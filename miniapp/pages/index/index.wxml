@@ -1,0 +1,156 @@
+<view class="card">
+  <view class="title">流浪猫绝育（TNR）申请</view>
+  <view class="sub">
+    请先点击“开启通知提醒”完成订阅授权。提交后若进入预通过/通过/拒绝/手术完成，系统将通过小程序订阅消息通知你。
+  </view>
+
+  <button class="btn secondary" bindtap="onEnableNotify">开启通知提醒</button>
+  <view wx:if="{{notifyStatusText}}" class="sub">{{notifyStatusText}}</view>
+  <button class="btn secondary" style="margin-top:12rpx;" bindtap="goStatusPage">我的订单 / 查看进度</button>
+
+  <view class="label">申请人姓名</view>
+  <input class="input input-lg" value="{{form.applicant_name}}" data-k="applicant_name" bindinput="onInput" />
+
+  <view class="label">身份证号</view>
+  <input class="input input-lg" value="{{form.id_number}}" data-k="id_number" maxlength="18" bindinput="onInput" />
+  <checkbox-group bindchange="onIdConsent">
+    <label class="sub">
+      <checkbox value="id" checked="{{idConsent}}" color="#262626" />
+      我已知悉身份证号仅用于签署同意书与必要核验，后台脱敏展示；留存期限与用途以医院告知为准。
+    </label>
+  </checkbox-group>
+  <view class="info-note">
+    <view class="info-note-title">详情说明</view>
+    <view class="sub info-note-text">
+      用途：仅用于签署同意书/必要核验；后台默认脱敏展示。留存：手术完成后 180 天内用于必要对账与纠纷处理，之后可删除。
+    </view>
+  </view>
+
+  <view class="label">手机号</view>
+  <input class="input input-lg" type="number" maxlength="11" value="{{form.phone}}" data-k="phone" bindinput="onInput" />
+
+  <view class="label">居住地址 / 发现地点</view>
+  <view class="addr-scope">广东省 · 深圳市<text class="addr-scope-muted">（当前服务范围）</text></view>
+  <view class="sub addr-hint">请选择区、街道，再填写门牌等详细信息。</view>
+  <view class="row2">
+    <view class="col">
+      <view class="label label-inline">区 / 县</view>
+      <picker class="picker picker-lg" mode="selector" range="{{districtNames}}" value="{{districtIndex}}" bindchange="onAddrDistrictPick">
+        <view>{{districtNames[districtIndex]}}</view>
+      </picker>
+    </view>
+    <view class="col">
+      <view class="label label-inline">街道 / 乡镇</view>
+      <picker class="picker picker-lg" mode="selector" range="{{streetNames}}" value="{{streetIndex}}" bindchange="onAddrStreetPick">
+        <view>{{streetNames[streetIndex]}}</view>
+      </picker>
+    </view>
+  </view>
+  <view class="label">详细地址</view>
+  <textarea class="textarea textarea-lg addr-detail" value="{{addressDetailInput}}" maxlength="240" placeholder="道路、门牌号、楼栋单元等" auto-height show-confirm-bar="{{false}}" bindinput="onAddressDetailInput" />
+
+  <view class="row2">
+    <view class="col">
+      <view class="label">预约门店</view>
+      <picker class="picker picker-lg" mode="selector" range="{{storeOptions}}" range-key="label" value="{{storeIndex}}" bindchange="onStoreChange">
+        <view>{{storeOptions[storeIndex].label}}</view>
+      </picker>
+    </view>
+    <view class="col">
+      <view class="label">期望手术日期</view>
+      <picker class="picker picker-lg" mode="date" value="{{appointmentDate}}" bindchange="onPickDate">
+        <view>{{appointmentDate || '请选择'}}</view>
+      </picker>
+    </view>
+  </view>
+
+  <view class="label">术后打算</view>
+  <picker class="picker picker-lg" mode="selector" range="{{planOptions}}" range-key="label" value="{{planIndex}}" bindchange="onPlanChange">
+    <view>{{planOptions[planIndex].label}}</view>
+  </picker>
+
+  <view class="label">定位（可选）</view>
+  <button class="btn secondary" bindtap="onGetLocation">获取定位</button>
+  <view class="sub" wx:if="{{form.location_address}}">
+    {{form.location_address}}
+  </view>
+
+  <view class="row2">
+    <view class="col">
+      <view class="label">流浪猫名字</view>
+      <input class="input input-lg" value="{{form.cat_nickname}}" data-k="cat_nickname" placeholder="无名字可按特征命名" placeholder-class="placeholder-sm" bindinput="onInput" />
+    </view>
+    <view class="col">
+      <view class="label">性别</view>
+      <picker class="picker picker-lg" mode="selector" range="{{genderOptions}}" range-key="label" value="{{genderIndex}}" bindchange="onGenderChange">
+        <view>{{genderOptions[genderIndex].label}}</view>
+      </picker>
+    </view>
+  </view>
+
+  <view class="label">年龄估计</view>
+  <view class="row2 age-inline-row">
+    <input class="input input-lg age-num" type="digit" value="{{ageNumInput}}" maxlength="3" bindinput="onAgeNumInput" />
+    <picker class="picker picker-lg age-unit" mode="selector" range="{{ageUnitOptions}}" range-key="label" value="{{ageUnitIndex}}" bindchange="onAgeUnitPick">
+      <view>{{ageUnitOptions[ageUnitIndex].label}}</view>
+    </picker>
+  </view>
+
+  <view class="label">流浪状况说明</view>
+  <textarea
+    class="textarea textarea-lg"
+    placeholder="介绍此流浪猫的详细情况，包括但不仅限于活动范围、外观、病史，性格，是否孕猫等等"
+    placeholder-class="placeholder-sm"
+    adjust-position="{{false}}"
+    bindinput="onHealthNoteInput"
+    bindblur="onHealthNoteBlur"
+  ></textarea>
+
+  <view class="label">申请照片（至少 1 张）</view>
+  <button class="btn secondary" bindtap="onPickImages">选择照片</button>
+  <view>
+    <text wx:for="{{images}}" wx:key="*this" class="tag">{{item}}</text>
+  </view>
+
+  <view class="label">申请视频（可选）</view>
+  <view class="sub addr-hint">提示：更多客观流浪的证据可以增加审核通过率。</view>
+  <button class="btn secondary" bindtap="onPickVideo">选择视频</button>
+  <view>
+    <text wx:for="{{videos}}" wx:key="*this" class="tag">{{item}}</text>
+  </view>
+
+  <view class="declare-panel">
+    <view class="label declare-title">声明</view>
+    <view class="declare-tags">
+      <text class="tag warn">必须剪耳标记</text>
+      <text class="tag warn">严禁家养猫冒充</text>
+    </view>
+    <checkbox-group bindchange="onChecks">
+      <label class="check-line"><checkbox value="ear" checked="{{checks.ear}}" color="#262626" /> 我同意术后剪耳标记</label>
+      <label class="check-line"><checkbox value="fraud" checked="{{checks.fraud}}" color="#262626" /> 我承诺非家养猫冒充申请</label>
+    </checkbox-group>
+  </view>
+
+  <button class="btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onSubmit">提交申请</button>
+
+  <view wx:if="{{result}}" class="sub">
+    <view class="tag ok">提交成功</view>
+    <view style="margin-top:10rpx;">申请编号：#{{result.id}}</view>
+    <view>当前状态：{{result.status}}</view>
+    <view wx:if="{{result.ai_summary}}">
+      AI：疑似流浪猫={{result.ai_summary.is_likely_stray}}，置信度={{result.ai_summary.confidence}}
+    </view>
+    <button class="btn secondary" style="margin-top:16rpx;" bindtap="goStatus">查看状态页</button>
+  </view>
+
+  <view wx:if="{{error}}" class="sub">
+    <view class="tag err">提交失败</view>
+    <view style="margin-top:10rpx;">{{error}}</view>
+  </view>
+</view>
+
+<view class="card dev-hint-card">
+  <view class="sub dev-hint-text">
+    提示：真机调试时，请把 <text class="tag">miniapp/app.js</text> 里的 apiBase 改成你电脑的局域网 IP（例如 <text class="tag">http://192.168.1.10:8765</text>）。
+  </view>
+</view>

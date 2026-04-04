@@ -1,0 +1,108 @@
+<view class="card">
+  <view class="title">申请状态</view>
+  <view class="sub">默认展示本账号全部订单；点订单即可查看当前进度。</view>
+
+  <view wx:if="{{error}}" class="sub" style="margin-top:16rpx;">
+    <text class="tag err">{{error}}</text>
+  </view>
+
+  <view wx:if="{{info}}" style="margin-top:16rpx;">
+    <view class="status-head">
+      <view class="status-title">当前状态</view>
+      <view class="status-badge">{{view.status_zh}}</view>
+    </view>
+
+    <view class="step-card">
+      <view class="step-title">进度</view>
+      <view class="step-desc">{{view.status_desc}}</view>
+      <view class="timeline-panel">
+        <view wx:for="{{view.timeline_steps}}" wx:key="key" class="timeline-item">
+          <view class="timeline-rail">
+            <view class="timeline-dot {{item.state}}"></view>
+            <view wx:if="{{!item.is_last}}" class="timeline-line {{item.line_state}}"></view>
+          </view>
+          <view class="timeline-body">
+            <view class="timeline-head">
+              <view class="timeline-label {{item.state}}">{{item.label}}</view>
+              <text wx:if="{{item.tag}}" class="timeline-chip {{item.state}}">{{item.tag}}</text>
+            </view>
+            <view wx:if="{{item.meta}}" class="timeline-meta">{{item.meta}}</view>
+          </view>
+        </view>
+      </view>
+      <view class="next-card">
+        <view class="next-k">下一步</view>
+        <view class="next-v">{{view.next_action}}</view>
+      </view>
+      <view wx:if="{{view.terminated}}" class="reason-card">
+        <view class="next-k">原因</view>
+        <view class="next-v">{{view.reason_text}}</view>
+      </view>
+    </view>
+
+    <view class="info-card">
+      <view class="label">关键信息</view>
+      <view class="kv">
+        <view class="k">门店</view><view class="v">{{info.clinic_store || '未选'}}</view>
+        <view class="k">期望日期</view><view class="v">{{info.appointment_at || '未填'}}</view>
+        <view class="k">联系电话</view><view class="v">{{info.phone_masked}}</view>
+        <view class="k">更新时间</view><view class="v">{{info.updated_at || info.created_at}}</view>
+        <view wx:if="{{!view.terminated && view.reason_text}}" class="k">备注</view>
+        <view wx:if="{{!view.terminated && view.reason_text}}" class="v">{{view.reason_text}}</view>
+      </view>
+      <view wx:if="{{view.contact && (view.contact.phone || view.contact.landline || view.contact.address)}}" class="label" style="margin-top:14rpx;">门店联系方式</view>
+      <view class="kv" wx:if="{{view.contact && (view.contact.phone || view.contact.landline || view.contact.address)}}">
+        <view class="k" wx:if="{{view.contact.phone}}">电话</view>
+        <view class="v" wx:if="{{view.contact.phone}}"><text selectable="{{true}}">{{view.contact.phone}}</text></view>
+        <view class="k" wx:if="{{view.contact.landline}}">座机</view>
+        <view class="v" wx:if="{{view.contact.landline}}"><text selectable="{{true}}">{{view.contact.landline}}</text></view>
+        <view class="k" wx:if="{{view.contact.address}}">地址</view>
+        <view class="v" wx:if="{{view.contact.address}}"><text selectable="{{true}}">{{view.contact.address}}</text></view>
+      </view>
+    </view>
+
+    <view class="label">通知记录</view>
+    <view wx:if="{{!view.notifications || !view.notifications.length}}" class="sub">暂无通知记录</view>
+    <view wx:for="{{view.notifications}}" wx:key="created_at" class="sub">
+      {{item.created_at}} · {{item.channel_zh}} · {{item.success_zh}}
+    </view>
+  </view>
+</view>
+
+<view class="card">
+  <view class="title">我的订单</view>
+  <view class="sub">一个救助人可提交多个流浪猫申请；点一下即可查看当前进度。</view>
+  <view wx:if="{{!openid}}" class="sub" style="margin-top:10rpx;">
+    <button class="btn secondary" loading="{{bindLoading}}" disabled="{{bindLoading}}" bindtap="bindAccount">
+      绑定账号（开启通知）
+    </button>
+    <view class="sub" wx:if="{{bindStatusText}}" style="margin-top:10rpx;">{{bindStatusText}}</view>
+  </view>
+  <view wx:if="{{myOrdersLoading}}" class="sub">正在加载…</view>
+  <view wx:if="{{!myOrdersLoading && (!myOrders || !myOrders.length)}}" class="sub">
+    暂无订单。若你曾在未绑定账号时提交过，可在下方“找回历史订单”里输入手机号与身份证号进行关联。
+  </view>
+
+  <view wx:if="{{openid && !myOrdersLoading && (!myOrders || !myOrders.length)}}" class="claim-card">
+    <view class="claim-title">找回历史订单</view>
+    <view class="claim-sub">用于把你之前提交但未写入 openid 的订单，关联到本账号（不会覆盖他人/已有 openid 的记录）。</view>
+    <input class="claim-input" type="number" maxlength="11" placeholder="请输入提交申请时的手机号" bindinput="onClaimPhoneInput" value="{{claimPhone}}" />
+    <input class="claim-input" maxlength="18" placeholder="请输入提交申请时的身份证号（15/18位）" bindinput="onClaimIdInput" value="{{claimIdNumber}}" />
+    <button class="btn" loading="{{claimLoading}}" disabled="{{claimLoading}}" bindtap="claimHistoryOrders">找回</button>
+    <view class="sub" wx:if="{{claimStatusText}}" style="margin-top:10rpx;">{{claimStatusText}}</view>
+  </view>
+
+  <view wx:for="{{myOrders}}" wx:key="id" class="order-item" data-id="{{item.id}}" bindtap="tapOrder">
+    <view class="order-top">
+      <text class="tag">#{{item.id}}</text>
+      <text class="tag">{{item.status_zh}}</text>
+    </view>
+    <view class="order-cat">{{item.cat_title}}</view>
+    <view class="sub">性别：{{item.cat_gender_zh}}　年龄：{{item.age_estimate || '未填'}}</view>
+    <view class="sub">门店：{{item.clinic_store || '未选'}}</view>
+    <view class="sub">期望手术日期：{{item.appointment_at || '未填'}}</view>
+    <view class="sub" wx:if="{{item.health_note_brief}}">流浪状况：{{item.health_note_brief}}</view>
+    <view class="sub" wx:if="{{item.note}}">备注：{{item.note}}</view>
+    <view class="sub">更新时间：{{item.updated}}</view>
+  </view>
+</view>

@@ -1,0 +1,515 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+  .admin-app-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .admin-app-meta { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+  .admin-app-lines p { margin: 0.35rem 0 0; font-size: 0.9rem; }
+  .admin-app-lines p.sub { margin: 0; font-size: 0.94rem; }
+
+  .admin-app-thumb-row { margin-top: 0.75rem; }
+  .admin-app-thumb-label { font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 0.35rem; }
+  .admin-app-thumb-wrap { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-start; }
+  a.admin-app-thumb {
+    display: block;
+    width: 76px;
+    height: 76px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    overflow: hidden;
+    background: var(--bg-elevated);
+    flex-shrink: 0;
+    text-decoration: none;
+    box-sizing: border-box;
+  }
+  a.admin-app-thumb:hover { border-color: var(--text); }
+  a.admin-app-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .ai-review-details summary { user-select: none; }
+  .ai-review-panel {
+    margin-top: 0.5rem;
+    padding: 0.85rem 1rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 12px);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .ai-review-block { margin-top: 0.65rem; }
+  .ai-review-block:first-child { margin-top: 0; }
+  .ai-review-k {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: none;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.2rem;
+  }
+  .ai-review-v { margin: 0; }
+  .ai-review-list { margin: 0.25rem 0 0; padding-left: 1.15rem; }
+  .ai-review-list li { margin: 0.2rem 0; }
+  .ai-review-footnote {
+    margin-top: 0.75rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .admin-actions {
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .admin-actions-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+    align-items: start;
+  }
+  @media (max-width: 720px) {
+    .admin-actions-row { grid-template-columns: 1fr; }
+    .admin-app-meta { white-space: normal; }
+  }
+  .admin-action-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem;
+  }
+  .admin-action-title {
+    font-weight: 800;
+    font-size: 0.88rem;
+    margin: 0 0 0.45rem;
+  }
+  .admin-form-line {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .admin-form-line input[type="text"], .admin-form-line input[type="date"] { width: 100%; }
+  .admin-form-line button { white-space: nowrap; }
+  .admin-form-stack { display: grid; gap: 0.5rem; }
+
+  .admin-upload {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+  .admin-upload-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem 0.9rem;
+    max-width: 720px;
+  }
+  @media (max-width: 720px) { .admin-upload-grid { grid-template-columns: 1fr; } }
+  .admin-upload-grid label { margin: 0; font-weight: 600; font-size: 0.86rem; }
+  .admin-upload-submit { max-width: 720px; margin-top: 0.75rem; width: 100%; }
+</style>
+{% endblock %}
+{% block body %}
+{% set filters = filters | default({}) %}
+{% set stats = stats | default({'overall_by_status': {}, 'today_new': 0, 'pending_todo': 0, 'total': 0}) %}
+{% set backup_files = backup_files | default([]) %}
+{% set STATUS_ZH = {
+  'draft': '草稿',
+  'pending_ai': '系统处理中',
+  'pending_manual': '待人工审核',
+  'pre_approved': '预通过（待复核）',
+  'approved': '已通过',
+  'scheduled': '已预约',
+  'no_show': '爽约',
+  'cancelled': '已取消',
+  'rejected': '已拒绝',
+  'arrived_verified': '到院已核对',
+  'surgery_completed': '手术完成'
+} %}
+<div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+  <div>
+    <h1 style="margin:0;">TNR 审核与手术登记</h1>
+    <p class="sub" style="margin:0.25rem 0 0;">处理申请、到院核对、上传术前术后资料、标记公开展示同意。</p>
+  </div>
+  <a class="btn secondary" href="/admin/logout" style="text-decoration:none;">退出登录</a>
+</div>
+
+{% if request.query_params.get('purge_ok') == '1' %}
+<div class="msg ok">清理完成：已删除 <strong>{{ request.query_params.get('deleted', '0') }}</strong> 条（{% if request.query_params.get('what') == 'drafts' %}仅草稿{% else %}全部申请{% endif %}）。上传目录中对应文件夹已一并删除。</div>
+{% endif %}
+{% if request.query_params.get('purge_err') == '1' %}
+<div class="msg err">操作未执行：请检查确认文案是否完全一致（区分大小写与空格）。</div>
+{% endif %}
+{% if request.query_params.get('backup_ok') == '1' %}
+<div class="msg ok">备份已生成：<strong>{{ request.query_params.get('file', '') }}</strong>（见下方列表，可下载保存到安全位置）。</div>
+{% endif %}
+{% if request.query_params.get('backup_err') == '1' %}
+<div class="msg err">备份失败：{{ request.query_params.get('reason', '请查看服务器日志或确认 data/、uploads/ 路径可读写') }}</div>
+{% endif %}
+
+<div class="card">
+  <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:flex-end;justify-content:space-between;">
+    <div>
+      <div style="font-weight:800;font-size:1.05rem;">数据筛选</div>
+      <div class="sub" style="margin:0.25rem 0 0;">申请量多时，用筛选快速定位待处理与历史记录。</div>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+      <a class="btn secondary" href="/admin" style="text-decoration:none;">清空筛选</a>
+    </div>
+  </div>
+  <form method="get" action="/admin" style="display:grid;gap:0.6rem;margin-top:0.75rem;">
+    <div class="row2">
+      <div>
+        <label style="margin:0 0 0.35rem;">状态</label>
+        <select name="status">
+          <option value="" {% if not filters.status %}selected{% endif %}>全部</option>
+          {% for s in ['draft','pending_ai','pending_manual','pre_approved','approved','scheduled','no_show','cancelled','rejected','arrived_verified','surgery_completed'] %}
+            <option value="{{ s }}" {% if filters.status==s %}selected{% endif %}>{{ STATUS_ZH.get(s, s) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="margin:0 0 0.35rem;">门店</label>
+        <select name="store">
+          <option value="" {% if not filters.store %}selected{% endif %}>全部</option>
+          <option value="大风动物医院（东环店）" {% if filters.store=='大风动物医院（东环店）' %}selected{% endif %}>大风动物医院（东环店）</option>
+          <option value="大风动物医院（横岗店）" {% if filters.store=='大风动物医院（横岗店）' %}selected{% endif %}>大风动物医院（横岗店）</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label style="margin:0 0 0.35rem;">关键词（ID/姓名/电话/地点/流浪猫名字）</label>
+        <input type="text" name="q" value="{{ filters.q or '' }}" placeholder="例如：13800138000 / 张三 / 123" />
+      </div>
+      <div>
+        <label style="margin:0 0 0.35rem;">每页数量</label>
+        <select name="page_size">
+          {% for n in [20,30,50,100] %}
+            <option value="{{n}}" {% if filters.page_size==n %}selected{% endif %}>{{n}}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label style="margin:0 0 0.35rem;">提交日期从（可选）</label>
+        <input type="date" name="from" value="{{ filters['from'] or '' }}" />
+      </div>
+      <div>
+        <label style="margin:0 0 0.35rem;">提交日期到（可选）</label>
+        <input type="date" name="to" value="{{ filters.to or '' }}" />
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label style="margin:0 0 0.35rem;">公布展示授权</label>
+        <select name="consent">
+          <option value="" {% if not filters.consent %}selected{% endif %}>不筛</option>
+          <option value="true" {% if filters.consent=='true' %}selected{% endif %}>同意</option>
+          <option value="false" {% if filters.consent=='false' %}selected{% endif %}>不同意</option>
+        </select>
+      </div>
+      <div>
+        <label style="margin:0 0 0.35rem;">到院核对</label>
+        <select name="verified">
+          <option value="" {% if not filters.verified %}selected{% endif %}>不筛</option>
+          <option value="true" {% if filters.verified=='true' %}selected{% endif %}>已核对</option>
+          <option value="false" {% if filters.verified=='false' %}selected{% endif %}>未核对</option>
+        </select>
+      </div>
+    </div>
+    <div class="admin-filter-actions">
+      <label class="admin-filter-check">
+        <input type="checkbox" name="has_media" value="true" {% if filters.has_media=='true' %}checked{% endif %} />
+        仅看“有申请素材”的记录
+      </label>
+      <button type="submit" class="admin-query-btn">查询</button>
+    </div>
+  </form>
+  <div class="sub" style="margin:0.6rem 0 0;">
+    当前结果：<strong>{{ stats.total }}</strong> 条；今日新增：<strong>{{ stats.today_new }}</strong>；待处理（人工审核/预通过）：<strong>{{ stats.pending_todo }}</strong>
+  </div>
+  <div style="margin-top:0.6rem;display:flex;flex-wrap:wrap;gap:0.4rem;">
+    {% for k,v in stats.overall_by_status.items() %}
+      <span class="badge" style="background:var(--bg-elevated);color:var(--muted);border-color:var(--border);">{{ STATUS_ZH.get(k, k) }}：{{ v }}</span>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin:0 0 0.35rem;font-size:1.05rem;">数据备份</h2>
+  <p class="sub" style="margin:0;">将 <code>data/</code> 下数据库文件（含 WAL/SHM）与整个 <code>uploads/</code> 打成 zip，保存在项目 <code>backups/</code> 目录，便于上线前迁机或灾难恢复。</p>
+  <form method="post" action="{{ request.url_for('admin_backup_create') }}" style="margin-top:0.75rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <button type="submit" class="secondary">立即生成备份（zip）</button>
+  </form>
+  {% if backup_files %}
+  <p style="margin:0.75rem 0 0.35rem;font-weight:600;font-size:0.9rem;">已有备份文件</p>
+  <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+    <thead>
+      <tr style="text-align:left;border-bottom:1px solid var(--border);">
+        <th style="padding:0.35rem 0;">文件名</th>
+        <th style="padding:0.35rem 0;">大小</th>
+        <th style="padding:0.35rem 0;">时间</th>
+        <th style="padding:0.35rem 0;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in backup_files %}
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.35rem 0;word-break:break-all;">{{ b.name }}</td>
+        <td style="padding:0.35rem 0;">{{ (b.size / 1024 / 1024) | round(2) }} MB</td>
+        <td style="padding:0.35rem 0;color:var(--muted);">{{ b.mtime_iso }}</td>
+        <td style="padding:0.35rem 0;"><a href="{{ request.url_for('admin_backup_download', filename=b.name) }}" class="btn secondary" style="padding:0.35rem 0.65rem;font-size:0.8rem;text-decoration:none;">下载</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="sub" style="margin:0.75rem 0 0;">暂无备份文件，点击上方按钮生成。</p>
+  {% endif %}
+</div>
+
+<div class="card" style="border:1px solid var(--border-strong);background:var(--bg-elevated);">
+  <details>
+    <summary style="cursor:pointer;font-weight:700;color:var(--text);">危险操作 · 数据清理（不可恢复）</summary>
+    <p class="sub" style="margin:0.5rem 0 0;">上线前清理实验/草稿数据，或整库清空申请。执行前请<strong>自行备份</strong> <code>data/tnr.db</code> 与 <code>uploads/</code>。</p>
+    <div style="margin-top:0.75rem;display:grid;gap:1rem;">
+      <form method="post" action="{{ request.url_for('admin_purge') }}" style="display:grid;gap:0.5rem;max-width:520px;" onsubmit="return confirm('确定仅删除「草稿」状态？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="scope" value="drafts" />
+        <label style="margin:0;font-weight:600;">仅删除全部草稿</label>
+        <input type="text" name="confirm" placeholder="在此输入：确认删除全部草稿" autocomplete="off" required />
+        <button type="submit" class="danger">删除全部草稿</button>
+      </form>
+      <form method="post" action="{{ request.url_for('admin_purge') }}" style="display:grid;gap:0.5rem;max-width:520px;" onsubmit="return confirm('确定删除全部申请？此操作不可恢复！');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="scope" value="all" />
+        <label style="margin:0;font-weight:600;">删除全部申请（含所有状态）</label>
+        <input type="text" name="confirm" placeholder="在此输入：确认删除全部申请数据" autocomplete="off" required />
+        <button type="submit" class="danger">一键删除全部申请</button>
+      </form>
+    </div>
+  </details>
+</div>
+
+{% macro status_badge(s) -%}
+  {% if s == 'pending_ai' %}<span class="badge b-pending">AI/待分派</span>
+  {% elif s == 'pending_manual' %}<span class="badge b-pending">待人工审核</span>
+  {% elif s == 'pre_approved' %}<span class="badge b-pending">预通过（待复核）</span>
+  {% elif s == 'approved' %}<span class="badge b-ok">已通过</span>
+  {% elif s == 'scheduled' %}<span class="badge b-ok">已预约</span>
+  {% elif s == 'no_show' %}<span class="badge b-no">爽约</span>
+  {% elif s == 'cancelled' %}<span class="badge b-no">已取消</span>
+  {% elif s == 'rejected' %}<span class="badge b-no">已拒绝</span>
+  {% elif s == 'arrived_verified' %}<span class="badge b-ok">到院已核对</span>
+  {% elif s == 'surgery_completed' %}<span class="badge b-done">手术完成</span>
+  {% else %}<span class="badge">{{ s }}</span>{% endif %}
+{%- endmacro %}
+
+{% for a in apps %}
+<div class="card">
+  <div class="admin-app-top">
+    <div class="admin-app-lines">
+      <strong>#{{ a.id }}</strong> {{ status_badge(a.status) }}
+      {% if a.staff_cat_verified %}<span class="badge b-ok" style="margin-left:0.35rem;">已现场确认猫只</span>{% endif %}
+      <h2 style="font-size:1.05rem;margin:0.5rem 0 0.25rem;">{{ a.applicant_name }} · {{ a.phone }}</h2>
+      <p class="sub" style="margin:0;">{{ a.address }}</p>
+      <p>
+        门店：<strong>{{ a.clinic_store or '未选' }}</strong>
+        {% if a.appointment_at %} · 期望手术日期：<strong>{{ a.appointment_at }}</strong>{% endif %}
+      </p>
+      <p style="margin-top:0.5rem;">
+        流浪猫名字：{{ a.cat_nickname or '—' }} · 性别 {{ a.cat_gender }} · {{ a.age_estimate or '年龄未填' }}
+      </p>
+      {% if a.health_note %}<p>流浪状况：{{ a.health_note }}</p>{% endif %}
+      {% if a.post_surgery_plan %}<p>术后打算：{{ a.post_surgery_plan }}</p>{% endif %}
+      {% if a.id_number %}<p>身份证号（脱敏）：{{ a.id_number[:2] }}********{{ a.id_number[-4:] }}</p>{% endif %}
+      {% if a.location_lat and a.location_lng %}
+        <p>
+          定位：{{ a.location_lat }}, {{ a.location_lng }}
+          <a href="https://uri.amap.com/marker?position={{ a.location_lng }},{{ a.location_lat }}&name=TNR申请点" target="_blank" rel="noopener" style="margin-left:0.35rem;">高德打开</a>
+        </p>
+      {% endif %}
+    </div>
+    <div class="admin-app-meta">
+      提交：{{ a.created_at.strftime('%Y-%m-%d %H:%M') if a.created_at else '' }}
+    </div>
+  </div>
+
+  {% if a.ai_raw_json %}
+  {% set ai = a.ai_raw_json | ai_review_view %}
+  <details class="ai-review-details" style="margin-top:0.75rem;font-size:0.88rem;">
+    <summary style="cursor:pointer;font-weight:600;">AI 辅助结论</summary>
+    <div class="ai-review-panel">
+      {% if ai.parse_error %}
+        <p class="sub" style="margin:0;">无法解析本次模型返回内容，请稍后重试或查看服务器日志。</p>
+      {% else %}
+        <div class="ai-review-block">
+          <div class="ai-review-k">是否疑似流浪猫</div>
+          <p class="ai-review-v">{{ ai.stray_zh }}</p>
+        </div>
+        <div class="ai-review-block">
+          <div class="ai-review-k">置信度</div>
+          <p class="ai-review-v">{{ ai.confidence_zh }}</p>
+        </div>
+        {% if ai.reasons %}
+        <div class="ai-review-block">
+          <div class="ai-review-k">判断要点</div>
+          <ul class="ai-review-list">
+            {% for line in ai.reasons %}<li>{{ line }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        {% if ai.photo_text %}
+        <div class="ai-review-block">
+          <div class="ai-review-k">关键依据照片</div>
+          <p class="ai-review-v">{{ ai.photo_text }}</p>
+        </div>
+        {% endif %}
+        <div class="ai-review-block">
+          <div class="ai-review-k">家养 / 反差线索</div>
+          {% if ai.fraud_lines %}
+          <ul class="ai-review-list">
+            {% for line in ai.fraud_lines %}<li>{{ line }}</li>{% endfor %}
+          </ul>
+          {% else %}
+          <p class="ai-review-v">无（模型未标记明显家养线索）</p>
+          {% endif %}
+        </div>
+        {% if ai.caveats %}
+        <div class="ai-review-block">
+          <div class="ai-review-k">需注意</div>
+          <ul class="ai-review-list">
+            {% for line in ai.caveats %}<li>{{ line }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        <div class="ai-review-block">
+          <div class="ai-review-k">流程建议（已由系统结合规则处理）</div>
+          <p class="ai-review-v">{{ ai.suggestion_zh }}</p>
+        </div>
+        <p class="ai-review-footnote">结论仅供辅助参考，最终以到院核对与人工判断为准。</p>
+      {% endif %}
+    </div>
+  </details>
+  {% endif %}
+
+  <div class="admin-app-thumb-row">
+    {% set imgs = a.media | selectattr('kind', 'equalto', 'application_image') | list %}
+    {% if imgs %}
+      <span class="admin-app-thumb-label">申请素材（点击小图打开原图）：</span>
+      <div class="admin-app-thumb-wrap">
+        {% for m in imgs %}
+        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="图{{ loop.index }} · 点击查看原图">
+          <img src="/file/{{ m.id }}" alt="申请图{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" />
+        </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="admin-actions">
+    <div class="admin-actions-row">
+      <div class="admin-action-card">
+        <div class="admin-action-title">审核</div>
+        <div class="admin-form-stack">
+          {% if a.status in ['pending_manual', 'pending_ai', 'pre_approved'] %}
+          <form method="post" action="/admin/app/{{ a.id }}/manual-approve">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit">人工通过</button>
+          </form>
+          {% endif %}
+          {% if a.status in ['pending_manual', 'pending_ai', 'pre_approved', 'approved', 'scheduled'] %}
+          <form method="post" action="/admin/app/{{ a.id }}/reject">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <div class="admin-form-line">
+              <input type="text" name="reason" placeholder="拒绝原因（建议填写；AI 误判或材料问题请说明）" />
+              <button type="submit" class="danger">{% if a.status in ['approved', 'scheduled'] %}审核拒绝（改未通过）{% else %}拒绝{% endif %}</button>
+            </div>
+          </form>
+          {% endif %}
+          {% if a.status in ['approved', 'scheduled'] %}
+          <form method="post" action="/admin/app/{{ a.id }}/verify-cat">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit">确认：到院即为此申请猫</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      <div class="admin-action-card">
+        <div class="admin-action-title">预约 / 流程</div>
+        <div class="admin-form-stack">
+          {% if a.status in ['approved', 'pre_approved'] %}
+          <form method="post" action="/admin/app/{{ a.id }}/mark-scheduled">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <div class="admin-form-line">
+              <input type="text" name="appointment_at" placeholder="预约日期（可选：YYYY-MM-DD）" />
+              <button type="submit" class="secondary">标记已预约</button>
+            </div>
+          </form>
+          {% endif %}
+          {% if a.status == 'scheduled' %}
+          <form method="post" action="/admin/app/{{ a.id }}/mark-no-show">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit" class="danger">标记爽约</button>
+          </form>
+          {% endif %}
+          {% if a.status in ['approved', 'scheduled', 'pre_approved'] %}
+          <form method="post" action="/admin/app/{{ a.id }}/mark-cancelled">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <div class="admin-form-line">
+              <input type="text" name="reason" placeholder="取消原因（可选）" />
+              <button type="submit" class="danger">取消</button>
+            </div>
+          </form>
+          {% endif %}
+          {% if a.status in ['approved', 'arrived_verified'] %}
+          <form method="post" action="/admin/app/{{ a.id }}/surgery-done">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit">标记手术已完成</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-upload">
+    <p style="margin:0 0 0.5rem;font-weight:800;">上传术前 / 术后影像</p>
+    <form method="post" action="/admin/app/{{ a.id }}/upload-surgery" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div class="admin-upload-grid">
+        <label>术前照片 <input type="file" name="before_images" accept="image/*" multiple /></label>
+        <label>术后照片 <input type="file" name="after_images" accept="image/*" multiple /></label>
+        <label>术前视频 <input type="file" name="before_videos" accept="video/*" multiple /></label>
+        <label>术后视频 <input type="file" name="after_videos" accept="video/*" multiple /></label>
+      </div>
+      <button type="submit" class="admin-upload-submit">上传手术资料</button>
+    </form>
+  </div>
+
+  <div style="margin-top:0.75rem;">
+    <form method="post" action="/admin/app/{{ a.id }}/toggle-showcase" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <label style="margin:0;font-weight:500;">公布展示授权</label>
+      <select name="consent" style="width:auto;">
+        <option value="true" {% if a.showcase_consent %}selected{% endif %}>同意公开展示术前术后</option>
+        <option value="false" {% if not a.showcase_consent %}selected{% endif %}>不同意展示</option>
+      </select>
+      <button type="submit" class="secondary">保存</button>
+    </form>
+    <p style="font-size:0.8rem;color:var(--muted);margin:0.35rem 0 0;">仅状态为<strong>手术完成</strong>且<strong>已上传</strong>术前术后资料、并已授权公开展示时，才会出现在展示页。</p>
+  </div>
+</div>
+{% else %}
+<div class="card"><p>暂无申请记录。</p></div>
+{% endfor %}
+{% endblock %}

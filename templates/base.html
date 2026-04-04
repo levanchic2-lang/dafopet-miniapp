@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --bg-elevated: #f4f4f5;
+      --card: #ffffff;
+      --text: #171717;
+      --muted: #737373;
+      --border: #e5e5e5;
+      --border-strong: #d4d4d4;
+      /* 与手机号等控件统一的输入框描边（等同 --border-strong） */
+      --input-border: var(--border-strong);
+      /* 主操作：黑 / 深灰 */
+      --accent: #262626;
+      --accent-hover: #0a0a0a;
+      /* 语义仍用灰阶区分轻重，避免彩色 */
+      --warn-fg: #404040;
+      --warn-bg: #f5f5f5;
+      --danger-fg: #262626;
+      --danger-bg: #e5e5e5;
+      --ok-fg: #171717;
+      --ok-bg: #f5f5f5;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+      background: var(--bg);
+      background-image:
+        radial-gradient(ellipse 120% 80% at 50% -20%, rgba(0, 0, 0, 0.04), transparent),
+        radial-gradient(ellipse 80% 50% at 100% 0%, rgba(0, 0, 0, 0.03), transparent);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    a { color: var(--text); text-decoration: none; border-bottom: 1px solid transparent; }
+    a:hover { border-bottom-color: var(--muted); }
+    code {
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      font-size: 0.88em;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      padding: 0.12em 0.4em;
+      border-radius: 6px;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+    header.site {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      margin-bottom: 1.5rem; flex-wrap: wrap;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { font-weight: 700; font-size: 1.12rem; color: var(--text); letter-spacing: -0.02em; }
+    .brand span { color: var(--muted); font-weight: 600; }
+    nav a {
+      margin-left: 1.1rem; font-weight: 500; font-size: 0.92rem; color: var(--muted);
+    }
+    nav a:hover { color: var(--text); border-bottom: none; }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 1.5rem 1.35rem;
+      margin-bottom: 1.25rem;
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 0.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); font-size: 0.94rem; margin-bottom: 1.15rem; }
+    label { display: block; font-weight: 600; font-size: 0.86rem; margin: 0.85rem 0 0.35rem; color: var(--text); }
+    /* 含未写 type 的 input（HTML5 默认为 text，但 [type="text"] 选不中），避免与 tel/number 边框不一致 */
+    input:not([type="hidden"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
+    textarea, select {
+      width: 100%; padding: 0.65rem 0.75rem; border: 1px solid var(--input-border); border-radius: var(--radius);
+      font: inherit; background: var(--card); color: var(--text);
+      box-sizing: border-box;
+    }
+    input[type="file"] {
+      width: 100%; padding: 0.55rem 0.65rem; border: 1px solid var(--input-border); border-radius: var(--radius);
+      font: inherit; background: var(--card); color: var(--text);
+      box-sizing: border-box;
+    }
+    input:not([type="hidden"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):focus,
+    textarea:focus, select:focus, input[type="file"]:focus {
+      outline: none; border-color: var(--text); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
+    }
+    textarea { min-height: 88px; resize: vertical; }
+    input[type="checkbox"], input[type="radio"] {
+      accent-color: var(--accent);
+      width: 1.05em; height: 1.05em;
+      flex-shrink: 0;
+    }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .row2 > * { min-width: 0; }
+    @media (max-width: 560px) { .row2 { grid-template-columns: 1fr; } }
+    .admin-filter-actions {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.75rem;
+      align-items: center;
+      margin-top: 0.35rem;
+    }
+    .admin-filter-check {
+      margin: 0;
+      font-weight: 600;
+      display: flex;
+      gap: 0.4rem;
+      align-items: center;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .admin-query-btn { min-width: 7.5rem; }
+    @media (max-width: 560px) {
+      .admin-filter-actions { grid-template-columns: 1fr; }
+      .admin-query-btn { width: 100%; }
+    }
+    .checks label { font-weight: 500; display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; color: var(--text); }
+    .checks input { margin-top: 0.25rem; }
+    button, .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0.62rem 1.1rem; border-radius: 8px; border: 1px solid var(--accent);
+      font: inherit; font-weight: 600; cursor: pointer;
+      background: var(--accent); color: #fafafa;
+    }
+    button:hover, .btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+    button.secondary, .btn.secondary {
+      background: var(--card); color: var(--text); border-color: var(--border-strong);
+    }
+    button.secondary:hover, .btn.secondary:hover { background: var(--bg-elevated); border-color: var(--muted); }
+    button.danger, .btn.danger {
+      background: var(--danger-bg); color: var(--danger-fg); border-color: #a3a3a3;
+    }
+    button.danger:hover, .btn.danger:hover { background: #d4d4d4; border-color: #737373; }
+    .badge {
+      display: inline-block; padding: 0.2rem 0.55rem; border-radius: 6px;
+      font-size: 0.72rem; font-weight: 600; border: 1px solid var(--border);
+    }
+    .b-pending { background: var(--warn-bg); color: var(--warn-fg); border-color: var(--border-strong); }
+    .b-ok { background: #f5f5f5; color: #262626; border-color: #d4d4d4; }
+    .b-no { background: #e5e5e5; color: #171717; border-color: #a3a3a3; }
+    .b-done { background: var(--card); color: var(--text); border-color: var(--text); }
+    .msg { padding: 0.75rem 1rem; border-radius: 8px; margin-top: 1rem; font-size: 0.92rem; border: 1px solid var(--border); }
+    .msg.ok { background: var(--ok-bg); color: var(--ok-fg); border-color: var(--border-strong); }
+    .msg.err { background: var(--danger-bg); color: var(--danger-fg); border-color: #a3a3a3; }
+    footer { margin-top: 2rem; font-size: 0.78rem; color: var(--muted); text-align: center; }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <div class="brand">大风动物医院 <span>· TNR</span></div>
+      <nav>
+        <a href="/">申请</a>
+        <a href="/showcase">公布展示</a>
+        <a href="/admin">医院后台</a>
+      </nav>
+    </header>
+    {% block body %}{% endblock %}
+    <footer>图像识别结论仅供辅助参考，最终以到院核对与医生判断为准。严禁家养猫冒充流浪猫申请。</footer>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

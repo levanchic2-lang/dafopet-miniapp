@@ -1,0 +1,2 @@
+行政区划 JSON 来源：modood/Administrative-divisions-of-China（MIT）
+仓库内文件：dist/pcas.json（省 / 市 / 区 / 街道四级）

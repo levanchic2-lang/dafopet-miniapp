@@ -1,0 +1,198 @@
+/* 黑白灰主题，与网页端设计令牌对齐 */
+page {
+  background: #fafafa;
+  color: #171717;
+  font-family: system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+  /* 与手机号输入框统一的描边（input / picker / textarea 共用） */
+  --input-border: #d4d4d4;
+}
+
+.card {
+  background: #ffffff;
+  margin: 20rpx;
+  padding: 28rpx 24rpx;
+  border-radius: 16rpx;
+  border: 1px solid #e5e5e5;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04), 0 12rpx 40rpx rgba(0, 0, 0, 0.04);
+}
+
+.title {
+  font-size: 38rpx;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #171717;
+}
+
+.sub {
+  margin-top: 10rpx;
+  color: #737373;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.row2 {
+  display: flex;
+  gap: 16rpx;
+}
+.col {
+  flex: 1;
+  min-width: 0;
+}
+.age-inline-row {
+  align-items: stretch;
+}
+.age-inline-row .age-num {
+  flex: 1.25;
+  min-width: 0;
+}
+.age-inline-row .age-unit {
+  flex: 0 0 220rpx;
+  max-width: 46%;
+}
+
+.label {
+  margin-top: 18rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #262626;
+}
+.label-inline {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+}
+.addr-hint {
+  margin-top: 6rpx !important;
+  margin-bottom: 2rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+.addr-scope {
+  margin-top: 10rpx;
+  padding: 18rpx 22rpx;
+  background: #f4f4f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #171717;
+}
+.addr-scope-muted {
+  font-weight: 500;
+  color: #737373;
+  font-size: 26rpx;
+}
+.addr-detail {
+  min-height: 140rpx;
+}
+
+.input, .picker, .textarea {
+  margin-top: 10rpx;
+  background: #ffffff;
+  border: 1px solid var(--input-border);
+  /* 与卡片圆角一致，视觉上与预约门店等选择框统一 */
+  border-radius: 16rpx;
+  padding: 18rpx 18rpx;
+  font-size: 28rpx;
+  color: #171717;
+  box-sizing: border-box;
+  width: 100%;
+}
+.input-lg, .picker-lg {
+  padding: 26rpx 22rpx;
+  font-size: 32rpx;
+  min-height: 96rpx;
+  box-sizing: border-box;
+  border-radius: 16rpx;
+}
+.picker-lg {
+  display: flex;
+  align-items: center;
+}
+.textarea {
+  min-height: 160rpx;
+}
+.textarea-lg {
+  min-height: 200rpx;
+  padding: 22rpx;
+  font-size: 30rpx;
+}
+/* 与手机号一致：部分机型对 digit/number 会套默认描边 */
+input.input {
+  border: 1px solid var(--input-border);
+}
+
+.btn {
+  margin-top: 24rpx;
+  background: #262626;
+  color: #fafafa;
+  font-weight: 700;
+  border-radius: 12rpx;
+  border: 1px solid #262626;
+}
+.btn.secondary {
+  background: #ffffff;
+  color: #171717;
+  border: 1px solid var(--input-border);
+}
+
+.declare-panel {
+  margin-top: 28rpx;
+  padding: 22rpx 24rpx;
+  background: #f4f4f5;
+  border-radius: 16rpx;
+  border: 1px solid #e5e5e5;
+}
+.declare-title {
+  margin-top: 0;
+}
+.declare-tags {
+  margin-top: 12rpx;
+}
+.check-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  margin-top: 16rpx;
+  font-size: 26rpx;
+  color: #262626;
+  line-height: 1.55;
+}
+
+.dev-hint-card {
+  background: #f4f4f5;
+  border-color: #e5e5e5;
+  box-shadow: none;
+}
+.dev-hint-text {
+  margin-top: 0;
+  font-size: 24rpx;
+  color: #737373;
+}
+
+.tag {
+  display: inline-block;
+  padding: 6rpx 14rpx;
+  border-radius: 8rpx;
+  background: #f4f4f5;
+  color: #525252;
+  font-size: 22rpx;
+  margin-right: 10rpx;
+  margin-top: 10rpx;
+  border: 1px solid #e5e5e5;
+}
+
+.warn {
+  background: #f5f5f5;
+  color: #404040;
+  border-color: #d4d4d4;
+}
+.ok {
+  background: #f5f5f5;
+  color: #171717;
+  border-color: #a3a3a3;
+}
+.err {
+  background: #e5e5e5;
+  color: #171717;
+  border-color: #a3a3a3;
+}

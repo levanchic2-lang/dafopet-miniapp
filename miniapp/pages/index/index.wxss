@@ -1,0 +1,19 @@
+.label { margin-top: 22rpx; font-size: 28rpx; font-weight: 700; }
+.placeholder-sm { font-size: 24rpx; color: #737373; }
+.sub label { display: block; margin-top: 10rpx; }
+.info-note {
+  margin-top: 12rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 16rpx;
+  border: 1rpx solid #e5e5e5;
+  background: #f4f4f5;
+}
+.info-note-title {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #171717;
+}
+.info-note-text {
+  margin-top: 8rpx;
+  margin-bottom: 0;
+}

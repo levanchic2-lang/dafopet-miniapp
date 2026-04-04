@@ -1,0 +1,20 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/status/status"
+  ],
+  "window": {
+    "navigationBarTitleText": "大风动物医院 TNR",
+    "navigationBarBackgroundColor": "#171717",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#fafafa",
+    "backgroundTextStyle": "dark"
+  },
+  "requiredBackgroundModes": ["audio"],
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于填写发现地点（可选）"
+    }
+  }
+}
+

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+  .grid { display: grid; gap: 1.25rem; }
+  @media (min-width: 640px) { .grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); } }
+  .case {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .case h3 { margin: 0; padding: 0.85rem 1rem; font-size: 1rem; background: linear-gradient(180deg, #f4f4f5 0%, #fafafa 100%); border-bottom: 1px solid var(--border); }
+  .case .meta { padding: 0 1rem 0.5rem; font-size: 0.82rem; color: var(--muted); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 0 1rem 1rem; }
+  @media (max-width: 480px) { .pair { grid-template-columns: 1fr; } }
+  .pair section { font-size: 0.8rem; }
+  .pair strong { display: block; margin-bottom: 0.35rem; color: var(--text); font-weight: 700; }
+  .pair img, .pair video { width: 100%; border-radius: 8px; background: var(--bg-elevated); border: 1px solid var(--border); max-height: 220px; object-fit: cover; }
+  .empty { text-align: center; padding: 2rem; color: var(--muted); }
+</style>
+{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>公布展示 · TNR 术前术后</h1>
+  <p class="sub">展示经救助人同意、已在本院完成绝育的猫咪术前术后影像，用于公益宣传与 TNR 科普。不涉及申请人隐私信息。</p>
+</div>
+{% if not items %}
+<div class="card empty">暂无符合条件的公布展示条目。完成手术、上传资料并勾选「同意公开展示」后将出现在此处。</div>
+{% else %}
+<div class="grid">
+  {% for it in items %}
+  {% set a = it.app %}
+  <article class="case">
+    <h3>案例 #{{ a.id }}{% if a.cat_nickname %} · {{ a.cat_nickname }}{% endif %}</h3>
+    <p class="meta">完成时间：{{ a.updated_at.strftime('%Y-%m-%d') if a.updated_at else '—' }}</p>
+    <div class="pair">
+      <section>
+        <strong>术前</strong>
+        {% for m in it.before %}
+          {% set p = m.stored_path.lower() %}
+          {% if p.endswith('.mp4') or p.endswith('.webm') or p.endswith('.mov') or p.endswith('.mkv') %}
+            <video src="/file/{{ m.id }}" controls playsinline></video>
+          {% else %}
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener"><img src="/file/{{ m.id }}" alt="术前" loading="lazy" /></a>
+          {% endif %}
+        {% else %}
+          <span class="sub">无图</span>
+        {% endfor %}
+      </section>
+      <section>
+        <strong>术后</strong>
+        {% for m in it.after %}
+          {% set p = m.stored_path.lower() %}
+          {% if p.endswith('.mp4') or p.endswith('.webm') or p.endswith('.mov') or p.endswith('.mkv') %}
+            <video src="/file/{{ m.id }}" controls playsinline></video>
+          {% else %}
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener"><img src="/file/{{ m.id }}" alt="术后" loading="lazy" /></a>
+          {% endif %}
+        {% else %}
+          <span class="sub">无图</span>
+        {% endfor %}
+      </section>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+  #f {
+    color-scheme: light;
+  }
+  #f .input-lg {
+    padding: 0.85rem 0.95rem;
+    font-size: 1.08rem;
+    min-height: 3rem;
+    line-height: 1.45;
+    border-radius: var(--radius);
+  }
+  #f select.input-lg { min-height: 3rem; border-radius: var(--radius); }
+  #f textarea#health_note {
+    border-radius: var(--radius);
+    min-height: 5rem;
+  }
+  #f .addr-hint { margin: 0.25rem 0 0.35rem; font-size: 0.82rem; color: var(--muted); }
+  #f .addr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 0.75rem; margin-top: 0.35rem; }
+  @media (max-width: 560px) { #f .addr-grid { grid-template-columns: 1fr; } }
+  #f .addr-scope { margin: 0.35rem 0 0.25rem; padding: 0.5rem 0.65rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.9rem; font-weight: 600; color: var(--text); }
+  #f textarea.input-lg#address_detail { min-height: 4.5rem; resize: vertical; }
+  #f .age-inline {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+    margin-top: 0.35rem;
+  }
+  #f .age-inline .age-num { flex: 1; min-width: 0; }
+  #f .age-inline select.age-unit { flex: 0 0 6.75rem; }
+  #f input[type="file"]::file-selector-button,
+  #f input[type="file"]::-webkit-file-upload-button {
+    font: inherit;
+    font-weight: 600;
+    padding: 0.45rem 0.85rem;
+    margin-right: 0.75rem;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    cursor: pointer;
+  }
+  #f input[type="file"]::file-selector-button:hover,
+  #f input[type="file"]::-webkit-file-upload-button:hover {
+    background: #ebebeb;
+  }
+  #f #cat_nickname::placeholder {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  #f #health_note::placeholder {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+</style>
+{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>流浪猫绝育（TNR）申请</h1>
+  <p class="sub">请如实填写信息并上传能反映猫咪<strong>室外/流浪场景</strong>的清晰照片；可同时上传短视频辅助说明。通过预审后，医院将与您联系预约到院时间。</p>
+  <form id="f">
+    <label for="applicant_name">申请人姓名</label>
+    <input class="input-lg" id="applicant_name" name="applicant_name" required />
+
+    <label for="id_number">身份证号</label>
+    <input class="input-lg" id="id_number" name="id_number" required maxlength="18" inputmode="numeric" autocomplete="off" />
+    <label class="checks" style="margin-top:0.5rem;"><input type="checkbox" id="id_consent" name="id_consent" value="true" required /> 我已知悉身份证号仅用于签署同意书与必要核验，后台脱敏展示；留存期限与用途以医院告知为准。</label>
+
+    <label for="phone">手机号</label>
+    <input class="input-lg" id="phone" name="phone" type="tel" required pattern="1[0-9]{10}" maxlength="11" inputmode="numeric" title="11 位中国大陆手机号" />
+
+    <label>居住地址 / 发现地点</label>
+    <p class="addr-scope">广东省 · 深圳市<span style="font-weight:500;color:var(--muted);">（当前服务范围）</span></p>
+    <p class="addr-hint">请选择区、街道，并在下方填写道路、门牌、小区等详细信息（必填）。</p>
+    <div class="addr-grid">
+      <div>
+        <label for="addr_district" style="margin-top:0;">区 / 县</label>
+        <select class="input-lg" id="addr_district" name="addr_district" aria-label="区或县" required></select>
+      </div>
+      <div>
+        <label for="addr_street" style="margin-top:0;">街道 / 乡镇</label>
+        <select class="input-lg" id="addr_street" name="addr_street" aria-label="街道或乡镇" required></select>
+      </div>
+    </div>
+    <label for="address_detail">详细地址</label>
+    <textarea class="input-lg" id="address_detail" rows="2" maxlength="240" autocomplete="street-address" placeholder="道路、门牌号、楼栋单元等" required></textarea>
+    <input type="hidden" name="address" id="address" value="" />
+
+    <div class="row2">
+      <div>
+        <label for="clinic_store">预约门店</label>
+        <select class="input-lg" id="clinic_store" name="clinic_store" required>
+          <option value="大风动物医院（东环店）">大风动物医院（东环店）</option>
+          <option value="大风动物医院（横岗店）">大风动物医院（横岗店）</option>
+        </select>
+      </div>
+      <div>
+        <label for="appointment_at">期望手术日期</label>
+        <input class="input-lg" id="appointment_at" name="appointment_at" type="date" required />
+      </div>
+    </div>
+
+    <label for="post_surgery_plan">术后打算</label>
+    <select class="input-lg" id="post_surgery_plan" name="post_surgery_plan" required>
+      <option value="原地放归">原地放归</option>
+      <option value="短期术后寄养 / 笼养观察后放归">短期术后寄养 / 笼养观察后放归</option>
+      <option value="在固定喂养点长期管理">在固定喂养点长期管理</option>
+      <option value="社会化后尝试送养/找领养">社会化后尝试送养/找领养</option>
+      <option value="留作长期安置 / 中途 / 收编">留作长期安置 / 中途 / 收编</option>
+      <option value="转移到更安全区域放归安置">转移到更安全区域放归安置</option>
+    </select>
+
+    <input type="hidden" id="location_lat" name="location_lat" />
+    <input type="hidden" id="location_lng" name="location_lng" />
+    <div style="margin-top:0.5rem;">
+      <button type="button" class="secondary" id="btnLoc">自动获取定位</button>
+      <div class="sub" id="locText" style="margin:0.35rem 0 0;">定位：未获取（可选）</div>
+    </div>
+
+    <div class="row2">
+      <div>
+        <label for="cat_nickname">流浪猫名字</label>
+        <input class="input-lg" id="cat_nickname" name="cat_nickname" required maxlength="120" placeholder="无名字可按特征命名" />
+      </div>
+      <div>
+        <label for="cat_gender">性别</label>
+        <select class="input-lg" id="cat_gender" name="cat_gender" required>
+          <option value="male">公猫</option>
+          <option value="female">母猫</option>
+          <option value="unknown">未知</option>
+        </select>
+      </div>
+    </div>
+    <div>
+      <label for="age_num">年龄估计</label>
+      <div class="age-inline">
+        <input class="input-lg age-num" id="age_num" type="number" min="1" max="999" step="1" inputmode="numeric" autocomplete="off" required />
+        <select class="input-lg age-unit" id="age_unit" name="age_unit" aria-label="年龄单位" required>
+          <option value="">单位</option>
+          <option value="day">天</option>
+          <option value="month">月</option>
+          <option value="year">年</option>
+        </select>
+      </div>
+      <input type="hidden" name="age_estimate" id="age_estimate" value="" />
+    </div>
+    <label for="health_note">流浪状况说明</label>
+    <textarea class="input-lg" id="health_note" name="health_note" required maxlength="8000" placeholder="介绍此流浪猫的详细情况，包括但不仅限于活动范围、外观、病史，性格，是否孕猫等等"></textarea>
+
+    <label>申请阶段照片（至少 1 张，必填）</label>
+    <input type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple required />
+
+    <label>申请阶段视频（可选）</label>
+    <p class="addr-hint">提示：更多客观流浪的证据可以增加审核通过率。</p>
+    <input type="file" name="videos" accept="video/*" multiple />
+
+    <div class="checks" style="margin-top:1rem;">
+      <label><input type="checkbox" name="agree_ear_tip" value="true" required /> 本人知悉并同意术后按规范进行<strong>剪耳标记</strong>，作为已绝育流浪猫标识。</label>
+      <label><input type="checkbox" name="agree_no_pet_fraud" value="true" required /> 本人承诺所申请猫只为<strong>流浪/无主</strong>场景，非家养猫冒充申请。</label>
+    </div>
+
+    <button type="submit" style="margin-top:1.25rem;">提交申请</button>
+  </form>
+  <div id="out"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const STATUS_ZH = {
+  pending_ai: "系统处理中",
+  pending_manual: "待人工审核",
+  pre_approved: "预通过（待复核）",
+  approved: "审核已通过",
+  scheduled: "已预约",
+  no_show: "爽约",
+  cancelled: "已取消",
+  rejected: "未通过",
+  arrived_verified: "已到院核对",
+  surgery_completed: "手术已完成"
+};
+function statusLabel(code) {
+  return STATUS_ZH[code] || code;
+}
+document.getElementById("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (typeof window.__syncAddressField === "function") window.__syncAddressField();
+  if (typeof window.__syncAgeEstimate === "function") window.__syncAgeEstimate();
+  const out = document.getElementById("out");
+  out.innerHTML = "";
+  const dSel = document.getElementById("addr_district");
+  const sSel = document.getElementById("addr_street");
+  const det = document.getElementById("address_detail");
+  const d = dSel && dSel.value ? dSel.value.trim() : "";
+  const s = sSel && sSel.value ? sSel.value.trim() : "";
+  const t = det && det.value ? det.value.trim() : "";
+  if (!d || !s || !t) {
+    out.innerHTML = '<div class="msg err">请选择区、街道，并填写详细地址。</div>';
+    return;
+  }
+  const ageH = document.getElementById("age_estimate");
+  if (!ageH || !String(ageH.value || "").trim()) {
+    out.innerHTML = '<div class="msg err">请填写年龄估计（数字并选择单位：天 / 月 / 年）。</div>';
+    return;
+  }
+  const imgInp = e.target.elements.namedItem("images");
+  const fl = imgInp && imgInp.files;
+  if (!fl || fl.length < 1) {
+    out.innerHTML = '<div class="msg err">请至少上传 1 张申请照片。</div>';
+    return;
+  }
+  const addrVal = (document.getElementById("address") && document.getElementById("address").value) ? document.getElementById("address").value.trim() : "";
+  if (addrVal.length > 500) {
+    out.innerHTML = '<div class="msg err">地址总长度不能超过 500 字，请缩短详细地址。</div>';
+    return;
+  }
+  const fd = new FormData(e.target);
+  fd.set("agree_ear_tip", e.target.agree_ear_tip.checked ? "true" : "false");
+  fd.set("agree_no_pet_fraud", e.target.agree_no_pet_fraud.checked ? "true" : "false");
+  try {
+    const r = await fetch("/api/apply", { method: "POST", body: fd });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || "提交失败");
+    let html = '<div class="msg ok">' + (j.message || "已提交") + "</div>";
+    if (j.ai_summary) {
+      const st = statusLabel(j.status);
+      html += "<p style='margin-top:0.75rem;font-size:0.9rem;color:var(--muted);'>";
+      html += "申请编号：<strong>#" + j.id + "</strong>；当前状态：<strong>" + st + "</strong>。";
+      if (j.ai_summary.auto_approved) html += " <strong>系统已自动预审通过</strong>，请留意医院电话/短信通知并按约定时间到院。";
+      else html += " 医院工作人员将在后台查看您的资料，请<strong>保持手机畅通</strong>；如需补材料会与您联系。";
+      html += "</p>";
+      html += "<p style='margin-top:0.5rem;font-size:0.88rem;color:var(--muted);'>";
+      html += "<strong>您无需在此页继续操作。</strong>审核结果会以登记方式通知；带猫到院、手术与术后展示由医院在系统中登记。";
+      html += "</p>";
+    }
+    out.innerHTML = html;
+    e.target.reset();
+    if (typeof window.__resetAgeEstimateUI === "function") window.__resetAgeEstimateUI();
+    if (typeof window.__resetAddressCascade === "function") window.__resetAddressCascade();
+    const loc = document.getElementById("locText");
+    if (loc) loc.textContent = "定位：未获取（可选）";
+  } catch (err) {
+    out.innerHTML = '<div class="msg err">' + err.message + "</div>";
+  }
+});
+
+document.getElementById("btnLoc").addEventListener("click", () => {
+  if (!navigator.geolocation) {
+    alert("当前浏览器不支持定位。");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      document.getElementById("location_lat").value = String(latitude);
+      document.getElementById("location_lng").value = String(longitude);
+      const el = document.getElementById("locText");
+      if (el) el.textContent = "定位：已获取，正在解析地址…";
+      try {
+        const qs = new URLSearchParams({ lat: String(latitude), lng: String(longitude) });
+        const r = await fetch("/api/geocode/regeo?" + qs.toString());
+        const j = await r.json().catch(() => ({}));
+        if (j && j.ok && j.address) {
+          if (el) el.textContent = "定位：" + j.address;
+        } else {
+          if (j && String(j.amap_infocode) === "10009") {
+            if (el) el.textContent = "定位：地址解析失败（高德Key类型不匹配：需要 Web服务 Key）";
+          } else {
+            if (el) el.textContent = "定位：已获取（未解析出地址）";
+          }
+        }
+      } catch (e) {
+        if (el) el.textContent = "定位：已获取（地址解析失败）";
+      }
+    },
+    (err) => {
+      alert("定位失败：" + (err && err.message ? err.message : "unknown"));
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+});
+
+// 默认自动尝试获取定位（不强制；失败不阻断）
+setTimeout(() => {
+  const lat = document.getElementById("location_lat")?.value?.trim();
+  const lng = document.getElementById("location_lng")?.value?.trim();
+  if (!lat || !lng) {
+    document.getElementById("btnLoc")?.click();
+  }
+}, 300);
+
+(function initAgeEstimate() {
+  const numEl = document.getElementById("age_num");
+  const unitEl = document.getElementById("age_unit");
+  const hidden = document.getElementById("age_estimate");
+  if (!numEl || !unitEl || !hidden) return;
+
+  function syncAgeEstimate() {
+    const raw = String(numEl.value || "").trim();
+    const u = unitEl.value;
+    const n = parseInt(raw, 10);
+    if (!u || raw === "" || !Number.isFinite(n) || n < 1) {
+      hidden.value = "";
+      return;
+    }
+    if (u === "day") hidden.value = n + "天";
+    else if (u === "month") hidden.value = n + "个月";
+    else if (u === "year") hidden.value = n + "岁";
+    else hidden.value = "";
+  }
+
+  numEl.addEventListener("input", syncAgeEstimate);
+  unitEl.addEventListener("change", syncAgeEstimate);
+
+  window.__syncAgeEstimate = syncAgeEstimate;
+  window.__resetAgeEstimateUI = function () {
+    numEl.value = "";
+    unitEl.value = "";
+    syncAgeEstimate();
+  };
+
+  syncAgeEstimate();
+})();
+</script>
+
+<script type="application/json" id="shenzhen-regions-data">{{ shenzhen_regions | default({}, true) | tojson }}</script>
+<script>
+(function initAddressCascade() {
+  const FIXED_PROV = "广东省";
+  const FIXED_CITY = "深圳市";
+  const distSel = document.getElementById("addr_district");
+  const strSel = document.getElementById("addr_street");
+  const detailEl = document.getElementById("address_detail");
+  const hiddenAddr = document.getElementById("address");
+  if (!distSel || !hiddenAddr) return;
+
+  let sz = null;
+
+  function fillSelect(sel, items, placeholder) {
+    sel.innerHTML = "";
+    const ph = document.createElement("option");
+    ph.value = "";
+    ph.textContent = placeholder;
+    sel.appendChild(ph);
+    for (const it of items) {
+      const op = document.createElement("option");
+      op.value = it;
+      op.textContent = it;
+      sel.appendChild(op);
+    }
+  }
+
+  function syncAddressField() {
+    const d = distSel.value.trim();
+    const s = strSel.value.trim();
+    const t = (detailEl.value || "").trim();
+    let prefix = "";
+    if (d && s) prefix = FIXED_PROV + FIXED_CITY + d + s;
+    else if (d) prefix = FIXED_PROV + FIXED_CITY + d;
+    if (!prefix && !t) {
+      hiddenAddr.value = "";
+      return;
+    }
+    hiddenAddr.value = t ? (prefix ? prefix + " " + t : t) : prefix;
+  }
+
+  function onDist() {
+    const di = distSel.value;
+    const streets =
+      di && sz && sz[di] ? [...sz[di]].sort((a, b) => String(a).localeCompare(b, "zh")) : [];
+    fillSelect(strSel, streets, "请选择街道 / 乡镇");
+    syncAddressField();
+  }
+
+  distSel.addEventListener("change", onDist);
+  strSel.addEventListener("change", syncAddressField);
+  detailEl.addEventListener("input", syncAddressField);
+
+  window.__syncAddressField = syncAddressField;
+  window.__resetAddressCascade = function () {
+    if (!sz) {
+      fillSelect(distSel, [], "请选择区 / 县");
+      fillSelect(strSel, [], "请选择街道 / 乡镇");
+    } else {
+      fillSelect(distSel, Object.keys(sz).sort(), "请选择区 / 县");
+      fillSelect(strSel, [], "请选择街道 / 乡镇");
+    }
+    detailEl.value = "";
+    syncAddressField();
+  };
+
+  function finishLoad(data) {
+    sz = data && typeof data === "object" ? data : null;
+    if (!sz || !Object.keys(sz).length) {
+      fillSelect(distSel, [], "数据未加载");
+      fillSelect(strSel, [], "请选择街道 / 乡镇");
+      return;
+    }
+    fillSelect(distSel, Object.keys(sz).sort(), "请选择区 / 县");
+    fillSelect(strSel, [], "请选择街道 / 乡镇");
+    syncAddressField();
+  }
+
+  const embeddedEl = document.getElementById("shenzhen-regions-data");
+  if (embeddedEl) {
+    try {
+      const raw = embeddedEl.textContent.trim();
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && Object.keys(parsed).length) {
+          finishLoad(parsed);
+          return;
+        }
+      }
+    } catch (e) {
+      /* 继续走网络 */
+    }
+  }
+
+  fetch("/api/regions/shenzhen")
+    .then((r) => (r.ok ? r.json() : Promise.reject()))
+    .then(finishLoad)
+    .catch(() =>
+      fetch("/static/shenzhen_regions.json")
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then(finishLoad)
+        .catch(() => {
+          fillSelect(distSel, [], "加载失败（请确认已启动后端并刷新）");
+          fillSelect(strSel, [], "请选择街道 / 乡镇");
+        })
+    );
+})();
+</script>
+{% endblock %}
