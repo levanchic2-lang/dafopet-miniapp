@@ -20,6 +20,21 @@ function postJson(path, data) {
   });
 }
 
+function getJson(path, data) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: base() + path,
+      method: "GET",
+      data,
+      success: (res) => {
+        if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data);
+        else reject(res.data || { detail: "请求失败" });
+      },
+      fail: reject
+    });
+  });
+}
+
 function uploadApply(form, images, videos) {
   return new Promise((resolve, reject) => {
     const url = base() + "/api/apply";
@@ -50,5 +65,5 @@ function uploadMore(appId, fieldName, filePath) {
   return Promise.resolve({ appId, fieldName, filePath });
 }
 
-module.exports = { postJson, uploadApply, uploadMore };
+module.exports = { getJson, postJson, uploadApply, uploadMore };
 

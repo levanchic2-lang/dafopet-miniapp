@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import mimetypes
 import re
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 from urllib.parse import quote
 
-from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import httpx
@@ -21,11 +22,20 @@ from starlette.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import get_db, init_db
-from app.models import Application, ApplicationStatus, AuditLog, MediaFile, MediaKind
+from app.models import (
+    Application,
+    ApplicationStatus,
+    Appointment,
+    AppointmentCategory,
+    AppointmentStatus,
+    AuditLog,
+    MediaFile,
+    MediaKind,
+)
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
 from app.services.backup_local import create_backup_zip, is_safe_backup_filename, list_backup_zips
-from app.services.wechat_miniapp import push_application_result, push_surgery_done, wechat_code2session
+from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_surgery_done, push_surgery_reminder, wechat_code2session
 
 app = FastAPI(title=settings.app_name)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, session_cookie="tnr_session")
@@ -154,6 +164,82 @@ def _load_china_pcas() -> dict:
 @app.on_event("startup")
 def _startup():
     init_db()
+    asyncio.get_event_loop().create_task(_surgery_reminder_loop())
+
+
+async def _surgery_reminder_loop():
+    """每天定时检查手术预约并推送前一天+当天提醒（#6）。"""
+    await asyncio.sleep(10)  # 启动后延迟 10s 再进入循环
+    while True:
+        try:
+            _run_surgery_reminders()
+        except Exception:
+            pass
+        # 计算距离明天 8:00 的等待时间（每天早上 8 点触发）
+        now = datetime.now()
+        next_run = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+        if now.hour < 8:
+            next_run = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        await asyncio.sleep((next_run - now).total_seconds())
+
+
+def _run_surgery_reminders():
+    """同步执行：查询手术预约并推送提醒。"""
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        today = datetime.now().date()
+        tomorrow = today + timedelta(days=1)
+        today_str = today.strftime("%Y-%m-%d")
+        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+
+        # 查询今天和明天的手术/TNR 预约（已确认）
+        rows = (
+            db.query(Appointment)
+            .filter(
+                Appointment.category.in_([AppointmentCategory.surgery.value, AppointmentCategory.tnr.value]),
+                Appointment.status == AppointmentStatus.confirmed.value,
+                Appointment.appointment_date.in_([today_str, tomorrow_str]),
+                Appointment.wechat_openid.isnot(None),
+                Appointment.wechat_openid != "",
+            )
+            .all()
+        )
+        for row in rows:
+            openid = (row.wechat_openid or "").strip()
+            if not openid:
+                continue
+            reminder_type = "day_of" if row.appointment_date == today_str else "day_before"
+            log_key = f"surgery_reminder_{reminder_type}_{row.id}_{row.appointment_date}"
+            # 检查是否已推送过（同一天同一类型不重复发）
+            from app.models import NotificationLog as _NL
+            already = (
+                db.query(_NL)
+                .filter(_NL.payload.contains(log_key))
+                .first()
+            )
+            if already:
+                continue
+            cat_name = (row.pet_name or "猫咪").strip()
+            push_surgery_reminder(
+                db,
+                appointment_id=row.id,
+                openid=openid,
+                cat_name=cat_name,
+                appointment_date=row.appointment_date or "",
+                appointment_time=row.appointment_time or "",
+                reminder_type=reminder_type,
+            )
+            # 记录已推送标记
+            db.add(_NL(
+                application_id=row.related_application_id,
+                channel="log",
+                payload=log_key,
+                success=True,
+            ))
+            db.commit()
+    finally:
+        db.close()
 
 
 def _admin_ok(request: Request) -> bool:
@@ -227,6 +313,18 @@ def _require_status_in(row: Application, allowed: set[str], action_label: str) -
         allowed_zh = " / ".join(zh.get(s, s) for s in sorted(allowed))
         current_zh = zh.get(row.status, row.status)
         raise HTTPException(409, f"{action_label}仅允许在「{allowed_zh}」状态执行，当前为「{current_zh}」。")
+
+
+def _application_has_surgery_before_and_after(db: Session, application_id: int) -> bool:
+    """术前、术后各至少一条媒体（照片或视频均可）。"""
+    rows = (
+        db.query(MediaFile.kind)
+        .filter(MediaFile.application_id == application_id)
+        .filter(MediaFile.kind.in_((MediaKind.surgery_before.value, MediaKind.surgery_after.value)))
+        .all()
+    )
+    kinds = {r[0] for r in rows}
+    return MediaKind.surgery_before.value in kinds and MediaKind.surgery_after.value in kinds
 
 
 @app.get("/api/regions/china")
@@ -349,7 +447,327 @@ async def page_apply(request: Request):
     )
 
 
-_ALLOWED_CLINIC_STORES = frozenset({"大风动物医院（东环店）", "大风动物医院（横岗店）"})
+_CLINIC_STORES = ("大风动物医院（东环店）", "大风动物医院（横岗店）")
+_ALLOWED_CLINIC_STORES = frozenset(_CLINIC_STORES)
+_ALLOWED_APPOINTMENT_CATEGORIES = frozenset({x.value for x in AppointmentCategory})
+_ALLOWED_APPOINTMENT_STATUSES = frozenset({x.value for x in AppointmentStatus})
+_APPOINTMENT_CATEGORY_LABELS = {
+    AppointmentCategory.tnr.value: "TNR 预约",
+    AppointmentCategory.outpatient.value: "门诊预约",
+    AppointmentCategory.surgery.value: "手术预约",
+    AppointmentCategory.beauty.value: "美容预约",
+    AppointmentCategory.grooming.value: "造型预约",   # 历史兼容
+    AppointmentCategory.washcare.value: "洗护预约",   # 历史兼容
+}
+_APPOINTMENT_STATUS_LABELS = {
+    AppointmentStatus.pending.value: "待确认",
+    AppointmentStatus.confirmed.value: "已确认",
+    AppointmentStatus.completed.value: "已完成",
+    AppointmentStatus.cancelled.value: "已取消",
+    AppointmentStatus.no_show.value: "未到店",
+}
+_PET_GENDER_LABELS = {"male": "公", "female": "母", "unknown": "未知"}
+_APPOINTMENT_BOOKING_MAX_DAYS_AHEAD = 30
+
+
+def _assert_appointment_fields(
+    *,
+    category: str,
+    service_name: str,
+    customer_name: str,
+    phone: str,
+    pet_name: str,
+    pet_gender: str,
+    store: str,
+    appointment_date: str,
+    appointment_time: str,
+    notes: str,
+    duration_minutes: str,
+) -> dict[str, str | int]:
+    def need(label: str, raw: str, max_len: int) -> str:
+        s = (raw or "").strip()
+        if not s:
+            raise HTTPException(400, f"请填写{label}。")
+        if len(s) > max_len:
+            raise HTTPException(400, f"{label}过长。")
+        return s
+
+    out: dict[str, str | int] = {}
+    cat = (category or "").strip()
+    if cat not in _ALLOWED_APPOINTMENT_CATEGORIES:
+        raise HTTPException(400, "请选择有效的预约类型。")
+    out["category"] = cat
+    out["service_name"] = need("预约项目", service_name, 120)
+    out["customer_name"] = need("联系人姓名", customer_name, 120)
+    phone_v = need("手机号", phone, 40)
+    if not re.fullmatch(r"1\d{10}", phone_v):
+        raise HTTPException(400, "请填写 11 位中国大陆手机号。")
+    out["phone"] = phone_v
+    out["pet_name"] = need("宠物/流浪猫名称", pet_name, 120)
+    g = (pet_gender or "").strip().lower()
+    if g not in ("male", "female", "unknown"):
+        raise HTTPException(400, "请选择性别。")
+    out["pet_gender"] = g
+    store_v = need("门店", store, 120)
+    if store_v not in _ALLOWED_CLINIC_STORES:
+        raise HTTPException(400, "请选择有效的预约门店。")
+    out["store"] = store_v
+    date_v = need("预约日期", appointment_date, 20)
+    try:
+        date_obj = datetime.strptime(date_v, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(400, "预约日期格式应为 YYYY-MM-DD。")
+    if date_obj < datetime.now().date():
+        raise HTTPException(400, "预约日期不能早于今天。")
+    out["appointment_date"] = date_v
+    time_v = need("预约时间", appointment_time, 20)
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", time_v):
+        raise HTTPException(400, "预约时间格式应为 HH:MM。")
+    out["appointment_time"] = time_v
+    out["notes"] = (notes or "").strip()[:2000]
+    try:
+        dur = int((duration_minutes or "30").strip() or "30")
+    except ValueError:
+        raise HTTPException(400, "时长应为分钟数。")
+    if dur < 10 or dur > 480:
+        raise HTTPException(400, "时长范围应在 10 到 480 分钟之间。")
+    out["duration_minutes"] = dur
+    # 与小程序 TNR 预约一致：后台/API 侧也固定项目与时长，避免手改表单绕过
+    if out["category"] == AppointmentCategory.tnr.value:
+        out["service_name"] = "TNR 手术安排"
+        out["duration_minutes"] = 60
+    return out
+
+
+def _mask_phone(phone: str) -> str:
+    t = (phone or "").strip()
+    if len(t) < 7:
+        return t
+    return t[:3] + "****" + t[-4:]
+
+
+_TNR_TIME_START = "11:00"
+_TNR_TIME_END = "18:00"
+_TNR_DAILY_MAX = 2
+
+
+def _time_to_minutes(t: str) -> int:
+    h, m = t.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _check_appointment_conflict(
+    db: "Session",
+    store: str,
+    appointment_date: str,
+    appointment_time: str,
+    duration_minutes: int,
+    exclude_id: int | None = None,
+) -> "Appointment | None":
+    """检查同门店同日是否存在时间重叠的预约（排除已取消/爽约）。重叠则返回冲突预约记录，否则返回 None。"""
+    q = (
+        db.query(Appointment)
+        .filter(
+            Appointment.store == store,
+            Appointment.appointment_date == appointment_date,
+            Appointment.status.notin_([AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value]),
+        )
+    )
+    if exclude_id is not None:
+        q = q.filter(Appointment.id != exclude_id)
+    existing = q.all()
+    new_start = _time_to_minutes(appointment_time)
+    new_end = new_start + duration_minutes
+    for appt in existing:
+        a_start = _time_to_minutes(appt.appointment_time)
+        a_end = a_start + appt.duration_minutes
+        if new_start < a_end and new_end > a_start:
+            return appt
+    return None
+
+
+def _check_tnr_constraints(
+    db: "Session",
+    category: str,
+    store: str,
+    appointment_date: str,
+    appointment_time: str,
+    exclude_id: int | None = None,
+) -> str | None:
+    """TNR 预约专项校验：时间段限制（11:00–18:00）和每店每日上限 2 个。违规返回错误字符串，通过返回 None。"""
+    if category != AppointmentCategory.tnr.value:
+        return None
+    # 时间段校验
+    t_minutes = _time_to_minutes(appointment_time)
+    start_minutes = _time_to_minutes(_TNR_TIME_START)
+    end_minutes = _time_to_minutes(_TNR_TIME_END)
+    if t_minutes < start_minutes or t_minutes >= end_minutes:
+        return f"TNR 手术预约时间须在 {_TNR_TIME_START}–{_TNR_TIME_END} 之间，请重新选择。"
+    # 每店每日上限
+    q = (
+        db.query(Appointment)
+        .filter(
+            Appointment.category == AppointmentCategory.tnr.value,
+            Appointment.store == store,
+            Appointment.appointment_date == appointment_date,
+            Appointment.status.notin_([AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value]),
+        )
+    )
+    if exclude_id is not None:
+        q = q.filter(Appointment.id != exclude_id)
+    count = q.count()
+    if count >= _TNR_DAILY_MAX:
+        return f"该门店 {appointment_date} TNR 手术预约已约满（每日上限 {_TNR_DAILY_MAX} 个），请改约其他日期。"
+    return None
+
+
+def _check_duplicate_application_appointment(
+    db: "Session",
+    related_application_id: int | None,
+    exclude_id: int | None = None,
+) -> str | None:
+    """检查同一 TNR 申请编号是否已有有效预约（非取消/爽约）。重复则返回错误字符串，否则返回 None。"""
+    if not related_application_id:
+        return None
+    q = (
+        db.query(Appointment)
+        .filter(
+            Appointment.related_application_id == related_application_id,
+            Appointment.status.notin_([AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value]),
+        )
+    )
+    if exclude_id is not None:
+        q = q.filter(Appointment.id != exclude_id)
+    existing = q.first()
+    if existing:
+        return (
+            f"申请 #{related_application_id} 已存在有效预约（预约 #{existing.id}，"
+            f"状态：{existing.status}），请先取消原预约再重新预约。"
+        )
+    return None
+
+
+async def _resolve_wechat_openid(payload: dict) -> str:
+    openid = ((payload or {}).get("openid", "") or "").strip()
+    code = ((payload or {}).get("code", "") or "").strip()
+    if not openid and code:
+        data = wechat_code2session(code)
+        openid = (data.get("openid", "") or "").strip()
+    if not openid:
+        raise HTTPException(400, "missing openid")
+    return openid
+
+
+def _appointment_catalog() -> dict:
+    today = datetime.now().date()
+    return {
+        "stores": list(_CLINIC_STORES),
+        "booking_window": {
+            "start_date": today.strftime("%Y-%m-%d"),
+            "max_days_ahead": _APPOINTMENT_BOOKING_MAX_DAYS_AHEAD,
+            "suggestion": "请使用「预约日期 / 预约时间」自主选择到院时段；后续可按门店、医生与服务能力细化排班规则。",
+        },
+        "categories": [
+            {
+                "value": AppointmentCategory.tnr.value,
+                "label": "流浪动物 TNR",
+                "description": "适合流浪动物初诊评估、TNR 手术安排和术后复诊。",
+                "booking_tip": "请使用下方「预约日期 / 预约时间」自主选择到院时段；不再展示固定建议时段列表。",
+                "supports_related_application": True,
+                "time_slots": [],
+                "services": [
+                    {
+                        "name": "TNR 手术安排",
+                        "duration_minutes": 60,
+                        "description": "用于确认手术时间、门店与到院前准备事项。",
+                    },
+                ],
+            },
+            {
+                "value": AppointmentCategory.outpatient.value,
+                "label": "常规门诊",
+                "description": "适合普通门诊、复诊、健康检查及疫苗驱虫等咨询。",
+                "booking_tip": "门诊可预约时间：10:00 – 21:00（上午需护理住院动物，晚上 21:00 后不接受新预约）。疫苗/驱虫 30 分钟，其余科目 60 分钟。",
+                "supports_related_application": False,
+                "time_range": {"start": "10:00", "end": "21:00"},
+                "time_slots": [],
+                "services": [
+                    {"name": "疫苗/驱虫",  "duration_minutes": 30},
+                    {"name": "体检",      "duration_minutes": 60},
+                    {"name": "呼吸道",    "duration_minutes": 60},
+                    {"name": "胃肠道",    "duration_minutes": 60},
+                    {"name": "泌尿道",    "duration_minutes": 60},
+                    {"name": "皮肤",      "duration_minutes": 60},
+                    {"name": "口腔",      "duration_minutes": 60},
+                    {"name": "行动异常",   "duration_minutes": 60},
+                    {"name": "心内科",    "duration_minutes": 60},
+                    {"name": "肾内科",    "duration_minutes": 60},
+                ],
+            },
+            {
+                "value": AppointmentCategory.surgery.value,
+                "label": "手术预约",
+                "description": "适合绝育手术、术前评估和术后复查。",
+                "booking_tip": "请使用下方「预约日期 / 预约时间」自主选择到院时段；后续可按手术台与麻醉安排细化。",
+                "supports_related_application": False,
+                "time_slots": [],
+                "services": [
+                    {"name": "绝育手术", "duration_minutes": 60, "description": "用于常规绝育手术预约。"},
+                    {"name": "术前评估", "duration_minutes": 30, "description": "用于评估手术风险、检查准备条件。"},
+                    {"name": "术后复查", "duration_minutes": 20, "description": "用于术后恢复、伤口与用药情况复核。"},
+                ],
+            },
+            {
+                "value": AppointmentCategory.beauty.value,
+                "label": "美容预约",
+                "description": "适合猫/犬洗护与造型服务，支持附加项目选择。",
+                "booking_tip": "请选择美容项目及附加服务，并提供宠物体型与毛发信息，以便安排合适的美容师与时段。",
+                "supports_related_application": False,
+                "time_slots": [],
+                "services": [
+                    {"name": "猫洗护", "duration_minutes": 60},
+                    {"name": "猫造型", "duration_minutes": 60},
+                    {"name": "犬洗护", "duration_minutes": 90},
+                    {"name": "犬造型", "duration_minutes": 90},
+                ],
+                "addon_options": ["去浮毛", "SPA", "护发素", "纯手剪", "药浴", "去油"],
+                "size_options": ["微小型犬（4kg 以下）", "小型犬（4–10kg）", "中型犬（10–15kg）", "中大型犬（15–25kg）", "大型犬（25kg 以上）"],
+                "coat_options": ["长毛", "短毛"],
+            },
+        ],
+        "pet_genders": [
+            {"value": "female", "label": "母"},
+            {"value": "male", "label": "公"},
+            {"value": "unknown", "label": "未知"},
+        ],
+    }
+
+
+def _serialize_appointment(row: Appointment) -> dict:
+    return {
+        "id": row.id,
+        "category": row.category,
+        "category_zh": _APPOINTMENT_CATEGORY_LABELS.get(row.category, row.category),
+        "status": row.status,
+        "status_zh": _APPOINTMENT_STATUS_LABELS.get(row.status, row.status),
+        "service_name": row.service_name,
+        "customer_name": row.customer_name,
+        "phone_masked": _mask_phone(row.phone),
+        "pet_name": row.pet_name,
+        "pet_gender": row.pet_gender,
+        "pet_gender_zh": _PET_GENDER_LABELS.get(row.pet_gender, row.pet_gender),
+        "store": row.store,
+        "appointment_date": row.appointment_date,
+        "appointment_time": row.appointment_time,
+        "duration_minutes": row.duration_minutes,
+        "notes": row.notes or "",
+        "related_application_id": row.related_application_id,
+        "pet_size": row.pet_size or "",
+        "coat_length": row.coat_length or "",
+        "addon_services": row.addon_services or "",
+        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+        "updated_at": row.updated_at.strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
+    }
 
 
 def _assert_application_form_fields(
@@ -803,6 +1221,8 @@ async def api_app_status(app_id: int, db: Session = Depends(get_db)):
         "status": row.status,
         "clinic_store": row.clinic_store,
         "appointment_at": row.appointment_at,
+        "applicant_name": row.applicant_name or "",
+        "phone": row.phone or "",
         "phone_masked": mask_phone(row.phone),
         "cat_nickname": row.cat_nickname or "",
         "cat_gender": row.cat_gender or "",
@@ -810,6 +1230,7 @@ async def api_app_status(app_id: int, db: Session = Depends(get_db)):
         "health_note": row.health_note or "",
         "address": row.address or "",
         "note": notes,
+        "reject_reason": notes,
         "created_at": row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         "updated_at": row.updated_at.strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
         "notifications": [
@@ -910,12 +1331,20 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
         backup_files = list_backup_zips()
     except Exception:
         backup_files = []
+    appointments = (
+        db.query(Appointment)
+        .options(selectinload(Appointment.application))
+        .order_by(Appointment.created_at.desc())
+        .limit(30)
+        .all()
+    )
     return templates.TemplateResponse(
         "admin.html",
         {
             "request": request,
             "title": "TNR 审核与手术登记",
             "apps": rows,
+            "appointments": appointments,
             "csrf_token": _get_csrf_token(request),
             "backup_files": backup_files,
             "filters": {
@@ -933,6 +1362,502 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
             "stats": {"overall_by_status": overall_by_status, "today_new": today_new, "pending_todo": pending_todo, "total": total},
         },
     )
+
+
+def _admin_appointment_redirect_base(redirect_after: str) -> str:
+    """预约表单提交后回到哪一页；仅允许固定路径，避免开放重定向。"""
+    if (redirect_after or "").strip().lower() == "appointments":
+        return "/admin/appointments"
+    return "/admin"
+
+
+def _admin_appointment_redirect(
+    next_val: str | None,
+    *,
+    ok: str | None = None,
+    err: str | None = None,
+    anchor: str | None = None,
+) -> RedirectResponse:
+    base = "/admin/appointments"
+    parts: list[str] = []
+    if ok:
+        parts.append(f"appointment_ok={ok}")
+    if err:
+        parts.append("appointment_err=" + quote(str(err)[:200], safe=""))
+    url = base + ("?" + "&".join(parts) if parts else "")
+    if anchor:
+        url += f"#{anchor}"
+    return RedirectResponse(url, status_code=303)
+
+
+# ── 美容时长估算 ──────────────────────────────────────────────────────────────
+# 美容师工作时间（分钟，从午夜起算）
+_BEAUTY_WORK_START = 13 * 60   # 13:00
+_BEAUTY_WORK_END   = 22 * 60   # 22:00
+_BEAUTY_SLOT_STEP  = 30        # 每 30 分钟一个可选时段
+
+
+def _calc_beauty_duration(service_name: str, pet_size: str, coat_length: str, addon_services: str = "") -> int:
+    """
+    根据美容项目、体型、毛发长度、附加服务估算占用分钟数。
+    附加服务用逗号分隔，每项 +30 分钟。
+    """
+    sn    = service_name or ""
+    sz    = pet_size     or ""
+    is_long  = (coat_length or "") == "长毛"
+    is_wash  = "洗护" in sn
+    # is_groom = "造型" in sn  # 不需要显式判断，else 分支即为造型
+
+    base = 60  # fallback
+
+    if "犬" in sn:
+        if "微小型" in sz:
+            base = 30 if is_wash else 90
+        elif "小型犬" in sz:           # 注意：elif 保证 "微小型" 已被排除
+            base = 60 if is_wash else 120
+        elif "中大型" in sz:
+            base = (120 if is_long else 90) if is_wash else 180
+        elif "中型犬" in sz:
+            base = (90 if is_long else 60) if is_wash else 150
+        elif "大型犬" in sz:           # "中大型犬" 已被前面 elif 排除
+            base = (150 if is_long else 120) if is_wash else 210
+    elif "猫" in sn:
+        if "大型猫" in sz:
+            base = (150 if is_long else 120) if is_wash else 150
+        elif "中型猫" in sz:
+            base = (120 if is_long else 90) if is_wash else 120
+        elif "小型猫" in sz:
+            base = (90 if is_long else 60) if is_wash else 120
+
+    # 附加服务：每项 +30 分钟
+    if addon_services:
+        addon_count = len([a for a in addon_services.split(",") if a.strip()])
+        base += addon_count * 30
+
+    return base
+
+
+def _beauty_slots_for_date(
+    db: "Session",
+    store: str,
+    date_str: str,
+    new_service: str,
+    new_duration: int,
+) -> list[str]:
+    """
+    返回指定日期门店美容师可接受的开始时间列表（HH:MM 字符串）。
+    实现猫进烘干机时可并发做 ≤60min 犬洗护的规则。
+    """
+    _inactive = {AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value}
+    bookings = (
+        db.query(Appointment)
+        .filter(
+            Appointment.appointment_date == date_str,
+            Appointment.store == store,
+            Appointment.category.in_(["beauty", "grooming", "washcare"]),
+            Appointment.status.notin_(list(_inactive)),
+        )
+        .all()
+    )
+
+    # 解析已有预约 → 时间块（分钟）
+    dog_blocks: list[tuple[int, int]] = []       # 犬：完全占用美容师
+    cat_active: list[tuple[int, int]] = []       # 猫主动护理阶段
+    cat_dryer:  list[tuple[int, int]] = []       # 猫烘干机阶段（可并发 ≤60min 犬服务）
+
+    for b in bookings:
+        try:
+            bh, bm = b.appointment_time.split(":")
+            b_s = int(bh) * 60 + int(bm)
+            b_e = b_s + (b.duration_minutes or 60)
+        except Exception:
+            continue
+        sn = b.service_name or ""
+        if "猫" in sn:
+            # 主动护理阶段固定为最初60分钟（洗猫+护理+冲洗）
+            # 之后才是烘干机阶段（此阶段可并发小型犬服务）
+            cat_active_end = b_s + 60
+            if cat_active_end < b_e:
+                cat_active.append((b_s, cat_active_end))
+                cat_dryer.append((cat_active_end, b_e))
+            else:
+                # 总时长 ≤60 分钟：全程主动护理，无烘干机窗口
+                cat_active.append((b_s, b_e))
+        else:
+            dog_blocks.append((b_s, b_e))
+
+    is_new_dog = "犬" in new_service
+    is_new_cat = "猫" in new_service
+
+    def _overlaps(s1: int, e1: int, s2: int, e2: int) -> bool:
+        return s1 < e2 and e1 > s2
+
+    def _slot_ok(start: int) -> bool:
+        end = start + new_duration
+        if start < _BEAUTY_WORK_START or end > _BEAUTY_WORK_END:
+            return False
+        # 犬类预约：不能与 dog_blocks 重叠
+        for bs, be in dog_blocks:
+            if _overlaps(start, end, bs, be):
+                return False
+        if is_new_dog:
+            # 不能与猫的主动护理阶段重叠
+            for bs, be in cat_active:
+                if _overlaps(start, end, bs, be):
+                    return False
+            # 烘干机窗口：仅 ≤60min 且完全落在窗口内才允许
+            for dws, dwe in cat_dryer:
+                if _overlaps(start, end, dws, dwe):
+                    if not (new_duration <= 60 and start >= dws and end <= dwe):
+                        return False
+        elif is_new_cat:
+            # 猫：需要完全空闲（不能与任何阶段重叠）
+            for bs, be in cat_active:
+                if _overlaps(start, end, bs, be):
+                    return False
+            for dws, dwe in cat_dryer:
+                if _overlaps(start, end, dws, dwe):
+                    return False
+        return True
+
+    slots = []
+    t = _BEAUTY_WORK_START
+    while t + new_duration <= _BEAUTY_WORK_END:
+        if _slot_ok(t):
+            slots.append(f"{t // 60:02d}:{t % 60:02d}")
+        t += _BEAUTY_SLOT_STEP
+    return slots
+
+
+# ── 门诊/手术容量规则 ─────────────────────────────────────────────────────────
+# 每门店、每时段（上午/下午/晚上）的总容量单位数上限
+_SLOT_CAPACITY_MAX = 9
+# 疫苗/驱虫 = 1 单位；普通门诊 = 3 单位；手术（含 TNR）= 6 单位
+# 规则：同时段最多 3 个普通门诊 (3×3=9)，或 1 个手术 (6) + 1 个普通门诊 (3)=9，等等
+
+_OUTPATIENT_SERVICES = [
+    "疫苗/驱虫", "体检", "呼吸道", "胃肠道", "泌尿道",
+    "皮肤", "口腔", "行动异常", "心内科", "肾内科",
+]
+_VACCINE_KEYWORDS = ("疫苗", "驱虫")
+
+_SLOT_BOUNDS = {
+    "morning":   ("09:00", "12:00"),
+    "afternoon": ("12:00", "18:00"),
+    "evening":   ("18:00", "22:00"),
+    "other":     ("00:00", "23:59"),
+}
+_SLOT_NAME_ZH = {"morning": "上午", "afternoon": "下午", "evening": "晚上", "other": "该时段"}
+
+
+def _capacity_units(category: str, service_name: str) -> int:
+    """返回该预约消耗的容量单位（0 = 不纳入容量管控，如造型/洗护）。"""
+    if category in ("tnr", "surgery"):
+        return 6
+    if category == "outpatient":
+        sn = service_name or ""
+        if any(kw in sn for kw in _VACCINE_KEYWORDS):
+            return 1
+        return 3
+    return 0  # beauty / grooming / washcare 不参与容量管控
+
+
+_OUTPATIENT_TIME_START = "10:00"   # 门诊最早开始时间（上午护理住院动物）
+_OUTPATIENT_TIME_END   = "21:00"   # 门诊最晚开始时间（避免加班）
+
+
+def _check_outpatient_time(category: str, appointment_time: str) -> str | None:
+    """门诊/疫苗时间限制：10:00 之后、21:00 之前。返回错误描述或 None。"""
+    if category != AppointmentCategory.outpatient.value:
+        return None
+    t = (appointment_time or "")[:5]
+    if t < _OUTPATIENT_TIME_START:
+        return f"门诊预约最早从 {_OUTPATIENT_TIME_START} 开始（上午需护理住院动物），请选择 {_OUTPATIENT_TIME_START} 或之后的时间。"
+    if t >= _OUTPATIENT_TIME_END:
+        return f"门诊预约最晚在 {_OUTPATIENT_TIME_END} 之前，请选择更早的时间。"
+    return None
+
+
+def _check_slot_capacity(
+    db: "Session",
+    store: str,
+    appointment_date: str,
+    appointment_time: str,
+    category: str,
+    service_name: str,
+    exclude_id: int | None = None,
+) -> str | None:
+    """返回错误提示（str）或 None（通过）。"""
+    new_units = _capacity_units(category, service_name)
+    if new_units == 0:
+        return None  # 不受容量限制
+
+    slot_key = _appt_time_slot(appointment_time)
+    t_from, t_to = _SLOT_BOUNDS.get(slot_key, ("00:00", "23:59"))
+    slot_zh = _SLOT_NAME_ZH.get(slot_key, "该时段")
+
+    _inactive = {AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value}
+    q = (
+        db.query(Appointment)
+        .filter(
+            Appointment.store == store,
+            Appointment.appointment_date == appointment_date,
+            Appointment.appointment_time >= t_from,
+            Appointment.appointment_time < t_to,
+            Appointment.status.notin_(list(_inactive)),
+        )
+    )
+    if exclude_id:
+        q = q.filter(Appointment.id != exclude_id)
+
+    used = sum(_capacity_units(a.category, a.service_name or "") for a in q.all())
+    avail = _SLOT_CAPACITY_MAX - used
+
+    if avail < new_units:
+        type_zh = (
+            "手术" if category in ("tnr", "surgery")
+            else ("疫苗/驱虫" if new_units == 1 else "门诊")
+        )
+        if avail <= 0:
+            return f"该门店 {slot_zh}时段预约容量已满（上限 {_SLOT_CAPACITY_MAX} 单位），请选择其他时段或日期。"
+        return (
+            f"该门店 {slot_zh}时段剩余容量不足：剩余 {avail} 单位，"
+            f"此{type_zh}需要 {new_units} 单位，请选择其他时段或日期。"
+        )
+    return None
+
+
+def _appt_time_slot(time_str: str) -> str:
+    try:
+        h = int((time_str or "00:00").split(":")[0])
+        if 9 <= h < 12:
+            return "morning"
+        if 12 <= h < 18:
+            return "afternoon"
+        if 18 <= h < 22:
+            return "evening"
+        return "other"
+    except Exception:
+        return "other"
+
+
+@app.get("/admin/appointments", response_class=HTMLResponse)
+async def page_admin_appointments(
+    request: Request,
+    db: Session = Depends(get_db),
+    df: str = Query(""),        # date_from  YYYY-MM-DD
+    dt: str = Query(""),        # date_to    YYYY-MM-DD
+    preset: str = Query("today"),  # today / 3days / week / month / custom
+    appt_status: str = Query(""),
+    appt_store: str = Query(""),
+    appt_category: str = Query(""),
+):
+    if not _admin_ok(request):
+        return templates.TemplateResponse(
+            "admin_login.html",
+            {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
+        )
+
+    today = datetime.now().date()
+    today_str = today.strftime("%Y-%m-%d")
+    tomorrow_str = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # ── 日期范围推导 ──────────────────────────────────────────
+    _preset = (preset or "today").strip()
+    if _preset == "3days":
+        df_d, dt_d = today, today + timedelta(days=2)
+    elif _preset == "week":
+        df_d, dt_d = today, today + timedelta(days=6)
+    elif _preset == "month":
+        df_d, dt_d = today, today + timedelta(days=29)
+    elif _preset == "custom":
+        try:
+            df_d = datetime.strptime(df, "%Y-%m-%d").date() if df else today
+        except ValueError:
+            df_d = today
+        try:
+            dt_d = datetime.strptime(dt, "%Y-%m-%d").date() if dt else df_d + timedelta(days=6)
+        except ValueError:
+            dt_d = df_d + timedelta(days=6)
+        if dt_d < df_d:
+            dt_d = df_d
+    else:  # today (default)
+        _preset = "today"
+        df_d, dt_d = today, today
+
+    df_str = df_d.strftime("%Y-%m-%d")
+    dt_str = dt_d.strftime("%Y-%m-%d")
+
+    # ── 查询 ──────────────────────────────────────────────────
+    q = (
+        db.query(Appointment)
+        .options(selectinload(Appointment.application))
+        .filter(
+            Appointment.appointment_date >= df_str,
+            Appointment.appointment_date <= dt_str,
+        )
+    )
+    if appt_status:
+        q = q.filter(Appointment.status == appt_status)
+    if appt_store:
+        q = q.filter(Appointment.store == appt_store)
+    if appt_category:
+        q = q.filter(Appointment.category == appt_category)
+
+    appointments_raw = q.order_by(
+        Appointment.appointment_date, Appointment.appointment_time
+    ).all()
+
+    # ── 按日期→部门→时段分组 ──────────────────────────────────
+    _SLOT_ORDER = ["morning", "afternoon", "evening", "other"]
+    _SLOT_LABELS = {
+        "morning":   "上午  09:00 – 12:00",
+        "afternoon": "下午  12:00 – 18:00",
+        "evening":   "晚上  18:00 – 22:00",
+        "other":     "其他时段",
+    }
+    _WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    _BEAUTY_CATS = {"beauty", "grooming", "washcare"}
+    _DEPT_ORDER  = ["medical", "beauty"]
+    _DEPT_LABELS = {"medical": "医疗", "beauty": "美容"}
+
+    # date → dept → slot → [appts]
+    date_buckets: dict[str, dict[str, dict[str, list]]] = {}
+    for appt in appointments_raw:
+        d = appt.appointment_date
+        if d not in date_buckets:
+            date_buckets[d] = {
+                "medical": {s: [] for s in _SLOT_ORDER},
+                "beauty":  {s: [] for s in _SLOT_ORDER},
+            }
+        dept = "beauty" if (appt.category or "") in _BEAUTY_CATS else "medical"
+        date_buckets[d][dept][_appt_time_slot(appt.appointment_time)].append(appt)
+
+    def _date_display(d_str: str) -> str:
+        try:
+            d_obj = datetime.strptime(d_str, "%Y-%m-%d").date()
+            wd = _WEEKDAYS[d_obj.weekday()]
+            label = f"{d_obj.month}月{d_obj.day}日（{wd}）"
+            if d_str == today_str:
+                label += " · 今天"
+            elif d_str == tomorrow_str:
+                label += " · 明天"
+            return label
+        except Exception:
+            return d_str
+
+    grouped_appointments = []
+    _inactive = {AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value}
+    for d_str in sorted(date_buckets):
+        all_day: list = []
+        dept_groups = []
+        for dept_key in _DEPT_ORDER:
+            dept_appts = [a for sl in _SLOT_ORDER for a in date_buckets[d_str][dept_key][sl]]
+            all_day.extend(dept_appts)
+            dept_slots = [
+                {"key": sl, "label": _SLOT_LABELS[sl], "appts": date_buckets[d_str][dept_key][sl]}
+                for sl in _SLOT_ORDER
+                if date_buckets[d_str][dept_key][sl]
+            ]
+            if dept_slots:
+                dept_groups.append({
+                    "key":   dept_key,
+                    "label": _DEPT_LABELS[dept_key],
+                    "slots": dept_slots,
+                    "total": len(dept_appts),
+                })
+
+        active   = [a for a in all_day if a.status not in _inactive]
+        pending  = [a for a in all_day if a.status == AppointmentStatus.pending.value]
+        tnr_ct   = sum(1 for a in active if a.category == AppointmentCategory.tnr.value)
+        grouped_appointments.append({
+            "date":          d_str,
+            "date_display":  _date_display(d_str),
+            "is_today":      d_str == today_str,
+            "total":         len(all_day),
+            "active_count":  len(active),
+            "pending_count": len(pending),
+            "tnr_count":     tnr_ct,
+            "dept_groups":   dept_groups,
+        })
+
+    # ── 顶部统计（始终基于今日全量，不受筛选影响） ────────────
+    _today_appts = (
+        db.query(Appointment)
+        .filter(
+            Appointment.appointment_date == today_str,
+            Appointment.status.notin_(list(_inactive)),
+        )
+        .all()
+    )
+    stats = {
+        "today_active":  len(_today_appts),
+        "pending_total": db.query(Appointment)
+            .filter(
+                Appointment.status == AppointmentStatus.pending.value,
+                Appointment.appointment_date >= today_str,
+            ).count(),
+        "tnr_today":     sum(1 for a in _today_appts if a.category == AppointmentCategory.tnr.value),
+        "tnr_daily_max": _TNR_DAILY_MAX,
+    }
+
+    return templates.TemplateResponse(
+        "admin_appointments.html",
+        {
+            "request":              request,
+            "title":                "预约管理",
+            "appointments":         appointments_raw,          # 创建表单 JS 仍使用
+            "grouped_appointments": grouped_appointments,
+            "stats":                stats,
+            "filters": {
+                "date_from": df_str,
+                "date_to":   dt_str,
+                "preset":    _preset,
+                "status":    appt_status,
+                "store":     appt_store,
+                "category":  appt_category,
+            },
+            "stores":     list(_CLINIC_STORES),
+            "csrf_token": _get_csrf_token(request),
+        },
+    )
+
+
+@app.get("/admin/api/tnr-application/{application_id}/for-appointment")
+async def admin_api_tnr_application_for_appointment(
+    application_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """后台新建预约时：按 TNR 申请编号拉取联系人、宠物、门店等用于自动填充（需已登录）。"""
+    require_admin(request)
+    row = db.get(Application, application_id)
+    if not row:
+        raise HTTPException(404, detail="申请不存在")
+    store = (row.clinic_store or "").strip()
+    if store not in _ALLOWED_CLINIC_STORES:
+        store = ""
+    g = (row.cat_gender or "unknown").strip().lower()
+    if g not in ("male", "female", "unknown"):
+        g = "unknown"
+    appt_date = ""
+    raw_at = (row.appointment_at or "").strip()
+    if len(raw_at) >= 10 and raw_at[4] == "-" and raw_at[7] == "-":
+        try:
+            datetime.strptime(raw_at[:10], "%Y-%m-%d")
+            appt_date = raw_at[:10]
+        except ValueError:
+            pass
+    return {
+        "ok": True,
+        "application_id": row.id,
+        "customer_name": (row.applicant_name or "").strip(),
+        "phone": (row.phone or "").strip(),
+        "pet_name": (row.cat_nickname or "").strip(),
+        "pet_gender": g,
+        "store": store,
+        "appointment_date_suggestion": appt_date,
+    }
 
 
 @app.post("/admin/login")
@@ -1058,6 +1983,348 @@ async def admin_purge_system(
     return await _admin_purge_run(request, db, csrf_token, scope, confirm)
 
 
+@app.post("/admin/appointments/create", name="admin_appointment_create")
+async def admin_appointment_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    category: str = Form(...),
+    service_name: str = Form(...),
+    customer_name: str = Form(...),
+    phone: str = Form(...),
+    pet_name: str = Form(...),
+    pet_gender: str = Form(...),
+    store: str = Form(...),
+    appointment_date: str = Form(...),
+    appointment_time: str = Form(...),
+    duration_minutes: str = Form("30"),
+    notes: str = Form(""),
+    related_application_id: str = Form(""),
+    redirect_after: str = Form("admin"),
+    pet_size: str = Form(""),
+    coat_length: str = Form(""),
+    addon_services: list[str] = Form([]),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    redirect_base = _admin_appointment_redirect_base(redirect_after)
+    try:
+        fields = _assert_appointment_fields(
+            category=category,
+            service_name=service_name,
+            customer_name=customer_name,
+            phone=phone,
+            pet_name=pet_name,
+            pet_gender=pet_gender,
+            store=store,
+            appointment_date=appointment_date,
+            appointment_time=appointment_time,
+            notes=notes,
+            duration_minutes=duration_minutes,
+        )
+        related_id: int | None = None
+        raw_related = (related_application_id or "").strip()
+        if str(fields["category"]) == AppointmentCategory.tnr.value and raw_related:
+            if not raw_related.isdigit():
+                raise HTTPException(400, "关联 TNR 申请编号应为数字。")
+            related_id = int(raw_related)
+            exists = db.query(Application.id).filter(Application.id == related_id).scalar()
+            if not exists:
+                raise HTTPException(404, "关联的 TNR 申请不存在。")
+        # TNR 规则校验
+        tnr_err = _check_tnr_constraints(
+            db,
+            category=str(fields["category"]),
+            store=str(fields["store"]),
+            appointment_date=str(fields["appointment_date"]),
+            appointment_time=str(fields["appointment_time"]),
+        )
+        if tnr_err:
+            raise HTTPException(400, tnr_err)
+        # 重复申请编号校验
+        dup_err = _check_duplicate_application_appointment(db, related_id)
+        if dup_err:
+            raise HTTPException(400, dup_err)
+        # 门诊时间限制校验
+        time_err = _check_outpatient_time(str(fields["category"]), str(fields["appointment_time"]))
+        if time_err:
+            raise HTTPException(400, time_err)
+        # 时段容量校验
+        cap_err = _check_slot_capacity(
+            db,
+            store=str(fields["store"]),
+            appointment_date=str(fields["appointment_date"]),
+            appointment_time=str(fields["appointment_time"]),
+            category=str(fields["category"]),
+            service_name=str(fields["service_name"]),
+        )
+        if cap_err:
+            raise HTTPException(400, cap_err)
+        # 时间冲突检测
+        conflict = _check_appointment_conflict(
+            db,
+            store=str(fields["store"]),
+            appointment_date=str(fields["appointment_date"]),
+            appointment_time=str(fields["appointment_time"]),
+            duration_minutes=int(fields["duration_minutes"]),
+        )
+        if conflict:
+            raise HTTPException(
+                400,
+                f"时间冲突：该门店 {conflict.appointment_date} {conflict.appointment_time} 已有预约"
+                f"（#{conflict.id} {conflict.customer_name}），请换一个时间段。",
+            )
+        _is_beauty = str(fields["category"]) == AppointmentCategory.beauty.value
+        row = Appointment(
+            category=str(fields["category"]),
+            status=AppointmentStatus.pending.value,
+            service_name=str(fields["service_name"]),
+            customer_name=str(fields["customer_name"]),
+            phone=str(fields["phone"]),
+            pet_name=str(fields["pet_name"]),
+            pet_gender=str(fields["pet_gender"]),
+            store=str(fields["store"]),
+            appointment_date=str(fields["appointment_date"]),
+            appointment_time=str(fields["appointment_time"]),
+            duration_minutes=int(fields["duration_minutes"]),
+            notes=str(fields["notes"]),
+            source="admin",
+            related_application_id=related_id,
+            pet_size=(pet_size.strip() or None) if _is_beauty else None,
+            coat_length=(coat_length.strip() or None) if _is_beauty else None,
+            addon_services=(",".join(s.strip() for s in addon_services if s.strip()) or None) if _is_beauty else None,
+        )
+        db.add(row)
+        db.flush()
+        _audit(
+            db,
+            request,
+            "appointment_create",
+            application_id=related_id,
+            detail={
+                "appointment_id": row.id,
+                "category": row.category,
+                "service_name": row.service_name,
+                "store": row.store,
+                "appointment_date": row.appointment_date,
+                "appointment_time": row.appointment_time,
+            },
+        )
+        db.commit()
+        return RedirectResponse(redirect_base + f"?appointment_ok=create#appt-{row.id}", status_code=303)
+    except HTTPException as e:
+        db.rollback()
+        return RedirectResponse(
+            redirect_base + "?appointment_err=" + quote(str(e.detail)[:160], safe=""),
+            status_code=303,
+        )
+
+
+@app.post("/admin/appointments/{appointment_id}/status", name="admin_appointment_status")
+async def admin_appointment_status(
+    appointment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    status: str = Form(...),
+    redirect_after: str = Form("admin"),
+    cancel_reason: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    redirect_base = _admin_appointment_redirect_base(redirect_after)
+    status = (status or "").strip()
+    anchor = f"appt-{appointment_id}"
+    if status not in _ALLOWED_APPOINTMENT_STATUSES:
+        return RedirectResponse(redirect_base + "?appointment_err=" + quote("无效的预约状态", safe="") + f"#{anchor}", status_code=303)
+    row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not row:
+        return RedirectResponse(redirect_base + "?appointment_err=" + quote("预约记录不存在", safe="") + f"#{anchor}", status_code=303)
+    old_appt_status = row.status
+    row.status = status
+    row.updated_at = datetime.utcnow()
+    reason_clean = (cancel_reason or "").strip()[:300]
+    audit_detail: dict = {"appointment_id": row.id, "old_status": old_appt_status, "status": row.status}
+    if reason_clean:
+        audit_detail["cancel_reason"] = reason_clean
+        # 将取消原因追加到备注，方便列表页直接查看
+        existing_notes = (row.notes or "").strip()
+        row.notes = (existing_notes + f"\n[取消原因] {reason_clean}").strip()
+    _audit(
+        db,
+        request,
+        "appointment_status_update",
+        application_id=row.related_application_id,
+        detail=audit_detail,
+    )
+    # 同步关联 TNR 申请状态
+    if row.related_application_id:
+        app_row = db.get(Application, row.related_application_id)
+        if app_row:
+            if status == AppointmentStatus.confirmed.value and app_row.status in (
+                ApplicationStatus.approved.value,
+                ApplicationStatus.pre_approved.value,
+            ):
+                app_row.status = ApplicationStatus.scheduled.value
+                app_row.appointment_at = row.appointment_date
+                app_row.updated_at = datetime.utcnow()
+            elif status == AppointmentStatus.cancelled.value and app_row.status == ApplicationStatus.scheduled.value:
+                app_row.status = ApplicationStatus.approved.value
+                app_row.updated_at = datetime.utcnow()
+            elif status == AppointmentStatus.no_show.value:
+                app_row.status = ApplicationStatus.no_show.value
+                app_row.updated_at = datetime.utcnow()
+    db.commit()
+    # 预约确认/取消后推送通知给用户（#5）
+    openid_for_push = (row.wechat_openid or "").strip()
+    if openid_for_push and status in (AppointmentStatus.confirmed.value, AppointmentStatus.cancelled.value):
+        status_label = "已确认，请按约定时间到院" if status == AppointmentStatus.confirmed.value else "已取消"
+        push_appointment_status(
+            db,
+            appointment_id=row.id,
+            openid=openid_for_push,
+            status_text=status_label,
+            service_name=row.service_name or "",
+            store=row.store or "",
+            appointment_date=row.appointment_date or "",
+            appointment_time=row.appointment_time or "",
+            note=reason_clean or status_label,
+        )
+    return RedirectResponse(redirect_base + f"?appointment_ok=status#{anchor}", status_code=303)
+
+
+@app.post("/admin/appointments/{appointment_id}/reschedule", name="admin_appointment_reschedule")
+async def admin_appointment_reschedule(
+    appointment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    next: str = Form("/admin/appointments"),
+    new_store: str = Form(""),
+    new_date: str = Form(...),
+    new_time: str = Form(...),
+    new_duration: str = Form(""),
+    reschedule_reason: str = Form(""),
+):
+    """后台改约：修改预约的门店、日期、时间，自动做冲突检测并记录通知日志。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _anchor = f"appt-{appointment_id}"
+    row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not row:
+        return _admin_appointment_redirect(next, err="预约记录不存在", anchor=_anchor)
+    if row.status in (AppointmentStatus.cancelled.value, AppointmentStatus.completed.value):
+        return _admin_appointment_redirect(next, err="已完成或已取消的预约不能改约", anchor=_anchor)
+
+    new_date = (new_date or "").strip()
+    new_time = (new_time or "").strip()
+    if not new_date or not new_time:
+        return _admin_appointment_redirect(next, err="请填写新的预约日期和时间", anchor=_anchor)
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_date):
+        return _admin_appointment_redirect(next, err="日期格式应为 YYYY-MM-DD", anchor=_anchor)
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", new_time):
+        return _admin_appointment_redirect(next, err="时间格式应为 HH:MM", anchor=_anchor)
+    try:
+        date_obj = datetime.strptime(new_date, "%Y-%m-%d").date()
+    except ValueError:
+        return _admin_appointment_redirect(next, err="无效的日期", anchor=_anchor)
+    if date_obj < datetime.now().date():
+        return _admin_appointment_redirect(next, err="改约日期不能早于今天", anchor=_anchor)
+
+    target_store = (new_store or "").strip() or row.store
+    if target_store not in _ALLOWED_CLINIC_STORES:
+        return _admin_appointment_redirect(next, err="无效的门店", anchor=_anchor)
+    dur_raw = (new_duration or "").strip()
+    target_duration = int(dur_raw) if dur_raw and dur_raw.isdigit() and 10 <= int(dur_raw) <= 480 else row.duration_minutes
+
+    # TNR 规则校验
+    tnr_err = _check_tnr_constraints(
+        db,
+        category=row.category,
+        store=target_store,
+        appointment_date=new_date,
+        appointment_time=new_time,
+        exclude_id=appointment_id,
+    )
+    if tnr_err:
+        return _admin_appointment_redirect(next, err=tnr_err, anchor=_anchor)
+    # 门诊时间限制校验（改约）
+    time_err = _check_outpatient_time(row.category, new_time)
+    if time_err:
+        return _admin_appointment_redirect(next, err=time_err, anchor=_anchor)
+    # 时段容量校验（改约）
+    cap_err = _check_slot_capacity(
+        db,
+        store=target_store,
+        appointment_date=new_date,
+        appointment_time=new_time,
+        category=row.category,
+        service_name=row.service_name or "",
+        exclude_id=appointment_id,
+    )
+    if cap_err:
+        return _admin_appointment_redirect(next, err=cap_err, anchor=_anchor)
+    # 冲突检测（排除自身）
+    conflict = _check_appointment_conflict(
+        db,
+        store=target_store,
+        appointment_date=new_date,
+        appointment_time=new_time,
+        duration_minutes=target_duration,
+        exclude_id=appointment_id,
+    )
+    if conflict:
+        return _admin_appointment_redirect(
+            next,
+            err=f"时间冲突：该门店 {conflict.appointment_date} {conflict.appointment_time} 已有预约"
+            f"（#{conflict.id} {conflict.customer_name}），请换一个时间段。",
+            anchor=_anchor,
+        )
+
+    old_store = row.store
+    old_date = row.appointment_date
+    old_time = row.appointment_time
+    old_duration = row.duration_minutes
+
+    row.store = target_store
+    row.appointment_date = new_date
+    row.appointment_time = new_time
+    row.duration_minutes = target_duration
+    row.updated_at = datetime.utcnow()
+
+    reason_text = (reschedule_reason or "").strip()[:500]
+    detail = {
+        "appointment_id": row.id,
+        "old": {"store": old_store, "date": old_date, "time": old_time, "duration": old_duration},
+        "new": {"store": row.store, "date": row.appointment_date, "time": row.appointment_time, "duration": row.duration_minutes},
+        "reason": reason_text,
+    }
+    _audit(db, request, "appointment_reschedule", application_id=row.related_application_id, detail=detail)
+
+    # 同步关联申请的预约日期
+    if row.related_application_id:
+        app_row = db.get(Application, row.related_application_id)
+        if app_row and app_row.status == ApplicationStatus.scheduled.value:
+            app_row.appointment_at = new_date
+            app_row.updated_at = datetime.utcnow()
+        notify_payload = (
+            f"预约改约通知：#{row.id} {row.customer_name} 由 {old_store} {old_date} {old_time} "
+            f"改为 {row.store} {row.appointment_date} {row.appointment_time}"
+        )
+        if reason_text:
+            notify_payload += f"（原因：{reason_text}）"
+        from app.models import NotificationLog
+        db.add(NotificationLog(
+            application_id=row.related_application_id,
+            channel="log",
+            payload=notify_payload,
+            success=True,
+        ))
+
+    db.commit()
+    return _admin_appointment_redirect(next, ok="reschedule", anchor=_anchor)
+
+
 @app.post("/admin/app/{app_id}/manual-approve")
 async def manual_approve(app_id: int, request: Request, db: Session = Depends(get_db), csrf_token: str = Form("")):
     require_admin(request)
@@ -1169,9 +2436,19 @@ async def surgery_done(app_id: int, request: Request, db: Session = Depends(get_
         {
             ApplicationStatus.approved.value,
             ApplicationStatus.arrived_verified.value,
+            ApplicationStatus.scheduled.value,
         },
         "标记手术完成",
     )
+    if not _application_has_surgery_before_and_after(db, app_id):
+        return RedirectResponse(
+            "/admin?surgery_media_err="
+            + quote(
+                "标记手术完成前，须在本申请下各上传至少 1 条术前资料与 1 条术后资料（照片或视频均可）。",
+                safe="",
+            ),
+            status_code=303,
+        )
     row.status = ApplicationStatus.surgery_completed.value
     _audit(db, request, "surgery_done", application_id=app_id)
     db.commit()
@@ -1206,6 +2483,155 @@ async def api_wechat_login(payload: dict = Body(...)):
         raise HTTPException(400, str(e))
     # 生产环境不建议把 session_key 返回给前端；这里只返回 openid 供演示
     return {"openid": data.get("openid", "")}
+
+
+@app.get("/api/appointments/config")
+async def api_appointments_config():
+    return _appointment_catalog()
+
+
+@app.get("/api/appointments/beauty-slots")
+async def api_beauty_slots(
+    service:     str = Query(""),
+    pet_size:    str = Query(""),
+    coat_length: str = Query(""),
+    addons:      str = Query(""),   # 逗号分隔的附加项目
+    date:        str = Query(""),   # YYYY-MM-DD
+    store:       str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """
+    美容预约：计算估算时长 + 可预约时段。
+    时段生成考虑猫进烘干机可并发小型犬洗护的规则。
+    """
+    duration = _calc_beauty_duration(service, pet_size, coat_length, addons)
+
+    # 时长显示字符串
+    h, m = divmod(duration, 60)
+    if h == 0:
+        dur_display = f"{m}分钟"
+    elif m:
+        dur_display = f"{h}小时{m}分钟"
+    else:
+        dur_display = f"{h}小时"
+
+    slots: list[str] = []
+    if date and store:
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+            slots = _beauty_slots_for_date(db, store, date, service, duration)
+        except Exception:
+            slots = []
+
+    return {
+        "duration_minutes": duration,
+        "duration_display": dur_display,
+        "available_slots":  slots,
+        "disclaimer": (
+            "以上占用时间为估算时间。"
+            "如动物不配合或毛量超出预估，实际服务时长可能有所浮动，"
+            "具体以门店实际执行时间为准。"
+        ),
+    }
+
+
+@app.post("/api/appointments/create")
+async def api_appointments_create(payload: dict = Body(...), db: Session = Depends(get_db)):
+    openid = await _resolve_wechat_openid(payload)
+    fields = _assert_appointment_fields(
+        category=(payload or {}).get("category", ""),
+        service_name=(payload or {}).get("service_name", ""),
+        customer_name=(payload or {}).get("customer_name", ""),
+        phone=(payload or {}).get("phone", ""),
+        pet_name=(payload or {}).get("pet_name", ""),
+        pet_gender=(payload or {}).get("pet_gender", ""),
+        store=(payload or {}).get("store", ""),
+        appointment_date=(payload or {}).get("appointment_date", ""),
+        appointment_time=(payload or {}).get("appointment_time", ""),
+        notes=(payload or {}).get("notes", ""),
+        duration_minutes=str((payload or {}).get("duration_minutes", "30")),
+    )
+    related_id: int | None = None
+    raw_related = (payload or {}).get("related_application_id")
+    if raw_related not in (None, ""):
+        try:
+            related_id = int(raw_related)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "关联申请编号格式不正确。")
+        exists = db.query(Application.id).filter(Application.id == related_id).scalar()
+        if not exists:
+            raise HTTPException(404, "关联的 TNR 申请不存在。")
+    # TNR 规则校验
+    tnr_err = _check_tnr_constraints(
+        db,
+        category=str(fields["category"]),
+        store=str(fields["store"]),
+        appointment_date=str(fields["appointment_date"]),
+        appointment_time=str(fields["appointment_time"]),
+    )
+    if tnr_err:
+        raise HTTPException(400, tnr_err)
+    # 重复申请编号校验
+    dup_err = _check_duplicate_application_appointment(db, related_id)
+    if dup_err:
+        raise HTTPException(400, dup_err)
+    # 时段容量校验
+    # 门诊时间限制校验
+    time_err = _check_outpatient_time(str(fields["category"]), str(fields["appointment_time"]))
+    if time_err:
+        raise HTTPException(400, time_err)
+    cap_err = _check_slot_capacity(
+        db,
+        store=str(fields["store"]),
+        appointment_date=str(fields["appointment_date"]),
+        appointment_time=str(fields["appointment_time"]),
+        category=str(fields["category"]),
+        service_name=str(fields["service_name"]),
+    )
+    if cap_err:
+        raise HTTPException(400, cap_err)
+    # 时间冲突检测
+    conflict = _check_appointment_conflict(
+        db,
+        store=str(fields["store"]),
+        appointment_date=str(fields["appointment_date"]),
+        appointment_time=str(fields["appointment_time"]),
+        duration_minutes=int(fields["duration_minutes"]),
+    )
+    if conflict:
+        raise HTTPException(
+            400,
+            f"时间冲突：该门店 {conflict.appointment_date} {conflict.appointment_time} 已有预约"
+            f"（#{conflict.id} {conflict.customer_name}），请换一个时间段。",
+        )
+    _is_beauty_api = str(fields["category"]) == AppointmentCategory.beauty.value
+    _pet_size_raw    = ((payload or {}).get("pet_size", "") or "").strip()
+    _coat_length_raw = ((payload or {}).get("coat_length", "") or "").strip()
+    _addon_raw       = ((payload or {}).get("addon_services", "") or "").strip()
+    row = Appointment(
+        wechat_openid=openid,
+        category=str(fields["category"]),
+        status=AppointmentStatus.pending.value,
+        service_name=str(fields["service_name"]),
+        customer_name=str(fields["customer_name"]),
+        phone=str(fields["phone"]),
+        pet_name=str(fields["pet_name"]),
+        pet_gender=str(fields["pet_gender"]),
+        store=str(fields["store"]),
+        appointment_date=str(fields["appointment_date"]),
+        appointment_time=str(fields["appointment_time"]),
+        duration_minutes=int(fields["duration_minutes"]),
+        source="miniapp",
+        notes=str(fields["notes"]),
+        related_application_id=related_id,
+        pet_size    =(_pet_size_raw    or None) if _is_beauty_api else None,
+        coat_length =(_coat_length_raw or None) if _is_beauty_api else None,
+        addon_services=(_addon_raw     or None) if _is_beauty_api else None,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"ok": True, "appointment": _serialize_appointment(row)}
 
 
 @app.post("/api/wechat/my-apps")
@@ -1261,6 +2687,46 @@ async def api_wechat_my_apps(payload: dict = Body(...), db: Session = Depends(ge
             }
         )
     return {"openid": openid, "items": items}
+
+
+@app.post("/api/wechat/my-appointments")
+async def api_wechat_my_appointments(payload: dict = Body(...), db: Session = Depends(get_db)):
+    openid = await _resolve_wechat_openid(payload)
+    rows = (
+        db.query(Appointment)
+        .filter(Appointment.wechat_openid == openid)
+        .order_by(Appointment.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return {"openid": openid, "items": [_serialize_appointment(x) for x in rows]}
+
+
+@app.post("/api/wechat/appointments/{appointment_id}/cancel")
+async def api_wechat_appointment_cancel(
+    appointment_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    """小程序端用户取消自己的预约（仅限 pending/confirmed 状态，且 openid 匹配）。"""
+    openid = await _resolve_wechat_openid(payload)
+    row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not row:
+        raise HTTPException(404, "预约记录不存在")
+    if (row.wechat_openid or "") != openid:
+        raise HTTPException(403, "无权操作此预约")
+    if row.status not in (AppointmentStatus.pending.value, AppointmentStatus.confirmed.value):
+        raise HTTPException(400, f"当前状态（{row.status}）不可取消，请联系医院处理")
+    row.status = AppointmentStatus.cancelled.value
+    row.updated_at = datetime.utcnow()
+    # 若关联 TNR 申请且已处于 scheduled 状态，回退为 approved
+    if row.related_application_id:
+        app_row = db.get(Application, row.related_application_id)
+        if app_row and app_row.status == ApplicationStatus.scheduled.value:
+            app_row.status = ApplicationStatus.approved.value
+            app_row.updated_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True, "id": appointment_id}
 
 
 @app.post("/api/wechat/claim-apps")

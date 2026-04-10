@@ -54,6 +54,17 @@ def _try_sqlite_migrations() -> None:
             if "post_surgery_plan" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN post_surgery_plan VARCHAR(120) DEFAULT ''"))
 
+            appointment_cols = conn.execute(text("PRAGMA table_info(appointments)")).fetchall()
+            appointment_names = {c[1] for c in appointment_cols}
+            if "wechat_openid" not in appointment_names:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN wechat_openid VARCHAR(64) DEFAULT ''"))
+            if "pet_size" not in appointment_names:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN pet_size VARCHAR(40) DEFAULT NULL"))
+            if "coat_length" not in appointment_names:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN coat_length VARCHAR(20) DEFAULT NULL"))
+            if "addon_services" not in appointment_names:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN addon_services VARCHAR(200) DEFAULT NULL"))
+
             # 性能：常用筛选字段加索引（存在则跳过）
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_applications_created_at ON applications(created_at)"))
@@ -65,6 +76,12 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_media_application_kind ON media_files(application_id, kind)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_notify_application_time ON notification_logs(application_id, created_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_audit_application_time ON audit_logs(application_id, created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_category_status ON appointments(category, status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_store_date ON appointments(store, appointment_date)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_phone ON appointments(phone)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_application ON appointments(related_application_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_wechat_openid ON appointments(wechat_openid)"))
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

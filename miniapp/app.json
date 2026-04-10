@@ -1,6 +1,9 @@
 {
+  "__usePrivacyCheck__": true,
   "pages": [
     "pages/index/index",
+    "pages/appointment/index",
+    "pages/appointment/list",
     "pages/status/status"
   ],
   "window": {
@@ -10,7 +13,6 @@
     "backgroundColor": "#fafafa",
     "backgroundTextStyle": "dark"
   },
-  "requiredBackgroundModes": ["audio"],
   "permission": {
     "scope.userLocation": {
       "desc": "用于填写发现地点（可选）"

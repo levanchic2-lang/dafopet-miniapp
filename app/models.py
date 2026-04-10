@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import List, Optional
-
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -22,6 +21,24 @@ class ApplicationStatus(str, enum.Enum):
     rejected = "rejected"
     arrived_verified = "arrived_verified"
     surgery_completed = "surgery_completed"
+
+
+class AppointmentCategory(str, enum.Enum):
+    tnr = "tnr"
+    outpatient = "outpatient"
+    surgery = "surgery"
+    beauty = "beauty"
+    # 保留旧值以兼容历史数据
+    grooming = "grooming"
+    washcare = "washcare"
+
+
+class AppointmentStatus(str, enum.Enum):
+    pending = "pending"
+    confirmed = "confirmed"
+    completed = "completed"
+    cancelled = "cancelled"
+    no_show = "no_show"
 
 
 class MediaKind(str, enum.Enum):
@@ -70,8 +87,38 @@ class Application(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    media: Mapped[List["MediaFile"]] = relationship(back_populates="application", cascade="all, delete-orphan")
-    notifications: Mapped[List["NotificationLog"]] = relationship(back_populates="application", cascade="all, delete-orphan")
+    media = relationship("MediaFile", back_populates="application", cascade="all, delete-orphan")
+    notifications = relationship("NotificationLog", back_populates="application", cascade="all, delete-orphan")
+    appointments = relationship("Appointment", back_populates="application")
+
+
+class Appointment(Base):
+    __tablename__ = "appointments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    wechat_openid: Mapped[str] = mapped_column(String(64), default="")
+    category: Mapped[str] = mapped_column(String(40), default=AppointmentCategory.outpatient.value)
+    status: Mapped[str] = mapped_column(String(40), default=AppointmentStatus.pending.value)
+    service_name: Mapped[str] = mapped_column(String(120), default="")
+    customer_name: Mapped[str] = mapped_column(String(120), default="")
+    phone: Mapped[str] = mapped_column(String(40), default="")
+    pet_name: Mapped[str] = mapped_column(String(120), default="")
+    pet_gender: Mapped[str] = mapped_column(String(20), default="")
+    store: Mapped[str] = mapped_column(String(120), default="")
+    appointment_date: Mapped[str] = mapped_column(String(20), default="")
+    appointment_time: Mapped[str] = mapped_column(String(20), default="")
+    duration_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    source: Mapped[str] = mapped_column(String(40), default="admin")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    # 美容专用附加字段（nullable，其他类型为空）
+    pet_size        = mapped_column(String(40),  nullable=True, default=None)
+    coat_length     = mapped_column(String(20),  nullable=True, default=None)
+    addon_services  = mapped_column(String(200), nullable=True, default=None)
+    related_application_id = mapped_column(ForeignKey("applications.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    application = relationship("Application", back_populates="appointments")
 
 
 class MediaFile(Base):
@@ -84,20 +131,20 @@ class MediaFile(Base):
     original_name: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    application: Mapped["Application"] = relationship(back_populates="media")
+    application = relationship("Application", back_populates="media")
 
 
 class NotificationLog(Base):
     __tablename__ = "notification_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"))
-    channel: Mapped[str] = mapped_column(String(40))  # email / log
+    application_id: Mapped[Optional[int]] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=True, default=None)
+    channel: Mapped[str] = mapped_column(String(40))  # email / log / wechat_miniapp
     payload: Mapped[str] = mapped_column(Text, default="")
     success: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    application: Mapped["Application"] = relationship(back_populates="notifications")
+    application = relationship("Application", back_populates="notifications", foreign_keys=[application_id])
 
 
 class AuditLog(Base):

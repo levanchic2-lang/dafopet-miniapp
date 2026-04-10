@@ -1,0 +1,183 @@
+<view class="card">
+  <view class="title">预约服务</view>
+  <view class="sub">可预约 TNR、门诊、手术及美容服务。</view>
+
+  <view wx:if="{{loading}}" class="sub">加载中…</view>
+
+  <block wx:else>
+    <!-- 预约板块 -->
+    <view class="label">预约板块</view>
+    <picker class="picker" mode="selector" range="{{categories}}" range-key="label" value="{{categoryIndex}}" bindchange="onCategoryChange">
+      <view>{{categories[categoryIndex].label}}</view>
+    </picker>
+    <view wx:if="{{selectedCategoryMeta && selectedCategoryMeta.description}}" class="tip">
+      {{selectedCategoryMeta.description}}
+    </view>
+    <view wx:if="{{selectedCategoryMeta && selectedCategoryMeta.booking_tip}}" class="tip light">
+      {{selectedCategoryMeta.booking_tip}}
+    </view>
+
+    <!-- 预约项目 -->
+    <view class="label">预约项目</view>
+    <picker class="picker" mode="selector" range="{{serviceOptions}}" range-key="name" value="{{serviceIndex}}" bindchange="onServiceChange">
+      <view>{{serviceOptions[serviceIndex].name}}</view>
+    </picker>
+    <view wx:if="{{selectedServiceMeta && selectedServiceMeta.description}}" class="tip">
+      {{selectedServiceMeta.description}}
+    </view>
+
+    <!-- ── 美容专属附加信息 ── -->
+    <block wx:if="{{isBeauty}}">
+      <!-- 附加服务（多选） -->
+      <view class="label">附加服务（可多选）</view>
+      <view class="addon-list">
+        <view
+          wx:for="{{beautyAddonOptions}}"
+          wx:key="name"
+          wx:for-index="ai"
+          class="addon-item {{item.checked ? 'addon-checked' : ''}}"
+          data-idx="{{ai}}"
+          bindtap="onAddonTap"
+        >
+          <view class="addon-check">{{item.checked ? '✓' : ''}}</view>
+          <text>{{item.name}}</text>
+        </view>
+      </view>
+
+      <!-- 体型 -->
+      <view wx:if="{{beautySizeOptions.length > 0}}" class="label">体型</view>
+      <picker wx:if="{{beautySizeOptions.length > 0}}"
+              class="picker" mode="selector"
+              range="{{beautySizeOptions}}" value="{{beautySizeIndex}}"
+              bindchange="onBeautySizeChange">
+        <view>{{beautySizeOptions[beautySizeIndex] || '请选择体型'}}</view>
+      </picker>
+
+      <!-- 毛发长度 -->
+      <view class="label">毛发长度</view>
+      <picker class="picker" mode="selector"
+              range="{{beautyCoatOptions}}" value="{{beautyCoatIndex}}"
+              bindchange="onBeautyCoatChange">
+        <view>{{beautyCoatOptions[beautyCoatIndex] || '请选择毛发长度'}}</view>
+      </picker>
+    </block>
+
+    <!-- 预约门店 -->
+    <view class="label">预约门店<text wx:if="{{isBeauty}}" style="font-size:22rpx;color:#8a6a00;font-weight:400;margin-left:12rpx;">（美容服务仅限横岗店）</text></view>
+    <picker class="picker {{isBeauty ? 'picker-locked' : ''}}" mode="selector" range="{{stores}}" value="{{storeIndex}}" bindchange="onStoreChange" disabled="{{isBeauty}}">
+      <view>{{stores[storeIndex]}}</view>
+    </picker>
+
+    <!-- 预约日期 -->
+    <view class="label">预约日期</view>
+    <picker class="picker" mode="date" start="{{dateStart}}" value="{{form.appointment_date}}" bindchange="onDateChange">
+      <view>{{form.appointment_date || '请选择'}}</view>
+    </picker>
+
+    <!-- 美容：时段选择（替代手动时间输入） -->
+    <block wx:if="{{isBeauty}}">
+      <!-- 估算时长 -->
+      <view wx:if="{{beautyDuration > 0}}" class="beauty-duration-card">
+        <view class="beauty-duration-row">
+          <text class="beauty-duration-label">预计占用时间</text>
+          <text class="beauty-duration-value">{{beautyDurationDisplay}}</text>
+        </view>
+      </view>
+
+      <!-- 可预约时段（需体型+毛发长度+日期均已选） -->
+      <block wx:if="{{form.pet_size && form.coat_length && form.appointment_date}}">
+        <view class="label">可预约时段</view>
+        <view wx:if="{{beautySlotLoading}}" class="tip">查询中…</view>
+        <view wx:elif="{{beautySlotError}}" class="tip" style="color:#cc0000;">
+          {{beautySlotError}}
+          <text bindtap="onRetryBeautySlots" style="margin-left:8rpx;color:#1a73e8;text-decoration:underline;">重试</text>
+        </view>
+        <view wx:elif="{{beautySlots.length === 0}}" class="tip" style="color:#cc3300;">当天暂无可用时段，请选择其他日期。</view>
+        <block wx:else>
+          <view class="tip light" style="margin-bottom:10rpx;">
+            可选时段：{{beautySlots[0]}} – {{beautySlots[beautySlots.length - 1]}}（点击选择）
+          </view>
+          <view class="slot-list">
+            <view
+              wx:for="{{beautySlots}}"
+              wx:key="*this"
+              wx:for-index="si"
+              class="slot-item {{beautySlotIndex === si ? 'active' : ''}}"
+              data-idx="{{si}}"
+              data-time="{{item}}"
+              bindtap="onBeautySlotTap"
+            >{{item}}</view>
+          </view>
+        </block>
+        <!-- 当天无可用时段时，仍允许手动输入时间 -->
+        <block wx:if="{{!beautySlotLoading && (beautySlotError || beautySlots.length === 0)}}">
+          <view class="label">手动选择时间</view>
+          <picker class="picker" mode="time" start="13:00" end="22:00" value="{{form.appointment_time}}" bindchange="onTimeChange">
+            <view>{{form.appointment_time || '请选择'}}</view>
+          </picker>
+        </block>
+      </block>
+
+      <!-- 体型或毛发长度未选时，先显示提示再显示手动时间选择 -->
+      <block wx:else>
+        <view class="label">预约时间</view>
+        <view wx:if="{{!form.appointment_date}}" class="tip light" style="margin-bottom:12rpx;">请先选择预约日期</view>
+        <view wx:elif="{{!form.pet_size || !form.coat_length}}" class="tip light" style="margin-bottom:12rpx;">选择体型与毛发长度后可查询可用时段</view>
+        <picker class="picker" mode="time" start="13:00" end="22:00" value="{{form.appointment_time}}" bindchange="onTimeChange">
+          <view>{{form.appointment_time || '请选择'}}</view>
+        </picker>
+      </block>
+
+      <!-- 说明 -->
+      <view wx:if="{{beautyDuration > 0}}" class="beauty-disclaimer">{{beautyDisclaimer}}</view>
+    </block>
+
+    <!-- 非美容：正常时间输入 -->
+    <block wx:else>
+      <view class="label">预约时间</view>
+      <picker class="picker" mode="time" start="{{timeRangeStart || ''}}" end="{{timeRangeEnd || ''}}" value="{{form.appointment_time}}" bindchange="onTimeChange">
+        <view>{{form.appointment_time || '请选择'}}</view>
+      </picker>
+      <view wx:if="{{selectedCategoryMeta && selectedCategoryMeta.time_range}}" class="tip light">
+        可预约时间：{{selectedCategoryMeta.time_range.start}} – {{selectedCategoryMeta.time_range.end}}{{selectedCategoryMeta.daily_max ? '，每门店每日上限 ' + selectedCategoryMeta.daily_max + ' 个' : ''}}
+      </view>
+      <view wx:if="{{timeSlots.length}}" class="slot-wrap">
+        <view class="slot-title">建议时段</view>
+        <view class="slot-list">
+          <view
+            wx:for="{{timeSlots}}"
+            wx:key="*this"
+            class="slot-item {{item === form.appointment_time ? 'active' : ''}}"
+            data-time="{{item}}"
+            bindtap="onQuickTimeTap"
+          >{{item}}</view>
+        </view>
+      </view>
+    </block>
+
+    <!-- 联系信息 -->
+    <view class="label">联系人姓名</view>
+    <input class="input" value="{{form.customer_name}}" data-k="customer_name" bindinput="onInput" />
+
+    <view class="label">手机号</view>
+    <input class="input" type="number" maxlength="11" value="{{form.phone}}" data-k="phone" bindinput="onInput" />
+
+    <view class="label">宠物 / 流浪猫名称</view>
+    <input class="input" value="{{form.pet_name}}" data-k="pet_name" bindinput="onInput" />
+
+    <view class="label">性别</view>
+    <picker class="picker" mode="selector" range="{{petGenders}}" range-key="label" value="{{petGenderIndex}}" bindchange="onPetGenderChange">
+      <view>{{petGenders[petGenderIndex].label}}</view>
+    </picker>
+
+    <block wx:if="{{selectedCategoryMeta && selectedCategoryMeta.supports_related_application}}">
+      <view class="label">关联 TNR 申请编号（选填）</view>
+      <input class="input" type="number" value="{{form.related_application_id}}" data-k="related_application_id" bindinput="onInput" />
+    </block>
+
+    <view class="label">备注</view>
+    <textarea class="textarea" maxlength="500" placeholder="补充病情、服务要求、时间偏好等" value="{{form.notes}}" data-k="notes" bindinput="onInput"></textarea>
+
+    <button class="btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onSubmit">提交预约</button>
+  </block>
+</view>

@@ -1,0 +1,471 @@
+<script>
+(function () {
+  var cat        = document.getElementById("admin_appt_category");
+  var svc        = document.getElementById("admin_appt_service");          // 文本输入
+  var svcSel     = document.getElementById("admin_appt_service_select");   // 门诊下拉
+  var svcBeauty  = document.getElementById("admin_appt_service_beauty");   // 美容下拉
+  var beautyExtra= document.getElementById("beauty-extra-section");        // 美容附加字段
+  var beautySizeDog  = document.getElementById("beauty-size-dog");          // 犬体型行
+  var beautySizeCat  = document.getElementById("beauty-size-cat");          // 猫体型行
+  var petSizeDog     = document.getElementById("admin_appt_pet_size_dog");
+  var petSizeCat     = document.getElementById("admin_appt_pet_size_cat");
+  var dur        = document.getElementById("admin_appt_duration");
+  if (!cat || !svc || !dur) return;
+
+  var relatedWrap  = document.getElementById("admin_appt_related_wrap");
+  var relatedInput = document.getElementById("admin_appt_related_id");
+  var relatedHint  = document.getElementById("admin_appt_related_hint");
+  var cust         = document.getElementById("admin_appt_customer_name");
+  var phoneIn      = document.getElementById("admin_appt_phone");
+  var petName      = document.getElementById("admin_appt_pet_name");
+  var petGender    = document.getElementById("admin_appt_pet_gender");
+  var storeSel     = document.getElementById("admin_appt_store");
+  var dateEl       = document.getElementById("admin_appt_date");
+
+  var TNR_SERVICE    = "TNR 手术安排";
+  var TNR_DURATION   = 60;
+  var DEFAULT_DURATION = 30;
+  var VACCINE_KEYWORDS = ["疫苗", "驱虫"];
+
+  /* ── 服务输入切换：text / 门诊下拉 / 美容下拉 ── */
+  function showServiceMode(mode) {
+    // mode: 'text' | 'outpatient' | 'beauty'
+    var useText      = mode === 'text';
+    var useOutpatient= mode === 'outpatient';
+    var useBeauty    = mode === 'beauty';
+
+    svc.style.display      = useText ? "" : "none";
+    svc.disabled           = !useText;
+    if (useText) svc.setAttribute("required", ""); else svc.removeAttribute("required");
+
+    if (svcSel) {
+      svcSel.style.display = useOutpatient ? "" : "none";
+      svcSel.disabled      = !useOutpatient;
+      if (useOutpatient) svcSel.setAttribute("required", ""); else svcSel.removeAttribute("required");
+    }
+    if (svcBeauty) {
+      svcBeauty.style.display = useBeauty ? "" : "none";
+      svcBeauty.disabled      = !useBeauty;
+      if (useBeauty) svcBeauty.setAttribute("required", ""); else svcBeauty.removeAttribute("required");
+    }
+
+    // 美容附加字段
+    if (beautySlotsRow) beautySlotsRow.style.display = useBeauty ? "" : "none";
+    if (beautyExtra) {
+      beautyExtra.style.display = useBeauty ? "block" : "none";
+      if (!useBeauty) {
+        // 非美容：清空 checkbox，禁用所有 select 避免残留提交
+        beautyExtra.querySelectorAll('input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+        beautyExtra.querySelectorAll('select').forEach(function(sel) { sel.selectedIndex = 0; sel.disabled = true; });
+        if (beautyDurationHint) beautyDurationHint.style.display = "none";
+      } else {
+        // 切回美容：先把所有 select 都解禁，再按猫/犬决定体型行
+        beautyExtra.querySelectorAll('select').forEach(function(sel) { sel.disabled = false; });
+        syncBeautySizeVisibility();
+      }
+    }
+  }
+
+  /* ── 美容时长估算（与后端 _calc_beauty_duration 保持一致） ── */
+  var beautyDurationHint = document.getElementById("beauty-duration-hint");
+  var beautyDurationText = document.getElementById("beauty-duration-text");
+
+  // ── 美容可用时段查询 ──
+  var beautySlotsRow     = document.getElementById("beauty-slots-row");
+  var beautySlotsLoading = document.getElementById("beauty-slots-loading");
+  var beautySlotsError   = document.getElementById("beauty-slots-error");
+  var beautySlotsInfo    = document.getElementById("beauty-slots-info");
+  var beautySlotsBtns    = document.getElementById("beauty-slots-btns");
+  var timeEl             = document.getElementById("admin_appt_time");
+  var _beautySlotTimer   = null;
+
+  function _renderBeautySlots(slots, durDisplay) {
+    if (!beautySlotsRow) return;
+    beautySlotsLoading.style.display = "none";
+    beautySlotsError.style.display   = "none";
+    beautySlotsBtns.innerHTML        = "";
+    if (slots.length === 0) {
+      beautySlotsInfo.style.display = "";
+      beautySlotsInfo.textContent   = "当日暂无可用时段，请换日期或联系门店。";
+      return;
+    }
+    beautySlotsInfo.style.display = "";
+    beautySlotsInfo.textContent   = "可选时段（点击自动填入）：" + slots[0] + " – " + slots[slots.length - 1];
+    slots.forEach(function(t) {
+      var btn = document.createElement("button");
+      btn.type        = "button";
+      btn.textContent = t;
+      btn.style.cssText = [
+        "font-size:0.82rem",
+        "padding:0.25rem 0.6rem",
+        "border-radius:6px",
+        "border:1px solid #d1d5db",
+        "background:#f9fafb",
+        "color:#111827",
+        "cursor:pointer",
+        "line-height:1.4",
+        "transition:background 0.1s,color 0.1s,border-color 0.1s"
+      ].join(";");
+      btn.addEventListener("click", function() {
+        if (timeEl) timeEl.value = t;
+        beautySlotsRow.querySelectorAll("button").forEach(function(b) {
+          b.style.background   = "#f9fafb";
+          b.style.color        = "#111827";
+          b.style.borderColor  = "#d1d5db";
+          b.style.fontWeight   = "normal";
+        });
+        btn.style.background  = "#1c1c1e";
+        btn.style.color       = "#ffffff";
+        btn.style.borderColor = "#1c1c1e";
+        btn.style.fontWeight  = "600";
+      });
+      beautySlotsBtns.appendChild(btn);
+    });
+  }
+
+  function fetchBeautyAdminSlots() {
+    if (!beautySlotsRow) return;
+    var sn = svcBeauty && !svcBeauty.disabled ? (svcBeauty.value || "") : "";
+    var sz = "";
+    if (petSizeDog && !petSizeDog.disabled) sz = petSizeDog.value || "";
+    if (petSizeCat && !petSizeCat.disabled) sz = petSizeCat.value || "";
+    var cl = "";
+    var coatSel = document.getElementById("admin_appt_coat_length");
+    if (coatSel && !coatSel.disabled) cl = coatSel.value || "";
+    var dateVal = dateEl ? (dateEl.value || "") : "";
+    var storeVal = storeSel ? (storeSel.value || "") : "";
+
+    if (!sn || !sz || !cl || !dateVal || !storeVal) {
+      beautySlotsRow.style.display = "none";
+      return;
+    }
+
+    var addonChecked = Array.from(document.querySelectorAll('input[name="addon_services"]:checked'))
+                            .map(function(cb) { return cb.value; }).join(",");
+
+    beautySlotsRow.style.display   = "";
+    beautySlotsLoading.style.display = "";
+    beautySlotsError.style.display   = "none";
+    beautySlotsInfo.style.display    = "none";
+    beautySlotsBtns.innerHTML        = "";
+
+    var qs = "service=" + encodeURIComponent(sn)
+           + "&pet_size=" + encodeURIComponent(sz)
+           + "&coat_length=" + encodeURIComponent(cl)
+           + "&addons=" + encodeURIComponent(addonChecked)
+           + "&date=" + encodeURIComponent(dateVal)
+           + "&store=" + encodeURIComponent(storeVal);
+
+    fetch("/api/appointments/beauty-slots?" + qs, { credentials: "same-origin" })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        beautySlotsLoading.style.display = "none";
+        _renderBeautySlots(data.available_slots || [], data.duration_display || "");
+      })
+      .catch(function() {
+        beautySlotsLoading.style.display = "none";
+        beautySlotsError.style.display   = "";
+        beautySlotsError.textContent     = "查询时段失败，请稍后重试。";
+      });
+  }
+
+  function scheduleBeautyAdminSlots() {
+    if (_beautySlotTimer) clearTimeout(_beautySlotTimer);
+    _beautySlotTimer = setTimeout(fetchBeautyAdminSlots, 500);
+  }
+
+  function calcBeautyDuration(sn, sz, cl, addonCheckedCount) {
+    var isLong  = cl === "长毛";
+    var isWash  = sn.indexOf("洗护") >= 0;
+    var base = 60;
+    if (sn.indexOf("犬") >= 0) {
+      if      (sz.indexOf("微小型") >= 0) { base = isWash ? 30  : 90;  }
+      else if (sz.indexOf("小型犬") >= 0) { base = isWash ? 60  : 120; }
+      else if (sz.indexOf("中大型") >= 0) { base = isWash ? (isLong ? 120 : 90)  : 180; }
+      else if (sz.indexOf("中型犬") >= 0) { base = isWash ? (isLong ? 90  : 60)  : 150; }
+      else if (sz.indexOf("大型犬") >= 0) { base = isWash ? (isLong ? 150 : 120) : 210; }
+    } else if (sn.indexOf("猫") >= 0) {
+      if      (sz.indexOf("大型猫") >= 0) { base = isWash ? (isLong ? 150 : 120) : 150; }
+      else if (sz.indexOf("中型猫") >= 0) { base = isWash ? (isLong ? 120 : 90)  : 120; }
+      else if (sz.indexOf("小型猫") >= 0) { base = isWash ? (isLong ? 90  : 60)  : 120; }
+    }
+    base += (addonCheckedCount || 0) * 30;
+    return base;
+  }
+
+  function updateBeautyDurationHint() {
+    if (!beautyDurationHint || !beautyDurationText) return;
+    var sn = svcBeauty && !svcBeauty.disabled ? (svcBeauty.value || "") : "";
+    var sz = "";
+    if (petSizeDog && !petSizeDog.disabled) sz = petSizeDog.value || "";
+    if (petSizeCat && !petSizeCat.disabled) sz = petSizeCat.value || "";
+    var cl = "";
+    var coatSel = document.getElementById("admin_appt_coat_length");
+    if (coatSel && !coatSel.disabled) cl = coatSel.value || "";
+
+    var addonChecked = 0;
+    var checkboxes = document.querySelectorAll('input[name="addon_services"]:checked');
+    addonChecked = checkboxes.length;
+
+    if (!sn || !sz || !cl) {
+      beautyDurationHint.style.display = "none";
+      return;
+    }
+    var mins = calcBeautyDuration(sn, sz, cl, addonChecked);
+    var h = Math.floor(mins / 60);
+    var m = mins % 60;
+    var label = h === 0 ? m + "分钟" : (h + "小时" + (m ? m + "分钟" : ""));
+    beautyDurationText.textContent = label;
+    // 同步更新时长字段
+    if (dur && !dur.readOnly) dur.value = String(mins);
+    beautyDurationHint.style.display = "";
+  }
+
+  // 绑定附加服务 checkbox 变化
+  document.querySelectorAll('input[name="addon_services"]').forEach(function(cb) {
+    cb.addEventListener("change", function() {
+      if (cat && cat.value === "beauty") { updateBeautyDurationHint(); scheduleBeautyAdminSlots(); }
+    });
+  });
+  // 绑定毛发长度变化
+  var coatSel = document.getElementById("admin_appt_coat_length");
+  if (coatSel) {
+    coatSel.addEventListener("change", function() {
+      if (cat && cat.value === "beauty") { updateBeautyDurationHint(); scheduleBeautyAdminSlots(); }
+    });
+  }
+  // 绑定日期变化
+  if (dateEl) {
+    dateEl.addEventListener("change", function() {
+      if (cat && cat.value === "beauty") scheduleBeautyAdminSlots();
+    });
+  }
+
+  /* ── 美容服务变化：按猫/犬切换对应体型选项，重置另一套 ── */
+  function syncBeautySizeVisibility() {
+    if (!svcBeauty) return;
+    var val   = svcBeauty.value || "";
+    var isDog = val.indexOf("犬") >= 0;
+    var isCat = val.indexOf("猫") >= 0;
+
+    if (beautySizeDog) {
+      beautySizeDog.style.display = isDog ? "" : "none";
+      if (!isDog && petSizeDog) { petSizeDog.selectedIndex = 0; petSizeDog.disabled = true; }
+      else if (petSizeDog)       { petSizeDog.disabled = false; }
+    }
+    if (beautySizeCat) {
+      beautySizeCat.style.display = isCat ? "" : "none";
+      if (!isCat && petSizeCat) { petSizeCat.selectedIndex = 0; petSizeCat.disabled = true; }
+      else if (petSizeCat)       { petSizeCat.disabled = false; }
+    }
+  }
+  if (svcBeauty) {
+    svcBeauty.addEventListener("change", function() {
+      syncBeautySizeVisibility();
+      updateBeautyDurationHint();
+      scheduleBeautyAdminSlots();
+    });
+  }
+  if (petSizeDog) petSizeDog.addEventListener("change", function() { updateBeautyDurationHint(); scheduleBeautyAdminSlots(); });
+  if (petSizeCat) petSizeCat.addEventListener("change", function() { updateBeautyDurationHint(); scheduleBeautyAdminSlots(); });
+
+  /* ── 门诊时长自动联动（锁定只读） ── */
+  function syncOutpatientDuration() {
+    if (!svcSel) return;
+    var sn = svcSel.value || "";
+    var isVaccine = VACCINE_KEYWORDS.some(function (kw) { return sn.indexOf(kw) >= 0; });
+    dur.value = isVaccine ? "30" : "60";
+    dur.readOnly = true;
+    dur.classList.add("appt-field-locked");
+  }
+
+  if (svcSel) {
+    svcSel.addEventListener("change", syncOutpatientDuration);
+  }
+
+  /* ── TNR 字段锁定 ── */
+  function applyTnrLock(locked) {
+    if (locked) {
+      svc.value = TNR_SERVICE;
+      svc.readOnly = true;
+      dur.value = String(TNR_DURATION);
+      dur.readOnly = true;
+      svc.classList.add("appt-field-locked");
+      dur.classList.add("appt-field-locked");
+    } else {
+      svc.readOnly = false;
+      dur.readOnly = false;
+      svc.classList.remove("appt-field-locked");
+      dur.classList.remove("appt-field-locked");
+    }
+  }
+
+  /* ── 关联 TNR 申请行显示 ── */
+  function toggleRelatedRow() {
+    if (!relatedWrap) return;
+    if (cat.value === "tnr") {
+      relatedWrap.style.display = "";
+    } else {
+      relatedWrap.style.display = "none";
+      if (relatedInput) relatedInput.value = "";
+      if (relatedHint) relatedHint.textContent = "";
+    }
+  }
+
+  /* ── 关联申请自动填充 ── */
+  function applyApplicationPayload(data) {
+    if (cust) cust.value = data.customer_name || "";
+    if (phoneIn) phoneIn.value = data.phone || "";
+    if (petName) petName.value = data.pet_name || "";
+    if (petGender && data.pet_gender) petGender.value = data.pet_gender;
+    if (storeSel && data.store) {
+      for (var i = 0; i < storeSel.options.length; i++) {
+        if (storeSel.options[i].value === data.store) { storeSel.value = data.store; break; }
+      }
+    }
+    if (dateEl && data.appointment_date_suggestion) dateEl.value = data.appointment_date_suggestion;
+    if (relatedHint)
+      relatedHint.textContent = "已从申请 #" + data.application_id + " 带入信息，请确认日期与预约时间";
+  }
+
+  var fetchTimer = null;
+  var fetchAbort = null;
+
+  function lookupRelatedId() {
+    if (cat.value !== "tnr" || !relatedInput) return;
+    var v = relatedInput.value.trim();
+    if (!v) { if (relatedHint) relatedHint.textContent = ""; return; }
+    if (!/^\d+$/.test(v)) { if (relatedHint) relatedHint.textContent = "申请编号须为数字"; return; }
+    if (fetchAbort) fetchAbort.abort();
+    fetchAbort = new AbortController();
+    fetch("/admin/api/tnr-application/" + encodeURIComponent(v) + "/for-appointment", {
+      credentials: "same-origin",
+      signal: fetchAbort.signal,
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          if (r.status === 401) throw new Error("auth");
+          if (r.status === 404) throw new Error("notfound");
+          if (!r.ok) throw new Error("bad");
+          return data;
+        });
+      })
+      .then(function (data) {
+        if (!data || !data.ok) throw new Error("bad");
+        applyApplicationPayload(data);
+      })
+      .catch(function (e) {
+        if (e.name === "AbortError") return;
+        if (!relatedHint) return;
+        if (e.message === "notfound") relatedHint.textContent = "未找到该申请编号";
+        else if (e.message === "auth") relatedHint.textContent = "登录已失效，请刷新页面后重新登录";
+        else relatedHint.textContent = "查询失败，请稍后重试";
+      });
+  }
+
+  function scheduleLookup() {
+    if (fetchTimer) clearTimeout(fetchTimer);
+    fetchTimer = setTimeout(lookupRelatedId, 450);
+  }
+
+  if (relatedInput) {
+    relatedInput.addEventListener("input", function () {
+      if (cat.value !== "tnr") return;
+      if (relatedHint) relatedHint.textContent = "";
+      if (relatedInput.value.trim()) scheduleLookup();
+    });
+    relatedInput.addEventListener("blur", function () {
+      if (cat.value === "tnr") lookupRelatedId();
+    });
+  }
+
+  /* ── 主 sync 函数：类型切换时统一更新所有状态 ── */
+  var prevCategory = null;
+  function sync() {
+    var c = cat.value;
+
+    if (c === "tnr") {
+      /* TNR：文本框锁定为固定服务 */
+      showServiceMode("text");
+      if (prevCategory !== null && prevCategory !== "tnr") {
+        dur.dataset.prevDur = dur.value || String(DEFAULT_DURATION);
+      }
+      applyTnrLock(true);
+      if (storeSel) { storeSel.disabled = false; storeSel.classList.remove("appt-field-locked"); }
+
+    } else if (c === "outpatient") {
+      /* 常规门诊：门诊下拉 + 时长自动锁定 */
+      applyTnrLock(false);
+      if (prevCategory === "tnr") delete dur.dataset.prevDur;
+      showServiceMode("outpatient");
+      syncOutpatientDuration();
+      if (storeSel) { storeSel.disabled = false; storeSel.classList.remove("appt-field-locked"); }
+
+    } else if (c === "beauty") {
+      /* 美容：美容下拉 + 附加字段 + 时长可手动改；门店锁定横岗店 */
+      applyTnrLock(false);
+      dur.readOnly = false;
+      dur.classList.remove("appt-field-locked");
+      if (storeSel) {
+        for (var si = 0; si < storeSel.options.length; si++) {
+          if (storeSel.options[si].value.indexOf('横岗') >= 0) {
+            storeSel.value = storeSel.options[si].value;
+            break;
+          }
+        }
+        storeSel.disabled = true;
+        storeSel.classList.add("appt-field-locked");
+      }
+      if (prevCategory === "tnr") {
+        dur.value = dur.dataset.prevDur || "60";
+        delete dur.dataset.prevDur;
+      } else if (prevCategory === "outpatient") {
+        dur.value = "60";
+      } else if (prevCategory === null) {
+        dur.value = "60";
+      }
+      showServiceMode("beauty");
+      syncBeautySizeVisibility();
+      updateBeautyDurationHint();
+      scheduleBeautyAdminSlots();
+
+    } else {
+      /* 手术 / 其他：自由文本 + 时长可手动 */
+      applyTnrLock(false);
+      showServiceMode("text");
+      dur.readOnly = false;
+      dur.classList.remove("appt-field-locked");
+      if (storeSel) {
+        storeSel.disabled = false;
+        storeSel.classList.remove("appt-field-locked");
+      }
+      if (prevCategory === "tnr") {
+        dur.value = dur.dataset.prevDur || String(DEFAULT_DURATION);
+        delete dur.dataset.prevDur;
+        if (svc.value === TNR_SERVICE) svc.value = "";
+      } else if (prevCategory === "outpatient") {
+        svc.value = "";
+        dur.value = String(DEFAULT_DURATION);
+      } else if (prevCategory === "beauty") {
+        svc.value = "";
+        dur.value = String(DEFAULT_DURATION);
+      }
+    }
+
+    prevCategory = c;
+    toggleRelatedRow();
+  }
+
+  cat.addEventListener("change", sync);
+  sync();
+
+  // 美容模式下 storeSel 被 disabled，disabled 字段不会随表单提交
+  // 在 submit 前临时 re-enable，确保 store 值能被后端收到
+  var createForm = cat.closest("form");
+  if (createForm) {
+    createForm.addEventListener("submit", function() {
+      if (storeSel && storeSel.disabled) storeSel.disabled = false;
+    });
+  }
+})();
+</script>

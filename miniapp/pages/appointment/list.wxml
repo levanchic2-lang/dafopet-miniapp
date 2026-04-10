@@ -1,0 +1,35 @@
+<view class="card">
+  <view class="title">我的预约</view>
+  <view class="sub">展示当前微信账号下已提交的预约记录。</view>
+
+  <view wx:if="{{loading}}" class="sub">加载中…</view>
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+
+  <view wx:if="{{!loading && !error && !items.length}}" class="empty">
+    暂无预约记录
+  </view>
+
+  <block wx:for="{{items}}" wx:key="id" wx:for-index="idx">
+    <view class="item {{item.isHighlight ? 'item-highlight' : ''}}">
+      <view class="item-head">
+        <text class="item-title">{{item.category_zh}}</text>
+        <text class="item-status {{item.status === 'cancelled' ? 'status-cancelled' : ''}}">{{item.status_zh}}</text>
+      </view>
+      <view class="line">预约编号：#{{item.id}}</view>
+      <view class="line">项目：{{item.service_name}}</view>
+      <view class="line">门店：{{item.store}}</view>
+      <view class="line">时间：{{item.appointment_date}} {{item.appointment_time}}</view>
+      <view class="line">宠物：{{item.pet_name}} / {{item.pet_gender_zh}}</view>
+      <view class="line">联系人：{{item.customer_name}} / {{item.phone_masked}}</view>
+      <view wx:if="{{item.related_application_id}}" class="line">关联 TNR：#{{item.related_application_id}}</view>
+      <view wx:if="{{item.pet_size}}" class="line">体型：{{item.pet_size}}</view>
+      <view wx:if="{{item.coat_length}}" class="line">毛发：{{item.coat_length}}</view>
+      <view wx:if="{{item.notes}}" class="line">备注：{{item.notes}}</view>
+      <view class="line line-muted">创建时间：{{item.created_at}}</view>
+      <!-- 取消按钮（仅 pending/confirmed 可取消） -->
+      <view wx:if="{{item.status === 'pending' || item.status === 'confirmed'}}" style="margin-top:16rpx;">
+        <button class="btn-cancel" data-id="{{item.id}}" data-index="{{idx}}" bindtap="onCancelAppt" loading="{{item.cancelling}}">取消预约</button>
+      </view>
+    </view>
+  </block>
+</view>

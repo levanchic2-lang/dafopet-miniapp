@@ -113,12 +113,65 @@
   @media (max-width: 720px) { .admin-upload-grid { grid-template-columns: 1fr; } }
   .admin-upload-grid label { margin: 0; font-weight: 600; font-size: 0.86rem; }
   .admin-upload-submit { max-width: 720px; margin-top: 0.75rem; width: 100%; }
+  .appt-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem 0.9rem;
+  }
+  .appt-grid .wide { grid-column: span 3; }
+  .appointment-list {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.9rem;
+  }
+  .appointment-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-elevated);
+    padding: 0.85rem 0.95rem;
+  }
+  .appointment-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .appointment-meta {
+    color: var(--muted);
+    font-size: 0.84rem;
+  }
+  .appointment-line {
+    margin: 0.35rem 0 0;
+    font-size: 0.9rem;
+  }
+  .appointment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .appointment-actions form { margin: 0; }
+  @media (max-width: 900px) {
+    .appt-grid { grid-template-columns: 1fr 1fr; }
+    .appt-grid .wide { grid-column: span 2; }
+  }
+  @media (max-width: 640px) {
+    .appt-grid { grid-template-columns: 1fr; }
+    .appt-grid .wide { grid-column: span 1; }
+  }
+  .appt-grid input.appt-field-locked {
+    background: var(--bg-elevated);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
 </style>
 {% endblock %}
 {% block body %}
 {% set filters = filters | default({}) %}
 {% set stats = stats | default({'overall_by_status': {}, 'today_new': 0, 'pending_todo': 0, 'total': 0}) %}
 {% set backup_files = backup_files | default([]) %}
+{% set appointments = appointments | default([]) %}
 {% set STATUS_ZH = {
   'draft': '草稿',
   'pending_ai': '系统处理中',
@@ -152,7 +205,9 @@
 {% if request.query_params.get('backup_err') == '1' %}
 <div class="msg err">备份失败：{{ request.query_params.get('reason', '请查看服务器日志或确认 data/、uploads/ 路径可读写') }}</div>
 {% endif %}
-
+{% if request.query_params.get('surgery_media_err') %}
+<div class="msg err">{{ request.query_params.get('surgery_media_err') }}</div>
+{% endif %}
 <div class="card">
   <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:flex-end;justify-content:space-between;">
     <div>
@@ -416,8 +471,146 @@
     {% endif %}
   </div>
 
+  {% set surg_before_files = a.media | selectattr('kind', 'equalto', 'surgery_before') | list %}
+  {% set surg_after_files  = a.media | selectattr('kind', 'equalto', 'surgery_after')  | list %}
+  {% set surg_before_n = surg_before_files | length %}
+  {% set surg_after_n  = surg_after_files  | length %}
+  {% set surgery_media_ok = surg_before_n > 0 and surg_after_n > 0 %}
+
+  {% if a.status == 'surgery_completed' %}
+  {# ── 手术完成：显示已上传缩略图 + 折叠式「补充材料」 ── #}
+  <div class="admin-upload">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
+      <p style="margin:0;font-weight:800;">手术影像记录</p>
+      <button type="button" class="secondary" style="font-size:0.84rem;padding:0.3rem 0.8rem;"
+              onclick="var p=this.closest('.admin-upload').querySelector('.supplement-form');p.toggleAttribute('hidden');this.textContent=p.hidden?'补充材料':'收起';"> 补充材料</button>
+    </div>
+    {# 术前缩略图 #}
+    {% if surg_before_files %}
+    <div style="margin-bottom:0.55rem;">
+      <span class="sub" style="font-size:0.82rem;">术前（{{ surg_before_n }} 个文件）：</span>
+      <div class="admin-app-thumb-wrap" style="margin-top:0.3rem;">
+        {% for m in surg_before_files %}
+        {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
+        {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
+        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
+           title="术前视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+        {% else %}
+        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术前 {{ loop.index }} · 点击查看原图">
+          <img src="/file/{{ m.id }}" alt="术前{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" />
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {# 术后缩略图 #}
+    {% if surg_after_files %}
+    <div style="margin-bottom:0.55rem;">
+      <span class="sub" style="font-size:0.82rem;">术后（{{ surg_after_n }} 个文件）：</span>
+      <div class="admin-app-thumb-wrap" style="margin-top:0.3rem;">
+        {% for m in surg_after_files %}
+        {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
+        {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
+        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
+           title="术后视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+        {% else %}
+        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术后 {{ loop.index }} · 点击查看原图">
+          <img src="/file/{{ m.id }}" alt="术后{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" />
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% if not surg_before_files and not surg_after_files %}
+    <p class="sub" style="margin:0 0 0.5rem;">暂无已上传的手术影像。</p>
+    {% endif %}
+    {# 折叠式补充上传表单 #}
+    <div class="supplement-form" hidden style="margin-top:0.6rem;padding:0.7rem 0.85rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg);">
+      <p style="margin:0 0 0.5rem;font-size:0.9rem;font-weight:700;">补充手术资料</p>
+      <form method="post" action="/admin/app/{{ a.id }}/upload-surgery" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <div class="admin-upload-grid">
+          <label>术前照片 <input type="file" name="before_images" accept="image/*" multiple /></label>
+          <label>术后照片 <input type="file" name="after_images" accept="image/*" multiple /></label>
+          <label>术前视频 <input type="file" name="before_videos" accept="video/*" multiple /></label>
+          <label>术后视频 <input type="file" name="after_videos" accept="video/*" multiple /></label>
+        </div>
+        <button type="submit" class="admin-upload-submit">上传补充资料</button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  {# ── 未完成：显示常规上传表单 ── #}
+  <div class="admin-upload">
+    <p style="margin:0 0 0.5rem;font-weight:800;">上传术前 / 术后影像（标记「手术完成」前须各至少 1 个文件）</p>
+    {% if a.status in ['approved', 'arrived_verified', 'scheduled'] and not surgery_media_ok %}
+    <p class="sub" style="margin:0 0 0.65rem;">当前：术前 {{ surg_before_n }} 个文件，术后 {{ surg_after_n }} 个文件。请补全后再点「标记手术已完成」。</p>
+    {% elif surgery_media_ok %}
+    <p class="sub" style="margin:0 0 0.65rem;color:var(--ok, green);">✓ 术前 {{ surg_before_n }} 个、术后 {{ surg_after_n }} 个，已满足要求，可标记手术完成。</p>
+    {% endif %}
+    {# 已上传文件预览（如有）#}
+    {% if surg_before_files or surg_after_files %}
+    <div style="margin-bottom:0.65rem;">
+      {% if surg_before_files %}
+      <span class="sub" style="font-size:0.82rem;">已上传术前：</span>
+      <div class="admin-app-thumb-wrap" style="margin:0.3rem 0 0.45rem;">
+        {% for m in surg_before_files %}
+        {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
+        {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
+        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
+           title="术前视频 {{ loop.index }}" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+        {% else %}
+        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术前 {{ loop.index }}">
+          <img src="/file/{{ m.id }}" alt="术前{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" />
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if surg_after_files %}
+      <span class="sub" style="font-size:0.82rem;">已上传术后：</span>
+      <div class="admin-app-thumb-wrap" style="margin:0.3rem 0 0;">
+        {% for m in surg_after_files %}
+        {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
+        {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
+        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
+           title="术后视频 {{ loop.index }}" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+        {% else %}
+        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术后 {{ loop.index }}">
+          <img src="/file/{{ m.id }}" alt="术后{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" />
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    <form method="post" action="/admin/app/{{ a.id }}/upload-surgery" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div class="admin-upload-grid">
+        <label>术前照片 <input type="file" name="before_images" accept="image/*" multiple /></label>
+        <label>术后照片 <input type="file" name="after_images" accept="image/*" multiple /></label>
+        <label>术前视频 <input type="file" name="before_videos" accept="video/*" multiple /></label>
+        <label>术后视频 <input type="file" name="after_videos" accept="video/*" multiple /></label>
+      </div>
+      <button type="submit" class="admin-upload-submit">上传手术资料</button>
+    </form>
+    {# 上传完毕后在此处显示"标记手术已完成"按钮 #}
+    {% if a.status in ['approved', 'arrived_verified', 'scheduled'] and surgery_media_ok %}
+    <form method="post" action="/admin/app/{{ a.id }}/surgery-done" style="margin-top:0.65rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <button type="submit">标记手术已完成</button>
+    </form>
+    {% elif a.status in ['approved', 'arrived_verified', 'scheduled'] %}
+    <p class="sub" style="margin:0.5rem 0 0;">请先完成术前、术后资料上传（各至少 1 个），再标记手术完成。</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <div class="admin-actions">
-    <div class="admin-actions-row">
+    <div class="admin-actions-row" style="grid-template-columns:1fr;">
       <div class="admin-action-card">
         <div class="admin-action-title">审核</div>
         <div class="admin-form-stack">
@@ -444,56 +637,7 @@
           {% endif %}
         </div>
       </div>
-      <div class="admin-action-card">
-        <div class="admin-action-title">预约 / 流程</div>
-        <div class="admin-form-stack">
-          {% if a.status in ['approved', 'pre_approved'] %}
-          <form method="post" action="/admin/app/{{ a.id }}/mark-scheduled">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            <div class="admin-form-line">
-              <input type="text" name="appointment_at" placeholder="预约日期（可选：YYYY-MM-DD）" />
-              <button type="submit" class="secondary">标记已预约</button>
-            </div>
-          </form>
-          {% endif %}
-          {% if a.status == 'scheduled' %}
-          <form method="post" action="/admin/app/{{ a.id }}/mark-no-show">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            <button type="submit" class="danger">标记爽约</button>
-          </form>
-          {% endif %}
-          {% if a.status in ['approved', 'scheduled', 'pre_approved'] %}
-          <form method="post" action="/admin/app/{{ a.id }}/mark-cancelled">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            <div class="admin-form-line">
-              <input type="text" name="reason" placeholder="取消原因（可选）" />
-              <button type="submit" class="danger">取消</button>
-            </div>
-          </form>
-          {% endif %}
-          {% if a.status in ['approved', 'arrived_verified'] %}
-          <form method="post" action="/admin/app/{{ a.id }}/surgery-done">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            <button type="submit">标记手术已完成</button>
-          </form>
-          {% endif %}
-        </div>
-      </div>
     </div>
-  </div>
-
-  <div class="admin-upload">
-    <p style="margin:0 0 0.5rem;font-weight:800;">上传术前 / 术后影像</p>
-    <form method="post" action="/admin/app/{{ a.id }}/upload-surgery" enctype="multipart/form-data">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-      <div class="admin-upload-grid">
-        <label>术前照片 <input type="file" name="before_images" accept="image/*" multiple /></label>
-        <label>术后照片 <input type="file" name="after_images" accept="image/*" multiple /></label>
-        <label>术前视频 <input type="file" name="before_videos" accept="video/*" multiple /></label>
-        <label>术后视频 <input type="file" name="after_videos" accept="video/*" multiple /></label>
-      </div>
-      <button type="submit" class="admin-upload-submit">上传手术资料</button>
-    </form>
   </div>
 
   <div style="margin-top:0.75rem;">
@@ -513,3 +657,6 @@
 <div class="card"><p>暂无申请记录。</p></div>
 {% endfor %}
 {% endblock %}
+{% block scripts %}
+{% endblock %}
+

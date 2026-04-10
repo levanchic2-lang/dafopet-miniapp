@@ -164,6 +164,150 @@ def push_application_result(
         db.commit()
 
 
+def push_appointment_status(
+    db: Session,
+    appointment_id: int,
+    openid: str,
+    status_text: str,
+    *,
+    service_name: str = "",
+    store: str = "",
+    appointment_date: str = "",
+    appointment_time: str = "",
+    note: str = "",
+) -> None:
+    """推送：预约状态变更（确认/取消）通知。复用 application_result 模板。"""
+    if not settings.wechat_tmpl_application_result:
+        return
+    if not _enabled() or not openid:
+        return
+
+    def v(x: str, fallback: str = "—", max_len: int = 20) -> str:
+        s = (x or "").strip()
+        if not s:
+            s = fallback
+        return s[:max_len]
+
+    keys = [k.strip() for k in (settings.wechat_fields_application_result or "").split(",") if k.strip()]
+    if not keys:
+        keys = ["thing1", "thing2", "thing3", "thing4", "thing5"]
+
+    now_str = time.strftime("%Y-%m-%d %H:%M", time.localtime())
+    appt_time_str = f"{appointment_date} {appointment_time}".strip() or now_str
+
+    data: dict[str, Any] = {}
+    for k in keys:
+        if k.startswith("time") or k.startswith("date"):
+            data[k] = {"value": appt_time_str if "date" in k else appt_time_str}
+        elif k == "thing4":
+            svc = v(service_name, fallback="美容/门诊预约", max_len=20)
+            data[k] = {"value": svc}
+        else:
+            msg = v(note, fallback=v(status_text, max_len=20), max_len=20)
+            data[k] = {"value": msg}
+
+    payload = {
+        "touser": openid,
+        "template_id": settings.wechat_tmpl_application_result,
+        "page": settings.wechat_message_page,
+        "data": data,
+    }
+    try:
+        resp = _post_subscribe_send(payload)
+        db.add(
+            NotificationLog(
+                application_id=None,
+                channel="wechat_miniapp",
+                payload=json.dumps({"type": "appointment_status", "appointment_id": appointment_id, "status": status_text, "resp": resp}, ensure_ascii=False),
+                success=True,
+            )
+        )
+        db.commit()
+    except Exception as e:
+        db.add(
+            NotificationLog(
+                application_id=None,
+                channel="wechat_miniapp",
+                payload=str(e),
+                success=False,
+            )
+        )
+        db.commit()
+
+
+def push_surgery_reminder(
+    db: Session,
+    appointment_id: int,
+    openid: str,
+    cat_name: str,
+    *,
+    appointment_date: str = "",
+    appointment_time: str = "",
+    reminder_type: str = "day_before",
+) -> None:
+    """推送：手术前提醒（前一天或当天）。复用 surgery_done 模板。"""
+    if not settings.wechat_tmpl_surgery_done:
+        return
+    if not _enabled() or not openid:
+        return
+
+    def v(x: str, fallback: str = "—", max_len: int = 20) -> str:
+        s = (x or "").strip()
+        if not s:
+            s = fallback
+        return s[:max_len]
+
+    keys = [k.strip() for k in (settings.wechat_fields_surgery_done or "").split(",") if k.strip()]
+    if not keys:
+        keys = ["thing1", "thing2", "thing3"]
+
+    appt_time_str = f"{appointment_date} {appointment_time}".strip()
+    if reminder_type == "day_before":
+        note_text = "明天手术，请提前禁食禁水"
+    else:
+        note_text = "今天手术，请按约定时间到院"
+
+    data: dict[str, Any] = {}
+    for k in keys:
+        if k.startswith("time"):
+            data[k] = {"value": appt_time_str or time.strftime("%Y-%m-%d", time.localtime())}
+        elif k == "thing5":
+            data[k] = {"value": v("TNR手术提醒", max_len=20)}
+        elif k == "thing4":
+            data[k] = {"value": v(note_text, max_len=20)}
+        else:
+            data[k] = {"value": v(cat_name, fallback="猫咪", max_len=20)}
+
+    payload = {
+        "touser": openid,
+        "template_id": settings.wechat_tmpl_surgery_done,
+        "page": settings.wechat_message_page,
+        "data": data,
+    }
+    log_type = f"surgery_reminder_{reminder_type}"
+    try:
+        resp = _post_subscribe_send(payload)
+        db.add(
+            NotificationLog(
+                application_id=None,
+                channel="wechat_miniapp",
+                payload=json.dumps({"type": log_type, "appointment_id": appointment_id, "resp": resp}, ensure_ascii=False),
+                success=True,
+            )
+        )
+        db.commit()
+    except Exception as e:
+        db.add(
+            NotificationLog(
+                application_id=None,
+                channel="wechat_miniapp",
+                payload=str(e),
+                success=False,
+            )
+        )
+        db.commit()
+
+
 def push_surgery_done(
     db: Session,
     application_id: int,

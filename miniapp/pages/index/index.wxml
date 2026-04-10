@@ -7,6 +7,8 @@
   <button class="btn secondary" bindtap="onEnableNotify">开启通知提醒</button>
   <view wx:if="{{notifyStatusText}}" class="sub">{{notifyStatusText}}</view>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goStatusPage">我的订单 / 查看进度</button>
+  <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAppointmentPage">预约服务</button>
+  <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAppointmentListPage">我的预约</button>
 
   <view class="label">申请人姓名</view>
   <input class="input input-lg" value="{{form.applicant_name}}" data-k="applicant_name" bindinput="onInput" />
@@ -49,20 +51,10 @@
   <view class="label">详细地址</view>
   <textarea class="textarea textarea-lg addr-detail" value="{{addressDetailInput}}" maxlength="240" placeholder="道路、门牌号、楼栋单元等" auto-height show-confirm-bar="{{false}}" bindinput="onAddressDetailInput" />
 
-  <view class="row2">
-    <view class="col">
-      <view class="label">预约门店</view>
-      <picker class="picker picker-lg" mode="selector" range="{{storeOptions}}" range-key="label" value="{{storeIndex}}" bindchange="onStoreChange">
-        <view>{{storeOptions[storeIndex].label}}</view>
-      </picker>
-    </view>
-    <view class="col">
-      <view class="label">期望手术日期</view>
-      <picker class="picker picker-lg" mode="date" value="{{appointmentDate}}" bindchange="onPickDate">
-        <view>{{appointmentDate || '请选择'}}</view>
-      </picker>
-    </view>
-  </view>
+  <view class="label">预约门店</view>
+  <picker class="picker picker-lg" mode="selector" range="{{storeOptions}}" range-key="label" value="{{storeIndex}}" bindchange="onStoreChange">
+    <view>{{storeOptions[storeIndex].label}}</view>
+  </picker>
 
   <view class="label">术后打算</view>
   <picker class="picker picker-lg" mode="selector" range="{{planOptions}}" range-key="label" value="{{planIndex}}" bindchange="onPlanChange">

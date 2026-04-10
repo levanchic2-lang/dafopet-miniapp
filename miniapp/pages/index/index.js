@@ -1,4 +1,5 @@
 const { postJson } = require("../../utils/api");
+const { runWithPrivacyGuard } = require("../../utils/privacy");
 const shenzhenRegionsLocal = (() => {
   try {
     return require("../../utils/shenzhen_regions.json");
@@ -21,7 +22,6 @@ Page({
       phone: "",
       address: "",
       clinic_store: "大风动物医院（东环店）",
-      appointment_at: "",
       location_lat: "",
       location_lng: "",
       location_address: "",
@@ -37,7 +37,6 @@ Page({
       { value: "大风动物医院（横岗店）", label: "大风动物医院（横岗店）" }
     ],
     storeIndex: 0,
-    appointmentDate: "",
     planOptions: [
       { value: "原地放归", label: "原地放归" },
       { value: "短期术后寄养 / 笼养观察后放归", label: "短期术后寄养 / 笼养观察后放归" },
@@ -237,31 +236,37 @@ Page({
   _autoGetLocationOnce() {
     if (this._didAutoLoc) return;
     this._didAutoLoc = true;
-    wx.getLocation({
-      type: "wgs84",
-      success: (res) => {
-        const lat = String(res.latitude);
-        const lng = String(res.longitude);
-        this.setData({
-          "form.location_lat": String(res.latitude),
-          "form.location_lng": String(res.longitude),
-          "form.location_address": "正在解析地址…"
-        });
-        this._reverseGeocode(lat, lng).then((j) => {
-          if (j && j.ok && j.address) {
-            this.setData({ "form.location_address": j.address });
-          } else {
-            if (j && String(j.amap_infocode) === "10009") {
-              this.setData({ "form.location_address": "地址解析失败：高德Key类型不匹配（需Web服务Key）" });
-            } else {
-              this.setData({ "form.location_address": "已获取定位（未解析出地址）" });
-            }
-          }
-        });
-      },
-      fail: () => {
-        // 静默失败：用户仍可手动点“获取定位”
-      }
+    runWithPrivacyGuard(
+      "定位功能",
+      () =>
+        new Promise((resolve, reject) => {
+          wx.getLocation({
+            type: "wgs84",
+            success: (res) => {
+              const lat = String(res.latitude);
+              const lng = String(res.longitude);
+              this.setData({
+                "form.location_lat": String(res.latitude),
+                "form.location_lng": String(res.longitude),
+                "form.location_address": "正在解析地址…"
+              });
+              this._reverseGeocode(lat, lng).then((j) => {
+                if (j && j.ok && j.address) {
+                  this.setData({ "form.location_address": j.address });
+                } else if (j && String(j.amap_infocode) === "10009") {
+                  this.setData({ "form.location_address": "地址解析失败：高德Key类型不匹配（需Web服务Key）" });
+                } else {
+                  this.setData({ "form.location_address": "已获取定位（未解析出地址）" });
+                }
+                resolve(res);
+              });
+            },
+            fail: reject
+          });
+        }),
+      { silent: true }
+    ).catch(() => {
+      // 静默失败：用户仍可手动点“获取定位”
     });
   },
 
@@ -425,28 +430,60 @@ Page({
     }
   },
 
-  onPickImages() {
-    wx.chooseMedia({
-      count: 6,
-      mediaType: ["image"],
-      sourceType: ["album", "camera"],
-      success: (res) => {
-        const files = (res.tempFiles || []).map((f) => f.tempFilePath);
-        this.setData({ images: files.slice(0, 6) });
-      }
-    });
+  async onPickImages() {
+    try {
+      await runWithPrivacyGuard("选择照片", () =>
+        new Promise((resolve, reject) => {
+          wx.chooseMedia({
+            count: 6,
+            mediaType: ["image"],
+            sourceType: ["album", "camera"],
+            success: (res) => {
+              const files = (res.tempFiles || []).map((f) => f.tempFilePath);
+              this.setData({ images: files.slice(0, 6) });
+              resolve(res);
+            },
+            fail: reject
+          });
+        })
+      );
+    } catch (e) {
+      const msg = (e && e.errMsg) || "";
+      if (msg.includes("cancel")) return;
+      wx.showModal({
+        title: "选择照片失败",
+        content: msg || "请检查隐私授权、相册权限或网络配置。",
+        showCancel: false
+      });
+    }
   },
 
-  onPickVideo() {
-    wx.chooseMedia({
-      count: 2,
-      mediaType: ["video"],
-      sourceType: ["album", "camera"],
-      success: (res) => {
-        const files = (res.tempFiles || []).map((f) => f.tempFilePath);
-        this.setData({ videos: files.slice(0, 2) });
-      }
-    });
+  async onPickVideo() {
+    try {
+      await runWithPrivacyGuard("选择视频", () =>
+        new Promise((resolve, reject) => {
+          wx.chooseMedia({
+            count: 2,
+            mediaType: ["video"],
+            sourceType: ["album", "camera"],
+            success: (res) => {
+              const files = (res.tempFiles || []).map((f) => f.tempFilePath);
+              this.setData({ videos: files.slice(0, 2) });
+              resolve(res);
+            },
+            fail: reject
+          });
+        })
+      );
+    } catch (e) {
+      const msg = (e && e.errMsg) || "";
+      if (msg.includes("cancel")) return;
+      wx.showModal({
+        title: "选择视频失败",
+        content: msg || "请检查隐私授权、相册权限或网络配置。",
+        showCancel: false
+      });
+    }
   },
 
   onStoreChange(e) {
@@ -457,16 +494,6 @@ Page({
     });
   },
 
-  onPickDate(e) {
-    const v = e.detail.value || "";
-    this.setData({ appointmentDate: v }, this._syncAppointmentAt);
-  },
-
-  _syncAppointmentAt() {
-    const d = this.data.appointmentDate;
-    this.setData({ "form.appointment_at": d || "" });
-  },
-
   onPlanChange(e) {
     const idx = Number(e.detail.value || 0);
     this.setData({
@@ -475,37 +502,44 @@ Page({
     });
   },
 
-  onGetLocation() {
-    wx.getLocation({
-      type: "wgs84",
-      success: (res) => {
-        const lat = String(res.latitude);
-        const lng = String(res.longitude);
-        this.setData({
-          "form.location_lat": lat,
-          "form.location_lng": lng,
-          "form.location_address": "正在解析地址…"
-        });
-        this._reverseGeocode(lat, lng).then((j) => {
-          if (j && j.ok && j.address) {
-            this.setData({ "form.location_address": j.address });
-          } else {
-            if (j && String(j.amap_infocode) === "10009") {
-              this.setData({ "form.location_address": "地址解析失败：高德Key类型不匹配（需Web服务Key）" });
-            } else {
-              this.setData({ "form.location_address": "已获取定位（未解析出地址）" });
-            }
-          }
-        });
-      },
-      fail: (e) => {
-        wx.showModal({
-          title: "定位失败",
-          content: (e && e.errMsg) || "请检查定位权限",
-          showCancel: false
-        });
-      }
-    });
+  async onGetLocation() {
+    try {
+      await runWithPrivacyGuard("定位功能", () =>
+        new Promise((resolve, reject) => {
+          wx.getLocation({
+            type: "wgs84",
+            success: (res) => {
+              const lat = String(res.latitude);
+              const lng = String(res.longitude);
+              this.setData({
+                "form.location_lat": lat,
+                "form.location_lng": lng,
+                "form.location_address": "正在解析地址…"
+              });
+              this._reverseGeocode(lat, lng).then((j) => {
+                if (j && j.ok && j.address) {
+                  this.setData({ "form.location_address": j.address });
+                } else if (j && String(j.amap_infocode) === "10009") {
+                  this.setData({ "form.location_address": "地址解析失败：高德Key类型不匹配（需Web服务Key）" });
+                } else {
+                  this.setData({ "form.location_address": "已获取定位（未解析出地址）" });
+                }
+                resolve(res);
+              });
+            },
+            fail: reject
+          });
+        })
+      );
+    } catch (e) {
+      const msg = (e && e.errMsg) || "请检查定位权限";
+      if (String(msg).includes("auth deny") || String(msg).includes("authorize")) return;
+      wx.showModal({
+        title: "定位失败",
+        content: msg,
+        showCancel: false
+      });
+    }
   },
 
   async onSubmit() {
@@ -541,10 +575,6 @@ Page({
     }
     if (!form.clinic_store) {
       this.setData({ error: "请选择预约门店。" });
-      return;
-    }
-    if (!String(form.appointment_at || "").trim()) {
-      this.setData({ error: "请选择期望手术日期。" });
       return;
     }
     if (!String(form.post_surgery_plan || "").trim()) {
@@ -709,6 +739,13 @@ Page({
 
   goStatusPage() {
     wx.navigateTo({ url: "/pages/status/status" });
+  },
+
+  goAppointmentPage() {
+    wx.navigateTo({ url: "/pages/appointment/index" });
+  },
+
+  goAppointmentListPage() {
+    wx.navigateTo({ url: "/pages/appointment/list" });
   }
 });
-

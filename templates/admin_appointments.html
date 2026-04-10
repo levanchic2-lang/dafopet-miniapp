@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+  html { scroll-behavior: smooth; }
+  .appointment-card:target {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ── 统计栏 ─────────────────────────────────────────────── */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.65rem;
+  }
+  .stat-cell {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.8rem 1rem;
+  }
+  .stat-label { font-size: 0.76rem; font-weight: 700; color: var(--muted); letter-spacing: 0.02em; }
+  .stat-value { font-size: 1.65rem; font-weight: 800; color: var(--text); line-height: 1.15; margin-top: 0.2rem; }
+  .stat-value span { font-size: 1rem; font-weight: 600; color: var(--muted); }
+  .stat-sub { font-size: 0.74rem; color: var(--muted); margin-top: 0.15rem; }
+
+  /* ── 筛选栏 ─────────────────────────────────────────────── */
+  .filter-bar {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.8rem 0.95rem;
+    display: grid;
+    gap: 0.6rem;
+  }
+  .preset-btns { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .preset-btn {
+    padding: 0.32rem 0.85rem;
+    border-radius: 99px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elevated);
+    font-size: 0.84rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text);
+    line-height: 1.4;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+  }
+  .preset-btn.active, .preset-btn:hover {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .filter-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .filter-field { display: flex; flex-direction: column; gap: 0.2rem; }
+  .filter-field label { font-size: 0.74rem; font-weight: 700; color: var(--muted); }
+  .filter-field select,
+  .filter-field input[type=date] {
+    height: 2.1rem;
+    padding: 0 0.55rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.84rem;
+    min-width: 0;
+  }
+  .filter-apply {
+    padding: 0 1.1rem;
+    height: 2.1rem;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.84rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    align-self: flex-end;
+  }
+  .filter-apply:hover { background: var(--accent-hover); }
+  #custom-range { display: flex; gap: 0.4rem; align-items: flex-end; flex-wrap: wrap; }
+  .range-sep { padding-bottom: 0.45rem; color: var(--muted); font-size: 0.82rem; }
+
+  /* ── 预约单区块 ─────────────────────────────────────────── */
+  .appt-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem 0.9rem;
+  }
+  .appt-grid .wide { grid-column: span 3; }
+
+  .date-group { margin-top: 1.3rem; }
+  .date-group:first-child { margin-top: 0.9rem; }
+
+  .date-group-header {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border-strong);
+    margin-bottom: 0.7rem;
+  }
+  .date-group-title {
+    font-size: 0.97rem;
+    font-weight: 800;
+    color: var(--text);
+    flex: 1;
+  }
+  .date-group-title.is-today { color: #1d4ed8; }
+  .date-group-chips { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+  .dg-chip {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.15rem 0.55rem;
+    border-radius: 99px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elevated);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .dg-chip.c-total { color: var(--muted); }
+  .dg-chip.c-pending { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+  .dg-chip.c-tnr { border-color: #c4b5fd; background: #f5f3ff; color: #5b21b6; }
+
+  /* ── 部门分区 ─────────────────────────────────────────────── */
+  .dept-section { margin-bottom: 1.1rem; }
+  .dept-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.6rem;
+  }
+  .dept-header.dept-medical {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-left: 3px solid #3b82f6;
+  }
+  .dept-header.dept-beauty {
+    background: #fdf4ff;
+    color: #7e22ce;
+    border-left: 3px solid #a855f7;
+  }
+  .dept-count {
+    font-weight: 400;
+    font-size: 0.78rem;
+    opacity: 0.75;
+  }
+
+  .slot-group { margin-bottom: 0.9rem; }
+  .slot-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 0.45rem;
+    letter-spacing: 0.02em;
+  }
+  .slot-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ── 预约卡片 ───────────────────────────────────────────── */
+  .appointment-list { display: grid; gap: 0.5rem; }
+  .appointment-card {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    overflow: hidden;
+    transition: box-shadow 0.12s;
+  }
+  .appointment-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+
+  .appt-status-rail { width: 5px; flex-shrink: 0; }
+  .appt-status-rail.s-pending   { background: #f59e0b; }
+  .appt-status-rail.s-confirmed { background: #10b981; }
+  .appt-status-rail.s-completed { background: #3b82f6; }
+  .appt-status-rail.s-cancelled { background: #d4d4d4; }
+  .appt-status-rail.s-no_show  { background: #ef4444; }
+
+  .appt-body { flex: 1; padding: 0.75rem 0.9rem; min-width: 0; }
+
+  .appt-top-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .appt-time-block { display: flex; flex-direction: column; gap: 0.1rem; }
+  .appt-time-big { font-size: 1.3rem; font-weight: 800; color: var(--text); line-height: 1; }
+  .appt-dur-line { font-size: 0.76rem; color: var(--muted); }
+  .appt-id-meta { font-size: 0.76rem; color: var(--muted); }
+
+  .appt-badges {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 0.45rem;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 99px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elevated);
+    color: var(--muted);
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+  .badge.b-ok      { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
+  .badge.b-no      { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
+  .badge.b-pending { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+  .badge.b-tnr     { background: #f5f3ff; border-color: #c4b5fd; color: #5b21b6; }
+  .badge.b-blue    { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+
+  .appt-info-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.3rem 0.65rem;
+    margin-top: 0.5rem;
+    align-items: start;
+  }
+  .appt-service { font-size: 0.92rem; font-weight: 700; color: var(--text); }
+  .appt-patient { font-size: 0.82rem; color: var(--muted); margin-top: 0.1rem; line-height: 1.45; }
+  .appt-store-tag {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.18rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--muted);
+    white-space: nowrap;
+    text-align: right;
+    align-self: start;
+    grid-row: span 2;
+  }
+
+  .appointment-meta { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+  .appointment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.65rem;
+  }
+  .appointment-actions form { margin: 0; }
+
+  .appt-detail {
+    margin-top: 0.5rem;
+    display: grid;
+    gap: 0.18rem 0;
+  }
+  .appt-detail-line {
+    display: grid;
+    grid-template-columns: 4.5rem 1fr;
+    gap: 0 0.4rem;
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+  .appt-detail-key {
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+    border: 1px dashed var(--border-strong);
+    border-radius: 12px;
+    margin-top: 0.75rem;
+  }
+
+  @media (max-width: 900px) {
+    .appt-grid { grid-template-columns: 1fr 1fr; }
+    .appt-grid .wide { grid-column: span 2; }
+    .stats-bar { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 640px) {
+    .appt-grid { grid-template-columns: 1fr; }
+    .appt-grid .wide { grid-column: span 1; }
+    .stats-bar { grid-template-columns: 1fr 1fr; }
+    .appt-time-big { font-size: 1.1rem; }
+  }
+  .appt-grid input.appt-field-locked {
+    background: var(--bg-elevated);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+{% set appointments = appointments | default([]) %}
+{% set grouped_appointments = grouped_appointments | default([]) %}
+{% set filters = filters | default({}) %}
+{% set stats = stats | default({}) %}
+
+{# ── 标题栏 ────────────────────────────────────────────────────── #}
+<div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+  <div>
+    <h1 style="margin:0;">预约管理</h1>
+    <p class="sub" style="margin:0.25rem 0 0;">创建与处理通用预约（TNR、门诊、手术、美容）。</p>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+    <a class="btn secondary" href="/admin" style="text-decoration:none;">返回医院后台</a>
+    <a class="btn secondary" href="/admin/logout" style="text-decoration:none;">退出登录</a>
+  </div>
+</div>
+
+{# ── 统计栏（基于今日全量，不受筛选影响） ─────────────────────── #}
+<div class="stats-bar">
+  <div class="stat-cell">
+    <div class="stat-label">今日有效预约</div>
+    <div class="stat-value">{{ stats.today_active | default(0) }}</div>
+    <div class="stat-sub">不含已取消 / 爽约</div>
+  </div>
+  <a class="stat-cell"
+     href="{{ request.url_for('page_admin_appointments') }}?preset=month&appt_status=pending"
+     style="text-decoration:none;color:inherit;display:block;cursor:pointer;"
+     title="点击查看全部待确认预约">
+    <div class="stat-label">待确认（今日起）</div>
+    <div class="stat-value" style="{% if stats.pending_total > 0 %}color:#d97706;{% endif %}">
+      {{ stats.pending_total | default(0) }}
+    </div>
+    <div class="stat-sub" style="{% if stats.pending_total > 0 %}color:#d97706;{% endif %}">
+      {% if stats.pending_total > 0 %}点击查看 →{% else %}今日及未来全部{% endif %}
+    </div>
+  </a>
+  <div class="stat-cell">
+    <div class="stat-label">今日 TNR 手术</div>
+    <div class="stat-value">{{ stats.tnr_today | default(0) }}<span> / {{ stats.tnr_daily_max | default(2) }}</span></div>
+    <div class="stat-sub">每店每日上限 {{ stats.tnr_daily_max | default(2) }} 台</div>
+  </div>
+</div>
+
+{# ── 筛选栏 ───────────────────────────────────────────────────── #}
+<div class="filter-bar">
+  <form id="filter-form" method="get" action="/admin/appointments">
+    <div class="preset-btns">
+      <button type="button" class="preset-btn {% if filters.preset == 'today' %}active{% endif %}" data-preset="today">今日</button>
+      <button type="button" class="preset-btn {% if filters.preset == '3days' %}active{% endif %}" data-preset="3days">未来三日</button>
+      <button type="button" class="preset-btn {% if filters.preset == 'week' %}active{% endif %}" data-preset="week">本周</button>
+      <button type="button" class="preset-btn {% if filters.preset == 'month' %}active{% endif %}" data-preset="month">本月</button>
+      <button type="button" class="preset-btn {% if filters.preset == 'custom' %}active{% endif %}" data-preset="custom">自定义</button>
+    </div>
+    <input type="hidden" name="preset" id="input-preset" value="{{ filters.preset | default('today') }}" />
+
+    <div class="filter-row">
+      <div id="custom-range" style="display:{% if filters.preset == 'custom' %}flex{% else %}none{% endif %};">
+        <div class="filter-field">
+          <label>开始日期</label>
+          <input type="date" name="df" id="input-df" value="{{ filters.date_from | default('') }}" />
+        </div>
+        <div class="range-sep">→</div>
+        <div class="filter-field">
+          <label>结束日期</label>
+          <input type="date" name="dt" id="input-dt" value="{{ filters.date_to | default('') }}" />
+        </div>
+      </div>
+      <div class="filter-field">
+        <label>状态</label>
+        <select name="appt_status">
+          <option value="">全部状态</option>
+          <option value="pending"   {% if filters.status == 'pending'    %}selected{% endif %}>待确认</option>
+          <option value="confirmed" {% if filters.status == 'confirmed'  %}selected{% endif %}>已确认</option>
+          <option value="completed" {% if filters.status == 'completed'  %}selected{% endif %}>已完成</option>
+          <option value="cancelled" {% if filters.status == 'cancelled'  %}selected{% endif %}>已取消</option>
+          <option value="no_show"   {% if filters.status == 'no_show'    %}selected{% endif %}>爽约</option>
+        </select>
+      </div>
+      <div class="filter-field">
+        <label>门店</label>
+        <select name="appt_store">
+          <option value="">全部门店</option>
+          {% for s in stores | default([]) %}
+          <option value="{{ s }}" {% if filters.store == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-field">
+        <label>类型</label>
+        <select name="appt_category">
+          <option value="">全部类型</option>
+          <option value="tnr"       {% if filters.category == 'tnr'       %}selected{% endif %}>TNR</option>
+          <option value="outpatient"{% if filters.category == 'outpatient'%}selected{% endif %}>门诊</option>
+          <option value="surgery"   {% if filters.category == 'surgery'   %}selected{% endif %}>手术</option>
+          <option value="beauty"    {% if filters.category == 'beauty'    %}selected{% endif %}>美容</option>
+        </select>
+      </div>
+      <button type="submit" class="filter-apply">筛选</button>
+    </div>
+  </form>
+</div>
+
+{# ── 预约规则（折叠） ─────────────────────────────────────────── #}
+<div class="card" style="padding:0;">
+  <button type="button"
+          onclick="var b=document.getElementById('rules-body');var opening=b.style.display==='none';b.style.display=opening?'grid':'none';this.querySelector('.rules-arrow').textContent=opening?'▲':'▼';"
+          style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0.85rem 0.95rem;cursor:pointer;font-size:0.95rem;font-weight:700;color:inherit;text-align:left;">
+    <span>预约规则（仅后台可见）</span>
+    <span class="rules-arrow" style="font-size:0.75rem;color:var(--muted);">▼</span>
+  </button>
+  <div id="rules-body" style="display:none;padding:0 0.95rem 0.85rem;font-size:0.9rem;gap:0.65rem;border-top:1px solid var(--border);">
+    <div style="padding-top:0.75rem;">
+      <strong>时间冲突规则</strong>
+      <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
+        <li>同门店同日期的预约时间段不可重叠（按「开始时间 + 时长」计算区间）。</li>
+        <li>已取消（cancelled）或爽约（no_show）的预约不参与冲突检测。</li>
+        <li>改约时自动排除当前预约本身，再做冲突检测。</li>
+      </ul>
+    </div>
+    <div>
+      <strong>TNR 手术专项规则</strong>
+      <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
+        <li>预约时间须在 11:00–18:00 之间；超出范围将被拒绝。</li>
+        <li>每门店每日上限 <strong>2</strong> 个 TNR 手术预约（不含已取消/爽约）；超出后提示「今日已约满，请改约其他日期」。</li>
+        <li>时长固定 60 分钟，服务项目固定为「TNR 手术安排」，前端与后端均不允许手动修改。</li>
+      </ul>
+    </div>
+    <div>
+      <strong>申请编号去重规则</strong>
+      <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
+        <li>同一 TNR 申请编号，只能存在一个有效预约（状态非取消/爽约）。</li>
+        <li>若已有有效预约，需先将原预约取消，才能为同一申请重新预约。</li>
+      </ul>
+    </div>
+    <div>
+      <strong>改约规则</strong>
+      <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
+        <li>只有状态为「待确认」或「已确认」的预约可以改约；已完成或已取消的预约不能改约。</li>
+        <li>改约日期不能早于今天。</li>
+        <li>改约后自动做时间冲突与 TNR 日限校验。</li>
+        <li>若关联了 TNR 申请且申请状态为「已预约」，改约后会同步更新申请的预约日期，并记录通知日志。</li>
+      </ul>
+    </div>
+    <div>
+      <strong>状态联动规则</strong>
+      <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
+        <li>预约「确认」→ 关联 TNR 申请状态变为「已预约（scheduled）」。</li>
+        <li>预约「取消」（且申请为已预约）→ 关联申请回退为「已通过（approved）」。</li>
+        <li>预约「爽约」→ 关联申请状态变为「爽约（no_show）」。</li>
+        <li>⚠️ 「手术完成」不在预约管理里操作 — 须在「TNR 审核与手术登记」（医院后台）中上传术前 + 术后影像后，点击「标记手术已完成」，完成后系统会自动向救助人发送小程序订阅消息通知。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+{% set appt_redirect = 'appointments' %}
+{% include "includes/admin_appointments_panel.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var presetBtns = document.querySelectorAll('.preset-btn');
+  var inputPreset = document.getElementById('input-preset');
+  var customRange = document.getElementById('custom-range');
+  var form = document.getElementById('filter-form');
+
+  presetBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var p = btn.dataset.preset;
+      inputPreset.value = p;
+      presetBtns.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      if (p === 'custom') {
+        customRange.style.display = 'flex';
+      } else {
+        customRange.style.display = 'none';
+        form.submit();
+      }
+    });
+  });
+
+  /* 自定义日期：开始日期变化时若结束日期为空则同步 */
+  var dfIn = document.getElementById('input-df');
+  var dtIn = document.getElementById('input-dt');
+  if (dfIn && dtIn) {
+    dfIn.addEventListener('change', function () {
+      if (!dtIn.value || dtIn.value < dfIn.value) dtIn.value = dfIn.value;
+    });
+    dtIn.addEventListener('change', function () {
+      if (dfIn.value && dtIn.value < dfIn.value) dfIn.value = dtIn.value;
+    });
+  }
+})();
+</script>
+{% include "includes/admin_appointments_scripts.html" %}
+{% endblock %}

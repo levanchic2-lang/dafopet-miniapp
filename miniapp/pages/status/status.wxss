@@ -159,12 +159,18 @@
 
 .order-item {
   margin-top: 14rpx;
-  padding: 16rpx 16rpx;
   border-radius: 16rpx;
   border: 1rpx solid #e5e5e5;
   background: #ffffff;
+  overflow: hidden;
 }
-.order-cat{
+.order-item-open {
+  border-color: #262626;
+}
+.order-summary {
+  padding: 16rpx 16rpx;
+}
+.order-cat {
   margin-top: 8rpx;
   font-size: 26rpx;
   font-weight: 700;
@@ -172,6 +178,16 @@
   line-height: 1.25;
 }
 .order-top { display: flex; gap: 10rpx; align-items: center; flex-wrap: wrap; }
+.order-arrow {
+  margin-left: auto;
+  font-size: 20rpx;
+  color: #a3a3a3;
+  padding-left: 8rpx;
+}
+.order-detail {
+  padding: 0 16rpx 16rpx;
+  border-top: 1rpx solid #e5e5e5;
+}
 
 .claim-card{
   margin-top: 16rpx;

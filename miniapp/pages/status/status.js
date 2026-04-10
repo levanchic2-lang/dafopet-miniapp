@@ -1,3 +1,5 @@
+const { runWithPrivacyGuard } = require("../../utils/privacy");
+
 const STATUS_ZH = {
   draft: "草稿",
   pending_ai: "系统处理中",
@@ -94,7 +96,7 @@ function nextActionText(info) {
     return "等待医院复核。请保持电话畅通，如需补充材料医院会联系你。";
   }
   if (s === "approved") {
-    return "等待医院联系预约；如较久未联系，可主动联系门店确认到院时间。";
+    return "已通过审核，请点击下方「去预约」选择手术时间。";
   }
   if (s === "scheduled") {
     const d = (info?.appointment_at || "").trim();
@@ -106,15 +108,9 @@ function nextActionText(info) {
   if (s === "surgery_completed") {
     return "手术已完成，请按医嘱护理；如同意展示，可在展示页查看术前术后资料。";
   }
-  if (s === "rejected") {
-    return "可联系医院了解原因；如需继续，可补充材料后重新提交。";
-  }
-  if (s === "cancelled") {
-    return "如需继续，请联系医院或重新提交申请。";
-  }
-  if (s === "no_show") {
-    return "如需继续，请联系医院重新安排。";
-  }
+  if (s === "rejected") return "可联系医院了解原因；如需继续，可补充材料后重新提交。";
+  if (s === "cancelled") return "如需继续，请联系医院或重新提交申请。";
+  if (s === "no_show") return "如需继续，请联系医院重新安排。";
   return "请联系医院确认进度。";
 }
 
@@ -127,21 +123,18 @@ function normalizeNotifications(list) {
   }));
 }
 
-// 门店联系信息
 const CLINIC_CONTACTS = {
   "大风动物医院（东环店）": {
     phone: "18026901718",
     landline: "075528018071",
     address: "广东省深圳市龙华区龙华街道建设东路聚豪国际a栋8号铺",
-    lat: null,
-    lng: null
+    lat: null, lng: null
   },
   "大风动物医院（横岗店）": {
     phone: "17820633031",
     landline: "075528704890",
     address: "广东省深圳市龙岗区横岗街道华侨新村社区隆盛花园S2商铺A1013",
-    lat: null,
-    lng: null
+    lat: null, lng: null
   }
 };
 
@@ -159,13 +152,29 @@ function genderZh(g) {
   return k || "未填";
 }
 
+function buildOrderDetail(info) {
+  const st = String(info?.status || "").trim();
+  const note = (info?.reject_reason || info?.note || "").trim();
+  const terminated = isTerminated(st);
+  const reasonText = terminated ? (note || "如需了解原因，请联系医院。") : note;
+  const contact = clinicContact(info?.clinic_store);
+  const view = {
+    status: st,
+    status_zh: statusZh(st),
+    status_desc: statusDesc(st),
+    step_index: deriveStepIndex(st),
+    timeline_steps: buildTimelineSteps(st),
+    terminated,
+    next_action: nextActionText(info),
+    reason_text: reasonText,
+    contact,
+    notifications: normalizeNotifications(info?.notifications)
+  };
+  return { info, view };
+}
+
 Page({
   data: {
-    id: "",
-    loading: false,
-    info: null,
-    view: null,
-    error: "",
     myOrders: [],
     myOrdersLoading: false,
     openid: "",
@@ -176,82 +185,75 @@ Page({
     claimLoading: false,
     claimStatusText: ""
   },
+
+  _pendingExpandId: "",
+
   onLoad(q) {
-    const id = q.id || wx.getStorageSync("LAST_APP_ID") || "";
+    const urlId = q.id || wx.getStorageSync("LAST_APP_ID") || "";
     const openid = wx.getStorageSync("WECHAT_OPENID") || "";
-    this.setData({
-      id: String(id || ""),
-      openid: String(openid || "")
-    });
-    // 优先拉取“本账号所有订单”
+    this._pendingExpandId = String(urlId || "").trim().replace(/^#/, "");
+    this.setData({ openid: String(openid || "") });
     this.fetchMyOrders();
-    if (id) this.fetchStatus();
   },
-  fetchStatus() {
-    const app = getApp();
-    const id = String(this.data.id || "").trim().replace(/^#/, "");
-    if (!id) {
-      this.setData({ error: "请输入申请编号。", info: null, view: null });
+
+  // 点击订单卡片：折叠/展开
+  tapOrder(e) {
+    const id = String(e.currentTarget.dataset.id || "");
+    const idx = Number(e.currentTarget.dataset.index);
+    if (!id) return;
+    const orders = this.data.myOrders;
+    const order = orders[idx];
+    if (!order) return;
+
+    if (order.expanded) {
+      this.setData({ [`myOrders[${idx}].expanded`]: false });
       return;
     }
-    this.setData({ loading: true, error: "", info: null, view: null });
+    // 折叠其他已展开的
+    orders.forEach((o, i) => {
+      if (o.expanded) this.setData({ [`myOrders[${i}].expanded`]: false });
+    });
+    this.setData({ [`myOrders[${idx}].expanded`]: true });
+    // 如果尚未加载详情则拉取
+    if (!order.detail) {
+      this._fetchOrderDetail(id, idx);
+    }
+  },
+
+  _fetchOrderDetail(id, idx) {
+    const app = getApp();
+    this.setData({ [`myOrders[${idx}].detailLoading`]: true, [`myOrders[${idx}].detailError`]: "" });
     wx.request({
       url: app.globalData.apiBase + `/api/app/${encodeURIComponent(id)}/status`,
       method: "GET",
       success: (res) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          const info = res.data || null;
-          const st = String(info?.status || "").trim();
-          const note = (info?.note || "").trim();
-          const terminated = isTerminated(st);
-          const reasonText = terminated ? (note || "如需了解原因，请联系医院。") : note;
-          const contact = clinicContact(info?.clinic_store);
-          const view = {
-            status: st,
-            status_zh: statusZh(st),
-            status_desc: statusDesc(st),
-            step_index: deriveStepIndex(st),
-            timeline_steps: buildTimelineSteps(st),
-            terminated,
-            next_action: nextActionText(info),
-            reason_text: reasonText,
-            contact,
-            notifications: normalizeNotifications(info?.notifications)
-          };
-          this.setData({ info, view, loading: false });
+          const detail = buildOrderDetail(res.data || {});
+          this.setData({
+            [`myOrders[${idx}].detail`]: detail,
+            [`myOrders[${idx}].detailLoading`]: false
+          });
         } else {
-          const msg =
-            (res.data && (res.data.detail || res.data.message)) ||
-            `查询失败（${res.statusCode}）`;
-          this.setData({ error: msg, loading: false });
+          const msg = (res.data && (res.data.detail || res.data.message)) || `加载失败（${res.statusCode}）`;
+          this.setData({
+            [`myOrders[${idx}].detailError`]: String(msg),
+            [`myOrders[${idx}].detailLoading`]: false
+          });
         }
       },
       fail: (e) => {
         this.setData({
-          error: (e && e.errMsg) || "请求失败，请检查网络与后端地址。",
-          loading: false
+          [`myOrders[${idx}].detailError`]: (e && e.errMsg) || "网络错误",
+          [`myOrders[${idx}].detailLoading`]: false
         });
       }
     });
   },
 
-  tapOrder(e) {
-    const id = e.currentTarget.dataset.id || "";
-    if (!id) return;
-    this.setData({ id: String(id) });
-    this.fetchStatus();
-    try {
-      wx.pageScrollTo({ scrollTop: 0, duration: 200 });
-    } catch (e2) {}
-  },
-
   fetchMyOrders() {
     const app = getApp();
     const openid = String(this.data.openid || "").trim();
-    if (!openid) {
-      // 没有 openid 时不阻断：仍可用手动输入编号查询
-      return;
-    }
+    if (!openid) return;
     this.setData({ myOrdersLoading: true });
     wx.request({
       url: app.globalData.apiBase + "/api/wechat/my-apps",
@@ -269,30 +271,48 @@ Page({
             String(it.cat_nickname || "").trim() ||
             (String(it.health_note_brief || "").trim() ? "未命名（可按流浪特征称呼）" : "未命名（按特征称呼）"),
           cat_gender_zh: genderZh(it.cat_gender),
+          expanded: false,
+          detailLoading: false,
+          detailError: "",
+          detail: null
         }));
         this.setData({ myOrders, myOrdersLoading: false });
-        // 若当前未选中任何订单，默认打开最新一条
-        if ((!this.data.id || !String(this.data.id).trim()) && myOrders.length) {
-          const firstId = String(myOrders[0].id || "");
-          if (firstId) {
-            this.setData({ id: firstId });
-            this.fetchStatus();
-          }
+        // 自动展开：优先 URL 指定，否则展开第一条
+        const pendingId = this._pendingExpandId || "";
+        let targetIdx = pendingId
+          ? myOrders.findIndex((o) => String(o.id) === pendingId)
+          : 0;
+        if (targetIdx < 0) targetIdx = 0;
+        if (myOrders.length > targetIdx) {
+          const targetId = String(myOrders[targetIdx].id || "");
+          this.setData({ [`myOrders[${targetIdx}].expanded`]: true });
+          this._fetchOrderDetail(targetId, targetIdx);
         }
       },
-      fail: () => {
-        this.setData({ myOrdersLoading: false });
-      }
+      fail: () => this.setData({ myOrdersLoading: false })
+    });
+  },
+
+  goBookTNR(e) {
+    const idx = Number(e.currentTarget.dataset.index || 0);
+    const order = this.data.myOrders[idx] || {};
+    const info = (order.detail && order.detail.info) || {};
+    const id = info.id || order.id || "";
+    const store = encodeURIComponent(info.clinic_store || "");
+    const name = encodeURIComponent(info.applicant_name || "");
+    const phone = encodeURIComponent(info.phone || "");
+    const cat = encodeURIComponent(info.cat_nickname || "");
+    const gender = encodeURIComponent(info.cat_gender || "");
+    wx.navigateTo({
+      url: `/pages/appointment/index?from_app=${id}&store=${store}&customer_name=${name}&phone=${phone}&pet_name=${cat}&pet_gender=${gender}&category=tnr`
     });
   },
 
   onClaimPhoneInput(e) {
-    const v = (e && e.detail ? e.detail.value : "") || "";
-    this.setData({ claimPhone: String(v).trim() });
+    this.setData({ claimPhone: String((e && e.detail ? e.detail.value : "") || "").trim() });
   },
   onClaimIdInput(e) {
-    const v = (e && e.detail ? e.detail.value : "") || "";
-    this.setData({ claimIdNumber: String(v).trim().toUpperCase() });
+    this.setData({ claimIdNumber: String((e && e.detail ? e.detail.value : "") || "").trim().toUpperCase() });
   },
 
   claimHistoryOrders() {
@@ -318,7 +338,11 @@ Page({
       success: (res) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           const updated = Number((res.data || {}).updated || 0);
-          this.setData({ claimStatusText: updated ? `找回成功：已关联 ${updated} 条历史订单。` : "未找到可关联的历史订单（可能之前已关联或信息不匹配）。" });
+          this.setData({
+            claimStatusText: updated
+              ? `找回成功：已关联 ${updated} 条历史订单。`
+              : "未找到可关联的历史订单（可能之前已关联或信息不匹配）。"
+          });
           this.fetchMyOrders();
         } else {
           const msg = (res.data && (res.data.detail || res.data.message)) || `找回失败（${res.statusCode}）`;
@@ -331,9 +355,7 @@ Page({
         this.setData({ claimStatusText: "找回失败：" + msg });
         wx.showModal({ title: "找回失败", content: String(msg), showCancel: false });
       },
-      complete: () => {
-        this.setData({ claimLoading: false });
-      }
+      complete: () => this.setData({ claimLoading: false })
     });
   },
 
@@ -344,15 +366,8 @@ Page({
     const withTimeout = (promise, ms, label) =>
       new Promise((resolve, reject) => {
         const t = setTimeout(() => reject(new Error(label + " 超时")), ms);
-        Promise.resolve(promise)
-          .then((v) => {
-            clearTimeout(t);
-            resolve(v);
-          })
-          .catch((e) => {
-            clearTimeout(t);
-            reject(e);
-          });
+        Promise.resolve(promise).then((v) => { clearTimeout(t); resolve(v); })
+          .catch((e) => { clearTimeout(t); reject(e); });
       });
 
     const fetchConfig = () =>
@@ -381,7 +396,6 @@ Page({
       });
 
     try {
-      // 1) 取模板ID（尽量不阻断；拿不到也可继续只绑定 openid）
       let tmplIds = [];
       const c = await withTimeout(fetchConfig(), 6000, "获取模板配置");
       const t1 = (c.wechat_tmpl_application_result || "").trim();
@@ -389,79 +403,25 @@ Page({
       if (t1) tmplIds.push(t1);
       if (t2) tmplIds.push(t2);
       tmplIds = Array.from(new Set(tmplIds)).slice(0, 2);
-
       if (tmplIds.length) {
         this.setData({ bindStatusText: "正在弹出订阅授权…" });
         await withTimeout(wx.requestSubscribeMessage({ tmplIds }), 12000, "订阅授权");
       }
-
-      // 2) 登录换 openid
       this.setData({ bindStatusText: "正在登录…" });
       const loginRes = await withTimeout(wx.login(), 8000, "微信登录");
-      const code = loginRes.code;
-      const data = await withTimeout(postJson("/api/wechat/login", { code }), 8000, "换取openid");
+      const data = await withTimeout(postJson("/api/wechat/login", { code: loginRes.code }), 8000, "换取openid");
       const openid = (data.openid || "").trim();
       if (!openid) throw new Error("未获取到 openid");
-
-      try {
-        wx.setStorageSync("WECHAT_OPENID", openid);
-      } catch (e2) {}
+      try { wx.setStorageSync("WECHAT_OPENID", openid); } catch (e2) {}
       this.setData({ openid, bindStatusText: "绑定成功，正在加载订单…" });
       this.fetchMyOrders();
       this.setData({ bindStatusText: "绑定成功。" });
     } catch (e) {
       const msg = (e && (e.errMsg || e.message)) || "绑定失败";
       this.setData({ bindStatusText: "绑定失败：" + msg });
-      wx.showModal({
-        title: "绑定失败",
-        content: String(msg),
-        showCancel: false
-      });
+      wx.showModal({ title: "绑定失败", content: String(msg), showCancel: false });
     } finally {
       this.setData({ bindLoading: false });
     }
-  },
-  callClinic() {
-    const phone = this.data.view?.contact?.phone || "";
-    if (!phone) {
-      wx.showModal({
-        title: "暂无电话",
-        content: "该门店电话尚未配置，请联系医院或在代码里补全门店联系方式。",
-        showCancel: false
-      });
-      return;
-    }
-    wx.makePhoneCall({ phoneNumber: phone });
-  },
-  copyClinic() {
-    const store = this.data.info?.clinic_store || "";
-    const c = this.data.view?.contact || {};
-    const text = [store, c.address, c.phone, c.landline ? ("座机 " + c.landline) : ""]
-      .filter(Boolean)
-      .join(" | ");
-    if (!text) return;
-    wx.setClipboardData({ data: text });
-  },
-  openClinicMap() {
-    const store = this.data.info?.clinic_store || "门店";
-    const c = this.data.view?.contact || {};
-    const lat = Number(c.lat);
-    const lng = Number(c.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) {
-      wx.openLocation({
-        latitude: lat,
-        longitude: lng,
-        name: store,
-        address: c.address || ""
-      });
-      return;
-    }
-    if (c.address) {
-      wx.setClipboardData({ data: c.address });
-      wx.showToast({ title: "已复制地址", icon: "none" });
-    } else {
-      wx.showToast({ title: "暂无地址信息", icon: "none" });
-    }
-  },
-  // 移除“复制编号/手动查询入口”后，不再需要对应方法
+  }
 });
