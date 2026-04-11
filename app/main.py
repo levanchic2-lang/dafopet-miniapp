@@ -2207,6 +2207,8 @@ async def admin_appointment_status(
             store=row.store or "",
             appointment_date=row.appointment_date or "",
             appointment_time=row.appointment_time or "",
+            phone=row.phone or "",
+            customer_name=row.customer_name or "",
             note=reason_clean or status_label,
         )
     return RedirectResponse(redirect_base + f"?appointment_ok=status#{anchor}", status_code=303)

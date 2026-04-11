@@ -174,10 +174,13 @@ def push_appointment_status(
     store: str = "",
     appointment_date: str = "",
     appointment_time: str = "",
+    phone: str = "",
+    customer_name: str = "",
     note: str = "",
 ) -> None:
-    """推送：预约状态变更（确认/取消）通知。复用 application_result 模板。"""
-    if not settings.wechat_tmpl_application_result:
+    """推送：预约状态变更（确认/取消）通知。使用 wechat_tmpl_appointment 模板。"""
+    tmpl = settings.wechat_tmpl_appointment or settings.wechat_tmpl_application_result
+    if not tmpl:
         return
     if not _enabled() or not openid:
         return
@@ -188,9 +191,11 @@ def push_appointment_status(
             s = fallback
         return s[:max_len]
 
-    keys = [k.strip() for k in (settings.wechat_fields_application_result or "").split(",") if k.strip()]
+    # 优先使用预约专属字段配置，否则回退到通用配置
+    fields_cfg = settings.wechat_fields_appointment or settings.wechat_fields_application_result
+    keys = [k.strip() for k in (fields_cfg or "").split(",") if k.strip()]
     if not keys:
-        keys = ["thing1", "thing2", "thing3", "thing4", "thing5"]
+        keys = ["time1", "thing2", "phone_number3", "thing4", "thing5"]
 
     now_str = time.strftime("%Y-%m-%d %H:%M", time.localtime())
     appt_time_str = f"{appointment_date} {appointment_time}".strip() or now_str
@@ -198,17 +203,27 @@ def push_appointment_status(
     data: dict[str, Any] = {}
     for k in keys:
         if k.startswith("time") or k.startswith("date"):
-            data[k] = {"value": appt_time_str if "date" in k else appt_time_str}
+            # time1 → 预约时间
+            data[k] = {"value": appt_time_str}
+        elif k.startswith("phone_number"):
+            # phone_number3 → 联系电话
+            data[k] = {"value": v(phone, fallback="—", max_len=20)}
+        elif k == "thing2":
+            # thing2 → 预约项目
+            data[k] = {"value": v(service_name, fallback="TNR手术预约", max_len=20)}
         elif k == "thing4":
-            svc = v(service_name, fallback="美容/门诊预约", max_len=20)
-            data[k] = {"value": svc}
+            # thing4 → 客户姓名
+            data[k] = {"value": v(customer_name, fallback="申请人", max_len=20)}
+        elif k == "thing5":
+            # thing5 → 预约地址/门店
+            data[k] = {"value": v(store, fallback="大风动物医院", max_len=20)}
         else:
-            msg = v(note, fallback=v(status_text, max_len=20), max_len=20)
-            data[k] = {"value": msg}
+            # 其余字段填状态或备注
+            data[k] = {"value": v(note, fallback=v(status_text, max_len=20), max_len=20)}
 
     payload = {
         "touser": openid,
-        "template_id": settings.wechat_tmpl_application_result,
+        "template_id": tmpl,
         "page": settings.wechat_message_page,
         "data": data,
     }
