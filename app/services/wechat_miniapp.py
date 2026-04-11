@@ -399,3 +399,71 @@ def push_surgery_done(
         )
         db.commit()
 
+def push_rejection_notice(
+    db,
+    application_id: int,
+    openid: str,
+    cat_nickname: str,
+    *,
+    reason: str = "",
+    action_at: str = "",
+) -> None:
+    """推送：审核不通过通知。模板字段：thing1=审核说明, phrase2=审核结果, thing3=审核对象, time4=审核时间。"""
+    if not settings.wechat_tmpl_rejection:
+        return
+    if not _enabled() or not openid:
+        return
+
+    def v(x: str, fallback: str = "—", max_len: int = 20) -> str:
+        s = (x or "").strip()
+        if not s:
+            s = fallback
+        return s[:max_len]
+
+    now_str = time.strftime("%Y-%m-%d %H:%M", time.localtime())
+    act_time = action_at or now_str
+
+    keys = [k.strip() for k in (settings.wechat_fields_rejection or "").split(",") if k.strip()]
+    if not keys:
+        keys = ["thing1", "phrase2", "thing3", "time4"]
+
+    data = {}
+    for k in keys:
+        if k.startswith("time"):
+            data[k] = {"value": act_time}
+        elif k.startswith("phrase"):
+            data[k] = {"value": "审核不通过"}
+        elif k == "thing1":
+            data[k] = {"value": v(reason, fallback="不符合申请条件", max_len=20)}
+        elif k == "thing3":
+            data[k] = {"value": v(cat_nickname, fallback="申请猫咪", max_len=20)}
+        else:
+            data[k] = {"value": v(reason, fallback="请联系医院前台", max_len=20)}
+
+    payload = {
+        "touser": openid,
+        "template_id": settings.wechat_tmpl_rejection,
+        "page": settings.wechat_message_page,
+        "data": data,
+    }
+    try:
+        resp = _post_subscribe_send(payload)
+        db.add(
+            NotificationLog(
+                application_id=application_id,
+                channel="wechat_miniapp",
+                payload=json.dumps({"type": "rejection_notice", "resp": resp}, ensure_ascii=False),
+                success=True,
+            )
+        )
+        db.commit()
+    except Exception as e:
+        db.add(
+            NotificationLog(
+                application_id=application_id,
+                channel="wechat_miniapp",
+                payload=str(e),
+                success=False,
+            )
+        )
+        db.commit()

@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     wechat_tmpl_surgery_done: str = ""
     # 预约状态通知模板 ID（确认/取消预约）
     wechat_tmpl_appointment: str = ""
+    # 审核不通过通知模板 ID（字段：thing1=审核说明,phrase2=审核结果,thing3=审核对象,time4=审核时间）
+    wechat_tmpl_rejection: str = ""
     # 点击消息打开的小程序页面（可选）
     wechat_message_page: str = "pages/index/index"
 
@@ -61,6 +63,8 @@ class Settings(BaseSettings):
     wechat_fields_surgery_done: str = "thing1,thing2,thing3"
     # 预约通知模板字段：time1=预约时间,thing2=预约项目,phone_number3=联系电话,thing4=客户姓名,thing5=预约地址
     wechat_fields_appointment: str = "time1,thing2,phone_number3,thing4,thing5"
+    # 拒绝通知模板字段：thing1=审核说明,phrase2=审核结果,thing3=审核对象,time4=审核时间
+    wechat_fields_rejection: str = "thing1,phrase2,thing3,time4"
 
     # 地理编码（可选）：用于把经纬度反查为中文地址展示
     amap_web_key: str = ""  # 高德 Web 服务 Key（建议放在 .env，不要写死在前端）

@@ -35,7 +35,7 @@ from app.models import (
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
 from app.services.backup_local import create_backup_zip, is_safe_backup_filename, list_backup_zips
-from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_surgery_done, push_surgery_reminder, wechat_code2session
+from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_rejection_notice, push_surgery_done, push_surgery_reminder, wechat_code2session
 
 app = FastAPI(title=settings.app_name)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, session_cookie="tnr_session")
@@ -388,10 +388,12 @@ async def api_wechat_config():
         "wechat_tmpl_application_result": settings.wechat_tmpl_application_result,
         "wechat_tmpl_surgery_done": settings.wechat_tmpl_surgery_done,
         "wechat_tmpl_appointment": settings.wechat_tmpl_appointment,
+        "wechat_tmpl_rejection": settings.wechat_tmpl_rejection,
         "wechat_message_page": settings.wechat_message_page,
         "wechat_fields_application_result": settings.wechat_fields_application_result,
         "wechat_fields_surgery_done": settings.wechat_fields_surgery_done,
         "wechat_fields_appointment": settings.wechat_fields_appointment,
+        "wechat_fields_rejection": settings.wechat_fields_rejection,
     }
 
 
@@ -2415,15 +2417,12 @@ async def manual_reject(
     _audit(db, request, "manual_reject", application_id=app_id, detail={"reason": row.reject_reason})
     db.commit()
     notify_application_result(db, app_id, row.phone, row.applicant_name, approved=False, extra=reason)
-    push_application_result(
+    push_rejection_notice(
         db,
         application_id=app_id,
         openid=row.wechat_openid,
-        applicant_name=row.applicant_name,
-        status_text="未通过",
-        phone_masked=row.phone,
-        note=(reason or "请联系医院前台")[:20],
-        submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+        cat_nickname=row.cat_nickname or "",
+        reason=(reason or "不符合申请条件")[:20],
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
     return RedirectResponse("/admin", status_code=303)

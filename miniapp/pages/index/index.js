@@ -330,6 +330,7 @@ Page({
     let s1 = _getCached("WECHAT_TMPL_APPLICATION_RESULT");
     let s2 = _getCached("WECHAT_TMPL_SURGERY_DONE");
     let s3 = _getCached("WECHAT_TMPL_APPOINTMENT");
+    let s4 = _getCached("WECHAT_TMPL_REJECTION");
     // 每次都从后端拉取最新模板列表；API 值优先，API 为空则保留 Storage 缓存
     try {
       const cfg = await this._withTimeout(
@@ -350,10 +351,12 @@ Page({
       if (cfg.wechat_tmpl_application_result) { s1 = cfg.wechat_tmpl_application_result; wx.setStorageSync("WECHAT_TMPL_APPLICATION_RESULT", s1); }
       if (cfg.wechat_tmpl_surgery_done)        { s2 = cfg.wechat_tmpl_surgery_done;        wx.setStorageSync("WECHAT_TMPL_SURGERY_DONE", s2); }
       if (cfg.wechat_tmpl_appointment)         { s3 = cfg.wechat_tmpl_appointment;         wx.setStorageSync("WECHAT_TMPL_APPOINTMENT", s3); }
+      if (cfg.wechat_tmpl_rejection)           { s4 = cfg.wechat_tmpl_rejection;           wx.setStorageSync("WECHAT_TMPL_REJECTION", s4); }
     } catch (e) { /* 网络失败则继续用 Storage 缓存 */ }
     if (s1) tmplIds.push(s1);
     if (s2) tmplIds.push(s2);
     if (s3) tmplIds.push(s3);
+    if (s4) tmplIds.push(s4);
     if (!tmplIds.length) {
       wx.showModal({
         title: "缺少模板ID",
