@@ -214,25 +214,32 @@ def push_appointment_status(
     }
     try:
         resp = _post_subscribe_send(payload)
-        db.add(
-            NotificationLog(
-                application_id=None,
-                channel="wechat_miniapp",
-                payload=json.dumps({"type": "appointment_status", "appointment_id": appointment_id, "status": status_text, "resp": resp}, ensure_ascii=False),
-                success=True,
+        try:
+            db.add(
+                NotificationLog(
+                    application_id=None,
+                    channel="wechat_miniapp",
+                    payload=json.dumps({"type": "appointment_status", "appointment_id": appointment_id, "status": status_text, "resp": resp}, ensure_ascii=False),
+                    success=True,
+                )
             )
-        )
-        db.commit()
+            db.commit()
+        except Exception:
+            db.rollback()
     except Exception as e:
-        db.add(
-            NotificationLog(
-                application_id=None,
-                channel="wechat_miniapp",
-                payload=str(e),
-                success=False,
+        try:
+            db.rollback()
+            db.add(
+                NotificationLog(
+                    application_id=None,
+                    channel="wechat_miniapp",
+                    payload=str(e),
+                    success=False,
+                )
             )
-        )
-        db.commit()
+            db.commit()
+        except Exception:
+            db.rollback()
 
 
 def push_surgery_reminder(
