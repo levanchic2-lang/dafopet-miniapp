@@ -387,9 +387,11 @@ async def api_wechat_config():
         "wechat_appid": settings.wechat_appid,
         "wechat_tmpl_application_result": settings.wechat_tmpl_application_result,
         "wechat_tmpl_surgery_done": settings.wechat_tmpl_surgery_done,
+        "wechat_tmpl_appointment": settings.wechat_tmpl_appointment,
         "wechat_message_page": settings.wechat_message_page,
         "wechat_fields_application_result": settings.wechat_fields_application_result,
         "wechat_fields_surgery_done": settings.wechat_fields_surgery_done,
+        "wechat_fields_appointment": settings.wechat_fields_appointment,
     }
 
 

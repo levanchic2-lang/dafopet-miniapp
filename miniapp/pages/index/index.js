@@ -339,8 +339,10 @@ Page({
     };
     const t1 = pick("WECHAT_TMPL_APPLICATION_RESULT");
     const t2 = pick("WECHAT_TMPL_SURGERY_DONE");
+    const t3 = pick("WECHAT_TMPL_APPOINTMENT");
     if (t1) tmplIds.push(t1);
     if (t2) tmplIds.push(t2);
+    if (t3) tmplIds.push(t3);
     if (!tmplIds.length) {
       // 手机预览/真机：Storage 不会与开发者工具同步。改为从后端拉取并缓存到本机 Storage。
       let fetchErr = "";
@@ -362,6 +364,7 @@ Page({
         );
         const c1 = cfg.wechat_tmpl_application_result || "";
         const c2 = cfg.wechat_tmpl_surgery_done || "";
+        const c3 = cfg.wechat_tmpl_appointment || "";
         if (c1) {
           wx.setStorageSync("WECHAT_TMPL_APPLICATION_RESULT", c1);
           tmplIds.push(c1);
@@ -369,6 +372,10 @@ Page({
         if (c2) {
           wx.setStorageSync("WECHAT_TMPL_SURGERY_DONE", c2);
           tmplIds.push(c2);
+        }
+        if (c3) {
+          wx.setStorageSync("WECHAT_TMPL_APPOINTMENT", c3);
+          tmplIds.push(c3);
         }
       } catch (e) {
         fetchErr = (e && (e.errMsg || e.message)) || JSON.stringify(e);
