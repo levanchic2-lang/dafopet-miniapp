@@ -325,8 +325,12 @@ Page({
     wx.showLoading({ title: "加载中…" });
     const app = getApp();
     const tmplIds = [];
-    // 每次都从后端拉取最新模板列表，确保新增模板能被订阅；失败时降级读 Storage 缓存
-    let fetchErr = "";
+    // 从 Storage 读已缓存的模板ID（上次成功订阅后存入）
+    const _getCached = (key) => { try { return wx.getStorageSync(key) || ""; } catch(e) { return ""; } };
+    let s1 = _getCached("WECHAT_TMPL_APPLICATION_RESULT");
+    let s2 = _getCached("WECHAT_TMPL_SURGERY_DONE");
+    let s3 = _getCached("WECHAT_TMPL_APPOINTMENT");
+    // 每次都从后端拉取最新模板列表；API 值优先，API 为空则保留 Storage 缓存
     try {
       const cfg = await this._withTimeout(
         new Promise((resolve, reject) => {
@@ -343,32 +347,13 @@ Page({
         6000,
         "获取模板配置"
       );
-      const c1 = cfg.wechat_tmpl_application_result || "";
-      const c2 = cfg.wechat_tmpl_surgery_done || "";
-      const c3 = cfg.wechat_tmpl_appointment || "";
-      if (c1) { wx.setStorageSync("WECHAT_TMPL_APPLICATION_RESULT", c1); tmplIds.push(c1); }
-      if (c2) { wx.setStorageSync("WECHAT_TMPL_SURGERY_DONE", c2); tmplIds.push(c2); }
-      if (c3) { wx.setStorageSync("WECHAT_TMPL_APPOINTMENT", c3); tmplIds.push(c3); }
-    } catch (e) {
-      fetchErr = (e && (e.errMsg || e.message)) || JSON.stringify(e);
-    }
-    // API 失败时降级用 Storage 缓存
-    if (!tmplIds.length) {
-      const info = wx.getStorageInfoSync();
-      const keys = info.keys || [];
-      const pick = (prefix) => {
-        const exact = wx.getStorageSync(prefix);
-        if (exact) return exact;
-        const k = keys.find((x) => x === prefix) || keys.find((x) => x && x.startsWith(prefix));
-        return k ? wx.getStorageSync(k) : "";
-      };
-      const t1 = pick("WECHAT_TMPL_APPLICATION_RESULT");
-      const t2 = pick("WECHAT_TMPL_SURGERY_DONE");
-      const t3 = pick("WECHAT_TMPL_APPOINTMENT");
-      if (t1) tmplIds.push(t1);
-      if (t2) tmplIds.push(t2);
-      if (t3) tmplIds.push(t3);
-    }
+      if (cfg.wechat_tmpl_application_result) { s1 = cfg.wechat_tmpl_application_result; wx.setStorageSync("WECHAT_TMPL_APPLICATION_RESULT", s1); }
+      if (cfg.wechat_tmpl_surgery_done)        { s2 = cfg.wechat_tmpl_surgery_done;        wx.setStorageSync("WECHAT_TMPL_SURGERY_DONE", s2); }
+      if (cfg.wechat_tmpl_appointment)         { s3 = cfg.wechat_tmpl_appointment;         wx.setStorageSync("WECHAT_TMPL_APPOINTMENT", s3); }
+    } catch (e) { /* 网络失败则继续用 Storage 缓存 */ }
+    if (s1) tmplIds.push(s1);
+    if (s2) tmplIds.push(s2);
+    if (s3) tmplIds.push(s3);
     if (!tmplIds.length) {
       wx.showModal({
         title: "缺少模板ID",
