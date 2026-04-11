@@ -325,14 +325,14 @@ Page({
     wx.showLoading({ title: "加载中…" });
     const app = getApp();
     const tmplIds = [];
-    // 每次都从后端拉取最新模板ID列表（确保新增模板也能被订阅），同时缓存到 Storage 作备用
-    let fetchErr = “”;
+    // 每次都从后端拉取最新模板列表，确保新增模板能被订阅；失败时降级读 Storage 缓存
+    let fetchErr = "";
     try {
       const cfg = await this._withTimeout(
         new Promise((resolve, reject) => {
           wx.request({
-            url: app.globalData.apiBase + “/api/wechat/config”,
-            method: “GET”,
+            url: app.globalData.apiBase + "/api/wechat/config",
+            method: "GET",
             success: (res) => {
               if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data || {});
               else reject({ statusCode: res.statusCode, data: res.data });
@@ -341,18 +341,18 @@ Page({
           });
         }),
         6000,
-        “获取模板配置”
+        "获取模板配置"
       );
-      const c1 = cfg.wechat_tmpl_application_result || “”;
-      const c2 = cfg.wechat_tmpl_surgery_done || “”;
-      const c3 = cfg.wechat_tmpl_appointment || “”;
-      if (c1) { wx.setStorageSync(“WECHAT_TMPL_APPLICATION_RESULT”, c1); tmplIds.push(c1); }
-      if (c2) { wx.setStorageSync(“WECHAT_TMPL_SURGERY_DONE”, c2); tmplIds.push(c2); }
-      if (c3) { wx.setStorageSync(“WECHAT_TMPL_APPOINTMENT”, c3); tmplIds.push(c3); }
+      const c1 = cfg.wechat_tmpl_application_result || "";
+      const c2 = cfg.wechat_tmpl_surgery_done || "";
+      const c3 = cfg.wechat_tmpl_appointment || "";
+      if (c1) { wx.setStorageSync("WECHAT_TMPL_APPLICATION_RESULT", c1); tmplIds.push(c1); }
+      if (c2) { wx.setStorageSync("WECHAT_TMPL_SURGERY_DONE", c2); tmplIds.push(c2); }
+      if (c3) { wx.setStorageSync("WECHAT_TMPL_APPOINTMENT", c3); tmplIds.push(c3); }
     } catch (e) {
       fetchErr = (e && (e.errMsg || e.message)) || JSON.stringify(e);
     }
-    // API 拉取失败时，降级使用 Storage 缓存
+    // API 失败时降级用 Storage 缓存
     if (!tmplIds.length) {
       const info = wx.getStorageInfoSync();
       const keys = info.keys || [];
@@ -360,23 +360,24 @@ Page({
         const exact = wx.getStorageSync(prefix);
         if (exact) return exact;
         const k = keys.find((x) => x === prefix) || keys.find((x) => x && x.startsWith(prefix));
-        return k ? wx.getStorageSync(k) : “”;
+        return k ? wx.getStorageSync(k) : "";
       };
-      const t1 = pick(“WECHAT_TMPL_APPLICATION_RESULT”);
-      const t2 = pick(“WECHAT_TMPL_SURGERY_DONE”);
-      const t3 = pick(“WECHAT_TMPL_APPOINTMENT”);
+      const t1 = pick("WECHAT_TMPL_APPLICATION_RESULT");
+      const t2 = pick("WECHAT_TMPL_SURGERY_DONE");
+      const t3 = pick("WECHAT_TMPL_APPOINTMENT");
       if (t1) tmplIds.push(t1);
       if (t2) tmplIds.push(t2);
       if (t3) tmplIds.push(t3);
     }
     if (!tmplIds.length) {
       wx.showModal({
-        title: “缺少模板ID”,
+        title: "缺少模板ID",
         content:
-          “未能从后端获取订阅消息模板配置。\n\n当前 apiBase：\n” +
+          "手机预览/真机不会读取电脑端 Storage。\n\n我已尝试从后端拉取模板配置，但没有成功。\n\n当前 apiBase：\n" +
           app.globalData.apiBase +
-          “\n\n错误信息：\n” +
-          (fetchErr || “（无）”),
+          "\n\n错误信息：\n" +
+          (fetchErr || "（无）") +
+          "\n\n请确认：\n1) 电脑后端用“一键启动_手机联调.bat”启动（监听 0.0.0.0）\n2) 手机与电脑同一 Wi-Fi，且 apiBase 为电脑局域网 IP\n3) Windows 防火墙允许 python.exe\n4) 开发者工具已勾选“不校验合法域名、web-view、TLS版本”\n",
         showCancel: false
       });
       wx.hideLoading();
