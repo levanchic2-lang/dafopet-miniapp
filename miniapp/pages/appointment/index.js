@@ -97,8 +97,20 @@ Page({
   async loadConfig() {
     this.setData({ loading: true });
     try {
-      const cfg = await getJson("/api/appointments/config");
-      const categories  = Array.isArray(cfg.categories)  ? cfg.categories  : [];
+      // 并行拉取配置 + 用户 TNR 审核状态
+      const openid = await this.ensureOpenid().catch(() => "");
+      const [cfg, tnrStatus] = await Promise.all([
+        getJson("/api/appointments/config"),
+        openid ? getJson("/api/wechat/my-tnr-status?openid=" + encodeURIComponent(openid)).catch(() => ({ has_approved: false })) : Promise.resolve({ has_approved: false }),
+      ]);
+      const hasApprovedTnr = !!(tnrStatus && tnrStatus.has_approved);
+      this._hasApprovedTnr = hasApprovedTnr;
+
+      let categories  = Array.isArray(cfg.categories)  ? cfg.categories  : [];
+      // TNR 类别只有已通过申请的用户才能选择
+      if (!hasApprovedTnr) {
+        categories = categories.filter(c => c.value !== "tnr");
+      }
       const stores      = Array.isArray(cfg.stores)       ? cfg.stores      : [];
       const petGenders  = Array.isArray(cfg.pet_genders)  ? cfg.pet_genders : [];
       const bookingWindow = cfg.booking_window || {};

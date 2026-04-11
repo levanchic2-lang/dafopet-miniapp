@@ -1,6 +1,9 @@
 <view class="card">
   <view class="title">预约服务</view>
-  <view class="sub">可预约 TNR、门诊、手术及美容服务。</view>
+  <view class="sub">可预约门诊、手术、美容等服务。</view>
+  <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#fff8e6;border-radius:10rpx;border:1rpx solid #f5d88a;font-size:26rpx;color:#7a5800;line-height:1.6;">
+    <text style="font-weight:700;">流浪猫 TNR 手术预约说明：</text>需先在首页提交 TNR 申请并审核通过后，「流浪动物 TNR」板块才会出现在此页面。未提交申请的主人，此处仅可预约门诊、手术、美容等常规服务。
+  </view>
 
   <view wx:if="{{loading}}" class="sub">加载中…</view>
 

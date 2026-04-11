@@ -2512,6 +2512,30 @@ async def api_wechat_login(payload: dict = Body(...)):
     return {"openid": data.get("openid", "")}
 
 
+@app.get("/api/wechat/my-tnr-status")
+async def api_my_tnr_status(openid: str = Query(""), db: Session = Depends(get_db)):
+    """小程序端：传 openid，返回该用户是否有可预约的已通过 TNR 申请。"""
+    if not openid.strip():
+        return {"has_approved": False, "approved_apps": []}
+    _APPROVED_STATUSES = {
+        ApplicationStatus.approved.value,
+        ApplicationStatus.pre_approved.value,
+        ApplicationStatus.scheduled.value,
+    }
+    rows = (
+        db.query(Application)
+        .filter(
+            Application.wechat_openid == openid.strip(),
+            Application.status.in_(_APPROVED_STATUSES),
+        )
+        .order_by(Application.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    apps = [{"id": r.id, "status": r.status, "cat_nickname": r.cat_nickname} for r in rows]
+    return {"has_approved": len(apps) > 0, "approved_apps": apps}
+
+
 @app.get("/api/appointments/config")
 async def api_appointments_config():
     return _appointment_catalog()
