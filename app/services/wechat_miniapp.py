@@ -467,3 +467,74 @@ def push_rejection_notice(
             )
         )
         db.commit()
+
+def push_pending_manual_notice(
+    db,
+    application_id: int,
+    openid: str,
+    applicant_name: str,
+    *,
+    submitted_at: str = "",
+) -> None:
+    """推送：进入人工审核提醒。模板字段：thing2=申请人, time3=申请时间, thing4=业务类型, character_string5=业务编号, phrase11=审核状态。"""
+    if not settings.wechat_tmpl_pending_manual:
+        return
+    if not _enabled() or not openid:
+        return
+
+    def v(x: str, fallback: str = "—", max_len: int = 20) -> str:
+        s = (x or "").strip()
+        if not s:
+            s = fallback
+        return s[:max_len]
+
+    now_str = time.strftime("%Y-%m-%d %H:%M", time.localtime())
+    sub_time = submitted_at or now_str
+
+    keys = [k.strip() for k in (settings.wechat_fields_pending_manual or "").split(",") if k.strip()]
+    if not keys:
+        keys = ["thing2", "time3", "thing4", "character_string5", "phrase11"]
+
+    data = {}
+    for k in keys:
+        if k.startswith("time"):
+            data[k] = {"value": sub_time}
+        elif k.startswith("phrase"):
+            # phrase 类型接受预定义词汇，"审核中"是合法值
+            data[k] = {"value": "审核中"}
+        elif k.startswith("character_string"):
+            data[k] = {"value": str(application_id)}
+        elif k == "thing2":
+            data[k] = {"value": v(applicant_name, fallback="申请人", max_len=20)}
+        elif k == "thing4":
+            data[k] = {"value": "流浪猫TNR申请"}
+        else:
+            data[k] = {"value": v(applicant_name, fallback="申请人", max_len=20)}
+
+    payload = {
+        "touser": openid,
+        "template_id": settings.wechat_tmpl_pending_manual,
+        "page": settings.wechat_message_page,
+        "data": data,
+    }
+    try:
+        resp = _post_subscribe_send(payload)
+        db.add(
+            NotificationLog(
+                application_id=application_id,
+                channel="wechat_miniapp",
+                payload=json.dumps({"type": "pending_manual_notice", "resp": resp}, ensure_ascii=False),
+                success=True,
+            )
+        )
+        db.commit()
+    except Exception as e:
+        db.add(
+            NotificationLog(
+                application_id=application_id,
+                channel="wechat_miniapp",
+                payload=str(e),
+                success=False,
+            )
+        )
+        db.commit()

@@ -35,7 +35,7 @@ from app.models import (
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
 from app.services.backup_local import create_backup_zip, is_safe_backup_filename, list_backup_zips
-from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_rejection_notice, push_surgery_done, push_surgery_reminder, wechat_code2session
+from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_pending_manual_notice, push_rejection_notice, push_surgery_done, push_surgery_reminder, wechat_code2session
 
 app = FastAPI(title=settings.app_name)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, session_cookie="tnr_session")
@@ -389,6 +389,7 @@ async def api_wechat_config():
         "wechat_tmpl_surgery_done": settings.wechat_tmpl_surgery_done,
         "wechat_tmpl_appointment": settings.wechat_tmpl_appointment,
         "wechat_tmpl_rejection": settings.wechat_tmpl_rejection,
+        "wechat_tmpl_pending_manual": settings.wechat_tmpl_pending_manual,
         "wechat_message_page": settings.wechat_message_page,
         "wechat_fields_application_result": settings.wechat_fields_application_result,
         "wechat_fields_surgery_done": settings.wechat_fields_surgery_done,
@@ -1009,6 +1010,14 @@ async def api_apply(
             submitted_at=app_row.created_at.strftime("%Y-%m-%d %H:%M") if app_row.created_at else "",
             action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         )
+    elif new_status == ApplicationStatus.pending_manual.value:
+        push_pending_manual_notice(
+            db,
+            application_id=aid,
+            openid=app_row.wechat_openid,
+            applicant_name=app_row.applicant_name,
+            submitted_at=app_row.created_at.strftime("%Y-%m-%d %H:%M") if app_row.created_at else "",
+        )
 
     return {
         "id": aid,
@@ -1189,6 +1198,14 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
             note="医院将尽快人工复核，请保持手机畅通",
             submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
             action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        )
+    elif new_status == ApplicationStatus.pending_manual.value:
+        push_pending_manual_notice(
+            db,
+            application_id=app_id,
+            openid=row.wechat_openid,
+            applicant_name=row.applicant_name,
+            submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         )
 
     _STATUS_ZH = {
