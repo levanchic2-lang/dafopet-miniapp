@@ -403,7 +403,7 @@
       {% if a.id_number %}<p>身份证号（脱敏）：{{ a.id_number[:2] }}********{{ a.id_number[-4:] }}</p>{% endif %}
       {% if a.location_lat and a.location_lng %}
         <p>
-          定位：{{ a.location_lat }}, {{ a.location_lng }}
+          定位：{% if a.location_address %}{{ a.location_address }}{% else %}{{ a.location_lat }}, {{ a.location_lng }}{% endif %}
           <a href="https://uri.amap.com/marker?position={{ a.location_lng }},{{ a.location_lat }}&name=TNR申请点" target="_blank" rel="noopener" style="margin-left:0.35rem;">高德打开</a>
         </p>
       {% endif %}

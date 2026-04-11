@@ -140,9 +140,3 @@
     <view style="margin-top:10rpx;">{{error}}</view>
   </view>
 </view>
-
-<view class="card dev-hint-card">
-  <view class="sub dev-hint-text">
-    提示：真机调试时，请把 <text class="tag">miniapp/app.js</text> 里的 apiBase 改成你电脑的局域网 IP（例如 <text class="tag">http://192.168.1.10:8765</text>）。
-  </view>
-</view>

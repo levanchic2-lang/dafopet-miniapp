@@ -49,6 +49,8 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN location_lat VARCHAR(32) DEFAULT ''"))
             if "location_lng" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN location_lng VARCHAR(32) DEFAULT ''"))
+            if "location_address" not in names:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN location_address VARCHAR(500) DEFAULT ''"))
             if "id_number" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN id_number VARCHAR(40) DEFAULT ''"))
             if "post_surgery_plan" not in names:

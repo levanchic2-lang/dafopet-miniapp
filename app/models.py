@@ -62,6 +62,7 @@ class Application(Base):
     # 客户定位（可选）
     location_lat: Mapped[str] = mapped_column(String(32), default="")
     location_lng: Mapped[str] = mapped_column(String(32), default="")
+    location_address: Mapped[str] = mapped_column(String(500), default="")
     # 身份证号（敏感信息：后台需脱敏展示）
     id_number: Mapped[str] = mapped_column(String(40), default="")
     # 术后打算：申请人勾选的固定中文选项全文（与网页/小程序下拉一致）
