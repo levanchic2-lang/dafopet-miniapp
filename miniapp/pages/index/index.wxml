@@ -128,9 +128,9 @@
   <view wx:if="{{result}}" class="sub">
     <view class="tag ok">提交成功</view>
     <view style="margin-top:10rpx;">申请编号：#{{result.id}}</view>
-    <view>当前状态：{{result.status}}</view>
-    <view wx:if="{{result.ai_summary}}">
-      AI：疑似流浪猫={{result.ai_summary.is_likely_stray}}，置信度={{result.ai_summary.confidence}}
+    <view>当前状态：{{result.status_zh || result.status}}</view>
+    <view wx:if="{{result.ai_summary && result.ai_summary.is_likely_stray !== null}}">
+      AI 预审：{{result.ai_summary.is_likely_stray ? '疑似流浪猫' : '非流浪猫'}}（置信度 {{result.ai_summary.confidence}}）
     </view>
     <button class="btn secondary" style="margin-top:16rpx;" bindtap="goStatus">查看状态页</button>
   </view>

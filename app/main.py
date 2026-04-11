@@ -1183,9 +1183,16 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
             action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         )
 
+    _STATUS_ZH = {
+        "draft": "草稿", "pending_ai": "系统处理中", "pending_manual": "待人工审核",
+        "pre_approved": "预通过（待复核）", "approved": "已通过", "scheduled": "已预约",
+        "arrived_verified": "到院已核对", "surgery_completed": "手术已完成",
+        "rejected": "未通过", "cancelled": "已取消", "no_show": "爽约",
+    }
     return {
         "id": row.id,
         "status": row.status,
+        "status_zh": _STATUS_ZH.get(row.status, row.status),
         "ai_summary": {
             "is_likely_stray": row.ai_is_likely_stray,
             "confidence": row.ai_confidence,
