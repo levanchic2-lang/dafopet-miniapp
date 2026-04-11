@@ -1938,29 +1938,41 @@ async def _admin_purge_run(
     scope: str,
     confirm: str,
 ):
-    """一键清理：scope=all 删除全部申请及关联数据与上传文件；scope=drafts 仅删除草稿。"""
+    """一键清理：scope=all/drafts/appointments/everything"""
     require_admin(request)
     _require_csrf(request, csrf_token)
     scope = (scope or "all").strip().lower()
-    if scope not in ("all", "drafts"):
+    if scope not in ("all", "drafts", "appointments", "everything"):
         return RedirectResponse("/admin?purge_err=1", status_code=303)
     confirm = (confirm or "").strip()
-    if scope == "drafts":
-        if confirm != "确认删除全部草稿":
-            return RedirectResponse("/admin?purge_err=1", status_code=303)
-        q = db.query(Application).filter(Application.status == ApplicationStatus.draft.value)
-    else:
-        if confirm != "确认删除全部申请数据":
-            return RedirectResponse("/admin?purge_err=1", status_code=303)
-        q = db.query(Application)
 
-    rows = q.all()
-    n = len(rows)
-    for row in rows:
-        _rmtree_app_uploads(row.id)
-        db.delete(row)
-    if scope == "all":
-        db.query(AuditLog).delete(synchronize_session=False)
+    CONFIRM_MAP = {
+        "drafts":       "确认删除全部草稿",
+        "all":          "确认删除全部申请数据",
+        "appointments": "确认删除全部预约数据",
+        "everything":   "确认删除全部数据",
+    }
+    if confirm != CONFIRM_MAP[scope]:
+        return RedirectResponse("/admin?purge_err=1", status_code=303)
+
+    n = 0
+    if scope in ("drafts", "all", "everything"):
+        if scope == "drafts":
+            q = db.query(Application).filter(Application.status == ApplicationStatus.draft.value)
+        else:
+            q = db.query(Application)
+        rows = q.all()
+        n += len(rows)
+        for row in rows:
+            _rmtree_app_uploads(row.id)
+            db.delete(row)
+        if scope in ("all", "everything"):
+            db.query(AuditLog).delete(synchronize_session=False)
+
+    if scope in ("appointments", "everything"):
+        appt_count = db.query(Appointment).delete(synchronize_session=False)
+        n += appt_count
+
     db.commit()
     _audit(db, request, "purge_" + scope, application_id=None, detail={"deleted": n})
     db.commit()
