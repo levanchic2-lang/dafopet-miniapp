@@ -802,7 +802,7 @@ def _assert_application_form_fields(
     if cs not in _ALLOWED_CLINIC_STORES:
         raise HTTPException(400, "请选择有效的预约门店。")
     out["clinic_store"] = cs
-    out["appointment_at"] = need("期望手术日期", appointment_at, 40)
+    out["appointment_at"] = (appointment_at or "").strip()[:40]  # 可选字段
     out["post_surgery_plan"] = need("术后打算", post_surgery_plan, 120)
     idn_raw = need("身份证号", id_number, 40)
     idn = idn_raw.upper()
