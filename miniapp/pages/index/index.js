@@ -90,7 +90,7 @@ Page({
   onLoad() {
     this._syncAgeEstimate();
     this._loadShenzhenRegions();
-    // 若之前已绑定 openid，直接复用，确保每单都能出现在“我的订单”
+    // 若之前已绑定 openid，直接复用，确保每单都能出现在"我的订单"
     try {
       const saved = wx.getStorageSync("WECHAT_OPENID") || "";
       if (saved && !this.data.openid) this.setData({ openid: String(saved) });
@@ -266,7 +266,7 @@ Page({
         }),
       { silent: true }
     ).catch(() => {
-      // 静默失败：用户仍可手动点“获取定位”
+      // 静默失败：用户仍可手动点"获取定位"
     });
   },
 
@@ -319,7 +319,7 @@ Page({
   },
 
   async onEnableNotify() {
-    // 立刻给用户反馈，避免“点了没反应”
+    // 立刻给用户反馈，避免"点了没反应"
     this.setData({ notifyStatusText: "正在开启通知提醒…" });
     wx.showToast({ title: "处理中…", icon: "loading", duration: 1200 });
     wx.showLoading({ title: "加载中…" });
@@ -367,7 +367,7 @@ Page({
           app.globalData.apiBase +
           "\n\n错误信息：\n" +
           (fetchErr || "（无）") +
-          "\n\n请确认：\n1) 电脑后端用“一键启动_手机联调.bat”启动（监听 0.0.0.0）\n2) 手机与电脑同一 Wi-Fi，且 apiBase 为电脑局域网 IP\n3) Windows 防火墙允许 python.exe\n4) 开发者工具已勾选“不校验合法域名、web-view、TLS版本”\n",
+          "\n\n请确认：\n1) 电脑后端用【一键启动_手机联调.bat】启动（监听 0.0.0.0）\n2) 手机与电脑同一 Wi-Fi，且 apiBase 为电脑局域网 IP\n3) Windows 防火墙允许 python.exe\n4) 开发者工具已勾选【不校验合法域名、web-view、TLS版本】\n",
         showCancel: false
       });
       wx.hideLoading();
@@ -376,7 +376,9 @@ Page({
 
     try {
       // 订阅弹窗：某些环境可能不返回回调导致卡住，增加超时保护
+      console.log("[notify] subscribing tmplIds:", JSON.stringify(tmplIds));
       await this._withTimeout(wx.requestSubscribeMessage({ tmplIds }), 12000, "订阅授权");
+      console.log("[notify] subscribe success");
       this.setData({ notifyStatusText: "已弹出授权（请在弹窗里点允许）。" });
 
       // 登录换 openid
@@ -397,17 +399,16 @@ Page({
         (e && (e.errMsg || e.message)) ||
         (typeof e === "string" ? e : "") ||
         JSON.stringify(e);
+      console.log("[notify] error:", msg, "tmplIds:", JSON.stringify(tmplIds));
       this.setData({
         notifyStatusText: "订阅/登录失败：" + msg
       });
+      const isWxApiErr = msg.includes("requestSubscribeMessage:fail");
       wx.showModal({
         title: "开启失败",
-        content:
-          "错误信息：\n" +
-          msg +
-          "\n\n当前 apiBase：\n" +
-          app.globalData.apiBase +
-          "\n\n建议：\n- 确保手机与电脑同一 Wi-Fi\n- 后端用“一键启动_手机联调.bat”启动\n- 开发者工具勾选“不校验合法域名、web-view、TLS版本”\n- 重新预览扫码获取最新包\n",
+        content: isWxApiErr
+          ? "微信通知订阅失败：\n" + msg + "\n\n已尝试订阅的模板：\n" + tmplIds.join("\n") + "\n\n请联系管理员核查模板配置。"
+          : "错误信息：\n" + msg + "\n\n当前 apiBase：\n" + app.globalData.apiBase + "\n\n建议：\n- 确保手机与电脑同一 Wi-Fi\n- 后端用\"一键启动_手机联调.bat\"启动\n- 开发者工具勾选\"不校验合法域名、web-view、TLS版本\"\n- 重新预览扫码获取最新包\n",
         showCancel: false
       });
     } finally {
@@ -608,7 +609,7 @@ Page({
       return;
     }
     if (!openid) {
-      this.setData({ error: "请先点击“开启通知提醒”绑定账号后再提交（用于订单归属与推送通知）。" });
+      this.setData({ error: "请先点击「开启通知提醒」绑定账号后再提交（用于订单归属与推送通知）。" });
       return;
     }
     this._submitNow();
