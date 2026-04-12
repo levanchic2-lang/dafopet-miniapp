@@ -2,15 +2,12 @@
 {% block body %}
 <div class="card" style="max-width:420px;margin:2rem auto;">
   <h1>医院后台登录</h1>
-  <p class="sub">请输入<strong>实际后台密码</strong>，不要输入「<code>ADMIN_PASSWORD</code>」这几个字——那只是配置文件里的<strong>变量名</strong>。</p>
-  <p class="sub" style="margin-top:-0.5rem;">若您尚未在 <code>.env</code> 里设置 <code>ADMIN_PASSWORD</code>，默认密码为：<strong><code>123456</code></strong>。正式环境请到 <code>.env</code> 改为强密码。</p>
   {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
   <form method="post" action="/admin/login">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     <label for="password">密码</label>
-    <input type="password" id="password" name="password" required autocomplete="current-password" />
+    <input type="password" id="password" name="password" required autocomplete="current-password" autofocus />
     <button type="submit" style="margin-top:1rem;width:100%;">登录</button>
   </form>
-  <p style="margin-top:1rem;"><a href="/">返回申请页</a></p>
 </div>
 {% endblock %}

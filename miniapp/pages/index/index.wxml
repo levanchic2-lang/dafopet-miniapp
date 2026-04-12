@@ -93,7 +93,6 @@
     class="textarea textarea-lg"
     placeholder="介绍此流浪猫的详细情况，包括但不仅限于活动范围、外观、病史，性格，是否孕猫等等"
     placeholder-class="placeholder-sm"
-    adjust-position="{{false}}"
     bindinput="onHealthNoteInput"
     bindblur="onHealthNoteBlur"
   ></textarea>

@@ -1900,7 +1900,7 @@ async def admin_login(request: Request, password: str = Form(...), csrf_token: s
         return RedirectResponse("/admin", status_code=303)
     return templates.TemplateResponse(
         "admin_login.html",
-        {"request": request, "title": "医院后台登录", "error": "密码错误", "csrf_token": _get_csrf_token(request)},
+        {"request": request, "title": "医院后台登录", "error": "账号或密码不正确", "csrf_token": _get_csrf_token(request)},
         status_code=401,
     )
 
