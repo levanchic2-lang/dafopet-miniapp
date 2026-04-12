@@ -324,12 +324,12 @@ Page({
     wx.showToast({ title: "处理中…", icon: "loading", duration: 1200 });
     wx.showLoading({ title: "加载中…" });
     const app = getApp();
+    // 微信每次最多订阅 3 个模板，此按钮只订阅 TNR 申请状态相关的 3 个：
+    //   审核通过(s1)、审核不通过(s4)、待人工审核(s5)
+    // 预约/手术完成通知(s2/s3)在预约提交时另行订阅
     const tmplIds = [];
-    // 从 Storage 读已缓存的模板ID（上次成功订阅后存入）
     const _getCached = (key) => { try { return wx.getStorageSync(key) || ""; } catch(e) { return ""; } };
     let s1 = _getCached("WECHAT_TMPL_APPLICATION_RESULT");
-    let s2 = _getCached("WECHAT_TMPL_SURGERY_DONE");
-    let s3 = _getCached("WECHAT_TMPL_APPOINTMENT");
     let s4 = _getCached("WECHAT_TMPL_REJECTION");
     let s5 = _getCached("WECHAT_TMPL_PENDING_MANUAL");
     // 每次都从后端拉取最新模板列表；API 值优先，API 为空则保留 Storage 缓存
@@ -350,14 +350,13 @@ Page({
         "获取模板配置"
       );
       if (cfg.wechat_tmpl_application_result) { s1 = cfg.wechat_tmpl_application_result; wx.setStorageSync("WECHAT_TMPL_APPLICATION_RESULT", s1); }
-      if (cfg.wechat_tmpl_surgery_done)        { s2 = cfg.wechat_tmpl_surgery_done;        wx.setStorageSync("WECHAT_TMPL_SURGERY_DONE", s2); }
-      if (cfg.wechat_tmpl_appointment)         { s3 = cfg.wechat_tmpl_appointment;         wx.setStorageSync("WECHAT_TMPL_APPOINTMENT", s3); }
-      if (cfg.wechat_tmpl_rejection)           { s4 = cfg.wechat_tmpl_rejection;           wx.setStorageSync("WECHAT_TMPL_REJECTION", s4); }
-      if (cfg.wechat_tmpl_pending_manual)      { s5 = cfg.wechat_tmpl_pending_manual;      wx.setStorageSync("WECHAT_TMPL_PENDING_MANUAL", s5); }
+      if (cfg.wechat_tmpl_rejection)          { s4 = cfg.wechat_tmpl_rejection;          wx.setStorageSync("WECHAT_TMPL_REJECTION", s4); }
+      if (cfg.wechat_tmpl_pending_manual)     { s5 = cfg.wechat_tmpl_pending_manual;     wx.setStorageSync("WECHAT_TMPL_PENDING_MANUAL", s5); }
+      // 同时缓存预约/手术模板ID，供预约页订阅时使用（不在此处请求授权）
+      if (cfg.wechat_tmpl_surgery_done)   wx.setStorageSync("WECHAT_TMPL_SURGERY_DONE", cfg.wechat_tmpl_surgery_done);
+      if (cfg.wechat_tmpl_appointment)    wx.setStorageSync("WECHAT_TMPL_APPOINTMENT", cfg.wechat_tmpl_appointment);
     } catch (e) { /* 网络失败则继续用 Storage 缓存 */ }
     if (s1) tmplIds.push(s1);
-    if (s2) tmplIds.push(s2);
-    if (s3) tmplIds.push(s3);
     if (s4) tmplIds.push(s4);
     if (s5) tmplIds.push(s5);
     if (!tmplIds.length) {
