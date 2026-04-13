@@ -446,13 +446,11 @@ Page({
         payload.coat_length = this.data.form.coat_length;
       }
       const res = await postJson("/api/appointments/create", payload);
-      // 预约提交成功后，趁用户刚操作，订阅预约状态和手术完成通知（≤3个，不超微信限制）
+      // 预约提交成功后，订阅预约状态通知
       try {
         const _c = (k) => { try { return wx.getStorageSync(k) || ""; } catch(e2) { return ""; } };
         const apptTmpl = _c("WECHAT_TMPL_APPOINTMENT");
-        const surgTmpl = _c("WECHAT_TMPL_SURGERY_DONE");
-        const apptIds = [apptTmpl, surgTmpl].filter(Boolean);
-        if (apptIds.length) await wx.requestSubscribeMessage({ tmplIds: apptIds });
+        if (apptTmpl) await wx.requestSubscribeMessage({ tmplIds: [apptTmpl] });
       } catch(e2) { /* 订阅失败不阻断跳转 */ }
       wx.showToast({ title: "预约已提交", icon: "success" });
       if (res && res.appointment && res.appointment.id) {

@@ -8,7 +8,8 @@
   <view wx:if="{{notifyStatusText}}" class="sub">{{notifyStatusText}}</view>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goStatusPage">我的订单 / 查看进度</button>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAppointmentPage">预约服务</button>
-  <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAppointmentListPage">我的预约</button>
+  <view class="sub" style="font-size:24rpx;color:#888;margin:6rpx 0 4rpx;text-align:center;">门诊 · 手术 · 美容等常规预约均可在此办理</view>
+  <button class="btn secondary" style="margin-top:8rpx;" bindtap="goAppointmentListPage">我的预约</button>
 
   <view class="label">申请人姓名</view>
   <input class="input input-lg" value="{{form.applicant_name}}" data-k="applicant_name" bindinput="onInput" />

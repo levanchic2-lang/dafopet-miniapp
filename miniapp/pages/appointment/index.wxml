@@ -1,6 +1,9 @@
 <view class="card">
   <view class="title">预约服务</view>
   <view class="sub">可预约门诊、手术、美容等服务。</view>
+  <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#e8f4ff;border-radius:10rpx;border:1rpx solid #90c4f0;font-size:26rpx;color:#1a4f7a;line-height:1.6;">
+    📅 <text style="font-weight:700;">已预约的客人将优先接待。</text>如与临时到店客人时间冲突，医院将优先为有预约记录的客人安排服务，请放心前来。
+  </view>
   <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#fff8e6;border-radius:10rpx;border:1rpx solid #f5d88a;font-size:26rpx;color:#7a5800;line-height:1.6;">
     <text style="font-weight:700;">流浪猫 TNR 手术预约说明：</text>需先在首页提交 TNR 申请并审核通过后，「流浪动物 TNR」板块才会出现在此页面。未提交申请的主人，此处仅可预约门诊、手术、美容等常规服务。
   </view>
@@ -165,7 +168,7 @@
     <view class="label">手机号</view>
     <input class="input" type="number" maxlength="11" value="{{form.phone}}" data-k="phone" bindinput="onInput" />
 
-    <view class="label">宠物 / 流浪猫名称</view>
+    <view class="label">宠物名称</view>
     <input class="input" value="{{form.pet_name}}" data-k="pet_name" bindinput="onInput" />
 
     <view class="label">性别</view>
