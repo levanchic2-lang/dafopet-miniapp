@@ -733,5 +733,9 @@ Page({
 
   goAppointmentListPage() {
     wx.navigateTo({ url: "/pages/appointment/list" });
+  },
+
+  goShowcase() {
+    wx.navigateTo({ url: "/pages/showcase/showcase" });
   }
 });

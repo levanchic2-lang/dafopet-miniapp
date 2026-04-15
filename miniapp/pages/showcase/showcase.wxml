@@ -1,0 +1,101 @@
+<!-- 加载中 -->
+<view wx:if="{{loading}}" class="loading-wrap">
+  <view class="loading-text">加载中…</view>
+</view>
+
+<!-- 空状态 -->
+<view wx:elif="{{!loading && items.length === 0}}" class="empty-wrap">
+  <view class="empty-icon">🐱</view>
+  <view class="empty-text">暂无展示内容</view>
+  <view class="empty-sub">完成手术并同意公开展示后将显示在此处</view>
+</view>
+
+<!-- 列表 -->
+<scroll-view wx:else scroll-y="{{false}}" style="width:100%;">
+  <!-- 顶部说明 -->
+  <view class="header-tip">
+    展示内容均已获得救助人同意，仅用于 TNR 公益科普 🐾
+  </view>
+
+  <view wx:for="{{items}}" wx:key="id" class="cat-card">
+    <!-- 猫咪信息头 -->
+    <view class="cat-header">
+      <view class="cat-name">{{ item.cat_nickname }}
+        <text class="cat-gender" wx:if="{{item.cat_gender === 'male'}}">♂</text>
+        <text class="cat-gender female" wx:elif="{{item.cat_gender === 'female'}}">♀</text>
+      </view>
+      <view class="cat-meta-row">
+        <text class="meta-tag" wx:if="{{item.store}}">📍 {{ item.store }}</text>
+        <text class="meta-tag" wx:if="{{item.surgery_date}}">✂️ {{ item.surgery_date }}</text>
+        <text class="meta-tag" wx:if="{{item.applicant_masked}}">🙋 {{ item.applicant_masked }}</text>
+      </view>
+      <view wx:if="{{item.address}}" class="cat-address">发现地：{{ item.address }}</view>
+    </view>
+
+    <!-- 术前术后对比图 -->
+    <view wx:if="{{item.before_images.length > 0 || item.after_images.length > 0}}" class="compare-wrap">
+      <!-- 术前 -->
+      <view class="compare-col">
+        <view class="compare-label before-label">术 前</view>
+        <view wx:if="{{item.before_images.length > 0}}">
+          <image
+            wx:for="{{item.before_images}}" wx:key="*this" wx:for-item="img"
+            src="{{img}}" class="compare-img"
+            mode="aspectFill"
+            bindtap="onPreviewImage"
+            data-src="{{img}}"
+            data-all="{{item.before_images}}"
+          />
+        </view>
+        <view wx:else class="no-media">暂无图片</view>
+      </view>
+
+      <!-- 分隔线 -->
+      <view class="compare-divider">
+        <view class="divider-line"></view>
+        <view class="divider-arrow">▶</view>
+        <view class="divider-line"></view>
+      </view>
+
+      <!-- 术后 -->
+      <view class="compare-col">
+        <view class="compare-label after-label">术 后</view>
+        <view wx:if="{{item.after_images.length > 0}}">
+          <image
+            wx:for="{{item.after_images}}" wx:key="*this" wx:for-item="img"
+            src="{{img}}" class="compare-img"
+            mode="aspectFill"
+            bindtap="onPreviewImage"
+            data-src="{{img}}"
+            data-all="{{item.after_images}}"
+          />
+        </view>
+        <view wx:else class="no-media">暂无图片</view>
+      </view>
+    </view>
+
+    <!-- 视频区（术前） -->
+    <view wx:if="{{item.before_videos.length > 0}}" class="video-section">
+      <view class="video-section-label">术前视频</view>
+      <video
+        wx:for="{{item.before_videos}}" wx:key="*this" wx:for-item="vid"
+        src="{{vid}}" class="cat-video"
+        controls show-play-btn
+        object-fit="contain"
+      />
+    </view>
+
+    <!-- 视频区（术后） -->
+    <view wx:if="{{item.after_videos.length > 0}}" class="video-section">
+      <view class="video-section-label">术后视频</view>
+      <video
+        wx:for="{{item.after_videos}}" wx:key="*this" wx:for-item="vid"
+        src="{{vid}}" class="cat-video"
+        controls show-play-btn
+        object-fit="contain"
+      />
+    </view>
+  </view>
+
+  <view class="bottom-tip">— 共 {{ items.length }} 只爱心猫咪 —</view>
+</scroll-view>

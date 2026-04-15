@@ -3354,6 +3354,53 @@ async def serve_file(media_id: int, request: Request, db: Session = Depends(get_
     return FileResponse(path, media_type=ctype or "application/octet-stream")
 
 
+@app.get("/api/showcase")
+async def api_showcase(request: Request, db: Session = Depends(get_db)):
+    """小程序爱心展示 JSON 接口：返回已完成手术且同意公开展示的条目。"""
+    base = str(request.base_url).rstrip("/")
+    q = (
+        db.query(Application)
+        .options(selectinload(Application.media))
+        .filter(Application.status == ApplicationStatus.surgery_completed.value)
+        .filter(Application.showcase_consent.is_(True))
+        .order_by(Application.updated_at.desc())
+    )
+    items = []
+    for a in q.all():
+        before_imgs = [f"{base}/file/{m.id}" for m in a.media
+                       if m.kind == MediaKind.surgery_before.value and not m.stored_path.lower().endswith(('.mp4', '.mov', '.avi'))]
+        after_imgs  = [f"{base}/file/{m.id}" for m in a.media
+                       if m.kind == MediaKind.surgery_after.value and not m.stored_path.lower().endswith(('.mp4', '.mov', '.avi'))]
+        before_vids = [f"{base}/file/{m.id}" for m in a.media
+                       if m.kind == MediaKind.surgery_before.value and m.stored_path.lower().endswith(('.mp4', '.mov', '.avi'))]
+        after_vids  = [f"{base}/file/{m.id}" for m in a.media
+                       if m.kind == MediaKind.surgery_after.value and m.stored_path.lower().endswith(('.mp4', '.mov', '.avi'))]
+        if not (before_imgs or after_imgs or before_vids or after_vids):
+            continue
+        # 姓氏保留，名字用 * 替代
+        name = a.applicant_name.strip() if a.applicant_name else ""
+        if len(name) >= 2:
+            masked_name = name[0] + "*" * (len(name) - 1)
+        elif len(name) == 1:
+            masked_name = name
+        else:
+            masked_name = "—"
+        items.append({
+            "id": a.id,
+            "cat_nickname": a.cat_nickname or "无名猫咪",
+            "cat_gender": a.cat_gender,
+            "address": a.address or "",
+            "store": a.clinic_store or "",
+            "surgery_date": a.updated_at.strftime("%Y-%m-%d") if a.updated_at else "",
+            "applicant_masked": masked_name,
+            "before_images": before_imgs,
+            "after_images": after_imgs,
+            "before_videos": before_vids,
+            "after_videos": after_vids,
+        })
+    return {"items": items, "total": len(items)}
+
+
 @app.get("/showcase", response_class=HTMLResponse)
 async def page_showcase(request: Request, db: Session = Depends(get_db)):
     q = (

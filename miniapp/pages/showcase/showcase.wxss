@@ -1,0 +1,163 @@
+.loading-wrap, .empty-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 40rpx;
+}
+.loading-text { color: #737373; font-size: 28rpx; }
+.empty-icon { font-size: 80rpx; margin-bottom: 20rpx; }
+.empty-text { font-size: 32rpx; font-weight: 700; color: #171717; }
+.empty-sub { font-size: 24rpx; color: #737373; margin-top: 12rpx; text-align: center; }
+
+.header-tip {
+  margin: 20rpx 20rpx 0;
+  padding: 16rpx 20rpx;
+  background: #f4f4f5;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  color: #737373;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* 每只猫的卡片 */
+.cat-card {
+  margin: 20rpx 20rpx 0;
+  background: #ffffff;
+  border-radius: 20rpx;
+  border: 1px solid #e5e5e5;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04), 0 8rpx 32rpx rgba(0,0,0,0.04);
+  overflow: hidden;
+}
+
+.cat-header {
+  padding: 24rpx 24rpx 16rpx;
+}
+.cat-name {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #171717;
+  letter-spacing: -0.01em;
+}
+.cat-gender {
+  font-size: 28rpx;
+  margin-left: 8rpx;
+  color: #4a90d9;
+}
+.cat-gender.female { color: #e07aa0; }
+
+.cat-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 12rpx;
+}
+.meta-tag {
+  font-size: 22rpx;
+  color: #525252;
+  background: #f4f4f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 8rpx;
+  padding: 4rpx 14rpx;
+}
+
+.cat-address {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #737373;
+  line-height: 1.5;
+}
+
+/* 术前术后对比 */
+.compare-wrap {
+  display: flex;
+  align-items: flex-start;
+  padding: 0 16rpx 20rpx;
+  gap: 0;
+}
+.compare-col {
+  flex: 1;
+  min-width: 0;
+}
+.compare-label {
+  text-align: center;
+  font-size: 22rpx;
+  font-weight: 700;
+  padding: 8rpx 0;
+  margin-bottom: 8rpx;
+  border-radius: 8rpx;
+}
+.before-label {
+  background: #f4f4f5;
+  color: #525252;
+}
+.after-label {
+  background: #171717;
+  color: #fafafa;
+}
+.compare-img {
+  width: 100%;
+  aspect-ratio: 1/1;
+  border-radius: 12rpx;
+  display: block;
+  margin-bottom: 8rpx;
+  background: #f4f4f5;
+}
+
+.compare-divider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 36rpx;
+  flex-shrink: 0;
+  padding-top: 40rpx;
+  gap: 6rpx;
+}
+.divider-line {
+  width: 2rpx;
+  flex: 1;
+  background: #e5e5e5;
+  min-height: 30rpx;
+}
+.divider-arrow {
+  font-size: 18rpx;
+  color: #a3a3a3;
+}
+
+.no-media {
+  height: 180rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #a3a3a3;
+  background: #f4f4f5;
+  border-radius: 12rpx;
+}
+
+/* 视频区 */
+.video-section {
+  padding: 0 16rpx 16rpx;
+}
+.video-section-label {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #525252;
+  margin-bottom: 10rpx;
+}
+.cat-video {
+  width: 100%;
+  border-radius: 12rpx;
+  display: block;
+  margin-bottom: 10rpx;
+  background: #000;
+}
+
+.bottom-tip {
+  text-align: center;
+  font-size: 24rpx;
+  color: #a3a3a3;
+  padding: 32rpx 0 48rpx;
+}

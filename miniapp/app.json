@@ -4,7 +4,8 @@
     "pages/index/index",
     "pages/appointment/index",
     "pages/appointment/list",
-    "pages/status/status"
+    "pages/status/status",
+    "pages/showcase/showcase"
   ],
   "window": {
     "navigationBarTitleText": "大风动物医院 TNR",

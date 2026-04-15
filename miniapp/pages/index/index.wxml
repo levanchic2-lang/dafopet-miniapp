@@ -140,3 +140,15 @@
     <view style="margin-top:10rpx;">{{error}}</view>
   </view>
 </view>
+
+<!-- 爱心展示入口卡片 -->
+<view class="card showcase-entry" bindtap="goShowcase">
+  <view class="showcase-entry-inner">
+    <view class="showcase-entry-icon">🐱</view>
+    <view class="showcase-entry-text">
+      <view class="showcase-entry-title">TNR 爱心展示</view>
+      <view class="showcase-entry-sub">已完成手术的流浪猫术前术后对比 · 公益科普</view>
+    </view>
+    <view class="showcase-entry-arrow">›</view>
+  </view>
+</view>
