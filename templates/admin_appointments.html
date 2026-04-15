@@ -465,69 +465,15 @@
     </div>
     <div>
       <strong>时段容量池规则</strong>
-      <p style="margin:0.35rem 0 0.4rem;font-size:0.88rem;color:var(--muted);">各时段按时长等比设置容量上限（每小时 3 单位），防止同一时段接诊量过多。</p>
-      <table style="width:100%;border-collapse:collapse;font-size:0.86rem;margin:0 0 0.75rem;">
-        <thead>
-          <tr style="border-bottom:2px solid var(--border-strong);">
-            <th style="text-align:left;padding:0.3rem 0.6rem;font-weight:700;">时段</th>
-            <th style="text-align:left;padding:0.3rem 0.6rem;font-weight:700;">时间</th>
-            <th style="text-align:center;padding:0.3rem 0.6rem;font-weight:700;">时长</th>
-            <th style="text-align:center;padding:0.3rem 0.6rem;font-weight:700;">容量上限</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:0.3rem 0.6rem;">上午</td>
-            <td style="padding:0.3rem 0.6rem;color:var(--muted);">09:00 – 12:00</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;">3 小时</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;font-weight:700;">9 单位</td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:0.3rem 0.6rem;">下午</td>
-            <td style="padding:0.3rem 0.6rem;color:var(--muted);">12:00 – 18:00</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;">6 小时</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;font-weight:700;">18 单位</td>
-          </tr>
-          <tr>
-            <td style="padding:0.3rem 0.6rem;">晚上</td>
-            <td style="padding:0.3rem 0.6rem;color:var(--muted);">18:00 – 22:00</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;">4 小时</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;font-weight:700;">12 单位</td>
-          </tr>
-        </tbody>
-      </table>
-      <table style="width:100%;border-collapse:collapse;font-size:0.86rem;margin:0 0 0.6rem;">
-        <thead>
-          <tr style="border-bottom:2px solid var(--border-strong);">
-            <th style="text-align:left;padding:0.3rem 0.6rem;font-weight:700;">预约类型</th>
-            <th style="text-align:center;padding:0.3rem 0.6rem;font-weight:700;">占用单位</th>
-            <th style="text-align:left;padding:0.3rem 0.6rem;font-weight:700;">说明</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:0.3rem 0.6rem;">疫苗 / 驱虫</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;">1</td>
-            <td style="padding:0.3rem 0.6rem;color:var(--muted);">快，10–15 分钟</td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:0.3rem 0.6rem;">普通门诊</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;">3</td>
-            <td style="padding:0.3rem 0.6rem;color:var(--muted);">中，30–45 分钟</td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:0.3rem 0.6rem;">TNR 手术 / 外科手术</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;">4</td>
-            <td style="padding:0.3rem 0.6rem;color:var(--muted);">术前检查少，相对快；TNR 另有每日 2 台硬上限</td>
-          </tr>
-          <tr>
-            <td style="padding:0.3rem 0.6rem;">美容 / 洗护</td>
-            <td style="text-align:center;padding:0.3rem 0.6rem;">0</td>
-            <td style="padding:0.3rem 0.6rem;color:var(--muted);">不参与容量管控（有独立时段排班）</td>
-          </tr>
-        </tbody>
-      </table>
-      <p style="margin:0;font-size:0.85rem;color:var(--muted);">下午组合举例：4 台 TNR（4×4=16）｜6 个普通门诊（3×6=18）｜2 台 TNR + 2 个门诊（4+4+3+3=14）｜18 个疫苗（1×18）</p>
+      <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
+        <li>各时段按时长等比设置容量上限（每小时 3 单位），防止同一时段接诊量过多。</li>
+        <li>上午（09:00–12:00，3 小时）：上限 <strong>9 单位</strong></li>
+        <li>下午（12:00–18:00，6 小时）：上限 <strong>18 单位</strong></li>
+        <li>晚上（18:00–22:00，4 小时）：上限 <strong>12 单位</strong></li>
+        <li>各类型占用单位：疫苗/驱虫 = <strong>1</strong>，普通门诊 = <strong>3</strong>，TNR/手术 = <strong>4</strong>，美容/洗护 = <strong>0（不参与）</strong></li>
+        <li>下午组合举例：2 台 TNR（4+4=8）｜6 个普通门诊（3×6=18）｜2 台 TNR + 2 个门诊（4+4+3+3=14）</li>
+        <li>⚠️ TNR 另有每日每店 <strong>2 台</strong>硬上限，两套规则同时生效。</li>
+      </ul>
     </div>
     <div>
       <strong>当前已开放的客户小程序通知</strong>
