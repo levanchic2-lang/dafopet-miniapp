@@ -63,6 +63,23 @@
       margin-left: 1.1rem; font-weight: 500; font-size: 0.92rem; color: var(--muted);
     }
     nav a:hover { color: var(--text); border-bottom: none; }
+    /* 待确认徽标 */
+    .nav-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 1.15em; height: 1.15em; padding: 0 0.32em;
+      border-radius: 99px; font-size: 0.72em; font-weight: 800;
+      background: #d97706; color: #fff;
+      vertical-align: middle; margin-left: 0.3em; line-height: 1;
+    }
+    /* 顶部待确认提示条 */
+    .pending-banner {
+      background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px;
+      padding: 0.6rem 1rem; margin-bottom: 1.1rem;
+      font-size: 0.88rem; font-weight: 600; color: #92400e;
+      align-items: center; gap: 0.6rem;
+    }
+    .pending-banner a { color: #92400e; border-bottom: 1px solid #fcd34d; font-weight: 700; }
+    .pending-banner a:hover { color: #78350f; border-bottom-color: #92400e; }
     .card {
       background: var(--card);
       border-radius: var(--radius);
@@ -158,7 +175,7 @@
       <div class="brand">大风动物医院 <span>· TNR</span></div>
       <nav>
         <a href="/showcase">公布展示</a>
-        <a href="/admin/appointments">预约管理</a>
+        <a href="/admin/appointments" id="nav-appt-link">预约管理<span id="nav-pending-badge" class="nav-badge" style="display:none;"></span></a>
         <a href="/admin">医院后台</a>
         {% if request.session.get('admin') %}
         <a href="/admin/staff">员工管理</a>
@@ -168,9 +185,50 @@
         {% endif %}
       </nav>
     </header>
+    <div id="pending-banner" class="pending-banner" style="display:none;">
+      <span>🔔</span>
+      <span>有 <strong id="pending-banner-count">0</strong> 条新预约待确认</span>
+      <a href="/admin/appointments?preset=month&appt_status=pending">立即查看 →</a>
+    </div>
     {% block body %}{% endblock %}
     <footer>图像识别结论仅供辅助参考，最终以到院核对与医生判断为准。严禁家养猫冒充流浪猫申请。</footer>
   </div>
   {% block scripts %}{% endblock %}
+  {% if request.session.get('admin') %}
+  <script>
+  (function () {
+    var badge = document.getElementById('nav-pending-badge');
+    var banner = document.getElementById('pending-banner');
+    var bannerCount = document.getElementById('pending-banner-count');
+    var lastCount = -1;
+
+    function updatePending() {
+      fetch('/api/admin/pending-count')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var n = data.count || 0;
+          if (n === lastCount) return;
+          lastCount = n;
+          if (n > 0) {
+            badge.textContent = n > 99 ? '99+' : n;
+            badge.style.display = 'inline-flex';
+            bannerCount.textContent = n;
+            /* 仅在非预约管理页面才显示 banner */
+            if (!window.location.pathname.startsWith('/admin/appointments')) {
+              banner.style.display = 'flex';
+            }
+          } else {
+            badge.style.display = 'none';
+            banner.style.display = 'none';
+          }
+        })
+        .catch(function () {});
+    }
+
+    updatePending();
+    setInterval(updatePending, 60000); /* 每分钟刷新一次 */
+  })();
+  </script>
+  {% endif %}
 </body>
 </html>

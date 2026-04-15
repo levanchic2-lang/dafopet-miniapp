@@ -1697,6 +1697,24 @@ def _appt_time_slot(time_str: str) -> str:
         return "other"
 
 
+@app.get("/api/admin/pending-count")
+async def api_admin_pending_count(request: Request, db: Session = Depends(get_db)):
+    """返回待确认预约数量（仅限已登录后台）"""
+    if not request.session.get("admin"):
+        return {"count": 0}
+    from datetime import date as _date
+    today_str = _date.today().isoformat()
+    count = (
+        db.query(func.count(Appointment.id))
+        .filter(
+            Appointment.status == AppointmentStatus.pending.value,
+            Appointment.appt_date >= today_str,
+        )
+        .scalar()
+    ) or 0
+    return {"count": count}
+
+
 @app.get("/admin/appointments", response_class=HTMLResponse)
 async def page_admin_appointments(
     request: Request,
