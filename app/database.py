@@ -84,6 +84,21 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_application ON appointments(related_application_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_wechat_openid ON appointments(wechat_openid)"))
+
+            # admin_users 表（多账号权限管理）
+            admin_user_cols = conn.execute(text("PRAGMA table_info(admin_users)")).fetchall()
+            if not admin_user_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS admin_users ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "username VARCHAR(80) UNIQUE NOT NULL, "
+                    "password_hash VARCHAR(256) NOT NULL, "
+                    "role VARCHAR(20) DEFAULT 'staff', "
+                    "is_active BOOLEAN DEFAULT 1, "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

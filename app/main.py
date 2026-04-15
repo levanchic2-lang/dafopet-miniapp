@@ -12,6 +12,7 @@ from typing import Annotated, Optional
 from urllib.parse import quote
 
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from passlib.context import CryptContext
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import httpx
@@ -23,6 +24,7 @@ from starlette.staticfiles import StaticFiles
 from app.config import settings
 from app.database import get_db, init_db
 from app.models import (
+    AdminUser,
     Application,
     ApplicationStatus,
     Appointment,
@@ -39,6 +41,8 @@ from app.services.wechat_miniapp import push_application_result, push_appointmen
 
 app = FastAPI(title=settings.app_name)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, session_cookie="tnr_session")
+
+_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 
 # 后台「AI 辅助结论」：把模型 JSON 转成中文可读结构（模板用 | ai_review_view）
@@ -246,9 +250,25 @@ def _admin_ok(request: Request) -> bool:
     return bool(request.session.get("admin"))
 
 
+def _admin_role(request: Request) -> str:
+    """返回当前登录角色：'superadmin' | 'staff' | ''（未登录）。旧 session 默认当 superadmin。"""
+    if not request.session.get("admin"):
+        return ""
+    return request.session.get("admin_role", "superadmin")
+
+
+def _is_superadmin(request: Request) -> bool:
+    return _admin_role(request) == "superadmin"
+
+
 def require_admin(request: Request):
     if not _admin_ok(request):
         raise HTTPException(status_code=401, detail="需要医院后台登录")
+
+
+def require_superadmin(request: Request):
+    if not _is_superadmin(request):
+        raise HTTPException(status_code=403, detail="需要超级管理员权限")
 
 
 def _get_csrf_token(request: Request) -> str:
@@ -286,7 +306,7 @@ def _audit(
     db.add(
         AuditLog(
             action=action,
-            actor="admin",
+            actor=request.session.get("admin_username", "admin"),
             application_id=application_id,
             ip=ip,
             user_agent=ua[:300],
@@ -1893,11 +1913,31 @@ async def admin_api_tnr_application_for_appointment(
 
 
 @app.post("/admin/login")
-async def admin_login(request: Request, password: str = Form(...), csrf_token: str = Form("")):
+async def admin_login(
+    request: Request,
+    db: Session = Depends(get_db),
+    username: str = Form(...),
+    password: str = Form(...),
+    csrf_token: str = Form(""),
+):
     _require_csrf(request, csrf_token)
-    if password == settings.admin_password:
+    username = username.strip()
+
+    # 优先查 DB 账号
+    user = db.query(AdminUser).filter(AdminUser.username == username, AdminUser.is_active == True).first()
+    if user and _pwd_ctx.verify(password, user.password_hash):
         request.session["admin"] = True
+        request.session["admin_role"] = user.role
+        request.session["admin_username"] = user.username
         return RedirectResponse("/admin", status_code=303)
+
+    # 兜底：环境变量密码（用于迁移期 / 紧急登录，用户名须为 admin）
+    if username == "admin" and password == settings.admin_password:
+        request.session["admin"] = True
+        request.session["admin_role"] = "superadmin"
+        request.session["admin_username"] = "admin"
+        return RedirectResponse("/admin", status_code=303)
+
     return templates.TemplateResponse(
         "admin_login.html",
         {"request": request, "title": "医院后台登录", "error": "账号或密码不正确", "csrf_token": _get_csrf_token(request)},
@@ -1911,9 +1951,112 @@ async def admin_logout(request: Request):
     return RedirectResponse("/admin", status_code=303)
 
 
+# ── 账号管理（仅 superadmin）────────────────────────────────────────────
+
+@app.get("/admin/users", response_class=HTMLResponse)
+async def admin_users_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    msg: str = Query(""),
+    err: str = Query(""),
+):
+    if not _admin_ok(request):
+        return templates.TemplateResponse(
+            "admin_login.html",
+            {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
+        )
+    require_superadmin(request)
+    users = db.query(AdminUser).order_by(AdminUser.created_at).all()
+    return templates.TemplateResponse(
+        "admin_users.html",
+        {
+            "request": request,
+            "title": "账号管理",
+            "users": users,
+            "current_username": request.session.get("admin_username", ""),
+            "csrf_token": _get_csrf_token(request),
+            "msg": msg,
+            "err": err,
+        },
+    )
+
+
+@app.post("/admin/users/create", name="admin_users_create")
+async def admin_users_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form("staff"),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    username = username.strip()
+    if not username or not password:
+        return RedirectResponse("/admin/users?err=用户名和密码不能为空", status_code=303)
+    if len(password) < 6:
+        return RedirectResponse("/admin/users?err=密码不能少于6位", status_code=303)
+    if role not in ("superadmin", "staff"):
+        role = "staff"
+    existing = db.query(AdminUser).filter(AdminUser.username == username).first()
+    if existing:
+        return RedirectResponse(f"/admin/users?err=用户名已存在：{username}", status_code=303)
+    db.add(AdminUser(username=username, password_hash=_pwd_ctx.hash(password), role=role, is_active=True))
+    _audit(db, request, "admin_user_create", application_id=None, detail={"username": username, "role": role})
+    db.commit()
+    return RedirectResponse(f"/admin/users?msg=已创建账号：{username}", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/toggle", name="admin_users_toggle")
+async def admin_users_toggle(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    if user.username == request.session.get("admin_username", ""):
+        return RedirectResponse("/admin/users?err=不能停用当前登录账号", status_code=303)
+    user.is_active = not user.is_active
+    _audit(db, request, "admin_user_toggle", application_id=None, detail={"username": user.username, "active": user.is_active})
+    db.commit()
+    status_zh = "启用" if user.is_active else "停用"
+    return RedirectResponse(f"/admin/users?msg=已{status_zh}账号：{user.username}", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/reset-password", name="admin_users_reset_password")
+async def admin_users_reset_password(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    new_password: str = Form(...),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    if not new_password or len(new_password) < 6:
+        return RedirectResponse("/admin/users?err=新密码不能少于6位", status_code=303)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    user.password_hash = _pwd_ctx.hash(new_password)
+    _audit(db, request, "admin_user_reset_password", application_id=None, detail={"username": user.username})
+    db.commit()
+    return RedirectResponse(f"/admin/users?msg=已重置密码：{user.username}", status_code=303)
+
+
 @app.post("/admin/backup/create", name="admin_backup_create")
 async def admin_backup_create(request: Request, db: Session = Depends(get_db), csrf_token: str = Form("")):
     require_admin(request)
+    require_superadmin(request)
     _require_csrf(request, csrf_token)
     try:
         out = create_backup_zip()
@@ -1927,6 +2070,7 @@ async def admin_backup_create(request: Request, db: Session = Depends(get_db), c
 @app.get("/admin/backup/download/{filename}", name="admin_backup_download")
 async def admin_backup_download(request: Request, filename: str, db: Session = Depends(get_db)):
     require_admin(request)
+    require_superadmin(request)
     if not is_safe_backup_filename(filename):
         raise HTTPException(404)
     root = Path(settings.backup_dir).resolve()
@@ -1965,6 +2109,7 @@ async def _admin_purge_run(
 ):
     """一键清理：scope=all/drafts/appointments/everything"""
     require_admin(request)
+    require_superadmin(request)
     _require_csrf(request, csrf_token)
     scope = (scope or "all").strip().lower()
     if scope not in ("all", "drafts", "appointments", "everything"):

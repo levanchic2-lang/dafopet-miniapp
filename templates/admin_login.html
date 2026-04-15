@@ -5,8 +5,10 @@
   {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
   <form method="post" action="/admin/login">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <label for="username">用户名</label>
+    <input type="text" id="username" name="username" required autocomplete="username" autofocus />
     <label for="password">密码</label>
-    <input type="password" id="password" name="password" required autocomplete="current-password" autofocus />
+    <input type="password" id="password" name="password" required autocomplete="current-password" />
     <button type="submit" style="margin-top:1rem;width:100%;">登录</button>
   </form>
 </div>
