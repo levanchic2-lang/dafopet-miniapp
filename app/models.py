@@ -116,6 +116,11 @@ class Appointment(Base):
     coat_length     = mapped_column(String(20),  nullable=True, default=None)
     addon_services  = mapped_column(String(200), nullable=True, default=None)
     related_application_id = mapped_column(ForeignKey("applications.id", ondelete="SET NULL"), nullable=True)
+    # 代预约信息
+    is_proxy: Mapped[bool] = mapped_column(Boolean, default=False)
+    proxy_name: Mapped[str] = mapped_column(String(120), default="")
+    proxy_phone: Mapped[str] = mapped_column(String(40), default="")
+    proxy_relation: Mapped[str] = mapped_column(String(40), default="")  # 家人/朋友/员工代录/其他
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

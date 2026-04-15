@@ -31,6 +31,16 @@ Page({
     serviceIndex: 0,
     storeIndex: 0,
     petGenderIndex: 0,
+    // 代预约
+    proxyRelations: [
+      { label: '本人预约', value: '' },
+      { label: '家人代预约', value: '家人' },
+      { label: '朋友 / 同事代预约', value: '朋友' },
+      { label: '其他', value: '其他' },
+    ],
+    proxyRelationIndex: 0,
+    isProxy: false,
+    proxyConsent: false,
     // 美容专属
     isBeauty: false,
     beautyAddonOptions: BEAUTY_ADDON_OPTIONS.map(n => ({ name: n, checked: false })),
@@ -59,6 +69,11 @@ Page({
       pet_gender: "unknown",
       related_application_id: "",
       notes: "",
+      // 代预约
+      is_proxy: false,
+      proxy_name: "",
+      proxy_phone: "",
+      proxy_relation: "",
       // 美容附加（提交时填充）
       pet_size: "",
       coat_length: "",
@@ -402,6 +417,26 @@ Page({
   onQuickTimeTap(e)  { const t = e.currentTarget.dataset.time || ""; if (t) this.setData({ "form.appointment_time": t }); },
   onInput(e)         { const k = e.currentTarget.dataset.k; this.setData({ [`form.${k}`]: e.detail.value || "" }); },
 
+  // 代预约
+  onProxyRelationChange(e) {
+    const idx = Number(e.detail.value || 0);
+    const rel = this.data.proxyRelations[idx] || { value: '' };
+    const isProxy = idx > 0;
+    this.setData({
+      proxyRelationIndex: idx,
+      isProxy,
+      'form.proxy_relation': rel.value || '',
+      'form.is_proxy': isProxy,
+      // 切回"本人"时清空代预约信息
+      'form.proxy_name': isProxy ? this.data.form.proxy_name : '',
+      'form.proxy_phone': isProxy ? this.data.form.proxy_phone : '',
+      proxyConsent: isProxy ? this.data.proxyConsent : false,
+    });
+  },
+  onProxyConsentChange(e) {
+    this.setData({ proxyConsent: (e.detail.value || []).length > 0 });
+  },
+
   // 美容：体型选择
   onBeautySizeChange(e) {
     const idx = Number(e.detail.value || 0);
@@ -436,6 +471,19 @@ Page({
     if (this.data.submitting) return;
     this.setData({ submitting: true });
     try {
+      // 代预约校验
+      if (this.data.isProxy) {
+        if (!this.data.form.proxy_name.trim()) {
+          wx.showModal({ title: '请填写代预约人姓名', showCancel: false });
+          this.setData({ submitting: false });
+          return;
+        }
+        if (!this.data.proxyConsent) {
+          wx.showModal({ title: '请勾选授权声明', content: '代预约需确认已获得就诊人本人授权。', showCancel: false });
+          this.setData({ submitting: false });
+          return;
+        }
+      }
       const openid = await this.ensureOpenid();
       const payload = Object.assign({}, this.data.form, { openid });
       // 美容：附加字段

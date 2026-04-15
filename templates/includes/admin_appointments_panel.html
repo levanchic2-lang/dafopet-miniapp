@@ -189,6 +189,41 @@
         <label style="margin:0 0 0.35rem;">备注</label>
         <textarea name="notes" rows="3" placeholder="例如：术前禁食提醒、造型偏好、是否需住院观察"></textarea>
       </div>
+
+      {# ── 代预约信息 ── #}
+      <div class="wide">
+        <div style="padding:0.85rem 1rem;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;">
+          <label style="margin:0 0 0.5rem;color:#92400e;font-size:0.88rem;">代预约说明</label>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <input type="checkbox" id="is_proxy_check" name="is_proxy" value="1"
+                   style="width:16px;height:16px;cursor:pointer;flex-shrink:0;"
+                   onchange="var s=document.getElementById('proxy-fields');s.style.display=this.checked?'grid':'none';" />
+            <label for="is_proxy_check" style="margin:0;font-weight:600;font-size:0.88rem;cursor:pointer;color:#78350f;">
+              此为代预约（客户电话/到店，员工代为录入）
+            </label>
+          </div>
+          <div id="proxy-fields" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:0.65rem;">
+            <div>
+              <label style="margin:0 0 0.3rem;font-size:0.82rem;">代预约人姓名</label>
+              <input type="text" name="proxy_name" placeholder="实际操作预约的人" />
+            </div>
+            <div>
+              <label style="margin:0 0 0.3rem;font-size:0.82rem;">代预约人手机</label>
+              <input type="text" name="proxy_phone" maxlength="11" placeholder="代预约人联系电话" />
+            </div>
+            <div>
+              <label style="margin:0 0 0.3rem;font-size:0.82rem;">代预约原因</label>
+              <select name="proxy_relation">
+                <option value="电话预约">电话预约</option>
+                <option value="到店登记">到店登记</option>
+                <option value="家人">家人代预约</option>
+                <option value="朋友">朋友代预约</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <div style="display:flex;justify-content:flex-end;">
       <button type="submit">创建预约</button>
@@ -272,6 +307,9 @@
                 {% if appt.related_application_id %}
                 <span class="badge b-blue">申请 #{{ appt.related_application_id }}</span>
                 {% endif %}
+                {% if appt.is_proxy %}
+                <span class="badge b-pending">代预约</span>
+                {% endif %}
               </div>
 
               {# 详细信息 #}
@@ -320,6 +358,16 @@
                 <div class="appt-detail-line">
                   <span class="appt-detail-key">备注</span>
                   <span>{{ appt.notes }}</span>
+                </div>
+                {% endif %}
+                {% if appt.is_proxy %}
+                <div class="appt-detail-line" style="margin-top:0.3rem;padding-top:0.3rem;border-top:1px solid var(--border);">
+                  <span class="appt-detail-key" style="color:#92400e;">代预约人</span>
+                  <span style="color:#92400e;">
+                    {{ appt.proxy_name or '—' }}
+                    {% if appt.proxy_phone %} · {{ appt.proxy_phone }}{% endif %}
+                    {% if appt.proxy_relation %}（{{ appt.proxy_relation }}）{% endif %}
+                  </span>
                 </div>
                 {% endif %}
               </div>

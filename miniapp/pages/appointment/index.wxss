@@ -173,6 +173,24 @@
   text-align: center;
 }
 
+/* ── 代预约信息卡片 ── */
+.proxy-info-card {
+  margin-top: 16rpx;
+  padding: 24rpx;
+  background: #fffbeb;
+  border: 1rpx solid #fcd34d;
+  border-radius: 18rpx;
+}
+.proxy-info-title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #92400e;
+}
+.placeholder-sm {
+  font-size: 24rpx;
+  color: #999999;
+}
+
 .btn {
   margin-top: 28rpx;
   width: 100%;

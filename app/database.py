@@ -66,6 +66,14 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE appointments ADD COLUMN coat_length VARCHAR(20) DEFAULT NULL"))
             if "addon_services" not in appointment_names:
                 conn.execute(text("ALTER TABLE appointments ADD COLUMN addon_services VARCHAR(200) DEFAULT NULL"))
+            if "is_proxy" not in appointment_names:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN is_proxy BOOLEAN DEFAULT 0"))
+            if "proxy_name" not in appointment_names:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN proxy_name VARCHAR(120) DEFAULT ''"))
+            if "proxy_phone" not in appointment_names:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN proxy_phone VARCHAR(40) DEFAULT ''"))
+            if "proxy_relation" not in appointment_names:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN proxy_relation VARCHAR(40) DEFAULT ''"))
 
             # 性能：常用筛选字段加索引（存在则跳过）
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status)"))

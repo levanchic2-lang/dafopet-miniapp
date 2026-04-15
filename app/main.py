@@ -2467,6 +2467,10 @@ async def admin_appointment_create(
     pet_size: str = Form(""),
     coat_length: str = Form(""),
     addon_services: list[str] = Form([]),
+    is_proxy: str = Form(""),
+    proxy_name: str = Form(""),
+    proxy_phone: str = Form(""),
+    proxy_relation: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -2538,6 +2542,7 @@ async def admin_appointment_create(
                 f"（#{conflict.id} {conflict.customer_name}），请换一个时间段。",
             )
         _is_beauty = str(fields["category"]) == AppointmentCategory.beauty.value
+        _is_proxy_bool = bool(is_proxy and is_proxy.strip())
         row = Appointment(
             category=str(fields["category"]),
             status=AppointmentStatus.pending.value,
@@ -2556,6 +2561,10 @@ async def admin_appointment_create(
             pet_size=(pet_size.strip() or None) if _is_beauty else None,
             coat_length=(coat_length.strip() or None) if _is_beauty else None,
             addon_services=(",".join(s.strip() for s in addon_services if s.strip()) or None) if _is_beauty else None,
+            is_proxy=_is_proxy_bool,
+            proxy_name=proxy_name.strip() if _is_proxy_bool else "",
+            proxy_phone=proxy_phone.strip() if _is_proxy_bool else "",
+            proxy_relation=proxy_relation.strip() if _is_proxy_bool else "",
         )
         db.add(row)
         db.flush()
@@ -3094,6 +3103,10 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
     _pet_size_raw    = ((payload or {}).get("pet_size", "") or "").strip()
     _coat_length_raw = ((payload or {}).get("coat_length", "") or "").strip()
     _addon_raw       = ((payload or {}).get("addon_services", "") or "").strip()
+    _is_proxy_api    = bool((payload or {}).get("is_proxy", False))
+    _proxy_name_raw  = ((payload or {}).get("proxy_name", "") or "").strip()
+    _proxy_phone_raw = ((payload or {}).get("proxy_phone", "") or "").strip()
+    _proxy_rel_raw   = ((payload or {}).get("proxy_relation", "") or "").strip()
     row = Appointment(
         wechat_openid=openid,
         category=str(fields["category"]),
@@ -3113,6 +3126,10 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
         pet_size    =(_pet_size_raw    or None) if _is_beauty_api else None,
         coat_length =(_coat_length_raw or None) if _is_beauty_api else None,
         addon_services=(_addon_raw     or None) if _is_beauty_api else None,
+        is_proxy=_is_proxy_api,
+        proxy_name=_proxy_name_raw if _is_proxy_api else "",
+        proxy_phone=_proxy_phone_raw if _is_proxy_api else "",
+        proxy_relation=_proxy_rel_raw if _is_proxy_api else "",
     )
     db.add(row)
     db.commit()

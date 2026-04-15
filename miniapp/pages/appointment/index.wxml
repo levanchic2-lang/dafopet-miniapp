@@ -184,6 +184,28 @@
     <view class="label">备注</view>
     <textarea class="textarea" maxlength="500" placeholder="补充病情、服务要求、时间偏好等" value="{{form.notes}}" data-k="notes" bindinput="onInput"></textarea>
 
+    <!-- ── 代预约 ── -->
+    <view class="label">预约人与就诊人关系</view>
+    <picker class="picker" mode="selector" range="{{proxyRelations}}" range-key="label" value="{{proxyRelationIndex}}" bindchange="onProxyRelationChange">
+      <view>{{proxyRelations[proxyRelationIndex].label}}</view>
+    </picker>
+
+    <block wx:if="{{isProxy}}">
+      <view class="proxy-info-card">
+        <view class="proxy-info-title">代预约人信息</view>
+        <view class="label" style="margin-top:18rpx;">代预约人姓名</view>
+        <input class="input" value="{{form.proxy_name}}" data-k="proxy_name" placeholder="实际操作预约的人" placeholder-class="placeholder-sm" bindinput="onInput" />
+        <view class="label">代预约人手机号</view>
+        <input class="input" type="number" maxlength="11" value="{{form.proxy_phone}}" data-k="proxy_phone" placeholder="代预约人联系电话" placeholder-class="placeholder-sm" bindinput="onInput" />
+        <checkbox-group bindchange="onProxyConsentChange" style="margin-top:16rpx;">
+          <label class="sub" style="display:flex;align-items:flex-start;gap:12rpx;margin-bottom:0;">
+            <checkbox value="consent" checked="{{proxyConsent}}" color="#262626" style="margin-top:2rpx;flex-shrink:0;" />
+            <text>我已获得就诊人本人授权，并知悉代预约的相关责任。</text>
+          </label>
+        </checkbox-group>
+      </view>
+    </block>
+
     <button class="btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onSubmit">提交预约</button>
   </block>
 </view>
