@@ -9,7 +9,17 @@
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goStatusPage">我的订单 / 查看进度</button>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAppointmentPage">预约服务</button>
   <view class="sub" style="font-size:24rpx;color:#888;margin:6rpx 0 4rpx;text-align:center;">门诊 · 手术 · 美容等常规预约均可在此办理</view>
-  <button class="btn secondary" style="margin-top:8rpx;" bindtap="goAppointmentListPage">我的预约</button>
+  <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAppointmentListPage">我的预约</button>
+
+  <!-- 爱心展示入口 -->
+  <view class="showcase-inline-btn" bindtap="goShowcase">
+    <view class="showcase-inline-icon">🐱</view>
+    <view class="showcase-inline-text">
+      <view class="showcase-inline-title">TNR 爱心展示</view>
+      <view class="showcase-inline-sub">已完成手术的流浪猫术前术后对比 · 公益科普</view>
+    </view>
+    <view class="showcase-inline-arrow">›</view>
+  </view>
 
   <view class="label">申请人姓名</view>
   <input class="input input-lg" value="{{form.applicant_name}}" data-k="applicant_name" bindinput="onInput" />
@@ -141,14 +151,3 @@
   </view>
 </view>
 
-<!-- 爱心展示入口卡片 -->
-<view class="card showcase-entry" bindtap="goShowcase">
-  <view class="showcase-entry-inner">
-    <view class="showcase-entry-icon">🐱</view>
-    <view class="showcase-entry-text">
-      <view class="showcase-entry-title">TNR 爱心展示</view>
-      <view class="showcase-entry-sub">已完成手术的流浪猫术前术后对比 · 公益科普</view>
-    </view>
-    <view class="showcase-entry-arrow">›</view>
-  </view>
-</view>

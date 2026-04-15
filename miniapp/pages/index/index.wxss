@@ -18,37 +18,39 @@
   margin-bottom: 0;
 }
 
-/* 爱心展示入口卡片 */
-.showcase-entry {
-  margin-top: 0;
-  cursor: pointer;
-}
-.showcase-entry-inner {
+/* 爱心展示内嵌入口 */
+.showcase-inline-btn {
+  margin-top: 12rpx;
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  gap: 16rpx;
+  padding: 20rpx 22rpx;
+  background: #f4f4f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 16rpx;
 }
-.showcase-entry-icon {
-  font-size: 56rpx;
+.showcase-inline-icon {
+  font-size: 44rpx;
   flex-shrink: 0;
+  line-height: 1;
 }
-.showcase-entry-text {
+.showcase-inline-text {
   flex: 1;
   min-width: 0;
 }
-.showcase-entry-title {
-  font-size: 30rpx;
+.showcase-inline-title {
+  font-size: 28rpx;
   font-weight: 700;
   color: #171717;
 }
-.showcase-entry-sub {
-  margin-top: 6rpx;
+.showcase-inline-sub {
+  margin-top: 4rpx;
   font-size: 22rpx;
   color: #737373;
   line-height: 1.5;
 }
-.showcase-entry-arrow {
-  font-size: 44rpx;
+.showcase-inline-arrow {
+  font-size: 40rpx;
   color: #a3a3a3;
   flex-shrink: 0;
 }
