@@ -1607,9 +1607,11 @@ _SLOT_NAME_ZH = {"morning": "上午", "afternoon": "下午", "evening": "晚上"
 
 
 def _capacity_units(category: str, service_name: str) -> int:
-    """返回该预约消耗的容量单位（0 = 不纳入容量管控，如造型/洗护）。"""
+    """返回该预约消耗的容量单位（0 = 不纳入容量管控）。
+    TNR / 手术已有独立的日限（_check_tnr_constraints）和时间冲突检测，
+    不再参与时段容量池，避免多台顺序手术被错误拒绝。"""
     if category in ("tnr", "surgery"):
-        return 6
+        return 0
     if category == "outpatient":
         sn = service_name or ""
         if any(kw in sn for kw in _VACCINE_KEYWORDS):
