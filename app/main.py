@@ -1588,8 +1588,12 @@ def _beauty_slots_for_date(
 # ── 门诊/手术容量规则 ─────────────────────────────────────────────────────────
 # 每门店、每时段（上午/下午/晚上）的总容量单位数上限
 _SLOT_CAPACITY_MAX = 9
-# 疫苗/驱虫 = 1 单位；普通门诊 = 3 单位；手术（含 TNR）= 6 单位
-# 规则：同时段最多 3 个普通门诊 (3×3=9)，或 1 个手术 (6) + 1 个普通门诊 (3)=9，等等
+# 疫苗/驱虫 = 1 单位；普通门诊 = 3 单位；TNR/手术 = 4 单位；美容 = 0（不参与）
+# 设计组合举例：
+#   3 个普通门诊           3×3 = 9
+#   2 台 TNR/手术         4×2 = 8 ≤ 9  ✅（TNR 另有每日2台上限）
+#   1 台 TNR + 1 个门诊   4+3 = 7 ≤ 9
+#   9 个疫苗/驱虫          1×9 = 9
 
 _OUTPATIENT_SERVICES = [
     "疫苗/驱虫", "体检", "呼吸道", "胃肠道", "泌尿道",
@@ -1608,10 +1612,14 @@ _SLOT_NAME_ZH = {"morning": "上午", "afternoon": "下午", "evening": "晚上"
 
 def _capacity_units(category: str, service_name: str) -> int:
     """返回该预约消耗的容量单位（0 = 不纳入容量管控）。
-    TNR / 手术已有独立的日限（_check_tnr_constraints）和时间冲突检测，
-    不再参与时段容量池，避免多台顺序手术被错误拒绝。"""
+    单位换算：
+      疫苗/驱虫 = 1 单位
+      普通门诊   = 3 单位
+      TNR/手术   = 4 单位（术前检查少，相对快，2台=8单位 ≤ 上限9）
+      美容/洗护  = 0 单位（不参与）
+    """
     if category in ("tnr", "surgery"):
-        return 0
+        return 4
     if category == "outpatient":
         sn = service_name or ""
         if any(kw in sn for kw in _VACCINE_KEYWORDS):
