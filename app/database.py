@@ -85,6 +85,51 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_wechat_openid ON appointments(wechat_openid)"))
 
+            # staff 员工档案表
+            staff_cols = conn.execute(text("PRAGMA table_info(staff)")).fetchall()
+            if not staff_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS staff ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "name VARCHAR(80) NOT NULL, "
+                    "gender VARCHAR(10) DEFAULT '', "
+                    "birthday VARCHAR(20) DEFAULT '', "
+                    "phone VARCHAR(40) DEFAULT '', "
+                    "id_number VARCHAR(40) DEFAULT '', "
+                    "store VARCHAR(80) DEFAULT '', "
+                    "position VARCHAR(80) DEFAULT '', "
+                    "hire_date VARCHAR(20) DEFAULT '', "
+                    "probation_end_date VARCHAR(20) DEFAULT '', "
+                    "status VARCHAR(20) DEFAULT 'active', "
+                    "resign_date VARCHAR(20) DEFAULT '', "
+                    "resign_reason TEXT DEFAULT '', "
+                    "emergency_contact_name VARCHAR(80) DEFAULT '', "
+                    "emergency_contact_phone VARCHAR(40) DEFAULT '', "
+                    "emergency_contact_relation VARCHAR(40) DEFAULT '', "
+                    "admin_user_id INTEGER REFERENCES admin_users(id) ON DELETE SET NULL, "
+                    "notes TEXT DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+
+            # contracts 合同管理表
+            contract_cols = conn.execute(text("PRAGMA table_info(contracts)")).fetchall()
+            if not contract_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS contracts ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE, "
+                    "contract_type VARCHAR(20) DEFAULT 'formal', "
+                    "start_date VARCHAR(20) DEFAULT '', "
+                    "end_date VARCHAR(20) DEFAULT '', "
+                    "file_path VARCHAR(512) DEFAULT '', "
+                    "original_filename VARCHAR(255) DEFAULT '', "
+                    "notes TEXT DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+
             # admin_users 表（多账号权限管理）
             admin_user_cols = conn.execute(text("PRAGMA table_info(admin_users)")).fetchall()
             if not admin_user_cols:

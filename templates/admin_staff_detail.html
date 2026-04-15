@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+{% if err %}<div class="msg err">{{ err }}</div>{% endif %}
+
+<!-- 员工基本信息 -->
+<div class="card">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+    <div>
+      <h1 style="margin:0;">{{ staff.name }}
+        {% if staff.status == 'probation' %}<span class="badge b-pending" style="font-size:0.75rem;margin-left:8px;">试用中</span>
+        {% elif staff.status == 'resigned' %}<span class="badge b-no" style="font-size:0.75rem;margin-left:8px;">已离职</span>
+        {% else %}<span class="badge b-ok" style="font-size:0.75rem;margin-left:8px;">在职</span>{% endif %}
+      </h1>
+      <p class="sub" style="margin:0.3rem 0 0;">{{ staff.position or '' }}{% if staff.position and staff.store %} · {% endif %}{{ staff.store or '' }}</p>
+    </div>
+    {% if is_superadmin %}
+    <a href="/admin/staff/{{ staff.id }}/edit" class="btn secondary" style="font-size:0.88rem;">编辑档案</a>
+    {% endif %}
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-top:1.25rem;">
+    {% macro field(label, value) %}
+    <div>
+      <div style="font-size:0.78rem;color:var(--muted);font-weight:600;margin-bottom:0.15rem;">{{ label }}</div>
+      <div style="font-size:0.93rem;">{{ value or '—' }}</div>
+    </div>
+    {% endmacro %}
+
+    {{ field('手机号', staff.phone) }}
+    {{ field('性别', '男' if staff.gender == 'male' else ('女' if staff.gender == 'female' else '')) }}
+    {{ field('生日', staff.birthday) }}
+    {{ field('身份证', staff.id_number[:6] + '****' + staff.id_number[-4:] if staff.id_number and staff.id_number|length > 10 else staff.id_number) }}
+    {{ field('入职日期', staff.hire_date) }}
+    {{ field('试用期结束', staff.probation_end_date) }}
+    {% if staff.status == 'resigned' %}
+    {{ field('离职日期', staff.resign_date) }}
+    {{ field('离职原因', staff.resign_reason) }}
+    {% endif %}
+    {% if staff.admin_user %}
+    <div>
+      <div style="font-size:0.78rem;color:var(--muted);font-weight:600;margin-bottom:0.15rem;">关联账号</div>
+      <div style="font-size:0.93rem;">{{ staff.admin_user.username }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if staff.emergency_contact_name or staff.emergency_contact_phone %}
+  <div style="margin-top:1.1rem;padding-top:1rem;border-top:1px solid var(--border);">
+    <div style="font-size:0.82rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem;">紧急联系人</div>
+    <span style="font-size:0.93rem;">{{ staff.emergency_contact_name }}
+      {% if staff.emergency_contact_relation %}（{{ staff.emergency_contact_relation }}）{% endif %}
+      {% if staff.emergency_contact_phone %} · {{ staff.emergency_contact_phone }}{% endif %}
+    </span>
+  </div>
+  {% endif %}
+
+  {% if staff.notes %}
+  <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+    <div style="font-size:0.82rem;font-weight:600;color:var(--muted);margin-bottom:0.3rem;">备注</div>
+    <div style="font-size:0.9rem;white-space:pre-wrap;color:var(--text);">{{ staff.notes }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- 合同管理 -->
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+    <h1 style="font-size:1.1rem;margin:0;">合同记录（{{ contracts|length }}）</h1>
+    {% if is_superadmin %}
+    <button type="button" class="secondary" style="font-size:0.85rem;" onclick="toggleAddContract()">＋ 添加合同</button>
+    {% endif %}
+  </div>
+
+  <!-- 添加合同表单（折叠） -->
+  {% if is_superadmin %}
+  <div id="add-contract-form" style="display:none;background:var(--bg-elevated);border-radius:10px;padding:1rem;margin-bottom:1rem;">
+    <form method="post" action="/admin/staff/{{ staff.id }}/contracts/create" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div class="row2">
+        <div>
+          <label for="contract_type">合同类型</label>
+          <select id="contract_type" name="contract_type">
+            <option value="formal">正式合同</option>
+            <option value="probation">试用期合同</option>
+            <option value="parttime">兼职合同</option>
+            <option value="labor">劳务合同</option>
+          </select>
+        </div>
+        <div>
+          <label for="con_file">合同文件（PDF/图片/Word）</label>
+          <input type="file" id="con_file" name="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" />
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <label for="start_date">合同开始日期</label>
+          <input type="date" id="start_date" name="start_date" />
+        </div>
+        <div>
+          <label for="end_date">合同结束日期（留空=无固定期限）</label>
+          <input type="date" id="end_date" name="end_date" />
+        </div>
+      </div>
+      <div>
+        <label for="con_notes">备注</label>
+        <input type="text" id="con_notes" name="notes" placeholder="可选" />
+      </div>
+      <div style="display:flex;gap:0.6rem;margin-top:0.75rem;">
+        <button type="submit">保存合同</button>
+        <button type="button" class="secondary" onclick="toggleAddContract()">取消</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- 合同列表 -->
+  {% if contracts %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">类型</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">有效期</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">状态</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">文件</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">备注</th>
+        {% if is_superadmin %}<th style="padding:0.5rem 0.75rem;"></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in contracts %}
+      {% set today = now_date %}
+      {% set expired = c.end_date and c.end_date < today %}
+      {% set expiring_soon = c.end_date and not expired and c.end_date <= expiry_30 %}
+      <tr style="border-bottom:1px solid var(--border);{% if expired %}opacity:0.55;{% endif %}">
+        <td style="padding:0.55rem 0.75rem;">{{ contract_type_zh.get(c.contract_type, c.contract_type) }}</td>
+        <td style="padding:0.55rem 0.75rem;">
+          {{ c.start_date or '—' }}
+          {% if c.end_date %} 至 {{ c.end_date }}{% else %} 至 无固定期限{% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;">
+          {% if not c.end_date %}
+            <span class="badge b-ok">长期有效</span>
+          {% elif expired %}
+            <span class="badge b-no">已过期</span>
+          {% elif expiring_soon %}
+            <span class="badge b-pending">即将到期</span>
+          {% else %}
+            <span class="badge b-ok">有效</span>
+          {% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;">
+          {% if c.file_path %}
+            <a href="/admin/staff/{{ staff.id }}/contracts/{{ c.id }}/file" target="_blank" style="font-size:0.85rem;">
+              📎 {{ c.original_filename or '查看文件' }}
+            </a>
+          {% else %}—{% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;color:var(--muted);">{{ c.notes or '—' }}</td>
+        {% if is_superadmin %}
+        <td style="padding:0.55rem 0.75rem;text-align:right;">
+          <form method="post" action="/admin/staff/{{ staff.id }}/contracts/{{ c.id }}/delete"
+                onsubmit="return confirm('确认删除此合同记录？')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit" class="danger" style="font-size:0.8rem;padding:0.3rem 0.6rem;">删除</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:0.9rem;margin:0.5rem 0;">暂无合同记录。</p>
+  {% endif %}
+</div>
+
+<div style="margin-top:0.5rem;">
+  <a href="/admin/staff" class="btn secondary" style="font-size:0.88rem;">返回员工列表</a>
+</div>
+
+{% block scripts %}
+<script>
+function toggleAddContract() {
+  var el = document.getElementById('add-contract-form');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}
+{% endblock %}

@@ -31,8 +31,12 @@ from app.models import (
     AppointmentCategory,
     AppointmentStatus,
     AuditLog,
+    Contract,
+    ContractType,
     MediaFile,
     MediaKind,
+    Staff,
+    StaffStatus,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -1966,13 +1970,14 @@ async def admin_users_page(
             {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
         )
     require_superadmin(request)
-    users = db.query(AdminUser).order_by(AdminUser.created_at).all()
+    all_users = db.query(AdminUser).order_by(AdminUser.created_at).all()
     return templates.TemplateResponse(
         "admin_users.html",
         {
             "request": request,
             "title": "账号管理",
-            "users": users,
+            "active_users": [u for u in all_users if u.is_active],
+            "inactive_users": [u for u in all_users if not u.is_active],
             "current_username": request.session.get("admin_username", ""),
             "csrf_token": _get_csrf_token(request),
             "msg": msg,
@@ -2051,6 +2056,257 @@ async def admin_users_reset_password(
     _audit(db, request, "admin_user_reset_password", application_id=None, detail={"username": user.username})
     db.commit()
     return RedirectResponse(f"/admin/users?msg=已重置密码：{user.username}", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/set-role", name="admin_users_set_role")
+async def admin_users_set_role(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    role: str = Form(...),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    if role not in ("superadmin", "staff"):
+        return RedirectResponse("/admin/users?err=角色参数无效", status_code=303)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    if user.username == request.session.get("admin_username", ""):
+        return RedirectResponse("/admin/users?err=不能修改自己的角色", status_code=303)
+    user.role = role
+    _audit(db, request, "admin_user_set_role", application_id=None, detail={"username": user.username, "role": role})
+    db.commit()
+    role_zh = "超级管理员" if role == "superadmin" else "员工"
+    return RedirectResponse(f"/admin/users?msg=已将「{user.username}」的角色改为{role_zh}", status_code=303)
+
+
+# ── 员工档案 & 合同管理 ─────────────────────────────────────────────────
+
+_STAFF_STATUS_ZH = {"probation": "试用中", "active": "在职", "resigned": "离职"}
+_CONTRACT_TYPE_ZH = {"formal": "正式合同", "probation": "试用期合同", "parttime": "兼职合同", "labor": "劳务合同"}
+_POSITION_OPTIONS = ["前台", "医生", "美容师", "助理", "收银", "其他"]
+_STORE_OPTIONS = ["东环店", "横岗店"]
+
+
+def _expiring_contracts(db: Session, days: int = 30) -> list:
+    """返回 days 天内到期的合同（end_date 非空）。"""
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    deadline = (date.today() + timedelta(days=days)).isoformat()
+    rows = (
+        db.query(Contract)
+        .filter(Contract.end_date != "", Contract.end_date >= today, Contract.end_date <= deadline)
+        .all()
+    )
+    return rows
+
+
+@app.get("/admin/staff", response_class=HTMLResponse)
+async def admin_staff_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    msg: str = Query(""),
+    err: str = Query(""),
+):
+    if not _admin_ok(request):
+        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+    active_staff = db.query(Staff).filter(Staff.status != StaffStatus.resigned.value).order_by(Staff.hire_date).all()
+    resigned_staff = db.query(Staff).filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
+    expiring = _expiring_contracts(db)
+    return templates.TemplateResponse("admin_staff_list.html", {
+        "request": request, "title": "员工管理",
+        "active_staff": active_staff, "resigned_staff": resigned_staff,
+        "expiring": expiring, "status_zh": _STAFF_STATUS_ZH,
+        "csrf_token": _get_csrf_token(request), "msg": msg, "err": err,
+    })
+
+
+@app.get("/admin/staff/create", response_class=HTMLResponse)
+async def admin_staff_create_get(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+    require_superadmin(request)
+    admin_users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.username).all()
+    return templates.TemplateResponse("admin_staff_form.html", {
+        "request": request, "title": "新增员工", "staff": None,
+        "admin_users": admin_users, "position_options": _POSITION_OPTIONS,
+        "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",
+    })
+
+
+@app.post("/admin/staff/create", name="admin_staff_create")
+async def admin_staff_create_post(
+    request: Request, db: Session = Depends(get_db),
+    name: str = Form(...), gender: str = Form(""), birthday: str = Form(""),
+    phone: str = Form(""), id_number: str = Form(""), store: str = Form(""),
+    position: str = Form(""), hire_date: str = Form(""), probation_end_date: str = Form(""),
+    status: str = Form("active"), emergency_contact_name: str = Form(""),
+    emergency_contact_phone: str = Form(""), emergency_contact_relation: str = Form(""),
+    admin_user_id: str = Form(""), notes: str = Form(""), csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    name = name.strip()
+    if not name:
+        return RedirectResponse("/admin/staff/create?err=姓名不能为空", status_code=303)
+    auid = int(admin_user_id) if admin_user_id.strip().isdigit() else None
+    s = Staff(
+        name=name, gender=gender, birthday=birthday, phone=phone.strip(),
+        id_number=id_number.strip(), store=store, position=position,
+        hire_date=hire_date, probation_end_date=probation_end_date, status=status,
+        emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
+        emergency_contact_relation=emergency_contact_relation, admin_user_id=auid, notes=notes,
+    )
+    db.add(s)
+    _audit(db, request, "staff_create", application_id=None, detail={"name": name})
+    db.commit()
+    return RedirectResponse(f"/admin/staff/{s.id}?msg=员工档案已创建", status_code=303)
+
+
+@app.get("/admin/staff/{staff_id}", response_class=HTMLResponse)
+async def admin_staff_detail(
+    staff_id: int, request: Request, db: Session = Depends(get_db),
+    msg: str = Query(""), err: str = Query(""),
+):
+    if not _admin_ok(request):
+        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not staff:
+        raise HTTPException(404)
+    contracts = db.query(Contract).filter(Contract.staff_id == staff_id).order_by(Contract.start_date.desc()).all()
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    expiry_30 = (date.today() + timedelta(days=30)).isoformat()
+    return templates.TemplateResponse("admin_staff_detail.html", {
+        "request": request, "title": f"员工档案 · {staff.name}",
+        "staff": staff, "contracts": contracts,
+        "status_zh": _STAFF_STATUS_ZH, "contract_type_zh": _CONTRACT_TYPE_ZH,
+        "csrf_token": _get_csrf_token(request), "msg": msg, "err": err,
+        "is_superadmin": _is_superadmin(request),
+        "now_date": today, "expiry_30": expiry_30,
+    })
+
+
+@app.get("/admin/staff/{staff_id}/edit", response_class=HTMLResponse)
+async def admin_staff_edit_get(staff_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+    require_superadmin(request)
+    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not staff:
+        raise HTTPException(404)
+    admin_users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.username).all()
+    return templates.TemplateResponse("admin_staff_form.html", {
+        "request": request, "title": f"编辑员工 · {staff.name}", "staff": staff,
+        "admin_users": admin_users, "position_options": _POSITION_OPTIONS,
+        "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",
+    })
+
+
+@app.post("/admin/staff/{staff_id}/edit", name="admin_staff_edit")
+async def admin_staff_edit_post(
+    staff_id: int, request: Request, db: Session = Depends(get_db),
+    name: str = Form(...), gender: str = Form(""), birthday: str = Form(""),
+    phone: str = Form(""), id_number: str = Form(""), store: str = Form(""),
+    position: str = Form(""), hire_date: str = Form(""), probation_end_date: str = Form(""),
+    status: str = Form("active"), resign_date: str = Form(""), resign_reason: str = Form(""),
+    emergency_contact_name: str = Form(""), emergency_contact_phone: str = Form(""),
+    emergency_contact_relation: str = Form(""), admin_user_id: str = Form(""),
+    notes: str = Form(""), csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not staff:
+        raise HTTPException(404)
+    staff.name = name.strip()
+    staff.gender = gender; staff.birthday = birthday; staff.phone = phone.strip()
+    staff.id_number = id_number.strip(); staff.store = store; staff.position = position
+    staff.hire_date = hire_date; staff.probation_end_date = probation_end_date
+    staff.status = status; staff.resign_date = resign_date; staff.resign_reason = resign_reason
+    staff.emergency_contact_name = emergency_contact_name
+    staff.emergency_contact_phone = emergency_contact_phone
+    staff.emergency_contact_relation = emergency_contact_relation
+    staff.admin_user_id = int(admin_user_id) if admin_user_id.strip().isdigit() else None
+    staff.notes = notes
+    _audit(db, request, "staff_edit", application_id=None, detail={"staff_id": staff_id, "name": staff.name})
+    db.commit()
+    return RedirectResponse(f"/admin/staff/{staff_id}?msg=已保存", status_code=303)
+
+
+@app.post("/admin/staff/{staff_id}/contracts/create", name="admin_contract_create")
+async def admin_contract_create(
+    staff_id: int, request: Request, db: Session = Depends(get_db),
+    contract_type: str = Form("formal"), start_date: str = Form(""),
+    end_date: str = Form(""), notes: str = Form(""),
+    file: Optional[UploadFile] = File(None), csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not staff:
+        raise HTTPException(404)
+    file_path = ""
+    original_filename = ""
+    if file and file.filename:
+        import aiofiles
+        ext = Path(file.filename).suffix.lower()
+        if ext not in (".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"):
+            return RedirectResponse(f"/admin/staff/{staff_id}?err=合同文件仅支持 PDF/图片/Word", status_code=303)
+        save_dir = Path(settings.upload_dir) / "contracts" / str(staff_id)
+        save_dir.mkdir(parents=True, exist_ok=True)
+        fname = f"{secrets.token_hex(8)}{ext}"
+        save_path = save_dir / fname
+        async with aiofiles.open(save_path, "wb") as f:
+            content = await file.read()
+            await f.write(content)
+        file_path = str(save_path)
+        original_filename = file.filename
+    c = Contract(
+        staff_id=staff_id, contract_type=contract_type,
+        start_date=start_date, end_date=end_date,
+        file_path=file_path, original_filename=original_filename, notes=notes,
+    )
+    db.add(c)
+    _audit(db, request, "contract_create", application_id=None, detail={"staff_id": staff_id, "type": contract_type})
+    db.commit()
+    return RedirectResponse(f"/admin/staff/{staff_id}?msg=合同已添加", status_code=303)
+
+
+@app.post("/admin/staff/{staff_id}/contracts/{contract_id}/delete", name="admin_contract_delete")
+async def admin_contract_delete(
+    staff_id: int, contract_id: int, request: Request,
+    db: Session = Depends(get_db), csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    c = db.query(Contract).filter(Contract.id == contract_id, Contract.staff_id == staff_id).first()
+    if not c:
+        raise HTTPException(404)
+    if c.file_path and Path(c.file_path).exists():
+        Path(c.file_path).unlink(missing_ok=True)
+    db.delete(c)
+    _audit(db, request, "contract_delete", application_id=None, detail={"staff_id": staff_id, "contract_id": contract_id})
+    db.commit()
+    return RedirectResponse(f"/admin/staff/{staff_id}?msg=合同已删除", status_code=303)
+
+
+@app.get("/admin/staff/{staff_id}/contracts/{contract_id}/file")
+async def admin_contract_file(
+    staff_id: int, contract_id: int, request: Request, db: Session = Depends(get_db),
+):
+    require_admin(request)
+    c = db.query(Contract).filter(Contract.id == contract_id, Contract.staff_id == staff_id).first()
+    if not c or not c.file_path or not Path(c.file_path).exists():
+        raise HTTPException(404)
+    return FileResponse(c.file_path, filename=c.original_filename or Path(c.file_path).name)
 
 
 @app.post("/admin/backup/create", name="admin_backup_create")

@@ -161,6 +161,63 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class StaffStatus(str, enum.Enum):
+    probation = "probation"   # 试用中
+    active = "active"         # 在职
+    resigned = "resigned"     # 离职
+
+
+class ContractType(str, enum.Enum):
+    formal = "formal"         # 正式合同
+    probation = "probation"   # 试用期合同
+    parttime = "parttime"     # 兼职合同
+    labor = "labor"           # 劳务合同
+
+
+class Staff(Base):
+    __tablename__ = "staff"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(80))
+    gender: Mapped[str] = mapped_column(String(10), default="")          # male / female
+    birthday: Mapped[str] = mapped_column(String(20), default="")        # YYYY-MM-DD
+    phone: Mapped[str] = mapped_column(String(40), default="")
+    id_number: Mapped[str] = mapped_column(String(40), default="")
+    store: Mapped[str] = mapped_column(String(80), default="")           # 东环店 / 横岗店
+    position: Mapped[str] = mapped_column(String(80), default="")        # 前台/医生/美容师/助理/其他
+    hire_date: Mapped[str] = mapped_column(String(20), default="")       # YYYY-MM-DD
+    probation_end_date: Mapped[str] = mapped_column(String(20), default="")
+    status: Mapped[str] = mapped_column(String(20), default=StaffStatus.active.value)
+    resign_date: Mapped[str] = mapped_column(String(20), default="")
+    resign_reason: Mapped[str] = mapped_column(Text, default="")
+    emergency_contact_name: Mapped[str] = mapped_column(String(80), default="")
+    emergency_contact_phone: Mapped[str] = mapped_column(String(40), default="")
+    emergency_contact_relation: Mapped[str] = mapped_column(String(40), default="")
+    admin_user_id = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    admin_user = relationship("AdminUser", backref="staff_profile", foreign_keys=[admin_user_id])
+    contracts = relationship("Contract", back_populates="staff", cascade="all, delete-orphan")
+
+
+class Contract(Base):
+    __tablename__ = "contracts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id", ondelete="CASCADE"))
+    contract_type: Mapped[str] = mapped_column(String(20), default=ContractType.formal.value)
+    start_date: Mapped[str] = mapped_column(String(20), default="")     # YYYY-MM-DD
+    end_date: Mapped[str] = mapped_column(String(20), default="")       # 空=无固定期限
+    file_path: Mapped[str] = mapped_column(String(512), default="")
+    original_filename: Mapped[str] = mapped_column(String(255), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    staff = relationship("Staff", back_populates="contracts")
+
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
 

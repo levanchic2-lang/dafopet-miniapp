@@ -7,55 +7,51 @@
   {% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
   {% if err %}<div class="msg err">{{ err }}</div>{% endif %}
 
-  <!-- 账号列表 -->
-  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;margin-top:1rem;">
+  <!-- 在职账号 -->
+  <h2 style="font-size:1rem;font-weight:700;margin:1.2rem 0 0.6rem;">启用中账号（{{ active_users|length }}）</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
     <thead>
       <tr style="border-bottom:2px solid var(--border);">
         <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">用户名</th>
         <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">角色</th>
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">状态</th>
         <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">创建时间</th>
         <th style="padding:0.5rem 0.75rem;"></th>
       </tr>
     </thead>
     <tbody>
-      {% for u in users %}
-      <tr style="border-bottom:1px solid var(--border);{% if not u.is_active %}opacity:0.55;{% endif %}">
+      {% for u in active_users %}
+      <tr style="border-bottom:1px solid var(--border);">
         <td style="padding:0.55rem 0.75rem;">
           {{ u.username }}
           {% if u.username == current_username %}<span style="font-size:0.75rem;color:var(--muted);margin-left:6px;">（当前）</span>{% endif %}
         </td>
         <td style="padding:0.55rem 0.75rem;">
-          {% if u.role == 'superadmin' %}
-            <span class="badge b-done">超级管理员</span>
+          <!-- 角色下拉（提交即改） -->
+          {% if u.username != current_username %}
+          <form method="post" action="/admin/users/{{ u.id }}/set-role" style="margin:0;display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <select name="role" onchange="this.form.submit()"
+              style="font-size:0.82rem;padding:0.2rem 0.4rem;border-radius:6px;border:1px solid var(--border-strong);background:var(--card);cursor:pointer;">
+              <option value="staff" {% if u.role == 'staff' %}selected{% endif %}>员工</option>
+              <option value="superadmin" {% if u.role == 'superadmin' %}selected{% endif %}>超级管理员</option>
+            </select>
+          </form>
           {% else %}
-            <span class="badge b-pending">员工</span>
-          {% endif %}
-        </td>
-        <td style="padding:0.55rem 0.75rem;">
-          {% if u.is_active %}
-            <span class="badge b-ok">启用</span>
-          {% else %}
-            <span class="badge b-no">已停用</span>
+            {% if u.role == 'superadmin' %}<span class="badge b-done">超级管理员</span>{% else %}<span class="badge b-pending">员工</span>{% endif %}
           {% endif %}
         </td>
         <td style="padding:0.55rem 0.75rem;color:var(--muted);">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
         <td style="padding:0.55rem 0.75rem;text-align:right;">
           <div style="display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;">
-            <!-- 停用 / 启用 -->
             {% if u.username != current_username %}
             <form method="post" action="/admin/users/{{ u.id }}/toggle" style="margin:0;">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              <button type="submit" class="secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;">
-                {{ '停用' if u.is_active else '启用' }}
-              </button>
+              <button type="submit" class="secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;">停用</button>
             </form>
             {% endif %}
-            <!-- 重置密码 -->
             <button type="button" class="secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;"
               onclick="toggleReset({{ u.id }})">重置密码</button>
           </div>
-          <!-- 重置密码表单（折叠） -->
           <div id="reset-{{ u.id }}" style="display:none;margin-top:0.5rem;">
             <form method="post" action="/admin/users/{{ u.id }}/reset-password"
                   style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
@@ -63,7 +59,7 @@
               <input type="password" name="new_password" placeholder="新密码（至少6位）"
                      required minlength="6"
                      style="width:160px;font-size:0.85rem;padding:0.3rem 0.55rem;" />
-              <button type="submit" style="font-size:0.8rem;padding:0.3rem 0.7rem;">确认重置</button>
+              <button type="submit" style="font-size:0.8rem;padding:0.3rem 0.7rem;">确认</button>
               <button type="button" class="secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;"
                 onclick="toggleReset({{ u.id }})">取消</button>
             </form>
@@ -71,14 +67,36 @@
         </td>
       </tr>
       {% else %}
-      <tr>
-        <td colspan="5" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">
-          暂无账号，请在下方创建第一个账号。
-        </td>
-      </tr>
+      <tr><td colspan="4" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">暂无启用账号</td></tr>
       {% endfor %}
     </tbody>
   </table>
+
+  <!-- 停用账号（折叠） -->
+  {% if inactive_users %}
+  <details style="margin-top:1.2rem;">
+    <summary style="cursor:pointer;font-size:0.9rem;font-weight:600;color:var(--muted);user-select:none;">
+      已停用账号（{{ inactive_users|length }}）▸ 点击展开
+    </summary>
+    <table style="width:100%;border-collapse:collapse;font-size:0.9rem;margin-top:0.6rem;opacity:0.65;">
+      <tbody>
+        {% for u in inactive_users %}
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.5rem 0.75rem;">{{ u.username }}</td>
+          <td style="padding:0.5rem 0.75rem;">{% if u.role == 'superadmin' %}<span class="badge b-done">超级管理员</span>{% else %}<span class="badge b-pending">员工</span>{% endif %}</td>
+          <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+          <td style="padding:0.5rem 0.75rem;text-align:right;">
+            <form method="post" action="/admin/users/{{ u.id }}/toggle" style="margin:0;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <button type="submit" class="secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;">启用</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
 </div>
 
 <!-- 新建账号 -->
@@ -89,13 +107,11 @@
     <div class="row2">
       <div>
         <label for="new_username">用户名</label>
-        <input type="text" id="new_username" name="username" required autocomplete="off"
-               placeholder="字母、数字、下划线" />
+        <input type="text" id="new_username" name="username" required autocomplete="off" placeholder="可用中文或英文" />
       </div>
       <div>
         <label for="new_password">初始密码（至少6位）</label>
-        <input type="password" id="new_password" name="password" required minlength="6"
-               autocomplete="new-password" />
+        <input type="password" id="new_password" name="password" required minlength="6" autocomplete="new-password" />
       </div>
     </div>
     <label for="new_role">角色</label>

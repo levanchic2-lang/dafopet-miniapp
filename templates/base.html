@@ -160,6 +160,9 @@
         <a href="/showcase">公布展示</a>
         <a href="/admin/appointments">预约管理</a>
         <a href="/admin">医院后台</a>
+        {% if request.session.get('admin') %}
+        <a href="/admin/staff">员工管理</a>
+        {% endif %}
         {% if request.session.get('admin_role') == 'superadmin' or (request.session.get('admin') and not request.session.get('admin_role')) %}
         <a href="/admin/users">账号管理</a>
         {% endif %}

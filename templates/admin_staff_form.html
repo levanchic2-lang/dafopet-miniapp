@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="max-width:680px;margin:0 auto;">
+  <h1>{{ title }}</h1>
+
+  {% if err %}<div class="msg err">{{ err }}</div>{% endif %}
+
+  <form method="post" action="{{ '/admin/staff/' + staff.id|string + '/edit' if staff else '/admin/staff/create' }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+    <h2 style="font-size:1rem;font-weight:700;margin:1.2rem 0 0.4rem;border-bottom:1px solid var(--border);padding-bottom:0.4rem;">基本信息</h2>
+    <div class="row2">
+      <div>
+        <label for="name">姓名 <span style="color:#e00;">*</span></label>
+        <input type="text" id="name" name="name" required value="{{ staff.name if staff else '' }}" />
+      </div>
+      <div>
+        <label for="gender">性别</label>
+        <select id="gender" name="gender">
+          <option value="" {% if not staff or not staff.gender %}selected{% endif %}>—</option>
+          <option value="male" {% if staff and staff.gender == 'male' %}selected{% endif %}>男</option>
+          <option value="female" {% if staff and staff.gender == 'female' %}selected{% endif %}>女</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label for="birthday">生日</label>
+        <input type="date" id="birthday" name="birthday" value="{{ staff.birthday if staff else '' }}" />
+      </div>
+      <div>
+        <label for="phone">手机号</label>
+        <input type="tel" id="phone" name="phone" value="{{ staff.phone if staff else '' }}" />
+      </div>
+    </div>
+    <div>
+      <label for="id_number">身份证号</label>
+      <input type="text" id="id_number" name="id_number" value="{{ staff.id_number if staff else '' }}" autocomplete="off" />
+    </div>
+
+    <h2 style="font-size:1rem;font-weight:700;margin:1.4rem 0 0.4rem;border-bottom:1px solid var(--border);padding-bottom:0.4rem;">工作信息</h2>
+    <div class="row2">
+      <div>
+        <label for="store">所在门店</label>
+        <select id="store" name="store">
+          <option value="">—</option>
+          {% for opt in store_options %}
+          <option value="{{ opt }}" {% if staff and staff.store == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="position">职位</label>
+        <select id="position" name="position">
+          <option value="">—</option>
+          {% for opt in position_options %}
+          <option value="{{ opt }}" {% if staff and staff.position == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label for="hire_date">入职日期</label>
+        <input type="date" id="hire_date" name="hire_date" value="{{ staff.hire_date if staff else '' }}" />
+      </div>
+      <div>
+        <label for="probation_end_date">试用期结束日期</label>
+        <input type="date" id="probation_end_date" name="probation_end_date" value="{{ staff.probation_end_date if staff else '' }}" />
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label for="status">在职状态</label>
+        <select id="status" name="status" onchange="toggleResign(this.value)">
+          <option value="probation" {% if staff and staff.status == 'probation' %}selected{% endif %}>试用中</option>
+          <option value="active" {% if not staff or staff.status == 'active' %}selected{% endif %}>在职</option>
+          <option value="resigned" {% if staff and staff.status == 'resigned' %}selected{% endif %}>离职</option>
+        </select>
+      </div>
+      <div>
+        <label for="admin_user_id">关联后台账号</label>
+        <select id="admin_user_id" name="admin_user_id">
+          <option value="">— 不关联 —</option>
+          {% for u in admin_users %}
+          <option value="{{ u.id }}" {% if staff and staff.admin_user_id == u.id %}selected{% endif %}>
+            {{ u.username }}（{{ '超级管理员' if u.role == 'superadmin' else '员工' }}）
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- 离职信息（仅离职时显示） -->
+    <div id="resign-section" style="display:{% if staff and staff.status == 'resigned' %}block{% else %}none{% endif %};">
+      <div class="row2">
+        <div>
+          <label for="resign_date">离职日期</label>
+          <input type="date" id="resign_date" name="resign_date" value="{{ staff.resign_date if staff else '' }}" />
+        </div>
+        <div>
+          <label for="resign_reason">离职原因</label>
+          <input type="text" id="resign_reason" name="resign_reason" value="{{ staff.resign_reason if staff else '' }}" />
+        </div>
+      </div>
+    </div>
+
+    <h2 style="font-size:1rem;font-weight:700;margin:1.4rem 0 0.4rem;border-bottom:1px solid var(--border);padding-bottom:0.4rem;">紧急联系人</h2>
+    <div class="row2" style="grid-template-columns:1fr 1fr 1fr;">
+      <div>
+        <label for="ec_name">姓名</label>
+        <input type="text" id="ec_name" name="emergency_contact_name" value="{{ staff.emergency_contact_name if staff else '' }}" />
+      </div>
+      <div>
+        <label for="ec_phone">电话</label>
+        <input type="tel" id="ec_phone" name="emergency_contact_phone" value="{{ staff.emergency_contact_phone if staff else '' }}" />
+      </div>
+      <div>
+        <label for="ec_rel">关系</label>
+        <input type="text" id="ec_rel" name="emergency_contact_relation" placeholder="如：配偶、父母" value="{{ staff.emergency_contact_relation if staff else '' }}" />
+      </div>
+    </div>
+
+    <h2 style="font-size:1rem;font-weight:700;margin:1.4rem 0 0.4rem;border-bottom:1px solid var(--border);padding-bottom:0.4rem;">备注</h2>
+    <textarea name="notes" rows="3" placeholder="其他备注信息…">{{ staff.notes if staff else '' }}</textarea>
+
+    <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap;">
+      <button type="submit">{{ '保存修改' if staff else '创建员工档案' }}</button>
+      <a href="{{ '/admin/staff/' + staff.id|string if staff else '/admin/staff' }}" class="btn secondary">取消</a>
+    </div>
+  </form>
+</div>
+
+{% block scripts %}
+<script>
+function toggleResign(val) {
+  document.getElementById('resign-section').style.display = val === 'resigned' ? 'block' : 'none';
+}
+</script>
+{% endblock %}
+{% endblock %}
