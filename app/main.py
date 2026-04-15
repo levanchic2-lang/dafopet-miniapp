@@ -1587,13 +1587,15 @@ def _beauty_slots_for_date(
 
 # ── 门诊/手术容量规则 ─────────────────────────────────────────────────────────
 # 每门店、每时段（上午/下午/晚上）的总容量单位数上限
-_SLOT_CAPACITY_MAX = 9
+# 各时段容量上限（按时长等比，每小时 3 单位）
+# 上午 3h=9，下午 6h=18，晚上 4h=12
+_SLOT_CAPACITY = {
+    "morning":   9,
+    "afternoon": 18,
+    "evening":   12,
+    "other":     9,
+}
 # 疫苗/驱虫 = 1 单位；普通门诊 = 3 单位；TNR/手术 = 4 单位；美容 = 0（不参与）
-# 设计组合举例：
-#   3 个普通门诊           3×3 = 9
-#   2 台 TNR/手术         4×2 = 8 ≤ 9  ✅（TNR 另有每日2台上限）
-#   1 台 TNR + 1 个门诊   4+3 = 7 ≤ 9
-#   9 个疫苗/驱虫          1×9 = 9
 
 _OUTPATIENT_SERVICES = [
     "疫苗/驱虫", "体检", "呼吸道", "胃肠道", "泌尿道",
@@ -1676,8 +1678,9 @@ def _check_slot_capacity(
     if exclude_id:
         q = q.filter(Appointment.id != exclude_id)
 
+    slot_max = _SLOT_CAPACITY.get(slot_key, 9)
     used = sum(_capacity_units(a.category, a.service_name or "") for a in q.all())
-    avail = _SLOT_CAPACITY_MAX - used
+    avail = slot_max - used
 
     if avail < new_units:
         type_zh = (
@@ -1685,7 +1688,7 @@ def _check_slot_capacity(
             else ("疫苗/驱虫" if new_units == 1 else "门诊")
         )
         if avail <= 0:
-            return f"该门店 {slot_zh}时段预约容量已满（上限 {_SLOT_CAPACITY_MAX} 单位），请选择其他时段或日期。"
+            return f"该门店 {slot_zh}时段预约容量已满（上限 {slot_max} 单位），请选择其他时段或日期。"
         return (
             f"该门店 {slot_zh}时段剩余容量不足：剩余 {avail} 单位，"
             f"此{type_zh}需要 {new_units} 单位，请选择其他时段或日期。"
