@@ -136,11 +136,11 @@
       请填写实际申请人（猫主管/喂养人）的联系方式，用于责任追溯与紧急联络。
     </view>
     <view class="label" style="margin-top:0;">实际申请人姓名</view>
-    <input class="input" value="{{proxyName}}" placeholder="实际负责喂养的人" placeholder-class="placeholder-sm" bindinput="onProxyName" />
+    <input class="input input-lg" value="{{proxyName}}" placeholder="实际负责喂养的人" placeholder-class="placeholder-sm" bindinput="onProxyName" />
     <view class="label">实际申请人手机号</view>
-    <input class="input" type="number" maxlength="11" value="{{proxyPhone}}" placeholder="11位手机号" placeholder-class="placeholder-sm" bindinput="onProxyPhone" />
+    <input class="input input-lg" type="number" maxlength="11" value="{{proxyPhone}}" placeholder="11位手机号" placeholder-class="placeholder-sm" bindinput="onProxyPhone" />
     <view class="label">与实际申请人关系</view>
-    <picker class="picker" mode="selector" range="{{proxyRelationOptions}}" value="{{proxyRelationIndex}}" bindchange="onProxyRelation">
+    <picker class="picker picker-lg" mode="selector" range="{{proxyRelationOptions}}" value="{{proxyRelationIndex}}" bindchange="onProxyRelation">
       <view>{{proxyRelationOptions[proxyRelationIndex]}}</view>
     </picker>
     <view style="margin-top:16rpx;">
