@@ -3253,6 +3253,70 @@ async def api_wechat_appointment_cancel(
     return {"ok": True, "id": appointment_id}
 
 
+@app.post("/api/wechat/appointments/{appointment_id}/get")
+async def api_wechat_appointment_get(
+    appointment_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    """小程序端获取单条预约详情（openid 校验）。"""
+    openid = await _resolve_wechat_openid(payload)
+    row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not row:
+        raise HTTPException(404, "预约记录不存在")
+    if (row.wechat_openid or "") != openid:
+        raise HTTPException(403, "无权查看此预约")
+    return _serialize_appointment(row)
+
+
+@app.post("/api/wechat/appointments/{appointment_id}/update")
+async def api_wechat_appointment_update(
+    appointment_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    """小程序端修改自己的预约（仅限 pending 状态，openid 校验，时段容量重新检验）。"""
+    openid = await _resolve_wechat_openid(payload)
+    row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not row:
+        raise HTTPException(404, "预约记录不存在")
+    if (row.wechat_openid or "") != openid:
+        raise HTTPException(403, "无权操作此预约")
+    if row.status != AppointmentStatus.pending.value:
+        raise HTTPException(400, "只有「待确认」状态的预约才能修改，如需调整请联系医院")
+
+    new_date = str(payload.get("appointment_date", "") or row.appointment_date).strip()
+    new_time = str(payload.get("appointment_time", "") or row.appointment_time).strip()
+
+    # 若日期或时间有变，重新做容量检查（exclude 自身，避免自我碰撞）
+    if new_date != row.appointment_date or new_time != row.appointment_time:
+        err = _check_slot_capacity(
+            db, row.store, new_date, new_time,
+            row.category, row.service_name or "",
+            exclude_id=appointment_id,
+        )
+        if err:
+            raise HTTPException(400, err)
+
+    row.appointment_date = new_date
+    row.appointment_time = new_time
+    if "customer_name" in payload and payload["customer_name"]:
+        row.customer_name = str(payload["customer_name"])[:80]
+    if "phone" in payload and payload["phone"]:
+        row.phone = str(payload["phone"])[:20]
+    if "pet_name" in payload and payload["pet_name"]:
+        row.pet_name = str(payload["pet_name"])[:80]
+    if "pet_gender" in payload and payload["pet_gender"]:
+        row.pet_gender = str(payload["pet_gender"])[:20]
+    if "notes" in payload:
+        row.notes = str(payload.get("notes") or "")[:500]
+
+    row.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(row)
+    return {"ok": True, "appointment": _serialize_appointment(row)}
+
+
 @app.post("/api/wechat/claim-apps")
 async def api_wechat_claim_apps(payload: dict = Body(...), db: Session = Depends(get_db)):
     """

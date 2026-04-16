@@ -56,6 +56,12 @@ Page({
     }
   },
 
+  onEditAppt(e) {
+    const id = Number(e.currentTarget.dataset.id || 0);
+    if (!id) return;
+    wx.navigateTo({ url: `/pages/appointment/index?mode=edit&id=${id}` });
+  },
+
   onCancelAppt(e) {
     const id = Number(e.currentTarget.dataset.id || 0);
     const idx = Number(e.currentTarget.dataset.index || 0);

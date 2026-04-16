@@ -56,6 +56,8 @@ Page({
     beautySlotLoading: false,
     beautySlotError: "",
     beautyDisclaimer: "以上占用时间为估算时间。如动物不配合或毛量超出预估，实际服务时长可能有所浮动，具体以门店实际执行时间为准。",
+    editMode: false,
+    editApptId: 0,
     form: {
       category: "",
       service_name: "",
@@ -82,6 +84,10 @@ Page({
   },
 
   onLoad(options) {
+    if (options && options.mode === 'edit' && options.id) {
+      this._editId = Number(options.id);
+      this.setData({ editMode: true, editApptId: this._editId });
+    }
     if (options) {
       this._prefill = {};
       if (options.from_app)      this._prefill.related_application_id = options.from_app;
@@ -169,6 +175,10 @@ Page({
         "form.coat_length": isBeauty ? (BEAUTY_COAT_OPTIONS[0] || "") : "",
       });
       this._applyPrefill(categories, stores, petGenders);
+      // 编辑模式：加载原预约数据并覆盖预填
+      if (this._editId) {
+        this._loadEditData(categories, stores, petGenders);
+      }
     } catch (e) {
       this.setData({ loading: false });
       wx.showModal({
@@ -278,6 +288,54 @@ Page({
     if (serviceName.indexOf("犬") >= 0) return BEAUTY_SIZE_DOG;
     if (serviceName.indexOf("猫") >= 0) return BEAUTY_SIZE_CAT;
     return [];
+  },
+
+  async _loadEditData(categories, stores, petGenders) {
+    try {
+      const openid = await this.ensureOpenid();
+      const appt = await postJson(`/api/wechat/appointments/${this._editId}/get`, { openid });
+      const patch = {
+        "form.customer_name":    appt.customer_name  || "",
+        "form.phone":            appt.phone_masked   || "",   // 脱敏显示，用户可重填
+        "form.pet_name":         appt.pet_name       || "",
+        "form.pet_gender":       appt.pet_gender     || "unknown",
+        "form.appointment_date": appt.appointment_date || "",
+        "form.appointment_time": appt.appointment_time || "",
+        "form.notes":            appt.notes          || "",
+        "form.category":         appt.category       || "",
+        "form.service_name":     appt.service_name   || "",
+        "form.store":            appt.store          || "",
+        "form.related_application_id": String(appt.related_application_id || ""),
+      };
+      // 同步 storeIndex
+      const sIdx = stores.indexOf(appt.store || "");
+      if (sIdx >= 0) patch.storeIndex = sIdx;
+      // 同步 petGenderIndex
+      const gIdx = petGenders.findIndex(g => g.value === appt.pet_gender);
+      if (gIdx >= 0) patch.petGenderIndex = gIdx;
+      // 同步 categoryIndex（category 和 service 锁定，只影响显示）
+      const cIdx = categories.findIndex(c => c.value === appt.category);
+      if (cIdx >= 0) {
+        patch.categoryIndex = cIdx;
+        const cat = categories[cIdx];
+        patch.selectedCategoryMeta = cat;
+        const svcs = Array.isArray(cat.services) ? cat.services : [];
+        patch.serviceOptions = svcs;
+        const svcIdx = svcs.findIndex(s => s.name === appt.service_name);
+        patch.serviceIndex = svcIdx >= 0 ? svcIdx : 0;
+        if (svcIdx >= 0) patch.selectedServiceMeta = svcs[svcIdx];
+      }
+      // 手机号需用户重新输入（脱敏），提示用户
+      patch["form.phone"] = "";
+      this.setData(patch);
+      wx.showToast({ title: "预约信息已加载", icon: "none", duration: 1500 });
+    } catch (e) {
+      wx.showModal({
+        title: "加载预约信息失败",
+        content: (e && (e.detail || e.message)) || "请返回重试",
+        showCancel: false
+      });
+    }
   },
 
   _applyPrefill(categories, stores, petGenders) {
@@ -486,25 +544,48 @@ Page({
       }
       const openid = await this.ensureOpenid();
       const payload = Object.assign({}, this.data.form, { openid });
-      // 美容：附加字段
-      if (this.data.isBeauty) {
-        const checked = this.data.beautyAddonOptions.filter(a => a.checked).map(a => a.name);
-        payload.addon_services = checked.join(",");
-        payload.pet_size    = this.data.form.pet_size;
-        payload.coat_length = this.data.form.coat_length;
-      }
-      const res = await postJson("/api/appointments/create", payload);
-      // 预约提交成功后，订阅预约状态通知
-      try {
-        const _c = (k) => { try { return wx.getStorageSync(k) || ""; } catch(e2) { return ""; } };
-        const apptTmpl = _c("WECHAT_TMPL_APPOINTMENT");
-        if (apptTmpl) await wx.requestSubscribeMessage({ tmplIds: [apptTmpl] });
-      } catch(e2) { /* 订阅失败不阻断跳转 */ }
-      wx.showToast({ title: "预约已提交", icon: "success" });
-      if (res && res.appointment && res.appointment.id) {
-        wx.navigateTo({ url: `/pages/appointment/list?highlight=${res.appointment.id}` });
+
+      if (this.data.editMode && this._editId) {
+        // ── 修改模式：只更新允许的字段 ──
+        if (!payload.phone || !/^1\d{10}$/.test(payload.phone.trim())) {
+          wx.showModal({ title: "请填写正确的11位手机号", showCancel: false });
+          this.setData({ submitting: false });
+          return;
+        }
+        const res = await postJson(`/api/wechat/appointments/${this._editId}/update`, {
+          openid,
+          appointment_date: payload.appointment_date,
+          appointment_time: payload.appointment_time,
+          customer_name:    payload.customer_name,
+          phone:            payload.phone.trim(),
+          pet_name:         payload.pet_name,
+          pet_gender:       payload.pet_gender,
+          notes:            payload.notes,
+        });
+        wx.showToast({ title: "修改成功", icon: "success" });
+        wx.navigateBack();
       } else {
-        wx.navigateTo({ url: "/pages/appointment/list" });
+        // ── 新建模式 ──
+        // 美容：附加字段
+        if (this.data.isBeauty) {
+          const checked = this.data.beautyAddonOptions.filter(a => a.checked).map(a => a.name);
+          payload.addon_services = checked.join(",");
+          payload.pet_size    = this.data.form.pet_size;
+          payload.coat_length = this.data.form.coat_length;
+        }
+        const res = await postJson("/api/appointments/create", payload);
+        // 预约提交成功后，订阅预约状态通知
+        try {
+          const _c = (k) => { try { return wx.getStorageSync(k) || ""; } catch(e2) { return ""; } };
+          const apptTmpl = _c("WECHAT_TMPL_APPOINTMENT");
+          if (apptTmpl) await wx.requestSubscribeMessage({ tmplIds: [apptTmpl] });
+        } catch(e2) { /* 订阅失败不阻断跳转 */ }
+        wx.showToast({ title: "预约已提交", icon: "success" });
+        if (res && res.appointment && res.appointment.id) {
+          wx.navigateTo({ url: `/pages/appointment/list?highlight=${res.appointment.id}` });
+        } else {
+          wx.navigateTo({ url: "/pages/appointment/list" });
+        }
       }
     } catch (e) {
       wx.showModal({

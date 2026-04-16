@@ -26,9 +26,11 @@
       <view wx:if="{{item.coat_length}}" class="line">毛发：{{item.coat_length}}</view>
       <view wx:if="{{item.notes}}" class="line">备注：{{item.notes}}</view>
       <view class="line line-muted">创建时间：{{item.created_at}}</view>
-      <!-- 取消按钮（仅 pending/confirmed 可取消） -->
-      <view wx:if="{{item.status === 'pending' || item.status === 'confirmed'}}" style="margin-top:16rpx;">
-        <button class="btn-cancel" data-id="{{item.id}}" data-index="{{idx}}" bindtap="onCancelAppt" loading="{{item.cancelling}}">取消预约</button>
+      <!-- 操作按钮 -->
+      <view wx:if="{{item.status === 'pending' || item.status === 'confirmed'}}" style="margin-top:16rpx;display:flex;gap:16rpx;">
+        <!-- 修改按钮：仅待确认可修改 -->
+        <button wx:if="{{item.status === 'pending'}}" class="btn-edit" data-id="{{item.id}}" bindtap="onEditAppt" style="flex:1;">修改预约</button>
+        <button class="btn-cancel" data-id="{{item.id}}" data-index="{{idx}}" bindtap="onCancelAppt" loading="{{item.cancelling}}" style="flex:1;">取消预约</button>
       </view>
     </view>
   </block>

@@ -85,3 +85,13 @@
   border: 1rpx solid #fca5a5;
   line-height: 1.5;
 }
+
+.btn-edit {
+  font-size: 26rpx;
+  padding: 12rpx 28rpx;
+  border-radius: 12rpx;
+  background: #f0f9ff;
+  color: #0369a1;
+  border: 1rpx solid #7dd3fc;
+  line-height: 1.5;
+}
