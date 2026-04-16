@@ -737,18 +737,16 @@ def _appointment_catalog() -> dict:
             {
                 "value": AppointmentCategory.surgery.value,
                 "label": "手术预约",
-                "description": "适合绝育、骨科、软组织、眼科、神经外科等各类手术预约，以及术前评估和术后复查。",
+                "description": "适合绝育、骨科、软组织、眼科、神经外科等各类手术预约。",
                 "booking_tip": "请使用下方「预约日期 / 预约时间」自主选择到院时段；后续可按手术台与麻醉安排细化。",
                 "supports_related_application": False,
                 "time_slots": [],
                 "services": [
-                    {"name": "绝育手术",   "duration_minutes": 60,  "description": "用于常规绝育手术预约。"},
-                    {"name": "骨科手术",   "duration_minutes": 120, "description": "用于骨折、关节、脊椎等骨科手术预约。"},
-                    {"name": "软组织手术", "duration_minutes": 90,  "description": "用于皮肤、肿瘤切除、消化道等软组织手术预约。"},
-                    {"name": "眼科手术",   "duration_minutes": 60,  "description": "用于眼睑、角膜、晶体等眼科手术预约。"},
+                    {"name": "绝育手术",    "duration_minutes": 60,  "description": "用于常规绝育手术预约。"},
+                    {"name": "骨科手术",    "duration_minutes": 120, "description": "用于骨折、关节、脊椎等骨科手术预约。"},
+                    {"name": "软组织手术",  "duration_minutes": 90,  "description": "用于皮肤、肿瘤切除、消化道等软组织手术预约。"},
+                    {"name": "眼科手术",    "duration_minutes": 60,  "description": "用于眼睑、角膜、晶体等眼科手术预约。"},
                     {"name": "神经外科手术","duration_minutes": 120, "description": "用于脑部、脊髓等神经外科手术预约。"},
-                    {"name": "术前评估",   "duration_minutes": 30,  "description": "用于评估手术风险、检查准备条件。"},
-                    {"name": "术后复查",   "duration_minutes": 20,  "description": "用于术后恢复、伤口与用药情况复核。"},
                 ],
             },
             {
