@@ -2,6 +2,32 @@
   <view class="title">问题反馈</view>
   <view class="sub">遇到任何问题都可以在这里告诉我们，我们会尽快处理。可附上截图，便于我们排查。</view>
 
+  <!-- 联系方式 -->
+  <view class="contact-card">
+    <view class="contact-store-name">大风动物医院 · 东环店</view>
+    <view class="contact-line">
+      <text class="contact-key">座机</text><text>0755-28018071</text>
+    </view>
+    <view class="contact-line">
+      <text class="contact-key">手机</text><text>18026901718（微信同号）</text>
+    </view>
+    <view class="contact-line">
+      <text class="contact-key">地址</text><text>龙华区龙华街道建设东路聚豪国际A栋商铺8号</text>
+    </view>
+  </view>
+  <view class="contact-card" style="margin-top:16rpx;">
+    <view class="contact-store-name">大风动物医院 · 横岗店</view>
+    <view class="contact-line">
+      <text class="contact-key">座机</text><text>0755-28704890</text>
+    </view>
+    <view class="contact-line">
+      <text class="contact-key">手机</text><text>17820633031（微信同号）</text>
+    </view>
+    <view class="contact-line">
+      <text class="contact-key">地址</text><text>龙岗区横岗街道四联路隆盛花园S2商铺A1013号</text>
+    </view>
+  </view>
+
   <view class="label">问题描述</view>
   <textarea class="textarea" maxlength="1000" placeholder="请描述遇到的问题，如：提交失败、页面显示异常、功能无法使用等…" bindinput="onContentInput" bindblur="onContentBlur" value="{{content}}"></textarea>
 
