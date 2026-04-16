@@ -580,10 +580,12 @@ Page({
           const tmplIds = [];
           const apptTmpl = _c("WECHAT_TMPL_APPOINTMENT");
           if (apptTmpl) tmplIds.push(apptTmpl);
-          // TNR/手术类预约额外订阅手术提醒模板
+          // TNR/手术类预约额外订阅手术提醒 + 手术完成模板（共3个，微信上限）
           if (payload.category === "tnr" || payload.category === "surgery") {
             const reminderTmpl = _c("WECHAT_TMPL_SURGERY_REMINDER");
             if (reminderTmpl && !tmplIds.includes(reminderTmpl)) tmplIds.push(reminderTmpl);
+            const doneTmpl = _c("WECHAT_TMPL_SURGERY_DONE");
+            if (doneTmpl && !tmplIds.includes(doneTmpl)) tmplIds.push(doneTmpl);
           }
           if (tmplIds.length) await wx.requestSubscribeMessage({ tmplIds });
         } catch(e2) { /* 订阅失败不阻断跳转 */ }
