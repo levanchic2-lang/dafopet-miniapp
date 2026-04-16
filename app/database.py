@@ -55,6 +55,14 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN id_number VARCHAR(40) DEFAULT ''"))
             if "post_surgery_plan" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN post_surgery_plan VARCHAR(120) DEFAULT ''"))
+            if "is_proxy" not in names:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN is_proxy BOOLEAN DEFAULT 0"))
+            if "proxy_name" not in names:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN proxy_name VARCHAR(120) DEFAULT ''"))
+            if "proxy_phone" not in names:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN proxy_phone VARCHAR(40) DEFAULT ''"))
+            if "proxy_relation" not in names:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN proxy_relation VARCHAR(40) DEFAULT ''"))
 
             appointment_cols = conn.execute(text("PRAGMA table_info(appointments)")).fetchall()
             appointment_names = {c[1] for c in appointment_cols}

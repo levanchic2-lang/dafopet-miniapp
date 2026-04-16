@@ -1076,6 +1076,10 @@ async def api_apply_create(
     wechat_openid: str = Form(""),
     agree_ear_tip: str = Form("false"),
     agree_no_pet_fraud: str = Form("false"),
+    is_proxy: str = Form(""),
+    proxy_name: str = Form(""),
+    proxy_phone: str = Form(""),
+    proxy_relation: str = Form(""),
 ):
     ok_ear = agree_ear_tip.lower() in ("true", "1", "on", "yes")
     ok_fraud = agree_no_pet_fraud.lower() in ("true", "1", "on", "yes")
@@ -1115,6 +1119,10 @@ async def api_apply_create(
         health_note=f["health_note"],
         agree_ear_tip=ok_ear,
         agree_no_pet_fraud=ok_fraud,
+        is_proxy=is_proxy.lower() in ("true", "1", "on", "yes"),
+        proxy_name=proxy_name.strip()[:120],
+        proxy_phone=proxy_phone.strip()[:40],
+        proxy_relation=proxy_relation.strip()[:40],
         status=ApplicationStatus.draft.value,
     )
     db.add(app_row)

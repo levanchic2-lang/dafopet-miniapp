@@ -121,6 +121,37 @@
     <text wx:for="{{videos}}" wx:key="*this" class="tag">{{item}}</text>
   </view>
 
+  <!-- ── 代预约 ── -->
+  <view class="label">代预约</view>
+  <view class="addon-list">
+    <view class="addon-item {{isProxy ? 'addon-checked' : ''}}" bindtap="onToggleProxy">
+      <text class="addon-check">{{isProxy ? '✓' : ''}}</text>
+      <text>我是代他人申请</text>
+    </view>
+  </view>
+  <view wx:if="{{isProxy}}" class="proxy-info-card">
+    <view class="proxy-info-title">代申请人信息</view>
+    <view class="tip" style="margin-top:8rpx;margin-bottom:16rpx;font-size:22rpx;color:#9e7a30;">
+      请填写实际申请人（猫主管/喂养人）的联系方式，用于责任追溯与紧急联络。
+    </view>
+    <view class="label" style="margin-top:0;">实际申请人姓名</view>
+    <input class="input" value="{{proxyName}}" placeholder="实际负责喂养的人" placeholder-class="placeholder-sm" bindinput="onProxyName" />
+    <view class="label">实际申请人手机号</view>
+    <input class="input" type="number" maxlength="11" value="{{proxyPhone}}" placeholder="11位手机号" placeholder-class="placeholder-sm" bindinput="onProxyPhone" />
+    <view class="label">与实际申请人关系</view>
+    <picker class="picker" mode="selector" range="{{proxyRelationOptions}}" value="{{proxyRelationIndex}}" bindchange="onProxyRelation">
+      <view>{{proxyRelationOptions[proxyRelationIndex]}}</view>
+    </picker>
+    <view style="margin-top:16rpx;">
+      <checkbox-group bindchange="onProxyConsent">
+        <label class="check-line">
+          <checkbox value="consent" checked="{{proxyConsent}}" color="#262626" />
+          实际申请人已知悉本次代申请，并授权我提交此表单。
+        </label>
+      </checkbox-group>
+    </view>
+  </view>
+
   <view class="declare-panel">
     <view class="label declare-title">声明</view>
     <view class="declare-tags">

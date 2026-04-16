@@ -18,6 +18,48 @@
   margin-bottom: 0;
 }
 
+/* ── 代预约 ── */
+.addon-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 12rpx;
+}
+.addon-item {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 16rpx 24rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid #d9d9d9;
+  background: #fafafa;
+  font-size: 26rpx;
+  color: #333333;
+}
+.addon-item.addon-checked {
+  border-color: #171717;
+  background: #171717;
+  color: #ffffff;
+}
+.addon-check {
+  width: 28rpx;
+  height: 28rpx;
+  font-size: 22rpx;
+  line-height: 28rpx;
+  text-align: center;
+}
+.proxy-info-card {
+  margin-top: 16rpx;
+  padding: 24rpx;
+  background: #fffbeb;
+  border: 1rpx solid #fcd34d;
+  border-radius: 18rpx;
+}
+.proxy-info-title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #92400e;
+}
 /* 爱心展示内嵌入口 */
 .showcase-inline-btn {
   margin-top: 12rpx;

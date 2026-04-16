@@ -69,6 +69,12 @@ Page({
     notifyStatusText: "",
     openid: "",
     idConsent: false,
+    isProxy: false,
+    proxyName: "",
+    proxyPhone: "",
+    proxyRelationOptions: ["请选择关系", "家人", "朋友", "同事/员工代录", "志愿者", "其他"],
+    proxyRelationIndex: 0,
+    proxyConsent: false,
     districtNames: ["加载中…"],
     streetNames: ["请选择"],
     districtIndex: 0,
@@ -307,6 +313,15 @@ Page({
       "form.cat_gender": this.data.genderOptions[idx].value
     });
   },
+
+  onToggleProxy() {
+    this.setData({ isProxy: !this.data.isProxy, proxyName: "", proxyPhone: "", proxyRelationIndex: 0, proxyConsent: false });
+  },
+
+  onProxyName(e) { this.setData({ proxyName: e.detail.value }); },
+  onProxyPhone(e) { this.setData({ proxyPhone: e.detail.value.replace(/\D/g, "").slice(0, 11) }); },
+  onProxyRelation(e) { this.setData({ proxyRelationIndex: Number(e.detail.value) }); },
+  onProxyConsent(e) { this.setData({ proxyConsent: (e.detail.value || []).includes("consent") }); },
 
   onChecks(e) {
     const vals = e.detail.value || [];
@@ -608,6 +623,14 @@ Page({
       this.setData({ error: "请至少上传 1 张申请照片。" });
       return;
     }
+    // 代预约校验
+    const { isProxy, proxyName, proxyPhone, proxyRelationOptions, proxyRelationIndex, proxyConsent } = this.data;
+    if (isProxy) {
+      if (!proxyName.trim()) { this.setData({ error: "代预约：请填写实际申请人姓名。" }); return; }
+      if (!/^1\d{10}$/.test(proxyPhone.trim())) { this.setData({ error: "代预约：请填写实际申请人 11 位手机号。" }); return; }
+      if (proxyRelationIndex === 0) { this.setData({ error: "代预约：请选择与实际申请人的关系。" }); return; }
+      if (!proxyConsent) { this.setData({ error: "代预约：请勾选实际申请人已授权确认。" }); return; }
+    }
     if (!openid) {
       this.setData({ error: "请先点击「开启通知提醒」绑定账号后再提交（用于订单归属与推送通知）。" });
       return;
@@ -621,7 +644,7 @@ Page({
     this.setData({ submitting: true });
     const hnDraft = typeof this._healthNoteDraft === "string" ? this._healthNoteDraft : "";
     const form = hnDraft ? { ...this.data.form, health_note: hnDraft } : this.data.form;
-    const { checks, images, videos, openid } = this.data;
+    const { checks, images, videos, openid, isProxy, proxyName, proxyPhone, proxyRelationOptions, proxyRelationIndex } = this.data;
     const app = getApp();
 
     const requestForm = (url, data) =>
@@ -675,7 +698,11 @@ Page({
           id_number: idNorm,
           wechat_openid: openid,
           agree_ear_tip: checks.ear ? "true" : "false",
-          agree_no_pet_fraud: checks.fraud ? "true" : "false"
+          agree_no_pet_fraud: checks.fraud ? "true" : "false",
+          is_proxy: isProxy ? "true" : "false",
+          proxy_name: isProxy ? proxyName.trim() : "",
+          proxy_phone: isProxy ? proxyPhone.trim() : "",
+          proxy_relation: isProxy ? (proxyRelationOptions[proxyRelationIndex] || "") : ""
         }),
         12000,
         "创建申请"
