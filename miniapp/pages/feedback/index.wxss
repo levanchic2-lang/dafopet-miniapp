@@ -1,0 +1,9 @@
+.card { background:#fff; margin:24rpx; padding:28rpx; border-radius:24rpx; box-shadow:0 8rpx 24rpx rgba(0,0,0,0.04); }
+.title { font-size:36rpx; font-weight:700; color:#171717; }
+.sub { margin-top:12rpx; margin-bottom:20rpx; font-size:24rpx; line-height:1.6; color:#666; }
+.label { margin-top:20rpx; margin-bottom:10rpx; font-size:26rpx; color:#171717; font-weight:600; }
+.textarea { width:100%; min-height:200rpx; box-sizing:border-box; padding:22rpx 24rpx; border:1rpx solid #d9d9d9; border-radius:18rpx; background:#fafafa; font-size:28rpx; color:#171717; }
+.img-preview { display:flex; flex-wrap:wrap; gap:16rpx; margin-top:16rpx; }
+.img-item { position:relative; width:160rpx; height:120rpx; }
+.img-thumb { width:160rpx; height:120rpx; border-radius:10rpx; border:1rpx solid #e5e5e5; }
+.img-del { position:absolute; top:-10rpx; right:-10rpx; width:40rpx; height:40rpx; background:#ef4444; color:#fff; border-radius:50%; font-size:28rpx; line-height:40rpx; text-align:center; }

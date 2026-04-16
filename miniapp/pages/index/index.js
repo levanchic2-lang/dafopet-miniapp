@@ -772,5 +772,9 @@ Page({
 
   goShowcase() {
     wx.navigateTo({ url: "/pages/showcase/showcase" });
+  },
+
+  goFeedbackPage() {
+    wx.navigateTo({ url: "/pages/feedback/index" });
   }
 });

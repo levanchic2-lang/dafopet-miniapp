@@ -1,0 +1,26 @@
+<view class="card">
+  <view class="title">问题反馈</view>
+  <view class="sub">遇到任何问题都可以在这里告诉我们，我们会尽快处理。可附上截图，便于我们排查。</view>
+
+  <view class="label">问题描述</view>
+  <textarea class="textarea" maxlength="1000" placeholder="请描述遇到的问题，如：提交失败、页面显示异常、功能无法使用等…" bindinput="onContentInput" bindblur="onContentBlur" value="{{content}}"></textarea>
+
+  <view class="label">截图（可选，最多4张）</view>
+  <button class="btn secondary" bindtap="onPickImages" disabled="{{images.length >= 4}}">
+    {{images.length >= 4 ? '已达上限' : '选择截图'}}
+  </button>
+  <view class="img-preview" wx:if="{{images.length > 0}}">
+    <view wx:for="{{images}}" wx:key="*this" wx:for-index="i" class="img-item">
+      <image src="{{item}}" mode="aspectFill" class="img-thumb" />
+      <view class="img-del" data-i="{{i}}" bindtap="onDelImage">×</view>
+    </view>
+  </view>
+
+  <button class="btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onSubmit" style="margin-top:32rpx;">提交反馈</button>
+
+  <view wx:if="{{success}}" style="margin-top:20rpx;padding:20rpx;background:#f0fdf4;border-radius:12rpx;border:1rpx solid #bbf7d0;text-align:center;">
+    <view style="font-size:30rpx;font-weight:700;color:#166534;">✅ 反馈已提交</view>
+    <view style="font-size:24rpx;color:#15803d;margin-top:8rpx;">我们会尽快处理，感谢您的反馈！</view>
+  </view>
+  <view wx:if="{{error}}" style="margin-top:16rpx;color:#dc2626;font-size:26rpx;">{{error}}</view>
+</view>

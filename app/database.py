@@ -160,6 +160,21 @@ def _try_sqlite_migrations() -> None:
                     ")"
                 ))
 
+            feedback_cols = conn.execute(text("PRAGMA table_info(feedback)")).fetchall()
+            if not feedback_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS feedback ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "openid VARCHAR(64) DEFAULT '', "
+                    "content TEXT DEFAULT '', "
+                    "status VARCHAR(20) DEFAULT 'pending', "
+                    "admin_note TEXT DEFAULT '', "
+                    "image_paths TEXT DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "resolved_at DATETIME DEFAULT NULL"
+                    ")"
+                ))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

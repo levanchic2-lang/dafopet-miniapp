@@ -1737,6 +1737,15 @@ async def api_admin_pending_count(request: Request, db: Session = Depends(get_db
     return {"count": count}
 
 
+@app.get("/api/admin/feedback-count")
+async def api_admin_feedback_count(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return {"count": 0}
+    from app.models import Feedback
+    count = db.query(func.count(Feedback.id)).filter(Feedback.status == "pending").scalar() or 0
+    return {"count": count}
+
+
 @app.get("/admin/appointments", response_class=HTMLResponse)
 async def page_admin_appointments(
     request: Request,
@@ -3361,6 +3370,108 @@ async def api_wechat_appointment_update(
     db.commit()
     db.refresh(row)
     return {"ok": True, "appointment": _serialize_appointment(row)}
+
+
+@app.post("/api/wechat/feedback/create")
+async def api_wechat_feedback_create(payload: dict = Body(...), db: Session = Depends(get_db)):
+    from app.models import Feedback
+    openid = str((payload or {}).get("openid", "") or "").strip()
+    content = str((payload or {}).get("content", "") or "").strip()
+    if not content:
+        raise HTTPException(400, "请填写反馈内容")
+    fb = Feedback(openid=openid, content=content[:2000])
+    db.add(fb)
+    db.commit()
+    db.refresh(fb)
+    # create upload dir
+    fb_dir = Path(settings.upload_dir) / "feedback" / str(fb.id)
+    fb_dir.mkdir(parents=True, exist_ok=True)
+    return {"id": fb.id, "ok": True}
+
+
+@app.post("/api/wechat/feedback/{feedback_id}/upload")
+async def api_wechat_feedback_upload(
+    feedback_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    from app.models import Feedback
+    import json as _json
+    fb = db.get(Feedback, feedback_id)
+    if not fb:
+        raise HTTPException(404, "反馈记录不存在")
+    ext = Path(file.filename or "img.jpg").suffix.lower() or ".jpg"
+    safe_ext = ext if ext in (".jpg", ".jpeg", ".png", ".gif", ".webp") else ".jpg"
+    fb_dir = Path(settings.upload_dir) / "feedback" / str(feedback_id)
+    fb_dir.mkdir(parents=True, exist_ok=True)
+    existing = _json.loads(fb.image_paths or "[]")
+    if len(existing) >= 6:
+        raise HTTPException(400, "最多上传6张截图")
+    fname = f"{len(existing)+1}{safe_ext}"
+    dest = fb_dir / fname
+    content_bytes = await file.read()
+    dest.write_bytes(content_bytes)
+    stored = str(dest)
+    existing.append(stored)
+    fb.image_paths = _json.dumps(existing, ensure_ascii=False)
+    db.commit()
+    return {"ok": True, "path": stored}
+
+
+@app.get("/admin/feedback", response_class=HTMLResponse)
+async def admin_feedback_page(request: Request, status: str = "", db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login", status_code=303)
+    from app.models import Feedback
+    q = db.query(Feedback).order_by(Feedback.created_at.desc())
+    if status == "pending":
+        q = q.filter(Feedback.status == "pending")
+    elif status == "resolved":
+        q = q.filter(Feedback.status == "resolved")
+    items = q.limit(100).all()
+    # Build image URLs for each feedback
+    import json as _json
+    feed_list = []
+    for fb in items:
+        paths = _json.loads(fb.image_paths or "[]")
+        img_urls = []
+        for p in paths:
+            # Convert stored path to URL
+            try:
+                rel = Path(p).relative_to(Path(settings.upload_dir))
+                img_urls.append("/uploads/" + str(rel).replace("\\", "/"))
+            except Exception:
+                pass
+        feed_list.append({"fb": fb, "img_urls": img_urls})
+    pending_count = db.query(Feedback).filter(Feedback.status == "pending").count()
+    return templates.TemplateResponse("admin_feedback.html", {
+        "request": request,
+        "title": "客户反馈",
+        "feed_list": feed_list,
+        "pending_count": pending_count,
+        "status_filter": status,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/feedback/{feedback_id}/resolve")
+async def admin_feedback_resolve(
+    feedback_id: int,
+    request: Request,
+    admin_note: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    if not request.session.get("admin"):
+        raise HTTPException(403)
+    from app.models import Feedback
+    fb = db.get(Feedback, feedback_id)
+    if not fb:
+        raise HTTPException(404)
+    fb.status = "resolved"
+    fb.admin_note = admin_note.strip()[:500]
+    fb.resolved_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/feedback?msg=已处理#{feedback_id}", status_code=303)
 
 
 @app.post("/api/wechat/claim-apps")

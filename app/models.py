@@ -172,6 +172,23 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class FeedbackStatus(str, enum.Enum):
+    pending = "pending"
+    resolved = "resolved"
+
+
+class Feedback(Base):
+    __tablename__ = "feedback"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    openid: Mapped[str] = mapped_column(String(64), default="")
+    content: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    admin_note: Mapped[str] = mapped_column(Text, default="")
+    image_paths: Mapped[str] = mapped_column(Text, default="")  # JSON list of stored paths
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    resolved_at: Mapped[datetime] = mapped_column(DateTime, nullable=True, default=None)
+
+
 class StaffStatus(str, enum.Enum):
     probation = "probation"   # 试用中
     active = "active"         # 在职

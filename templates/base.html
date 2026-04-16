@@ -184,6 +184,7 @@
         <a href="/admin/users">账号管理</a>
         {% endif %}
         {% if request.session.get('admin') %}
+        <a href="/admin/feedback" id="nav-feedback-link">反馈<span id="nav-feedback-badge" class="nav-badge" style="display:none;background:#f97316;"></span></a>
         <a href="/admin/changelog">开发日志</a>
         {% endif %}
       </nav>
@@ -230,6 +231,20 @@
 
     updatePending();
     setInterval(updatePending, 60000); /* 每分钟刷新一次 */
+
+    function updateFeedback() {
+      fetch('/api/admin/feedback-count')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var n = data.count || 0;
+          var fb = document.getElementById('nav-feedback-badge');
+          if (!fb) return;
+          if (n > 0) { fb.textContent = n > 99 ? '99+' : n; fb.style.display = 'inline-flex'; }
+          else { fb.style.display = 'none'; }
+        }).catch(function() {});
+    }
+    updateFeedback();
+    setInterval(updateFeedback, 60000);
   })();
   </script>
   {% endif %}
