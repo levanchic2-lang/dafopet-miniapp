@@ -1997,6 +1997,51 @@ async def admin_logout(request: Request):
 
 # ── 账号管理（仅 superadmin）────────────────────────────────────────────
 
+@app.get("/admin/changelog", response_class=HTMLResponse)
+async def admin_changelog_page(request: Request):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login", status_code=303)
+    import subprocess, re
+    commits = []
+    try:
+        result = subprocess.run(
+            ["git", "log", "--format=%H|%h|%s|%an|%ad", "--date=format:%Y-%m-%d %H:%M", "-80"],
+            capture_output=True, text=True, timeout=8,
+            cwd=Path(__file__).parent.parent,
+        )
+        for line in result.stdout.strip().splitlines():
+            parts = line.split("|", 4)
+            if len(parts) == 5:
+                full_hash, short_hash, subject, author, date = parts
+                # 提取类型前缀（feat/fix/chore/…）
+                m = re.match(r"^(feat|fix|chore|refactor|docs|style|test|perf|build|ci|revert)(\(.+?\))?:\s*(.+)$", subject)
+                if m:
+                    kind = m.group(1)
+                    scope = (m.group(2) or "").strip("()")
+                    msg = m.group(3)
+                else:
+                    kind = "update"
+                    scope = ""
+                    msg = subject
+                commits.append({
+                    "full_hash": full_hash,
+                    "short_hash": short_hash,
+                    "subject": subject,
+                    "msg": msg,
+                    "kind": kind,
+                    "scope": scope,
+                    "author": author,
+                    "date": date,
+                })
+    except Exception as e:
+        commits = [{"short_hash": "—", "msg": f"无法读取 git log：{e}", "kind": "error", "scope": "", "author": "", "date": "", "subject": "", "full_hash": ""}]
+    return templates.TemplateResponse("admin_changelog.html", {
+        "request": request,
+        "title": "开发日志",
+        "commits": commits,
+    })
+
+
 @app.get("/admin/users", response_class=HTMLResponse)
 async def admin_users_page(
     request: Request,

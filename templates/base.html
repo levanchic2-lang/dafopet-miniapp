@@ -183,6 +183,9 @@
         {% if request.session.get('admin_role') == 'superadmin' or (request.session.get('admin') and not request.session.get('admin_role')) %}
         <a href="/admin/users">账号管理</a>
         {% endif %}
+        {% if request.session.get('admin') %}
+        <a href="/admin/changelog">开发日志</a>
+        {% endif %}
       </nav>
     </header>
     <div id="pending-banner" class="pending-banner" style="display:none;">

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+.cl-header {
+  margin-bottom: 1.5rem;
+}
+.cl-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #171717;
+  margin: 0 0 .3rem;
+}
+.cl-header p {
+  font-size: .85rem;
+  color: #666;
+  margin: 0;
+}
+
+.cl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.cl-item {
+  display: grid;
+  grid-template-columns: 90px 72px 1fr;
+  align-items: start;
+  gap: 0;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 0;
+}
+.cl-item:last-child { border-bottom: none; }
+
+.cl-date {
+  padding: .75rem 1rem;
+  font-size: .78rem;
+  color: #888;
+  white-space: nowrap;
+  line-height: 1.4;
+  border-right: 1px solid #f0f0f0;
+}
+.cl-date .day { font-weight: 700; color: #555; font-size: .85rem; }
+
+.cl-badge-col {
+  padding: .75rem .75rem;
+  border-right: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  align-items: flex-start;
+}
+
+.cl-kind {
+  display: inline-block;
+  font-size: .7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.kind-feat    { background: #dbeafe; color: #1d4ed8; }
+.kind-fix     { background: #fee2e2; color: #b91c1c; }
+.kind-chore   { background: #f3f4f6; color: #4b5563; }
+.kind-refactor{ background: #ede9fe; color: #6d28d9; }
+.kind-docs    { background: #fef9c3; color: #854d0e; }
+.kind-perf    { background: #dcfce7; color: #166534; }
+.kind-update  { background: #f3f4f6; color: #374151; }
+.kind-error   { background: #fee2e2; color: #b91c1c; }
+
+.cl-scope {
+  font-size: .68rem;
+  color: #9ca3af;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cl-body {
+  padding: .75rem 1rem;
+}
+.cl-msg {
+  font-size: .9rem;
+  color: #171717;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.cl-hash {
+  margin-top: .25rem;
+  font-size: .72rem;
+  color: #aaa;
+  font-family: monospace;
+  letter-spacing: .04em;
+}
+.cl-author {
+  display: inline-block;
+  margin-left: .6rem;
+  color: #bbb;
+}
+
+/* 移动端适配 */
+@media (max-width: 640px) {
+  .cl-item {
+    grid-template-columns: 1fr;
+  }
+  .cl-date, .cl-badge-col {
+    border-right: none;
+    border-bottom: 1px solid #f0f0f0;
+    padding: .5rem 1rem;
+  }
+  .cl-badge-col { flex-direction: row; align-items: center; }
+}
+</style>
+
+<div class="cl-header">
+  <h1>📋 开发日志</h1>
+  <p>自动从 Git 提交记录生成，共 {{ commits|length }} 条。每次部署后自动更新。</p>
+</div>
+
+<div class="cl-list">
+  {% for c in commits %}
+  <div class="cl-item">
+    <div class="cl-date">
+      {% if c.date %}
+        <div class="day">{{ c.date[:10] }}</div>
+        <div>{{ c.date[11:] }}</div>
+      {% else %}
+        <div>—</div>
+      {% endif %}
+    </div>
+    <div class="cl-badge-col">
+      <span class="cl-kind kind-{{ c.kind }}">{{ c.kind }}</span>
+      {% if c.scope %}<span class="cl-scope" title="{{ c.scope }}">{{ c.scope }}</span>{% endif %}
+    </div>
+    <div class="cl-body">
+      <div class="cl-msg">{{ c.msg }}</div>
+      <div class="cl-hash">
+        {{ c.short_hash }}
+        {% if c.author and c.author != 'Claude Sonnet 4.6' %}
+        <span class="cl-author">· {{ c.author }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
