@@ -732,6 +732,13 @@ Page({
         const next = [sid, ...arr.filter((x) => String(x) !== sid)].slice(0, 20);
         wx.setStorageSync("MY_APPS", next);
       } catch (e) {}
+      // 提交成功后补订阅手术完成通知（未经预约流程时也能收到）
+      try {
+        const doneTmpl = wx.getStorageSync("WECHAT_TMPL_SURGERY_DONE") || "";
+        if (doneTmpl) {
+          await wx.requestSubscribeMessage({ tmplIds: [doneTmpl] });
+        }
+      } catch (e2) { /* 订阅失败不影响主流程 */ }
     } catch (e) {
       let msg = "提交失败";
       if (e && e.data) {

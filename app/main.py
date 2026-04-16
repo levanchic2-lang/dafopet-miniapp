@@ -1101,6 +1101,37 @@ async def api_apply_create(
         health_note=health_note,
     )
 
+    # ── 重复提交检测：同手机号在进行中的申请 ──
+    _ACTIVE_STATUSES = [
+        ApplicationStatus.draft.value,
+        ApplicationStatus.pending_ai.value,
+        ApplicationStatus.pending_manual.value,
+        ApplicationStatus.pre_approved.value,
+        ApplicationStatus.approved.value,
+        ApplicationStatus.scheduled.value,
+        ApplicationStatus.no_show.value,
+        ApplicationStatus.arrived_verified.value,
+    ]
+    _DUP_STATUS_ZH = {
+        "draft": "草稿", "pending_ai": "审核中", "pending_manual": "待人工审核",
+        "pre_approved": "预通过", "approved": "已通过", "scheduled": "已预约",
+        "no_show": "爽约", "arrived_verified": "到院核对中",
+    }
+    existing_dup = (
+        db.query(Application)
+        .filter(Application.phone == f["phone"])
+        .filter(Application.status.in_(_ACTIVE_STATUSES))
+        .order_by(Application.id.desc())
+        .first()
+    )
+    if existing_dup:
+        status_label = _DUP_STATUS_ZH.get(existing_dup.status, existing_dup.status)
+        raise HTTPException(
+            409,
+            f"该手机号已有进行中的申请（编号 #{existing_dup.id}，当前状态：{status_label}），请勿重复提交。"
+            f"如需重新申请，请等待当前申请处理完毕，或联系医院前台取消后再试。",
+        )
+
     app_row = Application(
         applicant_name=f["applicant_name"],
         phone=f["phone"],
