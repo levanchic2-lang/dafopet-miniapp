@@ -3,6 +3,7 @@
   var cat        = document.getElementById("admin_appt_category");
   var svc        = document.getElementById("admin_appt_service");          // 文本输入
   var svcSel     = document.getElementById("admin_appt_service_select");   // 门诊下拉
+  var svcSurgery = document.getElementById("admin_appt_service_surgery");  // 手术下拉
   var svcBeauty  = document.getElementById("admin_appt_service_beauty");   // 美容下拉
   var beautyExtra= document.getElementById("beauty-extra-section");        // 美容附加字段
   var beautySizeDog  = document.getElementById("beauty-size-dog");          // 犬体型行
@@ -27,11 +28,11 @@
   var DEFAULT_DURATION = 30;
   var VACCINE_KEYWORDS = ["疫苗", "驱虫"];
 
-  /* ── 服务输入切换：text / 门诊下拉 / 美容下拉 ── */
+  /* ── 服务输入切换：text / outpatient / surgery / beauty ── */
   function showServiceMode(mode) {
-    // mode: 'text' | 'outpatient' | 'beauty'
     var useText      = mode === 'text';
     var useOutpatient= mode === 'outpatient';
+    var useSurgery   = mode === 'surgery';
     var useBeauty    = mode === 'beauty';
 
     svc.style.display      = useText ? "" : "none";
@@ -42,6 +43,11 @@
       svcSel.style.display = useOutpatient ? "" : "none";
       svcSel.disabled      = !useOutpatient;
       if (useOutpatient) svcSel.setAttribute("required", ""); else svcSel.removeAttribute("required");
+    }
+    if (svcSurgery) {
+      svcSurgery.style.display = useSurgery ? "" : "none";
+      svcSurgery.disabled      = !useSurgery;
+      if (useSurgery) svcSurgery.setAttribute("required", ""); else svcSurgery.removeAttribute("required");
     }
     if (svcBeauty) {
       svcBeauty.style.display = useBeauty ? "" : "none";
@@ -429,8 +435,18 @@
       updateBeautyDurationHint();
       scheduleBeautyAdminSlots();
 
+    } else if (c === "surgery") {
+      /* 手术：手术下拉 + 时长可手动 */
+      applyTnrLock(false);
+      showServiceMode("surgery");
+      dur.readOnly = false;
+      dur.classList.remove("appt-field-locked");
+      if (storeSel) { storeSel.disabled = false; storeSel.classList.remove("appt-field-locked"); }
+      if (prevCategory === "tnr") { dur.value = dur.dataset.prevDur || "60"; delete dur.dataset.prevDur; }
+      else if (prevCategory === "outpatient" || prevCategory === "beauty") { dur.value = "60"; }
+
     } else {
-      /* 手术 / 其他：自由文本 + 时长可手动 */
+      /* 其他：自由文本 + 时长可手动 */
       applyTnrLock(false);
       showServiceMode("text");
       dur.readOnly = false;
