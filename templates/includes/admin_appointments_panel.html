@@ -234,7 +234,18 @@
 
 {# ── 看板样式 ─────────────────────────────────────────────────── #}
 <style>
-.kanban-wrap { margin-top: 1rem; max-width: none; }
+.kanban-wrap {
+  margin-top: 1rem;
+  /* 突破父容器 .wrap 的 max-width，撑满整个视口宽度 */
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  padding: 0 1.25rem;
+  box-sizing: border-box;
+}
 .kanban-wrap-header {
   display: flex; justify-content: space-between; align-items: center;
   gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;
