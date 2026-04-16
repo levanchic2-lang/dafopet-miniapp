@@ -176,19 +176,19 @@ def _startup():
 
 
 async def _surgery_reminder_loop():
-    """每天定时检查手术预约并推送前一天+当天提醒（#6）。"""
-    await asyncio.sleep(10)  # 启动后延迟 10s 再进入循环
+    """每天 08:00 检查手术预约并推送前一天+当天提醒。
+    先等到下一个 08:00 再执行，避免服务重启时立即触发误推。
+    """
     while True:
+        now = datetime.now()
+        next_run = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        if now >= next_run:
+            next_run += timedelta(days=1)
+        await asyncio.sleep((next_run - now).total_seconds())
         try:
             _run_surgery_reminders()
         except Exception:
             pass
-        # 计算距离明天 8:00 的等待时间（每天早上 8 点触发）
-        now = datetime.now()
-        next_run = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
-        if now.hour < 8:
-            next_run = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        await asyncio.sleep((next_run - now).total_seconds())
 
 
 def _run_surgery_reminders():
