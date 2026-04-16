@@ -232,10 +232,53 @@
   </div>{# /create-appt-body #}
 </div>
 
-{# ── 预约单列表（按日期 + 时段分组） ─────────────────────────── #}
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-    <h2 style="margin:0;font-size:1.08rem;">预约列表</h2>
+{# ── 看板样式 ─────────────────────────────────────────────────── #}
+<style>
+.kanban-wrap { margin-top: 1rem; max-width: none; }
+.kanban-wrap-header {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;
+}
+.kanban-wrap-header h2 { margin: 0; font-size: 1.08rem; }
+.kanban-day { margin-bottom: 1.5rem; }
+.kanban-day-header {
+  font-size: 1rem; font-weight: 700;
+  padding: 0.5rem 0.75rem; background: var(--bg-elevated);
+  border-radius: 10px; margin-bottom: 0.75rem;
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+}
+.kanban-day-header.is-today { border-left: 3px solid #262626; }
+.kanban-cols {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;
+}
+@media (max-width: 900px) { .kanban-cols { grid-template-columns: 1fr; } }
+.kanban-col {
+  border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg); padding: 0.6rem;
+  display: flex; flex-direction: column; gap: 0.6rem;
+}
+.kanban-col-head {
+  font-size: 0.82rem; font-weight: 700;
+  padding: 0.3rem 0.5rem; border-radius: 6px; margin-bottom: 0.25rem;
+}
+.kanban-morning .kanban-col-head { background: #eff6ff; color: #1d4ed8; }
+.kanban-afternoon .kanban-col-head { background: #fff7ed; color: #c2410c; }
+.kanban-evening .kanban-col-head { background: #f5f3ff; color: #6d28d9; }
+.kanban-empty { font-size: 0.8rem; color: var(--muted); text-align: center; padding: 1rem 0; }
+.kanban-dept-badge-medical {
+  font-size: 0.72rem; background: #dbeafe; color: #1e40af;
+  padding: 1px 6px; border-radius: 4px; margin-bottom: 4px; display: inline-block;
+}
+.kanban-dept-badge-beauty {
+  font-size: 0.72rem; background: #ede9fe; color: #6d28d9;
+  padding: 1px 6px; border-radius: 4px; margin-bottom: 4px; display: inline-block;
+}
+</style>
+
+{# ── 预约单列表（三栏看板布局） ──────────────────────────────── #}
+<div class="kanban-wrap">
+  <div class="kanban-wrap-header">
+    <h2>预约列表</h2>
     {% if grouped_appointments %}
     <span class="sub" style="font-size:0.8rem;">
       共 {{ grouped_appointments | sum(attribute='total') }} 条
@@ -245,252 +288,665 @@
 
   {% if grouped_appointments %}
     {% for dg in grouped_appointments %}
-    <div class="date-group">
-      {# 日期组标题 #}
-      <div class="date-group-header">
-        <div class="date-group-title {% if dg.is_today %}is-today{% endif %}">
-          {{ dg.date_display }}
-        </div>
-        <div class="date-group-chips">
-          <span class="dg-chip c-total">共 {{ dg.total }} 条</span>
-          {% if dg.pending_count > 0 %}
-          <span class="dg-chip c-pending">待确认 {{ dg.pending_count }}</span>
-          {% endif %}
-          {% if dg.tnr_count > 0 %}
-          <span class="dg-chip c-tnr">TNR {{ dg.tnr_count }}</span>
-          {% endif %}
-        </div>
+    <div class="kanban-day">
+      {# 日期标题行 #}
+      <div class="kanban-day-header {% if dg.is_today %}is-today{% endif %}">
+        <span>{{ dg.date_display }}</span>
+        <span class="dg-chip c-total" style="font-size:0.8rem;font-weight:400;">共 {{ dg.total }} 条</span>
+        {% if dg.pending_count > 0 %}
+        <span class="dg-chip c-pending" style="font-size:0.8rem;font-weight:400;">待确认 {{ dg.pending_count }}</span>
+        {% endif %}
+        {% if dg.tnr_count > 0 %}
+        <span class="dg-chip c-tnr" style="font-size:0.8rem;font-weight:400;">TNR {{ dg.tnr_count }}</span>
+        {% endif %}
       </div>
 
-      {# 部门→时段分组 #}
-      {% for dept in dg.dept_groups %}
-      <div class="dept-section">
-        <div class="dept-header dept-{{ dept.key }}">
-          {{ dept.label }}
-          <span class="dept-count">{{ dept.total }} 条</span>
-        </div>
-        {% for slot in dept.slots %}
-        <div class="slot-group">
-          <div class="slot-header">{{ slot.label }}</div>
-          <div class="appointment-list">
-            {% for appt in slot.appts %}
-            <div class="appointment-card" id="appt-{{appt.id}}">
-            {# 左侧状态色条 #}
-            <div class="appt-status-rail s-{{ appt.status }}"></div>
-            {# 主体内容 #}
-            <div class="appt-body">
-              {# 顶部：时间 + 编号/门店 #}
-              <div class="appt-top-row">
-                <div class="appt-time-block">
-                  <div class="appt-time-big">{{ appt.appointment_time[:5] if appt.appointment_time else '--:--' }}</div>
-                  <div class="appt-dur-line">时长 {{ appt.duration_minutes }} 分钟</div>
-                </div>
-                <div style="text-align:right;">
-                  <div class="appt-id-meta">#{{ appt.id }}</div>
-                  <div class="appt-store-tag" style="margin-top:0.25rem;display:inline-block;">
-                    {% if '横岗' in appt.store %}横岗店{% elif '东环' in appt.store %}东环店{% else %}{{ appt.store }}{% endif %}
-                  </div>
-                </div>
-              </div>
+      {# 三栏看板 #}
+      <div class="kanban-cols">
 
-              {# 徽标行 #}
-              <div class="appt-badges">
-                <span class="badge {% if appt.category == 'tnr' %}b-tnr{% endif %}">
-                  {{ APPOINTMENT_CATEGORY_ZH.get(appt.category, appt.category) }}
-                </span>
-                <span class="badge
-                  {% if appt.status in ['confirmed', 'completed'] %}b-ok
-                  {% elif appt.status in ['cancelled', 'no_show'] %}b-no
-                  {% else %}b-pending{% endif %}">
-                  {{ APPOINTMENT_STATUS_ZH.get(appt.status, appt.status) }}
-                </span>
-                {% if appt.related_application_id %}
-                <span class="badge b-blue">申请 #{{ appt.related_application_id }}</span>
-                {% endif %}
-                {% if appt.is_proxy %}
-                <span class="badge b-pending">代预约</span>
-                {% endif %}
-              </div>
+        {# ── 上午列 ── #}
+        <div class="kanban-col kanban-morning">
+          <div class="kanban-col-head">上午 09:00–12:00</div>
+          {% set morning_found = namespace(v=false) %}
+          {% for dept in dg.dept_groups %}
+            {% for slot in dept.slots %}
+              {% if slot.key == "morning" %}
+                {% for appt in slot.appts %}
+                  {% set morning_found.v = true %}
+                  <span class="kanban-dept-badge-{{ dept.key }}">{{ dept.label }}</span>
+                  <div class="appointment-card" id="appt-{{appt.id}}">
+                  {# 左侧状态色条 #}
+                  <div class="appt-status-rail s-{{ appt.status }}"></div>
+                  {# 主体内容 #}
+                  <div class="appt-body">
+                    {# 顶部：时间 + 编号/门店 #}
+                    <div class="appt-top-row">
+                      <div class="appt-time-block">
+                        <div class="appt-time-big">{{ appt.appointment_time[:5] if appt.appointment_time else '--:--' }}</div>
+                        <div class="appt-dur-line">时长 {{ appt.duration_minutes }} 分钟</div>
+                      </div>
+                      <div style="text-align:right;">
+                        <div class="appt-id-meta">#{{ appt.id }}</div>
+                        <div class="appt-store-tag" style="margin-top:0.25rem;display:inline-block;">
+                          {% if '横岗' in appt.store %}横岗店{% elif '东环' in appt.store %}东环店{% else %}{{ appt.store }}{% endif %}
+                        </div>
+                      </div>
+                    </div>
 
-              {# 详细信息 #}
-              <div class="appt-detail">
-                <div class="appt-detail-line">
-                  <span class="appt-detail-key">项目</span>
-                  <span>{{ appt.service_name }}</span>
-                </div>
-                <div class="appt-detail-line">
-                  <span class="appt-detail-key">联系人</span>
-                  <span>{{ appt.customer_name }} · {{ appt.phone }}</span>
-                </div>
-                <div class="appt-detail-line">
-                  <span class="appt-detail-key">对象</span>
-                  <span>{{ appt.pet_name }} · {% if appt.pet_gender == 'female' %}母{% elif appt.pet_gender == 'male' %}公{% else %}未知{% endif %}</span>
-                </div>
-                <div class="appt-detail-line">
-                  <span class="appt-detail-key">门店</span>
-                  <span>{{ appt.store }}</span>
-                </div>
-                {% if appt.related_application_id %}
-                <div class="appt-detail-line">
-                  <span class="appt-detail-key">关联申请</span>
-                  <span>#{{ appt.related_application_id }}</span>
-                </div>
-                {% endif %}
-                {% if appt.pet_size %}
-                <div class="appt-detail-line">
-                  <span class="appt-detail-key">体型</span>
-                  <span>{{ appt.pet_size }}</span>
-                </div>
-                {% endif %}
-                {% if appt.coat_length %}
-                <div class="appt-detail-line">
-                  <span class="appt-detail-key">毛发</span>
-                  <span>{{ appt.coat_length }}</span>
-                </div>
-                {% endif %}
-                {% if appt.addon_services %}
-                <div class="appt-detail-line">
-                  <span class="appt-detail-key">附加服务</span>
-                  <span>{{ appt.addon_services }}</span>
-                </div>
-                {% endif %}
-                {% if appt.notes %}
-                <div class="appt-detail-line">
-                  <span class="appt-detail-key">备注</span>
-                  <span>{{ appt.notes }}</span>
-                </div>
-                {% endif %}
-                {% if appt.is_proxy %}
-                <div class="appt-detail-line" style="margin-top:0.3rem;padding-top:0.3rem;border-top:1px solid var(--border);">
-                  <span class="appt-detail-key" style="color:#92400e;">代预约人</span>
-                  <span style="color:#92400e;">
-                    {{ appt.proxy_name or '—' }}
-                    {% if appt.proxy_phone %} · {{ appt.proxy_phone }}{% endif %}
-                    {% if appt.proxy_relation %}（{{ appt.proxy_relation }}）{% endif %}
-                  </span>
-                </div>
-                {% endif %}
-              </div>
+                    {# 徽标行 #}
+                    <div class="appt-badges">
+                      <span class="badge {% if appt.category == 'tnr' %}b-tnr{% endif %}">
+                        {{ APPOINTMENT_CATEGORY_ZH.get(appt.category, appt.category) }}
+                      </span>
+                      <span class="badge
+                        {% if appt.status in ['confirmed', 'completed'] %}b-ok
+                        {% elif appt.status in ['cancelled', 'no_show'] %}b-no
+                        {% else %}b-pending{% endif %}">
+                        {{ APPOINTMENT_STATUS_ZH.get(appt.status, appt.status) }}
+                      </span>
+                      {% if appt.related_application_id %}
+                      <span class="badge b-blue">申请 #{{ appt.related_application_id }}</span>
+                      {% endif %}
+                      {% if appt.is_proxy %}
+                      <span class="badge b-pending">代预约</span>
+                      {% endif %}
+                    </div>
 
-              {# 操作按钮行 #}
-              <div class="appointment-actions">
-                {# 确认 #}
-                {% if appt.status != 'confirmed' and appt.status not in ['cancelled', 'completed', 'no_show'] %}
-                <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                  <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
-                  <input type="hidden" name="status" value="confirmed" />
-                  <button type="submit" class="secondary">确认</button>
-                </form>
-                {% endif %}
-                {# 爽约 #}
-                {% if appt.status not in ['cancelled', 'no_show', 'completed'] %}
-                <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                  <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
-                  <input type="hidden" name="status" value="no_show" />
-                  <button type="submit" class="danger">爽约</button>
-                </form>
-                {% endif %}
-                {# 取消（折叠） #}
-                {% if appt.status not in ['cancelled', 'completed'] %}
-                <button type="button" class="danger"
-                  onclick="var c=this.closest('.appointment-card').querySelector('.cancel-panel');c.toggleAttribute('hidden');this.textContent=this.textContent==='取消'?'▲ 取消':'取消';">
-                  取消
-                </button>
-                {% endif %}
-                {# 改约（折叠） #}
-                {% if appt.status not in ['cancelled', 'completed'] %}
-                <button type="button" class="secondary"
-                  onclick="var p=this.closest('.appointment-card').querySelector('.reschedule-panel');p.toggleAttribute('hidden');this.textContent=this.textContent==='改约'?'▲ 改约':'改约';">
-                  改约
-                </button>
-                {% endif %}
-                {# 创建时间（右侧） #}
-                <span class="appointment-meta" style="margin-left:auto;align-self:center;">
-                  创建 {{ appt.created_at.strftime('%m-%d %H:%M') if appt.created_at else '' }}
-                </span>
-              </div>
+                    {# 详细信息 #}
+                    <div class="appt-detail">
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">项目</span>
+                        <span>{{ appt.service_name }}</span>
+                      </div>
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">联系人</span>
+                        <span>{{ appt.customer_name }} · {{ appt.phone }}</span>
+                      </div>
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">对象</span>
+                        <span>{{ appt.pet_name }} · {% if appt.pet_gender == 'female' %}母{% elif appt.pet_gender == 'male' %}公{% else %}未知{% endif %}</span>
+                      </div>
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">门店</span>
+                        <span>{{ appt.store }}</span>
+                      </div>
+                      {% if appt.related_application_id %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">关联申请</span>
+                        <span>#{{ appt.related_application_id }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.pet_size %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">体型</span>
+                        <span>{{ appt.pet_size }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.coat_length %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">毛发</span>
+                        <span>{{ appt.coat_length }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.addon_services %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">附加服务</span>
+                        <span>{{ appt.addon_services }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.notes %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">备注</span>
+                        <span>{{ appt.notes }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.is_proxy %}
+                      <div class="appt-detail-line" style="margin-top:0.3rem;padding-top:0.3rem;border-top:1px solid var(--border);">
+                        <span class="appt-detail-key" style="color:#92400e;">代预约人</span>
+                        <span style="color:#92400e;">
+                          {{ appt.proxy_name or '—' }}
+                          {% if appt.proxy_phone %} · {{ appt.proxy_phone }}{% endif %}
+                          {% if appt.proxy_relation %}（{{ appt.proxy_relation }}）{% endif %}
+                        </span>
+                      </div>
+                      {% endif %}
+                    </div>
 
-              {# 取消面板 #}
-              {% if appt.status not in ['cancelled', 'completed'] %}
-              <div class="cancel-panel" hidden style="margin-top:0.65rem;padding:0.65rem 0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg);">
-                <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}"
-                      style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                  <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
-                  <input type="hidden" name="status" value="cancelled" />
-                  <input type="text" name="cancel_reason" placeholder="取消原因（可选）" style="flex:1;min-width:160px;" />
-                  <button type="submit" class="danger">确认取消</button>
-                  <button type="button" class="secondary"
-                    onclick="this.closest('.cancel-panel').setAttribute('hidden','');this.closest('.appointment-card').querySelector('button.danger:not([type=submit])').textContent='取消';">
-                    放弃
-                  </button>
-                </form>
-              </div>
+                    {# 操作按钮行 #}
+                    <div class="appointment-actions">
+                      {% if appt.status != 'confirmed' and appt.status not in ['cancelled', 'completed', 'no_show'] %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="confirmed" />
+                        <button type="submit" class="secondary">确认</button>
+                      </form>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'no_show', 'completed'] %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="no_show" />
+                        <button type="submit" class="danger">爽约</button>
+                      </form>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'completed'] %}
+                      <button type="button" class="danger"
+                        onclick="var c=this.closest('.appointment-card').querySelector('.cancel-panel');c.toggleAttribute('hidden');this.textContent=this.textContent==='取消'?'▲ 取消':'取消';">
+                        取消
+                      </button>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'completed'] %}
+                      <button type="button" class="secondary"
+                        onclick="var p=this.closest('.appointment-card').querySelector('.reschedule-panel');p.toggleAttribute('hidden');this.textContent=this.textContent==='改约'?'▲ 改约':'改约';">
+                        改约
+                      </button>
+                      {% endif %}
+                      <span class="appointment-meta" style="margin-left:auto;align-self:center;">
+                        创建 {{ appt.created_at.strftime('%m-%d %H:%M') if appt.created_at else '' }}
+                      </span>
+                    </div>
+
+                    {# 取消面板 #}
+                    {% if appt.status not in ['cancelled', 'completed'] %}
+                    <div class="cancel-panel" hidden style="margin-top:0.65rem;padding:0.65rem 0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg);">
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}"
+                            style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="cancelled" />
+                        <input type="text" name="cancel_reason" placeholder="取消原因（可选）" style="flex:1;min-width:160px;" />
+                        <button type="submit" class="danger">确认取消</button>
+                        <button type="button" class="secondary"
+                          onclick="this.closest('.cancel-panel').setAttribute('hidden','');this.closest('.appointment-card').querySelector('button.danger:not([type=submit])').textContent='取消';">
+                          放弃
+                        </button>
+                      </form>
+                    </div>
+                    {% endif %}
+
+                    {# 改约面板 #}
+                    {% if appt.status not in ['cancelled', 'completed'] %}
+                    <div class="reschedule-panel" hidden style="margin-top:0.75rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg);">
+                      {% if appt.category == 'beauty' and (appt.pet_size or appt.coat_length) %}
+                      <div style="margin-bottom:0.6rem;padding:0.4rem 0.6rem;border-radius:6px;background:#fdf4ff;border:1px solid #e9d5ff;font-size:0.82rem;color:#7e22ce;">
+                        <strong>美容信息：</strong>
+                        {% if appt.pet_size %}体型：{{ appt.pet_size }}{% endif %}
+                        {% if appt.pet_size and appt.coat_length %} · {% endif %}
+                        {% if appt.coat_length %}毛发：{{ appt.coat_length }}{% endif %}
+                        {% if appt.addon_services %} · 附加：{{ appt.addon_services }}{% endif %}
+                        <span style="color:#9333ea;margin-left:0.4rem;">（参考时长：{{ appt.duration_minutes }} 分钟）</span>
+                      </div>
+                      {% endif %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_reschedule', appointment_id=appt.id) }}"
+                            style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;align-items:end;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="next" value="/admin/appointments" />
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">门店</label>
+                          <select name="new_store">
+                            <option value="大风动物医院（东环店）" {% if appt.store == '大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
+                            <option value="大风动物医院（横岗店）" {% if appt.store == '大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">新日期</label>
+                          <input type="date" name="new_date" value="{{ appt.appointment_date }}" required />
+                        </div>
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">新时间</label>
+                          <input type="time" name="new_time" value="{{ appt.appointment_time }}" required />
+                        </div>
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">时长（分钟）</label>
+                          <input type="number" name="new_duration" value="{{ appt.duration_minutes }}" min="10" max="480" />
+                        </div>
+                        <div style="grid-column:span 2;">
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">改约原因（可选）</label>
+                          <input type="text" name="reschedule_reason" placeholder="例如：当日手术台满" />
+                        </div>
+                        <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:0.5rem;">
+                          <button type="button" class="secondary"
+                            onclick="this.closest('.reschedule-panel').setAttribute('hidden','');var card=this.closest('.appointment-card');card.querySelectorAll('button.secondary').forEach(function(b){if(b.textContent.indexOf('改约')>=0)b.textContent='改约';});">
+                            放弃改约
+                          </button>
+                          <button type="submit">确认改约</button>
+                        </div>
+                      </form>
+                    </div>
+                    {% endif %}
+
+                  </div>{# /appt-body #}
+                  </div>{# /appointment-card #}
+                {% endfor %}
               {% endif %}
-
-              {# 改约面板 #}
-              {% if appt.status not in ['cancelled', 'completed'] %}
-              <div class="reschedule-panel" hidden style="margin-top:0.75rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg);">
-                {# 美容预约：显示体型/毛发作为参考（影响时长估算） #}
-                {% if appt.category == 'beauty' and (appt.pet_size or appt.coat_length) %}
-                <div style="margin-bottom:0.6rem;padding:0.4rem 0.6rem;border-radius:6px;background:#fdf4ff;border:1px solid #e9d5ff;font-size:0.82rem;color:#7e22ce;">
-                  <strong>美容信息：</strong>
-                  {% if appt.pet_size %}体型：{{ appt.pet_size }}{% endif %}
-                  {% if appt.pet_size and appt.coat_length %} · {% endif %}
-                  {% if appt.coat_length %}毛发：{{ appt.coat_length }}{% endif %}
-                  {% if appt.addon_services %} · 附加：{{ appt.addon_services }}{% endif %}
-                  <span style="color:#9333ea;margin-left:0.4rem;">（参考时长：{{ appt.duration_minutes }} 分钟）</span>
-                </div>
-                {% endif %}
-                <form method="post" action="{{ request.url_for('admin_appointment_reschedule', appointment_id=appt.id) }}"
-                      style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;align-items:end;">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                  <input type="hidden" name="next" value="/admin/appointments" />
-                  <div>
-                    <label style="font-size:0.82rem;margin:0 0 0.2rem;">门店</label>
-                    <select name="new_store">
-                      <option value="大风动物医院（东环店）" {% if appt.store == '大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
-                      <option value="大风动物医院（横岗店）" {% if appt.store == '大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style="font-size:0.82rem;margin:0 0 0.2rem;">新日期</label>
-                    <input type="date" name="new_date" value="{{ appt.appointment_date }}" required />
-                  </div>
-                  <div>
-                    <label style="font-size:0.82rem;margin:0 0 0.2rem;">新时间</label>
-                    <input type="time" name="new_time" value="{{ appt.appointment_time }}" required />
-                  </div>
-                  <div>
-                    <label style="font-size:0.82rem;margin:0 0 0.2rem;">时长（分钟）</label>
-                    <input type="number" name="new_duration" value="{{ appt.duration_minutes }}" min="10" max="480" />
-                  </div>
-                  <div style="grid-column:span 2;">
-                    <label style="font-size:0.82rem;margin:0 0 0.2rem;">改约原因（可选）</label>
-                    <input type="text" name="reschedule_reason" placeholder="例如：当日手术台满" />
-                  </div>
-                  <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:0.5rem;">
-                    <button type="button" class="secondary"
-                      onclick="this.closest('.reschedule-panel').setAttribute('hidden','');var card=this.closest('.appointment-card');card.querySelectorAll('button.secondary').forEach(function(b){if(b.textContent.indexOf('改约')>=0)b.textContent='改约';});">
-                      放弃改约
-                    </button>
-                    <button type="submit">确认改约</button>
-                  </div>
-                </form>
-              </div>
-              {% endif %}
-
-            </div>{# /appt-body #}
-            </div>{# /appointment-card #}
             {% endfor %}
-          </div>{# /appointment-list #}
-        </div>{# /slot-group #}
-        {% endfor %}
-      </div>{# /dept-section #}
-      {% endfor %}
-    </div>{# /date-group #}
+          {% endfor %}
+          {% if not morning_found.v %}
+          <div class="kanban-empty">暂无</div>
+          {% endif %}
+        </div>{# /kanban-morning #}
+
+        {# ── 下午列 ── #}
+        <div class="kanban-col kanban-afternoon">
+          <div class="kanban-col-head">下午 12:00–18:00</div>
+          {% set afternoon_found = namespace(v=false) %}
+          {% for dept in dg.dept_groups %}
+            {% for slot in dept.slots %}
+              {% if slot.key == "afternoon" %}
+                {% for appt in slot.appts %}
+                  {% set afternoon_found.v = true %}
+                  <span class="kanban-dept-badge-{{ dept.key }}">{{ dept.label }}</span>
+                  <div class="appointment-card" id="appt-{{appt.id}}">
+                  <div class="appt-status-rail s-{{ appt.status }}"></div>
+                  <div class="appt-body">
+                    <div class="appt-top-row">
+                      <div class="appt-time-block">
+                        <div class="appt-time-big">{{ appt.appointment_time[:5] if appt.appointment_time else '--:--' }}</div>
+                        <div class="appt-dur-line">时长 {{ appt.duration_minutes }} 分钟</div>
+                      </div>
+                      <div style="text-align:right;">
+                        <div class="appt-id-meta">#{{ appt.id }}</div>
+                        <div class="appt-store-tag" style="margin-top:0.25rem;display:inline-block;">
+                          {% if '横岗' in appt.store %}横岗店{% elif '东环' in appt.store %}东环店{% else %}{{ appt.store }}{% endif %}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="appt-badges">
+                      <span class="badge {% if appt.category == 'tnr' %}b-tnr{% endif %}">
+                        {{ APPOINTMENT_CATEGORY_ZH.get(appt.category, appt.category) }}
+                      </span>
+                      <span class="badge
+                        {% if appt.status in ['confirmed', 'completed'] %}b-ok
+                        {% elif appt.status in ['cancelled', 'no_show'] %}b-no
+                        {% else %}b-pending{% endif %}">
+                        {{ APPOINTMENT_STATUS_ZH.get(appt.status, appt.status) }}
+                      </span>
+                      {% if appt.related_application_id %}
+                      <span class="badge b-blue">申请 #{{ appt.related_application_id }}</span>
+                      {% endif %}
+                      {% if appt.is_proxy %}
+                      <span class="badge b-pending">代预约</span>
+                      {% endif %}
+                    </div>
+                    <div class="appt-detail">
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">项目</span>
+                        <span>{{ appt.service_name }}</span>
+                      </div>
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">联系人</span>
+                        <span>{{ appt.customer_name }} · {{ appt.phone }}</span>
+                      </div>
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">对象</span>
+                        <span>{{ appt.pet_name }} · {% if appt.pet_gender == 'female' %}母{% elif appt.pet_gender == 'male' %}公{% else %}未知{% endif %}</span>
+                      </div>
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">门店</span>
+                        <span>{{ appt.store }}</span>
+                      </div>
+                      {% if appt.related_application_id %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">关联申请</span>
+                        <span>#{{ appt.related_application_id }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.pet_size %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">体型</span>
+                        <span>{{ appt.pet_size }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.coat_length %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">毛发</span>
+                        <span>{{ appt.coat_length }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.addon_services %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">附加服务</span>
+                        <span>{{ appt.addon_services }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.notes %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">备注</span>
+                        <span>{{ appt.notes }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.is_proxy %}
+                      <div class="appt-detail-line" style="margin-top:0.3rem;padding-top:0.3rem;border-top:1px solid var(--border);">
+                        <span class="appt-detail-key" style="color:#92400e;">代预约人</span>
+                        <span style="color:#92400e;">
+                          {{ appt.proxy_name or '—' }}
+                          {% if appt.proxy_phone %} · {{ appt.proxy_phone }}{% endif %}
+                          {% if appt.proxy_relation %}（{{ appt.proxy_relation }}）{% endif %}
+                        </span>
+                      </div>
+                      {% endif %}
+                    </div>
+                    <div class="appointment-actions">
+                      {% if appt.status != 'confirmed' and appt.status not in ['cancelled', 'completed', 'no_show'] %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="confirmed" />
+                        <button type="submit" class="secondary">确认</button>
+                      </form>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'no_show', 'completed'] %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="no_show" />
+                        <button type="submit" class="danger">爽约</button>
+                      </form>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'completed'] %}
+                      <button type="button" class="danger"
+                        onclick="var c=this.closest('.appointment-card').querySelector('.cancel-panel');c.toggleAttribute('hidden');this.textContent=this.textContent==='取消'?'▲ 取消':'取消';">
+                        取消
+                      </button>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'completed'] %}
+                      <button type="button" class="secondary"
+                        onclick="var p=this.closest('.appointment-card').querySelector('.reschedule-panel');p.toggleAttribute('hidden');this.textContent=this.textContent==='改约'?'▲ 改约':'改约';">
+                        改约
+                      </button>
+                      {% endif %}
+                      <span class="appointment-meta" style="margin-left:auto;align-self:center;">
+                        创建 {{ appt.created_at.strftime('%m-%d %H:%M') if appt.created_at else '' }}
+                      </span>
+                    </div>
+                    {% if appt.status not in ['cancelled', 'completed'] %}
+                    <div class="cancel-panel" hidden style="margin-top:0.65rem;padding:0.65rem 0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg);">
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}"
+                            style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="cancelled" />
+                        <input type="text" name="cancel_reason" placeholder="取消原因（可选）" style="flex:1;min-width:160px;" />
+                        <button type="submit" class="danger">确认取消</button>
+                        <button type="button" class="secondary"
+                          onclick="this.closest('.cancel-panel').setAttribute('hidden','');this.closest('.appointment-card').querySelector('button.danger:not([type=submit])').textContent='取消';">
+                          放弃
+                        </button>
+                      </form>
+                    </div>
+                    {% endif %}
+                    {% if appt.status not in ['cancelled', 'completed'] %}
+                    <div class="reschedule-panel" hidden style="margin-top:0.75rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg);">
+                      {% if appt.category == 'beauty' and (appt.pet_size or appt.coat_length) %}
+                      <div style="margin-bottom:0.6rem;padding:0.4rem 0.6rem;border-radius:6px;background:#fdf4ff;border:1px solid #e9d5ff;font-size:0.82rem;color:#7e22ce;">
+                        <strong>美容信息：</strong>
+                        {% if appt.pet_size %}体型：{{ appt.pet_size }}{% endif %}
+                        {% if appt.pet_size and appt.coat_length %} · {% endif %}
+                        {% if appt.coat_length %}毛发：{{ appt.coat_length }}{% endif %}
+                        {% if appt.addon_services %} · 附加：{{ appt.addon_services }}{% endif %}
+                        <span style="color:#9333ea;margin-left:0.4rem;">（参考时长：{{ appt.duration_minutes }} 分钟）</span>
+                      </div>
+                      {% endif %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_reschedule', appointment_id=appt.id) }}"
+                            style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;align-items:end;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="next" value="/admin/appointments" />
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">门店</label>
+                          <select name="new_store">
+                            <option value="大风动物医院（东环店）" {% if appt.store == '大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
+                            <option value="大风动物医院（横岗店）" {% if appt.store == '大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">新日期</label>
+                          <input type="date" name="new_date" value="{{ appt.appointment_date }}" required />
+                        </div>
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">新时间</label>
+                          <input type="time" name="new_time" value="{{ appt.appointment_time }}" required />
+                        </div>
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">时长（分钟）</label>
+                          <input type="number" name="new_duration" value="{{ appt.duration_minutes }}" min="10" max="480" />
+                        </div>
+                        <div style="grid-column:span 2;">
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">改约原因（可选）</label>
+                          <input type="text" name="reschedule_reason" placeholder="例如：当日手术台满" />
+                        </div>
+                        <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:0.5rem;">
+                          <button type="button" class="secondary"
+                            onclick="this.closest('.reschedule-panel').setAttribute('hidden','');var card=this.closest('.appointment-card');card.querySelectorAll('button.secondary').forEach(function(b){if(b.textContent.indexOf('改约')>=0)b.textContent='改约';});">
+                            放弃改约
+                          </button>
+                          <button type="submit">确认改约</button>
+                        </div>
+                      </form>
+                    </div>
+                    {% endif %}
+                  </div>{# /appt-body #}
+                  </div>{# /appointment-card #}
+                {% endfor %}
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+          {% if not afternoon_found.v %}
+          <div class="kanban-empty">暂无</div>
+          {% endif %}
+        </div>{# /kanban-afternoon #}
+
+        {# ── 晚上列 ── #}
+        <div class="kanban-col kanban-evening">
+          <div class="kanban-col-head">晚上 18:00–22:00</div>
+          {% set evening_found = namespace(v=false) %}
+          {% for dept in dg.dept_groups %}
+            {% for slot in dept.slots %}
+              {% if slot.key == "evening" %}
+                {% for appt in slot.appts %}
+                  {% set evening_found.v = true %}
+                  <span class="kanban-dept-badge-{{ dept.key }}">{{ dept.label }}</span>
+                  <div class="appointment-card" id="appt-{{appt.id}}">
+                  <div class="appt-status-rail s-{{ appt.status }}"></div>
+                  <div class="appt-body">
+                    <div class="appt-top-row">
+                      <div class="appt-time-block">
+                        <div class="appt-time-big">{{ appt.appointment_time[:5] if appt.appointment_time else '--:--' }}</div>
+                        <div class="appt-dur-line">时长 {{ appt.duration_minutes }} 分钟</div>
+                      </div>
+                      <div style="text-align:right;">
+                        <div class="appt-id-meta">#{{ appt.id }}</div>
+                        <div class="appt-store-tag" style="margin-top:0.25rem;display:inline-block;">
+                          {% if '横岗' in appt.store %}横岗店{% elif '东环' in appt.store %}东环店{% else %}{{ appt.store }}{% endif %}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="appt-badges">
+                      <span class="badge {% if appt.category == 'tnr' %}b-tnr{% endif %}">
+                        {{ APPOINTMENT_CATEGORY_ZH.get(appt.category, appt.category) }}
+                      </span>
+                      <span class="badge
+                        {% if appt.status in ['confirmed', 'completed'] %}b-ok
+                        {% elif appt.status in ['cancelled', 'no_show'] %}b-no
+                        {% else %}b-pending{% endif %}">
+                        {{ APPOINTMENT_STATUS_ZH.get(appt.status, appt.status) }}
+                      </span>
+                      {% if appt.related_application_id %}
+                      <span class="badge b-blue">申请 #{{ appt.related_application_id }}</span>
+                      {% endif %}
+                      {% if appt.is_proxy %}
+                      <span class="badge b-pending">代预约</span>
+                      {% endif %}
+                    </div>
+                    <div class="appt-detail">
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">项目</span>
+                        <span>{{ appt.service_name }}</span>
+                      </div>
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">联系人</span>
+                        <span>{{ appt.customer_name }} · {{ appt.phone }}</span>
+                      </div>
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">对象</span>
+                        <span>{{ appt.pet_name }} · {% if appt.pet_gender == 'female' %}母{% elif appt.pet_gender == 'male' %}公{% else %}未知{% endif %}</span>
+                      </div>
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">门店</span>
+                        <span>{{ appt.store }}</span>
+                      </div>
+                      {% if appt.related_application_id %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">关联申请</span>
+                        <span>#{{ appt.related_application_id }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.pet_size %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">体型</span>
+                        <span>{{ appt.pet_size }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.coat_length %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">毛发</span>
+                        <span>{{ appt.coat_length }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.addon_services %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">附加服务</span>
+                        <span>{{ appt.addon_services }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.notes %}
+                      <div class="appt-detail-line">
+                        <span class="appt-detail-key">备注</span>
+                        <span>{{ appt.notes }}</span>
+                      </div>
+                      {% endif %}
+                      {% if appt.is_proxy %}
+                      <div class="appt-detail-line" style="margin-top:0.3rem;padding-top:0.3rem;border-top:1px solid var(--border);">
+                        <span class="appt-detail-key" style="color:#92400e;">代预约人</span>
+                        <span style="color:#92400e;">
+                          {{ appt.proxy_name or '—' }}
+                          {% if appt.proxy_phone %} · {{ appt.proxy_phone }}{% endif %}
+                          {% if appt.proxy_relation %}（{{ appt.proxy_relation }}）{% endif %}
+                        </span>
+                      </div>
+                      {% endif %}
+                    </div>
+                    <div class="appointment-actions">
+                      {% if appt.status != 'confirmed' and appt.status not in ['cancelled', 'completed', 'no_show'] %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="confirmed" />
+                        <button type="submit" class="secondary">确认</button>
+                      </form>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'no_show', 'completed'] %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="no_show" />
+                        <button type="submit" class="danger">爽约</button>
+                      </form>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'completed'] %}
+                      <button type="button" class="danger"
+                        onclick="var c=this.closest('.appointment-card').querySelector('.cancel-panel');c.toggleAttribute('hidden');this.textContent=this.textContent==='取消'?'▲ 取消':'取消';">
+                        取消
+                      </button>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'completed'] %}
+                      <button type="button" class="secondary"
+                        onclick="var p=this.closest('.appointment-card').querySelector('.reschedule-panel');p.toggleAttribute('hidden');this.textContent=this.textContent==='改约'?'▲ 改约':'改约';">
+                        改约
+                      </button>
+                      {% endif %}
+                      <span class="appointment-meta" style="margin-left:auto;align-self:center;">
+                        创建 {{ appt.created_at.strftime('%m-%d %H:%M') if appt.created_at else '' }}
+                      </span>
+                    </div>
+                    {% if appt.status not in ['cancelled', 'completed'] %}
+                    <div class="cancel-panel" hidden style="margin-top:0.65rem;padding:0.65rem 0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg);">
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}"
+                            style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="cancelled" />
+                        <input type="text" name="cancel_reason" placeholder="取消原因（可选）" style="flex:1;min-width:160px;" />
+                        <button type="submit" class="danger">确认取消</button>
+                        <button type="button" class="secondary"
+                          onclick="this.closest('.cancel-panel').setAttribute('hidden','');this.closest('.appointment-card').querySelector('button.danger:not([type=submit])').textContent='取消';">
+                          放弃
+                        </button>
+                      </form>
+                    </div>
+                    {% endif %}
+                    {% if appt.status not in ['cancelled', 'completed'] %}
+                    <div class="reschedule-panel" hidden style="margin-top:0.75rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg);">
+                      {% if appt.category == 'beauty' and (appt.pet_size or appt.coat_length) %}
+                      <div style="margin-bottom:0.6rem;padding:0.4rem 0.6rem;border-radius:6px;background:#fdf4ff;border:1px solid #e9d5ff;font-size:0.82rem;color:#7e22ce;">
+                        <strong>美容信息：</strong>
+                        {% if appt.pet_size %}体型：{{ appt.pet_size }}{% endif %}
+                        {% if appt.pet_size and appt.coat_length %} · {% endif %}
+                        {% if appt.coat_length %}毛发：{{ appt.coat_length }}{% endif %}
+                        {% if appt.addon_services %} · 附加：{{ appt.addon_services }}{% endif %}
+                        <span style="color:#9333ea;margin-left:0.4rem;">（参考时长：{{ appt.duration_minutes }} 分钟）</span>
+                      </div>
+                      {% endif %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_reschedule', appointment_id=appt.id) }}"
+                            style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;align-items:end;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="next" value="/admin/appointments" />
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">门店</label>
+                          <select name="new_store">
+                            <option value="大风动物医院（东环店）" {% if appt.store == '大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
+                            <option value="大风动物医院（横岗店）" {% if appt.store == '大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">新日期</label>
+                          <input type="date" name="new_date" value="{{ appt.appointment_date }}" required />
+                        </div>
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">新时间</label>
+                          <input type="time" name="new_time" value="{{ appt.appointment_time }}" required />
+                        </div>
+                        <div>
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">时长（分钟）</label>
+                          <input type="number" name="new_duration" value="{{ appt.duration_minutes }}" min="10" max="480" />
+                        </div>
+                        <div style="grid-column:span 2;">
+                          <label style="font-size:0.82rem;margin:0 0 0.2rem;">改约原因（可选）</label>
+                          <input type="text" name="reschedule_reason" placeholder="例如：当日手术台满" />
+                        </div>
+                        <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:0.5rem;">
+                          <button type="button" class="secondary"
+                            onclick="this.closest('.reschedule-panel').setAttribute('hidden','');var card=this.closest('.appointment-card');card.querySelectorAll('button.secondary').forEach(function(b){if(b.textContent.indexOf('改约')>=0)b.textContent='改约';});">
+                            放弃改约
+                          </button>
+                          <button type="submit">确认改约</button>
+                        </div>
+                      </form>
+                    </div>
+                    {% endif %}
+                  </div>{# /appt-body #}
+                  </div>{# /appointment-card #}
+                {% endfor %}
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+          {% if not evening_found.v %}
+          <div class="kanban-empty">暂无</div>
+          {% endif %}
+        </div>{# /kanban-evening #}
+
+      </div>{# /kanban-cols #}
+    </div>{# /kanban-day #}
     {% endfor %}
 
   {% else %}
@@ -499,4 +955,4 @@
       可调整日期范围或筛选条件，或通过上方表单创建新预约。
     </div>
   {% endif %}
-</div>
+</div>{# /kanban-wrap #}
