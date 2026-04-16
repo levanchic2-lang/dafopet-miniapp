@@ -414,6 +414,7 @@ async def api_wechat_config():
         "wechat_tmpl_appointment": settings.wechat_tmpl_appointment,
         "wechat_tmpl_rejection": settings.wechat_tmpl_rejection,
         "wechat_tmpl_pending_manual": settings.wechat_tmpl_pending_manual,
+        "wechat_tmpl_surgery_reminder": settings.wechat_tmpl_surgery_reminder,
         "wechat_message_page": settings.wechat_message_page,
         "wechat_fields_application_result": settings.wechat_fields_application_result,
         "wechat_fields_surgery_done": settings.wechat_fields_surgery_done,

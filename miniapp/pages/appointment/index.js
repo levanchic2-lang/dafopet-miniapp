@@ -574,11 +574,18 @@ Page({
           payload.coat_length = this.data.form.coat_length;
         }
         const res = await postJson("/api/appointments/create", payload);
-        // 预约提交成功后，订阅预约状态通知
+        // 预约提交成功后，订阅通知（最多3个）
         try {
           const _c = (k) => { try { return wx.getStorageSync(k) || ""; } catch(e2) { return ""; } };
+          const tmplIds = [];
           const apptTmpl = _c("WECHAT_TMPL_APPOINTMENT");
-          if (apptTmpl) await wx.requestSubscribeMessage({ tmplIds: [apptTmpl] });
+          if (apptTmpl) tmplIds.push(apptTmpl);
+          // TNR/手术类预约额外订阅手术提醒模板
+          if (payload.category === "tnr" || payload.category === "surgery") {
+            const reminderTmpl = _c("WECHAT_TMPL_SURGERY_REMINDER");
+            if (reminderTmpl && !tmplIds.includes(reminderTmpl)) tmplIds.push(reminderTmpl);
+          }
+          if (tmplIds.length) await wx.requestSubscribeMessage({ tmplIds });
         } catch(e2) { /* 订阅失败不阻断跳转 */ }
         wx.showToast({ title: "预约已提交", icon: "success" });
         if (res && res.appointment && res.appointment.id) {

@@ -368,8 +368,9 @@ Page({
       if (cfg.wechat_tmpl_rejection)          { s4 = cfg.wechat_tmpl_rejection;          wx.setStorageSync("WECHAT_TMPL_REJECTION", s4); }
       if (cfg.wechat_tmpl_pending_manual)     { s5 = cfg.wechat_tmpl_pending_manual;     wx.setStorageSync("WECHAT_TMPL_PENDING_MANUAL", s5); }
       // 同时缓存预约/手术模板ID，供预约页订阅时使用（不在此处请求授权）
-      if (cfg.wechat_tmpl_surgery_done)   wx.setStorageSync("WECHAT_TMPL_SURGERY_DONE", cfg.wechat_tmpl_surgery_done);
-      if (cfg.wechat_tmpl_appointment)    wx.setStorageSync("WECHAT_TMPL_APPOINTMENT", cfg.wechat_tmpl_appointment);
+      if (cfg.wechat_tmpl_surgery_done)     wx.setStorageSync("WECHAT_TMPL_SURGERY_DONE", cfg.wechat_tmpl_surgery_done);
+      if (cfg.wechat_tmpl_appointment)      wx.setStorageSync("WECHAT_TMPL_APPOINTMENT", cfg.wechat_tmpl_appointment);
+      if (cfg.wechat_tmpl_surgery_reminder) wx.setStorageSync("WECHAT_TMPL_SURGERY_REMINDER", cfg.wechat_tmpl_surgery_reminder);
     } catch (e) { /* 网络失败则继续用 Storage 缓存 */ }
     if (s1) tmplIds.push(s1);
     if (s4) tmplIds.push(s4);

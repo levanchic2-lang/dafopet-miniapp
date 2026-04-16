@@ -267,8 +267,9 @@ def push_surgery_reminder(
     appointment_time: str = "",
     reminder_type: str = "day_before",
 ) -> None:
-    """推送：手术前提醒（前一天或当天）。复用 surgery_done 模板。"""
-    if not settings.wechat_tmpl_surgery_done:
+    """推送：手术前提醒（前一天或当天）。使用专用 surgery_reminder 模板（预约提醒）。"""
+    tmpl_id = (settings.wechat_tmpl_surgery_reminder or "").strip()
+    if not tmpl_id:
         return
     if not _enabled() or not openid:
         return
@@ -279,9 +280,8 @@ def push_surgery_reminder(
             s = fallback
         return s[:max_len]
 
-    keys = [k.strip() for k in (settings.wechat_fields_surgery_done or "").split(",") if k.strip()]
-    if not keys:
-        keys = ["thing1", "thing2", "thing3"]
+    # 字段：thing1=用户名称, thing2=预约项目, time3=预约时间, thing4=温馨提示
+    keys = [k.strip() for k in (settings.wechat_fields_surgery_reminder or "thing1,thing2,time3,thing4").split(",") if k.strip()]
 
     appt_time_str = f"{appointment_date} {appointment_time}".strip()
     if reminder_type == "day_before":
@@ -293,16 +293,17 @@ def push_surgery_reminder(
     for k in keys:
         if k.startswith("time"):
             data[k] = {"value": appt_time_str or time.strftime("%Y-%m-%d", time.localtime())}
-        elif k == "thing5":
-            data[k] = {"value": v("TNR手术提醒", max_len=20)}
-        elif k == "thing4":
+        elif k == "thing2":
+            data[k] = {"value": v("TNR手术安排", max_len=20)}
+        elif k == "thing4" or k == "thing5":
             data[k] = {"value": v(note_text, max_len=20)}
         else:
+            # thing1 = 用户名称
             data[k] = {"value": v(cat_name, fallback="猫咪", max_len=20)}
 
     payload = {
         "touser": openid,
-        "template_id": settings.wechat_tmpl_surgery_done,
+        "template_id": tmpl_id,
         "page": settings.wechat_message_page,
         "data": data,
     }
