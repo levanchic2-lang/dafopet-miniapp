@@ -85,6 +85,12 @@ class Application(Base):
     staff_cat_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     showcase_consent: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # 代申请信息
+    is_proxy: Mapped[bool] = mapped_column(Boolean, default=False)
+    proxy_name: Mapped[str] = mapped_column(String(120), default="")
+    proxy_phone: Mapped[str] = mapped_column(String(40), default="")
+    proxy_relation: Mapped[str] = mapped_column(String(40), default="")
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
