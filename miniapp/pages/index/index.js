@@ -735,13 +735,20 @@ Page({
     } catch (e) {
       let msg = "提交失败";
       if (e && e.data) {
-        msg = (e.data && (e.data.detail || e.data.message)) || msg;
+        const d = e.data;
+        msg = (typeof d === "string" ? d : (d.detail || d.message || JSON.stringify(d))) || msg;
       } else if (e && e.errMsg) {
         msg = e.errMsg;
       } else if (e && e.message) {
         msg = e.message;
       }
+      // 附加状态码，方便排查
+      if (e && e.statusCode && e.statusCode !== 200) {
+        msg = `[${e.statusCode}] ${msg}`;
+      }
       this.setData({ error: msg, submitting: false });
+      // 控制台打印完整错误，开发者工具可见
+      console.error("[TNR submit error]", JSON.stringify(e));
     }
   },
 
