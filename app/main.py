@@ -2099,7 +2099,7 @@ async def admin_changelog_page(request: Request):
     commits = []
     try:
         result = subprocess.run(
-            ["git", "log", "--format=%H|%h|%s|%an|%ad", "--date=format:%Y-%m-%d %H:%M", "-80"],
+            ["git", "log", "--format=%H|%h|%s|%an|%ad", "--date=format:%Y-%m-%d %H:%M", "-500"],
             capture_output=True, text=True, timeout=8,
             cwd=Path(__file__).parent.parent,
         )
