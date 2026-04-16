@@ -464,15 +464,50 @@
       </ul>
     </div>
     <div>
-      <strong>时段容量池规则</strong>
+      <strong>时段容量池规则（医疗类）</strong>
       <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
         <li>各时段按时长等比设置容量上限（每小时 3 单位），防止同一时段接诊量过多。</li>
         <li>上午（09:00–12:00，3 小时）：上限 <strong>9 单位</strong></li>
         <li>下午（12:00–18:00，6 小时）：上限 <strong>18 单位</strong></li>
         <li>晚上（18:00–22:00，4 小时）：上限 <strong>12 单位</strong></li>
-        <li>各类型占用单位：疫苗/驱虫 = <strong>1</strong>，普通门诊 = <strong>3</strong>，TNR/手术 = <strong>4</strong>，美容/洗护 = <strong>0（不参与）</strong></li>
+        <li>各类型占用单位：疫苗/驱虫 = <strong>1</strong>，普通门诊 = <strong>3</strong>，TNR/手术 = <strong>4</strong>，美容/洗护 = <strong>0（不参与容量池）</strong></li>
         <li>下午组合举例：2 台 TNR（4+4=8）｜6 个普通门诊（3×6=18）｜2 台 TNR + 2 个门诊（4+4+3+3=14）</li>
         <li>⚠️ TNR 另有每日每店 <strong>2 台</strong>硬上限，两套规则同时生效。</li>
+      </ul>
+    </div>
+    <div>
+      <strong>美容预约规则</strong>
+      <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
+        <li>美容预约<strong>不参与医疗容量池</strong>，采用独立的美容师排班逻辑，按实际时段占用检测冲突。</li>
+        <li>可预约时段：<strong>13:00 – 22:00</strong>，每 30 分钟一个时段；系统自动过滤已被占用的时段。</li>
+        <li>支持服务类型：<strong>犬造型</strong>、<strong>犬洗护</strong>、<strong>猫造型</strong>、<strong>猫洗护</strong>。</li>
+        <li>毛发长度选项：<strong>长毛 / 短毛</strong>（影响估算时长）。</li>
+        <li>附加服务（各项 +30 分钟）：去浮毛、SPA、护发素、纯手剪、药浴、去油。</li>
+        <li style="margin-top:0.4rem;list-style:none;padding-left:0;">
+          <strong>预计占用时长参考表（分钟，不含附加服务）：</strong>
+          <table style="font-size:0.82rem;border-collapse:collapse;width:100%;margin-top:0.4rem;">
+            <thead>
+              <tr style="background:var(--bg-elevated);">
+                <th style="padding:4px 8px;border:1px solid var(--border);text-align:left;">服务 / 体型</th>
+                <th style="padding:4px 8px;border:1px solid var(--border);text-align:center;">造型</th>
+                <th style="padding:4px 8px;border:1px solid var(--border);text-align:center;">洗护（短毛）</th>
+                <th style="padding:4px 8px;border:1px solid var(--border);text-align:center;">洗护（长毛）</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td style="padding:4px 8px;border:1px solid var(--border);">犬·微小型（≤4 kg）</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">90</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">30</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">30</td></tr>
+              <tr><td style="padding:4px 8px;border:1px solid var(--border);">犬·小型（4–10 kg）</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">120</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">60</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">60</td></tr>
+              <tr><td style="padding:4px 8px;border:1px solid var(--border);">犬·中型（10–15 kg）</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">150</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">60</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">90</td></tr>
+              <tr><td style="padding:4px 8px;border:1px solid var(--border);">犬·中大型（15–25 kg）</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">180</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">90</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">120</td></tr>
+              <tr><td style="padding:4px 8px;border:1px solid var(--border);">犬·大型（25 kg+）</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">210</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">120</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">150</td></tr>
+              <tr><td style="padding:4px 8px;border:1px solid var(--border);">猫·小型（≤2.5 kg）</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">120</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">60</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">90</td></tr>
+              <tr><td style="padding:4px 8px;border:1px solid var(--border);">猫·中型（2.5–4 kg）</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">120</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">90</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">120</td></tr>
+              <tr><td style="padding:4px 8px;border:1px solid var(--border);">猫·大型（4 kg+）</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">150</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">120</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">150</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:0.35rem;font-size:0.8rem;color:var(--muted);">以上为基础时长，每项附加服务额外 +30 分钟。实际执行时间以门店为准。</div>
+        </li>
+        <li style="margin-top:0.35rem;">🐱 <strong>猫犬并发规则</strong>：猫完成主动护理（前 60 分钟）进入烘干阶段后，美容师可同时接入 <strong>≤60 分钟</strong>的犬洗护；超出烘干窗口的犬服务仍按普通冲突检测。</li>
       </ul>
     </div>
     <div>
@@ -482,7 +517,8 @@
         <li>✅ <strong>TNR 申请通过通知</strong>：AI 或人工审核通过后自动推送。</li>
         <li>✅ <strong>待人工审核通知</strong>：AI 判断需人工复核时自动推送。</li>
         <li>✅ <strong>审核不通过通知</strong>：人工审核拒绝时自动推送，附带不通过原因。</li>
-        <li>🔜 <strong>手术完成通知</strong>：待医疗管理系统完善后启用。</li>
+        <li>✅ <strong>手术完成通知</strong>：后台标记手术完成时自动推送（客户须在 TNR 申请提交时或预约时点击授权）。</li>
+        <li>✅ <strong>手术前提醒</strong>：每天 08:00 定时扫描，提前一天及当天有 TNR 手术预约时自动推送。</li>
       </ul>
     </div>
   </div>
