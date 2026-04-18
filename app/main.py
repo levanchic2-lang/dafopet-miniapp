@@ -4321,21 +4321,29 @@ async def page_admin_visit_create(
     customer_id: int = Query(0),
     pet_id: int = Query(0),
     appointment_id: int = Query(0),
+    search_q: str = Query(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     cust = db.get(Customer, customer_id) if customer_id else None
     pet = db.get(Pet, pet_id) if pet_id else None
     appt = db.get(Appointment, appointment_id) if appointment_id else None
-    # 该客户的全部宠物（用于下拉）
     pets = db.query(Pet).filter(Pet.customer_id == customer_id).all() if customer_id else []
-    # 在职医生列表（用于下拉建议）
     vets = db.query(Staff.name).filter(
         Staff.status.in_(["active", "probation"]),
         Staff.position.ilike("%医%")
     ).all()
     vet_names = [v[0] for v in vets]
     today = datetime.utcnow().strftime("%Y-%m-%d")
+    # 客户搜索结果
+    search_results = []
+    if search_q and not customer_id:
+        search_results = db.query(Customer).filter(
+            or_(
+                Customer.name.ilike(f"%{search_q}%"),
+                Customer.phone.ilike(f"%{search_q}%"),
+            )
+        ).limit(10).all()
     return templates.TemplateResponse(request, "admin_visit_form.html", {
         "cust": cust,
         "pet": pet,
@@ -4346,6 +4354,8 @@ async def page_admin_visit_create(
         "today": today,
         "csrf_token": _get_csrf_token(request),
         "mode": "create",
+        "search_q": search_q,
+        "search_results": search_results,
     })
 
 

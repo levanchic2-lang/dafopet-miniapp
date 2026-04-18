@@ -17,6 +17,41 @@
   </h1>
 </div>
 
+{% if not is_edit and not cust %}
+<!-- 第一步：搜索客户 -->
+<div class="card" style="max-width:600px;">
+  <div style="font-weight:700;font-size:1rem;margin-bottom:0.5rem;">第一步：找到客户</div>
+  <p class="sub" style="margin:0 0 0.75rem;">输入客户姓名或手机号搜索，选中后再填写病历。</p>
+  <form method="get" action="/admin/visits/create" style="display:flex;gap:0.5rem;">
+    <input name="search_q" value="{{ search_q or '' }}" placeholder="姓名 / 手机号" style="flex:1;" autofocus />
+    <button type="submit" style="white-space:nowrap;">搜索</button>
+  </form>
+
+  {% if search_q %}
+    {% if search_results %}
+    <div style="margin-top:0.85rem;display:grid;gap:0.4rem;">
+      {% for c in search_results %}
+      <a href="/admin/visits/create?customer_id={{ c.id }}"
+         style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.85rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
+        <span>
+          <strong>{{ c.name or '未命名' }}</strong>
+          <span style="color:var(--muted);margin-left:0.6rem;font-size:0.88rem;">{{ c.phone or '—' }}</span>
+        </span>
+        <span style="font-size:0.82rem;color:var(--muted);">选择 →</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="margin-top:0.75rem;color:var(--muted);font-size:0.9rem;">
+      没有找到"{{ search_q }}"的客户。
+      <a href="/admin/customers" style="margin-left:0.4rem;">先创建客户档案 →</a>
+    </p>
+    {% endif %}
+  {% endif %}
+</div>
+
+{% else %}
+
 <div style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start;">
 
   <!-- 左：SOAP 表单 -->
@@ -163,5 +198,7 @@
   </div>
 
 </div>
+
+{% endif %}{# end: not is_edit and not cust #}
 
 {% endblock %}
