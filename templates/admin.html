@@ -307,39 +307,6 @@
   </div>
 </div>
 
-<div class="card">
-  <h2 style="margin:0 0 0.35rem;font-size:1.05rem;">数据备份</h2>
-  <p class="sub" style="margin:0;">将 <code>data/</code> 下数据库文件（含 WAL/SHM）与整个 <code>uploads/</code> 打成 zip，保存在项目 <code>backups/</code> 目录，便于上线前迁机或灾难恢复。</p>
-  <form method="post" action="{{ request.url_for('admin_backup_create') }}" style="margin-top:0.75rem;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <button type="submit" class="secondary">立即生成备份（zip）</button>
-  </form>
-  {% if backup_files %}
-  <p style="margin:0.75rem 0 0.35rem;font-weight:600;font-size:0.9rem;">已有备份文件</p>
-  <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
-    <thead>
-      <tr style="text-align:left;border-bottom:1px solid var(--border);">
-        <th style="padding:0.35rem 0;">文件名</th>
-        <th style="padding:0.35rem 0;">大小</th>
-        <th style="padding:0.35rem 0;">时间</th>
-        <th style="padding:0.35rem 0;"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for b in backup_files %}
-      <tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:0.35rem 0;word-break:break-all;">{{ b.name }}</td>
-        <td style="padding:0.35rem 0;">{{ (b.size / 1024 / 1024) | round(2) }} MB</td>
-        <td style="padding:0.35rem 0;color:var(--muted);">{{ b.mtime_iso }}</td>
-        <td style="padding:0.35rem 0;"><a href="{{ request.url_for('admin_backup_download', filename=b.name) }}" class="btn secondary" style="padding:0.35rem 0.65rem;font-size:0.8rem;text-decoration:none;">下载</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="sub" style="margin:0.75rem 0 0;">暂无备份文件，点击上方按钮生成。</p>
-  {% endif %}
-</div>
 
 <div class="card" style="border:1px solid var(--border-strong);background:var(--bg-elevated);">
   <details>
