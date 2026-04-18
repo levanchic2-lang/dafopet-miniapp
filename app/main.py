@@ -4113,7 +4113,6 @@ async def page_admin_customer_detail(
     applications = db.query(Application).filter(Application.customer_id == customer_id).order_by(Application.id.desc()).limit(50).all()
     appointments = db.query(Appointment).filter(Appointment.customer_id == customer_id).order_by(Appointment.id.desc()).limit(50).all()
     visits = db.query(Visit).filter(Visit.customer_id == customer_id).order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(100).all()
-    # 按 pet_id 分组，方便模板展示
     visits_by_pet: dict[int, list] = {}
     visits_no_pet = []
     for vis in visits:
@@ -4122,6 +4121,8 @@ async def page_admin_customer_detail(
         else:
             visits_no_pet.append(vis)
     pet_map = {p.id: p for p in pets}
+    cust_sales_orders = db.query(SalesOrder).filter(SalesOrder.customer_id == customer_id).order_by(SalesOrder.id.desc()).limit(100).all()
+    _SO_STATUS_ZH_LOCAL = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
     return templates.TemplateResponse(
         request,
         "admin_customer_detail.html",
@@ -4135,6 +4136,8 @@ async def page_admin_customer_detail(
             "visits_no_pet": visits_no_pet,
             "pet_map": pet_map,
             "visit_type_zh": _VISIT_TYPE_ZH,
+            "sales_orders": cust_sales_orders,
+            "so_status_zh": _SO_STATUS_ZH_LOCAL,
             "csrf_token": _get_csrf_token(request),
         },
     )

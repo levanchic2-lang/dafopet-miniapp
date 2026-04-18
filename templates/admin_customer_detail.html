@@ -7,6 +7,10 @@
 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
   <a href="/admin/customers" class="btn secondary" style="font-size:0.85rem;">← 返回列表</a>
   <h1 style="margin:0;font-size:1.3rem;">{{ cust.name or '未命名客户' }} <span style="color:var(--muted);font-weight:400;font-size:0.9rem;">#{{ cust.id }}</span></h1>
+  <div style="margin-left:auto;display:flex;gap:0.5rem;flex-wrap:wrap;">
+    <a href="/admin/sales-orders/create?customer_id={{ cust.id }}" class="btn secondary" style="font-size:0.88rem;">＋ 开销售单</a>
+    <a href="/admin/visits/create?customer_id={{ cust.id }}" class="btn" style="font-size:0.88rem;">＋ 新建就诊</a>
+  </div>
 </div>
 
 <!-- 基本信息卡 -->
@@ -201,6 +205,50 @@
   </table>
 </div>
 {% endif %}
+
+<!-- 销售记录 -->
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+    <h2 style="margin:0;font-size:1rem;">销售记录（{{ sales_orders|length }}）</h2>
+    <a href="/admin/sales-orders/create?customer_id={{ cust.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">＋ 开销售单</a>
+  </div>
+  {% if sales_orders %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);">
+        <th style="text-align:left;padding:0.4rem 0.6rem;">编号</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">日期</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">项目数</th>
+        <th style="text-align:right;padding:0.4rem 0.6rem;">金额</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">收款方式</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">状态</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for so in sales_orders %}
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.6rem;color:var(--muted);">#{{ so.id }}</td>
+        <td style="padding:0.4rem 0.6rem;color:var(--muted);">{{ so.order_date or '—' }}</td>
+        <td style="padding:0.4rem 0.6rem;">{{ so.items|length }} 项</td>
+        <td style="padding:0.4rem 0.6rem;text-align:right;font-weight:600;">¥ {{ '%.2f'|format(so.total_amount) }}</td>
+        <td style="padding:0.4rem 0.6rem;color:var(--muted);">{{ so.payment_method or '—' }}</td>
+        <td style="padding:0.4rem 0.6rem;">
+          <span class="badge {% if so.status == 'paid' %}b-done{% elif so.status == 'cancelled' %}b-no{% else %}b-pending{% endif %}">
+            {{ so_status_zh.get(so.status, so.status) }}
+          </span>
+        </td>
+        <td style="padding:0.4rem 0.6rem;text-align:right;">
+          <a href="/admin/sales-orders/{{ so.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;">查看</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:0.9rem;margin:0;">暂无销售记录</p>
+  {% endif %}
+</div>
 
 <!-- 编辑客户信息 modal -->
 <div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:center;justify-content:center;">
