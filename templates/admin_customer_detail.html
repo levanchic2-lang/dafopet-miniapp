@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% set msg = request.query_params.get('msg') %}
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+  <a href="/admin/customers" class="btn secondary" style="font-size:0.85rem;">← 返回列表</a>
+  <h1 style="margin:0;font-size:1.3rem;">{{ cust.name or '未命名客户' }} <span style="color:var(--muted);font-weight:400;font-size:0.9rem;">#{{ cust.id }}</span></h1>
+</div>
+
+<!-- 基本信息卡 -->
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+    <h2 style="margin:0;font-size:1rem;">基本信息</h2>
+    <button onclick="document.getElementById('edit-modal').style.display='flex'" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">编辑</button>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1.5rem;font-size:0.9rem;">
+    <div><span style="color:var(--muted);">手机号</span><br/><strong>{{ cust.phone or '—' }}</strong></div>
+    <div><span style="color:var(--muted);">来源</span><br/>
+      {% if cust.source == 'tnr' %}TNR申请
+      {% elif cust.source == 'outpatient' %}门诊预约
+      {% elif cust.source == 'surgery' %}手术预约
+      {% elif cust.source == 'beauty' %}美容预约
+      {% elif cust.source == 'manual' %}手动创建
+      {% else %}{{ cust.source or '—' }}{% endif %}
+    </div>
+    <div style="grid-column:1/-1;"><span style="color:var(--muted);">地址</span><br/>{{ cust.address or '—' }}</div>
+    {% if cust.notes %}
+    <div style="grid-column:1/-1;"><span style="color:var(--muted);">备注</span><br/>{{ cust.notes }}</div>
+    {% endif %}
+    <div><span style="color:var(--muted);">创建时间</span><br/>{{ cust.created_at.strftime('%Y-%m-%d %H:%M') if cust.created_at else '—' }}</div>
+    <div><span style="color:var(--muted);">更新时间</span><br/>{{ cust.updated_at.strftime('%Y-%m-%d %H:%M') if cust.updated_at else '—' }}</div>
+  </div>
+</div>
+
+<!-- 宠物列表 -->
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+    <h2 style="margin:0;font-size:1rem;">宠物档案（{{ pets|length }}）</h2>
+    <button onclick="document.getElementById('add-pet-modal').style.display='flex'" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">＋ 添加宠物</button>
+  </div>
+  {% if pets %}
+  <div style="display:grid;gap:0.75rem;">
+    {% for pet in pets %}
+    <details style="border:1px solid var(--border);border-radius:10px;padding:0.75rem 1rem;">
+      <summary style="cursor:pointer;font-weight:600;font-size:0.92rem;list-style:none;display:flex;align-items:center;gap:0.5rem;">
+        <span>{{ '🐱' if pet.species == 'cat' else '🐶' if pet.species == 'dog' else '🐾' }}</span>
+        <span>{{ pet.name or '未命名' }}</span>
+        <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">
+          · {{ '公' if pet.gender == 'male' else '母' if pet.gender == 'female' else '未知性别' }}
+          {% if pet.is_neutered %} · 已绝育{% endif %}
+          {% if pet.is_stray %} · 流浪{% endif %}
+        </span>
+        <span style="margin-left:auto;font-size:0.8rem;color:var(--muted);">▸ 展开编辑</span>
+      </summary>
+      <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ pet.id }}/edit" style="margin-top:0.75rem;">
+        <div class="row2">
+          <div>
+            <label>名字</label>
+            <input name="name" value="{{ pet.name }}" />
+          </div>
+          <div>
+            <label>物种</label>
+            <select name="species">
+              <option value="cat" {% if pet.species == 'cat' %}selected{% endif %}>猫</option>
+              <option value="dog" {% if pet.species == 'dog' %}selected{% endif %}>狗</option>
+              <option value="other" {% if pet.species == 'other' %}selected{% endif %}>其他</option>
+            </select>
+          </div>
+          <div>
+            <label>品种</label>
+            <input name="breed" value="{{ pet.breed }}" placeholder="如：橘猫、拉布拉多" />
+          </div>
+          <div>
+            <label>性别</label>
+            <select name="gender">
+              <option value="male" {% if pet.gender == 'male' %}selected{% endif %}>公</option>
+              <option value="female" {% if pet.gender == 'female' %}selected{% endif %}>母</option>
+              <option value="unknown" {% if pet.gender == 'unknown' %}selected{% endif %}>未知</option>
+            </select>
+          </div>
+          <div>
+            <label>年龄估算</label>
+            <input name="birthday_estimate" value="{{ pet.birthday_estimate }}" placeholder="如：2岁、2023年" />
+          </div>
+          <div>
+            <label>颜色/花纹</label>
+            <input name="color_pattern" value="{{ pet.color_pattern }}" placeholder="如：橘白、黑白花" />
+          </div>
+          <div>
+            <label>芯片号（可选）</label>
+            <input name="microchip_id" value="{{ pet.microchip_id }}" placeholder="15位芯片编号" />
+          </div>
+          <div style="display:flex;align-items:center;gap:1.5rem;padding-top:1.5rem;">
+            <label style="display:flex;align-items:center;gap:0.4rem;font-weight:500;cursor:pointer;">
+              <input type="checkbox" name="is_neutered" value="1" {% if pet.is_neutered %}checked{% endif %} /> 已绝育
+            </label>
+            <label style="display:flex;align-items:center;gap:0.4rem;font-weight:500;cursor:pointer;">
+              <input type="checkbox" name="is_stray" value="1" {% if pet.is_stray %}checked{% endif %} /> 流浪动物
+            </label>
+          </div>
+        </div>
+        <label>备注</label>
+        <textarea name="notes" style="min-height:60px;">{{ pet.notes }}</textarea>
+        <button type="submit" class="btn" style="margin-top:0.6rem;font-size:0.88rem;">保存宠物信息</button>
+      </form>
+    </details>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--muted);font-size:0.9rem;">暂无宠物档案</p>
+  {% endif %}
+</div>
+
+<!-- TNR 申请记录 -->
+{% if applications %}
+<div class="card">
+  <h2 style="margin:0 0 0.75rem;font-size:1rem;">TNR 申请记录（{{ applications|length }}）</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);">
+        <th style="text-align:left;padding:0.4rem 0.6rem;">编号</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">猫咪</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">门店</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">状态</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">时间</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in applications %}
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.6rem;color:var(--muted);">#{{ a.id }}</td>
+        <td style="padding:0.4rem 0.6rem;">{{ a.cat_nickname or '—' }}</td>
+        <td style="padding:0.4rem 0.6rem;">{{ a.clinic_store or '—' }}</td>
+        <td style="padding:0.4rem 0.6rem;">{{ a.status }}</td>
+        <td style="padding:0.4rem 0.6rem;color:var(--muted);">{{ a.created_at.strftime('%Y-%m-%d') if a.created_at else '—' }}</td>
+        <td style="padding:0.4rem 0.6rem;"><a href="/admin/{{ a.id }}" style="font-size:0.8rem;">查看</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- 预约记录 -->
+{% if appointments %}
+<div class="card">
+  <h2 style="margin:0 0 0.75rem;font-size:1rem;">预约记录（{{ appointments|length }}）</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);">
+        <th style="text-align:left;padding:0.4rem 0.6rem;">编号</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">类别</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">服务</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">宠物</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">日期</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem;">状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ap in appointments %}
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.6rem;color:var(--muted);">#{{ ap.id }}</td>
+        <td style="padding:0.4rem 0.6rem;">{{ ap.category }}</td>
+        <td style="padding:0.4rem 0.6rem;">{{ ap.service_name or '—' }}</td>
+        <td style="padding:0.4rem 0.6rem;">{{ ap.pet_name or '—' }}</td>
+        <td style="padding:0.4rem 0.6rem;color:var(--muted);">{{ ap.appointment_date or '—' }}</td>
+        <td style="padding:0.4rem 0.6rem;">{{ ap.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- 编辑客户信息 modal -->
+<div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:440px;margin:1rem;">
+    <h2 style="margin:0 0 1rem;font-size:1.1rem;">编辑客户信息</h2>
+    <form method="post" action="/admin/customers/{{ cust.id }}/edit">
+      <label>姓名</label>
+      <input name="name" value="{{ cust.name }}" />
+      <label>手机号</label>
+      <input name="phone" value="{{ cust.phone }}" type="tel" />
+      <label>地址</label>
+      <input name="address" value="{{ cust.address }}" />
+      <label>备注</label>
+      <textarea name="notes" style="min-height:80px;">{{ cust.notes }}</textarea>
+      <div style="display:flex;gap:0.6rem;margin-top:1rem;">
+        <button type="submit" class="btn" style="flex:1;">保存</button>
+        <button type="button" onclick="document.getElementById('edit-modal').style.display='none'" class="btn secondary" style="flex:1;">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 添加宠物 modal -->
+<div id="add-pet-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:center;justify-content:center;overflow:auto;">
+  <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:480px;margin:1rem;">
+    <h2 style="margin:0 0 1rem;font-size:1.1rem;">添加宠物档案</h2>
+    <form method="post" action="/admin/customers/{{ cust.id }}/pets/add">
+      <div class="row2">
+        <div>
+          <label>名字</label>
+          <input name="name" placeholder="宠物名字" />
+        </div>
+        <div>
+          <label>物种</label>
+          <select name="species">
+            <option value="cat">猫</option>
+            <option value="dog">狗</option>
+            <option value="other">其他</option>
+          </select>
+        </div>
+        <div>
+          <label>品种</label>
+          <input name="breed" placeholder="如：橘猫" />
+        </div>
+        <div>
+          <label>性别</label>
+          <select name="gender">
+            <option value="unknown">未知</option>
+            <option value="male">公</option>
+            <option value="female">母</option>
+          </select>
+        </div>
+        <div>
+          <label>年龄估算</label>
+          <input name="birthday_estimate" placeholder="如：2岁" />
+        </div>
+        <div>
+          <label>颜色/花纹</label>
+          <input name="color_pattern" placeholder="如：橘白" />
+        </div>
+      </div>
+      <label>备注</label>
+      <textarea name="notes" style="min-height:60px;"></textarea>
+      <div style="display:flex;gap:0.75rem;margin-top:0.75rem;">
+        <label style="display:flex;align-items:center;gap:0.35rem;font-weight:500;cursor:pointer;">
+          <input type="checkbox" name="is_neutered" value="1" /> 已绝育
+        </label>
+        <label style="display:flex;align-items:center;gap:0.35rem;font-weight:500;cursor:pointer;">
+          <input type="checkbox" name="is_stray" value="1" /> 流浪动物
+        </label>
+      </div>
+      <div style="display:flex;gap:0.6rem;margin-top:1rem;">
+        <button type="submit" class="btn" style="flex:1;">添加</button>
+        <button type="button" onclick="document.getElementById('add-pet-modal').style.display='none'" class="btn secondary" style="flex:1;">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

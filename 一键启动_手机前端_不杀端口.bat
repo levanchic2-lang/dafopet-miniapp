@@ -1,4 +1,5 @@
 @echo off
+REM Same as 一键启动_手机联调_不杀端口.bat (ASCII-safe for cmd.exe)
 setlocal EnableExtensions
 cd /d "%~dp0"
 

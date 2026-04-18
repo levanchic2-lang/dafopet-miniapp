@@ -31,14 +31,8 @@ from app.models import (
     AppointmentCategory,
     AppointmentStatus,
     AuditLog,
-    Contract,
-    ContractType,
-    Customer,
     MediaFile,
     MediaKind,
-    Pet,
-    Staff,
-    StaffStatus,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -178,19 +172,19 @@ def _startup():
 
 
 async def _surgery_reminder_loop():
-    """每天 08:00 检查手术预约并推送前一天+当天提醒。
-    先等到下一个 08:00 再执行，避免服务重启时立即触发误推。
-    """
+    """每天定时检查手术预约并推送前一天+当天提醒（#6）。"""
+    await asyncio.sleep(10)  # 启动后延迟 10s 再进入循环
     while True:
-        now = datetime.now()
-        next_run = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        if now >= next_run:
-            next_run += timedelta(days=1)
-        await asyncio.sleep((next_run - now).total_seconds())
         try:
             _run_surgery_reminders()
         except Exception:
             pass
+        # 计算距离明天 8:00 的等待时间（每天早上 8 点触发）
+        now = datetime.now()
+        next_run = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+        if now.hour < 8:
+            next_run = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        await asyncio.sleep((next_run - now).total_seconds())
 
 
 def _run_surgery_reminders():
@@ -250,38 +244,6 @@ def _run_surgery_reminders():
             db.commit()
     finally:
         db.close()
-
-
-def _upsert_customer(db: Session, name: str, phone: str, openid: str = "", id_number: str = "", address: str = "", source: str = "") -> "Customer":
-    """查找或创建客户档案，始终合并最新信息。"""
-    phone = (phone or "").strip()
-    cust = db.query(Customer).filter(Customer.phone == phone).first() if phone else None
-    if not cust:
-        # 尝试通过 openid 查找（openid 非空时）
-        if openid and openid.strip():
-            cust = db.query(Customer).filter(Customer.wechat_openid == openid.strip()).first()
-    if cust:
-        # 合并更新
-        if name and not cust.name:
-            cust.name = name[:120]
-        if openid and not cust.wechat_openid:
-            cust.wechat_openid = openid.strip()
-        if id_number and not cust.id_number:
-            cust.id_number = id_number[:40]
-        if address and not cust.address:
-            cust.address = address[:500]
-    else:
-        cust = Customer(
-            name=(name or "")[:120],
-            phone=phone[:40],
-            wechat_openid=(openid or "").strip()[:64],
-            id_number=(id_number or "")[:40],
-            address=(address or "")[:500],
-            source=(source or "")[:40],
-        )
-        db.add(cust)
-        db.flush()  # get id without commit
-    return cust
 
 
 def _admin_ok(request: Request) -> bool:
@@ -448,7 +410,6 @@ async def api_wechat_config():
         "wechat_tmpl_appointment": settings.wechat_tmpl_appointment,
         "wechat_tmpl_rejection": settings.wechat_tmpl_rejection,
         "wechat_tmpl_pending_manual": settings.wechat_tmpl_pending_manual,
-        "wechat_tmpl_surgery_reminder": settings.wechat_tmpl_surgery_reminder,
         "wechat_message_page": settings.wechat_message_page,
         "wechat_fields_application_result": settings.wechat_fields_application_result,
         "wechat_fields_surgery_done": settings.wechat_fields_surgery_done,
@@ -771,16 +732,14 @@ def _appointment_catalog() -> dict:
             {
                 "value": AppointmentCategory.surgery.value,
                 "label": "手术预约",
-                "description": "适合绝育、骨科、软组织、眼科、神经外科等各类手术预约。",
+                "description": "适合绝育手术、术前评估和术后复查。",
                 "booking_tip": "请使用下方「预约日期 / 预约时间」自主选择到院时段；后续可按手术台与麻醉安排细化。",
                 "supports_related_application": False,
                 "time_slots": [],
                 "services": [
-                    {"name": "绝育手术",    "duration_minutes": 60,  "description": "用于常规绝育手术预约。"},
-                    {"name": "骨科手术",    "duration_minutes": 120, "description": "用于骨折、关节、脊椎等骨科手术预约。"},
-                    {"name": "软组织手术",  "duration_minutes": 90,  "description": "用于皮肤、肿瘤切除、消化道等软组织手术预约。"},
-                    {"name": "眼科手术",    "duration_minutes": 60,  "description": "用于眼睑、角膜、晶体等眼科手术预约。"},
-                    {"name": "神经外科手术","duration_minutes": 120, "description": "用于脑部、脊髓等神经外科手术预约。"},
+                    {"name": "绝育手术", "duration_minutes": 60, "description": "用于常规绝育手术预约。"},
+                    {"name": "术前评估", "duration_minutes": 30, "description": "用于评估手术风险、检查准备条件。"},
+                    {"name": "术后复查", "duration_minutes": 20, "description": "用于术后恢复、伤口与用药情况复核。"},
                 ],
             },
             {
@@ -1113,10 +1072,6 @@ async def api_apply_create(
     wechat_openid: str = Form(""),
     agree_ear_tip: str = Form("false"),
     agree_no_pet_fraud: str = Form("false"),
-    is_proxy: str = Form(""),
-    proxy_name: str = Form(""),
-    proxy_phone: str = Form(""),
-    proxy_relation: str = Form(""),
 ):
     ok_ear = agree_ear_tip.lower() in ("true", "1", "on", "yes")
     ok_fraud = agree_no_pet_fraud.lower() in ("true", "1", "on", "yes")
@@ -1137,52 +1092,6 @@ async def api_apply_create(
         health_note=health_note,
     )
 
-    # ── 重复提交检测：同手机号在进行中的申请 ──
-    _ACTIVE_STATUSES = [
-        ApplicationStatus.draft.value,
-        ApplicationStatus.pending_ai.value,
-        ApplicationStatus.pending_manual.value,
-        ApplicationStatus.pre_approved.value,
-        ApplicationStatus.approved.value,
-        ApplicationStatus.scheduled.value,
-        ApplicationStatus.no_show.value,
-        ApplicationStatus.arrived_verified.value,
-    ]
-    _DUP_STATUS_ZH = {
-        "draft": "草稿", "pending_ai": "审核中", "pending_manual": "待人工审核",
-        "pre_approved": "预通过", "approved": "已通过", "scheduled": "已预约",
-        "no_show": "爽约", "arrived_verified": "到院核对中",
-    }
-    existing_dup = (
-        db.query(Application)
-        .filter(Application.phone == f["phone"])
-        .filter(Application.status.in_(_ACTIVE_STATUSES))
-        .order_by(Application.id.desc())
-        .first()
-    )
-    if existing_dup:
-        status_label = _DUP_STATUS_ZH.get(existing_dup.status, existing_dup.status)
-        raise HTTPException(
-            409,
-            f"该手机号已有进行中的申请（编号 #{existing_dup.id}，当前状态：{status_label}），请勿重复提交。"
-            f"如需重新申请，请等待当前申请处理完毕，或联系医院前台取消后再试。",
-        )
-
-    # ── 自动创建/合并客户档案 ──
-    try:
-        _cust = _upsert_customer(
-            db,
-            name=f["applicant_name"],
-            phone=f["phone"],
-            openid=wechat_openid.strip(),
-            id_number=f["id_number"],
-            address=f["address"],
-            source="tnr",
-        )
-        _cust_id = _cust.id
-    except Exception:
-        _cust_id = None
-
     app_row = Application(
         applicant_name=f["applicant_name"],
         phone=f["phone"],
@@ -1202,35 +1111,11 @@ async def api_apply_create(
         health_note=f["health_note"],
         agree_ear_tip=ok_ear,
         agree_no_pet_fraud=ok_fraud,
-        is_proxy=is_proxy.lower() in ("true", "1", "on", "yes"),
-        proxy_name=proxy_name.strip()[:120],
-        proxy_phone=proxy_phone.strip()[:40],
-        proxy_relation=proxy_relation.strip()[:40],
         status=ApplicationStatus.draft.value,
-        customer_id=_cust_id,
     )
     db.add(app_row)
     db.commit()
     db.refresh(app_row)
-
-    # ── 自动创建宠物档案 ──
-    if _cust_id and f.get("cat_nickname"):
-        try:
-            _pet = Pet(
-                customer_id=_cust_id,
-                name=f["cat_nickname"][:120],
-                species="cat",
-                gender=f.get("cat_gender", "unknown"),
-                birthday_estimate=f.get("age_estimate", "")[:40],
-                is_stray=True,
-                notes=f.get("health_note", "")[:500],
-            )
-            db.add(_pet)
-            db.flush()
-            app_row.pet_id = _pet.id
-            db.commit()
-        except Exception:
-            pass
 
     base = Path(settings.upload_dir) / str(app_row.id)
     base.mkdir(parents=True, exist_ok=True)
@@ -1698,15 +1583,9 @@ def _beauty_slots_for_date(
 
 # ── 门诊/手术容量规则 ─────────────────────────────────────────────────────────
 # 每门店、每时段（上午/下午/晚上）的总容量单位数上限
-# 各时段容量上限（按时长等比，每小时 3 单位）
-# 上午 3h=9，下午 6h=18，晚上 4h=12
-_SLOT_CAPACITY = {
-    "morning":   9,
-    "afternoon": 18,
-    "evening":   12,
-    "other":     9,
-}
-# 疫苗/驱虫 = 1 单位；普通门诊 = 3 单位；TNR/手术 = 4 单位；美容 = 0（不参与）
+_SLOT_CAPACITY_MAX = 9
+# 疫苗/驱虫 = 1 单位；普通门诊 = 3 单位；手术（含 TNR）= 6 单位
+# 规则：同时段最多 3 个普通门诊 (3×3=9)，或 1 个手术 (6) + 1 个普通门诊 (3)=9，等等
 
 _OUTPATIENT_SERVICES = [
     "疫苗/驱虫", "体检", "呼吸道", "胃肠道", "泌尿道",
@@ -1724,15 +1603,9 @@ _SLOT_NAME_ZH = {"morning": "上午", "afternoon": "下午", "evening": "晚上"
 
 
 def _capacity_units(category: str, service_name: str) -> int:
-    """返回该预约消耗的容量单位（0 = 不纳入容量管控）。
-    单位换算：
-      疫苗/驱虫 = 1 单位
-      普通门诊   = 3 单位
-      TNR/手术   = 4 单位（术前检查少，相对快，2台=8单位 ≤ 上限9）
-      美容/洗护  = 0 单位（不参与）
-    """
+    """返回该预约消耗的容量单位（0 = 不纳入容量管控，如造型/洗护）。"""
     if category in ("tnr", "surgery"):
-        return 4
+        return 6
     if category == "outpatient":
         sn = service_name or ""
         if any(kw in sn for kw in _VACCINE_KEYWORDS):
@@ -1789,9 +1662,8 @@ def _check_slot_capacity(
     if exclude_id:
         q = q.filter(Appointment.id != exclude_id)
 
-    slot_max = _SLOT_CAPACITY.get(slot_key, 9)
     used = sum(_capacity_units(a.category, a.service_name or "") for a in q.all())
-    avail = slot_max - used
+    avail = _SLOT_CAPACITY_MAX - used
 
     if avail < new_units:
         type_zh = (
@@ -1799,7 +1671,7 @@ def _check_slot_capacity(
             else ("疫苗/驱虫" if new_units == 1 else "门诊")
         )
         if avail <= 0:
-            return f"该门店 {slot_zh}时段预约容量已满（上限 {slot_max} 单位），请选择其他时段或日期。"
+            return f"该门店 {slot_zh}时段预约容量已满（上限 {_SLOT_CAPACITY_MAX} 单位），请选择其他时段或日期。"
         return (
             f"该门店 {slot_zh}时段剩余容量不足：剩余 {avail} 单位，"
             f"此{type_zh}需要 {new_units} 单位，请选择其他时段或日期。"
@@ -1819,33 +1691,6 @@ def _appt_time_slot(time_str: str) -> str:
         return "other"
     except Exception:
         return "other"
-
-
-@app.get("/api/admin/pending-count")
-async def api_admin_pending_count(request: Request, db: Session = Depends(get_db)):
-    """返回待确认预约数量（仅限已登录后台）"""
-    if not request.session.get("admin"):
-        return {"count": 0}
-    from datetime import date as _date
-    today_str = _date.today().isoformat()
-    count = (
-        db.query(func.count(Appointment.id))
-        .filter(
-            Appointment.status == AppointmentStatus.pending.value,
-            Appointment.appointment_date >= today_str,
-        )
-        .scalar()
-    ) or 0
-    return {"count": count}
-
-
-@app.get("/api/admin/feedback-count")
-async def api_admin_feedback_count(request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("admin"):
-        return {"count": 0}
-    from app.models import Feedback
-    count = db.query(func.count(Feedback.id)).filter(Feedback.status == "pending").scalar() or 0
-    return {"count": count}
 
 
 @app.get("/admin/appointments", response_class=HTMLResponse)
@@ -2108,107 +1953,6 @@ async def admin_logout(request: Request):
 
 # ── 账号管理（仅 superadmin）────────────────────────────────────────────
 
-@app.get("/admin/changelog", response_class=HTMLResponse)
-async def admin_changelog_page(request: Request):
-    if not request.session.get("admin"):
-        return RedirectResponse("/admin/login", status_code=303)
-    import subprocess, re
-
-    # ── 提交中文描述映射表（短哈希 → 中文说明）──────────────────
-    _COMMIT_ZH: dict[str, str] = {
-        "853e7be": "问题反馈页新增两家门店联系电话、微信及地址",
-        "5447ee7": "修复：预约看板突破页面宽度限制，真正撑满全屏",
-        "5468e59": "预约列表改版为三栏看板（上午 / 下午 / 晚上）",
-        "cb8460c": "补充美容预约规则和各体型时长对照表至预约规则说明",
-        "25c5731": "新增重复提交检测；TNR 提交成功后自动订阅手术完成通知",
-        "1e8b16e": "修复：代申请人信息输入框高度过小、文字不显示",
-        "0b25cf5": "修复：提交 TNR/手术预约时同步订阅手术完成通知模板",
-        "4216c8c": "新增客户问题反馈功能（文字 + 截图上传，后台管理与处理）",
-        "15a3f57": "修复：Application 模型缺失代预约字段导致提交失败",
-        "0e4c84c": "修复：TNR 提交失败时前端显示详细错误信息",
-        "e936282": "后台新增开发日志页面（自动从 Git 记录生成）",
-        "67f6784": "新增专属手术提醒订阅消息模板（预约提醒）",
-        "db64cc6": "修复：服务重启后不再误发手术提醒推送",
-        "8433391": "新增客户自助改约功能（仅限待确认状态）",
-        "338c13f": "TNR 申请页新增代预约功能",
-        "b52b2d0": "修复：时段容量池说明在后台页面不显示的问题",
-        "4b0d67a": "时段容量池按时长等比调整（上午9 / 下午18 / 晚上12 单位）",
-        "fc28caa": "TNR/手术容量单位调整为4，预约管理页新增容量池规则说明",
-        "caa7a7e": "修复：TNR/手术不再占用时段容量池，避免连续手术被误拒",
-        "5315231": "新增代预约功能，记录代预约人姓名、电话及与实际申请人关系",
-        "cdebebc": "后台新预约待确认通知：导航橙色角标 + 页面提示条",
-        "d60f47d": "修复：爱心展示入口移至「我的预约」按钮下方",
-        "7b3af92": "小程序新增 TNR 爱心展示页面",
-        "439c2b0": "新增员工档案与合同管理模块，优化账号管理",
-        "bf68614": "修复：固定 bcrypt 版本以兼容 passlib 1.7.4",
-        "28a860e": "新增多账号权限管理系统",
-        "94e3369": "补全预约规则两条缺失说明",
-        "0f6a818": "更新预约规则说明，同步当前通知开放状态",
-        "b548fe8": "预约页体验优化四项改进",
-        "025cb96": "安全加固后台登录页，修复 textarea 跳顶问题",
-        "1ed1c53": "优化订阅通知错误处理，添加诊断日志并修复编码问题",
-        "5ecc4cf": "修复：遵守微信每次最多3个模板限制，拆分订阅时机",
-        "357caa2": "新增「待人工审核」小程序推送通知",
-        "7708658": "新增「审核不通过」小程序推送通知",
-        "59f0201": "修复：爱心展示默认关闭，手术完成后需管理员手动授权才公开",
-        "3023e71": "预约页 TNR 板块仅对申请已通过的用户开放",
-        "7b2f570": "保存并展示定位文字地址，删除调试提示文字",
-        "fb578bd": "修复：模板订阅改为 API + Storage 合并取值，互补不互斥",
-        "027dacf": "修复：订阅授权每次先从 API 拉取全部模板，Storage 仅降级备用",
-        "f982c6b": "修复：订阅授权始终从 API 拉取模板 ID，避免 Storage 缓存导致漏订阅",
-        "24bf5bf": "新增预约通知模板订阅；/api/wechat/config 返回预约模板字段",
-        "34c91aa": "预约通知改用独立模板，正确映射各字段",
-        "a1b84a9": "修复预约通知日志：加 rollback 防止 NOT NULL 报错崩溃",
-        "3256ed1": "数据清理功能完善：支持删除预约、一键清空全部数据",
-        "5626011": "修复提交成功页：状态显示中文，AI 结论为空时不显示",
-        "dbc0739": "期望手术日期改为可选字段",
-        "b943bb1": "网页端降级为备用入口，申请页顶部加小程序引导",
-        "3381914": "功能完善七项改进 + HTTPS 上线配置",
-        "bbb7f1d": "项目初始化导入",
-    }
-
-    commits = []
-    try:
-        result = subprocess.run(
-            ["git", "log", "--format=%H|%h|%s|%an|%ad", "--date=format:%Y-%m-%d %H:%M", "-500"],
-            capture_output=True, text=True, timeout=8,
-            cwd=Path(__file__).parent.parent,
-        )
-        for line in result.stdout.strip().splitlines():
-            parts = line.split("|", 4)
-            if len(parts) == 5:
-                full_hash, short_hash, subject, author, date = parts
-                # 提取类型前缀（feat/fix/chore/…）
-                m = re.match(r"^(feat|fix|chore|refactor|docs|style|test|perf|build|ci|revert)(\(.+?\))?:\s*(.+)$", subject)
-                if m:
-                    kind = m.group(1)
-                    scope = (m.group(2) or "").strip("()")
-                    msg_raw = m.group(3)
-                else:
-                    kind = "update"
-                    scope = ""
-                    msg_raw = subject
-                # 优先使用中文说明，无则保留原文
-                msg = _COMMIT_ZH.get(short_hash, msg_raw)
-                commits.append({
-                    "full_hash": full_hash,
-                    "short_hash": short_hash,
-                    "subject": subject,
-                    "msg": msg,
-                    "kind": kind,
-                    "scope": scope,
-                    "author": author,
-                    "date": date,
-                })
-    except Exception as e:
-        commits = [{"short_hash": "—", "msg": f"无法读取 git log：{e}", "kind": "error", "scope": "", "author": "", "date": "", "subject": "", "full_hash": ""}]
-    return templates.TemplateResponse("admin_changelog.html", {
-        "request": request,
-        "title": "开发日志",
-        "commits": commits,
-    })
-
-
 @app.get("/admin/users", response_class=HTMLResponse)
 async def admin_users_page(
     request: Request,
@@ -2222,14 +1966,13 @@ async def admin_users_page(
             {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
         )
     require_superadmin(request)
-    all_users = db.query(AdminUser).order_by(AdminUser.created_at).all()
+    users = db.query(AdminUser).order_by(AdminUser.created_at).all()
     return templates.TemplateResponse(
         "admin_users.html",
         {
             "request": request,
             "title": "账号管理",
-            "active_users": [u for u in all_users if u.is_active],
-            "inactive_users": [u for u in all_users if not u.is_active],
+            "users": users,
             "current_username": request.session.get("admin_username", ""),
             "csrf_token": _get_csrf_token(request),
             "msg": msg,
@@ -2308,257 +2051,6 @@ async def admin_users_reset_password(
     _audit(db, request, "admin_user_reset_password", application_id=None, detail={"username": user.username})
     db.commit()
     return RedirectResponse(f"/admin/users?msg=已重置密码：{user.username}", status_code=303)
-
-
-@app.post("/admin/users/{user_id}/set-role", name="admin_users_set_role")
-async def admin_users_set_role(
-    user_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    role: str = Form(...),
-    csrf_token: str = Form(""),
-):
-    require_admin(request)
-    require_superadmin(request)
-    _require_csrf(request, csrf_token)
-    if role not in ("superadmin", "staff"):
-        return RedirectResponse("/admin/users?err=角色参数无效", status_code=303)
-    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
-    if not user:
-        raise HTTPException(404)
-    if user.username == request.session.get("admin_username", ""):
-        return RedirectResponse("/admin/users?err=不能修改自己的角色", status_code=303)
-    user.role = role
-    _audit(db, request, "admin_user_set_role", application_id=None, detail={"username": user.username, "role": role})
-    db.commit()
-    role_zh = "超级管理员" if role == "superadmin" else "员工"
-    return RedirectResponse(f"/admin/users?msg=已将「{user.username}」的角色改为{role_zh}", status_code=303)
-
-
-# ── 员工档案 & 合同管理 ─────────────────────────────────────────────────
-
-_STAFF_STATUS_ZH = {"probation": "试用中", "active": "在职", "resigned": "离职"}
-_CONTRACT_TYPE_ZH = {"formal": "正式合同", "probation": "试用期合同", "parttime": "兼职合同", "labor": "劳务合同"}
-_POSITION_OPTIONS = ["前台", "医生", "美容师", "助理", "收银", "其他"]
-_STORE_OPTIONS = ["东环店", "横岗店"]
-
-
-def _expiring_contracts(db: Session, days: int = 30) -> list:
-    """返回 days 天内到期的合同（end_date 非空）。"""
-    from datetime import date, timedelta
-    today = date.today().isoformat()
-    deadline = (date.today() + timedelta(days=days)).isoformat()
-    rows = (
-        db.query(Contract)
-        .filter(Contract.end_date != "", Contract.end_date >= today, Contract.end_date <= deadline)
-        .all()
-    )
-    return rows
-
-
-@app.get("/admin/staff", response_class=HTMLResponse)
-async def admin_staff_list(
-    request: Request,
-    db: Session = Depends(get_db),
-    msg: str = Query(""),
-    err: str = Query(""),
-):
-    if not _admin_ok(request):
-        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
-    active_staff = db.query(Staff).filter(Staff.status != StaffStatus.resigned.value).order_by(Staff.hire_date).all()
-    resigned_staff = db.query(Staff).filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
-    expiring = _expiring_contracts(db)
-    return templates.TemplateResponse("admin_staff_list.html", {
-        "request": request, "title": "员工管理",
-        "active_staff": active_staff, "resigned_staff": resigned_staff,
-        "expiring": expiring, "status_zh": _STAFF_STATUS_ZH,
-        "csrf_token": _get_csrf_token(request), "msg": msg, "err": err,
-    })
-
-
-@app.get("/admin/staff/create", response_class=HTMLResponse)
-async def admin_staff_create_get(request: Request, db: Session = Depends(get_db)):
-    if not _admin_ok(request):
-        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
-    require_superadmin(request)
-    admin_users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.username).all()
-    return templates.TemplateResponse("admin_staff_form.html", {
-        "request": request, "title": "新增员工", "staff": None,
-        "admin_users": admin_users, "position_options": _POSITION_OPTIONS,
-        "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",
-    })
-
-
-@app.post("/admin/staff/create", name="admin_staff_create")
-async def admin_staff_create_post(
-    request: Request, db: Session = Depends(get_db),
-    name: str = Form(...), gender: str = Form(""), birthday: str = Form(""),
-    phone: str = Form(""), id_number: str = Form(""), store: str = Form(""),
-    position: str = Form(""), hire_date: str = Form(""), probation_end_date: str = Form(""),
-    status: str = Form("active"), emergency_contact_name: str = Form(""),
-    emergency_contact_phone: str = Form(""), emergency_contact_relation: str = Form(""),
-    admin_user_id: str = Form(""), notes: str = Form(""), csrf_token: str = Form(""),
-):
-    require_admin(request)
-    require_superadmin(request)
-    _require_csrf(request, csrf_token)
-    name = name.strip()
-    if not name:
-        return RedirectResponse("/admin/staff/create?err=姓名不能为空", status_code=303)
-    auid = int(admin_user_id) if admin_user_id.strip().isdigit() else None
-    s = Staff(
-        name=name, gender=gender, birthday=birthday, phone=phone.strip(),
-        id_number=id_number.strip(), store=store, position=position,
-        hire_date=hire_date, probation_end_date=probation_end_date, status=status,
-        emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
-        emergency_contact_relation=emergency_contact_relation, admin_user_id=auid, notes=notes,
-    )
-    db.add(s)
-    _audit(db, request, "staff_create", application_id=None, detail={"name": name})
-    db.commit()
-    return RedirectResponse(f"/admin/staff/{s.id}?msg=员工档案已创建", status_code=303)
-
-
-@app.get("/admin/staff/{staff_id}", response_class=HTMLResponse)
-async def admin_staff_detail(
-    staff_id: int, request: Request, db: Session = Depends(get_db),
-    msg: str = Query(""), err: str = Query(""),
-):
-    if not _admin_ok(request):
-        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
-    staff = db.query(Staff).filter(Staff.id == staff_id).first()
-    if not staff:
-        raise HTTPException(404)
-    contracts = db.query(Contract).filter(Contract.staff_id == staff_id).order_by(Contract.start_date.desc()).all()
-    from datetime import date, timedelta
-    today = date.today().isoformat()
-    expiry_30 = (date.today() + timedelta(days=30)).isoformat()
-    return templates.TemplateResponse("admin_staff_detail.html", {
-        "request": request, "title": f"员工档案 · {staff.name}",
-        "staff": staff, "contracts": contracts,
-        "status_zh": _STAFF_STATUS_ZH, "contract_type_zh": _CONTRACT_TYPE_ZH,
-        "csrf_token": _get_csrf_token(request), "msg": msg, "err": err,
-        "is_superadmin": _is_superadmin(request),
-        "now_date": today, "expiry_30": expiry_30,
-    })
-
-
-@app.get("/admin/staff/{staff_id}/edit", response_class=HTMLResponse)
-async def admin_staff_edit_get(staff_id: int, request: Request, db: Session = Depends(get_db)):
-    if not _admin_ok(request):
-        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
-    require_superadmin(request)
-    staff = db.query(Staff).filter(Staff.id == staff_id).first()
-    if not staff:
-        raise HTTPException(404)
-    admin_users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.username).all()
-    return templates.TemplateResponse("admin_staff_form.html", {
-        "request": request, "title": f"编辑员工 · {staff.name}", "staff": staff,
-        "admin_users": admin_users, "position_options": _POSITION_OPTIONS,
-        "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",
-    })
-
-
-@app.post("/admin/staff/{staff_id}/edit", name="admin_staff_edit")
-async def admin_staff_edit_post(
-    staff_id: int, request: Request, db: Session = Depends(get_db),
-    name: str = Form(...), gender: str = Form(""), birthday: str = Form(""),
-    phone: str = Form(""), id_number: str = Form(""), store: str = Form(""),
-    position: str = Form(""), hire_date: str = Form(""), probation_end_date: str = Form(""),
-    status: str = Form("active"), resign_date: str = Form(""), resign_reason: str = Form(""),
-    emergency_contact_name: str = Form(""), emergency_contact_phone: str = Form(""),
-    emergency_contact_relation: str = Form(""), admin_user_id: str = Form(""),
-    notes: str = Form(""), csrf_token: str = Form(""),
-):
-    require_admin(request)
-    require_superadmin(request)
-    _require_csrf(request, csrf_token)
-    staff = db.query(Staff).filter(Staff.id == staff_id).first()
-    if not staff:
-        raise HTTPException(404)
-    staff.name = name.strip()
-    staff.gender = gender; staff.birthday = birthday; staff.phone = phone.strip()
-    staff.id_number = id_number.strip(); staff.store = store; staff.position = position
-    staff.hire_date = hire_date; staff.probation_end_date = probation_end_date
-    staff.status = status; staff.resign_date = resign_date; staff.resign_reason = resign_reason
-    staff.emergency_contact_name = emergency_contact_name
-    staff.emergency_contact_phone = emergency_contact_phone
-    staff.emergency_contact_relation = emergency_contact_relation
-    staff.admin_user_id = int(admin_user_id) if admin_user_id.strip().isdigit() else None
-    staff.notes = notes
-    _audit(db, request, "staff_edit", application_id=None, detail={"staff_id": staff_id, "name": staff.name})
-    db.commit()
-    return RedirectResponse(f"/admin/staff/{staff_id}?msg=已保存", status_code=303)
-
-
-@app.post("/admin/staff/{staff_id}/contracts/create", name="admin_contract_create")
-async def admin_contract_create(
-    staff_id: int, request: Request, db: Session = Depends(get_db),
-    contract_type: str = Form("formal"), start_date: str = Form(""),
-    end_date: str = Form(""), notes: str = Form(""),
-    file: Optional[UploadFile] = File(None), csrf_token: str = Form(""),
-):
-    require_admin(request)
-    require_superadmin(request)
-    _require_csrf(request, csrf_token)
-    staff = db.query(Staff).filter(Staff.id == staff_id).first()
-    if not staff:
-        raise HTTPException(404)
-    file_path = ""
-    original_filename = ""
-    if file and file.filename:
-        import aiofiles
-        ext = Path(file.filename).suffix.lower()
-        if ext not in (".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"):
-            return RedirectResponse(f"/admin/staff/{staff_id}?err=合同文件仅支持 PDF/图片/Word", status_code=303)
-        save_dir = Path(settings.upload_dir) / "contracts" / str(staff_id)
-        save_dir.mkdir(parents=True, exist_ok=True)
-        fname = f"{secrets.token_hex(8)}{ext}"
-        save_path = save_dir / fname
-        async with aiofiles.open(save_path, "wb") as f:
-            content = await file.read()
-            await f.write(content)
-        file_path = str(save_path)
-        original_filename = file.filename
-    c = Contract(
-        staff_id=staff_id, contract_type=contract_type,
-        start_date=start_date, end_date=end_date,
-        file_path=file_path, original_filename=original_filename, notes=notes,
-    )
-    db.add(c)
-    _audit(db, request, "contract_create", application_id=None, detail={"staff_id": staff_id, "type": contract_type})
-    db.commit()
-    return RedirectResponse(f"/admin/staff/{staff_id}?msg=合同已添加", status_code=303)
-
-
-@app.post("/admin/staff/{staff_id}/contracts/{contract_id}/delete", name="admin_contract_delete")
-async def admin_contract_delete(
-    staff_id: int, contract_id: int, request: Request,
-    db: Session = Depends(get_db), csrf_token: str = Form(""),
-):
-    require_admin(request)
-    require_superadmin(request)
-    _require_csrf(request, csrf_token)
-    c = db.query(Contract).filter(Contract.id == contract_id, Contract.staff_id == staff_id).first()
-    if not c:
-        raise HTTPException(404)
-    if c.file_path and Path(c.file_path).exists():
-        Path(c.file_path).unlink(missing_ok=True)
-    db.delete(c)
-    _audit(db, request, "contract_delete", application_id=None, detail={"staff_id": staff_id, "contract_id": contract_id})
-    db.commit()
-    return RedirectResponse(f"/admin/staff/{staff_id}?msg=合同已删除", status_code=303)
-
-
-@app.get("/admin/staff/{staff_id}/contracts/{contract_id}/file")
-async def admin_contract_file(
-    staff_id: int, contract_id: int, request: Request, db: Session = Depends(get_db),
-):
-    require_admin(request)
-    c = db.query(Contract).filter(Contract.id == contract_id, Contract.staff_id == staff_id).first()
-    if not c or not c.file_path or not Path(c.file_path).exists():
-        raise HTTPException(404)
-    return FileResponse(c.file_path, filename=c.original_filename or Path(c.file_path).name)
 
 
 @app.post("/admin/backup/create", name="admin_backup_create")
@@ -2701,10 +2193,6 @@ async def admin_appointment_create(
     pet_size: str = Form(""),
     coat_length: str = Form(""),
     addon_services: list[str] = Form([]),
-    is_proxy: str = Form(""),
-    proxy_name: str = Form(""),
-    proxy_phone: str = Form(""),
-    proxy_relation: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -2776,19 +2264,6 @@ async def admin_appointment_create(
                 f"（#{conflict.id} {conflict.customer_name}），请换一个时间段。",
             )
         _is_beauty = str(fields["category"]) == AppointmentCategory.beauty.value
-        _is_proxy_bool = bool(is_proxy and is_proxy.strip())
-        # ── 自动创建/合并客户档案 ──
-        _admin_appt_cust_id = None
-        try:
-            _admin_appt_cust = _upsert_customer(
-                db,
-                name=str(fields["customer_name"]),
-                phone=str(fields["phone"]),
-                source=str(fields["category"]),
-            )
-            _admin_appt_cust_id = _admin_appt_cust.id
-        except Exception:
-            _admin_appt_cust_id = None
         row = Appointment(
             category=str(fields["category"]),
             status=AppointmentStatus.pending.value,
@@ -2807,11 +2282,6 @@ async def admin_appointment_create(
             pet_size=(pet_size.strip() or None) if _is_beauty else None,
             coat_length=(coat_length.strip() or None) if _is_beauty else None,
             addon_services=(",".join(s.strip() for s in addon_services if s.strip()) or None) if _is_beauty else None,
-            is_proxy=_is_proxy_bool,
-            proxy_name=proxy_name.strip() if _is_proxy_bool else "",
-            proxy_phone=proxy_phone.strip() if _is_proxy_bool else "",
-            proxy_relation=proxy_relation.strip() if _is_proxy_bool else "",
-            customer_id=_admin_appt_cust_id,
         )
         db.add(row)
         db.flush()
@@ -3350,23 +2820,6 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
     _pet_size_raw    = ((payload or {}).get("pet_size", "") or "").strip()
     _coat_length_raw = ((payload or {}).get("coat_length", "") or "").strip()
     _addon_raw       = ((payload or {}).get("addon_services", "") or "").strip()
-    _is_proxy_api    = bool((payload or {}).get("is_proxy", False))
-    _proxy_name_raw  = ((payload or {}).get("proxy_name", "") or "").strip()
-    _proxy_phone_raw = ((payload or {}).get("proxy_phone", "") or "").strip()
-    _proxy_rel_raw   = ((payload or {}).get("proxy_relation", "") or "").strip()
-    # ── 自动创建/合并客户档案 ──
-    _appt_cust_id = None
-    try:
-        _appt_cust = _upsert_customer(
-            db,
-            name=str(fields["customer_name"]),
-            phone=str(fields["phone"]),
-            openid=openid,
-            source=str(fields["category"]),
-        )
-        _appt_cust_id = _appt_cust.id
-    except Exception:
-        _appt_cust_id = None
     row = Appointment(
         wechat_openid=openid,
         category=str(fields["category"]),
@@ -3386,11 +2839,6 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
         pet_size    =(_pet_size_raw    or None) if _is_beauty_api else None,
         coat_length =(_coat_length_raw or None) if _is_beauty_api else None,
         addon_services=(_addon_raw     or None) if _is_beauty_api else None,
-        is_proxy=_is_proxy_api,
-        proxy_name=_proxy_name_raw if _is_proxy_api else "",
-        proxy_phone=_proxy_phone_raw if _is_proxy_api else "",
-        proxy_relation=_proxy_rel_raw if _is_proxy_api else "",
-        customer_id=_appt_cust_id,
     )
     db.add(row)
     db.commit()
@@ -3491,172 +2939,6 @@ async def api_wechat_appointment_cancel(
             app_row.updated_at = datetime.utcnow()
     db.commit()
     return {"ok": True, "id": appointment_id}
-
-
-@app.post("/api/wechat/appointments/{appointment_id}/get")
-async def api_wechat_appointment_get(
-    appointment_id: int,
-    payload: dict = Body(...),
-    db: Session = Depends(get_db),
-):
-    """小程序端获取单条预约详情（openid 校验）。"""
-    openid = await _resolve_wechat_openid(payload)
-    row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
-    if not row:
-        raise HTTPException(404, "预约记录不存在")
-    if (row.wechat_openid or "") != openid:
-        raise HTTPException(403, "无权查看此预约")
-    return _serialize_appointment(row)
-
-
-@app.post("/api/wechat/appointments/{appointment_id}/update")
-async def api_wechat_appointment_update(
-    appointment_id: int,
-    payload: dict = Body(...),
-    db: Session = Depends(get_db),
-):
-    """小程序端修改自己的预约（仅限 pending 状态，openid 校验，时段容量重新检验）。"""
-    openid = await _resolve_wechat_openid(payload)
-    row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
-    if not row:
-        raise HTTPException(404, "预约记录不存在")
-    if (row.wechat_openid or "") != openid:
-        raise HTTPException(403, "无权操作此预约")
-    if row.status != AppointmentStatus.pending.value:
-        raise HTTPException(400, "只有「待确认」状态的预约才能修改，如需调整请联系医院")
-
-    new_date = str(payload.get("appointment_date", "") or row.appointment_date).strip()
-    new_time = str(payload.get("appointment_time", "") or row.appointment_time).strip()
-
-    # 若日期或时间有变，重新做容量检查（exclude 自身，避免自我碰撞）
-    if new_date != row.appointment_date or new_time != row.appointment_time:
-        err = _check_slot_capacity(
-            db, row.store, new_date, new_time,
-            row.category, row.service_name or "",
-            exclude_id=appointment_id,
-        )
-        if err:
-            raise HTTPException(400, err)
-
-    row.appointment_date = new_date
-    row.appointment_time = new_time
-    if "customer_name" in payload and payload["customer_name"]:
-        row.customer_name = str(payload["customer_name"])[:80]
-    if "phone" in payload and payload["phone"]:
-        row.phone = str(payload["phone"])[:20]
-    if "pet_name" in payload and payload["pet_name"]:
-        row.pet_name = str(payload["pet_name"])[:80]
-    if "pet_gender" in payload and payload["pet_gender"]:
-        row.pet_gender = str(payload["pet_gender"])[:20]
-    if "notes" in payload:
-        row.notes = str(payload.get("notes") or "")[:500]
-
-    row.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(row)
-    return {"ok": True, "appointment": _serialize_appointment(row)}
-
-
-@app.post("/api/wechat/feedback/create")
-async def api_wechat_feedback_create(payload: dict = Body(...), db: Session = Depends(get_db)):
-    from app.models import Feedback
-    openid = str((payload or {}).get("openid", "") or "").strip()
-    content = str((payload or {}).get("content", "") or "").strip()
-    if not content:
-        raise HTTPException(400, "请填写反馈内容")
-    fb = Feedback(openid=openid, content=content[:2000])
-    db.add(fb)
-    db.commit()
-    db.refresh(fb)
-    # create upload dir
-    fb_dir = Path(settings.upload_dir) / "feedback" / str(fb.id)
-    fb_dir.mkdir(parents=True, exist_ok=True)
-    return {"id": fb.id, "ok": True}
-
-
-@app.post("/api/wechat/feedback/{feedback_id}/upload")
-async def api_wechat_feedback_upload(
-    feedback_id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-):
-    from app.models import Feedback
-    import json as _json
-    fb = db.get(Feedback, feedback_id)
-    if not fb:
-        raise HTTPException(404, "反馈记录不存在")
-    ext = Path(file.filename or "img.jpg").suffix.lower() or ".jpg"
-    safe_ext = ext if ext in (".jpg", ".jpeg", ".png", ".gif", ".webp") else ".jpg"
-    fb_dir = Path(settings.upload_dir) / "feedback" / str(feedback_id)
-    fb_dir.mkdir(parents=True, exist_ok=True)
-    existing = _json.loads(fb.image_paths or "[]")
-    if len(existing) >= 6:
-        raise HTTPException(400, "最多上传6张截图")
-    fname = f"{len(existing)+1}{safe_ext}"
-    dest = fb_dir / fname
-    content_bytes = await file.read()
-    dest.write_bytes(content_bytes)
-    stored = str(dest)
-    existing.append(stored)
-    fb.image_paths = _json.dumps(existing, ensure_ascii=False)
-    db.commit()
-    return {"ok": True, "path": stored}
-
-
-@app.get("/admin/feedback", response_class=HTMLResponse)
-async def admin_feedback_page(request: Request, status: str = "", db: Session = Depends(get_db)):
-    if not request.session.get("admin"):
-        return RedirectResponse("/admin/login", status_code=303)
-    from app.models import Feedback
-    q = db.query(Feedback).order_by(Feedback.created_at.desc())
-    if status == "pending":
-        q = q.filter(Feedback.status == "pending")
-    elif status == "resolved":
-        q = q.filter(Feedback.status == "resolved")
-    items = q.limit(100).all()
-    # Build image URLs for each feedback
-    import json as _json
-    feed_list = []
-    for fb in items:
-        paths = _json.loads(fb.image_paths or "[]")
-        img_urls = []
-        for p in paths:
-            # Convert stored path to URL
-            try:
-                rel = Path(p).relative_to(Path(settings.upload_dir))
-                img_urls.append("/uploads/" + str(rel).replace("\\", "/"))
-            except Exception:
-                pass
-        feed_list.append({"fb": fb, "img_urls": img_urls})
-    pending_count = db.query(Feedback).filter(Feedback.status == "pending").count()
-    return templates.TemplateResponse("admin_feedback.html", {
-        "request": request,
-        "title": "客户反馈",
-        "feed_list": feed_list,
-        "pending_count": pending_count,
-        "status_filter": status,
-        "csrf_token": _get_csrf_token(request),
-    })
-
-
-@app.post("/admin/feedback/{feedback_id}/resolve")
-async def admin_feedback_resolve(
-    feedback_id: int,
-    request: Request,
-    admin_note: str = Form(""),
-    db: Session = Depends(get_db),
-):
-    if not request.session.get("admin"):
-        raise HTTPException(403)
-    from app.models import Feedback
-    fb = db.get(Feedback, feedback_id)
-    if not fb:
-        raise HTTPException(404)
-    fb.status = "resolved"
-    fb.admin_note = admin_note.strip()[:500]
-    fb.resolved_at = datetime.utcnow()
-    db.commit()
-    return RedirectResponse(f"/admin/feedback?msg=已处理#{feedback_id}", status_code=303)
 
 
 @app.post("/api/wechat/claim-apps")
@@ -3814,53 +3096,6 @@ async def serve_file(media_id: int, request: Request, db: Session = Depends(get_
 
     ctype, _ = mimetypes.guess_type(str(path))
     return FileResponse(path, media_type=ctype or "application/octet-stream")
-
-
-@app.get("/api/showcase")
-async def api_showcase(request: Request, db: Session = Depends(get_db)):
-    """小程序爱心展示 JSON 接口：返回已完成手术且同意公开展示的条目。"""
-    base = str(request.base_url).rstrip("/")
-    q = (
-        db.query(Application)
-        .options(selectinload(Application.media))
-        .filter(Application.status == ApplicationStatus.surgery_completed.value)
-        .filter(Application.showcase_consent.is_(True))
-        .order_by(Application.updated_at.desc())
-    )
-    items = []
-    for a in q.all():
-        before_imgs = [f"{base}/file/{m.id}" for m in a.media
-                       if m.kind == MediaKind.surgery_before.value and not m.stored_path.lower().endswith(('.mp4', '.mov', '.avi'))]
-        after_imgs  = [f"{base}/file/{m.id}" for m in a.media
-                       if m.kind == MediaKind.surgery_after.value and not m.stored_path.lower().endswith(('.mp4', '.mov', '.avi'))]
-        before_vids = [f"{base}/file/{m.id}" for m in a.media
-                       if m.kind == MediaKind.surgery_before.value and m.stored_path.lower().endswith(('.mp4', '.mov', '.avi'))]
-        after_vids  = [f"{base}/file/{m.id}" for m in a.media
-                       if m.kind == MediaKind.surgery_after.value and m.stored_path.lower().endswith(('.mp4', '.mov', '.avi'))]
-        if not (before_imgs or after_imgs or before_vids or after_vids):
-            continue
-        # 姓氏保留，名字用 * 替代
-        name = a.applicant_name.strip() if a.applicant_name else ""
-        if len(name) >= 2:
-            masked_name = name[0] + "*" * (len(name) - 1)
-        elif len(name) == 1:
-            masked_name = name
-        else:
-            masked_name = "—"
-        items.append({
-            "id": a.id,
-            "cat_nickname": a.cat_nickname or "无名猫咪",
-            "cat_gender": a.cat_gender,
-            "address": a.address or "",
-            "store": a.clinic_store or "",
-            "surgery_date": a.updated_at.strftime("%Y-%m-%d") if a.updated_at else "",
-            "applicant_masked": masked_name,
-            "before_images": before_imgs,
-            "after_images": after_imgs,
-            "before_videos": before_vids,
-            "after_videos": after_vids,
-        })
-    return {"items": items, "total": len(items)}
 
 
 @app.get("/showcase", response_class=HTMLResponse)
@@ -4030,188 +3265,3 @@ async def admin_wechat_test_send(
     openid: str = Form(""),
 ):
     raise HTTPException(status_code=410, detail="该功能已移除")
-
-
-# ══════════════════════ 客户档案 CRM ══════════════════════
-
-@app.get("/admin/customers", response_class=HTMLResponse)
-async def page_admin_customers(
-    request: Request,
-    db: Session = Depends(get_db),
-    q: str = Query(""),
-    page: int = Query(1),
-):
-    if not request.session.get("admin"):
-        return RedirectResponse("/admin/login")
-    PAGE_SIZE = 30
-    query = db.query(Customer)
-    q = q.strip()
-    if q:
-        query = query.filter(
-            or_(
-                Customer.name.ilike(f"%{q}%"),
-                Customer.phone.ilike(f"%{q}%"),
-            )
-        )
-    total = query.count()
-    customers = query.order_by(Customer.id.desc()).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).all()
-    return templates.TemplateResponse(
-        request,
-        "admin_customers.html",
-        {
-            "customers": customers,
-            "q": q,
-            "page": page,
-            "total": total,
-            "page_size": PAGE_SIZE,
-            "total_pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
-        },
-    )
-
-
-@app.post("/admin/customers/create")
-async def admin_customer_create(
-    request: Request,
-    db: Session = Depends(get_db),
-    name: str = Form(""),
-    phone: str = Form(""),
-    address: str = Form(""),
-    notes: str = Form(""),
-    source: str = Form("manual"),
-):
-    if not request.session.get("admin"):
-        return RedirectResponse("/admin/login")
-    cust = Customer(
-        name=name.strip()[:120],
-        phone=phone.strip()[:40],
-        address=address.strip()[:500],
-        notes=notes.strip(),
-        source=source.strip()[:40] or "manual",
-    )
-    db.add(cust)
-    db.commit()
-    return RedirectResponse(f"/admin/customers/{cust.id}?msg=客户已创建", status_code=303)
-
-
-@app.get("/admin/customers/{customer_id}", response_class=HTMLResponse)
-async def page_admin_customer_detail(
-    customer_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    if not request.session.get("admin"):
-        return RedirectResponse("/admin/login")
-    cust = db.get(Customer, customer_id)
-    if not cust:
-        raise HTTPException(404, "客户不存在")
-    pets = db.query(Pet).filter(Pet.customer_id == customer_id).order_by(Pet.id.desc()).all()
-    applications = db.query(Application).filter(Application.customer_id == customer_id).order_by(Application.id.desc()).limit(50).all()
-    appointments = db.query(Appointment).filter(Appointment.customer_id == customer_id).order_by(Appointment.id.desc()).limit(50).all()
-    return templates.TemplateResponse(
-        request,
-        "admin_customer_detail.html",
-        {
-            "cust": cust,
-            "pets": pets,
-            "applications": applications,
-            "appointments": appointments,
-        },
-    )
-
-
-@app.post("/admin/customers/{customer_id}/edit")
-async def admin_customer_edit(
-    customer_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    name: str = Form(""),
-    phone: str = Form(""),
-    address: str = Form(""),
-    notes: str = Form(""),
-):
-    if not request.session.get("admin"):
-        return RedirectResponse("/admin/login")
-    cust = db.get(Customer, customer_id)
-    if not cust:
-        raise HTTPException(404, "客户不存在")
-    cust.name = name.strip()[:120]
-    cust.phone = phone.strip()[:40]
-    cust.address = address.strip()[:500]
-    cust.notes = notes.strip()
-    db.commit()
-    return RedirectResponse(f"/admin/customers/{customer_id}?msg=已保存", status_code=303)
-
-
-@app.post("/admin/customers/{customer_id}/pets/add")
-async def admin_customer_add_pet(
-    customer_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    name: str = Form(""),
-    species: str = Form("cat"),
-    breed: str = Form(""),
-    gender: str = Form("unknown"),
-    birthday_estimate: str = Form(""),
-    is_neutered: str = Form(""),
-    color_pattern: str = Form(""),
-    is_stray: str = Form(""),
-    microchip_id: str = Form(""),
-    notes: str = Form(""),
-):
-    if not request.session.get("admin"):
-        return RedirectResponse("/admin/login")
-    cust = db.get(Customer, customer_id)
-    if not cust:
-        raise HTTPException(404, "客户不存在")
-    pet = Pet(
-        customer_id=customer_id,
-        name=name.strip()[:120],
-        species=species.strip()[:40] or "cat",
-        breed=breed.strip()[:80],
-        gender=gender.strip()[:10] or "unknown",
-        birthday_estimate=birthday_estimate.strip()[:40],
-        is_neutered=is_neutered.lower() in ("1", "true", "on", "yes"),
-        color_pattern=color_pattern.strip()[:80],
-        is_stray=is_stray.lower() in ("1", "true", "on", "yes"),
-        microchip_id=microchip_id.strip()[:40],
-        notes=notes.strip(),
-    )
-    db.add(pet)
-    db.commit()
-    return RedirectResponse(f"/admin/customers/{customer_id}?msg=宠物已添加", status_code=303)
-
-
-@app.post("/admin/customers/{customer_id}/pets/{pet_id}/edit")
-async def admin_customer_edit_pet(
-    customer_id: int,
-    pet_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    name: str = Form(""),
-    species: str = Form("cat"),
-    breed: str = Form(""),
-    gender: str = Form("unknown"),
-    birthday_estimate: str = Form(""),
-    is_neutered: str = Form(""),
-    color_pattern: str = Form(""),
-    is_stray: str = Form(""),
-    microchip_id: str = Form(""),
-    notes: str = Form(""),
-):
-    if not request.session.get("admin"):
-        return RedirectResponse("/admin/login")
-    pet = db.get(Pet, pet_id)
-    if not pet or pet.customer_id != customer_id:
-        raise HTTPException(404, "宠物不存在")
-    pet.name = name.strip()[:120]
-    pet.species = species.strip()[:40] or "cat"
-    pet.breed = breed.strip()[:80]
-    pet.gender = gender.strip()[:10] or "unknown"
-    pet.birthday_estimate = birthday_estimate.strip()[:40]
-    pet.is_neutered = is_neutered.lower() in ("1", "true", "on", "yes")
-    pet.color_pattern = color_pattern.strip()[:80]
-    pet.is_stray = is_stray.lower() in ("1", "true", "on", "yes")
-    pet.microchip_id = microchip_id.strip()[:40]
-    pet.notes = notes.strip()
-    db.commit()
-    return RedirectResponse(f"/admin/customers/{customer_id}?msg=宠物已更新", status_code=303)

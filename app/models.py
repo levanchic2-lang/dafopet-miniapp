@@ -91,6 +91,9 @@ class Application(Base):
     proxy_phone: Mapped[str] = mapped_column(String(40), default="")
     proxy_relation: Mapped[str] = mapped_column(String(40), default="")
 
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -127,6 +130,10 @@ class Appointment(Base):
     proxy_name: Mapped[str] = mapped_column(String(120), default="")
     proxy_phone: Mapped[str] = mapped_column(String(40), default="")
     proxy_relation: Mapped[str] = mapped_column(String(40), default="")  # 家人/朋友/员工代录/其他
+
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -244,6 +251,44 @@ class Contract(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     staff = relationship("Staff", back_populates="contracts")
+
+
+class Customer(Base):
+    __tablename__ = "customers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    phone: Mapped[str] = mapped_column(String(40), default="")
+    wechat_openid: Mapped[str] = mapped_column(String(64), default="")
+    id_number: Mapped[str] = mapped_column(String(40), default="")
+    address: Mapped[str] = mapped_column(String(500), default="")
+    source: Mapped[str] = mapped_column(String(40), default="")   # tnr / outpatient / beauty / surgery / manual
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    pets = relationship("Pet", back_populates="customer", cascade="all, delete-orphan")
+
+
+class Pet(Base):
+    __tablename__ = "pets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(120), default="")
+    species: Mapped[str] = mapped_column(String(40), default="cat")   # cat / dog / other
+    breed: Mapped[str] = mapped_column(String(80), default="")
+    gender: Mapped[str] = mapped_column(String(10), default="unknown")  # male / female / unknown
+    birthday_estimate: Mapped[str] = mapped_column(String(40), default="")
+    is_neutered: Mapped[bool] = mapped_column(Boolean, default=False)
+    color_pattern: Mapped[str] = mapped_column(String(80), default="")
+    is_stray: Mapped[bool] = mapped_column(Boolean, default=False)
+    microchip_id: Mapped[str] = mapped_column(String(40), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer", back_populates="pets")
 
 
 class AdminUser(Base):

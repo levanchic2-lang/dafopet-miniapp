@@ -175,6 +175,64 @@ def _try_sqlite_migrations() -> None:
                     ")"
                 ))
 
+            # customers 客户档案表
+            customer_cols = conn.execute(text("PRAGMA table_info(customers)")).fetchall()
+            if not customer_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS customers ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "name VARCHAR(120) DEFAULT '', "
+                    "phone VARCHAR(40) DEFAULT '', "
+                    "wechat_openid VARCHAR(64) DEFAULT '', "
+                    "id_number VARCHAR(40) DEFAULT '', "
+                    "address VARCHAR(500) DEFAULT '', "
+                    "source VARCHAR(40) DEFAULT '', "
+                    "notes TEXT DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)"))
+
+            # pets 宠物档案表
+            pet_cols = conn.execute(text("PRAGMA table_info(pets)")).fetchall()
+            if not pet_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS pets ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, "
+                    "name VARCHAR(120) DEFAULT '', "
+                    "species VARCHAR(40) DEFAULT 'cat', "
+                    "breed VARCHAR(80) DEFAULT '', "
+                    "gender VARCHAR(10) DEFAULT 'unknown', "
+                    "birthday_estimate VARCHAR(40) DEFAULT '', "
+                    "is_neutered BOOLEAN DEFAULT 0, "
+                    "color_pattern VARCHAR(80) DEFAULT '', "
+                    "is_stray BOOLEAN DEFAULT 0, "
+                    "microchip_id VARCHAR(40) DEFAULT '', "
+                    "notes TEXT DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_pets_customer ON pets(customer_id)"))
+
+            # 为 applications 和 appointments 补 customer_id / pet_id 列
+            app_cols2 = conn.execute(text("PRAGMA table_info(applications)")).fetchall()
+            app_names2 = {c[1] for c in app_cols2}
+            if "customer_id" not in app_names2:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL"))
+            if "pet_id" not in app_names2:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL"))
+
+            appt_cols2 = conn.execute(text("PRAGMA table_info(appointments)")).fetchall()
+            appt_names2 = {c[1] for c in appt_cols2}
+            if "customer_id" not in appt_names2:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL"))
+            if "pet_id" not in appt_names2:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL"))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

@@ -19,6 +19,7 @@
     "scope.userLocation": {
       "desc": "用于填写发现地点（可选）"
     }
-  }
+  },
+  "requiredPrivateInfos": ["getLocation"]
 }
 

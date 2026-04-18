@@ -1,0 +1,15 @@
+python3 << 'PYEOF'
+import pathlib
+R = '/srv/tnr-app/releases/current'
+p = pathlib.Path(R+"/app/main.py")
+c = p.read_text(encoding="utf-8")
+old = '@app.get("/showcase", response_class=HTMLResponse)'
+new = '@app.get("/api/showcase")\nasync def api_showcase(request: Request, db: Session = Depends(get_db)):\n    """小程序爱心展示 JSON 接口：返回已完成手术且同意公开展示的条目。"""\n    base = str(request.base_url).rstrip("/")\n    q = (\n        db.query(Application)\n        .options(selectinload(Application.media))\n        .filter(Application.status == ApplicationStatus.surgery_completed.value)\n        .filter(Application.showcase_consent.is_(True))\n        .order_by(Application.updated_at.desc())\n    )\n    items = []\n    for a in q.all():\n        before_imgs = [f"{base}/file/{m.id}" for m in a.media\n                       if m.kind == MediaKind.surgery_before.value and not m.stored_path.lower().endswith((\'.mp4\', \'.mov\', \'.avi\'))]\n        after_imgs  = [f"{base}/file/{m.id}" for m in a.media\n                       if m.kind == MediaKind.surgery_after.value and not m.stored_path.lower().endswith((\'.mp4\', \'.mov\', \'.avi\'))]\n        before_vids = [f"{base}/file/{m.id}" for m in a.media\n                       if m.kind == MediaKind.surgery_before.value and m.stored_path.lower().endswith((\'.mp4\', \'.mov\', \'.avi\'))]\n        after_vids  = [f"{base}/file/{m.id}" for m in a.media\n                       if m.kind == MediaKind.surgery_after.value and m.stored_path.lower().endswith((\'.mp4\', \'.mov\', \'.avi\'))]\n        if not (before_imgs or after_imgs or before_vids or after_vids):\n            continue\n        # 姓氏保留，名字用 * 替代\n        name = a.applicant_name.strip() if a.applicant_name else ""\n        if len(name) >= 2:\n            masked_name = name[0] + "*" * (len(name) - 1)\n        elif len(name) == 1:\n            masked_name = name\n        else:\n            masked_name = "—"\n        items.append({\n            "id": a.id,\n            "cat_nickname": a.cat_nickname or "无名猫咪",\n            "cat_gender": a.cat_gender,\n            "address": a.address or "",\n            "store": a.clinic_store or "",\n            "surgery_date": a.updated_at.strftime("%Y-%m-%d") if a.updated_at else "",\n            "applicant_masked": masked_name,\n            "before_images": before_imgs,\n            "after_images": after_imgs,\n            "before_videos": before_vids,\n            "after_videos": after_vids,\n        })\n    return {"items": items, "total": len(items)}\n\n\n@app.get("/showcase", response_class=HTMLResponse)'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch applied")
+else:
+    print("already applied or not found")
+p.write_text(c, encoding="utf-8")
+print("Done")
+PYEOF

@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/main.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(.venv/Scripts/python -c \"from app.main import app; routes = [r.name for r in app.routes if hasattr\\(r,''name''\\)]; print\\(''admin_appointment_reschedule'' in routes\\); print\\([r for r in routes if ''reschedule'' in str\\(r\\)]\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/main.py'', doraise=True\\); print\\(''main.py OK''\\)\")",
+      "Bash(node -c miniapp/pages/index/index.js)",
+      "Bash(node -c miniapp/pages/status/status.js)",
+      "Bash(node -c miniapp/pages/appointment/index.js)",
+      "Bash(.venv/Scripts/python -c \":*)",
+      "Bash(.venv/Scripts/python -c \"from app.main import app; names=[r.name for r in app.routes if hasattr\\(r,''name''\\)]; print\\(''reschedule:'', ''admin_appointment_reschedule'' in names\\); print\\(''status:'', ''admin_appointment_status'' in names\\)\")",
+      "Bash(ping dafopet.com -n 4)",
+      "Bash(ping dafopet.com -c 4)",
+      "Bash(python -c \"import json; d=json.load\\(open\\('miniapp/utils/shenzhen_regions.json', encoding='utf-8'\\)\\); print\\(f'keys: {len\\(d\\)}, first: {list\\(d.keys\\(\\)\\)[:3]}'\\)\")",
+      "Bash(node -e ':*)",
+      "Read(//d C:/Users/liang/Desktop/**)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const code=fs.readFileSync\\('miniapp/pages/index/index.js','utf8'\\);try{new Function\\(code\\);console.log\\('OK'\\);}catch\\(e\\){console.log\\('ERROR:',e.message\\);}\")",
+      "Bash(node --input-type=module)",
+      "Bash(python -c ':*)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const c=fs.readFileSync\\('C:\\\\\\\\\\\\\\\\Users\\\\\\\\\\\\\\\\liang\\\\\\\\\\\\\\\\Desktop\\\\\\\\\\\\\\\\流浪猫申请程序\\\\\\\\\\\\\\\\miniapp\\\\\\\\\\\\\\\\pages\\\\\\\\\\\\\\\\index\\\\\\\\\\\\\\\\index.js','utf8'\\);try{new Function\\(c\\);console.log\\('OK'\\);}catch\\(e\\){console.log\\('ERR:',e.message\\);}\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const c=fs.readFileSync\\('C:/Users/liang/Desktop/流浪猫申请程序/miniapp/pages/index/index.js','utf8'\\);try{new Function\\(c\\);console.log\\('OK'\\);}catch\\(e\\){console.log\\('ERR:',e.message\\);}\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const c=fs.readFileSync\\('C:/Users/liang/Desktop/流浪猫申请程序/miniapp/pages/appointment/index.js','utf8'\\);try{new Function\\(c\\);console.log\\('OK'\\);}catch\\(e\\){console.log\\('ERR:',e.message\\);}\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);['C:/Users/liang/Desktop/流浪猫申请程序/app/services/wechat_miniapp.py','C:/Users/liang/Desktop/流浪猫申请程序/miniapp/pages/index/index.js'].forEach\\(f=>{try{if\\(f.endsWith\\('.js'\\)\\){new Function\\(fs.readFileSync\\(f,'utf8'\\)\\);console.log\\('OK:',f\\);}else{console.log\\('\\(py skip\\):',f\\);}}catch\\(e\\){console.log\\('ERR:',f,e.message\\);}}\\);\")",
+      "Bash(cd /d \"C:\\\\Users\\\\liang\\\\Desktop\\\\流浪猫申请程序\")",
+      "Bash(python3 -c \"f=open\\('miniapp/pages/index/index.js','rb'\\);d=f.read\\(\\);f.close\\(\\);lines=d.decode\\('utf-8'\\).split\\('\\\\n'\\);print\\('\\\\n'.join\\(repr\\(l[:100]\\) for l in lines[376:415]\\)\\)\")",
+      "Bash(python3)",
+      "Bash(python3 -c \"f=open\\('C:/Users/liang/Desktop/流浪猫申请程序/miniapp/pages/index/index.js','rb'\\);d=f.read\\(\\);f.close\\(\\);print\\(len\\(d\\)\\);print\\(d[13400:13700]\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const d=fs.readFileSync\\('C:/Users/liang/Desktop/流浪猫申请程序/miniapp/pages/index/index.js','utf8'\\);const lines=d.split\\('\\\\n'\\);for\\(let i=376;i<415;i++\\)console.log\\(\\(i+1\\)+': '+JSON.stringify\\(lines[i].substring\\(0,100\\)\\)\\);\")",
+      "Bash(python -c:*)",
+      "Bash(dir \"C:\\\\Users\\\\liang\\\\Desktop\\\\流浪猫申请程序\\\\miniapp\\\\pages\")",
+      "Bash(dir \"C:\\\\Users\\\\liang\\\\Desktop\\\\流浪猫申请程序\\\\miniapp\\\\pages\\\\index\")",
+      "Bash(dir \"C:\\\\Users\\\\liang\\\\Desktop\\\\流浪猫申请程序\\\\miniapp\\\\pages\\\\appointment\")",
+      "Bash(sed -n '225,250p' app/main.py)",
+      "Bash(sed -n '2755,2775p' app/main.py)",
+      "Bash(sed -n '2920,2945p' app/main.py)",
+      "Bash(sed -n '2965,2985p' app/main.py)",
+      "Bash(sed -n '3028,3055p' app/main.py)",
+      "Bash(grep -v \"setStorageSync\\\\|getStorageSync\\\\|console\\\\|//.*WECHAT\")"
+    ]
+  }
+}

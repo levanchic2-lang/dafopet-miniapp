@@ -1,0 +1,99 @@
+python3 << 'PYEOF'
+import pathlib
+R = '/srv/tnr-app/releases/current'
+p = pathlib.Path(R+"/app/main.py")
+c = p.read_text(encoding="utf-8")
+
+# patch 1
+old = 'from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile'
+new = 'from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile\nfrom passlib.context import CryptContext'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 1 applied")
+else:
+    print("patch 1: already applied or not found")
+
+# patch 2
+old = 'from app.models import (\n    Application,'
+new = 'from app.models import (\n    AdminUser,\n    Application,'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 2 applied")
+else:
+    print("patch 2: already applied or not found")
+
+# patch 3
+old = 'app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, session_cookie="tnr_session")\ntemplates'
+new = 'app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, session_cookie="tnr_session")\n\n_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")\ntemplates'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 3 applied")
+else:
+    print("patch 3: already applied or not found")
+
+# patch 4
+old = 'def require_admin(request: Request):\n    if not _admin_ok(request):\n        raise HTTPException(status_code=401, detail="需要医院后台登录")'
+new = 'def _admin_role(request: Request) -> str:\n    """返回当前登录角色：\'superadmin\' | \'staff\' | \'\'（未登录）。旧 session 默认当 superadmin。"""\n    if not request.session.get("admin"):\n        return ""\n    return request.session.get("admin_role", "superadmin")\n\n\ndef _is_superadmin(request: Request) -> bool:\n    return _admin_role(request) == "superadmin"\n\n\ndef require_admin(request: Request):\n    if not _admin_ok(request):\n        raise HTTPException(status_code=401, detail="需要医院后台登录")\n\n\ndef require_superadmin(request: Request):\n    if not _is_superadmin(request):\n        raise HTTPException(status_code=403, detail="需要超级管理员权限")'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 4 applied")
+else:
+    print("patch 4: already applied or not found")
+
+# patch 5
+old = '            actor="admin",'
+new = '            actor=request.session.get("admin_username", "admin"),'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 5 applied")
+else:
+    print("patch 5: already applied or not found")
+
+# patch 6
+old = '@app.post("/admin/login")\nasync def admin_login(request: Request, password: str = Form(...), csrf_token: str = Form("")):\n    _require_csrf(request, csrf_token)\n    if password == settings.admin_password:\n        request.session["admin"] = True\n        return RedirectResponse("/admin", status_code=303)\n    return templates.TemplateResponse(\n        "admin_login.html",\n        {"request": request, "title": "医院后台登录", "error": "密码错误", "csrf_token": _get_csrf_token(request)},\n        status_code=401,\n    )'
+new = '@app.post("/admin/login")\nasync def admin_login(\n    request: Request,\n    db: Session = Depends(get_db),\n    username: str = Form(...),\n    password: str = Form(...),\n    csrf_token: str = Form(""),\n):\n    _require_csrf(request, csrf_token)\n    username = username.strip()\n\n    # 优先查 DB 账号\n    user = db.query(AdminUser).filter(AdminUser.username == username, AdminUser.is_active == True).first()\n    if user and _pwd_ctx.verify(password, user.password_hash):\n        request.session["admin"] = True\n        request.session["admin_role"] = user.role\n        request.session["admin_username"] = user.username\n        return RedirectResponse("/admin", status_code=303)\n\n    # 兜底：环境变量密码（用于迁移期 / 紧急登录，用户名须为 admin）\n    if username == "admin" and password == settings.admin_password:\n        request.session["admin"] = True\n        request.session["admin_role"] = "superadmin"\n        request.session["admin_username"] = "admin"\n        return RedirectResponse("/admin", status_code=303)\n\n    return templates.TemplateResponse(\n        "admin_login.html",\n        {"request": request, "title": "医院后台登录", "error": "账号或密码不正确", "csrf_token": _get_csrf_token(request)},\n        status_code=401,\n    )'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 6 applied")
+else:
+    print("patch 6: already applied or not found")
+
+# patch 7
+old = 'async def admin_backup_create(request: Request, db: Session = Depends(get_db), csrf_token: str = Form("")):\n    require_admin(request)\n    _require_csrf(request, csrf_token)'
+new = 'async def admin_backup_create(request: Request, db: Session = Depends(get_db), csrf_token: str = Form("")):\n    require_admin(request)\n    require_superadmin(request)\n    _require_csrf(request, csrf_token)'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 7 applied")
+else:
+    print("patch 7: already applied or not found")
+
+# patch 8
+old = 'async def admin_backup_download(request: Request, filename: str, db: Session = Depends(get_db)):\n    require_admin(request)\n    if not is_safe'
+new = 'async def admin_backup_download(request: Request, filename: str, db: Session = Depends(get_db)):\n    require_admin(request)\n    require_superadmin(request)\n    if not is_safe'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 8 applied")
+else:
+    print("patch 8: already applied or not found")
+
+# patch 9
+old = '    require_admin(request)\n    _require_csrf(request, csrf_token)\n    scope = (scope or'
+new = '    require_admin(request)\n    require_superadmin(request)\n    _require_csrf(request, csrf_token)\n    scope = (scope or'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 9 applied")
+else:
+    print("patch 9: already applied or not found")
+
+# patch 10
+old = '@app.get("/admin/logout")\nasync def admin_logout(request: Request):\n    request.session.clear()\n    return RedirectResponse("/admin", status_code=303)\n\n\n@app.post("/admin/backup/create"'
+new = '@app.get("/admin/logout")\nasync def admin_logout(request: Request):\n    request.session.clear()\n    return RedirectResponse("/admin", status_code=303)\n\n\n# ── 账号管理（仅 superadmin）────────────────────────────────────────────\n\n@app.get("/admin/users", response_class=HTMLResponse)\nasync def admin_users_page(\n    request: Request,\n    db: Session = Depends(get_db),\n    msg: str = Query(""),\n    err: str = Query(""),\n):\n    if not _admin_ok(request):\n        return templates.TemplateResponse(\n            "admin_login.html",\n            {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},\n        )\n    require_superadmin(request)\n    users = db.query(AdminUser).order_by(AdminUser.created_at).all()\n    return templates.TemplateResponse(\n        "admin_users.html",\n        {\n            "request": request,\n            "title": "账号管理",\n            "users": users,\n            "current_username": request.session.get("admin_username", ""),\n            "csrf_token": _get_csrf_token(request),\n            "msg": msg,\n            "err": err,\n        },\n    )\n\n\n@app.post("/admin/users/create", name="admin_users_create")\nasync def admin_users_create(\n    request: Request,\n    db: Session = Depends(get_db),\n    username: str = Form(...),\n    password: str = Form(...),\n    role: str = Form("staff"),\n    csrf_token: str = Form(""),\n):\n    require_admin(request)\n    require_superadmin(request)\n    _require_csrf(request, csrf_token)\n    username = username.strip()\n    if not username or not password:\n        return RedirectResponse("/admin/users?err=用户名和密码不能为空", status_code=303)\n    if len(password) < 6:\n        return RedirectResponse("/admin/users?err=密码不能少于6位", status_code=303)\n    if role not in ("superadmin", "staff"):\n        role = "staff"\n    existing = db.query(AdminUser).filter(AdminUser.username == username).first()\n    if existing:\n        return RedirectResponse(f"/admin/users?err=用户名已存在：{username}", status_code=303)\n    db.add(AdminUser(username=username, password_hash=_pwd_ctx.hash(password), role=role, is_active=True))\n    _audit(db, request, "admin_user_create", application_id=None, detail={"username": username, "role": role})\n    db.commit()\n    return RedirectResponse(f"/admin/users?msg=已创建账号：{username}", status_code=303)\n\n\n@app.post("/admin/users/{user_id}/toggle", name="admin_users_toggle")\nasync def admin_users_toggle(\n    user_id: int,\n    request: Request,\n    db: Session = Depends(get_db),\n    csrf_token: str = Form(""),\n):\n    require_admin(request)\n    require_superadmin(request)\n    _require_csrf(request, csrf_token)\n    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()\n    if not user:\n        raise HTTPException(404)\n    if user.username == request.session.get("admin_username", ""):\n        return RedirectResponse("/admin/users?err=不能停用当前登录账号", status_code=303)\n    user.is_active = not user.is_active\n    _audit(db, request, "admin_user_toggle", application_id=None, detail={"username": user.username, "active": user.is_active})\n    db.commit()\n    status_zh = "启用" if user.is_active else "停用"\n    return RedirectResponse(f"/admin/users?msg=已{status_zh}账号：{user.username}", status_code=303)\n\n\n@app.post("/admin/users/{user_id}/reset-password", name="admin_users_reset_password")\nasync def admin_users_reset_password(\n    user_id: int,\n    request: Request,\n    db: Session = Depends(get_db),\n    new_password: str = Form(...),\n    csrf_token: str = Form(""),\n):\n    require_admin(request)\n    require_superadmin(request)\n    _require_csrf(request, csrf_token)\n    if not new_password or len(new_password) < 6:\n        return RedirectResponse("/admin/users?err=新密码不能少于6位", status_code=303)\n    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()\n    if not user:\n        raise HTTPException(404)\n    user.password_hash = _pwd_ctx.hash(new_password)\n    _audit(db, request, "admin_user_reset_password", application_id=None, detail={"username": user.username})\n    db.commit()\n    return RedirectResponse(f"/admin/users?msg=已重置密码：{user.username}", status_code=303)\n\n\n@app.post("/admin/backup/create"'
+if old in c:
+    c = c.replace(old, new, 1)
+    print("patch 10 applied")
+else:
+    print("patch 10: already applied or not found")
+
+p.write_text(c, encoding="utf-8")
+print("app/main.py done")
+PYEOF

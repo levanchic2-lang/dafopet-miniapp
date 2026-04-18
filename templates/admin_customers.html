@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
+    <div>
+      <h1 style="margin:0;">客户档案</h1>
+      <p class="sub" style="margin:0.25rem 0 0;">共 {{ total }} 条记录</p>
+    </div>
+    <button onclick="document.getElementById('create-modal').style.display='flex'" class="btn" style="font-size:0.9rem;">＋ 新建客户</button>
+  </div>
+
+  <form method="get" style="display:flex;gap:0.6rem;margin-bottom:1rem;flex-wrap:wrap;">
+    <input name="q" value="{{ q }}" placeholder="搜索姓名 / 手机号" style="flex:1;min-width:180px;" />
+    <button type="submit" class="btn secondary">搜索</button>
+    {% if q %}<a href="/admin/customers" class="btn secondary">清除</a>{% endif %}
+  </form>
+
+  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">ID</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">姓名</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">手机号</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">来源</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">创建时间</th>
+        <th style="padding:0.5rem 0.75rem;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in customers %}
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.55rem 0.75rem;color:var(--muted);font-size:0.82rem;">#{{ c.id }}</td>
+        <td style="padding:0.55rem 0.75rem;font-weight:600;">{{ c.name or '—' }}</td>
+        <td style="padding:0.55rem 0.75rem;">{{ c.phone or '—' }}</td>
+        <td style="padding:0.55rem 0.75rem;">
+          {% if c.source == 'tnr' %}<span class="badge b-pending">TNR</span>
+          {% elif c.source == 'outpatient' %}<span class="badge b-ok">门诊</span>
+          {% elif c.source == 'surgery' %}<span class="badge b-done">手术</span>
+          {% elif c.source == 'beauty' %}<span class="badge">美容</span>
+          {% elif c.source == 'manual' %}<span class="badge">手动</span>
+          {% else %}<span class="badge">{{ c.source or '—' }}</span>{% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;color:var(--muted);font-size:0.82rem;">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
+        <td style="padding:0.55rem 0.75rem;text-align:right;">
+          <a href="/admin/customers/{{ c.id }}" class="btn secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;">查看</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="padding:1.5rem 0.75rem;color:var(--muted);text-align:center;">暂无客户记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if total_pages > 1 %}
+  <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;align-items:center;">
+    {% if page > 1 %}<a href="?q={{ q }}&page={{ page - 1 }}" class="btn secondary" style="font-size:0.85rem;">上一页</a>{% endif %}
+    <span style="font-size:0.88rem;color:var(--muted);">第 {{ page }} / {{ total_pages }} 页</span>
+    {% if page < total_pages %}<a href="?q={{ q }}&page={{ page + 1 }}" class="btn secondary" style="font-size:0.85rem;">下一页</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- 新建客户 modal -->
+<div id="create-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:440px;margin:1rem;">
+    <h2 style="margin:0 0 1rem;font-size:1.1rem;">新建客户档案</h2>
+    <form method="post" action="/admin/customers/create">
+      <label>姓名</label>
+      <input name="name" placeholder="客户姓名" />
+      <label>手机号</label>
+      <input name="phone" type="tel" placeholder="11位手机号" />
+      <label>地址（可选）</label>
+      <input name="address" placeholder="居住地址" />
+      <label>备注（可选）</label>
+      <textarea name="notes" style="min-height:60px;"></textarea>
+      <input type="hidden" name="source" value="manual" />
+      <div style="display:flex;gap:0.6rem;margin-top:1rem;">
+        <button type="submit" class="btn" style="flex:1;">创建</button>
+        <button type="button" onclick="document.getElementById('create-modal').style.display='none'" class="btn secondary" style="flex:1;">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
