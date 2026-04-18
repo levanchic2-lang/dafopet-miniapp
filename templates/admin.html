@@ -165,6 +165,15 @@
     color: var(--muted);
     cursor: not-allowed;
   }
+  .apps-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .apps-grid { grid-template-columns: 1fr; }
+  }
 </style>
 {% endblock %}
 {% block body %}
@@ -383,8 +392,9 @@
   {% else %}<span class="badge">{{ s }}</span>{% endif %}
 {%- endmacro %}
 
+<div class="apps-grid">
 {% for a in apps %}
-<div class="card">
+<div class="card" style="margin-bottom:0;">
   <div class="admin-app-top">
     <div class="admin-app-lines">
       <strong>#{{ a.id }}</strong> {{ status_badge(a.status) }}
@@ -670,6 +680,7 @@
 {% else %}
 <div class="card"><p>暂无申请记录。</p></div>
 {% endfor %}
+</div>
 {% endblock %}
 {% block scripts %}
 {% endblock %}
