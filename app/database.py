@@ -233,6 +233,32 @@ def _try_sqlite_migrations() -> None:
             if "pet_id" not in appt_names2:
                 conn.execute(text("ALTER TABLE appointments ADD COLUMN pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL"))
 
+            # visits 就诊病历表
+            visit_cols = conn.execute(text("PRAGMA table_info(visits)")).fetchall()
+            if not visit_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS visits ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                    "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                    "appointment_id INTEGER DEFAULT NULL REFERENCES appointments(id) ON DELETE SET NULL, "
+                    "visit_date VARCHAR(20) DEFAULT '', "
+                    "visit_type VARCHAR(40) DEFAULT 'outpatient', "
+                    "chief_complaint TEXT DEFAULT '', "
+                    "physical_exam TEXT DEFAULT '', "
+                    "diagnosis TEXT DEFAULT '', "
+                    "treatment_plan TEXT DEFAULT '', "
+                    "notes TEXT DEFAULT '', "
+                    "vet_name VARCHAR(80) DEFAULT '', "
+                    "created_by VARCHAR(80) DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_visits_customer ON visits(customer_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_visits_pet ON visits(pet_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_visits_date ON visits(visit_date)"))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

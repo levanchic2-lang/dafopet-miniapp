@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block body %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
+  <div>
+    <h1 style="margin:0;">就诊病历</h1>
+    <p class="sub" style="margin:0.25rem 0 0;">共 {{ total }} 条记录</p>
+  </div>
+  <a href="/admin/visits/create" class="btn" style="font-size:0.9rem;">＋ 新建就诊记录</a>
+</div>
+
+<!-- 筛选 -->
+<div class="card" style="margin-bottom:1rem;">
+  <form method="get" action="/admin/visits" style="display:grid;gap:0.6rem;">
+    <div class="row2">
+      <div>
+        <label style="margin:0 0 0.35rem;">关键词（客户姓名/手机/宠物名/诊断）</label>
+        <input name="q" value="{{ filters.q or '' }}" placeholder="搜索..." />
+      </div>
+      <div>
+        <label style="margin:0 0 0.35rem;">就诊类型</label>
+        <select name="visit_type">
+          <option value="">全部</option>
+          {% for k, zh in visit_type_zh.items() %}
+          <option value="{{ k }}" {% if filters.visit_type == k %}selected{% endif %}>{{ zh }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="margin:0 0 0.35rem;">日期从</label>
+        <input type="date" name="date_from" value="{{ filters.date_from or '' }}" />
+      </div>
+      <div>
+        <label style="margin:0 0 0.35rem;">日期到</label>
+        <input type="date" name="date_to" value="{{ filters.date_to or '' }}" />
+      </div>
+    </div>
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+      <a href="/admin/visits" class="btn secondary">清空</a>
+      <button type="submit" style="min-width:7rem;">查询</button>
+    </div>
+  </form>
+</div>
+
+<!-- 列表 -->
+<div class="card" style="padding:0;overflow:hidden;">
+  {% if visits %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);background:var(--bg-elevated);">
+        <th style="text-align:left;padding:0.6rem 0.9rem;font-weight:600;">日期</th>
+        <th style="text-align:left;padding:0.6rem 0.9rem;font-weight:600;">类型</th>
+        <th style="text-align:left;padding:0.6rem 0.9rem;font-weight:600;">客户</th>
+        <th style="text-align:left;padding:0.6rem 0.9rem;font-weight:600;">宠物</th>
+        <th style="text-align:left;padding:0.6rem 0.9rem;font-weight:600;">诊断</th>
+        <th style="text-align:left;padding:0.6rem 0.9rem;font-weight:600;">医生</th>
+        <th style="padding:0.6rem 0.9rem;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in visits %}
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.55rem 0.9rem;white-space:nowrap;color:var(--muted);">{{ v.visit_date or '—' }}</td>
+        <td style="padding:0.55rem 0.9rem;">
+          <span class="badge b-ok">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>
+        </td>
+        <td style="padding:0.55rem 0.9rem;">
+          {% set c = cust_map.get(v.customer_id) %}
+          {% if c %}
+          <a href="/admin/customers/{{ c.id }}">{{ c.name or c.phone or '—' }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td style="padding:0.55rem 0.9rem;">
+          {% set p = pet_map.get(v.pet_id) %}
+          {{ p.name if p else '—' }}
+        </td>
+        <td style="padding:0.55rem 0.9rem;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          {{ v.diagnosis or '—' }}
+        </td>
+        <td style="padding:0.55rem 0.9rem;color:var(--muted);">{{ v.vet_name or '—' }}</td>
+        <td style="padding:0.55rem 0.9rem;text-align:right;">
+          <a href="/admin/visits/{{ v.id }}" class="btn secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;">查看</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- 分页 -->
+  {% if total > page_size %}
+  <div style="display:flex;justify-content:center;gap:0.5rem;padding:0.85rem;">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}&q={{ filters.q }}&visit_type={{ filters.visit_type }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}" class="btn secondary" style="font-size:0.85rem;padding:0.35rem 0.9rem;">← 上一页</a>
+    {% endif %}
+    <span style="padding:0.4rem 0.75rem;font-size:0.85rem;color:var(--muted);">第 {{ page }} 页 / 共 {{ ((total - 1) // page_size + 1) }} 页</span>
+    {% if page * page_size < total %}
+    <a href="?page={{ page + 1 }}&q={{ filters.q }}&visit_type={{ filters.visit_type }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}" class="btn secondary" style="font-size:0.85rem;padding:0.35rem 0.9rem;">下一页 →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div style="padding:2.5rem 1rem;text-align:center;color:var(--muted);font-size:0.9rem;">
+    暂无就诊记录{% if filters.q or filters.visit_type %}（当前筛选无结果，<a href="/admin/visits">清空筛选</a>）{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -54,7 +54,34 @@
         </span>
         <span style="margin-left:auto;font-size:0.8rem;color:var(--muted);">▸ 展开编辑</span>
       </summary>
-      <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ pet.id }}/edit" style="margin-top:0.75rem;">
+      <!-- 该宠物的就诊历史 -->
+      {% set pet_visits = visits_by_pet.get(pet.id, []) %}
+      <div style="margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid var(--border);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+          <span style="font-size:0.85rem;font-weight:600;">就诊历史（{{ pet_visits|length }}）</span>
+          <a href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ pet.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;">＋ 新建就诊</a>
+        </div>
+        {% if pet_visits %}
+        <div style="display:grid;gap:0.4rem;">
+          {% for vis in pet_visits[:5] %}
+          <a href="/admin/visits/{{ vis.id }}" style="display:flex;align-items:center;gap:0.75rem;padding:0.45rem 0.6rem;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border);text-decoration:none;border-bottom:1px solid var(--border);">
+            <span style="font-size:0.78rem;color:var(--muted);white-space:nowrap;">{{ vis.visit_date or '—' }}</span>
+            <span class="badge b-ok" style="font-size:0.68rem;">{{ visit_type_zh.get(vis.visit_type, vis.visit_type) }}</span>
+            <span style="font-size:0.85rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">{{ vis.diagnosis or vis.chief_complaint or '（无诊断）' }}</span>
+            <span style="font-size:0.78rem;color:var(--muted);">{{ vis.vet_name or '' }}</span>
+          </a>
+          {% endfor %}
+          {% if pet_visits|length > 5 %}
+          <a href="/admin/visits?pet_id={{ pet.id }}" style="font-size:0.82rem;color:var(--muted);text-align:center;padding:0.3rem;">查看全部 {{ pet_visits|length }} 条 →</a>
+          {% endif %}
+        </div>
+        {% else %}
+        <p style="color:var(--muted);font-size:0.85rem;margin:0;">暂无就诊记录</p>
+        {% endif %}
+      </div>
+
+      <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ pet.id }}/edit" style="margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid var(--border);">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.6rem;">编辑宠物信息</div>
         <div class="row2">
           <div>
             <label>名字</label>

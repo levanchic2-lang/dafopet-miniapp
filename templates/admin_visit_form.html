@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% set v = visit if visit else None %}
+{% set is_edit = (mode == 'edit') %}
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+  {% if cust %}
+  <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
+  {% else %}
+  <a href="/admin/visits" class="btn secondary" style="font-size:0.85rem;">← 返回就诊列表</a>
+  {% endif %}
+  <h1 style="margin:0;font-size:1.3rem;">
+    {% if is_edit %}就诊记录 #{{ v.id }}{% else %}新建就诊记录{% endif %}
+  </h1>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start;">
+
+  <!-- 左：SOAP 表单 -->
+  <div>
+    <div class="card">
+      <form method="post" action="{% if is_edit %}/admin/visits/{{ v.id }}/edit{% else %}/admin/visits/create{% endif %}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        {% if not is_edit %}
+        <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}" />
+        <input type="hidden" name="appointment_id" value="{{ appt.id if appt else 0 }}" />
+        {% endif %}
+
+        <!-- 基础信息行 -->
+        <div class="row2">
+          <div>
+            <label>就诊日期</label>
+            <input type="date" name="visit_date" value="{{ v.visit_date if v else today }}" required />
+          </div>
+          <div>
+            <label>就诊类型</label>
+            <select name="visit_type">
+              {% for k, zh in visit_type_zh.items() %}
+              <option value="{{ k }}" {% if (v and v.visit_type == k) or (not v and k == 'outpatient') %}selected{% endif %}>{{ zh }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>接诊医生</label>
+            <input name="vet_name" value="{{ v.vet_name if v else '' }}"
+                   list="vet-list" placeholder="输入或选择医生" />
+            <datalist id="vet-list">
+              {% for name in vet_names %}<option value="{{ name }}">{% endfor %}
+            </datalist>
+          </div>
+          <div>
+            <label>就诊宠物</label>
+            <select name="pet_id">
+              <option value="0">— 未指定 —</option>
+              {% for p in pets %}
+              <option value="{{ p.id }}"
+                {% if (v and v.pet_id == p.id) or (pet and pet.id == p.id and not v) %}selected{% endif %}>
+                {{ p.name or '未命名' }}（{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}）
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- SOAP -->
+        <div style="margin-top:1rem;">
+          <div style="display:grid;gap:0.85rem;">
+
+            <div>
+              <label style="display:flex;align-items:center;gap:0.4rem;">
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:1.4em;height:1.4em;background:var(--accent);color:#fff;border-radius:4px;font-size:0.72rem;font-weight:800;">S</span>
+                主诉 <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（客户描述的问题）</span>
+              </label>
+              <textarea name="chief_complaint" placeholder="例：猫咪今天食欲下降，精神萎靡，偶有咳嗽">{{ v.chief_complaint if v else '' }}</textarea>
+            </div>
+
+            <div>
+              <label style="display:flex;align-items:center;gap:0.4rem;">
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:1.4em;height:1.4em;background:var(--accent);color:#fff;border-radius:4px;font-size:0.72rem;font-weight:800;">O</span>
+                体格检查 <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（体温/体重/心率/检查发现）</span>
+              </label>
+              <textarea name="physical_exam" placeholder="T: 39.1℃  Wt: 3.8kg  HR: 180bpm  RR: 28次/分&#10;黏膜：淡粉，CRT<2s&#10;腹部触诊：无明显异常">{{ v.physical_exam if v else '' }}</textarea>
+            </div>
+
+            <div>
+              <label style="display:flex;align-items:center;gap:0.4rem;">
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:1.4em;height:1.4em;background:var(--accent);color:#fff;border-radius:4px;font-size:0.72rem;font-weight:800;">A</span>
+                诊断结论
+              </label>
+              <textarea name="diagnosis" style="min-height:72px;" placeholder="例：上呼吸道感染（猫疱疹病毒可疑）">{{ v.diagnosis if v else '' }}</textarea>
+            </div>
+
+            <div>
+              <label style="display:flex;align-items:center;gap:0.4rem;">
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:1.4em;height:1.4em;background:var(--accent);color:#fff;border-radius:4px;font-size:0.72rem;font-weight:800;">P</span>
+                处理方案
+              </label>
+              <textarea name="treatment_plan" placeholder="例：开具阿莫西林口服5天，补液100ml，1周后复诊">{{ v.treatment_plan if v else '' }}</textarea>
+            </div>
+
+            <div>
+              <label>补充备注</label>
+              <textarea name="notes" style="min-height:64px;" placeholder="其他注意事项、客户沟通记录等">{{ v.notes if v else '' }}</textarea>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:0.6rem;margin-top:1.25rem;">
+          <button type="submit" style="flex:1;">{% if is_edit %}保存修改{% else %}创建就诊记录{% endif %}</button>
+          {% if cust %}
+          <a href="/admin/customers/{{ cust.id }}" class="btn secondary">取消</a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    {% if is_edit %}
+    <!-- 删除 -->
+    <div style="margin-top:0.5rem;">
+      <form method="post" action="/admin/visits/{{ v.id }}/delete"
+            onsubmit="return confirm('确认删除此就诊记录？此操作不可恢复。')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="danger" style="font-size:0.85rem;width:100%;">删除此就诊记录</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 右：客户/宠物信息卡 -->
+  <div>
+    {% if cust %}
+    <div class="card" style="margin-bottom:0;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.6rem;">客户信息</div>
+      <div style="font-size:0.88rem;line-height:1.9;">
+        <div><span style="color:var(--muted);">姓名</span>　{{ cust.name or '—' }}</div>
+        <div><span style="color:var(--muted);">手机</span>　{{ cust.phone or '—' }}</div>
+        {% if cust.address %}
+        <div><span style="color:var(--muted);">地址</span>　{{ cust.address }}</div>
+        {% endif %}
+      </div>
+      <a href="/admin/customers/{{ cust.id }}" style="font-size:0.82rem;margin-top:0.6rem;display:inline-block;">查看完整档案 →</a>
+    </div>
+    {% endif %}
+
+    {% if is_edit and v %}
+    <div class="card" style="margin-top:0.75rem;margin-bottom:0;font-size:0.82rem;color:var(--muted);">
+      <div>创建人：{{ v.created_by or '—' }}</div>
+      <div>创建时间：{{ v.created_at.strftime('%Y-%m-%d %H:%M') if v.created_at else '—' }}</div>
+      <div>最后更新：{{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</div>
+    </div>
+    {% endif %}
+
+    {% if appt and not is_edit %}
+    <div class="card" style="margin-top:0.75rem;margin-bottom:0;font-size:0.88rem;">
+      <div style="font-weight:700;margin-bottom:0.4rem;">关联预约</div>
+      <div style="color:var(--muted);">#{{ appt.id }} · {{ appt.service_name or appt.category }}</div>
+      <div>{{ appt.appointment_date }} {{ appt.appointment_time }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endblock %}

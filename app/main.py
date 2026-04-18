@@ -39,6 +39,7 @@ from app.models import (
     Pet,
     Staff,
     StaffStatus,
+    Visit,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -4107,6 +4108,16 @@ async def page_admin_customer_detail(
     pets = db.query(Pet).filter(Pet.customer_id == customer_id).order_by(Pet.id.desc()).all()
     applications = db.query(Application).filter(Application.customer_id == customer_id).order_by(Application.id.desc()).limit(50).all()
     appointments = db.query(Appointment).filter(Appointment.customer_id == customer_id).order_by(Appointment.id.desc()).limit(50).all()
+    visits = db.query(Visit).filter(Visit.customer_id == customer_id).order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(100).all()
+    # 按 pet_id 分组，方便模板展示
+    visits_by_pet: dict[int, list] = {}
+    visits_no_pet = []
+    for vis in visits:
+        if vis.pet_id:
+            visits_by_pet.setdefault(vis.pet_id, []).append(vis)
+        else:
+            visits_no_pet.append(vis)
+    pet_map = {p.id: p for p in pets}
     return templates.TemplateResponse(
         request,
         "admin_customer_detail.html",
@@ -4115,6 +4126,12 @@ async def page_admin_customer_detail(
             "pets": pets,
             "applications": applications,
             "appointments": appointments,
+            "visits": visits,
+            "visits_by_pet": visits_by_pet,
+            "visits_no_pet": visits_no_pet,
+            "pet_map": pet_map,
+            "visit_type_zh": _VISIT_TYPE_ZH,
+            "csrf_token": _get_csrf_token(request),
         },
     )
 
@@ -4215,3 +4232,254 @@ async def admin_customer_edit_pet(
     pet.notes = notes.strip()
     db.commit()
     return RedirectResponse(f"/admin/customers/{customer_id}?msg=宠物已更新", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — 就诊病历 (Visits)
+# ---------------------------------------------------------------------------
+
+_VISIT_TYPE_ZH = {
+    "outpatient": "门诊",
+    "followup": "复诊",
+    "postop": "术后复查",
+    "vaccine": "疫苗接种",
+    "surgery_consult": "手术咨询",
+    "other": "其他",
+}
+
+
+@app.get("/admin/visits", response_class=HTMLResponse)
+async def page_admin_visits(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = Query(""),
+    visit_type: str = Query(""),
+    vet: str = Query(""),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    pet_id: int = Query(0),
+    customer_id: int = Query(0),
+    page: int = Query(1),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    query = db.query(Visit)
+    if q:
+        query = query.join(Customer, Visit.customer_id == Customer.id, isouter=True)\
+                     .join(Pet, Visit.pet_id == Pet.id, isouter=True)\
+                     .filter(or_(
+                         Customer.name.ilike(f"%{q}%"),
+                         Customer.phone.ilike(f"%{q}%"),
+                         Pet.name.ilike(f"%{q}%"),
+                         Visit.diagnosis.ilike(f"%{q}%"),
+                     ))
+    if visit_type:
+        query = query.filter(Visit.visit_type == visit_type)
+    if vet:
+        query = query.filter(Visit.vet_name.ilike(f"%{vet}%"))
+    if date_from:
+        query = query.filter(Visit.visit_date >= date_from)
+    if date_to:
+        query = query.filter(Visit.visit_date <= date_to)
+    if pet_id:
+        query = query.filter(Visit.pet_id == pet_id)
+    if customer_id:
+        query = query.filter(Visit.customer_id == customer_id)
+    total = query.count()
+    page_size = 30
+    visits = query.order_by(Visit.visit_date.desc(), Visit.id.desc())\
+                  .offset((page - 1) * page_size).limit(page_size).all()
+    # 预加载 customer/pet 名字
+    cust_map = {}
+    pet_map = {}
+    for v in visits:
+        if v.customer_id and v.customer_id not in cust_map:
+            c = db.get(Customer, v.customer_id)
+            if c:
+                cust_map[v.customer_id] = c
+        if v.pet_id and v.pet_id not in pet_map:
+            p = db.get(Pet, v.pet_id)
+            if p:
+                pet_map[v.pet_id] = p
+    return templates.TemplateResponse(request, "admin_visits.html", {
+        "visits": visits,
+        "cust_map": cust_map,
+        "pet_map": pet_map,
+        "visit_type_zh": _VISIT_TYPE_ZH,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "filters": {"q": q, "visit_type": visit_type, "vet": vet,
+                    "date_from": date_from, "date_to": date_to},
+    })
+
+
+@app.get("/admin/visits/create", response_class=HTMLResponse)
+async def page_admin_visit_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = Query(0),
+    pet_id: int = Query(0),
+    appointment_id: int = Query(0),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    appt = db.get(Appointment, appointment_id) if appointment_id else None
+    # 该客户的全部宠物（用于下拉）
+    pets = db.query(Pet).filter(Pet.customer_id == customer_id).all() if customer_id else []
+    # 在职医生列表（用于下拉建议）
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%")
+    ).all()
+    vet_names = [v[0] for v in vets]
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    return templates.TemplateResponse(request, "admin_visit_form.html", {
+        "cust": cust,
+        "pet": pet,
+        "pets": pets,
+        "appt": appt,
+        "vet_names": vet_names,
+        "visit_type_zh": _VISIT_TYPE_ZH,
+        "today": today,
+        "csrf_token": _get_csrf_token(request),
+        "mode": "create",
+    })
+
+
+@app.post("/admin/visits/create")
+async def admin_visit_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(0),
+    pet_id: int = Form(0),
+    appointment_id: int = Form(0),
+    visit_date: str = Form(""),
+    visit_type: str = Form("outpatient"),
+    chief_complaint: str = Form(""),
+    physical_exam: str = Form(""),
+    diagnosis: str = Form(""),
+    treatment_plan: str = Form(""),
+    notes: str = Form(""),
+    vet_name: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    v = Visit(
+        customer_id=customer_id or None,
+        pet_id=pet_id or None,
+        appointment_id=appointment_id or None,
+        visit_date=visit_date.strip()[:20],
+        visit_type=visit_type.strip()[:40] or "outpatient",
+        chief_complaint=chief_complaint.strip(),
+        physical_exam=physical_exam.strip(),
+        diagnosis=diagnosis.strip(),
+        treatment_plan=treatment_plan.strip(),
+        notes=notes.strip(),
+        vet_name=vet_name.strip()[:80],
+        created_by=request.session.get("admin_username", "admin"),
+    )
+    db.add(v)
+    db.commit()
+    db.refresh(v)
+    # 如果是从预约完成时创建，更新预约状态
+    if appointment_id:
+        appt = db.get(Appointment, appointment_id)
+        if appt and appt.status == AppointmentStatus.confirmed.value:
+            appt.status = AppointmentStatus.completed.value
+            db.commit()
+    if customer_id:
+        return RedirectResponse(f"/admin/customers/{customer_id}?msg=就诊记录已创建", status_code=303)
+    return RedirectResponse(f"/admin/visits/{v.id}?msg=就诊记录已创建", status_code=303)
+
+
+@app.get("/admin/visits/{visit_id}", response_class=HTMLResponse)
+async def page_admin_visit_detail(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    cust = db.get(Customer, v.customer_id) if v.customer_id else None
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    pets = db.query(Pet).filter(Pet.customer_id == v.customer_id).all() if v.customer_id else []
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%")
+    ).all()
+    vet_names = [v2[0] for v2 in vets]
+    return templates.TemplateResponse(request, "admin_visit_form.html", {
+        "visit": v,
+        "cust": cust,
+        "pet": pet,
+        "pets": pets,
+        "vet_names": vet_names,
+        "visit_type_zh": _VISIT_TYPE_ZH,
+        "csrf_token": _get_csrf_token(request),
+        "mode": "edit",
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/visits/{visit_id}/edit")
+async def admin_visit_edit(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    pet_id: int = Form(0),
+    visit_date: str = Form(""),
+    visit_type: str = Form("outpatient"),
+    chief_complaint: str = Form(""),
+    physical_exam: str = Form(""),
+    diagnosis: str = Form(""),
+    treatment_plan: str = Form(""),
+    notes: str = Form(""),
+    vet_name: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    v.pet_id = pet_id or v.pet_id
+    v.visit_date = visit_date.strip()[:20]
+    v.visit_type = visit_type.strip()[:40] or "outpatient"
+    v.chief_complaint = chief_complaint.strip()
+    v.physical_exam = physical_exam.strip()
+    v.diagnosis = diagnosis.strip()
+    v.treatment_plan = treatment_plan.strip()
+    v.notes = notes.strip()
+    v.vet_name = vet_name.strip()[:80]
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=已保存", status_code=303)
+
+
+@app.post("/admin/visits/{visit_id}/delete")
+async def admin_visit_delete(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    customer_id = v.customer_id
+    db.delete(v)
+    db.commit()
+    if customer_id:
+        return RedirectResponse(f"/admin/customers/{customer_id}?msg=就诊记录已删除", status_code=303)
+    return RedirectResponse("/admin/visits?msg=就诊记录已删除", status_code=303)

@@ -291,6 +291,31 @@ class Pet(Base):
     customer = relationship("Customer", back_populates="pets")
 
 
+class Visit(Base):
+    __tablename__ = "visits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    appointment_id = mapped_column(ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    visit_date: Mapped[str] = mapped_column(String(20), default="")        # YYYY-MM-DD
+    visit_type: Mapped[str] = mapped_column(String(40), default="outpatient")  # outpatient/followup/postop/vaccine/surgery_consult/other
+    chief_complaint: Mapped[str] = mapped_column(Text, default="")          # 主诉
+    physical_exam: Mapped[str] = mapped_column(Text, default="")            # 体格检查（体温/体重/心率等）
+    diagnosis: Mapped[str] = mapped_column(Text, default="")                # 诊断结论
+    treatment_plan: Mapped[str] = mapped_column(Text, default="")           # 处理方案
+    notes: Mapped[str] = mapped_column(Text, default="")                    # 补充备注
+
+    vet_name: Mapped[str] = mapped_column(String(80), default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer", backref="visits", foreign_keys=[customer_id])
+    pet = relationship("Pet", backref="visits", foreign_keys=[pet_id])
+
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
 
