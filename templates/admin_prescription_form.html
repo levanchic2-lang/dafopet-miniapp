@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+.drug-table { width:100%; border-collapse:collapse; font-size:0.88rem; }
+.drug-table th { text-align:left; padding:0.4rem 0.5rem; font-weight:600; font-size:0.8rem; color:var(--muted); border-bottom:2px solid var(--border); white-space:nowrap; }
+.drug-table td { padding:0.35rem 0.4rem; vertical-align:top; }
+.drug-table tr:not(:last-child) td { border-bottom:1px solid var(--border); }
+.drug-table input, .drug-table select, .drug-table textarea { padding:0.35rem 0.5rem; font-size:0.86rem; border-radius:8px; }
+.drug-table textarea { min-height:48px; resize:vertical; }
+@media print {
+  .no-print { display:none !important; }
+  body { background:#fff; }
+  .wrap { padding:0; }
+  .card { box-shadow:none; border:none; }
+}
+</style>
+{% endblock %}
+{% block body %}
+
+{% set p = presc %}
+{% set is_edit = (mode == 'edit') %}
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;" class="no-print">
+  {% if visit %}
+  <a href="/admin/visits/{{ visit.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回就诊记录</a>
+  {% elif cust %}
+  <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
+  {% endif %}
+  <h1 style="margin:0;font-size:1.3rem;">
+    {% if is_edit %}处方单 #{{ p.id }}{% else %}新建处方单{% endif %}
+  </h1>
+  {% if is_edit %}
+  <button onclick="window.print()" class="btn secondary" style="font-size:0.85rem;margin-left:auto;">🖨 打印处方</button>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:1rem;align-items:start;">
+
+  <div>
+    <div class="card">
+      <form method="post" action="{% if is_edit %}/admin/prescriptions/{{ p.id }}/edit{% else %}/admin/prescriptions/create{% endif %}" id="presc-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="visit_id" value="{{ visit.id if visit else (p.visit_id if p else 0) }}" />
+        <input type="hidden" name="customer_id" value="{{ cust.id if cust else (p.customer_id if p else 0) }}" />
+
+        <div class="row2">
+          <div>
+            <label>开具日期</label>
+            <input type="date" name="prescribed_date" value="{{ p.prescribed_date if p else today }}" required />
+          </div>
+          <div>
+            <label>开具医生</label>
+            <input name="vet_name" value="{{ p.vet_name if p else '' }}" list="vet-list" placeholder="输入或选择医生" />
+            <datalist id="vet-list">{% for n in vet_names %}<option value="{{ n }}">{% endfor %}</datalist>
+          </div>
+          <div>
+            <label>就诊宠物</label>
+            <select name="pet_id">
+              <option value="0">— 未指定 —</option>
+              {% for pt in pets %}
+              <option value="{{ pt.id }}" {% if (p and p.pet_id == pt.id) or (pet and pet.id == pt.id and not p) %}selected{% endif %}>
+                {{ pt.name or '未命名' }}（{{ '猫' if pt.species=='cat' else '狗' if pt.species=='dog' else pt.species }}）
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>状态</label>
+            <select name="status">
+              {% for k, zh in presc_status_zh.items() %}
+              <option value="{{ k }}" {% if (p and p.status == k) or (not p and k == 'issued') %}selected{% endif %}>{{ zh }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- 药品明细表 -->
+        <div style="margin-top:1.1rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+            <label style="margin:0;">药品明细</label>
+            <button type="button" onclick="addDrugRow()" class="btn secondary" style="font-size:0.8rem;padding:0.25rem 0.65rem;">＋ 添加药品</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="drug-table">
+              <thead>
+                <tr>
+                  <th style="min-width:130px;">药品名称 *</th>
+                  <th style="min-width:80px;">类型</th>
+                  <th style="min-width:90px;">剂量</th>
+                  <th style="min-width:110px;">频次</th>
+                  <th style="min-width:70px;">疗程</th>
+                  <th style="min-width:70px;">总量</th>
+                  <th style="min-width:120px;">特殊说明</th>
+                  <th class="no-print" style="width:36px;"></th>
+                </tr>
+              </thead>
+              <tbody id="drug-tbody">
+                {% if p and p.items %}
+                  {% for item in p.items %}
+                  {% set idx = loop.index0 %}
+                  <tr>
+                    <td><input name="drug_name_{{ idx }}" value="{{ item.drug_name }}" required /></td>
+                    <td>
+                      <select name="drug_type_{{ idx }}">
+                        {% for k, zh in drug_type_zh.items() %}
+                        <option value="{{ k }}" {% if item.drug_type == k %}selected{% endif %}>{{ zh }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td><input name="dosage_{{ idx }}" value="{{ item.dosage }}" placeholder="5mg" /></td>
+                    <td><input name="frequency_{{ idx }}" value="{{ item.frequency }}" placeholder="每日两次" /></td>
+                    <td><input name="duration_days_{{ idx }}" value="{{ item.duration_days }}" placeholder="7天" /></td>
+                    <td><input name="quantity_{{ idx }}" value="{{ item.quantity }}" placeholder="14片" /></td>
+                    <td><input name="instructions_{{ idx }}" value="{{ item.instructions }}" placeholder="饭后服用" /></td>
+                    <td class="no-print"><button type="button" onclick="this.closest('tr').remove()" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+                  </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr>
+                    <td><input name="drug_name_0" placeholder="药品名称" required /></td>
+                    <td>
+                      <select name="drug_type_0">
+                        {% for k, zh in drug_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}
+                      </select>
+                    </td>
+                    <td><input name="dosage_0" placeholder="5mg" /></td>
+                    <td><input name="frequency_0" placeholder="每日两次" /></td>
+                    <td><input name="duration_days_0" placeholder="7天" /></td>
+                    <td><input name="quantity_0" placeholder="14片" /></td>
+                    <td><input name="instructions_0" placeholder="饭后服用" /></td>
+                    <td class="no-print"><button type="button" onclick="this.closest('tr').remove()" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="margin-top:0.85rem;">
+          <label>备注</label>
+          <textarea name="notes" style="min-height:60px;" placeholder="其他说明">{{ p.notes if p else '' }}</textarea>
+        </div>
+
+        <div style="display:flex;gap:0.6rem;margin-top:1rem;" class="no-print">
+          <button type="submit" style="flex:1;">{% if is_edit %}保存修改{% else %}开具处方单{% endif %}</button>
+          {% if visit %}
+          <a href="/admin/visits/{{ visit.id }}" class="btn secondary">取消</a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    {% if is_edit %}
+    <div style="margin-top:0.5rem;" class="no-print">
+      <form method="post" action="/admin/prescriptions/{{ p.id }}/delete"
+            onsubmit="return confirm('确认删除此处方单？')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="danger" style="font-size:0.85rem;width:100%;">删除处方单</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 右侧信息卡 -->
+  <div class="no-print">
+    {% if cust %}
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">客户</div>
+      <div style="font-size:0.88rem;line-height:1.9;">
+        <div>{{ cust.name or '—' }}</div>
+        <div style="color:var(--muted);">{{ cust.phone or '—' }}</div>
+      </div>
+    </div>
+    {% endif %}
+    {% if visit %}
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">关联就诊</div>
+      <div style="font-size:0.88rem;color:var(--muted);">
+        #{{ visit.id }} · {{ visit.visit_date }}<br/>
+        {{ visit.diagnosis[:40] if visit.diagnosis else '—' }}
+      </div>
+    </div>
+    {% endif %}
+    {% if is_edit and p %}
+    <div class="card" style="font-size:0.82rem;color:var(--muted);">
+      <div>创建：{{ p.created_by or '—' }}</div>
+      <div>{{ p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else '' }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% block scripts %}
+<script>
+var _drugRowCount = {{ p.items|length if p and p.items else 1 }};
+var _drugTypeOptions = `{% for k, zh in drug_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}`;
+
+function addDrugRow() {
+  var idx = _drugRowCount++;
+  var row = `<tr>
+    <td><input name="drug_name_${idx}" placeholder="药品名称" required /></td>
+    <td><select name="drug_type_${idx}">${_drugTypeOptions}</select></td>
+    <td><input name="dosage_${idx}" placeholder="5mg" /></td>
+    <td><input name="frequency_${idx}" placeholder="每日两次" /></td>
+    <td><input name="duration_days_${idx}" placeholder="7天" /></td>
+    <td><input name="quantity_${idx}" placeholder="14片" /></td>
+    <td><input name="instructions_${idx}" placeholder="饭后服用" /></td>
+    <td class="no-print"><button type="button" onclick="this.closest('tr').remove()" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+  </tr>`;
+  document.getElementById('drug-tbody').insertAdjacentHTML('beforeend', row);
+}
+</script>
+{% endblock %}
+{% endblock %}

@@ -39,6 +39,10 @@ from app.models import (
     Pet,
     Staff,
     StaffStatus,
+    Prescription,
+    PrescriptionItem,
+    SalesOrder,
+    SalesOrderItem,
     Visit,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
@@ -4426,6 +4430,10 @@ async def page_admin_visit_detail(
         Staff.position.ilike("%医%")
     ).all()
     vet_names = [v2[0] for v2 in vets]
+    prescriptions = db.query(Prescription).filter(Prescription.visit_id == visit_id).order_by(Prescription.id.desc()).all()
+    sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
+    _PRESC_STATUS_ZH = {"draft": "草稿", "issued": "已开具", "dispensed": "已发药"}
+    _SO_STATUS_ZH = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
     return templates.TemplateResponse(request, "admin_visit_form.html", {
         "visit": v,
         "cust": cust,
@@ -4433,6 +4441,10 @@ async def page_admin_visit_detail(
         "pets": pets,
         "vet_names": vet_names,
         "visit_type_zh": _VISIT_TYPE_ZH,
+        "prescriptions": prescriptions,
+        "sales_orders": sales_orders,
+        "presc_status_zh": _PRESC_STATUS_ZH,
+        "so_status_zh": _SO_STATUS_ZH,
         "csrf_token": _get_csrf_token(request),
         "mode": "edit",
         "msg": request.query_params.get("msg"),
@@ -4493,3 +4505,360 @@ async def admin_visit_delete(
     if customer_id:
         return RedirectResponse(f"/admin/customers/{customer_id}?msg=就诊记录已删除", status_code=303)
     return RedirectResponse("/admin/visits?msg=就诊记录已删除", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — 处方单 (Prescriptions)
+# ---------------------------------------------------------------------------
+
+_PRESC_STATUS_ZH = {"draft": "草稿", "issued": "已开具", "dispensed": "已发药"}
+_DRUG_TYPE_ZH = {"oral": "口服", "topical": "外用", "injection": "注射", "eye_drop": "滴眼", "other": "其他"}
+
+
+def _parse_presc_items(form_data) -> list[dict]:
+    items = []
+    i = 0
+    while True:
+        name = form_data.get(f"drug_name_{i}", "").strip()
+        if not name and i > 20:
+            break
+        if name:
+            items.append({
+                "drug_name": name,
+                "drug_type": form_data.get(f"drug_type_{i}", "oral").strip(),
+                "dosage": form_data.get(f"dosage_{i}", "").strip(),
+                "frequency": form_data.get(f"frequency_{i}", "").strip(),
+                "duration_days": form_data.get(f"duration_days_{i}", "").strip(),
+                "quantity": form_data.get(f"quantity_{i}", "").strip(),
+                "instructions": form_data.get(f"instructions_{i}", "").strip(),
+            })
+        i += 1
+    return items
+
+
+@app.get("/admin/prescriptions/create", response_class=HTMLResponse)
+async def page_admin_presc_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    visit_id: int = Query(0),
+    customer_id: int = Query(0),
+    pet_id: int = Query(0),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    visit = db.get(Visit, visit_id) if visit_id else None
+    if visit:
+        customer_id = customer_id or visit.customer_id or 0
+        pet_id = pet_id or visit.pet_id or 0
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    pets = db.query(Pet).filter(Pet.customer_id == customer_id).all() if customer_id else []
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%")
+    ).all()
+    vet_names = [v[0] for v in vets]
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    return templates.TemplateResponse(request, "admin_prescription_form.html", {
+        "presc": None, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
+        "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
+        "presc_status_zh": _PRESC_STATUS_ZH,
+        "today": today, "csrf_token": _get_csrf_token(request), "mode": "create",
+    })
+
+
+@app.post("/admin/prescriptions/create")
+async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    visit_id = int(form.get("visit_id", 0) or 0)
+    customer_id = int(form.get("customer_id", 0) or 0)
+    pet_id = int(form.get("pet_id", 0) or 0)
+    presc = Prescription(
+        visit_id=visit_id or None,
+        customer_id=customer_id or None,
+        pet_id=pet_id or None,
+        prescribed_date=str(form.get("prescribed_date", "")).strip()[:20],
+        vet_name=str(form.get("vet_name", "")).strip()[:80],
+        status=str(form.get("status", "issued")).strip(),
+        notes=str(form.get("notes", "")).strip(),
+        created_by=request.session.get("admin_username", "admin"),
+    )
+    db.add(presc)
+    db.flush()
+    for it in _parse_presc_items(form):
+        db.add(PrescriptionItem(prescription_id=presc.id, **it))
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已开具" if visit_id else f"/admin/prescriptions/{presc.id}?msg=处方单已创建", status_code=303)
+
+
+@app.get("/admin/prescriptions/{presc_id}", response_class=HTMLResponse)
+async def page_admin_presc_detail(presc_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    presc = db.get(Prescription, presc_id)
+    if not presc:
+        raise HTTPException(404, "处方单不存在")
+    visit = db.get(Visit, presc.visit_id) if presc.visit_id else None
+    cust = db.get(Customer, presc.customer_id) if presc.customer_id else None
+    pet = db.get(Pet, presc.pet_id) if presc.pet_id else None
+    pets = db.query(Pet).filter(Pet.customer_id == presc.customer_id).all() if presc.customer_id else []
+    vets = db.query(Staff.name).filter(Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")).all()
+    vet_names = [v[0] for v in vets]
+    return templates.TemplateResponse(request, "admin_prescription_form.html", {
+        "presc": presc, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
+        "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
+        "presc_status_zh": _PRESC_STATUS_ZH,
+        "csrf_token": _get_csrf_token(request), "mode": "edit",
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/prescriptions/{presc_id}/edit")
+async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    presc = db.get(Prescription, presc_id)
+    if not presc:
+        raise HTTPException(404)
+    presc.prescribed_date = str(form.get("prescribed_date", "")).strip()[:20]
+    presc.vet_name = str(form.get("vet_name", "")).strip()[:80]
+    presc.pet_id = int(form.get("pet_id", 0) or 0) or presc.pet_id
+    presc.status = str(form.get("status", "issued")).strip()
+    presc.notes = str(form.get("notes", "")).strip()
+    # 重建明细
+    for old in presc.items:
+        db.delete(old)
+    db.flush()
+    for it in _parse_presc_items(form):
+        db.add(PrescriptionItem(prescription_id=presc_id, **it))
+    db.commit()
+    return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=已保存", status_code=303)
+
+
+@app.post("/admin/prescriptions/{presc_id}/delete")
+async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depends(get_db),
+                              csrf_token: str = Form("")):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    presc = db.get(Prescription, presc_id)
+    if not presc:
+        raise HTTPException(404)
+    visit_id = presc.visit_id
+    db.delete(presc)
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已删除" if visit_id else "/admin/visits", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — 销售单 (Sales Orders)
+# ---------------------------------------------------------------------------
+
+_SO_STATUS_ZH = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
+_SO_ITEM_TYPE_ZH = {"product": "商品", "service": "服务", "medication": "药品", "vaccine": "疫苗"}
+_PAYMENT_METHOD_OPTIONS = ["现金", "微信", "支付宝", "银行卡", "挂账"]
+
+
+def _parse_so_items(form_data) -> list[dict]:
+    items = []
+    i = 0
+    while True:
+        name = form_data.get(f"item_name_{i}", "").strip()
+        if not name and i > 20:
+            break
+        if name:
+            try:
+                unit_price = float(form_data.get(f"unit_price_{i}", 0) or 0)
+                quantity = float(form_data.get(f"quantity_{i}", 1) or 1)
+            except ValueError:
+                unit_price, quantity = 0.0, 1.0
+            subtotal = round(unit_price * quantity, 2)
+            items.append({
+                "item_name": name,
+                "item_type": form_data.get(f"item_type_{i}", "product").strip(),
+                "unit_price": unit_price,
+                "quantity": quantity,
+                "subtotal": subtotal,
+                "notes": form_data.get(f"item_notes_{i}", "").strip(),
+            })
+        i += 1
+    return items
+
+
+@app.get("/admin/sales-orders/create", response_class=HTMLResponse)
+async def page_admin_so_create(
+    request: Request, db: Session = Depends(get_db),
+    customer_id: int = Query(0), visit_id: int = Query(0), pet_id: int = Query(0),
+    search_q: str = Query(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    visit = db.get(Visit, visit_id) if visit_id else None
+    if visit:
+        customer_id = customer_id or visit.customer_id or 0
+        pet_id = pet_id or visit.pet_id or 0
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    pets = db.query(Pet).filter(Pet.customer_id == customer_id).all() if customer_id else []
+    search_results = []
+    if search_q and not customer_id:
+        search_results = db.query(Customer).filter(
+            or_(Customer.name.ilike(f"%{search_q}%"), Customer.phone.ilike(f"%{search_q}%"))
+        ).limit(10).all()
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    return templates.TemplateResponse(request, "admin_sales_order_form.html", {
+        "order": None, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
+        "so_status_zh": _SO_STATUS_ZH, "item_type_zh": _SO_ITEM_TYPE_ZH,
+        "payment_methods": _PAYMENT_METHOD_OPTIONS,
+        "today": today, "csrf_token": _get_csrf_token(request), "mode": "create",
+        "search_q": search_q, "search_results": search_results,
+    })
+
+
+@app.post("/admin/sales-orders/create")
+async def admin_so_create(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    customer_id = int(form.get("customer_id", 0) or 0)
+    visit_id = int(form.get("visit_id", 0) or 0)
+    pet_id = int(form.get("pet_id", 0) or 0)
+    items = _parse_so_items(form)
+    total = round(sum(it["subtotal"] for it in items), 2)
+    order = SalesOrder(
+        customer_id=customer_id or None,
+        visit_id=visit_id or None,
+        pet_id=pet_id or None,
+        order_date=str(form.get("order_date", "")).strip()[:20],
+        status=str(form.get("status", "pending")).strip(),
+        total_amount=total,
+        payment_method=str(form.get("payment_method", "")).strip()[:40],
+        notes=str(form.get("notes", "")).strip(),
+        created_by=request.session.get("admin_username", "admin"),
+    )
+    db.add(order)
+    db.flush()
+    for it in items:
+        db.add(SalesOrderItem(order_id=order.id, **it))
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已创建" if visit_id else f"/admin/sales-orders/{order.id}?msg=销售单已创建", status_code=303)
+
+
+@app.get("/admin/sales-orders", response_class=HTMLResponse)
+async def page_admin_so_list(
+    request: Request, db: Session = Depends(get_db),
+    q: str = Query(""), status: str = Query(""),
+    date_from: str = Query(""), date_to: str = Query(""),
+    page: int = Query(1),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    query = db.query(SalesOrder)
+    if q:
+        query = query.join(Customer, SalesOrder.customer_id == Customer.id, isouter=True).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        )
+    if status:
+        query = query.filter(SalesOrder.status == status)
+    if date_from:
+        query = query.filter(SalesOrder.order_date >= date_from)
+    if date_to:
+        query = query.filter(SalesOrder.order_date <= date_to)
+    total = query.count()
+    page_size = 30
+    orders = query.order_by(SalesOrder.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    cust_map = {}
+    for o in orders:
+        if o.customer_id and o.customer_id not in cust_map:
+            c = db.get(Customer, o.customer_id)
+            if c:
+                cust_map[o.customer_id] = c
+    return templates.TemplateResponse(request, "admin_sales_orders.html", {
+        "orders": orders, "cust_map": cust_map,
+        "so_status_zh": _SO_STATUS_ZH,
+        "total": total, "page": page, "page_size": page_size,
+        "filters": {"q": q, "status": status, "date_from": date_from, "date_to": date_to},
+    })
+
+
+@app.get("/admin/sales-orders/{order_id}", response_class=HTMLResponse)
+async def page_admin_so_detail(order_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        raise HTTPException(404, "销售单不存在")
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust = db.get(Customer, order.customer_id) if order.customer_id else None
+    pet = db.get(Pet, order.pet_id) if order.pet_id else None
+    pets = db.query(Pet).filter(Pet.customer_id == order.customer_id).all() if order.customer_id else []
+    return templates.TemplateResponse(request, "admin_sales_order_form.html", {
+        "order": order, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
+        "so_status_zh": _SO_STATUS_ZH, "item_type_zh": _SO_ITEM_TYPE_ZH,
+        "payment_methods": _PAYMENT_METHOD_OPTIONS,
+        "csrf_token": _get_csrf_token(request), "mode": "edit",
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/sales-orders/{order_id}/edit")
+async def admin_so_edit(order_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    items = _parse_so_items(form)
+    total = round(sum(it["subtotal"] for it in items), 2)
+    order.order_date = str(form.get("order_date", "")).strip()[:20]
+    order.status = str(form.get("status", "pending")).strip()
+    order.payment_method = str(form.get("payment_method", "")).strip()[:40]
+    order.total_amount = total
+    order.notes = str(form.get("notes", "")).strip()
+    order.pet_id = int(form.get("pet_id", 0) or 0) or order.pet_id
+    for old in order.items:
+        db.delete(old)
+    db.flush()
+    for it in items:
+        db.add(SalesOrderItem(order_id=order_id, **it))
+    db.commit()
+    return RedirectResponse(f"/admin/sales-orders/{order_id}?msg=已保存", status_code=303)
+
+
+@app.post("/admin/sales-orders/{order_id}/pay")
+async def admin_so_pay(order_id: int, request: Request, db: Session = Depends(get_db),
+                        csrf_token: str = Form(""), payment_method: str = Form("")):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    order.status = "paid"
+    if payment_method:
+        order.payment_method = payment_method.strip()[:40]
+    db.commit()
+    return RedirectResponse(f"/admin/sales-orders/{order_id}?msg=已标记收款", status_code=303)
+
+
+@app.post("/admin/sales-orders/{order_id}/delete")
+async def admin_so_delete(order_id: int, request: Request, db: Session = Depends(get_db),
+                           csrf_token: str = Form("")):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    visit_id = order.visit_id
+    db.delete(order)
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已删除" if visit_id else "/admin/sales-orders", status_code=303)

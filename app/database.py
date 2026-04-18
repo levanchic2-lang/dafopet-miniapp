@@ -233,6 +233,80 @@ def _try_sqlite_migrations() -> None:
             if "pet_id" not in appt_names2:
                 conn.execute(text("ALTER TABLE appointments ADD COLUMN pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL"))
 
+            # prescriptions 处方单表
+            prx_cols = conn.execute(text("PRAGMA table_info(prescriptions)")).fetchall()
+            if not prx_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS prescriptions ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                    "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                    "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                    "prescribed_date VARCHAR(20) DEFAULT '', "
+                    "vet_name VARCHAR(80) DEFAULT '', "
+                    "status VARCHAR(20) DEFAULT 'draft', "
+                    "notes TEXT DEFAULT '', "
+                    "created_by VARCHAR(80) DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_prescriptions_visit ON prescriptions(visit_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_prescriptions_customer ON prescriptions(customer_id)"))
+
+            prx_item_cols = conn.execute(text("PRAGMA table_info(prescription_items)")).fetchall()
+            if not prx_item_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS prescription_items ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "prescription_id INTEGER NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE, "
+                    "drug_name VARCHAR(120) DEFAULT '', "
+                    "drug_type VARCHAR(40) DEFAULT 'oral', "
+                    "dosage VARCHAR(80) DEFAULT '', "
+                    "frequency VARCHAR(80) DEFAULT '', "
+                    "duration_days VARCHAR(40) DEFAULT '', "
+                    "quantity VARCHAR(40) DEFAULT '', "
+                    "instructions TEXT DEFAULT ''"
+                    ")"
+                ))
+
+            # sales_orders 销售单表
+            so_cols = conn.execute(text("PRAGMA table_info(sales_orders)")).fetchall()
+            if not so_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS sales_orders ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                    "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                    "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                    "order_date VARCHAR(20) DEFAULT '', "
+                    "status VARCHAR(20) DEFAULT 'pending', "
+                    "total_amount REAL DEFAULT 0, "
+                    "payment_method VARCHAR(40) DEFAULT '', "
+                    "notes TEXT DEFAULT '', "
+                    "created_by VARCHAR(80) DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_sales_orders_customer ON sales_orders(customer_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_sales_orders_visit ON sales_orders(visit_id)"))
+
+            soi_cols = conn.execute(text("PRAGMA table_info(sales_order_items)")).fetchall()
+            if not soi_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS sales_order_items ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "order_id INTEGER NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE, "
+                    "item_name VARCHAR(120) DEFAULT '', "
+                    "item_type VARCHAR(40) DEFAULT 'product', "
+                    "unit_price REAL DEFAULT 0, "
+                    "quantity REAL DEFAULT 1, "
+                    "subtotal REAL DEFAULT 0, "
+                    "notes VARCHAR(200) DEFAULT ''"
+                    ")"
+                ))
+
             # visits 就诊病历表
             visit_cols = conn.execute(text("PRAGMA table_info(visits)")).fetchall()
             if not visit_cols:

@@ -153,8 +153,58 @@
     </div>
 
     {% if is_edit %}
+    <!-- 处方单 -->
+    <div class="card" style="margin-top:1rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <div style="font-weight:700;font-size:0.95rem;">处方单
+          <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（{{ prescriptions|length }}张）</span>
+        </div>
+        <a href="/admin/prescriptions/create?visit_id={{ v.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">＋ 开处方</a>
+      </div>
+      {% if prescriptions %}
+      <div style="display:grid;gap:0.4rem;">
+        {% for p in prescriptions %}
+        <a href="/admin/prescriptions/{{ p.id }}"
+           style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
+          <span style="font-size:0.78rem;color:var(--muted);">{{ p.prescribed_date or '—' }}</span>
+          <span class="badge {% if p.status == 'issued' %}b-ok{% elif p.status == 'dispensed' %}b-done{% else %}b-pending{% endif %}" style="font-size:0.68rem;">{{ presc_status_zh.get(p.status, p.status) }}</span>
+          <span style="flex:1;font-size:0.85rem;">{{ p.items|length }} 种药</span>
+          <span style="font-size:0.78rem;color:var(--muted);">{{ p.vet_name or '' }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:0.88rem;margin:0;">本次就诊暂无处方单</p>
+      {% endif %}
+    </div>
+
+    <!-- 销售单 -->
+    <div class="card" style="margin-top:0.75rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <div style="font-weight:700;font-size:0.95rem;">销售单
+          <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（{{ sales_orders|length }}张）</span>
+        </div>
+        <a href="/admin/sales-orders/create?visit_id={{ v.id }}&customer_id={{ v.customer_id or 0 }}" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">＋ 开销售单</a>
+      </div>
+      {% if sales_orders %}
+      <div style="display:grid;gap:0.4rem;">
+        {% for so in sales_orders %}
+        <a href="/admin/sales-orders/{{ so.id }}"
+           style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
+          <span style="font-size:0.78rem;color:var(--muted);">{{ so.order_date or '—' }}</span>
+          <span class="badge {% if so.status == 'paid' %}b-done{% elif so.status == 'cancelled' %}b-no{% else %}b-pending{% endif %}" style="font-size:0.68rem;">{{ so_status_zh.get(so.status, so.status) }}</span>
+          <span style="flex:1;font-size:0.85rem;">{{ so.items|length }} 项</span>
+          <span style="font-weight:600;font-size:0.9rem;">¥ {{ "%.2f"|format(so.total_amount) }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:0.88rem;margin:0;">本次就诊暂无销售单</p>
+      {% endif %}
+    </div>
+
     <!-- 删除 -->
-    <div style="margin-top:0.5rem;">
+    <div style="margin-top:0.75rem;">
       <form method="post" action="/admin/visits/{{ v.id }}/delete"
             onsubmit="return confirm('确认删除此就诊记录？此操作不可恢复。')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />

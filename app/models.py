@@ -291,6 +291,77 @@ class Pet(Base):
     customer = relationship("Customer", back_populates="pets")
 
 
+class Prescription(Base):
+    __tablename__ = "prescriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    prescribed_date: Mapped[str] = mapped_column(String(20), default="")
+    vet_name: Mapped[str] = mapped_column(String(80), default="")
+    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft / issued / dispensed
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items = relationship("PrescriptionItem", back_populates="prescription", cascade="all, delete-orphan")
+    customer = relationship("Customer", foreign_keys=[customer_id], backref="prescriptions")
+    pet = relationship("Pet", foreign_keys=[pet_id], backref="prescriptions")
+
+
+class PrescriptionItem(Base):
+    __tablename__ = "prescription_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    prescription_id: Mapped[int] = mapped_column(ForeignKey("prescriptions.id", ondelete="CASCADE"))
+    drug_name: Mapped[str] = mapped_column(String(120), default="")
+    drug_type: Mapped[str] = mapped_column(String(40), default="oral")  # oral/topical/injection/eye_drop/other
+    dosage: Mapped[str] = mapped_column(String(80), default="")       # 如 5mg / 1片
+    frequency: Mapped[str] = mapped_column(String(80), default="")    # 如 每日两次
+    duration_days: Mapped[str] = mapped_column(String(40), default="")
+    quantity: Mapped[str] = mapped_column(String(40), default="")     # 如 14片
+    instructions: Mapped[str] = mapped_column(Text, default="")
+
+    prescription = relationship("Prescription", back_populates="items")
+
+
+class SalesOrder(Base):
+    __tablename__ = "sales_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    visit_id = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    order_date: Mapped[str] = mapped_column(String(20), default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending / paid / cancelled
+    total_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    payment_method: Mapped[str] = mapped_column(String(40), default="")  # 现金/微信/支付宝/挂账
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items = relationship("SalesOrderItem", back_populates="order", cascade="all, delete-orphan")
+    customer = relationship("Customer", foreign_keys=[customer_id], backref="sales_orders")
+
+
+class SalesOrderItem(Base):
+    __tablename__ = "sales_order_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("sales_orders.id", ondelete="CASCADE"))
+    item_name: Mapped[str] = mapped_column(String(120), default="")
+    item_type: Mapped[str] = mapped_column(String(40), default="product")  # product/service/medication/vaccine
+    unit_price: Mapped[float] = mapped_column(Float, default=0.0)
+    quantity: Mapped[float] = mapped_column(Float, default=1.0)
+    subtotal: Mapped[float] = mapped_column(Float, default=0.0)
+    notes: Mapped[str] = mapped_column(String(200), default="")
+
+    order = relationship("SalesOrder", back_populates="items")
+
+
 class Visit(Base):
     __tablename__ = "visits"
 

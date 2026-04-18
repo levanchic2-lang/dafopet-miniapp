@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+.so-table { width:100%; border-collapse:collapse; font-size:0.88rem; }
+.so-table th { text-align:left; padding:0.4rem 0.5rem; font-weight:600; font-size:0.8rem; color:var(--muted); border-bottom:2px solid var(--border); white-space:nowrap; }
+.so-table td { padding:0.35rem 0.4rem; vertical-align:middle; }
+.so-table tr:not(:last-child) td { border-bottom:1px solid var(--border); }
+.so-table input, .so-table select { padding:0.35rem 0.5rem; font-size:0.86rem; border-radius:8px; }
+.so-total-row { background:var(--bg-elevated); font-weight:700; }
+@media print {
+  .no-print { display:none !important; }
+  body { background:#fff; }
+  .wrap { padding:0; }
+  .card { box-shadow:none; border:none; }
+}
+</style>
+{% endblock %}
+{% block body %}
+
+{% set o = order %}
+{% set is_edit = (mode == 'edit') %}
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+{% if not is_edit and not cust %}
+<!-- 第一步：搜索客户 -->
+<div class="card" style="max-width:600px;">
+  <div style="font-weight:700;font-size:1rem;margin-bottom:0.5rem;">第一步：找到客户</div>
+  <p class="sub" style="margin:0 0 0.75rem;">输入客户姓名或手机号，选中后再开销售单。</p>
+  <form method="get" action="/admin/sales-orders/create" style="display:flex;gap:0.5rem;">
+    {% if visit %}<input type="hidden" name="visit_id" value="{{ visit.id }}" />{% endif %}
+    <input name="search_q" value="{{ search_q or '' }}" placeholder="姓名 / 手机号" style="flex:1;" autofocus />
+    <button type="submit" style="white-space:nowrap;">搜索</button>
+  </form>
+  {% if search_q %}
+    {% if search_results %}
+    <div style="margin-top:0.85rem;display:grid;gap:0.4rem;">
+      {% for c in search_results %}
+      <a href="/admin/sales-orders/create?customer_id={{ c.id }}{% if visit %}&visit_id={{ visit.id }}{% endif %}"
+         style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.85rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
+        <span><strong>{{ c.name or '未命名' }}</strong><span style="color:var(--muted);margin-left:0.6rem;font-size:0.88rem;">{{ c.phone or '—' }}</span></span>
+        <span style="font-size:0.82rem;color:var(--muted);">选择 →</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="margin-top:0.75rem;color:var(--muted);font-size:0.9rem;">没有找到"{{ search_q }}"。<a href="/admin/customers" style="margin-left:0.4rem;">先创建客户 →</a></p>
+    {% endif %}
+  {% endif %}
+</div>
+
+{% else %}
+
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;" class="no-print">
+  {% if visit %}
+  <a href="/admin/visits/{{ visit.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回就诊记录</a>
+  {% elif cust %}
+  <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
+  {% else %}
+  <a href="/admin/sales-orders" class="btn secondary" style="font-size:0.85rem;">← 返回销售列表</a>
+  {% endif %}
+  <h1 style="margin:0;font-size:1.3rem;">{% if is_edit %}销售单 #{{ o.id }}{% else %}新建销售单{% endif %}</h1>
+  {% if is_edit %}
+  <button onclick="window.print()" class="btn secondary" style="font-size:0.85rem;margin-left:auto;" class="no-print">🖨 打印</button>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:1rem;align-items:start;">
+
+  <div>
+    <div class="card">
+      <form method="post" action="{% if is_edit %}/admin/sales-orders/{{ o.id }}/edit{% else %}/admin/sales-orders/create{% endif %}" id="so-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="customer_id" value="{{ cust.id if cust else (o.customer_id if o else 0) }}" />
+        <input type="hidden" name="visit_id" value="{{ visit.id if visit else (o.visit_id if o else 0) }}" />
+
+        <div class="row2">
+          <div>
+            <label>开单日期</label>
+            <input type="date" name="order_date" value="{{ o.order_date if o else today }}" required />
+          </div>
+          <div>
+            <label>关联宠物（可选）</label>
+            <select name="pet_id">
+              <option value="0">— 不关联 —</option>
+              {% for pt in pets %}
+              <option value="{{ pt.id }}" {% if (o and o.pet_id == pt.id) or (pet and pet.id == pt.id and not o) %}selected{% endif %}>
+                {{ pt.name or '未命名' }}（{{ '猫' if pt.species=='cat' else '狗' if pt.species=='dog' else pt.species }}）
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>收款方式</label>
+            <select name="payment_method">
+              <option value="">— 未收款 —</option>
+              {% for m in payment_methods %}
+              <option value="{{ m }}" {% if o and o.payment_method == m %}selected{% endif %}>{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>状态</label>
+            <select name="status">
+              {% for k, zh in so_status_zh.items() %}
+              <option value="{{ k }}" {% if (o and o.status == k) or (not o and k == 'pending') %}selected{% endif %}>{{ zh }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- 商品/服务明细 -->
+        <div style="margin-top:1.1rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+            <label style="margin:0;">明细</label>
+            <button type="button" onclick="addItem()" class="btn secondary" style="font-size:0.8rem;padding:0.25rem 0.65rem;">＋ 添加项目</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="so-table">
+              <thead>
+                <tr>
+                  <th style="min-width:160px;">名称 *</th>
+                  <th style="min-width:80px;">类型</th>
+                  <th style="min-width:90px;">单价（¥）</th>
+                  <th style="min-width:70px;">数量</th>
+                  <th style="min-width:90px;">小计（¥）</th>
+                  <th style="min-width:100px;">备注</th>
+                  <th class="no-print" style="width:36px;"></th>
+                </tr>
+              </thead>
+              <tbody id="so-tbody">
+                {% if o and o.items %}
+                  {% for item in o.items %}
+                  {% set idx = loop.index0 %}
+                  <tr>
+                    <td><input name="item_name_{{ idx }}" value="{{ item.item_name }}" required /></td>
+                    <td>
+                      <select name="item_type_{{ idx }}">
+                        {% for k, zh in item_type_zh.items() %}
+                        <option value="{{ k }}" {% if item.item_type == k %}selected{% endif %}>{{ zh }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td><input type="number" name="unit_price_{{ idx }}" value="{{ item.unit_price }}" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)" /></td>
+                    <td><input type="number" name="quantity_{{ idx }}" value="{{ item.quantity }}" step="0.1" min="0.1" class="qty-input" oninput="updateSubtotal(this)" /></td>
+                    <td><input name="subtotal_display_{{ idx }}" value="{{ '%.2f'|format(item.subtotal) }}" readonly style="background:var(--bg-elevated);font-weight:600;" /><input type="hidden" name="subtotal_{{ idx }}" value="{{ item.subtotal }}" class="subtotal-hidden" /></td>
+                    <td><input name="item_notes_{{ idx }}" value="{{ item.notes }}" /></td>
+                    <td class="no-print"><button type="button" onclick="removeItem(this)" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+                  </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr>
+                    <td><input name="item_name_0" placeholder="商品/服务名称" required /></td>
+                    <td><select name="item_type_0">{% for k, zh in item_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}</select></td>
+                    <td><input type="number" name="unit_price_0" placeholder="0.00" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)" /></td>
+                    <td><input type="number" name="quantity_0" value="1" step="0.1" min="0.1" class="qty-input" oninput="updateSubtotal(this)" /></td>
+                    <td><input name="subtotal_display_0" value="0.00" readonly style="background:var(--bg-elevated);font-weight:600;" /><input type="hidden" name="subtotal_0" value="0" class="subtotal-hidden" /></td>
+                    <td><input name="item_notes_0" placeholder="备注" /></td>
+                    <td class="no-print"><button type="button" onclick="removeItem(this)" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+                  </tr>
+                {% endif %}
+              </tbody>
+              <tfoot>
+                <tr class="so-total-row">
+                  <td colspan="4" style="padding:0.5rem 0.5rem;text-align:right;font-size:0.9rem;">合计</td>
+                  <td style="padding:0.5rem 0.5rem;font-size:1rem;">¥ <span id="grand-total">{{ '%.2f'|format(o.total_amount) if o else '0.00' }}</span></td>
+                  <td colspan="2"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div style="margin-top:0.85rem;">
+          <label>备注</label>
+          <textarea name="notes" style="min-height:60px;" placeholder="其他说明">{{ o.notes if o else '' }}</textarea>
+        </div>
+
+        <div style="display:flex;gap:0.6rem;margin-top:1rem;" class="no-print">
+          <button type="submit" style="flex:1;">{% if is_edit %}保存修改{% else %}创建销售单{% endif %}</button>
+          {% if visit %}<a href="/admin/visits/{{ visit.id }}" class="btn secondary">取消</a>
+          {% elif cust %}<a href="/admin/customers/{{ cust.id }}" class="btn secondary">取消</a>{% endif %}
+        </div>
+      </form>
+    </div>
+
+    {% if is_edit and o and o.status == 'pending' %}
+    <!-- 快速收款 -->
+    <div class="card" style="margin-top:0.75rem;" class="no-print">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.75rem;">收款</div>
+      <form method="post" action="/admin/sales-orders/{{ o.id }}/pay" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <select name="payment_method" style="flex:1;min-width:120px;">
+          {% for m in payment_methods %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+        </select>
+        <button type="submit" style="background:#166534;border-color:#166534;color:#fff;white-space:nowrap;">✓ 标记已收款 ¥{{ '%.2f'|format(o.total_amount) }}</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if is_edit %}
+    <div style="margin-top:0.5rem;" class="no-print">
+      <form method="post" action="/admin/sales-orders/{{ o.id }}/delete" onsubmit="return confirm('确认删除此销售单？')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="danger" style="font-size:0.85rem;width:100%;">删除销售单</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 右侧信息卡 -->
+  <div class="no-print">
+    {% if cust %}
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">客户</div>
+      <div style="font-size:0.88rem;line-height:1.9;">
+        <div>{{ cust.name or '—' }}</div>
+        <div style="color:var(--muted);">{{ cust.phone or '—' }}</div>
+      </div>
+      <a href="/admin/customers/{{ cust.id }}" style="font-size:0.82rem;margin-top:0.4rem;display:inline-block;">查看档案 →</a>
+    </div>
+    {% endif %}
+    {% if visit %}
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">关联就诊</div>
+      <div style="font-size:0.88rem;color:var(--muted);">#{{ visit.id }} · {{ visit.visit_date }}<br/>{{ visit.diagnosis[:40] if visit.diagnosis else '—' }}</div>
+    </div>
+    {% endif %}
+    {% if is_edit and o %}
+    <div class="card" style="font-size:0.82rem;color:var(--muted);">
+      <div>创建：{{ o.created_by or '—' }}</div>
+      <div>{{ o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '' }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endif %}
+
+{% block scripts %}
+<script>
+var _soRowCount = {{ o.items|length if o and o.items else 1 }};
+var _itemTypeOptions = `{% for k, zh in item_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}`;
+
+function updateSubtotal(input) {
+  var row = input.closest('tr');
+  var price = parseFloat(row.querySelector('.price-input').value) || 0;
+  var qty = parseFloat(row.querySelector('.qty-input').value) || 0;
+  var sub = (price * qty).toFixed(2);
+  row.querySelector('[name^="subtotal_display"]').value = sub;
+  row.querySelector('.subtotal-hidden').value = sub;
+  updateTotal();
+}
+
+function updateTotal() {
+  var total = 0;
+  document.querySelectorAll('.subtotal-hidden').forEach(function(el) {
+    total += parseFloat(el.value) || 0;
+  });
+  document.getElementById('grand-total').textContent = total.toFixed(2);
+}
+
+function removeItem(btn) {
+  btn.closest('tr').remove();
+  updateTotal();
+}
+
+function addItem() {
+  var idx = _soRowCount++;
+  var row = `<tr>
+    <td><input name="item_name_${idx}" placeholder="商品/服务名称" required /></td>
+    <td><select name="item_type_${idx}">${_itemTypeOptions}</select></td>
+    <td><input type="number" name="unit_price_${idx}" placeholder="0.00" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)" /></td>
+    <td><input type="number" name="quantity_${idx}" value="1" step="0.1" min="0.1" class="qty-input" oninput="updateSubtotal(this)" /></td>
+    <td><input name="subtotal_display_${idx}" value="0.00" readonly style="background:var(--bg-elevated);font-weight:600;" /><input type="hidden" name="subtotal_${idx}" value="0" class="subtotal-hidden" /></td>
+    <td><input name="item_notes_${idx}" placeholder="备注" /></td>
+    <td class="no-print"><button type="button" onclick="removeItem(this)" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+  </tr>`;
+  document.getElementById('so-tbody').insertAdjacentHTML('beforeend', row);
+}
+</script>
+{% endblock %}
+{% endblock %}
