@@ -178,12 +178,9 @@
         <a href="/admin/appointments" id="nav-appt-link">预约管理<span id="nav-pending-badge" class="nav-badge" style="display:none;"></span></a>
         <a href="/admin">医院后台</a>
         {% if request.session.get('admin') %}
-        <a href="/admin/staff">员工管理</a>
+        <a href="/admin/hr">人事管理</a>
         <a href="/admin/customers">客户档案</a>
         <a href="/admin/visits">就诊病历</a>
-        {% endif %}
-        {% if request.session.get('admin_role') == 'superadmin' or (request.session.get('admin') and not request.session.get('admin_role')) %}
-        <a href="/admin/users">账号管理</a>
         {% endif %}
         {% if request.session.get('admin') %}
         <a href="/admin/feedback" id="nav-feedback-link">反馈<span id="nav-feedback-badge" class="nav-badge" style="display:none;background:#f97316;"></span></a>

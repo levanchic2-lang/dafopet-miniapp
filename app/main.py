@@ -2214,6 +2214,31 @@ async def admin_changelog_page(request: Request):
     })
 
 
+@app.get("/admin/hr", response_class=HTMLResponse)
+async def admin_hr_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    msg: str = Query(""),
+    err: str = Query(""),
+):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login")
+    active_staff = db.query(Staff).filter(Staff.status != StaffStatus.resigned.value).order_by(Staff.hire_date).all()
+    resigned_staff = db.query(Staff).filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
+    expiring = _expiring_contracts(db)
+    all_users = db.query(AdminUser).order_by(AdminUser.created_at).all()
+    return templates.TemplateResponse("admin_hr.html", {
+        "request": request, "title": "人事管理",
+        "active_staff": active_staff, "resigned_staff": resigned_staff,
+        "expiring": expiring,
+        "active_users": [u for u in all_users if u.is_active],
+        "inactive_users": [u for u in all_users if not u.is_active],
+        "current_username": request.session.get("admin_username", ""),
+        "csrf_token": _get_csrf_token(request),
+        "msg": msg, "err": err,
+    })
+
+
 @app.get("/admin/users", response_class=HTMLResponse)
 async def admin_users_page(
     request: Request,
@@ -2257,18 +2282,18 @@ async def admin_users_create(
     _require_csrf(request, csrf_token)
     username = username.strip()
     if not username or not password:
-        return RedirectResponse("/admin/users?err=用户名和密码不能为空", status_code=303)
+        return RedirectResponse("/admin/hr?err=用户名和密码不能为空", status_code=303)
     if len(password) < 6:
-        return RedirectResponse("/admin/users?err=密码不能少于6位", status_code=303)
+        return RedirectResponse("/admin/hr?err=密码不能少于6位", status_code=303)
     if role not in ("superadmin", "staff"):
         role = "staff"
     existing = db.query(AdminUser).filter(AdminUser.username == username).first()
     if existing:
-        return RedirectResponse(f"/admin/users?err=用户名已存在：{username}", status_code=303)
+        return RedirectResponse(f"/admin/hr?err=用户名已存在：{username}", status_code=303)
     db.add(AdminUser(username=username, password_hash=_pwd_ctx.hash(password), role=role, is_active=True))
     _audit(db, request, "admin_user_create", application_id=None, detail={"username": username, "role": role})
     db.commit()
-    return RedirectResponse(f"/admin/users?msg=已创建账号：{username}", status_code=303)
+    return RedirectResponse(f"/admin/hr?msg=已创建账号：{username}", status_code=303)
 
 
 @app.post("/admin/users/{user_id}/toggle", name="admin_users_toggle")
@@ -2285,12 +2310,12 @@ async def admin_users_toggle(
     if not user:
         raise HTTPException(404)
     if user.username == request.session.get("admin_username", ""):
-        return RedirectResponse("/admin/users?err=不能停用当前登录账号", status_code=303)
+        return RedirectResponse("/admin/hr?err=不能停用当前登录账号", status_code=303)
     user.is_active = not user.is_active
     _audit(db, request, "admin_user_toggle", application_id=None, detail={"username": user.username, "active": user.is_active})
     db.commit()
     status_zh = "启用" if user.is_active else "停用"
-    return RedirectResponse(f"/admin/users?msg=已{status_zh}账号：{user.username}", status_code=303)
+    return RedirectResponse(f"/admin/hr?msg=已{status_zh}账号：{user.username}", status_code=303)
 
 
 @app.post("/admin/users/{user_id}/reset-password", name="admin_users_reset_password")
@@ -2305,14 +2330,14 @@ async def admin_users_reset_password(
     require_superadmin(request)
     _require_csrf(request, csrf_token)
     if not new_password or len(new_password) < 6:
-        return RedirectResponse("/admin/users?err=新密码不能少于6位", status_code=303)
+        return RedirectResponse("/admin/hr?err=新密码不能少于6位", status_code=303)
     user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
     if not user:
         raise HTTPException(404)
     user.password_hash = _pwd_ctx.hash(new_password)
     _audit(db, request, "admin_user_reset_password", application_id=None, detail={"username": user.username})
     db.commit()
-    return RedirectResponse(f"/admin/users?msg=已重置密码：{user.username}", status_code=303)
+    return RedirectResponse(f"/admin/hr?msg=已重置密码：{user.username}", status_code=303)
 
 
 @app.post("/admin/users/{user_id}/set-role", name="admin_users_set_role")
@@ -2327,17 +2352,17 @@ async def admin_users_set_role(
     require_superadmin(request)
     _require_csrf(request, csrf_token)
     if role not in ("superadmin", "staff"):
-        return RedirectResponse("/admin/users?err=角色参数无效", status_code=303)
+        return RedirectResponse("/admin/hr?err=角色参数无效", status_code=303)
     user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
     if not user:
         raise HTTPException(404)
     if user.username == request.session.get("admin_username", ""):
-        return RedirectResponse("/admin/users?err=不能修改自己的角色", status_code=303)
+        return RedirectResponse("/admin/hr?err=不能修改自己的角色", status_code=303)
     user.role = role
     _audit(db, request, "admin_user_set_role", application_id=None, detail={"username": user.username, "role": role})
     db.commit()
     role_zh = "超级管理员" if role == "superadmin" else "员工"
-    return RedirectResponse(f"/admin/users?msg=已将「{user.username}」的角色改为{role_zh}", status_code=303)
+    return RedirectResponse(f"/admin/hr?msg=已将「{user.username}」的角色改为{role_zh}", status_code=303)
 
 
 # ── 员工档案 & 合同管理 ─────────────────────────────────────────────────
