@@ -181,7 +181,6 @@
         <a href="/admin/staff">员工管理</a>
         <a href="/admin/customers">客户档案</a>
         <a href="/admin/visits">就诊病历</a>
-        <a href="/admin/sales-orders">销售单</a>
         {% endif %}
         {% if request.session.get('admin_role') == 'superadmin' or (request.session.get('admin') and not request.session.get('admin_role')) %}
         <a href="/admin/users">账号管理</a>
