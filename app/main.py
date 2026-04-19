@@ -1142,35 +1142,55 @@ async def api_apply_create(
         health_note=health_note,
     )
 
-    # ── 重复提交检测：同手机号在进行中的申请 ──
-    _ACTIVE_STATUSES = [
-        ApplicationStatus.draft.value,
-        ApplicationStatus.pending_ai.value,
-        ApplicationStatus.pending_manual.value,
-        ApplicationStatus.pre_approved.value,
-        ApplicationStatus.approved.value,
-        ApplicationStatus.scheduled.value,
-        ApplicationStatus.no_show.value,
-        ApplicationStatus.arrived_verified.value,
-    ]
+    # ── 重复提交检测 ──
     _DUP_STATUS_ZH = {
         "draft": "草稿", "pending_ai": "审核中", "pending_manual": "待人工审核",
         "pre_approved": "预通过", "approved": "已通过", "scheduled": "已预约",
         "no_show": "爽约", "arrived_verified": "到院核对中",
     }
-    existing_dup = (
+
+    # 1. 审核未完成时（未到「已通过」之前）不允许再提交任何申请
+    _PENDING_STATUSES = [
+        ApplicationStatus.draft.value,
+        ApplicationStatus.pending_ai.value,
+        ApplicationStatus.pending_manual.value,
+        ApplicationStatus.pre_approved.value,
+    ]
+    pending_dup = (
         db.query(Application)
         .filter(Application.phone == f["phone"])
-        .filter(Application.status.in_(_ACTIVE_STATUSES))
+        .filter(Application.status.in_(_PENDING_STATUSES))
         .order_by(Application.id.desc())
         .first()
     )
-    if existing_dup:
-        status_label = _DUP_STATUS_ZH.get(existing_dup.status, existing_dup.status)
+    if pending_dup:
+        status_label = _DUP_STATUS_ZH.get(pending_dup.status, pending_dup.status)
         raise HTTPException(
             409,
-            f"该手机号已有进行中的申请（编号 #{existing_dup.id}，当前状态：{status_label}），请勿重复提交。"
-            f"如需重新申请，请等待当前申请处理完毕，或联系医院前台取消后再试。",
+            f"您已有一份申请正在审核中（编号 #{pending_dup.id}，当前状态：{status_label}），"
+            f"请等待审核通过后再提交新的申请。如需取消，请联系医院前台。",
+        )
+
+    # 2. 同一手机号 + 同一猫咪名称，不能重复提交（终结状态除外）
+    _TERMINAL_STATUSES = [
+        ApplicationStatus.rejected.value,
+        ApplicationStatus.cancelled.value,
+        ApplicationStatus.surgery_completed.value,
+    ]
+    same_cat_dup = (
+        db.query(Application)
+        .filter(Application.phone == f["phone"])
+        .filter(Application.pet_name == f["pet_name"])
+        .filter(Application.status.notin_(_TERMINAL_STATUSES))
+        .order_by(Application.id.desc())
+        .first()
+    )
+    if same_cat_dup:
+        status_label = _DUP_STATUS_ZH.get(same_cat_dup.status, same_cat_dup.status)
+        raise HTTPException(
+            409,
+            f"「{f['pet_name']}」已有进行中的申请（编号 #{same_cat_dup.id}，当前状态：{status_label}），"
+            f"请勿为同一只猫重复提交申请。",
         )
 
     # ── 自动创建/合并客户档案 ──
