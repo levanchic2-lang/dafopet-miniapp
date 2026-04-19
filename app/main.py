@@ -1180,7 +1180,7 @@ async def api_apply_create(
     same_cat_dup = (
         db.query(Application)
         .filter(Application.phone == f["phone"])
-        .filter(Application.cat_nickname == f["pet_name"])
+        .filter(Application.cat_nickname == f["cat_nickname"])
         .filter(Application.status.notin_(_TERMINAL_STATUSES))
         .order_by(Application.id.desc())
         .first()
@@ -1189,7 +1189,7 @@ async def api_apply_create(
         status_label = _DUP_STATUS_ZH.get(same_cat_dup.status, same_cat_dup.status)
         raise HTTPException(
             409,
-            f"「{f['pet_name']}」已有进行中的申请（编号 #{same_cat_dup.id}，当前状态：{status_label}），"
+            f"「{f['cat_nickname']}」已有进行中的申请（编号 #{same_cat_dup.id}，当前状态：{status_label}），"
             f"请勿为同一只猫重复提交申请。",
         )
 
