@@ -2707,6 +2707,34 @@ async def _admin_purge_run(
     return RedirectResponse(f"/admin?purge_ok=1&deleted={n}&what={scope}", status_code=303)
 
 
+@app.post("/admin/application/{app_id}/edit-cat", name="admin_edit_cat")
+async def admin_edit_cat(
+    app_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login", status_code=303)
+    form = await request.form()
+    if form.get("csrf_token") != request.session.get("csrf_token"):
+        return RedirectResponse("/admin?err=csrf", status_code=303)
+    row = db.get(Application, app_id)
+    if not row:
+        return RedirectResponse("/admin?err=申请不存在", status_code=303)
+    cat_nickname = (form.get("cat_nickname") or "").strip()
+    cat_gender = (form.get("cat_gender") or "").strip()
+    age_estimate = (form.get("age_estimate") or "").strip()
+    health_note = (form.get("health_note") or "").strip()
+    if cat_nickname:
+        row.cat_nickname = cat_nickname
+    if cat_gender in ("male", "female", "unknown"):
+        row.cat_gender = cat_gender
+    row.age_estimate = age_estimate
+    row.health_note = health_note
+    db.commit()
+    return RedirectResponse(f"/admin?msg=申请+%23{app_id}+猫咪信息已更新", status_code=303)
+
+
 @app.post("/admin/purge", name="admin_purge")
 async def admin_purge(
     request: Request,

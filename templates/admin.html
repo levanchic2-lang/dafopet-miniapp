@@ -374,6 +374,35 @@
       </p>
       <p style="margin-top:0.5rem;">
         流浪猫名字：{{ a.cat_nickname or '—' }} · 性别 {{ a.cat_gender }} · {{ a.age_estimate or '年龄未填' }}
+        <details style="display:inline-block;margin-left:0.6rem;">
+          <summary style="cursor:pointer;font-size:0.8rem;color:var(--muted);display:inline;">✏️ 修改</summary>
+          <form method="post" action="/admin/application/{{ a.id }}/edit-cat" style="margin-top:0.6rem;display:grid;gap:0.5rem;max-width:420px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <div class="row2">
+              <div>
+                <label style="font-size:0.82rem;">猫咪名字</label>
+                <input type="text" name="cat_nickname" value="{{ a.cat_nickname or '' }}" style="font-size:0.85rem;" />
+              </div>
+              <div>
+                <label style="font-size:0.82rem;">性别</label>
+                <select name="cat_gender" style="font-size:0.85rem;">
+                  <option value="male" {% if a.cat_gender == 'male' %}selected{% endif %}>公猫</option>
+                  <option value="female" {% if a.cat_gender == 'female' %}selected{% endif %}>母猫</option>
+                  <option value="unknown" {% if a.cat_gender == 'unknown' %}selected{% endif %}>未知</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:0.82rem;">年龄估计</label>
+              <input type="text" name="age_estimate" value="{{ a.age_estimate or '' }}" style="font-size:0.85rem;" />
+            </div>
+            <div>
+              <label style="font-size:0.82rem;">流浪状况备注</label>
+              <textarea name="health_note" rows="2" style="font-size:0.85rem;">{{ a.health_note or '' }}</textarea>
+            </div>
+            <button type="submit" style="font-size:0.82rem;padding:0.3rem 0.8rem;width:fit-content;">保存修改</button>
+          </form>
+        </details>
       </p>
       {% if a.health_note %}<p>流浪状况：{{ a.health_note }}</p>{% endif %}
       {% if a.post_surgery_plan %}<p>术后打算：{{ a.post_surgery_plan }}</p>{% endif %}
