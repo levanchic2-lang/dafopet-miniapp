@@ -1180,7 +1180,7 @@ async def api_apply_create(
     same_cat_dup = (
         db.query(Application)
         .filter(Application.phone == f["phone"])
-        .filter(Application.pet_name == f["pet_name"])
+        .filter(Application.cat_nickname == f["pet_name"])
         .filter(Application.status.notin_(_TERMINAL_STATUSES))
         .order_by(Application.id.desc())
         .first()
