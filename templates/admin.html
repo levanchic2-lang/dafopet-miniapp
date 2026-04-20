@@ -370,7 +370,7 @@
       <p class="sub" style="margin:0;">{{ a.address }}</p>
       <p>
         门店：<strong>{{ a.clinic_store or '未选' }}</strong>
-        {% if a.appointment_at and a.status not in ['surgery_completed', 'rejected', 'cancelled'] %} · 期望手术日期：<strong>{{ a.appointment_at }}</strong>{% endif %}
+        {% if a.appointment_at and a.status in ['draft', 'pending_ai', 'pending_manual', 'pre_approved', 'scheduled'] %} · 期望手术日期：<strong>{{ a.appointment_at }}</strong>{% endif %}
       </p>
       <p style="margin-top:0.5rem;">
         流浪猫名字：{{ a.cat_nickname or '—' }} · 性别 {{ a.cat_gender }} · {{ a.age_estimate or '年龄未填' }}
