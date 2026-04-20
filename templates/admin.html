@@ -677,6 +677,26 @@
 <div class="card"><p>暂无申请记录。</p></div>
 {% endfor %}
 </div>
+
+{# ── 分页导航 ── #}
+{% set total_pages = ((stats.total - 1) // filters.page_size + 1) if stats.total > 0 else 1 %}
+{% if total_pages > 1 %}
+<div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin:1.25rem 0;flex-wrap:wrap;">
+  {% set pg = filters.page %}
+  {% set qs_base = '&q=' ~ (filters.q or '') ~ '&status=' ~ (filters.status or '') ~ '&store=' ~ (filters.store or '') ~ '&from=' ~ (filters.from or '') ~ '&to=' ~ (filters.to or '') ~ '&page_size=' ~ filters.page_size %}
+  {% if pg > 1 %}
+  <a href="?page=1{{ qs_base }}" class="btn secondary" style="font-size:0.85rem;padding:0.35rem 0.75rem;">« 首页</a>
+  <a href="?page={{ pg - 1 }}{{ qs_base }}" class="btn secondary" style="font-size:0.85rem;padding:0.35rem 0.75rem;">‹ 上一页</a>
+  {% endif %}
+  <span style="font-size:0.88rem;color:var(--muted);padding:0 0.5rem;">
+    第 {{ pg }} / {{ total_pages }} 页（共 {{ stats.total }} 条）
+  </span>
+  {% if pg < total_pages %}
+  <a href="?page={{ pg + 1 }}{{ qs_base }}" class="btn secondary" style="font-size:0.85rem;padding:0.35rem 0.75rem;">下一页 ›</a>
+  <a href="?page={{ total_pages }}{{ qs_base }}" class="btn secondary" style="font-size:0.85rem;padding:0.35rem 0.75rem;">末页 »</a>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 {% endblock %}
