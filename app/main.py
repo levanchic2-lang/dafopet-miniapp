@@ -3828,6 +3828,39 @@ def _image_ext(name: str) -> str:
     return ext if ext in (".jpg", ".jpeg", ".png", ".webp") else ".jpg"
 
 
+def _compress_image(src: Path, max_px: int = 1920, quality: int = 85) -> Path:
+    try:
+        from PIL import Image, ExifTags
+        img = Image.open(src)
+        # 按 EXIF 自动旋转
+        try:
+            exif = img._getexif()
+            if exif:
+                for tag, val in exif.items():
+                    if ExifTags.TAGS.get(tag) == "Orientation":
+                        if val == 3:
+                            img = img.rotate(180, expand=True)
+                        elif val == 6:
+                            img = img.rotate(270, expand=True)
+                        elif val == 8:
+                            img = img.rotate(90, expand=True)
+                        break
+        except Exception:
+            pass
+        if max(img.width, img.height) > max_px:
+            img.thumbnail((max_px, max_px), Image.LANCZOS)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        dest = src.with_suffix(".jpg")
+        img.save(dest, "JPEG", quality=quality, optimize=True)
+        if src.suffix.lower() not in (".jpg", ".jpeg"):
+            src.unlink(missing_ok=True)
+        return dest
+    except Exception as e:
+        logging.warning(f"图片压缩失败，保留原文件：{e}")
+        return src
+
+
 def _transcode_to_h264(src: Path) -> Path:
     """
     用 ffmpeg 将视频转码为 H.264 MP4（最广兼容格式）。
@@ -3894,7 +3927,9 @@ async def upload_surgery(
             dest = base / f"{file_prefix}_{secrets.token_hex(6)}{ext}"
             dest.write_bytes(await uf.read())
             if is_video:
-                dest = _transcode_to_h264(dest)  # 转码为 H.264 MP4，确保最广兼容性
+                dest = _transcode_to_h264(dest)
+            else:
+                dest = _compress_image(dest)  # 压缩图片至 1920px/JPEG85，加快加载
             db.add(
                 MediaFile(
                     application_id=app_id,
