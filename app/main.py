@@ -3917,7 +3917,15 @@ async def serve_file(media_id: int, request: Request, db: Session = Depends(get_
         raise HTTPException(403)
 
     ctype, _ = mimetypes.guess_type(str(path))
-    return FileResponse(path, media_type=ctype or "application/octet-stream")
+    # 统一将常见视频格式映射为 video/mp4，确保浏览器和小程序正常播放
+    ext = path.suffix.lower()
+    if ext in (".mp4", ".m4v", ".mov"):
+        ctype = "video/mp4"
+    elif ext in (".webm",):
+        ctype = "video/webm"
+    elif ext in (".avi",):
+        ctype = "video/x-msvideo"
+    return FileResponse(path, media_type=ctype or "application/octet-stream", headers={"Accept-Ranges": "bytes"})
 
 
 @app.get("/api/showcase")
