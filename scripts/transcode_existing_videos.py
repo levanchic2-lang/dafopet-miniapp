@@ -21,7 +21,9 @@ VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".3gp"}
 
 
 def transcode(src: Path) -> Path:
-    dest = src.with_suffix(".mp4")
+    # 输出到临时文件，避免与输入同名冲突（HEVC 文件扩展名也是 .mp4 的情况）
+    tmp = src.with_name(src.stem + "_h264tmp.mp4")
+    final = src.with_suffix(".mp4")
     try:
         r = subprocess.run(
             [
@@ -29,17 +31,18 @@ def transcode(src: Path) -> Path:
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                 "-c:a", "aac", "-movflags", "+faststart",
                 "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-                str(dest),
+                str(tmp),
             ],
             timeout=300,
             capture_output=True,
         )
-        if r.returncode == 0 and dest.exists():
-            if src.resolve() != dest.resolve():
-                src.unlink(missing_ok=True)
-            return dest
+        if r.returncode == 0 and tmp.exists():
+            src.unlink(missing_ok=True)   # 删除原始 HEVC 文件
+            tmp.rename(final)             # 临时文件改名为最终路径
+            return final
         else:
-            logging.warning(f"  ffmpeg 失败: {r.stderr.decode(errors='replace')[:200]}")
+            tmp.unlink(missing_ok=True)
+            logging.warning(f"  ffmpeg 失败: {r.stderr.decode(errors='replace')[:500]}")
             return src
     except FileNotFoundError:
         logging.error("ffmpeg 未安装，请先执行：apt install ffmpeg")
