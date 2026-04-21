@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import mimetypes
 import re
 import secrets
 import shutil
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Optional
@@ -3826,6 +3828,43 @@ def _image_ext(name: str) -> str:
     return ext if ext in (".jpg", ".jpeg", ".png", ".webp") else ".jpg"
 
 
+def _transcode_to_h264(src: Path) -> Path:
+    """
+    用 ffmpeg 将视频转码为 H.264 MP4（最广兼容格式）。
+    转码成功返回新路径（.mp4），失败则返回原路径（不影响上传流程）。
+    """
+    dest = src.with_suffix(".mp4")
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", str(src),
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-c:a", "aac",
+                "-movflags", "+faststart",  # 元数据前置，支持边下边播
+                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",  # 确保宽高为偶数
+                str(dest),
+            ],
+            timeout=300,
+            capture_output=True,
+        )
+        if result.returncode == 0 and dest.exists():
+            if src.suffix.lower() != ".mp4":
+                src.unlink(missing_ok=True)  # 删除原始文件节省空间
+            return dest
+        else:
+            logging.warning(f"ffmpeg 转码失败：{result.stderr.decode(errors='replace')[:300]}")
+            return src
+    except FileNotFoundError:
+        logging.warning("ffmpeg 未安装，跳过转码。建议服务器执行：apt install ffmpeg")
+        return src
+    except Exception as e:
+        logging.warning(f"ffmpeg 转码异常：{e}")
+        return src
+
+
 @app.post("/admin/app/{app_id}/upload-surgery")
 async def upload_surgery(
     app_id: int,
@@ -3854,6 +3893,8 @@ async def upload_surgery(
             ext = _video_ext(uf.filename) if is_video else _image_ext(uf.filename)
             dest = base / f"{file_prefix}_{secrets.token_hex(6)}{ext}"
             dest.write_bytes(await uf.read())
+            if is_video:
+                dest = _transcode_to_h264(dest)  # 转码为 H.264 MP4，确保最广兼容性
             db.add(
                 MediaFile(
                     application_id=app_id,
