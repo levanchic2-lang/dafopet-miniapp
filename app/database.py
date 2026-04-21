@@ -2,6 +2,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.pool import NullPool, QueuePool
 
 from app.config import settings
 
@@ -11,9 +12,12 @@ class Base(DeclarativeBase):
 
 
 Path("data").mkdir(parents=True, exist_ok=True)
+_is_sqlite = settings.database_url.startswith("sqlite")
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
+    # SQLite 用 NullPool：每个请求独立连接，彻底避免连接池耗尽导致的 504
+    poolclass=NullPool if _is_sqlite else QueuePool,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
