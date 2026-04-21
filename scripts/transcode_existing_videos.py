@@ -42,7 +42,8 @@ def transcode(src: Path) -> Path:
             return final
         else:
             tmp.unlink(missing_ok=True)
-            logging.warning(f"  ffmpeg 失败: {r.stderr.decode(errors='replace')[:500]}")
+            err = r.stderr.decode(errors='replace')
+            logging.warning(f"  ffmpeg 失败 (returncode={r.returncode}):\n{err[-1500:]}")
             return src
     except FileNotFoundError:
         logging.error("ffmpeg 未安装，请先执行：apt install ffmpeg")
