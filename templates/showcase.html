@@ -37,7 +37,9 @@
         {% for m in it.before %}
           {% set p = m.stored_path.lower() %}
           {% if p.endswith('.mp4') or p.endswith('.webm') or p.endswith('.mov') or p.endswith('.mkv') %}
-            <video controls playsinline preload="metadata" style="width:100%;border-radius:8px;background:#000;max-height:220px;"><source src="/file/{{ m.id }}" type="video/mp4" /></video>
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" style="display:block;">
+              <video controls playsinline preload="metadata" style="width:100%;border-radius:8px;background:#000;max-height:220px;pointer-events:none;"><source src="/file/{{ m.id }}" type="video/mp4" /></video>
+            </a>
           {% else %}
             <a href="/file/{{ m.id }}" target="_blank" rel="noopener"><img src="/file/{{ m.id }}" alt="术前" loading="lazy" /></a>
           {% endif %}
@@ -50,7 +52,9 @@
         {% for m in it.after %}
           {% set p = m.stored_path.lower() %}
           {% if p.endswith('.mp4') or p.endswith('.webm') or p.endswith('.mov') or p.endswith('.mkv') %}
-            <video controls playsinline preload="metadata" style="width:100%;border-radius:8px;background:#000;max-height:220px;"><source src="/file/{{ m.id }}" type="video/mp4" /></video>
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" style="display:block;">
+              <video controls playsinline preload="metadata" style="width:100%;border-radius:8px;background:#000;max-height:220px;pointer-events:none;"><source src="/file/{{ m.id }}" type="video/mp4" /></video>
+            </a>
           {% else %}
             <a href="/file/{{ m.id }}" target="_blank" rel="noopener"><img src="/file/{{ m.id }}" alt="术后" loading="lazy" /></a>
           {% endif %}
