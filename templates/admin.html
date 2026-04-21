@@ -511,14 +511,20 @@
       <div class="admin-app-thumb-wrap" style="margin-top:0.3rem;">
         {% for m in surg_before_files %}
         {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
-        {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
-        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
-           title="术前视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
-        {% else %}
-        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术前 {{ loop.index }} · 点击查看原图">
-          <img src="/file/{{ m.id }}" alt="术前{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" />
-        </a>
-        {% endif %}
+        <div style="position:relative;display:inline-block;">
+          {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
+          <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
+             title="术前视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+          {% else %}
+          <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术前 {{ loop.index }} · 点击查看原图">
+            <img src="/file/{{ m.id }}" alt="术前{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" />
+          </a>
+          {% endif %}
+          <form method="post" action="/admin/media/{{ m.id }}/delete" style="margin:0;" onsubmit="return confirm('确认删除此文件？');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit" style="position:absolute;top:2px;right:2px;width:18px;height:18px;padding:0;font-size:11px;line-height:1;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;">✕</button>
+          </form>
+        </div>
         {% endfor %}
       </div>
     </div>
@@ -530,14 +536,20 @@
       <div class="admin-app-thumb-wrap" style="margin-top:0.3rem;">
         {% for m in surg_after_files %}
         {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
-        {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
-        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
-           title="术后视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
-        {% else %}
-        <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术后 {{ loop.index }} · 点击查看原图">
-          <img src="/file/{{ m.id }}" alt="术后{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" />
-        </a>
-        {% endif %}
+        <div style="position:relative;display:inline-block;">
+          {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
+          <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
+             title="术后视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+          {% else %}
+          <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术后 {{ loop.index }} · 点击查看原图">
+            <img src="/file/{{ m.id }}" alt="术后{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" />
+          </a>
+          {% endif %}
+          <form method="post" action="/admin/media/{{ m.id }}/delete" style="margin:0;" onsubmit="return confirm('确认删除此文件？');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit" style="position:absolute;top:2px;right:2px;width:18px;height:18px;padding:0;font-size:11px;line-height:1;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;">✕</button>
+          </form>
+        </div>
         {% endfor %}
       </div>
     </div>

@@ -2707,6 +2707,32 @@ async def _admin_purge_run(
     return RedirectResponse(f"/admin?purge_ok=1&deleted={n}&what={scope}", status_code=303)
 
 
+@app.post("/admin/media/{media_id}/delete", name="admin_media_delete")
+async def admin_media_delete(
+    media_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login", status_code=303)
+    form = await request.form()
+    if form.get("csrf_token") != request.session.get("csrf_token"):
+        return RedirectResponse("/admin?err=csrf", status_code=303)
+    m = db.get(MediaFile, media_id)
+    if not m:
+        return RedirectResponse("/admin?err=文件不存在", status_code=303)
+    app_id = m.application_id
+    try:
+        p = Path(m.stored_path)
+        if p.exists():
+            p.unlink()
+    except Exception:
+        pass
+    db.delete(m)
+    db.commit()
+    return RedirectResponse(f"/admin?msg=文件已删除", status_code=303)
+
+
 @app.post("/admin/application/{app_id}/edit-cat", name="admin_edit_cat")
 async def admin_edit_cat(
     app_id: int,
