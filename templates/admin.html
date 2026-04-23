@@ -361,7 +361,7 @@
 
 <div class="apps-grid">
 {% for a in apps %}
-<div class="card" style="margin-bottom:0;">
+<div class="card" id="app-{{ a.id }}" style="margin-bottom:0;">
   <div class="admin-app-top">
     <div class="admin-app-lines">
       <strong>#{{ a.id }}</strong> {{ status_badge(a.status) }}

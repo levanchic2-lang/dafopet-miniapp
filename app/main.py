@@ -2732,7 +2732,7 @@ async def admin_media_delete(
         pass
     db.delete(m)
     db.commit()
-    return RedirectResponse(f"/admin?msg=文件已删除", status_code=303)
+    return RedirectResponse(f"/admin?msg=文件已删除#app-{app_id}", status_code=303)
 
 
 @app.post("/admin/application/{app_id}/edit-cat", name="admin_edit_cat")
@@ -2760,7 +2760,7 @@ async def admin_edit_cat(
     row.age_estimate = age_estimate
     row.health_note = health_note
     db.commit()
-    return RedirectResponse(f"/admin?msg=申请+%23{app_id}+猫咪信息已更新", status_code=303)
+    return RedirectResponse(f"/admin?msg=申请+%23{app_id}+猫咪信息已更新#app-{app_id}", status_code=303)
 
 
 @app.post("/admin/purge", name="admin_purge")
@@ -3183,7 +3183,7 @@ async def manual_approve(app_id: int, request: Request, db: Session = Depends(ge
         submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(f"/admin#app-{app_id}", status_code=303)
 
 
 @app.post("/admin/app/{app_id}/reject")
@@ -3223,7 +3223,7 @@ async def manual_reject(
         reason=(reason or "不符合申请条件")[:20],
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(f"/admin#app-{app_id}", status_code=303)
 
 
 @app.post("/admin/app/{app_id}/verify-cat")
@@ -3245,7 +3245,7 @@ async def verify_cat(app_id: int, request: Request, db: Session = Depends(get_db
     row.status = ApplicationStatus.arrived_verified.value
     _audit(db, request, "verify_cat", application_id=app_id)
     db.commit()
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(f"/admin#app-{app_id}", status_code=303)
 
 
 @app.post("/admin/app/{app_id}/surgery-done")
@@ -3270,7 +3270,8 @@ async def surgery_done(app_id: int, request: Request, db: Session = Depends(get_
             + quote(
                 "标记手术完成前，须在本申请下各上传至少 1 条术前资料与 1 条术后资料（照片或视频均可）。",
                 safe="",
-            ),
+            )
+            + f"#app-{app_id}",
             status_code=303,
         )
     row.status = ApplicationStatus.surgery_completed.value
@@ -3292,7 +3293,7 @@ async def surgery_done(app_id: int, request: Request, db: Session = Depends(get_
         note="手术已完成，请按医嘱护理",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(f"/admin#app-{app_id}", status_code=303)
 
 
 @app.post("/api/wechat/login")
@@ -3961,7 +3962,7 @@ async def upload_surgery(
         },
     )
     db.commit()
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(f"/admin#app-{app_id}", status_code=303)
 
 
 def _media_public_ok(m: MediaFile, app_row: Application) -> bool:
@@ -4088,7 +4089,7 @@ async def toggle_showcase(
     row.showcase_consent = consent.lower() in ("true", "1", "on", "yes")
     _audit(db, request, "toggle_showcase", application_id=app_id, detail={"consent": row.showcase_consent})
     db.commit()
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(f"/admin#app-{app_id}", status_code=303)
 
 
 @app.post("/admin/app/{app_id}/mark-scheduled")
@@ -4128,7 +4129,7 @@ async def mark_scheduled(
         submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(f"/admin#app-{app_id}", status_code=303)
 
 
 @app.post("/admin/app/{app_id}/mark-cancelled")
@@ -4169,7 +4170,7 @@ async def mark_cancelled(
         submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(f"/admin#app-{app_id}", status_code=303)
 
 
 @app.post("/admin/app/{app_id}/mark-no-show")
@@ -4205,7 +4206,7 @@ async def mark_no_show(
         submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(f"/admin#app-{app_id}", status_code=303)
 
 
 @app.post("/admin/wechat/test-send")
