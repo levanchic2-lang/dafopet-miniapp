@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="margin-bottom:1rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+    <div>
+      <h1 style="margin:0;">库存管理</h1>
+      <p class="sub" style="margin:0.25rem 0 0;">共 {{ total }} 个品目{% if low_count > 0 %}
+        <span style="color:#d97706;font-weight:600;margin-left:0.75rem;">⚠ {{ low_count }} 个低库存预警</span>
+      {% endif %}</p>
+    </div>
+    <a href="/admin/inventory/create" class="btn" style="font-size:0.9rem;">＋ 新增品目</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:1rem;">
+  <form method="get" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
+    <input name="q" value="{{ q }}" placeholder="搜索品名 / 供应商" style="flex:1;min-width:180px;" />
+    <select name="category" style="min-width:120px;">
+      <option value="">全部大类</option>
+      {% for cat_key, cat in categories.items() %}
+      <option value="{{ cat_key }}" {% if category == cat_key %}selected{% endif %}>{{ cat.label }}</option>
+      {% endfor %}
+    </select>
+    <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.88rem;cursor:pointer;">
+      <input type="checkbox" name="low_stock" value="1" {% if low_stock == '1' %}checked{% endif %} />
+      仅显示低库存
+    </label>
+    <button type="submit" class="btn secondary">筛选</button>
+    {% if q or category or low_stock %}<a href="/admin/inventory" class="btn secondary">清除</a>{% endif %}
+  </form>
+</div>
+
+{% if items %}
+<div class="card" style="padding:0;overflow:hidden;">
+  <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+    <thead>
+      <tr style="background:var(--bg-elevated);border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:0.6rem 1rem;font-weight:600;">品名</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">大类</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">小类</th>
+        <th style="text-align:right;padding:0.6rem 0.75rem;font-weight:600;">库存</th>
+        <th style="text-align:right;padding:0.6rem 0.75rem;font-weight:600;">售价</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">单位</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">供应商</th>
+        <th style="padding:0.6rem 0.75rem;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      {% set cat_label = categories[it.category].label if it.category in categories else it.category %}
+      {% set sub_label = categories[it.category].subs[it.subcategory] if it.category in categories and it.subcategory in categories[it.category].subs else it.subcategory %}
+      {% set is_low = (not it.is_service) and it.low_stock_min > 0 and it.stock_qty <= it.low_stock_min %}
+      <tr style="border-bottom:1px solid var(--border);{% if is_low %}background:#fffbeb;{% endif %}">
+        <td style="padding:0.55rem 1rem;font-weight:600;">
+          {{ it.name }}
+          {% if it.is_controlled %}<span style="font-size:0.72rem;background:#fef3c7;color:#92400e;padding:0.1rem 0.4rem;border-radius:4px;margin-left:0.3rem;">管控</span>{% endif %}
+          {% if it.is_service %}<span style="font-size:0.72rem;background:#f0f9ff;color:#0369a1;padding:0.1rem 0.4rem;border-radius:4px;margin-left:0.3rem;">服务</span>{% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;color:var(--muted);">{{ cat_label }}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--muted);font-size:0.82rem;">{{ sub_label or '—' }}</td>
+        <td style="padding:0.55rem 0.75rem;text-align:right;{% if is_low %}color:#d97706;font-weight:700;{% endif %}">
+          {% if it.is_service %}—
+          {% else %}{{ '%.1f'|format(it.stock_qty) }}
+            {% if is_low %} ⚠{% endif %}
+          {% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;text-align:right;">¥{{ '%.2f'|format(it.sell_price) }}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--muted);">
+          {{ it.unit }}{% if it.unit2 %} / {{ it.unit2 }}{% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;color:var(--muted);font-size:0.82rem;">{{ it.supplier or '—' }}</td>
+        <td style="padding:0.55rem 0.75rem;text-align:right;">
+          <a href="/admin/inventory/{{ it.id }}" style="font-size:0.82rem;">详情 →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;padding:1.2rem 0;font-size:0.88rem;">
+  {% set qs = '&q='~q~'&category='~category~'&low_stock='~low_stock %}
+  {% if page > 1 %}<a href="?page=1{{ qs }}" class="btn secondary" style="padding:0.3rem 0.7rem;">« 首页</a>
+  <a href="?page={{ page-1 }}{{ qs }}" class="btn secondary" style="padding:0.3rem 0.7rem;">‹ 上一页</a>{% endif %}
+  <span style="color:var(--muted);">第 {{ page }} / {{ total_pages }} 页</span>
+  {% if page < total_pages %}
+  <a href="?page={{ page+1 }}{{ qs }}" class="btn secondary" style="padding:0.3rem 0.7rem;">下一页 ›</a>
+  <a href="?page={{ total_pages }}{{ qs }}" class="btn secondary" style="padding:0.3rem 0.7rem;">末页 »</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="card" style="text-align:center;padding:3rem;color:var(--muted);">
+  暂无品目。<a href="/admin/inventory/create">点击新增</a>
+</div>
+{% endif %}
+{% endblock %}

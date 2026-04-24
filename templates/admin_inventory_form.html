@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="max-width:680px;margin:0 auto;">
+  <h1 style="margin:0 0 1.5rem;">{{ '编辑品目' if item else '新增品目' }}</h1>
+
+  <form method="post" action="{{ '/admin/inventory/'~item.id~'/edit' if item else '/admin/inventory/create' }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+      <div style="grid-column:1/-1;">
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">品名 <span style="color:#d97706;">*</span></label>
+        <input name="name" value="{{ item.name if item else '' }}" required placeholder="如：阿莫西林克拉维酸钾片" style="width:100%;" />
+      </div>
+
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">大类</label>
+        <select name="category" id="cat-select" style="width:100%;" onchange="updateSubs()">
+          {% for cat_key, cat in categories.items() %}
+          <option value="{{ cat_key }}" {% if item and item.category == cat_key %}selected{% elif not item and cat_key == 'medication' %}selected{% endif %}>{{ cat.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">小类</label>
+        <select name="subcategory" id="sub-select" style="width:100%;">
+          {% for cat_key, cat in categories.items() %}
+          {% for sub_key, sub_label in cat.subs.items() %}
+          <option value="{{ sub_key }}"
+            data-cat="{{ cat_key }}"
+            {% if item and item.subcategory == sub_key %}selected{% endif %}>
+            {{ sub_label }}
+          </option>
+          {% endfor %}
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="grid-column:1/-1;display:flex;gap:1.5rem;">
+        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+          <input type="checkbox" name="is_service" value="1" {% if item and item.is_service %}checked{% endif %} id="is-service-cb" onchange="toggleStock()" />
+          <span style="font-weight:600;">服务项目（不占库存）</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+          <input type="checkbox" name="is_controlled" value="1" {% if item and item.is_controlled %}checked{% endif %} />
+          <span style="font-weight:600;">管控药品（麻药/精神类）</span>
+        </label>
+      </div>
+
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">主单位</label>
+        <input name="unit" value="{{ item.unit if item else '个' }}" placeholder="片 / ml / 盒 / 次" style="width:100%;" />
+      </div>
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">售价（元/主单位）</label>
+        <input name="sell_price" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.sell_price) if item else '0.00' }}" style="width:100%;" />
+      </div>
+
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">副单位（可选，如"盒"）</label>
+        <input name="unit2" value="{{ item.unit2 if item else '' }}" placeholder="盒 / 瓶" style="width:100%;" />
+      </div>
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">1副单位 = N主单位</label>
+        <input name="unit2_ratio" type="number" step="0.01" min="1" value="{{ item.unit2_ratio if item else '1' }}" style="width:100%;" />
+      </div>
+
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">进价（元）</label>
+        <input name="cost_price" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.cost_price) if item else '0.00' }}" style="width:100%;" />
+      </div>
+
+      <div id="stock-fields">
+        {% if not item %}
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">初始库存</label>
+        <input name="stock_qty" type="number" step="0.01" min="0" value="0" style="width:100%;" />
+        {% endif %}
+      </div>
+
+      <div id="low-stock-field">
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">低库存预警线</label>
+        <input name="low_stock_min" type="number" step="0.01" min="0" value="{{ item.low_stock_min if item else '0' }}" style="width:100%;" />
+      </div>
+
+      <div style="grid-column:1/-1;">
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">供应商</label>
+        <input name="supplier" value="{{ item.supplier if item else '' }}" placeholder="供应商名称" style="width:100%;" />
+      </div>
+
+      <div style="grid-column:1/-1;">
+        <label style="display:block;font-weight:600;margin-bottom:0.35rem;">备注</label>
+        <textarea name="notes" rows="2" style="width:100%;">{{ item.notes if item else '' }}</textarea>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;">
+      <button type="submit" class="btn">{{ '保存' if item else '创建' }}</button>
+      <a href="{{ '/admin/inventory/'~item.id if item else '/admin/inventory' }}" class="btn secondary">取消</a>
+    </div>
+  </form>
+</div>
+
+<script>
+const CATS = {{ categories | tojson }};
+
+function updateSubs() {
+  const cat = document.getElementById('cat-select').value;
+  const sub = document.getElementById('sub-select');
+  Array.from(sub.options).forEach(o => {
+    o.style.display = o.dataset.cat === cat ? '' : 'none';
+  });
+  // 选第一个可见的
+  const first = Array.from(sub.options).find(o => o.dataset.cat === cat);
+  if (first) sub.value = first.value;
+}
+
+function toggleStock() {
+  const isService = document.getElementById('is-service-cb').checked;
+  document.getElementById('stock-fields').style.display = isService ? 'none' : '';
+  document.getElementById('low-stock-field').style.display = isService ? 'none' : '';
+}
+
+updateSubs();
+toggleStock();
+</script>
+{% endblock %}

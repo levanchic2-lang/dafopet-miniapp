@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block body %}
+{% set cat_label = categories[item.category].label if item.category in categories else item.category %}
+{% set sub_label = categories[item.category].subs[item.subcategory] if item.category in categories and item.subcategory in categories[item.category].subs else item.subcategory %}
+{% set is_low = (not item.is_service) and item.low_stock_min > 0 and item.stock_qty <= item.low_stock_min %}
+
+{% if request.query_params.get('msg') %}
+<div class="card" style="background:#f0fdf4;border:1px solid #bbf7d0;margin-bottom:1rem;padding:0.75rem 1rem;font-size:0.9rem;color:#15803d;">
+  ✓ {{ request.query_params.get('msg') }}
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 340px;gap:1.25rem;align-items:start;">
+
+  <!-- 左：基本信息 + 流水 -->
+  <div>
+    <div class="card" style="margin-bottom:1rem;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+        <div>
+          <h1 style="margin:0 0 0.25rem;">{{ item.name }}</h1>
+          <p class="sub" style="margin:0;">
+            {{ cat_label }}{% if sub_label %} · {{ sub_label }}{% endif %}
+            {% if item.is_controlled %} · <span style="color:#92400e;font-weight:600;">管控药品</span>{% endif %}
+            {% if item.is_service %} · <span style="color:#0369a1;">服务项目</span>{% endif %}
+          </p>
+        </div>
+        <a href="/admin/inventory/{{ item.id }}/edit" class="btn secondary" style="font-size:0.85rem;">✏ 编辑</a>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1rem;margin-top:1.2rem;">
+        <div style="background:var(--bg-elevated);border-radius:8px;padding:0.75rem 1rem;">
+          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.2rem;">售价</div>
+          <div style="font-size:1.3rem;font-weight:700;">¥{{ '%.2f'|format(item.sell_price) }}</div>
+          <div style="font-size:0.78rem;color:var(--muted);">/ {{ item.unit }}</div>
+        </div>
+        <div style="background:var(--bg-elevated);border-radius:8px;padding:0.75rem 1rem;">
+          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.2rem;">进价</div>
+          <div style="font-size:1.3rem;font-weight:700;">¥{{ '%.2f'|format(item.cost_price) }}</div>
+        </div>
+        {% if not item.is_service %}
+        <div style="background:{% if is_low %}#fffbeb{% else %}var(--bg-elevated){% endif %};border-radius:8px;padding:0.75rem 1rem;">
+          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.2rem;">当前库存</div>
+          <div style="font-size:1.3rem;font-weight:700;color:{% if is_low %}#d97706{% else %}var(--text){% endif %};">
+            {{ '%.1f'|format(item.stock_qty) }} {{ item.unit }}
+            {% if is_low %} ⚠{% endif %}
+          </div>
+          {% if item.low_stock_min > 0 %}
+          <div style="font-size:0.78rem;color:var(--muted);">预警线：{{ item.low_stock_min }}</div>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% if item.unit2 %}
+        <div style="background:var(--bg-elevated);border-radius:8px;padding:0.75rem 1rem;">
+          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.2rem;">换算</div>
+          <div style="font-size:0.95rem;font-weight:600;">1 {{ item.unit2 }} = {{ item.unit2_ratio }} {{ item.unit }}</div>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if item.supplier %}
+      <div style="margin-top:0.75rem;font-size:0.88rem;color:var(--muted);">供应商：{{ item.supplier }}</div>
+      {% endif %}
+      {% if item.notes %}
+      <div style="margin-top:0.4rem;font-size:0.88rem;color:var(--muted);">备注：{{ item.notes }}</div>
+      {% endif %}
+    </div>
+
+    <!-- 流水记录 -->
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border);font-weight:600;font-size:0.95rem;">
+        出入库记录（共 {{ tx_total }} 条）
+      </div>
+      {% if txs %}
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead>
+          <tr style="background:var(--bg-elevated);">
+            <th style="text-align:left;padding:0.5rem 1rem;font-weight:600;">时间</th>
+            <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">类型</th>
+            <th style="text-align:right;padding:0.5rem 0.75rem;font-weight:600;">数量</th>
+            <th style="text-align:right;padding:0.5rem 0.75rem;font-weight:600;">变动后</th>
+            <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">操作人</th>
+            <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in txs %}
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:0.5rem 1rem;color:var(--muted);font-size:0.8rem;">{{ tx.created_at.strftime('%m-%d %H:%M') }}</td>
+            <td style="padding:0.5rem 0.75rem;">
+              {% if tx.tx_type == 'in' %}<span style="color:#15803d;font-weight:600;">↑ 入库</span>
+              {% elif tx.tx_type == 'out' %}<span style="color:#dc2626;font-weight:600;">↓ 出库</span>
+              {% elif tx.tx_type == 'adjust' %}<span style="color:#0369a1;font-weight:600;">≈ 盘点</span>
+              {% else %}<span>{{ tx.tx_type }}</span>{% endif %}
+            </td>
+            <td style="padding:0.5rem 0.75rem;text-align:right;font-weight:600;">
+              {% if tx.tx_type == 'out' %}-{% else %}+{% endif %}{{ '%.1f'|format(tx.qty) }}
+            </td>
+            <td style="padding:0.5rem 0.75rem;text-align:right;color:var(--muted);">{{ '%.1f'|format(tx.qty_after) }}</td>
+            <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ tx.operator or '—' }}</td>
+            <td style="padding:0.5rem 0.75rem;color:var(--muted);font-size:0.8rem;">{{ tx.note or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if tx_pages > 1 %}
+      <div style="display:flex;gap:0.5rem;padding:0.75rem 1rem;justify-content:center;font-size:0.85rem;">
+        {% if page > 1 %}<a href="?page={{ page-1 }}" class="btn secondary" style="padding:0.2rem 0.6rem;">‹</a>{% endif %}
+        <span style="color:var(--muted);">{{ page }}/{{ tx_pages }}</span>
+        {% if page < tx_pages %}<a href="?page={{ page+1 }}" class="btn secondary" style="padding:0.2rem 0.6rem;">›</a>{% endif %}
+      </div>
+      {% endif %}
+      {% else %}
+      <div style="padding:2rem;text-align:center;color:var(--muted);">暂无流水记录</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 右：操作面板 -->
+  <div style="display:flex;flex-direction:column;gap:1rem;">
+
+    {% if not item.is_service %}
+    <!-- 入库 -->
+    <div class="card">
+      <h3 style="margin:0 0 1rem;font-size:0.95rem;">↑ 手动入库</h3>
+      <form method="post" action="/admin/inventory/{{ item.id }}/stock-in">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <div style="margin-bottom:0.75rem;">
+          <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">入库数量（{{ item.unit }}）</label>
+          <input name="qty" type="number" step="0.01" min="0.01" required style="width:100%;" placeholder="0" />
+        </div>
+        <div style="margin-bottom:0.75rem;">
+          <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">本次进价（元，选填）</label>
+          <input name="unit_price" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.cost_price) }}" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:0.75rem;">
+          <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">备注</label>
+          <input name="note" placeholder="如：采购批次" style="width:100%;" />
+        </div>
+        <button type="submit" class="btn" style="width:100%;">确认入库</button>
+      </form>
+    </div>
+
+    <!-- 盘点调整 -->
+    <div class="card">
+      <h3 style="margin:0 0 1rem;font-size:0.95rem;">≈ 盘点调整</h3>
+      <form method="post" action="/admin/inventory/{{ item.id }}/adjust">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <div style="margin-bottom:0.75rem;">
+          <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">调整后库存（{{ item.unit }}）</label>
+          <input name="new_qty" type="number" step="0.01" min="0" required value="{{ '%.1f'|format(item.stock_qty) }}" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:0.75rem;">
+          <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">盘点原因</label>
+          <input name="note" placeholder="如：盘点差异/损耗" style="width:100%;" />
+        </div>
+        <button type="submit" class="btn secondary" style="width:100%;">提交调整</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- 下架 -->
+    <div class="card">
+      <h3 style="margin:0 0 0.75rem;font-size:0.95rem;color:var(--muted);">其他操作</h3>
+      <a href="/admin/inventory/{{ item.id }}/edit" class="btn secondary" style="width:100%;display:block;text-align:center;margin-bottom:0.5rem;">✏ 编辑品目信息</a>
+      <form method="post" action="/admin/inventory/{{ item.id }}/deactivate" onsubmit="return confirm('确认下架「{{ item.name }}」？下架后不再显示于品目列表。')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="btn secondary" style="width:100%;color:#dc2626;">下架品目</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -46,6 +46,8 @@ from app.models import (
     SalesOrder,
     SalesOrderItem,
     Visit,
+    InventoryItem,
+    InventoryTransaction,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -5068,3 +5070,272 @@ async def admin_so_delete(order_id: int, request: Request, db: Session = Depends
     db.delete(order)
     db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已删除" if visit_id else "/admin/sales-orders", status_code=303)
+
+
+# ─────────────────────────────────────────────
+#  库存管理 Inventory
+# ─────────────────────────────────────────────
+
+INVENTORY_CATEGORIES = {
+    "medication": {"label": "药品", "subs": {
+        "controlled": "麻药/精神类",
+        "general":    "普通药品",
+        "vaccine":    "疫苗",
+        "antiparasitic": "驱虫",
+    }},
+    "consumable": {"label": "耗材", "subs": {
+        "general": "普通耗材",
+    }},
+    "product": {"label": "商品", "subs": {
+        "general": "普通商品",
+    }},
+    "grooming": {"label": "美容", "subs": {
+        "washcare": "洗护",
+        "styling":  "造型",
+        "addon":    "附加服务",
+    }},
+    "lab": {"label": "化验", "subs": {
+        "routine_lab":  "常规化验",
+        "external_lab": "院外送检",
+    }},
+    "imaging": {"label": "影像", "subs": {
+        "dr":        "DR",
+        "ct":        "CT",
+        "mri":       "核磁共振",
+        "ultrasound":"B超",
+    }},
+    "microscopy": {"label": "显微镜", "subs": {
+        "optical":   "常规光学显微镜",
+        "electron":  "电子显微镜",
+    }},
+}
+
+
+@app.get("/admin/inventory", response_class=HTMLResponse)
+async def admin_inventory_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    category: str = "",
+    low_stock: str = "",
+    page: int = 1,
+):
+    require_admin(request)
+    page_size = 50
+    query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    if q:
+        query = query.filter(
+            or_(InventoryItem.name.ilike(f"%{q}%"),
+                InventoryItem.supplier.ilike(f"%{q}%"))
+        )
+    if category:
+        query = query.filter(InventoryItem.category == category)
+    if low_stock == "1":
+        query = query.filter(
+            InventoryItem.is_service == False,
+            InventoryItem.stock_qty <= InventoryItem.low_stock_min,
+            InventoryItem.low_stock_min > 0,
+        )
+    total = query.count()
+    items = query.order_by(InventoryItem.category, InventoryItem.name).offset((page - 1) * page_size).limit(page_size).all()
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    # 低库存预警数量
+    low_count = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.is_service == False,
+        InventoryItem.stock_qty <= InventoryItem.low_stock_min,
+        InventoryItem.low_stock_min > 0,
+    ).count()
+    return templates.TemplateResponse("admin_inventory.html", {
+        "request": request, "items": items, "total": total,
+        "page": page, "total_pages": total_pages,
+        "q": q, "category": category, "low_stock": low_stock,
+        "categories": INVENTORY_CATEGORIES, "low_count": low_count,
+        "csrf_token": request.session.get("csrf_token", ""),
+        "title": "库存管理",
+    })
+
+
+@app.get("/admin/inventory/create", response_class=HTMLResponse)
+async def admin_inventory_create_form(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    return templates.TemplateResponse("admin_inventory_form.html", {
+        "request": request, "item": None,
+        "categories": INVENTORY_CATEGORIES,
+        "csrf_token": request.session.get("csrf_token", ""),
+        "title": "新增品目",
+    })
+
+
+@app.post("/admin/inventory/create")
+async def admin_inventory_create(
+    request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    name: str = Form(""), category: str = Form("medication"),
+    subcategory: str = Form(""), is_service: str = Form("0"),
+    is_controlled: str = Form("0"),
+    unit: str = Form("个"), unit2: str = Form(""), unit2_ratio: float = Form(1.0),
+    sell_price: float = Form(0.0), cost_price: float = Form(0.0),
+    stock_qty: float = Form(0.0), low_stock_min: float = Form(0.0),
+    supplier: str = Form(""), notes: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    if not name.strip():
+        raise HTTPException(400, "品名不能为空")
+    operator = request.session.get("admin", "")
+    item = InventoryItem(
+        name=name.strip(), category=category, subcategory=subcategory,
+        is_service=(is_service == "1"), is_controlled=(is_controlled == "1"),
+        unit=unit, unit2=unit2, unit2_ratio=unit2_ratio,
+        sell_price=sell_price, cost_price=cost_price,
+        stock_qty=stock_qty, low_stock_min=low_stock_min,
+        supplier=supplier, notes=notes, created_by=operator,
+    )
+    db.add(item)
+    db.flush()
+    # 若初始库存 > 0，记录入库流水
+    if stock_qty > 0 and not (is_service == "1"):
+        db.add(InventoryTransaction(
+            item_id=item.id, tx_type="in", qty=stock_qty,
+            qty_before=0, qty_after=stock_qty,
+            unit_price=cost_price, ref_type="manual",
+            operator=operator, note="初始库存录入",
+        ))
+    db.commit()
+    return RedirectResponse(f"/admin/inventory?msg=已创建：{item.name}", status_code=303)
+
+
+@app.get("/admin/inventory/{item_id}/edit", response_class=HTMLResponse)
+async def admin_inventory_edit_form(item_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    item = db.get(InventoryItem, item_id)
+    if not item:
+        raise HTTPException(404)
+    return templates.TemplateResponse("admin_inventory_form.html", {
+        "request": request, "item": item,
+        "categories": INVENTORY_CATEGORIES,
+        "csrf_token": request.session.get("csrf_token", ""),
+        "title": f"编辑品目：{item.name}",
+    })
+
+
+@app.get("/admin/inventory/{item_id}", response_class=HTMLResponse)
+async def admin_inventory_detail(item_id: int, request: Request, db: Session = Depends(get_db),
+                                  page: int = 1):
+    require_admin(request)
+    item = db.get(InventoryItem, item_id)
+    if not item:
+        raise HTTPException(404)
+    page_size = 30
+    txs = (db.query(InventoryTransaction)
+           .filter(InventoryTransaction.item_id == item_id)
+           .order_by(InventoryTransaction.created_at.desc())
+           .offset((page - 1) * page_size).limit(page_size).all())
+    tx_total = db.query(InventoryTransaction).filter(InventoryTransaction.item_id == item_id).count()
+    return templates.TemplateResponse("admin_inventory_detail.html", {
+        "request": request, "item": item, "txs": txs,
+        "tx_total": tx_total, "page": page,
+        "tx_pages": max(1, (tx_total + page_size - 1) // page_size),
+        "categories": INVENTORY_CATEGORIES,
+        "csrf_token": request.session.get("csrf_token", ""),
+        "title": f"品目详情：{item.name}",
+    })
+
+
+@app.post("/admin/inventory/{item_id}/edit")
+async def admin_inventory_edit(
+    item_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    name: str = Form(""), category: str = Form("medication"),
+    subcategory: str = Form(""), is_service: str = Form("0"),
+    is_controlled: str = Form("0"),
+    unit: str = Form("个"), unit2: str = Form(""), unit2_ratio: float = Form(1.0),
+    sell_price: float = Form(0.0), cost_price: float = Form(0.0),
+    low_stock_min: float = Form(0.0),
+    supplier: str = Form(""), notes: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    item = db.get(InventoryItem, item_id)
+    if not item:
+        raise HTTPException(404)
+    item.name = name.strip() or item.name
+    item.category = category; item.subcategory = subcategory
+    item.is_service = (is_service == "1"); item.is_controlled = (is_controlled == "1")
+    item.unit = unit; item.unit2 = unit2; item.unit2_ratio = unit2_ratio
+    item.sell_price = sell_price; item.cost_price = cost_price
+    item.low_stock_min = low_stock_min
+    item.supplier = supplier; item.notes = notes
+    item.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/inventory/{item_id}?msg=已保存", status_code=303)
+
+
+@app.post("/admin/inventory/{item_id}/stock-in")
+async def admin_inventory_stock_in(
+    item_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    qty: float = Form(...), unit_price: float = Form(0.0),
+    note: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    item = db.get(InventoryItem, item_id)
+    if not item or item.is_service:
+        raise HTTPException(404)
+    if qty <= 0:
+        raise HTTPException(400, "入库数量必须大于 0")
+    before = item.stock_qty
+    item.stock_qty += qty
+    item.updated_at = datetime.utcnow()
+    db.add(InventoryTransaction(
+        item_id=item_id, tx_type="in", qty=qty,
+        qty_before=before, qty_after=item.stock_qty,
+        unit_price=unit_price or item.cost_price,
+        ref_type="manual", operator=request.session.get("admin", ""),
+        note=note or "手动入库",
+    ))
+    db.commit()
+    return RedirectResponse(f"/admin/inventory/{item_id}?msg=入库成功+{qty}{item.unit}", status_code=303)
+
+
+@app.post("/admin/inventory/{item_id}/adjust")
+async def admin_inventory_adjust(
+    item_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    new_qty: float = Form(...), note: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    item = db.get(InventoryItem, item_id)
+    if not item or item.is_service:
+        raise HTTPException(404)
+    before = item.stock_qty
+    diff = new_qty - before
+    item.stock_qty = new_qty
+    item.updated_at = datetime.utcnow()
+    db.add(InventoryTransaction(
+        item_id=item_id, tx_type="adjust", qty=abs(diff),
+        qty_before=before, qty_after=new_qty,
+        unit_price=0, ref_type="manual",
+        operator=request.session.get("admin", ""),
+        note=note or f"盘点调整（{'+' if diff >= 0 else ''}{diff:.1f}）",
+    ))
+    db.commit()
+    return RedirectResponse(f"/admin/inventory/{item_id}?msg=库存已调整", status_code=303)
+
+
+@app.post("/admin/inventory/{item_id}/deactivate")
+async def admin_inventory_deactivate(
+    item_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    item = db.get(InventoryItem, item_id)
+    if not item:
+        raise HTTPException(404)
+    item.is_active = False
+    db.commit()
+    return RedirectResponse("/admin/inventory?msg=已下架", status_code=303)

@@ -337,6 +337,59 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_visits_pet ON visits(pet_id)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_visits_date ON visits(visit_date)"))
 
+            # inventory_items 品目表
+            inv_cols = conn.execute(text("PRAGMA table_info(inventory_items)")).fetchall()
+            if not inv_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS inventory_items ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "name VARCHAR(200) NOT NULL, "
+                    "category VARCHAR(60) DEFAULT 'medication', "
+                    "subcategory VARCHAR(60) DEFAULT '', "
+                    "is_service BOOLEAN DEFAULT 0, "
+                    "is_controlled BOOLEAN DEFAULT 0, "
+                    "unit VARCHAR(20) DEFAULT '个', "
+                    "unit2 VARCHAR(20) DEFAULT '', "
+                    "unit2_ratio REAL DEFAULT 1.0, "
+                    "sell_price REAL DEFAULT 0.0, "
+                    "cost_price REAL DEFAULT 0.0, "
+                    "stock_qty REAL DEFAULT 0.0, "
+                    "low_stock_min REAL DEFAULT 0.0, "
+                    "supplier VARCHAR(200) DEFAULT '', "
+                    "notes TEXT DEFAULT '', "
+                    "is_active BOOLEAN DEFAULT 1, "
+                    "created_by VARCHAR(80) DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_items_category ON inventory_items(category)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_items_name ON inventory_items(name)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_items_active ON inventory_items(is_active)"))
+
+            # inventory_transactions 出入库流水
+            inv_tx_cols = conn.execute(text("PRAGMA table_info(inventory_transactions)")).fetchall()
+            if not inv_tx_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS inventory_transactions ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE, "
+                    "tx_type VARCHAR(20) DEFAULT 'in', "
+                    "qty REAL NOT NULL, "
+                    "qty_before REAL DEFAULT 0.0, "
+                    "qty_after REAL DEFAULT 0.0, "
+                    "unit_price REAL DEFAULT 0.0, "
+                    "ref_type VARCHAR(40) DEFAULT 'manual', "
+                    "ref_id INTEGER DEFAULT NULL, "
+                    "operator VARCHAR(80) DEFAULT '', "
+                    "note VARCHAR(500) DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_tx_item ON inventory_transactions(item_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_tx_type ON inventory_transactions(tx_type)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_tx_created ON inventory_transactions(created_at)"))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

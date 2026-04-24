@@ -387,6 +387,57 @@ class Visit(Base):
     pet = relationship("Pet", backref="visits", foreign_keys=[pet_id])
 
 
+class InventoryItem(Base):
+    """品目表：药品/耗材/商品/服务项目"""
+    __tablename__ = "inventory_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)              # 品名
+    # 大类：medication/consumable/product/vaccine/antiparasitic/grooming/lab/imaging/microscopy
+    category: Mapped[str] = mapped_column(String(60), default="medication")
+    # 小类：controlled/general/washcare/styling/addon/routine_lab/external_lab/dr/ct/mri/ultrasound/optical/electron
+    subcategory: Mapped[str] = mapped_column(String(60), default="")
+    is_service: Mapped[bool] = mapped_column(Boolean, default=False)            # 服务项目不占库存
+    is_controlled: Mapped[bool] = mapped_column(Boolean, default=False)         # 精神类/麻药管控标记
+    unit: Mapped[str] = mapped_column(String(20), default="个")                 # 主单位（片/ml/盒/次）
+    unit2: Mapped[str] = mapped_column(String(20), default="")                  # 副单位（盒/瓶）
+    unit2_ratio: Mapped[float] = mapped_column(Float, default=1.0)              # 1副单位 = N主单位
+    sell_price: Mapped[float] = mapped_column(Float, default=0.0)               # 销售单价（按主单位）
+    cost_price: Mapped[float] = mapped_column(Float, default=0.0)               # 进价
+    stock_qty: Mapped[float] = mapped_column(Float, default=0.0)                # 当前库存（服务项目忽略）
+    low_stock_min: Mapped[float] = mapped_column(Float, default=0.0)            # 低库存预警线
+    supplier: Mapped[str] = mapped_column(String(200), default="")              # 供应商
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)              # 下架/停用
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    transactions = relationship("InventoryTransaction", back_populates="item", cascade="all, delete-orphan")
+
+
+class InventoryTransaction(Base):
+    """出入库流水记录"""
+    __tablename__ = "inventory_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False)
+    # type: in（入库）/ out（出库）/ adjust（盘点调整）/ return（退货）
+    tx_type: Mapped[str] = mapped_column(String(20), default="in")
+    qty: Mapped[float] = mapped_column(Float, nullable=False)                   # 变动数量（正数）
+    qty_before: Mapped[float] = mapped_column(Float, default=0.0)              # 变动前库存
+    qty_after: Mapped[float] = mapped_column(Float, default=0.0)               # 变动后库存
+    unit_price: Mapped[float] = mapped_column(Float, default=0.0)              # 本次单价（入库用进价，出库用售价）
+    # ref_type: manual/prescription/sales_order/lab_order/imaging_order
+    ref_type: Mapped[str] = mapped_column(String(40), default="manual")
+    ref_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    operator: Mapped[str] = mapped_column(String(80), default="")
+    note: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    item = relationship("InventoryItem", back_populates="transactions")
+
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
 
