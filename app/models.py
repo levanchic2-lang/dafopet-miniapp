@@ -301,6 +301,7 @@ class Prescription(Base):
     prescribed_date: Mapped[str] = mapped_column(String(20), default="")
     vet_name: Mapped[str] = mapped_column(String(80), default="")
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft / issued / dispensed
+    total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -316,15 +317,20 @@ class PrescriptionItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     prescription_id: Mapped[int] = mapped_column(ForeignKey("prescriptions.id", ondelete="CASCADE"))
+    item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
     drug_name: Mapped[str] = mapped_column(String(120), default="")
-    drug_type: Mapped[str] = mapped_column(String(40), default="oral")  # oral/topical/injection/eye_drop/other
-    dosage: Mapped[str] = mapped_column(String(80), default="")       # 如 5mg / 1片
-    frequency: Mapped[str] = mapped_column(String(80), default="")    # 如 每日两次
+    drug_type: Mapped[str] = mapped_column(String(40), default="oral")
+    dosage: Mapped[str] = mapped_column(String(80), default="")
+    frequency: Mapped[str] = mapped_column(String(80), default="")
     duration_days: Mapped[str] = mapped_column(String(40), default="")
-    quantity: Mapped[str] = mapped_column(String(40), default="")     # 如 14片
+    quantity_num: Mapped[float] = mapped_column(Float, default=1.0)   # 数量（数字）
+    quantity: Mapped[str] = mapped_column(String(40), default="")     # 显示用（如 14片）
+    unit_price: Mapped[float] = mapped_column(Float, default=0.0)
+    subtotal: Mapped[float] = mapped_column(Float, default=0.0)
     instructions: Mapped[str] = mapped_column(Text, default="")
 
     prescription = relationship("Prescription", back_populates="items")
+    inventory_item = relationship("InventoryItem", foreign_keys=[item_id])
 
 
 class SalesOrder(Base):
@@ -352,6 +358,7 @@ class SalesOrderItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("sales_orders.id", ondelete="CASCADE"))
+    item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
     item_name: Mapped[str] = mapped_column(String(120), default="")
     item_type: Mapped[str] = mapped_column(String(40), default="product")  # product/service/medication/vaccine
     unit_price: Mapped[float] = mapped_column(Float, default=0.0)
@@ -360,6 +367,7 @@ class SalesOrderItem(Base):
     notes: Mapped[str] = mapped_column(String(200), default="")
 
     order = relationship("SalesOrder", back_populates="items")
+    inventory_item = relationship("InventoryItem", foreign_keys=[item_id])
 
 
 class Visit(Base):

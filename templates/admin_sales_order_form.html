@@ -7,6 +7,11 @@
 .so-table tr:not(:last-child) td { border-bottom:1px solid var(--border); }
 .so-table input, .so-table select { padding:0.35rem 0.5rem; font-size:0.86rem; border-radius:8px; }
 .so-total-row { background:var(--bg-elevated); font-weight:700; }
+.inv-search-wrap { position:relative; }
+.inv-dropdown { position:absolute; top:100%; left:0; right:0; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); z-index:100; max-height:220px; overflow-y:auto; display:none; min-width:220px; }
+.inv-dropdown-item { padding:0.45rem 0.75rem; cursor:pointer; font-size:0.85rem; line-height:1.4; }
+.inv-dropdown-item:hover { background:var(--bg-elevated); }
+.inv-dropdown-item .item-meta { font-size:0.75rem; color:var(--muted); }
 @media print {
   .no-print { display:none !important; }
   body { background:#fff; }
@@ -133,7 +138,16 @@
                   {% for item in o.items %}
                   {% set idx = loop.index0 %}
                   <tr>
-                    <td><input name="item_name_{{ idx }}" value="{{ item.item_name }}" required /></td>
+                    <td>
+                      <div class="inv-search-wrap">
+                        <input name="item_name_{{ idx }}" value="{{ item.item_name }}" required
+                               autocomplete="off"
+                               oninput="onItemInput(this, {{ idx }})"
+                               onblur="closeSoDropdown({{ idx }})" />
+                        <input type="hidden" name="item_id_{{ idx }}" value="{{ item.item_id or '' }}" id="so_item_id_{{ idx }}" />
+                        <div class="inv-dropdown" id="so_dropdown_{{ idx }}"></div>
+                      </div>
+                    </td>
                     <td>
                       <select name="item_type_{{ idx }}">
                         {% for k, zh in item_type_zh.items() %}
@@ -141,20 +155,29 @@
                         {% endfor %}
                       </select>
                     </td>
-                    <td><input type="number" name="unit_price_{{ idx }}" value="{{ item.unit_price }}" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)" /></td>
+                    <td><input type="number" name="unit_price_{{ idx }}" value="{{ '%.2f'|format(item.unit_price) }}" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)" /></td>
                     <td><input type="number" name="quantity_{{ idx }}" value="{{ item.quantity }}" step="0.1" min="0.1" class="qty-input" oninput="updateSubtotal(this)" /></td>
-                    <td><input name="subtotal_display_{{ idx }}" value="{{ '%.2f'|format(item.subtotal) }}" readonly style="background:var(--bg-elevated);font-weight:600;" /><input type="hidden" name="subtotal_{{ idx }}" value="{{ item.subtotal }}" class="subtotal-hidden" /></td>
+                    <td><input name="subtotal_display_{{ idx }}" value="{{ '%.2f'|format(item.subtotal) }}" readonly style="background:var(--bg-elevated);font-weight:600;width:72px;" /><input type="hidden" name="subtotal_{{ idx }}" value="{{ item.subtotal }}" class="subtotal-hidden" /></td>
                     <td><input name="item_notes_{{ idx }}" value="{{ item.notes }}" /></td>
                     <td class="no-print"><button type="button" onclick="removeItem(this)" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
                   </tr>
                   {% endfor %}
                 {% else %}
                   <tr>
-                    <td><input name="item_name_0" placeholder="商品/服务名称" required /></td>
+                    <td>
+                      <div class="inv-search-wrap">
+                        <input name="item_name_0" placeholder="搜索库存或手动输入" required
+                               autocomplete="off"
+                               oninput="onItemInput(this, 0)"
+                               onblur="closeSoDropdown(0)" />
+                        <input type="hidden" name="item_id_0" value="" id="so_item_id_0" />
+                        <div class="inv-dropdown" id="so_dropdown_0"></div>
+                      </div>
+                    </td>
                     <td><select name="item_type_0">{% for k, zh in item_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}</select></td>
                     <td><input type="number" name="unit_price_0" placeholder="0.00" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)" /></td>
                     <td><input type="number" name="quantity_0" value="1" step="0.1" min="0.1" class="qty-input" oninput="updateSubtotal(this)" /></td>
-                    <td><input name="subtotal_display_0" value="0.00" readonly style="background:var(--bg-elevated);font-weight:600;" /><input type="hidden" name="subtotal_0" value="0" class="subtotal-hidden" /></td>
+                    <td><input name="subtotal_display_0" value="0.00" readonly style="background:var(--bg-elevated);font-weight:600;width:72px;" /><input type="hidden" name="subtotal_0" value="0" class="subtotal-hidden" /></td>
                     <td><input name="item_notes_0" placeholder="备注" /></td>
                     <td class="no-print"><button type="button" onclick="removeItem(this)" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
                   </tr>
@@ -242,6 +265,7 @@
 <script>
 var _soRowCount = {{ o.items|length if o and o.items else 1 }};
 var _itemTypeOptions = `{% for k, zh in item_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}`;
+var _soSearchTimers = {};
 
 function updateSubtotal(input) {
   var row = input.closest('tr');
@@ -266,14 +290,68 @@ function removeItem(btn) {
   updateTotal();
 }
 
+function onItemInput(input, idx) {
+  var q = input.value.trim();
+  clearTimeout(_soSearchTimers[idx]);
+  document.getElementById('so_item_id_' + idx).value = '';
+  if (q.length < 1) { closeSoDropdown(idx); return; }
+  _soSearchTimers[idx] = setTimeout(function() {
+    fetch('/api/inventory/search?q=' + encodeURIComponent(q))
+      .then(function(r) { return r.json(); })
+      .then(function(data) { showSoDropdown(idx, data, input); });
+  }, 200);
+}
+
+function showSoDropdown(idx, items, input) {
+  var dd = document.getElementById('so_dropdown_' + idx);
+  if (!items.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = '';
+  items.forEach(function(it) {
+    var div = document.createElement('div');
+    div.className = 'inv-dropdown-item';
+    var stock = it.is_service ? '服务' : ('库存:' + it.stock_qty + it.unit);
+    div.innerHTML = '<div>' + it.name + (it.is_controlled ? ' <span style="color:#92400e;font-size:0.72rem;">管控</span>' : '') + '</div>'
+      + '<div class="item-meta">¥' + it.sell_price.toFixed(2) + ' / ' + it.unit + ' &nbsp;·&nbsp; ' + stock + '</div>';
+    div.onmousedown = function(e) {
+      e.preventDefault();
+      selectSoItem(idx, it, input);
+    };
+    dd.appendChild(div);
+  });
+  dd.style.display = 'block';
+}
+
+function selectSoItem(idx, it, input) {
+  input.value = it.name;
+  document.getElementById('so_item_id_' + idx).value = it.id;
+  var row = input.closest('tr');
+  var priceEl = row.querySelector('.price-input');
+  if (priceEl) { priceEl.value = it.sell_price.toFixed(2); updateSubtotal(priceEl); }
+  closeSoDropdown(idx);
+}
+
+function closeSoDropdown(idx) {
+  var dd = document.getElementById('so_dropdown_' + idx);
+  if (dd) dd.style.display = 'none';
+}
+
 function addItem() {
   var idx = _soRowCount++;
   var row = `<tr>
-    <td><input name="item_name_${idx}" placeholder="商品/服务名称" required /></td>
+    <td>
+      <div class="inv-search-wrap">
+        <input name="item_name_${idx}" placeholder="搜索库存或手动输入" required
+               autocomplete="off"
+               oninput="onItemInput(this, ${idx})"
+               onblur="closeSoDropdown(${idx})" />
+        <input type="hidden" name="item_id_${idx}" value="" id="so_item_id_${idx}" />
+        <div class="inv-dropdown" id="so_dropdown_${idx}"></div>
+      </div>
+    </td>
     <td><select name="item_type_${idx}">${_itemTypeOptions}</select></td>
     <td><input type="number" name="unit_price_${idx}" placeholder="0.00" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)" /></td>
     <td><input type="number" name="quantity_${idx}" value="1" step="0.1" min="0.1" class="qty-input" oninput="updateSubtotal(this)" /></td>
-    <td><input name="subtotal_display_${idx}" value="0.00" readonly style="background:var(--bg-elevated);font-weight:600;" /><input type="hidden" name="subtotal_${idx}" value="0" class="subtotal-hidden" /></td>
+    <td><input name="subtotal_display_${idx}" value="0.00" readonly style="background:var(--bg-elevated);font-weight:600;width:72px;" /><input type="hidden" name="subtotal_${idx}" value="0" class="subtotal-hidden" /></td>
     <td><input name="item_notes_${idx}" placeholder="备注" /></td>
     <td class="no-print"><button type="button" onclick="removeItem(this)" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
   </tr>`;

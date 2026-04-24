@@ -4731,17 +4731,61 @@ def _parse_presc_items(form_data) -> list[dict]:
         if not name and i > 20:
             break
         if name:
+            try:
+                qty_num = float(form_data.get(f"quantity_num_{i}", 1) or 1)
+                unit_price = float(form_data.get(f"unit_price_{i}", 0) or 0)
+            except ValueError:
+                qty_num, unit_price = 1.0, 0.0
+            raw_item_id = form_data.get(f"item_id_{i}", "").strip()
+            item_id = int(raw_item_id) if raw_item_id and raw_item_id.isdigit() else None
+            subtotal = round(qty_num * unit_price, 2)
             items.append({
+                "item_id": item_id,
                 "drug_name": name,
                 "drug_type": form_data.get(f"drug_type_{i}", "oral").strip(),
                 "dosage": form_data.get(f"dosage_{i}", "").strip(),
                 "frequency": form_data.get(f"frequency_{i}", "").strip(),
                 "duration_days": form_data.get(f"duration_days_{i}", "").strip(),
+                "quantity_num": qty_num,
                 "quantity": form_data.get(f"quantity_{i}", "").strip(),
+                "unit_price": unit_price,
+                "subtotal": subtotal,
                 "instructions": form_data.get(f"instructions_{i}", "").strip(),
             })
         i += 1
     return items
+
+
+def _deduct_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_id: int, operator: str, note: str = "") -> None:
+    """出库：减少库存，写流水。"""
+    inv = db.get(InventoryItem, item_id)
+    if not inv or inv.is_service:
+        return
+    before = inv.stock_qty
+    inv.stock_qty = round(before - qty, 4)
+    db.add(InventoryTransaction(
+        item_id=item_id, tx_type="out", qty=qty,
+        qty_before=before, qty_after=inv.stock_qty,
+        unit_price=inv.sell_price,
+        ref_type=ref_type, ref_id=ref_id,
+        operator=operator, note=note,
+    ))
+
+
+def _restore_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_id: int, operator: str, note: str = "") -> None:
+    """退回库存（删单时）：增加库存，写流水。"""
+    inv = db.get(InventoryItem, item_id)
+    if not inv or inv.is_service:
+        return
+    before = inv.stock_qty
+    inv.stock_qty = round(before + qty, 4)
+    db.add(InventoryTransaction(
+        item_id=item_id, tx_type="return", qty=qty,
+        qty_before=before, qty_after=inv.stock_qty,
+        unit_price=inv.sell_price,
+        ref_type=ref_type, ref_id=ref_id,
+        operator=operator, note=note,
+    ))
 
 
 @app.get("/admin/prescriptions/create", response_class=HTMLResponse)
@@ -4784,6 +4828,9 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
     visit_id = int(form.get("visit_id", 0) or 0)
     customer_id = int(form.get("customer_id", 0) or 0)
     pet_id = int(form.get("pet_id", 0) or 0)
+    parsed_items = _parse_presc_items(form)
+    total = round(sum(it["subtotal"] for it in parsed_items), 2)
+    operator = request.session.get("admin_username", "admin")
     presc = Prescription(
         visit_id=visit_id or None,
         customer_id=customer_id or None,
@@ -4791,13 +4838,17 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
         prescribed_date=str(form.get("prescribed_date", "")).strip()[:20],
         vet_name=str(form.get("vet_name", "")).strip()[:80],
         status=str(form.get("status", "issued")).strip(),
+        total_amount=total,
         notes=str(form.get("notes", "")).strip(),
-        created_by=request.session.get("admin_username", "admin"),
+        created_by=operator,
     )
     db.add(presc)
     db.flush()
-    for it in _parse_presc_items(form):
+    for it in parsed_items:
         db.add(PrescriptionItem(prescription_id=presc.id, **it))
+        if it["item_id"] and it["quantity_num"] > 0:
+            _deduct_inventory(db, it["item_id"], it["quantity_num"],
+                              "prescription", presc.id, operator, f"处方#{presc.id}")
     db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已开具" if visit_id else f"/admin/prescriptions/{presc.id}?msg=处方单已创建", status_code=303)
 
@@ -4833,17 +4884,27 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
     presc = db.get(Prescription, presc_id)
     if not presc:
         raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
+    # 先把旧明细的库存退回
+    for old in presc.items:
+        if old.item_id and old.quantity_num > 0:
+            _restore_inventory(db, old.item_id, old.quantity_num,
+                               "prescription", presc_id, operator, f"编辑处方#{presc_id}退回")
+        db.delete(old)
+    db.flush()
+    parsed_items = _parse_presc_items(form)
+    total = round(sum(it["subtotal"] for it in parsed_items), 2)
     presc.prescribed_date = str(form.get("prescribed_date", "")).strip()[:20]
     presc.vet_name = str(form.get("vet_name", "")).strip()[:80]
     presc.pet_id = int(form.get("pet_id", 0) or 0) or presc.pet_id
     presc.status = str(form.get("status", "issued")).strip()
+    presc.total_amount = total
     presc.notes = str(form.get("notes", "")).strip()
-    # 重建明细
-    for old in presc.items:
-        db.delete(old)
-    db.flush()
-    for it in _parse_presc_items(form):
+    for it in parsed_items:
         db.add(PrescriptionItem(prescription_id=presc_id, **it))
+        if it["item_id"] and it["quantity_num"] > 0:
+            _deduct_inventory(db, it["item_id"], it["quantity_num"],
+                              "prescription", presc_id, operator, f"处方#{presc_id}")
     db.commit()
     return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=已保存", status_code=303)
 
@@ -4857,7 +4918,12 @@ async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depe
     presc = db.get(Prescription, presc_id)
     if not presc:
         raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
     visit_id = presc.visit_id
+    for it in presc.items:
+        if it.item_id and it.quantity_num > 0:
+            _restore_inventory(db, it.item_id, it.quantity_num,
+                               "prescription", presc_id, operator, f"删除处方#{presc_id}退回")
     db.delete(presc)
     db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已删除" if visit_id else "/admin/visits", status_code=303)
@@ -4886,7 +4952,10 @@ def _parse_so_items(form_data) -> list[dict]:
             except ValueError:
                 unit_price, quantity = 0.0, 1.0
             subtotal = round(unit_price * quantity, 2)
+            raw_item_id = form_data.get(f"item_id_{i}", "").strip()
+            item_id = int(raw_item_id) if raw_item_id and raw_item_id.isdigit() else None
             items.append({
+                "item_id": item_id,
                 "item_name": name,
                 "item_type": form_data.get(f"item_type_{i}", "product").strip(),
                 "unit_price": unit_price,
@@ -4939,6 +5008,7 @@ async def admin_so_create(request: Request, db: Session = Depends(get_db)):
     pet_id = int(form.get("pet_id", 0) or 0)
     items = _parse_so_items(form)
     total = round(sum(it["subtotal"] for it in items), 2)
+    operator = request.session.get("admin_username", "admin")
     order = SalesOrder(
         customer_id=customer_id or None,
         visit_id=visit_id or None,
@@ -4948,12 +5018,15 @@ async def admin_so_create(request: Request, db: Session = Depends(get_db)):
         total_amount=total,
         payment_method=str(form.get("payment_method", "")).strip()[:40],
         notes=str(form.get("notes", "")).strip(),
-        created_by=request.session.get("admin_username", "admin"),
+        created_by=operator,
     )
     db.add(order)
     db.flush()
     for it in items:
         db.add(SalesOrderItem(order_id=order.id, **it))
+        if it["item_id"] and it["quantity"] > 0:
+            _deduct_inventory(db, it["item_id"], it["quantity"],
+                              "sales_order", order.id, operator, f"销售单#{order.id}")
     db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已创建" if visit_id else f"/admin/sales-orders/{order.id}?msg=销售单已创建", status_code=303)
 
@@ -5024,6 +5097,14 @@ async def admin_so_edit(order_id: int, request: Request, db: Session = Depends(g
     order = db.get(SalesOrder, order_id)
     if not order:
         raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
+    # 先退回旧明细库存
+    for old in order.items:
+        if old.item_id and old.quantity > 0:
+            _restore_inventory(db, old.item_id, old.quantity,
+                               "sales_order", order_id, operator, f"编辑销售单#{order_id}退回")
+        db.delete(old)
+    db.flush()
     items = _parse_so_items(form)
     total = round(sum(it["subtotal"] for it in items), 2)
     order.order_date = str(form.get("order_date", "")).strip()[:20]
@@ -5032,11 +5113,11 @@ async def admin_so_edit(order_id: int, request: Request, db: Session = Depends(g
     order.total_amount = total
     order.notes = str(form.get("notes", "")).strip()
     order.pet_id = int(form.get("pet_id", 0) or 0) or order.pet_id
-    for old in order.items:
-        db.delete(old)
-    db.flush()
     for it in items:
         db.add(SalesOrderItem(order_id=order_id, **it))
+        if it["item_id"] and it["quantity"] > 0:
+            _deduct_inventory(db, it["item_id"], it["quantity"],
+                              "sales_order", order_id, operator, f"销售单#{order_id}")
     db.commit()
     return RedirectResponse(f"/admin/sales-orders/{order_id}?msg=已保存", status_code=303)
 
@@ -5066,7 +5147,12 @@ async def admin_so_delete(order_id: int, request: Request, db: Session = Depends
     order = db.get(SalesOrder, order_id)
     if not order:
         raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
     visit_id = order.visit_id
+    for it in order.items:
+        if it.item_id and it.quantity > 0:
+            _restore_inventory(db, it.item_id, it.quantity,
+                               "sales_order", order_id, operator, f"删除销售单#{order_id}退回")
     db.delete(order)
     db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已删除" if visit_id else "/admin/sales-orders", status_code=303)
@@ -5109,6 +5195,34 @@ INVENTORY_CATEGORIES = {
         "electron":  "电子显微镜",
     }},
 }
+
+
+@app.get("/api/inventory/search")
+async def api_inventory_search(
+    q: str = Query(""),
+    category: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """JSON autocomplete for inventory items — used by prescription/sales order forms."""
+    query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    if category:
+        query = query.filter(InventoryItem.category == category)
+    if q:
+        query = query.filter(InventoryItem.name.ilike(f"%{q}%"))
+    items = query.order_by(InventoryItem.name).limit(30).all()
+    return [
+        {
+            "id": it.id,
+            "name": it.name,
+            "category": it.category,
+            "unit": it.unit,
+            "sell_price": it.sell_price,
+            "stock_qty": it.stock_qty,
+            "is_service": it.is_service,
+            "is_controlled": it.is_controlled,
+        }
+        for it in items
+    ]
 
 
 @app.get("/admin/inventory", response_class=HTMLResponse)

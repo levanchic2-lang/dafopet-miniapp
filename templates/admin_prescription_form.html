@@ -7,6 +7,11 @@
 .drug-table tr:not(:last-child) td { border-bottom:1px solid var(--border); }
 .drug-table input, .drug-table select, .drug-table textarea { padding:0.35rem 0.5rem; font-size:0.86rem; border-radius:8px; }
 .drug-table textarea { min-height:48px; resize:vertical; }
+.inv-search-wrap { position:relative; }
+.inv-dropdown { position:absolute; top:100%; left:0; right:0; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); z-index:100; max-height:220px; overflow-y:auto; display:none; }
+.inv-dropdown-item { padding:0.45rem 0.75rem; cursor:pointer; font-size:0.85rem; line-height:1.4; }
+.inv-dropdown-item:hover { background:var(--bg-elevated); }
+.inv-dropdown-item .item-meta { font-size:0.75rem; color:var(--muted); }
 @media print {
   .no-print { display:none !important; }
   body { background:#fff; }
@@ -79,20 +84,23 @@
         <!-- 药品明细表 -->
         <div style="margin-top:1.1rem;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
-            <label style="margin:0;">药品明细</label>
-            <button type="button" onclick="addDrugRow()" class="btn secondary" style="font-size:0.8rem;padding:0.25rem 0.65rem;">＋ 添加药品</button>
+            <label style="margin:0;">药品 / 项目明细</label>
+            <button type="button" onclick="addDrugRow()" class="btn secondary no-print" style="font-size:0.8rem;padding:0.25rem 0.65rem;">＋ 添加</button>
           </div>
           <div style="overflow-x:auto;">
             <table class="drug-table">
               <thead>
                 <tr>
-                  <th style="min-width:130px;">药品名称 *</th>
-                  <th style="min-width:80px;">类型</th>
-                  <th style="min-width:90px;">剂量</th>
-                  <th style="min-width:110px;">频次</th>
-                  <th style="min-width:70px;">疗程</th>
-                  <th style="min-width:70px;">总量</th>
-                  <th style="min-width:120px;">特殊说明</th>
+                  <th style="min-width:160px;">药品/项目名称 *</th>
+                  <th style="min-width:72px;">类型</th>
+                  <th style="min-width:80px;">剂量</th>
+                  <th style="min-width:100px;">频次</th>
+                  <th style="min-width:64px;">疗程</th>
+                  <th style="min-width:72px;">数量</th>
+                  <th style="min-width:64px;">总量文字</th>
+                  <th style="min-width:84px;">单价(¥)</th>
+                  <th style="min-width:72px;">小计</th>
+                  <th style="min-width:100px;">特殊说明</th>
                   <th class="no-print" style="width:36px;"></th>
                 </tr>
               </thead>
@@ -101,7 +109,16 @@
                   {% for item in p.items %}
                   {% set idx = loop.index0 %}
                   <tr>
-                    <td><input name="drug_name_{{ idx }}" value="{{ item.drug_name }}" required /></td>
+                    <td>
+                      <div class="inv-search-wrap">
+                        <input name="drug_name_{{ idx }}" value="{{ item.drug_name }}" required
+                               autocomplete="off"
+                               oninput="onDrugInput(this, {{ idx }})"
+                               onblur="closeDropdown({{ idx }})" />
+                        <input type="hidden" name="item_id_{{ idx }}" value="{{ item.item_id or '' }}" id="item_id_{{ idx }}" />
+                        <div class="inv-dropdown" id="dropdown_{{ idx }}"></div>
+                      </div>
+                    </td>
                     <td>
                       <select name="drug_type_{{ idx }}">
                         {% for k, zh in drug_type_zh.items() %}
@@ -112,14 +129,29 @@
                     <td><input name="dosage_{{ idx }}" value="{{ item.dosage }}" placeholder="5mg" /></td>
                     <td><input name="frequency_{{ idx }}" value="{{ item.frequency }}" placeholder="每日两次" /></td>
                     <td><input name="duration_days_{{ idx }}" value="{{ item.duration_days }}" placeholder="7天" /></td>
-                    <td><input name="quantity_{{ idx }}" value="{{ item.quantity }}" placeholder="14片" /></td>
+                    <td><input name="quantity_num_{{ idx }}" type="number" step="0.01" min="0" value="{{ item.quantity_num }}"
+                               oninput="recalcRow({{ idx }})" style="width:64px;" /></td>
+                    <td><input name="quantity_{{ idx }}" value="{{ item.quantity }}" placeholder="14片" style="width:64px;" /></td>
+                    <td><input name="unit_price_{{ idx }}" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.unit_price) }}"
+                               oninput="recalcRow({{ idx }})" style="width:80px;" /></td>
+                    <td><input name="subtotal_{{ idx }}" type="number" step="0.01" readonly value="{{ '%.2f'|format(item.subtotal) }}"
+                               id="subtotal_{{ idx }}" style="width:68px;background:var(--bg-elevated);" /></td>
                     <td><input name="instructions_{{ idx }}" value="{{ item.instructions }}" placeholder="饭后服用" /></td>
-                    <td class="no-print"><button type="button" onclick="this.closest('tr').remove()" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+                    <td class="no-print"><button type="button" onclick="removeDrugRow(this, {{ idx }})" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
                   </tr>
                   {% endfor %}
                 {% else %}
                   <tr>
-                    <td><input name="drug_name_0" placeholder="药品名称" required /></td>
+                    <td>
+                      <div class="inv-search-wrap">
+                        <input name="drug_name_0" placeholder="搜索库存或手动输入" required
+                               autocomplete="off"
+                               oninput="onDrugInput(this, 0)"
+                               onblur="closeDropdown(0)" />
+                        <input type="hidden" name="item_id_0" value="" id="item_id_0" />
+                        <div class="inv-dropdown" id="dropdown_0"></div>
+                      </div>
+                    </td>
                     <td>
                       <select name="drug_type_0">
                         {% for k, zh in drug_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}
@@ -128,13 +160,23 @@
                     <td><input name="dosage_0" placeholder="5mg" /></td>
                     <td><input name="frequency_0" placeholder="每日两次" /></td>
                     <td><input name="duration_days_0" placeholder="7天" /></td>
-                    <td><input name="quantity_0" placeholder="14片" /></td>
+                    <td><input name="quantity_num_0" type="number" step="0.01" min="0" value="1"
+                               oninput="recalcRow(0)" style="width:64px;" /></td>
+                    <td><input name="quantity_0" placeholder="14片" style="width:64px;" /></td>
+                    <td><input name="unit_price_0" type="number" step="0.01" min="0" value="0.00"
+                               oninput="recalcRow(0)" style="width:80px;" /></td>
+                    <td><input name="subtotal_0" type="number" step="0.01" readonly value="0.00"
+                               id="subtotal_0" style="width:68px;background:var(--bg-elevated);" /></td>
                     <td><input name="instructions_0" placeholder="饭后服用" /></td>
-                    <td class="no-print"><button type="button" onclick="this.closest('tr').remove()" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+                    <td class="no-print"><button type="button" onclick="removeDrugRow(this, 0)" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
                   </tr>
                 {% endif %}
               </tbody>
             </table>
+          </div>
+          <!-- 合计 -->
+          <div style="display:flex;justify-content:flex-end;margin-top:0.6rem;font-weight:700;font-size:1rem;">
+            合计：¥<span id="grand-total">{{ '%.2f'|format(p.total_amount) if p else '0.00' }}</span>
           </div>
         </div>
 
@@ -155,7 +197,7 @@
     {% if is_edit %}
     <div style="margin-top:0.5rem;" class="no-print">
       <form method="post" action="/admin/prescriptions/{{ p.id }}/delete"
-            onsubmit="return confirm('确认删除此处方单？')">
+            onsubmit="return confirm('确认删除此处方单？删除后关联药品将退回库存。')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
         <button type="submit" class="danger" style="font-size:0.85rem;width:100%;">删除处方单</button>
       </form>
@@ -197,21 +239,109 @@
 <script>
 var _drugRowCount = {{ p.items|length if p and p.items else 1 }};
 var _drugTypeOptions = `{% for k, zh in drug_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}`;
+var _searchTimers = {};
+
+function recalcRow(idx) {
+  var qty = parseFloat(document.querySelector('[name="quantity_num_' + idx + '"]').value) || 0;
+  var price = parseFloat(document.querySelector('[name="unit_price_' + idx + '"]').value) || 0;
+  var sub = Math.round(qty * price * 100) / 100;
+  var el = document.getElementById('subtotal_' + idx);
+  if (el) el.value = sub.toFixed(2);
+  recalcTotal();
+}
+
+function recalcTotal() {
+  var total = 0;
+  document.querySelectorAll('[id^="subtotal_"]').forEach(function(el) {
+    total += parseFloat(el.value) || 0;
+  });
+  document.getElementById('grand-total').textContent = total.toFixed(2);
+}
+
+function removeDrugRow(btn, idx) {
+  btn.closest('tr').remove();
+  recalcTotal();
+}
+
+function onDrugInput(input, idx) {
+  var q = input.value.trim();
+  clearTimeout(_searchTimers[idx]);
+  document.getElementById('item_id_' + idx).value = '';
+  if (q.length < 1) { closeDropdown(idx); return; }
+  _searchTimers[idx] = setTimeout(function() {
+    fetch('/api/inventory/search?q=' + encodeURIComponent(q))
+      .then(function(r) { return r.json(); })
+      .then(function(data) { showDropdown(idx, data, input); });
+  }, 200);
+}
+
+function showDropdown(idx, items, input) {
+  var dd = document.getElementById('dropdown_' + idx);
+  if (!items.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = '';
+  items.forEach(function(it) {
+    var div = document.createElement('div');
+    div.className = 'inv-dropdown-item';
+    var stock = it.is_service ? '服务' : ('库存:' + it.stock_qty + it.unit);
+    div.innerHTML = '<div>' + it.name + (it.is_controlled ? ' <span style="color:#92400e;font-size:0.72rem;">管控</span>' : '') + '</div>'
+      + '<div class="item-meta">¥' + it.sell_price.toFixed(2) + ' / ' + it.unit + ' &nbsp;·&nbsp; ' + stock + '</div>';
+    div.onmousedown = function(e) {
+      e.preventDefault();
+      selectInventoryItem(idx, it, input);
+    };
+    dd.appendChild(div);
+  });
+  dd.style.display = 'block';
+}
+
+function selectInventoryItem(idx, it, input) {
+  input.value = it.name;
+  document.getElementById('item_id_' + idx).value = it.id;
+  var priceEl = document.querySelector('[name="unit_price_' + idx + '"]');
+  if (priceEl) priceEl.value = it.sell_price.toFixed(2);
+  var qtyEl = document.querySelector('[name="quantity_' + idx + '"]');
+  if (qtyEl && !qtyEl.value) qtyEl.value = '1' + it.unit;
+  closeDropdown(idx);
+  recalcRow(idx);
+}
+
+function closeDropdown(idx) {
+  var dd = document.getElementById('dropdown_' + idx);
+  if (dd) dd.style.display = 'none';
+}
 
 function addDrugRow() {
   var idx = _drugRowCount++;
   var row = `<tr>
-    <td><input name="drug_name_${idx}" placeholder="药品名称" required /></td>
+    <td>
+      <div class="inv-search-wrap">
+        <input name="drug_name_${idx}" placeholder="搜索库存或手动输入" required
+               autocomplete="off"
+               oninput="onDrugInput(this, ${idx})"
+               onblur="closeDropdown(${idx})" />
+        <input type="hidden" name="item_id_${idx}" value="" id="item_id_${idx}" />
+        <div class="inv-dropdown" id="dropdown_${idx}"></div>
+      </div>
+    </td>
     <td><select name="drug_type_${idx}">${_drugTypeOptions}</select></td>
     <td><input name="dosage_${idx}" placeholder="5mg" /></td>
     <td><input name="frequency_${idx}" placeholder="每日两次" /></td>
     <td><input name="duration_days_${idx}" placeholder="7天" /></td>
-    <td><input name="quantity_${idx}" placeholder="14片" /></td>
+    <td><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="1"
+               oninput="recalcRow(${idx})" style="width:64px;" /></td>
+    <td><input name="quantity_${idx}" placeholder="14片" style="width:64px;" /></td>
+    <td><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="0.00"
+               oninput="recalcRow(${idx})" style="width:80px;" /></td>
+    <td><input name="subtotal_${idx}" type="number" step="0.01" readonly value="0.00"
+               id="subtotal_${idx}" style="width:68px;background:var(--bg-elevated);" /></td>
     <td><input name="instructions_${idx}" placeholder="饭后服用" /></td>
-    <td class="no-print"><button type="button" onclick="this.closest('tr').remove()" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+    <td class="no-print"><button type="button" onclick="removeDrugRow(this, ${idx})" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
   </tr>`;
   document.getElementById('drug-tbody').insertAdjacentHTML('beforeend', row);
 }
+
+// init totals on page load
+document.addEventListener('DOMContentLoaded', recalcTotal);
 </script>
 {% endblock %}
 {% endblock %}

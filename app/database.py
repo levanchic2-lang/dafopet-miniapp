@@ -258,21 +258,41 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_prescriptions_visit ON prescriptions(visit_id)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_prescriptions_customer ON prescriptions(customer_id)"))
 
+            # prescriptions: add total_amount if missing
+            prx_cols2 = conn.execute(text("PRAGMA table_info(prescriptions)")).fetchall()
+            prx_names2 = {c[1] for c in prx_cols2}
+            if "total_amount" not in prx_names2:
+                conn.execute(text("ALTER TABLE prescriptions ADD COLUMN total_amount REAL DEFAULT 0.0"))
+
             prx_item_cols = conn.execute(text("PRAGMA table_info(prescription_items)")).fetchall()
             if not prx_item_cols:
                 conn.execute(text(
                     "CREATE TABLE IF NOT EXISTS prescription_items ("
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                     "prescription_id INTEGER NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE, "
+                    "item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL, "
                     "drug_name VARCHAR(120) DEFAULT '', "
                     "drug_type VARCHAR(40) DEFAULT 'oral', "
                     "dosage VARCHAR(80) DEFAULT '', "
                     "frequency VARCHAR(80) DEFAULT '', "
                     "duration_days VARCHAR(40) DEFAULT '', "
+                    "quantity_num REAL DEFAULT 1.0, "
                     "quantity VARCHAR(40) DEFAULT '', "
+                    "unit_price REAL DEFAULT 0.0, "
+                    "subtotal REAL DEFAULT 0.0, "
                     "instructions TEXT DEFAULT ''"
                     ")"
                 ))
+            else:
+                prx_item_names = {c[1] for c in prx_item_cols}
+                if "item_id" not in prx_item_names:
+                    conn.execute(text("ALTER TABLE prescription_items ADD COLUMN item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL"))
+                if "quantity_num" not in prx_item_names:
+                    conn.execute(text("ALTER TABLE prescription_items ADD COLUMN quantity_num REAL DEFAULT 1.0"))
+                if "unit_price" not in prx_item_names:
+                    conn.execute(text("ALTER TABLE prescription_items ADD COLUMN unit_price REAL DEFAULT 0.0"))
+                if "subtotal" not in prx_item_names:
+                    conn.execute(text("ALTER TABLE prescription_items ADD COLUMN subtotal REAL DEFAULT 0.0"))
 
             # sales_orders 销售单表
             so_cols = conn.execute(text("PRAGMA table_info(sales_orders)")).fetchall()
@@ -302,6 +322,7 @@ def _try_sqlite_migrations() -> None:
                     "CREATE TABLE IF NOT EXISTS sales_order_items ("
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                     "order_id INTEGER NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE, "
+                    "item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL, "
                     "item_name VARCHAR(120) DEFAULT '', "
                     "item_type VARCHAR(40) DEFAULT 'product', "
                     "unit_price REAL DEFAULT 0, "
@@ -310,6 +331,10 @@ def _try_sqlite_migrations() -> None:
                     "notes VARCHAR(200) DEFAULT ''"
                     ")"
                 ))
+            else:
+                soi_names = {c[1] for c in soi_cols}
+                if "item_id" not in soi_names:
+                    conn.execute(text("ALTER TABLE sales_order_items ADD COLUMN item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL"))
 
             # visits 就诊病历表
             visit_cols = conn.execute(text("PRAGMA table_info(visits)")).fetchall()
