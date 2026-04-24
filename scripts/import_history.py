@@ -113,7 +113,30 @@ def main():
         sys.exit(1)
 
     print(f"读取文件：{excel_path}")
-    df = pd.read_excel(excel_path)
+
+    # 自动找标题行：扫描前300行，找到包含「手机号」的那行
+    raw = pd.read_excel(excel_path, header=None, nrows=300)
+    header_row = None
+    for i, row in raw.iterrows():
+        if any("手机号" in str(v) for v in row.values if pd.notna(v)):
+            header_row = i
+            break
+
+    if header_row is None:
+        print("❌ 找不到标题行（包含「手机号」的行），请检查文件格式")
+        sys.exit(1)
+
+    print(f"标题行位于第 {header_row} 行")
+    df = pd.read_excel(excel_path, header=header_row)
+
+    # 找手机号列（兼容「手机号-手机号」「手机号」等命名）
+    phone_col = next((c for c in df.columns if "手机号" in str(c)), None)
+    if phone_col is None:
+        print(f"❌ 找不到手机号列，当前列名：{list(df.columns)}")
+        sys.exit(1)
+    if phone_col != "手机号-手机号":
+        df = df.rename(columns={phone_col: "手机号-手机号"})
+        print(f"列名「{phone_col}」已映射为「手机号-手机号」")
 
     # 过滤有效行（有手机号，且不是重复表头行）
     valid = df[
