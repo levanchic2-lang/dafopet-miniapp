@@ -1,0 +1,52 @@
+<view class="page" wx:if="{{pet}}">
+
+  <!-- 图片轮播 -->
+  <swiper wx:if="{{images.length > 0}}" class="swiper" indicator-dots="{{images.length > 1}}" autoplay circular>
+    <swiper-item wx:for="{{images}}" wx:key="*this">
+      <image src="{{item}}" class="swiper-img" mode="aspectFill" />
+    </swiper-item>
+  </swiper>
+  <view wx:else class="swiper-placeholder">
+    {{pet.species === 'cat' ? '🐱' : pet.species === 'dog' ? '🐶' : '🐾'}}
+  </view>
+
+  <!-- 基本信息 -->
+  <view class="card">
+    <view class="name">{{pet.name}}</view>
+    <view class="meta">
+      {{pet.species === 'cat' ? '猫' : pet.species === 'dog' ? '狗' : '其他'}}
+      <text wx:if="{{pet.breed}}"> · {{pet.breed}}</text>
+      <text wx:if="{{pet.age_estimate}}"> · {{pet.age_estimate}}</text>
+      <text wx:if="{{pet.gender === 'male'}}"> · 公</text>
+      <text wx:if="{{pet.gender === 'female'}}"> · 母</text>
+    </view>
+
+    <view wx:if="{{pet.personality}}">
+      <view class="section-title">🐾 性格特点</view>
+      <view class="section-text">{{pet.personality}}</view>
+    </view>
+
+    <view wx:if="{{pet.health_note}}">
+      <view class="section-title">💉 健康状况</view>
+      <view class="section-text">{{pet.health_note}}</view>
+    </view>
+
+    <view wx:if="{{pet.requirements}}">
+      <view class="section-title">📋 领养要求</view>
+      <view class="section-text">{{pet.requirements}}</view>
+    </view>
+  </view>
+
+  <!-- 视频 -->
+  <view wx:if="{{pet.has_video}}" class="card">
+    <view class="section-title">🎥 视频</view>
+    <video src="{{apiBase}}/api/adoption/{{pet.id}}/video" class="video" controls />
+  </view>
+
+  <!-- 底部联系按钮 -->
+  <view class="bottom-bar">
+    <button class="contact-btn phone-btn" bindtap="onCallPhone">📞 拨打电话</button>
+    <button class="contact-btn cs-btn" open-type="contact">💬 联系客服</button>
+  </view>
+
+</view>

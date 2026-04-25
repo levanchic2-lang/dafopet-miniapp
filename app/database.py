@@ -453,6 +453,29 @@ def _try_sqlite_migrations() -> None:
                 if "clinic_store" not in rvr_names:
                     conn.execute(text("ALTER TABLE rabies_vaccine_records ADD COLUMN clinic_store VARCHAR(60) DEFAULT '横岗店'"))
 
+            # adoption_pets 待领养动物表
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS adoption_pets ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "name VARCHAR(80) DEFAULT '', "
+                "species VARCHAR(40) DEFAULT 'cat', "
+                "breed VARCHAR(80) DEFAULT '', "
+                "age_estimate VARCHAR(40) DEFAULT '', "
+                "gender VARCHAR(20) DEFAULT 'unknown', "
+                "personality TEXT DEFAULT '', "
+                "health_note TEXT DEFAULT '', "
+                "requirements TEXT DEFAULT '', "
+                "image1_path VARCHAR(512) DEFAULT '', "
+                "image2_path VARCHAR(512) DEFAULT '', "
+                "video_path VARCHAR(512) DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'available', "
+                "adoption_agreement_path VARCHAR(512) DEFAULT '', "
+                "sort_order INTEGER DEFAULT 0, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

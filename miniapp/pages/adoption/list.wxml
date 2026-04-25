@@ -1,0 +1,37 @@
+<view class="page">
+  <view class="header">
+    <view class="header-title">🐾 待领养动物</view>
+    <view class="header-sub">遇见有缘的它，给它一个温暖的家</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">加载中…</view>
+
+  <view wx:elif="{{pets.length === 0}}" class="empty">
+    暂时没有待领养的动物\n请稍后再来看看
+  </view>
+
+  <view wx:else class="grid">
+    <view wx:for="{{pets}}" wx:key="id" class="card" bindtap="onTapPet" data-id="{{item.id}}">
+      <image wx:if="{{item.has_image1}}"
+        src="{{apiBase}}/api/adoption/{{item.id}}/image/1"
+        class="card-img" mode="aspectFill" />
+      <view wx:else class="card-img-placeholder">
+        {{item.species === 'cat' ? '🐱' : item.species === 'dog' ? '🐶' : '🐾'}}
+      </view>
+      <view class="card-body">
+        <view class="card-name">{{item.name}}</view>
+        <view class="card-meta">
+          {{item.species === 'cat' ? '猫' : item.species === 'dog' ? '狗' : '其他'}}
+          <text wx:if="{{item.breed}}"> · {{item.breed}}</text>
+          <text wx:if="{{item.age_estimate}}"> · {{item.age_estimate}}</text>
+          <text wx:if="{{item.gender === 'male'}}"> · 公</text>
+          <text wx:if="{{item.gender === 'female'}}"> · 母</text>
+        </view>
+        <view wx:if="{{item.personality}}" class="card-personality">{{item.personality}}</view>
+      </view>
+      <view class="card-footer">
+        <view class="btn-detail">查看详情 →</view>
+      </view>
+    </view>
+  </view>
+</view>

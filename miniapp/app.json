@@ -8,7 +8,9 @@
     "pages/showcase/showcase",
     "pages/feedback/index",
     "pages/rabies/index",
-    "pages/rabies/done"
+    "pages/rabies/done",
+    "pages/adoption/list",
+    "pages/adoption/detail"
   ],
   "window": {
     "navigationBarTitleText": "大风动物医院 TNR",

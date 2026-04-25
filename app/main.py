@@ -49,6 +49,7 @@ from app.models import (
     InventoryItem,
     InventoryTransaction,
     RabiesVaccineRecord,
+    AdoptionPet,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -5996,3 +5997,193 @@ async def admin_rabies_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}"},
     )
+
+
+# ── 待领养动物 ────────────────────────────────────────────────────────────────
+
+_ADOPTION_DIR = Path("data/adoption")
+_ADOPTION_STATUS_ZH = {"available": "待领养", "adopted": "已领养", "paused": "暂停"}
+
+
+def _save_adoption_file(upload: UploadFile, prefix: str) -> str:
+    _ADOPTION_DIR.mkdir(parents=True, exist_ok=True)
+    ext = Path(upload.filename).suffix.lower() or ".bin"
+    fname = f"{prefix}_{int(datetime.utcnow().timestamp()*1000)}{ext}"
+    dest = _ADOPTION_DIR / fname
+    content = upload.file.read()
+    dest.write_bytes(content)
+    return str(dest)
+
+
+# 公开 API（小程序用）
+@app.get("/api/adoption")
+async def api_adoption_list(db: Session = Depends(get_db)):
+    pets = db.query(AdoptionPet).filter(AdoptionPet.status == "available").order_by(AdoptionPet.sort_order, AdoptionPet.id.desc()).all()
+    result = []
+    for p in pets:
+        result.append({
+            "id": p.id,
+            "name": p.name,
+            "species": p.species,
+            "breed": p.breed,
+            "age_estimate": p.age_estimate,
+            "gender": p.gender,
+            "personality": p.personality,
+            "health_note": p.health_note,
+            "requirements": p.requirements,
+            "has_image1": bool(p.image1_path),
+            "has_image2": bool(p.image2_path),
+            "has_video": bool(p.video_path),
+            "status": p.status,
+        })
+    return result
+
+
+@app.get("/api/adoption/{pet_id}/image/{n}")
+async def api_adoption_image(pet_id: int, n: int, db: Session = Depends(get_db)):
+    pet = db.get(AdoptionPet, pet_id)
+    if not pet:
+        raise HTTPException(404)
+    path = pet.image1_path if n == 1 else pet.image2_path
+    if not path or not Path(path).exists():
+        raise HTTPException(404)
+    from fastapi.responses import FileResponse
+    return FileResponse(path)
+
+
+@app.get("/api/adoption/{pet_id}/video")
+async def api_adoption_video(pet_id: int, db: Session = Depends(get_db)):
+    pet = db.get(AdoptionPet, pet_id)
+    if not pet or not pet.video_path or not Path(pet.video_path).exists():
+        raise HTTPException(404)
+    from fastapi.responses import FileResponse
+    return FileResponse(pet.video_path)
+
+
+# 后台管理
+@app.get("/admin/adoption", response_class=HTMLResponse)
+async def admin_adoption_list(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    pets = db.query(AdoptionPet).order_by(AdoptionPet.sort_order, AdoptionPet.id.desc()).all()
+    return templates.TemplateResponse(request, "admin_adoption_list.html", {
+        "pets": pets, "status_zh": _ADOPTION_STATUS_ZH,
+    })
+
+
+@app.get("/admin/adoption/new", response_class=HTMLResponse)
+async def admin_adoption_new_form(request: Request):
+    require_admin(request)
+    return templates.TemplateResponse(request, "admin_adoption_form.html", {
+        "pet": None, "status_zh": _ADOPTION_STATUS_ZH,
+    })
+
+
+@app.post("/admin/adoption/new")
+async def admin_adoption_create(request: Request, db: Session = Depends(get_db),
+    name: str = Form(""), species: str = Form("cat"), breed: str = Form(""),
+    age_estimate: str = Form(""), gender: str = Form("unknown"),
+    personality: str = Form(""), health_note: str = Form(""), requirements: str = Form(""),
+    sort_order: int = Form(0), csrf_token: str = Form(""),
+    image1: UploadFile = File(None), image2: UploadFile = File(None),
+    video: UploadFile = File(None),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    pet = AdoptionPet(
+        name=name.strip(), species=species, breed=breed.strip(),
+        age_estimate=age_estimate.strip(), gender=gender,
+        personality=personality.strip(), health_note=health_note.strip(),
+        requirements=requirements.strip(), sort_order=sort_order,
+    )
+    if image1 and image1.filename:
+        pet.image1_path = _save_adoption_file(image1, f"img1_{name}")
+    if image2 and image2.filename:
+        pet.image2_path = _save_adoption_file(image2, f"img2_{name}")
+    if video and video.filename:
+        pet.video_path = _save_adoption_file(video, f"video_{name}")
+    db.add(pet)
+    db.commit()
+    return RedirectResponse("/admin/adoption?msg=已添加", status_code=303)
+
+
+@app.get("/admin/adoption/{pet_id}", response_class=HTMLResponse)
+async def admin_adoption_detail(pet_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    pet = db.get(AdoptionPet, pet_id)
+    if not pet:
+        raise HTTPException(404)
+    return templates.TemplateResponse(request, "admin_adoption_form.html", {
+        "pet": pet, "status_zh": _ADOPTION_STATUS_ZH,
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/adoption/{pet_id}/edit")
+async def admin_adoption_edit(pet_id: int, request: Request, db: Session = Depends(get_db),
+    name: str = Form(""), species: str = Form("cat"), breed: str = Form(""),
+    age_estimate: str = Form(""), gender: str = Form("unknown"),
+    personality: str = Form(""), health_note: str = Form(""), requirements: str = Form(""),
+    sort_order: int = Form(0), status: str = Form("available"), csrf_token: str = Form(""),
+    image1: UploadFile = File(None), image2: UploadFile = File(None),
+    video: UploadFile = File(None),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    pet = db.get(AdoptionPet, pet_id)
+    if not pet:
+        raise HTTPException(404)
+    pet.name = name.strip(); pet.species = species; pet.breed = breed.strip()
+    pet.age_estimate = age_estimate.strip(); pet.gender = gender
+    pet.personality = personality.strip(); pet.health_note = health_note.strip()
+    pet.requirements = requirements.strip(); pet.sort_order = sort_order
+    pet.status = status
+    if image1 and image1.filename:
+        pet.image1_path = _save_adoption_file(image1, f"img1_{pet_id}")
+    if image2 and image2.filename:
+        pet.image2_path = _save_adoption_file(image2, f"img2_{pet_id}")
+    if video and video.filename:
+        pet.video_path = _save_adoption_file(video, f"video_{pet_id}")
+    pet.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/adoption/{pet_id}?msg=已保存", status_code=303)
+
+
+@app.post("/admin/adoption/{pet_id}/adopt")
+async def admin_adoption_mark_adopted(pet_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), agreement: UploadFile = File(None),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    pet = db.get(AdoptionPet, pet_id)
+    if not pet:
+        raise HTTPException(404)
+    pet.status = "adopted"
+    if agreement and agreement.filename:
+        pet.adoption_agreement_path = _save_adoption_file(agreement, f"agreement_{pet_id}")
+    pet.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/adoption/{pet_id}?msg=已标记为已领养", status_code=303)
+
+
+@app.post("/admin/adoption/{pet_id}/delete")
+async def admin_adoption_delete(pet_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    pet = db.get(AdoptionPet, pet_id)
+    if not pet:
+        raise HTTPException(404)
+    db.delete(pet)
+    db.commit()
+    return RedirectResponse("/admin/adoption?msg=已删除", status_code=303)
+
+
+@app.get("/admin/adoption/{pet_id}/agreement")
+async def admin_adoption_agreement(pet_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    pet = db.get(AdoptionPet, pet_id)
+    if not pet or not pet.adoption_agreement_path or not Path(pet.adoption_agreement_path).exists():
+        raise HTTPException(404)
+    from fastapi.responses import FileResponse
+    return FileResponse(pet.adoption_agreement_path)

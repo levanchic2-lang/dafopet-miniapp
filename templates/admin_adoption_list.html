@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="margin-bottom:1rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+    <div>
+      <h1 style="margin:0;">待领养动物管理</h1>
+      <p class="sub" style="margin:0.25rem 0 0;">共 {{ pets|length }} 条记录</p>
+    </div>
+    <a href="/admin/adoption/new" class="btn" style="font-size:0.88rem;">＋ 新增动物</a>
+  </div>
+</div>
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+{% if pets %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;">
+  {% for pet in pets %}
+  <div class="card" style="padding:1rem;position:relative;">
+    {% if pet.image1_path %}
+    <img src="/api/adoption/{{ pet.id }}/image/1" style="width:100%;height:180px;object-fit:cover;border-radius:8px;margin-bottom:0.75rem;" />
+    {% else %}
+    <div style="width:100%;height:100px;background:#f3f4f6;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:0.85rem;margin-bottom:0.75rem;">暂无图片</div>
+    {% endif %}
+
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
+      <span style="font-size:1rem;font-weight:700;">{{ pet.name or '未命名' }}</span>
+      {% if pet.status == 'available' %}
+        <span style="background:#d1fae5;color:#065f46;font-size:0.72rem;padding:0.1rem 0.45rem;border-radius:4px;">待领养</span>
+      {% elif pet.status == 'adopted' %}
+        <span style="background:#e5e7eb;color:#6b7280;font-size:0.72rem;padding:0.1rem 0.45rem;border-radius:4px;">已领养</span>
+      {% else %}
+        <span style="background:#fef3c7;color:#92400e;font-size:0.72rem;padding:0.1rem 0.45rem;border-radius:4px;">暂停</span>
+      {% endif %}
+    </div>
+    <div style="font-size:0.82rem;color:var(--muted);">
+      {{ pet.species == 'cat' and '猫' or pet.species == 'dog' and '狗' or '其他' }}
+      {% if pet.breed %} · {{ pet.breed }}{% endif %}
+      {% if pet.age_estimate %} · {{ pet.age_estimate }}{% endif %}
+      {% if pet.gender == 'male' %} · 公{% elif pet.gender == 'female' %} · 母{% endif %}
+    </div>
+    <div style="margin-top:0.75rem;display:flex;gap:0.5rem;">
+      <a href="/admin/adoption/{{ pet.id }}" class="btn secondary" style="flex:1;text-align:center;font-size:0.82rem;padding:0.3rem 0;">编辑</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:3rem;color:var(--muted);">
+  暂无记录，<a href="/admin/adoption/new">新增第一只待领养动物</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -753,5 +753,9 @@ Page({
 
   goRabiesPage() {
     wx.navigateTo({ url: "/pages/rabies/index" });
+  },
+
+  goAdoptionPage() {
+    wx.navigateTo({ url: "/pages/adoption/list" });
   }
 });

@@ -495,6 +495,28 @@ class RabiesVaccineRecord(Base):
     pet      = relationship("Pet",      foreign_keys=[pet_id])
 
 
+class AdoptionPet(Base):
+    __tablename__ = "adoption_pets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(80), default="")
+    species: Mapped[str] = mapped_column(String(40), default="cat")   # cat / dog / other
+    breed: Mapped[str] = mapped_column(String(80), default="")
+    age_estimate: Mapped[str] = mapped_column(String(40), default="")  # e.g. "2岁"
+    gender: Mapped[str] = mapped_column(String(20), default="unknown") # male/female/unknown
+    personality: Mapped[str] = mapped_column(Text, default="")
+    health_note: Mapped[str] = mapped_column(Text, default="")
+    requirements: Mapped[str] = mapped_column(Text, default="")        # 领养要求
+    image1_path: Mapped[str] = mapped_column(String(512), default="")
+    image2_path: Mapped[str] = mapped_column(String(512), default="")
+    video_path: Mapped[str] = mapped_column(String(512), default="")
+    status: Mapped[str] = mapped_column(String(20), default="available")  # available/adopted/paused
+    adoption_agreement_path: Mapped[str] = mapped_column(String(512), default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
 

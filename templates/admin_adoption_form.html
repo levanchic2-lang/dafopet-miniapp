@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block body %}
+{% set is_new = pet is none %}
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+  <a href="/admin/adoption" class="btn secondary" style="font-size:0.85rem;">← 返回列表</a>
+  <h1 style="margin:0;font-size:1.25rem;">{{ '新增待领养动物' if is_new else '编辑：' ~ (pet.name or '未命名') }}</h1>
+</div>
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start;">
+
+  <!-- 左：基本信息 + 媒体 -->
+  <div>
+    <div class="card" style="margin-bottom:1rem;">
+      <h3 style="margin:0 0 1rem;font-size:0.95rem;">基本信息</h3>
+      <form method="post" action="{{ '/admin/adoption/new' if is_new else '/admin/adoption/' ~ pet.id ~ '/edit' }}"
+            enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+        <div class="row2">
+          <div>
+            <label>名字 <span style="color:#d97706;">*</span></label>
+            <input name="name" value="{{ pet.name if pet else '' }}" placeholder="动物名字" required />
+          </div>
+          <div>
+            <label>物种</label>
+            <select name="species">
+              <option value="cat" {{ 'selected' if pet and pet.species == 'cat' }}>猫</option>
+              <option value="dog" {{ 'selected' if pet and pet.species == 'dog' }}>狗</option>
+              <option value="other" {{ 'selected' if pet and pet.species == 'other' }}>其他</option>
+            </select>
+          </div>
+          <div>
+            <label>品种</label>
+            <input name="breed" value="{{ pet.breed if pet else '' }}" placeholder="如：橘猫、金毛" />
+          </div>
+          <div>
+            <label>年龄估算</label>
+            <input name="age_estimate" value="{{ pet.age_estimate if pet else '' }}" placeholder="如：约2岁、6个月" />
+          </div>
+          <div>
+            <label>性别</label>
+            <select name="gender">
+              <option value="unknown" {{ 'selected' if not pet or pet.gender == 'unknown' }}>未知</option>
+              <option value="male" {{ 'selected' if pet and pet.gender == 'male' }}>公</option>
+              <option value="female" {{ 'selected' if pet and pet.gender == 'female' }}>母</option>
+            </select>
+          </div>
+          <div>
+            <label>排序（数字越小越靠前）</label>
+            <input type="number" name="sort_order" value="{{ pet.sort_order if pet else 0 }}" min="0" />
+          </div>
+        </div>
+
+        <div style="margin-top:0.75rem;">
+          <label>性格描述</label>
+          <textarea name="personality" style="min-height:80px;" placeholder="活泼好动、亲人、和其他猫相处良好…">{{ pet.personality if pet else '' }}</textarea>
+        </div>
+        <div>
+          <label>健康状况</label>
+          <textarea name="health_note" style="min-height:80px;" placeholder="已绝育、已驱虫、已打疫苗，无慢性病…">{{ pet.health_note if pet else '' }}</textarea>
+        </div>
+        <div>
+          <label>领养要求</label>
+          <textarea name="requirements" style="min-height:80px;" placeholder="室内饲养、不可遗弃、定期体检…">{{ pet.requirements if pet else '' }}</textarea>
+        </div>
+
+        {% if not is_new %}
+        <div style="margin-top:0.75rem;">
+          <label>状态</label>
+          <select name="status">
+            {% for k, zh in status_zh.items() %}
+            <option value="{{ k }}" {{ 'selected' if pet.status == k }}>{{ zh }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+
+        <!-- 图片上传 -->
+        <div style="margin-top:1rem;">
+          <h3 style="margin:0 0 0.75rem;font-size:0.92rem;">图片（最多 2 张）</h3>
+          <div class="row2">
+            <div>
+              <label>图片 1</label>
+              {% if pet and pet.image1_path %}
+              <div style="margin-bottom:0.4rem;">
+                <img src="/api/adoption/{{ pet.id }}/image/1" style="max-height:120px;border-radius:6px;border:1px solid var(--border);" />
+              </div>
+              <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.3rem;">重新上传将替换现有图片</div>
+              {% endif %}
+              <input type="file" name="image1" accept="image/*" />
+            </div>
+            <div>
+              <label>图片 2</label>
+              {% if pet and pet.image2_path %}
+              <div style="margin-bottom:0.4rem;">
+                <img src="/api/adoption/{{ pet.id }}/image/2" style="max-height:120px;border-radius:6px;border:1px solid var(--border);" />
+              </div>
+              <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.3rem;">重新上传将替换现有图片</div>
+              {% endif %}
+              <input type="file" name="image2" accept="image/*" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 视频上传 -->
+        <div style="margin-top:0.75rem;">
+          <label>视频（最多 1 个）</label>
+          {% if pet and pet.video_path %}
+          <div style="margin-bottom:0.4rem;font-size:0.82rem;color:#15803d;">✓ 已上传视频，重新上传将替换</div>
+          {% endif %}
+          <input type="file" name="video" accept="video/*" />
+        </div>
+
+        <div style="margin-top:1.25rem;">
+          <button type="submit" class="btn">{{ '添加动物' if is_new else '保存修改' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 右：操作面板 -->
+  <div style="display:flex;flex-direction:column;gap:1rem;">
+
+    {% if not is_new %}
+    <!-- 标记已领养 -->
+    <div class="card">
+      <h3 style="margin:0 0 0.75rem;font-size:0.95rem;">标记已领养</h3>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:0.75rem;">
+        上传领养协议后标记为已领养，小程序将自动隐藏此动物。
+      </p>
+      <form method="post" action="/admin/adoption/{{ pet.id }}/adopt" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        {% if pet.adoption_agreement_path %}
+        <div style="font-size:0.82rem;color:#15803d;margin-bottom:0.5rem;">
+          ✓ 已上传协议 <a href="/admin/adoption/{{ pet.id }}/agreement" target="_blank" style="font-size:0.78rem;">查看</a>
+        </div>
+        {% endif %}
+        <label style="font-size:0.82rem;">领养协议（图片或 PDF）</label>
+        <input type="file" name="agreement" accept="image/*,.pdf" style="margin-bottom:0.6rem;" />
+        <button type="submit" class="btn" style="width:100%;background:#15803d;">
+          ✓ 确认已领养
+        </button>
+      </form>
+    </div>
+
+    <!-- 删除 -->
+    <div class="card">
+      <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:var(--muted);">危险操作</h3>
+      <form method="post" action="/admin/adoption/{{ pet.id }}/delete"
+            onsubmit="return confirm('确认删除「{{ pet.name }}」？此操作不可恢复。')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="btn" style="width:100%;background:#dc2626;font-size:0.85rem;">删除此记录</button>
+      </form>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
