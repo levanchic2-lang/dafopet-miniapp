@@ -58,8 +58,6 @@ Page({
       this._canvas = canvas;
       this._ctx = ctx;
       this._dpr = dpr;
-      this._canvasLeft = res[0].left;
-      this._canvasTop = res[0].top;
     });
   },
 
@@ -136,13 +134,13 @@ Page({
     if (!this._ctx) return;
     const t = e.touches[0];
     this._ctx.beginPath();
-    this._ctx.moveTo(t.clientX - this._canvasLeft, t.clientY - this._canvasTop);
+    this._ctx.moveTo(t.x, t.y);
     this._drawing = true;
   },
   onSigMove(e) {
     if (!this._drawing || !this._ctx) return;
     const t = e.touches[0];
-    this._ctx.lineTo(t.clientX - this._canvasLeft, t.clientY - this._canvasTop);
+    this._ctx.lineTo(t.x, t.y);
     this._ctx.stroke();
     if (!this.data.hasSig) this.setData({ hasSig: true });
   },
