@@ -122,7 +122,7 @@ Page({
   onAddressInput(e) { this.setData({ "form.owner_address": e.detail.value }); },
   onAnimalNameInput(e) { this.setData({ "form.animal_name": e.detail.value }); },
   onAnimalBreedInput(e) { this.setData({ "form.animal_breed": e.detail.value }); },
-  onAnimalDobInput(e) { this.setData({ "form.animal_dob": e.detail.value }); },
+  onAnimalDobChange(e) { this.setData({ "form.animal_dob": e.detail.value }); },
   onAnimalColorInput(e) { this.setData({ "form.animal_color": e.detail.value }); },
 
   onGenderChange(e) {

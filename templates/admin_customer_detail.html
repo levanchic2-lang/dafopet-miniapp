@@ -112,8 +112,8 @@
             </select>
           </div>
           <div>
-            <label>年龄估算</label>
-            <input name="birthday_estimate" value="{{ pet.birthday_estimate }}" placeholder="如：2岁、2023年" />
+            <label>出生年月</label>
+            <input type="month" name="birthday_estimate" value="{{ pet.birthday_estimate[:7] if pet.birthday_estimate and pet.birthday_estimate|length >= 7 else '' }}" />
           </div>
           <div>
             <label>颜色/花纹</label>
@@ -302,8 +302,8 @@
           </select>
         </div>
         <div>
-          <label>年龄估算</label>
-          <input name="birthday_estimate" placeholder="如：2岁" />
+          <label>出生年月</label>
+          <input type="month" name="birthday_estimate" />
         </div>
         <div>
           <label>颜色/花纹</label>

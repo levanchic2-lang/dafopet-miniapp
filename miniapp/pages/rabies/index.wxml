@@ -58,8 +58,10 @@
       <input class="input" value="{{form.animal_breed}}" placeholder="如：金毛" bindinput="onAnimalBreedInput" />
     </view>
     <view class="col">
-      <view class="label">出生年月/年龄</view>
-      <input class="input" value="{{form.animal_dob}}" placeholder="如：2022-03 或 2岁" bindinput="onAnimalDobInput" />
+      <view class="label">出生年月</view>
+      <picker mode="date" fields="month" value="{{form.animal_dob}}" bindchange="onAnimalDobChange">
+        <view class="picker">{{form.animal_dob || '选择年月'}}</view>
+      </picker>
     </view>
   </view>
 
