@@ -52,14 +52,6 @@ Page({
       { value: "unknown", label: "未知" }
     ],
     genderIndex: 0,
-    ageNumInput: "",
-    ageUnitOptions: [
-      { value: "", label: "单位" },
-      { value: "day", label: "天" },
-      { value: "month", label: "月" },
-      { value: "year", label: "年" }
-    ],
-    ageUnitIndex: 0,
     checks: { ear: true, fraud: true },
     images: [],
     videos: [],
@@ -94,7 +86,6 @@ Page({
   },
 
   onLoad() {
-    this._syncAgeEstimate();
     this._loadShenzhenRegions();
     // 若之前已绑定 openid，直接复用，确保每单都能出现在"我的订单"
     try {
@@ -199,31 +190,8 @@ Page({
     this.setData({ addressDetailInput: v.length > 240 ? v.slice(0, 240) : v }, () => this._syncFormAddress());
   },
 
-  _syncAgeEstimate() {
-    const units = this.data.ageUnitOptions || [];
-    const uidx = this.data.ageUnitIndex;
-    const u = units[uidx] ? units[uidx].value : "";
-    const raw = String(this.data.ageNumInput || "").trim();
-    const n = parseInt(raw, 10);
-    let s = "";
-    if (u && raw !== "" && Number.isFinite(n) && n >= 1) {
-      if (u === "day") s = n + "天";
-      else if (u === "month") s = n + "个月";
-      else if (u === "year") s = n + "岁";
-    }
-    if (this.data.form.age_estimate !== s) {
-      this.setData({ "form.age_estimate": s });
-    }
-  },
-
-  onAgeNumInput(e) {
-    const v = (e.detail.value || "").replace(/\D/g, "").slice(0, 3);
-    this.setData({ ageNumInput: v }, () => this._syncAgeEstimate());
-  },
-
-  onAgeUnitPick(e) {
-    const idx = Number(e.detail.value || 0);
-    this.setData({ ageUnitIndex: idx }, () => this._syncAgeEstimate());
+  onAgeEstimateChange(e) {
+    this.setData({ "form.age_estimate": e.detail.value });
   },
 
   _reverseGeocode(lat, lng) {
@@ -610,10 +578,9 @@ Page({
       this.setData({ error: "请填写流浪猫名字（无名字可按特征命名）。" });
       return;
     }
-    this._syncAgeEstimate();
     const { form: f2 } = this.data;
     if (!String(f2.age_estimate || "").trim()) {
-      this.setData({ error: "请填写年龄估计（数字并选择单位）。" });
+      this.setData({ error: "请选择出生年月。" });
       return;
     }
     if (!String(f2.health_note || "").trim()) {
@@ -640,7 +607,6 @@ Page({
   },
 
   async _submitNow() {
-    this._syncAgeEstimate();
     this._syncFormAddress();
     this.setData({ submitting: true });
     const hnDraft = typeof this._healthNoteDraft === "string" ? this._healthNoteDraft : "";

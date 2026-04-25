@@ -94,13 +94,10 @@
     </view>
   </view>
 
-  <view class="label">年龄估计</view>
-  <view class="row2 age-inline-row">
-    <input class="input input-lg age-num" type="digit" value="{{ageNumInput}}" maxlength="3" bindinput="onAgeNumInput" />
-    <picker class="picker picker-lg age-unit" mode="selector" range="{{ageUnitOptions}}" range-key="label" value="{{ageUnitIndex}}" bindchange="onAgeUnitPick">
-      <view>{{ageUnitOptions[ageUnitIndex].label}}</view>
-    </picker>
-  </view>
+  <view class="label">出生年月（估算）</view>
+  <picker mode="date" fields="month" value="{{form.age_estimate}}" bindchange="onAgeEstimateChange">
+    <view class="picker picker-lg">{{form.age_estimate || '选择年月'}}</view>
+  </picker>
 
   <view class="label">流浪状况说明</view>
   <textarea

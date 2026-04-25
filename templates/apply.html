@@ -139,17 +139,8 @@
       </div>
     </div>
     <div>
-      <label for="age_num">年龄估计</label>
-      <div class="age-inline">
-        <input class="input-lg age-num" id="age_num" type="number" min="1" max="999" step="1" inputmode="numeric" autocomplete="off" required />
-        <select class="input-lg age-unit" id="age_unit" name="age_unit" aria-label="年龄单位" required>
-          <option value="">单位</option>
-          <option value="day">天</option>
-          <option value="month">月</option>
-          <option value="year">年</option>
-        </select>
-      </div>
-      <input type="hidden" name="age_estimate" id="age_estimate" value="" />
+      <label for="age_estimate">出生年月（估算）</label>
+      <input class="input-lg" type="month" id="age_estimate" name="age_estimate" required style="max-width:200px;" />
     </div>
     <label for="health_note">流浪状况说明</label>
     <textarea class="input-lg" id="health_note" name="health_note" required maxlength="8000" placeholder="介绍此流浪猫的详细情况，包括但不仅限于活动范围、外观、病史，性格，是否孕猫等等"></textarea>
@@ -206,7 +197,7 @@ document.getElementById("f").addEventListener("submit", async (e) => {
   }
   const ageH = document.getElementById("age_estimate");
   if (!ageH || !String(ageH.value || "").trim()) {
-    out.innerHTML = '<div class="msg err">请填写年龄估计（数字并选择单位：天 / 月 / 年）。</div>';
+    out.innerHTML = '<div class="msg err">请选择出生年月。</div>';
     return;
   }
   const imgInp = e.target.elements.namedItem("images");
@@ -295,38 +286,6 @@ setTimeout(() => {
   }
 }, 300);
 
-(function initAgeEstimate() {
-  const numEl = document.getElementById("age_num");
-  const unitEl = document.getElementById("age_unit");
-  const hidden = document.getElementById("age_estimate");
-  if (!numEl || !unitEl || !hidden) return;
-
-  function syncAgeEstimate() {
-    const raw = String(numEl.value || "").trim();
-    const u = unitEl.value;
-    const n = parseInt(raw, 10);
-    if (!u || raw === "" || !Number.isFinite(n) || n < 1) {
-      hidden.value = "";
-      return;
-    }
-    if (u === "day") hidden.value = n + "天";
-    else if (u === "month") hidden.value = n + "个月";
-    else if (u === "year") hidden.value = n + "岁";
-    else hidden.value = "";
-  }
-
-  numEl.addEventListener("input", syncAgeEstimate);
-  unitEl.addEventListener("change", syncAgeEstimate);
-
-  window.__syncAgeEstimate = syncAgeEstimate;
-  window.__resetAgeEstimateUI = function () {
-    numEl.value = "";
-    unitEl.value = "";
-    syncAgeEstimate();
-  };
-
-  syncAgeEstimate();
-})();
 </script>
 
 <script type="application/json" id="shenzhen-regions-data">{{ shenzhen_regions | default({}, true) | tojson }}</script>
