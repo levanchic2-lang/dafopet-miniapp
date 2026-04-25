@@ -5811,6 +5811,19 @@ async def admin_rabies_cert_no(rec_id: int, request: Request, db: Session = Depe
     return RedirectResponse(f"/admin/rabies/{rec_id}?msg=免疫证号已录入", status_code=303)
 
 
+@app.post("/admin/rabies/{rec_id}/delete")
+async def admin_rabies_delete(rec_id: int, request: Request, db: Session = Depends(get_db),
+                               csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(RabiesVaccineRecord, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    db.delete(rec)
+    db.commit()
+    return RedirectResponse("/admin/rabies?msg=记录已删除", status_code=303)
+
+
 @app.get("/admin/rabies/{rec_id}/signature/{who}")
 async def admin_rabies_signature(rec_id: int, who: str, request: Request, db: Session = Depends(get_db)):
     """返回签名图片文件"""
@@ -5822,6 +5835,37 @@ async def admin_rabies_signature(rec_id: int, who: str, request: Request, db: Se
     if not path or not Path(path).exists():
         raise HTTPException(404)
     return FileResponse(path, media_type="image/png")
+
+
+@app.post("/admin/rabies/{rec_id}/edit-owner")
+async def admin_rabies_edit_owner(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    rec = db.get(RabiesVaccineRecord, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    form = await request.form()
+    rec.owner_name    = str(form.get("owner_name", rec.owner_name)).strip() or rec.owner_name
+    rec.owner_phone   = str(form.get("owner_phone", rec.owner_phone)).strip() or rec.owner_phone
+    rec.owner_address = str(form.get("owner_address", rec.owner_address or "")).strip()
+    rec.animal_name   = str(form.get("animal_name", rec.animal_name or "")).strip()
+    rec.animal_breed  = str(form.get("animal_breed", rec.animal_breed or "")).strip()
+    rec.animal_dob    = str(form.get("animal_dob", rec.animal_dob or "")).strip()
+    rec.animal_gender = str(form.get("animal_gender", rec.animal_gender or "")).strip()
+    rec.animal_color  = str(form.get("animal_color", rec.animal_color or "")).strip()
+    rec.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/rabies/{rec_id}?msg=信息已更新", status_code=303)
+
+
+@app.post("/admin/rabies/{rec_id}/delete")
+async def admin_rabies_delete(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    rec = db.get(RabiesVaccineRecord, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    db.delete(rec)
+    db.commit()
+    return RedirectResponse("/admin/rabies?msg=记录已删除", status_code=303)
 
 
 @app.get("/admin/rabies/export/excel")
