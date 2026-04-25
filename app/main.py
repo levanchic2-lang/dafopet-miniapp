@@ -5618,6 +5618,7 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
         owner_signature_path=sig_path,
         owner_signed_at=datetime.utcnow(),
         status="staff_pending",
+        clinic_store=str(form.get("clinic_store", "横岗店")).strip() or "横岗店",
     )
     db.add(record)
     db.commit()
@@ -5709,6 +5710,7 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
         owner_signature_path=sig_path,
         owner_signed_at=datetime.utcnow(),
         status="staff_pending",
+        clinic_store=str(body.get("clinic_store", "横岗店")).strip() or "横岗店",
     )
     db.add(record)
     db.commit()

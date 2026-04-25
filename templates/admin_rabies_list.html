@@ -42,6 +42,7 @@
         <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">手机号</th>
         <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">动物</th>
         <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">免疫证号</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">门店</th>
         <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">状态</th>
         <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">登记时间</th>
         <th style="padding:0.6rem 0.75rem;"></th>
@@ -61,6 +62,7 @@
           {% if rec.cert_no %}<span style="font-weight:600;color:#166534;">{{ rec.cert_no }}</span>
           {% else %}<span style="color:var(--muted);font-size:0.8rem;">待录入</span>{% endif %}
         </td>
+        <td style="padding:0.55rem 0.75rem;font-size:0.82rem;color:var(--muted);">{{ rec.clinic_store or '—' }}</td>
         <td style="padding:0.55rem 0.75rem;">
           {% if rec.status == 'staff_pending' %}
             <span style="background:#fef3c7;color:#92400e;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:4px;font-weight:600;">待医护填写</span>

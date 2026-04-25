@@ -23,6 +23,7 @@ Page({
       animal_dob: "",
       animal_gender: "unknown",
       animal_color: "",
+      clinic_store: "横岗店",
     },
     genderOptions: GENDER_OPTIONS,
     genderIndex: 0,

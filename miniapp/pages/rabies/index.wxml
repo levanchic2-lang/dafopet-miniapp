@@ -3,6 +3,11 @@
   <view class="title">狂犬疫苗免疫登记</view>
   <view class="sub">请填写主人与动物信息，并在下方手写签名完成登记。</view>
 
+  <!-- 门店 -->
+  <view style="background:#fef9c3;border:1rpx solid #fde047;border-radius:12rpx;padding:16rpx 24rpx;margin-bottom:24rpx;font-size:26rpx;color:#854d0e;">
+    📍 服务门店：<text style="font-weight:700;">横岗店</text>（本登记仅限横岗店使用）
+  </view>
+
   <!-- 手机号查询 -->
   <view class="label">手机号 <text style="color:#d97706;">*</text></view>
   <view class="input-row">

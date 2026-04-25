@@ -483,6 +483,8 @@ class RabiesVaccineRecord(Base):
     staff_signature_path: Mapped[str] = mapped_column(String(512), default="")
     staff_signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
 
+    clinic_store: Mapped[str] = mapped_column(String(60), default="横岗店")
+
     # 状态: owner_pending / staff_pending / completed
     status: Mapped[str] = mapped_column(String(20), default="owner_pending")
 

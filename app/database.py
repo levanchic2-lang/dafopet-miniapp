@@ -448,6 +448,10 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rvr_phone ON rabies_vaccine_records(owner_phone)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rvr_status ON rabies_vaccine_records(status)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rvr_created ON rabies_vaccine_records(created_at)"))
+            else:
+                rvr_names = {c[1] for c in rvr_cols}
+                if "clinic_store" not in rvr_names:
+                    conn.execute(text("ALTER TABLE rabies_vaccine_records ADD COLUMN clinic_store VARCHAR(60) DEFAULT '横岗店'"))
 
             conn.commit()
     except Exception:
