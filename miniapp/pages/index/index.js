@@ -783,5 +783,9 @@ Page({
 
   goFeedbackPage() {
     wx.navigateTo({ url: "/pages/feedback/index" });
+  },
+
+  goRabiesPage() {
+    wx.navigateTo({ url: "/pages/rabies/index" });
   }
 });

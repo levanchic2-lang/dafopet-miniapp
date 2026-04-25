@@ -5630,6 +5630,91 @@ async def page_rabies_done(request: Request, id: int = Query(0), db: Session = D
     return templates.TemplateResponse(request, "rabies_done.html", {"rec": rec})
 
 
+@app.post("/api/rabies/submit")
+async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
+    body = await request.json()
+    owner_name    = str(body.get("owner_name", "")).strip()
+    owner_phone   = str(body.get("owner_phone", "")).strip()
+    owner_address = str(body.get("owner_address", "")).strip()
+    animal_name   = str(body.get("animal_name", "")).strip()
+    animal_breed  = str(body.get("animal_breed", "")).strip()
+    animal_dob    = str(body.get("animal_dob", "")).strip()
+    animal_gender = str(body.get("animal_gender", "")).strip()
+    animal_color  = str(body.get("animal_color", "")).strip()
+    owner_sig_data  = str(body.get("owner_signature", "")).strip()
+    customer_id_raw = body.get("customer_id")
+    pet_id_raw      = body.get("pet_id")
+
+    if _is_invalid_name(owner_name) or not owner_name:
+        raise HTTPException(400, detail="请填写真实姓名（不可填写先生/女士）")
+    if not owner_phone:
+        raise HTTPException(400, detail="请填写手机号")
+    if not owner_sig_data or len(owner_sig_data) < 100:
+        raise HTTPException(400, detail="请完成签名")
+
+    sig_path = _save_signature(owner_sig_data, f"owner_{owner_phone}")
+
+    customer_id = int(customer_id_raw) if isinstance(customer_id_raw, int) or (isinstance(customer_id_raw, str) and customer_id_raw.isdigit()) else None
+    if not customer_id:
+        cust = db.query(Customer).filter(Customer.phone == owner_phone).first()
+        if cust:
+            customer_id = cust.id
+            if _is_invalid_name(cust.name):
+                cust.name = owner_name
+            if owner_address and not cust.address:
+                cust.address = owner_address
+        else:
+            cust = Customer(name=owner_name, phone=owner_phone, address=owner_address, source="rabies")
+            db.add(cust)
+            db.flush()
+            customer_id = cust.id
+    else:
+        cust = db.get(Customer, customer_id)
+        if cust and _is_invalid_name(cust.name):
+            cust.name = owner_name
+
+    pet_id = int(pet_id_raw) if isinstance(pet_id_raw, int) or (isinstance(pet_id_raw, str) and str(pet_id_raw).isdigit()) else None
+    if not pet_id and animal_name:
+        pet = Pet(
+            customer_id=customer_id,
+            name=animal_name,
+            breed=animal_breed,
+            gender=animal_gender,
+            birthday_estimate=animal_dob,
+            color_pattern=animal_color,
+            species="dog",
+        )
+        db.add(pet)
+        db.flush()
+        pet_id = pet.id
+    elif pet_id:
+        pet = db.get(Pet, pet_id)
+        if pet:
+            if animal_color:
+                pet.color_pattern = animal_color
+            if animal_dob:
+                pet.birthday_estimate = animal_dob
+
+    record = RabiesVaccineRecord(
+        customer_id=customer_id,
+        pet_id=pet_id,
+        owner_name=owner_name,
+        owner_address=owner_address,
+        owner_phone=owner_phone,
+        animal_name=animal_name,
+        animal_breed=animal_breed,
+        animal_dob=animal_dob,
+        animal_gender=animal_gender,
+        animal_color=animal_color,
+        owner_signature_path=sig_path,
+        owner_signed_at=datetime.utcnow(),
+        status="staff_pending",
+    )
+    db.add(record)
+    db.commit()
+    return {"id": record.id, "status": record.status}
+
+
 # ── 后台：狂犬疫苗登记管理 ───────────────────────────────────────────────────
 
 @app.get("/admin/rabies", response_class=HTMLResponse)

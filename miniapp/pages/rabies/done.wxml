@@ -1,0 +1,21 @@
+<view class="wrap">
+  <view class="icon">✅</view>
+  <view class="title">登记信息已提交</view>
+  <view class="sub">请等待医护人员叫号，核对信息后将为您的宠物进行免疫接种。</view>
+
+  <view wx:if="{{rec}}" class="info-box">
+    <view class="info-row"><text class="info-label">主人姓名：</text>{{rec.owner_name}}</view>
+    <view class="info-row"><text class="info-label">联系电话：</text>{{rec.owner_phone}}</view>
+    <view class="info-row"><text class="info-label">动物名称：</text>{{rec.animal_name || '—'}}</view>
+    <view class="info-row"><text class="info-label">登记编号：</text>#{{rec.id}}</view>
+  </view>
+
+  <view class="steps">
+    <view class="step"><view class="step-num done">✓</view><view class="step-text">主人填写信息并签名（已完成）</view></view>
+    <view class="step"><view class="step-num">2</view><view class="step-text">医护人员填写疫苗信息并签字</view></view>
+    <view class="step"><view class="step-num">3</view><view class="step-text">为宠物注射狂犬疫苗</view></view>
+    <view class="step"><view class="step-num">4</view><view class="step-text">获取免疫证号并录入系统</view></view>
+  </view>
+
+  <view class="hint">如有疑问请咨询前台工作人员</view>
+</view>
