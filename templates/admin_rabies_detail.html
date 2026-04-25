@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+.sig-wrap{border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:#fafafa;}
+.sig-wrap canvas{display:block;touch-action:none;}
+.sig-toolbar{display:flex;justify-content:flex-end;padding:0.3rem 0.5rem;background:var(--bg-elevated);border-top:1px solid var(--border);}
+.sig-toolbar button{padding:0.2rem 0.6rem;border:1px solid var(--border);border-radius:6px;background:var(--card);font-size:0.78rem;cursor:pointer;}
+.info-row{display:flex;gap:0.5rem;align-items:baseline;padding:0.35rem 0;border-bottom:1px solid var(--border);}
+.info-row:last-child{border-bottom:none;}
+.info-label{flex-shrink:0;width:110px;font-size:0.8rem;color:var(--muted);}
+.info-val{font-size:0.9rem;font-weight:500;}
+.step-badge{display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;border-radius:20px;font-size:0.82rem;font-weight:600;}
+.step-done{background:#d1fae5;color:#065f46;}
+.step-pending{background:#fef3c7;color:#92400e;}
+.step-wait{background:#f3f4f6;color:#6b7280;}
+</style>
+{% endblock %}
+{% block body %}
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+  <a href="/admin/rabies" class="btn secondary" style="font-size:0.85rem;">← 返回列表</a>
+  <h1 style="margin:0;font-size:1.25rem;">狂犬疫苗登记 #{{ rec.id }}</h1>
+  <span style="margin-left:auto;font-size:0.82rem;color:var(--muted);">
+    {{ rec.created_at.strftime('%Y-%m-%d %H:%M') if rec.created_at else '' }}
+  </span>
+</div>
+
+<!-- 流程进度 -->
+<div class="card" style="margin-bottom:1rem;">
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+    <span class="step-badge step-done">① 主人填写 ✓</span>
+    <span style="color:var(--muted);">→</span>
+    <span class="step-badge {% if rec.status == 'completed' %}step-done{% else %}step-pending{% endif %}">
+      ② 医护填写{% if rec.status == 'completed' %} ✓{% endif %}
+    </span>
+    <span style="color:var(--muted);">→</span>
+    <span class="step-badge {% if rec.status == 'completed' %}step-pending{% else %}step-wait{% endif %}">③ 注射疫苗</span>
+    <span style="color:var(--muted);">→</span>
+    <span class="step-badge {% if rec.cert_no %}step-done{% else %}step-wait{% endif %}">
+      ④ 录入证号{% if rec.cert_no %} ✓{% endif %}
+    </span>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 360px;gap:1rem;align-items:start;">
+
+  <!-- 左：信息 + 医护填写 -->
+  <div>
+
+    <!-- 主人提交信息 -->
+    <div class="card" style="margin-bottom:1rem;">
+      <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">主人填写信息</h3>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 1rem;">
+        <div>
+          <div style="font-size:0.78rem;font-weight:600;color:var(--muted);margin-bottom:0.5rem;">动物主人</div>
+          <div class="info-row"><span class="info-label">姓名</span><span class="info-val">{{ rec.owner_name }}</span></div>
+          <div class="info-row"><span class="info-label">手机号</span><span class="info-val">{{ rec.owner_phone }}</span></div>
+          <div class="info-row"><span class="info-label">地址</span><span class="info-val">{{ rec.owner_address or '—' }}</span></div>
+        </div>
+        <div>
+          <div style="font-size:0.78rem;font-weight:600;color:var(--muted);margin-bottom:0.5rem;">动物基本情况</div>
+          <div class="info-row"><span class="info-label">动物名称</span><span class="info-val">{{ rec.animal_name or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">品种</span><span class="info-val">{{ rec.animal_breed or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">出生年月/年龄</span><span class="info-val">{{ rec.animal_dob or '—' }}</span></div>
+          <div class="info-row"><span class="info-label">性别</span><span class="info-val">{% if rec.animal_gender == 'male' %}公（雄）{% elif rec.animal_gender == 'female' %}母（雌）{% else %}不详{% endif %}</span></div>
+          <div class="info-row"><span class="info-label">毛色</span><span class="info-val">{{ rec.animal_color or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- 主人签名 -->
+      <div style="margin-top:0.85rem;">
+        <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem;">动物主人签名</div>
+        {% if rec.owner_signature_path %}
+        <div style="border:1px solid var(--border);border-radius:8px;padding:0.5rem;background:#fafafa;display:inline-block;">
+          <img src="/admin/rabies/{{ rec.id }}/signature/owner" style="max-height:80px;display:block;" alt="主人签名" />
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem;">
+          签名时间：{{ rec.owner_signed_at.strftime('%Y-%m-%d %H:%M') if rec.owner_signed_at else '—' }}
+        </div>
+        {% else %}
+        <span style="color:var(--muted);font-size:0.88rem;">暂无签名</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 医护填写表单 -->
+    <div class="card">
+      <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">
+        {% if rec.status == 'completed' %}医护填写信息（已完成，可修改）{% else %}② 医护填写疫苗信息{% endif %}
+      </h3>
+      <form method="post" action="/admin/rabies/{{ rec.id }}/fill">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <div class="row2">
+          <div>
+            <label>疫苗厂家 <span style="color:#d97706;">*</span></label>
+            <input name="vaccine_manufacturer" value="{{ rec.vaccine_manufacturer }}" placeholder="如：成都康华" required />
+          </div>
+          <div>
+            <label>批号</label>
+            <input name="vaccine_batch_no" value="{{ rec.vaccine_batch_no }}" placeholder="批次编号" />
+          </div>
+          <div>
+            <label>免疫时间</label>
+            <input type="date" name="vaccine_date" value="{{ rec.vaccine_date or today }}" />
+          </div>
+          <div>
+            <label>免疫人员（医护）</label>
+            <input name="staff_name" value="{{ rec.staff_name }}" list="vet-list" placeholder="医护姓名" />
+            <datalist id="vet-list">{% for n in vet_names %}<option value="{{ n }}">{% endfor %}</datalist>
+          </div>
+        </div>
+
+        <!-- 医护签名 -->
+        <div style="margin-top:0.85rem;">
+          <label style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:0.4rem;">
+            免疫人员签名
+            {% if rec.staff_signature_path %}<span style="font-weight:400;color:#15803d;font-size:0.78rem;">（已有签名，重签将覆盖）</span>{% endif %}
+          </label>
+          {% if rec.staff_signature_path %}
+          <div style="border:1px solid var(--border);border-radius:8px;padding:0.5rem;background:#fafafa;display:inline-block;margin-bottom:0.5rem;">
+            <img src="/admin/rabies/{{ rec.id }}/signature/staff" style="max-height:60px;display:block;" alt="医护签名" />
+          </div><br/>
+          {% endif %}
+          <input type="hidden" name="staff_signature" id="staff_signature" value="" />
+          <div class="sig-wrap">
+            <canvas id="staff-sig-canvas" height="130"></canvas>
+            <div class="sig-toolbar"><button type="button" onclick="clearStaffSig()">清除重签</button></div>
+          </div>
+          <div style="font-size:0.76rem;color:var(--muted);margin-top:0.25rem;">
+            {% if rec.staff_signature_path %}已有签名，如不需修改可留空。{% else %}请在上方签名。{% endif %}
+          </div>
+        </div>
+
+        <div style="margin-top:1rem;">
+          <button type="submit" class="btn" id="fill-submit-btn">保存医护信息</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- 右：操作面板 -->
+  <div style="display:flex;flex-direction:column;gap:1rem;">
+
+    <!-- 录入免疫证号 -->
+    <div class="card">
+      <h3 style="margin:0 0 0.75rem;font-size:0.95rem;">④ 录入免疫证号</h3>
+      {% if rec.cert_no %}
+      <div style="font-size:1.1rem;font-weight:700;color:#166534;margin-bottom:0.75rem;">{{ rec.cert_no }}</div>
+      {% endif %}
+      <form method="post" action="/admin/rabies/{{ rec.id }}/cert-no">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input name="cert_no" value="{{ rec.cert_no }}" placeholder="打完疫苗后从系统获取并填入"
+               style="width:100%;margin-bottom:0.5rem;" />
+        <button type="submit" class="btn" style="width:100%;">
+          {% if rec.cert_no %}更新证号{% else %}录入证号{% endif %}
+        </button>
+      </form>
+      <p style="font-size:0.76rem;color:var(--muted);margin-top:0.5rem;">
+        注射疫苗后，在官方系统录入数据，获得免疫证号再填写此处。
+      </p>
+    </div>
+
+    <!-- 关联档案 -->
+    <div class="card">
+      <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:var(--muted);">关联档案</h3>
+      {% if rec.customer_id %}
+      <a href="/admin/customers/{{ rec.customer_id }}" class="btn secondary" style="width:100%;display:block;text-align:center;margin-bottom:0.5rem;font-size:0.85rem;">
+        👤 查看客户档案
+      </a>
+      {% endif %}
+      {% if rec.pet_id %}
+      <a href="/admin/pets/{{ rec.pet_id }}" class="btn secondary" style="width:100%;display:block;text-align:center;font-size:0.85rem;">
+        🐾 查看宠物档案
+      </a>
+      {% endif %}
+      {% if not rec.customer_id and not rec.pet_id %}
+      <p style="font-size:0.82rem;color:var(--muted);">暂无关联档案</p>
+      {% endif %}
+    </div>
+
+    <!-- 导出单条 -->
+    <div class="card">
+      <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:var(--muted);">导出</h3>
+      <a href="/admin/rabies/export/excel?q={{ rec.owner_phone }}"
+         class="btn secondary" style="width:100%;display:block;text-align:center;font-size:0.85rem;">
+        ⬇ 导出此记录 Excel
+      </a>
+    </div>
+
+  </div>
+</div>
+
+{% block scripts %}
+<script>
+const staffCanvas = document.getElementById('staff-sig-canvas');
+const staffCtx = staffCanvas.getContext('2d');
+let staffDrawing = false, staffHasSig = false;
+
+function resizeStaffCanvas() {
+  const w = staffCanvas.parentElement.clientWidth;
+  staffCanvas.width = w;
+  staffCanvas.height = 130;
+  staffCtx.strokeStyle = '#1a1a1a';
+  staffCtx.lineWidth = 2.5;
+  staffCtx.lineCap = 'round';
+  staffCtx.lineJoin = 'round';
+}
+resizeStaffCanvas();
+window.addEventListener('resize', resizeStaffCanvas);
+
+function getPos(e, cv) {
+  const r = cv.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return { x: src.clientX - r.left, y: src.clientY - r.top };
+}
+staffCanvas.addEventListener('mousedown', e => { staffDrawing=true; const p=getPos(e,staffCanvas); staffCtx.beginPath(); staffCtx.moveTo(p.x,p.y); });
+staffCanvas.addEventListener('mousemove', e => { if(!staffDrawing)return; const p=getPos(e,staffCanvas); staffCtx.lineTo(p.x,p.y); staffCtx.stroke(); staffHasSig=true; });
+staffCanvas.addEventListener('mouseup', ()=>staffDrawing=false);
+staffCanvas.addEventListener('mouseleave', ()=>staffDrawing=false);
+staffCanvas.addEventListener('touchstart', e=>{e.preventDefault();staffDrawing=true;const p=getPos(e,staffCanvas);staffCtx.beginPath();staffCtx.moveTo(p.x,p.y);},{passive:false});
+staffCanvas.addEventListener('touchmove', e=>{e.preventDefault();if(!staffDrawing)return;const p=getPos(e,staffCanvas);staffCtx.lineTo(p.x,p.y);staffCtx.stroke();staffHasSig=true;},{passive:false});
+staffCanvas.addEventListener('touchend', ()=>staffDrawing=false);
+
+function clearStaffSig() { staffCtx.clearRect(0,0,staffCanvas.width,staffCanvas.height); staffHasSig=false; }
+
+document.getElementById('fill-submit-btn').closest('form').addEventListener('submit', function(e) {
+  if (staffHasSig) {
+    document.getElementById('staff_signature').value = staffCanvas.toDataURL('image/png');
+  }
+});
+</script>
+{% endblock %}
+{% endblock %}

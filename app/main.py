@@ -48,6 +48,7 @@ from app.models import (
     Visit,
     InventoryItem,
     InventoryTransaction,
+    RabiesVaccineRecord,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -5453,3 +5454,414 @@ async def admin_inventory_deactivate(
     item.is_active = False
     db.commit()
     return RedirectResponse("/admin/inventory?msg=已下架", status_code=303)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  狂犬疫苗免疫登记  Rabies Vaccine Registration
+# ─────────────────────────────────────────────────────────────────────────────
+
+_INVALID_NAMES = {"先生", "女士", "mr", "mrs", "ms", "主人", "不详"}
+_SIG_DIR = Path("data/signatures")
+_SIG_DIR.mkdir(parents=True, exist_ok=True)
+
+_RABIES_STATUS_ZH = {
+    "owner_pending": "待医护填写",
+    "staff_pending": "待完成签字",
+    "completed": "已完成",
+}
+
+
+def _is_invalid_name(name: str) -> bool:
+    n = name.strip().lower().replace(" ", "").replace(".", "")
+    return n in _INVALID_NAMES or n in {"先生", "女士"}
+
+
+def _save_signature(data_url: str, prefix: str) -> str:
+    """将 base64 data URL 保存为 PNG 文件，返回相对路径。"""
+    import base64
+    if not data_url or not data_url.startswith("data:image/"):
+        return ""
+    try:
+        header, b64 = data_url.split(",", 1)
+        img_bytes = base64.b64decode(b64)
+        fname = f"{prefix}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}.png"
+        fpath = _SIG_DIR / fname
+        fpath.write_bytes(img_bytes)
+        return str(fpath)
+    except Exception:
+        return ""
+
+
+# ── 公开 API：手机号查询客户 ──────────────────────────────────────────────────
+
+@app.get("/api/customer/lookup")
+async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_db)):
+    if not phone or len(phone) < 6:
+        return {"found": False}
+    cust = db.query(Customer).filter(Customer.phone == phone.strip()).first()
+    if not cust:
+        return {"found": False}
+    pets = db.query(Pet).filter(Pet.customer_id == cust.id).all()
+    invalid_name = _is_invalid_name(cust.name)
+    return {
+        "found": True,
+        "customer_id": cust.id,
+        "name": "" if invalid_name else cust.name,
+        "name_invalid": invalid_name,
+        "address": cust.address,
+        "pets": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "breed": p.breed,
+                "gender": p.gender,
+                "birthday_estimate": p.birthday_estimate,
+                "color_pattern": p.color_pattern,
+                "species": p.species,
+            }
+            for p in pets
+        ],
+    }
+
+
+# ── 公开表单：主人填写 ────────────────────────────────────────────────────────
+
+@app.get("/rabies", response_class=HTMLResponse)
+async def page_rabies_form(request: Request):
+    return templates.TemplateResponse(request, "rabies_form.html", {
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/rabies")
+async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+
+    owner_name    = str(form.get("owner_name", "")).strip()
+    owner_phone   = str(form.get("owner_phone", "")).strip()
+    owner_address = str(form.get("owner_address", "")).strip()
+    animal_name   = str(form.get("animal_name", "")).strip()
+    animal_breed  = str(form.get("animal_breed", "")).strip()
+    animal_dob    = str(form.get("animal_dob", "")).strip()
+    animal_gender = str(form.get("animal_gender", "")).strip()
+    animal_color  = str(form.get("animal_color", "")).strip()
+    owner_sig_data = str(form.get("owner_signature", "")).strip()
+    customer_id_raw = str(form.get("customer_id", "")).strip()
+    pet_id_raw      = str(form.get("pet_id", "")).strip()
+
+    # 校验姓名
+    if _is_invalid_name(owner_name) or not owner_name:
+        return RedirectResponse("/rabies?msg=请填写真实姓名（不可填写先生/女士）", status_code=303)
+    if not owner_phone:
+        return RedirectResponse("/rabies?msg=请填写手机号", status_code=303)
+    if not owner_sig_data or len(owner_sig_data) < 100:
+        return RedirectResponse("/rabies?msg=请完成签名", status_code=303)
+
+    # 保存签名
+    sig_path = _save_signature(owner_sig_data, f"owner_{owner_phone}")
+
+    # 查找或创建客户
+    customer_id = int(customer_id_raw) if customer_id_raw.isdigit() else None
+    if not customer_id:
+        cust = db.query(Customer).filter(Customer.phone == owner_phone).first()
+        if cust:
+            customer_id = cust.id
+            # 如果档案名字是无效的，更新为真实姓名
+            if _is_invalid_name(cust.name):
+                cust.name = owner_name
+            if owner_address and not cust.address:
+                cust.address = owner_address
+        else:
+            cust = Customer(name=owner_name, phone=owner_phone, address=owner_address, source="rabies")
+            db.add(cust)
+            db.flush()
+            customer_id = cust.id
+    else:
+        cust = db.get(Customer, customer_id)
+        if cust and _is_invalid_name(cust.name):
+            cust.name = owner_name
+
+    # 查找或创建宠物
+    pet_id = int(pet_id_raw) if pet_id_raw.isdigit() else None
+    if not pet_id and animal_name:
+        pet = Pet(
+            customer_id=customer_id,
+            name=animal_name,
+            breed=animal_breed,
+            gender=animal_gender,
+            birthday_estimate=animal_dob,
+            color_pattern=animal_color,
+            species="dog",
+        )
+        db.add(pet)
+        db.flush()
+        pet_id = pet.id
+    elif pet_id:
+        pet = db.get(Pet, pet_id)
+        if pet:
+            if animal_color:
+                pet.color_pattern = animal_color
+            if animal_dob:
+                pet.birthday_estimate = animal_dob
+
+    record = RabiesVaccineRecord(
+        customer_id=customer_id,
+        pet_id=pet_id,
+        owner_name=owner_name,
+        owner_address=owner_address,
+        owner_phone=owner_phone,
+        animal_name=animal_name,
+        animal_breed=animal_breed,
+        animal_dob=animal_dob,
+        animal_gender=animal_gender,
+        animal_color=animal_color,
+        owner_signature_path=sig_path,
+        owner_signed_at=datetime.utcnow(),
+        status="staff_pending",
+    )
+    db.add(record)
+    db.commit()
+    return RedirectResponse(f"/rabies/done?id={record.id}", status_code=303)
+
+
+@app.get("/rabies/done", response_class=HTMLResponse)
+async def page_rabies_done(request: Request, id: int = Query(0), db: Session = Depends(get_db)):
+    rec = db.get(RabiesVaccineRecord, id) if id else None
+    return templates.TemplateResponse(request, "rabies_done.html", {"rec": rec})
+
+
+# ── 后台：狂犬疫苗登记管理 ───────────────────────────────────────────────────
+
+@app.get("/admin/rabies", response_class=HTMLResponse)
+async def admin_rabies_list(
+    request: Request, db: Session = Depends(get_db),
+    q: str = Query(""), status: str = Query(""),
+    date_from: str = Query(""), date_to: str = Query(""),
+    page: int = Query(1),
+):
+    require_admin(request)
+    query = db.query(RabiesVaccineRecord)
+    if q:
+        query = query.filter(or_(
+            RabiesVaccineRecord.owner_name.ilike(f"%{q}%"),
+            RabiesVaccineRecord.owner_phone.ilike(f"%{q}%"),
+            RabiesVaccineRecord.cert_no.ilike(f"%{q}%"),
+        ))
+    if status:
+        query = query.filter(RabiesVaccineRecord.status == status)
+    if date_from:
+        query = query.filter(RabiesVaccineRecord.created_at >= date_from)
+    if date_to:
+        query = query.filter(RabiesVaccineRecord.created_at <= date_to + " 23:59:59")
+    total = query.count()
+    page_size = 30
+    records = query.order_by(RabiesVaccineRecord.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    return templates.TemplateResponse(request, "admin_rabies_list.html", {
+        "records": records, "total": total, "page": page,
+        "total_pages": total_pages, "page_size": page_size,
+        "q": q, "status": status, "date_from": date_from, "date_to": date_to,
+        "status_zh": _RABIES_STATUS_ZH,
+    })
+
+
+@app.get("/admin/rabies/{rec_id}", response_class=HTMLResponse)
+async def admin_rabies_detail(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    rec = db.get(RabiesVaccineRecord, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%")
+    ).all()
+    vet_names = [v[0] for v in vets]
+    return templates.TemplateResponse(request, "admin_rabies_detail.html", {
+        "rec": rec,
+        "vet_names": vet_names,
+        "status_zh": _RABIES_STATUS_ZH,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/rabies/{rec_id}/fill")
+async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    """医护填写疫苗信息 + 签名"""
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    rec = db.get(RabiesVaccineRecord, rec_id)
+    if not rec:
+        raise HTTPException(404)
+
+    rec.vaccine_manufacturer = str(form.get("vaccine_manufacturer", "")).strip()[:120]
+    rec.vaccine_batch_no     = str(form.get("vaccine_batch_no", "")).strip()[:80]
+    rec.vaccine_date         = str(form.get("vaccine_date", "")).strip()[:20]
+    rec.staff_name           = str(form.get("staff_name", "")).strip()[:80]
+
+    staff_sig_data = str(form.get("staff_signature", "")).strip()
+    if staff_sig_data and len(staff_sig_data) > 100:
+        rec.staff_signature_path = _save_signature(staff_sig_data, f"staff_{rec_id}")
+        rec.staff_signed_at = datetime.utcnow()
+
+    rec.status = "completed"
+    rec.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/rabies/{rec_id}?msg=已保存", status_code=303)
+
+
+@app.post("/admin/rabies/{rec_id}/cert-no")
+async def admin_rabies_cert_no(rec_id: int, request: Request, db: Session = Depends(get_db),
+                                csrf_token: str = Form(""), cert_no: str = Form("")):
+    """录入免疫证号（最后一步）"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(RabiesVaccineRecord, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    rec.cert_no = cert_no.strip()[:60]
+    rec.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/rabies/{rec_id}?msg=免疫证号已录入", status_code=303)
+
+
+@app.get("/admin/rabies/{rec_id}/signature/{who}")
+async def admin_rabies_signature(rec_id: int, who: str, request: Request, db: Session = Depends(get_db)):
+    """返回签名图片文件"""
+    require_admin(request)
+    rec = db.get(RabiesVaccineRecord, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    path = rec.owner_signature_path if who == "owner" else rec.staff_signature_path
+    if not path or not Path(path).exists():
+        raise HTTPException(404)
+    return FileResponse(path, media_type="image/png")
+
+
+@app.get("/admin/rabies/export/excel")
+async def admin_rabies_export(
+    request: Request, db: Session = Depends(get_db),
+    date_from: str = Query(""), date_to: str = Query(""),
+    status: str = Query(""),
+):
+    """导出 Excel，格式与登记本一致，签名图片嵌入。"""
+    require_admin(request)
+    import io
+    import base64
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.drawing.image import Image as XLImage
+    from PIL import Image as PILImage
+
+    query = db.query(RabiesVaccineRecord)
+    if status:
+        query = query.filter(RabiesVaccineRecord.status == status)
+    if date_from:
+        query = query.filter(RabiesVaccineRecord.created_at >= date_from)
+    if date_to:
+        query = query.filter(RabiesVaccineRecord.created_at <= date_to + " 23:59:59")
+    records = query.order_by(RabiesVaccineRecord.id.asc()).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "狂犬疫苗免疫登记"
+
+    thin = Side(style="thin")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+    hdr_font = Font(bold=True, size=10)
+    hdr_fill = PatternFill("solid", fgColor="D9E1F2")
+
+    # 列宽
+    col_widths = [14, 10, 22, 13, 10, 12, 8, 10, 14, 14, 12, 18, 18]
+    cols = ["免疫证号", "姓名", "地址", "电话", "品种", "出生年月/年龄", "性别", "毛色",
+            "厂家", "批号", "免疫时间", "免疫人员签名", "动物主人签名"]
+    for i, (col, w) in enumerate(zip(cols, col_widths), 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # 标题行（两行 merged header，仿登记本）
+    groups = [
+        ("免疫证号", 1, 1),
+        ("动物主人情况", 2, 4),
+        ("动物基本情况", 5, 8),
+        ("疫苗使用情况", 9, 11),
+        ("免疫人员签名", 12, 12),
+        ("动物主人签名", 13, 13),
+    ]
+    for label, c1, c2 in groups:
+        ws.merge_cells(start_row=1, start_column=c1, end_row=1 if c1 in (1, 12, 13) else 1, end_column=c2)
+        cell = ws.cell(row=1, column=c1, value=label)
+        cell.font = hdr_font
+        cell.fill = hdr_fill
+        cell.alignment = center
+        cell.border = border
+        if c1 != c2:
+            ws.merge_cells(start_row=1, start_column=c1, end_row=1, end_column=c2)
+
+    # 子标题行
+    sub_headers = ["", "姓名", "地址", "电话", "品种", "出生年月/年龄", "性别", "毛色", "厂家", "批号", "免疫时间", "", ""]
+    for i, h in enumerate(sub_headers, 1):
+        cell = ws.cell(row=2, column=i, value=h)
+        cell.font = hdr_font
+        cell.fill = hdr_fill
+        cell.alignment = center
+        cell.border = border
+    ws.row_dimensions[1].height = 22
+    ws.row_dimensions[2].height = 18
+
+    # 数据行（每行60高，放签名图片）
+    ROW_H = 60
+    for r_idx, rec in enumerate(records, 3):
+        ws.row_dimensions[r_idx].height = ROW_H
+        values = [
+            rec.cert_no,
+            rec.owner_name,
+            rec.owner_address,
+            rec.owner_phone,
+            rec.animal_breed,
+            rec.animal_dob,
+            rec.animal_gender,
+            rec.animal_color,
+            rec.vaccine_manufacturer,
+            rec.vaccine_batch_no,
+            rec.vaccine_date,
+            "",  # 签名列留空，图片覆盖
+            "",
+        ]
+        for c_idx, val in enumerate(values, 1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=val)
+            cell.alignment = left
+            cell.border = border
+
+        # 嵌入签名图片
+        for col_idx, sig_path in [(12, rec.staff_signature_path), (13, rec.owner_signature_path)]:
+            if sig_path and Path(sig_path).exists():
+                try:
+                    pil_img = PILImage.open(sig_path).convert("RGBA")
+                    # 缩放到适合单元格的尺寸（约 120x45 px @96dpi）
+                    pil_img.thumbnail((120, 45), PILImage.LANCZOS)
+                    buf = io.BytesIO()
+                    pil_img.save(buf, format="PNG")
+                    buf.seek(0)
+                    xl_img = XLImage(buf)
+                    col_letter = get_column_letter(col_idx)
+                    # anchor: 列字母 + 行号
+                    xl_img.anchor = f"{col_letter}{r_idx}"
+                    ws.add_image(xl_img)
+                except Exception:
+                    pass
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    from fastapi.responses import Response
+    fname = f"狂犬疫苗登记_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    return Response(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}"},
+    )

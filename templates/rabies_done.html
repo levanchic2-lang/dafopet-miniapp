@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>登记成功</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f5f5;color:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1rem;}
+.card{background:#fff;border-radius:16px;padding:2rem 1.5rem;max-width:420px;width:100%;text-align:center;box-shadow:0 2px 16px rgba(0,0,0,.1);}
+.icon{font-size:3rem;margin-bottom:1rem;}
+h1{font-size:1.3rem;font-weight:700;margin-bottom:0.5rem;}
+p{font-size:0.9rem;color:#555;line-height:1.7;margin-bottom:0.4rem;}
+.info-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:1rem;margin:1.2rem 0;text-align:left;font-size:0.88rem;line-height:2;}
+.info-label{color:#6b7280;font-size:0.78rem;}
+.steps{text-align:left;margin:1rem 0;font-size:0.88rem;}
+.step{display:flex;gap:0.6rem;margin-bottom:0.6rem;align-items:flex-start;}
+.step-num{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:#1a56db;color:#fff;font-size:0.75rem;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.step-text{color:#374151;line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">✅</div>
+  <h1>登记信息已提交</h1>
+  <p>请等待医护人员叫号，核对信息后将为您的宠物进行免疫接种。</p>
+
+  {% if rec %}
+  <div class="info-box">
+    <div><span class="info-label">主人姓名：</span>{{ rec.owner_name }}</div>
+    <div><span class="info-label">联系电话：</span>{{ rec.owner_phone }}</div>
+    <div><span class="info-label">动物名称：</span>{{ rec.animal_name or '—' }}</div>
+    <div><span class="info-label">登记编号：</span>#{{ rec.id }}</div>
+  </div>
+  {% endif %}
+
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">✅ 主人填写信息并签名（已完成）</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">医护人员填写疫苗信息并签字</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">为宠物注射狂犬疫苗</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">获取免疫证号并录入系统</div></div>
+  </div>
+
+  <p style="font-size:0.78rem;color:#9ca3af;margin-top:0.5rem;">如有疑问请咨询前台工作人员</p>
+</div>
+</body>
+</html>

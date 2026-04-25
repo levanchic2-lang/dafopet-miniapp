@@ -415,6 +415,40 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_tx_type ON inventory_transactions(tx_type)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_tx_created ON inventory_transactions(created_at)"))
 
+            # rabies_vaccine_records 狂犬疫苗登记表
+            rvr_cols = conn.execute(text("PRAGMA table_info(rabies_vaccine_records)")).fetchall()
+            if not rvr_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS rabies_vaccine_records ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "cert_no VARCHAR(60) DEFAULT '', "
+                    "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                    "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                    "owner_name VARCHAR(120) DEFAULT '', "
+                    "owner_address VARCHAR(500) DEFAULT '', "
+                    "owner_phone VARCHAR(40) DEFAULT '', "
+                    "animal_name VARCHAR(80) DEFAULT '', "
+                    "animal_breed VARCHAR(80) DEFAULT '', "
+                    "animal_dob VARCHAR(40) DEFAULT '', "
+                    "animal_gender VARCHAR(10) DEFAULT '', "
+                    "animal_color VARCHAR(80) DEFAULT '', "
+                    "owner_signature_path VARCHAR(512) DEFAULT '', "
+                    "owner_signed_at DATETIME DEFAULT NULL, "
+                    "vaccine_manufacturer VARCHAR(120) DEFAULT '', "
+                    "vaccine_batch_no VARCHAR(80) DEFAULT '', "
+                    "vaccine_date VARCHAR(20) DEFAULT '', "
+                    "staff_name VARCHAR(80) DEFAULT '', "
+                    "staff_signature_path VARCHAR(512) DEFAULT '', "
+                    "staff_signed_at DATETIME DEFAULT NULL, "
+                    "status VARCHAR(20) DEFAULT 'owner_pending', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rvr_phone ON rabies_vaccine_records(owner_phone)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rvr_status ON rabies_vaccine_records(status)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rvr_created ON rabies_vaccine_records(created_at)"))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

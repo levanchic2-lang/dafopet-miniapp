@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>狂犬疫苗免疫登记</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f5f5;color:#1a1a1a;padding:1rem;}
+.wrap{max-width:600px;margin:0 auto;}
+h1{font-size:1.25rem;font-weight:700;text-align:center;margin-bottom:0.25rem;}
+.subtitle{text-align:center;font-size:0.82rem;color:#666;margin-bottom:1.2rem;}
+.card{background:#fff;border-radius:12px;padding:1.2rem;margin-bottom:1rem;box-shadow:0 1px 6px rgba(0,0,0,.08);}
+.section-title{font-weight:700;font-size:0.9rem;color:#1a56db;margin-bottom:0.85rem;padding-bottom:0.4rem;border-bottom:1px solid #e5e7eb;}
+.field{margin-bottom:0.85rem;}
+label{display:block;font-size:0.82rem;font-weight:600;color:#444;margin-bottom:0.3rem;}
+label .req{color:#e53e3e;margin-left:2px;}
+input[type=text],input[type=tel],input[type=date],select,textarea{
+  width:100%;padding:0.6rem 0.75rem;border:1px solid #d1d5db;border-radius:8px;
+  font-size:0.9rem;font-family:inherit;background:#fff;
+  transition:border-color .15s;
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#1a56db;box-shadow:0 0 0 2px rgba(26,86,219,.12);}
+.radio-group{display:flex;gap:1rem;margin-top:0.15rem;}
+.radio-group label{display:flex;align-items:center;gap:0.35rem;font-weight:400;cursor:pointer;}
+.autofill-badge{display:inline-block;font-size:0.72rem;background:#ecfdf5;color:#065f46;border-radius:4px;padding:0.1rem 0.4rem;margin-left:0.4rem;vertical-align:middle;}
+.lookup-row{display:flex;gap:0.5rem;}
+.lookup-row input{flex:1;}
+.lookup-btn{padding:0.6rem 0.9rem;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:0.85rem;cursor:pointer;white-space:nowrap;}
+.lookup-btn:disabled{opacity:.5;}
+.pet-selector{display:flex;flex-direction:column;gap:0.5rem;margin-bottom:0.75rem;}
+.pet-card{padding:0.6rem 0.85rem;border:1.5px solid #d1d5db;border-radius:8px;cursor:pointer;font-size:0.88rem;transition:border-color .15s;}
+.pet-card.selected{border-color:#1a56db;background:#eff6ff;}
+.pet-card-name{font-weight:600;}
+.pet-card-meta{font-size:0.76rem;color:#666;margin-top:0.15rem;}
+.new-pet-btn{padding:0.5rem;border:1.5px dashed #d1d5db;border-radius:8px;text-align:center;font-size:0.85rem;color:#666;cursor:pointer;}
+.new-pet-btn.selected{border-color:#1a56db;color:#1a56db;}
+.sig-wrap{border:1.5px solid #d1d5db;border-radius:8px;overflow:hidden;position:relative;background:#fafafa;}
+.sig-wrap canvas{display:block;touch-action:none;}
+.sig-toolbar{display:flex;justify-content:flex-end;padding:0.3rem 0.5rem;background:#f3f4f6;border-top:1px solid #e5e7eb;}
+.sig-toolbar button{padding:0.2rem 0.6rem;border:1px solid #d1d5db;border-radius:6px;background:#fff;font-size:0.78rem;cursor:pointer;}
+.sig-hint{font-size:0.76rem;color:#9ca3af;margin-top:0.3rem;}
+.msg-error{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:0.75rem 1rem;color:#dc2626;font-size:0.88rem;margin-bottom:1rem;}
+.msg-info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:0.6rem 0.85rem;color:#1e40af;font-size:0.82rem;margin-bottom:0.85rem;}
+.submit-btn{width:100%;padding:0.85rem;background:#1a56db;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:600;cursor:pointer;}
+.submit-btn:disabled{opacity:.5;}
+.hidden{display:none!important;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🐕 狂犬疫苗免疫登记</h1>
+  <p class="subtitle">请如实填写信息，带 <span style="color:#e53e3e;">*</span> 的为必填项</p>
+
+  {% if msg %}
+  <div class="msg-error">{{ msg }}</div>
+  {% endif %}
+
+  <form method="post" action="/rabies" id="rabies-form">
+    <!-- 隐藏字段 -->
+    <input type="hidden" name="customer_id" id="customer_id" value="" />
+    <input type="hidden" name="pet_id" id="pet_id" value="" />
+    <input type="hidden" name="owner_signature" id="owner_signature" value="" />
+
+    <!-- ── 第一部分：主人信息 ── -->
+    <div class="card">
+      <div class="section-title">动物主人信息</div>
+
+      <div class="field">
+        <label>手机号 <span class="req">*</span></label>
+        <div class="lookup-row">
+          <input type="tel" name="owner_phone" id="owner_phone" placeholder="输入手机号自动查找档案" maxlength="20" required />
+          <button type="button" class="lookup-btn" id="lookup-btn" onclick="lookupCustomer()">查询</button>
+        </div>
+      </div>
+
+      <div id="lookup-result"></div>
+
+      <div class="field">
+        <label>主人姓名 <span class="req">*</span> <span id="name-autofill-badge" class="autofill-badge hidden">已自动填充</span></label>
+        <input type="text" name="owner_name" id="owner_name" placeholder="请填写真实姓名" required maxlength="60" />
+        <div id="name-error" style="color:#dc2626;font-size:0.78rem;margin-top:0.2rem;display:none;">姓名不能填写"先生"或"女士"，请填写真实姓名</div>
+      </div>
+
+      <div class="field">
+        <label>家庭住址</label>
+        <input type="text" name="owner_address" id="owner_address" placeholder="详细地址" maxlength="200" />
+      </div>
+    </div>
+
+    <!-- ── 第二部分：动物信息 ── -->
+    <div class="card">
+      <div class="section-title">动物基本情况</div>
+
+      <div id="pet-selector-wrap" class="hidden">
+        <div class="msg-info">已找到该手机号下的宠物，请选择或新增：</div>
+        <div class="pet-selector" id="pet-selector"></div>
+      </div>
+
+      <div id="animal-fields">
+        <div class="field">
+          <label>动物名称 <span class="req">*</span></label>
+          <input type="text" name="animal_name" id="animal_name" placeholder="如：旺财" maxlength="40" required />
+        </div>
+        <div class="field">
+          <label>品种 <span class="req">*</span></label>
+          <input type="text" name="animal_breed" id="animal_breed" placeholder="如：金毛、泰迪" maxlength="60" required />
+        </div>
+        <div class="field">
+          <label>出生年月 / 年龄</label>
+          <input type="text" name="animal_dob" id="animal_dob" placeholder="如：2022-03 或 2岁" maxlength="30" />
+        </div>
+        <div class="field">
+          <label>性别</label>
+          <div class="radio-group">
+            <label><input type="radio" name="animal_gender" value="male" /> 公（雄）</label>
+            <label><input type="radio" name="animal_gender" value="female" /> 母（雌）</label>
+            <label><input type="radio" name="animal_gender" value="unknown" checked /> 不详</label>
+          </div>
+        </div>
+        <div class="field">
+          <label>毛色</label>
+          <input type="text" name="animal_color" id="animal_color" placeholder="如：黄色、黑白花" maxlength="60" />
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 主人签名 ── -->
+    <div class="card">
+      <div class="section-title">动物主人签名 <span class="req">*</span></div>
+      <p style="font-size:0.82rem;color:#666;margin-bottom:0.75rem;">
+        本人确认以上信息真实有效，同意为动物接种狂犬疫苗。
+      </p>
+      <div class="sig-wrap">
+        <canvas id="sig-canvas" width="520" height="160"></canvas>
+        <div class="sig-toolbar">
+          <button type="button" onclick="clearSig()">清除重签</button>
+        </div>
+      </div>
+      <div class="sig-hint">请在上方空白处手写签名</div>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submit-btn">提交登记</button>
+  </form>
+</div>
+
+<script>
+// ── 签名画板 ──────────────────────────────────────────────────────────────
+const canvas = document.getElementById('sig-canvas');
+const ctx = canvas.getContext('2d');
+let drawing = false, hasSig = false;
+
+function resizeCanvas() {
+  const w = canvas.parentElement.clientWidth;
+  canvas.width = w;
+  canvas.height = Math.round(w * 0.32);
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return { x: src.clientX - r.left, y: src.clientY - r.top };
+}
+canvas.addEventListener('mousedown', e => { drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+canvas.addEventListener('mousemove', e => { if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; });
+canvas.addEventListener('mouseup', () => drawing = false);
+canvas.addEventListener('mouseleave', () => drawing = false);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, {passive:false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasSig = true; }, {passive:false});
+canvas.addEventListener('touchend', () => drawing = false);
+
+function clearSig() { ctx.clearRect(0, 0, canvas.width, canvas.height); hasSig = false; }
+
+// ── 姓名验证 ──────────────────────────────────────────────────────────────
+const INVALID_NAMES = new Set(['先生','女士','mr','mrs','ms','主人','不详']);
+function isInvalidName(n) {
+  return INVALID_NAMES.has(n.trim().toLowerCase().replace(/\s/g,'').replace(/\./g,''));
+}
+document.getElementById('owner_name').addEventListener('input', function() {
+  document.getElementById('name-error').style.display = isInvalidName(this.value) ? '' : 'none';
+});
+
+// ── 客户查询 ──────────────────────────────────────────────────────────────
+let _existingPets = [];
+let _selectedPetId = null; // null = new pet
+
+async function lookupCustomer() {
+  const phone = document.getElementById('owner_phone').value.trim();
+  if (!phone) return;
+  const btn = document.getElementById('lookup-btn');
+  btn.disabled = true; btn.textContent = '查询中…';
+  try {
+    const res = await fetch('/api/customer/lookup?phone=' + encodeURIComponent(phone));
+    const data = await res.json();
+    btn.disabled = false; btn.textContent = '查询';
+    handleLookup(data);
+  } catch(e) { btn.disabled = false; btn.textContent = '查询'; }
+}
+
+// 手机号输入完毕自动触发
+document.getElementById('owner_phone').addEventListener('blur', function() {
+  if (this.value.length >= 8) lookupCustomer();
+});
+
+function handleLookup(data) {
+  const resultDiv = document.getElementById('lookup-result');
+  if (!data.found) {
+    resultDiv.innerHTML = '<div class="msg-info">未找到该手机号的档案，将在提交后自动新建。</div>';
+    document.getElementById('customer_id').value = '';
+    hidePetSelector();
+    return;
+  }
+  document.getElementById('customer_id').value = data.customer_id;
+  // 填充姓名
+  const nameEl = document.getElementById('owner_name');
+  if (data.name) {
+    nameEl.value = data.name;
+    document.getElementById('name-autofill-badge').classList.remove('hidden');
+  } else if (data.name_invalid) {
+    nameEl.value = '';
+    nameEl.placeholder = '档案姓名无效，请填写真实姓名';
+    resultDiv.innerHTML = '<div class="msg-error">档案中的姓名为"先生/女士"，请在下方填写真实姓名。</div>';
+  }
+  // 填充地址
+  if (data.address) document.getElementById('owner_address').value = data.address;
+  // 宠物选择
+  _existingPets = data.pets || [];
+  if (_existingPets.length > 0) {
+    showPetSelector(_existingPets);
+  } else {
+    resultDiv.innerHTML += '<div class="msg-info" style="margin-top:0.5rem;">已找到客户档案，暂无宠物，请填写新宠物信息。</div>';
+  }
+}
+
+function showPetSelector(pets) {
+  const wrap = document.getElementById('pet-selector-wrap');
+  const sel = document.getElementById('pet-selector');
+  wrap.classList.remove('hidden');
+  sel.innerHTML = '';
+  pets.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'pet-card';
+    div.dataset.petId = p.id;
+    div.innerHTML = `<div class="pet-card-name">${p.name || '未命名'}</div>
+      <div class="pet-card-meta">${p.breed || '品种不详'} · ${p.gender === 'male' ? '公' : p.gender === 'female' ? '母' : '不详'} · ${p.birthday_estimate || '年龄不详'} · 毛色：${p.color_pattern || '不详'}</div>`;
+    div.onclick = () => selectPet(p, div);
+    sel.appendChild(div);
+  });
+  const newDiv = document.createElement('div');
+  newDiv.className = 'new-pet-btn selected';
+  newDiv.id = 'new-pet-btn';
+  newDiv.textContent = '＋ 登记新宠物';
+  newDiv.onclick = () => selectNewPet(newDiv);
+  sel.appendChild(newDiv);
+  // 默认选择"新宠物"
+  selectNewPet(newDiv);
+}
+
+function hidePetSelector() {
+  document.getElementById('pet-selector-wrap').classList.add('hidden');
+  document.getElementById('animal-fields').style.display = '';
+  _selectedPetId = null;
+}
+
+function selectPet(pet, el) {
+  document.querySelectorAll('.pet-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('new-pet-btn').classList.remove('selected');
+  el.classList.add('selected');
+  _selectedPetId = pet.id;
+  document.getElementById('pet_id').value = pet.id;
+  // 填充动物信息
+  document.getElementById('animal_name').value = pet.name || '';
+  document.getElementById('animal_breed').value = pet.breed || '';
+  document.getElementById('animal_dob').value = pet.birthday_estimate || '';
+  document.getElementById('animal_color').value = pet.color_pattern || '';
+  const genderVal = pet.gender || 'unknown';
+  document.querySelectorAll('[name="animal_gender"]').forEach(r => r.checked = (r.value === genderVal));
+  // 仍显示字段（可修改毛色等）
+  document.getElementById('animal-fields').style.display = '';
+}
+
+function selectNewPet(el) {
+  document.querySelectorAll('.pet-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  _selectedPetId = null;
+  document.getElementById('pet_id').value = '';
+  // 清空动物字段
+  ['animal_name','animal_breed','animal_dob','animal_color'].forEach(id => document.getElementById(id).value = '');
+  document.querySelectorAll('[name="animal_gender"]').forEach(r => r.checked = (r.value === 'unknown'));
+  document.getElementById('animal-fields').style.display = '';
+}
+
+// ── 表单提交 ──────────────────────────────────────────────────────────────
+document.getElementById('rabies-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  // 姓名校验
+  const name = document.getElementById('owner_name').value.trim();
+  if (!name || isInvalidName(name)) {
+    document.getElementById('name-error').style.display = '';
+    document.getElementById('owner_name').focus();
+    return;
+  }
+  // 签名校验
+  if (!hasSig) {
+    alert('请完成动物主人签名后再提交。');
+    return;
+  }
+  // 写入签名 data URL
+  document.getElementById('owner_signature').value = canvas.toDataURL('image/png');
+  this.submit();
+});
+</script>
+</body>
+</html>

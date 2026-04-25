@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="margin-bottom:1rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+    <div>
+      <h1 style="margin:0;">狂犬疫苗登记</h1>
+      <p class="sub" style="margin:0.25rem 0 0;">共 {{ total }} 条记录</p>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+      <a href="/admin/rabies/export/excel?status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}"
+         class="btn secondary" style="font-size:0.88rem;">⬇ 导出 Excel</a>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:1rem;">
+  <form method="get" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
+    <input name="q" value="{{ q }}" placeholder="姓名 / 手机号 / 免疫证号" style="flex:1;min-width:160px;" />
+    <select name="status" style="min-width:120px;">
+      <option value="">全部状态</option>
+      {% for k, zh in status_zh.items() %}
+      <option value="{{ k }}" {% if status == k %}selected{% endif %}>{{ zh }}</option>
+      {% endfor %}
+    </select>
+    <input type="date" name="date_from" value="{{ date_from }}" style="min-width:130px;" />
+    <span style="color:var(--muted);font-size:0.85rem;">至</span>
+    <input type="date" name="date_to" value="{{ date_to }}" style="min-width:130px;" />
+    <button type="submit" class="btn secondary">筛选</button>
+    {% if q or status or date_from or date_to %}
+    <a href="/admin/rabies" class="btn secondary">清除</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if records %}
+<div class="card" style="padding:0;overflow:hidden;">
+  <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
+    <thead>
+      <tr style="background:var(--bg-elevated);border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:0.6rem 1rem;font-weight:600;">#</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">主人姓名</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">手机号</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">动物</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">免疫证号</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">状态</th>
+        <th style="text-align:left;padding:0.6rem 0.75rem;font-weight:600;">登记时间</th>
+        <th style="padding:0.6rem 0.75rem;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rec in records %}
+      <tr style="border-bottom:1px solid var(--border);{% if rec.status == 'staff_pending' %}background:#fffbeb;{% endif %}">
+        <td style="padding:0.55rem 1rem;color:var(--muted);font-size:0.8rem;">{{ rec.id }}</td>
+        <td style="padding:0.55rem 0.75rem;font-weight:600;">{{ rec.owner_name }}</td>
+        <td style="padding:0.55rem 0.75rem;color:var(--muted);">{{ rec.owner_phone }}</td>
+        <td style="padding:0.55rem 0.75rem;">
+          {% if rec.animal_name %}{{ rec.animal_name }}{% endif %}
+          {% if rec.animal_breed %}<span style="color:var(--muted);font-size:0.8rem;"> · {{ rec.animal_breed }}</span>{% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;">
+          {% if rec.cert_no %}<span style="font-weight:600;color:#166534;">{{ rec.cert_no }}</span>
+          {% else %}<span style="color:var(--muted);font-size:0.8rem;">待录入</span>{% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;">
+          {% if rec.status == 'staff_pending' %}
+            <span style="background:#fef3c7;color:#92400e;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:4px;font-weight:600;">待医护填写</span>
+          {% elif rec.status == 'completed' and not rec.cert_no %}
+            <span style="background:#dbeafe;color:#1e40af;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:4px;">待录证号</span>
+          {% elif rec.status == 'completed' %}
+            <span style="background:#d1fae5;color:#065f46;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:4px;">已完成</span>
+          {% else %}
+            <span style="color:var(--muted);font-size:0.8rem;">{{ status_zh.get(rec.status, rec.status) }}</span>
+          {% endif %}
+        </td>
+        <td style="padding:0.55rem 0.75rem;color:var(--muted);font-size:0.8rem;">
+          {{ rec.created_at.strftime('%m-%d %H:%M') if rec.created_at else '—' }}
+        </td>
+        <td style="padding:0.55rem 0.75rem;text-align:right;">
+          <a href="/admin/rabies/{{ rec.id }}" style="font-size:0.82rem;">详情 →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;padding:1.2rem 0;font-size:0.88rem;">
+  {% set qs = '&q='~q~'&status='~status~'&date_from='~date_from~'&date_to='~date_to %}
+  {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" class="btn secondary" style="padding:0.3rem 0.7rem;">‹ 上一页</a>{% endif %}
+  <span style="color:var(--muted);">第 {{ page }} / {{ total_pages }} 页</span>
+  {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}" class="btn secondary" style="padding:0.3rem 0.7rem;">下一页 ›</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="card" style="text-align:center;padding:3rem;color:var(--muted);">
+  暂无登记记录
+</div>
+{% endif %}
+{% endblock %}

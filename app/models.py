@@ -446,6 +446,53 @@ class InventoryTransaction(Base):
     item = relationship("InventoryItem", back_populates="transactions")
 
 
+class RabiesVaccineRecord(Base):
+    """狂犬疫苗免疫登记表"""
+    __tablename__ = "rabies_vaccine_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    cert_no: Mapped[str] = mapped_column(String(60), default="")          # 免疫证号（最后录入）
+
+    # 关联客户/宠物档案
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+
+    # 第一部分：主人填写
+    owner_name:    Mapped[str] = mapped_column(String(120), default="")   # 姓名
+    owner_address: Mapped[str] = mapped_column(String(500), default="")   # 地址
+    owner_phone:   Mapped[str] = mapped_column(String(40),  default="")   # 电话
+
+    # 动物基本情况（主人填）
+    animal_name:   Mapped[str] = mapped_column(String(80),  default="")   # 动物名称
+    animal_breed:  Mapped[str] = mapped_column(String(80),  default="")   # 品种
+    animal_dob:    Mapped[str] = mapped_column(String(40),  default="")   # 出生年月/年龄
+    animal_gender: Mapped[str] = mapped_column(String(10),  default="")   # 性别
+    animal_color:  Mapped[str] = mapped_column(String(80),  default="")   # 毛色
+
+    # 主人签名
+    owner_signature_path: Mapped[str] = mapped_column(String(512), default="")
+    owner_signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+
+    # 第二部分：医护填写
+    vaccine_manufacturer: Mapped[str] = mapped_column(String(120), default="")  # 厂家
+    vaccine_batch_no:     Mapped[str] = mapped_column(String(80),  default="")  # 批号
+    vaccine_date:         Mapped[str] = mapped_column(String(20),  default="")  # 免疫时间
+
+    # 医护签名
+    staff_name:           Mapped[str] = mapped_column(String(80),  default="")
+    staff_signature_path: Mapped[str] = mapped_column(String(512), default="")
+    staff_signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+
+    # 状态: owner_pending / staff_pending / completed
+    status: Mapped[str] = mapped_column(String(20), default="owner_pending")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
 
