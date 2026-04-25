@@ -29,11 +29,13 @@
   width: 100%;
   border: 1.5rpx solid #e0e0e0;
   border-radius: 12rpx;
-  padding: 18rpx 20rpx;
-  font-size: 28rpx;
+  padding: 22rpx 24rpx;
+  font-size: 30rpx;
   color: #171717;
   background: #fafafa;
   box-sizing: border-box;
+  min-height: 80rpx;
+  line-height: 1.4;
 }
 .input-row {
   display: flex;
@@ -68,11 +70,13 @@
   width: 100%;
   border: 1.5rpx solid #e0e0e0;
   border-radius: 12rpx;
-  padding: 18rpx 20rpx;
-  font-size: 28rpx;
+  padding: 22rpx 24rpx;
+  font-size: 30rpx;
   color: #171717;
   background: #fafafa;
   box-sizing: border-box;
+  min-height: 80rpx;
+  line-height: 1.4;
 }
 .row2 {
   display: flex;
@@ -104,7 +108,7 @@
 .sig-canvas {
   display: block;
   width: 100%;
-  height: 200rpx;
+  height: 260rpx;
 }
 .sig-hint {
   position: absolute;
