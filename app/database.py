@@ -1,13 +1,10 @@
 from pathlib import Path
 
-from passlib.context import CryptContext
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.pool import NullPool, QueuePool
 
 from app.config import settings
-
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class Base(DeclarativeBase):
@@ -478,23 +475,6 @@ def _try_sqlite_migrations() -> None:
                 "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
                 ")"
             ))
-
-            # 将「梁天兵」员工档案与 admin 账号绑定（一次性迁移）
-            existing_ltb = conn.execute(text(
-                "SELECT id FROM admin_users WHERE username = '梁天兵' LIMIT 1"
-            )).fetchone()
-            if not existing_ltb:
-                pw_hash = _pwd_ctx.hash(settings.admin_password)
-                conn.execute(text(
-                    "INSERT INTO admin_users (username, password_hash, role, is_active) "
-                    "VALUES ('梁天兵', :pw, 'superadmin', 1)"
-                ), {"pw": pw_hash})
-                new_id = conn.execute(text(
-                    "SELECT id FROM admin_users WHERE username = '梁天兵' LIMIT 1"
-                )).fetchone()[0]
-                conn.execute(text(
-                    "UPDATE staff SET admin_user_id = :uid WHERE name = '梁天兵'"
-                ), {"uid": new_id})
 
             conn.commit()
     except Exception:
