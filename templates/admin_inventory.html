@@ -13,20 +13,38 @@
 </div>
 
 <div class="card" style="margin-bottom:1rem;">
-  <form method="get" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
-    <input name="q" value="{{ q }}" placeholder="搜索品名 / 供应商" style="flex:1;min-width:180px;" />
-    <select name="category" style="min-width:120px;">
-      <option value="">全部大类</option>
-      {% for cat_key, cat in categories.items() %}
-      <option value="{{ cat_key }}" {% if category == cat_key %}selected{% endif %}>{{ cat.label }}</option>
-      {% endfor %}
-    </select>
-    <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.88rem;cursor:pointer;">
-      <input type="checkbox" name="low_stock" value="1" {% if low_stock == '1' %}checked{% endif %} />
-      仅显示低库存
-    </label>
-    <button type="submit" class="btn secondary">筛选</button>
-    {% if q or category or low_stock %}<a href="/admin/inventory" class="btn secondary">清除</a>{% endif %}
+  <form method="get">
+    <div style="display:flex;gap:0.6rem;align-items:center;">
+      <input name="q" value="{{ q }}" placeholder="搜索品名 / 供应商" style="flex:1;" />
+      <select name="category" style="width:160px;">
+        <option value="">全部大类</option>
+        {% for cat_key, cat in categories.items() %}
+        <option value="{{ cat_key }}" {% if category == cat_key %}selected{% endif %}>{{ cat.label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn secondary">筛选</button>
+      {% if q or category or low_stock or zero_stock or controlled or service_only %}
+      <a href="/admin/inventory" class="btn secondary">清除</a>
+      {% endif %}
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:0.6rem;flex-wrap:wrap;">
+      <a href="/admin/inventory?low_stock=1"
+         style="font-size:0.82rem;padding:0.3rem 0.75rem;border-radius:20px;border:1px solid {% if low_stock == '1' %}#d97706{% else %}var(--border){% endif %};background:{% if low_stock == '1' %}#fef3c7{% else %}var(--card){% endif %};color:{% if low_stock == '1' %}#92400e{% else %}var(--text){% endif %};text-decoration:none;white-space:nowrap;">
+        ⚠ 库存预警{% if low_count > 0 %} <strong>({{ low_count }})</strong>{% endif %}
+      </a>
+      <a href="/admin/inventory?zero_stock=1"
+         style="font-size:0.82rem;padding:0.3rem 0.75rem;border-radius:20px;border:1px solid {% if zero_stock == '1' %}#dc2626{% else %}var(--border){% endif %};background:{% if zero_stock == '1' %}#fee2e2{% else %}var(--card){% endif %};color:{% if zero_stock == '1' %}#991b1b{% else %}var(--text){% endif %};text-decoration:none;white-space:nowrap;">
+        🚫 零库存{% if zero_count > 0 %} <strong>({{ zero_count }})</strong>{% endif %}
+      </a>
+      <a href="/admin/inventory?controlled=1"
+         style="font-size:0.82rem;padding:0.3rem 0.75rem;border-radius:20px;border:1px solid {% if controlled == '1' %}#d97706{% else %}var(--border){% endif %};background:{% if controlled == '1' %}#fef3c7{% else %}var(--card){% endif %};color:{% if controlled == '1' %}#92400e{% else %}var(--text){% endif %};text-decoration:none;white-space:nowrap;">
+        💊 管控药品
+      </a>
+      <a href="/admin/inventory?service_only=1"
+         style="font-size:0.82rem;padding:0.3rem 0.75rem;border-radius:20px;border:1px solid {% if service_only == '1' %}#2563eb{% else %}var(--border){% endif %};background:{% if service_only == '1' %}#eff6ff{% else %}var(--card){% endif %};color:{% if service_only == '1' %}#1d4ed8{% else %}var(--text){% endif %};text-decoration:none;white-space:nowrap;">
+        📋 服务项目
+      </a>
+    </div>
   </form>
 </div>
 

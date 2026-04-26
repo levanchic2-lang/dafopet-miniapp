@@ -5276,6 +5276,9 @@ async def admin_inventory_list(
     q: str = "",
     category: str = "",
     low_stock: str = "",
+    zero_stock: str = "",
+    controlled: str = "",
+    service_only: str = "",
     page: int = 1,
 ):
     require_admin(request)
@@ -5294,21 +5297,32 @@ async def admin_inventory_list(
             InventoryItem.stock_qty <= InventoryItem.low_stock_min,
             InventoryItem.low_stock_min > 0,
         )
+    if zero_stock == "1":
+        query = query.filter(InventoryItem.is_service == False, InventoryItem.stock_qty <= 0)
+    if controlled == "1":
+        query = query.filter(InventoryItem.is_controlled == True)
+    if service_only == "1":
+        query = query.filter(InventoryItem.is_service == True)
     total = query.count()
     items = query.order_by(InventoryItem.category, InventoryItem.name).offset((page - 1) * page_size).limit(page_size).all()
     total_pages = max(1, (total + page_size - 1) // page_size)
-    # 低库存预警数量
     low_count = db.query(InventoryItem).filter(
         InventoryItem.is_active == True,
         InventoryItem.is_service == False,
         InventoryItem.stock_qty <= InventoryItem.low_stock_min,
         InventoryItem.low_stock_min > 0,
     ).count()
+    zero_count = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.is_service == False,
+        InventoryItem.stock_qty <= 0,
+    ).count()
     return templates.TemplateResponse("admin_inventory.html", {
         "request": request, "items": items, "total": total,
         "page": page, "total_pages": total_pages,
         "q": q, "category": category, "low_stock": low_stock,
-        "categories": INVENTORY_CATEGORIES, "low_count": low_count,
+        "zero_stock": zero_stock, "controlled": controlled, "service_only": service_only,
+        "categories": INVENTORY_CATEGORIES, "low_count": low_count, "zero_count": zero_count,
         "csrf_token": request.session.get("csrf_token", ""),
         "title": "库存管理",
     })
