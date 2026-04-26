@@ -28,9 +28,9 @@
   <view class="label">主人姓名 <text style="color:#d97706;">*</text></view>
   <input class="input" value="{{form.owner_name}}" placeholder="真实姓名" bindinput="onNameInput" />
 
-  <view class="label">联系地址</view>
+  <view class="label">联系地址 <text style="font-size:22rpx;color:#9ca3af;font-weight:400;">（选填）</text></view>
   <view class="addr-scope">广东省 · 深圳市</view>
-  <view class="sub" style="margin-bottom:12rpx;">请选择区、街道，再填写详细地址（可选）</view>
+  <view class="sub" style="margin-bottom:12rpx;">请选择区、街道，再填写详细地址</view>
   <view class="row2">
     <view class="col">
       <view class="label" style="margin-top:0;">区 / 县</view>
@@ -45,7 +45,7 @@
       </picker>
     </view>
   </view>
-  <view class="label">详细地址</view>
+  <view class="label">详细地址 <text style="font-size:22rpx;color:#9ca3af;font-weight:400;">（选填）</text></view>
   <textarea class="addr-detail" value="{{addressDetailInput}}" maxlength="240"
     placeholder="道路、门牌号、楼栋单元等（可选）"
     auto-height show-confirm-bar="{{false}}" bindinput="onAddressDetailInput" />
@@ -73,16 +73,16 @@
   <view class="divider" />
   <view class="label" style="font-size:28rpx;font-weight:700;">动物基本情况</view>
 
-  <view class="label">动物名称</view>
+  <view class="label">动物名称 <text style="font-size:22rpx;color:#9ca3af;font-weight:400;">（选填）</text></view>
   <input class="input" value="{{form.animal_name}}" placeholder="宠物名字" bindinput="onAnimalNameInput" />
 
   <view class="row2">
     <view class="col">
-      <view class="label">品种</view>
+      <view class="label">品种 <text style="font-size:22rpx;color:#9ca3af;font-weight:400;">（选填）</text></view>
       <input class="input" value="{{form.animal_breed}}" placeholder="如：金毛" bindinput="onAnimalBreedInput" />
     </view>
     <view class="col">
-      <view class="label">出生年月</view>
+      <view class="label">出生年月 <text style="font-size:22rpx;color:#9ca3af;font-weight:400;">（选填）</text></view>
       <picker mode="date" fields="month" value="{{form.animal_dob}}" bindchange="onAnimalDobChange">
         <view class="picker">{{form.animal_dob || '选择年月'}}</view>
       </picker>
@@ -91,14 +91,14 @@
 
   <view class="row2">
     <view class="col">
-      <view class="label">性别</view>
+      <view class="label">性别 <text style="font-size:22rpx;color:#9ca3af;font-weight:400;">（选填）</text></view>
       <picker mode="selector" range="{{genderOptions}}" range-key="label"
         value="{{genderIndex}}" bindchange="onGenderChange">
         <view class="picker">{{genderOptions[genderIndex].label}}</view>
       </picker>
     </view>
     <view class="col">
-      <view class="label">毛色</view>
+      <view class="label">毛色 <text style="font-size:22rpx;color:#9ca3af;font-weight:400;">（选填）</text></view>
       <input class="input" value="{{form.animal_color}}" placeholder="如：黄白" bindinput="onAnimalColorInput" />
     </view>
   </view>
