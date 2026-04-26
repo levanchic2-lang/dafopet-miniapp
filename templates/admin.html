@@ -390,6 +390,13 @@
               </div>
             </div>
             <div>
+              <label style="font-size:0.82rem;">门店</label>
+              <select name="clinic_store" style="font-size:0.85rem;">
+                <option value="大风动物医院（东环店）" {% if a.clinic_store == '大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
+                <option value="大风动物医院（横岗店）" {% if a.clinic_store == '大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
+              </select>
+            </div>
+            <div>
               <label style="font-size:0.82rem;">年龄估计</label>
               <input type="text" name="age_estimate" value="{{ a.age_estimate or '' }}" style="font-size:0.85rem;" />
             </div>

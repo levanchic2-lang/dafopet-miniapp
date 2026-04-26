@@ -2794,12 +2794,15 @@ async def admin_edit_cat(
     cat_gender = (form.get("cat_gender") or "").strip()
     age_estimate = (form.get("age_estimate") or "").strip()
     health_note = (form.get("health_note") or "").strip()
+    clinic_store = (form.get("clinic_store") or "").strip()
     if cat_nickname:
         row.cat_nickname = cat_nickname
     if cat_gender in ("male", "female", "unknown"):
         row.cat_gender = cat_gender
     row.age_estimate = age_estimate
     row.health_note = health_note
+    if clinic_store:
+        row.clinic_store = clinic_store
     db.commit()
     return _admin_back(request, app_id, f"猫咪信息已更新")
 
