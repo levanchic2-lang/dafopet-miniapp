@@ -6032,6 +6032,16 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(400, detail="请填写真实姓名（不可填写先生/女士）")
     if not owner_phone:
         raise HTTPException(400, detail="请填写手机号")
+    if not owner_address:
+        raise HTTPException(400, detail="请填写联系地址")
+    if not animal_name:
+        raise HTTPException(400, detail="请填写动物名称")
+    if not animal_breed:
+        raise HTTPException(400, detail="请填写动物品种")
+    if not animal_dob:
+        raise HTTPException(400, detail="请选择动物出生年月")
+    if not animal_color:
+        raise HTTPException(400, detail="请填写动物毛色")
     if not owner_sig_data or len(owner_sig_data) < 100:
         raise HTTPException(400, detail="请完成签名")
 

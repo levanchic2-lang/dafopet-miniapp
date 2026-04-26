@@ -228,12 +228,27 @@ Page({
 
   // ── 提交 ──
   onSubmit() {
-    const { form, hasSig, customerId, selectedPetId } = this.data;
+    const { form, hasSig, customerId, selectedPetId, districtNames, districtIndex } = this.data;
     if (!form.owner_phone || form.owner_phone.length < 11) {
       return this.setData({ error: "请填写11位手机号" });
     }
     if (!form.owner_name || isInvalidName(form.owner_name)) {
       return this.setData({ error: "请填写真实姓名（不可填写先生/女士）" });
+    }
+    if (!form.owner_address || districtIndex === 0) {
+      return this.setData({ error: "请选择联系地址（至少选择区/县）" });
+    }
+    if (!form.animal_name || !form.animal_name.trim()) {
+      return this.setData({ error: "请填写动物名称" });
+    }
+    if (!form.animal_breed || !form.animal_breed.trim()) {
+      return this.setData({ error: "请填写动物品种" });
+    }
+    if (!form.animal_dob) {
+      return this.setData({ error: "请选择动物出生年月" });
+    }
+    if (!form.animal_color || !form.animal_color.trim()) {
+      return this.setData({ error: "请填写动物毛色" });
     }
     if (!hasSig) {
       return this.setData({ error: "请完成手写签名" });
