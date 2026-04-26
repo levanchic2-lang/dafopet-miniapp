@@ -3673,13 +3673,14 @@ async def api_wechat_appointment_update(
     if row.status != AppointmentStatus.pending.value:
         raise HTTPException(400, "只有「待确认」状态的预约才能修改，如需调整请联系医院")
 
-    new_date = str(payload.get("appointment_date", "") or row.appointment_date).strip()
-    new_time = str(payload.get("appointment_time", "") or row.appointment_time).strip()
+    new_date  = str(payload.get("appointment_date", "") or row.appointment_date).strip()
+    new_time  = str(payload.get("appointment_time", "") or row.appointment_time).strip()
+    new_store = str(payload.get("store", "") or row.store or "").strip()
 
-    # 若日期或时间有变，重新做容量检查（exclude 自身，避免自我碰撞）
-    if new_date != row.appointment_date or new_time != row.appointment_time:
+    # 若日期、时间或门店有变，重新做容量检查（exclude 自身，避免自我碰撞）
+    if new_date != row.appointment_date or new_time != row.appointment_time or new_store != (row.store or ""):
         err = _check_slot_capacity(
-            db, row.store, new_date, new_time,
+            db, new_store, new_date, new_time,
             row.category, row.service_name or "",
             exclude_id=appointment_id,
         )
@@ -3688,6 +3689,8 @@ async def api_wechat_appointment_update(
 
     row.appointment_date = new_date
     row.appointment_time = new_time
+    if new_store:
+        row.store = new_store
     if "customer_name" in payload and payload["customer_name"]:
         row.customer_name = str(payload["customer_name"])[:80]
     if "phone" in payload and payload["phone"]:

@@ -554,6 +554,7 @@ Page({
         }
         const res = await postJson(`/api/wechat/appointments/${this._editId}/update`, {
           openid,
+          store:            payload.store,
           appointment_date: payload.appointment_date,
           appointment_time: payload.appointment_time,
           customer_name:    payload.customer_name,
