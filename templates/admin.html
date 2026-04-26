@@ -228,7 +228,7 @@
     </div>
   </div>
   <form method="get" action="/admin" style="display:grid;gap:0.6rem;margin-top:0.75rem;">
-    <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:0.5rem 0.75rem;align-items:end;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1.5fr 0.5fr;gap:0.5rem 0.75rem;align-items:end;">
       <div>
         <label style="margin:0 0 0.35rem;">状态</label>
         <select name="status">
@@ -252,14 +252,12 @@
       </div>
       <div>
         <label style="margin:0 0 0.35rem;">每页</label>
-        <select name="page_size" style="width:auto;">
+        <select name="page_size">
           {% for n in [20,30,50,100] %}
             <option value="{{n}}" {% if filters.page_size==n %}selected{% endif %}>{{n}}</option>
           {% endfor %}
         </select>
       </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem 0.75rem;align-items:end;">
       <div>
         <label style="margin:0 0 0.35rem;">提交日期从（可选）</label>
         <input type="date" name="from" value="{{ filters['from'] or '' }}" />
