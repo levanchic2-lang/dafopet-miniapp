@@ -49,6 +49,8 @@ from app.models import (
     InventoryItem,
     InventoryTransaction,
     InventoryBatch,
+    StocktakeSession,
+    StocktakeItem,
     RabiesVaccineRecord,
     AdoptionPet,
 )
@@ -5598,6 +5600,223 @@ async def admin_batch_deplete(
         ))
     db.commit()
     return RedirectResponse(f"/admin/inventory/{item_id}?msg=批次已标记耗尽", status_code=303)
+
+
+# ──────────────────────────────────────────────────────────────
+# 循环盘点
+# ──────────────────────────────────────────────────────────────
+
+@app.get("/admin/stocktake", response_class=HTMLResponse)
+async def admin_stocktake_list(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    from datetime import date as _date, timedelta as _timedelta
+    sessions = (db.query(StocktakeSession)
+                .order_by(StocktakeSession.created_at.desc())
+                .limit(30).all())
+    # 统计每个大类最近盘点时间
+    cycle_stats = []
+    today = _date.today()
+    for cat_key, cat_info in INVENTORY_CATEGORIES.items():
+        item_cnt = db.query(InventoryItem).filter(
+            InventoryItem.is_active == True,
+            InventoryItem.is_service == False,
+            InventoryItem.category == cat_key,
+        ).count()
+        if item_cnt == 0:
+            continue
+        last_row = (db.query(InventoryItem.last_counted_at)
+                    .filter(InventoryItem.is_active == True,
+                            InventoryItem.is_service == False,
+                            InventoryItem.category == cat_key,
+                            InventoryItem.last_counted_at.isnot(None))
+                    .order_by(InventoryItem.last_counted_at.desc())
+                    .first())
+        last_dt = last_row[0].date() if last_row and last_row[0] else None
+        days_ago = (today - last_dt).days if last_dt else None
+        cycle_stats.append({
+            "key": cat_key,
+            "label": cat_info["label"],
+            "item_count": item_cnt,
+            "last_counted": last_dt,
+            "days_ago": days_ago,
+        })
+    open_sessions = [s for s in sessions if s.status == "open"]
+    return templates.TemplateResponse("admin_stocktake.html", {
+        "request": request, "sessions": sessions,
+        "open_sessions": open_sessions,
+        "cycle_stats": cycle_stats,
+        "categories": INVENTORY_CATEGORIES,
+        "csrf_token": request.session.get("csrf_token", ""),
+        "title": "循环盘点",
+    })
+
+
+@app.post("/admin/stocktake/create")
+async def admin_stocktake_create(
+    request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    category_filter: str = Form(""),
+    name: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    operator = request.session.get("admin", "")
+    query = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.is_service == False,
+    )
+    if category_filter:
+        query = query.filter(InventoryItem.category == category_filter)
+    items = query.order_by(InventoryItem.category, InventoryItem.name).all()
+    if not items:
+        return RedirectResponse("/admin/stocktake?err=该类别暂无品目", status_code=303)
+    cat_label = INVENTORY_CATEGORIES.get(category_filter, {}).get("label", "全部") if category_filter else "全部"
+    from datetime import date as _date
+    session_name = name.strip() or f"{_date.today()} {cat_label}盘点"
+    sess = StocktakeSession(
+        name=session_name,
+        category_filter=category_filter,
+        operator=operator,
+        item_count=len(items),
+    )
+    db.add(sess)
+    db.flush()
+    for it in items:
+        db.add(StocktakeItem(
+            session_id=sess.id,
+            item_id=it.id,
+            item_name=it.name,
+            category=it.category,
+            unit=it.unit,
+            system_qty=it.stock_qty,
+        ))
+    db.commit()
+    return RedirectResponse(f"/admin/stocktake/{sess.id}", status_code=303)
+
+
+@app.get("/admin/stocktake/{session_id}", response_class=HTMLResponse)
+async def admin_stocktake_session(
+    session_id: int, request: Request, db: Session = Depends(get_db),
+    q: str = "",
+):
+    require_admin(request)
+    sess = db.get(StocktakeSession, session_id)
+    if not sess:
+        raise HTTPException(404)
+    items_q = db.query(StocktakeItem).filter(StocktakeItem.session_id == session_id)
+    if q:
+        items_q = items_q.filter(StocktakeItem.item_name.ilike(f"%{q}%"))
+    sit_items = items_q.order_by(StocktakeItem.category, StocktakeItem.item_name).all()
+    counted = sum(1 for x in sit_items if x.actual_qty is not None)
+    return templates.TemplateResponse("admin_stocktake_session.html", {
+        "request": request, "sess": sess, "sit_items": sit_items,
+        "q": q, "counted": counted,
+        "categories": INVENTORY_CATEGORIES,
+        "csrf_token": request.session.get("csrf_token", ""),
+        "title": f"盘点：{sess.name}",
+    })
+
+
+@app.post("/admin/stocktake/{session_id}/save")
+async def admin_stocktake_save(
+    session_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    sess = db.get(StocktakeSession, session_id)
+    if not sess or sess.status != "open":
+        raise HTTPException(400, "盘点已完成或不存在")
+    form = await request.form()
+    sit_map = {si.id: si for si in db.query(StocktakeItem).filter(StocktakeItem.session_id == session_id).all()}
+    for key, val in form.items():
+        if key.startswith("actual_"):
+            try:
+                si_id = int(key.split("_", 1)[1])
+                si = sit_map.get(si_id)
+                if si and val.strip() != "":
+                    si.actual_qty = float(val)
+                    si.variance = si.actual_qty - si.system_qty
+                elif si and val.strip() == "":
+                    si.actual_qty = None
+                    si.variance = 0.0
+            except (ValueError, IndexError):
+                pass
+        elif key.startswith("notes_"):
+            try:
+                si_id = int(key.split("_", 1)[1])
+                si = sit_map.get(si_id)
+                if si:
+                    si.notes = val
+            except (ValueError, IndexError):
+                pass
+    db.commit()
+    return RedirectResponse(f"/admin/stocktake/{session_id}?msg=已暂存", status_code=303)
+
+
+@app.post("/admin/stocktake/{session_id}/submit")
+async def admin_stocktake_submit(
+    session_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    sess = db.get(StocktakeSession, session_id)
+    if not sess or sess.status != "open":
+        raise HTTPException(400, "盘点已完成或不存在")
+    form = await request.form()
+    sit_map = {si.id: si for si in db.query(StocktakeItem).filter(StocktakeItem.session_id == session_id).all()}
+    # 先把表单值写入
+    for key, val in form.items():
+        if key.startswith("actual_"):
+            try:
+                si_id = int(key.split("_", 1)[1])
+                si = sit_map.get(si_id)
+                if si and val.strip() != "":
+                    si.actual_qty = float(val)
+                    si.variance = si.actual_qty - si.system_qty
+                elif si and val.strip() == "":
+                    si.actual_qty = None
+                    si.variance = 0.0
+            except (ValueError, IndexError):
+                pass
+        elif key.startswith("notes_"):
+            try:
+                si_id = int(key.split("_", 1)[1])
+                si = sit_map.get(si_id)
+                if si:
+                    si.notes = val
+            except (ValueError, IndexError):
+                pass
+    operator = request.session.get("admin", "")
+    now = datetime.utcnow()
+    variance_count = 0
+    for si in sit_map.values():
+        if si.actual_qty is None:
+            continue
+        inv_item = db.get(InventoryItem, si.item_id) if si.item_id else None
+        if not inv_item:
+            continue
+        diff = si.actual_qty - si.system_qty
+        if abs(diff) > 0.001:
+            variance_count += 1
+            before = inv_item.stock_qty
+            inv_item.stock_qty = max(0.0, inv_item.stock_qty + diff)
+            inv_item.updated_at = now
+            db.add(InventoryTransaction(
+                item_id=inv_item.id, tx_type="adjust", qty=abs(diff),
+                qty_before=before, qty_after=inv_item.stock_qty,
+                unit_price=0, ref_type="stocktake", ref_id=session_id,
+                operator=operator,
+                note=f"循环盘点#{session_id}（{'+' if diff >= 0 else ''}{diff:.1f}）",
+            ))
+            si.is_adjusted = True
+        inv_item.last_counted_at = now
+    sess.variance_count = variance_count
+    sess.status = "completed"
+    sess.completed_at = now
+    db.commit()
+    return RedirectResponse(f"/admin/stocktake/{session_id}?msg=盘点已提交", status_code=303)
 
 
 @app.post("/admin/inventory/{item_id}/deactivate")

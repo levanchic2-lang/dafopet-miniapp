@@ -417,6 +417,7 @@ class InventoryItem(Base):
     supplier: Mapped[str] = mapped_column(String(200), default="")              # 供应商
     notes: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)              # 下架/停用
+    last_counted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)  # 上次盘点时间
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -463,6 +464,44 @@ class InventoryBatch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     item = relationship("InventoryItem", back_populates="batches")
+
+
+class StocktakeSession(Base):
+    """盘点会话：一次循环盘点"""
+    __tablename__ = "stocktake_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), default="")          # 盘点备注名
+    category_filter: Mapped[str] = mapped_column(String(60), default="")  # 空=全部；否则限定大类
+    status: Mapped[str] = mapped_column(String(20), default="open")     # open / completed
+    operator: Mapped[str] = mapped_column(String(80), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    item_count: Mapped[int] = mapped_column(Integer, default=0)         # 参与品目数
+    variance_count: Mapped[int] = mapped_column(Integer, default=0)     # 有差异品目数
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    items = relationship("StocktakeItem", back_populates="session", cascade="all, delete-orphan")
+
+
+class StocktakeItem(Base):
+    """盘点明细：盘点会话中每个品目的实盘记录"""
+    __tablename__ = "stocktake_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("stocktake_sessions.id", ondelete="CASCADE"), nullable=False)
+    item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True)
+    item_name: Mapped[str] = mapped_column(String(200), default="")     # 冗余品名，防品目删除后丢失
+    category: Mapped[str] = mapped_column(String(60), default="")
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    system_qty: Mapped[float] = mapped_column(Float, default=0.0)       # 建单时的系统库存
+    actual_qty: Mapped[float] = mapped_column(Float, nullable=True)     # 实盘数量（NULL=未盘）
+    variance: Mapped[float] = mapped_column(Float, default=0.0)         # actual - system
+    is_adjusted: Mapped[bool] = mapped_column(Boolean, default=False)   # 是否已产生调整流水
+    notes: Mapped[str] = mapped_column(String(500), default="")
+
+    session = relationship("StocktakeSession", back_populates="items")
+    item = relationship("InventoryItem")
 
 
 class RabiesVaccineRecord(Base):

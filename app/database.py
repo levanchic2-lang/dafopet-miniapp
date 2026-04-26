@@ -415,6 +415,52 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_tx_type ON inventory_transactions(tx_type)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_tx_created ON inventory_transactions(created_at)"))
 
+            # inventory_items: 补 last_counted_at 列
+            inv_item_cols = conn.execute(text("PRAGMA table_info(inventory_items)")).fetchall()
+            inv_item_names = {c[1] for c in inv_item_cols}
+            if inv_item_cols and "last_counted_at" not in inv_item_names:
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN last_counted_at DATETIME DEFAULT NULL"))
+
+            # stocktake_sessions 盘点会话表
+            st_sess_cols = conn.execute(text("PRAGMA table_info(stocktake_sessions)")).fetchall()
+            if not st_sess_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS stocktake_sessions ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "name VARCHAR(120) DEFAULT '', "
+                    "category_filter VARCHAR(60) DEFAULT '', "
+                    "status VARCHAR(20) DEFAULT 'open', "
+                    "operator VARCHAR(80) DEFAULT '', "
+                    "note TEXT DEFAULT '', "
+                    "item_count INTEGER DEFAULT 0, "
+                    "variance_count INTEGER DEFAULT 0, "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "completed_at DATETIME DEFAULT NULL"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_st_sess_status ON stocktake_sessions(status)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_st_sess_created ON stocktake_sessions(created_at)"))
+
+            # stocktake_items 盘点明细表
+            st_item_cols = conn.execute(text("PRAGMA table_info(stocktake_items)")).fetchall()
+            if not st_item_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS stocktake_items ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "session_id INTEGER NOT NULL REFERENCES stocktake_sessions(id) ON DELETE CASCADE, "
+                    "item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL, "
+                    "item_name VARCHAR(200) DEFAULT '', "
+                    "category VARCHAR(60) DEFAULT '', "
+                    "unit VARCHAR(20) DEFAULT '', "
+                    "system_qty REAL DEFAULT 0.0, "
+                    "actual_qty REAL DEFAULT NULL, "
+                    "variance REAL DEFAULT 0.0, "
+                    "is_adjusted BOOLEAN DEFAULT 0, "
+                    "notes VARCHAR(500) DEFAULT ''"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_st_items_session ON stocktake_items(session_id)"))
+
             # inventory_batches 库存批次表
             inv_batch_cols = conn.execute(text("PRAGMA table_info(inventory_batches)")).fetchall()
             if not inv_batch_cols:

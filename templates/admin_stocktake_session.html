@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if request.query_params.get('msg') %}
+<div class="card" style="background:#f0fdf4;border:1px solid #bbf7d0;margin-bottom:1rem;padding:0.75rem 1rem;font-size:0.9rem;color:#15803d;">
+  ✓ {{ request.query_params.get('msg') }}
+</div>
+{% endif %}
+
+<!-- 头部信息 -->
+<div class="card" style="margin-bottom:1rem;">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+    <div>
+      <h1 style="margin:0 0 0.25rem;">{{ sess.name }}</h1>
+      <p class="sub" style="margin:0;">
+        {{ categories[sess.category_filter].label if sess.category_filter in categories else '全部类别' }}
+        · 共 {{ sit_items|length }} 个品目
+        · 已盘 {{ counted }} 个
+        {% if sess.status == 'completed' %}
+        · <span style="color:#15803d;font-weight:600;">已完成</span>
+        · 差异 {{ sess.variance_count }} 项
+        {% else %}
+        · <span style="color:#d97706;font-weight:600;">进行中</span>
+        {% endif %}
+        · 创建人：{{ sess.operator or '—' }}
+      </p>
+    </div>
+    <a href="/admin/stocktake" class="btn secondary" style="font-size:0.85rem;">← 返回盘点列表</a>
+  </div>
+
+  {% if sess.status == 'open' %}
+  <!-- 搜索栏 -->
+  <form method="get" style="margin-top:0.85rem;display:flex;gap:0.6rem;align-items:center;">
+    <input name="q" value="{{ q }}" placeholder="搜索品名" style="flex:1;max-width:300px;" />
+    <button type="submit" class="btn secondary">搜索</button>
+    {% if q %}<a href="/admin/stocktake/{{ sess.id }}" class="btn secondary">清除</a>{% endif %}
+  </form>
+  {% endif %}
+</div>
+
+<!-- 盘点表单 -->
+<form method="post" id="stocktake-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:5rem;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+      <thead>
+        <tr style="background:var(--bg-elevated);border-bottom:2px solid var(--border);">
+          <th style="text-align:left;padding:0.55rem 1rem;font-weight:600;">品名</th>
+          <th style="text-align:left;padding:0.55rem 0.75rem;font-weight:600;">大类</th>
+          <th style="text-align:right;padding:0.55rem 0.75rem;font-weight:600;">系统库存</th>
+          <th style="text-align:center;padding:0.55rem 0.75rem;font-weight:600;width:130px;">实盘数量</th>
+          <th style="text-align:right;padding:0.55rem 0.75rem;font-weight:600;width:80px;">差异</th>
+          <th style="text-align:left;padding:0.55rem 0.75rem;font-weight:600;">备注</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for si in sit_items %}
+        {% set cat_label = categories[si.category].label if si.category in categories else si.category %}
+        {% set has_variance = si.actual_qty is not none and si.actual_qty != si.system_qty %}
+        <tr style="border-bottom:1px solid var(--border);{% if has_variance %}background:#fffbeb;{% endif %}"
+            id="row-{{ si.id }}">
+          <td style="padding:0.5rem 1rem;font-weight:600;">{{ si.item_name }}</td>
+          <td style="padding:0.5rem 0.75rem;color:var(--muted);font-size:0.82rem;">{{ cat_label }}</td>
+          <td style="padding:0.5rem 0.75rem;text-align:right;color:var(--muted);">
+            {{ '%.1f'|format(si.system_qty) }} {{ si.unit }}
+          </td>
+          <td style="padding:0.4rem 0.5rem;text-align:center;">
+            {% if sess.status == 'open' %}
+            <input type="number" name="actual_{{ si.id }}"
+                   value="{{ '%.2f'|format(si.actual_qty) if si.actual_qty is not none else '' }}"
+                   step="0.01" min="0" placeholder="—"
+                   style="width:100%;text-align:right;font-size:0.88rem;padding:0.3rem 0.4rem;"
+                   oninput="updateVariance({{ si.id }}, {{ si.system_qty }}, this.value, '{{ si.unit }}')" />
+            {% else %}
+              <span style="{% if has_variance %}color:#d97706;font-weight:600;{% endif %}">
+                {{ '%.1f'|format(si.actual_qty) if si.actual_qty is not none else '—' }}
+              </span>
+            {% endif %}
+          </td>
+          <td style="padding:0.5rem 0.75rem;text-align:right;" id="var-{{ si.id }}">
+            {% if si.actual_qty is not none %}
+              {% set v = si.actual_qty - si.system_qty %}
+              <span style="{% if v > 0 %}color:#15803d;font-weight:600;{% elif v < 0 %}color:#dc2626;font-weight:600;{% else %}color:var(--muted);{% endif %}">
+                {% if v > 0 %}+{% endif %}{{ '%.1f'|format(v) }}
+              </span>
+              {% if si.is_adjusted %}<span style="font-size:0.72rem;color:var(--muted);margin-left:3px;">✓</span>{% endif %}
+            {% else %}
+              <span style="color:var(--muted);">—</span>
+            {% endif %}
+          </td>
+          <td style="padding:0.4rem 0.5rem;">
+            {% if sess.status == 'open' %}
+            <input type="text" name="notes_{{ si.id }}"
+                   value="{{ si.notes }}"
+                   placeholder="备注"
+                   style="width:100%;font-size:0.82rem;padding:0.25rem 0.4rem;" />
+            {% else %}
+              <span style="color:var(--muted);font-size:0.82rem;">{{ si.notes or '' }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="padding:2rem;text-align:center;color:var(--muted);">暂无品目</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 悬浮底部操作栏 -->
+  {% if sess.status == 'open' %}
+  <div style="position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);padding:0.85rem 1.5rem;display:flex;gap:0.75rem;align-items:center;z-index:100;box-shadow:0 -2px 12px rgba(0,0,0,0.08);">
+    <div style="flex:1;font-size:0.88rem;color:var(--muted);">
+      已填写 <strong id="filled-count">{{ counted }}</strong> / {{ sit_items|length }} 个品目
+    </div>
+    <button type="submit" formaction="/admin/stocktake/{{ sess.id }}/save"
+            class="btn secondary" style="font-size:0.9rem;">
+      💾 暂存草稿
+    </button>
+    <button type="submit" formaction="/admin/stocktake/{{ sess.id }}/submit"
+            class="btn" style="font-size:0.9rem;"
+            onclick="return confirm('确认提交盘点？\n已填写的品目将生成调整流水，未填写的品目不会变动。')">
+      ✅ 确认提交盘点
+    </button>
+  </div>
+  {% endif %}
+</form>
+
+{% block scripts %}
+<script>
+function updateVariance(siId, systemQty, inputVal, unit) {
+  var cell = document.getElementById('var-' + siId);
+  if (inputVal === '' || inputVal === null) {
+    cell.innerHTML = '<span style="color:var(--muted);">—</span>';
+    updateFilledCount();
+    return;
+  }
+  var actual = parseFloat(inputVal);
+  if (isNaN(actual)) { cell.innerHTML = '<span style="color:var(--muted);">—</span>'; return; }
+  var diff = actual - systemQty;
+  var color = diff > 0 ? '#15803d' : (diff < 0 ? '#dc2626' : 'var(--muted)');
+  var sign = diff > 0 ? '+' : '';
+  cell.innerHTML = '<span style="color:' + color + ';font-weight:' + (diff !== 0 ? '600' : 'normal') + ';">' + sign + diff.toFixed(1) + '</span>';
+  // row highlight
+  var row = document.getElementById('row-' + siId);
+  if (row) row.style.background = (diff !== 0) ? '#fffbeb' : '';
+  updateFilledCount();
+}
+
+function updateFilledCount() {
+  var inputs = document.querySelectorAll('input[name^="actual_"]');
+  var filled = Array.from(inputs).filter(function(i) { return i.value.trim() !== ''; }).length;
+  var el = document.getElementById('filled-count');
+  if (el) el.textContent = filled;
+}
+</script>
+{% endblock %}
+{% endblock %}
