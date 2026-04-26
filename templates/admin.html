@@ -228,7 +228,7 @@
     </div>
   </div>
   <form method="get" action="/admin" style="display:grid;gap:0.6rem;margin-top:0.75rem;">
-    <div class="row2">
+    <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:0.5rem 0.75rem;align-items:end;">
       <div>
         <label style="margin:0 0 0.35rem;">状态</label>
         <select name="status">
@@ -242,19 +242,17 @@
         <label style="margin:0 0 0.35rem;">门店</label>
         <select name="store">
           <option value="" {% if not filters.store %}selected{% endif %}>全部</option>
-          <option value="大风动物医院（东环店）" {% if filters.store=='大风动物医院（东环店）' %}selected{% endif %}>大风动物医院（东环店）</option>
-          <option value="大风动物医院（横岗店）" {% if filters.store=='大风动物医院（横岗店）' %}selected{% endif %}>大风动物医院（横岗店）</option>
+          <option value="大风动物医院（东环店）" {% if filters.store=='大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
+          <option value="大风动物医院（横岗店）" {% if filters.store=='大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
         </select>
       </div>
-    </div>
-    <div class="row2">
       <div>
         <label style="margin:0 0 0.35rem;">关键词（ID/姓名/电话/地点/流浪猫名字）</label>
         <input type="text" name="q" value="{{ filters.q or '' }}" placeholder="例如：13800138000 / 张三 / 123" />
       </div>
       <div>
-        <label style="margin:0 0 0.35rem;">每页数量</label>
-        <select name="page_size">
+        <label style="margin:0 0 0.35rem;">每页</label>
+        <select name="page_size" style="width:auto;">
           {% for n in [20,30,50,100] %}
             <option value="{{n}}" {% if filters.page_size==n %}selected{% endif %}>{{n}}</option>
           {% endfor %}
