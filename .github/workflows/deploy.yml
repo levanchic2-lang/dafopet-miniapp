@@ -10,11 +10,7 @@ jobs:
     steps:
       - name: Trigger deploy webhook
         run: |
-          RESP=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST \
+          curl -s -f -X POST \
             -H "X-Deploy-Token: ${{ secrets.DEPLOY_TOKEN }}" \
-            https://api.dafopet.com/api/webhook/deploy)
-          echo "Response: $RESP"
-          HTTP_CODE=$(echo "$RESP" | grep "HTTP_CODE:" | cut -d: -f2)
-          echo "HTTP Status: $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then exit 1; fi
+            https://api.dafopet.com/api/webhook/deploy
           echo "✅ 部署已触发"
