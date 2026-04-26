@@ -422,6 +422,8 @@ class InventoryItem(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     transactions = relationship("InventoryTransaction", back_populates="item", cascade="all, delete-orphan")
+    batches = relationship("InventoryBatch", back_populates="item", cascade="all, delete-orphan",
+                           order_by="InventoryBatch.expiry_date")
 
 
 class InventoryTransaction(Base):
@@ -444,6 +446,23 @@ class InventoryTransaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     item = relationship("InventoryItem", back_populates="transactions")
+
+
+class InventoryBatch(Base):
+    """库存批次：记录每批入库的有效期与剩余数量"""
+    __tablename__ = "inventory_batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False)
+    batch_no: Mapped[str] = mapped_column(String(80), default="")       # 批次号（选填）
+    quantity: Mapped[float] = mapped_column(Float, default=0.0)         # 该批次剩余数量
+    expiry_date: Mapped[str] = mapped_column(String(20), default="")    # YYYY-MM-DD
+    received_date: Mapped[str] = mapped_column(String(20), default="")  # 入库日期
+    notes: Mapped[str] = mapped_column(String(500), default="")
+    is_depleted: Mapped[bool] = mapped_column(Boolean, default=False)   # 手动标记已用完
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    item = relationship("InventoryItem", back_populates="batches")
 
 
 class RabiesVaccineRecord(Base):

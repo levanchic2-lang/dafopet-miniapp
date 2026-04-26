@@ -48,6 +48,7 @@ from app.models import (
     Visit,
     InventoryItem,
     InventoryTransaction,
+    InventoryBatch,
     RabiesVaccineRecord,
     AdoptionPet,
 )
@@ -5279,9 +5280,11 @@ async def admin_inventory_list(
     zero_stock: str = "",
     controlled: str = "",
     service_only: str = "",
+    expiry_alert: str = "",
     page: int = 1,
 ):
     require_admin(request)
+    from datetime import date as _date, timedelta as _timedelta
     page_size = 50
     query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
     if q:
@@ -5303,6 +5306,14 @@ async def admin_inventory_list(
         query = query.filter(InventoryItem.is_controlled == True)
     if service_only == "1":
         query = query.filter(InventoryItem.is_service == True)
+    if expiry_alert == "1":
+        alert_date = (_date.today() + _timedelta(days=90)).isoformat()
+        expiry_ids = (db.query(InventoryBatch.item_id)
+                      .filter(InventoryBatch.is_depleted == False,
+                              InventoryBatch.expiry_date != "",
+                              InventoryBatch.expiry_date <= alert_date)
+                      .distinct().subquery())
+        query = query.filter(InventoryItem.id.in_(expiry_ids))
     total = query.count()
     items = query.order_by(InventoryItem.category, InventoryItem.name).offset((page - 1) * page_size).limit(page_size).all()
     total_pages = max(1, (total + page_size - 1) // page_size)
@@ -5317,12 +5328,20 @@ async def admin_inventory_list(
         InventoryItem.is_service == False,
         InventoryItem.stock_qty <= 0,
     ).count()
+    _alert_date = (_date.today() + _timedelta(days=90)).isoformat()
+    expiry_count = (db.query(InventoryBatch.item_id)
+                    .filter(InventoryBatch.is_depleted == False,
+                            InventoryBatch.expiry_date != "",
+                            InventoryBatch.expiry_date <= _alert_date)
+                    .distinct().count())
     return templates.TemplateResponse("admin_inventory.html", {
         "request": request, "items": items, "total": total,
         "page": page, "total_pages": total_pages,
         "q": q, "category": category, "low_stock": low_stock,
         "zero_stock": zero_stock, "controlled": controlled, "service_only": service_only,
+        "expiry_alert": expiry_alert,
         "categories": INVENTORY_CATEGORIES, "low_count": low_count, "zero_count": zero_count,
+        "expiry_count": expiry_count,
         "csrf_token": request.session.get("csrf_token", ""),
         "title": "库存管理",
     })
@@ -5405,10 +5424,18 @@ async def admin_inventory_detail(item_id: int, request: Request, db: Session = D
            .order_by(InventoryTransaction.created_at.desc())
            .offset((page - 1) * page_size).limit(page_size).all())
     tx_total = db.query(InventoryTransaction).filter(InventoryTransaction.item_id == item_id).count()
+    batches = (db.query(InventoryBatch)
+               .filter(InventoryBatch.item_id == item_id)
+               .order_by(InventoryBatch.expiry_date)
+               .all())
+    from datetime import date as _date, timedelta as _timedelta
+    today_str = _date.today().isoformat()
+    alert_date_str = (_date.today() + _timedelta(days=90)).isoformat()
     return templates.TemplateResponse("admin_inventory_detail.html", {
         "request": request, "item": item, "txs": txs,
         "tx_total": tx_total, "page": page,
         "tx_pages": max(1, (tx_total + page_size - 1) // page_size),
+        "batches": batches, "today_str": today_str, "alert_date_str": alert_date_str,
         "categories": INVENTORY_CATEGORIES,
         "csrf_token": request.session.get("csrf_token", ""),
         "title": f"品目详情：{item.name}",
@@ -5449,6 +5476,7 @@ async def admin_inventory_stock_in(
     item_id: int, request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""),
     qty: float = Form(...), unit_price: float = Form(0.0),
+    batch_no: str = Form(""), expiry_date: str = Form(""),
     note: str = Form(""),
 ):
     require_admin(request)
@@ -5458,16 +5486,27 @@ async def admin_inventory_stock_in(
         raise HTTPException(404)
     if qty <= 0:
         raise HTTPException(400, "入库数量必须大于 0")
+    from datetime import date as _date
     before = item.stock_qty
     item.stock_qty += qty
     item.updated_at = datetime.utcnow()
+    tx_note = note or ("手动入库" + (f"（批次：{batch_no}）" if batch_no else ""))
     db.add(InventoryTransaction(
         item_id=item_id, tx_type="in", qty=qty,
         qty_before=before, qty_after=item.stock_qty,
         unit_price=unit_price or item.cost_price,
         ref_type="manual", operator=request.session.get("admin", ""),
-        note=note or "手动入库",
+        note=tx_note,
     ))
+    if expiry_date:
+        db.add(InventoryBatch(
+            item_id=item_id,
+            batch_no=batch_no,
+            quantity=qty,
+            expiry_date=expiry_date,
+            received_date=_date.today().isoformat(),
+            notes=note,
+        ))
     db.commit()
     return RedirectResponse(f"/admin/inventory/{item_id}?msg=入库成功+{qty}{item.unit}", status_code=303)
 
@@ -5496,6 +5535,69 @@ async def admin_inventory_adjust(
     ))
     db.commit()
     return RedirectResponse(f"/admin/inventory/{item_id}?msg=库存已调整", status_code=303)
+
+
+@app.post("/admin/inventory/{item_id}/batch/{batch_id}/adjust")
+async def admin_batch_adjust(
+    item_id: int, batch_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    new_qty: float = Form(...),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    batch = (db.query(InventoryBatch)
+             .filter(InventoryBatch.id == batch_id, InventoryBatch.item_id == item_id)
+             .first())
+    if not batch:
+        raise HTTPException(404)
+    item = db.get(InventoryItem, item_id)
+    diff = new_qty - batch.quantity
+    before = item.stock_qty
+    batch.quantity = new_qty
+    if new_qty <= 0:
+        batch.is_depleted = True
+    item.stock_qty = max(0.0, item.stock_qty + diff)
+    item.updated_at = datetime.utcnow()
+    db.add(InventoryTransaction(
+        item_id=item_id, tx_type="adjust", qty=abs(diff),
+        qty_before=before, qty_after=item.stock_qty,
+        unit_price=0, ref_type="batch",
+        operator=request.session.get("admin", ""),
+        note=f"批次{batch.batch_no or batch_id}数量修正（{'+' if diff >= 0 else ''}{diff:.1f}）",
+    ))
+    db.commit()
+    return RedirectResponse(f"/admin/inventory/{item_id}?msg=批次已更新", status_code=303)
+
+
+@app.post("/admin/inventory/{item_id}/batch/{batch_id}/deplete")
+async def admin_batch_deplete(
+    item_id: int, batch_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    batch = (db.query(InventoryBatch)
+             .filter(InventoryBatch.id == batch_id, InventoryBatch.item_id == item_id)
+             .first())
+    if not batch:
+        raise HTTPException(404)
+    item = db.get(InventoryItem, item_id)
+    before = item.stock_qty
+    remaining = batch.quantity
+    batch.quantity = 0
+    batch.is_depleted = True
+    if remaining > 0:
+        item.stock_qty = max(0.0, item.stock_qty - remaining)
+        item.updated_at = datetime.utcnow()
+        db.add(InventoryTransaction(
+            item_id=item_id, tx_type="adjust", qty=remaining,
+            qty_before=before, qty_after=item.stock_qty,
+            unit_price=0, ref_type="batch",
+            operator=request.session.get("admin", ""),
+            note=f"批次{batch.batch_no or batch_id}标记耗尽",
+        ))
+    db.commit()
+    return RedirectResponse(f"/admin/inventory/{item_id}?msg=批次已标记耗尽", status_code=303)
 
 
 @app.post("/admin/inventory/{item_id}/deactivate")

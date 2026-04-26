@@ -23,7 +23,7 @@
         {% endfor %}
       </select>
       <button type="submit" class="btn secondary">筛选</button>
-      {% if q or category or low_stock or zero_stock or controlled or service_only %}
+      {% if q or category or low_stock or zero_stock or controlled or service_only or expiry_alert %}
       <a href="/admin/inventory" class="btn secondary">清除</a>
       {% endif %}
     </div>
@@ -43,6 +43,10 @@
       <a href="/admin/inventory?service_only=1"
          style="font-size:0.82rem;padding:0.3rem 0.75rem;border-radius:20px;border:1px solid {% if service_only == '1' %}#2563eb{% else %}var(--border){% endif %};background:{% if service_only == '1' %}#eff6ff{% else %}var(--card){% endif %};color:{% if service_only == '1' %}#1d4ed8{% else %}var(--text){% endif %};text-decoration:none;white-space:nowrap;">
         📋 服务项目
+      </a>
+      <a href="/admin/inventory?expiry_alert=1"
+         style="font-size:0.82rem;padding:0.3rem 0.75rem;border-radius:20px;border:1px solid {% if expiry_alert == '1' %}#7c3aed{% else %}var(--border){% endif %};background:{% if expiry_alert == '1' %}#f5f3ff{% else %}var(--card){% endif %};color:{% if expiry_alert == '1' %}#5b21b6{% else %}var(--text){% endif %};text-decoration:none;white-space:nowrap;">
+        📅 有效期预警{% if expiry_count > 0 %} <strong>({{ expiry_count }})</strong>{% endif %}
       </a>
     </div>
   </form>

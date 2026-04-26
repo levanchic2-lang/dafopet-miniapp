@@ -65,6 +65,70 @@
       {% endif %}
     </div>
 
+    <!-- 批次列表 -->
+    {% if not item.is_service and batches %}
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:1rem;">
+      <div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border);font-weight:600;font-size:0.95rem;">
+        📅 库存批次（{{ batches|length }}）
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead>
+          <tr style="background:var(--bg-elevated);">
+            <th style="text-align:left;padding:0.5rem 1rem;font-weight:600;">批次号</th>
+            <th style="text-align:right;padding:0.5rem 0.75rem;font-weight:600;">剩余量</th>
+            <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">有效期至</th>
+            <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">入库日</th>
+            <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">状态</th>
+            <th style="padding:0.5rem 0.75rem;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in batches %}
+          {% set is_expired = b.expiry_date and b.expiry_date < today_str %}
+          {% set is_expiring = b.expiry_date and not is_expired and b.expiry_date <= alert_date_str %}
+          <tr style="border-bottom:1px solid var(--border);{% if b.is_depleted %}opacity:0.45;{% elif is_expired %}background:#fef2f2;{% elif is_expiring %}background:#fffbeb;{% endif %}">
+            <td style="padding:0.5rem 1rem;">{{ b.batch_no or '—' }}</td>
+            <td style="padding:0.5rem 0.75rem;text-align:right;font-weight:600;">{{ '%.1f'|format(b.quantity) }} {{ item.unit }}</td>
+            <td style="padding:0.5rem 0.75rem;{% if is_expired %}color:#dc2626;font-weight:600;{% elif is_expiring %}color:#d97706;font-weight:600;{% endif %}">
+              {{ b.expiry_date or '—' }}
+              {% if is_expired %} ❌{% elif is_expiring %} ⚠{% endif %}
+            </td>
+            <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ b.received_date or '—' }}</td>
+            <td style="padding:0.5rem 0.75rem;">
+              {% if b.is_depleted %}<span class="badge b-no">已耗尽</span>
+              {% elif is_expired %}<span class="badge b-no">已过期</span>
+              {% elif is_expiring %}<span class="badge b-pending">即将到期</span>
+              {% else %}<span class="badge b-ok">正常</span>{% endif %}
+            </td>
+            <td style="padding:0.5rem 0.75rem;text-align:right;">
+              {% if not b.is_depleted %}
+              <div style="display:flex;gap:0.4rem;justify-content:flex-end;flex-wrap:wrap;">
+                <button type="button" class="secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;" onclick="toggleBatchEdit({{ b.id }})">修正</button>
+                <form method="post" action="/admin/inventory/{{ item.id }}/batch/{{ b.id }}/deplete"
+                      onsubmit="return confirm('确认将此批次标记为耗尽？将从总库存中扣除剩余 {{ '%.1f'|format(b.quantity) }} {{ item.unit }}。')" style="margin:0;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <button type="submit" class="secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;color:#dc2626;">耗尽</button>
+                </form>
+              </div>
+              <div id="batch-edit-{{ b.id }}" style="display:none;margin-top:0.4rem;">
+                <form method="post" action="/admin/inventory/{{ item.id }}/batch/{{ b.id }}/adjust"
+                      style="display:flex;gap:0.4rem;align-items:center;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <input type="number" name="new_qty" step="0.01" min="0" value="{{ '%.2f'|format(b.quantity) }}"
+                         style="width:80px;font-size:0.82rem;padding:0.25rem 0.4rem;" required />
+                  <button type="submit" style="font-size:0.78rem;padding:0.25rem 0.6rem;">确认</button>
+                  <button type="button" class="secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;" onclick="toggleBatchEdit({{ b.id }})">取消</button>
+                </form>
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
     <!-- 流水记录 -->
     <div class="card" style="padding:0;overflow:hidden;">
       <div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border);font-weight:600;font-size:0.95rem;">
@@ -133,8 +197,16 @@
           <input name="unit_price" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.cost_price) }}" style="width:100%;" />
         </div>
         <div style="margin-bottom:0.75rem;">
+          <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">批次号（选填）</label>
+          <input name="batch_no" placeholder="如：202503A" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:0.75rem;">
+          <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">有效期至（选填）</label>
+          <input name="expiry_date" type="date" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:0.75rem;">
           <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">备注</label>
-          <input name="note" placeholder="如：采购批次" style="width:100%;" />
+          <input name="note" placeholder="如：采购备注" style="width:100%;" />
         </div>
         <button type="submit" class="btn" style="width:100%;">确认入库</button>
       </form>
@@ -169,4 +241,12 @@
     </div>
   </div>
 </div>
+{% block scripts %}
+<script>
+function toggleBatchEdit(id) {
+  var el = document.getElementById('batch-edit-' + id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}
 {% endblock %}

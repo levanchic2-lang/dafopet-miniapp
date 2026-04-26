@@ -415,6 +415,25 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_tx_type ON inventory_transactions(tx_type)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_tx_created ON inventory_transactions(created_at)"))
 
+            # inventory_batches 库存批次表
+            inv_batch_cols = conn.execute(text("PRAGMA table_info(inventory_batches)")).fetchall()
+            if not inv_batch_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS inventory_batches ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE, "
+                    "batch_no VARCHAR(80) DEFAULT '', "
+                    "quantity REAL DEFAULT 0.0, "
+                    "expiry_date VARCHAR(20) DEFAULT '', "
+                    "received_date VARCHAR(20) DEFAULT '', "
+                    "notes VARCHAR(500) DEFAULT '', "
+                    "is_depleted BOOLEAN DEFAULT 0, "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_batch_item ON inventory_batches(item_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_batch_expiry ON inventory_batches(expiry_date)"))
+
             # rabies_vaccine_records 狂犬疫苗登记表
             rvr_cols = conn.execute(text("PRAGMA table_info(rabies_vaccine_records)")).fetchall()
             if not rvr_cols:
