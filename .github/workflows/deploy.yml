@@ -12,9 +12,9 @@ jobs:
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
-          username: ubuntu
+          username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            sudo git -C /srv/tnr-app/releases/current pull origin main
-            sudo systemctl restart tnr-app
+            git -C /srv/tnr-app/releases/current pull origin main
+            systemctl restart tnr-app
             echo "✅ 部署成功"
