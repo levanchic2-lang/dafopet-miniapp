@@ -259,7 +259,7 @@
         </select>
       </div>
     </div>
-    <div class="row2">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem 0.75rem;align-items:end;">
       <div>
         <label style="margin:0 0 0.35rem;">提交日期从（可选）</label>
         <input type="date" name="from" value="{{ filters['from'] or '' }}" />
@@ -268,8 +268,6 @@
         <label style="margin:0 0 0.35rem;">提交日期到（可选）</label>
         <input type="date" name="to" value="{{ filters.to or '' }}" />
       </div>
-    </div>
-    <div class="row2">
       <div>
         <label style="margin:0 0 0.35rem;">公布展示授权</label>
         <select name="consent">
