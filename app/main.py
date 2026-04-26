@@ -2150,6 +2150,24 @@ async def admin_login(
     )
 
 
+_DEPLOY_TOKEN_FILE = Path("/srv/tnr-app/deploy_token.txt")
+
+@app.post("/webhook/deploy")
+async def webhook_deploy(request: Request):
+    token = request.headers.get("X-Deploy-Token", "")
+    try:
+        expected = _DEPLOY_TOKEN_FILE.read_text().strip()
+    except Exception:
+        raise HTTPException(status_code=503, detail="deploy token not configured")
+    if not token or not secrets.compare_digest(token, expected):
+        raise HTTPException(status_code=403, detail="forbidden")
+    subprocess.Popen(
+        "sleep 3 && git -C /srv/tnr-app/releases/current pull origin main && systemctl restart tnr-app",
+        shell=True, start_new_session=True,
+    )
+    return {"status": "deploying"}
+
+
 @app.get("/admin/logout")
 async def admin_logout(request: Request):
     request.session.clear()

@@ -8,13 +8,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: root
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            git -C /srv/tnr-app/releases/current pull origin main
-            systemctl restart tnr-app
-            echo "✅ 部署成功"
+      - name: Trigger deploy webhook
+        run: |
+          curl -s -f -X POST \
+            -H "X-Deploy-Token: ${{ secrets.DEPLOY_TOKEN }}" \
+            http://8.138.5.234/webhook/deploy
+          echo "✅ 部署已触发"
