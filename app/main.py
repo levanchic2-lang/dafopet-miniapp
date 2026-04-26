@@ -5797,15 +5797,19 @@ async def admin_stocktake_submit(
         inv_item = db.get(InventoryItem, si.item_id) if si.item_id else None
         if not inv_item:
             continue
-        diff = si.actual_qty - si.system_qty
+        # 以实盘数量直接覆盖当前系统库存（基准是提交时的当前值，不是建单快照）
+        # 这样盘点期间正常发生的出入库不会被重复计算
+        before = inv_item.stock_qty
+        after = si.actual_qty
+        diff = after - before          # 与"当前"系统值的差，而非与快照的差
+        si.variance = diff             # 更新为真实差异
         if abs(diff) > 0.001:
             variance_count += 1
-            before = inv_item.stock_qty
-            inv_item.stock_qty = max(0.0, inv_item.stock_qty + diff)
+            inv_item.stock_qty = after
             inv_item.updated_at = now
             db.add(InventoryTransaction(
                 item_id=inv_item.id, tx_type="adjust", qty=abs(diff),
-                qty_before=before, qty_after=inv_item.stock_qty,
+                qty_before=before, qty_after=after,
                 unit_price=0, ref_type="stocktake", ref_id=session_id,
                 operator=operator,
                 note=f"循环盘点#{session_id}（{'+' if diff >= 0 else ''}{diff:.1f}）",
