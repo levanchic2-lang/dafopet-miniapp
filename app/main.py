@@ -2290,12 +2290,19 @@ async def admin_hr_page(
     resigned_staff = db.query(Staff).filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
     expiring = _expiring_contracts(db)
     all_users = db.query(AdminUser).order_by(AdminUser.created_at).all()
+    # 尚未绑定账号的在职员工（可供新建账号时选择）
+    linked_staff_ids = {s.admin_user_id for s in active_staff if s.admin_user_id}
+    unlinked_staff = [s for s in active_staff if s.id not in linked_staff_ids]
+    # 账号 → 员工姓名映射（用于列表显示）
+    staff_by_user_id = {s.admin_user_id: s for s in active_staff if s.admin_user_id}
     return templates.TemplateResponse("admin_hr.html", {
         "request": request, "title": "人事管理",
         "active_staff": active_staff, "resigned_staff": resigned_staff,
         "expiring": expiring,
         "active_users": [u for u in all_users if u.is_active],
         "inactive_users": [u for u in all_users if not u.is_active],
+        "unlinked_staff": unlinked_staff,
+        "staff_by_user_id": staff_by_user_id,
         "current_username": request.session.get("admin_username", ""),
         "csrf_token": _get_csrf_token(request),
         "msg": msg, "err": err,
@@ -2338,6 +2345,7 @@ async def admin_users_create(
     username: str = Form(...),
     password: str = Form(...),
     role: str = Form("staff"),
+    staff_id: str = Form(""),
     csrf_token: str = Form(""),
 ):
     require_admin(request)
@@ -2353,7 +2361,17 @@ async def admin_users_create(
     existing = db.query(AdminUser).filter(AdminUser.username == username).first()
     if existing:
         return RedirectResponse(f"/admin/hr?err=用户名已存在：{username}", status_code=303)
-    db.add(AdminUser(username=username, password_hash=_pwd_ctx.hash(password), role=role, is_active=True))
+    new_user = AdminUser(username=username, password_hash=_pwd_ctx.hash(password), role=role, is_active=True)
+    db.add(new_user)
+    db.flush()  # 获取 new_user.id
+    if staff_id:
+        try:
+            sid = int(staff_id)
+            staff_row = db.get(Staff, sid)
+            if staff_row:
+                staff_row.admin_user_id = new_user.id
+        except (ValueError, TypeError):
+            pass
     _audit(db, request, "admin_user_create", application_id=None, detail={"username": username, "role": role})
     db.commit()
     return RedirectResponse(f"/admin/hr?msg=已创建账号：{username}", status_code=303)
