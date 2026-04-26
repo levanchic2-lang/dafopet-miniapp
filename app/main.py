@@ -2152,7 +2152,7 @@ async def admin_login(
 
 _DEPLOY_TOKEN_FILE = Path("/srv/tnr-app/deploy_token.txt")
 
-@app.post("/webhook/deploy")
+@app.post("/api/webhook/deploy")
 async def webhook_deploy(request: Request):
     token = request.headers.get("X-Deploy-Token", "")
     try:
