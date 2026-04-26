@@ -1,4 +1,8 @@
 const { getJson, postJson } = require("../../utils/api");
+const app = getApp();
+const shenzhenRegionsLocal = (() => {
+  try { return require("../../utils/shenzhen_regions.json"); } catch (e) { return null; }
+})();
 
 const GENDER_OPTIONS = [
   { label: "不详", value: "unknown" },
@@ -32,13 +36,84 @@ Page({
     customerId: null,
     lookupDone: false,
     customerFound: false,
+    districtNames: ["请选择"],
+    streetNames: ["请选择"],
+    districtIndex: 0,
+    streetIndex: 0,
+    addressDetailInput: "",
     hasSig: false,
     submitting: false,
     error: "",
   },
 
+  onLoad() {
+    this._loadShenzhenRegions();
+  },
+
   onReady() {
     this._setupCanvas();
+  },
+
+  _loadShenzhenRegions() {
+    const finish = () => this._initAddrPickers();
+    if (app.globalData.shenzhenRegions && Object.keys(app.globalData.shenzhenRegions).length) {
+      finish(); return;
+    }
+    if (shenzhenRegionsLocal && Object.keys(shenzhenRegionsLocal).length) {
+      app.globalData.shenzhenRegions = shenzhenRegionsLocal;
+      finish(); return;
+    }
+    wx.request({
+      url: app.globalData.apiBase + "/api/regions/shenzhen",
+      success: (res) => {
+        if (res.statusCode >= 200 && res.statusCode < 300 && res.data) {
+          app.globalData.shenzhenRegions = res.data;
+          finish();
+        }
+      }
+    });
+  },
+
+  _initAddrPickers() {
+    const sz = app.globalData.shenzhenRegions;
+    const ph = "请选择";
+    if (!sz || !Object.keys(sz).length) return;
+    const districts = Object.keys(sz).sort();
+    this.setData({ districtNames: [ph, ...districts], streetNames: [ph], districtIndex: 0, streetIndex: 0 });
+  },
+
+  _syncAddr() {
+    const ph = "请选择";
+    const { districtNames, streetNames, districtIndex, streetIndex, addressDetailInput } = this.data;
+    const d = districtNames[districtIndex];
+    const s = streetNames[streetIndex];
+    const detail = (addressDetailInput || "").trim();
+    let addr = "";
+    if (d && d !== ph) addr = "广东省深圳市" + d;
+    if (s && s !== ph) addr += s;
+    if (detail) addr += detail;
+    this.setData({ "form.owner_address": addr });
+  },
+
+  onAddrDistrictPick(e) {
+    const idx = Number(e.detail.value || 0);
+    const ph = "请选择";
+    const sz = app.globalData.shenzhenRegions;
+    const dist = this.data.districtNames[idx];
+    let streetNames = [ph];
+    if (idx > 0 && dist && sz && sz[dist]) {
+      const arr = [...sz[dist]].sort((a, b) => String(a).localeCompare(b, "zh"));
+      streetNames = [ph, ...arr];
+    }
+    this.setData({ districtIndex: idx, streetNames, streetIndex: 0 }, () => this._syncAddr());
+  },
+
+  onAddrStreetPick(e) {
+    this.setData({ streetIndex: Number(e.detail.value || 0) }, () => this._syncAddr());
+  },
+
+  onAddressDetailInput(e) {
+    this.setData({ addressDetailInput: e.detail.value || "" }, () => this._syncAddr());
   },
 
   _setupCanvas() {
@@ -82,7 +157,7 @@ Page({
           updates["form.owner_name"] = res.name;
         }
         if (res.address) {
-          updates["form.owner_address"] = res.address;
+          updates["addressDetailInput"] = res.address;
         }
         if (Object.keys(updates).length) this.setData(updates);
       }
@@ -118,7 +193,6 @@ Page({
   },
 
   onNameInput(e) { this.setData({ "form.owner_name": e.detail.value }); },
-  onAddressInput(e) { this.setData({ "form.owner_address": e.detail.value }); },
   onAnimalNameInput(e) { this.setData({ "form.animal_name": e.detail.value }); },
   onAnimalBreedInput(e) { this.setData({ "form.animal_breed": e.detail.value }); },
   onAnimalDobChange(e) { this.setData({ "form.animal_dob": e.detail.value }); },

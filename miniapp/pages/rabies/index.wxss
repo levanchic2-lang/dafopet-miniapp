@@ -149,3 +149,20 @@
   background: #eee;
   margin: 24rpx 0;
 }
+.addr-scope {
+  font-size: 26rpx;
+  color: #555;
+  margin-bottom: 6rpx;
+}
+.addr-detail {
+  width: 100%;
+  border: 1.5rpx solid #e0e0e0;
+  border-radius: 12rpx;
+  padding: 22rpx 24rpx;
+  font-size: 30rpx;
+  color: #171717;
+  background: #fafafa;
+  box-sizing: border-box;
+  min-height: 80rpx;
+  line-height: 1.5;
+}

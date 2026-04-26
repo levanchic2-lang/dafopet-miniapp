@@ -29,7 +29,26 @@
   <input class="input" value="{{form.owner_name}}" placeholder="真实姓名" bindinput="onNameInput" />
 
   <view class="label">联系地址</view>
-  <input class="input" value="{{form.owner_address}}" placeholder="省市区街道（可选）" bindinput="onAddressInput" />
+  <view class="addr-scope">广东省 · 深圳市</view>
+  <view class="sub" style="margin-bottom:12rpx;">请选择区、街道，再填写详细地址（可选）</view>
+  <view class="row2">
+    <view class="col">
+      <view class="label" style="margin-top:0;">区 / 县</view>
+      <picker mode="selector" range="{{districtNames}}" value="{{districtIndex}}" bindchange="onAddrDistrictPick">
+        <view class="picker">{{districtNames[districtIndex]}}</view>
+      </picker>
+    </view>
+    <view class="col">
+      <view class="label" style="margin-top:0;">街道 / 乡镇</view>
+      <picker mode="selector" range="{{streetNames}}" value="{{streetIndex}}" bindchange="onAddrStreetPick">
+        <view class="picker">{{streetNames[streetIndex]}}</view>
+      </picker>
+    </view>
+  </view>
+  <view class="label">详细地址</view>
+  <textarea class="addr-detail" value="{{addressDetailInput}}" maxlength="240"
+    placeholder="道路、门牌号、楼栋单元等（可选）"
+    auto-height show-confirm-bar="{{false}}" bindinput="onAddressDetailInput" />
 
   <!-- 宠物选择（有档案时显示） -->
   <view wx:if="{{pets.length > 0}}">
