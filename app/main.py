@@ -185,32 +185,7 @@ def _load_china_pcas() -> dict:
 @app.on_event("startup")
 def _startup():
     init_db()
-    _ensure_liangtianbing_account()
     asyncio.get_event_loop().create_task(_surgery_reminder_loop())
-
-
-def _ensure_liangtianbing_account():
-    """启动时确保梁天兵有对应的后台账号并绑定员工档案。"""
-    try:
-        db = SessionLocal()
-        existing = db.query(AdminUser).filter(AdminUser.username == "梁天兵").first()
-        if not existing:
-            new_user = AdminUser(
-                username="梁天兵",
-                password_hash=_pwd_ctx.hash(settings.admin_password),
-                role="superadmin",
-                is_active=True,
-            )
-            db.add(new_user)
-            db.flush()
-            staff_row = db.query(Staff).filter(Staff.name == "梁天兵").first()
-            if staff_row:
-                staff_row.admin_user_id = new_user.id
-            db.commit()
-    except Exception:
-        pass
-    finally:
-        db.close()
 
 
 async def _surgery_reminder_loop():
