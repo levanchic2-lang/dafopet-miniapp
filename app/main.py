@@ -4977,6 +4977,162 @@ async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depe
 
 
 # ---------------------------------------------------------------------------
+# 发药工作台 (Dispensing Workbench)
+# ---------------------------------------------------------------------------
+
+@app.get("/admin/dispensing", response_class=HTMLResponse)
+async def admin_dispensing(
+    request: Request, db: Session = Depends(get_db),
+    q: str = Query(""),
+    status: str = Query("issued"),
+    vet: str = Query(""),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    quick: str = Query(""),        # today / week / month
+):
+    require_admin(request)
+    from datetime import date as _date, timedelta as _timedelta
+
+    # 快捷时间范围
+    today = _date.today()
+    if quick == "today":
+        date_from = date_to = today.isoformat()
+    elif quick == "week":
+        date_from = (today - _timedelta(days=today.weekday())).isoformat()
+        date_to = today.isoformat()
+    elif quick == "month":
+        date_from = today.replace(day=1).isoformat()
+        date_to = today.isoformat()
+
+    qry = db.query(Prescription)
+    if status and status != "all":
+        qry = qry.filter(Prescription.status == status)
+    if vet:
+        qry = qry.filter(Prescription.vet_name == vet)
+    if date_from:
+        qry = qry.filter(Prescription.prescribed_date >= date_from)
+    if date_to:
+        qry = qry.filter(Prescription.prescribed_date <= date_to)
+    if q:
+        # 搜索患者姓名 / 宠物名 / 药品名（通过 subquery）
+        drug_ids = db.query(PrescriptionItem.prescription_id).filter(
+            PrescriptionItem.drug_name.ilike(f"%{q}%")
+        ).subquery()
+        pet_ids = db.query(Pet.id).filter(Pet.name.ilike(f"%{q}%")).subquery()
+        cust_ids = db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).subquery()
+        qry = qry.filter(or_(
+            Prescription.id.in_(drug_ids),
+            Prescription.pet_id.in_(pet_ids),
+            Prescription.customer_id.in_(cust_ids),
+        ))
+
+    # 待发药队列：最早开单排前；其余倒序
+    if status == "issued":
+        prescs = qry.order_by(Prescription.prescribed_date.asc(), Prescription.id.asc()).limit(200).all()
+    else:
+        prescs = qry.order_by(Prescription.id.desc()).limit(200).all()
+
+    # 预载关联数据
+    cust_map = {}
+    pet_map = {}
+    for p in prescs:
+        if p.customer_id and p.customer_id not in cust_map:
+            c = db.get(Customer, p.customer_id)
+            if c:
+                cust_map[p.customer_id] = c
+        if p.pet_id and p.pet_id not in pet_map:
+            pt = db.get(Pet, p.pet_id)
+            if pt:
+                pet_map[p.pet_id] = pt
+
+    # 统计数字
+    pending_count = db.query(Prescription).filter(Prescription.status == "issued").count()
+    today_str = today.isoformat()
+    today_dispensed = db.query(Prescription).filter(
+        Prescription.status == "dispensed",
+        Prescription.prescribed_date == today_str,
+    ).count()
+    month_start = today.replace(day=1).isoformat()
+    month_total = db.query(Prescription).filter(
+        Prescription.prescribed_date >= month_start,
+    ).count()
+
+    # 在职医生列表
+    vets = [r[0] for r in db.query(Prescription.vet_name).filter(
+        Prescription.vet_name != ""
+    ).distinct().order_by(Prescription.vet_name).all()]
+
+    return templates.TemplateResponse("admin_dispensing.html", {
+        "request": request,
+        "prescs": prescs, "cust_map": cust_map, "pet_map": pet_map,
+        "q": q, "status": status, "vet": vet,
+        "date_from": date_from, "date_to": date_to, "quick": quick,
+        "pending_count": pending_count,
+        "today_dispensed": today_dispensed,
+        "month_total": month_total,
+        "vets": vets,
+        "presc_status_zh": _PRESC_STATUS_ZH,
+        "csrf_token": request.session.get("csrf_token", ""),
+        "title": "发药工作台",
+    })
+
+
+@app.post("/admin/dispensing/{presc_id}/dispense")
+async def admin_dispensing_dispense(
+    presc_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    presc = db.get(Prescription, presc_id)
+    if not presc or presc.status != "issued":
+        raise HTTPException(400, "处方单状态不符，无法发药")
+    presc.status = "dispensed"
+    db.commit()
+    return RedirectResponse("/admin/dispensing?msg=已确认发药", status_code=303)
+
+
+@app.post("/admin/dispensing/{presc_id}/undispense")
+async def admin_dispensing_undispense(
+    presc_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    if request.session.get("admin_role") != "superadmin":
+        raise HTTPException(403, "仅超级管理员可撤回发药")
+    presc = db.get(Prescription, presc_id)
+    if not presc or presc.status != "dispensed":
+        raise HTTPException(400, "仅已发药的处方单可撤回")
+    presc.status = "issued"
+    db.commit()
+    return RedirectResponse(f"/admin/dispensing?msg=已撤回至待发药&status=all", status_code=303)
+
+
+@app.post("/admin/dispensing/bulk-dispense")
+async def admin_dispensing_bulk(
+    request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    form = await request.form()
+    ids = [int(v) for k, v in form.multi_items() if k == "presc_ids" and v.isdigit()]
+    if not ids:
+        return RedirectResponse("/admin/dispensing?err=未选择处方单", status_code=303)
+    updated = 0
+    for pid in ids:
+        p = db.get(Prescription, pid)
+        if p and p.status == "issued":
+            p.status = "dispensed"
+            updated += 1
+    db.commit()
+    return RedirectResponse(f"/admin/dispensing?msg=已批量确认发药+{updated}+张", status_code=303)
+
+
+# ---------------------------------------------------------------------------
 # Phase 3 — 销售单 (Sales Orders)
 # ---------------------------------------------------------------------------
 
