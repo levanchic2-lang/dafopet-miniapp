@@ -6473,8 +6473,8 @@ async def admin_rabies_export(
         ("动物名称",       10, lambda r: r.animal_name),
         ("品种",           10, lambda r: r.animal_breed),
         ("出生年月/年龄",   9, lambda r: r.animal_dob),
-        ("性别",            8, lambda r: {"male": "公", "female": "母"}.get(r.animal_gender, r.animal_gender or "")),
-        ("毛色",           10, lambda r: r.animal_color),
+        ("性别",            6, lambda r: {"male": "公", "female": "母"}.get(r.animal_gender, r.animal_gender or "")),
+        ("毛色",            6, lambda r: r.animal_color),
         ("疫苗厂家",       10, lambda r: r.vaccine_manufacturer),
         ("批号",            8, lambda r: r.vaccine_batch_no),
         ("免疫时间",       12, lambda r: r.vaccine_date),
@@ -6525,7 +6525,7 @@ async def admin_rabies_export(
             else:
                 val = ""
             cell = ws.cell(row=r_idx, column=c_idx, value=val)
-            cell.alignment = left_al; cell.border = border
+            cell.alignment = center; cell.border = border
         _embed_sig(rec.staff_signature_path, SIG_STAFF_COL, r_idx)
         _embed_sig(rec.owner_signature_path,  SIG_OWNER_COL,  r_idx)
 
