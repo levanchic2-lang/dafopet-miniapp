@@ -6471,14 +6471,13 @@ async def admin_rabies_export(
         ("动物主人签名", 13, 13),
     ]
     for label, c1, c2 in groups:
-        ws.merge_cells(start_row=1, start_column=c1, end_row=1 if c1 in (1, 12, 13) else 1, end_column=c2)
+        if c1 != c2:
+            ws.merge_cells(start_row=1, start_column=c1, end_row=1, end_column=c2)
         cell = ws.cell(row=1, column=c1, value=label)
         cell.font = hdr_font
         cell.fill = hdr_fill
         cell.alignment = center
         cell.border = border
-        if c1 != c2:
-            ws.merge_cells(start_row=1, start_column=c1, end_row=1, end_column=c2)
 
     # 子标题行
     sub_headers = ["", "姓名", "地址", "电话", "品种", "出生年月/年龄", "性别", "毛色", "厂家", "批号", "免疫时间", "", ""]
