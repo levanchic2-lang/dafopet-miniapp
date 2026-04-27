@@ -6424,12 +6424,13 @@ async def admin_rabies_export(
     date_from: str = Query(""), date_to: str = Query(""),
     status: str = Query(""),
 ):
-    """导出 Excel（文字版，无签名图片嵌入）。"""
+    """导出 Excel，含签名图片嵌入。"""
     require_admin(request)
     import io
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
+    from openpyxl.drawing.image import Image as XLImage
     from fastapi.responses import Response as FastResponse
 
     query = db.query(RabiesVaccineRecord)
@@ -6452,7 +6453,7 @@ async def admin_rabies_export(
     hdr_font = Font(bold=True, size=10)
     hdr_fill = PatternFill("solid", fgColor="D9E1F2")
 
-    # 列定义：(表头文字, 宽度, 取值函数)
+    # 列定义（签名列单独处理）
     columns = [
         ("免疫证号",       14, lambda r: r.cert_no),
         ("动物主人姓名",   12, lambda r: r.owner_name),
@@ -6467,11 +6468,14 @@ async def admin_rabies_export(
         ("批号",           14, lambda r: r.vaccine_batch_no),
         ("免疫时间",       12, lambda r: r.vaccine_date),
         ("免疫人员",       10, lambda r: r.staff_name),
-        ("医护已签名",     10, lambda r: "✓" if r.staff_signature_path else ""),
-        ("主人已签名",     10, lambda r: "✓" if r.owner_signature_path else ""),
+        ("医护签名",       22, None),   # 图片列，索引14（1-based）
+        ("主人签名",       22, None),   # 图片列，索引15（1-based）
         ("状态",            8, lambda r: {"owner_pending": "待主人签名", "staff_pending": "待医护签名", "completed": "已完成"}.get(r.status, r.status)),
         ("登记时间",       16, lambda r: r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else ""),
     ]
+    SIG_STAFF_COL = 14  # 医护签名列（1-based）
+    SIG_OWNER_COL = 15  # 主人签名列（1-based）
+    ROW_H = 55          # 数据行高（points），容纳签名图片
 
     for col_idx, (title, width, _) in enumerate(columns, 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
@@ -6482,23 +6486,53 @@ async def admin_rabies_export(
         cell.border = border
     ws.row_dimensions[1].height = 20
 
+    # 保持所有图片 BytesIO 对象的引用，防止 GC 在 wb.save() 前回收
+    _img_bufs = []
+
+    def _embed_sig(sig_path, col_idx, row_idx):
+        if not sig_path:
+            return
+        p = Path(sig_path)
+        if not p.exists():
+            return
+        try:
+            from PIL import Image as PILImage
+            pil_img = PILImage.open(p).convert("RGBA")
+            pil_img.thumbnail((160, 50), PILImage.LANCZOS)
+            img_buf = io.BytesIO()
+            pil_img.save(img_buf, format="PNG")
+            img_buf.seek(0)
+            _img_bufs.append(img_buf)   # 保持引用
+            xl_img = XLImage(img_buf)
+            xl_img.anchor = f"{get_column_letter(col_idx)}{row_idx}"
+            ws.add_image(xl_img)
+        except Exception:
+            # Pillow 不可用或图片损坏时静默跳过
+            ws.cell(row=row_idx, column=col_idx, value="已签名")
+
     for r_idx, rec in enumerate(records, 2):
+        ws.row_dimensions[r_idx].height = ROW_H
         for c_idx, (_, _, getter) in enumerate(columns, 1):
-            try:
-                val = getter(rec)
-            except Exception:
-                val = ""
-            cell = ws.cell(row=r_idx, column=c_idx, value=val)
+            if getter is None:
+                cell = ws.cell(row=r_idx, column=c_idx, value="")
+            else:
+                try:
+                    val = getter(rec)
+                except Exception:
+                    val = ""
+                cell = ws.cell(row=r_idx, column=c_idx, value=val)
             cell.alignment = left_al
             cell.border = border
+        _embed_sig(rec.staff_signature_path, SIG_STAFF_COL, r_idx)
+        _embed_sig(rec.owner_signature_path, SIG_OWNER_COL, r_idx)
 
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
+    out = io.BytesIO()
+    wb.save(out)
+    out.seek(0)
 
     fname = f"狂犬疫苗登记_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
     return FastResponse(
-        content=buf.read(),
+        content=out.read(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}"},
     )
