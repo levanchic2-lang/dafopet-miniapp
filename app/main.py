@@ -6424,15 +6424,13 @@ async def admin_rabies_export(
     date_from: str = Query(""), date_to: str = Query(""),
     status: str = Query(""),
 ):
-    """导出 Excel，格式与登记本一致，签名图片嵌入。"""
+    """导出 Excel（文字版，无签名图片嵌入）。"""
     require_admin(request)
     import io
-    import base64
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
-    from openpyxl.drawing.image import Image as XLImage
-    from PIL import Image as PILImage
+    from fastapi.responses import Response as FastResponse
 
     query = db.query(RabiesVaccineRecord)
     if status:
@@ -6450,95 +6448,56 @@ async def admin_rabies_export(
     thin = Side(style="thin")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    left   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+    left_al = Alignment(horizontal="left", vertical="center", wrap_text=True)
     hdr_font = Font(bold=True, size=10)
     hdr_fill = PatternFill("solid", fgColor="D9E1F2")
 
-    # 列宽
-    col_widths = [14, 10, 22, 13, 10, 12, 8, 10, 14, 14, 12, 18, 18]
-    cols = ["免疫证号", "姓名", "地址", "电话", "品种", "出生年月/年龄", "性别", "毛色",
-            "厂家", "批号", "免疫时间", "免疫人员签名", "动物主人签名"]
-    for i, (col, w) in enumerate(zip(cols, col_widths), 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-
-    # 标题行（两行 merged header，仿登记本）
-    groups = [
-        ("免疫证号", 1, 1),
-        ("动物主人情况", 2, 4),
-        ("动物基本情况", 5, 8),
-        ("疫苗使用情况", 9, 11),
-        ("免疫人员签名", 12, 12),
-        ("动物主人签名", 13, 13),
+    # 列定义：(表头文字, 宽度, 取值函数)
+    columns = [
+        ("免疫证号",       14, lambda r: r.cert_no),
+        ("动物主人姓名",   12, lambda r: r.owner_name),
+        ("联系地址",       28, lambda r: r.owner_address),
+        ("联系电话",       14, lambda r: r.owner_phone),
+        ("动物名称",       10, lambda r: r.animal_name),
+        ("品种",           10, lambda r: r.animal_breed),
+        ("出生年月/年龄",  14, lambda r: r.animal_dob),
+        ("性别",            8, lambda r: r.animal_gender),
+        ("毛色",           10, lambda r: r.animal_color),
+        ("疫苗厂家",       16, lambda r: r.vaccine_manufacturer),
+        ("批号",           14, lambda r: r.vaccine_batch_no),
+        ("免疫时间",       12, lambda r: r.vaccine_date),
+        ("免疫人员",       10, lambda r: r.staff_name),
+        ("医护已签名",     10, lambda r: "✓" if r.staff_signature_path else ""),
+        ("主人已签名",     10, lambda r: "✓" if r.owner_signature_path else ""),
+        ("状态",            8, lambda r: {"owner_pending": "待主人签名", "staff_pending": "待医护签名", "completed": "已完成"}.get(r.status, r.status)),
+        ("登记时间",       16, lambda r: r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else ""),
     ]
-    for label, c1, c2 in groups:
-        if c1 != c2:
-            ws.merge_cells(start_row=1, start_column=c1, end_row=1, end_column=c2)
-        cell = ws.cell(row=1, column=c1, value=label)
+
+    for col_idx, (title, width, _) in enumerate(columns, 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+        cell = ws.cell(row=1, column=col_idx, value=title)
         cell.font = hdr_font
         cell.fill = hdr_fill
         cell.alignment = center
         cell.border = border
+    ws.row_dimensions[1].height = 20
 
-    # 子标题行
-    sub_headers = ["", "姓名", "地址", "电话", "品种", "出生年月/年龄", "性别", "毛色", "厂家", "批号", "免疫时间", "", ""]
-    for i, h in enumerate(sub_headers, 1):
-        cell = ws.cell(row=2, column=i, value=h)
-        cell.font = hdr_font
-        cell.fill = hdr_fill
-        cell.alignment = center
-        cell.border = border
-    ws.row_dimensions[1].height = 22
-    ws.row_dimensions[2].height = 18
-
-    # 数据行（每行60高，放签名图片）
-    ROW_H = 60
-    for r_idx, rec in enumerate(records, 3):
-        ws.row_dimensions[r_idx].height = ROW_H
-        values = [
-            rec.cert_no,
-            rec.owner_name,
-            rec.owner_address,
-            rec.owner_phone,
-            rec.animal_breed,
-            rec.animal_dob,
-            rec.animal_gender,
-            rec.animal_color,
-            rec.vaccine_manufacturer,
-            rec.vaccine_batch_no,
-            rec.vaccine_date,
-            "",  # 签名列留空，图片覆盖
-            "",
-        ]
-        for c_idx, val in enumerate(values, 1):
+    for r_idx, rec in enumerate(records, 2):
+        for c_idx, (_, _, getter) in enumerate(columns, 1):
+            try:
+                val = getter(rec)
+            except Exception:
+                val = ""
             cell = ws.cell(row=r_idx, column=c_idx, value=val)
-            cell.alignment = left
+            cell.alignment = left_al
             cell.border = border
-
-        # 嵌入签名图片
-        for col_idx, sig_path in [(12, rec.staff_signature_path), (13, rec.owner_signature_path)]:
-            if sig_path and Path(sig_path).exists():
-                try:
-                    pil_img = PILImage.open(sig_path).convert("RGBA")
-                    # 缩放到适合单元格的尺寸（约 120x45 px @96dpi）
-                    pil_img.thumbnail((120, 45), PILImage.LANCZOS)
-                    buf = io.BytesIO()
-                    pil_img.save(buf, format="PNG")
-                    buf.seek(0)
-                    xl_img = XLImage(buf)
-                    col_letter = get_column_letter(col_idx)
-                    # anchor: 列字母 + 行号
-                    xl_img.anchor = f"{col_letter}{r_idx}"
-                    ws.add_image(xl_img)
-                except Exception:
-                    pass
 
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
 
-    from fastapi.responses import Response
     fname = f"狂犬疫苗登记_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
-    return Response(
+    return FastResponse(
         content=buf.read(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}"},
