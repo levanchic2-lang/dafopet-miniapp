@@ -6418,43 +6418,113 @@ async def admin_rabies_delete(rec_id: int, request: Request, db: Session = Depen
     return RedirectResponse("/admin/rabies?msg=记录已删除", status_code=303)
 
 
+def _xlsx_inject_images(xlsx_bytes: bytes, entries: list) -> bytes:
+    """
+    在 xlsx zip 层直接注入 PNG 图片，无需 Pillow。
+    entries: [(png_bytes, col_0idx, row_0idx), ...]
+    """
+    import zipfile as _zf
+    W_EMU, H_EMU = 1524000, 476250  # 160×50 px @ 96dpi
+
+    anchors, img_rels = [], []
+    for i, (_, col, row) in enumerate(entries, 1):
+        anchors.append(
+            f'<xdr:oneCellAnchor>'
+            f'<xdr:from><xdr:col>{col}</xdr:col><xdr:colOff>0</xdr:colOff>'
+            f'<xdr:row>{row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
+            f'<xdr:ext cx="{W_EMU}" cy="{H_EMU}"/>'
+            f'<xdr:pic>'
+            f'<xdr:nvPicPr><xdr:cNvPr id="{i+1}" name="sig{i}"/><xdr:cNvPicPr/></xdr:nvPicPr>'
+            f'<xdr:blipFill><a:blip r:embed="rId{i}"/>'
+            f'<a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'
+            f'<xdr:spPr><a:xfrm><a:off x="0" y="0"/>'
+            f'<a:ext cx="{W_EMU}" cy="{H_EMU}"/></a:xfrm>'
+            f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>'
+            f'</xdr:pic><xdr:clientData/></xdr:oneCellAnchor>'
+        )
+        img_rels.append(
+            f'<Relationship Id="rId{i}" '
+            f'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+            f'Target="../media/image{i}.png"/>'
+        )
+
+    drawing_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"'
+        ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+        ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        + ''.join(anchors) + '</xdr:wsDr>'
+    ).encode()
+
+    drawing_rels_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + ''.join(img_rels) + '</Relationships>'
+    ).encode()
+
+    draw_rel_tag = (
+        '<Relationship Id="rId_sigdraw" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" '
+        'Target="../drawings/drawing1.xml"/>'
+    )
+
+    in_buf = io.BytesIO(xlsx_bytes)
+    out_buf = io.BytesIO()
+    with _zf.ZipFile(in_buf, 'r') as zin:
+        existing = set(zin.namelist())
+        with _zf.ZipFile(out_buf, 'w', _zf.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                name = item.filename
+                if name == '[Content_Types].xml':
+                    t = data.decode()
+                    if 'image/png' not in t:
+                        t = t.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>')
+                    if 'drawing1.xml' not in t:
+                        t = t.replace('</Types>',
+                            '<Override PartName="/xl/drawings/drawing1.xml"'
+                            ' ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>')
+                    data = t.encode()
+                elif name == 'xl/worksheets/sheet1.xml':
+                    t = data.decode()
+                    if 'rId_sigdraw' not in t:
+                        t = t.replace('</worksheet>', '<drawing r:id="rId_sigdraw"/></worksheet>')
+                    data = t.encode()
+                elif name == 'xl/worksheets/_rels/sheet1.xml.rels':
+                    t = data.decode()
+                    if 'rId_sigdraw' not in t:
+                        t = t.replace('</Relationships>', draw_rel_tag + '</Relationships>')
+                    data = t.encode()
+                zout.writestr(item, data)
+
+            if 'xl/worksheets/_rels/sheet1.xml.rels' not in existing:
+                zout.writestr('xl/worksheets/_rels/sheet1.xml.rels', (
+                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                    + draw_rel_tag + '</Relationships>'
+                ).encode())
+
+            zout.writestr('xl/drawings/drawing1.xml', drawing_xml)
+            zout.writestr('xl/drawings/_rels/drawing1.xml.rels', drawing_rels_xml)
+            for i, (png_bytes, _, __) in enumerate(entries, 1):
+                zout.writestr(f'xl/media/image{i}.png', png_bytes)
+
+    return out_buf.getvalue()
+
+
 @app.get("/admin/rabies/export/excel")
 async def admin_rabies_export(
     request: Request, db: Session = Depends(get_db),
     date_from: str = Query(""), date_to: str = Query(""),
     status: str = Query(""),
 ):
-    """导出 Excel，含签名图片嵌入。"""
+    """导出 Excel，签名图片直接注入 xlsx zip，无需 Pillow。"""
     require_admin(request)
-    import io, struct
+    import io
     from fastapi.responses import Response as FastResponse
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
-    from openpyxl.drawing.image import Image as XLImage
-
-    # 若服务器未安装 Pillow，直接 patch Image.__init__ 绕过 PIL 检查
-    try:
-        import PIL  # noqa: F401
-    except ImportError:
-        def _no_pil_init(self, img):
-            self.format = None
-            self.ref = img
-            try:
-                pos = img.tell() if hasattr(img, 'tell') else 0
-                data = img.read()
-                img.seek(pos)
-                if data[:4] == b'\x89PNG' and len(data) >= 24:
-                    self.format = 'PNG'
-                    self.width  = struct.unpack('>I', data[16:20])[0]
-                    self.height = struct.unpack('>I', data[20:24])[0]
-                else:
-                    self.format = 'JPEG'
-                    self.width, self.height = 400, 120
-            except Exception:
-                self.format = 'PNG'
-                self.width, self.height = 400, 120
-        XLImage.__init__ = _no_pil_init
 
     query = db.query(RabiesVaccineRecord)
     if status:
@@ -6476,7 +6546,6 @@ async def admin_rabies_export(
     hdr_font = Font(bold=True, size=10)
     hdr_fill = PatternFill("solid", fgColor="D9E1F2")
 
-    # 列定义（签名列单独处理）
     columns = [
         ("免疫证号",       14, lambda r: r.cert_no),
         ("动物主人姓名",   12, lambda r: r.owner_name),
@@ -6491,70 +6560,61 @@ async def admin_rabies_export(
         ("批号",           14, lambda r: r.vaccine_batch_no),
         ("免疫时间",       12, lambda r: r.vaccine_date),
         ("免疫人员",       10, lambda r: r.staff_name),
-        ("医护签名",       22, None),   # 图片列，索引14（1-based）
-        ("主人签名",       22, None),   # 图片列，索引15（1-based）
+        ("医护签名",       22, None),
+        ("主人签名",       22, None),
         ("状态",            8, lambda r: {"owner_pending": "待主人签名", "staff_pending": "待医护签名", "completed": "已完成"}.get(r.status, r.status)),
         ("登记时间",       16, lambda r: r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else ""),
     ]
-    SIG_STAFF_COL = 14  # 医护签名列（1-based）
-    SIG_OWNER_COL = 15  # 主人签名列（1-based）
-    ROW_H = 55          # 数据行高（points），容纳签名图片
+    SIG_STAFF_COL = 14  # 1-based
+    SIG_OWNER_COL = 15
+    ROW_H = 55
 
     for col_idx, (title, width, _) in enumerate(columns, 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
         cell = ws.cell(row=1, column=col_idx, value=title)
-        cell.font = hdr_font
-        cell.fill = hdr_fill
-        cell.alignment = center
-        cell.border = border
+        cell.font = hdr_font; cell.fill = hdr_fill
+        cell.alignment = center; cell.border = border
     ws.row_dimensions[1].height = 20
 
-    # 保持所有图片 BytesIO 对象的引用，防止 GC 在 wb.save() 前回收
-    _img_bufs = []
-
-    def _embed_sig(sig_path, col_idx, row_idx):
-        if not sig_path:
-            return
-        p = Path(sig_path)
-        if not p.exists():
-            return
-        try:
-            raw = p.read_bytes()
-            img_buf = io.BytesIO(raw)
-            _img_bufs.append(img_buf)  # 保持引用，防止 GC
-            xl_img = XLImage(img_buf)
-            # 等比缩放到最大 160×50
-            scale = min(160 / max(xl_img.width, 1), 50 / max(xl_img.height, 1), 1.0)
-            xl_img.width  = int(xl_img.width  * scale)
-            xl_img.height = int(xl_img.height * scale)
-            xl_img.anchor = f"{get_column_letter(col_idx)}{row_idx}"
-            ws.add_image(xl_img)
-        except Exception:
-            pass  # 图片损坏时静默跳过
+    sig_entries = []  # (png_bytes, col_0idx, row_0idx)
 
     for r_idx, rec in enumerate(records, 2):
         ws.row_dimensions[r_idx].height = ROW_H
         for c_idx, (_, _, getter) in enumerate(columns, 1):
-            if getter is None:
-                cell = ws.cell(row=r_idx, column=c_idx, value="")
-            else:
+            val = "" if getter is None else (lambda g, r: (lambda: g(r) if True else "")() if True else "")  # noqa
+            if getter is not None:
                 try:
                     val = getter(rec)
                 except Exception:
                     val = ""
-                cell = ws.cell(row=r_idx, column=c_idx, value=val)
-            cell.alignment = left_al
-            cell.border = border
-        _embed_sig(rec.staff_signature_path, SIG_STAFF_COL, r_idx)
-        _embed_sig(rec.owner_signature_path, SIG_OWNER_COL, r_idx)
+            else:
+                val = ""
+            cell = ws.cell(row=r_idx, column=c_idx, value=val)
+            cell.alignment = left_al; cell.border = border
+
+        for col_1idx, sig_path in [(SIG_STAFF_COL, rec.staff_signature_path),
+                                    (SIG_OWNER_COL, rec.owner_signature_path)]:
+            if sig_path:
+                p = Path(sig_path)
+                if p.exists():
+                    try:
+                        sig_entries.append((p.read_bytes(), col_1idx - 1, r_idx - 1))
+                    except Exception:
+                        pass
 
     out = io.BytesIO()
     wb.save(out)
-    out.seek(0)
+    xlsx_bytes = out.getvalue()
+
+    if sig_entries:
+        try:
+            xlsx_bytes = _xlsx_inject_images(xlsx_bytes, sig_entries)
+        except Exception:
+            pass  # 注入失败时退回文字版
 
     fname = f"狂犬疫苗登记_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
     return FastResponse(
-        content=out.read(),
+        content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}"},
     )
