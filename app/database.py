@@ -541,6 +541,40 @@ def _try_sqlite_migrations() -> None:
                 ")"
             ))
 
+            # invoices 收费单
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS invoices ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "invoice_no VARCHAR(40) DEFAULT '', "
+                "customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, "
+                "visit_id INTEGER REFERENCES visits(id) ON DELETE SET NULL, "
+                "pet_id INTEGER REFERENCES pets(id) ON DELETE SET NULL, "
+                "invoice_date VARCHAR(20) DEFAULT '', "
+                "subtotal REAL DEFAULT 0.0, "
+                "discount_amount REAL DEFAULT 0.0, "
+                "total_amount REAL DEFAULT 0.0, "
+                "payment_status VARCHAR(20) DEFAULT 'unpaid', "
+                "payment_method VARCHAR(40) DEFAULT '', "
+                "paid_at DATETIME, "
+                "notes TEXT DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS invoice_items ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE, "
+                "ref_type VARCHAR(40) DEFAULT 'manual', "
+                "ref_id INTEGER, "
+                "description VARCHAR(300) DEFAULT '', "
+                "quantity REAL DEFAULT 1.0, "
+                "unit_price REAL DEFAULT 0.0, "
+                "subtotal REAL DEFAULT 0.0"
+                ")"
+            ))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

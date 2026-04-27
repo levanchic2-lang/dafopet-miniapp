@@ -203,6 +203,36 @@
       {% endif %}
     </div>
 
+    <!-- 收费单 -->
+    <div class="card" style="margin-top:0.75rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <div style="font-weight:700;font-size:0.95rem;">收费单
+          <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（{{ invoices|length }}张）</span>
+        </div>
+        {% set has_unpaid = invoices | selectattr('payment_status', 'eq', 'unpaid') | list %}
+        {% if not has_unpaid %}
+        <a href="/admin/invoices/create?visit_id={{ v.id }}"
+           class="btn" style="font-size:0.82rem;padding:0.3rem 0.75rem;">🧾 生成收费单</a>
+        {% endif %}
+      </div>
+      {% if invoices %}
+      <div style="display:grid;gap:0.4rem;">
+        {% for inv in invoices %}
+        <a href="/admin/invoices/{{ inv.id }}"
+           style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
+          <span style="font-size:0.78rem;color:var(--muted);font-family:monospace;">{{ inv.invoice_no }}</span>
+          <span class="badge {% if inv.payment_status == 'paid' %}b-done{% elif inv.payment_status == 'cancelled' %}b-no{% else %}b-pending{% endif %}"
+                style="font-size:0.68rem;">{{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}</span>
+          <span style="flex:1;font-size:0.85rem;">{{ inv.items|length }} 项</span>
+          <span style="font-weight:700;font-size:0.95rem;">¥ {{ '%.2f'|format(inv.total_amount) }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:0.88rem;margin:0;">本次就诊暂无收费单</p>
+      {% endif %}
+    </div>
+
     <!-- 删除 -->
     <div style="margin-top:0.75rem;">
       <form method="post" action="/admin/visits/{{ v.id }}/delete"

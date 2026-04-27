@@ -65,6 +65,8 @@ from app.models import (
     StocktakeItem,
     RabiesVaccineRecord,
     AdoptionPet,
+    Invoice,
+    InvoiceItem,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -4699,6 +4701,7 @@ async def page_admin_visit_detail(
     vet_names = [v2[0] for v2 in vets]
     prescriptions = db.query(Prescription).filter(Prescription.visit_id == visit_id).order_by(Prescription.id.desc()).all()
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
+    invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
     _PRESC_STATUS_ZH = {"draft": "草稿", "issued": "已开具", "dispensed": "已发药"}
     _SO_STATUS_ZH = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
     return templates.TemplateResponse(request, "admin_visit_form.html", {
@@ -4710,8 +4713,10 @@ async def page_admin_visit_detail(
         "visit_type_zh": _VISIT_TYPE_ZH,
         "prescriptions": prescriptions,
         "sales_orders": sales_orders,
+        "invoices": invoices,
         "presc_status_zh": _PRESC_STATUS_ZH,
         "so_status_zh": _SO_STATUS_ZH,
+        "inv_status_zh": _INV_STATUS_ZH,
         "csrf_token": _get_csrf_token(request),
         "mode": "edit",
         "msg": request.query_params.get("msg"),
@@ -6275,6 +6280,297 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
     db.add(record)
     db.commit()
     return {"id": record.id, "status": record.status}
+
+
+# ── 后台：收费单 ─────────────────────────────────────────────────────────────
+
+_INV_STATUS_ZH = {"unpaid": "待收款", "paid": "已收款", "cancelled": "已取消"}
+_INV_PAY_ZH    = {
+    "cash": "现金", "wechat": "微信支付", "alipay": "支付宝",
+    "card": "刷卡", "groupbuy": "团购", "prepaid": "预付款",
+}
+
+
+def _gen_invoice_no(db: Session) -> str:
+    """生成收费单号：YYYYMMDD-N（当天第几张）"""
+    from datetime import date
+    today_str = date.today().strftime("%Y%m%d")
+    count = db.query(func.count(Invoice.id)).filter(
+        Invoice.invoice_no.like(f"{today_str}-%")
+    ).scalar() or 0
+    return f"{today_str}-{count + 1}"
+
+
+@app.get("/admin/invoices", response_class=HTMLResponse)
+async def admin_invoices_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    status: str = "",
+):
+    require_admin(request)
+    query = db.query(Invoice).order_by(Invoice.id.desc())
+    if status:
+        query = query.filter(Invoice.payment_status == status)
+    if q:
+        from sqlalchemy import or_
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(Invoice.customer_id.in_(cids))
+    invoices = query.limit(200).all()
+    cust_map = {}
+    for inv in invoices:
+        if inv.customer_id and inv.customer_id not in cust_map:
+            cust_map[inv.customer_id] = db.get(Customer, inv.customer_id)
+    return templates.TemplateResponse(request, "admin_invoices.html", {
+        "invoices": invoices,
+        "cust_map": cust_map,
+        "inv_status_zh": _INV_STATUS_ZH,
+        "inv_pay_zh": _INV_PAY_ZH,
+        "q": q,
+        "status": status,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.get("/admin/invoices/create", response_class=HTMLResponse)
+async def admin_invoice_create_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    visit_id: int = 0,
+    customer_id: int = 0,
+):
+    require_admin(request)
+    from datetime import date
+    visit, cust, pet = None, None, None
+    prefill_items = []
+
+    if visit_id:
+        visit = db.get(Visit, visit_id)
+        if visit:
+            if visit.customer_id:
+                cust = db.get(Customer, visit.customer_id)
+            if visit.pet_id:
+                pet = db.get(Pet, visit.pet_id)
+            # 预填：处方单
+            prescs = db.query(Prescription).filter(
+                Prescription.visit_id == visit_id,
+                Prescription.status != "draft",
+            ).all()
+            for p in prescs:
+                for item in p.items:
+                    prefill_items.append({
+                        "ref_type": "prescription",
+                        "ref_id": p.id,
+                        "description": f"[处方#{p.id}] {item.drug_name}",
+                        "quantity": item.quantity_num,
+                        "unit_price": item.unit_price,
+                        "subtotal": item.subtotal,
+                    })
+            # 预填：销售单
+            sos = db.query(SalesOrder).filter(
+                SalesOrder.visit_id == visit_id,
+                SalesOrder.status != "cancelled",
+            ).all()
+            for so in sos:
+                for item in so.items:
+                    prefill_items.append({
+                        "ref_type": "sales_order",
+                        "ref_id": so.id,
+                        "description": f"[销售单#{so.id}] {item.item_name}",
+                        "quantity": item.quantity,
+                        "unit_price": item.unit_price,
+                        "subtotal": item.subtotal,
+                    })
+    elif customer_id:
+        cust = db.get(Customer, customer_id)
+
+    return templates.TemplateResponse(request, "admin_invoice_detail.html", {
+        "mode": "create",
+        "visit": visit,
+        "cust": cust,
+        "pet": pet,
+        "prefill_items": prefill_items,
+        "today": date.today().isoformat(),
+        "inv_status_zh": _INV_STATUS_ZH,
+        "inv_pay_zh": _INV_PAY_ZH,
+        "csrf_token": _get_csrf_token(request),
+        "msg": None,
+    })
+
+
+@app.post("/admin/invoices/create")
+async def admin_invoice_create(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    _check_csrf(request, await request.form())
+    form = await request.form()
+    from datetime import date
+
+    visit_id    = int(form.get("visit_id") or 0) or None
+    customer_id = int(form.get("customer_id") or 0) or None
+    pet_id      = int(form.get("pet_id") or 0) or None
+    invoice_date = str(form.get("invoice_date") or date.today().isoformat())
+    discount     = float(form.get("discount_amount") or 0)
+    notes        = str(form.get("notes") or "")
+    admin_name   = request.session.get("admin", "")
+
+    # 明细行
+    descs      = form.getlist("desc[]")
+    qtys       = form.getlist("qty[]")
+    prices     = form.getlist("price[]")
+    ref_types  = form.getlist("ref_type[]")
+    ref_ids    = form.getlist("ref_id[]")
+
+    subtotal = 0.0
+    line_items = []
+    for i, desc in enumerate(descs):
+        desc = desc.strip()
+        if not desc:
+            continue
+        qty   = float(qtys[i]) if i < len(qtys) else 1.0
+        price = float(prices[i]) if i < len(prices) else 0.0
+        sub   = round(qty * price, 2)
+        subtotal += sub
+        line_items.append(InvoiceItem(
+            ref_type    = ref_types[i] if i < len(ref_types) else "manual",
+            ref_id      = int(ref_ids[i]) if i < len(ref_ids) and ref_ids[i] else None,
+            description = desc,
+            quantity    = qty,
+            unit_price  = price,
+            subtotal    = sub,
+        ))
+
+    total = round(subtotal - discount, 2)
+    inv = Invoice(
+        invoice_no      = _gen_invoice_no(db),
+        customer_id     = customer_id,
+        visit_id        = visit_id,
+        pet_id          = pet_id,
+        invoice_date    = invoice_date,
+        subtotal        = round(subtotal, 2),
+        discount_amount = discount,
+        total_amount    = total,
+        payment_status  = "unpaid",
+        notes           = notes,
+        created_by      = admin_name,
+    )
+    db.add(inv)
+    db.flush()
+    for li in line_items:
+        li.invoice_id = inv.id
+        db.add(li)
+    db.commit()
+    return RedirectResponse(f"/admin/invoices/{inv.id}?msg=收费单已创建", status_code=303)
+
+
+@app.get("/admin/invoices/{inv_id}", response_class=HTMLResponse)
+async def admin_invoice_detail(
+    inv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404, "收费单不存在")
+    cust  = db.get(Customer, inv.customer_id) if inv.customer_id else None
+    pet   = db.get(Pet,      inv.pet_id)      if inv.pet_id      else None
+    visit = db.get(Visit,    inv.visit_id)    if inv.visit_id    else None
+    return templates.TemplateResponse(request, "admin_invoice_detail.html", {
+        "mode": "view",
+        "inv": inv,
+        "cust": cust,
+        "pet": pet,
+        "visit": visit,
+        "inv_status_zh": _INV_STATUS_ZH,
+        "inv_pay_zh": _INV_PAY_ZH,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/invoices/{inv_id}/pay")
+async def admin_invoice_pay(
+    inv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    _check_csrf(request, await request.form())
+    form = await request.form()
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404)
+    inv.payment_method = str(form.get("payment_method") or "cash")
+    inv.payment_status = "paid"
+    inv.paid_at        = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/invoices/{inv_id}?msg=收款成功", status_code=303)
+
+
+@app.post("/admin/invoices/{inv_id}/cancel")
+async def admin_invoice_cancel(
+    inv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    _check_csrf(request, await request.form())
+    inv = db.get(Invoice, inv_id)
+    if inv and inv.payment_status == "unpaid":
+        inv.payment_status = "cancelled"
+        db.commit()
+    return RedirectResponse(f"/admin/invoices/{inv_id}?msg=收费单已取消", status_code=303)
+
+
+@app.get("/admin/invoices/{inv_id}/print", response_class=HTMLResponse)
+async def admin_invoice_print(
+    inv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404)
+    cust  = db.get(Customer, inv.customer_id) if inv.customer_id else None
+    pet   = db.get(Pet,      inv.pet_id)      if inv.pet_id      else None
+    visit = db.get(Visit,    inv.visit_id)    if inv.visit_id    else None
+    from app.database import get_settings
+    clinic_name = "大风动物医院"
+    try:
+        settings_obj = get_settings()
+        clinic_name = getattr(settings_obj, "clinic_name", clinic_name)
+    except Exception:
+        pass
+    return templates.TemplateResponse(request, "admin_invoice_print.html", {
+        "inv": inv,
+        "cust": cust,
+        "pet": pet,
+        "visit": visit,
+        "inv_status_zh": _INV_STATUS_ZH,
+        "inv_pay_zh": _INV_PAY_ZH,
+        "clinic_name": clinic_name,
+    })
+
+
+@app.post("/admin/invoices/{inv_id}/delete")
+async def admin_invoice_delete(
+    inv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    _check_csrf(request, await request.form())
+    inv = db.get(Invoice, inv_id)
+    if inv:
+        db.delete(inv)
+        db.commit()
+    return RedirectResponse("/admin/invoices?msg=已删除", status_code=303)
 
 
 # ── 后台：狂犬疫苗登记管理 ───────────────────────────────────────────────────

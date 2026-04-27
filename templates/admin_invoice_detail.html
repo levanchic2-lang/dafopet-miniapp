@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+.pay-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.25rem;
+  padding:0.75rem 0.5rem;border:2px solid var(--border);border-radius:12px;cursor:pointer;
+  background:var(--card);transition:border-color .15s,background .15s;min-width:80px;flex:1;}
+.pay-btn:hover{border-color:var(--accent);background:var(--bg-elevated);}
+.pay-btn.selected{border-color:var(--accent);background:#eff6ff;}
+.pay-btn .icon{font-size:1.5rem;}
+.pay-btn .label{font-size:0.75rem;font-weight:600;color:var(--text);}
+.items-table th,.items-table td{padding:0.45rem 0.6rem;text-align:left;border-bottom:1px solid var(--border);}
+.items-table th{font-size:0.78rem;color:var(--muted);font-weight:600;background:var(--bg-elevated);}
+.items-table td{font-size:0.88rem;}
+.items-table td input{width:100%;padding:0.25rem 0.4rem;font-size:0.85rem;}
+.summary-row{display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.9rem;}
+.summary-total{font-size:1.2rem;font-weight:800;color:var(--accent);}
+</style>
+{% endblock %}
+{% block body %}
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+{% set is_create = (mode == 'create') %}
+{% set inv = inv if not is_create else None %}
+
+<!-- 顶部导航 -->
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+  <a href="/admin/invoices" class="btn secondary" style="font-size:0.85rem;">← 收银台</a>
+  {% if not is_create %}
+  <h1 style="margin:0;font-size:1.2rem;">收费单 {{ inv.invoice_no }}</h1>
+  <span class="badge {% if inv.payment_status == 'paid' %}b-done{% elif inv.payment_status == 'cancelled' %}b-no{% else %}b-pending{% endif %}"
+        style="font-size:0.8rem;">
+    {{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}
+  </span>
+  <div style="margin-left:auto;display:flex;gap:0.5rem;">
+    <a href="/admin/invoices/{{ inv.id }}/print" target="_blank"
+       class="btn secondary" style="font-size:0.85rem;">🖨 打印票据</a>
+  </div>
+  {% else %}
+  <h1 style="margin:0;font-size:1.2rem;">新建收费单</h1>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:1rem;align-items:start;">
+
+  <!-- 左栏：明细 -->
+  <div>
+
+    {% if is_create %}
+    <!-- ===== 创建模式 ===== -->
+    <form method="post" action="/admin/invoices/create" id="inv-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input type="hidden" name="visit_id"    value="{{ visit.id if visit else 0 }}" />
+      <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}" />
+      <input type="hidden" name="pet_id"      value="{{ visit.pet_id if visit and visit.pet_id else (cust.id if cust else 0) }}" />
+
+      <!-- 日期 -->
+      <div class="card" style="margin-bottom:0.75rem;">
+        <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
+          <div style="flex:0 0 180px;">
+            <label>收费日期</label>
+            <input type="date" name="invoice_date" value="{{ today }}" required />
+          </div>
+          <div style="flex:0 0 240px;">
+            <label>备注</label>
+            <input name="notes" placeholder="可选备注" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 明细表 -->
+      <div class="card" style="margin-bottom:0.75rem;padding:0;">
+        <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-weight:700;font-size:0.95rem;">费用明细</span>
+          <button type="button" onclick="addRow()" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">＋ 手动添加项目</button>
+        </div>
+        <table class="items-table" style="width:100%;" id="items-table">
+          <thead>
+            <tr>
+              <th style="width:45%;">描述</th>
+              <th style="width:12%;text-align:center;">数量</th>
+              <th style="width:15%;text-align:right;">单价 (¥)</th>
+              <th style="width:15%;text-align:right;">小计 (¥)</th>
+              <th style="width:8%;"></th>
+            </tr>
+          </thead>
+          <tbody id="items-body">
+            {% for item in prefill_items %}
+            <tr class="item-row">
+              <td>
+                <input type="hidden" name="ref_type[]" value="{{ item.ref_type }}" />
+                <input type="hidden" name="ref_id[]"   value="{{ item.ref_id or '' }}" />
+                <input name="desc[]" value="{{ item.description }}" required />
+              </td>
+              <td style="text-align:center;">
+                <input name="qty[]" type="number" step="0.01" min="0" value="{{ item.quantity }}"
+                       style="text-align:center;" oninput="calcRow(this)" />
+              </td>
+              <td style="text-align:right;">
+                <input name="price[]" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.unit_price) }}"
+                       style="text-align:right;" oninput="calcRow(this)" />
+              </td>
+              <td style="text-align:right;">
+                <input name="subtotal_display" readonly value="{{ '%.2f'|format(item.subtotal) }}"
+                       style="text-align:right;background:transparent;border:none;font-weight:600;" />
+              </td>
+              <td style="text-align:center;">
+                <button type="button" onclick="removeRow(this)" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;">✕</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 合计 + 折扣 -->
+      <div class="card" style="margin-bottom:0.75rem;">
+        <div class="summary-row">
+          <span style="color:var(--muted);">小计</span>
+          <span id="subtotal-display">¥ 0.00</span>
+        </div>
+        <div class="summary-row">
+          <span style="color:var(--muted);">折扣 / 减免</span>
+          <div style="display:flex;align-items:center;gap:0.35rem;">
+            <span>¥</span>
+            <input name="discount_amount" id="discount-input" type="number" step="0.01" min="0" value="0"
+                   style="width:90px;text-align:right;" oninput="calcTotal()" />
+          </div>
+        </div>
+        <div class="summary-row" style="border-top:1px solid var(--border);padding-top:0.5rem;margin-top:0.25rem;">
+          <span style="font-weight:700;">实收金额</span>
+          <span class="summary-total" id="total-display">¥ 0.00</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:0.6rem;">
+        <button type="submit" class="btn" style="flex:1;">保存收费单（待收款）</button>
+        {% if visit %}
+        <a href="/admin/visits/{{ visit.id }}" class="btn secondary">取消</a>
+        {% endif %}
+      </div>
+    </form>
+
+    {% else %}
+    <!-- ===== 查看模式 ===== -->
+
+    <!-- 明细表 -->
+    <div class="card" style="padding:0;margin-bottom:0.75rem;">
+      <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border);">
+        <span style="font-weight:700;font-size:0.95rem;">费用明细</span>
+      </div>
+      <table class="items-table" style="width:100%;">
+        <thead>
+          <tr>
+            <th style="width:50%;">描述</th>
+            <th style="width:12%;text-align:center;">数量</th>
+            <th style="width:16%;text-align:right;">单价 (¥)</th>
+            <th style="width:16%;text-align:right;">小计 (¥)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in inv.items %}
+          <tr>
+            <td>{{ item.description }}</td>
+            <td style="text-align:center;">{{ item.quantity }}</td>
+            <td style="text-align:right;">{{ '%.2f'|format(item.unit_price) }}</td>
+            <td style="text-align:right;font-weight:600;">{{ '%.2f'|format(item.subtotal) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 汇总 -->
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div class="summary-row">
+        <span style="color:var(--muted);">小计</span>
+        <span>¥ {{ '%.2f'|format(inv.subtotal) }}</span>
+      </div>
+      {% if inv.discount_amount > 0 %}
+      <div class="summary-row">
+        <span style="color:var(--muted);">折扣 / 减免</span>
+        <span style="color:#16a34a;">- ¥ {{ '%.2f'|format(inv.discount_amount) }}</span>
+      </div>
+      {% endif %}
+      <div class="summary-row" style="border-top:1px solid var(--border);padding-top:0.5rem;margin-top:0.25rem;">
+        <span style="font-weight:700;">实收金额</span>
+        <span class="summary-total">¥ {{ '%.2f'|format(inv.total_amount) }}</span>
+      </div>
+      {% if inv.payment_status == 'paid' %}
+      <div style="margin-top:0.75rem;padding:0.6rem 0.85rem;background:#d1fae5;border-radius:8px;font-size:0.85rem;color:#065f46;">
+        ✅ 已收款 · {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) }} ·
+        {{ inv.paid_at.strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- 收款操作（仅待收款状态显示） -->
+    {% if inv.payment_status == 'unpaid' %}
+    <div class="card" style="margin-bottom:0.75rem;">
+      <h3 style="margin:0 0 1rem;font-size:0.95rem;font-weight:700;">确认收款</h3>
+      <form method="post" action="/admin/invoices/{{ inv.id }}/pay">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="payment_method" id="pay-method-input" value="cash" />
+
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+          <button type="button" class="pay-btn selected" data-val="cash"     onclick="selectPay(this)"><span class="icon">💵</span><span class="label">现金</span></button>
+          <button type="button" class="pay-btn"          data-val="wechat"   onclick="selectPay(this)"><span class="icon">💚</span><span class="label">微信支付</span></button>
+          <button type="button" class="pay-btn"          data-val="alipay"   onclick="selectPay(this)"><span class="icon">🔵</span><span class="label">支付宝</span></button>
+          <button type="button" class="pay-btn"          data-val="card"     onclick="selectPay(this)"><span class="icon">💳</span><span class="label">刷卡</span></button>
+          <button type="button" class="pay-btn"          data-val="groupbuy" onclick="selectPay(this)"><span class="icon">🎟</span><span class="label">团购</span></button>
+          <button type="button" class="pay-btn"          data-val="prepaid"  onclick="selectPay(this)"><span class="icon">🪙</span><span class="label">预付款</span></button>
+        </div>
+
+        <div style="display:flex;gap:0.6rem;">
+          <button type="submit" class="btn" style="flex:1;font-size:1rem;padding:0.7rem;">
+            确认收款 ¥ {{ '%.2f'|format(inv.total_amount) }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- 取消 -->
+    <div class="card">
+      <h3 style="margin:0 0 0.5rem;font-size:0.88rem;color:var(--muted);">危险操作</h3>
+      <form method="post" action="/admin/invoices/{{ inv.id }}/cancel"
+            onsubmit="return confirm('确认取消此收费单？')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="btn secondary" style="width:100%;font-size:0.85rem;">取消此收费单</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if inv.payment_status == 'cancelled' %}
+    <div class="card">
+      <h3 style="margin:0 0 0.5rem;font-size:0.88rem;color:var(--muted);">删除记录</h3>
+      <form method="post" action="/admin/invoices/{{ inv.id }}/delete"
+            onsubmit="return confirm('确认删除此收费单？此操作不可恢复。')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="btn" style="width:100%;background:#dc2626;border-color:#dc2626;font-size:0.85rem;">删除此记录</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% endif %}{# end view mode #}
+  </div>
+
+  <!-- 右栏：客户/宠物/就诊信息 -->
+  <div style="display:flex;flex-direction:column;gap:0.75rem;">
+
+    {% if cust %}
+    <div class="card">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">客户</div>
+      <div style="font-weight:700;font-size:1rem;margin-bottom:0.15rem;">{{ cust.name or '—' }}</div>
+      <div style="font-size:0.85rem;color:var(--muted);">{{ cust.phone or '—' }}</div>
+      {% if cust.address %}
+      <div style="font-size:0.82rem;color:var(--muted);margin-top:0.2rem;">{{ cust.address }}</div>
+      {% endif %}
+      <a href="/admin/customers/{{ cust.id }}" style="font-size:0.78rem;margin-top:0.5rem;display:inline-block;">档案 →</a>
+    </div>
+    {% endif %}
+
+    {% set pet_obj = (visit.pet if visit and visit.pet else (inv.pet if inv and inv.pet else None)) %}
+    {% if pet_obj %}
+    <div class="card">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">宠物</div>
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        <span style="font-size:1.2rem;">{{ '🐱' if pet_obj.species == 'cat' else '🐶' if pet_obj.species == 'dog' else '🐾' }}</span>
+        <span style="font-weight:700;">{{ pet_obj.name or '未命名' }}</span>
+        {% if pet_obj.gender == 'male' %}<span class="badge b-pending" style="font-size:0.68rem;">公</span>
+        {% elif pet_obj.gender == 'female' %}<span class="badge b-done" style="font-size:0.68rem;">母</span>{% endif %}
+      </div>
+      <div style="font-size:0.82rem;color:var(--muted);margin-top:0.25rem;">
+        {{ '猫' if pet_obj.species == 'cat' else '狗' if pet_obj.species == 'dog' else pet_obj.species }}
+        {% if pet_obj.breed %} · {{ pet_obj.breed }}{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if visit %}
+    <div class="card">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">关联就诊</div>
+      <div style="font-size:0.85rem;">就诊 #{{ visit.id }} · {{ visit.visit_date or '—' }}</div>
+      {% if visit.diagnosis %}
+      <div style="font-size:0.82rem;color:var(--muted);margin-top:0.2rem;">{{ visit.diagnosis[:60] }}{% if visit.diagnosis|length > 60 %}…{% endif %}</div>
+      {% endif %}
+      <a href="/admin/visits/{{ visit.id }}" style="font-size:0.78rem;margin-top:0.5rem;display:inline-block;">查看就诊记录 →</a>
+    </div>
+    {% endif %}
+
+    {% if not is_create and inv %}
+    <div class="card" style="font-size:0.8rem;color:var(--muted);">
+      <div>创建：{{ inv.created_by or '—' }}</div>
+      <div>{{ inv.created_at.strftime('%Y-%m-%d %H:%M') if inv.created_at else '—' }}</div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% block scripts %}
+<script>
+function calcRow(input) {
+  const row = input.closest('tr');
+  const qty   = parseFloat(row.querySelector('input[name="qty[]"]').value) || 0;
+  const price = parseFloat(row.querySelector('input[name="price[]"]').value) || 0;
+  const sub   = (qty * price).toFixed(2);
+  row.querySelector('input[name="subtotal_display"]').value = sub;
+  calcTotal();
+}
+
+function calcTotal() {
+  let subtotal = 0;
+  document.querySelectorAll('input[name="subtotal_display"]').forEach(el => {
+    subtotal += parseFloat(el.value) || 0;
+  });
+  const discount = parseFloat(document.getElementById('discount-input')?.value) || 0;
+  document.getElementById('subtotal-display').textContent = '¥ ' + subtotal.toFixed(2);
+  document.getElementById('total-display').textContent    = '¥ ' + Math.max(0, subtotal - discount).toFixed(2);
+}
+
+function addRow() {
+  const tbody = document.getElementById('items-body');
+  const tr = document.createElement('tr');
+  tr.className = 'item-row';
+  tr.innerHTML = `
+    <td>
+      <input type="hidden" name="ref_type[]" value="manual" />
+      <input type="hidden" name="ref_id[]"   value="" />
+      <input name="desc[]" placeholder="项目描述" required />
+    </td>
+    <td style="text-align:center;">
+      <input name="qty[]" type="number" step="0.01" min="0" value="1" style="text-align:center;" oninput="calcRow(this)" />
+    </td>
+    <td style="text-align:right;">
+      <input name="price[]" type="number" step="0.01" min="0" value="0" style="text-align:right;" oninput="calcRow(this)" />
+    </td>
+    <td style="text-align:right;">
+      <input name="subtotal_display" readonly value="0.00" style="text-align:right;background:transparent;border:none;font-weight:600;" />
+    </td>
+    <td style="text-align:center;">
+      <button type="button" onclick="removeRow(this)" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;">✕</button>
+    </td>`;
+  tbody.appendChild(tr);
+}
+
+function removeRow(btn) {
+  btn.closest('tr').remove();
+  calcTotal();
+}
+
+function selectPay(btn) {
+  document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('pay-method-input').value = btn.dataset.val;
+}
+
+// 初始化计算
+document.addEventListener('DOMContentLoaded', calcTotal);
+</script>
+{% endblock %}
+{% endblock %}

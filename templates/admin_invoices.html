@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if request.query_params.get('msg') %}
+<div class="msg ok">{{ request.query_params.get('msg') }}</div>
+{% endif %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+  <div>
+    <h1 style="margin:0;font-size:1.3rem;">收银台</h1>
+    <p style="margin:0.2rem 0 0;font-size:0.82rem;color:var(--muted);">管理所有收费单，处理收款</p>
+  </div>
+  <a href="/admin/invoices/create" class="btn" style="font-size:0.9rem;">＋ 新建收费单</a>
+</div>
+
+<!-- 搜索 + Tab -->
+<div class="card" style="margin-bottom:1rem;padding:0.75rem 1rem;">
+  <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+    <input name="q" value="{{ q }}" placeholder="搜索客户姓名 / 手机号"
+           style="flex:1;min-width:200px;" />
+    <input type="hidden" name="status" value="{{ status }}" />
+    <button type="submit" class="btn secondary" style="white-space:nowrap;">搜索</button>
+    {% if q %}<a href="/admin/invoices?status={{ status }}" class="btn secondary">清除</a>{% endif %}
+  </form>
+</div>
+
+<!-- 状态 Tab -->
+<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:1rem;">
+  {% set tabs = [('','全部'),('unpaid','待收款'),('paid','已收款'),('cancelled','已取消')] %}
+  {% for val, label in tabs %}
+  <a href="/admin/invoices?status={{ val }}{% if q %}&q={{ q }}{% endif %}"
+     style="padding:0.5rem 1.1rem;font-size:0.88rem;text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-2px;
+            {% if status == val %}border-bottom-color:var(--accent);color:var(--accent);font-weight:600;{% else %}color:var(--muted);{% endif %}">
+    {{ label }}
+  </a>
+  {% endfor %}
+</div>
+
+{% if invoices %}
+<div class="card" style="padding:0;">
+  <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:var(--bg-elevated);">
+        <th style="text-align:left;padding:0.55rem 0.85rem;">单号</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">客户</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">宠物</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">日期</th>
+        <th style="text-align:right;padding:0.55rem 0.85rem;">实收</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">状态</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">支付方式</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in invoices %}
+      {% set cust = cust_map.get(inv.customer_id) %}
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.5rem 0.85rem;font-family:monospace;color:var(--muted);font-size:0.82rem;">{{ inv.invoice_no }}</td>
+        <td style="padding:0.5rem 0.85rem;font-weight:600;">{{ cust.name if cust else '—' }}</td>
+        <td style="padding:0.5rem 0.85rem;color:var(--muted);">{{ inv.pet.name if inv.pet else '—' }}</td>
+        <td style="padding:0.5rem 0.85rem;color:var(--muted);">{{ inv.invoice_date or '—' }}</td>
+        <td style="padding:0.5rem 0.85rem;text-align:right;font-weight:700;font-size:0.95rem;">¥ {{ '%.2f'|format(inv.total_amount) }}</td>
+        <td style="padding:0.5rem 0.85rem;">
+          <span class="badge {% if inv.payment_status == 'paid' %}b-done{% elif inv.payment_status == 'cancelled' %}b-no{% else %}b-pending{% endif %}"
+                style="font-size:0.72rem;">
+            {{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}
+          </span>
+        </td>
+        <td style="padding:0.5rem 0.85rem;color:var(--muted);font-size:0.82rem;">
+          {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) if inv.payment_method else '—' }}
+        </td>
+        <td style="padding:0.5rem 0.85rem;text-align:right;">
+          <a href="/admin/invoices/{{ inv.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">
+            {% if inv.payment_status == 'unpaid' %}收款{% else %}查看{% endif %}
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:3rem 1rem;color:var(--muted);">
+  <div style="font-size:2.5rem;margin-bottom:0.75rem;">🧾</div>
+  <div style="font-size:0.95rem;">
+    {% if status == 'unpaid' %}暂无待收款账单
+    {% elif status == 'paid' %}暂无已收款账单
+    {% elif status == 'cancelled' %}暂无已取消账单
+    {% else %}暂无收费单，从就诊记录生成或点击右上角新建{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

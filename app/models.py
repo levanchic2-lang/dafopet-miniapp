@@ -553,6 +553,48 @@ class RabiesVaccineRecord(Base):
     pet      = relationship("Pet",      foreign_keys=[pet_id])
 
 
+class Invoice(Base):
+    """收费单"""
+    __tablename__ = "invoices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    invoice_no: Mapped[str] = mapped_column(String(40), default="")          # YYYYMMDD-序号
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    invoice_date: Mapped[str] = mapped_column(String(20), default="")
+    subtotal: Mapped[float] = mapped_column(Float, default=0.0)              # 合计
+    discount_amount: Mapped[float] = mapped_column(Float, default=0.0)       # 折扣/减免
+    total_amount: Mapped[float] = mapped_column(Float, default=0.0)          # 实收
+    payment_status: Mapped[str] = mapped_column(String(20), default="unpaid")  # unpaid / paid
+    payment_method: Mapped[str] = mapped_column(String(40), default="")      # cash/wechat/alipay/credit
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items    = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+
+
+class InvoiceItem(Base):
+    """收费明细行"""
+    __tablename__ = "invoice_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"))
+    ref_type: Mapped[str] = mapped_column(String(40), default="manual")  # prescription/sales_order/manual
+    ref_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
+    description: Mapped[str] = mapped_column(String(300), default="")
+    quantity: Mapped[float] = mapped_column(Float, default=1.0)
+    unit_price: Mapped[float] = mapped_column(Float, default=0.0)
+    subtotal: Mapped[float] = mapped_column(Float, default=0.0)
+
+    invoice = relationship("Invoice", back_populates="items")
+
+
 class AdoptionPet(Base):
     __tablename__ = "adoption_pets"
 
