@@ -190,7 +190,8 @@
         <td style="padding:0.4rem 0.6rem;color:var(--muted);">#{{ a.id }}</td>
         <td style="padding:0.4rem 0.6rem;">{{ a.cat_nickname or '—' }}</td>
         <td style="padding:0.4rem 0.6rem;">{{ a.clinic_store or '—' }}</td>
-        <td style="padding:0.4rem 0.6rem;">{{ a.status }}</td>
+        {% set tnr_status_zh = {"draft":"草稿","pending_ai":"系统处理中","pending_manual":"待人工审核","pre_approved":"预通过","approved":"已通过","scheduled":"已预约","arrived_verified":"到院已核对","surgery_completed":"手术已完成","rejected":"未通过","cancelled":"已取消","no_show":"爽约"} %}
+        <td style="padding:0.4rem 0.6rem;">{{ tnr_status_zh.get(a.status, a.status) }}</td>
         <td style="padding:0.4rem 0.6rem;color:var(--muted);">{{ a.created_at.strftime('%Y-%m-%d') if a.created_at else '—' }}</td>
         <td style="padding:0.4rem 0.6rem;"><a href="/admin/{{ a.id }}" style="font-size:0.8rem;">查看</a></td>
       </tr>
