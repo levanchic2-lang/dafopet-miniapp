@@ -6426,39 +6426,35 @@ async def admin_rabies_export(
 ):
     """导出 Excel，含签名图片嵌入。"""
     require_admin(request)
-    import io, struct, sys, types
+    import io, struct
     from fastapi.responses import Response as FastResponse
-
-    # 若服务器未安装 Pillow，注入最小 mock，让 openpyxl 能嵌入图片
-    try:
-        import PIL  # noqa: F401
-    except ImportError:
-        def _mock_pil_open(buf):
-            if hasattr(buf, 'read'):
-                data = buf.read(); buf.seek(0)
-            else:
-                data = bytes(buf)
-            class _FakeImg:
-                pass
-            fi = _FakeImg()
-            if len(data) >= 24 and data[:4] == b'\x89PNG':
-                fi.size = (struct.unpack('>I', data[16:20])[0],
-                           struct.unpack('>I', data[20:24])[0])
-                fi.format = 'PNG'
-            else:
-                fi.size = (400, 120)
-                fi.format = 'JPEG'
-            return fi
-        _pil_mod = types.ModuleType('PIL')
-        _pil_img_mod = types.ModuleType('PIL.Image')
-        _pil_img_mod.open = _mock_pil_open
-        sys.modules.setdefault('PIL', _pil_mod)
-        sys.modules.setdefault('PIL.Image', _pil_img_mod)
-
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
     from openpyxl.drawing.image import Image as XLImage
+
+    # 若服务器未安装 Pillow，直接 patch Image.__init__ 绕过 PIL 检查
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        def _no_pil_init(self, img):
+            self.format = None
+            self.ref = img
+            try:
+                pos = img.tell() if hasattr(img, 'tell') else 0
+                data = img.read()
+                img.seek(pos)
+                if data[:4] == b'\x89PNG' and len(data) >= 24:
+                    self.format = 'PNG'
+                    self.width  = struct.unpack('>I', data[16:20])[0]
+                    self.height = struct.unpack('>I', data[20:24])[0]
+                else:
+                    self.format = 'JPEG'
+                    self.width, self.height = 400, 120
+            except Exception:
+                self.format = 'PNG'
+                self.width, self.height = 400, 120
+        XLImage.__init__ = _no_pil_init
 
     query = db.query(RabiesVaccineRecord)
     if status:
