@@ -45,33 +45,102 @@
     <button onclick="document.getElementById('add-pet-modal').style.display='flex'" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">＋ 添加宠物</button>
   </div>
   {% if pets %}
-  <div style="display:grid;gap:0.75rem;">
+  <div style="display:grid;gap:1rem;">
     {% for pet in pets %}
-    <details style="border:1px solid var(--border);border-radius:10px;padding:0.75rem 1rem;">
-      <summary style="cursor:pointer;font-weight:600;font-size:0.92rem;list-style:none;display:flex;align-items:center;gap:0.5rem;">
-        <span>{{ '🐱' if pet.species == 'cat' else '🐶' if pet.species == 'dog' else '🐾' }}</span>
-        <span>{{ pet.name or '未命名' }}</span>
-        <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">
-          · {{ '公' if pet.gender == 'male' else '母' if pet.gender == 'female' else '未知性别' }}
-          {% if pet.is_neutered %} · 已绝育{% endif %}
-          {% if pet.is_stray %} · 流浪{% endif %}
-        </span>
-        <span style="margin-left:auto;font-size:0.8rem;color:var(--muted);">▸ 展开编辑</span>
-      </summary>
-      <!-- 该宠物的就诊历史 -->
-      {% set pet_visits = visits_by_pet.get(pet.id, []) %}
-      <div style="margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid var(--border);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
-          <span style="font-size:0.85rem;font-weight:600;">就诊历史（{{ pet_visits|length }}）</span>
-          <a href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ pet.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;">＋ 新建就诊</a>
+    {% set pet_visits = visits_by_pet.get(pet.id, []) %}
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+
+      <!-- 宠物 header -->
+      <div style="display:flex;align-items:center;gap:0.5rem;padding:0.65rem 1rem;background:var(--bg-elevated);border-bottom:1px solid var(--border);">
+        <span style="font-size:1.1rem;">{{ '🐱' if pet.species == 'cat' else '🐶' if pet.species == 'dog' else '🐾' }}</span>
+        <span style="font-weight:700;font-size:0.95rem;">{{ pet.name or '未命名' }}</span>
+        {% if pet.gender == 'male' %}<span class="badge b-pending" style="font-size:0.7rem;">公</span>
+        {% elif pet.gender == 'female' %}<span class="badge b-done" style="font-size:0.7rem;">母</span>{% endif %}
+        {% if pet.is_neutered %}<span class="badge b-ok" style="font-size:0.7rem;">已绝育</span>{% endif %}
+        {% if pet.is_stray %}<span class="badge b-no" style="font-size:0.7rem;">流浪</span>{% endif %}
+        <div style="margin-left:auto;display:flex;gap:0.4rem;">
+          <a href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ pet.id }}"
+             class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;">＋ 新建就诊</a>
+          <button type="button" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;"
+                  onclick="togglePetEdit({{ pet.id }})">✏ 编辑</button>
+        </div>
+      </div>
+
+      <!-- 信息展示（只读） -->
+      <div id="pet-info-{{ pet.id }}" style="padding:0.75rem 1rem;border-bottom:1px solid var(--border);">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.5rem 1.5rem;font-size:0.88rem;">
+          <div><span style="color:var(--muted);font-size:0.78rem;">物种</span><br/>
+            {{ '猫' if pet.species == 'cat' else '狗' if pet.species == 'dog' else (pet.species or '—') }}</div>
+          <div><span style="color:var(--muted);font-size:0.78rem;">品种</span><br/>{{ pet.breed or '—' }}</div>
+          <div><span style="color:var(--muted);font-size:0.78rem;">出生年月</span><br/>{{ pet.birthday_estimate[:7] if pet.birthday_estimate else '—' }}</div>
+          <div><span style="color:var(--muted);font-size:0.78rem;">颜色/花纹</span><br/>{{ pet.color_pattern or '—' }}</div>
+          <div><span style="color:var(--muted);font-size:0.78rem;">芯片号</span><br/>{{ pet.microchip_id or '—' }}</div>
+          {% if pet.notes %}
+          <div style="grid-column:1/-1;"><span style="color:var(--muted);font-size:0.78rem;">备注</span><br/>{{ pet.notes }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 编辑表单（默认隐藏） -->
+      <div id="pet-edit-{{ pet.id }}" style="display:none;padding:0.85rem 1rem;border-bottom:1px solid var(--border);background:var(--bg-elevated);">
+        <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ pet.id }}/edit">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <div class="row2" style="margin-bottom:0.6rem;">
+            <div><label>名字</label><input name="name" value="{{ pet.name }}" /></div>
+            <div>
+              <label>物种</label>
+              <select name="species">
+                <option value="cat" {% if pet.species == 'cat' %}selected{% endif %}>猫</option>
+                <option value="dog" {% if pet.species == 'dog' %}selected{% endif %}>狗</option>
+                <option value="other" {% if pet.species == 'other' %}selected{% endif %}>其他</option>
+              </select>
+            </div>
+            <div><label>品种</label><input name="breed" value="{{ pet.breed }}" placeholder="如：橘猫、拉布拉多" /></div>
+            <div>
+              <label>性别</label>
+              <select name="gender">
+                <option value="male" {% if pet.gender == 'male' %}selected{% endif %}>公</option>
+                <option value="female" {% if pet.gender == 'female' %}selected{% endif %}>母</option>
+                <option value="unknown" {% if pet.gender == 'unknown' %}selected{% endif %}>未知</option>
+              </select>
+            </div>
+            <div><label>出生年月</label>
+              <input type="month" name="birthday_estimate" value="{{ pet.birthday_estimate[:7] if pet.birthday_estimate and pet.birthday_estimate|length >= 7 else '' }}" />
+            </div>
+            <div><label>颜色/花纹</label><input name="color_pattern" value="{{ pet.color_pattern }}" placeholder="如：橘白、黑白花" /></div>
+            <div><label>芯片号（可选）</label><input name="microchip_id" value="{{ pet.microchip_id }}" placeholder="15位芯片编号" /></div>
+            <div style="display:flex;align-items:center;gap:1.5rem;padding-top:1.4rem;">
+              <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+                <input type="checkbox" name="is_neutered" value="1" {% if pet.is_neutered %}checked{% endif %} /> 已绝育
+              </label>
+              <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+                <input type="checkbox" name="is_stray" value="1" {% if pet.is_stray %}checked{% endif %} /> 流浪动物
+              </label>
+            </div>
+          </div>
+          <div style="margin-bottom:0.6rem;"><label>备注</label>
+            <textarea name="notes" style="min-height:52px;">{{ pet.notes }}</textarea>
+          </div>
+          <div style="display:flex;gap:0.5rem;">
+            <button type="submit" class="btn" style="font-size:0.88rem;">保存</button>
+            <button type="button" class="btn secondary" style="font-size:0.88rem;"
+                    onclick="togglePetEdit({{ pet.id }})">取消</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 就诊历史（始终可见） -->
+      <div style="padding:0.75rem 1rem;">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.5rem;color:var(--muted);">
+          就诊历史（{{ pet_visits|length }}）
         </div>
         {% if pet_visits %}
-        <div style="display:grid;gap:0.4rem;">
+        <div style="display:grid;gap:0.35rem;">
           {% for vis in pet_visits[:5] %}
-          <a href="/admin/visits/{{ vis.id }}" style="display:flex;align-items:center;gap:0.75rem;padding:0.45rem 0.6rem;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border);text-decoration:none;border-bottom:1px solid var(--border);">
+          <a href="/admin/visits/{{ vis.id }}" style="display:flex;align-items:center;gap:0.75rem;padding:0.4rem 0.6rem;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border);text-decoration:none;">
             <span style="font-size:0.78rem;color:var(--muted);white-space:nowrap;">{{ vis.visit_date or '—' }}</span>
             <span class="badge b-ok" style="font-size:0.68rem;">{{ visit_type_zh.get(vis.visit_type, vis.visit_type) }}</span>
-            <span style="font-size:0.85rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">{{ vis.diagnosis or vis.chief_complaint or '（无诊断）' }}</span>
+            <span style="font-size:0.85rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ vis.diagnosis or vis.chief_complaint or '（无诊断）' }}</span>
             <span style="font-size:0.78rem;color:var(--muted);">{{ vis.vet_name or '' }}</span>
           </a>
           {% endfor %}
@@ -84,59 +153,7 @@
         {% endif %}
       </div>
 
-      <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ pet.id }}/edit" style="margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid var(--border);">
-        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.6rem;">编辑宠物信息</div>
-        <div class="row2">
-          <div>
-            <label>名字</label>
-            <input name="name" value="{{ pet.name }}" />
-          </div>
-          <div>
-            <label>物种</label>
-            <select name="species">
-              <option value="cat" {% if pet.species == 'cat' %}selected{% endif %}>猫</option>
-              <option value="dog" {% if pet.species == 'dog' %}selected{% endif %}>狗</option>
-              <option value="other" {% if pet.species == 'other' %}selected{% endif %}>其他</option>
-            </select>
-          </div>
-          <div>
-            <label>品种</label>
-            <input name="breed" value="{{ pet.breed }}" placeholder="如：橘猫、拉布拉多" />
-          </div>
-          <div>
-            <label>性别</label>
-            <select name="gender">
-              <option value="male" {% if pet.gender == 'male' %}selected{% endif %}>公</option>
-              <option value="female" {% if pet.gender == 'female' %}selected{% endif %}>母</option>
-              <option value="unknown" {% if pet.gender == 'unknown' %}selected{% endif %}>未知</option>
-            </select>
-          </div>
-          <div>
-            <label>出生年月</label>
-            <input type="month" name="birthday_estimate" value="{{ pet.birthday_estimate[:7] if pet.birthday_estimate and pet.birthday_estimate|length >= 7 else '' }}" />
-          </div>
-          <div>
-            <label>颜色/花纹</label>
-            <input name="color_pattern" value="{{ pet.color_pattern }}" placeholder="如：橘白、黑白花" />
-          </div>
-          <div>
-            <label>芯片号（可选）</label>
-            <input name="microchip_id" value="{{ pet.microchip_id }}" placeholder="15位芯片编号" />
-          </div>
-          <div style="display:flex;align-items:center;gap:1.5rem;padding-top:1.5rem;">
-            <label style="display:flex;align-items:center;gap:0.4rem;font-weight:500;cursor:pointer;">
-              <input type="checkbox" name="is_neutered" value="1" {% if pet.is_neutered %}checked{% endif %} /> 已绝育
-            </label>
-            <label style="display:flex;align-items:center;gap:0.4rem;font-weight:500;cursor:pointer;">
-              <input type="checkbox" name="is_stray" value="1" {% if pet.is_stray %}checked{% endif %} /> 流浪动物
-            </label>
-          </div>
-        </div>
-        <label>备注</label>
-        <textarea name="notes" style="min-height:60px;">{{ pet.notes }}</textarea>
-        <button type="submit" class="btn" style="margin-top:0.6rem;font-size:0.88rem;">保存宠物信息</button>
-      </form>
-    </details>
+    </div>
     {% endfor %}
   </div>
   {% else %}
@@ -327,4 +344,16 @@
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function togglePetEdit(id) {
+  var info = document.getElementById('pet-info-' + id);
+  var edit = document.getElementById('pet-edit-' + id);
+  var isEditing = edit.style.display !== 'none';
+  info.style.display = isEditing ? '' : 'none';
+  edit.style.display = isEditing ? 'none' : 'block';
+}
+</script>
 {% endblock %}
