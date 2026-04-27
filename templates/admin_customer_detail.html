@@ -224,7 +224,8 @@
         <td style="padding:0.4rem 0.6rem;">{{ ap.service_name or '—' }}</td>
         <td style="padding:0.4rem 0.6rem;">{{ ap.pet_name or '—' }}</td>
         <td style="padding:0.4rem 0.6rem;color:var(--muted);">{{ ap.appointment_date or '—' }}</td>
-        <td style="padding:0.4rem 0.6rem;">{{ ap.status }}</td>
+        {% set appt_status_zh = {"pending":"待确认","confirmed":"已确认","cancelled":"已取消","completed":"已完成","no_show":"爽约"} %}
+        <td style="padding:0.4rem 0.6rem;">{{ appt_status_zh.get(ap.status, ap.status) }}</td>
       </tr>
       {% endfor %}
     </tbody>
