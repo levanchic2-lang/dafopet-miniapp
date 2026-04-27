@@ -126,7 +126,7 @@
           {% endif %}
           <input type="hidden" name="staff_signature" id="staff_signature" value="" />
           <div class="sig-wrap">
-            <canvas id="staff-sig-canvas" height="130"></canvas>
+            <canvas id="staff-sig-canvas" height="200"></canvas>
             <div class="sig-toolbar"><button type="button" onclick="clearStaffSig()">清除重签</button></div>
           </div>
           <div style="font-size:0.76rem;color:var(--muted);margin-top:0.25rem;">
@@ -216,7 +216,7 @@ let staffDrawing = false, staffHasSig = false;
 function resizeStaffCanvas() {
   const w = staffCanvas.parentElement.clientWidth;
   staffCanvas.width = w;
-  staffCanvas.height = 130;
+  staffCanvas.height = 200;
   staffCtx.strokeStyle = '#1a1a1a';
   staffCtx.lineWidth = 2.5;
   staffCtx.lineCap = 'round';
