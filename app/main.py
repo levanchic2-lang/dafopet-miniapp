@@ -6472,17 +6472,15 @@ async def admin_rabies_export(
         ("联系电话",       14, lambda r: r.owner_phone),
         ("动物名称",       10, lambda r: r.animal_name),
         ("品种",           10, lambda r: r.animal_breed),
-        ("出生年月/年龄",  14, lambda r: r.animal_dob),
+        ("出生年月/年龄",   9, lambda r: r.animal_dob),
         ("性别",            8, lambda r: {"male": "公", "female": "母"}.get(r.animal_gender, r.animal_gender or "")),
         ("毛色",           10, lambda r: r.animal_color),
-        ("疫苗厂家",       16, lambda r: r.vaccine_manufacturer),
-        ("批号",           14, lambda r: r.vaccine_batch_no),
+        ("疫苗厂家",       10, lambda r: r.vaccine_manufacturer),
+        ("批号",            8, lambda r: r.vaccine_batch_no),
         ("免疫时间",       12, lambda r: r.vaccine_date),
         ("免疫人员",       10, lambda r: r.staff_name),
-        ("医护签名",       28, None),
-        ("主人签名",       28, None),
-        ("状态",            8, lambda r: {"owner_pending": "待主人签名", "staff_pending": "待医护签名", "completed": "已完成"}.get(r.status, r.status)),
-        ("登记时间",       16, lambda r: r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else ""),
+        ("医护签名",       15, None),
+        ("主人签名",       15, None),
     ]
     SIG_STAFF_COL = 14  # 1-based
     SIG_OWNER_COL = 15
@@ -6493,7 +6491,7 @@ async def admin_rabies_export(
         cell = ws.cell(row=1, column=col_idx, value=title)
         cell.font = hdr_font; cell.fill = hdr_fill
         cell.alignment = center; cell.border = border
-    ws.row_dimensions[1].height = 20
+    ws.row_dimensions[1].height = 35
 
     # 保持 BytesIO 引用防止 GC 在 wb.save() 前回收
     _img_bufs: list = []
