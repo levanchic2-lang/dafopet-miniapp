@@ -6479,14 +6479,14 @@ async def admin_rabies_export(
         ("批号",           14, lambda r: r.vaccine_batch_no),
         ("免疫时间",       12, lambda r: r.vaccine_date),
         ("免疫人员",       10, lambda r: r.staff_name),
-        ("医护签名",       36, None),
-        ("主人签名",       36, None),
+        ("医护签名",       28, None),
+        ("主人签名",       28, None),
         ("状态",            8, lambda r: {"owner_pending": "待主人签名", "staff_pending": "待医护签名", "completed": "已完成"}.get(r.status, r.status)),
         ("登记时间",       16, lambda r: r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else ""),
     ]
     SIG_STAFF_COL = 14  # 1-based
     SIG_OWNER_COL = 15
-    ROW_H = 90
+    ROW_H = 35
 
     for col_idx, (title, width, _) in enumerate(columns, 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
@@ -6508,7 +6508,7 @@ async def admin_rabies_export(
             buf = io.BytesIO(p.read_bytes())
             _img_bufs.append(buf)
             xl_img = XLImage(buf)
-            scale = min(260 / max(xl_img.width, 1), 80 / max(xl_img.height, 1), 1.0)
+            scale = min(180 / max(xl_img.width, 1), 40 / max(xl_img.height, 1), 1.0)
             xl_img.width  = int(xl_img.width  * scale)
             xl_img.height = int(xl_img.height * scale)
             xl_img.anchor = f"{get_column_letter(col_1idx)}{row_idx}"
