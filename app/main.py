@@ -6496,16 +6496,34 @@ async def admin_rabies_export(
         if not p.exists():
             return
         try:
-            # 直接读文件字节，不依赖 Pillow
-            img_buf = io.BytesIO(p.read_bytes())
-            _img_bufs.append(img_buf)   # 保持引用，防止 GC
-            xl_img = XLImage(img_buf)
-            xl_img.width = 160
-            xl_img.height = 50
+            import struct
+            raw = p.read_bytes()
+            if len(raw) < 24:
+                return
+            img_buf = io.BytesIO(raw)
+            _img_bufs.append(img_buf)  # 保持引用，防止 GC
+
+            # 绕过 XLImage.__init__ 中的 PIL 强制依赖
+            # openpyxl 保存时只读 ref / format / width / height
+            xl_img = object.__new__(XLImage)
+            xl_img.ref = img_buf
+            xl_img._id = None
+            # PNG IHDR: bytes 16-19 = width, 20-23 = height（big-endian）
+            if raw[:4] == b'\x89PNG':
+                xl_img.format = 'PNG'
+                orig_w = struct.unpack('>I', raw[16:20])[0]
+                orig_h = struct.unpack('>I', raw[20:24])[0]
+            else:
+                xl_img.format = 'JPEG'
+                orig_w, orig_h = 400, 120  # JPEG fallback
+            # 等比缩放到最大 160×50
+            scale = min(160 / max(orig_w, 1), 50 / max(orig_h, 1), 1.0)
+            xl_img.width  = int(orig_w * scale)
+            xl_img.height = int(orig_h * scale)
             xl_img.anchor = f"{get_column_letter(col_idx)}{row_idx}"
             ws.add_image(xl_img)
-        except Exception as _sig_err:
-            ws.cell(row=row_idx, column=col_idx, value=f"[ERR:{type(_sig_err).__name__}:{str(_sig_err)[:60]}]")
+        except Exception:
+            pass  # 图片损坏时静默跳过
 
     for r_idx, rec in enumerate(records, 2):
         ws.row_dimensions[r_idx].height = ROW_H
