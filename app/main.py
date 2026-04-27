@@ -6504,8 +6504,8 @@ async def admin_rabies_export(
             xl_img.height = 50
             xl_img.anchor = f"{get_column_letter(col_idx)}{row_idx}"
             ws.add_image(xl_img)
-        except Exception:
-            pass  # 图片损坏时静默跳过，保持单元格空白
+        except Exception as _sig_err:
+            ws.cell(row=row_idx, column=col_idx, value=f"[ERR:{type(_sig_err).__name__}:{str(_sig_err)[:60]}]")
 
     for r_idx, rec in enumerate(records, 2):
         ws.row_dimensions[r_idx].height = ROW_H
