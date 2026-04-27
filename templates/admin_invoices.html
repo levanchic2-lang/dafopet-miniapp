@@ -5,12 +5,9 @@
 <div class="msg ok">{{ request.query_params.get('msg') }}</div>
 {% endif %}
 
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
-  <div>
-    <h1 style="margin:0;font-size:1.3rem;">收银台</h1>
-    <p style="margin:0.2rem 0 0;font-size:0.82rem;color:var(--muted);">管理所有收费单，处理收款</p>
-  </div>
-  <a href="/admin/invoices/create" class="btn" style="font-size:0.9rem;">＋ 新建收费单</a>
+<div style="margin-bottom:1rem;">
+  <h1 style="margin:0;font-size:1.3rem;">收银台</h1>
+  <p style="margin:0.2rem 0 0;font-size:0.82rem;color:var(--muted);">收费单由就诊、处方、销售等环节生成，在此统一收款</p>
 </div>
 
 <!-- 搜索 + Tab -->
