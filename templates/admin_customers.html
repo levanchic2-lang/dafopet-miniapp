@@ -38,6 +38,7 @@
           {% elif c.source == 'surgery' %}<span class="badge b-done">手术</span>
           {% elif c.source == 'beauty' %}<span class="badge">美容</span>
           {% elif c.source == 'manual' %}<span class="badge">手动</span>
+          {% elif c.source == 'rabies' %}<span class="badge">狂犬疫苗</span>
           {% else %}<span class="badge">{{ c.source or '—' }}</span>{% endif %}
         </td>
         <td style="padding:0.55rem 0.75rem;color:var(--muted);font-size:0.82rem;">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
