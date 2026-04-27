@@ -52,7 +52,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <input type="hidden" name="visit_id"    value="{{ visit.id if visit else 0 }}" />
       <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}" />
-      <input type="hidden" name="pet_id"      value="{{ visit.pet_id if visit and visit.pet_id else (cust.id if cust else 0) }}" />
+      <input type="hidden" name="pet_id"      value="{{ visit.pet_id if visit and visit.pet_id else 0 }}" />
 
       <!-- 日期 -->
       <div class="card" style="margin-bottom:0.75rem;">
