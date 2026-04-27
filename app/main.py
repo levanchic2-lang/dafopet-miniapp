@@ -6462,7 +6462,7 @@ async def admin_rabies_export(
         ("动物名称",       10, lambda r: r.animal_name),
         ("品种",           10, lambda r: r.animal_breed),
         ("出生年月/年龄",  14, lambda r: r.animal_dob),
-        ("性别",            8, lambda r: r.animal_gender),
+        ("性别",            8, lambda r: {"male": "公", "female": "母"}.get(r.animal_gender, r.animal_gender or "")),
         ("毛色",           10, lambda r: r.animal_color),
         ("疫苗厂家",       16, lambda r: r.vaccine_manufacturer),
         ("批号",           14, lambda r: r.vaccine_batch_no),
@@ -6496,19 +6496,16 @@ async def admin_rabies_export(
         if not p.exists():
             return
         try:
-            from PIL import Image as PILImage
-            pil_img = PILImage.open(p).convert("RGBA")
-            pil_img.thumbnail((160, 50), PILImage.LANCZOS)
-            img_buf = io.BytesIO()
-            pil_img.save(img_buf, format="PNG")
-            img_buf.seek(0)
-            _img_bufs.append(img_buf)   # 保持引用
+            # 直接读文件字节，不依赖 Pillow
+            img_buf = io.BytesIO(p.read_bytes())
+            _img_bufs.append(img_buf)   # 保持引用，防止 GC
             xl_img = XLImage(img_buf)
+            xl_img.width = 160
+            xl_img.height = 50
             xl_img.anchor = f"{get_column_letter(col_idx)}{row_idx}"
             ws.add_image(xl_img)
         except Exception:
-            # Pillow 不可用或图片损坏时静默跳过
-            ws.cell(row=row_idx, column=col_idx, value="已签名")
+            pass  # 图片损坏时静默跳过，保持单元格空白
 
     for r_idx, rec in enumerate(records, 2):
         ws.row_dimensions[r_idx].height = ROW_H
