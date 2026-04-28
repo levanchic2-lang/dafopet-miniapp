@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+{% set is_edit = (mode == 'edit') %}
+
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+  {% if cust %}
+  <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
+  {% else %}
+  <a href="/admin/vaccinations" class="btn secondary" style="font-size:0.85rem;">← 疫苗管理</a>
+  {% endif %}
+  <h1 style="margin:0;font-size:1.2rem;">
+    {% if is_edit %}编辑接种记录 #{{ vacc.id }}{% else %}新建接种记录{% endif %}
+  </h1>
+  {% if is_edit and vacc.invoice_id %}
+  <a href="/admin/invoices/{{ vacc.invoice_id }}" class="btn secondary" style="font-size:0.82rem;margin-left:auto;">
+    🧾 查看收费单
+  </a>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:1rem;align-items:start;">
+
+  <!-- 左：表单 -->
+  <div>
+    <form method="post"
+          action="{% if is_edit %}/admin/vaccinations/{{ vacc.id }}/edit{% else %}/admin/vaccinations/create{% endif %}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input type="hidden" name="pet_id"      value="{{ pet.id if pet else 0 }}" />
+      <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}" />
+
+      <div class="card" style="margin-bottom:0.75rem;">
+        <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">疫苗信息</h3>
+        <div class="row2">
+
+          <div>
+            <label>疫苗类型 <span style="color:#d97706;">*</span></label>
+            <select name="vaccine_type" id="vaccine-type-sel" onchange="onTypeChange()">
+              {% for val, label in vacc_type_zh.items() %}
+              <option value="{{ val }}"
+                {% if (vacc and vacc.vaccine_type == val) or (not vacc and val == 'other') %}selected{% endif %}>
+                {{ label }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label>品牌/商品名</label>
+            <input name="vaccine_name" value="{{ vacc.vaccine_name if vacc else '' }}"
+                   placeholder="如：英特威猫三联、梅里亚狂犬" list="vacc-item-names" />
+            <datalist id="vacc-item-names">
+              {% for item in vacc_items %}<option value="{{ item.name }}">{% endfor %}
+            </datalist>
+          </div>
+
+          <div>
+            <label>库存关联品目</label>
+            <select name="inventory_item_id" id="inv-item-sel" onchange="onItemChange()">
+              <option value="">— 不关联库存 —</option>
+              {% for item in vacc_items %}
+              <option value="{{ item.id }}"
+                      data-price="{{ item.sell_price }}"
+                      data-name="{{ item.name }}"
+                      {% if vacc and vacc.inventory_item_id == item.id %}selected{% endif %}>
+                {{ item.name }}（库存：{{ item.stock_qty }}{{ item.unit }}，¥{{ '%.0f'|format(item.sell_price) }}）
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label>批次号</label>
+            <input name="batch_no" value="{{ vacc.batch_no if vacc else '' }}" placeholder="疫苗批次编号" />
+          </div>
+
+          <div>
+            <label>针次</label>
+            <select name="dose_number">
+              {% for val, label in dose_zh.items() %}
+              <option value="{{ val }}" {% if vacc and vacc.dose_number == val %}selected{% elif not vacc and val == 1 %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label>接诊兽医</label>
+            <input name="vet_name" value="{{ vacc.vet_name if vacc else '' }}"
+                   list="vet-list" placeholder="接种兽医" />
+            <datalist id="vet-list">{% for v in vets %}<option value="{{ v }}">{% endfor %}</datalist>
+          </div>
+
+          <div>
+            <label>接种日期 <span style="color:#d97706;">*</span></label>
+            <input type="date" name="vaccinated_date"
+                   value="{{ vacc.vaccinated_date if vacc else today }}" required />
+          </div>
+
+          <div>
+            <label>下次到期日</label>
+            <input type="date" name="next_due_date"
+                   value="{{ vacc.next_due_date if vacc else '' }}" />
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:0.2rem;">留空则不发提醒</div>
+          </div>
+
+        </div>
+
+        <div style="margin-top:0.75rem;">
+          <label>备注</label>
+          <textarea name="notes" style="min-height:52px;" placeholder="过敏史、特殊说明等">{{ vacc.notes if vacc else '' }}</textarea>
+        </div>
+      </div>
+
+      <!-- 收费选项（仅新建时显示；编辑时已处理） -->
+      {% if not is_edit %}
+      <div class="card" style="margin-bottom:0.75rem;" id="charge-card">
+        <h3 style="margin:0 0 0.75rem;font-size:0.95rem;">收费设置</h3>
+        <label style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;font-size:0.9rem;">
+          <input type="checkbox" name="is_free" value="1" id="is-free-chk"
+                 {% if vacc and vacc.is_free %}checked{% endif %}
+                 onchange="onFreeChange()" />
+          <span>此次接种免费（如：狂犬疫苗，不生成收费单）</span>
+        </label>
+        <p id="charge-hint" style="font-size:0.8rem;color:var(--muted);margin-top:0.5rem;">
+          关联库存品目后，若不勾选免费，保存时将自动生成收费单并进入收银台待收款。
+        </p>
+      </div>
+      {% endif %}
+
+      <div style="display:flex;gap:0.6rem;">
+        <button type="submit" class="btn" style="flex:1;">
+          {% if is_edit %}保存修改{% else %}保存接种记录{% endif %}
+        </button>
+        {% if cust %}
+        <a href="/admin/customers/{{ cust.id }}" class="btn secondary">取消</a>
+        {% else %}
+        <a href="/admin/vaccinations" class="btn secondary">取消</a>
+        {% endif %}
+      </div>
+    </form>
+
+    <!-- 删除（编辑模式） -->
+    {% if is_edit %}
+    <div style="margin-top:0.75rem;">
+      <form method="post" action="/admin/vaccinations/{{ vacc.id }}/delete"
+            onsubmit="return confirm('确认删除此接种记录？')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="btn"
+                style="width:100%;background:#dc2626;border-color:#dc2626;font-size:0.85rem;">
+          删除此记录
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 右：宠物/客户信息 -->
+  <div style="display:flex;flex-direction:column;gap:0.75rem;">
+
+    {% if pet %}
+    <div class="card">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">宠物</div>
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
+        <span style="font-size:1.3rem;">{{ '🐱' if pet.species == 'cat' else '🐶' if pet.species == 'dog' else '🐾' }}</span>
+        <span style="font-weight:700;font-size:1rem;">{{ pet.name or '未命名' }}</span>
+        {% if pet.gender == 'male' %}<span class="badge b-pending" style="font-size:0.68rem;">公</span>
+        {% elif pet.gender == 'female' %}<span class="badge b-done" style="font-size:0.68rem;">母</span>{% endif %}
+        {% if pet.is_neutered %}<span class="badge b-ok" style="font-size:0.68rem;">已绝育</span>{% endif %}
+      </div>
+      <div style="font-size:0.82rem;color:var(--muted);">
+        {{ '猫' if pet.species == 'cat' else '狗' if pet.species == 'dog' else pet.species }}
+        {% if pet.breed %} · {{ pet.breed }}{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if cust %}
+    <div class="card">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">主人</div>
+      <div style="font-weight:700;">{{ cust.name or '—' }}</div>
+      <div style="font-size:0.85rem;color:var(--muted);">{{ cust.phone or '—' }}</div>
+    </div>
+    {% endif %}
+
+    {% if is_edit and vacc %}
+    <div class="card" style="font-size:0.8rem;color:var(--muted);">
+      <div>创建：{{ vacc.created_by or '—' }}</div>
+      <div>{{ vacc.created_at.strftime('%Y-%m-%d %H:%M') if vacc.created_at else '—' }}</div>
+      {% if vacc.rabies_record_id %}
+      <div style="margin-top:0.4rem;">
+        <a href="/admin/rabies/{{ vacc.rabies_record_id }}" style="font-size:0.8rem;">
+          来源：狂犬登记 #{{ vacc.rabies_record_id }} →
+        </a>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% block scripts %}
+<script>
+function onTypeChange() {
+  const type = document.getElementById('vaccine-type-sel').value;
+  if (type === 'rabies') {
+    document.getElementById('is-free-chk').checked = true;
+  }
+}
+function onFreeChange() { /* 可扩展：勾选免费时更新提示 */ }
+function onItemChange() {
+  const sel = document.getElementById('inv-item-sel');
+  const opt = sel.options[sel.selectedIndex];
+  const name = opt.dataset.name || '';
+  if (name) {
+    const nameInput = document.querySelector('input[name="vaccine_name"]');
+    if (!nameInput.value) nameInput.value = name;
+  }
+}
+// 新建时，若选择疫苗类型为狂犬，自动勾选免费
+document.addEventListener('DOMContentLoaded', () => {
+  const chk = document.getElementById('is-free-chk');
+  if (chk) onTypeChange();
+});
+</script>
+{% endblock %}
+{% endblock %}

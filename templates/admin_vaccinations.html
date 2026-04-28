@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+  <div>
+    <h1 style="margin:0;font-size:1.3rem;">疫苗管理</h1>
+    <p style="margin:0.2rem 0 0;font-size:0.82rem;color:var(--muted);">全院宠物疫苗接种记录 · 到期提醒</p>
+  </div>
+  <a href="/admin/vaccinations/create" class="btn" style="font-size:0.9rem;">＋ 新建接种记录</a>
+</div>
+
+<!-- 搜索 + 筛选 -->
+<div class="card" style="margin-bottom:1rem;padding:0.75rem 1rem;">
+  <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+    <input name="q" value="{{ q }}" placeholder="搜索宠物名 / 主人姓名 / 手机号"
+           style="flex:1;min-width:200px;" />
+    <select name="vaccine_type" style="min-width:120px;">
+      <option value="">全部疫苗类型</option>
+      {% for val, label in vacc_type_zh.items() %}
+      <option value="{{ val }}" {% if vaccine_type == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="filter" value="{{ filter }}" />
+    <button type="submit" class="btn secondary">搜索</button>
+    {% if q or vaccine_type %}<a href="/admin/vaccinations?filter={{ filter }}" class="btn secondary">清除</a>{% endif %}
+  </form>
+</div>
+
+<!-- 状态 Tab -->
+<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:1rem;">
+  {% set tabs = [('all','全部'),('soon','7天内到期'),('overdue','已逾期')] %}
+  {% for val, label in tabs %}
+  <a href="/admin/vaccinations?filter={{ val }}{% if q %}&q={{ q }}{% endif %}{% if vaccine_type %}&vaccine_type={{ vaccine_type }}{% endif %}"
+     style="padding:0.5rem 1.1rem;font-size:0.88rem;text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-2px;
+            {% if filter == val %}border-bottom-color:var(--accent);color:var(--accent);font-weight:600;{% else %}color:var(--muted);{% endif %}">
+    {{ label }}
+  </a>
+  {% endfor %}
+</div>
+
+{% if records %}
+<div class="card" style="padding:0;">
+  <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:var(--bg-elevated);">
+        <th style="text-align:left;padding:0.55rem 0.85rem;">宠物</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">主人</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">疫苗</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">针次</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">接种日期</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">下次到期</th>
+        <th style="text-align:left;padding:0.55rem 0.85rem;">状态</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for vacc in records %}
+      {% set is_overdue = vacc.next_due_date and vacc.next_due_date < today %}
+      {% set is_soon    = vacc.next_due_date and vacc.next_due_date >= today and vacc.next_due_date <= soon %}
+      <tr style="border-bottom:1px solid var(--border);
+                 {% if is_overdue %}background:#fff5f5;{% elif is_soon %}background:#fffbeb;{% endif %}">
+        <td style="padding:0.5rem 0.85rem;font-weight:600;">
+          {% if vacc.pet %}
+          {{ '🐱' if vacc.pet.species == 'cat' else '🐶' if vacc.pet.species == 'dog' else '🐾' }}
+          {{ vacc.pet.name or '未命名' }}
+          {% else %}—{% endif %}
+        </td>
+        <td style="padding:0.5rem 0.85rem;color:var(--muted);">
+          {% if vacc.customer %}{{ vacc.customer.name or '—' }}{% else %}—{% endif %}
+        </td>
+        <td style="padding:0.5rem 0.85rem;">
+          <span class="badge b-ok" style="font-size:0.7rem;">{{ vacc_type_zh.get(vacc.vaccine_type, vacc.vaccine_type) }}</span>
+          {% if vacc.vaccine_name %}
+          <span style="font-size:0.82rem;color:var(--muted);margin-left:0.3rem;">{{ vacc.vaccine_name }}</span>
+          {% endif %}
+        </td>
+        <td style="padding:0.5rem 0.85rem;color:var(--muted);">
+          {{ dose_zh.get(vacc.dose_number, f'第{vacc.dose_number}针') }}
+        </td>
+        <td style="padding:0.5rem 0.85rem;color:var(--muted);">{{ vacc.vaccinated_date or '—' }}</td>
+        <td style="padding:0.5rem 0.85rem;font-weight:{% if is_overdue or is_soon %}600{% else %}400{% endif %};
+                   color:{% if is_overdue %}#dc2626{% elif is_soon %}#d97706{% else %}var(--muted){% endif %};">
+          {% if vacc.next_due_date %}
+            {{ vacc.next_due_date }}
+            {% if is_overdue %} ⚠️{% elif is_soon %} 🔔{% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td style="padding:0.5rem 0.85rem;">
+          {% if vacc.is_free %}
+          <span class="badge" style="font-size:0.68rem;background:#d1fae5;color:#065f46;">免费</span>
+          {% elif vacc.invoice_id %}
+          <span class="badge b-done" style="font-size:0.68rem;">已开单</span>
+          {% else %}
+          <span class="badge b-pending" style="font-size:0.68rem;">待收费</span>
+          {% endif %}
+        </td>
+        <td style="padding:0.5rem 0.85rem;text-align:right;">
+          <a href="/admin/vaccinations/{{ vacc.id }}" class="btn secondary"
+             style="font-size:0.78rem;padding:0.25rem 0.65rem;">编辑</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:3rem 1rem;color:var(--muted);">
+  <div style="font-size:2.5rem;margin-bottom:0.75rem;">💉</div>
+  <div style="font-size:0.95rem;">
+    {% if filter == 'soon' %}暂无 7 天内到期的接种记录
+    {% elif filter == 'overdue' %}暂无逾期未接种记录
+    {% else %}暂无疫苗接种记录{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

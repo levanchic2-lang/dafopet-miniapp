@@ -575,6 +575,33 @@ def _try_sqlite_migrations() -> None:
                 ")"
             ))
 
+            # vaccinations 疫苗接种记录
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS vaccinations ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "pet_id INTEGER REFERENCES pets(id) ON DELETE SET NULL, "
+                "customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, "
+                "vaccine_type VARCHAR(40) DEFAULT 'other', "
+                "vaccine_name VARCHAR(120) DEFAULT '', "
+                "batch_no VARCHAR(80) DEFAULT '', "
+                "dose_number INTEGER DEFAULT 1, "
+                "vaccinated_date VARCHAR(20) DEFAULT '', "
+                "next_due_date VARCHAR(20) DEFAULT '', "
+                "inventory_item_id INTEGER REFERENCES inventory_items(id) ON DELETE SET NULL, "
+                "is_free INTEGER DEFAULT 0, "
+                "rabies_record_id INTEGER REFERENCES rabies_vaccine_records(id) ON DELETE SET NULL, "
+                "invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL, "
+                "vet_name VARCHAR(80) DEFAULT '', "
+                "notes TEXT DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_pet ON vaccinations(pet_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_due ON vaccinations(next_due_date)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_rabies ON vaccinations(rabies_record_id)"))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

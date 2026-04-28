@@ -595,6 +595,45 @@ class InvoiceItem(Base):
     invoice = relationship("Invoice", back_populates="items")
 
 
+class Vaccination(Base):
+    """疫苗接种记录"""
+    __tablename__ = "vaccinations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    # 疫苗信息
+    # vaccine_type: rabies/combo_3/combo_6/canine_8/deworming/other
+    vaccine_type: Mapped[str]  = mapped_column(String(40),  default="other")
+    vaccine_name: Mapped[str]  = mapped_column(String(120), default="")   # 品牌/商品名
+    batch_no:     Mapped[str]  = mapped_column(String(80),  default="")   # 批次号
+    dose_number:  Mapped[int]  = mapped_column(Integer,     default=1)    # 第几针（99=加强）
+    vaccinated_date: Mapped[str] = mapped_column(String(20), default="")  # 接种日期
+    next_due_date:   Mapped[str] = mapped_column(String(20), default="")  # 下次到期日
+
+    # 关联库存品目（出库用）
+    inventory_item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    # 是否免费（狂犬疫苗 = True，不开收费单）
+    is_free: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # 关联来源
+    rabies_record_id = mapped_column(ForeignKey("rabies_vaccine_records.id", ondelete="SET NULL"), nullable=True, default=None)
+    invoice_id       = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    vet_name:   Mapped[str] = mapped_column(String(80), default="")
+    notes:      Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    pet           = relationship("Pet",                 foreign_keys=[pet_id])
+    customer      = relationship("Customer",            foreign_keys=[customer_id])
+    inventory_item = relationship("InventoryItem",      foreign_keys=[inventory_item_id])
+    rabies_record = relationship("RabiesVaccineRecord", foreign_keys=[rabies_record_id])
+
+
 class AdoptionPet(Base):
     __tablename__ = "adoption_pets"
 

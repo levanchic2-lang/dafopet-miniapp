@@ -67,6 +67,7 @@ from app.models import (
     AdoptionPet,
     Invoice,
     InvoiceItem,
+    Vaccination,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -4389,6 +4390,15 @@ async def page_admin_customer_detail(
     pet_map = {p.id: p for p in pets}
     cust_sales_orders = db.query(SalesOrder).filter(SalesOrder.customer_id == customer_id).order_by(SalesOrder.id.desc()).limit(100).all()
     _SO_STATUS_ZH_LOCAL = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
+    # 疫苗记录（按宠物分组）
+    vacc_list = db.query(Vaccination).filter(Vaccination.customer_id == customer_id).order_by(Vaccination.vaccinated_date.desc()).all()
+    vaccs_by_pet: dict[int, list] = {}
+    for v in vacc_list:
+        if v.pet_id:
+            vaccs_by_pet.setdefault(v.pet_id, []).append(v)
+    from datetime import date, timedelta
+    today_str = date.today().isoformat()
+    soon_str  = (date.today() + timedelta(days=7)).isoformat()
     return templates.TemplateResponse(
         request,
         "admin_customer_detail.html",
@@ -4404,6 +4414,10 @@ async def page_admin_customer_detail(
             "visit_type_zh": _VISIT_TYPE_ZH,
             "sales_orders": cust_sales_orders,
             "so_status_zh": _SO_STATUS_ZH_LOCAL,
+            "vaccs_by_pet": vaccs_by_pet,
+            "vacc_type_zh": _VACC_TYPE_ZH,
+            "today_str": today_str,
+            "soon_str": soon_str,
             "csrf_token": _get_csrf_token(request),
         },
     )
@@ -6573,6 +6587,218 @@ async def admin_invoice_delete(
     return RedirectResponse("/admin/invoices?msg=已删除", status_code=303)
 
 
+# ── 后台：疫苗档案管理 ───────────────────────────────────────────────────────
+
+_VACC_TYPE_ZH = {
+    "rabies":    "狂犬疫苗",
+    "combo_3":   "猫三联",
+    "combo_6":   "猫六联",
+    "canine_8":  "犬八联",
+    "deworming": "驱虫",
+    "other":     "其他",
+}
+_DOSE_ZH = {1: "第1针", 2: "第2针", 3: "第3针", 99: "加强针"}
+
+
+@app.get("/admin/vaccinations", response_class=HTMLResponse)
+async def admin_vaccinations_list(
+    request: Request, db: Session = Depends(get_db),
+    q: str = Query(""), filter: str = Query("all"),
+    vaccine_type: str = Query(""),
+):
+    require_admin(request)
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    soon  = (date.today() + timedelta(days=7)).isoformat()
+
+    query = db.query(Vaccination).order_by(Vaccination.next_due_date.asc().nullslast(), Vaccination.id.desc())
+
+    if q:
+        pet_ids = [p.id for p in db.query(Pet.id).filter(Pet.name.ilike(f"%{q}%")).all()]
+        cust_ids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(or_(
+            Vaccination.pet_id.in_(pet_ids),
+            Vaccination.customer_id.in_(cust_ids),
+        ))
+    if vaccine_type:
+        query = query.filter(Vaccination.vaccine_type == vaccine_type)
+    if filter == "soon":
+        query = query.filter(Vaccination.next_due_date != "", Vaccination.next_due_date <= soon, Vaccination.next_due_date >= today)
+    elif filter == "overdue":
+        query = query.filter(Vaccination.next_due_date != "", Vaccination.next_due_date < today)
+
+    records = query.limit(300).all()
+    return templates.TemplateResponse(request, "admin_vaccinations.html", {
+        "records": records, "q": q, "filter": filter,
+        "vaccine_type": vaccine_type,
+        "vacc_type_zh": _VACC_TYPE_ZH, "dose_zh": _DOSE_ZH,
+        "today": today, "soon": soon,
+        "msg": request.query_params.get("msg"),
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.get("/admin/vaccinations/create", response_class=HTMLResponse)
+async def admin_vaccination_create_page(
+    request: Request, db: Session = Depends(get_db),
+    pet_id: int = 0, customer_id: int = 0,
+):
+    require_admin(request)
+    from datetime import date
+    pet  = db.get(Pet, pet_id)  if pet_id  else None
+    cust = db.get(Customer, customer_id) if customer_id else (
+        db.get(Customer, pet.customer_id) if pet and pet.customer_id else None
+    )
+    vets = [v[0] for v in db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")
+    ).all()]
+    vacc_items = db.query(InventoryItem).filter(
+        InventoryItem.category.in_(["vaccine", "antiparasitic"]),
+        InventoryItem.stock_qty > 0,
+    ).order_by(InventoryItem.name).all()
+    return templates.TemplateResponse(request, "admin_vaccination_form.html", {
+        "mode": "create", "vacc": None,
+        "pet": pet, "cust": cust,
+        "vets": vets, "vacc_items": vacc_items,
+        "vacc_type_zh": _VACC_TYPE_ZH, "dose_zh": _DOSE_ZH,
+        "today": date.today().isoformat(),
+        "csrf_token": _get_csrf_token(request),
+        "msg": None,
+    })
+
+
+@app.post("/admin/vaccinations/create")
+async def admin_vaccination_create(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    from datetime import date
+
+    pet_id      = int(form.get("pet_id") or 0) or None
+    customer_id = int(form.get("customer_id") or 0) or None
+    item_id     = int(form.get("inventory_item_id") or 0) or None
+    is_free     = form.get("is_free") == "1"
+    admin_name  = request.session.get("admin", "")
+
+    vacc = Vaccination(
+        pet_id            = pet_id,
+        customer_id       = customer_id,
+        vaccine_type      = str(form.get("vaccine_type") or "other"),
+        vaccine_name      = str(form.get("vaccine_name") or "").strip()[:120],
+        batch_no          = str(form.get("batch_no") or "").strip()[:80],
+        dose_number       = int(form.get("dose_number") or 1),
+        vaccinated_date   = str(form.get("vaccinated_date") or date.today().isoformat()),
+        next_due_date     = str(form.get("next_due_date") or ""),
+        inventory_item_id = item_id,
+        is_free           = is_free,
+        vet_name          = str(form.get("vet_name") or "").strip()[:80],
+        notes             = str(form.get("notes") or "").strip(),
+        created_by        = admin_name,
+    )
+    db.add(vacc)
+    db.flush()
+
+    # 库存出库
+    if item_id:
+        _deduct_inventory(db, item_id, 1.0, "vaccination", vacc.id, admin_name,
+                          note=f"{vacc.vaccine_name or ''} 接种出库")
+
+    # 需要收费 → 自动生成收费单
+    if not is_free and item_id:
+        inv_item = db.get(InventoryItem, item_id)
+        if inv_item and inv_item.sell_price > 0:
+            inv = Invoice(
+                invoice_no      = _gen_invoice_no(db),
+                customer_id     = customer_id,
+                pet_id          = pet_id,
+                invoice_date    = vacc.vaccinated_date,
+                subtotal        = inv_item.sell_price,
+                discount_amount = 0.0,
+                total_amount    = inv_item.sell_price,
+                payment_status  = "unpaid",
+                notes           = f"疫苗接种 #{vacc.id}",
+                created_by      = admin_name,
+            )
+            db.add(inv)
+            db.flush()
+            db.add(InvoiceItem(
+                invoice_id  = inv.id,
+                ref_type    = "vaccination",
+                ref_id      = vacc.id,
+                description = vacc.vaccine_name or vacc.vaccine_type,
+                quantity    = 1.0,
+                unit_price  = inv_item.sell_price,
+                subtotal    = inv_item.sell_price,
+            ))
+            vacc.invoice_id = inv.id
+
+    db.commit()
+    redirect = f"/admin/customers/{db.get(Pet, pet_id).customer_id}" if pet_id and db.get(Pet, pet_id) else "/admin/vaccinations"
+    return RedirectResponse(f"{redirect}?msg=疫苗记录已添加", status_code=303)
+
+
+@app.get("/admin/vaccinations/{vacc_id}", response_class=HTMLResponse)
+async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    vacc = db.get(Vaccination, vacc_id)
+    if not vacc:
+        raise HTTPException(404)
+    pet  = db.get(Pet, vacc.pet_id) if vacc.pet_id else None
+    cust = db.get(Customer, vacc.customer_id) if vacc.customer_id else None
+    vets = [v[0] for v in db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")
+    ).all()]
+    vacc_items = db.query(InventoryItem).filter(
+        InventoryItem.category.in_(["vaccine", "antiparasitic"])
+    ).order_by(InventoryItem.name).all()
+    return templates.TemplateResponse(request, "admin_vaccination_form.html", {
+        "mode": "edit", "vacc": vacc,
+        "pet": pet, "cust": cust,
+        "vets": vets, "vacc_items": vacc_items,
+        "vacc_type_zh": _VACC_TYPE_ZH, "dose_zh": _DOSE_ZH,
+        "today": vacc.vaccinated_date,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/vaccinations/{vacc_id}/edit")
+async def admin_vaccination_edit(vacc_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    vacc = db.get(Vaccination, vacc_id)
+    if not vacc:
+        raise HTTPException(404)
+    vacc.vaccine_type    = str(form.get("vaccine_type") or "other")
+    vacc.vaccine_name    = str(form.get("vaccine_name") or "").strip()[:120]
+    vacc.batch_no        = str(form.get("batch_no") or "").strip()[:80]
+    vacc.dose_number     = int(form.get("dose_number") or 1)
+    vacc.vaccinated_date = str(form.get("vaccinated_date") or "")
+    vacc.next_due_date   = str(form.get("next_due_date") or "")
+    vacc.vet_name        = str(form.get("vet_name") or "").strip()[:80]
+    vacc.notes           = str(form.get("notes") or "").strip()
+    db.commit()
+    return RedirectResponse(f"/admin/vaccinations/{vacc_id}?msg=已更新", status_code=303)
+
+
+@app.post("/admin/vaccinations/{vacc_id}/delete")
+async def admin_vaccination_delete(vacc_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    vacc = db.get(Vaccination, vacc_id)
+    if vacc:
+        pet_cust_id = db.get(Pet, vacc.pet_id).customer_id if vacc.pet_id and db.get(Pet, vacc.pet_id) else None
+        db.delete(vacc)
+        db.commit()
+        if pet_cust_id:
+            return RedirectResponse(f"/admin/customers/{pet_cust_id}?msg=疫苗记录已删除", status_code=303)
+    return RedirectResponse("/admin/vaccinations?msg=已删除", status_code=303)
+
+
 # ── 后台：狂犬疫苗登记管理 ───────────────────────────────────────────────────
 
 @app.get("/admin/rabies", response_class=HTMLResponse)
@@ -6650,6 +6876,38 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
 
     rec.status = "completed"
     rec.updated_at = datetime.utcnow()
+    db.flush()
+
+    # 自动同步到疫苗档案（如果尚未同步过）
+    existing_vacc = db.query(Vaccination).filter(Vaccination.rabies_record_id == rec_id).first()
+    if not existing_vacc:
+        # 查找狂犬疫苗库存品目（优先匹配名称含"狂犬"的）
+        rabies_item = db.query(InventoryItem).filter(
+            InventoryItem.category == "vaccine",
+            InventoryItem.name.ilike("%狂犬%"),
+        ).first()
+        vacc = Vaccination(
+            pet_id            = rec.pet_id,
+            customer_id       = rec.customer_id,
+            vaccine_type      = "rabies",
+            vaccine_name      = rec.vaccine_manufacturer or "狂犬疫苗",
+            batch_no          = rec.vaccine_batch_no or "",
+            dose_number       = 1,
+            vaccinated_date   = rec.vaccine_date or datetime.utcnow().strftime("%Y-%m-%d"),
+            next_due_date     = "",   # 狂犬一般1年有效，可手动补录
+            inventory_item_id = rabies_item.id if rabies_item else None,
+            is_free           = True,
+            rabies_record_id  = rec_id,
+            vet_name          = rec.staff_name or "",
+            created_by        = request.session.get("admin", ""),
+        )
+        db.add(vacc)
+        db.flush()
+        # 库存出库（有关联库存品目时）
+        if rabies_item:
+            _deduct_inventory(db, rabies_item.id, 1.0, "vaccination", vacc.id,
+                              request.session.get("admin", ""), note=f"狂犬疫苗登记#{rec_id} 出库")
+
     db.commit()
     return RedirectResponse(f"/admin/rabies/{rec_id}?msg=已保存", status_code=303)
 

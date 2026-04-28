@@ -159,6 +159,55 @@
           {% endif %}
         </div>
 
+        <!-- 疫苗接种时间轴 -->
+        {% set pet_vaccs = vaccs_by_pet.get(pet.id, []) %}
+        <div style="padding:0.75rem 1rem;border-top:1px solid var(--border);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+            <div style="font-size:0.85rem;font-weight:600;color:var(--muted);">
+              疫苗记录（{{ pet_vaccs|length }}）
+            </div>
+            <a href="/admin/vaccinations/create?pet_id={{ pet.id }}&customer_id={{ cust.id }}"
+               class="btn secondary" style="font-size:0.75rem;padding:0.2rem 0.55rem;">＋ 新建接种</a>
+          </div>
+          {% if pet_vaccs %}
+          <div style="position:relative;padding-left:1.2rem;">
+            <!-- 竖线 -->
+            <div style="position:absolute;left:0.35rem;top:0.4rem;bottom:0.4rem;width:2px;background:var(--border);border-radius:2px;"></div>
+            <div style="display:grid;gap:0.5rem;">
+              {% for vacc in pet_vaccs %}
+              {% set is_overdue = vacc.next_due_date and vacc.next_due_date < today_str %}
+              {% set is_soon    = vacc.next_due_date and vacc.next_due_date >= today_str and vacc.next_due_date <= soon_str %}
+              <div style="position:relative;display:flex;align-items:flex-start;gap:0.6rem;">
+                <!-- 时间轴圆点 -->
+                <div style="position:absolute;left:-1.05rem;top:0.35rem;width:10px;height:10px;border-radius:50%;
+                            background:{% if is_overdue %}#dc2626{% elif is_soon %}#d97706{% else %}var(--accent){% endif %};
+                            border:2px solid #fff;box-shadow:0 0 0 1px var(--border);flex-shrink:0;"></div>
+                <a href="/admin/vaccinations/{{ vacc.id }}"
+                   style="flex:1;display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.6rem;border-radius:8px;
+                          background:{% if is_overdue %}#fff5f5{% elif is_soon %}#fffbeb{% else %}var(--bg-elevated){% endif %};
+                          border:1px solid var(--border);text-decoration:none;color:var(--text);">
+                  <span style="font-size:0.75rem;color:var(--muted);white-space:nowrap;min-width:80px;">{{ vacc.vaccinated_date or '—' }}</span>
+                  <span class="badge b-ok" style="font-size:0.65rem;white-space:nowrap;">{{ vacc_type_zh.get(vacc.vaccine_type, vacc.vaccine_type) }}</span>
+                  <span style="font-size:0.82rem;flex:1;">{{ vacc.vaccine_name or '—' }}</span>
+                  {% if vacc.next_due_date %}
+                  <span style="font-size:0.72rem;white-space:nowrap;
+                               color:{% if is_overdue %}#dc2626{% elif is_soon %}#d97706{% else %}var(--muted){% endif %};">
+                    到期：{{ vacc.next_due_date }}{% if is_overdue %} ⚠️{% elif is_soon %} 🔔{% endif %}
+                  </span>
+                  {% endif %}
+                  {% if vacc.is_free %}
+                  <span style="font-size:0.65rem;color:#059669;white-space:nowrap;">免费</span>
+                  {% endif %}
+                </a>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% else %}
+          <p style="color:var(--muted);font-size:0.85rem;margin:0;">暂无接种记录</p>
+          {% endif %}
+        </div>
+
       </div><!-- /pet-body -->
 
     </div>
