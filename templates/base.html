@@ -174,22 +174,22 @@
     <header class="site">
       <div class="brand">大风动物医院 <span>· TNR</span></div>
       <nav>
-        <a href="/showcase">公布展示</a>
         <a href="/admin/appointments" id="nav-appt-link">预约管理<span id="nav-pending-badge" class="nav-badge" style="display:none;"></span></a>
-        <a href="/admin">TNR后台</a>
         {% if request.session.get('admin') %}
-        <a href="/admin/hr">人事管理</a>
-        <a href="/admin/inventory">库存管理</a>
-        <a href="/admin/stocktake">循环盘点</a>
         <a href="/admin/customers">客户档案</a>
         <a href="/admin/visits">就诊病历</a>
-        <a href="/admin/invoices">收银台</a>
-        <a href="/admin/dispensing">发药台</a>
         <a href="/admin/vaccinations">疫苗管理</a>
         <a href="/admin/rabies">狂犬疫苗</a>
-        <a href="/admin/adoption">待领养</a>
+        <a href="/admin/dispensing">发药台</a>
+        <a href="/admin/invoices">收银台</a>
+        <a href="/admin/inventory">库存管理</a>
+        <a href="/admin/stocktake">循环盘点</a>
         {% endif %}
+        <a href="/admin">TNR后台</a>
+        <a href="/showcase">公布展示</a>
         {% if request.session.get('admin') %}
+        <a href="/admin/adoption">待领养</a>
+        <a href="/admin/hr">人事管理</a>
         <a href="/admin/feedback" id="nav-feedback-link">反馈<span id="nav-feedback-badge" class="nav-badge" style="display:none;background:#f97316;"></span></a>
         <a href="/admin/changelog">开发日志</a>
         {% endif %}
