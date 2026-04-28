@@ -1,65 +1,76 @@
 {% extends "base.html" %}
 {% block extra_css %}
 <style>
-  /* 案例卡片：全宽单列堆叠 */
   .case {
     background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
     overflow: hidden; margin-bottom: 1.1rem;
   }
+
+  /* 标题栏 */
   .case-head {
-    display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
-    padding: 0.8rem 1.1rem;
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+    padding: 0.7rem 1.1rem;
     background: linear-gradient(180deg, #f4f4f5 0%, #fafafa 100%);
     border-bottom: 1px solid var(--border);
   }
-  .case-head h3 { margin: 0; font-size: 1rem; font-weight: 700; }
-  .case-head .meta { font-size: 0.8rem; color: var(--muted); }
+  .case-head h3  { margin: 0; font-size: 0.98rem; font-weight: 700; }
+  .case-head .meta { font-size: 0.78rem; color: var(--muted); }
+  .case-head .counts { margin-left: auto; font-size: 0.78rem; color: var(--muted); }
 
-  /* 术前/术后两栏 */
-  .pair {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 0; /* 用 divider 分隔 */
-  }
-  @media (max-width: 560px) { .pair { grid-template-columns: 1fr; } }
-
-  .pair-col {
+  /* 图片区：flex 行，前后各自自然宽度 */
+  .img-row {
+    display: flex; align-items: flex-start;
     padding: 0.85rem 1.1rem 1rem;
-  }
-  .pair-col + .pair-col {
-    border-left: 1px solid var(--border);
-  }
-  @media (max-width: 560px) {
-    .pair-col + .pair-col { border-left: none; border-top: 1px solid var(--border); }
-  }
-  .pair-col > strong {
-    display: block; font-size: 0.78rem; font-weight: 700;
-    color: var(--muted); letter-spacing: 0.04em;
-    margin-bottom: 0.6rem; text-transform: uppercase;
+    gap: 0;
+    min-height: 0;
   }
 
-  /* 图片方块瀑布 */
-  .thumb-grid {
-    display: flex; flex-wrap: wrap; gap: 6px;
+  .img-section { display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; }
+
+  /* 前后标签 */
+  .section-label {
+    writing-mode: vertical-rl; text-orientation: mixed;
+    font-size: 0.72rem; font-weight: 700; color: var(--muted);
+    letter-spacing: 0.08em;
+    padding: 0.3rem 0;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-right: 0.5rem;
   }
-  .thumb-grid a {
+
+  /* 分割竖线 */
+  .divider {
+    width: 1px; background: var(--border);
+    align-self: stretch;
+    flex-shrink: 0;
+    margin: 0 1.1rem;
+  }
+
+  /* 图片方块 */
+  .thumb {
     display: block; flex-shrink: 0;
-    width: 110px; height: 110px;
-    border-radius: 8px; overflow: hidden;
+    width: 180px; height: 180px;
+    border-radius: 9px; overflow: hidden;
     border: 1px solid var(--border);
     background: var(--bg-elevated);
   }
-  @media (max-width: 760px) {
-    .thumb-grid a { width: 80px; height: 80px; }
-  }
-  .thumb-grid img, .thumb-grid video {
+  .thumb img, .thumb video {
     width: 100%; height: 100%; object-fit: cover; display: block;
   }
-  .thumb-grid a:hover { opacity: 0.88; }
+  .thumb:hover { opacity: 0.88; }
 
-  .no-img {
-    font-size: 0.82rem; color: var(--muted);
-    padding: 0.4rem 0;
+  @media (max-width: 760px) {
+    .thumb { width: 120px; height: 120px; }
+    .divider { margin: 0 0.6rem; }
+    .img-row { padding: 0.75rem 0.75rem 0.85rem; }
   }
+  @media (max-width: 480px) {
+    .img-row { flex-direction: column; gap: 0.85rem; }
+    .divider { display: none; }
+    .thumb { width: 100px; height: 100px; }
+  }
+
+  .no-img { font-size: 0.82rem; color: var(--muted); align-self: center; }
 
   .empty { text-align: center; padding: 2rem; color: var(--muted); }
 
@@ -96,60 +107,52 @@
   <article class="case">
     <div class="case-head">
       <h3>案例 #{{ a.id }}{% if a.cat_nickname %} · {{ a.cat_nickname }}{% endif %}</h3>
-      <span class="meta">完成时间：{{ a.updated_at.strftime('%Y-%m-%d') if a.updated_at else '—' }}</span>
-      <span class="meta" style="margin-left:auto;">
-        术前 {{ it.before | length }} 张 · 术后 {{ it.after | length }} 张
-      </span>
+      <span class="meta">{{ a.updated_at.strftime('%Y-%m-%d') if a.updated_at else '—' }}</span>
+      <span class="counts">术前 {{ it.before | length }} 张 · 术后 {{ it.after | length }} 张</span>
     </div>
 
-    <div class="pair">
+    <div class="img-row">
       <!-- 术前 -->
-      <div class="pair-col">
-        <strong>术前</strong>
+      <span class="section-label">术前</span>
+      <div class="img-section">
         {% if it.before %}
-        <div class="thumb-grid">
           {% for m in it.before %}
             {% set fp = m.stored_path.lower() %}
             {% if fp.endswith('.mp4') or fp.endswith('.webm') or fp.endswith('.mov') or fp.endswith('.mkv') %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener">
-              <video playsinline preload="none" muted>
-                <source src="/file/{{ m.id }}" type="video/mp4" />
-              </video>
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" class="thumb">
+              <video playsinline preload="none" muted><source src="/file/{{ m.id }}" type="video/mp4" /></video>
             </a>
             {% else %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener">
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" class="thumb">
               <img src="/file/{{ m.id }}" alt="术前 {{ loop.index }}" loading="lazy" />
             </a>
             {% endif %}
           {% endfor %}
-        </div>
         {% else %}
-        <p class="no-img">暂无术前图片</p>
+          <span class="no-img">暂无</span>
         {% endif %}
       </div>
 
+      <div class="divider"></div>
+
       <!-- 术后 -->
-      <div class="pair-col">
-        <strong>术后</strong>
+      <span class="section-label">术后</span>
+      <div class="img-section">
         {% if it.after %}
-        <div class="thumb-grid">
           {% for m in it.after %}
             {% set fp = m.stored_path.lower() %}
             {% if fp.endswith('.mp4') or fp.endswith('.webm') or fp.endswith('.mov') or fp.endswith('.mkv') %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener">
-              <video playsinline preload="none" muted>
-                <source src="/file/{{ m.id }}" type="video/mp4" />
-              </video>
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" class="thumb">
+              <video playsinline preload="none" muted><source src="/file/{{ m.id }}" type="video/mp4" /></video>
             </a>
             {% else %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener">
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" class="thumb">
               <img src="/file/{{ m.id }}" alt="术后 {{ loop.index }}" loading="lazy" />
             </a>
             {% endif %}
           {% endfor %}
-        </div>
         {% else %}
-        <p class="no-img">暂无术后图片</p>
+          <span class="no-img">暂无</span>
         {% endif %}
       </div>
     </div>
