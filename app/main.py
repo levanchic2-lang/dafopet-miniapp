@@ -18,7 +18,7 @@ from passlib.context import CryptContext
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import httpx
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, nullslast
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.staticfiles import StaticFiles
@@ -6611,7 +6611,7 @@ async def admin_vaccinations_list(
     today = date.today().isoformat()
     soon  = (date.today() + timedelta(days=7)).isoformat()
 
-    query = db.query(Vaccination).order_by(Vaccination.next_due_date.asc().nullslast(), Vaccination.id.desc())
+    query = db.query(Vaccination).order_by(nullslast(Vaccination.next_due_date.asc()), Vaccination.id.desc())
 
     if q:
         pet_ids = [p.id for p in db.query(Pet.id).filter(Pet.name.ilike(f"%{q}%")).all()]
