@@ -77,7 +77,7 @@
           {% endif %}
         </td>
         <td style="padding:0.5rem 0.85rem;color:var(--muted);">
-          {{ dose_zh.get(vacc.dose_number, f'第{vacc.dose_number}针') }}
+          {{ dose_zh.get(vacc.dose_number) or ('第' ~ vacc.dose_number ~ '针') }}
         </td>
         <td style="padding:0.5rem 0.85rem;color:var(--muted);">{{ vacc.vaccinated_date or '—' }}</td>
         <td style="padding:0.5rem 0.85rem;font-weight:{% if is_overdue or is_soon %}600{% else %}400{% endif %};

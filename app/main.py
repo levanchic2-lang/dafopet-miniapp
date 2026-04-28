@@ -6607,57 +6607,52 @@ async def admin_vaccinations_list(
     vaccine_type: str = Query(""),
 ):
     require_admin(request)
-    import traceback
     from datetime import date, timedelta
-    try:
-        today = date.today().isoformat()
-        soon  = (date.today() + timedelta(days=7)).isoformat()
+    from sqlalchemy import case as sa_case
+    today = date.today().isoformat()
+    soon  = (date.today() + timedelta(days=7)).isoformat()
 
-        # 按到期日升序，NULL/空值排末尾；用 case 保证跨版本兼容
-        from sqlalchemy import case as sa_case
-        due_order = sa_case(
-            (Vaccination.next_due_date.is_(None), "9999-99-99"),
-            (Vaccination.next_due_date == "",      "9999-99-99"),
-            else_=Vaccination.next_due_date,
+    # 按到期日升序，NULL/空值排末尾
+    due_order = sa_case(
+        (Vaccination.next_due_date.is_(None), "9999-99-99"),
+        (Vaccination.next_due_date == "",      "9999-99-99"),
+        else_=Vaccination.next_due_date,
+    )
+    query = db.query(Vaccination).order_by(due_order.asc(), Vaccination.id.desc())
+
+    if q:
+        pet_ids  = [p.id for p in db.query(Pet.id).filter(Pet.name.ilike(f"%{q}%")).all()]
+        cust_ids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(or_(
+            Vaccination.pet_id.in_(pet_ids),
+            Vaccination.customer_id.in_(cust_ids),
+        ))
+    if vaccine_type:
+        query = query.filter(Vaccination.vaccine_type == vaccine_type)
+    if filter == "soon":
+        query = query.filter(
+            Vaccination.next_due_date != "",
+            Vaccination.next_due_date <= soon,
+            Vaccination.next_due_date >= today,
         )
-        query = db.query(Vaccination).order_by(due_order.asc(), Vaccination.id.desc())
+    elif filter == "overdue":
+        query = query.filter(
+            Vaccination.next_due_date != "",
+            Vaccination.next_due_date < today,
+        )
 
-        if q:
-            pet_ids  = [p.id for p in db.query(Pet.id).filter(Pet.name.ilike(f"%{q}%")).all()]
-            cust_ids = [c.id for c in db.query(Customer.id).filter(
-                or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
-            ).all()]
-            query = query.filter(or_(
-                Vaccination.pet_id.in_(pet_ids),
-                Vaccination.customer_id.in_(cust_ids),
-            ))
-        if vaccine_type:
-            query = query.filter(Vaccination.vaccine_type == vaccine_type)
-        if filter == "soon":
-            query = query.filter(
-                Vaccination.next_due_date != "",
-                Vaccination.next_due_date <= soon,
-                Vaccination.next_due_date >= today,
-            )
-        elif filter == "overdue":
-            query = query.filter(
-                Vaccination.next_due_date != "",
-                Vaccination.next_due_date < today,
-            )
-
-        records = query.limit(300).all()
-        return templates.TemplateResponse(request, "admin_vaccinations.html", {
-            "records": records, "q": q, "filter": filter,
-            "vaccine_type": vaccine_type,
-            "vacc_type_zh": _VACC_TYPE_ZH, "dose_zh": _DOSE_ZH,
-            "today": today, "soon": soon,
-            "title": "疫苗管理",
-            "msg": request.query_params.get("msg"),
-            "csrf_token": _get_csrf_token(request),
-        })
-    except Exception as exc:
-        tb = traceback.format_exc()
-        return HTMLResponse(f"<pre style='color:red;padding:2rem'>{tb}</pre>", status_code=500)
+    records = query.limit(300).all()
+    return templates.TemplateResponse(request, "admin_vaccinations.html", {
+        "records": records, "q": q, "filter": filter,
+        "vaccine_type": vaccine_type,
+        "vacc_type_zh": _VACC_TYPE_ZH, "dose_zh": _DOSE_ZH,
+        "today": today, "soon": soon,
+        "title": "疫苗管理",
+        "msg": request.query_params.get("msg"),
+        "csrf_token": _get_csrf_token(request),
+    })
 
 
 @app.get("/admin/vaccinations/create", response_class=HTMLResponse)
