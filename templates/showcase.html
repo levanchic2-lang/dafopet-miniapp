@@ -15,6 +15,21 @@
   .pair strong { display: block; margin-bottom: 0.35rem; color: var(--text); font-weight: 700; }
   .pair img, .pair video { width: 100%; border-radius: 8px; background: var(--bg-elevated); border: 1px solid var(--border); max-height: 220px; object-fit: cover; }
   .empty { text-align: center; padding: 2rem; color: var(--muted); }
+  /* 翻页 */
+  .pagination {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+  }
+  .pagination a, .pagination span {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 2.2rem; height: 2.2rem; padding: 0 0.65rem;
+    border-radius: 8px; font-size: 0.88rem; font-weight: 600;
+    border: 1px solid var(--border); text-decoration: none;
+  }
+  .pagination a { background: var(--card); color: var(--text); }
+  .pagination a:hover { background: var(--bg-elevated); border-color: var(--muted); }
+  .pagination .cur { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .pagination .disabled { color: var(--muted); background: var(--bg-elevated); cursor: default; }
 </style>
 {% endblock %}
 {% block body %}
@@ -22,7 +37,7 @@
   <h1>公布展示 · TNR 术前术后</h1>
   <p class="sub">展示经救助人同意、已在本院完成绝育的猫咪术前术后影像，用于公益宣传与 TNR 科普。不涉及申请人隐私信息。</p>
 </div>
-{% if not items %}
+{% if not items and page == 1 %}
 <div class="card empty">暂无符合条件的公布展示条目。完成手术、上传资料并勾选「同意公开展示」后将出现在此处。</div>
 {% else %}
 <div class="grid">
@@ -66,5 +81,36 @@
   </article>
   {% endfor %}
 </div>
+
+<!-- 翻页条 -->
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+  <a href="/showcase?page={{ page - 1 }}">← 上一页</a>
+  {% else %}
+  <span class="disabled">← 上一页</span>
+  {% endif %}
+
+  {% for p in range(1, total_pages + 1) %}
+    {% if p == page %}
+    <span class="cur">{{ p }}</span>
+    {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+    <a href="/showcase?page={{ p }}">{{ p }}</a>
+    {% elif p == page - 3 or p == page + 3 %}
+    <span class="disabled">…</span>
+    {% endif %}
+  {% endfor %}
+
+  {% if page < total_pages %}
+  <a href="/showcase?page={{ page + 1 }}">下一页 →</a>
+  {% else %}
+  <span class="disabled">下一页 →</span>
+  {% endif %}
+</div>
+<p style="text-align:center;font-size:0.8rem;color:var(--muted);margin-top:0.5rem;">
+  共 {{ total }} 个案例 · 第 {{ page }} / {{ total_pages }} 页
+</p>
+{% endif %}
+
 {% endif %}
 {% endblock %}

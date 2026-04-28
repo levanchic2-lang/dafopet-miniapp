@@ -4136,23 +4136,39 @@ async def api_showcase(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/showcase", response_class=HTMLResponse)
-async def page_showcase(request: Request, db: Session = Depends(get_db)):
-    q = (
+async def page_showcase(request: Request, db: Session = Depends(get_db),
+                        page: int = Query(1)):
+    page_size = 4
+    page = max(1, page)
+    base_q = (
         db.query(Application)
         .options(selectinload(Application.media))
         .filter(Application.status == ApplicationStatus.surgery_completed.value)
         .filter(Application.showcase_consent.is_(True))
         .order_by(Application.updated_at.desc())
     )
-    items = []
-    for a in q.all():
+    # 先收集有图的记录（过滤掉无图案例）再分页
+    all_apps = base_q.all()
+    all_items = []
+    for a in all_apps:
         before = [x for x in a.media if x.kind == MediaKind.surgery_before.value]
-        after = [x for x in a.media if x.kind == MediaKind.surgery_after.value]
+        after  = [x for x in a.media if x.kind == MediaKind.surgery_after.value]
         if before or after:
-            items.append({"app": a, "before": before, "after": after})
+            all_items.append({"app": a, "before": before, "after": after})
+    total      = len(all_items)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page        = min(page, total_pages)
+    items       = all_items[(page - 1) * page_size : page * page_size]
     return templates.TemplateResponse(
         "showcase.html",
-        {"request": request, "title": "公布展示 · TNR 术前术后", "items": items},
+        {
+            "request": request,
+            "title": "公布展示 · TNR 术前术后",
+            "items": items,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+        },
     )
 
 
