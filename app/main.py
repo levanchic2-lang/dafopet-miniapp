@@ -4138,7 +4138,7 @@ async def api_showcase(request: Request, db: Session = Depends(get_db)):
 @app.get("/showcase", response_class=HTMLResponse)
 async def page_showcase(request: Request, db: Session = Depends(get_db),
                         page: int = Query(1)):
-    page_size = 4
+    page_size = 8
     page = max(1, page)
     base_q = (
         db.query(Application)

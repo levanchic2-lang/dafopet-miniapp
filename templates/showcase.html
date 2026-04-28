@@ -1,20 +1,65 @@
 {% extends "base.html" %}
 {% block extra_css %}
 <style>
-  .grid { display: grid; gap: 1.25rem; }
-  @media (min-width: 640px) { .grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); } }
+  /* 网格：宽屏 4 列，中屏 2 列，窄屏 1 列 */
+  .grid {
+    display: grid; gap: 1.1rem;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px)  { .grid { grid-template-columns: 1fr; } }
+
   .case {
     background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
     overflow: hidden; display: flex; flex-direction: column;
   }
-  .case h3 { margin: 0; padding: 0.85rem 1rem; font-size: 1rem; background: linear-gradient(180deg, #f4f4f5 0%, #fafafa 100%); border-bottom: 1px solid var(--border); }
-  .case .meta { padding: 0 1rem 0.5rem; font-size: 0.82rem; color: var(--muted); }
-  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 0 1rem 1rem; }
-  @media (max-width: 480px) { .pair { grid-template-columns: 1fr; } }
-  .pair section { font-size: 0.8rem; }
-  .pair strong { display: block; margin-bottom: 0.35rem; color: var(--text); font-weight: 700; }
-  .pair img, .pair video { width: 100%; border-radius: 8px; background: var(--bg-elevated); border: 1px solid var(--border); max-height: 220px; object-fit: cover; }
+  .case-head {
+    padding: 0.75rem 0.9rem 0.4rem;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #f4f4f5 0%, #fafafa 100%);
+  }
+  .case-head h3 { margin: 0; font-size: 0.95rem; font-weight: 700; }
+  .case-head .meta { font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }
+
+  /* 术前术后并排，固定高度，统一卡片高度 */
+  .pair {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+    padding: 0.75rem 0.9rem 0.9rem;
+    flex: 1;
+  }
+  .pair-col { display: flex; flex-direction: column; }
+  .pair-col strong {
+    font-size: 0.75rem; font-weight: 700; color: var(--muted);
+    margin-bottom: 0.3rem; display: block;
+  }
+
+  /* 缩略图容器：固定高度，超出裁剪 */
+  .thumb-wrap {
+    position: relative;
+    width: 100%; height: 160px;
+    border-radius: 8px; overflow: hidden;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+  }
+  .thumb-wrap img, .thumb-wrap video {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  /* 多图角标 */
+  .more-badge {
+    position: absolute; bottom: 6px; right: 6px;
+    background: rgba(0,0,0,0.55); color: #fff;
+    font-size: 0.7rem; font-weight: 700;
+    padding: 0.15em 0.5em; border-radius: 99px;
+    pointer-events: none;
+  }
+  .no-img {
+    height: 160px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; color: var(--muted);
+    border-radius: 8px; border: 1px dashed var(--border);
+  }
+
   .empty { text-align: center; padding: 2rem; color: var(--muted); }
+
   /* 翻页 */
   .pagination {
     display: flex; align-items: center; justify-content: center;
@@ -37,46 +82,65 @@
   <h1>公布展示 · TNR 术前术后</h1>
   <p class="sub">展示经救助人同意、已在本院完成绝育的猫咪术前术后影像，用于公益宣传与 TNR 科普。不涉及申请人隐私信息。</p>
 </div>
+
 {% if not items and page == 1 %}
 <div class="card empty">暂无符合条件的公布展示条目。完成手术、上传资料并勾选「同意公开展示」后将出现在此处。</div>
 {% else %}
 <div class="grid">
   {% for it in items %}
   {% set a = it.app %}
+  {% set b0 = it.before[0] if it.before else None %}
+  {% set a0 = it.after[0]  if it.after  else None %}
+  {% set b_extra = (it.before | length) - 1 %}
+  {% set a_extra = (it.after  | length) - 1 %}
+
   <article class="case">
-    <h3>案例 #{{ a.id }}{% if a.cat_nickname %} · {{ a.cat_nickname }}{% endif %}</h3>
-    <p class="meta">完成时间：{{ a.updated_at.strftime('%Y-%m-%d') if a.updated_at else '—' }}</p>
+    <div class="case-head">
+      <h3>案例 #{{ a.id }}{% if a.cat_nickname %} · {{ a.cat_nickname }}{% endif %}</h3>
+      <div class="meta">完成时间：{{ a.updated_at.strftime('%Y-%m-%d') if a.updated_at else '—' }}</div>
+    </div>
     <div class="pair">
-      <section>
+
+      <!-- 术前 -->
+      <div class="pair-col">
         <strong>术前</strong>
-        {% for m in it.before %}
-          {% set p = m.stored_path.lower() %}
-          {% if p.endswith('.mp4') or p.endswith('.webm') or p.endswith('.mov') or p.endswith('.mkv') %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" style="display:block;">
-              <video controls playsinline preload="metadata" style="width:100%;border-radius:8px;background:#000;max-height:220px;pointer-events:none;"><source src="/file/{{ m.id }}" type="video/mp4" /></video>
-            </a>
-          {% else %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener"><img src="/file/{{ m.id }}" alt="术前" loading="lazy" /></a>
-          {% endif %}
+        {% if b0 %}
+          {% set p = b0.stored_path.lower() %}
+          <a href="/file/{{ b0.id }}" target="_blank" rel="noopener" style="display:block;">
+            <div class="thumb-wrap">
+              {% if p.endswith('.mp4') or p.endswith('.webm') or p.endswith('.mov') or p.endswith('.mkv') %}
+                <video playsinline preload="metadata"><source src="/file/{{ b0.id }}" type="video/mp4" /></video>
+              {% else %}
+                <img src="/file/{{ b0.id }}" alt="术前" loading="lazy" />
+              {% endif %}
+              {% if b_extra > 0 %}<span class="more-badge">+{{ b_extra }}</span>{% endif %}
+            </div>
+          </a>
         {% else %}
-          <span class="sub">无图</span>
-        {% endfor %}
-      </section>
-      <section>
+          <div class="no-img">无图</div>
+        {% endif %}
+      </div>
+
+      <!-- 术后 -->
+      <div class="pair-col">
         <strong>术后</strong>
-        {% for m in it.after %}
-          {% set p = m.stored_path.lower() %}
-          {% if p.endswith('.mp4') or p.endswith('.webm') or p.endswith('.mov') or p.endswith('.mkv') %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" style="display:block;">
-              <video controls playsinline preload="metadata" style="width:100%;border-radius:8px;background:#000;max-height:220px;pointer-events:none;"><source src="/file/{{ m.id }}" type="video/mp4" /></video>
-            </a>
-          {% else %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener"><img src="/file/{{ m.id }}" alt="术后" loading="lazy" /></a>
-          {% endif %}
+        {% if a0 %}
+          {% set p = a0.stored_path.lower() %}
+          <a href="/file/{{ a0.id }}" target="_blank" rel="noopener" style="display:block;">
+            <div class="thumb-wrap">
+              {% if p.endswith('.mp4') or p.endswith('.webm') or p.endswith('.mov') or p.endswith('.mkv') %}
+                <video playsinline preload="metadata"><source src="/file/{{ a0.id }}" type="video/mp4" /></video>
+              {% else %}
+                <img src="/file/{{ a0.id }}" alt="术后" loading="lazy" />
+              {% endif %}
+              {% if a_extra > 0 %}<span class="more-badge">+{{ a_extra }}</span>{% endif %}
+            </div>
+          </a>
         {% else %}
-          <span class="sub">无图</span>
-        {% endfor %}
-      </section>
+          <div class="no-img">无图</div>
+        {% endif %}
+      </div>
+
     </div>
   </article>
   {% endfor %}
