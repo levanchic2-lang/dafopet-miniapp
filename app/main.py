@@ -2194,6 +2194,25 @@ async def admin_logout(request: Request):
 
 # ── 账号管理（仅 superadmin）────────────────────────────────────────────
 
+@app.get("/admin/run-seed-2604", response_class=HTMLResponse)
+async def admin_run_seed_2604(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    from app.database import _seed_data
+    import traceback
+    try:
+        _seed_data()
+        r1 = db.query(Application).filter(Application.phone == "15323455977").first()
+        r2 = db.query(Application).filter(Application.phone == "19856109910").first()
+        lines = []
+        lines.append(f"郑香玉(15323455977): {'✅ 已存在 id=' + str(r1.id) if r1 else '❌ 未找到'}")
+        lines.append(f"张春晓(19856109910): {'✅ 已存在 id=' + str(r2.id) if r2 else '❌ 未找到'}")
+        msg = "<br>".join(lines)
+        return HTMLResponse(f"<pre style='padding:2rem;font-size:1.1rem'>{msg}<br><br><a href='/admin'>← 返回后台</a></pre>")
+    except Exception:
+        tb = traceback.format_exc()
+        return HTMLResponse(f"<pre style='color:red;padding:2rem'>{tb}</pre>", status_code=500)
+
+
 @app.get("/admin/changelog", response_class=HTMLResponse)
 async def admin_changelog_page(request: Request):
     if not request.session.get("admin"):
