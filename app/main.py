@@ -2197,20 +2197,46 @@ async def admin_logout(request: Request):
 @app.get("/admin/run-seed-2604", response_class=HTMLResponse)
 async def admin_run_seed_2604(request: Request, db: Session = Depends(get_db)):
     require_admin(request)
-    from app.database import _seed_data
     import traceback
+    lines = []
+    records = [
+        dict(applicant_name="郑香玉", phone="15323455977", clinic_store="龙华店",
+             appointment_at="2026-04-25", location_address="中国广东省深圳市",
+             id_number="632123199706180526", address="秋港花园；秋港花园D 5楼下灌木丛",
+             cat_nickname="黑猫带一点白", cat_gender="male",
+             age_estimate="6个月-1岁（最佳）", weight_estimate="6",
+             health_note="花色特征：黑猫带一点白；亲人程度：亲人，随便摸",
+             post_surgery_plan="医院住院", status="surgery_completed",
+             created_at=datetime(2026, 4, 24, 12, 31),
+             updated_at=datetime(2026, 4, 24, 12, 31)),
+        dict(applicant_name="张春晓", phone="19856109910", clinic_store="龙华店",
+             appointment_at="2026-04-26", location_address="中国广东省深圳市",
+             id_number="340603199502220224", address="1980科技文化产业园；停车场",
+             cat_nickname="黑白", cat_gender="female",
+             age_estimate="6个月-1岁（最佳）", weight_estimate="3.5",
+             health_note="花色特征：黑白；怀孕/哺乳：是，肚子很大/乳头红肿有奶；亲人程度：可摸但警惕",
+             post_surgery_plan="医院住院", status="cancelled",
+             created_at=datetime(2026, 4, 25, 20, 33),
+             updated_at=datetime(2026, 4, 25, 20, 33)),
+    ]
     try:
-        _seed_data()
-        r1 = db.query(Application).filter(Application.phone == "15323455977").first()
-        r2 = db.query(Application).filter(Application.phone == "19856109910").first()
-        lines = []
-        lines.append(f"郑香玉(15323455977): {'✅ 已存在 id=' + str(r1.id) if r1 else '❌ 未找到'}")
-        lines.append(f"张春晓(19856109910): {'✅ 已存在 id=' + str(r2.id) if r2 else '❌ 未找到'}")
-        msg = "<br>".join(lines)
-        return HTMLResponse(f"<pre style='padding:2rem;font-size:1.1rem'>{msg}<br><br><a href='/admin'>← 返回后台</a></pre>")
+        for r in records:
+            exists = db.query(Application).filter(Application.phone == r["phone"]).first()
+            if exists:
+                lines.append(f"跳过（已存在）：{r['applicant_name']} id={exists.id}")
+                continue
+            app_row = Application(wechat_openid="", agree_ear_tip=True,
+                                  agree_no_pet_fraud=True, is_proxy=False, **r)
+            db.add(app_row)
+            db.flush()
+            lines.append(f"✅ 已插入：{r['applicant_name']} id={app_row.id}")
+        db.commit()
     except Exception:
+        db.rollback()
         tb = traceback.format_exc()
         return HTMLResponse(f"<pre style='color:red;padding:2rem'>{tb}</pre>", status_code=500)
+    msg = "\n".join(lines)
+    return HTMLResponse(f"<pre style='padding:2rem;font-size:1.1rem'>{msg}\n\n<a href='/admin'>← 返回后台</a></pre>")
 
 
 @app.get("/admin/changelog", response_class=HTMLResponse)
