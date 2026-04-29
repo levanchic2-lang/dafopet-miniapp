@@ -33,6 +33,7 @@ def get_db():
 def init_db():
     Base.metadata.create_all(bind=engine)
     _try_sqlite_migrations()
+    _seed_data()
 
 
 def _try_sqlite_migrations() -> None:
@@ -602,47 +603,66 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_due ON vaccinations(next_due_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_rabies ON vaccinations(rabies_record_id)"))
 
-            # ── 一次性数据补录：2026-04-24/25 两条申请 ──────────────────────
-            conn.execute(text("""
-                INSERT OR IGNORE INTO applications
-                  (applicant_name, phone, wechat_openid, clinic_store, appointment_at,
-                   location_address, id_number, address, cat_nickname, cat_gender,
-                   age_estimate, weight_estimate, health_note, post_surgery_plan,
-                   status, agree_ear_tip, agree_no_pet_fraud, is_proxy,
-                   created_at, updated_at)
-                SELECT
-                  '郑香玉','15323455977','','龙华店','2026-04-25',
-                  '中国广东省深圳市','632123199706180526','秋港花园；秋港花园D 5楼下灌木丛',
-                  '黑猫带一点白','male','6个月-1岁（最佳）','6',
-                  '花色特征：黑猫带一点白；亲人程度：亲人，随便摸','医院住院',
-                  'surgery_completed',1,1,0,
-                  '2026-04-24 12:31:00','2026-04-24 12:31:00'
-                WHERE NOT EXISTS (
-                  SELECT 1 FROM applications
-                  WHERE phone='15323455977' AND created_at='2026-04-24 12:31:00'
-                )
-            """))
-            conn.execute(text("""
-                INSERT OR IGNORE INTO applications
-                  (applicant_name, phone, wechat_openid, clinic_store, appointment_at,
-                   location_address, id_number, address, cat_nickname, cat_gender,
-                   age_estimate, weight_estimate, health_note, post_surgery_plan,
-                   status, agree_ear_tip, agree_no_pet_fraud, is_proxy,
-                   created_at, updated_at)
-                SELECT
-                  '张春晓','19856109910','','龙华店','2026-04-26',
-                  '中国广东省深圳市','340603199502220224','1980科技文化产业园；停车场',
-                  '黑白','female','6个月-1岁（最佳）','3.5',
-                  '花色特征：黑白；怀孕/哺乳：是，肚子很大/乳头红肿有奶；亲人程度：可摸但警惕','医院住院',
-                  'cancelled',1,1,0,
-                  '2026-04-25 20:33:00','2026-04-25 20:33:00'
-                WHERE NOT EXISTS (
-                  SELECT 1 FROM applications
-                  WHERE phone='19856109910' AND created_at='2026-04-25 20:33:00'
-                )
-            """))
-
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）
         return
+
+
+def _seed_data() -> None:
+    """一次性补录历史数据，幂等（重复执行安全）。"""
+    if not settings.database_url.startswith("sqlite"):
+        return
+    rows = [
+        {
+            "applicant_name": "郑香玉", "phone": "15323455977",
+            "clinic_store": "龙华店", "appointment_at": "2026-04-25",
+            "location_address": "中国广东省深圳市",
+            "id_number": "632123199706180526",
+            "address": "秋港花园；秋港花园D 5楼下灌木丛",
+            "cat_nickname": "黑猫带一点白", "cat_gender": "male",
+            "age_estimate": "6个月-1岁（最佳）", "weight_estimate": "6",
+            "health_note": "花色特征：黑猫带一点白；亲人程度：亲人，随便摸",
+            "post_surgery_plan": "医院住院",
+            "status": "surgery_completed",
+            "created_at": "2026-04-24 12:31:00",
+        },
+        {
+            "applicant_name": "张春晓", "phone": "19856109910",
+            "clinic_store": "龙华店", "appointment_at": "2026-04-26",
+            "location_address": "中国广东省深圳市",
+            "id_number": "340603199502220224",
+            "address": "1980科技文化产业园；停车场",
+            "cat_nickname": "黑白", "cat_gender": "female",
+            "age_estimate": "6个月-1岁（最佳）", "weight_estimate": "3.5",
+            "health_note": "花色特征：黑白；怀孕/哺乳：是，肚子很大/乳头红肿有奶；亲人程度：可摸但警惕",
+            "post_surgery_plan": "医院住院",
+            "status": "cancelled",
+            "created_at": "2026-04-25 20:33:00",
+        },
+    ]
+    try:
+        with engine.begin() as conn:
+            for r in rows:
+                exists = conn.execute(
+                    text("SELECT 1 FROM applications WHERE phone=:p AND created_at=:c"),
+                    {"p": r["phone"], "c": r["created_at"]},
+                ).fetchone()
+                if exists:
+                    continue
+                conn.execute(text("""
+                    INSERT INTO applications
+                      (applicant_name, phone, wechat_openid, clinic_store, appointment_at,
+                       location_address, id_number, address, cat_nickname, cat_gender,
+                       age_estimate, weight_estimate, health_note, post_surgery_plan,
+                       status, agree_ear_tip, agree_no_pet_fraud, is_proxy,
+                       created_at, updated_at)
+                    VALUES
+                      (:applicant_name, :phone, '', :clinic_store, :appointment_at,
+                       :location_address, :id_number, :address, :cat_nickname, :cat_gender,
+                       :age_estimate, :weight_estimate, :health_note, :post_surgery_plan,
+                       :status, 1, 1, 0,
+                       :created_at, :created_at)
+                """), r)
+    except Exception:
+        pass
