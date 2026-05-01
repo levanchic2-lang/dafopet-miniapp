@@ -110,17 +110,41 @@
     bindblur="onHealthNoteBlur"
   ></textarea>
 
-  <view class="label">申请照片（至少 1 张）</view>
-  <button class="btn secondary" bindtap="onPickImages">选择照片</button>
-  <view>
-    <text wx:for="{{images}}" wx:key="*this" class="tag">{{item}}</text>
+  <view class="label">申请照片 / 视频</view>
+  <!-- 要求说明 -->
+  <view class="tip" style="margin-bottom:12rpx;">
+    <view style="font-weight:600;margin-bottom:6rpx;">📸 上传要求（二选一）</view>
+    <view>① 至少 <text style="font-weight:700;color:#c04000;">2 张</text>照片（单张不可提交）</view>
+    <view>② 或上传 <text style="font-weight:700;color:#c04000;">1 个视频</text>代替照片</view>
+    <view style="margin-top:8rpx;color:#9e7a30;">⚠️ 照片须同时包含 <text style="font-weight:700;">清晰面部</text> 与 <text style="font-weight:700;">身体全貌</text>，模糊或仅有单侧将被拒绝。</view>
   </view>
 
-  <view class="label">申请视频（可选）</view>
-  <view class="sub addr-hint">提示：更多客观流浪的证据可以增加审核通过率。</view>
-  <button class="btn secondary" bindtap="onPickVideo">选择视频</button>
-  <view>
-    <text wx:for="{{videos}}" wx:key="*this" class="tag">{{item}}</text>
+  <!-- 照片 -->
+  <view class="upload-row">
+    <button class="btn secondary" bindtap="onPickImages">选择照片</button>
+    <view class="upload-count {{images.length >= 2 ? 'count-ok' : (images.length === 1 ? 'count-warn' : 'count-empty')}}">
+      {{images.length === 0 ? '未选择' : images.length + ' 张'}}
+      {{images.length === 1 ? '（还需 1 张）' : ''}}
+    </view>
+  </view>
+  <view wx:if="{{images.length}}">
+    <text wx:for="{{images}}" wx:key="*this" class="tag">照片 {{index + 1}}</text>
+  </view>
+
+  <!-- 视频 -->
+  <view class="upload-row" style="margin-top:16rpx;">
+    <button class="btn secondary" bindtap="onPickVideo">选择视频</button>
+    <view class="upload-count {{videos.length ? 'count-ok' : 'count-empty'}}">
+      {{videos.length ? videos.length + ' 个' : '未选择'}}
+    </view>
+  </view>
+  <view wx:if="{{videos.length}}">
+    <text wx:for="{{videos}}" wx:key="*this" class="tag">视频 {{index + 1}}</text>
+  </view>
+
+  <!-- 未达标提示 -->
+  <view wx:if="{{!mediaReady}}" class="tip tip-warn" style="margin-top:12rpx;">
+    {{images.length === 0 && videos.length === 0 ? '请上传至少 2 张照片或 1 个视频' : (images.length === 1 && videos.length === 0 ? '照片仅 1 张，请再添加 1 张或改为上传视频' : '')}}
   </view>
 
   <!-- ── 代预约 ── -->
@@ -166,7 +190,7 @@
     </checkbox-group>
   </view>
 
-  <button class="btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onSubmit">提交申请</button>
+  <button class="btn" loading="{{submitting}}" disabled="{{submitting || !mediaReady}}" bindtap="onSubmit">提交申请</button>
 
   <view wx:if="{{result}}" class="sub">
     <view class="tag ok">提交成功</view>

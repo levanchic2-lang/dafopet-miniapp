@@ -55,6 +55,7 @@ Page({
     checks: { ear: true, fraud: true },
     images: [],
     videos: [],
+    mediaReady: false,  // 2张图 或 1个视频
     submitting: false,
     result: null,
     error: "",
@@ -410,7 +411,8 @@ Page({
             sourceType: ["album", "camera"],
             success: (res) => {
               const files = (res.tempFiles || []).map((f) => f.tempFilePath);
-              this.setData({ images: files.slice(0, 6) });
+              const imgs = files.slice(0, 6);
+              this.setData({ images: imgs, mediaReady: imgs.length >= 2 || this.data.videos.length >= 1 });
               resolve(res);
             },
             fail: reject
@@ -438,7 +440,8 @@ Page({
             sourceType: ["album", "camera"],
             success: (res) => {
               const files = (res.tempFiles || []).map((f) => f.tempFilePath);
-              this.setData({ videos: files.slice(0, 2) });
+              const vids = files.slice(0, 2);
+              this.setData({ videos: vids, mediaReady: this.data.images.length >= 2 || vids.length >= 1 });
               resolve(res);
             },
             fail: reject
@@ -587,8 +590,12 @@ Page({
       this.setData({ error: "请填写流浪状况说明。" });
       return;
     }
-    if (!images.length) {
-      this.setData({ error: "请至少上传 1 张申请照片。" });
+    if (images.length === 0 && !videos.length) {
+      this.setData({ error: "请上传至少 2 张照片或 1 个视频。" });
+      return;
+    }
+    if (images.length === 1 && !videos.length) {
+      this.setData({ error: "照片仅 1 张，请再添加 1 张（共 2 张）或改为上传视频。" });
       return;
     }
     // 代预约校验
