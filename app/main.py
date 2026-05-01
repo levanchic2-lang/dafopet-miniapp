@@ -68,6 +68,7 @@ from app.models import (
     Invoice,
     InvoiceItem,
     Vaccination,
+    TnrStoreConfig,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -661,6 +662,9 @@ def _mask_phone(phone: str) -> str:
 _TNR_TIME_START = "11:00"
 _TNR_TIME_END = "18:00"
 _TNR_DAILY_MAX = 2
+_TNR_MONTHLY_QUOTA = 30          # 每月已确认 TNR 预约上限
+_TNR_NOSHOW_BAN_COUNT = 3        # 单月爽约次数达到此值触发封禁
+_TNR_NOSHOW_BAN_DAYS  = 90       # 封禁天数
 
 
 def _time_to_minutes(t: str) -> int:
@@ -698,15 +702,81 @@ def _check_appointment_conflict(
     return None
 
 
+def _get_tnr_store_config(db: "Session", store_name: str) -> "TnrStoreConfig":
+    """获取（或自动创建）门店 TNR 配额配置。"""
+    cfg = db.query(TnrStoreConfig).filter(TnrStoreConfig.store_name == store_name).first()
+    if cfg is None:
+        cfg = TnrStoreConfig(
+            store_name=store_name,
+            tnr_monthly_quota=_TNR_MONTHLY_QUOTA,
+            tnr_accepting=True,
+        )
+        db.add(cfg)
+        db.commit()
+        db.refresh(cfg)
+    return cfg
+
+
+def _get_tnr_monthly_confirmed_count(db: "Session", store: str, year_month: str) -> int:
+    """统计指定门店当月已确认（未取消/爽约）的 TNR 预约数。year_month 格式 YYYY-MM。"""
+    return (
+        db.query(Appointment)
+        .filter(
+            Appointment.category == AppointmentCategory.tnr.value,
+            Appointment.store == store,
+            Appointment.appointment_date.like(f"{year_month}%"),
+            Appointment.status == AppointmentStatus.confirmed.value,
+        )
+        .count()
+    )
+
+
+def _get_phone_noshow_ban_until(db: "Session", phone: str) -> "datetime | None":
+    """
+    检查该手机号是否因本月爽约 ≥3 次而被封禁。
+    返回封禁截止日期（date 对象），如未被封禁返回 None。
+    """
+    from collections import defaultdict
+    no_shows = (
+        db.query(Appointment)
+        .filter(
+            Appointment.phone == phone,
+            Appointment.category == AppointmentCategory.tnr.value,
+            Appointment.status == AppointmentStatus.no_show.value,
+        )
+        .order_by(Appointment.appointment_date)
+        .all()
+    )
+    by_month: dict[str, list] = defaultdict(list)
+    for appt in no_shows:
+        ym = (appt.appointment_date or "")[:7]
+        if ym:
+            by_month[ym].append(appt)
+    ban_until = None
+    for ym, appts in by_month.items():
+        if len(appts) >= _TNR_NOSHOW_BAN_COUNT:
+            appts_sorted = sorted(appts, key=lambda a: a.appointment_date)
+            trigger_date_str = appts_sorted[_TNR_NOSHOW_BAN_COUNT - 1].appointment_date
+            try:
+                trigger_date = datetime.strptime(trigger_date_str, "%Y-%m-%d").date()
+                candidate = trigger_date + timedelta(days=_TNR_NOSHOW_BAN_DAYS)
+                if ban_until is None or candidate > ban_until:
+                    ban_until = candidate
+            except Exception:
+                pass
+    return ban_until
+
+
 def _check_tnr_constraints(
     db: "Session",
     category: str,
     store: str,
     appointment_date: str,
     appointment_time: str,
+    phone: str = "",
     exclude_id: int | None = None,
 ) -> str | None:
-    """TNR 预约专项校验：时间段限制（11:00–18:00）和每店每日上限 2 个。违规返回错误字符串，通过返回 None。"""
+    """TNR 预约专项校验：时间段限制、每日上限、月度配额、门店开关、爽约封禁。违规返回错误字符串，通过返回 None。"""
     if category != AppointmentCategory.tnr.value:
         return None
     # 时间段校验
@@ -730,6 +800,24 @@ def _check_tnr_constraints(
     count = q.count()
     if count >= _TNR_DAILY_MAX:
         return f"该门店 {appointment_date} TNR 手术预约已约满（每日上限 {_TNR_DAILY_MAX} 个），请改约其他日期。"
+    # 门店手动开关校验
+    cfg = _get_tnr_store_config(db, store)
+    if not cfg.tnr_accepting:
+        return f"该门店 TNR 预约暂停接受，请稍后再试或联系门店咨询。"
+    # 月度配额校验
+    year_month = appointment_date[:7] if appointment_date and len(appointment_date) >= 7 else datetime.now().strftime("%Y-%m")
+    monthly_count = _get_tnr_monthly_confirmed_count(db, store, year_month)
+    quota = cfg.tnr_monthly_quota
+    if monthly_count >= quota:
+        return f"该门店 {year_month} 月 TNR 预约已达上限（{quota} 个），如有疑问请联系门店。"
+    # 爽约封禁校验
+    if phone:
+        ban_until = _get_phone_noshow_ban_until(db, phone)
+        if ban_until is not None and ban_until >= datetime.now().date():
+            return (
+                f"您本月 TNR 爽约次数已达 {_TNR_NOSHOW_BAN_COUNT} 次，账户已被限制至 "
+                f"{ban_until.strftime('%Y-%m-%d')} 前无法提交新的 TNR 预约，如有疑问请联系门店。"
+            )
     return None
 
 
@@ -2065,6 +2153,20 @@ async def page_admin_appointments(
         )
         .all()
     )
+    # TNR 月度配额状态
+    _this_month = today_str[:7]
+    _tnr_quota_status = []
+    for _store in _CLINIC_STORES:
+        _cfg = _get_tnr_store_config(db, _store)
+        _monthly = _get_tnr_monthly_confirmed_count(db, _store, _this_month)
+        _tnr_quota_status.append({
+            "store": _store,
+            "store_index": list(_CLINIC_STORES).index(_store),
+            "accepting": _cfg.tnr_accepting,
+            "monthly_count": _monthly,
+            "monthly_quota": _cfg.tnr_monthly_quota,
+            "is_open": _cfg.tnr_accepting and (_monthly < _cfg.tnr_monthly_quota),
+        })
     stats = {
         "today_active":  len(_today_appts),
         "pending_total": db.query(Appointment)
@@ -2074,6 +2176,7 @@ async def page_admin_appointments(
             ).count(),
         "tnr_today":     sum(1 for a in _today_appts if a.category == AppointmentCategory.tnr.value),
         "tnr_daily_max": _TNR_DAILY_MAX,
+        "tnr_quota_status": _tnr_quota_status,
     }
 
     return templates.TemplateResponse(
@@ -2963,13 +3066,14 @@ async def admin_appointment_create(
             exists = db.query(Application.id).filter(Application.id == related_id).scalar()
             if not exists:
                 raise HTTPException(404, "关联的 TNR 申请不存在。")
-        # TNR 规则校验
+        # TNR 规则校验（管理员创建不检查爽约封禁）
         tnr_err = _check_tnr_constraints(
             db,
             category=str(fields["category"]),
             store=str(fields["store"]),
             appointment_date=str(fields["appointment_date"]),
             appointment_time=str(fields["appointment_time"]),
+            phone="",
         )
         if tnr_err:
             raise HTTPException(400, tnr_err)
@@ -3189,13 +3293,14 @@ async def admin_appointment_reschedule(
     dur_raw = (new_duration or "").strip()
     target_duration = int(dur_raw) if dur_raw and dur_raw.isdigit() and 10 <= int(dur_raw) <= 480 else row.duration_minutes
 
-    # TNR 规则校验
+    # TNR 规则校验（管理员改约不检查爽约封禁）
     tnr_err = _check_tnr_constraints(
         db,
         category=row.category,
         store=target_store,
         appointment_date=new_date,
         appointment_time=new_time,
+        phone="",
         exclude_id=appointment_id,
     )
     if tnr_err:
@@ -3464,6 +3569,64 @@ async def api_appointments_config():
     return _appointment_catalog()
 
 
+@app.get("/api/tnr-store-status")
+async def api_tnr_store_status(phone: str = Query(""), db: Session = Depends(get_db)):
+    """
+    小程序调用：获取各门店 TNR 预约开放状态及当月已用配额。
+    可选传 phone 参数以检查爽约封禁。
+    """
+    today = datetime.now()
+    year_month = today.strftime("%Y-%m")
+    stores_info = []
+    for store in _CLINIC_STORES:
+        cfg = _get_tnr_store_config(db, store)
+        monthly_count = _get_tnr_monthly_confirmed_count(db, store, year_month)
+        quota = cfg.tnr_monthly_quota
+        is_open = cfg.tnr_accepting and (monthly_count < quota)
+        stores_info.append({
+            "store": store,
+            "accepting": cfg.tnr_accepting,
+            "monthly_count": monthly_count,
+            "monthly_quota": quota,
+            "is_open": is_open,
+        })
+    # 爽约封禁检查
+    ban_until_str = None
+    is_banned = False
+    if phone:
+        ban_until = _get_phone_noshow_ban_until(db, phone)
+        if ban_until is not None and ban_until >= today.date():
+            is_banned = True
+            ban_until_str = ban_until.strftime("%Y-%m-%d")
+    return {
+        "stores": stores_info,
+        "is_banned": is_banned,
+        "ban_until": ban_until_str,
+    }
+
+
+@app.post("/admin/tnr-quota/{store_index}/toggle")
+async def admin_tnr_quota_toggle(
+    request: Request,
+    store_index: int,
+    db: Session = Depends(get_db),
+):
+    """管理员手动开关门店 TNR 预约接受状态。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login", status_code=302)
+    stores = list(_CLINIC_STORES)
+    if store_index < 0 or store_index >= len(stores):
+        raise HTTPException(400, "无效的门店编号")
+    store_name = stores[store_index]
+    cfg = _get_tnr_store_config(db, store_name)
+    cfg.tnr_accepting = not cfg.tnr_accepting
+    cfg.updated_by = request.session.get("admin_user", "admin")
+    cfg.updated_at = datetime.utcnow()
+    db.commit()
+    next_url = request.headers.get("referer") or "/admin/appointments"
+    return RedirectResponse(next_url, status_code=302)
+
+
 @app.get("/api/appointments/beauty-slots")
 async def api_beauty_slots(
     service:     str = Query(""),
@@ -3535,13 +3698,14 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
         exists = db.query(Application.id).filter(Application.id == related_id).scalar()
         if not exists:
             raise HTTPException(404, "关联的 TNR 申请不存在。")
-    # TNR 规则校验
+    # TNR 规则校验（含爽约封禁检查）
     tnr_err = _check_tnr_constraints(
         db,
         category=str(fields["category"]),
         store=str(fields["store"]),
         appointment_date=str(fields["appointment_date"]),
         appointment_time=str(fields["appointment_time"]),
+        phone=str(fields.get("phone", "")),
     )
     if tnr_err:
         raise HTTPException(400, tnr_err)

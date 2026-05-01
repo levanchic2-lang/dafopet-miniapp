@@ -603,6 +603,18 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_due ON vaccinations(next_due_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_rabies ON vaccinations(rabies_record_id)"))
 
+            # tnr_store_configs TNR 门店配额配置表
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS tnr_store_configs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "store_name VARCHAR(120) UNIQUE NOT NULL, "
+                "tnr_monthly_quota INTEGER DEFAULT 30, "
+                "tnr_accepting BOOLEAN DEFAULT 1, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_by VARCHAR(80) DEFAULT ''"
+                ")"
+            ))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

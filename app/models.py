@@ -656,6 +656,18 @@ class AdoptionPet(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class TnrStoreConfig(Base):
+    """每家门店的 TNR 预约配额配置"""
+    __tablename__ = "tnr_store_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    store_name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    tnr_monthly_quota: Mapped[int] = mapped_column(Integer, default=30)   # 每月最大已确认 TNR 预约数
+    tnr_accepting: Mapped[bool] = mapped_column(Boolean, default=True)    # 管理员手动开关
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by: Mapped[str] = mapped_column(String(80), default="")
+
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
 

@@ -326,6 +326,48 @@
   </div>
 </div>
 
+{# ── TNR 月度配额卡（超级管理员可见） ─────────────────────────── #}
+{% if request.session.get('admin') and stats.tnr_quota_status %}
+<div class="card" style="padding:0.85rem 0.95rem;margin-bottom:0.1rem;">
+  <div style="font-size:0.82rem;font-weight:700;color:var(--muted);letter-spacing:0.04em;margin-bottom:0.65rem;">TNR 月度预约配额</div>
+  <div style="display:flex;flex-wrap:wrap;gap:0.65rem;">
+    {% for sq in stats.tnr_quota_status %}
+    <div style="flex:1;min-width:200px;border:1px solid var(--border);border-radius:10px;padding:0.75rem 0.9rem;background:var(--card);">
+      <div style="font-size:0.82rem;font-weight:700;color:var(--text);margin-bottom:0.35rem;">{{ sq.store }}</div>
+      {# 进度条 #}
+      {% set _raw_pct = (sq.monthly_count / sq.monthly_quota * 100)|int if sq.monthly_quota > 0 else 0 %}
+      {% set pct = [_raw_pct, 100]|min if _raw_pct >= 0 else 0 %}
+      <div style="height:6px;border-radius:99px;background:var(--border);margin-bottom:0.5rem;overflow:hidden;">
+        <div style="height:100%;width:{{ pct }}%;border-radius:99px;background:{% if not sq.is_open %}#ef4444{% elif pct >= 80 %}#f59e0b{% else %}#22c55e{% endif %};transition:width 0.3s;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
+        <span style="font-size:0.85rem;color:var(--text);">
+          <strong>{{ sq.monthly_count }}</strong> / {{ sq.monthly_quota }} 已确认
+        </span>
+        {# 状态标签 #}
+        {% if not sq.accepting %}
+          <span style="font-size:0.75rem;font-weight:700;padding:0.15rem 0.55rem;border-radius:99px;background:#fee2e2;color:#991b1b;">🔴 手动关闭</span>
+        {% elif sq.monthly_count >= sq.monthly_quota %}
+          <span style="font-size:0.75rem;font-weight:700;padding:0.15rem 0.55rem;border-radius:99px;background:#fef9c3;color:#713f12;">🟡 已满员</span>
+        {% else %}
+          <span style="font-size:0.75rem;font-weight:700;padding:0.15rem 0.55rem;border-radius:99px;background:#dcfce7;color:#166534;">🟢 接受预约</span>
+        {% endif %}
+      </div>
+      {# 开关按钮 #}
+      <form method="post" action="/admin/tnr-quota/{{ sq.store_index }}/toggle" style="margin-top:0.55rem;">
+        <button type="submit" style="width:100%;padding:0.4rem 0;border-radius:8px;border:1px solid var(--border-strong);font-size:0.82rem;font-weight:700;cursor:pointer;background:{% if sq.accepting %}#fee2e2{% else %}#f0fdf4{% endif %};color:{% if sq.accepting %}#991b1b{% else %}#166534{% endif %};">
+          {% if sq.accepting %}🔒 点击关闭预约{% else %}🔓 点击重新开放{% endif %}
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  <div style="margin-top:0.55rem;font-size:0.76rem;color:var(--muted);line-height:1.6;">
+    ℹ️ 配额仅统计状态为「已确认」的 TNR 预约；取消或爽约后配额自动释放。手动关闭后该门店小程序端无法提交新 TNR 预约。
+  </div>
+</div>
+{% endif %}
+
 {# ── 统计栏（基于今日全量，不受筛选影响） ─────────────────────── #}
 <div class="stats-bar">
   <div class="stat-cell">
@@ -435,6 +477,9 @@
         <li>小程序端仅对申请状态为「已通过 / 预通过 / 已预约」的用户显示 TNR 板块；未提交或未通过申请的用户看不到该选项。</li>
         <li>预约时间须在 11:00–18:00 之间；超出范围将被拒绝。</li>
         <li>每门店每日上限 <strong>2</strong> 个 TNR 手术预约（不含已取消/爽约）；超出后提示「今日已约满，请改约其他日期」。</li>
+        <li>每门店每月上限 <strong>30</strong> 个已确认 TNR 预约；超出后该门店当月不再接受新预约。取消或爽约后配额自动释放。</li>
+        <li>用户在小程序单月内爽约 <strong>3</strong> 次，账户将被限制 <strong>90 天</strong>内无法提交新 TNR 预约。</li>
+        <li>管理员可在上方「TNR 月度预约配额」卡片中手动开关各门店的预约接受状态。</li>
         <li>时长固定 60 分钟，服务项目固定为「TNR 手术安排」，前端与后端均不允许手动修改。</li>
       </ul>
     </div>

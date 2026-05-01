@@ -118,14 +118,18 @@ Page({
   async loadConfig() {
     this.setData({ loading: true });
     try {
-      // 并行拉取配置 + 用户 TNR 审核状态
+      // 并行拉取配置 + 用户 TNR 审核状态 + TNR 门店配额状态
       const openid = await this.ensureOpenid().catch(() => "");
-      const [cfg, tnrStatus] = await Promise.all([
+      const phone = wx.getStorageSync("USER_PHONE") || "";
+      const storeStatusQs = phone ? ("?phone=" + encodeURIComponent(phone)) : "";
+      const [cfg, tnrStatus, tnrStoreStatus] = await Promise.all([
         getJson("/api/appointments/config"),
         openid ? getJson("/api/wechat/my-tnr-status?openid=" + encodeURIComponent(openid)).catch(() => ({ has_approved: false })) : Promise.resolve({ has_approved: false }),
+        getJson("/api/tnr-store-status" + storeStatusQs).catch(() => ({ stores: [], is_banned: false })),
       ]);
       const hasApprovedTnr = !!(tnrStatus && tnrStatus.has_approved);
       this._hasApprovedTnr = hasApprovedTnr;
+      this._tnrStoreStatus = tnrStoreStatus || { stores: [], is_banned: false };
 
       let categories  = Array.isArray(cfg.categories)  ? cfg.categories  : [];
       // TNR 类别只有已通过申请的用户才能选择
@@ -529,6 +533,32 @@ Page({
     if (this.data.submitting) return;
     this.setData({ submitting: true });
     try {
+      // TNR 门店配额 & 爽约封禁前置校验（仅新建模式）
+      if (!this.data.editMode && this.data.form.category === "tnr") {
+        const storeStatus = this._tnrStoreStatus || {};
+        // 爽约封禁
+        if (storeStatus.is_banned) {
+          wx.showModal({
+            title: "账户受限",
+            content: `您本月 TNR 爽约次数已达上限，账户已被限制至 ${storeStatus.ban_until || "解封日"} 前无法预约 TNR。如有疑问请联系门店。`,
+            showCancel: false
+          });
+          this.setData({ submitting: false });
+          return;
+        }
+        // 门店配额检查
+        const storeList = Array.isArray(storeStatus.stores) ? storeStatus.stores : [];
+        const targetStore = this.data.form.store;
+        const storeInfo = storeList.find(s => s.store === targetStore);
+        if (storeInfo && !storeInfo.is_open) {
+          const reason = !storeInfo.accepting
+            ? "该门店 TNR 预约暂停接受，请联系门店咨询。"
+            : `该门店本月 TNR 预约已达上限（${storeInfo.monthly_count}/${storeInfo.monthly_quota}），如有疑问请联系门店。`;
+          wx.showModal({ title: "暂无法预约", content: reason, showCancel: false });
+          this.setData({ submitting: false });
+          return;
+        }
+      }
       // 代预约校验
       if (this.data.isProxy) {
         if (!this.data.form.proxy_name.trim()) {
@@ -544,6 +574,10 @@ Page({
       }
       const openid = await this.ensureOpenid();
       const payload = Object.assign({}, this.data.form, { openid });
+      // 缓存手机号供下次配额检查使用
+      if (payload.phone && /^1\d{10}$/.test((payload.phone || "").trim())) {
+        try { wx.setStorageSync("USER_PHONE", payload.phone.trim()); } catch(e2) {}
+      }
 
       if (this.data.editMode && this._editId) {
         // ── 修改模式：只更新允许的字段 ──

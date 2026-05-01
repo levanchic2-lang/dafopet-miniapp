@@ -520,7 +520,7 @@ Page({
     this._syncFormAddress();
     const hnDraft = typeof this._healthNoteDraft === "string" ? this._healthNoteDraft : "";
     const form = hnDraft ? { ...this.data.form, health_note: hnDraft } : this.data.form;
-    const { checks, images, openid, idConsent } = this.data;
+    const { checks, images, videos, openid, idConsent } = this.data;
     if (!checks.ear || !checks.fraud) {
       this.setData({ error: "请勾选同意剪耳标记与承诺非家养猫冒充。" });
       return;
@@ -610,6 +610,8 @@ Page({
       this.setData({ error: "请先点击「开启通知提醒」绑定账号后再提交（用于订单归属与推送通知）。" });
       return;
     }
+    // 缓存手机号供预约页 TNR 配额检查使用
+    try { wx.setStorageSync("USER_PHONE", String(form.phone || "").trim()); } catch(e2) {}
     this._submitNow();
   },
 
