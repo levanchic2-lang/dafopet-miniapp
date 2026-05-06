@@ -33,6 +33,7 @@ Page({
       health_note: ""
     },
     storeOptions: [
+      { value: "", label: "请选择门店" },
       { value: "大风动物医院（东环店）", label: "大风动物医院（东环店）" },
       { value: "大风动物医院（横岗店）", label: "大风动物医院（横岗店）" }
     ],
@@ -68,6 +69,8 @@ Page({
     proxyRelationOptions: ["请选择关系", "家人", "朋友", "同事/员工代录", "志愿者", "其他"],
     proxyRelationIndex: 0,
     proxyConsent: false,
+    cityNames: ["深圳市", "东莞市", "惠州市"],
+    cityIndex: 0,
     districtNames: ["加载中…"],
     streetNames: ["请选择"],
     districtIndex: 0,
@@ -133,10 +136,20 @@ Page({
   },
 
   _initShenzhenAddressPickers() {
-    const sz = getApp().globalData.shenzhenRegions;
+    const allRegions = getApp().globalData.shenzhenRegions;
     const ph = "请选择";
-    if (!sz || !Object.keys(sz).length) return;
-    const districts = Object.keys(sz).sort();
+    if (!allRegions || !Object.keys(allRegions).length) return;
+    // 新格式：{ "深圳市": { district: [streets] }, ... }
+    // 兼容旧格式（直接是 { district: [streets] }，没有城市层）
+    const isMultiCity = Object.values(allRegions)[0] && typeof Object.values(allRegions)[0] === "object" && !Array.isArray(Object.values(allRegions)[0]);
+    this._regionData = isMultiCity ? allRegions : { "深圳市": allRegions };
+    this._loadDistrictsForCity(this.data.cityNames[this.data.cityIndex]);
+  },
+
+  _loadDistrictsForCity(cityName) {
+    const ph = "请选择";
+    const cityData = (this._regionData || {})[cityName] || {};
+    const districts = Object.keys(cityData).sort();
     this.setData(
       {
         districtNames: [ph, ...districts],
@@ -149,17 +162,24 @@ Page({
     );
   },
 
+  onAddrCityPick(e) {
+    const idx = Number(e.detail.value || 0);
+    const cityName = this.data.cityNames[idx] || "深圳市";
+    this.setData({ cityIndex: idx });
+    this._loadDistrictsForCity(cityName);
+  },
+
   _syncFormAddress() {
     const ph = "请选择";
     const FIX_P = "广东省";
-    const FIX_C = "深圳市";
-    const { districtNames, streetNames, districtIndex, streetIndex, addressDetailInput } = this.data;
+    const { cityNames, cityIndex, districtNames, streetNames, districtIndex, streetIndex, addressDetailInput } = this.data;
+    const city = cityNames[cityIndex] || "深圳市";
     const d = districtNames[districtIndex];
     const s = streetNames[streetIndex];
     const detail = String(addressDetailInput || "").trim();
     let prefix = "";
-    if (d && d !== ph && s && s !== ph) prefix = FIX_P + FIX_C + d + s;
-    else if (d && d !== ph) prefix = FIX_P + FIX_C + d;
+    if (d && d !== ph && s && s !== ph) prefix = FIX_P + city + d + s;
+    else if (d && d !== ph) prefix = FIX_P + city + d;
     if (!prefix && !detail) {
       if (this.data.form.address !== "") this.setData({ "form.address": "" });
       return;
@@ -409,9 +429,18 @@ Page({
             count: 6,
             mediaType: ["image"],
             sourceType: ["album", "camera"],
-            success: (res) => {
-              const files = (res.tempFiles || []).map((f) => f.tempFilePath);
-              const imgs = files.slice(0, 6);
+            success: async (res) => {
+              const files = (res.tempFiles || []).map((f) => f.tempFilePath).slice(0, 6);
+              // 压缩图片（quality 60，失败时降级用原图）
+              const compress = (src) => new Promise((ok) => {
+                wx.compressImage({
+                  src,
+                  quality: 60,
+                  success: (r) => ok(r.tempFilePath),
+                  fail: () => ok(src),
+                });
+              });
+              const imgs = await Promise.all(files.map(compress));
               this.setData({ images: imgs, mediaReady: imgs.length >= 2 || this.data.videos.length >= 1 });
               resolve(res);
             },
@@ -546,7 +575,7 @@ Page({
       this.setData({ error: "请填写 11 位中国大陆手机号。" });
       return;
     }
-    if (!form.clinic_store) {
+    if (!form.clinic_store || form.clinic_store === "") {
       this.setData({ error: "请选择预约门店。" });
       return;
     }

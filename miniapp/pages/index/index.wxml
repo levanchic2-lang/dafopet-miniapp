@@ -48,9 +48,13 @@
   <input class="input input-lg" type="number" maxlength="11" value="{{form.phone}}" data-k="phone" bindinput="onInput" />
 
   <view class="label">居住地址 / 发现地点</view>
-  <view class="addr-scope">广东省 · 深圳市<text class="addr-scope-muted">（当前服务范围）</text></view>
-  <view class="sub addr-hint">请选择区、街道，再填写门牌等详细信息。</view>
-  <view class="row2">
+  <view class="addr-scope">广东省<text class="addr-scope-muted">（深圳市 · 东莞市 · 惠州市）</text></view>
+  <view class="sub addr-hint">请先选择城市，再选区/县和街道，最后填写门牌等详细信息。</view>
+  <view class="label label-inline" style="margin-top:12rpx;">城市</view>
+  <picker class="picker picker-lg" mode="selector" range="{{cityNames}}" value="{{cityIndex}}" bindchange="onAddrCityPick">
+    <view>{{cityNames[cityIndex]}}</view>
+  </picker>
+  <view class="row2" style="margin-top:12rpx;">
     <view class="col">
       <view class="label label-inline">区 / 县</view>
       <picker class="picker picker-lg" mode="selector" range="{{districtNames}}" value="{{districtIndex}}" bindchange="onAddrDistrictPick">
@@ -69,7 +73,7 @@
 
   <view class="label">预约门店</view>
   <picker class="picker picker-lg" mode="selector" range="{{storeOptions}}" range-key="label" value="{{storeIndex}}" bindchange="onStoreChange">
-    <view>{{storeOptions[storeIndex].label}}</view>
+    <view style="{{storeOptions[storeIndex].value === '' ? 'color:#aaa;' : ''}}">{{storeOptions[storeIndex].label}}</view>
   </picker>
 
   <view class="label">术后打算</view>

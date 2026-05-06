@@ -562,6 +562,16 @@ async def page_apply(request: Request):
 
 _CLINIC_STORES = ("大风动物医院（东环店）", "大风动物医院（横岗店）")
 _ALLOWED_CLINIC_STORES = frozenset(_CLINIC_STORES)
+# 短名 ↔ 全名映射（用于员工/管理员 store 字段 vs 预约/申请 store 字段）
+_STORE_SHORT_TO_FULL = {"东环店": "大风动物医院（东环店）", "横岗店": "大风动物医院（横岗店）"}
+_STORE_FULL_TO_SHORT = {"大风动物医院（东环店）": "东环店", "大风动物医院（横岗店）": "横岗店"}
+
+
+def _get_admin_store(request: "Request") -> str:
+    """返回当前登录用户被限制的门店短名（如 '东环店'）。超级管理员返回空字符串（不限）。"""
+    if request.session.get("admin_role") == "superadmin":
+        return ""
+    return request.session.get("admin_store", "")
 _ALLOWED_APPOINTMENT_CATEGORIES = frozenset({x.value for x in AppointmentCategory})
 _ALLOWED_APPOINTMENT_STATUSES = frozenset({x.value for x in AppointmentStatus})
 _APPOINTMENT_CATEGORY_LABELS = {
@@ -1589,6 +1599,12 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
     page_size = min(max(10, page_size), 100)
 
     base_q = db.query(Application)
+    # 门店权限过滤（非超级管理员只看自己门店的数据）
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, "")
+        if full_store:
+            base_q = base_q.filter(Application.clinic_store == full_store)
     if status:
         base_q = base_q.filter(Application.status == status)
     if store:
@@ -1626,13 +1642,18 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
                 )
             )
 
-    # 统计（全量，不受筛选影响）
-    overall_by_status = dict(db.query(Application.status, func.count(Application.id)).group_by(Application.status).all())
+    # 统计（按门店权限过滤，非超级管理员只统计自己门店）
+    _stat_q = db.query(Application)
+    if admin_store:
+        _stat_full = _STORE_SHORT_TO_FULL.get(admin_store, "")
+        if _stat_full:
+            _stat_q = _stat_q.filter(Application.clinic_store == _stat_full)
+    overall_by_status = dict(_stat_q.with_entities(Application.status, func.count(Application.id)).group_by(Application.status).all())
     today0 = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    today_new = db.query(func.count(Application.id)).filter(Application.created_at >= today0).scalar() or 0
+    today_new = _stat_q.filter(Application.created_at >= today0).with_entities(func.count(Application.id)).scalar() or 0
     pending_todo = (
-        db.query(func.count(Application.id))
-        .filter(Application.status.in_([ApplicationStatus.pending_manual.value, ApplicationStatus.pre_approved.value]))
+        _stat_q.filter(Application.status.in_([ApplicationStatus.pending_manual.value, ApplicationStatus.pre_approved.value]))
+        .with_entities(func.count(Application.id))
         .scalar()
         or 0
     )
@@ -2066,6 +2087,12 @@ async def page_admin_appointments(
         q = q.filter(Appointment.store == appt_store)
     if appt_category:
         q = q.filter(Appointment.category == appt_category)
+    # 门店权限过滤
+    _appt_admin_store = _get_admin_store(request)
+    if _appt_admin_store:
+        _appt_full_store = _STORE_SHORT_TO_FULL.get(_appt_admin_store, "")
+        if _appt_full_store:
+            q = q.filter(Appointment.store == _appt_full_store)
 
     appointments_raw = q.order_by(
         Appointment.appointment_date, Appointment.appointment_time
@@ -2255,6 +2282,7 @@ async def admin_login(
         request.session["admin"] = True
         request.session["admin_role"] = user.role
         request.session["admin_username"] = user.username
+        request.session["admin_store"] = user.store or ""
         return RedirectResponse("/admin", status_code=303)
 
     # 兜底：环境变量密码（用于迁移期 / 紧急登录，用户名须为 admin）
@@ -2452,8 +2480,12 @@ async def admin_hr_page(
 ):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login")
-    active_staff = db.query(Staff).filter(Staff.status != StaffStatus.resigned.value).order_by(Staff.hire_date).all()
-    resigned_staff = db.query(Staff).filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
+    _hr_admin_store = _get_admin_store(request)
+    _staff_q = db.query(Staff)
+    if _hr_admin_store:
+        _staff_q = _staff_q.filter(Staff.store == _hr_admin_store)
+    active_staff = _staff_q.filter(Staff.status != StaffStatus.resigned.value).order_by(Staff.hire_date).all()
+    resigned_staff = _staff_q.filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
     expiring = _expiring_contracts(db)
     all_users = db.query(AdminUser).order_by(AdminUser.created_at).all()
     # 尚未绑定账号的在职员工（可供新建账号时选择）
@@ -2511,6 +2543,7 @@ async def admin_users_create(
     username: str = Form(...),
     password: str = Form(...),
     role: str = Form("staff"),
+    store: str = Form(""),
     staff_id: str = Form(""),
     csrf_token: str = Form(""),
 ):
@@ -2524,10 +2557,11 @@ async def admin_users_create(
         return RedirectResponse("/admin/hr?err=密码不能少于6位", status_code=303)
     if role not in ("superadmin", "staff"):
         role = "staff"
+    store = store.strip() if store.strip() in _STORE_OPTIONS else ""
     existing = db.query(AdminUser).filter(AdminUser.username == username).first()
     if existing:
         return RedirectResponse(f"/admin/hr?err=用户名已存在：{username}", status_code=303)
-    new_user = AdminUser(username=username, password_hash=_pwd_ctx.hash(password), role=role, is_active=True)
+    new_user = AdminUser(username=username, password_hash=_pwd_ctx.hash(password), role=role, is_active=True, store=store)
     db.add(new_user)
     db.flush()  # 获取 new_user.id
     if staff_id:
@@ -2610,6 +2644,30 @@ async def admin_users_set_role(
     db.commit()
     role_zh = "超级管理员" if role == "superadmin" else "员工"
     return RedirectResponse(f"/admin/hr?msg=已将「{user.username}」的角色改为{role_zh}", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/set-store", name="admin_users_set_store")
+async def admin_users_set_store(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    store: str = Form(...),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    store = store.strip()
+    if store not in ("", *_STORE_OPTIONS):
+        return RedirectResponse("/admin/hr?err=门店参数无效", status_code=303)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    user.store = store
+    _audit(db, request, "admin_user_set_store", application_id=None, detail={"username": user.username, "store": store})
+    db.commit()
+    store_label = store or "（不限门店）"
+    return RedirectResponse(f"/admin/hr?msg=已将「{user.username}」的门店改为{store_label}", status_code=303)
 
 
 # ── 员工档案 & 合同管理 ─────────────────────────────────────────────────

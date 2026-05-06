@@ -98,9 +98,10 @@
   <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
     <thead>
       <tr style="border-bottom:2px solid var(--border);">
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:180px;">用户名</th>
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:160px;">角色</th>
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:110px;">创建时间</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:170px;">用户名</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:140px;">角色</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:130px;">所属门店</th>
+        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:100px;">创建时间</th>
         <th style="padding:0.5rem 0.75rem;"></th>
       </tr>
     </thead>
@@ -126,6 +127,16 @@
             {% if u.role == 'superadmin' %}<span class="badge b-done">超级管理员</span>{% else %}<span class="badge b-pending">员工</span>{% endif %}
           {% endif %}
         </td>
+        <td style="padding:0.55rem 0.75rem;">
+          <form method="post" action="/admin/users/{{ u.id }}/set-store" style="margin:0;display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <select name="store" onchange="this.form.submit()" style="font-size:0.82rem;padding:0.2rem 0.4rem;border-radius:6px;border:1px solid var(--border-strong);background:var(--card);cursor:pointer;">
+              <option value="" {% if not u.store %}selected{% endif %}>不限门店</option>
+              <option value="东环店" {% if u.store == '东环店' %}selected{% endif %}>东环店</option>
+              <option value="横岗店" {% if u.store == '横岗店' %}selected{% endif %}>横岗店</option>
+            </select>
+          </form>
+        </td>
         <td style="padding:0.55rem 0.75rem;color:var(--muted);">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
         <td style="padding:0.55rem 0.75rem;text-align:right;">
           <div style="display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;">
@@ -148,7 +159,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="4" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">暂无启用账号</td></tr>
+      <tr><td colspan="5" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">暂无启用账号</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -164,6 +175,7 @@
         <tr style="border-bottom:1px solid var(--border);">
           <td style="padding:0.5rem 0.75rem;">{{ u.username }}</td>
           <td style="padding:0.5rem 0.75rem;">{% if u.role == 'superadmin' %}<span class="badge b-done">超级管理员</span>{% else %}<span class="badge b-pending">员工</span>{% endif %}</td>
+          <td style="padding:0.5rem 0.75rem;">{% if u.store %}<span class="badge b-pending">{{ u.store }}</span>{% else %}<span style="color:var(--muted);font-size:0.8rem;">不限</span>{% endif %}</td>
           <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
           <td style="padding:0.5rem 0.75rem;text-align:right;">
             <form method="post" action="/admin/users/{{ u.id }}/toggle" style="margin:0;">
@@ -202,13 +214,24 @@
           <input type="password" id="new_password" name="password" required minlength="6" autocomplete="new-password" />
         </div>
       </div>
-      <div style="margin-top:0.6rem;">
-        <label for="new_role">角色</label>
-        <select id="new_role" name="role">
-          <option value="staff" selected>员工（可查看 + 改状态）</option>
-          <option value="superadmin">超级管理员（全权限）</option>
-        </select>
+      <div class="row2" style="margin-top:0.6rem;">
+        <div>
+          <label for="new_role">角色</label>
+          <select id="new_role" name="role">
+            <option value="staff" selected>员工（可查看 + 改状态）</option>
+            <option value="superadmin">超级管理员（全权限）</option>
+          </select>
+        </div>
+        <div>
+          <label for="new_store">所属门店</label>
+          <select id="new_store" name="store">
+            <option value="">不限门店（超管用）</option>
+            <option value="东环店">东环店</option>
+            <option value="横岗店">横岗店</option>
+          </select>
+        </div>
       </div>
+      <p class="sub" style="margin:0.4rem 0 0;font-size:0.8rem;color:var(--muted);">⚠️ 非超级管理员若设置了所属门店，登录后只能看到该门店的数据。</p>
       <button type="submit" style="margin-top:1rem;">创建账号</button>
     </form>
   </details>

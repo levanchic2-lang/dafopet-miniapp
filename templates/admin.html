@@ -238,6 +238,7 @@
           {% endfor %}
         </select>
       </div>
+      {% if request.session.get('admin_role') == 'superadmin' %}
       <div>
         <label style="margin:0 0 0.35rem;">门店</label>
         <select name="store">
@@ -246,6 +247,14 @@
           <option value="大风动物医院（横岗店）" {% if filters.store=='大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
         </select>
       </div>
+      {% else %}
+      <div>
+        <label style="margin:0 0 0.35rem;">门店</label>
+        <div style="padding:0.45rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:0.9rem;color:var(--muted);">
+          {{ request.session.get('admin_store') or '当前门店' }}（已限定）
+        </div>
+      </div>
+      {% endif %}
       <div>
         <label style="margin:0 0 0.35rem;">关键词（ID/姓名/电话/地点/流浪猫名字）</label>
         <input type="text" name="q" value="{{ filters.q or '' }}" placeholder="例如：13800138000 / 张三 / 123" />

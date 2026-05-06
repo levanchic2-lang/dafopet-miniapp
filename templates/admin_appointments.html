@@ -429,6 +429,7 @@
           <option value="no_show"   {% if filters.status == 'no_show'    %}selected{% endif %}>爽约</option>
         </select>
       </div>
+      {% if request.session.get('admin_role') == 'superadmin' %}
       <div class="filter-field">
         <label>门店</label>
         <select name="appt_store">
@@ -438,6 +439,14 @@
           {% endfor %}
         </select>
       </div>
+      {% else %}
+      <div class="filter-field">
+        <label>门店</label>
+        <div style="padding:0.4rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:0.88rem;color:var(--muted);">
+          {{ request.session.get('admin_store') or '当前门店' }}（已限定）
+        </div>
+      </div>
+      {% endif %}
       <div class="filter-field">
         <label>类型</label>
         <select name="appt_category">

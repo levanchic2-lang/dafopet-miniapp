@@ -603,6 +603,13 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_due ON vaccinations(next_due_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_rabies ON vaccinations(rabies_record_id)"))
 
+            # admin_users: 补 store 列
+            au_cols = conn.execute(text("PRAGMA table_info(admin_users)")).fetchall()
+            if au_cols:
+                au_names = {c[1] for c in au_cols}
+                if "store" not in au_names:
+                    conn.execute(text("ALTER TABLE admin_users ADD COLUMN store VARCHAR(40) DEFAULT ''"))
+
             # tnr_store_configs TNR 门店配额配置表
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS tnr_store_configs ("

@@ -677,4 +677,6 @@ class AdminUser(Base):
     # role: 'superadmin' | 'staff'
     role: Mapped[str] = mapped_column(String(20), default="staff")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # store: '东环店' | '横岗店' | '' (空=不限，超级管理员)
+    store: Mapped[str] = mapped_column(String(40), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
