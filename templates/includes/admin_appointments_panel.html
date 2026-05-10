@@ -10,6 +10,7 @@
 {% set APPOINTMENT_STATUS_ZH = {
   'pending': '待确认',
   'confirmed': '已确认',
+  'arrived': '已到店',
   'completed': '已完成',
   'cancelled': '已取消',
   'no_show': '爽约'
@@ -360,6 +361,7 @@
                       </span>
                       <span class="badge
                         {% if appt.status in ['confirmed', 'completed'] %}b-ok
+                        {% elif appt.status == 'arrived' %}b-blue
                         {% elif appt.status in ['cancelled', 'no_show'] %}b-no
                         {% else %}b-pending{% endif %}">
                         {{ APPOINTMENT_STATUS_ZH.get(appt.status, appt.status) }}
@@ -442,7 +444,15 @@
                         <button type="submit" class="secondary">确认</button>
                       </form>
                       {% endif %}
-                      {% if appt.status not in ['cancelled', 'no_show', 'completed'] %}
+                      {% if appt.status == 'confirmed' %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="arrived" />
+                        <button type="submit" style="background:#6366f1;color:#fff;border-color:#6366f1;">已到店</button>
+                      </form>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'no_show', 'completed', 'arrived'] %}
                       <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                         <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
@@ -578,6 +588,7 @@
                       </span>
                       <span class="badge
                         {% if appt.status in ['confirmed', 'completed'] %}b-ok
+                        {% elif appt.status == 'arrived' %}b-blue
                         {% elif appt.status in ['cancelled', 'no_show'] %}b-no
                         {% else %}b-pending{% endif %}">
                         {{ APPOINTMENT_STATUS_ZH.get(appt.status, appt.status) }}
@@ -656,7 +667,15 @@
                         <button type="submit" class="secondary">确认</button>
                       </form>
                       {% endif %}
-                      {% if appt.status not in ['cancelled', 'no_show', 'completed'] %}
+                      {% if appt.status == 'confirmed' %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="arrived" />
+                        <button type="submit" style="background:#6366f1;color:#fff;border-color:#6366f1;">已到店</button>
+                      </form>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'no_show', 'completed', 'arrived'] %}
                       <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                         <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
@@ -787,6 +806,7 @@
                       </span>
                       <span class="badge
                         {% if appt.status in ['confirmed', 'completed'] %}b-ok
+                        {% elif appt.status == 'arrived' %}b-blue
                         {% elif appt.status in ['cancelled', 'no_show'] %}b-no
                         {% else %}b-pending{% endif %}">
                         {{ APPOINTMENT_STATUS_ZH.get(appt.status, appt.status) }}
@@ -865,7 +885,15 @@
                         <button type="submit" class="secondary">确认</button>
                       </form>
                       {% endif %}
-                      {% if appt.status not in ['cancelled', 'no_show', 'completed'] %}
+                      {% if appt.status == 'confirmed' %}
+                      <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                        <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
+                        <input type="hidden" name="status" value="arrived" />
+                        <button type="submit" style="background:#6366f1;color:#fff;border-color:#6366f1;">已到店</button>
+                      </form>
+                      {% endif %}
+                      {% if appt.status not in ['cancelled', 'no_show', 'completed', 'arrived'] %}
                       <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                         <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />

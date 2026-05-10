@@ -36,6 +36,7 @@ class AppointmentCategory(str, enum.Enum):
 class AppointmentStatus(str, enum.Enum):
     pending = "pending"
     confirmed = "confirmed"
+    arrived = "arrived"
     completed = "completed"
     cancelled = "cancelled"
     no_show = "no_show"

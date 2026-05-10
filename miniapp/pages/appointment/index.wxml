@@ -11,6 +11,9 @@
   <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#fff8e6;border-radius:10rpx;border:1rpx solid #f5d88a;font-size:26rpx;color:#7a5800;line-height:1.6;">
     <text style="font-weight:700;">流浪猫 TNR 手术预约说明：</text>需先在首页提交 TNR 申请并审核通过后，「流浪动物 TNR」板块才会出现在此页面。未提交申请的主人，此处仅可预约门诊、手术、美容等常规服务。
   </view>
+  <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#fff1f0;border-radius:10rpx;border:1rpx solid #fca5a5;font-size:26rpx;color:#7f1d1d;line-height:1.6;">
+    <text style="font-weight:700;">⚠️ TNR 爽约规则：</text>同一自然月内爽约 <text style="font-weight:700;">3 次及以上</text>，账户将被限制 <text style="font-weight:700;">90 天</text>内无法提交新的 TNR 预约。如规则有变动或有特殊情况，请及时与客服沟通确认。
+  </view>
 
   <view wx:if="{{loading}}" class="sub">加载中…</view>
 

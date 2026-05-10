@@ -585,6 +585,7 @@ _APPOINTMENT_CATEGORY_LABELS = {
 _APPOINTMENT_STATUS_LABELS = {
     AppointmentStatus.pending.value: "待确认",
     AppointmentStatus.confirmed.value: "已确认",
+    AppointmentStatus.arrived.value: "已到店",
     AppointmentStatus.completed.value: "已完成",
     AppointmentStatus.cancelled.value: "已取消",
     AppointmentStatus.no_show.value: "未到店",
@@ -3291,6 +3292,11 @@ async def admin_appointment_status(
                 app_row.status = ApplicationStatus.scheduled.value
                 app_row.appointment_at = row.appointment_date
                 app_row.updated_at = datetime.utcnow()
+            elif status == AppointmentStatus.arrived.value and app_row.status in (
+                ApplicationStatus.scheduled.value, ApplicationStatus.approved.value,
+            ):
+                app_row.status = ApplicationStatus.arrived_verified.value
+                app_row.updated_at = datetime.utcnow()
             elif status == AppointmentStatus.cancelled.value and app_row.status == ApplicationStatus.scheduled.value:
                 app_row.status = ApplicationStatus.approved.value
                 app_row.updated_at = datetime.utcnow()
@@ -4451,8 +4457,15 @@ async def page_showcase(request: Request, db: Session = Depends(get_db),
     for a in all_apps:
         before = [x for x in a.media if x.kind == MediaKind.surgery_before.value]
         after  = [x for x in a.media if x.kind == MediaKind.surgery_after.value]
+        # 若无术前专用照片，回退到申请人上传的原始素材
+        before_is_fallback = False
+        if not before:
+            before = [x for x in a.media if x.kind in (
+                MediaKind.application_image.value, MediaKind.application_video.value)]
+            before_is_fallback = bool(before)
         if before or after:
-            all_items.append({"app": a, "before": before, "after": after})
+            all_items.append({"app": a, "before": before, "after": after,
+                               "before_is_fallback": before_is_fallback})
     total      = len(all_items)
     total_pages = max(1, (total + page_size - 1) // page_size)
     page        = min(page, total_pages)
