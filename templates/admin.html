@@ -655,6 +655,13 @@
       <div class="admin-action-card">
         <div class="admin-action-title">审核</div>
         <div class="admin-form-stack">
+          {% if a.status == 'draft' %}
+          <p class="sub" style="margin:0;color:#b45309;">⚠️ 此申请为草稿（客户提交后媒体上传/AI审核未完成），无法正常审核。可直接删除，客户将可重新提交。</p>
+          <form method="post" action="/admin/app/{{ a.id }}/delete-draft" onsubmit="return confirm('确认删除此草稿？客户将可重新提交申请。')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit" class="danger">删除此草稿</button>
+          </form>
+          {% endif %}
           {% if a.status in ['pending_manual', 'pending_ai', 'pre_approved'] %}
           <form method="post" action="/admin/app/{{ a.id }}/manual-approve">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />

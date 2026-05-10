@@ -1290,9 +1290,20 @@ async def api_apply_create(
         "no_show": "爽约", "arrived_verified": "到院核对中",
     }
 
-    # 1. 审核未完成时（未到「已通过」之前）不允许再提交任何申请
+    # 1a. 清理同手机号的遗留草稿（网络中断/关闭小程序导致未完成的提交）
+    old_drafts = (
+        db.query(Application)
+        .filter(Application.phone == f["phone"])
+        .filter(Application.status == ApplicationStatus.draft.value)
+        .all()
+    )
+    for _d in old_drafts:
+        db.delete(_d)
+    if old_drafts:
+        db.commit()
+
+    # 1b. 审核进行中时（pending_ai 之后）不允许再提交新申请
     _PENDING_STATUSES = [
-        ApplicationStatus.draft.value,
         ApplicationStatus.pending_ai.value,
         ApplicationStatus.pending_manual.value,
         ApplicationStatus.pre_approved.value,
@@ -3472,6 +3483,26 @@ async def manual_approve(app_id: int, request: Request, db: Session = Depends(ge
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
     return _admin_back(request, app_id)
+
+
+@app.post("/admin/app/{app_id}/delete-draft")
+async def admin_delete_draft(
+    app_id: int,
+    request: Request,
+    csrf_token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    row = db.get(Application, app_id)
+    if not row:
+        raise HTTPException(404)
+    if row.status != ApplicationStatus.draft.value:
+        raise HTTPException(400, "只能删除草稿状态的申请。")
+    _audit(db, request, "delete_draft", application_id=app_id, detail={"phone": row.phone})
+    db.delete(row)
+    db.commit()
+    return RedirectResponse("/admin?msg=草稿已删除，客户现可重新提交申请。", status_code=303)
 
 
 @app.post("/admin/app/{app_id}/reject")
