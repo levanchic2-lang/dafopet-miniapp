@@ -416,6 +416,12 @@
       {% if a.health_note %}<p>流浪状况：{{ a.health_note }}</p>{% endif %}
       {% if a.post_surgery_plan %}<p>术后打算：{{ a.post_surgery_plan }}</p>{% endif %}
       {% if a.id_number %}<p>身份证号（脱敏）：{{ a.id_number[:2] }}********{{ a.id_number[-4:] }}</p>{% endif %}
+      {% if a.status == 'rejected' %}
+      <div style="margin-top:0.5rem;padding:0.55rem 0.75rem;background:#fff1f0;border:1px solid #fca5a5;border-radius:8px;">
+        <span style="font-weight:600;color:#b91c1c;">拒绝原因：</span>
+        <span style="color:#7f1d1d;">{{ a.reject_reason or '（未填写原因）' }}</span>
+      </div>
+      {% endif %}
       {% if a.location_lat and a.location_lng %}
         <p>
           定位：{% if a.location_address %}{{ a.location_address }}{% else %}{{ a.location_lat }}, {{ a.location_lng }}{% endif %}
