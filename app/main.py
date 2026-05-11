@@ -2068,9 +2068,15 @@ async def page_admin_appointments(
     if _preset == "3days":
         df_d, dt_d = today, today + timedelta(days=2)
     elif _preset == "week":
-        df_d, dt_d = today, today + timedelta(days=6)
+        # 本周：当周一到当周日
+        df_d = today - timedelta(days=today.weekday())
+        dt_d = df_d + timedelta(days=6)
     elif _preset == "month":
-        df_d, dt_d = today, today + timedelta(days=29)
+        # 本月：本月1日到本月最后一天
+        import calendar as _calendar
+        df_d = today.replace(day=1)
+        last_day = _calendar.monthrange(today.year, today.month)[1]
+        dt_d = today.replace(day=last_day)
     elif _preset == "custom":
         try:
             df_d = datetime.strptime(df, "%Y-%m-%d").date() if df else today
@@ -3326,6 +3332,16 @@ async def admin_appointment_status(
             customer_name=row.customer_name or "",
             note=reason_clean or status_label,
         )
+    # 尽量回到操作前的筛选页面（保留 preset/df/dt/appt_status 等参数）
+    referer = request.headers.get("referer", "")
+    if referer and "/admin/appointments" in referer:
+        from urllib.parse import urlparse as _urlparse, urlencode as _urlencode, parse_qs as _parse_qs
+        _parsed = _urlparse(referer)
+        _params = {k: v[0] for k, v in _parse_qs(_parsed.query, keep_blank_values=True).items()
+                   if k not in ("appointment_ok", "appointment_err")}
+        _qs = _urlencode(_params)
+        _base_qs = f"/admin/appointments?{_qs}&appointment_ok=status" if _qs else "/admin/appointments?appointment_ok=status"
+        return RedirectResponse(f"{_base_qs}#{anchor}", status_code=303)
     return RedirectResponse(redirect_base + f"?appointment_ok=status#{anchor}", status_code=303)
 
 
