@@ -58,6 +58,9 @@ Page({
     beautyDisclaimer: "以上占用时间为估算时间。如动物不配合或毛量超出预估，实际服务时长可能有所浮动，具体以门店实际执行时间为准。",
     editMode: false,
     editApptId: 0,
+    // TNR 已通过申请列表（用于自动/手动关联）
+    tnrApps: [],
+    tnrAppIndex: 0,
     form: {
       category: "",
       service_name: "",
@@ -129,6 +132,7 @@ Page({
       ]);
       const hasApprovedTnr = !!(tnrStatus && tnrStatus.has_approved);
       this._hasApprovedTnr = hasApprovedTnr;
+      this._approvedApps = (tnrStatus && Array.isArray(tnrStatus.approved_apps)) ? tnrStatus.approved_apps : [];
       this._tnrStoreStatus = tnrStoreStatus || { stores: [], is_banned: false };
 
       let categories  = Array.isArray(cfg.categories)  ? cfg.categories  : [];
@@ -152,6 +156,10 @@ Page({
 
       const isBeauty = firstCategory.value === "beauty";
       const initSizeOpts = isBeauty ? this._beautySizeFor(firstService.name) : [];
+      // 如果第一个板块是 TNR 且有已通过申请，自动填入第一个
+      const initTnrApps = this._approvedApps;
+      const initTnrAppId = (firstCategory.value === "tnr" && initTnrApps.length > 0)
+        ? String(initTnrApps[0].id) : "";
       this.setData({
         loading: false,
         categories,
@@ -168,6 +176,8 @@ Page({
         beautySizeOptions: initSizeOpts,
         beautySizeIndex: 0,
         beautyCoatIndex: 0,
+        tnrApps: initTnrApps,
+        tnrAppIndex: 0,
         "form.category":          firstCategory.value || "",
         "form.service_name":      firstService.name   || "",
         "form.duration_minutes":  firstService.duration_minutes || 30,
@@ -177,6 +187,7 @@ Page({
         "form.appointment_time":  firstTime,
         "form.pet_size":    isBeauty ? (initSizeOpts[0] || "") : "",
         "form.coat_length": isBeauty ? (BEAUTY_COAT_OPTIONS[0] || "") : "",
+        "form.related_application_id": initTnrAppId,
       });
       this._applyPrefill(categories, stores, petGenders);
       // 编辑模式：加载原预约数据并覆盖预填
@@ -423,12 +434,28 @@ Page({
       "form.duration_minutes": firstService.duration_minutes || 30,
       "form.appointment_time": nextTime,
       "form.store":            storeVal,
-      "form.related_application_id": category.supports_related_application ? this.data.form.related_application_id : "",
+      "form.related_application_id": (() => {
+        if (!category.supports_related_application) return "";
+        if (category.value === "tnr" && this._approvedApps && this._approvedApps.length > 0) {
+          return String(this._approvedApps[0].id);
+        }
+        return this.data.form.related_application_id;
+      })(),
+      tnrAppIndex: 0,
       "form.pet_size":    isBeauty ? (this._beautySizeFor(firstService.name)[0] || "") : "",
       "form.coat_length": isBeauty ? (BEAUTY_COAT_OPTIONS[0] || "") : "",
       "form.addon_services": ""
     });
     if (isBeauty) this.scheduleBeautySlots();
+  },
+
+  onTnrAppChange(e) {
+    const idx = Number(e.detail.value || 0);
+    const app = (this._approvedApps || [])[idx];
+    this.setData({
+      tnrAppIndex: idx,
+      "form.related_application_id": app ? String(app.id) : "",
+    });
   },
 
   onServiceChange(e) {

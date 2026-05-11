@@ -188,8 +188,15 @@
     </picker>
 
     <block wx:if="{{selectedCategoryMeta && selectedCategoryMeta.supports_related_application}}">
-      <view class="label">关联 TNR 申请编号（选填）</view>
-      <input class="input" type="number" value="{{form.related_application_id}}" data-k="related_application_id" bindinput="onInput" />
+      <view class="label">关联 TNR 申请</view>
+      <block wx:if="{{tnrApps.length > 0}}">
+        <picker class="picker" mode="selector" range="{{tnrApps}}" range-key="cat_nickname" value="{{tnrAppIndex}}" bindchange="onTnrAppChange">
+          <view>申请 #{{tnrApps[tnrAppIndex].id}}{{tnrApps[tnrAppIndex].cat_nickname ? ' · ' + tnrApps[tnrAppIndex].cat_nickname : ''}}</view>
+        </picker>
+      </block>
+      <block wx:else>
+        <input class="input" type="number" value="{{form.related_application_id}}" data-k="related_application_id" bindinput="onInput" placeholder="手动输入申请编号" />
+      </block>
     </block>
 
     <view class="label">备注</view>
