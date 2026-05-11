@@ -8,7 +8,7 @@
 .drug-table input, .drug-table select, .drug-table textarea { padding:0.35rem 0.5rem; font-size:0.86rem; border-radius:8px; }
 .drug-table textarea { min-height:48px; resize:vertical; }
 .inv-search-wrap { position:relative; }
-.inv-dropdown { position:absolute; top:100%; left:0; right:0; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); z-index:100; max-height:220px; overflow-y:auto; display:none; }
+.inv-dropdown { position:fixed; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.18); z-index:9999; max-height:260px; overflow-y:auto; display:none; min-width:220px; }
 .inv-dropdown-item { padding:0.45rem 0.75rem; cursor:pointer; font-size:0.85rem; line-height:1.4; }
 .inv-dropdown-item:hover { background:var(--bg-elevated); }
 .inv-dropdown-item .item-meta { font-size:0.75rem; color:var(--muted); }
@@ -291,6 +291,11 @@ function showDropdown(idx, items, input) {
     };
     dd.appendChild(div);
   });
+  // 用 fixed 定位，跳出 overflow 裁剪
+  var rect = input.getBoundingClientRect();
+  dd.style.left  = rect.left + 'px';
+  dd.style.width = rect.width + 'px';
+  dd.style.top   = (rect.bottom + 2) + 'px';
   dd.style.display = 'block';
 }
 
