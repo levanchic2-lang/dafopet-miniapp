@@ -7591,10 +7591,20 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
     while idx < 30:
         name = str(form.get(f"item_name_{idx}") or "").strip()
         if name:
+            try:
+                qty        = float(form.get(f"item_qty_{idx}")   or 1)
+                unit_price = float(form.get(f"item_price_{idx}") or 0)
+            except (ValueError, TypeError):
+                qty, unit_price = 1.0, 0.0
+            subtotal = round(qty * unit_price, 2)
             items.append({
-                "name": name,
-                "item_id": int(form.get(f"item_id_{idx}") or 0) or None,
-                "notes": str(form.get(f"item_notes_{idx}") or "").strip(),
+                "name":       name,
+                "item_id":    int(form.get(f"item_id_{idx}") or 0) or None,
+                "qty":        qty,
+                "unit":       str(form.get(f"item_unit_{idx}")  or "").strip(),
+                "unit_price": unit_price,
+                "subtotal":   subtotal,
+                "notes":      str(form.get(f"item_notes_{idx}") or "").strip(),
             })
         idx += 1
 

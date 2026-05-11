@@ -10,6 +10,25 @@
 .inv-dropdown-item { padding: 0.45rem 0.75rem; cursor: pointer; font-size: 0.85rem; }
 .inv-dropdown-item:hover { background: var(--bg-elevated); }
 .inv-dropdown-item .meta { font-size: 0.73rem; color: var(--muted); }
+
+/* 检查项目表格 */
+.item-table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+.item-table th {
+  text-align: left; padding: 0.3rem 0.45rem;
+  font-size: 0.78rem; color: var(--muted); font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.item-table td { padding: 0.3rem 0.3rem; vertical-align: top; }
+.item-table input { width: 100%; }
+.col-name  { min-width: 180px; }
+.col-qty   { width: 68px; }
+.col-unit  { width: 64px; }
+.col-price { width: 88px; }
+.col-sub   { width: 88px; }
+.col-notes { min-width: 110px; }
+.col-del   { width: 36px; text-align: center; }
+.subtotal-cell { font-weight: 600; color: var(--accent); padding: 0.3rem 0.45rem; }
+.total-row td { border-top: 1px solid var(--border); padding-top: 0.55rem; font-weight: 700; }
 </style>
 {% endblock %}
 
@@ -29,8 +48,30 @@
 
   <div class="card" style="margin-bottom:0.75rem;">
     <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">检查项目</h3>
-    <div id="item-list"></div>
-    <button type="button" class="btn secondary" style="margin-top:0.5rem;font-size:0.85rem;" onclick="addItem()">＋ 添加项目</button>
+
+    <table class="item-table" id="item-table">
+      <thead>
+        <tr>
+          <th class="col-name">项目名称</th>
+          <th class="col-qty">数量</th>
+          <th class="col-unit">单位</th>
+          <th class="col-price">单价（元）</th>
+          <th class="col-sub">小计（元）</th>
+          <th class="col-notes">备注</th>
+          <th class="col-del"></th>
+        </tr>
+      </thead>
+      <tbody id="item-list"></tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td colspan="4" style="text-align:right;padding:0.45rem 0.45rem;font-size:0.85rem;color:var(--muted);">合计</td>
+          <td class="subtotal-cell" id="grand-total" style="font-size:1rem;">¥ 0.00</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <button type="button" class="btn secondary" style="margin-top:0.6rem;font-size:0.85rem;" onclick="addItem()">＋ 添加项目</button>
   </div>
 
   <div class="card" style="margin-bottom:0.75rem;">
@@ -76,24 +117,72 @@ var _searchTimer = null;
 var _activeInput = null;
 var _activeIdx = null;
 
-function addItem(name, itemId) {
+function addItem(name, itemId, qty, unit, unitPrice, notes) {
   var idx = _itemIdx++;
-  var li = document.createElement('div');
-  li.style.cssText = 'display:flex;gap:0.4rem;align-items:flex-start;margin-bottom:0.5rem;';
-  li.innerHTML = [
-    '<div class="inv-search-wrap" style="flex:2;">',
-      '<input name="item_name_'+idx+'" placeholder="搜索库存项目" ',
-             'value="'+(name||'')+'" ',
-             'autocomplete="off" style="width:100%;" ',
-             'oninput="onItemInput(this,'+idx+')" ',
-             'onblur="closeDropdown()" />',
-      '<input type="hidden" name="item_id_'+idx+'" id="iid_'+idx+'" value="'+(itemId||'')+'">',
-    '</div>',
-    '<input name="item_notes_'+idx+'" placeholder="备注（可选）" style="flex:1;" />',
-    '<button type="button" onclick="this.closest(\'div\').remove()" ',
-            'style="padding:0.35rem 0.6rem;background:#fee2e2;border:none;border-radius:6px;cursor:pointer;color:#dc2626;">✕</button>',
+  var tr = document.createElement('tr');
+  tr.id = 'item-row-' + idx;
+  tr.innerHTML = [
+    '<td class="col-name">',
+      '<div class="inv-search-wrap">',
+        '<input name="item_name_'+idx+'" placeholder="搜索项目" ',
+               'value="'+(name||'')+'" autocomplete="off" ',
+               'oninput="onItemInput(this,'+idx+')" onblur="closeDropdown()" />',
+        '<input type="hidden" name="item_id_'+idx+'" id="iid_'+idx+'" value="'+(itemId||'')+'">',
+      '</div>',
+    '</td>',
+    '<td class="col-qty">',
+      '<input type="number" name="item_qty_'+idx+'" id="qty_'+idx+'" ',
+             'value="'+(qty!=null?qty:1)+'" min="0.01" step="0.01" ',
+             'oninput="calcRow('+idx+')" style="text-align:right;" />',
+    '</td>',
+    '<td class="col-unit">',
+      '<input name="item_unit_'+idx+'" id="unit_'+idx+'" ',
+             'value="'+(unit||'')+'" placeholder="次" />',
+    '</td>',
+    '<td class="col-price">',
+      '<input type="number" name="item_price_'+idx+'" id="price_'+idx+'" ',
+             'value="'+(unitPrice!=null?unitPrice:'')+'" min="0" step="0.01" placeholder="0.00" ',
+             'oninput="calcRow('+idx+')" style="text-align:right;" />',
+    '</td>',
+    '<td class="col-sub" style="padding:0.3rem 0.45rem;font-weight:600;color:var(--accent);" id="sub_'+idx+'">',
+      '—',
+    '</td>',
+    '<td class="col-notes">',
+      '<input name="item_notes_'+idx+'" value="'+(notes||'')+'" placeholder="备注" />',
+    '</td>',
+    '<td class="col-del">',
+      '<button type="button" onclick="removeItem(\'item-row-'+idx+'\')" ',
+              'style="padding:0.25rem 0.45rem;background:#fee2e2;border:none;border-radius:5px;cursor:pointer;color:#dc2626;font-size:0.9rem;">✕</button>',
+    '</td>',
   ].join('');
-  document.getElementById('item-list').appendChild(li);
+  document.getElementById('item-list').appendChild(tr);
+  if (qty != null && unitPrice != null) calcRow(idx);
+}
+
+function removeItem(rowId) {
+  var row = document.getElementById(rowId);
+  if (row) { row.remove(); updateTotal(); }
+}
+
+function calcRow(idx) {
+  var qty   = parseFloat(document.getElementById('qty_'+idx).value)   || 0;
+  var price = parseFloat(document.getElementById('price_'+idx).value) || 0;
+  var sub   = qty * price;
+  var cell  = document.getElementById('sub_'+idx);
+  if (cell) cell.textContent = sub > 0 ? '¥ ' + sub.toFixed(2) : '—';
+  updateTotal();
+}
+
+function updateTotal() {
+  var rows  = document.querySelectorAll('#item-list tr');
+  var total = 0;
+  rows.forEach(function(tr) {
+    var id = tr.id.replace('item-row-', '');
+    var qty   = parseFloat((document.getElementById('qty_'+id)   || {}).value) || 0;
+    var price = parseFloat((document.getElementById('price_'+id) || {}).value) || 0;
+    total += qty * price;
+  });
+  document.getElementById('grand-total').textContent = '¥ ' + total.toFixed(2);
 }
 
 function onItemInput(input, idx) {
@@ -117,18 +206,28 @@ function showDropdown(items, input, idx) {
   items.forEach(function(it) {
     var div = document.createElement('div');
     div.className = 'inv-dropdown-item';
-    div.innerHTML = '<div>' + it.name + '</div><div class="meta">库存：' + it.stock_qty + it.unit + '</div>';
+    div.innerHTML = '<div>' + it.name + '</div>'
+      + '<div class="meta">单价：¥' + it.sell_price.toFixed(2)
+      + '　单位：' + (it.unit || '—')
+      + (it.is_service ? '' : '　库存：' + it.stock_qty + (it.unit || ''))
+      + '</div>';
     div.onmousedown = function(e) {
       e.preventDefault();
       input.value = it.name;
       document.getElementById('iid_' + idx).value = it.id;
+      // 自动填充单位和单价（仅在为空时填入，不覆盖已手填的内容）
+      var unitEl  = document.getElementById('unit_'  + idx);
+      var priceEl = document.getElementById('price_' + idx);
+      if (unitEl  && !unitEl.value.trim())  unitEl.value  = it.unit || '';
+      if (priceEl && !priceEl.value.trim()) priceEl.value = it.sell_price.toFixed(2);
+      calcRow(idx);
       hideDropdown();
     };
     dd.appendChild(div);
   });
   var rect = input.getBoundingClientRect();
   dd.style.left  = rect.left + 'px';
-  dd.style.width = rect.width + 'px';
+  dd.style.width = Math.max(rect.width, 260) + 'px';
   dd.style.top   = (rect.bottom + 2) + 'px';
   dd.style.display = 'block';
 }

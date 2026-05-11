@@ -41,16 +41,40 @@
     <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
       <thead><tr style="border-bottom:1px solid var(--border);color:var(--muted);">
         <th style="text-align:left;padding:0.3rem 0.5rem;">项目</th>
+        <th style="text-align:right;padding:0.3rem 0.5rem;">数量</th>
+        <th style="text-align:left;padding:0.3rem 0.3rem;">单位</th>
+        <th style="text-align:right;padding:0.3rem 0.5rem;">单价</th>
+        <th style="text-align:right;padding:0.3rem 0.5rem;">小计</th>
         <th style="text-align:left;padding:0.3rem 0.5rem;">备注</th>
       </tr></thead>
       <tbody>
+      {% set ns = namespace(total=0) %}
       {% for it in items %}
+      {% set sub = (it.subtotal or 0) | float %}
+      {% set ns.total = ns.total + sub %}
       <tr style="border-bottom:1px solid var(--border);">
         <td style="padding:0.4rem 0.5rem;font-weight:600;">{{ it.name }}</td>
+        <td style="padding:0.4rem 0.5rem;text-align:right;">{{ it.qty or 1 }}</td>
+        <td style="padding:0.4rem 0.3rem;color:var(--muted);">{{ it.unit or '—' }}</td>
+        <td style="padding:0.4rem 0.5rem;text-align:right;">
+          {% if it.unit_price %}¥ {{ '%.2f'|format(it.unit_price | float) }}{% else %}—{% endif %}
+        </td>
+        <td style="padding:0.4rem 0.5rem;text-align:right;font-weight:600;color:var(--accent);">
+          {% if sub > 0 %}¥ {{ '%.2f'|format(sub) }}{% else %}—{% endif %}
+        </td>
         <td style="padding:0.4rem 0.5rem;color:var(--muted);">{{ it.notes or '—' }}</td>
       </tr>
       {% endfor %}
       </tbody>
+      {% if ns.total > 0 %}
+      <tfoot>
+        <tr>
+          <td colspan="4" style="text-align:right;padding:0.5rem 0.5rem;font-size:0.85rem;color:var(--muted);border-top:1px solid var(--border);">合计</td>
+          <td style="padding:0.5rem 0.5rem;text-align:right;font-weight:700;font-size:1rem;color:var(--accent);border-top:1px solid var(--border);">¥ {{ '%.2f'|format(ns.total) }}</td>
+          <td style="border-top:1px solid var(--border);"></td>
+        </tr>
+      </tfoot>
+      {% endif %}
     </table>
     {% else %}
     <p class="sub">暂无检查项目</p>

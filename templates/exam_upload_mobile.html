@@ -78,7 +78,7 @@ select, input[type=text] {
   <h2>检查项目</h2>
   <div>
     {% for it in items %}
-    <span class="item-chip">{{ it.name }}</span>
+    <span class="item-chip">{{ it.name }}{% if it.unit_price %} · ¥{{ '%.2f'|format(it.unit_price | float) }}{% endif %}</span>
     {% endfor %}
   </div>
 </div>
