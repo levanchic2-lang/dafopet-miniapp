@@ -603,6 +603,13 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_due ON vaccinations(next_due_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_rabies ON vaccinations(rabies_record_id)"))
 
+            # vaccinations: 补 reminder_sent_at 列
+            vacc_cols = conn.execute(text("PRAGMA table_info(vaccinations)")).fetchall()
+            if vacc_cols:
+                vacc_col_names = {c[1] for c in vacc_cols}
+                if "reminder_sent_at" not in vacc_col_names:
+                    conn.execute(text("ALTER TABLE vaccinations ADD COLUMN reminder_sent_at DATETIME DEFAULT NULL"))
+
             # admin_users: 补 store 列
             au_cols = conn.execute(text("PRAGMA table_info(admin_users)")).fetchall()
             if au_cols:

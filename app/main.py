@@ -73,7 +73,7 @@ from app.models import (
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
 from app.services.backup_local import create_backup_zip, is_safe_backup_filename, list_backup_zips
-from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_pending_manual_notice, push_rejection_notice, push_surgery_done, push_surgery_reminder, wechat_code2session
+from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_pending_manual_notice, push_rejection_notice, push_surgery_done, push_surgery_reminder, push_vaccine_reminder, wechat_code2session
 
 app = FastAPI(title=settings.app_name)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, session_cookie="tnr_session")
@@ -205,6 +205,7 @@ def _load_china_pcas() -> dict:
 def _startup():
     init_db()
     asyncio.get_event_loop().create_task(_surgery_reminder_loop())
+    asyncio.get_event_loop().create_task(_vaccine_reminder_loop())
 
 
 async def _surgery_reminder_loop():
@@ -280,6 +281,82 @@ def _run_surgery_reminders():
             db.commit()
     finally:
         db.close()
+
+
+_VACC_REMINDER_DAYS = 7  # 提前 N 天推送
+
+
+def _run_vaccine_reminders(db: Session | None = None) -> dict:
+    """查询 N 天内到期的疫苗并推送提醒，返回 {"sent": int, "skipped": int, "errors": int}。"""
+    from app.database import SessionLocal
+    close_db = db is None
+    if db is None:
+        db = SessionLocal()
+    try:
+        today = datetime.now().date()
+        deadline = today + timedelta(days=_VACC_REMINDER_DAYS)
+        today_str = today.strftime("%Y-%m-%d")
+        deadline_str = deadline.strftime("%Y-%m-%d")
+
+        rows = (
+            db.query(Vaccination)
+            .filter(
+                Vaccination.next_due_date >= today_str,
+                Vaccination.next_due_date <= deadline_str,
+                Vaccination.reminder_sent_at.is_(None),
+            )
+            .all()
+        )
+
+        vacc_type_zh_map = {
+            "rabies": "狂犬疫苗", "combo_3": "猫三联", "combo_6": "猫六联",
+            "canine_8": "犬八联", "deworming": "驱虫", "other": "其他疫苗",
+        }
+        sent = skipped = errors = 0
+        for row in rows:
+            # 找 openid：通过 customer → wechat_openid
+            cust = row.customer
+            if not cust:
+                skipped += 1
+                continue
+            openid = (cust.wechat_openid or "").strip()
+            if not openid:
+                skipped += 1
+                continue
+            pet_name = row.pet.name if row.pet else "宠物"
+            vtype_zh = vacc_type_zh_map.get(row.vaccine_type or "", "疫苗")
+            try:
+                push_vaccine_reminder(
+                    db,
+                    vaccination_id=row.id,
+                    openid=openid,
+                    pet_name=pet_name,
+                    vaccine_type_zh=vtype_zh,
+                    next_due_date=row.next_due_date or "",
+                )
+                row.reminder_sent_at = datetime.utcnow()
+                db.commit()
+                sent += 1
+            except Exception:
+                errors += 1
+        return {"sent": sent, "skipped": skipped, "errors": errors}
+    finally:
+        if close_db:
+            db.close()
+
+
+async def _vaccine_reminder_loop():
+    """每天 09:00 执行疫苗到期提醒推送。"""
+    while True:
+        now = datetime.now()
+        next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        if now >= next_run:
+            next_run += timedelta(days=1)
+        await asyncio.sleep((next_run - now).total_seconds())
+        try:
+            _run_vaccine_reminders()
+        except Exception:
+            pass
 
 
 def _upsert_customer(db: Session, name: str, phone: str, openid: str = "", id_number: str = "", address: str = "", source: str = "") -> "Customer":
@@ -7160,6 +7237,15 @@ async def admin_vaccination_delete(vacc_id: int, request: Request, db: Session =
         if pet_cust_id:
             return RedirectResponse(f"/admin/customers/{pet_cust_id}?msg=疫苗记录已删除", status_code=303)
     return RedirectResponse("/admin/vaccinations?msg=已删除", status_code=303)
+
+
+@app.post("/admin/vaccinations/send-reminders")
+async def admin_send_vaccine_reminders(request: Request, db: Session = Depends(get_db)):
+    """手动批量发送 7 天内到期的疫苗提醒（幂等：同一条记录只发一次）。"""
+    require_admin(request)
+    result = _run_vaccine_reminders(db)
+    msg = f"提醒发送完成：成功 {result['sent']} 条，跳过 {result['skipped']} 条（无 openid），失败 {result['errors']} 条"
+    return RedirectResponse(f"/admin/vaccinations?msg={quote(msg, safe='')}", status_code=303)
 
 
 # ── 后台：狂犬疫苗登记管理 ───────────────────────────────────────────────────

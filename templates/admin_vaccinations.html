@@ -8,7 +8,14 @@
     <h1 style="margin:0;font-size:1.3rem;">疫苗管理</h1>
     <p style="margin:0.2rem 0 0;font-size:0.82rem;color:var(--muted);">全院宠物疫苗接种记录 · 到期提醒</p>
   </div>
-  <a href="/admin/vaccinations/create" class="btn" style="font-size:0.9rem;">＋ 新建接种记录</a>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+    <form method="post" action="/admin/vaccinations/send-reminders"
+          onsubmit="return confirm('将向 7 天内到期且尚未通知的主人发送微信提醒，继续？')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <button type="submit" class="btn secondary" style="font-size:0.85rem;">📣 发送到期提醒</button>
+    </form>
+    <a href="/admin/vaccinations/create" class="btn" style="font-size:0.9rem;">＋ 新建接种记录</a>
+  </div>
 </div>
 
 <!-- 搜索 + 筛选 -->

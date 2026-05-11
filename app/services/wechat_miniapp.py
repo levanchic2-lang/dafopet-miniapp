@@ -469,6 +469,69 @@ def push_rejection_notice(
         )
         db.commit()
 
+def push_vaccine_reminder(
+    db: Session,
+    vaccination_id: int,
+    openid: str,
+    pet_name: str,
+    vaccine_type_zh: str,
+    *,
+    next_due_date: str = "",
+) -> None:
+    """推送：疫苗即将到期提醒。模板字段：thing1=宠物名,thing2=疫苗类型,time3=到期日,thing4=温馨提示。"""
+    tmpl_id = (settings.wechat_tmpl_vaccine_reminder or "").strip()
+    if not tmpl_id:
+        return
+    if not _enabled() or not openid:
+        return
+
+    def v(x: str, fallback: str = "—", max_len: int = 20) -> str:
+        s = (x or "").strip()
+        if not s:
+            s = fallback
+        return s[:max_len]
+
+    keys = [k.strip() for k in (settings.wechat_fields_vaccine_reminder or "thing1,thing2,time3,thing4").split(",") if k.strip()]
+    data: dict[str, Any] = {}
+    for k in keys:
+        if k.startswith("time") or k.startswith("date"):
+            data[k] = {"value": next_due_date or time.strftime("%Y-%m-%d", time.localtime())}
+        elif k == "thing2":
+            data[k] = {"value": v(vaccine_type_zh, fallback="疫苗", max_len=20)}
+        elif k == "thing4" or k == "thing5":
+            data[k] = {"value": "请携带宠物前往医院接种"}
+        else:
+            data[k] = {"value": v(pet_name, fallback="宠物", max_len=20)}
+
+    payload = {
+        "touser": openid,
+        "template_id": tmpl_id,
+        "page": settings.wechat_message_page,
+        "data": data,
+    }
+    try:
+        resp = _post_subscribe_send(payload)
+        db.add(
+            NotificationLog(
+                application_id=None,
+                channel="wechat_miniapp",
+                payload=json.dumps({"type": "vaccine_reminder", "vaccination_id": vaccination_id, "resp": resp}, ensure_ascii=False),
+                success=True,
+            )
+        )
+        db.commit()
+    except Exception as e:
+        db.add(
+            NotificationLog(
+                application_id=None,
+                channel="wechat_miniapp",
+                payload=str(e),
+                success=False,
+            )
+        )
+        db.commit()
+
+
 def push_pending_manual_notice(
     db,
     application_id: int,

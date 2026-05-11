@@ -203,13 +203,49 @@
 
 {% block scripts %}
 <script>
+// ── 自动计算下次到期日 ──────────────────────────────────────────
+// 规则：
+//   rabies            → 接种日 + 1年
+//   combo_3/combo_6/canine_8  第1/2针 → +3周；第3针/加强针(99) → +1年
+//   deworming         → +3个月
+//   other             → 不自动填
+function calcNextDue() {
+  const type     = document.getElementById('vaccine-type-sel').value;
+  const doseEl   = document.querySelector('select[name="dose_number"]');
+  const dose     = doseEl ? parseInt(doseEl.value) : 1;
+  const dateEl   = document.querySelector('input[name="vaccinated_date"]');
+  const dueEl    = document.querySelector('input[name="next_due_date"]');
+  if (!dateEl || !dueEl || !dateEl.value) return;
+
+  const base = new Date(dateEl.value);
+  if (isNaN(base.getTime())) return;
+
+  let addDays = 0;
+  if (type === 'rabies') {
+    addDays = 365;
+  } else if (['combo_3', 'combo_6', 'canine_8'].includes(type)) {
+    addDays = (dose === 1 || dose === 2) ? 21 : 365;
+  } else if (type === 'deworming') {
+    addDays = 90;
+  } else {
+    return; // other 不自动填
+  }
+
+  const due = new Date(base);
+  due.setDate(due.getDate() + addDays);
+  const y = due.getFullYear();
+  const m = String(due.getMonth() + 1).padStart(2, '0');
+  const d = String(due.getDate()).padStart(2, '0');
+  dueEl.value = `${y}-${m}-${d}`;
+}
+
 function onTypeChange() {
   const type = document.getElementById('vaccine-type-sel').value;
-  if (type === 'rabies') {
-    document.getElementById('is-free-chk').checked = true;
-  }
+  const chk = document.getElementById('is-free-chk');
+  if (chk && type === 'rabies') chk.checked = true;
+  calcNextDue();
 }
-function onFreeChange() { /* 可扩展：勾选免费时更新提示 */ }
+function onFreeChange() {}
 function onItemChange() {
   const sel = document.getElementById('inv-item-sel');
   const opt = sel.options[sel.selectedIndex];
@@ -219,10 +255,16 @@ function onItemChange() {
     if (!nameInput.value) nameInput.value = name;
   }
 }
-// 新建时，若选择疫苗类型为狂犬，自动勾选免费
+
 document.addEventListener('DOMContentLoaded', () => {
   const chk = document.getElementById('is-free-chk');
   if (chk) onTypeChange();
+
+  // 针次或接种日期变化时重新计算
+  const doseEl = document.querySelector('select[name="dose_number"]');
+  const dateEl = document.querySelector('input[name="vaccinated_date"]');
+  if (doseEl) doseEl.addEventListener('change', calcNextDue);
+  if (dateEl) dateEl.addEventListener('change', calcNextDue);
 });
 </script>
 {% endblock %}
