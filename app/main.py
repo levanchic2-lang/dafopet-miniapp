@@ -7343,7 +7343,7 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
             batch_no          = rec.vaccine_batch_no or "",
             dose_number       = 1,
             vaccinated_date   = rec.vaccine_date or datetime.utcnow().strftime("%Y-%m-%d"),
-            next_due_date     = "",   # 狂犬一般1年有效，可手动补录
+            next_due_date     = (datetime.strptime(rec.vaccine_date, "%Y-%m-%d") + timedelta(days=365)).strftime("%Y-%m-%d") if rec.vaccine_date else (datetime.utcnow() + timedelta(days=365)).strftime("%Y-%m-%d"),
             inventory_item_id = rabies_item.id if rabies_item else None,
             is_free           = True,
             rabies_record_id  = rec_id,
