@@ -730,13 +730,18 @@ def _get_tnr_store_config(db: "Session", store_name: str) -> "TnrStoreConfig":
 
 def _get_tnr_monthly_confirmed_count(db: "Session", store: str, year_month: str) -> int:
     """统计指定门店当月已确认（未取消/爽约）的 TNR 预约数。year_month 格式 YYYY-MM。"""
+    _counted_statuses = [
+        AppointmentStatus.confirmed.value,
+        AppointmentStatus.arrived.value,
+        AppointmentStatus.completed.value,
+    ]
     return (
         db.query(Appointment)
         .filter(
             Appointment.category == AppointmentCategory.tnr.value,
             Appointment.store == store,
             Appointment.appointment_date.like(f"{year_month}%"),
-            Appointment.status == AppointmentStatus.confirmed.value,
+            Appointment.status.in_(_counted_statuses),
         )
         .count()
     )
