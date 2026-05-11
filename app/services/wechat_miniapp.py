@@ -491,16 +491,23 @@ def push_vaccine_reminder(
             s = fallback
         return s[:max_len]
 
-    keys = [k.strip() for k in (settings.wechat_fields_vaccine_reminder or "thing1,thing2,time3,thing4").split(",") if k.strip()]
+    keys = [k.strip() for k in (settings.wechat_fields_vaccine_reminder or "thing5,thing8,thing11,time7").split(",") if k.strip()]
     data: dict[str, Any] = {}
     for k in keys:
         if k.startswith("time") or k.startswith("date"):
+            # time7 → 服务时间（到期日）
             data[k] = {"value": next_due_date or time.strftime("%Y-%m-%d", time.localtime())}
-        elif k == "thing2":
+        elif k in ("thing11",):
+            # thing11 → 服务项目（疫苗类型）
             data[k] = {"value": v(vaccine_type_zh, fallback="疫苗", max_len=20)}
-        elif k == "thing4" or k == "thing5":
-            data[k] = {"value": "请携带宠物前往医院接种"}
+        elif k in ("thing8",):
+            # thing8 → 服务对象（宠物名）
+            data[k] = {"value": v(pet_name, fallback="宠物", max_len=20)}
+        elif k in ("thing5",):
+            # thing5 → 温馨提示
+            data[k] = {"value": "疫苗即将到期，请携带宠物来院"}
         else:
+            # 其余 thing* 字段兜底：填宠物名
             data[k] = {"value": v(pet_name, fallback="宠物", max_len=20)}
 
     payload = {

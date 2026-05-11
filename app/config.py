@@ -75,8 +75,8 @@ class Settings(BaseSettings):
     wechat_fields_rejection: str = "thing1,phrase2,thing3,time4"
     # 手术前提醒模板字段：thing1=用户名称,thing2=预约项目,time3=预约时间,thing4=温馨提示
     wechat_fields_surgery_reminder: str = "thing1,thing2,time3,thing4"
-    # 疫苗到期提醒模板字段：thing1=宠物名,thing2=疫苗类型,time3=到期日,thing4=温馨提示
-    wechat_fields_vaccine_reminder: str = "thing1,thing2,time3,thing4"
+    # 疫苗到期提醒模板字段：thing5=温馨提示,thing8=服务对象(宠物名),thing11=服务项目(疫苗类型),time7=服务时间(到期日)
+    wechat_fields_vaccine_reminder: str = "thing5,thing8,thing11,time7"
 
     # 地理编码（可选）：用于把经纬度反查为中文地址展示
     amap_web_key: str = ""  # 高德 Web 服务 Key（建议放在 .env，不要写死在前端）
