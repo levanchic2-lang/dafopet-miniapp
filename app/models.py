@@ -670,6 +670,44 @@ class TnrStoreConfig(Base):
     updated_by: Mapped[str] = mapped_column(String(80), default="")
 
 
+class ExamOrder(Base):
+    """检查单（关联就诊记录）"""
+    __tablename__ = "exam_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id = mapped_column(ForeignKey("visits.id", ondelete="CASCADE"), nullable=False)
+
+    items_json: Mapped[str] = mapped_column(Text, default="[]")   # [{name, item_id, notes}]
+    notes:      Mapped[str] = mapped_column(Text, default="")
+    status:     Mapped[str] = mapped_column(String(20), default="pending")  # pending/completed
+
+    # 手机上传 token（24小时有效）
+    upload_token:     Mapped[str]           = mapped_column(String(80), unique=True, default="")
+    token_expires_at: Mapped[datetime|None] = mapped_column(DateTime, nullable=True, default=None)
+
+    created_by: Mapped[str]      = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    visit   = relationship("Visit",       backref="exam_orders", foreign_keys=[visit_id])
+    reports = relationship("ExamReport",  backref="exam_order",  cascade="all, delete-orphan")
+
+
+class ExamReport(Base):
+    """检查报告文件（PDF 或图片）"""
+    __tablename__ = "exam_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exam_order_id = mapped_column(ForeignKey("exam_orders.id", ondelete="CASCADE"), nullable=False)
+
+    file_path:     Mapped[str] = mapped_column(String(500), default="")
+    original_name: Mapped[str] = mapped_column(String(200), default="")
+    file_type:     Mapped[str] = mapped_column(String(10),  default="image")  # pdf / image
+    item_label:    Mapped[str] = mapped_column(String(120), default="")        # 归属检查项（可选标注）
+    uploaded_by:   Mapped[str] = mapped_column(String(80),  default="")
+    uploaded_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
 

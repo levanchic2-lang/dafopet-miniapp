@@ -15,7 +15,7 @@ from urllib.parse import quote
 
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from passlib.context import CryptContext
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 import httpx
 from sqlalchemy import func, or_
@@ -69,6 +69,8 @@ from app.models import (
     InvoiceItem,
     Vaccination,
     TnrStoreConfig,
+    ExamOrder,
+    ExamReport,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -5141,6 +5143,7 @@ async def page_admin_visit_detail(
     prescriptions = db.query(Prescription).filter(Prescription.visit_id == visit_id).order_by(Prescription.id.desc()).all()
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
     invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
+    exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.desc()).all()
     _PRESC_STATUS_ZH = {"draft": "草稿", "issued": "已开具", "dispensed": "已发药"}
     _SO_STATUS_ZH = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
     return templates.TemplateResponse(request, "admin_visit_form.html", {
@@ -5153,6 +5156,7 @@ async def page_admin_visit_detail(
         "prescriptions": prescriptions,
         "sales_orders": sales_orders,
         "invoices": invoices,
+        "exam_orders": exam_orders,
         "presc_status_zh": _PRESC_STATUS_ZH,
         "so_status_zh": _SO_STATUS_ZH,
         "inv_status_zh": _INV_STATUS_ZH,
@@ -7542,6 +7546,249 @@ async def admin_rabies_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}"},
     )
+
+
+# ── 检查单 ────────────────────────────────────────────────────────────────────
+
+def _exam_order_token(db: Session) -> tuple[str, "datetime"]:
+    """生成唯一 upload_token + 24小时到期时间。"""
+    while True:
+        token = secrets.token_urlsafe(20)
+        if not db.query(ExamOrder).filter(ExamOrder.upload_token == token).first():
+            return token, datetime.utcnow() + timedelta(hours=24)
+
+
+@app.get("/admin/exam-orders/create", response_class=HTMLResponse)
+async def admin_exam_order_create_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    visit_id: int = Query(0),
+):
+    require_admin(request)
+    visit = db.get(Visit, visit_id) if visit_id else None
+    if not visit:
+        return RedirectResponse("/admin/visits")
+    cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    pet  = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    return templates.TemplateResponse(request, "admin_exam_order_form.html", {
+        "visit": visit, "cust": cust, "pet": pet,
+        "exam_order": None, "mode": "create",
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/exam-orders/create")
+async def admin_exam_order_create(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    visit_id = int(form.get("visit_id") or 0)
+    notes    = str(form.get("notes") or "").strip()
+
+    # 收集检查项目
+    items: list[dict] = []
+    idx = 0
+    while idx < 30:
+        name = str(form.get(f"item_name_{idx}") or "").strip()
+        if name:
+            items.append({
+                "name": name,
+                "item_id": int(form.get(f"item_id_{idx}") or 0) or None,
+                "notes": str(form.get(f"item_notes_{idx}") or "").strip(),
+            })
+        idx += 1
+
+    token, exp = _exam_order_token(db)
+    order = ExamOrder(
+        visit_id=visit_id,
+        items_json=json.dumps(items, ensure_ascii=False),
+        notes=notes,
+        upload_token=token,
+        token_expires_at=exp,
+        created_by=request.session.get("admin", ""),
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    return RedirectResponse(f"/admin/exam-orders/{order.id}", status_code=303)
+
+
+@app.get("/admin/exam-orders/{order_id}", response_class=HTMLResponse)
+async def admin_exam_order_detail(
+    order_id: int, request: Request, db: Session = Depends(get_db),
+    msg: str = Query(""),
+):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    visit = db.get(Visit, order.visit_id)
+    cust  = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+    pet   = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    items = json.loads(order.items_json or "[]")
+    # Token 过期则自动刷新
+    if not order.token_expires_at or order.token_expires_at < datetime.utcnow():
+        order.upload_token, order.token_expires_at = _exam_order_token(db)
+        db.commit()
+    return templates.TemplateResponse(request, "admin_exam_order_detail.html", {
+        "order": order, "visit": visit, "cust": cust, "pet": pet,
+        "items": items, "msg": msg,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/exam-orders/{order_id}/upload")
+async def admin_exam_order_upload(
+    order_id: int, request: Request, db: Session = Depends(get_db),
+    file: UploadFile = File(...),
+    item_label: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+
+    data = await file.read()
+    fname = file.filename or "report"
+    ext = Path(fname).suffix.lower()
+    ftype = "pdf" if ext == ".pdf" else "image"
+
+    dest_dir = Path(settings.upload_dir) / "exam_reports" / str(order_id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"rpt_{secrets.token_hex(8)}{ext}"
+    dest.write_bytes(data)
+
+    report = ExamReport(
+        exam_order_id=order_id,
+        file_path=str(dest),
+        original_name=fname,
+        file_type=ftype,
+        item_label=(item_label or "").strip()[:120],
+        uploaded_by=request.session.get("admin", "系统"),
+    )
+    db.add(report)
+    order.status = "completed"
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=报告已上传", status_code=303)
+
+
+@app.post("/admin/exam-orders/{order_id}/refresh-token")
+async def admin_exam_order_refresh_token(
+    order_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    order.upload_token, order.token_expires_at = _exam_order_token(db)
+    db.commit()
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=二维码已刷新", status_code=303)
+
+
+@app.post("/admin/exam-orders/{order_id}/delete-report/{report_id}")
+async def admin_exam_report_delete(
+    order_id: int, report_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rpt = db.get(ExamReport, report_id)
+    if rpt and rpt.exam_order_id == order_id:
+        try:
+            Path(rpt.file_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+        db.delete(rpt)
+        db.commit()
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=报告已删除", status_code=303)
+
+
+@app.get("/admin/exam-orders/{order_id}/qr.png")
+async def admin_exam_order_qr(
+    order_id: int, request: Request, db: Session = Depends(get_db),
+):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    import qrcode, io as _io
+    base = str(request.base_url).rstrip("/")
+    url  = f"{base}/exam-upload/{order.upload_token}"
+    img  = qrcode.make(url)
+    buf  = _io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
+
+
+@app.get("/admin/exam-reports/{report_id}/file")
+async def admin_exam_report_file(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    rpt = db.get(ExamReport, report_id)
+    if not rpt:
+        raise HTTPException(404)
+    p = Path(rpt.file_path)
+    if not p.exists():
+        raise HTTPException(404)
+    media = "application/pdf" if rpt.file_type == "pdf" else "image/jpeg"
+    return FileResponse(str(p), media_type=media, filename=rpt.original_name)
+
+
+# ── 手机端上传（无需登录，Token 校验）────────────────────────────────────────
+
+@app.get("/exam-upload/{token}", response_class=HTMLResponse)
+async def exam_upload_mobile_page(token: str, request: Request, db: Session = Depends(get_db)):
+    order = db.query(ExamOrder).filter(ExamOrder.upload_token == token).first()
+    if not order or (order.token_expires_at and order.token_expires_at < datetime.utcnow()):
+        return HTMLResponse("<h2 style='font-family:sans-serif;padding:2rem;'>链接已失效，请联系医院前台刷新二维码。</h2>", status_code=410)
+    visit = db.get(Visit, order.visit_id)
+    cust  = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+    pet   = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    items = json.loads(order.items_json or "[]")
+    return templates.TemplateResponse(request, "exam_upload_mobile.html", {
+        "order": order, "visit": visit, "cust": cust, "pet": pet,
+        "items": items, "token": token,
+        "msg": request.query_params.get("msg", ""),
+    })
+
+
+@app.post("/exam-upload/{token}/upload")
+async def exam_upload_mobile_post(
+    token: str, request: Request, db: Session = Depends(get_db),
+    file: UploadFile = File(...),
+    item_label: str = Form(""),
+):
+    order = db.query(ExamOrder).filter(ExamOrder.upload_token == token).first()
+    if not order or (order.token_expires_at and order.token_expires_at < datetime.utcnow()):
+        raise HTTPException(410, "链接已失效")
+
+    data = await file.read()
+    fname = file.filename or "photo.jpg"
+    ext   = Path(fname).suffix.lower() or ".jpg"
+    ftype = "pdf" if ext == ".pdf" else "image"
+
+    dest_dir = Path(settings.upload_dir) / "exam_reports" / str(order.id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"mob_{secrets.token_hex(8)}{ext}"
+    dest.write_bytes(data)
+
+    db.add(ExamReport(
+        exam_order_id=order.id,
+        file_path=str(dest),
+        original_name=fname,
+        file_type=ftype,
+        item_label=(item_label or "").strip()[:120],
+        uploaded_by="手机上传",
+    ))
+    order.status = "completed"
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/exam-upload/{token}?msg=上传成功", status_code=303)
 
 
 # ── 待领养动物 ────────────────────────────────────────────────────────────────

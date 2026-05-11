@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>上传检查报告</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+       background: #f5f5f5; color: #1a1a1a; }
+.top-bar { background: #1a1a2e; color: #fff; padding: 1rem 1.2rem;
+           display: flex; align-items: center; gap: 0.6rem; }
+.top-bar h1 { font-size: 1rem; font-weight: 700; }
+.top-bar .sub { font-size: 0.75rem; color: rgba(255,255,255,0.65); margin-top:0.1rem; }
+.card { background: #fff; border-radius: 14px; padding: 1.1rem 1.2rem;
+        margin: 0.75rem 1rem; box-shadow: 0 1px 6px rgba(0,0,0,.07); }
+.card h2 { font-size: 0.9rem; font-weight: 700; color: #555; margin-bottom: 0.6rem; }
+.item-chip { display: inline-block; background: #e0f2fe; color: #0369a1;
+             border-radius: 99px; padding: 0.2rem 0.65rem; font-size: 0.82rem;
+             font-weight: 600; margin: 0.15rem; }
+.msg-ok  { background: #d1fae5; color: #065f46; border-radius: 10px;
+           padding: 0.7rem 1.1rem; margin: 0.75rem 1rem; font-size: 0.9rem; font-weight: 600; }
+.msg-err { background: #fee2e2; color: #991b1b; border-radius: 10px;
+           padding: 0.7rem 1.1rem; margin: 0.75rem 1rem; font-size: 0.9rem; }
+label.upload-btn {
+  display: block; width: 100%; padding: 1rem; text-align: center;
+  background: #1a1a2e; color: #fff; border-radius: 12px; font-size: 1rem;
+  font-weight: 700; cursor: pointer; margin-top: 0.5rem; letter-spacing: 0.02em;
+}
+label.upload-btn:active { opacity: 0.85; }
+input[type=file] { display: none; }
+select, input[type=text] {
+  width: 100%; padding: 0.65rem 0.85rem; border-radius: 10px;
+  border: 1px solid #d1d5db; font-size: 0.95rem; background: #fafafa;
+}
+.preview-wrap { margin-top: 0.75rem; }
+.preview-wrap img { width: 100%; border-radius: 10px; border: 1px solid #e5e7eb; }
+.submit-btn {
+  display: block; width: 100%; padding: 1rem; text-align: center;
+  background: #16a34a; color: #fff; border: none; border-radius: 12px;
+  font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 0.6rem;
+}
+.submit-btn:active { opacity: 0.85; }
+.footer { text-align: center; padding: 1.5rem; font-size: 0.75rem; color: #9ca3af; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div>
+    <h1>📋 检查报告上传</h1>
+    <div class="sub">大风动物医院 · 检查单 #{{ order.id }}</div>
+  </div>
+</div>
+
+{% if msg %}
+<div class="msg-ok">✅ {{ msg }}</div>
+{% endif %}
+
+<!-- 宠物信息 -->
+<div class="card">
+  <h2>就诊信息</h2>
+  {% if pet %}
+  <div style="font-weight:700;font-size:1rem;">{{ pet.name or '未命名' }}</div>
+  <div style="font-size:0.85rem;color:#6b7280;margin-top:0.15rem;">
+    {{ '猫' if pet.species=='cat' else '狗' if pet.species=='dog' else '' }}
+    {% if cust %} · 主人：{{ cust.name or '—' }}{% endif %}
+  </div>
+  {% endif %}
+  {% if visit %}
+  <div style="font-size:0.82rem;color:#6b7280;margin-top:0.25rem;">就诊日期：{{ visit.visit_date }}</div>
+  {% endif %}
+</div>
+
+<!-- 检查项目 -->
+{% if items %}
+<div class="card">
+  <h2>检查项目</h2>
+  <div>
+    {% for it in items %}
+    <span class="item-chip">{{ it.name }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- 上传表单 -->
+<div class="card">
+  <h2>上传报告图片</h2>
+  <form method="post" action="/exam-upload/{{ token }}/upload" enctype="multipart/form-data" id="upload-form">
+
+    {% if items | length > 1 %}
+    <div style="margin-bottom:0.75rem;">
+      <label style="font-size:0.82rem;color:#6b7280;display:block;margin-bottom:0.3rem;">归属检查项目</label>
+      <select name="item_label">
+        <option value="">— 不指定 —</option>
+        {% for it in items %}
+        <option value="{{ it.name }}">{{ it.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <input type="hidden" name="item_label" value="{{ items[0].name if items else '' }}" />
+    {% endif %}
+
+    <input type="file" name="file" id="file-input" accept="image/*" capture="environment"
+           onchange="previewFile(this)" required />
+
+    <label for="file-input" class="upload-btn">📷 拍照 / 选择图片</label>
+
+    <div class="preview-wrap" id="preview-wrap" style="display:none;">
+      <img id="preview-img" src="" alt="预览" />
+    </div>
+
+    <button type="submit" class="submit-btn" id="submit-btn" style="display:none;">
+      ✅ 确认上传
+    </button>
+  </form>
+</div>
+
+<div class="footer">链接有效期：{{ order.token_expires_at.strftime('%Y-%m-%d %H:%M') if order.token_expires_at else '—' }} UTC<br>如链接失效请联系前台刷新</div>
+
+<script>
+function previewFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = document.getElementById('preview-img');
+    img.src = e.target.result;
+    document.getElementById('preview-wrap').style.display = 'block';
+    document.getElementById('submit-btn').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+// 防止重复提交
+document.getElementById('upload-form').addEventListener('submit', function() {
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = '上传中…';
+});
+</script>
+</body>
+</html>

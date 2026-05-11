@@ -233,6 +233,34 @@
       {% endif %}
     </div>
 
+    <!-- 检查单 -->
+    <div class="card" style="margin-top:0.75rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <div style="font-weight:700;font-size:0.95rem;">检查单
+          <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（{{ exam_orders|length }}张）</span>
+        </div>
+        <a href="/admin/exam-orders/create?visit_id={{ v.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">＋ 开检查单</a>
+      </div>
+      {% if exam_orders %}
+      <div style="display:grid;gap:0.4rem;">
+        {% for eo in exam_orders %}
+        <a href="/admin/exam-orders/{{ eo.id }}"
+           style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
+          <span style="font-size:0.78rem;color:var(--muted);">{{ eo.created_at.strftime('%m-%d %H:%M') if eo.created_at else '—' }}</span>
+          <span class="badge {% if eo.status == 'completed' %}b-done{% else %}b-pending{% endif %}" style="font-size:0.68rem;">
+            {{ '已出报告' if eo.status == 'completed' else '待出报告' }}
+          </span>
+          {% set eo_items = eo.items_json | tojson if eo.items_json is string else eo.items_json %}
+          <span style="flex:1;font-size:0.85rem;">#{{ eo.id }}</span>
+          <span style="font-size:0.78rem;color:var(--muted);">{{ eo.reports|length }} 份报告</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:0.88rem;margin:0;">本次就诊暂无检查单</p>
+      {% endif %}
+    </div>
+
     <!-- 删除 -->
     <div style="margin-top:0.75rem;">
       <form method="post" action="/admin/visits/{{ v.id }}/delete"

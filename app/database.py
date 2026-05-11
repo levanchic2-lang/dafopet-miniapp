@@ -603,6 +603,39 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_due ON vaccinations(next_due_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_rabies ON vaccinations(rabies_record_id)"))
 
+            # exam_orders 检查单
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS exam_orders ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "visit_id INTEGER NOT NULL REFERENCES visits(id) ON DELETE CASCADE, "
+                "items_json TEXT DEFAULT '[]', "
+                "notes TEXT DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'pending', "
+                "upload_token VARCHAR(80) UNIQUE DEFAULT '', "
+                "token_expires_at DATETIME DEFAULT NULL, "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_exam_orders_visit ON exam_orders(visit_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_exam_orders_token ON exam_orders(upload_token)"))
+
+            # exam_reports 检查报告
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS exam_reports ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "exam_order_id INTEGER NOT NULL REFERENCES exam_orders(id) ON DELETE CASCADE, "
+                "file_path VARCHAR(500) DEFAULT '', "
+                "original_name VARCHAR(200) DEFAULT '', "
+                "file_type VARCHAR(10) DEFAULT 'image', "
+                "item_label VARCHAR(120) DEFAULT '', "
+                "uploaded_by VARCHAR(80) DEFAULT '', "
+                "uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_exam_reports_order ON exam_reports(exam_order_id)"))
+
             # vaccinations: 补 reminder_sent_at 列
             vacc_cols = conn.execute(text("PRAGMA table_info(vaccinations)")).fetchall()
             if vacc_cols:
