@@ -306,6 +306,111 @@
     color: var(--muted);
     cursor: not-allowed;
   }
+
+  /* ── 紧凑表格视图 ─────────────────────────────── */
+  .appt-day-block { margin-top: 0.75rem; }
+  .appt-day-header {
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    padding: 0.45rem 0.85rem; background: var(--bg-elevated);
+    border: 1px solid var(--border); border-radius: 8px 8px 0 0;
+    border-bottom: none; font-weight: 700; font-size: 0.92rem;
+  }
+  .appt-day-header.is-today {
+    background: #eff6ff; border-color: #bfdbfe; color: #1e40af;
+  }
+  .appt-day-header .dg-chip {
+    padding: 0.1rem 0.55rem; border-radius: 99px; font-size: 0.75rem;
+    font-weight: 500; background: #fff; border: 1px solid var(--border);
+  }
+  .appt-day-header .dg-chip.c-pending { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+  .appt-day-header .dg-chip.c-tnr     { background: #f5f3ff; color: #5b21b6; border-color: #ddd6fe; }
+
+  .appt-table {
+    width: 100%; border-collapse: collapse;
+    border: 1px solid var(--border); border-radius: 0 0 8px 8px;
+    overflow: hidden; background: var(--card);
+    font-size: 0.85rem; table-layout: fixed;
+  }
+  .appt-table th {
+    text-align: left; padding: 0.45rem 0.65rem; font-weight: 600;
+    font-size: 0.75rem; color: var(--muted); background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border); letter-spacing: 0.02em;
+  }
+  .appt-table td {
+    padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--border);
+    vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .appt-table tr:last-child td { border-bottom: none; }
+  .appt-table tr.appt-row { transition: background 0.1s; cursor: default; }
+  .appt-table tr.appt-row:hover { background: #f9fafb; }
+  .appt-table tr.appt-row:hover .row-actions { opacity: 1; }
+  .appt-table tr.appt-row.s-cancelled td,
+  .appt-table tr.appt-row.s-no_show td { color: var(--muted); }
+  .appt-table tr.appt-row.s-cancelled .col-time,
+  .appt-table tr.appt-row.s-no_show .col-time { text-decoration: line-through; }
+
+  /* 列宽 */
+  .col-time   { width: 78px;  font-weight: 700; }
+  .col-cat    { width: 70px; }
+  .col-svc    { width: auto; }
+  .col-cust   { width: 165px; }
+  .col-pet    { width: 110px; color: var(--muted); }
+  .col-store  { width: 64px;  font-size: 0.78rem; color: var(--muted); }
+  .col-status { width: 78px; }
+  .col-actions{ width: 200px; text-align: right; }
+
+  .row-time-sub { font-size: 0.7rem; color: var(--muted); font-weight: 400; }
+  .row-cust-sub { font-size: 0.72rem; color: var(--muted); }
+  .row-svc-extra { font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* 操作区：默认隐藏，hover 行才显示 */
+  .row-actions {
+    display: flex; gap: 0.3rem; justify-content: flex-end; align-items: center;
+    opacity: 0.4; transition: opacity 0.1s;
+  }
+  .row-actions button, .row-actions a.row-btn {
+    padding: 0.25rem 0.55rem; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); font-size: 0.75rem; cursor: pointer;
+    white-space: nowrap; text-decoration: none; line-height: 1.3;
+  }
+  .row-actions button:hover, .row-actions a.row-btn:hover { background: var(--bg-elevated); }
+  .row-actions .a-arrived { background: #6366f1; color: #fff; border-color: #6366f1; }
+  .row-actions .a-arrived:hover { background: #4f46e5; border-color: #4f46e5; }
+  .row-actions .a-confirm { background: #10b981; color: #fff; border-color: #10b981; }
+  .row-actions .a-confirm:hover { background: #059669; border-color: #059669; }
+  .row-actions .a-danger  { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+  .row-actions form { margin: 0; display: inline-flex; }
+
+  /* 内嵌取消/改约面板（点击按钮在行下方展开） */
+  .appt-table tr.appt-panel-row td {
+    padding: 0; border-top: none; background: #fafbfc;
+  }
+  .appt-table tr.appt-panel-row .panel-wrap {
+    padding: 0.75rem 1rem; border-top: 2px solid #e0e7ff;
+  }
+  .appt-table tr.appt-panel-row .panel-wrap h4 {
+    margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--muted); font-weight: 600;
+  }
+
+  /* 类型标签紧凑版 */
+  .cat-pill {
+    display: inline-block; padding: 0.1rem 0.55rem; border-radius: 99px;
+    font-size: 0.72rem; font-weight: 600; border: 1px solid;
+  }
+  .cat-pill.c-tnr        { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .cat-pill.c-surgery    { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+  .cat-pill.c-outpatient { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+  .cat-pill.c-wash       { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+  .cat-pill.c-beauty     { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+
+  @media (max-width: 1100px) {
+    .col-pet { display: none; }
+    .col-actions { width: 150px; }
+  }
+  @media (max-width: 900px) {
+    .col-store { display: none; }
+    .col-cust { width: 130px; }
+  }
 </style>
 {% endblock %}
 
