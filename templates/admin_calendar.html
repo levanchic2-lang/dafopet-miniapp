@@ -5,8 +5,10 @@
 .cal-page { display:flex; flex-direction:column; height:calc(100vh - 52px); overflow:hidden; margin:-1rem; }
 .cal-topbar {
   display:flex; align-items:center; gap:0.75rem; padding:0.6rem 1.1rem;
-  background:var(--card); border-bottom:1px solid var(--border); flex-shrink:0; flex-wrap:wrap;
+  background:var(--card); border-bottom:1px solid var(--border); flex-shrink:0;
+  flex-wrap:nowrap; overflow-x:auto;
 }
+.cal-topbar > * { flex-shrink:0; }
 .cal-topbar .new-btn { white-space:nowrap; background:#16a34a; color:#fff; border-color:#16a34a; }
 .cal-topbar .new-btn:hover { background:#15803d; border-color:#15803d; }
 .cal-nav { display:flex; align-items:center; gap:0.4rem; }
@@ -15,12 +17,12 @@
 #cal-date-label { font-weight:700; font-size:1.05rem; min-width:130px; text-align:center; letter-spacing:0.01em; }
 .cal-actions { display:flex; align-items:center; gap:0.5rem; margin-left:auto; }
 .view-sw { display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-.view-sw button { padding:0.3rem 0.85rem; background:none; border:none; cursor:pointer; font-size:0.88rem; color:var(--muted); font-weight:500; }
+.view-sw button { padding:0.3rem 0.9rem; background:none; border:none; cursor:pointer; font-size:0.9rem; color:var(--muted); font-weight:500; white-space:nowrap; }
 .view-sw button:hover { background:var(--bg-elevated); color:var(--text); }
 .view-sw button.active { background:#3b82f6; color:#fff; font-weight:600; }
-#today-btn { background:none; border:1px solid var(--border); color:var(--text); font-size:0.85rem; padding:0.28rem 0.75rem; border-radius:6px; cursor:pointer; }
+#today-btn { background:none; border:1px solid var(--border); color:var(--text); font-size:0.9rem; padding:0.28rem 0.7rem; border-radius:6px; cursor:pointer; white-space:nowrap; min-width:auto; }
 #today-btn:hover { background:var(--bg-elevated); }
-#store-filter { padding:0.3rem 0.7rem; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; background:var(--card); color:var(--text); }
+#store-filter { padding:0.3rem 0.7rem; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; background:var(--card); color:var(--text); white-space:nowrap; }
 .cal-body { flex:1; overflow:hidden; display:flex; flex-direction:column; }
 
 /* ── 月视图 ──────────────────────────────────────────── */
@@ -180,7 +182,7 @@
       <button id="next-btn">›</button>
     </div>
     <div class="cal-actions">
-      <button class="btn secondary" id="today-btn" style="font-size:0.85rem;padding:0.3rem 0.75rem;">今天</button>
+      <button class="btn secondary" id="today-btn">今</button>
       <div class="view-sw">
         <button data-view="day">日</button>
         <button data-view="week" class="active">周</button>
