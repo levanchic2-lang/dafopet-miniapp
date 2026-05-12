@@ -8010,8 +8010,8 @@ async def api_calendar_events(
     store: str = Query(""),
     db: Session = Depends(get_db),
 ):
-    """返回指定日期范围内的预约 + 全天封锁日程（JSON）。"""
-    q = db.query(Appointment)
+    """返回指定日期范围内的预约 + 全天封锁日程（JSON）。已取消的预约不显示在日历上。"""
+    q = db.query(Appointment).filter(Appointment.status != AppointmentStatus.cancelled.value)
     if start:
         q = q.filter(Appointment.appointment_date >= start)
     if end:
