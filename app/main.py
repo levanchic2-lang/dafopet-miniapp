@@ -7829,6 +7829,33 @@ async def admin_exam_report_delete(
     return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=报告已删除", status_code=303)
 
 
+@app.post("/admin/exam-orders/{order_id}/delete")
+async def admin_exam_order_delete(
+    order_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    return_to: str = Form(""),
+):
+    """删除整个检查单（连同所有报告）。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404, "检查单不存在")
+    visit_id = order.visit_id
+    # 先删本地报告文件
+    for rpt in list(order.reports or []):
+        try:
+            if rpt.file_path:
+                Path(rpt.file_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+    db.delete(order)  # cascade 会删 reports
+    db.commit()
+    if return_to == "visit" and visit_id:
+        return RedirectResponse(f"/admin/visits/{visit_id}?step=3&msg=检查单已删除", status_code=303)
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=检查单已删除" if visit_id else "/admin/customers", status_code=303)
+
+
 @app.get("/admin/exam-orders/{order_id}/qr.png")
 async def admin_exam_order_qr(
     order_id: int, request: Request, db: Session = Depends(get_db),

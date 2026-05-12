@@ -456,14 +456,22 @@
  {% if exam_orders %}
  <div class="record-list">
  {% for eo in exam_orders %}
- <a class="record-item" href="/admin/exam-orders/{{ eo.id }}">
+ <div class="record-item" style="cursor:default;">
+ <a href="/admin/exam-orders/{{ eo.id }}" style="display:flex;flex:1;align-items:center;gap:0.65rem;text-decoration:none;color:inherit;">
  <span class="ri-date">{{ eo.created_at.strftime('%m-%d %H:%M') if eo.created_at else '—' }}</span>
- <span class="badge {% if eo.status == 'completed' %}b-done{% else %}b-pending{% endif %}" style="font-size:0.68rem;">
+ <span class="pill {% if eo.status == 'completed' %}pill-ok{% else %}pill-warn{% endif %}">
  {{ '已出报告' if eo.status == 'completed' else '待出报告' }}
  </span>
  <span class="ri-main">检查单 #{{ eo.id }}</span>
  <span style="font-size:0.78rem;color:var(--muted);">{{ eo.reports|length }} 份报告</span>
  </a>
+ <form method="post" action="/admin/exam-orders/{{ eo.id }}/delete" style="margin:0;"
+ onsubmit="return confirm('删除此检查单及其所有报告？此操作不可恢复。')">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="return_to" value="visit">
+ <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0.25rem 0.5rem;">🗑 删除</button>
+ </form>
+ </div>
  {% endfor %}
  </div>
  {% else %}

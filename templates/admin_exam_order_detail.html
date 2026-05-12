@@ -31,6 +31,14 @@
       <p class="ph-sub">{% if pet %}{{ pet.name }}{% if cust %} · {{ cust.name }}{% endif %} · {% endif %}创建于 {{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
     </div>
   </div>
+  <div class="ph-actions">
+    <form method="post" action="/admin/exam-orders/{{ order.id }}/delete" style="margin:0;"
+          onsubmit="return confirm('删除此检查单及其所有报告？此操作不可恢复。')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="return_to" value="visit">
+      <button type="submit" class="btn" style="background:#fee2e2;color:#dc2626;border-color:#fca5a5;font-size:0.82rem;">🗑 删除检查单</button>
+    </form>
+  </div>
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 260px;gap:1rem;align-items:start;">
