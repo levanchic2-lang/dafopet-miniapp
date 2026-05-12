@@ -194,12 +194,11 @@
   'arrived_verified': '到院已核对',
   'surgery_completed': '手术完成'
 } %}
-<div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+<div class="page-head">
   <div>
-    <h1 style="margin:0;">TNR 审核与手术登记</h1>
-    <p class="sub" style="margin:0.25rem 0 0;">处理申请、到院核对、上传术前术后资料、标记公开展示同意。</p>
+    <h1><span class="ph-icon">🐈</span>TNR 审核与手术登记</h1>
+    <p class="ph-sub">处理申请、到院核对、上传术前术后资料、标记公开展示同意</p>
   </div>
-  <a class="btn secondary" href="/admin/logout" style="text-decoration:none;">退出登录</a>
 </div>
 
 {% if request.query_params.get('purge_ok') == '1' %}
@@ -300,12 +299,19 @@
       <button type="submit" class="admin-query-btn">查询</button>
     </div>
   </form>
-  <div class="sub" style="margin:0.6rem 0 0;">
-    当前结果：<strong>{{ stats.total }}</strong> 条；今日新增：<strong>{{ stats.today_new }}</strong>；待处理（人工审核/预通过）：<strong>{{ stats.pending_todo }}</strong>
+  <div style="margin-top:0.75rem;padding-top:0.6rem;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:0.5rem 1.2rem;font-size:0.88rem;">
+    <span>当前结果 <strong style="color:var(--accent);font-size:1rem;">{{ stats.total }}</strong> 条</span>
+    <span>今日新增 <strong style="color:#15803d;font-size:1rem;">{{ stats.today_new }}</strong></span>
+    <span>待处理 <strong style="color:#d97706;font-size:1rem;">{{ stats.pending_todo }}</strong></span>
   </div>
-  <div style="margin-top:0.6rem;display:flex;flex-wrap:wrap;gap:0.4rem;">
+  <div style="margin-top:0.6rem;display:flex;flex-wrap:wrap;gap:0.35rem;">
     {% for k,v in stats.overall_by_status.items() %}
-      <span class="badge" style="background:var(--bg-elevated);color:var(--muted);border-color:var(--border);">{{ STATUS_ZH.get(k, k) }}：{{ v }}</span>
+      {% set cls = 'pill-gray' %}
+      {% if k == 'pending_ai' or k == 'pending_manual' %}{% set cls = 'pill-warn' %}
+      {% elif k == 'pre_approved' or k == 'approved' or k == 'scheduled' %}{% set cls = 'pill-info' %}
+      {% elif k == 'surgery_completed' or k == 'arrived_verified' %}{% set cls = 'pill-ok' %}
+      {% elif k == 'cancelled' or k == 'rejected' or k == 'no_show' %}{% set cls = 'pill-no' %}{% endif %}
+      <span class="pill {{ cls }}">{{ STATUS_ZH.get(k, k) }} {{ v }}</span>
     {% endfor %}
   </div>
 </div>

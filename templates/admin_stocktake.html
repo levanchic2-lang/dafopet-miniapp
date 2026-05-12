@@ -1,58 +1,60 @@
 {% extends "base.html" %}
 {% block body %}
 
-{% if request.query_params.get('err') %}
-<div class="msg err">{{ request.query_params.get('err') }}</div>
-{% endif %}
+{% if request.query_params.get('err') %}<div class="msg err">⚠️ {{ request.query_params.get('err') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
 
-<!-- 循环盘点周期概览 -->
-<div class="card" style="margin-bottom:1rem;">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
-    <div>
-      <h1 style="margin:0;">循环盘点</h1>
-      <p class="sub" style="margin:0.25rem 0 0;">按大类分批盘点，每次只盘一个类别，无需全仓停业</p>
-    </div>
+<div class="page-head">
+  <div>
+    <h1><span class="ph-icon">📊</span>循环盘点</h1>
+    <p class="ph-sub">按大类分批盘点，每次只盘一个类别，无需全仓停业</p>
   </div>
+</div>
 
-  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+{# 各大类盘点周期概览 #}
+<div class="data-table-wrap" style="margin-bottom:1rem;">
+  <div style="padding:0.6rem 1rem;background:var(--bg-elevated);border-bottom:1px solid var(--border);font-weight:700;font-size:0.92rem;">
+    📅 盘点周期概览
+  </div>
+  <table class="data-table">
     <thead>
-      <tr style="border-bottom:2px solid var(--border);">
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">大类</th>
-        <th style="text-align:right;padding:0.5rem 0.75rem;font-weight:600;">品目数</th>
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">上次盘点</th>
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">距今</th>
-        <th style="padding:0.5rem 0.75rem;"></th>
+      <tr>
+        <th>大类</th>
+        <th style="text-align:right;">品目数</th>
+        <th>上次盘点</th>
+        <th>距今</th>
+        <th style="text-align:right;">操作</th>
       </tr>
     </thead>
     <tbody>
       {% for stat in cycle_stats %}
       {% set urgent = stat.days_ago is none or stat.days_ago > 30 %}
       {% set warning = not urgent and stat.days_ago > 14 %}
-      <tr style="border-bottom:1px solid var(--border);{% if urgent %}background:#fef2f2;{% elif warning %}background:#fffbeb;{% endif %}">
-        <td style="padding:0.55rem 0.75rem;font-weight:600;">{{ stat.label }}</td>
-        <td style="padding:0.55rem 0.75rem;text-align:right;color:var(--muted);">{{ stat.item_count }}</td>
-        <td style="padding:0.55rem 0.75rem;">
+      <tr style="{% if urgent %}background:#fef2f2;{% elif warning %}background:#fffbeb;{% endif %}">
+        <td style="font-weight:600;">{{ stat.label }}</td>
+        <td style="text-align:right;color:var(--muted);">{{ stat.item_count }}</td>
+        <td>
           {% if stat.last_counted %}{{ stat.last_counted }}
           {% else %}<span style="color:var(--muted);">从未盘点</span>{% endif %}
         </td>
-        <td style="padding:0.55rem 0.75rem;">
+        <td>
           {% if stat.days_ago is none %}
-            <span style="color:#dc2626;font-weight:600;">—</span>
+            <span class="pill pill-no">🚫 从未</span>
           {% elif stat.days_ago > 30 %}
-            <span style="color:#dc2626;font-weight:600;">{{ stat.days_ago }} 天 !</span>
+            <span class="pill pill-no">⚠️ {{ stat.days_ago }} 天</span>
           {% elif stat.days_ago > 14 %}
-            <span style="color:#d97706;font-weight:600;">{{ stat.days_ago }} 天</span>
+            <span class="pill pill-warn">{{ stat.days_ago }} 天</span>
           {% else %}
-            <span style="color:#15803d;">{{ stat.days_ago }} 天</span>
+            <span class="pill pill-ok">✓ {{ stat.days_ago }} 天</span>
           {% endif %}
         </td>
-        <td style="padding:0.55rem 0.75rem;text-align:right;">
+        <td style="text-align:right;">
           <form method="post" action="/admin/stocktake/create" style="margin:0;display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <input type="hidden" name="category_filter" value="{{ stat.key }}" />
             <input type="hidden" name="name" value="" />
-            <button type="submit" class="btn secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;">
-              {% if urgent or warning %}⚡ 立即盘点{% else %}新建盘点{% endif %}
+            <button type="submit" class="btn {% if urgent or warning %}{% else %}secondary{% endif %}" style="font-size:0.78rem;padding:0.3rem 0.7rem;">
+              {% if urgent %}⚡ 立即盘点{% elif warning %}⚡ 立即盘点{% else %}新建盘点{% endif %}
             </button>
           </form>
         </td>
@@ -64,10 +66,10 @@
   </table>
 </div>
 
-<!-- 新建自定义盘点 -->
-<div class="card" style="margin-bottom:1rem;max-width:600px;">
+{# 自定义盘点 #}
+<div class="card" style="max-width:640px;margin-bottom:1rem;">
   <details>
-    <summary style="cursor:pointer;font-size:0.9rem;font-weight:600;user-select:none;">＋ 新建自定义盘点</summary>
+    <summary style="cursor:pointer;font-size:0.92rem;font-weight:700;user-select:none;">＋ 新建自定义盘点</summary>
     <form method="post" action="/admin/stocktake/create" style="margin-top:0.85rem;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <div class="row2" style="margin-bottom:0.75rem;">
@@ -90,46 +92,44 @@
   </details>
 </div>
 
-<!-- 历史盘点记录 -->
+{# 历史盘点记录 #}
 {% if sessions %}
-<div class="card" style="padding:0;overflow:hidden;">
-  <div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border);font-weight:600;font-size:0.95rem;">
-    历史盘点记录
+<div class="data-table-wrap">
+  <div style="padding:0.6rem 1rem;background:var(--bg-elevated);border-bottom:1px solid var(--border);font-weight:700;font-size:0.92rem;">
+    📋 历史盘点记录
   </div>
-  <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+  <table class="data-table">
     <thead>
-      <tr style="background:var(--bg-elevated);">
-        <th style="text-align:left;padding:0.5rem 1rem;font-weight:600;">盘点名称</th>
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">大类</th>
-        <th style="text-align:right;padding:0.5rem 0.75rem;font-weight:600;">品目数</th>
-        <th style="text-align:right;padding:0.5rem 0.75rem;font-weight:600;">差异数</th>
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">状态</th>
-        <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">创建时间</th>
-        <th style="padding:0.5rem 0.75rem;"></th>
+      <tr>
+        <th>盘点名称</th>
+        <th>大类</th>
+        <th style="text-align:right;">品目数</th>
+        <th style="text-align:right;">差异数</th>
+        <th>状态</th>
+        <th>创建时间</th>
+        <th style="text-align:right;">操作</th>
       </tr>
     </thead>
     <tbody>
       {% for s in sessions %}
-      <tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:0.55rem 1rem;font-weight:600;">{{ s.name or '—' }}</td>
-        <td style="padding:0.55rem 0.75rem;color:var(--muted);">
-          {{ categories[s.category_filter].label if s.category_filter in categories else '全部' }}
-        </td>
-        <td style="padding:0.55rem 0.75rem;text-align:right;">{{ s.item_count }}</td>
-        <td style="padding:0.55rem 0.75rem;text-align:right;">
+      <tr>
+        <td style="font-weight:600;">{{ s.name or '—' }}</td>
+        <td style="color:var(--muted);">{{ categories[s.category_filter].label if s.category_filter in categories else '全部' }}</td>
+        <td style="text-align:right;">{{ s.item_count }}</td>
+        <td style="text-align:right;">
           {% if s.variance_count > 0 %}
-            <span style="color:#d97706;font-weight:600;">{{ s.variance_count }}</span>
+            <span class="pill pill-warn">{{ s.variance_count }}</span>
           {% else %}
             <span style="color:var(--muted);">—</span>
           {% endif %}
         </td>
-        <td style="padding:0.55rem 0.75rem;">
-          {% if s.status == 'open' %}<span class="badge b-pending">进行中</span>
-          {% else %}<span class="badge b-ok">已完成</span>{% endif %}
+        <td>
+          {% if s.status == 'open' %}<span class="pill pill-warn">进行中</span>
+          {% else %}<span class="pill pill-ok">✓ 已完成</span>{% endif %}
         </td>
-        <td style="padding:0.55rem 0.75rem;color:var(--muted);">{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-        <td style="padding:0.55rem 0.75rem;text-align:right;">
-          <a href="/admin/stocktake/{{ s.id }}" class="btn secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;">
+        <td style="color:var(--muted);font-size:0.82rem;">{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td style="text-align:right;">
+          <a href="/admin/stocktake/{{ s.id }}" class="btn {% if s.status == 'open' %}{% else %}secondary{% endif %}" style="font-size:0.78rem;padding:0.3rem 0.7rem;">
             {% if s.status == 'open' %}继续盘点{% else %}查看{% endif %}
           </a>
         </td>
