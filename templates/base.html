@@ -385,9 +385,8 @@
     </div>
 
     {% if request.session.get('admin') %}
-    {# 医疗组 #}
+    {# 医疗组（就诊病历已合并到客户档案 hub，不再单独展示） #}
     <div class="ribbon-icons {% if _active_tab=='medical' %}active{% endif %}" data-tab-content="medical">
-      <a class="ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><span class="ri-emoji">🩺</span>就诊病历</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/dispensing') %}current{% endif %}" href="/admin/dispensing"><span class="ri-emoji">💊</span>发药台</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><span class="ri-emoji">💉</span>疫苗管理</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/rabies') %}current{% endif %}" href="/admin/rabies"><span class="ri-emoji">🐶</span>狂犬疫苗</a>
