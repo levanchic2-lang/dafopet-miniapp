@@ -402,6 +402,15 @@
 
  {# ── 收费 ── #}
  <div class="tab-content {% if active_tab=='invoices' %}active{% endif %}" data-tab-content="invoices">
+ <div class="tab-action-bar">
+ {% if visits %}
+ <a class="btn" href="/admin/invoices/create?visit_id={{ visits[0].id }}">＋ 新建收费单（最近就诊）</a>
+ {% else %}
+ <a class="btn" href="/admin/invoices/create?customer_id={{ cust.id }}">＋ 新建收费单</a>
+ {% endif %}
+ <a class="btn secondary" href="/admin/sales-orders/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建销售单</a>
+ <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ pet_invoices|length }} 张收费单</span>
+ </div>
  {% if pet_invoices %}
  <table class="data-table">
  <thead><tr><th>发票号</th><th>金额</th><th>状态</th><th>支付方式</th><th></th></tr></thead>
@@ -411,9 +420,9 @@
  <td style="font-family:monospace;">{{ inv.invoice_no }}</td>
  <td style="font-weight:600;">¥ {{ '%.2f'|format(inv.total_amount or 0) }}</td>
  <td>
- {% if inv.payment_status == 'paid' %}<span class="pill pill-ok">已支付</span>
+ {% if inv.payment_status == 'paid' %}<span class="pill pill-ok">✓ 已支付</span>
  {% elif inv.payment_status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
- {% else %}<span class="pill pill-warn">未支付</span>{% endif %}
+ {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
  </td>
  <td>{{ inv.payment_method or '—' }}</td>
  <td><a href="/admin/invoices/{{ inv.id }}">查看 →</a></td>
@@ -422,7 +431,9 @@
  </tbody>
  </table>
  {% else %}
- <div class="tab-empty">暂无收费记录</div>
+ <div class="tab-empty">
+ 暂无收费记录。完成就诊后点击上方「＋ 新建收费单（最近就诊）」自动汇总处方/检查费用。
+ </div>
  {% endif %}
  </div>
 
