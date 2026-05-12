@@ -16,45 +16,52 @@
 }
 .vh-meta b { color: #94a3b8; font-weight: 500; }
 
-/* 进度条 */
+/* 紧凑进度轴 ── 横向圆点 + 连接线 */
 .soap-steps {
- display: flex; align-items: stretch; justify-content: space-between;
- margin-bottom: 1rem; gap: 4px; position: relative;
+ display: flex; align-items: center; gap: 0;
+ margin: 0.75rem 0 0.85rem; padding: 0.4rem 0;
+ position: relative; overflow-x: auto;
 }
 .soap-step {
- flex: 1; cursor: pointer; padding: 0.55rem 0.5rem 0.4rem;
- border: 1.5px solid #e5e7eb; border-radius: 10px; background: var(--card);
- display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
- transition: all 0.15s; user-select: none; position: relative;
- min-width: 0;
+ flex: 1; cursor: pointer; display: flex; flex-direction: column;
+ align-items: center; gap: 0.2rem; position: relative;
+ user-select: none; min-width: 0; padding: 0 4px;
 }
-.soap-step:hover { border-color: #93c5fd; background: #f0f9ff; }
-.soap-step.current {
- border-color: #3b82f6; background: linear-gradient(180deg, #eff6ff, #dbeafe);
- box-shadow: 0 2px 8px rgba(59,130,246,0.15);
+/* 连接线：每个 step 的左侧绘制（除第一个） */
+.soap-step::before {
+ content: ''; position: absolute; top: 11px;
+ left: -50%; right: 50%; height: 2px; background: #e5e7eb; z-index: 0;
 }
-.soap-step.done { border-color: #86efac; background: #f0fdf4; }
-.soap-step.current.done { border-color: #3b82f6; background: linear-gradient(180deg, #eff6ff, #d1fae5); }
+.soap-step:first-child::before { display: none; }
+.soap-step.done::before, .soap-step.done + .soap-step::before { background: #10b981; }
+/* 当前步骤的右侧线条恢复灰色（避免高亮全段） */
+.soap-step.current ~ .soap-step::before { background: #e5e7eb; }
 
 .soap-circle {
- width: 36px; height: 36px; border-radius: 50%;
+ width: 22px; height: 22px; border-radius: 50%;
  display: flex; align-items: center; justify-content: center;
- font-size: 1.05rem; font-weight: 700; line-height: 1;
+ font-size: 0.72rem; font-weight: 700; line-height: 1;
  background: #f3f4f6; color: #9ca3af; border: 2px solid #e5e7eb;
- transition: all 0.15s;
+ transition: all 0.15s; position: relative; z-index: 1;
 }
+.soap-step:hover .soap-circle { border-color: #93c5fd; color: #1e40af; }
 .soap-step.done .soap-circle {
  background: #10b981; color: #fff; border-color: #10b981;
 }
 .soap-step.current .soap-circle {
  background: #3b82f6; color: #fff; border-color: #3b82f6;
- transform: scale(1.05);
+ box-shadow: 0 0 0 3px rgba(59,130,246,0.18);
 }
-.soap-step.done.current .soap-circle { background: #10b981; border-color: #3b82f6; }
-.soap-label { font-size: 0.82rem; font-weight: 600; color: var(--text); }
-.soap-sublabel { font-size: 0.7rem; color: var(--muted); }
-.soap-step.current .soap-label { color: #1e40af; }
+.soap-step.done.current .soap-circle { background: #3b82f6; border-color: #10b981; }
+.soap-label {
+ font-size: 0.76rem; font-weight: 500; color: var(--muted);
+ white-space: nowrap; line-height: 1.2;
+}
+.soap-step:hover .soap-label { color: var(--text); }
+.soap-step.current .soap-label { color: #1e40af; font-weight: 700; }
 .soap-step.done .soap-label { color: #065f46; }
+/* 子标签（S/O/A/P 或张单数）隐藏掉，让轴更纯净 */
+.soap-sublabel { display: none; }
 
 /* 步骤面板 */
 .soap-panel {
@@ -102,20 +109,12 @@
 .save-bar .saved-hint { color: var(--muted); font-size: 0.82rem; }
 .save-bar .save-spacer { flex: 1; }
 
-/* 步骤完成后右下角小勾 */
-.soap-step .step-tick {
- position: absolute; top: 4px; right: 4px;
- width: 14px; height: 14px; border-radius: 50%;
- background: #10b981; color: #fff; font-size: 9px;
- display: none; align-items: center; justify-content: center; font-weight: 800;
-}
-.soap-step.done .step-tick { display: flex; }
+/* 完成后圆圈里直接显示数字（绿色背景已足够强调），不再额外画小勾 */
+.soap-step .step-tick { display: none !important; }
 
 @media (max-width: 720px) {
- .soap-steps { flex-wrap: wrap; }
- .soap-step { flex: 0 1 calc(50% - 4px); min-width: 0; }
- .soap-circle { width: 30px; height: 30px; font-size: 0.95rem; }
- .soap-label { font-size: 0.78rem; }
+ .soap-circle { width: 20px; height: 20px; font-size: 0.68rem; }
+ .soap-label { font-size: 0.72rem; }
 }
 </style>
 {% endblock %}
@@ -240,48 +239,35 @@
  </div>
 </div>
 
-{# 7 步进度条 #}
+{# 7 步进度轴（横向紧凑） #}
 <div class="soap-steps">
  <div class="soap-step {% if step1_done %}done{% endif %} current" data-step="1" onclick="switchStep(1)">
  <div class="soap-circle">1</div>
  <div class="soap-label">主诉</div>
- <div class="soap-sublabel">S</div>
- <span class="step-tick">✓</span>
  </div>
  <div class="soap-step {% if step2_done %}done{% endif %}" data-step="2" onclick="switchStep(2)">
  <div class="soap-circle">2</div>
- <div class="soap-label">体格检查</div>
- <div class="soap-sublabel">O</div>
- <span class="step-tick">✓</span>
+ <div class="soap-label">体检</div>
  </div>
  <div class="soap-step {% if step3_done %}done{% endif %}" data-step="3" onclick="switchStep(3)">
  <div class="soap-circle">3</div>
- <div class="soap-label">检查化验</div>
- <div class="soap-sublabel">{{ exam_orders|length }} 张单</div>
- <span class="step-tick">✓</span>
+ <div class="soap-label">化验{% if exam_orders %} <span style="color:#3b82f6;font-weight:600;">{{ exam_orders|length }}</span>{% endif %}</div>
  </div>
  <div class="soap-step {% if step4_done %}done{% endif %}" data-step="4" onclick="switchStep(4)">
  <div class="soap-circle">4</div>
- <div class="soap-label">主观诊断</div>
- <div class="soap-sublabel">A</div>
- <span class="step-tick">✓</span>
+ <div class="soap-label">诊断</div>
  </div>
  <div class="soap-step {% if step5_done %}done{% endif %}" data-step="5" onclick="switchStep(5)">
  <div class="soap-circle">5</div>
- <div class="soap-label">处方</div>
- <div class="soap-sublabel">{{ prescriptions|length }} 张方</div>
- <span class="step-tick">✓</span>
+ <div class="soap-label">处方{% if prescriptions %} <span style="color:#3b82f6;font-weight:600;">{{ prescriptions|length }}</span>{% endif %}</div>
  </div>
  <div class="soap-step {% if step6_done %}done{% endif %}" data-step="6" onclick="switchStep(6)">
  <div class="soap-circle">6</div>
  <div class="soap-label">医嘱</div>
- <div class="soap-sublabel">P</div>
- <span class="step-tick">✓</span>
  </div>
  <div class="soap-step {% if step7_done %}done{% endif %}" data-step="7" onclick="switchStep(7)">
  <div class="soap-circle">7</div>
  <div class="soap-label">回访</div>
- <div class="soap-sublabel">{% if v.follow_up_at %}{{ v.follow_up_at }}{% else %}—{% endif %}</div>
  <span class="step-tick">✓</span>
  </div>
 </div>
