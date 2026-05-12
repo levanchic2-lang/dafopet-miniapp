@@ -325,13 +325,12 @@
  <textarea name="follow_up_note">{{ v.follow_up_note or '' }}</textarea>
  </div>
 
- {# 浮动保存条 #}
+ {# 浮动操作条（无需手动保存，自动保存） #}
  <div class="save-bar">
- <button type="submit" class="btn">💾 保存修改</button>
- <span class="saved-hint" id="autosave-status">最后更新 {{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
+ <span class="saved-hint" id="autosave-status" style="font-size:0.9rem;">✓ 自动保存 · 最后更新 {{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
  <div class="save-spacer"></div>
  <button type="button" onclick="prevStep()" class="btn secondary">‹ 上一步</button>
- <button type="button" onclick="nextStep()" class="btn secondary">下一步 ›</button>
+ <button type="button" onclick="nextStep()" class="btn">下一步 ›</button>
  </div>
 </form>
 
@@ -400,16 +399,25 @@
  saveTimer = setTimeout(doSave, 1500);
  }
 
+ // 立刻 flush（供 switchStep / 离开页面用）
+ window.__flushAutosave = function() {
+ if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; doSave(); }
+ };
+
  // 监听所有相关字段
  FIELDS.forEach(f => {
  const el = document.querySelector('[name="' + f + '"]');
  if (el) {
  el.addEventListener('input', scheduleAutosave);
  el.addEventListener('change', scheduleAutosave);
+ // 离开输入框时立刻保存（让用户感知更即时）
+ el.addEventListener('blur', function() {
+ if (saveTimer) { clearTimeout(saveTimer); doSave(); }
+ });
  }
  });
 
- // 切换 tab 前强制保存
+ // 切换 tab / 关闭页面前强制保存
  window.addEventListener('beforeunload', function(e) {
  if (saveTimer) { clearTimeout(saveTimer); doSave(); }
  });
@@ -546,17 +554,17 @@
 <script>
 let currentStep = 1;
 function switchStep(n) {
+ // 切换前先把待保存的变更立刻 flush 掉，避免下一秒才存
+ if (typeof window.__flushAutosave === 'function') window.__flushAutosave();
  currentStep = n;
  document.querySelectorAll('.soap-step').forEach(s => s.classList.toggle('current', +s.dataset.step === n));
  document.querySelectorAll('.soap-panel').forEach(p => p.classList.toggle('active', +p.dataset.panel === n));
- // 滚到面板顶部
  const activeP = document.querySelector('.soap-panel.active');
  if (activeP) activeP.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 }
 function prevStep() { if (currentStep> 1) switchStep(currentStep - 1); }
 function nextStep() { if (currentStep < 7) switchStep(currentStep + 1); }
 
-// 默认从 URL ?step=N 切换
 const urlStep = parseInt(new URLSearchParams(window.location.search).get('step') || '1');
 if (urlStep>= 1 && urlStep <= 7) switchStep(urlStep);
 </script>
