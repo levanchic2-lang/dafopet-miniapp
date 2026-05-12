@@ -6851,11 +6851,25 @@ async def admin_invoices_list(
     for inv in invoices:
         if inv.customer_id and inv.customer_id not in cust_map:
             cust_map[inv.customer_id] = db.get(Customer, inv.customer_id)
+    # 统计数据
+    from datetime import date as _date
+    today_str = _date.today().isoformat()
+    today_paid_sum = db.query(Invoice).filter(
+        Invoice.payment_status == "paid",
+        Invoice.invoice_date == today_str,
+    ).all()
+    inv_stats = {
+        "today_paid_total": round(sum((i.total_amount or 0) for i in today_paid_sum), 2),
+        "today_paid_count": len(today_paid_sum),
+        "unpaid_count": db.query(Invoice).filter(Invoice.payment_status == "unpaid").count(),
+        "unpaid_total": round(sum((i.total_amount or 0) for i in db.query(Invoice).filter(Invoice.payment_status == "unpaid").all()), 2),
+    }
     return templates.TemplateResponse(request, "admin_invoices.html", {
         "invoices": invoices,
         "cust_map": cust_map,
         "inv_status_zh": _INV_STATUS_ZH,
         "inv_pay_zh": _INV_PAY_ZH,
+        "inv_stats": inv_stats,
         "q": q,
         "status": status,
         "csrf_token": _get_csrf_token(request),

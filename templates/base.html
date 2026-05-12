@@ -218,6 +218,112 @@
     .b-ok { background: #f5f5f5; color: #262626; border-color: #d4d4d4; }
     .b-no { background: #e5e5e5; color: #171717; border-color: #a3a3a3; }
     .b-done { background: var(--card); color: var(--text); border-color: var(--text); }
+
+    /* ── 通用工具类（pill/data-table/page-head/list-tabs）── */
+    .pill {
+      display: inline-block; padding: 0.1rem 0.55rem; border-radius: 99px;
+      font-size: 0.72rem; font-weight: 600; border: 1px solid; line-height: 1.5;
+    }
+    .pill-ok    { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+    .pill-warn  { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+    .pill-no    { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    .pill-gray  { background: #f3f4f6; color: #6b7280; border-color: #d1d5db; }
+    .pill-info  { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+    .pill-purple{ background: #f5f3ff; color: #5b21b6; border-color: #c4b5fd; }
+    .pill-pink  { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+
+    /* 页面头部统一样式 */
+    .page-head {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1rem;
+    }
+    .page-head h1 {
+      margin: 0; font-size: 1.25rem; font-weight: 700;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .page-head .ph-icon { font-size: 1.5rem; }
+    .page-head .ph-sub {
+      margin: 0.15rem 0 0; font-size: 0.82rem; color: var(--muted);
+    }
+    .page-head .ph-actions {
+      display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;
+    }
+
+    /* 数据表格统一样式 */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    .data-table th {
+      text-align: left; padding: 0.5rem 0.75rem; font-weight: 600;
+      font-size: 0.74rem; color: var(--muted); background: #fafbfc;
+      border-bottom: 1px solid var(--border); letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .data-table td {
+      padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: #fafbfc; }
+    .data-table a { color: #3b82f6; text-decoration: none; }
+    .data-table a:hover { text-decoration: underline; }
+    .data-table-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+
+    /* 状态 Tab 栏 */
+    .list-tabs {
+      display: flex; gap: 0; border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem; overflow-x: auto;
+    }
+    .list-tab {
+      padding: 0.5rem 1.15rem; text-decoration: none;
+      color: var(--muted); font-size: 0.88rem; font-weight: 500;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      white-space: nowrap;
+    }
+    .list-tab:hover { color: var(--text); }
+    .list-tab.active {
+      color: #3b82f6; border-bottom-color: #3b82f6; font-weight: 600;
+    }
+    .list-tab .count {
+      display: inline-block; margin-left: 0.25rem;
+      background: #e5e7eb; color: #6b7280; padding: 0 0.4em;
+      border-radius: 99px; font-size: 0.7rem; font-weight: 600;
+    }
+    .list-tab.active .count { background: #dbeafe; color: #1e40af; }
+
+    /* 筛选卡片 */
+    .filter-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 0.65rem 0.85rem; margin-bottom: 0.85rem;
+    }
+    .filter-row {
+      display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+    }
+
+    /* 统计小卡 */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.85rem 1rem; display: flex; align-items: center; gap: 0.8rem;
+    }
+    .stat-card .stat-num {
+      font-size: 1.6rem; font-weight: 700; line-height: 1.1;
+    }
+    .stat-card .stat-label {
+      font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem;
+    }
+    .stat-card.s-warn .stat-num { color: #d97706; }
+    .stat-card.s-ok   .stat-num { color: #15803d; }
+    .stat-card.s-info .stat-num { color: #2563eb; }
+
+    /* 空状态 */
+    .empty-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; text-align: center; padding: 3rem 1rem;
+      color: var(--muted); font-size: 0.92rem;
+    }
+    .empty-card .empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
     .msg { padding: 0.75rem 1rem; border-radius: 8px; margin-top: 1rem; font-size: 0.92rem; border: 1px solid var(--border); }
     .msg.ok { background: var(--ok-bg); color: var(--ok-fg); border-color: var(--border-strong); }
     .msg.err { background: var(--danger-bg); color: var(--danger-fg); border-color: #a3a3a3; }

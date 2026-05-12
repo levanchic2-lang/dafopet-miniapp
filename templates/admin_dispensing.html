@@ -1,36 +1,64 @@
 {% extends "base.html" %}
+{% block extra_css %}
+<style>
+/* 快捷时间 chip */
+.quick-chip {
+  font-size: 0.8rem; padding: 0.3rem 0.75rem; border-radius: 99px;
+  text-decoration: none; white-space: nowrap; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); transition: all 0.1s;
+}
+.quick-chip:hover { border-color: #93c5fd; }
+.quick-chip.active { background: #eff6ff; color: #1d4ed8; border-color: #2563eb; font-weight: 600; }
+.batch-bar {
+  background: linear-gradient(90deg, #eff6ff 0%, #f0f9ff 100%);
+  border: 1px solid #bae6fd; border-radius: 8px;
+  padding: 0.5rem 0.85rem; margin-bottom: 0.6rem;
+  display: flex; align-items: center; gap: 0.75rem;
+}
+</style>
+{% endblock %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}
-<div class="msg ok">✓ {{ request.query_params.get('msg') }}</div>
-{% endif %}
-{% if request.query_params.get('err') %}
-<div class="msg err">{{ request.query_params.get('err') }}</div>
-{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('err') %}<div class="msg err">⚠️ {{ request.query_params.get('err') }}</div>{% endif %}
 
-<!-- 统计栏 -->
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1rem;">
-  <div class="card" style="text-align:center;padding:1rem;">
-    <div style="font-size:2rem;font-weight:700;color:#d97706;">{{ pending_count }}</div>
-    <div style="font-size:0.82rem;color:var(--muted);margin-top:0.2rem;">待发药</div>
-  </div>
-  <div class="card" style="text-align:center;padding:1rem;">
-    <div style="font-size:2rem;font-weight:700;color:#15803d;">{{ today_dispensed }}</div>
-    <div style="font-size:0.82rem;color:var(--muted);margin-top:0.2rem;">今日已发</div>
-  </div>
-  <div class="card" style="text-align:center;padding:1rem;">
-    <div style="font-size:2rem;font-weight:700;">{{ month_total }}</div>
-    <div style="font-size:0.82rem;color:var(--muted);margin-top:0.2rem;">本月处方总量</div>
+<div class="page-head">
+  <div>
+    <h1><span class="ph-icon">💊</span>发药台</h1>
+    <p class="ph-sub">处方单确认发药 · 库存自动扣减 · 支持批量操作</p>
   </div>
 </div>
 
-<!-- 筛选区 -->
-<div class="card" style="margin-bottom:1rem;">
+{# 统计卡 #}
+<div class="stat-grid">
+  <div class="stat-card s-warn">
+    <div style="font-size:1.8rem;">⏳</div>
+    <div>
+      <div class="stat-num">{{ pending_count }}</div>
+      <div class="stat-label">待发药</div>
+    </div>
+  </div>
+  <div class="stat-card s-ok">
+    <div style="font-size:1.8rem;">✅</div>
+    <div>
+      <div class="stat-num">{{ today_dispensed }}</div>
+      <div class="stat-label">今日已发</div>
+    </div>
+  </div>
+  <div class="stat-card s-info">
+    <div style="font-size:1.8rem;">📊</div>
+    <div>
+      <div class="stat-num">{{ month_total }}</div>
+      <div class="stat-label">本月处方总量</div>
+    </div>
+  </div>
+</div>
+
+{# 筛选区 #}
+<div class="filter-card">
   <form method="get" id="filter-form">
-    <!-- 第一行：搜索 + 医生 + 状态 -->
-    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
-      <input name="q" value="{{ q }}" placeholder="患者姓名 / 宠物名 / 药品名"
-             style="flex:1;min-width:180px;" />
+    <div class="filter-row">
+      <input name="q" value="{{ q }}" placeholder="🔍 患者姓名 / 宠物名 / 药品名" style="flex:1;min-width:200px;" />
       <select name="vet" style="width:140px;">
         <option value="">全部医生</option>
         {% for v in vets %}
@@ -49,86 +77,74 @@
       {% endif %}
     </div>
 
-    <!-- 第二行：快捷时间 + 自定义区间 -->
-    <div style="display:flex;gap:0.5rem;margin-top:0.6rem;align-items:center;flex-wrap:wrap;">
+    <div class="filter-row" style="margin-top:0.6rem;">
       {% for qk, ql in [('today','今日'),('week','本周'),('month','本月')] %}
       <a href="/admin/dispensing?status={{ status }}&vet={{ vet }}&q={{ q }}&quick={{ qk }}"
-         style="font-size:0.82rem;padding:0.3rem 0.75rem;border-radius:20px;text-decoration:none;white-space:nowrap;
-                border:1px solid {% if quick == qk %}#2563eb{% else %}var(--border){% endif %};
-                background:{% if quick == qk %}#eff6ff{% else %}var(--card){% endif %};
-                color:{% if quick == qk %}#1d4ed8{% else %}var(--text){% endif %};">
-        {{ ql }}
-      </a>
+         class="quick-chip {% if quick == qk %}active{% endif %}">{{ ql }}</a>
       {% endfor %}
-      <span style="color:var(--muted);font-size:0.82rem;margin-left:0.25rem;">自定义：</span>
+      <span style="color:var(--muted);font-size:0.82rem;margin-left:0.4rem;">自定义：</span>
       <input type="hidden" name="quick" value="" />
-      <input name="date_from" type="date" value="{{ date_from }}"
-             style="font-size:0.82rem;padding:0.3rem 0.5rem;width:140px;" />
+      <input name="date_from" type="date" value="{{ date_from }}" style="font-size:0.82rem;padding:0.3rem 0.5rem;width:150px;" />
       <span style="color:var(--muted);font-size:0.82rem;">→</span>
-      <input name="date_to" type="date" value="{{ date_to }}"
-             style="font-size:0.82rem;padding:0.3rem 0.5rem;width:140px;" />
+      <input name="date_to" type="date" value="{{ date_to }}" style="font-size:0.82rem;padding:0.3rem 0.5rem;width:150px;" />
     </div>
   </form>
 </div>
 
-<!-- 处方单列表 -->
 <form method="post" action="/admin/dispensing/bulk-dispense" id="bulk-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
 
   {% if prescs %}
-  <!-- 批量操作栏 -->
+  {# 批量操作栏 #}
   {% if status == 'issued' or status == 'all' %}
-  <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.6rem;">
-    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.88rem;cursor:pointer;">
+  <div class="batch-bar">
+    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.88rem;cursor:pointer;margin:0;">
       <input type="checkbox" id="check-all" onchange="toggleAll(this)" />
       全选本页
     </label>
-    <button type="submit" class="btn secondary" style="font-size:0.88rem;padding:0.35rem 0.85rem;"
-            onclick="return confirm('确认批量发药？')">
-      ✓ 批量确认发药
-    </button>
-    <span id="selected-count" style="font-size:0.82rem;color:var(--muted);">已选 0 张</span>
+    <button type="submit" class="btn" style="font-size:0.85rem;padding:0.35rem 0.85rem;"
+            onclick="return confirm('确认批量发药？')">✓ 批量确认发药</button>
+    <span id="selected-count" style="font-size:0.82rem;color:var(--muted);margin-left:auto;">已选 0 张</span>
   </div>
   {% endif %}
 
-  <div class="card" style="padding:0;overflow:hidden;">
-    <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+  <div class="data-table-wrap">
+    <table class="data-table">
       <thead>
-        <tr style="background:var(--bg-elevated);border-bottom:2px solid var(--border);">
-          {% if status == 'issued' or status == 'all' %}
-          <th style="padding:0.55rem 0.75rem;width:36px;"></th>
-          {% endif %}
-          <th style="text-align:left;padding:0.55rem 1rem;font-weight:600;">开单时间</th>
-          <th style="text-align:left;padding:0.55rem 0.75rem;font-weight:600;">患者 / 宠物</th>
-          <th style="text-align:left;padding:0.55rem 0.75rem;font-weight:600;">药品摘要</th>
-          <th style="text-align:right;padding:0.55rem 0.75rem;font-weight:600;">金额</th>
-          <th style="text-align:left;padding:0.55rem 0.75rem;font-weight:600;">医生</th>
-          <th style="text-align:left;padding:0.55rem 0.75rem;font-weight:600;">状态</th>
-          <th style="padding:0.55rem 0.75rem;"></th>
+        <tr>
+          {% if status == 'issued' or status == 'all' %}<th style="width:36px;"></th>{% endif %}
+          <th>开单时间</th>
+          <th>患者 / 宠物</th>
+          <th>药品摘要</th>
+          <th style="text-align:right;">金额</th>
+          <th>医生</th>
+          <th>状态</th>
+          <th style="text-align:right;">操作</th>
         </tr>
       </thead>
       <tbody>
         {% for p in prescs %}
         {% set cust = cust_map.get(p.customer_id) %}
-        {% set pet = pet_map.get(p.pet_id) %}
+        {% set pet  = pet_map.get(p.pet_id) %}
         {% set drug_names = p.items | map(attribute='drug_name') | list %}
-        <tr style="border-bottom:1px solid var(--border);">
+        <tr>
           {% if status == 'issued' or status == 'all' %}
-          <td style="padding:0.5rem 0.75rem;text-align:center;">
+          <td style="text-align:center;">
             {% if p.status == 'issued' %}
-            <input type="checkbox" name="presc_ids" value="{{ p.id }}"
-                   class="row-check" onchange="updateCount()" />
+            <input type="checkbox" name="presc_ids" value="{{ p.id }}" class="row-check" onchange="updateCount()" />
             {% endif %}
           </td>
           {% endif %}
-          <td style="padding:0.5rem 1rem;color:var(--muted);font-size:0.82rem;white-space:nowrap;">
+          <td style="color:var(--muted);font-size:0.82rem;white-space:nowrap;">
             {{ p.prescribed_date or p.created_at.strftime('%Y-%m-%d') }}
           </td>
-          <td style="padding:0.5rem 0.75rem;">
+          <td>
             <div style="font-weight:600;">{{ cust.name if cust else '—' }}</div>
-            <div style="font-size:0.78rem;color:var(--muted);">{{ pet.name if pet else '—' }}</div>
+            <div style="font-size:0.78rem;color:var(--muted);">
+              {% if pet %}{{ '🐱' if pet.species == 'cat' else '🐶' if pet.species == 'dog' else '🐾' }} {{ pet.name }}{% else %}—{% endif %}
+            </div>
           </td>
-          <td style="padding:0.5rem 0.75rem;max-width:260px;">
+          <td style="max-width:260px;">
             {% if drug_names %}
               <span>{{ drug_names[:2] | join('、') }}</span>
               {% if drug_names | length > 2 %}
@@ -138,38 +154,33 @@
               <span style="color:var(--muted);">—</span>
             {% endif %}
           </td>
-          <td style="padding:0.5rem 0.75rem;text-align:right;white-space:nowrap;">
-            ¥{{ '%.2f'|format(p.total_amount) }}
-          </td>
-          <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ p.vet_name or '—' }}</td>
-          <td style="padding:0.5rem 0.75rem;">
+          <td style="text-align:right;white-space:nowrap;font-weight:600;">¥{{ '%.2f'|format(p.total_amount) }}</td>
+          <td style="color:var(--muted);">{{ p.vet_name or '—' }}</td>
+          <td>
             {% if p.status == 'issued' %}
-              <span class="badge b-pending">待发药</span>
+              <span class="pill pill-warn">待发药</span>
             {% elif p.status == 'dispensed' %}
-              <span class="badge b-ok">已发药</span>
+              <span class="pill pill-ok">✓ 已发药</span>
             {% else %}
-              <span class="badge b-no">草稿</span>
+              <span class="pill pill-gray">草稿</span>
             {% endif %}
           </td>
-          <td style="padding:0.5rem 0.75rem;text-align:right;">
-            <div style="display:flex;gap:0.4rem;justify-content:flex-end;flex-wrap:wrap;">
+          <td style="text-align:right;">
+            <div style="display:flex;gap:0.35rem;justify-content:flex-end;flex-wrap:wrap;">
               {% if p.status == 'issued' %}
               <form method="post" action="/admin/dispensing/{{ p.id }}/dispense" style="margin:0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                <button type="submit" class="btn" style="font-size:0.78rem;padding:0.3rem 0.7rem;">
-                  ✓ 确认发药
-                </button>
+                <button type="submit" class="btn" style="font-size:0.78rem;padding:0.3rem 0.7rem;">✓ 确认发药</button>
               </form>
               {% endif %}
               {% if p.status == 'dispensed' and request.session.get('admin_role') == 'superadmin' %}
               <form method="post" action="/admin/dispensing/{{ p.id }}/undispense" style="margin:0;"
                     onsubmit="return confirm('确认撤回至待发药？')">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                <button type="submit" class="secondary" style="font-size:0.78rem;padding:0.3rem 0.7rem;">撤回</button>
+                <button type="submit" class="btn secondary" style="font-size:0.78rem;padding:0.3rem 0.7rem;">撤回</button>
               </form>
               {% endif %}
-              <a href="/admin/prescriptions/{{ p.id }}"
-                 class="btn secondary" style="font-size:0.78rem;padding:0.3rem 0.7rem;">查看</a>
+              <a href="/admin/prescriptions/{{ p.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.3rem 0.7rem;">查看</a>
             </div>
           </td>
         </tr>
@@ -179,12 +190,9 @@
   </div>
 
   {% else %}
-  <div class="card" style="text-align:center;padding:3rem;color:var(--muted);">
-    {% if status == 'issued' %}
-    🎉 当前无待发药处方单
-    {% else %}
-    暂无符合条件的处方单
-    {% endif %}
+  <div class="empty-card">
+    <div class="empty-icon">{% if status == 'issued' %}🎉{% else %}💊{% endif %}</div>
+    {% if status == 'issued' %}当前无待发药处方单{% else %}暂无符合条件的处方单{% endif %}
   </div>
   {% endif %}
 </form>
