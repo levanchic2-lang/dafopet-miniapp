@@ -325,12 +325,9 @@
  <textarea name="follow_up_note">{{ v.follow_up_note or '' }}</textarea>
  </div>
 
- {# 浮动操作条（无需手动保存，自动保存） #}
+ {# 自动保存状态条 #}
  <div class="save-bar">
  <span class="saved-hint" id="autosave-status" style="font-size:0.9rem;">✓ 自动保存 · 最后更新 {{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
- <div class="save-spacer"></div>
- <button type="button" onclick="prevStep()" class="btn secondary">‹ 上一步</button>
- <button type="button" onclick="nextStep()" class="btn">下一步 ›</button>
  </div>
 </form>
 
