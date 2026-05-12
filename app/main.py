@@ -2642,32 +2642,9 @@ async def admin_hr_page(
 
 
 @app.get("/admin/users", response_class=HTMLResponse)
-async def admin_users_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    msg: str = Query(""),
-    err: str = Query(""),
-):
-    if not _admin_ok(request):
-        return templates.TemplateResponse(
-            "admin_login.html",
-            {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
-        )
-    require_superadmin(request)
-    all_users = db.query(AdminUser).order_by(AdminUser.created_at).all()
-    return templates.TemplateResponse(
-        "admin_users.html",
-        {
-            "request": request,
-            "title": "账号管理",
-            "active_users": [u for u in all_users if u.is_active],
-            "inactive_users": [u for u in all_users if not u.is_active],
-            "current_username": request.session.get("admin_username", ""),
-            "csrf_token": _get_csrf_token(request),
-            "msg": msg,
-            "err": err,
-        },
-    )
+async def admin_users_page(request: Request):
+    """旧的独立账号管理页已合并到 /admin/hr 底部，永久跳转。"""
+    return RedirectResponse("/admin/hr", status_code=302)
 
 
 @app.post("/admin/users/create", name="admin_users_create")
@@ -2826,23 +2803,9 @@ def _expiring_contracts(db: Session, days: int = 30) -> list:
 
 
 @app.get("/admin/staff", response_class=HTMLResponse)
-async def admin_staff_list(
-    request: Request,
-    db: Session = Depends(get_db),
-    msg: str = Query(""),
-    err: str = Query(""),
-):
-    if not _admin_ok(request):
-        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
-    active_staff = db.query(Staff).filter(Staff.status != StaffStatus.resigned.value).order_by(Staff.hire_date).all()
-    resigned_staff = db.query(Staff).filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
-    expiring = _expiring_contracts(db)
-    return templates.TemplateResponse("admin_staff_list.html", {
-        "request": request, "title": "员工管理",
-        "active_staff": active_staff, "resigned_staff": resigned_staff,
-        "expiring": expiring, "status_zh": _STAFF_STATUS_ZH,
-        "csrf_token": _get_csrf_token(request), "msg": msg, "err": err,
-    })
+async def admin_staff_list(request: Request):
+    """旧的员工列表页已合并到 /admin/hr，永久跳转。"""
+    return RedirectResponse("/admin/hr", status_code=302)
 
 
 @app.get("/admin/staff/create", response_class=HTMLResponse)
@@ -4995,6 +4958,7 @@ async def admin_customer_edit_pet(
     pet_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
     name: str = Form(""),
     species: str = Form("cat"),
     breed: str = Form(""),
@@ -5005,9 +4969,13 @@ async def admin_customer_edit_pet(
     is_stray: str = Form(""),
     microchip_id: str = Form(""),
     notes: str = Form(""),
+    store: str = Form(""),
+    life_status: str = Form("alive"),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
+    if csrf_token:
+        _require_csrf(request, csrf_token)
     pet = db.get(Pet, pet_id)
     if not pet or pet.customer_id != customer_id:
         raise HTTPException(404, "宠物不存在")
@@ -5021,8 +4989,24 @@ async def admin_customer_edit_pet(
     pet.is_stray = is_stray.lower() in ("1", "true", "on", "yes")
     pet.microchip_id = microchip_id.strip()[:40]
     pet.notes = notes.strip()
+    # 门店变更时，限店员工不允许跨店；新分配病历号
+    admin_store = _get_admin_store(request)
+    new_store = store.strip()
+    if admin_store and new_store and new_store != admin_store:
+        # 限店员工不允许把宠物移到其他门店
+        new_store = admin_store
+    if new_store and new_store != (pet.store or ""):
+        pet.store = new_store
+        # 若原先无病历号或门店首字母变了，重新生成
+        old_letter = (pet.medical_record_no or "")[:1]
+        new_letter = _STORE_INITIAL.get(new_store, "X")
+        if not pet.medical_record_no or old_letter != new_letter:
+            pet.medical_record_no = _gen_medical_record_no(db, new_store)
+    elif not pet.store and new_store:
+        pet.store = new_store
+    pet.life_status = (life_status or "alive").strip()[:20]
     db.commit()
-    return RedirectResponse(f"/admin/customers/{customer_id}?msg=宠物已更新", status_code=303)
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&msg=宠物已更新", status_code=303)
 
 
 # ---------------------------------------------------------------------------

@@ -210,7 +210,8 @@
             {% else %}<span style="color:var(--muted);">—</span>{% endif %}
           </td>
           <td onclick="event.stopPropagation();">
-            <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}" style="font-size:0.78rem;color:#3b82f6;text-decoration:none;margin-right:0.5rem;">新增预约</a>
+            <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}" style="font-size:0.78rem;color:#3b82f6;text-decoration:none;margin-right:0.6rem;">预约</a>
+            <a href="#" onclick="event.preventDefault();openEditPet({{ p.id }})" style="font-size:0.78rem;color:#6b7280;text-decoration:none;">编辑</a>
           </td>
         </tr>
         {% endfor %}
@@ -592,6 +593,115 @@
   </div>
 </div>
 
+{# ── 弹窗：编辑宠物 ── #}
+<div class="cd-modal-overlay" id="edit-pet-modal">
+  <div class="cd-modal">
+    <h3 style="margin:0 0 0.85rem;font-size:1rem;">
+      编辑宠物
+      <span id="ep-mrn" style="font-family:monospace;color:#6b7280;font-weight:400;font-size:0.85rem;margin-left:0.4rem;"></span>
+    </h3>
+    <form method="post" id="edit-pet-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="row2">
+        <div>
+          <label>名称</label>
+          <input name="name" id="ep-name" required>
+        </div>
+        <div>
+          <label>所属门店</label>
+          <select name="store" id="ep-store" required>
+            {% if admin_store %}
+            <option value="{{ admin_store }}">{{ admin_store }}</option>
+            {% else %}
+            <option value="东环店">东环店</option>
+            <option value="横岗店">横岗店</option>
+            {% endif %}
+          </select>
+        </div>
+        <div>
+          <label>种类</label>
+          <select name="species" id="ep-species">
+            <option value="cat">猫</option>
+            <option value="dog">狗</option>
+            <option value="other">其他</option>
+          </select>
+        </div>
+        <div>
+          <label>性别</label>
+          <select name="gender" id="ep-gender">
+            <option value="female">母</option>
+            <option value="male">公</option>
+            <option value="unknown">未知</option>
+          </select>
+        </div>
+        <div>
+          <label>品种</label>
+          <input name="breed" id="ep-breed">
+        </div>
+        <div>
+          <label>颜色</label>
+          <input name="color_pattern" id="ep-color">
+        </div>
+        <div>
+          <label>年龄/出生</label>
+          <input name="birthday_estimate" id="ep-birthday" placeholder="如：1岁2月">
+        </div>
+        <div>
+          <label>状态</label>
+          <select name="life_status" id="ep-life">
+            <option value="alive">饲养中</option>
+            <option value="deceased">已离世</option>
+          </select>
+        </div>
+        <div>
+          <label>芯片号（可选）</label>
+          <input name="microchip_id" id="ep-chip">
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <label style="display:flex;align-items:center;gap:0.4rem;font-weight:500;margin:0;padding:0.65rem 0.75rem;">
+            <input type="checkbox" name="is_neutered" id="ep-neutered" value="1"> 已绝育
+          </label>
+        </div>
+      </div>
+      <label style="margin-top:0.4rem;display:flex;align-items:center;gap:0.4rem;font-weight:500;">
+        <input type="checkbox" name="is_stray" id="ep-stray" value="1"> 流浪猫
+      </label>
+      <label>备注</label>
+      <textarea name="notes" id="ep-notes"></textarea>
+      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+        <button type="submit" class="btn">保存修改</button>
+        <button type="button" class="btn secondary" onclick="document.getElementById('edit-pet-modal').classList.remove('visible')">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# 所有宠物数据（供编辑弹窗用） #}
+<script id="pets-data" type="application/json">
+{% set ns_p = namespace(arr=[]) %}
+[
+  {% for p in pets %}
+  {
+    "id": {{ p.id }},
+    "name": {{ (p.name or '') | tojson }},
+    "species": {{ (p.species or 'cat') | tojson }},
+    "gender": {{ (p.gender or 'unknown') | tojson }},
+    "breed": {{ (p.breed or '') | tojson }},
+    "color_pattern": {{ (p.color_pattern or '') | tojson }},
+    "birthday_estimate": {{ (p.birthday_estimate or '') | tojson }},
+    "store": {{ (p.store or '') | tojson }},
+    "life_status": {{ (p.life_status or 'alive') | tojson }},
+    "microchip_id": {{ (p.microchip_id or '') | tojson }},
+    "is_neutered": {{ (1 if p.is_neutered else 0) }},
+    "is_stray": {{ (1 if p.is_stray else 0) }},
+    "notes": {{ (p.notes or '') | tojson }},
+    "medical_record_no": {{ (p.medical_record_no or '') | tojson }}
+  }{{ "," if not loop.last }}
+  {% endfor %}
+]
+</script>
+
 {% if active_pet %}
 {# ── 弹窗：录入体重 ── #}
 <div class="cd-modal-overlay" id="add-weight-modal">
@@ -697,6 +807,36 @@
 function selectPet(petId) {
   const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'visits';
   window.location.href = '/admin/customers/{{ cust.id }}?pet_id=' + petId + '&tab=' + tab;
+}
+
+// 打开编辑宠物弹窗 — 从 JSON 中读取并填充
+const PETS_DATA = JSON.parse(document.getElementById('pets-data').textContent);
+function openEditPet(petId) {
+  const p = PETS_DATA.find(x => x.id === petId);
+  if (!p) return;
+  document.getElementById('edit-pet-form').action = '/admin/customers/{{ cust.id }}/pets/' + petId + '/edit';
+  document.getElementById('ep-mrn').textContent = p.medical_record_no ? '· ' + p.medical_record_no : '';
+  document.getElementById('ep-name').value     = p.name || '';
+  document.getElementById('ep-species').value  = p.species || 'cat';
+  document.getElementById('ep-gender').value   = p.gender || 'unknown';
+  document.getElementById('ep-breed').value    = p.breed || '';
+  document.getElementById('ep-color').value    = p.color_pattern || '';
+  document.getElementById('ep-birthday').value = p.birthday_estimate || '';
+  document.getElementById('ep-life').value     = p.life_status || 'alive';
+  document.getElementById('ep-chip').value     = p.microchip_id || '';
+  document.getElementById('ep-notes').value    = p.notes || '';
+  document.getElementById('ep-neutered').checked = !!p.is_neutered;
+  document.getElementById('ep-stray').checked    = !!p.is_stray;
+  // store 下拉如果没有该选项就先添加（避免限店员工的限制）
+  const storeSel = document.getElementById('ep-store');
+  const has = [...storeSel.options].some(o => o.value === (p.store || ''));
+  if (!has && p.store) {
+    const opt = document.createElement('option');
+    opt.value = p.store; opt.textContent = p.store;
+    storeSel.appendChild(opt);
+  }
+  storeSel.value = p.store || storeSel.options[0].value;
+  document.getElementById('edit-pet-modal').classList.add('visible');
 }
 
 function switchTab(tab) {
