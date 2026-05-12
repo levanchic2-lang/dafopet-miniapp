@@ -2,11 +2,11 @@
 {% block extra_css %}
 <style>
 .cust-avatar-mini {
-  width: 32px; height: 32px; border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  color: #fff; display: inline-flex; align-items: center; justify-content: center;
-  font-size: 0.92rem; font-weight: 700; flex-shrink: 0; margin-right: 0.4rem;
-  vertical-align: middle;
+ width: 32px; height: 32px; border-radius: 50%;
+ background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+ color: #fff; display: inline-flex; align-items: center; justify-content: center;
+ font-size: 0.92rem; font-weight: 700; flex-shrink: 0; margin-right: 0.4rem;
+ vertical-align: middle;
 }
 .cust-row { cursor: pointer; }
 .cust-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:1100; align-items:center; justify-content:center; }
@@ -19,105 +19,105 @@
 {% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="page-head">
-  <div>
-    <h1><span class="ph-icon">👥</span>客户档案</h1>
-    <p class="ph-sub">共 {{ total }} 条客户记录</p>
-  </div>
-  <div class="ph-actions">
-    <button type="button" class="btn" style="font-size:0.88rem;" onclick="document.getElementById('create-modal').classList.add('visible')">＋ 新建客户</button>
-  </div>
+ <div>
+ <h1><span class="ph-icon">👥</span>客户档案</h1>
+ <p class="ph-sub">共 {{ total }} 条客户记录</p>
+ </div>
+ <div class="ph-actions">
+ <button type="button" class="btn" style="font-size:0.88rem;" onclick="document.getElementById('create-modal').classList.add('visible')">＋ 新建客户</button>
+ </div>
 </div>
 
 <div class="filter-card">
-  <form method="get" class="filter-row">
-    <input name="q" value="{{ q }}" placeholder="🔍 搜索姓名 / 手机号" style="flex:1;min-width:200px;" />
-    <button type="submit" class="btn secondary">搜索</button>
-    {% if q %}<a href="/admin/customers" class="btn secondary">清除</a>{% endif %}
-  </form>
+ <form method="get" class="filter-row">
+ <input name="q" value="{{ q }}" style="flex:1;min-width:200px;"/>
+ <button type="submit" class="btn secondary">搜索</button>
+ {% if q %}<a href="/admin/customers" class="btn secondary">清除</a>{% endif %}
+ </form>
 </div>
 
 {% if customers %}
 <div class="data-table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>客户</th>
-        <th>手机号</th>
-        <th>来源</th>
-        <th>创建时间</th>
-        <th style="text-align:right;">操作</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for c in customers %}
-      <tr class="cust-row" onclick="window.location='/admin/customers/{{ c.id }}'">
-        <td style="color:var(--muted);font-size:0.8rem;font-family:monospace;">#{{ c.id }}</td>
-        <td style="font-weight:600;">
-          <span class="cust-avatar-mini">{{ (c.name or '?') | first | upper }}</span>
-          {{ c.name or '未命名' }}
-        </td>
-        <td>{{ c.phone or '—' }}</td>
-        <td>
-          {% if c.source == 'tnr' %}<span class="pill pill-purple">TNR</span>
-          {% elif c.source == 'outpatient' %}<span class="pill pill-info">门诊</span>
-          {% elif c.source == 'surgery' %}<span class="pill pill-warn">手术</span>
-          {% elif c.source == 'beauty' %}<span class="pill pill-pink">美容</span>
-          {% elif c.source == 'manual' %}<span class="pill pill-gray">手动</span>
-          {% elif c.source == 'rabies' %}<span class="pill pill-info">狂犬疫苗</span>
-          {% else %}<span class="pill pill-gray">{{ c.source or '—' }}</span>{% endif %}
-        </td>
-        <td style="color:var(--muted);font-size:0.82rem;">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
-        <td style="text-align:right;" onclick="event.stopPropagation();">
-          <a href="/admin/customers/{{ c.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+ <table class="data-table">
+ <thead>
+ <tr>
+ <th>ID</th>
+ <th>客户</th>
+ <th>手机号</th>
+ <th>来源</th>
+ <th>创建时间</th>
+ <th style="text-align:right;">操作</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for c in customers %}
+ <tr class="cust-row" onclick="window.location='/admin/customers/{{ c.id }}'">
+ <td style="color:var(--muted);font-size:0.8rem;font-family:monospace;">#{{ c.id }}</td>
+ <td style="font-weight:600;">
+ <span class="cust-avatar-mini">{{ (c.name or '?') | first | upper }}</span>
+ {{ c.name or '未命名' }}
+ </td>
+ <td>{{ c.phone or '—' }}</td>
+ <td>
+ {% if c.source == 'tnr' %}<span class="pill pill-purple">TNR</span>
+ {% elif c.source == 'outpatient' %}<span class="pill pill-info">门诊</span>
+ {% elif c.source == 'surgery' %}<span class="pill pill-warn">手术</span>
+ {% elif c.source == 'beauty' %}<span class="pill pill-pink">美容</span>
+ {% elif c.source == 'manual' %}<span class="pill pill-gray">手动</span>
+ {% elif c.source == 'rabies' %}<span class="pill pill-info">狂犬疫苗</span>
+ {% else %}<span class="pill pill-gray">{{ c.source or '—' }}</span>{% endif %}
+ </td>
+ <td style="color:var(--muted);font-size:0.82rem;">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
+ <td style="text-align:right;" onclick="event.stopPropagation();">
+ <a href="/admin/customers/{{ c.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
 </div>
 
-{% if total_pages > 1 %}
+{% if total_pages> 1 %}
 <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;align-items:center;justify-content:center;">
-  {% if page > 1 %}<a href="?q={{ q }}&page={{ page - 1 }}" class="btn secondary" style="font-size:0.85rem;">‹ 上一页</a>{% endif %}
-  <span style="font-size:0.88rem;color:var(--muted);">第 {{ page }} / {{ total_pages }} 页</span>
-  {% if page < total_pages %}<a href="?q={{ q }}&page={{ page + 1 }}" class="btn secondary" style="font-size:0.85rem;">下一页 ›</a>{% endif %}
+ {% if page> 1 %}<a href="?q={{ q }}&page={{ page - 1 }}" class="btn secondary" style="font-size:0.85rem;">‹ 上一页</a>{% endif %}
+ <span style="font-size:0.88rem;color:var(--muted);">第 {{ page }} / {{ total_pages }} 页</span>
+ {% if page < total_pages %}<a href="?q={{ q }}&page={{ page + 1 }}" class="btn secondary" style="font-size:0.85rem;">下一页 ›</a>{% endif %}
 </div>
 {% endif %}
 
 {% else %}
 <div class="empty-card">
-  <div class="empty-icon">👥</div>
-  {% if q %}没有找到匹配的客户。<a href="/admin/customers" style="color:#3b82f6;">清除搜索 →</a>
-  {% else %}暂无客户记录{% endif %}
+ <div class="empty-icon">👥</div>
+ {% if q %}没有找到匹配的客户。<a href="/admin/customers" style="color:#3b82f6;">清除搜索 →</a>
+ {% else %}暂无客户记录{% endif %}
 </div>
 {% endif %}
 
 {# 新建客户 modal #}
 <div class="cust-modal-overlay" id="create-modal">
-  <div class="cust-modal">
-    <h3 style="margin:0 0 0.85rem;font-size:1rem;">新建客户档案</h3>
-    <form method="post" action="/admin/customers/create">
-      <label>姓名</label>
-      <input name="name" placeholder="客户姓名" />
-      <label>手机号</label>
-      <input name="phone" type="tel" placeholder="11位手机号" />
-      <label>地址（可选）</label>
-      <input name="address" placeholder="居住地址" />
-      <label>备注（可选）</label>
-      <textarea name="notes" style="min-height:60px;"></textarea>
-      <input type="hidden" name="source" value="manual" />
-      <div style="display:flex;gap:0.6rem;margin-top:1rem;">
-        <button type="submit" class="btn" style="flex:1;">创建</button>
-        <button type="button" onclick="document.getElementById('create-modal').classList.remove('visible')" class="btn secondary" style="flex:1;">取消</button>
-      </div>
-    </form>
-  </div>
+ <div class="cust-modal">
+ <h3 style="margin:0 0 0.85rem;font-size:1rem;">新建客户档案</h3>
+ <form method="post" action="/admin/customers/create">
+ <label>姓名</label>
+ <input name="name"/>
+ <label>手机号</label>
+ <input name="phone" type="tel"/>
+ <label>地址（可选）</label>
+ <input name="address"/>
+ <label>备注（可选）</label>
+ <textarea name="notes" style="min-height:60px;"></textarea>
+ <input type="hidden" name="source" value="manual"/>
+ <div style="display:flex;gap:0.6rem;margin-top:1rem;">
+ <button type="submit" class="btn" style="flex:1;">创建</button>
+ <button type="button" onclick="document.getElementById('create-modal').classList.remove('visible')" class="btn secondary" style="flex:1;">取消</button>
+ </div>
+ </form>
+ </div>
 </div>
 
 <script>
 document.getElementById('create-modal').addEventListener('click', e => {
-  if (e.target.id === 'create-modal') e.target.classList.remove('visible');
+ if (e.target.id === 'create-modal') e.target.classList.remove('visible');
 });
 </script>
 {% endblock %}

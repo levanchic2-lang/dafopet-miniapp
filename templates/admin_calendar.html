@@ -4,11 +4,11 @@
 /* ── 全局布局 ─────────────────────────────────────────── */
 .cal-page { display:flex; flex-direction:column; height:calc(100vh - 52px); overflow:hidden; margin:-1rem; }
 .cal-topbar {
-  display:flex; align-items:center; gap:0.75rem; padding:0.6rem 1.1rem;
-  background:var(--card); border-bottom:1px solid var(--border); flex-shrink:0;
-  flex-wrap:nowrap;
+ display:flex; align-items:center; gap:0.75rem; padding:0.6rem 1.1rem;
+ background:var(--card); border-bottom:1px solid var(--border); flex-shrink:0;
+ flex-wrap:nowrap;
 }
-.cal-topbar > * { flex-shrink:0; }
+.cal-topbar> * { flex-shrink:0; }
 .cal-topbar .new-btn { white-space:nowrap; background:#16a34a; color:#fff; border-color:#16a34a; }
 .cal-topbar .new-btn:hover { background:#15803d; border-color:#15803d; }
 .cal-nav { display:flex; align-items:center; gap:0.4rem; }
@@ -16,7 +16,7 @@
 .cal-nav button:hover { background:var(--bg-elevated); color:var(--text); }
 #cal-date-label { font-weight:700; font-size:1.05rem; min-width:130px; text-align:center; letter-spacing:0.01em; }
 .cal-actions { display:flex; align-items:center; gap:0.5rem; margin-left:1.5rem; flex-shrink:0; }
-.cal-actions > * { flex-shrink:0; }
+.cal-actions> * { flex-shrink:0; }
 .view-sw { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; flex-shrink:0; }
 .view-sw button { padding:0.3rem 0.9rem; background:none; border:none; cursor:pointer; font-size:0.9rem; color:var(--muted); font-weight:500; white-space:nowrap; min-width:38px; flex-shrink:0; }
 .view-sw button:hover { background:var(--bg-elevated); color:var(--text); }
@@ -32,27 +32,27 @@
 .month-header div { text-align:center; padding:0.4rem; font-size:0.8rem; font-weight:600; color:var(--muted); }
 .month-body { flex:1; display:grid; grid-template-columns:repeat(7,1fr); grid-auto-rows:1fr; overflow:hidden; }
 .month-cell {
-  border-right:1px solid var(--border); border-bottom:1px solid var(--border);
-  padding:0.25rem; overflow:hidden; cursor:pointer; min-height:80px;
-  display:flex; flex-direction:column;
+ border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+ padding:0.25rem; overflow:hidden; cursor:pointer; min-height:80px;
+ display:flex; flex-direction:column;
 }
 .month-cell:hover { background:var(--bg-elevated); }
 .month-cell.other-month .day-num { color:var(--muted); }
 .month-cell.today { background:rgba(59,130,246,0.05); }
 .day-num { font-size:0.82rem; font-weight:700; padding:0.15rem 0.3rem; width:fit-content; color:var(--text); }
 .day-num.today-circle {
-  background:#3b82f6; color:#fff; border-radius:50%;
-  width:1.65rem; height:1.65rem; display:flex; align-items:center; justify-content:center; font-size:0.82rem;
+ background:#3b82f6; color:#fff; border-radius:50%;
+ width:1.65rem; height:1.65rem; display:flex; align-items:center; justify-content:center; font-size:0.82rem;
 }
 .month-lunar { font-size:0.68rem; color:var(--muted); margin-top:-0.1rem; padding:0 0.25rem 0.15rem; }
 .month-block-pill {
-  font-size:0.72rem; padding:0.1rem 0.4rem; border-radius:3px; margin-bottom:0.15rem;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
-  background:#e0e7ff; color:#3730a3;
+ font-size:0.72rem; padding:0.1rem 0.4rem; border-radius:3px; margin-bottom:0.15rem;
+ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
+ background:#e0e7ff; color:#3730a3;
 }
 .month-event-pill {
-  font-size:0.72rem; padding:0.1rem 0.4rem; border-radius:3px; margin-bottom:0.15rem;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
+ font-size:0.72rem; padding:0.1rem 0.4rem; border-radius:3px; margin-bottom:0.15rem;
+ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
 }
 .month-more { font-size:0.7rem; color:var(--muted); padding:0 0.25rem; cursor:pointer; }
 
@@ -62,16 +62,16 @@
 .week-time-gutter { width:56px; flex-shrink:0; }
 .week-header-cols { flex:1; display:grid; }
 .week-day-head {
-  text-align:center; padding:0.4rem 0.2rem; border-left:1px solid var(--border);
-  font-size:0.82rem; cursor:pointer; user-select:none;
+ text-align:center; padding:0.4rem 0.2rem; border-left:1px solid var(--border);
+ font-size:0.82rem; cursor:pointer; user-select:none;
 }
 .week-day-head:hover { background:var(--bg-elevated); }
 .week-day-head .wdn { color:var(--muted); font-size:0.73rem; font-weight:500; letter-spacing:0.02em; }
 .week-day-head .wdd { font-size:1.1rem; font-weight:700; line-height:2; }
 .week-day-head.today-col .wdn { color:#3b82f6; font-weight:600; }
 .week-day-head.today-col .wdd {
-  background:#3b82f6; color:#fff; border-radius:50%;
-  width:2rem; height:2rem; display:inline-flex; align-items:center; justify-content:center; font-size:1rem;
+ background:#3b82f6; color:#fff; border-radius:50%;
+ width:2rem; height:2rem; display:inline-flex; align-items:center; justify-content:center; font-size:1rem;
 }
 /* all-day row */
 .allday-row { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; min-height:28px; }
@@ -79,8 +79,8 @@
 .allday-cols { flex:1; display:grid; }
 .allday-cell { border-left:1px solid var(--border); padding:2px; display:flex; flex-direction:column; gap:2px; }
 .allday-block-pill {
-  font-size:0.71rem; padding:0.1rem 0.35rem; border-radius:3px;
-  background:#e0e7ff; color:#3730a3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
+ font-size:0.71rem; padding:0.1rem 0.35rem; border-radius:3px;
+ background:#e0e7ff; color:#3730a3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
 }
 /* time grid */
 .week-scroll { flex:1; overflow-y:auto; position:relative; }
@@ -98,21 +98,21 @@
 .now-dot { position:absolute; left:-5px; top:-4px; width:10px; height:10px; border-radius:50%; background:#3b82f6; box-shadow:0 0 0 2px #fff; }
 /* event blocks */
 .cal-event {
-  position:absolute; border-radius:6px; padding:3px 6px 3px 7px; cursor:pointer;
-  font-size:0.78rem; overflow:hidden; border-left:3px solid;
-  box-sizing:border-box; z-index:2; transition:filter 0.1s, box-shadow 0.1s;
-  box-shadow:0 1px 3px rgba(0,0,0,.08);
+ position:absolute; border-radius:6px; padding:3px 6px 3px 7px; cursor:pointer;
+ font-size:0.78rem; overflow:hidden; border-left:3px solid;
+ box-sizing:border-box; z-index:2; transition:filter 0.1s, box-shadow 0.1s;
+ box-shadow:0 1px 3px rgba(0,0,0,.08);
 }
 .cal-event:hover { filter:brightness(0.96); box-shadow:0 2px 8px rgba(0,0,0,.14); }
 .cal-event .ev-time { font-size:0.67rem; opacity:0.75; white-space:nowrap; line-height:1.4; }
 .cal-event .ev-title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.4; }
-.cal-event .ev-cust  { font-size:0.68rem; opacity:0.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.3; }
+.cal-event .ev-cust { font-size:0.68rem; opacity:0.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.3; }
 
 /* ── 弹出卡片 ────────────────────────────────────────── */
 .cal-popup {
-  position:fixed; z-index:1000; background:var(--card); border:1px solid var(--border);
-  border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.18); width:340px; max-width:95vw;
-  padding:1rem; display:none;
+ position:fixed; z-index:1000; background:var(--card); border:1px solid var(--border);
+ border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.18); width:340px; max-width:95vw;
+ padding:1rem; display:none;
 }
 .cal-popup.visible { display:block; }
 .popup-close { position:absolute; top:0.6rem; right:0.75rem; background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--muted); }
@@ -128,9 +128,9 @@
 .popup-actions button { padding:0.3rem 0.65rem; border-radius:7px; border:1px solid var(--border); cursor:pointer; font-size:0.82rem; background:var(--card); color:var(--text); }
 .popup-actions button:hover { background:var(--bg-elevated); }
 .popup-actions .btn-arrived { background:#16a34a; color:#fff; border-color:#16a34a; }
-.popup-actions .btn-noshow  { background:#f59e0b; color:#fff; border-color:#f59e0b; }
-.popup-actions .btn-cancel  { background:#fee2e2; color:#dc2626; border-color:#fca5a5; }
-.popup-actions .btn-edit    { background:var(--accent); color:#fff; border-color:var(--accent); }
+.popup-actions .btn-noshow { background:#f59e0b; color:#fff; border-color:#f59e0b; }
+.popup-actions .btn-cancel { background:#fee2e2; color:#dc2626; border-color:#fca5a5; }
+.popup-actions .btn-edit { background:var(--accent); color:#fff; border-color:var(--accent); }
 .popup-created { font-size:0.72rem; color:var(--muted); margin-left:auto; }
 
 /* ── 改约 modal ──────────────────────────────────────── */
@@ -145,28 +145,28 @@
 /* ── 新建选择 modal ──────────────────────────────────── */
 .create-choice { display:flex; gap:0.6rem; margin:0.75rem 0; }
 .create-choice-btn {
-  flex:1; padding:0.85rem 0.4rem; border:1.5px solid var(--border); border-radius:10px;
-  cursor:pointer; text-align:center; background:var(--card); color:var(--text); font-size:0.85rem;
-  line-height:1.4; white-space:nowrap;
+ flex:1; padding:0.85rem 0.4rem; border:1.5px solid var(--border); border-radius:10px;
+ cursor:pointer; text-align:center; background:var(--card); color:var(--text); font-size:0.85rem;
+ line-height:1.4; white-space:nowrap;
 }
 .create-choice-btn:hover { background:#f0f9ff; border-color:#3b82f6; color:#1e40af; }
 .create-choice-btn .icon { font-size:1.5rem; display:block; margin-bottom:0.25rem; }
 
 /* ── Toast ───────────────────────────────────────────── */
 .cal-toast {
-  position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%) translateY(60px);
-  background:#1a1a2e; color:#fff; padding:0.5rem 1.2rem; border-radius:8px; font-size:0.88rem;
-  z-index:2000; transition:transform 0.25s ease; pointer-events:none;
+ position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%) translateY(60px);
+ background:#1a1a2e; color:#fff; padding:0.5rem 1.2rem; border-radius:8px; font-size:0.88rem;
+ z-index:2000; transition:transform 0.25s ease; pointer-events:none;
 }
 .cal-toast.show { transform:translateX(-50%) translateY(0); }
 
 /* ── 颜色变量 ────────────────────────────────────────── */
 :root {
-  --c-tnr-bg:#dcfce7; --c-tnr-bd:#16a34a; --c-tnr-tx:#166534;
-  --c-surg-bg:#ffedd5; --c-surg-bd:#ea580c; --c-surg-tx:#9a3412;
-  --c-out-bg:#ede9fe;  --c-out-bd:#7c3aed;  --c-out-tx:#5b21b6;
-  --c-wash-bg:#dbeafe; --c-wash-bd:#2563eb; --c-wash-tx:#1e40af;
-  --c-beauty-bg:#fce7f3; --c-beauty-bd:#db2777; --c-beauty-tx:#9d174d;
+ --c-tnr-bg:#dcfce7; --c-tnr-bd:#16a34a; --c-tnr-tx:#166534;
+ --c-surg-bg:#ffedd5; --c-surg-bd:#ea580c; --c-surg-tx:#9a3412;
+ --c-out-bg:#ede9fe; --c-out-bd:#7c3aed; --c-out-tx:#5b21b6;
+ --c-wash-bg:#dbeafe; --c-wash-bd:#2563eb; --c-wash-tx:#1e40af;
+ --c-beauty-bg:#fce7f3; --c-beauty-bd:#db2777; --c-beauty-tx:#9d174d;
 }
 </style>
 {% endblock %}
@@ -174,94 +174,94 @@
 {% block body %}
 <div class="cal-page">
 
-  <!-- ── 顶部工具栏 ── -->
-  <div class="cal-topbar">
-    <button class="btn new-btn" id="new-event-btn">＋ 新建日程</button>
-    <div class="cal-nav">
-      <button id="prev-btn">‹</button>
-      <span id="cal-date-label"></span>
-      <button id="next-btn">›</button>
-    </div>
-    <div class="cal-actions">
-      <button class="btn secondary" id="today-btn">今</button>
-      <div class="view-sw">
-        <button data-view="day">日</button>
-        <button data-view="week" class="active">周</button>
-        <button data-view="month">月</button>
-      </div>
-      <select id="store-filter">
-        <option value="">全部门店</option>
-        <option value="东环店">东环店</option>
-        <option value="横岗店">横岗店</option>
-      </select>
-    </div>
-  </div>
+ <!-- ── 顶部工具栏 ── -->
+ <div class="cal-topbar">
+ <button class="btn new-btn" id="new-event-btn">＋ 新建日程</button>
+ <div class="cal-nav">
+ <button id="prev-btn">‹</button>
+ <span id="cal-date-label"></span>
+ <button id="next-btn">›</button>
+ </div>
+ <div class="cal-actions">
+ <button class="btn secondary" id="today-btn">今</button>
+ <div class="view-sw">
+ <button data-view="day">日</button>
+ <button data-view="week" class="active">周</button>
+ <button data-view="month">月</button>
+ </div>
+ <select id="store-filter">
+ <option value="">全部门店</option>
+ <option value="东环店">东环店</option>
+ <option value="横岗店">横岗店</option>
+ </select>
+ </div>
+ </div>
 
-  <!-- ── 日历主体（JS 渲染） ── -->
-  <div class="cal-body" id="cal-body"></div>
+ <!-- ── 日历主体（JS 渲染） ── -->
+ <div class="cal-body" id="cal-body"></div>
 
 </div>
 
 <!-- ── 弹出卡片 ── -->
 <div class="cal-popup" id="cal-popup">
-  <button class="popup-close" onclick="closePopup()">✕</button>
-  <div class="popup-title" id="pp-title"></div>
-  <div class="popup-datetime" id="pp-datetime"></div>
-  <div class="popup-badges" id="pp-badges"></div>
-  <div id="pp-rows"></div>
-  <div class="popup-notes" id="pp-notes" style="display:none;"></div>
-  <div class="popup-actions" id="pp-actions"></div>
+ <button class="popup-close" onclick="closePopup()">✕</button>
+ <div class="popup-title" id="pp-title"></div>
+ <div class="popup-datetime" id="pp-datetime"></div>
+ <div class="popup-badges" id="pp-badges"></div>
+ <div id="pp-rows"></div>
+ <div class="popup-notes" id="pp-notes" style="display:none;"></div>
+ <div class="popup-actions" id="pp-actions"></div>
 </div>
 
 <!-- ── 改约 modal ── -->
 <div class="cal-modal-overlay" id="reschedule-modal">
-  <div class="cal-modal">
-    <h3>📅 改约</h3>
-    <label>新日期</label>
-    <input type="date" id="rs-date" />
-    <label>新时间</label>
-    <input type="time" id="rs-time" step="300" />
-    <div class="modal-btns">
-      <button class="btn" id="rs-confirm-btn">确认改约</button>
-      <button class="btn secondary" onclick="closeReschedule()">取消</button>
-    </div>
-  </div>
+ <div class="cal-modal">
+ <h3>📅 改约</h3>
+ <label>新日期</label>
+ <input type="date" id="rs-date"/>
+ <label>新时间</label>
+ <input type="time" id="rs-time" step="300"/>
+ <div class="modal-btns">
+ <button class="btn" id="rs-confirm-btn">确认改约</button>
+ <button class="btn secondary" onclick="closeReschedule()">取消</button>
+ </div>
+ </div>
 </div>
 
 <!-- ── 新建日程选择 modal ── -->
 <div class="cal-modal-overlay" id="create-modal">
-  <div class="cal-modal">
-    <h3>新建日程</h3>
-    <div class="create-choice">
-      <button class="create-choice-btn" id="create-appt-btn">
-        <span class="icon">📋</span>新建预约
-      </button>
-      <button class="create-choice-btn" id="create-block-btn">
-        <span class="icon">🚫</span>全天封锁<br><small style="color:var(--muted);font-size:0.75rem;">美容师休息等</small>
-      </button>
-    </div>
-    <div id="block-form" style="display:none;">
-      <label>标题</label>
-      <input type="text" id="block-title" placeholder="美容师休息" style="margin-bottom:0.65rem;" />
-      <label>日期</label>
-      <input type="date" id="block-date" style="margin-bottom:0.65rem;" />
-      <label>门店</label>
-      <select id="block-store" style="margin-bottom:0.65rem;width:100%;">
-        <option value="">全部门店</option>
-        <option value="东环店">东环店</option>
-        <option value="横岗店">横岗店</option>
-      </select>
-      <label>备注（可选）</label>
-      <input type="text" id="block-notes" placeholder="" style="margin-bottom:0.65rem;" />
-      <div class="modal-btns">
-        <button class="btn" id="block-save-btn">保存</button>
-        <button class="btn secondary" onclick="closeCreateModal()">取消</button>
-      </div>
-    </div>
-    <div style="text-align:right;margin-top:0.5rem;">
-      <button class="btn secondary" style="font-size:0.82rem;" onclick="closeCreateModal()">关闭</button>
-    </div>
-  </div>
+ <div class="cal-modal">
+ <h3>新建日程</h3>
+ <div class="create-choice">
+ <button class="create-choice-btn" id="create-appt-btn">
+ <span class="icon">📋</span>新建预约
+ </button>
+ <button class="create-choice-btn" id="create-block-btn">
+ <span class="icon">🚫</span>全天封锁<br><small style="color:var(--muted);font-size:0.75rem;">美容师休息等</small>
+ </button>
+ </div>
+ <div id="block-form" style="display:none;">
+ <label>标题</label>
+ <input type="text" id="block-title" style="margin-bottom:0.65rem;"/>
+ <label>日期</label>
+ <input type="date" id="block-date" style="margin-bottom:0.65rem;"/>
+ <label>门店</label>
+ <select id="block-store" style="margin-bottom:0.65rem;width:100%;">
+ <option value="">全部门店</option>
+ <option value="东环店">东环店</option>
+ <option value="横岗店">横岗店</option>
+ </select>
+ <label>备注（可选）</label>
+ <input type="text" id="block-notes" style="margin-bottom:0.65rem;"/>
+ <div class="modal-btns">
+ <button class="btn" id="block-save-btn">保存</button>
+ <button class="btn secondary" onclick="closeCreateModal()">取消</button>
+ </div>
+ </div>
+ <div style="text-align:right;margin-top:0.5rem;">
+ <button class="btn secondary" style="font-size:0.82rem;" onclick="closeCreateModal()">关闭</button>
+ </div>
+ </div>
 </div>
 
 <!-- ── Toast ── -->
@@ -269,52 +269,52 @@
 
 <script>
 // ═══════════════════════════════════════════════════════
-//  全局状态
+// 全局状态
 // ═══════════════════════════════════════════════════════
 const CSRF = {{ csrf_token | tojson }};
 const ADMIN_STORE = {{ admin_store | tojson }};
 
 let view = 'week';
-let curDate = new Date();   // 当前显示的参考日期
-let store = ADMIN_STORE || '';  // 门店筛选（短名）
-let events = [];    // 预约列表
-let blocks = [];    // 全天封锁列表
+let curDate = new Date(); // 当前显示的参考日期
+let store = ADMIN_STORE || ''; // 门店筛选（短名）
+let events = []; // 预约列表
+let blocks = []; // 全天封锁列表
 let popupAppt = null; // 当前弹窗显示的预约
 
 // ═══════════════════════════════════════════════════════
-//  颜色方案
+// 颜色方案
 // ═══════════════════════════════════════════════════════
 function getColor(appt) {
-  const cat = appt.category || '';
-  const svc = appt.service_name || '';
-  if (cat === 'tnr')     return { bg:'#dcfce7', bd:'#16a34a', tx:'#166534' };
-  if (cat === 'surgery') return { bg:'#ffedd5', bd:'#ea580c', tx:'#9a3412' };
-  if (cat === 'outpatient') return { bg:'#ede9fe', bd:'#7c3aed', tx:'#5b21b6' };
-  if (['beauty','grooming','washcare'].includes(cat)) {
-    const isWash = /洗护|洗澡|药浴/.test(svc);
-    return isWash
-      ? { bg:'#dbeafe', bd:'#2563eb', tx:'#1e40af' }
-      : { bg:'#fce7f3', bd:'#db2777', tx:'#9d174d' };
-  }
-  return { bg:'#f3f4f6', bd:'#9ca3af', tx:'#374151' };
+ const cat = appt.category || '';
+ const svc = appt.service_name || '';
+ if (cat === 'tnr') return { bg:'#dcfce7', bd:'#16a34a', tx:'#166534' };
+ if (cat === 'surgery') return { bg:'#ffedd5', bd:'#ea580c', tx:'#9a3412' };
+ if (cat === 'outpatient') return { bg:'#ede9fe', bd:'#7c3aed', tx:'#5b21b6' };
+ if (['beauty','grooming','washcare'].includes(cat)) {
+ const isWash = /洗护|洗澡|药浴/.test(svc);
+ return isWash
+ ? { bg:'#dbeafe', bd:'#2563eb', tx:'#1e40af' }
+ : { bg:'#fce7f3', bd:'#db2777', tx:'#9d174d' };
+ }
+ return { bg:'#f3f4f6', bd:'#9ca3af', tx:'#374151' };
 }
 
 const STATUS_ZH = {
-  pending:'待确认', confirmed:'已确认', arrived:'已到店',
-  completed:'已完成', cancelled:'已取消', no_show:'未到店'
+ pending:'待确认', confirmed:'已确认', arrived:'已到店',
+ completed:'已完成', cancelled:'已取消', no_show:'未到店'
 };
 const CAT_ZH = {
-  tnr:'TNR', surgery:'手术', outpatient:'门诊',
-  beauty:'美容', grooming:'美容', washcare:'洗护'
+ tnr:'TNR', surgery:'手术', outpatient:'门诊',
+ beauty:'美容', grooming:'美容', washcare:'洗护'
 };
 const SPECIES_ZH = { cat:'猫', dog:'狗' };
-const GENDER_ZH  = { male:'公', female:'母', unknown:'未知' };
+const GENDER_ZH = { male:'公', female:'母', unknown:'未知' };
 
 // ═══════════════════════════════════════════════════════
-//  日期工具
+// 日期工具
 // ═══════════════════════════════════════════════════════
 function fmtDate(d) {
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function parseDate(s) { const p=s.split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
 function sameDay(a,b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
@@ -323,596 +323,596 @@ const WD_ZH = ['周日','周一','周二','周三','周四','周五','周六'];
 const MON_ZH = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
 
 function getWeekDays(ref) {
-  // 周日起始
-  const start = new Date(ref);
-  start.setDate(start.getDate() - start.getDay());
-  return Array.from({length:7}, (_,i) => addDays(start,i));
+ // 周日起始
+ const start = new Date(ref);
+ start.setDate(start.getDate() - start.getDay());
+ return Array.from({length:7}, (_,i) => addDays(start,i));
 }
 function getMonthGrid(ref) {
-  const y=ref.getFullYear(), m=ref.getMonth();
-  const first=new Date(y,m,1);
-  const last=new Date(y,m+1,0);
-  const start=new Date(first); start.setDate(start.getDate()-start.getDay());
-  const end=new Date(last); end.setDate(end.getDate()+(6-end.getDay()));
-  const days=[];
-  for(let d=new Date(start); d<=end; d=addDays(d,1)) days.push(new Date(d));
-  return days;
+ const y=ref.getFullYear(), m=ref.getMonth();
+ const first=new Date(y,m,1);
+ const last=new Date(y,m+1,0);
+ const start=new Date(first); start.setDate(start.getDate()-start.getDay());
+ const end=new Date(last); end.setDate(end.getDate()+(6-end.getDay()));
+ const days=[];
+ for(let d=new Date(start); d<=end; d=addDays(d,1)) days.push(new Date(d));
+ return days;
 }
 function getDateRange() {
-  if (view==='day') {
-    return { start: fmtDate(curDate), end: fmtDate(curDate) };
-  } else if (view==='week') {
-    const days = getWeekDays(curDate);
-    return { start: fmtDate(days[0]), end: fmtDate(days[6]) };
-  } else {
-    const grid = getMonthGrid(curDate);
-    return { start: fmtDate(grid[0]), end: fmtDate(grid[grid.length-1]) };
-  }
+ if (view==='day') {
+ return { start: fmtDate(curDate), end: fmtDate(curDate) };
+ } else if (view==='week') {
+ const days = getWeekDays(curDate);
+ return { start: fmtDate(days[0]), end: fmtDate(days[6]) };
+ } else {
+ const grid = getMonthGrid(curDate);
+ return { start: fmtDate(grid[0]), end: fmtDate(grid[grid.length-1]) };
+ }
 }
 function navigate(delta) {
-  const d = new Date(curDate);
-  if (view==='day')   d.setDate(d.getDate()+delta);
-  else if (view==='week') d.setDate(d.getDate()+delta*7);
-  else                d.setMonth(d.getMonth()+delta);
-  curDate=d;
-  fetchEvents();
+ const d = new Date(curDate);
+ if (view==='day') d.setDate(d.getDate()+delta);
+ else if (view==='week') d.setDate(d.getDate()+delta*7);
+ else d.setMonth(d.getMonth()+delta);
+ curDate=d;
+ fetchEvents();
 }
 function updateDateLabel() {
-  const el = document.getElementById('cal-date-label');
-  if (view==='day') {
-    el.textContent = curDate.getFullYear()+'年'+(curDate.getMonth()+1)+'月'+curDate.getDate()+'日';
-  } else if (view==='week') {
-    const days=getWeekDays(curDate);
-    el.textContent = days[0].getFullYear()+'年'+(days[0].getMonth()+1)+'月';
-  } else {
-    el.textContent = curDate.getFullYear()+'年'+(curDate.getMonth()+1)+'月';
-  }
+ const el = document.getElementById('cal-date-label');
+ if (view==='day') {
+ el.textContent = curDate.getFullYear()+'年'+(curDate.getMonth()+1)+'月'+curDate.getDate()+'日';
+ } else if (view==='week') {
+ const days=getWeekDays(curDate);
+ el.textContent = days[0].getFullYear()+'年'+(days[0].getMonth()+1)+'月';
+ } else {
+ el.textContent = curDate.getFullYear()+'年'+(curDate.getMonth()+1)+'月';
+ }
 }
 
 // ═══════════════════════════════════════════════════════
-//  数据获取
+// 数据获取
 // ═══════════════════════════════════════════════════════
 async function fetchEvents() {
-  closePopup();
-  const {start,end} = getDateRange();
-  const res = await fetch(`/api/calendar/events?start=${start}&end=${end}&store=${encodeURIComponent(store)}`);
-  const data = await res.json();
-  events = data.appointments || [];
-  blocks = data.blocks || [];
-  render();
+ closePopup();
+ const {start,end} = getDateRange();
+ const res = await fetch(`/api/calendar/events?start=${start}&end=${end}&store=${encodeURIComponent(store)}`);
+ const data = await res.json();
+ events = data.appointments || [];
+ blocks = data.blocks || [];
+ render();
 }
 
 function eventsForDay(dateStr) {
-  return events.filter(e => e.date === dateStr);
+ return events.filter(e => e.date === dateStr);
 }
 function blocksForDay(dateStr) {
-  const s = store;
-  return blocks.filter(b => b.date === dateStr && (!s || !b.store || b.store === s));
+ const s = store;
+ return blocks.filter(b => b.date === dateStr && (!s || !b.store || b.store === s));
 }
 
 // ═══════════════════════════════════════════════════════
-//  渲染分发
+// 渲染分发
 // ═══════════════════════════════════════════════════════
 function render() {
-  updateDateLabel();
-  const body = document.getElementById('cal-body');
-  if (view==='month')      renderMonth(body);
-  else if (view==='week')  renderWeek(body, getWeekDays(curDate));
-  else                     renderDay(body, curDate);
-  updateNowLine();
+ updateDateLabel();
+ const body = document.getElementById('cal-body');
+ if (view==='month') renderMonth(body);
+ else if (view==='week') renderWeek(body, getWeekDays(curDate));
+ else renderDay(body, curDate);
+ updateNowLine();
 }
 
 // ═══════════════════════════════════════════════════════
-//  月视图
+// 月视图
 // ═══════════════════════════════════════════════════════
 function renderMonth(body) {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const grid = getMonthGrid(curDate);
-  const curM = curDate.getMonth();
+ const today = new Date(); today.setHours(0,0,0,0);
+ const grid = getMonthGrid(curDate);
+ const curM = curDate.getMonth();
 
-  let html = '<div class="month-grid">';
-  html += '<div class="month-header">';
-  ['日','一','二','三','四','五','六'].forEach(d => html += `<div>${d}</div>`);
-  html += '</div><div class="month-body" id="month-body">';
+ let html = '<div class="month-grid">';
+ html += '<div class="month-header">';
+ ['日','一','二','三','四','五','六'].forEach(d => html += `<div>${d}</div>`);
+ html += '</div><div class="month-body" id="month-body">';
 
-  grid.forEach((d,i) => {
-    const ds = fmtDate(d);
-    const isToday = sameDay(d,today);
-    const isOther = d.getMonth()!==curM;
-    const dayEvts = eventsForDay(ds);
-    const dayBlocks = blocksForDay(ds);
+ grid.forEach((d,i) => {
+ const ds = fmtDate(d);
+ const isToday = sameDay(d,today);
+ const isOther = d.getMonth()!==curM;
+ const dayEvts = eventsForDay(ds);
+ const dayBlocks = blocksForDay(ds);
 
-    html += `<div class="month-cell${isOther?' other-month':''}${isToday?' today':''}" data-date="${ds}" onclick="onMonthCellClick(event,'${ds}')">`;
-    html += `<div class="day-num${isToday?' today-circle':''}">${d.getDate()}</div>`;
+ html += `<div class="month-cell${isOther?' other-month':''}${isToday?' today':''}" data-date="${ds}" onclick="onMonthCellClick(event,'${ds}')">`;
+ html += `<div class="day-num${isToday?' today-circle':''}">${d.getDate()}</div>`;
 
-    // 全天封锁
-    dayBlocks.forEach(b => {
-      html += `<div class="month-block-pill" onclick="event.stopPropagation();openBlockPopup(event,${b.id})" title="${b.title}">${b.title}</div>`;
-    });
+ // 全天封锁
+ dayBlocks.forEach(b => {
+ html += `<div class="month-block-pill" onclick="event.stopPropagation();openBlockPopup(event,${b.id})" title="${b.title}">${b.title}</div>`;
+ });
 
-    // 预约（最多3条）
-    const maxShow = 3 - dayBlocks.length;
-    dayEvts.slice(0, Math.max(0, maxShow)).forEach(e => {
-      const c=getColor(e);
-      const label = (e.time||'') + ' ' + (e.service_name || e.customer_name || '');
-      html += `<div class="month-event-pill" style="background:${c.bg};color:${c.tx};border-left:2px solid ${c.bd};"
-        onclick="event.stopPropagation();openApptPopup(event,${e.id})" title="${label}">${label}</div>`;
-    });
-    const more = dayEvts.length - Math.max(0, maxShow);
-    if (more > 0) html += `<div class="month-more" onclick="event.stopPropagation();drillToDay('${ds}')">还有${more}个</div>`;
+ // 预约（最多3条）
+ const maxShow = 3 - dayBlocks.length;
+ dayEvts.slice(0, Math.max(0, maxShow)).forEach(e => {
+ const c=getColor(e);
+ const label = (e.time||'') + ' ' + (e.service_name || e.customer_name || '');
+ html += `<div class="month-event-pill" style="background:${c.bg};color:${c.tx};border-left:2px solid ${c.bd};"
+ onclick="event.stopPropagation();openApptPopup(event,${e.id})" title="${label}">${label}</div>`;
+ });
+ const more = dayEvts.length - Math.max(0, maxShow);
+ if (more> 0) html += `<div class="month-more" onclick="event.stopPropagation();drillToDay('${ds}')">还有${more}个</div>`;
 
-    html += '</div>';
-  });
+ html += '</div>';
+ });
 
-  html += '</div></div>';
-  body.innerHTML = html;
+ html += '</div></div>';
+ body.innerHTML = html;
 }
 
 function onMonthCellClick(ev, dateStr) {
-  openCreateModal(dateStr, '');
+ openCreateModal(dateStr, '');
 }
 function drillToDay(dateStr) {
-  curDate = parseDate(dateStr);
-  setView('day');
+ curDate = parseDate(dateStr);
+ setView('day');
 }
 
 // ═══════════════════════════════════════════════════════
-//  周/日视图公共渲染
+// 周/日视图公共渲染
 // ═══════════════════════════════════════════════════════
-const HOUR_H = 64;  // px per hour
+const HOUR_H = 64; // px per hour
 const START_H = 8;
-const END_H   = 22;
+const END_H = 22;
 const TOTAL_H = (END_H - START_H) * HOUR_H;
 
 function timeToTop(timeStr) {
-  const [h,m] = (timeStr||'00:00').split(':').map(Number);
-  return (h - START_H) * HOUR_H + (m/60)*HOUR_H;
+ const [h,m] = (timeStr||'00:00').split(':').map(Number);
+ return (h - START_H) * HOUR_H + (m/60)*HOUR_H;
 }
 function durationToH(min) { return (min/60)*HOUR_H; }
 
 // 简单重叠布局
 function layoutEvents(evts) {
-  const sorted = [...evts].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
-  const placed = []; // {endMin, col}
-  const result = [];
-  for (const e of sorted) {
-    const [sh,sm] = (e.time||'00:00').split(':').map(Number);
-    const startMin = sh*60+sm;
-    const endMin   = startMin + Math.max(e.duration||30, 30);
-    const usedCols = placed.filter(p=>p.endMin>startMin).map(p=>p.col);
-    let col=0; while(usedCols.includes(col)) col++;
-    placed.push({endMin,col});
-    result.push({...e,_col:col});
-  }
-  const maxCol = result.length ? Math.max(...result.map(e=>e._col))+1 : 1;
-  return result.map(e=>({...e,_numCols:maxCol}));
+ const sorted = [...evts].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+ const placed = []; // {endMin, col}
+ const result = [];
+ for (const e of sorted) {
+ const [sh,sm] = (e.time||'00:00').split(':').map(Number);
+ const startMin = sh*60+sm;
+ const endMin = startMin + Math.max(e.duration||30, 30);
+ const usedCols = placed.filter(p=>p.endMin>startMin).map(p=>p.col);
+ let col=0; while(usedCols.includes(col)) col++;
+ placed.push({endMin,col});
+ result.push({...e,_col:col});
+ }
+ const maxCol = result.length ? Math.max(...result.map(e=>e._col))+1 : 1;
+ return result.map(e=>({...e,_numCols:maxCol}));
 }
 
 function renderTimeGrid(days) {
-  // 返回 {gutter, allDayRow, scrollArea}
-  const numCols = days.length;
-  const today = new Date(); today.setHours(0,0,0,0);
+ // 返回 {gutter, allDayRow, scrollArea}
+ const numCols = days.length;
+ const today = new Date(); today.setHours(0,0,0,0);
 
-  // ── header ──
-  let headerHtml = '<div class="week-header-row">';
-  headerHtml += '<div class="week-time-gutter"></div>';
-  headerHtml += `<div class="week-header-cols" style="grid-template-columns:repeat(${numCols},1fr);">`;
-  days.forEach(d => {
-    const isToday = sameDay(d,today);
-    headerHtml += `<div class="week-day-head${isToday?' today-col':''}" onclick="drillToDay('${fmtDate(d)}')">
-      <div class="wdn">${WD_ZH[d.getDay()]}</div>
-      <div class="wdd">${d.getDate()}</div>
-    </div>`;
-  });
-  headerHtml += '</div></div>';
+ // ── header ──
+ let headerHtml = '<div class="week-header-row">';
+ headerHtml += '<div class="week-time-gutter"></div>';
+ headerHtml += `<div class="week-header-cols" style="grid-template-columns:repeat(${numCols},1fr);">`;
+ days.forEach(d => {
+ const isToday = sameDay(d,today);
+ headerHtml += `<div class="week-day-head${isToday?' today-col':''}" onclick="drillToDay('${fmtDate(d)}')">
+ <div class="wdn">${WD_ZH[d.getDay()]}</div>
+ <div class="wdd">${d.getDate()}</div>
+ </div>`;
+ });
+ headerHtml += '</div></div>';
 
-  // ── all-day row ──
-  let allDayHtml = '<div class="allday-row">';
-  allDayHtml += '<div class="allday-gutter">全天</div>';
-  allDayHtml += `<div class="allday-cols" style="grid-template-columns:repeat(${numCols},1fr);">`;
-  days.forEach(d => {
-    const ds = fmtDate(d);
-    allDayHtml += '<div class="allday-cell">';
-    blocksForDay(ds).forEach(b => {
-      allDayHtml += `<div class="allday-block-pill" onclick="openBlockPopup(event,${b.id})" title="${b.title}">${b.title}</div>`;
-    });
-    allDayHtml += '</div>';
-  });
-  allDayHtml += '</div></div>';
+ // ── all-day row ──
+ let allDayHtml = '<div class="allday-row">';
+ allDayHtml += '<div class="allday-gutter">全天</div>';
+ allDayHtml += `<div class="allday-cols" style="grid-template-columns:repeat(${numCols},1fr);">`;
+ days.forEach(d => {
+ const ds = fmtDate(d);
+ allDayHtml += '<div class="allday-cell">';
+ blocksForDay(ds).forEach(b => {
+ allDayHtml += `<div class="allday-block-pill" onclick="openBlockPopup(event,${b.id})" title="${b.title}">${b.title}</div>`;
+ });
+ allDayHtml += '</div>';
+ });
+ allDayHtml += '</div></div>';
 
-  // ── time grid ──
-  let gridHtml = `<div class="week-scroll" id="week-scroll">
-    <div class="week-grid">
-      <div class="time-col">`;
-  for (let h=START_H; h<END_H; h++) {
-    gridHtml += `<div class="hour-label">${h}:00</div>`;
-  }
-  gridHtml += `</div>
-      <div class="day-cols" id="day-cols-area" style="grid-template-columns:repeat(${numCols},1fr);">`;
+ // ── time grid ──
+ let gridHtml = `<div class="week-scroll" id="week-scroll">
+ <div class="week-grid">
+ <div class="time-col">`;
+ for (let h=START_H; h<END_H; h++) {
+ gridHtml += `<div class="hour-label">${h}:00</div>`;
+ }
+ gridHtml += `</div>
+ <div class="day-cols" id="day-cols-area" style="grid-template-columns:repeat(${numCols},1fr);">`;
 
-  const todayGridStr = fmtDate(new Date());
-  days.forEach(d => {
-    const ds = fmtDate(d);
-    const isTodayCol = ds === todayGridStr;
-    gridHtml += `<div class="day-col${isTodayCol?' today-bg':''}" data-date="${ds}">`;
-    for (let h=START_H; h<END_H; h++) {
-      const hm = String(h).padStart(2,'0')+':00';
-      gridHtml += `<div class="hour-line" onclick="onTimeClick(event,'${ds}','${hm}')"></div>`;
-      // 半小时虚线
-      const top = (h-START_H)*HOUR_H + HOUR_H/2;
-      gridHtml += `<div class="half-line" style="top:${top}px;"></div>`;
-    }
-    // 事件块
-    const dayEvts = layoutEvents(eventsForDay(ds));
-    dayEvts.forEach(e => {
-      const c = getColor(e);
-      const top  = timeToTop(e.time);
-      const height = Math.max(durationToH(e.duration), 24);
-      if (top >= TOTAL_H || top < 0) return;
-      const w    = 94 / e._numCols;
-      const left = e._col * (94 / e._numCols);
-      const label = (e.service_name || e.customer_name || '预约');
-      const evH = Math.min(height, TOTAL_H-top);
-      gridHtml += `<div class="cal-event" style="
-        top:${top}px; height:${evH}px;
-        left:${left+0.5}%; width:${w-1}%;
-        background:${c.bg}; color:${c.tx}; border-left-color:${c.bd};"
-        onclick="event.stopPropagation();openApptPopup(event,${e.id})">
-        <div class="ev-time">${e.time}${e.duration>30?' · '+e.duration+'分':''}</div>
-        <div class="ev-title">${label}</div>
-        ${evH>48 && e.customer_name ? '<div class="ev-cust">'+e.customer_name+'</div>' : ''}
-      </div>`;
-    });
-    gridHtml += '</div>';
-  });
+ const todayGridStr = fmtDate(new Date());
+ days.forEach(d => {
+ const ds = fmtDate(d);
+ const isTodayCol = ds === todayGridStr;
+ gridHtml += `<div class="day-col${isTodayCol?' today-bg':''}" data-date="${ds}">`;
+ for (let h=START_H; h<END_H; h++) {
+ const hm = String(h).padStart(2,'0')+':00';
+ gridHtml += `<div class="hour-line" onclick="onTimeClick(event,'${ds}','${hm}')"></div>`;
+ // 半小时虚线
+ const top = (h-START_H)*HOUR_H + HOUR_H/2;
+ gridHtml += `<div class="half-line" style="top:${top}px;"></div>`;
+ }
+ // 事件块
+ const dayEvts = layoutEvents(eventsForDay(ds));
+ dayEvts.forEach(e => {
+ const c = getColor(e);
+ const top = timeToTop(e.time);
+ const height = Math.max(durationToH(e.duration), 24);
+ if (top>= TOTAL_H || top < 0) return;
+ const w = 94 / e._numCols;
+ const left = e._col * (94 / e._numCols);
+ const label = (e.service_name || e.customer_name || '预约');
+ const evH = Math.min(height, TOTAL_H-top);
+ gridHtml += `<div class="cal-event" style="
+ top:${top}px; height:${evH}px;
+ left:${left+0.5}%; width:${w-1}%;
+ background:${c.bg}; color:${c.tx}; border-left-color:${c.bd};"
+ onclick="event.stopPropagation();openApptPopup(event,${e.id})">
+ <div class="ev-time">${e.time}${e.duration>30?' · '+e.duration+'分':''}</div>
+ <div class="ev-title">${label}</div>
+ ${evH>48 && e.customer_name ? '<div class="ev-cust">'+e.customer_name+'</div>' : ''}
+ </div>`;
+ });
+ gridHtml += '</div>';
+ });
 
-  gridHtml += `</div>
-      <div class="now-line" id="now-line" style="display:none;">
-        <div class="now-dot"></div>
-      </div>
-    </div>
-  </div>`;
+ gridHtml += `</div>
+ <div class="now-line" id="now-line" style="display:none;">
+ <div class="now-dot"></div>
+ </div>
+ </div>
+ </div>`;
 
-  return headerHtml + allDayHtml + gridHtml;
+ return headerHtml + allDayHtml + gridHtml;
 }
 
 function renderWeek(body, days) {
-  body.innerHTML = '<div class="week-outer">' + renderTimeGrid(days) + '</div>';
-  scrollToNow();
+ body.innerHTML = '<div class="week-outer">' + renderTimeGrid(days) + '</div>';
+ scrollToNow();
 }
 function renderDay(body, d) {
-  body.innerHTML = '<div class="week-outer">' + renderTimeGrid([d]) + '</div>';
-  scrollToNow();
+ body.innerHTML = '<div class="week-outer">' + renderTimeGrid([d]) + '</div>';
+ scrollToNow();
 }
 
 function onTimeClick(ev, dateStr, timeStr) {
-  openCreateModal(dateStr, timeStr);
+ openCreateModal(dateStr, timeStr);
 }
 
 // ═══════════════════════════════════════════════════════
-//  当前时间指示线
+// 当前时间指示线
 // ═══════════════════════════════════════════════════════
 function updateNowLine() {
-  const line = document.getElementById('now-line');
-  if (!line) return;
-  const now = new Date();
-  const h = now.getHours(), m = now.getMinutes();
-  if (h < START_H || h >= END_H) { line.style.display='none'; return; }
-  const top = (h - START_H) * HOUR_H + (m / 60) * HOUR_H;
+ const line = document.getElementById('now-line');
+ if (!line) return;
+ const now = new Date();
+ const h = now.getHours(), m = now.getMinutes();
+ if (h < START_H || h>= END_H) { line.style.display='none'; return; }
+ const top = (h - START_H) * HOUR_H + (m / 60) * HOUR_H;
 
-  const today = new Date(); today.setHours(0,0,0,0);
-  let show = false;
-  if (view==='day')  show = sameDay(curDate, today);
-  else if (view==='week') show = getWeekDays(curDate).some(d=>sameDay(d,today));
-  if (!show) { line.style.display='none'; return; }
+ const today = new Date(); today.setHours(0,0,0,0);
+ let show = false;
+ if (view==='day') show = sameDay(curDate, today);
+ else if (view==='week') show = getWeekDays(curDate).some(d=>sameDay(d,today));
+ if (!show) { line.style.display='none'; return; }
 
-  const weekGrid = document.querySelector('.week-grid');
-  const cols = document.getElementById('day-cols-area');
-  if (!weekGrid || !cols) { line.style.display='none'; return; }
+ const weekGrid = document.querySelector('.week-grid');
+ const cols = document.getElementById('day-cols-area');
+ if (!weekGrid || !cols) { line.style.display='none'; return; }
 
-  const gridRect = weekGrid.getBoundingClientRect();
-  const todayStr = fmtDate(today);
+ const gridRect = weekGrid.getBoundingClientRect();
+ const todayStr = fmtDate(today);
 
-  // 日视图：横贯整个 day-cols 区域
-  if (view === 'day') {
-    const colsRect = cols.getBoundingClientRect();
-    line.style.left  = (colsRect.left  - gridRect.left) + 'px';
-    line.style.width = colsRect.width + 'px';
-  } else {
-    // 周视图：只覆盖今天那一列
-    let found = false;
-    cols.querySelectorAll('.day-col').forEach(el => {
-      if (el.dataset.date === todayStr) {
-        const r = el.getBoundingClientRect();
-        line.style.left  = (r.left - gridRect.left) + 'px';
-        line.style.width = r.width + 'px';
-        found = true;
-      }
-    });
-    if (!found) { line.style.display='none'; return; }
-  }
-  line.style.display = 'block';
-  line.style.top     = top + 'px';
+ // 日视图：横贯整个 day-cols 区域
+ if (view === 'day') {
+ const colsRect = cols.getBoundingClientRect();
+ line.style.left = (colsRect.left - gridRect.left) + 'px';
+ line.style.width = colsRect.width + 'px';
+ } else {
+ // 周视图：只覆盖今天那一列
+ let found = false;
+ cols.querySelectorAll('.day-col').forEach(el => {
+ if (el.dataset.date === todayStr) {
+ const r = el.getBoundingClientRect();
+ line.style.left = (r.left - gridRect.left) + 'px';
+ line.style.width = r.width + 'px';
+ found = true;
+ }
+ });
+ if (!found) { line.style.display='none'; return; }
+ }
+ line.style.display = 'block';
+ line.style.top = top + 'px';
 }
 
 function scrollToNow() {
-  setTimeout(()=>{
-    const sc = document.getElementById('week-scroll');
-    if (!sc) return;
-    const now = new Date();
-    const h = Math.max(now.getHours()-1, START_H);
-    sc.scrollTop = (h-START_H)*HOUR_H;
-  }, 50);
+ setTimeout(()=>{
+ const sc = document.getElementById('week-scroll');
+ if (!sc) return;
+ const now = new Date();
+ const h = Math.max(now.getHours()-1, START_H);
+ sc.scrollTop = (h-START_H)*HOUR_H;
+ }, 50);
 }
 
 // ═══════════════════════════════════════════════════════
-//  弹出卡片
+// 弹出卡片
 // ═══════════════════════════════════════════════════════
 function openApptPopup(ev, id) {
-  ev.stopPropagation();
-  const appt = events.find(e=>e.id===id);
-  if (!appt) return;
-  popupAppt = appt;
+ ev.stopPropagation();
+ const appt = events.find(e=>e.id===id);
+ if (!appt) return;
+ popupAppt = appt;
 
-  const c = getColor(appt);
-  document.getElementById('pp-title').textContent = appt.service_name || '预约';
+ const c = getColor(appt);
+ document.getElementById('pp-title').textContent = appt.service_name || '预约';
 
-  // 日期时间
-  const dur = appt.duration ? `· 时长 ${appt.duration} 分钟` : '';
-  document.getElementById('pp-datetime').textContent = `${appt.date} ${WD_ZH[parseDate(appt.date).getDay()]} ${appt.time} ${dur}`;
+ // 日期时间
+ const dur = appt.duration ? `· 时长 ${appt.duration} 分钟` : '';
+ document.getElementById('pp-datetime').textContent = `${appt.date} ${WD_ZH[parseDate(appt.date).getDay()]} ${appt.time} ${dur}`;
 
-  // 标签
-  const badgesEl = document.getElementById('pp-badges');
-  const catZh = CAT_ZH[appt.category] || appt.category;
-  const stZh  = STATUS_ZH[appt.status] || appt.status;
-  const stColor = {
-    pending:'#92400e', confirmed:'#1e40af', arrived:'#166534',
-    completed:'#166534', cancelled:'#991b1b', no_show:'#92400e'
-  }[appt.status] || '#374151';
-  const stBg = {
-    pending:'#fef3c7', confirmed:'#dbeafe', arrived:'#d1fae5',
-    completed:'#d1fae5', cancelled:'#fee2e2', no_show:'#fef3c7'
-  }[appt.status] || '#f3f4f6';
-  let badges = `<span class="popup-badge" style="background:${c.bg};color:${c.tx};border-color:${c.bd};">${catZh}</span>`;
-  badges += `<span class="popup-badge" style="background:${stBg};color:${stColor};border-color:${stColor}aa;">${stZh}</span>`;
-  if (appt.related_app_id) badges += `<span class="popup-badge" style="background:#f0fdf4;color:#166534;border-color:#86efac;">申请 #${appt.related_app_id}</span>`;
-  badgesEl.innerHTML = badges;
+ // 标签
+ const badgesEl = document.getElementById('pp-badges');
+ const catZh = CAT_ZH[appt.category] || appt.category;
+ const stZh = STATUS_ZH[appt.status] || appt.status;
+ const stColor = {
+ pending:'#92400e', confirmed:'#1e40af', arrived:'#166534',
+ completed:'#166534', cancelled:'#991b1b', no_show:'#92400e'
+ }[appt.status] || '#374151';
+ const stBg = {
+ pending:'#fef3c7', confirmed:'#dbeafe', arrived:'#d1fae5',
+ completed:'#d1fae5', cancelled:'#fee2e2', no_show:'#fef3c7'
+ }[appt.status] || '#f3f4f6';
+ let badges = `<span class="popup-badge" style="background:${c.bg};color:${c.tx};border-color:${c.bd};">${catZh}</span>`;
+ badges += `<span class="popup-badge" style="background:${stBg};color:${stColor};border-color:${stColor}aa;">${stZh}</span>`;
+ if (appt.related_app_id) badges += `<span class="popup-badge" style="background:#f0fdf4;color:#166534;border-color:#86efac;">申请 #${appt.related_app_id}</span>`;
+ badgesEl.innerHTML = badges;
 
-  // 详情行
-  let rows = '';
-  const spcZh = SPECIES_ZH[appt.pet_species] || '';
-  const genZh = GENDER_ZH[appt.pet_gender] || '';
-  const petLabel = [spcZh, appt.pet_name||'', genZh].filter(Boolean).join('·');
-  rows += row('项目', appt.service_name||'—');
-  rows += row('联系人', [appt.customer_name, appt.phone].filter(Boolean).join(' · ') || '—');
-  if (petLabel) rows += row('对象', petLabel);
-  rows += row('门店', appt.store||'—');
-  if (appt.related_app_id) rows += row('关联申请', '#'+appt.related_app_id);
-  document.getElementById('pp-rows').innerHTML = rows;
+ // 详情行
+ let rows = '';
+ const spcZh = SPECIES_ZH[appt.pet_species] || '';
+ const genZh = GENDER_ZH[appt.pet_gender] || '';
+ const petLabel = [spcZh, appt.pet_name||'', genZh].filter(Boolean).join('·');
+ rows += row('项目', appt.service_name||'—');
+ rows += row('联系人', [appt.customer_name, appt.phone].filter(Boolean).join(' · ') || '—');
+ if (petLabel) rows += row('对象', petLabel);
+ rows += row('门店', appt.store||'—');
+ if (appt.related_app_id) rows += row('关联申请', '#'+appt.related_app_id);
+ document.getElementById('pp-rows').innerHTML = rows;
 
-  // 备注
-  const notesEl = document.getElementById('pp-notes');
-  if (appt.notes) { notesEl.textContent = appt.notes; notesEl.style.display='block'; }
-  else notesEl.style.display='none';
+ // 备注
+ const notesEl = document.getElementById('pp-notes');
+ if (appt.notes) { notesEl.textContent = appt.notes; notesEl.style.display='block'; }
+ else notesEl.style.display='none';
 
-  // 操作按钮
-  const st = appt.status;
-  let btns = '';
-  if (st !== 'arrived' && st !== 'completed' && st !== 'cancelled' && st !== 'no_show')
-    btns += `<button class="btn-arrived" onclick="doStatus(${id},'arrived')">已到店</button>`;
-  if (st !== 'no_show' && st !== 'cancelled' && st !== 'completed')
-    btns += `<button class="btn-noshow" onclick="doStatus(${id},'no_show')">爽约</button>`;
-  if (st !== 'cancelled' && st !== 'completed')
-    btns += `<button class="btn-cancel" onclick="doCancel(${id})">取消</button>`;
-  if (st !== 'cancelled' && st !== 'completed')
-    btns += `<button onclick="openReschedule(${id})">改约</button>`;
-  btns += `<button class="btn-edit" onclick="window.location='/admin/appointments?search=${encodeURIComponent(appt.phone||appt.customer_name||'')}#appt-${id}'">编辑</button>`;
-  btns += `<span class="popup-created">创建 ${appt.created_at||''}</span>`;
-  document.getElementById('pp-actions').innerHTML = btns;
+ // 操作按钮
+ const st = appt.status;
+ let btns = '';
+ if (st !== 'arrived' && st !== 'completed' && st !== 'cancelled' && st !== 'no_show')
+ btns += `<button class="btn-arrived" onclick="doStatus(${id},'arrived')">已到店</button>`;
+ if (st !== 'no_show' && st !== 'cancelled' && st !== 'completed')
+ btns += `<button class="btn-noshow" onclick="doStatus(${id},'no_show')">爽约</button>`;
+ if (st !== 'cancelled' && st !== 'completed')
+ btns += `<button class="btn-cancel" onclick="doCancel(${id})">取消</button>`;
+ if (st !== 'cancelled' && st !== 'completed')
+ btns += `<button onclick="openReschedule(${id})">改约</button>`;
+ btns += `<button class="btn-edit" onclick="window.location='/admin/appointments?search=${encodeURIComponent(appt.phone||appt.customer_name||'')}#appt-${id}'">编辑</button>`;
+ btns += `<span class="popup-created">创建 ${appt.created_at||''}</span>`;
+ document.getElementById('pp-actions').innerHTML = btns;
 
-  positionPopup(ev);
+ positionPopup(ev);
 }
 
 function row(label, val) {
-  return `<div class="popup-row"><span class="popup-label">${label}</span><span class="popup-val">${val}</span></div>`;
+ return `<div class="popup-row"><span class="popup-label">${label}</span><span class="popup-val">${val}</span></div>`;
 }
 
 function openBlockPopup(ev, id) {
-  ev.stopPropagation();
-  const b = blocks.find(x=>x.id===id);
-  if (!b) return;
-  popupAppt = null;
+ ev.stopPropagation();
+ const b = blocks.find(x=>x.id===id);
+ if (!b) return;
+ popupAppt = null;
 
-  document.getElementById('pp-title').textContent = b.title;
-  document.getElementById('pp-datetime').textContent = b.date + ' 全天';
-  document.getElementById('pp-badges').innerHTML = `<span class="popup-badge" style="background:#e0e7ff;color:#3730a3;border-color:#a5b4fc;">全天封锁</span>`;
-  let rows = '';
-  if (b.store) rows += row('门店', b.store);
-  if (b.notes) rows += row('备注', b.notes);
-  document.getElementById('pp-rows').innerHTML = rows;
-  document.getElementById('pp-notes').style.display='none';
-  document.getElementById('pp-actions').innerHTML = `
-    <button class="btn-cancel" onclick="doDeleteBlock(${b.id})">删除</button>
-    <span class="popup-created"></span>
-  `;
-  positionPopup(ev);
+ document.getElementById('pp-title').textContent = b.title;
+ document.getElementById('pp-datetime').textContent = b.date + ' 全天';
+ document.getElementById('pp-badges').innerHTML = `<span class="popup-badge" style="background:#e0e7ff;color:#3730a3;border-color:#a5b4fc;">全天封锁</span>`;
+ let rows = '';
+ if (b.store) rows += row('门店', b.store);
+ if (b.notes) rows += row('备注', b.notes);
+ document.getElementById('pp-rows').innerHTML = rows;
+ document.getElementById('pp-notes').style.display='none';
+ document.getElementById('pp-actions').innerHTML = `
+ <button class="btn-cancel" onclick="doDeleteBlock(${b.id})">删除</button>
+ <span class="popup-created"></span>
+ `;
+ positionPopup(ev);
 }
 
 function positionPopup(ev) {
-  const popup = document.getElementById('cal-popup');
-  popup.classList.add('visible');
-  const x = ev.clientX, y = ev.clientY;
-  const pw = 340, ph = 400;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  popup.style.left = Math.min(x+10, vw-pw-10) + 'px';
-  popup.style.top  = Math.min(y+10, vh-ph-10) + 'px';
+ const popup = document.getElementById('cal-popup');
+ popup.classList.add('visible');
+ const x = ev.clientX, y = ev.clientY;
+ const pw = 340, ph = 400;
+ const vw = window.innerWidth, vh = window.innerHeight;
+ popup.style.left = Math.min(x+10, vw-pw-10) + 'px';
+ popup.style.top = Math.min(y+10, vh-ph-10) + 'px';
 }
 
 function closePopup() {
-  document.getElementById('cal-popup').classList.remove('visible');
-  popupAppt = null;
+ document.getElementById('cal-popup').classList.remove('visible');
+ popupAppt = null;
 }
 
 // ═══════════════════════════════════════════════════════
-//  AJAX 状态操作
+// AJAX 状态操作
 // ═══════════════════════════════════════════════════════
 async function doStatus(id, status) {
-  const res = await fetch(`/api/calendar/appt/${id}/status`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ csrf_token: CSRF, status })
-  });
-  const data = await res.json();
-  if (data.ok) { closePopup(); toast('操作成功'); fetchEvents(); }
-  else toast('错误：'+(data.error||'未知'));
+ const res = await fetch(`/api/calendar/appt/${id}/status`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, status })
+ });
+ const data = await res.json();
+ if (data.ok) { closePopup(); toast('操作成功'); fetchEvents(); }
+ else toast('错误：'+(data.error||'未知'));
 }
 
 async function doCancel(id) {
-  const reason = prompt('取消原因（可选）:') ?? null;
-  if (reason === null) return;
-  const res = await fetch(`/api/calendar/appt/${id}/status`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ csrf_token: CSRF, status:'cancelled', cancel_reason: reason })
-  });
-  const data = await res.json();
-  if (data.ok) { closePopup(); toast('已取消'); fetchEvents(); }
-  else toast('错误：'+(data.error||'未知'));
+ const reason = prompt('取消原因（可选）:') ?? null;
+ if (reason === null) return;
+ const res = await fetch(`/api/calendar/appt/${id}/status`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, status:'cancelled', cancel_reason: reason })
+ });
+ const data = await res.json();
+ if (data.ok) { closePopup(); toast('已取消'); fetchEvents(); }
+ else toast('错误：'+(data.error||'未知'));
 }
 
 async function doDeleteBlock(id) {
-  if (!confirm('删除此全天封锁？')) return;
-  const res = await fetch(`/api/calendar/blocks/${id}/delete`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ csrf_token: CSRF })
-  });
-  const data = await res.json();
-  if (data.ok) { closePopup(); toast('已删除'); fetchEvents(); }
-  else toast('错误：'+(data.error||''));
+ if (!confirm('删除此全天封锁？')) return;
+ const res = await fetch(`/api/calendar/blocks/${id}/delete`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF })
+ });
+ const data = await res.json();
+ if (data.ok) { closePopup(); toast('已删除'); fetchEvents(); }
+ else toast('错误：'+(data.error||''));
 }
 
 // ═══════════════════════════════════════════════════════
-//  改约
+// 改约
 // ═══════════════════════════════════════════════════════
 let rescheduleId = null;
 function openReschedule(id) {
-  rescheduleId = id;
-  const appt = events.find(e=>e.id===id);
-  document.getElementById('rs-date').value = appt?.date||'';
-  document.getElementById('rs-time').value = appt?.time||'';
-  document.getElementById('reschedule-modal').classList.add('visible');
+ rescheduleId = id;
+ const appt = events.find(e=>e.id===id);
+ document.getElementById('rs-date').value = appt?.date||'';
+ document.getElementById('rs-time').value = appt?.time||'';
+ document.getElementById('reschedule-modal').classList.add('visible');
 }
 function closeReschedule() {
-  document.getElementById('reschedule-modal').classList.remove('visible');
-  rescheduleId = null;
+ document.getElementById('reschedule-modal').classList.remove('visible');
+ rescheduleId = null;
 }
 document.getElementById('rs-confirm-btn').addEventListener('click', async () => {
-  if (!rescheduleId) return;
-  const date = document.getElementById('rs-date').value;
-  const time = document.getElementById('rs-time').value;
-  const res = await fetch(`/api/calendar/appt/${rescheduleId}/reschedule`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ csrf_token: CSRF, date, time })
-  });
-  const data = await res.json();
-  if (data.ok) { closeReschedule(); closePopup(); toast('改约成功'); fetchEvents(); }
-  else toast('错误：'+(data.error||''));
+ if (!rescheduleId) return;
+ const date = document.getElementById('rs-date').value;
+ const time = document.getElementById('rs-time').value;
+ const res = await fetch(`/api/calendar/appt/${rescheduleId}/reschedule`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, date, time })
+ });
+ const data = await res.json();
+ if (data.ok) { closeReschedule(); closePopup(); toast('改约成功'); fetchEvents(); }
+ else toast('错误：'+(data.error||''));
 });
 
 // ═══════════════════════════════════════════════════════
-//  新建日程
+// 新建日程
 // ═══════════════════════════════════════════════════════
 let createDate='', createTime='';
 function openCreateModal(date, time) {
-  createDate=date; createTime=time;
-  document.getElementById('block-date').value = date;
-  document.getElementById('block-form').style.display='none';
-  document.getElementById('create-modal').classList.add('visible');
+ createDate=date; createTime=time;
+ document.getElementById('block-date').value = date;
+ document.getElementById('block-form').style.display='none';
+ document.getElementById('create-modal').classList.add('visible');
 }
 function closeCreateModal() {
-  document.getElementById('create-modal').classList.remove('visible');
-  document.getElementById('block-form').style.display='none';
+ document.getElementById('create-modal').classList.remove('visible');
+ document.getElementById('block-form').style.display='none';
 }
 
 document.getElementById('create-appt-btn').addEventListener('click', () => {
-  closeCreateModal();
-  const url = '/admin/appointments/create'
-    + (createDate ? '?date='+createDate : '')
-    + (createTime ? (createDate?'&':'?')+'time='+createTime : '');
-  window.location.href = url;
+ closeCreateModal();
+ const url = '/admin/appointments/create'
+ + (createDate ? '?date='+createDate : '')
+ + (createTime ? (createDate?'&':'?')+'time='+createTime : '');
+ window.location.href = url;
 });
 
 document.getElementById('create-block-btn').addEventListener('click', () => {
-  document.getElementById('block-store').value = store;
-  document.getElementById('block-title').value = '';
-  document.getElementById('block-notes').value = '';
-  document.getElementById('create-appt-btn').parentElement.style.display='none';  // hide choice
-  document.getElementById('create-block-btn').parentElement.style.display='none';
-  document.getElementById('block-form').style.display='block';
+ document.getElementById('block-store').value = store;
+ document.getElementById('block-title').value = '';
+ document.getElementById('block-notes').value = '';
+ document.getElementById('create-appt-btn').parentElement.style.display='none'; // hide choice
+ document.getElementById('create-block-btn').parentElement.style.display='none';
+ document.getElementById('block-form').style.display='block';
 });
 
 document.getElementById('block-save-btn').addEventListener('click', async () => {
-  const title = document.getElementById('block-title').value.trim() || '全天封锁';
-  const date  = document.getElementById('block-date').value;
-  const st    = document.getElementById('block-store').value;
-  const notes = document.getElementById('block-notes').value.trim();
-  if (!date) { toast('请填写日期'); return; }
-  const res = await fetch('/api/calendar/blocks/create', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ csrf_token: CSRF, title, date, store: st, notes })
-  });
-  const data = await res.json();
-  if (data.ok) { closeCreateModal(); toast('已创建'); fetchEvents(); }
-  else toast('错误：'+(data.error||''));
+ const title = document.getElementById('block-title').value.trim() || '全天封锁';
+ const date = document.getElementById('block-date').value;
+ const st = document.getElementById('block-store').value;
+ const notes = document.getElementById('block-notes').value.trim();
+ if (!date) { toast('请填写日期'); return; }
+ const res = await fetch('/api/calendar/blocks/create', {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, title, date, store: st, notes })
+ });
+ const data = await res.json();
+ if (data.ok) { closeCreateModal(); toast('已创建'); fetchEvents(); }
+ else toast('错误：'+(data.error||''));
 });
 
 // ═══════════════════════════════════════════════════════
-//  Toast
+// Toast
 // ═══════════════════════════════════════════════════════
 let _toastTimer;
 function toast(msg) {
-  const el = document.getElementById('cal-toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(()=>el.classList.remove('show'), 2500);
+ const el = document.getElementById('cal-toast');
+ el.textContent = msg;
+ el.classList.add('show');
+ clearTimeout(_toastTimer);
+ _toastTimer = setTimeout(()=>el.classList.remove('show'), 2500);
 }
 
 // ═══════════════════════════════════════════════════════
-//  视图切换
+// 视图切换
 // ═══════════════════════════════════════════════════════
 function setView(v) {
-  view = v;
-  document.querySelectorAll('.view-sw button').forEach(b=>{
-    b.classList.toggle('active', b.dataset.view===v);
-  });
-  fetchEvents();
+ view = v;
+ document.querySelectorAll('.view-sw button').forEach(b=>{
+ b.classList.toggle('active', b.dataset.view===v);
+ });
+ fetchEvents();
 }
 
 // ═══════════════════════════════════════════════════════
-//  事件绑定
+// 事件绑定
 // ═══════════════════════════════════════════════════════
 document.getElementById('prev-btn').addEventListener('click', ()=>navigate(-1));
 document.getElementById('next-btn').addEventListener('click', ()=>navigate(1));
 document.getElementById('today-btn').addEventListener('click', ()=>{ curDate=new Date(); fetchEvents(); });
 document.querySelectorAll('.view-sw button').forEach(b=>{
-  b.addEventListener('click', ()=>setView(b.dataset.view));
+ b.addEventListener('click', ()=>setView(b.dataset.view));
 });
 document.getElementById('store-filter').addEventListener('change', e=>{
-  store=e.target.value; fetchEvents();
+ store=e.target.value; fetchEvents();
 });
 document.getElementById('new-event-btn').addEventListener('click', ()=>openCreateModal('',''));
 
 // 点击遮罩/空白关闭弹窗
 document.addEventListener('click', e=>{
-  if (!document.getElementById('cal-popup').contains(e.target)) closePopup();
-  if (e.target===document.getElementById('reschedule-modal')) closeReschedule();
-  if (e.target===document.getElementById('create-modal'))     closeCreateModal();
+ if (!document.getElementById('cal-popup').contains(e.target)) closePopup();
+ if (e.target===document.getElementById('reschedule-modal')) closeReschedule();
+ if (e.target===document.getElementById('create-modal')) closeCreateModal();
 });
 
 // 限制门店筛选器到管理员有权访问的门店
 if (ADMIN_STORE) {
-  const sel = document.getElementById('store-filter');
-  [...sel.options].forEach(o=>{ if(o.value && o.value!==ADMIN_STORE) o.disabled=true; });
-  sel.value = ADMIN_STORE;
+ const sel = document.getElementById('store-filter');
+ [...sel.options].forEach(o=>{ if(o.value && o.value!==ADMIN_STORE) o.disabled=true; });
+ sel.value = ADMIN_STORE;
 }
 
 // 每分钟刷新指示线

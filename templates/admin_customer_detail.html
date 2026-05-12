@@ -6,24 +6,24 @@
 
 /* 顶部客户信息卡 */
 .cust-card {
-  background: linear-gradient(135deg, #fefce8 0%, #fffbeb 100%);
-  border: 1px solid #fef3c7; border-radius: 10px;
-  padding: 0.85rem 1rem; display: flex; gap: 1rem; align-items: center;
+ background: linear-gradient(135deg, #fefce8 0%, #fffbeb 100%);
+ border: 1px solid #fef3c7; border-radius: 10px;
+ padding: 0.85rem 1rem; display: flex; gap: 1rem; align-items: center;
 }
 .cust-avatar {
-  width: 60px; height: 60px; border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  color: #fff; display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem; font-weight: 700; flex-shrink: 0;
+ width: 60px; height: 60px; border-radius: 50%;
+ background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+ color: #fff; display: flex; align-items: center; justify-content: center;
+ font-size: 1.5rem; font-weight: 700; flex-shrink: 0;
 }
 .cust-main { flex: 1; min-width: 0; }
 .cust-top-row {
-  display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
+ display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
 }
 .cust-name { font-size: 1.2rem; font-weight: 700; color: #1a1a2e; }
 .cust-info-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0.3rem 1rem; margin-top: 0.35rem; font-size: 0.85rem;
+ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+ gap: 0.3rem 1rem; margin-top: 0.35rem; font-size: 0.85rem;
 }
 .cust-info-grid b { color: var(--muted); font-weight: 500; margin-right: 0.4rem; }
 .cust-actions { display: flex; gap: 0.4rem; flex-shrink: 0; flex-wrap: wrap; }
@@ -32,21 +32,21 @@
 /* 宠物表格 */
 .pets-section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .pets-section-head {
-  padding: 0.55rem 1rem; background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between;
+ padding: 0.55rem 1rem; background: var(--bg-elevated);
+ border-bottom: 1px solid var(--border);
+ display: flex; align-items: center; justify-content: space-between;
 }
 .pets-section-head h3 { margin: 0; font-size: 0.95rem; font-weight: 700; }
 .pets-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .pets-table th {
-  text-align: left; padding: 0.45rem 0.65rem; font-weight: 600;
-  font-size: 0.74rem; color: var(--muted); background: #fafbfc;
-  border-bottom: 1px solid var(--border); letter-spacing: 0.02em;
-  white-space: nowrap;
+ text-align: left; padding: 0.45rem 0.65rem; font-weight: 600;
+ font-size: 0.74rem; color: var(--muted); background: #fafbfc;
+ border-bottom: 1px solid var(--border); letter-spacing: 0.02em;
+ white-space: nowrap;
 }
 .pets-table td {
-  padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--border);
-  vertical-align: middle; white-space: nowrap;
+ padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--border);
+ vertical-align: middle; white-space: nowrap;
 }
 .pets-table tr:last-child td { border-bottom: none; }
 .pets-table tr.pet-row { cursor: pointer; transition: background 0.1s; }
@@ -56,56 +56,56 @@
 .pet-mrn { font-family: monospace; font-size: 0.78rem; color: #4b5563; }
 .pet-name-cell { font-weight: 600; }
 .pill {
-  display: inline-block; padding: 0.1rem 0.5rem; border-radius: 99px;
-  font-size: 0.7rem; font-weight: 600; border: 1px solid;
+ display: inline-block; padding: 0.1rem 0.5rem; border-radius: 99px;
+ font-size: 0.7rem; font-weight: 600; border: 1px solid;
 }
-.pill-ok    { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
-.pill-warn  { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
-.pill-no    { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
-.pill-gray  { background: #f3f4f6; color: #6b7280; border-color: #d1d5db; }
-.pill-info  { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+.pill-ok { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+.pill-warn { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.pill-no { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.pill-gray { background: #f3f4f6; color: #6b7280; border-color: #d1d5db; }
+.pill-info { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
 .pets-empty { padding: 2rem; text-align: center; color: var(--muted); }
 
 /* 标签栏 + 内容区 */
 .tabs-bar {
-  display: flex; gap: 0; padding: 0 1rem; background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border); overflow-x: auto;
+ display: flex; gap: 0; padding: 0 1rem; background: var(--bg-elevated);
+ border-bottom: 1px solid var(--border); overflow-x: auto;
 }
 .tab-btn {
-  padding: 0.55rem 1rem; background: none; border: none; cursor: pointer;
-  font-size: 0.88rem; font-weight: 500; color: var(--muted);
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-  white-space: nowrap; line-height: 1.4;
+ padding: 0.55rem 1rem; background: none; border: none; cursor: pointer;
+ font-size: 0.88rem; font-weight: 500; color: var(--muted);
+ border-bottom: 2px solid transparent; margin-bottom: -1px;
+ white-space: nowrap; line-height: 1.4;
 }
 .tab-btn:hover { color: var(--text); background: rgba(59,130,246,0.04); }
 .tab-btn.active {
-  color: #3b82f6; border-bottom-color: #3b82f6; font-weight: 600;
-  background: var(--card);
+ color: #3b82f6; border-bottom-color: #3b82f6; font-weight: 600;
+ background: var(--card);
 }
 .tab-btn .count {
-  display: inline-block; margin-left: 0.3rem;
-  background: #e5e7eb; color: #6b7280; padding: 0 0.4em;
-  border-radius: 99px; font-size: 0.72rem; font-weight: 600;
+ display: inline-block; margin-left: 0.3rem;
+ background: #e5e7eb; color: #6b7280; padding: 0 0.4em;
+ border-radius: 99px; font-size: 0.72rem; font-weight: 600;
 }
 .tab-btn.active .count { background: #dbeafe; color: #1e40af; }
 
 .tab-content {
-  display: none; background: var(--card); border: 1px solid var(--border);
-  border-top: none; border-radius: 0 0 10px 10px;
-  padding: 1rem; min-height: 220px;
+ display: none; background: var(--card); border: 1px solid var(--border);
+ border-top: none; border-radius: 0 0 10px 10px;
+ padding: 1rem; min-height: 220px;
 }
 .tab-content.active { display: block; }
 
 /* 通用数据表 */
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .data-table th {
-  text-align: left; padding: 0.4rem 0.6rem; font-weight: 600;
-  font-size: 0.74rem; color: var(--muted); background: #fafbfc;
-  border-bottom: 1px solid var(--border); letter-spacing: 0.02em;
+ text-align: left; padding: 0.4rem 0.6rem; font-weight: 600;
+ font-size: 0.74rem; color: var(--muted); background: #fafbfc;
+ border-bottom: 1px solid var(--border); letter-spacing: 0.02em;
 }
 .data-table td {
-  padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border);
-  vertical-align: middle;
+ padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border);
+ vertical-align: middle;
 }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td { background: #fafbfc; }
@@ -116,8 +116,8 @@
 .tab-empty a { color: #3b82f6; }
 
 .tab-action-bar {
-  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
-  margin-bottom: 0.65rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+ display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+ margin-bottom: 0.65rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
 }
 .tab-action-bar .btn { font-size: 0.82rem; padding: 0.35rem 0.85rem; }
 
@@ -138,759 +138,759 @@
 
 <div class="hub-wrap">
 
-  {# ── 顶部客户信息卡 ── #}
-  <div class="cust-card">
-    <div class="cust-avatar">{{ (cust.name or '?') | first | upper }}</div>
-    <div class="cust-main">
-      <div class="cust-top-row">
-        <span class="cust-name">{{ cust.name or '未命名' }}</span>
-        {% if cust.phone %}<span style="font-size:0.95rem;color:#6b7280;">📞 {{ cust.phone }}</span>{% endif %}
-      </div>
-      <div class="cust-info-grid">
-        {% if cust.address %}<div><b>地址</b>{{ cust.address }}</div>{% endif %}
-        {% if cust.source %}<div><b>来源</b>{{ cust.source }}</div>{% endif %}
-        {% if cust.id_number %}<div><b>证件号</b>{{ cust.id_number }}</div>{% endif %}
-        <div><b>客户ID</b>#{{ cust.id }}</div>
-        <div><b>创建时间</b>{{ cust.created_at.strftime('%Y-%m-%d') if cust.created_at else '—' }}</div>
-      </div>
-      {% if cust.notes %}
-      <div style="margin-top:0.4rem;font-size:0.82rem;color:#6b7280;background:rgba(255,255,255,0.5);padding:0.35rem 0.6rem;border-radius:6px;">
-        备注：{{ cust.notes }}
-      </div>
-      {% endif %}
-    </div>
-    <div class="cust-actions">
-      <button type="button" class="btn secondary" onclick="document.getElementById('edit-cust-modal').classList.add('visible')">主人资料</button>
-      <button type="button" class="btn" onclick="document.getElementById('add-pet-modal').classList.add('visible')">＋ 添加宠物</button>
-    </div>
-  </div>
+ {# ── 顶部客户信息卡 ── #}
+ <div class="cust-card">
+ <div class="cust-avatar">{{ (cust.name or '?') | first | upper }}</div>
+ <div class="cust-main">
+ <div class="cust-top-row">
+ <span class="cust-name">{{ cust.name or '未命名' }}</span>
+ {% if cust.phone %}<span style="font-size:0.95rem;color:#6b7280;">📞 {{ cust.phone }}</span>{% endif %}
+ </div>
+ <div class="cust-info-grid">
+ {% if cust.address %}<div><b>地址</b>{{ cust.address }}</div>{% endif %}
+ {% if cust.source %}<div><b>来源</b>{{ cust.source }}</div>{% endif %}
+ {% if cust.id_number %}<div><b>证件号</b>{{ cust.id_number }}</div>{% endif %}
+ <div><b>客户ID</b>#{{ cust.id }}</div>
+ <div><b>创建时间</b>{{ cust.created_at.strftime('%Y-%m-%d') if cust.created_at else '—' }}</div>
+ </div>
+ {% if cust.notes %}
+ <div style="margin-top:0.4rem;font-size:0.82rem;color:#6b7280;background:rgba(255,255,255,0.5);padding:0.35rem 0.6rem;border-radius:6px;">
+ 备注：{{ cust.notes }}
+ </div>
+ {% endif %}
+ </div>
+ <div class="cust-actions">
+ <button type="button" class="btn secondary" onclick="document.getElementById('edit-cust-modal').classList.add('visible')">主人资料</button>
+ <button type="button" class="btn" onclick="document.getElementById('add-pet-modal').classList.add('visible')">＋ 添加宠物</button>
+ </div>
+ </div>
 
-  {# ── 宠物表格 ── #}
-  <div class="pets-section">
-    <div class="pets-section-head">
-      <h3>📋 宠物档案（{{ pets|length }} 只）</h3>
-      <span style="font-size:0.78rem;color:var(--muted);">点击下方一行查看该宠物所有记录</span>
-    </div>
-    {% if pets %}
-    <table class="pets-table">
-      <thead>
-        <tr>
-          <th>病历号</th><th>名称</th><th>种类</th><th>品种</th><th>性别</th><th>年龄</th>
-          <th>颜色</th><th>所属门店</th><th>状态</th><th>绝育</th><th>接种</th><th>驱虫</th><th>操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in pets %}
-        {% set is_active = (p.id == active_pet_id) %}
-        <tr class="pet-row {% if is_active %}active{% endif %}" onclick="selectPet({{ p.id }})">
-          <td><span class="pet-mrn">{{ p.medical_record_no or '—' }}</span></td>
-          <td class="pet-name-cell">{{ p.name or '未命名' }}</td>
-          <td>{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}</td>
-          <td>{{ p.breed or '—' }}</td>
-          <td>{{ '♀ 母' if p.gender=='female' else '♂ 公' if p.gender=='male' else '未知' }}</td>
-          <td>{{ p.birthday_estimate or '—' }}</td>
-          <td>{{ p.color_pattern or '—' }}</td>
-          <td>{{ p.store or '—' }}</td>
-          <td>
-            {% if p.life_status == 'deceased' %}<span class="pill pill-gray">已离世</span>
-            {% else %}<span class="pill pill-ok">饲养中</span>{% endif %}
-          </td>
-          <td>
-            {% if p.is_neutered %}<span class="pill pill-ok">已绝育</span>
-            {% else %}<span class="pill pill-warn">未绝育</span>{% endif %}
-          </td>
-          <td>
-            {% if is_active and vaccinations %}<span class="pill pill-info">{{ vaccinations|length }} 次</span>
-            {% elif is_active %}<span class="pill pill-gray">未接种</span>
-            {% else %}<span style="color:var(--muted);">—</span>{% endif %}
-          </td>
-          <td>
-            {% if is_active and dewormings %}<span class="pill pill-info">{{ dewormings|length }} 次</span>
-            {% elif is_active %}<span class="pill pill-gray">未驱虫</span>
-            {% else %}<span style="color:var(--muted);">—</span>{% endif %}
-          </td>
-          <td onclick="event.stopPropagation();">
-            <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}" style="font-size:0.78rem;color:#3b82f6;text-decoration:none;margin-right:0.6rem;">预约</a>
-            <a href="#" onclick="event.preventDefault();openEditPet({{ p.id }})" style="font-size:0.78rem;color:#6b7280;text-decoration:none;">编辑</a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="pets-empty">该客户尚未添加宠物。点击右上角「＋ 添加宠物」开始登记。</div>
-    {% endif %}
-  </div>
+ {# ── 宠物表格 ── #}
+ <div class="pets-section">
+ <div class="pets-section-head">
+ <h3>📋 宠物档案（{{ pets|length }} 只）</h3>
+ <span style="font-size:0.78rem;color:var(--muted);">点击下方一行查看该宠物所有记录</span>
+ </div>
+ {% if pets %}
+ <table class="pets-table">
+ <thead>
+ <tr>
+ <th>病历号</th><th>名称</th><th>种类</th><th>品种</th><th>性别</th><th>年龄</th>
+ <th>颜色</th><th>所属门店</th><th>状态</th><th>绝育</th><th>接种</th><th>驱虫</th><th>操作</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for p in pets %}
+ {% set is_active = (p.id == active_pet_id) %}
+ <tr class="pet-row {% if is_active %}active{% endif %}" onclick="selectPet({{ p.id }})">
+ <td><span class="pet-mrn">{{ p.medical_record_no or '—' }}</span></td>
+ <td class="pet-name-cell">{{ p.name or '未命名' }}</td>
+ <td>{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}</td>
+ <td>{{ p.breed or '—' }}</td>
+ <td>{{ '♀ 母' if p.gender=='female' else '♂ 公' if p.gender=='male' else '未知' }}</td>
+ <td>{{ p.birthday_estimate or '—' }}</td>
+ <td>{{ p.color_pattern or '—' }}</td>
+ <td>{{ p.store or '—' }}</td>
+ <td>
+ {% if p.life_status == 'deceased' %}<span class="pill pill-gray">已离世</span>
+ {% else %}<span class="pill pill-ok">饲养中</span>{% endif %}
+ </td>
+ <td>
+ {% if p.is_neutered %}<span class="pill pill-ok">已绝育</span>
+ {% else %}<span class="pill pill-warn">未绝育</span>{% endif %}
+ </td>
+ <td>
+ {% if is_active and vaccinations %}<span class="pill pill-info">{{ vaccinations|length }} 次</span>
+ {% elif is_active %}<span class="pill pill-gray">未接种</span>
+ {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+ </td>
+ <td>
+ {% if is_active and dewormings %}<span class="pill pill-info">{{ dewormings|length }} 次</span>
+ {% elif is_active %}<span class="pill pill-gray">未驱虫</span>
+ {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+ </td>
+ <td onclick="event.stopPropagation();">
+ <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}" style="font-size:0.78rem;color:#3b82f6;text-decoration:none;margin-right:0.6rem;">预约</a>
+ <a href="#" onclick="event.preventDefault();openEditPet({{ p.id }})" style="font-size:0.78rem;color:#6b7280;text-decoration:none;">编辑</a>
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <div class="pets-empty">该客户尚未添加宠物。点击右上角「＋ 添加宠物」开始登记。</div>
+ {% endif %}
+ </div>
 
-  {# ── 标签栏 + 内容区 ── #}
-  {% if active_pet %}
-  <div>
-    <div class="tabs-bar">
-      <button class="tab-btn {% if active_tab=='visits' %}active{% endif %}" data-tab="visits" onclick="switchTab('visits')">诊疗<span class="count">{{ visits|length }}</span></button>
-      <button class="tab-btn {% if active_tab=='prescriptions' %}active{% endif %}" data-tab="prescriptions" onclick="switchTab('prescriptions')">处方<span class="count">{{ prescriptions|length }}</span></button>
-      <button class="tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单<span class="count">{{ exam_orders|length }}</span></button>
-      <button class="tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约<span class="count">{{ appointments|length }}</span></button>
-      <button class="tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫<span class="count">{{ (vaccinations|length) + (dewormings|length) }}</span></button>
-      <button class="tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费<span class="count">{{ pet_invoices|length }}</span></button>
-      <button class="tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重曲线<span class="count">{{ weight_records|length }}</span></button>
-      <button class="tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">医疗文书<span class="count">{{ medical_docs|length }}</span></button>
-    </div>
+ {# ── 标签栏 + 内容区 ── #}
+ {% if active_pet %}
+ <div>
+ <div class="tabs-bar">
+ <button class="tab-btn {% if active_tab=='visits' %}active{% endif %}" data-tab="visits" onclick="switchTab('visits')">诊疗<span class="count">{{ visits|length }}</span></button>
+ <button class="tab-btn {% if active_tab=='prescriptions' %}active{% endif %}" data-tab="prescriptions" onclick="switchTab('prescriptions')">处方<span class="count">{{ prescriptions|length }}</span></button>
+ <button class="tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单<span class="count">{{ exam_orders|length }}</span></button>
+ <button class="tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约<span class="count">{{ appointments|length }}</span></button>
+ <button class="tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫<span class="count">{{ (vaccinations|length) + (dewormings|length) }}</span></button>
+ <button class="tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费<span class="count">{{ pet_invoices|length }}</span></button>
+ <button class="tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重曲线<span class="count">{{ weight_records|length }}</span></button>
+ <button class="tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">医疗文书<span class="count">{{ medical_docs|length }}</span></button>
+ </div>
 
-    {# ── 诊疗 ── #}
-    <div class="tab-content {% if active_tab=='visits' %}active{% endif %}" data-tab-content="visits">
-      <div class="tab-action-bar">
-        <a class="btn" href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建就诊</a>
-        <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ visits|length }} 条</span>
-      </div>
-      {% if visits %}
-      <table class="data-table">
-        <thead><tr><th>日期</th><th>类型</th><th>主诉</th><th>诊断</th><th>医生</th><th>回访</th><th></th></tr></thead>
-        <tbody>
-          {% for v in visits %}
-          <tr>
-            <td>{{ v.visit_date }}</td>
-            <td><span class="pill pill-info">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
-            <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ v.chief_complaint or '—' }}</td>
-            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ v.diagnosis or '—' }}</td>
-            <td>{{ v.vet_name or '—' }}</td>
-            <td>{% if v.follow_up_at %}<span class="pill pill-warn">{{ v.follow_up_at }}</span>{% else %}—{% endif %}</td>
-            <td><a href="/admin/visits/{{ v.id }}?return_to=customer">查看 →</a></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="tab-empty">暂无诊疗记录。<a href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">新建就诊 →</a></div>
-      {% endif %}
-    </div>
+ {# ── 诊疗 ── #}
+ <div class="tab-content {% if active_tab=='visits' %}active{% endif %}" data-tab-content="visits">
+ <div class="tab-action-bar">
+ <a class="btn" href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建就诊</a>
+ <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ visits|length }} 条</span>
+ </div>
+ {% if visits %}
+ <table class="data-table">
+ <thead><tr><th>日期</th><th>类型</th><th>主诉</th><th>诊断</th><th>医生</th><th>回访</th><th></th></tr></thead>
+ <tbody>
+ {% for v in visits %}
+ <tr>
+ <td>{{ v.visit_date }}</td>
+ <td><span class="pill pill-info">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
+ <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ v.chief_complaint or '—' }}</td>
+ <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ v.diagnosis or '—' }}</td>
+ <td>{{ v.vet_name or '—' }}</td>
+ <td>{% if v.follow_up_at %}<span class="pill pill-warn">{{ v.follow_up_at }}</span>{% else %}—{% endif %}</td>
+ <td><a href="/admin/visits/{{ v.id }}?return_to=customer">查看 →</a></td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <div class="tab-empty">暂无诊疗记录。<a href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">新建就诊 →</a></div>
+ {% endif %}
+ </div>
 
-    {# ── 处方 ── #}
-    <div class="tab-content {% if active_tab=='prescriptions' %}active{% endif %}" data-tab-content="prescriptions">
-      {% if prescriptions %}
-      <table class="data-table">
-        <thead><tr><th>开方日期</th><th>医生</th><th>药品数</th><th>金额</th><th>状态</th><th></th></tr></thead>
-        <tbody>
-          {% for p in prescriptions %}
-          <tr>
-            <td>{{ p.prescribed_date or '—' }}</td>
-            <td>{{ p.vet_name or '—' }}</td>
-            <td>{{ p.items|length }}</td>
-            <td>¥ {{ '%.2f'|format(p.total_amount or 0) }}</td>
-            <td><span class="pill {% if p.status == 'dispensed' %}pill-ok{% elif p.status == 'issued' %}pill-info{% else %}pill-warn{% endif %}">{{ p.status }}</span></td>
-            <td><a href="/admin/prescriptions/{{ p.id }}">查看 →</a></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="tab-empty">暂无处方记录</div>
-      {% endif %}
-    </div>
+ {# ── 处方 ── #}
+ <div class="tab-content {% if active_tab=='prescriptions' %}active{% endif %}" data-tab-content="prescriptions">
+ {% if prescriptions %}
+ <table class="data-table">
+ <thead><tr><th>开方日期</th><th>医生</th><th>药品数</th><th>金额</th><th>状态</th><th></th></tr></thead>
+ <tbody>
+ {% for p in prescriptions %}
+ <tr>
+ <td>{{ p.prescribed_date or '—' }}</td>
+ <td>{{ p.vet_name or '—' }}</td>
+ <td>{{ p.items|length }}</td>
+ <td>¥ {{ '%.2f'|format(p.total_amount or 0) }}</td>
+ <td><span class="pill {% if p.status == 'dispensed' %}pill-ok{% elif p.status == 'issued' %}pill-info{% else %}pill-warn{% endif %}">{{ p.status }}</span></td>
+ <td><a href="/admin/prescriptions/{{ p.id }}">查看 →</a></td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <div class="tab-empty">暂无处方记录</div>
+ {% endif %}
+ </div>
 
-    {# ── 检查单 ── #}
-    <div class="tab-content {% if active_tab=='exams' %}active{% endif %}" data-tab-content="exams">
-      {% if exam_orders %}
-      <table class="data-table">
-        <thead><tr><th>创建时间</th><th>状态</th><th>报告数</th><th></th></tr></thead>
-        <tbody>
-          {% for e in exam_orders %}
-          <tr>
-            <td>{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
-            <td>
-              {% if e.status == 'completed' %}<span class="pill pill-ok">已出报告</span>
-              {% else %}<span class="pill pill-warn">待出报告</span>{% endif %}
-            </td>
-            <td>{{ e.reports|length }}</td>
-            <td><a href="/admin/exam-orders/{{ e.id }}">查看 →</a></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="tab-empty">暂无检查单</div>
-      {% endif %}
-    </div>
+ {# ── 检查单 ── #}
+ <div class="tab-content {% if active_tab=='exams' %}active{% endif %}" data-tab-content="exams">
+ {% if exam_orders %}
+ <table class="data-table">
+ <thead><tr><th>创建时间</th><th>状态</th><th>报告数</th><th></th></tr></thead>
+ <tbody>
+ {% for e in exam_orders %}
+ <tr>
+ <td>{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
+ <td>
+ {% if e.status == 'completed' %}<span class="pill pill-ok">已出报告</span>
+ {% else %}<span class="pill pill-warn">待出报告</span>{% endif %}
+ </td>
+ <td>{{ e.reports|length }}</td>
+ <td><a href="/admin/exam-orders/{{ e.id }}">查看 →</a></td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <div class="tab-empty">暂无检查单</div>
+ {% endif %}
+ </div>
 
-    {# ── 预约 ── #}
-    <div class="tab-content {% if active_tab=='appointments' %}active{% endif %}" data-tab-content="appointments">
-      <div class="tab-action-bar">
-        <a class="btn" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增预约</a>
-      </div>
-      {% if appointments %}
-      <table class="data-table">
-        <thead><tr><th>日期</th><th>时间</th><th>类型</th><th>项目</th><th>门店</th><th>状态</th></tr></thead>
-        <tbody>
-          {% for a in appointments %}
-          <tr>
-            <td>{{ a.appointment_date }}</td>
-            <td>{{ a.appointment_time }}</td>
-            <td>{{ a.category }}</td>
-            <td>{{ a.service_name }}</td>
-            <td>{{ a.store }}</td>
-            <td>
-              {% if a.status == 'confirmed' %}<span class="pill pill-ok">已确认</span>
-              {% elif a.status == 'arrived' %}<span class="pill pill-info">已到店</span>
-              {% elif a.status == 'completed' %}<span class="pill pill-ok">已完成</span>
-              {% elif a.status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
-              {% elif a.status == 'no_show' %}<span class="pill pill-no">爽约</span>
-              {% else %}<span class="pill pill-warn">待确认</span>{% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="tab-empty">暂无预约记录</div>
-      {% endif %}
-    </div>
+ {# ── 预约 ── #}
+ <div class="tab-content {% if active_tab=='appointments' %}active{% endif %}" data-tab-content="appointments">
+ <div class="tab-action-bar">
+ <a class="btn" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增预约</a>
+ </div>
+ {% if appointments %}
+ <table class="data-table">
+ <thead><tr><th>日期</th><th>时间</th><th>类型</th><th>项目</th><th>门店</th><th>状态</th></tr></thead>
+ <tbody>
+ {% for a in appointments %}
+ <tr>
+ <td>{{ a.appointment_date }}</td>
+ <td>{{ a.appointment_time }}</td>
+ <td>{{ a.category }}</td>
+ <td>{{ a.service_name }}</td>
+ <td>{{ a.store }}</td>
+ <td>
+ {% if a.status == 'confirmed' %}<span class="pill pill-ok">已确认</span>
+ {% elif a.status == 'arrived' %}<span class="pill pill-info">已到店</span>
+ {% elif a.status == 'completed' %}<span class="pill pill-ok">已完成</span>
+ {% elif a.status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
+ {% elif a.status == 'no_show' %}<span class="pill pill-no">爽约</span>
+ {% else %}<span class="pill pill-warn">待确认</span>{% endif %}
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <div class="tab-empty">暂无预约记录</div>
+ {% endif %}
+ </div>
 
-    {# ── 疫苗驱虫 ── #}
-    <div class="tab-content {% if active_tab=='vaccines' %}active{% endif %}" data-tab-content="vaccines">
-      <div class="tab-action-bar">
-        <a class="btn secondary" href="/admin/vaccinations/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增疫苗</a>
-        <button type="button" class="btn secondary" onclick="document.getElementById('add-deworm-modal').classList.add('visible')">＋ 新增驱虫</button>
-      </div>
+ {# ── 疫苗驱虫 ── #}
+ <div class="tab-content {% if active_tab=='vaccines' %}active{% endif %}" data-tab-content="vaccines">
+ <div class="tab-action-bar">
+ <a class="btn secondary" href="/admin/vaccinations/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增疫苗</a>
+ <button type="button" class="btn secondary" onclick="document.getElementById('add-deworm-modal').classList.add('visible')">＋ 新增驱虫</button>
+ </div>
 
-      <h4 style="margin:0.5rem 0 0.6rem;font-size:0.85rem;color:var(--muted);">💉 疫苗记录</h4>
-      {% if vaccinations %}
-      <table class="data-table">
-        <thead><tr><th>接种日期</th><th>疫苗类型</th><th>第几针</th><th>厂家</th><th>下次到期</th></tr></thead>
-        <tbody>
-          {% for v in vaccinations %}
-          <tr>
-            <td>{{ v.vaccinated_date }}</td>
-            <td>{{ vacc_type_zh.get(v.vaccine_type, v.vaccine_type) }}</td>
-            <td>第 {{ v.dose_number }} 针</td>
-            <td>{{ v.manufacturer or '—' }}</td>
-            <td>{% if v.next_due_date %}{% if v.next_due_date < today_str %}<span class="pill pill-no">已过期 {{ v.next_due_date }}</span>{% elif v.next_due_date < soon_str %}<span class="pill pill-warn">7天内 {{ v.next_due_date }}</span>{% else %}{{ v.next_due_date }}{% endif %}{% else %}—{% endif %}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p style="color:var(--muted);font-size:0.85rem;">暂无疫苗记录</p>
-      {% endif %}
+ <h4 style="margin:0.5rem 0 0.6rem;font-size:0.85rem;color:var(--muted);">💉 疫苗记录</h4>
+ {% if vaccinations %}
+ <table class="data-table">
+ <thead><tr><th>接种日期</th><th>疫苗类型</th><th>第几针</th><th>厂家</th><th>下次到期</th></tr></thead>
+ <tbody>
+ {% for v in vaccinations %}
+ <tr>
+ <td>{{ v.vaccinated_date }}</td>
+ <td>{{ vacc_type_zh.get(v.vaccine_type, v.vaccine_type) }}</td>
+ <td>第 {{ v.dose_number }} 针</td>
+ <td>{{ v.manufacturer or '—' }}</td>
+ <td>{% if v.next_due_date %}{% if v.next_due_date < today_str %}<span class="pill pill-no">已过期 {{ v.next_due_date }}</span>{% elif v.next_due_date < soon_str %}<span class="pill pill-warn">7天内 {{ v.next_due_date }}</span>{% else %}{{ v.next_due_date }}{% endif %}{% else %}—{% endif %}</td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <p style="color:var(--muted);font-size:0.85rem;">暂无疫苗记录</p>
+ {% endif %}
 
-      <h4 style="margin:1rem 0 0.6rem;font-size:0.85rem;color:var(--muted);">🪱 驱虫记录</h4>
-      {% if dewormings %}
-      <table class="data-table">
-        <thead><tr><th>驱虫日期</th><th>类型</th><th>药品</th><th>体重</th><th>下次到期</th><th></th></tr></thead>
-        <tbody>
-          {% for d in dewormings %}
-          <tr>
-            <td>{{ d.deworm_date }}</td>
-            <td>{{ {'external':'体外','internal':'体内','combo':'体内+体外'}.get(d.deworm_type, d.deworm_type) }}</td>
-            <td>{{ d.product_name or '—' }}</td>
-            <td>{{ d.weight_kg }} kg</td>
-            <td>{% if d.next_due_date %}{% if d.next_due_date < today_str %}<span class="pill pill-no">已过期</span>{% elif d.next_due_date < soon_str %}<span class="pill pill-warn">{{ d.next_due_date }}</span>{% else %}{{ d.next_due_date }}{% endif %}{% else %}—{% endif %}</td>
-            <td>
-              <form method="post" action="/admin/dewormings/{{ d.id }}/delete" style="display:inline;" onsubmit="return confirm('删除此驱虫记录？')">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input type="hidden" name="customer_id" value="{{ cust.id }}">
-                <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
-                <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p style="color:var(--muted);font-size:0.85rem;">暂无驱虫记录</p>
-      {% endif %}
-    </div>
+ <h4 style="margin:1rem 0 0.6rem;font-size:0.85rem;color:var(--muted);">🪱 驱虫记录</h4>
+ {% if dewormings %}
+ <table class="data-table">
+ <thead><tr><th>驱虫日期</th><th>类型</th><th>药品</th><th>体重</th><th>下次到期</th><th></th></tr></thead>
+ <tbody>
+ {% for d in dewormings %}
+ <tr>
+ <td>{{ d.deworm_date }}</td>
+ <td>{{ {'external':'体外','internal':'体内','combo':'体内+体外'}.get(d.deworm_type, d.deworm_type) }}</td>
+ <td>{{ d.product_name or '—' }}</td>
+ <td>{{ d.weight_kg }} kg</td>
+ <td>{% if d.next_due_date %}{% if d.next_due_date < today_str %}<span class="pill pill-no">已过期</span>{% elif d.next_due_date < soon_str %}<span class="pill pill-warn">{{ d.next_due_date }}</span>{% else %}{{ d.next_due_date }}{% endif %}{% else %}—{% endif %}</td>
+ <td>
+ <form method="post" action="/admin/dewormings/{{ d.id }}/delete" style="display:inline;" onsubmit="return confirm('删除此驱虫记录？')">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="customer_id" value="{{ cust.id }}">
+ <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
+ <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
+ </form>
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <p style="color:var(--muted);font-size:0.85rem;">暂无驱虫记录</p>
+ {% endif %}
+ </div>
 
-    {# ── 收费 ── #}
-    <div class="tab-content {% if active_tab=='invoices' %}active{% endif %}" data-tab-content="invoices">
-      {% if pet_invoices %}
-      <table class="data-table">
-        <thead><tr><th>发票号</th><th>金额</th><th>状态</th><th>支付方式</th><th></th></tr></thead>
-        <tbody>
-          {% for inv in pet_invoices %}
-          <tr>
-            <td style="font-family:monospace;">{{ inv.invoice_no }}</td>
-            <td style="font-weight:600;">¥ {{ '%.2f'|format(inv.total_amount or 0) }}</td>
-            <td>
-              {% if inv.payment_status == 'paid' %}<span class="pill pill-ok">已支付</span>
-              {% elif inv.payment_status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
-              {% else %}<span class="pill pill-warn">未支付</span>{% endif %}
-            </td>
-            <td>{{ inv.payment_method or '—' }}</td>
-            <td><a href="/admin/invoices/{{ inv.id }}">查看 →</a></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="tab-empty">暂无收费记录</div>
-      {% endif %}
-    </div>
+ {# ── 收费 ── #}
+ <div class="tab-content {% if active_tab=='invoices' %}active{% endif %}" data-tab-content="invoices">
+ {% if pet_invoices %}
+ <table class="data-table">
+ <thead><tr><th>发票号</th><th>金额</th><th>状态</th><th>支付方式</th><th></th></tr></thead>
+ <tbody>
+ {% for inv in pet_invoices %}
+ <tr>
+ <td style="font-family:monospace;">{{ inv.invoice_no }}</td>
+ <td style="font-weight:600;">¥ {{ '%.2f'|format(inv.total_amount or 0) }}</td>
+ <td>
+ {% if inv.payment_status == 'paid' %}<span class="pill pill-ok">已支付</span>
+ {% elif inv.payment_status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
+ {% else %}<span class="pill pill-warn">未支付</span>{% endif %}
+ </td>
+ <td>{{ inv.payment_method or '—' }}</td>
+ <td><a href="/admin/invoices/{{ inv.id }}">查看 →</a></td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <div class="tab-empty">暂无收费记录</div>
+ {% endif %}
+ </div>
 
-    {# ── 体重曲线 ── #}
-    <div class="tab-content {% if active_tab=='weight' %}active{% endif %}" data-tab-content="weight">
-      <div class="tab-action-bar">
-        <button type="button" class="btn secondary" onclick="document.getElementById('add-weight-modal').classList.add('visible')">＋ 录入体重</button>
-        <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ weight_records|length }} 条</span>
-      </div>
-      {% if weight_records %}
-      <div class="weight-chart-wrap" id="weight-chart"></div>
-      <table class="data-table">
-        <thead><tr><th>日期</th><th>体重 (kg)</th><th>备注</th><th></th></tr></thead>
-        <tbody>
-          {% for w in weight_records | reverse %}
-          <tr>
-            <td>{{ w.record_date }}</td>
-            <td style="font-weight:600;">{{ '%.2f'|format(w.weight_kg) }} kg</td>
-            <td>{{ w.notes or '—' }}</td>
-            <td>
-              <form method="post" action="/admin/weight-records/{{ w.id }}/delete" style="display:inline;" onsubmit="return confirm('删除此体重记录？')">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input type="hidden" name="customer_id" value="{{ cust.id }}">
-                <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
-                <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="tab-empty">暂无体重记录。点击「＋ 录入体重」开始追踪宠物体重变化。</div>
-      {% endif %}
-    </div>
+ {# ── 体重曲线 ── #}
+ <div class="tab-content {% if active_tab=='weight' %}active{% endif %}" data-tab-content="weight">
+ <div class="tab-action-bar">
+ <button type="button" class="btn secondary" onclick="document.getElementById('add-weight-modal').classList.add('visible')">＋ 录入体重</button>
+ <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ weight_records|length }} 条</span>
+ </div>
+ {% if weight_records %}
+ <div class="weight-chart-wrap" id="weight-chart"></div>
+ <table class="data-table">
+ <thead><tr><th>日期</th><th>体重 (kg)</th><th>备注</th><th></th></tr></thead>
+ <tbody>
+ {% for w in weight_records | reverse %}
+ <tr>
+ <td>{{ w.record_date }}</td>
+ <td style="font-weight:600;">{{ '%.2f'|format(w.weight_kg) }} kg</td>
+ <td>{{ w.notes or '—' }}</td>
+ <td>
+ <form method="post" action="/admin/weight-records/{{ w.id }}/delete" style="display:inline;" onsubmit="return confirm('删除此体重记录？')">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="customer_id" value="{{ cust.id }}">
+ <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
+ <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
+ </form>
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <div class="tab-empty">暂无体重记录。点击「＋ 录入体重」开始追踪宠物体重变化。</div>
+ {% endif %}
+ </div>
 
-    {# ── 医疗文书 ── #}
-    <div class="tab-content {% if active_tab=='docs' %}active{% endif %}" data-tab-content="docs">
-      <div class="tab-action-bar">
-        <button type="button" class="btn secondary" onclick="document.getElementById('upload-doc-modal').classList.add('visible')">📎 上传文书</button>
-        <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">同意书、协议、报告等</span>
-      </div>
-      {% if medical_docs %}
-      <table class="data-table">
-        <thead><tr><th>类型</th><th>标题</th><th>文件名</th><th>大小</th><th>上传时间</th><th>上传人</th><th></th></tr></thead>
-        <tbody>
-          {% for d in medical_docs %}
-          <tr>
-            <td><span class="pill pill-info">{{ {'consent':'同意书','agreement':'协议','report':'报告','other':'其他'}.get(d.doc_type, d.doc_type) }}</span></td>
-            <td>{{ d.title or '—' }}</td>
-            <td>{{ d.original_name }}</td>
-            <td>{{ '%.1f KB'|format((d.file_size or 0) / 1024) }}</td>
-            <td>{{ d.uploaded_at.strftime('%Y-%m-%d %H:%M') if d.uploaded_at else '—' }}</td>
-            <td>{{ d.uploaded_by or '—' }}</td>
-            <td>
-              <a href="/admin/medical-docs/{{ d.id }}/file" target="_blank">下载</a>
-              <form method="post" action="/admin/medical-docs/{{ d.id }}/delete" style="display:inline;margin-left:0.4rem;" onsubmit="return confirm('删除此文书？')">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input type="hidden" name="customer_id" value="{{ cust.id }}">
-                <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
-                <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="tab-empty">暂无医疗文书。可上传同意书、协议、检查报告等 PDF 或图片。</div>
-      {% endif %}
-    </div>
+ {# ── 医疗文书 ── #}
+ <div class="tab-content {% if active_tab=='docs' %}active{% endif %}" data-tab-content="docs">
+ <div class="tab-action-bar">
+ <button type="button" class="btn secondary" onclick="document.getElementById('upload-doc-modal').classList.add('visible')">📎 上传文书</button>
+ <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">同意书、协议、报告等</span>
+ </div>
+ {% if medical_docs %}
+ <table class="data-table">
+ <thead><tr><th>类型</th><th>标题</th><th>文件名</th><th>大小</th><th>上传时间</th><th>上传人</th><th></th></tr></thead>
+ <tbody>
+ {% for d in medical_docs %}
+ <tr>
+ <td><span class="pill pill-info">{{ {'consent':'同意书','agreement':'协议','report':'报告','other':'其他'}.get(d.doc_type, d.doc_type) }}</span></td>
+ <td>{{ d.title or '—' }}</td>
+ <td>{{ d.original_name }}</td>
+ <td>{{ '%.1f KB'|format((d.file_size or 0) / 1024) }}</td>
+ <td>{{ d.uploaded_at.strftime('%Y-%m-%d %H:%M') if d.uploaded_at else '—' }}</td>
+ <td>{{ d.uploaded_by or '—' }}</td>
+ <td>
+ <a href="/admin/medical-docs/{{ d.id }}/file" target="_blank">下载</a>
+ <form method="post" action="/admin/medical-docs/{{ d.id }}/delete" style="display:inline;margin-left:0.4rem;" onsubmit="return confirm('删除此文书？')">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="customer_id" value="{{ cust.id }}">
+ <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
+ <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
+ </form>
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <div class="tab-empty">暂无医疗文书。可上传同意书、协议、检查报告等 PDF 或图片。</div>
+ {% endif %}
+ </div>
 
-  </div>
-  {% endif %}
+ </div>
+ {% endif %}
 
 </div>
 
 {# ── 弹窗：编辑主人 ── #}
 <div class="cd-modal-overlay" id="edit-cust-modal">
-  <div class="cd-modal">
-    <h3>编辑主人资料</h3>
-    <form method="post" action="/admin/customers/{{ cust.id }}/edit">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label>姓名</label>
-      <input name="name" value="{{ cust.name or '' }}">
-      <label>手机号</label>
-      <input name="phone" value="{{ cust.phone or '' }}">
-      <label>地址</label>
-      <input name="address" value="{{ cust.address or '' }}">
-      <label>备注</label>
-      <textarea name="notes">{{ cust.notes or '' }}</textarea>
-      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-        <button type="submit" class="btn">保存</button>
-        <button type="button" class="btn secondary" onclick="document.getElementById('edit-cust-modal').classList.remove('visible')">取消</button>
-      </div>
-    </form>
-  </div>
+ <div class="cd-modal">
+ <h3>编辑主人资料</h3>
+ <form method="post" action="/admin/customers/{{ cust.id }}/edit">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <label>姓名</label>
+ <input name="name" value="{{ cust.name or '' }}">
+ <label>手机号</label>
+ <input name="phone" value="{{ cust.phone or '' }}">
+ <label>地址</label>
+ <input name="address" value="{{ cust.address or '' }}">
+ <label>备注</label>
+ <textarea name="notes">{{ cust.notes or '' }}</textarea>
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+ <button type="submit" class="btn">保存</button>
+ <button type="button" class="btn secondary" onclick="document.getElementById('edit-cust-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
 </div>
 
 {# ── 弹窗：添加宠物 ── #}
 <div class="cd-modal-overlay" id="add-pet-modal">
-  <div class="cd-modal">
-    <h3>添加宠物</h3>
-    <form method="post" action="/admin/customers/{{ cust.id }}/pets/add">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="row2">
-        <div>
-          <label>名称</label>
-          <input name="name" required>
-        </div>
-        <div>
-          <label>所属门店</label>
-          <select name="store" required>
-            {% if admin_store %}
-            <option value="{{ admin_store }}" selected>{{ admin_store }}</option>
-            {% else %}
-            <option value="东环店">东环店</option>
-            <option value="横岗店">横岗店</option>
-            {% endif %}
-          </select>
-        </div>
-        <div>
-          <label>种类</label>
-          <select name="species">
-            <option value="cat">猫</option>
-            <option value="dog">狗</option>
-            <option value="other">其他</option>
-          </select>
-        </div>
-        <div>
-          <label>性别</label>
-          <select name="gender">
-            <option value="female">母</option>
-            <option value="male">公</option>
-            <option value="unknown">未知</option>
-          </select>
-        </div>
-        <div>
-          <label>品种</label>
-          <input name="breed" placeholder="如：田园猫">
-        </div>
-        <div>
-          <label>颜色</label>
-          <input name="color_pattern" placeholder="如：三花/橘猫">
-        </div>
-        <div>
-          <label>年龄/出生</label>
-          <input name="birthday_estimate" placeholder="如：1岁2月">
-        </div>
-        <div>
-          <label>状态</label>
-          <select name="life_status">
-            <option value="alive">饲养中</option>
-            <option value="deceased">已离世</option>
-          </select>
-        </div>
-      </div>
-      <label style="margin-top:0.6rem;display:flex;align-items:center;gap:0.4rem;font-weight:500;">
-        <input type="checkbox" name="is_neutered" value="1"> 已绝育
-      </label>
-      <label>备注</label>
-      <textarea name="notes"></textarea>
-      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-        <button type="submit" class="btn">添加（自动生成病历号）</button>
-        <button type="button" class="btn secondary" onclick="document.getElementById('add-pet-modal').classList.remove('visible')">取消</button>
-      </div>
-    </form>
-  </div>
+ <div class="cd-modal">
+ <h3>添加宠物</h3>
+ <form method="post" action="/admin/customers/{{ cust.id }}/pets/add">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <div class="row2">
+ <div>
+ <label>名称</label>
+ <input name="name" required>
+ </div>
+ <div>
+ <label>所属门店</label>
+ <select name="store" required>
+ {% if admin_store %}
+ <option value="{{ admin_store }}" selected>{{ admin_store }}</option>
+ {% else %}
+ <option value="东环店">东环店</option>
+ <option value="横岗店">横岗店</option>
+ {% endif %}
+ </select>
+ </div>
+ <div>
+ <label>种类</label>
+ <select name="species">
+ <option value="cat">猫</option>
+ <option value="dog">狗</option>
+ <option value="other">其他</option>
+ </select>
+ </div>
+ <div>
+ <label>性别</label>
+ <select name="gender">
+ <option value="female">母</option>
+ <option value="male">公</option>
+ <option value="unknown">未知</option>
+ </select>
+ </div>
+ <div>
+ <label>品种</label>
+ <input name="breed">
+ </div>
+ <div>
+ <label>颜色</label>
+ <input name="color_pattern">
+ </div>
+ <div>
+ <label>年龄/出生</label>
+ <input name="birthday_estimate">
+ </div>
+ <div>
+ <label>状态</label>
+ <select name="life_status">
+ <option value="alive">饲养中</option>
+ <option value="deceased">已离世</option>
+ </select>
+ </div>
+ </div>
+ <label style="margin-top:0.6rem;display:flex;align-items:center;gap:0.4rem;font-weight:500;">
+ <input type="checkbox" name="is_neutered" value="1"> 已绝育
+ </label>
+ <label>备注</label>
+ <textarea name="notes"></textarea>
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+ <button type="submit" class="btn">添加（自动生成病历号）</button>
+ <button type="button" class="btn secondary" onclick="document.getElementById('add-pet-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
 </div>
 
 {# ── 弹窗：编辑宠物 ── #}
 <div class="cd-modal-overlay" id="edit-pet-modal">
-  <div class="cd-modal">
-    <h3 style="margin:0 0 0.85rem;font-size:1rem;">
-      编辑宠物
-      <span id="ep-mrn" style="font-family:monospace;color:#6b7280;font-weight:400;font-size:0.85rem;margin-left:0.4rem;"></span>
-    </h3>
-    <form method="post" id="edit-pet-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="row2">
-        <div>
-          <label>名称</label>
-          <input name="name" id="ep-name" required>
-        </div>
-        <div>
-          <label>所属门店</label>
-          <select name="store" id="ep-store" required>
-            {% if admin_store %}
-            <option value="{{ admin_store }}">{{ admin_store }}</option>
-            {% else %}
-            <option value="东环店">东环店</option>
-            <option value="横岗店">横岗店</option>
-            {% endif %}
-          </select>
-        </div>
-        <div>
-          <label>种类</label>
-          <select name="species" id="ep-species">
-            <option value="cat">猫</option>
-            <option value="dog">狗</option>
-            <option value="other">其他</option>
-          </select>
-        </div>
-        <div>
-          <label>性别</label>
-          <select name="gender" id="ep-gender">
-            <option value="female">母</option>
-            <option value="male">公</option>
-            <option value="unknown">未知</option>
-          </select>
-        </div>
-        <div>
-          <label>品种</label>
-          <input name="breed" id="ep-breed">
-        </div>
-        <div>
-          <label>颜色</label>
-          <input name="color_pattern" id="ep-color">
-        </div>
-        <div>
-          <label>年龄/出生</label>
-          <input name="birthday_estimate" id="ep-birthday" placeholder="如：1岁2月">
-        </div>
-        <div>
-          <label>状态</label>
-          <select name="life_status" id="ep-life">
-            <option value="alive">饲养中</option>
-            <option value="deceased">已离世</option>
-          </select>
-        </div>
-        <div>
-          <label>芯片号（可选）</label>
-          <input name="microchip_id" id="ep-chip">
-        </div>
-        <div>
-          <label>&nbsp;</label>
-          <label style="display:flex;align-items:center;gap:0.4rem;font-weight:500;margin:0;padding:0.65rem 0.75rem;">
-            <input type="checkbox" name="is_neutered" id="ep-neutered" value="1"> 已绝育
-          </label>
-        </div>
-      </div>
-      <label style="margin-top:0.4rem;display:flex;align-items:center;gap:0.4rem;font-weight:500;">
-        <input type="checkbox" name="is_stray" id="ep-stray" value="1"> 流浪猫
-      </label>
-      <label>备注</label>
-      <textarea name="notes" id="ep-notes"></textarea>
-      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-        <button type="submit" class="btn">保存修改</button>
-        <button type="button" class="btn secondary" onclick="document.getElementById('edit-pet-modal').classList.remove('visible')">取消</button>
-      </div>
-    </form>
-  </div>
+ <div class="cd-modal">
+ <h3 style="margin:0 0 0.85rem;font-size:1rem;">
+ 编辑宠物
+ <span id="ep-mrn" style="font-family:monospace;color:#6b7280;font-weight:400;font-size:0.85rem;margin-left:0.4rem;"></span>
+ </h3>
+ <form method="post" id="edit-pet-form">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <div class="row2">
+ <div>
+ <label>名称</label>
+ <input name="name" id="ep-name" required>
+ </div>
+ <div>
+ <label>所属门店</label>
+ <select name="store" id="ep-store" required>
+ {% if admin_store %}
+ <option value="{{ admin_store }}">{{ admin_store }}</option>
+ {% else %}
+ <option value="东环店">东环店</option>
+ <option value="横岗店">横岗店</option>
+ {% endif %}
+ </select>
+ </div>
+ <div>
+ <label>种类</label>
+ <select name="species" id="ep-species">
+ <option value="cat">猫</option>
+ <option value="dog">狗</option>
+ <option value="other">其他</option>
+ </select>
+ </div>
+ <div>
+ <label>性别</label>
+ <select name="gender" id="ep-gender">
+ <option value="female">母</option>
+ <option value="male">公</option>
+ <option value="unknown">未知</option>
+ </select>
+ </div>
+ <div>
+ <label>品种</label>
+ <input name="breed" id="ep-breed">
+ </div>
+ <div>
+ <label>颜色</label>
+ <input name="color_pattern" id="ep-color">
+ </div>
+ <div>
+ <label>年龄/出生</label>
+ <input name="birthday_estimate" id="ep-birthday">
+ </div>
+ <div>
+ <label>状态</label>
+ <select name="life_status" id="ep-life">
+ <option value="alive">饲养中</option>
+ <option value="deceased">已离世</option>
+ </select>
+ </div>
+ <div>
+ <label>芯片号（可选）</label>
+ <input name="microchip_id" id="ep-chip">
+ </div>
+ <div>
+ <label>&nbsp;</label>
+ <label style="display:flex;align-items:center;gap:0.4rem;font-weight:500;margin:0;padding:0.65rem 0.75rem;">
+ <input type="checkbox" name="is_neutered" id="ep-neutered" value="1"> 已绝育
+ </label>
+ </div>
+ </div>
+ <label style="margin-top:0.4rem;display:flex;align-items:center;gap:0.4rem;font-weight:500;">
+ <input type="checkbox" name="is_stray" id="ep-stray" value="1"> 流浪猫
+ </label>
+ <label>备注</label>
+ <textarea name="notes" id="ep-notes"></textarea>
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+ <button type="submit" class="btn">保存修改</button>
+ <button type="button" class="btn secondary" onclick="document.getElementById('edit-pet-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
 </div>
 
 {# 所有宠物数据（供编辑弹窗用） #}
 <script id="pets-data" type="application/json">
 {% set ns_p = namespace(arr=[]) %}
 [
-  {% for p in pets %}
-  {
-    "id": {{ p.id }},
-    "name": {{ (p.name or '') | tojson }},
-    "species": {{ (p.species or 'cat') | tojson }},
-    "gender": {{ (p.gender or 'unknown') | tojson }},
-    "breed": {{ (p.breed or '') | tojson }},
-    "color_pattern": {{ (p.color_pattern or '') | tojson }},
-    "birthday_estimate": {{ (p.birthday_estimate or '') | tojson }},
-    "store": {{ (p.store or '') | tojson }},
-    "life_status": {{ (p.life_status or 'alive') | tojson }},
-    "microchip_id": {{ (p.microchip_id or '') | tojson }},
-    "is_neutered": {{ (1 if p.is_neutered else 0) }},
-    "is_stray": {{ (1 if p.is_stray else 0) }},
-    "notes": {{ (p.notes or '') | tojson }},
-    "medical_record_no": {{ (p.medical_record_no or '') | tojson }}
-  }{{ "," if not loop.last }}
-  {% endfor %}
+ {% for p in pets %}
+ {
+ "id": {{ p.id }},
+ "name": {{ (p.name or '') | tojson }},
+ "species": {{ (p.species or 'cat') | tojson }},
+ "gender": {{ (p.gender or 'unknown') | tojson }},
+ "breed": {{ (p.breed or '') | tojson }},
+ "color_pattern": {{ (p.color_pattern or '') | tojson }},
+ "birthday_estimate": {{ (p.birthday_estimate or '') | tojson }},
+ "store": {{ (p.store or '') | tojson }},
+ "life_status": {{ (p.life_status or 'alive') | tojson }},
+ "microchip_id": {{ (p.microchip_id or '') | tojson }},
+ "is_neutered": {{ (1 if p.is_neutered else 0) }},
+ "is_stray": {{ (1 if p.is_stray else 0) }},
+ "notes": {{ (p.notes or '') | tojson }},
+ "medical_record_no": {{ (p.medical_record_no or '') | tojson }}
+ }{{ "," if not loop.last }}
+ {% endfor %}
 ]
 </script>
 
 {% if active_pet %}
 {# ── 弹窗：录入体重 ── #}
 <div class="cd-modal-overlay" id="add-weight-modal">
-  <div class="cd-modal">
-    <h3>录入体重 — {{ active_pet.name }}</h3>
-    <form method="post" action="/admin/weight-records/create">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="customer_id" value="{{ cust.id }}">
-      <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
-      <label>日期</label>
-      <input type="date" name="record_date" value="{{ today_str }}" required>
-      <label>体重（kg）</label>
-      <input type="number" name="weight_kg" step="0.01" min="0.01" required>
-      <label>备注（可选）</label>
-      <input name="notes">
-      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-        <button type="submit" class="btn">保存</button>
-        <button type="button" class="btn secondary" onclick="document.getElementById('add-weight-modal').classList.remove('visible')">取消</button>
-      </div>
-    </form>
-  </div>
+ <div class="cd-modal">
+ <h3>录入体重 — {{ active_pet.name }}</h3>
+ <form method="post" action="/admin/weight-records/create">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="customer_id" value="{{ cust.id }}">
+ <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
+ <label>日期</label>
+ <input type="date" name="record_date" value="{{ today_str }}" required>
+ <label>体重（kg）</label>
+ <input type="number" name="weight_kg" step="0.01" min="0.01" required>
+ <label>备注（可选）</label>
+ <input name="notes">
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+ <button type="submit" class="btn">保存</button>
+ <button type="button" class="btn secondary" onclick="document.getElementById('add-weight-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
 </div>
 
 {# ── 弹窗：录入驱虫 ── #}
 <div class="cd-modal-overlay" id="add-deworm-modal">
-  <div class="cd-modal">
-    <h3>录入驱虫 — {{ active_pet.name }}</h3>
-    <form method="post" action="/admin/dewormings/create">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="customer_id" value="{{ cust.id }}">
-      <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
-      <div class="row2">
-        <div>
-          <label>驱虫日期</label>
-          <input type="date" name="deworm_date" value="{{ today_str }}" required>
-        </div>
-        <div>
-          <label>类型</label>
-          <select name="deworm_type">
-            <option value="external">体外</option>
-            <option value="internal">体内</option>
-            <option value="combo">体内+体外</option>
-          </select>
-        </div>
-        <div>
-          <label>药品名称</label>
-          <input name="product_name" placeholder="如：大宠爱">
-        </div>
-        <div>
-          <label>体重（kg）</label>
-          <input type="number" name="weight_kg" step="0.01" min="0">
-        </div>
-        <div>
-          <label>剂量</label>
-          <input name="dose" placeholder="如：0.5ml">
-        </div>
-        <div>
-          <label>下次到期</label>
-          <input type="date" name="next_due_date">
-        </div>
-      </div>
-      <label>备注</label>
-      <input name="notes">
-      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-        <button type="submit" class="btn">保存</button>
-        <button type="button" class="btn secondary" onclick="document.getElementById('add-deworm-modal').classList.remove('visible')">取消</button>
-      </div>
-    </form>
-  </div>
+ <div class="cd-modal">
+ <h3>录入驱虫 — {{ active_pet.name }}</h3>
+ <form method="post" action="/admin/dewormings/create">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="customer_id" value="{{ cust.id }}">
+ <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
+ <div class="row2">
+ <div>
+ <label>驱虫日期</label>
+ <input type="date" name="deworm_date" value="{{ today_str }}" required>
+ </div>
+ <div>
+ <label>类型</label>
+ <select name="deworm_type">
+ <option value="external">体外</option>
+ <option value="internal">体内</option>
+ <option value="combo">体内+体外</option>
+ </select>
+ </div>
+ <div>
+ <label>药品名称</label>
+ <input name="product_name">
+ </div>
+ <div>
+ <label>体重（kg）</label>
+ <input type="number" name="weight_kg" step="0.01" min="0">
+ </div>
+ <div>
+ <label>剂量</label>
+ <input name="dose">
+ </div>
+ <div>
+ <label>下次到期</label>
+ <input type="date" name="next_due_date">
+ </div>
+ </div>
+ <label>备注</label>
+ <input name="notes">
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+ <button type="submit" class="btn">保存</button>
+ <button type="button" class="btn secondary" onclick="document.getElementById('add-deworm-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
 </div>
 
 {# ── 弹窗：上传文书 ── #}
 <div class="cd-modal-overlay" id="upload-doc-modal">
-  <div class="cd-modal">
-    <h3>上传医疗文书 — {{ active_pet.name }}</h3>
-    <form method="post" action="/admin/medical-docs/upload" enctype="multipart/form-data">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="customer_id" value="{{ cust.id }}">
-      <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
-      <label>类型</label>
-      <select name="doc_type">
-        <option value="consent">同意书</option>
-        <option value="agreement">协议</option>
-        <option value="report">报告</option>
-        <option value="other">其他</option>
-      </select>
-      <label>标题</label>
-      <input name="title" placeholder="如：绝育手术同意书">
-      <label>选择文件（PDF / 图片）</label>
-      <input type="file" name="file" accept=".pdf,image/*" required>
-      <label>备注</label>
-      <input name="notes">
-      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-        <button type="submit" class="btn">上传</button>
-        <button type="button" class="btn secondary" onclick="document.getElementById('upload-doc-modal').classList.remove('visible')">取消</button>
-      </div>
-    </form>
-  </div>
+ <div class="cd-modal">
+ <h3>上传医疗文书 — {{ active_pet.name }}</h3>
+ <form method="post" action="/admin/medical-docs/upload" enctype="multipart/form-data">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="customer_id" value="{{ cust.id }}">
+ <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
+ <label>类型</label>
+ <select name="doc_type">
+ <option value="consent">同意书</option>
+ <option value="agreement">协议</option>
+ <option value="report">报告</option>
+ <option value="other">其他</option>
+ </select>
+ <label>标题</label>
+ <input name="title">
+ <label>选择文件（PDF / 图片）</label>
+ <input type="file" name="file" accept=".pdf,image/*" required>
+ <label>备注</label>
+ <input name="notes">
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+ <button type="submit" class="btn">上传</button>
+ <button type="button" class="btn secondary" onclick="document.getElementById('upload-doc-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
 </div>
 {% endif %}
 
 <script>
 function selectPet(petId) {
-  const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'visits';
-  window.location.href = '/admin/customers/{{ cust.id }}?pet_id=' + petId + '&tab=' + tab;
+ const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'visits';
+ window.location.href = '/admin/customers/{{ cust.id }}?pet_id=' + petId + '&tab=' + tab;
 }
 
 // 打开编辑宠物弹窗 — 从 JSON 中读取并填充
 const PETS_DATA = JSON.parse(document.getElementById('pets-data').textContent);
 function openEditPet(petId) {
-  const p = PETS_DATA.find(x => x.id === petId);
-  if (!p) return;
-  document.getElementById('edit-pet-form').action = '/admin/customers/{{ cust.id }}/pets/' + petId + '/edit';
-  document.getElementById('ep-mrn').textContent = p.medical_record_no ? '· ' + p.medical_record_no : '';
-  document.getElementById('ep-name').value     = p.name || '';
-  document.getElementById('ep-species').value  = p.species || 'cat';
-  document.getElementById('ep-gender').value   = p.gender || 'unknown';
-  document.getElementById('ep-breed').value    = p.breed || '';
-  document.getElementById('ep-color').value    = p.color_pattern || '';
-  document.getElementById('ep-birthday').value = p.birthday_estimate || '';
-  document.getElementById('ep-life').value     = p.life_status || 'alive';
-  document.getElementById('ep-chip').value     = p.microchip_id || '';
-  document.getElementById('ep-notes').value    = p.notes || '';
-  document.getElementById('ep-neutered').checked = !!p.is_neutered;
-  document.getElementById('ep-stray').checked    = !!p.is_stray;
-  // store 下拉如果没有该选项就先添加（避免限店员工的限制）
-  const storeSel = document.getElementById('ep-store');
-  const has = [...storeSel.options].some(o => o.value === (p.store || ''));
-  if (!has && p.store) {
-    const opt = document.createElement('option');
-    opt.value = p.store; opt.textContent = p.store;
-    storeSel.appendChild(opt);
-  }
-  storeSel.value = p.store || storeSel.options[0].value;
-  document.getElementById('edit-pet-modal').classList.add('visible');
+ const p = PETS_DATA.find(x => x.id === petId);
+ if (!p) return;
+ document.getElementById('edit-pet-form').action = '/admin/customers/{{ cust.id }}/pets/' + petId + '/edit';
+ document.getElementById('ep-mrn').textContent = p.medical_record_no ? '· ' + p.medical_record_no : '';
+ document.getElementById('ep-name').value = p.name || '';
+ document.getElementById('ep-species').value = p.species || 'cat';
+ document.getElementById('ep-gender').value = p.gender || 'unknown';
+ document.getElementById('ep-breed').value = p.breed || '';
+ document.getElementById('ep-color').value = p.color_pattern || '';
+ document.getElementById('ep-birthday').value = p.birthday_estimate || '';
+ document.getElementById('ep-life').value = p.life_status || 'alive';
+ document.getElementById('ep-chip').value = p.microchip_id || '';
+ document.getElementById('ep-notes').value = p.notes || '';
+ document.getElementById('ep-neutered').checked = !!p.is_neutered;
+ document.getElementById('ep-stray').checked = !!p.is_stray;
+ // store 下拉如果没有该选项就先添加（避免限店员工的限制）
+ const storeSel = document.getElementById('ep-store');
+ const has = [...storeSel.options].some(o => o.value === (p.store || ''));
+ if (!has && p.store) {
+ const opt = document.createElement('option');
+ opt.value = p.store; opt.textContent = p.store;
+ storeSel.appendChild(opt);
+ }
+ storeSel.value = p.store || storeSel.options[0].value;
+ document.getElementById('edit-pet-modal').classList.add('visible');
 }
 
 function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.querySelectorAll('.tab-content').forEach(d => d.classList.toggle('active', d.dataset.tabContent === tab));
-  if (tab === 'weight') renderWeightChart();
+ document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+ document.querySelectorAll('.tab-content').forEach(d => d.classList.toggle('active', d.dataset.tabContent === tab));
+ if (tab === 'weight') renderWeightChart();
 }
 
 document.querySelectorAll('.cd-modal-overlay').forEach(o => {
-  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('visible'); });
+ o.addEventListener('click', e => { if (e.target === o) o.classList.remove('visible'); });
 });
 
 {% if active_pet and weight_records %}
 const WEIGHT_DATA = [
-  {% for w in weight_records %}{date: "{{ w.record_date }}", kg: {{ w.weight_kg }}}{{ "," if not loop.last }}{% endfor %}
+ {% for w in weight_records %}{date: "{{ w.record_date }}", kg: {{ w.weight_kg }}}{{ "," if not loop.last }}{% endfor %}
 ];
 function renderWeightChart() {
-  const wrap = document.getElementById('weight-chart');
-  if (!wrap || WEIGHT_DATA.length === 0) return;
-  if (wrap.dataset.rendered) return;
-  wrap.dataset.rendered = '1';
-  const W = 720, H = 240, padL = 50, padR = 20, padT = 20, padB = 36;
-  const innerW = W - padL - padR, innerH = H - padT - padB;
-  const xs = WEIGHT_DATA.map(d => new Date(d.date).getTime());
-  const ys = WEIGHT_DATA.map(d => d.kg);
-  const xMin = Math.min(...xs), xMax = Math.max(...xs);
-  const yMin = Math.min(...ys) * 0.9, yMax = Math.max(...ys) * 1.1 || 1;
-  const xScale = x => xs.length<2 ? padL+innerW/2 : padL + (x-xMin)/(xMax-xMin || 1)*innerW;
-  const yScale = y => padT + (1 - (y-yMin)/(yMax-yMin || 1)) * innerH;
-  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">`;
-  for (let i = 0; i <= 4; i++) {
-    const y = padT + (innerH / 4) * i;
-    const v = (yMax - (yMax-yMin)/4 * i).toFixed(1);
-    svg += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e5e7eb" stroke-dasharray="3 3"/>`;
-    svg += `<text x="${padL-6}" y="${y+4}" text-anchor="end" fill="#9ca3af" font-size="11">${v}</text>`;
-  }
-  const dateLabels = xs.length <= 6 ? xs : [xs[0], xs[Math.floor(xs.length/2)], xs[xs.length-1]];
-  dateLabels.forEach(t => {
-    const x = xScale(t);
-    const d = new Date(t);
-    svg += `<text x="${x}" y="${H-padB+18}" text-anchor="middle" fill="#9ca3af" font-size="11">${d.getMonth()+1}-${d.getDate()}</text>`;
-  });
-  if (WEIGHT_DATA.length >= 2) {
-    const pts = WEIGHT_DATA.map(d => `${xScale(new Date(d.date).getTime())},${yScale(d.kg)}`).join(' ');
-    svg += `<polyline fill="none" stroke="#3b82f6" stroke-width="2" points="${pts}"/>`;
-  }
-  WEIGHT_DATA.forEach(d => {
-    const cx = xScale(new Date(d.date).getTime()), cy = yScale(d.kg);
-    svg += `<circle cx="${cx}" cy="${cy}" r="4" fill="#3b82f6"/>`;
-    svg += `<text x="${cx}" y="${cy-9}" text-anchor="middle" fill="#1e40af" font-size="11" font-weight="600">${d.kg}kg</text>`;
-  });
-  svg += `<text x="14" y="${padT+innerH/2}" transform="rotate(-90, 14, ${padT+innerH/2})" text-anchor="middle" fill="#6b7280" font-size="12">体重 (kg)</text>`;
-  svg += `</svg>`;
-  wrap.innerHTML = svg;
+ const wrap = document.getElementById('weight-chart');
+ if (!wrap || WEIGHT_DATA.length === 0) return;
+ if (wrap.dataset.rendered) return;
+ wrap.dataset.rendered = '1';
+ const W = 720, H = 240, padL = 50, padR = 20, padT = 20, padB = 36;
+ const innerW = W - padL - padR, innerH = H - padT - padB;
+ const xs = WEIGHT_DATA.map(d => new Date(d.date).getTime());
+ const ys = WEIGHT_DATA.map(d => d.kg);
+ const xMin = Math.min(...xs), xMax = Math.max(...xs);
+ const yMin = Math.min(...ys) * 0.9, yMax = Math.max(...ys) * 1.1 || 1;
+ const xScale = x => xs.length<2 ? padL+innerW/2 : padL + (x-xMin)/(xMax-xMin || 1)*innerW;
+ const yScale = y => padT + (1 - (y-yMin)/(yMax-yMin || 1)) * innerH;
+ let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">`;
+ for (let i = 0; i <= 4; i++) {
+ const y = padT + (innerH / 4) * i;
+ const v = (yMax - (yMax-yMin)/4 * i).toFixed(1);
+ svg += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e5e7eb" stroke-dasharray="3 3"/>`;
+ svg += `<text x="${padL-6}" y="${y+4}" text-anchor="end" fill="#9ca3af" font-size="11">${v}</text>`;
+ }
+ const dateLabels = xs.length <= 6 ? xs : [xs[0], xs[Math.floor(xs.length/2)], xs[xs.length-1]];
+ dateLabels.forEach(t => {
+ const x = xScale(t);
+ const d = new Date(t);
+ svg += `<text x="${x}" y="${H-padB+18}" text-anchor="middle" fill="#9ca3af" font-size="11">${d.getMonth()+1}-${d.getDate()}</text>`;
+ });
+ if (WEIGHT_DATA.length>= 2) {
+ const pts = WEIGHT_DATA.map(d => `${xScale(new Date(d.date).getTime())},${yScale(d.kg)}`).join(' ');
+ svg += `<polyline fill="none" stroke="#3b82f6" stroke-width="2" points="${pts}"/>`;
+ }
+ WEIGHT_DATA.forEach(d => {
+ const cx = xScale(new Date(d.date).getTime()), cy = yScale(d.kg);
+ svg += `<circle cx="${cx}" cy="${cy}" r="4" fill="#3b82f6"/>`;
+ svg += `<text x="${cx}" y="${cy-9}" text-anchor="middle" fill="#1e40af" font-size="11" font-weight="600">${d.kg}kg</text>`;
+ });
+ svg += `<text x="14" y="${padT+innerH/2}" transform="rotate(-90, 14, ${padT+innerH/2})" text-anchor="middle" fill="#6b7280" font-size="12">体重 (kg)</text>`;
+ svg += `</svg>`;
+ wrap.innerHTML = svg;
 }
 {% if active_tab == 'weight' %}
 document.addEventListener('DOMContentLoaded', renderWeightChart);

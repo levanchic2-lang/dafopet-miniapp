@@ -4,90 +4,90 @@
 {% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="page-head">
-  <div>
-    <h1><span class="ph-icon">📦</span>销售单</h1>
-    <p class="ph-sub">共 {{ total }} 张销售单</p>
-  </div>
-  <div class="ph-actions">
-    <a href="/admin/sales-orders/create" class="btn" style="font-size:0.88rem;">＋ 新建销售单</a>
-  </div>
+ <div>
+ <h1><span class="ph-icon">📦</span>销售单</h1>
+ <p class="ph-sub">共 {{ total }} 张销售单</p>
+ </div>
+ <div class="ph-actions">
+ <a href="/admin/sales-orders/create" class="btn" style="font-size:0.88rem;">＋ 新建销售单</a>
+ </div>
 </div>
 
 <div class="filter-card">
-  <form method="get" action="/admin/sales-orders">
-    <div class="filter-row">
-      <input name="q" value="{{ filters.q or '' }}" placeholder="🔍 客户姓名 / 手机号" style="flex:1;min-width:200px;" />
-      <select name="status" style="min-width:120px;">
-        <option value="">全部状态</option>
-        {% for k, zh in so_status_zh.items() %}
-        <option value="{{ k }}" {% if filters.status == k %}selected{% endif %}>{{ zh }}</option>
-        {% endfor %}
-      </select>
-      <input type="date" name="date_from" value="{{ filters.date_from or '' }}" style="width:150px;" />
-      <span style="color:var(--muted);font-size:0.85rem;">至</span>
-      <input type="date" name="date_to" value="{{ filters.date_to or '' }}" style="width:150px;" />
-      <button type="submit" class="btn secondary">查询</button>
-      {% if filters.q or filters.status or filters.date_from or filters.date_to %}
-      <a href="/admin/sales-orders" class="btn secondary">清除</a>
-      {% endif %}
-    </div>
-  </form>
+ <form method="get" action="/admin/sales-orders">
+ <div class="filter-row">
+ <input name="q" value="{{ filters.q or '' }}" style="flex:1;min-width:200px;"/>
+ <select name="status" style="min-width:120px;">
+ <option value="">全部状态</option>
+ {% for k, zh in so_status_zh.items() %}
+ <option value="{{ k }}" {% if filters.status == k %}selected{% endif %}>{{ zh }}</option>
+ {% endfor %}
+ </select>
+ <input type="date" name="date_from" value="{{ filters.date_from or '' }}" style="width:150px;"/>
+ <span style="color:var(--muted);font-size:0.85rem;">至</span>
+ <input type="date" name="date_to" value="{{ filters.date_to or '' }}" style="width:150px;"/>
+ <button type="submit" class="btn secondary">查询</button>
+ {% if filters.q or filters.status or filters.date_from or filters.date_to %}
+ <a href="/admin/sales-orders" class="btn secondary">清除</a>
+ {% endif %}
+ </div>
+ </form>
 </div>
 
 {% if orders %}
 <div class="data-table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>编号</th>
-        <th>日期</th>
-        <th>客户</th>
-        <th>项目数</th>
-        <th style="text-align:right;">金额</th>
-        <th>收款方式</th>
-        <th>状态</th>
-        <th style="text-align:right;">操作</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for o in orders %}
-      <tr>
-        <td style="color:var(--muted);font-family:monospace;font-size:0.8rem;">#{{ o.id }}</td>
-        <td style="white-space:nowrap;color:var(--muted);">{{ o.order_date or '—' }}</td>
-        <td style="font-weight:600;">
-          {% set c = cust_map.get(o.customer_id) %}
-          {% if c %}<a href="/admin/customers/{{ c.id }}">{{ c.name or c.phone or '—' }}</a>{% else %}—{% endif %}
-        </td>
-        <td style="color:var(--muted);">{{ o.items|length }} 项</td>
-        <td style="text-align:right;font-weight:700;font-size:0.95rem;">¥ {{ '%.2f'|format(o.total_amount) }}</td>
-        <td style="color:var(--muted);">{{ o.payment_method or '—' }}</td>
-        <td>
-          {% if o.status == 'paid' %}<span class="pill pill-ok">✓ 已收款</span>
-          {% elif o.status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
-          {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
-        </td>
-        <td style="text-align:right;">
-          <a href="/admin/sales-orders/{{ o.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+ <table class="data-table">
+ <thead>
+ <tr>
+ <th>编号</th>
+ <th>日期</th>
+ <th>客户</th>
+ <th>项目数</th>
+ <th style="text-align:right;">金额</th>
+ <th>收款方式</th>
+ <th>状态</th>
+ <th style="text-align:right;">操作</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for o in orders %}
+ <tr>
+ <td style="color:var(--muted);font-family:monospace;font-size:0.8rem;">#{{ o.id }}</td>
+ <td style="white-space:nowrap;color:var(--muted);">{{ o.order_date or '—' }}</td>
+ <td style="font-weight:600;">
+ {% set c = cust_map.get(o.customer_id) %}
+ {% if c %}<a href="/admin/customers/{{ c.id }}">{{ c.name or c.phone or '—' }}</a>{% else %}—{% endif %}
+ </td>
+ <td style="color:var(--muted);">{{ o.items|length }} 项</td>
+ <td style="text-align:right;font-weight:700;font-size:0.95rem;">¥ {{ '%.2f'|format(o.total_amount) }}</td>
+ <td style="color:var(--muted);">{{ o.payment_method or '—' }}</td>
+ <td>
+ {% if o.status == 'paid' %}<span class="pill pill-ok">✓ 已收款</span>
+ {% elif o.status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
+ {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
+ </td>
+ <td style="text-align:right;">
+ <a href="/admin/sales-orders/{{ o.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
 </div>
 
-{% if total > page_size %}
+{% if total> page_size %}
 <div style="display:flex;justify-content:center;gap:0.5rem;padding:1rem 0;">
-  {% set qs = '&q='~filters.q~'&status='~filters.status~'&date_from='~filters.date_from~'&date_to='~filters.date_to %}
-  {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" class="btn secondary" style="font-size:0.85rem;padding:0.3rem 0.85rem;">‹ 上一页</a>{% endif %}
-  <span style="padding:0.4rem 0.75rem;font-size:0.85rem;color:var(--muted);">第 {{ page }} 页 / 共 {{ ((total-1)//page_size+1) }} 页</span>
-  {% if page * page_size < total %}<a href="?page={{ page+1 }}{{ qs }}" class="btn secondary" style="font-size:0.85rem;padding:0.3rem 0.85rem;">下一页 ›</a>{% endif %}
+ {% set qs = '&q='~filters.q~'&status='~filters.status~'&date_from='~filters.date_from~'&date_to='~filters.date_to %}
+ {% if page> 1 %}<a href="?page={{ page-1 }}{{ qs }}" class="btn secondary" style="font-size:0.85rem;padding:0.3rem 0.85rem;">‹ 上一页</a>{% endif %}
+ <span style="padding:0.4rem 0.75rem;font-size:0.85rem;color:var(--muted);">第 {{ page }} 页 / 共 {{ ((total-1)//page_size+1) }} 页</span>
+ {% if page * page_size < total %}<a href="?page={{ page+1 }}{{ qs }}" class="btn secondary" style="font-size:0.85rem;padding:0.3rem 0.85rem;">下一页 ›</a>{% endif %}
 </div>
 {% endif %}
 
 {% else %}
 <div class="empty-card">
-  <div class="empty-icon">📦</div>
-  暂无销售单{% if filters.q or filters.status %}（<a href="/admin/sales-orders" style="color:#3b82f6;">清空筛选 →</a>）{% endif %}
+ <div class="empty-icon">📦</div>
+ 暂无销售单{% if filters.q or filters.status %}（<a href="/admin/sales-orders" style="color:#3b82f6;">清空筛选 →</a>）{% endif %}
 </div>
 {% endif %}
 

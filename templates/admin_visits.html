@@ -3,100 +3,100 @@
 
 {# 工作流迁移提示 #}
 <div class="msg" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;margin-bottom:0.85rem;font-size:0.88rem;">
-  💡 <strong>新工作流提示：</strong>诊疗/处方/检查单等已整合到客户档案 Hub。
-  请从 <a href="/admin/customers" style="color:#1e40af;font-weight:600;text-decoration:underline;">👥 客户档案</a> 进入对应客户的宠物诊疗 tab 操作。
-  本页保留用于全院搜索/历史查询。
+ 💡 <strong>新工作流提示：</strong>诊疗/处方/检查单等已整合到客户档案 Hub。
+ 请从 <a href="/admin/customers" style="color:#1e40af;font-weight:600;text-decoration:underline;">👥 客户档案</a> 进入对应客户的宠物诊疗 tab 操作。
+ 本页保留用于全院搜索/历史查询。
 </div>
 
 <div class="page-head">
-  <div>
-    <h1><span class="ph-icon">🩺</span>就诊病历（全院查询）</h1>
-    <p class="ph-sub">共 {{ total }} 条记录 · 跨客户的诊疗搜索视图</p>
-  </div>
-  <div class="ph-actions">
-    <a href="/admin/customers" class="btn" style="font-size:0.88rem;">👥 进入客户档案</a>
-  </div>
+ <div>
+ <h1><span class="ph-icon">🩺</span>就诊病历（全院查询）</h1>
+ <p class="ph-sub">共 {{ total }} 条记录 · 跨客户的诊疗搜索视图</p>
+ </div>
+ <div class="ph-actions">
+ <a href="/admin/customers" class="btn" style="font-size:0.88rem;">👥 进入客户档案</a>
+ </div>
 </div>
 
 <div class="filter-card">
-  <form method="get" action="/admin/visits">
-    <div class="filter-row">
-      <input name="q" value="{{ filters.q or '' }}" placeholder="🔍 客户姓名 / 手机 / 宠物名 / 诊断" style="flex:1;min-width:200px;" />
-      <select name="visit_type" style="min-width:130px;">
-        <option value="">全部类型</option>
-        {% for k, zh in visit_type_zh.items() %}
-        <option value="{{ k }}" {% if filters.visit_type == k %}selected{% endif %}>{{ zh }}</option>
-        {% endfor %}
-      </select>
-      <input type="date" name="date_from" value="{{ filters.date_from or '' }}" style="width:150px;" />
-      <span style="color:var(--muted);font-size:0.85rem;">至</span>
-      <input type="date" name="date_to" value="{{ filters.date_to or '' }}" style="width:150px;" />
-      <button type="submit" class="btn secondary">查询</button>
-      {% if filters.q or filters.visit_type or filters.date_from or filters.date_to %}
-      <a href="/admin/visits" class="btn secondary">清除</a>
-      {% endif %}
-    </div>
-  </form>
+ <form method="get" action="/admin/visits">
+ <div class="filter-row">
+ <input name="q" value="{{ filters.q or '' }}" style="flex:1;min-width:200px;"/>
+ <select name="visit_type" style="min-width:130px;">
+ <option value="">全部类型</option>
+ {% for k, zh in visit_type_zh.items() %}
+ <option value="{{ k }}" {% if filters.visit_type == k %}selected{% endif %}>{{ zh }}</option>
+ {% endfor %}
+ </select>
+ <input type="date" name="date_from" value="{{ filters.date_from or '' }}" style="width:150px;"/>
+ <span style="color:var(--muted);font-size:0.85rem;">至</span>
+ <input type="date" name="date_to" value="{{ filters.date_to or '' }}" style="width:150px;"/>
+ <button type="submit" class="btn secondary">查询</button>
+ {% if filters.q or filters.visit_type or filters.date_from or filters.date_to %}
+ <a href="/admin/visits" class="btn secondary">清除</a>
+ {% endif %}
+ </div>
+ </form>
 </div>
 
 {% if visits %}
 <div class="data-table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>日期</th>
-        <th>类型</th>
-        <th>客户</th>
-        <th>宠物</th>
-        <th>诊断</th>
-        <th>医生</th>
-        <th style="text-align:right;">操作</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for v in visits %}
-      <tr>
-        <td style="white-space:nowrap;color:var(--muted);">{{ v.visit_date or '—' }}</td>
-        <td><span class="pill pill-info">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
-        <td>
-          {% set c = cust_map.get(v.customer_id) %}
-          {% if c %}
-            <a href="/admin/customers/{{ c.id }}" style="color:#3b82f6;text-decoration:none;font-weight:600;">{{ c.name or c.phone or '—' }}</a>
-          {% else %}—{% endif %}
-        </td>
-        <td>
-          {% set p = pet_map.get(v.pet_id) %}
-          {% if p %}
-            {{ '🐱' if p.species == 'cat' else '🐶' if p.species == 'dog' else '🐾' }} {{ p.name or '—' }}
-          {% else %}—{% endif %}
-        </td>
-        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-          {{ v.diagnosis or '—' }}
-        </td>
-        <td style="color:var(--muted);">{{ v.vet_name or '—' }}</td>
-        <td style="text-align:right;">
-          <a href="/admin/visits/{{ v.id }}?return_to=customer" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+ <table class="data-table">
+ <thead>
+ <tr>
+ <th>日期</th>
+ <th>类型</th>
+ <th>客户</th>
+ <th>宠物</th>
+ <th>诊断</th>
+ <th>医生</th>
+ <th style="text-align:right;">操作</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for v in visits %}
+ <tr>
+ <td style="white-space:nowrap;color:var(--muted);">{{ v.visit_date or '—' }}</td>
+ <td><span class="pill pill-info">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
+ <td>
+ {% set c = cust_map.get(v.customer_id) %}
+ {% if c %}
+ <a href="/admin/customers/{{ c.id }}" style="color:#3b82f6;text-decoration:none;font-weight:600;">{{ c.name or c.phone or '—' }}</a>
+ {% else %}—{% endif %}
+ </td>
+ <td>
+ {% set p = pet_map.get(v.pet_id) %}
+ {% if p %}
+ {{ '🐱' if p.species == 'cat' else '🐶' if p.species == 'dog' else '🐾' }} {{ p.name or '—' }}
+ {% else %}—{% endif %}
+ </td>
+ <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+ {{ v.diagnosis or '—' }}
+ </td>
+ <td style="color:var(--muted);">{{ v.vet_name or '—' }}</td>
+ <td style="text-align:right;">
+ <a href="/admin/visits/{{ v.id }}?return_to=customer" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
 </div>
 
-{% if total > page_size %}
+{% if total> page_size %}
 <div style="display:flex;justify-content:center;gap:0.5rem;padding:1rem 0;">
-  {% set qs = '&q='~filters.q~'&visit_type='~filters.visit_type~'&date_from='~filters.date_from~'&date_to='~filters.date_to %}
-  {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" class="btn secondary" style="font-size:0.85rem;padding:0.3rem 0.85rem;">‹ 上一页</a>{% endif %}
-  <span style="padding:0.4rem 0.75rem;font-size:0.85rem;color:var(--muted);">第 {{ page }} 页 / 共 {{ ((total-1)//page_size+1) }} 页</span>
-  {% if page * page_size < total %}<a href="?page={{ page+1 }}{{ qs }}" class="btn secondary" style="font-size:0.85rem;padding:0.3rem 0.85rem;">下一页 ›</a>{% endif %}
+ {% set qs = '&q='~filters.q~'&visit_type='~filters.visit_type~'&date_from='~filters.date_from~'&date_to='~filters.date_to %}
+ {% if page> 1 %}<a href="?page={{ page-1 }}{{ qs }}" class="btn secondary" style="font-size:0.85rem;padding:0.3rem 0.85rem;">‹ 上一页</a>{% endif %}
+ <span style="padding:0.4rem 0.75rem;font-size:0.85rem;color:var(--muted);">第 {{ page }} 页 / 共 {{ ((total-1)//page_size+1) }} 页</span>
+ {% if page * page_size < total %}<a href="?page={{ page+1 }}{{ qs }}" class="btn secondary" style="font-size:0.85rem;padding:0.3rem 0.85rem;">下一页 ›</a>{% endif %}
 </div>
 {% endif %}
 
 {% else %}
 <div class="empty-card">
-  <div class="empty-icon">🩺</div>
-  {% if filters.q or filters.visit_type %}没有匹配的就诊记录。<a href="/admin/visits" style="color:#3b82f6;">清除筛选 →</a>
-  {% else %}暂无就诊记录。请到 <a href="/admin/customers" style="color:#3b82f6;">客户档案</a> 找到客户后创建就诊。{% endif %}
+ <div class="empty-icon">🩺</div>
+ {% if filters.q or filters.visit_type %}没有匹配的就诊记录。<a href="/admin/visits" style="color:#3b82f6;">清除筛选 →</a>
+ {% else %}暂无就诊记录。请到 <a href="/admin/customers" style="color:#3b82f6;">客户档案</a> 找到客户后创建就诊。{% endif %}
 </div>
 {% endif %}
 

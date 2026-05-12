@@ -1,19 +1,19 @@
 {% set appt_redirect = appt_redirect | default('admin') %}
 {% set APPOINTMENT_CATEGORY_ZH = {
-  'tnr': 'TNR',
-  'outpatient': '门诊',
-  'surgery': '手术',
-  'beauty': '美容',
-  'grooming': '造型',
-  'washcare': '洗护'
+ 'tnr': 'TNR',
+ 'outpatient': '门诊',
+ 'surgery': '手术',
+ 'beauty': '美容',
+ 'grooming': '造型',
+ 'washcare': '洗护'
 } %}
 {% set APPOINTMENT_STATUS_ZH = {
-  'pending': '待确认',
-  'confirmed': '已确认',
-  'arrived': '已到店',
-  'completed': '已完成',
-  'cancelled': '已取消',
-  'no_show': '爽约'
+ 'pending': '待确认',
+ 'confirmed': '已确认',
+ 'arrived': '已到店',
+ 'completed': '已完成',
+ 'cancelled': '已取消',
+ 'no_show': '爽约'
 } %}
 
 {% if request.query_params.get('appointment_ok') == 'create' %}
@@ -31,447 +31,446 @@
 
 {# ── 创建预约表单（折叠） ─────────────────────────────────────── #}
 <div class="card" style="padding:0;">
-  <button type="button"
-          onclick="var b=document.getElementById('create-appt-body');var opening=b.style.display==='none';b.style.display=opening?'block':'none';this.querySelector('.create-arrow').textContent=opening?'▲':'▼';"
-          style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0.85rem 0.95rem;cursor:pointer;font-size:1.08rem;font-weight:700;color:inherit;text-align:left;">
-    <span>＋ 新建预约</span>
-    <span class="create-arrow" style="font-size:0.75rem;color:var(--muted);">▼</span>
-  </button>
-  <div id="create-appt-body" style="display:none;padding:0 0.95rem 0.95rem;border-top:1px solid var(--border);">
-  <form method="post" action="{{ request.url_for('admin_appointment_create') }}" style="margin-top:0.85rem;display:grid;gap:0.75rem;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}" />
-    <div class="appt-grid">
-      <div>
-        <label style="margin:0 0 0.35rem;">预约类型</label>
-        <select id="admin_appt_category" name="category" required>
-          <option value="tnr">流浪动物 TNR</option>
-          <option value="outpatient">常规门诊</option>
-          <option value="surgery">手术</option>
-          <option value="beauty">美容</option>
-        </select>
-      </div>
-      <div>
-        <label style="margin:0 0 0.35rem;">预约项目</label>
-        {# 文本输入（TNR / 手术 / 造型 / 洗护 时使用） #}
-        <input id="admin_appt_service" type="text" name="service_name"
-               placeholder="例如：TNR 手术 / 绝育复诊 / 洗护" required />
-        {# 门诊下拉（常规门诊时显示） #}
-        <select id="admin_appt_service_select" name="service_name"
-                style="display:none;" disabled>
-          <option value="疫苗/驱虫">疫苗 / 驱虫</option>
-          <option value="体检">体检</option>
-          <option value="呼吸道">呼吸道</option>
-          <option value="胃肠道">胃肠道</option>
-          <option value="泌尿道">泌尿道</option>
-          <option value="皮肤">皮肤</option>
-          <option value="口腔">口腔</option>
-          <option value="行动异常">行动异常</option>
-          <option value="心内科">心内科</option>
-          <option value="肾内科">肾内科</option>
-        </select>
-        {# 手术下拉（手术类型时显示） #}
-        <select id="admin_appt_service_surgery" name="service_name"
-                style="display:none;" disabled>
-          <option value="绝育手术">绝育手术</option>
-          <option value="骨科手术">骨科手术</option>
-          <option value="软组织手术">软组织手术</option>
-          <option value="眼科手术">眼科手术</option>
-          <option value="神经外科手术">神经外科手术</option>
-        </select>
-        {# 美容下拉（美容类型时显示） #}
-        <select id="admin_appt_service_beauty" name="service_name"
-                style="display:none;" disabled>
-          <option value="猫洗护">猫洗护</option>
-          <option value="猫造型">猫造型</option>
-          <option value="犬洗护">犬洗护</option>
-          <option value="犬造型">犬造型</option>
-        </select>
-      </div>
+ <button type="button"
+ onclick="var b=document.getElementById('create-appt-body');var opening=b.style.display==='none';b.style.display=opening?'block':'none';this.querySelector('.create-arrow').textContent=opening?'▲':'▼';"
+ style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0.85rem 0.95rem;cursor:pointer;font-size:1.08rem;font-weight:700;color:inherit;text-align:left;">
+ <span>＋ 新建预约</span>
+ <span class="create-arrow" style="font-size:0.75rem;color:var(--muted);">▼</span>
+ </button>
+ <div id="create-appt-body" style="display:none;padding:0 0.95rem 0.95rem;border-top:1px solid var(--border);">
+ <form method="post" action="{{ request.url_for('admin_appointment_create') }}" style="margin-top:0.85rem;display:grid;gap:0.75rem;">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}"/>
+ <div class="appt-grid">
+ <div>
+ <label style="margin:0 0 0.35rem;">预约类型</label>
+ <select id="admin_appt_category" name="category" required>
+ <option value="tnr">流浪动物 TNR</option>
+ <option value="outpatient">常规门诊</option>
+ <option value="surgery">手术</option>
+ <option value="beauty">美容</option>
+ </select>
+ </div>
+ <div>
+ <label style="margin:0 0 0.35rem;">预约项目</label>
+ {# 文本输入（TNR / 手术 / 造型 / 洗护 时使用） #}
+ <input id="admin_appt_service" type="text" name="service_name" required/>
+ {# 门诊下拉（常规门诊时显示） #}
+ <select id="admin_appt_service_select" name="service_name"
+ style="display:none;" disabled>
+ <option value="疫苗/驱虫">疫苗 / 驱虫</option>
+ <option value="体检">体检</option>
+ <option value="呼吸道">呼吸道</option>
+ <option value="胃肠道">胃肠道</option>
+ <option value="泌尿道">泌尿道</option>
+ <option value="皮肤">皮肤</option>
+ <option value="口腔">口腔</option>
+ <option value="行动异常">行动异常</option>
+ <option value="心内科">心内科</option>
+ <option value="肾内科">肾内科</option>
+ </select>
+ {# 手术下拉（手术类型时显示） #}
+ <select id="admin_appt_service_surgery" name="service_name"
+ style="display:none;" disabled>
+ <option value="绝育手术">绝育手术</option>
+ <option value="骨科手术">骨科手术</option>
+ <option value="软组织手术">软组织手术</option>
+ <option value="眼科手术">眼科手术</option>
+ <option value="神经外科手术">神经外科手术</option>
+ </select>
+ {# 美容下拉（美容类型时显示） #}
+ <select id="admin_appt_service_beauty" name="service_name"
+ style="display:none;" disabled>
+ <option value="猫洗护">猫洗护</option>
+ <option value="猫造型">猫造型</option>
+ <option value="犬洗护">犬洗护</option>
+ <option value="犬造型">犬造型</option>
+ </select>
+ </div>
 
-      {# ── 美容专属附加信息（默认隐藏） ── #}
-      <div id="beauty-extra-section" style="display:none;">
-        <div class="appt-grid" style="gap:0.65rem;">
-          {# 附加服务（多选 checkboxes） #}
-          <div style="grid-column:span 3;">
-            <label style="margin:0 0 0.5rem;display:block;">附加服务项目（可多选）</label>
-            <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1rem;">
-              {% for addon in ['去浮毛','SPA','护发素','纯手剪','药浴','去油'] %}
-              <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.9rem;cursor:pointer;">
-                <input type="checkbox" name="addon_services" value="{{ addon }}"
-                       style="width:16px;height:16px;cursor:pointer;" />
-                {{ addon }}
-              </label>
-              {% endfor %}
-            </div>
-          </div>
-          {# 体型 —— 犬 / 猫各一套，JS 控制显隐 #}
-          <div id="beauty-size-dog" style="display:none;">
-            <label style="margin:0 0 0.35rem;">体型（犬）</label>
-            <select name="pet_size" id="admin_appt_pet_size_dog" disabled>
-              <option value="">请选择体型</option>
-              <option value="微小型犬（4kg 以下）">微小型犬（4kg 以下）</option>
-              <option value="小型犬（4–10kg）">小型犬（4–10kg）</option>
-              <option value="中型犬（10–15kg）">中型犬（10–15kg）</option>
-              <option value="中大型犬（15–25kg）">中大型犬（15–25kg）</option>
-              <option value="大型犬（25kg 以上）">大型犬（25kg 以上）</option>
-            </select>
-          </div>
-          <div id="beauty-size-cat" style="display:none;">
-            <label style="margin:0 0 0.35rem;">体型（猫）</label>
-            <select name="pet_size" id="admin_appt_pet_size_cat" disabled>
-              <option value="">请选择体型</option>
-              <option value="大型猫（4kg 以上）">大型猫（4kg 以上）</option>
-              <option value="中型猫（2.5–4kg）">中型猫（2.5–4kg）</option>
-              <option value="小型猫（2.5kg 以下）">小型猫（2.5kg 以下）</option>
-            </select>
-          </div>
-          {# 毛发长度 #}
-          <div>
-            <label style="margin:0 0 0.35rem;">毛发长度</label>
-            <select name="coat_length" id="admin_appt_coat_length">
-              <option value="">请选择毛发长度</option>
-              <option value="长毛">长毛</option>
-              <option value="短毛">短毛</option>
-            </select>
-          </div>
-          {# 估算时长提示 #}
-          <div id="beauty-duration-hint" style="display:none;grid-column:span 3;">
-            <div style="padding:0.5rem 0.75rem;border-radius:8px;background:#fffbeb;border:1px solid #fcd34d;font-size:0.83rem;color:#92400e;">
-              <strong>预计占用时间：</strong><span id="beauty-duration-text">—</span>
-              <br><span style="color:#b45309;">附加服务每项 +30 分钟。以上为估算，动物不配合或毛量超预估时实际时长可能浮动，具体以门店执行时间为准。</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div id="admin_appt_related_wrap">
-        <label style="margin:0 0 0.35rem;">关联 TNR 申请编号（可选）</label>
-        <input type="text" id="admin_appt_related_id" name="related_application_id" placeholder="输入后自动带出联系人、手机、宠物与门店" inputmode="numeric" autocomplete="off" />
-        <p id="admin_appt_related_hint" class="sub" style="margin:0.35rem 0 0;font-size:0.78rem;color:var(--muted);"></p>
-      </div>
-      <div>
-        <label style="margin:0 0 0.35rem;">联系人姓名</label>
-        <input id="admin_appt_customer_name" type="text" name="customer_name" required />
-      </div>
-      <div>
-        <label style="margin:0 0 0.35rem;">手机号</label>
-        <input id="admin_appt_phone" type="text" name="phone" maxlength="11" required />
-      </div>
-      <div>
-        <label style="margin:0 0 0.35rem;">宠物 / 流浪猫名称</label>
-        <input id="admin_appt_pet_name" type="text" name="pet_name" required />
-      </div>
-      <div>
-        <label style="margin:0 0 0.35rem;">性别</label>
-        <select id="admin_appt_pet_gender" name="pet_gender" required>
-          <option value="female">母</option>
-          <option value="male">公</option>
-          <option value="unknown">未知</option>
-        </select>
-      </div>
-      <div>
-        <label style="margin:0 0 0.35rem;">门店</label>
-        <select id="admin_appt_store" name="store" required>
-          <option value="大风动物医院（东环店）">大风动物医院（东环店）</option>
-          <option value="大风动物医院（横岗店）">大风动物医院（横岗店）</option>
-        </select>
-      </div>
-      <div>
-        <label style="margin:0 0 0.35rem;">时长（分钟）</label>
-        <input id="admin_appt_duration" type="number" name="duration_minutes" value="30" min="10" max="480" required />
-      </div>
-      <div>
-        <label style="margin:0 0 0.35rem;">预约日期</label>
-        <input id="admin_appt_date" type="date" name="appointment_date" required />
-      </div>
-      <div>
-        <label style="margin:0 0 0.35rem;">预约时间</label>
-        <input id="admin_appt_time" type="time" name="appointment_time" required />
-        {# 美容可用时段提示（美容类型时通过 JS 填充） #}
-        <div id="beauty-slots-row" style="display:none;margin-top:0.45rem;">
-          <div id="beauty-slots-loading" style="display:none;font-size:0.8rem;color:#6b7280;">查询中…</div>
-          <div id="beauty-slots-error" style="display:none;font-size:0.8rem;color:#cc3300;"></div>
-          <div id="beauty-slots-info" style="display:none;font-size:0.8rem;color:#6b7280;margin-bottom:0.4rem;"></div>
-          <div id="beauty-slots-btns" style="display:flex;flex-wrap:wrap;gap:0.35rem;"></div>
-        </div>
-      </div>
-      <div class="wide">
-        <label style="margin:0 0 0.35rem;">备注</label>
-        <textarea name="notes" rows="3" placeholder="例如：术前禁食提醒、造型偏好、是否需住院观察"></textarea>
-      </div>
+ {# ── 美容专属附加信息（默认隐藏） ── #}
+ <div id="beauty-extra-section" style="display:none;">
+ <div class="appt-grid" style="gap:0.65rem;">
+ {# 附加服务（多选 checkboxes） #}
+ <div style="grid-column:span 3;">
+ <label style="margin:0 0 0.5rem;display:block;">附加服务项目（可多选）</label>
+ <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1rem;">
+ {% for addon in ['去浮毛','SPA','护发素','纯手剪','药浴','去油'] %}
+ <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.9rem;cursor:pointer;">
+ <input type="checkbox" name="addon_services" value="{{ addon }}"
+ style="width:16px;height:16px;cursor:pointer;"/>
+ {{ addon }}
+ </label>
+ {% endfor %}
+ </div>
+ </div>
+ {# 体型 —— 犬 / 猫各一套，JS 控制显隐 #}
+ <div id="beauty-size-dog" style="display:none;">
+ <label style="margin:0 0 0.35rem;">体型（犬）</label>
+ <select name="pet_size" id="admin_appt_pet_size_dog" disabled>
+ <option value="">请选择体型</option>
+ <option value="微小型犬（4kg 以下）">微小型犬（4kg 以下）</option>
+ <option value="小型犬（4–10kg）">小型犬（4–10kg）</option>
+ <option value="中型犬（10–15kg）">中型犬（10–15kg）</option>
+ <option value="中大型犬（15–25kg）">中大型犬（15–25kg）</option>
+ <option value="大型犬（25kg 以上）">大型犬（25kg 以上）</option>
+ </select>
+ </div>
+ <div id="beauty-size-cat" style="display:none;">
+ <label style="margin:0 0 0.35rem;">体型（猫）</label>
+ <select name="pet_size" id="admin_appt_pet_size_cat" disabled>
+ <option value="">请选择体型</option>
+ <option value="大型猫（4kg 以上）">大型猫（4kg 以上）</option>
+ <option value="中型猫（2.5–4kg）">中型猫（2.5–4kg）</option>
+ <option value="小型猫（2.5kg 以下）">小型猫（2.5kg 以下）</option>
+ </select>
+ </div>
+ {# 毛发长度 #}
+ <div>
+ <label style="margin:0 0 0.35rem;">毛发长度</label>
+ <select name="coat_length" id="admin_appt_coat_length">
+ <option value="">请选择毛发长度</option>
+ <option value="长毛">长毛</option>
+ <option value="短毛">短毛</option>
+ </select>
+ </div>
+ {# 估算时长提示 #}
+ <div id="beauty-duration-hint" style="display:none;grid-column:span 3;">
+ <div style="padding:0.5rem 0.75rem;border-radius:8px;background:#fffbeb;border:1px solid #fcd34d;font-size:0.83rem;color:#92400e;">
+ <strong>预计占用时间：</strong><span id="beauty-duration-text">—</span>
+ <br><span style="color:#b45309;">附加服务每项 +30 分钟。以上为估算，动物不配合或毛量超预估时实际时长可能浮动，具体以门店执行时间为准。</span>
+ </div>
+ </div>
+ </div>
+ </div>
+ <div id="admin_appt_related_wrap">
+ <label style="margin:0 0 0.35rem;">关联 TNR 申请编号（可选）</label>
+ <input type="text" id="admin_appt_related_id" name="related_application_id" inputmode="numeric" autocomplete="off"/>
+ <p id="admin_appt_related_hint" class="sub" style="margin:0.35rem 0 0;font-size:0.78rem;color:var(--muted);"></p>
+ </div>
+ <div>
+ <label style="margin:0 0 0.35rem;">联系人姓名</label>
+ <input id="admin_appt_customer_name" type="text" name="customer_name" required/>
+ </div>
+ <div>
+ <label style="margin:0 0 0.35rem;">手机号</label>
+ <input id="admin_appt_phone" type="text" name="phone" maxlength="11" required/>
+ </div>
+ <div>
+ <label style="margin:0 0 0.35rem;">宠物 / 流浪猫名称</label>
+ <input id="admin_appt_pet_name" type="text" name="pet_name" required/>
+ </div>
+ <div>
+ <label style="margin:0 0 0.35rem;">性别</label>
+ <select id="admin_appt_pet_gender" name="pet_gender" required>
+ <option value="female">母</option>
+ <option value="male">公</option>
+ <option value="unknown">未知</option>
+ </select>
+ </div>
+ <div>
+ <label style="margin:0 0 0.35rem;">门店</label>
+ <select id="admin_appt_store" name="store" required>
+ <option value="大风动物医院（东环店）">大风动物医院（东环店）</option>
+ <option value="大风动物医院（横岗店）">大风动物医院（横岗店）</option>
+ </select>
+ </div>
+ <div>
+ <label style="margin:0 0 0.35rem;">时长（分钟）</label>
+ <input id="admin_appt_duration" type="number" name="duration_minutes" value="30" min="10" max="480" required/>
+ </div>
+ <div>
+ <label style="margin:0 0 0.35rem;">预约日期</label>
+ <input id="admin_appt_date" type="date" name="appointment_date" required/>
+ </div>
+ <div>
+ <label style="margin:0 0 0.35rem;">预约时间</label>
+ <input id="admin_appt_time" type="time" name="appointment_time" required/>
+ {# 美容可用时段提示（美容类型时通过 JS 填充） #}
+ <div id="beauty-slots-row" style="display:none;margin-top:0.45rem;">
+ <div id="beauty-slots-loading" style="display:none;font-size:0.8rem;color:#6b7280;">查询中…</div>
+ <div id="beauty-slots-error" style="display:none;font-size:0.8rem;color:#cc3300;"></div>
+ <div id="beauty-slots-info" style="display:none;font-size:0.8rem;color:#6b7280;margin-bottom:0.4rem;"></div>
+ <div id="beauty-slots-btns" style="display:flex;flex-wrap:wrap;gap:0.35rem;"></div>
+ </div>
+ </div>
+ <div class="wide">
+ <label style="margin:0 0 0.35rem;">备注</label>
+ <textarea name="notes" rows="3"></textarea>
+ </div>
 
-      {# ── 代预约信息 ── #}
-      <div class="wide">
-        <div style="padding:0.85rem 1rem;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;">
-          <label style="margin:0 0 0.5rem;color:#92400e;font-size:0.88rem;">代预约说明</label>
-          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
-            <input type="checkbox" id="is_proxy_check" name="is_proxy" value="1"
-                   style="width:16px;height:16px;cursor:pointer;flex-shrink:0;"
-                   onchange="var s=document.getElementById('proxy-fields');s.style.display=this.checked?'grid':'none';" />
-            <label for="is_proxy_check" style="margin:0;font-weight:600;font-size:0.88rem;cursor:pointer;color:#78350f;">
-              此为代预约（客户电话/到店，员工代为录入）
-            </label>
-          </div>
-          <div id="proxy-fields" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:0.65rem;">
-            <div>
-              <label style="margin:0 0 0.3rem;font-size:0.82rem;">代预约人姓名</label>
-              <input type="text" name="proxy_name" placeholder="实际操作预约的人" />
-            </div>
-            <div>
-              <label style="margin:0 0 0.3rem;font-size:0.82rem;">代预约人手机</label>
-              <input type="text" name="proxy_phone" maxlength="11" placeholder="代预约人联系电话" />
-            </div>
-            <div>
-              <label style="margin:0 0 0.3rem;font-size:0.82rem;">代预约原因</label>
-              <select name="proxy_relation">
-                <option value="电话预约">电话预约</option>
-                <option value="到店登记">到店登记</option>
-                <option value="家人">家人代预约</option>
-                <option value="朋友">朋友代预约</option>
-                <option value="其他">其他</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div style="display:flex;justify-content:flex-end;">
-      <button type="submit">创建预约</button>
-    </div>
-  </form>
-  </div>{# /create-appt-body #}
+ {# ── 代预约信息 ── #}
+ <div class="wide">
+ <div style="padding:0.85rem 1rem;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;">
+ <label style="margin:0 0 0.5rem;color:#92400e;font-size:0.88rem;">代预约说明</label>
+ <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+ <input type="checkbox" id="is_proxy_check" name="is_proxy" value="1"
+ style="width:16px;height:16px;cursor:pointer;flex-shrink:0;"
+ onchange="var s=document.getElementById('proxy-fields');s.style.display=this.checked?'grid':'none';"/>
+ <label for="is_proxy_check" style="margin:0;font-weight:600;font-size:0.88rem;cursor:pointer;color:#78350f;">
+ 此为代预约（客户电话/到店，员工代为录入）
+ </label>
+ </div>
+ <div id="proxy-fields" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:0.65rem;">
+ <div>
+ <label style="margin:0 0 0.3rem;font-size:0.82rem;">代预约人姓名</label>
+ <input type="text" name="proxy_name"/>
+ </div>
+ <div>
+ <label style="margin:0 0 0.3rem;font-size:0.82rem;">代预约人手机</label>
+ <input type="text" name="proxy_phone" maxlength="11"/>
+ </div>
+ <div>
+ <label style="margin:0 0 0.3rem;font-size:0.82rem;">代预约原因</label>
+ <select name="proxy_relation">
+ <option value="电话预约">电话预约</option>
+ <option value="到店登记">到店登记</option>
+ <option value="家人">家人代预约</option>
+ <option value="朋友">朋友代预约</option>
+ <option value="其他">其他</option>
+ </select>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ <div style="display:flex;justify-content:flex-end;">
+ <button type="submit">创建预约</button>
+ </div>
+ </form>
+ </div>{# /create-appt-body #}
 </div>
 
 
 {# ── 看板/全宽容器样式 ─────────────────────────────────────────── #}
 <style>
 .kanban-wrap {
-  margin-top: 1rem;
-  width: 100vw;
-  position: relative;
-  left: 50%;
-  right: 50%;
-  margin-left: -50vw;
-  margin-right: -50vw;
-  padding: 0 1.25rem;
-  box-sizing: border-box;
+ margin-top: 1rem;
+ width: 100vw;
+ position: relative;
+ left: 50%;
+ right: 50%;
+ margin-left: -50vw;
+ margin-right: -50vw;
+ padding: 0 1.25rem;
+ box-sizing: border-box;
 }
 .kanban-wrap-header {
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;
+ display: flex; justify-content: space-between; align-items: center;
+ gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;
 }
 .kanban-wrap-header h2 { margin: 0; font-size: 1.08rem; }
 </style>
 
 {# ── 预约单列表（紧凑表格） ──────────────────────────────── #}
 <div class="kanban-wrap">
-  <div class="kanban-wrap-header">
-    <h2>预约列表</h2>
-    {% if grouped_appointments %}
-    <span class="sub" style="font-size:0.8rem;">
-      共 {{ grouped_appointments | sum(attribute='total') }} 条 · 详细操作请到 <a href="/admin/calendar" style="color:var(--accent);text-decoration:none;">📅 日历</a> 查看
-    </span>
-    {% endif %}
-  </div>
+ <div class="kanban-wrap-header">
+ <h2>预约列表</h2>
+ {% if grouped_appointments %}
+ <span class="sub" style="font-size:0.8rem;">
+ 共 {{ grouped_appointments | sum(attribute='total') }} 条 · 详细操作请到 <a href="/admin/calendar" style="color:var(--accent);text-decoration:none;">📅 日历</a> 查看
+ </span>
+ {% endif %}
+ </div>
 
-  {% if grouped_appointments %}
-    {% for dg in grouped_appointments %}
-    <div class="appt-day-block">
-      <div class="appt-day-header {% if dg.is_today %}is-today{% endif %}">
-        <span>{{ dg.date_display }}</span>
-        <span class="dg-chip">共 {{ dg.total }} 条</span>
-        {% if dg.pending_count > 0 %}<span class="dg-chip c-pending">待确认 {{ dg.pending_count }}</span>{% endif %}
-        {% if dg.tnr_count > 0 %}<span class="dg-chip c-tnr">TNR {{ dg.tnr_count }}</span>{% endif %}
-      </div>
+ {% if grouped_appointments %}
+ {% for dg in grouped_appointments %}
+ <div class="appt-day-block">
+ <div class="appt-day-header {% if dg.is_today %}is-today{% endif %}">
+ <span>{{ dg.date_display }}</span>
+ <span class="dg-chip">共 {{ dg.total }} 条</span>
+ {% if dg.pending_count> 0 %}<span class="dg-chip c-pending">待确认 {{ dg.pending_count }}</span>{% endif %}
+ {% if dg.tnr_count> 0 %}<span class="dg-chip c-tnr">TNR {{ dg.tnr_count }}</span>{% endif %}
+ </div>
 
-      <table class="appt-table">
-        <colgroup>
-          <col class="col-time"><col class="col-cat"><col class="col-svc">
-          <col class="col-cust"><col class="col-pet"><col class="col-store">
-          <col class="col-status"><col class="col-actions">
-        </colgroup>
-        <thead>
-          <tr>
-            <th class="col-time">时间</th>
-            <th class="col-cat">类型</th>
-            <th class="col-svc">项目</th>
-            <th class="col-cust">客户</th>
-            <th class="col-pet">宠物</th>
-            <th class="col-store">门店</th>
-            <th class="col-status">状态</th>
-            <th class="col-actions"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {# 把 dept/slot 三层结构展平，按时间排序 #}
-          {% set ns = namespace(items=[]) %}
-          {% for dept in dg.dept_groups %}
-            {% for slot in dept.slots %}
-              {% for appt in slot.appts %}
-                {% set _ = ns.items.append(appt) %}
-              {% endfor %}
-            {% endfor %}
-          {% endfor %}
+ <table class="appt-table">
+ <colgroup>
+ <col class="col-time"><col class="col-cat"><col class="col-svc">
+ <col class="col-cust"><col class="col-pet"><col class="col-store">
+ <col class="col-status"><col class="col-actions">
+ </colgroup>
+ <thead>
+ <tr>
+ <th class="col-time">时间</th>
+ <th class="col-cat">类型</th>
+ <th class="col-svc">项目</th>
+ <th class="col-cust">客户</th>
+ <th class="col-pet">宠物</th>
+ <th class="col-store">门店</th>
+ <th class="col-status">状态</th>
+ <th class="col-actions"></th>
+ </tr>
+ </thead>
+ <tbody>
+ {# 把 dept/slot 三层结构展平，按时间排序 #}
+ {% set ns = namespace(items=[]) %}
+ {% for dept in dg.dept_groups %}
+ {% for slot in dept.slots %}
+ {% for appt in slot.appts %}
+ {% set _ = ns.items.append(appt) %}
+ {% endfor %}
+ {% endfor %}
+ {% endfor %}
 
-          {% for appt in ns.items | sort(attribute='appointment_time') %}
-          {% set svc = appt.service_name or '' %}
-          {% if appt.category == 'tnr' %}{% set cat_class = 'c-tnr' %}
-          {% elif appt.category == 'surgery' %}{% set cat_class = 'c-surgery' %}
-          {% elif appt.category == 'outpatient' %}{% set cat_class = 'c-outpatient' %}
-          {% elif appt.category in ['beauty','grooming','washcare'] %}
-            {% if '洗护' in svc or '洗澡' in svc or '药浴' in svc %}{% set cat_class = 'c-wash' %}
-            {% else %}{% set cat_class = 'c-beauty' %}{% endif %}
-          {% else %}{% set cat_class = '' %}{% endif %}
+ {% for appt in ns.items | sort(attribute='appointment_time') %}
+ {% set svc = appt.service_name or '' %}
+ {% if appt.category == 'tnr' %}{% set cat_class = 'c-tnr' %}
+ {% elif appt.category == 'surgery' %}{% set cat_class = 'c-surgery' %}
+ {% elif appt.category == 'outpatient' %}{% set cat_class = 'c-outpatient' %}
+ {% elif appt.category in ['beauty','grooming','washcare'] %}
+ {% if '洗护' in svc or '洗澡' in svc or '药浴' in svc %}{% set cat_class = 'c-wash' %}
+ {% else %}{% set cat_class = 'c-beauty' %}{% endif %}
+ {% else %}{% set cat_class = '' %}{% endif %}
 
-          <tr class="appt-row s-{{ appt.status }}" id="appt-{{ appt.id }}">
-            <td class="col-time">
-              {{ appt.appointment_time[:5] if appt.appointment_time else '--:--' }}
-              <div class="row-time-sub">{{ appt.duration_minutes }} 分</div>
-            </td>
-            <td class="col-cat">
-              <span class="cat-pill {{ cat_class }}">
-                {{ APPOINTMENT_CATEGORY_ZH.get(appt.category, appt.category) }}
-              </span>
-            </td>
-            <td class="col-svc">
-              <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;">{{ appt.service_name }}</div>
-              {% if appt.related_application_id or appt.is_proxy %}
-              <div class="row-svc-extra">
-                {% if appt.related_application_id %}申请 #{{ appt.related_application_id }}{% endif %}
-                {% if appt.is_proxy %}{% if appt.related_application_id %} · {% endif %}代预约{% endif %}
-              </div>
-              {% endif %}
-            </td>
-            <td class="col-cust">
-              <div>{{ appt.customer_name }}</div>
-              <div class="row-cust-sub">{{ appt.phone }}</div>
-            </td>
-            <td class="col-pet">
-              {{ appt.pet_name or '—' }}{% if appt.pet_gender == 'female' %} · 母{% elif appt.pet_gender == 'male' %} · 公{% endif %}
-            </td>
-            <td class="col-store">
-              {% if '横岗' in appt.store %}横岗店{% elif '东环' in appt.store %}东环店{% else %}{{ appt.store }}{% endif %}
-            </td>
-            <td class="col-status">
-              <span class="badge
-                {% if appt.status in ['confirmed','completed'] %}b-ok
-                {% elif appt.status == 'arrived' %}b-blue
-                {% elif appt.status in ['cancelled','no_show'] %}b-no
-                {% else %}b-pending{% endif %}">
-                {{ APPOINTMENT_STATUS_ZH.get(appt.status, appt.status) }}
-              </span>
-            </td>
-            <td class="col-actions">
-              <div class="row-actions">
-                {% if appt.status not in ['confirmed','cancelled','completed','no_show','arrived'] %}
-                <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                  <input type="hidden" name="redirect_after" value="appointments">
-                  <input type="hidden" name="status" value="confirmed">
-                  <button type="submit" class="a-confirm">确认</button>
-                </form>
-                {% endif %}
-                {% if appt.status == 'confirmed' %}
-                <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                  <input type="hidden" name="redirect_after" value="appointments">
-                  <input type="hidden" name="status" value="arrived">
-                  <button type="submit" class="a-arrived">已到店</button>
-                </form>
-                {% endif %}
-                {% if appt.status not in ['cancelled','completed'] %}
-                <button type="button" onclick="toggleApptPanel('cancel-{{ appt.id }}')">取消</button>
-                <button type="button" onclick="toggleApptPanel('rs-{{ appt.id }}')">改约</button>
-                {% endif %}
-                <a class="row-btn" href="/admin/calendar" title="在日历查看">📅</a>
-              </div>
-            </td>
-          </tr>
+ <tr class="appt-row s-{{ appt.status }}" id="appt-{{ appt.id }}">
+ <td class="col-time">
+ {{ appt.appointment_time[:5] if appt.appointment_time else '--:--' }}
+ <div class="row-time-sub">{{ appt.duration_minutes }} 分</div>
+ </td>
+ <td class="col-cat">
+ <span class="cat-pill {{ cat_class }}">
+ {{ APPOINTMENT_CATEGORY_ZH.get(appt.category, appt.category) }}
+ </span>
+ </td>
+ <td class="col-svc">
+ <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;">{{ appt.service_name }}</div>
+ {% if appt.related_application_id or appt.is_proxy %}
+ <div class="row-svc-extra">
+ {% if appt.related_application_id %}申请 #{{ appt.related_application_id }}{% endif %}
+ {% if appt.is_proxy %}{% if appt.related_application_id %} · {% endif %}代预约{% endif %}
+ </div>
+ {% endif %}
+ </td>
+ <td class="col-cust">
+ <div>{{ appt.customer_name }}</div>
+ <div class="row-cust-sub">{{ appt.phone }}</div>
+ </td>
+ <td class="col-pet">
+ {{ appt.pet_name or '—' }}{% if appt.pet_gender == 'female' %} · 母{% elif appt.pet_gender == 'male' %} · 公{% endif %}
+ </td>
+ <td class="col-store">
+ {% if '横岗' in appt.store %}横岗店{% elif '东环' in appt.store %}东环店{% else %}{{ appt.store }}{% endif %}
+ </td>
+ <td class="col-status">
+ <span class="badge
+ {% if appt.status in ['confirmed','completed'] %}b-ok
+ {% elif appt.status == 'arrived' %}b-blue
+ {% elif appt.status in ['cancelled','no_show'] %}b-no
+ {% else %}b-pending{% endif %}">
+ {{ APPOINTMENT_STATUS_ZH.get(appt.status, appt.status) }}
+ </span>
+ </td>
+ <td class="col-actions">
+ <div class="row-actions">
+ {% if appt.status not in ['confirmed','cancelled','completed','no_show','arrived'] %}
+ <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="redirect_after" value="appointments">
+ <input type="hidden" name="status" value="confirmed">
+ <button type="submit" class="a-confirm">确认</button>
+ </form>
+ {% endif %}
+ {% if appt.status == 'confirmed' %}
+ <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="redirect_after" value="appointments">
+ <input type="hidden" name="status" value="arrived">
+ <button type="submit" class="a-arrived">已到店</button>
+ </form>
+ {% endif %}
+ {% if appt.status not in ['cancelled','completed'] %}
+ <button type="button" onclick="toggleApptPanel('cancel-{{ appt.id }}')">取消</button>
+ <button type="button" onclick="toggleApptPanel('rs-{{ appt.id }}')">改约</button>
+ {% endif %}
+ <a class="row-btn" href="/admin/calendar" title="在日历查看">📅</a>
+ </div>
+ </td>
+ </tr>
 
-          {% if appt.status not in ['cancelled','completed'] %}
-          <tr class="appt-panel-row" id="cancel-{{ appt.id }}" hidden>
-            <td colspan="8">
-              <div class="panel-wrap">
-                <h4>取消预约 #{{ appt.id }}</h4>
-                <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}"
-                      style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                  <input type="hidden" name="redirect_after" value="appointments">
-                  <input type="hidden" name="status" value="cancelled">
-                  <input type="text" name="cancel_reason" placeholder="取消原因（可选）" style="flex:1;min-width:200px;">
-                  <button type="submit" class="danger">确认取消</button>
-                  <button type="button" class="secondary" onclick="toggleApptPanel('cancel-{{ appt.id }}')">放弃</button>
-                </form>
-              </div>
-            </td>
-          </tr>
+ {% if appt.status not in ['cancelled','completed'] %}
+ <tr class="appt-panel-row" id="cancel-{{ appt.id }}" hidden>
+ <td colspan="8">
+ <div class="panel-wrap">
+ <h4>取消预约 #{{ appt.id }}</h4>
+ <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}"
+ style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="redirect_after" value="appointments">
+ <input type="hidden" name="status" value="cancelled">
+ <input type="text" name="cancel_reason" style="flex:1;min-width:200px;">
+ <button type="submit" class="danger">确认取消</button>
+ <button type="button" class="secondary" onclick="toggleApptPanel('cancel-{{ appt.id }}')">放弃</button>
+ </form>
+ </div>
+ </td>
+ </tr>
 
-          <tr class="appt-panel-row" id="rs-{{ appt.id }}" hidden>
-            <td colspan="8">
-              <div class="panel-wrap">
-                <h4>改约 #{{ appt.id }}</h4>
-                {% if appt.category == 'beauty' and (appt.pet_size or appt.coat_length) %}
-                <div style="margin-bottom:0.6rem;padding:0.4rem 0.6rem;border-radius:6px;background:#fdf4ff;border:1px solid #e9d5ff;font-size:0.82rem;color:#7e22ce;">
-                  <strong>美容信息：</strong>
-                  {% if appt.pet_size %}体型：{{ appt.pet_size }}{% endif %}
-                  {% if appt.pet_size and appt.coat_length %} · {% endif %}
-                  {% if appt.coat_length %}毛发：{{ appt.coat_length }}{% endif %}
-                  {% if appt.addon_services %} · 附加：{{ appt.addon_services }}{% endif %}
-                </div>
-                {% endif %}
-                <form method="post" action="{{ request.url_for('admin_appointment_reschedule', appointment_id=appt.id) }}"
-                      style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem;align-items:end;">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                  <input type="hidden" name="next" value="/admin/appointments">
-                  <div>
-                    <label style="font-size:0.78rem;margin:0 0 0.2rem;">门店</label>
-                    <select name="new_store">
-                      <option value="大风动物医院（东环店）" {% if appt.store == '大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
-                      <option value="大风动物医院（横岗店）" {% if appt.store == '大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style="font-size:0.78rem;margin:0 0 0.2rem;">新日期</label>
-                    <input type="date" name="new_date" value="{{ appt.appointment_date }}" required>
-                  </div>
-                  <div>
-                    <label style="font-size:0.78rem;margin:0 0 0.2rem;">新时间</label>
-                    <input type="time" name="new_time" value="{{ appt.appointment_time }}" required>
-                  </div>
-                  <div>
-                    <label style="font-size:0.78rem;margin:0 0 0.2rem;">时长（分钟）</label>
-                    <input type="number" name="new_duration" value="{{ appt.duration_minutes }}" min="10" max="480">
-                  </div>
-                  <div style="grid-column:span 4;">
-                    <label style="font-size:0.78rem;margin:0 0 0.2rem;">改约原因（可选）</label>
-                    <input type="text" name="reschedule_reason" placeholder="例如：当日手术台满">
-                  </div>
-                  <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:0.5rem;">
-                    <button type="button" class="secondary" onclick="toggleApptPanel('rs-{{ appt.id }}')">放弃改约</button>
-                    <button type="submit">确认改约</button>
-                  </div>
-                </form>
-              </div>
-            </td>
-          </tr>
-          {% endif %}
+ <tr class="appt-panel-row" id="rs-{{ appt.id }}" hidden>
+ <td colspan="8">
+ <div class="panel-wrap">
+ <h4>改约 #{{ appt.id }}</h4>
+ {% if appt.category == 'beauty' and (appt.pet_size or appt.coat_length) %}
+ <div style="margin-bottom:0.6rem;padding:0.4rem 0.6rem;border-radius:6px;background:#fdf4ff;border:1px solid #e9d5ff;font-size:0.82rem;color:#7e22ce;">
+ <strong>美容信息：</strong>
+ {% if appt.pet_size %}体型：{{ appt.pet_size }}{% endif %}
+ {% if appt.pet_size and appt.coat_length %} · {% endif %}
+ {% if appt.coat_length %}毛发：{{ appt.coat_length }}{% endif %}
+ {% if appt.addon_services %} · 附加：{{ appt.addon_services }}{% endif %}
+ </div>
+ {% endif %}
+ <form method="post" action="{{ request.url_for('admin_appointment_reschedule', appointment_id=appt.id) }}"
+ style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem;align-items:end;">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="next" value="/admin/appointments">
+ <div>
+ <label style="font-size:0.78rem;margin:0 0 0.2rem;">门店</label>
+ <select name="new_store">
+ <option value="大风动物医院（东环店）" {% if appt.store == '大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
+ <option value="大风动物医院（横岗店）" {% if appt.store == '大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
+ </select>
+ </div>
+ <div>
+ <label style="font-size:0.78rem;margin:0 0 0.2rem;">新日期</label>
+ <input type="date" name="new_date" value="{{ appt.appointment_date }}" required>
+ </div>
+ <div>
+ <label style="font-size:0.78rem;margin:0 0 0.2rem;">新时间</label>
+ <input type="time" name="new_time" value="{{ appt.appointment_time }}" required>
+ </div>
+ <div>
+ <label style="font-size:0.78rem;margin:0 0 0.2rem;">时长（分钟）</label>
+ <input type="number" name="new_duration" value="{{ appt.duration_minutes }}" min="10" max="480">
+ </div>
+ <div style="grid-column:span 4;">
+ <label style="font-size:0.78rem;margin:0 0 0.2rem;">改约原因（可选）</label>
+ <input type="text" name="reschedule_reason">
+ </div>
+ <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:0.5rem;">
+ <button type="button" class="secondary" onclick="toggleApptPanel('rs-{{ appt.id }}')">放弃改约</button>
+ <button type="submit">确认改约</button>
+ </div>
+ </form>
+ </div>
+ </td>
+ </tr>
+ {% endif %}
 
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="empty-state">
-      当前筛选条件下暂无预约记录。<br>
-      可调整日期范围或筛选条件，或通过上方表单创建新预约。
-    </div>
-  {% endif %}
+ {% endfor %}
+ </tbody>
+ </table>
+ </div>
+ {% endfor %}
+ {% else %}
+ <div class="empty-state">
+ 当前筛选条件下暂无预约记录。<br>
+ 可调整日期范围或筛选条件，或通过上方表单创建新预约。
+ </div>
+ {% endif %}
 </div>
 
 <script>
 function toggleApptPanel(id) {
-  var el = document.getElementById(id);
-  if (el) el.toggleAttribute('hidden');
+ var el = document.getElementById(id);
+ if (el) el.toggleAttribute('hidden');
 }
 </script>

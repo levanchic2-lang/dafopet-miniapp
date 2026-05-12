@@ -3,14 +3,14 @@
 <style>
 .fb-list { display:flex; flex-direction:column; gap:0.75rem; }
 .fb-card {
-  background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
-  transition: opacity 0.15s;
+ background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+ transition: opacity 0.15s;
 }
 .fb-card.resolved { opacity: 0.7; }
 .fb-card-head {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 0.55rem 1rem; background: var(--bg-elevated); border-bottom: 1px solid var(--border);
-  font-size: 0.85rem;
+ display: flex; justify-content: space-between; align-items: center;
+ padding: 0.55rem 1rem; background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+ font-size: 0.85rem;
 }
 .fb-id { color: var(--muted); font-family: monospace; font-size: 0.78rem; }
 .fb-time { font-size: 0.78rem; color: #9ca3af; }
@@ -18,84 +18,84 @@
 .fb-content { font-size: 0.92rem; line-height: 1.65; white-space: pre-wrap; word-break: break-all; }
 .fb-images { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
 .fb-images img {
-  width: 120px; height: 90px; object-fit: cover; border-radius: 8px;
-  border: 1px solid var(--border); cursor: pointer; transition: border-color 0.1s;
+ width: 120px; height: 90px; object-fit: cover; border-radius: 8px;
+ border: 1px solid var(--border); cursor: pointer; transition: border-color 0.1s;
 }
 .fb-images img:hover { border-color: #3b82f6; }
 .fb-admin-note {
-  margin-top: 0.75rem; padding: 0.55rem 0.8rem;
-  background: #f0fdf4; border-radius: 8px; font-size: 0.85rem;
-  color: #166534; border: 1px solid #bbf7d0;
+ margin-top: 0.75rem; padding: 0.55rem 0.8rem;
+ background: #f0fdf4; border-radius: 8px; font-size: 0.85rem;
+ color: #166534; border: 1px solid #bbf7d0;
 }
 .fb-resolve-form {
-  padding: 0.75rem 1rem; border-top: 1px solid var(--border);
-  background: #fafbfc; display: flex; gap: 0.5rem; align-items: flex-start;
+ padding: 0.75rem 1rem; border-top: 1px solid var(--border);
+ background: #fafbfc; display: flex; gap: 0.5rem; align-items: flex-start;
 }
 .fb-resolve-form textarea {
-  flex: 1; font-size: 0.85rem; padding: 0.4rem 0.6rem;
-  border: 1px solid var(--border); border-radius: 8px; resize: vertical; min-height: 56px;
+ flex: 1; font-size: 0.85rem; padding: 0.4rem 0.6rem;
+ border: 1px solid var(--border); border-radius: 8px; resize: vertical; min-height: 56px;
 }
 </style>
 {% endblock %}
 {% block body %}
 
 <div class="page-head">
-  <div>
-    <h1>
-      <span class="ph-icon">💬</span>客户反馈
-      {% if pending_count > 0 %}<span class="pill pill-warn" style="margin-left:0.4rem;">{{ pending_count }} 待处理</span>{% endif %}
-    </h1>
-    <p class="ph-sub">小程序用户提交的意见、Bug 反馈与功能建议</p>
-  </div>
+ <div>
+ <h1>
+ <span class="ph-icon">💬</span>客户反馈
+ {% if pending_count> 0 %}<span class="pill pill-warn" style="margin-left:0.4rem;">{{ pending_count }} 待处理</span>{% endif %}
+ </h1>
+ <p class="ph-sub">小程序用户提交的意见、Bug 反馈与功能建议</p>
+ </div>
 </div>
 
 <div class="list-tabs">
-  <a href="/admin/feedback" class="list-tab {% if not status_filter %}active{% endif %}">全部</a>
-  <a href="/admin/feedback?status=pending" class="list-tab {% if status_filter=='pending' %}active{% endif %}">待处理</a>
-  <a href="/admin/feedback?status=resolved" class="list-tab {% if status_filter=='resolved' %}active{% endif %}">已处理</a>
+ <a href="/admin/feedback" class="list-tab {% if not status_filter %}active{% endif %}">全部</a>
+ <a href="/admin/feedback?status=pending" class="list-tab {% if status_filter=='pending' %}active{% endif %}">待处理</a>
+ <a href="/admin/feedback?status=resolved" class="list-tab {% if status_filter=='resolved' %}active{% endif %}">已处理</a>
 </div>
 
 {% if not feed_list %}
 <div class="empty-card">
-  <div class="empty-icon">💬</div>
-  暂无反馈记录
+ <div class="empty-icon">💬</div>
+ 暂无反馈记录
 </div>
 {% else %}
 <div class="fb-list">
 {% for row in feed_list %}
 {% set fb = row.fb %}
 <div class="fb-card {{ 'resolved' if fb.status == 'resolved' }}" id="fb-{{fb.id}}">
-  <div class="fb-card-head">
-    <span class="fb-id">#{{fb.id}}{% if fb.openid %} · {{fb.openid[:12]}}…{% endif %}</span>
-    <span style="display:flex;align-items:center;gap:0.5rem;">
-      {% if fb.status == 'pending' %}
-        <span class="pill pill-warn">⏳ 待处理</span>
-      {% else %}
-        <span class="pill pill-ok">✓ 已处理</span>
-      {% endif %}
-      <span class="fb-time">{{ fb.created_at.strftime('%Y-%m-%d %H:%M') if fb.created_at }}</span>
-    </span>
-  </div>
-  <div class="fb-body">
-    <div class="fb-content">{{fb.content}}</div>
-    {% if row.img_urls %}
-    <div class="fb-images">
-      {% for url in row.img_urls %}
-      <img src="{{url}}" onclick="window.open(this.src)" title="点击查看原图" />
-      {% endfor %}
-    </div>
-    {% endif %}
-    {% if fb.admin_note %}
-    <div class="fb-admin-note">📝 处理备注：{{fb.admin_note}}</div>
-    {% endif %}
-  </div>
-  {% if fb.status == 'pending' %}
-  <form class="fb-resolve-form" method="post" action="/admin/feedback/{{fb.id}}/resolve">
-    <input type="hidden" name="csrf_token" value="{{csrf_token}}" />
-    <textarea name="admin_note" placeholder="处理备注（可选）：记录解决方式，或回复客户的说明…"></textarea>
-    <button type="submit" class="btn" style="font-size:0.85rem;white-space:nowrap;">✓ 标记已处理</button>
-  </form>
-  {% endif %}
+ <div class="fb-card-head">
+ <span class="fb-id">#{{fb.id}}{% if fb.openid %} · {{fb.openid[:12]}}…{% endif %}</span>
+ <span style="display:flex;align-items:center;gap:0.5rem;">
+ {% if fb.status == 'pending' %}
+ <span class="pill pill-warn">⏳ 待处理</span>
+ {% else %}
+ <span class="pill pill-ok">✓ 已处理</span>
+ {% endif %}
+ <span class="fb-time">{{ fb.created_at.strftime('%Y-%m-%d %H:%M') if fb.created_at }}</span>
+ </span>
+ </div>
+ <div class="fb-body">
+ <div class="fb-content">{{fb.content}}</div>
+ {% if row.img_urls %}
+ <div class="fb-images">
+ {% for url in row.img_urls %}
+ <img src="{{url}}" onclick="window.open(this.src)" title="点击查看原图"/>
+ {% endfor %}
+ </div>
+ {% endif %}
+ {% if fb.admin_note %}
+ <div class="fb-admin-note">📝 处理备注：{{fb.admin_note}}</div>
+ {% endif %}
+ </div>
+ {% if fb.status == 'pending' %}
+ <form class="fb-resolve-form" method="post" action="/admin/feedback/{{fb.id}}/resolve">
+ <input type="hidden" name="csrf_token" value="{{csrf_token}}"/>
+ <textarea name="admin_note"></textarea>
+ <button type="submit" class="btn" style="font-size:0.85rem;white-space:nowrap;">✓ 标记已处理</button>
+ </form>
+ {% endif %}
 </div>
 {% endfor %}
 </div>
