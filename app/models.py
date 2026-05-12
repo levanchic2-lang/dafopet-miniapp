@@ -333,6 +333,12 @@ class PrescriptionItem(Base):
     unit_price: Mapped[float] = mapped_column(Float, default=0.0)
     subtotal: Mapped[float] = mapped_column(Float, default=0.0)
     instructions: Mapped[str] = mapped_column(Text, default="")
+    # ── 细化字段（与库存单位关联） ──
+    dose_amount: Mapped[float] = mapped_column(Float, default=0.0)        # 单次用量数字
+    dose_unit: Mapped[str] = mapped_column(String(20), default="")        # 单次用量单位 (ml/mg/片)
+    times_per_day: Mapped[float] = mapped_column(Float, default=0.0)      # 次/天
+    item_unit: Mapped[str] = mapped_column(String(20), default="")        # 出库单位（粒/支/盒）
+    print_note: Mapped[str] = mapped_column(Text, default="")             # 打印备注（客户可见）
 
     prescription = relationship("Prescription", back_populates="items")
     inventory_item = relationship("InventoryItem", foreign_keys=[item_id])

@@ -730,6 +730,20 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_meddoc_pet ON medical_documents(pet_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_meddoc_visit ON medical_documents(visit_id)"))
 
+            # prescription_items 细化字段（与库存单位关联）
+            pri_cols = conn.execute(text("PRAGMA table_info(prescription_items)")).fetchall()
+            if pri_cols:
+                pri_names = {c[1] for c in pri_cols}
+                for col, typ in [
+                    ("dose_amount", "REAL DEFAULT 0.0"),
+                    ("dose_unit", "VARCHAR(20) DEFAULT ''"),
+                    ("times_per_day", "REAL DEFAULT 0.0"),
+                    ("item_unit", "VARCHAR(20) DEFAULT ''"),
+                    ("print_note", "TEXT DEFAULT ''"),
+                ]:
+                    if col not in pri_names:
+                        conn.execute(text(f"ALTER TABLE prescription_items ADD COLUMN {col} {typ}"))
+
             # prescription_templates 处方套餐模板
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS prescription_templates ("

@@ -113,17 +113,26 @@
  <div style="overflow-x:auto;">
  <table class="drug-table">
  <thead>
+ {# 分组表头 #}
+ <tr style="background:#eff6ff;">
+ <th style="min-width:200px;">药品信息</th>
+ <th colspan="5" style="text-align:center;border-left:1px solid #c7d2fe;border-right:1px solid #c7d2fe;background:#f0fdf4;">投药信息</th>
+ <th colspan="4" style="text-align:center;border-right:1px solid #c7d2fe;background:#fffbeb;">出库计费</th>
+ <th colspan="2" style="text-align:center;background:#fdf4ff;">其它</th>
+ </tr>
  <tr>
- <th style="min-width:160px;">药品/项目名称 *</th>
- <th style="min-width:72px;">类型</th>
- <th style="min-width:80px;">剂量</th>
- <th style="min-width:100px;">频次</th>
- <th style="min-width:64px;">疗程</th>
- <th style="min-width:72px;">数量</th>
- <th style="min-width:64px;">总量文字</th>
- <th style="min-width:84px;">单价(¥)</th>
- <th style="min-width:72px;">小计</th>
- <th style="min-width:100px;">特殊说明</th>
+ <th style="min-width:200px;">项目名称 *</th>
+ <th style="min-width:74px;background:#f0fdf4;">使用方法</th>
+ <th style="min-width:64px;background:#f0fdf4;">单次用量</th>
+ <th style="min-width:54px;background:#f0fdf4;">单位</th>
+ <th style="min-width:60px;background:#f0fdf4;">次/天</th>
+ <th style="min-width:54px;background:#f0fdf4;">天数</th>
+ <th style="min-width:54px;background:#fffbeb;">总次</th>
+ <th style="min-width:80px;background:#fffbeb;">单价(¥)</th>
+ <th style="min-width:64px;background:#fffbeb;">数量</th>
+ <th style="min-width:54px;background:#fffbeb;">单位</th>
+ <th style="min-width:78px;background:#fffbeb;">小计</th>
+ <th style="min-width:100px;background:#fdf4ff;">特殊说明</th>
  <th class="no-print" style="width:36px;"></th>
  </tr>
  </thead>
@@ -131,6 +140,11 @@
  {% if p and p.items %}
  {% for item in p.items %}
  {% set idx = loop.index0 %}
+ {# 兼容老数据：dose_amount/dose_unit 为空则尝试从 dosage 提取 #}
+ {% set _dose_amt = item.dose_amount or '' %}
+ {% set _dose_un = item.dose_unit or '' %}
+ {% set _tpd = item.times_per_day or '' %}
+ {% set _i_unit = item.item_unit or item.quantity or '' %}
  <tr>
  <td>
  <div class="inv-search-wrap">
@@ -141,6 +155,11 @@
  <input type="hidden" name="item_id_{{ idx }}" value="{{ item.item_id or '' }}" id="item_id_{{ idx }}"/>
  <div class="inv-dropdown" id="dropdown_{{ idx }}"></div>
  </div>
+ {# 老数据 fallback：dosage 文本（如"50mg"），如果新字段都空才显示这个 #}
+ {% if not _dose_amt and item.dosage %}
+ <input type="hidden" name="dosage_{{ idx }}" value="{{ item.dosage }}"/>
+ <div style="font-size:0.72rem;color:#9ca3af;margin-top:2px;">原始剂量：{{ item.dosage }}{% if item.frequency %} · {{ item.frequency }}{% endif %}</div>
+ {% endif %}
  </td>
  <td>
  <select name="drug_type_{{ idx }}">
@@ -149,16 +168,20 @@
  {% endfor %}
  </select>
  </td>
- <td><input name="dosage_{{ idx }}" value="{{ item.dosage }}"/></td>
- <td><input name="frequency_{{ idx }}" value="{{ item.frequency }}"/></td>
- <td><input name="duration_days_{{ idx }}" value="{{ item.duration_days }}"/></td>
- <td><input name="quantity_num_{{ idx }}" type="number" step="0.01" min="0" value="{{ item.quantity_num }}"
- oninput="recalcRow({{ idx }})" style="width:64px;"/></td>
- <td><input name="quantity_{{ idx }}" value="{{ item.quantity }}" style="width:64px;"/></td>
+ <td><input name="dose_amount_{{ idx }}" type="number" step="0.01" min="0" value="{{ _dose_amt }}" style="width:64px;"/></td>
+ <td><input name="dose_unit_{{ idx }}" value="{{ _dose_un }}" style="width:54px;" id="dose_unit_{{ idx }}"/></td>
+ <td><input name="times_per_day_{{ idx }}" type="number" step="0.5" min="0" value="{{ _tpd }}"
+ oninput="recalcTotalTimes({{ idx }})" style="width:60px;"/></td>
+ <td><input name="duration_days_{{ idx }}" type="number" step="1" min="0" value="{{ item.duration_days }}"
+ oninput="recalcTotalTimes({{ idx }})" style="width:54px;"/></td>
+ <td style="text-align:center;font-weight:600;color:#3b82f6;" id="total_times_{{ idx }}">—</td>
  <td><input name="unit_price_{{ idx }}" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.unit_price) }}"
- oninput="recalcRow({{ idx }})" style="width:80px;"/></td>
+ oninput="recalcRow({{ idx }})" style="width:78px;"/></td>
+ <td><input name="quantity_num_{{ idx }}" type="number" step="0.01" min="0" value="{{ item.quantity_num }}"
+ oninput="recalcRow({{ idx }})" style="width:62px;"/></td>
+ <td><input name="item_unit_{{ idx }}" value="{{ _i_unit }}" style="width:54px;" id="item_unit_{{ idx }}"/></td>
  <td><input name="subtotal_{{ idx }}" type="number" step="0.01" readonly value="{{ '%.2f'|format(item.subtotal) }}"
- id="subtotal_{{ idx }}" style="width:68px;background:var(--bg-elevated);"/></td>
+ id="subtotal_{{ idx }}" style="width:74px;background:var(--bg-elevated);"/></td>
  <td><input name="instructions_{{ idx }}" value="{{ item.instructions }}"/></td>
  <td class="no-print"><button type="button" onclick="removeDrugRow(this, {{ idx }})" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
  </tr>
@@ -180,16 +203,15 @@
  {% for k, zh in drug_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}
  </select>
  </td>
- <td><input name="dosage_0"/></td>
- <td><input name="frequency_0"/></td>
- <td><input name="duration_days_0"/></td>
- <td><input name="quantity_num_0" type="number" step="0.01" min="0" value="1"
- oninput="recalcRow(0)" style="width:64px;"/></td>
- <td><input name="quantity_0" style="width:64px;"/></td>
- <td><input name="unit_price_0" type="number" step="0.01" min="0" value="0.00"
- oninput="recalcRow(0)" style="width:80px;"/></td>
- <td><input name="subtotal_0" type="number" step="0.01" readonly value="0.00"
- id="subtotal_0" style="width:68px;background:var(--bg-elevated);"/></td>
+ <td><input name="dose_amount_0" type="number" step="0.01" min="0" style="width:64px;"/></td>
+ <td><input name="dose_unit_0" style="width:54px;" id="dose_unit_0"/></td>
+ <td><input name="times_per_day_0" type="number" step="0.5" min="0" oninput="recalcTotalTimes(0)" style="width:60px;"/></td>
+ <td><input name="duration_days_0" type="number" step="1" min="0" oninput="recalcTotalTimes(0)" style="width:54px;"/></td>
+ <td style="text-align:center;font-weight:600;color:#3b82f6;" id="total_times_0">—</td>
+ <td><input name="unit_price_0" type="number" step="0.01" min="0" value="0.00" oninput="recalcRow(0)" style="width:78px;"/></td>
+ <td><input name="quantity_num_0" type="number" step="0.01" min="0" value="1" oninput="recalcRow(0)" style="width:62px;"/></td>
+ <td><input name="item_unit_0" style="width:54px;" id="item_unit_0"/></td>
+ <td><input name="subtotal_0" type="number" step="0.01" readonly value="0.00" id="subtotal_0" style="width:74px;background:var(--bg-elevated);"/></td>
  <td><input name="instructions_0"/></td>
  <td class="no-print"><button type="button" onclick="removeDrugRow(this, 0)" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
  </tr>
@@ -327,10 +349,23 @@ function selectInventoryItem(idx, it, input) {
  document.getElementById('item_id_' + idx).value = it.id;
  var priceEl = document.querySelector('[name="unit_price_' + idx + '"]');
  if (priceEl) priceEl.value = it.sell_price.toFixed(2);
- var qtyEl = document.querySelector('[name="quantity_' + idx + '"]');
- if (qtyEl && !qtyEl.value) qtyEl.value = '1' + it.unit;
+ // 自动填两个单位：单次用量单位 + 出库单位
+ var doseUnitEl = document.getElementById('dose_unit_' + idx);
+ if (doseUnitEl && !doseUnitEl.value) doseUnitEl.value = it.unit || '';
+ var itemUnitEl = document.getElementById('item_unit_' + idx);
+ if (itemUnitEl && !itemUnitEl.value) itemUnitEl.value = it.unit || '';
  closeDropdown(idx);
  recalcRow(idx);
+}
+
+// 总次数 = 次/天 × 天数
+function recalcTotalTimes(idx) {
+ var tpd = parseFloat((document.querySelector('[name="times_per_day_' + idx + '"]')||{}).value) || 0;
+ var dd = parseFloat((document.querySelector('[name="duration_days_' + idx + '"]')||{}).value) || 0;
+ var cell = document.getElementById('total_times_' + idx);
+ if (!cell) return;
+ if (tpd && dd) cell.textContent = (tpd * dd).toString();
+ else cell.textContent = '—';
 }
 
 function closeDropdown(idx) {
@@ -343,25 +378,22 @@ function addDrugRow() {
  var row = `<tr>
  <td>
  <div class="inv-search-wrap">
- <input name="drug_name_${idx}" required
- autocomplete="off"
- oninput="onDrugInput(this, ${idx})"
- onblur="closeDropdown(${idx})"/>
+ <input name="drug_name_${idx}" required autocomplete="off"
+ oninput="onDrugInput(this, ${idx})" onblur="closeDropdown(${idx})"/>
  <input type="hidden" name="item_id_${idx}" value="" id="item_id_${idx}"/>
  <div class="inv-dropdown" id="dropdown_${idx}"></div>
  </div>
  </td>
  <td><select name="drug_type_${idx}">${_drugTypeOptions}</select></td>
- <td><input name="dosage_${idx}"/></td>
- <td><input name="frequency_${idx}"/></td>
- <td><input name="duration_days_${idx}"/></td>
- <td><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="1"
- oninput="recalcRow(${idx})" style="width:64px;"/></td>
- <td><input name="quantity_${idx}" style="width:64px;"/></td>
- <td><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="0.00"
- oninput="recalcRow(${idx})" style="width:80px;"/></td>
- <td><input name="subtotal_${idx}" type="number" step="0.01" readonly value="0.00"
- id="subtotal_${idx}" style="width:68px;background:var(--bg-elevated);"/></td>
+ <td><input name="dose_amount_${idx}" type="number" step="0.01" min="0" style="width:64px;"/></td>
+ <td><input name="dose_unit_${idx}" id="dose_unit_${idx}" style="width:54px;"/></td>
+ <td><input name="times_per_day_${idx}" type="number" step="0.5" min="0" oninput="recalcTotalTimes(${idx})" style="width:60px;"/></td>
+ <td><input name="duration_days_${idx}" type="number" step="1" min="0" oninput="recalcTotalTimes(${idx})" style="width:54px;"/></td>
+ <td style="text-align:center;font-weight:600;color:#3b82f6;" id="total_times_${idx}">—</td>
+ <td><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="0.00" oninput="recalcRow(${idx})" style="width:78px;"/></td>
+ <td><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="1" oninput="recalcRow(${idx})" style="width:62px;"/></td>
+ <td><input name="item_unit_${idx}" id="item_unit_${idx}" style="width:54px;"/></td>
+ <td><input name="subtotal_${idx}" type="number" step="0.01" readonly value="0.00" id="subtotal_${idx}" style="width:74px;background:var(--bg-elevated);"/></td>
  <td><input name="instructions_${idx}"/></td>
  <td class="no-print"><button type="button" onclick="removeDrugRow(this, ${idx})" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
  </tr>`;
@@ -369,7 +401,14 @@ function addDrugRow() {
 }
 
 // init totals on page load
-document.addEventListener('DOMContentLoaded', recalcTotal);
+document.addEventListener('DOMContentLoaded', function() {
+ recalcTotal();
+ // 初始化每行的"总次数"显示
+ document.querySelectorAll('input[name^="times_per_day_"]').forEach(function(el) {
+ var idx = el.name.split('_').pop();
+ recalcTotalTimes(idx);
+ });
+});
 
 // ═══════════════════════════════════════════════════
 // 处方模板 / 复制上次 / 预览
@@ -394,25 +433,29 @@ function _appendRow(it) {
  for (const k in types) {
  typeOpts += `<option value="${k}" ${it.drug_type===k?'selected':''}>${types[k]}</option>`;
  }
+ const esc = s => (s||'').toString().replace(/"/g,'&quot;');
  const row = `<tr>
  <td><div class="inv-search-wrap">
- <input name="drug_name_${idx}" value="${(it.drug_name||'').replace(/"/g,'&quot;')}" required autocomplete="off"
+ <input name="drug_name_${idx}" value="${esc(it.drug_name)}" required autocomplete="off"
  oninput="onDrugInput(this, ${idx})" onblur="closeDropdown(${idx})"/>
  <input type="hidden" name="item_id_${idx}" value="${it.item_id||''}" id="item_id_${idx}"/>
  <div class="inv-dropdown" id="dropdown_${idx}"></div>
  </div></td>
  <td><select name="drug_type_${idx}">${typeOpts}</select></td>
- <td><input name="dosage_${idx}" value="${(it.dosage||'').replace(/"/g,'&quot;')}"/></td>
- <td><input name="frequency_${idx}" value="${(it.frequency||'').replace(/"/g,'&quot;')}"/></td>
- <td><input name="duration_days_${idx}" value="${(it.duration_days||'').replace(/"/g,'&quot;')}"/></td>
- <td><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="${it.quantity_num||1}" oninput="recalcRow(${idx})" style="width:64px;"/></td>
- <td><input name="quantity_${idx}" value="${(it.quantity||'').replace(/"/g,'&quot;')}" style="width:64px;"/></td>
- <td><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="${(it.unit_price||0).toFixed(2)}" oninput="recalcRow(${idx})" style="width:80px;"/></td>
- <td><input name="subtotal_${idx}" type="number" step="0.01" readonly value="${(it.subtotal||0).toFixed(2)}" id="subtotal_${idx}" style="width:68px;background:var(--bg-elevated);"/></td>
- <td><input name="instructions_${idx}" value="${(it.instructions||'').replace(/"/g,'&quot;')}"/></td>
+ <td><input name="dose_amount_${idx}" type="number" step="0.01" min="0" value="${it.dose_amount||''}" style="width:64px;"/></td>
+ <td><input name="dose_unit_${idx}" id="dose_unit_${idx}" value="${esc(it.dose_unit)}" style="width:54px;"/></td>
+ <td><input name="times_per_day_${idx}" type="number" step="0.5" min="0" value="${it.times_per_day||''}" oninput="recalcTotalTimes(${idx})" style="width:60px;"/></td>
+ <td><input name="duration_days_${idx}" type="number" step="1" min="0" value="${esc(it.duration_days)}" oninput="recalcTotalTimes(${idx})" style="width:54px;"/></td>
+ <td style="text-align:center;font-weight:600;color:#3b82f6;" id="total_times_${idx}">—</td>
+ <td><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="${(it.unit_price||0).toFixed(2)}" oninput="recalcRow(${idx})" style="width:78px;"/></td>
+ <td><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="${it.quantity_num||1}" oninput="recalcRow(${idx})" style="width:62px;"/></td>
+ <td><input name="item_unit_${idx}" id="item_unit_${idx}" value="${esc(it.item_unit||it.quantity)}" style="width:54px;"/></td>
+ <td><input name="subtotal_${idx}" type="number" step="0.01" readonly value="${(it.subtotal||0).toFixed(2)}" id="subtotal_${idx}" style="width:74px;background:var(--bg-elevated);"/></td>
+ <td><input name="instructions_${idx}" value="${esc(it.instructions)}"/></td>
  <td class="no-print"><button type="button" onclick="removeDrugRow(this, ${idx})" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
  </tr>`;
  document.getElementById('drug-tbody').insertAdjacentHTML('beforeend', row);
+ recalcTotalTimes(idx);
 }
 
 // ── 套用模板 ──
@@ -497,13 +540,20 @@ function _collectItems() {
  const get = n => (tr.querySelector('[name="' + n + '_' + idx + '"]')||{}).value || '';
  items.push({
  drug_name: get('drug_name'), item_id: get('item_id') || null,
- drug_type: get('drug_type'), dosage: get('dosage'),
- frequency: get('frequency'), duration_days: get('duration_days'),
+ drug_type: get('drug_type'),
+ dose_amount: parseFloat(get('dose_amount'))||0,
+ dose_unit: get('dose_unit'),
+ times_per_day: parseFloat(get('times_per_day'))||0,
+ duration_days: get('duration_days'),
  quantity_num: parseFloat(get('quantity_num'))||0,
- quantity: get('quantity'),
+ item_unit: get('item_unit'),
  unit_price: parseFloat(get('unit_price'))||0,
  subtotal: parseFloat(get('subtotal'))||0,
  instructions: get('instructions'),
+ // 老字段（向后兼容）
+ dosage: get('dosage'),
+ frequency: get('frequency'),
+ quantity: get('item_unit'),
  });
  });
  return items;

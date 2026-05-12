@@ -5344,18 +5344,37 @@ def _parse_presc_items(form_data) -> list[dict]:
             raw_item_id = form_data.get(f"item_id_{i}", "").strip()
             item_id = int(raw_item_id) if raw_item_id and raw_item_id.isdigit() else None
             subtotal = round(qty_num * unit_price, 2)
+            try:
+                dose_amount = float(form_data.get(f"dose_amount_{i}", 0) or 0)
+                times_per_day = float(form_data.get(f"times_per_day_{i}", 0) or 0)
+            except ValueError:
+                dose_amount, times_per_day = 0.0, 0.0
+            # 把 dose_amount + dose_unit 合成回 dosage（向后兼容显示）
+            dose_unit = form_data.get(f"dose_unit_{i}", "").strip()
+            dosage_legacy = form_data.get(f"dosage_{i}", "").strip()
+            if not dosage_legacy and dose_amount:
+                dosage_legacy = (f"{dose_amount:g}{dose_unit}").strip()
+            # frequency 文本：若有 times_per_day，自动生成"每日 N 次"
+            freq_legacy = form_data.get(f"frequency_{i}", "").strip()
+            if not freq_legacy and times_per_day:
+                freq_legacy = f"每日{times_per_day:g}次"
             items.append({
                 "item_id": item_id,
                 "drug_name": name,
                 "drug_type": form_data.get(f"drug_type_{i}", "oral").strip(),
-                "dosage": form_data.get(f"dosage_{i}", "").strip(),
-                "frequency": form_data.get(f"frequency_{i}", "").strip(),
+                "dosage": dosage_legacy,
+                "frequency": freq_legacy,
                 "duration_days": form_data.get(f"duration_days_{i}", "").strip(),
                 "quantity_num": qty_num,
                 "quantity": form_data.get(f"quantity_{i}", "").strip(),
                 "unit_price": unit_price,
                 "subtotal": subtotal,
                 "instructions": form_data.get(f"instructions_{i}", "").strip(),
+                "dose_amount": dose_amount,
+                "dose_unit": dose_unit,
+                "times_per_day": times_per_day,
+                "item_unit": form_data.get(f"item_unit_{i}", "").strip(),
+                "print_note": form_data.get(f"print_note_{i}", "").strip(),
             })
         i += 1
     return items
