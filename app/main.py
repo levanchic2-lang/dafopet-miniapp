@@ -4801,7 +4801,12 @@ async def page_admin_customer_detail(
     cust = db.get(Customer, customer_id)
     if not cust:
         raise HTTPException(404, "客户不存在")
-    pets = db.query(Pet).filter(Pet.customer_id == customer_id).order_by(Pet.id.desc()).all()
+    admin_store = _get_admin_store(request)  # 限店员工的门店短名
+    # 宠物列表（限店员工只看本店宠物）
+    pets_q = db.query(Pet).filter(Pet.customer_id == customer_id)
+    if admin_store:
+        pets_q = pets_q.filter((Pet.store == admin_store) | (Pet.store == ""))
+    pets = pets_q.order_by(Pet.id.desc()).all()
     pet_map = {p.id: p for p in pets}
 
     # 默认选中宠物
@@ -4830,11 +4835,17 @@ async def page_admin_customer_detail(
         dewormings = db.query(DewormingRecord).filter(DewormingRecord.pet_id == active_pet_id).order_by(DewormingRecord.deworm_date.desc()).all()
         weight_records = db.query(WeightRecord).filter(WeightRecord.pet_id == active_pet_id).order_by(WeightRecord.record_date.asc()).all()
         medical_docs = db.query(MedicalDocument).filter(MedicalDocument.pet_id == active_pet_id).order_by(MedicalDocument.id.desc()).all()
-        # 该宠物名下发票 = 该宠物的就诊产生的发票
-        visit_ids = [v.id for v in visits]
-        pet_invoices = [inv for inv in cust_invoices if inv.visit_id in visit_ids] if visit_ids else []
-        # 该宠物的销售单（按 pet_id 过滤）
-        pet_sales_orders = [so for so in cust_sales_orders if so.pet_id == active_pet_id]
+        # 该宠物名下发票 = 直接关联该宠物 OR 通过 visit_id 关联
+        visit_ids = {v.id for v in visits}
+        pet_invoices = [
+            inv for inv in cust_invoices
+            if inv.pet_id == active_pet_id or (inv.visit_id and inv.visit_id in visit_ids)
+        ]
+        # 该宠物的销售单（按 pet_id；无 pet_id 的旧单子归入活跃宠物，避免数据消失）
+        pet_sales_orders = [
+            so for so in cust_sales_orders
+            if so.pet_id == active_pet_id or (not so.pet_id)
+        ]
     else:
         appointments, visits, prescriptions, exam_orders = [], [], [], []
         vaccinations, dewormings, weight_records, medical_docs = [], [], [], []
@@ -5284,19 +5295,28 @@ async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depe
     v = db.get(Visit, visit_id)
     if not v:
         return {"ok": False, "error": "记录不存在"}
+    # 限店员工：只能改本店宠物的诊疗记录
+    admin_store = _get_admin_store(request)
+    if admin_store and v.pet_id:
+        pet = db.get(Pet, v.pet_id)
+        if pet and pet.store and pet.store != admin_store:
+            return {"ok": False, "error": "无权操作其他门店的就诊记录"}
     # 只允许这几个字段，避免 JS 注入修改 customer/pet
     allowed = {"chief_complaint", "physical_exam", "diagnosis", "treatment_plan", "follow_up_note", "follow_up_at", "notes"}
     changed = []
     for k, val in body.items():
         if k in allowed and isinstance(val, str):
             cur = getattr(v, k, "") or ""
-            if cur != val:
+            if cur != val[:2000]:
                 setattr(v, k, val[:2000])
                 changed.append(k)
     if changed:
         v.updated_at = datetime.utcnow()
         db.commit()
-    return {"ok": True, "changed": changed, "saved_at": datetime.utcnow().strftime("%H:%M:%S")}
+    # 本地时间显示
+    from datetime import timezone, timedelta
+    cn_tz = timezone(timedelta(hours=8))
+    return {"ok": True, "changed": changed, "saved_at": datetime.now(cn_tz).strftime("%H:%M:%S")}
 
 
 @app.post("/admin/visits/{visit_id}/delete")
@@ -6993,12 +7013,18 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         db.add(inv)
         db.flush()
     else:
-        # 替换明细
+        # 替换明细：先删旧明细 flush 后再插入新明细，避免冲突
         for old in list(inv.items):
             db.delete(old)
+        db.flush()
         inv.subtotal = subtotal_sum
         inv.total_amount = round(subtotal_sum - (inv.discount_amount or 0), 2)
         inv.updated_at = datetime.utcnow()
+        # 顺便同步客户/宠物（visit 可能换过宠物或主人）
+        if visit.customer_id:
+            inv.customer_id = visit.customer_id
+        if visit.pet_id:
+            inv.pet_id = visit.pet_id
 
     for li in line_items:
         db.add(InvoiceItem(invoice_id=inv.id, **li))
@@ -8771,6 +8797,12 @@ async def api_prescription_recent(
         "quantity_num": it.quantity_num, "quantity": it.quantity,
         "unit_price": it.unit_price, "subtotal": it.subtotal,
         "instructions": it.instructions,
+        # 新细化字段
+        "dose_amount": it.dose_amount or 0,
+        "dose_unit": it.dose_unit or "",
+        "times_per_day": it.times_per_day or 0,
+        "item_unit": it.item_unit or "",
+        "print_note": it.print_note or "",
     } for it in p.items]
     return {
         "ok": True, "id": p.id, "prescribed_date": p.prescribed_date,

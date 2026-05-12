@@ -647,13 +647,17 @@ function previewPrescription() {
  let total = 0;
  items.forEach((it, i) => {
  total += it.subtotal || 0;
+ // 优先用新字段，没有就 fallback 老字段
+ const doseDisplay = it.dose_amount ? `${it.dose_amount}${it.dose_unit||''}` : (it.dosage || '—');
+ const freqDisplay = it.times_per_day ? `每日${it.times_per_day}次` : (it.frequency || '—');
+ const qtyDisplay = it.quantity_num ? `${it.quantity_num}${it.item_unit||''}` : (it.quantity || it.quantity_num || '—');
  html += `<tr>
  <td style="padding:0.4rem;border-bottom:1px solid #eee;">${i+1}</td>
  <td style="padding:0.4rem;border-bottom:1px solid #eee;font-weight:600;">${it.drug_name}</td>
- <td style="padding:0.4rem;border-bottom:1px solid #eee;">${it.dosage||'—'}</td>
- <td style="padding:0.4rem;border-bottom:1px solid #eee;">${it.frequency||'—'}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;">${doseDisplay}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;">${freqDisplay}</td>
  <td style="padding:0.4rem;border-bottom:1px solid #eee;">${it.duration_days||'—'}</td>
- <td style="padding:0.4rem;border-bottom:1px solid #eee;text-align:right;">${it.quantity||it.quantity_num}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;text-align:right;">${qtyDisplay}</td>
  <td style="padding:0.4rem;border-bottom:1px solid #eee;text-align:right;">¥${(it.unit_price||0).toFixed(2)}</td>
  <td style="padding:0.4rem;border-bottom:1px solid #eee;text-align:right;font-weight:600;">¥${(it.subtotal||0).toFixed(2)}</td>
  </tr>`;

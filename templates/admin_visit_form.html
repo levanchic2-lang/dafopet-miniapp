@@ -509,6 +509,7 @@
  <summary style="cursor:pointer;font-size:0.88rem;color:var(--muted);">⚙ 修改基础信息（日期 / 类型 / 医生 / 宠物 / 备注）</summary>
  <form method="post" action="/admin/visits/{{ v.id }}/edit" style="margin-top:0.75rem;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input type="hidden" name="return_to" value="{{ return_to }}">
  {# 保留原有 SOAP 字段不变 #}
  <input type="hidden" name="chief_complaint" value="{{ v.chief_complaint or '' }}">
  <input type="hidden" name="physical_exam" value="{{ v.physical_exam or '' }}">
