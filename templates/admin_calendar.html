@@ -7,16 +7,20 @@
   display:flex; align-items:center; gap:0.75rem; padding:0.6rem 1.1rem;
   background:var(--card); border-bottom:1px solid var(--border); flex-shrink:0; flex-wrap:wrap;
 }
-.cal-topbar .new-btn { white-space:nowrap; }
+.cal-topbar .new-btn { white-space:nowrap; background:#16a34a; color:#fff; border-color:#16a34a; }
+.cal-topbar .new-btn:hover { background:#15803d; border-color:#15803d; }
 .cal-nav { display:flex; align-items:center; gap:0.4rem; }
-.cal-nav button { background:none; border:1px solid var(--border); border-radius:6px; padding:0.3rem 0.6rem; cursor:pointer; font-size:1rem; color:var(--text); }
-.cal-nav button:hover { background:var(--bg-elevated); }
-#cal-date-label { font-weight:700; font-size:1rem; min-width:120px; text-align:center; }
+.cal-nav button { background:none; border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.65rem; cursor:pointer; font-size:1.1rem; color:var(--muted); line-height:1; }
+.cal-nav button:hover { background:var(--bg-elevated); color:var(--text); }
+#cal-date-label { font-weight:700; font-size:1.05rem; min-width:130px; text-align:center; letter-spacing:0.01em; }
 .cal-actions { display:flex; align-items:center; gap:0.5rem; margin-left:auto; }
 .view-sw { display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-.view-sw button { padding:0.3rem 0.75rem; background:none; border:none; cursor:pointer; font-size:0.88rem; color:var(--text); }
-.view-sw button.active { background:var(--accent); color:#fff; }
-#store-filter { padding:0.3rem 0.6rem; border:1px solid var(--border); border-radius:6px; font-size:0.88rem; background:var(--card); color:var(--text); }
+.view-sw button { padding:0.3rem 0.85rem; background:none; border:none; cursor:pointer; font-size:0.88rem; color:var(--muted); font-weight:500; }
+.view-sw button:hover { background:var(--bg-elevated); color:var(--text); }
+.view-sw button.active { background:#3b82f6; color:#fff; font-weight:600; }
+#today-btn { background:none; border:1px solid var(--border); color:var(--text); font-size:0.85rem; padding:0.28rem 0.75rem; border-radius:6px; cursor:pointer; }
+#today-btn:hover { background:var(--bg-elevated); }
+#store-filter { padding:0.3rem 0.7rem; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; background:var(--card); color:var(--text); }
 .cal-body { flex:1; overflow:hidden; display:flex; flex-direction:column; }
 
 /* ── 月视图 ──────────────────────────────────────────── */
@@ -31,11 +35,11 @@
 }
 .month-cell:hover { background:var(--bg-elevated); }
 .month-cell.other-month .day-num { color:var(--muted); }
-.month-cell.today { background:#eff6ff; }
-.day-num { font-size:0.82rem; font-weight:700; padding:0.1rem 0.25rem; width:fit-content; }
+.month-cell.today { background:rgba(59,130,246,0.05); }
+.day-num { font-size:0.82rem; font-weight:700; padding:0.15rem 0.3rem; width:fit-content; color:var(--text); }
 .day-num.today-circle {
-  background:var(--accent); color:#fff; border-radius:50%;
-  width:1.5rem; height:1.5rem; display:flex; align-items:center; justify-content:center;
+  background:#3b82f6; color:#fff; border-radius:50%;
+  width:1.65rem; height:1.65rem; display:flex; align-items:center; justify-content:center; font-size:0.82rem;
 }
 .month-lunar { font-size:0.68rem; color:var(--muted); margin-top:-0.1rem; padding:0 0.25rem 0.15rem; }
 .month-block-pill {
@@ -55,15 +59,16 @@
 .week-time-gutter { width:56px; flex-shrink:0; }
 .week-header-cols { flex:1; display:grid; }
 .week-day-head {
-  text-align:center; padding:0.35rem 0.2rem; border-left:1px solid var(--border);
-  font-size:0.82rem; cursor:pointer;
+  text-align:center; padding:0.4rem 0.2rem; border-left:1px solid var(--border);
+  font-size:0.82rem; cursor:pointer; user-select:none;
 }
 .week-day-head:hover { background:var(--bg-elevated); }
-.week-day-head .wdn { color:var(--muted); font-size:0.75rem; }
-.week-day-head .wdd { font-size:1rem; font-weight:700; }
+.week-day-head .wdn { color:var(--muted); font-size:0.73rem; font-weight:500; letter-spacing:0.02em; }
+.week-day-head .wdd { font-size:1.1rem; font-weight:700; line-height:2; }
+.week-day-head.today-col .wdn { color:#3b82f6; font-weight:600; }
 .week-day-head.today-col .wdd {
-  background:var(--accent); color:#fff; border-radius:50%;
-  width:1.8rem; height:1.8rem; display:inline-flex; align-items:center; justify-content:center;
+  background:#3b82f6; color:#fff; border-radius:50%;
+  width:2rem; height:2rem; display:inline-flex; align-items:center; justify-content:center; font-size:1rem;
 }
 /* all-day row */
 .allday-row { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; min-height:28px; }
@@ -78,24 +83,27 @@
 .week-scroll { flex:1; overflow-y:auto; position:relative; }
 .week-grid { display:flex; position:relative; }
 .time-col { width:56px; flex-shrink:0; }
-.hour-label { height:64px; display:flex; align-items:flex-start; justify-content:flex-end; padding-right:6px; padding-top:2px; font-size:0.7rem; color:var(--muted); }
+.hour-label { height:64px; display:flex; align-items:flex-start; justify-content:flex-end; padding-right:8px; padding-top:3px; font-size:0.68rem; color:var(--muted); font-variant-numeric:tabular-nums; }
 .day-cols { flex:1; display:grid; position:relative; }
 .day-col { border-left:1px solid var(--border); position:relative; }
-.hour-line { height:64px; border-bottom:1px solid var(--border); cursor:pointer; }
-.hour-line:hover { background:rgba(59,130,246,.05); }
-.half-line { position:absolute; left:0; right:0; border-top:1px dashed var(--border); pointer-events:none; }
+.day-col.today-bg { background:rgba(59,130,246,0.035); }
+.hour-line { height:64px; border-bottom:1px solid #e9eaec; cursor:pointer; }
+.hour-line:hover { background:rgba(59,130,246,.06); }
+.half-line { position:absolute; left:0; right:0; border-top:1px dashed #e9eaec; pointer-events:none; }
 /* current time */
-.now-line { position:absolute; left:0; right:0; height:2px; background:#3b82f6; z-index:5; pointer-events:none; }
-.now-dot { position:absolute; left:-4px; top:-4px; width:8px; height:8px; border-radius:50%; background:#3b82f6; }
+.now-line { position:absolute; height:2px; background:#3b82f6; z-index:5; pointer-events:none; transition:top 1s linear; }
+.now-dot { position:absolute; left:-5px; top:-4px; width:10px; height:10px; border-radius:50%; background:#3b82f6; box-shadow:0 0 0 2px #fff; }
 /* event blocks */
 .cal-event {
-  position:absolute; border-radius:5px; padding:2px 5px; cursor:pointer;
+  position:absolute; border-radius:6px; padding:3px 6px 3px 7px; cursor:pointer;
   font-size:0.78rem; overflow:hidden; border-left:3px solid;
-  box-sizing:border-box; z-index:2; transition:opacity 0.1s;
+  box-sizing:border-box; z-index:2; transition:filter 0.1s, box-shadow 0.1s;
+  box-shadow:0 1px 3px rgba(0,0,0,.08);
 }
-.cal-event:hover { opacity:0.85; filter:brightness(0.95); }
-.cal-event .ev-time { font-size:0.68rem; opacity:0.8; white-space:nowrap; }
-.cal-event .ev-title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cal-event:hover { filter:brightness(0.96); box-shadow:0 2px 8px rgba(0,0,0,.14); }
+.cal-event .ev-time { font-size:0.67rem; opacity:0.75; white-space:nowrap; line-height:1.4; }
+.cal-event .ev-title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.4; }
+.cal-event .ev-cust  { font-size:0.68rem; opacity:0.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.3; }
 
 /* ── 弹出卡片 ────────────────────────────────────────── */
 .cal-popup {
@@ -134,11 +142,12 @@
 /* ── 新建选择 modal ──────────────────────────────────── */
 .create-choice { display:flex; gap:0.6rem; margin:0.75rem 0; }
 .create-choice-btn {
-  flex:1; padding:0.9rem 0.5rem; border:1px solid var(--border); border-radius:10px;
-  cursor:pointer; text-align:center; background:var(--card); color:var(--text); font-size:0.88rem;
+  flex:1; padding:0.85rem 0.4rem; border:1.5px solid var(--border); border-radius:10px;
+  cursor:pointer; text-align:center; background:var(--card); color:var(--text); font-size:0.85rem;
+  line-height:1.4; white-space:nowrap;
 }
-.create-choice-btn:hover { background:var(--bg-elevated); border-color:var(--accent); }
-.create-choice-btn .icon { font-size:1.6rem; display:block; margin-bottom:0.3rem; }
+.create-choice-btn:hover { background:#f0f9ff; border-color:#3b82f6; color:#1e40af; }
+.create-choice-btn .icon { font-size:1.5rem; display:block; margin-bottom:0.25rem; }
 
 /* ── Toast ───────────────────────────────────────────── */
 .cal-toast {
@@ -225,7 +234,7 @@
         <span class="icon">📋</span>新建预约
       </button>
       <button class="create-choice-btn" id="create-block-btn">
-        <span class="icon">🚫</span>全天封锁<br><small style="color:var(--muted);">美容师休息等</small>
+        <span class="icon">🚫</span>全天封锁<br><small style="color:var(--muted);font-size:0.75rem;">美容师休息等</small>
       </button>
     </div>
     <div id="block-form" style="display:none;">
@@ -518,9 +527,11 @@ function renderTimeGrid(days) {
   gridHtml += `</div>
       <div class="day-cols" id="day-cols-area" style="grid-template-columns:repeat(${numCols},1fr);">`;
 
+  const todayGridStr = fmtDate(new Date());
   days.forEach(d => {
     const ds = fmtDate(d);
-    gridHtml += `<div class="day-col" data-date="${ds}">`;
+    const isTodayCol = ds === todayGridStr;
+    gridHtml += `<div class="day-col${isTodayCol?' today-bg':''}" data-date="${ds}">`;
     for (let h=START_H; h<END_H; h++) {
       const hm = String(h).padStart(2,'0')+':00';
       gridHtml += `<div class="hour-line" onclick="onTimeClick(event,'${ds}','${hm}')"></div>`;
@@ -538,14 +549,15 @@ function renderTimeGrid(days) {
       const w    = 94 / e._numCols;
       const left = e._col * (94 / e._numCols);
       const label = (e.service_name || e.customer_name || '预约');
+      const evH = Math.min(height, TOTAL_H-top);
       gridHtml += `<div class="cal-event" style="
-        top:${top}px; height:${Math.min(height, TOTAL_H-top)}px;
-        left:${left+1}%; width:${w-1}%;
+        top:${top}px; height:${evH}px;
+        left:${left+0.5}%; width:${w-1}%;
         background:${c.bg}; color:${c.tx}; border-left-color:${c.bd};"
         onclick="event.stopPropagation();openApptPopup(event,${e.id})">
-        <div class="ev-time">${e.time}${e.duration ? ' ·'+e.duration+'分' : ''}</div>
+        <div class="ev-time">${e.time}${e.duration>30?' · '+e.duration+'分':''}</div>
         <div class="ev-title">${label}</div>
-        ${e.customer_name ? '<div style="font-size:0.68rem;opacity:0.8;">'+e.customer_name+'</div>' : ''}
+        ${evH>48 && e.customer_name ? '<div class="ev-cust">'+e.customer_name+'</div>' : ''}
       </div>`;
     });
     gridHtml += '</div>';
@@ -583,33 +595,41 @@ function updateNowLine() {
   const now = new Date();
   const h = now.getHours(), m = now.getMinutes();
   if (h < START_H || h >= END_H) { line.style.display='none'; return; }
-  const top = (h-START_H)*HOUR_H + (m/60)*HOUR_H;
+  const top = (h - START_H) * HOUR_H + (m / 60) * HOUR_H;
 
-  // 只在包含今天的视图里显示
   const today = new Date(); today.setHours(0,0,0,0);
   let show = false;
-  if (view==='day') show = sameDay(curDate,today);
+  if (view==='day')  show = sameDay(curDate, today);
   else if (view==='week') show = getWeekDays(curDate).some(d=>sameDay(d,today));
   if (!show) { line.style.display='none'; return; }
 
+  const weekGrid = document.querySelector('.week-grid');
   const cols = document.getElementById('day-cols-area');
-  if (!show || !cols) { line.style.display='none'; return; }
+  if (!weekGrid || !cols) { line.style.display='none'; return; }
 
-  // 找今天列的偏移
+  const gridRect = weekGrid.getBoundingClientRect();
   const todayStr = fmtDate(today);
-  const dayColEls = cols.querySelectorAll('.day-col');
-  let colLeft=0, colWidth=100;
-  dayColEls.forEach(el => {
-    if (el.dataset.date === todayStr) {
-      const r=el.getBoundingClientRect(), pr=cols.getBoundingClientRect();
-      colLeft=(r.left-pr.left)/pr.width*100;
-      colWidth=r.width/pr.width*100;
-    }
-  });
-  line.style.display='block';
-  line.style.top=top+'px';
-  line.style.left=colLeft+'%';
-  line.style.width=colWidth+'%';
+
+  // 日视图：横贯整个 day-cols 区域
+  if (view === 'day') {
+    const colsRect = cols.getBoundingClientRect();
+    line.style.left  = (colsRect.left  - gridRect.left) + 'px';
+    line.style.width = colsRect.width + 'px';
+  } else {
+    // 周视图：只覆盖今天那一列
+    let found = false;
+    cols.querySelectorAll('.day-col').forEach(el => {
+      if (el.dataset.date === todayStr) {
+        const r = el.getBoundingClientRect();
+        line.style.left  = (r.left - gridRect.left) + 'px';
+        line.style.width = r.width + 'px';
+        found = true;
+      }
+    });
+    if (!found) { line.style.display='none'; return; }
+  }
+  line.style.display = 'block';
+  line.style.top     = top + 'px';
 }
 
 function scrollToNow() {
