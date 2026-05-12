@@ -95,7 +95,7 @@
  <input type="hidden" name="visit_id" value="{{ visit.id if visit else (p.visit_id if p else 0) }}"/>
  <input type="hidden" name="customer_id" value="{{ cust.id if cust else (p.customer_id if p else 0) }}"/>
 
- <div class="row2">
+ <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;">
  <div>
  <label>开具日期</label>
  <input type="date" name="prescribed_date" value="{{ p.prescribed_date if p else today }}" required/>
