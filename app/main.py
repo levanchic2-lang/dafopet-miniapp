@@ -7537,7 +7537,16 @@ async def admin_vaccination_delete(vacc_id: int, request: Request, db: Session =
     _require_csrf(request, str(form.get("csrf_token", "")))
     vacc = db.get(Vaccination, vacc_id)
     if vacc:
+        operator = request.session.get("admin_username", "")
         pet_cust_id = db.get(Pet, vacc.pet_id).customer_id if vacc.pet_id and db.get(Pet, vacc.pet_id) else None
+        # 退回库存（疫苗扣减按 1.0 计算）
+        item_id = getattr(vacc, "item_id", None)
+        if item_id:
+            try:
+                _restore_inventory(db, item_id, 1.0, "vaccination", vacc.id, operator, f"删除疫苗#{vacc.id}退回")
+            except Exception:
+                pass
+        _audit(db, request, "vaccination_delete", detail={"vaccination_id": vacc_id})
         db.delete(vacc)
         db.commit()
         if pet_cust_id:
@@ -7690,9 +7699,31 @@ async def admin_rabies_delete(rec_id: int, request: Request, db: Session = Depen
     rec = db.get(RabiesVaccineRecord, rec_id)
     if not rec:
         raise HTTPException(404)
+    operator = request.session.get("admin_username", "")
+    # 级联：删除关联的疫苗记录 + 退回库存 + 删除签名图片文件
+    linked_vaccs = db.query(Vaccination).filter(Vaccination.rabies_record_id == rec_id).all()
+    for vacc in linked_vaccs:
+        # 通过 vaccine_name 反查库存项（疫苗扣减是按 1.0 数量）
+        # 直接走通用 restore：如果 vacc 没记 item_id 就跳过
+        item_id = getattr(vacc, "item_id", None)
+        if item_id:
+            try:
+                _restore_inventory(db, item_id, 1.0, "vaccination", vacc.id, operator,
+                                   f"删除狂犬记录#{rec_id}退回")
+            except Exception:
+                pass
+        db.delete(vacc)
+    # 删除签名文件
+    for sig_path in (rec.owner_signature_path, rec.staff_signature_path):
+        if sig_path:
+            try:
+                Path(sig_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+    _audit(db, request, "rabies_delete", detail={"rabies_id": rec_id, "linked_vacc_count": len(linked_vaccs)})
     db.delete(rec)
     db.commit()
-    return RedirectResponse("/admin/rabies?msg=记录已删除", status_code=303)
+    return RedirectResponse("/admin/rabies?msg=记录及关联数据已删除", status_code=303)
 
 
 @app.get("/admin/rabies/{rec_id}/signature/{who}")
@@ -7728,15 +7759,7 @@ async def admin_rabies_edit_owner(rec_id: int, request: Request, db: Session = D
     return RedirectResponse(f"/admin/rabies/{rec_id}?msg=信息已更新", status_code=303)
 
 
-@app.post("/admin/rabies/{rec_id}/delete")
-async def admin_rabies_delete(rec_id: int, request: Request, db: Session = Depends(get_db)):
-    require_admin(request)
-    rec = db.get(RabiesVaccineRecord, rec_id)
-    if not rec:
-        raise HTTPException(404)
-    db.delete(rec)
-    db.commit()
-    return RedirectResponse("/admin/rabies?msg=记录已删除", status_code=303)
+# 注：上面已有完整版本的 admin_rabies_delete（带 CSRF + 级联清理），此处旧版本已移除
 
 
 @app.get("/admin/rabies/export/excel")
@@ -7953,6 +7976,10 @@ async def admin_exam_order_detail(
     })
 
 
+_EXAM_REPORT_EXT_OK = {".pdf", ".jpg", ".jpeg", ".png", ".heic", ".webp"}
+_EXAM_REPORT_MAX_BYTES = 20 * 1024 * 1024  # 20 MB
+
+
 @app.post("/admin/exam-orders/{order_id}/upload")
 async def admin_exam_order_upload(
     order_id: int, request: Request, db: Session = Depends(get_db),
@@ -7966,9 +7993,13 @@ async def admin_exam_order_upload(
     if not order:
         raise HTTPException(404)
 
-    data = await file.read()
     fname = file.filename or "report"
     ext = Path(fname).suffix.lower()
+    if ext not in _EXAM_REPORT_EXT_OK:
+        raise HTTPException(400, f"不支持的文件类型 {ext}，仅允许 PDF/JPG/PNG/HEIC/WEBP")
+    data = await file.read()
+    if len(data) > _EXAM_REPORT_MAX_BYTES:
+        raise HTTPException(413, "文件超过 20MB 上限")
     ftype = "pdf" if ext == ".pdf" else "image"
 
     dest_dir = Path(settings.upload_dir) / "exam_reports" / str(order_id)
@@ -8114,9 +8145,13 @@ async def exam_upload_mobile_post(
     if not order or (order.token_expires_at and order.token_expires_at < datetime.utcnow()):
         raise HTTPException(410, "链接已失效")
 
-    data = await file.read()
     fname = file.filename or "photo.jpg"
     ext   = Path(fname).suffix.lower() or ".jpg"
+    if ext not in _EXAM_REPORT_EXT_OK:
+        raise HTTPException(400, f"不支持的文件类型 {ext}")
+    data = await file.read()
+    if len(data) > _EXAM_REPORT_MAX_BYTES:
+        raise HTTPException(413, "文件超过 20MB 上限")
     ftype = "pdf" if ext == ".pdf" else "image"
 
     dest_dir = Path(settings.upload_dir) / "exam_reports" / str(order.id)
@@ -8341,12 +8376,18 @@ async def admin_calendar_page(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/api/calendar/events")
 async def api_calendar_events(
+    request: Request,
     start: str = Query(""),
     end:   str = Query(""),
     store: str = Query(""),
     db: Session = Depends(get_db),
 ):
     """返回指定日期范围内的预约 + 全天封锁日程（JSON）。已取消的预约不显示在日历上。"""
+    require_admin(request)
+    # 限店员工强制使用自己门店，忽略前端传入的 store
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        store = admin_store
     q = db.query(Appointment).filter(Appointment.status != AppointmentStatus.cancelled.value)
     if start:
         q = q.filter(Appointment.appointment_date >= start)
@@ -8414,12 +8455,17 @@ async def api_calendar_block_create(request: Request, db: Session = Depends(get_
     require_admin(request)
     body = await request.json()
     _require_csrf(request, body.get("csrf_token", ""))
+    # 限店员工只能创建本店封锁
+    admin_store = _get_admin_store(request)
+    block_store = str(body.get("store", "")).strip()[:40]
+    if admin_store:
+        block_store = admin_store
     block = CalendarBlock(
         title=str(body.get("title", "")).strip()[:200] or "全天封锁",
         block_date=str(body.get("date", "")).strip()[:20],
-        store=str(body.get("store", "")).strip()[:40],
+        store=block_store,
         notes=str(body.get("notes", "")).strip()[:500],
-        created_by=request.session.get("admin", ""),
+        created_by=request.session.get("admin_username", ""),
     )
     db.add(block)
     db.commit()
@@ -8435,6 +8481,10 @@ async def api_calendar_block_delete(block_id: int, request: Request, db: Session
     block = db.get(CalendarBlock, block_id)
     if not block:
         return {"ok": False, "error": "不存在"}
+    # 限店员工只能删本店封锁
+    admin_store = _get_admin_store(request)
+    if admin_store and block.store and block.store != admin_store:
+        return {"ok": False, "error": "无权删除其他门店的封锁"}
     db.delete(block)
     db.commit()
     return {"ok": True}
@@ -8453,6 +8503,12 @@ async def api_calendar_appt_status(appt_id: int, request: Request, db: Session =
     row = db.get(Appointment, appt_id)
     if not row:
         return {"ok": False, "error": "预约不存在"}
+    # 限店员工只能改本店预约
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if row.store and row.store != full_store:
+            return {"ok": False, "error": "无权操作其他门店的预约"}
     old_status = row.status
     row.status = status
     row.updated_at = datetime.utcnow()
@@ -8510,6 +8566,15 @@ async def api_calendar_appt_reschedule(appt_id: int, request: Request, db: Sessi
     row = db.get(Appointment, appt_id)
     if not row:
         return {"ok": False, "error": "预约不存在"}
+    # 限店员工只能改本店预约
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if row.store and row.store != full_store:
+            return {"ok": False, "error": "无权操作其他门店的预约"}
+    # 已完成 / 已取消 / 爽约 状态不允许改约
+    if row.status in (AppointmentStatus.completed.value, AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value):
+        return {"ok": False, "error": f"当前状态（{_APPOINTMENT_STATUS_LABELS.get(row.status, row.status)}）不允许改约"}
     old_date, old_time = row.appointment_date, row.appointment_time
     row.appointment_date = new_date
     row.appointment_time = new_time
@@ -8594,14 +8659,15 @@ async def admin_weight_create(
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
-    if not pet_id or not weight_kg:
-        return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=weight&msg=请填写体重", status_code=303)
+    # 防呆：体重必须 > 0 且 ≤ 200kg（兜底防误输入负数或异常大值）
+    if not pet_id or weight_kg <= 0 or weight_kg > 200:
+        return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=weight&msg=体重需在 0~200kg 之间", status_code=303)
     rec = WeightRecord(
         pet_id=pet_id,
         record_date=record_date.strip()[:20],
         weight_kg=weight_kg,
         notes=notes.strip(),
-        created_by=request.session.get("admin", ""),
+        created_by=request.session.get("admin_username", ""),
     )
     db.add(rec)
     db.commit()
