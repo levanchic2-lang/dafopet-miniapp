@@ -253,7 +253,7 @@
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ v.diagnosis or '—' }}</td>
             <td>{{ v.vet_name or '—' }}</td>
             <td>{% if v.follow_up_at %}<span class="pill pill-warn">{{ v.follow_up_at }}</span>{% else %}—{% endif %}</td>
-            <td><a href="/admin/visits/{{ v.id }}/edit">查看 →</a></td>
+            <td><a href="/admin/visits/{{ v.id }}?return_to=customer">查看 →</a></td>
           </tr>
           {% endfor %}
         </tbody>

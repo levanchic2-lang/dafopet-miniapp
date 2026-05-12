@@ -5258,6 +5258,9 @@ async def admin_visit_edit(
     treatment_plan: str = Form(""),
     notes: str = Form(""),
     vet_name: str = Form(""),
+    follow_up_note: str = Form(""),
+    follow_up_at: str = Form(""),
+    return_to: str = Form(""),  # "customer" 时保存后跳回客户档案
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -5274,7 +5277,12 @@ async def admin_visit_edit(
     v.treatment_plan = treatment_plan.strip()
     v.notes = notes.strip()
     v.vet_name = vet_name.strip()[:80]
+    v.follow_up_note = follow_up_note.strip()
+    v.follow_up_at = follow_up_at.strip()[:20]
     db.commit()
+    # 若来自客户档案，保存后回去
+    if return_to == "customer" and v.customer_id:
+        return RedirectResponse(f"/admin/customers/{v.customer_id}?pet_id={v.pet_id or 0}&tab=visits&msg=就诊已保存", status_code=303)
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=已保存", status_code=303)
 
 

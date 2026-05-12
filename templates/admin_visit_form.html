@@ -1,24 +1,138 @@
 {% extends "base.html" %}
-{% block body %}
+{% block extra_css %}
+<style>
+/* ── 7 步 SOAP 工作流 ─────────────────────────────────────── */
+.visit-header {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd; border-radius: 10px;
+  padding: 0.75rem 1rem; margin-bottom: 0.85rem;
+  display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;
+}
+.vh-back { font-size: 0.82rem; padding: 0.35rem 0.75rem; flex-shrink: 0; }
+.vh-title { font-size: 1.05rem; font-weight: 700; color: #075985; }
+.vh-meta {
+  display: flex; gap: 0.65rem 1.25rem; flex-wrap: wrap;
+  margin-left: auto; font-size: 0.85rem; color: #475569;
+}
+.vh-meta b { color: #94a3b8; font-weight: 500; }
 
+/* 进度条 */
+.soap-steps {
+  display: flex; align-items: stretch; justify-content: space-between;
+  margin-bottom: 1rem; gap: 4px; position: relative;
+}
+.soap-step {
+  flex: 1; cursor: pointer; padding: 0.55rem 0.5rem 0.4rem;
+  border: 1.5px solid #e5e7eb; border-radius: 10px; background: var(--card);
+  display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+  transition: all 0.15s; user-select: none; position: relative;
+  min-width: 0;
+}
+.soap-step:hover { border-color: #93c5fd; background: #f0f9ff; }
+.soap-step.current {
+  border-color: #3b82f6; background: linear-gradient(180deg, #eff6ff, #dbeafe);
+  box-shadow: 0 2px 8px rgba(59,130,246,0.15);
+}
+.soap-step.done { border-color: #86efac; background: #f0fdf4; }
+.soap-step.current.done { border-color: #3b82f6; background: linear-gradient(180deg, #eff6ff, #d1fae5); }
+
+.soap-circle {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.05rem; font-weight: 700; line-height: 1;
+  background: #f3f4f6; color: #9ca3af; border: 2px solid #e5e7eb;
+  transition: all 0.15s;
+}
+.soap-step.done .soap-circle {
+  background: #10b981; color: #fff; border-color: #10b981;
+}
+.soap-step.current .soap-circle {
+  background: #3b82f6; color: #fff; border-color: #3b82f6;
+  transform: scale(1.05);
+}
+.soap-step.done.current .soap-circle { background: #10b981; border-color: #3b82f6; }
+.soap-label { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+.soap-sublabel { font-size: 0.7rem; color: var(--muted); }
+.soap-step.current .soap-label { color: #1e40af; }
+.soap-step.done .soap-label { color: #065f46; }
+
+/* 步骤面板 */
+.soap-panel {
+  display: none; background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1rem 1.15rem; min-height: 280px;
+}
+.soap-panel.active { display: block; }
+.soap-panel h3 {
+  font-size: 1rem; margin: 0 0 0.5rem; font-weight: 700;
+  display: flex; align-items: center; gap: 0.45rem;
+}
+.soap-panel h3 small {
+  font-weight: 400; font-size: 0.78rem; color: var(--muted);
+}
+.soap-panel textarea {
+  width: 100%; min-height: 120px; font-size: 0.95rem; line-height: 1.6;
+}
+.soap-nav-row {
+  display: flex; gap: 0.5rem; margin-top: 1rem;
+  padding-top: 0.8rem; border-top: 1px solid var(--border);
+}
+.soap-nav-row .spacer { flex: 1; }
+
+/* 化验/处方 卡片列表 */
+.record-list { display: grid; gap: 0.5rem; margin-top: 0.5rem; }
+.record-item {
+  display: flex; gap: 0.65rem; align-items: center;
+  padding: 0.55rem 0.85rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-elevated); text-decoration: none; color: var(--text);
+  transition: background 0.1s;
+}
+.record-item:hover { background: #f9fafb; border-color: #93c5fd; }
+.record-item .ri-date { font-size: 0.78rem; color: var(--muted); min-width: 90px; }
+.record-item .ri-main { flex: 1; font-size: 0.88rem; }
+.record-item .ri-amount { font-weight: 700; color: #059669; font-size: 0.9rem; }
+
+/* 浮动保存条 */
+.save-bar {
+  position: sticky; bottom: 0; background: var(--card);
+  padding: 0.75rem 1rem; border-top: 1px solid var(--border);
+  margin-top: 0.85rem; border-radius: 0 0 10px 10px;
+  display: flex; gap: 0.5rem; align-items: center;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.04); z-index: 10;
+}
+.save-bar .saved-hint { color: var(--muted); font-size: 0.82rem; }
+.save-bar .save-spacer { flex: 1; }
+
+/* 步骤完成后右下角小勾 */
+.soap-step .step-tick {
+  position: absolute; top: 4px; right: 4px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #10b981; color: #fff; font-size: 9px;
+  display: none; align-items: center; justify-content: center; font-weight: 800;
+}
+.soap-step.done .step-tick { display: flex; }
+
+@media (max-width: 720px) {
+  .soap-steps { flex-wrap: wrap; }
+  .soap-step { flex: 0 1 calc(50% - 4px); min-width: 0; }
+  .soap-circle { width: 30px; height: 30px; font-size: 0.95rem; }
+  .soap-label { font-size: 0.78rem; }
+}
+</style>
+{% endblock %}
+
+{% block body %}
 {% set v = visit if visit else None %}
 {% set is_edit = (mode == 'edit') %}
 
-{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
-
-<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
-  {% if cust %}
-  <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
-  {% else %}
-  <a href="/admin/visits" class="btn secondary" style="font-size:0.85rem;">← 返回就诊列表</a>
-  {% endif %}
-  <h1 style="margin:0;font-size:1.3rem;">
-    {% if is_edit %}就诊记录 #{{ v.id }}{% else %}新建就诊记录{% endif %}
-  </h1>
-</div>
+{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
 
 {% if not is_edit and not cust %}
-<!-- 第一步：搜索客户 -->
+{# ── 创建模式：先搜索客户 ── #}
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+  <a href="/admin/customers" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
+  <h1 style="margin:0;font-size:1.3rem;">新建就诊记录</h1>
+</div>
 <div class="card" style="max-width:600px;">
   <div style="font-weight:700;font-size:1rem;margin-bottom:0.5rem;">第一步：找到客户</div>
   <p class="sub" style="margin:0 0 0.75rem;">输入客户姓名或手机号搜索，选中后再填写病历。</p>
@@ -26,15 +140,13 @@
     <input name="search_q" value="{{ search_q or '' }}" placeholder="姓名 / 手机号" style="flex:1;" autofocus />
     <button type="submit" style="white-space:nowrap;">搜索</button>
   </form>
-
   {% if search_q %}
     {% if search_results %}
     <div style="margin-top:0.85rem;display:grid;gap:0.4rem;">
       {% for c in search_results %}
       <a href="/admin/visits/create?customer_id={{ c.id }}"
          style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.85rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
-        <span>
-          <strong>{{ c.name or '未命名' }}</strong>
+        <span><strong>{{ c.name or '未命名' }}</strong>
           <span style="color:var(--muted);margin-left:0.6rem;font-size:0.88rem;">{{ c.phone or '—' }}</span>
         </span>
         <span style="font-size:0.82rem;color:var(--muted);">选择 →</span>
@@ -50,263 +162,363 @@
   {% endif %}
 </div>
 
-{% else %}
-
-<div style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start;">
-
-  <!-- 左：SOAP 表单 -->
-  <div>
-    <div class="card">
-      <form method="post" action="{% if is_edit %}/admin/visits/{{ v.id }}/edit{% else %}/admin/visits/create{% endif %}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-        {% if not is_edit %}
-        <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}" />
-        <input type="hidden" name="appointment_id" value="{{ appt.id if appt else 0 }}" />
-        {% endif %}
-
-        <!-- 基础信息行 -->
-        <div class="row2">
-          <div>
-            <label>就诊日期</label>
-            <input type="date" name="visit_date" value="{{ v.visit_date if v else today }}" required />
-          </div>
-          <div>
-            <label>就诊类型</label>
-            <select name="visit_type">
-              {% for k, zh in visit_type_zh.items() %}
-              <option value="{{ k }}" {% if (v and v.visit_type == k) or (not v and k == 'outpatient') %}selected{% endif %}>{{ zh }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label>接诊医生</label>
-            <input name="vet_name" value="{{ v.vet_name if v else '' }}"
-                   list="vet-list" placeholder="输入或选择医生" />
-            <datalist id="vet-list">
-              {% for name in vet_names %}<option value="{{ name }}">{% endfor %}
-            </datalist>
-          </div>
-          <div>
-            <label>就诊宠物</label>
-            <select name="pet_id">
-              <option value="0">— 未指定 —</option>
-              {% for p in pets %}
-              <option value="{{ p.id }}"
-                {% if (v and v.pet_id == p.id) or (pet and pet.id == p.id and not v) %}selected{% endif %}>
-                {{ p.name or '未命名' }}（{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}）
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-
-        <!-- SOAP -->
-        <div style="margin-top:1rem;">
-          <div style="display:grid;gap:0.85rem;">
-
-            <div>
-              <label style="display:flex;align-items:center;gap:0.4rem;">
-                <span style="display:inline-flex;align-items:center;justify-content:center;width:1.4em;height:1.4em;background:var(--accent);color:#fff;border-radius:4px;font-size:0.72rem;font-weight:800;">S</span>
-                主诉 <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（客户描述的问题）</span>
-              </label>
-              <textarea name="chief_complaint" placeholder="例：猫咪今天食欲下降，精神萎靡，偶有咳嗽">{{ v.chief_complaint if v else '' }}</textarea>
-            </div>
-
-            <div>
-              <label style="display:flex;align-items:center;gap:0.4rem;">
-                <span style="display:inline-flex;align-items:center;justify-content:center;width:1.4em;height:1.4em;background:var(--accent);color:#fff;border-radius:4px;font-size:0.72rem;font-weight:800;">O</span>
-                体格检查 <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（体温/体重/心率/检查发现）</span>
-              </label>
-              <textarea name="physical_exam" placeholder="T: 39.1℃  Wt: 3.8kg  HR: 180bpm  RR: 28次/分&#10;黏膜：淡粉，CRT<2s&#10;腹部触诊：无明显异常">{{ v.physical_exam if v else '' }}</textarea>
-            </div>
-
-            <div>
-              <label style="display:flex;align-items:center;gap:0.4rem;">
-                <span style="display:inline-flex;align-items:center;justify-content:center;width:1.4em;height:1.4em;background:var(--accent);color:#fff;border-radius:4px;font-size:0.72rem;font-weight:800;">A</span>
-                诊断结论
-              </label>
-              <textarea name="diagnosis" style="min-height:72px;" placeholder="例：上呼吸道感染（猫疱疹病毒可疑）">{{ v.diagnosis if v else '' }}</textarea>
-            </div>
-
-            <div>
-              <label style="display:flex;align-items:center;gap:0.4rem;">
-                <span style="display:inline-flex;align-items:center;justify-content:center;width:1.4em;height:1.4em;background:var(--accent);color:#fff;border-radius:4px;font-size:0.72rem;font-weight:800;">P</span>
-                处理方案
-              </label>
-              <textarea name="treatment_plan" placeholder="例：开具阿莫西林口服5天，补液100ml，1周后复诊">{{ v.treatment_plan if v else '' }}</textarea>
-            </div>
-
-            <div>
-              <label>补充备注</label>
-              <textarea name="notes" style="min-height:64px;" placeholder="其他注意事项、客户沟通记录等">{{ v.notes if v else '' }}</textarea>
-            </div>
-          </div>
-        </div>
-
-        <div style="display:flex;gap:0.6rem;margin-top:1.25rem;">
-          <button type="submit" style="flex:1;">{% if is_edit %}保存修改{% else %}创建就诊记录{% endif %}</button>
-          {% if cust %}
-          <a href="/admin/customers/{{ cust.id }}" class="btn secondary">取消</a>
-          {% endif %}
-        </div>
-      </form>
-    </div>
-
-    {% if is_edit %}
-    <!-- 处方单 -->
-    <div class="card" style="margin-top:1rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-        <div style="font-weight:700;font-size:0.95rem;">处方单
-          <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（{{ prescriptions|length }}张）</span>
-        </div>
-        <a href="/admin/prescriptions/create?visit_id={{ v.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">＋ 开处方</a>
+{% elif not is_edit and cust %}
+{# ── 创建模式：客户已选，简单 SOAP 表单（保持兼容旧创建流程） ── #}
+<div class="visit-header">
+  <a href="/admin/customers/{{ cust.id }}" class="btn secondary vh-back">← 返回</a>
+  <div class="vh-title">新建就诊 · {{ cust.name }}{% if pet %} / {{ pet.name }}{% endif %}</div>
+</div>
+<div class="card">
+  <form method="post" action="/admin/visits/create">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="customer_id" value="{{ cust.id }}" />
+    <input type="hidden" name="appointment_id" value="{{ appt.id if appt else 0 }}" />
+    <div class="row2">
+      <div>
+        <label>就诊日期</label>
+        <input type="date" name="visit_date" value="{{ today }}" required />
       </div>
-      {% if prescriptions %}
-      <div style="display:grid;gap:0.4rem;">
-        {% for p in prescriptions %}
-        <a href="/admin/prescriptions/{{ p.id }}"
-           style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
-          <span style="font-size:0.78rem;color:var(--muted);">{{ p.prescribed_date or '—' }}</span>
-          <span class="badge {% if p.status == 'issued' %}b-ok{% elif p.status == 'dispensed' %}b-done{% else %}b-pending{% endif %}" style="font-size:0.68rem;">{{ presc_status_zh.get(p.status, p.status) }}</span>
-          <span style="flex:1;font-size:0.85rem;">{{ p.items|length }} 种药</span>
-          <span style="font-size:0.78rem;color:var(--muted);">{{ p.vet_name or '' }}</span>
-        </a>
-        {% endfor %}
+      <div>
+        <label>就诊类型</label>
+        <select name="visit_type">
+          {% for k, zh in visit_type_zh.items() %}
+          <option value="{{ k }}" {% if k == 'outpatient' %}selected{% endif %}>{{ zh }}</option>
+          {% endfor %}
+        </select>
       </div>
-      {% else %}
-      <p style="color:var(--muted);font-size:0.88rem;margin:0;">本次就诊暂无处方单</p>
-      {% endif %}
-    </div>
-
-    <!-- 销售单 -->
-    <div class="card" style="margin-top:0.75rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-        <div style="font-weight:700;font-size:0.95rem;">销售单
-          <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（{{ sales_orders|length }}张）</span>
-        </div>
-        <a href="/admin/sales-orders/create?visit_id={{ v.id }}&customer_id={{ v.customer_id or 0 }}" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">＋ 开销售单</a>
+      <div>
+        <label>接诊医生</label>
+        <input name="vet_name" list="vet-list" placeholder="输入或选择医生" />
+        <datalist id="vet-list">{% for name in vet_names %}<option value="{{ name }}">{% endfor %}</datalist>
       </div>
-      {% if sales_orders %}
-      <div style="display:grid;gap:0.4rem;">
-        {% for so in sales_orders %}
-        <a href="/admin/sales-orders/{{ so.id }}"
-           style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
-          <span style="font-size:0.78rem;color:var(--muted);">{{ so.order_date or '—' }}</span>
-          <span class="badge {% if so.status == 'paid' %}b-done{% elif so.status == 'cancelled' %}b-no{% else %}b-pending{% endif %}" style="font-size:0.68rem;">{{ so_status_zh.get(so.status, so.status) }}</span>
-          <span style="flex:1;font-size:0.85rem;">{{ so.items|length }} 项</span>
-          <span style="font-weight:600;font-size:0.9rem;">¥ {{ "%.2f"|format(so.total_amount) }}</span>
-        </a>
-        {% endfor %}
+      <div>
+        <label>就诊宠物</label>
+        <select name="pet_id">
+          <option value="0">— 未指定 —</option>
+          {% for p in pets %}
+          <option value="{{ p.id }}" {% if pet and pet.id == p.id %}selected{% endif %}>
+            {{ p.name or '未命名' }}（{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}）
+          </option>
+          {% endfor %}
+        </select>
       </div>
-      {% else %}
-      <p style="color:var(--muted);font-size:0.88rem;margin:0;">本次就诊暂无销售单</p>
-      {% endif %}
     </div>
-
-    <!-- 收费单 -->
-    <div class="card" style="margin-top:0.75rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-        <div style="font-weight:700;font-size:0.95rem;">收费单
-          <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（{{ invoices|length }}张）</span>
-        </div>
-        {% set has_unpaid = invoices | selectattr('payment_status', 'eq', 'unpaid') | list %}
-        {% if not has_unpaid %}
-        <a href="/admin/invoices/create?visit_id={{ v.id }}"
-           class="btn" style="font-size:0.82rem;padding:0.3rem 0.75rem;">🧾 生成收费单</a>
-        {% endif %}
-      </div>
-      {% if invoices %}
-      <div style="display:grid;gap:0.4rem;">
-        {% for inv in invoices %}
-        <a href="/admin/invoices/{{ inv.id }}"
-           style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
-          <span style="font-size:0.78rem;color:var(--muted);font-family:monospace;">{{ inv.invoice_no }}</span>
-          <span class="badge {% if inv.payment_status == 'paid' %}b-done{% elif inv.payment_status == 'cancelled' %}b-no{% else %}b-pending{% endif %}"
-                style="font-size:0.68rem;">{{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}</span>
-          <span style="flex:1;font-size:0.85rem;">{{ inv.items|length }} 项</span>
-          <span style="font-weight:700;font-size:0.95rem;">¥ {{ '%.2f'|format(inv.total_amount) }}</span>
-        </a>
-        {% endfor %}
-      </div>
-      {% else %}
-      <p style="color:var(--muted);font-size:0.88rem;margin:0;">本次就诊暂无收费单</p>
-      {% endif %}
+    <label style="margin-top:0.75rem;">主诉（可先填这一项，创建后再补充其他步骤）</label>
+    <textarea name="chief_complaint" placeholder="例：猫咪今天食欲下降，精神萎靡"></textarea>
+    <div style="display:flex;gap:0.6rem;margin-top:1.25rem;">
+      <button type="submit" style="flex:1;">创建就诊记录</button>
+      <a href="/admin/customers/{{ cust.id }}" class="btn secondary">取消</a>
     </div>
-
-    <!-- 检查单 -->
-    <div class="card" style="margin-top:0.75rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-        <div style="font-weight:700;font-size:0.95rem;">检查单
-          <span style="color:var(--muted);font-weight:400;font-size:0.82rem;">（{{ exam_orders|length }}张）</span>
-        </div>
-        <a href="/admin/exam-orders/create?visit_id={{ v.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.3rem 0.75rem;">＋ 开检查单</a>
-      </div>
-      {% if exam_orders %}
-      <div style="display:grid;gap:0.4rem;">
-        {% for eo in exam_orders %}
-        <a href="/admin/exam-orders/{{ eo.id }}"
-           style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);text-decoration:none;color:var(--text);">
-          <span style="font-size:0.78rem;color:var(--muted);">{{ eo.created_at.strftime('%m-%d %H:%M') if eo.created_at else '—' }}</span>
-          <span class="badge {% if eo.status == 'completed' %}b-done{% else %}b-pending{% endif %}" style="font-size:0.68rem;">
-            {{ '已出报告' if eo.status == 'completed' else '待出报告' }}
-          </span>
-          {% set eo_items = eo.items_json | tojson if eo.items_json is string else eo.items_json %}
-          <span style="flex:1;font-size:0.85rem;">#{{ eo.id }}</span>
-          <span style="font-size:0.78rem;color:var(--muted);">{{ eo.reports|length }} 份报告</span>
-        </a>
-        {% endfor %}
-      </div>
-      {% else %}
-      <p style="color:var(--muted);font-size:0.88rem;margin:0;">本次就诊暂无检查单</p>
-      {% endif %}
-    </div>
-
-    <!-- 删除 -->
-    <div style="margin-top:0.75rem;">
-      <form method="post" action="/admin/visits/{{ v.id }}/delete"
-            onsubmit="return confirm('确认删除此就诊记录？此操作不可恢复。')">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-        <button type="submit" class="danger" style="font-size:0.85rem;width:100%;">删除此就诊记录</button>
-      </form>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- 右：客户/宠物信息卡 -->
-  <div>
-    {% if cust %}
-    <div class="card" style="margin-bottom:0;">
-      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.6rem;">客户信息</div>
-      <div style="font-size:0.88rem;line-height:1.9;">
-        <div><span style="color:var(--muted);">姓名</span>　{{ cust.name or '—' }}</div>
-        <div><span style="color:var(--muted);">手机</span>　{{ cust.phone or '—' }}</div>
-        {% if cust.address %}
-        <div><span style="color:var(--muted);">地址</span>　{{ cust.address }}</div>
-        {% endif %}
-      </div>
-      <a href="/admin/customers/{{ cust.id }}" style="font-size:0.82rem;margin-top:0.6rem;display:inline-block;">查看完整档案 →</a>
-    </div>
-    {% endif %}
-
-    {% if is_edit and v %}
-    <div class="card" style="margin-top:0.75rem;margin-bottom:0;font-size:0.82rem;color:var(--muted);">
-      <div>创建人：{{ v.created_by or '—' }}</div>
-      <div>创建时间：{{ v.created_at.strftime('%Y-%m-%d %H:%M') if v.created_at else '—' }}</div>
-      <div>最后更新：{{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</div>
-    </div>
-    {% endif %}
-
-    {% if appt and not is_edit %}
-    <div class="card" style="margin-top:0.75rem;margin-bottom:0;font-size:0.88rem;">
-      <div style="font-weight:700;margin-bottom:0.4rem;">关联预约</div>
-      <div style="color:var(--muted);">#{{ appt.id }} · {{ appt.service_name or appt.category }}</div>
-      <div>{{ appt.appointment_date }} {{ appt.appointment_time }}</div>
-    </div>
-    {% endif %}
-  </div>
-
+  </form>
 </div>
 
-{% endif %}{# end: not is_edit and not cust #}
+{% else %}
+{# ── 编辑模式：7 步 SOAP 工作流 ── #}
+{% set step1_done = (v.chief_complaint or '').strip() | length > 0 %}
+{% set step2_done = (v.physical_exam or '').strip() | length > 0 %}
+{% set step3_done = exam_orders | length > 0 %}
+{% set step4_done = (v.diagnosis or '').strip() | length > 0 %}
+{% set step5_done = prescriptions | length > 0 %}
+{% set step6_done = (v.treatment_plan or '').strip() | length > 0 %}
+{% set step7_done = (v.follow_up_note or v.follow_up_at or '') | length > 0 %}
+{% set return_to = request.query_params.get('return_to', '') %}
+
+<div class="visit-header">
+  {% if return_to == 'customer' and cust %}
+  <a href="/admin/customers/{{ cust.id }}?pet_id={{ v.pet_id or 0 }}&tab=visits" class="btn secondary vh-back">← 返回客户档案</a>
+  {% elif cust %}
+  <a href="/admin/customers/{{ cust.id }}" class="btn secondary vh-back">← {{ cust.name }}</a>
+  {% else %}
+  <a href="/admin/visits" class="btn secondary vh-back">← 就诊列表</a>
+  {% endif %}
+  <div class="vh-title">就诊 #{{ v.id }}</div>
+  <div class="vh-meta">
+    <span><b>日期</b> {{ v.visit_date or '—' }}</span>
+    <span><b>类型</b> {{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>
+    <span><b>医生</b> {{ v.vet_name or '—' }}</span>
+    {% if pet %}<span><b>宠物</b> {{ pet.name }} · {{ '猫' if pet.species=='cat' else '狗' if pet.species=='dog' else pet.species }}</span>{% endif %}
+  </div>
+</div>
+
+{# 7 步进度条 #}
+<div class="soap-steps">
+  <div class="soap-step {% if step1_done %}done{% endif %} current" data-step="1" onclick="switchStep(1)">
+    <div class="soap-circle">1</div>
+    <div class="soap-label">主诉</div>
+    <div class="soap-sublabel">S</div>
+    <span class="step-tick">✓</span>
+  </div>
+  <div class="soap-step {% if step2_done %}done{% endif %}" data-step="2" onclick="switchStep(2)">
+    <div class="soap-circle">2</div>
+    <div class="soap-label">体格检查</div>
+    <div class="soap-sublabel">O</div>
+    <span class="step-tick">✓</span>
+  </div>
+  <div class="soap-step {% if step3_done %}done{% endif %}" data-step="3" onclick="switchStep(3)">
+    <div class="soap-circle">3</div>
+    <div class="soap-label">检查化验</div>
+    <div class="soap-sublabel">{{ exam_orders|length }} 张单</div>
+    <span class="step-tick">✓</span>
+  </div>
+  <div class="soap-step {% if step4_done %}done{% endif %}" data-step="4" onclick="switchStep(4)">
+    <div class="soap-circle">4</div>
+    <div class="soap-label">主观诊断</div>
+    <div class="soap-sublabel">A</div>
+    <span class="step-tick">✓</span>
+  </div>
+  <div class="soap-step {% if step5_done %}done{% endif %}" data-step="5" onclick="switchStep(5)">
+    <div class="soap-circle">5</div>
+    <div class="soap-label">处方</div>
+    <div class="soap-sublabel">{{ prescriptions|length }} 张方</div>
+    <span class="step-tick">✓</span>
+  </div>
+  <div class="soap-step {% if step6_done %}done{% endif %}" data-step="6" onclick="switchStep(6)">
+    <div class="soap-circle">6</div>
+    <div class="soap-label">医嘱</div>
+    <div class="soap-sublabel">P</div>
+    <span class="step-tick">✓</span>
+  </div>
+  <div class="soap-step {% if step7_done %}done{% endif %}" data-step="7" onclick="switchStep(7)">
+    <div class="soap-circle">7</div>
+    <div class="soap-label">回访</div>
+    <div class="soap-sublabel">{% if v.follow_up_at %}{{ v.follow_up_at }}{% else %}—{% endif %}</div>
+    <span class="step-tick">✓</span>
+  </div>
+</div>
+
+{# 主表单（包裹 SOAP 文本字段步骤）#}
+<form method="post" action="/admin/visits/{{ v.id }}/edit" id="soap-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <input type="hidden" name="return_to" value="{{ return_to }}">
+
+  {# 隐藏的基础信息（顶部已展示，但提交时需要带上）#}
+  <input type="hidden" name="visit_date" value="{{ v.visit_date }}">
+  <input type="hidden" name="visit_type" value="{{ v.visit_type }}">
+  <input type="hidden" name="vet_name" value="{{ v.vet_name }}">
+  <input type="hidden" name="pet_id" value="{{ v.pet_id or 0 }}">
+  <input type="hidden" name="notes" value="{{ v.notes or '' }}">
+
+  {# Step 1 主诉 #}
+  <div class="soap-panel active" data-panel="1">
+    <h3>📝 主诉 <small>客户描述的问题、症状、行为变化</small></h3>
+    <textarea name="chief_complaint" placeholder="例：猫咪今天食欲下降，精神萎靡，偶有咳嗽，3 天未排便">{{ v.chief_complaint or '' }}</textarea>
+  </div>
+
+  {# Step 2 体格检查 #}
+  <div class="soap-panel" data-panel="2">
+    <h3>🩺 体格检查 <small>体温/体重/心率/检查发现</small></h3>
+    <textarea name="physical_exam" style="min-height:200px;font-family:monospace;" placeholder="T: 39.1℃  Wt: 3.8kg  HR: 180bpm  RR: 28次/分&#10;黏膜：淡粉，CRT<2s&#10;腹部触诊：无明显异常&#10;淋巴结：未见肿大&#10;皮肤毛发：正常">{{ v.physical_exam or '' }}</textarea>
+  </div>
+
+  {# Step 4 主观诊断 #}
+  <div class="soap-panel" data-panel="4">
+    <h3>🔬 主观诊断 <small>基于主诉和体检的初步判断</small></h3>
+    <textarea name="diagnosis" placeholder="例：上呼吸道感染（猫疱疹病毒可疑）；消化不良继发性厌食">{{ v.diagnosis or '' }}</textarea>
+  </div>
+
+  {# Step 6 医嘱 #}
+  <div class="soap-panel" data-panel="6">
+    <h3>📋 医嘱 <small>用药指导、护理建议、复诊安排</small></h3>
+    <textarea name="treatment_plan" placeholder="例：开具阿莫西林口服 5 天，每日 2 次饭后服用；补液 100ml；保持温暖少喂凉食；1 周后复诊">{{ v.treatment_plan or '' }}</textarea>
+  </div>
+
+  {# Step 7 回访 #}
+  <div class="soap-panel" data-panel="7">
+    <h3>📞 回访 <small>客户回访记录、复诊预约</small></h3>
+    <div class="row2">
+      <div>
+        <label>回访日期</label>
+        <input type="date" name="follow_up_at" value="{{ v.follow_up_at or '' }}">
+      </div>
+      <div>
+        <label>回访方式</label>
+        <input value="电话 / 微信 / 上门" disabled style="background:#f9fafb;color:#9ca3af;">
+      </div>
+    </div>
+    <label>回访内容</label>
+    <textarea name="follow_up_note" placeholder="例：客户反馈猫咪精神状态好转，食欲恢复约 70%，未见复发咳嗽">{{ v.follow_up_note or '' }}</textarea>
+  </div>
+
+  {# 浮动保存条 #}
+  <div class="save-bar">
+    <button type="submit" class="btn">💾 保存修改</button>
+    <span class="saved-hint">最后更新 {{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
+    <div class="save-spacer"></div>
+    <button type="button" onclick="prevStep()" class="btn secondary">‹ 上一步</button>
+    <button type="button" onclick="nextStep()" class="btn secondary">下一步 ›</button>
+  </div>
+</form>
+
+{# Step 3 检查化验（外置面板，独立于主表单）#}
+<div class="soap-panel" data-panel="3" style="margin-top:0.85rem;">
+  <h3>🧪 检查化验 <small>血常规、生化、影像等</small></h3>
+  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.65rem;">
+    <a href="/admin/exam-orders/create?visit_id={{ v.id }}" class="btn">＋ 开检查单</a>
+    <span style="color:var(--muted);font-size:0.85rem;">现有 {{ exam_orders|length }} 张</span>
+  </div>
+  {% if exam_orders %}
+  <div class="record-list">
+    {% for eo in exam_orders %}
+    <a class="record-item" href="/admin/exam-orders/{{ eo.id }}">
+      <span class="ri-date">{{ eo.created_at.strftime('%m-%d %H:%M') if eo.created_at else '—' }}</span>
+      <span class="badge {% if eo.status == 'completed' %}b-done{% else %}b-pending{% endif %}" style="font-size:0.68rem;">
+        {{ '已出报告' if eo.status == 'completed' else '待出报告' }}
+      </span>
+      <span class="ri-main">检查单 #{{ eo.id }}</span>
+      <span style="font-size:0.78rem;color:var(--muted);">{{ eo.reports|length }} 份报告</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--muted);font-size:0.88rem;">尚未开具检查单</p>
+  {% endif %}
+</div>
+
+{# Step 5 处方（外置面板）#}
+<div class="soap-panel" data-panel="5" style="margin-top:0.85rem;">
+  <h3>💊 处方 <small>药品清单、剂量、用法</small></h3>
+  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.65rem;">
+    <a href="/admin/prescriptions/create?visit_id={{ v.id }}" class="btn">＋ 开处方</a>
+    <span style="color:var(--muted);font-size:0.85rem;">现有 {{ prescriptions|length }} 张</span>
+  </div>
+  {% if prescriptions %}
+  <div class="record-list">
+    {% for p in prescriptions %}
+    <a class="record-item" href="/admin/prescriptions/{{ p.id }}">
+      <span class="ri-date">{{ p.prescribed_date or '—' }}</span>
+      <span class="badge {% if p.status == 'issued' %}b-ok{% elif p.status == 'dispensed' %}b-done{% else %}b-pending{% endif %}" style="font-size:0.68rem;">
+        {{ presc_status_zh.get(p.status, p.status) }}
+      </span>
+      <span class="ri-main">{{ p.items|length }} 种药 · {{ p.vet_name or '—' }}</span>
+      <span class="ri-amount">¥ {{ '%.2f'|format(p.total_amount or 0) }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--muted);font-size:0.88rem;">尚未开具处方</p>
+  {% endif %}
+</div>
+
+{# ── 关联单据卡片（销售单、收费单）── #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.85rem;margin-top:0.85rem;">
+  {# 销售单 #}
+  <div class="card" style="margin-bottom:0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+      <div style="font-weight:700;font-size:0.92rem;">📦 销售单 <span style="color:var(--muted);font-weight:400;font-size:0.78rem;">（{{ sales_orders|length }} 张）</span></div>
+      <a href="/admin/sales-orders/create?visit_id={{ v.id }}&customer_id={{ v.customer_id or 0 }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">＋ 开销售单</a>
+    </div>
+    {% if sales_orders %}
+    <div class="record-list">
+      {% for so in sales_orders %}
+      <a class="record-item" href="/admin/sales-orders/{{ so.id }}">
+        <span class="ri-date">{{ so.order_date or '—' }}</span>
+        <span class="badge {% if so.status == 'paid' %}b-done{% elif so.status == 'cancelled' %}b-no{% else %}b-pending{% endif %}" style="font-size:0.68rem;">{{ so_status_zh.get(so.status, so.status) }}</span>
+        <span class="ri-main">{{ so.items|length }} 项</span>
+        <span class="ri-amount">¥ {{ '%.2f'|format(so.total_amount) }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:0.82rem;margin:0;">本次就诊暂无销售单</p>
+    {% endif %}
+  </div>
+
+  {# 收费单 #}
+  <div class="card" style="margin-bottom:0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+      <div style="font-weight:700;font-size:0.92rem;">🧾 收费单 <span style="color:var(--muted);font-weight:400;font-size:0.78rem;">（{{ invoices|length }} 张）</span></div>
+      {% set has_unpaid = invoices | selectattr('payment_status', 'eq', 'unpaid') | list %}
+      {% if not has_unpaid %}
+      <a href="/admin/invoices/create?visit_id={{ v.id }}" class="btn" style="font-size:0.78rem;padding:0.25rem 0.65rem;">🧾 生成收费单</a>
+      {% endif %}
+    </div>
+    {% if invoices %}
+    <div class="record-list">
+      {% for inv in invoices %}
+      <a class="record-item" href="/admin/invoices/{{ inv.id }}">
+        <span class="ri-date" style="font-family:monospace;">{{ inv.invoice_no }}</span>
+        <span class="badge {% if inv.payment_status == 'paid' %}b-done{% elif inv.payment_status == 'cancelled' %}b-no{% else %}b-pending{% endif %}" style="font-size:0.68rem;">{{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}</span>
+        <span class="ri-main">{{ inv.items|length }} 项</span>
+        <span class="ri-amount">¥ {{ '%.2f'|format(inv.total_amount) }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:0.82rem;margin:0;">本次就诊暂无收费单</p>
+    {% endif %}
+  </div>
+</div>
+
+{# ── 折叠的高级编辑（修改日期/类型/医生/宠物）── #}
+<details style="margin-top:0.85rem;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:0.6rem 1rem;">
+  <summary style="cursor:pointer;font-size:0.88rem;color:var(--muted);">⚙ 修改基础信息（日期 / 类型 / 医生 / 宠物 / 备注）</summary>
+  <form method="post" action="/admin/visits/{{ v.id }}/edit" style="margin-top:0.75rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    {# 保留原有 SOAP 字段不变 #}
+    <input type="hidden" name="chief_complaint" value="{{ v.chief_complaint or '' }}">
+    <input type="hidden" name="physical_exam" value="{{ v.physical_exam or '' }}">
+    <input type="hidden" name="diagnosis" value="{{ v.diagnosis or '' }}">
+    <input type="hidden" name="treatment_plan" value="{{ v.treatment_plan or '' }}">
+    <input type="hidden" name="follow_up_note" value="{{ v.follow_up_note or '' }}">
+    <input type="hidden" name="follow_up_at" value="{{ v.follow_up_at or '' }}">
+    <div class="row2">
+      <div>
+        <label>就诊日期</label>
+        <input type="date" name="visit_date" value="{{ v.visit_date }}" required />
+      </div>
+      <div>
+        <label>就诊类型</label>
+        <select name="visit_type">
+          {% for k, zh in visit_type_zh.items() %}
+          <option value="{{ k }}" {% if v.visit_type == k %}selected{% endif %}>{{ zh }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>接诊医生</label>
+        <input name="vet_name" value="{{ v.vet_name }}" list="vet-list" />
+        <datalist id="vet-list">{% for name in vet_names %}<option value="{{ name }}">{% endfor %}</datalist>
+      </div>
+      <div>
+        <label>就诊宠物</label>
+        <select name="pet_id">
+          <option value="0">— 未指定 —</option>
+          {% for p in pets %}
+          <option value="{{ p.id }}" {% if v.pet_id == p.id %}selected{% endif %}>{{ p.name or '未命名' }}（{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}）</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <label>补充备注</label>
+    <textarea name="notes" style="min-height:48px;">{{ v.notes or '' }}</textarea>
+    <div style="display:flex;gap:0.5rem;margin-top:0.6rem;">
+      <button type="submit">保存基础信息</button>
+      <form method="post" action="/admin/visits/{{ v.id }}/delete" onsubmit="return confirm('确认删除此就诊记录？此操作不可恢复。')" style="margin-left:auto;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="danger">🗑 删除就诊</button>
+      </form>
+    </div>
+  </form>
+</details>
+
+<script>
+let currentStep = 1;
+function switchStep(n) {
+  currentStep = n;
+  document.querySelectorAll('.soap-step').forEach(s => s.classList.toggle('current', +s.dataset.step === n));
+  document.querySelectorAll('.soap-panel').forEach(p => p.classList.toggle('active', +p.dataset.panel === n));
+  // 滚到面板顶部
+  const activeP = document.querySelector('.soap-panel.active');
+  if (activeP) activeP.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+function prevStep() { if (currentStep > 1) switchStep(currentStep - 1); }
+function nextStep() { if (currentStep < 7) switchStep(currentStep + 1); }
+
+// 默认从 URL ?step=N 切换
+const urlStep = parseInt(new URLSearchParams(window.location.search).get('step') || '1');
+if (urlStep >= 1 && urlStep <= 7) switchStep(urlStep);
+</script>
+
+{% endif %}{# end edit mode #}
 
 {% endblock %}
