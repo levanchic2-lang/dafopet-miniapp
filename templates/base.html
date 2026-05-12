@@ -50,19 +50,75 @@
       padding: 0.12em 0.4em;
       border-radius: 6px;
     }
-    .wrap { max-width: none; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
-    header.site {
-      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-      margin-bottom: 1.5rem; flex-wrap: wrap;
-      padding-bottom: 1rem;
+    .wrap { max-width: none; margin: 0 auto; padding: 1rem 2rem 3rem; }
+    /* ── Ribbon 顶部导航 ─────────────────────────────── */
+    .ribbon {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .ribbon-top {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.45rem 1.25rem; border-bottom: 1px solid var(--border);
+      background: linear-gradient(to bottom, #ffffff, #f9fafb);
+    }
+    .ribbon-brand { font-weight: 700; font-size: 1.05rem; color: var(--text); letter-spacing: -0.01em; }
+    .ribbon-brand span { color: var(--muted); font-weight: 500; font-size: 0.9rem; margin-left: 0.3rem; }
+    .ribbon-user {
+      display: flex; align-items: center; gap: 0.75rem; font-size: 0.82rem; color: var(--muted);
+    }
+    .ribbon-user a { color: var(--muted); font-weight: 500; }
+    .ribbon-user a:hover { color: var(--text); }
+
+    /* Tab 大类切换 */
+    .ribbon-tabs {
+      display: flex; align-items: center; gap: 0;
+      padding: 0 1rem; background: #f3f4f6;
       border-bottom: 1px solid var(--border);
     }
-    .brand { font-weight: 700; font-size: 1.12rem; color: var(--text); letter-spacing: -0.02em; }
-    .brand span { color: var(--muted); font-weight: 600; }
-    nav a {
-      margin-left: 1.1rem; font-weight: 500; font-size: 0.92rem; color: var(--muted);
+    .ribbon-tab {
+      padding: 0.5rem 1.2rem; cursor: pointer; font-size: 0.88rem; font-weight: 600;
+      color: var(--muted); border: none; background: none;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: all 0.1s;
     }
-    nav a:hover { color: var(--text); border-bottom: none; }
+    .ribbon-tab:hover { color: var(--text); }
+    .ribbon-tab.active {
+      color: #3b82f6; background: var(--card); border-bottom: 2px solid #3b82f6;
+    }
+
+    /* 图标按钮区 */
+    .ribbon-icons {
+      display: none; padding: 0.65rem 1.1rem; gap: 0.4rem; align-items: stretch;
+      background: var(--card); overflow-x: auto;
+    }
+    .ribbon-icons.active { display: flex; }
+    .ribbon-icon {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-width: 78px; padding: 0.5rem 0.5rem 0.4rem; border-radius: 8px;
+      cursor: pointer; text-decoration: none; color: var(--text);
+      font-size: 0.78rem; font-weight: 500; line-height: 1.3;
+      gap: 0.25rem; flex-shrink: 0; transition: background 0.12s;
+      position: relative;
+    }
+    .ribbon-icon:hover { background: #eff6ff; color: #1e40af; }
+    .ribbon-icon.current {
+      background: #dbeafe; color: #1e40af; font-weight: 600;
+    }
+    .ribbon-icon .ri-emoji {
+      font-size: 1.5rem; line-height: 1; margin-bottom: 0.15rem;
+    }
+    .ribbon-icon .ri-badge {
+      position: absolute; top: 0.25rem; right: 0.25rem;
+      min-width: 1.1em; height: 1.1em; padding: 0 0.3em;
+      border-radius: 99px; font-size: 0.65rem; font-weight: 800;
+      background: #d97706; color: #fff;
+      display: flex; align-items: center; justify-content: center; line-height: 1;
+    }
+    @media (max-width: 720px) {
+      .ribbon-icons { padding: 0.5rem 0.6rem; }
+      .ribbon-icon { min-width: 62px; padding: 0.4rem 0.3rem 0.3rem; font-size: 0.72rem; }
+      .ribbon-icon .ri-emoji { font-size: 1.3rem; }
+    }
     /* 待确认徽标 */
     .nav-badge {
       display: inline-flex; align-items: center; justify-content: center;
@@ -170,32 +226,95 @@
   {% block extra_css %}{% endblock %}
 </head>
 <body>
+  {% set _path = request.url.path %}
+  {% if request.session.get('admin') %}
+  {# 按 path 推断当前 ribbon tab 默认激活哪一组 #}
+  {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing') or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam') %}
+    {% set _active_tab = 'medical' %}
+  {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory') or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales') or _path.startswith('/admin/feedback') %}
+    {% set _active_tab = 'business' %}
+  {% elif _path.startswith('/admin/hr') or _path.startswith('/admin/adoption') or _path.startswith('/admin/changelog') or _path.startswith('/showcase') %}
+    {% set _active_tab = 'system' %}
+  {% else %}
+    {% set _active_tab = 'reception' %}
+  {% endif %}
+  {% else %}
+    {% set _active_tab = 'reception' %}
+  {% endif %}
+
+  <nav class="ribbon">
+    <div class="ribbon-top">
+      <div class="ribbon-brand">🐾 大风动物医院 <span>· TNR 管理系统</span></div>
+      <div class="ribbon-user">
+        {% if request.session.get('admin') %}
+          {{ request.session.get('admin') }}
+          {% if request.session.get('admin_store') %} · {{ request.session.get('admin_store') }}{% endif %}
+          {% if request.session.get('admin_role') == 'superadmin' %} · 超级管理员{% endif %}
+          · <a href="/admin/logout">退出</a>
+        {% else %}
+          <a href="/admin/login">登录</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="ribbon-tabs">
+      <button class="ribbon-tab {% if _active_tab=='reception' %}active{% endif %}" data-tab="reception" onclick="switchRibbon('reception')">接待</button>
+      {% if request.session.get('admin') %}
+      <button class="ribbon-tab {% if _active_tab=='medical' %}active{% endif %}" data-tab="medical" onclick="switchRibbon('medical')">医疗</button>
+      <button class="ribbon-tab {% if _active_tab=='business' %}active{% endif %}" data-tab="business" onclick="switchRibbon('business')">经营</button>
+      <button class="ribbon-tab {% if _active_tab=='system' %}active{% endif %}" data-tab="system" onclick="switchRibbon('system')">系统</button>
+      {% endif %}
+    </div>
+
+    {# 接待组 #}
+    <div class="ribbon-icons {% if _active_tab=='reception' %}active{% endif %}" data-tab-content="reception">
+      <a class="ribbon-icon {% if _path=='/admin' %}current{% endif %}" href="/admin"><span class="ri-emoji">🏠</span>工作台</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/calendar') %}current{% endif %}" href="/admin/calendar"><span class="ri-emoji">📅</span>日历</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/appointments') %}current{% endif %}" href="/admin/appointments" id="nav-appt-link">
+        <span class="ri-emoji">📋</span>预约管理<span id="nav-pending-badge" class="ri-badge" style="display:none;"></span>
+      </a>
+      {% if request.session.get('admin') %}
+      <a class="ribbon-icon {% if _path.startswith('/admin/customers') %}current{% endif %}" href="/admin/customers"><span class="ri-emoji">👥</span>客户档案</a>
+      {% endif %}
+    </div>
+
+    {% if request.session.get('admin') %}
+    {# 医疗组 #}
+    <div class="ribbon-icons {% if _active_tab=='medical' %}active{% endif %}" data-tab-content="medical">
+      <a class="ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><span class="ri-emoji">🩺</span>就诊病历</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/dispensing') %}current{% endif %}" href="/admin/dispensing"><span class="ri-emoji">💊</span>发药台</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><span class="ri-emoji">💉</span>疫苗管理</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/rabies') %}current{% endif %}" href="/admin/rabies"><span class="ri-emoji">🐶</span>狂犬疫苗</a>
+    </div>
+
+    {# 经营组 #}
+    <div class="ribbon-icons {% if _active_tab=='business' %}active{% endif %}" data-tab-content="business">
+      <a class="ribbon-icon {% if _path.startswith('/admin/invoices') %}current{% endif %}" href="/admin/invoices"><span class="ri-emoji">🧾</span>收银台</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/inventory') %}current{% endif %}" href="/admin/inventory"><span class="ri-emoji">📦</span>库存管理</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/stocktake') %}current{% endif %}" href="/admin/stocktake"><span class="ri-emoji">📊</span>循环盘点</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/feedback') %}current{% endif %}" href="/admin/feedback" id="nav-feedback-link">
+        <span class="ri-emoji">💬</span>反馈<span id="nav-feedback-badge" class="ri-badge" style="display:none;background:#f97316;"></span>
+      </a>
+    </div>
+
+    {# 系统组 #}
+    <div class="ribbon-icons {% if _active_tab=='system' %}active{% endif %}" data-tab-content="system">
+      <a class="ribbon-icon {% if _path.startswith('/admin/hr') %}current{% endif %}" href="/admin/hr"><span class="ri-emoji">👨‍💼</span>人事管理</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/adoption') %}current{% endif %}" href="/admin/adoption"><span class="ri-emoji">🐱</span>待领养</a>
+      <a class="ribbon-icon {% if _path.startswith('/showcase') %}current{% endif %}" href="/showcase"><span class="ri-emoji">🌟</span>公布展示</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/changelog') %}current{% endif %}" href="/admin/changelog"><span class="ri-emoji">📝</span>开发日志</a>
+    </div>
+    {% endif %}
+  </nav>
+
+  <script>
+  function switchRibbon(tab) {
+    document.querySelectorAll('.ribbon-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.ribbon-icons').forEach(d => d.classList.toggle('active', d.dataset.tabContent === tab));
+  }
+  </script>
+
   <div class="wrap">
-    <header class="site">
-      <div class="brand">大风动物医院 <span>· TNR</span></div>
-      <nav>
-        <a href="/admin/appointments" id="nav-appt-link">预约管理<span id="nav-pending-badge" class="nav-badge" style="display:none;"></span></a>
-        <a href="/admin/calendar">📅 日历</a>
-        <a href="/admin">TNR后台</a>
-        {% if request.session.get('admin') %}
-        <a href="/admin/customers">客户档案</a>
-        <a href="/admin/visits">就诊病历</a>
-        <a href="/admin/vaccinations">疫苗管理</a>
-        <a href="/admin/rabies">狂犬疫苗</a>
-        <a href="/admin/dispensing">发药台</a>
-        <a href="/admin/invoices">收银台</a>
-        <a href="/admin/inventory">库存管理</a>
-        <a href="/admin/stocktake">循环盘点</a>
-        {% endif %}
-        <a href="/showcase">公布展示</a>
-        {% if request.session.get('admin') %}
-        <a href="/admin/adoption">待领养</a>
-        <a href="/admin/hr">人事管理</a>
-        <a href="/admin/feedback" id="nav-feedback-link">反馈<span id="nav-feedback-badge" class="nav-badge" style="display:none;background:#f97316;"></span></a>
-        <a href="/admin/changelog">开发日志</a>
-        {% endif %}
-      </nav>
-    </header>
     <div id="pending-banner" class="pending-banner" style="display:none;">
       <span>🔔</span>
       <span>有 <strong id="pending-banner-count">0</strong> 条新预约待确认</span>

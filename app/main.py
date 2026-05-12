@@ -72,6 +72,9 @@ from app.models import (
     ExamOrder,
     ExamReport,
     CalendarBlock,
+    DewormingRecord,
+    WeightRecord,
+    MedicalDocument,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -652,6 +655,34 @@ def _get_admin_store(request: "Request") -> str:
     if request.session.get("admin_role") == "superadmin":
         return ""
     return request.session.get("admin_store", "")
+
+
+# 门店首字母（病历号前缀）
+_STORE_INITIAL = {"东环店": "D", "横岗店": "H"}
+
+
+def _gen_medical_record_no(db: "Session", store: str) -> str:
+    """生成病历号：{门店首字母}C{YY}{MM}{5位序号}。
+    例：DC2605 00001 / HC2605 00012。当月内同店递增。
+    """
+    letter = _STORE_INITIAL.get(store, "X")
+    now = datetime.utcnow()
+    prefix = f"{letter}C{now.strftime('%y%m')}"
+    # 找当月最大序号
+    from sqlalchemy import desc as _desc
+    last = (
+        db.query(Pet.medical_record_no)
+        .filter(Pet.medical_record_no.like(prefix + "%"))
+        .order_by(_desc(Pet.medical_record_no))
+        .first()
+    )
+    seq = 1
+    if last and last[0]:
+        try:
+            seq = int(last[0][len(prefix):]) + 1
+        except (ValueError, TypeError):
+            seq = 1
+    return f"{prefix}{seq:05d}"
 _ALLOWED_APPOINTMENT_CATEGORIES = frozenset({x.value for x in AppointmentCategory})
 _ALLOWED_APPOINTMENT_STATUSES = frozenset({x.value for x in AppointmentStatus})
 _APPOINTMENT_CATEGORY_LABELS = {
@@ -4798,6 +4829,8 @@ async def page_admin_customer_detail(
     customer_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    pet_id: int = Query(0),    # 选中显示哪只宠物（默认第一只）
+    tab: str = Query("visits"),  # 默认激活的标签
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -4805,25 +4838,44 @@ async def page_admin_customer_detail(
     if not cust:
         raise HTTPException(404, "客户不存在")
     pets = db.query(Pet).filter(Pet.customer_id == customer_id).order_by(Pet.id.desc()).all()
-    applications = db.query(Application).filter(Application.customer_id == customer_id).order_by(Application.id.desc()).limit(50).all()
-    appointments = db.query(Appointment).filter(Appointment.customer_id == customer_id).order_by(Appointment.id.desc()).limit(50).all()
-    visits = db.query(Visit).filter(Visit.customer_id == customer_id).order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(100).all()
-    visits_by_pet: dict[int, list] = {}
-    visits_no_pet = []
-    for vis in visits:
-        if vis.pet_id:
-            visits_by_pet.setdefault(vis.pet_id, []).append(vis)
-        else:
-            visits_no_pet.append(vis)
     pet_map = {p.id: p for p in pets}
+
+    # 默认选中宠物
+    if pet_id and pet_id in pet_map:
+        active_pet = pet_map[pet_id]
+    elif pets:
+        active_pet = pets[0]
+    else:
+        active_pet = None
+    active_pet_id = active_pet.id if active_pet else 0
+
+    # ── 客户级数据 ──
+    applications = db.query(Application).filter(Application.customer_id == customer_id).order_by(Application.id.desc()).limit(50).all()
     cust_sales_orders = db.query(SalesOrder).filter(SalesOrder.customer_id == customer_id).order_by(SalesOrder.id.desc()).limit(100).all()
+    cust_invoices = db.query(Invoice).filter(Invoice.customer_id == customer_id).order_by(Invoice.id.desc()).limit(100).all()
+
+    # ── 宠物级数据（仅取选中宠物的，节省查询）──
+    if active_pet:
+        appointments = db.query(Appointment).filter(
+            Appointment.pet_id == active_pet_id
+        ).order_by(Appointment.appointment_date.desc(), Appointment.appointment_time.desc()).limit(50).all()
+        visits = db.query(Visit).filter(Visit.pet_id == active_pet_id).order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(100).all()
+        prescriptions = db.query(Prescription).filter(Prescription.pet_id == active_pet_id).order_by(Prescription.id.desc()).limit(50).all()
+        exam_orders = db.query(ExamOrder).join(Visit, ExamOrder.visit_id == Visit.id).filter(Visit.pet_id == active_pet_id).order_by(ExamOrder.id.desc()).limit(50).all()
+        vaccinations = db.query(Vaccination).filter(Vaccination.pet_id == active_pet_id).order_by(Vaccination.vaccinated_date.desc()).all()
+        dewormings = db.query(DewormingRecord).filter(DewormingRecord.pet_id == active_pet_id).order_by(DewormingRecord.deworm_date.desc()).all()
+        weight_records = db.query(WeightRecord).filter(WeightRecord.pet_id == active_pet_id).order_by(WeightRecord.record_date.asc()).all()
+        medical_docs = db.query(MedicalDocument).filter(MedicalDocument.pet_id == active_pet_id).order_by(MedicalDocument.id.desc()).all()
+        # 该宠物名下发票 = 该宠物的就诊产生的发票
+        visit_ids = [v.id for v in visits]
+        pet_invoices = [inv for inv in cust_invoices if inv.visit_id in visit_ids] if visit_ids else []
+    else:
+        appointments, visits, prescriptions, exam_orders = [], [], [], []
+        vaccinations, dewormings, weight_records, medical_docs = [], [], [], []
+        pet_invoices = []
+
     _SO_STATUS_ZH_LOCAL = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
-    # 疫苗记录（按宠物分组）
-    vacc_list = db.query(Vaccination).filter(Vaccination.customer_id == customer_id).order_by(Vaccination.vaccinated_date.desc()).all()
-    vaccs_by_pet: dict[int, list] = {}
-    for v in vacc_list:
-        if v.pet_id:
-            vaccs_by_pet.setdefault(v.pet_id, []).append(v)
+    _INV_STATUS_ZH_LOCAL = {"unpaid": "未支付", "paid": "已支付", "cancelled": "已取消", "refunded": "已退款"}
     from datetime import date, timedelta
     today_str = date.today().isoformat()
     soon_str  = (date.today() + timedelta(days=7)).isoformat()
@@ -4833,20 +4885,33 @@ async def page_admin_customer_detail(
         {
             "cust": cust,
             "pets": pets,
+            "pet_map": pet_map,
+            "active_pet": active_pet,
+            "active_pet_id": active_pet_id,
+            "active_tab": tab,
+            # 客户级
             "applications": applications,
+            "sales_orders": cust_sales_orders,
+            "cust_invoices": cust_invoices,
+            # 宠物级
             "appointments": appointments,
             "visits": visits,
-            "visits_by_pet": visits_by_pet,
-            "visits_no_pet": visits_no_pet,
-            "pet_map": pet_map,
+            "prescriptions": prescriptions,
+            "exam_orders": exam_orders,
+            "vaccinations": vaccinations,
+            "dewormings": dewormings,
+            "weight_records": weight_records,
+            "medical_docs": medical_docs,
+            "pet_invoices": pet_invoices,
+            # 翻译字典
             "visit_type_zh": _VISIT_TYPE_ZH,
-            "sales_orders": cust_sales_orders,
             "so_status_zh": _SO_STATUS_ZH_LOCAL,
-            "vaccs_by_pet": vaccs_by_pet,
+            "inv_status_zh": _INV_STATUS_ZH_LOCAL,
             "vacc_type_zh": _VACC_TYPE_ZH,
             "today_str": today_str,
             "soon_str": soon_str,
             "csrf_token": _get_csrf_token(request),
+            "admin_store": _get_admin_store(request),
         },
     )
 
@@ -4889,12 +4954,20 @@ async def admin_customer_add_pet(
     is_stray: str = Form(""),
     microchip_id: str = Form(""),
     notes: str = Form(""),
+    store: str = Form(""),                # 短名：东环店/横岗店
+    life_status: str = Form("alive"),     # alive/deceased
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     cust = db.get(Customer, customer_id)
     if not cust:
         raise HTTPException(404, "客户不存在")
+    # 限店员工：强制使用自己门店
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        store = admin_store
+    store = (store or "").strip()
+    mrn = _gen_medical_record_no(db, store) if store else ""
     pet = Pet(
         customer_id=customer_id,
         name=name.strip()[:120],
@@ -4907,6 +4980,9 @@ async def admin_customer_add_pet(
         is_stray=is_stray.lower() in ("1", "true", "on", "yes"),
         microchip_id=microchip_id.strip()[:40],
         notes=notes.strip(),
+        store=store,
+        medical_record_no=mrn,
+        life_status=(life_status or "alive").strip()[:20],
     )
     db.add(pet)
     db.commit()
@@ -8184,3 +8260,179 @@ async def api_calendar_appt_reschedule(appt_id: int, request: Request, db: Sessi
                    "new_date": new_date, "new_time": new_time})
     db.commit()
     return {"ok": True}
+
+
+
+# ── 驱虫记录 / 体重记录 / 医疗文书 ────────────────────────────────
+
+_DEWORM_DIR = Path("data/dewormings")
+_MEDDOC_DIR = Path("data/medical_docs")
+
+
+@app.post("/admin/dewormings/create")
+async def admin_deworming_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(0),
+    pet_id: int = Form(0),
+    deworm_date: str = Form(""),
+    deworm_type: str = Form("external"),
+    product_name: str = Form(""),
+    weight_kg: float = Form(0.0),
+    dose: str = Form(""),
+    next_due_date: str = Form(""),
+    notes: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = DewormingRecord(
+        customer_id=customer_id or None,
+        pet_id=pet_id or None,
+        deworm_date=deworm_date.strip()[:20],
+        deworm_type=deworm_type.strip()[:40] or "external",
+        product_name=product_name.strip()[:120],
+        weight_kg=weight_kg or 0.0,
+        dose=dose.strip()[:80],
+        next_due_date=next_due_date.strip()[:20],
+        notes=notes.strip(),
+        created_by=request.session.get("admin", ""),
+    )
+    db.add(rec)
+    db.commit()
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg=驱虫已录入", status_code=303)
+
+
+@app.post("/admin/dewormings/{rec_id}/delete")
+async def admin_deworming_delete(
+    rec_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(0),
+    pet_id: int = Form(0),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(DewormingRecord, rec_id)
+    if rec:
+        db.delete(rec)
+        db.commit()
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg=驱虫记录已删除", status_code=303)
+
+
+@app.post("/admin/weight-records/create")
+async def admin_weight_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(0),
+    pet_id: int = Form(0),
+    record_date: str = Form(""),
+    weight_kg: float = Form(0.0),
+    notes: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    if not pet_id or not weight_kg:
+        return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=weight&msg=请填写体重", status_code=303)
+    rec = WeightRecord(
+        pet_id=pet_id,
+        record_date=record_date.strip()[:20],
+        weight_kg=weight_kg,
+        notes=notes.strip(),
+        created_by=request.session.get("admin", ""),
+    )
+    db.add(rec)
+    db.commit()
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=weight&msg=体重已记录", status_code=303)
+
+
+@app.post("/admin/weight-records/{rec_id}/delete")
+async def admin_weight_delete(
+    rec_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(0),
+    pet_id: int = Form(0),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(WeightRecord, rec_id)
+    if rec:
+        db.delete(rec)
+        db.commit()
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=weight&msg=体重记录已删除", status_code=303)
+
+
+@app.post("/admin/medical-docs/upload")
+async def admin_medical_doc_upload(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(0),
+    pet_id: int = Form(0),
+    visit_id: int = Form(0),
+    doc_type: str = Form("consent"),
+    title: str = Form(""),
+    notes: str = Form(""),
+    file: UploadFile = File(...),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _MEDDOC_DIR.mkdir(parents=True, exist_ok=True)
+    ext = Path(file.filename or "").suffix.lower() or ".bin"
+    fname = f"doc_{pet_id}_{int(datetime.utcnow().timestamp()*1000)}{ext}"
+    dest = _MEDDOC_DIR / fname
+    content = await file.read()
+    dest.write_bytes(content)
+    doc = MedicalDocument(
+        customer_id=customer_id or None,
+        pet_id=pet_id or None,
+        visit_id=visit_id or None,
+        doc_type=doc_type.strip()[:40] or "consent",
+        title=title.strip()[:200] or (file.filename or "未命名"),
+        file_path=str(dest),
+        original_name=file.filename or "",
+        file_type="pdf" if ext == ".pdf" else "image",
+        file_size=len(content),
+        notes=notes.strip(),
+        uploaded_by=request.session.get("admin", ""),
+    )
+    db.add(doc)
+    db.commit()
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=docs&msg=文书已上传", status_code=303)
+
+
+@app.get("/admin/medical-docs/{doc_id}/file")
+async def admin_medical_doc_file(doc_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    doc = db.get(MedicalDocument, doc_id)
+    if not doc or not doc.file_path or not Path(doc.file_path).exists():
+        raise HTTPException(404)
+    from fastapi.responses import FileResponse
+    return FileResponse(doc.file_path, filename=doc.original_name)
+
+
+@app.post("/admin/medical-docs/{doc_id}/delete")
+async def admin_medical_doc_delete(
+    doc_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(0),
+    pet_id: int = Form(0),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    doc = db.get(MedicalDocument, doc_id)
+    if doc:
+        try:
+            if doc.file_path and Path(doc.file_path).exists():
+                Path(doc.file_path).unlink()
+        except Exception:
+            pass
+        db.delete(doc)
+        db.commit()
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=docs&msg=文书已删除", status_code=303)

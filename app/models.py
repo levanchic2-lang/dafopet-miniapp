@@ -286,6 +286,10 @@ class Pet(Base):
     is_stray: Mapped[bool] = mapped_column(Boolean, default=False)
     microchip_id: Mapped[str] = mapped_column(String(40), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    # 新版客户档案中心化所需字段
+    store: Mapped[str] = mapped_column(String(40), default="")              # 短名：东环店/横岗店
+    medical_record_no: Mapped[str] = mapped_column(String(40), default="")  # 病历号 DC2605xxxxx / HC2605xxxxx
+    life_status: Mapped[str] = mapped_column(String(20), default="alive")   # alive / deceased
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -388,6 +392,9 @@ class Visit(Base):
     notes: Mapped[str] = mapped_column(Text, default="")                    # 补充备注
 
     vet_name: Mapped[str] = mapped_column(String(80), default="")
+    # 7 步 SOAP 工作流之"回访"步骤
+    follow_up_note: Mapped[str] = mapped_column(Text, default="")           # 回访备注
+    follow_up_at: Mapped[str] = mapped_column(String(20), default="")       # 回访日期 YYYY-MM-DD
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -719,6 +726,68 @@ class CalendarBlock(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DewormingRecord(Base):
+    """驱虫记录（独立于疫苗管理）"""
+    __tablename__ = "deworming_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    deworm_date: Mapped[str] = mapped_column(String(20), default="")         # 驱虫日期 YYYY-MM-DD
+    deworm_type: Mapped[str] = mapped_column(String(40), default="external") # external/internal/combo
+    product_name: Mapped[str] = mapped_column(String(120), default="")       # 药品名称
+    weight_kg: Mapped[float] = mapped_column(Float, default=0.0)             # 当时体重
+    dose: Mapped[str] = mapped_column(String(80), default="")                # 剂量
+    next_due_date: Mapped[str] = mapped_column(String(20), default="")       # 下次到期日
+    vet_name: Mapped[str] = mapped_column(String(80), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    pet      = relationship("Pet",      backref="deworming_records", foreign_keys=[pet_id])
+    customer = relationship("Customer", backref="deworming_records", foreign_keys=[customer_id])
+
+
+class WeightRecord(Base):
+    """体重记录（用于体重曲线）"""
+    __tablename__ = "weight_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pet_id      = mapped_column(ForeignKey("pets.id", ondelete="CASCADE"), nullable=False)
+    visit_id    = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
+    record_date: Mapped[str] = mapped_column(String(20), default="")         # YYYY-MM-DD
+    weight_kg: Mapped[float] = mapped_column(Float, default=0.0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    pet = relationship("Pet", backref="weight_records", foreign_keys=[pet_id])
+
+
+class MedicalDocument(Base):
+    """医疗文书（同意书、协议、报告等）"""
+    __tablename__ = "medical_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="SET NULL"), nullable=True, default=None)
+
+    doc_type: Mapped[str] = mapped_column(String(40), default="consent")     # consent/agreement/report/other
+    title: Mapped[str] = mapped_column(String(200), default="")              # 文书名称
+    file_path: Mapped[str] = mapped_column(String(500), default="")
+    original_name: Mapped[str] = mapped_column(String(200), default="")
+    file_type: Mapped[str] = mapped_column(String(10), default="pdf")        # pdf/image
+    file_size: Mapped[int] = mapped_column(Integer, default=0)               # bytes
+    notes: Mapped[str] = mapped_column(Text, default="")
+    uploaded_by: Mapped[str] = mapped_column(String(80), default="")
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    pet      = relationship("Pet",      backref="medical_documents", foreign_keys=[pet_id])
+    customer = relationship("Customer", backref="medical_documents", foreign_keys=[customer_id])
 
 
 class AdminUser(Base):

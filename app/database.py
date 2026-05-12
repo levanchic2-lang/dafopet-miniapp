@@ -651,6 +651,85 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE admin_users ADD COLUMN store VARCHAR(40) DEFAULT ''"))
 
             # tnr_store_configs TNR 门店配额配置表
+            # pets 新增字段：store / medical_record_no / life_status
+            pet_cols2 = conn.execute(text("PRAGMA table_info(pets)")).fetchall()
+            if pet_cols2:
+                pet_names_v2 = {c[1] for c in pet_cols2}
+                if "store" not in pet_names_v2:
+                    conn.execute(text("ALTER TABLE pets ADD COLUMN store VARCHAR(40) DEFAULT ''"))
+                if "medical_record_no" not in pet_names_v2:
+                    conn.execute(text("ALTER TABLE pets ADD COLUMN medical_record_no VARCHAR(40) DEFAULT ''"))
+                if "life_status" not in pet_names_v2:
+                    conn.execute(text("ALTER TABLE pets ADD COLUMN life_status VARCHAR(20) DEFAULT 'alive'"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_pets_mrn ON pets(medical_record_no)"))
+
+            # visits 新增字段：follow_up_note / follow_up_at
+            vst_cols2 = conn.execute(text("PRAGMA table_info(visits)")).fetchall()
+            if vst_cols2:
+                vst_names_v2 = {c[1] for c in vst_cols2}
+                if "follow_up_note" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN follow_up_note TEXT DEFAULT ''"))
+                if "follow_up_at" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN follow_up_at VARCHAR(20) DEFAULT ''"))
+
+            # deworming_records 驱虫记录
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS deworming_records ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "deworm_date VARCHAR(20) DEFAULT '', "
+                "deworm_type VARCHAR(40) DEFAULT 'external', "
+                "product_name VARCHAR(120) DEFAULT '', "
+                "weight_kg REAL DEFAULT 0.0, "
+                "dose VARCHAR(80) DEFAULT '', "
+                "next_due_date VARCHAR(20) DEFAULT '', "
+                "vet_name VARCHAR(80) DEFAULT '', "
+                "notes TEXT DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dewor_pet ON deworming_records(pet_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dewor_date ON deworming_records(deworm_date)"))
+
+            # weight_records 体重记录
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS weight_records ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "pet_id INTEGER NOT NULL REFERENCES pets(id) ON DELETE CASCADE, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "record_date VARCHAR(20) DEFAULT '', "
+                "weight_kg REAL DEFAULT 0.0, "
+                "notes TEXT DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_weight_pet ON weight_records(pet_id, record_date)"))
+
+            # medical_documents 医疗文书（同意书/协议/报告）
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS medical_documents ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "doc_type VARCHAR(40) DEFAULT 'consent', "
+                "title VARCHAR(200) DEFAULT '', "
+                "file_path VARCHAR(500) DEFAULT '', "
+                "original_name VARCHAR(200) DEFAULT '', "
+                "file_type VARCHAR(10) DEFAULT 'pdf', "
+                "file_size INTEGER DEFAULT 0, "
+                "notes TEXT DEFAULT '', "
+                "uploaded_by VARCHAR(80) DEFAULT '', "
+                "uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_meddoc_pet ON medical_documents(pet_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_meddoc_visit ON medical_documents(visit_id)"))
+
             # calendar_blocks 全天封锁日程
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS calendar_blocks ("
