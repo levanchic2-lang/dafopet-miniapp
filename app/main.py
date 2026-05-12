@@ -71,6 +71,7 @@ from app.models import (
     TnrStoreConfig,
     ExamOrder,
     ExamReport,
+    CalendarBlock,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -7989,3 +7990,197 @@ async def admin_adoption_agreement(pet_id: int, request: Request, db: Session = 
         raise HTTPException(404)
     from fastapi.responses import FileResponse
     return FileResponse(pet.adoption_agreement_path)
+
+
+# ── 日历视图 ──────────────────────────────────────────────────────────────────
+
+@app.get("/admin/calendar", response_class=HTMLResponse)
+async def admin_calendar_page(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    return templates.TemplateResponse(request, "admin_calendar.html", {
+        "csrf_token": _get_csrf_token(request),
+        "admin_store": _get_admin_store(request),
+    })
+
+
+@app.get("/api/calendar/events")
+async def api_calendar_events(
+    start: str = Query(""),
+    end:   str = Query(""),
+    store: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """返回指定日期范围内的预约 + 全天封锁日程（JSON）。"""
+    q = db.query(Appointment)
+    if start:
+        q = q.filter(Appointment.appointment_date >= start)
+    if end:
+        q = q.filter(Appointment.appointment_date <= end)
+    if store:
+        full_store = _STORE_SHORT_TO_FULL.get(store, store)
+        q = q.filter(Appointment.store == full_store)
+    appts = q.order_by(Appointment.appointment_date, Appointment.appointment_time).all()
+
+    pet_map: dict = {}
+    pet_ids = [a.pet_id for a in appts if a.pet_id]
+    if pet_ids:
+        pets_q = db.query(Pet).filter(Pet.id.in_(pet_ids)).all()
+        pet_map = {p.id: p for p in pets_q}
+
+    appt_list = []
+    for a in appts:
+        pet = pet_map.get(a.pet_id) if a.pet_id else None
+        species = pet.species if pet else ("cat" if a.category == "tnr" else "")
+        store_short = _STORE_FULL_TO_SHORT.get(a.store or "", a.store or "")
+        appt_list.append({
+            "id":             a.id,
+            "type":           "appointment",
+            "category":       a.category or "",
+            "service_name":   a.service_name or "",
+            "status":         a.status or "",
+            "customer_name":  a.customer_name or "",
+            "phone":          a.phone or "",
+            "pet_name":       a.pet_name or "",
+            "pet_gender":     a.pet_gender or "",
+            "pet_species":    species,
+            "store":          a.store or "",
+            "store_short":    store_short,
+            "date":           a.appointment_date or "",
+            "time":           a.appointment_time or "",
+            "duration":       a.duration_minutes or 30,
+            "notes":          a.notes or "",
+            "related_app_id": a.related_application_id,
+            "created_at":     a.created_at.strftime("%m-%d %H:%M") if a.created_at else "",
+        })
+
+    bq = db.query(CalendarBlock)
+    if start:
+        bq = bq.filter(CalendarBlock.block_date >= start)
+    if end:
+        bq = bq.filter(CalendarBlock.block_date <= end)
+    if store:
+        bq = bq.filter((CalendarBlock.store == store) | (CalendarBlock.store == ""))
+    blocks = bq.order_by(CalendarBlock.block_date).all()
+    block_list = [{
+        "id":    b.id,
+        "type":  "block",
+        "title": b.title,
+        "date":  b.block_date,
+        "store": b.store,
+        "notes": b.notes,
+    } for b in blocks]
+
+    return {"appointments": appt_list, "blocks": block_list}
+
+
+@app.post("/api/calendar/blocks/create")
+async def api_calendar_block_create(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    block = CalendarBlock(
+        title=str(body.get("title", "")).strip()[:200] or "全天封锁",
+        block_date=str(body.get("date", "")).strip()[:20],
+        store=str(body.get("store", "")).strip()[:40],
+        notes=str(body.get("notes", "")).strip()[:500],
+        created_by=request.session.get("admin", ""),
+    )
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+    return {"ok": True, "id": block.id}
+
+
+@app.post("/api/calendar/blocks/{block_id}/delete")
+async def api_calendar_block_delete(block_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    block = db.get(CalendarBlock, block_id)
+    if not block:
+        return {"ok": False, "error": "不存在"}
+    db.delete(block)
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/calendar/appt/{appt_id}/status")
+async def api_calendar_appt_status(appt_id: int, request: Request, db: Session = Depends(get_db)):
+    """日历弹窗 AJAX 状态更新，复用现有状态转换逻辑，返回 JSON。"""
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    status = str(body.get("status", "")).strip()
+    cancel_reason = str(body.get("cancel_reason", "")).strip()[:300]
+    if status not in _ALLOWED_APPOINTMENT_STATUSES:
+        return {"ok": False, "error": "无效状态"}
+    row = db.get(Appointment, appt_id)
+    if not row:
+        return {"ok": False, "error": "预约不存在"}
+    old_status = row.status
+    row.status = status
+    row.updated_at = datetime.utcnow()
+    if cancel_reason:
+        existing_notes = (row.notes or "").strip()
+        row.notes = (existing_notes + f"\n[取消原因] {cancel_reason}").strip()
+    _audit(db, request, "appointment_status_update",
+           application_id=row.related_application_id,
+           detail={"appointment_id": row.id, "old_status": old_status, "status": status})
+    if row.related_application_id:
+        app_row = db.get(Application, row.related_application_id)
+        if app_row:
+            if status == AppointmentStatus.confirmed.value and app_row.status in (
+                ApplicationStatus.approved.value, ApplicationStatus.pre_approved.value,
+            ):
+                app_row.status = ApplicationStatus.scheduled.value
+                app_row.appointment_at = row.appointment_date
+                app_row.updated_at = datetime.utcnow()
+            elif status == AppointmentStatus.arrived.value and app_row.status in (
+                ApplicationStatus.scheduled.value, ApplicationStatus.approved.value,
+            ):
+                app_row.status = ApplicationStatus.arrived_verified.value
+                app_row.updated_at = datetime.utcnow()
+            elif status == AppointmentStatus.cancelled.value and app_row.status == ApplicationStatus.scheduled.value:
+                app_row.status = ApplicationStatus.approved.value
+                app_row.updated_at = datetime.utcnow()
+            elif status == AppointmentStatus.no_show.value:
+                app_row.status = ApplicationStatus.no_show.value
+                app_row.updated_at = datetime.utcnow()
+    db.commit()
+    openid = (row.wechat_openid or "").strip()
+    if openid and status in (AppointmentStatus.confirmed.value, AppointmentStatus.cancelled.value):
+        status_label = "已确认，请按约定时间到院" if status == AppointmentStatus.confirmed.value else "已取消"
+        push_appointment_status(
+            db, appointment_id=row.id, openid=openid,
+            status_text=status_label, service_name=row.service_name or "",
+            store=row.store or "", appointment_date=row.appointment_date or "",
+            appointment_time=row.appointment_time or "",
+            phone=row.phone or "", customer_name=row.customer_name or "",
+            note=cancel_reason or status_label,
+        )
+    return {"ok": True}
+
+
+@app.post("/api/calendar/appt/{appt_id}/reschedule")
+async def api_calendar_appt_reschedule(appt_id: int, request: Request, db: Session = Depends(get_db)):
+    """日历弹窗 AJAX 改约。"""
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    new_date = str(body.get("date", "")).strip()[:20]
+    new_time = str(body.get("time", "")).strip()[:10]
+    if not new_date or not new_time:
+        return {"ok": False, "error": "请填写新日期和时间"}
+    row = db.get(Appointment, appt_id)
+    if not row:
+        return {"ok": False, "error": "预约不存在"}
+    old_date, old_time = row.appointment_date, row.appointment_time
+    row.appointment_date = new_date
+    row.appointment_time = new_time
+    row.updated_at = datetime.utcnow()
+    _audit(db, request, "appointment_reschedule",
+           application_id=row.related_application_id,
+           detail={"appointment_id": row.id, "old_date": old_date, "old_time": old_time,
+                   "new_date": new_date, "new_time": new_time})
+    db.commit()
+    return {"ok": True}

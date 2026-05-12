@@ -651,6 +651,20 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE admin_users ADD COLUMN store VARCHAR(40) DEFAULT ''"))
 
             # tnr_store_configs TNR 门店配额配置表
+            # calendar_blocks 全天封锁日程
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS calendar_blocks ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "title VARCHAR(200) DEFAULT '', "
+                "block_date VARCHAR(20) DEFAULT '', "
+                "store VARCHAR(40) DEFAULT '', "
+                "notes TEXT DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cal_blocks_date ON calendar_blocks(block_date)"))
+
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS tnr_store_configs ("
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, "

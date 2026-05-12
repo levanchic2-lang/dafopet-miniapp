@@ -708,6 +708,19 @@ class ExamReport(Base):
     uploaded_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class CalendarBlock(Base):
+    """全天封锁日程（如：美容师休息）"""
+    __tablename__ = "calendar_blocks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(200), default="")         # 标题，如"美容师休息"
+    block_date: Mapped[str] = mapped_column(String(20), default="")     # YYYY-MM-DD
+    store: Mapped[str] = mapped_column(String(40), default="")          # 短名；空=全部门店
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
 
