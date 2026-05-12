@@ -25,19 +25,31 @@
 {% set p = presc %}
 {% set is_edit = (mode == 'edit') %}
 
-{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
 
-<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;" class="no-print">
-  {% if visit %}
-  <a href="/admin/visits/{{ visit.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回就诊记录</a>
-  {% elif cust %}
-  <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
-  {% endif %}
-  <h1 style="margin:0;font-size:1.3rem;">
-    {% if is_edit %}处方单 #{{ p.id }}{% else %}新建处方单{% endif %}
-  </h1>
+<div class="page-head no-print">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    {% if visit %}
+    <a href="/admin/visits/{{ visit.id }}?return_to=customer" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回就诊</a>
+    {% elif cust %}
+    <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回客户</a>
+    {% endif %}
+    <div>
+      <h1><span class="ph-icon">💊</span>
+        {% if is_edit %}处方单 #{{ p.id }}{% else %}新建处方单{% endif %}
+        {% if is_edit and p.status %}
+          {% if p.status == 'dispensed' %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已发药</span>
+          {% elif p.status == 'issued' %}<span class="pill pill-info" style="margin-left:0.5rem;">已开具</span>
+          {% else %}<span class="pill pill-gray" style="margin-left:0.5rem;">{{ presc_status_zh.get(p.status, p.status) }}</span>{% endif %}
+        {% endif %}
+      </h1>
+      {% if cust %}<p class="ph-sub">{{ cust.name }}{% if pet %} · {{ pet.name }}{% endif %}</p>{% endif %}
+    </div>
+  </div>
   {% if is_edit %}
-  <button onclick="window.print()" class="btn secondary" style="font-size:0.85rem;margin-left:auto;">🖨 打印处方</button>
+  <div class="ph-actions">
+    <button onclick="window.print()" class="btn secondary" style="font-size:0.85rem;">🖨 打印处方</button>
+  </div>
   {% endif %}
 </div>
 
