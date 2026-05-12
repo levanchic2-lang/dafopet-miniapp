@@ -5474,6 +5474,10 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
             _deduct_inventory(db, it["item_id"], it["quantity_num"],
                               "prescription", presc.id, operator, f"处方#{presc.id}")
     db.commit()
+    # 自动同步到收费单（草稿）
+    if visit_id and presc.status != "draft":
+        _sync_visit_invoice(db, visit_id, operator)
+        db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已开具" if visit_id else f"/admin/prescriptions/{presc.id}?msg=处方单已创建", status_code=303)
 
 
@@ -5530,6 +5534,10 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
             _deduct_inventory(db, it["item_id"], it["quantity_num"],
                               "prescription", presc_id, operator, f"处方#{presc_id}")
     db.commit()
+    # 同步收费单
+    if presc.visit_id and presc.status != "draft":
+        _sync_visit_invoice(db, presc.visit_id, operator)
+        db.commit()
     return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=已保存", status_code=303)
 
 
@@ -5550,6 +5558,10 @@ async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depe
                                "prescription", presc_id, operator, f"删除处方#{presc_id}退回")
     db.delete(presc)
     db.commit()
+    # 同步收费单（删除后明细变少）
+    if visit_id:
+        _sync_visit_invoice(db, visit_id, operator)
+        db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已删除" if visit_id else "/admin/visits", status_code=303)
 
 
@@ -5808,6 +5820,10 @@ async def admin_so_create(request: Request, db: Session = Depends(get_db)):
             _deduct_inventory(db, it["item_id"], it["quantity"],
                               "sales_order", order.id, operator, f"销售单#{order.id}")
     db.commit()
+    # 同步收费单（若关联就诊）
+    if visit_id:
+        _sync_visit_invoice(db, visit_id, operator)
+        db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已创建" if visit_id else f"/admin/sales-orders/{order.id}?msg=销售单已创建", status_code=303)
 
 
@@ -5899,6 +5915,9 @@ async def admin_so_edit(order_id: int, request: Request, db: Session = Depends(g
             _deduct_inventory(db, it["item_id"], it["quantity"],
                               "sales_order", order_id, operator, f"销售单#{order_id}")
     db.commit()
+    if order.visit_id:
+        _sync_visit_invoice(db, order.visit_id, operator)
+        db.commit()
     return RedirectResponse(f"/admin/sales-orders/{order_id}?msg=已保存", status_code=303)
 
 
@@ -5935,6 +5954,9 @@ async def admin_so_delete(order_id: int, request: Request, db: Session = Depends
                                "sales_order", order_id, operator, f"删除销售单#{order_id}退回")
     db.delete(order)
     db.commit()
+    if visit_id:
+        _sync_visit_invoice(db, visit_id, operator)
+        db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已删除" if visit_id else "/admin/sales-orders", status_code=303)
 
 
@@ -6861,6 +6883,129 @@ def _gen_invoice_no(db: Session) -> str:
     return f"{today_str}-{count + 1}"
 
 
+def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "Invoice | None":
+    """把就诊产生的处方 / 检查单 / 销售单自动同步到一张「待收款」收费单。
+
+    规则：
+    - 已 paid / cancelled / refunded 的发票不动（已结清不能改）
+    - 已存在 unpaid 的发票 → 替换其所有明细
+    - 无 → 创建新 unpaid 发票
+    - 若没有任何明细 → 不创建（但已存在的 unpaid 发票若变空，会被清空明细但保留单据，方便后续追加）
+    """
+    if not visit_id:
+        return None
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        return None
+    from datetime import date as _date
+
+    line_items: list[dict] = []
+    subtotal_sum = 0.0
+
+    # ── 1) 处方 ──
+    prescs = db.query(Prescription).filter(
+        Prescription.visit_id == visit_id,
+        Prescription.status != "draft",
+    ).all()
+    for p in prescs:
+        for it in (p.items or []):
+            if not it.drug_name or (it.subtotal or 0) <= 0:
+                continue
+            line_items.append({
+                "ref_type": "prescription", "ref_id": p.id,
+                "description": f"[处方#{p.id}] {it.drug_name}",
+                "quantity": float(it.quantity_num or 0),
+                "unit_price": float(it.unit_price or 0),
+                "subtotal": float(it.subtotal or 0),
+            })
+            subtotal_sum += float(it.subtotal or 0)
+
+    # ── 2) 检查单 ──
+    exams = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).all()
+    for eo in exams:
+        try:
+            eitems = json.loads(eo.items_json or "[]")
+        except Exception:
+            eitems = []
+        for it in eitems:
+            name = (it.get("name") or "").strip()
+            if not name:
+                continue
+            qty = float(it.get("qty") or 1)
+            price = float(it.get("unit_price") or 0)
+            sub = round(qty * price, 2)
+            if sub <= 0:
+                continue
+            line_items.append({
+                "ref_type": "exam_order", "ref_id": eo.id,
+                "description": f"[检查#{eo.id}] {name}",
+                "quantity": qty, "unit_price": price, "subtotal": sub,
+            })
+            subtotal_sum += sub
+
+    # ── 3) 销售单 ──
+    sos = db.query(SalesOrder).filter(
+        SalesOrder.visit_id == visit_id,
+        SalesOrder.status != "cancelled",
+    ).all()
+    for so in sos:
+        for it in (so.items or []):
+            if (it.subtotal or 0) <= 0:
+                continue
+            line_items.append({
+                "ref_type": "sales_order", "ref_id": so.id,
+                "description": f"[销售#{so.id}] {it.item_name}",
+                "quantity": float(it.quantity or 0),
+                "unit_price": float(it.unit_price or 0),
+                "subtotal": float(it.subtotal or 0),
+            })
+            subtotal_sum += float(it.subtotal or 0)
+
+    subtotal_sum = round(subtotal_sum, 2)
+
+    # 查找现有未支付发票
+    inv = db.query(Invoice).filter(
+        Invoice.visit_id == visit_id,
+        Invoice.payment_status == "unpaid",
+    ).first()
+
+    if not line_items:
+        # 没有明细：若已有 unpaid 发票就清空它，否则不创建
+        if inv:
+            for old in list(inv.items):
+                db.delete(old)
+            inv.subtotal = 0.0
+            inv.total_amount = 0.0
+        return inv
+
+    if inv is None:
+        inv = Invoice(
+            invoice_no=_gen_invoice_no(db),
+            visit_id=visit_id,
+            customer_id=visit.customer_id,
+            pet_id=visit.pet_id,
+            invoice_date=_date.today().isoformat(),
+            payment_status="unpaid",
+            subtotal=subtotal_sum,
+            total_amount=subtotal_sum,
+            created_by=admin_name or "auto",
+        )
+        db.add(inv)
+        db.flush()
+    else:
+        # 替换明细
+        for old in list(inv.items):
+            db.delete(old)
+        inv.subtotal = subtotal_sum
+        inv.total_amount = round(subtotal_sum - (inv.discount_amount or 0), 2)
+        inv.updated_at = datetime.utcnow()
+
+    for li in line_items:
+        db.add(InvoiceItem(invoice_id=inv.id, **li))
+
+    return inv
+
+
 @app.get("/admin/invoices", response_class=HTMLResponse)
 async def admin_invoices_list(
     request: Request,
@@ -7751,6 +7896,10 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
     db.add(order)
     db.commit()
     db.refresh(order)
+    # 同步收费单
+    if order.visit_id:
+        _sync_visit_invoice(db, order.visit_id, request.session.get("admin_username", ""))
+        db.commit()
     return RedirectResponse(f"/admin/exam-orders/{order.id}", status_code=303)
 
 
@@ -7871,6 +8020,10 @@ async def admin_exam_order_delete(
             pass
     db.delete(order)  # cascade 会删 reports
     db.commit()
+    # 同步收费单
+    if visit_id:
+        _sync_visit_invoice(db, visit_id, request.session.get("admin_username", ""))
+        db.commit()
     if return_to == "visit" and visit_id:
         return RedirectResponse(f"/admin/visits/{visit_id}?step=3&msg=检查单已删除", status_code=303)
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=检查单已删除" if visit_id else "/admin/customers", status_code=303)
