@@ -231,6 +231,7 @@
  <button class="tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单<span class="count">{{ exam_orders|length }}</span></button>
  <button class="tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约<span class="count">{{ appointments|length }}</span></button>
  <button class="tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫<span class="count">{{ (vaccinations|length) + (dewormings|length) }}</span></button>
+ <button class="tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售<span class="count">{{ pet_sales_orders|length }}</span></button>
  <button class="tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费<span class="count">{{ pet_invoices|length }}</span></button>
  <button class="tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重曲线<span class="count">{{ weight_records|length }}</span></button>
  <button class="tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">医疗文书<span class="count">{{ medical_docs|length }}</span></button>
@@ -401,6 +402,37 @@
  </div>
 
  {# ── 收费 ── #}
+ {# ── 销售 ── #}
+ <div class="tab-content {% if active_tab=='sales' %}active{% endif %}" data-tab-content="sales">
+ <div class="tab-action-bar">
+ <a class="btn" href="/admin/sales-orders/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建销售单</a>
+ <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ pet_sales_orders|length }} 张</span>
+ </div>
+ {% if pet_sales_orders %}
+ <table class="data-table">
+ <thead><tr><th>日期</th><th>项目数</th><th style="text-align:right;">金额</th><th>收款方式</th><th>状态</th><th></th></tr></thead>
+ <tbody>
+ {% for so in pet_sales_orders %}
+ <tr>
+ <td style="color:var(--muted);">{{ so.order_date or '—' }}</td>
+ <td>{{ so.items|length }} 项</td>
+ <td style="text-align:right;font-weight:700;">¥ {{ '%.2f'|format(so.total_amount) }}</td>
+ <td style="color:var(--muted);">{{ so.payment_method or '—' }}</td>
+ <td>
+ {% if so.status == 'paid' %}<span class="pill pill-ok">✓ 已收款</span>
+ {% elif so.status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
+ {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
+ </td>
+ <td><a href="/admin/sales-orders/{{ so.id }}">查看 →</a></td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ {% else %}
+ <div class="tab-empty">暂无销售单。卖商品（猫粮/用品等）走这个入口，无需开就诊单。</div>
+ {% endif %}
+ </div>
+
  <div class="tab-content {% if active_tab=='invoices' %}active{% endif %}" data-tab-content="invoices">
  <div class="tab-action-bar">
  {% if visits %}
@@ -408,7 +440,6 @@
  {% else %}
  <a class="btn" href="/admin/invoices/create?customer_id={{ cust.id }}">＋ 新建收费单</a>
  {% endif %}
- <a class="btn secondary" href="/admin/sales-orders/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建销售单</a>
  <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ pet_invoices|length }} 张收费单</span>
  </div>
  {% if pet_invoices %}

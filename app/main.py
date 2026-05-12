@@ -4832,10 +4832,13 @@ async def page_admin_customer_detail(
         # 该宠物名下发票 = 该宠物的就诊产生的发票
         visit_ids = [v.id for v in visits]
         pet_invoices = [inv for inv in cust_invoices if inv.visit_id in visit_ids] if visit_ids else []
+        # 该宠物的销售单（按 pet_id 过滤）
+        pet_sales_orders = [so for so in cust_sales_orders if so.pet_id == active_pet_id]
     else:
         appointments, visits, prescriptions, exam_orders = [], [], [], []
         vaccinations, dewormings, weight_records, medical_docs = [], [], [], []
         pet_invoices = []
+        pet_sales_orders = []
 
     _SO_STATUS_ZH_LOCAL = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
     _INV_STATUS_ZH_LOCAL = {"unpaid": "未支付", "paid": "已支付", "cancelled": "已取消", "refunded": "已退款"}
@@ -4866,6 +4869,7 @@ async def page_admin_customer_detail(
             "weight_records": weight_records,
             "medical_docs": medical_docs,
             "pet_invoices": pet_invoices,
+            "pet_sales_orders": pet_sales_orders,
             # 翻译字典
             "visit_type_zh": _VISIT_TYPE_ZH,
             "so_status_zh": _SO_STATUS_ZH_LOCAL,
