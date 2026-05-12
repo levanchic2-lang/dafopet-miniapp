@@ -1,32 +1,26 @@
 {% extends "base.html" %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}
-<div class="card" style="background:#f0fdf4;border:1px solid #bbf7d0;margin-bottom:1rem;padding:0.75rem 1rem;font-size:0.9rem;color:#15803d;">
-  ✓ {{ request.query_params.get('msg') }}
-</div>
-{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
 
-<!-- 头部信息 -->
-<div class="card" style="margin-bottom:1rem;">
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+<div class="page-head">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    <a href="/admin/stocktake" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 盘点列表</a>
     <div>
-      <h1 style="margin:0 0 0.25rem;">{{ sess.name }}</h1>
-      <p class="sub" style="margin:0;">
+      <h1><span class="ph-icon">📊</span>{{ sess.name or '盘点单 #' ~ sess.id }}
+        {% if sess.status == 'completed' %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已完成</span>
+        {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">进行中</span>{% endif %}
+        {% if sess.variance_count and sess.variance_count > 0 %}<span class="pill pill-warn" style="margin-left:0.3rem;">差异 {{ sess.variance_count }}</span>{% endif %}
+      </h1>
+      <p class="ph-sub">
         {{ categories[sess.category_filter].label if sess.category_filter in categories else '全部类别' }}
-        · 共 {{ sit_items|length }} 个品目
-        · 已盘 {{ counted }} 个
-        {% if sess.status == 'completed' %}
-        · <span style="color:#15803d;font-weight:600;">已完成</span>
-        · 差异 {{ sess.variance_count }} 项
-        {% else %}
-        · <span style="color:#d97706;font-weight:600;">进行中</span>
-        {% endif %}
-        · 创建人：{{ sess.operator or '—' }}
+        · 共 {{ sit_items|length }} 个品目 · 已盘 {{ counted }} 个 · 创建人：{{ sess.operator or '—' }}
       </p>
     </div>
-    <a href="/admin/stocktake" class="btn secondary" style="font-size:0.85rem;">← 返回盘点列表</a>
   </div>
+</div>
+
+<div class="card" style="margin-bottom:1rem;display:none;">{# 保留原结构以兼容 #}
 
   {% if sess.status == 'open' %}
   <!-- 搜索栏 -->

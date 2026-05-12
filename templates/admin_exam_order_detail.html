@@ -16,19 +16,21 @@
 {% endblock %}
 
 {% block body %}
-{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
 
-<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
-  {% if visit %}
-  <a href="/admin/visits/{{ visit.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回就诊记录</a>
-  {% endif %}
-  <h1 style="margin:0;font-size:1.2rem;">
-    检查单 #{{ order.id }}
-    <span class="status-badge {{ 's-completed' if order.status == 'completed' else 's-pending' }}" style="margin-left:0.5rem;">
-      {{ '已出报告' if order.status == 'completed' else '待出报告' }}
-    </span>
-  </h1>
-  <span style="font-size:0.8rem;color:var(--muted);margin-left:auto;">{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+<div class="page-head">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    {% if visit %}
+    <a href="/admin/visits/{{ visit.id }}?return_to=customer" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回就诊</a>
+    {% endif %}
+    <div>
+      <h1><span class="ph-icon">🧪</span>检查单 #{{ order.id }}
+        {% if order.status == 'completed' %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已出报告</span>
+        {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待出报告</span>{% endif %}
+      </h1>
+      <p class="ph-sub">{% if pet %}{{ pet.name }}{% if cust %} · {{ cust.name }}{% endif %} · {% endif %}创建于 {{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+    </div>
+  </div>
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 260px;gap:1rem;align-items:start;">

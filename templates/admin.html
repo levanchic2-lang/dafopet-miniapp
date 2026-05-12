@@ -355,17 +355,18 @@
 </div>
 
 {% macro status_badge(s) -%}
-  {% if s == 'pending_ai' %}<span class="badge b-pending">AI/待分派</span>
-  {% elif s == 'pending_manual' %}<span class="badge b-pending">待人工审核</span>
-  {% elif s == 'pre_approved' %}<span class="badge b-pending">预通过（待复核）</span>
-  {% elif s == 'approved' %}<span class="badge b-ok">已通过</span>
-  {% elif s == 'scheduled' %}<span class="badge b-ok">已预约</span>
-  {% elif s == 'no_show' %}<span class="badge b-no">爽约</span>
-  {% elif s == 'cancelled' %}<span class="badge b-no">已取消</span>
-  {% elif s == 'rejected' %}<span class="badge b-no">已拒绝</span>
-  {% elif s == 'arrived_verified' %}<span class="badge b-ok">到院已核对</span>
-  {% elif s == 'surgery_completed' %}<span class="badge b-done">手术完成</span>
-  {% else %}<span class="badge">{{ s }}</span>{% endif %}
+  {% if s == 'pending_ai' %}<span class="pill pill-warn">🤖 AI/待分派</span>
+  {% elif s == 'pending_manual' %}<span class="pill pill-warn">⏳ 待人工审核</span>
+  {% elif s == 'pre_approved' %}<span class="pill pill-info">预通过</span>
+  {% elif s == 'approved' %}<span class="pill pill-ok">✓ 已通过</span>
+  {% elif s == 'scheduled' %}<span class="pill pill-info">📅 已预约</span>
+  {% elif s == 'arrived_verified' %}<span class="pill pill-info">🏥 到院已核对</span>
+  {% elif s == 'surgery_completed' %}<span class="pill pill-ok">✓ 手术完成</span>
+  {% elif s == 'no_show' %}<span class="pill pill-no">爽约</span>
+  {% elif s == 'cancelled' %}<span class="pill pill-gray">已取消</span>
+  {% elif s == 'rejected' %}<span class="pill pill-no">已拒绝</span>
+  {% elif s == 'draft' %}<span class="pill pill-gray">草稿</span>
+  {% else %}<span class="pill pill-gray">{{ s }}</span>{% endif %}
 {%- endmacro %}
 
 <div class="apps-grid">
@@ -374,7 +375,7 @@
   <div class="admin-app-top">
     <div class="admin-app-lines">
       <strong>#{{ a.id }}</strong> {{ status_badge(a.status) }}
-      {% if a.staff_cat_verified %}<span class="badge b-ok" style="margin-left:0.35rem;">已现场确认猫只</span>{% endif %}
+      {% if a.staff_cat_verified %}<span class="pill pill-ok" style="margin-left:0.35rem;">🐱 已现场确认</span>{% endif %}
       <h2 style="font-size:1.05rem;margin:0.5rem 0 0.25rem;">{{ a.applicant_name }} · {{ a.phone }}</h2>
       <p class="sub" style="margin:0;">{{ a.address }}</p>
       <p>

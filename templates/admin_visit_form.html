@@ -342,12 +342,118 @@
   {# 浮动保存条 #}
   <div class="save-bar">
     <button type="submit" class="btn">💾 保存修改</button>
-    <span class="saved-hint">最后更新 {{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
+    <span class="saved-hint" id="autosave-status">最后更新 {{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
     <div class="save-spacer"></div>
     <button type="button" onclick="prevStep()" class="btn secondary">‹ 上一步</button>
     <button type="button" onclick="nextStep()" class="btn secondary">下一步 ›</button>
   </div>
 </form>
+
+<script>
+// ── SOAP 自动保存（防抖 1.5 秒，AJAX 静默） ──
+(function() {
+  const CSRF = {{ csrf_token | tojson }};
+  const VISIT_ID = {{ v.id }};
+  const FIELDS = ['chief_complaint','physical_exam','diagnosis','treatment_plan','follow_up_note','follow_up_at'];
+  const statusEl = document.getElementById('autosave-status');
+  let lastValues = {};
+  let saveTimer = null;
+  let saving = false;
+
+  // 收集初始值
+  FIELDS.forEach(f => {
+    const el = document.querySelector('[name="' + f + '"]');
+    if (el) lastValues[f] = el.value;
+  });
+
+  function setStatus(text, color) {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.style.color = color || 'var(--muted)';
+  }
+
+  async function doSave() {
+    if (saving) return;
+    const payload = { csrf_token: CSRF };
+    let changed = false;
+    FIELDS.forEach(f => {
+      const el = document.querySelector('[name="' + f + '"]');
+      if (el && el.value !== lastValues[f]) {
+        payload[f] = el.value;
+        changed = true;
+      }
+    });
+    if (!changed) return;
+    saving = true;
+    setStatus('💾 保存中…', '#3b82f6');
+    try {
+      const r = await fetch('/api/visits/' + VISIT_ID + '/autosave', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      const data = await r.json();
+      if (data.ok) {
+        // 更新已保存的值
+        Object.keys(payload).forEach(k => { if (k !== 'csrf_token') lastValues[k] = payload[k]; });
+        setStatus('✓ 已保存 ' + (data.saved_at || ''), '#15803d');
+        // 同步进度条圆圈状态
+        refreshStepDots();
+      } else {
+        setStatus('⚠ 保存失败：' + (data.error || ''), '#dc2626');
+      }
+    } catch (e) {
+      setStatus('⚠ 网络异常', '#dc2626');
+    } finally {
+      saving = false;
+    }
+  }
+
+  function scheduleAutosave() {
+    clearTimeout(saveTimer);
+    setStatus('编辑中…', '#9ca3af');
+    saveTimer = setTimeout(doSave, 1500);
+  }
+
+  // 监听所有相关字段
+  FIELDS.forEach(f => {
+    const el = document.querySelector('[name="' + f + '"]');
+    if (el) {
+      el.addEventListener('input', scheduleAutosave);
+      el.addEventListener('change', scheduleAutosave);
+    }
+  });
+
+  // 切换 tab 前强制保存
+  window.addEventListener('beforeunload', function(e) {
+    if (saveTimer) { clearTimeout(saveTimer); doSave(); }
+  });
+
+  // 根据字段内容刷新步骤圆圈完成状态
+  function refreshStepDots() {
+    const stepMap = {
+      1: 'chief_complaint',
+      2: 'physical_exam',
+      4: 'diagnosis',
+      6: 'treatment_plan',
+      7: 'follow_up_note'
+    };
+    Object.entries(stepMap).forEach(([n, f]) => {
+      const el = document.querySelector('[name="' + f + '"]');
+      const step = document.querySelector('.soap-step[data-step="' + n + '"]');
+      if (!el || !step) return;
+      const hasContent = (el.value || '').trim().length > 0;
+      // 第 7 步特殊：follow_up_at 或 follow_up_note 任一有内容即完成
+      if (n === '7') {
+        const fa = document.querySelector('[name="follow_up_at"]');
+        const done = hasContent || (fa && fa.value);
+        step.classList.toggle('done', !!done);
+      } else {
+        step.classList.toggle('done', hasContent);
+      }
+    });
+  }
+})();
+</script>
 
 {# Step 3 检查化验（外置面板，独立于主表单）#}
 <div class="soap-panel" data-panel="3" style="margin-top:0.85rem;">

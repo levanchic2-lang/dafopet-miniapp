@@ -56,17 +56,31 @@
 
 {% else %}
 
-<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;" class="no-print">
-  {% if visit %}
-  <a href="/admin/visits/{{ visit.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回就诊记录</a>
-  {% elif cust %}
-  <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
-  {% else %}
-  <a href="/admin/sales-orders" class="btn secondary" style="font-size:0.85rem;">← 返回销售列表</a>
-  {% endif %}
-  <h1 style="margin:0;font-size:1.3rem;">{% if is_edit %}销售单 #{{ o.id }}{% else %}新建销售单{% endif %}</h1>
+<div class="page-head no-print">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    {% if visit %}
+    <a href="/admin/visits/{{ visit.id }}?return_to=customer" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回就诊</a>
+    {% elif cust %}
+    <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回客户</a>
+    {% else %}
+    <a href="/admin/sales-orders" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 销售列表</a>
+    {% endif %}
+    <div>
+      <h1><span class="ph-icon">📦</span>
+        {% if is_edit %}销售单 #{{ o.id }}{% else %}新建销售单{% endif %}
+        {% if is_edit and o.status %}
+          {% if o.status == 'paid' %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已收款</span>
+          {% elif o.status == 'cancelled' %}<span class="pill pill-gray" style="margin-left:0.5rem;">已取消</span>
+          {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待收款</span>{% endif %}
+        {% endif %}
+      </h1>
+      {% if cust %}<p class="ph-sub">{{ cust.name }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</p>{% endif %}
+    </div>
+  </div>
   {% if is_edit %}
-  <button onclick="window.print()" class="btn secondary" style="font-size:0.85rem;margin-left:auto;" class="no-print">🖨 打印</button>
+  <div class="ph-actions">
+    <button onclick="window.print()" class="btn secondary" style="font-size:0.85rem;">🖨 打印</button>
+  </div>
   {% endif %}
 </div>
 

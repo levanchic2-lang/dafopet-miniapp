@@ -1,23 +1,31 @@
 {% extends "base.html" %}
 {% block body %}
 
-{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
 
 {% set is_edit = (mode == 'edit') %}
 
-<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
-  {% if cust %}
-  <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
-  {% else %}
-  <a href="/admin/vaccinations" class="btn secondary" style="font-size:0.85rem;">← 疫苗管理</a>
-  {% endif %}
-  <h1 style="margin:0;font-size:1.2rem;">
-    {% if is_edit %}编辑接种记录 #{{ vacc.id }}{% else %}新建接种记录{% endif %}
-  </h1>
+<div class="page-head">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    {% if cust %}
+    <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回客户</a>
+    {% else %}
+    <a href="/admin/vaccinations" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 疫苗管理</a>
+    {% endif %}
+    <div>
+      <h1><span class="ph-icon">💉</span>
+        {% if is_edit %}接种记录 #{{ vacc.id }}{% else %}新建接种记录{% endif %}
+        {% if is_edit and vacc.invoice_id %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已开单</span>
+        {% elif is_edit and vacc.is_free %}<span class="pill pill-info" style="margin-left:0.5rem;">免费</span>
+        {% elif is_edit %}<span class="pill pill-warn" style="margin-left:0.5rem;">待收费</span>{% endif %}
+      </h1>
+      {% if cust or pet %}<p class="ph-sub">{% if cust %}{{ cust.name }}{% endif %}{% if pet %} · {{ pet.name }}{% endif %}</p>{% endif %}
+    </div>
+  </div>
   {% if is_edit and vacc.invoice_id %}
-  <a href="/admin/invoices/{{ vacc.invoice_id }}" class="btn secondary" style="font-size:0.82rem;margin-left:auto;">
-    🧾 查看收费单
-  </a>
+  <div class="ph-actions">
+    <a href="/admin/invoices/{{ vacc.invoice_id }}" class="btn secondary" style="font-size:0.82rem;">🧾 查看收费单</a>
+  </div>
   {% endif %}
 </div>
 

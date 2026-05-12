@@ -18,26 +18,33 @@
 {% endblock %}
 {% block body %}
 
-{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
 
 {% set is_create = (mode == 'create') %}
 {% set inv = inv if not is_create else None %}
 
-<!-- 顶部导航 -->
-<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
-  <a href="/admin/invoices" class="btn secondary" style="font-size:0.85rem;">← 收银台</a>
-  {% if not is_create %}
-  <h1 style="margin:0;font-size:1.2rem;">收费单 {{ inv.invoice_no }}</h1>
-  <span class="badge {% if inv.payment_status == 'paid' %}b-done{% elif inv.payment_status == 'cancelled' %}b-no{% else %}b-pending{% endif %}"
-        style="font-size:0.8rem;">
-    {{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}
-  </span>
-  <div style="margin-left:auto;display:flex;gap:0.5rem;">
-    <a href="/admin/invoices/{{ inv.id }}/print" target="_blank"
-       class="btn secondary" style="font-size:0.85rem;">🖨 打印票据</a>
+<div class="page-head">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    <a href="/admin/invoices" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 收银台</a>
+    <div>
+      {% if not is_create %}
+      <h1><span class="ph-icon">🧾</span>收费单 <span style="font-family:monospace;font-size:0.95rem;color:#4b5563;">{{ inv.invoice_no }}</span>
+        {% if inv.payment_status == 'paid' %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已收款</span>
+        {% elif inv.payment_status == 'cancelled' %}<span class="pill pill-gray" style="margin-left:0.5rem;">已取消</span>
+        {% elif inv.payment_status == 'refunded' %}<span class="pill pill-no" style="margin-left:0.5rem;">已退款</span>
+        {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待收款</span>{% endif %}
+      </h1>
+      {% if cust %}<p class="ph-sub">{{ cust.name }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</p>{% endif %}
+      {% else %}
+      <h1><span class="ph-icon">🧾</span>新建收费单</h1>
+      {% if cust %}<p class="ph-sub">{{ cust.name }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</p>{% endif %}
+      {% endif %}
+    </div>
   </div>
-  {% else %}
-  <h1 style="margin:0;font-size:1.2rem;">新建收费单</h1>
+  {% if not is_create %}
+  <div class="ph-actions">
+    <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="btn secondary" style="font-size:0.85rem;">🖨 打印票据</a>
+  </div>
   {% endif %}
 </div>
 

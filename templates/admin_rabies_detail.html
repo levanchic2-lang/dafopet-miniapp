@@ -17,14 +17,21 @@
 {% endblock %}
 {% block body %}
 
-{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
 
-<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
-  <a href="/admin/rabies" class="btn secondary" style="font-size:0.85rem;">← 返回列表</a>
-  <h1 style="margin:0;font-size:1.25rem;">狂犬疫苗登记 #{{ rec.id }}</h1>
-  <span style="margin-left:auto;font-size:0.82rem;color:var(--muted);">
-    {{ rec.created_at.strftime('%Y-%m-%d %H:%M') if rec.created_at else '' }}
-  </span>
+<div class="page-head">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    <a href="/admin/rabies" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回列表</a>
+    <div>
+      <h1><span class="ph-icon">🐶</span>狂犬疫苗登记 #{{ rec.id }}
+        {% if rec.status == 'completed' and rec.cert_no %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已完成</span>
+        {% elif rec.status == 'completed' %}<span class="pill pill-info" style="margin-left:0.5rem;">待录证号</span>
+        {% elif rec.status == 'staff_pending' %}<span class="pill pill-warn" style="margin-left:0.5rem;">待医护填写</span>
+        {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待主人签字</span>{% endif %}
+      </h1>
+      <p class="ph-sub">{{ rec.owner_name }} · {{ rec.owner_phone }} · 登记于 {{ rec.created_at.strftime('%Y-%m-%d %H:%M') if rec.created_at else '—' }}</p>
+    </div>
+  </div>
 </div>
 
 <!-- 流程进度 -->

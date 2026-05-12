@@ -5286,6 +5286,30 @@ async def admin_visit_edit(
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=已保存", status_code=303)
 
 
+@app.post("/api/visits/{visit_id}/autosave")
+async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    """SOAP 7 步工作流的实时自动保存。仅接受 JSON。只更新文本字段，不动 pet_id/date/type 等。"""
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    v = db.get(Visit, visit_id)
+    if not v:
+        return {"ok": False, "error": "记录不存在"}
+    # 只允许这几个字段，避免 JS 注入修改 customer/pet
+    allowed = {"chief_complaint", "physical_exam", "diagnosis", "treatment_plan", "follow_up_note", "follow_up_at", "notes"}
+    changed = []
+    for k, val in body.items():
+        if k in allowed and isinstance(val, str):
+            cur = getattr(v, k, "") or ""
+            if cur != val:
+                setattr(v, k, val[:2000])
+                changed.append(k)
+    if changed:
+        v.updated_at = datetime.utcnow()
+        db.commit()
+    return {"ok": True, "changed": changed, "saved_at": datetime.utcnow().strftime("%H:%M:%S")}
+
+
 @app.post("/admin/visits/{visit_id}/delete")
 async def admin_visit_delete(
     visit_id: int,
