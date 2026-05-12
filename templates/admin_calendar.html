@@ -15,9 +15,10 @@
 .cal-nav button { background:none; border:1px solid var(--border); border-radius:6px; padding:0.25rem 0.65rem; cursor:pointer; font-size:1.1rem; color:var(--muted); line-height:1; }
 .cal-nav button:hover { background:var(--bg-elevated); color:var(--text); }
 #cal-date-label { font-weight:700; font-size:1.05rem; min-width:130px; text-align:center; letter-spacing:0.01em; }
-.cal-actions { display:flex; align-items:center; gap:0.5rem; margin-left:auto; }
-.view-sw { display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-.view-sw button { padding:0.3rem 0.9rem; background:none; border:none; cursor:pointer; font-size:0.9rem; color:var(--muted); font-weight:500; white-space:nowrap; }
+.cal-actions { display:flex; align-items:center; gap:0.5rem; margin-left:auto; flex-shrink:0; }
+.cal-actions > * { flex-shrink:0; }
+.view-sw { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; flex-shrink:0; }
+.view-sw button { padding:0.3rem 0.9rem; background:none; border:none; cursor:pointer; font-size:0.9rem; color:var(--muted); font-weight:500; white-space:nowrap; min-width:38px; flex-shrink:0; }
 .view-sw button:hover { background:var(--bg-elevated); color:var(--text); }
 .view-sw button.active { background:#3b82f6; color:#fff; font-weight:600; }
 #today-btn { background:none; border:1px solid var(--border); color:var(--text); font-size:0.9rem; padding:0.28rem 0.7rem; border-radius:6px; cursor:pointer; white-space:nowrap; min-width:auto; }
