@@ -730,6 +730,21 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_meddoc_pet ON medical_documents(pet_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_meddoc_visit ON medical_documents(visit_id)"))
 
+            # prescription_templates 处方套餐模板
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS prescription_templates ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "name VARCHAR(120) DEFAULT '', "
+                "category VARCHAR(40) DEFAULT '', "
+                "items_json TEXT DEFAULT '[]', "
+                "notes TEXT DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "use_count INTEGER DEFAULT 0"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_presc_tmpl_name ON prescription_templates(name)"))
+
             # calendar_blocks 全天封锁日程
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS calendar_blocks ("

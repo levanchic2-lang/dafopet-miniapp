@@ -75,6 +75,7 @@ from app.models import (
     DewormingRecord,
     WeightRecord,
     MedicalDocument,
+    PrescriptionTemplate,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -8497,3 +8498,109 @@ async def admin_medical_doc_delete(
         db.delete(doc)
         db.commit()
     return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=docs&msg=文书已删除", status_code=303)
+
+
+
+# ── 处方模板（套餐） ─────────────────────────────────────────────
+
+@app.get("/api/prescription-templates")
+async def api_presc_templates_list(request: Request, db: Session = Depends(get_db)):
+    """列出所有处方模板。"""
+    require_admin(request)
+    rows = db.query(PrescriptionTemplate).order_by(
+        PrescriptionTemplate.use_count.desc(), PrescriptionTemplate.id.desc()
+    ).limit(200).all()
+    return [{
+        "id": r.id, "name": r.name, "category": r.category,
+        "use_count": r.use_count,
+        "item_count": len(json.loads(r.items_json or "[]")),
+    } for r in rows]
+
+
+@app.get("/api/prescription-templates/{tpl_id}")
+async def api_presc_template_get(tpl_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    tpl = db.get(PrescriptionTemplate, tpl_id)
+    if not tpl:
+        return {"ok": False, "error": "模板不存在"}
+    # 使用计数 +1
+    tpl.use_count = (tpl.use_count or 0) + 1
+    db.commit()
+    return {
+        "ok": True,
+        "id": tpl.id, "name": tpl.name, "notes": tpl.notes,
+        "items": json.loads(tpl.items_json or "[]"),
+    }
+
+
+@app.post("/api/prescription-templates/create")
+async def api_presc_template_create(request: Request, db: Session = Depends(get_db)):
+    """从当前处方表单保存为模板。"""
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    name = (body.get("name") or "").strip()[:120]
+    if not name:
+        return {"ok": False, "error": "请填写模板名称"}
+    items = body.get("items", [])
+    if not isinstance(items, list) or not items:
+        return {"ok": False, "error": "模板至少包含 1 个药品"}
+    tpl = PrescriptionTemplate(
+        name=name,
+        category=(body.get("category") or "").strip()[:40],
+        items_json=json.dumps(items, ensure_ascii=False),
+        notes=(body.get("notes") or "").strip()[:500],
+        created_by=request.session.get("admin_username", ""),
+    )
+    db.add(tpl)
+    db.commit()
+    db.refresh(tpl)
+    return {"ok": True, "id": tpl.id}
+
+
+@app.post("/api/prescription-templates/{tpl_id}/delete")
+async def api_presc_template_delete(tpl_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    tpl = db.get(PrescriptionTemplate, tpl_id)
+    if tpl:
+        db.delete(tpl)
+        db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/prescriptions/recent")
+async def api_prescription_recent(
+    pet_id: int = Query(0),
+    customer_id: int = Query(0),
+    exclude_visit_id: int = Query(0),
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    """返回该宠物（或客户）最近一张处方的明细，供「复制上次处方」用。"""
+    require_admin(request)
+    q = db.query(Prescription)
+    if pet_id:
+        q = q.filter(Prescription.pet_id == pet_id)
+    elif customer_id:
+        q = q.filter(Prescription.customer_id == customer_id)
+    else:
+        return {"ok": False, "error": "缺少 pet_id 或 customer_id"}
+    if exclude_visit_id:
+        q = q.filter(Prescription.visit_id != exclude_visit_id)
+    p = q.order_by(Prescription.id.desc()).first()
+    if not p:
+        return {"ok": False, "error": "无历史处方"}
+    items = [{
+        "drug_name": it.drug_name, "item_id": it.item_id,
+        "drug_type": it.drug_type, "dosage": it.dosage,
+        "frequency": it.frequency, "duration_days": it.duration_days,
+        "quantity_num": it.quantity_num, "quantity": it.quantity,
+        "unit_price": it.unit_price, "subtotal": it.subtotal,
+        "instructions": it.instructions,
+    } for it in p.items]
+    return {
+        "ok": True, "id": p.id, "prescribed_date": p.prescribed_date,
+        "vet_name": p.vet_name, "notes": p.notes, "items": items,
+    }

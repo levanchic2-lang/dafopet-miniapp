@@ -56,6 +56,17 @@
 <div style="display:grid;grid-template-columns:1fr 300px;gap:1rem;align-items:start;">
 
  <div>
+ {# ── 快捷工具栏：套用模板 / 复制上次 / 保存模板 / 预览 ── #}
+ <div class="card no-print" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;padding:0.65rem 0.85rem;margin-bottom:0.6rem;background:linear-gradient(90deg,#eff6ff,#f0f9ff);border:1px solid #bfdbfe;">
+ <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="openTemplatePicker()">📋 套用模板</button>
+ {% if pet or (p and p.pet_id) %}
+ <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="copyLastPresc()">📑 复制上次处方</button>
+ {% endif %}
+ <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="openSaveTemplate()">💾 保存为模板</button>
+ <div style="flex:1;"></div>
+ <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="previewPrescription()">👁 预览</button>
+ </div>
+
  <div class="card">
  <form method="post" action="{% if is_edit %}/admin/prescriptions/{{ p.id }}/edit{% else %}/admin/prescriptions/create{% endif %}" id="presc-form">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -359,6 +370,261 @@ function addDrugRow() {
 
 // init totals on page load
 document.addEventListener('DOMContentLoaded', recalcTotal);
+
+// ═══════════════════════════════════════════════════
+// 处方模板 / 复制上次 / 预览
+// ═══════════════════════════════════════════════════
+const CSRF_TOKEN = {{ csrf_token | tojson }};
+const PRESC_PET_ID = {{ (p.pet_id if p else (pet.id if pet else 0)) or 0 }};
+const PRESC_CUST_ID = {{ (p.customer_id if p else (cust.id if cust else 0)) or 0 }};
+const PRESC_VISIT_ID = {{ (visit.id if visit else (p.visit_id if p else 0)) or 0 }};
+
+function _showModal(id) { document.getElementById(id).classList.add('show'); }
+function _hideModal(id) { document.getElementById(id).classList.remove('show'); }
+
+function _clearRows() {
+ document.getElementById('drug-tbody').innerHTML = '';
+ _drugRowCount = 0;
+}
+
+function _appendRow(it) {
+ const idx = _drugRowCount++;
+ const types = {{ drug_type_zh | tojson }};
+ let typeOpts = '';
+ for (const k in types) {
+ typeOpts += `<option value="${k}" ${it.drug_type===k?'selected':''}>${types[k]}</option>`;
+ }
+ const row = `<tr>
+ <td><div class="inv-search-wrap">
+ <input name="drug_name_${idx}" value="${(it.drug_name||'').replace(/"/g,'&quot;')}" required autocomplete="off"
+ oninput="onDrugInput(this, ${idx})" onblur="closeDropdown(${idx})"/>
+ <input type="hidden" name="item_id_${idx}" value="${it.item_id||''}" id="item_id_${idx}"/>
+ <div class="inv-dropdown" id="dropdown_${idx}"></div>
+ </div></td>
+ <td><select name="drug_type_${idx}">${typeOpts}</select></td>
+ <td><input name="dosage_${idx}" value="${(it.dosage||'').replace(/"/g,'&quot;')}"/></td>
+ <td><input name="frequency_${idx}" value="${(it.frequency||'').replace(/"/g,'&quot;')}"/></td>
+ <td><input name="duration_days_${idx}" value="${(it.duration_days||'').replace(/"/g,'&quot;')}"/></td>
+ <td><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="${it.quantity_num||1}" oninput="recalcRow(${idx})" style="width:64px;"/></td>
+ <td><input name="quantity_${idx}" value="${(it.quantity||'').replace(/"/g,'&quot;')}" style="width:64px;"/></td>
+ <td><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="${(it.unit_price||0).toFixed(2)}" oninput="recalcRow(${idx})" style="width:80px;"/></td>
+ <td><input name="subtotal_${idx}" type="number" step="0.01" readonly value="${(it.subtotal||0).toFixed(2)}" id="subtotal_${idx}" style="width:68px;background:var(--bg-elevated);"/></td>
+ <td><input name="instructions_${idx}" value="${(it.instructions||'').replace(/"/g,'&quot;')}"/></td>
+ <td class="no-print"><button type="button" onclick="removeDrugRow(this, ${idx})" class="btn danger" style="padding:0.2rem 0.45rem;font-size:0.78rem;">✕</button></td>
+ </tr>`;
+ document.getElementById('drug-tbody').insertAdjacentHTML('beforeend', row);
+}
+
+// ── 套用模板 ──
+async function openTemplatePicker() {
+ const r = await fetch('/api/prescription-templates');
+ const data = await r.json();
+ const list = document.getElementById('tpl-list');
+ if (!data.length) {
+ list.innerHTML = '<p style="color:var(--muted);text-align:center;padding:1.5rem;">暂无模板，先开一张处方然后点「保存为模板」</p>';
+ } else {
+ list.innerHTML = data.map(t => `
+ <div style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0.75rem;border:1px solid var(--border);border-radius:8px;margin-bottom:0.35rem;">
+ <div style="flex:1;">
+ <div style="font-weight:600;">${t.name}</div>
+ <div style="font-size:0.78rem;color:var(--muted);">${t.item_count} 个药品 · 已用 ${t.use_count} 次${t.category?' · '+t.category:''}</div>
+ </div>
+ <button type="button" class="btn" style="font-size:0.78rem;padding:0.3rem 0.7rem;" onclick="applyTemplate(${t.id})">套用</button>
+ <button type="button" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.85rem;" onclick="deleteTemplate(${t.id})" title="删除模板">🗑</button>
+ </div>
+ `).join('');
+ }
+ _showModal('tpl-picker-modal');
+}
+
+async function applyTemplate(id) {
+ if (!confirm('套用模板将替换当前已填写的药品，确定吗？')) return;
+ const r = await fetch('/api/prescription-templates/' + id);
+ const data = await r.json();
+ if (!data.ok) { alert('错误：' + (data.error||'')); return; }
+ _clearRows();
+ (data.items || []).forEach(_appendRow);
+ if (data.notes) {
+ const ta = document.querySelector('textarea[name="notes"]');
+ if (ta && !ta.value) ta.value = data.notes;
+ }
+ recalcTotal();
+ _hideModal('tpl-picker-modal');
+}
+
+async function deleteTemplate(id) {
+ if (!confirm('删除此模板？')) return;
+ await fetch('/api/prescription-templates/' + id + '/delete', {
+ method: 'POST', headers: {'Content-Type':'application/json'},
+ body: JSON.stringify({csrf_token: CSRF_TOKEN})
+ });
+ openTemplatePicker();
+}
+
+// ── 复制上次处方 ──
+async function copyLastPresc() {
+ const params = new URLSearchParams({
+ pet_id: PRESC_PET_ID || 0,
+ customer_id: PRESC_CUST_ID || 0,
+ exclude_visit_id: PRESC_VISIT_ID || 0,
+ });
+ const r = await fetch('/api/prescriptions/recent?' + params);
+ const data = await r.json();
+ if (!data.ok) { alert(data.error || '无历史处方'); return; }
+ if (!confirm(`找到上次处方（${data.items.length} 项），将替换当前药品，确定？`)) return;
+ _clearRows();
+ (data.items || []).forEach(_appendRow);
+ recalcTotal();
+}
+
+// ── 保存为模板 ──
+function openSaveTemplate() {
+ const items = _collectItems();
+ if (!items.length) { alert('请先填写至少一项药品'); return; }
+ document.getElementById('save-tpl-count').textContent = items.length;
+ document.getElementById('save-tpl-name').value = '';
+ document.getElementById('save-tpl-cat').value = '';
+ _showModal('save-tpl-modal');
+}
+
+function _collectItems() {
+ const rows = document.querySelectorAll('#drug-tbody tr');
+ const items = [];
+ rows.forEach(tr => {
+ const nameInput = tr.querySelector('input[name^="drug_name_"]');
+ if (!nameInput || !nameInput.value.trim()) return;
+ const idx = nameInput.name.split('_').pop();
+ const get = n => (tr.querySelector('[name="' + n + '_' + idx + '"]')||{}).value || '';
+ items.push({
+ drug_name: get('drug_name'), item_id: get('item_id') || null,
+ drug_type: get('drug_type'), dosage: get('dosage'),
+ frequency: get('frequency'), duration_days: get('duration_days'),
+ quantity_num: parseFloat(get('quantity_num'))||0,
+ quantity: get('quantity'),
+ unit_price: parseFloat(get('unit_price'))||0,
+ subtotal: parseFloat(get('subtotal'))||0,
+ instructions: get('instructions'),
+ });
+ });
+ return items;
+}
+
+async function doSaveTemplate() {
+ const name = document.getElementById('save-tpl-name').value.trim();
+ if (!name) { alert('请填写模板名称'); return; }
+ const items = _collectItems();
+ const r = await fetch('/api/prescription-templates/create', {
+ method: 'POST', headers: {'Content-Type':'application/json'},
+ body: JSON.stringify({
+ csrf_token: CSRF_TOKEN, name: name,
+ category: document.getElementById('save-tpl-cat').value.trim(),
+ items: items,
+ notes: (document.querySelector('textarea[name="notes"]')||{}).value||'',
+ })
+ });
+ const d = await r.json();
+ if (d.ok) { alert('✓ 模板已保存'); _hideModal('save-tpl-modal'); }
+ else alert('错误：' + (d.error||''));
+}
+
+// ── 预览处方 ──
+function previewPrescription() {
+ const items = _collectItems();
+ if (!items.length) { alert('请先填写至少一项药品'); return; }
+ const vet = (document.querySelector('[name="vet_name"]')||{}).value || '—';
+ const date = (document.querySelector('[name="prescribed_date"]')||{}).value || '—';
+ const notes = (document.querySelector('[name="notes"]')||{}).value || '';
+ let html = `<h2 style="margin:0 0 0.5rem;">处方单预览</h2>
+ <div style="font-size:0.88rem;color:#6b7280;margin-bottom:0.85rem;">
+ 日期：${date} · 医生：${vet}{% if cust %} · 客户：{{ cust.name }}{% endif %}{% if pet %} · 宠物：{{ pet.name }}{% endif %}
+ </div>
+ <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+ <thead><tr style="background:#f3f4f6;">
+ <th style="padding:0.4rem;text-align:left;border-bottom:1px solid #ddd;">#</th>
+ <th style="padding:0.4rem;text-align:left;border-bottom:1px solid #ddd;">药品/项目</th>
+ <th style="padding:0.4rem;text-align:left;border-bottom:1px solid #ddd;">剂量</th>
+ <th style="padding:0.4rem;text-align:left;border-bottom:1px solid #ddd;">频次</th>
+ <th style="padding:0.4rem;text-align:left;border-bottom:1px solid #ddd;">疗程</th>
+ <th style="padding:0.4rem;text-align:right;border-bottom:1px solid #ddd;">数量</th>
+ <th style="padding:0.4rem;text-align:right;border-bottom:1px solid #ddd;">单价</th>
+ <th style="padding:0.4rem;text-align:right;border-bottom:1px solid #ddd;">小计</th>
+ </tr></thead><tbody>`;
+ let total = 0;
+ items.forEach((it, i) => {
+ total += it.subtotal || 0;
+ html += `<tr>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;">${i+1}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;font-weight:600;">${it.drug_name}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;">${it.dosage||'—'}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;">${it.frequency||'—'}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;">${it.duration_days||'—'}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;text-align:right;">${it.quantity||it.quantity_num}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;text-align:right;">¥${(it.unit_price||0).toFixed(2)}</td>
+ <td style="padding:0.4rem;border-bottom:1px solid #eee;text-align:right;font-weight:600;">¥${(it.subtotal||0).toFixed(2)}</td>
+ </tr>`;
+ if (it.instructions) html += `<tr><td colspan="8" style="padding:0.2rem 0.4rem 0.5rem 1.5rem;color:#6b7280;font-size:0.82rem;border-bottom:1px solid #eee;">特殊说明：${it.instructions}</td></tr>`;
+ });
+ html += `</tbody></table>
+ <div style="text-align:right;margin-top:0.75rem;font-size:1.05rem;font-weight:700;">合计：¥${total.toFixed(2)}</div>`;
+ if (notes) html += `<div style="margin-top:0.85rem;padding:0.6rem;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:0.88rem;">备注：${notes}</div>`;
+ document.getElementById('preview-body').innerHTML = html;
+ _showModal('preview-modal');
+}
+
+function printFromPreview() {
+ window.print();
+}
 </script>
+
+{# ── 弹窗：套用模板 ── #}
+<div class="presc-modal-overlay" id="tpl-picker-modal" onclick="if(event.target===this) _hideModal('tpl-picker-modal')">
+ <div class="presc-modal">
+ <h3 style="margin:0 0 0.85rem;font-size:1.05rem;">📋 套用处方模板</h3>
+ <div id="tpl-list" style="max-height:400px;overflow-y:auto;"></div>
+ <div style="text-align:right;margin-top:0.75rem;">
+ <button type="button" class="btn secondary" onclick="_hideModal('tpl-picker-modal')">关闭</button>
+ </div>
+ </div>
+</div>
+
+{# ── 弹窗：保存模板 ── #}
+<div class="presc-modal-overlay" id="save-tpl-modal" onclick="if(event.target===this) _hideModal('save-tpl-modal')">
+ <div class="presc-modal">
+ <h3 style="margin:0 0 0.85rem;font-size:1.05rem;">💾 保存为模板</h3>
+ <p style="color:var(--muted);font-size:0.85rem;">将当前 <strong id="save-tpl-count">0</strong> 个药品保存为可复用的处方模板。</p>
+ <label>模板名称 *</label>
+ <input id="save-tpl-name">
+ <label>类别（可选）</label>
+ <input id="save-tpl-cat">
+ <div style="display:flex;gap:0.5rem;margin-top:0.85rem;">
+ <button type="button" class="btn" onclick="doSaveTemplate()">保存</button>
+ <button type="button" class="btn secondary" onclick="_hideModal('save-tpl-modal')">取消</button>
+ </div>
+ </div>
+</div>
+
+{# ── 弹窗：预览 ── #}
+<div class="presc-modal-overlay" id="preview-modal" onclick="if(event.target===this) _hideModal('preview-modal')">
+ <div class="presc-modal" style="width:760px;max-width:95vw;">
+ <div id="preview-body"></div>
+ <div style="display:flex;gap:0.5rem;margin-top:1rem;justify-content:flex-end;">
+ <button type="button" class="btn" onclick="printFromPreview()">🖨 打印</button>
+ <button type="button" class="btn secondary" onclick="_hideModal('preview-modal')">关闭</button>
+ </div>
+ </div>
+</div>
+
+<style>
+.presc-modal-overlay {
+ display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+ z-index: 1100; align-items: center; justify-content: center;
+}
+.presc-modal-overlay.show { display: flex; }
+.presc-modal {
+ background: var(--card); border-radius: 12px; padding: 1.25rem;
+ width: 480px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+ box-shadow: 0 8px 32px rgba(0,0,0,.22);
+}
+</style>
 {% endblock %}
 {% endblock %}
