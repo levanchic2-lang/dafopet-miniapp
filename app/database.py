@@ -46,7 +46,7 @@ def _heal_rabies_pet_links() -> None:
     幂等：修复后不再产生不一致即为 no-op。
     """
     try:
-        from app.models import RabiesVaccineRecord, Pet  # 延迟 import 避免循环依赖
+        from app.models import RabiesVaccineRecord, Pet, Vaccination  # 延迟 import
     except Exception:
         return
     sess = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
@@ -86,8 +86,22 @@ def _heal_rabies_pet_links() -> None:
             rec.pet_id = target.id
             changed += 1
         if changed:
-            sess.commit()
+            sess.flush()
             print(f"[heal_rabies] 修复 {changed} 条狂犬记录（新建 {created} 只宠物）")
+
+        # 同步疫苗档案：把 Vaccination 的 pet_id 拉回到 rabies_record.pet_id
+        vacc_fixed = 0
+        vaccs = sess.query(Vaccination).filter(Vaccination.rabies_record_id.isnot(None)).all()
+        for v in vaccs:
+            rec = sess.get(RabiesVaccineRecord, v.rabies_record_id)
+            if rec and rec.pet_id and v.pet_id != rec.pet_id:
+                v.pet_id = rec.pet_id
+                vacc_fixed += 1
+        if vacc_fixed:
+            print(f"[heal_rabies] 同步 {vacc_fixed} 条 Vaccination.pet_id")
+
+        if changed or vacc_fixed:
+            sess.commit()
     except Exception as e:
         sess.rollback()
         # 数据修复失败不阻塞启动
