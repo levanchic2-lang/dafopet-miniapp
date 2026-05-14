@@ -3350,6 +3350,12 @@ async def admin_appointment_status(
     row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
     if not row:
         return RedirectResponse(redirect_base + "?appointment_err=" + quote("预约记录不存在", safe="") + f"#{anchor}", status_code=303)
+    # 限店员工只能改本店预约
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if row.store and row.store != full_store:
+            return RedirectResponse(redirect_base + "?appointment_err=" + quote("无权操作其他门店的预约", safe="") + f"#{anchor}", status_code=303)
     old_appt_status = row.status
     row.status = status
     row.updated_at = datetime.utcnow()
@@ -3440,8 +3446,14 @@ async def admin_appointment_reschedule(
     row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
     if not row:
         return _admin_appointment_redirect(next, err="预约记录不存在", anchor=_anchor)
-    if row.status in (AppointmentStatus.cancelled.value, AppointmentStatus.completed.value):
-        return _admin_appointment_redirect(next, err="已完成或已取消的预约不能改约", anchor=_anchor)
+    # 限店员工只能改本店预约
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if row.store and row.store != full_store:
+            return _admin_appointment_redirect(next, err="无权操作其他门店的预约", anchor=_anchor)
+    if row.status in (AppointmentStatus.cancelled.value, AppointmentStatus.completed.value, AppointmentStatus.no_show.value):
+        return _admin_appointment_redirect(next, err="当前状态不允许改约", anchor=_anchor)
 
     new_date = (new_date or "").strip()
     new_time = (new_time or "").strip()
@@ -4768,6 +4780,7 @@ async def page_admin_customers(
 async def admin_customer_create(
     request: Request,
     db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
     name: str = Form(""),
     phone: str = Form(""),
     address: str = Form(""),
@@ -4776,6 +4789,7 @@ async def admin_customer_create(
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
     cust = Customer(
         name=name.strip()[:120],
         phone=phone.strip()[:40],
@@ -4900,6 +4914,7 @@ async def admin_customer_edit(
     customer_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
     name: str = Form(""),
     phone: str = Form(""),
     address: str = Form(""),
@@ -4907,9 +4922,21 @@ async def admin_customer_edit(
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
     cust = db.get(Customer, customer_id)
     if not cust:
         raise HTTPException(404, "客户不存在")
+    # 限店员工：客户名下若全部宠物都在其他门店，则无权编辑
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        pets_in_store = db.query(Pet).filter(
+            Pet.customer_id == customer_id,
+            (Pet.store == admin_store) | (Pet.store == "")
+        ).count()
+        total_pets = db.query(Pet).filter(Pet.customer_id == customer_id).count()
+        # 完全没本店宠物 且 客户有别店宠物 → 拒绝
+        if total_pets > 0 and pets_in_store == 0:
+            raise HTTPException(403, "无权编辑其他门店的客户")
     cust.name = name.strip()[:120]
     cust.phone = phone.strip()[:40]
     cust.address = address.strip()[:500]
@@ -4923,6 +4950,7 @@ async def admin_customer_add_pet(
     customer_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
     name: str = Form(""),
     species: str = Form("cat"),
     breed: str = Form(""),
@@ -4938,6 +4966,7 @@ async def admin_customer_add_pet(
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
     cust = db.get(Customer, customer_id)
     if not cust:
         raise HTTPException(404, "客户不存在")
@@ -4990,8 +5019,7 @@ async def admin_customer_edit_pet(
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
-    if csrf_token:
-        _require_csrf(request, csrf_token)
+    _require_csrf(request, csrf_token)  # 强制校验：空 token 也会拒绝
     pet = db.get(Pet, pet_id)
     if not pet or pet.customer_id != customer_id:
         raise HTTPException(404, "宠物不存在")
@@ -6151,7 +6179,7 @@ async def admin_inventory_create(
     _require_csrf(request, csrf_token)
     if not name.strip():
         raise HTTPException(400, "品名不能为空")
-    operator = request.session.get("admin", "")
+    operator = request.session.get("admin_username", "")
     item = InventoryItem(
         name=name.strip(), category=category, subcategory=subcategory,
         is_service=(is_service == "1"), is_controlled=(is_controlled == "1"),
@@ -6272,7 +6300,7 @@ async def admin_inventory_stock_in(
         item_id=item_id, tx_type="in", qty=qty,
         qty_before=before, qty_after=item.stock_qty,
         unit_price=unit_price or item.cost_price,
-        ref_type="manual", operator=request.session.get("admin", ""),
+        ref_type="manual", operator=request.session.get("admin_username", ""),
         note=tx_note,
     ))
     if expiry_date:
@@ -6307,7 +6335,7 @@ async def admin_inventory_adjust(
         item_id=item_id, tx_type="adjust", qty=abs(diff),
         qty_before=before, qty_after=new_qty,
         unit_price=0, ref_type="manual",
-        operator=request.session.get("admin", ""),
+        operator=request.session.get("admin_username", ""),
         note=note or f"盘点调整（{'+' if diff >= 0 else ''}{diff:.1f}）",
     ))
     db.commit()
@@ -6339,7 +6367,7 @@ async def admin_batch_adjust(
         item_id=item_id, tx_type="adjust", qty=abs(diff),
         qty_before=before, qty_after=item.stock_qty,
         unit_price=0, ref_type="batch",
-        operator=request.session.get("admin", ""),
+        operator=request.session.get("admin_username", ""),
         note=f"批次{batch.batch_no or batch_id}数量修正（{'+' if diff >= 0 else ''}{diff:.1f}）",
     ))
     db.commit()
@@ -6370,7 +6398,7 @@ async def admin_batch_deplete(
             item_id=item_id, tx_type="adjust", qty=remaining,
             qty_before=before, qty_after=item.stock_qty,
             unit_price=0, ref_type="batch",
-            operator=request.session.get("admin", ""),
+            operator=request.session.get("admin_username", ""),
             note=f"批次{batch.batch_no or batch_id}标记耗尽",
         ))
     db.commit()
@@ -6435,7 +6463,7 @@ async def admin_stocktake_create(
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
-    operator = request.session.get("admin", "")
+    operator = request.session.get("admin_username", "")
     query = db.query(InventoryItem).filter(
         InventoryItem.is_active == True,
         InventoryItem.is_service == False,
@@ -6563,7 +6591,7 @@ async def admin_stocktake_submit(
                     si.notes = val
             except (ValueError, IndexError):
                 pass
-    operator = request.session.get("admin", "")
+    operator = request.session.get("admin_username", "")
     now = datetime.utcnow()
     variance_count = 0
     for si in sit_map.values():
@@ -7161,7 +7189,7 @@ async def admin_invoice_create(
     invoice_date = str(form.get("invoice_date") or date.today().isoformat())
     discount     = float(form.get("discount_amount") or 0)
     notes        = str(form.get("notes") or "")
-    admin_name   = request.session.get("admin", "")
+    admin_name   = request.session.get("admin_username", "")
 
     # 明细行
     descs      = form.getlist("desc[]")
@@ -7426,7 +7454,7 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
     customer_id = int(form.get("customer_id") or 0) or None
     item_id     = int(form.get("inventory_item_id") or 0) or None
     is_free     = form.get("is_free") == "1"
-    admin_name  = request.session.get("admin", "")
+    admin_name  = request.session.get("admin_username", "")
 
     vacc = Vaccination(
         pet_id            = pet_id,
@@ -7663,14 +7691,14 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
             is_free           = True,
             rabies_record_id  = rec_id,
             vet_name          = rec.staff_name or "",
-            created_by        = request.session.get("admin", ""),
+            created_by        = request.session.get("admin_username", ""),
         )
         db.add(vacc)
         db.flush()
         # 库存出库（有关联库存品目时）
         if rabies_item:
             _deduct_inventory(db, rabies_item.id, 1.0, "vaccination", vacc.id,
-                              request.session.get("admin", ""), note=f"狂犬疫苗登记#{rec_id} 出库")
+                              request.session.get("admin_username", ""), note=f"狂犬疫苗登记#{rec_id} 出库")
 
     db.commit()
     return RedirectResponse(f"/admin/rabies/{rec_id}?msg=已保存", status_code=303)
@@ -7940,7 +7968,7 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
         notes=notes,
         upload_token=token,
         token_expires_at=exp,
-        created_by=request.session.get("admin", ""),
+        created_by=request.session.get("admin_username", ""),
     )
     db.add(order)
     db.commit()
@@ -8013,7 +8041,7 @@ async def admin_exam_order_upload(
         original_name=fname,
         file_type=ftype,
         item_label=(item_label or "").strip()[:120],
-        uploaded_by=request.session.get("admin", "系统"),
+        uploaded_by=request.session.get("admin_username", "系统"),
     )
     db.add(report)
     order.status = "completed"
@@ -8179,12 +8207,28 @@ _ADOPTION_DIR = Path("data/adoption")
 _ADOPTION_STATUS_ZH = {"available": "待领养", "adopted": "已领养", "paused": "暂停"}
 
 
+# 领养文件白名单
+_ADOPTION_IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
+_ADOPTION_VIDEO_EXT = {".mp4", ".mov", ".webm"}
+_ADOPTION_DOC_EXT = {".pdf"}
+_ADOPTION_MAX_IMG = 10 * 1024 * 1024   # 10 MB
+_ADOPTION_MAX_VIDEO = 50 * 1024 * 1024 # 50 MB
+
+
 def _save_adoption_file(upload: UploadFile, prefix: str) -> str:
     _ADOPTION_DIR.mkdir(parents=True, exist_ok=True)
-    ext = Path(upload.filename).suffix.lower() or ".bin"
+    ext = Path(upload.filename or "").suffix.lower()
+    # 白名单校验
+    allowed = _ADOPTION_IMG_EXT | _ADOPTION_VIDEO_EXT | _ADOPTION_DOC_EXT
+    if ext not in allowed:
+        raise HTTPException(400, f"不支持的文件类型 {ext}")
+    content = upload.file.read()
+    # 大小限制
+    max_size = _ADOPTION_MAX_VIDEO if ext in _ADOPTION_VIDEO_EXT else _ADOPTION_MAX_IMG
+    if len(content) > max_size:
+        raise HTTPException(413, f"文件超过 {max_size // (1024*1024)}MB 上限")
     fname = f"{prefix}_{int(datetime.utcnow().timestamp()*1000)}{ext}"
     dest = _ADOPTION_DIR / fname
-    content = upload.file.read()
     dest.write_bytes(content)
     return str(dest)
 
@@ -8621,7 +8665,7 @@ async def admin_deworming_create(
         dose=dose.strip()[:80],
         next_due_date=next_due_date.strip()[:20],
         notes=notes.strip(),
-        created_by=request.session.get("admin", ""),
+        created_by=request.session.get("admin_username", ""),
     )
     db.add(rec)
     db.commit()
@@ -8724,7 +8768,7 @@ async def admin_medical_doc_upload(
         file_type="pdf" if ext == ".pdf" else "image",
         file_size=len(content),
         notes=notes.strip(),
-        uploaded_by=request.session.get("admin", ""),
+        uploaded_by=request.session.get("admin_username", ""),
     )
     db.add(doc)
     db.commit()
