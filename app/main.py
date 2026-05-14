@@ -6762,27 +6762,45 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
             cust.name = owner_name
 
     # 查找或创建宠物
+    # 修复：若传入 pet_id 但其名字与本次提交的 animal_name 不一致，
+    # 说明是同一主人的另一只宠物，应按 (customer_id, animal_name) 找已有，再否则新建，
+    # 避免把不同动物的狂犬记录全挂在第一只宠物身上
     pet_id = int(pet_id_raw) if pet_id_raw.isdigit() else None
-    if not pet_id and animal_name:
-        pet = Pet(
-            customer_id=customer_id,
-            name=animal_name,
-            breed=animal_breed,
-            gender=animal_gender,
-            birthday_estimate=animal_dob,
-            color_pattern=animal_color,
-            species="dog",
-        )
-        db.add(pet)
-        db.flush()
-        pet_id = pet.id
-    elif pet_id:
+    pet = None
+    if pet_id:
         pet = db.get(Pet, pet_id)
-        if pet:
-            if animal_color:
-                pet.color_pattern = animal_color
-            if animal_dob:
-                pet.birthday_estimate = animal_dob
+        if pet and animal_name and pet.name and pet.name.strip() != animal_name.strip():
+            # 名字不一致 → 视为不同动物
+            pet = None
+            pet_id = None
+    if not pet_id and animal_name:
+        # 先按 (customer_id, name) 找已有，避免重复
+        existing = (
+            db.query(Pet)
+            .filter(Pet.customer_id == customer_id, Pet.name == animal_name)
+            .first()
+        )
+        if existing:
+            pet = existing
+            pet_id = existing.id
+        else:
+            pet = Pet(
+                customer_id=customer_id,
+                name=animal_name,
+                breed=animal_breed,
+                gender=animal_gender,
+                birthday_estimate=animal_dob,
+                color_pattern=animal_color,
+                species="dog",
+            )
+            db.add(pet)
+            db.flush()
+            pet_id = pet.id
+    if pet:
+        if animal_color and not pet.color_pattern:
+            pet.color_pattern = animal_color
+        if animal_dob and not pet.birthday_estimate:
+            pet.birthday_estimate = animal_dob
 
     record = RabiesVaccineRecord(
         customer_id=customer_id,
@@ -6864,27 +6882,42 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
         if cust and _is_invalid_name(cust.name):
             cust.name = owner_name
 
+    # 修复：若传入 pet_id 但其名字与本次提交的 animal_name 不一致，
+    # 视为不同动物（参见 /rabies 表单同样的修复）
     pet_id = int(pet_id_raw) if isinstance(pet_id_raw, int) or (isinstance(pet_id_raw, str) and str(pet_id_raw).isdigit()) else None
-    if not pet_id and animal_name:
-        pet = Pet(
-            customer_id=customer_id,
-            name=animal_name,
-            breed=animal_breed,
-            gender=animal_gender,
-            birthday_estimate=animal_dob,
-            color_pattern=animal_color,
-            species="dog",
-        )
-        db.add(pet)
-        db.flush()
-        pet_id = pet.id
-    elif pet_id:
+    pet = None
+    if pet_id:
         pet = db.get(Pet, pet_id)
-        if pet:
-            if animal_color:
-                pet.color_pattern = animal_color
-            if animal_dob:
-                pet.birthday_estimate = animal_dob
+        if pet and animal_name and pet.name and pet.name.strip() != animal_name.strip():
+            pet = None
+            pet_id = None
+    if not pet_id and animal_name:
+        existing = (
+            db.query(Pet)
+            .filter(Pet.customer_id == customer_id, Pet.name == animal_name)
+            .first()
+        )
+        if existing:
+            pet = existing
+            pet_id = existing.id
+        else:
+            pet = Pet(
+                customer_id=customer_id,
+                name=animal_name,
+                breed=animal_breed,
+                gender=animal_gender,
+                birthday_estimate=animal_dob,
+                color_pattern=animal_color,
+                species="dog",
+            )
+            db.add(pet)
+            db.flush()
+            pet_id = pet.id
+    if pet:
+        if animal_color and not pet.color_pattern:
+            pet.color_pattern = animal_color
+        if animal_dob and not pet.birthday_estimate:
+            pet.birthday_estimate = animal_dob
 
     record = RabiesVaccineRecord(
         customer_id=customer_id,
