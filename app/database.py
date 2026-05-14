@@ -34,6 +34,66 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _try_sqlite_migrations()
     _seed_data()
+    _heal_rabies_pet_links()
+
+
+def _heal_rabies_pet_links() -> None:
+    """
+    一次性数据修复：早期 /rabies 与 /api/rabies/submit 收到 pet_id 时无条件复用，
+    同一主人多只动物的狂犬记录会全部错挂到第一只宠物身上。
+    本函数扫描所有 RabiesVaccineRecord：若 animal_name 与当前 pet.name 不一致，
+    重新挂到正确的 Pet（按 customer_id + name 查已有，否则按 record 字段新建）。
+    幂等：修复后不再产生不一致即为 no-op。
+    """
+    try:
+        from app.models import RabiesVaccineRecord, Pet  # 延迟 import 避免循环依赖
+    except Exception:
+        return
+    sess = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
+    try:
+        records = sess.query(RabiesVaccineRecord).all()
+        cache: dict[tuple[int, str], Pet] = {}
+        changed = 0
+        created = 0
+        for rec in records:
+            animal_name = (rec.animal_name or "").strip()
+            if not animal_name or not rec.customer_id:
+                continue
+            cur_pet = sess.get(Pet, rec.pet_id) if rec.pet_id else None
+            cur_name = (cur_pet.name or "").strip() if cur_pet else ""
+            if cur_pet and cur_name == animal_name:
+                continue  # 已对得上
+            key = (rec.customer_id, animal_name)
+            target = cache.get(key) or (
+                sess.query(Pet)
+                .filter(Pet.customer_id == rec.customer_id, Pet.name == animal_name)
+                .first()
+            )
+            if not target:
+                target = Pet(
+                    customer_id=rec.customer_id,
+                    name=animal_name,
+                    breed=(rec.animal_breed or "").strip(),
+                    gender=(rec.animal_gender or "").strip(),
+                    birthday_estimate=(rec.animal_dob or "").strip(),
+                    color_pattern=(rec.animal_color or "").strip(),
+                    species="dog",
+                )
+                sess.add(target)
+                sess.flush()
+                created += 1
+            cache[key] = target
+            rec.pet_id = target.id
+            changed += 1
+        if changed:
+            sess.commit()
+            print(f"[heal_rabies] 修复 {changed} 条狂犬记录（新建 {created} 只宠物）")
+    except Exception as e:
+        sess.rollback()
+        # 数据修复失败不阻塞启动
+        print(f"[heal_rabies] skip: {e}")
+    finally:
+        sess.close()
 
 
 def _try_sqlite_migrations() -> None:
