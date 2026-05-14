@@ -1709,8 +1709,7 @@ async def api_app_status(app_id: int, db: Session = Depends(get_db)):
 @app.get("/admin", response_class=HTMLResponse)
 async def page_admin(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
-        return templates.TemplateResponse(
-            "admin_login.html",
+        return templates.TemplateResponse(request, "admin_login.html",
             {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
         )
     qp = request.query_params
@@ -1811,8 +1810,7 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
         .limit(30)
         .all()
     )
-    return templates.TemplateResponse(
-        "admin.html",
+    return templates.TemplateResponse(request, "admin.html",
         {
             "request": request,
             "title": "TNR 审核与手术登记",
@@ -2166,8 +2164,7 @@ async def page_admin_appointments(
     appt_category: str = Query(""),
 ):
     if not _admin_ok(request):
-        return templates.TemplateResponse(
-            "admin_login.html",
+        return templates.TemplateResponse(request, "admin_login.html",
             {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
         )
 
@@ -2341,8 +2338,7 @@ async def page_admin_appointments(
         "tnr_quota_status": _tnr_quota_status,
     }
 
-    return templates.TemplateResponse(
-        "admin_appointments.html",
+    return templates.TemplateResponse(request, "admin_appointments.html",
         {
             "request":              request,
             "title":                "预约管理",
@@ -2427,8 +2423,7 @@ async def admin_login(
         request.session["admin_username"] = "admin"
         return RedirectResponse("/admin", status_code=303)
 
-    return templates.TemplateResponse(
-        "admin_login.html",
+    return templates.TemplateResponse(request, "admin_login.html",
         {"request": request, "title": "医院后台登录", "error": "账号或密码不正确", "csrf_token": _get_csrf_token(request)},
         status_code=401,
     )
@@ -2599,7 +2594,7 @@ async def admin_changelog_page(request: Request):
                 })
     except Exception as e:
         commits = [{"short_hash": "—", "msg": f"无法读取 git log：{e}", "kind": "error", "scope": "", "author": "", "date": "", "subject": "", "full_hash": ""}]
-    return templates.TemplateResponse("admin_changelog.html", {
+    return templates.TemplateResponse(request, "admin_changelog.html", {
         "request": request,
         "title": "开发日志",
         "commits": commits,
@@ -2628,7 +2623,7 @@ async def admin_hr_page(
     unlinked_staff = [s for s in active_staff if s.id not in linked_staff_ids]
     # 账号 → 员工姓名映射（用于列表显示）
     staff_by_user_id = {s.admin_user_id: s for s in active_staff if s.admin_user_id}
-    return templates.TemplateResponse("admin_hr.html", {
+    return templates.TemplateResponse(request, "admin_hr.html", {
         "request": request, "title": "人事管理",
         "active_staff": active_staff, "resigned_staff": resigned_staff,
         "expiring": expiring,
@@ -2812,10 +2807,10 @@ async def admin_staff_list(request: Request):
 @app.get("/admin/staff/create", response_class=HTMLResponse)
 async def admin_staff_create_get(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
-        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+        return templates.TemplateResponse(request, "admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
     require_superadmin(request)
     admin_users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.username).all()
-    return templates.TemplateResponse("admin_staff_form.html", {
+    return templates.TemplateResponse(request, "admin_staff_form.html", {
         "request": request, "title": "新增员工", "staff": None,
         "admin_users": admin_users, "position_options": _POSITION_OPTIONS,
         "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",
@@ -2858,7 +2853,7 @@ async def admin_staff_detail(
     msg: str = Query(""), err: str = Query(""),
 ):
     if not _admin_ok(request):
-        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+        return templates.TemplateResponse(request, "admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
     staff = db.query(Staff).filter(Staff.id == staff_id).first()
     if not staff:
         raise HTTPException(404)
@@ -2866,7 +2861,7 @@ async def admin_staff_detail(
     from datetime import date, timedelta
     today = date.today().isoformat()
     expiry_30 = (date.today() + timedelta(days=30)).isoformat()
-    return templates.TemplateResponse("admin_staff_detail.html", {
+    return templates.TemplateResponse(request, "admin_staff_detail.html", {
         "request": request, "title": f"员工档案 · {staff.name}",
         "staff": staff, "contracts": contracts,
         "status_zh": _STAFF_STATUS_ZH, "contract_type_zh": _CONTRACT_TYPE_ZH,
@@ -2879,13 +2874,13 @@ async def admin_staff_detail(
 @app.get("/admin/staff/{staff_id}/edit", response_class=HTMLResponse)
 async def admin_staff_edit_get(staff_id: int, request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
-        return templates.TemplateResponse("admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+        return templates.TemplateResponse(request, "admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
     require_superadmin(request)
     staff = db.query(Staff).filter(Staff.id == staff_id).first()
     if not staff:
         raise HTTPException(404)
     admin_users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.username).all()
-    return templates.TemplateResponse("admin_staff_form.html", {
+    return templates.TemplateResponse(request, "admin_staff_form.html", {
         "request": request, "title": f"编辑员工 · {staff.name}", "staff": staff,
         "admin_users": admin_users, "position_options": _POSITION_OPTIONS,
         "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",
@@ -4231,7 +4226,7 @@ async def admin_feedback_page(request: Request, status: str = "", db: Session = 
                 pass
         feed_list.append({"fb": fb, "img_urls": img_urls})
     pending_count = db.query(Feedback).filter(Feedback.status == "pending").count()
-    return templates.TemplateResponse("admin_feedback.html", {
+    return templates.TemplateResponse(request, "admin_feedback.html", {
         "request": request,
         "title": "客户反馈",
         "feed_list": feed_list,
@@ -4578,8 +4573,7 @@ async def page_showcase(request: Request, db: Session = Depends(get_db),
     total_pages = max(1, (total + page_size - 1) // page_size)
     page        = min(page, total_pages)
     items       = all_items[(page - 1) * page_size : page * page_size]
-    return templates.TemplateResponse(
-        "showcase.html",
+    return templates.TemplateResponse(request, "showcase.html",
         {
             "request": request,
             "title": "公布展示 · TNR 术前术后",
@@ -4772,6 +4766,7 @@ async def page_admin_customers(
             "total": total,
             "page_size": PAGE_SIZE,
             "total_pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
+            "csrf_token": _get_csrf_token(request),
         },
     )
 
@@ -5701,7 +5696,7 @@ async def admin_dispensing(
         Prescription.vet_name != ""
     ).distinct().order_by(Prescription.vet_name).all()]
 
-    return templates.TemplateResponse("admin_dispensing.html", {
+    return templates.TemplateResponse(request, "admin_dispensing.html", {
         "request": request,
         "prescs": prescs, "cust_map": cust_map, "pet_map": pet_map,
         "q": q, "status": status, "vet": vet,
@@ -6139,7 +6134,7 @@ async def admin_inventory_list(
                             InventoryBatch.expiry_date != "",
                             InventoryBatch.expiry_date <= _alert_date)
                     .distinct().count())
-    return templates.TemplateResponse("admin_inventory.html", {
+    return templates.TemplateResponse(request, "admin_inventory.html", {
         "request": request, "items": items, "total": total,
         "page": page, "total_pages": total_pages,
         "q": q, "category": category, "low_stock": low_stock,
@@ -6155,7 +6150,7 @@ async def admin_inventory_list(
 @app.get("/admin/inventory/create", response_class=HTMLResponse)
 async def admin_inventory_create_form(request: Request, db: Session = Depends(get_db)):
     require_admin(request)
-    return templates.TemplateResponse("admin_inventory_form.html", {
+    return templates.TemplateResponse(request, "admin_inventory_form.html", {
         "request": request, "item": None,
         "categories": INVENTORY_CATEGORIES,
         "csrf_token": request.session.get("csrf_token", ""),
@@ -6208,7 +6203,7 @@ async def admin_inventory_edit_form(item_id: int, request: Request, db: Session 
     item = db.get(InventoryItem, item_id)
     if not item:
         raise HTTPException(404)
-    return templates.TemplateResponse("admin_inventory_form.html", {
+    return templates.TemplateResponse(request, "admin_inventory_form.html", {
         "request": request, "item": item,
         "categories": INVENTORY_CATEGORIES,
         "csrf_token": request.session.get("csrf_token", ""),
@@ -6236,7 +6231,7 @@ async def admin_inventory_detail(item_id: int, request: Request, db: Session = D
     from datetime import date as _date, timedelta as _timedelta
     today_str = _date.today().isoformat()
     alert_date_str = (_date.today() + _timedelta(days=90)).isoformat()
-    return templates.TemplateResponse("admin_inventory_detail.html", {
+    return templates.TemplateResponse(request, "admin_inventory_detail.html", {
         "request": request, "item": item, "txs": txs,
         "tx_total": tx_total, "page": page,
         "tx_pages": max(1, (tx_total + page_size - 1) // page_size),
@@ -6444,7 +6439,7 @@ async def admin_stocktake_list(request: Request, db: Session = Depends(get_db)):
             "days_ago": days_ago,
         })
     open_sessions = [s for s in sessions if s.status == "open"]
-    return templates.TemplateResponse("admin_stocktake.html", {
+    return templates.TemplateResponse(request, "admin_stocktake.html", {
         "request": request, "sessions": sessions,
         "open_sessions": open_sessions,
         "cycle_stats": cycle_stats,
@@ -6511,7 +6506,7 @@ async def admin_stocktake_session(
         items_q = items_q.filter(StocktakeItem.item_name.ilike(f"%{q}%"))
     sit_items = items_q.order_by(StocktakeItem.category, StocktakeItem.item_name).all()
     counted = sum(1 for x in sit_items if x.actual_qty is not None)
-    return templates.TemplateResponse("admin_stocktake_session.html", {
+    return templates.TemplateResponse(request, "admin_stocktake_session.html", {
         "request": request, "sess": sess, "sit_items": sit_items,
         "q": q, "counted": counted,
         "categories": INVENTORY_CATEGORIES,
