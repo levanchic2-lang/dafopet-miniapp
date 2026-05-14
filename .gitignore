@@ -6,3 +6,8 @@ venv/
 data/
 uploads/
 backups/
+
+# 集成测试运行产物（保留 .py 脚本，不入运行时数据）
+_test/test.db
+_test/server.log
+_test/uploads/

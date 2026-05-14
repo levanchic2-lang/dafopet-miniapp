@@ -1,0 +1,42 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # 测试期固定 bcrypt，避免与 Python 新版本的 passlib 不兼容
+          pip install 'bcrypt==4.0.1'
+
+      - name: Run integration tests
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          mkdir -p _test
+          python _test/run_tests.py
+
+      - name: Upload server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-log
+          path: _test/server.log
+          if-no-files-found: ignore
