@@ -1,4 +1,10 @@
 {% extends "base.html" %}
+{% block extra_head %}
+{% if mode == 'edit' and visit %}
+<meta name="tab-label" content="{{ (cust.name if cust else '就诊') }}·{{ visit.visit_date[5:] if visit.visit_date else ('就诊#' ~ visit.id) }}"/>
+<meta name="tab-kind" content="visit"/>
+{% endif %}
+{% endblock %}
 {% block extra_css %}
 <style>
 /* ── 7 步 SOAP 工作流 ─────────────────────────────────────── */

@@ -1,4 +1,10 @@
 {% extends "base.html" %}
+{% block extra_head %}
+{% if mode == 'edit' and presc %}
+<meta name="tab-label" content="{{ (cust.name if cust else '处方') }}·处方#{{ presc.id }}"/>
+<meta name="tab-kind" content="prescription"/>
+{% endif %}
+{% endblock %}
 {% block extra_css %}
 <style>
 .drug-table { width:100%; border-collapse:separate; border-spacing:0; font-size:0.86rem; }

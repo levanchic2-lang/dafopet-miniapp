@@ -334,8 +334,41 @@
     .msg.ok { background: var(--ok-bg); color: var(--ok-fg); border-color: var(--border-strong); }
     .msg.err { background: var(--danger-bg); color: var(--danger-fg); border-color: #a3a3a3; }
     footer { margin-top: 2rem; font-size: 0.78rem; color: var(--muted); text-align: center; }
+
+    /* ── 底部多标签栏 ─────────────────────────────────────── */
+    .qtabs { position: fixed; left: 0; right: 0; bottom: 0;
+             background: rgba(255,255,255,0.96); backdrop-filter: blur(8px);
+             border-top: 1px solid #e5e7eb; z-index: 950; display: none;
+             padding: 4px 8px 4px 8px; }
+    .qtabs.has-tabs { display: flex; gap: 4px; overflow-x: auto;
+                       -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+    .qtab { display: inline-flex; align-items: center; gap: 5px;
+             flex: 0 0 auto; max-width: 240px;
+             padding: 5px 10px 5px 10px; border-radius: 6px 6px 0 0;
+             background: #f3f4f6; color: #4b5563; font-size: 0.82rem;
+             text-decoration: none; line-height: 1.4; white-space: nowrap;
+             border: 1px solid transparent; border-bottom: none;
+             cursor: pointer; user-select: none; }
+    .qtab:hover { background: #e5e7eb; }
+    .qtab.active { background: #fff; color: #111827; font-weight: 600;
+                   border-color: #d1d5db; box-shadow: 0 -2px 4px rgba(0,0,0,.04); }
+    .qtab .qt-icon { font-size: 0.95rem; }
+    .qtab .qt-label { overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+    .qtab .qt-close { color: #9ca3af; font-size: 1rem; line-height: 1; padding: 0 2px;
+                       border-radius: 4px; }
+    .qtab .qt-close:hover { background: #fee2e2; color: #b91c1c; }
+    .qtab-clear { display: inline-flex; align-items: center; padding: 0 8px;
+                   font-size: 0.78rem; color: #9ca3af; cursor: pointer; }
+    .qtab-clear:hover { color: #ef4444; }
+    /* 给页面留底部空间，避免被 tab 栏遮住 */
+    body.has-qtabs { padding-bottom: 42px; }
+    @media (max-width: 640px) {
+      .qtab { max-width: 140px; padding: 5px 8px; font-size: 0.78rem; }
+      .qtab .qt-label { max-width: 100px; }
+    }
   </style>
   {% block extra_css %}{% endblock %}
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
   {% set _path = request.url.path %}
@@ -438,8 +471,117 @@
     {% block body %}{% endblock %}
     <footer>图像识别结论仅供辅助参考，最终以到院核对与医生判断为准。严禁家养猫冒充流浪猫申请。</footer>
   </div>
+  {% if request.session.get('admin') %}
+  <div class="qtabs" id="qtabs"></div>
+  {% endif %}
   {% block scripts %}{% endblock %}
   {% if request.session.get('admin') %}
+  <script>
+  /* ── 底部多标签栏 ─────────────────────────────────────── */
+  (function () {
+    var STORAGE_KEY = 'dafopet_qtabs_v1';
+    var MAX_TABS = 8;
+
+    function readTabs() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+      catch (e) { return []; }
+    }
+    function writeTabs(arr) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(arr.slice(0, MAX_TABS))); }
+      catch (e) {}
+    }
+    function pageMeta(name) {
+      var m = document.querySelector('meta[name="' + name + '"]');
+      return m ? (m.getAttribute('content') || '') : '';
+    }
+    function currentTab() {
+      var label = pageMeta('tab-label');
+      if (!label) return null;
+      var kind = pageMeta('tab-kind') || 'page';
+      var icon = pageMeta('tab-icon') || ({customer:'👤', visit:'📋', prescription:'💊', exam:'🔬', invoice:'🧾'}[kind] || '📄');
+      // url = pathname + search，去掉 hash 与 msg= 一类的临时参数
+      var url = location.pathname + location.search;
+      url = url.replace(/[?&]msg=[^&]*/g, '').replace(/[?&]err=[^&]*/g, '');
+      url = url.replace(/^\?/, '?').replace(/\?$/, '');
+      // 用 path+主要资源 id 作为去重 key，避免 query 变化复制多次
+      var key = location.pathname.replace(/\/$/, '');
+      return { key: key, url: url, label: label, kind: kind, icon: icon, ts: Date.now() };
+    }
+    function upsert(tabs, tab) {
+      var idx = -1;
+      for (var i = 0; i < tabs.length; i++) {
+        if (tabs[i].key === tab.key) { idx = i; break; }
+      }
+      if (idx >= 0) {
+        // 更新已有 tab 的 label/url，但保持位置
+        tabs[idx].label = tab.label;
+        tabs[idx].url   = tab.url;
+        tabs[idx].icon  = tab.icon;
+        tabs[idx].kind  = tab.kind;
+        tabs[idx].ts    = tab.ts;
+      } else {
+        tabs.unshift(tab);
+        if (tabs.length > MAX_TABS) tabs.length = MAX_TABS;
+      }
+      return tabs;
+    }
+    function render() {
+      var bar = document.getElementById('qtabs');
+      if (!bar) return;
+      var tabs = readTabs();
+      bar.innerHTML = '';
+      if (!tabs.length) {
+        bar.classList.remove('has-tabs');
+        document.body.classList.remove('has-qtabs');
+        return;
+      }
+      bar.classList.add('has-tabs');
+      document.body.classList.add('has-qtabs');
+      var here = location.pathname.replace(/\/$/, '');
+      tabs.forEach(function(t) {
+        var a = document.createElement('a');
+        a.className = 'qtab' + (t.key === here ? ' active' : '');
+        a.href = t.url;
+        a.title = t.label;
+        a.innerHTML =
+          '<span class="qt-icon">' + (t.icon || '📄') + '</span>' +
+          '<span class="qt-label"></span>' +
+          '<span class="qt-close" title="关闭">×</span>';
+        a.querySelector('.qt-label').textContent = t.label;
+        a.querySelector('.qt-close').addEventListener('click', function(ev) {
+          ev.preventDefault(); ev.stopPropagation();
+          var rest = readTabs().filter(function(x) { return x.key !== t.key; });
+          writeTabs(rest);
+          render();
+        });
+        bar.appendChild(a);
+      });
+      if (tabs.length >= 2) {
+        var clr = document.createElement('span');
+        clr.className = 'qtab-clear';
+        clr.title = '关闭所有标签';
+        clr.textContent = '清空';
+        clr.addEventListener('click', function() {
+          if (confirm('清空所有标签？')) { writeTabs([]); render(); }
+        });
+        bar.appendChild(clr);
+      }
+    }
+
+    // 进入当前页时，若是可标签化页面 → upsert
+    var ct = currentTab();
+    if (ct) {
+      var tabs = upsert(readTabs(), ct);
+      writeTabs(tabs);
+    }
+    render();
+
+    // 跨标签同步（一个页面关掉 tab，另一个页面同步）
+    window.addEventListener('storage', function(e) {
+      if (e.key === STORAGE_KEY) render();
+    });
+  })();
+  </script>
   <script>
   (function () {
     var badge = document.getElementById('nav-pending-badge');

@@ -1,4 +1,8 @@
 {% extends "base.html" %}
+{% block extra_head %}
+<meta name="tab-label" content="{{ cust.name or '客户#' ~ cust.id }}"/>
+<meta name="tab-kind" content="customer"/>
+{% endblock %}
 {% block extra_css %}
 <style>
 /* ── 客户档案中心化 Hub ─────────────────────────────────── */

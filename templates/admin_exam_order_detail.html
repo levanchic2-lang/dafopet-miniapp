@@ -1,4 +1,10 @@
 {% extends "base.html" %}
+{% block extra_head %}
+{% if order %}
+<meta name="tab-label" content="{{ (cust.name if cust else '检查') }}·检查#{{ order.id }}"/>
+<meta name="tab-kind" content="exam"/>
+{% endif %}
+{% endblock %}
 {% block extra_css %}
 <style>
 .report-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:0.6rem; margin-top:0.6rem; }
