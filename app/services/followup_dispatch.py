@@ -27,27 +27,95 @@ from app.models import FollowUp, Customer, Pet, Visit
 logger = logging.getLogger(__name__)
 
 
-# ─── 渠道发送（占位，下一 commit 实现） ───
+# ─── 渠道发送 ───
+_VISIT_TYPE_ZH = {
+    "outpatient": "门诊", "surgery": "手术", "postop": "术后复查",
+    "beauty": "美容", "vaccine": "疫苗", "followup": "复诊",
+    "surgery_consult": "手术咨询", "other": "其他",
+}
+
+
+def _build_feedback_url(token: str) -> str:
+    """根据 public_base_url 构造完整反馈链接。未配则用相对路径。"""
+    base = (settings.public_base_url or "").strip().rstrip("/")
+    if base:
+        return f"{base}/follow-up/{token}"
+    return f"/follow-up/{token}"
+
+
+def _customer_openid(cust: Optional[Customer], db: Session) -> str:
+    """从 Customer.wechat_openid 取；空则回退查 Application."""
+    if not cust:
+        return ""
+    if cust.wechat_openid:
+        return cust.wechat_openid.strip()
+    # fallback：按手机号查 Application
+    if cust.phone:
+        from app.models import Application
+        app = (
+            db.query(Application)
+            .filter(Application.phone == cust.phone, Application.wechat_openid != "")
+            .order_by(Application.id.desc())
+            .first()
+        )
+        if app and app.wechat_openid:
+            return app.wechat_openid.strip()
+    return ""
+
+
 def send_via_miniapp(fu: FollowUp, cust: Optional[Customer],
-                     pet: Optional[Pet], visit: Optional[Visit]) -> bool:
+                     pet: Optional[Pet], visit: Optional[Visit],
+                     db: Optional[Session] = None) -> bool:
     """通过微信小程序订阅消息发送回访。返回是否成功。"""
-    return False
+    if db is None or not cust or not visit:
+        return False
+    if not settings.wechat_tmpl_followup:
+        return False
+    openid = _customer_openid(cust, db)
+    if not openid:
+        return False
+    try:
+        from app.services.wechat_miniapp import push_followup
+        return push_followup(
+            db,
+            openid=openid,
+            pet_name=(pet.name if pet else "您的宝贝"),
+            visit_type_zh=_VISIT_TYPE_ZH.get(visit.visit_type or "", visit.visit_type or "门诊"),
+            visit_date=visit.visit_date or "",
+            feedback_url=_build_feedback_url(fu.feedback_token),
+            customer_id=cust.id,
+        )
+    except Exception as e:
+        logger.warning("[followup] miniapp send failed: %s", e)
+        return False
 
 
 def send_via_sms(fu: FollowUp, cust: Optional[Customer],
-                 pet: Optional[Pet], visit: Optional[Visit]) -> bool:
+                 pet: Optional[Pet], visit: Optional[Visit],
+                 db: Optional[Session] = None) -> bool:
     """通过短信网关发送回访。返回是否成功。"""
-    if not settings.sms_gateway_url:
+    if not settings.sms_gateway_url or not cust or not cust.phone:
         return False
-    return False
+    pet_name = (pet.name if pet else "您的宝贝")
+    vt_zh = _VISIT_TYPE_ZH.get((visit.visit_type if visit else "") or "", "诊后") if visit else "诊后"
+    text = (
+        f"【大风动物医院】您家{pet_name}{visit.visit_date if visit else ''}做了{vt_zh}，"
+        f"现在感觉怎么样？点击反馈：{_build_feedback_url(fu.feedback_token)}"
+    )
+    try:
+        from app.services.sms_gateway import send_sms
+        return send_sms(cust.phone, text, scene="followup")
+    except Exception as e:
+        logger.warning("[followup] sms send failed: %s", e)
+        return False
 
 
 # ─── 调度任务 ───
-def _try_send(fu: FollowUp, cust, pet, visit) -> str:
+def _try_send(fu: FollowUp, cust, pet, visit, db: Session) -> str:
     """按优先级（小程序 → 短信）尝试发送，返回成功的 channel 或空串。"""
-    if send_via_miniapp(fu, cust, pet, visit):
+    if send_via_miniapp(fu, cust, pet, visit, db):
         return "miniapp"
-    if send_via_sms(fu, cust, pet, visit):
+    if send_via_sms(fu, cust, pet, visit, db):
         return "sms"
     return ""
 
@@ -77,7 +145,7 @@ def run_due_dispatch(db: Optional[Session] = None) -> dict:
             cust  = db.get(Customer, fu.customer_id) if fu.customer_id else None
             pet   = db.get(Pet,      fu.pet_id)      if fu.pet_id      else None
             visit = db.get(Visit,    fu.visit_id)    if fu.visit_id    else None
-            channel = _try_send(fu, cust, pet, visit)
+            channel = _try_send(fu, cust, pet, visit, db)
             if channel:
                 fu.status = "sent"
                 fu.channel = channel

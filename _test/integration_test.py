@@ -727,6 +727,50 @@ def t_dispatch_runs():
 t_dispatch_runs()
 
 
+@step("dispatch 小程序渠道成功 → status=sent, channel=miniapp")
+def t_dispatch_miniapp_ok():
+    import os
+    os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import FollowUp, Visit
+    from app.services import followup_dispatch as fd
+    from datetime import date
+
+    db = SessionLocal()
+    # 造一条到期 pending
+    v = Visit(customer_id=cust_id, pet_id=pet_id,
+              visit_date="2026-05-08", visit_type="outpatient",
+              vet_name="测试医生", chief_complaint="miniapp test")
+    db.add(v); db.commit(); db.refresh(v)
+    from app.main import _sync_followup_for_visit
+    _sync_followup_for_visit(db, v); db.commit()
+    fu = db.query(FollowUp).filter(FollowUp.visit_id == v.id).first()
+    fu.planned_date = date.today().isoformat()
+    fu.status = "pending"
+    db.commit()
+    fu_id = fu.id
+    db.close()
+
+    # Monkey-patch 小程序渠道返回 True
+    orig_mp = fd.send_via_miniapp
+    fd.send_via_miniapp = lambda fu, c, p, v, db=None: True
+    try:
+        res = fd.run_due_dispatch()
+        assert res["sent"] >= 1, res
+    finally:
+        fd.send_via_miniapp = orig_mp
+
+    db = SessionLocal()
+    fu = db.get(FollowUp, fu_id)
+    assert fu.status == "sent", f"应 sent，得 {fu.status}"
+    assert fu.channel == "miniapp"
+    assert fu.sent_at is not None
+    db.close()
+
+t_dispatch_miniapp_ok()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

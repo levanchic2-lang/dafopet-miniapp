@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     wechat_tmpl_surgery_reminder: str = ""
     # 疫苗到期提醒模板 ID（字段：thing1=宠物名,thing2=疫苗类型,time3=到期日,thing4=温馨提示）
     wechat_tmpl_vaccine_reminder: str = ""
+    # 回访通知模板 ID（字段：thing1=宠物名,thing2=就诊类型,time3=就诊日,thing4=温馨提示）
+    wechat_tmpl_followup: str = ""
     # 点击消息打开的小程序页面（可选）
     wechat_message_page: str = "pages/index/index"
 
@@ -77,6 +79,11 @@ class Settings(BaseSettings):
     wechat_fields_surgery_reminder: str = "thing1,thing2,time3,thing4"
     # 疫苗到期提醒模板字段：thing5=温馨提示,thing8=服务对象(宠物名),thing11=服务项目(疫苗类型),time7=服务时间(到期日)
     wechat_fields_vaccine_reminder: str = "thing5,thing8,thing11,time7"
+    # 回访通知模板字段：thing1=宠物名,thing2=就诊类型,time3=就诊日,thing4=温馨提示
+    wechat_fields_followup: str = "thing1,thing2,time3,thing4"
+
+    # 公开访问 URL 前缀（用于生成回访反馈短链等）。例：https://api.dafopet.com
+    public_base_url: str = ""
 
     # 地理编码（可选）：用于把经纬度反查为中文地址展示
     amap_web_key: str = ""  # 高德 Web 服务 Key（建议放在 .env，不要写死在前端）

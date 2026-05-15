@@ -609,3 +609,70 @@ def push_pending_manual_notice(
             )
         )
         db.commit()
+
+
+def push_followup(
+    db: Session,
+    openid: str,
+    pet_name: str,
+    visit_type_zh: str,
+    visit_date: str,
+    feedback_url: str,
+    *,
+    customer_id: int | None = None,
+) -> bool:
+    """推送回访订阅消息。客户点击进入反馈短链。
+    返回 True/False（不抛异常，调度器靠返回值判断是否走 fallback 渠道）。
+    """
+    tmpl_id = (settings.wechat_tmpl_followup or "").strip()
+    if not tmpl_id or not _enabled() or not openid:
+        return False
+
+    def v(x: str, fallback: str = "—", max_len: int = 20) -> str:
+        s = (x or "").strip()
+        return (s if s else fallback)[:max_len]
+
+    keys = [k.strip() for k in (settings.wechat_fields_followup or "").split(",") if k.strip()]
+    if not keys:
+        keys = ["thing1", "thing2", "time3", "thing4"]
+
+    data: dict[str, Any] = {}
+    for k in keys:
+        if k == "thing1":
+            data[k] = {"value": v(pet_name, "您的宝贝")}
+        elif k == "thing2":
+            data[k] = {"value": v(visit_type_zh, "门诊")}
+        elif k.startswith("time"):
+            data[k] = {"value": v(visit_date, time.strftime("%Y-%m-%d"))}
+        elif k == "thing4":
+            data[k] = {"value": "点击反馈当前状况，30 秒搞定"[:20]}
+        else:
+            data[k] = {"value": v(visit_type_zh)}
+
+    payload = {
+        "touser": openid,
+        "template_id": tmpl_id,
+        "page": settings.wechat_message_page,
+        "data": data,
+        "miniprogram_state": "formal",
+        "lang": "zh_CN",
+    }
+    try:
+        resp = _post_subscribe_send(payload)
+        db.add(NotificationLog(
+            application_id=customer_id or 0,
+            channel="wechat_miniapp",
+            payload=json.dumps({"type": "followup", "feedback_url": feedback_url, "resp": resp}, ensure_ascii=False),
+            success=True,
+        ))
+        db.commit()
+        return True
+    except Exception as e:
+        db.add(NotificationLog(
+            application_id=customer_id or 0,
+            channel="wechat_miniapp",
+            payload=f"followup push failed: {e}",
+            success=False,
+        ))
+        db.commit()
+        return False
