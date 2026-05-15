@@ -810,6 +810,50 @@ class MedicalDocument(Base):
     customer = relationship("Customer", backref="medical_documents", foreign_keys=[customer_id])
 
 
+class FollowUp(Base):
+    """回访任务：每条 Visit 自动衍生一条（visit_type 在规则里有 >0 天的才出）。
+
+    status 流转：
+      pending          → 计划中，未到日期
+      due              → 到日期未发送（dispatch 扫到后会发）
+      sent             → 已发送，等待客户反馈
+      responded        → 客户已点反馈（看 response 判断是好转/需复诊）
+      phone_pending    → 自动渠道全部失败 / 客户 48h 未点 → 转人工电话
+      closed           → 已完成（好转/已联系/忽略）
+    """
+    __tablename__ = "follow_ups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="CASCADE"), nullable=False, unique=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+
+    store:        Mapped[str] = mapped_column(String(40), default="")   # 短名：东环店/横岗店
+    assigned_to:  Mapped[str] = mapped_column(String(80), default="")   # 处理人（默认 visit.vet_name）
+    planned_date: Mapped[str] = mapped_column(String(20), default="")   # 计划回访 YYYY-MM-DD
+
+    status:       Mapped[str] = mapped_column(String(20), default="pending")
+    channel:      Mapped[str] = mapped_column(String(20), default="")   # miniapp/sms/phone
+    sent_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+
+    response:     Mapped[str] = mapped_column(String(20), default="")   # recovered/needs_visit/no_reply
+    response_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    response_note: Mapped[str] = mapped_column(Text, default="")
+
+    feedback_token: Mapped[str] = mapped_column(String(32), default="", index=True)
+
+    handled_by:   Mapped[str] = mapped_column(String(80), default="")
+    handled_at:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    handle_note:  Mapped[str] = mapped_column(Text, default="")
+
+    created_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    visit    = relationship("Visit",    foreign_keys=[visit_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
 

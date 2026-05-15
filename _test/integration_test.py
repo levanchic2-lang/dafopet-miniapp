@@ -522,6 +522,58 @@ t_noshow_ban()
 
 
 # ═══════════════════════════════════════════════
+print("\n[13] 回访任务自动生成")
+
+@step("新建 outpatient 就诊后自动产生 FollowUp，planned_date = visit_date + 7 天")
+def t_followup_auto():
+    import os
+    os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Visit, FollowUp
+    db = SessionLocal()
+    # 用前面创建的 visit_id（[3] 步骤里建的 outpatient，visit_date=2026-05-12）
+    v = db.get(Visit, visit_id)
+    assert v is not None, f"visit {visit_id} 不存在"
+    fu = db.query(FollowUp).filter(FollowUp.visit_id == visit_id).first()
+    assert fu is not None, "outpatient 应自动产生 FollowUp"
+    assert fu.planned_date == "2026-05-19", f"应 +7 天，得 {fu.planned_date}"
+    assert fu.status == "pending"
+    assert fu.feedback_token, "应自动分配 token"
+    assert fu.assigned_to == "测试医生", f"应自动指派给 vet_name，得 {fu.assigned_to!r}"
+    db.close()
+
+t_followup_auto()
+
+
+@step("vaccine 类型 visit 不产生 FollowUp")
+def t_followup_vaccine_none():
+    import os
+    os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Visit, FollowUp
+    db = SessionLocal()
+    v = Visit(
+        customer_id=cust_id, pet_id=pet_id,
+        visit_date="2026-05-12", visit_type="vaccine",
+        chief_complaint="疫苗", vet_name="测试医生",
+    )
+    db.add(v); db.commit(); db.refresh(v)
+    # 跑同步函数
+    import sys
+    sys.path.insert(0, ".")
+    from app.main import _sync_followup_for_visit
+    _sync_followup_for_visit(db, v)
+    db.commit()
+    fu = db.query(FollowUp).filter(FollowUp.visit_id == v.id).first()
+    assert fu is None, f"vaccine 不应产生 FollowUp，但得到 {fu}"
+    db.close()
+
+t_followup_vaccine_none()
+
+
+# ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
 print("\n" + "="*60)

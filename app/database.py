@@ -35,6 +35,72 @@ def init_db():
     _try_sqlite_migrations()
     _seed_data()
     _heal_rabies_pet_links()
+    _backfill_followups()
+
+
+def _backfill_followups() -> None:
+    """为历史 Visit 补建 FollowUp 行（幂等）。
+    新装机/旧库升级后，过去 30 天内的就诊会自动生成回访任务；
+    避免给太久远的 visit 也建（无意义、可能淹没真正待办）。
+    """
+    try:
+        from app.models import Visit, FollowUp, Pet
+    except Exception:
+        return
+    sess = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
+    try:
+        from datetime import date, timedelta
+        # 只回填最近 30 天的就诊
+        cutoff = (date.today() - timedelta(days=30)).isoformat()
+        visits = (
+            sess.query(Visit)
+            .filter(Visit.visit_date >= cutoff)
+            .order_by(Visit.id.asc())
+            .all()
+        )
+        rules = {
+            "surgery": 3, "postop": 2, "outpatient": 7, "beauty": 14,
+            "followup": 0, "vaccine": 0, "surgery_consult": 0, "other": 7,
+        }
+        created = 0
+        import secrets as _secrets
+        for v in visits:
+            exists = sess.query(FollowUp).filter(FollowUp.visit_id == v.id).first()
+            if exists:
+                continue
+            # 计算 planned_date
+            planned = (v.follow_up_at or "").strip()
+            if not planned:
+                days = rules.get((v.visit_type or "outpatient").strip(), 0)
+                if not days or not v.visit_date:
+                    continue
+                try:
+                    y, m, d = v.visit_date[:10].split("-")
+                    planned = (date(int(y), int(m), int(d)) + timedelta(days=days)).isoformat()
+                except Exception:
+                    continue
+            if not planned:
+                continue
+            pet = sess.get(Pet, v.pet_id) if v.pet_id else None
+            sess.add(FollowUp(
+                visit_id=v.id,
+                customer_id=v.customer_id,
+                pet_id=v.pet_id,
+                store=(pet.store or "") if pet else "",
+                assigned_to=(v.vet_name or "").strip()[:80],
+                planned_date=planned,
+                status="pending",
+                feedback_token=_secrets.token_urlsafe(12)[:16],
+            ))
+            created += 1
+        if created:
+            sess.commit()
+            print(f"[backfill_followups] 补建 {created} 条回访任务")
+    except Exception as e:
+        sess.rollback()
+        print(f"[backfill_followups] skip: {e}")
+    finally:
+        sess.close()
 
 
 def _heal_rabies_pet_links() -> None:
@@ -857,6 +923,34 @@ def _try_sqlite_migrations() -> None:
                 "updated_by VARCHAR(80) DEFAULT ''"
                 ")"
             ))
+
+            # follow_ups 回访任务
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS follow_ups ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "visit_id INTEGER NOT NULL UNIQUE REFERENCES visits(id) ON DELETE CASCADE, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "store VARCHAR(40) DEFAULT '', "
+                "assigned_to VARCHAR(80) DEFAULT '', "
+                "planned_date VARCHAR(20) DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'pending', "
+                "channel VARCHAR(20) DEFAULT '', "
+                "sent_at DATETIME DEFAULT NULL, "
+                "response VARCHAR(20) DEFAULT '', "
+                "response_at DATETIME DEFAULT NULL, "
+                "response_note TEXT DEFAULT '', "
+                "feedback_token VARCHAR(32) DEFAULT '', "
+                "handled_by VARCHAR(80) DEFAULT '', "
+                "handled_at DATETIME DEFAULT NULL, "
+                "handle_note TEXT DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_status_date ON follow_ups(status, planned_date)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_assignee ON follow_ups(assigned_to)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_token ON follow_ups(feedback_token)"))
 
             conn.commit()
     except Exception:

@@ -76,6 +76,7 @@ from app.models import (
     WeightRecord,
     MedicalDocument,
     PrescriptionTemplate,
+    FollowUp,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
@@ -5128,6 +5129,95 @@ async def page_admin_visits(
     })
 
 
+# ---------------------------------------------------------------------------
+# 回访 (FollowUp) — 触发规则 + 同步辅助
+# ---------------------------------------------------------------------------
+
+# visit_type → 默认回访间隔天数；0/缺省 = 不主动回访
+_FOLLOWUP_RULES: dict[str, int] = {
+    "surgery":         3,
+    "postop":          2,
+    "outpatient":      7,
+    "beauty":          14,
+    "followup":        0,   # 本身就是复诊，不再产生新回访
+    "vaccine":         0,
+    "surgery_consult": 0,
+    "other":           7,
+}
+
+
+def _gen_followup_token() -> str:
+    import secrets
+    return secrets.token_urlsafe(12)[:16]
+
+
+def _visit_store_short(db: Session, v: Visit) -> str:
+    """从 Visit → Pet.store 推出门店短名（用于回访的门店隔离）。"""
+    if not v.pet_id:
+        return ""
+    pet = db.get(Pet, v.pet_id)
+    return (pet.store or "") if pet else ""
+
+
+def _compute_followup_planned_date(v: Visit) -> str:
+    """如果医生填了 follow_up_at，优先用医生填的；否则按 visit_type 默认规则算。"""
+    if v.follow_up_at and v.follow_up_at.strip():
+        return v.follow_up_at.strip()
+    days = _FOLLOWUP_RULES.get((v.visit_type or "outpatient").strip(), 0)
+    if not days or days <= 0:
+        return ""
+    base = (v.visit_date or "").strip()[:10]
+    if not base:
+        return ""
+    try:
+        from datetime import date, timedelta
+        y, m, d = base.split("-")
+        dt = date(int(y), int(m), int(d)) + timedelta(days=days)
+        return dt.isoformat()
+    except Exception:
+        return ""
+
+
+def _sync_followup_for_visit(db: Session, v: Visit) -> None:
+    """新建或更新 visit 后调用：根据规则维护其 FollowUp 行。
+
+    - 若计算出 planned_date 为空 → 删掉已有的 FollowUp（如果状态还在 pending/due）
+    - 否则 upsert：未发送状态下 planned_date / assigned_to / store 可被覆盖
+      已发送/已反馈/已完成的不再修改 planned_date，避免误覆盖运营数据
+    """
+    if not v or not v.id:
+        return
+    fu = db.query(FollowUp).filter(FollowUp.visit_id == v.id).first()
+    planned = _compute_followup_planned_date(v)
+    if not planned:
+        if fu and fu.status in ("pending", "due"):
+            db.delete(fu)
+        return
+    if not fu:
+        fu = FollowUp(
+            visit_id=v.id,
+            customer_id=v.customer_id,
+            pet_id=v.pet_id,
+            store=_visit_store_short(db, v),
+            assigned_to=(v.vet_name or "").strip()[:80],
+            planned_date=planned,
+            status="pending",
+            feedback_token=_gen_followup_token(),
+        )
+        db.add(fu)
+    else:
+        # 同步基本字段
+        fu.customer_id = v.customer_id
+        fu.pet_id      = v.pet_id
+        fu.store       = _visit_store_short(db, v)
+        # 未发送的才可改 planned_date / assigned_to
+        if fu.status in ("pending", "due"):
+            fu.planned_date = planned
+            fu.assigned_to  = (v.vet_name or "").strip()[:80] or fu.assigned_to
+        if not fu.feedback_token:
+            fu.feedback_token = _gen_followup_token()
+
+
 @app.get("/admin/visits/create", response_class=HTMLResponse)
 async def page_admin_visit_create(
     request: Request,
@@ -5210,6 +5300,9 @@ async def admin_visit_create(
     db.add(v)
     db.commit()
     db.refresh(v)
+    # 创建回访任务（按 visit_type 规则）
+    _sync_followup_for_visit(db, v)
+    db.commit()
     # 如果是从预约完成时创建，更新预约状态
     if appointment_id:
         appt = db.get(Appointment, appointment_id)
@@ -5303,6 +5396,9 @@ async def admin_visit_edit(
     v.follow_up_note = follow_up_note.strip()
     v.follow_up_at = follow_up_at.strip()[:20]
     db.commit()
+    # 同步回访任务（visit_type / follow_up_at / vet_name 可能都变了）
+    _sync_followup_for_visit(db, v)
+    db.commit()
     # 若来自客户档案，保存后回去
     if return_to == "customer" and v.customer_id:
         return RedirectResponse(f"/admin/customers/{v.customer_id}?pet_id={v.pet_id or 0}&tab=visits&msg=就诊已保存", status_code=303)
@@ -5336,6 +5432,10 @@ async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depe
     if changed:
         v.updated_at = datetime.utcnow()
         db.commit()
+        # 如果 follow_up_at 变了，同步回访任务
+        if "follow_up_at" in changed:
+            _sync_followup_for_visit(db, v)
+            db.commit()
     # 本地时间显示
     from datetime import timezone, timedelta
     cn_tz = timezone(timedelta(hours=8))
