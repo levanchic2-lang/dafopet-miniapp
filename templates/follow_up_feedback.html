@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>大风动物医院 · 回访反馈</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+         background:#f5f7f9; color:#111827; }
+  .wrap { max-width:520px; margin:0 auto; padding:1.5rem 1.25rem; }
+  .card { background:#fff; border-radius:14px; padding:1.5rem 1.25rem; box-shadow:0 2px 14px rgba(0,0,0,.05); }
+  .brand { text-align:center; color:#6b7280; font-size:.9rem; margin-bottom:1rem; }
+  h1 { font-size:1.25rem; margin:0 0 .8rem; line-height:1.5; }
+  .pet-row { background:#f9fafb; border-radius:10px; padding:.85rem 1rem; margin:1rem 0; font-size:.95rem; }
+  .pet-row b { color:#111827; }
+  .ask { font-size:1.05rem; margin:1.25rem 0 1rem; line-height:1.6; }
+  .btns { display:flex; flex-direction:column; gap:.7rem; margin-bottom:1rem; }
+  button.choice { width:100%; padding:1rem 1.2rem; font-size:1.05rem; font-weight:600;
+                  border:none; border-radius:12px; cursor:pointer; }
+  button.recovered { background:#10b981; color:#fff; }
+  button.needs    { background:#f59e0b; color:#fff; }
+  textarea { width:100%; min-height:80px; padding:.7rem; border:1px solid #e5e7eb;
+             border-radius:10px; font-family:inherit; font-size:.95rem; resize:vertical; }
+  label { display:block; color:#6b7280; font-size:.85rem; margin-bottom:.4rem; }
+  .ok-card { text-align:center; padding:2rem 1rem; }
+  .ok-card .icon { font-size:3rem; }
+  .ok-card h2 { margin:.6rem 0; }
+  .ok-card p { color:#6b7280; }
+  .footer { text-align:center; color:#9ca3af; font-size:.78rem; margin-top:1.5rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+ <div class="brand">🐾 大风动物医院</div>
+
+ <div class="card">
+  {% if submitted %}
+   <div class="ok-card">
+    <div class="icon">{% if fu.response == 'recovered' %}✅{% else %}📞{% endif %}</div>
+    <h2>感谢您的反馈</h2>
+    <p>
+     {% if fu.response == 'recovered' %}
+      很高兴 {{ pet.name if pet else '您的宝贝' }} 状态良好，祝身体健康！
+     {% else %}
+      我们已记录您的反馈，工作人员会尽快与您联系安排复诊。
+     {% endif %}
+    </p>
+   </div>
+  {% else %}
+   <h1>关于 <b>{{ pet.name if pet else '宠物' }}</b> 的术后/诊后回访</h1>
+   <div class="pet-row">
+    <div>就诊日期：<b>{{ visit.visit_date if visit else '—' }}</b></div>
+    {% if visit %}<div>就诊类型：<b>{{ visit_type_zh.get(visit.visit_type, visit.visit_type) }}</b></div>{% endif %}
+    {% if visit and visit.diagnosis %}<div>诊断：{{ visit.diagnosis[:60] }}</div>{% endif %}
+   </div>
+
+   <div class="ask">{{ pet.name if pet else '您的宝贝' }} 现在感觉怎么样？</div>
+
+   <form method="post" id="feedback-form">
+    <div class="btns">
+     <button type="submit" name="response" value="recovered" class="choice recovered">
+      ✓ 已好转，状态良好
+     </button>
+     <button type="submit" name="response" value="needs_visit" class="choice needs">
+      ✗ 仍有不适，需要复诊
+     </button>
+    </div>
+    <label for="note">补充说明（选填）</label>
+    <textarea name="note" id="note" placeholder="例如：精神好，食欲恢复 / 还是有些拉肚子"></textarea>
+   </form>
+  {% endif %}
+ </div>
+
+ <div class="footer">
+  反馈仅用于跟进病情 · 大风动物医院
+ </div>
+</div>
+</body>
+</html>

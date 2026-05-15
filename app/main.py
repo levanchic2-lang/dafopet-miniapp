@@ -214,6 +214,21 @@ def _startup():
     init_db()
     asyncio.get_event_loop().create_task(_surgery_reminder_loop())
     asyncio.get_event_loop().create_task(_vaccine_reminder_loop())
+    # 回访任务调度器（每小时跑一次）
+    try:
+        from app.services.followup_dispatch import start_scheduler as _start_fu
+        _start_fu()
+    except Exception as _e:
+        logger.warning("回访调度器启动失败：%s", _e)
+
+
+@app.on_event("shutdown")
+def _shutdown():
+    try:
+        from app.services.followup_dispatch import stop_scheduler as _stop_fu
+        _stop_fu()
+    except Exception:
+        pass
 
 
 async def _surgery_reminder_loop():
@@ -5637,6 +5652,56 @@ async def admin_followup_handle(
     fu.updated_at = now
     db.commit()
     return RedirectResponse(f"/admin/follow-ups?tab={tab_redirect}&msg=已更新", status_code=303)
+
+
+# ─── 客户反馈短链（无登录，token 校验） ───────────────────────
+@app.get("/follow-up/{token}", response_class=HTMLResponse)
+async def page_followup_feedback(token: str, request: Request, db: Session = Depends(get_db)):
+    fu = db.query(FollowUp).filter(FollowUp.feedback_token == token).first()
+    if not fu:
+        raise HTTPException(404, "反馈链接已失效")
+    pet = db.get(Pet, fu.pet_id) if fu.pet_id else None
+    cust = db.get(Customer, fu.customer_id) if fu.customer_id else None
+    visit = db.get(Visit, fu.visit_id) if fu.visit_id else None
+    return templates.TemplateResponse(request, "follow_up_feedback.html", {
+        "fu": fu, "pet": pet, "cust": cust, "visit": visit,
+        "visit_type_zh": _VISIT_TYPE_ZH,
+        "submitted": False,
+        "csrf_token": "",  # 此短链对外不需要 CSRF（token 本身已是凭证）
+    })
+
+
+@app.post("/follow-up/{token}", response_class=HTMLResponse)
+async def submit_followup_feedback(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    response: str = Form(...),  # recovered / needs_visit
+    note: str = Form(""),
+):
+    fu = db.query(FollowUp).filter(FollowUp.feedback_token == token).first()
+    if not fu:
+        raise HTTPException(404, "反馈链接已失效")
+    if response not in ("recovered", "needs_visit"):
+        raise HTTPException(400, "无效的反馈选项")
+    fu.response = response
+    fu.response_at = datetime.utcnow()
+    fu.response_note = note.strip()[:500]
+    if response == "recovered":
+        fu.status = "closed"
+    else:
+        fu.status = "responded"   # 需复诊 → 留给医生跟进
+    fu.updated_at = datetime.utcnow()
+    db.commit()
+    pet = db.get(Pet, fu.pet_id) if fu.pet_id else None
+    cust = db.get(Customer, fu.customer_id) if fu.customer_id else None
+    visit = db.get(Visit, fu.visit_id) if fu.visit_id else None
+    return templates.TemplateResponse(request, "follow_up_feedback.html", {
+        "fu": fu, "pet": pet, "cust": cust, "visit": visit,
+        "visit_type_zh": _VISIT_TYPE_ZH,
+        "submitted": True,
+        "csrf_token": "",
+    })
 
 
 @app.get("/api/follow-ups/badge")

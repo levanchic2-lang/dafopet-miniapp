@@ -12,6 +12,7 @@ itsdangerous>=2.2.0
 Pillow>=10.0.0
 openpyxl>=3.1.0
 qrcode[pil]>=7.4.2
+apscheduler>=3.10.0
 
 # 可选：启用 OPENAI_API_KEY 后用于图片/视频帧的流浪猫辅助识别
 openai>=1.55.0

@@ -623,6 +623,110 @@ def t_followup_badge():
 t_followup_badge()
 
 
+@step("GET /follow-up/{token} 客户反馈页正常加载")
+def t_feedback_page():
+    import os
+    os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import FollowUp, Visit
+    db = SessionLocal()
+    # 拿一条还有 feedback_token 的 FollowUp（前面的已经 closed 了，找下一只）
+    fu = db.query(FollowUp).filter(FollowUp.status != "closed").first()
+    if not fu:
+        # 新建一条 visit + 自动产生 followup
+        v = Visit(customer_id=cust_id, pet_id=pet_id,
+                  visit_date="2026-05-12", visit_type="outpatient",
+                  vet_name="测试医生", chief_complaint="测试")
+        db.add(v); db.commit(); db.refresh(v)
+        from app.main import _sync_followup_for_visit
+        _sync_followup_for_visit(db, v); db.commit()
+        fu = db.query(FollowUp).filter(FollowUp.visit_id == v.id).first()
+    token = fu.feedback_token
+    db.close()
+    # 客户端无登录访问反馈页
+    import httpx as _hx
+    r = _hx.get(f"{BASE}/follow-up/{token}", follow_redirects=False, timeout=10)
+    assert r.status_code == 200, f"got {r.status_code}"
+    assert "回访" in r.text and "感觉怎么样" in r.text
+
+t_feedback_page()
+
+
+@step("无效 token → 404")
+def t_feedback_bad_token():
+    import httpx as _hx
+    r = _hx.get(f"{BASE}/follow-up/THIS_IS_NOT_VALID", timeout=10)
+    assert r.status_code == 404
+
+t_feedback_bad_token()
+
+
+@step("POST /follow-up/{token} response=recovered → 任务 closed")
+def t_feedback_submit():
+    import os
+    os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import FollowUp
+    db = SessionLocal()
+    fu = db.query(FollowUp).filter(FollowUp.status != "closed").first()
+    assert fu, "前置：应有未关闭的回访"
+    fu_id = fu.id
+    token = fu.feedback_token
+    db.close()
+    import httpx as _hx
+    r = _hx.post(f"{BASE}/follow-up/{token}",
+                 data={"response": "recovered", "note": "状态良好"},
+                 follow_redirects=False, timeout=10)
+    assert r.status_code == 200, f"got {r.status_code}"
+    assert "感谢您的反馈" in r.text
+    db = SessionLocal()
+    fu = db.get(FollowUp, fu_id)
+    assert fu.status == "closed", f"应 closed，得 {fu.status}"
+    assert fu.response == "recovered"
+    assert fu.response_note == "状态良好"
+    db.close()
+
+t_feedback_submit()
+
+
+@step("dispatch 函数：到期 pending 的回访状态被处理为 phone_pending（占位）")
+def t_dispatch_runs():
+    import os
+    os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import FollowUp, Visit
+    from datetime import date
+    db = SessionLocal()
+    # 造一条今天到期的 pending
+    v = Visit(customer_id=cust_id, pet_id=pet_id,
+              visit_date="2026-05-08", visit_type="outpatient",
+              vet_name="测试医生", chief_complaint="dispatch test")
+    db.add(v); db.commit(); db.refresh(v)
+    from app.main import _sync_followup_for_visit
+    _sync_followup_for_visit(db, v)
+    db.commit()
+    fu = db.query(FollowUp).filter(FollowUp.visit_id == v.id).first()
+    assert fu is not None, f"sync 未产生 FollowUp，visit_date={v.visit_date}, type={v.visit_type}"
+    fu.planned_date = date.today().isoformat()
+    fu.status = "pending"
+    db.commit()
+    fu_id = fu.id
+    db.close()
+    from app.services.followup_dispatch import run_due_dispatch
+    res = run_due_dispatch()
+    assert res["scanned"] >= 1, res
+    db = SessionLocal()
+    fu = db.get(FollowUp, fu_id)
+    # 没配置渠道 → 全部 fallback 到 phone_pending
+    assert fu.status == "phone_pending", f"占位渠道下应 phone_pending，得 {fu.status}"
+    db.close()
+
+t_dispatch_runs()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
