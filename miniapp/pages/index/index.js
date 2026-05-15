@@ -695,6 +695,39 @@ Page({
         });
       });
 
+    // ── 提交前先校验所有本地临时文件还在 ──
+    // 微信 tempFilePath 有生命周期，用户选完图后停留太久 / 切后台返回时
+    // 临时文件可能已被清理，此时 wx.uploadFile 会报 "file doesn't exist"。
+    try {
+      const fsm = wx.getFileSystemManager();
+      const checkOne = (p) => new Promise((ok) => {
+        fsm.access({ path: p, success: () => ok(true), fail: () => ok(false) });
+      });
+      const validImages = [];
+      const validVideos = [];
+      for (const p of images)        if (await checkOne(p)) validImages.push(p);
+      for (const p of (videos || [])) if (await checkOne(p)) validVideos.push(p);
+      const lostImg = images.length - validImages.length;
+      const lostVid = (videos || []).length - validVideos.length;
+      if (lostImg || lostVid) {
+        const parts = [];
+        if (lostImg) parts.push(`${lostImg} 张照片`);
+        if (lostVid) parts.push(`${lostVid} 个视频`);
+        // 把仍有效的文件回填到 state，让用户接着补选
+        this.setData({
+          images: validImages,
+          videos: validVideos,
+          mediaReady: validImages.length >= 2 || validVideos.length >= 1,
+          submitting: false,
+          error: `${parts.join("、")}因停留过久已失效，请重新选择后再次提交。`,
+        });
+        return;
+      }
+    } catch (e) {
+      // 校验本身出错不阻断提交，让原流程兜底
+      console.warn("[media validate]", e);
+    }
+
     try {
       const idNorm = String(form.id_number || "").trim().toUpperCase();
       const created = await this._withTimeout(
@@ -752,6 +785,15 @@ Page({
         msg = e.errMsg;
       } else if (e && e.message) {
         msg = e.message;
+      }
+      // 微信端常见英文错误中文化
+      const lower = String(msg).toLowerCase();
+      if (lower.includes("file doesn't exist") || lower.includes("file not exist")) {
+        msg = "照片/视频已失效，请重新选择后再次提交。";
+      } else if (lower.includes("timeout")) {
+        msg = "网络超时，请检查网络后重试。";
+      } else if (lower.includes("fail") && lower.includes("uploadfile")) {
+        msg = "上传失败，请检查网络后重试。";
       }
       // 附加状态码，方便排查
       if (e && e.statusCode && e.statusCode !== 200) {
