@@ -33,6 +33,12 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
 - `AdminUser`：后台账号，`store` 存短名，`role` = superadmin/staff
 - `TnrStoreConfig`：每家门店的 TNR 月度配额（`tnr_monthly_quota` 默认 30）和开关（`tnr_accepting`）
 - `MediaFile`：申请的照片/视频，`kind` = application_image/application_video/surgery_before_image 等
+- `FollowUp`：诊后回访任务，按 `Visit.visit_type` 自动衍生
+  - 规则：surgery+3天 / postop+2天 / outpatient+7天 / beauty+14天 / vaccine 等不出
+  - status：pending → due → sent → responded/closed/phone_pending
+  - 调度：`app/services/followup_dispatch.py` 每小时通过 APScheduler 跑
+  - 渠道：先小程序订阅消息（`wechat_tmpl_followup`）→ 短信网关 → 电话兜底
+  - 客户反馈短链：`/follow-up/{token}`（无登录，token 即凭证）
 
 ## TNR 业务规则
 - 每店每月最多 30 个已确认 TNR 预约（`TnrStoreConfig.tnr_monthly_quota`）
