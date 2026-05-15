@@ -341,7 +341,7 @@
   {% set _path = request.url.path %}
   {% if request.session.get('admin') %}
   {# 按 path 推断当前 ribbon tab 默认激活哪一组 #}
-  {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing') or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam') %}
+  {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing') or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam') or _path.startswith('/admin/follow-ups') %}
     {% set _active_tab = 'medical' %}
   {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory') or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales') or _path.startswith('/admin/feedback') %}
     {% set _active_tab = 'business' %}
@@ -397,6 +397,9 @@
       <a class="ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><span class="ri-emoji">💉</span>疫苗管理</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/rabies') %}current{% endif %}" href="/admin/rabies"><span class="ri-emoji">🐶</span>狂犬疫苗</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><span class="ri-emoji">🔍</span>病历查询</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/follow-ups') %}current{% endif %}" href="/admin/follow-ups" id="nav-followup-link">
+        <span class="ri-emoji">📞</span>回访管理<span id="nav-followup-badge" class="ri-badge" style="display:none;background:#10b981;"></span>
+      </a>
     </div>
 
     {# 经营组 #}
@@ -483,6 +486,20 @@
     }
     updateFeedback();
     setInterval(updateFeedback, 60000);
+
+    function updateFollowUp() {
+      fetch('/api/follow-ups/badge')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var n = data.count || 0;
+          var fu = document.getElementById('nav-followup-badge');
+          if (!fu) return;
+          if (n > 0) { fu.textContent = n > 99 ? '99+' : n; fu.style.display = 'inline-flex'; }
+          else { fu.style.display = 'none'; }
+        }).catch(function() {});
+    }
+    updateFollowUp();
+    setInterval(updateFollowUp, 60000);
   })();
   </script>
   {% endif %}

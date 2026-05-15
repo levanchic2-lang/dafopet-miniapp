@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+.fu-tabs { display:flex; gap:.4rem; margin:1rem 0 .5rem; flex-wrap:wrap; }
+.fu-tab { padding:.45rem .9rem; border-radius:8px; background:var(--card-2,#f3f4f6);
+          color:#374151; font-size:.88rem; text-decoration:none; display:inline-flex;
+          align-items:center; gap:.4rem; }
+.fu-tab.active { background:#111827; color:#fff; }
+.fu-tab .badge { background:rgba(255,255,255,.25); border-radius:10px; padding:0 .45rem;
+                  font-size:.75rem; min-width:1.2rem; text-align:center; }
+.fu-tab:not(.active) .badge { background:#e5e7eb; color:#374151; }
+.fu-mine-toggle { margin-left:auto; display:inline-flex; align-items:center; gap:.3rem;
+                  font-size:.85rem; color:var(--muted); }
+.fu-row-actions form { display:inline-block; margin:0; }
+.fu-action-btn { font-size:.78rem; padding:.25rem .6rem; border-radius:6px;
+                  background:#f3f4f6; border:1px solid #e5e7eb; color:#374151;
+                  cursor:pointer; margin-right:.2rem; }
+.fu-action-btn.primary { background:#10b981; border-color:#10b981; color:#fff; }
+.fu-action-btn.warn    { background:#fb923c; border-color:#fb923c; color:#fff; }
+.fu-action-btn.danger  { background:#ef4444; border-color:#ef4444; color:#fff; }
+.fu-status-pill { font-size:.75rem; padding:.15rem .55rem; border-radius:10px;
+                   background:#e5e7eb; color:#374151; white-space:nowrap; }
+.fu-status-pill.pending { background:#fef3c7; color:#92400e; }
+.fu-status-pill.due     { background:#fee2e2; color:#991b1b; }
+.fu-status-pill.sent    { background:#dbeafe; color:#1e40af; }
+.fu-status-pill.responded { background:#dcfce7; color:#166534; }
+.fu-status-pill.phone_pending { background:#fed7aa; color:#9a3412; }
+.fu-status-pill.closed  { background:#e5e7eb; color:#374151; }
+.fu-status-pill.skipped { background:#e5e7eb; color:#6b7280; }
+.fu-overdue { color:#dc2626; font-weight:600; }
+</style>
+{% endblock %}
+
+{% block body %}
+
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+
+{# 即使没有行也输出 token，方便测试 / 客户端拦截 #}
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon">📞</span>回访管理</h1>
+ <p class="ph-sub">就诊后自动产生回访任务 · 谁看诊谁回访 · 客户反馈自动闭环</p>
+ </div>
+</div>
+
+<div class="fu-tabs">
+ {% for key, label in [('today','今日待回访'), ('overdue','逾期未处理'), ('sent','已发送等反馈'), ('done','已完成')] %}
+ <a class="fu-tab {% if tab == key %}active{% endif %}" href="?tab={{ key }}{% if mine %}&mine=1{% endif %}">
+  {{ label }}
+  {% if counts[key] %}<span class="badge">{{ counts[key] }}</span>{% endif %}
+ </a>
+ {% endfor %}
+ <label class="fu-mine-toggle">
+  <input type="checkbox" {% if mine %}checked{% endif %}
+         onchange="location.href='?tab={{ tab }}'+(this.checked?'&mine=1':'')"/>
+  只看我的
+ </label>
+</div>
+
+{% if rows %}
+<div class="data-table-wrap">
+ <table class="data-table">
+ <thead>
+ <tr>
+ <th>计划回访日</th>
+ <th>客户</th>
+ <th>宠物</th>
+ <th>就诊类型</th>
+ <th>诊断 / 主诉</th>
+ <th>处理人</th>
+ <th>渠道</th>
+ <th>状态</th>
+ <th style="text-align:right;">操作</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for fu in rows %}
+ {% set v = visits.get(fu.visit_id) %}
+ {% set p = pets.get(fu.pet_id) %}
+ {% set c = customers.get(fu.customer_id) %}
+ <tr>
+  <td>
+   {% if fu.planned_date < today_str and fu.status in ('pending','due','phone_pending') %}
+    <span class="fu-overdue">{{ fu.planned_date }}</span>
+   {% else %}
+    {{ fu.planned_date }}
+   {% endif %}
+  </td>
+  <td>
+   {% if c %}<a href="/admin/customers/{{ c.id }}">{{ c.name or '—' }}</a>
+   <div style="color:var(--muted);font-size:.78rem;">{{ c.phone or '' }}</div>
+   {% else %}—{% endif %}
+  </td>
+  <td>
+   {% if p %}<strong>{{ p.name }}</strong>
+   <div style="color:var(--muted);font-size:.78rem;">{{ p.species or '' }} {{ p.breed or '' }}</div>
+   {% else %}—{% endif %}
+  </td>
+  <td>{% if v %}<span class="pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>{% else %}—{% endif %}</td>
+  <td style="max-width:280px;">
+   {% if v %}
+    <div style="font-size:.85rem;">{{ (v.diagnosis or v.chief_complaint or '—')[:80] }}</div>
+    <div style="color:var(--muted);font-size:.75rem;">就诊日：{{ v.visit_date }}</div>
+   {% else %}—{% endif %}
+  </td>
+  <td>{{ fu.assigned_to or '—' }}</td>
+  <td>
+   {% if fu.channel %}<span class="pill">{{ channel_zh.get(fu.channel, fu.channel) }}</span>
+   {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+   {% if fu.response %}
+    <div style="font-size:.75rem;color:#10b981;margin-top:.2rem;">
+     {{ response_zh.get(fu.response, fu.response) }}
+    </div>
+   {% endif %}
+  </td>
+  <td><span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span></td>
+  <td style="text-align:right;" class="fu-row-actions">
+   {% if v %}<a href="/admin/visits/{{ v.id }}" class="fu-action-btn">病例</a>{% endif %}
+   {% if fu.status in ('pending','due','phone_pending','sent') %}
+   <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
+    <input type="hidden" name="action" value="contacted"/>
+    <button class="fu-action-btn primary" onclick="return confirm('已联系并好转？')">✓ 已联系</button>
+   </form>
+   <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
+    <input type="hidden" name="action" value="refer_visit"/>
+    <button class="fu-action-btn warn">↻ 转复诊</button>
+   </form>
+   <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
+    <input type="hidden" name="action" value="skip"/>
+    <button class="fu-action-btn" onclick="return confirm('忽略此回访？')">✕ 忽略</button>
+   </form>
+   {% else %}
+   <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
+    <input type="hidden" name="action" value="reopen"/>
+    <button class="fu-action-btn">↺ 重新打开</button>
+   </form>
+   {% endif %}
+  </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+</div>
+
+{% if total_pages > 1 %}
+<div style="display:flex;gap:.5rem;margin-top:1rem;align-items:center;justify-content:center;font-size:.88rem;">
+ {% if page > 1 %}<a href="?tab={{ tab }}&page={{ page-1 }}{% if mine %}&mine=1{% endif %}" class="btn secondary">‹ 上一页</a>{% endif %}
+ <span style="color:var(--muted);">第 {{ page }} / {{ total_pages }} 页 · 共 {{ total }} 条</span>
+ {% if page < total_pages %}<a href="?tab={{ tab }}&page={{ page+1 }}{% if mine %}&mine=1{% endif %}" class="btn secondary">下一页 ›</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-card">
+ <div class="empty-icon">📞</div>
+ {% if tab == 'today' %}今天没有回访任务，去喝杯茶 🍵
+ {% elif tab == 'overdue' %}没有逾期任务，干得漂亮 ✨
+ {% elif tab == 'sent' %}还没有发出过任何回访
+ {% else %}近 30 天没有已完成的回访{% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

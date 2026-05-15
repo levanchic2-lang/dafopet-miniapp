@@ -573,6 +573,56 @@ def t_followup_vaccine_none():
 t_followup_vaccine_none()
 
 
+@step("GET /admin/follow-ups 列表页正常加载")
+def t_followup_page():
+    r = client.get("/admin/follow-ups?tab=today")
+    assert r.status_code == 200, f"got {r.status_code}"
+    assert "回访管理" in r.text
+
+t_followup_page()
+
+
+@step("POST /admin/follow-ups/{id}/handle 标记为已联系")
+def t_followup_handle():
+    import os
+    os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import FollowUp
+    db = SessionLocal()
+    fu = db.query(FollowUp).filter(FollowUp.visit_id == visit_id).first()
+    assert fu and fu.status == "pending", f"前置：FollowUp 应在 pending 状态, got {fu and fu.status}"
+    fu_id = fu.id
+    db.close()
+    r = client.get("/admin/follow-ups?tab=today")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/follow-ups/{fu_id}/handle", data={
+        "csrf_token": token, "action": "contacted",
+        "note": "电话已联系，已好转",
+        "tab_redirect": "today",
+    })
+    assert r.status_code == 303, f"got {r.status_code}"
+    # 验证状态变了
+    db = SessionLocal()
+    fu = db.get(FollowUp, fu_id)
+    assert fu.status == "closed", f"应 closed, got {fu.status}"
+    assert fu.response == "recovered"
+    db.close()
+
+t_followup_handle()
+
+
+@step("GET /api/follow-ups/badge 返回计数")
+def t_followup_badge():
+    r = client.get("/api/follow-ups/badge")
+    assert r.status_code == 200
+    data = r.json()
+    for k in ("count", "today", "overdue"):
+        assert k in data
+
+t_followup_badge()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

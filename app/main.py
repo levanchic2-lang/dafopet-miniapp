@@ -5464,6 +5464,203 @@ async def admin_visit_delete(
 
 
 # ---------------------------------------------------------------------------
+# 回访管理 — 列表 / 操作
+# ---------------------------------------------------------------------------
+
+_FOLLOWUP_STATUS_ZH = {
+    "pending":       "待回访",
+    "due":           "今日到期",
+    "sent":          "已发送",
+    "responded":     "客户已反馈",
+    "phone_pending": "需电话兜底",
+    "closed":        "已完成",
+    "skipped":       "已忽略",
+}
+
+_FOLLOWUP_RESPONSE_ZH = {
+    "recovered":    "已好转",
+    "needs_visit":  "需复诊",
+    "no_reply":     "无回应",
+}
+
+_FOLLOWUP_CHANNEL_ZH = {
+    "miniapp": "小程序",
+    "sms":     "短信",
+    "phone":   "电话",
+}
+
+
+def _followup_filtered_query(db: Session, request: Request):
+    """门店隔离 + 我的过滤的基础查询。"""
+    q = db.query(FollowUp)
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        q = q.filter((FollowUp.store == admin_store) | (FollowUp.store == ""))
+    return q
+
+
+@app.get("/admin/follow-ups", response_class=HTMLResponse)
+async def page_admin_follow_ups(
+    request: Request,
+    db: Session = Depends(get_db),
+    tab: str = Query("today"),     # today / overdue / sent / done
+    mine: int = Query(0),          # 1=只看我的
+    page: int = Query(1),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    from datetime import date
+    today = date.today().isoformat()
+
+    base = _followup_filtered_query(db, request)
+    username = request.session.get("admin_username") or ""
+    if mine and username:
+        base = base.filter(FollowUp.assigned_to == username)
+
+    # 4 个 tab 的过滤条件
+    if tab == "today":
+        q = base.filter(FollowUp.planned_date == today,
+                        FollowUp.status.in_(["pending", "due"]))
+        order = (FollowUp.planned_date.asc(), FollowUp.id.desc())
+    elif tab == "overdue":
+        q = base.filter(FollowUp.planned_date < today,
+                        FollowUp.status.in_(["pending", "due", "phone_pending"]))
+        order = (FollowUp.planned_date.asc(), FollowUp.id.desc())
+    elif tab == "sent":
+        q = base.filter(FollowUp.status == "sent")
+        order = (FollowUp.sent_at.desc(), FollowUp.id.desc())
+    else:  # done
+        tab = "done"
+        from datetime import timedelta
+        cutoff = (date.today() - timedelta(days=30)).isoformat()
+        q = base.filter(
+            FollowUp.status.in_(["responded", "closed", "skipped"]),
+            FollowUp.planned_date >= cutoff,
+        )
+        order = (FollowUp.updated_at.desc(), FollowUp.id.desc())
+
+    page_size = 30
+    total = q.count()
+    rows = q.order_by(*order).offset((page - 1) * page_size).limit(page_size).all()
+    total_pages = max(1, (total + page_size - 1) // page_size)
+
+    # 4 个 tab 各自总数（用于 tab 上的数字徽章）
+    def _count(filter_):
+        qq = _followup_filtered_query(db, request)
+        if mine and username:
+            qq = qq.filter(FollowUp.assigned_to == username)
+        return filter_(qq).count()
+    counts = {
+        "today":   _count(lambda x: x.filter(FollowUp.planned_date == today, FollowUp.status.in_(["pending", "due"]))),
+        "overdue": _count(lambda x: x.filter(FollowUp.planned_date < today, FollowUp.status.in_(["pending", "due", "phone_pending"]))),
+        "sent":    _count(lambda x: x.filter(FollowUp.status == "sent")),
+        "done":    _count(lambda x: x.filter(FollowUp.status.in_(["responded", "closed", "skipped"]))),
+    }
+
+    # 预取 visit / pet / customer 信息（避免模板里 N+1）
+    visit_ids = [r.visit_id for r in rows]
+    visits = {v.id: v for v in db.query(Visit).filter(Visit.id.in_(visit_ids)).all()} if visit_ids else {}
+    pet_ids = list({r.pet_id for r in rows if r.pet_id})
+    pets = {p.id: p for p in db.query(Pet).filter(Pet.id.in_(pet_ids)).all()} if pet_ids else {}
+    cust_ids = list({r.customer_id for r in rows if r.customer_id})
+    custs = {c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
+
+    return templates.TemplateResponse(request, "admin_follow_ups.html", {
+        "title": "回访管理",
+        "rows": rows,
+        "visits": visits,
+        "pets": pets,
+        "customers": custs,
+        "counts": counts,
+        "tab": tab,
+        "mine": mine,
+        "page": page,
+        "total_pages": total_pages,
+        "total": total,
+        "status_zh":   _FOLLOWUP_STATUS_ZH,
+        "response_zh": _FOLLOWUP_RESPONSE_ZH,
+        "channel_zh":  _FOLLOWUP_CHANNEL_ZH,
+        "visit_type_zh": _VISIT_TYPE_ZH,
+        "today_str": today,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/follow-ups/{fu_id}/handle")
+async def admin_followup_handle(
+    fu_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    action: str = Form(...),       # contacted / refer_visit / skip / reopen
+    note: str = Form(""),
+    tab_redirect: str = Form("today"),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    fu = db.get(FollowUp, fu_id)
+    if not fu:
+        raise HTTPException(404, "回访任务不存在")
+    # 门店隔离
+    admin_store = _get_admin_store(request)
+    if admin_store and fu.store and fu.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    username = request.session.get("admin_username") or "admin"
+    now = datetime.utcnow()
+    if action == "contacted":
+        fu.status = "closed"
+        fu.response = fu.response or "recovered"
+        fu.handled_by = username
+        fu.handled_at = now
+        fu.handle_note = note.strip()[:500]
+    elif action == "refer_visit":
+        fu.status = "responded"
+        fu.response = "needs_visit"
+        fu.response_at = now
+        fu.handled_by = username
+        fu.handled_at = now
+        fu.handle_note = note.strip()[:500]
+    elif action == "skip":
+        fu.status = "skipped"
+        fu.handled_by = username
+        fu.handled_at = now
+        fu.handle_note = note.strip()[:500]
+    elif action == "reopen":
+        fu.status = "pending"
+        fu.response = ""
+        fu.response_at = None
+        fu.handle_note = ""
+        fu.handled_at = None
+    else:
+        raise HTTPException(400, f"未知操作 {action}")
+    fu.updated_at = now
+    db.commit()
+    return RedirectResponse(f"/admin/follow-ups?tab={tab_redirect}&msg=已更新", status_code=303)
+
+
+@app.get("/api/follow-ups/badge")
+async def api_followup_badge(request: Request, db: Session = Depends(get_db)):
+    """工作台/导航栏轮询用：返回今日待回访 + 逾期 + 需电话兜底 的总数。"""
+    if not request.session.get("admin"):
+        return {"count": 0}
+    from datetime import date
+    today = date.today().isoformat()
+    base = _followup_filtered_query(db, request)
+    username = request.session.get("admin_username") or ""
+    mine = base.filter(FollowUp.assigned_to == username) if username else base
+    n_today = mine.filter(
+        FollowUp.planned_date == today,
+        FollowUp.status.in_(["pending", "due"]),
+    ).count()
+    n_overdue = mine.filter(
+        FollowUp.planned_date < today,
+        FollowUp.status.in_(["pending", "due", "phone_pending"]),
+    ).count()
+    return {"count": n_today + n_overdue, "today": n_today, "overdue": n_overdue}
+
+
+# ---------------------------------------------------------------------------
 # Phase 3 — 处方单 (Prescriptions)
 # ---------------------------------------------------------------------------
 
