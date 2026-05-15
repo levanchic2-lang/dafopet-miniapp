@@ -667,7 +667,8 @@ Page({
         });
       });
 
-    const uploadOne = (appId, kind, filePath) =>
+    // 单次 uploadFile
+    const uploadOnce = (appId, kind, filePath) =>
       new Promise((resolve, reject) => {
         wx.uploadFile({
           url: app.globalData.apiBase + `/api/apply/${encodeURIComponent(appId)}/upload-media`,
@@ -681,6 +682,35 @@ Page({
           fail: reject
         });
       });
+
+    // 带重试的 uploadFile：网络层错误（unreachable / timeout / aborted）自动重试 3 次
+    const uploadOne = async (appId, kind, filePath) => {
+      const maxAttempts = 3;
+      let lastErr = null;
+      for (let i = 1; i <= maxAttempts; i++) {
+        try {
+          return await uploadOnce(appId, kind, filePath);
+        } catch (e) {
+          lastErr = e;
+          const msg = (e && e.errMsg) || "";
+          // 只有网络层错误才重试；4xx/5xx 不重试（业务错误）
+          const isNetErr =
+            msg.includes("ADDRESS_UNREACHABLE") ||
+            msg.includes("CONNECTION_RESET") ||
+            msg.includes("NETWORK_CHANGED") ||
+            msg.includes("CONNECTION_ABORTED") ||
+            msg.includes("CONNECTION_REFUSED") ||
+            msg.includes("CONNECTION_FAILED") ||
+            msg.includes("TIMED_OUT") ||
+            msg.includes("timeout") ||
+            msg.includes("interrupted");
+          if (!isNetErr || i === maxAttempts) throw e;
+          // 1s, 2s 退避后重试
+          await new Promise((r) => setTimeout(r, i * 1000));
+        }
+      }
+      throw lastErr;
+    };
 
     const postEmpty = (url) =>
       new Promise((resolve, reject) => {
@@ -790,7 +820,11 @@ Page({
       const lower = String(msg).toLowerCase();
       if (lower.includes("file doesn't exist") || lower.includes("file not exist")) {
         msg = "照片/视频已失效，请重新选择后再次提交。";
-      } else if (lower.includes("timeout")) {
+      } else if (lower.includes("address_unreachable") || lower.includes("connection_refused") || lower.includes("connection_failed")) {
+        msg = "网络无法连接到服务器，请切换 4G/Wi-Fi 后重试。";
+      } else if (lower.includes("connection_reset") || lower.includes("connection_aborted") || lower.includes("network_changed") || lower.includes("interrupted")) {
+        msg = "上传中断，请检查网络后重试。";
+      } else if (lower.includes("timeout") || lower.includes("timed_out")) {
         msg = "网络超时，请检查网络后重试。";
       } else if (lower.includes("fail") && lower.includes("uploadfile")) {
         msg = "上传失败，请检查网络后重试。";
