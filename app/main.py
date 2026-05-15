@@ -2769,6 +2769,31 @@ async def admin_users_set_role(
     return RedirectResponse(f"/admin/hr?msg=已将「{user.username}」的角色改为{role_zh}", status_code=303)
 
 
+@app.post("/admin/users/{user_id}/set-display-name", name="admin_users_set_display_name")
+async def admin_users_set_display_name(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    display_name: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    """设置/修改账号的显示名（医生真名）。回访任务按此匹配 Visit.vet_name。"""
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    user.display_name = (display_name or "").strip()[:80]
+    _audit(db, request, "admin_user_set_display_name", application_id=None,
+           detail={"username": user.username, "display_name": user.display_name})
+    db.commit()
+    return RedirectResponse(
+        f"/admin/hr?msg=已将「{user.username}」的显示名改为{user.display_name or '（已清空）'}",
+        status_code=303,
+    )
+
+
 @app.post("/admin/users/{user_id}/set-store", name="admin_users_set_store")
 async def admin_users_set_store(
     user_id: int,
@@ -5174,6 +5199,23 @@ def _visit_store_short(db: Session, v: Visit) -> str:
     return (pet.store or "") if pet else ""
 
 
+def _resolve_vet_username(db: Session, vet_name: str) -> str:
+    """把 Visit.vet_name（医生真名）映射到 AdminUser.username。
+    顺序：display_name 完全匹配 → username 完全匹配 → 返回 vet_name 原样。
+    用于 FollowUp.assigned_to，让"只看我的"能正确过滤。
+    """
+    name = (vet_name or "").strip()
+    if not name:
+        return ""
+    u = db.query(AdminUser).filter(AdminUser.display_name == name, AdminUser.is_active == True).first()
+    if u:
+        return u.username
+    u = db.query(AdminUser).filter(AdminUser.username == name, AdminUser.is_active == True).first()
+    if u:
+        return u.username
+    return name  # 找不到也存原文，至少能显示出来
+
+
 def _compute_followup_planned_date(v: Visit) -> str:
     """如果医生填了 follow_up_at，优先用医生填的；否则按 visit_type 默认规则算。"""
     if v.follow_up_at and v.follow_up_at.strip():
@@ -5208,13 +5250,14 @@ def _sync_followup_for_visit(db: Session, v: Visit) -> None:
         if fu and fu.status in ("pending", "due"):
             db.delete(fu)
         return
+    assignee = _resolve_vet_username(db, v.vet_name or "")[:80]
     if not fu:
         fu = FollowUp(
             visit_id=v.id,
             customer_id=v.customer_id,
             pet_id=v.pet_id,
             store=_visit_store_short(db, v),
-            assigned_to=(v.vet_name or "").strip()[:80],
+            assigned_to=assignee,
             planned_date=planned,
             status="pending",
             feedback_token=_gen_followup_token(),
@@ -5228,7 +5271,7 @@ def _sync_followup_for_visit(db: Session, v: Visit) -> None:
         # 未发送的才可改 planned_date / assigned_to
         if fu.status in ("pending", "due"):
             fu.planned_date = planned
-            fu.assigned_to  = (v.vet_name or "").strip()[:80] or fu.assigned_to
+            fu.assigned_to  = assignee or fu.assigned_to
         if not fu.feedback_token:
             fu.feedback_token = _gen_followup_token()
 
@@ -5542,14 +5585,16 @@ async def page_admin_follow_ups(
                         FollowUp.status.in_(["pending", "due", "phone_pending"]))
         order = (FollowUp.planned_date.asc(), FollowUp.id.desc())
     elif tab == "sent":
-        q = base.filter(FollowUp.status == "sent")
-        order = (FollowUp.sent_at.desc(), FollowUp.id.desc())
+        # 已发送 + 已反馈待处理（needs_visit 的客户反馈需要医生跟进）
+        q = base.filter(FollowUp.status.in_(["sent", "responded"]))
+        # 把 responded 排前面，让医生先看到需复诊的
+        order = (FollowUp.response.desc(), FollowUp.sent_at.desc(), FollowUp.id.desc())
     else:  # done
         tab = "done"
         from datetime import timedelta
         cutoff = (date.today() - timedelta(days=30)).isoformat()
         q = base.filter(
-            FollowUp.status.in_(["responded", "closed", "skipped"]),
+            FollowUp.status.in_(["closed", "skipped"]),
             FollowUp.planned_date >= cutoff,
         )
         order = (FollowUp.updated_at.desc(), FollowUp.id.desc())
@@ -5568,8 +5613,9 @@ async def page_admin_follow_ups(
     counts = {
         "today":   _count(lambda x: x.filter(FollowUp.planned_date == today, FollowUp.status.in_(["pending", "due"]))),
         "overdue": _count(lambda x: x.filter(FollowUp.planned_date < today, FollowUp.status.in_(["pending", "due", "phone_pending"]))),
-        "sent":    _count(lambda x: x.filter(FollowUp.status == "sent")),
-        "done":    _count(lambda x: x.filter(FollowUp.status.in_(["responded", "closed", "skipped"]))),
+        "sent":    _count(lambda x: x.filter(FollowUp.status.in_(["sent", "responded"]))),
+        "done":    _count(lambda x: x.filter(FollowUp.status.in_(["closed", "skipped"]))),
+        "needs_visit": _count(lambda x: x.filter(FollowUp.status == "responded", FollowUp.response == "needs_visit")),
     }
 
     # 预取 visit / pet / customer 信息（避免模板里 N+1）
@@ -5722,7 +5768,17 @@ async def api_followup_badge(request: Request, db: Session = Depends(get_db)):
         FollowUp.planned_date < today,
         FollowUp.status.in_(["pending", "due", "phone_pending"]),
     ).count()
-    return {"count": n_today + n_overdue, "today": n_today, "overdue": n_overdue}
+    # 客户反馈"需复诊"的也算紧急（医生需要主动联系排期）
+    n_needs = mine.filter(
+        FollowUp.status == "responded",
+        FollowUp.response == "needs_visit",
+    ).count()
+    return {
+        "count":   n_today + n_overdue + n_needs,
+        "today":   n_today,
+        "overdue": n_overdue,
+        "needs_visit": n_needs,
+    }
 
 
 # ---------------------------------------------------------------------------

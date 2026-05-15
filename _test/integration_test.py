@@ -540,6 +540,7 @@ def t_followup_auto():
     assert fu.planned_date == "2026-05-19", f"应 +7 天，得 {fu.planned_date}"
     assert fu.status == "pending"
     assert fu.feedback_token, "应自动分配 token"
+    # 没有匹配的 AdminUser.display_name → 直接存原文
     assert fu.assigned_to == "测试医生", f"应自动指派给 vet_name，得 {fu.assigned_to!r}"
     db.close()
 
@@ -769,6 +770,32 @@ def t_dispatch_miniapp_ok():
     db.close()
 
 t_dispatch_miniapp_ok()
+
+
+@step("AdminUser.display_name 匹配 → FollowUp.assigned_to = username")
+def t_display_name_match():
+    import os
+    os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import AdminUser, Visit, FollowUp
+    from app.main import _sync_followup_for_visit
+    from passlib.hash import bcrypt as _bc
+    db = SessionLocal()
+    u = AdminUser(username="li.yi", password_hash=_bc.hash("test123456"),
+                  role="staff", store="东环店", display_name="李医生", is_active=True)
+    db.add(u); db.commit()
+    v = Visit(customer_id=cust_id, pet_id=pet_id,
+              visit_date="2026-05-08", visit_type="outpatient",
+              vet_name="李医生", chief_complaint="display_name 测试")
+    db.add(v); db.commit(); db.refresh(v)
+    _sync_followup_for_visit(db, v); db.commit()
+    fu = db.query(FollowUp).filter(FollowUp.visit_id == v.id).first()
+    assert fu is not None
+    assert fu.assigned_to == "li.yi", f"应解析为 username li.yi，得 {fu.assigned_to!r}"
+    db.close()
+
+t_display_name_match()
 
 
 # ═══════════════════════════════════════════════

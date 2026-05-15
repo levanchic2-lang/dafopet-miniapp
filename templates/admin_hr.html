@@ -105,9 +105,10 @@
  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
  <thead>
  <tr style="border-bottom:2px solid var(--border);">
- <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:170px;">用户名</th>
- <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:140px;">角色</th>
- <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:130px;">所属门店</th>
+ <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:140px;">用户名</th>
+ <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:150px;">显示名（医生）</th>
+ <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:130px;">角色</th>
+ <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:120px;">所属门店</th>
  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:100px;">创建时间</th>
  <th style="padding:0.5rem 0.75rem;"></th>
  </tr>
@@ -120,6 +121,16 @@
  {{ u.username }}
  {% if linked %}<span style="font-size:0.78rem;color:var(--muted);margin-left:6px;">· {{ linked.name }}</span>{% endif %}
  {% if u.username == current_username %}<span style="font-size:0.75rem;color:var(--muted);margin-left:6px;">（当前）</span>{% endif %}
+ </td>
+ <td style="padding:0.55rem 0.75rem;">
+ <form method="post" action="/admin/users/{{ u.id }}/set-display-name" style="margin:0;display:flex;gap:.3rem;align-items:center;"
+       onsubmit="this.querySelector('button').textContent='保存中…'">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="text" name="display_name" value="{{ u.display_name or '' }}"
+         placeholder="医生真名" maxlength="80"
+         style="width:110px;font-size:.85rem;padding:.2rem .4rem;border:1px solid var(--border-strong);border-radius:6px;background:var(--card);"/>
+  <button type="submit" class="secondary" style="font-size:.78rem;padding:.2rem .5rem;">保存</button>
+ </form>
  </td>
  <td style="padding:0.55rem 0.75rem;">
  {% if u.username != current_username %}
@@ -166,7 +177,7 @@
  </td>
  </tr>
  {% else %}
- <tr><td colspan="5" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">暂无启用账号</td></tr>
+ <tr><td colspan="6" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">暂无启用账号</td></tr>
  {% endfor %}
  </tbody>
  </table>

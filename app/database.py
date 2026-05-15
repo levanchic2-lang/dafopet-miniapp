@@ -789,6 +789,8 @@ def _try_sqlite_migrations() -> None:
                 au_names = {c[1] for c in au_cols}
                 if "store" not in au_names:
                     conn.execute(text("ALTER TABLE admin_users ADD COLUMN store VARCHAR(40) DEFAULT ''"))
+                if "display_name" not in au_names:
+                    conn.execute(text("ALTER TABLE admin_users ADD COLUMN display_name VARCHAR(80) DEFAULT ''"))
 
             # tnr_store_configs TNR 门店配额配置表
             # pets 新增字段：store / medical_record_no / life_status

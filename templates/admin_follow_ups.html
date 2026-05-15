@@ -38,6 +38,18 @@
 {# 即使没有行也输出 token，方便测试 / 客户端拦截 #}
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
 
+{% if counts.needs_visit and tab != 'sent' %}
+<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:.75rem 1rem;
+            margin:.75rem 0;display:flex;align-items:center;gap:.75rem;">
+ <span style="font-size:1.4rem;">⚠️</span>
+ <div style="flex:1;font-size:.92rem;color:#7f1d1d;">
+  有 <b>{{ counts.needs_visit }}</b> 位客户反馈"需复诊"，请尽快联系排期。
+ </div>
+ <a href="?tab=sent{% if mine %}&mine=1{% endif %}" class="btn"
+    style="background:#dc2626;color:#fff;font-size:.85rem;padding:.4rem .9rem;">立即查看 →</a>
+</div>
+{% endif %}
+
 <div class="page-head">
  <div>
  <h1><span class="ph-icon">📞</span>回访管理</h1>
@@ -118,6 +130,10 @@
   <td><span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span></td>
   <td style="text-align:right;" class="fu-row-actions">
    {% if v %}<a href="/admin/visits/{{ v.id }}" class="fu-action-btn">病例</a>{% endif %}
+   {% if fu.feedback_token and fu.status in ('pending','due','phone_pending','sent') %}
+   <button type="button" class="fu-action-btn"
+           onclick="copyFeedbackLink(this, '{{ fu.feedback_token }}')">📋 复制反馈链接</button>
+   {% endif %}
    {% if fu.status in ('pending','due','phone_pending','sent') %}
    <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -169,5 +185,24 @@
  {% else %}近 30 天没有已完成的回访{% endif %}
 </div>
 {% endif %}
+
+<script>
+function copyFeedbackLink(btn, token) {
+  var url = window.location.origin + '/follow-up/' + token;
+  var done = function() {
+    var orig = btn.textContent;
+    btn.textContent = '✓ 已复制';
+    setTimeout(function(){ btn.textContent = orig; }, 1500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done, function() {
+      // fallback
+      prompt('复制下方链接发给客户：', url);
+    });
+  } else {
+    prompt('复制下方链接发给客户：', url);
+  }
+}
+</script>
 
 {% endblock %}

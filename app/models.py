@@ -865,4 +865,7 @@ class AdminUser(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # store: '东环店' | '横岗店' | '' (空=不限，超级管理员)
     store: Mapped[str] = mapped_column(String(40), default="")
+    # 显示名（医生真名）：回访任务按 display_name 匹配 Visit.vet_name，
+    # 让"只看我的"功能正确生效。留空则回退到 username。
+    display_name: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
