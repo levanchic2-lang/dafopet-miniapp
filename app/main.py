@@ -6324,6 +6324,59 @@ async def admin_visit_create(
     return RedirectResponse(f"/admin/visits/{v.id}?msg=就诊记录已创建", status_code=303)
 
 
+@app.get("/admin/visits/{visit_id}/print", response_class=HTMLResponse)
+async def admin_visit_print(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    """病历单打印（一次就诊完整记录：SOAP + 处方 + 检查）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    pet  = db.get(Pet,      visit.pet_id)      if visit.pet_id      else None
+    prescriptions = db.query(Prescription).filter(Prescription.visit_id == visit_id).order_by(Prescription.id.asc()).all()
+    exam_orders   = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.asc()).all()
+    # 解析 exam_orders.items_json 一次，避免模板里调用 json
+    for eo in exam_orders:
+        try:
+            eo._items_parsed = json.loads(eo.items_json or "[]")
+        except Exception:
+            eo._items_parsed = []
+
+    # 体重 + 年龄（同 prescription print）
+    pet_weight = 0.0
+    if pet:
+        last_w = db.query(WeightRecord).filter(WeightRecord.pet_id == pet.id).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
+        if last_w:
+            pet_weight = float(last_w.weight_kg or 0)
+    pet_age = ""
+    if pet and pet.birthday_estimate:
+        try:
+            from datetime import date as _date
+            parts = pet.birthday_estimate.split("-")
+            by = int(parts[0]); bm = int(parts[1]) if len(parts) > 1 else 1
+            today = _date.today()
+            years = today.year - by - (1 if (today.month, 1) < (bm, 1) else 0)
+            pet_age = (f"{years} 岁" if years > 0 else f"{max(0, (today.year - by) * 12 + (today.month - bm))} 个月")
+        except Exception:
+            pet_age = pet.birthday_estimate or ""
+
+    clinic_name_zh = "大风动物医院"
+    clinic_name_en = "Da Feng Animal Hospital"
+    if pet and pet.store:
+        clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
+        clinic_name_en = f"Da Feng Animal Hospital · {pet.store.replace('店', '')}"
+
+    return templates.TemplateResponse(request, "admin_visit_print.html", {
+        "visit": visit, "cust": cust, "pet": pet,
+        "prescriptions": prescriptions,
+        "exam_orders": exam_orders,
+        "pet_weight": pet_weight, "pet_age": pet_age,
+        "clinic_name_zh": clinic_name_zh, "clinic_name_en": clinic_name_en,
+        "visit_type_zh": _VISIT_TYPE_ZH,
+    })
+
+
 @app.get("/admin/visits/{visit_id}", response_class=HTMLResponse)
 async def page_admin_visit_detail(
     visit_id: int,

@@ -1307,6 +1307,17 @@ def t_print_exam():
 t_print_exam()
 
 
+@step("打印：病历单页可加载（含 SOAP / 处方 / 检查）")
+def t_print_visit():
+    r = client.get(f"/admin/visits/{visit_id}/print")
+    assert r.status_code == 200
+    assert "病 历 单" in r.text or "Medical Record" in r.text
+    assert "Chief Complaint" in r.text
+    assert "Diagnosis" in r.text
+
+t_print_visit()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
