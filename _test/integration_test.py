@@ -878,6 +878,58 @@ def t_wallet_refund_overflow():
 t_wallet_refund_overflow()
 
 
+@step("套餐：创建套餐 + 售卖给客户（钱包支付）→ 余额扣减")
+def t_package_sell():
+    # 1) 超管创建套餐
+    r = client.get("/admin/packages")
+    token = extract_csrf(r.text)
+    r = client.post("/admin/packages/create", data={
+        "csrf_token": token, "name": "美容套餐10次", "category": "beauty",
+        "total_uses": "10", "sell_price": "300", "unit_price": "35",
+        "validity_days": "365",
+    })
+    assert r.status_code == 303, f"create got {r.status_code}"
+
+    # 2) 拿到产品 id
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import PackageProduct, CustomerPackage, Wallet
+    db = SessionLocal()
+    prod = db.query(PackageProduct).order_by(PackageProduct.id.desc()).first()
+    assert prod and prod.name == "美容套餐10次"
+    pid = prod.id
+
+    # 钱包当前余额（用前面 t_wallet_adjust 后的 600）
+    w_before = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    bal_before = w_before.balance
+    db.close()
+
+    # 3) 售卖（用钱包支付）
+    r = client.get(f"/admin/customers/{cust_id}?tab=packages")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/customers/{cust_id}/packages/sell", data={
+        "csrf_token": token, "product_id": str(pid),
+        "pay_method": "wallet", "pet_id": "0", "custom_price": "",
+    })
+    assert r.status_code == 303, f"sell got {r.status_code}, loc={r.headers.get('location')}"
+
+    db = SessionLocal()
+    cp = db.query(CustomerPackage).filter(
+        CustomerPackage.customer_id == cust_id, CustomerPackage.product_id == pid
+    ).order_by(CustomerPackage.id.desc()).first()
+    assert cp is not None, "未售出套餐"
+    assert cp.total_uses == 10 and cp.used_count == 0 and cp.status == "active"
+    assert cp.sell_price == 300.0
+
+    w_after = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    assert abs(w_after.balance - (bal_before - 300)) < 1e-6, \
+        f"钱包应扣 300，前 {bal_before} 后 {w_after.balance}"
+    db.close()
+
+t_package_sell()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

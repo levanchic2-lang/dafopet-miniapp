@@ -376,7 +376,7 @@
   {# 按 path 推断当前 ribbon tab 默认激活哪一组 #}
   {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing') or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam') or _path.startswith('/admin/follow-ups') %}
     {% set _active_tab = 'medical' %}
-  {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory') or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales') or _path.startswith('/admin/feedback') %}
+  {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory') or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales') or _path.startswith('/admin/feedback') or _path.startswith('/admin/packages') %}
     {% set _active_tab = 'business' %}
   {% elif _path.startswith('/admin/hr') or _path.startswith('/admin/adoption') or _path.startswith('/admin/changelog') or _path.startswith('/showcase') %}
     {% set _active_tab = 'system' %}
@@ -440,6 +440,7 @@
       <a class="ribbon-icon {% if _path.startswith('/admin/invoices') %}current{% endif %}" href="/admin/invoices"><span class="ri-emoji">🧾</span>收银台</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/inventory') %}current{% endif %}" href="/admin/inventory"><span class="ri-emoji">📦</span>库存管理</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/stocktake') %}current{% endif %}" href="/admin/stocktake"><span class="ri-emoji">📊</span>循环盘点</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/packages') %}current{% endif %}" href="/admin/packages"><span class="ri-emoji">🎫</span>套餐目录</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/feedback') %}current{% endif %}" href="/admin/feedback" id="nav-feedback-link">
         <span class="ri-emoji">💬</span>反馈<span id="nav-feedback-badge" class="ri-badge" style="display:none;background:#f97316;"></span>
       </a>
@@ -500,6 +501,7 @@
       '/admin/inventory':    { label: '库存管理',   kind: 'page', icon: '📦' },
       '/admin/stocktake':    { label: '循环盘点',   kind: 'page', icon: '📊' },
       '/admin/sales':        { label: '销售单',     kind: 'page', icon: '🛒' },
+      '/admin/packages':     { label: '套餐目录',   kind: 'page', icon: '🎫' },
       '/admin/feedback':     { label: '客户反馈',   kind: 'page', icon: '💬' },
       // 系统
       '/admin/hr':           { label: '人事管理',   kind: 'page', icon: '👨‍💼' },

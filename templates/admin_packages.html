@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+
+{% set is_superadmin = (request.session.get('admin_role') == 'superadmin') %}
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon">🎫</span>套餐目录</h1>
+ <p class="ph-sub">配置可售套餐（包次卡）—— 美容 10 次卡、洗护 5 次卡等</p>
+ </div>
+ {% if is_superadmin %}
+ <div class="ph-actions">
+ <button type="button" class="btn" onclick="document.getElementById('new-pkg-modal').classList.add('visible')">＋ 新建套餐</button>
+ </div>
+ {% endif %}
+</div>
+
+{% if items %}
+<div class="data-table-wrap">
+ <table class="data-table">
+ <thead>
+   <tr>
+     <th>套餐名</th>
+     <th>类别</th>
+     <th>次数</th>
+     <th>售价</th>
+     <th>单次参考价</th>
+     <th>有效期</th>
+     <th>已售</th>
+     <th>状态</th>
+     {% if is_superadmin %}<th>操作</th>{% endif %}
+   </tr>
+ </thead>
+ <tbody>
+ {% for p in items %}
+ <tr>
+   <td><strong>{{ p.name }}</strong>{% if p.notes %}<div style="font-size:.75rem;color:var(--muted);">{{ p.notes[:60] }}</div>{% endif %}</td>
+   <td>{{ category_zh.get(p.category, p.category) }}</td>
+   <td>{{ p.total_uses }}</td>
+   <td>¥{{ '%.2f'|format(p.sell_price) }}</td>
+   <td>¥{{ '%.2f'|format(p.unit_price) }}</td>
+   <td>{{ p.validity_days }} 天{% if p.validity_days == 0 %}（不限期）{% endif %}</td>
+   <td>{{ sold_map.get(p.id, 0) }} 份</td>
+   <td>{% if p.is_active %}<span class="pill pill-info">上架</span>{% else %}<span class="pill pill-gray">下架</span>{% endif %}</td>
+   {% if is_superadmin %}
+   <td>
+     <button type="button" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;"
+             onclick='openEdit({{ p.id }}, {{ {"name":p.name,"category":p.category,"total_uses":p.total_uses,"sell_price":p.sell_price,"unit_price":p.unit_price,"validity_days":p.validity_days,"notes":p.notes}|tojson }})'>编辑</button>
+     <form method="post" action="/admin/packages/{{ p.id }}/toggle" style="display:inline;">
+       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+       <button type="submit" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">
+         {% if p.is_active %}下架{% else %}上架{% endif %}
+       </button>
+     </form>
+   </td>
+   {% endif %}
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+</div>
+{% else %}
+<div class="empty-card">
+ <div class="empty-icon">🎫</div>
+ 还没创建任何套餐{% if is_superadmin %}，点右上 ＋ 开始{% endif %}。
+</div>
+{% endif %}
+
+{# 新建/编辑共用 modal #}
+{% if is_superadmin %}
+<div class="cust-modal-overlay" id="new-pkg-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1100;align-items:center;justify-content:center;">
+ <div style="background:var(--card);border-radius:12px;padding:1.25rem;width:460px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.22);">
+   <h3 id="pkg-modal-title" style="margin:0 0 .85rem;font-size:1rem;">新建套餐</h3>
+   <form id="pkg-form" method="post" action="/admin/packages/create">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <label>套餐名</label>
+     <input name="name" required maxlength="120">
+     <label>类别</label>
+     <select name="category">
+       {% for k, zh in category_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}
+     </select>
+     <label>次数</label>
+     <input name="total_uses" type="number" min="1" value="10" required>
+     <label>售价（¥）</label>
+     <input name="sell_price" type="number" step="0.01" min="0" required>
+     <label>单次参考价（¥，用于报表）</label>
+     <input name="unit_price" type="number" step="0.01" min="0" value="0">
+     <label>有效期（天，0 = 不限期）</label>
+     <input name="validity_days" type="number" min="0" value="365">
+     <label>备注</label>
+     <input name="notes">
+     <div style="display:flex;gap:.6rem;margin-top:1rem;">
+       <button type="submit" class="btn" style="flex:1;">保存</button>
+       <button type="button" class="btn secondary" style="flex:1;" onclick="document.getElementById('new-pkg-modal').style.display='none'">取消</button>
+     </div>
+   </form>
+ </div>
+</div>
+<script>
+function openEdit(id, data) {
+  var modal = document.getElementById('new-pkg-modal');
+  modal.querySelector('#pkg-modal-title').textContent = '编辑套餐';
+  var f = modal.querySelector('#pkg-form');
+  f.action = '/admin/packages/' + id + '/edit';
+  Object.keys(data).forEach(function(k){
+    var el = f.querySelector('[name="'+k+'"]');
+    if (el) el.value = data[k] == null ? '' : data[k];
+  });
+  modal.style.display = 'flex';
+}
+document.querySelector('.page-head .btn') && document.querySelector('.page-head .btn').addEventListener('click', function(){
+  var f = document.getElementById('pkg-form');
+  f.action = '/admin/packages/create';
+  f.reset();
+  document.getElementById('pkg-modal-title').textContent = '新建套餐';
+  document.getElementById('new-pkg-modal').style.display = 'flex';
+});
+document.getElementById('new-pkg-modal').addEventListener('click', function(e){
+  if (e.target.id === 'new-pkg-modal') e.target.style.display = 'none';
+});
+</script>
+{% endif %}
+
+{% endblock %}

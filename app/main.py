@@ -4929,6 +4929,16 @@ async def page_admin_customer_detail(
             .all()
         )
 
+    # ── 套餐 ──
+    customer_packages = (
+        db.query(CustomerPackage)
+        .filter(CustomerPackage.customer_id == customer_id)
+        .order_by(CustomerPackage.status.asc(), CustomerPackage.id.desc())
+        .all()
+    )
+    active_packages_count = sum(1 for p in customer_packages if p.status == "active")
+    package_products = db.query(PackageProduct).filter(PackageProduct.is_active == True).order_by(PackageProduct.id.desc()).all()
+
     return templates.TemplateResponse(
         request,
         "admin_customer_detail.html",
@@ -4959,6 +4969,11 @@ async def page_admin_customer_detail(
             "wallet_lifetime_recharge": wallet_lifetime_recharge,
             "wallet_lifetime_consume": wallet_lifetime_consume,
             "wallet_txs": wallet_txs,
+            # 套餐
+            "customer_packages": customer_packages,
+            "active_packages_count": active_packages_count,
+            "package_products": package_products,
+            "package_category_zh": _PACKAGE_CATEGORY_ZH,
             # 翻译字典
             "visit_type_zh": _VISIT_TYPE_ZH,
             "so_status_zh": _SO_STATUS_ZH_LOCAL,
@@ -5329,6 +5344,262 @@ async def admin_wallet_adjust(
     db.commit()
     sign = "+" if amt > 0 else ""
     return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=调账 {sign}¥{amt:.2f}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# 套餐 (Package) — 目录 + 售卖 + 核销
+# ---------------------------------------------------------------------------
+
+_PACKAGE_CATEGORY_ZH = {
+    "beauty":  "美容",
+    "bath":    "洗护",
+    "medical": "医疗",
+    "boarding":"寄养",
+    "other":   "其他",
+}
+
+
+@app.get("/admin/packages", response_class=HTMLResponse)
+async def admin_packages_list(request: Request, db: Session = Depends(get_db)):
+    """套餐目录管理（创建/编辑/启停）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    items = db.query(PackageProduct).order_by(
+        PackageProduct.is_active.desc(), PackageProduct.id.desc()
+    ).all()
+    # 统计：每个产品已售套餐数
+    from sqlalchemy import func as _f
+    sold_rows = (
+        db.query(CustomerPackage.product_id, _f.count(CustomerPackage.id))
+        .group_by(CustomerPackage.product_id)
+        .all()
+    )
+    sold_map = {pid: cnt for pid, cnt in sold_rows if pid}
+    return templates.TemplateResponse(request, "admin_packages.html", {
+        "items": items,
+        "sold_map": sold_map,
+        "category_zh": _PACKAGE_CATEGORY_ZH,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/packages/create", name="admin_packages_create")
+async def admin_packages_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    name: str = Form(...),
+    category: str = Form("beauty"),
+    total_uses: str = Form("10"),
+    sell_price: str = Form("0"),
+    unit_price: str = Form("0"),
+    validity_days: str = Form("365"),
+    notes: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    try:
+        n_total = max(1, int(total_uses))
+        v_days  = max(0, int(validity_days))
+        sp = max(0.0, float(sell_price))
+        up = max(0.0, float(unit_price))
+    except (TypeError, ValueError):
+        return RedirectResponse("/admin/packages?msg=数值字段无效", status_code=303)
+    if category not in _PACKAGE_CATEGORY_ZH:
+        category = "other"
+    p = PackageProduct(
+        name=(name or "").strip()[:120],
+        category=category,
+        total_uses=n_total,
+        sell_price=sp,
+        unit_price=up,
+        validity_days=v_days,
+        notes=(notes or "").strip(),
+        is_active=True,
+    )
+    db.add(p); db.commit()
+    return RedirectResponse(f"/admin/packages?msg=已创建套餐：{p.name}", status_code=303)
+
+
+@app.post("/admin/packages/{pid}/edit")
+async def admin_packages_edit(
+    pid: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    name: str = Form(...),
+    category: str = Form("beauty"),
+    total_uses: str = Form("10"),
+    sell_price: str = Form("0"),
+    unit_price: str = Form("0"),
+    validity_days: str = Form("365"),
+    notes: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    p = db.get(PackageProduct, pid)
+    if not p:
+        raise HTTPException(404)
+    try:
+        p.total_uses    = max(1, int(total_uses))
+        p.validity_days = max(0, int(validity_days))
+        p.sell_price    = max(0.0, float(sell_price))
+        p.unit_price    = max(0.0, float(unit_price))
+    except (TypeError, ValueError):
+        return RedirectResponse("/admin/packages?msg=数值字段无效", status_code=303)
+    p.name     = (name or "").strip()[:120]
+    p.category = category if category in _PACKAGE_CATEGORY_ZH else "other"
+    p.notes    = (notes or "").strip()
+    db.commit()
+    return RedirectResponse("/admin/packages?msg=已保存", status_code=303)
+
+
+@app.post("/admin/packages/{pid}/toggle")
+async def admin_packages_toggle(
+    pid: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    p = db.get(PackageProduct, pid)
+    if not p:
+        raise HTTPException(404)
+    p.is_active = not p.is_active
+    db.commit()
+    return RedirectResponse(
+        f"/admin/packages?msg={'已上架' if p.is_active else '已下架'}：{p.name}",
+        status_code=303,
+    )
+
+
+# ── 客户买套餐 ────────────────────────────────────────────────────
+@app.post("/admin/customers/{customer_id}/packages/sell")
+async def admin_customer_buy_package(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    product_id: int = Form(...),
+    pay_method: str = Form("cash"),
+    pet_id: int = Form(0),
+    custom_price: str = Form(""),     # 留空 → 按目录价
+    note: str = Form(""),
+):
+    """给客户售卖一份套餐 → 新建 CustomerPackage。
+    若 pay_method == 'wallet' → 自动从钱包扣款；否则只记账（外部已收）。
+    """
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404, "客户不存在")
+    prod = db.get(PackageProduct, product_id)
+    if not prod or not prod.is_active:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=packages&msg=套餐已下架或不存在", status_code=303)
+    try:
+        price = float(custom_price) if custom_price.strip() else float(prod.sell_price)
+    except (TypeError, ValueError):
+        price = float(prod.sell_price)
+    if price < 0:
+        price = 0.0
+
+    from datetime import date, timedelta
+    today = date.today()
+    expires = ""
+    if prod.validity_days and prod.validity_days > 0:
+        expires = (today + timedelta(days=prod.validity_days)).isoformat()
+
+    cp = CustomerPackage(
+        customer_id=customer_id,
+        pet_id=pet_id or None,
+        product_id=prod.id,
+        name=prod.name,
+        category=prod.category,
+        total_uses=prod.total_uses,
+        used_count=0,
+        sell_price=price,
+        unit_price=prod.unit_price,
+        purchase_date=today.isoformat(),
+        expires_at=expires,
+        status="active",
+        store=_get_admin_store(request),
+        operator=request.session.get("admin_username", "admin"),
+        note=(note or "").strip(),
+    )
+    db.add(cp); db.flush()
+
+    # 如果用钱包支付，立刻扣款
+    if pay_method == "wallet":
+        wallet = _get_or_create_wallet(db, customer_id)
+        try:
+            _wallet_apply_tx(
+                db, wallet, tx_type="consume", amount=price,
+                operator=request.session.get("admin_username", "admin"),
+                store=_get_admin_store(request),
+                note=f"购买套餐 {prod.name}",
+            )
+        except HTTPException as he:
+            db.rollback()
+            return RedirectResponse(
+                f"/admin/customers/{customer_id}?tab=packages&msg={he.detail}", status_code=303
+            )
+
+    db.commit()
+    _audit(db, request, "package_sell", application_id=None,
+           detail={"customer_id": customer_id, "product": prod.name, "price": price, "pay": pay_method})
+    db.commit()
+    return RedirectResponse(
+        f"/admin/customers/{customer_id}?tab=packages&msg=已售卖：{prod.name}（¥{price:.2f}）",
+        status_code=303,
+    )
+
+
+@app.post("/admin/customer-packages/{cp_id}/refund")
+async def admin_customer_package_refund(
+    cp_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    note: str = Form(""),
+):
+    """退掉未用完的套餐（按剩余次数比例退回钱包）。仅 superadmin。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    cp = db.get(CustomerPackage, cp_id)
+    if not cp:
+        raise HTTPException(404)
+    if cp.status != "active":
+        return RedirectResponse(
+            f"/admin/customers/{cp.customer_id}?tab=packages&msg=该套餐已非激活状态", status_code=303,
+        )
+    remaining = max(0, cp.total_uses - cp.used_count)
+    refund_amt = round(cp.sell_price * (remaining / cp.total_uses), 2) if cp.total_uses > 0 else 0.0
+    if refund_amt > 0:
+        wallet = _get_or_create_wallet(db, cp.customer_id)
+        _wallet_apply_tx(
+            db, wallet, tx_type="adjust", amount=refund_amt,
+            operator=request.session.get("admin_username", "admin"),
+            store=_get_admin_store(request),
+            note=f"套餐退款 {cp.name}（剩 {remaining}/{cp.total_uses}）",
+        )
+    cp.status = "refunded"
+    cp.note = ((cp.note or "") + f"\n[退款 ¥{refund_amt:.2f}：{note}]").strip()
+    db.commit()
+    return RedirectResponse(
+        f"/admin/customers/{cp.customer_id}?tab=packages&msg=已退款 ¥{refund_amt:.2f} 到钱包",
+        status_code=303,
+    )
 
 
 # ---------------------------------------------------------------------------

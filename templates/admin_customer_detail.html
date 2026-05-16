@@ -233,6 +233,7 @@
  <button class="tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重曲线<span class="count">{{ weight_records|length }}</span></button>
  <button class="tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">医疗文书<span class="count">{{ medical_docs|length }}</span></button>
  <button class="tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包<span class="count">¥{{ '%.0f'|format(wallet_balance) }}</span></button>
+ <button class="tab-btn {% if active_tab=='packages' %}active{% endif %}" data-tab="packages" onclick="switchTab('packages')">套餐<span class="count">{{ active_packages_count }}</span></button>
  </div>
 
  {# ── 诊疗 ── #}
@@ -594,6 +595,59 @@
    {% endif %}
  </div>
 
+ {# ── 套餐 ── #}
+ <div class="tab-content {% if active_tab=='packages' %}active{% endif %}" data-tab-content="packages">
+   <div class="tab-action-bar">
+     <button type="button" class="btn" onclick="document.getElementById('sell-pkg-modal').classList.add('visible')">＋ 售卖套餐</button>
+     <a href="/admin/packages" class="btn secondary">套餐目录管理 →</a>
+     <span style="margin-left:auto;color:var(--muted);font-size:.82rem;">共 {{ customer_packages|length }} 张（{{ active_packages_count }} 张有效）</span>
+   </div>
+
+   {% if customer_packages %}
+   <table class="data-table">
+     <thead>
+       <tr><th>套餐名</th><th>类别</th><th>用量</th><th>有效期</th><th>购买价</th><th>购买日</th><th>状态</th><th>操作</th></tr>
+     </thead>
+     <tbody>
+     {% for cp in customer_packages %}
+     <tr>
+       <td><strong>{{ cp.name }}</strong>{% if cp.note %}<div style="font-size:.75rem;color:var(--muted);">{{ cp.note[:60] }}</div>{% endif %}</td>
+       <td>{{ package_category_zh.get(cp.category, cp.category) }}</td>
+       <td>
+         <div style="font-weight:600;">{{ cp.used_count }} / {{ cp.total_uses }}</div>
+         <div style="background:#e5e7eb;height:5px;border-radius:3px;overflow:hidden;margin-top:.2rem;width:80px;">
+           <div style="background:#10b981;height:100%;width:{{ (cp.used_count * 100 // cp.total_uses) if cp.total_uses else 0 }}%;"></div>
+         </div>
+       </td>
+       <td style="font-size:.85rem;">{{ cp.expires_at or '不限期' }}</td>
+       <td>¥{{ '%.2f'|format(cp.sell_price) }}</td>
+       <td style="color:var(--muted);font-size:.82rem;">{{ cp.purchase_date }}</td>
+       <td>
+       {% if cp.status == 'active' %}<span class="pill pill-info">有效</span>
+       {% elif cp.status == 'exhausted' %}<span class="pill pill-gray">已用完</span>
+       {% elif cp.status == 'expired' %}<span class="pill pill-warn">已过期</span>
+       {% elif cp.status == 'refunded' %}<span class="pill pill-gray">已退款</span>
+       {% else %}<span class="pill">{{ cp.status }}</span>{% endif %}
+       </td>
+       <td>
+       {% if cp.status == 'active' and request.session.get('admin_role') == 'superadmin' %}
+       <form method="post" action="/admin/customer-packages/{{ cp.id }}/refund" style="display:inline;"
+             onsubmit="return confirm('退款剩余 {{ cp.total_uses - cp.used_count }} 次到钱包？')">
+         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+         <input type="hidden" name="note" value="客户退款">
+         <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.78rem;padding:0;">退款</button>
+       </form>
+       {% endif %}
+       </td>
+     </tr>
+     {% endfor %}
+     </tbody>
+   </table>
+   {% else %}
+   <div class="tab-empty">客户还没买过套餐。点 + 售卖套餐 开始。</div>
+   {% endif %}
+ </div>
+
  </div>
  {% endif %}
 
@@ -934,6 +988,61 @@
    <button type="button" class="btn secondary" onclick="document.getElementById('wallet-adjust-modal').classList.remove('visible')">取消</button>
  </div>
  </form>
+ </div>
+</div>
+
+<div class="cd-modal-overlay" id="sell-pkg-modal">
+ <div class="cd-modal">
+ <h3>售卖套餐 — {{ cust.name or '客户' }}</h3>
+ {% if package_products %}
+ <form method="post" action="/admin/customers/{{ cust.id }}/packages/sell">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <label>套餐</label>
+ <select name="product_id" required onchange="onPkgPick(this)">
+   <option value="">-- 选择套餐 --</option>
+   {% for p in package_products %}
+   <option value="{{ p.id }}" data-price="{{ p.sell_price }}" data-uses="{{ p.total_uses }}" data-validity="{{ p.validity_days }}">
+     {{ p.name }} · {{ package_category_zh.get(p.category, p.category) }} · {{ p.total_uses }}次 · ¥{{ '%.0f'|format(p.sell_price) }}
+   </option>
+   {% endfor %}
+ </select>
+ <div id="pkg-preview" style="display:none;background:#f3f4f6;border-radius:8px;padding:.6rem .8rem;margin:.5rem 0;font-size:.85rem;color:#4b5563;"></div>
+ <label>指定宠物（可选）</label>
+ <select name="pet_id">
+   <option value="0">-- 不绑定宠物（全家通用）--</option>
+   {% for p in pets %}<option value="{{ p.id }}">{{ p.name }} · {{ p.species or '' }}</option>{% endfor %}
+ </select>
+ <label>实际成交价（留空 = 目录价）</label>
+ <input name="custom_price" type="number" step="0.01" min="0" placeholder="如有优惠，填实际收的钱">
+ <label>支付方式</label>
+ <select name="pay_method">
+   <option value="cash">现金</option>
+   <option value="wechat">微信</option>
+   <option value="alipay">支付宝</option>
+   <option value="card">刷卡</option>
+   <option value="wallet">钱包余额（自动扣款）</option>
+ </select>
+ <label>备注（可选）</label>
+ <input name="note">
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+   <button type="submit" class="btn">售卖</button>
+   <button type="button" class="btn secondary" onclick="document.getElementById('sell-pkg-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ <script>
+ function onPkgPick(sel) {
+   var o = sel.selectedOptions[0];
+   var box = document.getElementById('pkg-preview');
+   if (!o || !o.value) { box.style.display = 'none'; return; }
+   var price = o.dataset.price, uses = o.dataset.uses, val = o.dataset.validity;
+   box.innerHTML = '目录价 ¥' + price + ' · 共 ' + uses + ' 次 · 有效期 ' + (val == '0' ? '不限期' : val + ' 天');
+   box.style.display = 'block';
+ }
+ </script>
+ {% else %}
+ <p style="color:var(--muted);">还没创建任何套餐。<a href="/admin/packages">去套餐目录创建 →</a></p>
+ <button type="button" class="btn secondary" onclick="document.getElementById('sell-pkg-modal').classList.remove('visible')">关闭</button>
+ {% endif %}
  </div>
 </div>
 
