@@ -76,7 +76,7 @@
  </div>
  {% if is_edit %}
  <div class="ph-actions">
- <button onclick="window.print()" class="btn secondary" style="font-size:0.85rem;">🖨 打印处方</button>
+ <a href="/admin/prescriptions/{{ p.id }}/print" target="_blank" class="btn secondary" style="font-size:0.85rem;">🖨 打印处方笺（国标）</a>
  </div>
  {% endif %}
 </div>

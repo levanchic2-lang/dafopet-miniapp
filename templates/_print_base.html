@@ -1,0 +1,123 @@
+{# 通用打印基础模板。子模板覆盖 page_size / margins / body。 #}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{% block title %}打印 · 大风动物医院{% endblock %}</title>
+<style>
+  /* === @page 尺寸：通过 body data-size 切换 === */
+  /* A4 (210mm × 297mm) */
+  @page A4 { size: A4; margin: 12mm 10mm; }
+  /* A5 (148mm × 210mm) — 处方笺常用 */
+  @page A5 { size: A5; margin: 8mm 7mm; }
+  /* A5 横向 — 国标处方笺横版 */
+  @page A5_LAND { size: A5 landscape; margin: 7mm 8mm; }
+  /* 80mm 热敏小票（高度自适应，靠 page-break-inside） */
+  @page T80 { size: 80mm auto; margin: 4mm 4mm; }
+
+  body[data-size="A4"]      { page: A4; }
+  body[data-size="A5"]      { page: A5; }
+  body[data-size="A5_LAND"] { page: A5_LAND; }
+  body[data-size="T80"]     { page: T80; }
+
+  /* === 通用 === */
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: #111;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Source Han Sans CN", system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+    background: #f3f4f6;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-stage {
+    margin: 16px auto;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(0,0,0,.08);
+  }
+  /* 屏幕预览：模拟纸张大小 */
+  body[data-size="A4"] .print-stage      { width: 210mm; min-height: 297mm; padding: 12mm 10mm; }
+  body[data-size="A5"] .print-stage      { width: 148mm; min-height: 210mm; padding: 8mm 7mm; }
+  body[data-size="A5_LAND"] .print-stage { width: 210mm; min-height: 148mm; padding: 7mm 8mm; }
+  body[data-size="T80"] .print-stage     { width: 80mm;  min-height: 100mm; padding: 4mm 4mm; }
+
+  /* 顶部工具条（屏幕用，打印时隐藏） */
+  .print-toolbar {
+    position: sticky; top: 0; z-index: 10;
+    background: #111827; color: #fff; padding: 10px 14px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  }
+  .print-toolbar button, .print-toolbar a {
+    background: rgba(255,255,255,.15); color: #fff; border: 0;
+    padding: 6px 14px; border-radius: 6px; font-size: 13px;
+    cursor: pointer; text-decoration: none;
+  }
+  .print-toolbar button:hover, .print-toolbar a:hover { background: rgba(255,255,255,.28); }
+  .print-toolbar .group { display: inline-flex; gap: 4px; background: rgba(255,255,255,.08); border-radius: 6px; padding: 2px; }
+  .print-toolbar .group button { background: transparent; padding: 4px 12px; border-radius: 4px; }
+  .print-toolbar .group button.active { background: #fff; color: #111827; font-weight: 600; }
+  .print-toolbar .spacer { flex: 1; }
+
+  /* 通用页眉/页脚 */
+  .ph-hdr { text-align: center; padding-bottom: 6px; border-bottom: 2px solid #111; margin-bottom: 8px; }
+  .ph-hdr .clinic-name { font-size: 16px; font-weight: 700; letter-spacing: 1px; }
+  .ph-hdr .doc-title   { font-size: 14px; margin-top: 2px; }
+  .ph-foot { margin-top: 10px; padding-top: 6px; border-top: 1px solid #ccc; font-size: 11px; color: #666; }
+
+  /* 表格通用 */
+  .ph-table { width: 100%; border-collapse: collapse; }
+  .ph-table th, .ph-table td { padding: 4px 6px; text-align: left; }
+  .ph-table thead th { border-bottom: 1.5px solid #111; font-weight: 600; }
+
+  /* 打印时：隐藏工具条，移除阴影，撑满纸张 */
+  @media print {
+    body { background: #fff !important; }
+    .print-toolbar, .no-print { display: none !important; }
+    .print-stage { margin: 0 !important; box-shadow: none !important; padding: 0 !important; width: auto !important; min-height: 0 !important; }
+  }
+
+  {% block extra_style %}{% endblock %}
+</style>
+</head>
+<body data-size="{% block default_size %}A4{% endblock %}">
+<div class="print-toolbar no-print">
+  <button onclick="window.print()" style="background:#10b981;font-weight:600;">🖨 打印</button>
+  <div class="group" id="size-switch">
+    <button data-size="A4">A4 纵</button>
+    <button data-size="A5">A5 纵</button>
+    <button data-size="A5_LAND">A5 横</button>
+    <button data-size="T80">80mm 小票</button>
+  </div>
+  {% block toolbar_extra %}{% endblock %}
+  <div class="spacer"></div>
+  <a href="javascript:history.back()">← 返回</a>
+</div>
+
+<div class="print-stage">
+  {% block content %}{% endblock %}
+</div>
+
+<script>
+(function () {
+  var body = document.body;
+  function setSize(s) {
+    body.setAttribute('data-size', s);
+    document.querySelectorAll('#size-switch button').forEach(function(b){
+      b.classList.toggle('active', b.dataset.size === s);
+    });
+    try { localStorage.setItem('print_size_pref', s); } catch(e){}
+  }
+  document.querySelectorAll('#size-switch button').forEach(function(b){
+    b.addEventListener('click', function(){ setSize(b.dataset.size); });
+  });
+  // 初始按 body 当前 data-size 高亮
+  setSize(body.getAttribute('data-size') || 'A4');
+})();
+</script>
+
+</body>
+</html>

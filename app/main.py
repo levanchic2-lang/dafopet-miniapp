@@ -6916,6 +6916,51 @@ async def page_admin_presc_detail(presc_id: int, request: Request, db: Session =
     })
 
 
+@app.get("/admin/prescriptions/{presc_id}/print", response_class=HTMLResponse)
+async def admin_presc_print(presc_id: int, request: Request, db: Session = Depends(get_db)):
+    """处方笺打印页（国标 A5 横版）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    presc = db.get(Prescription, presc_id)
+    if not presc:
+        raise HTTPException(404, "处方单不存在")
+    visit = db.get(Visit, presc.visit_id) if presc.visit_id else None
+    cust = db.get(Customer, presc.customer_id) if presc.customer_id else None
+    pet = db.get(Pet, presc.pet_id) if presc.pet_id else None
+    # 最近一次体重（用于处方笺顶部"体重"字段）
+    pet_weight = 0.0
+    if pet:
+        last_w = db.query(WeightRecord).filter(WeightRecord.pet_id == pet.id).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
+        if last_w:
+            pet_weight = float(last_w.weight_kg or 0)
+    # 年龄字符串（用 birthday_estimate 推断）
+    pet_age = ""
+    if pet and pet.birthday_estimate:
+        try:
+            from datetime import date as _date
+            parts = pet.birthday_estimate.split("-")
+            by = int(parts[0]); bm = int(parts[1]) if len(parts) > 1 else 1
+            today = _date.today()
+            years = today.year - by - (1 if (today.month, 1) < (bm, 1) else 0)
+            if years <= 0:
+                months = (today.year - by) * 12 + (today.month - bm)
+                pet_age = f"{max(0, months)} 个月"
+            else:
+                pet_age = f"{years} 岁"
+        except Exception:
+            pet_age = pet.birthday_estimate or ""
+    # 门店全名（处方笺标题里 "（横岗分院）" 等）
+    clinic_name = "大风动物医院"
+    if pet and pet.store:
+        clinic_name = f"大风动物医院（{pet.store.replace('店', '分院')}）"
+    return templates.TemplateResponse(request, "admin_prescription_print.html", {
+        "presc": presc, "visit": visit, "cust": cust, "pet": pet,
+        "pet_weight": pet_weight, "pet_age": pet_age,
+        "clinic_name": clinic_name,
+        "dispenser": "",  # 发药人留空，发药完成后可以打印第二联
+    })
+
+
 @app.post("/admin/prescriptions/{presc_id}/edit")
 async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depends(get_db)):
     if not request.session.get("admin"):

@@ -1,0 +1,181 @@
+{% extends "_print_base.html" %}
+{% block title %}处方笺 · {{ pet.name if pet else '' }}{% endblock %}
+{% block default_size %}A5_LAND{% endblock %}
+
+{% block extra_style %}
+.rx-frame {
+  border: 1.5px solid #000;
+  padding: 4mm 5mm;
+  height: calc(100% - 0mm);
+}
+.rx-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding-bottom: 3mm;
+  border-bottom: 1px solid #000;
+  margin-bottom: 3mm;
+}
+.rx-row {
+  display: flex;
+  gap: 5mm;
+  margin-bottom: 2mm;
+  font-size: 12px;
+}
+.rx-row .field {
+  display: inline-flex; align-items: baseline; flex: 1;
+}
+.rx-row .lbl { white-space: nowrap; margin-right: 4px; }
+.rx-row .val {
+  flex: 1;
+  border-bottom: 1px solid #000;
+  padding: 0 6px 1px;
+  min-height: 18px;
+  font-weight: 500;
+}
+
+.rx-body {
+  display: grid;
+  grid-template-columns: 14mm 1fr 7mm;
+  gap: 0;
+  border-top: 1px solid #000;
+  margin-top: 3mm;
+}
+.rx-diag {
+  border-right: 1px solid #000;
+  padding: 3mm 2mm 2mm 0;
+  font-size: 12px;
+  writing-mode: horizontal-tb;
+}
+.rx-diag .h { font-weight: 700; }
+.rx-diag .body { margin-top: 2mm; word-break: break-all; line-height: 1.6; }
+
+.rx-main {
+  padding: 3mm 3mm 2mm;
+  font-size: 11.5px;
+  min-height: 75mm;
+}
+.rx-rp { font-weight: 700; font-size: 14px; margin-bottom: 2mm; }
+.rx-drug-tbl { width: 100%; border-collapse: collapse; }
+.rx-drug-tbl th {
+  font-weight: 600; font-size: 10.5px; color: #333;
+  text-align: left; padding: 1mm 2mm 1mm 0;
+  border-bottom: 0.5px solid #999;
+}
+.rx-drug-tbl td {
+  padding: 1.5mm 2mm 1.5mm 0;
+  vertical-align: top;
+  font-size: 11px;
+}
+.rx-drug-tbl tr.row-even td { background: rgba(0,0,0,.015); }
+.rx-end {
+  margin-top: 4mm; font-size: 10.5px; color: #444; font-style: italic;
+}
+
+.rx-side {
+  border-left: 1px solid #000;
+  position: relative;
+}
+.rx-side .v-text {
+  position: absolute;
+  top: 4mm; left: 50%;
+  transform: translateX(-50%);
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: #555;
+}
+
+.rx-foot {
+  display: flex; gap: 8mm; padding-top: 2mm;
+  border-top: 1px solid #000; margin-top: 3mm;
+  font-size: 12px;
+}
+.rx-foot .fld { flex: 1; display: flex; align-items: baseline; }
+.rx-foot .fld .lbl { white-space: nowrap; margin-right: 4px; }
+.rx-foot .fld .val { flex: 1; border-bottom: 1px solid #000; padding: 0 6px; min-height: 18px; font-weight: 500; }
+{% endblock %}
+
+{% block toolbar_extra %}
+<span style="opacity:.8;font-size:12px;">建议 <b>A5 横向</b>（国标处方笺规格）</span>
+{% endblock %}
+
+{% block content %}
+{% set rx_no = presc.id %}
+<div class="rx-frame">
+  <div class="rx-title">{{ clinic_name or '大风动物医院' }} 处方笺</div>
+
+  <div class="rx-row">
+    <div class="field" style="flex:2;"><span class="lbl">动物主人/饲养单位</span><span class="val">{{ cust.name if cust else '' }}</span></div>
+    <div class="field"><span class="lbl">病历号</span><span class="val">{{ pet.medical_record_no if pet else '' }}</span></div>
+  </div>
+  <div class="rx-row">
+    <div class="field"><span class="lbl">动物种类</span><span class="val">{{ {'cat':'猫','dog':'狗','other':'其他'}.get(pet.species, pet.species) if pet else '' }}</span></div>
+    <div class="field"><span class="lbl">动物性别</span><span class="val">{{ {'male':'公','female':'母','unknown':'未知'}.get(pet.gender, pet.gender) if pet else '' }}</span></div>
+    <div class="field"><span class="lbl">动物毛色</span><span class="val">{{ pet.color_pattern if pet else '' }}</span></div>
+  </div>
+  <div class="rx-row">
+    <div class="field"><span class="lbl">体重</span><span class="val">{{ ('%.2fKg'|format(pet_weight)) if pet_weight else '' }}</span></div>
+    <div class="field"><span class="lbl">年(日)龄</span><span class="val">{{ pet_age or '' }}</span></div>
+    <div class="field" style="flex:1.4;"><span class="lbl">开具日期</span><span class="val">{{ presc.prescribed_date or (presc.created_at.strftime('%Y-%m-%d %H:%M') if presc.created_at else '') }}</span></div>
+  </div>
+
+  <div class="rx-body">
+    <div class="rx-diag">
+      <div class="h">诊断：</div>
+      <div class="body">{{ visit.diagnosis if visit and visit.diagnosis else '—' }}</div>
+    </div>
+
+    <div class="rx-main">
+      <div class="rx-rp">Rp:</div>
+      <table class="rx-drug-tbl">
+        <thead>
+          <tr>
+            <th style="width:14mm;">分组名</th>
+            <th style="width:auto;">药品名</th>
+            <th style="width:14mm;">规格</th>
+            <th style="width:14mm;">单次用量</th>
+            <th style="width:9mm;">次/天</th>
+            <th style="width:8mm;">天数</th>
+            <th style="width:14mm;">用法</th>
+            <th style="width:11mm;text-align:right;">单价</th>
+            <th style="width:9mm;text-align:right;">数量</th>
+            <th style="width:14mm;text-align:right;">总金额</th>
+            <th style="width:14mm;">备注</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for it in presc.items %}
+          <tr class="{% if loop.index0 % 2 == 1 %}row-even{% endif %}">
+            <td>{{ ('组' ~ ((loop.index0 // 5) + 1)) if presc.items|length > 5 else '' }}</td>
+            <td>{{ it.drug_name }}</td>
+            <td>{{ it.item_unit or '' }}</td>
+            <td>{{ ('%g%s'|format(it.dose_amount, it.dose_unit)) if it.dose_amount else (it.dosage or '') }}</td>
+            <td>{{ ('%g'|format(it.times_per_day)) if it.times_per_day else '' }}</td>
+            <td>{{ it.duration_days or '' }}</td>
+            <td>{% if it.drug_type == 'oral' %}口服 PO{% elif it.drug_type == 'topical' %}外用{% elif it.drug_type == 'injection' %}注射{% else %}{{ it.drug_type }}{% endif %}</td>
+            <td style="text-align:right;">{{ '%.2f'|format(it.unit_price or 0) }}</td>
+            <td style="text-align:right;">{{ '%g'|format(it.quantity_num or 0) }}</td>
+            <td style="text-align:right;">{{ '%.2f'|format(it.subtotal or 0) }}</td>
+            <td>{{ it.print_note or '' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="rx-end">以下为空白，开具当日有效</div>
+    </div>
+
+    <div class="rx-side">
+      <span class="v-text">第一联 从事动物诊疗活动的单位留存</span>
+    </div>
+  </div>
+
+  <div class="rx-foot">
+    <div class="fld" style="flex:2;"><span class="lbl">执业兽医师</span><span class="val">{{ presc.vet_name or '' }}</span></div>
+    <div class="fld" style="flex:2;"><span class="lbl">发药人</span><span class="val">{{ dispenser or '' }}</span></div>
+    <div class="fld"><span class="lbl">单号</span><span class="val" style="font-family:monospace;">Rx{{ '%06d'|format(rx_no) }}</span></div>
+  </div>
+</div>
+{% endblock %}
