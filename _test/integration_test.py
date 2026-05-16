@@ -930,6 +930,87 @@ def t_package_sell():
 t_package_sell()
 
 
+@step("收费单：钱包支付 → 余额扣减 + 流水有 invoice_id")
+def t_invoice_pay_wallet():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Invoice, Wallet, WalletTransaction
+    db = SessionLocal()
+    # 之前 t_create_prescription 自动生成了 ¥100 收费单（未支付状态）
+    inv = db.query(Invoice).filter(Invoice.customer_id == cust_id, Invoice.payment_status == "unpaid").order_by(Invoice.id.desc()).first()
+    assert inv, "找不到待支付的收费单"
+    inv_id = inv.id
+    inv_total = float(inv.total_amount)
+    w_before = db.query(Wallet).filter(Wallet.customer_id == cust_id).first().balance
+    db.close()
+
+    r = client.get(f"/admin/invoices/{inv_id}")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/invoices/{inv_id}/pay", data={
+        "csrf_token": token, "payment_method": "wallet",
+    })
+    assert r.status_code == 303, f"got {r.status_code}"
+
+    db = SessionLocal()
+    inv = db.get(Invoice, inv_id)
+    assert inv.payment_status == "paid" and inv.payment_method == "wallet"
+    w_after = db.query(Wallet).filter(Wallet.customer_id == cust_id).first().balance
+    assert abs(w_after - (w_before - inv_total)) < 1e-6, f"钱包应扣 {inv_total}，前 {w_before} 后 {w_after}"
+    tx = db.query(WalletTransaction).filter(WalletTransaction.invoice_id == inv_id).first()
+    assert tx is not None and tx.type == "consume" and tx.amount == -inv_total
+    db.close()
+
+t_invoice_pay_wallet()
+
+
+@step("收费单：套餐核销 → used_count +1，超不支持已用完套餐")
+def t_invoice_pay_package():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Invoice, CustomerPackage, PackageRedemption, Wallet
+    # 给客户钱包再充点，造一张收费单（手动建一张）
+    db = SessionLocal()
+    # 先确认有 active 套餐
+    cp = db.query(CustomerPackage).filter(
+        CustomerPackage.customer_id == cust_id, CustomerPackage.status == "active"
+    ).first()
+    assert cp, "前置：应有活跃套餐"
+    used_before = cp.used_count
+
+    # 直接造一张未支付收费单
+    inv = Invoice(
+        customer_id=cust_id, pet_id=pet_id,
+        invoice_no="TEST_PKG_INV", invoice_date="2026-05-15",
+        subtotal=50.0, discount_amount=0.0, total_amount=50.0,
+        payment_status="unpaid",
+    )
+    db.add(inv); db.commit(); db.refresh(inv)
+    inv_id = inv.id
+    cp_id = cp.id
+    db.close()
+
+    r = client.get(f"/admin/invoices/{inv_id}")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/invoices/{inv_id}/pay", data={
+        "csrf_token": token, "payment_method": "package",
+        "customer_package_id": str(cp_id),
+    })
+    assert r.status_code == 303
+
+    db = SessionLocal()
+    cp2 = db.get(CustomerPackage, cp_id)
+    assert cp2.used_count == used_before + 1, f"应 +1，前 {used_before} 后 {cp2.used_count}"
+    redeem = db.query(PackageRedemption).filter(PackageRedemption.invoice_id == inv_id).first()
+    assert redeem is not None and redeem.used_count == 1
+    inv2 = db.get(Invoice, inv_id)
+    assert inv2.payment_status == "paid" and inv2.payment_method == "package"
+    db.close()
+
+t_invoice_pay_package()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

@@ -216,8 +216,40 @@
  <button type="button" class="pay-btn" data-val="alipay" onclick="selectPay(this)"><span class="icon">🔵</span><span class="label">支付宝</span></button>
  <button type="button" class="pay-btn" data-val="card" onclick="selectPay(this)"><span class="icon">💳</span><span class="label">刷卡</span></button>
  <button type="button" class="pay-btn" data-val="groupbuy" onclick="selectPay(this)"><span class="icon">🎟</span><span class="label">团购</span></button>
- <button type="button" class="pay-btn" data-val="prepaid" onclick="selectPay(this)"><span class="icon">🪙</span><span class="label">预付款</span></button>
+ {% if wallet_balance > 0 %}
+ <button type="button" class="pay-btn" data-val="wallet" onclick="selectPay(this)"
+         title="客户钱包余额 ¥{{ '%.2f'|format(wallet_balance) }}">
+   <span class="icon">💰</span><span class="label">钱包<br><small style="font-size:.7rem;color:#10b981;">¥{{ '%.0f'|format(wallet_balance) }}</small></span>
+ </button>
+ {% endif %}
+ {% if active_packages %}
+ <button type="button" class="pay-btn" data-val="package" onclick="selectPay(this)">
+   <span class="icon">🎫</span><span class="label">套餐核销</span>
+ </button>
+ {% endif %}
  </div>
+
+ {# 选了"套餐"时显示套餐下拉 #}
+ {% if active_packages %}
+ <div id="pkg-pick-wrap" style="display:none;margin-bottom:1rem;background:#f3f4f6;border-radius:8px;padding:.7rem .9rem;">
+   <label style="font-size:.85rem;color:#4b5563;display:block;margin-bottom:.4rem;">核销哪张套餐？</label>
+   <select name="customer_package_id" style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;background:var(--card);">
+     <option value="">-- 选择套餐 --</option>
+     {% for cp in active_packages %}
+     <option value="{{ cp.id }}">
+       {{ cp.name }} · 剩 {{ cp.total_uses - cp.used_count }}/{{ cp.total_uses }} 次{% if cp.expires_at %} · 到期 {{ cp.expires_at }}{% endif %}
+     </option>
+     {% endfor %}
+   </select>
+   <p style="font-size:.75rem;color:var(--muted);margin:.5rem 0 0;">⚠ 套餐核销不论金额、扣 1 次（请确认收费项与套餐对应）</p>
+ </div>
+ {% endif %}
+
+ {% if wallet_balance > 0 and wallet_balance < inv.total_amount %}
+ <div id="wallet-low-warn" style="display:none;margin-bottom:1rem;padding:.5rem .8rem;background:#fef3c7;border-radius:6px;color:#92400e;font-size:.82rem;">
+   ⚠ 钱包余额 ¥{{ '%.2f'|format(wallet_balance) }} 不足以支付 ¥{{ '%.2f'|format(inv.total_amount) }}，请充值或换支付方式
+ </div>
+ {% endif %}
 
  <div style="display:flex;gap:0.6rem;">
  <button type="submit" class="btn" style="flex:1;font-size:1rem;padding:0.7rem;">
@@ -226,6 +258,20 @@
  </div>
  </form>
  </div>
+
+ {% if paid_wallet_txs or paid_redeems %}
+ <div class="card" style="margin-bottom:.75rem;">
+   <h3 style="margin:0 0 .5rem;font-size:.88rem;color:var(--muted);">收款流水</h3>
+   <table style="width:100%;font-size:.82rem;">
+   {% for tx in paid_wallet_txs %}
+   <tr><td>💰 钱包扣款</td><td style="text-align:right;">¥{{ '%.2f'|format(-tx.amount) }}</td></tr>
+   {% endfor %}
+   {% for r in paid_redeems %}
+   <tr><td>🎫 套餐核销 #{{ r.customer_package_id }}</td><td style="text-align:right;">扣 {{ r.used_count }} 次（剩 {{ r.remaining_after }}）</td></tr>
+   {% endfor %}
+   </table>
+ </div>
+ {% endif %}
 
  <!-- 取消 -->
  <div class="card">
@@ -359,7 +405,12 @@ function removeRow(btn) {
 function selectPay(btn) {
  document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('selected'));
  btn.classList.add('selected');
- document.getElementById('pay-method-input').value = btn.dataset.val;
+ var v = btn.dataset.val;
+ document.getElementById('pay-method-input').value = v;
+ var pkgWrap = document.getElementById('pkg-pick-wrap');
+ if (pkgWrap) pkgWrap.style.display = (v === 'package') ? 'block' : 'none';
+ var lowWarn = document.getElementById('wallet-low-warn');
+ if (lowWarn) lowWarn.style.display = (v === 'wallet') ? 'block' : 'none';
 }
 
 // 初始化计算

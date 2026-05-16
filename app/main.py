@@ -8138,8 +8138,8 @@ async def admin_invoice_create(
     db: Session = Depends(get_db),
 ):
     require_admin(request)
-    _check_csrf(request, await request.form())
     form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
     from datetime import date
 
     visit_id    = int(form.get("visit_id") or 0) or None
@@ -8212,6 +8212,34 @@ async def admin_invoice_detail(
     cust  = db.get(Customer, inv.customer_id) if inv.customer_id else None
     pet   = db.get(Pet,      inv.pet_id)      if inv.pet_id      else None
     visit = db.get(Visit,    inv.visit_id)    if inv.visit_id    else None
+    # 该客户可用的钱包余额 + 有效套餐（用于结算时选择）
+    wallet_balance = 0.0
+    active_packages = []
+    if inv.customer_id:
+        w = db.query(Wallet).filter(Wallet.customer_id == inv.customer_id).first()
+        wallet_balance = float(w.balance) if w else 0.0
+        active_packages = (
+            db.query(CustomerPackage)
+            .filter(
+                CustomerPackage.customer_id == inv.customer_id,
+                CustomerPackage.status == "active",
+            )
+            .order_by(CustomerPackage.id.desc())
+            .all()
+        )
+    # 该收费单已用的钱包/套餐流水
+    paid_wallet_txs = (
+        db.query(WalletTransaction)
+        .filter(WalletTransaction.invoice_id == inv_id)
+        .order_by(WalletTransaction.id.desc())
+        .all()
+    )
+    paid_redeems = (
+        db.query(PackageRedemption)
+        .filter(PackageRedemption.invoice_id == inv_id)
+        .order_by(PackageRedemption.id.desc())
+        .all()
+    )
     return templates.TemplateResponse(request, "admin_invoice_detail.html", {
         "mode": "view",
         "inv": inv,
@@ -8222,6 +8250,10 @@ async def admin_invoice_detail(
         "inv_pay_zh": _INV_PAY_ZH,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
+        "wallet_balance": wallet_balance,
+        "active_packages": active_packages,
+        "paid_wallet_txs": paid_wallet_txs,
+        "paid_redeems": paid_redeems,
     })
 
 
@@ -8232,12 +8264,66 @@ async def admin_invoice_pay(
     db: Session = Depends(get_db),
 ):
     require_admin(request)
-    _check_csrf(request, await request.form())
     form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
     inv = db.get(Invoice, inv_id)
     if not inv:
         raise HTTPException(404)
-    inv.payment_method = str(form.get("payment_method") or "cash")
+    if inv.payment_status == "paid":
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已收款，请勿重复", status_code=303)
+
+    method = str(form.get("payment_method") or "cash").strip()
+    operator = request.session.get("admin_username", "admin")
+    store = _get_admin_store(request)
+
+    # ── 钱包扣款 ──
+    if method == "wallet":
+        if not inv.customer_id:
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=无客户绑定，无法用钱包", status_code=303)
+        wallet = _get_or_create_wallet(db, inv.customer_id)
+        try:
+            _wallet_apply_tx(
+                db, wallet, tx_type="consume",
+                amount=float(inv.total_amount or 0),
+                invoice_id=inv.id,
+                operator=operator, store=store,
+                note=f"收费单 {inv.invoice_no or inv.id}",
+            )
+        except HTTPException as he:
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg={he.detail}", status_code=303)
+
+    # ── 套餐核销 ──
+    elif method == "package":
+        cp_id_raw = (form.get("customer_package_id") or "").strip()
+        if not cp_id_raw.isdigit():
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=请选择要核销的套餐", status_code=303)
+        cp = db.get(CustomerPackage, int(cp_id_raw))
+        if not cp or cp.customer_id != inv.customer_id:
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐与客户不匹配", status_code=303)
+        if cp.status != "active":
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐已失效", status_code=303)
+        if cp.used_count >= cp.total_uses:
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐次数已用完", status_code=303)
+        # 扣 1 次
+        cp.used_count += 1
+        remaining = cp.total_uses - cp.used_count
+        if remaining <= 0:
+            cp.status = "exhausted"
+        db.add(PackageRedemption(
+            customer_package_id=cp.id,
+            customer_id=cp.customer_id,
+            pet_id=inv.pet_id or cp.pet_id,
+            visit_id=inv.visit_id,
+            invoice_id=inv.id,
+            used_count=1,
+            remaining_after=remaining,
+            store=store,
+            operator=operator,
+            note=f"收费单 {inv.invoice_no or inv.id}",
+        ))
+
+    # cash / wechat / alipay / card / groupbuy / prepaid — 不需要 side effect
+    inv.payment_method = method
     inv.payment_status = "paid"
     inv.paid_at        = datetime.utcnow()
     db.commit()
@@ -8251,7 +8337,8 @@ async def admin_invoice_cancel(
     db: Session = Depends(get_db),
 ):
     require_admin(request)
-    _check_csrf(request, await request.form())
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
     inv = db.get(Invoice, inv_id)
     if inv and inv.payment_status == "unpaid":
         inv.payment_status = "cancelled"
@@ -8297,7 +8384,8 @@ async def admin_invoice_delete(
     db: Session = Depends(get_db),
 ):
     require_admin(request)
-    _check_csrf(request, await request.form())
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
     inv = db.get(Invoice, inv_id)
     if inv:
         db.delete(inv)
