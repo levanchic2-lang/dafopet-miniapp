@@ -6,7 +6,16 @@
 .rx-frame {
   border: 1.5px solid #000;
   padding: 4mm 5mm;
-  height: calc(100% - 0mm);
+  page-break-after: always;
+  break-after: page;
+}
+.rx-frame:last-child {
+  page-break-after: auto;
+  break-after: auto;
+}
+/* 屏幕下三联之间留点空隙，更易区分 */
+@media screen {
+  .rx-frame + .rx-frame { margin-top: 18px; }
 }
 .rx-title {
   text-align: center;
@@ -104,6 +113,13 @@
 
 {% block content %}
 {% set rx_no = presc.id %}
+{# 国标三联：医院 / 药房 / 客户。三次循环 → 三页打印 #}
+{% set lian_list = [
+  ('一', '从事动物诊疗活动的单位留存'),
+  ('二', '药房（发药留存）'),
+  ('三', '动物主人/饲养单位留存'),
+] %}
+{% for lian_no, lian_role in lian_list %}
 <div class="rx-frame">
   <div class="rx-title">{{ clinic_name or '大风动物医院' }} 处方笺</div>
 
@@ -168,14 +184,15 @@
     </div>
 
     <div class="rx-side">
-      <span class="v-text">第一联 从事动物诊疗活动的单位留存</span>
+      <span class="v-text">第{{ lian_no }}联 {{ lian_role }}</span>
     </div>
   </div>
 
   <div class="rx-foot">
     <div class="fld" style="flex:2;"><span class="lbl">执业兽医师</span><span class="val">{{ presc.vet_name or '' }}</span></div>
     <div class="fld" style="flex:2;"><span class="lbl">发药人</span><span class="val">{{ dispenser or '' }}</span></div>
-    <div class="fld"><span class="lbl">单号</span><span class="val" style="font-family:monospace;">Rx{{ '%06d'|format(rx_no) }}</span></div>
+    <div class="fld"><span class="lbl">单号</span><span class="val" style="font-family:monospace;">Rx{{ '%06d'|format(rx_no) }}-{{ lian_no }}</span></div>
   </div>
 </div>
+{% endfor %}
 {% endblock %}
