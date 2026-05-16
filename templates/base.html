@@ -480,7 +480,46 @@
   /* ── 底部多标签栏 ─────────────────────────────────────── */
   (function () {
     var STORAGE_KEY = 'dafopet_qtabs_v1';
-    var MAX_TABS = 8;
+    var MAX_TABS = 12;
+
+    // 路径 → 默认 tab 标签映射。详情页用 <meta tab-label> 覆盖。
+    // 顺序：先精确匹配，再前缀匹配。
+    var PATH_LABELS = [
+      // 接待
+      { path: '/admin',                  label: '工作台',     kind: 'page', icon: '🏠', exact: true },
+      { path: '/admin/calendar',         label: '日历',       kind: 'page', icon: '📅' },
+      { path: '/admin/appointments',     label: '预约管理',   kind: 'page', icon: '📋' },
+      { path: '/admin/customers',        label: '客户档案',   kind: 'page', icon: '👥', exact: true },
+      // 医疗
+      { path: '/admin/dispensing',       label: '发药台',     kind: 'page', icon: '💊' },
+      { path: '/admin/vaccinations',     label: '疫苗管理',   kind: 'page', icon: '💉' },
+      { path: '/admin/rabies',           label: '狂犬疫苗',   kind: 'page', icon: '🐶' },
+      { path: '/admin/visits',           label: '病历查询',   kind: 'page', icon: '🔍', exact: true },
+      { path: '/admin/follow-ups',       label: '回访管理',   kind: 'page', icon: '📞' },
+      // 经营
+      { path: '/admin/invoices',         label: '收银台',     kind: 'page', icon: '🧾', exact: true },
+      { path: '/admin/inventory',        label: '库存管理',   kind: 'page', icon: '📦', exact: true },
+      { path: '/admin/stocktake',        label: '循环盘点',   kind: 'page', icon: '📊' },
+      { path: '/admin/sales',            label: '销售单',     kind: 'page', icon: '🛒' },
+      { path: '/admin/feedback',         label: '客户反馈',   kind: 'page', icon: '💬' },
+      // 系统
+      { path: '/admin/hr',               label: '人事管理',   kind: 'page', icon: '👨‍💼' },
+      { path: '/admin/adoption',         label: '领养',       kind: 'page', icon: '🐾' },
+      { path: '/admin/changelog',        label: '开发日志',   kind: 'page', icon: '📝' },
+    ];
+
+    function lookupPath(p) {
+      // 精确匹配优先
+      for (var i = 0; i < PATH_LABELS.length; i++) {
+        if (PATH_LABELS[i].exact && PATH_LABELS[i].path === p) return PATH_LABELS[i];
+      }
+      // 前缀匹配（如 /admin/calendar/foo 也算日历）
+      for (var j = 0; j < PATH_LABELS.length; j++) {
+        var e = PATH_LABELS[j];
+        if (!e.exact && (p === e.path || p.indexOf(e.path + '/') === 0)) return e;
+      }
+      return null;
+    }
 
     function readTabs() {
       try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
@@ -495,17 +534,28 @@
       return m ? (m.getAttribute('content') || '') : '';
     }
     function currentTab() {
+      var path = location.pathname.replace(/\/$/, '');
       var label = pageMeta('tab-label');
-      if (!label) return null;
-      var kind = pageMeta('tab-kind') || 'page';
-      var icon = pageMeta('tab-icon') || ({customer:'👤', visit:'📋', prescription:'💊', exam:'🔬', invoice:'🧾'}[kind] || '📄');
-      // url = pathname + search，去掉 hash 与 msg= 一类的临时参数
+      var kind, icon;
+      if (label) {
+        // 详情页：用 meta 标签覆盖
+        kind = pageMeta('tab-kind') || 'detail';
+        icon = pageMeta('tab-icon') ||
+               ({customer:'👤', visit:'📋', prescription:'💊', exam:'🔬', invoice:'🧾'}[kind] || '📄');
+      } else {
+        // 列表/功能页：按 PATH_LABELS 推断
+        var hit = lookupPath(path);
+        if (!hit) return null;
+        label = hit.label; kind = hit.kind; icon = hit.icon;
+      }
+      // url = pathname + search，去掉 hash / msg= / err= / page= 等临时参数
       var url = location.pathname + location.search;
-      url = url.replace(/[?&]msg=[^&]*/g, '').replace(/[?&]err=[^&]*/g, '');
-      url = url.replace(/^\?/, '?').replace(/\?$/, '');
-      // 用 path+主要资源 id 作为去重 key，避免 query 变化复制多次
-      var key = location.pathname.replace(/\/$/, '');
-      return { key: key, url: url, label: label, kind: kind, icon: icon, ts: Date.now() };
+      url = url.replace(/[?&]msg=[^&]*/g, '')
+               .replace(/[?&]err=[^&]*/g, '')
+               .replace(/[?&]page=\d+/g, '');
+      // 收尾清理
+      url = url.replace(/\?&/, '?').replace(/\?$/, '');
+      return { key: path, url: url, label: label, kind: kind, icon: icon, ts: Date.now() };
     }
     function upsert(tabs, tab) {
       var idx = -1;
@@ -521,7 +571,15 @@
         tabs[idx].ts    = tab.ts;
       } else {
         tabs.unshift(tab);
-        if (tabs.length > MAX_TABS) tabs.length = MAX_TABS;
+        // 超出上限：先淘汰最早的功能页（kind=page），保护客户/处方/就诊/检查
+        while (tabs.length > MAX_TABS) {
+          var evictIdx = -1;
+          for (var k = tabs.length - 1; k > 0; k--) {
+            if (tabs[k].kind === 'page') { evictIdx = k; break; }
+          }
+          if (evictIdx < 0) evictIdx = tabs.length - 1;  // 全是详情页，淘汰最旧的
+          tabs.splice(evictIdx, 1);
+        }
       }
       return tabs;
     }
