@@ -810,6 +810,146 @@ class MedicalDocument(Base):
     customer = relationship("Customer", backref="medical_documents", foreign_keys=[customer_id])
 
 
+class Wallet(Base):
+    """客户钱包：现金预存款。一个客户一个钱包行。"""
+    __tablename__ = "wallets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, unique=True)
+    balance:           Mapped[float] = mapped_column(Float, default=0.0)   # 当前余额
+    lifetime_recharge: Mapped[float] = mapped_column(Float, default=0.0)   # 累计充值
+    lifetime_consume:  Mapped[float] = mapped_column(Float, default=0.0)   # 累计消费
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+
+
+class WalletTransaction(Base):
+    """钱包流水：每一笔充值/消费/退款/调账。"""
+    __tablename__ = "wallet_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    wallet_id   = mapped_column(ForeignKey("wallets.id",   ondelete="CASCADE"), nullable=False)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    # type: recharge / consume / refund / adjust
+    type:          Mapped[str]   = mapped_column(String(20), default="consume")
+    amount:        Mapped[float] = mapped_column(Float, default=0.0)        # 本次变动，正=进，负=出
+    balance_after: Mapped[float] = mapped_column(Float, default=0.0)        # 操作后余额
+    # 关联（充值时可记 pay_method，消费时关联 invoice_id）
+    pay_method: Mapped[str] = mapped_column(String(40), default="")         # 充值时记 cash/wechat/...
+    invoice_id  = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    bonus_amount: Mapped[float] = mapped_column(Float, default=0.0)         # 赠送金额（充 500 送 50 时）
+    store:      Mapped[str] = mapped_column(String(40), default="")         # 当时门店短名
+    note:       Mapped[str] = mapped_column(Text, default="")
+    operator:   Mapped[str] = mapped_column(String(80), default="")         # 经办人 username
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    wallet   = relationship("Wallet",   foreign_keys=[wallet_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+
+
+class PackageProduct(Base):
+    """套餐商品（目录）：例如 美容套餐 10 次卡 ¥800。"""
+    __tablename__ = "package_products"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name:        Mapped[str] = mapped_column(String(120), default="")
+    category:    Mapped[str] = mapped_column(String(40),  default="beauty")  # beauty/bath/medical/other
+    total_uses:  Mapped[int] = mapped_column(Integer, default=10)            # 包次卡总次数
+    sell_price:  Mapped[float] = mapped_column(Float, default=0.0)
+    # 单次抵扣的服务参考价（导出/报表用）
+    unit_price:  Mapped[float] = mapped_column(Float, default=0.0)
+    validity_days: Mapped[int] = mapped_column(Integer, default=365)         # 0 = 无限期
+    is_active:   Mapped[bool]  = mapped_column(Boolean, default=True)
+    notes:       Mapped[str]   = mapped_column(Text, default="")
+    created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class CustomerPackage(Base):
+    """客户已购套餐（实例）：1 张包次卡。"""
+    __tablename__ = "customer_packages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    product_id  = mapped_column(ForeignKey("package_products.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    # 售卖时快照（防止 product 改名/改价后影响历史）
+    name:       Mapped[str]   = mapped_column(String(120), default="")
+    category:   Mapped[str]   = mapped_column(String(40),  default="")
+    total_uses: Mapped[int]   = mapped_column(Integer, default=10)
+    used_count: Mapped[int]   = mapped_column(Integer, default=0)
+    sell_price: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_price: Mapped[float] = mapped_column(Float, default=0.0)
+
+    purchase_date: Mapped[str] = mapped_column(String(20), default="")
+    expires_at:    Mapped[str] = mapped_column(String(20), default="")        # 空 = 无限期
+    # status: active / exhausted / expired / refunded
+    status:    Mapped[str] = mapped_column(String(20), default="active")
+    store:     Mapped[str] = mapped_column(String(40), default="")
+    operator:  Mapped[str] = mapped_column(String(80), default="")
+    invoice_id = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    note:      Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer",       foreign_keys=[customer_id])
+    pet      = relationship("Pet",            foreign_keys=[pet_id])
+    product  = relationship("PackageProduct", foreign_keys=[product_id])
+
+
+class PackageRedemption(Base):
+    """套餐核销：每次扣 1 次的流水。"""
+    __tablename__ = "package_redemptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_package_id = mapped_column(ForeignKey("customer_packages.id", ondelete="CASCADE"), nullable=False)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="SET NULL"), nullable=True, default=None)
+    invoice_id  = mapped_column(ForeignKey("invoices.id",  ondelete="SET NULL"), nullable=True, default=None)
+    used_count:  Mapped[int]   = mapped_column(Integer, default=1)
+    remaining_after: Mapped[int] = mapped_column(Integer, default=0)
+    store:       Mapped[str]   = mapped_column(String(40), default="")
+    operator:    Mapped[str]   = mapped_column(String(80), default="")
+    note:        Mapped[str]   = mapped_column(Text, default="")
+    created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Deposit(Base):
+    """业务押金：手术押金、寄养押金等。关联具体业务实体。"""
+    __tablename__ = "deposits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    # 关联到具体业务（二选一）
+    appointment_id = mapped_column(ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True, default=None)
+    visit_id       = mapped_column(ForeignKey("visits.id",       ondelete="SET NULL"), nullable=True, default=None)
+    # category: surgery / boarding / beauty / other
+    category:   Mapped[str]   = mapped_column(String(40), default="surgery")
+    amount:     Mapped[float] = mapped_column(Float, default=0.0)
+    pay_method: Mapped[str]   = mapped_column(String(40), default="cash")
+    # status: held（已收待结算）/ applied（已抵扣到收费单）/ refunded（已退款）/ partial_refund
+    status:     Mapped[str]   = mapped_column(String(20), default="held")
+    # 抵扣到的收费单
+    applied_invoice_id = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    applied_amount:    Mapped[float] = mapped_column(Float, default=0.0)
+    refunded_amount:   Mapped[float] = mapped_column(Float, default=0.0)
+    refunded_at:       Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    store:      Mapped[str] = mapped_column(String(40), default="")
+    operator:   Mapped[str] = mapped_column(String(80), default="")
+    note:       Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer    = relationship("Customer",    foreign_keys=[customer_id])
+    pet         = relationship("Pet",         foreign_keys=[pet_id])
+    appointment = relationship("Appointment", foreign_keys=[appointment_id])
+    visit       = relationship("Visit",       foreign_keys=[visit_id])
+
+
 class FollowUp(Base):
     """回访任务：每条 Visit 自动衍生一条（visit_type 在规则里有 >0 天的才出）。
 

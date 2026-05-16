@@ -77,6 +77,12 @@ from app.models import (
     MedicalDocument,
     PrescriptionTemplate,
     FollowUp,
+    Wallet,
+    WalletTransaction,
+    PackageProduct,
+    CustomerPackage,
+    PackageRedemption,
+    Deposit,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result

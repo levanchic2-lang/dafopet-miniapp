@@ -926,6 +926,122 @@ def _try_sqlite_migrations() -> None:
                 ")"
             ))
 
+            # ── 钱包系统 ───────────────────────────────────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS wallets ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "customer_id INTEGER NOT NULL UNIQUE REFERENCES customers(id) ON DELETE CASCADE, "
+                "balance REAL DEFAULT 0.0, "
+                "lifetime_recharge REAL DEFAULT 0.0, "
+                "lifetime_consume REAL DEFAULT 0.0, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS wallet_transactions ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "type VARCHAR(20) DEFAULT 'consume', "
+                "amount REAL DEFAULT 0.0, "
+                "balance_after REAL DEFAULT 0.0, "
+                "pay_method VARCHAR(40) DEFAULT '', "
+                "invoice_id INTEGER DEFAULT NULL REFERENCES invoices(id) ON DELETE SET NULL, "
+                "bonus_amount REAL DEFAULT 0.0, "
+                "store VARCHAR(40) DEFAULT '', "
+                "note TEXT DEFAULT '', "
+                "operator VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_wtx_wallet ON wallet_transactions(wallet_id, created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_wtx_customer ON wallet_transactions(customer_id, created_at)"))
+
+            # ── 套餐 ────────────────────────────────────────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS package_products ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "name VARCHAR(120) DEFAULT '', "
+                "category VARCHAR(40) DEFAULT 'beauty', "
+                "total_uses INTEGER DEFAULT 10, "
+                "sell_price REAL DEFAULT 0.0, "
+                "unit_price REAL DEFAULT 0.0, "
+                "validity_days INTEGER DEFAULT 365, "
+                "is_active BOOLEAN DEFAULT 1, "
+                "notes TEXT DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS customer_packages ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "product_id INTEGER DEFAULT NULL REFERENCES package_products(id) ON DELETE SET NULL, "
+                "name VARCHAR(120) DEFAULT '', "
+                "category VARCHAR(40) DEFAULT '', "
+                "total_uses INTEGER DEFAULT 10, "
+                "used_count INTEGER DEFAULT 0, "
+                "sell_price REAL DEFAULT 0.0, "
+                "unit_price REAL DEFAULT 0.0, "
+                "purchase_date VARCHAR(20) DEFAULT '', "
+                "expires_at VARCHAR(20) DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'active', "
+                "store VARCHAR(40) DEFAULT '', "
+                "operator VARCHAR(80) DEFAULT '', "
+                "invoice_id INTEGER DEFAULT NULL REFERENCES invoices(id) ON DELETE SET NULL, "
+                "note TEXT DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cpkg_customer ON customer_packages(customer_id, status)"))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS package_redemptions ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "customer_package_id INTEGER NOT NULL REFERENCES customer_packages(id) ON DELETE CASCADE, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "invoice_id INTEGER DEFAULT NULL REFERENCES invoices(id) ON DELETE SET NULL, "
+                "used_count INTEGER DEFAULT 1, "
+                "remaining_after INTEGER DEFAULT 0, "
+                "store VARCHAR(40) DEFAULT '', "
+                "operator VARCHAR(80) DEFAULT '', "
+                "note TEXT DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_predeem_cpkg ON package_redemptions(customer_package_id)"))
+
+            # ── 押金 ────────────────────────────────────────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS deposits ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "appointment_id INTEGER DEFAULT NULL REFERENCES appointments(id) ON DELETE SET NULL, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "category VARCHAR(40) DEFAULT 'surgery', "
+                "amount REAL DEFAULT 0.0, "
+                "pay_method VARCHAR(40) DEFAULT 'cash', "
+                "status VARCHAR(20) DEFAULT 'held', "
+                "applied_invoice_id INTEGER DEFAULT NULL REFERENCES invoices(id) ON DELETE SET NULL, "
+                "applied_amount REAL DEFAULT 0.0, "
+                "refunded_amount REAL DEFAULT 0.0, "
+                "refunded_at DATETIME DEFAULT NULL, "
+                "store VARCHAR(40) DEFAULT '', "
+                "operator VARCHAR(80) DEFAULT '', "
+                "note TEXT DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dep_status ON deposits(status, customer_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dep_appt ON deposits(appointment_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dep_visit ON deposits(visit_id)"))
+
             # follow_ups 回访任务
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS follow_ups ("
