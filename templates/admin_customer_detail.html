@@ -232,6 +232,7 @@
  <button class="tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费<span class="count">{{ pet_invoices|length }}</span></button>
  <button class="tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重曲线<span class="count">{{ weight_records|length }}</span></button>
  <button class="tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">医疗文书<span class="count">{{ medical_docs|length }}</span></button>
+ <button class="tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包<span class="count">¥{{ '%.0f'|format(wallet_balance) }}</span></button>
  </div>
 
  {# ── 诊疗 ── #}
@@ -534,6 +535,65 @@
  {% endif %}
  </div>
 
+ {# ── 钱包 ── #}
+ <div class="tab-content {% if active_tab=='wallet' %}active{% endif %}" data-tab-content="wallet">
+   <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:0.8rem;margin-bottom:1rem;">
+     <div style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:12px;padding:1.1rem 1.2rem;">
+       <div style="font-size:.82rem;opacity:.85;">当前余额</div>
+       <div style="font-size:1.8rem;font-weight:700;margin-top:.3rem;">¥{{ '%.2f'|format(wallet_balance) }}</div>
+     </div>
+     <div style="background:#f3f4f6;border-radius:12px;padding:1.1rem 1.2rem;">
+       <div style="font-size:.82rem;color:var(--muted);">累计充值</div>
+       <div style="font-size:1.4rem;font-weight:600;margin-top:.3rem;color:#111827;">¥{{ '%.2f'|format(wallet_lifetime_recharge) }}</div>
+     </div>
+     <div style="background:#f3f4f6;border-radius:12px;padding:1.1rem 1.2rem;">
+       <div style="font-size:.82rem;color:var(--muted);">累计消费</div>
+       <div style="font-size:1.4rem;font-weight:600;margin-top:.3rem;color:#111827;">¥{{ '%.2f'|format(wallet_lifetime_consume) }}</div>
+     </div>
+   </div>
+
+   <div class="tab-action-bar">
+     <button type="button" class="btn" onclick="document.getElementById('wallet-recharge-modal').classList.add('visible')">＋ 充值</button>
+     {% if request.session.get('admin_role') == 'superadmin' %}
+     <button type="button" class="btn secondary" onclick="document.getElementById('wallet-refund-modal').classList.add('visible')">↩ 退款</button>
+     <button type="button" class="btn secondary" onclick="document.getElementById('wallet-adjust-modal').classList.add('visible')">⚖ 调账</button>
+     {% endif %}
+     <span style="margin-left:auto;color:var(--muted);font-size:.82rem;">近 50 条流水</span>
+   </div>
+
+   {% if wallet_txs %}
+   <table class="data-table">
+     <thead>
+       <tr><th>时间</th><th>类型</th><th>金额</th><th>余额</th><th>方式</th><th>经办</th><th>备注</th></tr>
+     </thead>
+     <tbody>
+     {% for tx in wallet_txs %}
+     <tr>
+       <td>{{ tx.created_at.strftime('%Y-%m-%d %H:%M') if tx.created_at else '—' }}</td>
+       <td>
+       {% if tx.type == 'recharge' %}<span class="pill pill-info">充值</span>
+       {% elif tx.type == 'consume' %}<span class="pill pill-warn">消费</span>
+       {% elif tx.type == 'refund' %}<span class="pill pill-gray">退款</span>
+       {% elif tx.type == 'adjust' %}<span class="pill pill-purple">调账</span>
+       {% else %}<span class="pill">{{ tx.type }}</span>{% endif %}
+       </td>
+       <td style="font-weight:600;color:{% if tx.amount > 0 %}#059669{% else %}#dc2626{% endif %};">
+         {% if tx.amount > 0 %}+{% endif %}¥{{ '%.2f'|format(tx.amount) }}
+         {% if tx.bonus_amount and tx.bonus_amount > 0 %}<span style="font-size:.75rem;color:var(--muted);">（送 ¥{{ '%.0f'|format(tx.bonus_amount) }}）</span>{% endif %}
+       </td>
+       <td>¥{{ '%.2f'|format(tx.balance_after) }}</td>
+       <td style="color:var(--muted);font-size:.82rem;">{{ {'cash':'现金','wechat':'微信','alipay':'支付宝','card':'刷卡','groupbuy':'团购','other':'其他'}.get(tx.pay_method, tx.pay_method or '—') }}</td>
+       <td style="color:var(--muted);font-size:.82rem;">{{ tx.operator or '—' }}</td>
+       <td style="color:var(--muted);font-size:.82rem;max-width:200px;">{{ tx.note or '—' }}</td>
+     </tr>
+     {% endfor %}
+     </tbody>
+   </table>
+   {% else %}
+   <div class="tab-empty">暂无流水。点 + 充值 为客户开启钱包。</div>
+   {% endif %}
+ </div>
+
  </div>
  {% endif %}
 
@@ -813,6 +873,70 @@
 </div>
 
 {# ── 弹窗：上传文书 ── #}
+<div class="cd-modal-overlay" id="wallet-recharge-modal">
+ <div class="cd-modal">
+ <h3>钱包充值 — {{ cust.name or '客户' }}</h3>
+ <form method="post" action="/admin/wallets/{{ cust.id }}/recharge">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <label>充值金额（¥）</label>
+ <input name="amount" type="number" step="0.01" min="0.01" required autofocus>
+ <label>赠送金额（可选）</label>
+ <input name="bonus" type="number" step="0.01" min="0" value="0" placeholder="充 500 送 50 → 这里填 50">
+ <label>收款方式</label>
+ <select name="pay_method">
+   <option value="cash">现金</option>
+   <option value="wechat">微信</option>
+   <option value="alipay">支付宝</option>
+   <option value="card">刷卡</option>
+   <option value="groupbuy">团购</option>
+   <option value="other">其他</option>
+ </select>
+ <label>备注（可选）</label>
+ <input name="note" placeholder="如 充值满 500 送 50">
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+   <button type="submit" class="btn">充值</button>
+   <button type="button" class="btn secondary" onclick="document.getElementById('wallet-recharge-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
+</div>
+
+<div class="cd-modal-overlay" id="wallet-refund-modal">
+ <div class="cd-modal">
+ <h3>钱包退款 — {{ cust.name or '客户' }}</h3>
+ <p style="color:#dc2626;font-size:.85rem;">⚠ 当前余额 ¥{{ '%.2f'|format(wallet_balance) }}。退款会扣减余额，操作不可撤销，请确认后再提交。</p>
+ <form method="post" action="/admin/wallets/{{ cust.id }}/refund">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <label>退款金额（¥）</label>
+ <input name="amount" type="number" step="0.01" min="0.01" max="{{ '%.2f'|format(wallet_balance) }}" required>
+ <label>备注（必填）</label>
+ <input name="note" required placeholder="如 客户申请退款 / 误充">
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+   <button type="submit" class="btn">退款</button>
+   <button type="button" class="btn secondary" onclick="document.getElementById('wallet-refund-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
+</div>
+
+<div class="cd-modal-overlay" id="wallet-adjust-modal">
+ <div class="cd-modal">
+ <h3>钱包调账 — {{ cust.name or '客户' }}</h3>
+ <p style="color:var(--muted);font-size:.85rem;">输入正数加余额，负数扣余额。任何调账都会留下完整审计日志。</p>
+ <form method="post" action="/admin/wallets/{{ cust.id }}/adjust">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <label>调整金额（¥，可正可负）</label>
+ <input name="amount" type="number" step="0.01" required placeholder="如 +10.00 或 -50.00">
+ <label>调账原因（必填）</label>
+ <input name="note" required placeholder="如 系统迁移修正 / 老客户回馈">
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+   <button type="submit" class="btn">提交调账</button>
+   <button type="button" class="btn secondary" onclick="document.getElementById('wallet-adjust-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
+</div>
+
 <div class="cd-modal-overlay" id="upload-doc-modal">
  <div class="cd-modal">
  <h3>上传医疗文书 — {{ active_pet.name }}</h3>

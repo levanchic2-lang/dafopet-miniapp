@@ -798,6 +798,86 @@ def t_display_name_match():
 t_display_name_match()
 
 
+@step("钱包：充值 100 余额 +100、累计 +100")
+def t_wallet_recharge():
+    r = client.get(f"/admin/customers/{cust_id}?tab=wallet")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/wallets/{cust_id}/recharge", data={
+        "csrf_token": token, "amount": "100", "pay_method": "cash",
+        "bonus": "0", "note": "测试充值",
+    })
+    assert r.status_code == 303, f"got {r.status_code}"
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Wallet, WalletTransaction
+    db = SessionLocal()
+    w = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    assert w and abs(w.balance - 100.0) < 1e-6, f"应余额 100，得 {w and w.balance}"
+    assert abs(w.lifetime_recharge - 100.0) < 1e-6
+    txs = db.query(WalletTransaction).filter(WalletTransaction.wallet_id == w.id).all()
+    assert len(txs) == 1 and txs[0].type == "recharge" and txs[0].amount == 100.0
+    db.close()
+
+t_wallet_recharge()
+
+
+@step("钱包：充 500 送 50 → 余额 +550、lifetime_recharge +500")
+def t_wallet_recharge_bonus():
+    r = client.get(f"/admin/customers/{cust_id}?tab=wallet")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/wallets/{cust_id}/recharge", data={
+        "csrf_token": token, "amount": "500", "pay_method": "wechat", "bonus": "50",
+    })
+    assert r.status_code == 303
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Wallet
+    db = SessionLocal()
+    w = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    assert abs(w.balance - 650.0) < 1e-6, f"应 650（100 + 500 + 50），得 {w.balance}"
+    assert abs(w.lifetime_recharge - 600.0) < 1e-6, f"应 600，得 {w.lifetime_recharge}"
+    db.close()
+
+t_wallet_recharge_bonus()
+
+
+@step("钱包：调账 -50 → 余额 600")
+def t_wallet_adjust():
+    r = client.get(f"/admin/customers/{cust_id}?tab=wallet")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/wallets/{cust_id}/adjust", data={
+        "csrf_token": token, "amount": "-50", "note": "测试调账",
+    })
+    assert r.status_code == 303
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Wallet
+    db = SessionLocal()
+    w = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    assert abs(w.balance - 600.0) < 1e-6, f"应 600，得 {w.balance}"
+    db.close()
+
+t_wallet_adjust()
+
+
+@step("钱包：退款超过余额应被拒")
+def t_wallet_refund_overflow():
+    r = client.get(f"/admin/customers/{cust_id}?tab=wallet")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/wallets/{cust_id}/refund", data={
+        "csrf_token": token, "amount": "999999", "note": "测试超额",
+    })
+    assert r.status_code == 303
+    from urllib.parse import unquote
+    loc = unquote(r.headers.get("location", ""))
+    assert "超过" in loc, f"loc={loc}"
+
+t_wallet_refund_overflow()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

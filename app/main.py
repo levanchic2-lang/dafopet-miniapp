@@ -4913,6 +4913,22 @@ async def page_admin_customer_detail(
     from datetime import date, timedelta
     today_str = date.today().isoformat()
     soon_str  = (date.today() + timedelta(days=7)).isoformat()
+
+    # ── 钱包 + 流水 ──
+    wallet = db.query(Wallet).filter(Wallet.customer_id == customer_id).first()
+    wallet_balance = float(wallet.balance) if wallet else 0.0
+    wallet_lifetime_recharge = float(wallet.lifetime_recharge) if wallet else 0.0
+    wallet_lifetime_consume = float(wallet.lifetime_consume) if wallet else 0.0
+    wallet_txs = []
+    if wallet:
+        wallet_txs = (
+            db.query(WalletTransaction)
+            .filter(WalletTransaction.wallet_id == wallet.id)
+            .order_by(WalletTransaction.id.desc())
+            .limit(50)
+            .all()
+        )
+
     return templates.TemplateResponse(
         request,
         "admin_customer_detail.html",
@@ -4938,6 +4954,11 @@ async def page_admin_customer_detail(
             "medical_docs": medical_docs,
             "pet_invoices": pet_invoices,
             "pet_sales_orders": pet_sales_orders,
+            # 钱包
+            "wallet_balance": wallet_balance,
+            "wallet_lifetime_recharge": wallet_lifetime_recharge,
+            "wallet_lifetime_consume": wallet_lifetime_consume,
+            "wallet_txs": wallet_txs,
             # 翻译字典
             "visit_type_zh": _VISIT_TYPE_ZH,
             "so_status_zh": _SO_STATUS_ZH_LOCAL,
@@ -5093,6 +5114,221 @@ async def admin_customer_edit_pet(
     pet.life_status = (life_status or "alive").strip()[:20]
     db.commit()
     return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&msg=宠物已更新", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# 客户钱包 (Wallet) — 充值 / 消费 / 退款 / 调账
+# ---------------------------------------------------------------------------
+
+_WALLET_TX_TYPE_ZH = {
+    "recharge": "充值",
+    "consume":  "消费",
+    "refund":   "退款",
+    "adjust":   "调账",
+}
+
+
+def _get_or_create_wallet(db: Session, customer_id: int) -> Wallet:
+    """取或建客户钱包，确保单例。"""
+    w = db.query(Wallet).filter(Wallet.customer_id == customer_id).first()
+    if w:
+        return w
+    w = Wallet(customer_id=customer_id, balance=0.0)
+    db.add(w)
+    db.flush()
+    return w
+
+
+def _wallet_apply_tx(
+    db: Session,
+    wallet: Wallet,
+    *,
+    tx_type: str,
+    amount: float,
+    bonus: float = 0.0,
+    pay_method: str = "",
+    invoice_id: int | None = None,
+    operator: str = "",
+    store: str = "",
+    note: str = "",
+) -> WalletTransaction:
+    """对钱包施加一笔流水。amount 正/负由 tx_type 决定：
+      recharge → balance + (amount + bonus)，lifetime_recharge += amount
+      consume  → balance - amount，lifetime_consume += amount
+      refund   → balance - amount（把余额退还客户）
+      adjust   → balance += amount（amount 可正可负）
+    返回 WalletTransaction 行，未 commit。
+    """
+    amt = float(amount or 0)
+    bns = float(bonus or 0)
+    if tx_type == "recharge":
+        delta = amt + bns
+        wallet.balance += delta
+        wallet.lifetime_recharge += amt
+        signed = delta  # 正
+    elif tx_type == "consume":
+        if amt > wallet.balance + 1e-6:
+            raise HTTPException(400, f"余额不足：当前 ¥{wallet.balance:.2f}，需扣 ¥{amt:.2f}")
+        wallet.balance -= amt
+        wallet.lifetime_consume += amt
+        signed = -amt
+    elif tx_type == "refund":
+        if amt > wallet.balance + 1e-6:
+            raise HTTPException(400, f"退款金额超过当前余额（¥{wallet.balance:.2f}）")
+        wallet.balance -= amt
+        signed = -amt
+    elif tx_type == "adjust":
+        # amount 可正可负
+        new_bal = wallet.balance + amt
+        if new_bal < -1e-6:
+            raise HTTPException(400, "调账后余额不能为负")
+        wallet.balance = new_bal
+        signed = amt
+    else:
+        raise HTTPException(400, f"未知流水类型：{tx_type}")
+
+    wallet.updated_at = datetime.utcnow()
+    tx = WalletTransaction(
+        wallet_id=wallet.id,
+        customer_id=wallet.customer_id,
+        type=tx_type,
+        amount=signed,
+        balance_after=wallet.balance,
+        pay_method=pay_method or "",
+        invoice_id=invoice_id,
+        bonus_amount=bns if tx_type == "recharge" else 0.0,
+        store=store or "",
+        operator=operator or "",
+        note=(note or "")[:500],
+    )
+    db.add(tx)
+    db.flush()
+    return tx
+
+
+@app.post("/admin/wallets/{customer_id}/recharge")
+async def admin_wallet_recharge(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    amount: str = Form(...),
+    pay_method: str = Form("cash"),
+    bonus: str = Form("0"),
+    note: str = Form(""),
+):
+    """客户钱包充值。amount = 实收，bonus = 赠送额。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404, "客户不存在")
+    try:
+        amt = float(amount)
+        bns = float(bonus or "0")
+    except (TypeError, ValueError):
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=金额无效", status_code=303)
+    if amt <= 0:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=充值金额需大于 0", status_code=303)
+    if bns < 0:
+        bns = 0.0
+    if pay_method not in ("cash", "wechat", "alipay", "card", "groupbuy", "other"):
+        pay_method = "cash"
+
+    wallet = _get_or_create_wallet(db, customer_id)
+    _wallet_apply_tx(
+        db, wallet, tx_type="recharge", amount=amt, bonus=bns,
+        pay_method=pay_method,
+        operator=request.session.get("admin_username", "admin"),
+        store=_get_admin_store(request),
+        note=note,
+    )
+    db.commit()
+    _audit(db, request, "wallet_recharge", application_id=None,
+           detail={"customer_id": customer_id, "amount": amt, "bonus": bns, "method": pay_method})
+    db.commit()
+    return RedirectResponse(
+        f"/admin/customers/{customer_id}?tab=wallet&msg=充值成功 ¥{amt:.2f}" + (f"（送 ¥{bns:.2f}）" if bns > 0 else ""),
+        status_code=303,
+    )
+
+
+@app.post("/admin/wallets/{customer_id}/refund")
+async def admin_wallet_refund(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    amount: str = Form(...),
+    note: str = Form(""),
+):
+    """钱包退款（把余额退给客户）。amount > 0。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)  # 退款仅超管
+    try:
+        amt = float(amount)
+    except (TypeError, ValueError):
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=金额无效", status_code=303)
+    if amt <= 0:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=退款金额需大于 0", status_code=303)
+    wallet = _get_or_create_wallet(db, customer_id)
+    try:
+        _wallet_apply_tx(
+            db, wallet, tx_type="refund", amount=amt,
+            operator=request.session.get("admin_username", "admin"),
+            store=_get_admin_store(request),
+            note=note,
+        )
+    except HTTPException as he:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg={he.detail}", status_code=303)
+    db.commit()
+    _audit(db, request, "wallet_refund", application_id=None,
+           detail={"customer_id": customer_id, "amount": amt})
+    db.commit()
+    return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=已退款 ¥{amt:.2f}", status_code=303)
+
+
+@app.post("/admin/wallets/{customer_id}/adjust")
+async def admin_wallet_adjust(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    amount: str = Form(...),
+    note: str = Form(""),
+):
+    """钱包调账（正可加、负可扣，需备注）。仅超管。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    if not (note or "").strip():
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=调账必须填备注", status_code=303)
+    try:
+        amt = float(amount)
+    except (TypeError, ValueError):
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=金额无效", status_code=303)
+    if amt == 0:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=调账金额不能为 0", status_code=303)
+    wallet = _get_or_create_wallet(db, customer_id)
+    try:
+        _wallet_apply_tx(
+            db, wallet, tx_type="adjust", amount=amt,
+            operator=request.session.get("admin_username", "admin"),
+            store=_get_admin_store(request),
+            note=note,
+        )
+    except HTTPException as he:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg={he.detail}", status_code=303)
+    db.commit()
+    _audit(db, request, "wallet_adjust", application_id=None,
+           detail={"customer_id": customer_id, "amount": amt, "note": note})
+    db.commit()
+    sign = "+" if amt > 0 else ""
+    return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=调账 {sign}¥{amt:.2f}", status_code=303)
 
 
 # ---------------------------------------------------------------------------
