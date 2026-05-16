@@ -1125,6 +1125,130 @@ def t_coupon_issue():
 t_coupon_issue()
 
 
+@step("混合支付：一单 ¥200 拆成 现金 ¥100 + 微信 ¥60 + 优惠券 ¥40")
+def t_mixed_payment():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Invoice, Payment, Coupon
+
+    db = SessionLocal()
+    # 造 200 元单
+    inv = Invoice(customer_id=cust_id, pet_id=pet_id,
+                  invoice_no="TEST_MIXED", invoice_date="2026-05-15",
+                  subtotal=200.0, discount_amount=0.0, total_amount=200.0,
+                  payment_status="unpaid")
+    db.add(inv); db.commit(); db.refresh(inv)
+    inv_id = inv.id
+    # 拿一张满 100 用 ¥50 的客户券
+    c = db.query(Coupon).filter(
+        Coupon.customer_id == cust_id, Coupon.kind == "cash",
+        Coupon.face_value == 50.0, Coupon.status == "issued",
+    ).first()
+    assert c
+    coupon_id = c.id
+    db.close()
+
+    # 第 1 笔：现金 100
+    r = client.get(f"/admin/invoices/{inv_id}")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/invoices/{inv_id}/add-payment", data={
+        "csrf_token": token, "method": "cash", "amount": "100",
+    })
+    assert r.status_code == 303
+
+    # 第 2 笔：微信 60
+    r = client.post(f"/admin/invoices/{inv_id}/add-payment", data={
+        "csrf_token": token, "method": "wechat", "amount": "60",
+        "ref_no": "WX_123456",
+    })
+    assert r.status_code == 303
+
+    # 此时 invoice 还没付清 (160/200)
+    db = SessionLocal()
+    inv2 = db.get(Invoice, inv_id)
+    assert inv2.payment_status == "unpaid"
+    pays = db.query(Payment).filter(Payment.invoice_id == inv_id).all()
+    assert len(pays) == 2
+    db.close()
+
+    # 第 3 笔：优惠券（应抵 ¥50 → 但 outstanding 只剩 40 → 实际只用 40）
+    r = client.post(f"/admin/invoices/{inv_id}/add-payment", data={
+        "csrf_token": token, "method": "coupon", "amount": "40",
+        "coupon_id": str(coupon_id),
+    })
+    assert r.status_code == 303
+
+    db = SessionLocal()
+    inv3 = db.get(Invoice, inv_id)
+    assert inv3.payment_status == "paid", f"应付清，得 {inv3.payment_status}"
+    pays = db.query(Payment).filter(Payment.invoice_id == inv_id, Payment.status == "success").all()
+    assert len(pays) == 3
+    total = sum(p.amount for p in pays)
+    assert abs(total - 200.0) < 1e-6, f"sum 应 200，得 {total}"
+    # 优惠券应标记 used
+    c2 = db.get(Coupon, coupon_id)
+    assert c2.status == "used"
+    assert c2.used_invoice_id == inv_id
+    db.close()
+
+t_mixed_payment()
+
+
+@step("混合支付：撤销其中一笔 → 收费单回到 unpaid，优惠券回到 issued")
+def t_payment_void():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Invoice, Payment, Coupon
+    db = SessionLocal()
+    # 找之前付清的 TEST_MIXED 单的优惠券那笔
+    inv = db.query(Invoice).filter(Invoice.invoice_no == "TEST_MIXED").first()
+    coupon_pay = db.query(Payment).filter(
+        Payment.invoice_id == inv.id, Payment.method == "coupon", Payment.status == "success"
+    ).first()
+    assert coupon_pay
+    pay_id = coupon_pay.id
+    inv_id = inv.id
+    coupon_id = coupon_pay.ref_id
+    db.close()
+
+    r = client.get(f"/admin/invoices/{inv_id}")
+    token = extract_csrf(r.text)
+    assert token, f"页面里抓不到 csrf_token；前 500 字: {r.text[:500]}"
+    r = client.post(f"/admin/invoices/{inv_id}/payments/{pay_id}/void", data={
+        "csrf_token": token,
+    })
+    assert r.status_code == 303, f"got {r.status_code}, body={r.text[:200]}, token len={len(token)}"
+
+    db = SessionLocal()
+    p = db.get(Payment, pay_id)
+    assert p.status == "cancelled"
+    inv2 = db.get(Invoice, inv_id)
+    assert inv2.payment_status == "unpaid", "撤销后应回 unpaid"
+    c = db.get(Coupon, coupon_id)
+    assert c.status == "issued", f"券应回 issued 得 {c.status}"
+    assert c.used_invoice_id is None
+    db.close()
+
+t_payment_void()
+
+
+@step("报表：按支付方式聚合从 Payment 表读，含混合支付的多笔")
+def t_revenue_payment_aggregation():
+    # 前面 t_mixed_payment 留下了 cash 100 + wechat 60，coupon 那笔已被 void
+    # 那个收费单状态是 unpaid（被 void 后），所以 invoice 不在 paid 集合里
+    # 但前面其他 paid 单（钱包付的 ¥100 / 套餐单 ¥50 / 押金抵扣单 ¥300 / 钱包付的套餐 ¥300）应该被算
+    r = client.get("/admin/reports/revenue?preset=year")
+    assert r.status_code == 200
+    # 当前 paid invoice 都有 Payment 行了吗？老数据没有 Payment，走 fallback
+    # 至少页面应包含 "现金 / 钱包" 等关键词之一
+    txt = r.text
+    assert ("现金" in txt or "钱包" in txt or "微信" in txt), "报表应显示支付方式标签"
+
+t_revenue_payment_aggregation()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

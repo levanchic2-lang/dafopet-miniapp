@@ -8545,14 +8545,29 @@ async def admin_reports_revenue(
     total_count = len(rows)
     avg = (total_amount / total_count) if total_count else 0.0
 
-    # 按支付方式
+    # 按支付方式：从 Payment 表聚合（混合支付时单张单可拆多笔）
+    invoice_ids = [r.id for r in rows]
+    pay_rows = []
+    if invoice_ids:
+        pay_rows = db.query(Payment).filter(
+            Payment.invoice_id.in_(invoice_ids),
+            Payment.status == "success",
+        ).all()
     by_method: dict[str, dict] = {}
-    for r in rows:
-        m = (r.payment_method or "").strip() or "other"
+    for p in pay_rows:
+        m = (p.method or "").strip() or "other"
         if m not in by_method:
             by_method[m] = {"amount": 0.0, "count": 0}
-        by_method[m]["amount"] += float(r.total_amount or 0)
+        by_method[m]["amount"] += float(p.amount or 0)
         by_method[m]["count"] += 1
+    # 兜底：如果完全没有 Payment 行（老数据），fall back 用 invoice.payment_method
+    if not by_method:
+        for r in rows:
+            m = (r.payment_method or "").strip() or "other"
+            if m not in by_method:
+                by_method[m] = {"amount": 0.0, "count": 0}
+            by_method[m]["amount"] += float(r.total_amount or 0)
+            by_method[m]["count"] += 1
     by_method_list = sorted(
         [{"method": m, "label": _REVENUE_PAY_ZH.get(m, m), **v} for m, v in by_method.items()],
         key=lambda x: -x["amount"],
@@ -8982,6 +8997,30 @@ async def admin_invoice_detail(
             if remaining > 0:
                 d._remaining = remaining
                 available_deposits.append(d)
+
+    # 客户可用的优惠券
+    available_coupons = []
+    if inv.customer_id:
+        for c in db.query(Coupon).filter(
+            ((Coupon.customer_id == inv.customer_id) | (Coupon.customer_id.is_(None))),
+            Coupon.status == "issued",
+        ).order_by(Coupon.id.desc()).all():
+            if _coupon_is_expired(c):
+                continue
+            usable = _coupon_compute_amount(c, float(inv.total_amount or 0))
+            if usable > 0:
+                c._usable_amount = usable
+                available_coupons.append(c)
+
+    # 已加的 Payment 流水（含已撤销）
+    payments = (
+        db.query(Payment)
+        .filter(Payment.invoice_id == inv_id)
+        .order_by(Payment.id.desc())
+        .all()
+    )
+    paid_sum = sum(float(p.amount or 0) for p in payments if p.status == "success")
+    outstanding = max(0.0, float(inv.total_amount or 0) - paid_sum)
     return templates.TemplateResponse(request, "admin_invoice_detail.html", {
         "mode": "view",
         "inv": inv,
@@ -8998,15 +9037,49 @@ async def admin_invoice_detail(
         "paid_redeems": paid_redeems,
         "available_deposits": available_deposits,
         "deposit_category_zh": _DEPOSIT_CATEGORY_ZH,
+        "available_coupons": available_coupons,
+        "coupon_kind_zh": _COUPON_KIND_ZH,
+        "payments": payments,
+        "paid_sum": paid_sum,
+        "outstanding": outstanding,
+        "method_zh": _REVENUE_PAY_ZH,
     })
 
 
-@app.post("/admin/invoices/{inv_id}/pay")
-async def admin_invoice_pay(
+def _invoice_paid_sum(db: Session, inv_id: int) -> float:
+    """已收款金额合计（仅 success 状态）。"""
+    rows = db.query(Payment).filter(
+        Payment.invoice_id == inv_id,
+        Payment.status == "success",
+    ).all()
+    return sum(float(r.amount or 0) for r in rows)
+
+
+def _invoice_recompute_status(db: Session, inv: Invoice) -> None:
+    """根据 Payments 合计自动调整 invoice 状态。"""
+    paid = _invoice_paid_sum(db, inv.id)
+    total = float(inv.total_amount or 0)
+    if paid >= total - 1e-6 and total > 0:
+        inv.payment_status = "paid"
+        if not inv.paid_at:
+            inv.paid_at = datetime.utcnow()
+        # payment_method = 笔数最多的那种
+        from collections import Counter
+        methods = [p.method for p in db.query(Payment).filter(Payment.invoice_id == inv.id, Payment.status == "success").all()]
+        if methods:
+            inv.payment_method = Counter(methods).most_common(1)[0][0]
+    else:
+        inv.payment_status = "unpaid"
+        inv.paid_at = None
+
+
+@app.post("/admin/invoices/{inv_id}/add-payment")
+async def admin_invoice_add_payment(
     inv_id: int,
     request: Request,
     db: Session = Depends(get_db),
 ):
+    """添加一笔收款（混合支付：可重复调用直到 sum >= total）。"""
     require_admin(request)
     form = await request.form()
     _require_csrf(request, str(form.get("csrf_token", "")))
@@ -9016,9 +9089,30 @@ async def admin_invoice_pay(
     if inv.payment_status == "paid":
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已收款，请勿重复", status_code=303)
 
-    method = str(form.get("payment_method") or "cash").strip()
+    method = str(form.get("method") or "cash").strip()
     operator = request.session.get("admin_username", "admin")
     store = _get_admin_store(request)
+    outstanding = max(0.0, float(inv.total_amount or 0) - _invoice_paid_sum(db, inv.id))
+    if outstanding <= 0:
+        _invoice_recompute_status(db, inv); db.commit()
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已无欠款", status_code=303)
+    try:
+        want = float(form.get("amount") or outstanding)
+    except (TypeError, ValueError):
+        want = outstanding
+    want = max(0.0, min(want, outstanding))
+    if want <= 0:
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=金额需大于 0", status_code=303)
+
+    ref_id: int | None = None
+    ref_no = (form.get("ref_no") or "").strip()[:120]
+    note   = (form.get("note") or "").strip()[:500]
+    valid_methods = {
+        "cash","wechat","alipay","shouqianba","meituan","third_party",
+        "wallet","package","deposit","coupon",
+    }
+    if method not in valid_methods:
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=未知支付方式 {method}", status_code=303)
 
     # ── 钱包扣款 ──
     if method == "wallet":
@@ -9026,17 +9120,16 @@ async def admin_invoice_pay(
             return RedirectResponse(f"/admin/invoices/{inv_id}?msg=无客户绑定，无法用钱包", status_code=303)
         wallet = _get_or_create_wallet(db, inv.customer_id)
         try:
-            _wallet_apply_tx(
-                db, wallet, tx_type="consume",
-                amount=float(inv.total_amount or 0),
-                invoice_id=inv.id,
-                operator=operator, store=store,
+            tx = _wallet_apply_tx(
+                db, wallet, tx_type="consume", amount=want,
+                invoice_id=inv.id, operator=operator, store=store,
                 note=f"收费单 {inv.invoice_no or inv.id}",
             )
+            ref_id = tx.id
         except HTTPException as he:
             return RedirectResponse(f"/admin/invoices/{inv_id}?msg={he.detail}", status_code=303)
 
-    # ── 套餐核销 ──
+    # ── 套餐核销 ──（套餐按"次"扣，金额 want 仅用于记账）
     elif method == "package":
         cp_id_raw = (form.get("customer_package_id") or "").strip()
         if not cp_id_raw.isdigit():
@@ -9044,34 +9137,185 @@ async def admin_invoice_pay(
         cp = db.get(CustomerPackage, int(cp_id_raw))
         if not cp or cp.customer_id != inv.customer_id:
             return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐与客户不匹配", status_code=303)
-        if cp.status != "active":
-            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐已失效", status_code=303)
-        if cp.used_count >= cp.total_uses:
-            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐次数已用完", status_code=303)
-        # 扣 1 次
+        if cp.status != "active" or cp.used_count >= cp.total_uses:
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐已失效或用完", status_code=303)
         cp.used_count += 1
-        remaining = cp.total_uses - cp.used_count
-        if remaining <= 0:
+        if cp.used_count >= cp.total_uses:
             cp.status = "exhausted"
         db.add(PackageRedemption(
-            customer_package_id=cp.id,
-            customer_id=cp.customer_id,
-            pet_id=inv.pet_id or cp.pet_id,
-            visit_id=inv.visit_id,
-            invoice_id=inv.id,
-            used_count=1,
-            remaining_after=remaining,
-            store=store,
-            operator=operator,
+            customer_package_id=cp.id, customer_id=cp.customer_id,
+            pet_id=inv.pet_id or cp.pet_id, visit_id=inv.visit_id, invoice_id=inv.id,
+            used_count=1, remaining_after=cp.total_uses - cp.used_count,
+            store=store, operator=operator,
             note=f"收费单 {inv.invoice_no or inv.id}",
         ))
+        ref_id = cp.id
 
-    # cash / wechat / alipay / card / groupbuy / prepaid — 不需要 side effect
-    inv.payment_method = method
-    inv.payment_status = "paid"
-    inv.paid_at        = datetime.utcnow()
+    # ── 押金抵扣 ──
+    elif method == "deposit":
+        d_id_raw = (form.get("deposit_id") or "").strip()
+        if not d_id_raw.isdigit():
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=请选择要使用的押金", status_code=303)
+        d = db.get(Deposit, int(d_id_raw))
+        if not d or d.customer_id != inv.customer_id:
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=押金与客户不匹配", status_code=303)
+        remaining = d.amount - (d.applied_amount or 0) - (d.refunded_amount or 0)
+        if remaining <= 0 or d.status in ("refunded", "cancelled"):
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=押金已无余额", status_code=303)
+        want = min(want, remaining)
+        d.applied_amount = (d.applied_amount or 0) + want
+        d.applied_invoice_id = inv.id
+        d_remaining = d.amount - d.applied_amount - (d.refunded_amount or 0)
+        d.status = "applied" if d_remaining <= 1e-6 else "partial_refund"
+        ref_id = d.id
+
+    # ── 优惠券核销 ──
+    elif method == "coupon":
+        c_id_raw = (form.get("coupon_id") or "").strip()
+        if not c_id_raw.isdigit():
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=请选择要使用的优惠券", status_code=303)
+        c = db.get(Coupon, int(c_id_raw))
+        if not c:
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=优惠券不存在", status_code=303)
+        if c.status != "issued":
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=优惠券状态不允许使用", status_code=303)
+        if _coupon_is_expired(c):
+            c.status = "expired"; db.commit()
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=优惠券已过期", status_code=303)
+        if c.customer_id and c.customer_id != inv.customer_id:
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=该券仅指定客户可用", status_code=303)
+        # 计算可抵扣
+        usable = _coupon_compute_amount(c, float(inv.total_amount or 0))
+        if usable <= 0:
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=未达使用门槛或券无效", status_code=303)
+        want = min(want, usable, outstanding)
+        c.status = "used"
+        c.used_invoice_id = inv.id
+        c.used_amount = want
+        c.used_at = datetime.utcnow()
+        ref_id = c.id
+
+    # cash / wechat / alipay / shouqianba / meituan / third_party — 无 side effect
+    # 加这笔 Payment
+    db.add(Payment(
+        invoice_id=inv.id,
+        customer_id=inv.customer_id,
+        method=method,
+        amount=want,
+        ref_id=ref_id,
+        ref_no=ref_no,
+        status="success",
+        store=store,
+        operator=operator,
+        note=note,
+    ))
+    db.flush()
+    _invoice_recompute_status(db, inv)
     db.commit()
-    return RedirectResponse(f"/admin/invoices/{inv_id}?msg=收款成功", status_code=303)
+    return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已加 ¥{want:.2f}", status_code=303)
+
+
+@app.post("/admin/invoices/{inv_id}/payments/{pay_id}/void")
+async def admin_invoice_payment_void(
+    inv_id: int,
+    pay_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """撤销一笔收款（错收时用，会回滚钱包/套餐/押金/优惠券副作用）。仅 superadmin。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    p = db.get(Payment, pay_id)
+    if not p or p.invoice_id != inv_id:
+        raise HTTPException(404)
+    if p.status != "success":
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=该笔已撤销", status_code=303)
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404)
+    # 回滚副作用
+    if p.method == "wallet" and p.ref_id:
+        wallet = _get_or_create_wallet(db, p.customer_id)
+        # 把这笔 consume 退回（用 adjust + 加 amount）
+        try:
+            _wallet_apply_tx(
+                db, wallet, tx_type="adjust", amount=float(p.amount),
+                operator=request.session.get("admin_username", "admin"),
+                store=p.store, note=f"撤销收费单 {inv.invoice_no or inv.id} 的钱包扣款",
+            )
+        except HTTPException:
+            pass
+    elif p.method == "package" and p.ref_id:
+        cp = db.get(CustomerPackage, p.ref_id)
+        if cp and cp.used_count > 0:
+            cp.used_count -= 1
+            if cp.status == "exhausted" and cp.used_count < cp.total_uses:
+                cp.status = "active"
+        # 标 redeem 行
+        for r in db.query(PackageRedemption).filter(
+            PackageRedemption.invoice_id == inv_id,
+            PackageRedemption.customer_package_id == p.ref_id,
+        ).all():
+            db.delete(r)
+    elif p.method == "deposit" and p.ref_id:
+        d = db.get(Deposit, p.ref_id)
+        if d:
+            d.applied_amount = max(0.0, (d.applied_amount or 0) - float(p.amount))
+            d.status = "held" if d.applied_amount <= 0 else "partial_refund"
+            if d.applied_amount <= 0:
+                d.applied_invoice_id = None
+    elif p.method == "coupon" and p.ref_id:
+        c = db.get(Coupon, p.ref_id)
+        if c and c.status == "used" and c.used_invoice_id == inv_id:
+            c.status = "issued"
+            c.used_invoice_id = None
+            c.used_amount = 0.0
+            c.used_at = None
+    p.status = "cancelled"
+    db.flush()
+    _invoice_recompute_status(db, inv)
+    db.commit()
+    return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已撤销 ¥{p.amount:.2f}", status_code=303)
+
+
+@app.post("/admin/invoices/{inv_id}/pay")
+async def admin_invoice_pay_legacy(
+    inv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """老接口：单笔全额支付。内部转发到 add-payment 用 outstanding 金额。"""
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404)
+    if inv.payment_status == "paid":
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已收款，请勿重复", status_code=303)
+    # 把表单的 payment_method 映射成新接口的 method
+    method = str(form.get("payment_method") or "cash").strip()
+    # 兼容旧 prepaid → wallet
+    if method == "prepaid":
+        method = "wallet"
+    # 重写表单参数
+    forwarded = {
+        "csrf_token": str(form.get("csrf_token", "")),
+        "method": method,
+        "amount": "",  # 留空 → 用 outstanding
+        "customer_package_id": str(form.get("customer_package_id", "")),
+        "deposit_id": str(form.get("deposit_id", "")),
+        "coupon_id": str(form.get("coupon_id", "")),
+        "ref_no": str(form.get("ref_no", "")),
+        "note": str(form.get("note", "")),
+    }
+    # 用 starlette 的 _Form 模拟（直接调函数会更省事）
+    from starlette.datastructures import FormData
+    request._form = FormData(forwarded)
+    # 委托给新接口
+    return await admin_invoice_add_payment(inv_id=inv_id, request=request, db=db)
 
 
 @app.post("/admin/invoices/{inv_id}/cancel")
