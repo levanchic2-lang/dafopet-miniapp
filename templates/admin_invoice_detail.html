@@ -259,6 +259,27 @@
  </form>
  </div>
 
+ {% if available_deposits %}
+ <div class="card" style="margin-bottom:.75rem;background:#fef3c7;">
+   <h3 style="margin:0 0 .5rem;font-size:.9rem;font-weight:700;color:#92400e;">⓪ 该客户有未结押金可抵扣</h3>
+   {% for d in available_deposits %}
+   <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-top:1px solid #fde68a;">
+     <div style="flex:1;font-size:.86rem;">
+       <strong>{{ deposit_category_zh.get(d.category, d.category) }} ¥{{ '%.2f'|format(d._remaining) }}</strong>
+       <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem;">（共收 ¥{{ '%.2f'|format(d.amount) }}{% if d.applied_amount %}，已用 ¥{{ '%.2f'|format(d.applied_amount) }}{% endif %}）</span>
+     </div>
+     <form method="post" action="/admin/deposits/{{ d.id }}/apply" style="margin:0;">
+       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+       <input type="hidden" name="invoice_id" value="{{ inv.id }}">
+       <button type="submit" class="btn" style="background:#f59e0b;border-color:#f59e0b;font-size:.82rem;padding:.35rem .85rem;">
+         抵扣此单
+       </button>
+     </form>
+   </div>
+   {% endfor %}
+ </div>
+ {% endif %}
+
  {% if paid_wallet_txs or paid_redeems %}
  <div class="card" style="margin-bottom:.75rem;">
    <h3 style="margin:0 0 .5rem;font-size:.88rem;color:var(--muted);">收款流水</h3>

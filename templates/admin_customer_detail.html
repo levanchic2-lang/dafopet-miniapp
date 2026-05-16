@@ -234,6 +234,7 @@
  <button class="tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">医疗文书<span class="count">{{ medical_docs|length }}</span></button>
  <button class="tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包<span class="count">¥{{ '%.0f'|format(wallet_balance) }}</span></button>
  <button class="tab-btn {% if active_tab=='packages' %}active{% endif %}" data-tab="packages" onclick="switchTab('packages')">套餐<span class="count">{{ active_packages_count }}</span></button>
+ <button class="tab-btn {% if active_tab=='deposits' %}active{% endif %}" data-tab="deposits" onclick="switchTab('deposits')">押金<span class="count">{{ held_deposits_count }}</span></button>
  </div>
 
  {# ── 诊疗 ── #}
@@ -648,6 +649,66 @@
    {% endif %}
  </div>
 
+ {# ── 押金 ── #}
+ <div class="tab-content {% if active_tab=='deposits' %}active{% endif %}" data-tab-content="deposits">
+   <div class="tab-action-bar">
+     <button type="button" class="btn" onclick="document.getElementById('add-deposit-modal').classList.add('visible')">＋ 收押金</button>
+     <span style="margin-left:auto;color:var(--muted);font-size:.82rem;">共 {{ deposits|length }} 笔，{{ held_deposits_count }} 笔待结</span>
+   </div>
+
+   {% if deposits %}
+   <table class="data-table">
+     <thead>
+       <tr><th>类别</th><th>金额</th><th>抵扣</th><th>退还</th><th>剩余</th><th>状态</th><th>关联</th><th>收款方式</th><th>时间</th><th>操作</th></tr>
+     </thead>
+     <tbody>
+     {% for d in deposits %}
+     {% set remaining = d.amount - (d.applied_amount or 0) - (d.refunded_amount or 0) %}
+     <tr>
+       <td><span class="pill pill-info">{{ deposit_category_zh.get(d.category, d.category) }}</span></td>
+       <td style="font-weight:600;">¥{{ '%.2f'|format(d.amount) }}</td>
+       <td>{% if d.applied_amount %}¥{{ '%.2f'|format(d.applied_amount) }}{% else %}—{% endif %}</td>
+       <td>{% if d.refunded_amount %}¥{{ '%.2f'|format(d.refunded_amount) }}{% else %}—{% endif %}</td>
+       <td style="font-weight:600;color:{% if remaining > 0 %}#10b981{% else %}var(--muted){% endif %};">¥{{ '%.2f'|format(remaining) }}</td>
+       <td>
+       {% if d.status == 'held' %}<span class="pill pill-warn">已收待结</span>
+       {% elif d.status == 'applied' %}<span class="pill pill-info">已抵扣</span>
+       {% elif d.status == 'partial_refund' %}<span class="pill pill-warn">部分退还</span>
+       {% elif d.status == 'refunded' %}<span class="pill pill-gray">已全退</span>
+       {% elif d.status == 'cancelled' %}<span class="pill pill-gray">已作废</span>{% endif %}
+       </td>
+       <td style="font-size:.78rem;">
+       {% if d.appointment_id %}<a href="/admin/appointments?id={{ d.appointment_id }}">预约#{{ d.appointment_id }}</a>{% endif %}
+       {% if d.visit_id %}<a href="/admin/visits/{{ d.visit_id }}">就诊#{{ d.visit_id }}</a>{% endif %}
+       {% if d.applied_invoice_id %}<br/><a href="/admin/invoices/{{ d.applied_invoice_id }}">收费#{{ d.applied_invoice_id }}</a>{% endif %}
+       </td>
+       <td style="color:var(--muted);font-size:.82rem;">{{ {'cash':'现金','wechat':'微信','alipay':'支付宝','card':'刷卡'}.get(d.pay_method, d.pay_method) }}</td>
+       <td style="color:var(--muted);font-size:.78rem;">{{ d.created_at.strftime('%Y-%m-%d %H:%M') if d.created_at else '—' }}</td>
+       <td>
+       {% if remaining > 0 and d.status in ('held', 'partial_refund') %}
+       <form method="post" action="/admin/deposits/{{ d.id }}/refund" style="display:inline;"
+             onsubmit="return confirm('退还押金 ¥{{ '%.2f'|format(remaining) }}？')">
+         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+         <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.78rem;padding:0;">退还</button>
+       </form>
+       {% endif %}
+       {% if request.session.get('admin_role') == 'superadmin' and d.status == 'held' and not d.applied_amount %}
+       <form method="post" action="/admin/deposits/{{ d.id }}/cancel" style="display:inline;margin-left:.4rem;"
+             onsubmit="return confirm('作废此押金？误收时使用。')">
+         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+         <button type="submit" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:.78rem;padding:0;">作废</button>
+       </form>
+       {% endif %}
+       </td>
+     </tr>
+     {% endfor %}
+     </tbody>
+   </table>
+   {% else %}
+   <div class="tab-empty">还没有押金记录。手术前、寄养前可以预收押金。</div>
+   {% endif %}
+ </div>
+
  </div>
  {% endif %}
 
@@ -986,6 +1047,43 @@
  <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
    <button type="submit" class="btn">提交调账</button>
    <button type="button" class="btn secondary" onclick="document.getElementById('wallet-adjust-modal').classList.remove('visible')">取消</button>
+ </div>
+ </form>
+ </div>
+</div>
+
+<div class="cd-modal-overlay" id="add-deposit-modal">
+ <div class="cd-modal">
+ <h3>收押金 — {{ cust.name or '客户' }}</h3>
+ <form method="post" action="/admin/deposits/create">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="customer_id" value="{{ cust.id }}">
+ <label>类别</label>
+ <select name="category">
+   <option value="surgery">手术押金</option>
+   <option value="boarding">寄养押金</option>
+   <option value="beauty">美容押金</option>
+   <option value="other">其他</option>
+ </select>
+ <label>金额（¥）</label>
+ <input name="amount" type="number" step="0.01" min="0.01" required autofocus>
+ <label>收款方式</label>
+ <select name="pay_method">
+   <option value="cash">现金</option>
+   <option value="wechat">微信</option>
+   <option value="alipay">支付宝</option>
+   <option value="card">刷卡</option>
+ </select>
+ <label>关联宠物（可选）</label>
+ <select name="pet_id">
+   <option value="0">-- 不指定 --</option>
+   {% for p in pets %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+ </select>
+ <label>备注（可选）</label>
+ <input name="note" placeholder="如 手术日 5-20 / 寨养 5 天">
+ <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+   <button type="submit" class="btn">确认收押金</button>
+   <button type="button" class="btn secondary" onclick="document.getElementById('add-deposit-modal').classList.remove('visible')">取消</button>
  </div>
  </form>
  </div>

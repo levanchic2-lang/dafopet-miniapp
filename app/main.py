@@ -4939,6 +4939,15 @@ async def page_admin_customer_detail(
     active_packages_count = sum(1 for p in customer_packages if p.status == "active")
     package_products = db.query(PackageProduct).filter(PackageProduct.is_active == True).order_by(PackageProduct.id.desc()).all()
 
+    # ── 押金 ──
+    deposits = (
+        db.query(Deposit)
+        .filter(Deposit.customer_id == customer_id)
+        .order_by(Deposit.status.asc(), Deposit.id.desc())
+        .all()
+    )
+    held_deposits_count = sum(1 for d in deposits if d.status in ("held", "partial_refund"))
+
     return templates.TemplateResponse(
         request,
         "admin_customer_detail.html",
@@ -4974,6 +4983,11 @@ async def page_admin_customer_detail(
             "active_packages_count": active_packages_count,
             "package_products": package_products,
             "package_category_zh": _PACKAGE_CATEGORY_ZH,
+            # 押金
+            "deposits": deposits,
+            "held_deposits_count": held_deposits_count,
+            "deposit_category_zh": _DEPOSIT_CATEGORY_ZH,
+            "deposit_status_zh": _DEPOSIT_STATUS_ZH,
             # 翻译字典
             "visit_type_zh": _VISIT_TYPE_ZH,
             "so_status_zh": _SO_STATUS_ZH_LOCAL,
@@ -5598,6 +5612,219 @@ async def admin_customer_package_refund(
     db.commit()
     return RedirectResponse(
         f"/admin/customers/{cp.customer_id}?tab=packages&msg=已退款 ¥{refund_amt:.2f} 到钱包",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 押金 (Deposit) — 手术 / 寄养 / 美容
+# ---------------------------------------------------------------------------
+
+_DEPOSIT_CATEGORY_ZH = {
+    "surgery":  "手术押金",
+    "boarding": "寄养押金",
+    "beauty":   "美容押金",
+    "other":    "其他押金",
+}
+_DEPOSIT_STATUS_ZH = {
+    "held":           "已收待结",
+    "applied":        "已抵扣",
+    "partial_refund": "部分退还",
+    "refunded":       "已全额退款",
+    "cancelled":      "已作废",
+}
+
+
+@app.post("/admin/deposits/create")
+async def admin_deposit_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(...),
+    pet_id: int = Form(0),
+    appointment_id: int = Form(0),
+    visit_id: int = Form(0),
+    category: str = Form("surgery"),
+    amount: str = Form(...),
+    pay_method: str = Form("cash"),
+    note: str = Form(""),
+):
+    """收押金。amount > 0。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    try:
+        amt = float(amount)
+    except (TypeError, ValueError):
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=deposits&msg=金额无效", status_code=303)
+    if amt <= 0:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=deposits&msg=押金需大于 0", status_code=303)
+    if category not in _DEPOSIT_CATEGORY_ZH:
+        category = "other"
+    d = Deposit(
+        customer_id=customer_id,
+        pet_id=pet_id or None,
+        appointment_id=appointment_id or None,
+        visit_id=visit_id or None,
+        category=category,
+        amount=amt,
+        pay_method=pay_method,
+        status="held",
+        store=_get_admin_store(request),
+        operator=request.session.get("admin_username", "admin"),
+        note=(note or "").strip()[:500],
+    )
+    db.add(d); db.commit()
+    _audit(db, request, "deposit_create", application_id=None,
+           detail={"customer_id": customer_id, "amount": amt, "category": category})
+    db.commit()
+    return RedirectResponse(
+        f"/admin/customers/{customer_id}?tab=deposits&msg=已收押金 ¥{amt:.2f}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/deposits/{dep_id}/apply")
+async def admin_deposit_apply(
+    dep_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    invoice_id: int = Form(...),
+    apply_amount: str = Form(""),  # 留空 = 全用
+):
+    """把押金应用到一张收费单：
+    - apply_amt = min(押金未用, 收费单未付)
+    - 押金 status 转 applied（如果全部用完）或 partial_refund 占位（部分用、剩余等退）
+    - 收费单 total 不变，但记账；剩余金额仍按 正常 pay 流程结算
+    """
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    d = db.get(Deposit, dep_id)
+    if not d:
+        raise HTTPException(404)
+    if d.status not in ("held", "partial_refund"):
+        return RedirectResponse(f"/admin/invoices/{invoice_id}?msg=押金状态不允许使用", status_code=303)
+    inv = db.get(Invoice, invoice_id)
+    if not inv:
+        raise HTTPException(404)
+    if inv.customer_id != d.customer_id:
+        return RedirectResponse(f"/admin/invoices/{invoice_id}?msg=押金与客户不匹配", status_code=303)
+    if inv.payment_status == "paid":
+        return RedirectResponse(f"/admin/invoices/{invoice_id}?msg=该单已收款", status_code=303)
+    # 押金剩余
+    remaining = d.amount - (d.applied_amount or 0.0) - (d.refunded_amount or 0.0)
+    if remaining <= 0:
+        return RedirectResponse(f"/admin/invoices/{invoice_id}?msg=押金已无余额", status_code=303)
+    try:
+        want = float(apply_amount) if apply_amount.strip() else remaining
+    except (TypeError, ValueError):
+        want = remaining
+    want = max(0.0, min(want, remaining, float(inv.total_amount or 0)))
+    if want <= 0:
+        return RedirectResponse(f"/admin/invoices/{invoice_id}?msg=应用金额需大于 0", status_code=303)
+
+    d.applied_invoice_id = inv.id
+    d.applied_amount = (d.applied_amount or 0.0) + want
+    # 折算后续状态
+    new_remaining = d.amount - d.applied_amount - (d.refunded_amount or 0.0)
+    if new_remaining <= 1e-6:
+        d.status = "applied"
+    else:
+        d.status = "partial_refund"  # 占位待退
+    # 如果 want 覆盖全单 → 收费单直接 paid
+    if want >= float(inv.total_amount or 0) - 1e-6:
+        inv.payment_method = inv.payment_method or "deposit"
+        inv.payment_status = "paid"
+        inv.paid_at = datetime.utcnow()
+    inv.notes = ((inv.notes or "") + f"\n[抵扣押金 #{d.id} ¥{want:.2f}]").strip()
+    db.commit()
+    _audit(db, request, "deposit_apply", application_id=None,
+           detail={"deposit_id": dep_id, "invoice_id": invoice_id, "amount": want})
+    db.commit()
+    return RedirectResponse(f"/admin/invoices/{invoice_id}?msg=已抵扣押金 ¥{want:.2f}", status_code=303)
+
+
+@app.post("/admin/deposits/{dep_id}/refund")
+async def admin_deposit_refund(
+    dep_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    refund_amount: str = Form(""),
+    note: str = Form(""),
+):
+    """退还押金剩余部分。默认退完所有未用余额。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    d = db.get(Deposit, dep_id)
+    if not d:
+        raise HTTPException(404)
+    if d.status in ("refunded", "cancelled"):
+        return RedirectResponse(
+            f"/admin/customers/{d.customer_id or 0}?tab=deposits&msg=押金已结清",
+            status_code=303,
+        )
+    remaining = d.amount - (d.applied_amount or 0.0) - (d.refunded_amount or 0.0)
+    if remaining <= 0:
+        return RedirectResponse(
+            f"/admin/customers/{d.customer_id or 0}?tab=deposits&msg=押金无可退余额",
+            status_code=303,
+        )
+    try:
+        want = float(refund_amount) if refund_amount.strip() else remaining
+    except (TypeError, ValueError):
+        want = remaining
+    want = max(0.0, min(want, remaining))
+    if want <= 0:
+        return RedirectResponse(
+            f"/admin/customers/{d.customer_id or 0}?tab=deposits&msg=退款金额无效",
+            status_code=303,
+        )
+    d.refunded_amount = (d.refunded_amount or 0.0) + want
+    d.refunded_at = datetime.utcnow()
+    new_remaining = d.amount - (d.applied_amount or 0.0) - d.refunded_amount
+    if new_remaining <= 1e-6:
+        d.status = "refunded" if not d.applied_amount else "applied"
+    else:
+        d.status = "partial_refund"
+    d.note = ((d.note or "") + f"\n[退 ¥{want:.2f}：{note}]").strip()
+    db.commit()
+    _audit(db, request, "deposit_refund", application_id=None,
+           detail={"deposit_id": dep_id, "amount": want})
+    db.commit()
+    return RedirectResponse(
+        f"/admin/customers/{d.customer_id or 0}?tab=deposits&msg=已退押金 ¥{want:.2f}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/deposits/{dep_id}/cancel")
+async def admin_deposit_cancel(
+    dep_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """作废押金（误收时用）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    d = db.get(Deposit, dep_id)
+    if not d:
+        raise HTTPException(404)
+    if d.applied_amount and d.applied_amount > 0:
+        return RedirectResponse(
+            f"/admin/customers/{d.customer_id or 0}?tab=deposits&msg=已有抵扣记录，不能作废",
+            status_code=303,
+        )
+    d.status = "cancelled"
+    db.commit()
+    return RedirectResponse(
+        f"/admin/customers/{d.customer_id or 0}?tab=deposits&msg=已作废",
         status_code=303,
     )
 
@@ -8240,6 +8467,17 @@ async def admin_invoice_detail(
         .order_by(PackageRedemption.id.desc())
         .all()
     )
+    # 客户有未结清的押金（held / partial_refund 且还有剩余）→ 可抵扣
+    available_deposits = []
+    if inv.customer_id:
+        for d in db.query(Deposit).filter(
+            Deposit.customer_id == inv.customer_id,
+            Deposit.status.in_(["held", "partial_refund"]),
+        ).order_by(Deposit.id.desc()).all():
+            remaining = d.amount - (d.applied_amount or 0) - (d.refunded_amount or 0)
+            if remaining > 0:
+                d._remaining = remaining
+                available_deposits.append(d)
     return templates.TemplateResponse(request, "admin_invoice_detail.html", {
         "mode": "view",
         "inv": inv,
@@ -8254,6 +8492,8 @@ async def admin_invoice_detail(
         "active_packages": active_packages,
         "paid_wallet_txs": paid_wallet_txs,
         "paid_redeems": paid_redeems,
+        "available_deposits": available_deposits,
+        "deposit_category_zh": _DEPOSIT_CATEGORY_ZH,
     })
 
 

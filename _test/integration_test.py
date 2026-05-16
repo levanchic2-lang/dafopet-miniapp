@@ -1011,6 +1011,71 @@ def t_invoice_pay_package():
 t_invoice_pay_package()
 
 
+@step("押金：收 500、抵扣到 300 收费单 → 应用 300、剩 200，再退 200")
+def t_deposit_flow():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Deposit, Invoice
+
+    # 收 500 押金
+    r = client.get(f"/admin/customers/{cust_id}?tab=deposits")
+    token = extract_csrf(r.text)
+    r = client.post("/admin/deposits/create", data={
+        "csrf_token": token, "customer_id": str(cust_id),
+        "category": "surgery", "amount": "500", "pay_method": "cash",
+        "pet_id": "0", "note": "测试押金",
+    })
+    assert r.status_code == 303
+
+    db = SessionLocal()
+    dep = db.query(Deposit).filter(Deposit.customer_id == cust_id).order_by(Deposit.id.desc()).first()
+    assert dep and dep.amount == 500.0 and dep.status == "held"
+    dep_id = dep.id
+
+    # 造一张 ¥300 待付收费单
+    inv = Invoice(customer_id=cust_id, pet_id=pet_id,
+                  invoice_no="TEST_DEP_INV", invoice_date="2026-05-15",
+                  subtotal=300.0, discount_amount=0.0, total_amount=300.0,
+                  payment_status="unpaid")
+    db.add(inv); db.commit(); db.refresh(inv)
+    inv_id = inv.id
+    db.close()
+
+    # 抵扣
+    r = client.get(f"/admin/invoices/{inv_id}")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/deposits/{dep_id}/apply", data={
+        "csrf_token": token, "invoice_id": str(inv_id), "apply_amount": "",
+    })
+    assert r.status_code == 303
+
+    db = SessionLocal()
+    dep2 = db.get(Deposit, dep_id)
+    assert dep2.applied_amount == 300.0
+    assert dep2.applied_invoice_id == inv_id
+    # 还剩 200，所以是 partial_refund 状态
+    assert dep2.status == "partial_refund", f"应 partial_refund 得 {dep2.status}"
+    inv2 = db.get(Invoice, inv_id)
+    assert inv2.payment_status == "paid", "押金覆盖全单应自动收款"
+    db.close()
+
+    # 退剩余 200
+    r = client.post(f"/admin/deposits/{dep_id}/refund", data={
+        "csrf_token": token, "refund_amount": "", "note": "客户来取剩余",
+    })
+    assert r.status_code == 303
+
+    db = SessionLocal()
+    dep3 = db.get(Deposit, dep_id)
+    assert abs(dep3.refunded_amount - 200.0) < 1e-6
+    # 全部结清 → applied (因为还有 applied_amount)
+    assert dep3.status == "applied"
+    db.close()
+
+t_deposit_flow()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
