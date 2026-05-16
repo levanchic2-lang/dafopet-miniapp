@@ -9392,21 +9392,28 @@ async def admin_invoice_print(
     cust  = db.get(Customer, inv.customer_id) if inv.customer_id else None
     pet   = db.get(Pet,      inv.pet_id)      if inv.pet_id      else None
     visit = db.get(Visit,    inv.visit_id)    if inv.visit_id    else None
-    from app.database import get_settings
-    clinic_name = "大风动物医院"
-    try:
-        settings_obj = get_settings()
-        clinic_name = getattr(settings_obj, "clinic_name", clinic_name)
-    except Exception:
-        pass
+    payments = (
+        db.query(Payment)
+        .filter(Payment.invoice_id == inv_id)
+        .order_by(Payment.id.asc())
+        .all()
+    )
+    # 门店全名 / 英文（根据宠物所属门店推断）
+    clinic_name_zh = "大风动物医院"
+    clinic_name_en = "Da Feng Animal Hospital"
+    if pet and pet.store:
+        clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
+        clinic_name_en = f"Da Feng Animal Hospital · {pet.store.replace('店', '')}"
     return templates.TemplateResponse(request, "admin_invoice_print.html", {
         "inv": inv,
         "cust": cust,
         "pet": pet,
         "visit": visit,
+        "payments": payments,
         "inv_status_zh": _INV_STATUS_ZH,
         "inv_pay_zh": _INV_PAY_ZH,
-        "clinic_name": clinic_name,
+        "clinic_name_zh": clinic_name_zh,
+        "clinic_name_en": clinic_name_en,
     })
 
 

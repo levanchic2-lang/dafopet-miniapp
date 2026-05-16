@@ -1,346 +1,191 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8" />
-<title>Receipt – {{ inv.invoice_no }}</title>
-<style>
-  /* ── 基础重置 ── */
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+{% extends "_print_base.html" %}
+{% block title %}Receipt · {{ inv.invoice_no }}{% endblock %}
+{% block default_size %}A4{% endblock %}
 
-  body {
-    font-family: 'Georgia', 'Times New Roman', serif;
-    font-size: 11pt;
-    color: #1a1a1a;
-    background: #fff;
-  }
+{% block extra_style %}
+/* ── 极简英伦风：Georgia serif + 细金线 + 双横线 ── */
+body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; color: #1a1a1a; }
+.inv-clinic-en { text-align:center; font-size: 22pt; letter-spacing: 6px; font-weight: 400; }
+.inv-clinic-zh { text-align:center; font-size: 11pt; letter-spacing: 8px; color:#555; margin-top: 3px; }
+.inv-clinic-tagline { text-align:center; font-size: 8.5pt; color:#888; font-style: italic; letter-spacing: 1px; margin-top: 6px; }
+.inv-rule-double { border: 0; border-top: 1px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; height: 4px; margin: 12px 0 4px; }
+.inv-rule-single { border: 0; border-top: 1px solid #888; margin: 6px 0; }
+.inv-rule-thin { border: 0; border-top: 0.5px solid #c8c8c8; margin: 4px 0; }
+.inv-title {
+  text-align: center; font-size: 13pt; font-weight: 700;
+  letter-spacing: 4px; text-transform: uppercase;
+  padding: 6px 0;
+}
+.inv-meta-row {
+  display: flex; justify-content: space-between;
+  font-size: 9.5pt; padding: 4px 0;
+}
+.inv-info {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 4px 24px; font-size: 10pt; padding: 6px 0;
+}
+.inv-info .lbl { color: #777; font-size: 9pt; margin-right: 6px; }
+.inv-info .val { font-weight: 600; }
+.inv-items { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 10pt; }
+.inv-items thead th {
+  text-align: left; padding: 6px 4px;
+  border-bottom: 1.5px solid #1a1a1a;
+  font-size: 9pt; letter-spacing: 1px; font-weight: 600;
+}
+.inv-items tbody td {
+  padding: 6px 4px;
+  border-bottom: 0.5px dashed #d0d0d0;
+}
+.inv-items .r { text-align: right; }
+.inv-items .c { text-align: center; }
+.inv-totals { margin-top: 12px; margin-left: auto; width: 56%; font-size: 10pt; }
+.inv-totals .row { display: flex; justify-content: space-between; padding: 3px 6px; color: #444; }
+.inv-totals .grand {
+  font-size: 13pt; font-weight: 700; color: #1a1a1a;
+  border-top: 1.5px solid #1a1a1a; padding-top: 6px; margin-top: 4px;
+  letter-spacing: 1px;
+}
+.inv-pay-list {
+  margin-top: 14px; padding: 8px 12px; background: #fafaf7;
+  border-left: 3px solid #1a1a1a;
+}
+.inv-pay-list .h { font-size: 9pt; letter-spacing: 1px; color: #888; text-transform: uppercase; margin-bottom: 4px; }
+.inv-pay-list .pay-row { display: flex; justify-content: space-between; font-size: 10pt; padding: 2px 0; }
+.inv-pay-list .pay-row .lbl { color: #444; }
+.inv-pay-list .pay-row .amt { font-weight: 600; }
+.inv-sig {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px; margin-top: 30px; font-size: 8.5pt; color: #555;
+}
+.inv-sig .box {
+  border-bottom: 1px solid #888;
+  padding: 30px 0 4px;
+  text-align: center; letter-spacing: 2px;
+}
+.inv-foot {
+  margin-top: 22px; padding-top: 8px;
+  text-align: center; font-size: 8pt; color: #888;
+  border-top: 0.5px solid #ccc; letter-spacing: 1px;
+}
+.inv-foot .thanks { font-size: 9.5pt; color: #555; font-style: italic; margin-bottom: 4px; letter-spacing: .5px; }
 
-  /* ── 页面尺寸（屏幕预览） ── */
-  .page {
-    width: 210mm;
-    min-height: 297mm;
-    margin: 0 auto;
-    padding: 18mm 20mm 16mm;
-    background: #fff;
-    position: relative;
-  }
+/* === 80mm 小票模式：紧凑 === */
+body[data-size="T80"] .inv-clinic-en { font-size: 12pt; letter-spacing: 2px; }
+body[data-size="T80"] .inv-clinic-zh { font-size: 11pt; letter-spacing: 4px; }
+body[data-size="T80"] .inv-clinic-tagline { display: none; }
+body[data-size="T80"] .inv-title { font-size: 11pt; letter-spacing: 2px; padding: 2px 0; }
+body[data-size="T80"] .inv-info { grid-template-columns: 1fr; gap: 2px; font-size: 9pt; }
+body[data-size="T80"] .inv-items { font-size: 9pt; }
+body[data-size="T80"] .inv-items thead th { padding: 3px 2px; }
+body[data-size="T80"] .inv-items tbody td { padding: 3px 2px; }
+body[data-size="T80"] .inv-totals { width: 100%; font-size: 9pt; }
+body[data-size="T80"] .inv-totals .grand { font-size: 11pt; }
+body[data-size="T80"] .inv-sig { display: none; }
+body[data-size="T80"] .inv-pay-list { background: transparent; border-left: 0; padding: 4px 0; }
 
-  /* ── 打印时直接输出 ── */
-  @media print {
-    html, body { margin: 0; padding: 0; }
-    .page { width: 100%; padding: 14mm 16mm 12mm; margin: 0; box-shadow: none; }
-    .no-print { display: none !important; }
-    @page { size: A4; margin: 0; }
-  }
+/* A5 / A5 横 缩小一档 */
+body[data-size="A5"] .inv-clinic-en,
+body[data-size="A5_LAND"] .inv-clinic-en { font-size: 16pt; letter-spacing: 3px; }
+body[data-size="A5"] .inv-title,
+body[data-size="A5_LAND"] .inv-title { font-size: 11pt; }
+body[data-size="A5"] .inv-items,
+body[data-size="A5_LAND"] .inv-items { font-size: 9pt; }
+{% endblock %}
 
-  /* ── 屏幕时加阴影模拟纸张 ── */
-  @media screen {
-    body { background: #e5e7eb; padding: 2rem 0; }
-    .page { box-shadow: 0 4px 32px rgba(0,0,0,0.18); }
-    .print-btn {
-      display: block; margin: 0 auto 1.5rem;
-      width: 210mm; text-align: right;
-    }
-    .print-btn button {
-      padding: 0.5rem 1.4rem; background: #1a1a1a; color: #fff;
-      border: none; border-radius: 6px; font-size: 0.9rem; cursor: pointer;
-      font-family: sans-serif;
-    }
-    .print-btn button:hover { background: #333; }
-  }
+{% block content %}
+<div class="inv-clinic-en">{{ clinic_name_en or 'Da Feng Animal Hospital' }}</div>
+<div class="inv-clinic-zh">{{ clinic_name_zh or '大风动物医院' }}</div>
+<div class="inv-clinic-tagline">Veterinary Care &amp; Surgical Services · Est. 2018</div>
 
-  /* ── 分割线样式 ── */
-  .rule-double {
-    border: none;
-    border-top: 3px double #1a1a1a;
-    margin: 0.6rem 0;
-  }
-  .rule-single {
-    border: none;
-    border-top: 1px solid #555;
-    margin: 0.5rem 0;
-  }
-  .rule-thin {
-    border: none;
-    border-top: 1px solid #ccc;
-    margin: 0.35rem 0;
-  }
+<hr class="inv-rule-double" />
+<div class="inv-title">Veterinary Receipt · 收 费 单</div>
+<hr class="inv-rule-single" />
 
-  /* ── 抬头 ── */
-  .clinic-header { text-align: center; padding-bottom: 0.6rem; }
-  .clinic-name-en {
-    font-size: 20pt;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-  .clinic-name-zh {
-    font-size: 13pt;
-    letter-spacing: 0.12em;
-    color: #444;
-    margin-top: 0.1rem;
-  }
-  .clinic-tagline {
-    font-size: 8.5pt;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: #666;
-    margin-top: 0.25rem;
-  }
-  .receipt-title {
-    text-align: center;
-    font-size: 13pt;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    margin: 0.55rem 0 0.1rem;
-    font-weight: 400;
-  }
-
-  /* ── 单号 / 日期行 ── */
-  .meta-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 9pt;
-    color: #444;
-    margin: 0.45rem 0;
-  }
-
-  /* ── 客户/宠物信息 ── */
-  .info-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.15rem 1.5rem;
-    font-size: 9.5pt;
-    margin: 0.5rem 0;
-  }
-  .info-grid .lbl { color: #666; font-style: italic; }
-  .info-grid .val { font-weight: 700; }
-
-  /* ── 明细表 ── */
-  .items-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 0.5rem 0;
-    font-size: 9.5pt;
-  }
-  .items-table thead th {
-    text-align: left;
-    font-weight: 700;
-    font-size: 8.5pt;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 0.35rem 0.3rem;
-    border-bottom: 1px solid #555;
-  }
-  .items-table thead th.r { text-align: right; }
-  .items-table tbody td {
-    padding: 0.28rem 0.3rem;
-    vertical-align: top;
-    border-bottom: 1px dotted #ccc;
-  }
-  .items-table tbody td.r { text-align: right; }
-  .items-table tbody td.c { text-align: center; }
-  .items-table tbody tr:last-child td { border-bottom: none; }
-
-  /* ── 合计区 ── */
-  .totals {
-    margin-left: auto;
-    width: 52%;
-    margin-top: 0.3rem;
-  }
-  .totals-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 9.5pt;
-    padding: 0.2rem 0;
-    color: #444;
-  }
-  .totals-row.grand {
-    font-size: 12pt;
-    font-weight: 700;
-    color: #1a1a1a;
-    padding: 0.35rem 0 0.2rem;
-    border-top: 2px solid #1a1a1a;
-    margin-top: 0.2rem;
-  }
-  .totals-row.grand .amt { letter-spacing: 0.04em; }
-
-  /* ── 支付信息 ── */
-  .payment-info {
-    font-size: 9pt;
-    color: #444;
-    margin-top: 0.5rem;
-    display: flex;
-    gap: 2rem;
-  }
-  .payment-info span { font-weight: 700; color: #1a1a1a; }
-
-  /* ── 签名栏 ── */
-  .sig-section {
-    margin-top: 1.8rem;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 1rem;
-    font-size: 8.5pt;
-    color: #555;
-  }
-  .sig-box {
-    border-bottom: 1px solid #888;
-    padding-bottom: 0.25rem;
-    padding-top: 1.8rem;
-    text-align: center;
-    letter-spacing: 0.04em;
-  }
-
-  /* ── 页脚 ── */
-  .footer {
-    margin-top: auto;
-    padding-top: 1.2rem;
-    text-align: center;
-    font-size: 8pt;
-    color: #888;
-    letter-spacing: 0.06em;
-  }
-  .footer .thanks {
-    font-size: 9.5pt;
-    font-style: italic;
-    color: #444;
-    margin-bottom: 0.3rem;
-  }
-</style>
-</head>
-<body>
-
-<!-- 打印按钮（屏幕模式才显示） -->
-<div class="print-btn no-print">
-  <button onclick="window.print()">🖨 打印 / 另存为 PDF</button>
+<div class="inv-meta-row">
+  <span>Invoice No. <strong>{{ inv.invoice_no or ('INV' ~ '%06d'|format(inv.id)) }}</strong></span>
+  <span>Date: <strong>{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</strong></span>
 </div>
 
-<div class="page">
+<hr class="inv-rule-thin" />
 
-  <!-- 诊所抬头 -->
-  <div class="clinic-header">
-    <div class="clinic-name-en">Da Feng Animal Hospital</div>
-    <div class="clinic-name-zh">大风动物医院（横岗店）</div>
-    <div class="clinic-tagline">Veterinary Care &amp; Surgical Services</div>
-  </div>
+<div class="inv-info">
+  <div><span class="lbl">Client · 客户</span><span class="val">{{ cust.name if cust else '—' }}</span></div>
+  <div><span class="lbl">Pet · 宠物</span><span class="val">
+    {{ pet.name if pet else '—' }}{% if pet %} ({{ {'cat':'猫','dog':'狗'}.get(pet.species, pet.species or '') }}){% endif %}
+  </span></div>
+  <div><span class="lbl">Tel · 电话</span><span class="val">{{ cust.phone if cust else '—' }}</span></div>
+  <div><span class="lbl">Visit · 就诊</span><span class="val">{% if visit %}#{{ visit.id }} · {{ visit.visit_date or '' }}{% else %}—{% endif %}</span></div>
+</div>
 
-  <hr class="rule-double" />
-  <div class="receipt-title">Veterinary Receipt</div>
-  <hr class="rule-single" />
+<hr class="inv-rule-single" />
 
-  <!-- 单号 + 日期 -->
-  <div class="meta-row">
-    <span>Invoice No.&ensp;<strong>{{ inv.invoice_no }}</strong></span>
-    <span>Date:&ensp;<strong>{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</strong></span>
-  </div>
+<table class="inv-items">
+  <thead>
+    <tr>
+      <th style="width:54%;">Description · 项目</th>
+      <th style="width:10%;" class="c">Qty</th>
+      <th style="width:18%;" class="r">Unit · 单价</th>
+      <th style="width:18%;" class="r">Amount · 小计</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for it in inv.items %}
+    <tr>
+      <td>{{ it.description }}</td>
+      <td class="c">{{ it.quantity | int if it.quantity == it.quantity | int else it.quantity }}</td>
+      <td class="r">{{ '%.2f'|format(it.unit_price) }}</td>
+      <td class="r"><strong>{{ '%.2f'|format(it.subtotal) }}</strong></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 
-  <hr class="rule-thin" />
-
-  <!-- 客户 / 宠物信息 -->
-  <div class="info-grid">
-    <div>
-      <span class="lbl">Client / 客户：</span>
-      <span class="val">{{ cust.name if cust else '—' }}</span>
-    </div>
-    <div>
-      <span class="lbl">Pet / 宠物：</span>
-      <span class="val">
-        {{ inv.pet.name if inv.pet else '—' }}
-        {% if inv.pet %}({{ '猫' if inv.pet.species == 'cat' else '狗' if inv.pet.species == 'dog' else inv.pet.species }}){% endif %}
-      </span>
-    </div>
-    <div>
-      <span class="lbl">Tel / 电话：</span>
-      <span class="val">{{ cust.phone if cust else '—' }}</span>
-    </div>
-    <div>
-      <span class="lbl">Visit / 就诊：</span>
-      <span class="val">{% if visit %}#{{ visit.id }} · {{ visit.visit_date or '—' }}{% else %}—{% endif %}</span>
-    </div>
-    {% if cust and cust.address %}
-    <div style="grid-column:1/-1;">
-      <span class="lbl">Address / 地址：</span>
-      <span class="val">{{ cust.address }}</span>
-    </div>
-    {% endif %}
-  </div>
-
-  <hr class="rule-single" />
-
-  <!-- 费用明细 -->
-  <table class="items-table">
-    <thead>
-      <tr>
-        <th style="width:52%;">Description / 项目</th>
-        <th style="width:12%;" class="r">Qty</th>
-        <th style="width:18%;" class="r">Unit Price (¥)</th>
-        <th style="width:18%;" class="r">Amount (¥)</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in inv.items %}
-      <tr>
-        <td>{{ item.description }}</td>
-        <td class="c">{{ item.quantity | int if item.quantity == item.quantity | int else item.quantity }}</td>
-        <td class="r">{{ '%.2f' | format(item.unit_price) }}</td>
-        <td class="r"><strong>{{ '%.2f' | format(item.subtotal) }}</strong></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <hr class="rule-thin" />
-
-  <!-- 合计 -->
-  <div class="totals">
-    <div class="totals-row">
-      <span>Subtotal / 小计</span>
-      <span>¥ {{ '%.2f' | format(inv.subtotal) }}</span>
-    </div>
-    {% if inv.discount_amount > 0 %}
-    <div class="totals-row">
-      <span>Discount / 优惠</span>
-      <span>– ¥ {{ '%.2f' | format(inv.discount_amount) }}</span>
-    </div>
-    {% endif %}
-    <div class="totals-row grand">
-      <span>TOTAL DUE</span>
-      <span class="amt">¥ {{ '%.2f' | format(inv.total_amount) }}</span>
-    </div>
-  </div>
-
-  <!-- 支付信息 -->
-  <div class="payment-info" style="margin-top:0.85rem;">
-    <div>Payment / 支付方式：<span>{{ inv_pay_zh.get(inv.payment_method, inv.payment_method) if inv.payment_method else '—' }}</span></div>
-    <div>Status / 状态：<span>{{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}</span></div>
-    {% if inv.paid_at %}
-    <div>Paid / 收款时间：<span>{{ inv.paid_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
-    {% endif %}
-  </div>
-
-  {% if inv.notes %}
-  <div style="margin-top:0.6rem;font-size:8.5pt;color:#555;">
-    <em>Notes / 备注：{{ inv.notes }}</em>
-  </div>
+<div class="inv-totals">
+  <div class="row"><span>Subtotal · 小计</span><span>¥ {{ '%.2f'|format(inv.subtotal) }}</span></div>
+  {% if inv.discount_amount > 0 %}
+  <div class="row"><span>Discount · 优惠</span><span>– ¥ {{ '%.2f'|format(inv.discount_amount) }}</span></div>
   {% endif %}
-
-  <hr class="rule-single" style="margin-top:1rem;" />
-
-  <!-- 签名栏 -->
-  <div class="sig-section">
-    <div class="sig-box">Veterinarian / 主治医生</div>
-    <div class="sig-box">Cashier / 收银员</div>
-    <div class="sig-box">Client Signature / 客户签名</div>
-  </div>
-
-  <!-- 页脚 -->
-  <div class="footer">
-    <div class="thanks">"Thank you for entrusting us with the care of your companion."</div>
-    <div>大风动物医院 · Da Feng Animal Hospital · 横岗店</div>
-    <div style="margin-top:0.2rem;">如有疑问，请凭此票据到院咨询 · Please retain this receipt for your records</div>
-  </div>
-
+  <div class="row grand"><span>Total Due · 应收</span><span>¥ {{ '%.2f'|format(inv.total_amount) }}</span></div>
 </div>
 
-</body>
-</html>
+{% if payments %}
+<div class="inv-pay-list">
+  <div class="h">Payment Received · 收款明细</div>
+  {% for p in payments if p.status == 'success' %}
+  <div class="pay-row">
+    <span class="lbl">{{ {
+      'cash':'Cash · 现金','wechat':'WeChat · 微信','alipay':'Alipay · 支付宝',
+      'shouqianba':'Shouqianba · 收钱吧','meituan':'Meituan · 美团','third_party':'Third Party · 第三方',
+      'wallet':'Wallet · 钱包','package':'Package · 套餐','deposit':'Deposit · 押金','coupon':'Coupon · 优惠券',
+    }.get(p.method, p.method) }}{% if p.ref_no %} <em style="color:#888;font-size:8.5pt;">#{{ p.ref_no }}</em>{% endif %}</span>
+    <span class="amt">¥ {{ '%.2f'|format(p.amount) }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div style="margin-top:10px;font-size:9.5pt;color:#666;">
+  Status · 状态：<strong>{{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}</strong>
+  {% if inv.payment_method %} · {{ inv.payment_method }}{% endif %}
+</div>
+{% endif %}
+
+{% if inv.notes %}
+<div style="margin-top:8px;font-size:9pt;color:#666;font-style:italic;">
+  Notes · 备注：{{ inv.notes }}
+</div>
+{% endif %}
+
+<hr class="inv-rule-single" style="margin-top:14px;" />
+
+<div class="inv-sig">
+  <div class="box">Veterinarian · 主治医生</div>
+  <div class="box">Cashier · 收银员</div>
+  <div class="box">Client Signature · 客户签名</div>
+</div>
+
+<div class="inv-foot">
+  <div class="thanks">"Thank you for entrusting us with the care of your companion."</div>
+  <div>{{ clinic_name_zh or '大风动物医院' }} · {{ clinic_name_en or 'Da Feng Animal Hospital' }}</div>
+  <div style="margin-top:2px;">Please retain this receipt for your records · 凭此票据到院咨询</div>
+</div>
+{% endblock %}
