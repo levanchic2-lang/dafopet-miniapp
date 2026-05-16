@@ -39,6 +39,13 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
   - 调度：`app/services/followup_dispatch.py` 每小时通过 APScheduler 跑
   - 渠道：先小程序订阅消息（`wechat_tmpl_followup`）→ 短信网关 → 电话兜底
   - 客户反馈短链：`/follow-up/{token}`（无登录，token 即凭证）
+- 财务模块（commit 1-6 of 财务系列）：
+  - `Wallet` + `WalletTransaction`：每客户一个钱包；4 种流水（recharge/consume/refund/adjust），所有变动写 balance_after 快照
+  - `PackageProduct` + `CustomerPackage` + `PackageRedemption`：套餐目录 / 客户已购实例（含售卖时快照防价格漂移）/ 核销流水
+  - `Deposit`：业务押金（手术/寄养/美容），关联 appointment/visit，status held → applied/partial_refund/refunded/cancelled
+  - 收费单 `Invoice.payment_method` 新支持 `wallet` / `package` / `deposit`
+  - 收款统计：`/admin/reports/revenue` 用 Chart.js 出日趋势/支付方式/门店分布，可导出 Excel
+  - 启动迁移：`app/database.py` 用 `CREATE TABLE IF NOT EXISTS` 风格幂等建表 + 索引
 
 ## TNR 业务规则
 - 每店每月最多 30 个已确认 TNR 预约（`TnrStoreConfig.tnr_monthly_quota`）

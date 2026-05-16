@@ -15,7 +15,7 @@ from urllib.parse import quote
 
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from passlib.context import CryptContext
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 import httpx
 from sqlalchemy import func, or_
@@ -8244,6 +8244,298 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         db.add(InvoiceItem(invoice_id=inv.id, **li))
 
     return inv
+
+
+# ---------------------------------------------------------------------------
+# 收款统计分析 — 日结 / 月结 / 各种维度分析
+# ---------------------------------------------------------------------------
+
+_REVENUE_PAY_ZH = {
+    "cash":     "现金",
+    "wechat":   "微信",
+    "alipay":   "支付宝",
+    "card":     "刷卡",
+    "groupbuy": "团购",
+    "prepaid":  "预付款",
+    "wallet":   "钱包",
+    "package":  "套餐核销",
+    "deposit":  "押金抵扣",
+    "other":    "其他",
+    "":         "未指定",
+}
+
+
+def _revenue_date_range(preset: str, date_from: str, date_to: str) -> tuple[str, str, str]:
+    """根据预设/自定义返回 (from, to, label)。"""
+    from datetime import date, timedelta
+    today = date.today()
+    if preset == "today":
+        return today.isoformat(), today.isoformat(), "今日"
+    if preset == "yesterday":
+        d = today - timedelta(days=1)
+        return d.isoformat(), d.isoformat(), "昨日"
+    if preset == "week":
+        start = today - timedelta(days=today.weekday())
+        return start.isoformat(), today.isoformat(), "本周"
+    if preset == "month":
+        start = today.replace(day=1)
+        return start.isoformat(), today.isoformat(), "本月"
+    if preset == "last_month":
+        first_this = today.replace(day=1)
+        last_prev = first_this - timedelta(days=1)
+        first_prev = last_prev.replace(day=1)
+        return first_prev.isoformat(), last_prev.isoformat(), "上月"
+    if preset == "year":
+        return today.replace(month=1, day=1).isoformat(), today.isoformat(), "本年"
+    # custom
+    df = (date_from or "").strip() or today.isoformat()
+    dt = (date_to   or "").strip() or today.isoformat()
+    return df, dt, f"{df} ~ {dt}"
+
+
+@app.get("/admin/reports/revenue", response_class=HTMLResponse)
+async def admin_reports_revenue(
+    request: Request,
+    db: Session = Depends(get_db),
+    preset: str = Query("month"),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    store: str = Query(""),  # 仅 superadmin 可选；员工自动锁本店
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    admin_store_short = _get_admin_store(request)
+    if admin_store_short:
+        store = admin_store_short  # 员工强制本店
+
+    df, dt, label = _revenue_date_range(preset, date_from, date_to)
+
+    # 已收款的收费单（paid_at 在区间内）
+    base_q = db.query(Invoice).filter(
+        Invoice.payment_status == "paid",
+        Invoice.invoice_date >= df,
+        Invoice.invoice_date <= dt,
+    )
+    rows = base_q.order_by(Invoice.paid_at.desc()).all()
+
+    # 如果有门店筛选：通过 visit.pet.store 关联（invoice 没有 store 字段，但能通过 pet）
+    if store:
+        from app.models import Pet as _Pet
+        pet_store_map = {}
+        pet_ids = list({r.pet_id for r in rows if r.pet_id})
+        if pet_ids:
+            for p in db.query(_Pet).filter(_Pet.id.in_(pet_ids)).all():
+                pet_store_map[p.id] = p.store or ""
+        rows = [r for r in rows if pet_store_map.get(r.pet_id, "") == store]
+
+    # 汇总
+    total_amount = sum(float(r.total_amount or 0) for r in rows)
+    total_count = len(rows)
+    avg = (total_amount / total_count) if total_count else 0.0
+
+    # 按支付方式
+    by_method: dict[str, dict] = {}
+    for r in rows:
+        m = (r.payment_method or "").strip() or "other"
+        if m not in by_method:
+            by_method[m] = {"amount": 0.0, "count": 0}
+        by_method[m]["amount"] += float(r.total_amount or 0)
+        by_method[m]["count"] += 1
+    by_method_list = sorted(
+        [{"method": m, "label": _REVENUE_PAY_ZH.get(m, m), **v} for m, v in by_method.items()],
+        key=lambda x: -x["amount"],
+    )
+
+    # 按门店（仅 superadmin 看；用 pet.store 推断）
+    by_store_list: list = []
+    if not admin_store_short:
+        from app.models import Pet as _Pet
+        pet_ids2 = list({r.pet_id for r in rows if r.pet_id})
+        psmap = {}
+        if pet_ids2:
+            for p in db.query(_Pet).filter(_Pet.id.in_(pet_ids2)).all():
+                psmap[p.id] = p.store or "未指定"
+        by_store: dict[str, dict] = {}
+        for r in rows:
+            s = psmap.get(r.pet_id, "未指定") or "未指定"
+            if s not in by_store:
+                by_store[s] = {"amount": 0.0, "count": 0}
+            by_store[s]["amount"] += float(r.total_amount or 0)
+            by_store[s]["count"] += 1
+        by_store_list = sorted(
+            [{"store": s, **v} for s, v in by_store.items()],
+            key=lambda x: -x["amount"],
+        )
+
+    # 日趋势（区间内每日）
+    from datetime import date as _date, timedelta as _td
+    def _parse(s):
+        try:
+            y, m, d = s.split("-")
+            return _date(int(y), int(m), int(d))
+        except Exception:
+            return None
+    d0 = _parse(df) or _date.today()
+    d1 = _parse(dt) or _date.today()
+    if (d1 - d0).days < 0:
+        d0, d1 = d1, d0
+    daily_amount: dict[str, float] = {}
+    cur = d0
+    while cur <= d1:
+        daily_amount[cur.isoformat()] = 0.0
+        cur += _td(days=1)
+    for r in rows:
+        k = (r.invoice_date or "")[:10]
+        if k in daily_amount:
+            daily_amount[k] += float(r.total_amount or 0)
+    daily_series = [{"date": k, "amount": round(v, 2)} for k, v in sorted(daily_amount.items())]
+
+    # 按收费来源类型（处方/检查/手术/其他）—— 通过 invoice.notes / visit 关联推断
+    # 简化：用 invoice_no 前缀 / notes 关键词 / visit_id 关联推断
+    by_category: dict[str, float] = {"处方": 0.0, "检查单": 0.0, "销售单": 0.0, "其他": 0.0}
+    for r in rows:
+        n = (r.notes or "") + (r.invoice_no or "")
+        if "处方" in n or "Rx" in n.upper() or "PRESC" in n.upper():
+            by_category["处方"] += float(r.total_amount or 0)
+        elif "检查" in n or "EXAM" in n.upper():
+            by_category["检查单"] += float(r.total_amount or 0)
+        elif "销售" in n or "SO" in n.upper():
+            by_category["销售单"] += float(r.total_amount or 0)
+        else:
+            by_category["其他"] += float(r.total_amount or 0)
+    by_category_list = [{"label": k, "amount": round(v, 2)} for k, v in by_category.items() if v > 0]
+
+    # 钱包充值（区间内）
+    wallet_recharge_q = db.query(WalletTransaction).filter(
+        WalletTransaction.type == "recharge",
+        WalletTransaction.created_at >= df + " 00:00:00",
+        WalletTransaction.created_at <= dt + " 23:59:59",
+    )
+    if store:
+        wallet_recharge_q = wallet_recharge_q.filter(WalletTransaction.store == store)
+    wallet_recharges = wallet_recharge_q.all()
+    wallet_recharge_total = sum(float(t.amount or 0) for t in wallet_recharges)
+
+    # 套餐售卖（区间内）
+    pkg_sold_q = db.query(CustomerPackage).filter(
+        CustomerPackage.purchase_date >= df,
+        CustomerPackage.purchase_date <= dt,
+    )
+    if store:
+        pkg_sold_q = pkg_sold_q.filter(CustomerPackage.store == store)
+    pkg_sold = pkg_sold_q.all()
+    pkg_sold_total = sum(float(p.sell_price or 0) for p in pkg_sold)
+
+    # 押金净流入（收 - 退）
+    dep_q = db.query(Deposit).filter(
+        Deposit.created_at >= df + " 00:00:00",
+        Deposit.created_at <= dt + " 23:59:59",
+    )
+    if store:
+        dep_q = dep_q.filter(Deposit.store == store)
+    deps = dep_q.all()
+    deposit_in = sum(float(d.amount or 0) for d in deps)
+    deposit_refund = sum(float(d.refunded_amount or 0) for d in deps if d.refunded_at and df <= d.refunded_at.strftime("%Y-%m-%d") <= dt)
+
+    return templates.TemplateResponse(request, "admin_reports_revenue.html", {
+        "label": label,
+        "df": df, "dt": dt,
+        "preset": preset,
+        "store": store,
+        "is_superadmin": (request.session.get("admin_role") == "superadmin"),
+        "store_options": _STORE_OPTIONS if not admin_store_short else [admin_store_short],
+        "admin_store_short": admin_store_short,
+        # 汇总
+        "total_amount": total_amount,
+        "total_count": total_count,
+        "avg": avg,
+        # 分类
+        "by_method_list": by_method_list,
+        "by_store_list": by_store_list,
+        "by_category_list": by_category_list,
+        "daily_series": daily_series,
+        # 其他财务流入
+        "wallet_recharge_total": wallet_recharge_total,
+        "wallet_recharges_count": len(wallet_recharges),
+        "pkg_sold_total": pkg_sold_total,
+        "pkg_sold_count": len(pkg_sold),
+        "deposit_in": deposit_in,
+        "deposit_refund": deposit_refund,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.get("/admin/reports/revenue/export")
+async def admin_reports_revenue_export(
+    request: Request,
+    db: Session = Depends(get_db),
+    preset: str = Query("month"),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    store: str = Query(""),
+):
+    """导出 Excel：收费单明细 + 汇总。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    admin_store_short = _get_admin_store(request)
+    if admin_store_short:
+        store = admin_store_short
+    df, dt, label = _revenue_date_range(preset, date_from, date_to)
+    rows = db.query(Invoice).filter(
+        Invoice.payment_status == "paid",
+        Invoice.invoice_date >= df,
+        Invoice.invoice_date <= dt,
+    ).order_by(Invoice.paid_at.asc()).all()
+
+    if store:
+        from app.models import Pet as _Pet
+        ps = {p.id: (p.store or "") for p in db.query(_Pet).filter(_Pet.id.in_({r.pet_id for r in rows if r.pet_id})).all()}
+        rows = [r for r in rows if ps.get(r.pet_id, "") == store]
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    from io import BytesIO
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "收款明细"
+    headers = ["收款时间", "单号", "客户", "宠物ID", "金额", "支付方式", "备注"]
+    ws.append(headers)
+    for c in range(1, len(headers) + 1):
+        ws.cell(row=1, column=c).font = Font(bold=True)
+    for r in rows:
+        cust = db.get(Customer, r.customer_id) if r.customer_id else None
+        ws.append([
+            r.paid_at.strftime("%Y-%m-%d %H:%M") if r.paid_at else "",
+            r.invoice_no or "",
+            (cust.name if cust else ""),
+            r.pet_id or "",
+            float(r.total_amount or 0),
+            _REVENUE_PAY_ZH.get(r.payment_method or "", r.payment_method or ""),
+            (r.notes or "")[:200],
+        ])
+    # 汇总
+    ws2 = wb.create_sheet("按支付方式")
+    ws2.append(["支付方式", "笔数", "金额"])
+    for c in range(1, 4):
+        ws2.cell(row=1, column=c).font = Font(bold=True)
+    by_m: dict[str, dict] = {}
+    for r in rows:
+        m = r.payment_method or "未指定"
+        d = by_m.setdefault(m, {"count": 0, "amount": 0.0})
+        d["count"] += 1
+        d["amount"] += float(r.total_amount or 0)
+    for m, d in sorted(by_m.items(), key=lambda x: -x[1]["amount"]):
+        ws2.append([_REVENUE_PAY_ZH.get(m, m), d["count"], round(d["amount"], 2)])
+
+    buf = BytesIO()
+    wb.save(buf); buf.seek(0)
+    from urllib.parse import quote
+    fname = quote(f"收款明细_{label.replace(' ', '_').replace('~','-')}.xlsx")
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}"},
+    )
 
 
 @app.get("/admin/invoices", response_class=HTMLResponse)

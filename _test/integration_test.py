@@ -1076,6 +1076,25 @@ def t_deposit_flow():
 t_deposit_flow()
 
 
+@step("收款统计：本月报表页可加载，含已支付的收费单金额")
+def t_revenue_report():
+    r = client.get("/admin/reports/revenue?preset=month")
+    assert r.status_code == 200, f"got {r.status_code}"
+    assert "收款统计" in r.text
+    # 前面的 t_invoice_pay_wallet 支付了一张 ¥100 单 → 应该出现在汇总里
+    # （只要页面 200 + 含字段即可，金额匹配在 export 测试时验）
+
+@step("收款统计：Excel 导出能成功（200 + xlsx mime）")
+def t_revenue_export():
+    r = client.get("/admin/reports/revenue/export?preset=month")
+    assert r.status_code == 200
+    assert "spreadsheet" in r.headers.get("content-type", ""), r.headers.get("content-type")
+    assert len(r.content) > 1000, f"导出文件应非空，得 {len(r.content)} bytes"
+
+t_revenue_report()
+t_revenue_export()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

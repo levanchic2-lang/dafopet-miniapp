@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block extra_css %}
+<style>
+.rev-summary { display:grid; grid-template-columns:repeat(4, 1fr); gap:.8rem; margin-bottom:1rem; }
+.rev-card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:1rem 1.1rem; }
+.rev-card .lbl { color:#6b7280; font-size:.8rem; }
+.rev-card .val { font-size:1.7rem; font-weight:700; margin-top:.3rem; color:#111827; }
+.rev-card.green { background:linear-gradient(135deg,#10b981,#059669); color:#fff; border-color:transparent; }
+.rev-card.green .lbl, .rev-card.green .val { color:#fff; }
+.rev-card.blue { background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; border-color:transparent; }
+.rev-card.blue .lbl, .rev-card.blue .val { color:#fff; }
+.rev-section { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:1rem 1.1rem; margin-bottom:1rem; }
+.rev-section h3 { margin:0 0 .8rem; font-size:.95rem; }
+.rev-table { width:100%; font-size:.88rem; border-collapse:collapse; }
+.rev-table th, .rev-table td { padding:.45rem .6rem; border-bottom:1px solid #f3f4f6; text-align:left; }
+.rev-table tr:last-child td { border-bottom:none; }
+.rev-table td.amount { font-weight:600; text-align:right; }
+.preset-tabs { display:flex; gap:.3rem; margin-bottom:.6rem; flex-wrap:wrap; }
+.preset-tab { padding:.35rem .8rem; border-radius:6px; background:#f3f4f6; color:#374151; font-size:.85rem; text-decoration:none; }
+.preset-tab.active { background:#111827; color:#fff; }
+@media (max-width: 768px) {
+  .rev-summary { grid-template-columns:repeat(2, 1fr); }
+}
+</style>
+{% endblock %}
+
+{% block body %}
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon">📊</span>收款统计</h1>
+ <p class="ph-sub">{{ label }} · 共 {{ total_count }} 笔 · 实收 ¥{{ '%.2f'|format(total_amount) }}</p>
+ </div>
+ <div class="ph-actions">
+ <a href="/admin/reports/revenue/export?preset={{ preset }}&date_from={{ df }}&date_to={{ dt }}&store={{ store }}"
+    class="btn secondary" style="font-size:.85rem;">⬇ 导出 Excel</a>
+ </div>
+</div>
+
+{# 日期预设 + 自定义 #}
+<div class="rev-section">
+  <div class="preset-tabs">
+    {% for k, zh in [('today','今日'),('yesterday','昨日'),('week','本周'),('month','本月'),('last_month','上月'),('year','本年'),('custom','自定义')] %}
+    <a class="preset-tab {% if preset == k %}active{% endif %}"
+       href="?preset={{ k }}&store={{ store }}{% if k == 'custom' %}&date_from={{ df }}&date_to={{ dt }}{% endif %}">{{ zh }}</a>
+    {% endfor %}
+  </div>
+  <form method="get" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+    <input type="hidden" name="preset" value="custom"/>
+    <input type="date" name="date_from" value="{{ df }}" style="font-size:.85rem;padding:.3rem .5rem;"/>
+    <span style="color:var(--muted);">至</span>
+    <input type="date" name="date_to" value="{{ dt }}" style="font-size:.85rem;padding:.3rem .5rem;"/>
+    {% if is_superadmin and not admin_store_short %}
+    <select name="store" style="font-size:.85rem;padding:.3rem .5rem;">
+      <option value="">全部门店</option>
+      {% for s in store_options %}<option value="{{ s }}" {% if s == store %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+    {% endif %}
+    <button type="submit" class="btn secondary" style="font-size:.85rem;">应用</button>
+  </form>
+</div>
+
+{# 关键指标 #}
+<div class="rev-summary">
+  <div class="rev-card green">
+    <div class="lbl">期间实收（收费单）</div>
+    <div class="val">¥{{ '%.2f'|format(total_amount) }}</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">收款笔数</div>
+    <div class="val">{{ total_count }}</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">单均金额</div>
+    <div class="val">¥{{ '%.2f'|format(avg) }}</div>
+  </div>
+  <div class="rev-card blue">
+    <div class="lbl">期间钱包充值</div>
+    <div class="val">¥{{ '%.2f'|format(wallet_recharge_total) }}</div>
+    <div style="font-size:.75rem;opacity:.85;margin-top:.2rem;">{{ wallet_recharges_count }} 笔</div>
+  </div>
+</div>
+
+<div class="rev-summary">
+  <div class="rev-card">
+    <div class="lbl">期间套餐售卖</div>
+    <div class="val">¥{{ '%.2f'|format(pkg_sold_total) }}</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:.2rem;">{{ pkg_sold_count }} 份</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">期间收押金</div>
+    <div class="val">¥{{ '%.2f'|format(deposit_in) }}</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">期间退押金</div>
+    <div class="val">¥{{ '%.2f'|format(deposit_refund) }}</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">净财务流入（实收 + 充值 + 套餐 + 押金 - 退押）</div>
+    <div class="val" style="font-size:1.4rem;">¥{{ '%.2f'|format(total_amount + wallet_recharge_total + pkg_sold_total + deposit_in - deposit_refund) }}</div>
+  </div>
+</div>
+
+{# 日趋势图 #}
+<div class="rev-section">
+  <h3>📈 日趋势（{{ daily_series|length }} 天）</h3>
+  <canvas id="daily-chart" height="80"></canvas>
+</div>
+
+{# 按支付方式 #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+  <div class="rev-section">
+    <h3>💳 按支付方式</h3>
+    <canvas id="method-chart" height="180"></canvas>
+    <table class="rev-table" style="margin-top:.8rem;">
+      <thead><tr><th>方式</th><th>笔数</th><th style="text-align:right;">金额</th><th style="text-align:right;">占比</th></tr></thead>
+      <tbody>
+      {% for m in by_method_list %}
+      <tr>
+        <td>{{ m.label }}</td>
+        <td>{{ m.count }}</td>
+        <td class="amount">¥{{ '%.2f'|format(m.amount) }}</td>
+        <td style="text-align:right;color:var(--muted);">{{ '%.1f'|format(m.amount * 100 / total_amount) if total_amount else '0' }}%</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if by_store_list %}
+  <div class="rev-section">
+    <h3>🏪 按门店</h3>
+    <canvas id="store-chart" height="180"></canvas>
+    <table class="rev-table" style="margin-top:.8rem;">
+      <thead><tr><th>门店</th><th>笔数</th><th style="text-align:right;">金额</th></tr></thead>
+      <tbody>
+      {% for s in by_store_list %}
+      <tr><td>{{ s.store }}</td><td>{{ s.count }}</td><td class="amount">¥{{ '%.2f'|format(s.amount) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rev-section">
+    <h3>📦 按收费类型</h3>
+    {% if by_category_list %}
+    <table class="rev-table">
+      <thead><tr><th>类型</th><th style="text-align:right;">金额</th></tr></thead>
+      <tbody>
+      {% for c in by_category_list %}
+      <tr><td>{{ c.label }}</td><td class="amount">¥{{ '%.2f'|format(c.amount) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="color:var(--muted);padding:2rem;text-align:center;">区间内无收款</div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if by_store_list and by_category_list %}
+<div class="rev-section">
+  <h3>📦 按收费类型</h3>
+  <table class="rev-table">
+    <thead><tr><th>类型</th><th style="text-align:right;">金额</th></tr></thead>
+    <tbody>
+    {% for c in by_category_list %}
+    <tr><td>{{ c.label }}</td><td class="amount">¥{{ '%.2f'|format(c.amount) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<script id="daily-data" type="application/json">{{ daily_series|tojson }}</script>
+<script id="method-data" type="application/json">{{ by_method_list|tojson }}</script>
+{% if by_store_list %}<script id="store-data" type="application/json">{{ by_store_list|tojson }}</script>{% endif %}
+
+<script>
+(function () {
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif';
+
+  // 日趋势
+  var daily = JSON.parse(document.getElementById('daily-data').textContent);
+  new Chart(document.getElementById('daily-chart'), {
+    type: 'line',
+    data: {
+      labels: daily.map(function(d){ return d.date.slice(5); }),
+      datasets: [{ label: '实收 ¥', data: daily.map(function(d){ return d.amount; }),
+                   borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)',
+                   tension: .25, fill: true, pointRadius: 2 }]
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+
+  // 按支付方式饼图
+  var method = JSON.parse(document.getElementById('method-data').textContent);
+  if (method.length) {
+    new Chart(document.getElementById('method-chart'), {
+      type: 'doughnut',
+      data: {
+        labels: method.map(function(m){ return m.label; }),
+        datasets: [{ data: method.map(function(m){ return m.amount; }),
+                     backgroundColor: ['#10b981','#3b82f6','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316'] }]
+      },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } } }
+    });
+  }
+
+  // 按门店柱图
+  var storeEl = document.getElementById('store-data');
+  if (storeEl) {
+    var store = JSON.parse(storeEl.textContent);
+    new Chart(document.getElementById('store-chart'), {
+      type: 'bar',
+      data: {
+        labels: store.map(function(s){ return s.store; }),
+        datasets: [{ label: '金额', data: store.map(function(s){ return s.amount; }), backgroundColor: '#3b82f6' }]
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+  }
+})();
+</script>
+
+{% endblock %}
