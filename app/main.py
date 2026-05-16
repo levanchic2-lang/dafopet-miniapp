@@ -10067,6 +10067,89 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
     return RedirectResponse(f"/admin/exam-orders/{order.id}", status_code=303)
 
 
+# 报告类型自动识别 → 不同标题 / 颜色 / 网格
+_REPORT_STYLES = {
+    "ultrasound": {
+        "title_zh": "B 超 检 查 报 告", "title_en": "Ultrasound Examination Report",
+        "accent": "#0369a1", "frame_bg": "#000", "frame_border": "#1e3a8a",
+        "grid_cols": "1fr 1fr", "media_label": "影 像 资 料",
+        "impression_label": "超声所见与印象 · Findings & Impression",
+        "keywords": ["B超", "超声", "ultrasound"],
+    },
+    "xray": {
+        "title_zh": "X 光 检 查 报 告", "title_en": "Radiographic Examination Report",
+        "accent": "#1f2937", "frame_bg": "#000", "frame_border": "#111",
+        "grid_cols": "1fr 1fr", "media_label": "X 光 片",
+        "impression_label": "影像所见与印象 · Findings & Impression",
+        "keywords": ["X光", "DR", "放射", "x-ray", "xray"],
+    },
+    "microscope": {
+        "title_zh": "显 微 镜 检 查 报 告", "title_en": "Microscopic Examination Report",
+        "accent": "#7c3aed", "frame_bg": "#f9fafb", "frame_border": "#c4b5fd",
+        "grid_cols": "1fr 1fr 1fr", "media_label": "镜 检 视 野",
+        "impression_label": "镜检所见与诊断 · Findings & Diagnosis",
+        "keywords": ["显微", "镜检", "涂片", "细胞学", "粪检"],
+    },
+    "lab": {
+        "title_zh": "化 验 检 查 报 告", "title_en": "Laboratory Test Report",
+        "accent": "#059669", "frame_bg": "#f9fafb", "frame_border": "#d1d5db",
+        "grid_cols": "1fr 1fr", "media_label": "化 验 单 据",
+        "impression_label": "化验结果与解读 · Results & Interpretation",
+        "keywords": ["血常规", "生化", "尿检", "化验", "血液", "lab"],
+    },
+    "generic": {
+        "title_zh": "检 查 报 告", "title_en": "Examination Report",
+        "accent": "#374151", "frame_bg": "#f9fafb", "frame_border": "#d1d5db",
+        "grid_cols": "1fr 1fr", "media_label": "检 查 资 料",
+        "impression_label": "检查所见与结论",
+        "keywords": [],
+    },
+}
+
+
+def _detect_report_style(items: list) -> dict:
+    """从检查项目名称推断报告类型样式。"""
+    text = " ".join((it.get("name") or "") for it in items).lower()
+    for key, style in _REPORT_STYLES.items():
+        if key == "generic":
+            continue
+        for kw in style["keywords"]:
+            if kw.lower() in text:
+                return style
+    return _REPORT_STYLES["generic"]
+
+
+@app.get("/admin/exam-orders/{order_id}/print", response_class=HTMLResponse)
+async def admin_exam_order_print(
+    order_id: int, request: Request, db: Session = Depends(get_db),
+):
+    """检查报告打印（按项目类型自动选样式：B超/X光/显微镜/化验/通用）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    items = json.loads(order.items_json or "[]")
+    style = _detect_report_style(items)
+    image_reports = [r for r in order.reports if (r.file_type or "image").lower() != "pdf"]
+    pdf_reports   = [r for r in order.reports if (r.file_type or "").lower() == "pdf"]
+    # clinic 名
+    clinic_name_zh = "大风动物医院"
+    if pet and pet.store:
+        clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
+    return templates.TemplateResponse(request, "admin_exam_print.html", {
+        "order": order, "visit": visit, "cust": cust, "pet": pet,
+        "items": items,
+        "image_reports": image_reports,
+        "pdf_reports": pdf_reports,
+        "report_style": style,
+        "clinic_name_zh": clinic_name_zh,
+    })
+
+
 @app.get("/admin/exam-orders/{order_id}", response_class=HTMLResponse)
 async def admin_exam_order_detail(
     order_id: int, request: Request, db: Session = Depends(get_db),

@@ -38,6 +38,7 @@
     </div>
   </div>
   <div class="ph-actions">
+    <a href="/admin/exam-orders/{{ order.id }}/print" target="_blank" class="btn secondary" style="font-size:0.82rem;">🖨 打印报告</a>
     <form method="post" action="/admin/exam-orders/{{ order.id }}/delete" style="margin:0;"
           onsubmit="return confirm('删除此检查单及其所有报告？此操作不可恢复。')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

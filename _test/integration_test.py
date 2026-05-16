@@ -1249,6 +1249,64 @@ def t_revenue_payment_aggregation():
 t_revenue_payment_aggregation()
 
 
+@step("打印：处方笺打印页可加载（国标 A5 横版）")
+def t_print_prescription():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Prescription
+    db = SessionLocal()
+    p = db.query(Prescription).order_by(Prescription.id.desc()).first()
+    assert p, "前置：应有处方"
+    pid = p.id
+    db.close()
+    r = client.get(f"/admin/prescriptions/{pid}/print")
+    assert r.status_code == 200
+    assert "处方笺" in r.text
+    assert "第一联" in r.text
+    assert "A5_LAND" in r.text
+
+t_print_prescription()
+
+
+@step("打印：收费单打印页含混合支付明细")
+def t_print_invoice():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Invoice
+    db = SessionLocal()
+    inv = db.query(Invoice).filter(Invoice.invoice_no == "TEST_MIXED").first()
+    inv_id = inv.id
+    db.close()
+    r = client.get(f"/admin/invoices/{inv_id}/print")
+    assert r.status_code == 200
+    assert "Veterinary Receipt" in r.text
+    assert "Cash" in r.text and "WeChat" in r.text
+
+t_print_invoice()
+
+
+@step("打印：检查报告页可加载 + 按项目自动选样式")
+def t_print_exam():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import ExamOrder
+    db = SessionLocal()
+    eo = db.query(ExamOrder).order_by(ExamOrder.id.desc()).first()
+    if not eo:
+        print("    (no exam order, skip)")
+        return
+    eo_id = eo.id
+    db.close()
+    r = client.get(f"/admin/exam-orders/{eo_id}/print")
+    assert r.status_code == 200
+    assert "检 查 报 告" in r.text or "B 超" in r.text or "X 光" in r.text or "显 微 镜" in r.text or "化 验" in r.text
+
+t_print_exam()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

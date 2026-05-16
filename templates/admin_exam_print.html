@@ -1,0 +1,180 @@
+{% extends "_print_base.html" %}
+{% block title %}{{ report_style.title_zh }} · {{ pet.name if pet else '' }}{% endblock %}
+{% block default_size %}A4{% endblock %}
+
+{% block extra_style %}
+.rpt-frame { padding: 2mm 0; }
+
+/* 标题 */
+.rpt-title-zh {
+  font-size: 22pt; letter-spacing: 12px; text-align: center;
+  font-weight: 700; padding: 6px 0 2px;
+}
+.rpt-title-en {
+  text-align: center; font-size: 11pt; letter-spacing: 4px; color: #555;
+  font-family: Georgia, serif;
+}
+.rpt-rule {
+  height: 5px; margin: 8px 0 12px;
+  border-top: 2px solid {{ report_style.accent }};
+  border-bottom: 0.5px solid {{ report_style.accent }};
+}
+
+/* 顶部信息表 */
+.rpt-info {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 4px 16px; font-size: 10.5pt; padding: 4px 0 10px;
+}
+.rpt-info .row { display: flex; align-items: baseline; }
+.rpt-info .lbl { color: #666; white-space: nowrap; margin-right: 6px; min-width: 4em; }
+.rpt-info .val { flex: 1; border-bottom: 0.5px solid #ccc; padding: 0 4px 1px; font-weight: 500; }
+
+/* 检查项目 */
+.rpt-section-h {
+  font-size: 11pt; font-weight: 700; color: {{ report_style.accent }};
+  border-left: 3px solid {{ report_style.accent }};
+  padding: 2px 8px; margin: 10px 0 6px;
+  letter-spacing: 2px;
+}
+.rpt-items {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 4px 16px; font-size: 10pt;
+}
+.rpt-items .item-row {
+  padding: 3px 8px;
+  background: #fafafa; border-left: 2px solid {{ report_style.accent }};
+}
+.rpt-items .item-row .name { font-weight: 600; }
+.rpt-items .item-row .notes { font-size: 9pt; color: #666; margin-top: 2px; }
+
+/* 影像 */
+.rpt-gallery {
+  display: grid;
+  grid-template-columns: {{ report_style.grid_cols }};
+  gap: 6px;
+  margin-top: 6px;
+}
+.rpt-img-card {
+  background: {{ report_style.frame_bg }};
+  border: 1px solid {{ report_style.frame_border }};
+  border-radius: 2px;
+  padding: 4px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.rpt-img-card img {
+  display: block; width: 100%; height: auto;
+  background: #000; max-height: 80mm; object-fit: contain;
+}
+.rpt-img-card .cap {
+  font-size: 8.5pt; color: #666;
+  padding: 3px 4px 0; text-align: center;
+}
+.rpt-pdf-card {
+  background: #f5f5f5; border: 1px dashed #bbb; padding: 12mm 4mm;
+  text-align: center; font-size: 9pt; color: #666;
+}
+
+/* 印象/诊断 */
+.rpt-impression {
+  margin-top: 12px; padding: 8px 12px;
+  background: #fff8e1; border-left: 4px solid #f59e0b;
+  font-size: 10.5pt; line-height: 1.7;
+}
+.rpt-impression .h {
+  font-weight: 700; color: #92400e; letter-spacing: 2px; margin-bottom: 4px;
+}
+
+/* 签名 */
+.rpt-sig {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px; margin-top: 24px;
+  font-size: 9pt; color: #555;
+}
+.rpt-sig .box {
+  border-bottom: 1px solid #888;
+  padding: 28px 0 4px; text-align: center; letter-spacing: 2px;
+}
+
+/* A5 / 小票降级 */
+body[data-size="A5"] .rpt-title-zh, body[data-size="A5_LAND"] .rpt-title-zh { font-size: 16pt; letter-spacing: 6px; }
+body[data-size="T80"] .rpt-title-zh { font-size: 12pt; letter-spacing: 2px; }
+body[data-size="T80"] .rpt-info, body[data-size="T80"] .rpt-items { grid-template-columns: 1fr; }
+body[data-size="T80"] .rpt-gallery { grid-template-columns: 1fr; }
+body[data-size="T80"] .rpt-sig { display: none; }
+{% endblock %}
+
+{% block toolbar_extra %}
+<span style="opacity:.8;font-size:12px;">报告类型：<b>{{ report_style.title_zh }}</b></span>
+{% endblock %}
+
+{% block content %}
+<div class="rpt-frame">
+  <div class="rpt-title-zh">{{ report_style.title_zh }}</div>
+  <div class="rpt-title-en">{{ report_style.title_en }} · {{ clinic_name_zh }}</div>
+  <div class="rpt-rule"></div>
+
+  <div class="rpt-info">
+    <div class="row"><span class="lbl">主人</span><span class="val">{{ cust.name if cust else '' }}</span></div>
+    <div class="row"><span class="lbl">宠物</span><span class="val">{{ pet.name if pet else '' }}</span></div>
+    <div class="row"><span class="lbl">种类</span><span class="val">{{ {'cat':'猫','dog':'狗'}.get(pet.species, pet.species or '') if pet else '' }}</span></div>
+    <div class="row"><span class="lbl">病历号</span><span class="val">{{ pet.medical_record_no if pet else '' }}</span></div>
+    <div class="row"><span class="lbl">性别</span><span class="val">{{ {'male':'公','female':'母'}.get(pet.gender, pet.gender or '') if pet else '' }}</span></div>
+    <div class="row"><span class="lbl">毛色</span><span class="val">{{ pet.color_pattern if pet else '' }}</span></div>
+    <div class="row"><span class="lbl">送检日</span><span class="val">{{ order.created_at.strftime('%Y-%m-%d') if order.created_at else '' }}</span></div>
+    <div class="row"><span class="lbl">单号</span><span class="val" style="font-family:monospace;">EX{{ '%06d'|format(order.id) }}</span></div>
+  </div>
+
+  {% if items %}
+  <div class="rpt-section-h">检 查 项 目</div>
+  <div class="rpt-items">
+    {% for it in items %}
+    <div class="item-row">
+      <div class="name">{{ it.name }}</div>
+      {% if it.notes %}<div class="notes">{{ it.notes }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if image_reports %}
+  <div class="rpt-section-h">{{ report_style.media_label }}</div>
+  <div class="rpt-gallery">
+    {% for r in image_reports %}
+    <div class="rpt-img-card">
+      <img src="/uploads/{{ r.file_path }}" alt="{{ r.original_name }}"/>
+      <div class="cap">{{ r.item_label or r.original_name }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if pdf_reports %}
+  <div class="rpt-section-h">附 件 报 告（PDF）</div>
+  {% for r in pdf_reports %}
+  <div class="rpt-pdf-card">
+    📄 <strong>{{ r.original_name }}</strong>
+    {% if r.item_label %} — {{ r.item_label }}{% endif %}
+    <div style="margin-top:4px;font-size:8pt;color:#888;">上传于 {{ r.uploaded_at.strftime('%Y-%m-%d %H:%M') if r.uploaded_at else '' }}</div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if order.notes %}
+  <div class="rpt-impression">
+    <div class="h">{{ report_style.impression_label }}</div>
+    <div>{{ order.notes }}</div>
+  </div>
+  {% endif %}
+
+  <div class="rpt-sig">
+    <div class="box">检查医师 · Examined By</div>
+    <div class="box">报告医师 · Reported By</div>
+    <div class="box">审核医师 · Reviewed By</div>
+  </div>
+
+  <div style="margin-top:18px;text-align:center;font-size:8pt;color:#888;letter-spacing:1px;">
+    本报告仅对送检样本/检查负责 · This report is valid only for the submitted examination.
+  </div>
+</div>
+{% endblock %}
