@@ -482,48 +482,51 @@
     var STORAGE_KEY = 'dafopet_qtabs_v1';
     var MAX_TABS = 12;
 
-    // 路径 → 默认 tab 标签映射。详情页用 <meta tab-label> 覆盖。
-    // 顺序：先精确匹配，再前缀匹配。
-    var PATH_LABELS = [
+    // 路径 → 默认 tab 标签映射。仅精确匹配（详情/子页用 <meta tab-label> 自行标记）。
+    var PATH_LABELS = {
       // 接待
-      { path: '/admin',                  label: '工作台',     kind: 'page', icon: '🏠', exact: true },
-      { path: '/admin/calendar',         label: '日历',       kind: 'page', icon: '📅' },
-      { path: '/admin/appointments',     label: '预约管理',   kind: 'page', icon: '📋' },
-      { path: '/admin/customers',        label: '客户档案',   kind: 'page', icon: '👥', exact: true },
+      '/admin':              { label: '工作台',     kind: 'page', icon: '🏠' },
+      '/admin/calendar':     { label: '日历',       kind: 'page', icon: '📅' },
+      '/admin/appointments': { label: '预约管理',   kind: 'page', icon: '📋' },
+      '/admin/customers':    { label: '客户档案',   kind: 'page', icon: '👥' },
       // 医疗
-      { path: '/admin/dispensing',       label: '发药台',     kind: 'page', icon: '💊' },
-      { path: '/admin/vaccinations',     label: '疫苗管理',   kind: 'page', icon: '💉' },
-      { path: '/admin/rabies',           label: '狂犬疫苗',   kind: 'page', icon: '🐶' },
-      { path: '/admin/visits',           label: '病历查询',   kind: 'page', icon: '🔍', exact: true },
-      { path: '/admin/follow-ups',       label: '回访管理',   kind: 'page', icon: '📞' },
+      '/admin/dispensing':   { label: '发药台',     kind: 'page', icon: '💊' },
+      '/admin/vaccinations': { label: '疫苗管理',   kind: 'page', icon: '💉' },
+      '/admin/rabies':       { label: '狂犬疫苗',   kind: 'page', icon: '🐶' },
+      '/admin/visits':       { label: '病历查询',   kind: 'page', icon: '🔍' },
+      '/admin/follow-ups':   { label: '回访管理',   kind: 'page', icon: '📞' },
       // 经营
-      { path: '/admin/invoices',         label: '收银台',     kind: 'page', icon: '🧾', exact: true },
-      { path: '/admin/inventory',        label: '库存管理',   kind: 'page', icon: '📦', exact: true },
-      { path: '/admin/stocktake',        label: '循环盘点',   kind: 'page', icon: '📊' },
-      { path: '/admin/sales',            label: '销售单',     kind: 'page', icon: '🛒' },
-      { path: '/admin/feedback',         label: '客户反馈',   kind: 'page', icon: '💬' },
+      '/admin/invoices':     { label: '收银台',     kind: 'page', icon: '🧾' },
+      '/admin/inventory':    { label: '库存管理',   kind: 'page', icon: '📦' },
+      '/admin/stocktake':    { label: '循环盘点',   kind: 'page', icon: '📊' },
+      '/admin/sales':        { label: '销售单',     kind: 'page', icon: '🛒' },
+      '/admin/feedback':     { label: '客户反馈',   kind: 'page', icon: '💬' },
       // 系统
-      { path: '/admin/hr',               label: '人事管理',   kind: 'page', icon: '👨‍💼' },
-      { path: '/admin/adoption',         label: '领养',       kind: 'page', icon: '🐾' },
-      { path: '/admin/changelog',        label: '开发日志',   kind: 'page', icon: '📝' },
-    ];
+      '/admin/hr':           { label: '人事管理',   kind: 'page', icon: '👨‍💼' },
+      '/admin/adoption':     { label: '领养',       kind: 'page', icon: '🐾' },
+      '/admin/changelog':    { label: '开发日志',   kind: 'page', icon: '📝' },
+    };
 
     function lookupPath(p) {
-      // 精确匹配优先
-      for (var i = 0; i < PATH_LABELS.length; i++) {
-        if (PATH_LABELS[i].exact && PATH_LABELS[i].path === p) return PATH_LABELS[i];
-      }
-      // 前缀匹配（如 /admin/calendar/foo 也算日历）
-      for (var j = 0; j < PATH_LABELS.length; j++) {
-        var e = PATH_LABELS[j];
-        if (!e.exact && (p === e.path || p.indexOf(e.path + '/') === 0)) return e;
-      }
-      return null;
+      return PATH_LABELS[p] || null;
     }
 
     function readTabs() {
-      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-      catch (e) { return []; }
+      try {
+        var raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+        // 兼容旧数据：按 key 去重；同名 page 类 tab 也去重（修复历史 bug）
+        var seenKeys = {}, seenPageLabels = {}, clean = [];
+        for (var i = 0; i < raw.length; i++) {
+          var t = raw[i];
+          if (!t || !t.key) continue;
+          if (seenKeys[t.key]) continue;
+          if (t.kind === 'page' && seenPageLabels[t.label]) continue;
+          seenKeys[t.key] = true;
+          if (t.kind === 'page') seenPageLabels[t.label] = true;
+          clean.push(t);
+        }
+        return clean;
+      } catch (e) { return []; }
     }
     function writeTabs(arr) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(arr.slice(0, MAX_TABS))); }
