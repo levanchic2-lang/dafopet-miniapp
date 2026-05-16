@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+
+{% set is_superadmin = (request.session.get('admin_role') == 'superadmin') %}
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon">🎟️</span>优惠券管理</h1>
+ <p class="ph-sub">未用 {{ counts.issued }} · 已核销 {{ counts.used }} · 已过期 {{ counts.expired }} · 已作废 {{ counts.cancelled }}</p>
+ </div>
+ {% if is_superadmin %}
+ <div class="ph-actions">
+ <button type="button" class="btn" onclick="document.getElementById('issue-coupon-modal').classList.add('visible')">＋ 发放优惠券</button>
+ </div>
+ {% endif %}
+</div>
+
+<div class="filter-card">
+ <form method="get" class="filter-row">
+ <input name="q" value="{{ q }}" placeholder="券码 / 标题" style="flex:1;min-width:180px;"/>
+ <select name="status" style="min-width:120px;">
+  <option value="">全部状态</option>
+  {% for k, zh in status_zh.items() %}<option value="{{ k }}" {% if status == k %}selected{% endif %}>{{ zh }}</option>{% endfor %}
+ </select>
+ <button type="submit" class="btn secondary">搜索</button>
+ {% if q or status %}<a href="/admin/coupons" class="btn secondary">清除</a>{% endif %}
+ </form>
+</div>
+
+{% if rows %}
+<div class="data-table-wrap">
+ <table class="data-table">
+ <thead>
+   <tr>
+     <th>券码</th>
+     <th>标题</th>
+     <th>类型</th>
+     <th>面值/折扣</th>
+     <th>门槛</th>
+     <th>关联客户</th>
+     <th>有效期</th>
+     <th>状态</th>
+     <th>发放</th>
+     {% if is_superadmin %}<th>操作</th>{% endif %}
+   </tr>
+ </thead>
+ <tbody>
+ {% for c in rows %}
+ <tr>
+   <td><code style="font-size:.78rem;background:#f3f4f6;padding:.15rem .35rem;border-radius:4px;">{{ c.code }}</code></td>
+   <td>{{ c.title }}</td>
+   <td>{{ kind_zh.get(c.kind, c.kind) }}</td>
+   <td>
+   {% if c.kind == 'cash' %}¥{{ '%.0f'|format(c.face_value) }}
+   {% elif c.kind == 'discount' %}{{ '%.1f'|format(c.discount_pct * 10) }} 折
+   {% elif c.kind == 'free_item' %}抵 ¥{{ '%.0f'|format(c.face_value) }}{% endif %}
+   </td>
+   <td>{% if c.min_amount %}满 ¥{{ '%.0f'|format(c.min_amount) }}{% else %}—{% endif %}</td>
+   <td>
+   {% if c.customer_id and cust_map.get(c.customer_id) %}
+     <a href="/admin/customers/{{ c.customer_id }}">{{ cust_map[c.customer_id].name or '客户#' ~ c.customer_id }}</a>
+   {% else %}<span style="color:var(--muted);">通用</span>{% endif %}
+   </td>
+   <td style="font-size:.82rem;">{{ c.expires_at or '不限期' }}</td>
+   <td>
+   {% if c.status == 'issued' %}<span class="pill pill-info">未使用</span>
+   {% elif c.status == 'used' %}<span class="pill pill-gray">已核销 ¥{{ '%.0f'|format(c.used_amount) }}</span>
+   {% elif c.status == 'expired' %}<span class="pill pill-warn">已过期</span>
+   {% elif c.status == 'cancelled' %}<span class="pill pill-gray">已作废</span>{% endif %}
+   </td>
+   <td style="font-size:.78rem;color:var(--muted);">{{ c.issued_at.strftime('%Y-%m-%d') if c.issued_at else '' }}<br>{{ c.issued_by }}</td>
+   {% if is_superadmin %}
+   <td>
+   {% if c.status == 'issued' %}
+   <form method="post" action="/admin/coupons/{{ c.id }}/cancel" style="display:inline;" onsubmit="return confirm('作废此券？')">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.78rem;padding:0;">作废</button>
+   </form>
+   {% endif %}
+   </td>
+   {% endif %}
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+</div>
+{% else %}
+<div class="empty-card"><div class="empty-icon">🎟️</div>暂无优惠券</div>
+{% endif %}
+
+{% if is_superadmin %}
+<div class="cust-modal-overlay" id="issue-coupon-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1100;align-items:center;justify-content:center;">
+ <div style="background:var(--card);border-radius:12px;padding:1.25rem;width:480px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.22);">
+ <h3 style="margin:0 0 .85rem;font-size:1rem;">发放优惠券</h3>
+ <form method="post" action="/admin/coupons/issue">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+   <label>标题（必填）</label>
+   <input name="title" required placeholder="如 老客回馈 50 元券">
+   <label>类型</label>
+   <select name="kind" onchange="onKindChange(this)">
+     <option value="cash">现金抵扣券（满 X 减 Y）</option>
+     <option value="discount">折扣券（如 9 折）</option>
+     <option value="free_item">兑换券（免费洗澡 1 次等）</option>
+   </select>
+   <div id="fld-face" style="margin-top:.5rem;">
+     <label>面额（¥）</label>
+     <input name="face_value" type="number" step="0.01" min="0" value="50">
+   </div>
+   <div id="fld-pct" style="display:none;margin-top:.5rem;">
+     <label>折扣（0~1 或 0~100；如 0.9 或 90 表示 9 折）</label>
+     <input name="discount_pct" type="number" step="0.01" min="0" value="0.9">
+   </div>
+   <label>最低消费门槛（满 X 可用，0 = 无门槛）</label>
+   <input name="min_amount" type="number" step="0.01" min="0" value="0">
+   <label>有效期至（YYYY-MM-DD，留空 = 不限期）</label>
+   <input name="expires_at" type="date">
+   <label>指定客户 ID（留空 = 通用券，任何人可用）</label>
+   <input name="customer_id" type="number" min="0" placeholder="如 29，从客户档案 URL 上看">
+   <label>批量数量（最多 500）</label>
+   <input name="quantity" type="number" min="1" max="500" value="1">
+   <label>券码前缀（可选，便于批次识别）</label>
+   <input name="code_prefix" maxlength="10" placeholder="如 ZJ618">
+   <label>备注</label>
+   <input name="notes">
+   <div style="display:flex;gap:.6rem;margin-top:1rem;">
+     <button type="submit" class="btn" style="flex:1;">发放</button>
+     <button type="button" class="btn secondary" style="flex:1;" onclick="document.getElementById('issue-coupon-modal').style.display='none'">取消</button>
+   </div>
+ </form>
+ </div>
+</div>
+<script>
+function onKindChange(sel) {
+  document.getElementById('fld-face').style.display = (sel.value === 'discount') ? 'none' : 'block';
+  document.getElementById('fld-pct').style.display  = (sel.value === 'discount') ? 'block' : 'none';
+}
+document.querySelector('.page-head .btn') && document.querySelector('.page-head .btn').addEventListener('click', function(){
+  document.getElementById('issue-coupon-modal').style.display = 'flex';
+});
+document.getElementById('issue-coupon-modal').addEventListener('click', function(e){
+  if (e.target.id === 'issue-coupon-modal') e.target.style.display = 'none';
+});
+</script>
+{% endif %}
+
+{% endblock %}

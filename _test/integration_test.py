@@ -1095,6 +1095,36 @@ t_revenue_report()
 t_revenue_export()
 
 
+@step("优惠券：发放 3 张 ¥50 现金券给客户")
+def t_coupon_issue():
+    r = client.get("/admin/coupons")
+    token = extract_csrf(r.text)
+    r = client.post("/admin/coupons/issue", data={
+        "csrf_token": token, "title": "新客 50 元抵扣",
+        "kind": "cash", "face_value": "50", "discount_pct": "0",
+        "min_amount": "100", "expires_at": "2027-12-31",
+        "customer_id": str(cust_id), "quantity": "3",
+        "code_prefix": "TEST", "notes": "集成测试",
+    })
+    assert r.status_code == 303, f"got {r.status_code}"
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Coupon
+    db = SessionLocal()
+    cs = db.query(Coupon).filter(Coupon.customer_id == cust_id, Coupon.title == "新客 50 元抵扣").all()
+    assert len(cs) == 3, f"应发 3 张，得 {len(cs)}"
+    # 券码应都不同
+    codes = {c.code for c in cs}
+    assert len(codes) == 3
+    # 校验字段
+    assert cs[0].face_value == 50.0 and cs[0].min_amount == 100.0
+    assert cs[0].status == "issued"
+    db.close()
+
+t_coupon_issue()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

@@ -4950,6 +4950,15 @@ async def page_admin_customer_detail(
     )
     held_deposits_count = sum(1 for d in deposits if d.status in ("held", "partial_refund"))
 
+    # ── 优惠券 ──
+    coupons = (
+        db.query(Coupon)
+        .filter(Coupon.customer_id == customer_id)
+        .order_by(Coupon.status.asc(), Coupon.id.desc())
+        .all()
+    )
+    active_coupons_count = sum(1 for c in coupons if c.status == "issued" and not _coupon_is_expired(c))
+
     return templates.TemplateResponse(
         request,
         "admin_customer_detail.html",
@@ -4990,6 +4999,11 @@ async def page_admin_customer_detail(
             "held_deposits_count": held_deposits_count,
             "deposit_category_zh": _DEPOSIT_CATEGORY_ZH,
             "deposit_status_zh": _DEPOSIT_STATUS_ZH,
+            # 优惠券
+            "coupons": coupons,
+            "active_coupons_count": active_coupons_count,
+            "coupon_kind_zh": _COUPON_KIND_ZH,
+            "coupon_status_zh": _COUPON_STATUS_ZH,
             # 翻译字典
             "visit_type_zh": _VISIT_TYPE_ZH,
             "so_status_zh": _SO_STATUS_ZH_LOCAL,
@@ -5360,6 +5374,202 @@ async def admin_wallet_adjust(
     db.commit()
     sign = "+" if amt > 0 else ""
     return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=调账 {sign}¥{amt:.2f}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# 优惠券 (Coupon) — 发放 / 核销 / 作废
+# ---------------------------------------------------------------------------
+
+_COUPON_KIND_ZH = {
+    "cash":      "现金抵扣券",
+    "discount":  "折扣券",
+    "free_item": "兑换券",
+}
+_COUPON_STATUS_ZH = {
+    "issued":    "未使用",
+    "used":      "已核销",
+    "expired":   "已过期",
+    "cancelled": "已作废",
+}
+
+
+def _gen_coupon_code() -> str:
+    """生成 12 位券码：日期 + 4 位随机。"""
+    import secrets, string
+    from datetime import date
+    suffix = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+    return date.today().strftime("%y%m%d") + suffix
+
+
+def _coupon_is_expired(c: Coupon) -> bool:
+    if not c.expires_at:
+        return False
+    from datetime import date
+    try:
+        y, m, d = c.expires_at[:10].split("-")
+        return date(int(y), int(m), int(d)) < date.today()
+    except Exception:
+        return False
+
+
+def _coupon_compute_amount(c: Coupon, invoice_total: float) -> float:
+    """按券类型 + 收费单总额 算出可抵扣多少。"""
+    if c.min_amount and invoice_total < c.min_amount:
+        return 0.0
+    if c.kind == "cash":
+        return float(min(c.face_value or 0, invoice_total))
+    if c.kind == "discount":
+        pct = float(c.discount_pct or 0)
+        if pct <= 0 or pct >= 1:
+            return 0.0
+        # discount_pct=0.9 表示 9 折 → 抵扣 10%
+        return round(invoice_total * (1 - pct), 2)
+    if c.kind == "free_item":
+        # 兑换券：用面额作参考价上限
+        return float(min(c.face_value or 0, invoice_total))
+    return 0.0
+
+
+@app.get("/admin/coupons", response_class=HTMLResponse)
+async def admin_coupons_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    status: str = Query(""),
+    q: str = Query(""),
+):
+    """优惠券总列表（发放管理）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    qq = db.query(Coupon)
+    if status:
+        qq = qq.filter(Coupon.status == status)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        qq = qq.filter((Coupon.code.like(like)) | (Coupon.title.like(like)))
+    rows = qq.order_by(Coupon.id.desc()).limit(500).all()
+    # 顺手把过期未用的标 expired
+    from datetime import date
+    today = date.today().isoformat()
+    flipped = 0
+    for c in rows:
+        if c.status == "issued" and c.expires_at and c.expires_at < today:
+            c.status = "expired"; flipped += 1
+    if flipped:
+        db.commit()
+    # 客户名映射
+    cust_ids = [c.customer_id for c in rows if c.customer_id]
+    cust_map = {x.id: x for x in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
+    # 统计
+    counts = {
+        "issued":    db.query(Coupon).filter(Coupon.status == "issued").count(),
+        "used":      db.query(Coupon).filter(Coupon.status == "used").count(),
+        "expired":   db.query(Coupon).filter(Coupon.status == "expired").count(),
+        "cancelled": db.query(Coupon).filter(Coupon.status == "cancelled").count(),
+    }
+    return templates.TemplateResponse(request, "admin_coupons.html", {
+        "rows": rows,
+        "cust_map": cust_map,
+        "status": status,
+        "q": q,
+        "counts": counts,
+        "kind_zh": _COUPON_KIND_ZH,
+        "status_zh": _COUPON_STATUS_ZH,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/coupons/issue")
+async def admin_coupon_issue(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    title: str = Form(...),
+    kind: str = Form("cash"),
+    face_value: str = Form("0"),
+    discount_pct: str = Form("0"),
+    min_amount: str = Form("0"),
+    expires_at: str = Form(""),
+    customer_id: str = Form(""),   # 留空 = 通用券
+    quantity: str = Form("1"),     # 批量发放数量
+    code_prefix: str = Form(""),   # 自定义前缀（可选）
+    notes: str = Form(""),
+):
+    """发放优惠券（可指定客户 / 通用；可单张 / 批量）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    if kind not in _COUPON_KIND_ZH:
+        kind = "cash"
+    try:
+        fv = max(0.0, float(face_value))
+        pct = max(0.0, float(discount_pct))
+        if pct > 1:
+            pct = pct / 100.0  # 用户填 90 表示 9 折
+        ma = max(0.0, float(min_amount))
+        qty = max(1, min(500, int(quantity)))
+    except (TypeError, ValueError):
+        return RedirectResponse("/admin/coupons?msg=数值字段无效", status_code=303)
+    cust_id_int = None
+    if customer_id.strip().isdigit():
+        cust_id_int = int(customer_id)
+        if not db.get(Customer, cust_id_int):
+            return RedirectResponse("/admin/coupons?msg=客户不存在", status_code=303)
+    issued = 0
+    for _ in range(qty):
+        # 唯一码（碰撞重试 5 次）
+        code = ""
+        for _try in range(5):
+            cand = (code_prefix.strip().upper()[:10] + _gen_coupon_code())[:40]
+            if not db.query(Coupon.id).filter(Coupon.code == cand).first():
+                code = cand
+                break
+        if not code:
+            continue
+        db.add(Coupon(
+            code=code,
+            customer_id=cust_id_int,
+            title=title.strip()[:120],
+            kind=kind,
+            face_value=fv,
+            discount_pct=pct,
+            min_amount=ma,
+            expires_at=(expires_at or "").strip()[:20],
+            status="issued",
+            issued_by=request.session.get("admin_username", "admin"),
+            notes=(notes or "").strip(),
+            store=_get_admin_store(request),
+        ))
+        issued += 1
+    db.commit()
+    _audit(db, request, "coupon_issue", application_id=None,
+           detail={"qty": issued, "kind": kind, "customer_id": cust_id_int})
+    db.commit()
+    return RedirectResponse(
+        f"/admin/coupons?msg=已发放 {issued} 张{'（指定客户）' if cust_id_int else '（通用券）'}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/coupons/{cid}/cancel")
+async def admin_coupon_cancel(
+    cid: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    c = db.get(Coupon, cid)
+    if not c:
+        raise HTTPException(404)
+    if c.status not in ("issued",):
+        return RedirectResponse(f"/admin/coupons?msg=该券状态不允许作废", status_code=303)
+    c.status = "cancelled"
+    db.commit()
+    return RedirectResponse(f"/admin/coupons?msg=已作废", status_code=303)
 
 
 # ---------------------------------------------------------------------------

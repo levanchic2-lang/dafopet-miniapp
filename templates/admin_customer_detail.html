@@ -235,6 +235,7 @@
  <button class="tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包<span class="count">¥{{ '%.0f'|format(wallet_balance) }}</span></button>
  <button class="tab-btn {% if active_tab=='packages' %}active{% endif %}" data-tab="packages" onclick="switchTab('packages')">套餐<span class="count">{{ active_packages_count }}</span></button>
  <button class="tab-btn {% if active_tab=='deposits' %}active{% endif %}" data-tab="deposits" onclick="switchTab('deposits')">押金<span class="count">{{ held_deposits_count }}</span></button>
+ <button class="tab-btn {% if active_tab=='coupons' %}active{% endif %}" data-tab="coupons" onclick="switchTab('coupons')">优惠券<span class="count">{{ active_coupons_count }}</span></button>
  </div>
 
  {# ── 诊疗 ── #}
@@ -706,6 +707,43 @@
    </table>
    {% else %}
    <div class="tab-empty">还没有押金记录。手术前、寄养前可以预收押金。</div>
+   {% endif %}
+ </div>
+
+ {# ── 优惠券 ── #}
+ <div class="tab-content {% if active_tab=='coupons' %}active{% endif %}" data-tab-content="coupons">
+   <div class="tab-action-bar">
+     <a href="/admin/coupons" class="btn secondary">去发放管理 →</a>
+     <span style="margin-left:auto;color:var(--muted);font-size:.82rem;">共 {{ coupons|length }} 张（{{ active_coupons_count }} 张可用）</span>
+   </div>
+   {% if coupons %}
+   <table class="data-table">
+     <thead><tr><th>券码</th><th>标题</th><th>类型</th><th>面值</th><th>门槛</th><th>有效期</th><th>状态</th></tr></thead>
+     <tbody>
+     {% for c in coupons %}
+     <tr>
+       <td><code style="font-size:.78rem;background:#f3f4f6;padding:.15rem .35rem;border-radius:4px;">{{ c.code }}</code></td>
+       <td>{{ c.title }}</td>
+       <td>{{ coupon_kind_zh.get(c.kind, c.kind) }}</td>
+       <td>
+       {% if c.kind == 'cash' %}¥{{ '%.0f'|format(c.face_value) }}
+       {% elif c.kind == 'discount' %}{{ '%.1f'|format(c.discount_pct * 10) }} 折
+       {% elif c.kind == 'free_item' %}抵 ¥{{ '%.0f'|format(c.face_value) }}{% endif %}
+       </td>
+       <td>{% if c.min_amount %}满 ¥{{ '%.0f'|format(c.min_amount) }}{% else %}—{% endif %}</td>
+       <td style="font-size:.82rem;">{{ c.expires_at or '不限期' }}</td>
+       <td>
+       {% if c.status == 'issued' %}<span class="pill pill-info">未使用</span>
+       {% elif c.status == 'used' %}<span class="pill pill-gray">已核销</span>
+       {% elif c.status == 'expired' %}<span class="pill pill-warn">已过期</span>
+       {% elif c.status == 'cancelled' %}<span class="pill pill-gray">已作废</span>{% endif %}
+       </td>
+     </tr>
+     {% endfor %}
+     </tbody>
+   </table>
+   {% else %}
+   <div class="tab-empty">该客户还没有优惠券。去 <a href="/admin/coupons" style="color:#3b82f6;">优惠券管理</a> 发放。</div>
    {% endif %}
  </div>
 
