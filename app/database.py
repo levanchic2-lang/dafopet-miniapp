@@ -1015,6 +1015,51 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_predeem_cpkg ON package_redemptions(customer_package_id)"))
 
+            # ── 收款明细（混合支付） ───────────────────────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS payments ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "method VARCHAR(20) DEFAULT 'cash', "
+                "amount REAL DEFAULT 0.0, "
+                "ref_id INTEGER DEFAULT NULL, "
+                "ref_no VARCHAR(120) DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'success', "
+                "store VARCHAR(40) DEFAULT '', "
+                "operator VARCHAR(80) DEFAULT '', "
+                "note TEXT DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_pay_invoice ON payments(invoice_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_pay_method_time ON payments(method, created_at)"))
+
+            # ── 优惠券 ────────────────────────────────────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS coupons ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "code VARCHAR(40) NOT NULL UNIQUE, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "title VARCHAR(120) DEFAULT '', "
+                "kind VARCHAR(20) DEFAULT 'cash', "
+                "face_value REAL DEFAULT 0.0, "
+                "discount_pct REAL DEFAULT 0.0, "
+                "min_amount REAL DEFAULT 0.0, "
+                "expires_at VARCHAR(20) DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'issued', "
+                "used_invoice_id INTEGER DEFAULT NULL REFERENCES invoices(id) ON DELETE SET NULL, "
+                "used_amount REAL DEFAULT 0.0, "
+                "used_at DATETIME DEFAULT NULL, "
+                "issued_by VARCHAR(80) DEFAULT '', "
+                "issued_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "notes TEXT DEFAULT '', "
+                "store VARCHAR(40) DEFAULT ''"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_coupon_customer_status ON coupons(customer_id, status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_coupon_code ON coupons(code)"))
+
             # ── 押金 ────────────────────────────────────────
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS deposits ("

@@ -950,6 +950,69 @@ class Deposit(Base):
     visit       = relationship("Visit",       foreign_keys=[visit_id])
 
 
+class Payment(Base):
+    """收款明细：一张收费单可以拆成多笔（混合支付）。
+    Invoice.total_amount = sum(Payment.amount where status=success)。
+    """
+    __tablename__ = "payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    invoice_id = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    # method: cash / wechat / alipay / shouqianba / meituan / third_party /
+    #         wallet / package / deposit / coupon
+    method:  Mapped[str]   = mapped_column(String(20), default="cash")
+    amount:  Mapped[float] = mapped_column(Float, default=0.0)
+    # 关联引用：method 决定 ref_id 指向哪个表
+    #   wallet  → WalletTransaction.id
+    #   package → CustomerPackage.id（同时记 PackageRedemption）
+    #   deposit → Deposit.id
+    #   coupon  → Coupon.id
+    #   其他    → NULL
+    ref_id:   Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    ref_no:   Mapped[str] = mapped_column(String(120), default="")   # 外部流水号（微信/支付宝/收钱吧 等）
+    status:   Mapped[str] = mapped_column(String(20), default="success")  # success / cancelled
+    store:    Mapped[str] = mapped_column(String(40), default="")
+    operator: Mapped[str] = mapped_column(String(80), default="")
+    note:     Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    invoice  = relationship("Invoice",  foreign_keys=[invoice_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+
+
+class Coupon(Base):
+    """优惠券：自家发放、自家核销。
+    kind:
+      cash      — 面额抵扣（face_value 元，满 min_amount 可用）
+      discount  — 折扣（discount_pct=0.9 = 9 折；满 min_amount 可用）
+      free_item — 兑换券（如 免费洗澡 1 次，face_value 当参考价）
+    """
+    __tablename__ = "coupons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(40), unique=True, index=True)  # 系统生成或自填，唯一
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    # 留空 = 任意客户可用（通用券）；填了 = 仅指定客户可用
+    title:     Mapped[str] = mapped_column(String(120), default="")
+    kind:      Mapped[str] = mapped_column(String(20), default="cash")
+    face_value:   Mapped[float] = mapped_column(Float, default=0.0)
+    discount_pct: Mapped[float] = mapped_column(Float, default=0.0)   # 0.9 = 9 折
+    min_amount:   Mapped[float] = mapped_column(Float, default=0.0)   # 最低消费门槛
+    expires_at:   Mapped[str] = mapped_column(String(20), default="") # YYYY-MM-DD，空 = 不限期
+    # status: issued / used / expired / cancelled
+    status:    Mapped[str] = mapped_column(String(20), default="issued")
+    used_invoice_id = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    used_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    used_at:     Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    issued_by:   Mapped[str] = mapped_column(String(80), default="")
+    issued_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    notes:       Mapped[str] = mapped_column(Text, default="")
+    store:       Mapped[str] = mapped_column(String(40), default="")
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+
+
 class FollowUp(Base):
     """回访任务：每条 Visit 自动衍生一条（visit_type 在规则里有 >0 天的才出）。
 
