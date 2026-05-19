@@ -1768,6 +1768,78 @@ def t_consent_resend_endpoint():
 t_consent_resend_endpoint()
 
 
+@step("客户绑定档案：发码 → 验证 → openid 落到 Customer.wechat_openid")
+def t_customer_binding():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Customer
+    # 用最早的客户测试（cust_id=1，phone=13800000001）
+    db = SessionLocal()
+    cust = db.get(Customer, cust_id)
+    phone = cust.phone
+    # 先清空 openid 模拟"未绑定"状态
+    cust.wechat_openid = ""
+    db.commit()
+    db.close()
+
+    import httpx as _hx
+    pub = _hx.Client(base_url=BASE, follow_redirects=False, timeout=10.0)
+
+    # 错的手机号格式
+    r = pub.post("/api/customer-binding/send-code", json={"phone": "abc"})
+    assert r.json().get("ok") is False
+
+    # 不存在的手机号
+    r = pub.post("/api/customer-binding/send-code", json={"phone": "13900000999"})
+    j = r.json()
+    assert j.get("ok") is False and "未找到" in j.get("error", "")
+
+    # 正确手机号
+    r = pub.post("/api/customer-binding/send-code", json={"phone": phone})
+    j = r.json()
+    assert j.get("ok") is True
+    assert j["customer"]["name"] == "测试客户A"
+    # 测试环境没配 sms_gateway，应返回 dev_code
+    assert "dev_code" in j and len(j["dev_code"]) == 6
+    code = j["dev_code"]
+
+    # 防刷：立即再发应被拒
+    r = pub.post("/api/customer-binding/send-code", json={"phone": phone})
+    assert r.json().get("ok") is False
+
+    # 错误验证码
+    r = pub.post("/api/customer-binding/verify", json={
+        "phone": phone, "code": "000000", "openid": "FAKE_OPENID_xyz",
+    })
+    assert r.json().get("ok") is False
+
+    # 正确验证码 + openid
+    r = pub.post("/api/customer-binding/verify", json={
+        "phone": phone, "code": code, "openid": "openid_user_aaa_111",
+    })
+    j = r.json()
+    assert j.get("ok") is True, j
+    assert j["customer_id"] == cust_id
+
+    # DB 校验
+    db = SessionLocal()
+    cust = db.get(Customer, cust_id)
+    assert cust.wechat_openid == "openid_user_aaa_111"
+    db.close()
+
+    # 验证码用完即销 - 重放应失败
+    r = pub.post("/api/customer-binding/verify", json={
+        "phone": phone, "code": code, "openid": "openid_replay_xxx",
+    })
+    assert r.json().get("ok") is False
+
+    pub.close()
+
+
+t_customer_binding()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

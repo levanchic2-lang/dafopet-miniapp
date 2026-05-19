@@ -1,0 +1,42 @@
+.card { background:#fff; margin:24rpx; padding:32rpx; border-radius:24rpx; box-shadow:0 8rpx 24rpx rgba(0,0,0,0.04); }
+.title { font-size:36rpx; font-weight:700; color:#171717; }
+.sub { margin-top:16rpx; margin-bottom:24rpx; font-size:24rpx; line-height:1.7; color:#666; }
+.label { margin-top:24rpx; margin-bottom:12rpx; font-size:26rpx; color:#171717; font-weight:600; }
+.input {
+  width:100%; box-sizing:border-box; padding:22rpx 24rpx;
+  border:1rpx solid #d9d9d9; border-radius:14rpx; background:#fafafa;
+  font-size:30rpx; color:#171717;
+}
+.row { display:flex; gap:16rpx; align-items:stretch; }
+.row .input { flex:1; }
+.btn-code {
+  background:#171717; color:#fff; font-size:24rpx; padding:0 24rpx;
+  border-radius:14rpx; line-height:74rpx; height:74rpx; white-space:nowrap;
+  border:0;
+}
+.btn-code.disabled { background:#a3a3a3; color:#fff; }
+
+.cust-preview {
+  margin-top:16rpx; padding:20rpx 24rpx;
+  background:#f0fdf4; border:1rpx solid #86efac; border-radius:14rpx;
+}
+.cust-name { font-size:28rpx; color:#166534; font-weight:600; }
+.cust-meta { margin-top:4rpx; font-size:22rpx; color:#15803d; }
+.dev-tip { margin-top:12rpx; font-size:22rpx; color:#92400e; }
+.dev-code { font-weight:700; font-size:28rpx; font-family: monospace; margin-left:8rpx; }
+
+.error { margin-top:20rpx; padding:16rpx 24rpx; background:#fee2e2; color:#991b1b; border-radius:12rpx; font-size:24rpx; }
+
+.btn { display:block; width:100%; box-sizing:border-box; height:88rpx; line-height:88rpx;
+  border:0; border-radius:14rpx; font-size:30rpx; font-weight:600; }
+.btn.primary { background:#171717; color:#fff; }
+.btn.primary[disabled] { background:#a3a3a3; color:#e5e5e5; }
+.submit-btn { margin-top:32rpx; }
+
+.tip { margin-top:24rpx; font-size:22rpx; color:#737373; line-height:1.7; white-space:pre-line; }
+
+.success-box { text-align:center; padding:60rpx 30rpx 30rpx; }
+.success-icon { font-size:88rpx; color:#10b981; }
+.success-title { margin-top:16rpx; font-size:36rpx; font-weight:700; color:#171717; }
+.success-text { margin-top:12rpx; font-size:26rpx; color:#666; }
+.success-box .btn { margin-top:40rpx; }

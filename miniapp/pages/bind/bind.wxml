@@ -1,0 +1,52 @@
+<view class="card">
+  <view class="title">绑定我的档案</view>
+  <view class="sub">
+    输入您在大风动物医院登记的手机号 → 获取短信验证码 → 完成绑定。
+    之后您将收到{'\n'}就诊回访 / 协议签署 / 疫苗到期 等小程序通知。
+  </view>
+
+  <!-- 已绑定提示 -->
+  <view wx:if="{{bound}}" class="success-box">
+    <view class="success-icon">✓</view>
+    <view class="success-title">已绑定</view>
+    <view class="success-text">您的档案：{{boundName}}</view>
+    <button class="btn primary" bindtap="onDone">完成</button>
+  </view>
+
+  <block wx:else>
+    <view class="label">手机号</view>
+    <view class="row">
+      <input class="input" type="number" maxlength="11" placeholder="11 位手机号" value="{{phone}}" bindinput="onPhoneInput"/>
+      <button class="btn-code {{cooldown > 0 || sending ? 'disabled' : ''}}"
+              disabled="{{cooldown > 0 || sending}}"
+              bindtap="onSendCode">
+        {{cooldown > 0 ? cooldown + 's' : (sending ? '发送中…' : '获取验证码')}}
+      </button>
+    </view>
+
+    <!-- 找到的档案预览 -->
+    <view wx:if="{{custPreview}}" class="cust-preview">
+      <view class="cust-name">✓ 找到档案：{{custPreview.name}}</view>
+      <view class="cust-meta">{{custPreview.pet_count}} 只宠物{{custPreview.address ? ' · ' + custPreview.address : ''}}</view>
+      <view wx:if="{{devCode}}" class="dev-tip">
+        ⚠ 短信未发送（开发模式），验证码：<text class="dev-code">{{devCode}}</text>
+      </view>
+    </view>
+
+    <view class="label">验证码</view>
+    <input class="input" type="number" maxlength="6" placeholder="6 位短信验证码" value="{{code}}" bindinput="onCodeInput"/>
+
+    <view class="error" wx:if="{{error}}">{{error}}</view>
+
+    <button class="btn primary submit-btn"
+            disabled="{{submitting || !phone || !code}}"
+            bindtap="onSubmit">
+      {{submitting ? '绑定中…' : '✓ 确认绑定'}}
+    </button>
+
+    <view class="tip">
+      💡 没找到手机号？请先到院前台办理建档。{'\n'}
+      💡 一个手机号只能绑定一个微信。如换了微信，请联系门店协助解绑。
+    </view>
+  </block>
+</view>

@@ -5758,6 +5758,115 @@ async def admin_consent_task_detail(
     })
 
 
+# ─── 客户档案绑定（小程序输入手机号 + 验证码 → 写 openid） ──
+# 内存验证码池：{phone: (code, expires_ts, customer_id)}
+_BIND_CODES: dict[str, tuple[str, float, int]] = {}
+_BIND_CODE_TTL_SECONDS = 300  # 5 分钟
+_BIND_LAST_SENT: dict[str, float] = {}  # 防短时间内重复发送
+_BIND_THROTTLE_SECONDS = 60
+
+
+@app.post("/api/customer-binding/send-code")
+async def api_binding_send_code(request: Request, db: Session = Depends(get_db)):
+    """根据手机号在 Customer 表查档案 + 发验证码。
+    返回 {ok, customer_summary, dev_code?}。dev_code 仅 sms_gateway 未配时返回。"""
+    body = await request.json()
+    phone = (body.get("phone") or "").strip()
+    if not phone or not phone.isdigit() or len(phone) != 11:
+        return {"ok": False, "error": "请输入 11 位手机号"}
+    # 防刷
+    import time as _t
+    now = _t.time()
+    last = _BIND_LAST_SENT.get(phone, 0)
+    if now - last < _BIND_THROTTLE_SECONDS:
+        wait = int(_BIND_THROTTLE_SECONDS - (now - last))
+        return {"ok": False, "error": f"请 {wait} 秒后再获取"}
+    # 查档案
+    rows = db.query(Customer).filter(Customer.phone == phone).all()
+    if not rows:
+        return {"ok": False, "error": "未找到此手机号对应的客户档案，请先到院前台建档"}
+    # 取最早的一条（防止多账号合并历史）
+    cust = sorted(rows, key=lambda c: c.id)[0]
+    pet_count = db.query(Pet).filter(Pet.customer_id == cust.id).count()
+    # 生成 6 位验证码
+    import secrets as _s
+    code = "".join(_s.choice("0123456789") for _ in range(6))
+    _BIND_CODES[phone] = (code, now + _BIND_CODE_TTL_SECONDS, cust.id)
+    _BIND_LAST_SENT[phone] = now
+    # 发短信
+    sent = False
+    try:
+        from app.services.sms_gateway import send_sms
+        sent = send_sms(
+            phone,
+            f"【大风动物医院】您的档案绑定验证码：{code}，5 分钟内有效。如非本人操作请忽略。",
+            scene="binding",
+        )
+    except Exception as _e:
+        logger.warning("[binding] sms 发送失败：%s", _e)
+    resp = {
+        "ok": True,
+        "customer": {
+            "id": cust.id, "name": cust.name or "—",
+            "pet_count": pet_count,
+            "address": (cust.address or "")[:40],
+        },
+        "sms_sent": sent,
+    }
+    if not sent:
+        # SMS 未发出（未配网关或网关错误）→ 把 code 返回给前端，并提示走人工核对
+        resp["dev_code"] = code
+        resp["dev_warning"] = "短信未发送，仅自助测试用；上线前必须配 SMS_GATEWAY_URL"
+    return resp
+
+
+@app.post("/api/customer-binding/verify")
+async def api_binding_verify(request: Request, db: Session = Depends(get_db)):
+    """校验验证码 + 写 Customer.wechat_openid。需要 js_code（用 wx.login 换 openid）。"""
+    body = await request.json()
+    phone = (body.get("phone") or "").strip()
+    code  = (body.get("code") or "").strip()
+    openid = (body.get("openid") or "").strip()
+    js_code = (body.get("js_code") or "").strip()
+    if not (phone and code):
+        return {"ok": False, "error": "手机号 + 验证码必填"}
+    # 验证码核对
+    import time as _t
+    entry = _BIND_CODES.get(phone)
+    if not entry:
+        return {"ok": False, "error": "请先获取验证码"}
+    saved_code, exp_ts, cust_id = entry
+    if _t.time() > exp_ts:
+        _BIND_CODES.pop(phone, None)
+        return {"ok": False, "error": "验证码已过期，请重新获取"}
+    if code != saved_code:
+        return {"ok": False, "error": "验证码不正确"}
+    # 没传 openid → 用 js_code 换
+    if not openid and js_code:
+        try:
+            sess_data = wechat_code2session(js_code)
+            openid = (sess_data.get("openid") or "").strip()
+        except Exception as e:
+            logger.warning("[binding] code2session 失败：%s", e)
+            return {"ok": False, "error": f"微信登录失败：{e}"}
+    if not openid:
+        return {"ok": False, "error": "缺少微信登录凭证（openid 或 js_code）"}
+    cust = db.get(Customer, cust_id)
+    if not cust:
+        return {"ok": False, "error": "客户档案不存在"}
+    cust.wechat_openid = openid[:64]
+    db.commit()
+    _BIND_CODES.pop(phone, None)
+    _audit(db, request, "customer_binding", application_id=None,
+           detail={"customer_id": cust_id, "phone": phone, "openid": openid[:10] + "..."})
+    db.commit()
+    return {
+        "ok": True,
+        "customer_id": cust_id,
+        "customer_name": cust.name or "",
+    }
+
+
 # ─── 客户端签署（无登录，token 即凭证） ──────────────────
 @app.get("/consent/{token}", response_class=HTMLResponse)
 async def consent_sign_page(token: str, request: Request, db: Session = Depends(get_db)):

@@ -10,6 +10,8 @@
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAppointmentPage">预约服务</button>
   <view class="sub" style="font-size:24rpx;color:#888;margin:6rpx 0 4rpx;text-align:center;">门诊 · 手术 · 美容等常规预约均可在此办理</view>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAppointmentListPage">我的预约</button>
+  <button class="btn secondary" style="margin-top:12rpx;" bindtap="goBindPage">📇 绑定我的档案</button>
+  <view class="sub" style="font-size:24rpx;color:#888;margin:6rpx 0 4rpx;text-align:center;">老客户绑定后可收到回访 / 协议 / 疫苗到期等通知</view>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAdoptionPage">🐾 待领养动物</button>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goRabiesPage">💉 狂犬疫苗免疫登记</button>
   <view class="sub" style="font-size:24rpx;color:#888;margin:6rpx 0 4rpx;text-align:center;">仅限横岗店使用</view>

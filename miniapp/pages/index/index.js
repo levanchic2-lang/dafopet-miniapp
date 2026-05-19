@@ -871,5 +871,9 @@ Page({
 
   goAdoptionPage() {
     wx.navigateTo({ url: "/pages/adoption/list" });
+  },
+
+  goBindPage() {
+    wx.navigateTo({ url: "/pages/bind/bind" });
   }
 });
