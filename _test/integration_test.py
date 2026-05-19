@@ -1491,6 +1491,51 @@ def t_invoice_refund_all():
 t_invoice_refund_all()
 
 
+@step("协议模板：CRUD + Quill HTML 正文 + 占位符变量")
+def t_consent_template_crud():
+    # 列表页可加载
+    r = client.get("/admin/consent-templates")
+    assert r.status_code == 200
+    assert "协议模板" in r.text
+    token = extract_csrf(r.text)
+    # 新建
+    body = "<h2>麻醉同意书</h2><p>客户 {{cust_name}} 同意为 {{pet_name}} 实施麻醉。</p>"
+    r = client.post("/admin/consent-templates/save", data={
+        "csrf_token": token, "template_id": "",
+        "name": "测试·麻醉同意书", "category": "anesthesia",
+        "body_html": body, "notes": "测试用",
+    })
+    assert r.status_code == 303
+
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import ConsentTemplate
+    db = SessionLocal()
+    t = db.query(ConsentTemplate).filter(ConsentTemplate.name == "测试·麻醉同意书").first()
+    assert t is not None
+    assert "{{cust_name}}" in t.body_html and "{{pet_name}}" in t.body_html
+    assert t.category == "anesthesia"
+    assert t.is_active is True
+    tid = t.id
+    db.close()
+
+    # 编辑表单可加载
+    r = client.get(f"/admin/consent-templates/{tid}/edit")
+    assert r.status_code == 200
+    assert "麻醉同意书" in r.text
+
+    # 下架
+    r = client.post(f"/admin/consent-templates/{tid}/toggle", data={"csrf_token": token})
+    assert r.status_code == 303
+    db = SessionLocal()
+    t = db.get(ConsentTemplate, tid)
+    assert t.is_active is False
+    db.close()
+
+t_consent_template_crud()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

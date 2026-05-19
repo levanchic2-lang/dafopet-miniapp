@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+{% endblock %}
+{% block extra_css %}
+<style>
+.editor-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:1rem 1.2rem; }
+#editor { min-height: 50vh; }
+.ql-editor { font-size: 14px; line-height: 1.75; min-height: 50vh; }
+.ql-editor h1, .ql-editor h2 { font-weight: 700; }
+.var-chips { display:flex; gap:.4rem; flex-wrap:wrap; margin: .3rem 0; }
+.var-chip {
+  background: #f3f4f6; color: #374151; padding: .2rem .6rem;
+  border-radius: 4px; font-size: .78rem; cursor: pointer;
+  border: 1px solid #e5e7eb; font-family: monospace;
+  user-select: none;
+}
+.var-chip:hover { background: #111; color: #fff; }
+.var-chip .zh { color:#9ca3af; margin-left:.3rem; font-family: -apple-system, sans-serif; }
+.var-chip:hover .zh { color: #d1d5db; }
+</style>
+{% endblock %}
+
+{% block body %}
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon">📝</span>{{ '编辑模板' if item else '新建协议模板' }}</h1>
+ <p class="ph-sub">用富文本编辑器写正文，可插入变量占位符</p>
+ </div>
+ <div class="ph-actions">
+ <a href="/admin/consent-templates" class="btn secondary" style="font-size:.85rem;">← 返回列表</a>
+ </div>
+</div>
+
+<form method="post" action="/admin/consent-templates/save" id="tmpl-form" style="display:grid;grid-template-columns:1fr 280px;gap:1rem;">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input type="hidden" name="template_id" value="{{ item.id if item else '' }}"/>
+ <input type="hidden" name="body_html" id="body-html-input"/>
+
+ <div class="editor-card">
+   <label style="display:block;font-weight:600;margin-bottom:.3rem;">模板名 *</label>
+   <input name="name" value="{{ item.name if item else '' }}" required maxlength="120"
+          placeholder="如 麻醉知情同意书"
+          style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;margin-bottom:1rem;"/>
+
+   <label style="display:block;font-weight:600;margin-bottom:.3rem;">类型</label>
+   <select name="category" style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;margin-bottom:1rem;">
+     {% for k, zh in category_zh.items() %}
+     <option value="{{ k }}" {% if item and item.category == k %}selected{% endif %}>{{ zh }}</option>
+     {% endfor %}
+   </select>
+
+   <label style="display:block;font-weight:600;margin-bottom:.3rem;">协议正文 *</label>
+   <div id="editor"></div>
+
+   <label style="display:block;font-weight:600;margin:1rem 0 .3rem;">备注（仅自己看）</label>
+   <textarea name="notes" rows="2"
+             style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;">{{ item.notes if item else '' }}</textarea>
+
+   <div style="display:flex;gap:.6rem;margin-top:1rem;">
+     <button type="submit" class="btn" style="font-size:.95rem;padding:.55rem 1.6rem;">✓ 保存</button>
+     <a href="/admin/consent-templates" class="btn secondary" style="font-size:.95rem;padding:.55rem 1.6rem;">取消</a>
+   </div>
+ </div>
+
+ <aside class="editor-card" style="position:sticky;top:1rem;height:fit-content;">
+   <h3 style="margin:0 0 .5rem;font-size:.95rem;">📌 可插入变量</h3>
+   <p style="font-size:.78rem;color:#6b7280;margin:0 0 .8rem;">点击插入到正文光标处。发起任务时自动替换为实际值。</p>
+   <div class="var-chips">
+     {% for v, label in variables.items() %}
+     <span class="var-chip" data-var="{{ v }}">{{ v }}<span class="zh">{{ label }}</span></span>
+     {% endfor %}
+   </div>
+   <hr style="border:0;border-top:1px solid #e5e7eb;margin:1rem 0;">
+   <h3 style="margin:0 0 .5rem;font-size:.95rem;">💡 示例</h3>
+   <button type="button" class="btn secondary" style="font-size:.82rem;width:100%;margin-bottom:.4rem;" onclick="loadSample('anesthesia')">📥 麻醉同意书示例</button>
+   <button type="button" class="btn secondary" style="font-size:.82rem;width:100%;margin-bottom:.4rem;" onclick="loadSample('vaccination')">📥 疫苗同意书示例</button>
+ </aside>
+</form>
+
+<script>
+(function () {
+  var quill = new Quill('#editor', {
+    theme: 'snow',
+    placeholder: '在此撰写协议正文，需要动态填充的位置插入变量占位符（右侧点击）',
+    modules: {
+      toolbar: [
+        [{ 'header': [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline'],
+        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+        [{ 'indent': '-1' }, { 'indent': '+1' }],
+        [{ 'align': [] }],
+        ['blockquote'],
+        ['clean']
+      ]
+    }
+  });
+  // 回填已有内容
+  {% if item and item.body_html %}
+  quill.clipboard.dangerouslyPasteHTML({{ item.body_html|tojson }});
+  {% endif %}
+
+  // 点击变量芯片 → 插到光标
+  document.querySelectorAll('.var-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var v = chip.dataset.var;
+      var range = quill.getSelection(true);
+      quill.insertText(range.index, v, 'user');
+      quill.setSelection(range.index + v.length, 0);
+      quill.focus();
+    });
+  });
+
+  // 提交前把 HTML 同步到 hidden input
+  document.getElementById('tmpl-form').addEventListener('submit', function (e) {
+    var html = quill.root.innerHTML.trim();
+    if (!html || html === '<p><br></p>') {
+      e.preventDefault();
+      alert('协议正文不能为空');
+      return false;
+    }
+    document.getElementById('body-html-input').value = html;
+  });
+
+  // 示例模板
+  var SAMPLES = {
+    anesthesia:
+      '<h2 style="text-align:center;">麻醉知情同意书</h2>' +
+      '<p>本人 <b>{{cust_name}}</b>（电话 {{cust_phone}}）作为宠物 <b>{{pet_name}}</b>（{{pet_species}} · {{pet_breed}} · {{pet_age}} · 体重 {{pet_weight}}kg）的主人，' +
+      '现就 {{date}} 在 {{clinic_name}} 由主治医师 <b>{{vet_name}}</b> 实施的麻醉操作，已充分知情：</p>' +
+      '<ol>' +
+      '<li>麻醉本身可能存在过敏、心肺抑制、低血压、苏醒延迟等风险，部分体质或潜在疾病可能加重风险。</li>' +
+      '<li>术前已配合医师完成体检 / 必要的化验，但部分潜在异常可能未被发现。</li>' +
+      '<li>同意院方根据术中实际情况调整麻醉方案或采取必要的急救措施。</li>' +
+      '<li>本同意书有效期为本次诊疗过程。</li>' +
+      '</ol>' +
+      '<p>本人已阅读、理解并自愿签署。</p>',
+    vaccination:
+      '<h2 style="text-align:center;">疫苗接种同意书</h2>' +
+      '<p>本人 <b>{{cust_name}}</b> 作为宠物 <b>{{pet_name}}</b>（{{pet_species}} · {{pet_age}}）的主人，' +
+      '同意于 {{date}} 在 {{clinic_name}} 由主治医师 <b>{{vet_name}}</b> 为其接种疫苗，已知晓：</p>' +
+      '<ol>' +
+      '<li>疫苗接种后 24~48 小时内宠物可能出现轻度发热、嗜睡、食欲减退或注射部位轻度肿胀，属正常反应；如出现持续不适请及时联系医院。</li>' +
+      '<li>极少数情况下可能出现急性过敏反应，院方将立即处理。</li>' +
+      '<li>请避免接种后 7 天内洗澡、剧烈运动或更换饲料。</li>' +
+      '</ol>' +
+      '<p>本人已阅读、理解并自愿签署。</p>',
+  };
+  window.loadSample = function (key) {
+    if (!confirm('载入示例会覆盖当前正文，确认？')) return;
+    quill.clipboard.dangerouslyPasteHTML(SAMPLES[key] || '');
+  };
+})();
+</script>
+{% endblock %}

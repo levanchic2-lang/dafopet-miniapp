@@ -433,6 +433,7 @@
       <a class="ribbon-icon {% if _path.startswith('/admin/follow-ups') %}current{% endif %}" href="/admin/follow-ups" id="nav-followup-link">
         <span class="ri-emoji">📞</span>回访管理<span id="nav-followup-badge" class="ri-badge" style="display:none;background:#10b981;"></span>
       </a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/consent') %}current{% endif %}" href="/admin/consent-templates"><span class="ri-emoji">📝</span>协议模板</a>
     </div>
 
     {# 经营组 #}
@@ -498,6 +499,7 @@
       '/admin/rabies':       { label: '狂犬疫苗',   kind: 'page', icon: '🐶' },
       '/admin/visits':       { label: '病历查询',   kind: 'page', icon: '🔍' },
       '/admin/follow-ups':   { label: '回访管理',   kind: 'page', icon: '📞' },
+      '/admin/consent-templates': { label: '协议模板', kind: 'page', icon: '📝' },
       // 经营
       '/admin/invoices':     { label: '收银台',     kind: 'page', icon: '🧾' },
       '/admin/inventory':    { label: '库存管理',   kind: 'page', icon: '📦' },

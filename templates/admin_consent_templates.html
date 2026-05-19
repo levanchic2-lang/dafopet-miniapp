@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+
+{% set is_superadmin = (request.session.get('admin_role') == 'superadmin') %}
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon">📝</span>协议模板</h1>
+ <p class="ph-sub">同意书 / 协议书 模板维护 · 发起签署时调用</p>
+ </div>
+ {% if is_superadmin %}
+ <div class="ph-actions">
+ <a href="/admin/consent-templates/create" class="btn">＋ 新建模板</a>
+ </div>
+ {% endif %}
+</div>
+
+{% if items %}
+<div class="data-table-wrap">
+ <table class="data-table">
+ <thead>
+   <tr>
+     <th style="width:40%;">模板名</th>
+     <th>类型</th>
+     <th style="text-align:right;">已使用</th>
+     <th>更新时间</th>
+     <th>状态</th>
+     {% if is_superadmin %}<th style="text-align:right;">操作</th>{% endif %}
+   </tr>
+ </thead>
+ <tbody>
+ {% for t in items %}
+ <tr>
+   <td><strong>{{ t.name }}</strong>{% if t.notes %}<div style="font-size:.75rem;color:var(--muted);">{{ t.notes[:60] }}</div>{% endif %}</td>
+   <td>{{ category_zh.get(t.category, t.category) }}</td>
+   <td style="text-align:right;color:var(--muted);">{{ used_map.get(t.id, 0) }} 次</td>
+   <td style="color:var(--muted);font-size:.82rem;">{{ t.updated_at.strftime('%Y-%m-%d %H:%M') if t.updated_at else '—' }}</td>
+   <td>{% if t.is_active %}<span class="pill pill-info">上架</span>{% else %}<span class="pill pill-gray">下架</span>{% endif %}</td>
+   {% if is_superadmin %}
+   <td style="text-align:right;">
+     <a href="/admin/consent-templates/{{ t.id }}/edit" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">编辑</a>
+     <form method="post" action="/admin/consent-templates/{{ t.id }}/toggle" style="display:inline;">
+       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+       <button type="submit" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">
+         {% if t.is_active %}下架{% else %}上架{% endif %}
+       </button>
+     </form>
+   </td>
+   {% endif %}
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+</div>
+{% else %}
+<div class="empty-card">
+ <div class="empty-icon">📝</div>
+ 还没有模板{% if is_superadmin %}，<a href="/admin/consent-templates/create" style="color:#3b82f6;">点击新建 →</a>{% endif %}
+</div>
+{% endif %}
+
+<div style="margin-top:1.2rem;padding:1rem 1.2rem;background:#f9fafb;border-radius:8px;font-size:.85rem;color:#4b5563;">
+ <b>支持的变量</b>（写在模板里发起时自动替换）：
+ <div style="display:flex;gap:.8rem;flex-wrap:wrap;margin-top:.5rem;">
+ {% for v, label in variables.items() %}
+  <code style="background:#fff;padding:.15rem .4rem;border-radius:4px;border:1px solid #e5e7eb;">{{ v }}</code><span style="color:var(--muted);font-size:.78rem;">{{ label }}</span>
+ {% endfor %}
+ </div>
+</div>
+
+{% endblock %}

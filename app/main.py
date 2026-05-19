@@ -5426,6 +5426,154 @@ async def admin_wallet_adjust(
 
 
 # ---------------------------------------------------------------------------
+# 协议签署 (Consent) — 模板 + 任务 + PDF 归档
+# ---------------------------------------------------------------------------
+
+_CONSENT_CATEGORY_ZH = {
+    "anesthesia":    "麻醉知情同意书",
+    "surgery":       "手术知情同意书",
+    "vaccination":   "疫苗接种同意书",
+    "euthanasia":    "安乐死同意书",
+    "boarding":      "寄养协议",
+    "transfusion":   "输血同意书",
+    "general":       "通用协议",
+}
+
+_CONSENT_STATUS_ZH = {
+    "pending":   "待签署",
+    "signed":    "已签署",
+    "cancelled": "已取消",
+    "expired":   "已过期",
+}
+
+# 模板里支持的变量
+_CONSENT_VARIABLES = {
+    "{{cust_name}}":  "客户姓名",
+    "{{cust_phone}}": "客户手机",
+    "{{pet_name}}":   "宠物名",
+    "{{pet_species}}":"宠物种类",
+    "{{pet_breed}}":  "品种",
+    "{{pet_gender}}": "宠物性别",
+    "{{pet_age}}":    "宠物年龄",
+    "{{pet_weight}}": "宠物体重",
+    "{{visit_date}}": "就诊日期",
+    "{{vet_name}}":   "主治医师",
+    "{{date}}":       "今日日期",
+    "{{clinic_name}}":"门店名称",
+}
+
+
+def _gen_consent_token() -> str:
+    import secrets
+    return secrets.token_urlsafe(18)[:32]
+
+
+@app.get("/admin/consent-templates", response_class=HTMLResponse)
+async def admin_consent_templates_list(request: Request, db: Session = Depends(get_db)):
+    """协议模板管理（列表 / 启停）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    items = db.query(ConsentTemplate).order_by(
+        ConsentTemplate.is_active.desc(), ConsentTemplate.id.desc()
+    ).all()
+    # 各模板被使用次数（签署任务计数）
+    from sqlalchemy import func as _f
+    used_rows = (
+        db.query(ConsentTask.template_id, _f.count(ConsentTask.id))
+        .group_by(ConsentTask.template_id)
+        .all()
+    )
+    used_map = {tid: cnt for tid, cnt in used_rows if tid}
+    return templates.TemplateResponse(request, "admin_consent_templates.html", {
+        "items": items, "used_map": used_map,
+        "category_zh": _CONSENT_CATEGORY_ZH,
+        "variables": _CONSENT_VARIABLES,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.get("/admin/consent-templates/create", response_class=HTMLResponse)
+@app.get("/admin/consent-templates/{tid}/edit", response_class=HTMLResponse)
+async def admin_consent_template_form(
+    request: Request, db: Session = Depends(get_db), tid: int = 0,
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    require_superadmin(request)
+    item = db.get(ConsentTemplate, tid) if tid else None
+    return templates.TemplateResponse(request, "admin_consent_template_form.html", {
+        "item": item,
+        "category_zh": _CONSENT_CATEGORY_ZH,
+        "variables": _CONSENT_VARIABLES,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/consent-templates/save")
+async def admin_consent_template_save(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    template_id: str = Form(""),
+    name: str = Form(...),
+    category: str = Form("general"),
+    body_html: str = Form(""),
+    notes: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    if category not in _CONSENT_CATEGORY_ZH:
+        category = "general"
+    name_v = (name or "").strip()[:120]
+    if not name_v:
+        return RedirectResponse("/admin/consent-templates?msg=模板名必填", status_code=303)
+    tid = int(template_id) if template_id.isdigit() else 0
+    if tid:
+        item = db.get(ConsentTemplate, tid)
+        if not item:
+            raise HTTPException(404)
+        item.name = name_v
+        item.category = category
+        item.body_html = body_html or ""
+        item.notes = (notes or "").strip()
+    else:
+        item = ConsentTemplate(
+            name=name_v, category=category,
+            body_html=body_html or "", notes=(notes or "").strip(),
+            created_by=request.session.get("admin_username", "admin"),
+            is_active=True,
+        )
+        db.add(item)
+    db.commit()
+    return RedirectResponse(
+        f"/admin/consent-templates?msg={'已保存' if tid else '已创建'}：{item.name}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/consent-templates/{tid}/toggle")
+async def admin_consent_template_toggle(
+    tid: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    item = db.get(ConsentTemplate, tid)
+    if not item:
+        raise HTTPException(404)
+    item.is_active = not item.is_active
+    db.commit()
+    return RedirectResponse(
+        f"/admin/consent-templates?msg={'已上架' if item.is_active else '已下架'}：{item.name}",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------------------------
 # 优惠券 (Coupon) — 发放 / 核销 / 作废
 # ---------------------------------------------------------------------------
 
