@@ -5943,6 +5943,28 @@ async def consent_sign_submit(
     return {"ok": True, "task_id": task.id}
 
 
+@app.get("/admin/consent-tasks/{task_id}/printable", response_class=HTMLResponse)
+async def admin_consent_task_printable(
+    task_id: int, request: Request, db: Session = Depends(get_db),
+):
+    """打印友好版（A4 一页，含签字图）。浏览器→打印→另存为 PDF。
+    不需要服务器装 weasyprint / pango。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    task = db.get(ConsentTask, task_id)
+    if not task:
+        raise HTTPException(404)
+    cust = db.get(Customer, task.customer_id) if task.customer_id else None
+    pet = db.get(Pet, task.pet_id) if task.pet_id else None
+    clinic_name = "大风动物医院"
+    if pet and pet.store:
+        clinic_name = f"大风动物医院（{pet.store.replace('店', '分院')}）"
+    return templates.TemplateResponse(request, "admin_consent_printable.html", {
+        "task": task, "cust": cust, "pet": pet,
+        "clinic_name": clinic_name,
+    })
+
+
 @app.post("/admin/consent-tasks/{task_id}/regenerate-pdf")
 async def admin_consent_task_regen_pdf(
     task_id: int, request: Request, db: Session = Depends(get_db),

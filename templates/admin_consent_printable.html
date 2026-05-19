@@ -1,0 +1,72 @@
+{% extends "_print_base.html" %}
+{% block title %}{{ task.title }} · {{ cust.name if cust else '' }}{% endblock %}
+{% block default_size %}A4{% endblock %}
+
+{% block extra_style %}
+.cs-frame { padding: 4mm 0; }
+.cs-clinic { text-align: center; font-size: 18pt; letter-spacing: 4px; font-weight: 700; }
+.cs-sub { text-align: center; font-size: 10pt; color: #555; letter-spacing: 2px; margin-top: 2pt; }
+.cs-rule { border: 0; border-top: 1.5px solid #111; border-bottom: 0.5px solid #111; height: 3px; margin: 8pt 0 12pt; }
+
+.cs-title { text-align: center; font-size: 14pt; font-weight: 700; letter-spacing: 4px; margin: 8pt 0 12pt; }
+
+.cs-meta { font-size: 10pt; color: #555; padding: 4pt 0 8pt; border-bottom: 0.5px solid #ddd; margin-bottom: 12pt; }
+.cs-meta b { color: #111; }
+
+.cs-body { font-size: 11pt; line-height: 1.85; color: #222; }
+.cs-body h1, .cs-body h2, .cs-body h3 { font-weight: 700; }
+.cs-body p, .cs-body li { line-height: 1.85; margin: 6pt 0; }
+.cs-body ol, .cs-body ul { padding-left: 22pt; }
+
+.cs-sig-block { margin-top: 18pt; padding-top: 8pt; border-top: 1px solid #ccc; }
+.cs-sig-row { display: flex; justify-content: space-between; gap: 24pt; margin-top: 8pt; }
+.cs-sig-col { flex: 1; font-size: 10pt; }
+.cs-sig-col .lbl { color: #666; font-size: 9pt; margin-bottom: 4pt; }
+.cs-sig-col img.sig { max-height: 70pt; max-width: 240pt; border: 0.5px solid #e0e0e0; padding: 3pt; background: #fff; }
+.cs-meta-small { font-size: 8.5pt; color: #777; margin-top: 6pt; line-height: 1.6; }
+
+.cs-foot { margin-top: 18pt; padding-top: 6pt; text-align: center; font-size: 8pt; color: #999; border-top: 0.3px solid #eee; letter-spacing: 1px; }
+
+@page { size: A4; margin: 18mm 16mm; }
+{% endblock %}
+
+{% block content %}
+<div class="cs-frame">
+  <div class="cs-clinic">{{ clinic_name }}</div>
+  <div class="cs-sub">Da Feng Animal Hospital · Veterinary Consent</div>
+  <hr class="cs-rule"/>
+  <div class="cs-title">{{ task.title }}</div>
+
+  <div class="cs-meta">
+    {% if cust %}<div>客户：<b>{{ cust.name or '' }}</b>　电话：{{ cust.phone or '' }}</div>{% endif %}
+    {% if pet %}<div>宠物：<b>{{ pet.name or '' }}</b>{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '狗' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
+    <div>发起时间：{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }} · 单号 CT{{ '%06d'|format(task.id) }}</div>
+  </div>
+
+  <div class="cs-body">{{ task.snapshot_html|safe }}</div>
+
+  <div class="cs-sig-block">
+    <div class="cs-sig-row">
+      <div class="cs-sig-col">
+        <div class="lbl">签字（客户）</div>
+        {% if task.signature_path %}
+        <img class="sig" src="/uploads/{{ task.signature_path }}" alt="客户签字"/>
+        {% else %}
+        <div style="color:#aaa;font-size:9pt;">（未签字）</div>
+        {% endif %}
+        <div class="cs-meta-small">
+          签署时间：{{ task.signed_at.strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}<br/>
+          签署 IP：{{ task.signed_ip or '—' }}
+        </div>
+      </div>
+      <div class="cs-sig-col" style="flex:.6;">
+        <div class="lbl">医院</div>
+        <div style="margin-top:14pt;border-bottom:1px solid #aaa;height:50pt;"></div>
+        <div class="cs-meta-small">主治/审核医师：__________________</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cs-foot">本协议由 {{ clinic_name }} 出具 · 签字数据加密保存 · 浏览器打印→另存为 PDF</div>
+</div>
+{% endblock %}

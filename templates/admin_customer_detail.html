@@ -532,10 +532,7 @@
      </td>
      <td>
      {% if ct.status == 'pending' %}<span class="pill pill-warn">⏳ 待签</span>
-     {% elif ct.status == 'signed' %}
-       <span class="pill pill-ok">✓ 已签</span>
-       {% if ct_doc %}<div style="font-size:.7rem;color:#10b981;margin-top:2px;">📎 PDF 已归档</div>
-       {% else %}<div style="font-size:.7rem;color:#f59e0b;margin-top:2px;">⚠ PDF 未生成</div>{% endif %}
+     {% elif ct.status == 'signed' %}<span class="pill pill-ok">✓ 已签</span>
      {% elif ct.status == 'cancelled' %}<span class="pill pill-gray">✕ 已取消</span>
      {% elif ct.status == 'expired' %}<span class="pill pill-gray">⌛ 已过期</span>
      {% endif %}
@@ -545,8 +542,8 @@
      <td style="color:var(--muted);font-size:.82rem;">{{ ct.expires_at or '不限期' }}</td>
      <td style="text-align:right;white-space:nowrap;">
        <a href="/admin/consent-tasks/{{ ct.id }}" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">查看</a>
-       {% if ct_doc %}
-       <a href="/uploads/{{ ct_doc.pdf_path }}" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;color:#10b981;">📥 PDF</a>
+       {% if ct.status == 'signed' %}
+       <a href="/admin/consent-tasks/{{ ct.id }}/printable" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;color:#10b981;">🖨 打印 PDF</a>
        {% endif %}
      </td>
    </tr>
