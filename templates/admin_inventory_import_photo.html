@@ -42,10 +42,36 @@
 .ip-row.unmatched { background: rgba(245,158,11,0.04); }
 .ip-row.skipped { opacity: 0.4; }
 
-.ip-badge { font-size: .72rem; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+.ip-badge { font-size: .72rem; padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+            cursor: pointer; user-select: none; border: 1px solid transparent; }
+.ip-badge:hover { filter: brightness(0.95); border-color: rgba(0,0,0,.1); }
 .ip-badge.matched { background: #d1fae5; color: #065f46; }
 .ip-badge.fuzzy { background: #fef3c7; color: #92400e; }
 .ip-badge.new { background: #dbeafe; color: #1e40af; }
+
+/* ── 搜索弹层 ── */
+.ip-popover {
+  position: fixed; z-index: 1200;
+  background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  padding: .7rem; width: 320px; max-width: 90vw;
+}
+.ip-popover input.q {
+  width: 100%; padding: .45rem .6rem; font-size: .9rem;
+  border: 1px solid #d1d5db; border-radius: 6px;
+}
+.ip-popover .results {
+  margin-top: .5rem; max-height: 260px; overflow-y: auto;
+  border-top: 1px solid #f3f4f6;
+}
+.ip-popover .result {
+  padding: .5rem .6rem; border-bottom: 1px solid #f3f4f6;
+  cursor: pointer; font-size: .85rem;
+}
+.ip-popover .result:hover { background: #f9fafb; }
+.ip-popover .result .meta { font-size: .75rem; color: #6b7280; margin-top: 2px; }
+.ip-popover .hint { font-size: .75rem; color: #6b7280; margin-top: .5rem; text-align: center; }
+.ip-popover-overlay { position: fixed; inset: 0; z-index: 1199; }
 </style>
 {% endblock %}
 
@@ -232,16 +258,17 @@
         '<td><input name="row' + i + '_unit_price" type="number" step="0.01" min="0" value="' + (it.unit_price || '') + '"></td>' +
         '<td><input name="row' + i + '_batch_no" value="' + escapeHtml(it.batch_no) + '" placeholder="选填"></td>' +
         '<td><input name="row' + i + '_expiry_date" type="date" value="' + escapeHtml(it.expiry_date) + '"></td>' +
-        '<td>' +
+        '<td class="ip-match-cell">' +
           (matched
-            ? '<span class="ip-badge ' + (fuzzy ? 'fuzzy' : 'matched') + '">' +
+            ? '<span class="ip-badge ' + (fuzzy ? 'fuzzy' : 'matched') + '" data-act="search">' +
                 (fuzzy ? '相似 ' + (it.match_confidence * 100).toFixed(0) + '%' : '✓ 已有') +
               '</span>' +
-              '<div style="font-size:.72rem;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="' + escapeHtml(it.matched_name || '') + '">' +
+              '<div class="ip-match-name" style="font-size:.72rem;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="' + escapeHtml(it.matched_name || '') + '">' +
                 escapeHtml(it.matched_name || '') +
                 (it.matched_stock !== undefined ? ' · 现存 ' + it.matched_stock : '') +
               '</div>'
-            : '<span class="ip-badge new">＋ 新品目</span>'
+            : '<span class="ip-badge new" data-act="search">＋ 新品目</span>' +
+              '<div class="ip-match-name" style="font-size:.72rem;color:var(--muted);margin-top:2px;"></div>'
           ) +
         '</td>';
       rowsTbody.appendChild(tr);
@@ -259,6 +286,15 @@
           tr.classList.remove('skipped');
         }
       });
+
+      // 徽章点击 → 弹搜索框，映射到已有品目
+      var badge = tr.querySelector('.ip-badge');
+      if (badge) {
+        badge.addEventListener('click', function (e) {
+          var defaultQ = tr.querySelector('input[name="row' + i + '_name"]').value;
+          openSearchPopover(badge, i, tr, defaultQ);
+        });
+      }
     });
     document.getElementById('row-count').textContent = items.length;
     document.getElementById('row-count-input').value = items.length;
@@ -279,6 +315,106 @@
     resultBox.style.display = 'none';
     hideError();
   };
+
+  // ── 搜索弹层 ──
+  var popover = null;
+  var searchTimer = null;
+  function closePopover() {
+    if (popover) { popover.remove(); popover = null; }
+    document.querySelectorAll('.ip-popover-overlay').forEach(function(o){ o.remove(); });
+  }
+  function openSearchPopover(anchor, rowIdx, tr, defaultQ) {
+    closePopover();
+    var overlay = document.createElement('div');
+    overlay.className = 'ip-popover-overlay';
+    overlay.addEventListener('click', closePopover);
+    document.body.appendChild(overlay);
+
+    var box = document.createElement('div');
+    box.className = 'ip-popover';
+    box.innerHTML =
+      '<input class="q" type="text" placeholder="搜索已有品目（名称/拼音/关键词）" autofocus>' +
+      '<div class="results"><div class="hint">输入关键词搜索…</div></div>' +
+      '<div class="hint">点选 = 映射；不选 = 新增</div>';
+    document.body.appendChild(box);
+    // 定位：anchor 下方
+    var rect = anchor.getBoundingClientRect();
+    box.style.left = Math.max(8, Math.min(window.innerWidth - 330, rect.right - 320)) + 'px';
+    box.style.top  = (rect.bottom + 6) + 'px';
+    popover = box;
+
+    var q = box.querySelector('input.q');
+    var results = box.querySelector('.results');
+    function doSearch(term) {
+      if (!term.trim()) { results.innerHTML = '<div class="hint">输入关键词搜索…</div>'; return; }
+      fetch('/api/inventory/search?q=' + encodeURIComponent(term), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var items = data.items || [];
+          if (!items.length) { results.innerHTML = '<div class="hint">没找到匹配品目</div>'; return; }
+          results.innerHTML = '';
+          items.forEach(function (it) {
+            var d = document.createElement('div');
+            d.className = 'result';
+            d.innerHTML =
+              '<div>' + escapeHtml(it.name) + '</div>' +
+              '<div class="meta">现存 ' + it.stock_qty + ' ' + escapeHtml(it.unit || '') +
+              ' · 进价 ¥' + (it.cost_price || 0).toFixed(2) + '</div>';
+            d.addEventListener('click', function () { applyMapping(rowIdx, tr, it); });
+            results.appendChild(d);
+          });
+        })
+        .catch(function () { results.innerHTML = '<div class="hint">网络错误</div>'; });
+    }
+    q.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () { doSearch(q.value); }, 200);
+    });
+    q.value = defaultQ || '';
+    if (q.value) doSearch(q.value);
+    setTimeout(function () { q.focus(); q.select(); }, 50);
+  }
+
+  function applyMapping(rowIdx, tr, it) {
+    // 切到 reuse + 写 hidden item_id
+    var sel = tr.querySelector('.ip-action');
+    // 确保有 reuse option
+    if (!sel.querySelector('option[value="reuse"]')) {
+      var opt = document.createElement('option');
+      opt.value = 'reuse'; opt.textContent = '累加';
+      sel.insertBefore(opt, sel.firstChild);
+    }
+    sel.value = 'reuse';
+    // 写或更新 hidden item_id
+    var hid = tr.querySelector('input[name="row' + rowIdx + '_item_id"]');
+    if (!hid) {
+      hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = 'row' + rowIdx + '_item_id';
+      sel.parentNode.appendChild(hid);
+    }
+    hid.value = it.id;
+    // 更新行样式 + 徽章 + 名字
+    tr.classList.remove('unmatched'); tr.classList.add('matched');
+    var cell = tr.querySelector('.ip-match-cell');
+    cell.innerHTML =
+      '<span class="ip-badge matched" data-act="search">✓ 已映射</span>' +
+      '<div class="ip-match-name" style="font-size:.72rem;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="' + escapeHtml(it.name) + '">' +
+        escapeHtml(it.name) + ' · 现存 ' + it.stock_qty +
+      '</div>';
+    cell.querySelector('.ip-badge').addEventListener('click', function () {
+      var defaultQ = tr.querySelector('input[name="row' + rowIdx + '_name"]').value;
+      openSearchPopover(cell.querySelector('.ip-badge'), rowIdx, tr, defaultQ);
+    });
+    // 单位 / 进价 如果空且 reuse 项有，可选填充
+    var unitInput = tr.querySelector('input[name="row' + rowIdx + '_unit"]');
+    if (unitInput && !unitInput.value && it.unit) unitInput.value = it.unit;
+    closePopover();
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closePopover();
+  });
 })();
 </script>
 {% endblock %}

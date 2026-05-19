@@ -7538,6 +7538,33 @@ async def api_inventory_search(
     ]
 
 
+# ── 库存品目搜索 API（拍照入库 / 各种映射场景共用） ───────
+@app.get("/api/inventory/search")
+async def api_inventory_search(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = Query(""),
+    limit: int = Query(15),
+):
+    """按名称模糊搜索品目。返回 JSON 列表。"""
+    if not request.session.get("admin"):
+        return {"items": []}
+    q = (q or "").strip()
+    qq = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    if q:
+        like = f"%{q}%"
+        qq = qq.filter(InventoryItem.name.like(like))
+    rows = qq.order_by(InventoryItem.name).limit(min(max(limit, 1), 50)).all()
+    return {"items": [
+        {
+            "id": r.id, "name": r.name, "unit": r.unit,
+            "stock_qty": float(r.stock_qty or 0),
+            "cost_price": float(r.cost_price or 0),
+        }
+        for r in rows
+    ]}
+
+
 # ── 进货单照片识别入库 ─────────────────────────────────────
 @app.get("/admin/inventory/import-photo", response_class=HTMLResponse)
 async def admin_inventory_import_photo_page(request: Request, db: Session = Depends(get_db)):
