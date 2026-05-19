@@ -1709,30 +1709,28 @@ def t_consent_pdf_gen():
 t_consent_pdf_gen()
 
 
-@step("协议推送：模板未配 / 无 openid 时静默失败不阻断签发")
-def t_consent_push_silent():
-    # 模板未配置 OPENAI/WECHAT 时，_try_push_consent_notice 应返回 False
-    # 并且不抛异常。这里直接调内部函数验证。
+@step("协议短信：网关未配 / 无手机号 时静默失败不阻断签发")
+def t_consent_sms_silent():
     import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
     from app import models  # noqa
     from app.database import SessionLocal
     from app.models import ConsentTask, Customer, Pet
-    from app.main import _try_push_consent_notice
+    from app.main import _try_send_consent_sms
     db = SessionLocal()
     task = db.query(ConsentTask).filter(ConsentTask.status == "pending").first()
     assert task
     cust = db.get(Customer, task.customer_id)
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
-    # 客户没有 wechat_openid（测试 DB 里也没有），应该返回 False
-    ok = _try_push_consent_notice(db, task, cust, pet)
-    assert ok is False  # 无 openid → 静默 False
+    # 测试环境未配 sms_gateway_url，应返回 False（静默）
+    ok = _try_send_consent_sms(db, task, cust, pet)
+    assert ok is False
     db.close()
 
 
-t_consent_push_silent()
+t_consent_sms_silent()
 
 
-@step("协议推送：管理员重发接口仅 pending 状态可用")
+@step("协议短信：管理员重发接口仅 pending 状态可用")
 def t_consent_resend_endpoint():
     import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
     from app import models  # noqa
@@ -1753,7 +1751,7 @@ def t_consent_resend_endpoint():
         from urllib.parse import unquote
         loc = unquote(r.headers.get("location", ""))
         assert "仅待签" in loc, f"loc={loc}"
-    # 重发 pending 的（无 openid → 不会推成功，但接口不应 500）
+    # 重发 pending 的（测试环境未配网关 → 提示"未配置短信网关"）
     if pending_id:
         r = client.get(f"/admin/consent-tasks/{pending_id}")
         token = extract_csrf(r.text)
@@ -1761,8 +1759,7 @@ def t_consent_resend_endpoint():
         assert r.status_code == 303
         from urllib.parse import unquote
         loc = unquote(r.headers.get("location", ""))
-        # 测试环境没有 wechat appid 也没有 openid，应该提示"推送失败"
-        assert "推送失败" in loc or "已重发" in loc
+        assert "未配置短信网关" in loc or "已发送短信" in loc or "无手机号" in loc, f"loc={loc}"
 
 
 t_consent_resend_endpoint()

@@ -5677,10 +5677,35 @@ async def admin_consent_task_create(
     _audit(db, request, "consent_task_create", application_id=None,
            detail={"task_id": task.id, "template": tpl.name, "customer_id": customer_id})
     db.commit()
-    # 自动推送小程序订阅消息（有 openid 才推）
-    pushed = _try_push_consent_notice(db, task, cust, pet)
-    suffix = "并已推送小程序通知" if pushed else "（客户无小程序授权，请手动复制链接发送）"
+    # 自动发短信给客户（有手机号才发；SMS 网关未配 → 静默跳过）
+    sms_ok = _try_send_consent_sms(db, task, cust, pet)
+    suffix = "并已短信发送签字链接" if sms_ok else "（请手动复制链接发给客户）"
     return RedirectResponse(f"/admin/consent-tasks/{task.id}?msg=已发起签署{suffix}", status_code=303)
+
+
+def _build_consent_sign_url(token: str) -> str:
+    base = (settings.public_base_url or "").strip().rstrip("/")
+    return f"{base}/consent/{token}" if base else f"/consent/{token}"
+
+
+def _try_send_consent_sms(db: Session, task: "ConsentTask", cust: "Customer | None", pet: "Pet | None") -> bool:
+    """给客户发短信（含签字链接）。无手机号 / 网关未配 → 返回 False（静默）。"""
+    if not cust or not (cust.phone or "").strip():
+        return False
+    if not (settings.sms_gateway_url or "").strip():
+        return False
+    pet_name = (pet.name if pet else "") or "您的宝贝"
+    sign_url = _build_consent_sign_url(task.token)
+    text = (
+        f"【大风动物医院】关于{pet_name}的{task.title}请尽快签署：{sign_url}"
+        f" 5 分钟内完成。如有疑问请联系您的主治医师。"
+    )
+    try:
+        from app.services.sms_gateway import send_sms
+        return send_sms(cust.phone.strip(), text, scene="consent")
+    except Exception as e:
+        logger.warning("[consent] SMS 发送失败 task=%s: %s", task.id, e)
+        return False
 
 
 def _try_push_consent_notice(db: Session, task: "ConsentTask", cust: "Customer | None", pet: "Pet | None") -> bool:
@@ -5727,7 +5752,7 @@ async def admin_consent_task_resend(
     task_id: int, request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""),
 ):
-    """手动重发小程序订阅消息。"""
+    """手动重发签字链接短信。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
@@ -5738,8 +5763,12 @@ async def admin_consent_task_resend(
         return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=仅待签状态可重发", status_code=303)
     cust = db.get(Customer, task.customer_id) if task.customer_id else None
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
-    ok = _try_push_consent_notice(db, task, cust, pet)
-    msg = "已重发小程序通知" if ok else "推送失败（客户无小程序授权 / 模板未配置 / API 错误）"
+    if not cust or not (cust.phone or "").strip():
+        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=客户无手机号，请直接复制链接微信发送", status_code=303)
+    if not (settings.sms_gateway_url or "").strip():
+        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=未配置短信网关，请直接复制链接微信发送", status_code=303)
+    ok = _try_send_consent_sms(db, task, cust, pet)
+    msg = "已发送短信" if ok else "短信发送失败，请稍后重试或复制链接微信发"
     return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg={msg}", status_code=303)
 
 
