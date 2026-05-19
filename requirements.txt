@@ -13,8 +13,6 @@ Pillow>=10.0.0
 openpyxl>=3.1.0
 qrcode[pil]>=7.4.2
 apscheduler>=3.10.0
-# 协议签署 PDF 生成（依赖系统库 pango/cairo；Ubuntu: apt install libpango-1.0-0 libpangoft2-1.0-0）
-weasyprint>=60.0
 
 # 可选：启用 OPENAI_API_KEY 后用于图片/视频帧的流浪猫辅助识别
 openai>=1.55.0
