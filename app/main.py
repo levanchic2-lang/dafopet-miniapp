@@ -1861,8 +1861,16 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
 
 def _admin_appointment_redirect_base(redirect_after: str) -> str:
     """预约表单提交后回到哪一页；仅允许固定路径，避免开放重定向。"""
-    if (redirect_after or "").strip().lower() == "appointments":
+    val = (redirect_after or "").strip().lower()
+    if val == "appointments":
         return "/admin/appointments"
+    if val == "calendar":
+        return "/admin/calendar"
+    # 从客户档案进来：return_to=customer:123 → 跳回 /admin/customers/123
+    if val.startswith("customer:"):
+        cid = val.split(":", 1)[1]
+        if cid.isdigit():
+            return f"/admin/customers/{cid}"
     return "/admin"
 
 
@@ -3212,6 +3220,44 @@ async def admin_purge_system(
 ):
     """备用地址：若 /admin/purge 被拦截，可改表单指向此路径。"""
     return await _admin_purge_run(request, db, csrf_token, scope, confirm)
+
+
+@app.get("/admin/appointments/create", response_class=HTMLResponse)
+async def admin_appointment_create_form(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = Query(0),
+    pet_id: int = Query(0),
+    date: str = Query(""),
+    time: str = Query(""),
+    category: str = Query(""),
+    return_to: str = Query(""),
+):
+    """新建预约表单页（GET）。从客户档案 / 日历点击都走这里。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    # 该客户的所有宠物（用于下拉切换）
+    pets = db.query(Pet).filter(Pet.customer_id == customer_id).all() if customer_id else []
+    admin_store = _get_admin_store(request)
+    # 默认门店：限店员工锁本店；否则用宠物归属门店；否则空
+    default_store_short = admin_store or (pet.store if pet else "") or ""
+    default_store_full = _STORE_SHORT_TO_FULL.get(default_store_short, "")
+    return templates.TemplateResponse(request, "admin_appointment_create_form.html", {
+        "cust": cust, "pet": pet, "pets": pets,
+        "default_date": (date or "")[:10],
+        "default_time": (time or "")[:5],
+        "default_category": category,
+        "default_store_full": default_store_full,
+        "store_options": _CLINIC_STORES,   # 全名
+        "admin_store_short": admin_store,
+        "category_labels": _APPOINTMENT_CATEGORY_LABELS,
+        "gender_labels": _PET_GENDER_LABELS,
+        "return_to": return_to or "",
+        "csrf_token": _get_csrf_token(request),
+        "title": "新建预约",
+    })
 
 
 @app.post("/admin/appointments/create", name="admin_appointment_create")

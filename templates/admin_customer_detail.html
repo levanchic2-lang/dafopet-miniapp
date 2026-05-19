@@ -207,7 +207,7 @@
  {% else %}<span style="color:var(--muted);">—</span>{% endif %}
  </td>
  <td onclick="event.stopPropagation();">
- <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}" style="font-size:0.78rem;color:#3b82f6;text-decoration:none;margin-right:0.6rem;">预约</a>
+ <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}&return_to=customer:{{ cust.id }}" style="font-size:0.78rem;color:#3b82f6;text-decoration:none;margin-right:0.6rem;">预约</a>
  <a href="#" onclick="event.preventDefault();openEditPet({{ p.id }})" style="font-size:0.78rem;color:#6b7280;text-decoration:none;">编辑</a>
  </td>
  </tr>

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block body %}
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon">📋</span>新建预约</h1>
+ <p class="ph-sub">
+ {% if cust %}<strong>{{ cust.name }}</strong> · {{ cust.phone }}{% endif %}
+ {% if pet %} · <strong>{{ pet.name }}</strong>{% endif %}
+ </p>
+ </div>
+ <div class="ph-actions">
+ <a href="javascript:history.back()" class="btn secondary" style="font-size:.85rem;">← 返回</a>
+ </div>
+</div>
+
+<form method="post" action="/admin/appointments/create" class="card" style="max-width:760px;padding:1.2rem 1.4rem;">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input type="hidden" name="redirect_after" value="{{ return_to or 'admin' }}"/>
+
+ {# 类型 #}
+ <label style="display:block;font-weight:600;margin-bottom:.3rem;">预约类型 *</label>
+ <select name="category" required style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;margin-bottom:.8rem;">
+   {% for k, zh in category_labels.items() %}
+   <option value="{{ k }}" {% if default_category == k %}selected{% endif %}>{{ zh }}</option>
+   {% endfor %}
+ </select>
+
+ {# 服务名 #}
+ <label style="display:block;font-weight:600;margin-bottom:.3rem;">服务项目 *</label>
+ <input name="service_name" required placeholder="如：体检 / 绝育 / 洗澡 / 接种狂犬"
+        style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;margin-bottom:.8rem;"/>
+
+ {# 客户 / 宠物（自动填，可改） #}
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;">
+   <div>
+     <label style="display:block;font-weight:600;margin-bottom:.3rem;">客户姓名 *</label>
+     <input name="customer_name" required value="{{ cust.name if cust else '' }}"
+            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"/>
+   </div>
+   <div>
+     <label style="display:block;font-weight:600;margin-bottom:.3rem;">手机号 *</label>
+     <input name="phone" required value="{{ cust.phone if cust else '' }}"
+            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"/>
+   </div>
+   <div>
+     <label style="display:block;font-weight:600;margin-bottom:.3rem;">宠物名 *</label>
+     <input name="pet_name" required value="{{ pet.name if pet else '' }}"
+            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"/>
+   </div>
+   <div>
+     <label style="display:block;font-weight:600;margin-bottom:.3rem;">宠物性别 *</label>
+     <select name="pet_gender" required style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;">
+       {% for k, zh in gender_labels.items() %}
+       <option value="{{ k }}" {% if pet and pet.gender == k %}selected{% endif %}>{{ zh }}</option>
+       {% endfor %}
+     </select>
+   </div>
+ </div>
+
+ {# 门店 + 日期时间 #}
+ <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8rem;margin-top:.8rem;">
+   <div>
+     <label style="display:block;font-weight:600;margin-bottom:.3rem;">门店 *</label>
+     <select name="store" required style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;">
+       {% for s in store_options %}
+       <option value="{{ s }}" {% if default_store_full == s %}selected{% endif %}>{{ s }}</option>
+       {% endfor %}
+     </select>
+   </div>
+   <div>
+     <label style="display:block;font-weight:600;margin-bottom:.3rem;">预约日期 *</label>
+     <input name="appointment_date" type="date" required value="{{ default_date }}"
+            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"/>
+   </div>
+   <div>
+     <label style="display:block;font-weight:600;margin-bottom:.3rem;">预约时间 *</label>
+     <input name="appointment_time" type="time" required value="{{ default_time }}"
+            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"/>
+   </div>
+ </div>
+
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-top:.8rem;">
+   <div>
+     <label style="display:block;font-weight:600;margin-bottom:.3rem;">时长（分钟）</label>
+     <input name="duration_minutes" type="number" min="5" max="480" value="30"
+            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"/>
+   </div>
+   <div>
+     <label style="display:block;font-weight:600;margin-bottom:.3rem;">关联 TNR 申请 ID（仅 TNR 类型用）</label>
+     <input name="related_application_id" placeholder="可选" type="number" min="0"
+            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"/>
+   </div>
+ </div>
+
+ <label style="display:block;font-weight:600;margin-top:.8rem;margin-bottom:.3rem;">备注</label>
+ <textarea name="notes" rows="3"
+           style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"></textarea>
+
+ <div style="display:flex;gap:.6rem;margin-top:1.2rem;">
+   <button type="submit" class="btn" style="font-size:.95rem;padding:.55rem 1.4rem;">✓ 创建预约</button>
+   <a href="javascript:history.back()" class="btn secondary" style="font-size:.95rem;padding:.55rem 1.4rem;">取消</a>
+ </div>
+</form>
+
+{% endblock %}
