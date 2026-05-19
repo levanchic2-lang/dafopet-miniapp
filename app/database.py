@@ -1015,6 +1015,58 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_predeem_cpkg ON package_redemptions(customer_package_id)"))
 
+            # ── 协议签署系统 ──────────────────────────────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS consent_templates ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "name VARCHAR(120) DEFAULT '', "
+                "category VARCHAR(40) DEFAULT 'general', "
+                "body_html TEXT DEFAULT '', "
+                "is_active BOOLEAN DEFAULT 1, "
+                "notes TEXT DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS consent_tasks ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "template_id INTEGER DEFAULT NULL REFERENCES consent_templates(id) ON DELETE SET NULL, "
+                "customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "title VARCHAR(120) DEFAULT '', "
+                "snapshot_html TEXT DEFAULT '', "
+                "token VARCHAR(40) DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'pending', "
+                "signature_path VARCHAR(500) DEFAULT '', "
+                "signed_at DATETIME DEFAULT NULL, "
+                "signed_ip VARCHAR(60) DEFAULT '', "
+                "expires_at VARCHAR(20) DEFAULT '', "
+                "store VARCHAR(40) DEFAULT '', "
+                "initiated_by VARCHAR(80) DEFAULT '', "
+                "initiated_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "notes TEXT DEFAULT ''"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_consent_task_token ON consent_tasks(token)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_consent_task_customer ON consent_tasks(customer_id, status)"))
+
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS consent_documents ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "task_id INTEGER NOT NULL UNIQUE REFERENCES consent_tasks(id) ON DELETE CASCADE, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "pdf_path VARCHAR(500) DEFAULT '', "
+                "pdf_size INTEGER DEFAULT 0, "
+                "title VARCHAR(120) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+
             # ── 收款明细（混合支付） ───────────────────────
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS payments ("

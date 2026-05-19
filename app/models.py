@@ -981,6 +981,74 @@ class Payment(Base):
     customer = relationship("Customer", foreign_keys=[customer_id])
 
 
+class ConsentTemplate(Base):
+    """协议/同意书模板。后台维护、富文本正文、支持 {{变量}} 占位。"""
+    __tablename__ = "consent_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name:     Mapped[str] = mapped_column(String(120), default="")   # 如 "麻醉知情同意书"
+    category: Mapped[str] = mapped_column(String(40),  default="general")
+    # category: anesthesia/surgery/vaccination/euthanasia/boarding/general
+    body_html: Mapped[str] = mapped_column(Text, default="")          # Quill 输出的 HTML 正文
+    # 占位符使用 {{pet_name}} / {{cust_name}} / {{visit_date}} / {{vet_name}} / {{date}} 等
+    # 发起任务时按 fields 自动替换并保存到 ConsentTask.snapshot_html
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes:     Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ConsentTask(Base):
+    """协议签署任务：给指定客户发的 1 次签署请求。"""
+    __tablename__ = "consent_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    template_id = mapped_column(ForeignKey("consent_templates.id", ondelete="SET NULL"), nullable=True, default=None)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="SET NULL"), nullable=True, default=None)
+
+    title:         Mapped[str] = mapped_column(String(120), default="")
+    # 发起任务时把模板正文 + 变量替换一次性快照，避免模板后续改了影响历史
+    snapshot_html: Mapped[str] = mapped_column(Text, default="")
+    # 客户端访问凭证（无登录链接）
+    token:         Mapped[str] = mapped_column(String(40), default="", index=True)
+    # status: pending / signed / cancelled / expired
+    status:        Mapped[str] = mapped_column(String(20), default="pending")
+    # 客户端签名数据（base64 PNG，签后立刻存）
+    signature_path: Mapped[str] = mapped_column(String(500), default="")
+    signed_at:     Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    signed_ip:     Mapped[str] = mapped_column(String(60), default="")
+    expires_at:    Mapped[str] = mapped_column(String(20), default="")   # YYYY-MM-DD 空=不限期
+
+    store:         Mapped[str] = mapped_column(String(40), default="")
+    initiated_by:  Mapped[str] = mapped_column(String(80), default="")    # 发起人 username
+    initiated_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    notes:         Mapped[str] = mapped_column(Text, default="")
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+    visit    = relationship("Visit",    foreign_keys=[visit_id])
+    template = relationship("ConsentTemplate", foreign_keys=[template_id])
+
+
+class ConsentDocument(Base):
+    """签署完成后归档的 PDF 文档（一对一 ConsentTask）。"""
+    __tablename__ = "consent_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id     = mapped_column(ForeignKey("consent_tasks.id", ondelete="CASCADE"), nullable=False, unique=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="SET NULL"), nullable=True, default=None)
+
+    pdf_path:     Mapped[str] = mapped_column(String(500), default="")
+    pdf_size:     Mapped[int] = mapped_column(Integer, default=0)
+    title:        Mapped[str] = mapped_column(String(120), default="")
+    created_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Coupon(Base):
     """优惠券：自家发放、自家核销。
     kind:

@@ -85,6 +85,9 @@ from app.models import (
     Deposit,
     Payment,
     Coupon,
+    ConsentTemplate,
+    ConsentTask,
+    ConsentDocument,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.notify import notify_application_result
