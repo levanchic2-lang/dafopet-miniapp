@@ -53,6 +53,13 @@
      <button type="submit" class="btn secondary" style="font-size:.85rem;">取消任务</button>
    </form>
    {% endif %}
+   {% if task.status in ('pending', 'cancelled') and request.session.get('admin_role') == 'superadmin' %}
+   <form method="post" action="/admin/consent-tasks/{{ task.id }}/delete" style="margin:0;"
+         onsubmit="return confirm('彻底删除这条任务？记录不可恢复。\n（如果只是想停用，请用'取消任务'。已签的任务不能删。）')">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <button type="submit" class="btn" style="font-size:.85rem;background:#fee2e2;color:#dc2626;border-color:#fca5a5;">🗑 删除</button>
+   </form>
+   {% endif %}
    <a href="/admin/customers/{{ task.customer_id }}?tab=docs" class="btn secondary" style="font-size:.85rem;">← 返回</a>
  </div>
 </div>

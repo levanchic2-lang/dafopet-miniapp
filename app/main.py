@@ -5997,6 +5997,36 @@ async def admin_consent_task_regen_pdf(
         )
 
 
+@app.post("/admin/consent-tasks/{task_id}/delete")
+async def admin_consent_task_delete(
+    task_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """彻底删除任务（仅 pending / cancelled 状态可删 — 已签的有法律凭证不能动）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    task = db.get(ConsentTask, task_id)
+    if not task:
+        raise HTTPException(404)
+    if task.status not in ("pending", "cancelled"):
+        return RedirectResponse(
+            f"/admin/consent-tasks/{task_id}?msg=只能删除待签/已取消的任务（已签有法律凭证不可删，请用'取消'）",
+            status_code=303,
+        )
+    cust_id = task.customer_id
+    db.delete(task)   # CASCADE 会顺带清掉关联的 ConsentDocument（如果有）
+    db.commit()
+    _audit(db, request, "consent_task_delete", application_id=None,
+           detail={"task_id": task_id, "customer_id": cust_id, "title": task.title})
+    db.commit()
+    return RedirectResponse(
+        f"/admin/customers/{cust_id}?tab=docs&msg=已删除协议任务",
+        status_code=303,
+    )
+
+
 @app.post("/admin/consent-tasks/{task_id}/cancel")
 async def admin_consent_task_cancel(
     task_id: int, request: Request, db: Session = Depends(get_db),

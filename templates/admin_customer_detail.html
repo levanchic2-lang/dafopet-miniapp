@@ -545,6 +545,13 @@
        {% if ct.status == 'signed' %}
        <a href="/admin/consent-tasks/{{ ct.id }}/printable" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;color:#10b981;">🖨 打印 PDF</a>
        {% endif %}
+       {% if ct.status in ('pending', 'cancelled') and request.session.get('admin_role') == 'superadmin' %}
+       <form method="post" action="/admin/consent-tasks/{{ ct.id }}/delete" style="display:inline;margin:0;"
+             onsubmit="return confirm('删除此任务？记录不可恢复。')">
+         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+         <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.78rem;padding:.2rem .4rem;">🗑</button>
+       </form>
+       {% endif %}
      </td>
    </tr>
    {% endfor %}

@@ -1840,6 +1840,54 @@ def t_customer_binding():
 t_customer_binding()
 
 
+@step("协议任务：pending 可删，signed 不可删")
+def t_consent_task_delete():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import ConsentTask, ConsentTemplate
+    db = SessionLocal()
+    # 造一条 pending 测试删除
+    t = db.query(ConsentTemplate).first()
+    pending_task = ConsentTask(
+        template_id=t.id, customer_id=cust_id,
+        title="测试·待删", snapshot_html="<p>测试</p>",
+        token="del_test_token", status="pending",
+    )
+    db.add(pending_task); db.commit()
+    pid = pending_task.id
+
+    # 找一条已签的
+    signed_task = db.query(ConsentTask).filter(ConsentTask.status == "signed").first()
+    sid = signed_task.id if signed_task else 0
+    db.close()
+
+    r = client.get(f"/admin/consent-tasks/{pid}")
+    token = extract_csrf(r.text)
+
+    # 已签的应被拒
+    if sid:
+        r = client.post(f"/admin/consent-tasks/{sid}/delete", data={"csrf_token": token})
+        assert r.status_code == 303
+        from urllib.parse import unquote
+        loc = unquote(r.headers.get("location", ""))
+        assert "不可删" in loc or "法律凭证" in loc, f"loc={loc}"
+        # 数据库里还在
+        db = SessionLocal()
+        assert db.get(ConsentTask, sid) is not None
+        db.close()
+
+    # pending 可删
+    r = client.post(f"/admin/consent-tasks/{pid}/delete", data={"csrf_token": token})
+    assert r.status_code == 303
+    db = SessionLocal()
+    assert db.get(ConsentTask, pid) is None  # 已被删
+    db.close()
+
+
+t_consent_task_delete()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
