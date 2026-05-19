@@ -520,15 +520,22 @@
 
  {# 待签 / 已取消 / 已过期 任务列表 #}
  {% if consent_tasks %}
+ <div style="font-size:.82rem;color:var(--muted);margin:.5rem 0 .3rem;">📝 协议签署</div>
  <table class="data-table" style="margin-bottom:.8rem;">
    <thead><tr><th>协议</th><th>状态</th><th>发起人</th><th>发起时间</th><th>有效期</th><th style="text-align:right;">操作</th></tr></thead>
    <tbody>
    {% for ct in consent_tasks %}
+   {% set ct_doc = consent_docs_map.get(ct.id) %}
    <tr>
-     <td><strong>{{ ct.title }}</strong></td>
+     <td><strong>{{ ct.title }}</strong>
+       {% if ct.status == 'signed' and ct.signed_at %}<div style="font-size:.72rem;color:var(--muted);">签于 {{ ct.signed_at.strftime('%Y-%m-%d %H:%M') }}</div>{% endif %}
+     </td>
      <td>
      {% if ct.status == 'pending' %}<span class="pill pill-warn">⏳ 待签</span>
-     {% elif ct.status == 'signed' %}<span class="pill pill-ok">✓ 已签</span>
+     {% elif ct.status == 'signed' %}
+       <span class="pill pill-ok">✓ 已签</span>
+       {% if ct_doc %}<div style="font-size:.7rem;color:#10b981;margin-top:2px;">📎 PDF 已归档</div>
+       {% else %}<div style="font-size:.7rem;color:#f59e0b;margin-top:2px;">⚠ PDF 未生成</div>{% endif %}
      {% elif ct.status == 'cancelled' %}<span class="pill pill-gray">✕ 已取消</span>
      {% elif ct.status == 'expired' %}<span class="pill pill-gray">⌛ 已过期</span>
      {% endif %}
@@ -536,13 +543,17 @@
      <td style="color:var(--muted);font-size:.82rem;">{{ ct.initiated_by or '—' }}</td>
      <td style="color:var(--muted);font-size:.82rem;">{{ ct.initiated_at.strftime('%Y-%m-%d %H:%M') if ct.initiated_at else '—' }}</td>
      <td style="color:var(--muted);font-size:.82rem;">{{ ct.expires_at or '不限期' }}</td>
-     <td style="text-align:right;">
+     <td style="text-align:right;white-space:nowrap;">
        <a href="/admin/consent-tasks/{{ ct.id }}" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">查看</a>
+       {% if ct_doc %}
+       <a href="/uploads/{{ ct_doc.pdf_path }}" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;color:#10b981;">📥 PDF</a>
+       {% endif %}
      </td>
    </tr>
    {% endfor %}
    </tbody>
  </table>
+ {% if medical_docs %}<div style="font-size:.82rem;color:var(--muted);margin:.8rem 0 .3rem;">📎 其他文书</div>{% endif %}
  {% endif %}
  {% if medical_docs %}
  <table class="data-table">

@@ -39,6 +39,15 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
   - 调度：`app/services/followup_dispatch.py` 每小时通过 APScheduler 跑
   - 渠道：先小程序订阅消息（`wechat_tmpl_followup`）→ 短信网关 → 电话兜底
   - 客户反馈短链：`/follow-up/{token}`（无登录，token 即凭证）
+- 协议签署系统（commit 1-7 of 协议系列）：
+  - 3 张表：`ConsentTemplate`（模板，Quill HTML + 占位符）/ `ConsentTask`（签署任务，含 token + snapshot_html）/ `ConsentDocument`（归档 PDF）
+  - 后台 `/admin/consent-templates` 维护模板，富文本编辑器（Quill 2.0 CDN）+ 12 个变量占位符（`{{pet_name}}` 等）
+  - 病例 / 客户档案"医疗文书"tab 点 "📝 发起协议签署" → 选模板 + 关联宠物/就诊 → 自动渲染变量 → 生成唯一 token
+  - 客户无登录 H5 `/consent/{token}` → 看协议 + signature_pad canvas 手写 → 提交
+  - 签字成功自动调 `app/services/consent_pdf.py` 用 weasyprint 渲染 PDF 归档到 ConsentDocument
+  - 小程序订阅消息推送：`wechat_tmpl_consent` + push_consent_signature()，5 字段映射（thing5/6/1/time12/4）
+  - 后台任务详情页：复制链接、重发通知、重新生成 PDF
+  - 部署提醒：服务器需 `apt install libpango-1.0-0 libpangoft2-1.0-0 libcairo2`；env 配 WECHAT_TMPL_CONSENT + PUBLIC_BASE_URL
 - 进货单照片识别入库：
   - `app/services/purchase_ocr.py` 调多模态视觉大模型（复用 `settings.openai_*`）
   - 入口：`/admin/inventory/import-photo`（库存页右上角"📸 拍照入库"）

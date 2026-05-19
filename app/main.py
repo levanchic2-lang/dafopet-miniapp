@@ -5008,7 +5008,7 @@ async def page_admin_customer_detail(
     )
     active_coupons_count = sum(1 for c in coupons if c.status == "issued" and not _coupon_is_expired(c))
 
-    # ── 协议签署任务 ──
+    # ── 协议签署任务 + 已归档 PDF ──
     consent_tasks = (
         db.query(ConsentTask)
         .filter(ConsentTask.customer_id == customer_id)
@@ -5016,6 +5016,12 @@ async def page_admin_customer_detail(
         .limit(30)
         .all()
     )
+    # 已签的关联 ConsentDocument（用于"医疗文书"区显示 PDF）
+    signed_task_ids = [t.id for t in consent_tasks if t.status == "signed"]
+    consent_docs_map = {}
+    if signed_task_ids:
+        for d in db.query(ConsentDocument).filter(ConsentDocument.task_id.in_(signed_task_ids)).all():
+            consent_docs_map[d.task_id] = d
     consent_templates_active = (
         db.query(ConsentTemplate)
         .filter(ConsentTemplate.is_active == True)
@@ -5071,6 +5077,7 @@ async def page_admin_customer_detail(
             # 协议签署
             "consent_tasks": consent_tasks,
             "consent_templates": consent_templates_active,
+            "consent_docs_map": consent_docs_map,
             # 翻译字典
             "visit_type_zh": _VISIT_TYPE_ZH,
             "so_status_zh": _SO_STATUS_ZH_LOCAL,
