@@ -1536,6 +1536,57 @@ def t_consent_template_crud():
 t_consent_template_crud()
 
 
+@step("发起协议签署：选模板 → 变量自动替换 → 生成唯一 token 任务")
+def t_consent_task_create():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import ConsentTemplate, ConsentTask
+    db = SessionLocal()
+    # 先确保有个上架模板（之前测试把它下架了，这里造一个新的）
+    t = ConsentTemplate(
+        name="测试·疫苗同意书",
+        category="vaccination",
+        body_html="<p>主人 <b>{{cust_name}}</b> 同意为 <b>{{pet_name}}</b> 接种疫苗。日期 {{date}}。</p>",
+        is_active=True,
+    )
+    db.add(t); db.commit(); db.refresh(t)
+    tid = t.id
+    db.close()
+
+    r = client.get(f"/admin/customers/{cust_id}?tab=docs")
+    token = extract_csrf(r.text)
+    r = client.post("/admin/consent-tasks/create", data={
+        "csrf_token": token, "template_id": str(tid),
+        "customer_id": str(cust_id), "pet_id": str(pet_id),
+        "title_override": "", "expires_at": "", "notes": "测试",
+    })
+    assert r.status_code == 303, f"got {r.status_code}, body[:200]={r.text[:200]}"
+
+    db = SessionLocal()
+    task = db.query(ConsentTask).filter(ConsentTask.template_id == tid).first()
+    assert task is not None
+    assert task.title == "测试·疫苗同意书"
+    assert task.status == "pending"
+    assert task.token and len(task.token) >= 16
+    # 变量应已被替换：原模板有 {{cust_name}}，snapshot 里应该不再有
+    assert "{{cust_name}}" not in task.snapshot_html
+    assert "{{pet_name}}" not in task.snapshot_html
+    # 替换成实际客户名（测试客户A）
+    assert "测试客户A" in task.snapshot_html
+    db.close()
+
+    # 任务详情页可加载
+    r = client.get(f"/admin/consent-tasks/{task.id}")
+    assert r.status_code == 200
+    assert "测试·疫苗同意书" in r.text
+    assert "签署链接" in r.text   # pending 状态下有复制链接区
+    # URL 应含 token
+    assert task.token in r.text
+
+t_consent_task_create()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

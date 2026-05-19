@@ -5008,6 +5008,21 @@ async def page_admin_customer_detail(
     )
     active_coupons_count = sum(1 for c in coupons if c.status == "issued" and not _coupon_is_expired(c))
 
+    # ── 协议签署任务 ──
+    consent_tasks = (
+        db.query(ConsentTask)
+        .filter(ConsentTask.customer_id == customer_id)
+        .order_by(ConsentTask.id.desc())
+        .limit(30)
+        .all()
+    )
+    consent_templates_active = (
+        db.query(ConsentTemplate)
+        .filter(ConsentTemplate.is_active == True)
+        .order_by(ConsentTemplate.id.desc())
+        .all()
+    )
+
     return templates.TemplateResponse(
         request,
         "admin_customer_detail.html",
@@ -5053,6 +5068,9 @@ async def page_admin_customer_detail(
             "active_coupons_count": active_coupons_count,
             "coupon_kind_zh": _COUPON_KIND_ZH,
             "coupon_status_zh": _COUPON_STATUS_ZH,
+            # 协议签署
+            "consent_tasks": consent_tasks,
+            "consent_templates": consent_templates_active,
             # 翻译字典
             "visit_type_zh": _VISIT_TYPE_ZH,
             "so_status_zh": _SO_STATUS_ZH_LOCAL,
@@ -5551,6 +5569,142 @@ async def admin_consent_template_save(
         f"/admin/consent-templates?msg={'已保存' if tid else '已创建'}：{item.name}",
         status_code=303,
     )
+
+
+def _consent_render_snapshot(template_body: str, *, cust=None, pet=None, visit=None,
+                              vet_name="", clinic_name="", pet_weight=0.0, pet_age="") -> str:
+    """把模板里的 {{变量}} 替换成实际值。HTML 安全，不再做 escape（Quill 已经是 HTML）。"""
+    from datetime import date as _date
+    vals = {
+        "{{cust_name}}":  (cust.name if cust else ""),
+        "{{cust_phone}}": (cust.phone if cust else ""),
+        "{{pet_name}}":   (pet.name if pet else ""),
+        "{{pet_species}}": ({"cat":"猫","dog":"狗"}.get(pet.species, pet.species) if pet else ""),
+        "{{pet_breed}}":  (pet.breed if pet else ""),
+        "{{pet_gender}}": ({"male":"公","female":"母","unknown":"未知"}.get(pet.gender, "") if pet else ""),
+        "{{pet_age}}":    (pet_age or ""),
+        "{{pet_weight}}": (f"{pet_weight:.2f}" if pet_weight else ""),
+        "{{visit_date}}": (visit.visit_date if visit else ""),
+        "{{vet_name}}":   (vet_name or ""),
+        "{{date}}":       _date.today().isoformat(),
+        "{{clinic_name}}": (clinic_name or "大风动物医院"),
+    }
+    out = template_body or ""
+    for k, v in vals.items():
+        out = out.replace(k, str(v or "—"))
+    return out
+
+
+@app.post("/admin/consent-tasks/create")
+async def admin_consent_task_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    template_id: int = Form(...),
+    customer_id: int = Form(...),
+    pet_id: int = Form(0),
+    visit_id: int = Form(0),
+    title_override: str = Form(""),
+    expires_at: str = Form(""),
+    notes: str = Form(""),
+):
+    """发起一次协议签署：把模板正文 + 变量快照保存，生成唯一 token。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    tpl = db.get(ConsentTemplate, template_id)
+    if not tpl or not tpl.is_active:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=docs&msg=模板不存在或已下架", status_code=303)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        return RedirectResponse("/admin?msg=客户不存在", status_code=303)
+    pet = db.get(Pet, pet_id) if pet_id else None
+    visit = db.get(Visit, visit_id) if visit_id else None
+    # 取宠物体重 / 年龄
+    pet_weight = 0.0
+    if pet:
+        last_w = db.query(WeightRecord).filter(WeightRecord.pet_id == pet.id).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
+        if last_w:
+            pet_weight = float(last_w.weight_kg or 0)
+    pet_age = ""
+    if pet and pet.birthday_estimate:
+        try:
+            from datetime import date as _date
+            y, m, _ = (pet.birthday_estimate + "-01").split("-")[:3]
+            today = _date.today()
+            years = today.year - int(y) - (1 if today.month < int(m) else 0)
+            pet_age = f"{years} 岁" if years > 0 else f"{max(0, (today.year-int(y))*12 + (today.month-int(m)))} 个月"
+        except Exception:
+            pet_age = pet.birthday_estimate or ""
+    # 渲染快照
+    vet_name = (visit.vet_name if visit else "") or (request.session.get("admin_username", ""))
+    clinic_name = "大风动物医院"
+    if pet and pet.store:
+        clinic_name = f"大风动物医院（{pet.store.replace('店', '分院')}）"
+    snapshot = _consent_render_snapshot(
+        tpl.body_html, cust=cust, pet=pet, visit=visit,
+        vet_name=vet_name, clinic_name=clinic_name,
+        pet_weight=pet_weight, pet_age=pet_age,
+    )
+    task = ConsentTask(
+        template_id=tpl.id,
+        customer_id=customer_id,
+        pet_id=pet_id or None,
+        visit_id=visit_id or None,
+        title=(title_override.strip() or tpl.name)[:120],
+        snapshot_html=snapshot,
+        token=_gen_consent_token(),
+        status="pending",
+        expires_at=(expires_at or "").strip()[:20],
+        store=_get_admin_store(request),
+        initiated_by=request.session.get("admin_username", "admin"),
+        notes=(notes or "").strip(),
+    )
+    db.add(task); db.commit(); db.refresh(task)
+    _audit(db, request, "consent_task_create", application_id=None,
+           detail={"task_id": task.id, "template": tpl.name, "customer_id": customer_id})
+    db.commit()
+    # 跳到任务详情页让 user 复制链接 / 发送
+    return RedirectResponse(f"/admin/consent-tasks/{task.id}?msg=已发起签署", status_code=303)
+
+
+@app.get("/admin/consent-tasks/{task_id}", response_class=HTMLResponse)
+async def admin_consent_task_detail(
+    task_id: int, request: Request, db: Session = Depends(get_db),
+):
+    """任务详情：展示签署链接 + 状态 + 快照预览 + 复制链接。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    task = db.get(ConsentTask, task_id)
+    if not task:
+        raise HTTPException(404)
+    cust = db.get(Customer, task.customer_id) if task.customer_id else None
+    pet = db.get(Pet, task.pet_id) if task.pet_id else None
+    doc = db.query(ConsentDocument).filter(ConsentDocument.task_id == task_id).first()
+    return templates.TemplateResponse(request, "admin_consent_task_detail.html", {
+        "task": task, "cust": cust, "pet": pet, "doc": doc,
+        "status_zh": _CONSENT_STATUS_ZH,
+        "category_zh": _CONSENT_CATEGORY_ZH,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/consent-tasks/{task_id}/cancel")
+async def admin_consent_task_cancel(
+    task_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    task = db.get(ConsentTask, task_id)
+    if not task:
+        raise HTTPException(404)
+    if task.status != "pending":
+        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=只能取消待签状态", status_code=303)
+    task.status = "cancelled"
+    db.commit()
+    return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=已取消", status_code=303)
 
 
 @app.post("/admin/consent-templates/{tid}/toggle")

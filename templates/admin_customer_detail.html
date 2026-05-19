@@ -513,9 +513,37 @@
  {# ── 医疗文书 ── #}
  <div class="tab-content {% if active_tab=='docs' %}active{% endif %}" data-tab-content="docs">
  <div class="tab-action-bar">
+ <button type="button" class="btn" onclick="document.getElementById('init-consent-modal').classList.add('visible')">📝 发起协议签署</button>
  <button type="button" class="btn secondary" onclick="document.getElementById('upload-doc-modal').classList.add('visible')">📎 上传文书</button>
- <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">同意书、协议、报告等</span>
+ <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">同意书、协议、报告 · 含小程序签署归档</span>
  </div>
+
+ {# 待签 / 已取消 / 已过期 任务列表 #}
+ {% if consent_tasks %}
+ <table class="data-table" style="margin-bottom:.8rem;">
+   <thead><tr><th>协议</th><th>状态</th><th>发起人</th><th>发起时间</th><th>有效期</th><th style="text-align:right;">操作</th></tr></thead>
+   <tbody>
+   {% for ct in consent_tasks %}
+   <tr>
+     <td><strong>{{ ct.title }}</strong></td>
+     <td>
+     {% if ct.status == 'pending' %}<span class="pill pill-warn">⏳ 待签</span>
+     {% elif ct.status == 'signed' %}<span class="pill pill-ok">✓ 已签</span>
+     {% elif ct.status == 'cancelled' %}<span class="pill pill-gray">✕ 已取消</span>
+     {% elif ct.status == 'expired' %}<span class="pill pill-gray">⌛ 已过期</span>
+     {% endif %}
+     </td>
+     <td style="color:var(--muted);font-size:.82rem;">{{ ct.initiated_by or '—' }}</td>
+     <td style="color:var(--muted);font-size:.82rem;">{{ ct.initiated_at.strftime('%Y-%m-%d %H:%M') if ct.initiated_at else '—' }}</td>
+     <td style="color:var(--muted);font-size:.82rem;">{{ ct.expires_at or '不限期' }}</td>
+     <td style="text-align:right;">
+       <a href="/admin/consent-tasks/{{ ct.id }}" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">查看</a>
+     </td>
+   </tr>
+   {% endfor %}
+   </tbody>
+ </table>
+ {% endif %}
  {% if medical_docs %}
  <table class="data-table">
  <thead><tr><th>类型</th><th>标题</th><th>文件名</th><th>大小</th><th>上传时间</th><th>上传人</th><th></th></tr></thead>
@@ -1095,6 +1123,55 @@
    <button type="button" class="btn secondary" onclick="document.getElementById('wallet-adjust-modal').classList.remove('visible')">取消</button>
  </div>
  </form>
+ </div>
+</div>
+
+<div class="cd-modal-overlay" id="init-consent-modal">
+ <div class="cd-modal" style="width:480px;">
+ <h3>发起协议签署 — {{ cust.name or '客户' }}</h3>
+ {% if consent_templates %}
+ <form method="post" action="/admin/consent-tasks/create">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+   <input type="hidden" name="customer_id" value="{{ cust.id }}">
+
+   <label>协议模板 *</label>
+   <select name="template_id" required>
+     <option value="">-- 选择 --</option>
+     {% for t in consent_templates %}
+     <option value="{{ t.id }}">{{ t.name }}</option>
+     {% endfor %}
+   </select>
+
+   <label>关联宠物（可选，用于变量替换）</label>
+   <select name="pet_id">
+     <option value="0">— 不指定 —</option>
+     {% for p in pets %}<option value="{{ p.id }}" {% if active_pet and p.id == active_pet.id %}selected{% endif %}>{{ p.name }}{% if p.species %} · {{ '猫' if p.species == 'cat' else '狗' if p.species == 'dog' else p.species }}{% endif %}</option>{% endfor %}
+   </select>
+
+   <label>关联就诊（可选，用于变量替换）</label>
+   <select name="visit_id">
+     <option value="0">— 不指定 —</option>
+     {% for v in visits %}<option value="{{ v.id }}">{{ v.visit_date }} · {{ visit_type_zh.get(v.visit_type, v.visit_type) }}{% if v.vet_name %} · {{ v.vet_name }}{% endif %}</option>{% endfor %}
+   </select>
+
+   <label>自定义标题（可选，默认用模板名）</label>
+   <input name="title_override" placeholder="如 阿宝麻醉知情同意书">
+
+   <label>有效期（可选，YYYY-MM-DD）</label>
+   <input name="expires_at" type="date">
+
+   <label>备注</label>
+   <input name="notes">
+
+   <div style="display:flex;gap:.6rem;margin-top:1rem;">
+     <button type="submit" class="btn" style="flex:1;">✓ 发起</button>
+     <button type="button" class="btn secondary" style="flex:1;" onclick="document.getElementById('init-consent-modal').classList.remove('visible')">取消</button>
+   </div>
+ </form>
+ {% else %}
+ <p style="color:var(--muted);">还没创建任何协议模板。<a href="/admin/consent-templates/create" style="color:#3b82f6;">去新建模板 →</a></p>
+ <button type="button" class="btn secondary" onclick="document.getElementById('init-consent-modal').classList.remove('visible')">关闭</button>
+ {% endif %}
  </div>
 </div>
 

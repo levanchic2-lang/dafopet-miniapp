@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<meta name="tab-label" content="协议·{{ task.title }}"/>
+<meta name="tab-kind" content="detail"/>
+{% endblock %}
+{% block extra_css %}
+<style>
+.consent-preview {
+  background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+  padding:1.5rem 2rem; max-width: 760px; margin:0 auto;
+}
+.consent-preview h1, .consent-preview h2, .consent-preview h3 { margin-top: .8em; }
+.consent-preview p, .consent-preview li { line-height: 1.75; }
+.sig-block {
+  margin-top:2rem; padding-top:1rem; border-top:1px solid #e5e7eb;
+}
+.sig-img { max-height: 100px; max-width: 280px; border:1px solid #e5e7eb; padding:.4rem; background:#fff; }
+.copy-bar {
+  display:flex; gap:.5rem; align-items:center;
+  background:#f9fafb; padding:.6rem .8rem; border-radius:6px;
+  font-family: monospace; font-size:.85rem;
+}
+.copy-bar input { flex:1; border:1px solid #e5e7eb; padding:.4rem .55rem; background:#fff;
+  border-radius:4px; font-family: inherit; color:#111; }
+</style>
+{% endblock %}
+
+{% block body %}
+
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+
+{% set base_url = (request.url.scheme ~ '://' ~ request.url.netloc) %}
+{% set sign_url = base_url ~ '/consent/' ~ task.token %}
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon">📝</span>{{ task.title }}</h1>
+ <p class="ph-sub">
+   #CT{{ '%06d'|format(task.id) }}
+   · 客户 {% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name }}</a>{% else %}—{% endif %}
+   {% if pet %} · 宠物 <b>{{ pet.name }}</b>{% endif %}
+   · 发起时间 {{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '—' }}
+ </p>
+ </div>
+ <div class="ph-actions">
+   {% if task.status == 'pending' %}
+   <form method="post" action="/admin/consent-tasks/{{ task.id }}/cancel" style="margin:0;"
+         onsubmit="return confirm('取消此签署任务？客户将不能再用旧链接签字。')">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <button type="submit" class="btn secondary" style="font-size:.85rem;">取消任务</button>
+   </form>
+   {% endif %}
+   <a href="/admin/customers/{{ task.customer_id }}?tab=docs" class="btn secondary" style="font-size:.85rem;">← 返回</a>
+ </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:1.2rem;align-items:start;">
+
+ <div>
+   <div class="consent-preview">
+     {{ task.snapshot_html|safe }}
+
+     {% if task.status == 'signed' and task.signature_path %}
+     <div class="sig-block">
+       <div style="font-size:.85rem;color:#666;margin-bottom:.5rem;">签字（客户）：</div>
+       <img class="sig-img" src="/uploads/{{ task.signature_path }}" alt="签字"/>
+       <div style="font-size:.75rem;color:#888;margin-top:.4rem;">
+         签署时间：{{ task.signed_at.strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}
+         {% if task.signed_ip %} · IP {{ task.signed_ip }}{% endif %}
+       </div>
+     </div>
+     {% endif %}
+   </div>
+ </div>
+
+ <aside style="display:flex;flex-direction:column;gap:1rem;">
+   {# 状态卡片 #}
+   <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.2rem;">
+     <div style="font-size:.78rem;color:#6b7280;letter-spacing:1px;margin-bottom:.3rem;">STATUS</div>
+     <div style="font-size:1.4rem;font-weight:700;">
+       {% if task.status == 'pending' %}⏳ 待签署
+       {% elif task.status == 'signed' %}<span style="color:#10b981;">✓ 已签署</span>
+       {% elif task.status == 'cancelled' %}<span style="color:#9ca3af;">✕ 已取消</span>
+       {% elif task.status == 'expired' %}<span style="color:#dc2626;">⌛ 已过期</span>
+       {% endif %}
+     </div>
+     {% if task.expires_at %}
+     <div style="font-size:.78rem;color:#6b7280;margin-top:.3rem;">有效期至 {{ task.expires_at }}</div>
+     {% endif %}
+   </div>
+
+   {# 签署链接 #}
+   {% if task.status == 'pending' %}
+   <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.2rem;">
+     <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem;">📋 签署链接</div>
+     <div class="copy-bar">
+       <input type="text" id="sign-url" value="{{ sign_url }}" readonly/>
+       <button type="button" class="btn" style="font-size:.78rem;padding:.35rem .7rem;"
+               onclick="copyUrl()">复制</button>
+     </div>
+     <p style="font-size:.78rem;color:#6b7280;margin:.6rem 0 0;">
+       发给客户（微信/短信均可）。点开链接 → 看协议 → 手写签字 → 自动归档为 PDF。
+     </p>
+   </div>
+   {% endif %}
+
+   {# PDF 归档（仅已签） #}
+   {% if task.status == 'signed' and doc %}
+   <div style="background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:1rem 1.2rem;">
+     <div style="font-size:.85rem;font-weight:600;color:#166534;margin-bottom:.4rem;">📎 已归档 PDF</div>
+     <div style="font-size:.78rem;color:#166534;">{{ doc.title or task.title }}</div>
+     <div style="display:flex;gap:.4rem;margin-top:.6rem;">
+       <a href="/uploads/{{ doc.pdf_path }}" target="_blank" class="btn" style="flex:1;font-size:.82rem;padding:.35rem;background:#10b981;border-color:#10b981;">📥 下载</a>
+       <a href="/uploads/{{ doc.pdf_path }}" target="_blank" class="btn secondary" style="flex:1;font-size:.82rem;padding:.35rem;">🖨 打印</a>
+     </div>
+   </div>
+   {% endif %}
+
+   {# 任务信息 #}
+   <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.2rem;font-size:.85rem;line-height:1.8;">
+     <div style="color:#6b7280;font-size:.78rem;letter-spacing:1px;margin-bottom:.3rem;">DETAILS</div>
+     <div><b>类型</b>　{{ category_zh.get(task.template.category if task.template else '', '—') }}</div>
+     <div><b>发起人</b>{{ task.initiated_by or '—' }}</div>
+     {% if task.notes %}<div><b>备注</b>　{{ task.notes }}</div>{% endif %}
+   </div>
+ </aside>
+</div>
+
+<script>
+function copyUrl(){
+  var u = document.getElementById('sign-url');
+  u.select();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(u.value).then(function(){
+      alert('已复制：' + u.value);
+    });
+  } else {
+    document.execCommand('copy');
+    alert('已复制');
+  }
+}
+</script>
+
+{% endblock %}
