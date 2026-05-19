@@ -5689,6 +5689,77 @@ async def admin_consent_task_detail(
     })
 
 
+# ─── 客户端签署（无登录，token 即凭证） ──────────────────
+@app.get("/consent/{token}", response_class=HTMLResponse)
+async def consent_sign_page(token: str, request: Request, db: Session = Depends(get_db)):
+    task = db.query(ConsentTask).filter(ConsentTask.token == token).first()
+    if not task:
+        raise HTTPException(404, "协议链接不存在或已失效")
+    # 过期检测
+    if task.expires_at:
+        from datetime import date as _date
+        try:
+            y, m, d = task.expires_at.split("-")
+            if _date(int(y), int(m), int(d)) < _date.today() and task.status == "pending":
+                task.status = "expired"
+                db.commit()
+        except Exception:
+            pass
+    cust = db.get(Customer, task.customer_id) if task.customer_id else None
+    pet = db.get(Pet, task.pet_id) if task.pet_id else None
+    return templates.TemplateResponse(request, "consent_sign.html", {
+        "task": task, "cust": cust, "pet": pet,
+        "title": task.title or "协议签署",
+    })
+
+
+@app.post("/consent/{token}/sign")
+async def consent_sign_submit(
+    token: str, request: Request, db: Session = Depends(get_db),
+):
+    task = db.query(ConsentTask).filter(ConsentTask.token == token).first()
+    if not task:
+        return {"ok": False, "error": "协议链接不存在或已失效"}
+    if task.status != "pending":
+        return {"ok": False, "error": f"该协议已 {_CONSENT_STATUS_ZH.get(task.status, task.status)}，不可再次签字"}
+    body = await request.json()
+    sig_data = (body.get("signature") or "").strip()
+    # signature_pad 输出 dataURL 形如 "data:image/png;base64,iVBORw..."
+    if not sig_data.startswith("data:image/") or "," not in sig_data:
+        return {"ok": False, "error": "签字数据无效"}
+    # 简单校验：非空 + 至少几百字节（避免一笔点击空签）
+    payload = sig_data.split(",", 1)[1]
+    if len(payload) < 800:
+        return {"ok": False, "error": "签字过于简单，请重新签字"}
+    # 保存 PNG
+    import base64
+    try:
+        raw = base64.b64decode(payload, validate=True)
+    except Exception:
+        return {"ok": False, "error": "签字数据解码失败"}
+    from pathlib import Path as _P
+    sig_dir = _P("uploads/consent_signatures")
+    sig_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"task_{task.id}_{secrets.token_hex(6)}.png"
+    (sig_dir / fname).write_bytes(raw)
+
+    task.signature_path = f"consent_signatures/{fname}"
+    task.signed_at = datetime.utcnow()
+    task.signed_ip = (request.client.host if request.client else "")[:60]
+    task.status = "signed"
+    db.commit()
+    # C5 commit 后再这里触发 PDF 生成；本 commit 留 hook 占位
+    try:
+        from app.services.consent_pdf import generate_consent_pdf
+        generate_consent_pdf(db, task.id)
+    except ImportError:
+        pass  # C5 还没实装
+    except Exception as _e:
+        # PDF 生成失败不阻断签字成功
+        logger.warning("[consent] PDF 生成失败 task=%s: %s", task.id, _e)
+    return {"ok": True, "task_id": task.id}
+
+
 @app.post("/admin/consent-tasks/{task_id}/cancel")
 async def admin_consent_task_cancel(
     task_id: int, request: Request, db: Session = Depends(get_db),

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>{{ title }} · 大风动物医院</title>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+         background:#f5f7f9; color:#111827; -webkit-text-size-adjust: 100%; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 1rem 1rem 6rem; }
+  .brand { text-align:center; color:#6b7280; font-size:.85rem; padding: 0.5rem 0; }
+  .doc-card {
+    background: #fff; border-radius: 12px; padding: 1.2rem 1.3rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,.04);
+  }
+  .doc-info { font-size: .85rem; color: #6b7280; padding-bottom: .8rem; border-bottom: 1px solid #f3f4f6; margin-bottom: .8rem; }
+  .doc-info b { color: #111; }
+  .doc-body { font-size: 15px; line-height: 1.85; color:#222; }
+  .doc-body h1, .doc-body h2 { font-weight:700; }
+  .doc-body p, .doc-body li { line-height: 1.85; }
+
+  .scroll-hint {
+    background: #fef3c7; color: #92400e; border-left: 3px solid #f59e0b;
+    border-radius: 6px; padding: .6rem .85rem; font-size: .85rem; margin-bottom: .8rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+
+  .sig-card {
+    margin-top: 1rem; background: #fff; border-radius: 12px; padding: 1rem 1.2rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,.04);
+  }
+  .sig-card h3 { margin: 0 0 .6rem; font-size: 1rem; }
+  .sig-box {
+    background: #fafaf7; border: 1.5px dashed #d1d5db; border-radius: 8px;
+    height: 200px; position: relative; overflow: hidden; touch-action: none;
+  }
+  .sig-box canvas { width: 100%; height: 100%; display: block; }
+  .sig-watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: #d1d5db; font-size: 1.4rem; pointer-events: none; letter-spacing: 4px; user-select: none; }
+  .sig-watermark.hide { display: none; }
+  .sig-bar { display:flex; gap: .5rem; margin-top: .6rem; }
+  .sig-bar button {
+    flex: 1; padding: .55rem .8rem; border-radius: 8px;
+    font-size: .92rem; cursor: pointer; border: 1px solid transparent;
+  }
+  .sig-clear { background: #f3f4f6; color: #374151; border-color: #e5e7eb; }
+  .sig-submit { background: #10b981; color: #fff; font-weight: 600; }
+  .sig-submit:disabled { opacity: .45; cursor: not-allowed; }
+
+  .alert { padding: .65rem .85rem; border-radius: 8px; font-size: .88rem; margin-top: .6rem; }
+  .alert.err { background: #fee2e2; color: #991b1b; }
+  .alert.ok { background: #d1fae5; color: #065f46; }
+
+  .footer { text-align:center; color:#9ca3af; font-size:.75rem; margin-top: 1.4rem; }
+
+  /* 已签 / 已取消 / 已过期 状态 */
+  .status-box { text-align:center; padding: 3rem 1.5rem; background:#fff; border-radius: 12px; }
+  .status-box .icon { font-size: 3.5rem; margin-bottom: .8rem; }
+  .status-box h2 { margin: 0 0 .4rem; font-size: 1.2rem; }
+  .status-box p { color: #6b7280; margin: .3rem 0; font-size: .92rem; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+ <div class="brand">🐾 大风动物医院</div>
+
+ {% if task.status == 'pending' %}
+ <div class="doc-card">
+   <div class="doc-info">
+     <b>{{ task.title }}</b>
+     {% if cust %}<div>客户：{{ cust.name }} · {{ cust.phone }}</div>{% endif %}
+     {% if pet %}<div>宠物：{{ pet.name }}{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '狗' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
+     <div>发起时间：{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }}</div>
+   </div>
+   <div class="scroll-hint">⬇ 请滚动阅读以下全文，下方签字。</div>
+   <div class="doc-body">{{ task.snapshot_html|safe }}</div>
+ </div>
+
+ <div class="sig-card">
+   <h3>签字（请用手指/触控笔在框内书写）</h3>
+   <div class="sig-box">
+     <div class="sig-watermark" id="watermark">在此签字</div>
+     <canvas id="sig"></canvas>
+   </div>
+   <div class="sig-bar">
+     <button type="button" class="sig-clear" onclick="clearSig()">重写</button>
+     <button type="button" class="sig-submit" id="submit-btn" onclick="submitSig()" disabled>✓ 提交签字</button>
+   </div>
+   <div id="alert"></div>
+   <p style="font-size:.75rem;color:#9ca3af;margin-top:.7rem;">
+     本次签字将被加密保存到您的诊疗档案，并自动生成 PDF。仅医院与您本人可查阅。
+   </p>
+ </div>
+
+ {% elif task.status == 'signed' %}
+ <div class="status-box">
+   <div class="icon">✅</div>
+   <h2>已签署</h2>
+   <p>签署时间：{{ task.signed_at.strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}</p>
+   <p>本协议已自动归档到您的医院档案。</p>
+ </div>
+
+ {% elif task.status == 'cancelled' %}
+ <div class="status-box">
+   <div class="icon">✕</div>
+   <h2>该协议已被取消</h2>
+   <p>请联系您的主治医师确认情况。</p>
+ </div>
+
+ {% elif task.status == 'expired' %}
+ <div class="status-box">
+   <div class="icon">⌛</div>
+   <h2>该协议已过期</h2>
+   <p>有效期 {{ task.expires_at }}。请联系医院重新发起。</p>
+ </div>
+ {% endif %}
+
+ <div class="footer">大风动物医院 · 本页仅用于本次协议签署</div>
+</div>
+
+{% if task.status == 'pending' %}
+<script>
+(function () {
+  var canvas = document.getElementById('sig');
+  var box = canvas.parentElement;
+  var watermark = document.getElementById('watermark');
+  var submitBtn = document.getElementById('submit-btn');
+  var alertBox = document.getElementById('alert');
+
+  function resize() {
+    var ratio = Math.max(window.devicePixelRatio || 1, 1);
+    canvas.width = box.clientWidth * ratio;
+    canvas.height = box.clientHeight * ratio;
+    canvas.getContext('2d').scale(ratio, ratio);
+    pad.clear();  // 重新计算清画布
+  }
+  var pad = new SignaturePad(canvas, {
+    backgroundColor: 'rgba(0,0,0,0)',
+    penColor: '#111',
+    minWidth: 1.2, maxWidth: 2.4,
+  });
+  pad.addEventListener('beginStroke', function () {
+    watermark.classList.add('hide');
+  });
+  pad.addEventListener('endStroke', function () {
+    submitBtn.disabled = pad.isEmpty();
+  });
+  window.clearSig = function () {
+    pad.clear();
+    watermark.classList.remove('hide');
+    submitBtn.disabled = true;
+    alertBox.innerHTML = '';
+  };
+  window.submitSig = function () {
+    if (pad.isEmpty()) return;
+    submitBtn.disabled = true;
+    submitBtn.textContent = '提交中…';
+    var data = pad.toDataURL('image/png');
+    fetch(window.location.pathname + '/sign', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ signature: data }),
+    }).then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j.ok) {
+          alertBox.innerHTML = '<div class="alert ok">✓ 已签署，正在跳转…</div>';
+          setTimeout(function () { window.location.reload(); }, 800);
+        } else {
+          alertBox.innerHTML = '<div class="alert err">' + (j.error || '提交失败') + '</div>';
+          submitBtn.disabled = false;
+          submitBtn.textContent = '✓ 提交签字';
+        }
+      })
+      .catch(function (e) {
+        alertBox.innerHTML = '<div class="alert err">网络错误：' + e + '</div>';
+        submitBtn.disabled = false;
+        submitBtn.textContent = '✓ 提交签字';
+      });
+  };
+  window.addEventListener('resize', resize);
+  resize();
+})();
+</script>
+{% endif %}
+</body>
+</html>

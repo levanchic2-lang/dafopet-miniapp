@@ -1587,6 +1587,93 @@ def t_consent_task_create():
 t_consent_task_create()
 
 
+@step("客户签字：GET /consent/{token} → POST 签字 → 任务变 signed")
+def t_consent_sign_flow():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import ConsentTask
+    db = SessionLocal()
+    task = db.query(ConsentTask).filter(ConsentTask.status == "pending").first()
+    assert task, "前置：应有 1 条待签任务"
+    tok = task.token
+    tid = task.id
+    db.close()
+
+    # 客户端无登录访问 H5
+    import httpx as _hx
+    pub = _hx.Client(base_url=BASE, follow_redirects=False, timeout=10.0)
+    r = pub.get(f"/consent/{tok}")
+    assert r.status_code == 200
+    assert "签字" in r.text and "测试客户A" in r.text  # 变量已替换
+
+    # 提交签字（模拟一张 signature_pad 输出的 PNG，base64 长度 > 800）
+    import base64
+    fake_png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 800   # 凑长度
+    sig_data = "data:image/png;base64," + base64.b64encode(fake_png_bytes).decode()
+    r = pub.post(f"/consent/{tok}/sign", json={"signature": sig_data})
+    assert r.status_code == 200, f"got {r.status_code}, body={r.text[:200]}"
+    j = r.json()
+    assert j.get("ok") is True, j
+
+    # 校验 DB 状态
+    db = SessionLocal()
+    t2 = db.get(ConsentTask, tid)
+    assert t2.status == "signed"
+    assert t2.signature_path and t2.signature_path.startswith("consent_signatures/")
+    assert t2.signed_at is not None
+    db.close()
+
+    # 再次 GET 应显示"已签署"页
+    r = pub.get(f"/consent/{tok}")
+    assert "已签署" in r.text
+
+    # 不能再次签
+    r = pub.post(f"/consent/{tok}/sign", json={"signature": sig_data})
+    j = r.json()
+    assert j.get("ok") is False
+    assert "不可再次" in j.get("error", "")
+
+    pub.close()
+
+
+t_consent_sign_flow()
+
+
+@step("客户签字：无效 token → 404；签字过短 → 拒绝")
+def t_consent_sign_invalid():
+    import httpx as _hx
+    pub = _hx.Client(base_url=BASE, follow_redirects=False, timeout=10.0)
+    r = pub.get("/consent/THIS_IS_NOT_VALID_TOKEN")
+    assert r.status_code == 404
+
+    # 造一个新 pending 任务专门测试签字过短
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import ConsentTask, ConsentTemplate
+    db = SessionLocal()
+    t = db.query(ConsentTemplate).filter(ConsentTemplate.is_active == True).first()
+    assert t, "前置：应有上架模板"
+    task = ConsentTask(
+        template_id=t.id, customer_id=cust_id, pet_id=pet_id,
+        title="测试·签字过短", snapshot_html="<p>测试</p>",
+        token="test_short_sig_xyz", status="pending",
+    )
+    db.add(task); db.commit()
+    db.close()
+
+    r = pub.post("/consent/test_short_sig_xyz/sign",
+                 json={"signature": "data:image/png;base64,AA=="})
+    j = r.json()
+    assert j.get("ok") is False
+    assert "过于简单" in j.get("error", "")
+    pub.close()
+
+
+t_consent_sign_invalid()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
