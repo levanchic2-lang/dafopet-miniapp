@@ -1454,6 +1454,43 @@ def t_inventory_bulk_edit():
 t_inventory_bulk_edit()
 
 
+@step("收费单整单退款：所有 Payment 撤销 + 状态 refunded")
+def t_invoice_refund_all():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Invoice, Payment
+    db = SessionLocal()
+    # 造一张 100 元单 + 一笔现金支付
+    inv = Invoice(customer_id=cust_id, pet_id=pet_id,
+                  invoice_no="TEST_REFUND", invoice_date="2026-05-19",
+                  subtotal=100.0, total_amount=100.0,
+                  payment_status="unpaid")
+    db.add(inv); db.commit(); db.refresh(inv)
+    inv_id = inv.id
+    db.close()
+
+    r = client.get(f"/admin/invoices/{inv_id}")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/invoices/{inv_id}/add-payment", data={
+        "csrf_token": token, "method": "cash", "amount": "100",
+    })
+    assert r.status_code == 303
+    # 退单
+    r = client.post(f"/admin/invoices/{inv_id}/refund", data={"csrf_token": token})
+    assert r.status_code == 303, f"got {r.status_code}, body={r.text[:200]}"
+
+    db = SessionLocal()
+    inv2 = db.get(Invoice, inv_id)
+    assert inv2.payment_status == "refunded"
+    assert inv2.paid_at is None
+    pays = db.query(Payment).filter(Payment.invoice_id == inv_id).all()
+    assert all(p.status == "cancelled" for p in pays), [p.status for p in pays]
+    db.close()
+
+t_invoice_refund_all()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

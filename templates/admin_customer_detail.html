@@ -436,16 +436,14 @@
 
  <div class="tab-content {% if active_tab=='invoices' %}active{% endif %}" data-tab-content="invoices">
  <div class="tab-action-bar">
- {% if visits %}
- <a class="btn" href="/admin/invoices/create?visit_id={{ visits[0].id }}">＋ 新建收费单（最近就诊）</a>
- {% else %}
- <a class="btn" href="/admin/invoices/create?customer_id={{ cust.id }}">＋ 新建收费单</a>
- {% endif %}
- <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ pet_invoices|length }} 张收费单</span>
+   <span style="color:var(--muted);font-size:.82rem;">
+     💡 收费单由处方/检查/销售单自动生成。这里仅展示和打印。
+   </span>
+   <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ pet_invoices|length }} 张</span>
  </div>
  {% if pet_invoices %}
  <table class="data-table">
- <thead><tr><th>发票号</th><th>金额</th><th>状态</th><th>支付方式</th><th></th></tr></thead>
+ <thead><tr><th>发票号</th><th>金额</th><th>状态</th><th>支付方式</th><th>日期</th><th style="text-align:right;">操作</th></tr></thead>
  <tbody>
  {% for inv in pet_invoices %}
  <tr>
@@ -454,18 +452,28 @@
  <td>
  {% if inv.payment_status == 'paid' %}<span class="pill pill-ok">✓ 已支付</span>
  {% elif inv.payment_status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
+ {% elif inv.payment_status == 'refunded' %}<span class="pill pill-gray">↩ 已退单</span>
  {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
  </td>
  <td>{{ inv.payment_method or '—' }}</td>
- <td><a href="/admin/invoices/{{ inv.id }}">查看 →</a></td>
+ <td style="color:var(--muted);font-size:.82rem;">{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
+ <td style="text-align:right;white-space:nowrap;">
+   <a href="/admin/invoices/{{ inv.id }}" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">查看</a>
+   <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">🖨 打印</a>
+   {% if inv.payment_status == 'paid' and request.session.get('admin_role') == 'superadmin' %}
+   <form method="post" action="/admin/invoices/{{ inv.id }}/refund" style="display:inline;"
+         onsubmit="return confirm('确认对这张收费单整单退款？所有 Payment 流水会逐一撤销（钱包退回、套餐次数恢复、券回 issued、押金还原）。')">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.78rem;padding:.2rem .55rem;">↩ 退单</button>
+   </form>
+   {% endif %}
+ </td>
  </tr>
  {% endfor %}
  </tbody>
  </table>
  {% else %}
- <div class="tab-empty">
- 暂无收费记录。完成就诊后点击上方「＋ 新建收费单（最近就诊）」自动汇总处方/检查费用。
- </div>
+ <div class="tab-empty">暂无收费记录。在处方 / 检查单 / 销售单详情页结算时自动生成。</div>
  {% endif %}
  </div>
 

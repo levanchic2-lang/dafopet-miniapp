@@ -9760,6 +9760,75 @@ async def admin_invoice_pay_legacy(
     return await admin_invoice_add_payment(inv_id=inv_id, request=request, db=db)
 
 
+@app.post("/admin/invoices/{inv_id}/refund")
+async def admin_invoice_refund(
+    inv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """整单退款：把所有 success 状态的 Payment 逐一 void，
+    自动回滚钱包/套餐/押金/优惠券副作用，invoice.payment_status 标 refunded。
+    """
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404)
+    if inv.payment_status != "paid":
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=只有已支付的单可整单退", status_code=303)
+    operator = request.session.get("admin_username", "admin")
+    pays = db.query(Payment).filter(
+        Payment.invoice_id == inv_id, Payment.status == "success"
+    ).all()
+    voided = 0
+    for p in pays:
+        # 重用 void 逻辑（复制实现，避免循环 await）
+        if p.method == "wallet" and p.ref_id:
+            wallet = _get_or_create_wallet(db, p.customer_id)
+            try:
+                _wallet_apply_tx(
+                    db, wallet, tx_type="adjust", amount=float(p.amount),
+                    operator=operator, store=p.store,
+                    note=f"整单退款 {inv.invoice_no or inv.id} 钱包返还",
+                )
+            except HTTPException:
+                pass
+        elif p.method == "package" and p.ref_id:
+            cp = db.get(CustomerPackage, p.ref_id)
+            if cp and cp.used_count > 0:
+                cp.used_count -= 1
+                if cp.status == "exhausted" and cp.used_count < cp.total_uses:
+                    cp.status = "active"
+            for r in db.query(PackageRedemption).filter(
+                PackageRedemption.invoice_id == inv_id,
+                PackageRedemption.customer_package_id == p.ref_id,
+            ).all():
+                db.delete(r)
+        elif p.method == "deposit" and p.ref_id:
+            d = db.get(Deposit, p.ref_id)
+            if d:
+                d.applied_amount = max(0.0, (d.applied_amount or 0) - float(p.amount))
+                d.status = "held" if d.applied_amount <= 0 else "partial_refund"
+                if d.applied_amount <= 0:
+                    d.applied_invoice_id = None
+        elif p.method == "coupon" and p.ref_id:
+            c = db.get(Coupon, p.ref_id)
+            if c and c.status == "used" and c.used_invoice_id == inv_id:
+                c.status = "issued"; c.used_invoice_id = None; c.used_amount = 0.0; c.used_at = None
+        p.status = "cancelled"
+        voided += 1
+    inv.payment_status = "refunded"
+    inv.paid_at = None
+    inv.notes = ((inv.notes or "") + f"\n[整单退款 by {operator} · 撤销 {voided} 笔]").strip()
+    db.commit()
+    _audit(db, request, "invoice_refund", application_id=None,
+           detail={"invoice_id": inv_id, "voided_payments": voided})
+    db.commit()
+    return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已整单退款（撤销 {voided} 笔收款）", status_code=303)
+
+
 @app.post("/admin/invoices/{inv_id}/cancel")
 async def admin_invoice_cancel(
     inv_id: int,
