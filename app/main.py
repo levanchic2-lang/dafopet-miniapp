@@ -5664,8 +5664,70 @@ async def admin_consent_task_create(
     _audit(db, request, "consent_task_create", application_id=None,
            detail={"task_id": task.id, "template": tpl.name, "customer_id": customer_id})
     db.commit()
-    # 跳到任务详情页让 user 复制链接 / 发送
-    return RedirectResponse(f"/admin/consent-tasks/{task.id}?msg=已发起签署", status_code=303)
+    # 自动推送小程序订阅消息（有 openid 才推）
+    pushed = _try_push_consent_notice(db, task, cust, pet)
+    suffix = "并已推送小程序通知" if pushed else "（客户无小程序授权，请手动复制链接发送）"
+    return RedirectResponse(f"/admin/consent-tasks/{task.id}?msg=已发起签署{suffix}", status_code=303)
+
+
+def _try_push_consent_notice(db: Session, task: "ConsentTask", cust: "Customer | None", pet: "Pet | None") -> bool:
+    """尝试给客户推送小程序订阅消息。无 openid / 模板未配 → 返回 False（静默）。"""
+    if not cust:
+        return False
+    openid = (cust.wechat_openid or "").strip()
+    if not openid and cust.phone:
+        # 兜底：按手机号在 Application 表里找历史 openid
+        app_row = (
+            db.query(Application)
+            .filter(Application.phone == cust.phone, Application.wechat_openid != "")
+            .order_by(Application.id.desc())
+            .first()
+        )
+        if app_row and app_row.wechat_openid:
+            openid = app_row.wechat_openid.strip()
+    if not openid:
+        return False
+    clinic_name = "大风动物医院"
+    if pet and pet.store:
+        clinic_name = f"大风动物医院（{pet.store.replace('店', '分院')}）"
+    base_url = (settings.public_base_url or "").strip().rstrip("/")
+    sign_url = f"{base_url}/consent/{task.token}" if base_url else f"/consent/{task.token}"
+    initiated_at = task.initiated_at.strftime("%Y-%m-%d %H:%M") if task.initiated_at else ""
+    try:
+        from app.services.wechat_miniapp import push_consent_signature
+        return push_consent_signature(
+            db, openid=openid,
+            cust_name=cust.name or "客户",
+            clinic_name=clinic_name,
+            title=task.title or "诊疗协议",
+            initiated_at=initiated_at,
+            sign_url=sign_url,
+            customer_id=cust.id,
+        )
+    except Exception as e:
+        logger.warning("[consent] 推送小程序通知失败 task=%s: %s", task.id, e)
+        return False
+
+
+@app.post("/admin/consent-tasks/{task_id}/resend")
+async def admin_consent_task_resend(
+    task_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """手动重发小程序订阅消息。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    task = db.get(ConsentTask, task_id)
+    if not task:
+        raise HTTPException(404)
+    if task.status != "pending":
+        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=仅待签状态可重发", status_code=303)
+    cust = db.get(Customer, task.customer_id) if task.customer_id else None
+    pet = db.get(Pet, task.pet_id) if task.pet_id else None
+    ok = _try_push_consent_notice(db, task, cust, pet)
+    msg = "已重发小程序通知" if ok else "推送失败（客户无小程序授权 / 模板未配置 / API 错误）"
+    return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg={msg}", status_code=303)
 
 
 @app.get("/admin/consent-tasks/{task_id}", response_class=HTMLResponse)

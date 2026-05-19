@@ -676,3 +676,73 @@ def push_followup(
         ))
         db.commit()
         return False
+
+
+def push_consent_signature(
+    db: Session,
+    openid: str,
+    cust_name: str,
+    clinic_name: str,
+    title: str,
+    initiated_at: str,
+    sign_url: str,
+    *,
+    customer_id: int | None = None,
+) -> bool:
+    """推送电子合同签约通知（协议签署）。返回是否成功。
+    模板字段：thing5=甲方(客户) / thing6=乙方(医院) / thing1=合同名称 / time12=发起时间 / thing4=备注。
+    """
+    tmpl_id = (settings.wechat_tmpl_consent or "").strip()
+    if not tmpl_id or not _enabled() or not openid:
+        return False
+
+    def v(x: str, fallback: str = "—", max_len: int = 20) -> str:
+        s = (x or "").strip()
+        return (s if s else fallback)[:max_len]
+
+    keys = [k.strip() for k in (settings.wechat_fields_consent or "").split(",") if k.strip()]
+    if not keys:
+        keys = ["thing5", "thing6", "thing1", "time12", "thing4"]
+
+    data: dict[str, Any] = {}
+    for k in keys:
+        if k == "thing5":   # 甲方 = 客户
+            data[k] = {"value": v(cust_name, "客户")}
+        elif k == "thing6": # 乙方 = 医院
+            data[k] = {"value": v(clinic_name, "大风动物医院")}
+        elif k == "thing1": # 合同名称
+            data[k] = {"value": v(title, "诊疗协议")}
+        elif k.startswith("time"):  # 发起时间
+            data[k] = {"value": v(initiated_at, time.strftime("%Y-%m-%d %H:%M"))}
+        elif k == "thing4": # 备注
+            data[k] = {"value": "请尽快前往小程序完成签约"[:20]}
+        else:
+            data[k] = {"value": v(title)}
+
+    payload = {
+        "touser": openid,
+        "template_id": tmpl_id,
+        "page": settings.wechat_message_page,
+        "data": data,
+        "miniprogram_state": "formal",
+        "lang": "zh_CN",
+    }
+    try:
+        resp = _post_subscribe_send(payload)
+        db.add(NotificationLog(
+            application_id=customer_id or 0,
+            channel="wechat_miniapp",
+            payload=json.dumps({"type": "consent_signature", "sign_url": sign_url, "resp": resp}, ensure_ascii=False),
+            success=True,
+        ))
+        db.commit()
+        return True
+    except Exception as e:
+        db.add(NotificationLog(
+            application_id=customer_id or 0,
+            channel="wechat_miniapp",
+            payload=f"consent push failed: {e}",
+            success=False,
+        ))
+        db.commit()
+        return False

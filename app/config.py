@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     wechat_tmpl_vaccine_reminder: str = ""
     # 回访通知模板 ID（字段：thing1=宠物名,thing2=就诊类型,time3=就诊日,thing4=温馨提示）
     wechat_tmpl_followup: str = ""
+    # 协议签署通知模板 ID（电子合同签约通知，字段：thing5=甲方,thing6=乙方,thing1=合同名称,time12=发起时间,thing4=备注）
+    wechat_tmpl_consent: str = ""
     # 点击消息打开的小程序页面（可选）
     wechat_message_page: str = "pages/index/index"
 
@@ -81,6 +83,8 @@ class Settings(BaseSettings):
     wechat_fields_vaccine_reminder: str = "thing5,thing8,thing11,time7"
     # 回访通知模板字段：thing1=宠物名,thing2=就诊类型,time3=就诊日,thing4=温馨提示
     wechat_fields_followup: str = "thing1,thing2,time3,thing4"
+    # 协议签署模板字段：thing5=甲方(客户),thing6=乙方(医院),thing1=合同名称(协议标题),time12=发起时间,thing4=备注
+    wechat_fields_consent: str = "thing5,thing6,thing1,time12,thing4"
 
     # 公开访问 URL 前缀（用于生成回访反馈短链等）。例：https://api.dafopet.com
     public_base_url: str = ""
