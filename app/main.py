@@ -7657,6 +7657,10 @@ async def admin_inventory_import_photo_commit(
     created = 0
     stocked_in = 0
     skipped = 0
+    merged = 0
+    # 同批次内的 create 去重：normalize(name+spec) → 已创建 item
+    from app.services.purchase_ocr import dedup_key as _dedup_key
+    inbatch_created: dict[str, InventoryItem] = {}
 
     for i in range(n):
         action = (form.get(f"row{i}_action") or "skip").strip()
@@ -7694,21 +7698,47 @@ async def admin_inventory_import_photo_commit(
                 skipped += 1
                 continue
         else:  # create
-            item = InventoryItem(
-                name=name[:200],
-                category="medication",
-                unit=unit[:20],
-                sell_price=0.0,
-                cost_price=unit_price,
-                stock_qty=0.0,
-                low_stock_min=0.0,
-                notes=spec,
-                created_by=operator,
-                is_active=True,
-            )
-            db.add(item)
-            db.flush()
-            created += 1
+            # 同批次内去重：相同 normalize(name+spec) 已经在本次创建过 → 直接复用
+            dkey = _dedup_key(name, spec)
+            existing_in_batch = inbatch_created.get(dkey)
+            if existing_in_batch:
+                item = existing_in_batch
+                merged += 1
+            else:
+                # 还要再防一道：可能本次跑里有 reuse 操作刚把它建过；
+                # 或同名 item 已在 DB 但客户端没匹配上（保险查一遍）
+                from app.services.purchase_ocr import _normalize, _strip_brand_prefix
+                tnorm = _normalize(_strip_brand_prefix(name))
+                if tnorm:
+                    db_dup = db.query(InventoryItem).filter(
+                        InventoryItem.is_active == True,
+                        InventoryItem.name == name,
+                    ).first()
+                    if db_dup:
+                        item = db_dup
+                        merged += 1
+                        inbatch_created[dkey] = item
+                    else:
+                        item = None
+                else:
+                    item = None
+                if item is None:
+                    item = InventoryItem(
+                        name=name[:200],
+                        category="medication",
+                        unit=unit[:20],
+                        sell_price=0.0,
+                        cost_price=unit_price,
+                        stock_qty=0.0,
+                        low_stock_min=0.0,
+                        notes=spec,
+                        created_by=operator,
+                        is_active=True,
+                    )
+                    db.add(item)
+                    db.flush()
+                    inbatch_created[dkey] = item
+                    created += 1
 
         # 累加库存 + 写流水
         qty_before = float(item.stock_qty or 0)
@@ -7741,10 +7771,12 @@ async def admin_inventory_import_photo_commit(
 
     db.commit()
     _audit(db, request, "inventory_import_photo", application_id=None,
-           detail={"new": created, "stocked": stocked_in, "skipped": skipped})
+           detail={"new": created, "stocked": stocked_in, "skipped": skipped, "merged": merged})
     db.commit()
-    msg = f"入库完成：新增 {created} 个品目，{stocked_in} 笔入库" + (f"，跳过 {skipped} 行" if skipped else "")
-    return RedirectResponse(f"/admin/inventory?msg={msg}", status_code=303)
+    parts = [f"新增 {created} 个品目", f"{stocked_in} 笔入库"]
+    if merged: parts.append(f"自动合并 {merged} 行同名")
+    if skipped: parts.append(f"跳过 {skipped} 行")
+    return RedirectResponse(f"/admin/inventory?msg=入库完成：{'，'.join(parts)}", status_code=303)
 
 
 @app.get("/admin/inventory", response_class=HTMLResponse)

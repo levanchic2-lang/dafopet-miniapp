@@ -125,34 +125,71 @@ async def recognize_purchase_photo(image_paths: list[Path]) -> dict[str, Any]:
 
 # ─── 匹配：识别出的品名 → 已有 InventoryItem ──────────────────
 def _normalize(s: str) -> str:
-    """去空格、统一大小写、常见单位统一，用于模糊匹配。"""
+    """去空格、统一大小写、剥离常见标点，用于模糊匹配。"""
     if not s:
         return ""
     out = s.strip().lower()
     for ch in (" ", "\t", "　", "·", "-", "_"):
         out = out.replace(ch, "")
-    # 单位单复数 + 中英
     return out
 
 
+def _strip_brand_prefix(s: str) -> str:
+    """去掉开头的"厂家："或"品牌-"前缀，便于跨厂家匹配。
+    例：'萌邦：宠尔康（复方氟康唑乳膏）' → '宠尔康（复方氟康唑乳膏）'
+    """
+    if not s:
+        return ""
+    for sep in ("：", ":", "·", " ", "—", "-"):
+        idx = s.find(sep)
+        # 前缀必须比较短（≤ 6 字符），否则可能是正文中的标点
+        if 0 < idx <= 6:
+            return s[idx + 1:].strip()
+    return s
+
+
 def match_item_by_name(name: str, all_items: list) -> tuple[int, float]:
-    """返回 (item_id, confidence)。confidence 0~1，1=完全一致。
-    无匹配返回 (0, 0)。"""
+    """返回 (item_id, confidence)。0~1，1=完全一致。无匹配返回 (0, 0)。
+    匹配策略：
+      1. 全名 normalize 后完全相等 → 1.0
+      2. 剥前缀后完全相等 → 0.95
+      3. SequenceMatcher（同时对原名 / 剥前缀名都跑一遍，取较优）
+      4. 子串包含给加分到 0.9
+    阈值：0.7
+    """
     from difflib import SequenceMatcher
-    target = _normalize(name)
-    if not target:
+    target_full = _normalize(name)
+    if not target_full:
         return (0, 0.0)
+    target_stripped = _normalize(_strip_brand_prefix(name))
     best = (0, 0.0)
     for it in all_items:
-        n = _normalize(it.name or "")
-        if not n:
+        n_full = _normalize(it.name or "")
+        if not n_full:
             continue
-        if n == target:
+        if n_full == target_full:
             return (it.id, 1.0)
-        ratio = SequenceMatcher(None, n, target).ratio()
-        # 子串包含给加分
-        if target in n or n in target:
+        n_stripped = _normalize(_strip_brand_prefix(it.name or ""))
+        if target_stripped and (target_stripped == n_full or target_stripped == n_stripped):
+            return (it.id, 0.95)
+        # 4 个组合两两比，取最高
+        ratios = [SequenceMatcher(None, n_full, target_full).ratio()]
+        if target_stripped:
+            ratios.append(SequenceMatcher(None, n_full, target_stripped).ratio())
+            if n_stripped != n_full:
+                ratios.append(SequenceMatcher(None, n_stripped, target_stripped).ratio())
+                ratios.append(SequenceMatcher(None, n_stripped, target_full).ratio())
+        ratio = max(ratios)
+        # 子串包含加分
+        if (target_full in n_full or n_full in target_full or
+            (target_stripped and (target_stripped in n_full or n_full in target_stripped))):
             ratio = max(ratio, 0.9)
         if ratio > best[1]:
             best = (it.id, ratio)
     return best if best[1] >= 0.7 else (0, best[1])
+
+
+def dedup_key(name: str, spec: str = "") -> str:
+    """同一批 OCR 结果内的去重键：剥前缀 + normalize + 规格。
+    用于把"同一次上传"里重复的多行合并入库。"""
+    return _normalize(_strip_brand_prefix(name)) + "|" + _normalize(spec)

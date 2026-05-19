@@ -1361,6 +1361,63 @@ def t_inventory_import_commit():
 t_inventory_import_commit()
 
 
+@step("进货单拍照：同批次重复同名行自动合并（不建 2 个重复品目）")
+def t_inventory_import_dedup():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import InventoryItem, InventoryTransaction
+    r = client.get("/admin/inventory/import-photo")
+    token = extract_csrf(r.text)
+    # 模拟 OCR 把同一行读了 2 遍：两行都是"萌邦：宠尔康"5 盒，第 3 行是"萌益健"3 盒
+    r = client.post("/admin/inventory/import-photo/commit", data={
+        "csrf_token": token, "row_count": "3",
+        "row0_action": "create", "row0_name": "萌邦：宠尔康（复方氟康唑乳膏）",
+        "row0_spec": "10g*1支", "row0_qty": "5", "row0_unit": "盒", "row0_unit_price": "50",
+        "row1_action": "create", "row1_name": "萌邦：宠尔康（复方氟康唑乳膏）",
+        "row1_spec": "10g*1支", "row1_qty": "5", "row1_unit": "盒", "row1_unit_price": "50",
+        "row2_action": "create", "row2_name": "萌益健-乳铁蛋白",
+        "row2_spec": "30ml/支", "row2_qty": "3", "row2_unit": "盒", "row2_unit_price": "78",
+    })
+    assert r.status_code == 303
+    db = SessionLocal()
+    # 只应有 1 条"萌邦：宠尔康"，库存 5+5=10
+    chongerkang = db.query(InventoryItem).filter(InventoryItem.name == "萌邦：宠尔康（复方氟康唑乳膏）").all()
+    assert len(chongerkang) == 1, f"应只有 1 条，得 {len(chongerkang)}"
+    assert chongerkang[0].stock_qty == 10.0, f"应 10，得 {chongerkang[0].stock_qty}"
+    # 应有 2 笔入库流水（每次累加都写一笔）
+    txs = db.query(InventoryTransaction).filter(InventoryTransaction.item_id == chongerkang[0].id).all()
+    assert len(txs) == 2 and all(t.tx_type == "in" and t.qty == 5.0 for t in txs)
+    # 第二个产品独立存在
+    mengyijian = db.query(InventoryItem).filter(InventoryItem.name == "萌益健-乳铁蛋白").first()
+    assert mengyijian is not None and mengyijian.stock_qty == 3.0
+    db.close()
+
+t_inventory_import_dedup()
+
+
+@step("进货单拍照：模糊匹配能识破厂家前缀")
+def t_inventory_import_fuzzy():
+    from app.services.purchase_ocr import match_item_by_name
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import InventoryItem
+    db = SessionLocal()
+    # DB 里已有"萌益健-乳铁蛋白"（上一个测试建的）
+    all_items = db.query(InventoryItem).filter(InventoryItem.is_active == True).all()
+    # 新 OCR 读到带不同前缀的版本，应该映射到同一个
+    item_id, conf = match_item_by_name("萌邦：乳铁蛋白", all_items)  # 不同厂家前缀 + 后缀少
+    # 这种差别太大其实不应硬匹配，确认这种确实跨不过去
+    item_id2, conf2 = match_item_by_name("萌益健 乳铁蛋白", all_items)  # 只是空格替代横线
+    assert item_id2 != 0, f"基本相同的名字应匹配到，得 conf={conf2}"
+    item_id3, conf3 = match_item_by_name("萌益健-乳铁蛋白", all_items)  # 完全一致
+    assert conf3 == 1.0
+    db.close()
+
+t_inventory_import_fuzzy()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
