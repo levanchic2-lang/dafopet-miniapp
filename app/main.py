@@ -5748,16 +5748,41 @@ async def consent_sign_submit(
     task.signed_ip = (request.client.host if request.client else "")[:60]
     task.status = "signed"
     db.commit()
-    # C5 commit 后再这里触发 PDF 生成；本 commit 留 hook 占位
+    # PDF 自动归档（失败不阻断签字成功 — 系统库缺也只是 PDF 不生成）
     try:
         from app.services.consent_pdf import generate_consent_pdf
         generate_consent_pdf(db, task.id)
-    except ImportError:
-        pass  # C5 还没实装
+    except (ImportError, OSError) as _e:
+        logger.info("[consent] PDF 渲染环境不可用，签字仍成功（task=%s）: %s", task.id, _e)
     except Exception as _e:
-        # PDF 生成失败不阻断签字成功
-        logger.warning("[consent] PDF 生成失败 task=%s: %s", task.id, _e)
+        logger.warning("[consent] PDF 生成异常 task=%s: %s", task.id, _e)
     return {"ok": True, "task_id": task.id}
+
+
+@app.post("/admin/consent-tasks/{task_id}/regenerate-pdf")
+async def admin_consent_task_regen_pdf(
+    task_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """手动重新生成 PDF（已签未归档时用）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    task = db.get(ConsentTask, task_id)
+    if not task:
+        raise HTTPException(404)
+    if task.status != "signed":
+        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=只有已签状态可生成 PDF", status_code=303)
+    try:
+        from app.services.consent_pdf import generate_consent_pdf
+        path = generate_consent_pdf(db, task_id)
+        if path:
+            return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=PDF 已生成", status_code=303)
+        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=PDF 生成失败，请查后台日志", status_code=303)
+    except (ImportError, OSError) as e:
+        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=PDF 渲染环境不可用（需装 weasyprint + 系统库 pango/cairo）", status_code=303)
+    except Exception as e:
+        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=PDF 生成异常 {str(e)[:80]}", status_code=303)
 
 
 @app.post("/admin/consent-tasks/{task_id}/cancel")

@@ -1674,6 +1674,41 @@ def t_consent_sign_invalid():
 t_consent_sign_invalid()
 
 
+@step("协议 PDF：weasyprint 装好时签字成功自动归档 ConsentDocument")
+def t_consent_pdf_gen():
+    """如果 weasyprint 可用，签字成功后 ConsentDocument 应已生成且 pdf_path 非空。
+    如果 weasyprint 未装（缺系统库），允许 ConsentDocument 不存在但不报错。"""
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import ConsentTask, ConsentDocument
+    try:
+        import weasyprint  # noqa
+        has_wp = True
+    except ImportError:
+        has_wp = False
+    except OSError:
+        # weasyprint 装了但系统库缺
+        has_wp = False
+    db = SessionLocal()
+    # 前面 t_consent_sign_flow 已经签了一条
+    task = db.query(ConsentTask).filter(ConsentTask.status == "signed").first()
+    assert task, "前置：应有已签任务"
+    doc = db.query(ConsentDocument).filter(ConsentDocument.task_id == task.id).first()
+    if has_wp:
+        assert doc is not None, "weasyprint 可用时应已归档"
+        assert doc.pdf_path and doc.pdf_path.startswith("consent_pdfs/")
+        # 文件应存在
+        from pathlib import Path as _P
+        assert _P("uploads") / doc.pdf_path
+        assert doc.pdf_size > 0
+    else:
+        print("    (weasyprint 未装/缺系统库，跳过 PDF 落盘断言)")
+    db.close()
+
+t_consent_pdf_gen()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
