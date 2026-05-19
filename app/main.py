@@ -94,6 +94,8 @@ from app.services.notify import notify_application_result
 from app.services.backup_local import create_backup_zip, is_safe_backup_filename, list_backup_zips
 from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_pending_manual_notice, push_rejection_notice, push_surgery_done, push_surgery_reminder, push_vaccine_reminder, wechat_code2session
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title=settings.app_name)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, session_cookie="tnr_session")
 
@@ -204,6 +206,10 @@ if _static_dir.is_dir():
     app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+# /uploads 静态文件兜底（生产 nginx 通常会优先匹配；本地 / 无 nginx 时由 FastAPI 直接提供）
+_uploads_dir = Path(settings.upload_dir).resolve()
+if _uploads_dir.is_dir():
+    app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
 
 # 中国省 / 市 / 区 / 街道四级数据（static/china_pcas.json，来源见 static/china_pcas.source.txt）
 _china_pcas: dict | None = None
@@ -5929,9 +5935,9 @@ async def consent_sign_submit(
     # PDF 自动归档（失败不阻断签字成功 — 系统库缺也只是 PDF 不生成）
     try:
         from app.services.consent_pdf import generate_consent_pdf
-        generate_consent_pdf(db, task.id)
-    except (ImportError, OSError) as _e:
-        logger.info("[consent] PDF 渲染环境不可用，签字仍成功（task=%s）: %s", task.id, _e)
+        path, err = generate_consent_pdf(db, task.id)
+        if err:
+            logger.info("[consent] PDF 自动生成跳过 task=%s: %s", task.id, err)
     except Exception as _e:
         logger.warning("[consent] PDF 生成异常 task=%s: %s", task.id, _e)
     return {"ok": True, "task_id": task.id}
@@ -5953,14 +5959,20 @@ async def admin_consent_task_regen_pdf(
         return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=只有已签状态可生成 PDF", status_code=303)
     try:
         from app.services.consent_pdf import generate_consent_pdf
-        path = generate_consent_pdf(db, task_id)
+        path, err = generate_consent_pdf(db, task_id)
         if path:
             return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=PDF 已生成", status_code=303)
-        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=PDF 生成失败，请查后台日志", status_code=303)
-    except (ImportError, OSError) as e:
-        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=PDF 渲染环境不可用（需装 weasyprint + 系统库 pango/cairo）", status_code=303)
+        from urllib.parse import quote
+        return RedirectResponse(
+            f"/admin/consent-tasks/{task_id}?msg=" + quote(f"PDF 失败：{err or '未知错误'}"),
+            status_code=303,
+        )
     except Exception as e:
-        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=PDF 生成异常 {str(e)[:80]}", status_code=303)
+        from urllib.parse import quote
+        return RedirectResponse(
+            f"/admin/consent-tasks/{task_id}?msg=" + quote(f"PDF 异常：{type(e).__name__}: {str(e)[:120]}"),
+            status_code=303,
+        )
 
 
 @app.post("/admin/consent-tasks/{task_id}/cancel")

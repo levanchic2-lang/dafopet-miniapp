@@ -116,21 +116,27 @@ def _build_html(task, cust, pet, doc_url_suffix: str, clinic_name: str) -> str:
 """
 
 
-def generate_consent_pdf(db: Session, task_id: int) -> Optional[str]:
-    """渲染并保存 PDF。返回相对路径（如 consent_pdfs/task_42.pdf），失败返回 None。
+def generate_consent_pdf(db: Session, task_id: int) -> tuple[Optional[str], Optional[str]]:
+    """渲染并保存 PDF。返回 (相对路径, 错误信息)；成功时错误为 None。
     成功时会 upsert ConsentDocument。
     """
     try:
         from weasyprint import HTML
-    except (ImportError, OSError) as e:
-        # ImportError = 包未装；OSError = 系统库缺（如 Windows 无 GTK / Linux 无 pango）
-        logger.warning("[consent_pdf] weasyprint 不可用：%s", e)
-        return None
+    except ImportError as e:
+        msg = f"weasyprint 包未安装：{e}（服务器跑 pip install weasyprint）"
+        logger.warning("[consent_pdf] %s", msg)
+        return None, msg
+    except OSError as e:
+        msg = f"weasyprint 系统库缺失：{e}（Linux: apt install libpango-1.0-0 libpangoft2-1.0-0 libcairo2）"
+        logger.warning("[consent_pdf] %s", msg)
+        return None, msg
 
     from app.models import ConsentTask, ConsentDocument, Customer, Pet
     task = db.get(ConsentTask, task_id)
-    if not task or task.status != "signed":
-        return None
+    if not task:
+        return None, "任务不存在"
+    if task.status != "signed":
+        return None, f"任务状态为 {task.status}，仅 signed 可生成 PDF"
     cust = db.get(Customer, task.customer_id) if task.customer_id else None
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
 
@@ -146,8 +152,9 @@ def generate_consent_pdf(db: Session, task_id: int) -> Optional[str]:
     try:
         HTML(string=html_str).write_pdf(target=str(out_path))
     except Exception as e:
-        logger.warning("[consent_pdf] 渲染失败 task=%s: %s", task.id, e)
-        return None
+        msg = f"weasyprint 渲染异常：{type(e).__name__}: {e}"
+        logger.warning("[consent_pdf] 渲染失败 task=%s: %s", task.id, msg)
+        return None, msg
 
     rel_path = f"consent_pdfs/{fname}"
     size = out_path.stat().st_size if out_path.exists() else 0
@@ -168,4 +175,4 @@ def generate_consent_pdf(db: Session, task_id: int) -> Optional[str]:
         ))
     db.commit()
     logger.info("[consent_pdf] 生成 task=%s → %s (%d bytes)", task.id, rel_path, size)
-    return rel_path
+    return rel_path, None
