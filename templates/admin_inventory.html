@@ -13,6 +13,35 @@
 .inv-chip.c-info.active { background: #eff6ff; color: #1d4ed8; border-color: #2563eb; }
 .inv-chip.c-purple.active { background: #f5f3ff; color: #5b21b6; border-color: #7c3aed; }
 .inv-chip strong { font-weight: 700; margin-left: 0.15rem; }
+
+/* === 批量编辑底部条 === */
+.bulk-bar {
+  position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%);
+  background: #111827; color: #fff; border-radius: 10px;
+  padding: .7rem 1rem; box-shadow: 0 8px 32px rgba(0,0,0,.25);
+  display: none; align-items: center; gap: .6rem;
+  z-index: 980; max-width: 92vw; flex-wrap: wrap;
+}
+.bulk-bar.visible { display: flex; }
+.bulk-bar .count { font-weight: 700; padding-right: .4rem; border-right: 1px solid #374151; margin-right: .2rem; }
+.bulk-bar select, .bulk-bar input[type="number"] {
+  background: rgba(255,255,255,.08); color: #fff; border: 1px solid #374151;
+  padding: .3rem .5rem; border-radius: 6px; font-size: .85rem;
+  min-width: 100px;
+}
+.bulk-bar select option { color: #111; }
+.bulk-bar .lbl { color: #9ca3af; font-size: .82rem; }
+.bulk-bar .btn-apply {
+  background: #10b981; color: #fff; border: 0; padding: .35rem .9rem;
+  border-radius: 6px; cursor: pointer; font-size: .85rem; font-weight: 600;
+}
+.bulk-bar .btn-apply:hover { background: #059669; }
+.bulk-bar .btn-cancel {
+  background: transparent; color: #9ca3af; border: 0; padding: .35rem .6rem;
+  cursor: pointer; font-size: .85rem;
+}
+.bulk-bar .btn-cancel:hover { color: #fff; }
+.row-selected td { background: #eff6ff !important; }
 </style>
 {% endblock %}
 {% block body %}
@@ -61,9 +90,11 @@
 
 {% if items %}
 <div class="data-table-wrap">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}" id="bulk-csrf"/>
  <table class="data-table">
  <thead>
  <tr>
+ <th style="width:30px;"><input type="checkbox" id="bulk-select-all" title="全选本页"/></th>
  <th>品名</th>
  <th>大类</th>
  <th>小类</th>
@@ -80,7 +111,8 @@
  {% set sub_label = categories[it.category].subs[it.subcategory] if it.category in categories and it.subcategory in categories[it.category].subs else it.subcategory %}
  {% set is_low = (not it.is_service) and it.low_stock_min> 0 and it.stock_qty <= it.low_stock_min %}
  {% set is_zero = (not it.is_service) and it.stock_qty <= 0 %}
- <tr style="{% if is_zero %}background:#fef2f2;{% elif is_low %}background:#fffbeb;{% endif %}">
+ <tr style="{% if is_zero %}background:#fef2f2;{% elif is_low %}background:#fffbeb;{% endif %}" data-item-id="{{ it.id }}">
+ <td><input type="checkbox" class="bulk-row" value="{{ it.id }}"/></td>
  <td style="font-weight:600;">
  {{ it.name }}
  {% if it.is_controlled %}<span class="pill pill-warn" style="margin-left:0.3rem;">管控</span>{% endif %}
@@ -128,4 +160,110 @@
  暂无品目，<a href="/admin/inventory/create" style="color:#3b82f6;">点击新增</a>
 </div>
 {% endif %}
+
+{# 批量编辑底部条（选中 ≥ 1 时显示） #}
+<form id="bulk-form" method="post" action="/admin/inventory/bulk-edit" style="display:contents;">
+ <div class="bulk-bar" id="bulk-bar">
+  <span class="count">已选 <span id="bulk-count">0</span> 项</span>
+  <span class="lbl">大类</span>
+  <select name="category" id="bulk-category">
+    <option value="">— 不修改 —</option>
+    {% for k, c in categories.items() %}
+    <option value="{{ k }}">{{ c.label }}</option>
+    {% endfor %}
+  </select>
+  <span class="lbl">小类</span>
+  <select name="subcategory" id="bulk-subcategory" disabled>
+    <option value="">— 先选大类 —</option>
+  </select>
+  <span class="lbl">供应商</span>
+  <input type="text" name="supplier" id="bulk-supplier" placeholder="留空=不改" style="background:rgba(255,255,255,.08);color:#fff;border:1px solid #374151;padding:.3rem .5rem;border-radius:6px;font-size:.85rem;width:140px;"/>
+  <button type="button" class="btn-apply" onclick="bulkApply()">✓ 应用</button>
+  <button type="button" class="btn-cancel" onclick="bulkClear()">取消</button>
+ </div>
+</form>
+
+<script>
+(function () {
+  var CATS = {{ categories|tojson }};
+  var bar = document.getElementById('bulk-bar');
+  var countEl = document.getElementById('bulk-count');
+  var selAll = document.getElementById('bulk-select-all');
+  var catSel = document.getElementById('bulk-category');
+  var subSel = document.getElementById('bulk-subcategory');
+
+  function selectedIds() {
+    return Array.from(document.querySelectorAll('.bulk-row:checked')).map(function(c){ return c.value; });
+  }
+  function refresh() {
+    var ids = selectedIds();
+    countEl.textContent = ids.length;
+    bar.classList.toggle('visible', ids.length > 0);
+    // 行高亮
+    document.querySelectorAll('tr[data-item-id]').forEach(function(tr){
+      var cb = tr.querySelector('.bulk-row');
+      tr.classList.toggle('row-selected', cb && cb.checked);
+    });
+  }
+
+  document.querySelectorAll('.bulk-row').forEach(function(c){
+    c.addEventListener('change', refresh);
+  });
+  selAll.addEventListener('change', function(){
+    document.querySelectorAll('.bulk-row').forEach(function(c){ c.checked = selAll.checked; });
+    refresh();
+  });
+
+  // 大类联动小类
+  catSel.addEventListener('change', function(){
+    subSel.innerHTML = '';
+    var cat = CATS[catSel.value];
+    if (!cat) {
+      subSel.disabled = true;
+      subSel.innerHTML = '<option value="">— 先选大类 —</option>';
+      return;
+    }
+    subSel.disabled = false;
+    var opt0 = document.createElement('option');
+    opt0.value = ''; opt0.textContent = '— 不改小类 —';
+    subSel.appendChild(opt0);
+    Object.keys(cat.subs || {}).forEach(function(k){
+      var o = document.createElement('option');
+      o.value = k; o.textContent = cat.subs[k];
+      subSel.appendChild(o);
+    });
+  });
+
+  window.bulkClear = function(){
+    document.querySelectorAll('.bulk-row').forEach(function(c){ c.checked = false; });
+    selAll.checked = false;
+    refresh();
+  };
+
+  window.bulkApply = function(){
+    var ids = selectedIds();
+    if (!ids.length) return;
+    var cat = catSel.value;
+    var sub = subSel.value;
+    var sup = document.getElementById('bulk-supplier').value.trim();
+    if (!cat && !sup) {
+      alert('请至少选择一个要修改的字段（大类 / 供应商）');
+      return;
+    }
+    if (!confirm('确认批量修改这 ' + ids.length + ' 个品目？')) return;
+    var fd = new FormData();
+    fd.append('csrf_token', document.getElementById('bulk-csrf').value);
+    ids.forEach(function(id){ fd.append('item_ids', id); });
+    if (cat) fd.append('category', cat);
+    if (sub) fd.append('subcategory', sub);
+    if (sup) fd.append('supplier', sup);
+    fetch('/admin/inventory/bulk-edit', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function(r){
+        if (r.redirected) { window.location = r.url; return; }
+        return r.text().then(function(t){ alert('提交失败：' + (r.status + ' ' + t.slice(0, 200))); });
+      })
+      .catch(function(e){ alert('网络错误：' + e); });
+  };
+})();
+</script>
 {% endblock %}

@@ -7538,6 +7538,63 @@ async def api_inventory_search(
     ]
 
 
+# ── 库存：批量编辑 ───────────────────────────────────────
+@app.post("/admin/inventory/bulk-edit")
+async def admin_inventory_bulk_edit(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    item_ids: list[int] = Form(...),
+    category: str = Form(""),
+    subcategory: str = Form(""),
+    supplier: str = Form(""),
+):
+    """对一组品目批量改 大类 / 小类 / 供应商。
+    每个字段留空 = 不修改；至少要改 1 个字段。
+    """
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    if not item_ids:
+        return RedirectResponse("/admin/inventory?msg=未选择品目", status_code=303)
+    # 校验 category（小类必须属于该大类）
+    if category and category not in INVENTORY_CATEGORIES:
+        return RedirectResponse("/admin/inventory?msg=大类无效", status_code=303)
+    if subcategory:
+        if not category:
+            return RedirectResponse("/admin/inventory?msg=改小类时必须同时选大类", status_code=303)
+        if subcategory not in INVENTORY_CATEGORIES[category].get("subs", {}):
+            return RedirectResponse("/admin/inventory?msg=小类不属于所选大类", status_code=303)
+    if not (category or supplier):
+        return RedirectResponse("/admin/inventory?msg=请至少选一个要修改的字段", status_code=303)
+
+    rows = db.query(InventoryItem).filter(InventoryItem.id.in_(item_ids)).all()
+    updated = 0
+    for it in rows:
+        if category:
+            it.category = category
+            # 改大类 → 小类同时清空或换；若用户明确选了小类用它，否则清空（防留旧大类的小类）
+            it.subcategory = subcategory or ""
+        elif subcategory:
+            it.subcategory = subcategory
+        if supplier:
+            it.supplier = supplier[:200]
+        it.updated_at = datetime.utcnow()
+        updated += 1
+    db.commit()
+    _audit(db, request, "inventory_bulk_edit", application_id=None,
+           detail={"count": updated, "category": category, "subcategory": subcategory, "supplier": supplier})
+    db.commit()
+    parts = []
+    if category: parts.append(f"大类={INVENTORY_CATEGORIES[category]['label']}")
+    if subcategory: parts.append(f"小类={INVENTORY_CATEGORIES[category]['subs'].get(subcategory, subcategory)}")
+    if supplier: parts.append(f"供应商={supplier}")
+    return RedirectResponse(
+        f"/admin/inventory?msg=已批量更新 {updated} 个品目（{' · '.join(parts)}）",
+        status_code=303,
+    )
+
+
 # ── 库存品目搜索 API（拍照入库 / 各种映射场景共用） ───────
 @app.get("/api/inventory/search")
 async def api_inventory_search(
@@ -7851,7 +7908,7 @@ async def admin_inventory_list(
         "expiry_alert": expiry_alert,
         "categories": INVENTORY_CATEGORIES, "low_count": low_count, "zero_count": zero_count,
         "expiry_count": expiry_count,
-        "csrf_token": request.session.get("csrf_token", ""),
+        "csrf_token": _get_csrf_token(request),
         "title": "库存管理",
     })
 

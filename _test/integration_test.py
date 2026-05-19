@@ -1418,6 +1418,42 @@ def t_inventory_import_fuzzy():
 t_inventory_import_fuzzy()
 
 
+@step("库存批量编辑：选 2 个品目 → 改大类/小类/供应商")
+def t_inventory_bulk_edit():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import InventoryItem
+    db = SessionLocal()
+    # 拿之前测试建的 2 个品目
+    ids = [r.id for r in db.query(InventoryItem).filter(
+        InventoryItem.name.in_(["萌邦：宠尔康（复方氟康唑乳膏）", "萌益健-乳铁蛋白"])
+    ).all()]
+    assert len(ids) >= 2, "前置：应有 2 个测试品目"
+    db.close()
+
+    r = client.get("/admin/inventory")
+    token = extract_csrf(r.text)
+    # 多值 item_ids 用 dict 列表语法
+    data = {
+        "csrf_token": token, "category": "medication", "subcategory": "general",
+        "supplier": "测试供应商有限公司",
+        "item_ids": [str(i) for i in ids],
+    }
+    r = client.post("/admin/inventory/bulk-edit", data=data)
+    assert r.status_code == 303, f"got {r.status_code}, body[:200]={r.text[:200]}"
+
+    db = SessionLocal()
+    for i in ids:
+        it = db.get(InventoryItem, i)
+        assert it.category == "medication"
+        assert it.subcategory == "general"
+        assert it.supplier == "测试供应商有限公司"
+    db.close()
+
+t_inventory_bulk_edit()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
