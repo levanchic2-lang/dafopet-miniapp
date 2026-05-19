@@ -1759,10 +1759,23 @@ def t_consent_resend_endpoint():
         assert r.status_code == 303
         from urllib.parse import unquote
         loc = unquote(r.headers.get("location", ""))
-        assert "未配置短信网关" in loc or "已发送短信" in loc or "无手机号" in loc, f"loc={loc}"
+        assert "未配置短信通道" in loc or "已发送短信" in loc or "无手机号" in loc, f"loc={loc}"
 
 
 t_consent_resend_endpoint()
+
+
+@step("协议短链：/c/{token} 302 跳到 /consent/{token}")
+def t_consent_short_redirect():
+    import httpx as _hx
+    pub = _hx.Client(base_url=BASE, follow_redirects=False, timeout=10)
+    r = pub.get("/c/random_token_xyz")
+    assert r.status_code in (302, 303), f"got {r.status_code}"
+    assert r.headers.get("location") == "/consent/random_token_xyz"
+    pub.close()
+
+
+t_consent_short_redirect()
 
 
 @step("客户绑定档案：发码 → 验证 → openid 落到 Customer.wechat_openid")

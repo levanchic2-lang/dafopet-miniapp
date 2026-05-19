@@ -13,6 +13,8 @@ Pillow>=10.0.0
 openpyxl>=3.1.0
 qrcode[pil]>=7.4.2
 apscheduler>=3.10.0
+# 腾讯云短信（仅当配置 TENCENT_SMS_SECRET_ID 等时才真正调用；缺包也不阻断启动）
+tencentcloud-sdk-python-sms>=3.0.1100
 
 # 可选：启用 OPENAI_API_KEY 后用于图片/视频帧的流浪猫辅助识别
 openai>=1.55.0

@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     sms_gateway_url: str = ""
     sms_gateway_secret: str = ""
 
+    # ── 腾讯云短信（直连，无需自建网关） ──
+    # 配齐这 5 项后，协议签署等场景自动通过腾讯云发短信
+    tencent_sms_secret_id:  str = ""    # 腾讯云控制台 → 访问密钥
+    tencent_sms_secret_key: str = ""
+    tencent_sms_sdk_app_id: str = ""    # 短信控制台 → 应用ID（10 位数字字符串）
+    tencent_sms_sign_name:  str = ""    # 已审核通过的签名，如 "大风动物医院"
+    tencent_sms_region:     str = "ap-guangzhou"
+    # 协议签署模板 ID（已审核通过），如 "1234567"
+    # 模板内容示意：【大风动物医院】您家{1}的{2}请打开 dafopet.com/c/{3} 完成签署
+    # 模板参数顺序：1=宠物名, 2=协议标题, 3=token
+    tencent_sms_tmpl_consent: str = ""
+
     # 会话密钥：重启后登录仍有效；生产环境务必修改
     session_secret: str = "dev-change-session-secret-in-env"
 

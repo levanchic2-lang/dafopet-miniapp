@@ -5689,23 +5689,48 @@ def _build_consent_sign_url(token: str) -> str:
 
 
 def _try_send_consent_sms(db: Session, task: "ConsentTask", cust: "Customer | None", pet: "Pet | None") -> bool:
-    """给客户发短信（含签字链接）。无手机号 / 网关未配 → 返回 False（静默）。"""
+    """给客户发短信（含签字链接）。
+    优先腾讯云直连，回退到通用网关；均未配 / 无手机号 → 返回 False（静默）。
+    """
     if not cust or not (cust.phone or "").strip():
         return False
-    if not (settings.sms_gateway_url or "").strip():
-        return False
     pet_name = (pet.name if pet else "") or "您的宝贝"
-    sign_url = _build_consent_sign_url(task.token)
-    text = (
-        f"【大风动物医院】关于{pet_name}的{task.title}请尽快签署：{sign_url}"
-        f" 5 分钟内完成。如有疑问请联系您的主治医师。"
-    )
-    try:
-        from app.services.sms_gateway import send_sms
-        return send_sms(cust.phone.strip(), text, scene="consent")
-    except Exception as e:
-        logger.warning("[consent] SMS 发送失败 task=%s: %s", task.id, e)
-        return False
+    phone = cust.phone.strip()
+
+    # 路径 1：腾讯云直连
+    if (settings.tencent_sms_tmpl_consent or "").strip():
+        from app.services.sms_tencent import send_sms_template, _enabled as _tc_enabled
+        if _tc_enabled():
+            # 模板参数顺序见 settings.tencent_sms_tmpl_consent 注释：
+            #   1=宠物名, 2=协议标题, 3=token
+            ok, err = send_sms_template(
+                phone,
+                settings.tencent_sms_tmpl_consent.strip(),
+                [pet_name[:10], (task.title or "诊疗协议")[:14], task.token],
+            )
+            if ok:
+                return True
+            logger.warning("[consent] 腾讯云短信失败 task=%s: %s", task.id, err)
+
+    # 路径 2：通用 HTTP 网关（自建/其他供应商）
+    if (settings.sms_gateway_url or "").strip():
+        sign_url = _build_consent_sign_url(task.token)
+        text = (
+            f"【大风动物医院】关于{pet_name}的{task.title}请尽快签署：{sign_url}"
+            f" 如有疑问请联系您的主治医师。"
+        )
+        try:
+            from app.services.sms_gateway import send_sms
+            return send_sms(phone, text, scene="consent")
+        except Exception as e:
+            logger.warning("[consent] 通用网关 SMS 失败 task=%s: %s", task.id, e)
+    return False
+
+
+# 短链：/c/{token} → 跳协议签字页（短信里链接更短）
+@app.get("/c/{token}")
+async def consent_short_redirect(token: str):
+    return RedirectResponse(f"/consent/{token}", status_code=302)
 
 
 def _try_push_consent_notice(db: Session, task: "ConsentTask", cust: "Customer | None", pet: "Pet | None") -> bool:
@@ -5765,8 +5790,10 @@ async def admin_consent_task_resend(
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
     if not cust or not (cust.phone or "").strip():
         return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=客户无手机号，请直接复制链接微信发送", status_code=303)
-    if not (settings.sms_gateway_url or "").strip():
-        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=未配置短信网关，请直接复制链接微信发送", status_code=303)
+    has_tencent = bool((settings.tencent_sms_tmpl_consent or "").strip())
+    has_gateway = bool((settings.sms_gateway_url or "").strip())
+    if not (has_tencent or has_gateway):
+        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=未配置短信通道，请直接复制链接微信发送", status_code=303)
     ok = _try_send_consent_sms(db, task, cust, pet)
     msg = "已发送短信" if ok else "短信发送失败，请稍后重试或复制链接微信发"
     return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg={msg}", status_code=303)
