@@ -39,6 +39,12 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
   - 调度：`app/services/followup_dispatch.py` 每小时通过 APScheduler 跑
   - 渠道：先小程序订阅消息（`wechat_tmpl_followup`）→ 短信网关 → 电话兜底
   - 客户反馈短链：`/follow-up/{token}`（无登录，token 即凭证）
+- 进货单照片识别入库：
+  - `app/services/purchase_ocr.py` 调多模态视觉大模型（复用 `settings.openai_*`）
+  - 入口：`/admin/inventory/import-photo`（库存页右上角"📸 拍照入库"）
+  - 流程：上传 → JS 异步调 `/recognize` → 模型返回 JSON → 表格可编辑 → 提交 `/commit` 批量入库
+  - 每行自动匹配已有品目（SequenceMatcher fuzzy >= 0.7）→ "累加 / 新增 / 跳过" 三选一
+  - 写 `InventoryItem` + `InventoryTransaction` (type=in)，有批号/有效期时再写 `InventoryBatch`
 - 打印系统：
   - `templates/_print_base.html` 通用基础模板，4 种纸张：A4 / A5 纵 / A5 横 / 80mm 热敏
   - `@page` CSS + `body[data-size]` 屏幕预览同步切换，工具条 localStorage 记住偏好

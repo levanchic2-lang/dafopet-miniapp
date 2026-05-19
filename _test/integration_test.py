@@ -1318,6 +1318,49 @@ def t_print_visit():
 t_print_visit()
 
 
+@step("进货单拍照：上传页可加载")
+def t_inventory_import_page():
+    r = client.get("/admin/inventory/import-photo")
+    assert r.status_code == 200
+    assert "进货单拍照入库" in r.text or "拍照入库" in r.text
+
+t_inventory_import_page()
+
+
+@step("进货单拍照：直接提交一行模拟数据（新增 + 入库 + 写批次）")
+def t_inventory_import_commit():
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import InventoryItem, InventoryTransaction, InventoryBatch
+    r = client.get("/admin/inventory/import-photo")
+    token = extract_csrf(r.text)
+    # 模拟用户编辑后提交 2 行：一新增、一跳过
+    r = client.post("/admin/inventory/import-photo/commit", data={
+        "csrf_token": token, "row_count": "2",
+        "row0_action": "create", "row0_name": "测试OCR药品",
+        "row0_spec": "10mg×30片", "row0_qty": "5", "row0_unit": "盒",
+        "row0_unit_price": "12.5", "row0_batch_no": "BATCH-T01",
+        "row0_expiry_date": "2027-01-01",
+        "row1_action": "skip", "row1_name": "应被跳过", "row1_qty": "100",
+    })
+    assert r.status_code == 303, f"got {r.status_code}"
+    db = SessionLocal()
+    it = db.query(InventoryItem).filter(InventoryItem.name == "测试OCR药品").first()
+    assert it is not None and it.stock_qty == 5.0
+    assert it.cost_price == 12.5
+    tx = db.query(InventoryTransaction).filter(InventoryTransaction.item_id == it.id).first()
+    assert tx and tx.tx_type == "in" and tx.qty == 5.0
+    batch = db.query(InventoryBatch).filter(InventoryBatch.item_id == it.id).first()
+    assert batch and batch.batch_no == "BATCH-T01" and batch.expiry_date == "2027-01-01"
+    # 跳过的不应入库
+    skipped = db.query(InventoryItem).filter(InventoryItem.name == "应被跳过").first()
+    assert skipped is None
+    db.close()
+
+t_inventory_import_commit()
+
+
 # ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════

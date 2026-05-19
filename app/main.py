@@ -7538,6 +7538,188 @@ async def api_inventory_search(
     ]
 
 
+# ── 进货单照片识别入库 ─────────────────────────────────────
+@app.get("/admin/inventory/import-photo", response_class=HTMLResponse)
+async def admin_inventory_import_photo_page(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    return templates.TemplateResponse(request, "admin_inventory_import_photo.html", {
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/inventory/import-photo/recognize")
+async def admin_inventory_import_photo_recognize(
+    request: Request,
+    db: Session = Depends(get_db),
+    files: list[UploadFile] = File(...),
+):
+    """接收 1~5 张进货单图片，调多模态 OCR，返回识别结果 JSON。"""
+    if not request.session.get("admin"):
+        return {"ok": False, "error": "未登录"}
+    if not files:
+        return {"ok": False, "error": "未上传图片"}
+    if len(files) > 5:
+        return {"ok": False, "error": "最多 5 张图片"}
+
+    import tempfile, os as _os
+    from app.services.purchase_ocr import recognize_purchase_photo, match_item_by_name
+
+    saved_paths: list[Path] = []
+    tmp_dir = Path(tempfile.mkdtemp(prefix="purchase_ocr_"))
+    try:
+        for f in files:
+            suf = (Path(f.filename or "").suffix or ".jpg").lower()
+            if suf not in (".jpg", ".jpeg", ".png", ".webp"):
+                continue
+            p = tmp_dir / f"{secrets.token_hex(8)}{suf}"
+            p.write_bytes(await f.read())
+            saved_paths.append(p)
+        if not saved_paths:
+            return {"ok": False, "error": "没有有效图片（仅支持 jpg/png/webp）"}
+        result = await recognize_purchase_photo(saved_paths)
+    finally:
+        # 清理临时图（保留 30 秒供调试看错误时也无所谓，直接清）
+        for p in saved_paths:
+            try: p.unlink()
+            except Exception: pass
+        try: tmp_dir.rmdir()
+        except Exception: pass
+
+    if not result["ok"]:
+        return {"ok": False, "error": result.get("error", "识别失败"), "raw": result.get("raw", "")}
+
+    # 对每行做品目匹配
+    all_items = db.query(InventoryItem).filter(InventoryItem.is_active == True).all()
+    for it in result["items"]:
+        matched_id, conf = match_item_by_name(it["name"], all_items)
+        it["matched_id"] = matched_id
+        it["match_confidence"] = round(conf, 2)
+        if matched_id:
+            m = next((x for x in all_items if x.id == matched_id), None)
+            if m:
+                it["matched_name"] = m.name
+                it["matched_unit"] = m.unit
+                it["matched_stock"] = float(m.stock_qty or 0)
+    return {"ok": True, "items": result["items"]}
+
+
+@app.post("/admin/inventory/import-photo/commit")
+async def admin_inventory_import_photo_commit(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """提交确认后的入库表单。表单字段（多行）：
+       row_count = N
+       row{i}_action = create | reuse | skip
+       row{i}_item_id = N (reuse 时必填)
+       row{i}_name / spec / qty / unit / unit_price / batch_no / expiry_date
+    """
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    try:
+        n = int(form.get("row_count") or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n <= 0:
+        return RedirectResponse("/admin/inventory/import-photo?msg=没有行可入库", status_code=303)
+
+    operator = request.session.get("admin_username", "admin")
+    created = 0
+    stocked_in = 0
+    skipped = 0
+
+    for i in range(n):
+        action = (form.get(f"row{i}_action") or "skip").strip()
+        if action == "skip":
+            skipped += 1
+            continue
+        name = (form.get(f"row{i}_name") or "").strip()
+        if not name:
+            skipped += 1
+            continue
+        try:
+            qty = float(form.get(f"row{i}_qty") or 0)
+        except (TypeError, ValueError):
+            qty = 0.0
+        if qty <= 0:
+            skipped += 1
+            continue
+        try:
+            unit_price = float(form.get(f"row{i}_unit_price") or 0)
+        except (TypeError, ValueError):
+            unit_price = 0.0
+        unit = (form.get(f"row{i}_unit") or "").strip() or "个"
+        batch_no = (form.get(f"row{i}_batch_no") or "").strip()
+        expiry = (form.get(f"row{i}_expiry_date") or "").strip()[:10]
+        spec = (form.get(f"row{i}_spec") or "").strip()
+
+        # 取得或新建 item
+        if action == "reuse":
+            try:
+                item_id = int(form.get(f"row{i}_item_id") or 0)
+            except (TypeError, ValueError):
+                item_id = 0
+            item = db.get(InventoryItem, item_id) if item_id else None
+            if not item:
+                skipped += 1
+                continue
+        else:  # create
+            item = InventoryItem(
+                name=name[:200],
+                category="medication",
+                unit=unit[:20],
+                sell_price=0.0,
+                cost_price=unit_price,
+                stock_qty=0.0,
+                low_stock_min=0.0,
+                notes=spec,
+                created_by=operator,
+                is_active=True,
+            )
+            db.add(item)
+            db.flush()
+            created += 1
+
+        # 累加库存 + 写流水
+        qty_before = float(item.stock_qty or 0)
+        item.stock_qty = qty_before + qty
+        if unit_price > 0:
+            item.cost_price = unit_price  # 用最新进价更新
+        db.add(InventoryTransaction(
+            item_id=item.id,
+            tx_type="in",
+            qty=qty,
+            qty_before=qty_before,
+            qty_after=item.stock_qty,
+            unit_price=unit_price,
+            ref_type="manual",
+            operator=operator,
+            note=f"进货单照片识别入库" + (f" · 批号{batch_no}" if batch_no else ""),
+        ))
+        # 批次
+        if batch_no or expiry:
+            from datetime import date as _date
+            db.add(InventoryBatch(
+                item_id=item.id,
+                batch_no=batch_no[:80],
+                quantity=qty,
+                expiry_date=expiry,
+                received_date=_date.today().isoformat(),
+                notes=spec[:500] if spec else "",
+            ))
+        stocked_in += 1
+
+    db.commit()
+    _audit(db, request, "inventory_import_photo", application_id=None,
+           detail={"new": created, "stocked": stocked_in, "skipped": skipped})
+    db.commit()
+    msg = f"入库完成：新增 {created} 个品目，{stocked_in} 笔入库" + (f"，跳过 {skipped} 行" if skipped else "")
+    return RedirectResponse(f"/admin/inventory?msg={msg}", status_code=303)
+
+
 @app.get("/admin/inventory", response_class=HTMLResponse)
 async def admin_inventory_list(
     request: Request,

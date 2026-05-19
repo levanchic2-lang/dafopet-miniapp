@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+.ip-uploader {
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  background: #fafafa;
+  cursor: pointer;
+  transition: all .15s;
+}
+.ip-uploader.dragover { border-color: #10b981; background: #f0fdf4; }
+.ip-uploader .icon { font-size: 2.5rem; }
+.ip-uploader .hint { color: #6b7280; font-size: 0.88rem; margin-top: .35rem; }
+.ip-thumbs { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .8rem; justify-content: center; }
+.ip-thumbs img { width: 90px; height: 90px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; }
+
+.ip-loading {
+  display: none; padding: 1.5rem; text-align: center;
+  background: #f3f4f6; border-radius: 8px; margin-top: .8rem;
+  color: #6b7280;
+}
+.ip-loading.active { display: block; }
+.ip-loading .spin { display: inline-block; width: 22px; height: 22px;
+  border: 3px solid #d1d5db; border-top-color: #10b981; border-radius: 50%;
+  animation: ipspin 0.6s linear infinite; vertical-align: middle; margin-right: .5rem; }
+@keyframes ipspin { to { transform: rotate(360deg); } }
+
+.ip-result-tbl { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: .8rem; }
+.ip-result-tbl th, .ip-result-tbl td {
+  padding: .35rem .4rem; border-bottom: 1px solid #f3f4f6; vertical-align: middle;
+}
+.ip-result-tbl thead th { background: #f9fafb; font-size: .78rem; color: #4b5563; font-weight: 600; }
+.ip-result-tbl input, .ip-result-tbl select {
+  width: 100%; box-sizing: border-box;
+  padding: .25rem .35rem; font-size: .82rem;
+  border: 1px solid #e5e7eb; border-radius: 4px; background: #fff;
+}
+.ip-result-tbl input[type="number"] { text-align: right; }
+.ip-row.matched { background: rgba(16,185,129,0.04); }
+.ip-row.unmatched { background: rgba(245,158,11,0.04); }
+.ip-row.skipped { opacity: 0.4; }
+
+.ip-badge { font-size: .72rem; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+.ip-badge.matched { background: #d1fae5; color: #065f46; }
+.ip-badge.fuzzy { background: #fef3c7; color: #92400e; }
+.ip-badge.new { background: #dbeafe; color: #1e40af; }
+</style>
+{% endblock %}
+
+{% block body %}
+
+{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon">📸</span>进货单拍照入库</h1>
+ <p class="ph-sub">拍下进货单照片 · 系统自动识别商品 · 一键批量入库</p>
+ </div>
+ <div class="ph-actions">
+ <a href="/admin/inventory" class="btn secondary">← 返回库存</a>
+ </div>
+</div>
+
+<div class="card" style="padding:1.2rem;">
+ <div class="ip-uploader" id="dropzone">
+   <div class="icon">📷</div>
+   <div style="font-size:1rem;font-weight:600;margin-top:.4rem;">点击或拖拽进货单照片到此</div>
+   <div class="hint">最多 5 张 · 支持 jpg / png / webp · 单张越清晰识别越准</div>
+   <input type="file" id="file-input" accept="image/*" multiple style="display:none;">
+   <div class="ip-thumbs" id="thumbs"></div>
+ </div>
+
+ <div class="ip-loading" id="loading">
+   <span class="spin"></span> 正在识别 ... 通常需要 5~15 秒
+ </div>
+
+ <div id="error" style="display:none;margin-top:.8rem;padding:.7rem 1rem;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:.88rem;"></div>
+
+ <div id="result" style="display:none;margin-top:1rem;">
+   <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6rem;">
+     <h3 style="margin:0;font-size:1rem;">识别结果（共 <span id="row-count">0</span> 行 · 可编辑）</h3>
+     <div style="font-size:.82rem;color:var(--muted);">
+       <span style="display:inline-block;width:10px;height:10px;background:#10b981;border-radius:2px;vertical-align:middle;"></span> 已匹配
+       <span style="display:inline-block;width:10px;height:10px;background:#f59e0b;border-radius:2px;vertical-align:middle;margin-left:.6rem;"></span> 新增
+     </div>
+   </div>
+
+   <form method="post" action="/admin/inventory/import-photo/commit" id="commit-form">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <input type="hidden" name="row_count" id="row-count-input" value="0">
+
+     <div style="overflow-x:auto;">
+       <table class="ip-result-tbl">
+         <thead>
+           <tr>
+             <th style="width:30px;">✓</th>
+             <th style="width:80px;">操作</th>
+             <th style="min-width:160px;">品名</th>
+             <th style="width:90px;">规格</th>
+             <th style="width:80px;">数量</th>
+             <th style="width:65px;">单位</th>
+             <th style="width:90px;">进价（¥）</th>
+             <th style="width:110px;">批号</th>
+             <th style="width:130px;">有效期</th>
+             <th style="width:140px;">匹配</th>
+           </tr>
+         </thead>
+         <tbody id="rows"></tbody>
+       </table>
+     </div>
+
+     <div style="margin-top:1rem;display:flex;gap:.6rem;justify-content:flex-end;">
+       <button type="button" class="btn secondary" onclick="resetUpload()">重新拍照识别</button>
+       <button type="submit" class="btn" id="commit-btn">✓ 全部入库</button>
+     </div>
+   </form>
+
+   <details style="margin-top:1rem;font-size:.82rem;color:var(--muted);">
+     <summary style="cursor:pointer;">查看模型原始输出（调试用）</summary>
+     <pre id="raw-output" style="background:#f3f4f6;padding:.6rem;border-radius:4px;overflow-x:auto;font-size:.78rem;max-height:200px;"></pre>
+   </details>
+ </div>
+</div>
+
+<script>
+(function () {
+  var dz = document.getElementById('dropzone');
+  var input = document.getElementById('file-input');
+  var thumbs = document.getElementById('thumbs');
+  var loading = document.getElementById('loading');
+  var errBox = document.getElementById('error');
+  var resultBox = document.getElementById('result');
+  var rowsTbody = document.getElementById('rows');
+  var picked = [];
+
+  dz.addEventListener('click', function (e) {
+    if (e.target.tagName === 'INPUT') return;
+    input.click();
+  });
+  input.addEventListener('change', function () {
+    pickFiles(Array.from(input.files || []));
+  });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('dragover'); });
+  });
+  dz.addEventListener('drop', function (e) {
+    var fs = Array.from(e.dataTransfer.files || []).filter(function (f) { return /^image\//.test(f.type); });
+    pickFiles(fs);
+  });
+
+  function pickFiles(fs) {
+    picked = fs.slice(0, 5);
+    renderThumbs();
+    if (picked.length > 0) startRecognize();
+  }
+
+  function renderThumbs() {
+    thumbs.innerHTML = '';
+    picked.forEach(function (f) {
+      var img = new Image();
+      img.src = URL.createObjectURL(f);
+      thumbs.appendChild(img);
+    });
+  }
+
+  function showError(msg) {
+    errBox.textContent = '⚠ ' + msg;
+    errBox.style.display = 'block';
+  }
+  function hideError() { errBox.style.display = 'none'; }
+
+  function startRecognize() {
+    hideError();
+    resultBox.style.display = 'none';
+    loading.classList.add('active');
+    var fd = new FormData();
+    picked.forEach(function (f) { fd.append('files', f); });
+
+    fetch('/admin/inventory/import-photo/recognize', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        loading.classList.remove('active');
+        if (!data.ok) {
+          showError(data.error || '识别失败');
+          if (data.raw) {
+            document.getElementById('raw-output').textContent = data.raw;
+            resultBox.style.display = 'block';
+            document.querySelector('#result details').open = true;
+          }
+          return;
+        }
+        renderResult(data.items);
+      })
+      .catch(function (e) {
+        loading.classList.remove('active');
+        showError('网络错误：' + e);
+      });
+  }
+
+  function renderResult(items) {
+    rowsTbody.innerHTML = '';
+    if (!items || items.length === 0) {
+      showError('未识别出任何商品行。可能是图片不清，或图上只有合计而无商品明细。');
+      return;
+    }
+    items.forEach(function (it, i) {
+      var matched = it.matched_id && it.matched_id > 0;
+      var fuzzy = matched && (it.match_confidence || 0) < 1;
+      var tr = document.createElement('tr');
+      tr.className = 'ip-row ' + (matched ? 'matched' : 'unmatched');
+      tr.innerHTML =
+        '<td><input type="checkbox" data-row="' + i + '" class="ip-check" checked></td>' +
+        '<td>' +
+          '<select name="row' + i + '_action" class="ip-action">' +
+            (matched
+              ? '<option value="reuse" selected>累加</option><option value="create">新增</option><option value="skip">跳过</option>'
+              : '<option value="create" selected>新增</option><option value="skip">跳过</option>') +
+          '</select>' +
+          (matched ? '<input type="hidden" name="row' + i + '_item_id" value="' + it.matched_id + '">' : '') +
+        '</td>' +
+        '<td><input name="row' + i + '_name" value="' + escapeHtml(it.name) + '" required></td>' +
+        '<td><input name="row' + i + '_spec" value="' + escapeHtml(it.spec) + '"></td>' +
+        '<td><input name="row' + i + '_qty" type="number" step="0.01" min="0" value="' + (it.qty || '') + '"></td>' +
+        '<td><input name="row' + i + '_unit" value="' + escapeHtml(it.unit || it.matched_unit || '') + '"></td>' +
+        '<td><input name="row' + i + '_unit_price" type="number" step="0.01" min="0" value="' + (it.unit_price || '') + '"></td>' +
+        '<td><input name="row' + i + '_batch_no" value="' + escapeHtml(it.batch_no) + '" placeholder="选填"></td>' +
+        '<td><input name="row' + i + '_expiry_date" type="date" value="' + escapeHtml(it.expiry_date) + '"></td>' +
+        '<td>' +
+          (matched
+            ? '<span class="ip-badge ' + (fuzzy ? 'fuzzy' : 'matched') + '">' +
+                (fuzzy ? '相似 ' + (it.match_confidence * 100).toFixed(0) + '%' : '✓ 已有') +
+              '</span>' +
+              '<div style="font-size:.72rem;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="' + escapeHtml(it.matched_name || '') + '">' +
+                escapeHtml(it.matched_name || '') +
+                (it.matched_stock !== undefined ? ' · 现存 ' + it.matched_stock : '') +
+              '</div>'
+            : '<span class="ip-badge new">＋ 新品目</span>'
+          ) +
+        '</td>';
+      rowsTbody.appendChild(tr);
+
+      // checkbox 控制 action=skip
+      var sel = tr.querySelector('.ip-action');
+      var chk = tr.querySelector('.ip-check');
+      chk.addEventListener('change', function () {
+        if (!chk.checked) {
+          sel.dataset.prev = sel.value;
+          sel.value = 'skip';
+          tr.classList.add('skipped');
+        } else {
+          sel.value = sel.dataset.prev || (matched ? 'reuse' : 'create');
+          tr.classList.remove('skipped');
+        }
+      });
+    });
+    document.getElementById('row-count').textContent = items.length;
+    document.getElementById('row-count-input').value = items.length;
+    resultBox.style.display = 'block';
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, function (m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+    });
+  }
+
+  window.resetUpload = function () {
+    picked = [];
+    input.value = '';
+    thumbs.innerHTML = '';
+    resultBox.style.display = 'none';
+    hideError();
+  };
+})();
+</script>
+{% endblock %}
