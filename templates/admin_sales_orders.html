@@ -36,7 +36,7 @@
 
 {% if orders %}
 <div class="data-table-wrap">
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
  <tr>
  <th>编号</th>
@@ -53,20 +53,20 @@
  {% for o in orders %}
  <tr>
  <td style="color:var(--muted);font-family:monospace;font-size:0.8rem;">#{{ o.id }}</td>
- <td style="white-space:nowrap;color:var(--muted);">{{ o.order_date or '—' }}</td>
- <td style="font-weight:600;">
+ <td data-label="日期" style="white-space:nowrap;color:var(--muted);">{{ o.order_date or '—' }}</td>
+ <td data-label="客户" style="font-weight:600;">
  {% set c = cust_map.get(o.customer_id) %}
  {% if c %}<a href="/admin/customers/{{ c.id }}">{{ c.name or c.phone or '—' }}</a>{% else %}—{% endif %}
  </td>
- <td style="color:var(--muted);">{{ o.items|length }} 项</td>
- <td style="text-align:right;font-weight:700;font-size:0.95rem;">¥ {{ '%.2f'|format(o.total_amount) }}</td>
- <td style="color:var(--muted);">{{ o.payment_method or '—' }}</td>
- <td>
+ <td data-label="项目数" style="color:var(--muted);">{{ o.items|length }} 项</td>
+ <td data-label="金额" style="text-align:right;font-weight:700;font-size:0.95rem;">¥ {{ '%.2f'|format(o.total_amount) }}</td>
+ <td data-label="收款方式" style="color:var(--muted);">{{ o.payment_method or '—' }}</td>
+ <td data-label="状态">
  {% if o.status == 'paid' %}<span class="pill pill-ok">✓ 已收款</span>
  {% elif o.status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
  {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
  </td>
- <td style="text-align:right;">
+ <td class="actions" style="text-align:right;">
  <a href="/admin/sales-orders/{{ o.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
  </td>
  </tr>

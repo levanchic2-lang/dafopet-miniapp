@@ -46,7 +46,7 @@
 
 {% if rows %}
 <div class="data-table-wrap">
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
    <tr>
      <th>券码</th>
@@ -69,28 +69,28 @@
      {{ c.title }}
      {% if c.store %}<span class="pill pill-gray" style="margin-left:.3rem;font-size:.7rem;">{{ c.store }}</span>{% else %}<span class="pill pill-info" style="margin-left:.3rem;background:#dbeafe;color:#1e40af;font-size:.7rem;">通用</span>{% endif %}
    </td>
-   <td>{{ kind_zh.get(c.kind, c.kind) }}</td>
-   <td>
+   <td data-label="类型">{{ kind_zh.get(c.kind, c.kind) }}</td>
+   <td data-label="面值/折扣">
    {% if c.kind == 'cash' %}¥{{ '%.0f'|format(c.face_value) }}
    {% elif c.kind == 'discount' %}{{ '%.1f'|format(c.discount_pct * 10) }} 折
    {% elif c.kind == 'free_item' %}抵 ¥{{ '%.0f'|format(c.face_value) }}{% endif %}
    </td>
-   <td>{% if c.min_amount %}满 ¥{{ '%.0f'|format(c.min_amount) }}{% else %}—{% endif %}</td>
-   <td>
+   <td data-label="门槛">{% if c.min_amount %}满 ¥{{ '%.0f'|format(c.min_amount) }}{% else %}—{% endif %}</td>
+   <td data-label="关联客户">
    {% if c.customer_id and cust_map.get(c.customer_id) %}
      <a href="/admin/customers/{{ c.customer_id }}">{{ cust_map[c.customer_id].name or '客户#' ~ c.customer_id }}</a>
    {% else %}<span style="color:var(--muted);">通用</span>{% endif %}
    </td>
-   <td style="font-size:.82rem;">{{ c.expires_at or '不限期' }}</td>
-   <td>
+   <td data-label="有效期" style="font-size:.82rem;">{{ c.expires_at or '不限期' }}</td>
+   <td data-label="状态">
    {% if c.status == 'issued' %}<span class="pill pill-info">未使用</span>
    {% elif c.status == 'used' %}<span class="pill pill-gray">已核销 ¥{{ '%.0f'|format(c.used_amount) }}</span>
    {% elif c.status == 'expired' %}<span class="pill pill-warn">已过期</span>
    {% elif c.status == 'cancelled' %}<span class="pill pill-gray">已作废</span>{% endif %}
    </td>
-   <td style="font-size:.78rem;color:var(--muted);">{{ c.issued_at.strftime('%Y-%m-%d') if c.issued_at else '' }}<br>{{ c.issued_by }}</td>
+   <td data-label="发放" style="font-size:.78rem;color:var(--muted);">{{ c.issued_at.strftime('%Y-%m-%d') if c.issued_at else '' }}<br>{{ c.issued_by }}</td>
    {% if is_superadmin %}
-   <td>
+   <td class="actions">
    {% if c.status == 'issued' %}
    <form method="post" action="/admin/coupons/{{ c.id }}/cancel" style="display:inline;" onsubmit="return confirm('作废此券？')">
      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

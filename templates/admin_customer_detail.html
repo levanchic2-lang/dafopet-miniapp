@@ -247,7 +247,7 @@
  <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ visits|length }} 条</span>
  </div>
  {% if visits %}
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>日期</th><th>类型</th><th>主诉</th><th>诊断</th><th>医生</th><th>回访</th><th></th></tr></thead>
  <tbody>
  {% for v in visits %}
@@ -271,7 +271,7 @@
  {# ── 处方 ── #}
  <div class="tab-content {% if active_tab=='prescriptions' %}active{% endif %}" data-tab-content="prescriptions">
  {% if prescriptions %}
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>开方日期</th><th>医生</th><th>药品数</th><th>金额</th><th>状态</th><th></th></tr></thead>
  <tbody>
  {% for p in prescriptions %}
@@ -294,7 +294,7 @@
  {# ── 检查单 ── #}
  <div class="tab-content {% if active_tab=='exams' %}active{% endif %}" data-tab-content="exams">
  {% if exam_orders %}
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>创建时间</th><th>状态</th><th>报告数</th><th></th></tr></thead>
  <tbody>
  {% for e in exam_orders %}
@@ -321,7 +321,7 @@
  <a class="btn" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增预约</a>
  </div>
  {% if appointments %}
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>日期</th><th>时间</th><th>类型</th><th>项目</th><th>门店</th><th>状态</th></tr></thead>
  <tbody>
  {% for a in appointments %}
@@ -357,7 +357,7 @@
 
  <h4 style="margin:0.5rem 0 0.6rem;font-size:0.85rem;color:var(--muted);">💉 疫苗记录</h4>
  {% if vaccinations %}
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>接种日期</th><th>疫苗类型</th><th>第几针</th><th>厂家</th><th>下次到期</th></tr></thead>
  <tbody>
  {% for v in vaccinations %}
@@ -377,7 +377,7 @@
 
  <h4 style="margin:1rem 0 0.6rem;font-size:0.85rem;color:var(--muted);">🪱 驱虫记录</h4>
  {% if dewormings %}
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>驱虫日期</th><th>类型</th><th>药品</th><th>体重</th><th>下次到期</th><th></th></tr></thead>
  <tbody>
  {% for d in dewormings %}
@@ -412,7 +412,7 @@
  <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ pet_sales_orders|length }} 张</span>
  </div>
  {% if pet_sales_orders %}
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>日期</th><th>项目数</th><th style="text-align:right;">金额</th><th>收款方式</th><th>状态</th><th></th></tr></thead>
  <tbody>
  {% for so in pet_sales_orders %}
@@ -444,7 +444,7 @@
    <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ pet_invoices|length }} 张</span>
  </div>
  {% if pet_invoices %}
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>发票号</th><th>金额</th><th>状态</th><th>支付方式</th><th>日期</th><th style="text-align:right;">操作</th></tr></thead>
  <tbody>
  {% for inv in pet_invoices %}
@@ -487,7 +487,7 @@
  </div>
  {% if weight_records %}
  <div class="weight-chart-wrap" id="weight-chart"></div>
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>日期</th><th>体重 (kg)</th><th>备注</th><th></th></tr></thead>
  <tbody>
  {% for w in weight_records | reverse %}
@@ -523,7 +523,7 @@
  {# 待签 / 已取消 / 已过期 任务列表 #}
  {% if consent_tasks %}
  <div style="font-size:.82rem;color:var(--muted);margin:.5rem 0 .3rem;">📝 协议签署</div>
- <table class="data-table" style="margin-bottom:.8rem;">
+ <table class="data-table mobile-card" style="margin-bottom:.8rem;">
    <thead><tr><th>协议</th><th>状态</th><th>发起人</th><th>发起时间</th><th>有效期</th><th style="text-align:right;">操作</th></tr></thead>
    <tbody>
    {% for ct in consent_tasks %}
@@ -562,7 +562,7 @@
  {% if medical_docs %}<div style="font-size:.82rem;color:var(--muted);margin:.8rem 0 .3rem;">📎 其他文书</div>{% endif %}
  {% endif %}
  {% if medical_docs %}
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead><tr><th>类型</th><th>标题</th><th>文件名</th><th>大小</th><th>上传时间</th><th>上传人</th><th></th></tr></thead>
  <tbody>
  {% for d in medical_docs %}
@@ -618,7 +618,7 @@
    </div>
 
    {% if wallet_txs %}
-   <table class="data-table">
+   <table class="data-table mobile-card">
      <thead>
        <tr><th>时间</th><th>类型</th><th>金额</th><th>余额</th><th>方式</th><th>经办</th><th>备注</th></tr>
      </thead>
@@ -659,7 +659,7 @@
    </div>
 
    {% if customer_packages %}
-   <table class="data-table">
+   <table class="data-table mobile-card">
      <thead>
        <tr><th>套餐名</th><th>类别</th><th>用量</th><th>有效期</th><th>购买价</th><th>购买日</th><th>状态</th><th>操作</th></tr>
      </thead>
@@ -711,7 +711,7 @@
    </div>
 
    {% if deposits %}
-   <table class="data-table">
+   <table class="data-table mobile-card">
      <thead>
        <tr><th>类别</th><th>金额</th><th>抵扣</th><th>退还</th><th>剩余</th><th>状态</th><th>关联</th><th>收款方式</th><th>时间</th><th>操作</th></tr>
      </thead>
@@ -770,7 +770,7 @@
      <span style="margin-left:auto;color:var(--muted);font-size:.82rem;">共 {{ coupons|length }} 张（{{ active_coupons_count }} 张可用）</span>
    </div>
    {% if coupons %}
-   <table class="data-table">
+   <table class="data-table mobile-card">
      <thead><tr><th>券码</th><th>标题</th><th>类型</th><th>面值</th><th>门槛</th><th>有效期</th><th>状态</th></tr></thead>
      <tbody>
      {% for c in coupons %}

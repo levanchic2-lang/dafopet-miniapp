@@ -16,7 +16,7 @@
  <div style="padding:0.6rem 1rem;background:var(--bg-elevated);border-bottom:1px solid var(--border);font-weight:700;font-size:0.92rem;">
  📅 盘点周期概览
  </div>
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
  <tr>
  <th>大类</th>
@@ -32,12 +32,12 @@
  {% set warning = not urgent and stat.days_ago> 14 %}
  <tr style="{% if urgent %}background:#fef2f2;{% elif warning %}background:#fffbeb;{% endif %}">
  <td style="font-weight:600;">{{ stat.label }}</td>
- <td style="text-align:right;color:var(--muted);">{{ stat.item_count }}</td>
- <td>
+ <td data-label="品目数" style="text-align:right;color:var(--muted);">{{ stat.item_count }}</td>
+ <td data-label="上次盘点">
  {% if stat.last_counted %}{{ stat.last_counted }}
  {% else %}<span style="color:var(--muted);">从未盘点</span>{% endif %}
  </td>
- <td>
+ <td data-label="距今">
  {% if stat.days_ago is none %}
  <span class="pill pill-no">🚫 从未</span>
  {% elif stat.days_ago> 30 %}
@@ -48,7 +48,7 @@
  <span class="pill pill-ok">✓ {{ stat.days_ago }} 天</span>
  {% endif %}
  </td>
- <td style="text-align:right;">
+ <td class="actions" style="text-align:right;">
  <form method="post" action="/admin/stocktake/create" style="margin:0;display:inline;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <input type="hidden" name="category_filter" value="{{ stat.key }}"/>
@@ -98,7 +98,7 @@
  <div style="padding:0.6rem 1rem;background:var(--bg-elevated);border-bottom:1px solid var(--border);font-weight:700;font-size:0.92rem;">
  📋 历史盘点记录
  </div>
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
  <tr>
  <th>盘点名称</th>
@@ -114,21 +114,21 @@
  {% for s in sessions %}
  <tr>
  <td style="font-weight:600;">{{ s.name or '—' }}</td>
- <td style="color:var(--muted);">{{ categories[s.category_filter].label if s.category_filter in categories else '全部' }}</td>
- <td style="text-align:right;">{{ s.item_count }}</td>
- <td style="text-align:right;">
+ <td data-label="大类" style="color:var(--muted);">{{ categories[s.category_filter].label if s.category_filter in categories else '全部' }}</td>
+ <td data-label="品目数" style="text-align:right;">{{ s.item_count }}</td>
+ <td data-label="差异数" style="text-align:right;">
  {% if s.variance_count> 0 %}
  <span class="pill pill-warn">{{ s.variance_count }}</span>
  {% else %}
  <span style="color:var(--muted);">—</span>
  {% endif %}
  </td>
- <td>
+ <td data-label="状态">
  {% if s.status == 'open' %}<span class="pill pill-warn">进行中</span>
  {% else %}<span class="pill pill-ok">✓ 已完成</span>{% endif %}
  </td>
- <td style="color:var(--muted);font-size:0.82rem;">{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
- <td style="text-align:right;">
+ <td data-label="创建时间" style="color:var(--muted);font-size:0.82rem;">{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+ <td class="actions" style="text-align:right;">
  <a href="/admin/stocktake/{{ s.id }}" class="btn {% if s.status == 'open' %}{% else %}secondary{% endif %}" style="font-size:0.78rem;padding:0.3rem 0.7rem;">
  {% if s.status == 'open' %}继续盘点{% else %}查看{% endif %}
  </a>

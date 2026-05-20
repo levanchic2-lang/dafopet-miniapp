@@ -32,7 +32,7 @@
  <div style="padding:0.6rem 1rem;background:var(--bg-elevated);border-bottom:1px solid var(--border);font-weight:700;font-size:0.92rem;">
  👤 在职员工（{{ active_staff|length }}）
  </div>
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
  <tr>
  <th>姓名</th>
@@ -48,15 +48,15 @@
  {% for s in active_staff %}
  <tr>
  <td style="font-weight:600;">{{ s.name }}</td>
- <td>{{ s.position or '—' }}</td>
- <td>{{ s.store or '—' }}</td>
- <td>{{ s.phone or '—' }}</td>
- <td style="color:var(--muted);">{{ s.hire_date or '—' }}</td>
- <td>
+ <td data-label="职位">{{ s.position or '—' }}</td>
+ <td data-label="门店">{{ s.store or '—' }}</td>
+ <td data-label="手机">{{ s.phone or '—' }}</td>
+ <td data-label="入职日期" style="color:var(--muted);">{{ s.hire_date or '—' }}</td>
+ <td data-label="状态">
  {% if s.status == 'probation' %}<span class="pill pill-warn">试用中</span>
  {% else %}<span class="pill pill-ok">✓ 在职</span>{% endif %}
  </td>
- <td style="text-align:right;">
+ <td class="actions" style="text-align:right;">
  <a href="/admin/staff/{{ s.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
  </td>
  </tr>
@@ -73,16 +73,16 @@
  已离职员工（{{ resigned_staff|length }}） · 点击展开
  </summary>
  <div class="data-table-wrap">
- <table class="data-table" style="opacity:0.75;">
+ <table class="data-table mobile-card" style="opacity:0.75;">
  <tbody>
  {% for s in resigned_staff %}
  <tr>
  <td style="font-weight:600;">{{ s.name }}</td>
- <td>{{ s.position or '—' }}</td>
- <td>{{ s.store or '—' }}</td>
- <td style="color:var(--muted);">离职：{{ s.resign_date or '—' }}</td>
- <td><span class="pill pill-gray">离职</span></td>
- <td style="text-align:right;">
+ <td data-label="职位">{{ s.position or '—' }}</td>
+ <td data-label="门店">{{ s.store or '—' }}</td>
+ <td data-label="离职日期" style="color:var(--muted);">离职：{{ s.resign_date or '—' }}</td>
+ <td data-label="状态"><span class="pill pill-gray">离职</span></td>
+ <td class="actions" style="text-align:right;">
  <a href="/admin/staff/{{ s.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
  </td>
  </tr>

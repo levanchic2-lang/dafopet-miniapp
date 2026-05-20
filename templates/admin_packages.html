@@ -33,7 +33,7 @@
 
 {% if items %}
 <div class="data-table-wrap">
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
    <tr>
      <th>套餐名</th>
@@ -55,15 +55,15 @@
      {% if p.store %}<span class="pill pill-gray" style="margin-left:.3rem;">{{ p.store }}</span>{% else %}<span class="pill pill-info" style="margin-left:.3rem;background:#dbeafe;color:#1e40af;">通用</span>{% endif %}
      {% if p.notes %}<div style="font-size:.75rem;color:var(--muted);">{{ p.notes[:60] }}</div>{% endif %}
    </td>
-   <td>{{ category_zh.get(p.category, p.category) }}</td>
-   <td>{{ p.total_uses }}</td>
-   <td>¥{{ '%.2f'|format(p.sell_price) }}</td>
-   <td>¥{{ '%.2f'|format(p.unit_price) }}</td>
-   <td>{{ p.validity_days }} 天{% if p.validity_days == 0 %}（不限期）{% endif %}</td>
-   <td>{{ sold_map.get(p.id, 0) }} 份</td>
-   <td>{% if p.is_active %}<span class="pill pill-info">上架</span>{% else %}<span class="pill pill-gray">下架</span>{% endif %}</td>
+   <td data-label="类别">{{ category_zh.get(p.category, p.category) }}</td>
+   <td data-label="次数">{{ p.total_uses }}</td>
+   <td data-label="售价">¥{{ '%.2f'|format(p.sell_price) }}</td>
+   <td data-label="单次参考价">¥{{ '%.2f'|format(p.unit_price) }}</td>
+   <td data-label="有效期">{{ p.validity_days }} 天{% if p.validity_days == 0 %}（不限期）{% endif %}</td>
+   <td data-label="已售">{{ sold_map.get(p.id, 0) }} 份</td>
+   <td data-label="状态">{% if p.is_active %}<span class="pill pill-info">上架</span>{% else %}<span class="pill pill-gray">下架</span>{% endif %}</td>
    {% if is_superadmin %}
-   <td>
+   <td class="actions">
      <button type="button" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;"
              onclick='openEdit({{ p.id }}, {{ {"name":p.name,"category":p.category,"total_uses":p.total_uses,"sell_price":p.sell_price,"unit_price":p.unit_price,"validity_days":p.validity_days,"notes":p.notes,"store":p.store}|tojson }})'>编辑</button>
      <form method="post" action="/admin/packages/{{ p.id }}/toggle" style="display:inline;">
