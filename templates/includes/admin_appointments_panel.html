@@ -393,11 +393,12 @@
  <div class="panel-wrap">
  <h4>取消预约 #{{ appt.id }}</h4>
  <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}"
+ class="cancel-form"
  style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
  <input type="hidden" name="redirect_after" value="appointments">
  <input type="hidden" name="status" value="cancelled">
- <input type="text" name="cancel_reason" style="flex:1;min-width:200px;">
+ <input type="text" name="cancel_reason" placeholder="取消原因（可选）" style="flex:1;min-width:160px;">
  <button type="submit" class="danger">确认取消</button>
  <button type="button" class="secondary" onclick="toggleApptPanel('cancel-{{ appt.id }}')">放弃</button>
  </form>
@@ -419,6 +420,7 @@
  </div>
  {% endif %}
  <form method="post" action="{{ request.url_for('admin_appointment_reschedule', appointment_id=appt.id) }}"
+ class="rs-form"
  style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem;align-items:end;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
  <input type="hidden" name="next" value="/admin/appointments">

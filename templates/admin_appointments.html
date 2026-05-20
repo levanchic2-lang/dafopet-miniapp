@@ -376,6 +376,32 @@
     }
     /* 改约/取消 panel-row 在手机上保持单 td 占满全宽 */
     .appt-table tr.appt-panel-row td { padding: 0 !important; }
+    /* 改约表单：4 列在手机上塌缩为 2 列；输入框补齐高度 */
+    .rs-form { grid-template-columns: 1fr 1fr !important; gap: .55rem !important; }
+    .rs-form > div { min-width: 0 !important; }
+    .rs-form input, .rs-form select {
+      width: 100% !important; min-width: 0 !important;
+      box-sizing: border-box !important;
+      min-height: 42px; padding: .45rem .6rem !important;
+      font-size: 16px;
+      -webkit-appearance: none; appearance: none;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .rs-form input[type="date"]::-webkit-date-and-time-value,
+    .rs-form input[type="time"]::-webkit-date-and-time-value {
+      text-align: left; min-height: 1.4em;
+    }
+    /* panel 内的容器最大宽 100vw - 边距 */
+    .appt-table tr.appt-panel-row .panel-wrap { padding: .6rem .75rem !important; }
+    /* 取消表单：手机上输入框占满，按钮排第二行 */
+    .cancel-form input[type="text"] { flex: 1 1 100% !important; min-width: 0 !important;
+      min-height: 42px; padding: .45rem .6rem !important; font-size: 16px;
+      box-sizing: border-box !important;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--card);
+    }
+    .cancel-form button { flex: 1 1 calc(50% - .25rem); min-height: 42px; }
     .col-time { font-size: 1rem; }
     .col-actions { width: auto !important; text-align: left; padding-top: .4rem !important; border-top: 1px dashed var(--border) !important; margin-top: .3rem !important; }
     .row-actions { opacity: 1; flex-wrap: wrap; justify-content: flex-start; }

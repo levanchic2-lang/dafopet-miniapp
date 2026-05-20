@@ -188,10 +188,22 @@
    .tnr-filter-grid input[type="text"] {
      width: 100% !important; max-width: 100% !important;
      box-sizing: border-box !important; min-width: 0 !important;
-     -webkit-appearance: none; /* iOS 原生 date 控件会撑宽，去掉系统外观 */
    }
-   /* 重新画 date 输入框的右侧图标位置 */
-   .tnr-filter-grid input[type="date"] { appearance: none; padding-right: .5rem; }
+   /* date 输入框：去原生外观 + 补齐高度，跟其他文本框一致 */
+   .tnr-filter-grid input[type="date"] {
+     -webkit-appearance: none; appearance: none;
+     min-height: 42px;
+     padding: .5rem .65rem !important;
+     font-size: 16px;
+     background: var(--card);
+     border: 1px solid var(--border);
+     border-radius: 8px;
+     line-height: 1.4;
+   }
+   /* iOS 上 date input 内部还有几个 ::-webkit-date-and-time-value 元素，统一对齐 */
+   .tnr-filter-grid input[type="date"]::-webkit-date-and-time-value {
+     text-align: left; min-height: 1.4em;
+   }
    /* 申请素材缩略图：手机上更小，更密 */
    .admin-app-thumb img { max-width: 28vw !important; height: auto !important; }
  }
