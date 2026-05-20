@@ -104,6 +104,23 @@
 .record-item .ri-main { flex: 1; font-size: 0.88rem; }
 .record-item .ri-amount { font-weight: 700; color: #059669; font-size: 0.9rem; }
 
+/* 移动端：.record-item 内部元素允许换行，主标题占满，删除按钮独占一行 */
+@media (max-width: 768px) {
+  .record-item { flex-wrap: wrap; padding: .55rem .65rem; }
+  .record-item > a {
+    display: flex !important; flex-wrap: wrap !important;
+    gap: .35rem .55rem !important; width: 100%; align-items: center !important;
+  }
+  .record-item .ri-date { min-width: 0 !important; flex: 0 0 auto; }
+  .record-item .ri-main {
+    flex: 1 1 100% !important; font-size: .92rem; font-weight: 600;
+    order: -1; /* 主标题排到最前面，更显眼 */
+  }
+  .record-item .ri-amount { flex: 0 0 auto; }
+  .record-item form { width: 100%; text-align: right;
+    border-top: 1px dashed var(--border); padding-top: .35rem; margin-top: .3rem; }
+}
+
 /* 浮动保存条 */
 .save-bar {
  position: sticky; bottom: 0; background: var(--card);
