@@ -411,7 +411,7 @@ def build_outpatient_followup_today(db: Session, store_short: str) -> dict:
 # ─────────────────────────────────────────────────────
 
 def build_batch_expiry(db: Session, store_short: str) -> dict:
-    """批次有效期 30 天内（无门店概念）。"""
+    """库存批次有效期 30 天内到期 — 覆盖所有品目（药品/疫苗/耗材/化验/影像试剂等）。"""
     today = _today_str()
     end = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
     q = (db.query(InventoryBatch)
@@ -423,16 +423,22 @@ def build_batch_expiry(db: Session, store_short: str) -> dict:
              InventoryBatch.expiry_date <= end,
          ).order_by(InventoryBatch.expiry_date.asc()))
     rows = q.all()
+    _CAT_ZH = {
+        "medication": "药品", "vaccine": "疫苗", "antiparasitic": "驱虫",
+        "consumable": "耗材", "product": "商品", "grooming": "美容用品",
+        "lab": "化验试剂", "imaging": "影像耗材", "microscopy": "显微",
+    }
     items = []
     for b in rows[:3]:
         item = b.item
+        cat = _CAT_ZH.get((item.category if item else ""), (item.category if item else "")) or "—"
         items.append({
-            "label": (item.name if item else "未知品目"),
-            "sub": f"批 {b.batch_no or '—'} · 余 {b.quantity} · {b.expiry_date}",
+            "label": f"[{cat}] {(item.name if item else '未知品目')}",
+            "sub": f"批 {b.batch_no or '—'} · 余 {b.quantity} · 到期 {b.expiry_date}",
             "url": f"/admin/inventory/{b.item_id}",
         })
     return {
-        "key": "batch_expiry", "title": "药品/疫苗 30 天内到期", "icon": "⏳",
+        "key": "batch_expiry", "title": "库存 30 天内到期", "icon": "⏳",
         "count": len(rows), "previews": items,
         "all_url": "/admin/inventory",
         "tone": "info",
