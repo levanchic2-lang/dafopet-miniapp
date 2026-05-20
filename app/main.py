@@ -2709,19 +2709,12 @@ async def admin_hr_page(
     resigned_staff = _staff_q.filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
     expiring = _expiring_contracts(db)
     all_users = db.query(AdminUser).order_by(AdminUser.created_at).all()
-    # 尚未绑定账号的在职员工（可供新建账号时选择）
-    linked_staff_ids = {s.admin_user_id for s in active_staff if s.admin_user_id}
-    unlinked_staff = [s for s in active_staff if s.id not in linked_staff_ids]
-    # 账号 → 员工姓名映射（用于列表显示）
-    staff_by_user_id = {s.admin_user_id: s for s in active_staff if s.admin_user_id}
     return templates.TemplateResponse(request, "admin_hr.html", {
         "request": request, "title": "人事管理",
         "active_staff": active_staff, "resigned_staff": resigned_staff,
         "expiring": expiring,
         "active_users": [u for u in all_users if u.is_active],
         "inactive_users": [u for u in all_users if not u.is_active],
-        "unlinked_staff": unlinked_staff,
-        "staff_by_user_id": staff_by_user_id,
         "current_username": request.session.get("admin_username", ""),
         "csrf_token": _get_csrf_token(request),
         "msg": msg, "err": err,
@@ -2742,7 +2735,6 @@ async def admin_users_create(
     password: str = Form(...),
     role: str = Form("staff"),
     store: str = Form(""),
-    staff_id: str = Form(""),
     csrf_token: str = Form(""),
 ):
     require_admin(request)
@@ -2762,14 +2754,6 @@ async def admin_users_create(
     new_user = AdminUser(username=username, password_hash=_pwd_ctx.hash(password), role=role, is_active=True, store=store)
     db.add(new_user)
     db.flush()  # 获取 new_user.id
-    if staff_id:
-        try:
-            sid = int(staff_id)
-            staff_row = db.get(Staff, sid)
-            if staff_row:
-                staff_row.admin_user_id = new_user.id
-        except (ValueError, TypeError):
-            pass
     _audit(db, request, "admin_user_create", application_id=None, detail={"username": username, "role": role})
     db.commit()
     return RedirectResponse(f"/admin/hr?msg=已创建账号：{username}", status_code=303)
@@ -2936,10 +2920,9 @@ async def admin_staff_create_get(request: Request, db: Session = Depends(get_db)
     if not _admin_ok(request):
         return templates.TemplateResponse(request, "admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
     require_superadmin(request)
-    admin_users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.username).all()
     return templates.TemplateResponse(request, "admin_staff_form.html", {
         "request": request, "title": "新增员工", "staff": None,
-        "admin_users": admin_users, "position_options": _POSITION_OPTIONS,
+        "position_options": _POSITION_OPTIONS,
         "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",
     })
 
@@ -2952,7 +2935,7 @@ async def admin_staff_create_post(
     position: str = Form(""), hire_date: str = Form(""), probation_end_date: str = Form(""),
     status: str = Form("active"), emergency_contact_name: str = Form(""),
     emergency_contact_phone: str = Form(""), emergency_contact_relation: str = Form(""),
-    admin_user_id: str = Form(""), notes: str = Form(""), csrf_token: str = Form(""),
+    notes: str = Form(""), csrf_token: str = Form(""),
 ):
     require_admin(request)
     require_superadmin(request)
@@ -2960,13 +2943,12 @@ async def admin_staff_create_post(
     name = name.strip()
     if not name:
         return RedirectResponse("/admin/staff/create?err=姓名不能为空", status_code=303)
-    auid = int(admin_user_id) if admin_user_id.strip().isdigit() else None
     s = Staff(
         name=name, gender=gender, birthday=birthday, phone=phone.strip(),
         id_number=id_number.strip(), store=store, position=position,
         hire_date=hire_date, probation_end_date=probation_end_date, status=status,
         emergency_contact_name=emergency_contact_name, emergency_contact_phone=emergency_contact_phone,
-        emergency_contact_relation=emergency_contact_relation, admin_user_id=auid, notes=notes,
+        emergency_contact_relation=emergency_contact_relation, notes=notes,
     )
     db.add(s)
     _audit(db, request, "staff_create", application_id=None, detail={"name": name})
@@ -3006,10 +2988,9 @@ async def admin_staff_edit_get(staff_id: int, request: Request, db: Session = De
     staff = db.query(Staff).filter(Staff.id == staff_id).first()
     if not staff:
         raise HTTPException(404)
-    admin_users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.username).all()
     return templates.TemplateResponse(request, "admin_staff_form.html", {
         "request": request, "title": f"编辑员工 · {staff.name}", "staff": staff,
-        "admin_users": admin_users, "position_options": _POSITION_OPTIONS,
+        "position_options": _POSITION_OPTIONS,
         "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",
     })
 
@@ -3022,7 +3003,7 @@ async def admin_staff_edit_post(
     position: str = Form(""), hire_date: str = Form(""), probation_end_date: str = Form(""),
     status: str = Form("active"), resign_date: str = Form(""), resign_reason: str = Form(""),
     emergency_contact_name: str = Form(""), emergency_contact_phone: str = Form(""),
-    emergency_contact_relation: str = Form(""), admin_user_id: str = Form(""),
+    emergency_contact_relation: str = Form(""),
     notes: str = Form(""), csrf_token: str = Form(""),
 ):
     require_admin(request)
@@ -3039,7 +3020,6 @@ async def admin_staff_edit_post(
     staff.emergency_contact_name = emergency_contact_name
     staff.emergency_contact_phone = emergency_contact_phone
     staff.emergency_contact_relation = emergency_contact_relation
-    staff.admin_user_id = int(admin_user_id) if admin_user_id.strip().isdigit() else None
     staff.notes = notes
     _audit(db, request, "staff_edit", application_id=None, detail={"staff_id": staff_id, "name": staff.name})
     db.commit()

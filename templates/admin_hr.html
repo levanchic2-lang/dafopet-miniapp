@@ -119,14 +119,9 @@
  </style>
  <tbody>
  {% for u in active_users %}
- {% set linked = staff_by_user_id.get(u.id) %}
  <tr style="border-bottom:1px solid var(--border);vertical-align:middle;">
  <td style="padding:0.55rem 0.75rem;white-space:nowrap;">
  {{ u.username }}
- {# 仅当员工档案名跟用户名不同时才显示，避免重复 #}
- {% if linked and linked.name and linked.name != u.username %}
-   <span style="font-size:0.78rem;color:var(--muted);margin-left:6px;">· {{ linked.name }}</span>
- {% endif %}
  {% if u.username == current_username %}<span style="font-size:0.75rem;color:var(--muted);margin-left:6px;">（当前）</span>{% endif %}
  </td>
  <td style="padding:0.55rem 0.75rem;white-space:nowrap;">
@@ -221,19 +216,10 @@
  <summary style="cursor:pointer;font-size:0.9rem;font-weight:600;color:var(--text);user-select:none;">＋ 新建账号</summary>
  <form method="post" action="/admin/users/create" style="margin-top:0.75rem;max-width:560px;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <div>
- <label for="new_staff">关联员工档案</label>
- <select id="new_staff" name="staff_id">
- <option value="">— 暂不关联 —</option>
- {% for s in unlinked_staff %}
- <option value="{{ s.id }}">{{ s.name }}（{{ s.position or '职位未填' }} · {{ s.store or '门店未填' }}）</option>
- {% endfor %}
- </select>
- </div>
  <div class="row2" style="margin-top:0.6rem;">
  <div>
  <label for="new_username">用户名</label>
- <input type="text" id="new_username" name="username" required autocomplete="off"/>
+ <input type="text" id="new_username" name="username" required autocomplete="off" placeholder="如 lianggu / 梁天兵"/>
  </div>
  <div>
  <label for="new_password">初始密码（至少6位）</label>

@@ -78,17 +78,6 @@
  <option value="resigned" {% if staff and staff.status == 'resigned' %}selected{% endif %}>离职</option>
  </select>
  </div>
- <div>
- <label for="admin_user_id">关联后台账号</label>
- <select id="admin_user_id" name="admin_user_id">
- <option value="">— 不关联 —</option>
- {% for u in admin_users %}
- <option value="{{ u.id }}" {% if staff and staff.admin_user_id == u.id %}selected{% endif %}>
- {{ u.username }}（{{ '超级管理员' if u.role == 'superadmin' else '员工' }}）
- </option>
- {% endfor %}
- </select>
- </div>
  </div>
 
  <!-- 离职信息（仅离职时显示） -->
