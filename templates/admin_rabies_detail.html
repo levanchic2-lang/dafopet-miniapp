@@ -48,6 +48,8 @@
   .info-label { width: auto !important; flex: 0 0 100% !important;
                 font-weight: 500; margin-bottom: .15rem; }
   .info-val { font-size: .95rem; word-break: break-all; }
+  /* 医护签名板：手机上铺满宽度变成横向矩形（更好签字） */
+  .staff-sig-box { max-width: 100% !important; }
 }
 </style>
 {% endblock %}
@@ -168,7 +170,7 @@
  </div><br/>
  {% endif %}
  <input type="hidden" name="staff_signature" id="staff_signature" value=""/>
- <div class="sig-wrap" style="max-width:33%;">
+ <div class="sig-wrap staff-sig-box" style="max-width:33%;">
  <canvas id="staff-sig-canvas" height="200"></canvas>
  <div class="sig-toolbar"><button type="button" onclick="clearStaffSig()">清除重签</button></div>
  </div>
