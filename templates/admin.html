@@ -174,6 +174,14 @@
  @media (max-width: 900px) {
  .apps-grid { grid-template-columns: 1fr; }
  }
+ /* TNR 列表的筛选器：窄屏塌缩为单列 */
+ @media (max-width: 768px) {
+   .tnr-filter-grid { grid-template-columns: 1fr !important; gap: .55rem !important; }
+   .tnr-filter-grid label { margin: 0 0 .2rem !important; font-size: .82rem; }
+   .tnr-filter-grid input, .tnr-filter-grid select { width: 100%; box-sizing: border-box; }
+   /* 申请素材缩略图：手机上更小，更密 */
+   .admin-app-thumb img { max-width: 28vw !important; height: auto !important; }
+ }
 </style>
 {% endblock %}
 {% block body %}
@@ -227,7 +235,7 @@
  </div>
  </div>
  <form method="get" action="/admin" style="display:grid;gap:0.6rem;margin-top:0.75rem;">
- <div style="display:grid;grid-template-columns:1fr 1fr 1.5fr 0.5fr;gap:0.5rem 0.75rem;align-items:end;">
+ <div class="tnr-filter-grid" style="display:grid;grid-template-columns:1fr 1fr 1.5fr 0.5fr;gap:0.5rem 0.75rem;align-items:end;">
  <div>
  <label style="margin:0 0 0.35rem;">状态</label>
  <select name="status">

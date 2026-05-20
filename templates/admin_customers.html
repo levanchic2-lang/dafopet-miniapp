@@ -125,12 +125,13 @@
 <div class="wb-group-title" style="margin-top:1.5rem;">👥 客户档案（共 {{ total }} 条）</div>
 
 <div class="cust-search-card">
-  <form method="get" id="cust-search-form">
+  <form method="get" id="cust-search-form" action="#cust-list-anchor">
     {% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}
-    <input id="cust-q" type="text" name="q" value="{{ q }}" placeholder="输入姓名 / 手机号搜索客户… 按 / 快速聚焦" autocomplete="off" autofocus/>
+    <input id="cust-q" type="text" name="q" value="{{ q }}" placeholder="输入姓名 / 手机号搜索客户… 按 / 快速聚焦" autocomplete="off"/>
     <button type="submit" class="btn">搜索</button>
     {% if q %}<a href="/admin/customers{% if wb_store %}?store={{ wb_store }}{% endif %}" class="btn secondary">清除</a>{% endif %}
   </form>
+  <span id="cust-list-anchor"></span>
 </div>
 
 {% if customers %}
@@ -224,5 +225,16 @@ document.addEventListener('keydown', e => {
   const box = document.getElementById('cust-q');
   if (box) { box.focus(); box.select(); }
 });
+
+// 搜索结果加载后：如果带了 ?q= 参数（说明用户刚搜索过），自动把列表区滚到视野
+(function () {
+  var p = new URLSearchParams(location.search);
+  if (p.get('q')) {
+    var anchor = document.getElementById('cust-list-anchor');
+    if (anchor) setTimeout(function () {
+      anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  }
+})();
 </script>
 {% endblock %}

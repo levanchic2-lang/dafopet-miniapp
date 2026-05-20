@@ -359,6 +359,26 @@
   .col-status { width: 78px; }
   .col-actions{ width: 200px; text-align: right; }
 
+  /* 移动端：把宽表改成卡片纵向铺开 */
+  @media (max-width: 768px) {
+    .appt-table, .appt-table thead, .appt-table tbody, .appt-table tr, .appt-table td { display: block; width: 100%; }
+    .appt-table thead { display: none; }
+    .appt-table tr.appt-row {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: .55rem .75rem; margin-bottom: .5rem;
+    }
+    .appt-table td {
+      padding: .15rem 0; border: none !important; white-space: normal !important;
+      overflow: visible !important; text-overflow: clip !important;
+    }
+    .col-time { font-size: 1rem; }
+    .col-actions { width: auto !important; text-align: left; padding-top: .4rem !important; border-top: 1px dashed var(--border) !important; margin-top: .3rem !important; }
+    .row-actions { opacity: 1; flex-wrap: wrap; justify-content: flex-start; }
+    .stats-bar { padding: .55rem .65rem !important; }
+    /* 顶部"日期分组"卡片：内边距收紧 */
+    .day-section { padding: .55rem !important; }
+  }
+
   .row-time-sub { font-size: 0.7rem; color: var(--muted); font-weight: 400; }
   .row-cust-sub { font-size: 0.72rem; color: var(--muted); }
   .row-svc-extra { font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

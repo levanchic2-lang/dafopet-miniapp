@@ -500,6 +500,30 @@
       .data-table.mobile-card tr { padding: .55rem .7rem; }
       .filter-row select { flex: 1 1 100%; }
     }
+
+    /* ── 全局图片 Lightbox（PWA standalone 模式下 _blank 没用，必须用弹层） ── */
+    #lb-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.92);
+      z-index: 99999; display: none; align-items: center; justify-content: center;
+      touch-action: none;
+    }
+    #lb-overlay.open { display: flex; }
+    #lb-overlay img, #lb-overlay video {
+      max-width: 96vw; max-height: 92vh; object-fit: contain;
+      box-shadow: 0 12px 60px rgba(0,0,0,.5);
+    }
+    #lb-close {
+      position: fixed; top: env(safe-area-inset-top, 12px); right: 16px;
+      width: 44px; height: 44px; border-radius: 50%; border: none;
+      background: rgba(255,255,255,.95); color: #111; font-size: 22px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      z-index: 100000; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    }
+    #lb-hint {
+      position: fixed; bottom: env(safe-area-inset-bottom, 16px); left: 0; right: 0;
+      text-align: center; color: rgba(255,255,255,.6); font-size: .8rem;
+      pointer-events: none; z-index: 100000;
+    }
   </style>
   {% block extra_css %}{% endblock %}
   {% block extra_head %}{% endblock %}
@@ -857,6 +881,101 @@
         .catch(function (e) { console.warn('[PWA] sw register failed:', e); });
     });
   }
+  </script>
+
+  {# ── 全局图片 Lightbox：拦截所有 <a href="/file/..."> 点击，弹层显示 ── #}
+  <div id="lb-overlay" role="dialog" aria-hidden="true">
+    <button id="lb-close" aria-label="关闭">✕</button>
+    <div id="lb-content"></div>
+    <div id="lb-hint">轻触画面外或按 ✕ 关闭</div>
+  </div>
+  <script>
+  (function () {
+    var overlay = document.getElementById('lb-overlay');
+    var content = document.getElementById('lb-content');
+    var closeBtn = document.getElementById('lb-close');
+    if (!overlay || !content || !closeBtn) return;
+
+    var IMG_EXT = /\.(jpe?g|png|webp|gif|bmp|svg|heic|heif)(\?.*)?$/i;
+    var VID_EXT = /\.(mp4|mov|avi|mkv|webm|m4v)(\?.*)?$/i;
+
+    function isFileHref(href) {
+      if (!href) return false;
+      // 同源 /file/123 或 /uploads/xxx.jpg
+      if (href.indexOf('/file/') === 0) return true;
+      if (href.indexOf('/uploads/') === 0) return true;
+      return false;
+    }
+    function isMediaTarget(a) {
+      // 优先：图片/视频文件名后缀
+      var href = a.getAttribute('href') || '';
+      if (IMG_EXT.test(href) || VID_EXT.test(href)) return true;
+      // /file/{id} 没有扩展名，但 <a> 里包了 <img> 或 <video> 就当媒体处理
+      if (a.querySelector('img, video')) return true;
+      return false;
+    }
+
+    function openLightbox(src, kind) {
+      content.innerHTML = '';
+      var el;
+      if (kind === 'video') {
+        el = document.createElement('video');
+        el.src = src; el.controls = true; el.autoplay = true; el.playsInline = true;
+      } else {
+        el = document.createElement('img');
+        el.src = src; el.alt = '查看';
+      }
+      content.appendChild(el);
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      // 进入历史栈，让系统返回手势/按钮也能关闭
+      try { history.pushState({ lb: 1 }, ''); } catch (e) {}
+    }
+    function closeLightbox() {
+      overlay.classList.remove('open');
+      overlay.setAttribute('aria-hidden', 'true');
+      content.innerHTML = '';
+      document.body.style.overflow = '';
+    }
+
+    // 全局拦截：任何指向 /file/ 或 /uploads/ 的 <a> 点击
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a');
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (!isFileHref(href)) return;
+      if (!isMediaTarget(a)) return;
+      // 修饰键不拦截（用户主动想在新标签打开）
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      // 推断类型
+      var kind = VID_EXT.test(href) || a.querySelector('video') ? 'video' : 'image';
+      openLightbox(href, kind);
+    }, true);
+
+    closeBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeLightbox();
+      try { if (history.state && history.state.lb) history.back(); } catch (_) {}
+    });
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay || e.target === content) {
+        closeLightbox();
+        try { if (history.state && history.state.lb) history.back(); } catch (_) {}
+      }
+    });
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && overlay.classList.contains('open')) {
+        closeLightbox();
+        try { if (history.state && history.state.lb) history.back(); } catch (_) {}
+      }
+    });
+    // 系统返回手势/按钮：popstate 时关掉弹层
+    window.addEventListener('popstate', function () {
+      if (overlay.classList.contains('open')) closeLightbox();
+    });
+  })();
   </script>
 </body>
 </html>
