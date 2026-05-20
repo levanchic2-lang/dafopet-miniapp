@@ -176,14 +176,22 @@
  }
  /* TNR 列表的筛选器：窄屏塌缩为单列 */
  @media (max-width: 768px) {
+   /* 关键：父级 .card 也得允许子元素缩到 0，否则 grid item 撑爆 */
+   .card { overflow-x: hidden; min-width: 0; }
    .tnr-filter-grid { grid-template-columns: 1fr !important; gap: .55rem !important; }
-   .tnr-filter-grid label { margin: 0 0 .2rem !important; font-size: .82rem; }
+   /* grid item 默认 min-width:auto，会拒绝缩小 → 强制 0 让 input 服从 100% */
+   .tnr-filter-grid > div { min-width: 0 !important; max-width: 100% !important; }
+   .tnr-filter-grid label { margin: 0 0 .2rem !important; font-size: .82rem; display: block; }
    .tnr-filter-grid input,
    .tnr-filter-grid select,
-   .tnr-filter-grid input[type="date"] {
+   .tnr-filter-grid input[type="date"],
+   .tnr-filter-grid input[type="text"] {
      width: 100% !important; max-width: 100% !important;
      box-sizing: border-box !important; min-width: 0 !important;
+     -webkit-appearance: none; /* iOS 原生 date 控件会撑宽，去掉系统外观 */
    }
+   /* 重新画 date 输入框的右侧图标位置 */
+   .tnr-filter-grid input[type="date"] { appearance: none; padding-right: .5rem; }
    /* 申请素材缩略图：手机上更小，更密 */
    .admin-app-thumb img { max-width: 28vw !important; height: auto !important; }
  }
