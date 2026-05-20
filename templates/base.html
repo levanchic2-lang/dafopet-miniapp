@@ -2,8 +2,20 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>{{ title }}</title>
+  {# ── PWA: 可添加到主屏，全屏运行 ── #}
+  <link rel="manifest" href="/static/manifest.json" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="application-name" content="大风TNR" />
+  {# iOS Safari 「添加到主屏」 #}
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="大风TNR" />
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+  {# Windows 磁贴 #}
+  <meta name="msapplication-TileColor" content="#2563eb" />
+  <meta name="msapplication-TileImage" content="/static/icon-192.png" />
   <style>
     :root {
       --bg: #fafafa;
@@ -714,5 +726,15 @@
   })();
   </script>
   {% endif %}
+
+  {# ── PWA: 注册 Service Worker（HTTPS / localhost 才生效） ── #}
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/static/sw.js', { scope: '/' })
+        .catch(function (e) { console.warn('[PWA] sw register failed:', e); });
+    });
+  }
+  </script>
 </body>
 </html>
