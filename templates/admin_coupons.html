@@ -15,6 +15,7 @@
     padding: 0 !important; box-sizing: border-box !important;
     box-shadow: none !important;
     display: flex !important; flex-direction: column !important;
+    position: relative !important;  /* 给绝对定位的底栏做参考系 */
   }
   /* 标题：固定不滚 — 紫色渐变顶栏，明显的视觉变化 */
   #issue-coupon-modal > .cust-modal > h3:first-child {
@@ -57,12 +58,14 @@
   #issue-coupon-modal form > div:not(:last-child) {
     padding: 0 1rem !important; margin: .5rem 0 0 !important;
   }
-  /* 最后一行（提交+取消按钮）：sticky 钉在底部 */
+  /* 最后一行（按钮栏）：绝对定位钉在 modal 底部（比 sticky 在 iOS 更可靠） */
   #issue-coupon-modal form > div:last-child {
-    position: sticky !important; bottom: 0 !important;
-    left: 0; right: 0; z-index: 10 !important;
-    margin: 1rem -1rem -.5rem !important;
-    padding: .75rem 1rem env(safe-area-inset-bottom, .75rem) !important;
+    position: absolute !important;
+    left: 0; right: 0; bottom: 0;
+    z-index: 10 !important;
+    margin: 0 !important;
+    padding: .75rem 1rem !important;
+    padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px)) !important;
     background: var(--card) !important;
     border-top: 1px solid var(--border);
     box-shadow: 0 -6px 14px rgba(0,0,0,.08);
@@ -72,8 +75,8 @@
   #issue-coupon-modal form > div:last-child > a {
     flex: 1 1 50% !important; height: 44px !important; font-size: .95rem !important;
   }
-  /* 表单内边距：留出按钮栏的空间，避免最后一个字段被遮 */
-  #issue-coupon-modal form { padding: 0 0 1rem !important; }
+  /* 表单底部留出按钮栏的高度（~80px），避免最后字段被遮 */
+  #issue-coupon-modal form { padding: 0 0 100px !important; }
 }
 </style>
 {% endblock %}
