@@ -55,7 +55,8 @@
   form > div[style*="repeat(4,1fr)"],
   form > div[style*="repeat(4, 1fr)"] {
     grid-template-columns: 1fr 1fr !important;
-    gap: .55rem .55rem !important;
+    gap: .65rem .55rem !important;
+    align-items: end !important;
   }
   form > div[style*="repeat(4,1fr)"] > div,
   form > div[style*="repeat(4, 1fr)"] > div { min-width: 0 !important; }
@@ -63,12 +64,23 @@
   form > div[style*="repeat(4,1fr)"] select,
   form > div[style*="repeat(4, 1fr)"] input,
   form > div[style*="repeat(4, 1fr)"] select {
-    width: 100% !important; height: 40px !important; box-sizing: border-box !important;
-    padding: .4rem .55rem !important; font-size: 16px !important;
+    width: 100% !important; box-sizing: border-box !important;
+    /* iOS date 控件原生外观 + 高度跟其他不一致 → 全部去掉原生外观、统一 42px */
+    -webkit-appearance: none !important; appearance: none !important;
+    height: 42px !important; line-height: 1.4 !important;
+    padding: 0 .65rem !important; font-size: 16px !important;
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important; border-radius: 8px !important;
+    margin: 0 !important;
+  }
+  /* iOS date input 内部还有 ::-webkit-date-and-time-value，强制居中 */
+  form > div[style*="repeat(4,1fr)"] input[type="date"]::-webkit-date-and-time-value {
+    text-align: left; min-height: 1.4em; line-height: 1.4em;
   }
   form > div[style*="repeat(4,1fr)"] label,
   form > div[style*="repeat(4, 1fr)"] label {
-    font-size: .78rem; margin: 0 0 .25rem !important;
+    font-size: .78rem; margin: 0 0 .25rem !important; display: block;
+    height: 1.1rem; line-height: 1.1rem;
   }
   /* 工具栏按钮：移动端 2 列均分（套用模板/复制 顶上一行 · 保存为模板/预览 下一行） */
   .card[style*="linear-gradient(90deg,#eff6ff"] {
