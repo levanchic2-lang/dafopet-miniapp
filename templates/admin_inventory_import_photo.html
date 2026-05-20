@@ -126,10 +126,12 @@
              <th style="width:30px;">✓</th>
              <th style="width:80px;">操作</th>
              <th style="min-width:160px;">品名</th>
-             <th style="width:90px;">规格</th>
-             <th style="width:80px;">数量</th>
-             <th style="width:65px;">单位</th>
-             <th style="width:90px;">进价（¥）</th>
+             <th style="width:80px;">规格</th>
+             <th style="width:75px;">数量</th>
+             <th style="width:60px;">包装单位</th>
+             <th style="width:70px;" title="包装内最小单位数（1盒=N片）">×N</th>
+             <th style="width:60px;" title="发药/拆零用的最小单位">最小单位</th>
+             <th style="width:90px;" title="按包装单位的进价">进价/件</th>
              <th style="width:110px;">批号</th>
              <th style="width:130px;">有效期</th>
              <th style="width:140px;">匹配</th>
@@ -292,9 +294,11 @@
           (matched ? '<input type="hidden" name="row' + i + '_item_id" value="' + it.matched_id + '">' : '') +
         '</td>' +
         '<td><input name="row' + i + '_name" value="' + escapeHtml(it.name) + '" required></td>' +
-        '<td><input name="row' + i + '_spec" value="' + escapeHtml(it.spec) + '"></td>' +
+        '<td><input name="row' + i + '_spec" value="' + escapeHtml(it.spec) + '" placeholder="如10mg"></td>' +
         '<td><input name="row' + i + '_qty" type="number" step="0.01" min="0" value="' + (it.qty || '') + '"></td>' +
-        '<td><input name="row' + i + '_unit" value="' + escapeHtml(it.unit || it.matched_unit || '') + '"></td>' +
+        '<td><input name="row' + i + '_unit" value="' + escapeHtml(it.unit || it.pack_unit || it.matched_unit2 || it.matched_unit || '') + '" placeholder="盒"></td>' +
+        '<td><input name="row' + i + '_pack_size" type="number" step="1" min="0" value="' + (it.pack_size || it.matched_unit2_ratio || '') + '" placeholder="30"></td>' +
+        '<td><input name="row' + i + '_main_unit" value="' + escapeHtml(it.main_unit || it.matched_unit || '') + '" placeholder="片"></td>' +
         '<td><input name="row' + i + '_unit_price" type="number" step="0.01" min="0" value="' + (it.unit_price || '') + '"></td>' +
         '<td><input name="row' + i + '_batch_no" value="' + escapeHtml(it.batch_no) + '" placeholder="选填"></td>' +
         '<td><input name="row' + i + '_expiry_date" type="date" value="' + escapeHtml(it.expiry_date) + '"></td>' +

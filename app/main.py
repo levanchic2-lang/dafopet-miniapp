@@ -8551,7 +8551,20 @@ async def admin_inventory_import_photo_recognize(
             if m:
                 it["matched_name"] = m.name
                 it["matched_unit"] = m.unit
+                it["matched_unit2"] = m.unit2 or ""
+                it["matched_unit2_ratio"] = float(m.unit2_ratio or 1.0)
                 it["matched_stock"] = float(m.stock_qty or 0)
+                # 高置信匹配时，把已有品目的 spec/unit 反填进 OCR 行，省得用户手填
+                if conf >= 0.85:
+                    if not it.get("spec") and m.notes:
+                        # InventoryItem 没有专门 spec 字段，规格通常在 notes 里
+                        it["spec"] = (m.notes or "").strip()[:40]
+                    if not it.get("main_unit"):
+                        it["main_unit"] = m.unit or ""
+                    if not it.get("pack_unit"):
+                        it["pack_unit"] = m.unit2 or m.unit or ""
+                    if not it.get("pack_size") and (m.unit2_ratio or 0) > 1:
+                        it["pack_size"] = float(m.unit2_ratio)
     return {"ok": True, "items": result["items"]}
 
 
@@ -8610,6 +8623,13 @@ async def admin_inventory_import_photo_commit(
         batch_no = (form.get(f"row{i}_batch_no") or "").strip()
         expiry = (form.get(f"row{i}_expiry_date") or "").strip()[:10]
         spec = (form.get(f"row{i}_spec") or "").strip()
+        # 包装信息（OCR 新增字段）— 创建时记到 unit2/unit2_ratio；reuse 时用于单位换算
+        try:
+            pack_size = float(form.get(f"row{i}_pack_size") or 0)
+        except (TypeError, ValueError):
+            pack_size = 0.0
+        main_unit_in = (form.get(f"row{i}_main_unit") or "").strip()
+        pack_unit_in = (form.get(f"row{i}_pack_unit") or "").strip()
 
         # 取得或新建 item
         if action == "reuse":
@@ -8649,12 +8669,27 @@ async def admin_inventory_import_photo_commit(
                 else:
                     item = None
                 if item is None:
+                    # 优先使用 OCR 识别的 main_unit；若无则退回 unit
+                    _main_u = main_unit_in or unit
+                    _pack_u = pack_unit_in or unit
+                    _ratio = pack_size if pack_size > 1 else 1.0
+                    # 若包装单位与主单位不同 → 把包装写进 unit2
+                    if _pack_u and _pack_u != _main_u and _ratio > 1:
+                        _unit2 = _pack_u
+                        _unit2_ratio = _ratio
+                    else:
+                        _unit2 = ""
+                        _unit2_ratio = 1.0
+                    # 进价：OCR 是 ¥/pack_unit，统一换算成 ¥/main_unit 入库
+                    _cost_per_main = unit_price / _ratio if _ratio > 1 else unit_price
                     item = InventoryItem(
                         name=name[:200],
                         category="medication",
-                        unit=unit[:20],
+                        unit=_main_u[:20],
+                        unit2=_unit2[:20],
+                        unit2_ratio=_unit2_ratio,
                         sell_price=0.0,
-                        cost_price=unit_price,
+                        cost_price=_cost_per_main,
                         stock_qty=0.0,
                         low_stock_min=0.0,
                         notes=spec,
@@ -8667,21 +8702,33 @@ async def admin_inventory_import_photo_commit(
                     inbatch_created[dkey] = item
                     created += 1
 
+        # 单位换算：OCR 行的 unit 可能是包装单位（盒），item.unit 是主单位（片）
+        # 若 unit == item.unit2（且有 ratio）→ 实际入库数量 = qty * ratio
+        effective_qty = qty
+        effective_unit_price = unit_price
+        if item.unit2 and unit and unit == item.unit2 and (item.unit2_ratio or 1) > 1:
+            effective_qty = qty * float(item.unit2_ratio)
+            # 进价同步换算成 ¥/主单位
+            effective_unit_price = unit_price / float(item.unit2_ratio) if unit_price > 0 else 0.0
         # 累加库存 + 写流水
         qty_before = float(item.stock_qty or 0)
-        item.stock_qty = qty_before + qty
-        if unit_price > 0:
-            item.cost_price = unit_price  # 用最新进价更新
+        item.stock_qty = qty_before + effective_qty
+        if effective_unit_price > 0:
+            item.cost_price = effective_unit_price  # 用最新进价更新（按主单位）
+        # 流水按"换算后"的主单位记
+        _note_pack = ""
+        if effective_qty != qty:
+            _note_pack = f" · 原 {qty}{unit} × {item.unit2_ratio:g}/{unit} = {effective_qty:g}{item.unit}"
         db.add(InventoryTransaction(
             item_id=item.id,
             tx_type="in",
-            qty=qty,
+            qty=effective_qty,
             qty_before=qty_before,
             qty_after=item.stock_qty,
-            unit_price=unit_price,
+            unit_price=effective_unit_price,
             ref_type="manual",
             operator=operator,
-            note=f"进货单照片识别入库" + (f" · 批号{batch_no}" if batch_no else ""),
+            note=f"进货单照片识别入库" + (f" · 批号{batch_no}" if batch_no else "") + _note_pack,
         ))
         # 批次
         if batch_no or expiry:
@@ -8689,7 +8736,7 @@ async def admin_inventory_import_photo_commit(
             db.add(InventoryBatch(
                 item_id=item.id,
                 batch_no=batch_no[:80],
-                quantity=qty,
+                quantity=effective_qty,
                 expiry_date=expiry,
                 received_date=_date.today().isoformat(),
                 notes=spec[:500] if spec else "",
