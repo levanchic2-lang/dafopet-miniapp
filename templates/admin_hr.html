@@ -95,24 +95,28 @@
 
 <!-- ── 账号管理 ── -->
 {% if request.session.get('admin_role') == 'superadmin' or not request.session.get('admin_role') %}
-<div class="card" style="max-width:780px;">
+<div class="card" style="max-width:none;width:100%;overflow-x:auto;">
  <div style="margin-bottom:1rem;">
  <h2 style="margin:0;font-size:1.05rem;">账号管理</h2>
  <p class="sub" style="margin:0.2rem 0 0;">管理后台登录账号，仅超级管理员可操作。</p>
  </div>
 
  <h3 style="font-size:0.9rem;font-weight:700;margin:0 0 0.5rem;">启用中（{{ active_users|length }}）</h3>
- <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+ <table class="acct-table" style="width:100%;border-collapse:collapse;font-size:0.9rem;min-width:1080px;table-layout:auto;">
  <thead>
  <tr style="border-bottom:2px solid var(--border);">
- <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:140px;">用户名</th>
- <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:150px;">显示名（医生）</th>
- <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:130px;">角色</th>
- <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:120px;">所属门店</th>
- <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;width:100px;">创建时间</th>
- <th style="padding:0.5rem 0.75rem;"></th>
+ <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">用户名</th>
+ <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">显示名（医生）</th>
+ <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">角色</th>
+ <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">门店</th>
+ <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">创建时间</th>
+ <th style="padding:0.5rem 0.5rem;white-space:nowrap;">操作</th>
  </tr>
  </thead>
+ <style>
+   .acct-table td, .acct-table th { white-space: nowrap; }
+   .acct-table select { min-width: 96px; }
+ </style>
  <tbody>
  {% for u in active_users %}
  {% set linked = staff_by_user_id.get(u.id) %}
