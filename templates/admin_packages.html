@@ -15,9 +15,25 @@
     display: flex !important; flex-direction: column !important;
   }
   #new-pkg-modal > .cust-modal > h3:first-child {
-    flex: 0 0 auto !important; margin: 0 !important; padding: .9rem 1rem !important;
-    font-size: 1.05rem !important; background: var(--card);
-    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto !important; margin: 0 !important;
+    padding: 1rem 1rem 1rem 1rem !important;
+    padding-top: calc(1rem + env(safe-area-inset-top, 0px)) !important;
+    font-size: 1.1rem !important; font-weight: 700 !important;
+    background: linear-gradient(135deg, #16a34a 0%, #059669 100%) !important;
+    color: #fff !important;
+    border-bottom: none !important;
+    display: flex !important; align-items: center;
+  }
+  #new-pkg-modal > .cust-modal > h3:first-child::before {
+    content: "🎫"; font-size: 1.3rem; margin-right: .5rem;
+  }
+  #new-pkg-modal > .cust-modal > h3:first-child::after {
+    content: "✕";
+    margin-left: auto;
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,.2); border-radius: 50%;
+    font-size: 1rem;
   }
   #new-pkg-modal form {
     flex: 1 1 auto !important; overflow-y: auto !important;
