@@ -51,6 +51,36 @@
    移动端：把 13 列的横表转为「每个药品一张卡片」纵向铺开
    ══════════════════════════════════════════════════ */
 @media (max-width: 768px) {
+  /* 顶部 4 列基础信息（日期/医生/宠物/状态）→ 2 列；输入框补齐高度对齐 */
+  form > div[style*="repeat(4,1fr)"],
+  form > div[style*="repeat(4, 1fr)"] {
+    grid-template-columns: 1fr 1fr !important;
+    gap: .55rem .55rem !important;
+  }
+  form > div[style*="repeat(4,1fr)"] > div,
+  form > div[style*="repeat(4, 1fr)"] > div { min-width: 0 !important; }
+  form > div[style*="repeat(4,1fr)"] input,
+  form > div[style*="repeat(4,1fr)"] select,
+  form > div[style*="repeat(4, 1fr)"] input,
+  form > div[style*="repeat(4, 1fr)"] select {
+    width: 100% !important; height: 40px !important; box-sizing: border-box !important;
+    padding: .4rem .55rem !important; font-size: 16px !important;
+  }
+  form > div[style*="repeat(4,1fr)"] label,
+  form > div[style*="repeat(4, 1fr)"] label {
+    font-size: .78rem; margin: 0 0 .25rem !important;
+  }
+  /* 工具栏按钮：移动端 2 列均分（套用模板/复制 顶上一行 · 保存为模板/预览 下一行） */
+  .card[style*="linear-gradient(90deg,#eff6ff"] {
+    flex-direction: row !important; flex-wrap: wrap !important;
+    justify-content: center; gap: .45rem !important;
+  }
+  .card[style*="linear-gradient(90deg,#eff6ff"] button,
+  .card[style*="linear-gradient(90deg,#eff6ff"] a.btn {
+    flex: 1 1 calc(50% - .25rem) !important;
+    min-height: 38px;
+  }
+
   .drug-table { min-width: 0 !important; display: block; }
   .drug-table colgroup { display: none; }
   .drug-table thead { display: none; }
