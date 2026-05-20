@@ -80,6 +80,8 @@
     flex: 1 1 calc(50% - .25rem) !important;
     min-height: 38px;
   }
+  /* 隐藏布局 spacer（桌面端用来撑开"预览"按钮到右侧） */
+  .card[style*="linear-gradient(90deg,#eff6ff"] > div[style*="flex:1"] { display: none !important; }
 
   .drug-table { min-width: 0 !important; display: block; }
   .drug-table colgroup { display: none; }
