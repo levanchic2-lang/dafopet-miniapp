@@ -7,10 +7,16 @@
 /* 移动端日历：顶部工具栏换行；月/周视图允许横向滚动 */
 @media (max-width: 768px) {
   .cal-page { height: calc(100vh - 40px); margin: -.4rem; }
-  .cal-topbar { flex-wrap: wrap; gap: .35rem .5rem !important; padding: .4rem .5rem !important; }
-  .cal-topbar .new-btn { font-size: .85rem; padding: .35rem .7rem; }
-  .cal-actions { margin-left: 0 !important; gap: .35rem !important; flex-wrap: wrap; }
-  .cal-actions select, .cal-actions button { font-size: .82rem !important; padding: .25rem .55rem !important; }
+  .cal-topbar { flex-wrap: wrap; gap: .35rem .4rem !important; padding: .4rem .5rem !important; }
+  .cal-topbar > * { flex-shrink: 1 !important; min-width: 0; }
+  .cal-topbar .new-btn { font-size: .82rem; padding: .35rem .65rem; flex: 0 0 auto; }
+  .cal-nav { flex: 1 1 auto; justify-content: center; }
+  .cal-nav span { font-size: .92rem !important; }
+  .cal-actions { margin-left: 0 !important; gap: .3rem !important; flex-wrap: wrap;
+                  width: 100%; justify-content: flex-start; }
+  .cal-actions select, .cal-actions button { font-size: .8rem !important; padding: .25rem .5rem !important; flex: 0 0 auto; }
+  .cal-actions .view-sw { display: inline-flex; gap: 1px; flex: 0 0 auto; }
+  .cal-actions #store-filter { flex: 1 1 auto; min-width: 80px; max-width: 140px; }
   .cal-nav button { font-size: 1rem !important; padding: .2rem .5rem !important; }
   .month-header, .month-body { min-width: 0; }
   /* week/day 视图：用滚动容器，避免溢出 */
@@ -19,6 +25,15 @@
   /* 月视图字号缩小 */
   .month-cell { font-size: .68rem; padding: .15rem; }
   .month-cell .event { font-size: .58rem !important; padding: 0 2px !important; }
+
+  /* 新建日程 modal：表单字段满宽 */
+  .modal-content { max-width: 92vw !important; max-height: 90vh !important; }
+  .modal-content input, .modal-content select, .modal-content textarea {
+    width: 100% !important; box-sizing: border-box !important;
+  }
+  .modal-content form > div[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
 }
 .cal-topbar {
  display:flex; align-items:center; gap:0.75rem; padding:0.6rem 1.1rem;

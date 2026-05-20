@@ -178,7 +178,12 @@
  @media (max-width: 768px) {
    .tnr-filter-grid { grid-template-columns: 1fr !important; gap: .55rem !important; }
    .tnr-filter-grid label { margin: 0 0 .2rem !important; font-size: .82rem; }
-   .tnr-filter-grid input, .tnr-filter-grid select { width: 100%; box-sizing: border-box; }
+   .tnr-filter-grid input,
+   .tnr-filter-grid select,
+   .tnr-filter-grid input[type="date"] {
+     width: 100% !important; max-width: 100% !important;
+     box-sizing: border-box !important; min-width: 0 !important;
+   }
    /* 申请素材缩略图：手机上更小，更密 */
    .admin-app-thumb img { max-width: 28vw !important; height: auto !important; }
  }

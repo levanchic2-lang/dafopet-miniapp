@@ -33,13 +33,25 @@
 
 /* 客户档案搜索条 */
 .cust-search-card { position:sticky; top:0; z-index:5; background:var(--card); padding:.85rem 1rem; border:1px solid var(--border, #e5e7eb); border-radius:10px; margin-bottom:.85rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
-.cust-search-card form { display:flex; gap:.5rem; align-items:center; }
+.cust-search-card form { display:flex; gap:.5rem; align-items:stretch; }
 .cust-search-card input[type="text"], .cust-search-card input[name="q"] {
-  flex:1; min-width:200px; font-size:.95rem; padding:.55rem .8rem;
+  flex:1; min-width:0; font-size:.95rem; padding:.55rem .8rem;
   border:1px solid var(--border, #e5e7eb); border-radius:8px;
+  height: 40px; box-sizing: border-box;
 }
 .cust-search-card input:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.15); }
+.cust-search-card .btn {
+  height: 40px; padding: 0 1.1rem; white-space: nowrap;
+  font-size: .9rem; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 .cust-search-card .hint-key { display:inline-block; font-family:monospace; background:#f1f5f9; color:#475569; padding:1px 6px; border-radius:4px; font-size:.72rem; }
+@media (max-width: 768px) {
+  .cust-search-card { padding: .55rem .65rem; }
+  .cust-search-card form { gap: .4rem; }
+  .cust-search-card input[type="text"] { height: 38px; font-size: 16px; min-width: 0 !important; flex: 1 1 0 !important; }
+  .cust-search-card .btn { height: 38px; padding: 0 .8rem; min-height: 38px !important; flex: 0 0 auto !important; }
+}
 </style>
 {% endblock %}
 {% block body %}
