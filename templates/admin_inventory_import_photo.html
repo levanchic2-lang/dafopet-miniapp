@@ -182,9 +182,49 @@
   });
 
   function pickFiles(fs) {
-    picked = fs.slice(0, 5);
-    renderThumbs();
-    if (picked.length > 0) startRecognize();
+    var raw = fs.slice(0, 5);
+    if (raw.length === 0) return;
+    // 浏览器侧压缩到 ≤ 2400px、JPEG q=0.85，避免 19MB 原图超过模型 10MB 限制
+    Promise.all(raw.map(compressImage)).then(function (compressed) {
+      picked = compressed;
+      renderThumbs();
+      startRecognize();
+    }).catch(function (e) {
+      showError('图片预处理失败：' + e.message);
+    });
+  }
+
+  // 在浏览器把大图压成 JPEG ≤ 2400px / q=0.85
+  function compressImage(file) {
+    return new Promise(function (resolve, reject) {
+      if (!/^image\//.test(file.type)) { resolve(file); return; }
+      var img = new Image();
+      img.onload = function () {
+        var maxSide = 2400;
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (Math.max(w, h) > maxSide) {
+          var r = maxSide / Math.max(w, h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function (blob) {
+          if (!blob) { resolve(file); return; }
+          // 若压缩后仍 >5MB，进一步降质
+          if (blob.size > 5 * 1024 * 1024) {
+            canvas.toBlob(function (b2) {
+              resolve(new File([b2 || blob], (file.name || 'photo') + '.jpg', { type: 'image/jpeg' }));
+            }, 'image/jpeg', 0.7);
+          } else {
+            resolve(new File([blob], (file.name || 'photo') + '.jpg', { type: 'image/jpeg' }));
+          }
+          URL.revokeObjectURL(img.src);
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function () { reject(new Error('图片解码失败')); };
+      img.src = URL.createObjectURL(file);
+    });
   }
 
   function renderThumbs() {
