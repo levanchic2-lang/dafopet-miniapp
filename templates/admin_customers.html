@@ -135,7 +135,7 @@
 
 {% if customers %}
 <div class="data-table-wrap">
-  <table class="data-table">
+  <table class="data-table mobile-card">
     <thead>
       <tr>
         <th>ID</th>
@@ -149,10 +149,10 @@
     <tbody>
       {% for c in customers %}
         <tr class="cust-row" onclick="window.location='/admin/customers/{{ c.id }}'">
-          <td style="color:var(--muted);font-size:0.8rem;font-family:monospace;">#{{ c.id }}</td>
+          <td data-label="ID" style="color:var(--muted);font-size:0.8rem;font-family:monospace;">#{{ c.id }}</td>
           <td style="font-weight:600;">{{ c.name or '未命名' }}</td>
-          <td>{{ c.phone or '—' }}</td>
-          <td>
+          <td data-label="手机号">{{ c.phone or '—' }}</td>
+          <td data-label="来源">
             {% if c.source == 'tnr' %}<span class="pill pill-purple">TNR</span>
             {% elif c.source == 'outpatient' %}<span class="pill pill-info">门诊</span>
             {% elif c.source == 'surgery' %}<span class="pill pill-warn">手术</span>
@@ -161,8 +161,8 @@
             {% elif c.source == 'rabies' %}<span class="pill pill-info">狂犬疫苗</span>
             {% else %}<span class="pill pill-gray">{{ c.source or '—' }}</span>{% endif %}
           </td>
-          <td style="color:var(--muted);font-size:0.82rem;">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
-          <td style="text-align:right;" onclick="event.stopPropagation();">
+          <td data-label="创建时间" style="color:var(--muted);font-size:0.82rem;">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
+          <td class="actions" style="text-align:right;" onclick="event.stopPropagation();">
             <a href="/admin/customers/{{ c.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
           </td>
         </tr>

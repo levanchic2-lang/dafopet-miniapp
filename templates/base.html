@@ -378,6 +378,128 @@
       .qtab { max-width: 140px; padding: 5px 8px; font-size: 0.78rem; }
       .qtab .qt-label { max-width: 100px; }
     }
+
+    /* ══════════════════════════════════════════════════════════════
+       移动端响应式底座（≤768px）
+       原则：表格 → 横滑 + 字号缩小；过窄时 .data-table.mobile-card 自动转卡片
+       ══════════════════════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      /* ── 全局容器 ── */
+      .wrap { padding: 0.6rem 0.75rem 4rem; }
+
+      /* ── 顶部品牌栏 ── */
+      .ribbon-top { padding: 0.4rem 0.75rem !important; flex-wrap: wrap; gap: .3rem .6rem; }
+      .ribbon-brand { font-size: .92rem !important; }
+      .ribbon-brand span { font-size: .76rem !important; }
+      .ribbon-user { font-size: .78rem !important; }
+
+      /* ── 二级 ribbon tab 横滑 ── */
+      .ribbon-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      .ribbon-tabs::-webkit-scrollbar { display: none; }
+      .ribbon-tab { white-space: nowrap; }
+      .ribbon-icons { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+      /* ── 页头：纵向堆叠 ── */
+      .page-head { flex-direction: column; align-items: stretch; }
+      .page-head h1 { font-size: 1.05rem; }
+      .page-head .ph-icon { font-size: 1.25rem; }
+      .page-head .ph-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+      .page-head .ph-actions .btn { font-size: .82rem !important; padding: .35rem .7rem !important; }
+
+      /* ── 卡片 / 内边距收紧 ── */
+      .card { padding: .85rem .8rem !important; border-radius: 8px !important; }
+
+      /* ── 筛选条：自动多行 + 输入框占满 ── */
+      .filter-card { padding: .55rem .65rem; margin-bottom: .65rem; }
+      .filter-row { gap: .4rem; }
+      .filter-row input[type="text"],
+      .filter-row input[type="search"],
+      .filter-row input:not([type]) { flex: 1 1 100%; min-width: 0 !important; }
+      .filter-row select { flex: 1 1 calc(50% - .2rem); min-width: 0 !important; }
+      .filter-row .btn,
+      .filter-row button { flex: 1 1 calc(50% - .2rem); min-width: 0 !important; }
+
+      /* ── 表格通用：默认包一层横滑；字号缩小 ── */
+      .data-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
+      .data-table { font-size: .8rem; min-width: 100%; }
+      .data-table th, .data-table td { padding: .4rem .55rem; }
+      .data-table th { font-size: .68rem; }
+
+      /* ── 表格"卡片模式"：给 <table class="data-table mobile-card"> 用 ── */
+      .data-table.mobile-card,
+      .data-table.mobile-card thead,
+      .data-table.mobile-card tbody,
+      .data-table.mobile-card tr,
+      .data-table.mobile-card td { display: block; width: 100%; }
+      .data-table.mobile-card thead { display: none; }
+      .data-table.mobile-card tr {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: 8px; padding: .65rem .85rem; margin-bottom: .55rem;
+      }
+      .data-table.mobile-card td {
+        border: none !important; padding: .18rem 0 !important;
+        display: flex !important; justify-content: space-between; align-items: center;
+        font-size: .85rem; gap: .6rem; min-height: 1.8rem;
+      }
+      /* 用 data-label 属性渲染字段名（如 <td data-label="客户">...</td>） */
+      .data-table.mobile-card td[data-label]::before {
+        content: attr(data-label); color: var(--muted); font-size: .74rem;
+        font-weight: 500; flex: 0 0 auto; margin-right: .8rem;
+      }
+      /* 卡片第一行通常是主信息，加粗 */
+      .data-table.mobile-card td:first-child { font-weight: 600; font-size: .95rem; padding-top: 0 !important; }
+      .data-table.mobile-card td:first-child::before { display: none; }
+      .data-table.mobile-card td:last-child { padding-bottom: 0 !important; }
+      /* 操作按钮列：右对齐成一排 */
+      .data-table.mobile-card td.actions { justify-content: flex-end; padding-top: .4rem !important; border-top: 1px dashed var(--border) !important; margin-top: .3rem; }
+
+      /* ── 表单：所有表单字段竖排，输入框满宽 ── */
+      .row2 { grid-template-columns: 1fr !important; gap: .6rem !important; }
+      form input[type="text"],
+      form input[type="tel"],
+      form input[type="number"],
+      form input[type="date"],
+      form input[type="email"],
+      form input[type="password"],
+      form input[type="search"],
+      form select,
+      form textarea { font-size: 16px !important; /* ≥16px 防 iOS 自动放大 */ width: 100%; box-sizing: border-box; }
+      form label { font-size: .85rem; }
+
+      /* ── 按钮触摸目标 ── */
+      .btn, button, input[type="submit"] {
+        min-height: 38px; touch-action: manipulation;
+      }
+      .btn.secondary, button.secondary { min-height: 34px; }
+
+      /* ── 统计小卡：2 列 ── */
+      .stat-grid { grid-template-columns: repeat(2, 1fr); gap: .55rem; }
+      .stat-card { padding: .65rem .75rem; }
+      .stat-card .stat-num { font-size: 1.25rem; }
+      .stat-card .stat-label { font-size: .7rem; }
+
+      /* ── List-tabs 横滑 ── */
+      .list-tabs { gap: 0; padding: 0 .2rem; }
+      .list-tab { padding: .45rem .8rem; font-size: .82rem; }
+
+      /* ── pill 字号微调 ── */
+      .pill { font-size: .68rem; padding: .08rem .45rem; }
+
+      /* ── 让 iframe / 图片不溢出 ── */
+      iframe, img, video { max-width: 100%; height: auto; }
+
+      /* ── 防止 overflow 出现横向滚动 ── */
+      html, body { overflow-x: hidden; }
+    }
+
+    /* 极窄屏（≤480px）二次收紧 */
+    @media (max-width: 480px) {
+      .wrap { padding: 0.4rem 0.55rem 4rem; }
+      .stat-grid { grid-template-columns: 1fr 1fr; }
+      .data-table { font-size: .76rem; }
+      .data-table.mobile-card tr { padding: .55rem .7rem; }
+      .filter-row select { flex: 1 1 100%; }
+    }
   </style>
   {% block extra_css %}{% endblock %}
   {% block extra_head %}{% endblock %}
