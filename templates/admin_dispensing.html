@@ -109,7 +109,7 @@
  {% endif %}
 
  <div class="data-table-wrap">
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
  <tr>
  {% if status == 'issued' or status == 'all' %}<th style="width:36px;"></th>{% endif %}
@@ -129,13 +129,13 @@
  {% set drug_names = p.items | map(attribute='drug_name') | list %}
  <tr>
  {% if status == 'issued' or status == 'all' %}
- <td style="text-align:center;">
+ <td data-label="选" style="text-align:center;">
  {% if p.status == 'issued' %}
  <input type="checkbox" name="presc_ids" value="{{ p.id }}" class="row-check" onchange="updateCount()"/>
  {% endif %}
  </td>
  {% endif %}
- <td style="color:var(--muted);font-size:0.82rem;white-space:nowrap;">
+ <td data-label="开单时间" style="color:var(--muted);font-size:0.82rem;white-space:nowrap;">
  {{ p.prescribed_date or p.created_at.strftime('%Y-%m-%d') }}
  </td>
  <td>
@@ -144,7 +144,7 @@
  {% if pet %}{{ '🐱' if pet.species == 'cat' else '🐶' if pet.species == 'dog' else '🐾' }} {{ pet.name }}{% else %}—{% endif %}
  </div>
  </td>
- <td style="max-width:260px;">
+ <td data-label="药品" style="max-width:260px;">
  {% if drug_names %}
  <span>{{ drug_names[:2] | join('、') }}</span>
  {% if drug_names | length> 2 %}
@@ -154,9 +154,9 @@
  <span style="color:var(--muted);">—</span>
  {% endif %}
  </td>
- <td style="text-align:right;white-space:nowrap;font-weight:600;">¥{{ '%.2f'|format(p.total_amount) }}</td>
- <td style="color:var(--muted);">{{ p.vet_name or '—' }}</td>
- <td>
+ <td data-label="金额" style="text-align:right;white-space:nowrap;font-weight:600;">¥{{ '%.2f'|format(p.total_amount) }}</td>
+ <td data-label="医生" style="color:var(--muted);">{{ p.vet_name or '—' }}</td>
+ <td data-label="状态">
  {% if p.status == 'issued' %}
  <span class="pill pill-warn">待发药</span>
  {% elif p.status == 'dispensed' %}
@@ -165,7 +165,7 @@
  <span class="pill pill-gray">草稿</span>
  {% endif %}
  </td>
- <td style="text-align:right;">
+ <td class="actions" style="text-align:right;">
  <div style="display:flex;gap:0.35rem;justify-content:flex-end;flex-wrap:wrap;">
  {% if p.status == 'issued' %}
  <form method="post" action="/admin/dispensing/{{ p.id }}/dispense" style="margin:0;">

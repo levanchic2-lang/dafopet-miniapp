@@ -36,7 +36,7 @@
 
 {% if records %}
 <div class="data-table-wrap">
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
  <tr>
  <th>#</th>
@@ -53,22 +53,22 @@
  <tbody>
  {% for rec in records %}
  <tr style="{% if rec.status == 'staff_pending' %}background:#fffbeb;{% endif %}">
- <td style="color:var(--muted);font-size:0.78rem;">{{ rec.id }}</td>
+ <td data-label="ID" style="color:var(--muted);font-size:0.78rem;">{{ rec.id }}</td>
  <td style="font-weight:600;">{{ rec.owner_name }}</td>
- <td style="color:var(--muted);">{{ rec.owner_phone }}</td>
- <td>
+ <td data-label="手机号" style="color:var(--muted);">{{ rec.owner_phone }}</td>
+ <td data-label="动物">
  {% if rec.animal_name %}{{ rec.animal_name }}{% endif %}
  {% if rec.animal_breed %}<span style="color:var(--muted);font-size:0.78rem;"> · {{ rec.animal_breed }}</span>{% endif %}
  </td>
- <td>
+ <td data-label="免疫证号">
  {% if rec.cert_no %}
  <span style="font-family:monospace;font-weight:600;color:#166534;">{{ rec.cert_no }}</span>
  {% else %}
  <span style="color:var(--muted);font-size:0.78rem;">待录入</span>
  {% endif %}
  </td>
- <td style="color:var(--muted);font-size:0.82rem;">{{ rec.clinic_store or '—' }}</td>
- <td>
+ <td data-label="门店" style="color:var(--muted);font-size:0.82rem;">{{ rec.clinic_store or '—' }}</td>
+ <td data-label="状态">
  {% if rec.status == 'staff_pending' %}
  <span class="pill pill-warn">待医护填写</span>
  {% elif rec.status == 'owner_pending' %}
@@ -81,10 +81,10 @@
  <span class="pill pill-gray">{{ status_zh.get(rec.status, rec.status) }}</span>
  {% endif %}
  </td>
- <td style="color:var(--muted);font-size:0.8rem;">
+ <td data-label="登记时间" style="color:var(--muted);font-size:0.8rem;">
  {{ rec.created_at.strftime('%m-%d %H:%M') if rec.created_at else '—' }}
  </td>
- <td style="text-align:right;">
+ <td class="actions" style="text-align:right;">
  <a href="/admin/rabies/{{ rec.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">详情 →</a>
  </td>
  </tr>

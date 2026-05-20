@@ -1,4 +1,22 @@
 {% extends "base.html" %}
+{% block extra_css %}
+<style>
+  @media (max-width: 768px) {
+    /* 顶部 2 列布局塌缩为单列 */
+    body div[style*="grid-template-columns:1fr 300px"],
+    body div[style*="grid-template-columns: 1fr 300px"] {
+      grid-template-columns: 1fr !important;
+    }
+    /* row2 已由 base 处理；form 输入框统一满宽 */
+    form input, form select, form textarea {
+      width: 100% !important; box-sizing: border-box !important;
+      min-width: 0 !important;
+    }
+    /* 卡片内边距收紧 */
+    .card { padding: .85rem .75rem !important; }
+  }
+</style>
+{% endblock %}
 {% block body %}
 
 {% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}

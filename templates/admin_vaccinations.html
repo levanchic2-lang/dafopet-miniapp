@@ -47,7 +47,7 @@
 
 {% if records %}
 <div class="data-table-wrap">
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
  <tr>
  <th>宠物</th>
@@ -71,20 +71,20 @@
  {{ vacc.pet.name or '未命名' }}
  {% else %}—{% endif %}
  </td>
- <td>
+ <td data-label="主人">
  {% if vacc.customer %}{{ vacc.customer.name or '—' }}{% else %}—{% endif %}
  </td>
- <td>
+ <td data-label="疫苗">
  <span class="pill pill-purple">{{ vacc_type_zh.get(vacc.vaccine_type, vacc.vaccine_type) }}</span>
  {% if vacc.vaccine_name %}
  <span style="font-size:0.78rem;color:var(--muted);margin-left:0.3rem;">{{ vacc.vaccine_name }}</span>
  {% endif %}
  </td>
- <td style="color:var(--muted);font-size:0.82rem;">
+ <td data-label="针次" style="color:var(--muted);font-size:0.82rem;">
  {{ dose_zh.get(vacc.dose_number) or ('第' ~ vacc.dose_number ~ '针') }}
  </td>
- <td>{{ vacc.vaccinated_date or '—' }}</td>
- <td>
+ <td data-label="接种日期">{{ vacc.vaccinated_date or '—' }}</td>
+ <td data-label="下次到期">
  {% if vacc.next_due_date %}
  {% if is_overdue %}
  <span class="pill pill-no">⚠️ {{ vacc.next_due_date }}</span>
@@ -95,7 +95,7 @@
  {% endif %}
  {% else %}—{% endif %}
  </td>
- <td>
+ <td data-label="收费">
  {% if vacc.is_free %}
  <span class="pill pill-info">免费</span>
  {% elif vacc.invoice_id %}
@@ -104,7 +104,7 @@
  <span class="pill pill-warn">待收费</span>
  {% endif %}
  </td>
- <td style="text-align:right;">
+ <td class="actions" style="text-align:right;">
  <a href="/admin/vaccinations/{{ vacc.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">编辑</a>
  </td>
  </tr>
