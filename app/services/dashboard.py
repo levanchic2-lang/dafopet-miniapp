@@ -34,6 +34,7 @@ from app.models import (
     InventoryItem, InventoryBatch,
     CustomerPackage, Coupon,
     Customer, Pet,
+    RabiesVaccineRecord,
 )
 
 _STORE_SHORT_TO_FULL = {
@@ -169,6 +170,35 @@ def build_invoice_unpaid(db: Session, store_short: str) -> dict:
         "key": "invoice_unpaid", "title": "超期未付收费单", "icon": "💰",
         "count": len(rows), "previews": items,
         "all_url": "/admin/invoices?status=unpaid",
+        "tone": "danger",
+    }
+
+
+def build_rabies_pending(db: Session, store_short: str) -> dict:
+    """狂犬疫苗登记未完成：owner_pending（待主人签）+ staff_pending（待医护填写）。"""
+    q = db.query(RabiesVaccineRecord).filter(
+        RabiesVaccineRecord.status.in_(["owner_pending", "staff_pending"]),
+    )
+    if store_short:
+        q = q.filter(RabiesVaccineRecord.clinic_store == store_short)
+    rows = q.order_by(RabiesVaccineRecord.created_at.desc()).all()
+    items = []
+    for r in rows[:3]:
+        if r.status == "owner_pending":
+            badge = "待主人签字"
+        else:
+            badge = "待医护填写"
+        owner = r.owner_name or "未填姓名"
+        animal = r.animal_name or "—"
+        items.append({
+            "label": f"{owner} · {animal}",
+            "sub": f"{badge} · {r.created_at.strftime('%m-%d %H:%M') if r.created_at else ''}",
+            "url": f"/admin/rabies/{r.id}",
+        })
+    return {
+        "key": "rabies_pending", "title": "狂犬疫苗待完成", "icon": "🐶",
+        "count": len(rows), "previews": items,
+        "all_url": "/admin/rabies?status=staff_pending",
         "tone": "danger",
     }
 
@@ -534,6 +564,7 @@ def build_workbench(db: Session, store_short: str = "") -> dict:
         build_appt_today(db, store_short),
         build_followup_today(db, store_short),
         build_consent_pending(db, store_short),
+        build_rabies_pending(db, store_short),
         build_invoice_unpaid(db, store_short),
         build_tnr_pending(db, store_short),
     ]
