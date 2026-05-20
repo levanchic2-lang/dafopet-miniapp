@@ -109,8 +109,8 @@
 {% endif %}
 
 {% if is_superadmin %}
-<div class="cust-modal-overlay" id="issue-coupon-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1100;align-items:center;justify-content:center;">
- <div style="background:var(--card);border-radius:12px;padding:1.25rem;width:480px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.22);">
+<div class="cust-modal-overlay" id="issue-coupon-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1100;align-items:center;justify-content:center;overflow-y:auto;padding:2rem 0;">
+ <div class="cust-modal" style="background:var(--card);border-radius:12px;padding:1.25rem;width:480px;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.22);">
  <h3 style="margin:0 0 .85rem;font-size:1rem;">发放优惠券</h3>
  <form method="post" action="/admin/coupons/issue">
    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
