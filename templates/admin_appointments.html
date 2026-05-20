@@ -376,9 +376,11 @@
     }
     /* 改约/取消 panel-row 在手机上保持单 td 占满全宽 */
     .appt-table tr.appt-panel-row td { padding: 0 !important; }
-    /* 改约表单：4 列在手机上塌缩为 2 列；输入框补齐高度 */
-    .rs-form { grid-template-columns: 1fr 1fr !important; gap: .55rem !important; }
-    .rs-form > div { min-width: 0 !important; }
+    /* 改约表单：手机上塌缩为单列纵向铺开 + 输入框补齐高度 */
+    .rs-form { grid-template-columns: 1fr !important; gap: .55rem !important; }
+    .rs-form > div { min-width: 0 !important; max-width: 100% !important; }
+    .rs-form > div[style*="grid-column"] { grid-column: 1 !important; }
+    .rs-form label { display: block; margin: 0 0 .25rem !important; font-size: .8rem !important; }
     .rs-form input, .rs-form select {
       width: 100% !important; min-width: 0 !important;
       box-sizing: border-box !important;
@@ -392,6 +394,14 @@
     .rs-form input[type="date"]::-webkit-date-and-time-value,
     .rs-form input[type="time"]::-webkit-date-and-time-value {
       text-align: left; min-height: 1.4em;
+    }
+    /* 最后一行按钮：两个按钮平分 */
+    .rs-form > div[style*="justify-content:flex-end"] {
+      display: flex !important; gap: .5rem !important;
+      justify-content: stretch !important;
+    }
+    .rs-form > div[style*="justify-content:flex-end"] button {
+      flex: 1 1 50% !important; min-height: 42px;
     }
     /* panel 内的容器最大宽 100vw - 边距 */
     .appt-table tr.appt-panel-row .panel-wrap { padding: .6rem .75rem !important; }
