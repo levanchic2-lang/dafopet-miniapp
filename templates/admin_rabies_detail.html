@@ -13,6 +13,42 @@
 .step-done{background:#d1fae5;color:#065f46;}
 .step-pending{background:#fef3c7;color:#92400e;}
 .step-wait{background:#f3f4f6;color:#6b7280;}
+
+/* 移动端：主人填写 2 列 → 1 列；医护填写 4 列 → 2 列 + 输入框统一对齐 */
+@media (max-width: 768px) {
+  /* 主人填写信息：原 2 列 (动物主人 / 动物基本情况) → 1 列堆叠 */
+  div[style*="grid-template-columns:1fr 1fr"][style*="0 1rem"] {
+    grid-template-columns: 1fr !important; gap: 0 !important;
+  }
+  /* 医护填写：原 4 列 → 2 列 */
+  div[style*="grid-template-columns:1fr 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr 1fr !important; gap: .65rem .55rem !important;
+    align-items: end !important;
+  }
+  div[style*="grid-template-columns:1fr 1fr 1fr 1fr"] > div { min-width: 0 !important; }
+  div[style*="grid-template-columns:1fr 1fr 1fr 1fr"] input,
+  div[style*="grid-template-columns:1fr 1fr 1fr 1fr"] select {
+    width: 100% !important; box-sizing: border-box !important;
+    -webkit-appearance: none !important; appearance: none !important;
+    height: 42px !important; line-height: 1.4 !important;
+    padding: 0 .65rem !important; font-size: 16px !important;
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important; border-radius: 8px !important;
+    margin: 0 !important;
+  }
+  div[style*="grid-template-columns:1fr 1fr 1fr 1fr"] input[type="date"]::-webkit-date-and-time-value {
+    text-align: left; min-height: 1.4em; line-height: 1.4em;
+  }
+  div[style*="grid-template-columns:1fr 1fr 1fr 1fr"] label {
+    font-size: .78rem; margin: 0 0 .25rem !important; display: block;
+    min-height: 1.1rem; line-height: 1.1rem; white-space: nowrap;
+  }
+  /* info-row 行：标签太窄换行 */
+  .info-row { flex-wrap: wrap; }
+  .info-label { width: auto !important; flex: 0 0 100% !important;
+                font-weight: 500; margin-bottom: .15rem; }
+  .info-val { font-size: .95rem; word-break: break-all; }
+}
 </style>
 {% endblock %}
 {% block body %}
