@@ -56,15 +56,22 @@
   #issue-coupon-modal form > div:not(:last-child) {
     padding: 0 1rem !important; margin: .5rem 0 0 !important;
   }
-  /* 最后一行（提交+取消按钮）：sticky 在底部 */
+  /* 最后一行（提交+取消按钮）：sticky 钉在底部 */
   #issue-coupon-modal form > div:last-child {
+    position: sticky !important; bottom: 0 !important; z-index: 10 !important;
     flex: 0 0 auto !important;
-    margin: .5rem 0 0 !important; padding: .75rem 1rem env(safe-area-inset-bottom, .75rem) !important;
-    background: var(--card); border-top: 1px solid var(--border);
-    position: relative;
+    margin: .5rem 0 0 !important;
+    padding: .75rem 1rem env(safe-area-inset-bottom, .75rem) !important;
+    background: var(--card) !important;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 12px rgba(0,0,0,.06);
+    display: flex !important; gap: .5rem !important;
   }
-  /* 让内容部分可滚动：把表单分两段 — 这里用 padding-bottom 给底栏让位 */
-  #issue-coupon-modal form { overflow-y: auto !important; padding-bottom: .5rem !important; }
+  #issue-coupon-modal form > div:last-child > button,
+  #issue-coupon-modal form > div:last-child > a {
+    flex: 1 1 50% !important; height: 44px !important;
+  }
+  #issue-coupon-modal form { overflow-y: auto !important; }
 }
 </style>
 {% endblock %}

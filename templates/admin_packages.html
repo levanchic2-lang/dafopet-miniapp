@@ -51,9 +51,17 @@
     box-sizing: border-box !important;
   }
   #new-pkg-modal form > div:last-child {
+    position: sticky !important; bottom: 0 !important; z-index: 10 !important;
     flex: 0 0 auto !important;
-    margin: .5rem 0 0 !important; padding: .75rem 1rem env(safe-area-inset-bottom, .75rem) !important;
-    background: var(--card); border-top: 1px solid var(--border);
+    margin: .5rem 0 0 !important;
+    padding: .75rem 1rem env(safe-area-inset-bottom, .75rem) !important;
+    background: var(--card) !important; border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 12px rgba(0,0,0,.06);
+    display: flex !important; gap: .5rem !important;
+  }
+  #new-pkg-modal form > div:last-child > button,
+  #new-pkg-modal form > div:last-child > a {
+    flex: 1 1 50% !important; height: 44px !important;
   }
 }
 </style>
