@@ -91,7 +91,7 @@ def build_appt_today(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "appt_today", "title": "今日预约", "icon": "📅",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": f"/admin/appointments?date={today}",
         "tone": "danger",
     }
@@ -117,7 +117,7 @@ def build_followup_today(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "followup_today", "title": "待回访任务", "icon": "📞",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/follow-ups?status=due",
         "tone": "danger",
     }
@@ -142,7 +142,7 @@ def build_consent_pending(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "consent_pending", "title": "待签协议", "icon": "📝",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/customers",
         "tone": "danger",
     }
@@ -167,7 +167,7 @@ def build_invoice_unpaid(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "invoice_unpaid", "title": "超期未付收费单", "icon": "💰",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/invoices?status=unpaid",
         "tone": "danger",
     }
@@ -191,7 +191,7 @@ def build_tnr_pending(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "tnr_pending", "title": "TNR 待审核", "icon": "🐱",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin?status=pending_manual",
         "tone": "danger",
     }
@@ -226,7 +226,7 @@ def build_vaccine_due(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "vaccine_due", "title": "疫苗 7 天内到期", "icon": "💉",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/vaccinations",
         "tone": "warn",
     }
@@ -256,7 +256,7 @@ def build_deworm_due(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "deworm_due", "title": "驱虫 7 天内到期", "icon": "🪱",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/vaccinations?type=deworming",
         "tone": "warn",
     }
@@ -284,7 +284,7 @@ def build_chronic_recheck(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "chronic_recheck", "title": "复诊提醒（含慢病）", "icon": "🔁",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/visits",
         "tone": "warn",
     }
@@ -309,7 +309,7 @@ def build_deposit_held(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "deposit_held", "title": "押金超 7 天未结算", "icon": "🔒",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/customers",
         "tone": "warn",
     }
@@ -342,7 +342,7 @@ def build_surgery_after_missing(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "surgery_after_missing", "title": "术后照片未上传", "icon": "📷",
-        "count": len(pending), "items": items,
+        "count": len(pending), "previews": items,
         "all_url": "/admin?status=arrived_verified",
         "tone": "warn",
     }
@@ -371,7 +371,7 @@ def build_surgery_followup_today(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "surgery_followup_today", "title": "手术回访今日", "icon": "🏥",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/follow-ups?status=due",
         "tone": "warn",
     }
@@ -400,7 +400,7 @@ def build_outpatient_followup_today(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "outpatient_followup_today", "title": "门诊回访今日", "icon": "🩺",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/follow-ups?status=due",
         "tone": "warn",
     }
@@ -433,7 +433,7 @@ def build_batch_expiry(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "batch_expiry", "title": "药品/疫苗 30 天内到期", "icon": "⏳",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/inventory",
         "tone": "info",
     }
@@ -456,7 +456,7 @@ def build_low_stock(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "low_stock", "title": "库存低于阈值", "icon": "📉",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/inventory",
         "tone": "info",
     }
@@ -484,7 +484,7 @@ def build_package_expiring(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "package_expiring", "title": "套餐 30 天内到期", "icon": "📦",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/packages",
         "tone": "info",
     }
@@ -512,7 +512,7 @@ def build_coupon_expiring(db: Session, store_short: str) -> dict:
         })
     return {
         "key": "coupon_expiring", "title": "优惠券 30 天内到期", "icon": "🎟️",
-        "count": len(rows), "items": items,
+        "count": len(rows), "previews": items,
         "all_url": "/admin/coupons",
         "tone": "info",
     }

@@ -82,7 +82,7 @@
       {% if total == 0 %}
         <div class="wb-empty">今日无待办 🎉</div>
       {% else %}
-        {% for it in c.items %}
+        {% for it in c.previews %}
           <a class="wb-item" href="{{ it.url }}">
             <div class="wi-main">{{ it.label }}</div>
             <div class="wi-sub">{{ it.sub }}</div>
@@ -90,7 +90,7 @@
         {% endfor %}
       {% endif %}
     </div>
-    {% if total > c.items|length %}
+    {% if total > c.previews|length %}
       <div class="wb-foot"><a href="{{ c.all_url }}">查看全部 {{ total }} 条 →</a></div>
     {% elif total > 0 %}
       <div class="wb-foot"><a href="{{ c.all_url }}">前往详情 →</a></div>
