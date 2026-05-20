@@ -29,6 +29,66 @@
 .col-del { width: 36px; text-align: center; }
 .subtotal-cell { font-weight: 600; color: var(--accent); padding: 0.3rem 0.45rem; }
 .total-row td { border-top: 1px solid var(--border); padding-top: 0.55rem; font-weight: 700; }
+
+/* ── 移动端：每个检查项目变独立卡片 ── */
+@media (max-width: 768px) {
+  .item-table { min-width: 0 !important; display: block; }
+  .item-table thead { display: none; }
+  .item-table tbody { display: block; }
+  .item-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+      "name name name"
+      "qty unit price"
+      "sub sub sub"
+      "notes notes notes"
+      "del del del";
+    gap: .5rem;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: .75rem .8rem; margin-bottom: .6rem;
+  }
+  .item-table tbody tr td {
+    display: block !important; border: none !important; padding: 0 !important;
+    min-width: 0;
+  }
+  .item-table tbody tr td::before {
+    display: block; font-size: .72rem; color: var(--muted);
+    margin-bottom: .2rem; font-weight: 500;
+  }
+  .item-table tbody tr td input,
+  .item-table tbody tr td select {
+    width: 100% !important; height: 38px !important; font-size: 16px !important;
+    padding: .35rem .55rem !important; box-sizing: border-box;
+    border: 1px solid var(--border); border-radius: 6px; text-align: left !important;
+  }
+  .item-table tbody tr td.col-name { grid-area: name; }
+  .item-table tbody tr td.col-name::before { content: "🧪 检查项目 *"; font-size: .78rem; font-weight: 600; color: var(--text); }
+  .item-table tbody tr td.col-qty { grid-area: qty; }
+  .item-table tbody tr td.col-qty::before { content: "数量"; }
+  .item-table tbody tr td.col-unit { grid-area: unit; }
+  .item-table tbody tr td.col-unit::before { content: "单位"; }
+  .item-table tbody tr td.col-price { grid-area: price; }
+  .item-table tbody tr td.col-price::before { content: "单价 ¥"; }
+  .item-table tbody tr td.col-sub { grid-area: sub; padding: .35rem .55rem !important;
+    background: #ecfdf5; border-radius: 6px !important; font-weight: 700; color: #059669;
+    text-align: center !important; font-size: 1rem; }
+  .item-table tbody tr td.col-sub::before { content: "💰 小计 ¥"; font-size: .72rem; color: #047857; font-weight: 500; }
+  .item-table tbody tr td.col-notes { grid-area: notes; }
+  .item-table tbody tr td.col-notes::before { content: "备注（可选）"; }
+  .item-table tbody tr td.col-del {
+    grid-area: del; text-align: right !important;
+    border-top: 1px dashed var(--border) !important; padding-top: .4rem !important;
+  }
+  .item-table tbody tr td.col-del::before { display: none; }
+  .item-table tbody tr td.col-del button {
+    background: #fef2f2 !important; border: 1px solid #fca5a5 !important;
+    color: #b91c1c !important; padding: .35rem .8rem !important;
+    border-radius: 6px !important; font-size: .82rem !important;
+  }
+  /* 隐藏合计行（在外面有显示合计的） */
+  .item-table .total-row { display: none; }
+}
 </style>
 {% endblock %}
 

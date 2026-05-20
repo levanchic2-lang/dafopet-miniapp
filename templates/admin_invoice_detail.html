@@ -17,6 +17,58 @@
 .items-table td input{width:100%;padding:0.25rem 0.4rem;font-size:0.85rem;}
 .summary-row{display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.9rem;}
 .summary-total{font-size:1.2rem;font-weight:800;color:var(--accent);}
+
+/* ── 移动端：每一条费用变独立卡片 ── */
+@media (max-width: 768px) {
+  .items-table { min-width: 0 !important; display: block; }
+  .items-table thead { display: none; }
+  .items-table tbody { display: block; }
+  .items-table tbody tr.item-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+      "desc desc desc"
+      "qty price sub"
+      "del del del";
+    gap: .5rem;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: .75rem .8rem; margin-bottom: .55rem;
+  }
+  .items-table tbody tr.item-row td {
+    display: block !important; border: none !important; padding: 0 !important;
+    min-width: 0;
+  }
+  .items-table tbody tr.item-row td::before {
+    display: block; font-size: .72rem; color: var(--muted);
+    margin-bottom: .2rem; font-weight: 500;
+  }
+  .items-table tbody tr.item-row td input {
+    width: 100% !important; height: 38px !important; font-size: 16px !important;
+    padding: .35rem .55rem !important; box-sizing: border-box;
+    border: 1px solid var(--border) !important; border-radius: 6px;
+  }
+  .items-table tbody tr.item-row td:nth-child(1) { grid-area: desc; }
+  .items-table tbody tr.item-row td:nth-child(1)::before { content: "🏷 描述"; font-size: .78rem; font-weight: 600; color: var(--text); }
+  .items-table tbody tr.item-row td:nth-child(2) { grid-area: qty; }
+  .items-table tbody tr.item-row td:nth-child(2)::before { content: "数量"; }
+  .items-table tbody tr.item-row td:nth-child(3) { grid-area: price; }
+  .items-table tbody tr.item-row td:nth-child(3)::before { content: "单价 ¥"; }
+  .items-table tbody tr.item-row td:nth-child(4) { grid-area: sub; padding: .35rem .55rem !important;
+    background: #ecfdf5; border-radius: 6px !important; text-align: center !important; }
+  .items-table tbody tr.item-row td:nth-child(4)::before { content: "💰 小计 ¥"; font-size: .72rem; color: #047857; }
+  .items-table tbody tr.item-row td:nth-child(4) input { background: transparent !important; border: none !important;
+    text-align: center !important; font-weight: 700 !important; color: #059669 !important; font-size: 1rem !important; }
+  .items-table tbody tr.item-row td:nth-child(5) {
+    grid-area: del; text-align: right !important;
+    border-top: 1px dashed var(--border) !important; padding-top: .4rem !important;
+  }
+  .items-table tbody tr.item-row td:nth-child(5)::before { display: none; }
+  .items-table tbody tr.item-row td:nth-child(5) button {
+    background: #fef2f2 !important; border: 1px solid #fca5a5 !important;
+    color: #b91c1c !important; padding: .35rem .8rem !important;
+    border-radius: 6px !important; font-size: .82rem !important;
+  }
+}
 </style>
 {% endblock %}
 {% block body %}
