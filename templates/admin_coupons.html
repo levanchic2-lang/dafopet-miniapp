@@ -3,7 +3,7 @@
 
 {% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
 
-{% set is_superadmin = (request.session.get('admin_role') == 'superadmin') %}
+{# is_superadmin / wb_store 由后端注入 #}
 
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
 
@@ -19,15 +19,28 @@
  {% endif %}
 </div>
 
+{% if is_superadmin %}
+<div style="margin:.5rem 0 1rem;font-size:.85rem;color:var(--muted);">
+  门店：
+  <a href="?store=" style="color:{{ '#3b82f6' if not wb_store else 'var(--muted)' }};text-decoration:none;margin:0 .3rem;">全部</a>
+  <a href="?store=东环店" style="color:{{ '#3b82f6' if wb_store == '东环店' else 'var(--muted)' }};text-decoration:none;margin:0 .3rem;">东环店</a>
+  <a href="?store=横岗店" style="color:{{ '#3b82f6' if wb_store == '横岗店' else 'var(--muted)' }};text-decoration:none;margin:0 .3rem;">横岗店</a>
+  <span style="color:#94a3b8;">· 空标签=两店通用券</span>
+</div>
+{% elif wb_store %}
+<div style="margin:.5rem 0 1rem;font-size:.85rem;color:var(--muted);">门店：{{ wb_store }} ·（含通用券）</div>
+{% endif %}
+
 <div class="filter-card">
  <form method="get" class="filter-row">
+ {% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}
  <input name="q" value="{{ q }}" placeholder="券码 / 标题" style="flex:1;min-width:180px;"/>
  <select name="status" style="min-width:120px;">
   <option value="">全部状态</option>
   {% for k, zh in status_zh.items() %}<option value="{{ k }}" {% if status == k %}selected{% endif %}>{{ zh }}</option>{% endfor %}
  </select>
  <button type="submit" class="btn secondary">搜索</button>
- {% if q or status %}<a href="/admin/coupons" class="btn secondary">清除</a>{% endif %}
+ {% if q or status %}<a href="/admin/coupons{% if wb_store %}?store={{ wb_store }}{% endif %}" class="btn secondary">清除</a>{% endif %}
  </form>
 </div>
 
@@ -52,7 +65,10 @@
  {% for c in rows %}
  <tr>
    <td><code style="font-size:.78rem;background:#f3f4f6;padding:.15rem .35rem;border-radius:4px;">{{ c.code }}</code></td>
-   <td>{{ c.title }}</td>
+   <td>
+     {{ c.title }}
+     {% if c.store %}<span class="pill pill-gray" style="margin-left:.3rem;font-size:.7rem;">{{ c.store }}</span>{% else %}<span class="pill pill-info" style="margin-left:.3rem;background:#dbeafe;color:#1e40af;font-size:.7rem;">通用</span>{% endif %}
+   </td>
    <td>{{ kind_zh.get(c.kind, c.kind) }}</td>
    <td>
    {% if c.kind == 'cash' %}¥{{ '%.0f'|format(c.face_value) }}
@@ -124,6 +140,12 @@
    <input name="quantity" type="number" min="1" max="500" value="1">
    <label>券码前缀（可选，便于批次识别）</label>
    <input name="code_prefix" maxlength="10" placeholder="如 ZJ618">
+   <label>归属门店</label>
+   <select name="store">
+     <option value="">通用（两店共享）</option>
+     <option value="东环店">仅东环店</option>
+     <option value="横岗店">仅横岗店</option>
+   </select>
    <label>备注</label>
    <input name="notes">
    <div style="display:flex;gap:.6rem;margin-top:1rem;">

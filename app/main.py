@@ -6238,11 +6238,18 @@ async def admin_coupons_list(
     db: Session = Depends(get_db),
     status: str = Query(""),
     q: str = Query(""),
+    store: str = Query(""),
 ):
     """优惠券总列表（发放管理）。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
+    _admin_store = _get_admin_store(request)
+    if request.session.get("admin_role") == "superadmin":
+        _wb_store = (store or "").strip()
+    else:
+        _wb_store = _admin_store
     qq = db.query(Coupon)
+    qq = _apply_store_filter(qq, Coupon.store, _wb_store)
     if status:
         qq = qq.filter(Coupon.status == status)
     if q.strip():
@@ -6277,6 +6284,8 @@ async def admin_coupons_list(
         "kind_zh": _COUPON_KIND_ZH,
         "status_zh": _COUPON_STATUS_ZH,
         "csrf_token": _get_csrf_token(request),
+        "wb_store": _wb_store,
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
     })
 
 
@@ -6295,6 +6304,7 @@ async def admin_coupon_issue(
     quantity: str = Form("1"),     # 批量发放数量
     code_prefix: str = Form(""),   # 自定义前缀（可选）
     notes: str = Form(""),
+    store: str = Form(""),
 ):
     """发放优惠券（可指定客户 / 通用；可单张 / 批量）。"""
     if not request.session.get("admin"):
@@ -6340,7 +6350,7 @@ async def admin_coupon_issue(
             status="issued",
             issued_by=request.session.get("admin_username", "admin"),
             notes=(notes or "").strip(),
-            store=_get_admin_store(request),
+            store=_resolve_store_for_create(request, store),
         ))
         issued += 1
     db.commit()
@@ -6388,13 +6398,18 @@ _PACKAGE_CATEGORY_ZH = {
 
 
 @app.get("/admin/packages", response_class=HTMLResponse)
-async def admin_packages_list(request: Request, db: Session = Depends(get_db)):
+async def admin_packages_list(request: Request, db: Session = Depends(get_db), store: str = ""):
     """套餐目录管理（创建/编辑/启停）。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
-    items = db.query(PackageProduct).order_by(
-        PackageProduct.is_active.desc(), PackageProduct.id.desc()
-    ).all()
+    _admin_store = _get_admin_store(request)
+    if request.session.get("admin_role") == "superadmin":
+        _wb_store = (store or "").strip()
+    else:
+        _wb_store = _admin_store
+    q = db.query(PackageProduct)
+    q = _apply_store_filter(q, PackageProduct.store, _wb_store)
+    items = q.order_by(PackageProduct.is_active.desc(), PackageProduct.id.desc()).all()
     # 统计：每个产品已售套餐数
     from sqlalchemy import func as _f
     sold_rows = (
@@ -6408,6 +6423,8 @@ async def admin_packages_list(request: Request, db: Session = Depends(get_db)):
         "sold_map": sold_map,
         "category_zh": _PACKAGE_CATEGORY_ZH,
         "csrf_token": _get_csrf_token(request),
+        "wb_store": _wb_store,
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
     })
 
 
@@ -6423,6 +6440,7 @@ async def admin_packages_create(
     unit_price: str = Form("0"),
     validity_days: str = Form("365"),
     notes: str = Form(""),
+    store: str = Form(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -6446,6 +6464,7 @@ async def admin_packages_create(
         validity_days=v_days,
         notes=(notes or "").strip(),
         is_active=True,
+        store=_resolve_store_for_create(request, store),
     )
     db.add(p); db.commit()
     return RedirectResponse(f"/admin/packages?msg=已创建套餐：{p.name}", status_code=303)
@@ -6464,6 +6483,7 @@ async def admin_packages_edit(
     unit_price: str = Form("0"),
     validity_days: str = Form("365"),
     notes: str = Form(""),
+    store: str = Form(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -6482,6 +6502,9 @@ async def admin_packages_edit(
     p.name     = (name or "").strip()[:120]
     p.category = category if category in _PACKAGE_CATEGORY_ZH else "other"
     p.notes    = (notes or "").strip()
+    # superadmin 可改门店归属
+    if request.session.get("admin_role") == "superadmin":
+        p.store = (store or "").strip()
     db.commit()
     return RedirectResponse("/admin/packages?msg=已保存", status_code=303)
 
@@ -8475,8 +8498,10 @@ async def admin_inventory_import_photo_recognize(
     if not result["ok"]:
         return {"ok": False, "error": result.get("error", "识别失败"), "raw": result.get("raw", "")}
 
-    # 对每行做品目匹配
-    all_items = db.query(InventoryItem).filter(InventoryItem.is_active == True).all()
+    # 对每行做品目匹配（按当前用户门店过滤，避免跨店误匹配）
+    _match_q = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    _match_q = _apply_store_filter(_match_q, InventoryItem.store, _get_admin_store(request))
+    all_items = _match_q.all()
     for it in result["items"]:
         matched_id, conf = match_item_by_name(it["name"], all_items)
         it["matched_id"] = matched_id
@@ -8569,10 +8594,12 @@ async def admin_inventory_import_photo_commit(
                 from app.services.purchase_ocr import _normalize, _strip_brand_prefix
                 tnorm = _normalize(_strip_brand_prefix(name))
                 if tnorm:
-                    db_dup = db.query(InventoryItem).filter(
+                    _dup_q = db.query(InventoryItem).filter(
                         InventoryItem.is_active == True,
                         InventoryItem.name == name,
-                    ).first()
+                    )
+                    _dup_q = _apply_store_filter(_dup_q, InventoryItem.store, _get_admin_store(request))
+                    db_dup = _dup_q.first()
                     if db_dup:
                         item = db_dup
                         merged += 1
@@ -8593,6 +8620,7 @@ async def admin_inventory_import_photo_commit(
                         notes=spec,
                         created_by=operator,
                         is_active=True,
+                        store=_resolve_store_for_create(request),
                     )
                     db.add(item)
                     db.flush()
@@ -8649,12 +8677,20 @@ async def admin_inventory_list(
     controlled: str = "",
     service_only: str = "",
     expiry_alert: str = "",
+    store: str = "",
     page: int = 1,
 ):
     require_admin(request)
     from datetime import date as _date, timedelta as _timedelta
     page_size = 50
     query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    # 多门店过滤：staff 自动看本店+通用；superadmin 可通过 ?store= 切
+    _admin_store = _get_admin_store(request)
+    if request.session.get("admin_role") == "superadmin":
+        _wb_store = (store or "").strip()
+    else:
+        _wb_store = _admin_store
+    query = _apply_store_filter(query, InventoryItem.store, _wb_store)
     if q:
         query = query.filter(
             or_(InventoryItem.name.ilike(f"%{q}%"),
@@ -8712,6 +8748,8 @@ async def admin_inventory_list(
         "expiry_count": expiry_count,
         "csrf_token": _get_csrf_token(request),
         "title": "库存管理",
+        "wb_store": _wb_store,
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
     })
 
 
@@ -8723,6 +8761,8 @@ async def admin_inventory_create_form(request: Request, db: Session = Depends(ge
         "categories": INVENTORY_CATEGORIES,
         "csrf_token": request.session.get("csrf_token", ""),
         "title": "新增品目",
+        "default_store": _get_admin_store(request),
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
     })
 
 
@@ -8737,6 +8777,7 @@ async def admin_inventory_create(
     sell_price: float = Form(0.0), cost_price: float = Form(0.0),
     stock_qty: float = Form(0.0), low_stock_min: float = Form(0.0),
     supplier: str = Form(""), notes: str = Form(""),
+    store: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -8750,6 +8791,7 @@ async def admin_inventory_create(
         sell_price=sell_price, cost_price=cost_price,
         stock_qty=stock_qty, low_stock_min=low_stock_min,
         supplier=supplier, notes=notes, created_by=operator,
+        store=_resolve_store_for_create(request, store),
     )
     db.add(item)
     db.flush()
@@ -8776,6 +8818,8 @@ async def admin_inventory_edit_form(item_id: int, request: Request, db: Session 
         "categories": INVENTORY_CATEGORIES,
         "csrf_token": request.session.get("csrf_token", ""),
         "title": f"编辑品目：{item.name}",
+        "default_store": item.store or _get_admin_store(request),
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
     })
 
 
@@ -8821,6 +8865,7 @@ async def admin_inventory_edit(
     sell_price: float = Form(0.0), cost_price: float = Form(0.0),
     low_stock_min: float = Form(0.0),
     supplier: str = Form(""), notes: str = Form(""),
+    store: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -8834,6 +8879,9 @@ async def admin_inventory_edit(
     item.sell_price = sell_price; item.cost_price = cost_price
     item.low_stock_min = low_stock_min
     item.supplier = supplier; item.notes = notes
+    # 门店：staff 无权改；superadmin 可改
+    if request.session.get("admin_role") == "superadmin":
+        item.store = (store or "").strip()
     item.updated_at = datetime.utcnow()
     db.commit()
     return RedirectResponse(f"/admin/inventory/{item_id}?msg=已保存", status_code=303)

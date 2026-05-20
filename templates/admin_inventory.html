@@ -71,9 +71,23 @@
  </div>
 </div>
 
+{% if is_superadmin %}
+<div class="filter-row" style="margin-bottom:.6rem;font-size:.85rem;color:var(--muted);">
+  门店：
+  <a href="?store=" style="color:{{ '#3b82f6' if not wb_store else 'var(--muted)' }};text-decoration:none;margin:0 .25rem;">全部</a>
+  <a href="?store=东环店" style="color:{{ '#3b82f6' if wb_store == '东环店' else 'var(--muted)' }};text-decoration:none;margin:0 .25rem;">东环店</a>
+  <a href="?store=横岗店" style="color:{{ '#3b82f6' if wb_store == '横岗店' else 'var(--muted)' }};text-decoration:none;margin:0 .25rem;">横岗店</a>
+  <span style="color:#94a3b8;">·</span>
+  <span style="color:#94a3b8;">staff 自动锁本店；空标签=两店通用品目</span>
+</div>
+{% elif wb_store %}
+<div class="filter-row" style="margin-bottom:.6rem;font-size:.85rem;color:var(--muted);">门店：{{ wb_store }} ·（含通用品目）</div>
+{% endif %}
+
 {# 搜索 + 大类筛选 #}
 <div class="filter-card">
  <form method="get">
+ {% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}
  <div class="filter-row">
  <input name="q" value="{{ q }}" style="flex:1;min-width:200px;"/>
  <select name="category" style="width:160px;">
@@ -84,7 +98,7 @@
  </select>
  <button type="submit" class="btn secondary">筛选</button>
  {% if q or category or low_stock or zero_stock or controlled or service_only or expiry_alert %}
- <a href="/admin/inventory" class="btn secondary">清除</a>
+ <a href="/admin/inventory{% if wb_store %}?store={{ wb_store }}{% endif %}" class="btn secondary">清除</a>
  {% endif %}
  </div>
  <div class="filter-row" style="margin-top:0.6rem;">
@@ -126,6 +140,7 @@
  {{ it.name }}
  {% if it.is_controlled %}<span class="pill pill-warn" style="margin-left:0.3rem;">管控</span>{% endif %}
  {% if it.is_service %}<span class="pill pill-info" style="margin-left:0.3rem;">服务</span>{% endif %}
+ {% if it.store %}<span class="pill pill-gray" style="margin-left:0.3rem;">{{ it.store }}</span>{% else %}<span class="pill pill-info" style="margin-left:0.3rem;background:#dbeafe;color:#1e40af;">通用</span>{% endif %}
  </td>
  <td style="color:var(--muted);">{{ cat_label }}</td>
  <td style="color:var(--muted);font-size:0.82rem;">{{ sub_label or '—' }}</td>

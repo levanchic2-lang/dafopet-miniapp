@@ -19,6 +19,18 @@
  {% endif %}
 </div>
 
+{% if is_superadmin %}
+<div style="margin:.5rem 0 1rem;font-size:.85rem;color:var(--muted);">
+  门店：
+  <a href="?store=" style="color:{{ '#3b82f6' if not wb_store else 'var(--muted)' }};text-decoration:none;margin:0 .3rem;">全部</a>
+  <a href="?store=东环店" style="color:{{ '#3b82f6' if wb_store == '东环店' else 'var(--muted)' }};text-decoration:none;margin:0 .3rem;">东环店</a>
+  <a href="?store=横岗店" style="color:{{ '#3b82f6' if wb_store == '横岗店' else 'var(--muted)' }};text-decoration:none;margin:0 .3rem;">横岗店</a>
+  <span style="color:#94a3b8;">· 空标签=两店通用套餐</span>
+</div>
+{% elif wb_store %}
+<div style="margin:.5rem 0 1rem;font-size:.85rem;color:var(--muted);">门店：{{ wb_store }} ·（含通用套餐）</div>
+{% endif %}
+
 {% if items %}
 <div class="data-table-wrap">
  <table class="data-table">
@@ -38,7 +50,11 @@
  <tbody>
  {% for p in items %}
  <tr>
-   <td><strong>{{ p.name }}</strong>{% if p.notes %}<div style="font-size:.75rem;color:var(--muted);">{{ p.notes[:60] }}</div>{% endif %}</td>
+   <td>
+     <strong>{{ p.name }}</strong>
+     {% if p.store %}<span class="pill pill-gray" style="margin-left:.3rem;">{{ p.store }}</span>{% else %}<span class="pill pill-info" style="margin-left:.3rem;background:#dbeafe;color:#1e40af;">通用</span>{% endif %}
+     {% if p.notes %}<div style="font-size:.75rem;color:var(--muted);">{{ p.notes[:60] }}</div>{% endif %}
+   </td>
    <td>{{ category_zh.get(p.category, p.category) }}</td>
    <td>{{ p.total_uses }}</td>
    <td>¥{{ '%.2f'|format(p.sell_price) }}</td>
@@ -49,7 +65,7 @@
    {% if is_superadmin %}
    <td>
      <button type="button" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;"
-             onclick='openEdit({{ p.id }}, {{ {"name":p.name,"category":p.category,"total_uses":p.total_uses,"sell_price":p.sell_price,"unit_price":p.unit_price,"validity_days":p.validity_days,"notes":p.notes}|tojson }})'>编辑</button>
+             onclick='openEdit({{ p.id }}, {{ {"name":p.name,"category":p.category,"total_uses":p.total_uses,"sell_price":p.sell_price,"unit_price":p.unit_price,"validity_days":p.validity_days,"notes":p.notes,"store":p.store}|tojson }})'>编辑</button>
      <form method="post" action="/admin/packages/{{ p.id }}/toggle" style="display:inline;">
        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
        <button type="submit" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">
@@ -91,6 +107,12 @@
      <input name="unit_price" type="number" step="0.01" min="0" value="0">
      <label>有效期（天，0 = 不限期）</label>
      <input name="validity_days" type="number" min="0" value="365">
+     <label>归属门店</label>
+     <select name="store">
+       <option value="">通用（两店共享）</option>
+       <option value="东环店">仅东环店</option>
+       <option value="横岗店">仅横岗店</option>
+     </select>
      <label>备注</label>
      <input name="notes">
      <div style="display:flex;gap:.6rem;margin-top:1rem;">
