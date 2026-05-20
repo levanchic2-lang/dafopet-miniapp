@@ -691,6 +691,39 @@ def _get_admin_store(request: "Request") -> str:
     return request.session.get("admin_store", "")
 
 
+def _apply_store_filter(query, store_field, store_short: str):
+    """给「目录类」表加门店可见性过滤。
+
+    约定：store 字段为空字符串 = 通用，两店共享。
+      - staff（store_short 非空）→ 看到 本店 + 通用
+      - superadmin（store_short 空）→ 看到全部，不过滤
+
+    使用例：
+      q = _apply_store_filter(q, InventoryItem.store, _get_admin_store(request))
+    """
+    if not store_short:
+        return query
+    return query.filter(or_(store_field == store_short, store_field == ""))
+
+
+def _resolve_store_for_create(request: "Request", explicit: str = "") -> str:
+    """决定新建「目录类」记录归属哪个门店。
+
+    优先级：
+      1. 表单显式传了 explicit（superadmin 在切换器里选了具体门店）
+      2. staff 自动归本店
+      3. 兜底空字符串（通用）
+    """
+    explicit = (explicit or "").strip()
+    if explicit in ("东环店", "横岗店", ""):
+        # 注意：superadmin 选「通用」=""，要尊重它
+        # staff 不允许 explicit 越过本店
+        if request.session.get("admin_role") == "superadmin":
+            return explicit
+    # staff：永远是本店
+    return request.session.get("admin_store", "") or ""
+
+
 # 门店首字母（病历号前缀）
 _STORE_INITIAL = {"东环店": "D", "横岗店": "H"}
 

@@ -431,6 +431,8 @@ class InventoryItem(Base):
     supplier: Mapped[str] = mapped_column(String(200), default="")              # 供应商
     notes: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)              # 下架/停用
+    # 多门店分离：空 = 通用两店共享，"东环店" / "横岗店" = 仅该店
+    store: Mapped[str] = mapped_column(String(40), default="")
     last_counted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)  # 上次盘点时间
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -863,6 +865,8 @@ class PackageProduct(Base):
     validity_days: Mapped[int] = mapped_column(Integer, default=365)         # 0 = 无限期
     is_active:   Mapped[bool]  = mapped_column(Boolean, default=True)
     notes:       Mapped[str]   = mapped_column(Text, default="")
+    # 多门店分离：空 = 通用套餐两店共享，"东环店" / "横岗店" = 仅该店
+    store:       Mapped[str]   = mapped_column(String(40), default="")
     created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

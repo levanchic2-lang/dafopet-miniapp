@@ -561,6 +561,10 @@ def _try_sqlite_migrations() -> None:
             inv_item_names = {c[1] for c in inv_item_cols}
             if inv_item_cols and "last_counted_at" not in inv_item_names:
                 conn.execute(text("ALTER TABLE inventory_items ADD COLUMN last_counted_at DATETIME DEFAULT NULL"))
+            # inventory_items: 多门店分离 — 空字符串 = 通用两店共享
+            if inv_item_cols and "store" not in inv_item_names:
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN store VARCHAR(40) DEFAULT ''"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_items_store ON inventory_items(store)"))
 
             # stocktake_sessions 盘点会话表
             st_sess_cols = conn.execute(text("PRAGMA table_info(stocktake_sessions)")).fetchall()
@@ -970,9 +974,16 @@ def _try_sqlite_migrations() -> None:
                 "validity_days INTEGER DEFAULT 365, "
                 "is_active BOOLEAN DEFAULT 1, "
                 "notes TEXT DEFAULT '', "
+                "store VARCHAR(40) DEFAULT '', "
                 "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
                 ")"
             ))
+            # 已存在的 package_products 表补 store 字段（多门店分离）
+            _pp_cols = conn.execute(text("PRAGMA table_info(package_products)")).fetchall()
+            _pp_names = {c[1] for c in _pp_cols}
+            if _pp_cols and "store" not in _pp_names:
+                conn.execute(text("ALTER TABLE package_products ADD COLUMN store VARCHAR(40) DEFAULT ''"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_pkg_prod_store ON package_products(store)"))
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS customer_packages ("
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, "
