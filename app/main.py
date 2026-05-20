@@ -2481,12 +2481,19 @@ async def admin_login(
     _require_csrf(request, csrf_token)
     username = username.strip()
 
-    # 优先查 DB 账号
+    # 优先查 DB 账号（精确匹配）
     user = db.query(AdminUser).filter(AdminUser.username == username, AdminUser.is_active == True).first()
+    # 兜底：DB 里历史数据可能有首尾空格 → 用 TRIM 再匹配一次
+    if not user:
+        from sqlalchemy import func as _f
+        user = db.query(AdminUser).filter(
+            _f.trim(AdminUser.username) == username,
+            AdminUser.is_active == True,
+        ).first()
     if user and _pwd_ctx.verify(password, user.password_hash):
         request.session["admin"] = True
         request.session["admin_role"] = user.role
-        request.session["admin_username"] = user.username
+        request.session["admin_username"] = (user.username or "").strip()
         request.session["admin_store"] = user.store or ""
         return RedirectResponse("/admin", status_code=303)
 
@@ -2496,6 +2503,16 @@ async def admin_login(
         request.session["admin_role"] = "superadmin"
         request.session["admin_username"] = "admin"
         return RedirectResponse("/admin", status_code=303)
+
+    # 失败时记日志，方便诊断（控制台 / journalctl 看得到）
+    _diag_user = db.query(AdminUser).filter(AdminUser.username.like(f"%{username}%")).first()
+    if _diag_user:
+        logger.warning(
+            "[login fail] 输入='%s' 找到相似账号 id=%s username=%r is_active=%s",
+            username, _diag_user.id, _diag_user.username, _diag_user.is_active,
+        )
+    else:
+        logger.warning("[login fail] 输入='%s' 数据库里找不到该账号", username)
 
     return templates.TemplateResponse(request, "admin_login.html",
         {"request": request, "title": "医院后台登录", "error": "账号或密码不正确", "csrf_token": _get_csrf_token(request)},
@@ -2791,15 +2808,26 @@ async def admin_users_reset_password(
     require_admin(request)
     require_superadmin(request)
     _require_csrf(request, csrf_token)
+    new_password = (new_password or "").strip()
     if not new_password or len(new_password) < 6:
         return RedirectResponse("/admin/hr?err=新密码不能少于6位", status_code=303)
     user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
     if not user:
         raise HTTPException(404)
+    # 顺手 trim 用户名 — 历史数据可能 import 时带了首尾空格，导致登录时 username 无法 exact-match
+    _orig = user.username or ""
+    if _orig != _orig.strip():
+        user.username = _orig.strip()
     user.password_hash = _pwd_ctx.hash(new_password)
+    # 顺手把账号激活（万一被停用了）
+    user.is_active = True
     _audit(db, request, "admin_user_reset_password", application_id=None, detail={"username": user.username})
     db.commit()
-    return RedirectResponse(f"/admin/hr?msg=已重置密码：{user.username}", status_code=303)
+    # 显示带引号的用户名，方便发现首尾空格、全角字符等问题
+    return RedirectResponse(
+        f"/admin/hr?msg=密码已重置 · 登录用户名：「{user.username}」 长度{len(user.username)} · 已确保账号启用",
+        status_code=303,
+    )
 
 
 @app.post("/admin/users/{user_id}/set-role", name="admin_users_set_role")
