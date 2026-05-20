@@ -411,9 +411,9 @@ def build_outpatient_followup_today(db: Session, store_short: str) -> dict:
 # ─────────────────────────────────────────────────────
 
 def build_batch_expiry(db: Session, store_short: str) -> dict:
-    """库存批次有效期 30 天内到期 — 覆盖所有品目（药品/疫苗/耗材/化验/影像试剂等）。"""
+    """库存批次有效期 90 天内到期 — 覆盖所有品目（药品/疫苗/耗材/化验/影像试剂等）。"""
     today = _today_str()
-    end = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    end = (datetime.now() + timedelta(days=90)).strftime("%Y-%m-%d")
     q = (db.query(InventoryBatch)
          .filter(
              InventoryBatch.is_depleted.is_(False),
@@ -438,7 +438,7 @@ def build_batch_expiry(db: Session, store_short: str) -> dict:
             "url": f"/admin/inventory/{b.item_id}",
         })
     return {
-        "key": "batch_expiry", "title": "库存 30 天内到期", "icon": "⏳",
+        "key": "batch_expiry", "title": "库存 90 天内到期", "icon": "⏳",
         "count": len(rows), "previews": items,
         "all_url": "/admin/inventory",
         "tone": "info",
