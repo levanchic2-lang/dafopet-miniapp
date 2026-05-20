@@ -499,6 +499,23 @@
       }
       /* grid item 默认 min-width:auto 拒绝缩小，全局兜底 */
       [style*="display:grid"] > *, [style*="display: grid"] > * { min-width: 0 !important; }
+
+      /* 全局：详情/编辑页常见的「左主+右侧栏」2 列布局，手机塌缩为单列
+         匹配 1fr <数字>px 模式（侧栏宽度 200-400px 都行） */
+      [style*="grid-template-columns:1fr 2"][style*="px"],
+      [style*="grid-template-columns: 1fr 2"][style*="px"],
+      [style*="grid-template-columns:1fr 3"][style*="px"],
+      [style*="grid-template-columns: 1fr 3"][style*="px"],
+      [style*="grid-template-columns:1fr 4"][style*="px"],
+      [style*="grid-template-columns: 1fr 4"][style*="px"] {
+        grid-template-columns: 1fr !important;
+      }
+
+      /* 「录入型」表格（处方 drug-table / 检查单 item-table）：保留表格语义，
+         父级允许横向滚动。给 table 设最小宽度防止被压扁。 */
+      .drug-table, .item-table { min-width: 680px; }
+      /* 在父容器（.card 或 .form-scroll-wrap）放横向滚动 */
+      .form-scroll-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     }
 
     /* 极窄屏（≤480px）二次收紧 */
