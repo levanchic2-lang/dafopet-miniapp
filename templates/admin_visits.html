@@ -41,7 +41,7 @@
 
 {% if visits %}
 <div class="data-table-wrap">
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
  <tr>
  <th>日期</th>
@@ -56,25 +56,25 @@
  <tbody>
  {% for v in visits %}
  <tr>
- <td style="white-space:nowrap;color:var(--muted);">{{ v.visit_date or '—' }}</td>
- <td><span class="pill pill-info">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
- <td>
+ <td data-label="日期" style="white-space:nowrap;color:var(--muted);">{{ v.visit_date or '—' }}</td>
+ <td data-label="类型"><span class="pill pill-info">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
+ <td data-label="客户">
  {% set c = cust_map.get(v.customer_id) %}
  {% if c %}
  <a href="/admin/customers/{{ c.id }}" style="color:#3b82f6;text-decoration:none;font-weight:600;">{{ c.name or c.phone or '—' }}</a>
  {% else %}—{% endif %}
  </td>
- <td>
+ <td data-label="宠物">
  {% set p = pet_map.get(v.pet_id) %}
  {% if p %}
  {{ '🐱' if p.species == 'cat' else '🐶' if p.species == 'dog' else '🐾' }} {{ p.name or '—' }}
  {% else %}—{% endif %}
  </td>
- <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+ <td data-label="诊断" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
  {{ v.diagnosis or '—' }}
  </td>
- <td style="color:var(--muted);">{{ v.vet_name or '—' }}</td>
- <td style="text-align:right;">
+ <td data-label="医生" style="color:var(--muted);">{{ v.vet_name or '—' }}</td>
+ <td class="actions" style="text-align:right;">
  <a href="/admin/visits/{{ v.id }}?return_to=customer" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
  </td>
  </tr>

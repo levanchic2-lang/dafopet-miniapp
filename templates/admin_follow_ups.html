@@ -28,6 +28,22 @@
 .fu-status-pill.closed  { background:#e5e7eb; color:#374151; }
 .fu-status-pill.skipped { background:#e5e7eb; color:#6b7280; }
 .fu-overdue { color:#dc2626; font-weight:600; }
+
+/* 移动端：操作按钮在卡片底部横铺，可换行 */
+@media (max-width: 768px) {
+  .fu-tabs { gap:.3rem; }
+  .fu-tab { padding:.4rem .65rem; font-size:.8rem; }
+  .fu-mine-toggle { margin-left:0; margin-top:.4rem; font-size:.82rem; flex-basis:100%; }
+  .fu-row-actions {
+    flex-wrap: wrap !important; gap: .35rem !important;
+    justify-content: flex-start !important;
+  }
+  .fu-row-actions > * { flex: 0 0 auto; }
+  .fu-action-btn {
+    font-size: .78rem !important; padding: .35rem .65rem !important;
+    margin-right: 0 !important; white-space: nowrap;
+  }
+}
 </style>
 {% endblock %}
 
@@ -73,7 +89,7 @@
 
 {% if rows %}
 <div class="data-table-wrap">
- <table class="data-table">
+ <table class="data-table mobile-card">
  <thead>
  <tr>
  <th>计划回访日</th>
@@ -93,32 +109,32 @@
  {% set p = pets.get(fu.pet_id) %}
  {% set c = customers.get(fu.customer_id) %}
  <tr>
-  <td>
+  <td data-label="计划回访日">
    {% if fu.planned_date < today_str and fu.status in ('pending','due','phone_pending') %}
     <span class="fu-overdue">{{ fu.planned_date }}</span>
    {% else %}
     {{ fu.planned_date }}
    {% endif %}
   </td>
-  <td>
+  <td data-label="客户">
    {% if c %}<a href="/admin/customers/{{ c.id }}">{{ c.name or '—' }}</a>
    <div style="color:var(--muted);font-size:.78rem;">{{ c.phone or '' }}</div>
    {% else %}—{% endif %}
   </td>
-  <td>
+  <td data-label="宠物">
    {% if p %}<strong>{{ p.name }}</strong>
    <div style="color:var(--muted);font-size:.78rem;">{{ p.species or '' }} {{ p.breed or '' }}</div>
    {% else %}—{% endif %}
   </td>
-  <td>{% if v %}<span class="pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>{% else %}—{% endif %}</td>
-  <td style="max-width:280px;">
+  <td data-label="就诊类型">{% if v %}<span class="pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>{% else %}—{% endif %}</td>
+  <td data-label="诊断" style="max-width:280px;">
    {% if v %}
     <div style="font-size:.85rem;">{{ (v.diagnosis or v.chief_complaint or '—')[:80] }}</div>
     <div style="color:var(--muted);font-size:.75rem;">就诊日：{{ v.visit_date }}</div>
    {% else %}—{% endif %}
   </td>
-  <td>{{ fu.assigned_to or '—' }}</td>
-  <td>
+  <td data-label="处理人">{{ fu.assigned_to or '—' }}</td>
+  <td data-label="渠道">
    {% if fu.channel %}<span class="pill">{{ channel_zh.get(fu.channel, fu.channel) }}</span>
    {% else %}<span style="color:var(--muted);">—</span>{% endif %}
    {% if fu.response %}
@@ -127,8 +143,8 @@
     </div>
    {% endif %}
   </td>
-  <td><span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span></td>
-  <td style="text-align:right;" class="fu-row-actions">
+  <td data-label="状态"><span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span></td>
+  <td class="actions fu-row-actions" style="text-align:right;">
    {% if v %}<a href="/admin/visits/{{ v.id }}" class="fu-action-btn">病例</a>{% endif %}
    {% if fu.feedback_token and fu.status in ('pending','due','phone_pending','sent') %}
    <button type="button" class="fu-action-btn"
