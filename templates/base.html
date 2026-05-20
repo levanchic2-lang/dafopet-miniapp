@@ -516,6 +516,25 @@
       .drug-table, .item-table { min-width: 680px; }
       /* 在父容器（.card 或 .form-scroll-wrap）放横向滚动 */
       .form-scroll-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+      /* 模态弹层：手机上限高 + 内滚动，避免长表单撑出视口锁死操作 */
+      .cust-modal-overlay > div,
+      .cust-modal,
+      [class*="modal"][style*="position:fixed"] > div {
+        max-height: 88vh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        width: 96vw !important;
+        padding: 1rem .85rem !important;
+      }
+      /* 模态里所有输入框统一 — 防止 iOS date 撑爆 */
+      .cust-modal-overlay input,
+      .cust-modal-overlay select,
+      .cust-modal-overlay textarea {
+        width: 100% !important; box-sizing: border-box !important;
+        -webkit-appearance: none !important; appearance: none !important;
+        max-width: 100% !important; min-width: 0 !important;
+      }
     }
 
     /* 极窄屏（≤480px）二次收紧 */
