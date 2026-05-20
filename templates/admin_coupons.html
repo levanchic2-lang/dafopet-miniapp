@@ -35,13 +35,14 @@
     display: flex; align-items: center; justify-content: center;
     background: rgba(255,255,255,.2); border-radius: 50%; font-size: 1rem;
   }
-  /* 表单：占满中间，内部滚动 */
+  /* 表单：占满中间，内部滚动（不用 flex column，避免 Safari sticky bug） */
   #issue-coupon-modal form {
-    flex: 1 1 auto !important; display: flex !important; flex-direction: column !important;
-    overflow: hidden !important; min-height: 0 !important;
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    min-height: 0 !important;
+    display: block !important;
   }
-  /* 表单内部除最后一行外，统一在一个滚动容器里 */
-  #issue-coupon-modal form > *:not(:last-child) { flex: 0 0 auto; }
   /* 字段紧凑：label + input 单元 */
   #issue-coupon-modal form > label {
     padding: .6rem 1rem 0 !important; margin: 0 !important;
@@ -58,20 +59,21 @@
   }
   /* 最后一行（提交+取消按钮）：sticky 钉在底部 */
   #issue-coupon-modal form > div:last-child {
-    position: sticky !important; bottom: 0 !important; z-index: 10 !important;
-    flex: 0 0 auto !important;
-    margin: .5rem 0 0 !important;
+    position: sticky !important; bottom: 0 !important;
+    left: 0; right: 0; z-index: 10 !important;
+    margin: 1rem -1rem -.5rem !important;
     padding: .75rem 1rem env(safe-area-inset-bottom, .75rem) !important;
     background: var(--card) !important;
     border-top: 1px solid var(--border);
-    box-shadow: 0 -4px 12px rgba(0,0,0,.06);
+    box-shadow: 0 -6px 14px rgba(0,0,0,.08);
     display: flex !important; gap: .5rem !important;
   }
   #issue-coupon-modal form > div:last-child > button,
   #issue-coupon-modal form > div:last-child > a {
-    flex: 1 1 50% !important; height: 44px !important;
+    flex: 1 1 50% !important; height: 44px !important; font-size: .95rem !important;
   }
-  #issue-coupon-modal form { overflow-y: auto !important; }
+  /* 表单内边距：留出按钮栏的空间，避免最后一个字段被遮 */
+  #issue-coupon-modal form { padding: 0 0 1rem !important; }
 }
 </style>
 {% endblock %}
