@@ -2,30 +2,57 @@
 {% block extra_css %}
 <style>
 @media (max-width: 768px) {
+  /* v23-coupon-modal: 全屏 + 字段紧凑 + 标题底部都 sticky */
   #issue-coupon-modal {
     align-items: stretch !important; justify-content: stretch !important;
     padding: 0 !important; overflow: hidden !important;
+    background: var(--card) !important;  /* 全屏不透明背景 */
   }
   #issue-coupon-modal > .cust-modal {
     width: 100vw !important; max-width: 100vw !important;
     height: 100vh !important; max-height: 100vh !important;
     border-radius: 0 !important; margin: 0 !important;
-    padding: 1rem 1rem 5rem !important; box-sizing: border-box !important;
+    padding: 0 !important; box-sizing: border-box !important;
     box-shadow: none !important;
-    overflow-y: auto !important; -webkit-overflow-scrolling: touch !important;
+    display: flex !important; flex-direction: column !important;
   }
+  /* 标题：固定不滚 */
   #issue-coupon-modal > .cust-modal > h3:first-child {
-    position: sticky !important; top: -1rem;
-    background: var(--card); margin: -1rem -1rem .8rem !important;
-    padding: .85rem 1rem !important; font-size: 1.05rem !important;
-    border-bottom: 1px solid var(--border); z-index: 5;
+    flex: 0 0 auto !important;
+    margin: 0 !important; padding: .9rem 1rem !important;
+    font-size: 1.05rem !important; background: var(--card);
+    border-bottom: 1px solid var(--border);
   }
-  #issue-coupon-modal form > div[style*="display:flex"]:last-child {
-    position: sticky; bottom: 0; background: var(--card);
-    margin: 1rem -1rem -5rem !important;
-    padding: .75rem 1rem !important; border-top: 1px solid var(--border);
-    z-index: 5;
+  /* 表单：占满中间，内部滚动 */
+  #issue-coupon-modal form {
+    flex: 1 1 auto !important; display: flex !important; flex-direction: column !important;
+    overflow: hidden !important; min-height: 0 !important;
   }
+  /* 表单内部除最后一行外，统一在一个滚动容器里 */
+  #issue-coupon-modal form > *:not(:last-child) { flex: 0 0 auto; }
+  /* 字段紧凑：label + input 单元 */
+  #issue-coupon-modal form > label {
+    padding: .6rem 1rem 0 !important; margin: 0 !important;
+    font-size: .82rem !important; color: var(--muted); display: block;
+  }
+  #issue-coupon-modal form > input,
+  #issue-coupon-modal form > select {
+    margin: .25rem 1rem 0 !important; width: calc(100% - 2rem) !important;
+    height: 42px !important; padding: 0 .7rem !important; font-size: 16px !important;
+    box-sizing: border-box !important;
+  }
+  #issue-coupon-modal form > div:not(:last-child) {
+    padding: 0 1rem !important; margin: .5rem 0 0 !important;
+  }
+  /* 最后一行（提交+取消按钮）：sticky 在底部 */
+  #issue-coupon-modal form > div:last-child {
+    flex: 0 0 auto !important;
+    margin: .5rem 0 0 !important; padding: .75rem 1rem env(safe-area-inset-bottom, .75rem) !important;
+    background: var(--card); border-top: 1px solid var(--border);
+    position: relative;
+  }
+  /* 让内容部分可滚动：把表单分两段 — 这里用 padding-bottom 给底栏让位 */
+  #issue-coupon-modal form { overflow-y: auto !important; padding-bottom: .5rem !important; }
 }
 </style>
 {% endblock %}

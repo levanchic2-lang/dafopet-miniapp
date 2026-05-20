@@ -2,29 +2,42 @@
 {% block extra_css %}
 <style>
 @media (max-width: 768px) {
+  /* v23-pkg-modal: 全屏 flex 布局 */
   #new-pkg-modal {
     align-items: stretch !important; justify-content: stretch !important;
-    padding: 0 !important; overflow: hidden !important;
+    padding: 0 !important; overflow: hidden !important; background: var(--card) !important;
   }
   #new-pkg-modal > .cust-modal {
     width: 100vw !important; max-width: 100vw !important;
     height: 100vh !important; max-height: 100vh !important;
     border-radius: 0 !important; margin: 0 !important;
-    padding: 1rem 1rem 5rem !important; box-sizing: border-box !important;
-    box-shadow: none !important;
-    overflow-y: auto !important; -webkit-overflow-scrolling: touch !important;
+    padding: 0 !important; box-sizing: border-box !important; box-shadow: none !important;
+    display: flex !important; flex-direction: column !important;
   }
   #new-pkg-modal > .cust-modal > h3:first-child {
-    position: sticky !important; top: -1rem;
-    background: var(--card); margin: -1rem -1rem .8rem !important;
-    padding: .85rem 1rem !important; font-size: 1.05rem !important;
-    border-bottom: 1px solid var(--border); z-index: 5;
+    flex: 0 0 auto !important; margin: 0 !important; padding: .9rem 1rem !important;
+    font-size: 1.05rem !important; background: var(--card);
+    border-bottom: 1px solid var(--border);
   }
-  #new-pkg-modal form > div[style*="display:flex"]:last-child {
-    position: sticky; bottom: 0; background: var(--card);
-    margin: 1rem -1rem -5rem !important;
-    padding: .75rem 1rem !important; border-top: 1px solid var(--border);
-    z-index: 5;
+  #new-pkg-modal form {
+    flex: 1 1 auto !important; overflow-y: auto !important;
+    display: flex !important; flex-direction: column !important;
+    min-height: 0 !important; padding-bottom: .5rem !important;
+  }
+  #new-pkg-modal form > label {
+    padding: .6rem 1rem 0 !important; margin: 0 !important;
+    font-size: .82rem !important; color: var(--muted); display: block;
+  }
+  #new-pkg-modal form > input,
+  #new-pkg-modal form > select {
+    margin: .25rem 1rem 0 !important; width: calc(100% - 2rem) !important;
+    height: 42px !important; padding: 0 .7rem !important; font-size: 16px !important;
+    box-sizing: border-box !important;
+  }
+  #new-pkg-modal form > div:last-child {
+    flex: 0 0 auto !important;
+    margin: .5rem 0 0 !important; padding: .75rem 1rem env(safe-area-inset-bottom, .75rem) !important;
+    background: var(--card); border-top: 1px solid var(--border);
   }
 }
 </style>
