@@ -513,8 +513,11 @@
 </div>
 
 {# ── 折叠的高级编辑（修改日期/类型/医生/宠物）── #}
+{# 病历是法定档案，基础信息和删除仅超级管理员可见可操作 #}
+{% if is_superadmin %}
 <details style="margin-top:0.85rem;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:0.6rem 1rem;">
- <summary style="cursor:pointer;font-size:0.88rem;color:var(--muted);">⚙ 修改基础信息（日期 / 类型 / 医生 / 宠物 / 备注）</summary>
+ <summary style="cursor:pointer;font-size:0.88rem;color:var(--muted);">⚙ 修改基础信息（日期 / 类型 / 医生 / 宠物 / 备注）<span style="margin-left:.4rem;font-size:.72rem;color:#9333ea;">超管</span></summary>
+ <p style="margin:.4rem 0 0;font-size:.78rem;color:var(--muted);">⚠ 病历是法定档案，请谨慎修改。常规情况下基础信息不应被改动。</p>
  <form method="post" action="/admin/visits/{{ v.id }}/edit" style="margin-top:0.75rem;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <input type="hidden" name="return_to" value="{{ return_to }}">
@@ -557,13 +560,14 @@
  <textarea name="notes" style="min-height:48px;">{{ v.notes or '' }}</textarea>
  <div style="display:flex;gap:0.5rem;margin-top:0.6rem;">
  <button type="submit">保存基础信息</button>
- <form method="post" action="/admin/visits/{{ v.id }}/delete" onsubmit="return confirm('确认删除此就诊记录？此操作不可恢复。')" style="margin-left:auto;">
+ <form method="post" action="/admin/visits/{{ v.id }}/delete" onsubmit="return confirm('⚠ 确认彻底删除此病历记录？此操作不可恢复，已开具的处方/收费单也会断链。')" style="margin-left:auto;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <button type="submit" class="danger">🗑 删除就诊</button>
  </form>
  </div>
  </form>
 </details>
+{% endif %}
 
 <script>
 let currentStep = 1;

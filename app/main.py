@@ -7256,6 +7256,7 @@ async def page_admin_visit_detail(
         "csrf_token": _get_csrf_token(request),
         "mode": "edit",
         "msg": request.query_params.get("msg"),
+        "is_superadmin": _is_superadmin(request),
     })
 
 
@@ -7284,15 +7285,28 @@ async def admin_visit_edit(
     v = db.get(Visit, visit_id)
     if not v:
         raise HTTPException(404, "就诊记录不存在")
-    v.pet_id = pet_id or v.pet_id
-    v.visit_date = visit_date.strip()[:20]
-    v.visit_type = visit_type.strip()[:40] or "outpatient"
+    # 病历是法定档案：基础信息（日期/类型/医生/宠物）非超管不允许改
+    _new_pet_id = pet_id or v.pet_id
+    _new_date   = visit_date.strip()[:20]
+    _new_type   = visit_type.strip()[:40] or "outpatient"
+    _new_vet    = vet_name.strip()[:80]
+    _meta_changed = (
+        _new_pet_id != (v.pet_id or 0) or
+        _new_date != (v.visit_date or "") or
+        _new_type != (v.visit_type or "") or
+        _new_vet  != (v.vet_name or "")
+    )
+    if _meta_changed and not _is_superadmin(request):
+        raise HTTPException(status_code=403, detail="病历基础信息（日期/类型/医生/宠物）仅超级管理员可修改")
+    v.pet_id = _new_pet_id
+    v.visit_date = _new_date
+    v.visit_type = _new_type
     v.chief_complaint = chief_complaint.strip()
     v.physical_exam = physical_exam.strip()
     v.diagnosis = diagnosis.strip()
     v.treatment_plan = treatment_plan.strip()
     v.notes = notes.strip()
-    v.vet_name = vet_name.strip()[:80]
+    v.vet_name = _new_vet
     v.follow_up_note = follow_up_note.strip()
     v.follow_up_at = follow_up_at.strip()[:20]
     db.commit()
@@ -7351,6 +7365,8 @@ async def admin_visit_delete(
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
+    # 病历法定档案：只有超管能删
+    require_superadmin(request)
     _require_csrf(request, csrf_token)
     v = db.get(Visit, visit_id)
     if not v:
