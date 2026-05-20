@@ -489,7 +489,16 @@
       iframe, img, video { max-width: 100%; height: auto; }
 
       /* ── 防止 overflow 出现横向滚动 ── */
-      html, body { overflow-x: hidden; }
+      html, body { overflow-x: hidden; max-width: 100vw; }
+      /* nuclear：所有 input/select 强制不超容器 */
+      input[type="date"], input[type="datetime-local"], input[type="time"],
+      input[type="text"], input[type="tel"], input[type="number"], input[type="email"],
+      input[type="password"], input[type="search"], select, textarea {
+        max-width: 100% !important; min-width: 0 !important;
+        box-sizing: border-box !important;
+      }
+      /* grid item 默认 min-width:auto 拒绝缩小，全局兜底 */
+      [style*="display:grid"] > *, [style*="display: grid"] > * { min-width: 0 !important; }
     }
 
     /* 极窄屏（≤480px）二次收紧 */
