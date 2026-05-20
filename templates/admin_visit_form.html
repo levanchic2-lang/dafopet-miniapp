@@ -85,6 +85,22 @@
 .soap-panel textarea {
  width: 100%; min-height: 120px; font-size: 0.95rem; line-height: 1.6;
 }
+/* 移动端：soap-panel 内输入框统一 — 防 iOS date 撑爆容器 */
+@media (max-width: 768px) {
+ .soap-panel { padding: .75rem .75rem !important; }
+ .soap-panel input, .soap-panel select, .soap-panel textarea {
+   width: 100% !important; box-sizing: border-box !important;
+   -webkit-appearance: none !important; appearance: none !important;
+   min-width: 0 !important; max-width: 100% !important;
+   font-size: 16px !important;
+   border: 1px solid var(--border); border-radius: 8px;
+   background: var(--card);
+   padding: 0 .65rem !important;
+ }
+ .soap-panel input { height: 42px !important; line-height: 1.4 !important; }
+ .soap-panel textarea { min-height: 100px; padding: .55rem .65rem !important; line-height: 1.5 !important; }
+ .soap-panel .row2 > div { min-width: 0 !important; }
+}
 .soap-nav-row {
  display: flex; gap: 0.5rem; margin-top: 1rem;
  padding-top: 0.8rem; border-top: 1px solid var(--border);
