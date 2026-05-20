@@ -8404,9 +8404,11 @@ async def admin_inventory_bulk_edit(
     category: str = Form(""),
     subcategory: str = Form(""),
     supplier: str = Form(""),
+    store: str = Form("__keep__"),
 ):
-    """对一组品目批量改 大类 / 小类 / 供应商。
-    每个字段留空 = 不修改；至少要改 1 个字段。
+    """对一组品目批量改 大类 / 小类 / 供应商 / 归属门店。
+    每个字段留空（store 为 "__keep__"）= 不修改；至少要改 1 个字段。
+    门店字段仅超级管理员可改；staff 提交会被忽略。
     """
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -8421,7 +8423,11 @@ async def admin_inventory_bulk_edit(
             return RedirectResponse("/admin/inventory?msg=改小类时必须同时选大类", status_code=303)
         if subcategory not in INVENTORY_CATEGORIES[category].get("subs", {}):
             return RedirectResponse("/admin/inventory?msg=小类不属于所选大类", status_code=303)
-    if not (category or supplier):
+    # 门店：__keep__ = 不改；空字符串 = 改成通用；东环店/横岗店 = 改成指定店
+    change_store = (store != "__keep__") and (request.session.get("admin_role") == "superadmin")
+    if change_store and store not in ("", "东环店", "横岗店"):
+        return RedirectResponse("/admin/inventory?msg=门店值无效", status_code=303)
+    if not (category or supplier or change_store):
         return RedirectResponse("/admin/inventory?msg=请至少选一个要修改的字段", status_code=303)
 
     rows = db.query(InventoryItem).filter(InventoryItem.id.in_(item_ids)).all()
@@ -8435,6 +8441,8 @@ async def admin_inventory_bulk_edit(
             it.subcategory = subcategory
         if supplier:
             it.supplier = supplier[:200]
+        if change_store:
+            it.store = store
         it.updated_at = datetime.utcnow()
         updated += 1
     db.commit()

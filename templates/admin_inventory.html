@@ -202,6 +202,15 @@
   </select>
   <span class="lbl">供应商</span>
   <input type="text" name="supplier" id="bulk-supplier" placeholder="留空=不改" style="width:140px;"/>
+  {% if is_superadmin %}
+  <span class="lbl">归属门店</span>
+  <select name="store" id="bulk-store">
+    <option value="__keep__">— 不修改 —</option>
+    <option value="">通用（两店共享）</option>
+    <option value="东环店">仅东环店</option>
+    <option value="横岗店">仅横岗店</option>
+  </select>
+  {% endif %}
   <button type="button" class="btn-apply" onclick="bulkApply()">✓ 应用</button>
   <button type="button" class="btn-cancel" onclick="bulkClear()">取消</button>
  </div>
@@ -270,17 +279,25 @@
     var cat = catSel.value;
     var sub = subSel.value;
     var sup = document.getElementById('bulk-supplier').value.trim();
-    if (!cat && !sup) {
-      alert('请至少选择一个要修改的字段（大类 / 供应商）');
+    var storeEl = document.getElementById('bulk-store');
+    var storeVal = storeEl ? storeEl.value : '__keep__';
+    var changeStore = storeEl && storeVal !== '__keep__';
+    if (!cat && !sup && !changeStore) {
+      alert('请至少选择一个要修改的字段（大类 / 供应商 / 门店）');
       return;
     }
-    if (!confirm('确认批量修改这 ' + ids.length + ' 个品目？')) return;
+    var msg = '确认批量修改这 ' + ids.length + ' 个品目？';
+    if (changeStore) {
+      msg += '\n门店将设为：' + (storeVal === '' ? '通用（两店共享）' : '仅 ' + storeVal);
+    }
+    if (!confirm(msg)) return;
     var fd = new FormData();
     fd.append('csrf_token', document.getElementById('bulk-csrf').value);
     ids.forEach(function(id){ fd.append('item_ids', id); });
     if (cat) fd.append('category', cat);
     if (sub) fd.append('subcategory', sub);
     if (sup) fd.append('supplier', sup);
+    if (changeStore) fd.append('store', storeVal);
     fetch('/admin/inventory/bulk-edit', { method: 'POST', body: fd, credentials: 'same-origin' })
       .then(function(r){
         if (r.redirected) { window.location = r.url; return; }
