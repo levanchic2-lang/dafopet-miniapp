@@ -413,13 +413,13 @@
 
     {# 接待组 #}
     <div class="ribbon-icons {% if _active_tab=='reception' %}active{% endif %}" data-tab-content="reception">
-      <a class="ribbon-icon {% if _path=='/admin' %}current{% endif %}" href="/admin"><span class="ri-emoji">🏠</span>TNR 工作台</a>
+      <a class="ribbon-icon {% if _path=='/admin' %}current{% endif %}" href="/admin"><span class="ri-emoji">🐱</span>TNR 申请</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/calendar') %}current{% endif %}" href="/admin/calendar"><span class="ri-emoji">📅</span>日历</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/appointments') %}current{% endif %}" href="/admin/appointments" id="nav-appt-link">
         <span class="ri-emoji">📋</span>预约管理<span id="nav-pending-badge" class="ri-badge" style="display:none;"></span>
       </a>
       {% if request.session.get('admin') %}
-      <a class="ribbon-icon {% if _path.startswith('/admin/customers') %}current{% endif %}" href="/admin/customers"><span class="ri-emoji">👥</span>客户操作中心</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/customers') %}current{% endif %}" href="/admin/customers"><span class="ri-emoji">🏠</span>今日工作台</a>
       {% endif %}
     </div>
 
@@ -489,10 +489,10 @@
     // 路径 → 默认 tab 标签映射。仅精确匹配（详情/子页用 <meta tab-label> 自行标记）。
     var PATH_LABELS = {
       // 接待
-      '/admin':              { label: 'TNR 工作台', kind: 'page', icon: '🏠' },
+      '/admin':              { label: 'TNR 申请',   kind: 'page', icon: '🐱' },
       '/admin/calendar':     { label: '日历',       kind: 'page', icon: '📅' },
       '/admin/appointments': { label: '预约管理',   kind: 'page', icon: '📋' },
-      '/admin/customers':    { label: '客户操作中心', kind: 'page', icon: '👥' },
+      '/admin/customers':    { label: '今日工作台',  kind: 'page', icon: '🏠' },
       // 医疗
       '/admin/dispensing':   { label: '发药台',     kind: 'page', icon: '💊' },
       '/admin/vaccinations': { label: '疫苗管理',   kind: 'page', icon: '💉' },

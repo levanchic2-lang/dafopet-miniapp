@@ -4845,7 +4845,13 @@ async def page_admin_customers(
     db: Session = Depends(get_db),
     q: str = Query(""),
     page: int = Query(1),
+    store: str = Query(""),
 ):
+    """今日工作台 + 客户档案速查。
+
+    顶部：13+ 张卡片汇总今天/本周要做的事。
+    底部：客户搜索 + 列表（搜索框自动聚焦，按 / 也可聚焦）。
+    """
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     PAGE_SIZE = 30
@@ -4860,6 +4866,21 @@ async def page_admin_customers(
         )
     total = query.count()
     customers = query.order_by(Customer.id.desc()).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).all()
+
+    # 工作台数据：staff 锁本店；superadmin 可通过 ?store=东环店/横岗店 切
+    admin_store = _get_admin_store(request)
+    if request.session.get("admin_role") == "superadmin":
+        wb_store = (store or "").strip()
+    else:
+        wb_store = admin_store
+
+    from app.services.dashboard import build_workbench
+    try:
+        wb = build_workbench(db, wb_store)
+    except Exception as _e:
+        logger.warning("[workbench] build failed: %s", _e)
+        wb = {"urgent": [], "weekly": [], "stock": []}
+
     return templates.TemplateResponse(
         request,
         "admin_customers.html",
@@ -4871,6 +4892,9 @@ async def page_admin_customers(
             "page_size": PAGE_SIZE,
             "total_pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
             "csrf_token": _get_csrf_token(request),
+            "workbench": wb,
+            "wb_store": wb_store,
+            "is_superadmin": request.session.get("admin_role") == "superadmin",
         },
     )
 
