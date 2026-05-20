@@ -451,7 +451,13 @@ def build_batch_expiry(db: Session, store_short: str) -> dict:
              InventoryBatch.expiry_date != "",
              InventoryBatch.expiry_date >= today,
              InventoryBatch.expiry_date <= end,
-         ).order_by(InventoryBatch.expiry_date.asc()))
+         ))
+    if store_short:
+        # 批次本身没 store 字段，通过 item 关联过滤
+        q = q.join(InventoryItem, InventoryItem.id == InventoryBatch.item_id).filter(
+            or_(InventoryItem.store == store_short, InventoryItem.store == "")
+        )
+    q = q.order_by(InventoryBatch.expiry_date.asc())
     rows = q.all()
     _CAT_ZH = {
         "medication": "药品", "vaccine": "疫苗", "antiparasitic": "驱虫",
@@ -481,7 +487,10 @@ def build_low_stock(db: Session, store_short: str) -> dict:
         InventoryItem.is_service.is_(False),
         InventoryItem.low_stock_min > 0,
         InventoryItem.stock_qty <= InventoryItem.low_stock_min,
-    ).order_by((InventoryItem.stock_qty - InventoryItem.low_stock_min).asc())
+    )
+    if store_short:
+        q = q.filter(or_(InventoryItem.store == store_short, InventoryItem.store == ""))
+    q = q.order_by((InventoryItem.stock_qty - InventoryItem.low_stock_min).asc())
     rows = q.all()
     items = []
     for it in rows[:3]:
@@ -509,7 +518,8 @@ def build_package_expiring(db: Session, store_short: str) -> dict:
         CustomerPackage.expires_at <= end,
     )
     if store_short:
-        q = q.filter(CustomerPackage.store == store_short)
+        # 已售的 CustomerPackage.store 记录的是售卖时的门店；通用就空
+        q = q.filter(or_(CustomerPackage.store == store_short, CustomerPackage.store == ""))
     rows = q.order_by(CustomerPackage.expires_at.asc()).all()
     items = []
     for p in rows[:3]:

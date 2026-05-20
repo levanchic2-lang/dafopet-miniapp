@@ -5051,7 +5051,11 @@ async def page_admin_customer_detail(
         .all()
     )
     active_packages_count = sum(1 for p in customer_packages if p.status == "active")
-    package_products = db.query(PackageProduct).filter(PackageProduct.is_active == True).order_by(PackageProduct.id.desc()).all()
+    # 客户档案里售卖套餐：staff 只看本店+通用，避免售错门店的套餐
+    package_products = _apply_store_filter(
+        db.query(PackageProduct).filter(PackageProduct.is_active == True),
+        PackageProduct.store, _get_admin_store(request),
+    ).order_by(PackageProduct.id.desc()).all()
 
     # ── 押金 ──
     deposits = (
@@ -8337,12 +8341,15 @@ INVENTORY_CATEGORIES = {
 
 @app.get("/api/inventory/search")
 async def api_inventory_search(
+    request: Request,
     q: str = Query(""),
     category: str = Query(""),
     db: Session = Depends(get_db),
 ):
     """JSON autocomplete for inventory items — used by prescription/sales order forms."""
     query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    # 多门店：staff 只看本店+通用；superadmin 全看
+    query = _apply_store_filter(query, InventoryItem.store, _get_admin_store(request))
     if category:
         query = query.filter(InventoryItem.category == category)
     if q:
@@ -8433,6 +8440,7 @@ async def api_inventory_search(
         return {"items": []}
     q = (q or "").strip()
     qq = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    qq = _apply_store_filter(qq, InventoryItem.store, _get_admin_store(request))
     if q:
         like = f"%{q}%"
         qq = qq.filter(InventoryItem.name.like(like))
@@ -8721,13 +8729,17 @@ async def admin_inventory_list(
     total = query.count()
     items = query.order_by(InventoryItem.category, InventoryItem.name).offset((page - 1) * page_size).limit(page_size).all()
     total_pages = max(1, (total + page_size - 1) // page_size)
-    low_count = db.query(InventoryItem).filter(
+    low_count = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _wb_store
+    ).filter(
         InventoryItem.is_active == True,
         InventoryItem.is_service == False,
         InventoryItem.stock_qty <= InventoryItem.low_stock_min,
         InventoryItem.low_stock_min > 0,
     ).count()
-    zero_count = db.query(InventoryItem).filter(
+    zero_count = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _wb_store
+    ).filter(
         InventoryItem.is_active == True,
         InventoryItem.is_service == False,
         InventoryItem.stock_qty <= 0,
@@ -9030,8 +9042,11 @@ async def admin_stocktake_list(request: Request, db: Session = Depends(get_db)):
     # 统计每个大类最近盘点时间
     cycle_stats = []
     today = _date.today()
+    _stocktake_store = _get_admin_store(request)
     for cat_key, cat_info in INVENTORY_CATEGORIES.items():
-        item_cnt = db.query(InventoryItem).filter(
+        item_cnt = _apply_store_filter(
+            db.query(InventoryItem), InventoryItem.store, _stocktake_store
+        ).filter(
             InventoryItem.is_active == True,
             InventoryItem.is_service == False,
             InventoryItem.category == cat_key,
@@ -9079,6 +9094,7 @@ async def admin_stocktake_create(
         InventoryItem.is_active == True,
         InventoryItem.is_service == False,
     )
+    query = _apply_store_filter(query, InventoryItem.store, _get_admin_store(request))
     if category_filter:
         query = query.filter(InventoryItem.category == category_filter)
     items = query.order_by(InventoryItem.category, InventoryItem.name).all()
@@ -10785,7 +10801,9 @@ async def admin_vaccination_create_page(
     vets = [v[0] for v in db.query(Staff.name).filter(
         Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")
     ).all()]
-    vacc_items = db.query(InventoryItem).filter(
+    vacc_items = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+    ).filter(
         InventoryItem.category.in_(["vaccine", "antiparasitic"]),
         InventoryItem.stock_qty > 0,
     ).order_by(InventoryItem.name).all()
@@ -10881,7 +10899,9 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
     vets = [v[0] for v in db.query(Staff.name).filter(
         Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")
     ).all()]
-    vacc_items = db.query(InventoryItem).filter(
+    vacc_items = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+    ).filter(
         InventoryItem.category.in_(["vaccine", "antiparasitic"])
     ).order_by(InventoryItem.name).all()
     return templates.TemplateResponse(request, "admin_vaccination_form.html", {
@@ -11031,7 +11051,9 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
     existing_vacc = db.query(Vaccination).filter(Vaccination.rabies_record_id == rec_id).first()
     if not existing_vacc:
         # 查找狂犬疫苗库存品目（优先匹配名称含"狂犬"的）
-        rabies_item = db.query(InventoryItem).filter(
+        rabies_item = _apply_store_filter(
+            db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        ).filter(
             InventoryItem.category == "vaccine",
             InventoryItem.name.ilike("%狂犬%"),
         ).first()
