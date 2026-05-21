@@ -17,7 +17,7 @@
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">👨‍<i data-lucide="briefcase"></i></span>人事管理</h1>
+ <h1><span class="ph-icon"><i data-lucide="briefcase"></i></span>人事管理</h1>
  <p class="ph-sub">在职 {{ active_staff|length }} 人 · 离职 {{ resigned_staff|length }} 人</p>
  </div>
  {% if request.session.get('admin_role') == 'superadmin' or not request.session.get('admin_role') %}
