@@ -408,7 +408,7 @@
  });
  if (!changed) return;
  saving = true;
- setStatus('💾 保存中…', '#3b82f6');
+ setStatus('保存中…', '#3b82f6');
  try {
  const r = await fetch('/api/visits/' + VISIT_ID + '/autosave', {
  method: 'POST', headers: {'Content-Type': 'application/json'},

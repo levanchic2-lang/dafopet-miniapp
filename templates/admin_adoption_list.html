@@ -63,7 +63,7 @@
     <div class="adoption-body">
       <div class="adoption-name">{{ pet.name or '未命名' }}</div>
       <div class="adoption-meta">
-        {{ '<i data-lucide="cat"></i> 猫' if pet.species == 'cat' else '<i data-lucide="dog"></i> 狗' if pet.species == 'dog' else '<i data-lucide="paw-print"></i> 其他' }}
+        {{ ('<i data-lucide="cat"></i> 猫' if pet.species == 'cat' else '<i data-lucide="dog"></i> 狗' if pet.species == 'dog' else '<i data-lucide="paw-print"></i> 其他')|safe }}
         {% if pet.breed %} · {{ pet.breed }}{% endif %}
         {% if pet.age_estimate %} · {{ pet.age_estimate }}{% endif %}
         {% if pet.gender == 'male' %} · ♂ 公{% elif pet.gender == 'female' %} · ♀ 母{% endif %}
