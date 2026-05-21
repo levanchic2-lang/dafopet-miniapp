@@ -351,7 +351,10 @@
     .qtabs { position: fixed; left: 0; right: 0; bottom: 0;
              background: rgba(255,255,255,0.96); backdrop-filter: blur(8px);
              border-top: 1px solid #e5e7eb; z-index: 950; display: none;
-             padding: 4px 8px 4px 8px; }
+             padding: 4px 8px 4px 8px;
+             /* iOS 底部 home 指示器避让 — 标签栏整体上移，标签不再贴边
+                导致误触 home 手势 */
+             padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px)); }
     .qtabs.has-tabs { display: flex; gap: 4px; overflow-x: auto;
                        -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
     .qtab { display: inline-flex; align-items: center; gap: 5px;
@@ -360,7 +363,9 @@
              background: #f3f4f6; color: #4b5563; font-size: 0.82rem;
              text-decoration: none; line-height: 1.4; white-space: nowrap;
              border: 1px solid transparent; border-bottom: none;
-             cursor: pointer; user-select: none; }
+             cursor: pointer; user-select: none;
+             /* 手机点触面积加大 — 至少 32px 高，方便手指点 */
+             min-height: 32px; }
     .qtab:hover { background: #e5e7eb; }
     .qtab.active { background: #fff; color: #111827; font-weight: 600;
                    border-color: #d1d5db; box-shadow: 0 -2px 4px rgba(0,0,0,.04); }
@@ -372,11 +377,13 @@
     .qtab-clear { display: inline-flex; align-items: center; padding: 0 8px;
                    font-size: 0.78rem; color: #9ca3af; cursor: pointer; }
     .qtab-clear:hover { color: #ef4444; }
-    /* 给页面留底部空间，避免被 tab 栏遮住 */
-    body.has-qtabs { padding-bottom: 42px; }
+    /* 给页面留底部空间，避免被 tab 栏遮住（含 safe-area） */
+    body.has-qtabs { padding-bottom: calc(42px + env(safe-area-inset-bottom, 0px)); }
     @media (max-width: 640px) {
-      .qtab { max-width: 140px; padding: 5px 8px; font-size: 0.78rem; }
+      .qtab { max-width: 140px; padding: 6px 10px; font-size: 0.78rem; min-height: 34px; }
       .qtab .qt-label { max-width: 100px; }
+      /* 手机上标签栏整体高度稍微增加，让标签离 home 指示器更远 */
+      .qtabs { padding-top: 6px; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
     }
 
     /* ══════════════════════════════════════════════════════════════
