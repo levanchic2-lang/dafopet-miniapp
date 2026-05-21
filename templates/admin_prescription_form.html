@@ -135,7 +135,7 @@
     padding: .35rem .55rem !important; box-sizing: border-box;
   }
   .drug-table tbody tr td:nth-child(1) { grid-area: name; }
-  .drug-table tbody tr td:nth-child(1)::before { content: "🏷 项目名称 *"; font-size: .78rem; font-weight: 600; color: var(--text); }
+  .drug-table tbody tr td:nth-child(1)::before { content: "项目名称 *"; font-size: .78rem; font-weight: 600; color: var(--text); }
   .drug-table tbody tr td:nth-child(2) { grid-area: usage; }
   .drug-table tbody tr td:nth-child(2)::before { content: "使用方法"; }
   .drug-table tbody tr td:nth-child(3) { grid-area: dose; }
@@ -155,7 +155,7 @@
   .drug-table tbody tr td:nth-child(10) { grid-area: piece; }
   .drug-table tbody tr td:nth-child(10)::before { content: "出库单位"; }
   .drug-table tbody tr td:nth-child(11) { grid-area: subtotal; }
-  .drug-table tbody tr td:nth-child(11)::before { content: "💰 小计 ¥"; font-weight: 600; color: #059669; }
+  .drug-table tbody tr td:nth-child(11)::before { content: "小计 ¥"; font-weight: 600; color: #059669; }
   .drug-table tbody tr td:nth-child(11) input { font-weight: 700; color: #059669; }
   .drug-table tbody tr td:nth-child(12) { grid-area: instr; }
   .drug-table tbody tr td:nth-child(12)::before { content: "特殊说明"; }
@@ -212,11 +212,11 @@
  <div class="card no-print" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;padding:0.65rem 0.85rem;margin-bottom:0.6rem;background:var(--brand-bg-soft);border:1px solid var(--brand-light);">
  <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="openTemplatePicker()"><i data-lucide="clipboard-list"></i> 套用模板</button>
  {% if pet or (p and p.pet_id) %}
- <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="copyLastPresc()">📑 复制上次处方</button>
+ <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="copyLastPresc()"><i data-lucide="copy"></i> 复制上次处方</button>
  {% endif %}
  <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="openSaveTemplate()"><i data-lucide="save"></i> 保存为模板</button>
  <div style="flex:1;"></div>
- <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="previewPrescription()">👁 预览</button>
+ <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="previewPrescription()"><i data-lucide="eye"></i> 预览</button>
  </div>
 
  <div class="card">
@@ -648,7 +648,7 @@ async function openTemplatePicker() {
  <div style="font-size:0.78rem;color:var(--muted);">${t.item_count} 个药品 · 已用 ${t.use_count} 次${t.category?' · '+t.category:''}</div>
  </div>
  <button type="button" class="btn" style="font-size:0.78rem;padding:0.3rem 0.7rem;" onclick="applyTemplate(${t.id})">套用</button>
- <button type="button" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.85rem;" onclick="deleteTemplate(${t.id})" title="删除模板">🗑</button>
+ <button type="button" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.85rem;" onclick="deleteTemplate(${t.id})" title="删除模板"><i data-lucide="trash-2"></i></button>
  </div>
  `).join('');
  }

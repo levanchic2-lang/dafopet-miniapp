@@ -515,17 +515,17 @@
         </span>
         {# 状态标签 #}
         {% if not sq.accepting %}
-          <span style="font-size:0.75rem;font-weight:700;padding:0.15rem 0.55rem;border-radius:99px;background:#fee2e2;color:#991b1b;">🔴 手动关闭</span>
+          <span style="font-size:0.75rem;font-weight:700;padding:0.15rem 0.55rem;border-radius:99px;background:var(--danger-bg);color:var(--danger-fg);display:inline-flex;align-items:center;gap:.25rem;"><i data-lucide="circle" style="width:.6em;height:.6em;fill:currentColor;"></i> 手动关闭</span>
         {% elif sq.monthly_count >= sq.monthly_quota %}
-          <span style="font-size:0.75rem;font-weight:700;padding:0.15rem 0.55rem;border-radius:99px;background:#fef9c3;color:#713f12;">🟡 已满员</span>
+          <span style="font-size:0.75rem;font-weight:700;padding:0.15rem 0.55rem;border-radius:99px;background:var(--warn-bg);color:var(--warn-fg);display:inline-flex;align-items:center;gap:.25rem;"><i data-lucide="circle" style="width:.6em;height:.6em;fill:currentColor;"></i> 已满员</span>
         {% else %}
-          <span style="font-size:0.75rem;font-weight:700;padding:0.15rem 0.55rem;border-radius:99px;background:#dcfce7;color:#166534;">🟢 接受预约</span>
+          <span style="font-size:0.75rem;font-weight:700;padding:0.15rem 0.55rem;border-radius:99px;background:var(--ok-bg);color:var(--ok-fg);display:inline-flex;align-items:center;gap:.25rem;"><i data-lucide="circle" style="width:.6em;height:.6em;fill:currentColor;"></i> 接受预约</span>
         {% endif %}
       </div>
       {# 开关按钮 #}
       <form method="post" action="/admin/tnr-quota/{{ sq.store_index }}/toggle" style="margin-top:0.55rem;">
         <button type="submit" style="width:100%;padding:0.4rem 0;border-radius:8px;border:1px solid var(--border-strong);font-size:0.82rem;font-weight:700;cursor:pointer;background:{% if sq.accepting %}#fee2e2{% else %}#f0fdf4{% endif %};color:{% if sq.accepting %}#991b1b{% else %}#166534{% endif %};">
-          {% if sq.accepting %}<i data-lucide="lock"></i> 点击关闭预约{% else %}🔓 点击重新开放{% endif %}
+          {% if sq.accepting %}<i data-lucide="lock"></i> 点击关闭预约{% else %}<i data-lucide="unlock"></i> 点击重新开放{% endif %}
         </button>
       </form>
     </div>

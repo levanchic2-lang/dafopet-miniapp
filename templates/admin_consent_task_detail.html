@@ -172,7 +172,7 @@ function copyUrl(){
 <div class="card" style="margin-top:1rem;{% if not sms_mode_enabled %}background:#fffbeb;border-color:#fcd34d;{% else %}background:#ecfdf5;border-color:#86efac;{% endif %}">
   {% if sms_mode_enabled %}
   <div style="display:flex;align-items:center;gap:.5rem;">
-    <span style="font-size:1.4rem;">🟢</span>
+    <span style="color:var(--ok-fg);display:inline-flex;align-items:center;"><i data-lucide="shield-check" style="width:1.4rem;height:1.4rem;"></i></span>
     <div>
       <div style="font-weight:600;color:#065f46;">短信验证码模式 已启用</div>
       <div style="font-size:.82rem;color:#047857;margin-top:.2rem;">
@@ -182,7 +182,7 @@ function copyUrl(){
   </div>
   {% else %}
   <div style="display:flex;align-items:flex-start;gap:.5rem;">
-    <span style="font-size:1.4rem;">🟡</span>
+    <span style="color:var(--warn-fg);display:inline-flex;align-items:center;"><i data-lucide="alert-triangle" style="width:1.4rem;height:1.4rem;"></i></span>
     <div style="flex:1;">
       <div style="font-weight:600;color:#92400e;">当前是「手机号匹配」兜底模式</div>
       <div style="font-size:.82rem;color:#92400e;margin-top:.3rem;line-height:1.6;">

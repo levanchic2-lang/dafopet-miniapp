@@ -388,7 +388,7 @@
 </div>
 
 {% macro status_badge(s) -%}
- {% if s == 'pending_ai' %}<span class="pill pill-warn">🤖 AI/待分派</span>
+ {% if s == 'pending_ai' %}<span class="pill pill-warn"><i data-lucide="bot"></i> AI/待分派</span>
  {% elif s == 'pending_manual' %}<span class="pill pill-warn"><i data-lucide="hourglass"></i> 待人工审核</span>
  {% elif s == 'pre_approved' %}<span class="pill pill-info">预通过</span>
  {% elif s == 'approved' %}<span class="pill pill-ok"><i data-lucide="check"></i> 已通过</span>
