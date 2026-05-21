@@ -4991,6 +4991,236 @@ async def admin_customer_create(
     return RedirectResponse(f"/admin/customers/{cust.id}?msg=客户已创建", status_code=303)
 
 
+# ─────────── 老系统客户 xls 批量导入（superadmin only）───────────
+@app.get("/admin/customers/import", response_class=HTMLResponse)
+async def page_admin_customers_import(request: Request):
+    require_admin(request)
+    require_superadmin(request)
+    return templates.TemplateResponse(
+        request,
+        "admin_customers_import.html",
+        {
+            "csrf_token": _get_csrf_token(request),
+            "result": None,
+        },
+    )
+
+
+@app.post("/admin/customers/import", response_class=HTMLResponse)
+async def admin_customers_import_post(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+    confirm: str = Form(""),
+    import_store: str = Form("东环店"),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    do_commit = (confirm == "yes")
+
+    result = {"ok": False, "msg": "", "stats": None, "samples": [], "committed": False}
+
+    if not file or not file.filename:
+        result["msg"] = "请选择 xls / xlsx 文件"
+        return templates.TemplateResponse(
+            request,
+            "admin_customers_import.html",
+            {"csrf_token": _get_csrf_token(request), "result": result},
+        )
+
+    import pandas as pd
+    import io as _io
+
+    try:
+        raw = await file.read()
+        # 兼容 xls / xlsx
+        bio = _io.BytesIO(raw)
+        try:
+            df = pd.read_excel(bio)
+        except Exception as e1:
+            bio.seek(0)
+            try:
+                dfs = pd.read_html(bio, encoding="utf-8")
+                df = dfs[0]
+            except Exception as e2:
+                result["msg"] = f"无法解析文件：{e1} / {e2}"
+                return templates.TemplateResponse(
+                    request, "admin_customers_import.html",
+                    {"csrf_token": _get_csrf_token(request), "result": result},
+                )
+    except Exception as e:
+        result["msg"] = f"读取失败：{e}"
+        return templates.TemplateResponse(
+            request, "admin_customers_import.html",
+            {"csrf_token": _get_csrf_token(request), "result": result},
+        )
+
+    # 字段名兼容（中文列）
+    col_map = {
+        "name": ["客户姓名", "姓名", "name"],
+        "phone": ["联系电话", "电话", "手机", "phone"],
+        "member_id": ["会员编号", "编号", "id"],
+        "gender": ["性别"],
+        "level": ["会员级别"],
+        "card_bal": ["会员卡余额"],
+        "acc_bal": ["账户余额"],
+        "spent": ["累计消费"],
+        "org": ["所属机构"],
+        "source": ["客户来源", "来源"],
+        "notes": ["备注"],
+        "created_at": ["登记日期", "创建时间"],
+    }
+    def pick(row, key):
+        for c in col_map.get(key, []):
+            if c in row.index:
+                v = row[c]
+                if pd.isna(v):
+                    return None
+                return v
+        return None
+
+    def _phone(v):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return ""
+        if isinstance(v, (int, float)):
+            return str(int(v))
+        return str(v).strip()
+
+    def _f(v) -> float:
+        if v is None:
+            return 0.0
+        try:
+            return float(v)
+        except Exception:
+            return 0.0
+
+    def build_notes(row):
+        parts = []
+        mid = pick(row, "member_id")
+        if mid: parts.append(f"老系统会员号:{mid}")
+        g = pick(row, "gender")
+        if g: parts.append(f"性别:{g}")
+        spent = _f(pick(row, "spent"))
+        if spent > 0: parts.append(f"老系统累计消费:¥{spent:,.0f}")
+        org = pick(row, "org")
+        if org: parts.append(f"原属:{org}→{import_store}")
+        lvl = pick(row, "level")
+        if lvl and str(lvl).strip() and str(lvl) != "warmsoft客户":
+            parts.append(f"等级:{lvl}")
+        old_note = pick(row, "notes")
+        if old_note and str(old_note).strip():
+            parts.append(f"原备注:{old_note}")
+        return "[导入] " + " | ".join(parts) if parts else ""
+
+    # 现有手机号
+    existing_phones = set(
+        p for (p,) in db.query(Customer.phone).filter(Customer.phone.isnot(None)).all() if p
+    )
+
+    n_new = 0
+    n_skip_dup = 0
+    n_skip_no_phone = 0
+    wallet_jobs = []  # (idx_in_new_customers, total_bal)
+    new_customers = []
+    samples = []
+
+    for _, row in df.iterrows():
+        phone = _phone(pick(row, "phone"))
+        if not phone:
+            n_skip_no_phone += 1
+            continue
+        if phone in existing_phones:
+            n_skip_dup += 1
+            continue
+
+        name = pick(row, "name")
+        name = str(name).strip() if name else ""
+        source = pick(row, "source")
+        source = str(source).strip() if source else None
+        notes = build_notes(row)
+        created_at_v = pick(row, "created_at")
+        try:
+            created_at = pd.to_datetime(created_at_v).to_pydatetime() if created_at_v else datetime.now()
+        except Exception:
+            created_at = datetime.now()
+
+        card_bal = _f(pick(row, "card_bal"))
+        acc_bal = _f(pick(row, "acc_bal"))
+        total_bal = card_bal + acc_bal
+
+        c = Customer(
+            name=name,
+            phone=phone,
+            source=source,
+            notes=notes,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        new_customers.append(c)
+        if total_bal > 0:
+            wallet_jobs.append((len(new_customers) - 1, total_bal))
+
+        n_new += 1
+        existing_phones.add(phone)
+        if len(samples) < 5:
+            samples.append({
+                "name": name, "phone": phone, "source": source or "—",
+                "notes": notes[:120],
+                "balance": total_bal,
+            })
+
+    wallet_total = sum(b for _, b in wallet_jobs)
+
+    result["stats"] = {
+        "total_rows": int(len(df)),
+        "new": n_new,
+        "skip_dup": n_skip_dup,
+        "skip_no_phone": n_skip_no_phone,
+        "wallets": len(wallet_jobs),
+        "wallet_total": wallet_total,
+        "import_store": import_store,
+    }
+    result["samples"] = samples
+    result["ok"] = True
+
+    if do_commit and new_customers:
+        # 真写
+        db.add_all(new_customers)
+        db.flush()
+        for idx, bal in wallet_jobs:
+            cid = new_customers[idx].id
+            w = Wallet(
+                customer_id=cid,
+                balance=bal,
+                lifetime_recharge=bal,
+                lifetime_consume=0,
+            )
+            db.add(w)
+            db.flush()
+            tx = WalletTransaction(
+                wallet_id=w.id,
+                customer_id=cid,
+                type="adjust",
+                amount=bal,
+                balance_after=bal,
+                note=f"老系统历史余额导入（{import_store}）",
+                operator=request.session.get("admin", "导入"),
+                store=import_store,
+            )
+            db.add(tx)
+        db.commit()
+        result["committed"] = True
+        result["msg"] = f"已导入 {n_new} 个客户 + {len(wallet_jobs)} 个钱包"
+
+    return templates.TemplateResponse(
+        request,
+        "admin_customers_import.html",
+        {"csrf_token": _get_csrf_token(request), "result": result},
+    )
+
+
 @app.get("/admin/customers/{customer_id}", response_class=HTMLResponse)
 async def page_admin_customer_detail(
     customer_id: int,

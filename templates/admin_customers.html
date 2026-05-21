@@ -134,7 +134,12 @@
 {% endif %}
 
 {# ─────────── 客户档案速查 ─────────── #}
-<div class="wb-group-title" style="margin-top:1.5rem;"><i data-lucide="users"></i> 客户档案（共 {{ total }} 条）</div>
+<div class="wb-group-title" style="margin-top:1.5rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
+ <span><i data-lucide="users"></i> 客户档案（共 {{ total }} 条）</span>
+ {% if is_superadmin %}
+ <a href="/admin/customers/import" class="btn secondary" style="font-size:.78rem;padding:.25rem .65rem;font-weight:500;"><i data-lucide="upload"></i> 导入老系统客户</a>
+ {% endif %}
+</div>
 
 <div class="cust-search-card">
   <form method="get" id="cust-search-form" action="#cust-list-anchor">

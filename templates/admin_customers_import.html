@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block body %}
+
+<div class="page-head">
+ <div>
+  <h1><span class="ph-icon"><i data-lucide="upload"></i></span>导入老系统客户</h1>
+  <p class="ph-sub">上传老系统导出的 xls / xlsx，先预演看结果再确认导入</p>
+ </div>
+ <div class="ph-actions">
+  <a href="/admin/customers" class="btn secondary" style="font-size:.85rem;"><i data-lucide="arrow-left"></i> 返回客户档案</a>
+ </div>
+</div>
+
+{% if result and result.committed %}
+<div class="msg ok" style="margin-bottom:1rem;">
+ <i data-lucide="check-circle-2"></i> {{ result.msg }}
+ <a href="/admin/customers" style="margin-left:.5rem;text-decoration:underline;">去客户档案看看 →</a>
+</div>
+{% endif %}
+
+{% if result and result.msg and not result.committed %}
+<div class="msg err" style="margin-bottom:1rem;">
+ <i data-lucide="alert-triangle"></i> {{ result.msg }}
+</div>
+{% endif %}
+
+<div class="card">
+ <h3 style="margin:0 0 .65rem;font-size:.95rem;"><i data-lucide="info"></i> 说明</h3>
+ <ul style="font-size:.85rem;color:var(--muted);line-height:1.7;margin:0 0 1rem;padding-left:1.2rem;">
+  <li>支持的字段：客户姓名 / 联系电话 / 性别 / 会员级别 / 会员卡余额 / 账户余额 / 累计消费 / 所属机构 / 客户来源 / 备注 / 登记日期</li>
+  <li>按 <strong>手机号去重</strong>：已存在的客户档案 <strong>不会覆盖</strong>，只会跳过</li>
+  <li>余额 &gt; 0 的客户会自动创建钱包记录（type=adjust）</li>
+  <li>会员编号 / 性别 / 累计消费 / 原属机构 等老数据会合并写到 <code>notes</code> 字段</li>
+  <li>支持 .xls / .xlsx 格式</li>
+ </ul>
+
+ <form method="post" action="/admin/customers/import" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  <label style="font-weight:600;">选择 xls 文件</label>
+  <input type="file" name="file" accept=".xls,.xlsx" required style="margin-bottom:1rem;"/>
+
+  <label style="font-weight:600;">归属门店（仅写到客户 notes 备查）</label>
+  <select name="import_store" style="margin-bottom:1rem;max-width:200px;">
+   <option value="东环店" selected>东环店</option>
+   <option value="横岗店">横岗店</option>
+  </select>
+
+  <div style="background:var(--brand-bg-soft);border:1px solid var(--brand-light);border-radius:8px;padding:.65rem .85rem;margin-bottom:1rem;font-size:.85rem;">
+   <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:600;color:var(--brand-dark);">
+    <input type="checkbox" name="confirm" value="yes" style="width:1.1em;height:1.1em;"/>
+    <span>我已确认数据无误，<strong>执行真实导入</strong>（不勾则只预演 dry-run）</span>
+   </label>
+  </div>
+
+  <div style="display:flex;gap:.6rem;">
+   <button type="submit" class="btn"><i data-lucide="upload"></i> 上传并处理</button>
+   <a href="/admin/customers" class="btn secondary">取消</a>
+  </div>
+ </form>
+</div>
+
+{% if result and result.ok and result.stats %}
+{% set s = result.stats %}
+<div class="card" style="margin-top:1rem;{% if result.committed %}background:var(--ok-bg);border-color:#bbf7d0;{% endif %}">
+ <h3 style="margin:0 0 .85rem;font-size:.95rem;">
+  {% if result.committed %}<i data-lucide="check-circle-2"></i> 导入完成{% else %}<i data-lucide="eye"></i> 预演结果（DRY-RUN，未写库）{% endif %}
+ </h3>
+
+ <div class="stat-grid" style="margin-bottom:.85rem;">
+  <div class="stat-card">
+   <div style="font-size:1.6rem;color:var(--muted);"><i data-lucide="file-text"></i></div>
+   <div><div class="stat-num">{{ s.total_rows }}</div><div class="stat-label">文件总行数</div></div>
+  </div>
+  <div class="stat-card s-info">
+   <div style="font-size:1.6rem;"><i data-lucide="user-plus"></i></div>
+   <div><div class="stat-num">{{ s.new }}</div><div class="stat-label">{% if result.committed %}已导入{% else %}将导入{% endif %}客户</div></div>
+  </div>
+  <div class="stat-card s-warn">
+   <div style="font-size:1.6rem;"><i data-lucide="copy-x"></i></div>
+   <div><div class="stat-num">{{ s.skip_dup }}</div><div class="stat-label">手机号已存在 跳过</div></div>
+  </div>
+  <div class="stat-card">
+   <div style="font-size:1.6rem;color:var(--muted);"><i data-lucide="phone-off"></i></div>
+   <div><div class="stat-num">{{ s.skip_no_phone }}</div><div class="stat-label">无手机号 跳过</div></div>
+  </div>
+  <div class="stat-card s-ok">
+   <div style="font-size:1.6rem;"><i data-lucide="wallet"></i></div>
+   <div><div class="stat-num">{{ s.wallets }}</div><div class="stat-label">钱包 ¥{{ '%.0f'|format(s.wallet_total) }}</div></div>
+  </div>
+ </div>
+
+ {% if result.samples %}
+ <h4 style="margin:.65rem 0 .45rem;font-size:.88rem;color:var(--muted);font-weight:600;">前 5 行预览</h4>
+ <div class="data-table-wrap">
+  <table class="data-table">
+   <thead>
+    <tr><th>姓名</th><th>电话</th><th>来源</th><th>备注</th><th style="text-align:right;">余额</th></tr>
+   </thead>
+   <tbody>
+    {% for r in result.samples %}
+    <tr>
+     <td>{{ r.name }}</td>
+     <td style="font-family:monospace;color:var(--muted);font-size:.82rem;">{{ r.phone }}</td>
+     <td>{{ r.source }}</td>
+     <td style="font-size:.78rem;color:var(--muted);max-width:380px;">{{ r.notes }}</td>
+     <td style="text-align:right;font-weight:600;">{% if r.balance > 0 %}¥{{ '%.2f'|format(r.balance) }}{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+   </tbody>
+  </table>
+ </div>
+ {% endif %}
+
+ {% if not result.committed %}
+ <div style="margin-top:1rem;font-size:.85rem;color:var(--muted);">
+  <i data-lucide="info"></i> 数据看起来对吗？返回上方表单，<strong>勾选「执行真实导入」</strong> 后再点上传一次。
+ </div>
+ {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
