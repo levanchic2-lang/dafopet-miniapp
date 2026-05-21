@@ -10,7 +10,7 @@
 
 /* 顶部客户信息卡 */
 .cust-card {
- background: linear-gradient(135deg, #fefce8 0%, #fffbeb 100%);
+ background: var(--warn-bg);
  border: 1px solid #fef3c7; border-radius: 10px;
  padding: 0.85rem 1rem; display: flex; gap: 1rem; align-items: center;
 }
@@ -594,7 +594,7 @@
  {# ── 钱包 ── #}
  <div class="tab-content {% if active_tab=='wallet' %}active{% endif %}" data-tab-content="wallet">
    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:0.8rem;margin-bottom:1rem;">
-     <div style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:12px;padding:1.1rem 1.2rem;">
+     <div style="background:var(--ok-bg);color:var(--ok-fg);border:1px solid #bbf7d0;border-radius:12px;padding:1.1rem 1.2rem;">
        <div style="font-size:.82rem;opacity:.85;">当前余额</div>
        <div style="font-size:1.8rem;font-weight:700;margin-top:.3rem;">¥{{ '%.2f'|format(wallet_balance) }}</div>
      </div>

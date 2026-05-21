@@ -209,7 +209,7 @@
 
  <div>
  {# ── 快捷工具栏：套用模板 / 复制上次 / 保存模板 / 预览 ── #}
- <div class="card no-print" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;padding:0.65rem 0.85rem;margin-bottom:0.6rem;background:linear-gradient(90deg,#eff6ff,#f0f9ff);border:1px solid #bfdbfe;">
+ <div class="card no-print" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;padding:0.65rem 0.85rem;margin-bottom:0.6rem;background:var(--brand-bg-soft);border:1px solid var(--brand-light);">
  <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="openTemplatePicker()"><i data-lucide="clipboard-list"></i> 套用模板</button>
  {% if pet or (p and p.pet_id) %}
  <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="copyLastPresc()">📑 复制上次处方</button>
