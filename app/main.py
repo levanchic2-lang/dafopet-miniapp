@@ -5013,7 +5013,7 @@ async def admin_customers_import_post(
     csrf_token: str = Form(""),
     file: Optional[UploadFile] = File(None),
     confirm: str = Form(""),
-    import_store: str = Form("东环店"),
+    fallback_store: str = Form("东环店"),
 ):
     require_admin(request)
     require_superadmin(request)
@@ -5096,7 +5096,23 @@ async def admin_customers_import_post(
         except Exception:
             return 0.0
 
-    def build_notes(row):
+    def map_store(org_value) -> str:
+        """老机构名 → 当前系统门店。
+
+        - 龙华 / 东环 → 东环店
+        - 横岗 → 横岗店
+        - 其他 → fallback_store
+        """
+        if not org_value:
+            return fallback_store
+        s = str(org_value)
+        if "横岗" in s:
+            return "横岗店"
+        if "龙华" in s or "东环" in s:
+            return "东环店"
+        return fallback_store
+
+    def build_notes(row, target_store):
         parts = []
         mid = pick(row, "member_id")
         if mid: parts.append(f"老系统会员号:{mid}")
@@ -5105,7 +5121,7 @@ async def admin_customers_import_post(
         spent = _f(pick(row, "spent"))
         if spent > 0: parts.append(f"老系统累计消费:¥{spent:,.0f}")
         org = pick(row, "org")
-        if org: parts.append(f"原属:{org}→{import_store}")
+        if org: parts.append(f"原属:{org}→{target_store}")
         lvl = pick(row, "level")
         if lvl and str(lvl).strip() and str(lvl) != "warmsoft客户":
             parts.append(f"等级:{lvl}")
@@ -5122,9 +5138,11 @@ async def admin_customers_import_post(
     n_new = 0
     n_skip_dup = 0
     n_skip_no_phone = 0
-    wallet_jobs = []  # (idx_in_new_customers, total_bal)
+    wallet_jobs = []  # (idx_in_new_customers, total_bal, target_store)
     new_customers = []
     samples = []
+    org_breakdown = {}  # {老机构: count}
+    store_breakdown = {}  # {目标门店: count}
 
     for _, row in df.iterrows():
         phone = _phone(pick(row, "phone"))
@@ -5135,11 +5153,17 @@ async def admin_customers_import_post(
             n_skip_dup += 1
             continue
 
+        org_value = pick(row, "org")
+        target_store = map_store(org_value)
+        org_key = str(org_value) if org_value else "(空)"
+        org_breakdown[org_key] = org_breakdown.get(org_key, 0) + 1
+        store_breakdown[target_store] = store_breakdown.get(target_store, 0) + 1
+
         name = pick(row, "name")
         name = str(name).strip() if name else ""
         source = pick(row, "source")
         source = str(source).strip() if source else None
-        notes = build_notes(row)
+        notes = build_notes(row, target_store)
         created_at_v = pick(row, "created_at")
         try:
             created_at = pd.to_datetime(created_at_v).to_pydatetime() if created_at_v else datetime.now()
@@ -5160,7 +5184,7 @@ async def admin_customers_import_post(
         )
         new_customers.append(c)
         if total_bal > 0:
-            wallet_jobs.append((len(new_customers) - 1, total_bal))
+            wallet_jobs.append((len(new_customers) - 1, total_bal, target_store))
 
         n_new += 1
         existing_phones.add(phone)
@@ -5169,9 +5193,10 @@ async def admin_customers_import_post(
                 "name": name, "phone": phone, "source": source or "—",
                 "notes": notes[:120],
                 "balance": total_bal,
+                "target_store": target_store,
             })
 
-    wallet_total = sum(b for _, b in wallet_jobs)
+    wallet_total = sum(b for _, b, _ in wallet_jobs)
 
     result["stats"] = {
         "total_rows": int(len(df)),
@@ -5180,7 +5205,9 @@ async def admin_customers_import_post(
         "skip_no_phone": n_skip_no_phone,
         "wallets": len(wallet_jobs),
         "wallet_total": wallet_total,
-        "import_store": import_store,
+        "fallback_store": fallback_store,
+        "org_breakdown": sorted(org_breakdown.items(), key=lambda x: -x[1]),
+        "store_breakdown": sorted(store_breakdown.items(), key=lambda x: -x[1]),
     }
     result["samples"] = samples
     result["ok"] = True
@@ -5189,7 +5216,7 @@ async def admin_customers_import_post(
         # 真写
         db.add_all(new_customers)
         db.flush()
-        for idx, bal in wallet_jobs:
+        for idx, bal, target_store in wallet_jobs:
             cid = new_customers[idx].id
             w = Wallet(
                 customer_id=cid,
@@ -5205,9 +5232,9 @@ async def admin_customers_import_post(
                 type="adjust",
                 amount=bal,
                 balance_after=bal,
-                note=f"老系统历史余额导入（{import_store}）",
+                note=f"老系统历史余额导入（{target_store}）",
                 operator=request.session.get("admin", "导入"),
-                store=import_store,
+                store=target_store,
             )
             db.add(tx)
         db.commit()

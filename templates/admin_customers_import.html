@@ -27,9 +27,12 @@
 <div class="card">
  <h3 style="margin:0 0 .65rem;font-size:.95rem;"><i data-lucide="info"></i> 说明</h3>
  <ul style="font-size:.85rem;color:var(--muted);line-height:1.7;margin:0 0 1rem;padding-left:1.2rem;">
-  <li>支持的字段：客户姓名 / 联系电话 / 性别 / 会员级别 / 会员卡余额 / 账户余额 / 累计消费 / 所属机构 / 客户来源 / 备注 / 登记日期</li>
+  <li>支持字段：客户姓名 / 联系电话 / 性别 / 会员级别 / 会员卡余额 / 账户余额 / 累计消费 / 所属机构 / 客户来源 / 备注 / 登记日期</li>
   <li>按 <strong>手机号去重</strong>：已存在的客户档案 <strong>不会覆盖</strong>，只会跳过</li>
-  <li>余额 &gt; 0 的客户会自动创建钱包记录（type=adjust）</li>
+  <li>根据 xls 里的「所属机构」<strong>自动分流到对应门店</strong>：
+   <br/><span style="color:var(--brand-dark);font-weight:600;">含「龙华」或「东环」→ 东环店；含「横岗」→ 横岗店；其他 → 兜底门店</span>
+  </li>
+  <li>余额 &gt; 0 的客户会自动创建钱包记录（按映射后的门店归属）</li>
   <li>会员编号 / 性别 / 累计消费 / 原属机构 等老数据会合并写到 <code>notes</code> 字段</li>
   <li>支持 .xls / .xlsx 格式</li>
  </ul>
@@ -40,8 +43,8 @@
   <label style="font-weight:600;">选择 xls 文件</label>
   <input type="file" name="file" accept=".xls,.xlsx" required style="margin-bottom:1rem;"/>
 
-  <label style="font-weight:600;">归属门店（仅写到客户 notes 备查）</label>
-  <select name="import_store" style="margin-bottom:1rem;max-width:200px;">
+  <label style="font-weight:600;">兜底门店（xls 里没填或无法识别「所属机构」时用这家）</label>
+  <select name="fallback_store" style="margin-bottom:1rem;max-width:200px;">
    <option value="东环店" selected>东环店</option>
    <option value="横岗店">横岗店</option>
   </select>
@@ -90,18 +93,40 @@
   </div>
  </div>
 
+ {% if s.store_breakdown %}
+ <h4 style="margin:.65rem 0 .45rem;font-size:.88rem;color:var(--muted);font-weight:600;"><i data-lucide="git-fork"></i> 门店自动分流</h4>
+ <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem;">
+  {% for store_name, cnt in s.store_breakdown %}
+  <span class="pill pill-info" style="padding:.3rem .75rem;font-size:.82rem;">{{ store_name }} · {{ cnt }} 人</span>
+  {% endfor %}
+ </div>
+
+ <h4 style="margin:.65rem 0 .45rem;font-size:.88rem;color:var(--muted);font-weight:600;"><i data-lucide="file-text"></i> 老机构来源分布</h4>
+ <div class="data-table-wrap" style="margin-bottom:.85rem;">
+  <table class="data-table" style="font-size:.85rem;">
+   <thead><tr><th>老机构</th><th style="text-align:right;">人数</th></tr></thead>
+   <tbody>
+   {% for org, cnt in s.org_breakdown[:8] %}
+   <tr><td>{{ org }}</td><td style="text-align:right;font-weight:600;">{{ cnt }}</td></tr>
+   {% endfor %}
+   </tbody>
+  </table>
+ </div>
+ {% endif %}
+
  {% if result.samples %}
- <h4 style="margin:.65rem 0 .45rem;font-size:.88rem;color:var(--muted);font-weight:600;">前 5 行预览</h4>
+ <h4 style="margin:.65rem 0 .45rem;font-size:.88rem;color:var(--muted);font-weight:600;"><i data-lucide="eye"></i> 前 5 行预览</h4>
  <div class="data-table-wrap">
   <table class="data-table">
    <thead>
-    <tr><th>姓名</th><th>电话</th><th>来源</th><th>备注</th><th style="text-align:right;">余额</th></tr>
+    <tr><th>姓名</th><th>电话</th><th>归属门店</th><th>来源</th><th>备注</th><th style="text-align:right;">余额</th></tr>
    </thead>
    <tbody>
     {% for r in result.samples %}
     <tr>
      <td>{{ r.name }}</td>
      <td style="font-family:monospace;color:var(--muted);font-size:.82rem;">{{ r.phone }}</td>
+     <td><span class="pill pill-info">{{ r.target_store }}</span></td>
      <td>{{ r.source }}</td>
      <td style="font-size:.78rem;color:var(--muted);max-width:380px;">{{ r.notes }}</td>
      <td style="text-align:right;font-weight:600;">{% if r.balance > 0 %}¥{{ '%.2f'|format(r.balance) }}{% else %}—{% endif %}</td>
