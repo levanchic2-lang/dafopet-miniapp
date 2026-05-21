@@ -1,13 +1,13 @@
 {
-  "name": "大风动物医院 · TNR 管理系统",
-  "short_name": "大风TNR",
+  "name": "大风动物医院",
+  "short_name": "大风",
   "description": "大风动物医院 TNR 申请 + 客户/病历/库存/收费 一体化管理系统",
   "start_url": "/admin/customers",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "lang": "zh-CN",
   "icons": [
     {
