@@ -211,7 +211,7 @@
  <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border);">
  <span style="font-weight:700;font-size:0.95rem;">费用明细</span>
  </div>
- <table class="items-table" style="width:100%;">
+ <table class="items-table data-table mobile-card" style="width:100%;">
  <thead>
  <tr>
  <th style="width:50%;">描述</th>
@@ -224,9 +224,9 @@
  {% for item in inv.items %}
  <tr>
  <td>{{ item.description }}</td>
- <td style="text-align:center;">{{ item.quantity }}</td>
- <td style="text-align:right;">{{ '%.2f'|format(item.unit_price) }}</td>
- <td style="text-align:right;font-weight:600;">{{ '%.2f'|format(item.subtotal) }}</td>
+ <td data-label="数量" style="text-align:center;">{{ item.quantity }}</td>
+ <td data-label="单价 ¥" style="text-align:right;">{{ '%.2f'|format(item.unit_price) }}</td>
+ <td data-label="小计 ¥" style="text-align:right;font-weight:600;">{{ '%.2f'|format(item.subtotal) }}</td>
  </tr>
  {% endfor %}
  </tbody>

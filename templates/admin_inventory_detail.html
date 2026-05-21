@@ -73,7 +73,7 @@
  <div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border);font-weight:600;font-size:0.95rem;">
  📅 库存批次（{{ batches|length }}）
  </div>
- <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+ <table class="data-table mobile-card" style="width:100%;border-collapse:collapse;font-size:0.85rem;">
  <thead>
  <tr style="background:var(--bg-elevated);">
  <th style="text-align:left;padding:0.5rem 1rem;font-weight:600;">批次号</th>
@@ -81,7 +81,7 @@
  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">有效期至</th>
  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">入库日</th>
  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600;">状态</th>
- <th style="padding:0.5rem 0.75rem;"></th>
+ <th style="padding:0.5rem 0.75rem;">操作</th>
  </tr>
  </thead>
  <tbody>
@@ -90,19 +90,19 @@
  {% set is_expiring = b.expiry_date and not is_expired and b.expiry_date <= alert_date_str %}
  <tr style="border-bottom:1px solid var(--border);{% if b.is_depleted %}opacity:0.45;{% elif is_expired %}background:#fef2f2;{% elif is_expiring %}background:#fffbeb;{% endif %}">
  <td style="padding:0.5rem 1rem;">{{ b.batch_no or '—' }}</td>
- <td style="padding:0.5rem 0.75rem;text-align:right;font-weight:600;">{{ '%.1f'|format(b.quantity) }} {{ item.unit }}</td>
- <td style="padding:0.5rem 0.75rem;{% if is_expired %}color:#dc2626;font-weight:600;{% elif is_expiring %}color:#d97706;font-weight:600;{% endif %}">
+ <td data-label="剩余量" style="padding:0.5rem 0.75rem;text-align:right;font-weight:600;">{{ '%.1f'|format(b.quantity) }} {{ item.unit }}</td>
+ <td data-label="有效期至" style="padding:0.5rem 0.75rem;{% if is_expired %}color:#dc2626;font-weight:600;{% elif is_expiring %}color:#d97706;font-weight:600;{% endif %}">
  {{ b.expiry_date or '—' }}
  {% if is_expired %} ❌{% elif is_expiring %} ⚠{% endif %}
  </td>
- <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ b.received_date or '—' }}</td>
- <td style="padding:0.5rem 0.75rem;">
+ <td data-label="入库日" style="padding:0.5rem 0.75rem;color:var(--muted);">{{ b.received_date or '—' }}</td>
+ <td data-label="状态" style="padding:0.5rem 0.75rem;">
  {% if b.is_depleted %}<span class="badge b-no">已耗尽</span>
  {% elif is_expired %}<span class="badge b-no">已过期</span>
  {% elif is_expiring %}<span class="badge b-pending">即将到期</span>
  {% else %}<span class="badge b-ok">正常</span>{% endif %}
  </td>
- <td style="padding:0.5rem 0.75rem;text-align:right;">
+ <td class="actions" style="padding:0.5rem 0.75rem;text-align:right;">
  {% if not b.is_depleted %}
  <div style="display:flex;gap:0.4rem;justify-content:flex-end;flex-wrap:wrap;">
  <button type="button" class="secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;" onclick="toggleBatchEdit({{ b.id }})">修正</button>
@@ -137,7 +137,7 @@
  出入库记录（共 {{ tx_total }} 条）
  </div>
  {% if txs %}
- <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+ <table class="data-table mobile-card" style="width:100%;border-collapse:collapse;font-size:0.85rem;">
  <thead>
  <tr style="background:var(--bg-elevated);">
  <th style="text-align:left;padding:0.5rem 1rem;font-weight:600;">时间</th>
@@ -152,18 +152,18 @@
  {% for tx in txs %}
  <tr style="border-bottom:1px solid var(--border);">
  <td style="padding:0.5rem 1rem;color:var(--muted);font-size:0.8rem;">{{ tx.created_at.strftime('%m-%d %H:%M') }}</td>
- <td style="padding:0.5rem 0.75rem;">
+ <td data-label="类型" style="padding:0.5rem 0.75rem;">
  {% if tx.tx_type == 'in' %}<span style="color:#15803d;font-weight:600;">↑ 入库</span>
  {% elif tx.tx_type == 'out' %}<span style="color:#dc2626;font-weight:600;">↓ 出库</span>
  {% elif tx.tx_type == 'adjust' %}<span style="color:#0369a1;font-weight:600;">≈ 盘点</span>
  {% else %}<span>{{ tx.tx_type }}</span>{% endif %}
  </td>
- <td style="padding:0.5rem 0.75rem;text-align:right;font-weight:600;">
+ <td data-label="数量" style="padding:0.5rem 0.75rem;text-align:right;font-weight:600;">
  {% if tx.tx_type == 'out' %}-{% else %}+{% endif %}{{ '%.1f'|format(tx.qty) }}
  </td>
- <td style="padding:0.5rem 0.75rem;text-align:right;color:var(--muted);">{{ '%.1f'|format(tx.qty_after) }}</td>
- <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ tx.operator or '—' }}</td>
- <td style="padding:0.5rem 0.75rem;color:var(--muted);font-size:0.8rem;">{{ tx.note or '—' }}</td>
+ <td data-label="变动后" style="padding:0.5rem 0.75rem;text-align:right;color:var(--muted);">{{ '%.1f'|format(tx.qty_after) }}</td>
+ <td data-label="操作人" style="padding:0.5rem 0.75rem;color:var(--muted);">{{ tx.operator or '—' }}</td>
+ <td data-label="备注" style="padding:0.5rem 0.75rem;color:var(--muted);font-size:0.8rem;">{{ tx.note or '—' }}</td>
  </tr>
  {% endfor %}
  </tbody>
