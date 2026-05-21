@@ -168,4 +168,61 @@ function copyUrl(){
 }
 </script>
 
+{# ─────────── 审计日志（证据链）─────────── #}
+{% if audit_logs %}
+<div class="card" style="margin-top:1rem;">
+  <h3 style="margin:0 0 .55rem;font-size:.95rem;">🛡 审计日志（{{ audit_logs|length }} 条）</h3>
+  <p class="sub" style="margin:0 0 .85rem;font-size:.78rem;color:var(--muted);">
+    法律证据链：客户每次访问/验证/签字都被记录。文档与签字的 SHA256 哈希在签后被冻结，
+    任何后续篡改都可比对发现。
+  </p>
+  {% set event_zh = {
+    'link_opened': '🔗 打开链接',
+    'code_sent': '📨 发送验证码',
+    'code_verify_ok': '✅ 身份验证通过',
+    'code_verify_fail': '❌ 身份验证失败',
+    'sign_fail': '❌ 签字失败',
+    'sign_success': '✍ 签字成功',
+    'sign_submit': '📝 提交签字',
+  } %}
+  <div class="data-table-wrap" style="font-size:.82rem;">
+    <table class="data-table mobile-card">
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>事件</th>
+          <th>IP</th>
+          <th>手机号</th>
+          <th>哈希 / 备注</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in audit_logs %}
+        <tr>
+          <td data-label="时间" style="white-space:nowrap;color:var(--muted);">
+            {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else '—' }}
+          </td>
+          <td data-label="事件" style="font-weight:600;">
+            {{ event_zh.get(log.event, log.event) }}
+          </td>
+          <td data-label="IP" style="font-family:monospace;font-size:.78rem;color:var(--muted);">
+            {{ log.ip or '—' }}
+          </td>
+          <td data-label="手机号" style="font-family:monospace;font-size:.78rem;">
+            {{ log.phone_masked or '—' }}
+          </td>
+          <td data-label="详情" style="font-size:.76rem;color:var(--muted);word-break:break-all;">
+            {% if log.doc_sha256 %}<div>📄 {{ log.doc_sha256[:16] }}...</div>{% endif %}
+            {% if log.sig_sha256 %}<div>✍ {{ log.sig_sha256[:16] }}...</div>{% endif %}
+            {% if log.user_agent %}<div title="{{ log.user_agent }}">UA: {{ log.user_agent[:30] }}{% if log.user_agent|length > 30 %}…{% endif %}</div>{% endif %}
+            {% if log.note %}<div>{{ log.note[:80] }}{% if log.note|length > 80 %}…{% endif %}</div>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}

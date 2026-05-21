@@ -1078,6 +1078,25 @@ def _try_sqlite_migrations() -> None:
                 ")"
             ))
 
+            # ── 协议签署审计日志（仅追加，作为打官司证据链） ───
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS consent_audit_logs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "task_id INTEGER NOT NULL REFERENCES consent_tasks(id) ON DELETE CASCADE, "
+                "event VARCHAR(40) DEFAULT '', "
+                "ip VARCHAR(60) DEFAULT '', "
+                "user_agent VARCHAR(500) DEFAULT '', "
+                "phone_masked VARCHAR(20) DEFAULT '', "
+                "doc_sha256 VARCHAR(64) DEFAULT '', "
+                "sig_sha256 VARCHAR(64) DEFAULT '', "
+                "session_hash VARCHAR(64) DEFAULT '', "
+                "note TEXT DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_consent_audit_task ON consent_audit_logs(task_id, created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_consent_audit_event ON consent_audit_logs(event)"))
+
             # ── 收款明细（混合支付） ───────────────────────
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS payments ("

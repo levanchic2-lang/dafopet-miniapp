@@ -5906,11 +5906,20 @@ async def admin_consent_task_detail(
     cust = db.get(Customer, task.customer_id) if task.customer_id else None
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
     doc = db.query(ConsentDocument).filter(ConsentDocument.task_id == task_id).first()
+    # 审计日志（证据链）
+    from app.models import ConsentAuditLog
+    audit_logs = (
+        db.query(ConsentAuditLog)
+        .filter(ConsentAuditLog.task_id == task_id)
+        .order_by(ConsentAuditLog.created_at.asc())
+        .all()
+    )
     return templates.TemplateResponse(request, "admin_consent_task_detail.html", {
         "task": task, "cust": cust, "pet": pet, "doc": doc,
         "status_zh": _CONSENT_STATUS_ZH,
         "category_zh": _CONSENT_CATEGORY_ZH,
         "csrf_token": _get_csrf_token(request),
+        "audit_logs": audit_logs,
     })
 
 
@@ -6031,7 +6040,6 @@ def _consent_phone_match(phone_input: str, customer_phone: str) -> bool:
     b = re.sub(r'\D', '', customer_phone or '')
     if not a or not b:
         return False
-    # 去掉可能的 86 国码前缀
     if a.startswith('86') and len(a) > 11: a = a[2:]
     if b.startswith('86') and len(b) > 11: b = b[2:]
     return a == b
@@ -6039,6 +6047,71 @@ def _consent_phone_match(phone_input: str, customer_phone: str) -> bool:
 
 def _is_consent_verified(request: Request, token: str) -> bool:
     return bool(request.session.get(f"consent_verified_{token}"))
+
+
+def _phone_mask(phone: str) -> str:
+    """脱敏手机号：138****1234"""
+    if not phone: return ""
+    p = ''.join(ch for ch in phone if ch.isdigit())
+    if len(p) >= 7: return p[:3] + "****" + p[-4:]
+    if len(p) >= 4: return "****" + p[-4:]
+    return ""
+
+
+def _sha256(data) -> str:
+    """计算 SHA256 hex（接受 str 或 bytes）。"""
+    import hashlib
+    if isinstance(data, str): data = data.encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
+
+
+def _log_consent_audit(
+    db: "Session", request: "Request", task_id: int, event: str,
+    *, phone: str = "", note: str = "",
+    doc_sha256: str = "", sig_sha256: str = "",
+) -> None:
+    """追加一条签署审计日志。永远不抛异常（日志失败不能阻断业务）。"""
+    try:
+        from app.models import ConsentAuditLog
+        ip = ""
+        try:
+            ip = (request.client.host if request.client else "")[:60]
+            # 兼容反代：优先取 X-Forwarded-For
+            xff = request.headers.get("x-forwarded-for") or ""
+            if xff:
+                ip = xff.split(",")[0].strip()[:60]
+        except Exception:
+            pass
+        ua = (request.headers.get("user-agent") or "")[:500]
+        # session_id 不直接存（隐私），存它的 SHA256 — 后续可以核对"同一个 session"但不能反查
+        session_id = (request.cookies.get("session") or "")[:200]
+        session_hash = _sha256(session_id) if session_id else ""
+        db.add(ConsentAuditLog(
+            task_id=task_id, event=event,
+            ip=ip, user_agent=ua,
+            phone_masked=_phone_mask(phone),
+            doc_sha256=doc_sha256, sig_sha256=sig_sha256,
+            session_hash=session_hash,
+            note=note[:2000],
+        ))
+        db.commit()
+    except Exception as _e:
+        logger.warning("[consent-audit] 日志写入失败 task=%s event=%s: %s", task_id, event, _e)
+
+
+# ─── 协议签字 SMS 验证码（中期方案，等腾讯云模板审核通过自动启用） ──
+_CONSENT_CODES: dict[str, tuple[str, float]] = {}  # {token: (code, expires_ts)}
+_CONSENT_CODE_TTL = 300       # 5 分钟
+_CONSENT_SEND_THROTTLE = 60   # 同 token 60 秒内不可重发
+_CONSENT_LAST_SENT: dict[str, float] = {}
+
+
+def _consent_sms_enabled() -> bool:
+    """SMS 验证码模式是否启用 — 需腾讯云模板 ID 已配置。"""
+    return bool(
+        (settings.tencent_sms_tmpl_consent or "").strip()
+        and (settings.tencent_sms_secret_id or "").strip()
+    )
 
 
 @app.get("/consent/{token}", response_class=HTMLResponse)
@@ -6058,48 +6131,127 @@ async def consent_sign_page(token: str, request: Request, db: Session = Depends(
             pass
     cust = db.get(Customer, task.customer_id) if task.customer_id else None
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
-    # 身份验证状态：pending 才需要验证；已签/已过期/已取消都跳过
     verified = _is_consent_verified(request, token) or task.status != "pending"
-    # 档案是否有手机号（无则拒绝签字）
     has_phone = bool(cust and cust.phone and cust.phone.strip())
-    # 给客户提示是哪个号码（后 4 位脱敏显示）
-    phone_hint = ""
-    if cust and cust.phone:
-        p = ''.join(ch for ch in cust.phone if ch.isdigit())
-        if len(p) >= 7:
-            phone_hint = p[:3] + "****" + p[-4:]
-        elif len(p) >= 4:
-            phone_hint = "****" + p[-4:]
+    phone_hint = _phone_mask(cust.phone) if cust else ""
+    # 审计日志：仅 pending 状态记 link_opened，避免每次刷新都记
+    if task.status == "pending":
+        _log_consent_audit(db, request, task.id, "link_opened",
+                           note=f"verified={verified}")
     return templates.TemplateResponse(request, "consent_sign.html", {
         "task": task, "cust": cust, "pet": pet,
         "title": task.title or "协议签署",
         "verified": verified,
         "has_phone": has_phone,
         "phone_hint": phone_hint,
+        "sms_mode": _consent_sms_enabled(),  # 是否走短信验证码模式
     })
+
+
+@app.post("/consent/{token}/send-code")
+async def consent_send_code(
+    token: str, request: Request, db: Session = Depends(get_db),
+):
+    """向客户档案手机号发 6 位短信验证码（中期方案，需腾讯云模板审核通过）。"""
+    task = db.query(ConsentTask).filter(ConsentTask.token == token).first()
+    if not task:
+        return {"ok": False, "error": "协议链接不存在或已失效"}
+    if task.status != "pending":
+        return {"ok": False, "error": "该协议已不可签字"}
+    if not _consent_sms_enabled():
+        return {"ok": False, "error": "短信服务未启用，请直接输入手机号验证"}
+    cust = db.get(Customer, task.customer_id) if task.customer_id else None
+    if not cust or not (cust.phone or "").strip():
+        return {"ok": False, "error": "客户档案缺手机号，无法发送验证码"}
+    import time as _t, secrets as _s
+    now = _t.time()
+    last = _CONSENT_LAST_SENT.get(token, 0)
+    if now - last < _CONSENT_SEND_THROTTLE:
+        wait = int(_CONSENT_SEND_THROTTLE - (now - last))
+        return {"ok": False, "error": f"请 {wait} 秒后再获取"}
+    code = "".join(_s.choice("0123456789") for _ in range(6))
+    _CONSENT_CODES[token] = (code, now + _CONSENT_CODE_TTL)
+    _CONSENT_LAST_SENT[token] = now
+    # 发短信
+    sent = False
+    err = None
+    try:
+        from app.services.sms_tencent import send_sms_template
+        sent, err = send_sms_template(
+            cust.phone,
+            settings.tencent_sms_tmpl_consent,
+            [code, str(_CONSENT_CODE_TTL // 60)],  # 假设模板形如：您的验证码 {1}，{2} 分钟内有效
+        )
+    except Exception as _e:
+        err = str(_e)
+    _log_consent_audit(db, request, task.id, "code_sent",
+                       phone=cust.phone,
+                       note=f"sent={sent} err={err or ''}")
+    if not sent:
+        return {"ok": False, "error": f"短信发送失败：{err or '未知错误'}"}
+    return {"ok": True, "phone_masked": _phone_mask(cust.phone)}
 
 
 @app.post("/consent/{token}/verify")
 async def consent_verify(
     token: str, request: Request, db: Session = Depends(get_db),
 ):
-    """客户在签字前输入手机号验证身份，对比客户档案中的手机号。"""
+    """两种模式：
+    - SMS 模式（短信验证码已启用）：客户输入收到的 6 位验证码
+    - 手机号匹配模式（默认 / SMS 未启用）：客户输入手机号，与档案对比
+    """
     task = db.query(ConsentTask).filter(ConsentTask.token == token).first()
     if not task:
         return {"ok": False, "error": "协议链接不存在或已失效"}
     if task.status != "pending":
         return {"ok": False, "error": "该协议已不可签字"}
     body = await request.json()
-    phone_input = (body.get("phone") or "").strip()
-    if not phone_input:
-        return {"ok": False, "error": "请输入手机号"}
     cust = db.get(Customer, task.customer_id) if task.customer_id else None
     if not cust or not (cust.phone or "").strip():
+        _log_consent_audit(db, request, task.id, "code_verify_fail",
+                           note="no_phone_on_file")
         return {"ok": False, "error": "客户档案缺手机号，无法验证身份，请联系医院"}
-    if not _consent_phone_match(phone_input, cust.phone):
-        return {"ok": False, "error": "手机号与档案不符"}
-    request.session[f"consent_verified_{token}"] = True
-    return {"ok": True}
+
+    if _consent_sms_enabled():
+        # 短信验证码模式
+        code_input = (body.get("code") or "").strip()
+        if not code_input or not code_input.isdigit() or len(code_input) != 6:
+            return {"ok": False, "error": "请输入 6 位验证码"}
+        import time as _t
+        entry = _CONSENT_CODES.get(token)
+        if not entry:
+            _log_consent_audit(db, request, task.id, "code_verify_fail",
+                               phone=cust.phone, note="no_code_issued")
+            return {"ok": False, "error": "请先获取验证码"}
+        code_correct, expires_at = entry
+        if _t.time() > expires_at:
+            _CONSENT_CODES.pop(token, None)
+            _log_consent_audit(db, request, task.id, "code_verify_fail",
+                               phone=cust.phone, note="code_expired")
+            return {"ok": False, "error": "验证码已过期，请重新获取"}
+        if code_input != code_correct:
+            _log_consent_audit(db, request, task.id, "code_verify_fail",
+                               phone=cust.phone, note="code_mismatch")
+            return {"ok": False, "error": "验证码不正确"}
+        # 通过 → 清掉一次性 code
+        _CONSENT_CODES.pop(token, None)
+        request.session[f"consent_verified_{token}"] = True
+        _log_consent_audit(db, request, task.id, "code_verify_ok",
+                           phone=cust.phone, note="mode=sms")
+        return {"ok": True}
+    else:
+        # 手机号匹配模式
+        phone_input = (body.get("phone") or "").strip()
+        if not phone_input:
+            return {"ok": False, "error": "请输入手机号"}
+        if not _consent_phone_match(phone_input, cust.phone):
+            _log_consent_audit(db, request, task.id, "code_verify_fail",
+                               phone=phone_input, note="phone_mismatch")
+            return {"ok": False, "error": "手机号与档案不符"}
+        request.session[f"consent_verified_{token}"] = True
+        _log_consent_audit(db, request, task.id, "code_verify_ok",
+                           phone=cust.phone, note="mode=phone_match")
+        return {"ok": True}
 
 
 @app.post("/consent/{token}/sign")
@@ -6113,21 +6265,23 @@ async def consent_sign_submit(
         return {"ok": False, "error": f"该协议已 {_CONSENT_STATUS_ZH.get(task.status, task.status)}，不可再次签字"}
     # 强制要求先通过手机号验证（防别人拿链接代签）
     if not _is_consent_verified(request, token):
-        return {"ok": False, "error": "请先完成手机号身份验证"}
+        _log_consent_audit(db, request, task.id, "sign_fail", note="not_verified")
+        return {"ok": False, "error": "请先完成身份验证"}
     body = await request.json()
     sig_data = (body.get("signature") or "").strip()
-    # signature_pad 输出 dataURL 形如 "data:image/png;base64,iVBORw..."
     if not sig_data.startswith("data:image/") or "," not in sig_data:
+        _log_consent_audit(db, request, task.id, "sign_fail", note="invalid_data_url")
         return {"ok": False, "error": "签字数据无效"}
-    # 简单校验：非空 + 至少几百字节（避免一笔点击空签）
     payload = sig_data.split(",", 1)[1]
     if len(payload) < 800:
+        _log_consent_audit(db, request, task.id, "sign_fail",
+                           note=f"sig_too_small payload_len={len(payload)}")
         return {"ok": False, "error": "签字过于简单，请重新签字"}
-    # 保存 PNG
     import base64
     try:
         raw = base64.b64decode(payload, validate=True)
     except Exception:
+        _log_consent_audit(db, request, task.id, "sign_fail", note="b64_decode_failed")
         return {"ok": False, "error": "签字数据解码失败"}
     from pathlib import Path as _P
     sig_dir = _P("uploads/consent_signatures")
@@ -6135,11 +6289,21 @@ async def consent_sign_submit(
     fname = f"task_{task.id}_{secrets.token_hex(6)}.png"
     (sig_dir / fname).write_bytes(raw)
 
+    # 计算文档/签字的 SHA256（证据链关键 — 后续如果文档或签字被改，哈希对不上）
+    doc_hash = _sha256(task.snapshot_html or "")
+    sig_hash = _sha256(raw)
+
     task.signature_path = f"consent_signatures/{fname}"
     task.signed_at = datetime.utcnow()
     task.signed_ip = (request.client.host if request.client else "")[:60]
     task.status = "signed"
     db.commit()
+    # 记签字成功 + 文档/签字哈希
+    _log_consent_audit(
+        db, request, task.id, "sign_success",
+        doc_sha256=doc_hash, sig_sha256=sig_hash,
+        note=f"sig_bytes={len(raw)} sig_path={task.signature_path}",
+    )
     # PDF 自动归档（失败不阻断签字成功 — 系统库缺也只是 PDF 不生成）
     try:
         from app.services.consent_pdf import generate_consent_pdf

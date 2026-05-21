@@ -84,6 +84,31 @@
    <div style="text-align:center;padding:1rem 0;">
      <div style="font-size:2.4rem;margin-bottom:.4rem;">🔒</div>
      <h2 style="margin:.3rem 0 .5rem;font-size:1.15rem;">请验证身份</h2>
+     {% if sms_mode %}
+     <p style="color:#6b7280;font-size:.92rem;margin:0 0 1.2rem;line-height:1.7;">
+       为确认是您本人签字，请先获取短信验证码<br/>
+       {% if phone_hint %}<span style="color:#9ca3af;font-size:.85rem;">验证码将发到：{{ phone_hint }}</span>{% endif %}
+     </p>
+     <div style="display:flex;gap:.5rem;max-width:340px;margin:0 auto;">
+       <input type="tel" id="code-input" inputmode="numeric" maxlength="6"
+              placeholder="6 位验证码"
+              style="flex:1;padding:.85rem 1rem;font-size:1.05rem;
+                     border:1.5px solid #e5e7eb;border-radius:10px;text-align:center;
+                     letter-spacing:.3em;box-sizing:border-box;-webkit-appearance:none;"/>
+       <button type="button" id="send-code-btn" onclick="sendCode()"
+               style="white-space:nowrap;background:#fff;color:#111;border:1.5px solid #111;
+                      padding:.5rem .85rem;border-radius:10px;cursor:pointer;font-size:.92rem;">
+         获取验证码
+       </button>
+     </div>
+     <div id="verify-alert" style="color:#dc2626;font-size:.9rem;margin-top:.6rem;min-height:1.2em;"></div>
+     <button type="button" onclick="verifyCode()"
+             style="margin-top:.8rem;width:100%;max-width:340px;background:#111;color:#fff;
+                    border:none;padding:.85rem 1rem;font-size:1rem;border-radius:10px;
+                    cursor:pointer;font-weight:600;">
+       验证并查看协议 →
+     </button>
+     {% else %}
      <p style="color:#6b7280;font-size:.92rem;margin:0 0 1.2rem;line-height:1.7;">
        为确认是您本人签字，请输入登记的手机号<br/>
        {% if phone_hint %}<span style="color:#9ca3af;font-size:.85rem;">提示：{{ phone_hint }}</span>{% endif %}
@@ -100,6 +125,7 @@
                     cursor:pointer;font-weight:600;">
        验证并查看协议 →
      </button>
+     {% endif %}
    </div>
    {% endif %}
  </div>
@@ -163,6 +189,65 @@
 {% if task.status == 'pending' and not verified %}
 <script>
 // 身份验证步骤
+{% if sms_mode %}
+// SMS 验证码模式
+var _smsCountdown = 0;
+window.sendCode = async function () {
+  if (_smsCountdown > 0) return;
+  var alertBox = document.getElementById('verify-alert');
+  alertBox.textContent = '';
+  var btn = document.getElementById('send-code-btn');
+  btn.disabled = true;
+  try {
+    var r = await fetch('/consent/{{ task.token }}/send-code', { method: 'POST' });
+    var d = await r.json();
+    if (d.ok) {
+      _smsCountdown = 60;
+      var tick = setInterval(function () {
+        _smsCountdown--;
+        btn.textContent = _smsCountdown > 0 ? _smsCountdown + ' 秒' : '重新获取';
+        if (_smsCountdown <= 0) { clearInterval(tick); btn.disabled = false; }
+      }, 1000);
+      btn.textContent = _smsCountdown + ' 秒';
+    } else {
+      alertBox.textContent = d.error || '发送失败';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    alertBox.textContent = '网络错误，请重试';
+    btn.disabled = false;
+  }
+};
+window.verifyCode = async function () {
+  var inp = document.getElementById('code-input');
+  var alertBox = document.getElementById('verify-alert');
+  alertBox.textContent = '';
+  var code = (inp.value || '').trim();
+  if (!/^\d{6}$/.test(code)) {
+    alertBox.textContent = '请输入 6 位验证码';
+    return;
+  }
+  try {
+    var r = await fetch('/consent/{{ task.token }}/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code })
+    });
+    var d = await r.json();
+    if (d.ok) { location.reload(); }
+    else { alertBox.textContent = d.error || '验证失败'; }
+  } catch (e) {
+    alertBox.textContent = '网络错误，请重试';
+  }
+};
+document.addEventListener('DOMContentLoaded', function () {
+  var inp = document.getElementById('code-input');
+  if (inp) inp.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); window.verifyCode(); }
+  });
+});
+{% else %}
+// 手机号匹配模式
 window.verifyPhone = async function () {
   var inp = document.getElementById('phone-input');
   var alertBox = document.getElementById('verify-alert');
@@ -179,22 +264,19 @@ window.verifyPhone = async function () {
       body: JSON.stringify({ phone: phone })
     });
     var d = await r.json();
-    if (d.ok) {
-      location.reload();
-    } else {
-      alertBox.textContent = d.error || '验证失败';
-    }
+    if (d.ok) { location.reload(); }
+    else { alertBox.textContent = d.error || '验证失败'; }
   } catch (e) {
     alertBox.textContent = '网络错误，请重试';
   }
 };
-// 回车键快捷提交
 document.addEventListener('DOMContentLoaded', function () {
   var inp = document.getElementById('phone-input');
   if (inp) inp.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); window.verifyPhone(); }
   });
 });
+{% endif %}
 </script>
 {% endif %}
 

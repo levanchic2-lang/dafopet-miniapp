@@ -1053,6 +1053,39 @@ class ConsentDocument(Base):
     created_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class ConsentAuditLog(Base):
+    """协议签署审计日志：每一步操作都记录，作为打官司时的证据链。
+    打开链接 / 发验证码 / 验证手机号 / 提交签字 / 失败原因 等都记。
+    任何字段都不应允许修改（仅追加）。
+    """
+    __tablename__ = "consent_audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id = mapped_column(ForeignKey("consent_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    # event:
+    #   link_opened       客户打开链接（GET /consent/{token}）
+    #   code_sent         发短信验证码
+    #   code_verify_ok    验证码 / 手机号 校验通过
+    #   code_verify_fail  校验失败
+    #   sign_submit       提交签字（payload size、签字图哈希）
+    #   sign_success      签字成功落档
+    #   sign_fail         签字失败（含错误原因）
+    event:       Mapped[str] = mapped_column(String(40), default="")
+    ip:          Mapped[str] = mapped_column(String(60), default="")
+    user_agent:  Mapped[str] = mapped_column(String(500), default="")
+    # 验证时输入的手机号（脱敏：仅前 3 + 后 4，例 138****1234）
+    phone_masked: Mapped[str] = mapped_column(String(20), default="")
+    # 文档正文 snapshot_html 的 SHA256（防文档被改后说当时签的是另一版）
+    doc_sha256:  Mapped[str] = mapped_column(String(64), default="")
+    # 签字 PNG 的 SHA256
+    sig_sha256:  Mapped[str] = mapped_column(String(64), default="")
+    # session 标识（防重放）— 用 session_id 的 SHA256，不存原值
+    session_hash: Mapped[str] = mapped_column(String(64), default="")
+    # 备注 / 错误原因
+    note:        Mapped[str] = mapped_column(Text, default="")
+    created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Coupon(Base):
     """优惠券：自家发放、自家核销。
     kind:
