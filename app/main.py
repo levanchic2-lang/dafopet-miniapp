@@ -5906,7 +5906,6 @@ async def admin_consent_task_detail(
     cust = db.get(Customer, task.customer_id) if task.customer_id else None
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
     doc = db.query(ConsentDocument).filter(ConsentDocument.task_id == task_id).first()
-    # 审计日志（证据链）
     from app.models import ConsentAuditLog
     audit_logs = (
         db.query(ConsentAuditLog)
@@ -5920,6 +5919,7 @@ async def admin_consent_task_detail(
         "category_zh": _CONSENT_CATEGORY_ZH,
         "csrf_token": _get_csrf_token(request),
         "audit_logs": audit_logs,
+        "sms_mode_enabled": _consent_sms_enabled(),
     })
 
 

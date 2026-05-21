@@ -168,6 +168,35 @@ function copyUrl(){
 }
 </script>
 
+{# ─────────── 身份验证模式状态 ─────────── #}
+<div class="card" style="margin-top:1rem;{% if not sms_mode_enabled %}background:#fffbeb;border-color:#fcd34d;{% else %}background:#ecfdf5;border-color:#86efac;{% endif %}">
+  {% if sms_mode_enabled %}
+  <div style="display:flex;align-items:center;gap:.5rem;">
+    <span style="font-size:1.4rem;">🟢</span>
+    <div>
+      <div style="font-weight:600;color:#065f46;">短信验证码模式 已启用</div>
+      <div style="font-size:.82rem;color:#047857;margin-top:.2rem;">
+        客户必须收到短信里的 6 位验证码才能签字。法律证据链完整。
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div style="display:flex;align-items:flex-start;gap:.5rem;">
+    <span style="font-size:1.4rem;">🟡</span>
+    <div style="flex:1;">
+      <div style="font-weight:600;color:#92400e;">当前是「手机号匹配」兜底模式</div>
+      <div style="font-size:.82rem;color:#92400e;margin-top:.3rem;line-height:1.6;">
+        客户输入手机号后，后端跟客户档案对比是否一致。<strong>没有发短信</strong>。
+        <br/>
+        升级到「短信验证码」模式：等腾讯云签名 + 模板审核通过后，把模板 ID 写进
+        <code style="background:#fef3c7;padding:0 .3rem;border-radius:3px;">TENCENT_SMS_TMPL_CONSENT</code>
+        env 变量重启服务即可。
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
 {# ─────────── 审计日志（证据链）─────────── #}
 {% if audit_logs %}
 <div class="card" style="margin-top:1rem;">
