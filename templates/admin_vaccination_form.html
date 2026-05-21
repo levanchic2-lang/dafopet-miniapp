@@ -188,7 +188,7 @@
  <div class="card">
  <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">宠物</div>
  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
- <span style="font-size:1.3rem;">{{ '<i data-lucide="cat"></i>' if pet.species == 'cat' else '<i data-lucide="dog"></i>' if pet.species == 'dog' else '<i data-lucide="paw-print"></i>' }}</span>
+ <span style="font-size:1.3rem;">{{ ('<i data-lucide="cat"></i>' if pet.species == 'cat' else '<i data-lucide="dog"></i>' if pet.species == 'dog' else '<i data-lucide="paw-print"></i>')|safe }}</span>
  <span style="font-weight:700;font-size:1rem;">{{ pet.name or '未命名' }}</span>
  {% if pet.gender == 'male' %}<span class="badge b-pending" style="font-size:0.68rem;">公</span>
  {% elif pet.gender == 'female' %}<span class="badge b-done" style="font-size:0.68rem;">母</span>{% endif %}

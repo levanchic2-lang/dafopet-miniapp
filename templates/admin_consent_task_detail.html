@@ -209,8 +209,8 @@ function copyUrl(){
     'link_opened': '<i data-lucide="link"></i> 打开链接',
     'code_sent': '<i data-lucide="mail"></i> 发送验证码',
     'code_verify_ok': '<i data-lucide="check-circle-2"></i> 身份验证通过',
-    'code_verify_fail': '❌ 身份验证失败',
-    'sign_fail': '❌ 签字失败',
+    'code_verify_fail': '<i data-lucide="x-circle"></i> 身份验证失败',
+    'sign_fail': '<i data-lucide="x-circle"></i> 签字失败',
     'sign_success': '<i data-lucide="pen-tool"></i> 签字成功',
     'sign_submit': '<i data-lucide="pencil-line"></i> 提交签字',
   } %}
@@ -232,7 +232,7 @@ function copyUrl(){
             {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else '—' }}
           </td>
           <td data-label="事件" style="font-weight:600;">
-            {{ event_zh.get(log.event, log.event) }}
+            {{ event_zh.get(log.event, log.event)|safe }}
           </td>
           <td data-label="IP" style="font-family:monospace;font-size:.78rem;color:var(--muted);">
             {{ log.ip or '—' }}

@@ -141,7 +141,7 @@
  <td>
  <div style="font-weight:600;">{{ cust.name if cust else '—' }}</div>
  <div style="font-size:0.78rem;color:var(--muted);">
- {% if pet %}{{ '<i data-lucide="cat"></i>' if pet.species == 'cat' else '<i data-lucide="dog"></i>' if pet.species == 'dog' else '<i data-lucide="paw-print"></i>' }} {{ pet.name }}{% else %}—{% endif %}
+ {% if pet %}{{ ('<i data-lucide="cat"></i>' if pet.species == 'cat' else '<i data-lucide="dog"></i>' if pet.species == 'dog' else '<i data-lucide="paw-print"></i>')|safe }} {{ pet.name }}{% else %}—{% endif %}
  </div>
  </td>
  <td data-label="药品" style="max-width:260px;">

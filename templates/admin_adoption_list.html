@@ -46,7 +46,7 @@
       <img src="/api/adoption/{{ pet.id }}/image/1" alt="{{ pet.name }}" />
       {% else %}
       <div class="adoption-img-placeholder">
-        <span style="font-size:2.5rem;">{{ '<i data-lucide="cat"></i>' if pet.species == 'cat' else '<i data-lucide="dog"></i>' if pet.species == 'dog' else '<i data-lucide="paw-print"></i>' }}</span>
+        <span style="font-size:2.5rem;">{{ ('<i data-lucide="cat"></i>' if pet.species == 'cat' else '<i data-lucide="dog"></i>' if pet.species == 'dog' else '<i data-lucide="paw-print"></i>')|safe }}</span>
         <span>暂无图片</span>
       </div>
       {% endif %}

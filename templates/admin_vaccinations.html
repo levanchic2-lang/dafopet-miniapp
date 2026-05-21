@@ -67,7 +67,7 @@
  <tr style="{% if is_overdue %}background:#fef2f2;{% elif is_soon %}background:#fffbeb;{% endif %}">
  <td style="font-weight:600;">
  {% if vacc.pet %}
- {{ '<i data-lucide="cat"></i>' if vacc.pet.species == 'cat' else '<i data-lucide="dog"></i>' if vacc.pet.species == 'dog' else '<i data-lucide="paw-print"></i>' }}
+ {{ ('<i data-lucide="cat"></i>' if vacc.pet.species == 'cat' else '<i data-lucide="dog"></i>' if vacc.pet.species == 'dog' else '<i data-lucide="paw-print"></i>')|safe }}
  {{ vacc.pet.name or '未命名' }}
  {% else %}—{% endif %}
  </td>
