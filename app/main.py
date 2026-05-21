@@ -6024,6 +6024,23 @@ async def api_binding_verify(request: Request, db: Session = Depends(get_db)):
 
 
 # ─── 客户端签署（无登录，token 即凭证） ──────────────────
+def _consent_phone_match(phone_input: str, customer_phone: str) -> bool:
+    """对比手机号（去除空格/破折号/+86 前缀）。"""
+    import re
+    a = re.sub(r'\D', '', phone_input or '')
+    b = re.sub(r'\D', '', customer_phone or '')
+    if not a or not b:
+        return False
+    # 去掉可能的 86 国码前缀
+    if a.startswith('86') and len(a) > 11: a = a[2:]
+    if b.startswith('86') and len(b) > 11: b = b[2:]
+    return a == b
+
+
+def _is_consent_verified(request: Request, token: str) -> bool:
+    return bool(request.session.get(f"consent_verified_{token}"))
+
+
 @app.get("/consent/{token}", response_class=HTMLResponse)
 async def consent_sign_page(token: str, request: Request, db: Session = Depends(get_db)):
     task = db.query(ConsentTask).filter(ConsentTask.token == token).first()
@@ -6041,10 +6058,48 @@ async def consent_sign_page(token: str, request: Request, db: Session = Depends(
             pass
     cust = db.get(Customer, task.customer_id) if task.customer_id else None
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
+    # 身份验证状态：pending 才需要验证；已签/已过期/已取消都跳过
+    verified = _is_consent_verified(request, token) or task.status != "pending"
+    # 档案是否有手机号（无则拒绝签字）
+    has_phone = bool(cust and cust.phone and cust.phone.strip())
+    # 给客户提示是哪个号码（后 4 位脱敏显示）
+    phone_hint = ""
+    if cust and cust.phone:
+        p = ''.join(ch for ch in cust.phone if ch.isdigit())
+        if len(p) >= 7:
+            phone_hint = p[:3] + "****" + p[-4:]
+        elif len(p) >= 4:
+            phone_hint = "****" + p[-4:]
     return templates.TemplateResponse(request, "consent_sign.html", {
         "task": task, "cust": cust, "pet": pet,
         "title": task.title or "协议签署",
+        "verified": verified,
+        "has_phone": has_phone,
+        "phone_hint": phone_hint,
     })
+
+
+@app.post("/consent/{token}/verify")
+async def consent_verify(
+    token: str, request: Request, db: Session = Depends(get_db),
+):
+    """客户在签字前输入手机号验证身份，对比客户档案中的手机号。"""
+    task = db.query(ConsentTask).filter(ConsentTask.token == token).first()
+    if not task:
+        return {"ok": False, "error": "协议链接不存在或已失效"}
+    if task.status != "pending":
+        return {"ok": False, "error": "该协议已不可签字"}
+    body = await request.json()
+    phone_input = (body.get("phone") or "").strip()
+    if not phone_input:
+        return {"ok": False, "error": "请输入手机号"}
+    cust = db.get(Customer, task.customer_id) if task.customer_id else None
+    if not cust or not (cust.phone or "").strip():
+        return {"ok": False, "error": "客户档案缺手机号，无法验证身份，请联系医院"}
+    if not _consent_phone_match(phone_input, cust.phone):
+        return {"ok": False, "error": "手机号与档案不符"}
+    request.session[f"consent_verified_{token}"] = True
+    return {"ok": True}
 
 
 @app.post("/consent/{token}/sign")
@@ -6056,6 +6111,9 @@ async def consent_sign_submit(
         return {"ok": False, "error": "协议链接不存在或已失效"}
     if task.status != "pending":
         return {"ok": False, "error": f"该协议已 {_CONSENT_STATUS_ZH.get(task.status, task.status)}，不可再次签字"}
+    # 强制要求先通过手机号验证（防别人拿链接代签）
+    if not _is_consent_verified(request, token):
+        return {"ok": False, "error": "请先完成手机号身份验证"}
     body = await request.json()
     sig_data = (body.get("signature") or "").strip()
     # signature_pad 输出 dataURL 形如 "data:image/png;base64,iVBORw..."

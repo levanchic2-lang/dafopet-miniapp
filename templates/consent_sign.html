@@ -66,11 +66,49 @@
 <div class="wrap">
  <div class="brand">🐾 大风动物医院</div>
 
- {% if task.status == 'pending' %}
+ {% if task.status == 'pending' and not verified %}
+ {# ─────────── 身份验证步骤 ─────────── #}
  <div class="doc-card">
    <div class="doc-info">
      <b>{{ task.title }}</b>
-     {% if cust %}<div>客户：{{ cust.name }} · {{ cust.phone }}</div>{% endif %}
+     {% if cust %}<div>客户：{{ cust.name }}</div>{% endif %}
+     {% if pet %}<div>宠物：{{ pet.name }}</div>{% endif %}
+   </div>
+   {% if not has_phone %}
+   <div class="status-box">
+     <div class="icon">⚠️</div>
+     <h2>无法验证身份</h2>
+     <p>客户档案缺手机号，请联系医院确认。</p>
+   </div>
+   {% else %}
+   <div style="text-align:center;padding:1rem 0;">
+     <div style="font-size:2.4rem;margin-bottom:.4rem;">🔒</div>
+     <h2 style="margin:.3rem 0 .5rem;font-size:1.15rem;">请验证身份</h2>
+     <p style="color:#6b7280;font-size:.92rem;margin:0 0 1.2rem;line-height:1.7;">
+       为确认是您本人签字，请输入登记的手机号<br/>
+       {% if phone_hint %}<span style="color:#9ca3af;font-size:.85rem;">提示：{{ phone_hint }}</span>{% endif %}
+     </p>
+     <input type="tel" id="phone-input" inputmode="numeric" maxlength="13"
+            placeholder="请输入完整手机号"
+            style="width:100%;max-width:340px;padding:.85rem 1rem;font-size:1.05rem;
+                   border:1.5px solid #e5e7eb;border-radius:10px;text-align:center;
+                   letter-spacing:.1em;box-sizing:border-box;-webkit-appearance:none;"/>
+     <div id="verify-alert" style="color:#dc2626;font-size:.9rem;margin-top:.6rem;min-height:1.2em;"></div>
+     <button type="button" onclick="verifyPhone()"
+             style="margin-top:.8rem;width:100%;max-width:340px;background:#111;color:#fff;
+                    border:none;padding:.85rem 1rem;font-size:1rem;border-radius:10px;
+                    cursor:pointer;font-weight:600;">
+       验证并查看协议 →
+     </button>
+   </div>
+   {% endif %}
+ </div>
+
+ {% elif task.status == 'pending' and verified %}
+ <div class="doc-card">
+   <div class="doc-info">
+     <b>{{ task.title }}</b>
+     {% if cust %}<div>客户：{{ cust.name }} ✓ 已验证</div>{% endif %}
      {% if pet %}<div>宠物：{{ pet.name }}{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '狗' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
      <div>发起时间：{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }}</div>
    </div>
@@ -78,6 +116,7 @@
    <div class="doc-body">{{ task.snapshot_html|safe }}</div>
  </div>
 
+ {% if verified %}
  <div class="sig-card">
    <h3>签字（请用手指/触控笔在框内书写）</h3>
    <div class="sig-box">
@@ -93,6 +132,7 @@
      本次签字将被加密保存到您的诊疗档案，并自动生成 PDF。仅医院与您本人可查阅。
    </p>
  </div>
+ {% endif %}
 
  {% elif task.status == 'signed' %}
  <div class="status-box">
@@ -120,7 +160,45 @@
  <div class="footer">大风动物医院 · 本页仅用于本次协议签署</div>
 </div>
 
-{% if task.status == 'pending' %}
+{% if task.status == 'pending' and not verified %}
+<script>
+// 身份验证步骤
+window.verifyPhone = async function () {
+  var inp = document.getElementById('phone-input');
+  var alertBox = document.getElementById('verify-alert');
+  alertBox.textContent = '';
+  var phone = (inp.value || '').replace(/\D/g, '');
+  if (!phone || phone.length < 7) {
+    alertBox.textContent = '请输入完整手机号';
+    return;
+  }
+  try {
+    var r = await fetch('/consent/{{ task.token }}/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: phone })
+    });
+    var d = await r.json();
+    if (d.ok) {
+      location.reload();
+    } else {
+      alertBox.textContent = d.error || '验证失败';
+    }
+  } catch (e) {
+    alertBox.textContent = '网络错误，请重试';
+  }
+};
+// 回车键快捷提交
+document.addEventListener('DOMContentLoaded', function () {
+  var inp = document.getElementById('phone-input');
+  if (inp) inp.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); window.verifyPhone(); }
+  });
+});
+</script>
+{% endif %}
+
+{% if task.status == 'pending' and verified %}
 <script>
 (function () {
   var canvas = document.getElementById('sig');
