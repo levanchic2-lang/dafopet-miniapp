@@ -23,6 +23,44 @@
 .preset-tab.active { background:#111827; color:#fff; }
 @media (max-width: 768px) {
   .rev-summary { grid-template-columns:repeat(2, 1fr); }
+  /* 报表里的「按支付方式 + 按门店/收费类型」原本 2 列并排，手机塌缩为单列 */
+  .rev-section + .rev-section,
+  body div[style*="grid-template-columns:1fr 1fr"][style*="margin-bottom:1rem"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* 强制：任何 grid-template-columns:1fr 1fr 在收款统计页内 → 1 列 */
+  body div[style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* 报表 table 变卡片：每行变独立卡片 */
+  .rev-table thead { display: none; }
+  .rev-table { display: block; }
+  .rev-table tbody { display: block; }
+  .rev-table tbody tr {
+    display: grid; grid-template-columns: 1fr auto;
+    column-gap: .8rem; row-gap: .2rem;
+    padding: .55rem .6rem; margin-bottom: .4rem;
+    background: #fafafa; border-radius: 8px;
+    border-bottom: none !important;
+  }
+  .rev-table tbody tr td {
+    padding: 0 !important; border: none !important; text-align: left !important;
+    font-size: .88rem; min-width: 0;
+  }
+  /* 第一列（名称/方式/类型）独占左侧 */
+  .rev-table tbody tr td:first-child {
+    grid-column: 1 / 2; font-weight: 600; font-size: .95rem;
+  }
+  /* 后面的列右对齐 */
+  .rev-table tbody tr td:nth-child(n+2) {
+    grid-column: 2 / 3; text-align: right !important;
+    font-size: .82rem; color: var(--muted);
+  }
+  .rev-table tbody tr td.amount {
+    color: #059669 !important; font-weight: 700 !important;
+  }
+  /* 图表区域：手机上压缩到合适高度，避免占太大 */
+  .rev-section canvas { max-height: 200px !important; }
 }
 </style>
 {% endblock %}
