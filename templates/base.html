@@ -6,7 +6,7 @@
   <title>{{ title }}</title>
   {# ── PWA: 可添加到主屏，全屏运行 ── #}
   <link rel="manifest" href="/static/manifest.json" />
-  <meta name="theme-color" content="#2563eb" />
+  <meta name="theme-color" content="#3b8ec1" />
   <meta name="application-name" content="大风" />
   {# iOS Safari 「添加到主屏」 #}
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,10 +14,11 @@
   <meta name="apple-mobile-web-app-title" content="大风" />
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
   {# Windows 磁贴 #}
-  <meta name="msapplication-TileColor" content="#2563eb" />
+  <meta name="msapplication-TileColor" content="#3b8ec1" />
   <meta name="msapplication-TileImage" content="/static/icon-192.png" />
   <style>
     :root {
+      /* ─── 中性色 ──────────────────────────────────── */
       --bg: #fafafa;
       --bg-elevated: #f4f4f5;
       --card: #ffffff;
@@ -25,20 +26,37 @@
       --muted: #737373;
       --border: #e5e5e5;
       --border-strong: #d4d4d4;
-      /* 与手机号等控件统一的输入框描边（等同 --border-strong） */
       --input-border: var(--border-strong);
-      /* 主操作：黑 / 深灰 */
-      --accent: #262626;
-      --accent-hover: #0a0a0a;
-      /* 语义仍用灰阶区分轻重，避免彩色 */
-      --warn-fg: #404040;
-      --warn-bg: #f5f5f5;
-      --danger-fg: #262626;
-      --danger-bg: #e5e5e5;
-      --ok-fg: #171717;
-      --ok-bg: #f5f5f5;
-      --radius: 12px;
-      --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
+
+      /* ─── 品牌色（基于 dafo+ logo 衍生）─────────────── */
+      --brand-light: #8bc9e0;   /* logo 原色 — 用作背景 / 描边 / 轻强调 */
+      --brand:       #3b8ec1;   /* CTA 主色 — 按钮 / 链接 / 选中状态 */
+      --brand-dark:  #2d7aa8;   /* hover / 加深 */
+      --brand-fg:    #ffffff;   /* 在 --brand 上的文字色 */
+      --brand-bg-soft: #eaf5fa; /* 极浅蓝背景（pill-info / 选中行底纹）*/
+      --accent-warm: #f5b942;   /* 暖橙黄（logo 辅助色）— 留给重要徽章 */
+
+      /* 主操作：用品牌色（之前是黑 #262626，现在切到品牌蓝） */
+      --accent: var(--brand);
+      --accent-hover: var(--brand-dark);
+
+      /* ─── 语义状态色（统一收紧）─────────────────────── */
+      --ok-fg:     #15803d;
+      --ok-bg:     #dcfce7;
+      --warn-fg:   #b45309;
+      --warn-bg:   #fef3c7;
+      --danger-fg: #b91c1c;
+      --danger-bg: #fee2e2;
+      --info-fg:   var(--brand-dark);
+      --info-bg:   var(--brand-bg-soft);
+
+      /* ─── 圆角 / 阴影 ─────────────────────────────── */
+      --radius-sm: 6px;
+      --radius:    10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow:    0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
+      --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
     }
     * { box-sizing: border-box; }
     body {
@@ -73,7 +91,12 @@
       padding: 0.45rem 1.25rem; border-bottom: 1px solid var(--border);
       background: linear-gradient(to bottom, #ffffff, #f9fafb);
     }
-    .ribbon-brand { font-weight: 700; font-size: 1.05rem; color: var(--text); letter-spacing: -0.01em; }
+    .ribbon-brand { font-weight: 700; font-size: 1.05rem; color: var(--text); letter-spacing: -0.01em;
+                     display: inline-flex; align-items: center; gap: .5rem; }
+    .ribbon-brand .brand-logo {
+      width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+      background: var(--brand-light) url("/static/logo.png") center / 90% no-repeat;
+    }
     .ribbon-brand span { color: var(--muted); font-weight: 500; font-size: 0.9rem; margin-left: 0.3rem; }
     .ribbon-user {
       display: flex; align-items: center; gap: 0.75rem; font-size: 0.82rem; color: var(--muted);
@@ -95,7 +118,7 @@
     }
     .ribbon-tab:hover { color: var(--text); }
     .ribbon-tab.active {
-      color: #3b82f6; background: var(--card); border-bottom: 2px solid #3b82f6;
+      color: var(--brand); background: var(--card); border-bottom: 2px solid var(--brand);
     }
 
     /* 图标按钮区 */
@@ -112,9 +135,9 @@
       gap: 0.25rem; flex-shrink: 0; transition: background 0.12s;
       position: relative;
     }
-    .ribbon-icon:hover { background: #eff6ff; color: #1e40af; }
+    .ribbon-icon:hover { background: var(--brand-bg-soft); color: var(--brand-dark); }
     .ribbon-icon.current {
-      background: #dbeafe; color: #1e40af; font-weight: 600;
+      background: var(--brand-bg-soft); color: var(--brand-dark); font-weight: 600;
     }
     .ribbon-icon .ri-emoji {
       font-size: 1.5rem; line-height: 1; margin-bottom: 0.15rem;
@@ -225,9 +248,9 @@
     }
     button.secondary:hover, .btn.secondary:hover { background: var(--bg-elevated); border-color: var(--muted); }
     button.danger, .btn.danger {
-      background: var(--danger-bg); color: var(--danger-fg); border-color: #a3a3a3;
+      background: var(--danger-bg); color: var(--danger-fg); border-color: #fca5a5;
     }
-    button.danger:hover, .btn.danger:hover { background: #d4d4d4; border-color: #737373; }
+    button.danger:hover, .btn.danger:hover { background: #fecaca; border-color: var(--danger-fg); color: var(--danger-fg); }
     .badge {
       display: inline-block; padding: 0.2rem 0.55rem; border-radius: 6px;
       font-size: 0.72rem; font-weight: 600; border: 1px solid var(--border);
@@ -246,7 +269,7 @@
     .pill-warn  { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
     .pill-no    { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
     .pill-gray  { background: #f3f4f6; color: #6b7280; border-color: #d1d5db; }
-    .pill-info  { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+    .pill-info  { background: var(--info-bg); color: var(--info-fg); border-color: var(--brand-light); }
     .pill-purple{ background: #f5f3ff; color: #5b21b6; border-color: #c4b5fd; }
     .pill-pink  { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
 
@@ -281,7 +304,7 @@
     }
     .data-table tr:last-child td { border-bottom: none; }
     .data-table tr:hover td { background: #fafbfc; }
-    .data-table a { color: #3b82f6; text-decoration: none; }
+    .data-table a { color: var(--brand); text-decoration: none; }
     .data-table a:hover { text-decoration: underline; }
     .data-table-wrap {
       background: var(--card); border: 1px solid var(--border);
@@ -301,14 +324,14 @@
     }
     .list-tab:hover { color: var(--text); }
     .list-tab.active {
-      color: #3b82f6; border-bottom-color: #3b82f6; font-weight: 600;
+      color: var(--brand); border-bottom-color: var(--brand); font-weight: 600;
     }
     .list-tab .count {
       display: inline-block; margin-left: 0.25rem;
       background: #e5e7eb; color: #6b7280; padding: 0 0.4em;
       border-radius: 99px; font-size: 0.7rem; font-weight: 600;
     }
-    .list-tab.active .count { background: #dbeafe; color: #1e40af; }
+    .list-tab.active .count { background: var(--info-bg); color: var(--info-fg); }
 
     /* 筛选卡片 */
     .filter-card {
@@ -333,7 +356,7 @@
     }
     .stat-card.s-warn .stat-num { color: #d97706; }
     .stat-card.s-ok   .stat-num { color: #15803d; }
-    .stat-card.s-info .stat-num { color: #2563eb; }
+    .stat-card.s-info .stat-num { color: var(--brand); }
 
     /* 空状态 */
     .empty-card {
@@ -398,6 +421,7 @@
       .ribbon-top { padding: 0.4rem 0.75rem !important; flex-wrap: wrap; gap: .3rem .6rem; }
       .ribbon-brand { font-size: .92rem !important; }
       .ribbon-brand span { font-size: .76rem !important; }
+      .ribbon-brand .brand-logo { width: 24px !important; height: 24px !important; }
       .ribbon-user { font-size: .78rem !important; }
 
       /* ── 二级 ribbon tab 横滑 ── */
@@ -622,7 +646,10 @@
 
   <nav class="ribbon">
     <div class="ribbon-top">
-      <div class="ribbon-brand">🐾 大风动物医院 <span>· TNR 管理系统</span></div>
+      <div class="ribbon-brand">
+        <span class="brand-logo" aria-hidden="true"></span>
+        大风动物医院 <span>· TNR 管理系统</span>
+      </div>
       <div class="ribbon-user">
         {% if request.session.get('admin') %}
           👤 {{ request.session.get('admin_username') or 'admin' }}
