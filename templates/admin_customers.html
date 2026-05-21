@@ -87,7 +87,7 @@
   {% else %}{% set tone = 't-high' %}{% endif %}
   <div class="wb-card {% if total == 0 %}empty{% endif %}">
     <div class="wb-card-head">
-      <div class="wb-card-title">{{ c.icon }} {{ c.title }}</div>
+      <div class="wb-card-title"><i data-lucide="{{ c.icon }}"></i> {{ c.title }}</div>
       <span class="wb-badge {{ tone }}">{{ total }}</span>
     </div>
     <div class="wb-items">
@@ -112,21 +112,21 @@
 
 {% if workbench %}
 <div class="wb-group">
-  <div class="wb-group-title">🔴 今日必做</div>
+  <div class="wb-group-title"><i data-lucide="alert-circle" style="color:#dc2626;"></i> 今日必做</div>
   <div class="wb-grid">
     {% for c in workbench.urgent %}{{ render_card(c) }}{% endfor %}
   </div>
 </div>
 
 <div class="wb-group">
-  <div class="wb-group-title">🟡 本周提醒</div>
+  <div class="wb-group-title"><i data-lucide="bell" style="color:#d97706;"></i> 本周提醒</div>
   <div class="wb-grid">
     {% for c in workbench.weekly %}{{ render_card(c) }}{% endfor %}
   </div>
 </div>
 
 <div class="wb-group">
-  <div class="wb-group-title">⚪ 库存/经营预警</div>
+  <div class="wb-group-title"><i data-lucide="package-search" style="color:#6b7280;"></i> 库存/经营预警</div>
   <div class="wb-grid">
     {% for c in workbench.stock %}{{ render_card(c) }}{% endfor %}
   </div>
