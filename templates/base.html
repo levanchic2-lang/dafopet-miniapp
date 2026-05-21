@@ -757,33 +757,42 @@
     var MAX_TABS = 12;
 
     // 路径 → 默认 tab 标签映射。仅精确匹配（详情/子页用 <meta tab-label> 自行标记）。
+    // icon 值是 Lucide 图标名（见 https://lucide.dev/icons）
     var PATH_LABELS = {
       // 接待
-      '/admin':              { label: 'TNR 申请',   kind: 'page', icon: '🐱' },
-      '/admin/calendar':     { label: '日历',       kind: 'page', icon: '📅' },
-      '/admin/appointments': { label: '预约管理',   kind: 'page', icon: '📋' },
-      '/admin/customers':    { label: '今日工作台',  kind: 'page', icon: '🏠' },
+      '/admin':              { label: 'TNR 申请',   kind: 'page', icon: 'cat' },
+      '/admin/calendar':     { label: '日历',       kind: 'page', icon: 'calendar' },
+      '/admin/appointments': { label: '预约管理',   kind: 'page', icon: 'clipboard-list' },
+      '/admin/customers':    { label: '今日工作台',  kind: 'page', icon: 'home' },
       // 医疗
-      '/admin/dispensing':   { label: '发药台',     kind: 'page', icon: '💊' },
-      '/admin/vaccinations': { label: '疫苗管理',   kind: 'page', icon: '💉' },
-      '/admin/rabies':       { label: '狂犬疫苗',   kind: 'page', icon: '🐶' },
-      '/admin/visits':       { label: '病历查询',   kind: 'page', icon: '🔍' },
-      '/admin/follow-ups':   { label: '回访管理',   kind: 'page', icon: '📞' },
-      '/admin/consent-templates': { label: '协议模板', kind: 'page', icon: '📝' },
+      '/admin/dispensing':   { label: '发药台',     kind: 'page', icon: 'pill' },
+      '/admin/vaccinations': { label: '疫苗管理',   kind: 'page', icon: 'syringe' },
+      '/admin/rabies':       { label: '狂犬疫苗',   kind: 'page', icon: 'dog' },
+      '/admin/visits':       { label: '病历查询',   kind: 'page', icon: 'search' },
+      '/admin/follow-ups':   { label: '回访管理',   kind: 'page', icon: 'phone' },
+      '/admin/consent-templates': { label: '协议模板', kind: 'page', icon: 'pen-tool' },
       // 经营
-      '/admin/invoices':     { label: '收银台',     kind: 'page', icon: '🧾' },
-      '/admin/inventory':    { label: '库存管理',   kind: 'page', icon: '📦' },
-      '/admin/stocktake':    { label: '循环盘点',   kind: 'page', icon: '📊' },
-      '/admin/sales':        { label: '销售单',     kind: 'page', icon: '🛒' },
-      '/admin/packages':     { label: '套餐目录',   kind: 'page', icon: '🎫' },
-      '/admin/coupons':      { label: '优惠券',     kind: 'page', icon: '🎟️' },
-      '/admin/reports/revenue': { label: '收款统计', kind: 'page', icon: '📊' },
-      '/admin/feedback':     { label: '客户反馈',   kind: 'page', icon: '💬' },
+      '/admin/invoices':     { label: '收银台',     kind: 'page', icon: 'receipt' },
+      '/admin/inventory':    { label: '库存管理',   kind: 'page', icon: 'package' },
+      '/admin/stocktake':    { label: '循环盘点',   kind: 'page', icon: 'bar-chart-3' },
+      '/admin/sales':        { label: '销售单',     kind: 'page', icon: 'shopping-cart' },
+      '/admin/packages':     { label: '套餐目录',   kind: 'page', icon: 'ticket' },
+      '/admin/coupons':      { label: '优惠券',     kind: 'page', icon: 'ticket' },
+      '/admin/reports/revenue': { label: '收款统计', kind: 'page', icon: 'bar-chart-3' },
+      '/admin/feedback':     { label: '客户反馈',   kind: 'page', icon: 'message-circle' },
       // 系统
-      '/admin/hr':           { label: '人事管理',   kind: 'page', icon: '👨‍💼' },
-      '/admin/adoption':     { label: '领养',       kind: 'page', icon: '🐾' },
-      '/admin/changelog':    { label: '开发日志',   kind: 'page', icon: '📝' },
+      '/admin/hr':           { label: '人事管理',   kind: 'page', icon: 'briefcase' },
+      '/admin/adoption':     { label: '领养',       kind: 'page', icon: 'paw-print' },
+      '/admin/changelog':    { label: '开发日志',   kind: 'page', icon: 'pencil-line' },
     };
+    // 判断 icon 是否是 Lucide 名（纯 ASCII 字母+连字符）。兼容 localStorage 里旧的 emoji。
+    function isLucideIcon(s) {
+      return typeof s === 'string' && /^[a-z][a-z0-9-]*$/.test(s);
+    }
+    function renderIcon(icon) {
+      if (isLucideIcon(icon)) return '<i data-lucide="' + icon + '"></i>';
+      return icon || '';
+    }
 
     function lookupPath(p) {
       return PATH_LABELS[p] || null;
@@ -799,6 +808,11 @@
           if (!t || !t.key) continue;
           if (seenKeys[t.key]) continue;
           if (t.kind === 'page' && seenPageLabels[t.label]) continue;
+          // 旧数据自动升级：icon 还是 emoji 时，按 key 反查 PATH_LABELS 替换成 lucide 名
+          if (!isLucideIcon(t.icon)) {
+            var hit = PATH_LABELS[t.key];
+            t.icon = hit ? hit.icon : 'file-text';
+          }
           seenKeys[t.key] = true;
           if (t.kind === 'page') seenPageLabels[t.label] = true;
           clean.push(t);
@@ -822,7 +836,7 @@
         // 详情页：用 meta 标签覆盖
         kind = pageMeta('tab-kind') || 'detail';
         icon = pageMeta('tab-icon') ||
-               ({customer:'👤', visit:'📋', prescription:'💊', exam:'🔬', invoice:'🧾'}[kind] || '📄');
+               ({customer:'user', visit:'clipboard-list', prescription:'pill', exam:'flask-conical', invoice:'receipt'}[kind] || 'file-text');
       } else {
         // 列表/功能页：按 PATH_LABELS 推断
         var hit = lookupPath(path);
@@ -883,7 +897,7 @@
         a.href = t.url;
         a.title = t.label;
         a.innerHTML =
-          '<span class="qt-icon">' + (t.icon || '📄') + '</span>' +
+          '<span class="qt-icon">' + renderIcon(t.icon || 'file-text') + '</span>' +
           '<span class="qt-label"></span>' +
           '<span class="qt-close" title="关闭">×</span>';
         a.querySelector('.qt-label').textContent = t.label;
@@ -905,6 +919,8 @@
         });
         bar.appendChild(clr);
       }
+      // 渲染完触发 Lucide，把 <i data-lucide=".."> 转成 SVG
+      if (window.lucide) { try { lucide.createIcons({ attrs: { class: 'ico' } }); } catch(e){} }
     }
 
     // 进入当前页时，若是可标签化页面 → upsert
