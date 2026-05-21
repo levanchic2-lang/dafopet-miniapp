@@ -448,6 +448,19 @@ def _is_superadmin(request: Request) -> bool:
 
 def require_admin(request: Request):
     if not _admin_ok(request):
+        # 浏览器导航类请求 → 重定向到登录页（友好）
+        # API/AJAX 请求 → 401 JSON（让前端拿到错误码）
+        accept = (request.headers.get("accept") or "").lower()
+        path = request.url.path or ""
+        is_html_nav = (
+            "text/html" in accept
+            and not path.startswith("/api/")
+        )
+        if is_html_nav:
+            raise HTTPException(
+                status_code=303,
+                headers={"Location": "/admin/login"},
+            )
         raise HTTPException(status_code=401, detail="需要医院后台登录")
 
 
@@ -2468,6 +2481,18 @@ async def admin_api_tnr_application_for_appointment(
         "store": store,
         "appointment_date_suggestion": appt_date,
     }
+
+
+@app.get("/admin/login", response_class=HTMLResponse)
+async def admin_login_page(request: Request):
+    """GET: 展示登录页（点击「登录」链接 / 未登录访问任意页 都会到这里）。"""
+    # 已登录直接回工作台
+    if _admin_ok(request):
+        return RedirectResponse("/admin/customers", status_code=303)
+    return templates.TemplateResponse(request, "admin_login.html", {
+        "title": "医院后台登录",
+        "csrf_token": _get_csrf_token(request),
+    })
 
 
 @app.post("/admin/login")
