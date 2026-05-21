@@ -10,12 +10,20 @@
   }
   #issue-coupon-modal > .cust-modal {
     width: 100vw !important; max-width: 100vw !important;
-    height: 100vh !important; max-height: 100vh !important;
+    /* 100dvh = 动态视口高度，自动减去 Safari 底部工具栏 */
+    height: 100dvh !important; max-height: 100dvh !important;
     border-radius: 0 !important; margin: 0 !important;
     padding: 0 !important; box-sizing: border-box !important;
     box-shadow: none !important;
     display: flex !important; flex-direction: column !important;
-    position: relative !important;  /* 给绝对定位的底栏做参考系 */
+    position: relative !important;
+  }
+  /* iOS Safari ≤ 15 不支持 dvh，回退到 -webkit-fill-available */
+  @supports not (height: 100dvh) {
+    #issue-coupon-modal > .cust-modal {
+      height: -webkit-fill-available !important;
+      max-height: -webkit-fill-available !important;
+    }
   }
   /* 标题：固定不滚 — 紫色渐变顶栏，明显的视觉变化 */
   #issue-coupon-modal > .cust-modal > h3:first-child {
@@ -44,19 +52,20 @@
     min-height: 0 !important;
     display: block !important;
   }
-  /* 字段紧凑：label + input 单元 */
+  /* 字段紧凑：label + input 单元（节省空间） */
   #issue-coupon-modal form > label {
-    padding: .6rem 1rem 0 !important; margin: 0 !important;
-    font-size: .82rem !important; color: var(--muted); display: block;
+    padding: .45rem 1rem 0 !important; margin: 0 !important;
+    font-size: .76rem !important; color: var(--muted); display: block;
+    line-height: 1.2;
   }
   #issue-coupon-modal form > input,
   #issue-coupon-modal form > select {
-    margin: .25rem 1rem 0 !important; width: calc(100% - 2rem) !important;
-    height: 42px !important; padding: 0 .7rem !important; font-size: 16px !important;
+    margin: .15rem 1rem 0 !important; width: calc(100% - 2rem) !important;
+    height: 38px !important; padding: 0 .7rem !important; font-size: 16px !important;
     box-sizing: border-box !important;
   }
   #issue-coupon-modal form > div:not(:last-child) {
-    padding: 0 1rem !important; margin: .5rem 0 0 !important;
+    padding: 0 1rem !important; margin: .35rem 0 0 !important;
   }
   /* 最后一行（按钮栏）：绝对定位钉在 modal 底部（比 sticky 在 iOS 更可靠） */
   #issue-coupon-modal form > div:last-child {
