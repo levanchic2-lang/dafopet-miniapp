@@ -18,14 +18,14 @@
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">📋</span>新建预约</h1>
+ <h1><span class="ph-icon"><i data-lucide="clipboard-list"></i></span>新建预约</h1>
  <p class="ph-sub">
  {% if cust %}<strong>{{ cust.name }}</strong> · {{ cust.phone }}{% endif %}
  {% if pet %} · <strong>{{ pet.name }}</strong>{% endif %}
  </p>
  </div>
  <div class="ph-actions">
- <a href="javascript:history.back()" class="btn secondary" style="font-size:.85rem;">← 返回</a>
+ <a href="javascript:history.back()" class="btn secondary" style="font-size:.85rem;"><i data-lucide="arrow-left"></i> 返回</a>
  </div>
 </div>
 
@@ -113,7 +113,7 @@
            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"></textarea>
 
  <div style="display:flex;gap:.6rem;margin-top:1.2rem;">
-   <button type="submit" class="btn" style="font-size:.95rem;padding:.55rem 1.4rem;">✓ 创建预约</button>
+   <button type="submit" class="btn" style="font-size:.95rem;padding:.55rem 1.4rem;"><i data-lucide="check"></i> 创建预约</button>
    <a href="javascript:history.back()" class="btn secondary" style="font-size:.95rem;padding:.55rem 1.4rem;">取消</a>
  </div>
 </form>

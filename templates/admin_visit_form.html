@@ -162,13 +162,13 @@
 {% set v = visit if visit else None %}
 {% set is_edit = (mode == 'edit') %}
 
-{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 {% if not is_edit and not cust %}
 {# ── 创建模式：先搜索客户 ── #}
 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
- <a href="/admin/customers" class="btn secondary" style="font-size:0.85rem;">← 返回客户档案</a>
+ <a href="/admin/customers" class="btn secondary" style="font-size:0.85rem;"><i data-lucide="arrow-left"></i> 返回客户档案</a>
  <h1 style="margin:0;font-size:1.3rem;">新建就诊记录</h1>
 </div>
 <div class="card" style="max-width:600px;">
@@ -187,14 +187,14 @@
  <span><strong>{{ c.name or '未命名' }}</strong>
  <span style="color:var(--muted);margin-left:0.6rem;font-size:0.88rem;">{{ c.phone or '—' }}</span>
  </span>
- <span style="font-size:0.82rem;color:var(--muted);">选择 →</span>
+ <span style="font-size:0.82rem;color:var(--muted);">选择 <i data-lucide="arrow-right"></i></span>
  </a>
  {% endfor %}
  </div>
  {% else %}
  <p style="margin-top:0.75rem;color:var(--muted);font-size:0.9rem;">
  没有找到"{{ search_q }}"的客户。
- <a href="/admin/customers" style="margin-left:0.4rem;">先创建客户档案 →</a>
+ <a href="/admin/customers" style="margin-left:0.4rem;">先创建客户档案 <i data-lucide="arrow-right"></i></a>
  </p>
  {% endif %}
  {% endif %}
@@ -203,7 +203,7 @@
 {% elif not is_edit and cust %}
 {# ── 创建模式：客户已选，简单 SOAP 表单（保持兼容旧创建流程） ── #}
 <div class="visit-header">
- <a href="/admin/customers/{{ cust.id }}" class="btn secondary vh-back">← 返回</a>
+ <a href="/admin/customers/{{ cust.id }}" class="btn secondary vh-back"><i data-lucide="arrow-left"></i> 返回</a>
  <div class="vh-title">新建就诊 · {{ cust.name }}{% if pet %} / {{ pet.name }}{% endif %}</div>
 </div>
 <div class="card">
@@ -263,11 +263,11 @@
 
 <div class="visit-header">
  {% if return_to == 'customer' and cust %}
- <a href="/admin/customers/{{ cust.id }}?pet_id={{ v.pet_id or 0 }}&tab=visits" class="btn secondary vh-back">← 返回客户档案</a>
+ <a href="/admin/customers/{{ cust.id }}?pet_id={{ v.pet_id or 0 }}&tab=visits" class="btn secondary vh-back"><i data-lucide="arrow-left"></i> 返回客户档案</a>
  {% elif cust %}
- <a href="/admin/customers/{{ cust.id }}" class="btn secondary vh-back">← {{ cust.name }}</a>
+ <a href="/admin/customers/{{ cust.id }}" class="btn secondary vh-back"><i data-lucide="arrow-left"></i> {{ cust.name }}</a>
  {% else %}
- <a href="/admin/visits" class="btn secondary vh-back">← 就诊列表</a>
+ <a href="/admin/visits" class="btn secondary vh-back"><i data-lucide="arrow-left"></i> 就诊列表</a>
  {% endif %}
  <div class="vh-title">就诊 #{{ v.id }}</div>
  <div class="vh-meta">
@@ -277,7 +277,7 @@
  {% if pet %}<span><b>宠物</b> {{ pet.name }} · {{ '猫' if pet.species=='cat' else '狗' if pet.species=='dog' else pet.species }}</span>{% endif %}
  </div>
  <a href="/admin/visits/{{ v.id }}/print" target="_blank" class="btn secondary"
-    style="margin-left:auto;font-size:.82rem;">🖨 打印病历</a>
+    style="margin-left:auto;font-size:.82rem;"><i data-lucide="printer"></i> 打印病历</a>
 </div>
 
 {# 7 步进度轴（横向紧凑） #}
@@ -309,7 +309,7 @@
  <div class="soap-step {% if step7_done %}done{% endif %}" data-step="7" onclick="switchStep(7)">
  <div class="soap-circle">7</div>
  <div class="soap-label">回访</div>
- <span class="step-tick">✓</span>
+ <span class="step-tick"><i data-lucide="check"></i></span>
  </div>
 </div>
 
@@ -327,13 +327,13 @@
 
  {# Step 1 主诉 #}
  <div class="soap-panel active" data-panel="1">
- <h3>📝 主诉 <small>客户描述的问题、症状、行为变化</small></h3>
+ <h3><i data-lucide="pencil-line"></i> 主诉 <small>客户描述的问题、症状、行为变化</small></h3>
  <textarea name="chief_complaint">{{ v.chief_complaint or '' }}</textarea>
  </div>
 
  {# Step 2 体格检查 #}
  <div class="soap-panel" data-panel="2">
- <h3>🩺 体格检查 <small>体温/体重/心率/检查发现</small></h3>
+ <h3><i data-lucide="stethoscope"></i> 体格检查 <small>体温/体重/心率/检查发现</small></h3>
  <textarea name="physical_exam" style="min-height:200px;font-family:monospace;">{{ v.physical_exam or '' }}</textarea>
  </div>
 
@@ -345,13 +345,13 @@
 
  {# Step 6 医嘱 #}
  <div class="soap-panel" data-panel="6">
- <h3>📋 医嘱 <small>用药指导、护理建议、复诊安排</small></h3>
+ <h3><i data-lucide="clipboard-list"></i> 医嘱 <small>用药指导、护理建议、复诊安排</small></h3>
  <textarea name="treatment_plan">{{ v.treatment_plan or '' }}</textarea>
  </div>
 
  {# Step 7 回访 #}
  <div class="soap-panel" data-panel="7">
- <h3>📞 回访 <small>客户回访记录、复诊预约</small></h3>
+ <h3><i data-lucide="phone"></i> 回访 <small>客户回访记录、复诊预约</small></h3>
  <div class="row2">
  <div>
  <label>回访日期</label>
@@ -368,7 +368,7 @@
 
  {# 自动保存状态条 #}
  <div class="save-bar">
- <span class="saved-hint" id="autosave-status" style="font-size:0.9rem;">✓ 自动保存 · 最后更新 {{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
+ <span class="saved-hint" id="autosave-status" style="font-size:0.9rem;"><i data-lucide="check"></i> 自动保存 · 最后更新 {{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
  </div>
 </form>
 
@@ -489,9 +489,9 @@
 
 {# Step 3 检查化验（外置面板，独立于主表单）#}
 <div class="soap-panel" data-panel="3" style="margin-top:0.85rem;">
- <h3>🧪 检查化验 <small>血常规、生化、影像等</small></h3>
+ <h3><i data-lucide="flask-conical"></i> 检查化验 <small>血常规、生化、影像等</small></h3>
  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.65rem;">
- <a href="/admin/exam-orders/create?visit_id={{ v.id }}" class="btn">＋ 开检查单</a>
+ <a href="/admin/exam-orders/create?visit_id={{ v.id }}" class="btn"><i data-lucide="plus"></i> 开检查单</a>
  <span style="color:var(--muted);font-size:0.85rem;">现有 {{ exam_orders|length }} 张</span>
  </div>
  {% if exam_orders %}
@@ -510,7 +510,7 @@
  onsubmit="return confirm('删除此检查单及其所有报告？此操作不可恢复。')">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
  <input type="hidden" name="return_to" value="visit">
- <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0.25rem 0.5rem;">🗑 删除</button>
+ <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0.25rem 0.5rem;"><i data-lucide="trash-2"></i> 删除</button>
  </form>
  </div>
  {% endfor %}
@@ -522,9 +522,9 @@
 
 {# Step 5 处方（外置面板）#}
 <div class="soap-panel" data-panel="5" style="margin-top:0.85rem;">
- <h3>💊 处方 <small>药品清单、剂量、用法</small></h3>
+ <h3><i data-lucide="pill"></i> 处方 <small>药品清单、剂量、用法</small></h3>
  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.65rem;">
- <a href="/admin/prescriptions/create?visit_id={{ v.id }}" class="btn">＋ 开处方</a>
+ <a href="/admin/prescriptions/create?visit_id={{ v.id }}" class="btn"><i data-lucide="plus"></i> 开处方</a>
  <span style="color:var(--muted);font-size:0.85rem;">现有 {{ prescriptions|length }} 张</span>
  </div>
  {% if prescriptions %}
@@ -549,8 +549,8 @@
 {# 病历是法定档案，基础信息和删除仅超级管理员可见可操作 #}
 {% if is_superadmin %}
 <details style="margin-top:0.85rem;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:0.6rem 1rem;">
- <summary style="cursor:pointer;font-size:0.88rem;color:var(--muted);">⚙ 修改基础信息（日期 / 类型 / 医生 / 宠物 / 备注）<span style="margin-left:.4rem;font-size:.72rem;color:#9333ea;">超管</span></summary>
- <p style="margin:.4rem 0 0;font-size:.78rem;color:var(--muted);">⚠ 病历是法定档案，请谨慎修改。常规情况下基础信息不应被改动。</p>
+ <summary style="cursor:pointer;font-size:0.88rem;color:var(--muted);"><i data-lucide="settings"></i> 修改基础信息（日期 / 类型 / 医生 / 宠物 / 备注）<span style="margin-left:.4rem;font-size:.72rem;color:#9333ea;">超管</span></summary>
+ <p style="margin:.4rem 0 0;font-size:.78rem;color:var(--muted);"><i data-lucide="alert-triangle"></i> 病历是法定档案，请谨慎修改。常规情况下基础信息不应被改动。</p>
  <form method="post" action="/admin/visits/{{ v.id }}/edit" style="margin-top:0.75rem;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <input type="hidden" name="return_to" value="{{ return_to }}">
@@ -595,7 +595,7 @@
  <button type="submit">保存基础信息</button>
  <form method="post" action="/admin/visits/{{ v.id }}/delete" onsubmit="return confirm('⚠ 确认彻底删除此病历记录？此操作不可恢复，已开具的处方/收费单也会断链。')" style="margin-left:auto;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <button type="submit" class="danger">🗑 删除就诊</button>
+ <button type="submit" class="danger"><i data-lucide="trash-2"></i> 删除就诊</button>
  </form>
  </div>
  </form>

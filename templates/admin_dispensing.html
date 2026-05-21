@@ -19,12 +19,12 @@
 {% endblock %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
-{% if request.query_params.get('err') %}<div class="msg err">⚠️ {{ request.query_params.get('err') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('err') %}<div class="msg err"><i data-lucide="alert-triangle"></i> {{ request.query_params.get('err') }}</div>{% endif %}
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">💊</span>发药台</h1>
+ <h1><span class="ph-icon"><i data-lucide="pill"></i></span>发药台</h1>
  <p class="ph-sub">处方单确认发药 · 库存自动扣减 · 支持批量操作</p>
  </div>
 </div>
@@ -32,21 +32,21 @@
 {# 统计卡 #}
 <div class="stat-grid">
  <div class="stat-card s-warn">
- <div style="font-size:1.8rem;">⏳</div>
+ <div style="font-size:1.8rem;"><i data-lucide="hourglass"></i></div>
  <div>
  <div class="stat-num">{{ pending_count }}</div>
  <div class="stat-label">待发药</div>
  </div>
  </div>
  <div class="stat-card s-ok">
- <div style="font-size:1.8rem;">✅</div>
+ <div style="font-size:1.8rem;"><i data-lucide="check-circle-2"></i></div>
  <div>
  <div class="stat-num">{{ today_dispensed }}</div>
  <div class="stat-label">今日已发</div>
  </div>
  </div>
  <div class="stat-card s-info">
- <div style="font-size:1.8rem;">📊</div>
+ <div style="font-size:1.8rem;"><i data-lucide="bar-chart-3"></i></div>
  <div>
  <div class="stat-num">{{ month_total }}</div>
  <div class="stat-label">本月处方总量</div>
@@ -85,7 +85,7 @@
  <span style="color:var(--muted);font-size:0.82rem;margin-left:0.4rem;">自定义：</span>
  <input type="hidden" name="quick" value=""/>
  <input name="date_from" type="date" value="{{ date_from }}" style="font-size:0.82rem;padding:0.3rem 0.5rem;width:150px;"/>
- <span style="color:var(--muted);font-size:0.82rem;">→</span>
+ <span style="color:var(--muted);font-size:0.82rem;"><i data-lucide="arrow-right"></i></span>
  <input name="date_to" type="date" value="{{ date_to }}" style="font-size:0.82rem;padding:0.3rem 0.5rem;width:150px;"/>
  </div>
  </form>
@@ -103,7 +103,7 @@
  全选本页
  </label>
  <button type="submit" class="btn" style="font-size:0.85rem;padding:0.35rem 0.85rem;"
- onclick="return confirm('确认批量发药？')">✓ 批量确认发药</button>
+ onclick="return confirm('确认批量发药？')"><i data-lucide="check"></i> 批量确认发药</button>
  <span id="selected-count" style="font-size:0.82rem;color:var(--muted);margin-left:auto;">已选 0 张</span>
  </div>
  {% endif %}
@@ -141,7 +141,7 @@
  <td>
  <div style="font-weight:600;">{{ cust.name if cust else '—' }}</div>
  <div style="font-size:0.78rem;color:var(--muted);">
- {% if pet %}{{ '🐱' if pet.species == 'cat' else '🐶' if pet.species == 'dog' else '🐾' }} {{ pet.name }}{% else %}—{% endif %}
+ {% if pet %}{{ '<i data-lucide="cat"></i>' if pet.species == 'cat' else '<i data-lucide="dog"></i>' if pet.species == 'dog' else '<i data-lucide="paw-print"></i>' }} {{ pet.name }}{% else %}—{% endif %}
  </div>
  </td>
  <td data-label="药品" style="max-width:260px;">
@@ -160,7 +160,7 @@
  {% if p.status == 'issued' %}
  <span class="pill pill-warn">待发药</span>
  {% elif p.status == 'dispensed' %}
- <span class="pill pill-ok">✓ 已发药</span>
+ <span class="pill pill-ok"><i data-lucide="check"></i> 已发药</span>
  {% else %}
  <span class="pill pill-gray">草稿</span>
  {% endif %}
@@ -170,7 +170,7 @@
  {% if p.status == 'issued' %}
  <form method="post" action="/admin/dispensing/{{ p.id }}/dispense" style="margin:0;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <button type="submit" class="btn" style="font-size:0.78rem;padding:0.3rem 0.7rem;">✓ 确认发药</button>
+ <button type="submit" class="btn" style="font-size:0.78rem;padding:0.3rem 0.7rem;"><i data-lucide="check"></i> 确认发药</button>
  </form>
  {% endif %}
  {% if p.status == 'dispensed' and request.session.get('admin_role') == 'superadmin' %}
@@ -191,7 +191,7 @@
 
  {% else %}
  <div class="empty-card">
- <div class="empty-icon">{% if status == 'issued' %}🎉{% else %}💊{% endif %}</div>
+ <div class="empty-icon">{% if status == 'issued' %}<i data-lucide="party-popper"></i>{% else %}<i data-lucide="pill"></i>{% endif %}</div>
  {% if status == 'issued' %}当前无待发药处方单{% else %}暂无符合条件的处方单{% endif %}
  </div>
  {% endif %}

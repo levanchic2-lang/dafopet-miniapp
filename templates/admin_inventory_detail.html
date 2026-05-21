@@ -4,22 +4,22 @@
 {% set sub_label = categories[item.category].subs[item.subcategory] if item.category in categories and item.subcategory in categories[item.category].subs else item.subcategory %}
 {% set is_low = (not item.is_service) and item.low_stock_min> 0 and item.stock_qty <= item.low_stock_min %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="page-head">
  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
- <a href="/admin/inventory" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 库存列表</a>
+ <a href="/admin/inventory" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 库存列表</a>
  <div>
- <h1><span class="ph-icon">📦</span>{{ item.name }}
- {% if item.is_controlled %}<span class="pill pill-warn" style="margin-left:0.5rem;">💊 管控</span>{% endif %}
- {% if item.is_service %}<span class="pill pill-info" style="margin-left:0.5rem;">📋 服务</span>{% endif %}
- {% if is_low %}<span class="pill pill-warn" style="margin-left:0.5rem;">⚠ 低库存</span>{% endif %}
+ <h1><span class="ph-icon"><i data-lucide="package"></i></span>{{ item.name }}
+ {% if item.is_controlled %}<span class="pill pill-warn" style="margin-left:0.5rem;"><i data-lucide="pill"></i> 管控</span>{% endif %}
+ {% if item.is_service %}<span class="pill pill-info" style="margin-left:0.5rem;"><i data-lucide="clipboard-list"></i> 服务</span>{% endif %}
+ {% if is_low %}<span class="pill pill-warn" style="margin-left:0.5rem;"><i data-lucide="alert-triangle"></i> 低库存</span>{% endif %}
  </h1>
  <p class="ph-sub">{{ cat_label }}{% if sub_label %} · {{ sub_label }}{% endif %}</p>
  </div>
  </div>
  <div class="ph-actions">
- <a href="/admin/inventory/{{ item.id }}/edit" class="btn secondary" style="font-size:0.85rem;">✏ 编辑</a>
+ <a href="/admin/inventory/{{ item.id }}/edit" class="btn secondary" style="font-size:0.85rem;"><i data-lucide="pencil"></i> 编辑</a>
  </div>
 </div>
 
@@ -44,7 +44,7 @@
  <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.2rem;">当前库存</div>
  <div style="font-size:1.3rem;font-weight:700;color:{% if is_low %}#d97706{% else %}var(--text){% endif %};">
  {{ '%.1f'|format(item.stock_qty) }} {{ item.unit }}
- {% if is_low %} ⚠{% endif %}
+ {% if is_low %} <i data-lucide="alert-triangle"></i>{% endif %}
  </div>
  {% if item.low_stock_min> 0 %}
  <div style="font-size:0.78rem;color:var(--muted);">预警线：{{ item.low_stock_min }}</div>
@@ -71,7 +71,7 @@
  {% if not item.is_service and batches %}
  <div class="card" style="padding:0;overflow:hidden;margin-bottom:1rem;">
  <div style="padding:0.85rem 1rem;border-bottom:1px solid var(--border);font-weight:600;font-size:0.95rem;">
- 📅 库存批次（{{ batches|length }}）
+ <i data-lucide="calendar"></i> 库存批次（{{ batches|length }}）
  </div>
  <table class="data-table mobile-card" style="width:100%;border-collapse:collapse;font-size:0.85rem;">
  <thead>
@@ -93,7 +93,7 @@
  <td data-label="剩余量" style="padding:0.5rem 0.75rem;text-align:right;font-weight:600;">{{ '%.1f'|format(b.quantity) }} {{ item.unit }}</td>
  <td data-label="有效期至" style="padding:0.5rem 0.75rem;{% if is_expired %}color:#dc2626;font-weight:600;{% elif is_expiring %}color:#d97706;font-weight:600;{% endif %}">
  {{ b.expiry_date or '—' }}
- {% if is_expired %} ❌{% elif is_expiring %} ⚠{% endif %}
+ {% if is_expired %} ❌{% elif is_expiring %} <i data-lucide="alert-triangle"></i>{% endif %}
  </td>
  <td data-label="入库日" style="padding:0.5rem 0.75rem;color:var(--muted);">{{ b.received_date or '—' }}</td>
  <td data-label="状态" style="padding:0.5rem 0.75rem;">
@@ -153,8 +153,8 @@
  <tr style="border-bottom:1px solid var(--border);">
  <td style="padding:0.5rem 1rem;color:var(--muted);font-size:0.8rem;">{{ tx.created_at.strftime('%m-%d %H:%M') }}</td>
  <td data-label="类型" style="padding:0.5rem 0.75rem;">
- {% if tx.tx_type == 'in' %}<span style="color:#15803d;font-weight:600;">↑ 入库</span>
- {% elif tx.tx_type == 'out' %}<span style="color:#dc2626;font-weight:600;">↓ 出库</span>
+ {% if tx.tx_type == 'in' %}<span style="color:#15803d;font-weight:600;"><i data-lucide="arrow-up"></i> 入库</span>
+ {% elif tx.tx_type == 'out' %}<span style="color:#dc2626;font-weight:600;"><i data-lucide="arrow-down"></i> 出库</span>
  {% elif tx.tx_type == 'adjust' %}<span style="color:#0369a1;font-weight:600;">≈ 盘点</span>
  {% else %}<span>{{ tx.tx_type }}</span>{% endif %}
  </td>
@@ -187,7 +187,7 @@
  {% if not item.is_service %}
  <!-- 入库 -->
  <div class="card">
- <h3 style="margin:0 0 1rem;font-size:0.95rem;">↑ 手动入库</h3>
+ <h3 style="margin:0 0 1rem;font-size:0.95rem;"><i data-lucide="arrow-up"></i> 手动入库</h3>
  <form method="post" action="/admin/inventory/{{ item.id }}/stock-in">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div style="margin-bottom:0.75rem;">
@@ -235,7 +235,7 @@
  <!-- 下架 -->
  <div class="card">
  <h3 style="margin:0 0 0.75rem;font-size:0.95rem;color:var(--muted);">其他操作</h3>
- <a href="/admin/inventory/{{ item.id }}/edit" class="btn secondary" style="width:100%;display:block;text-align:center;margin-bottom:0.5rem;">✏ 编辑品目信息</a>
+ <a href="/admin/inventory/{{ item.id }}/edit" class="btn secondary" style="width:100%;display:block;text-align:center;margin-bottom:0.5rem;"><i data-lucide="pencil"></i> 编辑品目信息</a>
  <form method="post" action="/admin/inventory/{{ item.id }}/deactivate" onsubmit="return confirm('确认下架「{{ item.name }}」？下架后不再显示于品目列表。')">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <button type="submit" class="btn secondary" style="width:100%;color:#dc2626;">下架品目</button>

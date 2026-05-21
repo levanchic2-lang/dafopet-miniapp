@@ -225,7 +225,7 @@ body[data-size="T80"] .mr-sig { display: none; }
   {% endif %}
   {% if eo.reports %}
   <div style="margin-top:4px;color:#888;font-size:8.5pt;">
-    📎 附件 {{ eo.reports|length }} 份{% if eo.reports|length <= 3 %}（{% for r in eo.reports %}{{ r.original_name }}{% if not loop.last %}、{% endif %}{% endfor %}）{% endif %}
+    <i data-lucide="paperclip"></i> 附件 {{ eo.reports|length }} 份{% if eo.reports|length <= 3 %}（{% for r in eo.reports %}{{ r.original_name }}{% if not loop.last %}、{% endif %}{% endfor %}）{% endif %}
   </div>
   {% endif %}
 </div>

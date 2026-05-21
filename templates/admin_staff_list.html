@@ -3,7 +3,7 @@
 
 {% if expiring %}
 <div style="background:#fff7e6;border:1px solid #f0c040;border-radius:10px;padding:0.85rem 1.1rem;margin-bottom:1rem;font-size:0.9rem;">
-  ⚠️ <strong>合同即将到期提醒（30天内）：</strong>
+  <i data-lucide="alert-triangle"></i> <strong>合同即将到期提醒（30天内）：</strong>
   {% for c in expiring %}
     <span style="margin-left:0.6rem;">
       <a href="/admin/staff/{{ c.staff_id }}">{{ c.staff.name }}</a>
@@ -23,7 +23,7 @@
       <p class="sub" style="margin:0.25rem 0 0;">在职 {{ active_staff|length }} 人 · 离职 {{ resigned_staff|length }} 人</p>
     </div>
     {% if request.session.get('admin_role') == 'superadmin' or not request.session.get('admin_role') %}
-    <a href="/admin/staff/create" class="btn" style="font-size:0.9rem;">＋ 新增员工</a>
+    <a href="/admin/staff/create" class="btn" style="font-size:0.9rem;"><i data-lucide="plus"></i> 新增员工</a>
     {% endif %}
   </div>
 

@@ -132,7 +132,7 @@
 {% endblock %}
 
 {% block body %}
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="hub-wrap">
 
@@ -141,7 +141,7 @@
  <div class="cust-main">
  <div class="cust-top-row">
  <span class="cust-name">{{ cust.name or '未命名' }}</span>
- {% if cust.phone %}<span style="font-size:0.95rem;color:#6b7280;">📞 {{ cust.phone }}</span>{% endif %}
+ {% if cust.phone %}<span style="font-size:0.95rem;color:#6b7280;"><i data-lucide="phone"></i> {{ cust.phone }}</span>{% endif %}
  </div>
  <div class="cust-info-grid">
  {% if cust.address %}<div><b>地址</b>{{ cust.address }}</div>{% endif %}
@@ -158,14 +158,14 @@
  </div>
  <div class="cust-actions">
  <button type="button" class="btn secondary" onclick="document.getElementById('edit-cust-modal').classList.add('visible')">主人资料</button>
- <button type="button" class="btn" onclick="document.getElementById('add-pet-modal').classList.add('visible')">＋ 添加宠物</button>
+ <button type="button" class="btn" onclick="document.getElementById('add-pet-modal').classList.add('visible')"><i data-lucide="plus"></i> 添加宠物</button>
  </div>
  </div>
 
  {# ── 宠物表格 ── #}
  <div class="pets-section">
  <div class="pets-section-head">
- <h3>📋 宠物档案（{{ pets|length }} 只）</h3>
+ <h3><i data-lucide="clipboard-list"></i> 宠物档案（{{ pets|length }} 只）</h3>
  <span style="font-size:0.78rem;color:var(--muted);">点击下方一行查看该宠物所有记录</span>
  </div>
  {% if pets %}
@@ -215,7 +215,7 @@
  </tbody>
  </table>
  {% else %}
- <div class="pets-empty">该客户尚未添加宠物。点击右上角「＋ 添加宠物」开始登记。</div>
+ <div class="pets-empty">该客户尚未添加宠物。点击右上角「<i data-lucide="plus"></i> 添加宠物」开始登记。</div>
  {% endif %}
  </div>
 
@@ -243,7 +243,7 @@
  {# ── 诊疗 ── #}
  <div class="tab-content {% if active_tab=='visits' %}active{% endif %}" data-tab-content="visits">
  <div class="tab-action-bar">
- <a class="btn" href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建就诊</a>
+ <a class="btn" href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="plus"></i> 新建就诊</a>
  <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ visits|length }} 条</span>
  </div>
  {% if visits %}
@@ -258,13 +258,13 @@
  <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ v.diagnosis or '—' }}</td>
  <td>{{ v.vet_name or '—' }}</td>
  <td>{% if v.follow_up_at %}<span class="pill pill-warn">{{ v.follow_up_at }}</span>{% else %}—{% endif %}</td>
- <td><a href="/admin/visits/{{ v.id }}?return_to=customer">查看 →</a></td>
+ <td><a href="/admin/visits/{{ v.id }}?return_to=customer">查看 <i data-lucide="arrow-right"></i></a></td>
  </tr>
  {% endfor %}
  </tbody>
  </table>
  {% else %}
- <div class="tab-empty">暂无诊疗记录。<a href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">新建就诊 →</a></div>
+ <div class="tab-empty">暂无诊疗记录。<a href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">新建就诊 <i data-lucide="arrow-right"></i></a></div>
  {% endif %}
  </div>
 
@@ -281,7 +281,7 @@
  <td>{{ p.items|length }}</td>
  <td>¥ {{ '%.2f'|format(p.total_amount or 0) }}</td>
  <td><span class="pill {% if p.status == 'dispensed' %}pill-ok{% elif p.status == 'issued' %}pill-info{% else %}pill-warn{% endif %}">{{ p.status }}</span></td>
- <td><a href="/admin/prescriptions/{{ p.id }}">查看 →</a></td>
+ <td><a href="/admin/prescriptions/{{ p.id }}">查看 <i data-lucide="arrow-right"></i></a></td>
  </tr>
  {% endfor %}
  </tbody>
@@ -305,7 +305,7 @@
  {% else %}<span class="pill pill-warn">待出报告</span>{% endif %}
  </td>
  <td>{{ e.reports|length }}</td>
- <td><a href="/admin/exam-orders/{{ e.id }}">查看 →</a></td>
+ <td><a href="/admin/exam-orders/{{ e.id }}">查看 <i data-lucide="arrow-right"></i></a></td>
  </tr>
  {% endfor %}
  </tbody>
@@ -318,7 +318,7 @@
  {# ── 预约 ── #}
  <div class="tab-content {% if active_tab=='appointments' %}active{% endif %}" data-tab-content="appointments">
  <div class="tab-action-bar">
- <a class="btn" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增预约</a>
+ <a class="btn" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="plus"></i> 新增预约</a>
  </div>
  {% if appointments %}
  <table class="data-table mobile-card">
@@ -351,11 +351,11 @@
  {# ── 疫苗驱虫 ── #}
  <div class="tab-content {% if active_tab=='vaccines' %}active{% endif %}" data-tab-content="vaccines">
  <div class="tab-action-bar">
- <a class="btn secondary" href="/admin/vaccinations/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增疫苗</a>
- <button type="button" class="btn secondary" onclick="document.getElementById('add-deworm-modal').classList.add('visible')">＋ 新增驱虫</button>
+ <a class="btn secondary" href="/admin/vaccinations/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="plus"></i> 新增疫苗</a>
+ <button type="button" class="btn secondary" onclick="document.getElementById('add-deworm-modal').classList.add('visible')"><i data-lucide="plus"></i> 新增驱虫</button>
  </div>
 
- <h4 style="margin:0.5rem 0 0.6rem;font-size:0.85rem;color:var(--muted);">💉 疫苗记录</h4>
+ <h4 style="margin:0.5rem 0 0.6rem;font-size:0.85rem;color:var(--muted);"><i data-lucide="syringe"></i> 疫苗记录</h4>
  {% if vaccinations %}
  <table class="data-table mobile-card">
  <thead><tr><th>接种日期</th><th>疫苗类型</th><th>第几针</th><th>厂家</th><th>下次到期</th></tr></thead>
@@ -375,7 +375,7 @@
  <p style="color:var(--muted);font-size:0.85rem;">暂无疫苗记录</p>
  {% endif %}
 
- <h4 style="margin:1rem 0 0.6rem;font-size:0.85rem;color:var(--muted);">🪱 驱虫记录</h4>
+ <h4 style="margin:1rem 0 0.6rem;font-size:0.85rem;color:var(--muted);"><i data-lucide="bug"></i> 驱虫记录</h4>
  {% if dewormings %}
  <table class="data-table mobile-card">
  <thead><tr><th>驱虫日期</th><th>类型</th><th>药品</th><th>体重</th><th>下次到期</th><th></th></tr></thead>
@@ -408,7 +408,7 @@
  {# ── 销售 ── #}
  <div class="tab-content {% if active_tab=='sales' %}active{% endif %}" data-tab-content="sales">
  <div class="tab-action-bar">
- <a class="btn" href="/admin/sales-orders/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建销售单</a>
+ <a class="btn" href="/admin/sales-orders/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="plus"></i> 新建销售单</a>
  <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ pet_sales_orders|length }} 张</span>
  </div>
  {% if pet_sales_orders %}
@@ -422,11 +422,11 @@
  <td style="text-align:right;font-weight:700;">¥ {{ '%.2f'|format(so.total_amount) }}</td>
  <td style="color:var(--muted);">{{ so.payment_method or '—' }}</td>
  <td>
- {% if so.status == 'paid' %}<span class="pill pill-ok">✓ 已收款</span>
+ {% if so.status == 'paid' %}<span class="pill pill-ok"><i data-lucide="check"></i> 已收款</span>
  {% elif so.status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
  {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
  </td>
- <td><a href="/admin/sales-orders/{{ so.id }}">查看 →</a></td>
+ <td><a href="/admin/sales-orders/{{ so.id }}">查看 <i data-lucide="arrow-right"></i></a></td>
  </tr>
  {% endfor %}
  </tbody>
@@ -439,7 +439,7 @@
  <div class="tab-content {% if active_tab=='invoices' %}active{% endif %}" data-tab-content="invoices">
  <div class="tab-action-bar">
    <span style="color:var(--muted);font-size:.82rem;">
-     💡 收费单由处方/检查/销售单自动生成。这里仅展示和打印。
+     <i data-lucide="lightbulb"></i> 收费单由处方/检查/销售单自动生成。这里仅展示和打印。
    </span>
    <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ pet_invoices|length }} 张</span>
  </div>
@@ -452,7 +452,7 @@
  <td style="font-family:monospace;">{{ inv.invoice_no }}</td>
  <td style="font-weight:600;">¥ {{ '%.2f'|format(inv.total_amount or 0) }}</td>
  <td>
- {% if inv.payment_status == 'paid' %}<span class="pill pill-ok">✓ 已支付</span>
+ {% if inv.payment_status == 'paid' %}<span class="pill pill-ok"><i data-lucide="check"></i> 已支付</span>
  {% elif inv.payment_status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
  {% elif inv.payment_status == 'refunded' %}<span class="pill pill-gray">↩ 已退单</span>
  {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
@@ -461,7 +461,7 @@
  <td style="color:var(--muted);font-size:.82rem;">{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
  <td style="text-align:right;white-space:nowrap;">
    <a href="/admin/invoices/{{ inv.id }}" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">查看</a>
-   <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">🖨 打印</a>
+   <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;"><i data-lucide="printer"></i> 打印</a>
    {% if inv.payment_status == 'paid' and request.session.get('admin_role') == 'superadmin' %}
    <form method="post" action="/admin/invoices/{{ inv.id }}/refund" style="display:inline;"
          onsubmit="return confirm('确认对这张收费单整单退款？所有 Payment 流水会逐一撤销（钱包退回、套餐次数恢复、券回 issued、押金还原）。')">
@@ -482,7 +482,7 @@
  {# ── 体重曲线 ── #}
  <div class="tab-content {% if active_tab=='weight' %}active{% endif %}" data-tab-content="weight">
  <div class="tab-action-bar">
- <button type="button" class="btn secondary" onclick="document.getElementById('add-weight-modal').classList.add('visible')">＋ 录入体重</button>
+ <button type="button" class="btn secondary" onclick="document.getElementById('add-weight-modal').classList.add('visible')"><i data-lucide="plus"></i> 录入体重</button>
  <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">共 {{ weight_records|length }} 条</span>
  </div>
  {% if weight_records %}
@@ -508,21 +508,21 @@
  </tbody>
  </table>
  {% else %}
- <div class="tab-empty">暂无体重记录。点击「＋ 录入体重」开始追踪宠物体重变化。</div>
+ <div class="tab-empty">暂无体重记录。点击「<i data-lucide="plus"></i> 录入体重」开始追踪宠物体重变化。</div>
  {% endif %}
  </div>
 
  {# ── 医疗文书 ── #}
  <div class="tab-content {% if active_tab=='docs' %}active{% endif %}" data-tab-content="docs">
  <div class="tab-action-bar">
- <button type="button" class="btn" onclick="document.getElementById('init-consent-modal').classList.add('visible')">📝 发起协议签署</button>
- <button type="button" class="btn secondary" onclick="document.getElementById('upload-doc-modal').classList.add('visible')">📎 上传文书</button>
+ <button type="button" class="btn" onclick="document.getElementById('init-consent-modal').classList.add('visible')"><i data-lucide="pencil-line"></i> 发起协议签署</button>
+ <button type="button" class="btn secondary" onclick="document.getElementById('upload-doc-modal').classList.add('visible')"><i data-lucide="paperclip"></i> 上传文书</button>
  <span style="margin-left:auto;color:var(--muted);font-size:0.82rem;">同意书、协议、报告 · 含小程序签署归档</span>
  </div>
 
  {# 待签 / 已取消 / 已过期 任务列表 #}
  {% if consent_tasks %}
- <div style="font-size:.82rem;color:var(--muted);margin:.5rem 0 .3rem;">📝 协议签署</div>
+ <div style="font-size:.82rem;color:var(--muted);margin:.5rem 0 .3rem;"><i data-lucide="pencil-line"></i> 协议签署</div>
  <table class="data-table mobile-card" style="margin-bottom:.8rem;">
    <thead><tr><th>协议</th><th>状态</th><th>发起人</th><th>发起时间</th><th>有效期</th><th style="text-align:right;">操作</th></tr></thead>
    <tbody>
@@ -533,9 +533,9 @@
        {% if ct.status == 'signed' and ct.signed_at %}<div style="font-size:.72rem;color:var(--muted);">签于 {{ ct.signed_at.strftime('%Y-%m-%d %H:%M') }}</div>{% endif %}
      </td>
      <td>
-     {% if ct.status == 'pending' %}<span class="pill pill-warn">⏳ 待签</span>
-     {% elif ct.status == 'signed' %}<span class="pill pill-ok">✓ 已签</span>
-     {% elif ct.status == 'cancelled' %}<span class="pill pill-gray">✕ 已取消</span>
+     {% if ct.status == 'pending' %}<span class="pill pill-warn"><i data-lucide="hourglass"></i> 待签</span>
+     {% elif ct.status == 'signed' %}<span class="pill pill-ok"><i data-lucide="check"></i> 已签</span>
+     {% elif ct.status == 'cancelled' %}<span class="pill pill-gray"><i data-lucide="x"></i> 已取消</span>
      {% elif ct.status == 'expired' %}<span class="pill pill-gray">⌛ 已过期</span>
      {% endif %}
      </td>
@@ -545,13 +545,13 @@
      <td style="text-align:right;white-space:nowrap;">
        <a href="/admin/consent-tasks/{{ ct.id }}" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">查看</a>
        {% if ct.status == 'signed' %}
-       <a href="/admin/consent-tasks/{{ ct.id }}/printable" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;color:#10b981;">🖨 打印 PDF</a>
+       <a href="/admin/consent-tasks/{{ ct.id }}/printable" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;color:#10b981;"><i data-lucide="printer"></i> 打印 PDF</a>
        {% endif %}
        {% if ct.status in ('pending', 'cancelled') and request.session.get('admin_role') == 'superadmin' %}
        <form method="post" action="/admin/consent-tasks/{{ ct.id }}/delete" style="display:inline;margin:0;"
              onsubmit="return confirm('删除此任务？记录不可恢复。')">
          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-         <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.78rem;padding:.2rem .4rem;">🗑</button>
+         <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.78rem;padding:.2rem .4rem;"><i data-lucide="trash-2"></i></button>
        </form>
        {% endif %}
      </td>
@@ -559,7 +559,7 @@
    {% endfor %}
    </tbody>
  </table>
- {% if medical_docs %}<div style="font-size:.82rem;color:var(--muted);margin:.8rem 0 .3rem;">📎 其他文书</div>{% endif %}
+ {% if medical_docs %}<div style="font-size:.82rem;color:var(--muted);margin:.8rem 0 .3rem;"><i data-lucide="paperclip"></i> 其他文书</div>{% endif %}
  {% endif %}
  {% if medical_docs %}
  <table class="data-table mobile-card">
@@ -609,7 +609,7 @@
    </div>
 
    <div class="tab-action-bar">
-     <button type="button" class="btn" onclick="document.getElementById('wallet-recharge-modal').classList.add('visible')">＋ 充值</button>
+     <button type="button" class="btn" onclick="document.getElementById('wallet-recharge-modal').classList.add('visible')"><i data-lucide="plus"></i> 充值</button>
      {% if request.session.get('admin_role') == 'superadmin' %}
      <button type="button" class="btn secondary" onclick="document.getElementById('wallet-refund-modal').classList.add('visible')">↩ 退款</button>
      <button type="button" class="btn secondary" onclick="document.getElementById('wallet-adjust-modal').classList.add('visible')">⚖ 调账</button>
@@ -653,8 +653,8 @@
  {# ── 套餐 ── #}
  <div class="tab-content {% if active_tab=='packages' %}active{% endif %}" data-tab-content="packages">
    <div class="tab-action-bar">
-     <button type="button" class="btn" onclick="document.getElementById('sell-pkg-modal').classList.add('visible')">＋ 售卖套餐</button>
-     <a href="/admin/packages" class="btn secondary">套餐目录管理 →</a>
+     <button type="button" class="btn" onclick="document.getElementById('sell-pkg-modal').classList.add('visible')"><i data-lucide="plus"></i> 售卖套餐</button>
+     <a href="/admin/packages" class="btn secondary">套餐目录管理 <i data-lucide="arrow-right"></i></a>
      <span style="margin-left:auto;color:var(--muted);font-size:.82rem;">共 {{ customer_packages|length }} 张（{{ active_packages_count }} 张有效）</span>
    </div>
 
@@ -706,7 +706,7 @@
  {# ── 押金 ── #}
  <div class="tab-content {% if active_tab=='deposits' %}active{% endif %}" data-tab-content="deposits">
    <div class="tab-action-bar">
-     <button type="button" class="btn" onclick="document.getElementById('add-deposit-modal').classList.add('visible')">＋ 收押金</button>
+     <button type="button" class="btn" onclick="document.getElementById('add-deposit-modal').classList.add('visible')"><i data-lucide="plus"></i> 收押金</button>
      <span style="margin-left:auto;color:var(--muted);font-size:.82rem;">共 {{ deposits|length }} 笔，{{ held_deposits_count }} 笔待结</span>
    </div>
 
@@ -766,7 +766,7 @@
  {# ── 优惠券 ── #}
  <div class="tab-content {% if active_tab=='coupons' %}active{% endif %}" data-tab-content="coupons">
    <div class="tab-action-bar">
-     <a href="/admin/coupons" class="btn secondary">去发放管理 →</a>
+     <a href="/admin/coupons" class="btn secondary">去发放管理 <i data-lucide="arrow-right"></i></a>
      <span style="margin-left:auto;color:var(--muted);font-size:.82rem;">共 {{ coupons|length }} 张（{{ active_coupons_count }} 张可用）</span>
    </div>
    {% if coupons %}
@@ -1110,7 +1110,7 @@
 <div class="cd-modal-overlay" id="wallet-refund-modal">
  <div class="cd-modal">
  <h3>钱包退款 — {{ cust.name or '客户' }}</h3>
- <p style="color:#dc2626;font-size:.85rem;">⚠ 当前余额 ¥{{ '%.2f'|format(wallet_balance) }}。退款会扣减余额，操作不可撤销，请确认后再提交。</p>
+ <p style="color:#dc2626;font-size:.85rem;"><i data-lucide="alert-triangle"></i> 当前余额 ¥{{ '%.2f'|format(wallet_balance) }}。退款会扣减余额，操作不可撤销，请确认后再提交。</p>
  <form method="post" action="/admin/wallets/{{ cust.id }}/refund">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
  <label>退款金额（¥）</label>
@@ -1181,12 +1181,12 @@
    <input name="notes">
 
    <div style="display:flex;gap:.6rem;margin-top:1rem;">
-     <button type="submit" class="btn" style="flex:1;">✓ 发起</button>
+     <button type="submit" class="btn" style="flex:1;"><i data-lucide="check"></i> 发起</button>
      <button type="button" class="btn secondary" style="flex:1;" onclick="document.getElementById('init-consent-modal').classList.remove('visible')">取消</button>
    </div>
  </form>
  {% else %}
- <p style="color:var(--muted);">还没创建任何协议模板。<a href="/admin/consent-templates/create" style="color:#3b82f6;">去新建模板 →</a></p>
+ <p style="color:var(--muted);">还没创建任何协议模板。<a href="/admin/consent-templates/create" style="color:#3b82f6;">去新建模板 <i data-lucide="arrow-right"></i></a></p>
  <button type="button" class="btn secondary" onclick="document.getElementById('init-consent-modal').classList.remove('visible')">关闭</button>
  {% endif %}
  </div>
@@ -1278,7 +1278,7 @@
  }
  </script>
  {% else %}
- <p style="color:var(--muted);">还没创建任何套餐。<a href="/admin/packages">去套餐目录创建 →</a></p>
+ <p style="color:var(--muted);">还没创建任何套餐。<a href="/admin/packages">去套餐目录创建 <i data-lucide="arrow-right"></i></a></p>
  <button type="button" class="btn secondary" onclick="document.getElementById('sell-pkg-modal').classList.remove('visible')">关闭</button>
  {% endif %}
  </div>

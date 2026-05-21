@@ -156,9 +156,9 @@
   {% if total_pages > 1 %}
   <div class="pagination">
     {% if page > 1 %}
-    <a href="/showcase?page={{ page - 1 }}">← 上一页</a>
+    <a href="/showcase?page={{ page - 1 }}"><i data-lucide="arrow-left"></i> 上一页</a>
     {% else %}
-    <span class="disabled">← 上一页</span>
+    <span class="disabled"><i data-lucide="arrow-left"></i> 上一页</span>
     {% endif %}
 
     {% for p in range(1, total_pages + 1) %}
@@ -172,9 +172,9 @@
     {% endfor %}
 
     {% if page < total_pages %}
-    <a href="/showcase?page={{ page + 1 }}">下一页 →</a>
+    <a href="/showcase?page={{ page + 1 }}">下一页 <i data-lucide="arrow-right"></i></a>
     {% else %}
-    <span class="disabled">下一页 →</span>
+    <span class="disabled">下一页 <i data-lucide="arrow-right"></i></span>
     {% endif %}
   </div>
   <p style="text-align:center;font-size:0.8rem;color:var(--muted);margin-top:0.5rem;">

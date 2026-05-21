@@ -27,7 +27,7 @@
 
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 {# 始终输出 csrf token，方便页面里所有表单 / 客户端 fetch 使用 #}
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -37,7 +37,7 @@
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">📝</span>{{ task.title }}</h1>
+ <h1><span class="ph-icon"><i data-lucide="pencil-line"></i></span>{{ task.title }}</h1>
  <p class="ph-sub">
    #CT{{ '%06d'|format(task.id) }}
    · 客户 {% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name }}</a>{% else %}—{% endif %}
@@ -57,10 +57,10 @@
    <form method="post" action="/admin/consent-tasks/{{ task.id }}/delete" style="margin:0;"
          onsubmit="return confirm('彻底删除这条任务？记录不可恢复。\n（如果只是想停用，请用'取消任务'。已签的任务不能删。）')">
      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-     <button type="submit" class="btn" style="font-size:.85rem;background:#fee2e2;color:#dc2626;border-color:#fca5a5;">🗑 删除</button>
+     <button type="submit" class="btn" style="font-size:.85rem;background:#fee2e2;color:#dc2626;border-color:#fca5a5;"><i data-lucide="trash-2"></i> 删除</button>
    </form>
    {% endif %}
-   <a href="/admin/customers/{{ task.customer_id }}?tab=docs" class="btn secondary" style="font-size:.85rem;">← 返回</a>
+   <a href="/admin/customers/{{ task.customer_id }}?tab=docs" class="btn secondary" style="font-size:.85rem;"><i data-lucide="arrow-left"></i> 返回</a>
  </div>
 </div>
 
@@ -88,9 +88,9 @@
    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.2rem;">
      <div style="font-size:.78rem;color:#6b7280;letter-spacing:1px;margin-bottom:.3rem;">STATUS</div>
      <div style="font-size:1.4rem;font-weight:700;">
-       {% if task.status == 'pending' %}⏳ 待签署
-       {% elif task.status == 'signed' %}<span style="color:#10b981;">✓ 已签署</span>
-       {% elif task.status == 'cancelled' %}<span style="color:#9ca3af;">✕ 已取消</span>
+       {% if task.status == 'pending' %}<i data-lucide="hourglass"></i> 待签署
+       {% elif task.status == 'signed' %}<span style="color:#10b981;"><i data-lucide="check"></i> 已签署</span>
+       {% elif task.status == 'cancelled' %}<span style="color:#9ca3af;"><i data-lucide="x"></i> 已取消</span>
        {% elif task.status == 'expired' %}<span style="color:#dc2626;">⌛ 已过期</span>
        {% endif %}
      </div>
@@ -102,14 +102,14 @@
    {# 签署链接 + 重发小程序通知 #}
    {% if task.status == 'pending' %}
    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.2rem;">
-     <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem;">📋 签署链接</div>
+     <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem;"><i data-lucide="clipboard-list"></i> 签署链接</div>
      <div class="copy-bar">
        <input type="text" id="sign-url" value="{{ sign_url }}" readonly/>
        <button type="button" class="btn" style="font-size:.78rem;padding:.35rem .7rem;"
                onclick="copyUrl()">复制</button>
      </div>
      <p style="font-size:.78rem;color:#6b7280;margin:.6rem 0 0;">
-       复制链接微信发给客户，或点下方按钮直接给客户发短信。客户点开 → 签字 → 自动归档。
+       复制链接微信发给客户，或点下方按钮直接给客户发短信。客户点开 <i data-lucide="arrow-right"></i> 签字 <i data-lucide="arrow-right"></i> 自动归档。
      </p>
      <form method="post" action="/admin/consent-tasks/{{ task.id }}/resend" style="margin-top:.7rem;">
        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -123,16 +123,16 @@
    {# 打印 / 保存 PDF（仅已签） #}
    {% if task.status == 'signed' %}
    <div style="background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:1rem 1.2rem;">
-     <div style="font-size:.85rem;font-weight:600;color:#166534;margin-bottom:.5rem;">📎 已签署存档</div>
+     <div style="font-size:.85rem;font-weight:600;color:#166534;margin-bottom:.5rem;"><i data-lucide="paperclip"></i> 已签署存档</div>
      <div style="font-size:.78rem;color:#166534;margin-bottom:.6rem;">
        签字数据 + 协议正文已加密保存。可一键打印或保存为 PDF 发送给客户/外院。
      </div>
      <a href="/admin/consent-tasks/{{ task.id }}/printable" target="_blank"
         class="btn" style="display:block;width:100%;text-align:center;font-size:.85rem;padding:.5rem;background:#10b981;border-color:#10b981;color:#fff;text-decoration:none;">
-       🖨 打印 / 另存为 PDF
+       <i data-lucide="printer"></i> 打印 / 另存为 PDF
      </a>
      <div style="font-size:.72rem;color:#166534;margin-top:.5rem;">
-       💡 打开后点浏览器打印 → 目标选"另存为 PDF"即可下载。
+       <i data-lucide="lightbulb"></i> 打开后点浏览器打印 <i data-lucide="arrow-right"></i> 目标选"另存为 PDF"即可下载。
      </div>
      {% if doc and doc.pdf_path %}
      <a href="/uploads/{{ doc.pdf_path }}" target="_blank"
@@ -200,19 +200,19 @@ function copyUrl(){
 {# ─────────── 审计日志（证据链）─────────── #}
 {% if audit_logs %}
 <div class="card" style="margin-top:1rem;">
-  <h3 style="margin:0 0 .55rem;font-size:.95rem;">🛡 审计日志（{{ audit_logs|length }} 条）</h3>
+  <h3 style="margin:0 0 .55rem;font-size:.95rem;"><i data-lucide="shield"></i> 审计日志（{{ audit_logs|length }} 条）</h3>
   <p class="sub" style="margin:0 0 .85rem;font-size:.78rem;color:var(--muted);">
     法律证据链：客户每次访问/验证/签字都被记录。文档与签字的 SHA256 哈希在签后被冻结，
     任何后续篡改都可比对发现。
   </p>
   {% set event_zh = {
-    'link_opened': '🔗 打开链接',
-    'code_sent': '📨 发送验证码',
-    'code_verify_ok': '✅ 身份验证通过',
+    'link_opened': '<i data-lucide="link"></i> 打开链接',
+    'code_sent': '<i data-lucide="mail"></i> 发送验证码',
+    'code_verify_ok': '<i data-lucide="check-circle-2"></i> 身份验证通过',
     'code_verify_fail': '❌ 身份验证失败',
     'sign_fail': '❌ 签字失败',
-    'sign_success': '✍ 签字成功',
-    'sign_submit': '📝 提交签字',
+    'sign_success': '<i data-lucide="pen-tool"></i> 签字成功',
+    'sign_submit': '<i data-lucide="pencil-line"></i> 提交签字',
   } %}
   <div class="data-table-wrap" style="font-size:.82rem;">
     <table class="data-table mobile-card">
@@ -241,8 +241,8 @@ function copyUrl(){
             {{ log.phone_masked or '—' }}
           </td>
           <td data-label="详情" style="font-size:.76rem;color:var(--muted);word-break:break-all;">
-            {% if log.doc_sha256 %}<div>📄 {{ log.doc_sha256[:16] }}...</div>{% endif %}
-            {% if log.sig_sha256 %}<div>✍ {{ log.sig_sha256[:16] }}...</div>{% endif %}
+            {% if log.doc_sha256 %}<div><i data-lucide="file-text"></i> {{ log.doc_sha256[:16] }}...</div>{% endif %}
+            {% if log.sig_sha256 %}<div><i data-lucide="pen-tool"></i> {{ log.sig_sha256[:16] }}...</div>{% endif %}
             {% if log.user_agent %}<div title="{{ log.user_agent }}">UA: {{ log.user_agent[:30] }}{% if log.user_agent|length > 30 %}…{% endif %}</div>{% endif %}
             {% if log.note %}<div>{{ log.note[:80] }}{% if log.note|length > 80 %}…{% endif %}</div>{% endif %}
           </td>

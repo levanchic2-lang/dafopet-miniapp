@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">🐶</span>狂犬疫苗登记</h1>
+ <h1><span class="ph-icon"><i data-lucide="dog"></i></span>狂犬疫苗登记</h1>
  <p class="ph-sub">共 {{ total }} 条登记记录 · 主人/医护双方电子签名</p>
  </div>
  <div class="ph-actions">
  <a href="/admin/rabies/export/excel?status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}"
- class="btn secondary" style="font-size:0.85rem;">⬇ 导出 Excel</a>
+ class="btn secondary" style="font-size:0.85rem;"><i data-lucide="arrow-down"></i> 导出 Excel</a>
  </div>
 </div>
 
@@ -76,7 +76,7 @@
  {% elif rec.status == 'completed' and not rec.cert_no %}
  <span class="pill pill-info">待录证号</span>
  {% elif rec.status == 'completed' %}
- <span class="pill pill-ok">✓ 已完成</span>
+ <span class="pill pill-ok"><i data-lucide="check"></i> 已完成</span>
  {% else %}
  <span class="pill pill-gray">{{ status_zh.get(rec.status, rec.status) }}</span>
  {% endif %}
@@ -85,7 +85,7 @@
  {{ rec.created_at.strftime('%m-%d %H:%M') if rec.created_at else '—' }}
  </td>
  <td class="actions" style="text-align:right;">
- <a href="/admin/rabies/{{ rec.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">详情 →</a>
+ <a href="/admin/rabies/{{ rec.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">详情 <i data-lucide="arrow-right"></i></a>
  </td>
  </tr>
  {% endfor %}
@@ -104,7 +104,7 @@
 
 {% else %}
 <div class="empty-card">
- <div class="empty-icon">🐶</div>
+ <div class="empty-icon"><i data-lucide="dog"></i></div>
  暂无狂犬疫苗登记记录
 </div>
 {% endif %}

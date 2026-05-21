@@ -34,8 +34,8 @@
  <button type="button"
  onclick="var b=document.getElementById('create-appt-body');var opening=b.style.display==='none';b.style.display=opening?'block':'none';this.querySelector('.create-arrow').textContent=opening?'▲':'▼';"
  style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0.85rem 0.95rem;cursor:pointer;font-size:1.08rem;font-weight:700;color:inherit;text-align:left;">
- <span>＋ 新建预约</span>
- <span class="create-arrow" style="font-size:0.75rem;color:var(--muted);">▼</span>
+ <span><i data-lucide="plus"></i> 新建预约</span>
+ <span class="create-arrow" style="font-size:0.75rem;color:var(--muted);"><i data-lucide="chevron-down"></i></span>
  </button>
  <div id="create-appt-body" style="display:none;padding:0 0.95rem 0.95rem;border-top:1px solid var(--border);">
  <form method="post" action="{{ request.url_for('admin_appointment_create') }}" style="margin-top:0.85rem;display:grid;gap:0.75rem;">
@@ -268,7 +268,7 @@
  <h2>预约列表</h2>
  {% if grouped_appointments %}
  <span class="sub" style="font-size:0.8rem;">
- 共 {{ grouped_appointments | sum(attribute='total') }} 条 · 详细操作请到 <a href="/admin/calendar" style="color:var(--accent);text-decoration:none;">📅 日历</a> 查看
+ 共 {{ grouped_appointments | sum(attribute='total') }} 条 · 详细操作请到 <a href="/admin/calendar" style="color:var(--accent);text-decoration:none;"><i data-lucide="calendar"></i> 日历</a> 查看
  </span>
  {% endif %}
  </div>
@@ -382,7 +382,7 @@
  <button type="button" onclick="toggleApptPanel('cancel-{{ appt.id }}')">取消</button>
  <button type="button" onclick="toggleApptPanel('rs-{{ appt.id }}')">改约</button>
  {% endif %}
- <a class="row-btn" href="/admin/calendar" title="在日历查看">📅</a>
+ <a class="row-btn" href="/admin/calendar" title="在日历查看"><i data-lucide="calendar"></i></a>
  </div>
  </td>
  </tr>

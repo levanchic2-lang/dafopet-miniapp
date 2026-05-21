@@ -73,7 +73,7 @@
 {% endblock %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 {% set is_superadmin = (request.session.get('admin_role') == 'superadmin') %}
 
@@ -81,12 +81,12 @@
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">🎫</span>套餐目录</h1>
+ <h1><span class="ph-icon"><i data-lucide="ticket"></i></span>套餐目录</h1>
  <p class="ph-sub">配置可售套餐（包次卡）—— 美容 10 次卡、洗护 5 次卡等</p>
  </div>
  {% if is_superadmin %}
  <div class="ph-actions">
- <button type="button" class="btn" onclick="document.getElementById('new-pkg-modal').classList.add('visible')">＋ 新建套餐</button>
+ <button type="button" class="btn" onclick="document.getElementById('new-pkg-modal').classList.add('visible')"><i data-lucide="plus"></i> 新建套餐</button>
  </div>
  {% endif %}
 </div>
@@ -153,8 +153,8 @@
 </div>
 {% else %}
 <div class="empty-card">
- <div class="empty-icon">🎫</div>
- 还没创建任何套餐{% if is_superadmin %}，点右上 ＋ 开始{% endif %}。
+ <div class="empty-icon"><i data-lucide="ticket"></i></div>
+ 还没创建任何套餐{% if is_superadmin %}，点右上 <i data-lucide="plus"></i> 开始{% endif %}。
 </div>
 {% endif %}
 

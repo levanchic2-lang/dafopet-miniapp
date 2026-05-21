@@ -19,21 +19,21 @@
 {% endblock %}
 {% block body %}
 
-{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
 
 {% set is_edit = (mode == 'edit') %}
 
 <div class="page-head">
  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
  {% if cust %}
- <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回客户</a>
+ <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回客户</a>
  {% else %}
- <a href="/admin/vaccinations" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 疫苗管理</a>
+ <a href="/admin/vaccinations" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 疫苗管理</a>
  {% endif %}
  <div>
- <h1><span class="ph-icon">💉</span>
+ <h1><span class="ph-icon"><i data-lucide="syringe"></i></span>
  {% if is_edit %}接种记录 #{{ vacc.id }}{% else %}新建接种记录{% endif %}
- {% if is_edit and vacc.invoice_id %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已开单</span>
+ {% if is_edit and vacc.invoice_id %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已开单</span>
  {% elif is_edit and vacc.is_free %}<span class="pill pill-info" style="margin-left:0.5rem;">免费</span>
  {% elif is_edit %}<span class="pill pill-warn" style="margin-left:0.5rem;">待收费</span>{% endif %}
  </h1>
@@ -42,7 +42,7 @@
  </div>
  {% if is_edit and vacc.invoice_id %}
  <div class="ph-actions">
- <a href="/admin/invoices/{{ vacc.invoice_id }}" class="btn secondary" style="font-size:0.82rem;">🧾 查看收费单</a>
+ <a href="/admin/invoices/{{ vacc.invoice_id }}" class="btn secondary" style="font-size:0.82rem;"><i data-lucide="receipt"></i> 查看收费单</a>
  </div>
  {% endif %}
 </div>
@@ -188,7 +188,7 @@
  <div class="card">
  <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">宠物</div>
  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
- <span style="font-size:1.3rem;">{{ '🐱' if pet.species == 'cat' else '🐶' if pet.species == 'dog' else '🐾' }}</span>
+ <span style="font-size:1.3rem;">{{ '<i data-lucide="cat"></i>' if pet.species == 'cat' else '<i data-lucide="dog"></i>' if pet.species == 'dog' else '<i data-lucide="paw-print"></i>' }}</span>
  <span style="font-weight:700;font-size:1rem;">{{ pet.name or '未命名' }}</span>
  {% if pet.gender == 'male' %}<span class="badge b-pending" style="font-size:0.68rem;">公</span>
  {% elif pet.gender == 'female' %}<span class="badge b-done" style="font-size:0.68rem;">母</span>{% endif %}
@@ -216,7 +216,7 @@
  {% if vacc.rabies_record_id %}
  <div style="margin-top:0.4rem;">
  <a href="/admin/rabies/{{ vacc.rabies_record_id }}" style="font-size:0.8rem;">
- 来源：狂犬登记 #{{ vacc.rabies_record_id }} →
+ 来源：狂犬登记 #{{ vacc.rabies_record_id }} <i data-lucide="arrow-right"></i>
  </a>
  </div>
  {% endif %}

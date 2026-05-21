@@ -64,7 +64,7 @@
 </head>
 <body>
 <div class="wrap">
- <div class="brand">🐾 大风动物医院</div>
+ <div class="brand"><i data-lucide="paw-print"></i> 大风动物医院</div>
 
  {% if task.status == 'pending' and not verified %}
  {# ─────────── 身份验证步骤 ─────────── #}
@@ -76,13 +76,13 @@
    </div>
    {% if not has_phone %}
    <div class="status-box">
-     <div class="icon">⚠️</div>
+     <div class="icon"><i data-lucide="alert-triangle"></i></div>
      <h2>无法验证身份</h2>
      <p>客户档案缺手机号，请联系医院确认。</p>
    </div>
    {% else %}
    <div style="text-align:center;padding:1rem 0;">
-     <div style="font-size:2.4rem;margin-bottom:.4rem;">🔒</div>
+     <div style="font-size:2.4rem;margin-bottom:.4rem;"><i data-lucide="lock"></i></div>
      <h2 style="margin:.3rem 0 .5rem;font-size:1.15rem;">请验证身份</h2>
      {% if sms_mode %}
      <p style="color:#6b7280;font-size:.92rem;margin:0 0 1.2rem;line-height:1.7;">
@@ -106,7 +106,7 @@
              style="margin-top:.8rem;width:100%;max-width:340px;background:#111;color:#fff;
                     border:none;padding:.85rem 1rem;font-size:1rem;border-radius:10px;
                     cursor:pointer;font-weight:600;">
-       验证并查看协议 →
+       验证并查看协议 <i data-lucide="arrow-right"></i>
      </button>
      {% else %}
      <p style="color:#6b7280;font-size:.92rem;margin:0 0 1.2rem;line-height:1.7;">
@@ -123,7 +123,7 @@
              style="margin-top:.8rem;width:100%;max-width:340px;background:#111;color:#fff;
                     border:none;padding:.85rem 1rem;font-size:1rem;border-radius:10px;
                     cursor:pointer;font-weight:600;">
-       验证并查看协议 →
+       验证并查看协议 <i data-lucide="arrow-right"></i>
      </button>
      {% endif %}
    </div>
@@ -134,11 +134,11 @@
  <div class="doc-card">
    <div class="doc-info">
      <b>{{ task.title }}</b>
-     {% if cust %}<div>客户：{{ cust.name }} ✓ 已验证</div>{% endif %}
+     {% if cust %}<div>客户：{{ cust.name }} <i data-lucide="check"></i> 已验证</div>{% endif %}
      {% if pet %}<div>宠物：{{ pet.name }}{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '狗' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
      <div>发起时间：{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }}</div>
    </div>
-   <div class="scroll-hint">⬇ 请滚动阅读以下全文，下方签字。</div>
+   <div class="scroll-hint"><i data-lucide="arrow-down"></i> 请滚动阅读以下全文，下方签字。</div>
    <div class="doc-body">{{ task.snapshot_html|safe }}</div>
  </div>
 
@@ -151,7 +151,7 @@
    </div>
    <div class="sig-bar">
      <button type="button" class="sig-clear" onclick="clearSig()">重写</button>
-     <button type="button" class="sig-submit" id="submit-btn" onclick="submitSig()" disabled>✓ 提交签字</button>
+     <button type="button" class="sig-submit" id="submit-btn" onclick="submitSig()" disabled><i data-lucide="check"></i> 提交签字</button>
    </div>
    <div id="alert"></div>
    <p style="font-size:.75rem;color:#9ca3af;margin-top:.7rem;">
@@ -162,7 +162,7 @@
 
  {% elif task.status == 'signed' %}
  <div class="status-box">
-   <div class="icon">✅</div>
+   <div class="icon"><i data-lucide="check-circle-2"></i></div>
    <h2>已签署</h2>
    <p>签署时间：{{ task.signed_at.strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}</p>
    <p>本协议已自动归档到您的医院档案。</p>
@@ -170,7 +170,7 @@
 
  {% elif task.status == 'cancelled' %}
  <div class="status-box">
-   <div class="icon">✕</div>
+   <div class="icon"><i data-lucide="x"></i></div>
    <h2>该协议已被取消</h2>
    <p>请联系您的主治医师确认情况。</p>
  </div>

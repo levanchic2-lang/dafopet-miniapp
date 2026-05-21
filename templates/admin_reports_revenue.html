@@ -66,18 +66,18 @@
 {% endblock %}
 
 {% block body %}
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">📊</span>收款统计</h1>
+ <h1><span class="ph-icon"><i data-lucide="bar-chart-3"></i></span>收款统计</h1>
  <p class="ph-sub">{{ label }} · 共 {{ total_count }} 笔 · 实收 ¥{{ '%.2f'|format(total_amount) }}</p>
  </div>
  <div class="ph-actions">
  <a href="/admin/reports/revenue/export?preset={{ preset }}&date_from={{ df }}&date_to={{ dt }}&store={{ store }}"
-    class="btn secondary" style="font-size:.85rem;">⬇ 导出 Excel</a>
+    class="btn secondary" style="font-size:.85rem;"><i data-lucide="arrow-down"></i> 导出 Excel</a>
  </div>
 </div>
 
@@ -147,14 +147,14 @@
 
 {# 日趋势图 #}
 <div class="rev-section">
-  <h3>📈 日趋势（{{ daily_series|length }} 天）</h3>
+  <h3><i data-lucide="trending-up"></i> 日趋势（{{ daily_series|length }} 天）</h3>
   <canvas id="daily-chart" height="80"></canvas>
 </div>
 
 {# 按支付方式 #}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
   <div class="rev-section">
-    <h3>💳 按支付方式</h3>
+    <h3><i data-lucide="credit-card"></i> 按支付方式</h3>
     <canvas id="method-chart" height="180"></canvas>
     <table class="rev-table" style="margin-top:.8rem;">
       <thead><tr><th>方式</th><th>笔数</th><th style="text-align:right;">金额</th><th style="text-align:right;">占比</th></tr></thead>
@@ -173,7 +173,7 @@
 
   {% if by_store_list %}
   <div class="rev-section">
-    <h3>🏪 按门店</h3>
+    <h3><i data-lucide="store"></i> 按门店</h3>
     <canvas id="store-chart" height="180"></canvas>
     <table class="rev-table" style="margin-top:.8rem;">
       <thead><tr><th>门店</th><th>笔数</th><th style="text-align:right;">金额</th></tr></thead>
@@ -186,7 +186,7 @@
   </div>
   {% else %}
   <div class="rev-section">
-    <h3>📦 按收费类型</h3>
+    <h3><i data-lucide="package"></i> 按收费类型</h3>
     {% if by_category_list %}
     <table class="rev-table">
       <thead><tr><th>类型</th><th style="text-align:right;">金额</th></tr></thead>
@@ -205,7 +205,7 @@
 
 {% if by_store_list and by_category_list %}
 <div class="rev-section">
-  <h3>📦 按收费类型</h3>
+  <h3><i data-lucide="package"></i> 按收费类型</h3>
   <table class="rev-table">
     <thead><tr><th>类型</th><th style="text-align:right;">金额</th></tr></thead>
     <tbody>

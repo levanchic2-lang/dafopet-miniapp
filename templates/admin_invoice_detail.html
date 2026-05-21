@@ -73,32 +73,32 @@
 {% endblock %}
 {% block body %}
 
-{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
 
 {% set is_create = (mode == 'create') %}
 {% set inv = inv if not is_create else None %}
 
 <div class="page-head">
  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
- <a href="/admin/invoices" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 收银台</a>
+ <a href="/admin/invoices" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 收银台</a>
  <div>
  {% if not is_create %}
- <h1><span class="ph-icon">🧾</span>收费单 <span style="font-family:monospace;font-size:0.95rem;color:#4b5563;">{{ inv.invoice_no }}</span>
- {% if inv.payment_status == 'paid' %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已收款</span>
+ <h1><span class="ph-icon"><i data-lucide="receipt"></i></span>收费单 <span style="font-family:monospace;font-size:0.95rem;color:#4b5563;">{{ inv.invoice_no }}</span>
+ {% if inv.payment_status == 'paid' %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已收款</span>
  {% elif inv.payment_status == 'cancelled' %}<span class="pill pill-gray" style="margin-left:0.5rem;">已取消</span>
  {% elif inv.payment_status == 'refunded' %}<span class="pill pill-no" style="margin-left:0.5rem;">已退款</span>
  {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待收款</span>{% endif %}
  </h1>
  {% if cust %}<p class="ph-sub">{{ cust.name }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</p>{% endif %}
  {% else %}
- <h1><span class="ph-icon">🧾</span>新建收费单</h1>
+ <h1><span class="ph-icon"><i data-lucide="receipt"></i></span>新建收费单</h1>
  {% if cust %}<p class="ph-sub">{{ cust.name }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</p>{% endif %}
  {% endif %}
  </div>
  </div>
  {% if not is_create %}
  <div class="ph-actions">
- <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="btn secondary" style="font-size:0.85rem;">🖨 打印票据</a>
+ <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="btn secondary" style="font-size:0.85rem;"><i data-lucide="printer"></i> 打印票据</a>
  </div>
  {% endif %}
 </div>
@@ -134,7 +134,7 @@
  <div class="card" style="margin-bottom:0.75rem;padding:0;">
  <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
  <span style="font-weight:700;font-size:0.95rem;">费用明细</span>
- <button type="button" onclick="addRow()" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">＋ 手动添加项目</button>
+ <button type="button" onclick="addRow()" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;"><i data-lucide="plus"></i> 手动添加项目</button>
  </div>
  <table class="items-table" style="width:100%;" id="items-table">
  <thead>
@@ -167,7 +167,7 @@
  style="text-align:right;background:transparent;border:none;font-weight:600;"/>
  </td>
  <td style="text-align:center;">
- <button type="button" onclick="removeRow(this)" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;">✕</button>
+ <button type="button" onclick="removeRow(this)" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;"><i data-lucide="x"></i></button>
  </td>
  </tr>
  {% endfor %}
@@ -251,7 +251,7 @@
  </div>
  {% if inv.payment_status == 'paid' %}
  <div style="margin-top:0.75rem;padding:0.6rem 0.85rem;background:#d1fae5;border-radius:8px;font-size:0.85rem;color:#065f46;">
- ✅ 已收款 · {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) }} ·
+ <i data-lucide="check-circle-2"></i> 已收款 · {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) }} ·
  {{ inv.paid_at.strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
  </div>
  {% endif %}
@@ -276,7 +276,7 @@
      </div>
    </div>
 
-   <p style="font-size:.8rem;color:var(--muted);margin:0 0 .6rem;">💡 可拆分多种方式收款（混合支付）。每点一次"确认这一笔"会立刻入账。</p>
+   <p style="font-size:.8rem;color:var(--muted);margin:0 0 .6rem;"><i data-lucide="lightbulb"></i> 可拆分多种方式收款（混合支付）。每点一次"确认这一笔"会立刻入账。</p>
 
    <form method="post" action="/admin/invoices/{{ inv.id }}/add-payment" id="pay-form">
      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -288,30 +288,30 @@
        <button type="button" class="pay-btn" data-val="alipay" onclick="selectPay(this)"><span class="icon">🔵</span><span class="label">支付宝</span></button>
        <button type="button" class="pay-btn" data-val="shouqianba" onclick="selectPay(this)"><span class="icon">📲</span><span class="label">收钱吧</span></button>
        <button type="button" class="pay-btn" data-val="meituan" onclick="selectPay(this)"><span class="icon">🍔</span><span class="label">美团</span></button>
-       <button type="button" class="pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="icon">🔗</span><span class="label">第三方</span></button>
+       <button type="button" class="pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="icon"><i data-lucide="link"></i></span><span class="label">第三方</span></button>
        {# 钱包 / 套餐 / 押金 / 优惠券 始终显示，没有可用项时显示灰色提示 #}
        <button type="button" class="pay-btn{% if wallet_balance <= 0 %} unavailable{% endif %}" data-val="wallet" onclick="selectPay(this)"
                title="{% if wallet_balance > 0 %}客户钱包余额 ¥{{ '%.2f'|format(wallet_balance) }}{% else %}客户暂无钱包余额，点击仍可去客户档案充值{% endif %}">
-         <span class="icon">💰</span><span class="label">钱包<small style="display:block;font-size:.7rem;color:{% if wallet_balance > 0 %}#10b981{% else %}#9ca3af{% endif %};">¥{{ '%.0f'|format(wallet_balance) }}</small></span>
+         <span class="icon"><i data-lucide="wallet"></i></span><span class="label">钱包<small style="display:block;font-size:.7rem;color:{% if wallet_balance > 0 %}#10b981{% else %}#9ca3af{% endif %};">¥{{ '%.0f'|format(wallet_balance) }}</small></span>
        </button>
        <button type="button" class="pay-btn{% if not active_packages %} unavailable{% endif %}" data-val="package" onclick="selectPay(this)">
-         <span class="icon">🎫</span><span class="label">套餐<small style="display:block;font-size:.7rem;color:{% if active_packages %}#3b82f6{% else %}#9ca3af{% endif %};">{{ active_packages|length }} 张</small></span>
+         <span class="icon"><i data-lucide="ticket"></i></span><span class="label">套餐<small style="display:block;font-size:.7rem;color:{% if active_packages %}#3b82f6{% else %}#9ca3af{% endif %};">{{ active_packages|length }} 张</small></span>
        </button>
        <button type="button" class="pay-btn{% if not available_deposits %} unavailable{% endif %}" data-val="deposit" onclick="selectPay(this)">
          <span class="icon">🏦</span><span class="label">押金<small style="display:block;font-size:.7rem;color:{% if available_deposits %}#f59e0b{% else %}#9ca3af{% endif %};">{{ available_deposits|length }} 笔</small></span>
        </button>
        <button type="button" class="pay-btn{% if not available_coupons %} unavailable{% endif %}" data-val="coupon" onclick="selectPay(this)">
-         <span class="icon">🎟️</span><span class="label">优惠券<small style="display:block;font-size:.7rem;color:{% if available_coupons %}#10b981{% else %}#9ca3af{% endif %};">{{ available_coupons|length }} 张</small></span>
+         <span class="icon"><i data-lucide="ticket"></i></span><span class="label">优惠券<small style="display:block;font-size:.7rem;color:{% if available_coupons %}#10b981{% else %}#9ca3af{% endif %};">{{ available_coupons|length }} 张</small></span>
        </button>
      </div>
 
      {# 钱包 picker（钱包 ¥0 时的提示） #}
      <div id="wal-pick-wrap" style="display:none;margin-bottom:.6rem;background:#eef2ff;border-radius:8px;padding:.6rem .8rem;">
        {% if wallet_balance > 0 %}
-       <span style="font-size:.85rem;color:#3730a3;">💰 客户钱包余额 <b>¥{{ '%.2f'|format(wallet_balance) }}</b>，本笔最多可扣 <b>¥{{ '%.2f'|format([wallet_balance, outstanding]|min) }}</b></span>
+       <span style="font-size:.85rem;color:#3730a3;"><i data-lucide="wallet"></i> 客户钱包余额 <b>¥{{ '%.2f'|format(wallet_balance) }}</b>，本笔最多可扣 <b>¥{{ '%.2f'|format([wallet_balance, outstanding]|min) }}</b></span>
        {% else %}
-       <span style="font-size:.85rem;color:#92400e;">⚠ 客户暂无钱包余额。
-         {% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=wallet" target="_blank" style="color:#3b82f6;">去充值 →</a>{% endif %}
+       <span style="font-size:.85rem;color:#92400e;"><i data-lucide="alert-triangle"></i> 客户暂无钱包余额。
+         {% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=wallet" target="_blank" style="color:#3b82f6;">去充值 <i data-lucide="arrow-right"></i></a>{% endif %}
        </span>
        {% endif %}
      </div>
@@ -327,8 +327,8 @@
          {% endfor %}
        </select>
        {% else %}
-       <span style="font-size:.85rem;color:#92400e;">⚠ 客户暂无有效套餐。
-         {% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=packages" target="_blank" style="color:#3b82f6;">去售卖套餐 →</a>{% endif %}
+       <span style="font-size:.85rem;color:#92400e;"><i data-lucide="alert-triangle"></i> 客户暂无有效套餐。
+         {% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=packages" target="_blank" style="color:#3b82f6;">去售卖套餐 <i data-lucide="arrow-right"></i></a>{% endif %}
        </span>
        {% endif %}
      </div>
@@ -344,8 +344,8 @@
          {% endfor %}
        </select>
        {% else %}
-       <span style="font-size:.85rem;color:#92400e;">⚠ 客户暂无押金。
-         {% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=deposits" target="_blank" style="color:#3b82f6;">去收押金 →</a>{% endif %}
+       <span style="font-size:.85rem;color:#92400e;"><i data-lucide="alert-triangle"></i> 客户暂无押金。
+         {% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=deposits" target="_blank" style="color:#3b82f6;">去收押金 <i data-lucide="arrow-right"></i></a>{% endif %}
        </span>
        {% endif %}
      </div>
@@ -361,8 +361,8 @@
          {% endfor %}
        </select>
        {% else %}
-       <span style="font-size:.85rem;color:#92400e;">⚠ 客户暂无可用优惠券。
-         <a href="/admin/coupons" target="_blank" style="color:#3b82f6;">去发放 →</a>
+       <span style="font-size:.85rem;color:#92400e;"><i data-lucide="alert-triangle"></i> 客户暂无可用优惠券。
+         <a href="/admin/coupons" target="_blank" style="color:#3b82f6;">去发放 <i data-lucide="arrow-right"></i></a>
        </span>
        {% endif %}
      </div>
@@ -382,7 +382,7 @@
      </div>
 
      <button type="submit" class="btn" style="width:100%;font-size:1rem;padding:.7rem;">
-       ✓ 确认这一笔
+       <i data-lucide="check"></i> 确认这一笔
      </button>
    </form>
  </div>
@@ -443,11 +443,11 @@
      {% elif p.method == 'alipay' %}🔵 支付宝
      {% elif p.method == 'shouqianba' %}📲 收钱吧
      {% elif p.method == 'meituan' %}🍔 美团
-     {% elif p.method == 'third_party' %}🔗 第三方
-     {% elif p.method == 'wallet' %}💰 钱包
-     {% elif p.method == 'package' %}🎫 套餐核销
+     {% elif p.method == 'third_party' %}<i data-lucide="link"></i> 第三方
+     {% elif p.method == 'wallet' %}<i data-lucide="wallet"></i> 钱包
+     {% elif p.method == 'package' %}<i data-lucide="ticket"></i> 套餐核销
      {% elif p.method == 'deposit' %}🏦 押金抵扣
-     {% elif p.method == 'coupon' %}🎟️ 优惠券
+     {% elif p.method == 'coupon' %}<i data-lucide="ticket"></i> 优惠券
      {% else %}{{ p.method }}{% endif %}
      {% if p.ref_no %}<span style="color:var(--muted);font-size:.75rem;margin-left:.4rem;">#{{ p.ref_no }}</span>{% endif %}
      </td>
@@ -482,7 +482,7 @@
  {% if cust.address %}
  <div style="font-size:0.82rem;color:var(--muted);margin-top:0.2rem;">{{ cust.address }}</div>
  {% endif %}
- <a href="/admin/customers/{{ cust.id }}" style="font-size:0.78rem;margin-top:0.5rem;display:inline-block;">档案 →</a>
+ <a href="/admin/customers/{{ cust.id }}" style="font-size:0.78rem;margin-top:0.5rem;display:inline-block;">档案 <i data-lucide="arrow-right"></i></a>
  </div>
  {% endif %}
 
@@ -491,7 +491,7 @@
  <div class="card">
  <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">宠物</div>
  <div style="display:flex;align-items:center;gap:0.5rem;">
- <span style="font-size:1.2rem;">{{ '🐱' if pet_obj.species == 'cat' else '🐶' if pet_obj.species == 'dog' else '🐾' }}</span>
+ <span style="font-size:1.2rem;">{{ '<i data-lucide="cat"></i>' if pet_obj.species == 'cat' else '<i data-lucide="dog"></i>' if pet_obj.species == 'dog' else '<i data-lucide="paw-print"></i>' }}</span>
  <span style="font-weight:700;">{{ pet_obj.name or '未命名' }}</span>
  {% if pet_obj.gender == 'male' %}<span class="badge b-pending" style="font-size:0.68rem;">公</span>
  {% elif pet_obj.gender == 'female' %}<span class="badge b-done" style="font-size:0.68rem;">母</span>{% endif %}
@@ -510,7 +510,7 @@
  {% if visit.diagnosis %}
  <div style="font-size:0.82rem;color:var(--muted);margin-top:0.2rem;">{{ visit.diagnosis[:60] }}{% if visit.diagnosis|length> 60 %}…{% endif %}</div>
  {% endif %}
- <a href="/admin/visits/{{ visit.id }}" style="font-size:0.78rem;margin-top:0.5rem;display:inline-block;">查看就诊记录 →</a>
+ <a href="/admin/visits/{{ visit.id }}" style="font-size:0.78rem;margin-top:0.5rem;display:inline-block;">查看就诊记录 <i data-lucide="arrow-right"></i></a>
  </div>
  {% endif %}
 

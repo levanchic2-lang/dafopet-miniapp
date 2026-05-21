@@ -32,12 +32,12 @@
 </head>
 <body>
 <div class="wrap">
- <div class="brand">🐾 大风动物医院</div>
+ <div class="brand"><i data-lucide="paw-print"></i> 大风动物医院</div>
 
  <div class="card">
   {% if submitted %}
    <div class="ok-card">
-    <div class="icon">{% if fu.response == 'recovered' %}✅{% else %}📞{% endif %}</div>
+    <div class="icon">{% if fu.response == 'recovered' %}<i data-lucide="check-circle-2"></i>{% else %}<i data-lucide="phone"></i>{% endif %}</div>
     <h2>感谢您的反馈</h2>
     <p>
      {% if fu.response == 'recovered' %}
@@ -60,10 +60,10 @@
    <form method="post" id="feedback-form">
     <div class="btns">
      <button type="submit" name="response" value="recovered" class="choice recovered">
-      ✓ 已好转，状态良好
+      <i data-lucide="check"></i> 已好转，状态良好
      </button>
      <button type="submit" name="response" value="needs_visit" class="choice needs">
-      ✗ 仍有不适，需要复诊
+      <i data-lucide="x"></i> 仍有不适，需要复诊
      </button>
     </div>
     <label for="note">补充说明（选填）</label>

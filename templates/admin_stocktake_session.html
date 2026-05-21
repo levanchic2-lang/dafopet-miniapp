@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="page-head">
  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
- <a href="/admin/stocktake" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 盘点列表</a>
+ <a href="/admin/stocktake" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 盘点列表</a>
  <div>
- <h1><span class="ph-icon">📊</span>{{ sess.name or '盘点单 #' ~ sess.id }}
- {% if sess.status == 'completed' %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已完成</span>
+ <h1><span class="ph-icon"><i data-lucide="bar-chart-3"></i></span>{{ sess.name or '盘点单 #' ~ sess.id }}
+ {% if sess.status == 'completed' %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已完成</span>
  {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">进行中</span>{% endif %}
  {% if sess.variance_count and sess.variance_count> 0 %}<span class="pill pill-warn" style="margin-left:0.3rem;">差异 {{ sess.variance_count }}</span>{% endif %}
  </h1>
@@ -78,7 +78,7 @@
  <span style="{% if v> 0 %}color:#15803d;font-weight:600;{% elif v < 0 %}color:#dc2626;font-weight:600;{% else %}color:var(--muted);{% endif %}">
  {% if v> 0 %}+{% endif %}{{ '%.1f'|format(v) }}
  </span>
- {% if si.is_adjusted %}<span style="font-size:0.72rem;color:var(--muted);margin-left:3px;">✓</span>{% endif %}
+ {% if si.is_adjusted %}<span style="font-size:0.72rem;color:var(--muted);margin-left:3px;"><i data-lucide="check"></i></span>{% endif %}
  {% else %}
  <span style="color:var(--muted);">—</span>
  {% endif %}
@@ -108,12 +108,12 @@
  </div>
  <button type="submit" formaction="/admin/stocktake/{{ sess.id }}/save"
  class="btn secondary" style="font-size:0.9rem;">
- 💾 暂存草稿
+ <i data-lucide="save"></i> 暂存草稿
  </button>
  <button type="submit" formaction="/admin/stocktake/{{ sess.id }}/submit"
  class="btn" style="font-size:0.9rem;"
  onclick="return confirm('确认提交盘点？\n已填写的品目将生成调整流水，未填写的品目不会变动。')">
- ✅ 确认提交盘点
+ <i data-lucide="check-circle-2"></i> 确认提交盘点
  </button>
  </div>
  {% endif %}

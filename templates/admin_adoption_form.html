@@ -2,7 +2,7 @@
 {% block body %}
 {% set is_new = pet is none %}
 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
- <a href="/admin/adoption" class="btn secondary" style="font-size:0.85rem;">← 返回列表</a>
+ <a href="/admin/adoption" class="btn secondary" style="font-size:0.85rem;"><i data-lucide="arrow-left"></i> 返回列表</a>
  <h1 style="margin:0;font-size:1.25rem;">{{ '新增待领养动物' if is_new else '编辑：' ~ (pet.name or '未命名') }}</h1>
 </div>
 
@@ -108,7 +108,7 @@
  <div style="margin-top:0.75rem;">
  <label>视频（最多 1 个）</label>
  {% if pet and pet.video_path %}
- <div style="margin-bottom:0.4rem;font-size:0.82rem;color:#15803d;">✓ 已上传视频，重新上传将替换</div>
+ <div style="margin-bottom:0.4rem;font-size:0.82rem;color:#15803d;"><i data-lucide="check"></i> 已上传视频，重新上传将替换</div>
  {% endif %}
  <input type="file" name="video" accept="video/*"/>
  </div>
@@ -134,13 +134,13 @@
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  {% if pet.adoption_agreement_path %}
  <div style="font-size:0.82rem;color:#15803d;margin-bottom:0.5rem;">
- ✓ 已上传协议 <a href="/admin/adoption/{{ pet.id }}/agreement" target="_blank" style="font-size:0.78rem;">查看</a>
+ <i data-lucide="check"></i> 已上传协议 <a href="/admin/adoption/{{ pet.id }}/agreement" target="_blank" style="font-size:0.78rem;">查看</a>
  </div>
  {% endif %}
  <label style="font-size:0.82rem;">领养协议（图片或 PDF）</label>
  <input type="file" name="agreement" accept="image/*,.pdf" style="margin-bottom:0.6rem;"/>
  <button type="submit" class="btn" style="width:100%;background:#15803d;">
- ✓ 确认已领养
+ <i data-lucide="check"></i> 确认已领养
  </button>
  </form>
  </div>

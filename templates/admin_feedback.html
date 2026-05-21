@@ -42,7 +42,7 @@
 <div class="page-head">
  <div>
  <h1>
- <span class="ph-icon">💬</span>客户反馈
+ <span class="ph-icon"><i data-lucide="message-circle"></i></span>客户反馈
  {% if pending_count> 0 %}<span class="pill pill-warn" style="margin-left:0.4rem;">{{ pending_count }} 待处理</span>{% endif %}
  </h1>
  <p class="ph-sub">小程序用户提交的意见、Bug 反馈与功能建议</p>
@@ -57,7 +57,7 @@
 
 {% if not feed_list %}
 <div class="empty-card">
- <div class="empty-icon">💬</div>
+ <div class="empty-icon"><i data-lucide="message-circle"></i></div>
  暂无反馈记录
 </div>
 {% else %}
@@ -69,9 +69,9 @@
  <span class="fb-id">#{{fb.id}}{% if fb.openid %} · {{fb.openid[:12]}}…{% endif %}</span>
  <span style="display:flex;align-items:center;gap:0.5rem;">
  {% if fb.status == 'pending' %}
- <span class="pill pill-warn">⏳ 待处理</span>
+ <span class="pill pill-warn"><i data-lucide="hourglass"></i> 待处理</span>
  {% else %}
- <span class="pill pill-ok">✓ 已处理</span>
+ <span class="pill pill-ok"><i data-lucide="check"></i> 已处理</span>
  {% endif %}
  <span class="fb-time">{{ fb.created_at.strftime('%Y-%m-%d %H:%M') if fb.created_at }}</span>
  </span>
@@ -86,14 +86,14 @@
  </div>
  {% endif %}
  {% if fb.admin_note %}
- <div class="fb-admin-note">📝 处理备注：{{fb.admin_note}}</div>
+ <div class="fb-admin-note"><i data-lucide="pencil-line"></i> 处理备注：{{fb.admin_note}}</div>
  {% endif %}
  </div>
  {% if fb.status == 'pending' %}
  <form class="fb-resolve-form" method="post" action="/admin/feedback/{{fb.id}}/resolve">
  <input type="hidden" name="csrf_token" value="{{csrf_token}}"/>
  <textarea name="admin_note"></textarea>
- <button type="submit" class="btn" style="font-size:0.85rem;white-space:nowrap;">✓ 标记已处理</button>
+ <button type="submit" class="btn" style="font-size:0.85rem;white-space:nowrap;"><i data-lucide="check"></i> 标记已处理</button>
  </form>
  {% endif %}
 </div>

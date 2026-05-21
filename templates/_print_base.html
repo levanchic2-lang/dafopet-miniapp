@@ -85,7 +85,7 @@
 </head>
 <body data-size="{% block default_size %}A4{% endblock %}">
 <div class="print-toolbar no-print">
-  <button onclick="window.print()" style="background:#10b981;font-weight:600;">🖨 打印</button>
+  <button onclick="window.print()" style="background:#10b981;font-weight:600;"><i data-lucide="printer"></i> 打印</button>
   <div class="group" id="size-switch">
     <button data-size="A4">A4 纵</button>
     <button data-size="A5">A5 纵</button>
@@ -94,7 +94,7 @@
   </div>
   {% block toolbar_extra %}{% endblock %}
   <div class="spacer"></div>
-  <a href="javascript:history.back()">← 返回</a>
+  <a href="javascript:history.back()"><i data-lucide="arrow-left"></i> 返回</a>
 </div>
 
 <div class="print-stage">

@@ -237,7 +237,7 @@
 
  <!-- ── 顶部工具栏 ── -->
  <div class="cal-topbar">
- <button class="btn new-btn" id="new-event-btn">＋ 新建日程</button>
+ <button class="btn new-btn" id="new-event-btn"><i data-lucide="plus"></i> 新建日程</button>
  <div class="cal-nav">
  <button id="prev-btn">‹</button>
  <span id="cal-date-label"></span>
@@ -265,7 +265,7 @@
 
 <!-- ── 弹出卡片 ── -->
 <div class="cal-popup" id="cal-popup">
- <button class="popup-close" onclick="closePopup()">✕</button>
+ <button class="popup-close" onclick="closePopup()"><i data-lucide="x"></i></button>
  <div class="popup-title" id="pp-title"></div>
  <div class="popup-datetime" id="pp-datetime"></div>
  <div class="popup-badges" id="pp-badges"></div>
@@ -277,7 +277,7 @@
 <!-- ── 改约 modal ── -->
 <div class="cal-modal-overlay" id="reschedule-modal">
  <div class="cal-modal">
- <h3>📅 改约</h3>
+ <h3><i data-lucide="calendar"></i> 改约</h3>
  <label>新日期</label>
  <input type="date" id="rs-date"/>
  <label>新时间</label>
@@ -295,10 +295,10 @@
  <h3>新建日程</h3>
  <div class="create-choice">
  <button class="create-choice-btn" id="create-appt-btn">
- <span class="icon">📋</span>新建预约
+ <span class="icon"><i data-lucide="clipboard-list"></i></span>新建预约
  </button>
  <button class="create-choice-btn" id="create-block-btn">
- <span class="icon">🚫</span>全天封锁<br><small style="color:var(--muted);font-size:0.75rem;">美容师休息等</small>
+ <span class="icon"><i data-lucide="ban"></i></span>全天封锁<br><small style="color:var(--muted);font-size:0.75rem;">美容师休息等</small>
  </button>
  </div>
  <div id="block-form" style="display:none;">

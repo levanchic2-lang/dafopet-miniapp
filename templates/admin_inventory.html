@@ -55,19 +55,19 @@
 {% endblock %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">📦</span>库存管理</h1>
+ <h1><span class="ph-icon"><i data-lucide="package"></i></span>库存管理</h1>
  <p class="ph-sub">
  共 {{ total }} 个品目
- {% if low_count> 0 %}· <span style="color:#d97706;font-weight:600;">⚠ {{ low_count }} 个低库存预警</span>{% endif %}
+ {% if low_count> 0 %}· <span style="color:#d97706;font-weight:600;"><i data-lucide="alert-triangle"></i> {{ low_count }} 个低库存预警</span>{% endif %}
  </p>
  </div>
  <div class="ph-actions">
  <a href="/admin/inventory/import-photo" class="btn secondary" style="font-size:0.88rem;">📸 拍照入库</a>
- <a href="/admin/inventory/create" class="btn" style="font-size:0.88rem;">＋ 新增品目</a>
+ <a href="/admin/inventory/create" class="btn" style="font-size:0.88rem;"><i data-lucide="plus"></i> 新增品目</a>
  </div>
 </div>
 
@@ -102,11 +102,11 @@
  {% endif %}
  </div>
  <div class="filter-row" style="margin-top:0.6rem;">
- <a href="/admin/inventory?low_stock=1" class="inv-chip c-warn {% if low_stock == '1' %}active{% endif %}">⚠ 库存预警{% if low_count> 0 %} <strong>({{ low_count }})</strong>{% endif %}</a>
- <a href="/admin/inventory?zero_stock=1" class="inv-chip c-no {% if zero_stock == '1' %}active{% endif %}">🚫 零库存{% if zero_count> 0 %} <strong>({{ zero_count }})</strong>{% endif %}</a>
- <a href="/admin/inventory?controlled=1" class="inv-chip c-warn {% if controlled == '1' %}active{% endif %}">💊 管控药品</a>
- <a href="/admin/inventory?service_only=1" class="inv-chip c-info {% if service_only == '1' %}active{% endif %}">📋 服务项目</a>
- <a href="/admin/inventory?expiry_alert=1" class="inv-chip c-purple {% if expiry_alert == '1' %}active{% endif %}">📅 有效期预警{% if expiry_count> 0 %} <strong>({{ expiry_count }})</strong>{% endif %}</a>
+ <a href="/admin/inventory?low_stock=1" class="inv-chip c-warn {% if low_stock == '1' %}active{% endif %}"><i data-lucide="alert-triangle"></i> 库存预警{% if low_count> 0 %} <strong>({{ low_count }})</strong>{% endif %}</a>
+ <a href="/admin/inventory?zero_stock=1" class="inv-chip c-no {% if zero_stock == '1' %}active{% endif %}"><i data-lucide="ban"></i> 零库存{% if zero_count> 0 %} <strong>({{ zero_count }})</strong>{% endif %}</a>
+ <a href="/admin/inventory?controlled=1" class="inv-chip c-warn {% if controlled == '1' %}active{% endif %}"><i data-lucide="pill"></i> 管控药品</a>
+ <a href="/admin/inventory?service_only=1" class="inv-chip c-info {% if service_only == '1' %}active{% endif %}"><i data-lucide="clipboard-list"></i> 服务项目</a>
+ <a href="/admin/inventory?expiry_alert=1" class="inv-chip c-purple {% if expiry_alert == '1' %}active{% endif %}"><i data-lucide="calendar"></i> 有效期预警{% if expiry_count> 0 %} <strong>({{ expiry_count }})</strong>{% endif %}</a>
  </div>
  </form>
 </div>
@@ -147,15 +147,15 @@
  <td data-label="库存" style="text-align:right;{% if is_zero %}color:#dc2626;font-weight:700;{% elif is_low %}color:#d97706;font-weight:700;{% endif %}">
  {% if it.is_service %}—
  {% else %}{{ '%.1f'|format(it.stock_qty) }}
- {% if is_zero %} 🚫
- {% elif is_low %} ⚠{% endif %}
+ {% if is_zero %} <i data-lucide="ban"></i>
+ {% elif is_low %} <i data-lucide="alert-triangle"></i>{% endif %}
  {% endif %}
  </td>
  <td data-label="售价" style="text-align:right;font-weight:600;">¥{{ '%.2f'|format(it.sell_price) }}</td>
  <td data-label="单位" style="color:var(--muted);">{{ it.unit }}{% if it.unit2 %} / {{ it.unit2 }}{% endif %}</td>
  <td data-label="供应商" style="color:var(--muted);font-size:0.82rem;">{{ it.supplier or '—' }}</td>
  <td class="actions" style="text-align:right;">
- <a href="/admin/inventory/{{ it.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">详情 →</a>
+ <a href="/admin/inventory/{{ it.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">详情 <i data-lucide="arrow-right"></i></a>
  </td>
  </tr>
  {% endfor %}
@@ -180,7 +180,7 @@
 
 {% else %}
 <div class="empty-card">
- <div class="empty-icon">📦</div>
+ <div class="empty-icon"><i data-lucide="package"></i></div>
  暂无品目，<a href="/admin/inventory/create" style="color:#3b82f6;">点击新增</a>
 </div>
 {% endif %}
@@ -211,7 +211,7 @@
     <option value="横岗店">仅横岗店</option>
   </select>
   {% endif %}
-  <button type="button" class="btn-apply" onclick="bulkApply()">✓ 应用</button>
+  <button type="button" class="btn-apply" onclick="bulkApply()"><i data-lucide="check"></i> 应用</button>
   <button type="button" class="btn-cancel" onclick="bulkClear()">取消</button>
  </div>
 </form>

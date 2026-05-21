@@ -49,7 +49,7 @@
 
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 {# 即使没有行也输出 token，方便测试 / 客户端拦截 #}
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -57,18 +57,18 @@
 {% if counts.needs_visit and tab != 'sent' %}
 <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:.75rem 1rem;
             margin:.75rem 0;display:flex;align-items:center;gap:.75rem;">
- <span style="font-size:1.4rem;">⚠️</span>
+ <span style="font-size:1.4rem;"><i data-lucide="alert-triangle"></i></span>
  <div style="flex:1;font-size:.92rem;color:#7f1d1d;">
   有 <b>{{ counts.needs_visit }}</b> 位客户反馈"需复诊"，请尽快联系排期。
  </div>
  <a href="?tab=sent{% if mine %}&mine=1{% endif %}" class="btn"
-    style="background:#dc2626;color:#fff;font-size:.85rem;padding:.4rem .9rem;">立即查看 →</a>
+    style="background:#dc2626;color:#fff;font-size:.85rem;padding:.4rem .9rem;">立即查看 <i data-lucide="arrow-right"></i></a>
 </div>
 {% endif %}
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">📞</span>回访管理</h1>
+ <h1><span class="ph-icon"><i data-lucide="phone"></i></span>回访管理</h1>
  <p class="ph-sub">就诊后自动产生回访任务 · 谁看诊谁回访 · 客户反馈自动闭环</p>
  </div>
 </div>
@@ -148,33 +148,33 @@
    {% if v %}<a href="/admin/visits/{{ v.id }}" class="fu-action-btn">病例</a>{% endif %}
    {% if fu.feedback_token and fu.status in ('pending','due','phone_pending','sent') %}
    <button type="button" class="fu-action-btn"
-           onclick="copyFeedbackLink(this, '{{ fu.feedback_token }}')">📋 复制反馈链接</button>
+           onclick="copyFeedbackLink(this, '{{ fu.feedback_token }}')"><i data-lucide="clipboard-list"></i> 复制反馈链接</button>
    {% endif %}
    {% if fu.status in ('pending','due','phone_pending','sent') %}
    <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
     <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
     <input type="hidden" name="action" value="contacted"/>
-    <button class="fu-action-btn primary" onclick="return confirm('已联系并好转？')">✓ 已联系</button>
+    <button class="fu-action-btn primary" onclick="return confirm('已联系并好转？')"><i data-lucide="check"></i> 已联系</button>
    </form>
    <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
     <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
     <input type="hidden" name="action" value="refer_visit"/>
-    <button class="fu-action-btn warn">↻ 转复诊</button>
+    <button class="fu-action-btn warn"><i data-lucide="rotate-cw"></i> 转复诊</button>
    </form>
    <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
     <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
     <input type="hidden" name="action" value="skip"/>
-    <button class="fu-action-btn" onclick="return confirm('忽略此回访？')">✕ 忽略</button>
+    <button class="fu-action-btn" onclick="return confirm('忽略此回访？')"><i data-lucide="x"></i> 忽略</button>
    </form>
    {% else %}
    <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
     <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
     <input type="hidden" name="action" value="reopen"/>
-    <button class="fu-action-btn">↺ 重新打开</button>
+    <button class="fu-action-btn"><i data-lucide="rotate-ccw"></i> 重新打开</button>
    </form>
    {% endif %}
   </td>
@@ -194,9 +194,9 @@
 
 {% else %}
 <div class="empty-card">
- <div class="empty-icon">📞</div>
+ <div class="empty-icon"><i data-lucide="phone"></i></div>
  {% if tab == 'today' %}今天没有回访任务，去喝杯茶 🍵
- {% elif tab == 'overdue' %}没有逾期任务，干得漂亮 ✨
+ {% elif tab == 'overdue' %}没有逾期任务，干得漂亮 <i data-lucide="sparkles"></i>
  {% elif tab == 'sent' %}还没有发出过任何回访
  {% else %}近 30 天没有已完成的回访{% endif %}
 </div>

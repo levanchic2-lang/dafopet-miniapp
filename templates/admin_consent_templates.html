@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 {% set is_superadmin = (request.session.get('admin_role') == 'superadmin') %}
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">📝</span>协议模板</h1>
+ <h1><span class="ph-icon"><i data-lucide="pencil-line"></i></span>协议模板</h1>
  <p class="ph-sub">同意书 / 协议书 模板维护 · 发起签署时调用</p>
  </div>
  {% if is_superadmin %}
  <div class="ph-actions">
- <a href="/admin/consent-templates/create" class="btn">＋ 新建模板</a>
+ <a href="/admin/consent-templates/create" class="btn"><i data-lucide="plus"></i> 新建模板</a>
  </div>
  {% endif %}
 </div>
@@ -57,8 +57,8 @@
 </div>
 {% else %}
 <div class="empty-card">
- <div class="empty-icon">📝</div>
- 还没有模板{% if is_superadmin %}，<a href="/admin/consent-templates/create" style="color:#3b82f6;">点击新建 →</a>{% endif %}
+ <div class="empty-icon"><i data-lucide="pencil-line"></i></div>
+ 还没有模板{% if is_superadmin %}，<a href="/admin/consent-templates/create" style="color:#3b82f6;">点击新建 <i data-lucide="arrow-right"></i></a>{% endif %}
 </div>
 {% endif %}
 

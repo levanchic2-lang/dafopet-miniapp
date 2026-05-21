@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">📦</span>销售单</h1>
+ <h1><span class="ph-icon"><i data-lucide="package"></i></span>销售单</h1>
  <p class="ph-sub">共 {{ total }} 张销售单</p>
  </div>
  <div class="ph-actions">
- <a href="/admin/sales-orders/create" class="btn" style="font-size:0.88rem;">＋ 新建销售单</a>
+ <a href="/admin/sales-orders/create" class="btn" style="font-size:0.88rem;"><i data-lucide="plus"></i> 新建销售单</a>
  </div>
 </div>
 
@@ -62,12 +62,12 @@
  <td data-label="金额" style="text-align:right;font-weight:700;font-size:0.95rem;">¥ {{ '%.2f'|format(o.total_amount) }}</td>
  <td data-label="收款方式" style="color:var(--muted);">{{ o.payment_method or '—' }}</td>
  <td data-label="状态">
- {% if o.status == 'paid' %}<span class="pill pill-ok">✓ 已收款</span>
+ {% if o.status == 'paid' %}<span class="pill pill-ok"><i data-lucide="check"></i> 已收款</span>
  {% elif o.status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
  {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
  </td>
  <td class="actions" style="text-align:right;">
- <a href="/admin/sales-orders/{{ o.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
+ <a href="/admin/sales-orders/{{ o.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 <i data-lucide="arrow-right"></i></a>
  </td>
  </tr>
  {% endfor %}
@@ -86,8 +86,8 @@
 
 {% else %}
 <div class="empty-card">
- <div class="empty-icon">📦</div>
- 暂无销售单{% if filters.q or filters.status %}（<a href="/admin/sales-orders" style="color:#3b82f6;">清空筛选 →</a>）{% endif %}
+ <div class="empty-icon"><i data-lucide="package"></i></div>
+ 暂无销售单{% if filters.q or filters.status %}（<a href="/admin/sales-orders" style="color:#3b82f6;">清空筛选 <i data-lucide="arrow-right"></i></a>）{% endif %}
 </div>
 {% endif %}
 

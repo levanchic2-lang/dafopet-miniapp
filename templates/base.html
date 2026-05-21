@@ -13,6 +13,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="大风" />
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+  {# Lucide 图标库 — 全站替代 emoji 用 #}
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
   {# Windows 磁贴 #}
   <meta name="msapplication-TileColor" content="#3b8ec1" />
   <meta name="msapplication-TileImage" content="/static/icon-192.png" />
@@ -58,6 +60,11 @@
       --shadow:    0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
       --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
     }
+    /* Lucide 图标默认样式 — 继承文字颜色，根据上下文调整尺寸 */
+    .ico { display: inline-block; width: 1em; height: 1em; vertical-align: -.125em; flex-shrink: 0; }
+    .ico-sm { width: .85em; height: .85em; }
+    .ico-lg { width: 1.25em; height: 1.25em; }
+    [data-lucide] { stroke-width: 1.8; }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -652,8 +659,8 @@
       </div>
       <div class="ribbon-user">
         {% if request.session.get('admin') %}
-          👤 {{ request.session.get('admin_username') or 'admin' }}
-          {% if request.session.get('admin_store') %} · 🏪 {{ request.session.get('admin_store') }}{% endif %}
+          <i data-lucide="user"></i> {{ request.session.get('admin_username') or 'admin' }}
+          {% if request.session.get('admin_store') %} · <i data-lucide="store"></i> {{ request.session.get('admin_store') }}{% endif %}
           {% if request.session.get('admin_role') == 'superadmin' %} · 超级管理员{% endif %}
           · <a href="/admin/logout">退出</a>
         {% else %}
@@ -673,48 +680,48 @@
 
     {# 接待组 #}
     <div class="ribbon-icons {% if _active_tab=='reception' %}active{% endif %}" data-tab-content="reception">
-      <a class="ribbon-icon {% if _path=='/admin' %}current{% endif %}" href="/admin"><span class="ri-emoji">🐱</span>TNR 申请</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/calendar') %}current{% endif %}" href="/admin/calendar"><span class="ri-emoji">📅</span>日历</a>
+      <a class="ribbon-icon {% if _path=='/admin' %}current{% endif %}" href="/admin"><span class="ri-emoji"><i data-lucide="cat"></i></span>TNR 申请</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/calendar') %}current{% endif %}" href="/admin/calendar"><span class="ri-emoji"><i data-lucide="calendar"></i></span>日历</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/appointments') %}current{% endif %}" href="/admin/appointments" id="nav-appt-link">
-        <span class="ri-emoji">📋</span>预约管理<span id="nav-pending-badge" class="ri-badge" style="display:none;"></span>
+        <span class="ri-emoji"><i data-lucide="clipboard-list"></i></span>预约管理<span id="nav-pending-badge" class="ri-badge" style="display:none;"></span>
       </a>
       {% if request.session.get('admin') %}
-      <a class="ribbon-icon {% if _path.startswith('/admin/customers') %}current{% endif %}" href="/admin/customers"><span class="ri-emoji">🏠</span>今日工作台</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/customers') %}current{% endif %}" href="/admin/customers"><span class="ri-emoji"><i data-lucide="home"></i></span>今日工作台</a>
       {% endif %}
     </div>
 
     {% if request.session.get('admin') %}
     {# 医疗组（就诊病历入口=全院查询；日常诊疗入口在客户档案 hub） #}
     <div class="ribbon-icons {% if _active_tab=='medical' %}active{% endif %}" data-tab-content="medical">
-      <a class="ribbon-icon {% if _path.startswith('/admin/dispensing') %}current{% endif %}" href="/admin/dispensing"><span class="ri-emoji">💊</span>发药台</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><span class="ri-emoji">💉</span>疫苗管理</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/rabies') %}current{% endif %}" href="/admin/rabies"><span class="ri-emoji">🐶</span>狂犬疫苗</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><span class="ri-emoji">🔍</span>病历查询</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/dispensing') %}current{% endif %}" href="/admin/dispensing"><span class="ri-emoji"><i data-lucide="pill"></i></span>发药台</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><span class="ri-emoji"><i data-lucide="syringe"></i></span>疫苗管理</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/rabies') %}current{% endif %}" href="/admin/rabies"><span class="ri-emoji"><i data-lucide="dog"></i></span>狂犬疫苗</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><span class="ri-emoji"><i data-lucide="search"></i></span>病历查询</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/follow-ups') %}current{% endif %}" href="/admin/follow-ups" id="nav-followup-link">
-        <span class="ri-emoji">📞</span>回访管理<span id="nav-followup-badge" class="ri-badge" style="display:none;background:#10b981;"></span>
+        <span class="ri-emoji"><i data-lucide="phone"></i></span>回访管理<span id="nav-followup-badge" class="ri-badge" style="display:none;background:#10b981;"></span>
       </a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/consent') %}current{% endif %}" href="/admin/consent-templates"><span class="ri-emoji">📝</span>协议模板</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/consent') %}current{% endif %}" href="/admin/consent-templates"><span class="ri-emoji"><i data-lucide="pencil-line"></i></span>协议模板</a>
     </div>
 
     {# 经营组 #}
     <div class="ribbon-icons {% if _active_tab=='business' %}active{% endif %}" data-tab-content="business">
-      <a class="ribbon-icon {% if _path.startswith('/admin/invoices') %}current{% endif %}" href="/admin/invoices"><span class="ri-emoji">🧾</span>收银台</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/inventory') %}current{% endif %}" href="/admin/inventory"><span class="ri-emoji">📦</span>库存管理</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/stocktake') %}current{% endif %}" href="/admin/stocktake"><span class="ri-emoji">📊</span>循环盘点</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/packages') %}current{% endif %}" href="/admin/packages"><span class="ri-emoji">🎫</span>套餐目录</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/coupons') %}current{% endif %}" href="/admin/coupons"><span class="ri-emoji">🎟️</span>优惠券</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/reports') %}current{% endif %}" href="/admin/reports/revenue"><span class="ri-emoji">📊</span>收款统计</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/invoices') %}current{% endif %}" href="/admin/invoices"><span class="ri-emoji"><i data-lucide="receipt"></i></span>收银台</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/inventory') %}current{% endif %}" href="/admin/inventory"><span class="ri-emoji"><i data-lucide="package"></i></span>库存管理</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/stocktake') %}current{% endif %}" href="/admin/stocktake"><span class="ri-emoji"><i data-lucide="bar-chart-3"></i></span>循环盘点</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/packages') %}current{% endif %}" href="/admin/packages"><span class="ri-emoji"><i data-lucide="ticket"></i></span>套餐目录</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/coupons') %}current{% endif %}" href="/admin/coupons"><span class="ri-emoji"><i data-lucide="ticket"></i></span>优惠券</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/reports') %}current{% endif %}" href="/admin/reports/revenue"><span class="ri-emoji"><i data-lucide="bar-chart-3"></i></span>收款统计</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/feedback') %}current{% endif %}" href="/admin/feedback" id="nav-feedback-link">
-        <span class="ri-emoji">💬</span>反馈<span id="nav-feedback-badge" class="ri-badge" style="display:none;background:#f97316;"></span>
+        <span class="ri-emoji"><i data-lucide="message-circle"></i></span>反馈<span id="nav-feedback-badge" class="ri-badge" style="display:none;background:#f97316;"></span>
       </a>
     </div>
 
     {# 系统组 #}
     <div class="ribbon-icons {% if _active_tab=='system' %}active{% endif %}" data-tab-content="system">
-      <a class="ribbon-icon {% if _path.startswith('/admin/hr') %}current{% endif %}" href="/admin/hr"><span class="ri-emoji">👨‍💼</span>人事管理</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/adoption') %}current{% endif %}" href="/admin/adoption"><span class="ri-emoji">🐱</span>待领养</a>
-      <a class="ribbon-icon {% if _path.startswith('/showcase') %}current{% endif %}" href="/showcase"><span class="ri-emoji">🌟</span>公布展示</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/changelog') %}current{% endif %}" href="/admin/changelog"><span class="ri-emoji">📝</span>开发日志</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/hr') %}current{% endif %}" href="/admin/hr"><span class="ri-emoji"><i data-lucide="briefcase"></i></span>人事管理</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/adoption') %}current{% endif %}" href="/admin/adoption"><span class="ri-emoji"><i data-lucide="cat"></i></span>待领养</a>
+      <a class="ribbon-icon {% if _path.startswith('/showcase') %}current{% endif %}" href="/showcase"><span class="ri-emoji"><i data-lucide="sparkles"></i></span>公布展示</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/changelog') %}current{% endif %}" href="/admin/changelog"><span class="ri-emoji"><i data-lucide="pencil-line"></i></span>开发日志</a>
     </div>
     {% endif %}
   </nav>
@@ -728,9 +735,9 @@
 
   <div class="wrap">
     <div id="pending-banner" class="pending-banner" style="display:none;">
-      <span>🔔</span>
+      <span><i data-lucide="bell"></i></span>
       <span>有 <strong id="pending-banner-count">0</strong> 条新预约待确认</span>
-      <a href="/admin/appointments?preset=month&appt_status=pending">立即查看 →</a>
+      <a href="/admin/appointments?preset=month&appt_status=pending">立即查看 <i data-lucide="arrow-right"></i></a>
     </div>
     {% block body %}{% endblock %}
     <footer>图像识别结论仅供辅助参考，最终以到院核对与医生判断为准。严禁家养猫冒充流浪猫申请。</footer>
@@ -987,9 +994,9 @@
 
   {# ── 全局图片 Lightbox：拦截所有 <a href="/file/..."> 点击，弹层显示 ── #}
   <div id="lb-overlay" role="dialog" aria-hidden="true">
-    <button id="lb-close" aria-label="关闭">✕</button>
+    <button id="lb-close" aria-label="关闭"><i data-lucide="x"></i></button>
     <div id="lb-content"></div>
-    <div id="lb-hint">轻触画面外或按 ✕ 关闭</div>
+    <div id="lb-hint">轻触画面外或按 <i data-lucide="x"></i> 关闭</div>
   </div>
   <script>
   (function () {
@@ -1078,6 +1085,26 @@
       if (overlay.classList.contains('open')) closeLightbox();
     });
   })();
+  </script>
+
+  {# Lucide 图标渲染：扫描所有 data-lucide 属性并替换为 SVG #}
+  <script>
+    if (window.lucide) {
+      lucide.createIcons({ attrs: { class: 'ico' } });
+      // 兼容 SPA 部分场景：MutationObserver 监听新加入的图标
+      var _icoObserver = new MutationObserver(function (muts) {
+        var found = false;
+        muts.forEach(function (m) {
+          m.addedNodes && m.addedNodes.forEach(function (n) {
+            if (n.nodeType === 1 && (n.hasAttribute && n.hasAttribute('data-lucide') || n.querySelector && n.querySelector('[data-lucide]'))) {
+              found = true;
+            }
+          });
+        });
+        if (found) lucide.createIcons({ attrs: { class: 'ico' } });
+      });
+      _icoObserver.observe(document.body, { childList: true, subtree: true });
+    }
   </script>
 </body>
 </html>

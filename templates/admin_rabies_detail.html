@@ -69,14 +69,14 @@
 {% endblock %}
 {% block body %}
 
-{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
 
 <div class="page-head">
  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
- <a href="/admin/rabies" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回列表</a>
+ <a href="/admin/rabies" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回列表</a>
  <div>
- <h1><span class="ph-icon">🐶</span>狂犬疫苗登记 #{{ rec.id }}
- {% if rec.status == 'completed' and rec.cert_no %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已完成</span>
+ <h1><span class="ph-icon"><i data-lucide="dog"></i></span>狂犬疫苗登记 #{{ rec.id }}
+ {% if rec.status == 'completed' and rec.cert_no %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已完成</span>
  {% elif rec.status == 'completed' %}<span class="pill pill-info" style="margin-left:0.5rem;">待录证号</span>
  {% elif rec.status == 'staff_pending' %}<span class="pill pill-warn" style="margin-left:0.5rem;">待医护填写</span>
  {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待主人签字</span>{% endif %}
@@ -89,16 +89,16 @@
 <!-- 流程进度 -->
 <div class="card step-progress-card" style="margin-bottom:1rem;">
  <div class="step-progress-row" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
- <span class="step-badge step-done">① 主人填写 ✓</span>
- <span class="step-arrow" style="color:var(--muted);">→</span>
+ <span class="step-badge step-done">① 主人填写 <i data-lucide="check"></i></span>
+ <span class="step-arrow" style="color:var(--muted);"><i data-lucide="arrow-right"></i></span>
  <span class="step-badge {% if rec.status == 'completed' %}step-done{% else %}step-pending{% endif %}">
- ② 医护填写{% if rec.status == 'completed' %} ✓{% endif %}
+ ② 医护填写{% if rec.status == 'completed' %} <i data-lucide="check"></i>{% endif %}
  </span>
- <span class="step-arrow" style="color:var(--muted);">→</span>
+ <span class="step-arrow" style="color:var(--muted);"><i data-lucide="arrow-right"></i></span>
  <span class="step-badge {% if rec.status == 'completed' %}step-pending{% else %}step-wait{% endif %}">③ 注射疫苗</span>
- <span class="step-arrow" style="color:var(--muted);">→</span>
+ <span class="step-arrow" style="color:var(--muted);"><i data-lucide="arrow-right"></i></span>
  <span class="step-badge {% if rec.cert_no %}step-done{% else %}step-wait{% endif %}">
- ④ 录入证号{% if rec.cert_no %} ✓{% endif %}
+ ④ 录入证号{% if rec.cert_no %} <i data-lucide="check"></i>{% endif %}
  </span>
  </div>
 </div>
@@ -228,12 +228,12 @@
  <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:var(--muted);">关联档案</h3>
  {% if rec.customer_id %}
  <a href="/admin/customers/{{ rec.customer_id }}" class="btn secondary" style="width:100%;display:block;text-align:center;margin-bottom:0.5rem;font-size:0.85rem;">
- 👤 查看客户档案
+ <i data-lucide="user"></i> 查看客户档案
  </a>
  {% endif %}
  {% if rec.pet_id %}
  <a href="/admin/pets/{{ rec.pet_id }}" class="btn secondary" style="width:100%;display:block;text-align:center;font-size:0.85rem;">
- 🐾 查看宠物档案
+ <i data-lucide="paw-print"></i> 查看宠物档案
  </a>
  {% endif %}
  {% if not rec.customer_id and not rec.pet_id %}
@@ -246,7 +246,7 @@
  <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:var(--muted);">导出</h3>
  <a href="/admin/rabies/export/excel?q={{ rec.owner_phone }}"
  class="btn secondary" style="width:100%;display:block;text-align:center;font-size:0.85rem;">
- ⬇ 导出此记录 Excel
+ <i data-lucide="arrow-down"></i> 导出此记录 Excel
  </a>
  </div>
 

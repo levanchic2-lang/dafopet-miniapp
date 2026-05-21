@@ -24,16 +24,16 @@
 {% endblock %}
 {% block body %}
 
-{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="page-head">
   <div>
-    <h1><span class="ph-icon">🐱</span>待领养动物</h1>
+    <h1><span class="ph-icon"><i data-lucide="cat"></i></span>待领养动物</h1>
     <p class="ph-sub">共 {{ pets|length }} 条记录</p>
   </div>
   <div class="ph-actions">
-    <a href="/admin/adoption/new" class="btn" style="font-size:0.88rem;">＋ 新增动物</a>
+    <a href="/admin/adoption/new" class="btn" style="font-size:0.88rem;"><i data-lucide="plus"></i> 新增动物</a>
   </div>
 </div>
 
@@ -46,13 +46,13 @@
       <img src="/api/adoption/{{ pet.id }}/image/1" alt="{{ pet.name }}" />
       {% else %}
       <div class="adoption-img-placeholder">
-        <span style="font-size:2.5rem;">{{ '🐱' if pet.species == 'cat' else '🐶' if pet.species == 'dog' else '🐾' }}</span>
+        <span style="font-size:2.5rem;">{{ '<i data-lucide="cat"></i>' if pet.species == 'cat' else '<i data-lucide="dog"></i>' if pet.species == 'dog' else '<i data-lucide="paw-print"></i>' }}</span>
         <span>暂无图片</span>
       </div>
       {% endif %}
       <div class="adoption-status-overlay">
         {% if pet.status == 'available' %}
-          <span class="pill pill-ok">✓ 待领养</span>
+          <span class="pill pill-ok"><i data-lucide="check"></i> 待领养</span>
         {% elif pet.status == 'adopted' %}
           <span class="pill pill-gray">已领养</span>
         {% else %}
@@ -63,7 +63,7 @@
     <div class="adoption-body">
       <div class="adoption-name">{{ pet.name or '未命名' }}</div>
       <div class="adoption-meta">
-        {{ '🐱 猫' if pet.species == 'cat' else '🐶 狗' if pet.species == 'dog' else '🐾 其他' }}
+        {{ '<i data-lucide="cat"></i> 猫' if pet.species == 'cat' else '<i data-lucide="dog"></i> 狗' if pet.species == 'dog' else '<i data-lucide="paw-print"></i> 其他' }}
         {% if pet.breed %} · {{ pet.breed }}{% endif %}
         {% if pet.age_estimate %} · {{ pet.age_estimate }}{% endif %}
         {% if pet.gender == 'male' %} · ♂ 公{% elif pet.gender == 'female' %} · ♀ 母{% endif %}
@@ -77,8 +77,8 @@
 </div>
 {% else %}
 <div class="empty-card">
-  <div class="empty-icon">🐱</div>
-  暂无待领养动物，<a href="/admin/adoption/new" style="color:#3b82f6;">新增第一只 →</a>
+  <div class="empty-icon"><i data-lucide="cat"></i></div>
+  暂无待领养动物，<a href="/admin/adoption/new" style="color:#3b82f6;">新增第一只 <i data-lucide="arrow-right"></i></a>
 </div>
 {% endif %}
 

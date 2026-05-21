@@ -153,7 +153,7 @@ body[data-size="T80"] .rpt-sig { display: none; }
   <div class="rpt-section-h">附 件 报 告（PDF）</div>
   {% for r in pdf_reports %}
   <div class="rpt-pdf-card">
-    📄 <strong>{{ r.original_name }}</strong>
+    <i data-lucide="file-text"></i> <strong>{{ r.original_name }}</strong>
     {% if r.item_label %} — {{ r.item_label }}{% endif %}
     <div style="margin-top:4px;font-size:8pt;color:#888;">上传于 {{ r.uploaded_at.strftime('%Y-%m-%d %H:%M') if r.uploaded_at else '' }}</div>
   </div>

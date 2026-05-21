@@ -48,13 +48,13 @@ select, input[type=text] {
 
 <div class="top-bar">
   <div>
-    <h1>📋 检查报告上传</h1>
+    <h1><i data-lucide="clipboard-list"></i> 检查报告上传</h1>
     <div class="sub">大风动物医院 · 检查单 #{{ order.id }}</div>
   </div>
 </div>
 
 {% if msg %}
-<div class="msg-ok">✅ {{ msg }}</div>
+<div class="msg-ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>
 {% endif %}
 
 <!-- 宠物信息 -->
@@ -106,14 +106,14 @@ select, input[type=text] {
     <input type="file" name="file" id="file-input" accept="image/*" capture="environment"
            onchange="previewFile(this)" required />
 
-    <label for="file-input" class="upload-btn">📷 拍照 / 选择图片</label>
+    <label for="file-input" class="upload-btn"><i data-lucide="camera"></i> 拍照 / 选择图片</label>
 
     <div class="preview-wrap" id="preview-wrap" style="display:none;">
       <img id="preview-img" src="" alt="预览" />
     </div>
 
     <button type="submit" class="submit-btn" id="submit-btn" style="display:none;">
-      ✅ 确认上传
+      <i data-lucide="check-circle-2"></i> 确认上传
     </button>
   </form>
 </div>

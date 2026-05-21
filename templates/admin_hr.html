@@ -6,7 +6,7 @@
 
 {% if expiring %}
 <div class="msg" style="background:#fffbeb;border-color:#fcd34d;color:#92400e;margin-bottom:1rem;">
- ⚠️ <strong>合同即将到期提醒（30 天内）：</strong>
+ <i data-lucide="alert-triangle"></i> <strong>合同即将到期提醒（30 天内）：</strong>
  {% for c in expiring %}
  <span style="margin-left:0.6rem;">
  <a href="/admin/staff/{{ c.staff_id }}" style="color:#92400e;font-weight:600;">{{ c.staff.name }}</a> — {{ c.end_date }} 到期
@@ -17,12 +17,12 @@
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">👨‍💼</span>人事管理</h1>
+ <h1><span class="ph-icon">👨‍<i data-lucide="briefcase"></i></span>人事管理</h1>
  <p class="ph-sub">在职 {{ active_staff|length }} 人 · 离职 {{ resigned_staff|length }} 人</p>
  </div>
  {% if request.session.get('admin_role') == 'superadmin' or not request.session.get('admin_role') %}
  <div class="ph-actions">
- <a href="/admin/staff/create" class="btn" style="font-size:0.88rem;">＋ 新增员工</a>
+ <a href="/admin/staff/create" class="btn" style="font-size:0.88rem;"><i data-lucide="plus"></i> 新增员工</a>
  </div>
  {% endif %}
 </div>
@@ -30,7 +30,7 @@
 {# 在职员工 #}
 <div class="data-table-wrap" style="margin-bottom:1rem;">
  <div style="padding:0.6rem 1rem;background:var(--bg-elevated);border-bottom:1px solid var(--border);font-weight:700;font-size:0.92rem;">
- 👤 在职员工（{{ active_staff|length }}）
+ <i data-lucide="user"></i> 在职员工（{{ active_staff|length }}）
  </div>
  <table class="data-table mobile-card">
  <thead>
@@ -54,10 +54,10 @@
  <td data-label="入职日期" style="color:var(--muted);">{{ s.hire_date or '—' }}</td>
  <td data-label="状态">
  {% if s.status == 'probation' %}<span class="pill pill-warn">试用中</span>
- {% else %}<span class="pill pill-ok">✓ 在职</span>{% endif %}
+ {% else %}<span class="pill pill-ok"><i data-lucide="check"></i> 在职</span>{% endif %}
  </td>
  <td class="actions" style="text-align:right;">
- <a href="/admin/staff/{{ s.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
+ <a href="/admin/staff/{{ s.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 <i data-lucide="arrow-right"></i></a>
  </td>
  </tr>
  {% else %}
@@ -83,7 +83,7 @@
  <td data-label="离职日期" style="color:var(--muted);">离职：{{ s.resign_date or '—' }}</td>
  <td data-label="状态"><span class="pill pill-gray">离职</span></td>
  <td class="actions" style="text-align:right;">
- <a href="/admin/staff/{{ s.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
+ <a href="/admin/staff/{{ s.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 <i data-lucide="arrow-right"></i></a>
  </td>
  </tr>
  {% endfor %}
@@ -213,7 +213,7 @@
 
  <!-- 新建账号 -->
  <details style="margin-top:1.25rem;">
- <summary style="cursor:pointer;font-size:0.9rem;font-weight:600;color:var(--text);user-select:none;">＋ 新建账号</summary>
+ <summary style="cursor:pointer;font-size:0.9rem;font-weight:600;color:var(--text);user-select:none;"><i data-lucide="plus"></i> 新建账号</summary>
  <form method="post" action="/admin/users/create" style="margin-top:0.75rem;max-width:560px;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div class="row2" style="margin-top:0.6rem;">
@@ -243,7 +243,7 @@
  </select>
  </div>
  </div>
- <p class="sub" style="margin:0.4rem 0 0;font-size:0.8rem;color:var(--muted);">⚠️ 非超级管理员若设置了所属门店，登录后只能看到该门店的数据。</p>
+ <p class="sub" style="margin:0.4rem 0 0;font-size:0.8rem;color:var(--muted);"><i data-lucide="alert-triangle"></i> 非超级管理员若设置了所属门店，登录后只能看到该门店的数据。</p>
  <button type="submit" style="margin-top:1rem;">创建账号</button>
  </form>
  </details>

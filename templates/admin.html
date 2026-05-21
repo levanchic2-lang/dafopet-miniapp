@@ -229,7 +229,7 @@
 } %}
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">🐈</span>TNR 审核与手术登记</h1>
+ <h1><span class="ph-icon"><i data-lucide="cat"></i></span>TNR 审核与手术登记</h1>
  <p class="ph-sub">处理申请、到院核对、上传术前术后资料、标记公开展示同意</p>
  </div>
 </div>
@@ -379,7 +379,7 @@
  <form method="post" action="{{ request.url_for('admin_purge') }}" style="display:grid;gap:0.5rem;max-width:520px;" onsubmit="return confirm('确定清空全部数据（申请+预约）？此操作不可恢复！');">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <input type="hidden" name="scope" value="everything"/>
- <label style="margin:0;font-weight:600;color:#b91c1c;">⚠️ 一键清空全部数据（申请 + 预约）</label>
+ <label style="margin:0;font-weight:600;color:#b91c1c;"><i data-lucide="alert-triangle"></i> 一键清空全部数据（申请 + 预约）</label>
  <input type="text" name="confirm" autocomplete="off" required/>
  <button type="submit" class="danger">清空全部测试数据</button>
  </form>
@@ -389,12 +389,12 @@
 
 {% macro status_badge(s) -%}
  {% if s == 'pending_ai' %}<span class="pill pill-warn">🤖 AI/待分派</span>
- {% elif s == 'pending_manual' %}<span class="pill pill-warn">⏳ 待人工审核</span>
+ {% elif s == 'pending_manual' %}<span class="pill pill-warn"><i data-lucide="hourglass"></i> 待人工审核</span>
  {% elif s == 'pre_approved' %}<span class="pill pill-info">预通过</span>
- {% elif s == 'approved' %}<span class="pill pill-ok">✓ 已通过</span>
- {% elif s == 'scheduled' %}<span class="pill pill-info">📅 已预约</span>
- {% elif s == 'arrived_verified' %}<span class="pill pill-info">🏥 到院已核对</span>
- {% elif s == 'surgery_completed' %}<span class="pill pill-ok">✓ 手术完成</span>
+ {% elif s == 'approved' %}<span class="pill pill-ok"><i data-lucide="check"></i> 已通过</span>
+ {% elif s == 'scheduled' %}<span class="pill pill-info"><i data-lucide="calendar"></i> 已预约</span>
+ {% elif s == 'arrived_verified' %}<span class="pill pill-info"><i data-lucide="hospital"></i> 到院已核对</span>
+ {% elif s == 'surgery_completed' %}<span class="pill pill-ok"><i data-lucide="check"></i> 手术完成</span>
  {% elif s == 'no_show' %}<span class="pill pill-no">爽约</span>
  {% elif s == 'cancelled' %}<span class="pill pill-gray">已取消</span>
  {% elif s == 'rejected' %}<span class="pill pill-no">已拒绝</span>
@@ -408,7 +408,7 @@
  <div class="admin-app-top">
  <div class="admin-app-lines">
  <strong>#{{ a.id }}</strong> {{ status_badge(a.status) }}
- {% if a.staff_cat_verified %}<span class="pill pill-ok" style="margin-left:0.35rem;">🐱 已现场确认</span>{% endif %}
+ {% if a.staff_cat_verified %}<span class="pill pill-ok" style="margin-left:0.35rem;"><i data-lucide="cat"></i> 已现场确认</span>{% endif %}
  <h2 style="font-size:1.05rem;margin:0.5rem 0 0.25rem;">{{ a.applicant_name }} · {{ a.phone }}</h2>
  <p class="sub" style="margin:0;">{{ a.address }}</p>
  <p>
@@ -417,7 +417,7 @@
  <p style="margin-top:0.5rem;">
  流浪猫名字：{{ a.cat_nickname or '—' }} · 性别 {{ a.cat_gender }} · {{ a.age_estimate or '年龄未填' }}
  <details style="display:inline-block;margin-left:0.6rem;">
- <summary style="cursor:pointer;font-size:0.8rem;color:var(--muted);display:inline;">✏️ 修改</summary>
+ <summary style="cursor:pointer;font-size:0.8rem;color:var(--muted);display:inline;"><i data-lucide="pencil"></i> 修改</summary>
  <form method="post" action="/admin/application/{{ a.id }}/edit-cat" style="margin-top:0.6rem;display:grid;gap:0.5rem;max-width:420px;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div class="row2">
@@ -570,7 +570,7 @@
  <div style="position:relative;display:inline-block;">
  {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
  <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
- title="术前视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+ title="术前视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;"><i data-lucide="film"></i></a>
  {% else %}
  <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术前 {{ loop.index }} · 点击查看原图">
  <img src="/file/{{ m.id }}" alt="术前{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async"/>
@@ -578,7 +578,7 @@
  {% endif %}
  <form method="post" action="/admin/media/{{ m.id }}/delete" style="margin:0;" onsubmit="return confirm('确认删除此文件？');">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <button type="submit" style="position:absolute;top:2px;right:2px;width:18px;height:18px;padding:0;font-size:11px;line-height:1;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;">✕</button>
+ <button type="submit" style="position:absolute;top:2px;right:2px;width:18px;height:18px;padding:0;font-size:11px;line-height:1;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;"><i data-lucide="x"></i></button>
  </form>
  </div>
  {% endfor %}
@@ -595,7 +595,7 @@
  <div style="position:relative;display:inline-block;">
  {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
  <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
- title="术后视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+ title="术后视频 {{ loop.index }} · 点击查看" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;"><i data-lucide="film"></i></a>
  {% else %}
  <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术后 {{ loop.index }} · 点击查看原图">
  <img src="/file/{{ m.id }}" alt="术后{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async"/>
@@ -603,7 +603,7 @@
  {% endif %}
  <form method="post" action="/admin/media/{{ m.id }}/delete" style="margin:0;" onsubmit="return confirm('确认删除此文件？');">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <button type="submit" style="position:absolute;top:2px;right:2px;width:18px;height:18px;padding:0;font-size:11px;line-height:1;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;">✕</button>
+ <button type="submit" style="position:absolute;top:2px;right:2px;width:18px;height:18px;padding:0;font-size:11px;line-height:1;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;"><i data-lucide="x"></i></button>
  </form>
  </div>
  {% endfor %}
@@ -635,7 +635,7 @@
  {% if a.status in ['approved', 'arrived_verified', 'scheduled'] and not surgery_media_ok %}
  <p class="sub" style="margin:0 0 0.65rem;">当前：术前 {{ surg_before_n }} 个文件，术后 {{ surg_after_n }} 个文件。请补全后再点「标记手术已完成」。</p>
  {% elif surgery_media_ok %}
- <p class="sub" style="margin:0 0 0.65rem;color:var(--ok, green);">✓ 术前 {{ surg_before_n }} 个、术后 {{ surg_after_n }} 个，已满足要求，可标记手术完成。</p>
+ <p class="sub" style="margin:0 0 0.65rem;color:var(--ok, green);"><i data-lucide="check"></i> 术前 {{ surg_before_n }} 个、术后 {{ surg_after_n }} 个，已满足要求，可标记手术完成。</p>
  {% endif %}
  {# 已上传文件预览（如有）#}
  {% if surg_before_files or surg_after_files %}
@@ -647,7 +647,7 @@
  {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
  {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
  <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
- title="术前视频 {{ loop.index }}" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+ title="术前视频 {{ loop.index }}" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;"><i data-lucide="film"></i></a>
  {% else %}
  <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术前 {{ loop.index }}">
  <img src="/file/{{ m.id }}" alt="术前{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async"/>
@@ -663,7 +663,7 @@
  {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
  {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
  <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
- title="术后视频 {{ loop.index }}" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;">🎬</a>
+ title="术后视频 {{ loop.index }}" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;"><i data-lucide="film"></i></a>
  {% else %}
  <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术后 {{ loop.index }}">
  <img src="/file/{{ m.id }}" alt="术后{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async"/>
@@ -702,7 +702,7 @@
  <div class="admin-action-title">审核</div>
  <div class="admin-form-stack">
  {% if a.status == 'draft' %}
- <p class="sub" style="margin:0;color:#b45309;">⚠️ 此申请为草稿（客户提交后媒体上传/AI审核未完成），无法正常审核。可直接删除，客户将可重新提交。</p>
+ <p class="sub" style="margin:0;color:#b45309;"><i data-lucide="alert-triangle"></i> 此申请为草稿（客户提交后媒体上传/AI审核未完成），无法正常审核。可直接删除，客户将可重新提交。</p>
  <form method="post" action="/admin/app/{{ a.id }}/delete-draft" onsubmit="return confirm('确认删除此草稿？客户将可重新提交申请。')">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <button type="submit" class="danger">删除此草稿</button>

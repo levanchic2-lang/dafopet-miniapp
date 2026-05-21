@@ -525,14 +525,14 @@
       {# 开关按钮 #}
       <form method="post" action="/admin/tnr-quota/{{ sq.store_index }}/toggle" style="margin-top:0.55rem;">
         <button type="submit" style="width:100%;padding:0.4rem 0;border-radius:8px;border:1px solid var(--border-strong);font-size:0.82rem;font-weight:700;cursor:pointer;background:{% if sq.accepting %}#fee2e2{% else %}#f0fdf4{% endif %};color:{% if sq.accepting %}#991b1b{% else %}#166534{% endif %};">
-          {% if sq.accepting %}🔒 点击关闭预约{% else %}🔓 点击重新开放{% endif %}
+          {% if sq.accepting %}<i data-lucide="lock"></i> 点击关闭预约{% else %}🔓 点击重新开放{% endif %}
         </button>
       </form>
     </div>
     {% endfor %}
   </div>
   <div style="margin-top:0.55rem;font-size:0.76rem;color:var(--muted);line-height:1.6;">
-    ℹ️ 配额仅统计状态为「已确认」的 TNR 预约；取消或爽约后配额自动释放。手动关闭后该门店小程序端无法提交新 TNR 预约。
+    <i data-lucide="info"></i> 配额仅统计状态为「已确认」的 TNR 预约；取消或爽约后配额自动释放。手动关闭后该门店小程序端无法提交新 TNR 预约。
   </div>
 </div>
 {% endif %}
@@ -553,7 +553,7 @@
       {{ stats.pending_total | default(0) }}
     </div>
     <div class="stat-sub" style="{% if stats.pending_total > 0 %}color:#d97706;{% endif %}">
-      {% if stats.pending_total > 0 %}点击查看 →{% else %}今日及未来全部{% endif %}
+      {% if stats.pending_total > 0 %}点击查看 <i data-lucide="arrow-right"></i>{% else %}今日及未来全部{% endif %}
     </div>
   </a>
   <div class="stat-cell">
@@ -581,7 +581,7 @@
           <label>开始日期</label>
           <input type="date" name="df" id="input-df" value="{{ filters.date_from | default('') }}" />
         </div>
-        <div class="range-sep">→</div>
+        <div class="range-sep"><i data-lucide="arrow-right"></i></div>
         <div class="filter-field">
           <label>结束日期</label>
           <input type="date" name="dt" id="input-dt" value="{{ filters.date_to | default('') }}" />
@@ -637,7 +637,7 @@
           onclick="var b=document.getElementById('rules-body');var opening=b.style.display==='none';b.style.display=opening?'grid':'none';this.querySelector('.rules-arrow').textContent=opening?'▲':'▼';"
           style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0.85rem 0.95rem;cursor:pointer;font-size:0.95rem;font-weight:700;color:inherit;text-align:left;">
     <span>预约规则（仅后台可见）</span>
-    <span class="rules-arrow" style="font-size:0.75rem;color:var(--muted);">▼</span>
+    <span class="rules-arrow" style="font-size:0.75rem;color:var(--muted);"><i data-lucide="chevron-down"></i></span>
   </button>
   <div id="rules-body" style="display:none;padding:0 0.95rem 0.85rem;font-size:0.9rem;gap:0.65rem;border-top:1px solid var(--border);">
     <div style="padding-top:0.75rem;">
@@ -646,7 +646,7 @@
         <li>同门店同日期的预约时间段不可重叠（按「开始时间 + 时长」计算区间）。</li>
         <li>已取消（cancelled）或爽约（no_show）的预约不参与冲突检测。</li>
         <li>改约时自动排除当前预约本身，再做冲突检测。</li>
-        <li>📌 <strong>预约优先政策</strong>：若有预约客人与临时到店客人时间冲突，优先接待有预约记录的客人。此政策已在小程序预约页向客户告知。</li>
+        <li><i data-lucide="pin"></i> <strong>预约优先政策</strong>：若有预约客人与临时到店客人时间冲突，优先接待有预约记录的客人。此政策已在小程序预约页向客户告知。</li>
       </ul>
     </div>
     <div>
@@ -680,10 +680,10 @@
     <div>
       <strong>状态联动规则</strong>
       <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
-        <li>预约「确认」→ 关联 TNR 申请状态变为「已预约（scheduled）」。</li>
-        <li>预约「取消」（且申请为已预约）→ 关联申请回退为「已通过（approved）」。</li>
-        <li>预约「爽约」→ 关联申请状态变为「爽约（no_show）」。</li>
-        <li>⚠️ 「手术完成」不在预约管理里操作 — 须在「TNR 审核与手术登记」（医院后台）中上传术前 + 术后影像后，点击「标记手术已完成」。手术完成的小程序通知功能待医疗管理系统完善后启用，当前暂未开放。</li>
+        <li>预约「确认」<i data-lucide="arrow-right"></i> 关联 TNR 申请状态变为「已预约（scheduled）」。</li>
+        <li>预约「取消」（且申请为已预约）<i data-lucide="arrow-right"></i> 关联申请回退为「已通过（approved）」。</li>
+        <li>预约「爽约」<i data-lucide="arrow-right"></i> 关联申请状态变为「爽约（no_show）」。</li>
+        <li><i data-lucide="alert-triangle"></i> 「手术完成」不在预约管理里操作 — 须在「TNR 审核与手术登记」（医院后台）中上传术前 + 术后影像后，点击「标记手术已完成」。手术完成的小程序通知功能待医疗管理系统完善后启用，当前暂未开放。</li>
       </ul>
     </div>
     <div>
@@ -695,7 +695,7 @@
         <li>晚上（18:00–22:00，4 小时）：上限 <strong>12 单位</strong></li>
         <li>各类型占用单位：疫苗/驱虫 = <strong>1</strong>，普通门诊 = <strong>3</strong>，TNR/手术 = <strong>4</strong>，美容/洗护 = <strong>0（不参与容量池）</strong></li>
         <li>下午组合举例：2 台 TNR（4+4=8）｜6 个普通门诊（3×6=18）｜2 台 TNR + 2 个门诊（4+4+3+3=14）</li>
-        <li>⚠️ TNR 另有每日每店 <strong>2 台</strong>硬上限，两套规则同时生效。</li>
+        <li><i data-lucide="alert-triangle"></i> TNR 另有每日每店 <strong>2 台</strong>硬上限，两套规则同时生效。</li>
       </ul>
     </div>
     <div>
@@ -730,18 +730,18 @@
           </table>
           <div style="margin-top:0.35rem;font-size:0.8rem;color:var(--muted);">以上为基础时长，每项附加服务额外 +30 分钟。实际执行时间以门店为准。</div>
         </li>
-        <li style="margin-top:0.35rem;">🐱 <strong>猫犬并发规则</strong>：猫完成主动护理（前 60 分钟）进入烘干阶段后，美容师可同时接入 <strong>≤60 分钟</strong>的犬洗护；超出烘干窗口的犬服务仍按普通冲突检测。</li>
+        <li style="margin-top:0.35rem;"><i data-lucide="cat"></i> <strong>猫犬并发规则</strong>：猫完成主动护理（前 60 分钟）进入烘干阶段后，美容师可同时接入 <strong>≤60 分钟</strong>的犬洗护；超出烘干窗口的犬服务仍按普通冲突检测。</li>
       </ul>
     </div>
     <div>
       <strong>当前已开放的客户小程序通知</strong>
       <ul style="margin:0.35rem 0 0;padding-left:1.25rem;line-height:1.75;">
-        <li>✅ <strong>预约确认通知</strong>：客户提交预约后可订阅，后台确认预约时自动推送。</li>
-        <li>✅ <strong>TNR 申请通过通知</strong>：AI 或人工审核通过后自动推送。</li>
-        <li>✅ <strong>待人工审核通知</strong>：AI 判断需人工复核时自动推送。</li>
-        <li>✅ <strong>审核不通过通知</strong>：人工审核拒绝时自动推送，附带不通过原因。</li>
-        <li>✅ <strong>手术完成通知</strong>：后台标记手术完成时自动推送（客户须在 TNR 申请提交时或预约时点击授权）。</li>
-        <li>✅ <strong>手术前提醒</strong>：每天 08:00 定时扫描，提前一天及当天有 TNR 手术预约时自动推送。</li>
+        <li><i data-lucide="check-circle-2"></i> <strong>预约确认通知</strong>：客户提交预约后可订阅，后台确认预约时自动推送。</li>
+        <li><i data-lucide="check-circle-2"></i> <strong>TNR 申请通过通知</strong>：AI 或人工审核通过后自动推送。</li>
+        <li><i data-lucide="check-circle-2"></i> <strong>待人工审核通知</strong>：AI 判断需人工复核时自动推送。</li>
+        <li><i data-lucide="check-circle-2"></i> <strong>审核不通过通知</strong>：人工审核拒绝时自动推送，附带不通过原因。</li>
+        <li><i data-lucide="check-circle-2"></i> <strong>手术完成通知</strong>：后台标记手术完成时自动推送（客户须在 TNR 申请提交时或预约时点击授权）。</li>
+        <li><i data-lucide="check-circle-2"></i> <strong>手术前提醒</strong>：每天 08:00 定时扫描，提前一天及当天有 TNR 手术预约时自动推送。</li>
       </ul>
     </div>
   </div>

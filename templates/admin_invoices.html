@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">🧾</span>收银台</h1>
+ <h1><span class="ph-icon"><i data-lucide="receipt"></i></span>收银台</h1>
  <p class="ph-sub">收费单由就诊、处方、销售等环节生成，在此统一收款</p>
  </div>
 </div>
@@ -14,14 +14,14 @@
 {% if inv_stats %}
 <div class="stat-grid">
  <div class="stat-card s-ok">
- <div style="font-size:1.8rem;">💰</div>
+ <div style="font-size:1.8rem;"><i data-lucide="wallet"></i></div>
  <div>
  <div class="stat-num">¥ {{ '%.2f'|format(inv_stats.today_paid_total) }}</div>
  <div class="stat-label">今日已收款（{{ inv_stats.today_paid_count }} 单）</div>
  </div>
  </div>
  <div class="stat-card s-warn">
- <div style="font-size:1.8rem;">⏳</div>
+ <div style="font-size:1.8rem;"><i data-lucide="hourglass"></i></div>
  <div>
  <div class="stat-num">¥ {{ '%.2f'|format(inv_stats.unpaid_total) }}</div>
  <div class="stat-label">待收账款（{{ inv_stats.unpaid_count }} 单）</div>
@@ -75,7 +75,7 @@
  <td data-label="实收" style="text-align:right;font-weight:700;font-size:0.95rem;">¥ {{ '%.2f'|format(inv.total_amount) }}</td>
  <td data-label="状态">
  {% if inv.payment_status == 'paid' %}
- <span class="pill pill-ok">✓ 已收款</span>
+ <span class="pill pill-ok"><i data-lucide="check"></i> 已收款</span>
  {% elif inv.payment_status == 'cancelled' %}
  <span class="pill pill-gray">已取消</span>
  {% elif inv.payment_status == 'refunded' %}
@@ -89,7 +89,7 @@
  </td>
  <td class="actions" style="text-align:right;">
  <a href="/admin/invoices/{{ inv.id }}" class="btn {% if inv.payment_status == 'unpaid' %}{% else %}secondary{% endif %}" style="font-size:0.78rem;padding:0.25rem 0.7rem;">
- {% if inv.payment_status == 'unpaid' %}💰 收款{% else %}查看{% endif %}
+ {% if inv.payment_status == 'unpaid' %}<i data-lucide="wallet"></i> 收款{% else %}查看{% endif %}
  </a>
  </td>
  </tr>
@@ -99,7 +99,7 @@
 </div>
 {% else %}
 <div class="empty-card">
- <div class="empty-icon">🧾</div>
+ <div class="empty-icon"><i data-lucide="receipt"></i></div>
  {% if status == 'unpaid' %}暂无待收款账单
  {% elif status == 'paid' %}暂无已收款账单
  {% elif status == 'cancelled' %}暂无已取消账单

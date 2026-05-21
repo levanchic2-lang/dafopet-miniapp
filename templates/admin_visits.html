@@ -3,18 +3,18 @@
 
 {# 工作流迁移提示 #}
 <div class="msg" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;margin-bottom:0.85rem;font-size:0.88rem;">
- 💡 <strong>新工作流提示：</strong>诊疗/处方/检查单等已整合到客户档案 Hub。
- 请从 <a href="/admin/customers" style="color:#1e40af;font-weight:600;text-decoration:underline;">👥 客户档案</a> 进入对应客户的宠物诊疗 tab 操作。
+ <i data-lucide="lightbulb"></i> <strong>新工作流提示：</strong>诊疗/处方/检查单等已整合到客户档案 Hub。
+ 请从 <a href="/admin/customers" style="color:#1e40af;font-weight:600;text-decoration:underline;"><i data-lucide="users"></i> 客户档案</a> 进入对应客户的宠物诊疗 tab 操作。
  本页保留用于全院搜索/历史查询。
 </div>
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">🩺</span>就诊病历（全院查询）</h1>
+ <h1><span class="ph-icon"><i data-lucide="stethoscope"></i></span>就诊病历（全院查询）</h1>
  <p class="ph-sub">共 {{ total }} 条记录 · 跨客户的诊疗搜索视图</p>
  </div>
  <div class="ph-actions">
- <a href="/admin/customers" class="btn" style="font-size:0.88rem;">👥 进入客户档案</a>
+ <a href="/admin/customers" class="btn" style="font-size:0.88rem;"><i data-lucide="users"></i> 进入客户档案</a>
  </div>
 </div>
 
@@ -67,7 +67,7 @@
  <td data-label="宠物">
  {% set p = pet_map.get(v.pet_id) %}
  {% if p %}
- {{ '🐱' if p.species == 'cat' else '🐶' if p.species == 'dog' else '🐾' }} {{ p.name or '—' }}
+ {{ '<i data-lucide="cat"></i>' if p.species == 'cat' else '<i data-lucide="dog"></i>' if p.species == 'dog' else '<i data-lucide="paw-print"></i>' }} {{ p.name or '—' }}
  {% else %}—{% endif %}
  </td>
  <td data-label="诊断" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
@@ -75,7 +75,7 @@
  </td>
  <td data-label="医生" style="color:var(--muted);">{{ v.vet_name or '—' }}</td>
  <td class="actions" style="text-align:right;">
- <a href="/admin/visits/{{ v.id }}?return_to=customer" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 →</a>
+ <a href="/admin/visits/{{ v.id }}?return_to=customer" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 <i data-lucide="arrow-right"></i></a>
  </td>
  </tr>
  {% endfor %}
@@ -94,8 +94,8 @@
 
 {% else %}
 <div class="empty-card">
- <div class="empty-icon">🩺</div>
- {% if filters.q or filters.visit_type %}没有匹配的就诊记录。<a href="/admin/visits" style="color:#3b82f6;">清除筛选 →</a>
+ <div class="empty-icon"><i data-lucide="stethoscope"></i></div>
+ {% if filters.q or filters.visit_type %}没有匹配的就诊记录。<a href="/admin/visits" style="color:#3b82f6;">清除筛选 <i data-lucide="arrow-right"></i></a>
  {% else %}暂无就诊记录。请到 <a href="/admin/customers" style="color:#3b82f6;">客户档案</a> 找到客户后创建就诊。{% endif %}
 </div>
 {% endif %}

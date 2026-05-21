@@ -80,7 +80,7 @@
 {% endblock %}
 {% block body %}
 
-{% if request.query_params.get('msg') %}<div class="msg ok">✅ {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 {# is_superadmin / wb_store 由后端注入 #}
 
@@ -88,12 +88,12 @@
 
 <div class="page-head">
  <div>
- <h1><span class="ph-icon">🎟️</span>优惠券管理</h1>
+ <h1><span class="ph-icon"><i data-lucide="ticket"></i></span>优惠券管理</h1>
  <p class="ph-sub">未用 {{ counts.issued }} · 已核销 {{ counts.used }} · 已过期 {{ counts.expired }} · 已作废 {{ counts.cancelled }}</p>
  </div>
  {% if is_superadmin %}
  <div class="ph-actions">
- <button type="button" class="btn" onclick="document.getElementById('issue-coupon-modal').classList.add('visible')">＋ 发放优惠券</button>
+ <button type="button" class="btn" onclick="document.getElementById('issue-coupon-modal').classList.add('visible')"><i data-lucide="plus"></i> 发放优惠券</button>
  </div>
  {% endif %}
 </div>
@@ -184,7 +184,7 @@
  </table>
 </div>
 {% else %}
-<div class="empty-card"><div class="empty-icon">🎟️</div>暂无优惠券</div>
+<div class="empty-card"><div class="empty-icon"><i data-lucide="ticket"></i></div>暂无优惠券</div>
 {% endif %}
 
 {% if is_superadmin %}

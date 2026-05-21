@@ -177,20 +177,20 @@
 {% set p = presc %}
 {% set is_edit = (mode == 'edit') %}
 
-{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
 
 <div class="page-head no-print">
  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
  {% if visit %}
- <a href="/admin/visits/{{ visit.id }}?return_to=customer" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回就诊</a>
+ <a href="/admin/visits/{{ visit.id }}?return_to=customer" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回就诊</a>
  {% elif cust %}
- <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回客户</a>
+ <a href="/admin/customers/{{ cust.id }}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回客户</a>
  {% endif %}
  <div>
- <h1><span class="ph-icon">💊</span>
+ <h1><span class="ph-icon"><i data-lucide="pill"></i></span>
  {% if is_edit %}处方单 #{{ p.id }}{% else %}新建处方单{% endif %}
  {% if is_edit and p.status %}
- {% if p.status == 'dispensed' %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已发药</span>
+ {% if p.status == 'dispensed' %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已发药</span>
  {% elif p.status == 'issued' %}<span class="pill pill-info" style="margin-left:0.5rem;">已开具</span>
  {% else %}<span class="pill pill-gray" style="margin-left:0.5rem;">{{ presc_status_zh.get(p.status, p.status) }}</span>{% endif %}
  {% endif %}
@@ -200,7 +200,7 @@
  </div>
  {% if is_edit %}
  <div class="ph-actions">
- <a href="/admin/prescriptions/{{ p.id }}/print" target="_blank" class="btn secondary" style="font-size:0.85rem;">🖨 打印处方笺（国标）</a>
+ <a href="/admin/prescriptions/{{ p.id }}/print" target="_blank" class="btn secondary" style="font-size:0.85rem;"><i data-lucide="printer"></i> 打印处方笺（国标）</a>
  </div>
  {% endif %}
 </div>
@@ -210,11 +210,11 @@
  <div>
  {# ── 快捷工具栏：套用模板 / 复制上次 / 保存模板 / 预览 ── #}
  <div class="card no-print" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;padding:0.65rem 0.85rem;margin-bottom:0.6rem;background:linear-gradient(90deg,#eff6ff,#f0f9ff);border:1px solid #bfdbfe;">
- <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="openTemplatePicker()">📋 套用模板</button>
+ <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="openTemplatePicker()"><i data-lucide="clipboard-list"></i> 套用模板</button>
  {% if pet or (p and p.pet_id) %}
  <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="copyLastPresc()">📑 复制上次处方</button>
  {% endif %}
- <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="openSaveTemplate()">💾 保存为模板</button>
+ <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="openSaveTemplate()"><i data-lucide="save"></i> 保存为模板</button>
  <div style="flex:1;"></div>
  <button type="button" class="btn secondary" style="font-size:0.82rem;" onclick="previewPrescription()">👁 预览</button>
  </div>
@@ -260,7 +260,7 @@
  <div style="margin-top:1.1rem;">
  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
  <label style="margin:0;">药品 / 项目明细</label>
- <button type="button" onclick="addDrugRow()" class="btn secondary no-print" style="font-size:0.8rem;padding:0.25rem 0.65rem;">＋ 添加</button>
+ <button type="button" onclick="addDrugRow()" class="btn secondary no-print" style="font-size:0.8rem;padding:0.25rem 0.65rem;"><i data-lucide="plus"></i> 添加</button>
  </div>
  <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:8px;">
  <table class="drug-table">
@@ -333,7 +333,7 @@
  <td class="col-unit"><input name="item_unit_{{ idx }}" value="{{ _i_unit }}" id="item_unit_{{ idx }}" oninput="recalcDosage({{ idx }})"/></td>
  <td class="col-num"><input name="subtotal_{{ idx }}" type="number" step="0.01" readonly value="{{ '%.2f'|format(item.subtotal) }}" id="subtotal_{{ idx }}"/></td>
  <td><input name="instructions_{{ idx }}" value="{{ item.instructions }}"/></td>
- <td class="no-print"><button type="button" onclick="removeDrugRow(this, {{ idx }})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:1rem;padding:0.25rem;">✕</button></td>
+ <td class="no-print"><button type="button" onclick="removeDrugRow(this, {{ idx }})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:1rem;padding:0.25rem;"><i data-lucide="x"></i></button></td>
  </tr>
  {% endfor %}
  {% else %}
@@ -361,7 +361,7 @@
  <td class="col-unit"><input name="item_unit_0" id="item_unit_0" oninput="recalcDosage(0)"/></td>
  <td class="col-num"><input name="subtotal_0" type="number" step="0.01" readonly value="0.00" id="subtotal_0"/></td>
  <td><input name="instructions_0"/></td>
- <td class="no-print"><button type="button" onclick="removeDrugRow(this, 0)" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:1rem;padding:0.25rem;">✕</button></td>
+ <td class="no-print"><button type="button" onclick="removeDrugRow(this, 0)" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:1rem;padding:0.25rem;"><i data-lucide="x"></i></button></td>
  </tr>
  {% endif %}
  </tbody>
@@ -808,7 +808,7 @@ function printFromPreview() {
 {# ── 弹窗：套用模板 ── #}
 <div class="presc-modal-overlay" id="tpl-picker-modal" onclick="if(event.target===this) _hideModal('tpl-picker-modal')">
  <div class="presc-modal">
- <h3 style="margin:0 0 0.85rem;font-size:1.05rem;">📋 套用处方模板</h3>
+ <h3 style="margin:0 0 0.85rem;font-size:1.05rem;"><i data-lucide="clipboard-list"></i> 套用处方模板</h3>
  <div id="tpl-list" style="max-height:400px;overflow-y:auto;"></div>
  <div style="text-align:right;margin-top:0.75rem;">
  <button type="button" class="btn secondary" onclick="_hideModal('tpl-picker-modal')">关闭</button>
@@ -819,7 +819,7 @@ function printFromPreview() {
 {# ── 弹窗：保存模板 ── #}
 <div class="presc-modal-overlay" id="save-tpl-modal" onclick="if(event.target===this) _hideModal('save-tpl-modal')">
  <div class="presc-modal">
- <h3 style="margin:0 0 0.85rem;font-size:1.05rem;">💾 保存为模板</h3>
+ <h3 style="margin:0 0 0.85rem;font-size:1.05rem;"><i data-lucide="save"></i> 保存为模板</h3>
  <p style="color:var(--muted);font-size:0.85rem;">将当前 <strong id="save-tpl-count">0</strong> 个药品保存为可复用的处方模板。</p>
  <label>模板名称 *</label>
  <input id="save-tpl-name">
@@ -837,7 +837,7 @@ function printFromPreview() {
  <div class="presc-modal" style="width:760px;max-width:95vw;">
  <div id="preview-body"></div>
  <div style="display:flex;gap:0.5rem;margin-top:1rem;justify-content:flex-end;">
- <button type="button" class="btn" onclick="printFromPreview()">🖨 打印</button>
+ <button type="button" class="btn" onclick="printFromPreview()"><i data-lucide="printer"></i> 打印</button>
  <button type="button" class="btn secondary" onclick="_hideModal('preview-modal')">关闭</button>
  </div>
  </div>

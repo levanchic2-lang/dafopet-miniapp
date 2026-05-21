@@ -22,28 +22,28 @@
 {% endblock %}
 
 {% block body %}
-{% if msg %}<div class="msg ok">✅ {{ msg }}</div>{% endif %}
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
 
 <div class="page-head">
   <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
     {% if visit %}
-    <a href="/admin/visits/{{ visit.id }}?return_to=customer" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;">← 返回就诊</a>
+    <a href="/admin/visits/{{ visit.id }}?return_to=customer" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回就诊</a>
     {% endif %}
     <div>
-      <h1><span class="ph-icon">🧪</span>检查单 #{{ order.id }}
-        {% if order.status == 'completed' %}<span class="pill pill-ok" style="margin-left:0.5rem;">✓ 已出报告</span>
+      <h1><span class="ph-icon"><i data-lucide="flask-conical"></i></span>检查单 #{{ order.id }}
+        {% if order.status == 'completed' %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已出报告</span>
         {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待出报告</span>{% endif %}
       </h1>
       <p class="ph-sub">{% if pet %}{{ pet.name }}{% if cust %} · {{ cust.name }}{% endif %} · {% endif %}创建于 {{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
     </div>
   </div>
   <div class="ph-actions">
-    <a href="/admin/exam-orders/{{ order.id }}/print" target="_blank" class="btn secondary" style="font-size:0.82rem;">🖨 打印报告</a>
+    <a href="/admin/exam-orders/{{ order.id }}/print" target="_blank" class="btn secondary" style="font-size:0.82rem;"><i data-lucide="printer"></i> 打印报告</a>
     <form method="post" action="/admin/exam-orders/{{ order.id }}/delete" style="margin:0;"
           onsubmit="return confirm('删除此检查单及其所有报告？此操作不可恢复。')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="return_to" value="visit">
-      <button type="submit" class="btn" style="background:#fee2e2;color:#dc2626;border-color:#fca5a5;font-size:0.82rem;">🗑 删除检查单</button>
+      <button type="submit" class="btn" style="background:#fee2e2;color:#dc2626;border-color:#fca5a5;font-size:0.82rem;"><i data-lucide="trash-2"></i> 删除检查单</button>
     </form>
   </div>
 </div>
@@ -135,7 +135,7 @@
       {% for rpt in order.reports %}
       <div class="report-card">
         {% if rpt.file_type == 'pdf' %}
-        <div class="pdf-thumb">📄</div>
+        <div class="pdf-thumb"><i data-lucide="file-text"></i></div>
         {% else %}
         <img class="thumb" src="/admin/exam-reports/{{ rpt.id }}/file" alt="报告" loading="lazy" />
         {% endif %}
