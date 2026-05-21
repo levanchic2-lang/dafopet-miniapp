@@ -283,11 +283,11 @@
      <input type="hidden" name="method" id="pay-method-input" value="cash"/>
 
      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin-bottom:.8rem;">
-       <button type="button" class="pay-btn selected" data-val="cash" onclick="selectPay(this)"><span class="icon">💵</span><span class="label">现金</span></button>
-       <button type="button" class="pay-btn" data-val="wechat" onclick="selectPay(this)"><span class="icon">💚</span><span class="label">微信</span></button>
-       <button type="button" class="pay-btn" data-val="alipay" onclick="selectPay(this)"><span class="icon">🔵</span><span class="label">支付宝</span></button>
-       <button type="button" class="pay-btn" data-val="shouqianba" onclick="selectPay(this)"><span class="icon">📲</span><span class="label">收钱吧</span></button>
-       <button type="button" class="pay-btn" data-val="meituan" onclick="selectPay(this)"><span class="icon">🍔</span><span class="label">美团</span></button>
+       <button type="button" class="pay-btn selected" data-val="cash" onclick="selectPay(this)"><span class="icon" style="color:#15803d;"><i data-lucide="banknote"></i></span><span class="label">现金</span></button>
+       <button type="button" class="pay-btn" data-val="wechat" onclick="selectPay(this)"><span class="icon" style="color:#07c160;"><i data-lucide="message-circle"></i></span><span class="label">微信</span></button>
+       <button type="button" class="pay-btn" data-val="alipay" onclick="selectPay(this)"><span class="icon" style="color:#1677ff;"><i data-lucide="circle-dollar-sign"></i></span><span class="label">支付宝</span></button>
+       <button type="button" class="pay-btn" data-val="shouqianba" onclick="selectPay(this)"><span class="icon" style="color:#3b82f6;"><i data-lucide="smartphone"></i></span><span class="label">收钱吧</span></button>
+       <button type="button" class="pay-btn" data-val="meituan" onclick="selectPay(this)"><span class="icon" style="color:#ffc300;"><i data-lucide="utensils"></i></span><span class="label">美团</span></button>
        <button type="button" class="pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="icon"><i data-lucide="link"></i></span><span class="label">第三方</span></button>
        {# 钱包 / 套餐 / 押金 / 优惠券 始终显示，没有可用项时显示灰色提示 #}
        <button type="button" class="pay-btn{% if wallet_balance <= 0 %} unavailable{% endif %}" data-val="wallet" onclick="selectPay(this)"
@@ -298,7 +298,7 @@
          <span class="icon"><i data-lucide="ticket"></i></span><span class="label">套餐<small style="display:block;font-size:.7rem;color:{% if active_packages %}#3b82f6{% else %}#9ca3af{% endif %};">{{ active_packages|length }} 张</small></span>
        </button>
        <button type="button" class="pay-btn{% if not available_deposits %} unavailable{% endif %}" data-val="deposit" onclick="selectPay(this)">
-         <span class="icon">🏦</span><span class="label">押金<small style="display:block;font-size:.7rem;color:{% if available_deposits %}#f59e0b{% else %}#9ca3af{% endif %};">{{ available_deposits|length }} 笔</small></span>
+         <span class="icon" style="color:#f59e0b;"><i data-lucide="landmark"></i></span><span class="label">押金<small style="display:block;font-size:.7rem;color:{% if available_deposits %}#f59e0b{% else %}#9ca3af{% endif %};">{{ available_deposits|length }} 笔</small></span>
        </button>
        <button type="button" class="pay-btn{% if not available_coupons %} unavailable{% endif %}" data-val="coupon" onclick="selectPay(this)">
          <span class="icon"><i data-lucide="ticket"></i></span><span class="label">优惠券<small style="display:block;font-size:.7rem;color:{% if available_coupons %}#10b981{% else %}#9ca3af{% endif %};">{{ available_coupons|length }} 张</small></span>
@@ -438,15 +438,15 @@
    {% for p in payments %}
    <tr style="{% if p.status == 'cancelled' %}opacity:.4;text-decoration:line-through;{% endif %}border-bottom:1px solid #f3f4f6;">
      <td style="padding:.4rem 0;">
-     {% if p.method == 'cash' %}💵 现金
-     {% elif p.method == 'wechat' %}💚 微信
-     {% elif p.method == 'alipay' %}🔵 支付宝
-     {% elif p.method == 'shouqianba' %}📲 收钱吧
-     {% elif p.method == 'meituan' %}🍔 美团
+     {% if p.method == 'cash' %}<i data-lucide="banknote" style="color:#15803d;"></i> 现金
+     {% elif p.method == 'wechat' %}<i data-lucide="message-circle" style="color:#07c160;"></i> 微信
+     {% elif p.method == 'alipay' %}<i data-lucide="circle-dollar-sign" style="color:#1677ff;"></i> 支付宝
+     {% elif p.method == 'shouqianba' %}<i data-lucide="smartphone" style="color:#3b82f6;"></i> 收钱吧
+     {% elif p.method == 'meituan' %}<i data-lucide="utensils" style="color:#ffc300;"></i> 美团
      {% elif p.method == 'third_party' %}<i data-lucide="link"></i> 第三方
      {% elif p.method == 'wallet' %}<i data-lucide="wallet"></i> 钱包
      {% elif p.method == 'package' %}<i data-lucide="ticket"></i> 套餐核销
-     {% elif p.method == 'deposit' %}🏦 押金抵扣
+     {% elif p.method == 'deposit' %}<i data-lucide="landmark" style="color:#f59e0b;"></i> 押金抵扣
      {% elif p.method == 'coupon' %}<i data-lucide="ticket"></i> 优惠券
      {% else %}{{ p.method }}{% endif %}
      {% if p.ref_no %}<span style="color:var(--muted);font-size:.75rem;margin-left:.4rem;">#{{ p.ref_no }}</span>{% endif %}
