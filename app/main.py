@@ -5035,17 +5035,38 @@ async def admin_customers_import_post(
 
     try:
         raw = await file.read()
-        # 兼容 xls / xlsx
+        fname_lower = (file.filename or "").lower()
+        is_xls = fname_lower.endswith(".xls")
         bio = _io.BytesIO(raw)
         try:
             df = pd.read_excel(bio)
+        except ImportError as e_imp:
+            # 服务器缺 xlrd（.xls）或 openpyxl（.xlsx）依赖
+            if is_xls:
+                result["msg"] = (
+                    "服务器暂时无法读取 .xls 老格式（缺 xlrd 包）。"
+                    "解决：用 Excel 打开此文件 → 文件 → 另存为 → 选「Excel 工作簿 (*.xlsx)」"
+                    " → 上传转好的 .xlsx 文件即可。"
+                )
+            else:
+                result["msg"] = f"服务器缺解析依赖：{e_imp}"
+            return templates.TemplateResponse(
+                request, "admin_customers_import.html",
+                {"csrf_token": _get_csrf_token(request), "result": result},
+            )
         except Exception as e1:
             bio.seek(0)
             try:
                 dfs = pd.read_html(bio, encoding="utf-8")
                 df = dfs[0]
             except Exception as e2:
-                result["msg"] = f"无法解析文件：{e1} / {e2}"
+                if is_xls:
+                    result["msg"] = (
+                        "无法解析 .xls 文件。最简方案：用 Excel 打开 → 另存为 .xlsx → 重新上传。"
+                        f"（原始错误：{e1}）"
+                    )
+                else:
+                    result["msg"] = f"无法解析文件：{e1} / {e2}"
                 return templates.TemplateResponse(
                     request, "admin_customers_import.html",
                     {"csrf_token": _get_csrf_token(request), "result": result},
