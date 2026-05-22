@@ -1497,27 +1497,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {# ── 弹窗：上传文书 ── #}
 <div class="cd-modal-overlay" id="wallet-recharge-modal">
- <div class="cd-modal">
+ <div class="cd-modal cd-modal-mini">
  <h3>钱包充值 — {{ cust.name or '客户' }}</h3>
  <form method="post" action="/admin/wallets/{{ cust.id }}/recharge">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
- <label>充值金额（¥）</label>
- <input name="amount" type="number" step="0.01" min="0.01" required autofocus>
- <label>赠送金额（可选）</label>
- <input name="bonus" type="number" step="0.01" min="0" value="0" placeholder="充 500 送 50 → 这里填 50">
- <label>收款方式</label>
- <select name="pay_method">
-   <option value="cash">现金</option>
-   <option value="wechat">微信</option>
-   <option value="alipay">支付宝</option>
-   <option value="card">刷卡</option>
-   <option value="groupbuy">团购</option>
-   <option value="other">其他</option>
- </select>
+ <div class="row2">
+   <div>
+     <label>充值金额（¥）</label>
+     <input name="amount" type="number" step="0.01" min="0.01" required autofocus placeholder="如 500">
+   </div>
+   <div>
+     <label>赠送金额（¥）</label>
+     <input name="bonus" type="number" step="0.01" min="0" value="0" placeholder="如 50">
+   </div>
+ </div>
  <label>备注（可选）</label>
  <input name="note" placeholder="如 充值满 500 送 50">
+ <div style="margin-top:.65rem;padding:.55rem .75rem;background:var(--brand-bg-soft);border:1px solid var(--brand-light);border-radius:6px;font-size:.78rem;color:var(--brand-dark);line-height:1.5;">
+   <i data-lucide="info" style="width:.9em;height:.9em;"></i>
+   提交后会生成一张"钱包充值"<strong>收费单</strong>进入收银台，收款完成后余额自动到账。
+ </div>
  <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-   <button type="submit" class="btn">充值</button>
+   <button type="submit" class="btn">生成充值单</button>
    <button type="button" class="btn secondary" onclick="document.getElementById('wallet-recharge-modal').classList.remove('visible')">取消</button>
  </div>
  </form>

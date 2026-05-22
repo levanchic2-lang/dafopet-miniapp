@@ -5994,11 +5994,12 @@ async def admin_wallet_recharge(
     db: Session = Depends(get_db),
     csrf_token: str = Form(""),
     amount: str = Form(...),
-    pay_method: str = Form("cash"),
     bonus: str = Form("0"),
     note: str = Form(""),
 ):
-    """客户钱包充值。amount = 实收，bonus = 赠送额。"""
+    """客户钱包充值 → 生成一张未付收费单进收银台。
+    收银台收款完成后，对应的钱包余额才会真正到账（add-payment 钩子里触发）。
+    这样收款方式、对账、报表都走统一的 Invoice/Payment 链路。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
@@ -6014,24 +6015,81 @@ async def admin_wallet_recharge(
         return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=充值金额需大于 0", status_code=303)
     if bns < 0:
         bns = 0.0
-    if pay_method not in ("cash", "wechat", "alipay", "card", "groupbuy", "other"):
-        pay_method = "cash"
 
-    wallet = _get_or_create_wallet(db, customer_id)
+    admin_name = request.session.get("admin_username", "admin")
+    # 生成"钱包充值"收费单（未付）
+    desc = f"钱包充值 ¥{amt:.2f}"
+    if bns > 0:
+        desc += f"（赠送 ¥{bns:.2f}）"
+    notes_payload = (note.strip() + " " if note.strip() else "") + f"[wallet_recharge_bonus={bns:.2f}]"
+    inv = Invoice(
+        invoice_no      = _gen_invoice_no(db),
+        customer_id     = customer_id,
+        pet_id          = None,
+        invoice_date    = datetime.now().strftime("%Y-%m-%d"),
+        subtotal        = amt,
+        discount_amount = 0.0,
+        total_amount    = amt,
+        payment_status  = "unpaid",
+        notes           = notes_payload,
+        created_by      = admin_name,
+    )
+    db.add(inv)
+    db.flush()
+    db.add(InvoiceItem(
+        invoice_id  = inv.id,
+        ref_type    = "wallet_recharge",
+        ref_id      = customer_id,
+        description = desc,
+        quantity    = 1.0,
+        unit_price  = amt,
+        subtotal    = amt,
+    ))
+    _audit(db, request, "wallet_recharge_invoice_create", application_id=None,
+           detail={"customer_id": customer_id, "amount": amt, "bonus": bns, "invoice_id": inv.id})
+    db.commit()
+    # 跳到收费单收款页，立即可以收款
+    return RedirectResponse(
+        f"/admin/invoices/{inv.id}?msg=已生成充值单 ¥{amt:.2f}" + (f"（送 ¥{bns:.2f}）" if bns > 0 else "") + "，请选择收款方式",
+        status_code=303,
+    )
+
+
+def _maybe_credit_wallet_from_invoice(db: Session, inv: "Invoice", request: Request) -> None:
+    """收费单付清后：如果含 ref_type='wallet_recharge' 项目，把钱真正打进钱包。
+    用 WalletTransaction.invoice_id 做幂等：已经有同 invoice_id 的 recharge tx 就不再加。"""
+    if inv.payment_status != "paid":
+        return
+    if not inv.customer_id:
+        return
+    has_recharge_item = db.query(InvoiceItem.id).filter(
+        InvoiceItem.invoice_id == inv.id,
+        InvoiceItem.ref_type == "wallet_recharge",
+    ).first()
+    if not has_recharge_item:
+        return
+    existed = db.query(WalletTransaction.id).filter(
+        WalletTransaction.invoice_id == inv.id,
+        WalletTransaction.type == "recharge",
+    ).first()
+    if existed:
+        return
+    # 从 notes 解析 bonus
+    bonus = 0.0
+    import re as _re
+    m = _re.search(r"\[wallet_recharge_bonus=([\d.]+)\]", inv.notes or "")
+    if m:
+        try: bonus = float(m.group(1))
+        except: bonus = 0.0
+    wallet = _get_or_create_wallet(db, inv.customer_id)
     _wallet_apply_tx(
-        db, wallet, tx_type="recharge", amount=amt, bonus=bns,
-        pay_method=pay_method,
+        db, wallet, tx_type="recharge",
+        amount=float(inv.total_amount or 0),
+        bonus=bonus,
+        invoice_id=inv.id,
         operator=request.session.get("admin_username", "admin"),
         store=_get_admin_store(request),
-        note=note,
-    )
-    db.commit()
-    _audit(db, request, "wallet_recharge", application_id=None,
-           detail={"customer_id": customer_id, "amount": amt, "bonus": bns, "method": pay_method})
-    db.commit()
-    return RedirectResponse(
-        f"/admin/customers/{customer_id}?tab=wallet&msg=充值成功 ¥{amt:.2f}" + (f"（送 ¥{bns:.2f}）" if bns > 0 else ""),
-        status_code=303,
+        note=f"充值单 {inv.invoice_no or inv.id}",
     )
 
 
@@ -11369,6 +11427,11 @@ async def admin_invoice_add_payment(
     ))
     db.flush()
     _invoice_recompute_status(db, inv)
+    # 充值单付清 → 把钱真正打进钱包（幂等）
+    try:
+        _maybe_credit_wallet_from_invoice(db, inv, request)
+    except Exception as _e:
+        logger.warning("[wallet_recharge_credit] failed: %s", _e)
     db.commit()
     return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已加 ¥{want:.2f}", status_code=303)
 
