@@ -9081,8 +9081,16 @@ INVENTORY_CATEGORIES = {
     "medication": {"label": "药品", "subs": {
         "controlled": "麻药/精神类",
         "general":    "普通药品",
-        "vaccine":    "疫苗",
-        "antiparasitic": "驱虫",
+    }},
+    "vaccine": {"label": "疫苗", "subs": {
+        "rabies":     "狂犬疫苗",
+        "combo":      "联苗",
+        "other":      "其他疫苗",
+    }},
+    "antiparasitic": {"label": "驱虫", "subs": {
+        "internal":   "体内驱虫",
+        "external":   "体外驱虫",
+        "both":       "体内外同驱",
     }},
     "consumable": {"label": "耗材", "subs": {
         "general": "普通耗材",
@@ -11551,12 +11559,40 @@ async def admin_invoice_delete(
 
 _VACC_TYPE_ZH = {
     "rabies":    "狂犬疫苗",
-    "combo_3":   "猫三联",
-    "combo_6":   "猫六联",
-    "canine_8":  "犬八联",
+    "combo":     "联苗",
+    "combo_3":   "猫三联",     # 历史兼容
+    "combo_6":   "猫六联",     # 历史兼容
+    "canine_8":  "犬八联",     # 历史兼容
     "deworming": "驱虫",
     "other":     "其他",
 }
+# 新建/编辑表单只显示这两个；驱虫单独走 DewormingRecord，不出现在疫苗表
+_VACC_TYPE_OPTIONS = {
+    "rabies":    "狂犬疫苗",
+    "combo":     "联苗",
+}
+
+
+def _attach_latest_batch(db: Session, items: list) -> None:
+    """给一组 InventoryItem 附最新一批的 batch_no / expiry_date，
+    供前端 JS 选品目时自动填 批次号 / 有效期。
+    用属性 latest_batch_no / latest_expiry_date（不入库），不会影响 ORM。"""
+    if not items:
+        return
+    ids = [it.id for it in items if getattr(it, "id", None)]
+    if not ids:
+        return
+    rows = db.query(InventoryBatch).filter(
+        InventoryBatch.item_id.in_(ids),
+        InventoryBatch.qty_remaining > 0,
+    ).order_by(InventoryBatch.expiry_date.asc(), InventoryBatch.id.desc()).all()
+    by_item: dict[int, "InventoryBatch"] = {}
+    for b in rows:
+        by_item.setdefault(b.item_id, b)
+    for it in items:
+        b = by_item.get(it.id)
+        it.latest_batch_no = (b.batch_no if b else "") or ""
+        it.latest_expiry_date = (b.expiry_date if b else "") or ""
 _DOSE_ZH = {1: "第1针", 2: "第2针", 3: "第3针", 99: "加强针"}
 
 
@@ -11635,11 +11671,15 @@ async def admin_vaccination_create_page(
         InventoryItem.category.in_(["vaccine", "antiparasitic"]),
         InventoryItem.stock_qty > 0,
     ).order_by(InventoryItem.name).all()
+    # 给每个品目附最近一批的 batch_no + expiry_date（用于 JS 自动填）
+    _attach_latest_batch(db, vacc_items)
     return templates.TemplateResponse(request, "admin_vaccination_form.html", {
         "mode": "create", "vacc": None,
         "pet": pet, "cust": cust,
         "vets": vets, "vacc_items": vacc_items,
-        "vacc_type_zh": _VACC_TYPE_ZH, "dose_zh": _DOSE_ZH,
+        "vacc_type_zh": _VACC_TYPE_ZH,
+        "vacc_type_options": _VACC_TYPE_OPTIONS,
+        "dose_zh": _DOSE_ZH,
         "today": date.today().isoformat(),
         "csrf_token": _get_csrf_token(request),
         "msg": None,
@@ -11732,11 +11772,14 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
     ).filter(
         InventoryItem.category.in_(["vaccine", "antiparasitic"])
     ).order_by(InventoryItem.name).all()
+    _attach_latest_batch(db, vacc_items)
     return templates.TemplateResponse(request, "admin_vaccination_form.html", {
         "mode": "edit", "vacc": vacc,
         "pet": pet, "cust": cust,
         "vets": vets, "vacc_items": vacc_items,
-        "vacc_type_zh": _VACC_TYPE_ZH, "dose_zh": _DOSE_ZH,
+        "vacc_type_zh": _VACC_TYPE_ZH,
+        "vacc_type_options": _VACC_TYPE_OPTIONS,
+        "dose_zh": _DOSE_ZH,
         "today": vacc.vaccinated_date,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),

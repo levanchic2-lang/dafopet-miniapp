@@ -64,12 +64,16 @@
  <div>
  <label>疫苗类型 <span style="color:#d97706;">*</span></label>
  <select name="vaccine_type" id="vaccine-type-sel" onchange="onTypeChange()">
- {% for val, label in vacc_type_zh.items() %}
+ {% for val, label in vacc_type_options.items() %}
  <option value="{{ val }}"
- {% if (vacc and vacc.vaccine_type == val) or (not vacc and val == 'other') %}selected{% endif %}>
+ {% if (vacc and vacc.vaccine_type == val) or (not vacc and val == 'rabies') %}selected{% endif %}>
  {{ label }}
  </option>
  {% endfor %}
+ {# 历史兼容：旧记录用的 combo_3 / combo_6 / canine_8 / deworming / other 仍能保留显示 #}
+ {% if vacc and vacc.vaccine_type and vacc.vaccine_type not in vacc_type_options %}
+ <option value="{{ vacc.vaccine_type }}" selected>{{ vacc_type_zh.get(vacc.vaccine_type, vacc.vaccine_type) }}（历史）</option>
+ {% endif %}
  </select>
  </div>
 
@@ -82,15 +86,17 @@
  </div>
 
  <div>
- <label>库存关联品目</label>
+ <label>库存关联品目 <span style="color:var(--muted);font-weight:400;font-size:.78rem;">— 选了自动带出品牌 / 批号 / 有效期</span></label>
  <select name="inventory_item_id" id="inv-item-sel" onchange="onItemChange()">
  <option value="">— 不关联库存 —</option>
  {% for item in vacc_items %}
  <option value="{{ item.id }}"
  data-price="{{ item.sell_price }}"
  data-name="{{ item.name }}"
+ data-batch="{{ item.latest_batch_no or '' }}"
+ data-expiry="{{ item.latest_expiry_date or '' }}"
  {% if vacc and vacc.inventory_item_id == item.id %}selected{% endif %}>
- {{ item.name }}（库存：{{ item.stock_qty }}{{ item.unit }}，¥{{ '%.0f'|format(item.sell_price) }}）
+ {{ item.name }}（库存：{{ item.stock_qty }}{{ item.unit }}，¥{{ '%.0f'|format(item.sell_price) }}{% if item.latest_batch_no %} · 批 {{ item.latest_batch_no }}{% endif %}）
  </option>
  {% endfor %}
  </select>
@@ -248,7 +254,7 @@ function calcNextDue() {
  let addDays = 0;
  if (type === 'rabies') {
  addDays = 365;
- } else if (['combo_3', 'combo_6', 'canine_8'].includes(type)) {
+ } else if (['combo', 'combo_3', 'combo_6', 'canine_8'].includes(type)) {
  addDays = (dose === 1 || dose === 2) ? 21 : 365;
  } else if (type === 'deworming') {
  addDays = 90;
@@ -275,10 +281,18 @@ function onItemChange() {
  const sel = document.getElementById('inv-item-sel');
  const opt = sel.options[sel.selectedIndex];
  const name = opt.dataset.name || '';
+ const batch = opt.dataset.batch || '';
+ const expiry = opt.dataset.expiry || '';
+ // 选了库存品目 → 自动带出 品牌名 / 批号；空字段才填，不覆盖用户已输入的
  if (name) {
  const nameInput = document.querySelector('input[name="vaccine_name"]');
- if (!nameInput.value) nameInput.value = name;
+ if (nameInput && !nameInput.value) nameInput.value = name;
  }
+ if (batch) {
+ const batchInput = document.querySelector('input[name="batch_no"]');
+ if (batchInput && !batchInput.value) batchInput.value = batch;
+ }
+ // 有效期不强填，避免覆盖手术日 + 365 天的下次到期日逻辑
 }
 
 document.addEventListener('DOMContentLoaded', () => {

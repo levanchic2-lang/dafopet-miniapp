@@ -533,6 +533,20 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_items_name ON inventory_items(name)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_items_active ON inventory_items(is_active)"))
 
+            # 迁移：把老的 category=medication+subcategory=vaccine/antiparasitic
+            # 提升为 category=vaccine / antiparasitic 顶级（idempotent）
+            try:
+                conn.execute(text(
+                    "UPDATE inventory_items SET category='vaccine', subcategory='other' "
+                    "WHERE category='medication' AND subcategory='vaccine'"
+                ))
+                conn.execute(text(
+                    "UPDATE inventory_items SET category='antiparasitic', subcategory='both' "
+                    "WHERE category='medication' AND subcategory='antiparasitic'"
+                ))
+            except Exception:
+                pass
+
             # inventory_transactions 出入库流水
             inv_tx_cols = conn.execute(text("PRAGMA table_info(inventory_transactions)")).fetchall()
             if not inv_tx_cols:
