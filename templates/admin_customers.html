@@ -217,9 +217,24 @@
       <input name="phone" type="tel"/>
       <label>地址（可选）</label>
       <input name="address"/>
+      <label>来源</label>
+      <input name="source" list="customer-source-options" placeholder="如：自然到店 / 朋友介绍 / 抖音 …" value="自然到店"/>
+      <datalist id="customer-source-options">
+        <option value="自然到店"></option>
+        <option value="朋友介绍"></option>
+        <option value="老客户带新"></option>
+        <option value="微信公众号"></option>
+        <option value="抖音"></option>
+        <option value="小红书"></option>
+        <option value="大众点评"></option>
+        <option value="美团"></option>
+        <option value="小程序"></option>
+        <option value="路过"></option>
+        <option value="转店客户"></option>
+        <option value="其他"></option>
+      </datalist>
       <label>备注（可选）</label>
       <textarea name="notes" style="min-height:60px;"></textarea>
-      <input type="hidden" name="source" value="manual"/>
       <div style="display:flex;gap:0.6rem;margin-top:1rem;">
         <button type="submit" class="btn" style="flex:1;">创建</button>
         <button type="button" onclick="document.getElementById('create-modal').classList.remove('visible')" class="btn secondary" style="flex:1;">取消</button>

@@ -869,6 +869,22 @@
  <input name="phone" value="{{ cust.phone or '' }}">
  <label>地址</label>
  <input name="address" value="{{ cust.address or '' }}">
+ <label>来源</label>
+ <input name="source" list="customer-source-options" value="{{ cust.source or '' }}" placeholder="如：自然到店 / 朋友介绍 / 抖音 …">
+ <datalist id="customer-source-options">
+  <option value="自然到店"></option>
+  <option value="朋友介绍"></option>
+  <option value="老客户带新"></option>
+  <option value="微信公众号"></option>
+  <option value="抖音"></option>
+  <option value="小红书"></option>
+  <option value="大众点评"></option>
+  <option value="美团"></option>
+  <option value="小程序"></option>
+  <option value="路过"></option>
+  <option value="转店客户"></option>
+  <option value="其他"></option>
+ </datalist>
  <label>备注</label>
  <textarea name="notes">{{ cust.notes or '' }}</textarea>
  <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">

@@ -5630,6 +5630,7 @@ async def admin_customer_edit(
     phone: str = Form(""),
     address: str = Form(""),
     notes: str = Form(""),
+    source: str = Form(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -5652,6 +5653,10 @@ async def admin_customer_edit(
     cust.phone = phone.strip()[:40]
     cust.address = address.strip()[:500]
     cust.notes = notes.strip()
+    # source 只在传了非空值时更新，避免历史"老系统导入"被清空
+    new_source = source.strip()[:40]
+    if new_source:
+        cust.source = new_source
     db.commit()
     return RedirectResponse(f"/admin/customers/{customer_id}?msg=已保存", status_code=303)
 
