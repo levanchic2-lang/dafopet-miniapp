@@ -5639,6 +5639,9 @@ async def page_admin_customer_detail(
             # 品种联想（datalist）
             "breed_dogs": _BREEDS_ALL["dog"],
             "breed_cats": _BREEDS_ALL["cat"],
+            "breed_exotic": _BREEDS_ALL["exotic"],
+            # 驱虫弹窗用
+            "deworm_items": deworm_items,
         },
     )
 
