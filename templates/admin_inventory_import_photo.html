@@ -72,6 +72,79 @@
 .ip-popover .result .meta { font-size: .75rem; color: #6b7280; margin-top: 2px; }
 .ip-popover .hint { font-size: .75rem; color: #6b7280; margin-top: .5rem; text-align: center; }
 .ip-popover-overlay { position: fixed; inset: 0; z-index: 1199; }
+
+/* ── 移动端：识别结果表 → 一行一张卡片 ── */
+@media (max-width: 768px) {
+  .ip-result-tbl { display: block; min-width: 0 !important; }
+  .ip-result-tbl thead { display: none; }
+  .ip-result-tbl tbody { display: block; }
+  .ip-result-tbl tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: .45rem .5rem;
+    padding: .65rem .75rem;
+    margin-bottom: .55rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+  }
+  .ip-result-tbl tbody tr.matched { border-left: 3px solid #10b981; }
+  .ip-result-tbl tbody tr.unmatched { border-left: 3px solid #f59e0b; }
+  .ip-result-tbl tbody tr.skipped { opacity: .45; }
+  .ip-result-tbl tbody tr td {
+    display: block;
+    padding: 0 !important;
+    border: none !important;
+    min-width: 0;
+  }
+  /* 标签 + 输入框竖排 */
+  .ip-result-tbl tbody tr td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: .68rem;
+    color: var(--muted);
+    margin-bottom: .15rem;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+  .ip-result-tbl tbody tr td[data-label=""]::before { display: none; }
+  .ip-result-tbl input, .ip-result-tbl select {
+    padding: .35rem .45rem !important;
+    font-size: 16px !important;  /* 防 iOS 自动放大 */
+    border-radius: 6px !important;
+    height: 36px;
+  }
+  /* 占满整行的字段 */
+  .ip-result-tbl tbody tr td.col-name,
+  .ip-result-tbl tbody tr td.col-match { grid-column: 1 / -1; }
+  /* checkbox + action 同行 */
+  .ip-result-tbl tbody tr td.col-check {
+    display: flex; align-items: center; justify-content: center;
+    grid-column: 1 / 2; padding-top: .8rem !important;
+  }
+  .ip-result-tbl tbody tr td.col-check::before { display: none; }
+  .ip-result-tbl tbody tr td.col-check input[type="checkbox"] { width: 1.4em; height: 1.4em; }
+  .ip-result-tbl tbody tr td.col-action { grid-column: 2 / 4; }
+  /* 数字字段：3 列等分 */
+  .ip-result-tbl tbody tr td.col-spec,
+  .ip-result-tbl tbody tr td.col-qty,
+  .ip-result-tbl tbody tr td.col-unit { grid-column: span 1; }
+  .ip-result-tbl tbody tr td.col-packsize,
+  .ip-result-tbl tbody tr td.col-mainunit,
+  .ip-result-tbl tbody tr td.col-price { grid-column: span 1; }
+  .ip-result-tbl tbody tr td.col-batch { grid-column: 1 / 2; }
+  .ip-result-tbl tbody tr td.col-expiry { grid-column: 2 / 4; }
+  /* 匹配徽章 + 名字 */
+  .ip-match-name { max-width: 100% !important; }
+  /* 操作栏吸底 */
+  #commit-form > div:last-child {
+    position: sticky; bottom: 0; left: 0; right: 0;
+    background: var(--card); padding: .65rem .25rem .65rem !important;
+    border-top: 1px solid var(--border);
+    margin-top: .85rem !important;
+    z-index: 5;
+  }
+}
 </style>
 {% endblock %}
 
@@ -284,8 +357,8 @@
       var tr = document.createElement('tr');
       tr.className = 'ip-row ' + (matched ? 'matched' : 'unmatched');
       tr.innerHTML =
-        '<td><input type="checkbox" data-row="' + i + '" class="ip-check" checked></td>' +
-        '<td>' +
+        '<td class="col-check" data-label=""><input type="checkbox" data-row="' + i + '" class="ip-check" checked></td>' +
+        '<td class="col-action" data-label="操作">' +
           '<select name="row' + i + '_action" class="ip-action">' +
             (matched
               ? '<option value="reuse" selected>累加</option><option value="create">新增</option><option value="skip">跳过</option>'
@@ -293,16 +366,16 @@
           '</select>' +
           (matched ? '<input type="hidden" name="row' + i + '_item_id" value="' + it.matched_id + '">' : '') +
         '</td>' +
-        '<td><input name="row' + i + '_name" value="' + escapeHtml(it.name) + '" required></td>' +
-        '<td><input name="row' + i + '_spec" value="' + escapeHtml(it.spec) + '" placeholder="如10mg"></td>' +
-        '<td><input name="row' + i + '_qty" type="number" step="0.01" min="0" value="' + (it.qty || '') + '"></td>' +
-        '<td><input name="row' + i + '_unit" value="' + escapeHtml(it.unit || it.pack_unit || it.matched_unit2 || it.matched_unit || '') + '" placeholder="盒"></td>' +
-        '<td><input name="row' + i + '_pack_size" type="number" step="1" min="0" value="' + (it.pack_size || it.matched_unit2_ratio || '') + '" placeholder="30"></td>' +
-        '<td><input name="row' + i + '_main_unit" value="' + escapeHtml(it.main_unit || it.matched_unit || '') + '" placeholder="片"></td>' +
-        '<td><input name="row' + i + '_unit_price" type="number" step="0.01" min="0" value="' + (it.unit_price || '') + '"></td>' +
-        '<td><input name="row' + i + '_batch_no" value="' + escapeHtml(it.batch_no) + '" placeholder="选填"></td>' +
-        '<td><input name="row' + i + '_expiry_date" type="date" value="' + escapeHtml(it.expiry_date) + '"></td>' +
-        '<td class="ip-match-cell">' +
+        '<td class="col-name" data-label="品名"><input name="row' + i + '_name" value="' + escapeHtml(it.name) + '" required></td>' +
+        '<td class="col-spec" data-label="规格"><input name="row' + i + '_spec" value="' + escapeHtml(it.spec) + '" placeholder="如10mg"></td>' +
+        '<td class="col-qty" data-label="数量"><input name="row' + i + '_qty" type="number" step="0.01" min="0" value="' + (it.qty || '') + '"></td>' +
+        '<td class="col-unit" data-label="包装单位"><input name="row' + i + '_unit" value="' + escapeHtml(it.unit || it.pack_unit || it.matched_unit2 || it.matched_unit || '') + '" placeholder="盒"></td>' +
+        '<td class="col-packsize" data-label="×N（包装内）"><input name="row' + i + '_pack_size" type="number" step="1" min="0" value="' + (it.pack_size || it.matched_unit2_ratio || '') + '" placeholder="30"></td>' +
+        '<td class="col-mainunit" data-label="最小单位"><input name="row' + i + '_main_unit" value="' + escapeHtml(it.main_unit || it.matched_unit || '') + '" placeholder="片"></td>' +
+        '<td class="col-price" data-label="进价/件"><input name="row' + i + '_unit_price" type="number" step="0.01" min="0" value="' + (it.unit_price || '') + '"></td>' +
+        '<td class="col-batch" data-label="批号"><input name="row' + i + '_batch_no" value="' + escapeHtml(it.batch_no) + '" placeholder="选填"></td>' +
+        '<td class="col-expiry" data-label="有效期"><input name="row' + i + '_expiry_date" type="date" value="' + escapeHtml(it.expiry_date) + '"></td>' +
+        '<td class="ip-match-cell col-match" data-label="匹配">' +
           (matched
             ? '<span class="ip-badge ' + (fuzzy ? 'fuzzy' : 'matched') + '" data-act="search">' +
                 (fuzzy ? '相似 ' + (it.match_confidence * 100).toFixed(0) + '%' : '✓ 已有') +
