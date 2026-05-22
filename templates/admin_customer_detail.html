@@ -443,7 +443,7 @@
  <tbody>
  {% for p in pets %}
  {% set is_active = (p.id == active_pet_id) %}
- <tr class="pet-row {% if is_active %}active{% endif %}" onclick="selectPet({{ p.id }})">
+ <tr class="pet-row {% if is_active %}active{% endif %}" id="pet-{{ p.id }}" onclick="selectPet({{ p.id }})">
  <td data-label="病历号"><span class="pet-mrn">{{ p.medical_record_no or '—' }}</span></td>
  <td data-label="名称" class="pet-name-cell">{{ p.name or '未命名' }}</td>
  <td data-label="种类">{{ {'cat':'猫','dog':'犬','exotic':'异宠','other':'其他'}.get(p.species, p.species or '—') }}</td>
@@ -1704,8 +1704,25 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 function selectPet(petId) {
  const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'visits';
- window.location.href = '/admin/customers/{{ cust.id }}?pet_id=' + petId + '&tab=' + tab;
+ // 记一下滚动位置 + 切宠物锚点，避免跳到页面顶部
+ try { sessionStorage.setItem('cust_{{ cust.id }}_scroll', String(window.scrollY)); } catch (e) {}
+ window.location.href = '/admin/customers/{{ cust.id }}?pet_id=' + petId + '&tab=' + tab + '#pet-' + petId;
 }
+
+// 切宠物后页面会重载，恢复滚动位置（用 sessionStorage 暂存 scrollY）
+document.addEventListener('DOMContentLoaded', function() {
+ try {
+   const key = 'cust_{{ cust.id }}_scroll';
+   const saved = sessionStorage.getItem(key);
+   if (saved !== null) {
+     // 等浏览器把 hash anchor 处理完，再覆盖滚动到记录的位置
+     requestAnimationFrame(function() {
+       window.scrollTo(0, parseInt(saved, 10) || 0);
+       sessionStorage.removeItem(key);
+     });
+   }
+ } catch (e) {}
+});
 
 // 打开编辑宠物弹窗 — 从 JSON 中读取并填充
 const PETS_DATA = JSON.parse(document.getElementById('pets-data').textContent);
