@@ -342,11 +342,25 @@
  {% endif %}
  </td>
  <td class="col-cust">
- <div>{{ appt.customer_name }}</div>
+ {% if appt.customer_id %}
+ <a href="/admin/customers/{{ appt.customer_id }}{% if appt.pet_id %}?pet_id={{ appt.pet_id }}{% endif %}"
+    style="color:var(--brand);text-decoration:none;font-weight:600;"
+    title="进入客户档案">{{ appt.customer_name }} <i data-lucide="arrow-right" style="width:.85em;height:.85em;"></i></a>
+ {% else %}
+ <a href="/admin/customers?q={{ appt.phone or appt.customer_name }}"
+    style="color:var(--brand);text-decoration:none;font-weight:600;"
+    title="按电话搜索客户">{{ appt.customer_name }} <i data-lucide="search" style="width:.85em;height:.85em;"></i></a>
+ {% endif %}
  <div class="row-cust-sub">{{ appt.phone }}</div>
  </td>
  <td class="col-pet">
- {{ appt.pet_name or '—' }}{% if appt.pet_gender == 'female' %} · 母{% elif appt.pet_gender == 'male' %} · 公{% endif %}
+ {% if appt.customer_id and appt.pet_id %}
+ <a href="/admin/customers/{{ appt.customer_id }}?pet_id={{ appt.pet_id }}"
+    style="color:var(--brand);text-decoration:none;">{{ appt.pet_name or '—' }}</a>
+ {% else %}
+ {{ appt.pet_name or '—' }}
+ {% endif %}
+ {% if appt.pet_gender == 'female' %} · 母{% elif appt.pet_gender == 'male' %} · 公{% endif %}
  </td>
  <td class="col-store">
  {% if '横岗' in appt.store %}横岗店{% elif '东环' in appt.store %}东环店{% else %}{{ appt.store }}{% endif %}
