@@ -5819,6 +5819,12 @@ async def admin_customer_edit_pet(
             pet.medical_record_no = _gen_medical_record_no(db, new_store)
     elif not pet.store and new_store:
         pet.store = new_store
+
+    # 保底兜底：编辑保存时若仍没有病历号 + 已设置门店 → 自动补号
+    # 这样老 pet（导入或早期建档遗漏 MRN 的）只要点一次「保存修改」就能补上
+    if not pet.medical_record_no and pet.store:
+        pet.medical_record_no = _gen_medical_record_no(db, pet.store)
+
     pet.life_status = (life_status or "alive").strip()[:20]
     db.commit()
     return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&msg=宠物已更新", status_code=303)
