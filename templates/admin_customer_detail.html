@@ -225,7 +225,8 @@
   }
   .cd-modal > form, .cd-modal > div:not(:first-child) {
     flex: 1 1 auto;
-    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    overflow-y: auto; overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
     padding: .7rem .9rem !important;
     min-height: 0;
   }
@@ -241,8 +242,11 @@
     color: var(--muted);
     font-weight: 500;
   }
-  /* 输入控件统一缩小，但 input 字号保持 16px 防 iOS zoom */
-  .cd-modal form input, .cd-modal form select, .cd-modal form textarea {
+  /* 输入控件统一缩小，但 input 字号保持 16px 防 iOS zoom
+     注意：不能覆盖 checkbox/radio —— 否则它们会被强制成 100% 宽度 + 34px 高度 */
+  .cd-modal form input:not([type="checkbox"]):not([type="radio"]),
+  .cd-modal form select,
+  .cd-modal form textarea {
     font-size: 16px !important;
     height: 34px !important;
     padding: 0 .55rem !important;
@@ -254,6 +258,12 @@
     box-sizing: border-box !important;
     -webkit-appearance: none !important;
     appearance: none !important;
+  }
+  /* checkbox/radio 保持原生尺寸 */
+  .cd-modal form input[type="checkbox"],
+  .cd-modal form input[type="radio"] {
+    width: 1.1em !important; height: 1.1em !important;
+    flex-shrink: 0;
   }
   /* iOS date 内部组件靠左 + 容器允许收缩，不撑爆 grid */
   .cd-modal form .row2 > div { min-width: 0 !important; }
@@ -287,6 +297,9 @@
   .cd-modal form > div:last-child > button,
   .cd-modal form > div:last-child > a {
     flex: 1 1 50% !important; height: 40px !important; font-size: .92rem !important;
+    white-space: nowrap !important;
+    overflow: hidden; text-overflow: ellipsis;
+    padding: 0 .5rem !important;
   }
   /* 编辑/添加宠物弹窗：把两个 checkbox 排成一行 + 备注变成单行 input 视觉 */
   #edit-pet-modal form > label[for],
@@ -1096,7 +1109,7 @@
  <label>备注</label>
  <textarea name="notes" rows="2" style="min-height:42px;"></textarea>
  <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
- <button type="submit" class="btn">添加（自动生成病历号）</button>
+ <button type="submit" class="btn">添加宠物</button>
  <button type="button" class="btn secondary" onclick="document.getElementById('add-pet-modal').classList.remove('visible')">取消</button>
  </div>
  </form>
