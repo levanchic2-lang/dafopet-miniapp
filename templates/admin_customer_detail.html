@@ -232,7 +232,7 @@
  <td data-label="名称" class="pet-name-cell">{{ p.name or '未命名' }}</td>
  <td data-label="种类">{{ {'cat':'猫','dog':'犬','exotic':'异宠','other':'其他'}.get(p.species, p.species or '—') }}</td>
  <td data-label="品种">{{ p.breed or '—' }}</td>
- <td data-label="性别">{{ '♀ 母' if p.gender=='female' else '♂ 公' if p.gender=='male' else '未知' }}</td>
+ <td data-label="性别">{{ '母' if p.gender=='female' else '公' if p.gender=='male' else '未知' }}</td>
  <td data-label="年龄">{{ p.birthday_estimate or '—' }}</td>
  <td data-label="颜色">{{ p.color_pattern or '—' }}</td>
  <td data-label="所属门店">{{ p.store or '—' }}</td>
