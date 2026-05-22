@@ -166,17 +166,22 @@
    <form id="pkg-form" method="post" action="/admin/packages/create">
      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
      <label>套餐名</label>
-     <input name="name" required maxlength="120">
+     <input name="name" required maxlength="120" placeholder="如 55元洗澡卡4送1">
+
      <label>类别</label>
      <select name="category">
        {% for k, zh in category_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}
      </select>
-     <label>次数</label>
-     <input name="total_uses" type="number" min="1" value="10" required>
-     <label>售价（¥）</label>
-     <input name="sell_price" type="number" step="0.01" min="0" required>
-     <label>单次参考价（¥，用于报表）</label>
-     <input name="unit_price" type="number" step="0.01" min="0" value="0">
+
+     <label>总次数 <span style="color:var(--muted);font-weight:400;font-size:.74rem;">— 含赠送在内的总核销次数（4 送 1 → 填 5）</span></label>
+     <input name="total_uses" type="number" min="1" value="10" required oninput="recalcPkgUnitPrice()" id="pkg-total-uses">
+
+     <label>售价 ¥ <span style="color:var(--muted);font-weight:400;font-size:.74rem;">— 客户实付金额（4×55=220）</span></label>
+     <input name="sell_price" type="number" step="0.01" min="0" required oninput="recalcPkgUnitPrice()" id="pkg-sell-price">
+
+     <label>单次参考价 ¥ <span style="color:var(--muted);font-weight:400;font-size:.74rem;">— 自动算 售价÷总次数（核销记账用）</span></label>
+     <input name="unit_price" type="number" step="0.01" min="0" value="0" id="pkg-unit-price" readonly style="background:var(--bg-elevated);">
+
      <label>有效期（天，0 = 不限期）</label>
      <input name="validity_days" type="number" min="0" value="365">
      <label>归属门店</label>
@@ -195,6 +200,13 @@
  </div>
 </div>
 <script>
+function recalcPkgUnitPrice() {
+  var n = parseFloat((document.getElementById('pkg-total-uses') || {}).value || 0) || 0;
+  var p = parseFloat((document.getElementById('pkg-sell-price') || {}).value || 0) || 0;
+  var u = document.getElementById('pkg-unit-price');
+  if (!u) return;
+  u.value = (n > 0 && p > 0) ? (p / n).toFixed(2) : '0.00';
+}
 function openEdit(id, data) {
   var modal = document.getElementById('new-pkg-modal');
   modal.querySelector('#pkg-modal-title').textContent = '编辑套餐';
@@ -204,6 +216,8 @@ function openEdit(id, data) {
     var el = f.querySelector('[name="'+k+'"]');
     if (el) el.value = data[k] == null ? '' : data[k];
   });
+  // 编辑也重新算一遍以保持一致
+  recalcPkgUnitPrice();
   modal.style.display = 'flex';
 }
 document.querySelector('.page-head .btn') && document.querySelector('.page-head .btn').addEventListener('click', function(){
