@@ -11723,37 +11723,50 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
                           note=f"{vacc.vaccine_name or ''} 接种出库")
 
     # 需要收费 → 自动生成收费单
-    if not is_free and item_id:
-        inv_item = db.get(InventoryItem, item_id)
-        if inv_item and inv_item.sell_price > 0:
-            inv = Invoice(
-                invoice_no      = _gen_invoice_no(db),
-                customer_id     = customer_id,
-                pet_id          = pet_id,
-                invoice_date    = vacc.vaccinated_date,
-                subtotal        = inv_item.sell_price,
-                discount_amount = 0.0,
-                total_amount    = inv_item.sell_price,
-                payment_status  = "unpaid",
-                notes           = f"疫苗接种 #{vacc.id}",
-                created_by      = admin_name,
-            )
-            db.add(inv)
-            db.flush()
-            db.add(InvoiceItem(
-                invoice_id  = inv.id,
-                ref_type    = "vaccination",
-                ref_id      = vacc.id,
-                description = vacc.vaccine_name or vacc.vaccine_type,
-                quantity    = 1.0,
-                unit_price  = inv_item.sell_price,
-                subtotal    = inv_item.sell_price,
-            ))
-            vacc.invoice_id = inv.id
+    # 优先用表单填的 charge_amount；为空才退回到 inventory item 的 sell_price
+    try:
+        charge_amount = float(form.get("charge_amount") or 0)
+    except (ValueError, TypeError):
+        charge_amount = 0.0
+    if (not is_free) and charge_amount <= 0 and item_id:
+        inv_item_for_price = db.get(InventoryItem, item_id)
+        if inv_item_for_price and inv_item_for_price.sell_price > 0:
+            charge_amount = float(inv_item_for_price.sell_price)
+
+    if (not is_free) and charge_amount > 0:
+        inv = Invoice(
+            invoice_no      = _gen_invoice_no(db),
+            customer_id     = customer_id,
+            pet_id          = pet_id,
+            invoice_date    = vacc.vaccinated_date,
+            subtotal        = charge_amount,
+            discount_amount = 0.0,
+            total_amount    = charge_amount,
+            payment_status  = "unpaid",
+            notes           = f"疫苗接种 #{vacc.id}",
+            created_by      = admin_name,
+        )
+        db.add(inv)
+        db.flush()
+        db.add(InvoiceItem(
+            invoice_id  = inv.id,
+            ref_type    = "vaccination",
+            ref_id      = vacc.id,
+            description = vacc.vaccine_name or vacc.vaccine_type,
+            quantity    = 1.0,
+            unit_price  = charge_amount,
+            subtotal    = charge_amount,
+        ))
+        vacc.invoice_id = inv.id
 
     db.commit()
     redirect = f"/admin/customers/{db.get(Pet, pet_id).customer_id}" if pet_id and db.get(Pet, pet_id) else "/admin/vaccinations"
-    return RedirectResponse(f"{redirect}?msg=疫苗记录已添加", status_code=303)
+    msg_part = "疫苗记录已添加"
+    if vacc.invoice_id:
+        msg_part += f"，收费单 ¥{charge_amount:.2f} 已生成待收款"
+    elif not is_free:
+        msg_part += "（未生成收费单：金额=0 且未关联有售价的库存品目）"
+    return RedirectResponse(f"{redirect}?msg={msg_part}", status_code=303)
 
 
 @app.get("/admin/vaccinations/{vacc_id}", response_class=HTMLResponse)

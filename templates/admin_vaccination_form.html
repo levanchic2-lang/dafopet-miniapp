@@ -152,10 +152,17 @@
  <input type="checkbox" name="is_free" value="1" id="is-free-chk"
  {% if vacc and vacc.is_free %}checked{% endif %}
  onchange="onFreeChange()"/>
- <span>此次接种免费（如：狂犬疫苗，不生成收费单）</span>
+ <span>此次接种免费（如：政府狂犬疫苗，不生成收费单）</span>
  </label>
+ <div id="charge-row" style="margin-top:0.75rem;display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;">
+   <label style="min-width:80px;font-size:.88rem;font-weight:600;">收费金额 ¥</label>
+   <input name="charge_amount" id="charge-amount" type="number" step="0.01" min="0" placeholder="0.00"
+          style="width:160px;" value=""/>
+   <span style="font-size:.78rem;color:var(--muted);">关联库存时自动带出售价；可手动改</span>
+ </div>
  <p id="charge-hint" style="font-size:0.8rem;color:var(--muted);margin-top:0.5rem;">
- 关联库存品目后，若不勾选免费，保存时将自动生成收费单并进入收银台待收款。
+ 不勾"免费" + 金额 &gt; 0 时，保存会自动生成收费单进入收银台待收款。<br/>
+ 关联库存时还会自动出库 1 单位；不关联只产生收费单。
  </p>
  </div>
  {% endif %}
@@ -282,8 +289,8 @@ function onItemChange() {
  const opt = sel.options[sel.selectedIndex];
  const name = opt.dataset.name || '';
  const batch = opt.dataset.batch || '';
- const expiry = opt.dataset.expiry || '';
- // 选了库存品目 → 自动带出 品牌名 / 批号；空字段才填，不覆盖用户已输入的
+ const price = opt.dataset.price || '';
+ // 选了库存品目 → 自动带出 品牌名 / 批号 / 收费金额；空字段才填，不覆盖用户已输入的
  if (name) {
  const nameInput = document.querySelector('input[name="vaccine_name"]');
  if (nameInput && !nameInput.value) nameInput.value = name;
@@ -291,6 +298,10 @@ function onItemChange() {
  if (batch) {
  const batchInput = document.querySelector('input[name="batch_no"]');
  if (batchInput && !batchInput.value) batchInput.value = batch;
+ }
+ if (price && parseFloat(price) > 0) {
+ const amtInput = document.getElementById('charge-amount');
+ if (amtInput && !amtInput.value) amtInput.value = parseFloat(price).toFixed(2);
  }
  // 有效期不强填，避免覆盖手术日 + 365 天的下次到期日逻辑
 }
