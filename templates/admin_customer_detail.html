@@ -231,6 +231,23 @@
     background: rgba(255,255,255,.25) !important; color: #fff !important;
   }
   .tab-content { border-radius: 0 0 10px 10px; }
+
+  /* 病历卡片里主诉/诊断等长文字字段：移动端不截断，自动换行 */
+  .data-table.mobile-card td.long-text {
+    max-width: none !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: break-word;
+    display: block !important;
+    padding: .25rem 0 !important;
+  }
+  .data-table.mobile-card td.long-text::before {
+    content: attr(data-label);
+    display: block !important;
+    color: var(--muted); font-size: .7rem;
+    margin-bottom: .15rem; font-weight: 500;
+  }
 }
 
 .tab-content {
@@ -528,8 +545,8 @@
  <tr>
  <td>{{ v.visit_date }}</td>
  <td><span class="pill pill-info">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
- <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ v.chief_complaint or '—' }}</td>
- <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ v.diagnosis or '—' }}</td>
+ <td class="long-text" data-label="主诉" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ v.chief_complaint or '' }}">{{ v.chief_complaint or '—' }}</td>
+ <td class="long-text" data-label="诊断" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ v.diagnosis or '' }}">{{ v.diagnosis or '—' }}</td>
  <td>{{ v.vet_name or '—' }}</td>
  <td>{% if v.follow_up_at %}<span class="pill pill-warn">{{ v.follow_up_at }}</span>{% else %}—{% endif %}</td>
  <td><a href="/admin/visits/{{ v.id }}?return_to=customer">查看 <i data-lucide="arrow-right"></i></a></td>
