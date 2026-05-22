@@ -625,7 +625,7 @@
  <tr>
  <td>{{ a.appointment_date }}</td>
  <td>{{ a.appointment_time }}</td>
- <td>{{ a.category }}</td>
+ <td>{{ {'tnr':'TNR 预约','outpatient':'门诊','surgery':'手术','beauty':'美容','grooming':'造型','washcare':'洗护'}.get(a.category, a.category) }}</td>
  <td>{{ a.service_name }}</td>
  <td>{{ a.store }}</td>
  <td>
