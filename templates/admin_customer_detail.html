@@ -98,6 +98,22 @@
   justify-content: flex-end;
  }
  .pets-table tr.pet-row td.pet-actions-cell::before { display: none; }
+ /* 接种 / 驱虫 多行内容：跨整行 + label 在上、内容多行在下 */
+ .pets-table tr.pet-row td.multiline {
+  grid-column: 1 / -1;
+  display: block !important;
+  border-top: 1px dashed var(--border) !important;
+  padding-top: .35rem !important;
+  margin-top: .1rem;
+ }
+ .pets-table tr.pet-row td.multiline::before {
+  display: block !important;
+  margin: 0 0 .2rem !important;
+  font-size: .7rem;
+ }
+ .pets-table tr.pet-row td.multiline > div {
+  font-size: .8rem; line-height: 1.35;
+ }
 }
 .pet-mrn { font-family: monospace; font-size: 0.78rem; color: #4b5563; }
 .pet-name-cell { font-weight: 600; }
@@ -176,6 +192,51 @@
 .cd-modal-overlay.visible { display:flex; }
 .cd-modal { background:var(--card); border-radius:12px; padding:1.25rem; width:480px; max-width:95vw; box-shadow:0 8px 32px rgba(0,0,0,.22); max-height:90vh; overflow-y:auto; }
 .cd-modal h3 { margin:0 0 0.85rem; font-size:1rem; }
+
+/* 手机端：弹窗变小卡片 + flex 列布局，让保存按钮 sticky 在底部，永远点得到 */
+@media (max-width: 768px) {
+  .cd-modal-overlay { padding: 0; align-items: flex-end !important; }
+  .cd-modal {
+    width: 100vw !important; max-width: 100vw !important;
+    max-height: 88dvh !important;
+    border-radius: 14px 14px 0 0 !important;
+    padding: 0 !important;
+    display: flex !important; flex-direction: column !important;
+    overflow: hidden !important;
+  }
+  @supports not (max-height: 88dvh) { .cd-modal { max-height: 88vh !important; } }
+  .cd-modal > h3:first-of-type {
+    flex: 0 0 auto;
+    padding: .85rem 1rem !important;
+    margin: 0 !important;
+    border-bottom: 1px solid var(--border);
+    background: var(--card); position: sticky; top: 0;
+  }
+  .cd-modal > form, .cd-modal > div:not(:first-child) {
+    flex: 1 1 auto;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 1rem !important;
+    min-height: 0;
+  }
+  .cd-modal form .row2 { grid-template-columns: 1fr !important; gap: .55rem !important; }
+  .cd-modal form input, .cd-modal form select, .cd-modal form textarea {
+    font-size: 16px !important;  /* 防 iOS zoom */
+  }
+  /* 表单最末的按钮组：sticky 在底部 */
+  .cd-modal form > div:last-child {
+    position: sticky; bottom: 0;
+    background: var(--card);
+    padding: .65rem 0 0 !important;
+    margin: .75rem 0 0 !important;
+    border-top: 1px solid var(--border);
+    display: flex !important; gap: .5rem !important;
+    z-index: 5;
+  }
+  .cd-modal form > div:last-child > button,
+  .cd-modal form > div:last-child > a {
+    flex: 1 1 50% !important; height: 42px !important; font-size: .95rem !important;
+  }
+}
 </style>
 {% endblock %}
 
