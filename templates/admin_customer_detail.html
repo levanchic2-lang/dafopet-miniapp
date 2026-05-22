@@ -244,15 +244,21 @@
  {% if p.is_neutered %}<span class="pill pill-ok">已绝育</span>
  {% else %}<span class="pill pill-warn">未绝育</span>{% endif %}
  </td>
+ {% set last_v = latest_vacc_by_pet.get(p.id) %}
+ {% set last_d = latest_deworm_by_pet.get(p.id) %}
  <td data-label="接种">
- {% if is_active and vaccinations %}<span class="pill pill-info">{{ vaccinations|length }} 次</span>
- {% elif is_active %}<span class="pill pill-gray">未接种</span>
- {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+ {% if last_v %}
+   <div style="font-size:.82rem;font-weight:600;">{{ last_v.vaccine_name or last_v.vaccine_type or '疫苗' }}{% if last_v.dose_number %} · 第{{ last_v.dose_number }}针{% endif %}</div>
+   <div style="font-size:.72rem;color:var(--muted);">{{ last_v.vaccinated_date or '' }}{% if last_v.next_due_date %} · 下次 {{ last_v.next_due_date }}{% endif %}</div>
+ {% elif p.life_status == 'deceased' %}<span style="color:var(--muted);">—</span>
+ {% else %}<span class="pill pill-gray">未接种</span>{% endif %}
  </td>
  <td data-label="驱虫">
- {% if is_active and dewormings %}<span class="pill pill-info">{{ dewormings|length }} 次</span>
- {% elif is_active %}<span class="pill pill-gray">未驱虫</span>
- {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+ {% if last_d %}
+   <div style="font-size:.82rem;font-weight:600;">{{ last_d.product_name or last_d.deworm_type or '驱虫' }}</div>
+   <div style="font-size:.72rem;color:var(--muted);">{{ last_d.deworm_date or '' }}{% if last_d.next_due_date %} · 下次 {{ last_d.next_due_date }}{% endif %}</div>
+ {% elif p.life_status == 'deceased' %}<span style="color:var(--muted);">—</span>
+ {% else %}<span class="pill pill-gray">未驱虫</span>{% endif %}
  </td>
  <td onclick="event.stopPropagation();" class="pet-actions-cell">
  <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}&return_to=customer:{{ cust.id }}" style="font-size:0.78rem;color:var(--brand);text-decoration:none;margin-right:0.6rem;">预约</a>
