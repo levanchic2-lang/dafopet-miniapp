@@ -233,7 +233,7 @@
  <td data-label="种类">{{ {'cat':'猫','dog':'犬','exotic':'异宠','other':'其他'}.get(p.species, p.species or '—') }}</td>
  <td data-label="品种">{{ p.breed or '—' }}</td>
  <td data-label="性别">{{ '母' if p.gender=='female' else '公' if p.gender=='male' else '未知' }}</td>
- <td data-label="年龄">{{ p.birthday_estimate or '—' }}</td>
+ <td data-label="年龄">{% if p.birthday_estimate %}<span title="{{ p.birthday_estimate }}">{{ p.birthday_estimate | pet_age }}</span>{% else %}—{% endif %}</td>
  <td data-label="颜色">{{ p.color_pattern or '—' }}</td>
  <td data-label="所属门店">{{ p.store or '—' }}</td>
  <td data-label="状态">
@@ -246,14 +246,14 @@
  </td>
  {% set last_v = latest_vacc_by_pet.get(p.id) %}
  {% set last_d = latest_deworm_by_pet.get(p.id) %}
- <td data-label="接种">
+ <td data-label="接种" class="multiline">
  {% if last_v %}
    <div style="font-size:.82rem;font-weight:600;">{{ last_v.vaccine_name or last_v.vaccine_type or '疫苗' }}{% if last_v.dose_number %} · 第{{ last_v.dose_number }}针{% endif %}</div>
    <div style="font-size:.72rem;color:var(--muted);">{{ last_v.vaccinated_date or '' }}{% if last_v.next_due_date %} · 下次 {{ last_v.next_due_date }}{% endif %}</div>
  {% elif p.life_status == 'deceased' %}<span style="color:var(--muted);">—</span>
  {% else %}<span class="pill pill-gray">未接种</span>{% endif %}
  </td>
- <td data-label="驱虫">
+ <td data-label="驱虫" class="multiline">
  {% if last_d %}
    <div style="font-size:.82rem;font-weight:600;">{{ last_d.product_name or last_d.deworm_type or '驱虫' }}</div>
    <div style="font-size:.72rem;color:var(--muted);">{{ last_d.deworm_date or '' }}{% if last_d.next_due_date %} · 下次 {{ last_d.next_due_date }}{% endif %}</div>
@@ -956,8 +956,8 @@
  <input name="color_pattern">
  </div>
  <div>
- <label>年龄/出生</label>
- <input name="birthday_estimate">
+ <label>出生日期</label>
+ <input name="birthday_estimate" type="date" max="{{ today_str }}">
  </div>
  <div>
  <label>状态</label>
@@ -1031,8 +1031,8 @@
  <input name="color_pattern" id="ep-color">
  </div>
  <div>
- <label>年龄/出生</label>
- <input name="birthday_estimate" id="ep-birthday">
+ <label>出生日期</label>
+ <input name="birthday_estimate" id="ep-birthday" type="date" max="{{ today_str }}">
  </div>
  <div>
  <label>状态</label>

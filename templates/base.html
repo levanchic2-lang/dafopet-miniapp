@@ -493,6 +493,17 @@
       .data-table.mobile-card td:last-child { padding-bottom: 0 !important; }
       /* 操作按钮列：右对齐成一排 */
       .data-table.mobile-card td.actions { justify-content: flex-end; padding-top: .4rem !important; border-top: 1px dashed var(--border) !important; margin-top: .3rem; }
+      /* 多行内容的单元格：取消 flex 横排，改成 label 在上、内容在下，避免文字溢出/错位 */
+      .data-table.mobile-card td.multiline {
+        display: block !important;
+        padding: .35rem 0 !important;
+      }
+      .data-table.mobile-card td.multiline::before {
+        display: block !important; margin: 0 0 .2rem !important;
+      }
+      .data-table.mobile-card td.multiline > div {
+        text-align: left !important;
+      }
 
       /* ── 表单：所有表单字段竖排，输入框满宽 ── */
       .row2 { grid-template-columns: 1fr !important; gap: .6rem !important; }

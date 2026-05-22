@@ -203,6 +203,35 @@ def _filter_ai_review_view(raw: str | None) -> dict:
 
 templates.env.filters["ai_review_view"] = _filter_ai_review_view
 
+
+def _filter_pet_age(birthday: str) -> str:
+    """把 'YYYY-MM-DD' 出生日期渲染成「X 岁」或「Y 个月」可读年龄。
+    非日期格式（老数据如 '2岁'）原样返回。"""
+    if not birthday:
+        return "—"
+    s = str(birthday).strip()
+    if not s or s == "—":
+        return "—"
+    # 老自由文本兼容
+    if not (len(s) >= 7 and s[4] in ("-", "/") and s[:4].isdigit()):
+        return s
+    try:
+        from datetime import date as _date
+        parts = s.replace("/", "-").split("-")
+        y, m, d = int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 1
+        today = _date.today()
+        years = today.year - y - (1 if (today.month, today.day) < (m, d) else 0)
+        if years >= 1:
+            return f"{years} 岁"
+        months = (today.year - y) * 12 + (today.month - m) - (1 if today.day < d else 0)
+        months = max(0, months)
+        return f"{months} 个月"
+    except Exception:
+        return s
+
+
+templates.env.filters["pet_age"] = _filter_pet_age
+
 _static_dir = Path(__file__).resolve().parent.parent / "static"
 if _static_dir.is_dir():
     app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
