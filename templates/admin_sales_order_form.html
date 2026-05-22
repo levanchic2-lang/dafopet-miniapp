@@ -7,6 +7,12 @@
 .so-table tr:not(:last-child) td { border-bottom:1px solid var(--border); }
 .so-table input, .so-table select { padding:0.35rem 0.5rem; font-size:0.86rem; border-radius:8px; }
 .so-total-row { background:var(--bg-elevated); font-weight:700; }
+/* 「类型」列改为 hidden input — 表头还在但单元格塌缩为 0 宽，不占空间 */
+.so-table th:nth-child(2), .so-table td.col-type-hidden {
+  width: 0 !important; padding: 0 !important; border: none !important;
+  font-size: 0 !important; min-width: 0 !important;
+}
+.so-table th:nth-child(2) { display: none; }
 .inv-search-wrap { position:relative; }
 .inv-dropdown { position:absolute; top:100%; left:0; right:0; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); z-index:100; max-height:220px; overflow-y:auto; display:none; min-width:220px; }
 .inv-dropdown-item { padding:0.45rem 0.75rem; cursor:pointer; font-size:0.85rem; line-height:1.4; }
@@ -29,7 +35,6 @@
   grid-template-columns: 1fr 1fr;
   grid-template-areas:
     "name name"
-    "type type"
     "price qty"
     "subtotal subtotal"
     "notes notes"
@@ -38,6 +43,8 @@
   background: var(--card); border: 1px solid var(--border);
   border-radius: 10px; padding: .65rem .75rem; margin-bottom: .55rem;
  }
+ /* 隐藏的类型 td 在手机端也不占网格位 */
+ .so-table tbody tr td.col-type-hidden { display: none !important; }
  .so-table tbody tr td {
   display: block !important; padding: 0 !important; border: none !important;
   min-width: 0;
@@ -55,8 +62,7 @@
  }
  .so-table tbody tr td:nth-child(1) { grid-area: name; }
  .so-table tbody tr td:nth-child(1)::before { content: "项目名称 *"; font-size: .78rem; font-weight: 600; color: var(--text); }
- .so-table tbody tr td:nth-child(2) { grid-area: type; }
- .so-table tbody tr td:nth-child(2)::before { content: "类型"; }
+ /* 第 2 列是隐藏的类型 — 不进网格 */
  .so-table tbody tr td:nth-child(3) { grid-area: price; }
  .so-table tbody tr td:nth-child(3)::before { content: "单价 ¥"; }
  .so-table tbody tr td:nth-child(4) { grid-area: qty; }
@@ -194,7 +200,7 @@
  <thead>
  <tr>
  <th style="min-width:160px;">名称 *</th>
- <th style="min-width:80px;">类型</th>
+ <th>类型</th>
  <th style="min-width:90px;">单价（¥）</th>
  <th style="min-width:70px;">数量</th>
  <th style="min-width:90px;">小计（¥）</th>
@@ -217,12 +223,8 @@
  <div class="inv-dropdown" id="so_dropdown_{{ idx }}"></div>
  </div>
  </td>
- <td>
- <select name="item_type_{{ idx }}">
- {% for k, zh in item_type_zh.items() %}
- <option value="{{ k }}" {% if item.item_type == k %}selected{% endif %}>{{ zh }}</option>
- {% endfor %}
- </select>
+ <td class="col-type-hidden">
+ <input type="hidden" name="item_type_{{ idx }}" value="{{ item.item_type or 'product' }}" id="so_item_type_{{ idx }}"/>
  </td>
  <td><input type="number" name="unit_price_{{ idx }}" value="{{ '%.2f'|format(item.unit_price) }}" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)"/></td>
  <td><input type="number" name="quantity_{{ idx }}" value="{{ item.quantity }}" step="0.1" min="0.1" class="qty-input" oninput="updateSubtotal(this)"/></td>
@@ -243,7 +245,7 @@
  <div class="inv-dropdown" id="so_dropdown_0"></div>
  </div>
  </td>
- <td><select name="item_type_0">{% for k, zh in item_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}</select></td>
+ <td class="col-type-hidden"><input type="hidden" name="item_type_0" value="product" id="so_item_type_0"/></td>
  <td><input type="number" name="unit_price_0" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)"/></td>
  <td><input type="number" name="quantity_0" value="1" step="0.1" min="0.1" class="qty-input" oninput="updateSubtotal(this)"/></td>
  <td><input name="subtotal_display_0" value="0.00" readonly style="background:var(--bg-elevated);font-weight:600;width:72px;"/><input type="hidden" name="subtotal_0" value="0" class="subtotal-hidden"/></td>
@@ -393,10 +395,23 @@ function showSoDropdown(idx, items, input) {
 function selectSoItem(idx, it, input) {
  input.value = it.name;
  document.getElementById('so_item_id_' + idx).value = it.id;
+ // 同时根据库存品目的 category 自动带出销售单 item_type
+ var typeEl = document.getElementById('so_item_type_' + idx);
+ if (typeEl) typeEl.value = _categoryToItemType(it.category, it.is_service);
  var row = input.closest('tr');
  var priceEl = row.querySelector('.price-input');
  if (priceEl) { priceEl.value = it.sell_price.toFixed(2); updateSubtotal(priceEl); }
  closeSoDropdown(idx);
+}
+
+// 库存品目 category → 销售单 item_type 映射
+function _categoryToItemType(cat, isService) {
+ if (isService) return 'service';
+ if (cat === 'medication' || cat === 'vaccine' || cat === 'antiparasitic') return 'medication';
+ if (cat === 'lab' || cat === 'imaging' || cat === 'microscopy') return 'service';
+ if (cat === 'grooming') return 'service';
+ // consumable / product → product
+ return 'product';
 }
 
 function closeSoDropdown(idx) {
@@ -417,7 +432,7 @@ function addItem() {
  <div class="inv-dropdown" id="so_dropdown_${idx}"></div>
  </div>
  </td>
- <td><select name="item_type_${idx}">${_itemTypeOptions}</select></td>
+ <td class="col-type-hidden"><input type="hidden" name="item_type_${idx}" value="product" id="so_item_type_${idx}"/></td>
  <td><input type="number" name="unit_price_${idx}" step="0.01" min="0" class="price-input" oninput="updateSubtotal(this)"/></td>
  <td><input type="number" name="quantity_${idx}" value="1" step="0.1" min="0.1" class="qty-input" oninput="updateSubtotal(this)"/></td>
  <td><input name="subtotal_display_${idx}" value="0.00" readonly style="background:var(--bg-elevated);font-weight:600;width:72px;"/><input type="hidden" name="subtotal_${idx}" value="0" class="subtotal-hidden"/></td>
