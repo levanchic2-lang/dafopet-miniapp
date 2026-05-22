@@ -11584,7 +11584,7 @@ def _attach_latest_batch(db: Session, items: list) -> None:
         return
     rows = db.query(InventoryBatch).filter(
         InventoryBatch.item_id.in_(ids),
-        InventoryBatch.qty_remaining > 0,
+        InventoryBatch.is_depleted == False,  # noqa: E712
     ).order_by(InventoryBatch.expiry_date.asc(), InventoryBatch.id.desc()).all()
     by_item: dict[int, "InventoryBatch"] = {}
     for b in rows:
