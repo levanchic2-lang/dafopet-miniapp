@@ -18,6 +18,75 @@
  .wrap { padding:0; }
  .card { box-shadow:none; border:none; }
 }
+
+/* 手机端：每个明细行变独立卡片，不再横滑 */
+@media (max-width: 768px) {
+ .so-table { min-width:0 !important; display:block; }
+ .so-table thead { display:none; }
+ .so-table tbody { display:block; }
+ .so-table tbody tr {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "name name"
+    "type type"
+    "price qty"
+    "subtotal subtotal"
+    "notes notes"
+    "del del";
+  gap: .5rem;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: .65rem .75rem; margin-bottom: .55rem;
+ }
+ .so-table tbody tr td {
+  display: block !important; padding: 0 !important; border: none !important;
+  min-width: 0;
+ }
+ .so-table tbody tr td::before {
+  display: block; font-size: .72rem; color: var(--muted);
+  margin-bottom: .2rem; font-weight: 500; line-height: 1.2;
+ }
+ .so-table tbody tr td input,
+ .so-table tbody tr td select {
+  width: 100% !important; height: 38px !important;
+  font-size: 16px !important; padding: .35rem .55rem !important;
+  box-sizing: border-box; border: 1px solid var(--border) !important;
+  border-radius: 6px !important; min-width: 0 !important;
+ }
+ .so-table tbody tr td:nth-child(1) { grid-area: name; }
+ .so-table tbody tr td:nth-child(1)::before { content: "项目名称 *"; font-size: .78rem; font-weight: 600; color: var(--text); }
+ .so-table tbody tr td:nth-child(2) { grid-area: type; }
+ .so-table tbody tr td:nth-child(2)::before { content: "类型"; }
+ .so-table tbody tr td:nth-child(3) { grid-area: price; }
+ .so-table tbody tr td:nth-child(3)::before { content: "单价 ¥"; }
+ .so-table tbody tr td:nth-child(4) { grid-area: qty; }
+ .so-table tbody tr td:nth-child(4)::before { content: "数量"; }
+ .so-table tbody tr td:nth-child(5) {
+  grid-area: subtotal; padding: .35rem .55rem !important;
+  background: var(--ok-bg); border-radius: 6px !important; text-align: center !important;
+ }
+ .so-table tbody tr td:nth-child(5)::before { content: "小计 ¥"; font-size: .72rem; color: var(--ok-fg); }
+ .so-table tbody tr td:nth-child(5) input {
+  background: transparent !important; border: none !important;
+  text-align: center !important; font-weight: 700 !important;
+  color: var(--ok-fg) !important; font-size: 1rem !important;
+ }
+ .so-table tbody tr td:nth-child(6) { grid-area: notes; }
+ .so-table tbody tr td:nth-child(6)::before { content: "备注"; }
+ .so-table tbody tr td:nth-child(7) {
+  grid-area: del; text-align: right !important;
+  border-top: 1px dashed var(--border) !important;
+  padding-top: .4rem !important;
+ }
+ .so-table tbody tr td:nth-child(7)::before { display: none; }
+ .so-table tfoot { display: block; margin-top: .5rem; }
+ .so-table tfoot tr { display: flex; justify-content: space-between; align-items: center;
+   padding: .6rem .85rem; background: var(--brand-bg-soft); border-radius: 8px;
+   font-size: 1rem; }
+ .so-table tfoot tr td { display: inline !important; padding: 0 !important; border: none !important; }
+ .so-table tfoot tr td[colspan="4"] { font-weight: 600; }
+ .so-table tfoot tr td:nth-child(2) { font-weight: 800; color: var(--brand-dark); }
+}
 </style>
 {% endblock %}
 {% block body %}
@@ -109,23 +178,9 @@
  {% endfor %}
  </select>
  </div>
- <div>
- <label>收款方式</label>
- <select name="payment_method">
- <option value="">— 未收款 —</option>
- {% for m in payment_methods %}
- <option value="{{ m }}" {% if o and o.payment_method == m %}selected{% endif %}>{{ m }}</option>
- {% endfor %}
- </select>
- </div>
- <div>
- <label>状态</label>
- <select name="status">
- {% for k, zh in so_status_zh.items() %}
- <option value="{{ k }}" {% if (o and o.status == k) or (not o and k == 'pending') %}selected{% endif %}>{{ zh }}</option>
- {% endfor %}
- </select>
- </div>
+ {# 收款方式 + 状态 已迁到收银台统一管理，新建/编辑销售单不再露出 #}
+ <input type="hidden" name="payment_method" value="{{ o.payment_method if o and o.payment_method else '' }}"/>
+ <input type="hidden" name="status" value="{{ o.status if o and o.status else 'pending' }}"/>
  </div>
 
  <!-- 商品/服务明细 -->
