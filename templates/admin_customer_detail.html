@@ -571,7 +571,13 @@
  <td>{{ p.vet_name or '—' }}</td>
  <td>{{ p.items|length }}</td>
  <td>¥ {{ '%.2f'|format(p.total_amount or 0) }}</td>
- <td><span class="pill {% if p.status == 'dispensed' %}pill-ok{% elif p.status == 'issued' %}pill-info{% else %}pill-warn{% endif %}">{{ p.status }}</span></td>
+ <td>
+ {% if p.status == 'dispensed' %}<span class="pill pill-ok">已发药</span>
+ {% elif p.status == 'issued' %}<span class="pill pill-info">已开方</span>
+ {% elif p.status == 'draft' %}<span class="pill pill-gray">草稿</span>
+ {% elif p.status == 'cancelled' %}<span class="pill pill-gray">已取消</span>
+ {% else %}<span class="pill pill-warn">{{ p.status }}</span>{% endif %}
+ </td>
  <td><a href="/admin/prescriptions/{{ p.id }}">查看 <i data-lucide="arrow-right"></i></a></td>
  </tr>
  {% endfor %}

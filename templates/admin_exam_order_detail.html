@@ -18,6 +18,9 @@
 .s-completed { background:#d1fae5; color:#065f46; }
 .qr-box { text-align:center; padding:0.75rem; }
 .qr-box img { width:180px; height:180px; border:1px solid var(--border); border-radius:8px; }
+@media (max-width: 768px) {
+  .hide-on-mobile { display: none !important; }
+}
 </style>
 {% endblock %}
 
@@ -163,11 +166,14 @@
 <!-- 右侧：二维码 + 宠物信息 -->
 <div style="display:flex;flex-direction:column;gap:0.75rem;">
 
-  <div class="card">
+  {# 手机扫码上传：只在桌面端有意义（电脑端打开页面让助理用手机扫码），
+     手机端打开页面本身就在手机上了，扫码自己没意义，隐藏 #}
+  <div class="card hide-on-mobile">
     <h3 style="margin:0 0 0.5rem;font-size:0.92rem;"><i data-lucide="smartphone"></i> 手机扫码上传</h3>
     <p style="font-size:0.8rem;color:var(--muted);margin:0 0 0.5rem;">助理用手机扫描下方二维码，可直接拍照上传报告图片。</p>
     <div class="qr-box">
-      <img src="/admin/exam-orders/{{ order.id }}/qr.png" alt="上传二维码" />
+      <img src="/admin/exam-orders/{{ order.id }}/qr.png?v={{ order.token_expires_at.strftime('%s') if order.token_expires_at else '0' }}" alt="上传二维码" onerror="this.style.display='none';this.nextElementSibling.style.display='block';" />
+      <div style="display:none;color:var(--danger-fg);font-size:.82rem;padding:1rem;background:var(--danger-bg);border-radius:8px;">二维码生成失败，请刷新或联系管理员</div>
     </div>
     <p style="font-size:0.75rem;color:var(--muted);text-align:center;margin:0.3rem 0 0.5rem;">
       有效期：{{ order.token_expires_at.strftime('%m-%d %H:%M') if order.token_expires_at else '—' }}（北京时间+8）

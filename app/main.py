@@ -12517,14 +12517,26 @@ async def admin_exam_order_qr(
     order = db.get(ExamOrder, order_id)
     if not order:
         raise HTTPException(404)
-    import qrcode, io as _io
-    base = str(request.base_url).rstrip("/")
-    url  = f"{base}/exam-upload/{order.upload_token}"
-    img  = qrcode.make(url)
-    buf  = _io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    return StreamingResponse(buf, media_type="image/png")
+    # 老订单可能缺 upload_token（早期建单遗漏）→ 自动补一个，并立即写库
+    if not order.upload_token or not order.token_expires_at or order.token_expires_at < datetime.utcnow():
+        try:
+            order.upload_token, order.token_expires_at = _exam_order_token(db)
+            db.commit()
+        except Exception as _e:
+            logger.warning("[exam-qr] regen token failed: %s", _e)
+    # 优先用 PUBLIC_BASE_URL 配置（生产域名），否则 fallback 到 request.base_url
+    base = (settings.public_base_url or str(request.base_url)).rstrip("/")
+    url  = f"{base}/exam-upload/{order.upload_token or ''}"
+    try:
+        import qrcode, io as _io
+        img  = qrcode.make(url)
+        buf  = _io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return StreamingResponse(buf, media_type="image/png")
+    except Exception as _e:
+        logger.error("[exam-qr] qrcode generation failed: %s", _e)
+        raise HTTPException(500, f"二维码生成失败：{_e}")
 
 
 @app.get("/admin/exam-reports/{report_id}/file")
