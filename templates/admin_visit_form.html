@@ -235,7 +235,7 @@
  <option value="0">— 未指定 —</option>
  {% for p in pets %}
  <option value="{{ p.id }}" {% if pet and pet.id == p.id %}selected{% endif %}>
- {{ p.name or '未命名' }}（{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}）
+ {{ p.name or '未命名' }}（{{ '猫' if p.species=='cat' else '犬' if p.species == 'dog' else p.species }}）
  </option>
  {% endfor %}
  </select>
@@ -274,7 +274,7 @@
  <span><b>日期</b> {{ v.visit_date or '—' }}</span>
  <span><b>类型</b> {{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>
  <span><b>医生</b> {{ v.vet_name or '—' }}</span>
- {% if pet %}<span><b>宠物</b> {{ pet.name }} · {{ '猫' if pet.species=='cat' else '狗' if pet.species=='dog' else pet.species }}</span>{% endif %}
+ {% if pet %}<span><b>宠物</b> {{ pet.name }} · {{ '猫' if pet.species=='cat' else '犬' if pet.species == 'dog' else pet.species }}</span>{% endif %}
  </div>
  <a href="/admin/visits/{{ v.id }}/print" target="_blank" class="btn secondary"
     style="margin-left:auto;font-size:.82rem;"><i data-lucide="printer"></i> 打印病历</a>
@@ -584,7 +584,7 @@
  <select name="pet_id">
  <option value="0">— 未指定 —</option>
  {% for p in pets %}
- <option value="{{ p.id }}" {% if v.pet_id == p.id %}selected{% endif %}>{{ p.name or '未命名' }}（{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}）</option>
+ <option value="{{ p.id }}" {% if v.pet_id == p.id %}selected{% endif %}>{{ p.name or '未命名' }}（{{ '猫' if p.species=='cat' else '犬' if p.species == 'dog' else p.species }}）</option>
  {% endfor %}
  </select>
  </div>

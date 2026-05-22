@@ -241,7 +241,7 @@
  <option value="0">— 未指定 —</option>
  {% for pt in pets %}
  <option value="{{ pt.id }}" {% if (p and p.pet_id == pt.id) or (pet and pet.id == pt.id and not p) %}selected{% endif %}>
- {{ pt.name or '未命名' }}（{{ '猫' if pt.species=='cat' else '狗' if pt.species=='dog' else pt.species }}）
+ {{ pt.name or '未命名' }}（{{ '猫' if pt.species=='cat' else '犬' if pt.species == 'dog' else pt.species }}）
  </option>
  {% endfor %}
  </select>

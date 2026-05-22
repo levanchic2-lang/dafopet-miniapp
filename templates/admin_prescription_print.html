@@ -128,7 +128,7 @@
     <div class="field"><span class="lbl">病历号</span><span class="val">{{ pet.medical_record_no if pet else '' }}</span></div>
   </div>
   <div class="rx-row">
-    <div class="field"><span class="lbl">动物种类</span><span class="val">{{ {'cat':'猫','dog':'狗','other':'其他'}.get(pet.species, pet.species) if pet else '' }}</span></div>
+    <div class="field"><span class="lbl">动物种类</span><span class="val">{{ {'cat':'猫','dog': '犬','other':'其他'}.get(pet.species, pet.species) if pet else '' }}</span></div>
     <div class="field"><span class="lbl">动物性别</span><span class="val">{{ {'male':'公','female':'母','unknown':'未知'}.get(pet.gender, pet.gender) if pet else '' }}</span></div>
     <div class="field"><span class="lbl">动物毛色</span><span class="val">{{ pet.color_pattern if pet else '' }}</span></div>
   </div>

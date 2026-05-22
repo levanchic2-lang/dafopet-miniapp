@@ -27,7 +27,8 @@
  <label>物种</label>
  <select name="species">
  <option value="cat" {{ 'selected' if pet and pet.species == 'cat' }}>猫</option>
- <option value="dog" {{ 'selected' if pet and pet.species == 'dog' }}>狗</option>
+ <option value="dog" {{ 'selected' if pet and pet.species == 'dog' }}>犬</option>
+ <option value="exotic" {{ 'selected' if pet and pet.species == 'exotic' }}>异宠</option>
  <option value="other" {{ 'selected' if pet and pet.species == 'other' }}>其他</option>
  </select>
  </div>

@@ -497,7 +497,7 @@
  {% elif pet_obj.gender == 'female' %}<span class="badge b-done" style="font-size:0.68rem;">母</span>{% endif %}
  </div>
  <div style="font-size:0.82rem;color:var(--muted);margin-top:0.25rem;">
- {{ '猫' if pet_obj.species == 'cat' else '狗' if pet_obj.species == 'dog' else pet_obj.species }}
+ {{ '猫' if pet_obj.species == 'cat' else '犬' if pet_obj.species == 'dog' else pet_obj.species }}
  {% if pet_obj.breed %} · {{ pet_obj.breed }}{% endif %}
  </div>
  </div>

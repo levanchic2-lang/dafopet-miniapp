@@ -39,7 +39,7 @@
 
   <div class="cs-meta">
     {% if cust %}<div>客户：<b>{{ cust.name or '' }}</b>　电话：{{ cust.phone or '' }}</div>{% endif %}
-    {% if pet %}<div>宠物：<b>{{ pet.name or '' }}</b>{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '狗' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
+    {% if pet %}<div>宠物：<b>{{ pet.name or '' }}</b>{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
     <div>发起时间：{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }} · 单号 CT{{ '%06d'|format(task.id) }}</div>
   </div>
 

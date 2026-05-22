@@ -123,7 +123,7 @@ body[data-size="T80"] .mr-sig { display: none; }
   <div><span class="lbl">Address · 地址</span><span class="val">{{ (cust.address if cust else '') or '—' }}</span></div>
   <div><span class="lbl">Pet · 宠物</span><span class="val">{{ pet.name if pet else '—' }}</span></div>
   <div><span class="lbl">Species/Breed · 种类</span><span class="val">
-    {{ {'cat':'猫','dog':'狗'}.get(pet.species, pet.species or '') if pet else '' }}
+    {{ {'cat':'猫','dog': '犬'}.get(pet.species, pet.species or '') if pet else '' }}
     {% if pet and pet.breed %} · {{ pet.breed }}{% endif %}
   </span></div>
   <div><span class="lbl">Sex · 性别</span><span class="val">

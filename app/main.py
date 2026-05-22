@@ -6169,7 +6169,7 @@ def _consent_render_snapshot(template_body: str, *, cust=None, pet=None, visit=N
         "{{cust_name}}":  (cust.name if cust else ""),
         "{{cust_phone}}": (cust.phone if cust else ""),
         "{{pet_name}}":   (pet.name if pet else ""),
-        "{{pet_species}}": ({"cat":"猫","dog":"狗"}.get(pet.species, pet.species) if pet else ""),
+        "{{pet_species}}": ({"cat":"猫","dog": "犬"}.get(pet.species, pet.species) if pet else ""),
         "{{pet_breed}}":  (pet.breed if pet else ""),
         "{{pet_gender}}": ({"male":"公","female":"母","unknown":"未知"}.get(pet.gender, "") if pet else ""),
         "{{pet_age}}":    (pet_age or ""),

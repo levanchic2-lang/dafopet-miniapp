@@ -230,7 +230,7 @@
  <tr class="pet-row {% if is_active %}active{% endif %}" onclick="selectPet({{ p.id }})">
  <td data-label="病历号"><span class="pet-mrn">{{ p.medical_record_no or '—' }}</span></td>
  <td data-label="名称" class="pet-name-cell">{{ p.name or '未命名' }}</td>
- <td data-label="种类">{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}</td>
+ <td data-label="种类">{{ {'cat':'猫','dog':'犬','exotic':'异宠','other':'其他'}.get(p.species, p.species or '—') }}</td>
  <td data-label="品种">{{ p.breed or '—' }}</td>
  <td data-label="性别">{{ '♀ 母' if p.gender=='female' else '♂ 公' if p.gender=='male' else '未知' }}</td>
  <td data-label="年龄">{{ p.birthday_estimate or '—' }}</td>
@@ -905,7 +905,8 @@
  <label>种类</label>
  <select name="species" id="ap-species" onchange="syncBreedList('ap')">
  <option value="cat">猫</option>
- <option value="dog">狗</option>
+ <option value="dog">犬</option>
+ <option value="exotic">异宠</option>
  <option value="other">其他</option>
  </select>
  </div>
@@ -979,7 +980,8 @@
  <label>种类</label>
  <select name="species" id="ep-species" onchange="syncBreedList('ep')">
  <option value="cat">猫</option>
- <option value="dog">狗</option>
+ <option value="dog">犬</option>
+ <option value="exotic">异宠</option>
  <option value="other">其他</option>
  </select>
  </div>
@@ -1040,6 +1042,9 @@
 </datalist>
 <datalist id="breeds-dog">
  {% for b in breed_dogs %}<option value="{{ b }}"></option>{% endfor %}
+</datalist>
+<datalist id="breeds-exotic">
+ {% for b in breed_exotic %}<option value="{{ b }}"></option>{% endfor %}
 </datalist>
 
 {# 所有宠物数据（供编辑弹窗用） #}
@@ -1222,7 +1227,7 @@
    <label>关联宠物（可选，用于变量替换）</label>
    <select name="pet_id">
      <option value="0">— 不指定 —</option>
-     {% for p in pets %}<option value="{{ p.id }}" {% if active_pet and p.id == active_pet.id %}selected{% endif %}>{{ p.name }}{% if p.species %} · {{ '猫' if p.species == 'cat' else '狗' if p.species == 'dog' else p.species }}{% endif %}</option>{% endfor %}
+     {% for p in pets %}<option value="{{ p.id }}" {% if active_pet and p.id == active_pet.id %}selected{% endif %}>{{ p.name }}{% if p.species %} · {{ '猫' if p.species == 'cat' else '犬' if p.species == 'dog' else p.species }}{% endif %}</option>{% endfor %}
    </select>
 
    <label>关联就诊（可选，用于变量替换）</label>
@@ -1419,6 +1424,7 @@ function syncBreedList(prefix) {
  const v = sp.value;
  if (v === 'dog') br.setAttribute('list', 'breeds-dog');
  else if (v === 'cat') br.setAttribute('list', 'breeds-cat');
+ else if (v === 'exotic') br.setAttribute('list', 'breeds-exotic');
  else br.removeAttribute('list');
 }
 

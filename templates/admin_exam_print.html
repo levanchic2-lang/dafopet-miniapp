@@ -117,7 +117,7 @@ body[data-size="T80"] .rpt-sig { display: none; }
   <div class="rpt-info">
     <div class="row"><span class="lbl">主人</span><span class="val">{{ cust.name if cust else '' }}</span></div>
     <div class="row"><span class="lbl">宠物</span><span class="val">{{ pet.name if pet else '' }}</span></div>
-    <div class="row"><span class="lbl">种类</span><span class="val">{{ {'cat':'猫','dog':'狗'}.get(pet.species, pet.species or '') if pet else '' }}</span></div>
+    <div class="row"><span class="lbl">种类</span><span class="val">{{ {'cat':'猫','dog': '犬'}.get(pet.species, pet.species or '') if pet else '' }}</span></div>
     <div class="row"><span class="lbl">病历号</span><span class="val">{{ pet.medical_record_no if pet else '' }}</span></div>
     <div class="row"><span class="lbl">性别</span><span class="val">{{ {'male':'公','female':'母'}.get(pet.gender, pet.gender or '') if pet else '' }}</span></div>
     <div class="row"><span class="lbl">毛色</span><span class="val">{{ pet.color_pattern if pet else '' }}</span></div>

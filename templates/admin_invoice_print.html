@@ -111,7 +111,7 @@ body[data-size="A5_LAND"] .inv-items { font-size: 9pt; }
 <div class="inv-info">
   <div><span class="lbl">Client · 客户</span><span class="val">{{ cust.name if cust else '—' }}</span></div>
   <div><span class="lbl">Pet · 宠物</span><span class="val">
-    {{ pet.name if pet else '—' }}{% if pet %} ({{ {'cat':'猫','dog':'狗'}.get(pet.species, pet.species or '') }}){% endif %}
+    {{ pet.name if pet else '—' }}{% if pet %} ({{ {'cat':'猫','dog': '犬'}.get(pet.species, pet.species or '') }}){% endif %}
   </span></div>
   <div><span class="lbl">Tel · 电话</span><span class="val">{{ cust.phone if cust else '—' }}</span></div>
   <div><span class="lbl">Visit · 就诊</span><span class="val">{% if visit %}#{{ visit.id }} · {{ visit.visit_date or '' }}{% else %}—{% endif %}</span></div>

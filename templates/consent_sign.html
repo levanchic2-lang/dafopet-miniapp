@@ -135,7 +135,7 @@
    <div class="doc-info">
      <b>{{ task.title }}</b>
      {% if cust %}<div>客户：{{ cust.name }} <i data-lucide="check"></i> 已验证</div>{% endif %}
-     {% if pet %}<div>宠物：{{ pet.name }}{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '狗' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
+     {% if pet %}<div>宠物：{{ pet.name }}{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
      <div>发起时间：{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }}</div>
    </div>
    <div class="scroll-hint"><i data-lucide="arrow-down"></i> 请滚动阅读以下全文，下方签字。</div>
