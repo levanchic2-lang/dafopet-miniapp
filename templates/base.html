@@ -402,11 +402,21 @@
     .qtab:hover { background: #e5e7eb; }
     .qtab.active { background: #fff; color: #111827; font-weight: 600;
                    border-color: #d1d5db; box-shadow: 0 -2px 4px rgba(0,0,0,.04); }
+    .qtab .qtab-link {
+      display: inline-flex; align-items: center; gap: 5px;
+      color: inherit; text-decoration: none; min-width: 0;
+      padding: 0 2px;
+    }
     .qtab .qt-icon { font-size: 0.95rem; }
     .qtab .qt-label { overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
-    .qtab .qt-close { color: #9ca3af; font-size: 1rem; line-height: 1; padding: 0 2px;
-                       border-radius: 4px; }
-    .qtab .qt-close:hover { background: #fee2e2; color: #b91c1c; }
+    .qtab .qt-close {
+      color: #9ca3af; font-size: 1rem; line-height: 1; padding: 2px 6px;
+      border-radius: 4px; background: none; border: none; cursor: pointer;
+      margin-left: 4px; touch-action: manipulation;
+    }
+    .qtab .qt-close:hover, .qtab .qt-close:active {
+      background: #fee2e2; color: #b91c1c;
+    }
     .qtab-clear { display: inline-flex; align-items: center; padding: 0 8px;
                    font-size: 0.78rem; color: #9ca3af; cursor: pointer; }
     .qtab-clear:hover { color: #ef4444; }
@@ -903,22 +913,41 @@
       document.body.classList.add('has-qtabs');
       var here = location.pathname.replace(/\/$/, '');
       tabs.forEach(function(t) {
+        // 用容器 + 内部链接 + 单独的关闭按钮（不再让 × 套在 <a> 里）
+        // —— 避免 iOS Safari 上点 × 时父 <a> 的导航行为吞掉 preventDefault 导致页面卡顿
+        var wrap = document.createElement('span');
+        wrap.className = 'qtab' + (t.key === here ? ' active' : '');
+        wrap.title = t.label;
+
         var a = document.createElement('a');
-        a.className = 'qtab' + (t.key === here ? ' active' : '');
+        a.className = 'qtab-link';
         a.href = t.url;
-        a.title = t.label;
         a.innerHTML =
           '<span class="qt-icon">' + renderIcon(t.icon || 'file-text') + '</span>' +
-          '<span class="qt-label"></span>' +
-          '<span class="qt-close" title="关闭">×</span>';
+          '<span class="qt-label"></span>';
         a.querySelector('.qt-label').textContent = t.label;
-        a.querySelector('.qt-close').addEventListener('click', function(ev) {
-          ev.preventDefault(); ev.stopPropagation();
-          var rest = readTabs().filter(function(x) { return x.key !== t.key; });
-          writeTabs(rest);
+        wrap.appendChild(a);
+
+        var closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'qt-close';
+        closeBtn.setAttribute('aria-label', '关闭');
+        closeBtn.textContent = '×';
+        // 用 mousedown + click 双保险拦截
+        var doClose = function(ev) {
+          if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+          try {
+            var rest = readTabs().filter(function(x) { return x.key !== t.key; });
+            writeTabs(rest);
+          } catch (e) {}
           render();
-        });
-        bar.appendChild(a);
+        };
+        closeBtn.addEventListener('click', doClose);
+        closeBtn.addEventListener('mousedown', function(ev) { ev.stopPropagation(); });
+        closeBtn.addEventListener('touchstart', function(ev) { ev.stopPropagation(); }, {passive: true});
+        wrap.appendChild(closeBtn);
+
+        bar.appendChild(wrap);
       });
       if (tabs.length >= 2) {
         var clr = document.createElement('span');
