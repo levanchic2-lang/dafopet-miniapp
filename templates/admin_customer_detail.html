@@ -416,15 +416,22 @@
  <h4 style="margin:0.5rem 0 0.6rem;font-size:0.85rem;color:var(--muted);"><i data-lucide="syringe"></i> 疫苗记录</h4>
  {% if vaccinations %}
  <table class="data-table mobile-card">
- <thead><tr><th>接种日期</th><th>疫苗类型</th><th>第几针</th><th>厂家</th><th>下次到期</th></tr></thead>
+ <thead><tr><th>接种日期</th><th>疫苗类型</th><th>第几针</th><th>厂家/品牌</th><th>下次到期</th><th class="actions"></th></tr></thead>
  <tbody>
  {% for v in vaccinations %}
  <tr>
- <td>{{ v.vaccinated_date }}</td>
- <td>{{ vacc_type_zh.get(v.vaccine_type, v.vaccine_type) }}</td>
- <td>第 {{ v.dose_number }} 针</td>
- <td>{{ v.manufacturer or '—' }}</td>
- <td>{% if v.next_due_date %}{% if v.next_due_date < today_str %}<span class="pill pill-no">已过期 {{ v.next_due_date }}</span>{% elif v.next_due_date < soon_str %}<span class="pill pill-warn">7天内 {{ v.next_due_date }}</span>{% else %}{{ v.next_due_date }}{% endif %}{% else %}—{% endif %}</td>
+ <td data-label="接种日期">{{ v.vaccinated_date }}</td>
+ <td data-label="疫苗类型">{{ vacc_type_zh.get(v.vaccine_type, v.vaccine_type) }}</td>
+ <td data-label="第几针">第 {{ v.dose_number }} 针</td>
+ <td data-label="厂家/品牌">{{ v.vaccine_name or '—' }}{% if v.batch_no %} · 批 {{ v.batch_no }}{% endif %}</td>
+ <td data-label="下次到期">{% if v.next_due_date %}{% if v.next_due_date < today_str %}<span class="pill pill-no">已过期 {{ v.next_due_date }}</span>{% elif v.next_due_date < soon_str %}<span class="pill pill-warn">7天内 {{ v.next_due_date }}</span>{% else %}{{ v.next_due_date }}{% endif %}{% else %}—{% endif %}</td>
+ <td class="actions" style="text-align:right;">
+  <a href="/admin/vaccinations/{{ v.id }}" style="font-size:0.78rem;color:#6b7280;text-decoration:none;margin-right:0.6rem;">编辑</a>
+  <form method="post" action="/admin/vaccinations/{{ v.id }}/delete" style="display:inline;" onsubmit="return confirm('删除此疫苗记录？\n\n若关联了库存品目，会自动退回 1 单位库存；关联的收费单不会自动撤销，请单独处理。')">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+   <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
+  </form>
+ </td>
  </tr>
  {% endfor %}
  </tbody>
