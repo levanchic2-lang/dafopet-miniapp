@@ -26,8 +26,12 @@
  <input name="q" value="{{ q }}" style="flex:1;min-width:200px;"/>
  <select name="vaccine_type" style="min-width:140px;">
  <option value="">全部疫苗类型</option>
- {% for val, label in vacc_type_zh.items() %}
+ {% for val, label in vacc_type_options.items() %}
  <option value="{{ val }}" {% if vaccine_type == val %}selected{% endif %}>{{ label }}</option>
+ {% endfor %}
+ {# 历史选项放在尾部分组，方便筛选老记录 #}
+ {% for val, label in vacc_type_zh.items() if val not in vacc_type_options %}
+ <option value="{{ val }}" {% if vaccine_type == val %}selected{% endif %}>{{ label }}（历史）</option>
  {% endfor %}
  </select>
  <input type="hidden" name="filter" value="{{ filter }}"/>

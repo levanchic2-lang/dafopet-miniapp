@@ -11643,7 +11643,9 @@ async def admin_vaccinations_list(
     return templates.TemplateResponse(request, "admin_vaccinations.html", {
         "records": records, "q": q, "filter": filter,
         "vaccine_type": vaccine_type,
-        "vacc_type_zh": _VACC_TYPE_ZH, "dose_zh": _DOSE_ZH,
+        "vacc_type_zh": _VACC_TYPE_ZH,
+        "vacc_type_options": _VACC_TYPE_OPTIONS,
+        "dose_zh": _DOSE_ZH,
         "today": today, "soon": soon,
         "title": "疫苗管理",
         "msg": request.query_params.get("msg"),
