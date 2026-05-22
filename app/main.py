@@ -5020,6 +5020,15 @@ async def admin_customers_import_post(
     _require_csrf(request, csrf_token)
     do_commit = (confirm == "yes")
 
+    # 读取所有 overwrite_<phone>=yes 字段（撞号但用户选择"用 xls 覆盖"的）
+    form_data = await request.form()
+    overwrite_phones = set()
+    for key, val in form_data.items():
+        if key.startswith("overwrite_") and val == "yes":
+            phone_part = key[len("overwrite_"):]
+            if phone_part:
+                overwrite_phones.add(phone_part)
+
     result = {"ok": False, "msg": "", "stats": None, "samples": [], "committed": False}
 
     if not file or not file.filename:
@@ -5159,6 +5168,8 @@ async def admin_customers_import_post(
     n_new = 0
     n_skip_dup = 0
     n_skip_no_phone = 0
+    n_overwritten = 0
+    overwrite_jobs = []  # [(phone, name, notes, created_at, target_store)] 覆盖现有档案
     wallet_jobs = []  # (idx_in_new_customers, total_bal, target_store)
     new_customers = []
     samples = []
@@ -5193,6 +5204,39 @@ async def admin_customers_import_post(
                 })
             continue
         if phone in existing_phones:
+            # 撞号 → 默认跳过；除非用户在 dup 表里勾了 overwrite_<phone>=yes
+            if phone in overwrite_phones:
+                # 排队等真写时一起 update
+                org_value_dup = pick(row, "org")
+                target_store_dup = map_store(org_value_dup)
+                org_breakdown[str(org_value_dup) if org_value_dup else "(空)"] = (
+                    org_breakdown.get(str(org_value_dup) if org_value_dup else "(空)", 0) + 1
+                )
+                store_breakdown[target_store_dup] = store_breakdown.get(target_store_dup, 0) + 1
+                notes_dup = build_notes(row, target_store_dup)
+                created_at_v_dup = pick(row, "created_at")
+                try:
+                    created_at_dup = pd.to_datetime(created_at_v_dup).to_pydatetime() if created_at_v_dup else None
+                except Exception:
+                    created_at_dup = None
+                overwrite_jobs.append({
+                    "phone": phone,
+                    "name": name_str,
+                    "notes": notes_dup,
+                    "created_at": created_at_dup,
+                    "target_store": target_store_dup,
+                })
+                n_overwritten += 1
+                # 撞号仍然显示在 dup_details，但带状态
+                if len(dup_details) < 100:
+                    dup_details.append({
+                        "phone": phone,
+                        "old_name": name_str or "—",
+                        "existing_name": existing_phone_to_name.get(phone, "?") or "—",
+                        "balance": _f(pick(row, "card_bal")) + _f(pick(row, "acc_bal")),
+                        "will_overwrite": True,
+                    })
+                continue
             n_skip_dup += 1
             if len(dup_details) < 100:
                 dup_details.append({
@@ -5200,6 +5244,7 @@ async def admin_customers_import_post(
                     "old_name": name_str or "—",
                     "existing_name": existing_phone_to_name.get(phone, "?") or "—",
                     "balance": _f(pick(row, "card_bal")) + _f(pick(row, "acc_bal")),
+                    "will_overwrite": False,
                 })
             continue
 
@@ -5267,6 +5312,7 @@ async def admin_customers_import_post(
         "new": n_new,
         "skip_dup": n_skip_dup,
         "skip_no_phone": n_skip_no_phone,
+        "overwritten": n_overwritten,
         "wallets": len(wallet_jobs),
         "wallet_total": wallet_total,
         "fallback_store": fallback_store,
@@ -5279,10 +5325,11 @@ async def admin_customers_import_post(
     result["wallet_details"] = wallet_details
     result["ok"] = True
 
-    if do_commit and new_customers:
-        # 真写
-        db.add_all(new_customers)
-        db.flush()
+    if do_commit and (new_customers or overwrite_jobs):
+        # 真写：新增客户
+        if new_customers:
+            db.add_all(new_customers)
+            db.flush()
         for idx, bal, target_store in wallet_jobs:
             cid = new_customers[idx].id
             w = Wallet(
@@ -5304,9 +5351,34 @@ async def admin_customers_import_post(
                 store=target_store,
             )
             db.add(tx)
+
+        # 真写：覆盖现有档案（用户在 dup 表勾选的）
+        for job in overwrite_jobs:
+            existing = db.query(Customer).filter(Customer.phone == job["phone"]).first()
+            if not existing:
+                continue
+            if job["name"]:
+                existing.name = job["name"][:120]
+            # notes：保留旧 notes，新 notes 追加在后面（不丢历史）
+            old_notes = (existing.notes or "").strip()
+            new_notes_part = job["notes"]
+            if new_notes_part:
+                if old_notes:
+                    existing.notes = old_notes + "\n" + new_notes_part
+                else:
+                    existing.notes = new_notes_part
+            if job["created_at"]:
+                # 旧档案的 created_at 通常更早，留旧的；只更新 updated_at
+                pass
+            existing.updated_at = datetime.now()
+
         db.commit()
         result["committed"] = True
-        result["msg"] = f"已导入 {n_new} 个客户 + {len(wallet_jobs)} 个钱包"
+        parts = []
+        if n_new: parts.append(f"导入 {n_new} 个新客户")
+        if len(wallet_jobs): parts.append(f"{len(wallet_jobs)} 个钱包")
+        if n_overwritten: parts.append(f"覆盖 {n_overwritten} 个已有档案")
+        result["msg"] = "已" + " + ".join(parts) if parts else "无变更"
 
     return templates.TemplateResponse(
         request,

@@ -37,7 +37,7 @@
   <li>支持 .xls / .xlsx 格式</li>
  </ul>
 
- <form method="post" action="/admin/customers/import" enctype="multipart/form-data">
+<form method="post" action="/admin/customers/import" enctype="multipart/form-data" id="import-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
 
   <label style="font-weight:600;">选择 xls 文件</label>
@@ -60,7 +60,6 @@
    <button type="submit" class="btn"><i data-lucide="upload"></i> 上传并处理</button>
    <a href="/admin/customers" class="btn secondary">取消</a>
   </div>
- </form>
 </div>
 
 {% if result and result.ok and result.stats %}
@@ -149,23 +148,42 @@
 <details class="card" style="margin-top:1rem;" open>
  <summary style="cursor:pointer;font-weight:600;font-size:.95rem;">
   <i data-lucide="copy-x"></i> 手机号撞号 跳过明细（{{ s.skip_dup }} 条，显示前 {{ result.dup_details|length }}）
-  <span style="font-size:.78rem;color:var(--muted);font-weight:400;margin-left:.4rem;">同手机号已在客户档案，不会覆盖</span>
+  <span style="font-size:.78rem;color:var(--muted);font-weight:400;margin-left:.4rem;">默认 <strong>保留现有档案</strong>；勾选「用 xls 覆盖」的行会用 xls 姓名 + notes 更新现有档案（不动钱包/宠物/就诊）</span>
  </summary>
+
+ <div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem;padding:.5rem .75rem;background:var(--bg-elevated);border-radius:6px;font-size:.82rem;">
+  <span style="color:var(--muted);">批量操作：</span>
+  <button type="button" class="btn secondary" style="font-size:.78rem;padding:.2rem .65rem;" onclick="dupBulkSelect('姓名不同')"><i data-lucide="alert-triangle"></i> 全选「姓名不同」</button>
+  <button type="button" class="btn secondary" style="font-size:.78rem;padding:.2rem .65rem;" onclick="dupBulkSelect('all')">全部勾选</button>
+  <button type="button" class="btn secondary" style="font-size:.78rem;padding:.2rem .65rem;" onclick="dupBulkSelect('none')">全部清空</button>
+  <span style="margin-left:auto;color:var(--brand-dark);font-weight:600;">已选 <span id="dup-selected-count">0</span> 条覆盖</span>
+ </div>
+
  <div class="data-table-wrap" style="margin-top:.6rem;">
   <table class="data-table" style="font-size:.85rem;">
-   <thead><tr><th>电话</th><th>xls 里的姓名</th><th>现有档案姓名</th><th style="text-align:right;">原余额</th><th>提示</th></tr></thead>
+   <thead><tr><th style="width:90px;">用 xls 覆盖</th><th>电话</th><th>xls 里的姓名</th><th>现有档案姓名</th><th style="text-align:right;">原余额</th><th>提示</th></tr></thead>
    <tbody>
    {% for d in result.dup_details %}
-   <tr>
+   {% set is_diff_name = d.old_name != d.existing_name and d.existing_name not in ['—','?'] %}
+   <tr data-namediff="{{ '1' if is_diff_name else '0' }}">
+    <td style="text-align:center;">
+     <label style="display:inline-flex;align-items:center;cursor:pointer;">
+      <input type="checkbox" name="overwrite_{{ d.phone }}" value="yes" class="dup-overwrite-cb" style="width:1.15em;height:1.15em;cursor:pointer;" onchange="updateDupCount()"/>
+     </label>
+    </td>
     <td style="font-family:monospace;">{{ d.phone }}</td>
     <td>{{ d.old_name }}</td>
     <td>{{ d.existing_name }}</td>
     <td style="text-align:right;font-weight:600;">{% if d.balance > 0 %}¥{{ '%.2f'|format(d.balance) }}{% else %}—{% endif %}</td>
-    <td style="font-size:.78rem;">{% if d.old_name != d.existing_name and d.existing_name not in ['—','?'] %}<span class="pill pill-warn">姓名不同 可能同号不同人</span>{% else %}<span class="pill pill-gray">大概率同一人</span>{% endif %}</td>
+    <td style="font-size:.78rem;">{% if is_diff_name %}<span class="pill pill-warn">姓名不同 可能同号不同人</span>{% else %}<span class="pill pill-gray">大概率同一人</span>{% endif %}</td>
    </tr>
    {% endfor %}
    </tbody>
   </table>
+ </div>
+
+ <div style="margin-top:.65rem;padding:.55rem .75rem;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:.8rem;color:#92400e;">
+  <i data-lucide="info"></i> <strong>提示</strong>：勾选完后回到上方表单，<strong>重新选一次 xls 文件</strong>（浏览器安全限制） + 勾「执行真实导入」+ 点上传 → 才会真生效。
  </div>
 </details>
 {% endif %}
@@ -221,5 +239,27 @@
 {% endif %}
 
 {% endif %}
+
+</form>
+
+<script>
+function updateDupCount() {
+  var n = document.querySelectorAll('.dup-overwrite-cb:checked').length;
+  var el = document.getElementById('dup-selected-count');
+  if (el) el.textContent = n;
+}
+function dupBulkSelect(mode) {
+  var rows = document.querySelectorAll('tr[data-namediff]');
+  rows.forEach(function (r) {
+    var cb = r.querySelector('.dup-overwrite-cb');
+    if (!cb) return;
+    if (mode === 'all') cb.checked = true;
+    else if (mode === 'none') cb.checked = false;
+    else if (mode === '姓名不同') cb.checked = r.dataset.namediff === '1';
+  });
+  updateDupCount();
+}
+updateDupCount();
+</script>
 
 {% endblock %}
