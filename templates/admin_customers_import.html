@@ -143,6 +143,83 @@
  </div>
  {% endif %}
 </div>
+
+{# ── 跳过/有余额 明细，逐条核验 ── #}
+{% if result.dup_details %}
+<details class="card" style="margin-top:1rem;" open>
+ <summary style="cursor:pointer;font-weight:600;font-size:.95rem;">
+  <i data-lucide="copy-x"></i> 手机号撞号 跳过明细（{{ s.skip_dup }} 条，显示前 {{ result.dup_details|length }}）
+  <span style="font-size:.78rem;color:var(--muted);font-weight:400;margin-left:.4rem;">同手机号已在客户档案，不会覆盖</span>
+ </summary>
+ <div class="data-table-wrap" style="margin-top:.6rem;">
+  <table class="data-table" style="font-size:.85rem;">
+   <thead><tr><th>电话</th><th>xls 里的姓名</th><th>现有档案姓名</th><th style="text-align:right;">原余额</th><th>提示</th></tr></thead>
+   <tbody>
+   {% for d in result.dup_details %}
+   <tr>
+    <td style="font-family:monospace;">{{ d.phone }}</td>
+    <td>{{ d.old_name }}</td>
+    <td>{{ d.existing_name }}</td>
+    <td style="text-align:right;font-weight:600;">{% if d.balance > 0 %}¥{{ '%.2f'|format(d.balance) }}{% else %}—{% endif %}</td>
+    <td style="font-size:.78rem;">{% if d.old_name != d.existing_name and d.existing_name not in ['—','?'] %}<span class="pill pill-warn">姓名不同 可能同号不同人</span>{% else %}<span class="pill pill-gray">大概率同一人</span>{% endif %}</td>
+   </tr>
+   {% endfor %}
+   </tbody>
+  </table>
+ </div>
+</details>
+{% endif %}
+
+{% if result.no_phone_details %}
+<details class="card" style="margin-top:1rem;">
+ <summary style="cursor:pointer;font-weight:600;font-size:.95rem;">
+  <i data-lucide="phone-off"></i> 无手机号 跳过明细（{{ s.skip_no_phone }} 条，按消费+余额倒序显示前 {{ result.no_phone_details|length }}）
+  <span style="font-size:.78rem;color:var(--muted);font-weight:400;margin-left:.4rem;">没有电话就没法以后联系，建议在 xls 里补全后再导</span>
+ </summary>
+ <div class="data-table-wrap" style="margin-top:.6rem;">
+  <table class="data-table" style="font-size:.85rem;">
+   <thead><tr><th>姓名</th><th>原属机构</th><th style="text-align:right;">老系统累计消费</th><th style="text-align:right;">老系统余额</th></tr></thead>
+   <tbody>
+   {% for d in result.no_phone_details %}
+   <tr>
+    <td>{{ d.name }}</td>
+    <td style="color:var(--muted);font-size:.82rem;">{{ d.org }}</td>
+    <td style="text-align:right;">{% if d.spent > 0 %}¥{{ '%.2f'|format(d.spent) }}{% else %}—{% endif %}</td>
+    <td style="text-align:right;font-weight:{% if d.balance > 0 %}700{% else %}400{% endif %};color:{% if d.balance > 0 %}#dc2626{% else %}var(--muted){% endif %};">{% if d.balance > 0 %}¥{{ '%.2f'|format(d.balance) }}{% else %}—{% endif %}</td>
+   </tr>
+   {% endfor %}
+   </tbody>
+  </table>
+ </div>
+</details>
+{% endif %}
+
+{% if result.wallet_details %}
+<details class="card" style="margin-top:1rem;background:#f0fdf4;border-color:#bbf7d0;">
+ <summary style="cursor:pointer;font-weight:600;font-size:.95rem;color:#15803d;">
+  <i data-lucide="wallet"></i> 有余额 客户明细（{{ s.wallets }} 条，按金额倒序{% if result.wallet_details|length < s.wallets %}显示前 {{ result.wallet_details|length }}{% endif %}）
+  <span style="font-size:.78rem;color:var(--muted);font-weight:400;margin-left:.4rem;">这些会自动建钱包，请核对金额对不对得上</span>
+ </summary>
+ <div class="data-table-wrap" style="margin-top:.6rem;">
+  <table class="data-table" style="font-size:.85rem;">
+   <thead><tr><th>姓名</th><th>电话</th><th>归属</th><th style="text-align:right;">会员卡余额</th><th style="text-align:right;">账户余额</th><th style="text-align:right;">合计 → 写入钱包</th></tr></thead>
+   <tbody>
+   {% for d in result.wallet_details %}
+   <tr>
+    <td>{{ d.name }}</td>
+    <td style="font-family:monospace;color:var(--muted);font-size:.82rem;">{{ d.phone }}</td>
+    <td><span class="pill pill-info">{{ d.target_store }}</span></td>
+    <td style="text-align:right;color:var(--muted);">{% if d.card_bal > 0 %}¥{{ '%.2f'|format(d.card_bal) }}{% else %}—{% endif %}</td>
+    <td style="text-align:right;color:var(--muted);">{% if d.acc_bal > 0 %}¥{{ '%.2f'|format(d.acc_bal) }}{% else %}—{% endif %}</td>
+    <td style="text-align:right;font-weight:700;color:#059669;">¥{{ '%.2f'|format(d.total) }}</td>
+   </tr>
+   {% endfor %}
+   </tbody>
+  </table>
+ </div>
+</details>
+{% endif %}
+
 {% endif %}
 
 {% endblock %}

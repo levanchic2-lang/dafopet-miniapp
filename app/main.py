@@ -5164,14 +5164,43 @@ async def admin_customers_import_post(
     samples = []
     org_breakdown = {}  # {老机构: count}
     store_breakdown = {}  # {目标门店: count}
+    dup_details = []     # 撞号客户明细
+    no_phone_details = []  # 无手机号明细
+    wallet_details = []  # 有余额客户明细（核对）
+
+    # 现有手机号 → 姓名 速查（撞号时方便对比是不是同一人）
+    existing_phone_to_name = {}
+    for cust_row in db.query(Customer.phone, Customer.name).filter(Customer.phone.isnot(None)).all():
+        if cust_row[0]:
+            existing_phone_to_name[cust_row[0]] = cust_row[1]
 
     for _, row in df.iterrows():
         phone = _phone(pick(row, "phone"))
+        name_v = pick(row, "name")
+        name_str = str(name_v).strip() if name_v else ""
         if not phone:
             n_skip_no_phone += 1
+            if len(no_phone_details) < 100:
+                org_v = pick(row, "org")
+                spent_v = _f(pick(row, "spent"))
+                card_v = _f(pick(row, "card_bal"))
+                acc_v = _f(pick(row, "acc_bal"))
+                no_phone_details.append({
+                    "name": name_str or "—",
+                    "org": str(org_v) if org_v else "—",
+                    "spent": spent_v,
+                    "balance": card_v + acc_v,
+                })
             continue
         if phone in existing_phones:
             n_skip_dup += 1
+            if len(dup_details) < 100:
+                dup_details.append({
+                    "phone": phone,
+                    "old_name": name_str or "—",
+                    "existing_name": existing_phone_to_name.get(phone, "?") or "—",
+                    "balance": _f(pick(row, "card_bal")) + _f(pick(row, "acc_bal")),
+                })
             continue
 
         org_value = pick(row, "org")
@@ -5206,6 +5235,15 @@ async def admin_customers_import_post(
         new_customers.append(c)
         if total_bal > 0:
             wallet_jobs.append((len(new_customers) - 1, total_bal, target_store))
+            if len(wallet_details) < 200:
+                wallet_details.append({
+                    "name": name,
+                    "phone": phone,
+                    "target_store": target_store,
+                    "card_bal": _f(pick(row, "card_bal")),
+                    "acc_bal": _f(pick(row, "acc_bal")),
+                    "total": total_bal,
+                })
 
         n_new += 1
         existing_phones.add(phone)
@@ -5219,6 +5257,11 @@ async def admin_customers_import_post(
 
     wallet_total = sum(b for _, b, _ in wallet_jobs)
 
+    # 按金额倒序排（有余额的客户）/ 按金额倒序（无手机号但有消费/余额）
+    wallet_details.sort(key=lambda x: -x["total"])
+    no_phone_details.sort(key=lambda x: -(x["balance"] + x["spent"]))
+    dup_details.sort(key=lambda x: -x["balance"])
+
     result["stats"] = {
         "total_rows": int(len(df)),
         "new": n_new,
@@ -5231,6 +5274,9 @@ async def admin_customers_import_post(
         "store_breakdown": sorted(store_breakdown.items(), key=lambda x: -x[1]),
     }
     result["samples"] = samples
+    result["dup_details"] = dup_details
+    result["no_phone_details"] = no_phone_details
+    result["wallet_details"] = wallet_details
     result["ok"] = True
 
     if do_commit and new_customers:
