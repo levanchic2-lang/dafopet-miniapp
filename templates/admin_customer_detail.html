@@ -198,18 +198,23 @@
   width: 560px !important; max-width: 95vw !important;
 }
 
-/* 手机端：弹窗紧凑卡片 + 双列布局，尽量一屏放下 */
+/* 手机端：弹窗紧凑卡片 + 双列布局，尽量一屏放下；居中显示 */
 @media (max-width: 768px) {
-  .cd-modal-overlay { padding: 0; align-items: flex-end !important; }
+  .cd-modal-overlay {
+    padding: .5rem !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
   .cd-modal {
-    width: 100vw !important; max-width: 100vw !important;
-    max-height: 92dvh !important;
-    border-radius: 14px 14px 0 0 !important;
+    width: 94vw !important; max-width: 460px !important;
+    max-height: 90dvh !important;
+    border-radius: 14px !important;
     padding: 0 !important;
     display: flex !important; flex-direction: column !important;
     overflow: hidden !important;
+    margin: 0 !important;
   }
-  @supports not (max-height: 92dvh) { .cd-modal { max-height: 92vh !important; } }
+  @supports not (max-height: 90dvh) { .cd-modal { max-height: 90vh !important; } }
   .cd-modal > h3:first-of-type {
     flex: 0 0 auto;
     padding: .65rem .9rem !important;
