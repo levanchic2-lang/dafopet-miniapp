@@ -10,6 +10,18 @@
     form input, form select, form textarea {
       width: 100% !important; box-sizing: border-box !important;
       min-width: 0 !important; max-width: 100% !important;
+      -webkit-appearance: none !important; appearance: none !important;
+      font-size: 16px !important;  /* 防 iOS zoom */
+    }
+    /* iOS date input：去掉原生最小宽度，文本左对齐 */
+    form input[type="date"], form input[type="time"] {
+      height: 40px;
+      padding: 0 .65rem;
+      line-height: 1.4;
+    }
+    form input[type="date"]::-webkit-date-and-time-value,
+    form input[type="time"]::-webkit-date-and-time-value {
+      text-align: left; min-width: 0;
     }
   }
 </style>

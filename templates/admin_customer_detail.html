@@ -151,6 +151,47 @@
 }
 .tab-btn.active .count { background: #dbeafe; color: #1e40af; }
 
+/* 手机端：标签栏改成 grid 4 列固定，所有 tab 一次性显示，无需横滑 */
+@media (max-width: 768px) {
+  .tabs-bar {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 2px !important;
+    padding: .25rem !important;
+    overflow: visible !important;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border-radius: 8px 8px 0 0;
+  }
+  .tab-btn {
+    padding: .4rem .25rem !important;
+    font-size: .76rem !important;
+    line-height: 1.15 !important;
+    border-radius: 6px !important;
+    border-bottom: none !important;
+    margin-bottom: 0 !important;
+    display: flex !important; flex-direction: column;
+    align-items: center; gap: 2px;
+    min-height: 38px; justify-content: center;
+    white-space: normal !important;
+    text-align: center;
+  }
+  .tab-btn.active {
+    background: var(--brand) !important;
+    color: #fff !important;
+    border-bottom: none !important;
+  }
+  .tab-btn .count {
+    margin-left: 0 !important;
+    font-size: .65rem !important;
+    padding: 0 .35em !important;
+  }
+  .tab-btn.active .count {
+    background: rgba(255,255,255,.25) !important; color: #fff !important;
+  }
+  .tab-content { border-radius: 0 0 10px 10px; }
+}
+
 .tab-content {
  display: none; background: var(--card); border: 1px solid var(--border);
  border-top: none; border-radius: 0 0 10px 10px;
