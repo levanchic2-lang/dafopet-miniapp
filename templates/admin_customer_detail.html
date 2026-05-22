@@ -291,6 +291,8 @@
 .cd-modal-overlay.visible { display:flex; }
 .cd-modal { background:var(--card); border-radius:12px; padding:1.25rem; width:480px; max-width:95vw; box-shadow:0 8px 32px rgba(0,0,0,.22); max-height:90vh; overflow-y:auto; }
 .cd-modal h3 { margin:0 0 0.85rem; font-size:1rem; }
+/* 迷你弹窗：字段少时用 */
+.cd-modal.cd-modal-mini { width: 340px !important; max-width: 92vw !important; }
 /* 编辑/添加宠物弹窗：桌面端也用紧凑布局让一屏看完 */
 #edit-pet-modal .cd-modal,
 #add-pet-modal .cd-modal {
@@ -1342,21 +1344,25 @@
 </script>
 
 {% if active_pet %}
-{# ── 弹窗：录入体重 ── #}
+{# ── 弹窗：录入体重 — 紧凑型，只要日期+体重 ── #}
 <div class="cd-modal-overlay" id="add-weight-modal">
- <div class="cd-modal">
- <h3>录入体重 — {{ active_pet.name }}</h3>
+ <div class="cd-modal cd-modal-mini">
+ <h3>录入体重 — {{ active_pet.name if active_pet else '' }}</h3>
  <form method="post" action="/admin/weight-records/create">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
  <input type="hidden" name="customer_id" value="{{ cust.id }}">
- <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
- <label>日期</label>
- <input type="date" name="record_date" value="{{ today_str }}" required>
- <label>体重（kg）</label>
- <input type="number" name="weight_kg" step="0.01" min="0.01" required>
- <label>备注（可选）</label>
- <input name="notes">
- <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+ <input type="hidden" name="pet_id" value="{{ active_pet.id if active_pet else 0 }}">
+ <div class="row2">
+   <div>
+     <label>日期</label>
+     <input type="date" name="record_date" value="{{ today_str }}" required>
+   </div>
+   <div>
+     <label>体重（kg）</label>
+     <input type="number" name="weight_kg" step="0.01" min="0.01" required autofocus placeholder="如 4.5">
+   </div>
+ </div>
+ <div style="display:flex;gap:0.5rem;margin-top:0.85rem;">
  <button type="submit" class="btn">保存</button>
  <button type="button" class="btn secondary" onclick="document.getElementById('add-weight-modal').classList.remove('visible')">取消</button>
  </div>
