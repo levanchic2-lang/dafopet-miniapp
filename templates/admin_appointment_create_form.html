@@ -44,6 +44,9 @@
 <form method="post" action="/admin/appointments/create" class="card" style="max-width:760px;padding:1.2rem 1.4rem;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <input type="hidden" name="redirect_after" value="{{ return_to or 'admin' }}"/>
+ {# 关联现有客户/宠物档案，预约创建后能在档案里看到 #}
+ <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+ <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
 
  {# 类型 #}
  <label style="display:block;font-weight:600;margin-bottom:.3rem;">预约类型 *</label>

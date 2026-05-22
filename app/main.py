@@ -3391,6 +3391,8 @@ async def admin_appointment_create(
     proxy_name: str = Form(""),
     proxy_phone: str = Form(""),
     proxy_relation: str = Form(""),
+    customer_id: int = Form(0),
+    pet_id: int = Form(0),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -3465,17 +3467,27 @@ async def admin_appointment_create(
         _is_beauty = str(fields["category"]) == AppointmentCategory.beauty.value
         _is_proxy_bool = bool(is_proxy and is_proxy.strip())
         # ── 自动创建/合并客户档案 ──
-        _admin_appt_cust_id = None
-        try:
-            _admin_appt_cust = _upsert_customer(
-                db,
-                name=str(fields["customer_name"]),
-                phone=str(fields["phone"]),
-                source=str(fields["category"]),
-            )
-            _admin_appt_cust_id = _admin_appt_cust.id
-        except Exception:
-            _admin_appt_cust_id = None
+        # 优先用表单传入的 customer_id（从客户档案页发起的新建预约会带）
+        _admin_appt_cust_id = customer_id if customer_id else None
+        if not _admin_appt_cust_id:
+            try:
+                _admin_appt_cust = _upsert_customer(
+                    db,
+                    name=str(fields["customer_name"]),
+                    phone=str(fields["phone"]),
+                    source=str(fields["category"]),
+                )
+                _admin_appt_cust_id = _admin_appt_cust.id
+            except Exception:
+                _admin_appt_cust_id = None
+        # 校验 pet_id 是否真属于这个客户（防伪造）
+        _admin_appt_pet_id = None
+        if pet_id and _admin_appt_cust_id:
+            _pet_ok = db.query(Pet.id).filter(
+                Pet.id == pet_id, Pet.customer_id == _admin_appt_cust_id
+            ).first()
+            if _pet_ok:
+                _admin_appt_pet_id = pet_id
         row = Appointment(
             category=str(fields["category"]),
             status=AppointmentStatus.pending.value,
@@ -3499,6 +3511,7 @@ async def admin_appointment_create(
             proxy_phone=proxy_phone.strip() if _is_proxy_bool else "",
             proxy_relation=proxy_relation.strip() if _is_proxy_bool else "",
             customer_id=_admin_appt_cust_id,
+            pet_id=_admin_appt_pet_id,
         )
         db.add(row)
         db.flush()
