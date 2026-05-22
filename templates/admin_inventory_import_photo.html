@@ -41,6 +41,8 @@
 .ip-row.matched { background: rgba(16,185,129,0.04); }
 .ip-row.unmatched { background: rgba(245,158,11,0.04); }
 .ip-row.skipped { opacity: 0.4; }
+.ip-result-tbl td.col-subtotal { text-align: right; }
+.ip-subtotal { font-weight: 700; color: #059669; font-size: .92rem; padding: .25rem .4rem; }
 
 .ip-badge { font-size: .72rem; padding: 2px 8px; border-radius: 10px; white-space: nowrap;
             cursor: pointer; user-select: none; border: 1px solid transparent; }
@@ -132,10 +134,19 @@
   .ip-result-tbl tbody tr td.col-packsize,
   .ip-result-tbl tbody tr td.col-mainunit,
   .ip-result-tbl tbody tr td.col-price { grid-column: span 1; }
+  /* 小计在 进价 那一行的右边 */
+  .ip-result-tbl tbody tr td.col-subtotal { grid-column: 1 / -1; text-align: right; }
+  .ip-subtotal {
+    display: inline-block; padding: .25rem .55rem;
+    background: var(--ok-bg); color: var(--ok-fg);
+    border-radius: 6px; font-size: 1rem;
+  }
   .ip-result-tbl tbody tr td.col-batch { grid-column: 1 / 2; }
   .ip-result-tbl tbody tr td.col-expiry { grid-column: 2 / 4; }
   /* 匹配徽章 + 名字 */
   .ip-match-name { max-width: 100% !important; }
+  /* 数量等数字字段：手机上居中，不要靠右贴边显得空 */
+  .ip-result-tbl tbody tr input[type="number"] { text-align: center !important; }
   /* 操作栏吸底 */
   #commit-form > div:last-child {
     position: sticky; bottom: 0; left: 0; right: 0;
@@ -205,6 +216,7 @@
              <th style="width:70px;" title="包装内最小单位数（1盒=N片）">×N</th>
              <th style="width:60px;" title="发药/拆零用的最小单位">最小单位</th>
              <th style="width:90px;" title="按包装单位的进价">进价/件</th>
+             <th style="width:100px;text-align:right;" title="数量 × 进价">小计</th>
              <th style="width:110px;">批号</th>
              <th style="width:130px;">有效期</th>
              <th style="width:140px;">匹配</th>
@@ -212,6 +224,11 @@
          </thead>
          <tbody id="rows"></tbody>
        </table>
+     </div>
+
+     <div style="margin-top:.85rem;padding:.7rem 1rem;background:var(--brand-bg-soft);border:1px solid var(--brand-light);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+       <div style="font-size:.85rem;color:var(--brand-dark);">入库合计金额（含跳过项排除）</div>
+       <div style="font-size:1.45rem;font-weight:800;color:var(--brand-dark);">¥ <span id="grand-total">0.00</span></div>
      </div>
 
      <div style="margin-top:1rem;display:flex;gap:.6rem;justify-content:flex-end;">
@@ -373,6 +390,7 @@
         '<td class="col-packsize" data-label="×N（包装内）"><input name="row' + i + '_pack_size" type="number" step="1" min="0" value="' + (it.pack_size || it.matched_unit2_ratio || '') + '" placeholder="30"></td>' +
         '<td class="col-mainunit" data-label="最小单位"><input name="row' + i + '_main_unit" value="' + escapeHtml(it.main_unit || it.matched_unit || '') + '" placeholder="片"></td>' +
         '<td class="col-price" data-label="进价/件"><input name="row' + i + '_unit_price" type="number" step="0.01" min="0" value="' + (it.unit_price || '') + '"></td>' +
+        '<td class="col-subtotal" data-label="小计 ¥"><div class="ip-subtotal" data-row="' + i + '">¥0.00</div></td>' +
         '<td class="col-batch" data-label="批号"><input name="row' + i + '_batch_no" value="' + escapeHtml(it.batch_no) + '" placeholder="选填"></td>' +
         '<td class="col-expiry" data-label="有效期"><input name="row' + i + '_expiry_date" type="date" value="' + escapeHtml(it.expiry_date) + '"></td>' +
         '<td class="ip-match-cell col-match" data-label="匹配">' +
@@ -412,10 +430,38 @@
           openSearchPopover(badge, i, tr, defaultQ);
         });
       }
+
+      // 数量 / 进价变 → 重算小计 + 合计；勾选切换也要重算（跳过的不计入合计）
+      var qtyEl = tr.querySelector('input[name="row' + i + '_qty"]');
+      var priceEl = tr.querySelector('input[name="row' + i + '_unit_price"]');
+      if (qtyEl) qtyEl.addEventListener('input', recalcAll);
+      if (priceEl) priceEl.addEventListener('input', recalcAll);
+      chk.addEventListener('change', recalcAll);
+      sel.addEventListener('change', recalcAll);
     });
     document.getElementById('row-count').textContent = items.length;
     document.getElementById('row-count-input').value = items.length;
     resultBox.style.display = 'block';
+    recalcAll();
+  }
+
+  function recalcAll() {
+    var rows = rowsTbody.querySelectorAll('tr');
+    var grand = 0;
+    rows.forEach(function (tr, idx) {
+      var qty = parseFloat((tr.querySelector('input[name^="row"][name$="_qty"]') || {}).value || 0) || 0;
+      var price = parseFloat((tr.querySelector('input[name^="row"][name$="_unit_price"]') || {}).value || 0) || 0;
+      var sub = qty * price;
+      var subEl = tr.querySelector('.ip-subtotal');
+      if (subEl) subEl.textContent = '¥' + sub.toFixed(2);
+      // 跳过 / 取消勾选的不计入合计
+      var actionEl = tr.querySelector('.ip-action');
+      var chkEl = tr.querySelector('.ip-check');
+      var skipped = (actionEl && actionEl.value === 'skip') || (chkEl && !chkEl.checked);
+      if (!skipped) grand += sub;
+    });
+    var gEl = document.getElementById('grand-total');
+    if (gEl) gEl.textContent = grand.toFixed(2);
   }
 
   function escapeHtml(s) {
