@@ -5499,6 +5499,15 @@ async def page_admin_customer_detail(
     today_str = date.today().isoformat()
     soon_str  = (date.today() + timedelta(days=7)).isoformat()
 
+    # 录入驱虫弹窗用：本店可用的驱虫品目（含最近一批的批号）
+    deworm_items = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+    ).filter(
+        InventoryItem.category == "antiparasitic",
+        InventoryItem.stock_qty > 0,
+    ).order_by(InventoryItem.name).all()
+    _attach_latest_batch(db, deworm_items)
+
     # ── 钱包 + 流水 ──
     wallet = db.query(Wallet).filter(Wallet.customer_id == customer_id).first()
     wallet_balance = float(wallet.balance) if wallet else 0.0
@@ -13000,9 +13009,16 @@ async def admin_deworming_create(
     dose: str = Form(""),
     next_due_date: str = Form(""),
     notes: str = Form(""),
+    inventory_item_id: int = Form(0),
+    batch_no: str = Form(""),
+    charge_amount: float = Form(0.0),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
+    # batch_no 临时存到 notes 末尾（DewormingRecord 模型没该字段，避免迁移）
+    notes_full = notes.strip()
+    if batch_no.strip():
+        notes_full = (notes_full + "\n批号：" + batch_no.strip()).strip()
     rec = DewormingRecord(
         customer_id=customer_id or None,
         pet_id=pet_id or None,
@@ -13012,12 +13028,52 @@ async def admin_deworming_create(
         weight_kg=weight_kg or 0.0,
         dose=dose.strip()[:80],
         next_due_date=next_due_date.strip()[:20],
-        notes=notes.strip(),
+        notes=notes_full,
         created_by=request.session.get("admin_username", ""),
     )
     db.add(rec)
+    db.flush()
+
+    admin_name = request.session.get("admin_username", "")
+    msg = "驱虫已录入"
+
+    # 库存出库 1 单位
+    if inventory_item_id:
+        try:
+            _deduct_inventory(db, inventory_item_id, 1.0, "deworming", rec.id, admin_name,
+                              note=f"{rec.product_name or '驱虫'} 使用出库")
+        except Exception as _e:
+            logger.warning("[deworming] inventory deduct failed: %s", _e)
+
+    # 自动生成收费单（不收费=金额≤0）
+    if charge_amount and charge_amount > 0:
+        inv = Invoice(
+            invoice_no      = _gen_invoice_no(db),
+            customer_id     = customer_id or None,
+            pet_id          = pet_id or None,
+            invoice_date    = rec.deworm_date or datetime.now().strftime("%Y-%m-%d"),
+            subtotal        = charge_amount,
+            discount_amount = 0.0,
+            total_amount    = charge_amount,
+            payment_status  = "unpaid",
+            notes           = f"驱虫 #{rec.id}",
+            created_by      = admin_name,
+        )
+        db.add(inv)
+        db.flush()
+        db.add(InvoiceItem(
+            invoice_id  = inv.id,
+            ref_type    = "deworming",
+            ref_id      = rec.id,
+            description = rec.product_name or "驱虫",
+            quantity    = 1.0,
+            unit_price  = charge_amount,
+            subtotal    = charge_amount,
+        ))
+        msg += f"，收费单 ¥{charge_amount:.2f} 已生成待收款"
+
     db.commit()
-    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg=驱虫已录入", status_code=303)
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg={msg}", status_code=303)
 
 
 @app.post("/admin/dewormings/{rec_id}/delete")
