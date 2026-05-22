@@ -5759,6 +5759,60 @@ async def admin_customer_edit_pet(
     return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&msg=宠物已更新", status_code=303)
 
 
+@app.post("/admin/customers/{customer_id}/pets/{pet_id}/delete")
+async def admin_customer_delete_pet(
+    customer_id: int,
+    pet_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """删除宠物 — 仅在没有任何业务关联记录时允许。
+
+    检查：Visit / Appointment / Invoice / Vaccination / RabiesVaccineRecord / Prescription
+    如果有任意一条，拒绝并返回错误提示（保护业务数据）。
+    """
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    pet = db.get(Pet, pet_id)
+    if not pet or pet.customer_id != customer_id:
+        raise HTTPException(404, "宠物不存在")
+
+    # 统计关联记录
+    blockers = []
+    n_visits = db.query(Visit).filter(Visit.pet_id == pet_id).count()
+    if n_visits: blockers.append(f"{n_visits} 条病历")
+    n_appts = db.query(Appointment).filter(Appointment.pet_id == pet_id).count()
+    if n_appts: blockers.append(f"{n_appts} 条预约")
+    n_invoices = db.query(Invoice).filter(Invoice.pet_id == pet_id).count()
+    if n_invoices: blockers.append(f"{n_invoices} 张收费单")
+    n_vacc = db.query(Vaccination).filter(Vaccination.pet_id == pet_id).count()
+    if n_vacc: blockers.append(f"{n_vacc} 条疫苗记录")
+    try:
+        n_rabies = db.query(RabiesVaccineRecord).filter(RabiesVaccineRecord.pet_id == pet_id).count()
+        if n_rabies: blockers.append(f"{n_rabies} 条狂犬登记")
+    except Exception:
+        pass
+    n_presc = db.query(Prescription).filter(Prescription.pet_id == pet_id).count()
+    if n_presc: blockers.append(f"{n_presc} 张处方")
+
+    if blockers:
+        msg = f"该宠物有关联记录（{' / '.join(blockers)}），不允许删除。如确需清理请先处理对应记录。"
+        return RedirectResponse(
+            f"/admin/customers/{customer_id}?pet_id={pet_id}&err={msg}",
+            status_code=303,
+        )
+
+    pet_name = pet.name or "未命名"
+    db.delete(pet)
+    db.commit()
+    return RedirectResponse(
+        f"/admin/customers/{customer_id}?msg=已删除宠物「{pet_name}」",
+        status_code=303,
+    )
+
+
 # ---------------------------------------------------------------------------
 # 客户钱包 (Wallet) — 充值 / 消费 / 退款 / 调账
 # ---------------------------------------------------------------------------

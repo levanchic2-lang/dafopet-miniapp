@@ -50,7 +50,55 @@
 .pets-table tr.pet-row { cursor: pointer; transition: background 0.1s; }
 .pets-table tr.pet-row:hover { background: #f9fafb; }
 .pets-table tr.pet-row.active { background: #eff6ff; }
-.pets-table tr.pet-row.active td:first-child { border-left: 3px solid #3b82f6; padding-left: calc(0.65rem - 3px); }
+.pets-table tr.pet-row.active td:first-child { border-left: 3px solid var(--brand); padding-left: calc(0.65rem - 3px); }
+
+/* ── 移动端：宠物表 → 一行一卡片 ── */
+@media (max-width: 768px) {
+ .pets-section { overflow-x: visible; }
+ .pets-table, .pets-table thead, .pets-table tbody, .pets-table tr, .pets-table td {
+  display: block; width: 100%;
+ }
+ .pets-table thead { display: none; }
+ .pets-table tr.pet-row {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: .7rem .85rem; margin-bottom: .5rem;
+  display: grid; grid-template-columns: 1fr 1fr; gap: .2rem .6rem;
+ }
+ .pets-table tr.pet-row.active {
+  background: var(--brand-bg-soft); border-color: var(--brand-light);
+ }
+ .pets-table tr.pet-row td {
+  border: none !important; padding: .1rem 0 !important;
+  white-space: normal !important;
+  font-size: .82rem;
+  display: flex; justify-content: space-between; align-items: center; gap: .4rem;
+ }
+ .pets-table tr.pet-row td::before {
+  content: attr(data-label); color: var(--muted); font-size: .7rem;
+  font-weight: 500; flex: 0 0 auto;
+ }
+ .pets-table tr.pet-row td[data-label=""]::before { display: none; }
+ /* 病历号 + 名称 各占一格在第一行，作为卡片标题 */
+ .pets-table tr.pet-row td:first-child {
+  grid-column: 1 / 2;
+  font-weight: 600;
+ }
+ .pets-table tr.pet-row td:nth-child(2) {
+  grid-column: 2 / 3;
+  font-weight: 700; font-size: .95rem;
+  justify-content: flex-end;
+ }
+ .pets-table tr.pet-row td:nth-child(2)::before { display: none; }
+ /* 操作按钮列占满一行，居右 */
+ .pets-table tr.pet-row td.pet-actions-cell {
+  grid-column: 1 / -1;
+  border-top: 1px dashed var(--border) !important;
+  padding-top: .45rem !important;
+  margin-top: .25rem;
+  justify-content: flex-end;
+ }
+ .pets-table tr.pet-row td.pet-actions-cell::before { display: none; }
+}
 .pet-mrn { font-family: monospace; font-size: 0.78rem; color: #4b5563; }
 .pet-name-cell { font-weight: 600; }
 .pill {
@@ -180,35 +228,39 @@
  {% for p in pets %}
  {% set is_active = (p.id == active_pet_id) %}
  <tr class="pet-row {% if is_active %}active{% endif %}" onclick="selectPet({{ p.id }})">
- <td><span class="pet-mrn">{{ p.medical_record_no or '—' }}</span></td>
- <td class="pet-name-cell">{{ p.name or '未命名' }}</td>
- <td>{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}</td>
- <td>{{ p.breed or '—' }}</td>
- <td>{{ '♀ 母' if p.gender=='female' else '♂ 公' if p.gender=='male' else '未知' }}</td>
- <td>{{ p.birthday_estimate or '—' }}</td>
- <td>{{ p.color_pattern or '—' }}</td>
- <td>{{ p.store or '—' }}</td>
- <td>
+ <td data-label="病历号"><span class="pet-mrn">{{ p.medical_record_no or '—' }}</span></td>
+ <td data-label="名称" class="pet-name-cell">{{ p.name or '未命名' }}</td>
+ <td data-label="种类">{{ '猫' if p.species=='cat' else '狗' if p.species=='dog' else p.species }}</td>
+ <td data-label="品种">{{ p.breed or '—' }}</td>
+ <td data-label="性别">{{ '♀ 母' if p.gender=='female' else '♂ 公' if p.gender=='male' else '未知' }}</td>
+ <td data-label="年龄">{{ p.birthday_estimate or '—' }}</td>
+ <td data-label="颜色">{{ p.color_pattern or '—' }}</td>
+ <td data-label="所属门店">{{ p.store or '—' }}</td>
+ <td data-label="状态">
  {% if p.life_status == 'deceased' %}<span class="pill pill-gray">已离世</span>
  {% else %}<span class="pill pill-ok">饲养中</span>{% endif %}
  </td>
- <td>
+ <td data-label="绝育">
  {% if p.is_neutered %}<span class="pill pill-ok">已绝育</span>
  {% else %}<span class="pill pill-warn">未绝育</span>{% endif %}
  </td>
- <td>
+ <td data-label="接种">
  {% if is_active and vaccinations %}<span class="pill pill-info">{{ vaccinations|length }} 次</span>
  {% elif is_active %}<span class="pill pill-gray">未接种</span>
  {% else %}<span style="color:var(--muted);">—</span>{% endif %}
  </td>
- <td>
+ <td data-label="驱虫">
  {% if is_active and dewormings %}<span class="pill pill-info">{{ dewormings|length }} 次</span>
  {% elif is_active %}<span class="pill pill-gray">未驱虫</span>
  {% else %}<span style="color:var(--muted);">—</span>{% endif %}
  </td>
- <td onclick="event.stopPropagation();">
- <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}&return_to=customer:{{ cust.id }}" style="font-size:0.78rem;color:#3b82f6;text-decoration:none;margin-right:0.6rem;">预约</a>
- <a href="#" onclick="event.preventDefault();openEditPet({{ p.id }})" style="font-size:0.78rem;color:#6b7280;text-decoration:none;">编辑</a>
+ <td onclick="event.stopPropagation();" class="pet-actions-cell">
+ <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}&return_to=customer:{{ cust.id }}" style="font-size:0.78rem;color:var(--brand);text-decoration:none;margin-right:0.6rem;">预约</a>
+ <a href="#" onclick="event.preventDefault();openEditPet({{ p.id }})" style="font-size:0.78rem;color:#6b7280;text-decoration:none;margin-right:0.6rem;">编辑</a>
+ <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ p.id }}/delete" style="display:inline;" onsubmit="return confirm('确认删除宠物「{{ p.name or '未命名' }}」？\n\n只有无业务记录（无病历/预约/收费单/疫苗等）才能删除，否则系统会拒绝。');">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <button type="submit" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.78rem;padding:0;">删除</button>
+ </form>
  </td>
  </tr>
  {% endfor %}

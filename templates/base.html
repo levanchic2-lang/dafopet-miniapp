@@ -1125,5 +1125,42 @@
       _icoObserver.observe(document.body, { childList: true, subtree: true });
     }
   </script>
+
+  {# ── 全局：防止表单重复提交（用户连点 N 次造成重复创建） ── #}
+  <script>
+    document.addEventListener('submit', function (e) {
+      var form = e.target;
+      if (!form || form.tagName !== 'FORM') return;
+      // 已经标记过的不重复处理
+      if (form.dataset.submitting === '1') {
+        e.preventDefault();
+        return false;
+      }
+      form.dataset.submitting = '1';
+      var btns = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+      btns.forEach(function (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btn.style.cursor = 'wait';
+        if (!btn.dataset.origText && btn.tagName === 'BUTTON') {
+          btn.dataset.origText = btn.innerHTML;
+          btn.innerHTML = '提交中…';
+        }
+      });
+      // 网络很慢的兜底：10 秒后恢复，允许重试
+      setTimeout(function () {
+        form.dataset.submitting = '';
+        btns.forEach(function (btn) {
+          btn.disabled = false;
+          btn.style.opacity = '';
+          btn.style.cursor = '';
+          if (btn.dataset.origText) {
+            btn.innerHTML = btn.dataset.origText;
+            btn.dataset.origText = '';
+          }
+        });
+      }, 10000);
+    }, true);
+  </script>
 </body>
 </html>
