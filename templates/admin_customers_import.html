@@ -189,17 +189,29 @@
 {% endif %}
 
 {% if result.no_phone_details %}
-<details class="card" style="margin-top:1rem;">
+<details class="card" style="margin-top:1rem;" open>
  <summary style="cursor:pointer;font-weight:600;font-size:.95rem;">
-  <i data-lucide="phone-off"></i> 无手机号 跳过明细（{{ s.skip_no_phone }} 条，按消费+余额倒序显示前 {{ result.no_phone_details|length }}）
-  <span style="font-size:.78rem;color:var(--muted);font-weight:400;margin-left:.4rem;">没有电话就没法以后联系，建议在 xls 里补全后再导</span>
+  <i data-lucide="phone-off"></i> 无手机号 跳过明细（{{ s.skip_no_phone }} 条，显示前 {{ result.no_phone_details|length }}）
+  <span style="font-size:.78rem;color:var(--muted);font-weight:400;margin-left:.4rem;">默认全部跳过；勾选的会以空手机号建档（不会与他人冲突，事后可在客户详情补手机号）</span>
  </summary>
+
+ <div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem;padding:.5rem .75rem;background:var(--bg-elevated);border-radius:6px;font-size:.82rem;">
+  <span style="color:var(--muted);">批量操作：</span>
+  <button type="button" class="btn secondary" style="font-size:.78rem;padding:.2rem .65rem;" onclick="npBulkSelect('haspay')"><i data-lucide="wallet"></i> 全选「有余额或有消费」</button>
+  <button type="button" class="btn secondary" style="font-size:.78rem;padding:.2rem .65rem;" onclick="npBulkSelect('all')">全部勾选</button>
+  <button type="button" class="btn secondary" style="font-size:.78rem;padding:.2rem .65rem;" onclick="npBulkSelect('none')">全部清空</button>
+  <span style="margin-left:auto;color:var(--brand-dark);font-weight:600;">已选 <span id="np-selected-count">0</span> 条导入</span>
+ </div>
+
  <div class="data-table-wrap" style="margin-top:.6rem;">
   <table class="data-table" style="font-size:.85rem;">
-   <thead><tr><th>姓名</th><th>原属机构</th><th style="text-align:right;">老系统累计消费</th><th style="text-align:right;">老系统余额</th></tr></thead>
+   <thead><tr><th style="width:60px;">导入</th><th>姓名</th><th>原属机构</th><th style="text-align:right;">老系统累计消费</th><th style="text-align:right;">老系统余额</th></tr></thead>
    <tbody>
    {% for d in result.no_phone_details %}
-   <tr>
+   <tr data-haspay="{{ '1' if (d.balance > 0 or d.spent > 0) else '0' }}">
+    <td style="text-align:center;">
+     <input type="checkbox" name="import_nophone_{{ d.np_idx }}" value="yes" class="np-import-cb" style="width:1.15em;height:1.15em;cursor:pointer;" onchange="updateNpCount()" {% if d.will_import %}checked{% endif %}/>
+    </td>
     <td>{{ d.name }}</td>
     <td style="color:var(--muted);font-size:.82rem;">{{ d.org }}</td>
     <td style="text-align:right;">{% if d.spent > 0 %}¥{{ '%.2f'|format(d.spent) }}{% else %}—{% endif %}</td>
@@ -208,6 +220,10 @@
    {% endfor %}
    </tbody>
   </table>
+ </div>
+
+ <div style="margin-top:.65rem;padding:.55rem .75rem;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:.8rem;color:#92400e;">
+  <i data-lucide="info"></i> 勾选后回到上方，<strong>重新选 xls 文件</strong> + 勾 confirm + 点上传 → 这些客户会以姓名为主、phone 留空入库（建议事后补手机号）。
  </div>
 </details>
 {% endif %}
@@ -260,6 +276,24 @@ function dupBulkSelect(mode) {
   updateDupCount();
 }
 updateDupCount();
+
+function updateNpCount() {
+  var n = document.querySelectorAll('.np-import-cb:checked').length;
+  var el = document.getElementById('np-selected-count');
+  if (el) el.textContent = n;
+}
+function npBulkSelect(mode) {
+  var rows = document.querySelectorAll('tr[data-haspay]');
+  rows.forEach(function (r) {
+    var cb = r.querySelector('.np-import-cb');
+    if (!cb) return;
+    if (mode === 'all') cb.checked = true;
+    else if (mode === 'none') cb.checked = false;
+    else if (mode === 'haspay') cb.checked = r.dataset.haspay === '1';
+  });
+  updateNpCount();
+}
+updateNpCount();
 </script>
 
 {% endblock %}

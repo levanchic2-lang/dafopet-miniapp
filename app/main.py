@@ -5021,13 +5021,20 @@ async def admin_customers_import_post(
     do_commit = (confirm == "yes")
 
     # 读取所有 overwrite_<phone>=yes 字段（撞号但用户选择"用 xls 覆盖"的）
+    # 以及 import_nophone_<np_idx>=yes 字段（无手机号但用户选择导入的）
     form_data = await request.form()
     overwrite_phones = set()
+    import_np_indices = set()
     for key, val in form_data.items():
         if key.startswith("overwrite_") and val == "yes":
             phone_part = key[len("overwrite_"):]
             if phone_part:
                 overwrite_phones.add(phone_part)
+        elif key.startswith("import_nophone_") and val == "yes":
+            try:
+                import_np_indices.add(int(key[len("import_nophone_"):]))
+            except ValueError:
+                pass
 
     result = {"ok": False, "msg": "", "stats": None, "samples": [], "committed": False}
 
@@ -5185,25 +5192,45 @@ async def admin_customers_import_post(
         if cust_row[0]:
             existing_phone_to_name[cust_row[0]] = cust_row[1]
 
+    np_idx_counter = -1  # 无手机号行计数，用于稳定 form key
     for _, row in df.iterrows():
         phone = _phone(pick(row, "phone"))
         name_v = pick(row, "name")
         name_str = str(name_v).strip() if name_v else ""
         if not phone:
-            n_skip_no_phone += 1
+            np_idx_counter += 1
+            # 用户在 no-phone 表里勾了导入 → fallthrough 到下面新建分支
+            if np_idx_counter not in import_np_indices:
+                n_skip_no_phone += 1
+                if len(no_phone_details) < 100:
+                    org_v = pick(row, "org")
+                    spent_v = _f(pick(row, "spent"))
+                    card_v = _f(pick(row, "card_bal"))
+                    acc_v = _f(pick(row, "acc_bal"))
+                    no_phone_details.append({
+                        "np_idx": np_idx_counter,
+                        "name": name_str or "—",
+                        "org": str(org_v) if org_v else "—",
+                        "spent": spent_v,
+                        "balance": card_v + acc_v,
+                        "will_import": False,
+                    })
+                continue
+            # else: 用户选了要导入 — 继续走新增流程，但 phone 为空
             if len(no_phone_details) < 100:
                 org_v = pick(row, "org")
                 spent_v = _f(pick(row, "spent"))
                 card_v = _f(pick(row, "card_bal"))
                 acc_v = _f(pick(row, "acc_bal"))
                 no_phone_details.append({
+                    "np_idx": np_idx_counter,
                     "name": name_str or "—",
                     "org": str(org_v) if org_v else "—",
                     "spent": spent_v,
                     "balance": card_v + acc_v,
+                    "will_import": True,
                 })
-            continue
-        if phone in existing_phones:
+        if phone and phone in existing_phones:
             # 撞号 → 默认跳过；除非用户在 dup 表里勾了 overwrite_<phone>=yes
             if phone in overwrite_phones:
                 # 排队等真写时一起 update
@@ -5304,7 +5331,8 @@ async def admin_customers_import_post(
 
     # 按金额倒序排（有余额的客户）/ 按金额倒序（无手机号但有消费/余额）
     wallet_details.sort(key=lambda x: -x["total"])
-    no_phone_details.sort(key=lambda x: -(x["balance"] + x["spent"]))
+    # 无手机号：先按 will_import True/False 分组（True 在前），再按 消费+余额 倒序
+    no_phone_details.sort(key=lambda x: (not x.get("will_import", False), -(x["balance"] + x["spent"])))
     dup_details.sort(key=lambda x: -x["balance"])
 
     result["stats"] = {
