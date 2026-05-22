@@ -903,7 +903,7 @@
  </div>
  <div>
  <label>种类</label>
- <select name="species">
+ <select name="species" id="ap-species" onchange="syncBreedList('ap')">
  <option value="cat">猫</option>
  <option value="dog">狗</option>
  <option value="other">其他</option>
@@ -918,8 +918,8 @@
  </select>
  </div>
  <div>
- <label>品种</label>
- <input name="breed">
+ <label>品种 <span style="color:var(--muted);font-weight:400;font-size:.78rem;">— 边输入边联想</span></label>
+ <input name="breed" id="ap-breed" list="breeds-cat" autocomplete="off" placeholder="如输入「金毛」会提示「金毛巡回猎犬」">
  </div>
  <div>
  <label>颜色</label>
@@ -977,7 +977,7 @@
  </div>
  <div>
  <label>种类</label>
- <select name="species" id="ep-species">
+ <select name="species" id="ep-species" onchange="syncBreedList('ep')">
  <option value="cat">猫</option>
  <option value="dog">狗</option>
  <option value="other">其他</option>
@@ -992,8 +992,8 @@
  </select>
  </div>
  <div>
- <label>品种</label>
- <input name="breed" id="ep-breed">
+ <label>品种 <span style="color:var(--muted);font-weight:400;font-size:.78rem;">— 边输入边联想</span></label>
+ <input name="breed" id="ep-breed" list="breeds-cat" autocomplete="off" placeholder="如输入「金毛」会提示「金毛巡回猎犬」">
  </div>
  <div>
  <label>颜色</label>
@@ -1033,6 +1033,14 @@
  </form>
  </div>
 </div>
+
+{# 品种联想：HTML5 datalist。同时支持 cat / dog，按 species 切换 list 引用 #}
+<datalist id="breeds-cat">
+ {% for b in breed_cats %}<option value="{{ b }}"></option>{% endfor %}
+</datalist>
+<datalist id="breeds-dog">
+ {% for b in breed_dogs %}<option value="{{ b }}"></option>{% endfor %}
+</datalist>
 
 {# 所有宠物数据（供编辑弹窗用） #}
 <script id="pets-data" type="application/json">
@@ -1398,7 +1406,20 @@ function openEditPet(petId) {
  storeSel.appendChild(opt);
  }
  storeSel.value = p.store || storeSel.options[0].value;
+ // 同步品种联想 list（cat / dog / other）
+ syncBreedList('ep');
  document.getElementById('edit-pet-modal').classList.add('visible');
+}
+
+// 切换品种 datalist：根据 species 让 breed input 联想对应的品种全名表
+function syncBreedList(prefix) {
+ const sp = document.getElementById(prefix + '-species');
+ const br = document.getElementById(prefix + '-breed');
+ if (!sp || !br) return;
+ const v = sp.value;
+ if (v === 'dog') br.setAttribute('list', 'breeds-dog');
+ else if (v === 'cat') br.setAttribute('list', 'breeds-cat');
+ else br.removeAttribute('list');
 }
 
 function switchTab(tab) {

@@ -90,6 +90,8 @@ from app.models import (
     ConsentDocument,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
+from app.services.breeds import all_breeds as _all_breeds
+_BREEDS_ALL = _all_breeds()
 from app.services.notify import notify_application_result
 from app.services.backup_local import create_backup_zip, is_safe_backup_filename, list_backup_zips
 from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_pending_manual_notice, push_rejection_notice, push_surgery_done, push_surgery_reminder, push_vaccine_reminder, wechat_code2session
@@ -5611,6 +5613,9 @@ async def page_admin_customer_detail(
             "soon_str": soon_str,
             "csrf_token": _get_csrf_token(request),
             "admin_store": _get_admin_store(request),
+            # 品种联想（datalist）
+            "breed_dogs": _BREEDS_ALL["dog"],
+            "breed_cats": _BREEDS_ALL["cat"],
         },
     )
 
