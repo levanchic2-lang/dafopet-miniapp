@@ -1,4 +1,19 @@
 {% extends "base.html" %}
+{% block extra_css %}
+<style>
+/* 收银台收款/查看按钮：彻底简化，纯文字 + 固定宽度，避免 lucide 替换造成的空白闪烁 */
+.inv-action-btn {
+  display: inline-block !important;
+  min-width: 70px;
+  text-align: center;
+  font-size: 0.85rem !important;
+  padding: 0.35rem 0.85rem !important;
+  text-decoration: none;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+</style>
+{% endblock %}
 {% block body %}
 
 {% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
@@ -87,9 +102,9 @@
  <td data-label="支付方式" style="color:var(--muted);font-size:0.82rem;">
  {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) if inv.payment_method else '—' }}
  </td> <td class="actions" style="text-align:right;">
- <a href="/admin/invoices/{{ inv.id }}" class="btn {% if inv.payment_status == 'unpaid' %}{% else %}secondary{% endif %}"
-    style="font-size:0.82rem;padding:0.3rem 0.85rem;display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap;min-width:64px;justify-content:center;">
- {% if inv.payment_status == 'unpaid' %}<i data-lucide="wallet" style="width:.9em;height:.9em;"></i> <span>收款</span>{% else %}<span>查看</span>{% endif %}
+ <a href="/admin/invoices/{{ inv.id }}"
+    class="{% if inv.payment_status == 'unpaid' %}btn{% else %}btn secondary{% endif %} inv-action-btn">
+ {% if inv.payment_status == 'unpaid' %}收款{% else %}查看{% endif %}
  </a>
  </td>
  </tr>
