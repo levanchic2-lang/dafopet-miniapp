@@ -104,33 +104,117 @@
   </form>
 </div>
 
-{# 关键指标 #}
+{# ════════════════════════════════════════════
+   区块 1：财务收入（每天对账 — 严格现金口径）
+   ════════════════════════════════════════════ #}
+<div style="margin-bottom:.5rem;display:flex;align-items:baseline;gap:.6rem;">
+  <h2 style="margin:0;font-size:1.05rem;font-weight:800;"><i data-lucide="wallet"></i> 财务收入</h2>
+  <span style="color:var(--muted);font-size:.82rem;">每天对账用 · 实际收到的现金/电子钱</span>
+</div>
 <div class="rev-summary">
   <div class="rev-card green">
-    <div class="lbl">期间实收（收费单）</div>
-    <div class="val">¥{{ '%.2f'|format(total_amount) }}</div>
+    <div class="lbl">财务收入合计</div>
+    <div class="val">¥{{ '%.2f'|format(finance_total) }}</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">现金类 + 充值实收</div>
   </div>
   <div class="rev-card">
-    <div class="lbl">收款笔数</div>
-    <div class="val">{{ total_count }}</div>
-  </div>
-  <div class="rev-card">
-    <div class="lbl">单均金额</div>
-    <div class="val">¥{{ '%.2f'|format(avg) }}</div>
+    <div class="lbl">现金类合计</div>
+    <div class="val">¥{{ '%.2f'|format(finance_cash_total) }}</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">收费单收到的真实金</div>
   </div>
   <div class="rev-card blue">
-    <div class="lbl">期间钱包充值</div>
+    <div class="lbl">钱包充值实收</div>
     <div class="val">¥{{ '%.2f'|format(wallet_recharge_total) }}</div>
-    <div style="font-size:.75rem;opacity:.85;margin-top:.2rem;">{{ wallet_recharges_count }} 笔</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">{{ wallet_recharges_count }} 笔（不含赠送）</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">收款笔数 / 单均</div>
+    <div class="val" style="font-size:1.25rem;">{{ total_count }} 笔 · ¥{{ '%.0f'|format(avg) }}</div>
   </div>
 </div>
 
+{# 现金类拆解小表 #}
+<div class="rev-section">
+  <h3 style="margin-bottom:.55rem;"><i data-lucide="credit-card"></i> 现金类支付方式拆解</h3>
+  {% if finance_methods_list %}
+  <table class="rev-table">
+    <thead><tr><th>方式</th><th>笔数</th><th style="text-align:right;">金额</th><th style="text-align:right;">占比</th></tr></thead>
+    <tbody>
+    {% for m in finance_methods_list %}
+    <tr>
+      <td>{{ m.label }}</td>
+      <td>{{ m.count }}</td>
+      <td class="amount">¥{{ '%.2f'|format(m.amount) }}</td>
+      <td style="text-align:right;color:var(--muted);">{{ '%.1f'|format(m.amount * 100 / finance_cash_total) if finance_cash_total else '0' }}%</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="color:var(--muted);padding:1.5rem;text-align:center;">区间内无现金类收款</div>
+  {% endif %}
+</div>
+
+{# ════════════════════════════════════════════
+   区块 2：业务收入（营业规模 — 实际"卖出去"的服务/产品）
+   ════════════════════════════════════════════ #}
+<div style="margin:1.25rem 0 .5rem;display:flex;align-items:baseline;gap:.6rem;">
+  <h2 style="margin:0;font-size:1.05rem;font-weight:800;"><i data-lucide="bar-chart-3"></i> 业务收入</h2>
+  <span style="color:var(--muted);font-size:.82rem;">营业量 · 实际卖出去的服务和商品</span>
+</div>
 <div class="rev-summary">
-  <div class="rev-card">
-    <div class="lbl">期间套餐售卖</div>
-    <div class="val">¥{{ '%.2f'|format(pkg_sold_total) }}</div>
-    <div style="font-size:.75rem;color:var(--muted);margin-top:.2rem;">{{ pkg_sold_count }} 份</div>
+  <div class="rev-card blue">
+    <div class="lbl">业务收入合计</div>
+    <div class="val">¥{{ '%.2f'|format(business_total) }}</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">现金类 + 钱包扣款 + 套餐 + 押金抵扣 + 优惠券抵扣</div>
   </div>
+  <div class="rev-card">
+    <div class="lbl">现金类</div>
+    <div class="val">¥{{ '%.2f'|format(finance_cash_total) }}</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">非现金抵扣合计</div>
+    <div class="val">¥{{ '%.2f'|format(business_noncash_total) }}</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">钱包/套餐/押金/优惠券</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">套餐售卖（独立）</div>
+    <div class="val">¥{{ '%.2f'|format(pkg_sold_total) }}</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">{{ pkg_sold_count }} 份 · 不算入业务收入</div>
+  </div>
+</div>
+
+{# 非现金抵扣拆解小表 #}
+<div class="rev-section">
+  <h3 style="margin-bottom:.55rem;"><i data-lucide="package"></i> 非现金抵扣拆解</h3>
+  {% if business_noncash_list %}
+  <table class="rev-table">
+    <thead><tr><th>方式</th><th>笔数</th><th style="text-align:right;">金额</th><th style="text-align:right;">说明</th></tr></thead>
+    <tbody>
+    {% for m in business_noncash_list %}
+    <tr>
+      <td>{{ m.label }}</td>
+      <td>{{ m.count }}</td>
+      <td class="amount">¥{{ '%.2f'|format(m.amount) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">
+        {% if m.method == 'wallet' %}
+          含本金约 ¥{{ '%.2f'|format(wallet_consume_principal_est) }} · 赠送约 ¥{{ '%.2f'|format(wallet_consume_bonus_est) }}
+        {% elif m.method == 'package' %}套餐核销
+        {% elif m.method == 'deposit' %}押金抵扣
+        {% elif m.method == 'coupon' %}优惠券抵扣
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="color:var(--muted);padding:1.5rem;text-align:center;">区间内无非现金抵扣</div>
+  {% endif %}
+</div>
+
+{# 押金独立小表（流水大不进业务收入合计） #}
+<div class="rev-summary" style="margin-top:.85rem;">
   <div class="rev-card">
     <div class="lbl">期间收押金</div>
     <div class="val">¥{{ '%.2f'|format(deposit_in) }}</div>
@@ -140,8 +224,9 @@
     <div class="val">¥{{ '%.2f'|format(deposit_refund) }}</div>
   </div>
   <div class="rev-card">
-    <div class="lbl">净财务流入（实收 + 充值 + 套餐 + 押金 - 退押）</div>
-    <div class="val" style="font-size:1.4rem;">¥{{ '%.2f'|format(total_amount + wallet_recharge_total + pkg_sold_total + deposit_in - deposit_refund) }}</div>
+    <div class="lbl">净财务流入（粗算）</div>
+    <div class="val" style="font-size:1.35rem;">¥{{ '%.2f'|format(total_amount + wallet_recharge_total + pkg_sold_total + deposit_in - deposit_refund) }}</div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.2rem;">实收 + 充值 + 套餐 + 押金 - 退押</div>
   </div>
 </div>
 
@@ -211,6 +296,26 @@
     <tbody>
     {% for c in by_category_list %}
     <tr><td>{{ c.label }}</td><td class="amount">¥{{ '%.2f'|format(c.amount) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# 按收款员 · 人均收款 #}
+{% if by_operator_list %}
+<div class="rev-section">
+  <h3><i data-lucide="users"></i> 按收款员（人均收款，不算提成）</h3>
+  <table class="rev-table">
+    <thead><tr><th>收款员</th><th>笔数</th><th style="text-align:right;">总收款金额</th><th style="text-align:right;">单均</th></tr></thead>
+    <tbody>
+    {% for o in by_operator_list %}
+    <tr>
+      <td>{{ o.operator }}</td>
+      <td>{{ o.count }}</td>
+      <td class="amount">¥{{ '%.2f'|format(o.amount) }}</td>
+      <td style="text-align:right;color:var(--muted);">¥{{ '%.0f'|format(o.amount / o.count) if o.count else '0' }}</td>
+    </tr>
     {% endfor %}
     </tbody>
   </table>

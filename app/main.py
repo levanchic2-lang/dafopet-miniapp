@@ -10828,6 +10828,45 @@ async def admin_reports_revenue(
         key=lambda x: -x["amount"],
     )
 
+    # 拆分：财务现金类（实收现金/电子钱）vs 业务非现金类（钱包/套餐/押金/券）
+    _CASH_METHODS = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party"}
+    _NONCASH_METHODS = {"wallet", "package", "deposit", "coupon"}
+    finance_methods_list = [m for m in by_method_list if m["method"] in _CASH_METHODS]
+    business_noncash_list = [m for m in by_method_list if m["method"] in _NONCASH_METHODS]
+    finance_cash_total = sum(m["amount"] for m in finance_methods_list)
+    business_noncash_total = sum(m["amount"] for m in business_noncash_list)
+
+    # 按收款员（不论现金还是非现金，看人均收款情况）
+    by_operator: dict[str, dict] = {}
+    for p in pay_rows:
+        op = (p.operator or "").strip() or "未指定"
+        if op not in by_operator:
+            by_operator[op] = {"amount": 0.0, "count": 0}
+        by_operator[op]["amount"] += float(p.amount or 0)
+        by_operator[op]["count"] += 1
+    by_operator_list = sorted(
+        [{"operator": o, **v} for o, v in by_operator.items()],
+        key=lambda x: -x["amount"],
+    )
+
+    # 钱包消费中"赠送部分"的占比（粗估）—— 没有按比例扣的字段时，按时间段内总赠送额 / 总余额 估算
+    # 真精确按比例扣后续单独 commit 改 schema
+    wallet_consume_total = sum(m["amount"] for m in by_method_list if m["method"] == "wallet")
+    wallet_consume_bonus_est = 0.0
+    if wallet_consume_total > 0:
+        try:
+            tot_principal = db.query(func.coalesce(func.sum(WalletTransaction.amount), 0)).filter(
+                WalletTransaction.type == "recharge"
+            ).scalar() or 0.0
+            tot_bonus = db.query(func.coalesce(func.sum(WalletTransaction.bonus_amount), 0)).filter(
+                WalletTransaction.type == "recharge"
+            ).scalar() or 0.0
+            if (tot_principal + tot_bonus) > 0:
+                wallet_consume_bonus_est = wallet_consume_total * (tot_bonus / (tot_principal + tot_bonus))
+        except Exception:
+            pass
+    wallet_consume_principal_est = wallet_consume_total - wallet_consume_bonus_est
+
     # 按门店（仅 superadmin 看；用 pet.store 推断）
     by_store_list: list = []
     if not admin_store_short:
@@ -10936,6 +10975,17 @@ async def admin_reports_revenue(
         "by_store_list": by_store_list,
         "by_category_list": by_category_list,
         "daily_series": daily_series,
+        # 财务 vs 业务 拆分
+        "finance_methods_list": finance_methods_list,        # 现金类（含微信/支付宝/收钱吧/美团/第三方/现金）
+        "finance_cash_total": finance_cash_total,             # 现金类总额
+        "business_noncash_list": business_noncash_list,       # 钱包/套餐/押金/券
+        "business_noncash_total": business_noncash_total,
+        # 钱包消费拆解
+        "wallet_consume_total": wallet_consume_total,
+        "wallet_consume_principal_est": wallet_consume_principal_est,
+        "wallet_consume_bonus_est": wallet_consume_bonus_est,
+        # 按收款员
+        "by_operator_list": by_operator_list,
         # 其他财务流入
         "wallet_recharge_total": wallet_recharge_total,
         "wallet_recharges_count": len(wallet_recharges),
@@ -10943,6 +10993,9 @@ async def admin_reports_revenue(
         "pkg_sold_count": len(pkg_sold),
         "deposit_in": deposit_in,
         "deposit_refund": deposit_refund,
+        # 财务收入合计 / 业务收入合计
+        "finance_total": finance_cash_total + wallet_recharge_total,
+        "business_total": total_amount,  # = 已收款收费单总额 = 现金类+钱包+套餐+押金+券
         "csrf_token": _get_csrf_token(request),
     })
 
