@@ -409,7 +409,17 @@
  <div class="admin-app-lines">
  <strong>#{{ a.id }}</strong> {{ status_badge(a.status) }}
  {% if a.staff_cat_verified %}<span class="pill pill-ok" style="margin-left:0.35rem;"><i data-lucide="cat"></i> 已现场确认</span>{% endif %}
- <h2 style="font-size:1.05rem;margin:0.5rem 0 0.25rem;">{{ a.applicant_name }} · {{ a.phone }}</h2>
+ <h2 style="font-size:1.05rem;margin:0.5rem 0 0.25rem;">
+ {% if a.customer_id %}
+   <a href="/admin/customers/{{ a.customer_id }}{% if a.pet_id %}?pet_id={{ a.pet_id }}{% endif %}"
+      style="color:var(--brand);text-decoration:none;" title="进入客户档案">{{ a.applicant_name }} · {{ a.phone }} <i data-lucide="arrow-right" style="width:.85em;height:.85em;"></i></a>
+ {% elif a.phone %}
+   <a href="/admin/customers?q={{ a.phone }}"
+      style="color:var(--brand);text-decoration:none;" title="按电话搜索客户">{{ a.applicant_name }} · {{ a.phone }} <i data-lucide="search" style="width:.85em;height:.85em;"></i></a>
+ {% else %}
+   {{ a.applicant_name }} · {{ a.phone }}
+ {% endif %}
+ </h2>
  <p class="sub" style="margin:0;">{{ a.address }}</p>
  <p>
  门店：<strong>{{ a.clinic_store or '未选' }}</strong>
