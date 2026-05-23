@@ -227,7 +227,7 @@
  'no_show': '爽约',
  'cancelled': '已取消',
  'rejected': '已拒绝',
- 'arrived_verified': '到院已核对',
+ 'arrived_verified': '已到店',
  'surgery_completed': '手术完成',
  'showcase_hidden': '拒绝公开展示'
 } %}
@@ -394,7 +394,7 @@
  <div class="admin-app-top">
  <div class="admin-app-lines">
  <strong>#{{ a.id }}</strong> {{ status_badge(a.status) }}
- {# 「已现场确认」与「到院已核对」状态语义重复 — 仅留 status pill 即可，不再额外显示 #}
+ {% if a.staff_cat_verified %}<span class="pill pill-ok" style="margin-left:0.35rem;"><i data-lucide="cat"></i> 已现场确认</span>{% endif %}
  <h2 style="font-size:1.05rem;margin:0.5rem 0 0.25rem;">
  {% if a.customer_id %}
    <a href="/admin/customers/{{ a.customer_id }}{% if a.pet_id %}?pet_id={{ a.pet_id }}{% endif %}"
@@ -719,10 +719,10 @@
  </div>
  </form>
  {% endif %}
- {% if a.status in ['approved', 'scheduled'] %}
+ {% if a.status in ['approved', 'scheduled', 'arrived_verified'] and not a.staff_cat_verified %}
  <form method="post" action="/admin/app/{{ a.id }}/verify-cat">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <button type="submit">确认：到院即为此申请猫</button>
+ <button type="submit"><i data-lucide="cat"></i> 确认：到院即为此申请猫</button>
  </form>
  {% endif %}
  </div>

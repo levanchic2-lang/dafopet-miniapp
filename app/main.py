@@ -575,7 +575,7 @@ def _require_status_in(row: Application, allowed: set[str], action_label: str) -
             ApplicationStatus.no_show.value: "爽约",
             ApplicationStatus.cancelled.value: "已取消",
             ApplicationStatus.rejected.value: "已拒绝",
-            ApplicationStatus.arrived_verified.value: "到院已核对",
+            ApplicationStatus.arrived_verified.value: "已到店",
             ApplicationStatus.surgery_completed.value: "手术完成",
         }
         allowed_zh = " / ".join(zh.get(s, s) for s in sorted(allowed))
@@ -1515,7 +1515,7 @@ async def api_apply_create(
     _DUP_STATUS_ZH = {
         "draft": "草稿", "pending_ai": "审核中", "pending_manual": "待人工审核",
         "pre_approved": "预通过", "approved": "已通过", "scheduled": "已预约",
-        "no_show": "爽约", "arrived_verified": "到院核对中",
+        "no_show": "爽约", "arrived_verified": "已到店",
     }
 
     # 1a. 清理同手机号的遗留草稿（网络中断/关闭小程序导致未完成的提交）
@@ -1751,7 +1751,7 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
     _STATUS_ZH = {
         "draft": "草稿", "pending_ai": "系统处理中", "pending_manual": "待人工审核",
         "pre_approved": "预通过（待复核）", "approved": "已通过", "scheduled": "已预约",
-        "arrived_verified": "到院已核对", "surgery_completed": "手术已完成",
+        "arrived_verified": "已到店", "surgery_completed": "手术已完成",
         "rejected": "未通过", "cancelled": "已取消", "no_show": "爽约",
     }
     return {
@@ -3882,7 +3882,11 @@ async def manual_reject(
 
 
 @app.post("/admin/app/{app_id}/verify-cat")
-async def verify_cat(app_id: int, request: Request, db: Session = Depends(get_db), csrf_token: str = Form("")):
+async def verify_cat(app_id: int, request: Request, db: Session = Depends(get_db), csrf_token: str = Form(""), _NOTE_="""
+确认「到的这只猫 = 申请单上那只猫」。仅设 staff_cat_verified=True，
+不再连带改 status。原因：客户到店（status=arrived_verified）和核实猫身份是
+两个独立动作 —— 可能到了店但发现不是同一只猫，此时不应自动设确认。
+"""):
     require_admin(request)
     _require_csrf(request, csrf_token)
     row = db.get(Application, app_id)
@@ -3893,11 +3897,12 @@ async def verify_cat(app_id: int, request: Request, db: Session = Depends(get_db
         {
             ApplicationStatus.approved.value,
             ApplicationStatus.scheduled.value,
+            ApplicationStatus.arrived_verified.value,  # 已到店但还没确认是同一只猫
         },
-        "到院核对",
+        "现场确认",
     )
+    # 只设核实标记 — 「到店」和「核实是同一只猫」是两个独立动作
     row.staff_cat_verified = True
-    row.status = ApplicationStatus.arrived_verified.value
     _audit(db, request, "verify_cat", application_id=app_id)
     db.commit()
     return _admin_back(request, app_id)
