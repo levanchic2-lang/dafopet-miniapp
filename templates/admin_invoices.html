@@ -86,10 +86,10 @@
  </td>
  <td data-label="支付方式" style="color:var(--muted);font-size:0.82rem;">
  {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) if inv.payment_method else '—' }}
- </td>
- <td class="actions" style="text-align:right;">
- <a href="/admin/invoices/{{ inv.id }}" class="btn {% if inv.payment_status == 'unpaid' %}{% else %}secondary{% endif %}" style="font-size:0.78rem;padding:0.25rem 0.7rem;">
- {% if inv.payment_status == 'unpaid' %}<i data-lucide="wallet"></i> 收款{% else %}查看{% endif %}
+ </td> <td class="actions" style="text-align:right;">
+ <a href="/admin/invoices/{{ inv.id }}" class="btn {% if inv.payment_status == 'unpaid' %}{% else %}secondary{% endif %}"
+    style="font-size:0.82rem;padding:0.3rem 0.85rem;display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap;min-width:64px;justify-content:center;">
+ {% if inv.payment_status == 'unpaid' %}<i data-lucide="wallet" style="width:.9em;height:.9em;"></i> <span>收款</span>{% else %}<span>查看</span>{% endif %}
  </a>
  </td>
  </tr>
