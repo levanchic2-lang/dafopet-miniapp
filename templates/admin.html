@@ -260,16 +260,9 @@
  </div>
  </div>
  <form method="get" action="/admin" style="display:grid;gap:0.6rem;margin-top:0.75rem;">
- <div class="tnr-filter-grid" style="display:grid;grid-template-columns:1fr 1fr 1.5fr 0.5fr;gap:0.5rem 0.75rem;align-items:end;">
- <div>
- <label style="margin:0 0 0.35rem;">状态</label>
- <select name="status">
- <option value="" {% if not filters.status %}selected{% endif %}>全部</option>
- {% for s in ['draft','pending_ai','pending_manual','pre_approved','approved','scheduled','no_show','cancelled','rejected','arrived_verified','surgery_completed'] %}
- <option value="{{ s }}" {% if filters.status==s %}selected{% endif %}>{{ STATUS_ZH.get(s, s) }}</option>
- {% endfor %}
- </select>
- </div>
+ {# 当前 status 通过下方 pill 点击切换；保留 hidden input 以便在表单提交时保留 #}
+ <input type="hidden" name="status" value="{{ filters.status or '' }}"/>
+ <div class="tnr-filter-grid" style="display:grid;grid-template-columns:1fr 1.5fr 0.5fr;gap:0.5rem 0.75rem;align-items:end;">
  {% if request.session.get('admin_role') == 'superadmin' %}
  <div>
  <label style="margin:0 0 0.35rem;">门店</label>
@@ -313,14 +306,6 @@
  <option value="" {% if not filters.consent %}selected{% endif %}>不筛</option>
  <option value="true" {% if filters.consent=='true' %}selected{% endif %}>同意</option>
  <option value="false" {% if filters.consent=='false' %}selected{% endif %}>不同意</option>
- </select>
- </div>
- <div>
- <label style="margin:0 0 0.35rem;">到院核对</label>
- <select name="verified">
- <option value="" {% if not filters.verified %}selected{% endif %}>不筛</option>
- <option value="true" {% if filters.verified=='true' %}selected{% endif %}>已核对</option>
- <option value="false" {% if filters.verified=='false' %}selected{% endif %}>未核对</option>
  </select>
  </div>
  </div>
