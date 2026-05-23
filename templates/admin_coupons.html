@@ -1,6 +1,23 @@
 {% extends "base.html" %}
 {% block extra_css %}
 <style>
+/* 优惠券弹窗紧凑布局：双列 + label 小字提示，单屏放下 */
+.coupon-modal-compact label {
+  font-size: .82rem; margin: .55rem 0 .25rem; display: block;
+  color: var(--text); font-weight: 600;
+}
+.coupon-modal-compact input,
+.coupon-modal-compact select {
+  height: 36px; padding: 0 .55rem; font-size: 16px;
+  border-radius: 7px; border: 1px solid var(--input-border);
+  width: 100%; box-sizing: border-box;
+}
+.coupon-modal-compact .row2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .4rem .65rem;
+  margin-bottom: .15rem;
+}
+.coupon-modal-compact .row2 > div { min-width: 0; }
+.coupon-modal-compact .row2 > div label { margin-top: .35rem; }
 @media (max-width: 768px) {
   /* v30-coupon-modal: 居中弹窗卡片（不再全屏），周围留 dim 背景 */
   #issue-coupon-modal {
