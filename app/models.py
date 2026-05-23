@@ -818,7 +818,9 @@ class Wallet(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     customer_id = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, unique=True)
-    balance:           Mapped[float] = mapped_column(Float, default=0.0)   # 当前余额
+    balance:           Mapped[float] = mapped_column(Float, default=0.0)   # 当前余额 = principal + bonus
+    balance_principal: Mapped[float] = mapped_column(Float, default=0.0)   # 余额-本金部分（充值实付）
+    balance_bonus:     Mapped[float] = mapped_column(Float, default=0.0)   # 余额-赠送部分（送的部分）
     lifetime_recharge: Mapped[float] = mapped_column(Float, default=0.0)   # 累计充值
     lifetime_consume:  Mapped[float] = mapped_column(Float, default=0.0)   # 累计消费
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -842,6 +844,8 @@ class WalletTransaction(Base):
     pay_method: Mapped[str] = mapped_column(String(40), default="")         # 充值时记 cash/wechat/...
     invoice_id  = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
     bonus_amount: Mapped[float] = mapped_column(Float, default=0.0)         # 赠送金额（充 500 送 50 时）
+    consumed_principal: Mapped[float] = mapped_column(Float, default=0.0)   # 本笔消费扣的本金部分
+    consumed_bonus:     Mapped[float] = mapped_column(Float, default=0.0)   # 本笔消费扣的赠送部分
     store:      Mapped[str] = mapped_column(String(40), default="")         # 当时门店短名
     note:       Mapped[str] = mapped_column(Text, default="")
     operator:   Mapped[str] = mapped_column(String(80), default="")         # 经办人 username

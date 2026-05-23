@@ -302,6 +302,41 @@
 </div>
 {% endif %}
 
+{# 按门店 × 支付方式 二维拆分 #}
+{% if by_store_method_list and by_store_method_list|length > 0 %}
+<div class="rev-section">
+  <h3><i data-lucide="store"></i> 按门店 × 支付方式</h3>
+  <table class="rev-table">
+    <thead>
+      <tr>
+        <th>门店</th><th>笔数</th>
+        <th style="text-align:right;">现金类</th>
+        <th style="text-align:right;">非现金抵扣</th>
+        <th style="text-align:right;">合计</th>
+        <th style="font-size:.78rem;color:var(--muted);">明细</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in by_store_method_list %}
+    <tr>
+      <td><strong>{{ s.store }}</strong></td>
+      <td>{{ s.count }}</td>
+      <td style="text-align:right;">¥{{ '%.2f'|format(s.cash_total) }}</td>
+      <td style="text-align:right;color:var(--muted);">¥{{ '%.2f'|format(s.noncash_total) }}</td>
+      <td class="amount">¥{{ '%.2f'|format(s.total) }}</td>
+      <td style="font-size:.74rem;color:var(--muted);line-height:1.6;">
+        {% for m, amt in s.methods.items() %}
+          {% set zh = {'cash':'现金','wechat':'微信','alipay':'支付宝','shouqianba':'收钱吧','meituan':'美团','third_party':'第三方','wallet':'钱包','package':'套餐','deposit':'押金','coupon':'优惠券'}.get(m, m) %}
+          <span style="display:inline-block;margin-right:.65rem;">{{ zh }} ¥{{ '%.0f'|format(amt) }}</span>
+        {% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 {# 按收款员 · 人均收款 #}
 {% if by_operator_list %}
 <div class="rev-section">

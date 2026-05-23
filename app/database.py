@@ -209,6 +209,47 @@ def _try_sqlite_migrations() -> None:
             if "proxy_relation" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN proxy_relation VARCHAR(40) DEFAULT ''"))
 
+            # 钱包"按比例扣本金/赠送"所需字段（idempotent）
+            try:
+                w_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(wallets)")).fetchall()}
+                if "balance_principal" not in w_cols:
+                    conn.execute(text("ALTER TABLE wallets ADD COLUMN balance_principal REAL DEFAULT 0"))
+                if "balance_bonus" not in w_cols:
+                    conn.execute(text("ALTER TABLE wallets ADD COLUMN balance_bonus REAL DEFAULT 0"))
+                wt_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(wallet_transactions)")).fetchall()}
+                if "consumed_principal" not in wt_cols:
+                    conn.execute(text("ALTER TABLE wallet_transactions ADD COLUMN consumed_principal REAL DEFAULT 0"))
+                if "consumed_bonus" not in wt_cols:
+                    conn.execute(text("ALTER TABLE wallet_transactions ADD COLUMN consumed_bonus REAL DEFAULT 0"))
+                # 一次性回填：还没拆过的钱包（principal=0 且 bonus=0 但 balance > 0）
+                # 按该钱包历史 recharge 的本金 : 赠送 比例拆当前 balance
+                rows = conn.execute(text(
+                    "SELECT id, balance FROM wallets "
+                    "WHERE balance > 0 AND (balance_principal IS NULL OR balance_principal = 0) "
+                    "AND (balance_bonus IS NULL OR balance_bonus = 0)"
+                )).fetchall()
+                for wid, bal in rows:
+                    tot = conn.execute(text(
+                        "SELECT COALESCE(SUM(amount), 0), COALESCE(SUM(bonus_amount), 0) "
+                        "FROM wallet_transactions WHERE wallet_id=:w AND type='recharge'"
+                    ), {"w": wid}).fetchone()
+                    p_recharge, b_recharge = float(tot[0] or 0), float(tot[1] or 0)
+                    total_rec = p_recharge + b_recharge
+                    if total_rec > 0:
+                        # 按充值的本金:赠送 比例拆当前 balance
+                        ratio_p = p_recharge / total_rec
+                        bp = round(float(bal) * ratio_p, 2)
+                        bb = round(float(bal) - bp, 2)
+                    else:
+                        # 没有 recharge 记录的旧数据（导入的），全部算本金
+                        bp = float(bal)
+                        bb = 0.0
+                    conn.execute(text(
+                        "UPDATE wallets SET balance_principal=:p, balance_bonus=:b WHERE id=:w"
+                    ), {"p": bp, "b": bb, "w": wid})
+            except Exception:
+                pass
+
             # 一次性数据修复：手术完成 → 必然已现场确认（业务约束）
             # 历史上员工跳步骤导致 surgery_completed 但 staff_cat_verified=0 的记录
             try:

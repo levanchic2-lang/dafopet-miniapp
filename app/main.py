@@ -5981,28 +5981,80 @@ def _wallet_apply_tx(
     """
     amt = float(amount or 0)
     bns = float(bonus or 0)
+    # 兜底：旧数据 balance_principal/bonus 还没拆 → 当前余额全部归本金
+    if (wallet.balance_principal or 0) == 0 and (wallet.balance_bonus or 0) == 0 and (wallet.balance or 0) > 0:
+        wallet.balance_principal = float(wallet.balance)
+        wallet.balance_bonus = 0.0
+    consumed_p = 0.0
+    consumed_b = 0.0
     if tx_type == "recharge":
         delta = amt + bns
         wallet.balance += delta
+        wallet.balance_principal = (wallet.balance_principal or 0) + amt
+        wallet.balance_bonus = (wallet.balance_bonus or 0) + bns
         wallet.lifetime_recharge += amt
         signed = delta  # 正
     elif tx_type == "consume":
         if amt > wallet.balance + 1e-6:
             raise HTTPException(400, f"余额不足：当前 ¥{wallet.balance:.2f}，需扣 ¥{amt:.2f}")
+        # 按本金:赠送 比例同步扣（用户确认的方案）
+        bp = float(wallet.balance_principal or 0)
+        bb = float(wallet.balance_bonus or 0)
+        total = bp + bb
+        if total > 0:
+            ratio_p = bp / total
+            consumed_p = round(amt * ratio_p, 2)
+            consumed_b = round(amt - consumed_p, 2)
+            # 兜底防越界（浮点误差导致负数）
+            if consumed_p > bp:
+                consumed_p = bp
+                consumed_b = amt - consumed_p
+            if consumed_b > bb:
+                consumed_b = bb
+                consumed_p = amt - consumed_b
+        else:
+            consumed_p = amt
+            consumed_b = 0.0
         wallet.balance -= amt
+        wallet.balance_principal = max(0, bp - consumed_p)
+        wallet.balance_bonus = max(0, bb - consumed_b)
         wallet.lifetime_consume += amt
         signed = -amt
     elif tx_type == "refund":
         if amt > wallet.balance + 1e-6:
             raise HTTPException(400, f"退款金额超过当前余额（¥{wallet.balance:.2f}）")
+        # 退款优先扣本金（实付的钱），不退赠送
+        bp = float(wallet.balance_principal or 0)
+        if amt <= bp:
+            consumed_p = amt
+        else:
+            consumed_p = bp
+            # 超出本金部分按比例从赠送扣（极少见）
+            consumed_b = amt - bp
         wallet.balance -= amt
+        wallet.balance_principal = max(0, bp - consumed_p)
+        wallet.balance_bonus = max(0, (wallet.balance_bonus or 0) - consumed_b)
         signed = -amt
     elif tx_type == "adjust":
-        # amount 可正可负
+        # amount 可正可负 — 调账走本金
         new_bal = wallet.balance + amt
         if new_bal < -1e-6:
             raise HTTPException(400, "调账后余额不能为负")
         wallet.balance = new_bal
+        if amt >= 0:
+            wallet.balance_principal = (wallet.balance_principal or 0) + amt
+        else:
+            # 调减：先扣本金，不够再扣赠送
+            need = -amt
+            bp = float(wallet.balance_principal or 0)
+            take_p = min(need, bp)
+            consumed_p = take_p
+            wallet.balance_principal = bp - take_p
+            need -= take_p
+            if need > 0:
+                bb = float(wallet.balance_bonus or 0)
+                wallet.balance_bonus = max(0, bb - need)
+                consumed_b = need
         signed = amt
     else:
         raise HTTPException(400, f"未知流水类型：{tx_type}")
@@ -6017,6 +6069,8 @@ def _wallet_apply_tx(
         pay_method=pay_method or "",
         invoice_id=invoice_id,
         bonus_amount=bns if tx_type == "recharge" else 0.0,
+        consumed_principal=consumed_p,
+        consumed_bonus=consumed_b,
         store=store or "",
         operator=operator or "",
         note=(note or "")[:500],
@@ -10849,23 +10903,55 @@ async def admin_reports_revenue(
         key=lambda x: -x["amount"],
     )
 
-    # 钱包消费中"赠送部分"的占比（粗估）—— 没有按比例扣的字段时，按时间段内总赠送额 / 总余额 估算
-    # 真精确按比例扣后续单独 commit 改 schema
+    # 按门店 × 支付方式 二维拆分（superadmin 一眼看两店对比）
+    # 用 Payment.store 字段；fallback 用 pet 推断 store
+    store_x_method: dict[str, dict[str, float]] = {}
+    store_x_method_meta: dict[str, dict] = {}  # 每家店的合计 + 笔数
+    for p in pay_rows:
+        s = (p.store or "").strip() or "未指定"
+        m = (p.method or "").strip() or "other"
+        if s not in store_x_method:
+            store_x_method[s] = {}
+            store_x_method_meta[s] = {"cash_total": 0.0, "noncash_total": 0.0, "count": 0}
+        store_x_method[s][m] = store_x_method[s].get(m, 0.0) + float(p.amount or 0)
+        store_x_method_meta[s]["count"] += 1
+        if m in _CASH_METHODS:
+            store_x_method_meta[s]["cash_total"] += float(p.amount or 0)
+        elif m in _NONCASH_METHODS:
+            store_x_method_meta[s]["noncash_total"] += float(p.amount or 0)
+    # 排序：按总金额倒序
+    by_store_method_list = []
+    for s in sorted(store_x_method.keys(), key=lambda x: -(store_x_method_meta[x]["cash_total"] + store_x_method_meta[x]["noncash_total"])):
+        row = {
+            "store": s,
+            "count": store_x_method_meta[s]["count"],
+            "cash_total": store_x_method_meta[s]["cash_total"],
+            "noncash_total": store_x_method_meta[s]["noncash_total"],
+            "total": store_x_method_meta[s]["cash_total"] + store_x_method_meta[s]["noncash_total"],
+            "methods": store_x_method[s],
+        }
+        by_store_method_list.append(row)
+
+    # 钱包消费"按比例扣的本金 vs 赠送"—— 用 WalletTransaction 上记的精确值
     wallet_consume_total = sum(m["amount"] for m in by_method_list if m["method"] == "wallet")
+    wallet_consume_principal_est = 0.0
     wallet_consume_bonus_est = 0.0
-    if wallet_consume_total > 0:
-        try:
-            tot_principal = db.query(func.coalesce(func.sum(WalletTransaction.amount), 0)).filter(
-                WalletTransaction.type == "recharge"
-            ).scalar() or 0.0
-            tot_bonus = db.query(func.coalesce(func.sum(WalletTransaction.bonus_amount), 0)).filter(
-                WalletTransaction.type == "recharge"
-            ).scalar() or 0.0
-            if (tot_principal + tot_bonus) > 0:
-                wallet_consume_bonus_est = wallet_consume_total * (tot_bonus / (tot_principal + tot_bonus))
-        except Exception:
-            pass
-    wallet_consume_principal_est = wallet_consume_total - wallet_consume_bonus_est
+    try:
+        _wt_consume_q = db.query(
+            func.coalesce(func.sum(WalletTransaction.consumed_principal), 0),
+            func.coalesce(func.sum(WalletTransaction.consumed_bonus), 0),
+        ).filter(
+            WalletTransaction.type == "consume",
+            WalletTransaction.created_at >= df + " 00:00:00",
+            WalletTransaction.created_at <= dt + " 23:59:59",
+        )
+        if store:
+            _wt_consume_q = _wt_consume_q.filter(WalletTransaction.store == store)
+        wp, wb = _wt_consume_q.one()
+        wallet_consume_principal_est = float(wp or 0)
+        wallet_consume_bonus_est = float(wb or 0)
+    except Exception:
+        pass
 
     # 按门店（仅 superadmin 看；用 pet.store 推断）
     by_store_list: list = []
@@ -10986,6 +11072,8 @@ async def admin_reports_revenue(
         "wallet_consume_bonus_est": wallet_consume_bonus_est,
         # 按收款员
         "by_operator_list": by_operator_list,
+        # 按门店 × 支付方式
+        "by_store_method_list": by_store_method_list,
         # 其他财务流入
         "wallet_recharge_total": wallet_recharge_total,
         "wallet_recharges_count": len(wallet_recharges),
