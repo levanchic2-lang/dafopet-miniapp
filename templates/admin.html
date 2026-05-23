@@ -394,7 +394,7 @@
  <div class="admin-app-top">
  <div class="admin-app-lines">
  <strong>#{{ a.id }}</strong> {{ status_badge(a.status) }}
- {% if a.staff_cat_verified %}<span class="pill pill-ok" style="margin-left:0.35rem;"><i data-lucide="cat"></i> 已现场确认</span>{% endif %}
+ {# 「已现场确认」与「到院已核对」状态语义重复 — 仅留 status pill 即可，不再额外显示 #}
  <h2 style="font-size:1.05rem;margin:0.5rem 0 0.25rem;">
  {% if a.customer_id %}
    <a href="/admin/customers/{{ a.customer_id }}{% if a.pet_id %}?pet_id={{ a.pet_id }}{% endif %}"
