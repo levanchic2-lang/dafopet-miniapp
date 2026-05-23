@@ -337,14 +337,19 @@
  <span>今日新增 <strong style="color:#15803d;font-size:1rem;">{{ stats.today_new }}</strong></span>
  <span>待处理 <strong style="color:#d97706;font-size:1rem;">{{ stats.pending_todo }}</strong></span>
  </div>
- <div style="margin-top:0.6rem;display:flex;flex-wrap:wrap;gap:0.35rem;">
+ <div style="margin-top:0.6rem;display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center;">
+ <span style="font-size:.78rem;color:var(--muted);margin-right:.2rem;">点击筛选：</span>
+ {% if filters.status %}<a href="/admin" class="pill pill-gray" style="text-decoration:none;cursor:pointer;" title="清除筛选">× 全部</a>{% endif %}
  {% for k,v in stats.overall_by_status.items() %}
  {% set cls = 'pill-gray' %}
  {% if k == 'pending_ai' or k == 'pending_manual' %}{% set cls = 'pill-warn' %}
  {% elif k == 'pre_approved' or k == 'approved' or k == 'scheduled' %}{% set cls = 'pill-info' %}
  {% elif k == 'surgery_completed' or k == 'arrived_verified' %}{% set cls = 'pill-ok' %}
  {% elif k == 'cancelled' or k == 'rejected' or k == 'no_show' %}{% set cls = 'pill-no' %}{% endif %}
- <span class="pill {{ cls }}">{{ STATUS_ZH.get(k, k) }} {{ v }}</span>
+ <a href="?status={{ k }}{% if filters.q %}&q={{ filters.q }}{% endif %}{% if filters['from'] %}&from={{ filters['from'] }}{% endif %}{% if filters.to %}&to={{ filters.to }}{% endif %}"
+    class="pill {{ cls }}"
+    style="text-decoration:none;cursor:pointer;{% if filters.status == k %}outline:2px solid var(--brand-dark);outline-offset:1px;{% endif %}"
+    title="只看「{{ STATUS_ZH.get(k, k) }}」">{{ STATUS_ZH.get(k, k) }} {{ v }}</a>
  {% endfor %}
  </div>
 </div>
