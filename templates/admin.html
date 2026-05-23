@@ -167,9 +167,12 @@
  }
  .apps-grid {
  display: grid;
- grid-template-columns: 1fr 1fr;
+ grid-template-columns: repeat(3, minmax(0, 1fr));
  gap: 1rem;
  align-items: start;
+ }
+ @media (max-width: 1280px) {
+ .apps-grid { grid-template-columns: 1fr 1fr; }
  }
  @media (max-width: 900px) {
  .apps-grid { grid-template-columns: 1fr; }
@@ -727,24 +730,25 @@
  </div>
  </div>
 
- {# ── 公开展示开关：默认全部公开；点一下即切换 ── #}
+ {# ── 公开展示开关：只在「手术完成」时显示；默认全部公开；点一下即切换 ── #}
+ {% if a.status == 'surgery_completed' %}
  {% set _is_public = (a.showcase_consent is none) or a.showcase_consent %}
  <div style="margin-top:0.75rem;padding:.6rem .85rem;background:{{ 'var(--ok-bg)' if _is_public else 'var(--warn-bg)' }};border:1px solid {{ '#bbf7d0' if _is_public else '#fcd34d' }};border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;">
-   <div style="font-size:.88rem;color:{{ 'var(--ok-fg)' if _is_public else 'var(--warn-fg)' }};">
+   <div style="font-size:.85rem;color:{{ 'var(--ok-fg)' if _is_public else 'var(--warn-fg)' }};">
      {% if _is_public %}
-     <i data-lucide="eye"></i> <strong>正在公开展示</strong> · 申请的术前/术后已对外可见
+     <i data-lucide="eye"></i> <strong>正在公开展示</strong>
      {% else %}
-     <i data-lucide="eye-off"></i> <strong>已隐藏不公开</strong> · 不会出现在公布展示页
+     <i data-lucide="eye-off"></i> <strong>已拒绝公开</strong>
      {% endif %}
    </div>
    <form method="post" action="/admin/app/{{ a.id }}/toggle-showcase" style="margin:0;">
      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-     <button type="submit" class="btn secondary" style="font-size:.82rem;">
+     <button type="submit" class="btn secondary" style="font-size:.78rem;padding:.25rem .6rem;">
        {% if _is_public %}<i data-lucide="eye-off"></i> 关闭公开{% else %}<i data-lucide="eye"></i> 重新公开{% endif %}
      </button>
    </form>
  </div>
- <p style="font-size:.78rem;color:var(--muted);margin:.35rem 0 0;">默认<strong>全部公开</strong>（已通过公开渠道告知）；特殊病例需要隐私时点「关闭公开」即可。</p>
+ {% endif %}
 </div>
 {% else %}
 <div class="card"><p>暂无申请记录。</p></div>
