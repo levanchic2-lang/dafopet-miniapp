@@ -209,6 +209,16 @@ def _try_sqlite_migrations() -> None:
             if "proxy_relation" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN proxy_relation VARCHAR(40) DEFAULT ''"))
 
+            # 一次性数据修复：手术完成 → 必然已现场确认（业务约束）
+            # 历史上员工跳步骤导致 surgery_completed 但 staff_cat_verified=0 的记录
+            try:
+                conn.execute(text(
+                    "UPDATE applications SET staff_cat_verified = 1 "
+                    "WHERE status = 'surgery_completed' AND (staff_cat_verified IS NULL OR staff_cat_verified = 0)"
+                ))
+            except Exception:
+                pass
+
             appointment_cols = conn.execute(text("PRAGMA table_info(appointments)")).fetchall()
             appointment_names = {c[1] for c in appointment_cols}
             if "wechat_openid" not in appointment_names:

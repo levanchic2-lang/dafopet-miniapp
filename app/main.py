@@ -3930,6 +3930,9 @@ async def surgery_done(app_id: int, request: Request, db: Session = Depends(get_
             status_code=303,
         )
     row.status = ApplicationStatus.surgery_completed.value
+    # 业务约束：手术完成天然蕴含「已现场确认」（不可能没核对就做手术）
+    # 员工跳步骤直接点手术完成的，这里自动补上
+    row.staff_cat_verified = True
     _audit(db, request, "surgery_done", application_id=app_id)
     db.commit()
     notify_application_result(
