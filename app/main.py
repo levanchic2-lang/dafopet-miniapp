@@ -1843,7 +1843,13 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
         full_store = _STORE_SHORT_TO_FULL.get(admin_store, "")
         if full_store:
             base_q = base_q.filter(Application.clinic_store == full_store)
-    if status:
+    if status == "showcase_hidden":
+        # 虚拟筛选：手术完成 + 管理员手动关闭公开
+        base_q = base_q.filter(
+            Application.status == ApplicationStatus.surgery_completed.value,
+            Application.showcase_consent.is_(False),
+        )
+    elif status:
         base_q = base_q.filter(Application.status == status)
     if store:
         base_q = base_q.filter(Application.clinic_store == store)
@@ -1887,6 +1893,13 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
         if _stat_full:
             _stat_q = _stat_q.filter(Application.clinic_store == _stat_full)
     overall_by_status = dict(_stat_q.with_entities(Application.status, func.count(Application.id)).group_by(Application.status).all())
+    # 虚拟状态：手术完成但被管理员手动关闭公开 — 用 "showcase_hidden" key 加进统计
+    _hidden_count = _stat_q.filter(
+        Application.status == ApplicationStatus.surgery_completed.value,
+        Application.showcase_consent.is_(False),
+    ).with_entities(func.count(Application.id)).scalar() or 0
+    if _hidden_count > 0:
+        overall_by_status["showcase_hidden"] = _hidden_count
     today0 = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     today_new = _stat_q.filter(Application.created_at >= today0).with_entities(func.count(Application.id)).scalar() or 0
     pending_todo = (
@@ -4672,7 +4685,8 @@ async def upload_surgery(
 def _media_public_ok(m: MediaFile, app_row: Application) -> bool:
     if app_row.status != ApplicationStatus.surgery_completed.value:
         return False
-    if not app_row.showcase_consent:
+    # 默认公开：仅当 showcase_consent 明确为 False（管理员手动关闭）才屏蔽
+    if app_row.showcase_consent is False:
         return False
     return m.kind in (MediaKind.surgery_before.value, MediaKind.surgery_after.value)
 
@@ -4717,7 +4731,7 @@ async def api_showcase(request: Request, db: Session = Depends(get_db)):
         db.query(Application)
         .options(selectinload(Application.media))
         .filter(Application.status == ApplicationStatus.surgery_completed.value)
-        .filter(Application.showcase_consent.is_(True))
+        .filter(or_(Application.showcase_consent.is_(True), Application.showcase_consent.is_(None)))
         .order_by(Application.updated_at.desc())
     )
     items = []
@@ -4765,7 +4779,7 @@ async def page_showcase(request: Request, db: Session = Depends(get_db),
         db.query(Application)
         .options(selectinload(Application.media))
         .filter(Application.status == ApplicationStatus.surgery_completed.value)
-        .filter(Application.showcase_consent.is_(True))
+        .filter(or_(Application.showcase_consent.is_(True), Application.showcase_consent.is_(None)))
         .order_by(Application.updated_at.desc())
     )
     # 先收集有图的记录（过滤掉无图案例）再分页
@@ -4804,15 +4818,23 @@ async def toggle_showcase(
     app_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    consent: str = Form("false"),
+    consent: str = Form(""),  # 兼容老调用；新流程不再使用
     csrf_token: str = Form(""),
 ):
+    """切换该申请的"公开展示"开关。
+    新流程：默认全部公开，管理员点一下就 toggle 当前状态。
+    老流程兼容：如果传了 consent，按其取值生效。"""
     require_admin(request)
     _require_csrf(request, csrf_token)
     row = db.get(Application, app_id)
     if not row:
         raise HTTPException(404)
-    row.showcase_consent = consent.lower() in ("true", "1", "on", "yes")
+    if consent != "":
+        row.showcase_consent = consent.lower() in ("true", "1", "on", "yes")
+    else:
+        # 视当前 NULL 为公开（默认公开规则）
+        currently_public = (row.showcase_consent is None) or bool(row.showcase_consent)
+        row.showcase_consent = not currently_public
     _audit(db, request, "toggle_showcase", application_id=app_id, detail={"consent": row.showcase_consent})
     db.commit()
     return _admin_back(request, app_id)

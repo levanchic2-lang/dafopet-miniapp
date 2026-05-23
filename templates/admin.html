@@ -225,7 +225,8 @@
  'cancelled': '已取消',
  'rejected': '已拒绝',
  'arrived_verified': '到院已核对',
- 'surgery_completed': '手术完成'
+ 'surgery_completed': '手术完成',
+ 'showcase_hidden': '拒绝公开展示'
 } %}
 <div class="page-head">
  <div>
@@ -299,14 +300,6 @@
  <div>
  <label style="margin:0 0 0.35rem;">提交日期到（可选）</label>
  <input type="date" name="to" value="{{ filters.to or '' }}"/>
- </div>
- <div>
- <label style="margin:0 0 0.35rem;">公布展示授权</label>
- <select name="consent">
- <option value="" {% if not filters.consent %}selected{% endif %}>不筛</option>
- <option value="true" {% if filters.consent=='true' %}selected{% endif %}>同意</option>
- <option value="false" {% if filters.consent=='false' %}selected{% endif %}>不同意</option>
- </select>
  </div>
  </div>
  <div class="admin-filter-actions">
@@ -734,17 +727,24 @@
  </div>
  </div>
 
- <div style="margin-top:0.75rem;">
- <form method="post" action="/admin/app/{{ a.id }}/toggle-showcase" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
- <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <label style="margin:0;font-weight:500;">公布展示授权</label>
- <select name="consent" style="width:auto;">
- <option value="true" {% if a.showcase_consent %}selected{% endif %}>同意公开展示术前术后</option>
- <option value="false" {% if not a.showcase_consent %}selected{% endif %}>不同意展示</option>
- </select>
- <button type="submit" class="secondary">保存</button>
- </form>
- <p style="font-size:0.8rem;color:var(--muted);margin:0.35rem 0 0;">默认<strong>不公开</strong>。确认征得助人同意后，手动改为「同意公开展示」并保存，才会出现在展示页。</p>
+ {# ── 公开展示开关：默认全部公开；点一下即切换 ── #}
+ {% set _is_public = (a.showcase_consent is none) or a.showcase_consent %}
+ <div style="margin-top:0.75rem;padding:.6rem .85rem;background:{{ 'var(--ok-bg)' if _is_public else 'var(--warn-bg)' }};border:1px solid {{ '#bbf7d0' if _is_public else '#fcd34d' }};border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;">
+   <div style="font-size:.88rem;color:{{ 'var(--ok-fg)' if _is_public else 'var(--warn-fg)' }};">
+     {% if _is_public %}
+     <i data-lucide="eye"></i> <strong>正在公开展示</strong> · 申请的术前/术后已对外可见
+     {% else %}
+     <i data-lucide="eye-off"></i> <strong>已隐藏不公开</strong> · 不会出现在公布展示页
+     {% endif %}
+   </div>
+   <form method="post" action="/admin/app/{{ a.id }}/toggle-showcase" style="margin:0;">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+     <button type="submit" class="btn secondary" style="font-size:.82rem;">
+       {% if _is_public %}<i data-lucide="eye-off"></i> 关闭公开{% else %}<i data-lucide="eye"></i> 重新公开{% endif %}
+     </button>
+   </form>
+ </div>
+ <p style="font-size:.78rem;color:var(--muted);margin:.35rem 0 0;">默认<strong>全部公开</strong>（已通过公开渠道告知）；特殊病例需要隐私时点「关闭公开」即可。</p>
  </div>
 </div>
 {% else %}
