@@ -206,45 +206,73 @@
 
 {% if is_superadmin %}
 <div class="cust-modal-overlay" id="issue-coupon-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1100;align-items:center;justify-content:center;overflow-y:auto;padding:2rem 0;">
- <div class="cust-modal" style="background:var(--card);border-radius:12px;padding:1.25rem;width:480px;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.22);">
- <h3 style="margin:0 0 .85rem;font-size:1rem;">发放优惠券</h3>
+ <div class="cust-modal coupon-modal-compact" style="background:var(--card);border-radius:12px;padding:1.05rem 1.15rem;width:540px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.22);">
+ <h3 style="margin:0 0 .55rem;font-size:1rem;">发放优惠券</h3>
  <form method="post" action="/admin/coupons/issue">
    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-   <label>标题（必填）</label>
+   <label>标题</label>
    <input name="title" required placeholder="如 老客回馈 50 元券">
-   <label>类型</label>
-   <select name="kind" onchange="onKindChange(this)">
-     <option value="cash">现金抵扣券（满 X 减 Y）</option>
-     <option value="discount">折扣券（如 9 折）</option>
-     <option value="free_item">兑换券（免费洗澡 1 次等）</option>
-   </select>
-   <div id="fld-face" style="margin-top:.5rem;">
-     <label>面额（¥）</label>
-     <input name="face_value" type="number" step="0.01" min="0" value="50">
+
+   <div class="row2">
+     <div>
+       <label>类型</label>
+       <select name="kind" onchange="onKindChange(this)">
+         <option value="cash">现金抵扣券</option>
+         <option value="discount">折扣券</option>
+         <option value="free_item">兑换券</option>
+       </select>
+     </div>
+     <div id="fld-face">
+       <label>面额 ¥</label>
+       <input name="face_value" type="number" step="0.01" min="0" value="50">
+     </div>
+     <div id="fld-pct" style="display:none;">
+       <label>折扣 <span style="color:var(--muted);font-weight:400;font-size:.72rem;">0.9=9折</span></label>
+       <input name="discount_pct" type="number" step="0.01" min="0" value="0.9">
+     </div>
    </div>
-   <div id="fld-pct" style="display:none;margin-top:.5rem;">
-     <label>折扣（0~1 或 0~100；如 0.9 或 90 表示 9 折）</label>
-     <input name="discount_pct" type="number" step="0.01" min="0" value="0.9">
+
+   <div class="row2">
+     <div>
+       <label>消费门槛 ¥ <span style="color:var(--muted);font-weight:400;font-size:.72rem;">0=无门槛</span></label>
+       <input name="min_amount" type="number" step="0.01" min="0" value="0">
+     </div>
+     <div>
+       <label>有效期至 <span style="color:var(--muted);font-weight:400;font-size:.72rem;">留空=不限</span></label>
+       <input name="expires_at" type="date">
+     </div>
    </div>
-   <label>最低消费门槛（满 X 可用，0 = 无门槛）</label>
-   <input name="min_amount" type="number" step="0.01" min="0" value="0">
-   <label>有效期至（YYYY-MM-DD，留空 = 不限期）</label>
-   <input name="expires_at" type="date">
-   <label>指定客户 ID（留空 = 通用券，任何人可用）</label>
-   <input name="customer_id" type="number" min="0" placeholder="如 29，从客户档案 URL 上看">
-   <label>批量数量（最多 500）</label>
-   <input name="quantity" type="number" min="1" max="500" value="1">
-   <label>券码前缀（可选，便于批次识别）</label>
-   <input name="code_prefix" maxlength="10" placeholder="如 ZJ618">
-   <label>归属门店</label>
-   <select name="store">
-     <option value="">通用（两店共享）</option>
-     <option value="东环店">仅东环店</option>
-     <option value="横岗店">仅横岗店</option>
-   </select>
+
+   <div class="row2">
+     <div>
+       <label>指定客户 ID <span style="color:var(--muted);font-weight:400;font-size:.72rem;">留空=通用</span></label>
+       <input name="customer_id" type="number" min="0" placeholder="如 29">
+     </div>
+     <div>
+       <label>批量数量 <span style="color:var(--muted);font-weight:400;font-size:.72rem;">最多 500</span></label>
+       <input name="quantity" type="number" min="1" max="500" value="1">
+     </div>
+   </div>
+
+   <div class="row2">
+     <div>
+       <label>券码前缀 <span style="color:var(--muted);font-weight:400;font-size:.72rem;">可选</span></label>
+       <input name="code_prefix" maxlength="10" placeholder="如 ZJ618">
+     </div>
+     <div>
+       <label>归属门店</label>
+       <select name="store">
+         <option value="">通用</option>
+         <option value="东环店">东环店</option>
+         <option value="横岗店">横岗店</option>
+       </select>
+     </div>
+   </div>
+
    <label>备注</label>
    <input name="notes">
-   <div style="display:flex;gap:.6rem;margin-top:1rem;">
+
+   <div style="display:flex;gap:.6rem;margin-top:.85rem;">
      <button type="submit" class="btn" style="flex:1;">发放</button>
      <button type="button" class="btn secondary" style="flex:1;" onclick="document.getElementById('issue-coupon-modal').style.display='none'">取消</button>
    </div>
