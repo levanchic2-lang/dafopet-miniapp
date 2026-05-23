@@ -543,6 +543,19 @@
  {% endif %}
  </div>
 
+ {# ── 现场确认按钮：放在「申请素材」和「术前/术后影像」之间，工作流的天然位置 ── #}
+ {% if a.status in ['approved', 'scheduled', 'arrived_verified'] and not a.staff_cat_verified %}
+ <div style="margin:.75rem 0;padding:.6rem .85rem;background:var(--brand-bg-soft);border:1px solid var(--brand-light);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;">
+   <div style="font-size:.85rem;color:var(--brand-dark);">
+     <i data-lucide="info"></i> 核对申请素材后，确认到院的就是这只猫
+   </div>
+   <form method="post" action="/admin/app/{{ a.id }}/verify-cat" style="margin:0;">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+     <button type="submit" class="btn" style="font-size:.85rem;"><i data-lucide="cat"></i> 确认：到院即为此申请猫</button>
+   </form>
+ </div>
+ {% endif %}
+
  {% set surg_before_files = a.media | selectattr('kind', 'equalto', 'surgery_before') | list %}
  {% set surg_after_files = a.media | selectattr('kind', 'equalto', 'surgery_after') | list %}
  {% set surg_before_n = surg_before_files | length %}
@@ -720,12 +733,7 @@
  </div>
  </form>
  {% endif %}
- {% if a.status in ['approved', 'scheduled', 'arrived_verified'] and not a.staff_cat_verified %}
- <form method="post" action="/admin/app/{{ a.id }}/verify-cat">
- <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <button type="submit"><i data-lucide="cat"></i> 确认：到院即为此申请猫</button>
- </form>
- {% endif %}
+ {# 「确认到院即为此申请猫」按钮已移到上方（申请素材 与 术前术后影像之间） #}
  </div>
  </div>
  </div>
