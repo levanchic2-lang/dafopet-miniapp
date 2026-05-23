@@ -1849,6 +1849,9 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
             Application.status == ApplicationStatus.surgery_completed.value,
             Application.showcase_consent.is_(False),
         )
+    elif status == "cat_verified":
+        # 虚拟筛选：已现场确认（员工核对过"到的就是这只猫"）
+        base_q = base_q.filter(Application.staff_cat_verified.is_(True))
     elif status:
         base_q = base_q.filter(Application.status == status)
     if store:
@@ -1900,6 +1903,12 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
     ).with_entities(func.count(Application.id)).scalar() or 0
     if _hidden_count > 0:
         overall_by_status["showcase_hidden"] = _hidden_count
+    # 虚拟统计：已现场确认（一次性事件，跨状态）
+    _verified_count = _stat_q.filter(
+        Application.staff_cat_verified.is_(True),
+    ).with_entities(func.count(Application.id)).scalar() or 0
+    if _verified_count > 0:
+        overall_by_status["cat_verified"] = _verified_count
     today0 = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     today_new = _stat_q.filter(Application.created_at >= today0).with_entities(func.count(Application.id)).scalar() or 0
     pending_todo = (

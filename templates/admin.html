@@ -229,7 +229,8 @@
  'rejected': '已拒绝',
  'arrived_verified': '已到店',
  'surgery_completed': '手术完成',
- 'showcase_hidden': '拒绝公开展示'
+ 'showcase_hidden': '拒绝公开展示',
+ 'cat_verified': '已现场确认'
 } %}
 <div class="page-head">
  <div>
@@ -325,7 +326,7 @@
  {% set cls = 'pill-gray' %}
  {% if k == 'pending_ai' or k == 'pending_manual' %}{% set cls = 'pill-warn' %}
  {% elif k == 'pre_approved' or k == 'approved' or k == 'scheduled' %}{% set cls = 'pill-info' %}
- {% elif k == 'surgery_completed' or k == 'arrived_verified' %}{% set cls = 'pill-ok' %}
+ {% elif k == 'surgery_completed' or k == 'arrived_verified' or k == 'cat_verified' %}{% set cls = 'pill-ok' %}
  {% elif k == 'cancelled' or k == 'rejected' or k == 'no_show' %}{% set cls = 'pill-no' %}{% endif %}
  <a href="?status={{ k }}{% if filters.q %}&q={{ filters.q }}{% endif %}{% if filters['from'] %}&from={{ filters['from'] }}{% endif %}{% if filters.to %}&to={{ filters.to }}{% endif %}"
     class="pill {{ cls }}"
