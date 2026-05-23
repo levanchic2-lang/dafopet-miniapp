@@ -267,7 +267,10 @@
  <form method="get" action="/admin" style="display:grid;gap:0.6rem;margin-top:0.75rem;">
  {# 当前 status 通过下方 pill 点击切换；保留 hidden input 以便在表单提交时保留 #}
  <input type="hidden" name="status" value="{{ filters.status or '' }}"/>
- <div class="tnr-filter-grid" style="display:grid;grid-template-columns:1fr 1.5fr 0.5fr;gap:0.5rem 0.75rem;align-items:end;">
+ {# 4 个筛选并排在一行：门店 / 关键词 / 提交日期从 / 提交日期到 #}
+ {# 每页固定 50（之前的 select 下拉删掉），用 hidden input 提交 #}
+ <input type="hidden" name="page_size" value="50"/>
+ <div class="tnr-filter-grid" style="display:grid;grid-template-columns:1fr 2fr 1fr 1fr;gap:0.5rem 0.75rem;align-items:end;">
  {% if request.session.get('admin_role') == 'superadmin' %}
  <div>
  <label style="margin:0 0 0.35rem;">门店</label>
@@ -290,19 +293,11 @@
  <input type="text" name="q" value="{{ filters.q or '' }}"/>
  </div>
  <div>
- <label style="margin:0 0 0.35rem;">每页</label>
- <select name="page_size">
- {% for n in [20,30,50,100] %}
- <option value="{{n}}" {% if filters.page_size==n %}selected{% endif %}>{{n}}</option>
- {% endfor %}
- </select>
- </div>
- <div>
- <label style="margin:0 0 0.35rem;">提交日期从（可选）</label>
+ <label style="margin:0 0 0.35rem;">提交日期从</label>
  <input type="date" name="from" value="{{ filters['from'] or '' }}"/>
  </div>
  <div>
- <label style="margin:0 0 0.35rem;">提交日期到（可选）</label>
+ <label style="margin:0 0 0.35rem;">提交日期到</label>
  <input type="date" name="to" value="{{ filters.to or '' }}"/>
  </div>
  </div>

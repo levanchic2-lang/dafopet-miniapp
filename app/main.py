@@ -1832,7 +1832,7 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
     date_from = (qp.get("from") or "").strip()  # YYYY-MM-DD
     date_to = (qp.get("to") or "").strip()  # YYYY-MM-DD
     page = int((qp.get("page") or "1").strip() or 1)
-    page_size = int((qp.get("page_size") or "30").strip() or 30)
+    page_size = int((qp.get("page_size") or "50").strip() or 50)
     page = max(1, page)
     page_size = min(max(10, page_size), 100)
 
