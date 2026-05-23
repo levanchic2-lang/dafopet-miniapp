@@ -12955,6 +12955,8 @@ async def api_calendar_events(
             "notes":          a.notes or "",
             "related_app_id": a.related_application_id,
             "created_at":     a.created_at.strftime("%m-%d %H:%M") if a.created_at else "",
+            "customer_id":    a.customer_id,
+            "pet_id":         a.pet_id,
         })
 
     bq = db.query(CalendarBlock)

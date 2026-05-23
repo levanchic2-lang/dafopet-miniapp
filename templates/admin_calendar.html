@@ -746,8 +746,26 @@ function openApptPopup(ev, id) {
  const genZh = GENDER_ZH[appt.pet_gender] || '';
  const petLabel = [spcZh, appt.pet_name||'', genZh].filter(Boolean).join('·');
  rows += row('项目', appt.service_name||'—');
- rows += row('联系人', [appt.customer_name, appt.phone].filter(Boolean).join(' · ') || '—');
- if (petLabel) rows += row('对象', petLabel);
+ // 联系人：有 customer_id → 蓝色链接，一键进客户档案
+ let contactCell = '—';
+ const contactText = [appt.customer_name, appt.phone].filter(Boolean).join(' · ');
+ if (appt.customer_id) {
+   const petQs = appt.pet_id ? '?pet_id=' + appt.pet_id : '';
+   contactCell = `<a href="/admin/customers/${appt.customer_id}${petQs}" style="color:var(--brand);text-decoration:none;font-weight:600;">${contactText || '客户档案'} →</a>`;
+ } else if (contactText) {
+   // 老预约没绑 customer_id → 降级为按电话搜索
+   const q = encodeURIComponent(appt.phone || appt.customer_name || '');
+   contactCell = `<a href="/admin/customers?q=${q}" style="color:var(--brand);text-decoration:none;">${contactText} 🔍</a>`;
+ }
+ rows += row('联系人', contactCell);
+ if (petLabel) {
+   // 宠物也加链接（如果有 customer_id + pet_id）
+   if (appt.customer_id && appt.pet_id) {
+     rows += row('对象', `<a href="/admin/customers/${appt.customer_id}?pet_id=${appt.pet_id}" style="color:var(--brand);text-decoration:none;">${petLabel}</a>`);
+   } else {
+     rows += row('对象', petLabel);
+   }
+ }
  rows += row('门店', appt.store||'—');
  if (appt.related_app_id) rows += row('关联申请', '#'+appt.related_app_id);
  document.getElementById('pp-rows').innerHTML = rows;
