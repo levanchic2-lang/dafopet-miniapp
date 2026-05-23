@@ -52,6 +52,33 @@
   .cust-search-card input[type="text"] { height: 38px; font-size: 16px; min-width: 0 !important; flex: 1 1 0 !important; }
   .cust-search-card .btn { height: 38px; padding: 0 .8rem; min-height: 38px !important; flex: 0 0 auto !important; }
 }
+
+/* 顶栏快捷搜索 — 与系统风格统一 */
+.wb-quick-search { display:flex; gap:.4rem; align-items:center; margin:0; }
+.wb-qs-wrap {
+  position:relative; display:inline-flex; align-items:center;
+  background:var(--card,#fff); border:1px solid var(--border,#e5e7eb);
+  border-radius: var(--radius-md, 10px); padding: 0 .65rem 0 .55rem;
+  height: 38px; box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  transition: border-color .15s, box-shadow .15s;
+}
+.wb-qs-wrap:focus-within { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.15); }
+.wb-qs-icon { width:15px !important; height:15px !important; color:var(--muted,#9ca3af); margin-right:.35rem; flex-shrink:0; }
+.wb-qs-wrap input[type="text"] {
+  border:none !important; outline:none !important; background:transparent !important;
+  height:100% !important; padding:0 !important; font-size:.88rem !important;
+  width: 190px; min-width:0;
+}
+.wb-qs-btn {
+  height:38px !important; padding:0 .95rem !important;
+  font-size:.85rem !important; white-space:nowrap !important;
+  min-height:38px !important; flex:0 0 auto !important;
+}
+@media (max-width: 768px) {
+  .wb-quick-search { flex:1 1 100%; }
+  .wb-qs-wrap { flex:1; }
+  .wb-qs-wrap input[type="text"] { width:auto; flex:1; font-size:16px !important; }
+}
 </style>
 {% endblock %}
 {% block body %}
@@ -74,11 +101,13 @@
     </p>
   </div>
   <div class="ph-actions" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-    <form method="get" action="/admin/customers#cust-list-anchor" style="display:flex;gap:.35rem;align-items:center;margin:0;">
+    <form method="get" action="/admin/customers#cust-list-anchor" class="wb-quick-search">
       {% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}
-      <input type="text" name="q" value="{{ q or '' }}" placeholder="搜姓名 / 手机号…" autocomplete="off"
-             style="height:38px;padding:0 .7rem;border:1px solid var(--border,#e5e7eb);border-radius:8px;font-size:.9rem;min-width:180px;box-sizing:border-box;"/>
-      <button type="submit" class="btn secondary" style="font-size:0.85rem;height:38px;padding:0 .9rem;"><i data-lucide="search"></i> 搜索</button>
+      <span class="wb-qs-wrap">
+        <i data-lucide="search" class="wb-qs-icon"></i>
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="搜姓名 / 手机号…" autocomplete="off"/>
+      </span>
+      <button type="submit" class="btn secondary wb-qs-btn">搜索</button>
     </form>
     <button type="button" class="btn" style="font-size:0.88rem;" onclick="document.getElementById('create-modal').classList.add('visible')"><i data-lucide="plus"></i> 新建客户</button>
   </div>
