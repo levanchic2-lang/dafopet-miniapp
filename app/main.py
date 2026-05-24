@@ -10569,6 +10569,9 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
     # 保存签名
     sig_path = _save_signature(owner_sig_data, f"owner_{owner_phone}")
 
+    # 提前读出门店（Pet 病历号生成、Customer 归属都会用到）
+    clinic_store = str(form.get("clinic_store", "横岗店")).strip() or "横岗店"
+
     # 查找或创建客户
     customer_id = int(customer_id_raw) if customer_id_raw.isdigit() else None
     if not customer_id:
@@ -10581,7 +10584,8 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
             if owner_address and not cust.address:
                 cust.address = owner_address
         else:
-            cust = Customer(name=owner_name, phone=owner_phone, address=owner_address, source="rabies")
+            cust = Customer(name=owner_name, phone=owner_phone, address=owner_address,
+                            source="rabies", store=clinic_store)
             db.add(cust)
             db.flush()
             customer_id = cust.id
@@ -10621,6 +10625,8 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
                 birthday_estimate=animal_dob,
                 color_pattern=animal_color,
                 species="dog",
+                store=clinic_store,
+                medical_record_no=_gen_medical_record_no(db, clinic_store),
             )
             db.add(pet)
             db.flush()
@@ -10630,6 +10636,10 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
             pet.color_pattern = animal_color
         if animal_dob and not pet.birthday_estimate:
             pet.birthday_estimate = animal_dob
+        # 老宠物没病历号 → 借这次登记补一个
+        if not pet.medical_record_no:
+            pet.store = pet.store or clinic_store
+            pet.medical_record_no = _gen_medical_record_no(db, pet.store)
 
     record = RabiesVaccineRecord(
         customer_id=customer_id,
@@ -10645,7 +10655,7 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
         owner_signature_path=sig_path,
         owner_signed_at=datetime.utcnow(),
         status="staff_pending",
-        clinic_store=str(form.get("clinic_store", "横岗店")).strip() or "横岗店",
+        clinic_store=clinic_store,
     )
     db.add(record)
     db.commit()
@@ -10692,6 +10702,9 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
 
     sig_path = _save_signature(owner_sig_data, f"owner_{owner_phone}")
 
+    # 提前读出门店（Pet 病历号生成、Customer 归属都会用到）
+    clinic_store = str(body.get("clinic_store", "横岗店")).strip() or "横岗店"
+
     customer_id = int(customer_id_raw) if isinstance(customer_id_raw, int) or (isinstance(customer_id_raw, str) and customer_id_raw.isdigit()) else None
     if not customer_id:
         cust = db.query(Customer).filter(Customer.phone == owner_phone).first()
@@ -10702,7 +10715,8 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
             if owner_address and not cust.address:
                 cust.address = owner_address
         else:
-            cust = Customer(name=owner_name, phone=owner_phone, address=owner_address, source="rabies")
+            cust = Customer(name=owner_name, phone=owner_phone, address=owner_address,
+                            source="rabies", store=clinic_store)
             db.add(cust)
             db.flush()
             customer_id = cust.id
@@ -10738,6 +10752,8 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
                 birthday_estimate=animal_dob,
                 color_pattern=animal_color,
                 species="dog",
+                store=clinic_store,
+                medical_record_no=_gen_medical_record_no(db, clinic_store),
             )
             db.add(pet)
             db.flush()
@@ -10747,6 +10763,10 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
             pet.color_pattern = animal_color
         if animal_dob and not pet.birthday_estimate:
             pet.birthday_estimate = animal_dob
+        # 老宠物没病历号 → 借这次登记补一个
+        if not pet.medical_record_no:
+            pet.store = pet.store or clinic_store
+            pet.medical_record_no = _gen_medical_record_no(db, pet.store)
 
     record = RabiesVaccineRecord(
         customer_id=customer_id,
@@ -10762,7 +10782,7 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
         owner_signature_path=sig_path,
         owner_signed_at=datetime.utcnow(),
         status="staff_pending",
-        clinic_store=str(body.get("clinic_store", "横岗店")).strip() or "横岗店",
+        clinic_store=clinic_store,
     )
     db.add(record)
     db.commit()

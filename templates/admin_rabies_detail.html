@@ -91,7 +91,17 @@
  {% elif rec.status == 'staff_pending' %}<span class="pill pill-warn" style="margin-left:0.5rem;">待医护填写</span>
  {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待主人签字</span>{% endif %}
  </h1>
- <p class="ph-sub">{{ rec.owner_name }} · {{ rec.owner_phone }} · 登记于 {{ rec.created_at.strftime('%Y-%m-%d %H:%M') if rec.created_at else '—' }}</p>
+ <p class="ph-sub">
+   {% if rec.customer_id %}
+     <a href="/admin/customers/{{ rec.customer_id }}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{{ rec.owner_name }} <i data-lucide="external-link" style="width:12px;height:12px;vertical-align:-2px;"></i></a>
+   {% else %}
+     {{ rec.owner_name }}
+   {% endif %}
+   · {{ rec.owner_phone }} · 登记于 {{ rec.created_at.strftime('%Y-%m-%d %H:%M') if rec.created_at else '—' }}
+   {% if rec.pet_id %}
+     · <a href="/admin/customers/{{ rec.customer_id }}#pet-{{ rec.pet_id }}" style="color:#1d4ed8;text-decoration:none;">查看宠物档案 <i data-lucide="paw-print" style="width:12px;height:12px;vertical-align:-2px;"></i></a>
+   {% endif %}
+ </p>
  </div>
  </div>
 </div>
