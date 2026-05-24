@@ -3121,6 +3121,91 @@ async def admin_wecom_dispatch_now(
     )
 
 
+@app.get("/admin/wecom-customers/probe", response_class=HTMLResponse, name="admin_wecom_customers_probe")
+async def admin_wecom_customers_probe(request: Request):
+    """Phase 3 探测：调用客户联系基础 API，看 errcode 决定下一步。
+
+    顺序：
+      1. get_follow_user_list — 列出能用客户联系的员工
+      2. 拿第一个员工的客户联系 list — 看能不能拉客户 external_userid
+      3. 拿第一个客户的详情 — 看返回字段有什么
+    """
+    require_admin(request)
+    require_superadmin(request)
+    from app.services import wecom_client as _wc
+    if not _wc.enabled():
+        return HTMLResponse("<p>企业微信未配置</p>", status_code=503)
+
+    import json as _json
+    blocks = []
+    follow_users: list[str] = []
+
+    # Step 1
+    try:
+        r1 = _wc.external_get_follow_user_list()
+        blocks.append(("① 列出客户联系成员", r1))
+        if r1.get("errcode") in (0, "0", None):
+            follow_users = r1.get("follow_user", []) or []
+    except Exception as e:
+        blocks.append(("① 列出客户联系成员", {"exception": str(e)}))
+
+    # Step 2 - 拿第一个员工的 external_userid 列表
+    sample_external_userid = ""
+    if follow_users:
+        try:
+            r2 = _wc.external_list_by_userid(follow_users[0])
+            blocks.append((f"② 列出 {follow_users[0]} 名下的客户 external_userid", r2))
+            eu_list = r2.get("external_userid", []) or []
+            if eu_list:
+                sample_external_userid = eu_list[0]
+        except Exception as e:
+            blocks.append(("②", {"exception": str(e)}))
+
+    # Step 3 - 拿一个客户详情
+    if sample_external_userid:
+        try:
+            r3 = _wc.external_get_detail(sample_external_userid)
+            blocks.append((f"③ 客户详情（{sample_external_userid[:20]}…）", r3))
+        except Exception as e:
+            blocks.append(("③", {"exception": str(e)}))
+
+    html_parts = ["""
+    <html><head><meta charset="utf-8"><title>客户联系 API 探测</title>
+    <style>
+      body{font-family:system-ui;padding:1.5rem;max-width:920px;margin:auto;color:#111;}
+      h1{font-size:1.2rem;margin:0 0 1rem;}
+      h2{font-size:1rem;margin:1.2rem 0 .4rem;color:#1d4ed8;}
+      pre{background:#f5f5f5;padding:.85rem;border-radius:8px;overflow:auto;font-size:.82rem;line-height:1.5;}
+      .ok{color:#15803d;font-weight:600;}
+      .err{color:#b91c1c;font-weight:600;}
+      .hint{background:#fef3c7;border-left:3px solid #f59e0b;padding:.7rem 1rem;margin:1rem 0;font-size:.88rem;border-radius:0 8px 8px 0;}
+      a{color:#1d4ed8;text-decoration:none;}
+    </style></head><body>
+    <p><a href="/admin/customers">← 返回工作台</a></p>
+    <h1>🔍 客户联系 API 探测</h1>
+    """]
+    for title, data in blocks:
+        ec = data.get("errcode") if isinstance(data, dict) else None
+        status = '<span class="ok">errcode=0 ✓</span>' if ec in (0, "0", None) else f'<span class="err">errcode={ec} ✗</span>'
+        html_parts.append(f"<h2>{title} {status}</h2>")
+        html_parts.append(f"<pre>{_json.dumps(data, ensure_ascii=False, indent=2)}</pre>")
+
+    # 智能提示
+    first_errcode = blocks[0][1].get("errcode") if blocks and isinstance(blocks[0][1], dict) else None
+    if first_errcode == 60011:
+        html_parts.append('<div class="hint"><b>诊断：</b>应用没有客户联系 API 权限。<br>去 <b>客户联系 → 权限配置 → 「可调用接口的应用」</b> 把「大风动物医院 TNR」加进去。</div>')
+    elif first_errcode == 48002:
+        html_parts.append('<div class="hint"><b>诊断：</b>接口未在白名单。同上，去权限配置授权。</div>')
+    elif first_errcode == 60020:
+        html_parts.append('<div class="hint"><b>诊断：</b>IP 不在企业可信 IP。但我们之前加过了，可能企微 token 缓存还没刷新，等 2 小时或重启服务。</div>')
+    elif first_errcode in (0, "0", None) and blocks:
+        n = len(follow_users)
+        html_parts.append(f'<div class="hint" style="background:#d1fae5;border-color:#10b981;"><b>✅ 客户联系 API 完全可用！</b><br>当前 {n} 个员工配置了客户联系。可以开始 Phase 3 Step 1：拉取 611 个客户、建映射表。</div>')
+
+    html_parts.append("</body></html>")
+    return HTMLResponse("".join(html_parts))
+
+
 @app.get("/admin/users/{user_id}/notify-prefs", name="admin_users_notify_prefs", response_class=HTMLResponse)
 async def admin_users_notify_prefs(
     user_id: int,

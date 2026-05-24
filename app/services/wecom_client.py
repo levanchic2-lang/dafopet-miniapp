@@ -106,6 +106,45 @@ def get_user_detail(userid: str) -> dict[str, Any]:
     return data
 
 
+# ── 客户联系 API（Phase 3 用）─────────────────────────────────
+
+def external_get_follow_user_list() -> dict[str, Any]:
+    """列出企业里所有「配置了客户联系」的成员 userid 列表。
+
+    第一个要调的 API。返回 errcode=0 说明应用有客户联系权限。
+    常见错误码：
+      60011 - 应用无客户联系权限
+      60020 - IP 不在白名单
+      48002 - 接口未在客户联系 → 权限配置 → 「可调用接口的应用」白名单里
+    """
+    token = _get_access_token()
+    url = f"{_API_BASE}/cgi-bin/externalcontact/get_follow_user_list"
+    with httpx.Client(timeout=8.0) as client:
+        r = client.get(url, params={"access_token": token})
+        r.raise_for_status()
+        return r.json()
+
+
+def external_list_by_userid(userid: str) -> dict[str, Any]:
+    """列出某个成员（userid）名下的所有外部联系人（external_userid 数组）。"""
+    token = _get_access_token()
+    url = f"{_API_BASE}/cgi-bin/externalcontact/list"
+    with httpx.Client(timeout=8.0) as client:
+        r = client.get(url, params={"access_token": token, "userid": userid})
+        r.raise_for_status()
+        return r.json()
+
+
+def external_get_detail(external_userid: str) -> dict[str, Any]:
+    """拿单个外部联系人详情：unionid / name / avatar / 跟进员工 / 备注名 / 备注手机号 等。"""
+    token = _get_access_token()
+    url = f"{_API_BASE}/cgi-bin/externalcontact/get"
+    with httpx.Client(timeout=8.0) as client:
+        r = client.get(url, params={"access_token": token, "external_userid": external_userid})
+        r.raise_for_status()
+        return r.json()
+
+
 def send_app_message(payload: dict[str, Any]) -> dict[str, Any]:
     """发送应用消息（Phase 2 用，先预留）。
 
