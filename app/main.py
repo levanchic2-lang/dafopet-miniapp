@@ -3075,6 +3075,46 @@ async def admin_users_set_wecom_userid(
     )
 
 
+@app.post("/admin/users/{user_id}/wecom-test", name="admin_users_wecom_test")
+async def admin_users_wecom_test(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """推送一条测试卡片到该员工的企业微信，验证推送链路是否通畅。"""
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    if not user.wecom_userid:
+        return RedirectResponse(
+            f"/admin/hr?err=「{user.username}」还没绑定企微 userid，请先绑定",
+            status_code=303,
+        )
+    from app.services import wecom_notify as _notify
+    try:
+        result = _notify.push_test(user.wecom_userid)
+    except Exception as e:
+        logger.warning("[wecom test push] failed: %s", e)
+        return RedirectResponse(
+            f"/admin/hr?err=推送失败：{str(e)[:100]}",
+            status_code=303,
+        )
+    errcode = result.get("errcode")
+    if errcode in (0, "0", None):
+        return RedirectResponse(
+            f"/admin/hr?msg=已向「{user.username}」（{user.wecom_userid}）推送测试卡片，请打开企业微信查看",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/admin/hr?err=推送失败 errcode={errcode}: {result.get('errmsg', '')[:200]}",
+        status_code=303,
+    )
+
+
 @app.post("/admin/users/{user_id}/set-store", name="admin_users_set_store")
 async def admin_users_set_store(
     user_id: int,

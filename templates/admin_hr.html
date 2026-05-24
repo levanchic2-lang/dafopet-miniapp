@@ -160,16 +160,25 @@
  </form>
  </td>
  <td style="padding:0.55rem 0.75rem;white-space:nowrap;">
- <form method="post" action="/admin/users/{{ u.id }}/set-wecom-userid"
-       style="margin:0;display:inline-flex;gap:.35rem;align-items:center;"
-       onsubmit="this.querySelector('button').textContent='保存中'">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-  <input type="text" name="wecom_userid" value="{{ u.wecom_userid or '' }}"
-         placeholder="企微 userid" maxlength="80"
-         title="企业微信管理后台 → 通讯录 → 点该员工 → 看「账号」字段"
-         style="width:130px;font-size:.85rem;padding:.25rem .5rem;border:1px solid var(--border-strong);border-radius:6px;background:var(--card);"/>
-  <button type="submit" class="secondary" style="font-size:.78rem;padding:.25rem .65rem;white-space:nowrap;">绑定</button>
- </form>
+ <div style="display:inline-flex;gap:.35rem;align-items:center;">
+   <form method="post" action="/admin/users/{{ u.id }}/set-wecom-userid"
+         style="margin:0;display:inline-flex;gap:.35rem;align-items:center;"
+         onsubmit="this.querySelector('button').textContent='保存中'">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="text" name="wecom_userid" value="{{ u.wecom_userid or '' }}"
+           placeholder="企微 userid" maxlength="80"
+           title="企业微信管理后台 → 通讯录 → 点该员工 → 看「账号」字段"
+           style="width:130px;font-size:.85rem;padding:.25rem .5rem;border:1px solid var(--border-strong);border-radius:6px;background:var(--card);"/>
+    <button type="submit" class="secondary" style="font-size:.78rem;padding:.25rem .65rem;white-space:nowrap;">绑定</button>
+   </form>
+   {% if u.wecom_userid %}
+   <form method="post" action="/admin/users/{{ u.id }}/wecom-test" style="margin:0;display:inline;"
+         onsubmit="this.querySelector('button').textContent='推送中…'">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <button type="submit" class="secondary" style="font-size:.75rem;padding:.25rem .55rem;white-space:nowrap;" title="向该员工的企微推送一条测试卡片">📨 测试</button>
+   </form>
+   {% endif %}
+ </div>
  </td>
  <td style="padding:0.55rem 0.75rem;color:var(--muted);white-space:nowrap;">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
  <td style="padding:0.55rem 0.75rem;text-align:right;white-space:nowrap;">
