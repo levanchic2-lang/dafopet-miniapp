@@ -1467,6 +1467,12 @@ async def api_apply(
             applicant_name=app_row.applicant_name,
             submitted_at=app_row.created_at.strftime("%Y-%m-%d %H:%M") if app_row.created_at else "",
         )
+        # 同步推送到员工企业微信
+        try:
+            from app.services import wecom_notify as _wn
+            _wn.notify_tnr_pending_manual(db, app_row)
+        except Exception as _e:
+            logger.warning("[wecom] notify_tnr_pending_manual failed: %s", _e)
 
     return {
         "id": aid,
@@ -1761,6 +1767,12 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
             applicant_name=row.applicant_name,
             submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         )
+        # 同步推送到员工企业微信
+        try:
+            from app.services import wecom_notify as _wn
+            _wn.notify_tnr_pending_manual(db, row)
+        except Exception as _e:
+            logger.warning("[wecom] notify_tnr_pending_manual failed: %s", _e)
 
     _STATUS_ZH = {
         "draft": "草稿", "pending_ai": "系统处理中", "pending_manual": "待人工审核",
@@ -4440,6 +4452,12 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
     db.add(row)
     db.commit()
     db.refresh(row)
+    # 推送给对应门店员工
+    try:
+        from app.services import wecom_notify as _wn
+        _wn.notify_appointment_created(db, row)
+    except Exception as _e:
+        logger.warning("[wecom] notify_appointment_created failed: %s", _e)
     return {"ok": True, "appointment": _serialize_appointment(row)}
 
 
@@ -7234,6 +7252,12 @@ async def consent_sign_submit(
             logger.info("[consent] PDF 自动生成跳过 task=%s: %s", task.id, err)
     except Exception as _e:
         logger.warning("[consent] PDF 生成异常 task=%s: %s", task.id, _e)
+    # 推送给发起人的企业微信
+    try:
+        from app.services import wecom_notify as _wn
+        _wn.notify_consent_signed(db, task)
+    except Exception as _e:
+        logger.warning("[wecom] notify_consent_signed failed: %s", _e)
     return {"ok": True, "task_id": task.id}
 
 
@@ -10735,6 +10759,11 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
     )
     db.add(record)
     db.commit()
+    try:
+        from app.services import wecom_notify as _wn
+        _wn.notify_rabies_submitted(db, record)
+    except Exception as _e:
+        logger.warning("[wecom] notify_rabies_submitted failed: %s", _e)
     return RedirectResponse(f"/rabies/done?id={record.id}", status_code=303)
 
 
@@ -10862,6 +10891,11 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
     )
     db.add(record)
     db.commit()
+    try:
+        from app.services import wecom_notify as _wn
+        _wn.notify_rabies_submitted(db, record)
+    except Exception as _e:
+        logger.warning("[wecom] notify_rabies_submitted failed: %s", _e)
     return {"id": record.id, "status": record.status}
 
 

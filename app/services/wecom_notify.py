@@ -235,6 +235,151 @@ def push_workbench_digest(db, user) -> dict | None:
     )
 
 
+# ═════════════════════════════════════════════════════════════
+# 即时事件推送（C 模式）
+# 在业务路由里直接调，客户提交后员工立刻收到卡片
+# ═════════════════════════════════════════════════════════════
+
+def _resolve_recipients(db, store_short: str = "", roles: tuple = ("superadmin", "staff")) -> list[str]:
+    """根据门店和角色返回 wecom_userid 列表。
+
+    store_short: '东环店' / '横岗店' / '' (空 = 所有门店)
+    roles: 默认所有角色都收（超管 + 普通员工）
+    返回去重的 userid 列表。
+    """
+    from app.models import AdminUser
+    q = db.query(AdminUser).filter(
+        AdminUser.is_active == True,
+        AdminUser.wecom_userid != "",
+        AdminUser.role.in_(roles),
+    )
+    users = q.all()
+    out: list[str] = []
+    for u in users:
+        # 超管收所有门店；员工只收自己门店或不限门店
+        if u.role == "superadmin":
+            out.append(u.wecom_userid)
+        elif not store_short or not u.store or u.store == store_short:
+            out.append(u.wecom_userid)
+    return list(dict.fromkeys(out))  # 去重保序
+
+
+def _safe_push(touser_list: list[str], **kwargs) -> dict | None:
+    """安全推送：无收件人/未启用时静默返回 None；失败仅打日志不抛错。"""
+    if not touser_list or not _wc.enabled():
+        return None
+    try:
+        return push_textcard(touser="|".join(touser_list), **kwargs)
+    except Exception as e:
+        logger.warning("[wecom event push] %s | kwargs=%s", e, kwargs)
+        return None
+
+
+# ── 单条业务事件 ──────────────────────────────────────────────────────────
+
+def notify_rabies_submitted(db, rec) -> None:
+    """新狂犬登记：主人已签字 → 推给门店全员，请尽快接待打针。"""
+    store = (rec.clinic_store or "").strip()
+    tousers = _resolve_recipients(db, store_short=store)
+    pet_desc = f"{rec.animal_name or '—'}（{rec.animal_breed or '?'}）"
+    _safe_push(
+        tousers,
+        title=f"💉 {rec.owner_name} 已提交狂犬登记",
+        description=(
+            f"<div class=\"gray\">{store or '门店未指定'} · {rec.owner_phone}</div>"
+            f"<div>动物：{pet_desc}</div>"
+            f"<div>请医护尽快接待，录入疫苗信息。</div>"
+        ),
+        url=f"/admin/rabies/{rec.id}",
+        btntxt="去录入",
+    )
+
+
+def notify_tnr_pending_manual(db, app_obj) -> None:
+    """新 TNR 申请进入人工审核 → 推给超管 + 同店员工。"""
+    store = (app_obj.clinic_store or "").strip()
+    tousers = _resolve_recipients(db, store_short=store)
+    contact = getattr(app_obj, "applicant_name", None) or "申请人"
+    phone = getattr(app_obj, "phone", None) or "—"
+    cat = getattr(app_obj, "cat_nickname", None) or "未命名"
+    _safe_push(
+        tousers,
+        title=f"🐈 新 TNR 申请待审核",
+        description=(
+            f"<div class=\"gray\">{store or '门店未指定'} · {phone}</div>"
+            f"<div>申请人：{contact} · 猫咪：{cat}</div>"
+            f"<div>需要人工查看照片决定通过/拒绝。</div>"
+        ),
+        url=f"/admin?status=pending_manual#app-{app_obj.id}",
+        btntxt="去审核",
+    )
+
+
+def notify_consent_signed(db, task) -> None:
+    """协议签署完成 → 推给发起人。
+
+    ConsentTask.initiated_by 存的是发起人的 username，
+    用它在 AdminUser 表里找对应 wecom_userid。
+    若发起人没绑企微，回退到推给超管。
+    """
+    from app.models import AdminUser, Customer
+    tousers: list[str] = []
+    if task.initiated_by:
+        creator = db.query(AdminUser).filter(
+            AdminUser.username == task.initiated_by,
+            AdminUser.is_active == True,
+            AdminUser.wecom_userid != "",
+        ).first()
+        if creator:
+            tousers.append(creator.wecom_userid)
+    if not tousers:
+        # 回退：推给所有超管
+        tousers = _resolve_recipients(db, roles=("superadmin",))
+    if not tousers:
+        return
+    title = (getattr(task, "title", None) or "客户协议")[:40]
+    customer_name = ""
+    if task.customer_id:
+        c = db.get(Customer, task.customer_id)
+        if c:
+            customer_name = c.name or ""
+    _safe_push(
+        tousers,
+        title=f"✅ 协议已签署：{title}",
+        description=(
+            f"<div class=\"gray\">客户：{customer_name or '—'} · 发起人：{task.initiated_by or '—'}</div>"
+            f"<div>已自动生成 PDF 归档，可下载存档。</div>"
+        ),
+        url=f"/admin/consent-tasks/{task.id}",
+        btntxt="查看",
+    )
+
+
+def notify_appointment_created(db, appt) -> None:
+    """客户在小程序创建预约 → 推给对应门店员工。
+
+    （只在 /api/appointments/create 入口调用；后台手动创建的预约不会触发）
+    """
+    store = (appt.store or "").strip()
+    # 门店全名 → 短名（dashboard 用的是短→全反向映射）
+    from app.services.dashboard import _STORE_SHORT_TO_FULL
+    _STORE_FULL_TO_SHORT = {v: k for k, v in _STORE_SHORT_TO_FULL.items()}
+    store_short = _STORE_FULL_TO_SHORT.get(store, "")
+    tousers = _resolve_recipients(db, store_short=store_short)
+    when = f"{appt.appointment_date or '?'} {appt.appointment_time or ''}"
+    _safe_push(
+        tousers,
+        title=f"📅 新预约：{appt.customer_name or '客户'}",
+        description=(
+            f"<div class=\"gray\">{store or '门店未指定'} · {appt.phone or '—'}</div>"
+            f"<div>项目：{appt.service_name or appt.category or '—'}</div>"
+            f"<div>时间：{when}</div>"
+        ),
+        url=f"/admin/appointments?date={appt.appointment_date or ''}",
+        btntxt="去查看",
+    )
+
+
 def dispatch_workbench_to_all(db) -> dict:
     """遍历所有 active + 已绑 wecom_userid 的员工，按各自门店推送工作台摘要。
 
