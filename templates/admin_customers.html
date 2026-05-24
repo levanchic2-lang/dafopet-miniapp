@@ -85,6 +85,7 @@
 {% block body %}
 
 {% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('err') %}<div class="msg err"><i data-lucide="alert-triangle"></i> {{ request.query_params.get('err') }}</div>{% endif %}
 
 <div class="page-head">
   <div>
@@ -110,6 +111,13 @@
       </span>
       <button type="submit" class="btn secondary wb-qs-btn">搜索</button>
     </form>
+    {% if is_superadmin %}
+    <form method="post" action="/admin/wecom-notify/dispatch-now" style="margin:0;"
+          onsubmit="return confirm('立即把今日待办推送到所有已绑定企微的员工聊天？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="btn secondary" style="font-size:0.85rem;" title="给所有已绑定企微 userid 的员工推一张今日工作台摘要卡">📨 推送企微</button>
+    </form>
+    {% endif %}
     <button type="button" class="btn" style="font-size:0.88rem;" onclick="document.getElementById('create-modal').classList.add('visible')"><i data-lucide="plus"></i> 新建客户</button>
   </div>
 </div>

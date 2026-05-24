@@ -189,3 +189,76 @@ def push_followup_today(touser: str, count: int) -> dict:
         url="/admin/follow-ups?status=due",
         btntxt="去回访",
     )
+
+
+# ── 工作台摘要：把 dashboard.build_workbench 的所有 count>0 项汇总到一张卡 ──
+
+def push_workbench_digest(db, user) -> dict | None:
+    """根据员工的门店推送今日待办汇总卡。
+
+    返回：None = 没有待办，跳过；否则返回企微 API 响应。
+    """
+    if not user.wecom_userid:
+        return None
+    from app.services.dashboard import build_workbench
+    wb = build_workbench(db, user.store or "")
+    urgent = [c for c in wb.get("urgent", []) if (c.get("count") or 0) > 0]
+    weekly = [c for c in wb.get("weekly", []) if (c.get("count") or 0) > 0]
+    stock  = [c for c in wb.get("stock", [])  if (c.get("count") or 0) > 0]
+    total = sum((c.get("count") or 0) for c in urgent + weekly + stock)
+    if total == 0:
+        return None  # 没待办，不打扰
+
+    parts = []
+    if urgent:
+        parts.append("<div class=\"gray\">🔴 今日必做</div>")
+        for c in urgent[:5]:
+            parts.append(f"<div>· {c.get('title','—')}：<b>{c.get('count')}</b></div>")
+    if weekly:
+        parts.append("<div class=\"gray\" style=\"margin-top:4px;\">🟡 本周提醒</div>")
+        for c in weekly[:5]:
+            parts.append(f"<div>· {c.get('title','—')}：<b>{c.get('count')}</b></div>")
+    if stock:
+        parts.append("<div class=\"gray\" style=\"margin-top:4px;\">📦 库存 / 经营</div>")
+        for c in stock[:4]:
+            parts.append(f"<div>· {c.get('title','—')}：<b>{c.get('count')}</b></div>")
+
+    description = "".join(parts)
+    store_label = user.store or "全门店"
+    title = f"📋 今日待办 · {store_label}（{total} 项）"
+    return push_textcard(
+        touser=user.wecom_userid,
+        title=title,
+        description=description,
+        url="/admin/customers",
+        btntxt="进系统",
+    )
+
+
+def dispatch_workbench_to_all(db) -> dict:
+    """遍历所有 active + 已绑 wecom_userid 的员工，按各自门店推送工作台摘要。
+
+    返回统计：{"sent": N, "skipped": M, "failed": [...]}
+    """
+    from app.models import AdminUser
+    users = db.query(AdminUser).filter(
+        AdminUser.is_active == True,
+        AdminUser.wecom_userid != "",
+    ).all()
+    sent = 0
+    skipped = 0
+    failed: list[str] = []
+    for u in users:
+        try:
+            res = push_workbench_digest(db, u)
+            if res is None:
+                skipped += 1
+                continue
+            errcode = res.get("errcode")
+            if errcode in (0, "0", None):
+                sent += 1
+            else:
+                failed.append(f"{u.username}: errcode={errcode} {res.get('errmsg','')[:80]}")
+        except Exception as e:
+            failed.append(f"{u.username}: {str(e)[:100]}")
+    return {"sent": sent, "skipped": skipped, "failed": failed, "total": len(users)}

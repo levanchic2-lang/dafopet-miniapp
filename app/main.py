@@ -3075,6 +3075,40 @@ async def admin_users_set_wecom_userid(
     )
 
 
+@app.post("/admin/wecom-notify/dispatch-now", name="admin_wecom_dispatch_now")
+async def admin_wecom_dispatch_now(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """手动触发：把当前每个员工的「今日待办」推送到他们的企业微信。
+
+    遍历所有 active + 已绑 wecom_userid 的员工：按各自门店计算 workbench，
+    没有待办则跳过，有待办推一张摘要卡。
+    """
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    from app.services import wecom_notify as _notify
+    try:
+        stat = _notify.dispatch_workbench_to_all(db)
+    except Exception as e:
+        logger.warning("[wecom dispatch] failed: %s", e)
+        return RedirectResponse(
+            f"/admin/customers?err=推送失败：{str(e)[:100]}",
+            status_code=303,
+        )
+    msg_parts = [f"已推送 {stat['sent']} 人"]
+    if stat["skipped"]:
+        msg_parts.append(f"{stat['skipped']} 人无待办跳过")
+    if stat["failed"]:
+        msg_parts.append(f"失败 {len(stat['failed'])}：" + " | ".join(stat["failed"][:2]))
+    return RedirectResponse(
+        f"/admin/customers?msg=" + "，".join(msg_parts),
+        status_code=303,
+    )
+
+
 @app.post("/admin/users/{user_id}/wecom-test", name="admin_users_wecom_test")
 async def admin_users_wecom_test(
     user_id: int,
@@ -5217,6 +5251,8 @@ async def page_admin_customers(
             "workbench": wb,
             "wb_store": wb_store,
             "is_superadmin": request.session.get("admin_role") == "superadmin",
+            "msg": request.query_params.get("msg"),
+            "err": request.query_params.get("err"),
         },
     )
 
