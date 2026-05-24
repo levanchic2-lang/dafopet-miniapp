@@ -864,6 +864,9 @@ def _try_sqlite_migrations() -> None:
                 if "wecom_userid" not in au_names:
                     conn.execute(text("ALTER TABLE admin_users ADD COLUMN wecom_userid VARCHAR(80) DEFAULT ''"))
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_users_wecom_userid ON admin_users(wecom_userid)"))
+                # 企微通知偏好（CSV 存 disabled 的事件 key）
+                if "wecom_notify_disabled" not in au_names:
+                    conn.execute(text("ALTER TABLE admin_users ADD COLUMN wecom_notify_disabled VARCHAR(500) DEFAULT ''"))
 
             # tnr_store_configs TNR 门店配额配置表
             # pets 新增字段：store / medical_record_no / life_status

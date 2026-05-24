@@ -1182,4 +1182,7 @@ class AdminUser(Base):
     display_name: Mapped[str] = mapped_column(String(80), default="")
     # 企业微信 userid（自建应用 OAuth 登录后绑定，员工在企微内免密进系统）
     wecom_userid: Mapped[str] = mapped_column(String(80), default="", index=True)
+    # 企微通知偏好：CSV 字符串，存「不想收的事件 key」（默认空 = 全部都收）
+    # 可选事件：tnr_pending / rabies_submitted / consent_signed / appointment_created / workbench_digest
+    wecom_notify_disabled: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

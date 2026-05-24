@@ -177,6 +177,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
     <button type="submit" class="secondary" style="font-size:.75rem;padding:.25rem .55rem;white-space:nowrap;" title="向该员工的企微推送一条测试卡片">📨 测试</button>
    </form>
+   <a href="/admin/users/{{ u.id }}/notify-prefs" class="btn secondary" style="font-size:.75rem;padding:.25rem .55rem;white-space:nowrap;text-decoration:none;" title="设置该员工想收哪几类提醒">🔔 通知</a>
    {% endif %}
  </div>
  </td>

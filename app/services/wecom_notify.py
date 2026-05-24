@@ -196,9 +196,11 @@ def push_followup_today(touser: str, count: int) -> dict:
 def push_workbench_digest(db, user) -> dict | None:
     """根据员工的门店推送今日待办汇总卡。
 
-    返回：None = 没有待办，跳过；否则返回企微 API 响应。
+    返回：None = 没有待办或用户关闭了该类通知，跳过；否则返回企微 API 响应。
     """
     if not user.wecom_userid:
+        return None
+    if _user_event_disabled(user, "workbench_digest"):
         return None
     from app.services.dashboard import build_workbench
     wb = build_workbench(db, user.store or "")
@@ -240,11 +242,36 @@ def push_workbench_digest(db, user) -> dict | None:
 # 在业务路由里直接调，客户提交后员工立刻收到卡片
 # ═════════════════════════════════════════════════════════════
 
-def _resolve_recipients(db, store_short: str = "", roles: tuple = ("superadmin", "staff")) -> list[str]:
-    """根据门店和角色返回 wecom_userid 列表。
+# 所有支持的事件 key（用于 UI 渲染勾选项 + 防止笔误传入未定义 key）
+EVENT_KEYS = {
+    "tnr_pending":         "新 TNR 申请待人工审核",
+    "rabies_submitted":    "客户提交狂犬登记",
+    "consent_signed":      "协议签署完成",
+    "appointment_created": "客户在小程序创建预约",
+    "workbench_digest":    "「今日待办」摘要推送",
+}
+
+
+def _user_event_disabled(user, event_key: str) -> bool:
+    """用户是否禁用了某事件类型的推送。"""
+    raw = (getattr(user, "wecom_notify_disabled", "") or "").strip()
+    if not raw:
+        return False
+    disabled = {k.strip() for k in raw.split(",") if k.strip()}
+    return event_key in disabled
+
+
+def _resolve_recipients(
+    db,
+    store_short: str = "",
+    roles: tuple = ("superadmin", "staff"),
+    event_key: str = "",
+) -> list[str]:
+    """根据门店、角色、用户事件偏好返回 wecom_userid 列表。
 
     store_short: '东环店' / '横岗店' / '' (空 = 所有门店)
     roles: 默认所有角色都收（超管 + 普通员工）
+    event_key: 传入后，过滤掉自己关闭了该事件的员工
     返回去重的 userid 列表。
     """
     from app.models import AdminUser
@@ -256,6 +283,9 @@ def _resolve_recipients(db, store_short: str = "", roles: tuple = ("superadmin",
     users = q.all()
     out: list[str] = []
     for u in users:
+        # 该用户关掉了这类通知 → 跳过
+        if event_key and _user_event_disabled(u, event_key):
+            continue
         # 超管收所有门店；员工只收自己门店或不限门店
         if u.role == "superadmin":
             out.append(u.wecom_userid)
@@ -280,7 +310,7 @@ def _safe_push(touser_list: list[str], **kwargs) -> dict | None:
 def notify_rabies_submitted(db, rec) -> None:
     """新狂犬登记：主人已签字 → 推给门店全员，请尽快接待打针。"""
     store = (rec.clinic_store or "").strip()
-    tousers = _resolve_recipients(db, store_short=store)
+    tousers = _resolve_recipients(db, store_short=store, event_key="rabies_submitted")
     pet_desc = f"{rec.animal_name or '—'}（{rec.animal_breed or '?'}）"
     _safe_push(
         tousers,
@@ -298,7 +328,7 @@ def notify_rabies_submitted(db, rec) -> None:
 def notify_tnr_pending_manual(db, app_obj) -> None:
     """新 TNR 申请进入人工审核 → 推给超管 + 同店员工。"""
     store = (app_obj.clinic_store or "").strip()
-    tousers = _resolve_recipients(db, store_short=store)
+    tousers = _resolve_recipients(db, store_short=store, event_key="tnr_pending")
     contact = getattr(app_obj, "applicant_name", None) or "申请人"
     phone = getattr(app_obj, "phone", None) or "—"
     cat = getattr(app_obj, "cat_nickname", None) or "未命名"
@@ -330,11 +360,11 @@ def notify_consent_signed(db, task) -> None:
             AdminUser.is_active == True,
             AdminUser.wecom_userid != "",
         ).first()
-        if creator:
+        if creator and not _user_event_disabled(creator, "consent_signed"):
             tousers.append(creator.wecom_userid)
     if not tousers:
         # 回退：推给所有超管
-        tousers = _resolve_recipients(db, roles=("superadmin",))
+        tousers = _resolve_recipients(db, roles=("superadmin",), event_key="consent_signed")
     if not tousers:
         return
     title = (getattr(task, "title", None) or "客户协议")[:40]
@@ -365,7 +395,7 @@ def notify_appointment_created(db, appt) -> None:
     from app.services.dashboard import _STORE_SHORT_TO_FULL
     _STORE_FULL_TO_SHORT = {v: k for k, v in _STORE_SHORT_TO_FULL.items()}
     store_short = _STORE_FULL_TO_SHORT.get(store, "")
-    tousers = _resolve_recipients(db, store_short=store_short)
+    tousers = _resolve_recipients(db, store_short=store_short, event_key="appointment_created")
     when = f"{appt.appointment_date or '?'} {appt.appointment_time or ''}"
     _safe_push(
         tousers,

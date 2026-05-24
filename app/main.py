@@ -3121,6 +3121,61 @@ async def admin_wecom_dispatch_now(
     )
 
 
+@app.get("/admin/users/{user_id}/notify-prefs", name="admin_users_notify_prefs", response_class=HTMLResponse)
+async def admin_users_notify_prefs(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """员工的企微通知偏好（哪些事件要收 / 不收）。"""
+    require_admin(request)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    # 超管可以改任何人；普通员工只能改自己
+    if request.session.get("admin_role") != "superadmin":
+        if request.session.get("admin_username") != user.username:
+            raise HTTPException(403, "只能修改自己的通知偏好")
+    from app.services.wecom_notify import EVENT_KEYS
+    disabled_set = {k.strip() for k in (user.wecom_notify_disabled or "").split(",") if k.strip()}
+    return templates.TemplateResponse(request, "admin_user_notify_prefs.html", {
+        "user": user,
+        "event_keys": EVENT_KEYS,
+        "disabled_set": disabled_set,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/users/{user_id}/notify-prefs", name="admin_users_notify_prefs_save")
+async def admin_users_notify_prefs_save(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    if request.session.get("admin_role") != "superadmin":
+        if request.session.get("admin_username") != user.username:
+            raise HTTPException(403)
+    _require_csrf(request, csrf_token)
+    form = await request.form()
+    from app.services.wecom_notify import EVENT_KEYS
+    # 表单里 enabled_<key>=on 表示开（收），未提交则视为关
+    disabled = [k for k in EVENT_KEYS.keys() if form.get(f"enabled_{k}") != "on"]
+    user.wecom_notify_disabled = ",".join(disabled)
+    db.commit()
+    _audit(db, request, "admin_user_notify_prefs",
+           detail={"username": user.username, "disabled": disabled})
+    return RedirectResponse(
+        f"/admin/users/{user.id}/notify-prefs?msg=偏好已保存（开 {len(EVENT_KEYS) - len(disabled)} 类 / 关 {len(disabled)} 类）",
+        status_code=303,
+    )
+
+
 @app.post("/admin/users/{user_id}/wecom-test", name="admin_users_wecom_test")
 async def admin_users_wecom_test(
     user_id: int,
