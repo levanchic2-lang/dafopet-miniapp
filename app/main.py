@@ -232,6 +232,13 @@ def _filter_pet_age(birthday: str) -> str:
 
 templates.env.filters["pet_age"] = _filter_pet_age
 
+# 姓名规范性检测：捕获「先生 / 女士 / 小姐 / X小姐 / X先生 / X女士 …」等占位 / 单姓后缀格式
+# （实现见下文 _is_invalid_name；这里只声明全局，使 templates 内可 {{ name | is_invalid_name }}）
+def _filter_is_invalid_name(name: str) -> bool:
+    return _is_invalid_name(name or "")
+
+templates.env.filters["is_invalid_name"] = _filter_is_invalid_name
+
 _static_dir = Path(__file__).resolve().parent.parent / "static"
 if _static_dir.is_dir():
     app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
@@ -10445,7 +10452,8 @@ async def admin_inventory_deactivate(
 #  狂犬疫苗免疫登记  Rabies Vaccine Registration
 # ─────────────────────────────────────────────────────────────────────────────
 
-_INVALID_NAMES = {"先生", "女士", "mr", "mrs", "ms", "主人", "不详"}
+_INVALID_NAMES = {"先生", "女士", "小姐", "太太", "夫人", "mr", "mrs", "ms", "主人", "不详"}
+_GENERIC_SUFFIXES = ("小姐", "先生", "女士", "太太", "夫人")
 _SIG_DIR = Path("data/signatures")
 _SIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -10457,8 +10465,24 @@ _RABIES_STATUS_ZH = {
 
 
 def _is_invalid_name(name: str) -> bool:
+    """判断姓名是否为「不规范 / 占位」格式。
+
+    捕获：
+      - 完全的占位词：先生、女士、小姐、太太、夫人、mr、不详 …
+      - 单姓 + 通用后缀：「高小姐」「刘先生」「李女士」等导入老系统的脏数据
+    """
+    if not name:
+        return True
     n = name.strip().lower().replace(" ", "").replace(".", "")
-    return n in _INVALID_NAMES or n in {"先生", "女士"}
+    if n in _INVALID_NAMES:
+        return True
+    raw = name.strip()
+    # 「X小姐」「X先生」… 长度 ≤ 3 且尾部是通用后缀 → 老系统脏数据
+    if len(raw) <= 3:
+        for suf in _GENERIC_SUFFIXES:
+            if raw.endswith(suf) and len(raw) > len(suf):
+                return True
+    return False
 
 
 def _save_signature(data_url: str, prefix: str) -> str:
@@ -12335,6 +12359,8 @@ async def admin_rabies_detail(rec_id: int, request: Request, db: Session = Depen
         "status_zh": _RABIES_STATUS_ZH,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
+        "err": request.query_params.get("err"),
+        "owner_name_invalid": _is_invalid_name(rec.owner_name or ""),
     })
 
 
@@ -12468,7 +12494,13 @@ async def admin_rabies_edit_owner(rec_id: int, request: Request, db: Session = D
     if not rec:
         raise HTTPException(404)
     form = await request.form()
-    rec.owner_name    = str(form.get("owner_name", rec.owner_name)).strip() or rec.owner_name
+    new_owner_name = str(form.get("owner_name", rec.owner_name)).strip()
+    if new_owner_name and _is_invalid_name(new_owner_name):
+        return RedirectResponse(
+            f"/admin/rabies/{rec_id}?err=请填写真实姓名（不可仅填先生/女士/小姐）",
+            status_code=303,
+        )
+    rec.owner_name    = new_owner_name or rec.owner_name
     rec.owner_phone   = str(form.get("owner_phone", rec.owner_phone)).strip() or rec.owner_phone
     rec.owner_address = str(form.get("owner_address", rec.owner_address or "")).strip()
     rec.animal_name   = str(form.get("animal_name", rec.animal_name or "")).strip()
@@ -12477,8 +12509,30 @@ async def admin_rabies_edit_owner(rec_id: int, request: Request, db: Session = D
     rec.animal_gender = str(form.get("animal_gender", rec.animal_gender or "")).strip()
     rec.animal_color  = str(form.get("animal_color", rec.animal_color or "")).strip()
     rec.updated_at = datetime.utcnow()
+
+    # 同步客户档案：姓名若是规范的全名，覆盖客户主档（修复老数据脏名）
+    synced_msg = ""
+    if rec.customer_id and new_owner_name and not _is_invalid_name(new_owner_name):
+        cust = db.get(Customer, rec.customer_id)
+        if cust and cust.name != new_owner_name:
+            old_name = cust.name
+            cust.name = new_owner_name
+            synced_msg = f" · 客户档案姓名已同步（{old_name} → {new_owner_name}）"
+    # 同步宠物档案：动物名称变更时
+    if rec.pet_id and rec.animal_name:
+        pet = db.get(Pet, rec.pet_id)
+        if pet and pet.name != rec.animal_name:
+            pet.name = rec.animal_name
+        if pet:
+            if rec.animal_breed and pet.breed != rec.animal_breed:
+                pet.breed = rec.animal_breed
+            if rec.animal_color and pet.color_pattern != rec.animal_color:
+                pet.color_pattern = rec.animal_color
+            if rec.animal_dob and pet.birthday_estimate != rec.animal_dob:
+                pet.birthday_estimate = rec.animal_dob
+
     db.commit()
-    return RedirectResponse(f"/admin/rabies/{rec_id}?msg=信息已更新", status_code=303)
+    return RedirectResponse(f"/admin/rabies/{rec_id}?msg=信息已更新{synced_msg}", status_code=303)
 
 
 # 注：上面已有完整版本的 admin_rabies_delete（带 CSRF + 级联清理），此处旧版本已移除

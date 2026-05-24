@@ -19,6 +19,9 @@
     ✅ 找到档案：{{form.owner_name}}
     <text wx:if="{{pets.length}}" style="margin-left:8rpx;">· {{pets.length}} 只宠物</text>
   </view>
+  <view wx:if="{{needsFullName}}" class="lookup-result" style="background:#fef3c7;border-color:#f59e0b;color:#92400e;">
+    ⚠️ 您的档案姓名为占位称谓（小姐/先生/女士），请在下方填写真实全名，提交后将自动更新档案。
+  </view>
   <view wx:if="{{lookupDone && !customerFound}}" class="lookup-result" style="background:#fef9c3;border-color:#fde047;color:#854d0e;">
     ℹ️ 未找到档案，将自动建立新档
   </view>

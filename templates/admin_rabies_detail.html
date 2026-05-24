@@ -70,6 +70,16 @@
 {% block body %}
 
 {% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+{% if err %}<div class="msg err"><i data-lucide="alert-triangle"></i> {{ err }}</div>{% endif %}
+{% if owner_name_invalid %}
+<div class="card" style="background:#fef3c7;border-color:#fbbf24;color:#92400e;margin-bottom:1rem;padding:.75rem 1rem;display:flex;gap:.6rem;align-items:flex-start;">
+  <i data-lucide="alert-triangle" style="flex-shrink:0;margin-top:2px;color:#d97706;"></i>
+  <div style="flex:1;font-size:.88rem;line-height:1.55;">
+    <b>姓名待补全</b>：当前主人姓名为「{{ rec.owner_name }}」，疑似从老系统导入的占位称谓（X小姐 / X先生 / X女士）。
+    请在下方「主人填写信息」表单里改成真实全名后保存，系统会自动同步到客户档案。
+  </div>
+</div>
+{% endif %}
 
 <div class="page-head">
  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
@@ -110,24 +120,53 @@
 
  <!-- 主人提交信息 -->
  <div class="card" style="margin-bottom:1rem;">
- <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">主人填写信息</h3>
+ <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 0.85rem;">
+   <h3 style="margin:0;font-size:0.95rem;">主人填写信息</h3>
+   <span style="font-size:.75rem;color:var(--muted);">字段可编辑，保存后同步客户/宠物档案</span>
+ </div>
 
+ <form method="post" action="/admin/rabies/{{ rec.id }}/edit-owner" onsubmit="this.querySelector('button[type=submit]').textContent='保存中…'">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 1rem;">
  <div>
  <div style="font-size:0.78rem;font-weight:600;color:var(--muted);margin-bottom:0.5rem;">动物主人</div>
- <div class="info-row"><span class="info-label">姓名</span><span class="info-val">{{ rec.owner_name }}</span></div>
- <div class="info-row"><span class="info-label">手机号</span><span class="info-val">{{ rec.owner_phone }}</span></div>
- <div class="info-row"><span class="info-label">地址</span><span class="info-val">{{ rec.owner_address or '—' }}</span></div>
+ <label style="font-size:.78rem;color:var(--muted);">姓名 {% if owner_name_invalid %}<span style="color:#d97706;">（待补全）</span>{% endif %}</label>
+ <input type="text" name="owner_name" value="{{ rec.owner_name }}" required maxlength="120"
+        placeholder="真实全名（不可仅填 X先生 / X女士）"
+        style="width:100%;{% if owner_name_invalid %}border-color:#f59e0b;background:#fffbeb;{% endif %}"/>
+ <label style="font-size:.78rem;color:var(--muted);margin-top:.4rem;">手机号</label>
+ <input type="tel" name="owner_phone" value="{{ rec.owner_phone }}" maxlength="40" style="width:100%;"/>
+ <label style="font-size:.78rem;color:var(--muted);margin-top:.4rem;">地址</label>
+ <input type="text" name="owner_address" value="{{ rec.owner_address or '' }}" maxlength="500" style="width:100%;"/>
  </div>
  <div>
  <div style="font-size:0.78rem;font-weight:600;color:var(--muted);margin-bottom:0.5rem;">动物基本情况</div>
- <div class="info-row"><span class="info-label">动物名称</span><span class="info-val">{{ rec.animal_name or '—' }}</span></div>
- <div class="info-row"><span class="info-label">品种</span><span class="info-val">{{ rec.animal_breed or '—' }}</span></div>
- <div class="info-row"><span class="info-label">出生年月/年龄</span><span class="info-val">{{ rec.animal_dob or '—' }}</span></div>
- <div class="info-row"><span class="info-label">性别</span><span class="info-val">{% if rec.animal_gender == 'male' %}公（雄）{% elif rec.animal_gender == 'female' %}母（雌）{% else %}不详{% endif %}</span></div>
- <div class="info-row"><span class="info-label">毛色</span><span class="info-val">{{ rec.animal_color or '—' }}</span></div>
+ <label style="font-size:.78rem;color:var(--muted);">动物名称</label>
+ <input type="text" name="animal_name" value="{{ rec.animal_name or '' }}" maxlength="80" style="width:100%;"/>
+ <label style="font-size:.78rem;color:var(--muted);margin-top:.4rem;">品种</label>
+ <input type="text" name="animal_breed" value="{{ rec.animal_breed or '' }}" maxlength="80" style="width:100%;"/>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.4rem;">
+   <div>
+     <label style="font-size:.78rem;color:var(--muted);">出生年月/年龄</label>
+     <input type="text" name="animal_dob" value="{{ rec.animal_dob or '' }}" maxlength="40" style="width:100%;"/>
+   </div>
+   <div>
+     <label style="font-size:.78rem;color:var(--muted);">性别</label>
+     <select name="animal_gender" style="width:100%;">
+       <option value="" {% if not rec.animal_gender %}selected{% endif %}>不详</option>
+       <option value="male" {% if rec.animal_gender == 'male' %}selected{% endif %}>公（雄）</option>
+       <option value="female" {% if rec.animal_gender == 'female' %}selected{% endif %}>母（雌）</option>
+     </select>
+   </div>
+ </div>
+ <label style="font-size:.78rem;color:var(--muted);margin-top:.4rem;">毛色</label>
+ <input type="text" name="animal_color" value="{{ rec.animal_color or '' }}" maxlength="80" style="width:100%;"/>
  </div>
  </div>
+ <div style="margin-top:.85rem;display:flex;justify-content:flex-end;">
+   <button type="submit" class="secondary" style="font-size:.85rem;padding:.4rem 1rem;"><i data-lucide="save"></i> 保存修改</button>
+ </div>
+ </form>
 
  <!-- 主人签名 -->
  <div style="margin-top:0.85rem;">

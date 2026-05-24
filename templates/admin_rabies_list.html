@@ -54,7 +54,12 @@
  {% for rec in records %}
  <tr style="{% if rec.status == 'staff_pending' %}background:#fffbeb;{% endif %}">
  <td data-label="ID" style="color:var(--muted);font-size:0.78rem;">{{ rec.id }}</td>
- <td style="font-weight:600;">{{ rec.owner_name }}</td>
+ <td style="font-weight:600;">
+   {{ rec.owner_name }}
+   {% if rec.owner_name | is_invalid_name %}
+     <a href="/admin/rabies/{{ rec.id }}" title="姓名是占位称谓，点开补全" style="display:inline-block;margin-left:.25rem;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;font-size:.7rem;font-weight:600;text-decoration:none;border:1px solid #fbbf24;">姓名待补全</a>
+   {% endif %}
+ </td>
  <td data-label="手机号" style="color:var(--muted);">{{ rec.owner_phone }}</td>
  <td data-label="动物">
  {% if rec.animal_name %}{{ rec.animal_name }}{% endif %}

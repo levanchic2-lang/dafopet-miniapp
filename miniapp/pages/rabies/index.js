@@ -10,10 +10,21 @@ const GENDER_OPTIONS = [
   { label: "母（雌）", value: "female" },
 ];
 
-const INVALID_NAMES = new Set(["先生", "女士", "mr", "mrs", "ms", "主人", "不详"]);
+const INVALID_NAMES = new Set(["先生", "女士", "小姐", "太太", "夫人", "mr", "mrs", "ms", "主人", "不详"]);
+const GENERIC_SUFFIXES = ["小姐", "先生", "女士", "太太", "夫人"];
 
 function isInvalidName(name) {
-  return INVALID_NAMES.has((name || "").trim().toLowerCase());
+  const raw = (name || "").trim();
+  if (!raw) return true;
+  const low = raw.toLowerCase();
+  if (INVALID_NAMES.has(low)) return true;
+  // 「X小姐」「X先生」… 单姓 + 通用后缀 = 占位
+  if (raw.length <= 3) {
+    for (const suf of GENERIC_SUFFIXES) {
+      if (raw.endsWith(suf) && raw.length > suf.length) return true;
+    }
+  }
+  return false;
 }
 
 Page({
@@ -144,12 +155,15 @@ Page({
     const phone = (this.data.form.owner_phone || "").trim();
     if (phone.length < 11) return;
     getJson("/api/customer/lookup", { phone }).then(res => {
+      // 老系统导入数据，姓名是「X小姐 / X先生 / X女士」占位 → 提示客户必须改成全名
+      const needsFullName = res.found && !!res.name_invalid;
       this.setData({
         lookupDone: true,
         customerFound: res.found,
         customerId: res.customer_id || null,
         pets: res.pets || [],
         selectedPetId: null,
+        needsFullName,
       });
       if (res.found) {
         const updates = {};
