@@ -709,6 +709,13 @@ async def api_geocode_regeo(lat: str = "", lng: str = ""):
     }
 
 
+# ─── 企业微信域名归属校验 ───
+# 校验文件由企业微信后台「申请校验域名」生成，必须可通过 https://域名/WW_verify_xxx.txt 访问
+@app.get("/WW_verify_f5g3FhGYiTN0VHR8.txt", response_class=Response)
+async def wecom_domain_verify():
+    return Response(content="f5g3FhGYiTN0VHR8", media_type="text/plain")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def page_apply(request: Request):
     return templates.TemplateResponse(
