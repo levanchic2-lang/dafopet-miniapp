@@ -30,7 +30,7 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
 - `Application`：TNR 申请，`clinic_store` 存全名
 - `Appointment`：预约，`store` 存全名，`category` 区分 tnr/outpatient/surgery/beauty 等
 - `Staff`：员工档案，`store` 存短名
-- `AdminUser`：后台账号，`store` 存短名，`role` = superadmin/staff
+- `AdminUser`：后台账号，`store` 存短名，`role` = superadmin/staff，`wecom_userid` 绑定企业微信免密登录
 - `TnrStoreConfig`：每家门店的 TNR 月度配额（`tnr_monthly_quota` 默认 30）和开关（`tnr_accepting`）
 - `MediaFile`：申请的照片/视频，`kind` = application_image/application_video/surgery_before_image 等
 - `FollowUp`：诊后回访任务，按 `Visit.visit_type` 自动衍生
@@ -89,3 +89,14 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
 - 模板里用 `request.session.get('admin_role')` 判断权限，不要在 Python 里传多余变量
 - 不要用 `git add -A`，按文件名 add
 - 提交信息用中文 feat/fix/refactor 风格
+
+## 企业微信集成
+- **域名归属校验**：`GET /WW_verify_f5g3FhGYiTN0VHR8.txt` 返回校验内容（`app/main.py`）
+- **Phase 1 单点登录（已完成）**：
+  - `app/services/wecom_client.py`：access_token 缓存 + OAuth (`code_to_userid`) + `send_app_message`（Phase 2 用）
+  - `/admin/wecom-login` → 跳企微 OAuth → `/admin/wecom-callback` → 找 `AdminUser.wecom_userid` → 写 session
+  - `AdminUser.wecom_userid` 字段（含索引，唯一约束在路由里做）
+  - 后台 `/admin/hr` 加「企微 userid」列，超管录入
+  - 登录页 `/admin/login` 加「用企业微信登录」按钮
+  - 服务器 `.env` 需配 `WECOM_CORP_ID` / `WECOM_AGENT_ID` / `WECOM_SECRET` + `PUBLIC_BASE_URL=https://dafopet.com`
+  - 企微后台「网页授权及JS-SDK」可信域名：`dafopet.com`

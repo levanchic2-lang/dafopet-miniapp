@@ -2605,6 +2605,86 @@ async def admin_login(
     )
 
 
+# ═════════════════════════════════════════════════════════════
+# 企业微信单点登录（Phase 1）
+# 流程：员工在企微内点应用 → 跳 /admin/wecom-login → 重定向到企微 OAuth →
+#       企微带 code 回 /admin/wecom-callback → 用 code 换 userid →
+#       按 wecom_userid 找到 AdminUser → 写 session → 跳 /admin/customers
+# ═════════════════════════════════════════════════════════════
+@app.get("/admin/wecom-login")
+async def admin_wecom_login(request: Request, next: str = "/admin/customers"):
+    from app.services import wecom_client as _wc
+    if not _wc.enabled():
+        return HTMLResponse(
+            "<p style='font-family:system-ui;padding:2rem;color:#b91c1c;'>"
+            "企业微信集成未配置。请管理员在服务器 <code>.env</code> 中配置 "
+            "WECOM_CORP_ID / WECOM_AGENT_ID / WECOM_SECRET。</p>",
+            status_code=503,
+        )
+    base = (settings.public_base_url or "").rstrip("/") or str(request.base_url).rstrip("/")
+    # state 里塞 next，回调时取出
+    state = quote(next or "/admin/customers", safe="")
+    redirect_uri = f"{base}/admin/wecom-callback"
+    url = _wc.build_oauth_url(redirect_uri, state=state)
+    return RedirectResponse(url, status_code=302)
+
+
+@app.get("/admin/wecom-callback")
+async def admin_wecom_callback(
+    request: Request,
+    code: str = "",
+    state: str = "",
+    db: Session = Depends(get_db),
+):
+    from app.services import wecom_client as _wc
+    if not code:
+        return HTMLResponse("缺少 code 参数", status_code=400)
+    try:
+        info = _wc.code_to_userid(code)
+    except Exception as e:
+        logger.warning("[wecom oauth] code_to_userid failed: %s", e)
+        return HTMLResponse(
+            f"<p style='font-family:system-ui;padding:2rem;color:#b91c1c;'>企业微信登录失败：{e}</p>"
+            "<p><a href='/admin/login'>← 用账号密码登录</a></p>",
+            status_code=502,
+        )
+    userid = (info.get("userid") or "").strip()
+    if not userid:
+        # 外部成员（客户）登录，不允许进后台
+        return HTMLResponse(
+            "<p style='font-family:system-ui;padding:2rem;color:#b91c1c;'>"
+            "检测到您是外部联系人，无后台访问权限。</p>",
+            status_code=403,
+        )
+    user = db.query(AdminUser).filter(
+        AdminUser.wecom_userid == userid,
+        AdminUser.is_active == True,
+    ).first()
+    if not user:
+        return HTMLResponse(
+            f"<div style='font-family:system-ui;padding:2rem;max-width:480px;margin:auto;'>"
+            f"<h3 style='color:#b91c1c;'>企业微信账号未绑定</h3>"
+            f"<p>你的企微 userid：<code>{userid}</code></p>"
+            f"<p>请联系超级管理员，在「员工管理」中把这个 userid 填到你的账号上，再重新打开应用。</p>"
+            f"<p><a href='/admin/login'>← 先用账号密码登录</a></p>"
+            f"</div>",
+            status_code=403,
+        )
+    request.session["admin"] = True
+    request.session["admin_role"] = user.role
+    request.session["admin_username"] = (user.username or "").strip()
+    request.session["admin_store"] = user.store or ""
+    # state 中带回的跳转目标
+    from urllib.parse import unquote as _unquote
+    try:
+        next_url = _unquote(state) if state else "/admin/customers"
+    except Exception:
+        next_url = "/admin/customers"
+    if not next_url.startswith("/"):
+        next_url = "/admin/customers"
+    return RedirectResponse(next_url, status_code=303)
+
+
 _DEPLOY_TOKEN_FILE = Path("/srv/tnr-app/deploy_token.txt")
 
 @app.post("/api/webhook/deploy")
@@ -2945,6 +3025,45 @@ async def admin_users_set_display_name(
     db.commit()
     return RedirectResponse(
         f"/admin/hr?msg=已将「{user.username}」的显示名改为{user.display_name or '（已清空）'}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/users/{user_id}/set-wecom-userid", name="admin_users_set_wecom_userid")
+async def admin_users_set_wecom_userid(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    wecom_userid: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    """绑定企业微信 userid（Phase 1 单点登录用）。
+    在企业微信管理后台 → 通讯录 → 点员工 → 看「账号」字段就是 userid。
+    """
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    new_uid = (wecom_userid or "").strip()[:80]
+    # 同一企微 userid 只允许绑一个账号
+    if new_uid:
+        clash = db.query(AdminUser).filter(
+            AdminUser.wecom_userid == new_uid,
+            AdminUser.id != user_id,
+        ).first()
+        if clash:
+            return RedirectResponse(
+                f"/admin/hr?err=该企微 userid 已绑定到账号「{clash.username}」",
+                status_code=303,
+            )
+    user.wecom_userid = new_uid
+    _audit(db, request, "admin_user_set_wecom_userid", application_id=None,
+           detail={"username": user.username, "wecom_userid": new_uid})
+    db.commit()
+    return RedirectResponse(
+        f"/admin/hr?msg=已为「{user.username}」绑定企微 userid={new_uid or '（已清空）'}",
         status_code=303,
     )
 

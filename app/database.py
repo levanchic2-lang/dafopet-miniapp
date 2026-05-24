@@ -860,6 +860,10 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE admin_users ADD COLUMN store VARCHAR(40) DEFAULT ''"))
                 if "display_name" not in au_names:
                     conn.execute(text("ALTER TABLE admin_users ADD COLUMN display_name VARCHAR(80) DEFAULT ''"))
+                # 企业微信单点登录：员工绑定的企业微信 userid
+                if "wecom_userid" not in au_names:
+                    conn.execute(text("ALTER TABLE admin_users ADD COLUMN wecom_userid VARCHAR(80) DEFAULT ''"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_users_wecom_userid ON admin_users(wecom_userid)"))
 
             # tnr_store_configs TNR 门店配额配置表
             # pets 新增字段：store / medical_record_no / life_status

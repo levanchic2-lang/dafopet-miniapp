@@ -104,5 +104,13 @@ class Settings(BaseSettings):
     # 地理编码（可选）：用于把经纬度反查为中文地址展示
     amap_web_key: str = ""  # 高德 Web 服务 Key（建议放在 .env，不要写死在前端）
 
+    # ── 企业微信集成 ──
+    # Phase 1：自建应用 OAuth 单点登录（员工免密进系统）
+    # Phase 2：应用消息推送（13 类工作提醒推到员工聊天）
+    # 配置位置：企业微信管理后台 → 应用管理 → 自建应用
+    wecom_corp_id:   str = ""   # 企业 ID（我的企业页最下）
+    wecom_agent_id:  str = ""   # 自建应用 AgentID
+    wecom_secret:    str = ""   # 自建应用 Secret
+
 
 settings = Settings()

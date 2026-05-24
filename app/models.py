@@ -1180,4 +1180,6 @@ class AdminUser(Base):
     # 显示名（医生真名）：回访任务按 display_name 匹配 Visit.vet_name，
     # 让"只看我的"功能正确生效。留空则回退到 username。
     display_name: Mapped[str] = mapped_column(String(80), default="")
+    # 企业微信 userid（自建应用 OAuth 登录后绑定，员工在企微内免密进系统）
+    wecom_userid: Mapped[str] = mapped_column(String(80), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
