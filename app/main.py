@@ -10740,7 +10740,7 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
                 cust.address = owner_address
         else:
             cust = Customer(name=owner_name, phone=owner_phone, address=owner_address,
-                            source="rabies", store=clinic_store)
+                            source="rabies")
             db.add(cust)
             db.flush()
             customer_id = cust.id
@@ -10876,7 +10876,7 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
                 cust.address = owner_address
         else:
             cust = Customer(name=owner_name, phone=owner_phone, address=owner_address,
-                            source="rabies", store=clinic_store)
+                            source="rabies")
             db.add(cust)
             db.flush()
             customer_id = cust.id
