@@ -3199,6 +3199,62 @@ async def admin_wecom_customers_sync(
     return RedirectResponse(f"/admin/wecom-customers?msg={msg}", status_code=303)
 
 
+@app.post("/admin/wecom-customers/batch-create", name="admin_wecom_customers_batch_create")
+async def admin_wecom_customers_batch_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """批量为多条 unmatched 链接新建 Customer 档案。
+
+    每条 link 用 remark_name（企微备注名）作为 Customer.name；
+    若 remark_name 为空，回退到 wechat name；都没有则 "（企微未命名）"。
+    备注手机号若有则填入 Customer.phone。
+    """
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    form = await request.form()
+    link_ids = form.getlist("link_ids") if hasattr(form, "getlist") else []
+    if not link_ids:
+        # Starlette UploadFile-style; try multi-value getter
+        raw = form.get("link_ids", "")
+        if isinstance(raw, str) and raw:
+            link_ids = [x for x in raw.split(",") if x.strip()]
+    if not link_ids:
+        return RedirectResponse("/admin/wecom-customers?err=未选择任何记录", status_code=303)
+
+    from app.models import WecomCustomerLink
+    created = 0
+    skipped = 0
+    for raw_id in link_ids:
+        try:
+            lid = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        link = db.get(WecomCustomerLink, lid)
+        if not link or link.customer_id:
+            skipped += 1
+            continue
+        cust_name = (link.remark_name or link.name or "（企微未命名）").strip()[:120]
+        cust = Customer(
+            name=cust_name,
+            phone=link.remark_mobile or "",
+            address="",
+            source="wecom",
+        )
+        db.add(cust)
+        db.flush()
+        link.customer_id = cust.id
+        link.sync_status = "created"
+        created += 1
+    db.commit()
+    return RedirectResponse(
+        f"/admin/wecom-customers?msg=批量新建完成：新建 {created} 个档案，跳过 {skipped} 条",
+        status_code=303,
+    )
+
+
 @app.post("/admin/wecom-customers/{link_id}/create-customer", name="admin_wecom_customers_create")
 async def admin_wecom_customers_create(
     link_id: int,

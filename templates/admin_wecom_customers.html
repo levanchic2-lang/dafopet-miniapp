@@ -5,7 +5,9 @@
 .wcl-stat { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:.6rem .9rem; font-size:.85rem; }
 .wcl-stat b { font-size:1.05rem; display:block; line-height:1.2; }
 .wcl-stat.sel { background:#eff6ff; border-color:#3b82f6; }
-.wcl-row { border-bottom:1px solid var(--border); padding:.7rem .8rem; display:grid; grid-template-columns: 56px 1fr 220px 200px 200px; gap:1rem; align-items:center; }
+.wcl-row { border-bottom:1px solid var(--border); padding:.7rem .8rem; display:grid; grid-template-columns: 28px 56px 1fr 220px 200px 240px; gap:1rem; align-items:center; }
+.wcl-row .wcl-check { display:flex; align-items:center; justify-content:center; }
+.wcl-row .wcl-check input { width:16px; height:16px; cursor:pointer; }
 .wcl-row:hover { background:#fafbfc; }
 .wcl-row .avatar { width:48px; height:48px; border-radius:50%; background:#e5e7eb; overflow:hidden; }
 .wcl-row .avatar img { width:100%; height:100%; object-fit:cover; }
@@ -19,10 +21,12 @@
 .wcl-act { display:flex; gap:.35rem; justify-content:flex-end; flex-wrap:wrap; }
 .wcl-act .btn, .wcl-act button { font-size:.75rem; padding:.25rem .55rem; white-space:nowrap; }
 @media (max-width: 900px) {
-  .wcl-row { grid-template-columns: 48px 1fr; gap:.6rem; }
-  .wcl-row > div:nth-child(n+3) { grid-column: 1 / -1; }
+  .wcl-row { grid-template-columns: 28px 48px 1fr; gap:.6rem; }
+  .wcl-row > div:nth-child(n+4) { grid-column: 1 / -1; }
   .wcl-act { justify-content:flex-start; }
 }
+
+.batch-bar { position:sticky; top:0; background:#fef3c7; border:1px solid #fbbf24; border-radius:8px; padding:.55rem .85rem; margin:0 0 .85rem; display:flex; gap:.6rem; align-items:center; z-index:10; }
 </style>
 {% endblock %}
 {% block body %}
@@ -77,6 +81,26 @@
   {% if q %}<a href="?{% if status %}status={{ status }}{% endif %}" class="btn secondary" style="font-size:.85rem;">清除</a>{% endif %}
 </form>
 
+{# 批量操作浮条（仅在 status=unmatched 时显示） #}
+{% if status == 'unmatched' and links %}
+<form id="batch-form" method="post" action="/admin/wecom-customers/batch-create"
+      onsubmit="return confirmBatch();">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <div class="batch-bar">
+    <label style="display:flex;align-items:center;gap:.4rem;font-size:.85rem;cursor:pointer;">
+      <input type="checkbox" id="check-all" style="width:16px;height:16px;cursor:pointer;"/>
+      全选本页可见（{{ links|length }} 条）
+    </label>
+    <span style="color:#92400e;font-size:.82rem;flex:1;">
+      已选 <b id="sel-count">0</b> 条 — 用「企微备注名」作为客户姓名新建档案
+    </span>
+    <button type="submit" class="btn" style="font-size:.85rem;padding:.35rem .9rem;background:#d97706;border-color:#d97706;">
+      ✅ 批量新建档案
+    </button>
+  </div>
+</form>
+{% endif %}
+
 <div class="card" style="padding:0;">
   {% if not links %}
   <div style="padding:2rem;text-align:center;color:var(--muted);">
@@ -90,6 +114,11 @@
 
   {% for L in links %}
   <div class="wcl-row">
+    <div class="wcl-check">
+      {% if L.sync_status == 'unmatched' %}
+      <input type="checkbox" form="batch-form" name="link_ids" value="{{ L.id }}" class="row-check"/>
+      {% endif %}
+    </div>
     <div class="avatar">
       {% if L.avatar %}<img src="{{ L.avatar }}" alt=""/>{% endif %}
     </div>
@@ -194,6 +223,30 @@ function closeMatchDialog() {
 document.getElementById('match-dialog').addEventListener('click', function(e) {
   if (e.target === this) closeMatchDialog();
 });
+
+// 批量勾选
+(function() {
+  const checkAll = document.getElementById('check-all');
+  if (!checkAll) return;
+  const rows = document.querySelectorAll('.row-check');
+  const counter = document.getElementById('sel-count');
+  function updateCounter() {
+    let n = 0;
+    rows.forEach(c => { if (c.checked) n++; });
+    counter.textContent = n;
+    checkAll.checked = n === rows.length && n > 0;
+  }
+  checkAll.addEventListener('change', function() {
+    rows.forEach(c => { c.checked = checkAll.checked; });
+    updateCounter();
+  });
+  rows.forEach(c => c.addEventListener('change', updateCounter));
+  window.confirmBatch = function() {
+    const n = parseInt(counter.textContent, 10);
+    if (!n) { alert('请先勾选要批量新建的客户'); return false; }
+    return confirm('确认为勾选的 ' + n + ' 个企微客户批量新建档案？\n（用备注名作为客户姓名，备注手机号若有也会填入）');
+  };
+})();
 
 // 快速绑定：输入手机号 → 自动查档案 → 找到一键绑定
 document.querySelectorAll('.quick-bind-form').forEach(function(form) {
