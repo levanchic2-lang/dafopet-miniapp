@@ -1,4 +1,10 @@
 Page({
+  onShareAppMessage() {
+    return { title: "大风动物医院 · 流浪猫 TNR 申请", path: "/pages/index/index" };
+  },
+  onShareTimeline() {
+    return { title: "大风动物医院 · 流浪猫 TNR 申请" };
+  },
   data: { rec: null },
 
   onLoad(options) {
