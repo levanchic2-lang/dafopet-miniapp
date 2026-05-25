@@ -3125,6 +3125,79 @@ async def admin_wecom_dispatch_now(
 # Phase 3 Step 1 — 企微外部联系人 ↔ Customer 映射
 # ═════════════════════════════════════════════════════════════
 
+@app.get("/admin/wecom-sidebar", response_class=HTMLResponse, name="admin_wecom_sidebar")
+async def admin_wecom_sidebar(
+    request: Request,
+    db: Session = Depends(get_db),
+    external_userid: str = Query("", description="企微外部联系人 ID（聊天客户）"),
+):
+    """企微聊天侧边栏 H5：员工跟客户聊天时显示客户档案。
+
+    Phase 3 Step 2。
+    企微侧边栏会自动在 URL 拼 ?external_userid=xxx（部分版本需要 JS-SDK 主动调用获取）。
+    """
+    # 未登录 → 走企微 OAuth 静默登录 → 回到这个 URL（带原 external_userid 参数）
+    if not _admin_ok(request):
+        from urllib.parse import quote as _q
+        next_url = f"/admin/wecom-sidebar?external_userid={_q(external_userid)}"
+        return RedirectResponse(f"/admin/wecom-login?next={_q(next_url, safe='')}", status_code=302)
+
+    from app.models import WecomCustomerLink
+
+    link = None
+    cust = None
+    pets = []
+    recent_visits = []
+    wallet = None
+    if external_userid:
+        link = db.query(WecomCustomerLink).filter(
+            WecomCustomerLink.external_userid == external_userid
+        ).first()
+        if link and link.customer_id:
+            cust = db.get(Customer, link.customer_id)
+            if cust:
+                pets = db.query(Pet).filter(Pet.customer_id == cust.id).all()
+                recent_visits = (
+                    db.query(Visit)
+                    .filter(Visit.customer_id == cust.id)
+                    .order_by(Visit.id.desc())
+                    .limit(5).all()
+                )
+                wallet = db.query(Wallet).filter(Wallet.customer_id == cust.id).first()
+
+    # 计算待办：未付费 / 未签协议 / 押金未结算
+    pending_invoices = 0
+    pending_consents = 0
+    held_deposits = 0
+    if cust:
+        from app.models import Invoice, ConsentTask, Deposit
+        pending_invoices = db.query(Invoice).filter(
+            Invoice.customer_id == cust.id,
+            Invoice.payment_status.in_(("unpaid", "partial")),
+        ).count()
+        pending_consents = db.query(ConsentTask).filter(
+            ConsentTask.customer_id == cust.id,
+            ConsentTask.status == "pending",
+        ).count()
+        held_deposits = db.query(Deposit).filter(
+            Deposit.customer_id == cust.id,
+            Deposit.status == "held",
+        ).count()
+
+    return templates.TemplateResponse(request, "admin_wecom_sidebar.html", {
+        "external_userid": external_userid,
+        "link": link,
+        "cust": cust,
+        "pets": pets,
+        "recent_visits": recent_visits,
+        "wallet": wallet,
+        "pending_invoices": pending_invoices,
+        "pending_consents": pending_consents,
+        "held_deposits": held_deposits,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
 @app.get("/admin/wecom-customers", response_class=HTMLResponse, name="admin_wecom_customers_list")
 async def admin_wecom_customers_list(
     request: Request,

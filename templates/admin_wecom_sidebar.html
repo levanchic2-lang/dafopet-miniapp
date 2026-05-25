@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<title>客户档案 · 大风动物医院</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif;background:#f5f7fa;color:#111;font-size:13px;line-height:1.5;}
+  .wrap{padding:.6rem;max-width:560px;margin:auto;}
+  .card{background:#fff;border-radius:10px;padding:.7rem .8rem;margin-bottom:.55rem;box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .hd{display:flex;align-items:center;gap:.5rem;}
+  .hd .avatar{width:42px;height:42px;border-radius:50%;background:#e5e7eb;flex-shrink:0;overflow:hidden;}
+  .hd .avatar img{width:100%;height:100%;object-fit:cover;}
+  .hd .info{flex:1;min-width:0;}
+  .hd .name{font-weight:700;font-size:.95rem;line-height:1.3;}
+  .hd .meta{color:#6b7280;font-size:.72rem;margin-top:1px;}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;margin-top:.6rem;}
+  .stat{background:#f9fafb;border-radius:6px;padding:.4rem .35rem;text-align:center;}
+  .stat b{display:block;font-size:.95rem;font-weight:700;color:#111;line-height:1.2;}
+  .stat .lbl{font-size:.66rem;color:#6b7280;margin-top:2px;}
+  .stat.warn b{color:#d97706;}
+  .stat.bad b{color:#dc2626;}
+  h3{margin:0 0 .4rem;font-size:.78rem;color:#6b7280;font-weight:600;letter-spacing:.05em;text-transform:uppercase;}
+  .pet-row{display:flex;align-items:center;gap:.5rem;padding:.45rem 0;border-bottom:1px solid #f3f4f6;}
+  .pet-row:last-child{border-bottom:none;}
+  .pet-row .badge{background:#dbeafe;color:#1e40af;font-size:.66rem;padding:1px 5px;border-radius:3px;font-weight:600;}
+  .pet-row .ico{width:30px;height:30px;border-radius:50%;background:#e0f2fe;color:#0369a1;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;}
+  .pet-info{flex:1;min-width:0;}
+  .pet-name{font-weight:600;font-size:.82rem;}
+  .pet-meta{font-size:.7rem;color:#6b7280;margin-top:1px;}
+  .visit-row{padding:.45rem 0;border-bottom:1px solid #f3f4f6;font-size:.78rem;}
+  .visit-row:last-child{border-bottom:none;}
+  .visit-date{color:#6b7280;font-size:.7rem;}
+  .visit-diag{margin-top:2px;color:#111;font-weight:500;}
+  .action-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.4rem;}
+  .action-btn{display:flex;align-items:center;justify-content:center;gap:.3rem;padding:.55rem;background:#fff;border:1px solid #d1d5db;border-radius:8px;text-decoration:none;color:#111;font-size:.82rem;font-weight:500;}
+  .action-btn:active{background:#f3f4f6;}
+  .action-btn.primary{background:#3b82f6;color:#fff;border-color:#3b82f6;}
+  .empty{padding:1.5rem 1rem;text-align:center;color:#6b7280;font-size:.85rem;}
+  .empty.bad{color:#92400e;background:#fef3c7;border-radius:10px;}
+  a{color:#1d4ed8;text-decoration:none;}
+  .wallet-line{display:flex;justify-content:space-between;align-items:baseline;font-size:.78rem;color:#6b7280;}
+  .wallet-line + .wallet-line{margin-top:2px;}
+  .wallet-line b{font-size:.95rem;color:#15803d;font-weight:700;}
+  .pill{display:inline-block;padding:1px 6px;border-radius:3px;font-size:.66rem;font-weight:600;}
+  .pill.red{background:#fee2e2;color:#991b1b;}
+  .pill.amber{background:#fef3c7;color:#92400e;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+{% if not external_userid %}
+  <div class="card empty">
+    📱 请在企业微信内打开此页面（点开客户聊天 → 右侧栏会自动加载）
+  </div>
+{% elif not link %}
+  <div class="card empty bad">
+    ⚠️ 这个客户还没在系统里同步。<br/>
+    打开企微 → 给他填备注手机号 → 回 PC 端点同步。<br/>
+    <small style="color:#9ca3af;">external_userid: {{ external_userid[:30] }}…</small>
+  </div>
+  <a href="/admin/wecom-customers" class="action-btn primary" style="margin-top:.5rem;">去同步页面</a>
+{% elif not cust %}
+  <div class="card empty bad">
+    ⚠️ 这个企微客户还没绑定到任何档案。<br/>
+    去同步页处理一下。
+  </div>
+  <a href="/admin/wecom-customers?status=unmatched" class="action-btn primary" style="margin-top:.5rem;">去处理</a>
+{% else %}
+
+{# 客户基本信息卡 #}
+<div class="card">
+  <div class="hd">
+    <div class="avatar">
+      {% if link.avatar %}<img src="{{ link.avatar }}" alt=""/>{% endif %}
+    </div>
+    <div class="info">
+      <div class="name">{{ cust.name }}{% if link.remark_name and link.remark_name != cust.name %} · <span style="color:#6b7280;font-weight:500;">{{ link.remark_name }}</span>{% endif %}</div>
+      <div class="meta">
+        📱 {{ cust.phone or '未填手机' }}
+        {% if cust.created_at %} · 建档 {{ cust.created_at.strftime('%y-%m-%d') }}{% endif %}
+      </div>
+    </div>
+    <a href="/admin/customers/{{ cust.id }}" target="_blank" style="font-size:.7rem;color:#1d4ed8;">完整档案 →</a>
+  </div>
+  <div class="stat-grid">
+    <div class="stat"><b>{{ pets|length }}</b><div class="lbl">宠物</div></div>
+    <div class="stat {% if pending_invoices > 0 %}bad{% endif %}"><b>{{ pending_invoices }}</b><div class="lbl">未付收费</div></div>
+    <div class="stat {% if pending_consents > 0 %}warn{% endif %}"><b>{{ pending_consents }}</b><div class="lbl">待签协议</div></div>
+  </div>
+  {% if held_deposits > 0 %}
+  <div style="margin-top:.4rem;font-size:.75rem;color:#92400e;">⚠️ 有 {{ held_deposits }} 笔押金未结算</div>
+  {% endif %}
+</div>
+
+{# 钱包 #}
+{% if wallet and (wallet.balance > 0 or wallet.lifetime_recharge > 0) %}
+<div class="card">
+  <h3>💰 钱包</h3>
+  <div class="wallet-line">
+    <span>当前余额</span>
+    <b>¥{{ '%.2f'|format(wallet.balance or 0) }}</b>
+  </div>
+  {% if (wallet.balance_principal or 0) + (wallet.balance_bonus or 0) > 0 %}
+  <div class="wallet-line">
+    <span>　本金 / 赠送</span>
+    <span>¥{{ '%.2f'|format(wallet.balance_principal or 0) }} / ¥{{ '%.2f'|format(wallet.balance_bonus or 0) }}</span>
+  </div>
+  {% endif %}
+  <div class="wallet-line">
+    <span>累计充值</span>
+    <span>¥{{ '%.2f'|format(wallet.lifetime_recharge or 0) }}</span>
+  </div>
+</div>
+{% endif %}
+
+{# 宠物列表 #}
+<div class="card">
+  <h3>🐾 宠物（{{ pets|length }}）</h3>
+  {% if not pets %}
+    <div style="font-size:.78rem;color:#9ca3af;">该客户暂无宠物档案</div>
+  {% endif %}
+  {% for p in pets %}
+  <a href="/admin/customers/{{ cust.id }}#pet-{{ p.id }}" target="_blank" class="pet-row" style="color:inherit;">
+    <div class="ico">{% if p.species == 'dog' %}🐕{% elif p.species == 'cat' %}🐈{% else %}🐾{% endif %}</div>
+    <div class="pet-info">
+      <div class="pet-name">{{ p.name or '未命名' }}
+        {% if p.medical_record_no %}<span class="badge">{{ p.medical_record_no }}</span>{% endif %}
+      </div>
+      <div class="pet-meta">
+        {% if p.breed %}{{ p.breed }} · {% endif %}
+        {% if p.gender == 'male' %}♂{% elif p.gender == 'female' %}♀{% endif %}
+        {% if p.is_neutered %} · 已绝育{% endif %}
+        {% if p.life_status == 'deceased' %} <span class="pill red">已故</span>{% endif %}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+{# 最近就诊 #}
+<div class="card">
+  <h3>🩺 最近就诊（{{ recent_visits|length }}）</h3>
+  {% if not recent_visits %}
+    <div style="font-size:.78rem;color:#9ca3af;">暂无就诊记录</div>
+  {% endif %}
+  {% for v in recent_visits %}
+  <div class="visit-row">
+    <div class="visit-date">
+      {{ v.visit_date or '未填日期' }}
+      {% if v.visit_type %} · {{ {'outpatient':'门诊','followup':'回访','postop':'术后','vaccine':'疫苗','surgery_consult':'术前','other':'其他'}.get(v.visit_type, v.visit_type) }}{% endif %}
+      {% if v.vet_name %} · {{ v.vet_name }}{% endif %}
+    </div>
+    <div class="visit-diag">{{ v.diagnosis or v.chief_complaint or '（未填）' }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+{# 快捷操作 #}
+<div class="card">
+  <h3>⚡ 快捷操作</h3>
+  <div class="action-grid">
+    <a href="/admin/customers/{{ cust.id }}" target="_blank" class="action-btn primary">📋 完整档案</a>
+    <a href="/admin/appointments/new?customer_id={{ cust.id }}" target="_blank" class="action-btn">📅 新预约</a>
+    <a href="/admin/visits/new?customer_id={{ cust.id }}" target="_blank" class="action-btn">🩺 新建诊疗</a>
+    <a href="/admin/consent-tasks/new?customer_id={{ cust.id }}" target="_blank" class="action-btn">📝 发起协议</a>
+  </div>
+</div>
+
+<div style="text-align:center;color:#9ca3af;font-size:.7rem;margin-top:1rem;padding:.5rem;">
+  external_userid · <code>{{ external_userid[:30] }}…</code>
+</div>
+
+{% endif %}
+</div>
+</body>
+</html>
