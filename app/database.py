@@ -868,6 +868,31 @@ def _try_sqlite_migrations() -> None:
                 if "wecom_notify_disabled" not in au_names:
                     conn.execute(text("ALTER TABLE admin_users ADD COLUMN wecom_notify_disabled VARCHAR(500) DEFAULT ''"))
 
+            # wecom_customer_links: 企微外部联系人 ↔ Customer 映射表（Phase 3）
+            wcl_cols = conn.execute(text("PRAGMA table_info(wecom_customer_links)")).fetchall()
+            if not wcl_cols:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS wecom_customer_links ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "external_userid VARCHAR(120) UNIQUE NOT NULL, "
+                    "customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, "
+                    "follow_userid VARCHAR(80) DEFAULT '', "
+                    "remark_name VARCHAR(120) DEFAULT '', "
+                    "remark_mobile VARCHAR(40) DEFAULT '', "
+                    "unionid VARCHAR(80) DEFAULT '', "
+                    "name VARCHAR(120) DEFAULT '', "
+                    "avatar VARCHAR(500) DEFAULT '', "
+                    "sync_status VARCHAR(20) DEFAULT 'unmatched', "
+                    "raw_json TEXT DEFAULT '', "
+                    "last_synced_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wcl_external_userid ON wecom_customer_links(external_userid)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wcl_follow_userid ON wecom_customer_links(follow_userid)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wcl_remark_mobile ON wecom_customer_links(remark_mobile)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wcl_sync_status ON wecom_customer_links(sync_status)"))
+
             # tnr_store_configs TNR 门店配额配置表
             # pets 新增字段：store / medical_record_no / life_status
             pet_cols2 = conn.execute(text("PRAGMA table_info(pets)")).fetchall()

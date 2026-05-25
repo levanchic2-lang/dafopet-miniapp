@@ -145,6 +145,22 @@ def external_get_detail(external_userid: str) -> dict[str, Any]:
         return r.json()
 
 
+def external_batch_get_by_user(userid_list: list[str], cursor: str = "", limit: int = 100) -> dict[str, Any]:
+    """批量拉取多个员工名下的客户详情（含跟进员工备注名/备注手机号 等）。
+
+    单次最多 100 条，配合 cursor 翻页。最高效的同步方式。
+    """
+    token = _get_access_token()
+    url = f"{_API_BASE}/cgi-bin/externalcontact/batch/get_by_user"
+    body = {"userid_list": userid_list, "limit": limit}
+    if cursor:
+        body["cursor"] = cursor
+    with httpx.Client(timeout=15.0) as client:
+        r = client.post(url, params={"access_token": token}, json=body)
+        r.raise_for_status()
+        return r.json()
+
+
 def send_app_message(payload: dict[str, Any]) -> dict[str, Any]:
     """发送应用消息（Phase 2 用，先预留）。
 

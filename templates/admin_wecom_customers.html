@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+.wcl-stat-row { display:flex; gap:.6rem; flex-wrap:wrap; margin: 0 0 1rem; }
+.wcl-stat { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:.6rem .9rem; font-size:.85rem; }
+.wcl-stat b { font-size:1.05rem; display:block; line-height:1.2; }
+.wcl-stat.sel { background:#eff6ff; border-color:#3b82f6; }
+.wcl-row { border-bottom:1px solid var(--border); padding:.7rem .8rem; display:grid; grid-template-columns: 56px 1fr 220px 200px 200px; gap:1rem; align-items:center; }
+.wcl-row:hover { background:#fafbfc; }
+.wcl-row .avatar { width:48px; height:48px; border-radius:50%; background:#e5e7eb; overflow:hidden; }
+.wcl-row .avatar img { width:100%; height:100%; object-fit:cover; }
+.wcl-name { font-weight:600; font-size:.92rem; }
+.wcl-meta { color:var(--muted); font-size:.78rem; margin-top:2px; }
+.wcl-pill { display:inline-block; padding:1px 8px; border-radius:4px; font-size:.72rem; font-weight:600; }
+.wcl-pill.matched { background:#d1fae5; color:#065f46; }
+.wcl-pill.unmatched { background:#fef3c7; color:#92400e; }
+.wcl-pill.created { background:#dbeafe; color:#1e40af; }
+.wcl-pill.ignored { background:#f3f4f6; color:#6b7280; }
+.wcl-act { display:flex; gap:.35rem; justify-content:flex-end; flex-wrap:wrap; }
+.wcl-act .btn, .wcl-act button { font-size:.75rem; padding:.25rem .55rem; white-space:nowrap; }
+@media (max-width: 900px) {
+  .wcl-row { grid-template-columns: 48px 1fr; gap:.6rem; }
+  .wcl-row > div:nth-child(n+3) { grid-column: 1 / -1; }
+  .wcl-act { justify-content:flex-start; }
+}
+</style>
+{% endblock %}
+{% block body %}
+
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+{% if err %}<div class="msg err"><i data-lucide="alert-triangle"></i> {{ err }}</div>{% endif %}
+
+<div class="page-head">
+  <div>
+    <h1><span class="ph-icon"><i data-lucide="users"></i></span>企微客户同步</h1>
+    <p class="ph-sub">把企业微信里的外部联系人和系统客户档案对齐 · 共 {{ counts.get('total', 0) }} 个</p>
+  </div>
+  <div class="ph-actions">
+    <form method="post" action="/admin/wecom-customers/sync" style="margin:0;display:inline;"
+          onsubmit="return confirm('试运行只统计能匹配多少，不写数据库。继续？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="dry_run" value="1"/>
+      <button type="submit" class="btn secondary" style="font-size:.85rem;">🧪 试运行</button>
+    </form>
+    <form method="post" action="/admin/wecom-customers/sync" style="margin:0;display:inline;"
+          onsubmit="return confirm('正式同步将拉取所有企微客户并落库（611 个 → 约 30 秒）。继续？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="btn" style="font-size:.88rem;"><i data-lucide="refresh-cw"></i> 同步</button>
+    </form>
+  </div>
+</div>
+
+{# 状态统计 + 筛选 #}
+<div class="wcl-stat-row">
+  <a href="?" class="wcl-stat {% if not status %}sel{% endif %}" style="text-decoration:none;color:inherit;">
+    <b>{{ counts.get('total', 0) }}</b>全部
+  </a>
+  <a href="?status=matched" class="wcl-stat {% if status == 'matched' %}sel{% endif %}" style="text-decoration:none;color:inherit;">
+    <b style="color:#065f46;">{{ counts.get('matched', 0) }}</b>✓ 自动匹配
+  </a>
+  <a href="?status=unmatched" class="wcl-stat {% if status == 'unmatched' %}sel{% endif %}" style="text-decoration:none;color:inherit;">
+    <b style="color:#92400e;">{{ counts.get('unmatched', 0) }}</b>⚠ 待人工处理
+  </a>
+  <a href="?status=created" class="wcl-stat {% if status == 'created' %}sel{% endif %}" style="text-decoration:none;color:inherit;">
+    <b style="color:#1e40af;">{{ counts.get('created', 0) }}</b>+ 新建档案
+  </a>
+  <a href="?status=ignored" class="wcl-stat {% if status == 'ignored' %}sel{% endif %}" style="text-decoration:none;color:inherit;">
+    <b style="color:#6b7280;">{{ counts.get('ignored', 0) }}</b>○ 已忽略
+  </a>
+</div>
+
+<form method="get" style="display:flex;gap:.4rem;margin:0 0 1rem;">
+  {% if status %}<input type="hidden" name="status" value="{{ status }}"/>{% endif %}
+  <input type="text" name="q" value="{{ q }}" placeholder="搜备注名 / 手机号 / 微信昵称"
+         style="flex:1;max-width:360px;height:36px;padding:0 .7rem;border:1px solid var(--border);border-radius:8px;"/>
+  <button type="submit" class="btn secondary" style="font-size:.85rem;">搜索</button>
+  {% if q %}<a href="?{% if status %}status={{ status }}{% endif %}" class="btn secondary" style="font-size:.85rem;">清除</a>{% endif %}
+</form>
+
+<div class="card" style="padding:0;">
+  {% if not links %}
+  <div style="padding:2rem;text-align:center;color:var(--muted);">
+    {% if not counts.get('total') %}
+      还没同步过。点右上角 <b>同步</b> 拉取 611 个企微客户。
+    {% else %}
+      当前筛选条件下没有结果。
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% for L in links %}
+  <div class="wcl-row">
+    <div class="avatar">
+      {% if L.avatar %}<img src="{{ L.avatar }}" alt=""/>{% endif %}
+    </div>
+    <div>
+      <div class="wcl-name">
+        {{ L.remark_name or L.name or '（未命名）' }}
+        <span class="wcl-pill {{ L.sync_status }}">
+          {% if L.sync_status == 'matched' %}✓ 已匹配
+          {% elif L.sync_status == 'unmatched' %}⚠ 待处理
+          {% elif L.sync_status == 'created' %}+ 已新建
+          {% elif L.sync_status == 'ignored' %}○ 已忽略
+          {% else %}{{ L.sync_status }}{% endif %}
+        </span>
+      </div>
+      <div class="wcl-meta">
+        {% if L.name and L.remark_name and L.name != L.remark_name %}微信昵称：{{ L.name }} · {% endif %}
+        {% if L.remark_mobile %}📱 {{ L.remark_mobile }}{% else %}<span style="color:#d97706;">无备注手机号</span>{% endif %}
+        {% if L.follow_userid %} · 跟进：{{ L.follow_userid }}{% endif %}
+      </div>
+    </div>
+    <div style="font-size:.82rem;">
+      {% if L.customer_id and L.customer %}
+        <a href="/admin/customers/{{ L.customer_id }}" style="color:#1d4ed8;text-decoration:none;">
+          {{ L.customer.name }}（#{{ L.customer_id }}）
+        </a>
+        <div class="wcl-meta">{{ L.customer.phone or '无手机' }}</div>
+      {% else %}
+        <span style="color:var(--muted);">未绑定</span>
+      {% endif %}
+    </div>
+    <div style="font-size:.75rem;color:var(--muted);">
+      external_userid<br>
+      <code style="font-size:.7rem;">{{ L.external_userid[:24] }}…</code>
+    </div>
+    <div class="wcl-act">
+      {% if L.sync_status in ('unmatched', 'ignored') %}
+        <form method="post" action="/admin/wecom-customers/{{ L.id }}/create-customer" style="margin:0;display:inline;"
+              onsubmit="return confirm('为「{{ L.remark_name or L.name }}」新建客户档案？');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="secondary">+ 新建</button>
+        </form>
+        <button type="button" class="secondary" onclick="openMatchDialog({{ L.id }}, '{{ (L.remark_name or L.name)|e }}')">🔗 绑已有</button>
+      {% endif %}
+      {% if L.sync_status != 'ignored' %}
+        <form method="post" action="/admin/wecom-customers/{{ L.id }}/ignore" style="margin:0;display:inline;"
+              onsubmit="return confirm('忽略这条记录？以后同步不会再处理。');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="secondary">○ 忽略</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if total_pages > 1 %}
+<div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap;align-items:center;justify-content:center;">
+  {% if page > 1 %}<a href="?status={{ status }}&q={{ q }}&page={{ page - 1 }}" class="btn secondary" style="font-size:.85rem;">‹ 上一页</a>{% endif %}
+  <span style="font-size:.88rem;color:var(--muted);">第 {{ page }} / {{ total_pages }} 页</span>
+  {% if page < total_pages %}<a href="?status={{ status }}&q={{ q }}&page={{ page + 1 }}" class="btn secondary" style="font-size:.85rem;">下一页 ›</a>{% endif %}
+</div>
+{% endif %}
+
+{# 手动绑定弹窗 #}
+<div id="match-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:12px;padding:1.25rem;width:480px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.22);">
+    <h3 id="md-title" style="margin:0 0 .85rem;font-size:1rem;">绑定到已有客户</h3>
+    <form id="md-form" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <label style="font-size:.82rem;color:var(--muted);">输入客户 ID 或精确手机号</label>
+      <input type="number" name="customer_id" id="md-customer-id" placeholder="客户 ID（在客户档案 URL 末尾的数字）" required min="1"
+             style="width:100%;margin-top:.35rem;"/>
+      <p style="font-size:.75rem;color:var(--muted);margin:.4rem 0 1rem;">
+        提示：去 <a href="/admin/customers" target="_blank" style="color:#1d4ed8;">客户档案</a> 搜索目标客户，URL 末尾的数字就是 ID。
+      </p>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;">
+        <button type="button" class="btn secondary" onclick="closeMatchDialog()">取消</button>
+        <button type="submit" class="btn">确认绑定</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openMatchDialog(linkId, name) {
+  document.getElementById('md-title').textContent = '绑定「' + name + '」到已有客户档案';
+  document.getElementById('md-form').action = '/admin/wecom-customers/' + linkId + '/match';
+  document.getElementById('md-customer-id').value = '';
+  document.getElementById('match-dialog').style.display = 'flex';
+}
+function closeMatchDialog() {
+  document.getElementById('match-dialog').style.display = 'none';
+}
+document.getElementById('match-dialog').addEventListener('click', function(e) {
+  if (e.target === this) closeMatchDialog();
+});
+</script>
+
+{% endblock %}

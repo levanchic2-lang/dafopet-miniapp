@@ -3121,6 +3121,170 @@ async def admin_wecom_dispatch_now(
     )
 
 
+# ═════════════════════════════════════════════════════════════
+# Phase 3 Step 1 — 企微外部联系人 ↔ Customer 映射
+# ═════════════════════════════════════════════════════════════
+
+@app.get("/admin/wecom-customers", response_class=HTMLResponse, name="admin_wecom_customers_list")
+async def admin_wecom_customers_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    status: str = Query("", description="筛选：matched/unmatched/created/ignored，空=全部"),
+    q: str = Query("", description="按 remark_name / remark_mobile / name 搜"),
+    page: int = Query(1, ge=1),
+):
+    require_admin(request)
+    require_superadmin(request)
+    from app.models import WecomCustomerLink
+    query = db.query(WecomCustomerLink)
+    if status:
+        query = query.filter(WecomCustomerLink.sync_status == status)
+    if q.strip():
+        kw = f"%{q.strip()}%"
+        query = query.filter(or_(
+            WecomCustomerLink.remark_name.like(kw),
+            WecomCustomerLink.remark_mobile.like(kw),
+            WecomCustomerLink.name.like(kw),
+        ))
+    total = query.count()
+    page_size = 50
+    links = (
+        query.order_by(WecomCustomerLink.sync_status.asc(), WecomCustomerLink.id.desc())
+        .offset((page - 1) * page_size).limit(page_size).all()
+    )
+    # 统计各状态数量
+    from sqlalchemy import func as _f
+    counts_raw = (
+        db.query(WecomCustomerLink.sync_status, _f.count(WecomCustomerLink.id))
+        .group_by(WecomCustomerLink.sync_status).all()
+    )
+    counts = {s: n for s, n in counts_raw}
+    counts["total"] = sum(counts.values())
+    return templates.TemplateResponse(request, "admin_wecom_customers.html", {
+        "links": links, "counts": counts, "status": status, "q": q,
+        "page": page, "total": total,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+        "err": request.query_params.get("err"),
+    })
+
+
+@app.post("/admin/wecom-customers/sync", name="admin_wecom_customers_sync")
+async def admin_wecom_customers_sync(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    dry_run: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    from app.services.wecom_customers import sync_all
+    is_dry = bool(dry_run)
+    try:
+        stats = sync_all(db, dry_run=is_dry)
+    except Exception as e:
+        logger.warning("[wecom sync] failed: %s", e)
+        return RedirectResponse(f"/admin/wecom-customers?err=同步失败：{str(e)[:120]}", status_code=303)
+    prefix = "试运行：" if is_dry else "同步完成："
+    msg = (
+        f"{prefix}拉取 {stats['pulled']} 个客户，自动匹配 {stats['matched']}，"
+        f"待匹配 {stats['unmatched']}"
+    )
+    if not is_dry:
+        msg += f"（新建 {stats['created_links']} 条 / 更新 {stats['updated_links']} 条）"
+    if stats["errors"]:
+        msg += f" · 错误 {len(stats['errors'])}：" + (stats["errors"][0][:80])
+    return RedirectResponse(f"/admin/wecom-customers?msg={msg}", status_code=303)
+
+
+@app.post("/admin/wecom-customers/{link_id}/create-customer", name="admin_wecom_customers_create")
+async def admin_wecom_customers_create(
+    link_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """为 unmatched 链接新建一个 Customer 记录 + 自动 link。"""
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    from app.models import WecomCustomerLink
+    link = db.get(WecomCustomerLink, link_id)
+    if not link:
+        raise HTTPException(404)
+    if link.customer_id:
+        return RedirectResponse(f"/admin/wecom-customers?err=该客户已有匹配档案（#{link.customer_id}）", status_code=303)
+    # 用备注名 > 微信昵称作为客户姓名
+    cust_name = (link.remark_name or link.name or "").strip() or "（企微未命名）"
+    cust = Customer(
+        name=cust_name,
+        phone=link.remark_mobile or "",
+        address="",
+        source="wecom",
+    )
+    db.add(cust)
+    db.flush()
+    link.customer_id = cust.id
+    link.sync_status = "created"
+    db.commit()
+    return RedirectResponse(
+        f"/admin/wecom-customers?msg=已新建客户档案「{cust_name}」并绑定（Customer #{cust.id}）",
+        status_code=303,
+    )
+
+
+@app.post("/admin/wecom-customers/{link_id}/match", name="admin_wecom_customers_match")
+async def admin_wecom_customers_match(
+    link_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(...),
+):
+    """手动把企微客户绑到已有 Customer 上。"""
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    from app.models import WecomCustomerLink
+    link = db.get(WecomCustomerLink, link_id)
+    if not link:
+        raise HTTPException(404)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        return RedirectResponse(f"/admin/wecom-customers?err=客户 #{customer_id} 不存在", status_code=303)
+    link.customer_id = cust.id
+    link.sync_status = "matched"
+    db.commit()
+    return RedirectResponse(
+        f"/admin/wecom-customers?msg=已绑定 {link.remark_name or link.name or '客户'} → 档案 {cust.name}（#{cust.id}）",
+        status_code=303,
+    )
+
+
+@app.post("/admin/wecom-customers/{link_id}/ignore", name="admin_wecom_customers_ignore")
+async def admin_wecom_customers_ignore(
+    link_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    from app.models import WecomCustomerLink
+    link = db.get(WecomCustomerLink, link_id)
+    if not link:
+        raise HTTPException(404)
+    link.sync_status = "ignored"
+    db.commit()
+    return RedirectResponse(
+        f"/admin/wecom-customers?msg=已忽略 {link.remark_name or link.name or '该客户'}",
+        status_code=303,
+    )
+
+
 @app.get("/admin/wecom-customers/probe", response_class=HTMLResponse, name="admin_wecom_customers_probe")
 async def admin_wecom_customers_probe(request: Request):
     """Phase 3 探测：调用客户联系基础 API，看 errcode 决定下一步。

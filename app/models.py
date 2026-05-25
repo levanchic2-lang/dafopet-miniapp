@@ -1186,3 +1186,34 @@ class AdminUser(Base):
     # 可选事件：tnr_pending / rabies_submitted / consent_signed / appointment_created / workbench_digest
     wecom_notify_disabled: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WecomCustomerLink(Base):
+    """企业微信外部联系人 ↔ 我们系统 Customer 的映射。
+
+    611 个企微客户同步进来时一对一建一条；按 remark_mobile 自动匹配 Customer。
+    sync_status: matched(自动匹配上) / unmatched(待人工) / created(同步时新建客户) / ignored(明确跳过)
+    """
+    __tablename__ = "wecom_customer_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    external_userid: Mapped[str] = mapped_column(String(120), unique=True, nullable=False, index=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    # 跟进员工的企微 userid（员工对客户的所属关系）
+    follow_userid: Mapped[str] = mapped_column(String(80), default="", index=True)
+    # 员工在企微里给客户起的备注名（最有用，比客户自己设的昵称准）
+    remark_name:   Mapped[str] = mapped_column(String(120), default="")
+    # 员工填写的备注手机号 — 主要匹配字段
+    remark_mobile: Mapped[str] = mapped_column(String(40), default="", index=True)
+    # 微信 unionid（需要绑定开发者ID才有，目前留空）
+    unionid:       Mapped[str] = mapped_column(String(80), default="")
+    # 客户微信昵称 + 头像（外部联系人自报）
+    name:          Mapped[str] = mapped_column(String(120), default="")
+    avatar:        Mapped[str] = mapped_column(String(500), default="")
+    sync_status:   Mapped[str] = mapped_column(String(20), default="unmatched", index=True)
+    # 完整 API 返回 JSON，备查/未来字段扩展用
+    raw_json:      Mapped[str] = mapped_column(Text, default="")
+    last_synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at:    Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
