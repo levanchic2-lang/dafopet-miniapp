@@ -3235,6 +3235,30 @@ async def admin_wecom_customers_create(
     )
 
 
+@app.get("/api/admin/customer/find-by-phone", name="admin_api_customer_find_by_phone")
+async def admin_api_customer_find_by_phone(
+    request: Request,
+    db: Session = Depends(get_db),
+    phone: str = Query(""),
+):
+    """按手机号搜系统内已有客户，给企微客户绑定界面用。"""
+    require_admin(request)
+    p = "".join(c for c in (phone or "") if c.isdigit())
+    if len(p) < 6:
+        return {"found": False}
+    cust = db.query(Customer).filter(Customer.phone == p).first()
+    if not cust:
+        return {"found": False}
+    pet_count = db.query(Pet).filter(Pet.customer_id == cust.id).count()
+    return {
+        "found": True,
+        "id": cust.id,
+        "name": cust.name or "（未命名）",
+        "phone": cust.phone,
+        "pets": pet_count,
+    }
+
+
 @app.post("/admin/wecom-customers/{link_id}/match", name="admin_wecom_customers_match")
 async def admin_wecom_customers_match(
     link_id: int,

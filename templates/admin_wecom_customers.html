@@ -126,12 +126,20 @@
     </div>
     <div class="wcl-act">
       {% if L.sync_status in ('unmatched', 'ignored') %}
+        {# 内联快速搜手机号 #}
+        <form class="quick-bind-form" data-link-id="{{ L.id }}" method="post"
+              action="/admin/wecom-customers/{{ L.id }}/match" style="margin:0;display:inline-flex;gap:.2rem;align-items:center;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="customer_id" class="qb-customer-id" value=""/>
+          <input type="tel" inputmode="numeric" placeholder="搜手机号绑定" class="qb-phone"
+                 style="width:118px;height:26px;padding:0 .4rem;border:1px solid var(--border);border-radius:5px;font-size:.78rem;"/>
+          <span class="qb-result" style="font-size:.72rem;min-width:50px;"></span>
+        </form>
         <form method="post" action="/admin/wecom-customers/{{ L.id }}/create-customer" style="margin:0;display:inline;"
               onsubmit="return confirm('为「{{ L.remark_name or L.name }}」新建客户档案？');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
           <button type="submit" class="secondary">+ 新建</button>
         </form>
-        <button type="button" class="secondary" onclick="openMatchDialog({{ L.id }}, '{{ (L.remark_name or L.name)|e }}')">🔗 绑已有</button>
       {% endif %}
       {% if L.sync_status != 'ignored' %}
         <form method="post" action="/admin/wecom-customers/{{ L.id }}/ignore" style="margin:0;display:inline;"
@@ -185,6 +193,45 @@ function closeMatchDialog() {
 }
 document.getElementById('match-dialog').addEventListener('click', function(e) {
   if (e.target === this) closeMatchDialog();
+});
+
+// 快速绑定：输入手机号 → 自动查档案 → 找到一键绑定
+document.querySelectorAll('.quick-bind-form').forEach(function(form) {
+  const phoneInput = form.querySelector('.qb-phone');
+  const custIdInput = form.querySelector('.qb-customer-id');
+  const resultSpan = form.querySelector('.qb-result');
+  let timer = null;
+
+  phoneInput.addEventListener('input', function() {
+    clearTimeout(timer);
+    custIdInput.value = '';
+    resultSpan.textContent = '';
+    resultSpan.style.color = '';
+    const raw = phoneInput.value.replace(/\D/g, '');
+    if (raw.length < 6) return;
+    resultSpan.textContent = '查…';
+    resultSpan.style.color = '#9ca3af';
+    timer = setTimeout(function() {
+      fetch('/api/admin/customer/find-by-phone?phone=' + encodeURIComponent(raw))
+        .then(r => r.json())
+        .then(data => {
+          if (data.found) {
+            custIdInput.value = data.id;
+            resultSpan.innerHTML = '<a href="#" style="color:#15803d;font-weight:600;text-decoration:underline;cursor:pointer;" data-bind="1">✓ ' + data.name + '</a>';
+            resultSpan.querySelector('[data-bind]').addEventListener('click', function(e) {
+              e.preventDefault();
+              if (confirm('确认把企微客户绑定到「' + data.name + '」（' + data.phone + '）？')) {
+                form.submit();
+              }
+            });
+          } else {
+            resultSpan.textContent = '✗ 没找到';
+            resultSpan.style.color = '#b91c1c';
+          }
+        })
+        .catch(() => { resultSpan.textContent = '出错'; resultSpan.style.color = '#b91c1c'; });
+    }, 350);
+  });
 });
 </script>
 
