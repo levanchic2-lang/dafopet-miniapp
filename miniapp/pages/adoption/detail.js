@@ -6,10 +6,28 @@ const PHONE_LANDLINE = "075528704890";
 
 Page({
   onShareAppMessage() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请", path: "/pages/index/index" };
+    const p = this.data.pet;
+    if (p && p.id) {
+      const tag = p.breed ? `（${p.breed}）` : "";
+      return {
+        title: `【${p.name || "待领养"}】${tag}等你来接回家 · 大风动物医院`,
+        path: `/pages/adoption/detail?id=${p.id}`,
+        imageUrl: p.has_image1 ? `${this.data.apiBase}/api/adoption/${p.id}/image/1` : "",
+      };
+    }
+    return { title: "这些猫狗在等你回家 · 大风动物医院", path: "/pages/adoption/list" };
   },
   onShareTimeline() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请" };
+    const p = this.data.pet;
+    if (p && p.id) {
+      const tag = p.breed ? `（${p.breed}）` : "";
+      return {
+        title: `【${p.name || "待领养"}】${tag}等你来接回家 · 大风动物医院`,
+        query: `id=${p.id}`,
+        imageUrl: p.has_image1 ? `${this.data.apiBase}/api/adoption/${p.id}/image/1` : "",
+      };
+    }
+    return { title: "这些猫狗在等你回家 · 大风动物医院" };
   },
   data: { pet: null, images: [], apiBase: "" },
 

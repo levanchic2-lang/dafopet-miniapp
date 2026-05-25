@@ -15,10 +15,10 @@ function todayString() {
 
 Page({
   onShareAppMessage() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请", path: "/pages/index/index" };
+    return { title: "在大风动物医院预约门诊 / 美容 / 手术", path: "/pages/appointment/index" };
   },
   onShareTimeline() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请" };
+    return { title: "在大风动物医院预约门诊 / 美容 / 手术" };
   },
   data: {
     loading: true,

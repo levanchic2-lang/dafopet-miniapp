@@ -2,10 +2,10 @@ const app = getApp();
 
 Page({
   onShareAppMessage() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请", path: "/pages/index/index" };
+    return { title: "流浪猫 TNR 公益展示 · 守护社区生灵", path: "/pages/showcase/showcase" };
   },
   onShareTimeline() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请" };
+    return { title: "流浪猫 TNR 公益展示 · 守护社区生灵" };
   },
   data: {
     items: [],

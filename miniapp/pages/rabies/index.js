@@ -29,10 +29,10 @@ function isInvalidName(name) {
 
 Page({
   onShareAppMessage() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请", path: "/pages/index/index" };
+    return { title: "狂犬疫苗免疫登记 · 大风动物医院", path: "/pages/rabies/index" };
   },
   onShareTimeline() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请" };
+    return { title: "狂犬疫苗免疫登记 · 大风动物医院" };
   },
   data: {
     form: {

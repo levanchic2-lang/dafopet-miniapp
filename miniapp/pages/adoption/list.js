@@ -3,10 +3,10 @@ const app = getApp();
 
 Page({
   onShareAppMessage() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请", path: "/pages/index/index" };
+    return { title: "这些猫狗在等你回家 · 大风动物医院", path: "/pages/adoption/list" };
   },
   onShareTimeline() {
-    return { title: "大风动物医院 · 流浪猫 TNR 申请" };
+    return { title: "这些猫狗在等你回家 · 大风动物医院" };
   },
   data: { pets: [], loading: true, apiBase: "" },
 
