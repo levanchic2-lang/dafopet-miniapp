@@ -6591,6 +6591,114 @@ async def admin_customer_edit_pet(
     return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&msg=宠物已更新", status_code=303)
 
 
+@app.post("/admin/customers/{customer_id}/pets/{pet_id}/merge-into")
+async def admin_customer_merge_pet(
+    customer_id: int,
+    pet_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    target_id: int = Form(...),
+):
+    """合并宠物：把 pet_id 的所有业务关联指向 target_id，然后删除 pet_id。
+
+    适用场景：客户取消 TNR 又重新申请，导致出现多条同名宠物档案。
+    """
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    if pet_id == target_id:
+        return RedirectResponse(
+            f"/admin/customers/{customer_id}?err=源宠物和目标宠物不能相同",
+            status_code=303,
+        )
+    src = db.get(Pet, pet_id)
+    tgt = db.get(Pet, target_id)
+    if not src or src.customer_id != customer_id:
+        raise HTTPException(404, "源宠物不存在")
+    if not tgt or tgt.customer_id != customer_id:
+        return RedirectResponse(
+            f"/admin/customers/{customer_id}?err=目标宠物 #{target_id} 不属于该客户",
+            status_code=303,
+        )
+
+    # 已知所有挂 pet_id 的表，全部更新到目标
+    from sqlalchemy import update as _upd
+    moved = {}
+    table_classes = [
+        ("申请", Application),
+        ("预约", Appointment),
+        ("就诊", Visit),
+        ("收费单", Invoice),
+        ("疫苗", Vaccination),
+        ("狂犬", RabiesVaccineRecord),
+        ("协议", ConsentTask),
+    ]
+    # 试图扩展更多模型（按需懒导入）
+    try:
+        from app.models import Deworming
+        table_classes.append(("驱虫", Deworming))
+    except ImportError:
+        pass
+    try:
+        from app.models import Prescription
+        table_classes.append(("处方", Prescription))
+    except ImportError:
+        pass
+    try:
+        from app.models import ExamOrder
+        table_classes.append(("检查单", ExamOrder))
+    except ImportError:
+        pass
+    try:
+        from app.models import Deposit
+        table_classes.append(("押金", Deposit))
+    except ImportError:
+        pass
+    try:
+        from app.models import MediaFile
+        table_classes.append(("素材", MediaFile))
+    except ImportError:
+        pass
+    try:
+        from app.models import WeightRecord
+        table_classes.append(("体重", WeightRecord))
+    except ImportError:
+        pass
+
+    for label, cls in table_classes:
+        if not hasattr(cls, "pet_id"):
+            continue
+        try:
+            cnt = db.query(cls).filter(cls.pet_id == pet_id).update(
+                {cls.pet_id: target_id}, synchronize_session=False
+            )
+            if cnt:
+                moved[label] = cnt
+        except Exception as e:
+            logger.warning("[merge pet] move %s failed: %s", label, e)
+
+    # 补全目标宠物字段（源有目标没有）
+    for fld in ("breed", "color_pattern", "birthday_estimate", "microchip_id", "notes"):
+        if not getattr(tgt, fld, None) and getattr(src, fld, None):
+            setattr(tgt, fld, getattr(src, fld))
+    if not tgt.gender or tgt.gender == "unknown":
+        if src.gender and src.gender != "unknown":
+            tgt.gender = src.gender
+
+    src_label = f"{src.name}(#{src.id})"
+    tgt_label = f"{tgt.name}(#{tgt.id})"
+    db.delete(src)
+    _audit(db, request, "pet_merge",
+           detail={"src": src_label, "target": tgt_label, "moved": moved})
+    db.commit()
+    summary = "，".join([f"{k} {v}" for k, v in moved.items()]) or "无关联"
+    return RedirectResponse(
+        f"/admin/customers/{customer_id}?msg=已合并 {src_label} → {tgt_label}（迁移：{summary}）",
+        status_code=303,
+    )
+
+
 @app.post("/admin/customers/{customer_id}/pets/{pet_id}/delete")
 async def admin_customer_delete_pet(
     customer_id: int,

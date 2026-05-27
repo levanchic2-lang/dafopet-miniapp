@@ -498,6 +498,7 @@
  <td onclick="event.stopPropagation();" class="pet-actions-cell">
  <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}&return_to=customer:{{ cust.id }}" style="font-size:0.78rem;color:var(--brand);text-decoration:none;margin-right:0.6rem;">预约</a>
  <a href="#" onclick="event.preventDefault();openEditPet({{ p.id }})" style="font-size:0.78rem;color:#6b7280;text-decoration:none;margin-right:0.6rem;">编辑</a>
+ <a href="#" onclick="event.preventDefault();openMergePet({{ p.id }}, '{{ (p.name or '未命名')|e }}')" style="font-size:0.78rem;color:#d97706;text-decoration:none;margin-right:0.6rem;" title="把这只宠物合并到客户的另一只宠物（业务记录全迁移）">合并</a>
  <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ p.id }}/delete" style="display:inline;" onsubmit="return confirm('确认删除宠物「{{ p.name or '未命名' }}」？\n\n只有无业务记录（无病历/预约/收费单/疫苗等）才能删除，否则系统会拒绝。');">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
  <button type="submit" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.78rem;padding:0;">删除</button>
@@ -1855,5 +1856,57 @@ function renderWeightChart() {
 document.addEventListener('DOMContentLoaded', renderWeightChart);
 {% endif %}
 {% endif %}
+
+// ── 合并宠物 ──
+const __PETS_FOR_MERGE = [
+  {% for p in pets %}{ id: {{ p.id }}, name: {{ (p.name or '未命名')|tojson }}, mrn: {{ (p.medical_record_no or '')|tojson }} }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+function openMergePet(srcId, srcName) {
+  const others = __PETS_FOR_MERGE.filter(p => p.id !== srcId);
+  if (!others.length) {
+    alert('客户名下只有这一只宠物，无法合并');
+    return;
+  }
+  let html = '<select id="merge-target" style="width:100%;padding:.4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;">';
+  others.forEach(p => {
+    const mrn = p.mrn ? ' · ' + p.mrn : '';
+    html += `<option value="${p.id}">${p.name}${mrn}（#${p.id}）</option>`;
+  });
+  html += '</select>';
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:1.25rem;width:440px;max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,.22);">
+      <h3 style="margin:0 0 .6rem;font-size:1rem;">合并宠物「${srcName}」</h3>
+      <p style="margin:0 0 .85rem;font-size:.82rem;color:#6b7280;line-height:1.5;">
+        把「${srcName}」的所有业务记录（申请 / 预约 / 病历 / 收费 / 疫苗 / 协议 …）
+        全部迁移到下面选中的宠物，然后<b style="color:#dc2626;">删除「${srcName}」</b>。
+        此操作不可撤销。
+      </p>
+      <label style="font-size:.82rem;color:#6b7280;">合并到（保留的宠物）</label>
+      <div style="margin-top:.35rem;margin-bottom:1rem;">${html}</div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;">
+        <button type="button" id="merge-cancel" style="padding:.4rem 1rem;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:.85rem;">取消</button>
+        <button type="button" id="merge-confirm" style="padding:.4rem 1rem;border:none;border-radius:6px;background:#dc2626;color:#fff;cursor:pointer;font-size:.85rem;font-weight:600;">确认合并</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelector('#merge-cancel').onclick = () => modal.remove();
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.querySelector('#merge-confirm').onclick = function() {
+    const targetId = modal.querySelector('#merge-target').value;
+    if (!confirm('再次确认：合并「' + srcName + '」到 #' + targetId + '？')) return;
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = '/admin/customers/{{ cust.id }}/pets/' + srcId + '/merge-into';
+    form.innerHTML = '<input type="hidden" name="csrf_token" value="{{ csrf_token }}">' +
+                     '<input type="hidden" name="target_id" value="' + targetId + '">';
+    document.body.appendChild(form);
+    form.submit();
+  };
+}
 </script>
 {% endblock %}
