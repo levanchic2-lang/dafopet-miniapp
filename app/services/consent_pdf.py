@@ -74,7 +74,7 @@ def _build_html(task, cust, pet, doc_url_suffix: str, clinic_name: str) -> str:
         cust_line = f"客户：<b>{cust.name or ''}</b>　电话：{cust.phone or ''}"
     pet_line = ""
     if pet:
-        species_zh = {"cat": "猫", "dog": "狗"}.get(pet.species or "", pet.species or "")
+        species_zh = {"cat": "猫", "dog": "犬"}.get(pet.species or "", pet.species or "")
         pet_line = f"宠物：<b>{pet.name or ''}</b>{(' · ' + species_zh) if species_zh else ''}"
     initiated_at = task.initiated_at.strftime("%Y-%m-%d %H:%M") if task.initiated_at else ""
 
@@ -82,7 +82,7 @@ def _build_html(task, cust, pet, doc_url_suffix: str, clinic_name: str) -> str:
 <html><head><meta charset="utf-8"/><style>{PDF_CSS}</style></head>
 <body>
 <div class="pdf-clinic">{clinic_name or '大风动物医院'}</div>
-<div class="pdf-sub">Da Feng Animal Hospital · Veterinary Consent</div>
+<div class="pdf-sub">DaFo Animal Hospital · Veterinary Consent</div>
 <hr class="pdf-rule"/>
 <div class="pdf-title">{task.title or '协议签署'}</div>
 <div class="pdf-meta">

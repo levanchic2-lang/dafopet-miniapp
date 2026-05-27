@@ -3,7 +3,7 @@
 {% block default_size %}A4{% endblock %}
 
 {% block extra_style %}
-body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; color: #1a1a1a; }
+body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; color: #1a1a1a; font-variant-numeric: lining-nums tabular-nums; font-feature-settings: "lnum" 1, "tnum" 1; }
 
 .mr-clinic-en { text-align:center; font-size: 22pt; letter-spacing: 6px; font-weight: 400; }
 .mr-clinic-zh { text-align:center; font-size: 11pt; letter-spacing: 8px; color:#555; margin-top: 3px; }
@@ -99,7 +99,7 @@ body[data-size="T80"] .mr-sig { display: none; }
 {% endblock %}
 
 {% block content %}
-<div class="mr-clinic-en">{{ clinic_name_en or 'Da Feng Animal Hospital' }}</div>
+<div class="mr-clinic-en">{{ clinic_name_en or 'DaFo Animal Hospital' }}</div>
 <div class="mr-clinic-zh">{{ clinic_name_zh or '大风动物医院' }}</div>
 <div class="mr-clinic-tagline">Veterinary Medical Record · 兽 医 病 历 单</div>
 
@@ -243,7 +243,7 @@ body[data-size="T80"] .mr-sig { display: none; }
 
 <div class="mr-foot">
   <div class="thanks">"Compassionate care, accurate records."</div>
-  <div>{{ clinic_name_zh or '大风动物医院' }} · {{ clinic_name_en or 'Da Feng Animal Hospital' }}</div>
+  <div>{{ clinic_name_zh or '大风动物医院' }} · {{ clinic_name_en or 'DaFo Animal Hospital' }}</div>
   <div style="margin-top:2px;">本病历由本院出具，仅记载本次就诊信息 · Authenticated medical record for this visit only.</div>
 </div>
 {% endblock %}

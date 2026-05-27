@@ -8999,10 +8999,10 @@ async def admin_visit_print(visit_id: int, request: Request, db: Session = Depen
             pet_age = pet.birthday_estimate or ""
 
     clinic_name_zh = "大风动物医院"
-    clinic_name_en = "Da Feng Animal Hospital"
+    clinic_name_en = "DaFo Animal Hospital"
     if pet and pet.store:
         clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
-        clinic_name_en = f"Da Feng Animal Hospital · {pet.store.replace('店', '')}"
+        clinic_name_en = f"DaFo Animal Hospital · {pet.store.replace('店', '')}"
 
     return templates.TemplateResponse(request, "admin_visit_print.html", {
         "visit": visit, "cust": cust, "pet": pet,
@@ -12712,10 +12712,10 @@ async def admin_invoice_print(
     )
     # 门店全名 / 英文（根据宠物所属门店推断）
     clinic_name_zh = "大风动物医院"
-    clinic_name_en = "Da Feng Animal Hospital"
+    clinic_name_en = "DaFo Animal Hospital"
     if pet and pet.store:
         clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
-        clinic_name_en = f"Da Feng Animal Hospital · {pet.store.replace('店', '')}"
+        clinic_name_en = f"DaFo Animal Hospital · {pet.store.replace('店', '')}"
     return templates.TemplateResponse(request, "admin_invoice_print.html", {
         "inv": inv,
         "cust": cust,

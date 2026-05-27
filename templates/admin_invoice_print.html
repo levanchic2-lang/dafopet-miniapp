@@ -4,7 +4,7 @@
 
 {% block extra_style %}
 /* ── 极简英伦风：Georgia serif + 细金线 + 双横线 ── */
-body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; color: #1a1a1a; }
+body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; color: #1a1a1a; font-variant-numeric: lining-nums tabular-nums; font-feature-settings: "lnum" 1, "tnum" 1; }
 .inv-clinic-en { text-align:center; font-size: 22pt; letter-spacing: 6px; font-weight: 400; }
 .inv-clinic-zh { text-align:center; font-size: 11pt; letter-spacing: 8px; color:#555; margin-top: 3px; }
 .inv-clinic-tagline { text-align:center; font-size: 8.5pt; color:#888; font-style: italic; letter-spacing: 1px; margin-top: 6px; }
@@ -93,7 +93,7 @@ body[data-size="A5_LAND"] .inv-items { font-size: 9pt; }
 {% endblock %}
 
 {% block content %}
-<div class="inv-clinic-en">{{ clinic_name_en or 'Da Feng Animal Hospital' }}</div>
+<div class="inv-clinic-en">{{ clinic_name_en or 'DaFo Animal Hospital' }}</div>
 <div class="inv-clinic-zh">{{ clinic_name_zh or '大风动物医院' }}</div>
 <div class="inv-clinic-tagline">Veterinary Care &amp; Surgical Services · Est. 2018</div>
 
@@ -185,7 +185,7 @@ body[data-size="A5_LAND"] .inv-items { font-size: 9pt; }
 
 <div class="inv-foot">
   <div class="thanks">"Thank you for entrusting us with the care of your companion."</div>
-  <div>{{ clinic_name_zh or '大风动物医院' }} · {{ clinic_name_en or 'Da Feng Animal Hospital' }}</div>
+  <div>{{ clinic_name_zh or '大风动物医院' }} · {{ clinic_name_en or 'DaFo Animal Hospital' }}</div>
   <div style="margin-top:2px;">Please retain this receipt for your records · 凭此票据到院咨询</div>
 </div>
 {% endblock %}
