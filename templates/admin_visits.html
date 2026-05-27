@@ -67,11 +67,16 @@
  <td data-label="宠物">
  {% set p = pet_map.get(v.pet_id) %}
  {% if p %}
- {{ ('<i data-lucide="cat"></i>' if p.species == 'cat' else '<i data-lucide="dog"></i>' if p.species == 'dog' else '<i data-lucide="paw-print"></i>')|safe }} {{ p.name or '—' }}
+ <span style="display:inline-flex;align-items:center;gap:.3rem;">
+   {{ ('<i data-lucide="cat"></i>' if p.species == 'cat' else '<i data-lucide="dog"></i>' if p.species == 'dog' else '<i data-lucide="paw-print"></i>')|safe }}
+   {{ p.name or '—' }}
+ </span>
  {% else %}—{% endif %}
  </td>
- <td data-label="诊断" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
- {{ v.diagnosis or '—' }}
+ <td data-label="诊断">
+ <span style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;">
+   {{ v.diagnosis or '—' }}
+ </span>
  </td>
  <td data-label="医生" style="color:var(--muted);">{{ v.vet_name or '—' }}</td>
  <td class="actions" style="text-align:right;">
