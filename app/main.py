@@ -13700,6 +13700,7 @@ async def admin_exam_order_qr(
     # 优先用 PUBLIC_BASE_URL 配置（生产域名），否则 fallback 到 request.base_url
     base = (settings.public_base_url or str(request.base_url)).rstrip("/")
     url  = f"{base}/exam-upload/{order.upload_token or ''}"
+    # 尝试 1: qrcode + PIL（PNG）
     try:
         import qrcode, io as _io
         img  = qrcode.make(url)
@@ -13707,9 +13708,33 @@ async def admin_exam_order_qr(
         img.save(buf, format="PNG")
         buf.seek(0)
         return StreamingResponse(buf, media_type="image/png")
-    except Exception as _e:
-        logger.error("[exam-qr] qrcode generation failed: %s", _e)
-        raise HTTPException(500, f"二维码生成失败：{_e}")
+    except Exception as e1:
+        logger.warning("[exam-qr] PNG 生成失败，尝试 SVG: %s", e1)
+    # 尝试 2: qrcode SVG（不需要 PIL）
+    try:
+        import qrcode
+        import qrcode.image.svg as _svg
+        import io as _io
+        factory = _svg.SvgImage
+        img = qrcode.make(url, image_factory=factory)
+        buf = _io.BytesIO()
+        img.save(buf)
+        buf.seek(0)
+        return StreamingResponse(buf, media_type="image/svg+xml")
+    except Exception as e2:
+        logger.error("[exam-qr] SVG 也失败: %s", e2)
+    # 尝试 3: 第三方公网 API（兜底，无需任何依赖）
+    try:
+        from urllib.parse import quote as _q
+        import httpx
+        api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=240x240&data={_q(url, safe='')}"
+        with httpx.Client(timeout=5.0, follow_redirects=True) as cli:
+            r = cli.get(api_url)
+            if r.status_code == 200 and r.content:
+                return Response(content=r.content, media_type=r.headers.get('content-type', 'image/png'))
+    except Exception as e3:
+        logger.error("[exam-qr] 第三方 API 也失败: %s", e3)
+    raise HTTPException(500, "二维码生成失败 — 请检查服务器是否安装 qrcode 和 Pillow 库")
 
 
 @app.get("/admin/exam-reports/{report_id}/file")
