@@ -20,7 +20,7 @@
       font-size: 12px; padding: 3px 9px; border-radius: 14px;
       border: 1px solid #d1d5db; background: #fff;
       color: #374151; cursor: pointer; user-select: none;
-      transition: all .15s; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+      transition: all .15s; box-shadow: 0 1px 2px rgba(0,0,0,.06);
     }
     .voice-input-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
     .voice-input-btn.recording {
@@ -32,7 +32,11 @@
       50% { box-shadow: 0 0 0 6px rgba(220,38,38,0); }
     }
     .voice-input-btn.disabled { opacity: .55; cursor: not-allowed; }
-    .voice-input-hint { font-size: 11px; color: #9ca3af; margin-left: 6px; }
+    /* 手机端：按钮缩小成纯图标，节省横向空间 */
+    @media (max-width: 768px) {
+      .voice-input-btn { padding: 4px 7px; font-size: 13px; border-radius: 50%; }
+      .voice-input-btn .voice-input-label { display: none; }
+    }
   `;
   document.head.appendChild(style);
 
@@ -63,6 +67,14 @@
     if (!supported) btn.classList.add('disabled');
     host.appendChild(btn);
 
+    // 给 textarea 留出按钮的空间（避免文字钻到按钮下面）
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const need = isMobile ? 36 : 72;
+    const cur = parseFloat(getComputedStyle(textarea).paddingRight) || 0;
+    if (cur < need) {
+      textarea.style.paddingRight = need + 'px';
+    }
+
     if (!supported) {
       btn.addEventListener('click', function (e) {
         e.preventDefault();
@@ -79,7 +91,7 @@
     function setBtnRecording(on) {
       isRecording = on;
       btn.classList.toggle('recording', on);
-      btn.innerHTML = on ? '⏹ <span class="voice-input-label">结束</span>' : '🎤 <span class="voice-input-label">语音</span>';
+      btn.innerHTML = on ? '⏹<span class="voice-input-label"> 结束</span>' : '🎤<span class="voice-input-label"> 语音</span>';
     }
 
     function start() {
