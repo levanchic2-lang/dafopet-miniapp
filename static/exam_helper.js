@@ -109,6 +109,12 @@
   cursor: pointer; user-select: none; transition: all .12s;
 }
 .exam-tpl-btn:hover { background: #1e40af; }
+.exam-expand-btn {
+  font-size: .72rem; padding: 2px 9px; border-radius: 12px;
+  border: 1px dashed #94a3b8; background: transparent; color: #64748b;
+  cursor: pointer; user-select: none; transition: all .12s; margin-left: auto;
+}
+.exam-expand-btn:hover { border-color: #475569; color: #1e293b; background: #f1f5f9; }
 .exam-tpl-dropdown {
   position: absolute; z-index: 100; margin-top: 4px;
   background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
@@ -132,13 +138,19 @@
   document.head.appendChild(style);
 
   /* ─────────────────────────  逻辑  ───────────────────────── */
-  function insertAtCursor(ta, text) {
+  function insertAtCursor(ta, text, opts) {
+    opts = opts || {};
     const start = ta.selectionStart, end = ta.selectionEnd;
     const before = ta.value.substring(0, start);
     const after = ta.value.substring(end);
-    // 前面没换行且非空 → 自动加空格（避免连写）
     let prefix = '';
-    if (before && !/[\s\n>]$/.test(before)) prefix = ' ';
+    if (opts.newline) {
+      // 系统类：插入前确保单独成行（前面是行首 / 已换行 / 空 都不加）
+      if (before && !/\n$/.test(before)) prefix = '\n';
+    } else if (before && !/[\s\n>]$/.test(before)) {
+      // 默认：避免连写，前面非空+非空白 加空格
+      prefix = ' ';
+    }
     ta.value = before + prefix + text + after;
     const newPos = start + prefix.length + text.length;
     ta.selectionStart = ta.selectionEnd = newPos;
@@ -170,7 +182,7 @@
     const helper = document.createElement('div');
     helper.className = 'exam-helper';
 
-    // 第 1 行：模板按钮 + verdict chips
+    // 第 1 行：模板按钮 + verdict chips + 展开/收起按钮
     const row1 = document.createElement('div');
     row1.className = 'exam-helper-row';
     const tplBtn = document.createElement('button');
@@ -179,15 +191,37 @@
     tplBtn.textContent = '📋 模板 ▾';
     row1.appendChild(tplBtn);
     CHIPS.filter(c => c.group === 'verdict').forEach(c => row1.appendChild(makeChip(textarea, c)));
+
+    const expandBtn = document.createElement('button');
+    expandBtn.type = 'button';
+    expandBtn.className = 'exam-expand-btn';
+    expandBtn.textContent = '⇣ 更多';
+    expandBtn.title = '展开数值 / 系统 检查项';
+    row1.appendChild(expandBtn);
     helper.appendChild(row1);
 
-    // 第 2 行：数值类
+    // 第 2 行 + 第 3 行：默认隐藏
     const row2 = makeRow('数值', 'vitals', textarea);
-    helper.appendChild(row2);
-
-    // 第 3 行：系统类
     const row3 = makeRow('系统', 'system', textarea);
+    row2.style.display = 'none';
+    row3.style.display = 'none';
+    helper.appendChild(row2);
     helper.appendChild(row3);
+
+    // 折叠 / 展开切换（本地存住偏好）
+    let expanded = localStorage.getItem('exam_helper_expanded') === '1';
+    function applyExpanded() {
+      row2.style.display = expanded ? '' : 'none';
+      row3.style.display = expanded ? '' : 'none';
+      expandBtn.textContent = expanded ? '⇡ 收起' : '⇣ 更多';
+    }
+    applyExpanded();
+    expandBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      expanded = !expanded;
+      localStorage.setItem('exam_helper_expanded', expanded ? '1' : '0');
+      applyExpanded();
+    });
 
     textarea.parentNode.insertBefore(helper, textarea);
 
@@ -239,7 +273,8 @@
     chip.title = '插入：' + c.snippet;
     chip.addEventListener('click', function (e) {
       e.preventDefault();
-      insertAtCursor(textarea, c.snippet);
+      // 系统类 chip：插入前自动换行（每项一行更易读）
+      insertAtCursor(textarea, c.snippet, { newline: c.group === 'system' });
     });
     return chip;
   }
