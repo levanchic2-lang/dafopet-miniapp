@@ -438,7 +438,11 @@ async def _vaccine_reminder_loop():
 
 
 def _upsert_customer(db: Session, name: str, phone: str, openid: str = "", id_number: str = "", address: str = "", source: str = "") -> "Customer":
-    """查找或创建客户档案，始终合并最新信息。"""
+    """查找或创建客户档案，始终合并最新信息。
+
+    匹配优先级：phone → openid。
+    姓名覆盖规则：当老档案名为空 / 占位（"高女士" 等），且新名是合法全名时，覆盖。
+    """
     phone = (phone or "").strip()
     cust = db.query(Customer).filter(Customer.phone == phone).first() if phone else None
     if not cust:
@@ -447,8 +451,21 @@ def _upsert_customer(db: Session, name: str, phone: str, openid: str = "", id_nu
             cust = db.query(Customer).filter(Customer.wechat_openid == openid.strip()).first()
     if cust:
         # 合并更新
-        if name and not cust.name:
-            cust.name = name[:120]
+        new_name = (name or "").strip()
+        old_name = (cust.name or "").strip()
+        # 覆盖姓名条件：
+        #   1. 老档案名为空 → 直接填
+        #   2. 老档案名是占位（X女士/X先生/X小姐 等）+ 姓氏与新名首字相同
+        #      + 新名是真实全名 → 用新名修复（避免同手机号不同人误覆盖）
+        if new_name:
+            if not old_name:
+                cust.name = new_name[:120]
+            elif _is_invalid_name(old_name) and not _is_invalid_name(new_name):
+                # 占位名格式 "X+后缀"：取首字作为姓氏
+                old_surname = old_name[0] if old_name else ""
+                new_surname = new_name[0] if new_name else ""
+                if not old_surname or old_surname == new_surname:
+                    cust.name = new_name[:120]
         if openid and not cust.wechat_openid:
             cust.wechat_openid = openid.strip()
         if id_number and not cust.id_number:
