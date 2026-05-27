@@ -278,6 +278,8 @@
  </div>
  <a href="/admin/visits/{{ v.id }}/print" target="_blank" class="btn secondary"
     style="margin-left:auto;font-size:.82rem;"><i data-lucide="printer"></i> 打印病历</a>
+ <a href="/admin/visits/{{ v.id }}/discharge-print" target="_blank" class="btn secondary"
+    style="font-size:.82rem;"><i data-lucide="clipboard-list"></i> 打印医嘱单</a>
 </div>
 
 {# 7 步进度轴（横向紧凑） #}
@@ -346,7 +348,7 @@
  {# Step 6 医嘱 #}
  <div class="soap-panel" data-panel="6">
  <h3><i data-lucide="clipboard-list"></i> 医嘱 <small>用药指导、护理建议、复诊安排</small></h3>
- <textarea name="treatment_plan" data-voice="1">{{ v.treatment_plan or '' }}</textarea>
+ <textarea name="treatment_plan" data-voice="1" data-orders-helper="1">{{ v.treatment_plan or '' }}</textarea>
  </div>
 
  {# Step 7 回访 #}

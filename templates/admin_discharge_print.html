@@ -1,0 +1,229 @@
+{% extends "_print_base.html" %}
+{% block title %}医嘱单 · {{ pet.name if pet else '' }} · {{ visit.visit_date }}{% endblock %}
+{% block default_size %}A4{% endblock %}
+
+{% block extra_style %}
+body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; color: #1a1a1a; font-variant-numeric: lining-nums tabular-nums; font-feature-settings: "lnum" 1, "tnum" 1; }
+
+.dc-clinic-en { text-align:center; font-size: 22pt; letter-spacing: 6px; font-weight: 400; }
+.dc-clinic-zh { text-align:center; font-size: 11pt; letter-spacing: 8px; color:#555; margin-top: 3px; }
+.dc-clinic-tagline { text-align:center; font-size: 8.5pt; color:#888; font-style: italic; letter-spacing: 1px; margin-top: 6px; }
+.dc-rule-double { border: 0; border-top: 1px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; height: 4px; margin: 12px 0 4px; }
+.dc-rule-single { border: 0; border-top: 1px solid #888; margin: 6px 0; }
+.dc-title {
+  text-align: center; font-size: 13pt; font-weight: 700;
+  letter-spacing: 6px; text-transform: uppercase;
+  padding: 6px 0;
+}
+.dc-meta-row {
+  display: flex; justify-content: space-between;
+  font-size: 9.5pt; padding: 4px 0;
+}
+.dc-info {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px 20px; font-size: 10pt; padding: 8px 0;
+}
+.dc-info .lbl { color: #777; font-size: 9pt; margin-right: 6px; }
+.dc-info .val { font-weight: 600; }
+.dc-sec {
+  margin-top: 14px;
+  border-left: 3px solid #1a1a1a;
+  padding: 2px 8px; margin-bottom: 6px;
+}
+.dc-sec .zh { font-size: 12pt; font-weight: 700; letter-spacing: 4px; }
+.dc-sec .en { font-size: 8.5pt; color: #888; letter-spacing: 2px; text-transform: uppercase; margin-left: 4px; }
+
+/* 医嘱正文：突出大段说明 */
+.dc-orders {
+  font-size: 10.5pt; line-height: 1.8;
+  white-space: pre-wrap;
+  padding: 10px 14px;
+  background: #fafaf7;
+  border-left: 3px solid #b08d57;
+  border-radius: 0 4px 4px 0;
+}
+
+/* 诊断 + 主诉 简短框 */
+.dc-summary {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px 16px; font-size: 10pt; margin-top: 4px;
+}
+.dc-summary .blk {
+  border: 0.5px solid #c8c8c8; padding: 8px 10px;
+}
+.dc-summary .blk .h {
+  font-size: 8.5pt; color: #888; text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 4px;
+  border-bottom: 0.5px solid #e5e5e5; padding-bottom: 2px;
+}
+.dc-summary .blk .body {
+  white-space: pre-wrap; line-height: 1.6;
+}
+
+/* 处方表格（同病历单风格） */
+.dc-tbl { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 4px; }
+.dc-tbl thead th {
+  text-align: left; padding: 4px 6px;
+  border-bottom: 1.5px solid #1a1a1a;
+  font-size: 8.5pt; letter-spacing: 1px; font-weight: 600;
+  white-space: nowrap;
+}
+.dc-tbl tbody td {
+  padding: 4px 6px;
+  border-bottom: 0.5px dashed #d0d0d0; vertical-align: top;
+}
+.dc-tbl .r { text-align: right; }
+
+/* 紧急联系 */
+.dc-emergency {
+  margin-top: 16px;
+  padding: 8px 12px;
+  border: 1px dashed #dc2626;
+  border-radius: 4px;
+  background: #fff5f5;
+  font-size: 9.5pt;
+  color: #991b1b;
+}
+.dc-emergency .h {
+  font-weight: 700;
+  margin-bottom: 4px;
+  letter-spacing: 1px;
+}
+
+/* 签名栏 */
+.dc-sig {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 24px; margin-top: 28px;
+  font-size: 8.5pt; color: #555;
+}
+.dc-sig .box {
+  border-bottom: 1px solid #888;
+  padding: 28px 0 4px; text-align: center; letter-spacing: 2px;
+}
+.dc-foot {
+  margin-top: 18px; padding-top: 8px;
+  text-align: center; font-size: 8pt; color: #888;
+  border-top: 0.5px solid #ccc; letter-spacing: 1px;
+}
+.dc-foot .thanks { font-size: 9pt; color: #555; font-style: italic; margin-bottom: 4px; letter-spacing: .5px; }
+
+/* A5 / 80mm 降级 */
+body[data-size="A5"] .dc-clinic-en, body[data-size="A5_LAND"] .dc-clinic-en { font-size: 16pt; letter-spacing: 3px; }
+body[data-size="A5"] .dc-title, body[data-size="A5_LAND"] .dc-title { font-size: 11pt; }
+body[data-size="A5"] .dc-info, body[data-size="A5"] .dc-summary { grid-template-columns: 1fr; }
+body[data-size="T80"] .dc-clinic-en { font-size: 12pt; }
+body[data-size="T80"] .dc-info, body[data-size="T80"] .dc-summary { grid-template-columns: 1fr; }
+body[data-size="T80"] .dc-sig { display: none; }
+body[data-size="T80"] .dc-orders { font-size: 9.5pt; padding: 6px 8px; }
+{% endblock %}
+
+{% block content %}
+<div class="dc-clinic-en">{{ clinic_name_en or 'DaFo Animal Hospital' }}</div>
+<div class="dc-clinic-zh">{{ clinic_name_zh or '大风动物医院' }}</div>
+<div class="dc-clinic-tagline">Discharge Instructions · 医 嘱 单</div>
+
+<hr class="dc-rule-double" />
+<div class="dc-title">Discharge Orders · 医 嘱 单</div>
+<hr class="dc-rule-single" />
+
+<div class="dc-meta-row">
+  <span><b>Order No · 单号</b> DO{{ '%06d'|format(visit.id) }}</span>
+  <span><b>Visit Date · 就诊日</b> {{ visit.visit_date }}</span>
+  <span><b>Type · 类型</b> {{ visit_type_zh.get(visit.visit_type, visit.visit_type) }}</span>
+</div>
+
+<div class="dc-sec"><span class="zh">客户与宠物</span><span class="en">Client & Patient</span></div>
+<div class="dc-info">
+  <div><span class="lbl">Client · 客户</span><span class="val">{{ cust.name if cust else '—' }}</span></div>
+  <div><span class="lbl">Tel · 电话</span><span class="val">{{ cust.phone if cust else '—' }}</span></div>
+  <div><span class="lbl">Address · 地址</span><span class="val">{{ cust.address if cust and cust.address else '—' }}</span></div>
+  <div><span class="lbl">Pet · 宠物</span><span class="val">{{ pet.name if pet else '—' }}</span></div>
+  <div><span class="lbl">Species/Breed · 种类</span><span class="val">{% if pet %}{{ {'cat':'猫','dog':'犬','other':'异宠'}.get(pet.species, pet.species) }}{% if pet.breed %} · {{ pet.breed }}{% endif %}{% else %}—{% endif %}</span></div>
+  <div><span class="lbl">Sex · 性别</span><span class="val">{% if pet %}{% if pet.gender == 'male' %}公{% elif pet.gender == 'female' %}母{% else %}未知{% endif %}{% if pet.is_neutered %} (已绝育){% endif %}{% else %}—{% endif %}</span></div>
+  <div><span class="lbl">Age · 年龄</span><span class="val">{{ pet_age or '—' }}</span></div>
+  <div><span class="lbl">Weight · 体重</span><span class="val">{% if pet_weight %}{{ '%.1f'|format(pet_weight) }} kg{% else %}—{% endif %}</span></div>
+  <div><span class="lbl">Chart No. · 病历号</span><span class="val">{{ pet.medical_record_no if pet and pet.medical_record_no else '—' }}</span></div>
+</div>
+
+{# 主诉 + 诊断（简要回顾，让客户对得上号） #}
+<div class="dc-sec"><span class="zh">就诊摘要</span><span class="en">Visit Summary</span></div>
+<div class="dc-summary">
+  <div class="blk">
+    <div class="h">Chief Complaint · 主诉</div>
+    <div class="body">{{ visit.chief_complaint or '—' }}</div>
+  </div>
+  <div class="blk">
+    <div class="h">Diagnosis · 诊断</div>
+    <div class="body">{{ visit.diagnosis or '—' }}</div>
+  </div>
+</div>
+
+{# 医嘱正文 #}
+<div class="dc-sec"><span class="zh">医嘱内容</span><span class="en">Discharge Instructions</span></div>
+<div class="dc-orders">{{ visit.treatment_plan or '（医生暂未填写医嘱）' }}</div>
+
+{# 处方（如果有） #}
+{% if prescriptions %}
+<div class="dc-sec"><span class="zh">处方用药</span><span class="en">Prescriptions</span></div>
+{% for presc in prescriptions %}
+<div style="margin-bottom:8px;font-size:9.5pt;">
+  <div style="color:#666;">Rx{{ '%06d'|format(presc.id) }} · {{ presc.created_at.strftime('%Y-%m-%d') if presc.created_at else '' }}
+  {% if presc.vet_name %} · 处方医师 {{ presc.vet_name }}{% endif %}
+  </div>
+  <table class="dc-tbl">
+    <thead>
+      <tr>
+        <th style="width:auto;">Drug · 药品</th>
+        <th style="width:16%;">Dose · 用量</th>
+        <th style="width:12%;">Freq · 频次</th>
+        <th style="width:9%;">Days · 天</th>
+        <th style="width:13%;">Route · 用法</th>
+        <th style="width:13%;" class="r">Qty · 数量</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for it in presc.items %}
+      <tr>
+        <td>{{ it.drug_name }}{% if it.instructions %}<div style="font-size:8.5pt;color:#666;">{{ it.instructions }}</div>{% endif %}</td>
+        <td>{{ it.dose_text or '' }}</td>
+        <td>{{ ('%g 次/天'|format(it.times_per_day)) if it.times_per_day else (it.frequency or '') }}</td>
+        <td>{{ it.duration_days or '' }}</td>
+        <td>{% if it.drug_type == 'oral' %}口服 PO{% elif it.drug_type == 'topical' %}外用{% elif it.drug_type == 'injection' %}注射{% else %}{{ it.drug_type }}{% endif %}</td>
+        <td class="r">{{ '%g'|format(it.quantity_num or 0) }} {{ it.item_unit or '' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+{% endif %}
+
+{# 回访建议（如果填了） #}
+{% if visit.follow_up_at or visit.follow_up_note %}
+<div class="dc-sec"><span class="zh">复诊建议</span><span class="en">Follow-Up</span></div>
+<div style="font-size:10pt;line-height:1.7;padding:4px 0;">
+  {% if visit.follow_up_at %}<div><b>计划回访日期：</b>{{ visit.follow_up_at }}</div>{% endif %}
+  {% if visit.follow_up_note %}<div style="white-space:pre-wrap;margin-top:4px;">{{ visit.follow_up_note }}</div>{% endif %}
+</div>
+{% endif %}
+
+{# 紧急联系 #}
+<div class="dc-emergency">
+  <div class="h">⚠️ Emergency · 紧急情况请立即联系</div>
+  <div>如出现持续呕吐、拒食、伤口异常、呼吸困难、精神萎靡等异常，请立即电话联系医院或来院就诊。</div>
+</div>
+
+<hr class="dc-rule-single" style="margin-top:14px;" />
+
+{# 签名 #}
+<div class="dc-sig">
+  <div class="box">Attending Vet · 主治医师 {{ visit.vet_name or '' }}</div>
+  <div class="box">Client Acknowledged · 客户签字</div>
+</div>
+
+<div class="dc-foot">
+  <div class="thanks">"Caring for them, caring with you."</div>
+  <div>{{ clinic_name_zh or '大风动物医院' }} · {{ clinic_name_en or 'DaFo Animal Hospital' }}</div>
+  <div style="margin-top:2px;">本医嘱单仅针对本次就诊出具，请妥善保管 · For this visit only.</div>
+</div>
+{% endblock %}
