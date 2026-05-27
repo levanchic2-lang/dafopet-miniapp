@@ -13738,7 +13738,12 @@ async def admin_exam_order_qr(
 
 
 @app.get("/admin/exam-reports/{report_id}/file")
-async def admin_exam_report_file(report_id: int, request: Request, db: Session = Depends(get_db)):
+async def admin_exam_report_file(
+    report_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    download: int = Query(0, description="1=强制下载附件，0=浏览器内联预览"),
+):
     require_admin(request)
     rpt = db.get(ExamReport, report_id)
     if not rpt:
@@ -13747,7 +13752,17 @@ async def admin_exam_report_file(report_id: int, request: Request, db: Session =
     if not p.exists():
         raise HTTPException(404)
     media = "application/pdf" if rpt.file_type == "pdf" else "image/jpeg"
-    return FileResponse(str(p), media_type=media, filename=rpt.original_name)
+    if download:
+        # Content-Disposition: attachment + filename → 浏览器触发下载
+        return FileResponse(str(p), media_type=media, filename=rpt.original_name)
+    # 内联预览：Content-Disposition: inline → PDF 浏览器内打开，图片直接显示
+    from urllib.parse import quote as _q
+    safe_name = _q(rpt.original_name or "report")
+    return FileResponse(
+        str(p),
+        media_type=media,
+        headers={"Content-Disposition": f'inline; filename*=UTF-8\'\'{safe_name}'},
+    )
 
 
 # ── 手机端上传（无需登录，Token 校验）────────────────────────────────────────

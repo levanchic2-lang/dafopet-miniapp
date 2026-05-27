@@ -144,7 +144,9 @@
         {% endif %}
         <div class="foot">
           {% if rpt.item_label %}<div style="font-weight:600;margin-bottom:0.15rem;">{{ rpt.item_label }}</div>{% endif %}
-          <a href="/admin/exam-reports/{{ rpt.id }}/file" target="_blank">查看 / 下载</a>
+          <a href="/admin/exam-reports/{{ rpt.id }}/file" target="_blank" title="浏览器内预览">查看</a>
+          <span style="color:var(--muted);margin:0 .25rem;">·</span>
+          <a href="/admin/exam-reports/{{ rpt.id }}/file?download=1" title="保存到本地" download="{{ rpt.original_name or '' }}">下载</a>
           <span style="color:var(--muted);margin-left:0.4rem;">{{ rpt.file_type | upper }}</span>
           <div style="color:var(--muted);margin-top:0.15rem;">{{ rpt.uploaded_by }} · {{ rpt.uploaded_at.strftime('%m-%d %H:%M') }}</div>
           <form method="post" action="/admin/exam-orders/{{ order.id }}/delete-report/{{ rpt.id }}"
