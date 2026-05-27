@@ -8974,11 +8974,19 @@ async def admin_visit_print(visit_id: int, request: Request, db: Session = Depen
     prescriptions = db.query(Prescription).filter(Prescription.visit_id == visit_id).order_by(Prescription.id.asc()).all()
     exam_orders   = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.asc()).all()
     # 解析 exam_orders.items_json 一次，避免模板里调用 json
+    # 同时给每个 report 计算 page_count（PDF 渲染嵌入用），上限 5 页避免打印爆炸
+    from app.services.pdf_render import get_pdf_page_count
     for eo in exam_orders:
         try:
             eo._items_parsed = json.loads(eo.items_json or "[]")
         except Exception:
             eo._items_parsed = []
+        for rpt in eo.reports:
+            if rpt.file_type == "pdf":
+                cnt = get_pdf_page_count(rpt.file_path)
+                rpt.page_count = min(cnt, 5) if cnt else 0
+            else:
+                rpt.page_count = 1  # 图片只有 1 张
 
     # 体重 + 年龄（同 prescription print）
     pet_weight = 0.0
@@ -13735,6 +13743,34 @@ async def admin_exam_order_qr(
     except Exception as e3:
         logger.error("[exam-qr] 第三方 API 也失败: %s", e3)
     raise HTTPException(500, "二维码生成失败 — 请检查服务器是否安装 qrcode 和 Pillow 库")
+
+
+@app.get("/admin/exam-reports/{report_id}/page-image")
+async def admin_exam_report_page_image(
+    report_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    page: int = Query(0, ge=0, description="PDF 页码（0-based）；图片类型忽略此参数"),
+):
+    """检查报告渲染成 PNG 用于嵌入打印页。
+
+    - 图片类型：直接返回原文件
+    - PDF：用 PyMuPDF 渲染指定页为 PNG，缓存到 data/exam_pages_cache/
+    """
+    require_admin(request)
+    rpt = db.get(ExamReport, report_id)
+    if not rpt:
+        raise HTTPException(404)
+    p = Path(rpt.file_path)
+    if not p.exists():
+        raise HTTPException(404)
+    if rpt.file_type != "pdf":
+        return FileResponse(str(p), media_type="image/jpeg")
+    from app.services.pdf_render import render_pdf_page
+    out = render_pdf_page(str(p), page, rpt.id)
+    if not out:
+        raise HTTPException(500, "PDF 渲染失败（服务器可能未装 PyMuPDF）")
+    return FileResponse(str(out), media_type="image/png")
 
 
 @app.get("/admin/exam-reports/{report_id}/file")

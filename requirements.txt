@@ -14,6 +14,8 @@ openpyxl>=3.1.0
 xlrd>=2.0.1
 pandas>=2.0.0
 qrcode[pil]>=7.4.2
+# PDF 渲染（病历打印里嵌入检查报告 PDF 页面图像；纯 wheel，无系统依赖）
+PyMuPDF>=1.24.0
 apscheduler>=3.10.0
 # 腾讯云短信（仅当配置 TENCENT_SMS_SECRET_ID 等时才真正调用；缺包也不阻断启动）
 tencentcloud-sdk-python-sms>=3.0.1100

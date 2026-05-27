@@ -225,8 +225,23 @@ body[data-size="T80"] .mr-sig { display: none; }
   </div>
   {% endif %}
   {% if eo.reports %}
-  <div style="margin-top:4px;color:#888;font-size:8.5pt;">
-    <i data-lucide="paperclip"></i> 附件 {{ eo.reports|length }} 份{% if eo.reports|length <= 3 %}（{% for r in eo.reports %}{{ r.original_name }}{% if not loop.last %}、{% endif %}{% endfor %}）{% endif %}
+  <div class="mr-reports" style="margin-top:8px;">
+    {% for r in eo.reports %}
+      {% if r.page_count and r.page_count > 0 %}
+        {% for pg in range(r.page_count) %}
+          <div class="mr-report-page" style="margin: 4px 0 6px; page-break-inside: avoid;">
+            <img src="/admin/exam-reports/{{ r.id }}/page-image?page={{ pg }}"
+                 alt="{{ r.original_name }}"
+                 style="width:100%;max-width:520px;border:1px solid #ddd;border-radius:2px;display:block;" />
+            <div style="font-size:8pt;color:#888;text-align:right;margin-top:2px;">
+              {{ r.item_label or r.original_name }}{% if r.page_count > 1 %} · 第 {{ pg + 1 }}/{{ r.page_count }} 页{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div style="color:#888;font-size:8.5pt;">📎 附件 {{ r.original_name }}（无法嵌入，请扫码或下载查看）</div>
+      {% endif %}
+    {% endfor %}
   </div>
   {% endif %}
 </div>
