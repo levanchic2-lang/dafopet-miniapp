@@ -4623,6 +4623,9 @@ async def surgery_done(app_id: int, request: Request, db: Session = Depends(get_
     # 业务约束：手术完成天然蕴含「已现场确认」（不可能没核对就做手术）
     # 员工跳步骤直接点手术完成的，这里自动补上
     row.staff_cat_verified = True
+    # 默认公开公布：标记手术完成时自动开启公益展示
+    # 如果客户/医院不想公开，员工可在卡片上点「拒绝公开」手动关掉
+    row.showcase_consent = True
     _audit(db, request, "surgery_done", application_id=app_id)
     db.commit()
     notify_application_result(
