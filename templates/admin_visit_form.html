@@ -334,7 +334,7 @@
  {# Step 2 体格检查 #}
  <div class="soap-panel" data-panel="2">
  <h3><i data-lucide="stethoscope"></i> 体格检查 <small>体温/体重/心率/检查发现</small></h3>
- <textarea name="physical_exam" data-voice="1" style="min-height:200px;font-family:monospace;">{{ v.physical_exam or '' }}</textarea>
+ <textarea name="physical_exam" data-voice="1" data-exam-helper="1" style="min-height:200px;font-family:monospace;">{{ v.physical_exam or '' }}</textarea>
  </div>
 
  {# Step 4 主观诊断 #}
