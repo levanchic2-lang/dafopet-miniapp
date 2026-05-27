@@ -1638,21 +1638,43 @@ async def api_apply_create(
     db.commit()
     db.refresh(app_row)
 
-    # ── 自动创建宠物档案 ──
+    # ── 自动创建/复用宠物档案 ──
+    # 同一客户同名流浪猫（特别是申请后取消又重新申请的）应复用同一条 Pet，
+    # 避免客户宠物档案出现多个重复的「彪 / 小灰灰 …」
     if _cust_id and f.get("cat_nickname"):
         try:
-            _pet = Pet(
-                customer_id=_cust_id,
-                name=f["cat_nickname"][:120],
-                species="cat",
-                gender=f.get("cat_gender", "unknown"),
-                birthday_estimate=f.get("age_estimate", "")[:40],
-                is_stray=True,
-                notes=f.get("health_note", "")[:500],
+            _cat_name = f["cat_nickname"].strip()[:120]
+            _existing_pet = (
+                db.query(Pet)
+                .filter(
+                    Pet.customer_id == _cust_id,
+                    Pet.species == "cat",
+                    Pet.name == _cat_name,
+                )
+                .first()
             )
-            db.add(_pet)
-            db.flush()
-            app_row.pet_id = _pet.id
+            if _existing_pet:
+                # 复用已有宠物：补全可能新增的信息（不覆盖已有字段）
+                if not _existing_pet.gender or _existing_pet.gender == "unknown":
+                    _existing_pet.gender = f.get("cat_gender", "unknown")
+                if not _existing_pet.birthday_estimate:
+                    _existing_pet.birthday_estimate = f.get("age_estimate", "")[:40]
+                if not _existing_pet.notes and f.get("health_note"):
+                    _existing_pet.notes = f.get("health_note", "")[:500]
+                app_row.pet_id = _existing_pet.id
+            else:
+                _pet = Pet(
+                    customer_id=_cust_id,
+                    name=_cat_name,
+                    species="cat",
+                    gender=f.get("cat_gender", "unknown"),
+                    birthday_estimate=f.get("age_estimate", "")[:40],
+                    is_stray=True,
+                    notes=f.get("health_note", "")[:500],
+                )
+                db.add(_pet)
+                db.flush()
+                app_row.pet_id = _pet.id
             db.commit()
         except Exception:
             pass
