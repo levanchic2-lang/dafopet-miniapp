@@ -242,7 +242,7 @@
  </div>
  </div>
  <label style="margin-top:0.75rem;">主诉（可先填这一项，创建后再补充其他步骤）</label>
- <textarea name="chief_complaint"></textarea>
+ <textarea name="chief_complaint" data-voice="1"></textarea>
  <div style="display:flex;gap:0.6rem;margin-top:1.25rem;">
  <button type="submit" style="flex:1;">创建就诊记录</button>
  <a href="/admin/customers/{{ cust.id }}" class="btn secondary">取消</a>
@@ -328,25 +328,25 @@
  {# Step 1 主诉 #}
  <div class="soap-panel active" data-panel="1">
  <h3><i data-lucide="pencil-line"></i> 主诉 <small>客户描述的问题、症状、行为变化</small></h3>
- <textarea name="chief_complaint">{{ v.chief_complaint or '' }}</textarea>
+ <textarea name="chief_complaint" data-voice="1">{{ v.chief_complaint or '' }}</textarea>
  </div>
 
  {# Step 2 体格检查 #}
  <div class="soap-panel" data-panel="2">
  <h3><i data-lucide="stethoscope"></i> 体格检查 <small>体温/体重/心率/检查发现</small></h3>
- <textarea name="physical_exam" style="min-height:200px;font-family:monospace;">{{ v.physical_exam or '' }}</textarea>
+ <textarea name="physical_exam" data-voice="1" style="min-height:200px;font-family:monospace;">{{ v.physical_exam or '' }}</textarea>
  </div>
 
  {# Step 4 主观诊断 #}
  <div class="soap-panel" data-panel="4">
  <h3><i data-lucide="microscope"></i> 主观诊断 <small>基于主诉和体检的初步判断</small></h3>
- <textarea name="diagnosis">{{ v.diagnosis or '' }}</textarea>
+ <textarea name="diagnosis" data-voice="1">{{ v.diagnosis or '' }}</textarea>
  </div>
 
  {# Step 6 医嘱 #}
  <div class="soap-panel" data-panel="6">
  <h3><i data-lucide="clipboard-list"></i> 医嘱 <small>用药指导、护理建议、复诊安排</small></h3>
- <textarea name="treatment_plan">{{ v.treatment_plan or '' }}</textarea>
+ <textarea name="treatment_plan" data-voice="1">{{ v.treatment_plan or '' }}</textarea>
  </div>
 
  {# Step 7 回访 #}
@@ -363,7 +363,7 @@
  </div>
  </div>
  <label>回访内容</label>
- <textarea name="follow_up_note">{{ v.follow_up_note or '' }}</textarea>
+ <textarea name="follow_up_note" data-voice="1">{{ v.follow_up_note or '' }}</textarea>
  </div>
 
  {# 自动保存状态条 #}
@@ -590,7 +590,7 @@
  </div>
  </div>
  <label>补充备注</label>
- <textarea name="notes" style="min-height:48px;">{{ v.notes or '' }}</textarea>
+ <textarea name="notes" data-voice="1" style="min-height:48px;">{{ v.notes or '' }}</textarea>
  <div style="display:flex;gap:0.5rem;margin-top:0.6rem;">
  <button type="submit">保存基础信息</button>
  <form method="post" action="/admin/visits/{{ v.id }}/delete" onsubmit="return confirm('⚠ 确认彻底删除此病历记录？此操作不可恢复，已开具的处方/收费单也会断链。')" style="margin-left:auto;">
