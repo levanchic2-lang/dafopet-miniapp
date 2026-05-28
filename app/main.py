@@ -9089,6 +9089,12 @@ async def page_admin_visit_detail(
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
     invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
     exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.desc()).all()
+    # 解析检查项目，让列表能展示开了哪些项
+    for eo in exam_orders:
+        try:
+            eo._items_parsed = json.loads(eo.items_json or "[]")
+        except Exception:
+            eo._items_parsed = []
     _PRESC_STATUS_ZH = {"draft": "草稿", "issued": "已开具", "dispensed": "已发药"}
     _SO_STATUS_ZH = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
     return templates.TemplateResponse(request, "admin_visit_form.html", {

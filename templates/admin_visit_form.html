@@ -499,14 +499,25 @@
  {% if exam_orders %}
  <div class="record-list">
  {% for eo in exam_orders %}
- <div class="record-item" style="cursor:default;">
- <a href="/admin/exam-orders/{{ eo.id }}" style="display:flex;flex:1;align-items:center;gap:0.65rem;text-decoration:none;color:inherit;">
+ <div class="record-item" style="cursor:default;align-items:flex-start;">
+ <a href="/admin/exam-orders/{{ eo.id }}" style="display:block;flex:1;text-decoration:none;color:inherit;">
+ <div style="display:flex;align-items:center;gap:0.65rem;flex-wrap:wrap;">
  <span class="ri-date">{{ eo.created_at.strftime('%m-%d %H:%M') if eo.created_at else '—' }}</span>
  <span class="pill {% if eo.status == 'completed' %}pill-ok{% else %}pill-warn{% endif %}">
  {{ '已出报告' if eo.status == 'completed' else '待出报告' }}
  </span>
  <span class="ri-main">检查单 #{{ eo.id }}</span>
  <span style="font-size:0.78rem;color:var(--muted);">{{ eo.reports|length }} 份报告</span>
+ </div>
+ {% if eo._items_parsed %}
+ <div style="margin-top:0.4rem;display:flex;flex-wrap:wrap;gap:0.3rem;">
+ {% for it in eo._items_parsed %}
+ <span style="display:inline-block;background:#eff6ff;color:#1e40af;font-size:0.74rem;padding:1px 8px;border-radius:4px;border:1px solid #bfdbfe;">{{ it.name }}{% if it.notes %} · {{ it.notes }}{% endif %}</span>
+ {% endfor %}
+ </div>
+ {% else %}
+ <div style="margin-top:0.4rem;font-size:0.74rem;color:#9ca3af;">（未填检查项目）</div>
+ {% endif %}
  </a>
  <form method="post" action="/admin/exam-orders/{{ eo.id }}/delete" style="margin:0;"
  onsubmit="return confirm('删除此检查单及其所有报告？此操作不可恢复。')">

@@ -5,7 +5,7 @@
  *   - API / 表单 POST：直通网络（不缓存）
  *   - 升级版本时改 CACHE_VERSION，自动清旧
  */
-const CACHE_VERSION = 'v99-discharge-orders';
+const CACHE_VERSION = 'v100-exam-items-show';
 const STATIC_CACHE = 'static-' + CACHE_VERSION;
 const PAGE_CACHE   = 'pages-' + CACHE_VERSION;
 
