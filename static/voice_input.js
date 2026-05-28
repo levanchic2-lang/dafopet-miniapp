@@ -15,12 +15,12 @@
   style.textContent = `
     .voice-input-wrap { position: relative; display: block; }
     .voice-input-btn {
-      position: absolute; top: 6px; right: 6px; z-index: 5;
+      position: absolute; top: 8px; right: 10px; z-index: 5;
       display: inline-flex; align-items: center; gap: 4px;
       font-size: 12px; padding: 3px 9px; border-radius: 14px;
-      border: 1px solid #d1d5db; background: #fff;
+      border: 1px solid #d1d5db; background: rgba(255,255,255,.92);
       color: #374151; cursor: pointer; user-select: none;
-      transition: all .15s; box-shadow: 0 1px 2px rgba(0,0,0,.06);
+      transition: all .15s; box-shadow: 0 1px 3px rgba(0,0,0,.12);
     }
     .voice-input-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
     .voice-input-btn.recording {
@@ -49,15 +49,12 @@
 
     // 确保父级有 position:relative（不破坏现有布局，必要时用 wrap div）
     const parent = textarea.parentElement;
-    const parentPos = getComputedStyle(parent).position;
-    let host = parent;
-    if (parentPos === 'static' || parentPos === '') {
-      const wrap = document.createElement('div');
-      wrap.className = 'voice-input-wrap';
-      parent.insertBefore(wrap, textarea);
-      wrap.appendChild(textarea);
-      host = wrap;
-    }
+    // 始终用 wrap 包住 textarea，保证按钮相对 textarea 定位（不会跑到面板顶部压住工具条）
+    const wrap = document.createElement('div');
+    wrap.className = 'voice-input-wrap';
+    parent.insertBefore(wrap, textarea);
+    wrap.appendChild(textarea);
+    const host = wrap;
 
     const btn = document.createElement('button');
     btn.type = 'button';
