@@ -74,9 +74,8 @@
         <th style="padding:.4rem;width:11%;">给药途径</th>
         <th style="padding:.4rem;width:10%;">数量</th>
         <th style="padding:.4rem;width:9%;">单位</th>
-        <th style="padding:.4rem;width:10%;">单价</th>
+        <th style="padding:.4rem;width:11%;">单价</th>
         <th style="padding:.4rem;width:11%;">小计</th>
-        <th style="padding:.4rem;width:8%;">服务类</th>
         <th style="width:60px;"></th>
       </tr>
     </thead>
@@ -92,14 +91,14 @@
           <td><input name="total_unit[]" value="{{ it.total_unit }}" placeholder="支/ml" style="width:100%;"/></td>
           <td><input type="number" step="0.01" name="unit_price[]" value="{{ '%.2f'|format(it.unit_price) }}" style="width:100%;" onchange="recalc()"/></td>
           <td><input class="subtotal" readonly value="{{ '%.2f'|format(it.subtotal) }}" style="width:100%;background:#f8fafc;font-weight:600;"/></td>
-          <td style="text-align:center;"><input type="checkbox" name="is_service[]" value="1" {% if it.is_service %}checked{% endif %} onchange="toggleService(this)"/></td>
           <td style="text-align:center;white-space:nowrap;">
+            <input type="hidden" name="is_service[]" value="{{ '1' if it.is_service else '0' }}"/>
             <button type="button" class="icon-btn" onclick="toggleDetail(this)" title="浓度/剂量">✏</button>
             <button type="button" class="icon-btn" onclick="rmRow(this)" title="删除" style="color:#dc2626;">✕</button>
           </td>
         </tr>
         <tr class="anesth-detail" data-idx="{{ i }}">
-          <td colspan="8" style="padding:.5rem .8rem;">
+          <td colspan="7" style="padding:.5rem .8rem;">
             <div class="dose-only" style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;">
               <div><label class="mini">浓度（如 2%）</label><input name="concentration[]" value="{{ it.concentration }}" style="width:100%;"/></div>
               <div><label class="mini">单次剂量</label><input type="number" step="0.01" name="dose_amount[]" value="{{ it.dose_amount or '' }}" style="width:100%;"/></div>
@@ -178,8 +177,8 @@ function addRow() {
     <td><input name="total_unit[]" placeholder="支/ml" style="width:100%;"/></td>
     <td><input type="number" step="0.01" name="unit_price[]" style="width:100%;" onchange="recalc()"/></td>
     <td><input class="subtotal" readonly value="0.00" style="width:100%;background:#f8fafc;font-weight:600;"/></td>
-    <td style="text-align:center;"><input type="checkbox" name="is_service[]" value="1" onchange="toggleService(this)"/></td>
     <td style="text-align:center;white-space:nowrap;">
+      <input type="hidden" name="is_service[]" value="0"/>
       <button type="button" class="icon-btn" onclick="toggleDetail(this)" title="浓度/剂量">✏</button>
       <button type="button" class="icon-btn" onclick="rmRow(this)" title="删除" style="color:#dc2626;">✕</button>
     </td>`;
@@ -187,7 +186,7 @@ function addRow() {
   detail.className = 'anesth-detail';
   detail.dataset.idx = i;
   detail.innerHTML = `
-    <td colspan="8" style="padding:.5rem .8rem;">
+    <td colspan="7" style="padding:.5rem .8rem;">
       <div class="dose-only" style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;">
         <div><label class="mini">浓度（如 2%）</label><input name="concentration[]" style="width:100%;"/></div>
         <div><label class="mini">单次剂量</label><input type="number" step="0.01" name="dose_amount[]" style="width:100%;"/></div>
@@ -209,18 +208,17 @@ function onDrugPick(input, i) {
   const pp = row.querySelector('input[name="unit_price[]"]');
   if (!pp.value || pp.value === '0' || pp.value === '0.00') pp.value = c.price.toFixed(2);
   const sv = row.querySelector('input[name="is_service[]"]');
-  if (c.service) { sv.checked = true; row.classList.add('is-service'); }
-  // 服务类的单位默认 = "次"
-  if (c.service && !tu.value) tu.value = '次';
-  // 服务类默认数量 = 1
-  const qty = row.querySelector('input[name="total_qty[]"]');
-  if (c.service && !qty.value) qty.value = '1';
+  if (c.service) {
+    sv.value = '1';
+    row.classList.add('is-service');
+    if (!tu.value) tu.value = '次';
+    const qty = row.querySelector('input[name="total_qty[]"]');
+    if (!qty.value) qty.value = '1';
+  } else {
+    sv.value = '0';
+    row.classList.remove('is-service');
+  }
   recalc();
-}
-
-function toggleService(cb) {
-  const row = cb.closest('tr');
-  row.classList.toggle('is-service', cb.checked);
 }
 
 function toggleDetail(btn) {
