@@ -167,7 +167,7 @@ def run_due_dispatch(db: Optional[Session] = None) -> dict:
 
 
 def run_no_reply_promote(db: Optional[Session] = None) -> dict:
-    """把已发送 48h 仍未反馈的转为 phone_pending。"""
+    """把已发送 48h 仍未反馈的转为 phone_pending，并按 assigned_to 聚合后推送企微通知。"""
     own_session = db is None
     if own_session:
         db = SessionLocal()
@@ -183,17 +183,58 @@ def run_no_reply_promote(db: Optional[Session] = None) -> dict:
             .all()
         )
         n = len(rows)
+        promoted_by_user: dict[str, list] = {}
         for fu in rows:
             fu.status = "phone_pending"
             fu.response = fu.response or "no_reply"
             fu.updated_at = datetime.utcnow()
+            key = (fu.assigned_to or "").strip()
+            if key:
+                promoted_by_user.setdefault(key, []).append(fu)
         if n:
             db.commit()
             logger.info("[followup no-reply] promoted=%d", n)
+            # 按主治医师聚合后推企微一条（避免刷屏）
+            try:
+                _push_phone_pending_summary(db, promoted_by_user)
+            except Exception as e:
+                logger.warning("[followup no-reply] wecom push failed: %s", e)
         return {"promoted": n}
     finally:
         if own_session:
             db.close()
+
+
+def _push_phone_pending_summary(db: Session, by_user: dict) -> None:
+    """按 assigned_to (AdminUser.username) 聚合 → 一条企微消息列出该用户名下的电话兜底列表。"""
+    if not by_user:
+        return
+    try:
+        from app.services.wecom_client import send_app_message as _send
+        from app.models import AdminUser as _AU, Pet as _Pet, Customer as _Cust
+    except Exception:
+        return
+    base = (settings.public_base_url or "").strip().rstrip("/")
+    for username, fus in by_user.items():
+        u = db.query(_AU).filter(_AU.username == username, _AU.is_active == True).first()
+        if not u or not u.wecom_userid:
+            continue
+        lines = [f"📞 客户 48h 未反馈，请电话回访（{len(fus)} 单）"]
+        for fu in fus[:8]:
+            pet = db.get(_Pet, fu.pet_id) if fu.pet_id else None
+            cust = db.get(_Cust, fu.customer_id) if fu.customer_id else None
+            phone = (cust.phone if cust else "") or ""
+            pet_name = pet.name if pet else "客户宠物"
+            cust_name = cust.name if cust else "客户"
+            lines.append(f"· {pet_name}（{cust_name}{' '+phone if phone else ''}）")
+        if len(fus) > 8:
+            lines.append(f"...还有 {len(fus) - 8} 单")
+        if base:
+            lines.append(f"详情：{base}/admin/follow-ups?tab=overdue&mine=1")
+        try:
+            _send(u.wecom_userid, "\n".join(lines))
+        except Exception as e:
+            logger.warning("[followup no-reply] send to %s failed: %s", username, e)
 
 
 # ─── 调度器（APScheduler） ───

@@ -69,7 +69,10 @@
 <div class="page-head">
  <div>
  <h1><span class="ph-icon"><i data-lucide="phone"></i></span>回访管理</h1>
- <p class="ph-sub">就诊后自动产生回访任务 · 谁看诊谁回访 · 客户反馈自动闭环</p>
+ <p class="ph-sub">就诊后按诊断自动衍生多轮回访 · 模板化结构化反馈 · 客户反馈自动闭环</p>
+ </div>
+ <div class="ph-actions">
+   <a href="/admin/follow-up-templates" class="btn secondary" style="font-size:.88rem;"><i data-lucide="layout-template"></i> 回访模板</a>
  </div>
 </div>
 
@@ -127,11 +130,35 @@
    {% else %}—{% endif %}
   </td>
   <td data-label="就诊类型">{% if v %}<span class="pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>{% else %}—{% endif %}</td>
-  <td data-label="诊断" style="max-width:280px;">
+  <td data-label="诊断" style="max-width:320px;">
    {% if v %}
     <div style="font-size:.85rem;">{{ (v.diagnosis or v.chief_complaint or '—')[:80] }}</div>
     <div style="color:var(--muted);font-size:.75rem;">就诊日：{{ v.visit_date }}</div>
    {% else %}—{% endif %}
+   {% if fu.template_name %}
+    <div style="font-size:.72rem;color:#7c3aed;margin-top:.2rem;">📋 {{ fu.template_name }}{% if fu.round_name %} · {{ fu.round_name }}{% endif %}</div>
+   {% endif %}
+   {% if fu.response_data %}
+    {% set ans = fu.response_data | parse_json %}
+    {% if ans %}
+    <details style="margin-top:.3rem;">
+     <summary style="cursor:pointer;font-size:.75rem;color:#10b981;">✓ {{ ans.keys()|length }} 项结构化反馈</summary>
+     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:.4rem .6rem;margin-top:.3rem;font-size:.78rem;line-height:1.6;">
+      {% for k, val in ans.items() %}
+        <div><b style="color:#166534;">{{ k }}:</b>
+        {% if val is iterable and val is not string %}
+          {% if val and val[0] and val[0] is string and val[0].startswith('/uploads/') %}
+            <div style="display:flex;gap:.3rem;margin-top:.2rem;">
+            {% for url in val %}<a href="{{ url }}" target="_blank"><img src="{{ url }}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid #cbd5e1;"/></a>{% endfor %}
+            </div>
+          {% else %}{{ val|join(', ') }}{% endif %}
+        {% else %}{{ val }}{% endif %}
+        </div>
+      {% endfor %}
+     </div>
+    </details>
+    {% endif %}
+   {% endif %}
   </td>
   <td data-label="处理人">{{ fu.assigned_to or '—' }}</td>
   <td data-label="渠道">

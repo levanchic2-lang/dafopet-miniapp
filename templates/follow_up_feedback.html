@@ -7,22 +7,56 @@
 <style>
   * { box-sizing: border-box; }
   body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
-         background:#f5f7f9; color:#111827; }
-  .wrap { max-width:520px; margin:0 auto; padding:1.5rem 1.25rem; }
+         background:#f5f7f9; color:#111827; padding-bottom:2rem; }
+  .wrap { max-width:560px; margin:0 auto; padding:1.5rem 1.25rem; }
   .card { background:#fff; border-radius:14px; padding:1.5rem 1.25rem; box-shadow:0 2px 14px rgba(0,0,0,.05); }
   .brand { text-align:center; color:#6b7280; font-size:.9rem; margin-bottom:1rem; }
-  h1 { font-size:1.25rem; margin:0 0 .8rem; line-height:1.5; }
-  .pet-row { background:#f9fafb; border-radius:10px; padding:.85rem 1rem; margin:1rem 0; font-size:.95rem; }
+  h1 { font-size:1.2rem; margin:0 0 .4rem; line-height:1.5; }
+  h1 .round-tag { display:inline-block;background:#dbeafe;color:#1e40af;font-size:.75rem;padding:2px 8px;border-radius:4px;margin-left:.3rem;vertical-align:middle; }
+  .sub { color:#6b7280; font-size:.85rem; margin-bottom:1rem; }
+  .pet-row { background:#f9fafb; border-radius:10px; padding:.85rem 1rem; margin:1rem 0; font-size:.92rem; line-height:1.7; }
   .pet-row b { color:#111827; }
-  .ask { font-size:1.05rem; margin:1.25rem 0 1rem; line-height:1.6; }
-  .btns { display:flex; flex-direction:column; gap:.7rem; margin-bottom:1rem; }
-  button.choice { width:100%; padding:1rem 1.2rem; font-size:1.05rem; font-weight:600;
-                  border:none; border-radius:12px; cursor:pointer; }
-  button.recovered { background:#10b981; color:#fff; }
-  button.needs    { background:#f59e0b; color:#fff; }
-  textarea { width:100%; min-height:80px; padding:.7rem; border:1px solid #e5e7eb;
-             border-radius:10px; font-family:inherit; font-size:.95rem; resize:vertical; }
-  label { display:block; color:#6b7280; font-size:.85rem; margin-bottom:.4rem; }
+
+  .q { background:#fafbfc; border-radius:10px; padding:.85rem 1rem; margin-bottom:.7rem; }
+  .q .label { font-weight:600; font-size:.95rem; color:#111827; margin-bottom:.5rem; display:block; }
+  .q .help { color:#9ca3af; font-size:.78rem; font-weight:400; margin-left:.3rem; }
+  .q.required .label::after { content:" *"; color:#dc2626; }
+
+  /* 1-5 scale */
+  .scale-row { display:flex; gap:.4rem; justify-content:space-between; }
+  .scale-btn { flex:1; padding:.7rem .2rem; border:1px solid #e5e7eb; background:#fff; border-radius:8px;
+               font-size:1.4rem; cursor:pointer; transition:.15s; }
+  .scale-btn.selected { background:#10b981; color:#fff; border-color:#10b981; }
+  .scale-labels { display:flex; justify-content:space-between; font-size:.7rem; color:#9ca3af; margin-top:.3rem; }
+
+  /* select / multi */
+  .opt-row { display:flex; flex-wrap:wrap; gap:.4rem; }
+  .opt-btn { padding:.55rem .9rem; border:1.5px solid #e5e7eb; background:#fff; border-radius:8px;
+             font-size:.92rem; cursor:pointer; transition:.15s; }
+  .opt-btn.selected { background:#3b82f6; color:#fff; border-color:#3b82f6; }
+
+  /* text/number */
+  input[type=text], input[type=number], textarea {
+    width:100%; padding:.7rem; border:1px solid #e5e7eb; border-radius:8px;
+    font-family:inherit; font-size:.95rem; resize:vertical;
+  }
+  textarea { min-height:60px; }
+
+  /* upload */
+  .upload-row { display:flex; gap:.5rem; flex-wrap:wrap; }
+  .upload-item { width:80px; height:80px; border:1.5px dashed #cbd5e1; border-radius:8px;
+                 display:flex; align-items:center; justify-content:center; background:#f8fafc;
+                 cursor:pointer; font-size:1.8rem; color:#94a3b8; position:relative; overflow:hidden; }
+  .upload-item img { width:100%; height:100%; object-fit:cover; }
+  .upload-item .rm-btn { position:absolute; top:2px; right:2px; background:rgba(0,0,0,.5);
+                         color:#fff; border:none; border-radius:50%; width:18px; height:18px;
+                         font-size:.7rem; cursor:pointer; line-height:18px; padding:0; }
+
+  .submit-btn { width:100%; padding:1rem; font-size:1.05rem; font-weight:600;
+                background:#10b981; color:#fff; border:none; border-radius:12px; cursor:pointer;
+                margin-top:1rem; }
+  .submit-btn:disabled { background:#9ca3af; cursor:not-allowed; }
+
   .ok-card { text-align:center; padding:2rem 1rem; }
   .ok-card .icon { font-size:3rem; }
   .ok-card h2 { margin:.6rem 0; }
@@ -32,42 +66,95 @@
 </head>
 <body>
 <div class="wrap">
- <div class="brand"><i data-lucide="paw-print"></i> 大风动物医院</div>
+ <div class="brand">🐾 大风动物医院</div>
 
  <div class="card">
   {% if submitted %}
    <div class="ok-card">
-    <div class="icon">{% if fu.response == 'recovered' %}<i data-lucide="check-circle-2"></i>{% else %}<i data-lucide="phone"></i>{% endif %}</div>
+    <div class="icon">{% if fu.response == 'recovered' %}✅{% elif fu.response == 'needs_visit' %}📞{% else %}📝{% endif %}</div>
     <h2>感谢您的反馈</h2>
     <p>
      {% if fu.response == 'recovered' %}
       很高兴 {{ pet.name if pet else '您的宝贝' }} 状态良好，祝身体健康！
+     {% elif fu.response == 'needs_visit' %}
+      已记录，工作人员会尽快与您联系安排复诊。
      {% else %}
-      我们已记录您的反馈，工作人员会尽快与您联系安排复诊。
+      您的反馈已收到，医生会及时查看。
      {% endif %}
     </p>
    </div>
   {% else %}
-   <h1>关于 <b>{{ pet.name if pet else '宠物' }}</b> 的术后/诊后回访</h1>
+   <h1>{{ pet.name if pet else '您的宝贝' }} 回访{% if fu.round_name %} <span class="round-tag">{{ fu.round_name }}</span>{% endif %}</h1>
+   {% if fu.template_name %}<div class="sub">{{ fu.template_name }}</div>{% endif %}
    <div class="pet-row">
-    <div>就诊日期：<b>{{ visit.visit_date if visit else '—' }}</b></div>
-    {% if visit %}<div>就诊类型：<b>{{ visit_type_zh.get(visit.visit_type, visit.visit_type) }}</b></div>{% endif %}
-    {% if visit and visit.diagnosis %}<div>诊断：{{ visit.diagnosis[:60] }}</div>{% endif %}
+    {% if visit %}<div>就诊日期：<b>{{ visit.visit_date }}</b></div>{% endif %}
+    {% if visit and visit.diagnosis %}<div>诊断：<b>{{ visit.diagnosis[:80] }}</b></div>{% endif %}
+    {% if visit and visit.vet_name %}<div>主治医师：<b>{{ visit.vet_name }}</b></div>{% endif %}
    </div>
 
-   <div class="ask">{{ pet.name if pet else '您的宝贝' }} 现在感觉怎么样？</div>
+   <form method="post" enctype="multipart/form-data" id="feedback-form">
+    {% if questions %}
+      {% for q in questions %}
+      <div class="q" data-key="{{ q.key }}" data-type="{{ q.type }}">
+        <label class="label">{{ q.label }}{% if q.help %}<span class="help">（{{ q.help }}）</span>{% endif %}</label>
 
-   <form method="post" id="feedback-form">
-    <div class="btns">
-     <button type="submit" name="response" value="recovered" class="choice recovered">
-      <i data-lucide="check"></i> 已好转，状态良好
-     </button>
-     <button type="submit" name="response" value="needs_visit" class="choice needs">
-      <i data-lucide="x"></i> 仍有不适，需要复诊
-     </button>
-    </div>
-    <label for="note">补充说明（选填）</label>
-    <textarea name="note" id="note" placeholder="例如：精神好，食欲恢复 / 还是有些拉肚子"></textarea>
+        {% if q.type == 'scale1to5' %}
+          <div class="scale-row" data-scale>
+            {% for v, emo in [(1,'😟'),(2,'😐'),(3,'🙂'),(4,'😊'),(5,'🤩')] %}
+            <button type="button" class="scale-btn" data-value="{{ v }}">{{ emo }}</button>
+            {% endfor %}
+          </div>
+          <div class="scale-labels"><span>差</span><span>好</span></div>
+          <input type="hidden" name="q_{{ q.key }}" value=""/>
+
+        {% elif q.type == 'select' %}
+          <div class="opt-row" data-select>
+          {% for opt in q.options %}
+            <button type="button" class="opt-btn" data-value="{{ opt }}">{{ opt }}</button>
+          {% endfor %}
+          </div>
+          <input type="hidden" name="q_{{ q.key }}" value=""/>
+
+        {% elif q.type == 'multi' %}
+          <div class="opt-row" data-multi>
+          {% for opt in q.options %}
+            <button type="button" class="opt-btn" data-value="{{ opt }}">{{ opt }}</button>
+          {% endfor %}
+          </div>
+          <input type="hidden" name="q_{{ q.key }}" value=""/>
+
+        {% elif q.type == 'number' %}
+          <input type="number" name="q_{{ q.key }}" step="{{ q.step|default(0.01) }}" placeholder="{{ q.placeholder|default('') }}"/>
+
+        {% elif q.type == 'text' %}
+          <textarea name="q_{{ q.key }}" placeholder="{{ q.placeholder|default('') }}"></textarea>
+
+        {% elif q.type == 'upload' %}
+          <div class="upload-row" data-upload data-max="{{ q.max|default(3) }}">
+            <label class="upload-item" data-add>+</label>
+          </div>
+          <input type="file" name="q_{{ q.key }}_files" multiple accept="image/*" capture="environment" style="display:none;"/>
+
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      {# 兜底（旧模板缺失时）：保留 2 选 1 #}
+      <div class="q">
+        <label class="label">{{ pet.name if pet else '您的宝贝' }} 现在感觉怎么样？</label>
+        <div class="opt-row" data-select>
+          <button type="button" class="opt-btn" data-value="recovered">✅ 已好转</button>
+          <button type="button" class="opt-btn" data-value="needs_visit">📞 仍有不适</button>
+        </div>
+        <input type="hidden" name="q_status" value="" required/>
+      </div>
+      <div class="q">
+        <label class="label">补充说明</label>
+        <textarea name="q_note" placeholder="例如：精神好，食欲恢复 / 还是有些拉肚子"></textarea>
+      </div>
+    {% endif %}
+
+    <button type="submit" class="submit-btn">提交反馈</button>
    </form>
   {% endif %}
  </div>
@@ -76,5 +163,85 @@
   反馈仅用于跟进病情 · 大风动物医院
  </div>
 </div>
+
+<script>
+// ── 1-5 评分 ──
+document.querySelectorAll('[data-scale]').forEach(row => {
+  const input = row.parentElement.querySelector('input[type=hidden]');
+  row.querySelectorAll('.scale-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      row.querySelectorAll('.scale-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      input.value = btn.dataset.value;
+    });
+  });
+});
+
+// ── 单选 ──
+document.querySelectorAll('[data-select]').forEach(row => {
+  const input = row.parentElement.querySelector('input[type=hidden]');
+  row.querySelectorAll('.opt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      row.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      input.value = btn.dataset.value;
+    });
+  });
+});
+
+// ── 多选 ──
+document.querySelectorAll('[data-multi]').forEach(row => {
+  const input = row.parentElement.querySelector('input[type=hidden]');
+  const selected = new Set();
+  row.querySelectorAll('.opt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const v = btn.dataset.value;
+      if (selected.has(v)) { selected.delete(v); btn.classList.remove('selected'); }
+      else { selected.add(v); btn.classList.add('selected'); }
+      input.value = Array.from(selected).join('|');
+    });
+  });
+});
+
+// ── 照片上传 ──
+document.querySelectorAll('[data-upload]').forEach(row => {
+  const fileInput = row.parentElement.querySelector('input[type=file]');
+  const max = parseInt(row.dataset.max || '3', 10);
+  const addBtn = row.querySelector('[data-add]');
+  let files = [];
+
+  addBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', e => {
+    Array.from(e.target.files).forEach(f => {
+      if (files.length >= max) return;
+      files.push(f);
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const item = document.createElement('div');
+        item.className = 'upload-item';
+        item.innerHTML = `<img src="${ev.target.result}"/><button type="button" class="rm-btn">×</button>`;
+        item.querySelector('.rm-btn').addEventListener('click', () => {
+          const idx = files.indexOf(f);
+          if (idx >= 0) files.splice(idx, 1);
+          item.remove();
+          syncFileInput();
+          if (files.length < max) addBtn.style.display = '';
+        });
+        row.insertBefore(item, addBtn);
+        if (files.length >= max) addBtn.style.display = 'none';
+      };
+      reader.readAsDataURL(f);
+    });
+    syncFileInput();
+  });
+
+  function syncFileInput() {
+    const dt = new DataTransfer();
+    files.forEach(f => dt.items.add(f));
+    fileInput.files = dt.files;
+  }
+});
+</script>
 </body>
 </html>

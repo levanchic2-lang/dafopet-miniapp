@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="max-width:1280px;margin:0 auto;">
+ <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+   <a href="/admin/follow-ups" class="btn secondary" style="padding:.3rem .6rem;">← 回访管理</a>
+   <h1 style="margin:0;">📋 回访模板</h1>
+   <small style="color:#64748b;">按诊断关键词自动匹配并衍生多轮回访</small>
+   <span style="flex:1;"></span>
+   <a href="/admin/follow-up-templates/new" class="btn">+ 新建模板</a>
+ </div>
+
+ {% if msg %}<div style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;padding:.5rem .8rem;border-radius:8px;margin-top:1rem;">{{ msg }}</div>{% endif %}
+
+ <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:.5rem .85rem;font-size:.82rem;color:#92400e;margin-top:1rem;">
+   ℹ 工作原理：医生在病例第 4 步填诊断（如「猫冠状病毒肠炎」）→ 系统按关键词匹配命中的模板 → 自动按模板的每一轮生成回访任务（visit_date + day_offset）→ 到点自动推送给客户。<br/>
+   内置模板可编辑、可禁用，但不可删除；自建模板可随时增删改。
+ </div>
+
+ <div style="margin-top:1rem;overflow-x:auto;">
+  <table style="width:100%;border-collapse:collapse;font-size:.88rem;">
+    <thead style="background:#f1f5f9;">
+      <tr>
+        <th style="padding:.5rem;text-align:left;width:50px;">优先</th>
+        <th style="padding:.5rem;text-align:left;">模板名</th>
+        <th style="padding:.5rem;text-align:left;width:110px;">系统</th>
+        <th style="padding:.5rem;text-align:left;">关键词（前 6 个）</th>
+        <th style="padding:.5rem;text-align:center;width:90px;">轮次</th>
+        <th style="padding:.5rem;text-align:center;width:90px;">状态</th>
+        <th style="padding:.5rem;text-align:center;width:160px;">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tpls %}
+      {% set kws = (t.keywords or '').split(',')[:6] %}
+      <tr style="border-bottom:1px solid #f1f5f9;{% if not t.is_active %}opacity:.55;{% endif %}">
+        <td style="padding:.5rem;font-weight:600;color:#64748b;">{{ t.priority }}</td>
+        <td style="padding:.5rem;">
+          <a href="/admin/follow-up-templates/{{ t.id }}/edit" style="font-weight:600;color:#1e40af;">{{ t.name }}</a>
+          {% if t.is_builtin %}<span style="font-size:.7rem;background:#ede9fe;color:#6b21a8;padding:0 .35rem;border-radius:3px;margin-left:.3rem;">内置</span>{% endif %}
+        </td>
+        <td style="padding:.5rem;color:#475569;font-size:.82rem;">{{ systems.get(t.system, t.system) or '—' }}</td>
+        <td style="padding:.5rem;font-size:.78rem;color:#64748b;line-height:1.5;">
+          {% for kw in kws %}<span style="display:inline-block;background:#f1f5f9;padding:1px 6px;border-radius:3px;margin:1px;">{{ kw.strip() }}</span>{% endfor %}
+          {% if t.keywords and t.keywords.count(',') > 5 %}<span style="color:#94a3b8;">+ {{ t.keywords.count(',') - 5 }} 个</span>{% endif %}
+        </td>
+        <td style="padding:.5rem;text-align:center;font-variant-numeric:tabular-nums;">
+          {{ t._rounds|length }}
+          <div style="font-size:.7rem;color:#94a3b8;">
+            {% for r in t._rounds %}D+{{ r.day_offset }}{% if not loop.last %} · {% endif %}{% endfor %}
+          </div>
+        </td>
+        <td style="padding:.5rem;text-align:center;">
+          {% if t.is_active %}<span style="background:#dcfce7;color:#166534;font-size:.7rem;padding:1px 6px;border-radius:3px;">启用</span>
+          {% else %}<span style="background:#fee2e2;color:#991b1b;font-size:.7rem;padding:1px 6px;border-radius:3px;">禁用</span>{% endif %}
+        </td>
+        <td style="padding:.5rem;text-align:center;">
+          <a href="/admin/follow-up-templates/{{ t.id }}/edit" class="btn secondary" style="padding:2px 8px;font-size:.78rem;">编辑</a>
+          <form method="post" action="/admin/follow-up-templates/{{ t.id }}/toggle" style="display:inline-block;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="btn secondary" style="padding:2px 8px;font-size:.78rem;">{{ '禁用' if t.is_active else '启用' }}</button>
+          </form>
+          {% if not t.is_builtin %}
+          <form method="post" action="/admin/follow-up-templates/{{ t.id }}/delete" style="display:inline-block;" onsubmit="return confirm('确认删除模板「{{ t.name }}」？该操作不可恢复。')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="danger" style="padding:2px 8px;font-size:.78rem;">删</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="padding:2rem;text-align:center;color:#94a3b8;">还没有任何模板</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+ </div>
+</div>
+{% endblock %}

@@ -209,6 +209,20 @@ def _filter_ai_review_view(raw: str | None) -> dict:
 templates.env.filters["ai_review_view"] = _filter_ai_review_view
 
 
+def _filter_parse_json(s):
+    """Jinja 过滤器：把 JSON 字符串解析成 dict/list，失败返回 None。"""
+    if not s:
+        return None
+    try:
+        import json as _json
+        return _json.loads(s)
+    except Exception:
+        return None
+
+
+templates.env.filters["parse_json"] = _filter_parse_json
+
+
 def _filter_pet_age(birthday: str) -> str:
     """把 'YYYY-MM-DD' 出生日期渲染成「X 岁」或「Y 个月」可读年龄。
     非日期格式（老数据如 '2岁'）原样返回。"""
@@ -9663,7 +9677,193 @@ async def admin_followup_handle(
     return RedirectResponse(f"/admin/follow-ups?tab={tab_redirect}&msg=已更新", status_code=303)
 
 
+# ═════════════════════════════════════════════════════════════════
+# 回访模板管理（C）
+# ═════════════════════════════════════════════════════════════════
+_QUESTION_TYPES = {
+    "scale1to5": "1-5 评分",
+    "select":    "单选",
+    "multi":     "多选",
+    "number":    "数字（如体重）",
+    "text":      "文本",
+    "upload":    "上传照片",
+}
+
+
+@app.get("/admin/follow-up-templates", response_class=HTMLResponse)
+async def page_admin_futpl_list(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    from app.data.vet_seed import SYSTEMS as _SYS
+    tpls = db.query(FollowUpTemplate).order_by(
+        FollowUpTemplate.is_active.desc(),
+        FollowUpTemplate.priority.desc(),
+        FollowUpTemplate.system,
+        FollowUpTemplate.name,
+    ).all()
+    # 解析 rounds_json 用于列表显示
+    import json as _json
+    for t in tpls:
+        try:
+            t._rounds = _json.loads(t.rounds_json or "[]")
+        except Exception:
+            t._rounds = []
+    return templates.TemplateResponse(request, "admin_follow_up_templates.html", {
+        "tpls": tpls, "systems": _SYS,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.get("/admin/follow-up-templates/new", response_class=HTMLResponse)
+async def page_admin_futpl_new(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    from app.data.vet_seed import SYSTEMS as _SYS
+    return templates.TemplateResponse(request, "admin_follow_up_template_form.html", {
+        "tpl": None, "rounds": [], "systems": _SYS,
+        "question_types": _QUESTION_TYPES,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.get("/admin/follow-up-templates/{tpl_id}/edit", response_class=HTMLResponse)
+async def page_admin_futpl_edit(tpl_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    tpl = db.get(FollowUpTemplate, tpl_id)
+    if not tpl:
+        raise HTTPException(404)
+    from app.data.vet_seed import SYSTEMS as _SYS
+    import json as _json
+    try:
+        rounds = _json.loads(tpl.rounds_json or "[]")
+    except Exception:
+        rounds = []
+    return templates.TemplateResponse(request, "admin_follow_up_template_form.html", {
+        "tpl": tpl, "rounds": rounds, "systems": _SYS,
+        "question_types": _QUESTION_TYPES,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/follow-up-templates/save")
+async def admin_futpl_save(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    tpl_id = int(form.get("tpl_id", 0) or 0)
+    name = str(form.get("name", "")).strip()[:120]
+    system = str(form.get("system", "")).strip()[:40]
+    keywords = str(form.get("keywords", "")).strip()
+    try:
+        priority = int(form.get("priority", 50) or 50)
+    except Exception:
+        priority = 50
+    rounds_json = str(form.get("rounds_json", "[]")).strip() or "[]"
+    is_active = str(form.get("is_active", "0")) in ("1", "true", "on")
+    notes = str(form.get("notes", "")).strip()
+
+    if not name:
+        raise HTTPException(400, "模板名为必填")
+
+    # 校验 rounds_json 是合法 JSON
+    import json as _json
+    try:
+        rounds = _json.loads(rounds_json)
+        assert isinstance(rounds, list)
+        for rnd in rounds:
+            assert isinstance(rnd, dict)
+            assert "day_offset" in rnd
+    except Exception as e:
+        raise HTTPException(400, f"轮次配置 JSON 不合法：{e}")
+
+    if tpl_id:
+        tpl = db.get(FollowUpTemplate, tpl_id)
+        if not tpl:
+            raise HTTPException(404)
+        # 防止重名
+        dup = db.query(FollowUpTemplate).filter(
+            FollowUpTemplate.name == name, FollowUpTemplate.id != tpl_id
+        ).first()
+        if dup:
+            raise HTTPException(400, "已有同名模板")
+        tpl.name = name
+        tpl.system = system
+        tpl.keywords = keywords
+        tpl.priority = priority
+        tpl.rounds_json = rounds_json
+        tpl.is_active = is_active
+        tpl.notes = notes
+        tpl.updated_at = datetime.utcnow()
+    else:
+        if db.query(FollowUpTemplate).filter(FollowUpTemplate.name == name).first():
+            raise HTTPException(400, "已有同名模板")
+        tpl = FollowUpTemplate(
+            name=name, system=system, keywords=keywords,
+            priority=priority, rounds_json=rounds_json,
+            is_active=is_active, is_builtin=False, notes=notes,
+        )
+        db.add(tpl)
+    db.commit()
+    return RedirectResponse(f"/admin/follow-up-templates?msg=已保存：{name}", status_code=303)
+
+
+@app.post("/admin/follow-up-templates/{tpl_id}/toggle")
+async def admin_futpl_toggle(tpl_id: int, request: Request, db: Session = Depends(get_db),
+                              csrf_token: str = Form("")):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    tpl = db.get(FollowUpTemplate, tpl_id)
+    if not tpl:
+        raise HTTPException(404)
+    tpl.is_active = not tpl.is_active
+    db.commit()
+    return RedirectResponse(f"/admin/follow-up-templates?msg={'已启用' if tpl.is_active else '已禁用'}：{tpl.name}", status_code=303)
+
+
+@app.post("/admin/follow-up-templates/{tpl_id}/delete")
+async def admin_futpl_delete(tpl_id: int, request: Request, db: Session = Depends(get_db),
+                              csrf_token: str = Form("")):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    tpl = db.get(FollowUpTemplate, tpl_id)
+    if not tpl:
+        raise HTTPException(404)
+    if tpl.is_builtin:
+        raise HTTPException(400, "内置模板不可删除，请改为禁用")
+    name = tpl.name
+    db.delete(tpl)
+    db.commit()
+    return RedirectResponse(f"/admin/follow-up-templates?msg=已删除：{name}", status_code=303)
+
+
 # ─── 客户反馈短链（无登录，token 校验） ───────────────────────
+def _load_followup_questions(db: Session, fu: FollowUp) -> list:
+    """根据 FollowUp 的 template_id + round_no 拿到本轮要问的问题列表。
+
+    模板被删/找不到时返回空列表，前端会用兜底的「2 选 1」表单。
+    """
+    if not fu.template_id:
+        return []
+    tpl = db.get(FollowUpTemplate, fu.template_id)
+    if not tpl:
+        return []
+    import json as _json
+    try:
+        rounds = _json.loads(tpl.rounds_json or "[]")
+    except Exception:
+        return []
+    idx = max(0, (fu.round_no or 1) - 1)
+    if idx >= len(rounds):
+        return []
+    return rounds[idx].get("questions", []) or []
+
+
 @app.get("/follow-up/{token}", response_class=HTMLResponse)
 async def page_followup_feedback(token: str, request: Request, db: Session = Depends(get_db)):
     fu = db.query(FollowUp).filter(FollowUp.feedback_token == token).first()
@@ -9672,45 +9872,176 @@ async def page_followup_feedback(token: str, request: Request, db: Session = Dep
     pet = db.get(Pet, fu.pet_id) if fu.pet_id else None
     cust = db.get(Customer, fu.customer_id) if fu.customer_id else None
     visit = db.get(Visit, fu.visit_id) if fu.visit_id else None
+    questions = _load_followup_questions(db, fu)
     return templates.TemplateResponse(request, "follow_up_feedback.html", {
         "fu": fu, "pet": pet, "cust": cust, "visit": visit,
         "visit_type_zh": _VISIT_TYPE_ZH,
+        "questions": questions,
         "submitted": False,
-        "csrf_token": "",  # 此短链对外不需要 CSRF（token 本身已是凭证）
+        "csrf_token": "",
     })
 
 
 @app.post("/follow-up/{token}", response_class=HTMLResponse)
-async def submit_followup_feedback(
-    token: str,
-    request: Request,
-    db: Session = Depends(get_db),
-    response: str = Form(...),  # recovered / needs_visit
-    note: str = Form(""),
-):
+async def submit_followup_feedback(token: str, request: Request, db: Session = Depends(get_db)):
     fu = db.query(FollowUp).filter(FollowUp.feedback_token == token).first()
     if not fu:
         raise HTTPException(404, "反馈链接已失效")
-    if response not in ("recovered", "needs_visit"):
-        raise HTTPException(400, "无效的反馈选项")
-    fu.response = response
-    fu.response_at = datetime.utcnow()
-    fu.response_note = note.strip()[:500]
-    if response == "recovered":
-        fu.status = "closed"
+    form = await request.form()
+    questions = _load_followup_questions(db, fu)
+
+    # ── 收集结构化答案 ──
+    import json as _json
+    answers: dict = {}
+    photo_urls: list = []
+    for q in questions:
+        key = q.get("key")
+        qtype = q.get("type")
+        if not key:
+            continue
+        if qtype == "upload":
+            files = form.getlist(f"q_{key}_files")
+            saved = await _save_followup_photos(token, files, q.get("max", 3))
+            if saved:
+                answers[key] = saved
+                photo_urls.extend(saved)
+        else:
+            raw = form.get(f"q_{key}", "")
+            if raw is None:
+                continue
+            val = str(raw).strip()
+            if not val:
+                continue
+            if qtype == "multi":
+                answers[key] = [s for s in val.split("|") if s]
+            elif qtype == "number":
+                try:
+                    answers[key] = float(val)
+                except Exception:
+                    answers[key] = val
+            elif qtype == "scale1to5":
+                try:
+                    answers[key] = int(val)
+                except Exception:
+                    answers[key] = val
+            else:
+                answers[key] = val[:1000]
+
+    # ── 兜底：旧模板/无模板时按 q_status 走 #
+    if not questions:
+        st = str(form.get("q_status", "")).strip()
+        note = str(form.get("q_note", "")).strip()
+        if st == "recovered":
+            fu.status = "closed"; fu.response = "recovered"
+        elif st == "needs_visit":
+            fu.status = "responded"; fu.response = "needs_visit"
+        fu.response_note = note[:500]
+        fu.response_at = datetime.utcnow()
+        fu.updated_at = datetime.utcnow()
+        db.commit()
     else:
-        fu.status = "responded"   # 需复诊 → 留给医生跟进
-    fu.updated_at = datetime.utcnow()
-    db.commit()
+        # ── 推断高层 status：看是否有 needs_visit 类信号 ──
+        nv = answers.get("needs_visit") or answers.get("status") or ""
+        if isinstance(nv, str) and ("复诊" in nv or "紧急" in nv or "立即" in nv):
+            fu.response = "needs_visit"
+            fu.status = "responded"
+        else:
+            fu.response = "recovered"
+            fu.status = "closed"
+        # response_note: 把 'note' 答案显式同步出来，列表更直观
+        note_val = answers.get("note") or ""
+        if note_val:
+            fu.response_note = str(note_val)[:500]
+        fu.response_data = _json.dumps(answers, ensure_ascii=False)
+        fu.response_at = datetime.utcnow()
+        fu.updated_at = datetime.utcnow()
+        db.commit()
+
+        # ── 客户标紧急 / 需复诊 → 立即推送主治医师（企微，best-effort） ──
+        if fu.response == "needs_visit":
+            try:
+                _push_urgent_feedback_to_vet(db, fu, answers)
+            except Exception as e:
+                logger.warning(f"urgent push failed for fu#{fu.id}: {e}")
+
     pet = db.get(Pet, fu.pet_id) if fu.pet_id else None
     cust = db.get(Customer, fu.customer_id) if fu.customer_id else None
     visit = db.get(Visit, fu.visit_id) if fu.visit_id else None
     return templates.TemplateResponse(request, "follow_up_feedback.html", {
         "fu": fu, "pet": pet, "cust": cust, "visit": visit,
         "visit_type_zh": _VISIT_TYPE_ZH,
+        "questions": [],
         "submitted": True,
         "csrf_token": "",
     })
+
+
+async def _save_followup_photos(token: str, files: list, max_count: int = 3) -> list[str]:
+    """保存客户反馈附带的照片，返回 URL 列表。
+
+    存储位置：uploads/followup/{token}/<idx>_<safename>
+    """
+    from pathlib import Path as _P
+    import re as _re
+    saved_urls: list[str] = []
+    base = _P("uploads") / "followup" / token
+    base.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for f in files:
+        if n >= max_count:
+            break
+        try:
+            content = await f.read()
+        except Exception:
+            continue
+        if not content or len(content) > 8 * 1024 * 1024:  # 8MB
+            continue
+        safename = _re.sub(r"[^a-zA-Z0-9._-]", "_", getattr(f, "filename", "img.jpg"))[:64] or "img.jpg"
+        path = base / f"{n}_{safename}"
+        try:
+            with open(path, "wb") as out:
+                out.write(content)
+            saved_urls.append(f"/uploads/followup/{token}/{n}_{safename}")
+            n += 1
+        except Exception:
+            continue
+    return saved_urls
+
+
+def _push_urgent_feedback_to_vet(db: Session, fu: FollowUp, answers: dict) -> None:
+    """客户反馈需复诊 / 紧急 → 推送主治医师企微消息。
+    需 AdminUser.wecom_userid 已绑定。
+    """
+    try:
+        from app.services.wecom_client import send_app_message as _send
+    except Exception:
+        return
+    assignee = (fu.assigned_to or "").strip()
+    if not assignee:
+        return
+    user = db.query(AdminUser).filter(AdminUser.username == assignee).first()
+    if not user or not user.wecom_userid:
+        return
+    pet = db.get(Pet, fu.pet_id) if fu.pet_id else None
+    cust = db.get(Customer, fu.customer_id) if fu.customer_id else None
+    pet_name = pet.name if pet else "客户宠物"
+    cust_name = cust.name if cust else "客户"
+    phone = (cust.phone if cust else "") or ""
+    parts = [f"⚠️ 客户反馈紧急 / 需复诊：{pet_name}（{cust_name}）"]
+    if phone:
+        parts.append(f"电话：{phone}")
+    if fu.template_name:
+        parts.append(f"回访模板：{fu.template_name} · {fu.round_name or ''}")
+    # 关键答案摘要
+    for k in ("vomit", "stool", "cough", "breath", "wound", "needs_visit", "note"):
+        v = answers.get(k)
+        if v:
+            parts.append(f"· {k}: {v}")
+    parts.append(f"详情：https://dafopet.com/admin/follow-ups?tab=overdue")
+    try:
+        _send(user.wecom_userid, "\n".join(parts))
+    except Exception:
+        pass
 
 
 @app.get("/api/follow-ups/badge")

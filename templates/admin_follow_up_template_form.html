@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+  .round-card { background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;padding:.85rem 1rem;margin-bottom:.8rem; }
+  .round-head { display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem; }
+  .question-item { background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:.5rem .65rem;margin-bottom:.4rem;display:grid;grid-template-columns:90px 1fr 130px 30px;gap:.5rem;align-items:center; }
+  .question-options { grid-column:2/-1;font-size:.78rem;color:#64748b;margin-top:.3rem; }
+  .question-options input { width:100%; }
+  .mini { font-size:.78rem;color:#64748b; }
+  .icon-btn { background:none;border:none;cursor:pointer;color:#64748b;font-size:.95rem; }
+  .icon-btn:hover { color:#dc2626; }
+</style>
+
+<div class="card" style="max-width:1100px;margin:0 auto;">
+ <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+   <a href="/admin/follow-up-templates" class="btn secondary" style="padding:.3rem .6rem;">← 返回</a>
+   <h1 style="margin:0;">📋 {{ '编辑模板' if tpl else '新建回访模板' }}</h1>
+   {% if tpl and tpl.is_builtin %}<span style="background:#ede9fe;color:#6b21a8;font-size:.72rem;padding:2px 8px;border-radius:3px;">内置</span>{% endif %}
+ </div>
+
+ {% if msg %}<div style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;padding:.5rem .8rem;border-radius:8px;margin-top:1rem;">{{ msg }}</div>{% endif %}
+
+ <form method="post" action="/admin/follow-up-templates/save" id="tplForm" style="margin-top:1rem;">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+   <input type="hidden" name="tpl_id" value="{{ tpl.id if tpl else 0 }}"/>
+   <input type="hidden" name="rounds_json" id="rounds_json" value=""/>
+
+   <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:.7rem;margin-bottom:.8rem;">
+     <div>
+       <label class="mini">模板名 *</label>
+       <input name="name" required value="{{ tpl.name if tpl else '' }}" style="width:100%;" maxlength="120"/>
+     </div>
+     <div>
+       <label class="mini">系统分类</label>
+       <select name="system" style="width:100%;">
+         <option value="">—</option>
+         {% for k, v in systems.items() %}<option value="{{ k }}" {% if tpl and tpl.system == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+       </select>
+     </div>
+     <div>
+       <label class="mini">优先级（0-100）</label>
+       <input type="number" name="priority" min="0" max="100" step="1" value="{{ tpl.priority if tpl else 50 }}" style="width:100%;"/>
+       <small style="font-size:.7rem;color:#94a3b8;">数值越高越优先匹配</small>
+     </div>
+     <div>
+       <label class="mini">启用</label>
+       <div style="padding-top:.4rem;">
+         <label style="cursor:pointer;"><input type="checkbox" name="is_active" value="1" {% if (tpl and tpl.is_active) or not tpl %}checked{% endif %}/> 启用此模板</label>
+       </div>
+     </div>
+   </div>
+
+   <div style="margin-bottom:.8rem;">
+     <label class="mini">关键词（英文逗号分隔，自动匹配诊断中的字符串）</label>
+     <textarea name="keywords" rows="2" style="width:100%;" placeholder="例：肠炎,IBD,炎症性肠病,胰腺炎,呕吐,腹泻">{{ tpl.keywords if tpl else '' }}</textarea>
+     <small style="font-size:.7rem;color:#94a3b8;">留空 = 此模板不参与关键词匹配（除非作为系统兜底模板）</small>
+   </div>
+
+   <div style="margin-bottom:.8rem;">
+     <label class="mini">备注</label>
+     <input name="notes" value="{{ tpl.notes if tpl else '' }}" style="width:100%;" placeholder="可选：模板用途、临床依据等"/>
+   </div>
+
+   <hr style="margin:1.2rem 0;border:none;border-top:1px dashed #cbd5e1;"/>
+
+   <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem;">
+     <h2 style="margin:0;font-size:1.1rem;">🔁 回访轮次</h2>
+     <small style="color:#64748b;">每一轮 = 一次客户反馈表单。day_offset 是相对就诊日的天数。</small>
+     <span style="flex:1;"></span>
+     <button type="button" onclick="addRound()" class="btn secondary">+ 增加一轮</button>
+   </div>
+
+   <div id="roundsContainer"></div>
+
+   <div style="margin-top:1.2rem;display:flex;gap:.6rem;">
+     <button type="submit" class="btn">💾 保存模板</button>
+     <a href="/admin/follow-up-templates" class="btn secondary">取消</a>
+   </div>
+ </form>
+</div>
+
+<script>
+const QUESTION_TYPES = {{ question_types|tojson }};
+let ROUNDS = {{ rounds|tojson }};
+
+function render() {
+  const c = document.getElementById('roundsContainer');
+  if (!ROUNDS.length) {
+    c.innerHTML = '<div style="background:#f1f5f9;border:1px dashed #cbd5e1;border-radius:8px;padding:2rem;text-align:center;color:#94a3b8;">还没有轮次，点上方「+ 增加一轮」开始配置</div>';
+    return;
+  }
+  c.innerHTML = '';
+  ROUNDS.forEach((r, ri) => {
+    const card = document.createElement('div');
+    card.className = 'round-card';
+    card.innerHTML = `
+      <div class="round-head">
+        <span style="background:#3b82f6;color:#fff;font-weight:600;width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${ri + 1}</span>
+        <input value="${escapeHtml(r.round_name || '')}" placeholder="轮次名（如：术后 3 天复查）" data-r="${ri}" data-f="round_name" style="flex:1;font-weight:600;"/>
+        <span class="mini">D+</span>
+        <input type="number" min="1" max="365" value="${r.day_offset || 1}" data-r="${ri}" data-f="day_offset" style="width:70px;"/>
+        <span class="mini">天</span>
+        <button type="button" class="icon-btn" onclick="rmRound(${ri})" title="删除此轮">🗑</button>
+      </div>
+      <div class="mini" style="margin-bottom:.3rem;">📝 这轮问客户的问题：</div>
+      <div class="questions-list" data-r="${ri}"></div>
+      <button type="button" class="btn secondary" onclick="addQuestion(${ri})" style="margin-top:.4rem;font-size:.78rem;padding:.25rem .6rem;">+ 加一题</button>
+    `;
+    c.appendChild(card);
+    renderQuestions(ri);
+  });
+}
+
+function renderQuestions(ri) {
+  const list = document.querySelector(`.questions-list[data-r="${ri}"]`);
+  list.innerHTML = '';
+  (ROUNDS[ri].questions || []).forEach((q, qi) => {
+    const div = document.createElement('div');
+    div.className = 'question-item';
+    const typeOpts = Object.entries(QUESTION_TYPES).map(([k, v]) =>
+      `<option value="${k}" ${q.type === k ? 'selected' : ''}>${v}</option>`).join('');
+    const needsOptions = (q.type === 'select' || q.type === 'multi');
+    div.innerHTML = `
+      <select data-r="${ri}" data-q="${qi}" data-f="type" onchange="onQType(${ri},${qi},this.value)">${typeOpts}</select>
+      <input value="${escapeHtml(q.label || '')}" placeholder="问题标签（如：精神状态）" data-r="${ri}" data-q="${qi}" data-f="label"/>
+      <input value="${escapeHtml(q.key || '')}" placeholder="字段 key（英文）" data-r="${ri}" data-q="${qi}" data-f="key" style="font-family:monospace;font-size:.78rem;"/>
+      <button type="button" class="icon-btn" onclick="rmQuestion(${ri},${qi})" title="删除">🗑</button>
+      ${needsOptions ? `
+        <div class="question-options">
+          <span class="mini">选项（每行一个）：</span>
+          <textarea rows="2" data-r="${ri}" data-q="${qi}" data-f="options" placeholder="正常&#10;软便&#10;拉稀">${(q.options || []).join('\n')}</textarea>
+        </div>` : ''}
+    `;
+    list.appendChild(div);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[c]));
+}
+
+function addRound() {
+  ROUNDS.push({day_offset: 7, round_name: `第 ${ROUNDS.length + 1} 轮`, questions: []});
+  render();
+}
+
+function rmRound(i) {
+  if (!confirm(`删除第 ${i + 1} 轮？该轮所有问题也会删除。`)) return;
+  ROUNDS.splice(i, 1);
+  render();
+}
+
+function addQuestion(ri) {
+  ROUNDS[ri].questions = ROUNDS[ri].questions || [];
+  ROUNDS[ri].questions.push({key: '', type: 'scale1to5', label: ''});
+  renderQuestions(ri);
+}
+
+function rmQuestion(ri, qi) {
+  ROUNDS[ri].questions.splice(qi, 1);
+  renderQuestions(ri);
+}
+
+function onQType(ri, qi, type) {
+  ROUNDS[ri].questions[qi].type = type;
+  // 类型变了重渲染（决定要不要 options 框）
+  renderQuestions(ri);
+}
+
+// 监听所有 input/textarea 把值收回到 ROUNDS
+document.getElementById('roundsContainer').addEventListener('input', e => {
+  const el = e.target;
+  const r = el.dataset.r, q = el.dataset.q, f = el.dataset.f;
+  if (r === undefined) return;
+  const ri = parseInt(r, 10);
+  if (q === undefined) {
+    if (f === 'day_offset') ROUNDS[ri][f] = parseInt(el.value, 10) || 1;
+    else ROUNDS[ri][f] = el.value;
+  } else {
+    const qi = parseInt(q, 10);
+    ROUNDS[ri].questions[qi] = ROUNDS[ri].questions[qi] || {};
+    if (f === 'options') {
+      ROUNDS[ri].questions[qi].options = el.value.split('\n').map(s => s.trim()).filter(Boolean);
+    } else {
+      ROUNDS[ri].questions[qi][f] = el.value;
+    }
+  }
+});
+
+// 提交前序列化
+document.getElementById('tplForm').addEventListener('submit', e => {
+  // 校验：每个问题必填 key 和 label
+  for (let ri = 0; ri < ROUNDS.length; ri++) {
+    const r = ROUNDS[ri];
+    for (let qi = 0; qi < (r.questions || []).length; qi++) {
+      const q = r.questions[qi];
+      if (!q.key || !q.label) {
+        alert(`第 ${ri + 1} 轮 第 ${qi + 1} 题：key 和 label 都是必填`);
+        e.preventDefault();
+        return;
+      }
+      if (!/^[a-z][a-z0-9_]*$/i.test(q.key)) {
+        alert(`第 ${ri + 1} 轮 第 ${qi + 1} 题：key 只能用英文字母+数字+下划线`);
+        e.preventDefault();
+        return;
+      }
+    }
+  }
+  document.getElementById('rounds_json').value = JSON.stringify(ROUNDS);
+});
+
+render();
+</script>
+{% endblock %}
