@@ -799,6 +799,55 @@ def _resolve_store_for_create(request: "Request", explicit: str = "") -> str:
     return request.session.get("admin_store", "") or ""
 
 
+def _age_estimate_to_birthday(s: str) -> str:
+    """把 "3岁" / "6个月" / "1岁半" 等自由文本年龄估算转成 YYYY-MM-DD（按今天倒推）。
+
+    无法识别 → 返回空字符串（保持空比存脏数据好，编辑表单能正常显示）。
+    """
+    import re
+    from datetime import date as _date, timedelta
+    if not s:
+        return ""
+    raw = str(s).strip()
+    if not raw:
+        return ""
+    # 中文数字映射（简单覆盖 1-10）
+    cn_num = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+    for cn, n in cn_num.items():
+        raw = raw.replace(cn, str(n))
+    today = _date.today()
+    # 「3岁半」「1岁半」→ years + 0.5
+    half = ".5" if "半" in raw else ""
+    # 「6个月」「8 个月」
+    m_month = re.search(r"(\d+(?:\.\d+)?)\s*个?月", raw)
+    # 「3岁」「3 岁」「3 年」
+    m_year = re.search(r"(\d+(?:\.\d+)?)\s*[岁年]", raw)
+    if m_year:
+        try:
+            yrs = float(m_year.group(1) + half)
+            days = int(yrs * 365.25)
+            d = today - timedelta(days=days)
+            return d.strftime("%Y-%m-%d")
+        except Exception:
+            return ""
+    if m_month:
+        try:
+            mos = float(m_month.group(1))
+            days = int(mos * 30.44)
+            d = today - timedelta(days=days)
+            return d.strftime("%Y-%m-%d")
+        except Exception:
+            return ""
+    # 已经是 YYYY-MM-DD / YYYY-MM 格式 → 直接返回
+    if re.match(r"^\d{4}-\d{1,2}(?:-\d{1,2})?$", raw):
+        parts = raw.split("-")
+        y = parts[0]
+        mo = parts[1].zfill(2) if len(parts) > 1 else "01"
+        da = parts[2].zfill(2) if len(parts) > 2 else "01"
+        return f"{y}-{mo}-{da}"
+    return ""
+
+
 # 门店首字母（病历号前缀）
 _STORE_INITIAL = {"东环店": "D", "横岗店": "H"}
 
@@ -1661,6 +1710,12 @@ async def api_apply_create(
     if _cust_id and f.get("cat_nickname"):
         try:
             _cat_name = f["cat_nickname"].strip()[:120]
+            # 把 "3岁" / "6个月" 等自由文本转成「出生日期」估算（YYYY-MM-DD），
+            # 这样宠物编辑的 <input type="date"> 能渲染回来。
+            _est_birthday = _age_estimate_to_birthday(f.get("age_estimate", ""))
+            # 门店：从 clinic_store 全名取短名，给病历号生成用
+            _short_store = _STORE_FULL_TO_SHORT.get(f.get("clinic_store", ""), "")
+
             _existing_pet = (
                 db.query(Pet)
                 .filter(
@@ -1674,10 +1729,14 @@ async def api_apply_create(
                 # 复用已有宠物：补全可能新增的信息（不覆盖已有字段）
                 if not _existing_pet.gender or _existing_pet.gender == "unknown":
                     _existing_pet.gender = f.get("cat_gender", "unknown")
-                if not _existing_pet.birthday_estimate:
-                    _existing_pet.birthday_estimate = f.get("age_estimate", "")[:40]
+                if not _existing_pet.birthday_estimate and _est_birthday:
+                    _existing_pet.birthday_estimate = _est_birthday
                 if not _existing_pet.notes and f.get("health_note"):
                     _existing_pet.notes = f.get("health_note", "")[:500]
+                if not _existing_pet.store and _short_store:
+                    _existing_pet.store = _short_store
+                if not _existing_pet.medical_record_no and (_existing_pet.store or _short_store):
+                    _existing_pet.medical_record_no = _gen_medical_record_no(db, _existing_pet.store or _short_store)
                 app_row.pet_id = _existing_pet.id
             else:
                 _pet = Pet(
@@ -1685,16 +1744,18 @@ async def api_apply_create(
                     name=_cat_name,
                     species="cat",
                     gender=f.get("cat_gender", "unknown"),
-                    birthday_estimate=f.get("age_estimate", "")[:40],
+                    birthday_estimate=_est_birthday,
                     is_stray=True,
                     notes=f.get("health_note", "")[:500],
+                    store=_short_store,
+                    medical_record_no=_gen_medical_record_no(db, _short_store) if _short_store else "",
                 )
                 db.add(_pet)
                 db.flush()
                 app_row.pet_id = _pet.id
             db.commit()
-        except Exception:
-            pass
+        except Exception as _pet_err:
+            logger.warning("[tnr pet create] %s", _pet_err)
 
     base = Path(settings.upload_dir) / str(app_row.id)
     base.mkdir(parents=True, exist_ok=True)
