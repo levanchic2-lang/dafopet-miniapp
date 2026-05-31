@@ -211,7 +211,13 @@
     <option value="">— 先选大类 —</option>
   </select>
   <span class="lbl">供应商</span>
-  <input type="text" name="supplier" id="bulk-supplier" placeholder="留空=不改" style="width:140px;"/>
+  <input type="text" name="supplier" id="bulk-supplier" placeholder="留空=不改" style="width:120px;"/>
+  <span class="lbl">主单位</span>
+  <input type="text" name="unit" id="bulk-unit" placeholder="留空=不改" style="width:70px;"/>
+  <span class="lbl">副单位</span>
+  <input type="text" name="unit2" id="bulk-unit2" placeholder="留空=不改" style="width:70px;"/>
+  <span class="lbl">换算</span>
+  <input type="number" step="0.01" min="1" name="unit2_ratio" id="bulk-unit2-ratio" placeholder="不改" style="width:60px;" title="1 副单位 = N 主单位"/>
   {% if is_superadmin %}
   <span class="lbl">归属门店</span>
   <select name="store" id="bulk-store">
@@ -305,6 +311,9 @@
     var cat = catSel.value;
     var sub = subSel.value;
     var sup = document.getElementById('bulk-supplier').value.trim();
+    var unit = document.getElementById('bulk-unit').value.trim();
+    var unit2 = document.getElementById('bulk-unit2').value.trim();
+    var unit2Ratio = document.getElementById('bulk-unit2-ratio').value.trim();
     var storeEl = document.getElementById('bulk-store');
     var storeVal = storeEl ? storeEl.value : '__keep__';
     var changeStore = storeEl && storeVal !== '__keep__';
@@ -314,8 +323,8 @@
     var isCtrlEl = document.getElementById('bulk-is-controlled');
     var isCtrl = isCtrlEl ? isCtrlEl.value : '__keep__';
     var changeIsCtrl = isCtrl !== '__keep__';
-    if (!cat && !sup && !changeStore && !changeIsSvc && !changeIsCtrl) {
-      alert('请至少选择一个要修改的字段（大类 / 供应商 / 门店 / 服务类目 / 麻醉管控）');
+    if (!cat && !sup && !unit && !unit2 && !unit2Ratio && !changeStore && !changeIsSvc && !changeIsCtrl) {
+      alert('请至少选择一个要修改的字段');
       return;
     }
     var msg = '确认批量修改这 ' + ids.length + ' 个品目？';
@@ -329,6 +338,9 @@
     if (cat) fd.append('category', cat);
     if (sub) fd.append('subcategory', sub);
     if (sup) fd.append('supplier', sup);
+    if (unit) fd.append('unit', unit);
+    if (unit2) fd.append('unit2', unit2);
+    if (unit2Ratio) fd.append('unit2_ratio', unit2Ratio);
     if (changeStore) fd.append('store', storeVal);
     if (changeIsSvc) fd.append('is_service', isSvc);
     if (changeIsCtrl) fd.append('is_controlled', isCtrl);
