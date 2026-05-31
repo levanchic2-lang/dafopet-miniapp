@@ -3164,6 +3164,51 @@ async def admin_wecom_dispatch_now(
 # Phase 3 Step 1 — 企微外部联系人 ↔ Customer 映射
 # ═════════════════════════════════════════════════════════════
 
+@app.get("/api/wecom/jssdk-config", name="api_wecom_jssdk_config")
+async def api_wecom_jssdk_config(request: Request, url: str = Query(..., description="完整页面 URL（去 hash）")):
+    """返回企业微信 JS-SDK 鉴权配置。
+
+    用法（前端）：
+      fetch('/api/wecom/jssdk-config?url=' + encodeURIComponent(location.href))
+        .then(r => r.json())
+        .then(cfg => {
+          wx.config({...cfg.config, jsApiList: ['agentConfig']});
+          wx.ready(() => {
+            wx.agentConfig({...cfg.agent_config, jsApiList: ['getCurExternalContact'], success() { ... }});
+          });
+        });
+    """
+    if not _admin_ok(request):
+        raise HTTPException(401)
+    from app.services import wecom_client as _wc
+    if not _wc.enabled():
+        return {"error": "wecom not configured"}
+    try:
+        corp_cfg = _wc.build_jsapi_signature(url, agent=False)
+        agent_cfg = _wc.build_jsapi_signature(url, agent=True)
+    except Exception as e:
+        logger.warning("[jssdk-config] %s", e)
+        raise HTTPException(500, f"签名生成失败：{e}")
+    # wx.config 用 corp 级别
+    config = {
+        "beta": True,
+        "debug": False,
+        "appId": corp_cfg["appId"],
+        "timestamp": corp_cfg["timestamp"],
+        "nonceStr": corp_cfg["nonceStr"],
+        "signature": corp_cfg["signature"],
+    }
+    # wx.agentConfig 用 agent 级别（同时带 corpid + agentid）
+    agent_config = {
+        "corpid": agent_cfg["appId"],
+        "agentid": agent_cfg["agentid"],
+        "timestamp": agent_cfg["timestamp"],
+        "nonceStr": agent_cfg["nonceStr"],
+        "signature": agent_cfg["signature"],
+    }
+    return {"config": config, "agent_config": agent_config}
+
+
 @app.get("/admin/wecom-sidebar", response_class=HTMLResponse, name="admin_wecom_sidebar")
 async def admin_wecom_sidebar(
     request: Request,

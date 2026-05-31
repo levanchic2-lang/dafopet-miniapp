@@ -52,9 +52,68 @@
 <div class="wrap">
 
 {% if not external_userid %}
-  <div class="card empty">
-    📱 请在企业微信内打开此页面（点开客户聊天 → 右侧栏会自动加载）
+  <div class="card empty" id="loading-state">
+    <div style="display:flex;align-items:center;justify-content:center;gap:.5rem;">
+      <span style="display:inline-block;width:16px;height:16px;border:2px solid #cbd5e1;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;"></span>
+      正在读取当前聊天客户…
+    </div>
+    <div style="margin-top:.5rem;font-size:.75rem;color:#9ca3af;" id="loading-hint">
+      （若超过 5 秒无反应，请确认在企业微信内打开此页面）
+    </div>
   </div>
+  <style>@keyframes spin{to{transform:rotate(360deg);}}</style>
+  <script src="https://wwcdn.weixin.qq.com/node/wework/wwopen/js/jweixin-1.2.0.js"></script>
+  <script>
+  (function() {
+    if (typeof wx === 'undefined') {
+      document.getElementById('loading-hint').textContent = '⚠ 未加载到 jweixin.js（网络问题？）';
+      return;
+    }
+    const pageUrl = location.href.split('#')[0];
+    fetch('/api/wecom/jssdk-config?url=' + encodeURIComponent(pageUrl), {credentials: 'same-origin'})
+      .then(r => r.json())
+      .then(cfg => {
+        if (cfg.error) throw new Error(cfg.error);
+        wx.config({
+          beta: true,
+          debug: false,
+          appId: cfg.config.appId,
+          timestamp: cfg.config.timestamp,
+          nonceStr: cfg.config.nonceStr,
+          signature: cfg.config.signature,
+          jsApiList: ['agentConfig']
+        });
+        wx.ready(function() {
+          wx.agentConfig({
+            corpid: cfg.agent_config.corpid,
+            agentid: cfg.agent_config.agentid,
+            timestamp: cfg.agent_config.timestamp,
+            nonceStr: cfg.agent_config.nonceStr,
+            signature: cfg.agent_config.signature,
+            jsApiList: ['getCurExternalContact'],
+            success: function() {
+              wx.invoke('getCurExternalContact', {}, function(res) {
+                if (res.err_msg === 'getCurExternalContact:ok' && res.userId) {
+                  location.href = '/admin/wecom-sidebar?external_userid=' + encodeURIComponent(res.userId);
+                } else {
+                  document.getElementById('loading-hint').textContent = '⚠ 拿不到聊天对象：' + (res.err_msg || '未知');
+                }
+              });
+            },
+            fail: function(res) {
+              document.getElementById('loading-hint').textContent = '⚠ agentConfig 失败：' + (res.errMsg || JSON.stringify(res));
+            }
+          });
+        });
+        wx.error(function(res) {
+          document.getElementById('loading-hint').textContent = '⚠ wx.config 失败：' + (res.errMsg || JSON.stringify(res));
+        });
+      })
+      .catch(err => {
+        document.getElementById('loading-hint').textContent = '⚠ 签名接口失败：' + err.message;
+      });
+  })();
+  </script>
 {% elif not link %}
   <div class="card empty bad">
     ⚠️ 这个客户还没在系统里同步。<br/>

@@ -145,6 +145,82 @@ def external_get_detail(external_userid: str) -> dict[str, Any]:
         return r.json()
 
 
+# ── JSAPI Ticket（JS-SDK 鉴权签名用）─────────────────────────────
+
+@dataclass
+class _JsapiTicketCache:
+    corp_ticket: str = ""
+    corp_expires_at: float = 0.0
+    agent_ticket: str = ""
+    agent_expires_at: float = 0.0
+
+
+_jsapi_cache = _JsapiTicketCache()
+
+
+def _get_jsapi_ticket(agent: bool = False) -> str:
+    """获取 jsapi_ticket（公司级 / 应用级）。
+
+    agent=False: 用于 wx.config（公司级）
+    agent=True:  用于 wx.agentConfig（应用级）
+    """
+    now = time.time()
+    if agent:
+        if _jsapi_cache.agent_ticket and now < _jsapi_cache.agent_expires_at - 60:
+            return _jsapi_cache.agent_ticket
+    else:
+        if _jsapi_cache.corp_ticket and now < _jsapi_cache.corp_expires_at - 60:
+            return _jsapi_cache.corp_ticket
+    token = _get_access_token()
+    url = f"{_API_BASE}/cgi-bin/ticket/get"
+    params = {"access_token": token}
+    if agent:
+        params["type"] = "agent_config"
+    else:
+        params["type"] = "jsapi"
+    with httpx.Client(timeout=8.0) as client:
+        r = client.get(url, params=params)
+        r.raise_for_status()
+        data = r.json()
+    if data.get("errcode") not in (0, "0", None):
+        raise RuntimeError(f"jsapi ticket 失败: {data}")
+    ticket = data["ticket"]
+    expires_in = int(data.get("expires_in", 7200))
+    if agent:
+        _jsapi_cache.agent_ticket = ticket
+        _jsapi_cache.agent_expires_at = now + expires_in
+    else:
+        _jsapi_cache.corp_ticket = ticket
+        _jsapi_cache.corp_expires_at = now + expires_in
+    return ticket
+
+
+def build_jsapi_signature(url: str, agent: bool = False) -> dict[str, Any]:
+    """构造 JS-SDK 鉴权所需的 4 元素（含签名）。
+
+    返回：{appId, agentid, timestamp, nonceStr, signature}
+    URL 必须是完整的页面 URL（不含 #hash）。
+    """
+    if not enabled():
+        raise RuntimeError("企业微信未配置")
+    import hashlib
+    import secrets as _sec
+    ticket = _get_jsapi_ticket(agent=agent)
+    timestamp = int(time.time())
+    nonce = _sec.token_hex(8)
+    # 去掉 URL fragment
+    clean_url = url.split("#")[0]
+    raw = f"jsapi_ticket={ticket}&noncestr={nonce}&timestamp={timestamp}&url={clean_url}"
+    signature = hashlib.sha1(raw.encode("utf-8")).hexdigest()
+    return {
+        "appId": settings.wecom_corp_id,
+        "agentid": int(settings.wecom_agent_id),
+        "timestamp": timestamp,
+        "nonceStr": nonce,
+        "signature": signature,
+    }
+
+
 def external_batch_get_by_user(userid_list: list[str], cursor: str = "", limit: int = 100) -> dict[str, Any]:
     """批量拉取多个员工名下的客户详情（含跟进员工备注名/备注手机号 等）。
 
