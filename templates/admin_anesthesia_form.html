@@ -1,13 +1,9 @@
 {% extends "base.html" %}
 {% block body %}
 <style>
-  .anesth-row { background:#fff; }
-  .anesth-row.is-service .dose-only { display:none !important; }
-  .anesth-detail { display:none; background:#f8fafc; }
-  .anesth-detail.open { display:table-row; }
   .mini { font-size:.78rem; color:#64748b; }
   .icon-btn { background:none;border:none;cursor:pointer;color:#64748b;padding:.2rem .4rem;font-size:.95rem; }
-  .icon-btn:hover { color:#2563eb; }
+  .icon-btn:hover { color:#dc2626; }
 </style>
 
 <div class="card" style="max-width:1000px;margin:0 auto;">
@@ -93,18 +89,7 @@
           <td><input class="subtotal" readonly value="{{ '%.2f'|format(it.subtotal) }}" style="width:100%;background:#f8fafc;font-weight:600;"/></td>
           <td style="text-align:center;white-space:nowrap;">
             <input type="hidden" name="is_service[]" value="{{ '1' if it.is_service else '0' }}"/>
-            <button type="button" class="icon-btn" onclick="toggleDetail(this)" title="浓度/剂量">✏</button>
             <button type="button" class="icon-btn" onclick="rmRow(this)" title="删除" style="color:#dc2626;">✕</button>
-          </td>
-        </tr>
-        <tr class="anesth-detail" data-idx="{{ i }}">
-          <td colspan="7" style="padding:.5rem .8rem;">
-            <div class="dose-only" style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;">
-              <div><label class="mini">浓度（如 2%）</label><input name="concentration[]" value="{{ it.concentration }}" style="width:100%;"/></div>
-              <div><label class="mini">单次剂量</label><input type="number" step="0.01" name="dose_amount[]" value="{{ it.dose_amount or '' }}" style="width:100%;"/></div>
-              <div><label class="mini">剂量单位</label><input name="dose_unit[]" value="{{ it.dose_unit }}" placeholder="mg/ml/μg" style="width:100%;"/></div>
-              <div><label class="mini">行内备注</label><input name="note[]" value="{{ it.note }}" style="width:100%;"/></div>
-            </div>
           </td>
         </tr>
         {% endfor %}
@@ -179,23 +164,9 @@ function addRow() {
     <td><input class="subtotal" readonly value="0.00" style="width:100%;background:#f8fafc;font-weight:600;"/></td>
     <td style="text-align:center;white-space:nowrap;">
       <input type="hidden" name="is_service[]" value="0"/>
-      <button type="button" class="icon-btn" onclick="toggleDetail(this)" title="浓度/剂量">✏</button>
       <button type="button" class="icon-btn" onclick="rmRow(this)" title="删除" style="color:#dc2626;">✕</button>
     </td>`;
-  const detail = document.createElement('tr');
-  detail.className = 'anesth-detail';
-  detail.dataset.idx = i;
-  detail.innerHTML = `
-    <td colspan="7" style="padding:.5rem .8rem;">
-      <div class="dose-only" style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;">
-        <div><label class="mini">浓度（如 2%）</label><input name="concentration[]" style="width:100%;"/></div>
-        <div><label class="mini">单次剂量</label><input type="number" step="0.01" name="dose_amount[]" style="width:100%;"/></div>
-        <div><label class="mini">剂量单位</label><input name="dose_unit[]" value="mg" placeholder="mg/ml/μg" style="width:100%;"/></div>
-        <div><label class="mini">行内备注</label><input name="note[]" style="width:100%;"/></div>
-      </div>
-    </td>`;
   tb.appendChild(main);
-  tb.appendChild(detail);
 }
 
 function onDrugPick(input, i) {
@@ -221,13 +192,6 @@ function onDrugPick(input, i) {
   recalc();
 }
 
-function toggleDetail(btn) {
-  const row = btn.closest('tr');
-  const idx = row.dataset.idx;
-  const detail = document.querySelector(`tr.anesth-detail[data-idx="${idx}"]`);
-  if (detail) detail.classList.toggle('open');
-}
-
 function recalc() {
   const rows = document.querySelectorAll('#itemsBody tr.anesth-row');
   let total = 0;
@@ -243,11 +207,7 @@ function recalc() {
 }
 
 function rmRow(btn) {
-  const row = btn.closest('tr');
-  const idx = row.dataset.idx;
-  const detail = document.querySelector(`tr.anesth-detail[data-idx="${idx}"]`);
-  row.remove();
-  if (detail) detail.remove();
+  btn.closest('tr').remove();
   recalc();
 }
 
