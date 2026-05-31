@@ -351,22 +351,110 @@
  <textarea name="treatment_plan" data-voice="1" data-orders-helper="1">{{ v.treatment_plan or '' }}</textarea>
  </div>
 
- {# Step 7 回访 #}
+ {# Step 7 回访任务概览 — 按诊断自动衍生多轮 + 客户结构化反馈 #}
  <div class="soap-panel" data-panel="7">
- <h3><i data-lucide="phone"></i> 回访 <small>客户回访记录、复诊预约</small></h3>
- <div class="row2">
- <div>
- <label>回访日期</label>
- <input type="date" name="follow_up_at" value="{{ v.follow_up_at or '' }}">
+ <h3><i data-lucide="phone"></i> 回访任务 <small>按诊断自动衍生 · 客户结构化反馈</small></h3>
+ {% if not followups %}
+ <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:1.2rem;text-align:center;color:#64748b;font-size:.9rem;">
+   <div style="font-size:1.5rem;margin-bottom:.3rem;">📋</div>
+   还没有自动生成回访任务<br/>
+   <small>填好<b>第 4 步「诊断」</b>后会按疾病类型自动衍生多轮回访</small>
  </div>
- <div>
- <label>回访方式</label>
- <input value="电话 / 微信 / 上门" disabled style="background:#f9fafb;color:#9ca3af;">
+ {% else %}
+ {% set tpl_name = followups[0].template_name %}
+ <div style="background:#faf5ff;border:1px solid #d8b4fe;border-radius:8px;padding:.6rem .85rem;margin-bottom:.7rem;font-size:.85rem;color:#6b21a8;">
+   📋 <b>{{ tpl_name or '回访' }}</b> · 共 {{ followups|length }} 轮
+   <a href="/admin/follow-up-templates" style="float:right;font-size:.78rem;color:#6b21a8;">编辑模板 →</a>
+ </div>
+
+ {% set _STATUS_BG = {'pending':'#fef9c3','due':'#fde68a','sent':'#dbeafe','responded':'#dcfce7','phone_pending':'#fecaca','closed':'#e2e8f0','skipped':'#f1f5f9'} %}
+ {% set _STATUS_FG = {'pending':'#854d0e','due':'#92400e','sent':'#1e40af','responded':'#166534','phone_pending':'#991b1b','closed':'#475569','skipped':'#94a3b8'} %}
+
+ {% for fu in followups %}
+ <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:.7rem .9rem;margin-bottom:.5rem;">
+   <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+     <span style="background:#dbeafe;color:#1e40af;font-weight:600;width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.85rem;">{{ fu.round_no }}</span>
+     <div style="flex:1;min-width:140px;">
+       <div style="font-weight:600;">{{ fu.round_name or ('第 ' ~ fu.round_no ~ ' 轮') }}</div>
+       <div style="color:#64748b;font-size:.78rem;">📅 {{ fu.planned_date or '—' }}{% if fu.sent_at %} · 已发于 {{ fu.sent_at.strftime('%m-%d %H:%M') }}{% endif %}</div>
+     </div>
+     <span style="background:{{ _STATUS_BG.get(fu.status, '#e2e8f0') }};color:{{ _STATUS_FG.get(fu.status, '#475569') }};font-size:.72rem;padding:3px 10px;border-radius:4px;font-weight:600;">{{ fu_status_zh.get(fu.status, fu.status) }}</span>
+     {% if fu.response == 'needs_visit' %}<span style="background:#fef3c7;color:#92400e;font-size:.72rem;padding:3px 10px;border-radius:4px;">需复诊</span>{% endif %}
+     {% if fu.response == 'recovered' %}<span style="background:#dcfce7;color:#166534;font-size:.72rem;padding:3px 10px;border-radius:4px;">✓ 已好转</span>{% endif %}
+   </div>
+
+   {% if fu._answers %}
+   <details style="margin-top:.5rem;">
+     <summary style="cursor:pointer;font-size:.82rem;color:#10b981;font-weight:600;">✓ 客户已反馈 {{ fu._answers.keys()|length }} 项</summary>
+     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:.5rem .8rem;margin-top:.4rem;font-size:.82rem;line-height:1.7;">
+       {% for k, val in fu._answers.items() %}
+       <div><b style="color:#166534;">{{ k }}:</b>
+         {% if val is iterable and val is not string %}
+           {% if val and val[0] and val[0] is string and val[0].startswith('/uploads/') %}
+             <div style="display:flex;gap:.3rem;margin-top:.2rem;">
+             {% for url in val %}<a href="{{ url }}" target="_blank"><img src="{{ url }}" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid #cbd5e1;"/></a>{% endfor %}
+             </div>
+           {% else %}{{ val|join(', ') }}{% endif %}
+         {% else %}{{ val }}{% endif %}
+       </div>
+       {% endfor %}
+     </div>
+   </details>
+   {% endif %}
+
+   <div style="margin-top:.5rem;display:flex;gap:.4rem;flex-wrap:wrap;">
+     {% if fu.feedback_token and fu.status in ('pending','due','phone_pending','sent') %}
+     <button type="button" class="btn secondary" style="font-size:.78rem;padding:3px 10px;" onclick="copyFuLink(this, '{{ fu.feedback_token }}')">📋 复制反馈链接</button>
+     {% endif %}
+     {% if fu.status in ('pending','due','phone_pending','sent') %}
+     <button type="button" class="btn" style="font-size:.78rem;padding:3px 10px;background:#10b981;border-color:#10b981;" onclick="handleFu({{ fu.id }}, 'contacted', '已联系并好转？')">✓ 已联系</button>
+     <button type="button" class="btn" style="font-size:.78rem;padding:3px 10px;background:#f59e0b;border-color:#f59e0b;" onclick="handleFu({{ fu.id }}, 'refer_visit', null)">🔄 转复诊</button>
+     <button type="button" class="btn secondary" style="font-size:.78rem;padding:3px 10px;" onclick="handleFu({{ fu.id }}, 'skip', '忽略此回访？')">✕ 忽略</button>
+     {% else %}
+     <button type="button" class="btn secondary" style="font-size:.78rem;padding:3px 10px;" onclick="handleFu({{ fu.id }}, 'reopen', null)">↶ 重新打开</button>
+     {% endif %}
+   </div>
+ </div>
+ {% endfor %}
+ {% endif %}
+
+ <div style="margin-top:1rem;padding-top:.7rem;border-top:1px dashed #e2e8f0;">
+   <label>💬 医生内部备注 <small style="color:#94a3b8;font-weight:400;">仅员工可见，不发客户</small></label>
+   <textarea name="follow_up_note" data-voice="1" placeholder="如：客户家里另有一只猫情绪应激、首次手术，特殊注意事项...">{{ v.follow_up_note or '' }}</textarea>
+   {# 保留隐藏字段兼容老接口（follow_up_at 不再手填，但 autosave 仍可接受） #}
+   <input type="hidden" name="follow_up_at" value="{{ v.follow_up_at or '' }}"/>
  </div>
  </div>
- <label>回访内容</label>
- <textarea name="follow_up_note" data-voice="1">{{ v.follow_up_note or '' }}</textarea>
- </div>
+
+ <script>
+ function copyFuLink(btn, token) {
+   const base = window.location.origin;
+   const url = `${base}/follow-up/${token}`;
+   navigator.clipboard.writeText(url).then(() => {
+     const orig = btn.innerHTML;
+     btn.innerHTML = '✓ 已复制';
+     btn.style.background = '#10b981';
+     btn.style.color = '#fff';
+     setTimeout(() => { btn.innerHTML = orig; btn.style.background = ''; btn.style.color = ''; }, 1500);
+   }).catch(() => alert(url));
+ }
+ async function handleFu(fuId, action, confirmMsg) {
+   if (confirmMsg && !confirm(confirmMsg)) return;
+   const csrf = {{ csrf_token | tojson }};
+   const fd = new FormData();
+   fd.append('csrf_token', csrf);
+   fd.append('action', action);
+   fd.append('tab_redirect', 'today');
+   try {
+     const r = await fetch(`/admin/follow-ups/${fuId}/handle`, { method: 'POST', body: fd });
+     if (r.ok || r.redirected) {
+       location.reload();
+     } else {
+       alert('操作失败：' + r.status);
+     }
+   } catch (e) { alert('网络错误：' + e); }
+ }
+ </script>
 
  {# 自动保存状态条 #}
  <div class="save-bar">

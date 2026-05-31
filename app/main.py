@@ -9349,6 +9349,14 @@ async def page_admin_visit_detail(
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
     invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
     exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.desc()).all()
+    # 本 visit 的所有回访轮次（按计划日 + round_no 排序）
+    followups = db.query(FollowUp).filter(FollowUp.visit_id == visit_id)\
+        .order_by(FollowUp.planned_date, FollowUp.round_no).all()
+    for fu in followups:
+        try:
+            fu._answers = json.loads(fu.response_data or "") if fu.response_data else None
+        except Exception:
+            fu._answers = None
     # 解析检查项目，让列表能展示开了哪些项
     for eo in exam_orders:
         try:
@@ -9369,9 +9377,15 @@ async def page_admin_visit_detail(
         "sales_orders": sales_orders,
         "invoices": invoices,
         "exam_orders": exam_orders,
+        "followups": followups,
         "presc_status_zh": _PRESC_STATUS_ZH,
         "so_status_zh": _SO_STATUS_ZH,
         "inv_status_zh": _INV_STATUS_ZH,
+        "fu_status_zh": {
+            "pending": "待回访", "due": "今日到期", "sent": "已发送等反馈",
+            "responded": "客户已反馈", "phone_pending": "需电话兜底",
+            "closed": "已完成", "skipped": "已忽略",
+        },
         "csrf_token": _get_csrf_token(request),
         "mode": "edit",
         "msg": request.query_params.get("msg"),
