@@ -1301,6 +1301,77 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_assignee ON follow_ups(assigned_to)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_token ON follow_ups(feedback_token)"))
 
+            # ── 麻醉单 + 麻醉/管控药台账（国标合规） ───────────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS anesthesia_orders ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "anesth_date VARCHAR(20) DEFAULT '', "
+                "asa_grade VARCHAR(10) DEFAULT '', "
+                "vet_name VARCHAR(80) DEFAULT '', "
+                "cosigner VARCHAR(80) DEFAULT '', "
+                "start_time VARCHAR(10) DEFAULT '', "
+                "end_time VARCHAR(10) DEFAULT '', "
+                "recovery VARCHAR(40) DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'issued', "
+                "total_amount REAL DEFAULT 0.0, "
+                "store VARCHAR(40) DEFAULT '', "
+                "notes TEXT DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anesth_visit ON anesthesia_orders(visit_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anesth_date ON anesthesia_orders(anesth_date)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anesth_store ON anesthesia_orders(store)"))
+
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS anesthesia_order_items ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "order_id INTEGER NOT NULL REFERENCES anesthesia_orders(id) ON DELETE CASCADE, "
+                "item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL, "
+                "drug_name VARCHAR(120) DEFAULT '', "
+                "route VARCHAR(20) DEFAULT 'IV', "
+                "concentration VARCHAR(40) DEFAULT '', "
+                "dose_amount REAL DEFAULT 0.0, "
+                "dose_unit VARCHAR(20) DEFAULT 'mg', "
+                "total_qty REAL DEFAULT 0.0, "
+                "total_unit VARCHAR(20) DEFAULT '', "
+                "unit_price REAL DEFAULT 0.0, "
+                "subtotal REAL DEFAULT 0.0, "
+                "is_service BOOLEAN DEFAULT 0, "
+                "note VARCHAR(200) DEFAULT ''"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anesth_item_order ON anesthesia_order_items(order_id)"))
+
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS narcotics_ledger ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "event_date VARCHAR(20) DEFAULT '', "
+                "item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL, "
+                "item_name VARCHAR(120) DEFAULT '', "
+                "direction VARCHAR(10) DEFAULT 'out', "
+                "source VARCHAR(30) DEFAULT 'manual', "
+                "qty REAL DEFAULT 0.0, "
+                "unit VARCHAR(20) DEFAULT '', "
+                "balance_after REAL DEFAULT 0.0, "
+                "operator VARCHAR(80) DEFAULT '', "
+                "cosigner VARCHAR(80) DEFAULT '', "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "anesth_order_id INTEGER DEFAULT NULL REFERENCES anesthesia_orders(id) ON DELETE SET NULL, "
+                "store VARCHAR(40) DEFAULT '', "
+                "notes TEXT DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_item_date ON narcotics_ledger(item_id, event_date)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_store_date ON narcotics_ledger(store, event_date)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_source ON narcotics_ledger(source)"))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

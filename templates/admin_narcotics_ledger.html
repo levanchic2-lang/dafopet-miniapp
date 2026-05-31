@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="max-width:1280px;margin:0 auto;">
+ <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+  <a href="/admin/inventory" class="btn secondary" style="padding:.3rem .6rem;">← 库存</a>
+  <h1 style="margin:0;">💊 麻醉/管控药台账</h1>
+  <small style="color:#64748b;">国标合规：双签字、全周期可追溯、月度盘点</small>
+  <span style="flex:1;"></span>
+  <a href="/admin/inventory/narcotics-ledger/manual" class="btn">+ 手动录入（补充/盘点/损耗）</a>
+  <a href="/admin/inventory/narcotics-ledger/export?{% if item_id %}item_id={{ item_id }}&{% endif %}{% if source %}source={{ source }}&{% endif %}{% if date_from %}date_from={{ date_from }}&{% endif %}{% if date_to %}date_to={{ date_to }}&{% endif %}" class="btn secondary">📥 导出 Excel</a>
+ </div>
+
+ {% if msg %}<div style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;padding:.5rem .8rem;border-radius:8px;margin-top:1rem;">{{ msg }}</div>{% endif %}
+
+ <form method="get" style="margin-top:1rem;padding:.6rem .85rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;display:flex;gap:.6rem;align-items:end;flex-wrap:wrap;">
+   <div>
+     <label style="font-size:.78rem;color:#64748b;display:block;">药品</label>
+     <select name="item_id" style="min-width:200px;">
+       <option value="0">全部</option>
+       {% for it in items_list %}
+       <option value="{{ it.id }}" {% if item_id == it.id %}selected{% endif %}>{{ it.name }}{% if it.is_controlled %} 🔒{% endif %}</option>
+       {% endfor %}
+     </select>
+   </div>
+   <div>
+     <label style="font-size:.78rem;color:#64748b;display:block;">来源</label>
+     <select name="source">
+       <option value="">全部</option>
+       <option value="anesth_order" {% if source == 'anesth_order' %}selected{% endif %}>麻醉单</option>
+       <option value="manual_refill" {% if source == 'manual_refill' %}selected{% endif %}>手动补充</option>
+       <option value="manual_consume" {% if source == 'manual_consume' %}selected{% endif %}>手动消耗</option>
+       <option value="stocktake" {% if source == 'stocktake' %}selected{% endif %}>盘点</option>
+       <option value="loss" {% if source == 'loss' %}selected{% endif %}>损耗</option>
+     </select>
+   </div>
+   <div>
+     <label style="font-size:.78rem;color:#64748b;display:block;">起始</label>
+     <input type="date" name="date_from" value="{{ date_from }}"/>
+   </div>
+   <div>
+     <label style="font-size:.78rem;color:#64748b;display:block;">截止</label>
+     <input type="date" name="date_to" value="{{ date_to }}"/>
+   </div>
+   <button type="submit" class="btn">筛选</button>
+   {% if item_id or source or date_from or date_to %}
+   <a href="/admin/inventory/narcotics-ledger" class="btn secondary">清除</a>
+   {% endif %}
+ </form>
+
+ <div style="margin-top:1rem;overflow-x:auto;">
+  <table style="width:100%;border-collapse:collapse;font-size:.86rem;">
+    <thead style="background:#f1f5f9;">
+      <tr>
+        <th style="padding:.45rem;text-align:left;">日期</th>
+        <th style="padding:.45rem;text-align:left;">药品</th>
+        <th style="padding:.45rem;">方向</th>
+        <th style="padding:.45rem;">来源</th>
+        <th style="padding:.45rem;text-align:right;">数量</th>
+        <th style="padding:.45rem;">单位</th>
+        <th style="padding:.45rem;text-align:right;">余额</th>
+        <th style="padding:.45rem;">经办人</th>
+        <th style="padding:.45rem;">复核人</th>
+        <th style="padding:.45rem;">关联</th>
+        <th style="padding:.45rem;text-align:left;">备注</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set _DIR = {'in':'入','out':'出','loss':'损耗'} %}
+      {% set _SRC = {'anesth_order':'麻醉单','manual_refill':'手动补充','manual_consume':'手动消耗','stocktake':'盘点','loss':'损耗'} %}
+      {% for r in rows %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:.4rem;">{{ r.event_date }}</td>
+        <td style="padding:.4rem;">{{ r.item_name }}</td>
+        <td style="padding:.4rem;text-align:center;">
+          {% if r.direction == 'in' %}<span style="color:#059669;font-weight:600;">↑ 入</span>
+          {% elif r.direction == 'out' %}<span style="color:#dc2626;font-weight:600;">↓ 出</span>
+          {% else %}<span style="color:#a16207;font-weight:600;">⚠ 损</span>{% endif %}
+        </td>
+        <td style="padding:.4rem;text-align:center;font-size:.78rem;color:#64748b;">{{ _SRC.get(r.source, r.source) }}</td>
+        <td style="padding:.4rem;text-align:right;font-variant-numeric:tabular-nums;">{{ r.qty }}</td>
+        <td style="padding:.4rem;color:#64748b;">{{ r.unit }}</td>
+        <td style="padding:.4rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">{{ r.balance_after }}</td>
+        <td style="padding:.4rem;">{{ r.operator }}</td>
+        <td style="padding:.4rem;">{{ r.cosigner or '—' }}</td>
+        <td style="padding:.4rem;font-size:.78rem;">
+          {% if r.anesth_order_id %}<a href="/admin/anesthesia/{{ r.anesth_order_id }}">麻#{{ r.anesth_order_id }}</a>{% endif %}
+          {% if r.visit_id %}{% if r.anesth_order_id %} · {% endif %}<a href="/admin/visits/{{ r.visit_id }}">病#{{ r.visit_id }}</a>{% endif %}
+        </td>
+        <td style="padding:.4rem;color:#64748b;font-size:.8rem;">{{ r.notes or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="11" style="padding:2rem;text-align:center;color:#94a3b8;">暂无台账记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+ </div>
+ {% if rows|length >= 500 %}
+ <p style="text-align:center;color:#94a3b8;font-size:.8rem;margin-top:.5rem;">仅显示最近 500 条，导出 Excel 可看完整数据</p>
+ {% endif %}
+</div>
+{% endblock %}

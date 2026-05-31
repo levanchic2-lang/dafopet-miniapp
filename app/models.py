@@ -1224,3 +1224,84 @@ class WecomCustomerLink(Base):
     created_at:    Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     customer = relationship("Customer", foreign_keys=[customer_id])
+
+
+# ════════════════════════════════════════════════════════════════
+# 麻醉单 + 麻醉/管控药台账
+# 国标要求：麻醉单独立开（与处方分开）、双人复核签字、全生命周期可追溯
+# ════════════════════════════════════════════════════════════════
+class AnesthesiaOrder(Base):
+    """麻醉单（独立于处方单）"""
+    __tablename__ = "anesthesia_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="SET NULL"), nullable=True, default=None)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    anesth_date: Mapped[str] = mapped_column(String(20), default="")
+    asa_grade:   Mapped[str] = mapped_column(String(10), default="")
+    vet_name:    Mapped[str] = mapped_column(String(80), default="")
+    cosigner:    Mapped[str] = mapped_column(String(80), default="")
+    start_time:  Mapped[str] = mapped_column(String(10), default="")
+    end_time:    Mapped[str] = mapped_column(String(10), default="")
+    recovery:    Mapped[str] = mapped_column(String(40), default="")
+    status:      Mapped[str] = mapped_column(String(20), default="issued")
+    total_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    store:       Mapped[str] = mapped_column(String(40), default="")
+    notes:       Mapped[str] = mapped_column(Text, default="")
+    created_by:  Mapped[str] = mapped_column(String(80), default="")
+    created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items = relationship("AnesthesiaOrderItem", back_populates="order", cascade="all, delete-orphan")
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+
+
+class AnesthesiaOrderItem(Base):
+    __tablename__ = "anesthesia_order_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("anesthesia_orders.id", ondelete="CASCADE"))
+    item_id   = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
+    drug_name:     Mapped[str] = mapped_column(String(120), default="")
+    route:         Mapped[str] = mapped_column(String(20), default="IV")
+    concentration: Mapped[str] = mapped_column(String(40), default="")
+    dose_amount:   Mapped[float] = mapped_column(Float, default=0.0)
+    dose_unit:     Mapped[str] = mapped_column(String(20), default="mg")
+    total_qty:     Mapped[float] = mapped_column(Float, default=0.0)
+    total_unit:    Mapped[str] = mapped_column(String(20), default="")
+    unit_price:    Mapped[float] = mapped_column(Float, default=0.0)
+    subtotal:      Mapped[float] = mapped_column(Float, default=0.0)
+    is_service:    Mapped[bool] = mapped_column(Boolean, default=False)
+    note:          Mapped[str] = mapped_column(String(200), default="")
+
+    order = relationship("AnesthesiaOrder", back_populates="items")
+    inventory_item = relationship("InventoryItem", foreign_keys=[item_id])
+
+
+class NarcoticsLedger(Base):
+    """麻醉/管控药台账：自动 + 手动 双源汇总，国标月度盘点用。"""
+    __tablename__ = "narcotics_ledger"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_date: Mapped[str] = mapped_column(String(20), default="", index=True)
+    item_id     = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
+    item_name:  Mapped[str] = mapped_column(String(120), default="", index=True)
+    direction:  Mapped[str] = mapped_column(String(10), default="out")
+    source:     Mapped[str] = mapped_column(String(30), default="manual")
+    # anesth_order / manual_refill / manual_consume / stocktake / loss
+    qty:        Mapped[float] = mapped_column(Float, default=0.0)
+    unit:       Mapped[str] = mapped_column(String(20), default="")
+    balance_after: Mapped[float] = mapped_column(Float, default=0.0)
+    operator:   Mapped[str] = mapped_column(String(80), default="")
+    cosigner:   Mapped[str] = mapped_column(String(80), default="")
+    visit_id        = mapped_column(ForeignKey("visits.id",            ondelete="SET NULL"), nullable=True, default=None)
+    anesth_order_id = mapped_column(ForeignKey("anesthesia_orders.id", ondelete="SET NULL"), nullable=True, default=None)
+    store:      Mapped[str] = mapped_column(String(40), default="", index=True)
+    notes:      Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    inventory_item = relationship("InventoryItem", foreign_keys=[item_id])
+    visit          = relationship("Visit",         foreign_keys=[visit_id])
+    anesth_order   = relationship("AnesthesiaOrder", foreign_keys=[anesth_order_id])

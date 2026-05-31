@@ -88,6 +88,9 @@ from app.models import (
     ConsentTemplate,
     ConsentTask,
     ConsentDocument,
+    AnesthesiaOrder,
+    AnesthesiaOrderItem,
+    NarcoticsLedger,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
@@ -9251,6 +9254,7 @@ async def page_admin_visit_detail(
     ).all()
     vet_names = [v2[0] for v2 in vets]
     prescriptions = db.query(Prescription).filter(Prescription.visit_id == visit_id).order_by(Prescription.id.desc()).all()
+    anesth_orders = db.query(AnesthesiaOrder).filter(AnesthesiaOrder.visit_id == visit_id).order_by(AnesthesiaOrder.id.desc()).all()
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
     invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
     exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.desc()).all()
@@ -9270,6 +9274,7 @@ async def page_admin_visit_detail(
         "vet_names": vet_names,
         "visit_type_zh": _VISIT_TYPE_ZH,
         "prescriptions": prescriptions,
+        "anesth_orders": anesth_orders,
         "sales_orders": sales_orders,
         "invoices": invoices,
         "exam_orders": exam_orders,
@@ -9950,6 +9955,443 @@ async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depe
         _sync_visit_invoice(db, visit_id, operator)
         db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已删除" if visit_id else "/admin/visits", status_code=303)
+
+
+# ═════════════════════════════════════════════════════════════════════
+# 麻醉单（独立于处方单，国标要求）+ 麻醉/管控药台账
+# ═════════════════════════════════════════════════════════════════════
+_ANESTH_ROUTES = ["IV", "IM", "SC", "吸入", "硬膜外", "局部浸润", "口服"]
+_ASA_GRADES = ["I", "II", "III", "IV", "V", "E"]
+
+
+def _ledger_balance_for(db: Session, item_id: int) -> float:
+    """取该药品台账当前余额（最后一条 balance_after）。"""
+    if not item_id:
+        return 0.0
+    last = db.query(NarcoticsLedger).filter(NarcoticsLedger.item_id == item_id)\
+        .order_by(NarcoticsLedger.id.desc()).first()
+    if last:
+        return float(last.balance_after or 0)
+    # 没台账记录 → 用库存当前数量作起点
+    inv = db.get(InventoryItem, item_id)
+    return float(inv.stock_qty or 0) if inv else 0.0
+
+
+def _write_narcotics_ledger(db: Session, *, item_id: int, item_name: str,
+                            direction: str, source: str, qty: float, unit: str,
+                            operator: str, cosigner: str = "",
+                            visit_id: int | None = None,
+                            anesth_order_id: int | None = None,
+                            store: str = "", notes: str = "",
+                            event_date: str = "") -> "NarcoticsLedger":
+    """写一条台账，自动算 balance_after。direction: in=入/out=出/loss=损耗"""
+    prev = _ledger_balance_for(db, item_id) if item_id else 0.0
+    delta = qty if direction == "in" else -qty
+    new_balance = round(prev + delta, 4)
+    row = NarcoticsLedger(
+        event_date=event_date or datetime.utcnow().strftime("%Y-%m-%d"),
+        item_id=item_id or None,
+        item_name=(item_name or "")[:120],
+        direction=direction, source=source,
+        qty=float(qty), unit=unit or "",
+        balance_after=new_balance,
+        operator=operator, cosigner=cosigner,
+        visit_id=visit_id, anesth_order_id=anesth_order_id,
+        store=store, notes=notes,
+    )
+    db.add(row)
+    return row
+
+
+def _parse_anesth_items(form) -> list[dict]:
+    """解析麻醉单明细。字段：drug_name[]/item_id[]/route[]/concentration[]/dose_amount[]/dose_unit[]/total_qty[]/total_unit[]/unit_price[]/is_service[]/note[]"""
+    names = form.getlist("drug_name[]")
+    items = []
+    for i, name in enumerate(names):
+        name = str(name or "").strip()
+        if not name:
+            continue
+        def _g(k, d=""):
+            v = form.getlist(f"{k}[]")
+            return v[i] if i < len(v) else d
+        def _f(k):
+            try:
+                return float(_g(k) or 0)
+            except Exception:
+                return 0.0
+        item_id = 0
+        try:
+            item_id = int(_g("item_id") or 0)
+        except Exception:
+            item_id = 0
+        is_service_raw = _g("is_service") or ""
+        unit_price = _f("unit_price")
+        total_qty = _f("total_qty")
+        subtotal = round(unit_price * (total_qty if total_qty > 0 else 1), 2)
+        items.append({
+            "item_id": item_id or None,
+            "drug_name": name[:120],
+            "route": (_g("route") or "IV")[:20],
+            "concentration": (_g("concentration") or "")[:40],
+            "dose_amount": _f("dose_amount"),
+            "dose_unit": (_g("dose_unit") or "mg")[:20],
+            "total_qty": total_qty,
+            "total_unit": (_g("total_unit") or "")[:20],
+            "unit_price": unit_price,
+            "subtotal": subtotal,
+            "is_service": is_service_raw in ("1", "true", "on"),
+            "note": (_g("note") or "")[:200],
+        })
+    return items
+
+
+def _anesth_form_context(request, db, *, order=None, visit=None, cust=None,
+                         pet=None, pets=None, mode="create"):
+    # 麻醉医师/复核人候选
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%")
+    ).all()
+    vet_names = [v[0] for v in vets]
+    nurses = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+    ).all()
+    cosigner_names = [n[0] for n in nurses if n[0] not in vet_names] + vet_names
+    # 候选药：麻醉/管控药 + 服务类（吸入麻醉等）
+    store = _get_admin_store(request) or ""
+    cand_q = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    cand_q = cand_q.filter(
+        (InventoryItem.is_controlled == True) |
+        (InventoryItem.subcategory == "controlled") |
+        (InventoryItem.name.ilike("%麻%"))
+    )
+    if store:
+        cand_q = cand_q.filter((InventoryItem.store == store) | (InventoryItem.store == "") | (InventoryItem.store.is_(None)))
+    candidates = cand_q.order_by(InventoryItem.name).limit(200).all()
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    return {
+        "order": order, "visit": visit, "cust": cust, "pet": pet, "pets": pets or [],
+        "vet_names": vet_names, "cosigner_names": cosigner_names,
+        "candidates": candidates,
+        "routes": _ANESTH_ROUTES, "asa_grades": _ASA_GRADES,
+        "today": today, "mode": mode,
+        "csrf_token": _get_csrf_token(request),
+    }
+
+
+@app.get("/admin/visits/{visit_id}/anesthesia/new", response_class=HTMLResponse)
+async def page_admin_anesth_new(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "病例不存在")
+    cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    pets = db.query(Pet).filter(Pet.customer_id == visit.customer_id).all() if visit.customer_id else []
+    ctx = _anesth_form_context(request, db, visit=visit, cust=cust, pet=pet, pets=pets, mode="create")
+    return templates.TemplateResponse(request, "admin_anesthesia_form.html", ctx)
+
+
+@app.post("/admin/anesthesia/create")
+async def admin_anesth_create(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    visit_id = int(form.get("visit_id", 0) or 0)
+    customer_id = int(form.get("customer_id", 0) or 0)
+    pet_id = int(form.get("pet_id", 0) or 0)
+    vet_name = str(form.get("vet_name", "")).strip()[:80]
+    cosigner = str(form.get("cosigner", "")).strip()[:80]
+    if not vet_name:
+        raise HTTPException(400, "麻醉医师为必填")
+    if not cosigner:
+        raise HTTPException(400, "国标要求双人复核：请选择第二签字人")
+    if cosigner == vet_name:
+        raise HTTPException(400, "第二签字人不能与麻醉医师相同")
+    items = _parse_anesth_items(form)
+    if not items:
+        raise HTTPException(400, "请至少填写一项麻醉药品")
+    total = round(sum(it["subtotal"] for it in items), 2)
+    operator = request.session.get("admin_username", "admin")
+    store = ""
+    if visit_id:
+        v = db.get(Visit, visit_id)
+        if v and v.pet_id:
+            p = db.get(Pet, v.pet_id)
+            if p and p.store:
+                store = p.store
+    if not store:
+        store = _get_admin_store(request) or ""
+    order = AnesthesiaOrder(
+        visit_id=visit_id or None,
+        customer_id=customer_id or None,
+        pet_id=pet_id or None,
+        anesth_date=str(form.get("anesth_date", "")).strip()[:20] or datetime.utcnow().strftime("%Y-%m-%d"),
+        asa_grade=str(form.get("asa_grade", "")).strip()[:10],
+        vet_name=vet_name, cosigner=cosigner,
+        start_time=str(form.get("start_time", "")).strip()[:10],
+        end_time=str(form.get("end_time", "")).strip()[:10],
+        recovery=str(form.get("recovery", "")).strip()[:40],
+        status="issued",
+        total_amount=total,
+        store=store,
+        notes=str(form.get("notes", "")).strip(),
+        created_by=operator,
+    )
+    db.add(order)
+    db.flush()
+    # 写明细 + 出库（有库存的管控药）+ 台账留痕（所有项）
+    for it in items:
+        db.add(AnesthesiaOrderItem(order_id=order.id, **it))
+        inv = db.get(InventoryItem, it["item_id"]) if it["item_id"] else None
+        # 1) 实物扣库存：非服务类 + 有库存品目
+        if inv and not inv.is_service and not it["is_service"] and it["total_qty"] > 0:
+            _deduct_inventory(db, inv.id, it["total_qty"], "anesthesia",
+                              order.id, operator, f"麻醉单#{order.id}")
+        # 2) 写台账（包括服务类，国标要求所有麻醉/管控药都有痕迹）
+        if inv and (inv.is_controlled or (inv.subcategory == "controlled")) or (not inv and it["is_service"]):
+            _write_narcotics_ledger(
+                db, item_id=inv.id if inv else 0, item_name=it["drug_name"],
+                direction="out", source="anesth_order",
+                qty=it["total_qty"] if it["total_qty"] > 0 else 1,
+                unit=it["total_unit"] or it["dose_unit"],
+                operator=vet_name, cosigner=cosigner,
+                visit_id=visit_id or None, anesth_order_id=order.id,
+                store=store, event_date=order.anesth_date,
+                notes=f"{it['route']} {it['dose_amount']}{it['dose_unit']} · 麻醉单#{order.id}",
+            )
+    db.commit()
+    # 同步收费单
+    if visit_id:
+        try:
+            _sync_visit_invoice(db, visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=麻醉单已开具" if visit_id else f"/admin/anesthesia/{order.id}", status_code=303)
+
+
+@app.get("/admin/anesthesia/{order_id}", response_class=HTMLResponse)
+async def page_admin_anesth_detail(order_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    order = db.get(AnesthesiaOrder, order_id)
+    if not order:
+        raise HTTPException(404, "麻醉单不存在")
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust = db.get(Customer, order.customer_id) if order.customer_id else None
+    pet = db.get(Pet, order.pet_id) if order.pet_id else None
+    pets = db.query(Pet).filter(Pet.customer_id == order.customer_id).all() if order.customer_id else []
+    ctx = _anesth_form_context(request, db, order=order, visit=visit, cust=cust, pet=pet, pets=pets, mode="edit")
+    ctx["msg"] = request.query_params.get("msg")
+    return templates.TemplateResponse(request, "admin_anesthesia_form.html", ctx)
+
+
+@app.post("/admin/anesthesia/{order_id}/void")
+async def admin_anesth_void(order_id: int, request: Request, db: Session = Depends(get_db),
+                            csrf_token: str = Form("")):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    order = db.get(AnesthesiaOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    if order.status == "voided":
+        return RedirectResponse(f"/admin/anesthesia/{order_id}?msg=该单已作废", status_code=303)
+    operator = request.session.get("admin_username", "admin")
+    visit_id = order.visit_id
+    # 回库 + 反向台账
+    for it in order.items:
+        inv = db.get(InventoryItem, it.item_id) if it.item_id else None
+        if inv and not inv.is_service and not it.is_service and it.total_qty > 0:
+            _restore_inventory(db, inv.id, it.total_qty, "anesthesia",
+                               order_id, operator, f"作废麻醉单#{order_id}回库")
+        if inv and (inv.is_controlled or inv.subcategory == "controlled"):
+            _write_narcotics_ledger(
+                db, item_id=inv.id, item_name=it.drug_name,
+                direction="in", source="anesth_order",
+                qty=it.total_qty if it.total_qty > 0 else 1,
+                unit=it.total_unit or it.dose_unit,
+                operator=operator, cosigner=order.cosigner,
+                visit_id=order.visit_id, anesth_order_id=order.id,
+                store=order.store, notes=f"作废麻醉单#{order.id}回退",
+            )
+    order.status = "voided"
+    db.commit()
+    if visit_id:
+        try:
+            _sync_visit_invoice(db, visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=麻醉单已作废" if visit_id else f"/admin/anesthesia/{order_id}", status_code=303)
+
+
+# ─── 麻醉/管控药台账 ─────────────────────────────────────────────
+@app.get("/admin/inventory/narcotics-ledger", response_class=HTMLResponse)
+async def page_admin_narcotics_ledger(
+    request: Request, db: Session = Depends(get_db),
+    item_id: int = Query(0), source: str = Query(""),
+    date_from: str = Query(""), date_to: str = Query(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    store = _get_admin_store(request) or ""
+    q = db.query(NarcoticsLedger)
+    if store:
+        q = q.filter(NarcoticsLedger.store == store)
+    if item_id:
+        q = q.filter(NarcoticsLedger.item_id == item_id)
+    if source:
+        q = q.filter(NarcoticsLedger.source == source)
+    if date_from:
+        q = q.filter(NarcoticsLedger.event_date >= date_from)
+    if date_to:
+        q = q.filter(NarcoticsLedger.event_date <= date_to)
+    rows = q.order_by(NarcoticsLedger.id.desc()).limit(500).all()
+    # 候选药品下拉
+    items_q = db.query(InventoryItem).filter(
+        (InventoryItem.is_controlled == True) |
+        (InventoryItem.subcategory == "controlled")
+    )
+    if store:
+        items_q = items_q.filter((InventoryItem.store == store) | (InventoryItem.store == "") | (InventoryItem.store.is_(None)))
+    items_list = items_q.order_by(InventoryItem.name).all()
+    return templates.TemplateResponse(request, "admin_narcotics_ledger.html", {
+        "rows": rows, "items_list": items_list,
+        "item_id": item_id, "source": source,
+        "date_from": date_from, "date_to": date_to,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.get("/admin/inventory/narcotics-ledger/manual", response_class=HTMLResponse)
+async def page_admin_narcotics_manual(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    store = _get_admin_store(request) or ""
+    items_q = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    items_q = items_q.filter(
+        (InventoryItem.is_controlled == True) |
+        (InventoryItem.subcategory == "controlled") |
+        (InventoryItem.name.ilike("%麻%"))
+    )
+    if store:
+        items_q = items_q.filter((InventoryItem.store == store) | (InventoryItem.store == "") | (InventoryItem.store.is_(None)))
+    items_list = items_q.order_by(InventoryItem.name).all()
+    staff_list = db.query(Staff.name).filter(Staff.status.in_(["active", "probation"])).all()
+    staff_names = [s[0] for s in staff_list]
+    return templates.TemplateResponse(request, "admin_narcotics_manual.html", {
+        "items_list": items_list, "staff_names": staff_names,
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/inventory/narcotics-ledger/manual")
+async def admin_narcotics_manual_submit(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    item_id = int(form.get("item_id", 0) or 0)
+    direction = str(form.get("direction", "")).strip()  # in / out / loss
+    source = str(form.get("source", "manual_consume")).strip()  # manual_refill / manual_consume / stocktake / loss
+    qty = float(form.get("qty", 0) or 0)
+    unit = str(form.get("unit", "")).strip()[:20]
+    operator = str(form.get("operator", "")).strip() or request.session.get("admin_username", "admin")
+    cosigner = str(form.get("cosigner", "")).strip()[:80]
+    notes = str(form.get("notes", "")).strip()
+    event_date = str(form.get("event_date", "")).strip() or datetime.utcnow().strftime("%Y-%m-%d")
+    if direction not in ("in", "out", "loss"):
+        raise HTTPException(400, "方向无效")
+    if qty <= 0:
+        raise HTTPException(400, "数量必须大于 0")
+    if not cosigner:
+        raise HTTPException(400, "国标要求复核人签字")
+    if cosigner == operator:
+        raise HTTPException(400, "复核人不能与经办人相同")
+    inv = db.get(InventoryItem, item_id) if item_id else None
+    item_name = (inv.name if inv else str(form.get("item_name", "")).strip())[:120]
+    if not item_name:
+        raise HTTPException(400, "请选择或填写药品名称")
+    store = (inv.store if inv else "") or _get_admin_store(request) or ""
+    # 同步实物库存（仅对有库存的非服务类品目）
+    if inv and not inv.is_service:
+        if direction == "in":
+            _restore_inventory(db, inv.id, qty, "narcotics_manual", 0, operator, notes or f"手动入账 {source}")
+        else:
+            _deduct_inventory(db, inv.id, qty, "narcotics_manual", 0, operator, notes or f"手动出账 {source}")
+    _write_narcotics_ledger(
+        db, item_id=inv.id if inv else 0, item_name=item_name,
+        direction=direction, source=source,
+        qty=qty, unit=unit or (inv.unit if inv else ""),
+        operator=operator, cosigner=cosigner,
+        store=store, notes=notes, event_date=event_date,
+    )
+    db.commit()
+    return RedirectResponse("/admin/inventory/narcotics-ledger?msg=已记录", status_code=303)
+
+
+@app.get("/admin/inventory/narcotics-ledger/export")
+async def admin_narcotics_export(
+    request: Request, db: Session = Depends(get_db),
+    item_id: int = Query(0), source: str = Query(""),
+    date_from: str = Query(""), date_to: str = Query(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment
+    except ImportError:
+        raise HTTPException(500, "openpyxl 未安装")
+    store = _get_admin_store(request) or ""
+    q = db.query(NarcoticsLedger)
+    if store:
+        q = q.filter(NarcoticsLedger.store == store)
+    if item_id:
+        q = q.filter(NarcoticsLedger.item_id == item_id)
+    if source:
+        q = q.filter(NarcoticsLedger.source == source)
+    if date_from:
+        q = q.filter(NarcoticsLedger.event_date >= date_from)
+    if date_to:
+        q = q.filter(NarcoticsLedger.event_date <= date_to)
+    rows = q.order_by(NarcoticsLedger.event_date, NarcoticsLedger.id).all()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "麻醉管控药台账"
+    headers = ["日期", "药品", "方向", "来源", "数量", "单位", "余额", "经办人", "复核人", "门店", "关联病例", "关联麻醉单", "备注"]
+    ws.append(headers)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+        c.alignment = Alignment(horizontal="center")
+    _DIR = {"in": "入", "out": "出", "loss": "损耗"}
+    _SRC = {"anesth_order": "麻醉单", "manual_refill": "手动补充",
+            "manual_consume": "手动消耗", "stocktake": "盘点", "loss": "损耗"}
+    for r in rows:
+        ws.append([
+            r.event_date, r.item_name, _DIR.get(r.direction, r.direction),
+            _SRC.get(r.source, r.source), r.qty, r.unit, r.balance_after,
+            r.operator, r.cosigner, r.store,
+            r.visit_id or "", r.anesth_order_id or "", r.notes or "",
+        ])
+    for col in "ABCDEFGHIJKLM":
+        ws.column_dimensions[col].width = 14
+    import io
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"narcotics_ledger_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return Response(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 # ---------------------------------------------------------------------------

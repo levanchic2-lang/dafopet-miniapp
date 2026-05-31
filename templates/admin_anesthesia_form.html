@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="max-width:1100px;margin:0 auto;">
+ <div style="display:flex;align-items:center;gap:.6rem;margin:0 0 .5rem;">
+  <a href="{% if visit %}/admin/visits/{{ visit.id }}{% else %}/admin/visits{% endif %}" class="btn secondary" style="padding:.3rem .6rem;">← 返回</a>
+  <h1 style="margin:0;">💉 {{ '麻醉单详情' if order else '新建麻醉单' }}</h1>
+  {% if order and order.status == 'voided' %}<span class="badge b-pending">已作废</span>{% endif %}
+  {% if order %}<small style="color:#64748b;">#{{ order.id }}</small>{% endif %}
+ </div>
+ {% if cust or pet %}
+ <div style="color:#475569;font-size:.92rem;margin-bottom:1rem;">
+  {{ cust.name if cust else '—' }} · {{ pet.name if pet else '—' }}{% if pet %}（{{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }}）{% endif %}
+ </div>
+ {% endif %}
+ {% if msg %}<div style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;padding:.5rem .8rem;border-radius:8px;margin-bottom:1rem;">{{ msg }}</div>{% endif %}
+
+ <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:.5rem .8rem;font-size:.82rem;color:#92400e;margin-bottom:1rem;">
+   ⚠ 国标要求：麻醉单与处方单<b>独立开具</b>，且须经<b>麻醉医师 + 复核人</b>双签字。所有麻醉/管控药品的领用会自动写入《麻醉管控药台账》。
+ </div>
+
+ {% set readonly = order and order.status == 'voided' %}
+ <form method="post" action="{% if order %}#{% else %}/admin/anesthesia/create{% endif %}" id="anesthForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+  <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;margin-bottom:1rem;">
+    <div>
+      <label style="font-weight:600;font-size:.85rem;">麻醉日期</label>
+      <input type="date" name="anesth_date" value="{{ order.anesth_date if order else today }}" {% if readonly %}readonly{% endif %} style="width:100%;"/>
+    </div>
+    <div>
+      <label style="font-weight:600;font-size:.85rem;">ASA 分级</label>
+      <select name="asa_grade" {% if readonly %}disabled{% endif %} style="width:100%;">
+        <option value="">—</option>
+        {% for g in asa_grades %}<option value="{{ g }}" {% if order and order.asa_grade == g %}selected{% endif %}>{{ g }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="font-weight:600;font-size:.85rem;">麻醉医师 *</label>
+      <input name="vet_name" list="vet-list" required value="{{ order.vet_name if order else '' }}" {% if readonly %}readonly{% endif %} style="width:100%;"/>
+      <datalist id="vet-list">{% for n in vet_names %}<option value="{{ n }}">{% endfor %}</datalist>
+    </div>
+    <div>
+      <label style="font-weight:600;font-size:.85rem;">复核人（双签）*</label>
+      <input name="cosigner" list="cos-list" required value="{{ order.cosigner if order else '' }}" {% if readonly %}readonly{% endif %} style="width:100%;"/>
+      <datalist id="cos-list">{% for n in cosigner_names %}<option value="{{ n }}">{% endfor %}</datalist>
+    </div>
+    <div>
+      <label style="font-weight:600;font-size:.85rem;">开始时间</label>
+      <input type="time" name="start_time" value="{{ order.start_time if order else '' }}" {% if readonly %}readonly{% endif %} style="width:100%;"/>
+    </div>
+    <div>
+      <label style="font-weight:600;font-size:.85rem;">结束时间</label>
+      <input type="time" name="end_time" value="{{ order.end_time if order else '' }}" {% if readonly %}readonly{% endif %} style="width:100%;"/>
+    </div>
+    <div style="grid-column:span 2;">
+      <label style="font-weight:600;font-size:.85rem;">苏醒情况</label>
+      <input name="recovery" value="{{ order.recovery if order else '' }}" placeholder="如：苏醒良好 / 苏醒延迟 / 出现呕吐" {% if readonly %}readonly{% endif %} style="width:100%;"/>
+    </div>
+  </div>
+
+  <h3 style="margin:1rem 0 .5rem;">💊 麻醉药品 / 项目</h3>
+  <table id="itemsTable" style="width:100%;border-collapse:collapse;font-size:.86rem;">
+    <thead style="background:#f1f5f9;">
+      <tr>
+        <th style="padding:.4rem;text-align:left;width:22%;">药品 *</th>
+        <th style="padding:.4rem;width:9%;">给药途径</th>
+        <th style="padding:.4rem;width:9%;">浓度</th>
+        <th style="padding:.4rem;width:9%;">单次剂量</th>
+        <th style="padding:.4rem;width:7%;">剂量单位</th>
+        <th style="padding:.4rem;width:8%;">总用量</th>
+        <th style="padding:.4rem;width:7%;">出库单位</th>
+        <th style="padding:.4rem;width:8%;">单价</th>
+        <th style="padding:.4rem;width:8%;">小计</th>
+        <th style="padding:.4rem;width:7%;">服务类</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="itemsBody">
+      {% if order %}
+        {% for it in order.items %}
+        {% set i = loop.index0 %}
+        <tr>
+          <td><input list="drug-list" name="drug_name[]" value="{{ it.drug_name }}" required style="width:100%;" onchange="onDrugPick(this, {{ i }})"/>
+              <input type="hidden" name="item_id[]" value="{{ it.item_id or 0 }}"/></td>
+          <td><select name="route[]" style="width:100%;">{% for r in routes %}<option value="{{ r }}" {% if it.route == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></td>
+          <td><input name="concentration[]" value="{{ it.concentration }}" style="width:100%;"/></td>
+          <td><input type="number" step="0.01" name="dose_amount[]" value="{{ it.dose_amount or '' }}" style="width:100%;"/></td>
+          <td><input name="dose_unit[]" value="{{ it.dose_unit }}" style="width:100%;"/></td>
+          <td><input type="number" step="0.01" name="total_qty[]" value="{{ it.total_qty or '' }}" style="width:100%;" onchange="recalc({{ i }})"/></td>
+          <td><input name="total_unit[]" value="{{ it.total_unit }}" style="width:100%;"/></td>
+          <td><input type="number" step="0.01" name="unit_price[]" value="{{ '%.2f'|format(it.unit_price) }}" style="width:100%;" onchange="recalc({{ i }})"/></td>
+          <td><input class="subtotal" readonly value="{{ '%.2f'|format(it.subtotal) }}" style="width:100%;background:#f8fafc;"/></td>
+          <td style="text-align:center;"><input type="checkbox" name="is_service[]" value="1" {% if it.is_service %}checked{% endif %}/></td>
+          <td><button type="button" onclick="rmRow(this)" style="color:#dc2626;background:none;border:none;cursor:pointer;">✕</button></td>
+        </tr>
+        {% endfor %}
+      {% endif %}
+    </tbody>
+  </table>
+  <datalist id="drug-list">
+    {% for c in candidates %}
+    <option value="{{ c.name }}" data-id="{{ c.id }}" data-unit="{{ c.unit }}" data-price="{{ c.sell_price }}" data-controlled="{{ '1' if c.is_controlled else '0' }}" data-service="{{ '1' if c.is_service else '0' }}"></option>
+    {% endfor %}
+  </datalist>
+
+  {% if not readonly %}
+  <div style="margin:.6rem 0;">
+    <button type="button" onclick="addRow()" class="btn secondary">+ 增加一行</button>
+    <span style="float:right;font-weight:600;">合计：¥ <span id="grandTotal">{{ '%.2f'|format(order.total_amount) if order else '0.00' }}</span></span>
+  </div>
+  {% endif %}
+
+  <div style="margin-top:1rem;">
+    <label style="font-weight:600;">备注 / 不良反应记录</label>
+    <textarea name="notes" rows="2" {% if readonly %}readonly{% endif %} style="width:100%;">{{ order.notes if order else '' }}</textarea>
+  </div>
+
+  {% if not order %}
+  <div style="margin-top:1rem;display:flex;gap:.6rem;">
+    <button type="submit" class="btn">✓ 开具麻醉单（双签确认）</button>
+    <a href="{% if visit %}/admin/visits/{{ visit.id }}{% else %}/admin/visits{% endif %}" class="btn secondary">取消</a>
+  </div>
+  {% elif order and order.status == 'issued' %}
+  <div style="margin-top:1rem;display:flex;gap:.6rem;align-items:center;">
+    <form method="post" action="/admin/anesthesia/{{ order.id }}/void" onsubmit="return confirm('作废后会自动回库 + 反写台账，确定吗？')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="danger">作废此麻醉单</button>
+    </form>
+    <span style="color:#64748b;font-size:.85rem;">已开具的麻醉单不可改，如需修改请作废后重开。</span>
+  </div>
+  {% endif %}
+ </form>
+</div>
+
+<script>
+const CANDIDATES = {};
+document.querySelectorAll('#drug-list option').forEach(o => {
+  CANDIDATES[o.value] = {
+    id: o.dataset.id, unit: o.dataset.unit,
+    price: parseFloat(o.dataset.price || 0),
+    controlled: o.dataset.controlled === '1',
+    service: o.dataset.service === '1',
+  };
+});
+
+function addRow() {
+  const tb = document.getElementById('itemsBody');
+  const i = tb.children.length;
+  const routes = {{ routes|tojson }};
+  const optHtml = routes.map(r => `<option value="${r}">${r}</option>`).join('');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input list="drug-list" name="drug_name[]" required style="width:100%;" onchange="onDrugPick(this, ${i})"/>
+        <input type="hidden" name="item_id[]" value="0"/></td>
+    <td><select name="route[]" style="width:100%;">${optHtml}</select></td>
+    <td><input name="concentration[]" style="width:100%;"/></td>
+    <td><input type="number" step="0.01" name="dose_amount[]" style="width:100%;"/></td>
+    <td><input name="dose_unit[]" value="mg" style="width:100%;"/></td>
+    <td><input type="number" step="0.01" name="total_qty[]" style="width:100%;" onchange="recalc(${i})"/></td>
+    <td><input name="total_unit[]" style="width:100%;"/></td>
+    <td><input type="number" step="0.01" name="unit_price[]" style="width:100%;" onchange="recalc(${i})"/></td>
+    <td><input class="subtotal" readonly value="0.00" style="width:100%;background:#f8fafc;"/></td>
+    <td style="text-align:center;"><input type="checkbox" name="is_service[]" value="1"/></td>
+    <td><button type="button" onclick="rmRow(this)" style="color:#dc2626;background:none;border:none;cursor:pointer;">✕</button></td>`;
+  tb.appendChild(tr);
+}
+
+function onDrugPick(input, i) {
+  const c = CANDIDATES[input.value];
+  if (!c) return;
+  const row = input.closest('tr');
+  row.querySelector('input[name="item_id[]"]').value = c.id;
+  const tu = row.querySelector('input[name="total_unit[]"]');
+  if (!tu.value) tu.value = c.unit || '';
+  const pp = row.querySelector('input[name="unit_price[]"]');
+  if (!pp.value || pp.value === '0' || pp.value === '0.00') pp.value = c.price.toFixed(2);
+  const sv = row.querySelector('input[name="is_service[]"]');
+  if (c.service) sv.checked = true;
+  recalc(i);
+}
+
+function recalc(i) {
+  const rows = document.querySelectorAll('#itemsBody tr');
+  let total = 0;
+  rows.forEach(r => {
+    const q = parseFloat(r.querySelector('input[name="total_qty[]"]').value || 0);
+    const p = parseFloat(r.querySelector('input[name="unit_price[]"]').value || 0);
+    const sub = (q > 0 ? q : 1) * p;
+    r.querySelector('.subtotal').value = sub.toFixed(2);
+    total += sub;
+  });
+  const gt = document.getElementById('grandTotal');
+  if (gt) gt.textContent = total.toFixed(2);
+}
+
+function rmRow(btn) {
+  btn.closest('tr').remove();
+  recalc(0);
+}
+
+// 初始空白行
+if (!document.querySelectorAll('#itemsBody tr').length) addRow();
+</script>
+{% endblock %}

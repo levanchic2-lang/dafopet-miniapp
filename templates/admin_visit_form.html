@@ -536,9 +536,10 @@
 {# Step 5 处方（外置面板）#}
 <div class="soap-panel" data-panel="5" style="margin-top:0.85rem;">
  <h3><i data-lucide="pill"></i> 处方 <small>药品清单、剂量、用法</small></h3>
- <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.65rem;">
+ <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.65rem;flex-wrap:wrap;">
  <a href="/admin/prescriptions/create?visit_id={{ v.id }}" class="btn"><i data-lucide="plus"></i> 开处方</a>
- <span style="color:var(--muted);font-size:0.85rem;">现有 {{ prescriptions|length }} 张</span>
+ <a href="/admin/visits/{{ v.id }}/anesthesia/new" class="btn" style="background:#7c3aed;border-color:#7c3aed;">💉 新建麻醉单</a>
+ <span style="color:var(--muted);font-size:0.85rem;">处方 {{ prescriptions|length }} 张 · 麻醉 {{ anesth_orders|length }} 张</span>
  </div>
  {% if prescriptions %}
  <div class="record-list">
@@ -555,6 +556,22 @@
  </div>
  {% else %}
  <p style="color:var(--muted);font-size:0.88rem;">尚未开具处方</p>
+ {% endif %}
+
+ {% if anesth_orders %}
+ <div style="margin-top:.75rem;padding-top:.5rem;border-top:1px dashed var(--border);">
+  <div style="font-size:.82rem;color:#7c3aed;font-weight:600;margin-bottom:.3rem;">💉 麻醉单</div>
+  <div class="record-list">
+  {% for a in anesth_orders %}
+  <a class="record-item" href="/admin/anesthesia/{{ a.id }}">
+   <span class="ri-date">{{ a.anesth_date or '—' }}</span>
+   <span class="badge {% if a.status == 'voided' %}b-pending{% else %}b-ok{% endif %}" style="font-size:0.68rem;">{{ '已作废' if a.status == 'voided' else 'ASA '~(a.asa_grade or '—') }}</span>
+   <span class="ri-main">{{ a.items|length }} 项 · {{ a.vet_name }} / 复核 {{ a.cosigner or '—' }}</span>
+   <span class="ri-amount">¥ {{ '%.2f'|format(a.total_amount or 0) }}</span>
+  </a>
+  {% endfor %}
+  </div>
+ </div>
  {% endif %}
 </div>
 

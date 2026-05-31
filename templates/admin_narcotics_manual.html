@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="max-width:680px;margin:0 auto;">
+ <div style="display:flex;align-items:center;gap:.6rem;">
+   <a href="/admin/inventory/narcotics-ledger" class="btn secondary" style="padding:.3rem .6rem;">← 返回台账</a>
+   <h1 style="margin:0;">📝 手动录入麻醉/管控药台账</h1>
+ </div>
+
+ <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:.55rem .85rem;font-size:.82rem;color:#92400e;margin:1rem 0;">
+   适用场景：①吸入麻醉药（异氟烷）补充入麻醉机；②月度盘点差异调整；③过期销毁；④其他不通过麻醉单领用的情况。<br/>
+   <b>所有操作都需要双人签字。</b>
+ </div>
+
+ <form method="post" action="/admin/inventory/narcotics-ledger/manual">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:.8rem;">
+     <div style="grid-column:1/-1;">
+       <label style="font-weight:600;display:block;margin-bottom:.25rem;">药品 *</label>
+       <select name="item_id" id="item-sel" style="width:100%;" required onchange="onItemChange()">
+         <option value="">— 选择药品 —</option>
+         {% for it in items_list %}
+         <option value="{{ it.id }}" data-name="{{ it.name }}" data-unit="{{ it.unit }}" data-service="{{ '1' if it.is_service else '0' }}">
+           {{ it.name }}{% if it.is_controlled %} 🔒{% endif %}{% if it.is_service %} (服务类){% endif %} · 库存 {{ it.stock_qty or 0 }} {{ it.unit }}
+         </option>
+         {% endfor %}
+       </select>
+       <small style="color:#64748b;">列表外的药品请联系超管先建档</small>
+     </div>
+
+     <div>
+       <label style="font-weight:600;display:block;margin-bottom:.25rem;">日期</label>
+       <input type="date" name="event_date" value="{{ today }}" style="width:100%;"/>
+     </div>
+
+     <div>
+       <label style="font-weight:600;display:block;margin-bottom:.25rem;">方向 *</label>
+       <select name="direction" id="dir-sel" style="width:100%;" required onchange="onDirChange()">
+         <option value="in">入（补充 / 盘盈）</option>
+         <option value="out" selected>出（消耗 / 倒入麻醉机）</option>
+         <option value="loss">损耗（过期 / 销毁 / 盘亏）</option>
+       </select>
+     </div>
+
+     <div>
+       <label style="font-weight:600;display:block;margin-bottom:.25rem;">来源 *</label>
+       <select name="source" id="src-sel" style="width:100%;" required>
+         <option value="manual_refill">手动补充（如异氟烷加注）</option>
+         <option value="manual_consume" selected>手动消耗</option>
+         <option value="stocktake">盘点调整</option>
+         <option value="loss">损耗 / 销毁</option>
+       </select>
+     </div>
+
+     <div>
+       <label style="font-weight:600;display:block;margin-bottom:.25rem;">数量 *</label>
+       <input type="number" step="0.01" min="0.01" name="qty" required style="width:100%;"/>
+     </div>
+     <div>
+       <label style="font-weight:600;display:block;margin-bottom:.25rem;">单位</label>
+       <input name="unit" id="unit-in" placeholder="如 ml / 支 / 瓶" style="width:100%;"/>
+     </div>
+
+     <div>
+       <label style="font-weight:600;display:block;margin-bottom:.25rem;">经办人 *</label>
+       <input name="operator" list="staff-list" required style="width:100%;"/>
+     </div>
+     <div>
+       <label style="font-weight:600;display:block;margin-bottom:.25rem;">复核人 *（不能与经办相同）</label>
+       <input name="cosigner" list="staff-list" required style="width:100%;"/>
+     </div>
+     <datalist id="staff-list">{% for n in staff_names %}<option value="{{ n }}">{% endfor %}</datalist>
+
+     <div style="grid-column:1/-1;">
+       <label style="font-weight:600;display:block;margin-bottom:.25rem;">说明 / 用途</label>
+       <textarea name="notes" rows="2" placeholder="如：异氟烷 250ml 整瓶倒入麻醉机蒸发罐；月底盘点盘亏 0.5 支；批次 XXX 过期销毁" style="width:100%;"></textarea>
+     </div>
+   </div>
+
+   <div style="display:flex;gap:.6rem;">
+     <button type="submit" class="btn">✓ 提交（双签字）</button>
+     <a href="/admin/inventory/narcotics-ledger" class="btn secondary">取消</a>
+   </div>
+ </form>
+</div>
+
+<script>
+function onItemChange() {
+  const sel = document.getElementById('item-sel');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.dataset.unit) return;
+  const u = document.getElementById('unit-in');
+  if (!u.value) u.value = opt.dataset.unit;
+}
+function onDirChange() {
+  const d = document.getElementById('dir-sel').value;
+  const s = document.getElementById('src-sel');
+  // 简单联动：方向变了，来源给个合理默认
+  if (d === 'in') s.value = 'manual_refill';
+  else if (d === 'loss') s.value = 'loss';
+  else s.value = 'manual_consume';
+}
+</script>
+{% endblock %}
