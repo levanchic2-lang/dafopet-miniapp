@@ -10391,6 +10391,21 @@ INVENTORY_CATEGORIES = {
         "optical":   "常规光学显微镜",
         "electron":  "电子显微镜",
     }},
+    "surgery": {"label": "手术", "subs": {
+        "general":    "普外科手术",
+        "ophthalmic": "眼科手术",
+        "orthopedic": "骨科手术",
+        "dental":     "口腔手术",
+        "neuro":      "神经外科",
+    }},
+    "treatment": {"label": "处置", "subs": {
+        "routine":   "一般处置",
+        "emergency": "紧急处置",
+    }},
+    "nursing": {"label": "护理", "subs": {
+        "general":   "普通护理",
+        "isolation": "隔离护理",
+    }},
 }
 
 
