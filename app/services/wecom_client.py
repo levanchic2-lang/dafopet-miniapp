@@ -172,18 +172,21 @@ def _get_jsapi_ticket(agent: bool = False) -> str:
         if _jsapi_cache.corp_ticket and now < _jsapi_cache.corp_expires_at - 60:
             return _jsapi_cache.corp_ticket
     token = _get_access_token()
-    url = f"{_API_BASE}/cgi-bin/ticket/get"
-    params = {"access_token": token}
+    # 企微两套不同的接口：
+    #   公司级 wx.config 用：/cgi-bin/get_jsapi_ticket?access_token=...（独立端点，无 type 参数）
+    #   应用级 wx.agentConfig 用：/cgi-bin/ticket/get?access_token=...&type=agent_config
     if agent:
-        params["type"] = "agent_config"
+        url = f"{_API_BASE}/cgi-bin/ticket/get"
+        params = {"access_token": token, "type": "agent_config"}
     else:
-        params["type"] = "jsapi"
+        url = f"{_API_BASE}/cgi-bin/get_jsapi_ticket"
+        params = {"access_token": token}
     with httpx.Client(timeout=8.0) as client:
         r = client.get(url, params=params)
         r.raise_for_status()
         data = r.json()
     if data.get("errcode") not in (0, "0", None):
-        raise RuntimeError(f"jsapi ticket 失败: {data}")
+        raise RuntimeError(f"jsapi ticket 失败({'agent' if agent else 'corp'}): {data}")
     ticket = data["ticket"]
     expires_in = int(data.get("expires_in", 7200))
     if agent:
