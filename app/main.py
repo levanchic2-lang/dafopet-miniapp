@@ -9465,8 +9465,8 @@ async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depe
     if changed:
         v.updated_at = datetime.utcnow()
         db.commit()
-        # 如果 follow_up_at 变了，同步回访任务
-        if "follow_up_at" in changed:
+        # 诊断 / 复诊日期 任一变化都要重新匹配模板 + 衍生多轮回访
+        if any(k in changed for k in ("follow_up_at", "diagnosis")):
             _sync_followup_for_visit(db, v)
             db.commit()
     # 本地时间显示
