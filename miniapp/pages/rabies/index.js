@@ -94,11 +94,16 @@ Page({
   },
 
   _initAddrPickers() {
-    const sz = app.globalData.shenzhenRegions;
     const ph = "请选择";
+    const sz = this._szData();
     if (!sz || !Object.keys(sz).length) return;
     const districts = Object.keys(sz).sort();
-    this.setData({ districtNames: [ph, ...districts], streetNames: [ph], districtIndex: 0, streetIndex: 0 });
+    this.setData({
+      districtNames: [ph, ...districts],
+      streetNames: [ph],
+      communityNames: [ph],
+      districtIndex: 0, streetIndex: 0, communityIndex: 0,
+    });
   },
 
   _szData() {
