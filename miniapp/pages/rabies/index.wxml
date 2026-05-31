@@ -1,4 +1,3 @@
-<scroll-view scroll-y style="height:100vh;">
 <view class="card">
   <view class="title">狂犬疫苗免疫登记</view>
   <view class="sub">请填写主人与动物信息，并在下方手写签名完成登记。</view>
@@ -126,4 +125,3 @@
 
   <view wx:if="{{error}}" style="margin-top:16rpx;font-size:24rpx;color:#dc2626;text-align:center;">{{error}}</view>
 </view>
-</scroll-view>
