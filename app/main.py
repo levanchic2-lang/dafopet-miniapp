@@ -10509,6 +10509,17 @@ async def admin_inventory_import_xls_page(request: Request):
     })
 
 
+# 导入 records 暂存目录（替代 session，避免 cookie 容量超限）
+_INV_IMPORT_CACHE_DIR = Path("data/inv_import_cache")
+_INV_IMPORT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _inv_import_cache_path(token: str) -> Path:
+    # token 是 secrets.token_urlsafe，只允许 url-safe 字符，安全
+    safe = "".join(c for c in token if c.isalnum() or c in "-_")[:80]
+    return _INV_IMPORT_CACHE_DIR / f"{safe}.json"
+
+
 @app.post("/admin/inventory/import-xls/preview")
 async def admin_inventory_import_xls_preview(
     request: Request,
@@ -10532,10 +10543,22 @@ async def admin_inventory_import_xls_preview(
         if not records:
             return RedirectResponse(f"/admin/inventory/import-xls?err=未解析出任何记录", status_code=303)
         preview = preview_import(db, records, store=store or "")
-        # 把 records 暂存到 session 里供 commit 用
-        request.session["_inv_import_records"] = _json.dumps(records, ensure_ascii=False)
-        request.session["_inv_import_store"] = store or ""
-        request.session["_inv_import_warnings"] = warnings[:20]
+        # 大数据集（583+ 条）不能塞 session cookie（4KB 上限），落盘 cache
+        token = secrets.token_urlsafe(20)
+        cache_path = _inv_import_cache_path(token)
+        cache_path.write_text(
+            _json.dumps({"records": records, "store": store or ""}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        # session 里只存 token（短字符串），并清理 1 小时前的旧缓存
+        request.session["_inv_import_token"] = token
+        try:
+            now = datetime.utcnow().timestamp()
+            for f in _INV_IMPORT_CACHE_DIR.glob("*.json"):
+                if now - f.stat().st_mtime > 3600:
+                    f.unlink(missing_ok=True)
+        except Exception:
+            pass
         return templates.TemplateResponse(request, "admin_inventory_import_xls.html", {
             "csrf_token": _get_csrf_token(request),
             "preview": preview,
@@ -10561,16 +10584,24 @@ async def admin_inventory_import_xls_commit(
     require_superadmin(request)
     _require_csrf(request, csrf_token)
     import json as _json
-    raw = request.session.get("_inv_import_records")
-    if not raw:
-        return RedirectResponse("/admin/inventory/import-xls?err=会话已过期，请重新上传", status_code=303)
-    records = _json.loads(raw)
-    store = request.session.get("_inv_import_store", "")
+    token = request.session.get("_inv_import_token", "")
+    cache_path = _inv_import_cache_path(token) if token else None
+    if not cache_path or not cache_path.exists():
+        return RedirectResponse("/admin/inventory/import-xls?err=会话已过期或缓存丢失，请重新上传", status_code=303)
+    try:
+        cached = _json.loads(cache_path.read_text(encoding="utf-8"))
+        records = cached.get("records", [])
+        store = cached.get("store", "")
+    except Exception as e:
+        return RedirectResponse(f"/admin/inventory/import-xls?err=读取缓存失败：{e}", status_code=303)
     from app.services.inventory_import import commit_import
     stat = commit_import(db, records, store=store, strategy=strategy)
-    # 清掉 session
-    request.session.pop("_inv_import_records", None)
-    request.session.pop("_inv_import_store", None)
+    # 清理缓存 + session 凭证
+    try:
+        cache_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+    request.session.pop("_inv_import_token", None)
     msg = f"导入完成：新建 {stat['created']} / 更新 {stat['updated']} / 跳过 {stat['skipped']}"
     return RedirectResponse(f"/admin/inventory?msg={msg}", status_code=303)
 
