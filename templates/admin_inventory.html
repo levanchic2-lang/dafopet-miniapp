@@ -154,7 +154,14 @@
  {% elif is_low %} <i data-lucide="alert-triangle"></i>{% endif %}
  {% endif %}
  </td>
- <td data-label="售价" style="text-align:right;font-weight:600;">¥{{ '%.2f'|format(it.sell_price) }}</td>
+ <td data-label="售价" style="text-align:right;font-weight:600;">
+   {% set _cs = request.session.get('admin_store', '') %}
+   {% set _ep = it | eff_price(_cs) %}
+   ¥{{ '%.2f'|format(_ep) }}
+   {% if _cs and (it | has_override(_cs)) %}<span title="本店覆盖价（默认 ¥{{ '%.2f'|format(it.sell_price) }}）" style="font-size:.65rem;color:#2563eb;margin-left:2px;vertical-align:top;">店</span>{% endif %}
+   {% set _summary = it | overrides_summary %}
+   {% if not _cs and _summary %}<div style="font-size:.7rem;color:var(--muted);font-weight:400;margin-top:1px;" title="各店覆盖价">{{ _summary }}</div>{% endif %}
+ </td>
  <td data-label="单位" style="color:var(--muted);">{{ it.unit }}{% if it.unit2 %} / {{ it.unit2 }}{% endif %}</td>
  <td data-label="供应商" style="color:var(--muted);font-size:0.82rem;">{{ it.supplier or '—' }}</td>
  <td class="actions" style="text-align:right;">

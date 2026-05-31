@@ -1,7 +1,14 @@
 {% extends "base.html" %}
 {% block body %}
 <div class="card" style="max-width:680px;margin:0 auto;">
- <h1 style="margin:0 0 1.5rem;">{{ '编辑品目' if item else '新增品目' }}</h1>
+ <h1 style="margin:0 0 .5rem;">{{ '编辑品目' if item else '新增品目' }}</h1>
+
+ {% if item %}
+ <div style="background:var(--brand-bg-soft);border:1px solid var(--brand-light);border-radius:8px;padding:.6rem .85rem;margin-bottom:1rem;font-size:.85rem;color:var(--brand-dark);display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+  <i data-lucide="info"></i>
+  <span>批次号 / 有效期 / 入库流水 → 在品目<a href="/admin/inventory/{{ item.id }}" style="color:var(--brand-dark);font-weight:600;text-decoration:underline;">详情页</a>管理。本页只改基础信息（品名、价格、单位等）。</span>
+ </div>
+ {% endif %}
 
  <form method="post" action="{{ '/admin/inventory/'~item.id~'/edit' if item else '/admin/inventory/create' }}">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -52,7 +59,7 @@
  <input name="unit" value="{{ item.unit if item else '个' }}" style="width:100%;"/>
  </div>
  <div>
- <label style="display:block;font-weight:600;margin-bottom:0.35rem;">售价（元/主单位）</label>
+ <label style="display:block;font-weight:600;margin-bottom:0.35rem;">默认售价（元/主单位）<small style="color:#9ca3af;font-weight:400;">未配置门店覆盖时使用</small></label>
  <input name="sell_price" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.sell_price) if item else '0.00' }}" style="width:100%;"/>
  </div>
 
@@ -66,8 +73,37 @@
  </div>
 
  <div>
- <label style="display:block;font-weight:600;margin-bottom:0.35rem;">进价（元）</label>
+ <label style="display:block;font-weight:600;margin-bottom:0.35rem;">默认进价（元）</label>
  <input name="cost_price" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.cost_price) if item else '0.00' }}" style="width:100%;"/>
+ </div>
+
+ {# ── 门店覆盖价（方案 H）─ 不填用默认价 ── #}
+ <div style="grid-column:1/-1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.75rem 1rem;">
+   <div style="font-weight:600;margin-bottom:.5rem;font-size:.9rem;color:#1e293b;">
+     🏪 门店价格覆盖
+     <small style="color:#64748b;font-weight:400;font-size:.78rem;">（不填用上方默认价；填了员工开单时按当前门店自动取）</small>
+   </div>
+   {% set _ov = (item.store_overrides if item else '') %}
+   {% set _ov_dh = (item.store_overrides_parsed.get('东环店', {}) if (item and item.store_overrides_parsed) else {}) %}
+   {% set _ov_hg = (item.store_overrides_parsed.get('横岗店', {}) if (item and item.store_overrides_parsed) else {}) %}
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem 1rem;">
+     <div>
+       <label style="display:block;font-size:.82rem;color:#64748b;margin-bottom:.2rem;">东环店 售价</label>
+       <input name="override_sell_donghuan" type="number" step="0.01" min="0" placeholder="留空 = 用默认价" value="{{ _ov_dh.get('sell', '') if _ov_dh.get('sell') is not none else '' }}" style="width:100%;"/>
+     </div>
+     <div>
+       <label style="display:block;font-size:.82rem;color:#64748b;margin-bottom:.2rem;">东环店 进价</label>
+       <input name="override_cost_donghuan" type="number" step="0.01" min="0" placeholder="留空 = 用默认价" value="{{ _ov_dh.get('cost', '') if _ov_dh.get('cost') is not none else '' }}" style="width:100%;"/>
+     </div>
+     <div>
+       <label style="display:block;font-size:.82rem;color:#64748b;margin-bottom:.2rem;">横岗店 售价</label>
+       <input name="override_sell_henggang" type="number" step="0.01" min="0" placeholder="留空 = 用默认价" value="{{ _ov_hg.get('sell', '') if _ov_hg.get('sell') is not none else '' }}" style="width:100%;"/>
+     </div>
+     <div>
+       <label style="display:block;font-size:.82rem;color:#64748b;margin-bottom:.2rem;">横岗店 进价</label>
+       <input name="override_cost_henggang" type="number" step="0.01" min="0" placeholder="留空 = 用默认价" value="{{ _ov_hg.get('cost', '') if _ov_hg.get('cost') is not none else '' }}" style="width:100%;"/>
+     </div>
+   </div>
  </div>
 
  <div id="stock-fields">

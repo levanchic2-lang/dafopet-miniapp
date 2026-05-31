@@ -436,6 +436,11 @@ class InventoryItem(Base):
     # 多门店分离：空 = 通用两店共享，"东环店" / "横岗店" = 仅该店
     store: Mapped[str] = mapped_column(String(40), default="")
     last_counted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)  # 上次盘点时间
+    # 门店级价格覆盖（JSON 字符串，方案 H）
+    # 格式：{"东环店": {"sell": 99.5, "cost": 50}, "横岗店": {"sell": 105, "cost": 52}}
+    # 未配置的门店 → 回退到 sell_price / cost_price 默认价
+    # 加店无需改 schema，直接 JSON 添 key
+    store_overrides: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

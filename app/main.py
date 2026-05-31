@@ -239,6 +239,27 @@ def _filter_is_invalid_name(name: str) -> bool:
 
 templates.env.filters["is_invalid_name"] = _filter_is_invalid_name
 
+
+# 门店级价格覆盖（方案 H）— Jinja 全局过滤器
+# 用法：{{ item | eff_price(current_store) }}
+from app.services.pricing import (
+    effective_sell_price as _eff_sell_price,
+    effective_cost_price as _eff_cost_price,
+    has_override as _has_override,
+    overrides_summary as _overrides_summary,
+)
+
+def _filter_eff_price(item, store: str = "") -> float:
+    return _eff_sell_price(item, store or "")
+
+def _filter_eff_cost(item, store: str = "") -> float:
+    return _eff_cost_price(item, store or "")
+
+templates.env.filters["eff_price"] = _filter_eff_price
+templates.env.filters["eff_cost"] = _filter_eff_cost
+templates.env.filters["has_override"] = lambda item, store: _has_override(item, store or "")
+templates.env.filters["overrides_summary"] = _overrides_summary
+
 _static_dir = Path(__file__).resolve().parent.parent / "static"
 if _static_dir.is_dir():
     app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
@@ -10389,13 +10410,17 @@ async def api_inventory_search(
     if q:
         query = query.filter(InventoryItem.name.ilike(f"%{q}%"))
     items = query.order_by(InventoryItem.name).limit(30).all()
+    # 按当前员工的门店取「有效售价」（默认价 + 该店覆盖）
+    from app.services.pricing import effective_sell_price as _eff
+    _cur_store = _get_admin_store(request)
     return [
         {
             "id": it.id,
             "name": it.name,
             "category": it.category,
             "unit": it.unit,
-            "sell_price": it.sell_price,
+            "sell_price": _eff(it, _cur_store),  # 关键：替换为有效价
+            "default_price": it.sell_price,       # 留默认价做参考
             "stock_qty": it.stock_qty,
             "is_service": it.is_service,
             "is_controlled": it.is_controlled,
@@ -11089,6 +11114,8 @@ async def admin_inventory_edit_form(item_id: int, request: Request, db: Session 
     item = db.get(InventoryItem, item_id)
     if not item:
         raise HTTPException(404)
+    from app.services.pricing import parse_overrides as _po
+    item.store_overrides_parsed = _po(item)
     return templates.TemplateResponse(request, "admin_inventory_form.html", {
         "request": request, "item": item,
         "categories": INVENTORY_CATEGORIES,
@@ -11142,6 +11169,9 @@ async def admin_inventory_edit(
     low_stock_min: float = Form(0.0),
     supplier: str = Form(""), notes: str = Form(""),
     store: str = Form(""),
+    # 门店覆盖价（方案 H）
+    override_sell_donghuan: str = Form(""), override_cost_donghuan: str = Form(""),
+    override_sell_henggang: str = Form(""), override_cost_henggang: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -11155,6 +11185,19 @@ async def admin_inventory_edit(
     item.sell_price = sell_price; item.cost_price = cost_price
     item.low_stock_min = low_stock_min
     item.supplier = supplier; item.notes = notes
+    # 处理门店覆盖：留空 → 清除；填了 → set
+    from app.services.pricing import set_override as _set_ov, clear_override as _clr_ov
+    def _apply(_store, _sell, _cost):
+        s = (_sell or "").strip()
+        c = (_cost or "").strip()
+        if not s and not c:
+            _clr_ov(item, _store)
+            return
+        _set_ov(item, _store,
+                sell=float(s) if s else None,
+                cost=float(c) if c else None)
+    _apply("东环店", override_sell_donghuan, override_cost_donghuan)
+    _apply("横岗店", override_sell_henggang, override_cost_henggang)
     # 门店：staff 无权改；superadmin 可改
     if request.session.get("admin_role") == "superadmin":
         item.store = (store or "").strip()
@@ -13299,8 +13342,11 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
         charge_amount = 0.0
     if (not is_free) and charge_amount <= 0 and item_id:
         inv_item_for_price = db.get(InventoryItem, item_id)
-        if inv_item_for_price and inv_item_for_price.sell_price > 0:
-            charge_amount = float(inv_item_for_price.sell_price)
+        if inv_item_for_price:
+            from app.services.pricing import effective_sell_price as _eff
+            _price = _eff(inv_item_for_price, _get_admin_store(request))
+            if _price > 0:
+                charge_amount = _price
 
     if (not is_free) and charge_amount > 0:
         inv = Invoice(

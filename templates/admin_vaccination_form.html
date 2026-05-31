@@ -89,14 +89,16 @@
  <label>库存关联品目 <span style="color:var(--muted);font-weight:400;font-size:.78rem;">— 选了自动带出品牌 / 批号 / 有效期</span></label>
  <select name="inventory_item_id" id="inv-item-sel" onchange="onItemChange()">
  <option value="">— 不关联库存 —</option>
+ {% set _cur_store = request.session.get('admin_store', '') %}
  {% for item in vacc_items %}
+ {% set _ep = item | eff_price(_cur_store) %}
  <option value="{{ item.id }}"
- data-price="{{ item.sell_price }}"
+ data-price="{{ _ep }}"
  data-name="{{ item.name }}"
  data-batch="{{ item.latest_batch_no or '' }}"
  data-expiry="{{ item.latest_expiry_date or '' }}"
  {% if vacc and vacc.inventory_item_id == item.id %}selected{% endif %}>
- {{ item.name }}（库存：{{ item.stock_qty }}{{ item.unit }}，¥{{ '%.0f'|format(item.sell_price) }}{% if item.latest_batch_no %} · 批 {{ item.latest_batch_no }}{% endif %}）
+ {{ item.name }}（库存：{{ item.stock_qty }}{{ item.unit }}，¥{{ '%.0f'|format(_ep) }}{% if item.latest_batch_no %} · 批 {{ item.latest_batch_no }}{% endif %}）
  </option>
  {% endfor %}
  </select>

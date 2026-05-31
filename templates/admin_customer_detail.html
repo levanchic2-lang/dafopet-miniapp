@@ -1383,13 +1383,15 @@
  <label>库存关联品目 <span style="color:var(--muted);font-weight:400;font-size:.78rem;">— 选了自动带药名 / 批号 / 售价</span></label>
  <select name="inventory_item_id" id="dw-item-sel" onchange="onDewormItemChange()">
   <option value="">— 不关联库存 —</option>
+  {% set _cur_store = request.session.get('admin_store', '') %}
   {% for it in deworm_items %}
+  {% set _ep = it | eff_price(_cur_store) %}
   <option value="{{ it.id }}"
    data-name="{{ it.name }}"
-   data-price="{{ it.sell_price }}"
+   data-price="{{ _ep }}"
    data-batch="{{ it.latest_batch_no or '' }}"
    data-subcat="{{ it.subcategory or '' }}">
-   {{ it.name }}（库存 {{ it.stock_qty }}{{ it.unit }}，¥{{ '%.0f'|format(it.sell_price) }}{% if it.latest_batch_no %} · 批 {{ it.latest_batch_no }}{% endif %}）
+   {{ it.name }}（库存 {{ it.stock_qty }}{{ it.unit }}，¥{{ '%.0f'|format(_ep) }}{% if it.latest_batch_no %} · 批 {{ it.latest_batch_no }}{% endif %}）
   </option>
   {% endfor %}
  </select>

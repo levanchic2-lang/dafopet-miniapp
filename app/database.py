@@ -634,6 +634,9 @@ def _try_sqlite_migrations() -> None:
             if inv_item_cols and "store" not in inv_item_names:
                 conn.execute(text("ALTER TABLE inventory_items ADD COLUMN store VARCHAR(40) DEFAULT ''"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_inv_items_store ON inventory_items(store)"))
+            # inventory_items: 门店级价格覆盖（方案 H — JSON 字符串）
+            if inv_item_cols and "store_overrides" not in inv_item_names:
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN store_overrides TEXT DEFAULT ''"))
 
             # stocktake_sessions 盘点会话表
             st_sess_cols = conn.execute(text("PRAGMA table_info(stocktake_sessions)")).fetchall()
