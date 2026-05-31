@@ -336,7 +336,7 @@
  <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;">{{ appt.service_name }}</div>
  {% if appt.related_application_id or appt.is_proxy %}
  <div class="row-svc-extra">
- {% if appt.related_application_id %}<a href="/admin#app-{{ appt.related_application_id }}" target="_blank" style="color:#1d4ed8;text-decoration:none;" title="跳转 TNR 申请详情">申请 #{{ appt.related_application_id }} ↗</a>{% endif %}
+ {% if appt.related_application_id %}<a href="/admin#app-{{ appt.related_application_id }}" style="color:#1d4ed8;text-decoration:none;" title="跳转 TNR 申请详情">申请 #{{ appt.related_application_id }} →</a>{% endif %}
  {% if appt.is_proxy %}{% if appt.related_application_id %} · {% endif %}代预约{% endif %}
  </div>
  {% endif %}
