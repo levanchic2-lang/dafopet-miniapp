@@ -212,6 +212,14 @@
   </select>
   <span class="lbl">供应商</span>
   <input type="text" name="supplier" id="bulk-supplier" placeholder="留空=不改" style="width:120px;"/>
+  <label style="font-size:.72rem;color:#dc2626;cursor:pointer;display:inline-flex;align-items:center;gap:2px;" title="勾上 → 把供应商批量清空">
+    <input type="checkbox" id="bulk-supplier-clear" style="margin:0;"/> 清空
+  </label>
+  <span class="lbl">备注</span>
+  <input type="text" name="notes" id="bulk-notes" placeholder="留空=不改" style="width:140px;"/>
+  <label style="font-size:.72rem;color:#dc2626;cursor:pointer;display:inline-flex;align-items:center;gap:2px;" title="勾上 → 把备注批量清空">
+    <input type="checkbox" id="bulk-notes-clear" style="margin:0;"/> 清空
+  </label>
   <span class="lbl">主单位</span>
   <input type="text" name="unit" id="bulk-unit" placeholder="留空=不改" style="width:70px;"/>
   <span class="lbl">副单位</span>
@@ -311,6 +319,9 @@
     var cat = catSel.value;
     var sub = subSel.value;
     var sup = document.getElementById('bulk-supplier').value.trim();
+    var supClear = document.getElementById('bulk-supplier-clear').checked;
+    var notes = document.getElementById('bulk-notes').value;
+    var notesClear = document.getElementById('bulk-notes-clear').checked;
     var unit = document.getElementById('bulk-unit').value.trim();
     var unit2 = document.getElementById('bulk-unit2').value.trim();
     var unit2Ratio = document.getElementById('bulk-unit2-ratio').value.trim();
@@ -323,7 +334,7 @@
     var isCtrlEl = document.getElementById('bulk-is-controlled');
     var isCtrl = isCtrlEl ? isCtrlEl.value : '__keep__';
     var changeIsCtrl = isCtrl !== '__keep__';
-    if (!cat && !sup && !unit && !unit2 && !unit2Ratio && !changeStore && !changeIsSvc && !changeIsCtrl) {
+    if (!cat && !sup && !supClear && !notes && !notesClear && !unit && !unit2 && !unit2Ratio && !changeStore && !changeIsSvc && !changeIsCtrl) {
       alert('请至少选择一个要修改的字段');
       return;
     }
@@ -337,7 +348,10 @@
     ids.forEach(function(id){ fd.append('item_ids', id); });
     if (cat) fd.append('category', cat);
     if (sub) fd.append('subcategory', sub);
-    if (sup) fd.append('supplier', sup);
+    if (supClear) fd.append('supplier_clear', '1');
+    else if (sup) fd.append('supplier', sup);
+    if (notesClear) fd.append('notes_clear', '1');
+    else if (notes) fd.append('notes', notes);
     if (unit) fd.append('unit', unit);
     if (unit2) fd.append('unit2', unit2);
     if (unit2Ratio) fd.append('unit2_ratio', unit2Ratio);

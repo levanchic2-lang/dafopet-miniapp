@@ -10460,6 +10460,9 @@ async def admin_inventory_bulk_edit(
     unit: str = Form(""),
     unit2: str = Form(""),
     unit2_ratio: str = Form(""),
+    notes: str = Form(""),
+    supplier_clear: str = Form(""),
+    notes_clear: str = Form(""),
 ):
     """对一组品目批量改 大类 / 小类 / 供应商 / 归属门店 / 服务类目 / 麻醉管控。
     每个字段留空（store/is_service/is_controlled 为 "__keep__"）= 不修改；至少要改 1 个字段。
@@ -10494,7 +10497,10 @@ async def admin_inventory_bulk_edit(
                 ratio_val = 1.0
         except (ValueError, TypeError):
             ratio_val = None
-    if not (category or supplier or change_store or change_is_service or change_is_controlled
+    do_supplier_clear = supplier_clear == "1"
+    do_notes_clear = notes_clear == "1"
+    if not (category or supplier or do_supplier_clear or notes or do_notes_clear
+            or change_store or change_is_service or change_is_controlled
             or unit or unit2 or ratio_val is not None):
         return RedirectResponse("/admin/inventory?msg=请至少选一个要修改的字段", status_code=303)
 
@@ -10507,8 +10513,14 @@ async def admin_inventory_bulk_edit(
             it.subcategory = subcategory or ""
         elif subcategory:
             it.subcategory = subcategory
-        if supplier:
+        if do_supplier_clear:
+            it.supplier = ""
+        elif supplier:
             it.supplier = supplier[:200]
+        if do_notes_clear:
+            it.notes = ""
+        elif notes:
+            it.notes = notes[:1000]
         if change_store:
             it.store = store
         if change_is_service:
