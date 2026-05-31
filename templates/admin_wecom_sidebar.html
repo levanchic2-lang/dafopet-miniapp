@@ -62,11 +62,38 @@
     </div>
   </div>
   <style>@keyframes spin{to{transform:rotate(360deg);}}</style>
-  <script src="https://wwcdn.weixin.qq.com/node/wework/wwopen/js/jweixin-1.2.0.js"></script>
   <script>
-  (function() {
+  // 串行尝试多个 CDN 加载 jweixin.js，任一成功即可
+  (function loadJweixin() {
+    const cdns = [
+      'https://res.wx.qq.com/open/js/jweixin-1.2.0.js',
+      'https://wwcdn.weixin.qq.com/node/wework/wwopen/js/jwxwork-1.0.0.js',
+      'https://wwcdn.weixin.qq.com/node/wework/wwopen/js/jweixin-1.2.0.js',
+    ];
+    let i = 0;
+    function tryNext() {
+      if (i >= cdns.length) {
+        document.getElementById('loading-hint').textContent = '⚠ 所有 CDN 都加载不到 jweixin.js（请检查网络）';
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = cdns[i++];
+      s.onload = () => {
+        if (typeof wx !== 'undefined' || typeof window.jWeixin !== 'undefined' || typeof window.WWOpenData !== 'undefined') {
+          initWeComSdk();
+        } else {
+          tryNext();
+        }
+      };
+      s.onerror = tryNext;
+      document.head.appendChild(s);
+    }
+    tryNext();
+  })();
+
+  function initWeComSdk() {
     if (typeof wx === 'undefined') {
-      document.getElementById('loading-hint').textContent = '⚠ 未加载到 jweixin.js（网络问题？）';
+      document.getElementById('loading-hint').textContent = '⚠ jweixin 已加载但 wx 对象未暴露';
       return;
     }
     const pageUrl = location.href.split('#')[0];
@@ -112,7 +139,7 @@
       .catch(err => {
         document.getElementById('loading-hint').textContent = '⚠ 签名接口失败：' + err.message;
       });
-  })();
+  }
   </script>
 {% elif not link %}
   <div class="card empty bad">
