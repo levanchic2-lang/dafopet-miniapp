@@ -12,6 +12,10 @@
   <h1 style="margin:0;">💉 {{ '麻醉单详情' if order else '新建麻醉单' }}</h1>
   {% if order and order.status == 'voided' %}<span class="badge b-pending">已作废</span>{% endif %}
   {% if order %}<small style="color:#64748b;">#{{ order.id }}</small>{% endif %}
+  <span style="flex:1;"></span>
+  {% if order %}
+  <a href="/admin/anesthesia/{{ order.id }}/print" target="_blank" class="btn secondary" style="padding:.3rem .7rem;">🖨 打印（三联）</a>
+  {% endif %}
  </div>
  {% if cust or pet %}
  <div style="color:#475569;font-size:.92rem;margin-bottom:.8rem;">

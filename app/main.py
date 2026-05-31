@@ -10189,6 +10189,49 @@ async def page_admin_anesth_detail(order_id: int, request: Request, db: Session 
     return templates.TemplateResponse(request, "admin_anesthesia_form.html", ctx)
 
 
+@app.get("/admin/anesthesia/{order_id}/print", response_class=HTMLResponse)
+async def admin_anesth_print(order_id: int, request: Request, db: Session = Depends(get_db)):
+    """麻醉记录单打印（国标三联，A5 横版，与处方笺同规格）"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    order = db.get(AnesthesiaOrder, order_id)
+    if not order:
+        raise HTTPException(404, "麻醉单不存在")
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust = db.get(Customer, order.customer_id) if order.customer_id else None
+    pet = db.get(Pet, order.pet_id) if order.pet_id else None
+    pet_weight = 0.0
+    if pet:
+        last_w = db.query(WeightRecord).filter(WeightRecord.pet_id == pet.id)\
+            .order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
+        if last_w:
+            pet_weight = float(last_w.weight_kg or 0)
+    pet_age = ""
+    if pet and pet.birthday_estimate:
+        try:
+            from datetime import date as _date
+            parts = pet.birthday_estimate.split("-")
+            by = int(parts[0]); bm = int(parts[1]) if len(parts) > 1 else 1
+            today = _date.today()
+            years = today.year - by - (1 if (today.month, 1) < (bm, 1) else 0)
+            if years <= 0:
+                months = (today.year - by) * 12 + (today.month - bm)
+                pet_age = f"{max(0, months)} 个月"
+            else:
+                pet_age = f"{years} 岁"
+        except Exception:
+            pet_age = pet.birthday_estimate or ""
+    clinic_name = "大风动物医院"
+    store_for_title = order.store or (pet.store if pet else "")
+    if store_for_title:
+        clinic_name = f"大风动物医院（{store_for_title.replace('店', '分院')}）"
+    return templates.TemplateResponse(request, "admin_anesthesia_print.html", {
+        "order": order, "visit": visit, "cust": cust, "pet": pet,
+        "pet_weight": pet_weight, "pet_age": pet_age,
+        "clinic_name": clinic_name,
+    })
+
+
 @app.post("/admin/anesthesia/{order_id}/void")
 async def admin_anesth_void(order_id: int, request: Request, db: Session = Depends(get_db),
                             csrf_token: str = Form("")):

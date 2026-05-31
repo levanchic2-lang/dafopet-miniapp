@@ -1,0 +1,206 @@
+{% extends "_print_base.html" %}
+{% block title %}麻醉记录单 · {{ pet.name if pet else '' }}{% endblock %}
+{% block default_size %}A5_LAND{% endblock %}
+
+{% block extra_style %}
+.an-frame {
+  border: 1.5px solid #000;
+  padding: 4mm 5mm;
+  page-break-after: always;
+  break-after: page;
+}
+.an-frame:last-child { page-break-after: auto; break-after: auto; }
+@media screen { .an-frame + .an-frame { margin-top: 18px; } }
+
+.an-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding-bottom: 3mm;
+  border-bottom: 1px solid #000;
+  margin-bottom: 3mm;
+  position: relative;
+}
+.an-title .void-stamp {
+  position: absolute; right: 0; top: 0;
+  color: #b91c1c; font-size: 14px; border: 2px solid #b91c1c;
+  padding: 1mm 3mm; transform: rotate(-8deg); letter-spacing: 4px;
+}
+.an-row {
+  display: flex;
+  gap: 5mm;
+  margin-bottom: 2mm;
+  font-size: 12px;
+}
+.an-row .field { display: inline-flex; align-items: baseline; flex: 1; }
+.an-row .lbl { white-space: nowrap; margin-right: 4px; color: #333; }
+.an-row .val {
+  flex: 1;
+  border-bottom: 1px solid #000;
+  padding: 0 6px 1px;
+  min-height: 18px;
+  font-weight: 500;
+}
+
+.an-body {
+  display: grid;
+  grid-template-columns: 1fr 7mm;
+  gap: 0;
+  border-top: 1px solid #000;
+  margin-top: 3mm;
+}
+.an-main {
+  padding: 3mm 3mm 2mm;
+  font-size: 11.5px;
+  min-height: 75mm;
+}
+.an-rp { font-weight: 700; font-size: 14px; margin-bottom: 2mm; letter-spacing: 1px; }
+.an-tbl { width: 100%; border-collapse: collapse; }
+.an-tbl th {
+  font-weight: 600; font-size: 10.5px; color: #333;
+  text-align: left; padding: 1mm 2mm 1mm 0;
+  border-bottom: 0.5px solid #999;
+}
+.an-tbl td {
+  padding: 1.5mm 2mm 1.5mm 0;
+  vertical-align: top;
+  font-size: 11px;
+}
+.an-tbl tr.row-even td { background: rgba(0,0,0,.015); }
+.an-tbl .service-tag {
+  display: inline-block;
+  background: #f3e8ff; color: #6b21a8;
+  font-size: 9px; padding: 0 4px; border-radius: 2px;
+  margin-left: 3px;
+}
+.an-end {
+  margin-top: 4mm; font-size: 10.5px; color: #444; font-style: italic;
+}
+.an-notes {
+  margin-top: 3mm; padding-top: 2mm;
+  border-top: 0.5px dashed #999;
+  font-size: 10.5px; color: #333;
+  min-height: 8mm;
+}
+.an-notes .h { font-weight: 600; color: #000; }
+
+.an-side {
+  border-left: 1px solid #000;
+  position: relative;
+}
+.an-side .v-text {
+  position: absolute;
+  top: 4mm; left: 50%;
+  transform: translateX(-50%);
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: #555;
+}
+
+.an-foot {
+  display: flex; gap: 8mm; padding-top: 2mm;
+  border-top: 1px solid #000; margin-top: 3mm;
+  font-size: 12px;
+}
+.an-foot .fld { flex: 1; display: flex; align-items: baseline; }
+.an-foot .fld .lbl { white-space: nowrap; margin-right: 4px; }
+.an-foot .fld .val {
+  flex: 1; border-bottom: 1px solid #000;
+  padding: 0 6px; min-height: 18px; font-weight: 500;
+}
+{% endblock %}
+
+{% block toolbar_extra %}
+<span style="opacity:.8;font-size:12px;">建议 <b>A5 横向</b>（与处方笺同规格）</span>
+{% endblock %}
+
+{% block content %}
+{% set an_no = order.id %}
+{# 国标三联：病历 / 麻醉医师 / 药剂科（管控药留存） #}
+{% set lian_list = [
+  ('一', '病历归档'),
+  ('二', '麻醉医师留存'),
+  ('三', '药剂科 / 管控药台账'),
+] %}
+{% for lian_no, lian_role in lian_list %}
+<div class="an-frame">
+  <div class="an-title">
+    {{ clinic_name or '大风动物医院' }} 麻醉记录单
+    {% if order.status == 'voided' %}<span class="void-stamp">已 作 废</span>{% endif %}
+  </div>
+
+  <div class="an-row">
+    <div class="field" style="flex:2;"><span class="lbl">动物主人/饲养单位</span><span class="val">{{ cust.name if cust else '' }}</span></div>
+    <div class="field"><span class="lbl">病历号</span><span class="val">{{ pet.medical_record_no if pet else '' }}</span></div>
+  </div>
+  <div class="an-row">
+    <div class="field"><span class="lbl">动物种类</span><span class="val">{{ {'cat':'猫','dog':'犬','other':'其他'}.get(pet.species, pet.species) if pet else '' }}</span></div>
+    <div class="field"><span class="lbl">动物性别</span><span class="val">{{ {'male':'公','female':'母','unknown':'未知'}.get(pet.gender, pet.gender) if pet else '' }}</span></div>
+    <div class="field"><span class="lbl">体重</span><span class="val">{{ ('%.2fKg'|format(pet_weight)) if pet_weight else '' }}</span></div>
+  </div>
+  <div class="an-row">
+    <div class="field"><span class="lbl">年(日)龄</span><span class="val">{{ pet_age or '' }}</span></div>
+    <div class="field"><span class="lbl">ASA 分级</span><span class="val">{{ order.asa_grade or '—' }}</span></div>
+    <div class="field"><span class="lbl">麻醉日期</span><span class="val">{{ order.anesth_date or (order.created_at.strftime('%Y-%m-%d') if order.created_at else '') }}</span></div>
+    <div class="field"><span class="lbl">起止时间</span><span class="val">{{ (order.start_time or '—') ~ ' ~ ' ~ (order.end_time or '—') }}</span></div>
+  </div>
+
+  <div class="an-body">
+    <div class="an-main">
+      <div class="an-rp">麻 醉 用 药：</div>
+      <table class="an-tbl">
+        <thead>
+          <tr>
+            <th style="width:auto;">药品名</th>
+            <th style="width:12mm;">途径</th>
+            <th style="width:12mm;text-align:right;">数量</th>
+            <th style="width:10mm;">单位</th>
+            <th style="width:14mm;text-align:right;">单价</th>
+            <th style="width:14mm;text-align:right;">小计</th>
+            <th style="width:20mm;">备注</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for it in order.items %}
+          <tr class="{% if loop.index0 % 2 == 1 %}row-even{% endif %}">
+            <td>{{ it.drug_name }}{% if it.is_service %}<span class="service-tag">服务</span>{% endif %}</td>
+            <td>{{ it.route or '' }}</td>
+            <td style="text-align:right;">{{ '%g'|format(it.total_qty or 0) }}</td>
+            <td>{{ it.total_unit or '' }}</td>
+            <td style="text-align:right;">{{ '%.2f'|format(it.unit_price or 0) }}</td>
+            <td style="text-align:right;">{{ '%.2f'|format(it.subtotal or 0) }}</td>
+            <td>{{ it.note or '' }}</td>
+          </tr>
+        {% endfor %}
+          <tr>
+            <td colspan="5" style="text-align:right;font-weight:600;padding-top:2mm;border-top:0.5px solid #999;">合计</td>
+            <td style="text-align:right;font-weight:700;padding-top:2mm;border-top:0.5px solid #999;">¥ {{ '%.2f'|format(order.total_amount or 0) }}</td>
+            <td style="border-top:0.5px solid #999;"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="an-notes">
+        <span class="h">苏醒情况：</span>{{ order.recovery or '—' }}
+        {% if order.notes %}<br/><span class="h">备注 / 不良反应：</span>{{ order.notes }}{% endif %}
+      </div>
+
+      <div class="an-end">本单据为麻醉医疗文书，按《动物诊疗机构管理办法》要求保存。</div>
+    </div>
+
+    <div class="an-side">
+      <span class="v-text">第{{ lian_no }}联 {{ lian_role }}</span>
+    </div>
+  </div>
+
+  <div class="an-foot">
+    <div class="fld" style="flex:2;"><span class="lbl">麻醉医师</span><span class="val">{{ order.vet_name or '' }}</span></div>
+    <div class="fld" style="flex:2;"><span class="lbl">复核人（双签）</span><span class="val">{{ order.cosigner or '' }}</span></div>
+    <div class="fld"><span class="lbl">单号</span><span class="val" style="font-family:monospace;">An{{ '%06d'|format(an_no) }}-{{ lian_no }}</span></div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
