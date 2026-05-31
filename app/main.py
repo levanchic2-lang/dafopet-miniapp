@@ -91,6 +91,8 @@ from app.models import (
     AnesthesiaOrder,
     AnesthesiaOrderItem,
     NarcoticsLedger,
+    FollowUpTemplate,
+    Disease,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
@@ -8974,63 +8976,138 @@ def _resolve_vet_username(db: Session, vet_name: str) -> str:
 
 
 def _compute_followup_planned_date(v: Visit) -> str:
-    """如果医生填了 follow_up_at，优先用医生填的；否则按 visit_type 默认规则算。"""
+    """旧版兜底：visit_type 死规则。新系统用 _match_followup_templates。"""
     if v.follow_up_at and v.follow_up_at.strip():
         return v.follow_up_at.strip()
     days = _FOLLOWUP_RULES.get((v.visit_type or "outpatient").strip(), 0)
     if not days or days <= 0:
         return ""
-    base = (v.visit_date or "").strip()[:10]
-    if not base:
+    return _add_days_to_date(v.visit_date, days)
+
+
+def _add_days_to_date(date_str: str, days: int) -> str:
+    """YYYY-MM-DD + days → YYYY-MM-DD。"""
+    base = (date_str or "").strip()[:10]
+    if not base or days <= 0:
         return ""
     try:
         from datetime import date, timedelta
         y, m, d = base.split("-")
-        dt = date(int(y), int(m), int(d)) + timedelta(days=days)
+        dt = date(int(y), int(m), int(d)) + timedelta(days=int(days))
         return dt.isoformat()
     except Exception:
         return ""
 
 
-def _sync_followup_for_visit(db: Session, v: Visit) -> None:
-    """新建或更新 visit 后调用：根据规则维护其 FollowUp 行。
+def _match_followup_templates(db: Session, diagnosis: str, visit_type: str = "") -> list:
+    """按 diagnosis 关键词匹配 FollowUpTemplate 列表（去重 + 按 priority 排序）。
 
-    - 若计算出 planned_date 为空 → 删掉已有的 FollowUp（如果状态还在 pending/due）
-    - 否则 upsert：未发送状态下 planned_date / assigned_to / store 可被覆盖
-      已发送/已反馈/已完成的不再修改 planned_date，避免误覆盖运营数据
+    匹配规则：
+      - 遍历 is_active=True 模板，按 priority desc
+      - 任一 keyword 出现在 diagnosis 中 → 命中
+      - 不区分大小写、忽略空白
+      - 没命中任何模板 + visit_type 是门诊类 → 用「一般门诊（默认）」兜底
+    """
+    diag = (diagnosis or "").lower().strip()
+    templates = db.query(FollowUpTemplate).filter(FollowUpTemplate.is_active == True)\
+        .order_by(FollowUpTemplate.priority.desc(), FollowUpTemplate.id).all()
+    matched: list = []
+    seen_ids: set = set()
+    for tpl in templates:
+        if tpl.id in seen_ids:
+            continue
+        kws = [k.strip().lower() for k in (tpl.keywords or "").split(",") if k.strip()]
+        if not kws:
+            continue  # 空关键词模板不参与匹配（如默认门诊）
+        for kw in kws:
+            if kw and kw in diag:
+                matched.append(tpl)
+                seen_ids.add(tpl.id)
+                break
+    if not matched and visit_type in ("outpatient", "other", "followup", ""):
+        default = db.query(FollowUpTemplate).filter(FollowUpTemplate.name == "一般门诊（默认）").first()
+        if default:
+            matched = [default]
+    return matched
+
+
+def _sync_followup_for_visit(db: Session, v: Visit) -> None:
+    """根据诊断匹配模板，自动衍生/更新多轮 FollowUp。
+
+    语义：
+      - 命中模板列表 × 每模板的 rounds → 每个 (template_id, round_no) 一条 FollowUp
+      - 未发送的 (status in pending/due) 可被重建：planned_date/assignee 覆盖
+      - 已发送/已反馈/已完成的（sent/responded/closed/phone_pending）一律保留
+      - 诊断变化导致模板不再命中时：未发送的旧轮次会被删除，已发送的保留作为历史
     """
     if not v or not v.id:
         return
-    fu = db.query(FollowUp).filter(FollowUp.visit_id == v.id).first()
-    planned = _compute_followup_planned_date(v)
-    if not planned:
-        if fu and fu.status in ("pending", "due"):
-            db.delete(fu)
-        return
+    import json as _json
+
+    templates = _match_followup_templates(db, v.diagnosis or "", v.visit_type or "")
+    existing = db.query(FollowUp).filter(FollowUp.visit_id == v.id).all()
+    existing_by_key = {(fu.template_id, fu.round_no): fu for fu in existing}
+
+    base_date = (v.visit_date or "").strip()[:10]
     assignee = _resolve_vet_username(db, v.vet_name or "")[:80]
-    if not fu:
-        fu = FollowUp(
-            visit_id=v.id,
-            customer_id=v.customer_id,
-            pet_id=v.pet_id,
-            store=_visit_store_short(db, v),
-            assigned_to=assignee,
-            planned_date=planned,
-            status="pending",
-            feedback_token=_gen_followup_token(),
-        )
-        db.add(fu)
-    else:
-        # 同步基本字段
-        fu.customer_id = v.customer_id
-        fu.pet_id      = v.pet_id
-        fu.store       = _visit_store_short(db, v)
-        # 未发送的才可改 planned_date / assigned_to
-        if fu.status in ("pending", "due"):
-            fu.planned_date = planned
-            fu.assigned_to  = assignee or fu.assigned_to
-        if not fu.feedback_token:
-            fu.feedback_token = _gen_followup_token()
+    store = _visit_store_short(db, v)
+
+    if not templates or not base_date:
+        # 没匹配到 / 无就诊日期 → 删除所有未发送的
+        for fu in existing:
+            if fu.status in ("pending", "due"):
+                db.delete(fu)
+        return
+
+    desired_keys: set = set()
+    for tpl in templates:
+        try:
+            rounds = _json.loads(tpl.rounds_json or "[]")
+        except Exception:
+            rounds = []
+        for round_idx, rnd in enumerate(rounds, start=1):
+            day_offset = int(rnd.get("day_offset", 0) or 0)
+            if day_offset <= 0:
+                continue
+            planned = _add_days_to_date(base_date, day_offset)
+            if not planned:
+                continue
+            key = (tpl.id, round_idx)
+            desired_keys.add(key)
+            fu = existing_by_key.get(key)
+            round_name = (rnd.get("round_name") or f"第 {round_idx} 轮")[:80]
+            if fu is None:
+                fu = FollowUp(
+                    visit_id=v.id,
+                    customer_id=v.customer_id,
+                    pet_id=v.pet_id,
+                    template_id=tpl.id,
+                    template_name=tpl.name[:120],
+                    round_no=round_idx,
+                    round_name=round_name,
+                    store=store,
+                    assigned_to=assignee,
+                    planned_date=planned,
+                    status="pending",
+                    feedback_token=_gen_followup_token(),
+                )
+                db.add(fu)
+            else:
+                fu.customer_id = v.customer_id
+                fu.pet_id = v.pet_id
+                fu.store = store
+                fu.template_name = tpl.name[:120]
+                fu.round_name = round_name
+                if fu.status in ("pending", "due"):
+                    fu.planned_date = planned
+                    fu.assigned_to = assignee or fu.assigned_to
+                if not fu.feedback_token:
+                    fu.feedback_token = _gen_followup_token()
+
+    # 删除不在 desired 里且未发送的
+    for key, fu in existing_by_key.items():
+        if key not in desired_keys and fu.status in ("pending", "due"):
+            db.delete(fu)
 
 
 @app.get("/admin/visits/create", response_class=HTMLResponse)

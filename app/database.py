@@ -1301,6 +1301,95 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_assignee ON follow_ups(assigned_to)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_token ON follow_ups(feedback_token)"))
 
+            # ── 多模板/多轮回访升级：补字段 + 解除 visit_id UNIQUE ──
+            fu_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(follow_ups)")).fetchall()}
+            if "round_no" not in fu_cols:
+                # 老库 visit_id 是 UNIQUE — 必须 rebuild 表才能去掉
+                # SQLite 标准 rebuild：建新表 → copy → drop → rename
+                conn.execute(text(
+                    "CREATE TABLE follow_ups_new ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "visit_id INTEGER NOT NULL REFERENCES visits(id) ON DELETE CASCADE, "
+                    "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                    "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                    "template_id INTEGER DEFAULT NULL REFERENCES follow_up_templates(id) ON DELETE SET NULL, "
+                    "template_name VARCHAR(120) DEFAULT '', "
+                    "round_no INTEGER DEFAULT 1, "
+                    "round_name VARCHAR(80) DEFAULT '', "
+                    "response_data TEXT DEFAULT '', "
+                    "store VARCHAR(40) DEFAULT '', "
+                    "assigned_to VARCHAR(80) DEFAULT '', "
+                    "planned_date VARCHAR(20) DEFAULT '', "
+                    "status VARCHAR(20) DEFAULT 'pending', "
+                    "channel VARCHAR(20) DEFAULT '', "
+                    "sent_at DATETIME DEFAULT NULL, "
+                    "response VARCHAR(20) DEFAULT '', "
+                    "response_at DATETIME DEFAULT NULL, "
+                    "response_note TEXT DEFAULT '', "
+                    "feedback_token VARCHAR(32) DEFAULT '', "
+                    "handled_by VARCHAR(80) DEFAULT '', "
+                    "handled_at DATETIME DEFAULT NULL, "
+                    "handle_note TEXT DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                # 复制现有数据（老库的没有 round_no，默认 1）
+                conn.execute(text(
+                    "INSERT INTO follow_ups_new ("
+                    "id, visit_id, customer_id, pet_id, store, assigned_to, planned_date,"
+                    " status, channel, sent_at, response, response_at, response_note,"
+                    " feedback_token, handled_by, handled_at, handle_note, created_at, updated_at)"
+                    " SELECT id, visit_id, customer_id, pet_id, store, assigned_to, planned_date,"
+                    " status, channel, sent_at, response, response_at, response_note,"
+                    " feedback_token, handled_by, handled_at, handle_note, created_at, updated_at"
+                    " FROM follow_ups"
+                ))
+                conn.execute(text("DROP TABLE follow_ups"))
+                conn.execute(text("ALTER TABLE follow_ups_new RENAME TO follow_ups"))
+                # 重建索引
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_status_date ON follow_ups(status, planned_date)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_assignee ON follow_ups(assigned_to)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_token ON follow_ups(feedback_token)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_visit_round ON follow_ups(visit_id, round_no)"))
+
+            # ── 回访模板（按疾病系统分类） ─────────────────────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS follow_up_templates ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "name VARCHAR(120) NOT NULL UNIQUE, "
+                "system VARCHAR(40) DEFAULT '', "
+                "keywords TEXT DEFAULT '', "
+                "priority INTEGER DEFAULT 50, "
+                "rounds_json TEXT DEFAULT '[]', "
+                "is_active BOOLEAN DEFAULT 1, "
+                "is_builtin BOOLEAN DEFAULT 0, "
+                "notes TEXT DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_futpl_active_pri ON follow_up_templates(is_active, priority)"))
+
+            # ── 疾病字典（用于诊断 autocomplete） ─────────────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS diseases ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "name VARCHAR(160) NOT NULL UNIQUE, "
+                "system VARCHAR(40) DEFAULT '', "
+                "aliases TEXT DEFAULT '', "
+                "severity VARCHAR(20) DEFAULT '', "
+                "species VARCHAR(40) DEFAULT '', "
+                "notes TEXT DEFAULT '', "
+                "is_builtin BOOLEAN DEFAULT 0, "
+                "use_count INTEGER DEFAULT 0, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_disease_system ON diseases(system)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_disease_use ON diseases(use_count DESC)"))
+
             # ── 麻醉单 + 麻醉/管控药台账（国标合规） ───────────
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS anesthesia_orders ("
@@ -1435,3 +1524,53 @@ def _seed_data() -> None:
                 """), r)
     except Exception:
         pass
+    # 兽医级疾病库 + 回访模板（幂等填充）
+    _seed_vet_diseases_and_templates()
+
+
+def _seed_vet_diseases_and_templates() -> None:
+    """从 app/data/vet_seed.py 灌入疾病字典 + 回访模板。
+
+    幂等：按 name 查重；新增写入，不覆盖用户编辑过的内置项。
+    """
+    try:
+        import json as _json
+        from app.data.vet_seed import DISEASES, TEMPLATES
+    except Exception as e:
+        print(f"[seed_vet] import failed: {e}")
+        return
+    try:
+        with engine.begin() as conn:
+            # diseases
+            for (name, system, aliases, severity, species) in DISEASES:
+                exists = conn.execute(
+                    text("SELECT 1 FROM diseases WHERE name=:n"),
+                    {"n": name},
+                ).fetchone()
+                if exists:
+                    continue
+                conn.execute(text(
+                    "INSERT INTO diseases (name, system, aliases, severity, species, notes, is_builtin, use_count, created_at, updated_at) "
+                    "VALUES (:n, :sy, :al, :sv, :sp, '', 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ), {"n": name, "sy": system, "al": aliases, "sv": severity, "sp": species})
+
+            # follow_up_templates
+            for tpl in TEMPLATES:
+                exists = conn.execute(
+                    text("SELECT 1 FROM follow_up_templates WHERE name=:n"),
+                    {"n": tpl["name"]},
+                ).fetchone()
+                if exists:
+                    continue
+                rounds_json = _json.dumps(tpl["rounds"], ensure_ascii=False)
+                conn.execute(text(
+                    "INSERT INTO follow_up_templates "
+                    "(name, system, keywords, priority, rounds_json, is_active, is_builtin, notes, created_at, updated_at) "
+                    "VALUES (:n, :sy, :kw, :pr, :rj, 1, 1, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ), {
+                    "n": tpl["name"], "sy": tpl["system"],
+                    "kw": tpl["keywords"], "pr": int(tpl["priority"]),
+                    "rj": rounds_json,
+                })
+    except Exception as e:
+        print(f"[seed_vet] insert failed: {e}")

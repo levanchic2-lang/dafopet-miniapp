@@ -1130,7 +1130,7 @@ class Coupon(Base):
 
 
 class FollowUp(Base):
-    """回访任务：每条 Visit 自动衍生一条（visit_type 在规则里有 >0 天的才出）。
+    """回访任务：诊断匹配模板后，按 (visit_id, round_no) 自动衍生 N 条。
 
     status 流转：
       pending          → 计划中，未到日期
@@ -1143,19 +1143,26 @@ class FollowUp(Base):
     __tablename__ = "follow_ups"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="CASCADE"), nullable=False, unique=True)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="CASCADE"), nullable=False, index=True)
     customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
     pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
 
-    store:        Mapped[str] = mapped_column(String(40), default="")   # 短名：东环店/横岗店
-    assigned_to:  Mapped[str] = mapped_column(String(80), default="")   # 处理人（默认 visit.vet_name）
-    planned_date: Mapped[str] = mapped_column(String(20), default="")   # 计划回访 YYYY-MM-DD
+    # ── 多模板/多轮 ──────────────────────────
+    template_id   = mapped_column(ForeignKey("follow_up_templates.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    template_name: Mapped[str] = mapped_column(String(120), default="")   # 快照（模板被改名/删时仍可读）
+    round_no:      Mapped[int] = mapped_column(Integer, default=1)        # 第几轮
+    round_name:    Mapped[str] = mapped_column(String(80), default="")    # 如「术后 3 天复查」
+    response_data: Mapped[str] = mapped_column(Text, default="")          # 结构化答案 JSON
+
+    store:        Mapped[str] = mapped_column(String(40), default="")
+    assigned_to:  Mapped[str] = mapped_column(String(80), default="")
+    planned_date: Mapped[str] = mapped_column(String(20), default="")
 
     status:       Mapped[str] = mapped_column(String(20), default="pending")
-    channel:      Mapped[str] = mapped_column(String(20), default="")   # miniapp/sms/phone
+    channel:      Mapped[str] = mapped_column(String(20), default="")
     sent_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
-    response:     Mapped[str] = mapped_column(String(20), default="")   # recovered/needs_visit/no_reply
+    response:     Mapped[str] = mapped_column(String(20), default="")
     response_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     response_note: Mapped[str] = mapped_column(Text, default="")
 
@@ -1171,6 +1178,60 @@ class FollowUp(Base):
     visit    = relationship("Visit",    foreign_keys=[visit_id])
     customer = relationship("Customer", foreign_keys=[customer_id])
     pet      = relationship("Pet",      foreign_keys=[pet_id])
+    template = relationship("FollowUpTemplate", foreign_keys=[template_id])
+
+
+class FollowUpTemplate(Base):
+    """回访模板：按疾病系统分类，存关键词 + 多轮配置。
+
+    rounds_json 结构：
+        [{
+            "day_offset": 3,
+            "round_name": "术后 3 天复查",
+            "channel": "auto",
+            "questions": [
+                {"key":"spirit","type":"scale1to5","label":"精神状态","required":true},
+                {"key":"appetite","type":"scale1to5","label":"食欲"},
+                {"key":"stool","type":"select","label":"排便",
+                    "options":["正常","软便","拉稀","便血","便秘"]},
+                {"key":"photos","type":"upload","label":"伤口/便便照片","max":3},
+                {"key":"note","type":"text","label":"其他想说的"}
+            ]
+        }, ...]
+    """
+    __tablename__ = "follow_up_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name:        Mapped[str] = mapped_column(String(120), default="", unique=True)
+    system:      Mapped[str] = mapped_column(String(40), default="")    # 消化/呼吸/皮肤/口腔/...
+    keywords:    Mapped[str] = mapped_column(Text, default="")           # CSV
+    priority:    Mapped[int] = mapped_column(Integer, default=50)        # 高优先级先匹配
+    rounds_json: Mapped[str] = mapped_column(Text, default="[]")
+    is_active:   Mapped[bool] = mapped_column(Boolean, default=True)
+    is_builtin:  Mapped[bool] = mapped_column(Boolean, default=False)   # 系统预置（防止误删）
+    notes:       Mapped[str] = mapped_column(Text, default="")
+    created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Disease(Base):
+    """疾病字典：用于 diagnosis 输入框 autocomplete + 关键词索引。
+
+    可由后台维护 / 内置库 seed / 在病例诊断里被引用统计。
+    """
+    __tablename__ = "diseases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name:    Mapped[str] = mapped_column(String(160), default="", unique=True, index=True)
+    system:  Mapped[str] = mapped_column(String(40), default="", index=True)  # 系统分类
+    aliases: Mapped[str] = mapped_column(Text, default="")  # 别名 CSV，autocomplete 搜全词
+    severity: Mapped[str] = mapped_column(String(20), default="")  # mild/moderate/severe/chronic
+    species: Mapped[str] = mapped_column(String(40), default="")    # cat/dog/both
+    notes:   Mapped[str] = mapped_column(Text, default="")
+    is_builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    use_count:  Mapped[int] = mapped_column(Integer, default=0)     # 被诊断引用次数（autocomplete 排序用）
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class AdminUser(Base):
