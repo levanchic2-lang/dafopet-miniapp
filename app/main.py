@@ -10681,34 +10681,75 @@ async def admin_inventory_batch_action(
         verb = "启用" if new_val else "下架"
         return RedirectResponse(f"/admin/inventory?msg=已{verb} {affected} 条", status_code=303)
     if action == "delete":
-        # 引用保护：检查处方/收费明细/采购入库 是否引用
-        from app.models import PrescriptionItem, InvoiceItem, InventoryTransaction
+        # 业务引用检查（影响病历准确性的引用 → 阻止删除，建议下架）
+        #   PrescriptionItem / SalesOrderItem / Vaccination / Deworming / PackageRedemption
+        # 内部引用（库存自身衍生数据 → 删除时手动级联清掉，SQLite 默认不启用 FK CASCADE）
+        #   InventoryTransaction / InventoryBatch
+        from app.models import (
+            PrescriptionItem, InventoryTransaction, InventoryBatch,
+            Vaccination,
+        )
+        try:
+            from app.models import SalesOrderItem
+        except ImportError:
+            SalesOrderItem = None
+        try:
+            from app.models import Deworming
+        except ImportError:
+            Deworming = None
+        try:
+            from app.models import PackageRedemption
+        except ImportError:
+            PackageRedemption = None
+
         for iid in ids:
             it = db.get(InventoryItem, iid)
             if not it:
                 continue
+            # 1. 检查业务引用（处方/销售/疫苗/驱虫/套餐核销）— 任一存在则阻止
             ref_count = 0
             try:
                 ref_count += db.query(PrescriptionItem).filter(PrescriptionItem.item_id == iid).count()
             except Exception:
                 pass
+            if SalesOrderItem is not None:
+                try:
+                    ref_count += db.query(SalesOrderItem).filter(SalesOrderItem.item_id == iid).count()
+                except Exception:
+                    pass
             try:
-                ref_count += db.query(InvoiceItem).filter(InvoiceItem.item_id == iid).count()
+                ref_count += db.query(Vaccination).filter(Vaccination.inventory_item_id == iid).count()
             except Exception:
                 pass
-            try:
-                ref_count += db.query(InventoryTransaction).filter(InventoryTransaction.item_id == iid).count()
-            except Exception:
-                pass
+            if Deworming is not None:
+                try:
+                    ref_count += db.query(Deworming).filter(Deworming.inventory_item_id == iid).count()
+                except Exception:
+                    pass
+            if PackageRedemption is not None:
+                try:
+                    ref_count += db.query(PackageRedemption).filter(PackageRedemption.item_id == iid).count()
+                except Exception:
+                    pass
             if ref_count > 0:
                 blocked += 1
                 continue
+            # 2. 手动清理内部引用（SQLite 不自动 CASCADE）
+            try:
+                db.query(InventoryTransaction).filter(InventoryTransaction.item_id == iid).delete(synchronize_session=False)
+            except Exception:
+                pass
+            try:
+                db.query(InventoryBatch).filter(InventoryBatch.item_id == iid).delete(synchronize_session=False)
+            except Exception:
+                pass
+            # 3. 删除品目本身
             db.delete(it)
             affected += 1
         db.commit()
         msg = f"已删除 {affected} 条"
         if blocked:
-            msg += f"，{blocked} 条因有业务记录引用被保留（请改用下架）"
+            msg += f"，{blocked} 条因有业务记录（处方/销售/疫苗等）引用被保留（请改用下架）"
         return RedirectResponse(f"/admin/inventory?msg={msg}", status_code=303)
     return RedirectResponse("/admin/inventory?err=未知操作", status_code=303)
 
