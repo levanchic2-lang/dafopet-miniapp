@@ -10445,6 +10445,38 @@ async def api_inventory_search(
 
 
 # ── 库存：批量编辑 ───────────────────────────────────────
+def _redirect_back_with_msg(request: Request, fallback: str, msg: str = "", err: str = "") -> RedirectResponse:
+    """带筛选参数回到 referer 页（编辑后保留 q/category/subcategory 等）。
+
+    referer 不可信时回退到 fallback。msg 或 err 自动 url 编码追加。
+    """
+    from urllib.parse import urlparse, urlencode, parse_qsl, quote as _q
+    referer = (request.headers.get("referer") or "").strip()
+    target = fallback
+    if referer:
+        try:
+            u = urlparse(referer)
+            # 只接受同源同路径前缀的 referer，安全
+            if u.path and (u.path == fallback.split("?")[0]
+                           or u.path.startswith(fallback.split("?")[0] + "?")):
+                params = dict(parse_qsl(u.query, keep_blank_values=False))
+                # 清掉旧的 msg/err
+                params.pop("msg", None); params.pop("err", None)
+                if msg: params["msg"] = msg
+                if err: params["err"] = err
+                target = u.path
+                if params:
+                    target += "?" + urlencode(params, doseq=False)
+                return RedirectResponse(target, status_code=303)
+        except Exception:
+            pass
+    # 回退路径
+    suffix = ""
+    if msg: suffix = f"?msg={_q(msg, safe='')}"
+    elif err: suffix = f"?err={_q(err, safe='')}"
+    return RedirectResponse(fallback + suffix, status_code=303)
+
+
 @app.post("/admin/inventory/bulk-edit")
 async def admin_inventory_bulk_edit(
     request: Request,
@@ -10543,10 +10575,14 @@ async def admin_inventory_bulk_edit(
     if category: parts.append(f"大类={INVENTORY_CATEGORIES[category]['label']}")
     if subcategory: parts.append(f"小类={INVENTORY_CATEGORIES[category]['subs'].get(subcategory, subcategory)}")
     if supplier: parts.append(f"供应商={supplier}")
-    return RedirectResponse(
-        f"/admin/inventory?msg=已批量更新 {updated} 个品目（{' · '.join(parts)}）",
-        status_code=303,
-    )
+    if do_supplier_clear: parts.append("供应商=清空")
+    if do_notes_clear: parts.append("备注=清空")
+    if unit: parts.append(f"主单位={unit}")
+    if unit2: parts.append(f"副单位={unit2}")
+    msg = f"已批量更新 {updated} 个品目"
+    if parts:
+        msg += f"（{' · '.join(parts)}）"
+    return _redirect_back_with_msg(request, "/admin/inventory", msg=msg)
 
 
 # ── 库存品目搜索 API（拍照入库 / 各种映射场景共用） ───────
@@ -10719,7 +10755,7 @@ async def admin_inventory_batch_action(
                 affected += 1
         db.commit()
         verb = "启用" if new_val else "下架"
-        return RedirectResponse(f"/admin/inventory?msg=已{verb} {affected} 条", status_code=303)
+        return _redirect_back_with_msg(request, "/admin/inventory", msg=f"已{verb} {affected} 条")
     if action == "delete":
         # 业务引用检查（影响病历准确性的引用 → 阻止删除，建议下架）
         #   PrescriptionItem / SalesOrderItem / Vaccination / Deworming / PackageRedemption
@@ -10790,7 +10826,7 @@ async def admin_inventory_batch_action(
         msg = f"已删除 {affected} 条"
         if blocked:
             msg += f"，{blocked} 条因有业务记录（处方/销售/疫苗等）引用被保留（请改用下架）"
-        return RedirectResponse(f"/admin/inventory?msg={msg}", status_code=303)
+        return _redirect_back_with_msg(request, "/admin/inventory", msg=msg)
     return RedirectResponse("/admin/inventory?err=未知操作", status_code=303)
 
 
@@ -11065,6 +11101,7 @@ async def admin_inventory_list(
     db: Session = Depends(get_db),
     q: str = "",
     category: str = "",
+    subcategory: str = "",
     low_stock: str = "",
     zero_stock: str = "",
     controlled: str = "",
@@ -11091,6 +11128,8 @@ async def admin_inventory_list(
         )
     if category:
         query = query.filter(InventoryItem.category == category)
+    if subcategory:
+        query = query.filter(InventoryItem.subcategory == subcategory)
     if low_stock == "1":
         query = query.filter(
             InventoryItem.is_service == False,
@@ -11138,7 +11177,7 @@ async def admin_inventory_list(
     return templates.TemplateResponse(request, "admin_inventory.html", {
         "request": request, "items": items, "total": total,
         "page": page, "total_pages": total_pages,
-        "q": q, "category": category, "low_stock": low_stock,
+        "q": q, "category": category, "subcategory": subcategory, "low_stock": low_stock,
         "zero_stock": zero_stock, "controlled": controlled, "service_only": service_only,
         "expiry_alert": expiry_alert,
         "categories": INVENTORY_CATEGORIES, "low_count": low_count, "zero_count": zero_count,

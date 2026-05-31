@@ -93,14 +93,22 @@
  {% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}
  <div class="filter-row">
  <input name="q" value="{{ q }}" style="flex:1;min-width:200px;"/>
- <select name="category" style="width:160px;">
+ <select name="category" id="filter-category" style="width:140px;" onchange="onFilterCategoryChange()">
  <option value="">全部大类</option>
  {% for cat_key, cat in categories.items() %}
  <option value="{{ cat_key }}" {% if category == cat_key %}selected{% endif %}>{{ cat.label }}</option>
  {% endfor %}
  </select>
+ <select name="subcategory" id="filter-subcategory" style="width:140px;" {% if not category %}disabled{% endif %}>
+ <option value="">全部小类</option>
+ {% if category and categories.get(category) %}
+   {% for sk, sl in categories[category].get('subs', {}).items() %}
+   <option value="{{ sk }}" {% if subcategory == sk %}selected{% endif %}>{{ sl }}</option>
+   {% endfor %}
+ {% endif %}
+ </select>
  <button type="submit" class="btn secondary">筛选</button>
- {% if q or category or low_stock or zero_stock or controlled or service_only or expiry_alert %}
+ {% if q or category or subcategory or low_stock or zero_stock or controlled or service_only or expiry_alert %}
  <a href="/admin/inventory{% if wb_store %}?store={{ wb_store }}{% endif %}" class="btn secondary">清除</a>
  {% endif %}
  </div>
@@ -259,6 +267,23 @@
 <script>
 (function () {
   var CATS = {{ categories|tojson }};
+
+  // 筛选区：大类变了 → 联动小类选项 + 重置小类选中
+  window.onFilterCategoryChange = function() {
+    var fc = document.getElementById('filter-category');
+    var fs = document.getElementById('filter-subcategory');
+    if (!fc || !fs) return;
+    var cat = CATS[fc.value];
+    fs.innerHTML = '<option value="">全部小类</option>';
+    if (!cat) { fs.disabled = true; return; }
+    fs.disabled = false;
+    var subs = cat.subs || {};
+    Object.keys(subs).forEach(function(k){
+      var o = document.createElement('option');
+      o.value = k; o.textContent = subs[k];
+      fs.appendChild(o);
+    });
+  };
   var bar = document.getElementById('bulk-bar');
   var countEl = document.getElementById('bulk-count');
   var selAll = document.getElementById('bulk-select-all');
