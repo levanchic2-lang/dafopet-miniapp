@@ -7632,17 +7632,34 @@ async def api_binding_send_code(request: Request, db: Session = Depends(get_db))
     code = "".join(_s.choice("0123456789") for _ in range(6))
     _BIND_CODES[phone] = (code, now + _BIND_CODE_TTL_SECONDS, cust.id)
     _BIND_LAST_SENT[phone] = now
-    # 发短信
+    # 发短信：优先腾讯云直连（已配好的验证码模板），失败兜底 sms_gateway 通用网关
     sent = False
+    err_detail = ""
+    # 1) 腾讯云
     try:
-        from app.services.sms_gateway import send_sms
-        sent = send_sms(
-            phone,
-            f"【大风动物医院】您的档案绑定验证码：{code}，5 分钟内有效。如非本人操作请忽略。",
-            scene="binding",
-        )
+        from app.services.sms_tencent import send_sms_template, _enabled as _tc_enabled
+        if _tc_enabled() and (settings.tencent_sms_tmpl_consent or "").strip():
+            ttl_min = max(1, _BIND_CODE_TTL_SECONDS // 60)
+            sent, err_detail = send_sms_template(
+                phone,
+                settings.tencent_sms_tmpl_consent.strip(),
+                [code, str(ttl_min)],
+            )
+            if not sent:
+                logger.warning("[binding] 腾讯云发送失败：%s", err_detail)
     except Exception as _e:
-        logger.warning("[binding] sms 发送失败：%s", _e)
+        logger.warning("[binding] 腾讯云调用异常：%s", _e)
+    # 2) 兜底：通用 sms_gateway
+    if not sent:
+        try:
+            from app.services.sms_gateway import send_sms
+            sent = send_sms(
+                phone,
+                f"【大风动物医院】您的档案绑定验证码：{code}，5 分钟内有效。如非本人操作请忽略。",
+                scene="binding",
+            )
+        except Exception as _e:
+            logger.warning("[binding] sms_gateway 发送失败：%s", _e)
     resp = {
         "ok": True,
         "customer": {

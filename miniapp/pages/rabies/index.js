@@ -58,6 +58,7 @@ Page({
     districtIndex: 0,
     streetIndex: 0,
     addressDetailInput: "",
+    communityInput: "",
     hasSig: false,
     submitting: false,
     error: "",
@@ -101,13 +102,15 @@ Page({
 
   _syncAddr() {
     const ph = "请选择";
-    const { districtNames, streetNames, districtIndex, streetIndex, addressDetailInput } = this.data;
+    const { districtNames, streetNames, districtIndex, streetIndex, addressDetailInput, communityInput } = this.data;
     const d = districtNames[districtIndex];
     const s = streetNames[streetIndex];
+    const community = (communityInput || "").trim();
     const detail = (addressDetailInput || "").trim();
     let addr = "";
     if (d && d !== ph) addr = "广东省深圳市" + d;
     if (s && s !== ph) addr += s;
+    if (community) addr += community;
     if (detail) addr += detail;
     this.setData({ "form.owner_address": addr });
   },
@@ -131,6 +134,10 @@ Page({
 
   onAddressDetailInput(e) {
     this.setData({ addressDetailInput: e.detail.value || "" }, () => this._syncAddr());
+  },
+
+  onCommunityInput(e) {
+    this.setData({ communityInput: e.detail.value || "" }, () => this._syncAddr());
   },
 
   _setupCanvas() {

@@ -3,16 +3,17 @@
 .sub { margin-top:16rpx; margin-bottom:24rpx; font-size:24rpx; line-height:1.7; color:#666; }
 .label { margin-top:24rpx; margin-bottom:12rpx; font-size:26rpx; color:#171717; font-weight:600; }
 .input {
-  width:100%; box-sizing:border-box; padding:22rpx 24rpx;
+  width:100%; box-sizing:border-box; padding:0 24rpx;
   border:1rpx solid #d9d9d9; border-radius:14rpx; background:#fafafa;
   font-size:30rpx; color:#171717;
+  height:88rpx; line-height:88rpx;
 }
 .row { display:flex; gap:16rpx; align-items:stretch; }
-.row .input { flex:1; }
+.row .input { flex:1 1 0; min-width:0; }
 .btn-code {
-  background:#171717; color:#fff; font-size:24rpx; padding:0 24rpx;
-  border-radius:14rpx; line-height:74rpx; height:74rpx; white-space:nowrap;
-  border:0;
+  background:#171717; color:#fff; font-size:26rpx; padding:0 28rpx;
+  border-radius:14rpx; line-height:88rpx; height:88rpx; white-space:nowrap;
+  border:0; flex:0 0 auto;
 }
 .btn-code.disabled { background:#a3a3a3; color:#fff; }
 
