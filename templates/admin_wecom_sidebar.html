@@ -98,9 +98,13 @@
     }
     const pageUrl = location.href.split('#')[0];
     fetch('/api/wecom/jssdk-config?url=' + encodeURIComponent(pageUrl), {credentials: 'same-origin'})
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + r.statusText);
+        return r.json();
+      })
       .then(cfg => {
         if (cfg.error) throw new Error(cfg.error);
+        if (!cfg.config || !cfg.agent_config) throw new Error('返回缺字段：' + JSON.stringify(cfg).slice(0, 80));
         wx.config({
           beta: true,
           debug: false,

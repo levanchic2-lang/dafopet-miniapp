@@ -3168,6 +3168,9 @@ async def admin_wecom_dispatch_now(
 async def api_wecom_jssdk_config(request: Request, url: str = Query(..., description="完整页面 URL（去 hash）")):
     """返回企业微信 JS-SDK 鉴权配置。
 
+    不要求登录：签名本身不敏感（只是 ticket + url + nonce 的 SHA1），
+    且企微 iframe 内 cookies 不一定能传过来。
+
     用法（前端）：
       fetch('/api/wecom/jssdk-config?url=' + encodeURIComponent(location.href))
         .then(r => r.json())
@@ -3178,8 +3181,6 @@ async def api_wecom_jssdk_config(request: Request, url: str = Query(..., descrip
           });
         });
     """
-    if not _admin_ok(request):
-        raise HTTPException(401)
     from app.services import wecom_client as _wc
     if not _wc.enabled():
         return {"error": "wecom not configured"}
