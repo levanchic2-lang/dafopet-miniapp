@@ -71,6 +71,8 @@ class Application(Base):
     address: Mapped[str] = mapped_column(String(500))
     cat_nickname: Mapped[str] = mapped_column(String(120), default="")
     cat_gender: Mapped[str] = mapped_column(String(10))  # male / female / unknown
+    cat_breed: Mapped[str] = mapped_column(String(80), default="")        # 品种（猫为主，可空）
+    cat_color: Mapped[str] = mapped_column(String(80), default="")        # 毛色 / 颜色描述
     age_estimate: Mapped[str] = mapped_column(String(80), default="")
     weight_estimate: Mapped[str] = mapped_column(String(80), default="")
     health_note: Mapped[str] = mapped_column(Text, default="")

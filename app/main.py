@@ -1388,6 +1388,8 @@ async def api_apply(
     post_surgery_plan: str = Form(""),
     cat_nickname: str = Form(""),
     cat_gender: str = Form(...),
+    cat_breed: str = Form(""),
+    cat_color: str = Form(""),
     age_estimate: str = Form(""),
     health_note: str = Form(""),
     wechat_openid: str = Form(""),
@@ -1418,6 +1420,9 @@ async def api_apply(
         age_estimate=age_estimate,
         health_note=health_note,
     )
+    # 品种和颜色（可选）
+    f["cat_breed"] = (cat_breed or "").strip()[:80]
+    f["cat_color"] = (cat_color or "").strip()[:80]
 
     app_row = Application(
         applicant_name=f["applicant_name"],
@@ -1433,6 +1438,8 @@ async def api_apply(
         address=f["address"],
         cat_nickname=f["cat_nickname"],
         cat_gender=f["cat_gender"],
+        cat_breed=f.get("cat_breed", ""),
+        cat_color=f.get("cat_color", ""),
         age_estimate=f["age_estimate"],
         weight_estimate="",
         health_note=f["health_note"],
@@ -1568,6 +1575,8 @@ async def api_apply_create(
     post_surgery_plan: str = Form(""),
     cat_nickname: str = Form(""),
     cat_gender: str = Form(...),
+    cat_breed: str = Form(""),
+    cat_color: str = Form(""),
     age_estimate: str = Form(""),
     health_note: str = Form(""),
     wechat_openid: str = Form(""),
@@ -1596,6 +1605,9 @@ async def api_apply_create(
         age_estimate=age_estimate,
         health_note=health_note,
     )
+    # 品种和颜色（可选，不强制校验）
+    f["cat_breed"] = (cat_breed or "").strip()[:80]
+    f["cat_color"] = (cat_color or "").strip()[:80]
 
     # ── 重复提交检测 ──
     _DUP_STATUS_ZH = {
@@ -1688,6 +1700,8 @@ async def api_apply_create(
         address=f["address"],
         cat_nickname=f["cat_nickname"],
         cat_gender=f["cat_gender"],
+        cat_breed=f.get("cat_breed", ""),
+        cat_color=f.get("cat_color", ""),
         age_estimate=f["age_estimate"],
         weight_estimate="",
         health_note=f["health_note"],
@@ -1733,6 +1747,10 @@ async def api_apply_create(
                     _existing_pet.birthday_estimate = _est_birthday
                 if not _existing_pet.notes and f.get("health_note"):
                     _existing_pet.notes = f.get("health_note", "")[:500]
+                if not _existing_pet.breed and f.get("cat_breed"):
+                    _existing_pet.breed = f.get("cat_breed", "")[:80]
+                if not _existing_pet.color_pattern and f.get("cat_color"):
+                    _existing_pet.color_pattern = f.get("cat_color", "")[:80]
                 if not _existing_pet.store and _short_store:
                     _existing_pet.store = _short_store
                 if not _existing_pet.medical_record_no and (_existing_pet.store or _short_store):
@@ -1744,6 +1762,8 @@ async def api_apply_create(
                     name=_cat_name,
                     species="cat",
                     gender=f.get("cat_gender", "unknown"),
+                    breed=f.get("cat_breed", "")[:80],
+                    color_pattern=f.get("cat_color", "")[:80],
                     birthday_estimate=_est_birthday,
                     is_stray=True,
                     notes=f.get("health_note", "")[:500],

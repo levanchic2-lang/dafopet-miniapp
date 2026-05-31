@@ -102,6 +102,17 @@
     </view>
   </view>
 
+  <view class="row2">
+    <view class="col">
+      <view class="label">品种 <text style="color:#9ca3af;font-weight:normal;">（可选）</text></view>
+      <input class="input input-lg" value="{{form.cat_breed}}" data-k="cat_breed" placeholder="如：田园猫 / 橘猫" placeholder-class="placeholder-sm" bindinput="onInput" />
+    </view>
+    <view class="col">
+      <view class="label">颜色 / 毛色 <text style="color:#9ca3af;font-weight:normal;">（可选）</text></view>
+      <input class="input input-lg" value="{{form.cat_color}}" data-k="cat_color" placeholder="如：黑白 / 三花 / 奶牛" placeholder-class="placeholder-sm" bindinput="onInput" />
+    </view>
+  </view>
+
   <view class="label">出生年月（估算）</view>
   <picker mode="date" fields="month" value="{{form.age_estimate}}" bindchange="onAgeEstimateChange">
     <view class="picker picker-lg">{{form.age_estimate || '选择年月'}}</view>

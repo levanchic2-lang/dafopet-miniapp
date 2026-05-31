@@ -35,6 +35,8 @@ Page({
       post_surgery_plan: "原地放归",
       cat_nickname: "",
       cat_gender: "male",
+      cat_breed: "",
+      cat_color: "",
       age_estimate: "",
       health_note: ""
     },

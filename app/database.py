@@ -208,6 +208,10 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN proxy_phone VARCHAR(40) DEFAULT ''"))
             if "proxy_relation" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN proxy_relation VARCHAR(40) DEFAULT ''"))
+            if "cat_breed" not in names:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN cat_breed VARCHAR(80) DEFAULT ''"))
+            if "cat_color" not in names:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN cat_color VARCHAR(80) DEFAULT ''"))
 
             # 钱包"按比例扣本金/赠送"所需字段（idempotent）
             try:
