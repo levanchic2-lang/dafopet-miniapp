@@ -47,11 +47,11 @@
       </picker>
     </view>
   </view>
-  <view class="label">社区 / 小区 <text style="color:#9ca3af;font-weight:normal;">（可选）</text></view>
-  <input class="input" value="{{communityInput}}" maxlength="60"
-    placeholder="如：龙园新村 / 万科里 / 大康社区"
-    bindinput="onCommunityInput" />
-  <view class="label">详细地址 <text style="color:#d97706;">*</text></view>
+  <view class="label" style="margin-top:16rpx;">社区 <text style="color:#9ca3af;font-weight:normal;">（可选）</text></view>
+  <picker mode="selector" range="{{communityNames}}" value="{{communityIndex}}" bindchange="onAddrCommunityPick" disabled="{{communityNames.length <= 1}}">
+    <view class="picker" style="{{communityNames.length <= 1 ? 'color:#9ca3af;' : ''}}">{{communityNames[communityIndex] || '请先选街道'}}</view>
+  </picker>
+  <view class="label">详细地址（道路 / 门牌号 / 楼栋单元）<text style="color:#d97706;">*</text></view>
   <textarea class="addr-detail" value="{{addressDetailInput}}" maxlength="240"
     placeholder="道路、门牌号、楼栋单元等"
     auto-height show-confirm-bar="{{false}}" bindinput="onAddressDetailInput" />

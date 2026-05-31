@@ -199,12 +199,16 @@ Page({
   onAddrDistrictPick(e) {
     const idx = Number(e.detail.value || 0);
     const ph = "请选择";
-    const sz = getApp().globalData.shenzhenRegions;
+    const cityName = this.data.cityNames[this.data.cityIndex] || "深圳市";
+    const cityData = (this._regionData || {})[cityName] || {};
     const dist = this.data.districtNames[idx];
     let streetNames = [ph];
-    if (idx > 0 && dist && dist !== ph && sz && sz[dist]) {
-      const arr = [...sz[dist]].sort((a, b) => String(a).localeCompare(b, "zh"));
-      streetNames = [ph, ...arr];
+    if (idx > 0 && dist && dist !== ph && cityData[dist]) {
+      // 新结构：cityData[dist] 是 object {街道: [社区]}；旧结构：是 array
+      const raw = cityData[dist];
+      const streetArr = Array.isArray(raw) ? raw : Object.keys(raw);
+      const sorted = [...streetArr].sort((a, b) => String(a).localeCompare(b, "zh"));
+      streetNames = [ph, ...sorted];
     }
     this.setData({ districtIndex: idx, streetNames, streetIndex: 0 }, () => this._syncFormAddress());
   },

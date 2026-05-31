@@ -58,7 +58,8 @@ Page({
     districtIndex: 0,
     streetIndex: 0,
     addressDetailInput: "",
-    communityInput: "",
+    communityNames: ["请选择"],
+    communityIndex: 0,
     hasSig: false,
     submitting: false,
     error: "",
@@ -100,17 +101,25 @@ Page({
     this.setData({ districtNames: [ph, ...districts], streetNames: [ph], districtIndex: 0, streetIndex: 0 });
   },
 
+  _szData() {
+    // 新结构「深圳市」是 3 级 object，老结构是 2 级 array
+    // app.globalData.shenzhenRegions 可能是 {"深圳市": {区: ...}, "东莞市": {...}} 或直接 {区: ...}
+    const all = app.globalData.shenzhenRegions || {};
+    const sz = all["深圳市"];
+    return sz && typeof sz === "object" && !Array.isArray(sz) ? sz : all;
+  },
+
   _syncAddr() {
     const ph = "请选择";
-    const { districtNames, streetNames, districtIndex, streetIndex, addressDetailInput, communityInput } = this.data;
+    const { districtNames, streetNames, communityNames, districtIndex, streetIndex, communityIndex, addressDetailInput } = this.data;
     const d = districtNames[districtIndex];
     const s = streetNames[streetIndex];
-    const community = (communityInput || "").trim();
+    const c = communityNames[communityIndex];
     const detail = (addressDetailInput || "").trim();
     let addr = "";
     if (d && d !== ph) addr = "广东省深圳市" + d;
     if (s && s !== ph) addr += s;
-    if (community) addr += community;
+    if (c && c !== ph) addr += c;
     if (detail) addr += detail;
     this.setData({ "form.owner_address": addr });
   },
@@ -118,26 +127,49 @@ Page({
   onAddrDistrictPick(e) {
     const idx = Number(e.detail.value || 0);
     const ph = "请选择";
-    const sz = app.globalData.shenzhenRegions;
+    const sz = this._szData();
     const dist = this.data.districtNames[idx];
     let streetNames = [ph];
-    if (idx > 0 && dist && sz && sz[dist]) {
-      const arr = [...sz[dist]].sort((a, b) => String(a).localeCompare(b, "zh"));
-      streetNames = [ph, ...arr];
+    if (idx > 0 && dist && sz[dist]) {
+      const raw = sz[dist];
+      const arr = Array.isArray(raw) ? raw : Object.keys(raw);
+      streetNames = [ph, ...[...arr].sort((a, b) => String(a).localeCompare(b, "zh"))];
     }
-    this.setData({ districtIndex: idx, streetNames, streetIndex: 0 }, () => this._syncAddr());
+    this.setData({
+      districtIndex: idx,
+      streetNames,
+      streetIndex: 0,
+      communityNames: [ph],
+      communityIndex: 0,
+    }, () => this._syncAddr());
   },
 
   onAddrStreetPick(e) {
-    this.setData({ streetIndex: Number(e.detail.value || 0) }, () => this._syncAddr());
+    const idx = Number(e.detail.value || 0);
+    const ph = "请选择";
+    const sz = this._szData();
+    const dist = this.data.districtNames[this.data.districtIndex];
+    const street = this.data.streetNames[idx];
+    let communityNames = [ph];
+    if (dist && sz[dist] && !Array.isArray(sz[dist])) {
+      const comms = sz[dist][street];
+      if (Array.isArray(comms) && comms.length) {
+        communityNames = [ph, ...[...comms].sort((a, b) => String(a).localeCompare(b, "zh"))];
+      }
+    }
+    this.setData({
+      streetIndex: idx,
+      communityNames,
+      communityIndex: 0,
+    }, () => this._syncAddr());
+  },
+
+  onAddrCommunityPick(e) {
+    this.setData({ communityIndex: Number(e.detail.value || 0) }, () => this._syncAddr());
   },
 
   onAddressDetailInput(e) {
     this.setData({ addressDetailInput: e.detail.value || "" }, () => this._syncAddr());
-  },
-
-  onCommunityInput(e) {
-    this.setData({ communityInput: e.detail.value || "" }, () => this._syncAddr());
   },
 
   _setupCanvas() {
