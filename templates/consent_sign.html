@@ -89,16 +89,17 @@
        为确认是您本人签字，请先获取短信验证码<br/>
        {% if phone_hint %}<span style="color:#9ca3af;font-size:.85rem;">验证码将发到：{{ phone_hint }}</span>{% endif %}
      </p>
-     <div style="display:flex;gap:.5rem;max-width:340px;margin:0 auto;">
+     <div style="display:flex;gap:.5rem;max-width:340px;margin:0 auto;align-items:stretch;">
        <input type="tel" id="code-input" inputmode="numeric" maxlength="6"
               placeholder="6 位验证码"
-              style="flex:1;padding:.85rem 1rem;font-size:1.05rem;
+              style="flex:1 1 0;min-width:0;padding:.75rem .85rem;font-size:1.02rem;
                      border:1.5px solid #e5e7eb;border-radius:10px;text-align:center;
-                     letter-spacing:.3em;box-sizing:border-box;-webkit-appearance:none;"/>
+                     letter-spacing:.25em;box-sizing:border-box;-webkit-appearance:none;"/>
        <button type="button" id="send-code-btn" onclick="sendCode()"
-               style="white-space:nowrap;background:#fff;color:#111;border:1.5px solid #111;
-                      padding:.5rem .85rem;border-radius:10px;cursor:pointer;font-size:.92rem;">
-         获取验证码
+               style="flex:0 0 auto;white-space:nowrap;background:#fff;color:#111;
+                      border:1.5px solid #111;padding:0 .75rem;border-radius:10px;
+                      cursor:pointer;font-size:.85rem;">
+         发送验证码
        </button>
      </div>
      <div id="verify-alert" style="color:#dc2626;font-size:.9rem;margin-top:.6rem;min-height:1.2em;"></div>
