@@ -221,6 +221,18 @@
     <option value="横岗店">仅横岗店</option>
   </select>
   {% endif %}
+  <span class="lbl">服务类目</span>
+  <select name="is_service" id="bulk-is-service">
+    <option value="__keep__">— 不改 —</option>
+    <option value="1">是（不占库存）</option>
+    <option value="0">否</option>
+  </select>
+  <span class="lbl">麻醉/管控</span>
+  <select name="is_controlled" id="bulk-is-controlled">
+    <option value="__keep__">— 不改 —</option>
+    <option value="1">是（管控）</option>
+    <option value="0">否</option>
+  </select>
   <button type="button" class="btn-apply" onclick="bulkApply()"><i data-lucide="check"></i> 应用</button>
   <button type="button" class="btn-cancel" onclick="bulkClear()">取消</button>
   <span style="border-left:1px solid #d1d5db;height:24px;margin:0 .35rem;"></span>
@@ -296,14 +308,20 @@
     var storeEl = document.getElementById('bulk-store');
     var storeVal = storeEl ? storeEl.value : '__keep__';
     var changeStore = storeEl && storeVal !== '__keep__';
-    if (!cat && !sup && !changeStore) {
-      alert('请至少选择一个要修改的字段（大类 / 供应商 / 门店）');
+    var isSvcEl = document.getElementById('bulk-is-service');
+    var isSvc = isSvcEl ? isSvcEl.value : '__keep__';
+    var changeIsSvc = isSvc !== '__keep__';
+    var isCtrlEl = document.getElementById('bulk-is-controlled');
+    var isCtrl = isCtrlEl ? isCtrlEl.value : '__keep__';
+    var changeIsCtrl = isCtrl !== '__keep__';
+    if (!cat && !sup && !changeStore && !changeIsSvc && !changeIsCtrl) {
+      alert('请至少选择一个要修改的字段（大类 / 供应商 / 门店 / 服务类目 / 麻醉管控）');
       return;
     }
     var msg = '确认批量修改这 ' + ids.length + ' 个品目？';
-    if (changeStore) {
-      msg += '\n门店将设为：' + (storeVal === '' ? '通用（两店共享）' : '仅 ' + storeVal);
-    }
+    if (changeStore) msg += '\n门店：' + (storeVal === '' ? '通用（两店共享）' : '仅 ' + storeVal);
+    if (changeIsSvc) msg += '\n服务类目：' + (isSvc === '1' ? '是（不占库存）' : '否');
+    if (changeIsCtrl) msg += '\n麻醉/管控：' + (isCtrl === '1' ? '是' : '否');
     if (!confirm(msg)) return;
     var fd = new FormData();
     fd.append('csrf_token', document.getElementById('bulk-csrf').value);
@@ -312,6 +330,8 @@
     if (sub) fd.append('subcategory', sub);
     if (sup) fd.append('supplier', sup);
     if (changeStore) fd.append('store', storeVal);
+    if (changeIsSvc) fd.append('is_service', isSvc);
+    if (changeIsCtrl) fd.append('is_controlled', isCtrl);
     fetch('/admin/inventory/bulk-edit', { method: 'POST', body: fd, credentials: 'same-origin' })
       .then(function(r){
         if (r.redirected) { window.location = r.url; return; }
