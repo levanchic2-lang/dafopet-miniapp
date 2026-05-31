@@ -737,7 +737,7 @@ function openApptPopup(ev, id) {
  }[appt.status] || '#f3f4f6';
  let badges = `<span class="popup-badge" style="background:${c.bg};color:${c.tx};border-color:${c.bd};">${catZh}</span>`;
  badges += `<span class="popup-badge" style="background:${stBg};color:${stColor};border-color:${stColor}aa;">${stZh}</span>`;
- if (appt.related_app_id) badges += `<span class="popup-badge" style="background:#f0fdf4;color:#166534;border-color:#86efac;">申请 #${appt.related_app_id}</span>`;
+ if (appt.related_app_id) badges += `<a href="/admin#app-${appt.related_app_id}" target="_blank" class="popup-badge" style="background:#f0fdf4;color:#166534;border-color:#86efac;text-decoration:none;" title="跳转 TNR 申请详情">申请 #${appt.related_app_id} ↗</a>`;
  badgesEl.innerHTML = badges;
 
  // 详情行
