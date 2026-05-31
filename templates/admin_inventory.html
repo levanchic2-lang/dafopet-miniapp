@@ -66,6 +66,9 @@
  </p>
  </div>
  <div class="ph-actions">
+ {% if is_superadmin %}
+ <a href="/admin/inventory/import-xls" class="btn secondary" style="font-size:0.88rem;" title="从小暖医生原生 Excel 导入药品/疫苗/驱虫等"><i data-lucide="upload"></i> 导入小暖 Excel</a>
+ {% endif %}
  <a href="/admin/inventory/import-photo" class="btn secondary" style="font-size:0.88rem;"><i data-lucide="camera"></i> 拍照入库</a>
  <a href="/admin/inventory/create" class="btn" style="font-size:0.88rem;"><i data-lucide="plus"></i> 新增品目</a>
  </div>
@@ -213,6 +216,10 @@
   {% endif %}
   <button type="button" class="btn-apply" onclick="bulkApply()"><i data-lucide="check"></i> 应用</button>
   <button type="button" class="btn-cancel" onclick="bulkClear()">取消</button>
+  <span style="border-left:1px solid #d1d5db;height:24px;margin:0 .35rem;"></span>
+  <button type="button" class="btn-cancel" onclick="bulkBatchAction('deactivate')" title="批量下架（保留数据，业务关联不影响）">⊘ 批量下架</button>
+  <button type="button" class="btn-cancel" onclick="bulkBatchAction('activate')" title="批量启用">✓ 批量启用</button>
+  <button type="button" class="btn-cancel" onclick="bulkBatchAction('delete')" style="color:#dc2626;" title="批量真删除（有处方/收费/出入库记录的会被保留）">🗑 真删除</button>
  </div>
 </form>
 
@@ -299,6 +306,28 @@
     if (sup) fd.append('supplier', sup);
     if (changeStore) fd.append('store', storeVal);
     fetch('/admin/inventory/bulk-edit', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function(r){
+        if (r.redirected) { window.location = r.url; return; }
+        return r.text().then(function(t){ alert('提交失败：' + (r.status + ' ' + t.slice(0, 200))); });
+      })
+      .catch(function(e){ alert('网络错误：' + e); });
+  };
+
+  // 批量下架 / 启用 / 删除
+  window.bulkBatchAction = function(action) {
+    var ids = selectedIds();
+    if (!ids.length) { alert('请先勾选要操作的品目'); return; }
+    var msg;
+    if (action === 'deactivate') msg = '确认下架这 ' + ids.length + ' 个品目？\n（保留数据，列表里隐藏，可随时启用）';
+    else if (action === 'activate') msg = '确认启用这 ' + ids.length + ' 个品目？';
+    else if (action === 'delete') msg = '⚠️ 真删除这 ' + ids.length + ' 个品目？\n\n有处方/收费/出入库记录引用的会被自动保留（不删）。\n此操作不可恢复！';
+    else return;
+    if (!confirm(msg)) return;
+    var fd = new FormData();
+    fd.append('csrf_token', document.getElementById('bulk-csrf').value);
+    fd.append('action', action);
+    ids.forEach(function(id){ fd.append('item_ids', id); });
+    fetch('/admin/inventory/batch-action', { method: 'POST', body: fd, credentials: 'same-origin' })
       .then(function(r){
         if (r.redirected) { window.location = r.url; return; }
         return r.text().then(function(t){ alert('提交失败：' + (r.status + ' ' + t.slice(0, 200))); });

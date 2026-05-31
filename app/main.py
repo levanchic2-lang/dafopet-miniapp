@@ -10498,6 +10498,150 @@ async def api_inventory_search(
 
 
 # ── 进货单照片识别入库 ─────────────────────────────────────
+@app.get("/admin/inventory/import-xls", response_class=HTMLResponse)
+async def admin_inventory_import_xls_page(request: Request):
+    require_admin(request)
+    require_superadmin(request)
+    return templates.TemplateResponse(request, "admin_inventory_import_xls.html", {
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+        "err": request.query_params.get("err"),
+    })
+
+
+@app.post("/admin/inventory/import-xls/preview")
+async def admin_inventory_import_xls_preview(
+    request: Request,
+    db: Session = Depends(get_db),
+    file: UploadFile = File(...),
+    store: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    import tempfile, os, json as _json
+    from app.services.inventory_import import parse_xls_to_records, preview_import
+
+    suffix = ".xlsx" if file.filename.lower().endswith(".xlsx") else ".xls"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    try:
+        records, warnings = parse_xls_to_records(tmp_path)
+        if not records:
+            return RedirectResponse(f"/admin/inventory/import-xls?err=未解析出任何记录", status_code=303)
+        preview = preview_import(db, records, store=store or "")
+        # 把 records 暂存到 session 里供 commit 用
+        request.session["_inv_import_records"] = _json.dumps(records, ensure_ascii=False)
+        request.session["_inv_import_store"] = store or ""
+        request.session["_inv_import_warnings"] = warnings[:20]
+        return templates.TemplateResponse(request, "admin_inventory_import_xls.html", {
+            "csrf_token": _get_csrf_token(request),
+            "preview": preview,
+            "warnings": warnings[:20],
+            "filename": file.filename,
+            "store": store,
+        })
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+
+@app.post("/admin/inventory/import-xls/commit")
+async def admin_inventory_import_xls_commit(
+    request: Request,
+    db: Session = Depends(get_db),
+    strategy: str = Form("skip"),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    import json as _json
+    raw = request.session.get("_inv_import_records")
+    if not raw:
+        return RedirectResponse("/admin/inventory/import-xls?err=会话已过期，请重新上传", status_code=303)
+    records = _json.loads(raw)
+    store = request.session.get("_inv_import_store", "")
+    from app.services.inventory_import import commit_import
+    stat = commit_import(db, records, store=store, strategy=strategy)
+    # 清掉 session
+    request.session.pop("_inv_import_records", None)
+    request.session.pop("_inv_import_store", None)
+    msg = f"导入完成：新建 {stat['created']} / 更新 {stat['updated']} / 跳过 {stat['skipped']}"
+    return RedirectResponse(f"/admin/inventory?msg={msg}", status_code=303)
+
+
+@app.post("/admin/inventory/batch-action")
+async def admin_inventory_batch_action(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    action: str = Form(...),  # deactivate / activate / delete
+):
+    """库存品目批量操作：下架 / 启用 / 真删除（带引用保护）。"""
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    form = await request.form()
+    raw_ids = form.getlist("item_ids") if hasattr(form, "getlist") else []
+    ids = []
+    for x in raw_ids:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return RedirectResponse("/admin/inventory?err=未选中任何品目", status_code=303)
+
+    affected = 0
+    blocked = 0
+    if action in ("deactivate", "activate"):
+        new_val = (action == "activate")
+        for iid in ids:
+            it = db.get(InventoryItem, iid)
+            if it:
+                it.is_active = new_val
+                affected += 1
+        db.commit()
+        verb = "启用" if new_val else "下架"
+        return RedirectResponse(f"/admin/inventory?msg=已{verb} {affected} 条", status_code=303)
+    if action == "delete":
+        # 引用保护：检查处方/收费明细/采购入库 是否引用
+        from app.models import PrescriptionItem, InvoiceItem, InventoryTransaction
+        for iid in ids:
+            it = db.get(InventoryItem, iid)
+            if not it:
+                continue
+            ref_count = 0
+            try:
+                ref_count += db.query(PrescriptionItem).filter(PrescriptionItem.item_id == iid).count()
+            except Exception:
+                pass
+            try:
+                ref_count += db.query(InvoiceItem).filter(InvoiceItem.item_id == iid).count()
+            except Exception:
+                pass
+            try:
+                ref_count += db.query(InventoryTransaction).filter(InventoryTransaction.item_id == iid).count()
+            except Exception:
+                pass
+            if ref_count > 0:
+                blocked += 1
+                continue
+            db.delete(it)
+            affected += 1
+        db.commit()
+        msg = f"已删除 {affected} 条"
+        if blocked:
+            msg += f"，{blocked} 条因有业务记录引用被保留（请改用下架）"
+        return RedirectResponse(f"/admin/inventory?msg={msg}", status_code=303)
+    return RedirectResponse("/admin/inventory?err=未知操作", status_code=303)
+
+
 @app.get("/admin/inventory/import-photo", response_class=HTMLResponse)
 async def admin_inventory_import_photo_page(request: Request, db: Session = Depends(get_db)):
     if not request.session.get("admin"):
