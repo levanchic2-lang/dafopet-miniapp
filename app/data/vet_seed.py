@@ -44,7 +44,7 @@ SYSTEMS = {
 # ═══════════════════════════════════════════════════════════════
 DISEASES = [
     # ── 消化系统 ──────────────────────────────────
-    ("急性胃肠炎",       "gi", "AGE,急性胃肠炎,胃肠型",                "moderate", "both"),
+    ("急性胃肠炎",       "gi", "AGE,急性胃肠炎,胃肠型,呕吐,干呕,反胃,没胃口,食欲不振", "moderate", "both"),
     ("慢性胃肠炎",       "gi", "慢性胃肠炎,慢性肠炎",                  "chronic",  "both"),
     ("炎症性肠病",       "gi", "IBD,炎性肠病,Inflammatory Bowel Disease", "chronic", "both"),
     ("急性胰腺炎",       "gi", "急性胰腺炎,胰腺炎",                    "severe",   "both"),
@@ -56,7 +56,7 @@ DISEASES = [
     ("胃肠异物",        "gi", "异物,异物梗阻,foreign body",          "severe",   "both"),
     ("巨结肠",          "gi", "巨结肠,Megacolon",                     "chronic",  "cat"),
     ("便秘",            "gi", "便秘,Constipation",                    "mild",     "both"),
-    ("急性腹泻",        "gi", "急性腹泻,Acute Diarrhea",              "mild",     "both"),
+    ("急性腹泻",        "gi", "急性腹泻,腹泻,拉稀,拉肚子,水样便,软便,Diarrhea", "mild", "both"),
     ("出血性肠炎",      "gi", "HGE,AHDS,出血性肠胃炎",                "severe",   "dog"),
     ("嗜酸性肠炎",      "gi", "嗜酸性肠炎,EE",                        "chronic",  "both"),
     ("蛋白丢失性肠病",  "gi", "PLE,Protein-Losing Enteropathy",       "chronic",  "both"),
@@ -82,7 +82,7 @@ DISEASES = [
     ("螺杆菌感染",      "gi", "螺杆菌,幽门螺杆菌,Helicobacter",      "moderate", "both"),
 
     # ── 呼吸系统 ──────────────────────────────────
-    ("猫鼻支",          "respiratory", "鼻支,FHV-1,猫疱疹病毒",     "moderate", "cat"),
+    ("猫鼻支",          "respiratory", "鼻支,FHV-1,猫疱疹病毒,流鼻涕,打喷嚏,鼻塞", "moderate", "cat"),
     ("猫杯状病毒",      "respiratory", "杯状,FCV,Calicivirus",      "moderate", "cat"),
     ("猫支原体感染",    "respiratory", "支原体,Mycoplasma",         "moderate", "cat"),
     ("猫衣原体感染",    "respiratory", "衣原体,Chlamydia",          "moderate", "cat"),
@@ -130,7 +130,7 @@ DISEASES = [
     ("红斑狼疮",        "skin", "红斑狼疮,Lupus,DLE,SLE",          "chronic",  "both"),
     ("内分泌性脱毛",    "skin", "内分泌脱毛,Endocrine Alopecia",   "chronic",  "both"),
     ("肛周瘘",          "skin", "肛周瘘,Perianal Fistula",         "chronic",  "dog"),
-    ("外耳炎",          "skin", "外耳炎,Otitis Externa",           "moderate", "both"),
+    ("外耳炎",          "skin", "外耳炎,Otitis Externa,耳朵痒,耳朵臭,耳屎多", "moderate", "both"),
     ("中耳炎",          "skin", "中耳炎,Otitis Media",             "moderate", "both"),
 
     # ── 口腔牙科 ──────────────────────────────────
@@ -151,7 +151,7 @@ DISEASES = [
     ("角膜溃疡",        "ophthalmic", "角膜溃疡,Corneal Ulcer",    "severe",   "both"),
     ("角膜穿孔",        "ophthalmic", "角膜穿孔",                  "severe",   "both"),
     ("嗜酸性角膜炎",    "ophthalmic", "嗜酸性角膜炎,EK",           "chronic",  "cat"),
-    ("结膜炎",          "ophthalmic", "结膜炎,Conjunctivitis",     "mild",     "both"),
+    ("结膜炎",          "ophthalmic", "结膜炎,Conjunctivitis,眼屎多,流眼泪,眼睛红", "mild", "both"),
     ("干眼症",          "ophthalmic", "干眼症,KCS,泪液减少",       "chronic",  "dog"),
     ("葡萄膜炎",        "ophthalmic", "葡萄膜炎,Uveitis",          "moderate", "both"),
     ("白内障",          "ophthalmic", "白内障,Cataract",           "chronic",  "both"),
@@ -164,7 +164,7 @@ DISEASES = [
     ("第三眼睑突出",    "ophthalmic", "第三眼睑突出,Haw Syndrome", "mild",     "cat"),
 
     # ── 泌尿系统 ─────────────────────────────────
-    ("膀胱炎",          "urinary", "膀胱炎,Cystitis",              "moderate", "both"),
+    ("膀胱炎",          "urinary", "膀胱炎,Cystitis,尿频,血尿,小便带血,排尿困难", "moderate", "both"),
     ("猫特发性膀胱炎",  "urinary", "FIC,特发性膀胱炎",              "chronic",  "cat"),
     ("猫下泌尿道综合征","urinary", "FLUTD,FUS",                    "moderate", "cat"),
     ("尿道堵塞",        "urinary", "尿道堵塞,尿闭,Urethral Obstruction", "severe", "cat"),

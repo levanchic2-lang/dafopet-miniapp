@@ -1541,13 +1541,18 @@ def _seed_vet_diseases_and_templates() -> None:
         return
     try:
         with engine.begin() as conn:
-            # diseases
+            # diseases — 新增插入；已存在的 builtin 项同步 aliases（用户可能依赖新增的口语别名）
             for (name, system, aliases, severity, species) in DISEASES:
                 exists = conn.execute(
-                    text("SELECT 1 FROM diseases WHERE name=:n"),
+                    text("SELECT is_builtin FROM diseases WHERE name=:n"),
                     {"n": name},
                 ).fetchone()
                 if exists:
+                    if exists[0]:
+                        conn.execute(text(
+                            "UPDATE diseases SET aliases=:al, system=:sy, severity=:sv, species=:sp, updated_at=CURRENT_TIMESTAMP "
+                            "WHERE name=:n AND is_builtin=1"
+                        ), {"n": name, "sy": system, "al": aliases, "sv": severity, "sp": species})
                     continue
                 conn.execute(text(
                     "INSERT INTO diseases (name, system, aliases, severity, species, notes, is_builtin, use_count, created_at, updated_at) "

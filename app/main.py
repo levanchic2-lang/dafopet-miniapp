@@ -10971,6 +10971,39 @@ INVENTORY_CATEGORIES = {
 }
 
 
+@app.get("/api/diseases/search")
+async def api_diseases_search(
+    request: Request,
+    q: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """诊断 autocomplete：在疾病字典 + 别名里模糊搜索。
+
+    返回：[{name, system, system_zh, aliases, severity}]
+    排序：use_count desc（常用的在前） + name 字母序
+    """
+    if not request.session.get("admin"):
+        return []
+    from sqlalchemy import or_ as _or_
+    from app.data.vet_seed import SYSTEMS as _SYS
+    qs = (q or "").strip()
+    query = db.query(Disease)
+    if qs:
+        like = f"%{qs}%"
+        query = query.filter(_or_(Disease.name.ilike(like), Disease.aliases.ilike(like)))
+    rows = query.order_by(Disease.use_count.desc(), Disease.name).limit(20).all()
+    return [
+        {
+            "name": d.name,
+            "system": d.system,
+            "system_zh": _SYS.get(d.system, d.system),
+            "severity": d.severity,
+            "aliases": d.aliases,
+        }
+        for d in rows
+    ]
+
+
 @app.get("/api/inventory/search")
 async def api_inventory_search(
     request: Request,
