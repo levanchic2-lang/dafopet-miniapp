@@ -28,7 +28,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import (
     AdminUser, Customer, Pet, Visit, Wallet, Appointment, AppointmentStatus, FollowUp,
-    ExamOrder,
+    ExamOrder, Vaccination, DewormingRecord, GroomingOrder,
 )
 from app.services import wecom_session as _sess
 from app.services.wecom_client import send_app_message
@@ -36,11 +36,11 @@ from app.services.wecom_client import send_app_message
 logger = logging.getLogger(__name__)
 
 
-_SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业微信发文字或语音（已转文字）给你，你帮他们查档案、新建病历、新建预约、开检查单、记主诉/体检/诊断。
+_SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业微信发文字或语音（已转文字）给你，你帮他们查档案、新建病历、新建预约、开检查单、开美容/疫苗/驱虫单、记主诉/体检/诊断。
 
 【硬性原则】
-1. 写操作（新建病历、写主诉/体检/诊断、新建预约、开检查单）必须先调对应工具拿到 summary，绝不直接说"已完成"，等系统让用户确认。
-2. 不要做：开处方、开麻醉单、收款、退款、删除、作废、开美容/疫苗/驱虫单。这些工具暂未提供，不要假装能做。
+1. 写操作（新建病历、写主诉/体检/诊断、新建预约、开检查单/美容/疫苗/驱虫单）必须先调对应工具拿到 summary，绝不直接说"已完成"，等系统让用户确认。
+2. 不要做：开处方、开麻醉单、收款、退款、删除、作废。这些工具暂未提供，不要假装能做。
 3. 找客户时优先按手机号；其次按姓名/宠物名。find_customer 的 query 只能传**一个**关键词（号码 或 客户名 或 宠物名），不能拼接（不能传"13823137494 大米"）。
 4. 单次工具调用做一件事。比如「找李敏的大米新建病历」拆成：先 find_customer(query="李敏") 拿到客户和宠物列表，再 create_visit(pet_id=大米的 id)。
 5. 回复简洁，中文，必要时用 emoji（✓ ✋ ⚠ 📋）。不要长篇大论。
@@ -48,7 +48,7 @@ _SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业
 7. find_customer/get_customer_profile 的返回里会标 [pet_id=N]、(customer_id=N)，请直接读用这些 ID，不要再问用户。
 
 【写动作流程】
-- create_visit / update_visit_field / create_appointment / create_exam_order 会返回 "PENDING:" 开头的字符串
+- create_visit / update_visit_field / create_appointment / create_exam_order / create_vaccination / create_deworming / create_grooming_order 会返回 "PENDING:" 开头的字符串
 - 你要原样把 PENDING 后面的 summary 转述给用户，结尾问「确认执行吗？回复『确认』」
 - 不要自作主张说"已完成"，让用户先确认
 
@@ -70,6 +70,13 @@ _SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业
 - 用户说「开个 B 超和血常规」→ items=["B超", "血常规"]
 - 单价和数量不填（医生会回系统补），agent 只负责拉好骨架
 - 草稿态：单据 status=pending，会自动同步到收费单（不扣钱，等医生在系统确认）
+
+【疫苗/驱虫/美容单规则】
+- 都需要 current_pet_id（先 find_customer 锁定宠物）
+- create_vaccination：vaccine_type 必填，枚举 rabies(狂犬) / combo_3(三联) / combo_6(六联) / canine_8(犬八联) / other；vaccine_name 是品牌（妙三多/英特威/卫佳等）；日期默认今天
+- create_deworming：product_name 必填（海乐妙/拜耳大宠爱/福来恩等）；deworm_type 默认 external（体外），用户明确说体内/内外同驱再改
+- create_grooming_order：services 是服务项数组，如 ["洗澡", "造型"]；门店从员工绑定取；价格/数量留给医生回系统补
+- 草稿态：不扣库存、不收款；医生回系统补批号/价格/上次记录核对
 """
 
 
@@ -382,6 +389,128 @@ def tool_create_exam_order(
     return f"PENDING:{summary}"
 
 
+_VACCINE_TYPE_ZH = {
+    "rabies": "狂犬", "combo_3": "三联", "combo_6": "六联",
+    "canine_8": "犬八联", "deworming": "驱虫", "other": "其他",
+}
+_DEWORM_TYPE_ZH = {"external": "体外", "internal": "体内", "combo": "内外同驱"}
+
+
+def tool_create_vaccination(
+    db: Session, userid: str,
+    pet_id: Optional[int] = None,
+    vaccine_type: str = "other",
+    vaccine_name: str = "",
+    vaccinated_date: Optional[str] = None,
+    dose_number: int = 1,
+    notes: str = "",
+) -> str:
+    ctx = _sess.get(userid)
+    pid = pet_id or ctx.get("current_pet_id")
+    if not pid:
+        return "❌ 没有当前宠物，先 find_customer"
+    pet = db.get(Pet, pid)
+    if not pet:
+        return "❌ 宠物不存在"
+    if vaccine_type not in _VACCINE_TYPE_ZH:
+        return f"❌ vaccine_type {vaccine_type} 不支持（rabies/combo_3/combo_6/canine_8/other）"
+    if not (vaccine_name or "").strip() and vaccine_type != "rabies":
+        return "❌ 请告诉我疫苗品牌（如妙三多/英特威/卫佳）"
+    today = _date.today().isoformat()
+    v_date = (vaccinated_date or "").strip() or today
+    summary = (
+        f"✋ 即将为 {pet.name or '宠物'} 登记疫苗：\n"
+        f"  品种：{_VACCINE_TYPE_ZH[vaccine_type]}（{vaccine_name or '—'}）\n"
+        f"  第 {dose_number} 针 · 接种日 {v_date}\n"
+        f"  （草稿；批号/库存出库需医生回系统补）\n回复「确认」执行"
+    )
+    _sess.set_pending(userid, "create_vaccination", {
+        "pet_id": pid, "customer_id": pet.customer_id,
+        "vaccine_type": vaccine_type, "vaccine_name": (vaccine_name or "").strip(),
+        "vaccinated_date": v_date, "dose_number": int(dose_number or 1),
+        "notes": (notes or "").strip(),
+    }, summary)
+    return f"PENDING:{summary}"
+
+
+def tool_create_deworming(
+    db: Session, userid: str,
+    pet_id: Optional[int] = None,
+    product_name: str = "",
+    deworm_date: Optional[str] = None,
+    deworm_type: str = "external",
+    weight_kg: float = 0.0,
+    dose: str = "",
+    notes: str = "",
+) -> str:
+    ctx = _sess.get(userid)
+    pid = pet_id or ctx.get("current_pet_id")
+    if not pid:
+        return "❌ 没有当前宠物，先 find_customer"
+    pet = db.get(Pet, pid)
+    if not pet:
+        return "❌ 宠物不存在"
+    if not (product_name or "").strip():
+        return "❌ 请告诉我驱虫药名（如海乐妙/拜耳大宠爱/福来恩）"
+    if deworm_type not in _DEWORM_TYPE_ZH:
+        return f"❌ deworm_type 取值 external/internal/combo"
+    d_date = (deworm_date or "").strip() or _date.today().isoformat()
+    summary = (
+        f"✋ 即将为 {pet.name or '宠物'} 登记驱虫：\n"
+        f"  药品：{product_name.strip()}（{_DEWORM_TYPE_ZH[deworm_type]}）\n"
+        f"  日期：{d_date}\n"
+        + (f"  体重：{weight_kg}kg  剂量：{dose}\n" if weight_kg or dose else "")
+        + f"  （草稿；下次到期 / 批号需医生回系统补）\n回复「确认」执行"
+    )
+    _sess.set_pending(userid, "create_deworming", {
+        "pet_id": pid, "customer_id": pet.customer_id,
+        "product_name": product_name.strip(), "deworm_type": deworm_type,
+        "deworm_date": d_date, "weight_kg": float(weight_kg or 0.0),
+        "dose": (dose or "").strip(), "notes": (notes or "").strip(),
+    }, summary)
+    return f"PENDING:{summary}"
+
+
+def tool_create_grooming_order(
+    db: Session, userid: str,
+    pet_id: Optional[int] = None,
+    services: Optional[list] = None,
+    groom_date: Optional[str] = None,
+    notes: str = "",
+) -> str:
+    ctx = _sess.get(userid)
+    pid = pet_id or ctx.get("current_pet_id")
+    if not pid:
+        return "❌ 没有当前宠物，先 find_customer"
+    pet = db.get(Pet, pid)
+    if not pet:
+        return "❌ 宠物不存在"
+    if not isinstance(services, list) or not services:
+        return "❌ 请告诉我具体服务项（如 洗澡 / 造型 / 剪指甲）"
+    clean = [str(s).strip() for s in services if str(s).strip()]
+    if not clean:
+        return "❌ 服务项不能为空"
+    if len(clean) > 10:
+        return "❌ 一单最多 10 个服务项"
+    # 门店
+    u_row = db.query(AdminUser).filter(AdminUser.wecom_userid == userid).first()
+    store_short = (u_row.store if u_row else "") or ""
+    g_date = (groom_date or "").strip() or _date.today().isoformat()
+    summary = (
+        f"✋ 即将为 {pet.name or '宠物'} 开美容单：\n"
+        f"  服务：{'、'.join(clean)}\n"
+        f"  日期：{g_date}\n"
+        f"  门店：{store_short or '（未绑定）'}\n"
+        f"  （草稿；价格/前后照片/总额需医生回系统补）\n回复「确认」执行"
+    )
+    _sess.set_pending(userid, "create_grooming_order", {
+        "pet_id": pid, "customer_id": pet.customer_id,
+        "services": clean, "groom_date": g_date,
+        "store_short": store_short, "notes": (notes or "").strip(),
+    }, summary)
+    return f"PENDING:{summary}"
+
+
 # ─── 实际执行（pending → confirm 后调） ───
 def _execute_create_visit(db: Session, userid: str, args: dict) -> str:
     """真正建病历。复用 main 里的 _sync_followup_for_visit 来衍生回访。"""
@@ -507,7 +636,76 @@ def _execute_pending(db: Session, userid: str, pending: dict) -> str:
         return _execute_create_appointment(db, userid, args)
     if action == "create_exam_order":
         return _execute_create_exam_order(db, userid, args)
+    if action == "create_vaccination":
+        return _execute_create_vaccination(db, userid, args)
+    if action == "create_deworming":
+        return _execute_create_deworming(db, userid, args)
+    if action == "create_grooming_order":
+        return _execute_create_grooming_order(db, userid, args)
     return f"❌ 未知动作 {action}"
+
+
+def _execute_create_vaccination(db: Session, userid: str, args: dict) -> str:
+    u = db.query(AdminUser).filter(AdminUser.wecom_userid == userid).first()
+    vet_name = (u.display_name if u and u.display_name else (u.username if u else "")) or ""
+    row = Vaccination(
+        pet_id=args["pet_id"], customer_id=args.get("customer_id"),
+        vaccine_type=args["vaccine_type"], vaccine_name=args.get("vaccine_name", ""),
+        vaccinated_date=args["vaccinated_date"], dose_number=int(args.get("dose_number") or 1),
+        is_free=(args["vaccine_type"] == "rabies"),
+        vet_name=vet_name, notes=args.get("notes", ""),
+        created_by=(u.username if u else "wecom_agent"),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    zh = _VACCINE_TYPE_ZH.get(args["vaccine_type"], args["vaccine_type"])
+    return (f"✓ 疫苗记录 #{row.id} 已登记（草稿）\n"
+            f"{zh}·{args.get('vaccine_name') or '—'}·第 {row.dose_number} 针\n"
+            f"请回系统补批号/有效期/库存出库")
+
+
+def _execute_create_deworming(db: Session, userid: str, args: dict) -> str:
+    u = db.query(AdminUser).filter(AdminUser.wecom_userid == userid).first()
+    vet_name = (u.display_name if u and u.display_name else (u.username if u else "")) or ""
+    row = DewormingRecord(
+        pet_id=args["pet_id"], customer_id=args.get("customer_id"),
+        deworm_date=args["deworm_date"], deworm_type=args["deworm_type"],
+        product_name=args["product_name"],
+        weight_kg=float(args.get("weight_kg") or 0.0),
+        dose=args.get("dose", ""), vet_name=vet_name,
+        notes=args.get("notes", ""),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return (f"✓ 驱虫记录 #{row.id} 已登记（草稿）\n"
+            f"{args['product_name']}·{_DEWORM_TYPE_ZH.get(args['deworm_type'], args['deworm_type'])}\n"
+            f"请回系统补下次到期日 / 批号")
+
+
+def _execute_create_grooming_order(db: Session, userid: str, args: dict) -> str:
+    u = db.query(AdminUser).filter(AdminUser.wecom_userid == userid).first()
+    services_payload = [
+        {"name": n, "qty": 1.0, "price": 0.0, "subtotal": 0.0, "notes": ""}
+        for n in args["services"]
+    ]
+    row = GroomingOrder(
+        customer_id=args.get("customer_id"), pet_id=args["pet_id"],
+        groom_date=args["groom_date"],
+        groomer_name=(u.display_name if u and u.display_name else (u.username if u else "")) or "",
+        services_json=json.dumps(services_payload, ensure_ascii=False),
+        total_amount=0.0,
+        store=args.get("store_short", ""),
+        notes=args.get("notes", ""),
+        created_by=(u.username if u else "wecom_agent"),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return (f"✓ 美容单 #{row.id} 已创建（草稿）\n"
+            f"服务：{'、'.join(args['services'])}\n"
+            f"请回系统补价格 / 前后照片 / 美容师")
 
 
 # ─────────────────────────────────────────────────────────
@@ -590,6 +788,51 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "create_vaccination",
+            "description": "登记疫苗记录（草稿态，批号/库存出库需医生回系统补）。写操作 - 返回 PENDING 等确认。",
+            "parameters": {"type": "object", "properties": {
+                "pet_id":          {"type": "integer", "description": "宠物 ID；留空用 current_pet_id"},
+                "vaccine_type":    {"type": "string", "enum": ["rabies", "combo_3", "combo_6", "canine_8", "other"]},
+                "vaccine_name":    {"type": "string", "description": "品牌商品名（妙三多/英特威/卫佳等）；rabies 可空"},
+                "vaccinated_date": {"type": "string", "description": "YYYY-MM-DD，留空用今天"},
+                "dose_number":     {"type": "integer", "default": 1, "description": "第几针；加强针填 99"},
+                "notes":           {"type": "string"},
+            }, "required": ["vaccine_type"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_deworming",
+            "description": "登记驱虫记录（草稿态，下次到期日/批号需医生回系统补）。写操作 - 返回 PENDING 等确认。",
+            "parameters": {"type": "object", "properties": {
+                "pet_id":       {"type": "integer", "description": "宠物 ID；留空用 current_pet_id"},
+                "product_name": {"type": "string", "description": "驱虫药商品名（海乐妙/拜耳大宠爱/福来恩等）"},
+                "deworm_date":  {"type": "string", "description": "YYYY-MM-DD，留空用今天"},
+                "deworm_type":  {"type": "string", "enum": ["external", "internal", "combo"], "default": "external"},
+                "weight_kg":    {"type": "number"},
+                "dose":         {"type": "string"},
+                "notes":        {"type": "string"},
+            }, "required": ["product_name"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_grooming_order",
+            "description": "开美容单（草稿态，价格/前后照片/总额需医生回系统补）。写操作 - 返回 PENDING 等确认。",
+            "parameters": {"type": "object", "properties": {
+                "pet_id":     {"type": "integer", "description": "宠物 ID；留空用 current_pet_id"},
+                "services":   {"type": "array", "items": {"type": "string"},
+                               "description": "服务项数组，如 [\"洗澡\", \"造型\"]"},
+                "groom_date": {"type": "string", "description": "YYYY-MM-DD，留空用今天"},
+                "notes":      {"type": "string"},
+            }, "required": ["services"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "create_exam_order",
             "description": "在当前病历上开检查单（草稿态，需医生回系统补价格/上传报告）。写操作 - 返回 PENDING 等确认。",
             "parameters": {"type": "object", "properties": {
@@ -629,6 +872,9 @@ TOOL_HANDLERS = {
     "update_visit_field":     tool_update_visit_field,
     "create_appointment":     tool_create_appointment,
     "create_exam_order":      tool_create_exam_order,
+    "create_vaccination":     tool_create_vaccination,
+    "create_deworming":       tool_create_deworming,
+    "create_grooming_order":  tool_create_grooming_order,
 }
 
 
