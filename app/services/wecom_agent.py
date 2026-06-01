@@ -503,6 +503,12 @@ def push_reply(userid: str, text: str) -> None:
     if not userid or not text:
         return
     try:
-        send_app_message(userid, text)
+        res = send_app_message({
+            "touser": userid,
+            "msgtype": "text",
+            "text": {"content": text},
+        })
+        if res.get("errcode") not in (0, "0", None):
+            logger.error("[wecom agent push fail] %s", res)
     except Exception as e:
-        logger.warning(f"push_reply failed: {e}")
+        logger.exception(f"push_reply failed: {e}")
