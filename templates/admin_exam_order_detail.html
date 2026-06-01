@@ -249,6 +249,11 @@ function confirmExamVoid(form, paidAmount) {
   </div>
   {% endif %}
 
+  <div data-customer-context
+       data-customer-id="{{ cust.id if cust else 0 }}"
+       data-pet-id="{{ pet.id if pet else 0 }}"
+       style="display:none;"></div>
+
 </div>
 </div>
 {% endblock %}

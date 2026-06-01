@@ -367,6 +367,10 @@ function confirmSoVoid(form) { return confirmVoidWithRefund(form, 0); }
  <a href="/admin/customers/{{ cust.id }}" style="font-size:0.82rem;margin-top:0.4rem;display:inline-block;">查看档案 <i data-lucide="arrow-right"></i></a>
  </div>
  {% endif %}
+ <div data-customer-context
+      data-customer-id="{{ cust.id if cust else 0 }}"
+      data-pet-id="{{ pet.id if pet else (o.pet_id if o else 0) }}"
+      style="display:none;margin-bottom:0.75rem;"></div>
  {% if visit %}
  <div class="card" style="margin-bottom:0.75rem;">
  <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">关联就诊</div>

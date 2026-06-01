@@ -2478,6 +2478,159 @@ async def api_admin_feedback_count(request: Request, db: Session = Depends(get_d
     return {"count": count}
 
 
+_HEALTH_WARNING_KEYWORDS = [
+    ("过敏", "🚫", "过敏"),
+    ("青霉素", "🚫", "青霉素过敏"),
+    ("CKD", "💊", "慢性肾病 CKD"),
+    ("慢性肾", "💊", "慢性肾病"),
+    ("肾衰", "💊", "肾衰"),
+    ("糖尿病", "💊", "糖尿病"),
+    ("HCM", "❤️", "肥厚性心肌病"),
+    ("心脏病", "❤️", "心脏病"),
+    ("FIP", "⚠", "FIP（治疗中）"),
+    ("癫痫", "⚡", "癫痫"),
+    ("特应性", "💊", "特应性皮炎"),
+    ("FIV", "🩸", "FIV"),
+    ("FeLV", "🩸", "FeLV"),
+    ("管控药", "⚠", "管控药敏感"),
+]
+
+
+def _detect_health_warnings(text: str) -> list:
+    """从 pet.notes / visit.diagnosis 文本里扫描健康警示关键词。返回 [{emoji, label}] 去重。"""
+    if not text:
+        return []
+    out = []
+    seen = set()
+    for kw, emoji, label in _HEALTH_WARNING_KEYWORDS:
+        if kw in text and label not in seen:
+            out.append({"emoji": emoji, "label": label})
+            seen.add(label)
+    return out
+
+
+@app.get("/api/admin/customer-context")
+async def api_admin_customer_context(
+    request: Request, db: Session = Depends(get_db),
+    customer_id: int = Query(0), pet_id: int = Query(0),
+):
+    """开单页右侧 sidebar 异步拉取的客户上下文：
+    钱包余额 / 健康警示 / 未付单据 / 最近就诊 / 防疫近况 / 体重变化。
+    """
+    if not request.session.get("admin"):
+        return {}
+    data: dict = {}
+
+    # 钱包
+    if customer_id:
+        w = db.query(Wallet).filter(Wallet.customer_id == customer_id).first()
+        if w and (w.balance or 0) > 0:
+            data["wallet"] = {
+                "balance": round(float(w.balance or 0), 2),
+                "lifetime_recharge": round(float(w.lifetime_recharge or 0), 2),
+            }
+
+    # 健康警示 — 从 pet.notes + 最近 5 次 visit.diagnosis 扫
+    warnings: list = []
+    if pet_id:
+        pet = db.get(Pet, pet_id)
+        if pet:
+            warnings.extend(_detect_health_warnings(pet.notes or ""))
+            recent_diags = db.query(Visit.diagnosis)\
+                .filter(Visit.pet_id == pet_id, Visit.diagnosis != "")\
+                .order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(5).all()
+            for (diag,) in recent_diags:
+                for w in _detect_health_warnings(diag or ""):
+                    if w not in warnings:
+                        warnings.append(w)
+    if warnings:
+        data["warnings"] = warnings[:5]
+
+    # 未付单据
+    if customer_id:
+        unpaid_rows = db.query(Invoice).filter(
+            Invoice.customer_id == customer_id,
+            Invoice.payment_status == "unpaid",
+        ).all()
+        if unpaid_rows:
+            data["unpaid"] = {
+                "count": len(unpaid_rows),
+                "total": round(sum((r.total_amount or 0) for r in unpaid_rows), 2),
+            }
+
+    # 最近 3 次就诊
+    if pet_id:
+        recent_visits = db.query(Visit).filter(Visit.pet_id == pet_id)\
+            .order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(3).all()
+        if recent_visits:
+            data["recent_visits"] = [{
+                "id": v.id,
+                "date": v.visit_date or "—",
+                "diagnosis": ((v.diagnosis or v.chief_complaint or "")[:30]) or "—",
+                "vet": v.vet_name or "",
+            } for v in recent_visits]
+
+    # 防疫近况：最近一针狂犬 + 联苗 + 体内驱 + 体外驱
+    if pet_id:
+        from datetime import date as _date
+        today = _date.today().isoformat()
+        immun = []
+        # 疫苗最近一次（按 vaccine_type 取最新）
+        for vt, label in [("rabies", "狂犬"), ("combo", "联苗"), ("combo_3", "联苗"), ("combo_6", "联苗")]:
+            v = db.query(Vaccination).filter(
+                Vaccination.pet_id == pet_id,
+                Vaccination.vaccine_type == vt,
+                Vaccination.status != "voided",
+            ).order_by(Vaccination.vaccinated_date.desc(), Vaccination.id.desc()).first()
+            if v:
+                state = "ok"
+                if v.next_due_date:
+                    if v.next_due_date < today:
+                        state = "expired"
+                    else:
+                        try:
+                            from datetime import datetime as _dt
+                            days_left = (_dt.strptime(v.next_due_date, "%Y-%m-%d") - _dt.strptime(today, "%Y-%m-%d")).days
+                            if 0 <= days_left <= 14:
+                                state = "due_soon"
+                        except Exception:
+                            pass
+                immun.append({"type": label, "date": v.vaccinated_date, "next": v.next_due_date, "state": state})
+                if vt == "combo_3" or vt == "combo_6":
+                    break  # 联苗只取一次
+        # 驱虫
+        for dt_kind, label in [("internal", "体内驱虫"), ("external", "体外驱虫"), ("combo", "体内外驱虫")]:
+            d = db.query(DewormingRecord).filter(
+                DewormingRecord.pet_id == pet_id,
+                DewormingRecord.deworm_type == dt_kind,
+                DewormingRecord.status != "voided",
+            ).order_by(DewormingRecord.deworm_date.desc(), DewormingRecord.id.desc()).first()
+            if d:
+                state = "ok"
+                if d.next_due_date and d.next_due_date < today:
+                    state = "expired"
+                immun.append({"type": label, "date": d.deworm_date, "next": d.next_due_date, "state": state})
+        if immun:
+            data["immunity"] = immun[:6]
+
+    # 体重
+    if pet_id:
+        weights = db.query(WeightRecord).filter(WeightRecord.pet_id == pet_id)\
+            .order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).limit(2).all()
+        if weights:
+            cur = weights[0]
+            delta = None
+            if len(weights) >= 2:
+                delta = round(float(cur.weight_kg or 0) - float(weights[1].weight_kg or 0), 2)
+            data["weight"] = {
+                "current": round(float(cur.weight_kg or 0), 2),
+                "date": cur.record_date or "",
+                "delta": delta,
+            }
+
+    return data
+
+
 @app.get("/admin/appointments", response_class=HTMLResponse)
 async def page_admin_appointments(
     request: Request,
