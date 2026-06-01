@@ -17156,7 +17156,7 @@ _GROOMING_COAT_LENGTHS = {"short": "短毛", "medium": "中毛", "long": "长毛
 
 
 def _parse_grooming_services(form) -> list:
-    """解析美容服务清单。字段：service_name[]/qty[]/price[]/note[]"""
+    """解析美容服务清单。字段：service_name[]/item_id[]/qty[]/price[]/note[]"""
     names = form.getlist("service_name[]")
     items = []
     for i, name in enumerate(names):
@@ -17174,14 +17174,30 @@ def _parse_grooming_services(form) -> list:
             price = float(_g("price") or 0)
         except Exception:
             price = 0.0
+        try:
+            item_id = int(_g("item_id") or 0)
+        except Exception:
+            item_id = 0
         items.append({
             "name": name[:120],
+            "item_id": item_id or None,
             "qty": qty,
             "price": price,
             "subtotal": round(qty * price, 2),
             "notes": (_g("note") or "")[:200],
         })
     return items
+
+
+def _query_grooming_items(db: Session, request: Request):
+    """美容服务项库存（category=grooming）。"""
+    q = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+    ).filter(
+        InventoryItem.category == "grooming",
+        InventoryItem.is_active == True,
+    ).order_by(InventoryItem.subcategory, InventoryItem.name)
+    return q.all()
 
 
 @app.get("/admin/grooming-orders/create", response_class=HTMLResponse)
@@ -17200,15 +17216,15 @@ async def page_admin_grooming_create(
         Staff.status.in_(["active", "probation"]),
     ).all()]
     today = datetime.utcnow().strftime("%Y-%m-%d")
-    # 该宠物历史美容
     history = []
     if pet:
         history = db.query(GroomingOrder).filter(GroomingOrder.pet_id == pet.id)\
             .order_by(GroomingOrder.id.desc()).limit(10).all()
+    groom_items = _query_grooming_items(db, request)
     return templates.TemplateResponse(request, "admin_grooming_form.html", {
         "mode": "create", "rec": None,
         "cust": cust, "pet": pet, "appt": appt,
-        "groomers": groomers,
+        "groomers": groomers, "groom_items": groom_items,
         "pet_sizes": _GROOMING_PET_SIZES, "coat_lengths": _GROOMING_COAT_LENGTHS,
         "today": today,
         "grooming_history": history,
@@ -17253,6 +17269,16 @@ async def admin_grooming_create(request: Request, db: Session = Depends(get_db))
     )
     db.add(rec)
     db.flush()
+
+    # 关联库存品目自动扣库存（仅非服务类）
+    for s in services:
+        iid = s.get("item_id")
+        qty = float(s.get("qty") or 0)
+        if iid and qty > 0:
+            inv = db.get(InventoryItem, iid)
+            if inv and not inv.is_service:
+                _deduct_inventory(db, iid, qty, "grooming", rec.id, operator,
+                                  note=f"美容#{rec.id} {s.get('name','')}")
 
     msg = "美容单已开具"
     # 自动生成收费单（金额 > 0 时）
@@ -17305,10 +17331,11 @@ async def page_admin_grooming_detail(rec_id: int, request: Request, db: Session 
         history = db.query(GroomingOrder).filter(
             GroomingOrder.pet_id == rec.pet_id, GroomingOrder.id != rec_id,
         ).order_by(GroomingOrder.id.desc()).limit(10).all()
+    groom_items = _query_grooming_items(db, request)
     return templates.TemplateResponse(request, "admin_grooming_form.html", {
         "mode": "edit", "rec": rec, "rec_services": services,
         "cust": cust, "pet": pet, "appt": appt,
-        "groomers": groomers,
+        "groomers": groomers, "groom_items": groom_items,
         "pet_sizes": _GROOMING_PET_SIZES, "coat_lengths": _GROOMING_COAT_LENGTHS,
         "today": rec.groom_date,
         "grooming_history": history,
@@ -17378,6 +17405,19 @@ async def admin_grooming_void(rec_id: int, request: Request, db: Session = Depen
     if rec.status == "voided":
         return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=该单已作废", status_code=303)
     operator = request.session.get("admin_username", "admin")
+    # 回库（仅非服务类品目）
+    try:
+        services = json.loads(rec.services_json or "[]")
+        for s in services:
+            iid = s.get("item_id")
+            qty = float(s.get("qty") or 0)
+            if iid and qty > 0:
+                inv = db.get(InventoryItem, iid)
+                if inv and not inv.is_service:
+                    _restore_inventory(db, iid, qty, "grooming_void", rec_id, operator,
+                                       note=f"作废美容#{rec_id} 回库")
+    except Exception:
+        pass
     rec.status = "voided"
     rec.voided_by = operator
     rec.voided_at = datetime.utcnow()

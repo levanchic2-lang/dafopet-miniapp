@@ -159,7 +159,10 @@ function confirmGroomVoid(form, paidAmount) {
      <tbody id="svc-tbody">
        {% for s in _services %}
        <tr>
-         <td><input name="service_name[]" value="{{ s.name or '' }}" placeholder="如：洗澡 / 剃毛 / 修甲" list="svc-presets"/></td>
+         <td>
+           <input name="service_name[]" value="{{ s.name or '' }}" placeholder="输入或选择服务" list="svc-presets" onchange="onSvcPick(this)"/>
+           <input type="hidden" name="item_id[]" value="{{ s.item_id or 0 }}"/>
+         </td>
          <td><input type="number" step="0.5" min="0" name="qty[]" value="{{ s.qty or 1 }}" oninput="recalc()"/></td>
          <td><input type="number" step="0.01" min="0" name="price[]" value="{{ s.price or '' }}" oninput="recalc()"/></td>
          <td style="text-align:right;font-weight:600;" class="svc-sub">¥ {{ '%.2f'|format(s.subtotal or 0) }}</td>
@@ -170,16 +173,16 @@ function confirmGroomVoid(form, paidAmount) {
      </tbody>
    </table>
    <datalist id="svc-presets">
-     <option value="洗澡（小型）">
-     <option value="洗澡（中型）">
-     <option value="洗澡（大型）">
-     <option value="剃毛">
-     <option value="造型修剪">
-     <option value="修甲">
-     <option value="挤肛门腺">
-     <option value="清耳道">
-     <option value="药浴">
-     <option value="SPA 护理">
+     {% for it in groom_items %}
+     <option value="{{ it.name }}"
+       data-id="{{ it.id }}"
+       data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+       data-subcat="{{ it.subcategory or '' }}"
+       data-service="{{ '1' if it.is_service else '0' }}"
+       data-stock="{{ it.stock_qty or 0 }}">
+       {{ it.name }} · ¥{{ '%.0f'|format(it.sell_price or 0) }}{% if it.subcategory %} · {{ {'washcare':'洗护','styling':'造型','addon':'附加'}.get(it.subcategory, it.subcategory) }}{% endif %}{% if not it.is_service %} · 库存{{ it.stock_qty }}{% endif %}
+     </option>
+     {% endfor %}
    </datalist>
    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.5rem;">
      <button type="button" onclick="addRow()" class="btn secondary" style="font-size:.82rem;">+ 增加服务项</button>
@@ -281,6 +284,17 @@ function confirmGroomVoid(form, paidAmount) {
 <script>
 let _svcRows = {{ _services|length if _services else 1 }};
 
+// 建一个 name → item 的映射（从 datalist 反查）
+const _SVC_INDEX = {};
+document.querySelectorAll('#svc-presets option').forEach(o => {
+  _SVC_INDEX[o.value] = {
+    id: o.dataset.id || 0,
+    price: parseFloat(o.dataset.price || 0),
+    isService: o.dataset.service === '1',
+    subcat: o.dataset.subcat || '',
+  };
+});
+
 function recalc() {
   let total = 0;
   document.querySelectorAll('#svc-tbody tr').forEach(tr => {
@@ -293,11 +307,31 @@ function recalc() {
   document.getElementById('grand-total').textContent = total.toFixed(2);
 }
 
+function onSvcPick(nameInput) {
+  const tr = nameInput.closest('tr');
+  const meta = _SVC_INDEX[nameInput.value.trim()];
+  const idInput = tr.querySelector('input[name="item_id[]"]');
+  const priceInput = tr.querySelector('input[name="price[]"]');
+  if (meta) {
+    idInput.value = meta.id;
+    if (!priceInput.value || parseFloat(priceInput.value) === 0) {
+      priceInput.value = meta.price.toFixed(2);
+    }
+    recalc();
+  } else {
+    // 自由输入（非库存项），item_id 清空
+    idInput.value = 0;
+  }
+}
+
 function addRow() {
   const tb = document.getElementById('svc-tbody');
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input name="service_name[]" placeholder="如：洗澡 / 剃毛 / 修甲" list="svc-presets"/></td>
+    <td>
+      <input name="service_name[]" placeholder="输入或选择服务" list="svc-presets" onchange="onSvcPick(this)"/>
+      <input type="hidden" name="item_id[]" value="0"/>
+    </td>
     <td><input type="number" step="0.5" min="0" name="qty[]" value="1" oninput="recalc()"/></td>
     <td><input type="number" step="0.01" min="0" name="price[]" oninput="recalc()"/></td>
     <td style="text-align:right;font-weight:600;" class="svc-sub">¥ 0.00</td>
