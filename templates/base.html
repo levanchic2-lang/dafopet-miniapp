@@ -754,6 +754,7 @@
       <a class="ribbon-icon {% if _path.startswith('/admin/adoption') %}current{% endif %}" href="/admin/adoption"><span class="ri-emoji"><i data-lucide="cat"></i></span>待领养</a>
       <a class="ribbon-icon {% if _path.startswith('/showcase') %}current{% endif %}" href="/showcase"><span class="ri-emoji"><i data-lucide="sparkles"></i></span>公布展示</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/changelog') %}current{% endif %}" href="/admin/changelog"><span class="ri-emoji"><i data-lucide="pencil-line"></i></span>开发日志</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/audit-logs') %}current{% endif %}" href="/admin/audit-logs"><span class="ri-emoji"><i data-lucide="shield-check"></i></span>审计日志</a>
     </div>
     {% endif %}
   </nav>
@@ -813,6 +814,7 @@
       '/admin/hr':           { label: '人事管理',   kind: 'page', icon: 'briefcase' },
       '/admin/adoption':     { label: '领养',       kind: 'page', icon: 'paw-print' },
       '/admin/changelog':    { label: '开发日志',   kind: 'page', icon: 'pencil-line' },
+      '/admin/audit-logs':   { label: '审计日志',   kind: 'page', icon: 'shield-check' },
     };
     // 判断 icon 是否是 Lucide 名（纯 ASCII 字母+连字符）。兼容 localStorage 里旧的 emoji。
     function isLucideIcon(s) {

@@ -52,16 +52,21 @@
   <div style="font-size:1.4rem;">🔒</div>
   <div style="flex:1;min-width:200px;">
     <div style="font-weight:600;color:#991b1b;">此疫苗单已锁定（{{ lock_reason }}），不可修改</div>
-    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">「📋 复制为新单」开下一针 · 或「🚫 作废」回退后重开</div>
+    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">
+      「📋 复制为新单」开下一针 · 或「🚫 作废」回退后重开
+      {% if paid_amount and paid_amount > 0 %}<br/><b style="color:#b91c1c;">💰 此单已收款 ¥{{ '%.2f'|format(paid_amount) }}</b>，作废时可选退到客户钱包{% endif %}
+    </div>
   </div>
   <form method="post" action="/admin/vaccinations/{{ vacc.id }}/copy-as-new" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
     <button type="submit" class="btn" style="background:#3b82f6;border-color:#3b82f6;">📋 复制为新单（下一针）</button>
   </form>
   {% if vacc.status != 'voided' %}
-  <form method="post" action="/admin/vaccinations/{{ vacc.id }}/void" style="display:inline;" onsubmit="return confirmVaccVoid(this)">
+  <form method="post" action="/admin/vaccinations/{{ vacc.id }}/void" style="display:inline;" onsubmit="return confirmVaccVoid(this, {{ paid_amount or 0 }})">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
     <input type="hidden" name="void_reason" value=""/>
+    <input type="hidden" name="refund_to_wallet" value=""/>
+    <input type="hidden" name="refund_amount" value="0"/>
     <button type="submit" class="danger">🚫 作废此单</button>
   </form>
   {% endif %}
@@ -75,11 +80,21 @@
   .locked-form button[type="submit"] { display: none !important; }
 </style>
 <script>
-function confirmVaccVoid(form) {
+function confirmVaccVoid(form, paidAmount) {
   const reason = prompt('请填写作废原因（必填）：');
   if (!reason || !reason.trim()) return false;
   form.querySelector('input[name="void_reason"]').value = reason.trim();
-  return confirm('确认作废此疫苗单？\n• 库存将自动回退\n• 此操作会写入审计日志');
+  if (paidAmount > 0) {
+    const amt = prompt('💰 此单已收款 ¥' + paidAmount.toFixed(2) + '\n\n如需退到客户钱包，请输入退款金额（留空 = 不退）：', paidAmount.toFixed(2));
+    if (amt !== null && amt !== '' && parseFloat(amt) > 0) {
+      form.querySelector('input[name="refund_to_wallet"]').value = '1';
+      form.querySelector('input[name="refund_amount"]').value = parseFloat(amt).toFixed(2);
+    }
+  }
+  let m = '确认作废此疫苗单？\n• 库存自动回退\n• 写入审计日志';
+  const refundVal = form.querySelector('input[name="refund_amount"]').value;
+  if (parseFloat(refundVal) > 0) m += '\n• 退款 ¥' + parseFloat(refundVal).toFixed(2) + ' 立即入客户钱包';
+  return confirm(m);
 }
 </script>
 {% endif %}

@@ -206,20 +206,25 @@
 </div>
 
 {% if locked %}
-<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;">
+<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;">
   <div style="font-size:1.4rem;">🔒</div>
-  <div style="flex:1;">
+  <div style="flex:1;min-width:200px;">
     <div style="font-weight:600;color:#991b1b;">此处方单已锁定（{{ lock_reason }}），不可修改</div>
-    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">医疗 / 财务档案不可改。如需调整：「📋 复制为新单」开下一张 · 或「🚫 作废此单」回退库存后重开</div>
+    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">
+      医疗 / 财务档案不可改。如需调整：「📋 复制为新单」开下一张 · 或「🚫 作废此单」回退库存后重开
+      {% if paid_amount and paid_amount > 0 %}<br/><b style="color:#b91c1c;">💰 此单已收款 ¥{{ '%.2f'|format(paid_amount) }}</b>，作废时可选退到客户钱包{% endif %}
+    </div>
   </div>
   <form method="post" action="/admin/prescriptions/{{ p.id }}/copy-as-new" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
     <button type="submit" class="btn" style="background:#3b82f6;border-color:#3b82f6;">📋 复制为新单</button>
   </form>
   {% if p.status != 'voided' %}
-  <form method="post" action="/admin/prescriptions/{{ p.id }}/void" style="display:inline;" onsubmit="return confirmVoid(this)">
+  <form method="post" action="/admin/prescriptions/{{ p.id }}/void" style="display:inline;" onsubmit="return confirmVoidWithRefund(this, {{ paid_amount or 0 }})">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
     <input type="hidden" name="void_reason" value=""/>
+    <input type="hidden" name="refund_to_wallet" value=""/>
+    <input type="hidden" name="refund_amount" value="0"/>
     <button type="submit" class="danger">🚫 作废此单</button>
   </form>
   {% endif %}
@@ -235,12 +240,24 @@
   .locked-form button[type="submit"] { opacity: .5; display: none !important; }
 </style>
 <script>
-function confirmVoid(form) {
+function confirmVoidWithRefund(form, paidAmount) {
   const reason = prompt('请填写作废原因（必填）：');
   if (!reason || !reason.trim()) return false;
   form.querySelector('input[name="void_reason"]').value = reason.trim();
-  return confirm('确认作废此处方单？\n• 库存将自动回退\n• 此操作会写入审计日志\n• 客户已付款的，请到收银台手动处理退款');
+  if (paidAmount > 0) {
+    const amt = prompt('💰 此单已收款 ¥' + paidAmount.toFixed(2) + '\n\n如需退到客户钱包，请输入退款金额（留空 = 不退、客户去收银台单独处理）：', paidAmount.toFixed(2));
+    if (amt !== null && amt !== '' && parseFloat(amt) > 0) {
+      form.querySelector('input[name="refund_to_wallet"]').value = '1';
+      form.querySelector('input[name="refund_amount"]').value = parseFloat(amt).toFixed(2);
+    }
+  }
+  let confirmMsg = '确认作废？\n• 库存自动回退\n• 写入审计日志';
+  const refundVal = form.querySelector('input[name="refund_amount"]').value;
+  if (parseFloat(refundVal) > 0) confirmMsg += '\n• 退款 ¥' + parseFloat(refundVal).toFixed(2) + ' 立即入客户钱包';
+  return confirm(confirmMsg);
 }
+// 兼容旧调用
+function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
 </script>
 {% endif %}
 

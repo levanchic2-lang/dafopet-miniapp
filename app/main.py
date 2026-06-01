@@ -3036,6 +3036,129 @@ async def admin_changelog_page(request: Request):
     })
 
 
+# ────────────────────────────────────────────────────────────────
+# 审计日志：单据作废 / 复制 / 锁定相关操作的全部痕迹
+# ────────────────────────────────────────────────────────────────
+_AUDIT_ACTION_GROUPS = {
+    "void":      ("作废",      "#dc2626"),
+    "copy_from": ("复制为新单", "#3b82f6"),
+    "cert_locked": ("证号录入锁定", "#7c3aed"),
+    "delete":    ("删除",      "#dc2626"),
+    "manual_approve": ("人工通过", "#10b981"),
+    "reject":    ("驳回",      "#dc2626"),
+    "surgery_done": ("手术完成", "#10b981"),
+}
+
+_AUDIT_DOC_TYPE_ZH = {
+    "prescription":   "处方单",
+    "sales_order":    "销售单",
+    "anesthesia":     "麻醉单",
+    "exam_order":     "检查单",
+    "vaccination":    "疫苗单",
+    "deworming":      "驱虫单",
+    "rabies":         "狂犬登记",
+    "application":    "TNR 申请",
+}
+
+
+def _parse_audit_detail(detail: str) -> dict:
+    """解析 audit detail 字符串，形如 'id=42 reason=用错药 src=41'"""
+    out = {}
+    if not detail:
+        return out
+    # 简单 key=value 分隔（允许 value 含空格直到下一个 key=）
+    import re
+    pairs = re.findall(r"(\w+)=([^=]+?)(?=\s+\w+=|$)", detail)
+    for k, v in pairs:
+        out[k] = v.strip()
+    if not pairs:
+        out["note"] = detail
+    return out
+
+
+@app.get("/admin/audit-logs", response_class=HTMLResponse)
+async def page_admin_audit_logs(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = Query(""),
+    action: str = Query(""),
+    actor: str = Query(""),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    page: int = Query(1),
+):
+    """审计日志查询页：单据作废 / 复制 / TNR 审核动作 等"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    # 仅超管可见
+    if request.session.get("admin_role") != "superadmin":
+        raise HTTPException(403, "仅超级管理员可访问审计日志")
+
+    query = db.query(AuditLog)
+    if action:
+        # 支持模糊匹配前缀（prescription.void 等）
+        if "." in action:
+            query = query.filter(AuditLog.action == action)
+        else:
+            query = query.filter(AuditLog.action.ilike(f"%{action}%"))
+    if actor:
+        query = query.filter(AuditLog.actor.ilike(f"%{actor}%"))
+    if date_from:
+        query = query.filter(AuditLog.created_at >= date_from)
+    if date_to:
+        query = query.filter(AuditLog.created_at <= date_to + " 23:59:59")
+    if q:
+        like = f"%{q}%"
+        query = query.filter((AuditLog.detail.ilike(like)) | (AuditLog.action.ilike(like)))
+
+    total = query.count()
+    page_size = 50
+    rows = query.order_by(AuditLog.id.desc())\
+        .offset((page - 1) * page_size).limit(page_size).all()
+
+    # 解析每行的 doc_type/action_kind + detail
+    for r in rows:
+        if "." in (r.action or ""):
+            doc_type, action_kind = r.action.split(".", 1)
+        else:
+            doc_type, action_kind = "", (r.action or "")
+        r._doc_type = doc_type
+        r._doc_type_zh = _AUDIT_DOC_TYPE_ZH.get(doc_type, doc_type)
+        r._action_kind = action_kind
+        label, color = _AUDIT_ACTION_GROUPS.get(action_kind, (action_kind, "#64748b"))
+        r._action_zh = label
+        r._action_color = color
+        r._detail_kv = _parse_audit_detail(r.detail)
+
+    # 统计概览（最近 30 天按 action_kind 分组）
+    from datetime import date as _date, timedelta as _td
+    thirty_days_ago = (_date.today() - _td(days=30)).isoformat()
+    stats_rows = db.query(AuditLog.action, AuditLog.id).filter(
+        AuditLog.created_at >= thirty_days_ago
+    ).all()
+    stats: dict = {}
+    for a, _ in stats_rows:
+        if not a:
+            continue
+        kind = a.split(".", 1)[1] if "." in a else a
+        stats[kind] = stats.get(kind, 0) + 1
+
+    # 操作类型下拉候选
+    distinct_actions = [r[0] for r in db.query(AuditLog.action).distinct().limit(50).all() if r[0]]
+
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    return templates.TemplateResponse(request, "admin_audit_logs.html", {
+        "rows": rows,
+        "total": total, "page": page, "total_pages": total_pages, "page_size": page_size,
+        "q": q, "action": action, "actor": actor, "date_from": date_from, "date_to": date_to,
+        "action_groups": _AUDIT_ACTION_GROUPS,
+        "doc_type_zh": _AUDIT_DOC_TYPE_ZH,
+        "stats": stats,
+        "distinct_actions": sorted(distinct_actions),
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
 @app.get("/admin/hr", response_class=HTMLResponse)
 async def admin_hr_page(
     request: Request,
@@ -10300,6 +10423,67 @@ def _is_rabies_locked(db: Session, r: "RabiesVaccineRecord") -> tuple[bool, str]
     return False, ""
 
 
+def _doc_paid_amount(db: Session, doc_type: str, doc_id: int) -> float:
+    """通过 InvoiceItem.ref_type+ref_id 反查该单据在已付 Invoice 中的小计金额。
+
+    返回 0 表示客户未付（拒绝退款入口），返回正值 = 可退到客户钱包的金额。
+    """
+    if not doc_id or not doc_type:
+        return 0.0
+    rows = (
+        db.query(InvoiceItem)
+        .join(Invoice, InvoiceItem.invoice_id == Invoice.id)
+        .filter(
+            InvoiceItem.ref_type == doc_type,
+            InvoiceItem.ref_id == doc_id,
+            Invoice.payment_status == "paid",
+        )
+        .all()
+    )
+    return round(sum((r.subtotal or 0) for r in rows), 2)
+
+
+def _refund_to_wallet(
+    db: Session, customer_id: int, amount: float, operator: str,
+    note: str = "", invoice_id: int | None = None, store: str = "",
+) -> "WalletTransaction | None":
+    """退款入钱包：自动建钱包（如缺）+ 写 WalletTransaction(type=refund)。
+
+    返回写入的 WalletTransaction，失败返回 None。
+    """
+    if not customer_id or amount <= 0:
+        return None
+    try:
+        wallet = db.query(Wallet).filter(Wallet.customer_id == customer_id).first()
+        if not wallet:
+            wallet = Wallet(customer_id=customer_id, balance=0.0,
+                            balance_principal=0.0, balance_bonus=0.0,
+                            lifetime_recharge=0.0, lifetime_consume=0.0)
+            db.add(wallet)
+            db.flush()
+        amount = round(float(amount), 2)
+        wallet.balance = round((wallet.balance or 0) + amount, 2)
+        # 退款全部进本金桶（赠送部分不退）
+        wallet.balance_principal = round((wallet.balance_principal or 0) + amount, 2)
+        wallet.updated_at = datetime.utcnow()
+        tx = WalletTransaction(
+            wallet_id=wallet.id,
+            customer_id=customer_id,
+            type="refund",
+            amount=amount,
+            balance_after=wallet.balance,
+            invoice_id=invoice_id,
+            store=store,
+            note=note[:500],
+            operator=operator,
+        )
+        db.add(tx)
+        return tx
+    except Exception as e:
+        logger.warning(f"refund_to_wallet failed: {e}")
+        return None
+
+
 def _audit_doc_action(db: Session, doc_type: str, doc_id: int, action: str,
                        operator: str, reason: str = "", extra: str = "") -> None:
     """单据锁定/作废审计日志，写入 AuditLog 表。
@@ -10400,11 +10584,12 @@ async def page_admin_presc_detail(presc_id: int, request: Request, db: Session =
     vets = db.query(Staff.name).filter(Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")).all()
     vet_names = [v[0] for v in vets]
     locked, lock_reason = _is_prescription_locked(db, presc)
+    paid_amount = _doc_paid_amount(db, "prescription", presc_id) if locked else 0.0
     return templates.TemplateResponse(request, "admin_prescription_form.html", {
         "presc": presc, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
         "presc_status_zh": _PRESC_STATUS_ZH,
-        "locked": locked, "lock_reason": lock_reason,
+        "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "csrf_token": _get_csrf_token(request), "mode": "edit",
         "msg": request.query_params.get("msg"),
     })
@@ -10525,8 +10710,9 @@ async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depe
 
 @app.post("/admin/prescriptions/{presc_id}/void")
 async def admin_presc_void(presc_id: int, request: Request, db: Session = Depends(get_db),
-                            csrf_token: str = Form(""), void_reason: str = Form("")):
-    """锁定的处方作废：库存回退 + 写审计 + status=voided。财务退款另行手动处理。"""
+                            csrf_token: str = Form(""), void_reason: str = Form(""),
+                            refund_to_wallet: str = Form(""), refund_amount: float = Form(0.0)):
+    """锁定的处方作废：库存回退 + 写审计 + status=voided + 可选退款入钱包。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
@@ -10546,6 +10732,17 @@ async def admin_presc_void(presc_id: int, request: Request, db: Session = Depend
     presc.voided_by = operator
     presc.voided_at = datetime.utcnow()
     presc.void_reason = (void_reason or "")[:200]
+    # 退款入钱包
+    refund_msg = ""
+    if refund_to_wallet in ("1", "true", "on") and presc.customer_id and refund_amount > 0:
+        tx = _refund_to_wallet(
+            db, presc.customer_id, float(refund_amount), operator,
+            note=f"作废处方#{presc_id} 退款 · {void_reason}"[:500],
+        )
+        if tx:
+            refund_msg = f" · ¥{refund_amount:.2f} 已退入客户钱包"
+            _audit_doc_action(db, "prescription", presc_id, "refund_to_wallet",
+                              operator, extra=f"amount={refund_amount}")
     _audit_doc_action(db, "prescription", presc_id, "void", operator, void_reason)
     db.commit()
     if visit_id:
@@ -10554,7 +10751,7 @@ async def admin_presc_void(presc_id: int, request: Request, db: Session = Depend
             db.commit()
         except Exception:
             pass
-    return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已作废" if visit_id else f"/admin/prescriptions/{presc_id}", status_code=303)
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已作废{refund_msg}" if visit_id else f"/admin/prescriptions/{presc_id}?msg=已作废{refund_msg}", status_code=303)
 
 
 @app.post("/admin/prescriptions/{presc_id}/copy-as-new")
@@ -10848,6 +11045,7 @@ async def page_admin_anesth_detail(order_id: int, request: Request, db: Session 
     locked, reason = _is_anesthesia_locked(db, order)
     ctx["locked"] = locked
     ctx["lock_reason"] = reason
+    ctx["paid_amount"] = _doc_paid_amount(db, "anesthesia", order_id) if locked else 0.0
     ctx["msg"] = request.query_params.get("msg")
     return templates.TemplateResponse(request, "admin_anesthesia_form.html", ctx)
 
@@ -10971,7 +11169,8 @@ async def admin_anesth_print(order_id: int, request: Request, db: Session = Depe
 
 @app.post("/admin/anesthesia/{order_id}/void")
 async def admin_anesth_void(order_id: int, request: Request, db: Session = Depends(get_db),
-                            csrf_token: str = Form("")):
+                            csrf_token: str = Form(""), void_reason: str = Form(""),
+                            refund_to_wallet: str = Form(""), refund_amount: float = Form(0.0)):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
@@ -10999,6 +11198,20 @@ async def admin_anesth_void(order_id: int, request: Request, db: Session = Depen
                 store=order.store, notes=f"作废麻醉单#{order.id}回退",
             )
     order.status = "voided"
+    order.voided_by = operator
+    order.voided_at = datetime.utcnow()
+    order.void_reason = (void_reason or "")[:200]
+    refund_msg = ""
+    if refund_to_wallet in ("1", "true", "on") and order.customer_id and refund_amount > 0:
+        tx = _refund_to_wallet(
+            db, order.customer_id, float(refund_amount), operator,
+            note=f"作废麻醉单#{order_id} 退款 · {void_reason}"[:500], store=order.store,
+        )
+        if tx:
+            refund_msg = f" · ¥{refund_amount:.2f} 已退入客户钱包"
+            _audit_doc_action(db, "anesthesia", order_id, "refund_to_wallet",
+                              operator, extra=f"amount={refund_amount}")
+    _audit_doc_action(db, "anesthesia", order_id, "void", operator, void_reason)
     db.commit()
     if visit_id:
         try:
@@ -11006,7 +11219,7 @@ async def admin_anesth_void(order_id: int, request: Request, db: Session = Depen
             db.commit()
         except Exception:
             pass
-    return RedirectResponse(f"/admin/visits/{visit_id}?msg=麻醉单已作废" if visit_id else f"/admin/anesthesia/{order_id}", status_code=303)
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=麻醉单已作废{refund_msg}" if visit_id else f"/admin/anesthesia/{order_id}?msg=已作废{refund_msg}", status_code=303)
 
 
 # ─── 麻醉/管控药台账 ─────────────────────────────────────────────
@@ -11485,11 +11698,12 @@ async def page_admin_so_detail(order_id: int, request: Request, db: Session = De
     pet = db.get(Pet, order.pet_id) if order.pet_id else None
     pets = db.query(Pet).filter(Pet.customer_id == order.customer_id).all() if order.customer_id else []
     locked, lock_reason = _is_sales_order_locked(db, order)
+    paid_amount = _doc_paid_amount(db, "sales_order", order_id) if locked else 0.0
     return templates.TemplateResponse(request, "admin_sales_order_form.html", {
         "order": order, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "so_status_zh": _SO_STATUS_ZH, "item_type_zh": _SO_ITEM_TYPE_ZH,
         "payment_methods": _PAYMENT_METHOD_OPTIONS,
-        "locked": locked, "lock_reason": lock_reason,
+        "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "csrf_token": _get_csrf_token(request), "mode": "edit",
         "msg": request.query_params.get("msg"),
     })
@@ -11579,7 +11793,8 @@ async def admin_so_delete(order_id: int, request: Request, db: Session = Depends
 
 @app.post("/admin/sales-orders/{order_id}/void")
 async def admin_so_void(order_id: int, request: Request, db: Session = Depends(get_db),
-                         csrf_token: str = Form(""), void_reason: str = Form("")):
+                         csrf_token: str = Form(""), void_reason: str = Form(""),
+                         refund_to_wallet: str = Form(""), refund_amount: float = Form(0.0)):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
@@ -11598,6 +11813,16 @@ async def admin_so_void(order_id: int, request: Request, db: Session = Depends(g
     order.voided_by = operator
     order.voided_at = datetime.utcnow()
     order.void_reason = (void_reason or "")[:200]
+    refund_msg = ""
+    if refund_to_wallet in ("1", "true", "on") and order.customer_id and refund_amount > 0:
+        tx = _refund_to_wallet(
+            db, order.customer_id, float(refund_amount), operator,
+            note=f"作废销售单#{order_id} 退款 · {void_reason}"[:500],
+        )
+        if tx:
+            refund_msg = f" · ¥{refund_amount:.2f} 已退入客户钱包"
+            _audit_doc_action(db, "sales_order", order_id, "refund_to_wallet",
+                              operator, extra=f"amount={refund_amount}")
     _audit_doc_action(db, "sales_order", order_id, "void", operator, void_reason)
     db.commit()
     if visit_id:
@@ -11606,7 +11831,7 @@ async def admin_so_void(order_id: int, request: Request, db: Session = Depends(g
             db.commit()
         except Exception:
             pass
-    return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已作废" if visit_id else f"/admin/sales-orders/{order_id}", status_code=303)
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已作废{refund_msg}" if visit_id else f"/admin/sales-orders/{order_id}?msg=已作废{refund_msg}", status_code=303)
 
 
 @app.post("/admin/sales-orders/{order_id}/copy-as-new")
@@ -14882,6 +15107,7 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
     ).order_by(InventoryItem.name).all()
     _attach_latest_batch(db, vacc_items)
     locked, lock_reason = _is_vaccination_locked(db, vacc)
+    paid_amount = _doc_paid_amount(db, "vaccination", vacc_id) if locked else 0.0
     return templates.TemplateResponse(request, "admin_vaccination_form.html", {
         "mode": "edit", "vacc": vacc,
         "pet": pet, "cust": cust,
@@ -14889,7 +15115,7 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
         "vacc_type_zh": _VACC_TYPE_ZH,
         "vacc_type_options": _VACC_TYPE_OPTIONS,
         "dose_zh": _DOSE_ZH,
-        "locked": locked, "lock_reason": lock_reason,
+        "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "today": vacc.vaccinated_date,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
@@ -14948,7 +15174,8 @@ async def admin_vaccination_delete(vacc_id: int, request: Request, db: Session =
 
 @app.post("/admin/vaccinations/{vacc_id}/void")
 async def admin_vaccination_void(vacc_id: int, request: Request, db: Session = Depends(get_db),
-                                   csrf_token: str = Form(""), void_reason: str = Form("")):
+                                   csrf_token: str = Form(""), void_reason: str = Form(""),
+                                   refund_to_wallet: str = Form(""), refund_amount: float = Form(0.0)):
     require_admin(request)
     _require_csrf(request, csrf_token)
     vacc = db.get(Vaccination, vacc_id)
@@ -14967,9 +15194,19 @@ async def admin_vaccination_void(vacc_id: int, request: Request, db: Session = D
     vacc.voided_by = operator
     vacc.voided_at = datetime.utcnow()
     vacc.void_reason = (void_reason or "")[:200]
+    refund_msg = ""
+    if refund_to_wallet in ("1", "true", "on") and vacc.customer_id and refund_amount > 0:
+        tx = _refund_to_wallet(
+            db, vacc.customer_id, float(refund_amount), operator,
+            note=f"作废疫苗#{vacc_id} 退款 · {void_reason}"[:500],
+        )
+        if tx:
+            refund_msg = f" · ¥{refund_amount:.2f} 已退入客户钱包"
+            _audit_doc_action(db, "vaccination", vacc_id, "refund_to_wallet",
+                              operator, extra=f"amount={refund_amount}")
     _audit_doc_action(db, "vaccination", vacc_id, "void", operator, void_reason)
     db.commit()
-    return RedirectResponse(f"/admin/vaccinations/{vacc_id}?msg=已作废", status_code=303)
+    return RedirectResponse(f"/admin/vaccinations/{vacc_id}?msg=已作废{refund_msg}", status_code=303)
 
 
 @app.post("/admin/vaccinations/{vacc_id}/copy-as-new")
@@ -15551,10 +15788,11 @@ async def admin_exam_order_detail(
         order.upload_token, order.token_expires_at = _exam_order_token(db)
         db.commit()
     locked, lock_reason = _is_exam_order_locked(db, order)
+    paid_amount = _doc_paid_amount(db, "exam_order", order_id) if locked else 0.0
     return templates.TemplateResponse(request, "admin_exam_order_detail.html", {
         "order": order, "visit": visit, "cust": cust, "pet": pet,
         "items": items, "msg": msg,
-        "locked": locked, "lock_reason": lock_reason,
+        "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -15676,6 +15914,7 @@ async def admin_exam_order_delete(
 async def admin_exam_order_void(
     order_id: int, request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""), void_reason: str = Form(""),
+    refund_to_wallet: str = Form(""), refund_amount: float = Form(0.0),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -15689,6 +15928,19 @@ async def admin_exam_order_void(
     order.voided_by = operator
     order.voided_at = datetime.utcnow()
     order.void_reason = (void_reason or "")[:200]
+    refund_msg = ""
+    if refund_to_wallet in ("1", "true", "on") and order.visit_id and refund_amount > 0:
+        visit = db.get(Visit, order.visit_id)
+        cust_id = visit.customer_id if visit else 0
+        if cust_id:
+            tx = _refund_to_wallet(
+                db, cust_id, float(refund_amount), operator,
+                note=f"作废检查单#{order_id} 退款 · {void_reason}"[:500],
+            )
+            if tx:
+                refund_msg = f" · ¥{refund_amount:.2f} 已退入客户钱包"
+                _audit_doc_action(db, "exam_order", order_id, "refund_to_wallet",
+                                  operator, extra=f"amount={refund_amount}")
     _audit_doc_action(db, "exam_order", order_id, "void", operator, void_reason)
     db.commit()
     if order.visit_id:
@@ -15697,7 +15949,7 @@ async def admin_exam_order_void(
             db.commit()
         except Exception:
             pass
-    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=已作废", status_code=303)
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=已作废{refund_msg}", status_code=303)
 
 
 @app.post("/admin/exam-orders/{order_id}/copy-as-new")
