@@ -242,6 +242,32 @@ function confirmDewVoid(form, paidAmount) {
    {% endif %}
  </div>
  {% endif %}
+
+ {# ── 历史驱虫记录 ── #}
+ {% if deworm_history and deworm_history|length > 0 %}
+ {% set today_iso = today %}
+ {% set _TYPE_ZH = {'external':'体外','internal':'体内','combo':'体内外'} %}
+ <div class="card" style="padding:.75rem 1rem;">
+   <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.5rem;">📋 历史驱虫（{{ deworm_history|length }} 条）</div>
+   {% for h in deworm_history %}
+   {% set is_voided = (h.status == 'voided') %}
+   {% set is_expired = (h.next_due_date and h.next_due_date < today_iso) %}
+   {% set due_color = '#dc2626' if is_expired else '#10b981' %}
+   <a href="/admin/dewormings/{{ h.id }}" style="display:block;padding:.4rem 0;border-bottom:1px dashed #e2e8f0;text-decoration:none;color:inherit;{% if is_voided %}opacity:.5;{% endif %}">
+     <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:#475569;">
+       <span style="font-variant-numeric:tabular-nums;">{{ h.deworm_date or '—' }}</span>
+       <span style="font-size:.7rem;background:#f1f5f9;padding:1px 6px;border-radius:3px;">{{ _TYPE_ZH.get(h.deworm_type, h.deworm_type) }}{% if h.weight_kg %} · {{ '%.1f'|format(h.weight_kg) }}kg{% endif %}</span>
+     </div>
+     <div style="font-size:0.82rem;color:#1e293b;font-weight:500;margin-top:.2rem;">{{ h.product_name or '—' }}{% if h.dose %} <span style="color:#94a3b8;font-size:.72rem;">{{ h.dose }}</span>{% endif %}</div>
+     {% if h.next_due_date %}
+     <div style="font-size:.72rem;color:{{ due_color }};margin-top:.15rem;">{% if is_expired %}⚠ 已过期 {% else %}下次 {% endif %}{{ h.next_due_date }}</div>
+     {% endif %}
+     {% if is_voided %}<div style="font-size:.7rem;color:#94a3b8;">（已作废）</div>{% endif %}
+   </a>
+   {% endfor %}
+ </div>
+ {% endif %}
+
  </div>
 </div>
 

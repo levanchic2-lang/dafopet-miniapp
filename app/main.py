@@ -15161,6 +15161,11 @@ async def admin_vaccination_create_page(
     ).order_by(InventoryItem.name).all()
     # 给每个品目附最近一批的 batch_no + expiry_date（用于 JS 自动填）
     _attach_latest_batch(db, vacc_items)
+    # 该宠物的历史疫苗记录（倒序，最多 10 条）
+    history = []
+    if pet_id:
+        history = db.query(Vaccination).filter(Vaccination.pet_id == pet_id)\
+            .order_by(Vaccination.vaccinated_date.desc(), Vaccination.id.desc()).limit(10).all()
     return templates.TemplateResponse(request, "admin_vaccination_form.html", {
         "mode": "create", "vacc": None,
         "pet": pet, "cust": cust,
@@ -15168,6 +15173,7 @@ async def admin_vaccination_create_page(
         "vacc_type_zh": _VACC_TYPE_ZH,
         "vacc_type_options": _VACC_TYPE_OPTIONS,
         "dose_zh": _DOSE_ZH,
+        "vacc_history": history,
         "today": date.today().isoformat(),
         "csrf_token": _get_csrf_token(request),
         "msg": None,
@@ -15279,6 +15285,12 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
     _attach_latest_batch(db, vacc_items)
     locked, lock_reason = _is_vaccination_locked(db, vacc)
     paid_amount = _doc_paid_amount(db, "vaccination", vacc_id) if locked else 0.0
+    history = []
+    if vacc.pet_id:
+        history = db.query(Vaccination).filter(
+            Vaccination.pet_id == vacc.pet_id,
+            Vaccination.id != vacc_id,
+        ).order_by(Vaccination.vaccinated_date.desc(), Vaccination.id.desc()).limit(10).all()
     return templates.TemplateResponse(request, "admin_vaccination_form.html", {
         "mode": "edit", "vacc": vacc,
         "pet": pet, "cust": cust,
@@ -15286,6 +15298,7 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
         "vacc_type_zh": _VACC_TYPE_ZH,
         "vacc_type_options": _VACC_TYPE_OPTIONS,
         "dose_zh": _DOSE_ZH,
+        "vacc_history": history,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "today": vacc.vaccinated_date,
         "csrf_token": _get_csrf_token(request),
@@ -16801,11 +16814,16 @@ async def page_admin_deworming_create(
     from datetime import date as _d, timedelta as _td
     today = _d.today().isoformat()
     next_due = (_d.today() + _td(days=30)).isoformat()
+    history = []
+    if pet_id:
+        history = db.query(DewormingRecord).filter(DewormingRecord.pet_id == pet_id)\
+            .order_by(DewormingRecord.deworm_date.desc(), DewormingRecord.id.desc()).limit(10).all()
     return templates.TemplateResponse(request, "admin_deworming_form.html", {
         "mode": "create", "rec": None,
         "cust": cust, "pet": pet, "vets": vets, "dew_items": dew_items,
         "today": today, "next_due_default": next_due,
         "rec_batch_no": "", "rec_clean_notes": "", "rec_charge_amount": 0.0,
+        "deworm_history": history,
         "locked": False, "lock_reason": "", "paid_amount": 0.0,
         "csrf_token": _get_csrf_token(request),
     })
@@ -16838,11 +16856,18 @@ async def page_admin_deworming_detail(rec_id: int, request: Request, db: Session
         inv = db.get(Invoice, rec.invoice_id)
         if inv:
             charge = float(inv.total_amount or 0)
+    history = []
+    if rec.pet_id:
+        history = db.query(DewormingRecord).filter(
+            DewormingRecord.pet_id == rec.pet_id,
+            DewormingRecord.id != rec_id,
+        ).order_by(DewormingRecord.deworm_date.desc(), DewormingRecord.id.desc()).limit(10).all()
     return templates.TemplateResponse(request, "admin_deworming_form.html", {
         "mode": "edit", "rec": rec,
         "cust": cust, "pet": pet, "vets": vets, "dew_items": dew_items,
         "today": rec.deworm_date, "next_due_default": rec.next_due_date,
         "rec_batch_no": batch_no, "rec_clean_notes": clean_notes, "rec_charge_amount": charge,
+        "deworm_history": history,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
