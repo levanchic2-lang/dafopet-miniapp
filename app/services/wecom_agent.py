@@ -556,7 +556,9 @@ def _llm_client():
 
 
 def _llm_model() -> str:
-    return (getattr(settings, "openai_model", "") or "gpt-4o-mini").strip()
+    # 企微 agent 优先用专用模型（一般是更便宜的纯文本），没配再回退 openai_model
+    return ((getattr(settings, "wecom_agent_model", "") or "").strip()
+            or (getattr(settings, "openai_model", "") or "gpt-4o-mini").strip())
 
 
 def _run_llm_with_tools(db: Session, userid: str, user_text: str, ctx: dict) -> str:

@@ -118,5 +118,9 @@ class Settings(BaseSettings):
     wecom_callback_token:    str = ""  # 自定义 Token（明文匹配签名）
     wecom_callback_aes_key:  str = ""  # 43 字符 EncodingAESKey
 
+    # 企微 agent 专用模型（function calling 走纯文本路径，独立于 TNR 视觉审核）
+    # 留空则回退到 OPENAI_MODEL
+    wecom_agent_model: str = ""
+
 
 settings = Settings()
