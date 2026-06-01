@@ -28,6 +28,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import (
     AdminUser, Customer, Pet, Visit, Wallet, Appointment, AppointmentStatus, FollowUp,
+    ExamOrder,
 )
 from app.services import wecom_session as _sess
 from app.services.wecom_client import send_app_message
@@ -35,11 +36,11 @@ from app.services.wecom_client import send_app_message
 logger = logging.getLogger(__name__)
 
 
-_SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业微信发文字或语音（已转文字）给你，你帮他们查档案、新建病历、新建预约、记主诉/体检/诊断。
+_SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业微信发文字或语音（已转文字）给你，你帮他们查档案、新建病历、新建预约、开检查单、记主诉/体检/诊断。
 
 【硬性原则】
-1. 写操作（新建病历、写主诉/体检/诊断、新建预约）必须先调对应工具拿到 summary，绝不直接说"已完成"，等系统让用户确认。
-2. 不要做：开处方、开麻醉单、收款、退款、删除、作废、开检查单、开美容/疫苗/驱虫单。这些工具暂未提供，不要假装能做。
+1. 写操作（新建病历、写主诉/体检/诊断、新建预约、开检查单）必须先调对应工具拿到 summary，绝不直接说"已完成"，等系统让用户确认。
+2. 不要做：开处方、开麻醉单、收款、退款、删除、作废、开美容/疫苗/驱虫单。这些工具暂未提供，不要假装能做。
 3. 找客户时优先按手机号；其次按姓名/宠物名。find_customer 的 query 只能传**一个**关键词（号码 或 客户名 或 宠物名），不能拼接（不能传"13823137494 大米"）。
 4. 单次工具调用做一件事。比如「找李敏的大米新建病历」拆成：先 find_customer(query="李敏") 拿到客户和宠物列表，再 create_visit(pet_id=大米的 id)。
 5. 回复简洁，中文，必要时用 emoji（✓ ✋ ⚠ 📋）。不要长篇大论。
@@ -47,7 +48,7 @@ _SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业
 7. find_customer/get_customer_profile 的返回里会标 [pet_id=N]、(customer_id=N)，请直接读用这些 ID，不要再问用户。
 
 【写动作流程】
-- create_visit / update_visit_field / create_appointment 会返回 "PENDING:" 开头的字符串
+- create_visit / update_visit_field / create_appointment / create_exam_order 会返回 "PENDING:" 开头的字符串
 - 你要原样把 PENDING 后面的 summary 转述给用户，结尾问「确认执行吗？回复『确认』」
 - 不要自作主张说"已完成"，让用户先确认
 
@@ -62,6 +63,13 @@ _SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业
 - 门店：员工已绑定门店时不需要问；超管必须明确指定「东环店」或「横岗店」
 - 美容（beauty）必须让用户说出具体服务项（洗澡 / 造型 / 剪指甲...），不能默认
 - 信息不全时先问清楚，不要瞎填
+
+【检查单规则（create_exam_order）】
+- 必须先有 current_visit_id（病历），没有就先 create_visit
+- items 是字符串数组，每项是一个检查名称：「B超」「X光」「血常规」「生化」「粪检」「尿检」「显微镜检」等
+- 用户说「开个 B 超和血常规」→ items=["B超", "血常规"]
+- 单价和数量不填（医生会回系统补），agent 只负责拉好骨架
+- 草稿态：单据 status=pending，会自动同步到收费单（不扣钱，等医生在系统确认）
 """
 
 
@@ -341,6 +349,39 @@ def tool_create_appointment(
     return f"PENDING:{summary}"
 
 
+def tool_create_exam_order(
+    db: Session, userid: str, items: list[str], notes: str = "",
+    visit_id: Optional[int] = None,
+) -> str:
+    """开检查单：items 是检查项目名数组。挂 pending 等确认。"""
+    ctx = _sess.get(userid)
+    vid = visit_id or ctx.get("current_visit_id")
+    if not vid:
+        return "❌ 没有当前病历，请先 create_visit 新建病历再开检查单"
+    v = db.get(Visit, vid)
+    if not v:
+        return f"❌ 病历 #{vid} 不存在"
+    if not isinstance(items, list) or not items:
+        return "❌ 检查项目不能为空，请告诉我要开什么（如 B超 / 血常规 / X光）"
+    # 清洗项目名
+    clean = [str(x).strip() for x in items if str(x).strip()]
+    if not clean:
+        return "❌ 检查项目不能为空"
+    if len(clean) > 20:
+        return "❌ 一次最多 20 个项目"
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    summary = (
+        f"✋ 即将为病历 #{vid}（{pet.name if pet else '宠物'}）开检查单：\n"
+        + "\n".join(f"  • {n}" for n in clean)
+        + (f"\n备注：{notes.strip()}" if notes and notes.strip() else "")
+        + "\n（草稿态，价格/数量需医生回系统补；不扣库存/不收款）\n回复「确认」执行"
+    )
+    _sess.set_pending(userid, "create_exam_order", {
+        "visit_id": vid, "items": clean, "notes": (notes or "").strip(),
+    }, summary)
+    return f"PENDING:{summary}"
+
+
 # ─── 实际执行（pending → confirm 后调） ───
 def _execute_create_visit(db: Session, userid: str, args: dict) -> str:
     """真正建病历。复用 main 里的 _sync_followup_for_visit 来衍生回访。"""
@@ -422,6 +463,39 @@ def _execute_create_appointment(db: Session, userid: str, args: dict) -> str:
             f"{args['service_name']} · {args['pet_name']}（待门店确认）")
 
 
+def _execute_create_exam_order(db: Session, userid: str, args: dict) -> str:
+    from app.main import _exam_order_token, _sync_visit_invoice
+    u = db.query(AdminUser).filter(AdminUser.wecom_userid == userid).first()
+    vid = args["visit_id"]
+    items_payload = [
+        {"name": n, "item_id": None, "qty": 1.0, "unit": "",
+         "unit_price": 0.0, "subtotal": 0.0, "notes": ""}
+        for n in args["items"]
+    ]
+    token, exp = _exam_order_token(db)
+    order = ExamOrder(
+        visit_id=vid,
+        items_json=json.dumps(items_payload, ensure_ascii=False),
+        notes=args.get("notes", ""),
+        upload_token=token,
+        token_expires_at=exp,
+        created_by=(u.username if u else "wecom_agent"),
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    # 同步到收费单（草稿态，不收款）
+    try:
+        _sync_visit_invoice(db, vid, (u.username if u else "wecom_agent"))
+        db.commit()
+    except Exception as e:
+        logger.warning(f"sync_invoice after wecom create_exam_order failed: {e}")
+    items_zh = "、".join(args["items"])
+    return (f"✓ 检查单 #{order.id} 已创建（草稿）\n"
+            f"项目：{items_zh}\n"
+            f"请回系统补价格/数量并上传报告")
+
+
 def _execute_pending(db: Session, userid: str, pending: dict) -> str:
     action = pending.get("action")
     args = pending.get("args", {})
@@ -431,6 +505,8 @@ def _execute_pending(db: Session, userid: str, pending: dict) -> str:
         return _execute_update_visit_field(db, userid, args)
     if action == "create_appointment":
         return _execute_create_appointment(db, userid, args)
+    if action == "create_exam_order":
+        return _execute_create_exam_order(db, userid, args)
     return f"❌ 未知动作 {action}"
 
 
@@ -514,6 +590,19 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "create_exam_order",
+            "description": "在当前病历上开检查单（草稿态，需医生回系统补价格/上传报告）。写操作 - 返回 PENDING 等确认。",
+            "parameters": {"type": "object", "properties": {
+                "items":    {"type": "array", "items": {"type": "string"},
+                             "description": "检查项目名数组，如 [\"B超\", \"血常规\"]"},
+                "notes":    {"type": "string", "description": "整张单的备注，可选"},
+                "visit_id": {"type": "integer", "description": "显式指定病历 ID；留空则用 current_visit_id"},
+            }, "required": ["items"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "create_appointment",
             "description": "为某只宠物新建预约。写操作 - 会返回 PENDING 让用户确认；信息不全先问用户，不要瞎填。",
             "parameters": {"type": "object", "properties": {
@@ -539,6 +628,7 @@ TOOL_HANDLERS = {
     "create_visit":           tool_create_visit,
     "update_visit_field":     tool_update_visit_field,
     "create_appointment":     tool_create_appointment,
+    "create_exam_order":      tool_create_exam_order,
 }
 
 
