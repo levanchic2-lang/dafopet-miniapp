@@ -100,7 +100,7 @@
  <h1 style="margin:0;font-size:1.2rem;">开检查单</h1>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 280px;gap:1rem;align-items:start;">
+<div style="display:grid;grid-template-columns:minmax(0,720px) 360px;gap:1.25rem;align-items:start;">
 <div>
 <form method="post" action="/admin/exam-orders/create">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -166,6 +166,10 @@
  <div style="font-size:0.82rem;color:var(--muted);">{{ cust.phone or '—' }}</div>
  </div>
  {% endif %}
+ <div data-customer-context
+      data-customer-id="{{ cust.id if cust else 0 }}"
+      data-pet-id="{{ pet.id if pet else 0 }}"
+      style="display:none;"></div>
 </div>
 </div>
 

@@ -2521,6 +2521,24 @@ async def api_admin_customer_context(
         return {}
     data: dict = {}
 
+    # 档案摘要（始终返回 — 客户/宠物基本统计，避免右栏空白）
+    if customer_id:
+        cust = db.get(Customer, customer_id)
+        if cust:
+            pet_count = db.query(func.count(Pet.id)).filter(Pet.customer_id == customer_id).scalar() or 0
+            paid_total = db.query(func.coalesce(func.sum(Invoice.total_amount), 0)).filter(
+                Invoice.customer_id == customer_id,
+                Invoice.payment_status == "paid",
+            ).scalar() or 0
+            last_visit = db.query(Visit.visit_date).filter(Visit.customer_id == customer_id)\
+                .order_by(Visit.visit_date.desc(), Visit.id.desc()).first()
+            data["summary"] = {
+                "register_date": cust.created_at.strftime("%Y-%m-%d") if cust.created_at else "",
+                "pet_count": int(pet_count),
+                "lifetime_paid": round(float(paid_total), 2),
+                "last_visit": (last_visit[0] if last_visit else "") or "",
+            }
+
     # 钱包
     if customer_id:
         w = db.query(Wallet).filter(Wallet.customer_id == customer_id).first()

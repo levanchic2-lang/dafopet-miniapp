@@ -32,6 +32,23 @@
   function renderInto(host, data) {
     const cards = [];
 
+    // 📇 档案摘要（始终显示，避免右栏空白）
+    if (data.summary) {
+      const s = data.summary;
+      const items = [];
+      if (s.register_date) items.push(`<div>注册 <b>${s.register_date}</b></div>`);
+      if (s.pet_count) items.push(`<div>名下 <b>${s.pet_count}</b> 只宠物</div>`);
+      if (s.lifetime_paid > 0) items.push(`<div>累计消费 <b>${moneyFmt(s.lifetime_paid)}</b></div>`);
+      if (s.last_visit) items.push(`<div>上次到店 <b>${s.last_visit}</b></div>`);
+      if (items.length) {
+        cards.push(`
+          <div class="card" style="padding:.75rem 1rem;">
+            <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.4rem;">📇 档案摘要</div>
+            <div style="font-size:.82rem;color:#475569;line-height:1.85;">${items.join('')}</div>
+          </div>`);
+      }
+    }
+
     // 💰 钱包
     if (data.wallet) {
       cards.push(`
