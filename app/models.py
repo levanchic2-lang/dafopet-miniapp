@@ -307,9 +307,12 @@ class Prescription(Base):
     pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
     prescribed_date: Mapped[str] = mapped_column(String(20), default="")
     vet_name: Mapped[str] = mapped_column(String(80), default="")
-    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft / issued / dispensed
+    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft / issued / dispensed / voided
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[str] = mapped_column(Text, default="")
+    voided_by:  Mapped[str] = mapped_column(String(80), default="")
+    voided_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    void_reason: Mapped[str] = mapped_column(String(200), default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -354,10 +357,13 @@ class SalesOrder(Base):
     visit_id = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
     pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
     order_date: Mapped[str] = mapped_column(String(20), default="")
-    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending / paid / cancelled
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending / paid / cancelled / voided
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     payment_method: Mapped[str] = mapped_column(String(40), default="")  # 现金/微信/支付宝/挂账
     notes: Mapped[str] = mapped_column(Text, default="")
+    voided_by:  Mapped[str] = mapped_column(String(80), default="")
+    voided_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    void_reason: Mapped[str] = mapped_column(String(200), default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -647,6 +653,11 @@ class Vaccination(Base):
 
     vet_name:   Mapped[str] = mapped_column(String(80), default="")
     notes:      Mapped[str] = mapped_column(Text, default="")
+    # 锁定支持：active = 正常；voided = 已作废
+    status:     Mapped[str] = mapped_column(String(20), default="active")
+    voided_by:  Mapped[str] = mapped_column(String(80), default="")
+    voided_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    void_reason: Mapped[str] = mapped_column(String(200), default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -701,12 +712,15 @@ class ExamOrder(Base):
 
     items_json: Mapped[str] = mapped_column(Text, default="[]")   # [{name, item_id, notes}]
     notes:      Mapped[str] = mapped_column(Text, default="")
-    status:     Mapped[str] = mapped_column(String(20), default="pending")  # pending/completed
+    status:     Mapped[str] = mapped_column(String(20), default="pending")  # pending/completed/voided
 
     # 手机上传 token（24小时有效）
     upload_token:     Mapped[str]           = mapped_column(String(80), unique=True, default="")
     token_expires_at: Mapped[datetime|None] = mapped_column(DateTime, nullable=True, default=None)
 
+    voided_by:  Mapped[str] = mapped_column(String(80), default="")
+    voided_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    void_reason: Mapped[str] = mapped_column(String(200), default="")
     created_by: Mapped[str]      = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -758,6 +772,13 @@ class DewormingRecord(Base):
     next_due_date: Mapped[str] = mapped_column(String(20), default="")       # 下次到期日
     vet_name: Mapped[str] = mapped_column(String(80), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    # 关联收费单（用于锁定判定）
+    invoice_id = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    # 锁定支持
+    status:     Mapped[str] = mapped_column(String(20), default="active")
+    voided_by:  Mapped[str] = mapped_column(String(80), default="")
+    voided_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    void_reason: Mapped[str] = mapped_column(String(200), default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1310,6 +1331,9 @@ class AnesthesiaOrder(Base):
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     store:       Mapped[str] = mapped_column(String(40), default="")
     notes:       Mapped[str] = mapped_column(Text, default="")
+    voided_by:   Mapped[str] = mapped_column(String(80), default="")
+    voided_at:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    void_reason: Mapped[str] = mapped_column(String(200), default="")
     created_by:  Mapped[str] = mapped_column(String(80), default="")
     created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

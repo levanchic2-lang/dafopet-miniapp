@@ -47,12 +47,50 @@
  {% endif %}
 </div>
 
+{% if locked %}
+<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;">
+  <div style="font-size:1.4rem;">🔒</div>
+  <div style="flex:1;min-width:200px;">
+    <div style="font-weight:600;color:#991b1b;">此疫苗单已锁定（{{ lock_reason }}），不可修改</div>
+    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">「📋 复制为新单」开下一针 · 或「🚫 作废」回退后重开</div>
+  </div>
+  <form method="post" action="/admin/vaccinations/{{ vacc.id }}/copy-as-new" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <button type="submit" class="btn" style="background:#3b82f6;border-color:#3b82f6;">📋 复制为新单（下一针）</button>
+  </form>
+  {% if vacc.status != 'voided' %}
+  <form method="post" action="/admin/vaccinations/{{ vacc.id }}/void" style="display:inline;" onsubmit="return confirmVaccVoid(this)">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="void_reason" value=""/>
+    <button type="submit" class="danger">🚫 作废此单</button>
+  </form>
+  {% endif %}
+</div>
+<style>
+  .locked-form input, .locked-form select, .locked-form textarea, .locked-form button[type="submit"] {
+    pointer-events: none !important;
+    background-color: #f8fafc !important;
+    color: #64748b !important;
+  }
+  .locked-form button[type="submit"] { display: none !important; }
+</style>
+<script>
+function confirmVaccVoid(form) {
+  const reason = prompt('请填写作废原因（必填）：');
+  if (!reason || !reason.trim()) return false;
+  form.querySelector('input[name="void_reason"]').value = reason.trim();
+  return confirm('确认作废此疫苗单？\n• 库存将自动回退\n• 此操作会写入审计日志');
+}
+</script>
+{% endif %}
+
 <div style="display:grid;grid-template-columns:1fr 300px;gap:1rem;align-items:start;">
 
  <!-- 左：表单 -->
  <div>
  <form method="post"
- action="{% if is_edit %}/admin/vaccinations/{{ vacc.id }}/edit{% else %}/admin/vaccinations/create{% endif %}">
+ action="{% if is_edit %}/admin/vaccinations/{{ vacc.id }}/edit{% else %}/admin/vaccinations/create{% endif %}"
+ class="{% if locked %}locked-form{% endif %}">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
  <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
@@ -181,8 +219,8 @@
  </div>
  </form>
 
- <!-- 删除（编辑模式） -->
- {% if is_edit %}
+ <!-- 删除（编辑模式 · 未锁定） -->
+ {% if is_edit and not locked %}
  <div style="margin-top:0.75rem;">
  <form method="post" action="/admin/vaccinations/{{ vacc.id }}/delete"
  onsubmit="return confirm('确认删除此接种记录？')">

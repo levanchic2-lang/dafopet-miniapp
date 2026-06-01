@@ -688,19 +688,37 @@
  <thead><tr><th>驱虫日期</th><th>类型</th><th>药品</th><th>体重</th><th>下次到期</th><th></th></tr></thead>
  <tbody>
  {% for d in dewormings %}
- <tr>
- <td>{{ d.deworm_date }}</td>
+ <tr {% if d.status == 'voided' %}style="opacity:.5;"{% endif %}>
+ <td>{{ d.deworm_date }}{% if d.status == 'voided' %} <span class="pill pill-gray" style="font-size:.65rem;">已作废</span>{% endif %}</td>
  <td>{{ {'external':'体外','internal':'体内','combo':'体内+体外'}.get(d.deworm_type, d.deworm_type) }}</td>
  <td>{{ d.product_name or '—' }}</td>
  <td>{{ d.weight_kg }} kg</td>
  <td>{% if d.next_due_date %}{% if d.next_due_date < today_str %}<span class="pill pill-no">已过期</span>{% elif d.next_due_date < soon_str %}<span class="pill pill-warn">{{ d.next_due_date }}</span>{% else %}{{ d.next_due_date }}{% endif %}{% else %}—{% endif %}</td>
- <td>
+ <td style="white-space:nowrap;">
+ {% if d._locked %}
+   {% if d.status != 'voided' %}
+   <form method="post" action="/admin/dewormings/{{ d.id }}/copy-as-new" style="display:inline;">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <input type="hidden" name="customer_id" value="{{ cust.id }}">
+     <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
+     <button type="submit" title="以此为模板新建" style="background:none;border:none;color:#3b82f6;cursor:pointer;font-size:0.78rem;padding:0;margin-right:.5rem;">📋复制</button>
+   </form>
+   <form method="post" action="/admin/dewormings/{{ d.id }}/void" style="display:inline;" onsubmit="var r=prompt('作废原因（必填）：');if(!r){return false;}this.querySelector('[name=void_reason]').value=r;return confirm('确认作废？');">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <input type="hidden" name="customer_id" value="{{ cust.id }}">
+     <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
+     <input type="hidden" name="void_reason" value="">
+     <button type="submit" title="{{ d._lock_reason }}，不可删除只能作废" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">🚫作废</button>
+   </form>
+   {% endif %}
+ {% else %}
  <form method="post" action="/admin/dewormings/{{ d.id }}/delete" style="display:inline;" onsubmit="return confirm('删除此驱虫记录？')">
- <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
- <input type="hidden" name="customer_id" value="{{ cust.id }}">
- <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
- <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+   <input type="hidden" name="customer_id" value="{{ cust.id }}">
+   <input type="hidden" name="pet_id" value="{{ active_pet.id }}">
+   <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
  </form>
+ {% endif %}
  </td>
  </tr>
  {% endfor %}

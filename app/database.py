@@ -213,6 +213,46 @@ def _try_sqlite_migrations() -> None:
             if "cat_color" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN cat_color VARCHAR(80) DEFAULT ''"))
 
+            # ── 单据锁定支持：Vaccination / DewormingRecord 加 status + 作废元数据 ──
+            try:
+                vacc_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(vaccinations)")).fetchall()}
+                if "status" not in vacc_cols:
+                    conn.execute(text("ALTER TABLE vaccinations ADD COLUMN status VARCHAR(20) DEFAULT 'active'"))
+                if "voided_by" not in vacc_cols:
+                    conn.execute(text("ALTER TABLE vaccinations ADD COLUMN voided_by VARCHAR(80) DEFAULT ''"))
+                if "voided_at" not in vacc_cols:
+                    conn.execute(text("ALTER TABLE vaccinations ADD COLUMN voided_at DATETIME DEFAULT NULL"))
+                if "void_reason" not in vacc_cols:
+                    conn.execute(text("ALTER TABLE vaccinations ADD COLUMN void_reason VARCHAR(200) DEFAULT ''"))
+            except Exception:
+                pass
+            try:
+                dew_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(deworming_records)")).fetchall()}
+                if "invoice_id" not in dew_cols:
+                    conn.execute(text("ALTER TABLE deworming_records ADD COLUMN invoice_id INTEGER DEFAULT NULL"))
+                if "status" not in dew_cols:
+                    conn.execute(text("ALTER TABLE deworming_records ADD COLUMN status VARCHAR(20) DEFAULT 'active'"))
+                if "voided_by" not in dew_cols:
+                    conn.execute(text("ALTER TABLE deworming_records ADD COLUMN voided_by VARCHAR(80) DEFAULT ''"))
+                if "voided_at" not in dew_cols:
+                    conn.execute(text("ALTER TABLE deworming_records ADD COLUMN voided_at DATETIME DEFAULT NULL"))
+                if "void_reason" not in dew_cols:
+                    conn.execute(text("ALTER TABLE deworming_records ADD COLUMN void_reason VARCHAR(200) DEFAULT ''"))
+            except Exception:
+                pass
+            # 处方单/销售单/麻醉单/检查单 加作废元数据（status 字段都已有）
+            for tbl in ("prescriptions", "sales_orders", "anesthesia_orders", "exam_orders"):
+                try:
+                    cols = {c[1] for c in conn.execute(text(f"PRAGMA table_info({tbl})")).fetchall()}
+                    if "voided_by" not in cols:
+                        conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN voided_by VARCHAR(80) DEFAULT ''"))
+                    if "voided_at" not in cols:
+                        conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN voided_at DATETIME DEFAULT NULL"))
+                    if "void_reason" not in cols:
+                        conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN void_reason VARCHAR(200) DEFAULT ''"))
+                except Exception:
+                    pass
+
             # 钱包"按比例扣本金/赠送"所需字段（idempotent）
             try:
                 w_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(wallets)")).fetchall()}

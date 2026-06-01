@@ -42,14 +42,46 @@
   </div>
   <div class="ph-actions">
     <a href="/admin/exam-orders/{{ order.id }}/print" target="_blank" class="btn secondary" style="font-size:0.82rem;"><i data-lucide="printer"></i> 打印报告</a>
+    {% if locked %}
+    <form method="post" action="/admin/exam-orders/{{ order.id }}/copy-as-new" style="margin:0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn" style="background:#3b82f6;color:#fff;border-color:#3b82f6;font-size:0.82rem;">📋 复制为新单</button>
+    </form>
+    {% if order.status != 'voided' %}
+    <form method="post" action="/admin/exam-orders/{{ order.id }}/void" style="margin:0;" onsubmit="return confirmExamVoid(this)">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="void_reason" value="">
+      <button type="submit" class="btn" style="background:#fee2e2;color:#dc2626;border-color:#fca5a5;font-size:0.82rem;">🚫 作废</button>
+    </form>
+    {% endif %}
+    {% else %}
     <form method="post" action="/admin/exam-orders/{{ order.id }}/delete" style="margin:0;"
           onsubmit="return confirm('删除此检查单及其所有报告？此操作不可恢复。')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="return_to" value="visit">
       <button type="submit" class="btn" style="background:#fee2e2;color:#dc2626;border-color:#fca5a5;font-size:0.82rem;"><i data-lucide="trash-2"></i> 删除检查单</button>
     </form>
+    {% endif %}
   </div>
 </div>
+
+{% if locked %}
+<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;">
+  <div style="font-size:1.4rem;">🔒</div>
+  <div style="flex:1;">
+    <div style="font-weight:600;color:#991b1b;">检查项目已锁定（{{ lock_reason }}），不可增减</div>
+    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">报告仍可继续上传 · 如需增减检查项请「📋 复制为新单」开下一张</div>
+  </div>
+</div>
+<script>
+function confirmExamVoid(form) {
+  const reason = prompt('请填写作废原因（必填）：');
+  if (!reason || !reason.trim()) return false;
+  form.querySelector('input[name="void_reason"]').value = reason.trim();
+  return confirm('确认作废？此操作会写入审计日志。');
+}
+</script>
+{% endif %}
 
 <div style="display:grid;grid-template-columns:1fr 260px;gap:1rem;align-items:start;">
 <div>

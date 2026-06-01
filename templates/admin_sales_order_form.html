@@ -159,11 +159,48 @@
  {% endif %}
 </div>
 
+{% if locked %}
+<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;">
+  <div style="font-size:1.4rem;">🔒</div>
+  <div style="flex:1;min-width:200px;">
+    <div style="font-weight:600;color:#991b1b;">此销售单已锁定（{{ lock_reason }}），不可修改</div>
+    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">医疗 / 财务档案。如需调整可「📋 复制为新单」或「🚫 作废此单」后重开</div>
+  </div>
+  <form method="post" action="/admin/sales-orders/{{ o.id }}/copy-as-new" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <button type="submit" class="btn" style="background:#3b82f6;border-color:#3b82f6;">📋 复制为新单</button>
+  </form>
+  {% if o.status != 'voided' %}
+  <form method="post" action="/admin/sales-orders/{{ o.id }}/void" style="display:inline;" onsubmit="return confirmSoVoid(this)">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="void_reason" value=""/>
+    <button type="submit" class="danger">🚫 作废此单</button>
+  </form>
+  {% endif %}
+</div>
+<style>
+  .locked-form input, .locked-form select, .locked-form textarea, .locked-form button[type="submit"] {
+    pointer-events: none !important;
+    background-color: #f8fafc !important;
+    color: #64748b !important;
+  }
+  .locked-form button[type="submit"] { display: none !important; }
+</style>
+<script>
+function confirmSoVoid(form) {
+  const reason = prompt('请填写作废原因（必填）：');
+  if (!reason || !reason.trim()) return false;
+  form.querySelector('input[name="void_reason"]').value = reason.trim();
+  return confirm('确认作废此销售单？\n• 库存将自动回退\n• 此操作会写入审计日志\n• 客户已付款的请到收银台手动退款');
+}
+</script>
+{% endif %}
+
 <div style="display:grid;grid-template-columns:1fr 300px;gap:1rem;align-items:start;">
 
  <div>
  <div class="card">
- <form method="post" action="{% if is_edit %}/admin/sales-orders/{{ o.id }}/edit{% else %}/admin/sales-orders/create{% endif %}" id="so-form">
+ <form method="post" action="{% if is_edit %}/admin/sales-orders/{{ o.id }}/edit{% else %}/admin/sales-orders/create{% endif %}" id="so-form" class="{% if locked %}locked-form{% endif %}">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <input type="hidden" name="customer_id" value="{{ cust.id if cust else (o.customer_id if o else 0) }}"/>
  <input type="hidden" name="visit_id" value="{{ visit.id if visit else (o.visit_id if o else 0) }}"/>
@@ -292,7 +329,7 @@
  </div>
  {% endif %}
 
- {% if is_edit %}
+ {% if is_edit and not locked %}
  <div style="margin-top:0.5rem;" class="no-print">
  <form method="post" action="/admin/sales-orders/{{ o.id }}/delete" onsubmit="return confirm('确认删除此销售单？')">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

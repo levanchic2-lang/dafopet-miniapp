@@ -6448,6 +6448,14 @@ async def page_admin_customer_detail(
         exam_orders = db.query(ExamOrder).join(Visit, ExamOrder.visit_id == Visit.id).filter(Visit.pet_id == active_pet_id).order_by(ExamOrder.id.desc()).limit(50).all()
         vaccinations = db.query(Vaccination).filter(Vaccination.pet_id == active_pet_id).order_by(Vaccination.vaccinated_date.desc()).all()
         dewormings = db.query(DewormingRecord).filter(DewormingRecord.pet_id == active_pet_id).order_by(DewormingRecord.deworm_date.desc()).all()
+        for _d in dewormings:
+            _l, _r = _is_deworming_locked(db, _d)
+            _d._locked = _l
+            _d._lock_reason = _r
+        for _v in vaccinations:
+            _l, _r = _is_vaccination_locked(db, _v)
+            _v._locked = _l
+            _v._lock_reason = _r
         weight_records = db.query(WeightRecord).filter(WeightRecord.pet_id == active_pet_id).order_by(WeightRecord.record_date.asc()).all()
         medical_docs = db.query(MedicalDocument).filter(MedicalDocument.pet_id == active_pet_id).order_by(MedicalDocument.id.desc()).all()
         # 该宠物名下发票 = 直接关联该宠物 OR 通过 visit_id 关联
@@ -10181,6 +10189,134 @@ def _restore_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref
     ))
 
 
+# ════════════════════════════════════════════════════════════════════
+# 单据锁定：医疗 / 财务档案的不可篡改保护
+#
+# 锁定规则：
+#   - 处方单：dispensed (已发药) 或 关联 Visit 有已付 Invoice → 锁
+#   - 麻醉单：issued (已开具) 或 关联 Visit 有已付 Invoice → 锁
+#   - 销售单：paid 或 关联 Visit 有已付 Invoice → 锁
+#   - 检查单：有 ExamReport 或 关联 Visit 有已付 Invoice → 锁（仅项目，报告仍可上传）
+#   - 疫苗单：invoice_id 对应 Invoice 已付 → 锁
+#   - 驱虫单：invoice_id 对应 Invoice 已付 → 锁
+#   - 狂犬疫苗：cert_no 已填 → 锁
+#   - 任何 status='voided' 都视为锁
+#
+# 锁定后允许的操作：
+#   1. 看 / 打印
+#   2. 复制为新单（以本单为模板新建一张）
+#   3. 作废（status→voided + 库存回退 + 写审计日志）
+# ════════════════════════════════════════════════════════════════════
+
+def _invoice_paid_for_visit(db: Session, visit_id: int) -> bool:
+    """Visit 是否有任何 payment_status='paid' 的 Invoice。"""
+    if not visit_id:
+        return False
+    return db.query(Invoice).filter(
+        Invoice.visit_id == visit_id,
+        Invoice.payment_status == "paid",
+    ).first() is not None
+
+
+def _is_prescription_locked(db: Session, p: "Prescription") -> tuple[bool, str]:
+    if not p:
+        return False, ""
+    if getattr(p, "status", "") == "voided":
+        return True, "已作废"
+    if getattr(p, "status", "") == "dispensed":
+        return True, "已发药"
+    if p.visit_id and _invoice_paid_for_visit(db, p.visit_id):
+        return True, "关联收费单已付款"
+    return False, ""
+
+
+def _is_sales_order_locked(db: Session, so: "SalesOrder") -> tuple[bool, str]:
+    if not so:
+        return False, ""
+    if getattr(so, "status", "") == "voided":
+        return True, "已作废"
+    if getattr(so, "status", "") == "paid":
+        return True, "已付款"
+    if so.visit_id and _invoice_paid_for_visit(db, so.visit_id):
+        return True, "关联收费单已付款"
+    return False, ""
+
+
+def _is_anesthesia_locked(db: Session, a: "AnesthesiaOrder") -> tuple[bool, str]:
+    if not a:
+        return False, ""
+    if getattr(a, "status", "") == "voided":
+        return True, "已作废"
+    if getattr(a, "status", "") == "issued":
+        return True, "已开具"
+    if a.visit_id and _invoice_paid_for_visit(db, a.visit_id):
+        return True, "关联收费单已付款"
+    return False, ""
+
+
+def _is_exam_order_locked(db: Session, eo: "ExamOrder") -> tuple[bool, str]:
+    """检查单特殊：报告已上传或付款 → 锁项目；但报告仍可继续上传。"""
+    if not eo:
+        return False, ""
+    if getattr(eo, "status", "") == "voided":
+        return True, "已作废"
+    has_report = db.query(ExamReport).filter(ExamReport.exam_order_id == eo.id).first() is not None
+    if has_report:
+        return True, "检查报告已上传"
+    if eo.visit_id and _invoice_paid_for_visit(db, eo.visit_id):
+        return True, "关联收费单已付款"
+    return False, ""
+
+
+def _is_vaccination_locked(db: Session, v: "Vaccination") -> tuple[bool, str]:
+    if not v:
+        return False, ""
+    if getattr(v, "status", "") == "voided":
+        return True, "已作废"
+    if v.invoice_id:
+        inv = db.get(Invoice, v.invoice_id)
+        if inv and inv.payment_status == "paid":
+            return True, "关联收费单已付款"
+    return False, ""
+
+
+def _is_deworming_locked(db: Session, d: "DewormingRecord") -> tuple[bool, str]:
+    if not d:
+        return False, ""
+    if getattr(d, "status", "") == "voided":
+        return True, "已作废"
+    if getattr(d, "invoice_id", None):
+        inv = db.get(Invoice, d.invoice_id)
+        if inv and inv.payment_status == "paid":
+            return True, "关联收费单已付款"
+    return False, ""
+
+
+def _is_rabies_locked(db: Session, r: "RabiesVaccineRecord") -> tuple[bool, str]:
+    if not r:
+        return False, ""
+    if getattr(r, "cert_no", ""):
+        return True, "免疫证号已上传"
+    return False, ""
+
+
+def _audit_doc_action(db: Session, doc_type: str, doc_id: int, action: str,
+                       operator: str, reason: str = "", extra: str = "") -> None:
+    """单据锁定/作废审计日志，写入 AuditLog 表。
+
+    action: void / unlock / copy_from
+    """
+    try:
+        db.add(AuditLog(
+            application_id=None,
+            actor=operator or "system",
+            action=f"{doc_type}.{action}",
+            detail=(f"id={doc_id} reason={reason} {extra}").strip()[:500],
+        ))
+    except Exception:
+        pass
+
+
 @app.get("/admin/prescriptions/create", response_class=HTMLResponse)
 async def page_admin_presc_create(
     request: Request,
@@ -10263,10 +10399,12 @@ async def page_admin_presc_detail(presc_id: int, request: Request, db: Session =
     pets = db.query(Pet).filter(Pet.customer_id == presc.customer_id).all() if presc.customer_id else []
     vets = db.query(Staff.name).filter(Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")).all()
     vet_names = [v[0] for v in vets]
+    locked, lock_reason = _is_prescription_locked(db, presc)
     return templates.TemplateResponse(request, "admin_prescription_form.html", {
         "presc": presc, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
         "presc_status_zh": _PRESC_STATUS_ZH,
+        "locked": locked, "lock_reason": lock_reason,
         "csrf_token": _get_csrf_token(request), "mode": "edit",
         "msg": request.query_params.get("msg"),
     })
@@ -10326,6 +10464,9 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
     presc = db.get(Prescription, presc_id)
     if not presc:
         raise HTTPException(404)
+    locked, reason = _is_prescription_locked(db, presc)
+    if locked:
+        raise HTTPException(400, f"处方单已锁定（{reason}），不可修改。如需调整请「复制为新单」或「作废」后重开。")
     operator = request.session.get("admin_username", "admin")
     # 先把旧明细的库存退回
     for old in presc.items:
@@ -10358,12 +10499,16 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
 @app.post("/admin/prescriptions/{presc_id}/delete")
 async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depends(get_db),
                               csrf_token: str = Form("")):
+    """未锁定的处方单（draft / issued 且未付款）可删；锁定的请走 /void。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
     presc = db.get(Prescription, presc_id)
     if not presc:
         raise HTTPException(404)
+    locked, reason = _is_prescription_locked(db, presc)
+    if locked:
+        raise HTTPException(400, f"处方单已锁定（{reason}），不可删除。请使用「作废」。")
     operator = request.session.get("admin_username", "admin")
     visit_id = presc.visit_id
     for it in presc.items:
@@ -10372,11 +10517,104 @@ async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depe
                                "prescription", presc_id, operator, f"删除处方#{presc_id}退回")
     db.delete(presc)
     db.commit()
-    # 同步收费单（删除后明细变少）
     if visit_id:
         _sync_visit_invoice(db, visit_id, operator)
         db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已删除" if visit_id else "/admin/visits", status_code=303)
+
+
+@app.post("/admin/prescriptions/{presc_id}/void")
+async def admin_presc_void(presc_id: int, request: Request, db: Session = Depends(get_db),
+                            csrf_token: str = Form(""), void_reason: str = Form("")):
+    """锁定的处方作废：库存回退 + 写审计 + status=voided。财务退款另行手动处理。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    presc = db.get(Prescription, presc_id)
+    if not presc:
+        raise HTTPException(404)
+    if presc.status == "voided":
+        return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=该单已作废", status_code=303)
+    operator = request.session.get("admin_username", "admin")
+    visit_id = presc.visit_id
+    # 库存回退
+    for it in presc.items:
+        if it.item_id and it.quantity_num > 0:
+            _restore_inventory(db, it.item_id, it.quantity_num,
+                               "prescription_void", presc_id, operator, f"作废处方#{presc_id}回退")
+    presc.status = "voided"
+    presc.voided_by = operator
+    presc.voided_at = datetime.utcnow()
+    presc.void_reason = (void_reason or "")[:200]
+    _audit_doc_action(db, "prescription", presc_id, "void", operator, void_reason)
+    db.commit()
+    if visit_id:
+        try:
+            _sync_visit_invoice(db, visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已作废" if visit_id else f"/admin/prescriptions/{presc_id}", status_code=303)
+
+
+@app.post("/admin/prescriptions/{presc_id}/copy-as-new")
+async def admin_presc_copy_as_new(presc_id: int, request: Request, db: Session = Depends(get_db),
+                                    csrf_token: str = Form("")):
+    """以本单为模板新建一张处方单（同 visit/customer/pet/vet/医生 + 全部明细）。
+    新单 status=draft，未发药未付款，扣库存在保存时统一处理。
+    """
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    src = db.get(Prescription, presc_id)
+    if not src:
+        raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
+    new_presc = Prescription(
+        visit_id=src.visit_id,
+        customer_id=src.customer_id,
+        pet_id=src.pet_id,
+        prescribed_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        vet_name=src.vet_name,
+        status="issued",
+        total_amount=src.total_amount,
+        notes=src.notes,
+        created_by=operator,
+    )
+    db.add(new_presc)
+    db.flush()
+    for old in src.items:
+        new_it = PrescriptionItem(
+            prescription_id=new_presc.id,
+            item_id=old.item_id,
+            drug_name=old.drug_name,
+            drug_type=old.drug_type,
+            dosage=old.dosage,
+            frequency=old.frequency,
+            duration_days=old.duration_days,
+            quantity_num=old.quantity_num,
+            quantity=old.quantity,
+            unit_price=old.unit_price,
+            subtotal=old.subtotal,
+            instructions=old.instructions,
+            dose_amount=old.dose_amount,
+            dose_unit=old.dose_unit,
+            times_per_day=old.times_per_day,
+            item_unit=old.item_unit,
+            print_note=old.print_note,
+        )
+        db.add(new_it)
+        if old.item_id and old.quantity_num > 0:
+            _deduct_inventory(db, old.item_id, old.quantity_num,
+                              "prescription", new_presc.id, operator,
+                              f"处方#{new_presc.id}（复制自 #{presc_id}）")
+    _audit_doc_action(db, "prescription", new_presc.id, "copy_from", operator,
+                      extra=f"src={presc_id}")
+    db.commit()
+    if new_presc.visit_id:
+        _sync_visit_invoice(db, new_presc.visit_id, operator)
+        db.commit()
+    return RedirectResponse(f"/admin/prescriptions/{new_presc.id}?msg=已复制为新单 · 可继续编辑", status_code=303)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -10607,8 +10845,85 @@ async def page_admin_anesth_detail(order_id: int, request: Request, db: Session 
     pet = db.get(Pet, order.pet_id) if order.pet_id else None
     pets = db.query(Pet).filter(Pet.customer_id == order.customer_id).all() if order.customer_id else []
     ctx = _anesth_form_context(request, db, order=order, visit=visit, cust=cust, pet=pet, pets=pets, mode="edit")
+    locked, reason = _is_anesthesia_locked(db, order)
+    ctx["locked"] = locked
+    ctx["lock_reason"] = reason
     ctx["msg"] = request.query_params.get("msg")
     return templates.TemplateResponse(request, "admin_anesthesia_form.html", ctx)
+
+
+@app.post("/admin/anesthesia/{order_id}/copy-as-new")
+async def admin_anesth_copy_as_new(order_id: int, request: Request, db: Session = Depends(get_db),
+                                     csrf_token: str = Form("")):
+    """以本麻醉单为模板新建一张（同 visit/pet/医师 + 全部明细 + 扣库存）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    src = db.get(AnesthesiaOrder, order_id)
+    if not src:
+        raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
+    new_order = AnesthesiaOrder(
+        visit_id=src.visit_id,
+        customer_id=src.customer_id,
+        pet_id=src.pet_id,
+        anesth_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        asa_grade=src.asa_grade,
+        vet_name=src.vet_name,
+        cosigner=src.cosigner,
+        start_time="",
+        end_time="",
+        recovery="",
+        status="issued",
+        total_amount=src.total_amount,
+        store=src.store,
+        notes=src.notes,
+        created_by=operator,
+    )
+    db.add(new_order)
+    db.flush()
+    for old in src.items:
+        new_it = AnesthesiaOrderItem(
+            order_id=new_order.id,
+            item_id=old.item_id,
+            drug_name=old.drug_name,
+            route=old.route,
+            concentration=old.concentration,
+            dose_amount=old.dose_amount,
+            dose_unit=old.dose_unit,
+            total_qty=old.total_qty,
+            total_unit=old.total_unit,
+            unit_price=old.unit_price,
+            subtotal=old.subtotal,
+            is_service=old.is_service,
+            note=old.note,
+        )
+        db.add(new_it)
+        inv = db.get(InventoryItem, old.item_id) if old.item_id else None
+        if inv and not inv.is_service and not old.is_service and old.total_qty > 0:
+            _deduct_inventory(db, inv.id, old.total_qty, "anesthesia",
+                              new_order.id, operator, f"麻醉单#{new_order.id}（复制自 #{order_id}）")
+        # 写台账
+        if inv and (inv.is_controlled or inv.subcategory == "controlled"):
+            _write_narcotics_ledger(
+                db, item_id=inv.id, item_name=old.drug_name,
+                direction="out", source="anesth_order",
+                qty=old.total_qty if old.total_qty > 0 else 1,
+                unit=old.total_unit or old.dose_unit,
+                operator=src.vet_name, cosigner=src.cosigner,
+                visit_id=src.visit_id, anesth_order_id=new_order.id,
+                store=src.store, event_date=new_order.anesth_date,
+                notes=f"复制自麻醉单#{order_id}",
+            )
+    _audit_doc_action(db, "anesthesia", new_order.id, "copy_from", operator, extra=f"src={order_id}")
+    db.commit()
+    if new_order.visit_id:
+        try:
+            _sync_visit_invoice(db, new_order.visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    return RedirectResponse(f"/admin/anesthesia/{new_order.id}?msg=已复制为新单", status_code=303)
 
 
 @app.get("/admin/anesthesia/{order_id}/print", response_class=HTMLResponse)
@@ -11169,10 +11484,12 @@ async def page_admin_so_detail(order_id: int, request: Request, db: Session = De
     cust = db.get(Customer, order.customer_id) if order.customer_id else None
     pet = db.get(Pet, order.pet_id) if order.pet_id else None
     pets = db.query(Pet).filter(Pet.customer_id == order.customer_id).all() if order.customer_id else []
+    locked, lock_reason = _is_sales_order_locked(db, order)
     return templates.TemplateResponse(request, "admin_sales_order_form.html", {
         "order": order, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "so_status_zh": _SO_STATUS_ZH, "item_type_zh": _SO_ITEM_TYPE_ZH,
         "payment_methods": _PAYMENT_METHOD_OPTIONS,
+        "locked": locked, "lock_reason": lock_reason,
         "csrf_token": _get_csrf_token(request), "mode": "edit",
         "msg": request.query_params.get("msg"),
     })
@@ -11187,6 +11504,9 @@ async def admin_so_edit(order_id: int, request: Request, db: Session = Depends(g
     order = db.get(SalesOrder, order_id)
     if not order:
         raise HTTPException(404)
+    locked, reason = _is_sales_order_locked(db, order)
+    if locked:
+        raise HTTPException(400, f"销售单已锁定（{reason}），不可修改。请「复制为新单」或「作废」后重开。")
     operator = request.session.get("admin_username", "admin")
     # 先退回旧明细库存
     for old in order.items:
@@ -11240,6 +11560,9 @@ async def admin_so_delete(order_id: int, request: Request, db: Session = Depends
     order = db.get(SalesOrder, order_id)
     if not order:
         raise HTTPException(404)
+    locked, reason = _is_sales_order_locked(db, order)
+    if locked:
+        raise HTTPException(400, f"销售单已锁定（{reason}），不可删除。请使用「作废」。")
     operator = request.session.get("admin_username", "admin")
     visit_id = order.visit_id
     for it in order.items:
@@ -11252,6 +11575,88 @@ async def admin_so_delete(order_id: int, request: Request, db: Session = Depends
         _sync_visit_invoice(db, visit_id, operator)
         db.commit()
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已删除" if visit_id else "/admin/sales-orders", status_code=303)
+
+
+@app.post("/admin/sales-orders/{order_id}/void")
+async def admin_so_void(order_id: int, request: Request, db: Session = Depends(get_db),
+                         csrf_token: str = Form(""), void_reason: str = Form("")):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    if order.status == "voided":
+        return RedirectResponse(f"/admin/sales-orders/{order_id}?msg=该单已作废", status_code=303)
+    operator = request.session.get("admin_username", "admin")
+    visit_id = order.visit_id
+    for it in order.items:
+        if it.item_id and it.quantity > 0:
+            _restore_inventory(db, it.item_id, it.quantity,
+                               "sales_order_void", order_id, operator, f"作废销售单#{order_id}回退")
+    order.status = "voided"
+    order.voided_by = operator
+    order.voided_at = datetime.utcnow()
+    order.void_reason = (void_reason or "")[:200]
+    _audit_doc_action(db, "sales_order", order_id, "void", operator, void_reason)
+    db.commit()
+    if visit_id:
+        try:
+            _sync_visit_invoice(db, visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已作废" if visit_id else f"/admin/sales-orders/{order_id}", status_code=303)
+
+
+@app.post("/admin/sales-orders/{order_id}/copy-as-new")
+async def admin_so_copy_as_new(order_id: int, request: Request, db: Session = Depends(get_db),
+                                csrf_token: str = Form("")):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    src = db.get(SalesOrder, order_id)
+    if not src:
+        raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
+    new_order = SalesOrder(
+        customer_id=src.customer_id,
+        visit_id=src.visit_id,
+        pet_id=src.pet_id,
+        order_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        status="pending",
+        total_amount=src.total_amount,
+        payment_method="",
+        notes=src.notes,
+        created_by=operator,
+    )
+    db.add(new_order)
+    db.flush()
+    for old in src.items:
+        new_it = SalesOrderItem(
+            order_id=new_order.id,
+            item_id=old.item_id,
+            item_name=old.item_name,
+            item_type=old.item_type,
+            unit_price=old.unit_price,
+            quantity=old.quantity,
+            subtotal=old.subtotal,
+            notes=old.notes,
+        )
+        db.add(new_it)
+        if old.item_id and old.quantity > 0:
+            _deduct_inventory(db, old.item_id, old.quantity,
+                              "sales_order", new_order.id, operator,
+                              f"销售单#{new_order.id}（复制自 #{order_id}）")
+    _audit_doc_action(db, "sales_order", new_order.id, "copy_from", operator, extra=f"src={order_id}")
+    db.commit()
+    if new_order.visit_id:
+        try:
+            _sync_visit_invoice(db, new_order.visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    return RedirectResponse(f"/admin/sales-orders/{new_order.id}?msg=已复制为新单", status_code=303)
 
 
 # ─────────────────────────────────────────────
@@ -14476,6 +14881,7 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
         InventoryItem.category.in_(["vaccine", "antiparasitic"])
     ).order_by(InventoryItem.name).all()
     _attach_latest_batch(db, vacc_items)
+    locked, lock_reason = _is_vaccination_locked(db, vacc)
     return templates.TemplateResponse(request, "admin_vaccination_form.html", {
         "mode": "edit", "vacc": vacc,
         "pet": pet, "cust": cust,
@@ -14483,6 +14889,7 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
         "vacc_type_zh": _VACC_TYPE_ZH,
         "vacc_type_options": _VACC_TYPE_OPTIONS,
         "dose_zh": _DOSE_ZH,
+        "locked": locked, "lock_reason": lock_reason,
         "today": vacc.vaccinated_date,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
@@ -14497,6 +14904,9 @@ async def admin_vaccination_edit(vacc_id: int, request: Request, db: Session = D
     vacc = db.get(Vaccination, vacc_id)
     if not vacc:
         raise HTTPException(404)
+    locked, reason = _is_vaccination_locked(db, vacc)
+    if locked:
+        raise HTTPException(400, f"疫苗单已锁定（{reason}），不可修改。请「复制为新单」或「作废」后重开。")
     vacc.vaccine_type    = str(form.get("vaccine_type") or "other")
     vacc.vaccine_name    = str(form.get("vaccine_name") or "").strip()[:120]
     vacc.batch_no        = str(form.get("batch_no") or "").strip()[:80]
@@ -14515,22 +14925,87 @@ async def admin_vaccination_delete(vacc_id: int, request: Request, db: Session =
     form = await request.form()
     _require_csrf(request, str(form.get("csrf_token", "")))
     vacc = db.get(Vaccination, vacc_id)
-    if vacc:
-        operator = request.session.get("admin_username", "")
-        pet_cust_id = db.get(Pet, vacc.pet_id).customer_id if vacc.pet_id and db.get(Pet, vacc.pet_id) else None
-        # 退回库存（疫苗扣减按 1.0 计算）
-        item_id = getattr(vacc, "item_id", None)
-        if item_id:
-            try:
-                _restore_inventory(db, item_id, 1.0, "vaccination", vacc.id, operator, f"删除疫苗#{vacc.id}退回")
-            except Exception:
-                pass
-        _audit(db, request, "vaccination_delete", detail={"vaccination_id": vacc_id})
-        db.delete(vacc)
-        db.commit()
-        if pet_cust_id:
-            return RedirectResponse(f"/admin/customers/{pet_cust_id}?msg=疫苗记录已删除", status_code=303)
+    if not vacc:
+        return RedirectResponse("/admin/vaccinations?msg=已删除", status_code=303)
+    locked, reason = _is_vaccination_locked(db, vacc)
+    if locked:
+        raise HTTPException(400, f"疫苗单已锁定（{reason}），不可删除。请使用「作废」。")
+    operator = request.session.get("admin_username", "")
+    pet_cust_id = db.get(Pet, vacc.pet_id).customer_id if vacc.pet_id and db.get(Pet, vacc.pet_id) else None
+    item_id = getattr(vacc, "inventory_item_id", None)
+    if item_id:
+        try:
+            _restore_inventory(db, item_id, 1.0, "vaccination", vacc.id, operator, f"删除疫苗#{vacc.id}退回")
+        except Exception:
+            pass
+    _audit(db, request, "vaccination_delete", detail={"vaccination_id": vacc_id})
+    db.delete(vacc)
+    db.commit()
+    if pet_cust_id:
+        return RedirectResponse(f"/admin/customers/{pet_cust_id}?msg=疫苗记录已删除", status_code=303)
     return RedirectResponse("/admin/vaccinations?msg=已删除", status_code=303)
+
+
+@app.post("/admin/vaccinations/{vacc_id}/void")
+async def admin_vaccination_void(vacc_id: int, request: Request, db: Session = Depends(get_db),
+                                   csrf_token: str = Form(""), void_reason: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    vacc = db.get(Vaccination, vacc_id)
+    if not vacc:
+        raise HTTPException(404)
+    if vacc.status == "voided":
+        return RedirectResponse(f"/admin/vaccinations/{vacc_id}?msg=该单已作废", status_code=303)
+    operator = request.session.get("admin_username", "admin")
+    item_id = getattr(vacc, "inventory_item_id", None)
+    if item_id:
+        try:
+            _restore_inventory(db, item_id, 1.0, "vaccination_void", vacc.id, operator, f"作废疫苗#{vacc.id}回退")
+        except Exception:
+            pass
+    vacc.status = "voided"
+    vacc.voided_by = operator
+    vacc.voided_at = datetime.utcnow()
+    vacc.void_reason = (void_reason or "")[:200]
+    _audit_doc_action(db, "vaccination", vacc_id, "void", operator, void_reason)
+    db.commit()
+    return RedirectResponse(f"/admin/vaccinations/{vacc_id}?msg=已作废", status_code=303)
+
+
+@app.post("/admin/vaccinations/{vacc_id}/copy-as-new")
+async def admin_vaccination_copy_as_new(vacc_id: int, request: Request, db: Session = Depends(get_db),
+                                          csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    src = db.get(Vaccination, vacc_id)
+    if not src:
+        raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
+    new_v = Vaccination(
+        pet_id=src.pet_id, customer_id=src.customer_id,
+        vaccine_type=src.vaccine_type, vaccine_name=src.vaccine_name,
+        batch_no="", dose_number=src.dose_number + 1 if src.dose_number < 99 else 99,
+        vaccinated_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        next_due_date="",
+        inventory_item_id=src.inventory_item_id,
+        is_free=src.is_free,
+        rabies_record_id=None,
+        invoice_id=None,
+        vet_name=src.vet_name, notes=src.notes,
+        status="active",
+        created_by=operator,
+    )
+    db.add(new_v)
+    if src.inventory_item_id:
+        try:
+            _deduct_inventory(db, src.inventory_item_id, 1.0, "vaccination",
+                              0, operator, f"疫苗（复制自 #{vacc_id}）")
+        except Exception:
+            pass
+    _audit_doc_action(db, "vaccination", 0, "copy_from", operator, extra=f"src={vacc_id}")
+    db.commit()
+    db.refresh(new_v)
+    return RedirectResponse(f"/admin/vaccinations/{new_v.id}?msg=已复制为新单 · 请填写最新批次/日期", status_code=303)
 
 
 @app.post("/admin/vaccinations/send-reminders")
@@ -14588,10 +15063,12 @@ async def admin_rabies_detail(rec_id: int, request: Request, db: Session = Depen
         Staff.position.ilike("%医%")
     ).all()
     vet_names = [v[0] for v in vets]
+    locked, lock_reason = _is_rabies_locked(db, rec)
     return templates.TemplateResponse(request, "admin_rabies_detail.html", {
         "rec": rec,
         "vet_names": vet_names,
         "status_zh": _RABIES_STATUS_ZH,
+        "locked": locked, "lock_reason": lock_reason,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
         "err": request.query_params.get("err"),
@@ -14608,6 +15085,9 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
     rec = db.get(RabiesVaccineRecord, rec_id)
     if not rec:
         raise HTTPException(404)
+    locked, reason = _is_rabies_locked(db, rec)
+    if locked:
+        raise HTTPException(400, f"狂犬登记已锁定（{reason}），不可修改。请使用「作废」后重开。")
 
     rec.vaccine_manufacturer = str(form.get("vaccine_manufacturer", "")).strip()[:120]
     rec.vaccine_batch_no     = str(form.get("vaccine_batch_no", "")).strip()[:80]
@@ -14662,16 +15142,20 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
 @app.post("/admin/rabies/{rec_id}/cert-no")
 async def admin_rabies_cert_no(rec_id: int, request: Request, db: Session = Depends(get_db),
                                 csrf_token: str = Form(""), cert_no: str = Form("")):
-    """录入免疫证号（最后一步）"""
+    """录入免疫证号（最后一步 · 录入即锁）"""
     require_admin(request)
     _require_csrf(request, csrf_token)
     rec = db.get(RabiesVaccineRecord, rec_id)
     if not rec:
         raise HTTPException(404)
+    if rec.cert_no:
+        raise HTTPException(400, "免疫证号已录入，记录已锁定。如需修改请「作废重开」。")
     rec.cert_no = cert_no.strip()[:60]
     rec.updated_at = datetime.utcnow()
+    _audit_doc_action(db, "rabies", rec_id, "cert_locked",
+                      request.session.get("admin_username", ""), extra=f"cert_no={rec.cert_no}")
     db.commit()
-    return RedirectResponse(f"/admin/rabies/{rec_id}?msg=免疫证号已录入", status_code=303)
+    return RedirectResponse(f"/admin/rabies/{rec_id}?msg=免疫证号已录入 · 记录已锁定", status_code=303)
 
 
 @app.post("/admin/rabies/{rec_id}/delete")
@@ -14728,6 +15212,9 @@ async def admin_rabies_edit_owner(rec_id: int, request: Request, db: Session = D
     rec = db.get(RabiesVaccineRecord, rec_id)
     if not rec:
         raise HTTPException(404)
+    locked, reason = _is_rabies_locked(db, rec)
+    if locked:
+        raise HTTPException(400, f"狂犬登记已锁定（{reason}），不可修改。")
     form = await request.form()
     new_owner_name = str(form.get("owner_name", rec.owner_name)).strip()
     if new_owner_name and _is_invalid_name(new_owner_name):
@@ -15063,9 +15550,11 @@ async def admin_exam_order_detail(
     if not order.token_expires_at or order.token_expires_at < datetime.utcnow():
         order.upload_token, order.token_expires_at = _exam_order_token(db)
         db.commit()
+    locked, lock_reason = _is_exam_order_locked(db, order)
     return templates.TemplateResponse(request, "admin_exam_order_detail.html", {
         "order": order, "visit": visit, "cust": cust, "pet": pet,
         "items": items, "msg": msg,
+        "locked": locked, "lock_reason": lock_reason,
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -15155,12 +15644,15 @@ async def admin_exam_order_delete(
     csrf_token: str = Form(""),
     return_to: str = Form(""),
 ):
-    """删除整个检查单（连同所有报告）。"""
+    """删除整个检查单（连同所有报告）。锁定的请走 /void。"""
     require_admin(request)
     _require_csrf(request, csrf_token)
     order = db.get(ExamOrder, order_id)
     if not order:
         raise HTTPException(404, "检查单不存在")
+    locked, reason = _is_exam_order_locked(db, order)
+    if locked:
+        raise HTTPException(400, f"检查单已锁定（{reason}），不可删除。请使用「作废」。")
     visit_id = order.visit_id
     # 先删本地报告文件
     for rpt in list(order.reports or []):
@@ -15178,6 +15670,68 @@ async def admin_exam_order_delete(
     if return_to == "visit" and visit_id:
         return RedirectResponse(f"/admin/visits/{visit_id}?step=3&msg=检查单已删除", status_code=303)
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=检查单已删除" if visit_id else "/admin/customers", status_code=303)
+
+
+@app.post("/admin/exam-orders/{order_id}/void")
+async def admin_exam_order_void(
+    order_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), void_reason: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    if order.status == "voided":
+        return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=该单已作废", status_code=303)
+    operator = request.session.get("admin_username", "admin")
+    order.status = "voided"
+    order.voided_by = operator
+    order.voided_at = datetime.utcnow()
+    order.void_reason = (void_reason or "")[:200]
+    _audit_doc_action(db, "exam_order", order_id, "void", operator, void_reason)
+    db.commit()
+    if order.visit_id:
+        try:
+            _sync_visit_invoice(db, order.visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=已作废", status_code=303)
+
+
+@app.post("/admin/exam-orders/{order_id}/copy-as-new")
+async def admin_exam_order_copy_as_new(
+    order_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    src = db.get(ExamOrder, order_id)
+    if not src:
+        raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
+    token, exp = _exam_order_token(db)
+    new_order = ExamOrder(
+        visit_id=src.visit_id,
+        items_json=src.items_json,
+        notes=src.notes,
+        status="pending",
+        upload_token=token,
+        token_expires_at=exp,
+        created_by=operator,
+    )
+    db.add(new_order)
+    _audit_doc_action(db, "exam_order", new_order.id, "copy_from", operator, extra=f"src={order_id}")
+    db.commit()
+    db.refresh(new_order)
+    if new_order.visit_id:
+        try:
+            _sync_visit_invoice(db, new_order.visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    return RedirectResponse(f"/admin/exam-orders/{new_order.id}?msg=已复制为新单", status_code=303)
 
 
 @app.get("/admin/exam-orders/{order_id}/qr.png")
@@ -15880,9 +16434,62 @@ async def admin_deworming_delete(
     _require_csrf(request, csrf_token)
     rec = db.get(DewormingRecord, rec_id)
     if rec:
+        locked, reason = _is_deworming_locked(db, rec)
+        if locked:
+            raise HTTPException(400, f"驱虫记录已锁定（{reason}），不可删除。请使用「作废」。")
         db.delete(rec)
         db.commit()
     return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg=驱虫记录已删除", status_code=303)
+
+
+@app.post("/admin/dewormings/{rec_id}/void")
+async def admin_deworming_void(rec_id: int, request: Request, db: Session = Depends(get_db),
+                                 csrf_token: str = Form(""), void_reason: str = Form(""),
+                                 customer_id: int = Form(0), pet_id: int = Form(0)):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(DewormingRecord, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    if rec.status == "voided":
+        return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg=该单已作废", status_code=303)
+    operator = request.session.get("admin_username", "admin")
+    rec.status = "voided"
+    rec.voided_by = operator
+    rec.voided_at = datetime.utcnow()
+    rec.void_reason = (void_reason or "")[:200]
+    _audit_doc_action(db, "deworming", rec_id, "void", operator, void_reason)
+    db.commit()
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg=驱虫记录已作废", status_code=303)
+
+
+@app.post("/admin/dewormings/{rec_id}/copy-as-new")
+async def admin_deworming_copy_as_new(rec_id: int, request: Request, db: Session = Depends(get_db),
+                                        csrf_token: str = Form(""),
+                                        customer_id: int = Form(0), pet_id: int = Form(0)):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    src = db.get(DewormingRecord, rec_id)
+    if not src:
+        raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
+    new_rec = DewormingRecord(
+        customer_id=src.customer_id, pet_id=src.pet_id,
+        deworm_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        deworm_type=src.deworm_type,
+        product_name=src.product_name,
+        weight_kg=src.weight_kg,
+        dose=src.dose,
+        next_due_date="",
+        vet_name=src.vet_name,
+        notes=src.notes,
+        status="active",
+        created_by=operator,
+    )
+    db.add(new_rec)
+    _audit_doc_action(db, "deworming", 0, "copy_from", operator, extra=f"src={rec_id}")
+    db.commit()
+    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg=已复制为新驱虫记录", status_code=303)
 
 
 @app.post("/admin/weight-records/create")
