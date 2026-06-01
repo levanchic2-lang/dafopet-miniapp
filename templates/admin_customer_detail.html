@@ -517,22 +517,22 @@
  {% if active_pet %}
  <div>
  <div class="tabs-bar">
- <button class="tab-btn {% if active_tab=='visits' %}active{% endif %}" data-tab="visits" onclick="switchTab('visits')">诊疗<span class="count">{{ visits|length }}</span></button>
- <button class="tab-btn {% if active_tab=='prescriptions' %}active{% endif %}" data-tab="prescriptions" onclick="switchTab('prescriptions')">处方<span class="count">{{ prescriptions|length }}</span></button>
- <button class="tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单<span class="count">{{ exam_orders|length }}</span></button>
- <button class="tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约<span class="count">{{ appointments|length }}</span></button>
- <button class="tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫<span class="count">{{ (vaccinations|length) + (dewormings|length) }}</span></button>
- <button class="tab-btn {% if active_tab=='grooming' %}active{% endif %}" data-tab="grooming" onclick="switchTab('grooming')">美容<span class="count">{{ groomings|length }}</span></button>
- <button class="tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售<span class="count">{{ pet_sales_orders|length }}</span></button>
- <button class="tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费<span class="count">{{ pet_invoices|length }}</span></button>
- <button class="tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重曲线<span class="count">{{ weight_records|length }}</span></button>
+ <button class="tab-btn {% if active_tab=='visits' %}active{% endif %}" data-tab="visits" onclick="switchTab('visits')">诊疗</button>
+ <button class="tab-btn {% if active_tab=='prescriptions' %}active{% endif %}" data-tab="prescriptions" onclick="switchTab('prescriptions')">处方</button>
+ <button class="tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单</button>
+ <button class="tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约</button>
+ <button class="tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫</button>
+ <button class="tab-btn {% if active_tab=='grooming' %}active{% endif %}" data-tab="grooming" onclick="switchTab('grooming')">美容</button>
+ <button class="tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售</button>
+ <button class="tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费</button>
+ <button class="tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重曲线</button>
  {# 医疗文书计数 = 上传文书 + 待签/已签 协议任务（已取消/已过期不计） #}
  {% set _docs_count = medical_docs|length + (consent_tasks|selectattr('status', 'in', ['pending', 'signed'])|list|length if consent_tasks else 0) %}
- <button class="tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">医疗文书<span class="count">{{ _docs_count }}</span></button>
- <button class="tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包<span class="count">¥{{ '%.0f'|format(wallet_balance) }}</span></button>
- <button class="tab-btn {% if active_tab=='packages' %}active{% endif %}" data-tab="packages" onclick="switchTab('packages')">套餐<span class="count">{{ active_packages_count }}</span></button>
- <button class="tab-btn {% if active_tab=='deposits' %}active{% endif %}" data-tab="deposits" onclick="switchTab('deposits')">押金<span class="count">{{ held_deposits_count }}</span></button>
- <button class="tab-btn {% if active_tab=='coupons' %}active{% endif %}" data-tab="coupons" onclick="switchTab('coupons')">优惠券<span class="count">{{ active_coupons_count }}</span></button>
+ <button class="tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">医疗文书</button>
+ <button class="tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包</button>
+ <button class="tab-btn {% if active_tab=='packages' %}active{% endif %}" data-tab="packages" onclick="switchTab('packages')">套餐</button>
+ <button class="tab-btn {% if active_tab=='deposits' %}active{% endif %}" data-tab="deposits" onclick="switchTab('deposits')">押金</button>
+ <button class="tab-btn {% if active_tab=='coupons' %}active{% endif %}" data-tab="coupons" onclick="switchTab('coupons')">优惠券</button>
  </div>
 
  {# ── 诊疗 ── #}
