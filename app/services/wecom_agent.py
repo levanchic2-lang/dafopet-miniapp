@@ -22,11 +22,12 @@ from datetime import date as _date
 
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from fastapi import HTTPException
 
 from app.config import settings
 from app.database import SessionLocal
 from app.models import (
-    AdminUser, Customer, Pet, Visit, Wallet, Appointment, FollowUp,
+    AdminUser, Customer, Pet, Visit, Wallet, Appointment, AppointmentStatus, FollowUp,
 )
 from app.services import wecom_session as _sess
 from app.services.wecom_client import send_app_message
@@ -34,23 +35,31 @@ from app.services.wecom_client import send_app_message
 logger = logging.getLogger(__name__)
 
 
-_SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业微信发文字或语音（已转文字）给你，你帮他们查档案、新建病历、记主诉/体检/诊断。
+_SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业微信发文字或语音（已转文字）给你，你帮他们查档案、新建病历、新建预约、记主诉/体检/诊断。
 
 【硬性原则】
-1. 写操作（新建病历、写主诉/体检/诊断）必须先调对应工具拿到 summary，绝不直接说"已完成"，等系统让用户确认。
-2. 不要做：开处方、开麻醉单、收款、退款、删除、作废。这些工具不存在，你也不要假装能做。
+1. 写操作（新建病历、写主诉/体检/诊断、新建预约）必须先调对应工具拿到 summary，绝不直接说"已完成"，等系统让用户确认。
+2. 不要做：开处方、开麻醉单、收款、退款、删除、作废、开检查单、开美容/疫苗/驱虫单。这些工具暂未提供，不要假装能做。
 3. 找客户时优先按手机号；其次按姓名/宠物名；找到多个就列出来让用户挑。
 4. 单次工具调用做一件事。比如「找李敏的大米新建病历」拆成：先 find_customer，确认是哪只宠物，再 create_visit。
 5. 回复简洁，中文，必要时用 emoji（✓ ✋ ⚠ 📋）。不要长篇大论。
 
 【写动作流程】
-- create_visit / update_visit_field 会返回 "PENDING:" 开头的字符串
+- create_visit / update_visit_field / create_appointment 会返回 "PENDING:" 开头的字符串
 - 你要原样把 PENDING 后面的 summary 转述给用户，结尾问「确认执行吗？回复『确认』」
 - 不要自作主张说"已完成"，让用户先确认
 
 【上下文】
 - 你的会话状态记录了 current_customer / current_pet / current_visit
 - 用户说"主诉..."、"诊断..." 时如果 current_visit 存在，直接用那个 ID
+
+【预约规则（create_appointment）】
+- 类目（category）：outpatient(门诊) / tnr(绝育) / surgery(手术) / beauty(美容)
+- 日期必须是 YYYY-MM-DD 绝对日期，相对词「明天/后天/下周三」由你换算（参考系统提示里的今天日期）
+- 时间必须是 HH:MM 24 小时制；门诊只能 10:00-21:00，TNR 只能 11:00-18:00
+- 门店：员工已绑定门店时不需要问；超管必须明确指定「东环店」或「横岗店」
+- 美容（beauty）必须让用户说出具体服务项（洗澡 / 造型 / 剪指甲...），不能默认
+- 信息不全时先问清楚，不要瞎填
 """
 
 
@@ -222,6 +231,113 @@ def tool_update_visit_field(db: Session, userid: str, visit_id: int, field: str,
     return f"PENDING:{summary}"
 
 
+_CAT_ZH = {"outpatient": "门诊", "tnr": "TNR 绝育", "surgery": "手术", "beauty": "美容"}
+_CAT_DEFAULT_SERVICE = {"outpatient": "门诊就诊", "surgery": "手术"}
+_CAT_DEFAULT_DURATION = {"outpatient": 30, "tnr": 60, "surgery": 90, "beauty": 60}
+
+
+def tool_create_appointment(
+    db: Session, userid: str, pet_id: int, category: str,
+    appointment_date: str, appointment_time: str,
+    service_name: Optional[str] = None,
+    duration_minutes: Optional[int] = None,
+    notes: str = "",
+    store_short: Optional[str] = None,
+) -> str:
+    """新建预约。校验通过后挂 pending。"""
+    if category not in _CAT_ZH:
+        return f"❌ 类目 {category} 不支持（仅 outpatient/tnr/surgery/beauty）"
+    pet = db.get(Pet, pet_id) if pet_id else None
+    if not pet:
+        return "❌ 宠物不存在，先 find_customer 锁定客户和宠物"
+    cust = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    if not cust:
+        return "❌ 宠物没有关联客户"
+    if not cust.phone:
+        return f"❌ 客户「{cust.name or '客户'}」没填手机号，无法创建预约（请先到系统补全档案）"
+
+    # 门店
+    from app.main import _STORE_SHORT_TO_FULL
+    emp_store = _admin_store_of(db, userid)
+    use_short = (store_short or "").strip() or emp_store
+    if not use_short:
+        return "❌ 请告诉我哪个门店（东环店 / 横岗店）"
+    store_full = _STORE_SHORT_TO_FULL.get(use_short)
+    if not store_full:
+        return f"❌ 不认识门店「{use_short}」，仅支持「东环店」或「横岗店」"
+
+    # 服务名 + 时长默认值
+    if category == "tnr":
+        service_name = "TNR 手术安排"  # 强制
+    if not service_name:
+        service_name = _CAT_DEFAULT_SERVICE.get(category, "")
+    if not service_name:
+        return f"❌ {_CAT_ZH[category]}必须指定具体服务项（如「{'洗澡/造型' if category=='beauty' else '服务名'}」）"
+    if not duration_minutes:
+        duration_minutes = _CAT_DEFAULT_DURATION.get(category, 30)
+
+    # 跑系统已有的所有校验（保持后台 / agent 一致）
+    from app.main import (
+        _assert_appointment_fields, _check_tnr_constraints,
+        _check_outpatient_time, _check_slot_capacity, _check_appointment_conflict,
+    )
+    try:
+        _assert_appointment_fields(
+            category=category, service_name=service_name,
+            customer_name=cust.name or "客户", phone=cust.phone,
+            pet_name=pet.name or "宠物", pet_gender=pet.gender or "unknown",
+            store=store_full, appointment_date=appointment_date,
+            appointment_time=appointment_time, notes=notes,
+            duration_minutes=str(duration_minutes),
+        )
+    except HTTPException as e:
+        return f"❌ {e.detail}"
+
+    err = _check_tnr_constraints(
+        db, category=category, store=store_full,
+        appointment_date=appointment_date, appointment_time=appointment_time,
+        phone=cust.phone,
+    )
+    if err:
+        return f"❌ {err}"
+    err = _check_outpatient_time(category, appointment_time)
+    if err:
+        return f"❌ {err}"
+    err = _check_slot_capacity(
+        db, store=store_full, appointment_date=appointment_date,
+        appointment_time=appointment_time, category=category, service_name=service_name,
+    )
+    if err:
+        return f"❌ {err}"
+    conflict = _check_appointment_conflict(
+        db, store=store_full, appointment_date=appointment_date,
+        appointment_time=appointment_time, duration_minutes=int(duration_minutes),
+    )
+    if conflict:
+        return (f"❌ 时间冲突：{conflict.appointment_date} {conflict.appointment_time} "
+                f"门店已有预约 #{conflict.id} {conflict.customer_name}，请换时间")
+
+    # 复诵
+    summary = (
+        f"✋ 即将新建预约：\n"
+        f"  客户：{cust.name or '客户'} · {cust.phone}\n"
+        f"  宠物：{_fmt_pet(pet)}\n"
+        f"  类目：{_CAT_ZH[category]} · {service_name}\n"
+        f"  门店：{use_short}\n"
+        f"  时间：{appointment_date} {appointment_time}（{duration_minutes} 分钟）\n"
+        f"回复「确认」执行"
+    )
+    _sess.set_pending(userid, "create_appointment", {
+        "pet_id": pet.id, "customer_id": cust.id,
+        "customer_name": cust.name or "客户", "phone": cust.phone,
+        "pet_name": pet.name or "宠物", "pet_gender": pet.gender or "unknown",
+        "store": store_full, "category": category, "service_name": service_name,
+        "appointment_date": appointment_date, "appointment_time": appointment_time,
+        "duration_minutes": int(duration_minutes), "notes": (notes or "").strip(),
+    }, summary)
+    return f"PENDING:{summary}"
+
+
 # ─── 实际执行（pending → confirm 后调） ───
 def _execute_create_visit(db: Session, userid: str, args: dict) -> str:
     """真正建病历。复用 main 里的 _sync_followup_for_visit 来衍生回访。"""
@@ -276,6 +392,33 @@ def _execute_update_visit_field(db: Session, userid: str, args: dict) -> str:
     return f"✓ {LABEL.get(field, field)} 已保存到病历 #{v.id}"
 
 
+def _execute_create_appointment(db: Session, userid: str, args: dict) -> str:
+    u = db.query(AdminUser).filter(AdminUser.wecom_userid == userid).first()
+    row = Appointment(
+        category=args["category"],
+        status=AppointmentStatus.pending.value,
+        service_name=args["service_name"],
+        customer_name=args["customer_name"],
+        phone=args["phone"],
+        pet_name=args["pet_name"],
+        pet_gender=args["pet_gender"],
+        store=args["store"],
+        appointment_date=args["appointment_date"],
+        appointment_time=args["appointment_time"],
+        duration_minutes=int(args.get("duration_minutes") or 30),
+        notes=args.get("notes", ""),
+        source="wecom_agent",
+        customer_id=args.get("customer_id"),
+        pet_id=args.get("pet_id"),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return (f"✓ 预约 #{row.id} 已创建\n"
+            f"{args['appointment_date']} {args['appointment_time']} · "
+            f"{args['service_name']} · {args['pet_name']}（待门店确认）")
+
+
 def _execute_pending(db: Session, userid: str, pending: dict) -> str:
     action = pending.get("action")
     args = pending.get("args", {})
@@ -283,6 +426,8 @@ def _execute_pending(db: Session, userid: str, pending: dict) -> str:
         return _execute_create_visit(db, userid, args)
     if action == "update_visit_field":
         return _execute_update_visit_field(db, userid, args)
+    if action == "create_appointment":
+        return _execute_create_appointment(db, userid, args)
     return f"❌ 未知动作 {action}"
 
 
@@ -363,6 +508,23 @@ TOOLS = [
             }, "required": ["visit_id", "field", "value"]},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_appointment",
+            "description": "为某只宠物新建预约。写操作 - 会返回 PENDING 让用户确认；信息不全先问用户，不要瞎填。",
+            "parameters": {"type": "object", "properties": {
+                "pet_id":           {"type": "integer", "description": "宠物 ID（必填，先 find_customer）"},
+                "category":         {"type": "string", "enum": ["outpatient", "tnr", "surgery", "beauty"]},
+                "appointment_date": {"type": "string", "description": "YYYY-MM-DD（相对词如「明天」请换算成绝对日期）"},
+                "appointment_time": {"type": "string", "description": "HH:MM 24 小时制"},
+                "service_name":     {"type": "string", "description": "具体服务项；TNR 不用填（强制为 TNR 手术安排）；门诊/手术留空则用默认；美容必须明确（洗澡/造型/剪指甲等）"},
+                "duration_minutes": {"type": "integer", "description": "时长分钟，留空用默认"},
+                "notes":            {"type": "string"},
+                "store_short":      {"type": "string", "enum": ["东环店", "横岗店"], "description": "门店；超管必填，员工留空用绑定门店"},
+            }, "required": ["pet_id", "category", "appointment_date", "appointment_time"]},
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -373,6 +535,7 @@ TOOL_HANDLERS = {
     "get_today_appointments": tool_get_today_appointments,
     "create_visit":           tool_create_visit,
     "update_visit_field":     tool_update_visit_field,
+    "create_appointment":     tool_create_appointment,
 }
 
 
@@ -400,16 +563,14 @@ def _run_llm_with_tools(db: Session, userid: str, user_text: str, ctx: dict) -> 
         return "❌ LLM 未配置（settings.openai_api_key 缺失）"
 
     # 把会话上下文塞到 system 提示里
-    ctx_lines = []
+    ctx_lines = [f"today={_date.today().isoformat()}（员工绑定门店：{_admin_store_of(db, userid) or '（超管，未绑定）'}）"]
     if ctx.get("current_customer_id"):
         ctx_lines.append(f"current_customer_id={ctx['current_customer_id']}")
     if ctx.get("current_pet_id"):
         ctx_lines.append(f"current_pet_id={ctx['current_pet_id']}")
     if ctx.get("current_visit_id"):
         ctx_lines.append(f"current_visit_id={ctx['current_visit_id']}")
-    system = _SYSTEM_PROMPT
-    if ctx_lines:
-        system += "\n\n【当前上下文】\n" + "\n".join(ctx_lines)
+    system = _SYSTEM_PROMPT + "\n\n【当前上下文】\n" + "\n".join(ctx_lines)
 
     messages = [
         {"role": "system", "content": system},
