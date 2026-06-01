@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+  @media (max-width: 768px) {
+    body div[style*="grid-template-columns:1fr 300px"],
+    body div[style*="grid-template-columns: 1fr 300px"] {
+      grid-template-columns: 1fr !important;
+    }
+    form input, form select, form textarea {
+      width: 100% !important; box-sizing: border-box !important; min-width: 0 !important;
+    }
+    .card { padding: .85rem .75rem !important; }
+  }
+</style>
+{% endblock %}
+{% block body %}
+
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+
+{% set is_edit = (mode == 'edit') %}
+
+<div class="page-head">
+ <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+ {% if cust %}
+ <a href="/admin/customers/{{ cust.id }}?pet_id={{ pet.id if pet else 0 }}&tab=vaccines" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回客户</a>
+ {% endif %}
+ <div>
+ <h1><span class="ph-icon"><i data-lucide="bug"></i></span>
+ {% if is_edit %}驱虫记录 #{{ rec.id }}{% else %}新建驱虫记录{% endif %}
+ {% if is_edit and rec.status == 'voided' %}<span class="pill pill-gray" style="margin-left:0.5rem;">已作废</span>
+ {% elif is_edit and rec.invoice_id %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已开单</span>
+ {% endif %}
+ </h1>
+ {% if cust or pet %}<p class="ph-sub">{% if cust %}{{ cust.name }}{% endif %}{% if pet %} · {{ pet.name }}{% endif %}</p>{% endif %}
+ </div>
+ </div>
+ {% if is_edit and rec.invoice_id %}
+ <div class="ph-actions">
+ <a href="/admin/invoices/{{ rec.invoice_id }}" class="btn secondary" style="font-size:0.82rem;"><i data-lucide="receipt"></i> 查看收费单</a>
+ </div>
+ {% endif %}
+</div>
+
+{% if locked %}
+<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;">
+  <div style="font-size:1.4rem;">🔒</div>
+  <div style="flex:1;min-width:200px;">
+    <div style="font-weight:600;color:#991b1b;">此驱虫记录已锁定（{{ lock_reason }}），不可修改</div>
+    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">
+      「📋 复制为新单」开下一次驱虫 · 或「🚫 作废」回退后重开
+      {% if paid_amount and paid_amount > 0 %}<br/><b style="color:#b91c1c;">💰 此单已收款 ¥{{ '%.2f'|format(paid_amount) }}</b>，作废时可选退到客户钱包{% endif %}
+    </div>
+  </div>
+  <form method="post" action="/admin/dewormings/{{ rec.id }}/copy-as-new" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+    <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+    <button type="submit" class="btn" style="background:#3b82f6;border-color:#3b82f6;">📋 复制为新单（下次）</button>
+  </form>
+  {% if rec.status != 'voided' %}
+  <form method="post" action="/admin/dewormings/{{ rec.id }}/void" style="display:inline;" onsubmit="return confirmDewVoid(this, {{ paid_amount or 0 }})">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+    <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+    <input type="hidden" name="void_reason" value=""/>
+    <input type="hidden" name="refund_to_wallet" value=""/>
+    <input type="hidden" name="refund_amount" value="0"/>
+    <button type="submit" class="danger">🚫 作废</button>
+  </form>
+  {% endif %}
+</div>
+<style>
+  .locked-form input, .locked-form select, .locked-form textarea, .locked-form button[type="submit"] {
+    pointer-events: none !important;
+    background-color: #f8fafc !important;
+    color: #64748b !important;
+  }
+  .locked-form button[type="submit"] { display: none !important; }
+</style>
+<script>
+function confirmDewVoid(form, paidAmount) {
+  const reason = prompt('请填写作废原因（必填）：');
+  if (!reason || !reason.trim()) return false;
+  form.querySelector('input[name="void_reason"]').value = reason.trim();
+  if (paidAmount > 0) {
+    const amt = prompt('💰 此单已收款 ¥' + paidAmount.toFixed(2) + '\n\n如需退到客户钱包，请输入退款金额（留空 = 不退）：', paidAmount.toFixed(2));
+    if (amt !== null && amt !== '' && parseFloat(amt) > 0) {
+      form.querySelector('input[name="refund_to_wallet"]').value = '1';
+      form.querySelector('input[name="refund_amount"]').value = parseFloat(amt).toFixed(2);
+    }
+  }
+  let m = '确认作废此驱虫记录？\n• 库存自动回退\n• 写入审计日志';
+  const refundVal = form.querySelector('input[name="refund_amount"]').value;
+  if (parseFloat(refundVal) > 0) m += '\n• 退款 ¥' + parseFloat(refundVal).toFixed(2) + ' 立即入客户钱包';
+  return confirm(m);
+}
+</script>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:1rem;align-items:start;">
+
+ <!-- 左：表单 -->
+ <div>
+ <form method="post"
+       action="{% if is_edit %}/admin/dewormings/{{ rec.id }}/edit{% else %}/admin/dewormings/create{% endif %}"
+       class="{% if locked %}locked-form{% endif %}">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+ <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+
+ <div class="card" style="margin-bottom:0.75rem;">
+ <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">驱虫信息</h3>
+ <div class="row2">
+
+ <div>
+ <label>驱虫日期 <span style="color:#d97706;">*</span></label>
+ <input type="date" name="deworm_date" value="{{ rec.deworm_date if rec else today }}" required/>
+ </div>
+
+ <div>
+ <label>类型 <span style="color:#d97706;">*</span></label>
+ <select name="deworm_type" id="deworm-type-sel" onchange="onTypeChange()">
+   <option value="external" {% if rec and rec.deworm_type == 'external' %}selected{% endif %}>体外驱虫</option>
+   <option value="internal" {% if rec and rec.deworm_type == 'internal' %}selected{% endif %}>体内驱虫</option>
+   <option value="combo"    {% if rec and rec.deworm_type == 'combo'    %}selected{% endif %}>体内外同驱</option>
+ </select>
+ </div>
+
+ <div class="row2" style="grid-column:1/-1;">
+ <div>
+ <label>库存关联品目 <small style="color:#9ca3af;font-weight:normal;">— 选了自动带药品名 / 售价 / 库存出库</small></label>
+ <select name="inventory_item_id" id="inv-item-sel" onchange="onInvItemChange()">
+   <option value="0">— 不关联库存 —</option>
+   {% for it in dew_items %}
+   <option value="{{ it.id }}" data-name="{{ it.name }}" data-price="{{ it.sell_price or 0 }}"
+           {% if rec and rec.inventory_item_id == it.id %}selected{% endif %}>
+     {{ it.name }}（库存 {{ it.stock_qty }} {{ it.unit }}）
+   </option>
+   {% endfor %}
+ </select>
+ </div>
+ <div>
+ <label>批号</label>
+ <input name="batch_no" value="{{ rec_batch_no or '' }}" placeholder="可选" maxlength="80"/>
+ </div>
+ </div>
+
+ <div>
+ <label>药品名称</label>
+ <input name="product_name" id="product-name-input" value="{{ rec.product_name if rec else '' }}" placeholder="如 大宠爱 / 拜宠清" maxlength="120"/>
+ </div>
+
+ <div>
+ <label>体重（kg）</label>
+ <input type="number" name="weight_kg" step="0.01" min="0" value="{{ '%.2f'|format(rec.weight_kg) if rec and rec.weight_kg else '' }}" placeholder="0.00"/>
+ </div>
+
+ <div>
+ <label>剂量</label>
+ <input name="dose" value="{{ rec.dose if rec else '' }}" placeholder="如 1 片 / 2.5 ml" maxlength="80"/>
+ </div>
+
+ <div>
+ <label>接诊兽医</label>
+ <input name="vet_name" value="{{ rec.vet_name if rec else '' }}" list="vet-list" placeholder="可选" maxlength="80"/>
+ <datalist id="vet-list">{% for v in vets %}<option value="{{ v }}">{% endfor %}</datalist>
+ </div>
+
+ <div>
+ <label>下次到期日</label>
+ <input type="date" name="next_due_date" id="next-due-date" value="{{ rec.next_due_date if rec else next_due_default }}"/>
+ <small style="color:var(--muted);font-size:.72rem;">体内 +3 个月 / 体外 +1 个月 / 体内外 +3 个月 · 留空 = 不发提醒</small>
+ </div>
+
+ <div>
+ <label>收费金额 ¥</label>
+ <input type="number" name="charge_amount" step="0.01" min="0" id="charge-input" value="{{ '%.2f'|format(rec_charge_amount) if rec_charge_amount else '0.00' }}" placeholder="0 = 不收费"/>
+ <small style="color:var(--muted);font-size:.72rem;">> 0 自动生成收费单进收银台</small>
+ </div>
+
+ <div style="grid-column:1/-1;">
+ <label>备注</label>
+ <textarea name="notes" rows="2" maxlength="500">{{ rec_clean_notes or '' }}</textarea>
+ </div>
+
+ </div>
+ </div>
+
+ <div style="display:flex;gap:0.6rem;margin-top:1rem;">
+ <button type="submit" style="flex:1;">{% if is_edit %}保存修改{% else %}保存驱虫记录{% endif %}</button>
+ </div>
+
+ </form>
+
+ {% if is_edit and not locked %}
+ <div style="margin-top:0.75rem;">
+ <form method="post" action="/admin/dewormings/{{ rec.id }}/delete"
+       onsubmit="return confirm('确认删除此驱虫记录？')">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+ <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+ <button type="submit" class="btn"
+         style="width:100%;background:#dc2626;border-color:#dc2626;font-size:0.85rem;">
+   删除此记录
+ </button>
+ </form>
+ </div>
+ {% endif %}
+ </div>
+
+ <!-- 右：宠物/客户信息 -->
+ <div style="display:flex;flex-direction:column;gap:0.75rem;">
+ {% if pet %}
+ <div class="card">
+ <div style="font-weight:700;font-size:0.9rem;margin-bottom:.5rem;">宠物</div>
+ <div style="font-size:.95rem;font-weight:600;">{{ pet.name }}</div>
+ <div style="color:var(--muted);font-size:.82rem;">{{ {'cat':'猫','dog':'犬'}.get(pet.species, pet.species) }}{% if pet.breed %} · {{ pet.breed }}{% endif %}</div>
+ </div>
+ {% endif %}
+ {% if cust %}
+ <div class="card">
+ <div style="font-weight:700;font-size:0.9rem;margin-bottom:.5rem;">主人</div>
+ <div style="font-weight:600;">{{ cust.name }}</div>
+ <div style="color:var(--muted);font-size:.82rem;font-family:monospace;">{{ cust.phone }}</div>
+ </div>
+ {% endif %}
+ </div>
+</div>
+
+<script>
+function onTypeChange() {
+  const t = document.getElementById('deworm-type-sel').value;
+  const inp = document.getElementById('next-due-date');
+  const base = document.querySelector('input[name="deworm_date"]').value;
+  if (!base || !inp) return;
+  const dt = new Date(base);
+  if (Number.isNaN(dt.getTime())) return;
+  const monthsToAdd = (t === 'external') ? 1 : 3;
+  dt.setMonth(dt.getMonth() + monthsToAdd);
+  inp.value = dt.toISOString().slice(0, 10);
+}
+function onInvItemChange() {
+  const sel = document.getElementById('inv-item-sel');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.dataset.name) return;
+  const nameInput = document.getElementById('product-name-input');
+  if (nameInput && !nameInput.value.trim()) nameInput.value = opt.dataset.name || '';
+  const chargeInput = document.getElementById('charge-input');
+  if (chargeInput && opt.dataset.price && (parseFloat(chargeInput.value) || 0) === 0) {
+    chargeInput.value = parseFloat(opt.dataset.price).toFixed(2);
+  }
+}
+// 日期变了也重算下次到期
+document.querySelector('input[name="deworm_date"]').addEventListener('change', onTypeChange);
+</script>
+{% endblock %}

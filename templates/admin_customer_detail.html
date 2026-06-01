@@ -652,7 +652,7 @@
  <div class="tab-content {% if active_tab=='vaccines' %}active{% endif %}" data-tab-content="vaccines">
  <div class="tab-action-bar">
  <a class="btn secondary" href="/admin/vaccinations/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="plus"></i> 新增疫苗</a>
- <button type="button" class="btn secondary" onclick="document.getElementById('add-deworm-modal').classList.add('visible')"><i data-lucide="plus"></i> 新增驱虫</button>
+ <a class="btn secondary" href="/admin/dewormings/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="plus"></i> 新增驱虫</a>
  </div>
 
  <h4 style="margin:0.5rem 0 0.6rem;font-size:0.85rem;color:var(--muted);"><i data-lucide="syringe"></i> 疫苗记录</h4>
@@ -689,9 +689,9 @@
  <tbody>
  {% for d in dewormings %}
  <tr {% if d.status == 'voided' %}style="opacity:.5;"{% endif %}>
- <td>{{ d.deworm_date }}{% if d.status == 'voided' %} <span class="pill pill-gray" style="font-size:.65rem;">已作废</span>{% endif %}</td>
+ <td><a href="/admin/dewormings/{{ d.id }}" style="color:#1e40af;text-decoration:none;font-weight:600;">{{ d.deworm_date }}</a>{% if d.status == 'voided' %} <span class="pill pill-gray" style="font-size:.65rem;">已作废</span>{% elif d._locked %} <span class="pill pill-ok" style="font-size:.65rem;" title="{{ d._lock_reason }}">🔒</span>{% endif %}</td>
  <td>{{ {'external':'体外','internal':'体内','combo':'体内+体外'}.get(d.deworm_type, d.deworm_type) }}</td>
- <td>{{ d.product_name or '—' }}</td>
+ <td><a href="/admin/dewormings/{{ d.id }}" style="color:#1e293b;text-decoration:none;">{{ d.product_name or '—' }}</a></td>
  <td>{{ d.weight_kg }} kg</td>
  <td>{% if d.next_due_date %}{% if d.next_due_date < today_str %}<span class="pill pill-no">已过期</span>{% elif d.next_due_date < soon_str %}<span class="pill pill-warn">{{ d.next_due_date }}</span>{% else %}{{ d.next_due_date }}{% endif %}{% else %}—{% endif %}</td>
  <td style="white-space:nowrap;">
@@ -1389,132 +1389,7 @@
  </div>
 </div>
 
-{# ── 弹窗：录入驱虫 ── #}
-<div class="cd-modal-overlay" id="add-deworm-modal">
- <div class="cd-modal">
- <h3>录入驱虫 — {{ active_pet.name if active_pet else '' }}</h3>
- <form method="post" action="/admin/dewormings/create">
- <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
- <input type="hidden" name="customer_id" value="{{ cust.id }}">
- <input type="hidden" name="pet_id" value="{{ active_pet.id if active_pet else 0 }}">
-
- <label>库存关联品目 <span style="color:var(--muted);font-weight:400;font-size:.78rem;">— 选了自动带药名 / 批号 / 售价</span></label>
- <select name="inventory_item_id" id="dw-item-sel" onchange="onDewormItemChange()">
-  <option value="">— 不关联库存 —</option>
-  {% set _cur_store = request.session.get('admin_store', '') %}
-  {% for it in deworm_items %}
-  {% set _ep = it | eff_price(_cur_store) %}
-  <option value="{{ it.id }}"
-   data-name="{{ it.name }}"
-   data-price="{{ _ep }}"
-   data-batch="{{ it.latest_batch_no or '' }}"
-   data-subcat="{{ it.subcategory or '' }}">
-   {{ it.name }}（库存 {{ it.stock_qty }}{{ it.unit }}，¥{{ '%.0f'|format(_ep) }}{% if it.latest_batch_no %} · 批 {{ it.latest_batch_no }}{% endif %}）
-  </option>
-  {% endfor %}
- </select>
-
- <div class="row2" style="margin-top:.75rem;">
- <div>
- <label>驱虫日期</label>
- <input type="date" name="deworm_date" id="dw-date" value="{{ today_str }}" required onchange="calcDewormDue()">
- </div>
- <div>
- <label>类型</label>
- <select name="deworm_type" id="dw-type" onchange="calcDewormDue()">
- <option value="internal">体内驱虫</option>
- <option value="external">体外驱虫</option>
- <option value="combo">体内 + 体外</option>
- </select>
- </div>
- <div>
- <label>药品名称</label>
- <input name="product_name" id="dw-product">
- </div>
- <div>
- <label>体重（kg）</label>
- <input type="number" name="weight_kg" step="0.01" min="0">
- </div>
- <div>
- <label>剂量</label>
- <input name="dose" placeholder="如 1片 / 2.5ml">
- </div>
- <div>
- <label>批号</label>
- <input name="batch_no" id="dw-batch">
- </div>
- <div>
- <label>下次到期</label>
- <input type="date" name="next_due_date" id="dw-next">
- <div style="font-size:.72rem;color:var(--muted);margin-top:.15rem;">体内 +3 个月 / 体外 +1 个月 / 体内外 +3 个月</div>
- </div>
- <div>
- <label>收费金额 ¥</label>
- <input type="number" name="charge_amount" id="dw-amount" step="0.01" min="0" placeholder="0 = 不收费">
- <div style="font-size:.72rem;color:var(--muted);margin-top:.15rem;">关联库存时自动带出售价；可手动改</div>
- </div>
- </div>
- <label>备注</label>
- <input name="notes">
- <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
- <button type="submit" class="btn">保存</button>
- <button type="button" class="btn secondary" onclick="document.getElementById('add-deworm-modal').classList.remove('visible')">取消</button>
- </div>
- </form>
- </div>
-</div>
-
-<script>
-function onDewormItemChange() {
- var sel = document.getElementById('dw-item-sel');
- var opt = sel.options[sel.selectedIndex];
- var name = opt.dataset.name || '';
- var price = opt.dataset.price || '';
- var batch = opt.dataset.batch || '';
- var subcat = opt.dataset.subcat || '';
- if (name) {
-   var p = document.getElementById('dw-product');
-   if (p && !p.value) p.value = name;
- }
- if (batch) {
-   var b = document.getElementById('dw-batch');
-   if (b && !b.value) b.value = batch;
- }
- if (price && parseFloat(price) > 0) {
-   var a = document.getElementById('dw-amount');
-   if (a && !a.value) a.value = parseFloat(price).toFixed(2);
- }
- // subcategory 影射到驱虫类型（库存品目的 subcategory）
- if (subcat) {
-   var t = document.getElementById('dw-type');
-   if (subcat === 'internal') t.value = 'internal';
-   else if (subcat === 'external') t.value = 'external';
-   else if (subcat === 'both') t.value = 'combo';
-   calcDewormDue();
- }
-}
-function calcDewormDue() {
- var dEl = document.getElementById('dw-date');
- var tEl = document.getElementById('dw-type');
- var nEl = document.getElementById('dw-next');
- if (!dEl || !tEl || !nEl || !dEl.value) return;
- var base = new Date(dEl.value);
- if (isNaN(base.getTime())) return;
- // 体内 / 体内外 → +3 个月；体外 → +1 个月
- var addDays = (tEl.value === 'external') ? 30 : 90;
- var due = new Date(base);
- due.setDate(due.getDate() + addDays);
- var y = due.getFullYear();
- var m = String(due.getMonth()+1).padStart(2,'0');
- var d = String(due.getDate()).padStart(2,'0');
- nEl.value = y + '-' + m + '-' + d;
-}
-document.addEventListener('DOMContentLoaded', function() {
- // 弹窗打开时初算
- var btn = document.querySelector('button[onclick*="add-deworm-modal"]');
- if (btn) btn.addEventListener('click', function() { setTimeout(calcDewormDue, 50); });
-});
-</script>
+{# 驱虫弹窗已废弃 → 改为跳 /admin/dewormings/create 完整表单页 #}
 
 {# ── 弹窗：上传文书 ── #}
 <div class="cd-modal-overlay" id="wallet-recharge-modal">

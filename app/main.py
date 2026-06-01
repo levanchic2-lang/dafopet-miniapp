@@ -16592,6 +16592,130 @@ _DEWORM_DIR = Path("data/dewormings")
 _MEDDOC_DIR = Path("data/medical_docs")
 
 
+_DEW_TYPE_ZH = {"external": "体外驱虫", "internal": "体内驱虫", "combo": "体内外同驱"}
+
+
+def _split_dew_notes(notes: str) -> tuple[str, str]:
+    """从 notes 里抽出『批号：xxx』，返回 (清干净的 notes, batch_no)"""
+    if not notes:
+        return "", ""
+    import re
+    m = re.search(r"批号[:：]\s*([^\n]+)", notes)
+    if m:
+        batch = m.group(1).strip()
+        clean = re.sub(r"批号[:：][^\n]+\n?", "", notes).strip()
+        return clean, batch
+    return notes, ""
+
+
+@app.get("/admin/dewormings/create", response_class=HTMLResponse)
+async def page_admin_deworming_create(
+    request: Request, db: Session = Depends(get_db),
+    customer_id: int = Query(0), pet_id: int = Query(0),
+):
+    require_admin(request)
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    vets_q = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%")
+    ).all()
+    vets = [v[0] for v in vets_q]
+    dew_items = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+    ).filter(
+        InventoryItem.category == "antiparasitic",
+        InventoryItem.is_active == True,
+    ).order_by(InventoryItem.name).all()
+    from datetime import date as _d, timedelta as _td
+    today = _d.today().isoformat()
+    next_due = (_d.today() + _td(days=30)).isoformat()
+    return templates.TemplateResponse(request, "admin_deworming_form.html", {
+        "mode": "create", "rec": None,
+        "cust": cust, "pet": pet, "vets": vets, "dew_items": dew_items,
+        "today": today, "next_due_default": next_due,
+        "rec_batch_no": "", "rec_clean_notes": "", "rec_charge_amount": 0.0,
+        "locked": False, "lock_reason": "", "paid_amount": 0.0,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.get("/admin/dewormings/{rec_id}", response_class=HTMLResponse)
+async def page_admin_deworming_detail(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    rec = db.get(DewormingRecord, rec_id)
+    if not rec:
+        raise HTTPException(404, "驱虫记录不存在")
+    cust = db.get(Customer, rec.customer_id) if rec.customer_id else None
+    pet = db.get(Pet, rec.pet_id) if rec.pet_id else None
+    vets_q = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%")
+    ).all()
+    vets = [v[0] for v in vets_q]
+    dew_items = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+    ).filter(
+        InventoryItem.category == "antiparasitic",
+        InventoryItem.is_active == True,
+    ).order_by(InventoryItem.name).all()
+    locked, lock_reason = _is_deworming_locked(db, rec)
+    paid_amount = _doc_paid_amount(db, "deworming", rec_id) if locked else 0.0
+    clean_notes, batch_no = _split_dew_notes(rec.notes or "")
+    charge = 0.0
+    if rec.invoice_id:
+        inv = db.get(Invoice, rec.invoice_id)
+        if inv:
+            charge = float(inv.total_amount or 0)
+    return templates.TemplateResponse(request, "admin_deworming_form.html", {
+        "mode": "edit", "rec": rec,
+        "cust": cust, "pet": pet, "vets": vets, "dew_items": dew_items,
+        "today": rec.deworm_date, "next_due_default": rec.next_due_date,
+        "rec_batch_no": batch_no, "rec_clean_notes": clean_notes, "rec_charge_amount": charge,
+        "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/dewormings/{rec_id}/edit")
+async def admin_deworming_edit(
+    rec_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    deworm_date: str = Form(""),
+    deworm_type: str = Form("external"),
+    product_name: str = Form(""),
+    weight_kg: float = Form(0.0),
+    dose: str = Form(""),
+    next_due_date: str = Form(""),
+    notes: str = Form(""),
+    vet_name: str = Form(""),
+    batch_no: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(DewormingRecord, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    locked, reason = _is_deworming_locked(db, rec)
+    if locked:
+        raise HTTPException(400, f"驱虫记录已锁定（{reason}），不可修改。请「复制为新单」或「作废」。")
+    notes_full = notes.strip()
+    if batch_no.strip():
+        notes_full = (notes_full + "\n批号：" + batch_no.strip()).strip()
+    rec.deworm_date = deworm_date.strip()[:20]
+    rec.deworm_type = (deworm_type or "external")[:40]
+    rec.product_name = product_name.strip()[:120]
+    rec.weight_kg = weight_kg or 0.0
+    rec.dose = dose.strip()[:80]
+    rec.next_due_date = next_due_date.strip()[:20]
+    rec.vet_name = vet_name.strip()[:80]
+    rec.notes = notes_full
+    rec.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/dewormings/{rec_id}?msg=已保存", status_code=303)
+
+
 @app.post("/admin/dewormings/create")
 async def admin_deworming_create(
     request: Request,
@@ -16606,6 +16730,7 @@ async def admin_deworming_create(
     dose: str = Form(""),
     next_due_date: str = Form(""),
     notes: str = Form(""),
+    vet_name: str = Form(""),
     inventory_item_id: int = Form(0),
     batch_no: str = Form(""),
     charge_amount: float = Form(0.0),
@@ -16625,6 +16750,7 @@ async def admin_deworming_create(
         weight_kg=weight_kg or 0.0,
         dose=dose.strip()[:80],
         next_due_date=next_due_date.strip()[:20],
+        vet_name=vet_name.strip()[:80],
         notes=notes_full,
         created_by=request.session.get("admin_username", ""),
     )
@@ -16667,10 +16793,13 @@ async def admin_deworming_create(
             unit_price  = charge_amount,
             subtotal    = charge_amount,
         ))
+        # 反向挂到驱虫记录上（支持锁定/退款路径）
+        rec.invoice_id = inv.id
         msg += f"，收费单 ¥{charge_amount:.2f} 已生成待收款"
 
     db.commit()
-    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg={msg}", status_code=303)
+    # 跳到驱虫详情页（与疫苗一致），用户可继续编辑/锁定/作废
+    return RedirectResponse(f"/admin/dewormings/{rec.id}?msg={msg}", status_code=303)
 
 
 @app.post("/admin/dewormings/{rec_id}/delete")
