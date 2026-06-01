@@ -40,9 +40,11 @@ _SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业
 【硬性原则】
 1. 写操作（新建病历、写主诉/体检/诊断、新建预约）必须先调对应工具拿到 summary，绝不直接说"已完成"，等系统让用户确认。
 2. 不要做：开处方、开麻醉单、收款、退款、删除、作废、开检查单、开美容/疫苗/驱虫单。这些工具暂未提供，不要假装能做。
-3. 找客户时优先按手机号；其次按姓名/宠物名；找到多个就列出来让用户挑。
-4. 单次工具调用做一件事。比如「找李敏的大米新建病历」拆成：先 find_customer，确认是哪只宠物，再 create_visit。
+3. 找客户时优先按手机号；其次按姓名/宠物名。find_customer 的 query 只能传**一个**关键词（号码 或 客户名 或 宠物名），不能拼接（不能传"13823137494 大米"）。
+4. 单次工具调用做一件事。比如「找李敏的大米新建病历」拆成：先 find_customer(query="李敏") 拿到客户和宠物列表，再 create_visit(pet_id=大米的 id)。
 5. 回复简洁，中文，必要时用 emoji（✓ ✋ ⚠ 📋）。不要长篇大论。
+6. **优先使用上下文 ID**：上下文里给了 current_customer_id / current_pet_id 时直接用，**不要再调 find_customer 重新查**。如果 current_customer_id 已存在但用户提到具体宠物名而 current_pet_id 是 None（说明该客户名下多只），调 get_customer_profile(customer_id=current_customer_id) 拿到宠物列表 + pet_id，再按宠物名挑。
+7. find_customer/get_customer_profile 的返回里会标 [pet_id=N]、(customer_id=N)，请直接读用这些 ID，不要再问用户。
 
 【写动作流程】
 - create_visit / update_visit_field / create_appointment 会返回 "PENDING:" 开头的字符串
@@ -109,16 +111,16 @@ def tool_find_customer(db: Session, userid: str, query: str) -> str:
         pets = db.query(Pet).filter(Pet.customer_id == c.id).all()
         _sess.touch(userid, current_customer_id=c.id,
                     current_pet_id=(pets[0].id if len(pets) == 1 else None))
-        lines = [f"✓ {c.name or '客户#'+str(c.id)} · {c.phone or '—'}"]
+        lines = [f"✓ {c.name or '客户#'+str(c.id)} (customer_id={c.id}) · {c.phone or '—'}"]
         if pets:
             lines.append(f"名下 {len(pets)} 只宠物：")
             for i, p in enumerate(pets, 1):
-                lines.append(f"  {i}. {_fmt_pet(p)}")
+                lines.append(f"  {i}. {_fmt_pet(p)} [pet_id={p.id}]")
         return "\n".join(lines)
     # 多条命中
     lines = [f"找到 {len(custs)} 位客户："]
     for i, c in enumerate(custs, 1):
-        lines.append(f"  {i}. {c.name or '客户#'+str(c.id)} · {c.phone or '—'}")
+        lines.append(f"  {i}. {c.name or '客户#'+str(c.id)} (customer_id={c.id}) · {c.phone or '—'}")
     lines.append("说「1」或姓名继续")
     return "\n".join(lines)
 
@@ -133,11 +135,11 @@ def tool_get_customer_profile(db: Session, userid: str, customer_id: int) -> str
     wallet = db.query(Wallet).filter(Wallet.customer_id == c.id).first()
     last_visit = db.query(Visit).filter(Visit.customer_id == c.id)\
         .order_by(Visit.visit_date.desc(), Visit.id.desc()).first()
-    lines = [f"📋 {c.name or '客户'} · {c.phone or '—'}"]
+    lines = [f"📋 {c.name or '客户'} (customer_id={c.id}) · {c.phone or '—'}"]
     if pets:
         lines.append(f"名下 {len(pets)} 只：")
         for p in pets:
-            lines.append(f"  • {_fmt_pet(p)}")
+            lines.append(f"  • {_fmt_pet(p)} [pet_id={p.id}]")
     if wallet and (wallet.balance or 0) > 0:
         lines.append(f"💰 钱包 ¥{wallet.balance:.2f}")
     if last_visit:
@@ -440,9 +442,9 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "find_customer",
-            "description": "按手机号、姓名或宠物名查客户。命中 1 个时自动聚焦。",
+            "description": "按手机号、姓名或宠物名查客户。query 只能传一个关键词（号码 或 名字之一），禁止拼接。命中 1 个时自动聚焦。返回结果会标 customer_id / pet_id，请直接使用。",
             "parameters": {"type": "object", "properties": {
-                "query": {"type": "string", "description": "手机号/客户姓名/宠物名"},
+                "query": {"type": "string", "description": "只填一个：手机号 或 客户姓名 或 宠物名（择一）"},
             }, "required": ["query"]},
         },
     },
