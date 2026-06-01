@@ -258,10 +258,11 @@ def tool_create_appointment(
     if not cust.phone:
         return f"❌ 客户「{cust.name or '客户'}」没填手机号，无法创建预约（请先到系统补全档案）"
 
-    # 门店
+    # 门店：用户传 > 员工档案里的 store（即使是超管也用，作为「常驻门店」默认值）
     from app.main import _STORE_SHORT_TO_FULL
-    emp_store = _admin_store_of(db, userid)
-    use_short = (store_short or "").strip() or emp_store
+    u_row = db.query(AdminUser).filter(AdminUser.wecom_userid == userid).first()
+    bound_store = (u_row.store if u_row else "") or ""
+    use_short = (store_short or "").strip() or bound_store
     if not use_short:
         return "❌ 请告诉我哪个门店（东环店 / 横岗店）"
     store_full = _STORE_SHORT_TO_FULL.get(use_short)
@@ -565,7 +566,9 @@ def _run_llm_with_tools(db: Session, userid: str, user_text: str, ctx: dict) -> 
         return "❌ LLM 未配置（settings.openai_api_key 缺失）"
 
     # 把会话上下文塞到 system 提示里
-    ctx_lines = [f"today={_date.today().isoformat()}（员工绑定门店：{_admin_store_of(db, userid) or '（超管，未绑定）'}）"]
+    _u_row = db.query(AdminUser).filter(AdminUser.wecom_userid == userid).first()
+    _bound = (_u_row.store if _u_row else "") or ""
+    ctx_lines = [f"today={_date.today().isoformat()}（你的默认门店：{_bound or '未绑定，需要时请向用户确认'}）"]
     if ctx.get("current_customer_id"):
         ctx_lines.append(f"current_customer_id={ctx['current_customer_id']}")
     if ctx.get("current_pet_id"):
