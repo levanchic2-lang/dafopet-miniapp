@@ -2,8 +2,8 @@
 {% block extra_css %}
 <style>
   @media (max-width: 768px) {
-    body div[style*="grid-template-columns:1fr 300px"],
-    body div[style*="grid-template-columns: 1fr 300px"] {
+    body div[style*="grid-template-columns:minmax"],
+    body div[style*="grid-template-columns: minmax"] {
       grid-template-columns: 1fr !important;
     }
     form input, form select, form textarea {
@@ -97,7 +97,7 @@ function confirmDewVoid(form, paidAmount) {
 </script>
 {% endif %}
 
-<div style="display:grid;grid-template-columns:1fr 300px;gap:1rem;align-items:start;">
+<div style="display:grid;grid-template-columns:minmax(0,720px) 360px;gap:1.25rem;align-items:start;">
 
  <!-- 左：表单 -->
  <div>
@@ -208,20 +208,34 @@ function confirmDewVoid(form, paidAmount) {
  {% endif %}
  </div>
 
- <!-- 右：宠物/客户信息 -->
+ <!-- 右：宠物 + 主人合并卡片 -->
  <div style="display:flex;flex-direction:column;gap:0.75rem;">
- {% if pet %}
- <div class="card">
- <div style="font-weight:700;font-size:0.9rem;margin-bottom:.5rem;">宠物</div>
- <div style="font-size:.95rem;font-weight:600;">{{ pet.name }}</div>
- <div style="color:var(--muted);font-size:.82rem;">{{ {'cat':'猫','dog':'犬'}.get(pet.species, pet.species) }}{% if pet.breed %} · {{ pet.breed }}{% endif %}</div>
- </div>
- {% endif %}
- {% if cust %}
- <div class="card">
- <div style="font-weight:700;font-size:0.9rem;margin-bottom:.5rem;">主人</div>
- <div style="font-weight:600;">{{ cust.name }}</div>
- <div style="color:var(--muted);font-size:.82rem;font-family:monospace;">{{ cust.phone }}</div>
+ {% if pet or cust %}
+ <div class="card" style="padding:0;overflow:hidden;">
+   {% if pet %}
+   <div style="padding:.85rem 1rem;">
+     <div style="font-size:0.72rem;font-weight:700;color:var(--muted);margin-bottom:0.45rem;letter-spacing:.04em;">🐾 宠物</div>
+     <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem;flex-wrap:wrap;">
+       <span style="font-weight:700;font-size:1.05rem;">{{ pet.name or '未命名' }}</span>
+       {% if pet.gender == 'male' %}<span class="badge b-pending" style="font-size:0.68rem;">公</span>
+       {% elif pet.gender == 'female' %}<span class="badge b-done" style="font-size:0.68rem;">母</span>{% endif %}
+       {% if pet.is_neutered %}<span class="badge b-ok" style="font-size:0.68rem;">已绝育</span>{% endif %}
+     </div>
+     <div style="font-size:0.82rem;color:var(--muted);">
+       {{ {'cat':'猫','dog':'犬'}.get(pet.species, pet.species) }}{% if pet.breed %} · {{ pet.breed }}{% endif %}
+     </div>
+   </div>
+   {% endif %}
+
+   {% if pet and cust %}<div style="height:1px;background:var(--border);"></div>{% endif %}
+
+   {% if cust %}
+   <div style="padding:.85rem 1rem;">
+     <div style="font-size:0.72rem;font-weight:700;color:var(--muted);margin-bottom:0.45rem;letter-spacing:.04em;">👤 主人</div>
+     <div style="font-weight:700;font-size:1.05rem;">{{ cust.name or '—' }}</div>
+     <div style="font-size:0.85rem;color:var(--muted);font-family:monospace;">{{ cust.phone or '—' }}</div>
+   </div>
+   {% endif %}
  </div>
  {% endif %}
  </div>
