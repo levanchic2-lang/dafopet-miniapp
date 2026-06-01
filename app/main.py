@@ -10695,10 +10695,15 @@ async def page_admin_presc_create(
     ).all()
     vet_names = [v[0] for v in vets]
     today = datetime.utcnow().strftime("%Y-%m-%d")
+    history = []
+    if pet_id:
+        history = db.query(Prescription).filter(Prescription.pet_id == pet_id)\
+            .order_by(Prescription.id.desc()).limit(10).all()
     return templates.TemplateResponse(request, "admin_prescription_form.html", {
         "presc": None, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
         "presc_status_zh": _PRESC_STATUS_ZH,
+        "presc_history": history,
         "today": today, "csrf_token": _get_csrf_token(request), "mode": "create",
     })
 
@@ -10756,10 +10761,17 @@ async def page_admin_presc_detail(presc_id: int, request: Request, db: Session =
     vet_names = [v[0] for v in vets]
     locked, lock_reason = _is_prescription_locked(db, presc)
     paid_amount = _doc_paid_amount(db, "prescription", presc_id) if locked else 0.0
+    history = []
+    if presc.pet_id:
+        history = db.query(Prescription).filter(
+            Prescription.pet_id == presc.pet_id,
+            Prescription.id != presc_id,
+        ).order_by(Prescription.id.desc()).limit(10).all()
     return templates.TemplateResponse(request, "admin_prescription_form.html", {
         "presc": presc, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
         "presc_status_zh": _PRESC_STATUS_ZH,
+        "presc_history": history,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "csrf_token": _get_csrf_token(request), "mode": "edit",
         "msg": request.query_params.get("msg"),
@@ -11118,6 +11130,10 @@ async def page_admin_anesth_new(visit_id: int, request: Request, db: Session = D
     pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
     pets = db.query(Pet).filter(Pet.customer_id == visit.customer_id).all() if visit.customer_id else []
     ctx = _anesth_form_context(request, db, visit=visit, cust=cust, pet=pet, pets=pets, mode="create")
+    if pet:
+        ctx["anesth_history"] = db.query(AnesthesiaOrder).filter(
+            AnesthesiaOrder.pet_id == pet.id
+        ).order_by(AnesthesiaOrder.id.desc()).limit(10).all()
     return templates.TemplateResponse(request, "admin_anesthesia_form.html", ctx)
 
 
@@ -11217,6 +11233,11 @@ async def page_admin_anesth_detail(order_id: int, request: Request, db: Session 
     ctx["locked"] = locked
     ctx["lock_reason"] = reason
     ctx["paid_amount"] = _doc_paid_amount(db, "anesthesia", order_id) if locked else 0.0
+    if order.pet_id:
+        ctx["anesth_history"] = db.query(AnesthesiaOrder).filter(
+            AnesthesiaOrder.pet_id == order.pet_id,
+            AnesthesiaOrder.id != order_id,
+        ).order_by(AnesthesiaOrder.id.desc()).limit(10).all()
     ctx["msg"] = request.query_params.get("msg")
     return templates.TemplateResponse(request, "admin_anesthesia_form.html", ctx)
 
@@ -11773,10 +11794,15 @@ async def page_admin_so_create(
             or_(Customer.name.ilike(f"%{search_q}%"), Customer.phone.ilike(f"%{search_q}%"))
         ).limit(10).all()
     today = datetime.utcnow().strftime("%Y-%m-%d")
+    history = []
+    if customer_id:
+        history = db.query(SalesOrder).filter(SalesOrder.customer_id == customer_id)\
+            .order_by(SalesOrder.id.desc()).limit(10).all()
     return templates.TemplateResponse(request, "admin_sales_order_form.html", {
         "order": None, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "so_status_zh": _SO_STATUS_ZH, "item_type_zh": _SO_ITEM_TYPE_ZH,
         "payment_methods": _PAYMENT_METHOD_OPTIONS,
+        "so_history": history,
         "today": today, "csrf_token": _get_csrf_token(request), "mode": "create",
         "search_q": search_q, "search_results": search_results,
     })
@@ -11870,10 +11896,17 @@ async def page_admin_so_detail(order_id: int, request: Request, db: Session = De
     pets = db.query(Pet).filter(Pet.customer_id == order.customer_id).all() if order.customer_id else []
     locked, lock_reason = _is_sales_order_locked(db, order)
     paid_amount = _doc_paid_amount(db, "sales_order", order_id) if locked else 0.0
+    history = []
+    if order.customer_id:
+        history = db.query(SalesOrder).filter(
+            SalesOrder.customer_id == order.customer_id,
+            SalesOrder.id != order_id,
+        ).order_by(SalesOrder.id.desc()).limit(10).all()
     return templates.TemplateResponse(request, "admin_sales_order_form.html", {
         "order": order, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "so_status_zh": _SO_STATUS_ZH, "item_type_zh": _SO_ITEM_TYPE_ZH,
         "payment_methods": _PAYMENT_METHOD_OPTIONS,
+        "so_history": history,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "csrf_token": _get_csrf_token(request), "mode": "edit",
         "msg": request.query_params.get("msg"),
@@ -15814,9 +15847,21 @@ async def admin_exam_order_create_page(
         return RedirectResponse("/admin/visits")
     cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
     pet  = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    history = []
+    if pet:
+        history_q = db.query(ExamOrder).join(Visit, ExamOrder.visit_id == Visit.id)\
+            .filter(Visit.pet_id == pet.id).order_by(ExamOrder.id.desc()).limit(10).all()
+        for h in history_q:
+            try:
+                h._items_parsed = json.loads(h.items_json or "[]")
+            except Exception:
+                h._items_parsed = []
+            h._has_report = db.query(ExamReport).filter(ExamReport.exam_order_id == h.id).first() is not None
+        history = history_q
     return templates.TemplateResponse(request, "admin_exam_order_form.html", {
         "visit": visit, "cust": cust, "pet": pet,
         "exam_order": None, "mode": "create",
+        "exam_history": history,
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -15973,9 +16018,23 @@ async def admin_exam_order_detail(
         db.commit()
     locked, lock_reason = _is_exam_order_locked(db, order)
     paid_amount = _doc_paid_amount(db, "exam_order", order_id) if locked else 0.0
+    # 该宠物历史检查单（通过 Visit.pet_id 反查，最多 10 条）
+    history = []
+    if visit and visit.pet_id:
+        history_q = db.query(ExamOrder).join(Visit, ExamOrder.visit_id == Visit.id)\
+            .filter(Visit.pet_id == visit.pet_id, ExamOrder.id != order_id)\
+            .order_by(ExamOrder.id.desc()).limit(10).all()
+        for h in history_q:
+            try:
+                h._items_parsed = json.loads(h.items_json or "[]")
+            except Exception:
+                h._items_parsed = []
+            h._has_report = db.query(ExamReport).filter(ExamReport.exam_order_id == h.id).first() is not None
+        history = history_q
     return templates.TemplateResponse(request, "admin_exam_order_detail.html", {
         "order": order, "visit": visit, "cust": cust, "pet": pet,
         "items": items, "msg": msg,
+        "exam_history": history,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "csrf_token": _get_csrf_token(request),
     })

@@ -181,6 +181,29 @@
   </div>
   {% endif %}
  </form>
+
+ {# ── 该宠物历史麻醉单 ── #}
+ {% if anesth_history and anesth_history|length > 0 %}
+ <div class="card" style="margin-top:1rem;padding:.85rem 1.1rem;">
+   <div style="font-size:.78rem;font-weight:700;color:#64748b;letter-spacing:.04em;margin-bottom:.5rem;">💉 该宠物历史麻醉（{{ anesth_history|length }} 条）</div>
+   <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:.5rem;">
+   {% for h in anesth_history %}
+   {% set is_voided = (h.status == 'voided') %}
+   <a href="/admin/anesthesia/{{ h.id }}" style="display:block;padding:.5rem .7rem;border:1px solid #e2e8f0;border-radius:6px;text-decoration:none;color:inherit;{% if is_voided %}opacity:.5;{% endif %}">
+     <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:#475569;">
+       <span style="font-variant-numeric:tabular-nums;">{{ h.anesth_date or '—' }}</span>
+       <span style="font-size:.7rem;background:#ede9fe;color:#6b21a8;padding:1px 6px;border-radius:3px;">#{{ h.id }} · ASA {{ h.asa_grade or '—' }}</span>
+     </div>
+     <div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem;color:#1e293b;margin-top:.2rem;">
+       <span>{{ h.items|length }} 项 · {{ h.vet_name or '—' }}</span>
+       <span style="font-weight:600;color:#059669;">¥ {{ '%.2f'|format(h.total_amount or 0) }}</span>
+     </div>
+     {% if is_voided %}<div style="font-size:.7rem;color:#94a3b8;">（已作废）</div>{% endif %}
+   </a>
+   {% endfor %}
+   </div>
+ </div>
+ {% endif %}
 </div>
 
 <script>

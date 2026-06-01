@@ -254,6 +254,29 @@ function confirmExamVoid(form, paidAmount) {
        data-pet-id="{{ pet.id if pet else 0 }}"
        style="display:none;"></div>
 
+  {# ── 该宠物历史检查单 ── #}
+  {% if exam_history and exam_history|length > 0 %}
+  <div class="card" style="padding:.75rem 1rem;">
+    <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.5rem;">📋 该宠物历史检查（{{ exam_history|length }} 条）</div>
+    {% for h in exam_history %}
+    {% set is_voided = (h.status == 'voided') %}
+    <a href="/admin/exam-orders/{{ h.id }}" style="display:block;padding:.4rem 0;border-bottom:1px dashed #e2e8f0;text-decoration:none;color:inherit;{% if is_voided %}opacity:.5;{% endif %}">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:#475569;">
+        <span style="font-variant-numeric:tabular-nums;">{{ h.created_at.strftime('%Y-%m-%d') if h.created_at else '—' }}</span>
+        <span style="font-size:.7rem;padding:1px 6px;border-radius:3px;{% if h._has_report %}background:#dcfce7;color:#166534;{% else %}background:#fef3c7;color:#92400e;{% endif %}">
+          #{{ h.id }} · {% if h._has_report %}✓ 已出报告{% else %}待出报告{% endif %}
+        </span>
+      </div>
+      <div style="font-size:.82rem;color:#1e293b;margin-top:.2rem;line-height:1.5;">
+        {% for it in h._items_parsed[:3] %}{{ it.name }}{% if not loop.last %} · {% endif %}{% endfor %}
+        {% if h._items_parsed|length > 3 %} <span style="color:#94a3b8;">+{{ h._items_parsed|length - 3 }}</span>{% endif %}
+      </div>
+      {% if is_voided %}<div style="font-size:.7rem;color:#94a3b8;">（已作废）</div>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
 </div>
 </div>
 {% endblock %}

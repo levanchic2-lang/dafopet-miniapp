@@ -383,6 +383,30 @@ function confirmSoVoid(form) { return confirmVoidWithRefund(form, 0); }
  <div>{{ o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '' }}</div>
  </div>
  {% endif %}
+
+ {# ── 该客户历史销售单 ── #}
+ {% if so_history and so_history|length > 0 %}
+ <div class="card" style="padding:.75rem 1rem;">
+   <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.5rem;">📋 该客户历史销售（{{ so_history|length }} 条）</div>
+   {% for h in so_history %}
+   {% set is_voided = (h.status == 'voided') %}
+   {% set _stat_color = '#059669' if h.status == 'paid' else ('#94a3b8' if is_voided else '#f59e0b') %}
+   <a href="/admin/sales-orders/{{ h.id }}" style="display:block;padding:.4rem 0;border-bottom:1px dashed #e2e8f0;text-decoration:none;color:inherit;{% if is_voided %}opacity:.5;{% endif %}">
+     <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:#475569;">
+       <span style="font-variant-numeric:tabular-nums;">{{ h.order_date or '—' }}</span>
+       <span style="font-size:.7rem;background:#f1f5f9;padding:1px 6px;border-radius:3px;color:{{ _stat_color }};">
+         #{{ h.id }} · {{ so_status_zh.get(h.status, h.status) }}
+       </span>
+     </div>
+     <div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem;color:#1e293b;margin-top:.2rem;">
+       <span>{{ h.items|length }} 项</span>
+       <span style="font-weight:600;color:#059669;">¥ {{ '%.2f'|format(h.total_amount or 0) }}</span>
+     </div>
+     {% if is_voided %}<div style="font-size:.7rem;color:#94a3b8;">（已作废）</div>{% endif %}
+   </a>
+   {% endfor %}
+ </div>
+ {% endif %}
  </div>
 
 </div>
