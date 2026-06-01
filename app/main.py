@@ -6838,6 +6838,10 @@ async def page_admin_customer_detail(
     )
     active_coupons_count = sum(1 for c in coupons if c.status == "issued" and not _coupon_is_expired(c))
 
+    # ── 头部信号 chip 数据 ──
+    unpaid_total = round(sum((i.total_amount or 0) for i in cust_invoices if i.payment_status == "unpaid"), 2)
+    held_deposits_total = round(sum((d.amount or 0) for d in deposits if d.status in ("held", "partial_refund")), 2)
+
     # ── 协议签署任务 + 已归档 PDF ──
     consent_tasks = (
         db.query(ConsentTask)
@@ -6905,6 +6909,8 @@ async def page_admin_customer_detail(
             # 优惠券
             "coupons": coupons,
             "active_coupons_count": active_coupons_count,
+            "unpaid_total": unpaid_total,
+            "held_deposits_total": held_deposits_total,
             "coupon_kind_zh": _COUPON_KIND_ZH,
             "coupon_status_zh": _COUPON_STATUS_ZH,
             # 协议签署
