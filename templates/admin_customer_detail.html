@@ -653,6 +653,7 @@
  <div class="tab-action-bar">
  <a class="btn secondary" href="/admin/vaccinations/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="plus"></i> 新增疫苗</a>
  <a class="btn secondary" href="/admin/dewormings/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="plus"></i> 新增驱虫</a>
+ <a class="btn secondary" href="/admin/grooming-orders/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="scissors"></i> 新增美容</a>
  </div>
 
  <h4 style="margin:0.5rem 0 0.6rem;font-size:0.85rem;color:var(--muted);"><i data-lucide="syringe"></i> 疫苗记录</h4>
@@ -726,6 +727,37 @@
  </table>
  {% else %}
  <p style="color:var(--muted);font-size:0.85rem;">暂无驱虫记录</p>
+ {% endif %}
+
+ <h4 style="margin:1rem 0 0.6rem;font-size:0.85rem;color:var(--muted);"><i data-lucide="scissors"></i> 美容记录</h4>
+ {% if groomings %}
+ <table class="data-table mobile-card">
+   <thead><tr><th>美容日期</th><th>美容师</th><th>项目</th><th>体型/毛长</th><th style="text-align:right;">金额</th><th></th></tr></thead>
+   <tbody>
+   {% for g in groomings %}
+   <tr {% if g.status == 'voided' %}style="opacity:.5;"{% endif %}>
+     <td><a href="/admin/grooming-orders/{{ g.id }}" style="color:#1e40af;text-decoration:none;font-weight:600;">{{ g.groom_date }}</a>{% if g.status == 'voided' %} <span class="pill pill-gray" style="font-size:.65rem;">已作废</span>{% elif g._locked %} <span class="pill pill-ok" style="font-size:.65rem;" title="{{ g._lock_reason }}">🔒</span>{% endif %}</td>
+     <td>{{ g.groomer_name or '—' }}</td>
+     <td style="font-size:.82rem;color:#64748b;">{{ (g.services_json|parse_json or [])|length }} 项{% if g.start_time and g.end_time %} · {{ g.start_time }}-{{ g.end_time }}{% endif %}</td>
+     <td style="font-size:.78rem;color:var(--muted);">
+       {% if g.pet_size %}{{ {'small':'小型','medium':'中型','large':'大型','xlarge':'巨型'}.get(g.pet_size, g.pet_size) }}{% endif %}
+       {% if g.coat_length %} · {{ {'short':'短毛','medium':'中毛','long':'长毛'}.get(g.coat_length, g.coat_length) }}{% endif %}
+     </td>
+     <td style="text-align:right;font-weight:600;color:#059669;">¥ {{ '%.2f'|format(g.total_amount or 0) }}</td>
+     <td style="white-space:nowrap;">
+       {% if not g._locked and g.status != 'voided' %}
+       <form method="post" action="/admin/grooming-orders/{{ g.id }}/delete" style="display:inline;" onsubmit="return confirm('删除此美容单？')">
+         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+         <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.78rem;padding:0;">删除</button>
+       </form>
+       {% endif %}
+     </td>
+   </tr>
+   {% endfor %}
+   </tbody>
+ </table>
+ {% else %}
+ <p style="color:var(--muted);font-size:0.85rem;">暂无美容记录</p>
  {% endif %}
  </div>
 

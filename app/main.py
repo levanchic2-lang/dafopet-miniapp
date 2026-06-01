@@ -93,6 +93,7 @@ from app.models import (
     NarcoticsLedger,
     FollowUpTemplate,
     Disease,
+    GroomingOrder,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
@@ -6750,6 +6751,11 @@ async def page_admin_customer_detail(
             _l, _r = _is_vaccination_locked(db, _v)
             _v._locked = _l
             _v._lock_reason = _r
+        groomings = db.query(GroomingOrder).filter(GroomingOrder.pet_id == active_pet_id).order_by(GroomingOrder.groom_date.desc(), GroomingOrder.id.desc()).all()
+        for _g in groomings:
+            _l, _r = _is_grooming_locked(db, _g)
+            _g._locked = _l
+            _g._lock_reason = _r
         weight_records = db.query(WeightRecord).filter(WeightRecord.pet_id == active_pet_id).order_by(WeightRecord.record_date.asc()).all()
         medical_docs = db.query(MedicalDocument).filter(MedicalDocument.pet_id == active_pet_id).order_by(MedicalDocument.id.desc()).all()
         # 该宠物名下发票 = 直接关联该宠物 OR 通过 visit_id 关联
@@ -6766,6 +6772,7 @@ async def page_admin_customer_detail(
     else:
         appointments, visits, prescriptions, exam_orders = [], [], [], []
         vaccinations, dewormings, weight_records, medical_docs = [], [], [], []
+        groomings = []
         pet_invoices = []
         pet_sales_orders = []
 
@@ -6873,6 +6880,7 @@ async def page_admin_customer_detail(
             "exam_orders": exam_orders,
             "vaccinations": vaccinations,
             "dewormings": dewormings,
+            "groomings": groomings,
             "latest_vacc_by_pet": latest_vacc_by_pet,
             "latest_deworm_by_pet": latest_deworm_by_pet,
             "weight_records": weight_records,
@@ -10581,6 +10589,18 @@ def _is_deworming_locked(db: Session, d: "DewormingRecord") -> tuple[bool, str]:
         return True, "已作废"
     if getattr(d, "invoice_id", None):
         inv = db.get(Invoice, d.invoice_id)
+        if inv and inv.payment_status == "paid":
+            return True, "关联收费单已付款"
+    return False, ""
+
+
+def _is_grooming_locked(db: Session, g: "GroomingOrder") -> tuple[bool, str]:
+    if not g:
+        return False, ""
+    if getattr(g, "status", "") == "voided":
+        return True, "已作废"
+    if getattr(g, "invoice_id", None):
+        inv = db.get(Invoice, g.invoice_id)
         if inv and inv.payment_status == "paid":
             return True, "关联收费单已付款"
     return False, ""
@@ -17126,6 +17146,286 @@ async def admin_deworming_copy_as_new(rec_id: int, request: Request, db: Session
     _audit_doc_action(db, "deworming", 0, "copy_from", operator, extra=f"src={rec_id}")
     db.commit()
     return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=vaccines&msg=已复制为新驱虫记录", status_code=303)
+
+
+# ═════════════════════════════════════════════════════════════════════
+# 美容单 (GroomingOrder) — 独立单据，与驱虫/疫苗一致体验
+# ═════════════════════════════════════════════════════════════════════
+_GROOMING_PET_SIZES = {"small": "小型", "medium": "中型", "large": "大型", "xlarge": "巨型"}
+_GROOMING_COAT_LENGTHS = {"short": "短毛", "medium": "中毛", "long": "长毛"}
+
+
+def _parse_grooming_services(form) -> list:
+    """解析美容服务清单。字段：service_name[]/qty[]/price[]/note[]"""
+    names = form.getlist("service_name[]")
+    items = []
+    for i, name in enumerate(names):
+        name = str(name or "").strip()
+        if not name:
+            continue
+        def _g(k, d=""):
+            v = form.getlist(f"{k}[]")
+            return v[i] if i < len(v) else d
+        try:
+            qty = float(_g("qty") or 1)
+        except Exception:
+            qty = 1.0
+        try:
+            price = float(_g("price") or 0)
+        except Exception:
+            price = 0.0
+        items.append({
+            "name": name[:120],
+            "qty": qty,
+            "price": price,
+            "subtotal": round(qty * price, 2),
+            "notes": (_g("note") or "")[:200],
+        })
+    return items
+
+
+@app.get("/admin/grooming-orders/create", response_class=HTMLResponse)
+async def page_admin_grooming_create(
+    request: Request, db: Session = Depends(get_db),
+    customer_id: int = Query(0), pet_id: int = Query(0), appointment_id: int = Query(0),
+):
+    require_admin(request)
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    appt = db.get(Appointment, appointment_id) if appointment_id else None
+    if appt and not cust:
+        cust = db.get(Customer, appt.customer_id) if appt.customer_id else None
+        pet = db.get(Pet, appt.pet_id) if appt.pet_id else pet
+    groomers = [s[0] for s in db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+    ).all()]
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    # 该宠物历史美容
+    history = []
+    if pet:
+        history = db.query(GroomingOrder).filter(GroomingOrder.pet_id == pet.id)\
+            .order_by(GroomingOrder.id.desc()).limit(10).all()
+    return templates.TemplateResponse(request, "admin_grooming_form.html", {
+        "mode": "create", "rec": None,
+        "cust": cust, "pet": pet, "appt": appt,
+        "groomers": groomers,
+        "pet_sizes": _GROOMING_PET_SIZES, "coat_lengths": _GROOMING_COAT_LENGTHS,
+        "today": today,
+        "grooming_history": history,
+        "locked": False, "lock_reason": "", "paid_amount": 0.0,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/grooming-orders/create")
+async def admin_grooming_create(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    customer_id = int(form.get("customer_id", 0) or 0)
+    pet_id = int(form.get("pet_id", 0) or 0)
+    appointment_id = int(form.get("appointment_id", 0) or 0)
+    services = _parse_grooming_services(form)
+    total = round(sum(s["subtotal"] for s in services), 2)
+    charge_amount = float(form.get("charge_amount", 0) or 0)
+    operator = request.session.get("admin_username", "admin")
+
+    pet = db.get(Pet, pet_id) if pet_id else None
+    store = (pet.store if pet else "") or _get_admin_store(request) or ""
+
+    rec = GroomingOrder(
+        customer_id=customer_id or None,
+        pet_id=pet_id or None,
+        appointment_id=appointment_id or None,
+        groom_date=str(form.get("groom_date", "")).strip()[:20],
+        start_time=str(form.get("start_time", "")).strip()[:10],
+        end_time=str(form.get("end_time", "")).strip()[:10],
+        groomer_name=str(form.get("groomer_name", "")).strip()[:80],
+        services_json=json.dumps(services, ensure_ascii=False),
+        total_amount=total,
+        pet_size=str(form.get("pet_size", "")).strip()[:20],
+        coat_length=str(form.get("coat_length", "")).strip()[:20],
+        skin_condition=str(form.get("skin_condition", "")).strip()[:200],
+        behavior_note=str(form.get("behavior_note", "")).strip()[:200],
+        store=store,
+        notes=str(form.get("notes", "")).strip(),
+        created_by=operator,
+    )
+    db.add(rec)
+    db.flush()
+
+    msg = "美容单已开具"
+    # 自动生成收费单（金额 > 0 时）
+    actual_charge = charge_amount if charge_amount > 0 else total
+    if actual_charge > 0:
+        inv = Invoice(
+            invoice_no=_gen_invoice_no(db),
+            customer_id=customer_id or None,
+            pet_id=pet_id or None,
+            invoice_date=rec.groom_date or datetime.now().strftime("%Y-%m-%d"),
+            subtotal=actual_charge, discount_amount=0.0, total_amount=actual_charge,
+            payment_status="unpaid",
+            notes=f"美容 #{rec.id}",
+            created_by=operator,
+        )
+        db.add(inv)
+        db.flush()
+        db.add(InvoiceItem(
+            invoice_id=inv.id, ref_type="grooming", ref_id=rec.id,
+            description=f"美容服务（{len(services)} 项）",
+            quantity=1.0, unit_price=actual_charge, subtotal=actual_charge,
+        ))
+        rec.invoice_id = inv.id
+        msg += f"，收费单 ¥{actual_charge:.2f} 已生成待收款"
+
+    db.commit()
+    return RedirectResponse(f"/admin/grooming-orders/{rec.id}?msg={msg}", status_code=303)
+
+
+@app.get("/admin/grooming-orders/{rec_id}", response_class=HTMLResponse)
+async def page_admin_grooming_detail(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        raise HTTPException(404, "美容单不存在")
+    cust = db.get(Customer, rec.customer_id) if rec.customer_id else None
+    pet = db.get(Pet, rec.pet_id) if rec.pet_id else None
+    appt = db.get(Appointment, rec.appointment_id) if rec.appointment_id else None
+    groomers = [s[0] for s in db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+    ).all()]
+    locked, lock_reason = _is_grooming_locked(db, rec)
+    paid_amount = _doc_paid_amount(db, "grooming", rec_id) if locked else 0.0
+    try:
+        services = json.loads(rec.services_json or "[]")
+    except Exception:
+        services = []
+    history = []
+    if rec.pet_id:
+        history = db.query(GroomingOrder).filter(
+            GroomingOrder.pet_id == rec.pet_id, GroomingOrder.id != rec_id,
+        ).order_by(GroomingOrder.id.desc()).limit(10).all()
+    return templates.TemplateResponse(request, "admin_grooming_form.html", {
+        "mode": "edit", "rec": rec, "rec_services": services,
+        "cust": cust, "pet": pet, "appt": appt,
+        "groomers": groomers,
+        "pet_sizes": _GROOMING_PET_SIZES, "coat_lengths": _GROOMING_COAT_LENGTHS,
+        "today": rec.groom_date,
+        "grooming_history": history,
+        "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/grooming-orders/{rec_id}/edit")
+async def admin_grooming_edit(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    locked, reason = _is_grooming_locked(db, rec)
+    if locked:
+        raise HTTPException(400, f"美容单已锁定（{reason}），不可修改。请「复制为新单」或「作废」。")
+    services = _parse_grooming_services(form)
+    rec.groom_date = str(form.get("groom_date", "")).strip()[:20]
+    rec.start_time = str(form.get("start_time", "")).strip()[:10]
+    rec.end_time = str(form.get("end_time", "")).strip()[:10]
+    rec.groomer_name = str(form.get("groomer_name", "")).strip()[:80]
+    rec.services_json = json.dumps(services, ensure_ascii=False)
+    rec.total_amount = round(sum(s["subtotal"] for s in services), 2)
+    rec.pet_size = str(form.get("pet_size", "")).strip()[:20]
+    rec.coat_length = str(form.get("coat_length", "")).strip()[:20]
+    rec.skin_condition = str(form.get("skin_condition", "")).strip()[:200]
+    rec.behavior_note = str(form.get("behavior_note", "")).strip()[:200]
+    rec.notes = str(form.get("notes", "")).strip()
+    rec.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已保存", status_code=303)
+
+
+@app.post("/admin/grooming-orders/{rec_id}/delete")
+async def admin_grooming_delete(rec_id: int, request: Request, db: Session = Depends(get_db),
+                                 csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        return RedirectResponse("/admin/customers", status_code=303)
+    locked, reason = _is_grooming_locked(db, rec)
+    if locked:
+        raise HTTPException(400, f"美容单已锁定（{reason}），不可删除。请使用「作废」。")
+    cust_id = rec.customer_id
+    pet_id = rec.pet_id
+    db.delete(rec)
+    db.commit()
+    if cust_id:
+        return RedirectResponse(f"/admin/customers/{cust_id}?pet_id={pet_id}&msg=美容单已删除", status_code=303)
+    return RedirectResponse("/admin/customers?msg=美容单已删除", status_code=303)
+
+
+@app.post("/admin/grooming-orders/{rec_id}/void")
+async def admin_grooming_void(rec_id: int, request: Request, db: Session = Depends(get_db),
+                                csrf_token: str = Form(""), void_reason: str = Form(""),
+                                refund_to_wallet: str = Form(""), refund_amount: float = Form(0.0)):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    if rec.status == "voided":
+        return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=该单已作废", status_code=303)
+    operator = request.session.get("admin_username", "admin")
+    rec.status = "voided"
+    rec.voided_by = operator
+    rec.voided_at = datetime.utcnow()
+    rec.void_reason = (void_reason or "")[:200]
+    refund_msg = ""
+    if refund_to_wallet in ("1", "true", "on") and rec.customer_id and refund_amount > 0:
+        tx = _refund_to_wallet(
+            db, rec.customer_id, float(refund_amount), operator,
+            note=f"作废美容单#{rec_id} 退款 · {void_reason}"[:500],
+        )
+        if tx:
+            refund_msg = f" · ¥{refund_amount:.2f} 已退入客户钱包"
+            _audit_doc_action(db, "grooming", rec_id, "refund_to_wallet",
+                              operator, extra=f"amount={refund_amount}")
+    _audit_doc_action(db, "grooming", rec_id, "void", operator, void_reason)
+    db.commit()
+    return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已作废{refund_msg}", status_code=303)
+
+
+@app.post("/admin/grooming-orders/{rec_id}/copy-as-new")
+async def admin_grooming_copy_as_new(rec_id: int, request: Request, db: Session = Depends(get_db),
+                                       csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    src = db.get(GroomingOrder, rec_id)
+    if not src:
+        raise HTTPException(404)
+    operator = request.session.get("admin_username", "admin")
+    new_rec = GroomingOrder(
+        customer_id=src.customer_id, pet_id=src.pet_id,
+        appointment_id=None,
+        groom_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        start_time="", end_time="",
+        groomer_name=src.groomer_name,
+        services_json=src.services_json,
+        total_amount=src.total_amount,
+        pet_size=src.pet_size, coat_length=src.coat_length,
+        skin_condition="", behavior_note="",
+        store=src.store,
+        notes=src.notes,
+        status="active",
+        created_by=operator,
+    )
+    db.add(new_rec)
+    _audit_doc_action(db, "grooming", 0, "copy_from", operator, extra=f"src={rec_id}")
+    db.commit()
+    db.refresh(new_rec)
+    return RedirectResponse(f"/admin/grooming-orders/{new_rec.id}?msg=已复制为新美容单 · 请填本次时间/状态", status_code=303)
 
 
 @app.post("/admin/weight-records/create")

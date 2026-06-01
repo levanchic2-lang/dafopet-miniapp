@@ -1501,6 +1501,41 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_store_date ON narcotics_ledger(store, event_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_source ON narcotics_ledger(source)"))
 
+            # 美容单
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS grooming_orders ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "appointment_id INTEGER DEFAULT NULL REFERENCES appointments(id) ON DELETE SET NULL, "
+                "invoice_id INTEGER DEFAULT NULL REFERENCES invoices(id) ON DELETE SET NULL, "
+                "groom_date VARCHAR(20) DEFAULT '', "
+                "start_time VARCHAR(10) DEFAULT '', "
+                "end_time VARCHAR(10) DEFAULT '', "
+                "groomer_name VARCHAR(80) DEFAULT '', "
+                "services_json TEXT DEFAULT '[]', "
+                "total_amount REAL DEFAULT 0.0, "
+                "before_photos TEXT DEFAULT '', "
+                "after_photos TEXT DEFAULT '', "
+                "pet_size VARCHAR(20) DEFAULT '', "
+                "coat_length VARCHAR(20) DEFAULT '', "
+                "skin_condition VARCHAR(200) DEFAULT '', "
+                "behavior_note VARCHAR(200) DEFAULT '', "
+                "store VARCHAR(40) DEFAULT '', "
+                "notes TEXT DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'active', "
+                "voided_by VARCHAR(80) DEFAULT '', "
+                "voided_at DATETIME DEFAULT NULL, "
+                "void_reason VARCHAR(200) DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_grooming_pet ON grooming_orders(pet_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_grooming_customer ON grooming_orders(customer_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_grooming_date ON grooming_orders(groom_date)"))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

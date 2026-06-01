@@ -787,6 +787,54 @@ class DewormingRecord(Base):
     customer = relationship("Customer", backref="deworming_records", foreign_keys=[customer_id])
 
 
+class GroomingOrder(Base):
+    """美容单：洗澡/造型/SPA 等服务记录。
+
+    与 Appointment(category=beauty) 关联，但独立成单，记录服务细节 + 前后照片。
+    锁定规则：invoice paid 即锁，作废可退款。
+    """
+    __tablename__ = "grooming_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id    = mapped_column(ForeignKey("customers.id",    ondelete="SET NULL"), nullable=True, default=None)
+    pet_id         = mapped_column(ForeignKey("pets.id",         ondelete="SET NULL"), nullable=True, default=None)
+    appointment_id = mapped_column(ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True, default=None)
+    invoice_id     = mapped_column(ForeignKey("invoices.id",     ondelete="SET NULL"), nullable=True, default=None)
+
+    groom_date:  Mapped[str] = mapped_column(String(20), default="")
+    start_time:  Mapped[str] = mapped_column(String(10), default="")
+    end_time:    Mapped[str] = mapped_column(String(10), default="")
+    groomer_name: Mapped[str] = mapped_column(String(80), default="")
+
+    # 服务清单 JSON：[{name, qty, price, subtotal, notes}]
+    services_json: Mapped[str] = mapped_column(Text, default="[]")
+    total_amount:  Mapped[float] = mapped_column(Float, default=0.0)
+
+    # 美容前/后照片（路径 CSV）
+    before_photos: Mapped[str] = mapped_column(Text, default="")
+    after_photos:  Mapped[str] = mapped_column(Text, default="")
+
+    # 状况描述
+    pet_size:        Mapped[str] = mapped_column(String(20), default="")   # small/medium/large/xlarge
+    coat_length:     Mapped[str] = mapped_column(String(20), default="")   # short/medium/long
+    skin_condition:  Mapped[str] = mapped_column(String(200), default="")  # 皮肤情况
+    behavior_note:   Mapped[str] = mapped_column(String(200), default="")  # 行为反应（合作/紧张/咬人等）
+
+    store:       Mapped[str] = mapped_column(String(40), default="")
+    notes:       Mapped[str] = mapped_column(Text, default="")
+    status:      Mapped[str] = mapped_column(String(20), default="active")   # active / voided
+    voided_by:   Mapped[str] = mapped_column(String(80), default="")
+    voided_at:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    void_reason: Mapped[str] = mapped_column(String(200), default="")
+
+    created_by:  Mapped[str] = mapped_column(String(80), default="")
+    created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+
+
 class WeightRecord(Base):
     """体重记录（用于体重曲线）"""
     __tablename__ = "weight_records"

@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+  @media (max-width: 768px) {
+    body div[style*="grid-template-columns:minmax"],
+    body div[style*="grid-template-columns: minmax"] {
+      grid-template-columns: 1fr !important;
+    }
+    form input, form select, form textarea {
+      width: 100% !important; box-sizing: border-box !important; min-width: 0 !important;
+    }
+  }
+  .svc-table { width:100%; border-collapse:collapse; font-size:.86rem; }
+  .svc-table th { font-size:.74rem; color:#64748b; text-align:left; padding:.4rem .5rem; border-bottom:1px solid #e2e8f0; }
+  .svc-table td { padding:.35rem .5rem; vertical-align:middle; }
+  .svc-table input { width:100%; padding:.3rem .45rem; font-size:.86rem; border:1px solid #e2e8f0; border-radius:6px; box-sizing:border-box; height:32px; }
+</style>
+{% endblock %}
+{% block body %}
+
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+
+{% set is_edit = (mode == 'edit') %}
+{% set _services = rec_services if is_edit else [{}] %}
+
+<div class="page-head">
+ <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+ {% if cust %}
+ <a href="/admin/customers/{{ cust.id }}?pet_id={{ pet.id if pet else 0 }}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回客户</a>
+ {% endif %}
+ <div>
+ <h1><span class="ph-icon"><i data-lucide="scissors"></i></span>
+ {% if is_edit %}美容单 #{{ rec.id }}{% else %}新建美容单{% endif %}
+ {% if is_edit and rec.status == 'voided' %}<span class="pill pill-gray" style="margin-left:0.5rem;">已作废</span>
+ {% elif is_edit and rec.invoice_id %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已开单</span>{% endif %}
+ </h1>
+ {% if cust or pet %}<p class="ph-sub">{% if cust %}{{ cust.name }}{% endif %}{% if pet %} · {{ pet.name }}{% endif %}</p>{% endif %}
+ </div>
+ </div>
+ {% if is_edit and rec.invoice_id %}
+ <div class="ph-actions">
+ <a href="/admin/invoices/{{ rec.invoice_id }}" class="btn secondary" style="font-size:0.82rem;"><i data-lucide="receipt"></i> 查看收费单</a>
+ </div>
+ {% endif %}
+</div>
+
+{% if locked %}
+<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;">
+  <div style="font-size:1.4rem;">🔒</div>
+  <div style="flex:1;min-width:200px;">
+    <div style="font-weight:600;color:#991b1b;">此美容单已锁定（{{ lock_reason }}），不可修改</div>
+    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">
+      「📋 复制为新单」开下一次 · 或「🚫 作废」回退后重开
+      {% if paid_amount and paid_amount > 0 %}<br/><b style="color:#b91c1c;">💰 此单已收款 ¥{{ '%.2f'|format(paid_amount) }}</b>，作废时可选退到客户钱包{% endif %}
+    </div>
+  </div>
+  <form method="post" action="/admin/grooming-orders/{{ rec.id }}/copy-as-new" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <button type="submit" class="btn" style="background:#3b82f6;border-color:#3b82f6;">📋 复制为新单</button>
+  </form>
+  {% if rec.status != 'voided' %}
+  <form method="post" action="/admin/grooming-orders/{{ rec.id }}/void" style="display:inline;" onsubmit="return confirmGroomVoid(this, {{ paid_amount or 0 }})">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="void_reason" value=""/>
+    <input type="hidden" name="refund_to_wallet" value=""/>
+    <input type="hidden" name="refund_amount" value="0"/>
+    <button type="submit" class="danger">🚫 作废</button>
+  </form>
+  {% endif %}
+</div>
+<style>
+  .locked-form input, .locked-form select, .locked-form textarea, .locked-form button[type="submit"] {
+    pointer-events: none !important; background:#f8fafc !important; color:#64748b !important;
+  }
+  .locked-form button[type="submit"] { display: none !important; }
+</style>
+<script>
+function confirmGroomVoid(form, paidAmount) {
+  const reason = prompt('请填写作废原因（必填）：');
+  if (!reason || !reason.trim()) return false;
+  form.querySelector('input[name="void_reason"]').value = reason.trim();
+  if (paidAmount > 0) {
+    const amt = prompt('💰 此单已收款 ¥' + paidAmount.toFixed(2) + '\n\n如需退到客户钱包，请输入退款金额（留空 = 不退）：', paidAmount.toFixed(2));
+    if (amt !== null && amt !== '' && parseFloat(amt) > 0) {
+      form.querySelector('input[name="refund_to_wallet"]').value = '1';
+      form.querySelector('input[name="refund_amount"]').value = parseFloat(amt).toFixed(2);
+    }
+  }
+  let m = '确认作废？\n• 写入审计日志';
+  const refundVal = form.querySelector('input[name="refund_amount"]').value;
+  if (parseFloat(refundVal) > 0) m += '\n• 退款 ¥' + parseFloat(refundVal).toFixed(2) + ' 立即入客户钱包';
+  return confirm(m);
+}
+</script>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:minmax(0,960px) 360px;gap:1.25rem;align-items:start;">
+
+ <div>
+ <form method="post"
+       action="{% if is_edit %}/admin/grooming-orders/{{ rec.id }}/edit{% else %}/admin/grooming-orders/create{% endif %}"
+       id="groom-form"
+       class="{% if locked %}locked-form{% endif %}">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+ <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+ <input type="hidden" name="appointment_id" value="{{ appt.id if appt else 0 }}"/>
+
+ <div class="card" style="margin-bottom:0.75rem;">
+   <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">🛁 服务信息</h3>
+   <div class="row2">
+     <div>
+       <label>美容日期 <span style="color:#d97706;">*</span></label>
+       <input type="date" name="groom_date" value="{{ rec.groom_date if rec else today }}" required/>
+     </div>
+     <div>
+       <label>美容师 <span style="color:#d97706;">*</span></label>
+       <input name="groomer_name" required value="{{ rec.groomer_name if rec else '' }}" list="groomer-list" placeholder="选择或输入"/>
+       <datalist id="groomer-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
+     </div>
+     <div>
+       <label>开始时间</label>
+       <input type="time" name="start_time" value="{{ rec.start_time if rec else '' }}"/>
+     </div>
+     <div>
+       <label>结束时间</label>
+       <input type="time" name="end_time" value="{{ rec.end_time if rec else '' }}"/>
+     </div>
+     <div>
+       <label>体型</label>
+       <select name="pet_size">
+         <option value="">—</option>
+         {% for k, v in pet_sizes.items() %}<option value="{{ k }}" {% if rec and rec.pet_size == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+       </select>
+     </div>
+     <div>
+       <label>毛长</label>
+       <select name="coat_length">
+         <option value="">—</option>
+         {% for k, v in coat_lengths.items() %}<option value="{{ k }}" {% if rec and rec.coat_length == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+       </select>
+     </div>
+   </div>
+ </div>
+
+ <div class="card" style="margin-bottom:0.75rem;">
+   <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">✂ 服务清单</h3>
+   <table class="svc-table" id="svc-table">
+     <thead>
+       <tr>
+         <th style="width:auto;">服务项目 *</th>
+         <th style="width:80px;">数量</th>
+         <th style="width:90px;">单价 ¥</th>
+         <th style="width:90px;text-align:right;">小计</th>
+         <th style="width:auto;">备注</th>
+         <th style="width:40px;"></th>
+       </tr>
+     </thead>
+     <tbody id="svc-tbody">
+       {% for s in _services %}
+       <tr>
+         <td><input name="service_name[]" value="{{ s.name or '' }}" placeholder="如：洗澡 / 剃毛 / 修甲" list="svc-presets"/></td>
+         <td><input type="number" step="0.5" min="0" name="qty[]" value="{{ s.qty or 1 }}" oninput="recalc()"/></td>
+         <td><input type="number" step="0.01" min="0" name="price[]" value="{{ s.price or '' }}" oninput="recalc()"/></td>
+         <td style="text-align:right;font-weight:600;" class="svc-sub">¥ {{ '%.2f'|format(s.subtotal or 0) }}</td>
+         <td><input name="note[]" value="{{ s.notes or '' }}" placeholder="可选"/></td>
+         <td><button type="button" onclick="rmRow(this)" style="color:#dc2626;background:none;border:none;cursor:pointer;">✕</button></td>
+       </tr>
+       {% endfor %}
+     </tbody>
+   </table>
+   <datalist id="svc-presets">
+     <option value="洗澡（小型）">
+     <option value="洗澡（中型）">
+     <option value="洗澡（大型）">
+     <option value="剃毛">
+     <option value="造型修剪">
+     <option value="修甲">
+     <option value="挤肛门腺">
+     <option value="清耳道">
+     <option value="药浴">
+     <option value="SPA 护理">
+   </datalist>
+   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.5rem;">
+     <button type="button" onclick="addRow()" class="btn secondary" style="font-size:.82rem;">+ 增加服务项</button>
+     <div style="font-size:1rem;">合计：¥ <b id="grand-total" style="color:#059669;">{{ '%.2f'|format(rec.total_amount) if rec else '0.00' }}</b></div>
+   </div>
+   <div style="margin-top:.6rem;padding-top:.6rem;border-top:1px dashed #e2e8f0;display:flex;align-items:center;gap:.5rem;">
+     <label style="margin:0;font-weight:600;">收费金额 ¥</label>
+     <input type="number" name="charge_amount" step="0.01" min="0" id="charge-input" value="0.00" placeholder="留空 = 用合计" style="width:140px;"/>
+     <small style="color:var(--muted);">留空或 0 = 不收费；> 0 自动生成收费单</small>
+   </div>
+ </div>
+
+ <div class="card" style="margin-bottom:0.75rem;">
+   <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">📝 状况记录</h3>
+   <div>
+     <label>皮肤情况</label>
+     <input name="skin_condition" maxlength="200" value="{{ rec.skin_condition if rec else '' }}" placeholder="如：发现耳道发红 / 腹部红疹 / 正常"/>
+   </div>
+   <div style="margin-top:.5rem;">
+     <label>行为反应</label>
+     <input name="behavior_note" maxlength="200" value="{{ rec.behavior_note if rec else '' }}" placeholder="如：合作 / 紧张应激 / 咬人 / 全程睡觉"/>
+   </div>
+   <div style="margin-top:.5rem;">
+     <label>其他备注</label>
+     <textarea name="notes" rows="2" maxlength="500">{{ rec.notes if rec else '' }}</textarea>
+   </div>
+ </div>
+
+ <div style="display:flex;gap:0.6rem;margin-top:1rem;">
+   <button type="submit" style="flex:1;">{% if is_edit %}保存修改{% else %}保存美容单{% endif %}</button>
+ </div>
+ </form>
+
+ {% if is_edit and not locked %}
+ <div style="margin-top:0.75rem;">
+   <form method="post" action="/admin/grooming-orders/{{ rec.id }}/delete"
+         onsubmit="return confirm('确认删除此美容单？')">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+     <button type="submit" class="btn" style="width:100%;background:#dc2626;border-color:#dc2626;font-size:.85rem;">删除此美容单</button>
+   </form>
+ </div>
+ {% endif %}
+ </div>
+
+ <!-- 右栏 -->
+ <div style="display:flex;flex-direction:column;gap:0.75rem;">
+   {% if pet or cust %}
+   <div class="card" style="padding:0;overflow:hidden;">
+     {% if pet %}
+     <div style="padding:.85rem 1rem;">
+       <div style="font-size:0.72rem;font-weight:700;color:var(--muted);margin-bottom:0.45rem;letter-spacing:.04em;">🐾 宠物</div>
+       <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem;flex-wrap:wrap;">
+         <span style="font-weight:700;font-size:1.05rem;">{{ pet.name or '未命名' }}</span>
+         {% if pet.gender == 'male' %}<span class="badge b-pending" style="font-size:0.68rem;">公</span>
+         {% elif pet.gender == 'female' %}<span class="badge b-done" style="font-size:0.68rem;">母</span>{% endif %}
+       </div>
+       <div style="font-size:0.82rem;color:var(--muted);">
+         {{ {'cat':'猫','dog':'犬'}.get(pet.species, pet.species) }}{% if pet.breed %} · {{ pet.breed }}{% endif %}
+       </div>
+     </div>
+     {% endif %}
+     {% if pet and cust %}<div style="height:1px;background:var(--border);"></div>{% endif %}
+     {% if cust %}
+     <div style="padding:.85rem 1rem;">
+       <div style="font-size:0.72rem;font-weight:700;color:var(--muted);margin-bottom:0.45rem;letter-spacing:.04em;">👤 主人</div>
+       <div style="font-weight:700;font-size:1.05rem;">{{ cust.name or '—' }}</div>
+       <div style="font-size:0.85rem;color:var(--muted);font-family:monospace;">{{ cust.phone or '—' }}</div>
+     </div>
+     {% endif %}
+   </div>
+   {% endif %}
+
+   <div data-customer-context
+        data-customer-id="{{ cust.id if cust else 0 }}"
+        data-pet-id="{{ pet.id if pet else 0 }}"
+        style="display:none;"></div>
+
+   {# ── 历史美容记录 ── #}
+   {% if grooming_history and grooming_history|length > 0 %}
+   <div class="card" style="padding:.75rem 1rem;">
+     <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.5rem;">✂ 历史美容（{{ grooming_history|length }} 条）</div>
+     {% for h in grooming_history %}
+     {% set is_voided = (h.status == 'voided') %}
+     <a href="/admin/grooming-orders/{{ h.id }}" style="display:block;padding:.4rem 0;border-bottom:1px dashed #e2e8f0;text-decoration:none;color:inherit;{% if is_voided %}opacity:.5;{% endif %}">
+       <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:#475569;">
+         <span style="font-variant-numeric:tabular-nums;">{{ h.groom_date or '—' }}</span>
+         <span style="font-weight:600;color:#059669;">¥ {{ '%.2f'|format(h.total_amount or 0) }}</span>
+       </div>
+       <div style="font-size:0.82rem;color:#1e293b;margin-top:.2rem;">{{ h.groomer_name or '—' }}</div>
+       {% if is_voided %}<div style="font-size:.7rem;color:#94a3b8;">（已作废）</div>{% endif %}
+     </a>
+     {% endfor %}
+   </div>
+   {% endif %}
+ </div>
+
+</div>
+
+<script>
+let _svcRows = {{ _services|length if _services else 1 }};
+
+function recalc() {
+  let total = 0;
+  document.querySelectorAll('#svc-tbody tr').forEach(tr => {
+    const q = parseFloat(tr.querySelector('input[name="qty[]"]').value || 0);
+    const p = parseFloat(tr.querySelector('input[name="price[]"]').value || 0);
+    const sub = q * p;
+    tr.querySelector('.svc-sub').textContent = '¥ ' + sub.toFixed(2);
+    total += sub;
+  });
+  document.getElementById('grand-total').textContent = total.toFixed(2);
+}
+
+function addRow() {
+  const tb = document.getElementById('svc-tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input name="service_name[]" placeholder="如：洗澡 / 剃毛 / 修甲" list="svc-presets"/></td>
+    <td><input type="number" step="0.5" min="0" name="qty[]" value="1" oninput="recalc()"/></td>
+    <td><input type="number" step="0.01" min="0" name="price[]" oninput="recalc()"/></td>
+    <td style="text-align:right;font-weight:600;" class="svc-sub">¥ 0.00</td>
+    <td><input name="note[]" placeholder="可选"/></td>
+    <td><button type="button" onclick="rmRow(this)" style="color:#dc2626;background:none;border:none;cursor:pointer;">✕</button></td>
+  `;
+  tb.appendChild(tr);
+  _svcRows++;
+}
+
+function rmRow(btn) {
+  btn.closest('tr').remove();
+  recalc();
+}
+
+if (!document.querySelectorAll('#svc-tbody tr').length) addRow();
+recalc();
+</script>
+{% endblock %}
