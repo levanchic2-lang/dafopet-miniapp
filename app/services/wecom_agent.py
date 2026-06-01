@@ -29,6 +29,7 @@ from app.database import SessionLocal
 from app.models import (
     AdminUser, Customer, Pet, Visit, Wallet, Appointment, AppointmentStatus, FollowUp,
     ExamOrder, Vaccination, DewormingRecord, GroomingOrder,
+    Prescription, PrescriptionItem, InventoryItem,
 )
 from app.services import wecom_session as _sess
 from app.services.wecom_client import send_app_message
@@ -36,11 +37,12 @@ from app.services.wecom_client import send_app_message
 logger = logging.getLogger(__name__)
 
 
-_SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业微信发文字或语音（已转文字）给你，你帮他们查档案、新建病历、新建预约、开检查单、开美容/疫苗/驱虫单、记主诉/体检/诊断。
+_SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业微信发文字或语音（已转文字）给你，你帮他们查档案、新建病历、新建预约、开检查单、开美容/疫苗/驱虫单、开处方（草稿）、记主诉/体检/诊断。
 
 【硬性原则】
-1. 写操作（新建病历、写主诉/体检/诊断、新建预约、开检查单/美容/疫苗/驱虫单）必须先调对应工具拿到 summary，绝不直接说"已完成"，等系统让用户确认。
-2. 不要做：开处方、开麻醉单、收款、退款、删除、作废。这些工具暂未提供，不要假装能做。
+1. 写操作（新建病历、写主诉/体检/诊断、新建预约、开检查单/美容/疫苗/驱虫单/处方）必须先调对应工具拿到 summary，绝不直接说"已完成"，等系统让用户确认。
+2. 不要做：开麻醉单、收款、退款、删除、作废。这些工具暂未提供，不要假装能做。
+2a. **诊断（diagnosis）字段不允许写药品+剂量+频次**，那是处方，必须用 create_prescription_draft。诊断只写疾病名（如「慢性鼻炎」），用药全部走处方工具。
 3. 找客户时优先按手机号；其次按姓名/宠物名。find_customer 的 query 只能传**一个**关键词（号码 或 客户名 或 宠物名），不能拼接（不能传"13823137494 大米"）。
 4. 单次工具调用做一件事。比如「找李敏的大米新建病历」拆成：先 find_customer(query="李敏") 拿到客户和宠物列表，再 create_visit(pet_id=大米的 id)。
 5. 回复简洁，中文，必要时用 emoji（✓ ✋ ⚠ 📋）。不要长篇大论。
@@ -48,7 +50,7 @@ _SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业
 7. find_customer/get_customer_profile 的返回里会标 [pet_id=N]、(customer_id=N)，请直接读用这些 ID，不要再问用户。
 
 【写动作流程】
-- create_visit / update_visit_field / create_appointment / create_exam_order / create_vaccination / create_deworming / create_grooming_order 会返回 "PENDING:" 开头的字符串
+- create_visit / update_visit_field / create_appointment / create_exam_order / create_vaccination / create_deworming / create_grooming_order / create_prescription_draft 会返回 "PENDING:" 开头的字符串
 - 你要原样把 PENDING 后面的 summary 转述给用户，结尾问「确认执行吗？回复『确认』」
 - 不要自作主张说"已完成"，让用户先确认
 
@@ -77,6 +79,16 @@ _SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业
 - create_deworming：product_name 必填（海乐妙/拜耳大宠爱/福来恩等）；deworm_type 默认 external（体外），用户明确说体内/内外同驱再改
 - create_grooming_order：services 是服务项数组，如 ["洗澡", "造型"]；门店从员工绑定取；价格/数量留给医生回系统补
 - 草稿态：不扣库存、不收款；医生回系统补批号/价格/上次记录核对
+
+【处方规则（create_prescription_draft）· 最高风险】
+- 必须先有 current_visit_id（病历）
+- drugs 是对象数组，每项必须完整：drug_name + dose_amount + dose_unit + times_per_day + duration_days
+  例：「多西环素，每次 10mg/kg，一天 2 次，连服 7 天」→
+    {"drug_name":"多西环素","dose_amount":10,"dose_unit":"mg/kg","times_per_day":2,"duration_days":7}
+- **任何一项缺失就追问用户，不要默认 / 不要瞎填**
+- 一律 status=draft（草稿），不扣库存、不收款；医生回系统选库存品目 + 改 issued
+- 麻药 / 精神类管控药品禁止 → 工具会自动拒绝
+- 复诵时把每个药完整念一遍：药名+单次剂量+频次+天数。语音误识别这块容错为 0，必须用户明确说「确认」
 """
 
 
@@ -511,6 +523,102 @@ def tool_create_grooming_order(
     return f"PENDING:{summary}"
 
 
+def _check_controlled_drug(db: Session, drug_name: str) -> Optional[str]:
+    """返回受管控药品名（命中即拒绝），未命中返回 None。
+
+    匹配：库存里 is_controlled=True 的品目，名字包含/被包含 drug_name 关键词。
+    """
+    name = (drug_name or "").strip()
+    if not name:
+        return None
+    rows = db.query(InventoryItem).filter(
+        InventoryItem.is_controlled == True,  # noqa: E712
+        InventoryItem.is_active == True,      # noqa: E712
+    ).all()
+    for it in rows:
+        if not it.name:
+            continue
+        if name in it.name or it.name in name:
+            return it.name
+    return None
+
+
+def tool_create_prescription_draft(
+    db: Session, userid: str,
+    drugs: list,
+    visit_id: Optional[int] = None,
+    notes: str = "",
+) -> str:
+    """开处方草稿。drugs 是对象数组，每项必须有：
+       drug_name / dose_amount / dose_unit / times_per_day / duration_days
+       可选：instructions（用药提示，给客户看的）
+    """
+    ctx = _sess.get(userid)
+    vid = visit_id or ctx.get("current_visit_id")
+    if not vid:
+        return "❌ 没有当前病历，请先 create_visit"
+    v = db.get(Visit, vid)
+    if not v:
+        return f"❌ 病历 #{vid} 不存在"
+    if not isinstance(drugs, list) or not drugs:
+        return "❌ 没有药品；请说清楚药名+单次剂量+频次+天数"
+    if len(drugs) > 10:
+        return "❌ 一张处方最多 10 个药"
+
+    # 逐项校验 + 受管控检查
+    cleaned = []
+    for i, d in enumerate(drugs, 1):
+        if not isinstance(d, dict):
+            return f"❌ 第 {i} 项格式错"
+        name = str(d.get("drug_name") or "").strip()
+        dose_amount = d.get("dose_amount")
+        dose_unit = str(d.get("dose_unit") or "").strip()
+        tpd = d.get("times_per_day")
+        days = d.get("duration_days")
+        if not name:
+            return f"❌ 第 {i} 项缺药名"
+        if dose_amount in (None, "", 0, 0.0):
+            return f"❌ 第 {i} 项「{name}」缺单次剂量（dose_amount）"
+        if not dose_unit:
+            return f"❌ 第 {i} 项「{name}」缺剂量单位（mg/kg、ml、片 等）"
+        if not tpd:
+            return f"❌ 第 {i} 项「{name}」缺频次（一天几次）"
+        if not days:
+            return f"❌ 第 {i} 项「{name}」缺连服天数"
+        # 受管控药品拒绝
+        controlled = _check_controlled_drug(db, name)
+        if controlled:
+            return (f"⚠ 第 {i} 项「{name}」匹配到受管控药品「{controlled}」"
+                    f"（精神类/麻药），agent 不开此类，请医生在系统手动开处方")
+        cleaned.append({
+            "drug_name": name,
+            "dose_amount": float(dose_amount),
+            "dose_unit": dose_unit,
+            "times_per_day": float(tpd),
+            "duration_days": str(days).strip(),
+            "instructions": str(d.get("instructions") or "").strip(),
+        })
+
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    lines = [f"✋ 即将开处方（草稿 · 不扣库存不收款）：",
+             f"病历 #{vid}（{pet.name if pet else '宠物'}）"]
+    for i, c in enumerate(cleaned, 1):
+        lines.append(
+            f"  {i}. {c['drug_name']}：单次 {c['dose_amount']}{c['dose_unit']}"
+            f" · 一天 {int(c['times_per_day']) if c['times_per_day'].is_integer() else c['times_per_day']} 次"
+            f" · 连服 {c['duration_days']} 天"
+            + (f"（{c['instructions']}）" if c['instructions'] else "")
+        )
+    lines.append("⚠ 请逐条核对药名/剂量/频次/天数；任何一处不对就回「取消」")
+    lines.append("无误回「确认」执行（医生需回系统绑库存品目后改 issued）")
+    summary = "\n".join(lines)
+    _sess.set_pending(userid, "create_prescription_draft", {
+        "visit_id": vid, "customer_id": v.customer_id, "pet_id": v.pet_id,
+        "drugs": cleaned, "notes": (notes or "").strip(),
+    }, summary)
+    return f"PENDING:{summary}"
+
+
 # ─── 实际执行（pending → confirm 后调） ───
 def _execute_create_visit(db: Session, userid: str, args: dict) -> str:
     """真正建病历。复用 main 里的 _sync_followup_for_visit 来衍生回访。"""
@@ -642,7 +750,45 @@ def _execute_pending(db: Session, userid: str, pending: dict) -> str:
         return _execute_create_deworming(db, userid, args)
     if action == "create_grooming_order":
         return _execute_create_grooming_order(db, userid, args)
+    if action == "create_prescription_draft":
+        return _execute_create_prescription_draft(db, userid, args)
     return f"❌ 未知动作 {action}"
+
+
+def _execute_create_prescription_draft(db: Session, userid: str, args: dict) -> str:
+    u = db.query(AdminUser).filter(AdminUser.wecom_userid == userid).first()
+    vet_name = (u.display_name if u and u.display_name else (u.username if u else "")) or ""
+    presc = Prescription(
+        visit_id=args["visit_id"],
+        customer_id=args.get("customer_id"),
+        pet_id=args.get("pet_id"),
+        prescribed_date=_date.today().isoformat(),
+        vet_name=vet_name,
+        status="draft",            # 草稿 → sync_invoice 跳过、不扣钱
+        total_amount=0.0,
+        notes=args.get("notes", ""),
+        created_by=(u.username if u else "wecom_agent"),
+    )
+    db.add(presc)
+    db.flush()
+    for c in args["drugs"]:
+        # 注意：不绑 item_id，所以 _deduct_inventory 不会被触发
+        db.add(PrescriptionItem(
+            prescription_id=presc.id,
+            drug_name=c["drug_name"],
+            dose_amount=c["dose_amount"],
+            dose_unit=c["dose_unit"],
+            times_per_day=c["times_per_day"],
+            duration_days=c["duration_days"],
+            instructions=c.get("instructions", ""),
+            # 兼容字段：dosage/frequency 用人话拼一份，方便老打印模板
+            dosage=f"{c['dose_amount']}{c['dose_unit']}",
+            frequency=f"一天{int(c['times_per_day']) if float(c['times_per_day']).is_integer() else c['times_per_day']}次",
+        ))
+    db.commit()
+    db.refresh(presc)
+    return (f"✓ 处方 #{presc.id} 已创建（草稿，{len(args['drugs'])} 个药）\n"
+            f"请回系统绑库存品目 + 改 issued，库存才会扣减、收费单才会同步")
 
 
 def _execute_create_vaccination(db: Session, userid: str, args: dict) -> str:
@@ -788,6 +934,29 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "create_prescription_draft",
+            "description": "开处方（草稿态，不扣库存不收款，医生回系统绑库存品目后改 issued 才生效）。写操作 - 返回 PENDING 等用户严格逐条核对后确认。受管控（麻药/精神类）自动拒绝。",
+            "parameters": {"type": "object", "properties": {
+                "drugs": {
+                    "type": "array",
+                    "description": "药品数组，每项必须完整：药名+单次剂量+剂量单位+频次+天数",
+                    "items": {"type": "object", "properties": {
+                        "drug_name":     {"type": "string", "description": "药品名（如 多西环素）"},
+                        "dose_amount":   {"type": "number", "description": "单次剂量数字（如 10）"},
+                        "dose_unit":     {"type": "string", "description": "单次剂量单位（mg/kg、mg、ml、片、粒）"},
+                        "times_per_day": {"type": "number", "description": "一天几次（如 2）"},
+                        "duration_days": {"type": "string", "description": "连服天数，可以是数字或描述（如 7 或「症状缓解为止」）"},
+                        "instructions":  {"type": "string", "description": "用药提示，可选（如「饭后服用」）"},
+                    }, "required": ["drug_name", "dose_amount", "dose_unit", "times_per_day", "duration_days"]},
+                },
+                "visit_id": {"type": "integer", "description": "病历 ID；留空用 current_visit_id"},
+                "notes":    {"type": "string", "description": "整张处方备注，可选"},
+            }, "required": ["drugs"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "create_vaccination",
             "description": "登记疫苗记录（草稿态，批号/库存出库需医生回系统补）。写操作 - 返回 PENDING 等确认。",
             "parameters": {"type": "object", "properties": {
@@ -875,6 +1044,7 @@ TOOL_HANDLERS = {
     "create_vaccination":     tool_create_vaccination,
     "create_deworming":       tool_create_deworming,
     "create_grooming_order":  tool_create_grooming_order,
+    "create_prescription_draft": tool_create_prescription_draft,
 }
 
 
