@@ -113,5 +113,10 @@ class Settings(BaseSettings):
     wecom_agent_id:  str = ""   # 自建应用 AgentID
     wecom_secret:    str = ""   # 自建应用 Secret
 
+    # Phase 4：语音/文字消息回调（接收员工发给应用的消息 → AI agent 执行）
+    # 配置位置：自建应用 → 接收消息 → API 接收
+    wecom_callback_token:    str = ""  # 自定义 Token（明文匹配签名）
+    wecom_callback_aes_key:  str = ""  # 43 字符 EncodingAESKey
+
 
 settings = Settings()

@@ -781,6 +781,96 @@ async def wecom_domain_verify():
     return Response(content="f5g3FhGYiTN0VHR8", media_type="text/plain")
 
 
+# ─── 企微「接收消息」回调（语音/文字 agent 入口） ───
+# 配置位置：企业微信管理后台 → 自建应用 → 接收消息 → API 接收
+#   URL: https://dafopet.com/wecom/callback
+#   Token: settings.wecom_callback_token（你自定义）
+#   EncodingAESKey: settings.wecom_callback_aes_key（43 字符）
+@app.get("/wecom/callback")
+async def wecom_callback_verify(
+    request: Request,
+    msg_signature: str = Query(""),
+    timestamp: str = Query(""),
+    nonce: str = Query(""),
+    echostr: str = Query(""),
+):
+    """URL 验证：企微后台保存配置时会 GET 这个端点。"""
+    from app.services.wecom_callback_crypto import verify_url, decrypt_msg, WXBizMsgCryptError
+    token = settings.wecom_callback_token
+    aes_key = settings.wecom_callback_aes_key
+    corp_id = settings.wecom_corp_id
+    if not (token and aes_key and corp_id):
+        raise HTTPException(503, "wecom callback not configured")
+    if not verify_url(token, msg_signature, timestamp, nonce, echostr):
+        raise HTTPException(401, "signature mismatch")
+    try:
+        plain = decrypt_msg(echostr, aes_key, corp_id)
+    except WXBizMsgCryptError as e:
+        raise HTTPException(400, f"decrypt failed: {e}")
+    return Response(content=plain, media_type="text/plain")
+
+
+@app.post("/wecom/callback")
+async def wecom_callback_receive(
+    request: Request,
+    msg_signature: str = Query(""),
+    timestamp: str = Query(""),
+    nonce: str = Query(""),
+):
+    """接收消息：员工通过企微发文字/语音给应用 → LLM agent 处理 → 主动 push 回复"""
+    from app.services.wecom_callback_crypto import (
+        verify_msg, decrypt_msg, parse_encrypt_envelope, parse_inbound_xml,
+        WXBizMsgCryptError,
+    )
+    from app.services.wecom_agent import handle_inbound_message, push_reply
+    token = settings.wecom_callback_token
+    aes_key = settings.wecom_callback_aes_key
+    corp_id = settings.wecom_corp_id
+    if not (token and aes_key and corp_id):
+        return Response(content="", media_type="text/plain")
+    body = (await request.body()).decode("utf-8")
+    try:
+        encrypt = parse_encrypt_envelope(body)
+    except Exception as e:
+        logger.warning(f"[wecom callback] bad envelope: {e}")
+        return Response(content="", media_type="text/plain")
+    if not verify_msg(token, msg_signature, timestamp, nonce, encrypt):
+        logger.warning("[wecom callback] sig mismatch")
+        return Response(content="", media_type="text/plain")
+    try:
+        plain = decrypt_msg(encrypt, aes_key, corp_id)
+        msg = parse_inbound_xml(plain)
+    except WXBizMsgCryptError as e:
+        logger.warning(f"[wecom callback] decrypt failed: {e}")
+        return Response(content="", media_type="text/plain")
+    msg_type = msg.get("MsgType", "")
+    userid = msg.get("FromUserName", "")
+    # 文字 → Content；语音 → Recognition（开了语音识别开关才有）
+    text = ""
+    if msg_type == "text":
+        text = msg.get("Content", "")
+    elif msg_type == "voice":
+        text = msg.get("Recognition", "") or "（语音转文字失败 · 请在企微应用后台开启「语音识别」）"
+    elif msg_type == "event":
+        # 关注/取关 等事件，先忽略
+        return Response(content="", media_type="text/plain")
+    else:
+        text = f"（暂不支持 {msg_type} 消息，请发文字或语音）"
+    # 路由到 agent
+    try:
+        reply = handle_inbound_message(userid, text)
+        if reply:
+            push_reply(userid, reply)
+    except Exception as e:
+        logger.exception("[wecom agent] handle failed")
+        try:
+            push_reply(userid, f"❌ 内部错误：{e}")
+        except Exception:
+            pass
+    # 被动响应空字符串即可（我们用主动 push 回消息）
+    return Response(content="", media_type="text/plain")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def page_apply(request: Request):
     return templates.TemplateResponse(

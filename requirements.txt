@@ -23,3 +23,6 @@ tencentcloud-sdk-python-sms>=3.0.1100
 # 可选：启用 OPENAI_API_KEY 后用于图片/视频帧的流浪猫辅助识别
 openai>=1.55.0
 opencv-python-headless>=4.8.0
+
+# 企微回调消息加解密（AES-256-CBC）
+pycryptodome>=3.20.0
