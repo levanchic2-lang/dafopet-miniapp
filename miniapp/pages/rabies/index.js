@@ -1,7 +1,10 @@
 const { getJson, postJson } = require("../../utils/api");
 const app = getApp();
+// 优先 .js 模块（更可靠），缺失时退 .json（旧版兼容）
 const shenzhenRegionsLocal = (() => {
-  try { return require("../../utils/shenzhen_regions.json"); } catch (e) { return null; }
+  try { return require("../../utils/shenzhen_regions.js"); } catch (e) {}
+  try { return require("../../utils/shenzhen_regions.json"); } catch (e) {}
+  return null;
 })();
 
 const GENDER_OPTIONS = [
@@ -53,12 +56,13 @@ Page({
     customerId: null,
     lookupDone: false,
     customerFound: false,
-    districtNames: ["请选择"],
-    streetNames: ["请选择"],
+    addrReady: false,
+    districtNames: ["加载中…"],
+    streetNames: ["请先选区"],
     districtIndex: 0,
     streetIndex: 0,
     addressDetailInput: "",
-    communityNames: ["请选择"],
+    communityNames: ["请先选街道"],
     communityIndex: 0,
     hasSig: false,
     submitting: false,
@@ -67,6 +71,11 @@ Page({
 
   onLoad() {
     this._loadShenzhenRegions();
+  },
+
+  onShow() {
+    // 兜底：onLoad 时如果数据没就绪，重入页面再试一次
+    if (!this.data.addrReady) this._loadShenzhenRegions();
   },
 
   onReady() {
@@ -84,24 +93,32 @@ Page({
     }
     wx.request({
       url: app.globalData.apiBase + "/api/regions/shenzhen",
+      timeout: 8000,
       success: (res) => {
-        if (res.statusCode >= 200 && res.statusCode < 300 && res.data) {
+        if (res.statusCode >= 200 && res.statusCode < 300 && res.data && typeof res.data === "object") {
           app.globalData.shenzhenRegions = res.data;
           finish();
+        } else {
+          this.setData({ districtNames: ["数据加载失败，请重进"] });
         }
-      }
+      },
+      fail: () => this.setData({ districtNames: ["网络异常，请重进"] })
     });
   },
 
   _initAddrPickers() {
     const ph = "请选择";
     const sz = this._szData();
-    if (!sz || !Object.keys(sz).length) return;
-    const districts = Object.keys(sz).sort();
+    if (!sz || !Object.keys(sz).length) {
+      this.setData({ districtNames: ["数据为空，请重进"] });
+      return;
+    }
+    const districts = Object.keys(sz).sort((a, b) => String(a).localeCompare(b, "zh"));
     this.setData({
+      addrReady: true,
       districtNames: [ph, ...districts],
-      streetNames: [ph],
-      communityNames: [ph],
+      streetNames: ["请先选区"],
+      communityNames: ["请先选街道"],
       districtIndex: 0, streetIndex: 0, communityIndex: 0,
     });
   },
@@ -111,30 +128,33 @@ Page({
     // app.globalData.shenzhenRegions 可能是 {"深圳市": {区: ...}, "东莞市": {...}} 或直接 {区: ...}
     const all = app.globalData.shenzhenRegions || {};
     const sz = all["深圳市"];
-    return sz && typeof sz === "object" && !Array.isArray(sz) ? sz : all;
+    if (sz && typeof sz === "object" && !Array.isArray(sz)) return sz;
+    return all;
   },
 
   _syncAddr() {
-    const ph = "请选择";
     const { districtNames, streetNames, communityNames, districtIndex, streetIndex, communityIndex, addressDetailInput } = this.data;
     const d = districtNames[districtIndex];
     const s = streetNames[streetIndex];
     const c = communityNames[communityIndex];
+    // 任何以「请」/「加载」/「（」开头的占位文本都不入地址
+    const isReal = v => v && !/^(请|加载|（|数据|网络)/.test(v);
     const detail = (addressDetailInput || "").trim();
     let addr = "";
-    if (d && d !== ph) addr = "广东省深圳市" + d;
-    if (s && s !== ph) addr += s;
-    if (c && c !== ph) addr += c;
+    if (isReal(d)) addr = "广东省深圳市" + d;
+    if (isReal(s)) addr += s;
+    if (isReal(c)) addr += c;
     if (detail) addr += detail;
     this.setData({ "form.owner_address": addr });
   },
 
   onAddrDistrictPick(e) {
+    if (!this.data.addrReady) return;
     const idx = Number(e.detail.value || 0);
     const ph = "请选择";
     const sz = this._szData();
     const dist = this.data.districtNames[idx];
-    let streetNames = [ph];
+    let streetNames = ["请先选区"];
     if (idx > 0 && dist && sz[dist]) {
       const raw = sz[dist];
       const arr = Array.isArray(raw) ? raw : Object.keys(raw);
@@ -144,22 +164,26 @@ Page({
       districtIndex: idx,
       streetNames,
       streetIndex: 0,
-      communityNames: [ph],
+      communityNames: ["请先选街道"],
       communityIndex: 0,
     }, () => this._syncAddr());
   },
 
   onAddrStreetPick(e) {
+    if (!this.data.addrReady) return;
     const idx = Number(e.detail.value || 0);
     const ph = "请选择";
     const sz = this._szData();
     const dist = this.data.districtNames[this.data.districtIndex];
     const street = this.data.streetNames[idx];
-    let communityNames = [ph];
-    if (dist && sz[dist] && !Array.isArray(sz[dist])) {
+    let communityNames = ["请先选街道"];
+    if (idx > 0 && dist && sz[dist] && !Array.isArray(sz[dist])) {
       const comms = sz[dist][street];
       if (Array.isArray(comms) && comms.length) {
         communityNames = [ph, ...[...comms].sort((a, b) => String(a).localeCompare(b, "zh"))];
+      } else {
+        // 该街道没有社区数据 → 留空选项即可
+        communityNames = ["（无社区数据，可留空）"];
       }
     }
     this.setData({
@@ -170,6 +194,7 @@ Page({
   },
 
   onAddrCommunityPick(e) {
+    if (!this.data.addrReady) return;
     this.setData({ communityIndex: Number(e.detail.value || 0) }, () => this._syncAddr());
   },
 

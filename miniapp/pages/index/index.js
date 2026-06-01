@@ -1,11 +1,10 @@
 const { postJson } = require("../../utils/api");
 const { runWithPrivacyGuard } = require("../../utils/privacy");
+// 优先 .js 模块（require 更可靠），缺失时退 .json 兼容
 const shenzhenRegionsLocal = (() => {
-  try {
-    return require("../../utils/shenzhen_regions.json");
-  } catch (e) {
-    return null;
-  }
+  try { return require("../../utils/shenzhen_regions.js"); } catch (e) {}
+  try { return require("../../utils/shenzhen_regions.json"); } catch (e) {}
+  return null;
 })();
 
 function maskPhone(s) {
@@ -77,10 +76,11 @@ Page({
     proxyRelationOptions: ["请选择关系", "家人", "朋友", "同事/员工代录", "志愿者", "其他"],
     proxyRelationIndex: 0,
     proxyConsent: false,
+    addrReady: false,
     cityNames: ["深圳市", "东莞市", "惠州市"],
     cityIndex: 0,
     districtNames: ["加载中…"],
-    streetNames: ["请选择"],
+    streetNames: ["请先选区"],
     districtIndex: 0,
     streetIndex: 0,
     addressDetailInput: ""
@@ -108,6 +108,11 @@ Page({
     const { form } = this.data;
     if (form.location_lat && form.location_lng) return;
     this._autoGetLocationOnce();
+  },
+
+  onShow() {
+    // 兜底：onLoad 时如果数据没就绪（require 失败 + 网络慢），重入页面再试
+    if (!this.data.addrReady) this._loadShenzhenRegions();
   },
 
   _loadShenzhenRegions() {
@@ -157,11 +162,12 @@ Page({
   _loadDistrictsForCity(cityName) {
     const ph = "请选择";
     const cityData = (this._regionData || {})[cityName] || {};
-    const districts = Object.keys(cityData).sort();
+    const districts = Object.keys(cityData).sort((a, b) => String(a).localeCompare(b, "zh"));
     this.setData(
       {
-        districtNames: [ph, ...districts],
-        streetNames: [ph],
+        addrReady: districts.length > 0,
+        districtNames: districts.length ? [ph, ...districts] : ["该城市无数据"],
+        streetNames: ["请先选区"],
         districtIndex: 0,
         streetIndex: 0,
         addressDetailInput: ""
@@ -171,6 +177,7 @@ Page({
   },
 
   onAddrCityPick(e) {
+    if (!this.data.addrReady) return;
     const idx = Number(e.detail.value || 0);
     const cityName = this.data.cityNames[idx] || "深圳市";
     this.setData({ cityIndex: idx });
@@ -197,23 +204,25 @@ Page({
   },
 
   onAddrDistrictPick(e) {
+    if (!this.data.addrReady) return;
     const idx = Number(e.detail.value || 0);
     const ph = "请选择";
     const cityName = this.data.cityNames[this.data.cityIndex] || "深圳市";
     const cityData = (this._regionData || {})[cityName] || {};
     const dist = this.data.districtNames[idx];
-    let streetNames = [ph];
+    let streetNames = ["请先选区"];
     if (idx > 0 && dist && dist !== ph && cityData[dist]) {
       // 新结构：cityData[dist] 是 object {街道: [社区]}；旧结构：是 array
       const raw = cityData[dist];
       const streetArr = Array.isArray(raw) ? raw : Object.keys(raw);
       const sorted = [...streetArr].sort((a, b) => String(a).localeCompare(b, "zh"));
-      streetNames = [ph, ...sorted];
+      streetNames = sorted.length ? [ph, ...sorted] : ["该区无街道数据"];
     }
     this.setData({ districtIndex: idx, streetNames, streetIndex: 0 }, () => this._syncFormAddress());
   },
 
   onAddrStreetPick(e) {
+    if (!this.data.addrReady) return;
     const idx = Number(e.detail.value || 0);
     this.setData({ streetIndex: idx }, () => this._syncFormAddress());
   },
