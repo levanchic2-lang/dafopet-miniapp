@@ -12,6 +12,8 @@
 
  <form method="post" action="{{ '/admin/inventory/'~item.id~'/edit' if item else '/admin/inventory/create' }}">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ {% set _fp = request.query_params.get('from_page', '') %}
+ {% if _fp %}<input type="hidden" name="from_page" value="{{ _fp }}"/>{% endif %}
 
  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
  <div style="grid-column:1/-1;">

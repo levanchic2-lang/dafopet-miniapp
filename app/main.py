@@ -13276,6 +13276,8 @@ async def admin_inventory_edit(
     override_sell_henggang: str = Form(""), override_cost_henggang: str = Form(""),
     # 进货识别别名（一行一个）
     aliases_text: str = Form(""),
+    # 从列表第几页跳来的（保存后回该页，避免每次回到第 1 页）
+    from_page: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -13318,6 +13320,12 @@ async def admin_inventory_edit(
         item.store = (store or "").strip()
     item.updated_at = datetime.utcnow()
     db.commit()
+    # 保存后优先回列表的原页码（用户的核心痛点：编辑第 10 页品目不要弹回第 1 页）
+    if (from_page or "").strip().isdigit():
+        return RedirectResponse(
+            f"/admin/inventory?page={int(from_page)}&msg=已保存：{item.name[:30]}",
+            status_code=303,
+        )
     return RedirectResponse(f"/admin/inventory/{item_id}?msg=已保存", status_code=303)
 
 
