@@ -5,7 +5,7 @@
  *   - API / 表单 POST：直通网络（不缓存）
  *   - 升级版本时改 CACHE_VERSION，自动清旧
  */
-const CACHE_VERSION = 'v169-hosp-cage-qr-D6';
+const CACHE_VERSION = 'v170-rabies-staff-editable';
 const STATIC_CACHE = 'static-' + CACHE_VERSION;
 const PAGE_CACHE   = 'pages-' + CACHE_VERSION;
 

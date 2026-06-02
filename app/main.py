@@ -15812,10 +15812,10 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
     rec = db.get(RabiesVaccineRecord, rec_id)
     if not rec:
         raise HTTPException(404)
-    locked, reason = _is_rabies_locked(db, rec)
-    if locked:
-        raise HTTPException(400, f"狂犬登记已锁定（{reason}），不可修改。请使用「作废」后重开。")
+    # 医护信息允许在 cert_no 录入后继续修改（仅主人/宠物信息一并被锁）
 
+    # 医护信息：即使 cert_no 已录入（lock = True）也允许修改
+    # 用户痛点：常需补录批号 / 改医护名 / 修正日期；锁的应只是主人和宠物信息
     rec.vaccine_manufacturer = str(form.get("vaccine_manufacturer", "")).strip()[:120]
     rec.vaccine_batch_no     = str(form.get("vaccine_batch_no", "")).strip()[:80]
     rec.vaccine_date         = str(form.get("vaccine_date", "")).strip()[:20]
@@ -15826,7 +15826,9 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
         rec.staff_signature_path = _save_signature(staff_sig_data, f"staff_{rec_id}")
         rec.staff_signed_at = datetime.utcnow()
 
-    rec.status = "completed"
+    # 状态：未录证号才推进到 completed；已录证号保持 completed 不变
+    if rec.status != "completed":
+        rec.status = "completed"
     rec.updated_at = datetime.utcnow()
     db.flush()
 

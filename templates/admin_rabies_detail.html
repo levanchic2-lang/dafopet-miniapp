@@ -82,14 +82,17 @@
 {% endif %}
 
 {% if locked %}
-<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;">
+<div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;">
   <div style="font-size:1.4rem;">🔒</div>
   <div style="flex:1;">
-    <div style="font-weight:600;color:#991b1b;">此狂犬登记已锁定（{{ lock_reason }}），不可修改</div>
-    <div style="font-size:.82rem;color:#7f1d1d;margin-top:.15rem;">医疗 / 法定档案。如需更正请联系超管走「作废重开」流程</div>
+    <div style="font-weight:600;color:#78350f;">此狂犬登记已锁定（{{ lock_reason }}）</div>
+    <div style="font-size:.82rem;color:#7c2d12;margin-top:.15rem;">
+      <b>主人与宠物信息</b>不可修改（合规要求）。<b>医护填写部分</b>（厂家/批号/日期/医护签名）<u>仍可补录与更正</u>。
+    </div>
   </div>
 </div>
 <style>
+  /* 锁定的是主人/宠物档案那张表；医护那张表仍可编辑 */
   .locked-form input, .locked-form select, .locked-form textarea, .locked-form button[type="submit"] {
     pointer-events: none !important;
     background-color: #f8fafc !important;
@@ -217,7 +220,7 @@
  <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">
  {% if rec.status == 'completed' %}医护填写信息（已完成，可修改）{% else %}② 医护填写疫苗信息{% endif %}
  </h3>
- <form method="post" action="/admin/rabies/{{ rec.id }}/fill" class="{% if locked %}locked-form{% endif %}">
+ <form method="post" action="/admin/rabies/{{ rec.id }}/fill">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.6rem 0.75rem;">
  <div>
