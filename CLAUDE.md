@@ -61,6 +61,36 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
   - 收费单 `admin_invoice_print.html`：极简英伦风（Georgia serif + 双横线），10 种支付方式中英对照
   - 检查报告 `admin_exam_print.html`：按项目名自动选样式（B超/X光/显微镜/化验/通用），不同颜色 + 不同影像网格
   - 入口：处方/收费单/检查单详情页右上角 🖨 按钮，新标签打开
+- **住院管理系统**（D1-D8 完整闭环）：
+  - 入口：`/admin/inpatient`（医疗 ribbon）/ 病历详情页头部蓝色「🛏 转住院」按钮
+  - 8 张表：
+    - `Cage`：笼位（store/code/kind=general/iso/icu + daily_rate + sort_order，软删除，同店内 code 唯一）
+    - `Hospitalization`：住院档案（pet/customer/visit/cage 关联 + reason + admitted_at/discharged_at + daily_rate_override + 双 token：staff_token + owner_token）
+    - `MedicationAdminLog`：发药打勾日志（按 PrescriptionItem × scheduled_at 展开；status=pending/done/skipped/refused；reminder_sent_at 用于漏药推送去重）
+    - `VitalSignsLog`：T/HR/RR/MM/CRT/Weight + notes（按 species 阈值判异常红标）
+    - `IOLog`：direction=in/out + category（iv_fluid/oral/injection / urine/stool/vomit/drainage）+ amount_ml
+    - `FeedingLog`：food_type + offered_g/eaten_g + appetite_score(0-4)
+    - `HandoverNote`：shift=morning/afternoon/night + content（早 7-15 / 中 15-22 / 夜 22-7 自动识别）
+  - `PrescriptionItem.schedule_times`：CSV 24h 时刻表（如 "8,14,20"），仅住院动物需填；处方 save 后自动生成发药任务（`_generate_med_logs_for_prescription`）
+  - 天数算法 `_calc_hosp_days`：过夜算 1 天（discharge_date - admit_date），当天进当天出 = 0 天笼费
+  - 出院自动结账：`_sync_visit_invoice` 加第 4 类「住院笼费」明细 + 绑 invoice_id
+  - 看板视图（`/admin/inpatient`）：卡片 / 笼位图双视图切换（默认卡片）
+    - 卡片：宠物 emoji 头像 + 笼号 pill + 住院天数 + 处方数 + 入院原因
+    - 笼位图：所有笼位平铺，占用橙色 + 宠物名 + 已住天数，空位虚线 + 日费率
+  - 详情页（`/admin/inpatient/{id}`）：
+    - 顶部状态横幅 + 最新交班一句话黄色提醒
+    - 用药任务面板（今日列表，按时间排序，巨大「✓ 打勾」绿色按钮，漏药红色警示）
+    - 体征 / I/O（24h 净平衡）/ 进食（吃/提供 % + 食欲 0-4 着色）
+    - 交班记录（早班蓝 / 中班橙 / 夜班紫 左边框）
+    - 右侧栏：换笼、出院结账、误开取消、关联账单、打印笼牌
+  - 笼牌打印 `/admin/inpatient/{id}/cage-tag`：A5 portrait 含员工 + 业主双二维码，PNG 由 `qrcode` 库生成
+  - 扫码入口：
+    - `/inpatient/staff/{token}` 员工 → 已登录直跳 admin 详情，未登录 ?next=
+    - `/inpatient/owner/{token}` 业主 → 无登录只读 H5 时间轴（💊用药/🍽喂食/🌡体温 emoji 友好渲染，剂量/HR/RR/SOAP/费用一律不展示）
+  - 漏药 + 接班推送：`app/services/inpatient_dispatch.py` 通过 APScheduler 跑
+    - `scan_overdue_medications` 每 5 分钟扫，scheduled_at + 30 分钟仍 pending → 推该店所有 wecom_userid 已绑 admin（聚合按宠物）
+    - `send_shift_handover_reminder` 6:50 / 14:50 / 21:50 北京时间分别推早/中/夜班接下来 9h 任务清单
+    - `medication-log/{id}/uncheck` 时清 reminder_sent_at，允许重新提醒
 - 财务模块（commit 1-12 of 财务系列）：
   - `Wallet` + `WalletTransaction`：客户钱包 = 充值卡；4 种流水（recharge/consume/refund/adjust），balance_after 快照
   - `PackageProduct` + `CustomerPackage` + `PackageRedemption`：套餐目录（洗澡卡/造型卡等）+ 已购实例（含售卖时快照防价格漂移）+ 核销流水
@@ -76,6 +106,23 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
 - 每店每月最多 30 个已确认 TNR 预约（`TnrStoreConfig.tnr_monthly_quota`）
 - 爽约（no_show）≥3 次/月 → 封禁 90 天
 - 手术完成必须先上传术前 + 术后各至少 1 个文件
+
+## 病历合规规则（病历结束系统）
+- `Visit.status`：open / closed；closed 后病历及关联**处方/检查单**不可改、不可重开（行业惯例）
+- 「✓ 结束病历」按钮在病历详情页头部，二次确认走 `/admin/visits/{id}/close`
+- 关联模块锁定细节：
+  - 处方 create/edit/delete → 视 visit closed 拒绝
+  - 检查单 create/delete → 拒绝；report upload 仍允许（附证据非改单）
+  - 处方/检查 void 仍允许（合规挽救动作）
+  - **疫苗 / 驱虫 / 销售 / 美容**独立单据，不受 visit closed 影响
+- agent 的 `_resolve_or_list_visit` 仅查 open 病历，已结束病历带 🔒 标记
+
+## 住院业务规则
+- 笼位自由增删改，同店内 code 唯一；占用中不允许删
+- 住院天数：过夜算 1 天（按日期差，不按小时数），当天进当天出 = 0 天笼费
+- 日费率优先 `Hospitalization.daily_rate_override` > `Cage.daily_rate`
+- 出院 → 自动笼费写入 visit 收费单 + 绑 `invoice_id`
+- 业主只读 H5 不展示：剂量 / SOAP / 诊断 / 收费 / I/O 输液量 / HR/RR/MM/CRT / 交班记录
 
 ## 小程序关键页面
 - `miniapp/pages/index/`：TNR 申请表单，多城市地址选择（深圳/东莞/惠州）
@@ -100,3 +147,16 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
   - 登录页 `/admin/login` 加「用企业微信登录」按钮
   - 服务器 `.env` 需配 `WECOM_CORP_ID` / `WECOM_AGENT_ID` / `WECOM_SECRET` + `PUBLIC_BASE_URL=https://dafopet.com`
   - 企微后台「网页授权及JS-SDK」可信域名：`dafopet.com`
+- **Phase 4 语音/文字 agent**（已完成）：
+  - 回调入口：`POST /wecom/callback`（AES-256-CBC + sha1 加解密，`app/services/wecom_callback_crypto.py`）
+  - agent 主体：`app/services/wecom_agent.py`（11 个 function tool · LLM 5 跳上限）
+  - 工具清单（写动作全部走复诵确认 + 草稿态）：
+    - 查：find_customer / get_customer_profile / get_recent_visits / get_wallet / get_today_appointments
+    - 写：create_visit / update_visit_field / create_appointment / create_exam_order / create_vaccination / create_deworming / create_grooming_order / create_prescription_draft
+    - 处方草稿态：不传 item_id 不扣库存，status=draft，sync_invoice 跳过；受管控药品（is_controlled=True）拒绝
+  - 上下文：`app/services/wecom_session.py` 内存 dict，30min TTL；current_customer_id / current_pet_id / current_visit_id + pending_action
+  - 复诵确认：写工具返回 `PENDING:` 前缀，session 存 pending；用户回「确认」/「是」/「对」等触发执行；「取消」/「不」清空
+  - 入口校验：`AdminUser.wecom_userid` 绑定；未绑用户拒绝
+  - 模型拆分：`OPENAI_MODEL`（TNR 视觉审核用 doubao-1-5-vision-pro）/ `WECOM_AGENT_MODEL`（agent 用 doubao-1-5-pro 或 lite，便宜 3-4 倍；空则回退 OPENAI_MODEL）
+  - 复用今日病历：`_resolve_or_list_visit` 自动找当天 open visit；无则列最近 3 次未结束病历让用户选「用病历 #N」/「新建病历」
+  - 默认门店：`AdminUser.store` 直读（含超管，让超管也能有"常驻门店"）
