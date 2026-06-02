@@ -1066,6 +1066,58 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_med_log_sched ON medication_admin_logs(scheduled_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_med_log_status ON medication_admin_logs(status)"))
 
+            # vital_signs_logs 生命体征
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS vital_signs_logs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "hospitalization_id INTEGER NOT NULL REFERENCES hospitalizations(id) ON DELETE CASCADE, "
+                "recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "recorded_by VARCHAR(80) DEFAULT '', "
+                "temperature_c REAL DEFAULT 0.0, "
+                "hr INTEGER DEFAULT 0, "
+                "rr INTEGER DEFAULT 0, "
+                "mm_color VARCHAR(20) DEFAULT '', "
+                "crt_sec REAL DEFAULT 0.0, "
+                "weight_kg REAL DEFAULT 0.0, "
+                "notes VARCHAR(300) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vital_hosp ON vital_signs_logs(hospitalization_id, recorded_at)"))
+
+            # io_logs 输液/输出记录
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS io_logs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "hospitalization_id INTEGER NOT NULL REFERENCES hospitalizations(id) ON DELETE CASCADE, "
+                "recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "recorded_by VARCHAR(80) DEFAULT '', "
+                "direction VARCHAR(10) DEFAULT 'in', "
+                "category VARCHAR(20) DEFAULT 'other', "
+                "amount_ml REAL DEFAULT 0.0, "
+                "notes VARCHAR(300) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_io_hosp ON io_logs(hospitalization_id, recorded_at)"))
+
+            # feeding_logs 进食记录
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS feeding_logs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "hospitalization_id INTEGER NOT NULL REFERENCES hospitalizations(id) ON DELETE CASCADE, "
+                "recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "recorded_by VARCHAR(80) DEFAULT '', "
+                "food_type VARCHAR(120) DEFAULT '', "
+                "offered_g REAL DEFAULT 0.0, "
+                "eaten_g REAL DEFAULT 0.0, "
+                "appetite_score INTEGER DEFAULT 3, "
+                "notes VARCHAR(300) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_feed_hosp ON feeding_logs(hospitalization_id, recorded_at)"))
+
             # weight_records 体重记录
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS weight_records ("

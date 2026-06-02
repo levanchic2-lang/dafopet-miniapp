@@ -941,6 +941,72 @@ class MedicationAdminLog(Base):
     prescription_item = relationship("PrescriptionItem", foreign_keys=[prescription_item_id])
 
 
+class VitalSignsLog(Base):
+    """生命体征记录：T/HR/RR/黏膜/CRT/体重。
+
+    异常阈值（参考；实际由模板里渲染时判断）：
+      T   猫 38.0-39.5，犬 37.5-39.0
+      HR  猫 120-220，犬 60-160
+      RR  猫 16-40，犬 10-30
+      MM  pink=正常，pale/cyanotic/jaundice/brick_red 异常
+      CRT < 2s 正常，>= 2s 异常
+    """
+    __tablename__ = "vital_signs_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hospitalization_id = mapped_column(ForeignKey("hospitalizations.id", ondelete="CASCADE"), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    recorded_by: Mapped[str] = mapped_column(String(80), default="")
+
+    temperature_c: Mapped[float] = mapped_column(Float, default=0.0)   # 0 = 未测
+    hr:            Mapped[int]   = mapped_column(Integer, default=0)
+    rr:            Mapped[int]   = mapped_column(Integer, default=0)
+    mm_color:      Mapped[str]   = mapped_column(String(20), default="")  # pink/pale/cyanotic/jaundice/brick_red
+    crt_sec:       Mapped[float] = mapped_column(Float, default=0.0)
+    weight_kg:     Mapped[float] = mapped_column(Float, default=0.0)
+    notes:         Mapped[str]   = mapped_column(String(300), default="")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class IOLog(Base):
+    """输入/输出记录：用于评估液体平衡。"""
+    __tablename__ = "io_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hospitalization_id = mapped_column(ForeignKey("hospitalizations.id", ondelete="CASCADE"), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    recorded_by: Mapped[str] = mapped_column(String(80), default="")
+
+    direction: Mapped[str] = mapped_column(String(10), default="in")   # in / out
+    # in: iv_fluid / oral / injection / other
+    # out: urine / stool / vomit / drainage / other
+    category:  Mapped[str] = mapped_column(String(20), default="other")
+    amount_ml: Mapped[float] = mapped_column(Float, default=0.0)
+    notes:     Mapped[str] = mapped_column(String(300), default="")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class FeedingLog(Base):
+    """进食记录：吃了什么 / 提供 / 实际 / 食欲评分（0-4）。"""
+    __tablename__ = "feeding_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hospitalization_id = mapped_column(ForeignKey("hospitalizations.id", ondelete="CASCADE"), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    recorded_by: Mapped[str] = mapped_column(String(80), default="")
+
+    food_type: Mapped[str] = mapped_column(String(120), default="")    # 自由文本
+    offered_g: Mapped[float] = mapped_column(Float, default=0.0)
+    eaten_g:   Mapped[float] = mapped_column(Float, default=0.0)
+    # 0 拒食 1 强饲 2 少量 3 正常 4 旺盛
+    appetite_score: Mapped[int] = mapped_column(Integer, default=3)
+    notes: Mapped[str] = mapped_column(String(300), default="")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class WeightRecord(Base):
     """体重记录（用于体重曲线）"""
     __tablename__ = "weight_records"

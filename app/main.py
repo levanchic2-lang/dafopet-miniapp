@@ -97,6 +97,9 @@ from app.models import (
     Cage,
     Hospitalization,
     MedicationAdminLog,
+    VitalSignsLog,
+    IOLog,
+    FeedingLog,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
@@ -18343,6 +18346,27 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
         MedicationAdminLog.scheduled_at < today_start,
         MedicationAdminLog.status == "pending",
     ).order_by(MedicationAdminLog.scheduled_at).limit(20).all()
+    # D4：生命体征 / I/O / 进食 最近记录 + 24h 汇总
+    vitals = db.query(VitalSignsLog).filter(
+        VitalSignsLog.hospitalization_id == h.id,
+    ).order_by(VitalSignsLog.recorded_at.desc()).limit(20).all()
+    io_logs = db.query(IOLog).filter(
+        IOLog.hospitalization_id == h.id,
+    ).order_by(IOLog.recorded_at.desc()).limit(20).all()
+    feed_logs = db.query(FeedingLog).filter(
+        FeedingLog.hospitalization_id == h.id,
+    ).order_by(FeedingLog.recorded_at.desc()).limit(20).all()
+    # 24h I/O 净平衡
+    from datetime import timedelta as _td2
+    cutoff = datetime.utcnow() - _td2(hours=24)
+    io_24h = db.query(IOLog).filter(
+        IOLog.hospitalization_id == h.id,
+        IOLog.recorded_at >= cutoff,
+    ).all()
+    io_in_24h = sum((x.amount_ml or 0) for x in io_24h if x.direction == "in")
+    io_out_24h = sum((x.amount_ml or 0) for x in io_24h if x.direction == "out")
+    # 体征异常标记
+    vital_flag_map = {v.id: _vital_flags(pet.species if pet else "", v) for v in vitals}
     return templates.TemplateResponse(request, "admin_inpatient_detail.html", {
         "request": request, "h": h, "cust": cust, "pet": pet, "cage": cage,
         "visit": visit, "avail_cages": avail_cages, "occupied_ids": occupied_ids,
@@ -18351,6 +18375,11 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
         "now": datetime.utcnow(),
         "prescs": prescs,
         "today_logs": today_logs, "overdue_logs": overdue_logs,
+        "vitals": vitals, "io_logs": io_logs, "feed_logs": feed_logs,
+        "io_in_24h": io_in_24h, "io_out_24h": io_out_24h,
+        "vital_flag_map": vital_flag_map,
+        "mm_color_zh": _MM_COLOR_ZH, "io_cat_zh": _IO_CATEGORY_ZH,
+        "appetite_zh": _APPETITE_ZH,
         "csrf_token": _get_csrf_token(request),
         "title": f"住院 #{h.id}",
     })
@@ -18510,3 +18539,203 @@ async def admin_medication_log_uncheck(log_id: int, request: Request,
     db.commit()
     return RedirectResponse(f"/admin/inpatient/{log.hospitalization_id}#meds",
                              status_code=303)
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 住院 D4：生命体征 / I/O / 进食记录
+# ════════════════════════════════════════════════════════════════════════
+
+_MM_COLOR_ZH = {
+    "pink": "粉红 ✓", "pale": "苍白 ⚠", "cyanotic": "发绀 ⚠",
+    "jaundice": "黄染 ⚠", "brick_red": "砖红 ⚠",
+}
+_IO_CATEGORY_ZH = {
+    # in
+    "iv_fluid": "静脉输液", "oral": "口服", "injection": "注射", "in_other": "其他(入)",
+    # out
+    "urine": "尿", "stool": "便", "vomit": "呕吐", "drainage": "引流", "out_other": "其他(出)",
+}
+_APPETITE_ZH = {
+    0: "拒食 0", 1: "强饲 1", 2: "少量 2", 3: "正常 3", 4: "旺盛 4",
+}
+
+
+def _check_hosp_writable(db: Session, hosp_id: int):
+    """统一校验住院档案可写。"""
+    h = db.get(Hospitalization, hosp_id)
+    if not h:
+        raise HTTPException(404, "住院档案不存在")
+    if h.status != "admitted":
+        raise HTTPException(400, "已出院 / 取消的住院档案不可记录")
+    return h
+
+
+@app.post("/admin/inpatient/{hosp_id}/vitals")
+async def admin_inpatient_vitals_create(hosp_id: int, request: Request,
+                                          db: Session = Depends(get_db),
+                                          csrf_token: str = Form(""),
+                                          temperature_c: float = Form(0.0),
+                                          hr: int = Form(0),
+                                          rr: int = Form(0),
+                                          mm_color: str = Form(""),
+                                          crt_sec: float = Form(0.0),
+                                          weight_kg: float = Form(0.0),
+                                          notes: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _check_hosp_writable(db, hosp_id)
+    if not any([temperature_c, hr, rr, mm_color, crt_sec, weight_kg]):
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=至少填一项体征#vitals",
+                                 status_code=303)
+    if mm_color not in _MM_COLOR_ZH and mm_color != "":
+        mm_color = ""
+    log = VitalSignsLog(
+        hospitalization_id=hosp_id,
+        recorded_by=request.session.get("admin_username", ""),
+        temperature_c=max(0.0, float(temperature_c or 0)),
+        hr=max(0, int(hr or 0)),
+        rr=max(0, int(rr or 0)),
+        mm_color=mm_color,
+        crt_sec=max(0.0, float(crt_sec or 0)),
+        weight_kg=max(0.0, float(weight_kg or 0)),
+        notes=(notes or "").strip()[:300],
+    )
+    db.add(log)
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=体征已记录#vitals",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/vitals/{log_id}/delete")
+async def admin_inpatient_vitals_delete(hosp_id: int, log_id: int, request: Request,
+                                          db: Session = Depends(get_db),
+                                          csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _check_hosp_writable(db, hosp_id)
+    log = db.get(VitalSignsLog, log_id)
+    if log and log.hospitalization_id == hosp_id:
+        db.delete(log)
+        db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已删除#vitals",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/io")
+async def admin_inpatient_io_create(hosp_id: int, request: Request,
+                                      db: Session = Depends(get_db),
+                                      csrf_token: str = Form(""),
+                                      direction: str = Form("in"),
+                                      category: str = Form("other"),
+                                      amount_ml: float = Form(0.0),
+                                      notes: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _check_hosp_writable(db, hosp_id)
+    if direction not in ("in", "out"):
+        direction = "in"
+    if amount_ml < 0:
+        amount_ml = 0
+    log = IOLog(
+        hospitalization_id=hosp_id,
+        recorded_by=request.session.get("admin_username", ""),
+        direction=direction,
+        category=category[:20],
+        amount_ml=float(amount_ml),
+        notes=(notes or "").strip()[:300],
+    )
+    db.add(log)
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=I/O 已记录#io",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/io/{log_id}/delete")
+async def admin_inpatient_io_delete(hosp_id: int, log_id: int, request: Request,
+                                      db: Session = Depends(get_db),
+                                      csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _check_hosp_writable(db, hosp_id)
+    log = db.get(IOLog, log_id)
+    if log and log.hospitalization_id == hosp_id:
+        db.delete(log)
+        db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已删除#io",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/feeding")
+async def admin_inpatient_feeding_create(hosp_id: int, request: Request,
+                                           db: Session = Depends(get_db),
+                                           csrf_token: str = Form(""),
+                                           food_type: str = Form(""),
+                                           offered_g: float = Form(0.0),
+                                           eaten_g: float = Form(0.0),
+                                           appetite_score: int = Form(3),
+                                           notes: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _check_hosp_writable(db, hosp_id)
+    if appetite_score < 0 or appetite_score > 4:
+        appetite_score = 3
+    log = FeedingLog(
+        hospitalization_id=hosp_id,
+        recorded_by=request.session.get("admin_username", ""),
+        food_type=(food_type or "").strip()[:120],
+        offered_g=max(0.0, float(offered_g or 0)),
+        eaten_g=max(0.0, float(eaten_g or 0)),
+        appetite_score=int(appetite_score),
+        notes=(notes or "").strip()[:300],
+    )
+    db.add(log)
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=进食已记录#feeding",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/feeding/{log_id}/delete")
+async def admin_inpatient_feeding_delete(hosp_id: int, log_id: int, request: Request,
+                                           db: Session = Depends(get_db),
+                                           csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _check_hosp_writable(db, hosp_id)
+    log = db.get(FeedingLog, log_id)
+    if log and log.hospitalization_id == hosp_id:
+        db.delete(log)
+        db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已删除#feeding",
+                             status_code=303)
+
+
+def _vital_flags(species: str, log: "VitalSignsLog") -> dict:
+    """判断哪些体征异常。species: cat/dog/其他。"""
+    sp = (species or "").lower()
+    flags = {"T": "", "HR": "", "RR": "", "MM": "", "CRT": ""}
+    if log.temperature_c:
+        if sp == "cat":
+            if log.temperature_c < 38.0 or log.temperature_c > 39.5:
+                flags["T"] = "high" if log.temperature_c > 39.5 else "low"
+        else:  # dog 或未知，用犬阈值
+            if log.temperature_c < 37.5 or log.temperature_c > 39.0:
+                flags["T"] = "high" if log.temperature_c > 39.0 else "low"
+    if log.hr:
+        if sp == "cat":
+            if log.hr < 120 or log.hr > 220:
+                flags["HR"] = "high" if log.hr > 220 else "low"
+        else:
+            if log.hr < 60 or log.hr > 160:
+                flags["HR"] = "high" if log.hr > 160 else "low"
+    if log.rr:
+        if sp == "cat":
+            if log.rr < 16 or log.rr > 40:
+                flags["RR"] = "high" if log.rr > 40 else "low"
+        else:
+            if log.rr < 10 or log.rr > 30:
+                flags["RR"] = "high" if log.rr > 30 else "low"
+    if log.mm_color and log.mm_color != "pink":
+        flags["MM"] = "abnormal"
+    if log.crt_sec and log.crt_sec >= 2:
+        flags["CRT"] = "high"
+    return flags

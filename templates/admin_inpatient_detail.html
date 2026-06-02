@@ -192,9 +192,173 @@
    {% endif %}
   </div>
 
+  {# ─────────── 生命体征（D4） ─────────── #}
+  <div class="card" style="margin-top:1rem;" id="vitals">
+   <h3 style="margin:0 0 .65rem;font-size:1rem;"><i data-lucide="activity"></i> 生命体征
+    <small style="color:var(--muted);font-weight:400;font-size:.78rem;">最近 {{ vitals|length }} 条</small>
+   </h3>
+   {% if h.status == 'admitted' %}
+   <form method="post" action="/admin/inpatient/{{ h.id }}/vitals" style="display:grid;grid-template-columns:repeat(6, 1fr) auto;gap:.4rem;margin-bottom:.7rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input name="temperature_c" type="number" step="0.1" min="0" placeholder="T ℃" title="体温"/>
+    <input name="hr" type="number" min="0" placeholder="HR" title="心率 /min"/>
+    <input name="rr" type="number" min="0" placeholder="RR" title="呼吸 /min"/>
+    <select name="mm_color" title="黏膜颜色">
+     <option value="">黏膜</option>
+     {% for k, v in mm_color_zh.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+    </select>
+    <input name="crt_sec" type="number" step="0.1" min="0" placeholder="CRT s" title="CRT 秒"/>
+    <input name="weight_kg" type="number" step="0.01" min="0" placeholder="体重 kg" title="体重"/>
+    <button type="submit" class="btn" style="font-size:.82rem;padding:.4rem .8rem;">记录</button>
+    <input name="notes" placeholder="备注（可选）" style="grid-column:1/-1;"/>
+   </form>
+   {% endif %}
+   {% if vitals %}
+   <div style="overflow-x:auto;">
+   <table class="data-table" style="width:100%;font-size:.82rem;">
+    <thead>
+     <tr><th>时刻</th><th>T℃</th><th>HR</th><th>RR</th><th>黏膜</th><th>CRT</th><th>体重</th><th>记录</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for v in vitals %}
+    {% set flg = vital_flag_map.get(v.id, {}) %}
+    <tr>
+     <td>{{ v.recorded_at.strftime('%m-%d %H:%M') }}</td>
+     <td style="{% if flg.T %}color:#dc2626;font-weight:600;{% endif %}">{{ '%.1f'|format(v.temperature_c) if v.temperature_c else '—' }}{% if flg.T == 'high' %} ↑{% elif flg.T == 'low' %} ↓{% endif %}</td>
+     <td style="{% if flg.HR %}color:#dc2626;font-weight:600;{% endif %}">{{ v.hr or '—' }}{% if flg.HR == 'high' %} ↑{% elif flg.HR == 'low' %} ↓{% endif %}</td>
+     <td style="{% if flg.RR %}color:#dc2626;font-weight:600;{% endif %}">{{ v.rr or '—' }}{% if flg.RR == 'high' %} ↑{% elif flg.RR == 'low' %} ↓{% endif %}</td>
+     <td style="{% if flg.MM %}color:#dc2626;font-weight:600;{% endif %}">{{ mm_color_zh.get(v.mm_color, v.mm_color or '—') }}</td>
+     <td style="{% if flg.CRT %}color:#dc2626;font-weight:600;{% endif %}">{{ '%.1fs'|format(v.crt_sec) if v.crt_sec else '—' }}</td>
+     <td>{{ '%.2f'|format(v.weight_kg) if v.weight_kg else '—' }}</td>
+     <td style="color:var(--muted);font-size:.74rem;">{{ v.recorded_by or '—' }}{% if v.notes %}<br><span style="color:#475569;">{{ v.notes }}</span>{% endif %}</td>
+     <td>
+      {% if h.status == 'admitted' %}
+      <form method="post" action="/admin/inpatient/{{ h.id }}/vitals/{{ v.id }}/delete" style="margin:0;" onsubmit="return confirm('删除此条体征记录？');">
+       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+       <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.78rem;">✕</button>
+      </form>
+      {% endif %}
+     </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+   </table>
+   </div>
+   {% else %}
+   <p style="color:var(--muted);font-size:.85rem;margin:0;">尚无体征记录</p>
+   {% endif %}
+  </div>
+
+  {# ─────────── I/O 输液 / 输出（D4） ─────────── #}
+  <div class="card" style="margin-top:1rem;" id="io">
+   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;">
+    <h3 style="margin:0;font-size:1rem;"><i data-lucide="droplets"></i> 输液 / 输出</h3>
+    <div style="font-size:.84rem;color:var(--muted);">
+     24h: <b style="color:#0369a1;">入 {{ '%.0f'|format(io_in_24h) }}ml</b>
+     / <b style="color:#b45309;">出 {{ '%.0f'|format(io_out_24h) }}ml</b>
+     / 净 <b style="color:{% if io_in_24h - io_out_24h >= 0 %}#0369a1{% else %}#b45309{% endif %};">{{ '%+.0f'|format(io_in_24h - io_out_24h) }}ml</b>
+    </div>
+   </div>
+   {% if h.status == 'admitted' %}
+   <form method="post" action="/admin/inpatient/{{ h.id }}/io" style="display:grid;grid-template-columns:90px 130px 100px 1fr auto;gap:.4rem;margin-bottom:.7rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <select name="direction" onchange="updateIOCategoryOptions(this)">
+     <option value="in">入(IN)</option>
+     <option value="out">出(OUT)</option>
+    </select>
+    <select name="category" id="io-category">
+     <option value="iv_fluid">静脉输液</option>
+     <option value="oral">口服</option>
+     <option value="injection">注射</option>
+     <option value="in_other">其他(入)</option>
+    </select>
+    <input name="amount_ml" type="number" step="0.1" min="0" placeholder="量 ml" required/>
+    <input name="notes" placeholder="备注（药名、速度、性状...）"/>
+    <button type="submit" class="btn" style="font-size:.82rem;">记录</button>
+   </form>
+   <script>
+   function updateIOCategoryOptions(sel) {
+     var cat = document.getElementById('io-category');
+     cat.innerHTML = '';
+     var opts = sel.value === 'in'
+       ? [['iv_fluid','静脉输液'],['oral','口服'],['injection','注射'],['in_other','其他(入)']]
+       : [['urine','尿'],['stool','便'],['vomit','呕吐'],['drainage','引流'],['out_other','其他(出)']];
+     opts.forEach(function(o){
+       var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1];
+       cat.appendChild(op);
+     });
+   }
+   </script>
+   {% endif %}
+   {% if io_logs %}
+   <div style="display:flex;flex-direction:column;gap:.35rem;">
+   {% for l in io_logs %}
+   <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;background:{% if l.direction == 'in' %}#eff6ff{% else %}#fef3c7{% endif %};border-radius:5px;font-size:.85rem;">
+    <span style="font-weight:700;color:{% if l.direction == 'in' %}#1e40af{% else %}#92400e{% endif %};min-width:34px;">{{ '入' if l.direction == 'in' else '出' }}</span>
+    <span style="min-width:80px;">{{ io_cat_zh.get(l.category, l.category) }}</span>
+    <span style="font-weight:600;min-width:70px;">{{ '%.0f'|format(l.amount_ml) }} ml</span>
+    <span style="color:#475569;flex:1;min-width:0;">{{ l.notes or '' }}</span>
+    <span style="color:var(--muted);font-size:.74rem;">{{ l.recorded_at.strftime('%m-%d %H:%M') }} · {{ l.recorded_by or '—' }}</span>
+    {% if h.status == 'admitted' %}
+    <form method="post" action="/admin/inpatient/{{ h.id }}/io/{{ l.id }}/delete" style="margin:0;" onsubmit="return confirm('删除此条 I/O 记录？');">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+     <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;">✕</button>
+    </form>
+    {% endif %}
+   </div>
+   {% endfor %}
+   </div>
+   {% else %}
+   <p style="color:var(--muted);font-size:.85rem;margin:0;">尚无 I/O 记录</p>
+   {% endif %}
+  </div>
+
+  {# ─────────── 进食（D4） ─────────── #}
+  <div class="card" style="margin-top:1rem;" id="feeding">
+   <h3 style="margin:0 0 .65rem;font-size:1rem;"><i data-lucide="utensils"></i> 进食
+    <small style="color:var(--muted);font-weight:400;font-size:.78rem;">最近 {{ feed_logs|length }} 条</small>
+   </h3>
+   {% if h.status == 'admitted' %}
+   <form method="post" action="/admin/inpatient/{{ h.id }}/feeding" style="display:grid;grid-template-columns:1.3fr 100px 100px 130px auto;gap:.4rem;margin-bottom:.7rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input name="food_type" placeholder="食物（如 处方粮 / 罐头 / 强饲糊）" required/>
+    <input name="offered_g" type="number" step="1" min="0" placeholder="提供 g"/>
+    <input name="eaten_g" type="number" step="1" min="0" placeholder="吃了 g"/>
+    <select name="appetite_score">
+     {% for k, v in appetite_zh.items() %}<option value="{{ k }}" {% if k == 3 %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn" style="font-size:.82rem;">记录</button>
+    <input name="notes" placeholder="备注（可选）" style="grid-column:1/-1;"/>
+   </form>
+   {% endif %}
+   {% if feed_logs %}
+   <div style="display:flex;flex-direction:column;gap:.35rem;">
+   {% for f in feed_logs %}
+   {% set rate = (f.eaten_g / f.offered_g * 100) if f.offered_g > 0 else 0 %}
+   <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;background:{% if f.appetite_score <= 1 %}#fef2f2{% elif f.appetite_score == 2 %}#fef3c7{% else %}#f0fdf4{% endif %};border-radius:5px;font-size:.85rem;">
+    <span style="font-weight:600;min-width:120px;">{{ f.food_type or '—' }}</span>
+    <span style="min-width:80px;">{{ '%.0f'|format(f.eaten_g) }} / {{ '%.0f'|format(f.offered_g) }} g</span>
+    {% if rate > 0 %}<span style="min-width:54px;color:var(--muted);">{{ '%.0f'|format(rate) }}%</span>{% else %}<span style="min-width:54px;"></span>{% endif %}
+    <span class="hc-pill" style="font-size:.74rem;border:1px solid #e5e7eb;">{{ appetite_zh.get(f.appetite_score, f.appetite_score) }}</span>
+    <span style="color:#475569;flex:1;min-width:0;font-size:.78rem;">{{ f.notes or '' }}</span>
+    <span style="color:var(--muted);font-size:.74rem;">{{ f.recorded_at.strftime('%m-%d %H:%M') }} · {{ f.recorded_by or '—' }}</span>
+    {% if h.status == 'admitted' %}
+    <form method="post" action="/admin/inpatient/{{ h.id }}/feeding/{{ f.id }}/delete" style="margin:0;" onsubmit="return confirm('删除？');">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+     <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;">✕</button>
+    </form>
+    {% endif %}
+   </div>
+   {% endfor %}
+   </div>
+   {% else %}
+   <p style="color:var(--muted);font-size:.85rem;margin:0;">尚无进食记录</p>
+   {% endif %}
+  </div>
+
   <div class="card" style="margin-top:1rem;text-align:center;color:var(--muted);padding:1rem;">
    <i data-lucide="construction" style="opacity:.5;width:18px;height:18px;"></i>
-   <span style="font-size:.85rem;margin-left:.3rem;">生命体征 / I/O / 进食 / 交班 模块（D4-D5）开发中</span>
+   <span style="font-size:.85rem;margin-left:.3rem;">交班 / 笼牌二维码 / 业主只读页 模块（D5-D7）开发中</span>
   </div>
  </div>
 
