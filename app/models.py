@@ -409,6 +409,10 @@ class Visit(Base):
     # 7 步 SOAP 工作流之"回访"步骤
     follow_up_note: Mapped[str] = mapped_column(Text, default="")           # 回访备注
     follow_up_at: Mapped[str] = mapped_column(String(20), default="")       # 回访日期 YYYY-MM-DD
+    # 病历结束（合规要求：closed 后病历及关联处方/检查不可改；不可重开）
+    status: Mapped[str] = mapped_column(String(20), default="open")         # open / closed
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    closed_by: Mapped[str] = mapped_column(String(80), default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

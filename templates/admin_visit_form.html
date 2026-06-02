@@ -260,6 +260,15 @@
 {% set step6_done = (v.treatment_plan or '').strip() | length> 0 %}
 {% set step7_done = (v.follow_up_note or v.follow_up_at or '') | length> 0 %}
 {% set return_to = request.query_params.get('return_to', '') %}
+{% set visit_closed = (v.status or 'open') == 'closed' %}
+
+{% if visit_closed %}
+<div class="msg" style="background:#fef3c7;border-left:4px solid #d97706;color:#78350f;padding:0.7rem 0.95rem;border-radius:6px;margin-bottom:0.75rem;display:flex;align-items:center;gap:0.55rem;">
+ <i data-lucide="lock"></i>
+ <span><b>病历已结束</b> · 由 {{ v.closed_by or '—' }} 于 {{ v.closed_at.strftime('%Y-%m-%d %H:%M') if v.closed_at else '—' }} 关闭。
+ 病历及关联处方/检查单不可再修改（合规要求，不可重开）。如需追加请新建病历。</span>
+</div>
+{% endif %}
 
 <div class="visit-header">
  {% if return_to == 'customer' and cust %}
@@ -280,6 +289,15 @@
     style="margin-left:auto;font-size:.82rem;"><i data-lucide="printer"></i> 打印病历</a>
  <a href="/admin/visits/{{ v.id }}/discharge-print" target="_blank" class="btn secondary"
     style="font-size:.82rem;"><i data-lucide="clipboard-list"></i> 打印医嘱单</a>
+ {% if not visit_closed %}
+ <form method="post" action="/admin/visits/{{ v.id }}/close" style="display:inline;"
+       onsubmit="return confirm('⚠ 确定结束本次病历？\n\n结束后病历及关联处方/检查单将不可修改，且按合规要求不能重开。\n如有遗漏只能新建一份病历做补充。');">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <button type="submit" class="btn" style="background:#ea580c;color:#fff;font-size:.82rem;">
+ <i data-lucide="lock"></i> 结束病历
+ </button>
+ </form>
+ {% endif %}
 </div>
 
 {# 7 步进度轴（横向紧凑） #}
@@ -581,7 +599,11 @@
 <div class="soap-panel" data-panel="3" style="margin-top:0.85rem;">
  <h3><i data-lucide="flask-conical"></i> 检查化验 <small>血常规、生化、影像等</small></h3>
  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.65rem;">
+ {% if visit_closed %}
+ <span class="btn" style="opacity:.4;cursor:not-allowed;pointer-events:none;"><i data-lucide="lock"></i> 病历已结束</span>
+ {% else %}
  <a href="/admin/exam-orders/create?visit_id={{ v.id }}" class="btn"><i data-lucide="plus"></i> 开检查单</a>
+ {% endif %}
  <span style="color:var(--muted);font-size:0.85rem;">现有 {{ exam_orders|length }} 张</span>
  </div>
  {% if exam_orders %}
@@ -625,8 +647,12 @@
 <div class="soap-panel" data-panel="5" style="margin-top:0.85rem;">
  <h3><i data-lucide="pill"></i> 处方 <small>药品清单、剂量、用法</small></h3>
  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.65rem;flex-wrap:wrap;">
+ {% if visit_closed %}
+ <span class="btn" style="opacity:.4;cursor:not-allowed;pointer-events:none;"><i data-lucide="lock"></i> 病历已结束</span>
+ {% else %}
  <a href="/admin/prescriptions/create?visit_id={{ v.id }}" class="btn"><i data-lucide="plus"></i> 开处方</a>
  <a href="/admin/visits/{{ v.id }}/anesthesia/new" class="btn" style="background:#7c3aed;border-color:#7c3aed;">💉 新建麻醉单</a>
+ {% endif %}
  <span style="color:var(--muted);font-size:0.85rem;">处方 {{ prescriptions|length }} 张 · 麻醉 {{ anesth_orders|length }} 张</span>
  </div>
  {% if prescriptions %}

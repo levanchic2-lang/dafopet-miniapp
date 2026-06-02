@@ -9837,6 +9837,8 @@ async def admin_visit_edit(
     )
     if _meta_changed and not _is_superadmin(request):
         raise HTTPException(status_code=403, detail="病历基础信息（日期/类型/医生/宠物）仅超级管理员可修改")
+    if (v.status or "open") == "closed":
+        raise HTTPException(status_code=403, detail="病历已结束，不可修改（合规要求）。如需追加请新建病历。")
     v.pet_id = _new_pet_id
     v.visit_date = _new_date
     v.visit_type = _new_type
@@ -9858,6 +9860,34 @@ async def admin_visit_edit(
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=已保存", status_code=303)
 
 
+@app.post("/admin/visits/{visit_id}/close")
+async def admin_visit_close(visit_id: int, request: Request,
+                            csrf_token: str = Form(""),
+                            db: Session = Depends(get_db)):
+    """结束病历。结束后病历及关联处方/检查不可改；按合规要求不可重开。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    # 限店员工
+    admin_store = _get_admin_store(request)
+    if admin_store and v.pet_id:
+        pet = db.get(Pet, v.pet_id)
+        if pet and pet.store and pet.store != admin_store:
+            raise HTTPException(403, "无权操作其他门店的就诊记录")
+    if (v.status or "open") == "closed":
+        return RedirectResponse(f"/admin/visits/{visit_id}?msg=该病历已是结束状态", status_code=303)
+    v.status = "closed"
+    v.closed_at = datetime.utcnow()
+    v.closed_by = request.session.get("admin_username", "") or ""
+    db.commit()
+    _audit(db, request, "visit_close",
+           detail={"visit_id": v.id, "pet_id": v.pet_id, "customer_id": v.customer_id})
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=病历已结束", status_code=303)
+
+
 @app.post("/api/visits/{visit_id}/autosave")
 async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depends(get_db)):
     """SOAP 7 步工作流的实时自动保存。仅接受 JSON。只更新文本字段，不动 pet_id/date/type 等。"""
@@ -9867,6 +9897,8 @@ async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depe
     v = db.get(Visit, visit_id)
     if not v:
         return {"ok": False, "error": "记录不存在"}
+    if (v.status or "open") == "closed":
+        return {"ok": False, "error": "病历已结束，不可修改"}
     # 限店员工：只能改本店宠物的诊疗记录
     admin_store = _get_admin_store(request)
     if admin_store and v.pet_id:
@@ -10833,6 +10865,11 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
     visit_id = int(form.get("visit_id", 0) or 0)
     customer_id = int(form.get("customer_id", 0) or 0)
     pet_id = int(form.get("pet_id", 0) or 0)
+    # 病历已结束 → 不能再开处方
+    if visit_id:
+        _v = db.get(Visit, visit_id)
+        if _v and (_v.status or "open") == "closed":
+            raise HTTPException(403, "该病历已结束，不可新增处方；如需追加请新建病历")
     parsed_items = _parse_presc_items(form)
     total = round(sum(it["subtotal"] for it in parsed_items), 2)
     operator = request.session.get("admin_username", "admin")
@@ -10951,6 +10988,11 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
     locked, reason = _is_prescription_locked(db, presc)
     if locked:
         raise HTTPException(400, f"处方单已锁定（{reason}），不可修改。如需调整请「复制为新单」或「作废」后重开。")
+    # 病历已结束 → 不能改处方
+    if presc.visit_id:
+        _v = db.get(Visit, presc.visit_id)
+        if _v and (_v.status or "open") == "closed":
+            raise HTTPException(403, "所属病历已结束，处方不可修改")
     operator = request.session.get("admin_username", "admin")
     # 先把旧明细的库存退回
     for old in presc.items:
@@ -10993,6 +11035,10 @@ async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depe
     locked, reason = _is_prescription_locked(db, presc)
     if locked:
         raise HTTPException(400, f"处方单已锁定（{reason}），不可删除。请使用「作废」。")
+    if presc.visit_id:
+        _v = db.get(Visit, presc.visit_id)
+        if _v and (_v.status or "open") == "closed":
+            raise HTTPException(403, "所属病历已结束，处方不可删除。如确需作废请使用「作废」。")
     operator = request.session.get("admin_username", "admin")
     visit_id = presc.visit_id
     for it in presc.items:
@@ -15989,6 +16035,11 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
     _require_csrf(request, str(form.get("csrf_token", "")))
     visit_id = int(form.get("visit_id") or 0)
     notes    = str(form.get("notes") or "").strip()
+    # 病历已结束 → 不能开新检查
+    if visit_id:
+        _v = db.get(Visit, visit_id)
+        if _v and (_v.status or "open") == "closed":
+            raise HTTPException(403, "所属病历已结束，不可新增检查单；如需追加请新建病历")
 
     # 收集检查项目
     items: list[dict] = []
@@ -16250,6 +16301,10 @@ async def admin_exam_order_delete(
     locked, reason = _is_exam_order_locked(db, order)
     if locked:
         raise HTTPException(400, f"检查单已锁定（{reason}），不可删除。请使用「作废」。")
+    if order.visit_id:
+        _v = db.get(Visit, order.visit_id)
+        if _v and (_v.status or "open") == "closed":
+            raise HTTPException(403, "所属病历已结束，检查单不可删除。如确需作废请使用「作废」。")
     visit_id = order.visit_id
     # 先删本地报告文件
     for rpt in list(order.reports or []):

@@ -5,7 +5,7 @@
  *   - API / 表单 POST：直通网络（不缓存）
  *   - 升级版本时改 CACHE_VERSION，自动清旧
  */
-const CACHE_VERSION = 'v158-agent-debug-log';
+const CACHE_VERSION = 'v159-visit-close';
 const STATIC_CACHE = 'static-' + CACHE_VERSION;
 const PAGE_CACHE   = 'pages-' + CACHE_VERSION;
 

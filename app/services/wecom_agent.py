@@ -190,7 +190,8 @@ def tool_get_recent_visits(db: Session, userid: str, pet_id: int, limit: int = 3
     lines = [f"📋 {pet.name} 最近 {len(visits)} 次就诊："]
     for v in visits:
         diag = (v.diagnosis or v.chief_complaint or "—")[:40]
-        lines.append(f"  • {v.visit_date} · {diag}")
+        flag = "🔒" if (v.status or "open") == "closed" else ""
+        lines.append(f"  • #{v.id} · {v.visit_date} · {diag} {flag}")
     return "\n".join(lines)
 
 
@@ -233,16 +234,21 @@ def _resolve_or_list_visit(db: Session, pet_id: int) -> tuple[Optional[int], str
       - visit_id None：message 是给用户的提示文本（最近就诊列表 + 操作指引）
     """
     today = _date.today().isoformat()
+    # 只看 status='open'（结束的病历按合规不可改）
     today_v = db.query(Visit).filter(
-        Visit.pet_id == pet_id, Visit.visit_date == today
+        Visit.pet_id == pet_id,
+        Visit.visit_date == today,
+        Visit.status != "closed",
     ).order_by(Visit.id.desc()).first()
     if today_v:
         return today_v.id, ""
-    recent = db.query(Visit).filter(Visit.pet_id == pet_id)\
-        .order_by(Visit.id.desc()).limit(3).all()
+    recent = db.query(Visit).filter(
+        Visit.pet_id == pet_id,
+        Visit.status != "closed",
+    ).order_by(Visit.id.desc()).limit(3).all()
     if not recent:
-        return None, "❌ 该宠物还没有任何病历，请说「新建病历」"
-    lines = ["⚠ 今天还没有新病历。最近 3 次就诊："]
+        return None, "❌ 该宠物没有未结束的病历，请说「新建病历」"
+    lines = ["⚠ 今天还没有新病历。最近 3 次未结束就诊："]
     for v in recent:
         diag = (v.diagnosis or v.chief_complaint or "—")[:30]
         lines.append(f"  • #{v.id} · {v.visit_date} · {diag}")
@@ -275,6 +281,8 @@ def tool_update_visit_field(db: Session, userid: str, visit_id: int, field: str,
     v = db.get(Visit, visit_id) if visit_id else None
     if not v:
         return "❌ 病历不存在"
+    if (v.status or "open") == "closed":
+        return f"❌ 病历 #{visit_id} 已结束，不可修改（合规要求）。如需追加请说「新建病历」"
     value = (value or "").strip()
     if not value:
         return "❌ 内容不能为空"
@@ -414,6 +422,8 @@ def tool_create_exam_order(
     v = db.get(Visit, vid)
     if not v:
         return f"❌ 病历 #{vid} 不存在"
+    if (v.status or "open") == "closed":
+        return f"❌ 病历 #{vid} 已结束，不可追加；请说「新建病历」"
     if not isinstance(items, list) or not items:
         return "❌ 检查项目不能为空，请告诉我要开什么（如 B超 / 血常规 / X光）"
     # 清洗项目名
@@ -601,6 +611,8 @@ def tool_create_prescription_draft(
     v = db.get(Visit, vid)
     if not v:
         return f"❌ 病历 #{vid} 不存在"
+    if (v.status or "open") == "closed":
+        return f"❌ 病历 #{vid} 已结束，不可追加；请说「新建病历」"
     if not isinstance(drugs, list) or not drugs:
         return "❌ 没有药品；请说清楚药名+单次剂量+频次+天数"
     if len(drugs) > 10:

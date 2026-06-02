@@ -961,6 +961,13 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE visits ADD COLUMN follow_up_note TEXT DEFAULT ''"))
                 if "follow_up_at" not in vst_names_v2:
                     conn.execute(text("ALTER TABLE visits ADD COLUMN follow_up_at VARCHAR(20) DEFAULT ''"))
+                # 病历结束（合规：closed 后不可改、不可重开）
+                if "status" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN status VARCHAR(20) DEFAULT 'open'"))
+                if "closed_at" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN closed_at DATETIME DEFAULT NULL"))
+                if "closed_by" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN closed_by VARCHAR(80) DEFAULT ''"))
 
             # deworming_records 驱虫记录
             conn.execute(text(
