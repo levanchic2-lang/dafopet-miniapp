@@ -18233,8 +18233,9 @@ async def admin_inpatient_cancel(hosp_id: int, request: Request,
 
 @app.get("/admin/inpatient", response_class=HTMLResponse)
 async def admin_inpatient_board(request: Request, db: Session = Depends(get_db),
-                                   status: str = "admitted", store: str = ""):
-    """住院看板：默认显示住院中（D1 用列表展示，D2 升级为卡片）。"""
+                                   status: str = "admitted", store: str = "",
+                                   view: str = "cards"):
+    """住院看板：卡片视图（默认）/ 笼位图视图。"""
     require_admin(request)
     admin_store = _get_admin_store(request)
     if request.session.get("admin_role") == "superadmin":
@@ -18247,12 +18248,43 @@ async def admin_inpatient_board(request: Request, db: Session = Depends(get_db),
     if wb_store:
         q = q.filter(Hospitalization.store == wb_store)
     rows = q.order_by(Hospitalization.admitted_at.desc()).limit(200).all()
+
+    # 给每张卡片附加：处方数、活跃药品数
+    presc_map: dict[int, dict] = {}
+    visit_ids = [h.visit_id for h in rows if h.visit_id]
+    if visit_ids:
+        from sqlalchemy import func
+        rows_p = (db.query(Prescription.visit_id,
+                            func.count(Prescription.id).label("cnt"))
+                  .filter(Prescription.visit_id.in_(visit_ids),
+                          Prescription.status.in_(["issued", "dispensed", "draft"]))
+                  .group_by(Prescription.visit_id).all())
+        for vid, cnt in rows_p:
+            presc_map[vid] = {"count": cnt}
+
+    # 笼位图：所有笼（按当前 wb_store 过滤），叠加占用映射
+    cages_q = db.query(Cage).filter(Cage.is_active == True)
+    if wb_store:
+        cages_q = cages_q.filter(Cage.store == wb_store)
+    all_cages = cages_q.order_by(Cage.store, Cage.sort_order, Cage.code).all()
+    occ_map: dict[int, Hospitalization] = {}
+    if view == "cages" or status == "admitted":
+        # 用全量 admitted 的占用映射（不受 status 筛选影响）
+        adm_q = db.query(Hospitalization).filter(Hospitalization.status == "admitted")
+        if wb_store:
+            adm_q = adm_q.filter(Hospitalization.store == wb_store)
+        for h in adm_q.all():
+            if h.cage_id:
+                occ_map[h.cage_id] = h
+
     return templates.TemplateResponse(request, "admin_inpatient.html", {
-        "request": request, "rows": rows, "status": status,
+        "request": request, "rows": rows, "status": status, "view": view,
         "status_zh": _HOSP_STATUS_ZH, "kind_zh": _CAGE_KIND_ZH,
         "wb_store": wb_store, "csrf_token": _get_csrf_token(request),
         "calc_days": _calc_hosp_days,
         "now": datetime.utcnow(),
+        "presc_map": presc_map,
+        "all_cages": all_cages, "occ_map": occ_map,
         "title": "住院管理",
     })
 
