@@ -68,7 +68,7 @@ _SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业
 - 信息不全时先问清楚，不要瞎填
 
 【检查单规则（create_exam_order）】
-- 必须先有 current_visit_id（病历），没有就先 create_visit
+- 工具会自动找今天的病历；今天没有会列最近 3 次让用户选；不要直接 create_visit
 - items 是字符串数组，每项是一个检查名称：「B超」「X光」「血常规」「生化」「粪检」「尿检」「显微镜检」等
 - 用户说「开个 B 超和血常规」→ items=["B超", "血常规"]
 - 单价和数量不填（医生会回系统补），agent 只负责拉好骨架
@@ -84,7 +84,7 @@ _SYSTEM_PROMPT = """你是大风动物医院的语音助手。员工通过企业
 【处方规则（create_prescription_draft）· 最高风险】
 - 这是合法工具，用户让你开处方时**必须调用它**，不要自行说「无法开处方/暂时不能」之类拒绝。
 - 拒绝场景只有 1 个：用户明确说要开麻醉药/受管控药品（工具内部也会拦）
-- 必须先有 current_visit_id（病历）；没有就先 create_visit
+- 工具会自动找今天的病历；今天没有会列最近 3 次让用户选。用户说「用病历 #N」时把 N 当 visit_id 传；说「新建病历」时再调 create_visit
 - drugs 是对象数组，每项必须完整：drug_name + dose_amount + dose_unit + times_per_day + duration_days
   例：「多西环素，每次 10mg/kg，一天 2 次，连服 7 天」→
     {"drug_name":"多西环素","dose_amount":10,"dose_unit":"mg/kg","times_per_day":2,"duration_days":"7"}
@@ -223,6 +223,31 @@ def tool_get_today_appointments(db: Session, userid: str) -> str:
               "completed": "已完成", "cancelled": "已取消", "no_show": "爽约"}.get(a.status, a.status)
         lines.append(f"  {t} · {nm} · {st}")
     return "\n".join(lines)
+
+
+def _resolve_or_list_visit(db: Session, pet_id: int) -> tuple[Optional[int], str]:
+    """优先取今天的病历；没有就返回最近 3 次的清单字符串，让 LLM 让用户选。
+
+    返回 (visit_id_or_None, message)
+      - visit_id 非空：自动找到了今天的，可继续
+      - visit_id None：message 是给用户的提示文本（最近就诊列表 + 操作指引）
+    """
+    today = _date.today().isoformat()
+    today_v = db.query(Visit).filter(
+        Visit.pet_id == pet_id, Visit.visit_date == today
+    ).order_by(Visit.id.desc()).first()
+    if today_v:
+        return today_v.id, ""
+    recent = db.query(Visit).filter(Visit.pet_id == pet_id)\
+        .order_by(Visit.id.desc()).limit(3).all()
+    if not recent:
+        return None, "❌ 该宠物还没有任何病历，请说「新建病历」"
+    lines = ["⚠ 今天还没有新病历。最近 3 次就诊："]
+    for v in recent:
+        diag = (v.diagnosis or v.chief_complaint or "—")[:30]
+        lines.append(f"  • #{v.id} · {v.visit_date} · {diag}")
+    lines.append("→ 用最近这个请说「用病历 #N」；要新建请说「新建病历」")
+    return None, "\n".join(lines)
 
 
 # ─── 写操作（不直接执行，挂 pending） ───
@@ -378,7 +403,14 @@ def tool_create_exam_order(
     ctx = _sess.get(userid)
     vid = visit_id or ctx.get("current_visit_id")
     if not vid:
-        return "❌ 没有当前病历，请先 create_visit 新建病历再开检查单"
+        # 自动找今天的病历；没有就列最近 3 次让用户选
+        pid = ctx.get("current_pet_id")
+        if not pid:
+            return "❌ 没有当前宠物，先 find_customer 锁定"
+        vid, msg = _resolve_or_list_visit(db, pid)
+        if not vid:
+            return msg
+        _sess.touch(userid, current_visit_id=vid)
     v = db.get(Visit, vid)
     if not v:
         return f"❌ 病历 #{vid} 不存在"
@@ -558,7 +590,14 @@ def tool_create_prescription_draft(
     ctx = _sess.get(userid)
     vid = visit_id or ctx.get("current_visit_id")
     if not vid:
-        return "❌ 没有当前病历，请先 create_visit"
+        # 自动找今天的病历；没有就列最近 3 次让用户选
+        pid = ctx.get("current_pet_id")
+        if not pid:
+            return "❌ 没有当前宠物，先 find_customer 锁定"
+        vid, msg = _resolve_or_list_visit(db, pid)
+        if not vid:
+            return msg
+        _sess.touch(userid, current_visit_id=vid)
     v = db.get(Visit, vid)
     if not v:
         return f"❌ 病历 #{vid} 不存在"
