@@ -18764,8 +18764,65 @@ async def inpatient_owner_scan(token: str, request: Request, db: Session = Depen
         })
     pet = db.get(Pet, h.pet_id) if h.pet_id else None
     cust = db.get(Customer, h.customer_id) if h.customer_id else None
+    # 业主可看的事件时间轴（最近 3 天）：用药打勾 / 喂食 / 体温
+    from datetime import timedelta as _td3
+    cutoff = datetime.utcnow() - _td3(days=3)
+    events: list[dict] = []
+    # 已完成用药
+    for ml in db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.hospitalization_id == h.id,
+        MedicationAdminLog.status == "done",
+        MedicationAdminLog.administered_at >= cutoff,
+    ).order_by(MedicationAdminLog.administered_at.desc()).limit(30).all():
+        drug = ml.prescription_item.drug_name if ml.prescription_item else "药物"
+        events.append({
+            "kind": "med", "icon": "💊", "color": "#3b82f6",
+            "title": drug,
+            "subtitle": "已喂药",
+            "at": ml.administered_at,
+        })
+    # 喂食
+    for f in db.query(FeedingLog).filter(
+        FeedingLog.hospitalization_id == h.id,
+        FeedingLog.recorded_at >= cutoff,
+    ).order_by(FeedingLog.recorded_at.desc()).limit(30).all():
+        appetite_emoji = ["😢 拒食", "😟 强饲", "🙂 少量", "😊 正常", "😋 旺盛"][min(max(f.appetite_score, 0), 4)]
+        eaten_text = ""
+        if f.offered_g and f.eaten_g:
+            eaten_text = f" · 吃了 {f.eaten_g:g}/{f.offered_g:g}g"
+        elif f.eaten_g:
+            eaten_text = f" · 吃了 {f.eaten_g:g}g"
+        events.append({
+            "kind": "feed", "icon": "🍽", "color": "#f97316",
+            "title": (f.food_type or "进食"),
+            "subtitle": f"{appetite_emoji}{eaten_text}",
+            "at": f.recorded_at,
+        })
+    # 体温（只展示体温，不展示 HR/RR 等专业指标）
+    for v in db.query(VitalSignsLog).filter(
+        VitalSignsLog.hospitalization_id == h.id,
+        VitalSignsLog.recorded_at >= cutoff,
+        VitalSignsLog.temperature_c > 0,
+    ).order_by(VitalSignsLog.recorded_at.desc()).limit(20).all():
+        # 体温标签
+        sp = (pet.species if pet else "").lower()
+        if sp == "cat":
+            normal = 38.0 <= v.temperature_c <= 39.5
+        else:
+            normal = 37.5 <= v.temperature_c <= 39.0
+        events.append({
+            "kind": "vital", "icon": "🌡", "color": "#ef4444" if not normal else "#10b981",
+            "title": f"体温 {v.temperature_c:.1f}℃",
+            "subtitle": "正常" if normal else "偏离正常范围（医生关注中）",
+            "at": v.recorded_at,
+        })
+    events.sort(key=lambda e: e["at"] or datetime.min, reverse=True)
+    events = events[:30]
+    # 入院多少天
+    days = _calc_hosp_days(h.admitted_at, h.discharged_at or datetime.utcnow())
     return templates.TemplateResponse(request, "inpatient_owner.html", {
         "request": request, "h": h, "pet": pet, "cust": cust,
+        "events": events, "days": days,
         "title": "宠物住院信息",
     })
 
