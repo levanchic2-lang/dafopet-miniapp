@@ -17757,6 +17757,107 @@ async def admin_grooming_copy_as_new(rec_id: int, request: Request, db: Session 
     return RedirectResponse(f"/admin/grooming-orders/{new_rec.id}?msg=已复制为新美容单 · 请填本次时间/状态", status_code=303)
 
 
+# ── 美容前后照片：上传 / 删除（CSV 存路径） ──
+def _grooming_photos_list(csv: str) -> list[str]:
+    return [p.strip() for p in (csv or "").split(",") if p.strip()]
+
+
+def _grooming_photos_join(items: list[str]) -> str:
+    return ",".join(items)
+
+
+@app.post("/admin/grooming-orders/{rec_id}/upload-photos")
+async def admin_grooming_upload_photos(
+    rec_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    kind: str = Form(""),               # before / after
+    photos: list[UploadFile] | None = File(None),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    if rec.status == "voided":
+        return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已作废单无法上传", status_code=303)
+    if kind not in ("before", "after"):
+        raise HTTPException(400, "kind 必须是 before 或 after")
+    if not photos:
+        return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=未选择文件", status_code=303)
+    base = Path(settings.upload_dir) / "grooming" / str(rec_id)
+    base.mkdir(parents=True, exist_ok=True)
+    added = 0
+    for uf in photos:
+        if not uf.filename:
+            continue
+        ext = _image_ext(uf.filename)
+        dest = base / f"{kind}_{secrets.token_hex(6)}{ext}"
+        dest.write_bytes(await uf.read())
+        try:
+            dest = _compress_image(dest)
+        except Exception:
+            pass
+        try:
+            rel = Path(dest).resolve().relative_to(Path(settings.upload_dir).resolve())
+            url = "/uploads/" + str(rel).replace("\\", "/")
+        except Exception:
+            url = "/uploads/grooming/" + str(rec_id) + "/" + dest.name
+        added += 1
+        if kind == "before":
+            items = _grooming_photos_list(rec.before_photos)
+            items.append(url)
+            rec.before_photos = _grooming_photos_join(items)
+        else:
+            items = _grooming_photos_list(rec.after_photos)
+            items.append(url)
+            rec.after_photos = _grooming_photos_join(items)
+    rec.updated_at = datetime.utcnow()
+    db.commit()
+    label = "美容前" if kind == "before" else "美容后"
+    return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已上传{added}张{label}照片", status_code=303)
+
+
+@app.post("/admin/grooming-orders/{rec_id}/delete-photo")
+async def admin_grooming_delete_photo(
+    rec_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    kind: str = Form(""),
+    photo_url: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    if rec.status == "voided":
+        return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已作废单不可改", status_code=303)
+    if kind not in ("before", "after"):
+        raise HTTPException(400, "kind 错误")
+    field_val = rec.before_photos if kind == "before" else rec.after_photos
+    items = [p for p in _grooming_photos_list(field_val) if p != photo_url]
+    if kind == "before":
+        rec.before_photos = _grooming_photos_join(items)
+    else:
+        rec.after_photos = _grooming_photos_join(items)
+    # 尝试物理删除文件
+    try:
+        if photo_url.startswith("/uploads/"):
+            rel = photo_url[len("/uploads/"):]
+            p = (Path(settings.upload_dir) / rel).resolve()
+            root = Path(settings.upload_dir).resolve()
+            if str(p).startswith(str(root)) and p.is_file():
+                p.unlink()
+    except Exception:
+        pass
+    rec.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已删除", status_code=303)
+
+
 @app.post("/admin/weight-records/create")
 async def admin_weight_create(
     request: Request,

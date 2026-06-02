@@ -216,6 +216,100 @@ function confirmGroomVoid(form, paidAmount) {
  </div>
  </form>
 
+ {% if is_edit %}
+ {% set _before_list = (rec.before_photos or '').split(',') | reject('equalto', '') | list %}
+ {% set _after_list  = (rec.after_photos  or '').split(',') | reject('equalto', '') | list %}
+ <div class="card" style="margin-top:0.75rem;">
+   <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">📷 美容前后照片</h3>
+
+   {# 美容前 #}
+   <div style="margin-bottom:1rem;">
+     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+       <div style="font-weight:600;color:#475569;">📥 美容前（{{ _before_list|length }}）</div>
+       {% if not locked %}
+       <form method="post" action="/admin/grooming-orders/{{ rec.id }}/upload-photos"
+             enctype="multipart/form-data" style="display:inline;">
+         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+         <input type="hidden" name="kind" value="before"/>
+         <label class="btn secondary" style="font-size:.78rem;padding:.3rem .65rem;cursor:pointer;">
+           ➕ 添加照片
+           <input type="file" name="photos" accept="image/*" multiple capture="environment"
+                  onchange="this.form.submit()" style="display:none;">
+         </label>
+       </form>
+       {% endif %}
+     </div>
+     {% if _before_list %}
+     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.5rem;">
+       {% for url in _before_list %}
+       <div style="position:relative;aspect-ratio:1;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background:#f8fafc;">
+         <a href="{{ url }}" target="_blank">
+           <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover;display:block;" alt="美容前"/>
+         </a>
+         {% if not locked %}
+         <form method="post" action="/admin/grooming-orders/{{ rec.id }}/delete-photo"
+               style="position:absolute;top:4px;right:4px;"
+               onsubmit="return confirm('删除这张照片？')">
+           <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+           <input type="hidden" name="kind" value="before"/>
+           <input type="hidden" name="photo_url" value="{{ url }}"/>
+           <button type="submit"
+                   style="background:rgba(220,38,38,.85);color:#fff;border:none;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:.8rem;line-height:1;padding:0;">✕</button>
+         </form>
+         {% endif %}
+       </div>
+       {% endfor %}
+     </div>
+     {% else %}
+     <div style="font-size:.82rem;color:#94a3b8;padding:.5rem 0;">还没有美容前照片</div>
+     {% endif %}
+   </div>
+
+   {# 美容后 #}
+   <div>
+     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+       <div style="font-weight:600;color:#475569;">✨ 美容后（{{ _after_list|length }}）</div>
+       {% if not locked %}
+       <form method="post" action="/admin/grooming-orders/{{ rec.id }}/upload-photos"
+             enctype="multipart/form-data" style="display:inline;">
+         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+         <input type="hidden" name="kind" value="after"/>
+         <label class="btn secondary" style="font-size:.78rem;padding:.3rem .65rem;cursor:pointer;">
+           ➕ 添加照片
+           <input type="file" name="photos" accept="image/*" multiple capture="environment"
+                  onchange="this.form.submit()" style="display:none;">
+         </label>
+       </form>
+       {% endif %}
+     </div>
+     {% if _after_list %}
+     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.5rem;">
+       {% for url in _after_list %}
+       <div style="position:relative;aspect-ratio:1;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background:#f8fafc;">
+         <a href="{{ url }}" target="_blank">
+           <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover;display:block;" alt="美容后"/>
+         </a>
+         {% if not locked %}
+         <form method="post" action="/admin/grooming-orders/{{ rec.id }}/delete-photo"
+               style="position:absolute;top:4px;right:4px;"
+               onsubmit="return confirm('删除这张照片？')">
+           <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+           <input type="hidden" name="kind" value="after"/>
+           <input type="hidden" name="photo_url" value="{{ url }}"/>
+           <button type="submit"
+                   style="background:rgba(220,38,38,.85);color:#fff;border:none;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:.8rem;line-height:1;padding:0;">✕</button>
+         </form>
+         {% endif %}
+       </div>
+       {% endfor %}
+     </div>
+     {% else %}
+     <div style="font-size:.82rem;color:#94a3b8;padding:.5rem 0;">还没有美容后照片</div>
+     {% endif %}
+   </div>
+ </div>
+ {% endif %}
+
  {% if is_edit and not locked %}
  <div style="margin-top:0.75rem;">
    <form method="post" action="/admin/grooming-orders/{{ rec.id }}/delete"
