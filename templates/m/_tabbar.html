@@ -18,8 +18,8 @@
 
 {% elif mobile_role == 'groomer' %}
   <a class="m-tab {% if _t=='today' %}active{% endif %}"     href="/m/groomer"><span class="icon">📅</span>今日</a>
-  <a class="m-tab {% if _t=='grooming' %}active{% endif %}"  href="/m/soon?title=美容单"><span class="icon">✂</span>美容单</a>
-  <a class="m-tab {% if _t=='customers' %}active{% endif %}" href="/m/soon?title=客户"><span class="icon">👤</span>客户</a>
+  <a class="m-tab {% if _t=='grooming' %}active{% endif %}"  href="/m/grooming"><span class="icon">✂</span>美容单</a>
+  <a class="m-tab {% if _t=='new' %}active{% endif %}"       href="/m/grooming/new"><span class="icon">➕</span>新建</a>
   <a class="m-tab {% if _t=='me' %}active{% endif %}"        href="/m/me"><span class="icon">⚙</span>我</a>
 
 {% else %}

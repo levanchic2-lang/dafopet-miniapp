@@ -1,0 +1,45 @@
+{% extends "m/_base.html" %}
+{% block title %}美容单{% endblock %}
+{% block topbar_title %}✂ 美容单{% endblock %}
+{% block topbar_sub %}{{ admin_store_label }} · {{ rows|length }} 单{% endblock %}
+
+{% block topbar_actions %}
+<a href="/m/grooming/new" class="m-icon-btn" title="新建" style="background:#16a34a;color:#fff;">➕</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not rows %}
+  <div class="m-empty" style="padding-top:60px;">
+    <div class="emoji">✂</div>
+    <div>还没有美容单</div>
+    <a href="/m/grooming/new" class="m-btn" style="margin-top:16px;background:#16a34a;display:inline-block;width:auto;padding:10px 20px;">➕ 立即新建</a>
+  </div>
+{% else %}
+  {% for r in rows %}
+  {% set rec = r.r %}
+  {% set voided = (rec.status == 'voided') %}
+  <a class="m-card" href="/m/grooming/{{ rec.id }}" style="display:block;text-decoration:none;color:inherit;{% if voided %}opacity:0.5;{% endif %}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div style="font-size:11px;color:#94a3b8;">#{{ rec.id }} · {{ rec.groom_date or '—' }}</div>
+      {% if voided %}
+      <div style="background:#e2e8f0;color:#475569;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">已作废</div>
+      {% elif rec.invoice_id %}
+      <div style="background:#dcfce7;color:#166534;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">已开单</div>
+      {% endif %}
+    </div>
+    <div style="font-size:16px;font-weight:700;color:#0f172a;">
+      {{ r.pet.name if r.pet else '宠物' }}
+      <span style="color:#94a3b8;font-weight:500;font-size:13px;">· {{ r.cust.name if r.cust else '—' }}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;">
+      <span style="color:#64748b;">{{ rec.groomer_name or '—' }}</span>
+      <span style="color:#059669;font-weight:700;">¥{{ '%.0f'|format(rec.total_amount or 0) }}</span>
+      <span style="color:#94a3b8;">·</span>
+      <span style="color:#3b82f6;">📷 前 {{ r.before_n }} / 后 {{ r.after_n }}</span>
+    </div>
+  </a>
+  {% endfor %}
+{% endif %}
+
+{% endblock %}

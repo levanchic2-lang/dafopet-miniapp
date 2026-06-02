@@ -17843,6 +17843,7 @@ async def admin_grooming_upload_photos(
     csrf_token: str = Form(""),
     kind: str = Form(""),               # before / after
     photos: list[UploadFile] | None = File(None),
+    next_url: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -17885,7 +17886,10 @@ async def admin_grooming_upload_photos(
     rec.updated_at = datetime.utcnow()
     db.commit()
     label = "美容前" if kind == "before" else "美容后"
-    return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已上传{added}张{label}照片", status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/grooming-orders/{rec_id}?msg=已上传{added}张{label}照片"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/grooming-orders/{rec_id}/delete-photo")
@@ -17896,6 +17900,7 @@ async def admin_grooming_delete_photo(
     csrf_token: str = Form(""),
     kind: str = Form(""),
     photo_url: str = Form(""),
+    next_url: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -17924,7 +17929,10 @@ async def admin_grooming_delete_photo(
         pass
     rec.updated_at = datetime.utcnow()
     db.commit()
-    return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已删除", status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/grooming-orders/{rec_id}?msg=已删除"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/weight-records/create")
@@ -19337,11 +19345,7 @@ async def m_nurse_home(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "m/home_nurse.html", ctx)
 
 
-@app.get("/m/groomer", response_class=HTMLResponse)
-async def m_groomer_home(request: Request, db: Session = Depends(get_db)):
-    if not _admin_ok(request):
-        return RedirectResponse("/admin/login?next=/m/groomer", status_code=303)
-    return templates.TemplateResponse(request, "m/home_groomer.html", _m_ctx(request, db, active_tab="today"))
+# M1 占位的 /m/groomer 由 M2.5 的 m_groomer_home_v2 覆盖
 
 
 @app.get("/m/soon", response_class=HTMLResponse)
@@ -19587,6 +19591,260 @@ async def m_dispensing_mark(
         p.status = "dispensed"
     db.commit()
     return RedirectResponse("/m/dispensing?msg=已配齐 ✓", status_code=303)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# M2.5 · 美容师页：今日预约 / 美容单 / 新建 / 拍照
+# ═════════════════════════════════════════════════════════════════════════════
+_M_BEAUTY_CATS = ("beauty", "grooming", "washcare")
+
+
+def _m_today_beauty_appts(db: Session, store_short: str, store_full: str):
+    """今日的美容预约（按时间排序）。"""
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    q = db.query(Appointment).filter(
+        Appointment.category.in_(_M_BEAUTY_CATS),
+        Appointment.appointment_date == today_str,
+        Appointment.status.notin_(["cancelled", "rejected", "no_show"]),
+    )
+    if store_short:
+        q = q.filter(or_(Appointment.store == store_full,
+                          Appointment.store == store_short))
+    return q.order_by(Appointment.appointment_time.asc()).all()
+
+
+@app.get("/m/groomer", response_class=HTMLResponse)
+async def m_groomer_home_v2(request: Request, db: Session = Depends(get_db)):
+    """美容师首页（覆盖 M1 占位版）。"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/groomer", status_code=303)
+    ctx = _m_ctx(request, db, active_tab="today")
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    appts = _m_today_beauty_appts(db, store_short, store_full)
+    # 最近 3 个美容单
+    q = db.query(GroomingOrder).filter(GroomingOrder.status != "voided")
+    if store_short:
+        q = q.filter(or_(GroomingOrder.store == store_short,
+                          GroomingOrder.store == store_full,
+                          GroomingOrder.store == ""))
+    recent = q.order_by(GroomingOrder.id.desc()).limit(5).all()
+    # 未拍照单（today + 没 after_photos）
+    no_photo = 0
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    for r in recent:
+        if r.groom_date == today_str and not (r.after_photos or "").strip():
+            no_photo += 1
+    ctx.update({
+        "appts": appts, "recent": recent, "no_photo": no_photo,
+    })
+    return templates.TemplateResponse(request, "m/groomer_home.html", ctx)
+
+
+@app.get("/m/grooming", response_class=HTMLResponse)
+async def m_grooming_list(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/grooming", status_code=303)
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    q = db.query(GroomingOrder)
+    if store_short:
+        q = q.filter(or_(GroomingOrder.store == store_short,
+                          GroomingOrder.store == store_full,
+                          GroomingOrder.store == ""))
+    rows = q.order_by(GroomingOrder.id.desc()).limit(80).all()
+    enriched = []
+    for r in rows:
+        pet = db.get(Pet, r.pet_id) if r.pet_id else None
+        cust = db.get(Customer, r.customer_id) if r.customer_id else None
+        before_n = len([p for p in (r.before_photos or "").split(",") if p.strip()])
+        after_n = len([p for p in (r.after_photos or "").split(",") if p.strip()])
+        enriched.append({
+            "r": r, "pet": pet, "cust": cust,
+            "before_n": before_n, "after_n": after_n,
+        })
+    ctx = _m_ctx(request, db, active_tab="grooming")
+    ctx["rows"] = enriched
+    return templates.TemplateResponse(request, "m/grooming_list.html", ctx)
+
+
+@app.get("/m/grooming/new", response_class=HTMLResponse)
+async def m_grooming_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = 0,
+    pet_id: int = 0,
+    appointment_id: int = 0,
+):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/grooming/new", status_code=303)
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    appt = db.get(Appointment, appointment_id) if appointment_id else None
+    if appt and not cust:
+        cust = db.get(Customer, appt.customer_id) if appt.customer_id else None
+        pet = db.get(Pet, appt.pet_id) if appt.pet_id else None
+    pets = []
+    if cust:
+        pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
+    groomers = [s[0] for s in db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+    ).all()]
+    groom_items = _query_grooming_items(db, request)
+    ctx = _m_ctx(request, db, active_tab="grooming")
+    ctx.update({
+        "cust": cust, "pet": pet, "appt": appt, "pets": pets,
+        "groomers": groomers, "groom_items": groom_items,
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "now_time": datetime.utcnow().strftime("%H:%M"),
+        "default_groomer": request.session.get("admin_username", ""),
+    })
+    return templates.TemplateResponse(request, "m/grooming_new.html", ctx)
+
+
+@app.post("/m/grooming/create")
+async def m_grooming_create(request: Request, db: Session = Depends(get_db)):
+    """手机精简新建：不出收费单，留到桌面端收费。"""
+    if not _admin_ok(request):
+        raise HTTPException(401)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    customer_id = int(form.get("customer_id", 0) or 0)
+    pet_id = int(form.get("pet_id", 0) or 0)
+    appointment_id = int(form.get("appointment_id", 0) or 0)
+    if not pet_id or not customer_id:
+        return RedirectResponse("/m/grooming/new?err=请选择客户和宠物", status_code=303)
+    # 服务：item_id[] CSV 形式（chip 多选）
+    service_ids = form.getlist("service_id[]")
+    services = []
+    for sid in service_ids:
+        try:
+            iid = int(sid)
+        except Exception:
+            continue
+        inv = db.get(InventoryItem, iid)
+        if not inv:
+            continue
+        price = float(inv.sell_price or 0)
+        services.append({
+            "name": inv.name,
+            "item_id": iid,
+            "qty": 1.0,
+            "price": price,
+            "subtotal": round(price, 2),
+            "notes": "",
+        })
+    total = round(sum(s["subtotal"] for s in services), 2)
+    operator = request.session.get("admin_username", "admin")
+    pet = db.get(Pet, pet_id)
+    store = (pet.store if pet else "") or _get_admin_store(request) or ""
+    rec = GroomingOrder(
+        customer_id=customer_id or None,
+        pet_id=pet_id or None,
+        appointment_id=appointment_id or None,
+        groom_date=str(form.get("groom_date", "")).strip()[:20] or datetime.utcnow().strftime("%Y-%m-%d"),
+        start_time=str(form.get("start_time", "")).strip()[:10],
+        end_time="",
+        groomer_name=str(form.get("groomer_name", "")).strip()[:80] or operator,
+        services_json=json.dumps(services, ensure_ascii=False),
+        total_amount=total,
+        pet_size=str(form.get("pet_size", "")).strip()[:20],
+        coat_length=str(form.get("coat_length", "")).strip()[:20],
+        skin_condition=str(form.get("skin_condition", "")).strip()[:200],
+        behavior_note=str(form.get("behavior_note", "")).strip()[:200],
+        store=store,
+        notes=str(form.get("notes", "")).strip(),
+        created_by=operator,
+    )
+    db.add(rec)
+    db.flush()
+    # 自动扣库存（仅非服务）
+    for s in services:
+        iid = s.get("item_id")
+        qty = float(s.get("qty") or 0)
+        if iid and qty > 0:
+            inv = db.get(InventoryItem, iid)
+            if inv and not inv.is_service:
+                _deduct_inventory(db, iid, qty, "grooming", rec.id, operator,
+                                  note=f"美容#{rec.id} {s.get('name','')}")
+    db.commit()
+    return RedirectResponse(f"/m/grooming/{rec.id}?msg=美容单已建", status_code=303)
+
+
+@app.get("/m/grooming/{rec_id}", response_class=HTMLResponse)
+async def m_grooming_detail(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/grooming/{rec_id}", status_code=303)
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    pet = db.get(Pet, rec.pet_id) if rec.pet_id else None
+    cust = db.get(Customer, rec.customer_id) if rec.customer_id else None
+    try:
+        services = json.loads(rec.services_json or "[]")
+    except Exception:
+        services = []
+    before_list = [p for p in (rec.before_photos or "").split(",") if p.strip()]
+    after_list = [p for p in (rec.after_photos or "").split(",") if p.strip()]
+    locked, lock_reason = _is_grooming_locked(db, rec)
+    ctx = _m_ctx(request, db, active_tab="grooming")
+    ctx.update({
+        "rec": rec, "pet": pet, "cust": cust,
+        "services": services,
+        "before_list": before_list, "after_list": after_list,
+        "locked": locked, "lock_reason": lock_reason,
+        "next_url": f"/m/grooming/{rec_id}",
+    })
+    return templates.TemplateResponse(request, "m/grooming_detail.html", ctx)
+
+
+@app.post("/m/grooming/{rec_id}/done")
+async def m_grooming_mark_done(rec_id: int, request: Request,
+                                 db: Session = Depends(get_db),
+                                 csrf_token: str = Form("")):
+    """手机端「完成美容」按钮：写 end_time。"""
+    if not _admin_ok(request):
+        raise HTTPException(401)
+    _require_csrf(request, csrf_token)
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    if rec.status == "voided":
+        return RedirectResponse(f"/m/grooming/{rec_id}?err=已作废", status_code=303)
+    rec.end_time = datetime.utcnow().strftime("%H:%M")
+    rec.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/m/grooming/{rec_id}?msg=已标记完成", status_code=303)
+
+
+# 简易客户搜索：JSON，给 grooming_new.html 用
+@app.get("/m/api/search-customer")
+async def m_api_search_customer(
+    request: Request,
+    q: str = "",
+    db: Session = Depends(get_db),
+):
+    if not _admin_ok(request):
+        return {"results": []}
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"results": []}
+    custs = db.query(Customer).filter(
+        or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+    ).order_by(Customer.id.desc()).limit(10).all()
+    results = []
+    for c in custs:
+        pets = db.query(Pet).filter(Pet.customer_id == c.id).order_by(Pet.id).all()
+        results.append({
+            "id": c.id,
+            "name": c.name or "",
+            "phone": c.phone or "",
+            "pets": [{
+                "id": p.id, "name": p.name or "",
+                "species": p.species, "breed": p.breed or "",
+            } for p in pets],
+        })
+    return {"results": results}
 
 
 @app.post("/m/dispensing/{presc_id}/undo")

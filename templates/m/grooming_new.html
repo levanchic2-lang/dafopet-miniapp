@@ -1,0 +1,194 @@
+{% extends "m/_base.html" %}
+{% block title %}新建美容单{% endblock %}
+{% block topbar_title %}➕ 新建美容单{% endblock %}
+
+{% block topbar_actions %}
+<a href="/m/grooming" class="m-icon-btn" title="返回">←</a>
+{% endblock %}
+
+{% block content %}
+
+<form method="post" action="/m/grooming/create" id="grm-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="customer_id" id="customer_id" value="{{ cust.id if cust else 0 }}"/>
+  <input type="hidden" name="pet_id" id="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="appointment_id" value="{{ appt.id if appt else 0 }}"/>
+
+  {# 1. 客户/宠物 #}
+  <div class="m-card">
+    <div class="m-card-title">👤 客户 / 宠物</div>
+    <div id="picked-cust" style="{% if not cust %}display:none;{% endif %}padding:10px;background:#f0fdf4;border-radius:8px;margin-bottom:10px;">
+      <div style="font-weight:700;color:#0f172a;" id="picked-cust-name">{{ cust.name if cust else '' }}</div>
+      <div style="font-size:13px;color:#64748b;font-family:ui-monospace,monospace;" id="picked-cust-phone">{{ cust.phone if cust else '' }}</div>
+    </div>
+    <div id="search-area" style="{% if cust %}display:none;{% endif %}">
+      <input type="search" id="cust-search" placeholder="搜手机号或姓名（至少 2 字）"
+             style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
+      <div id="search-results" style="margin-top:8px;"></div>
+    </div>
+    {% if cust %}
+    <a href="/m/grooming/new" style="font-size:12px;color:#3b82f6;text-decoration:underline;display:inline-block;margin-top:6px;">↶ 换客户</a>
+    {% endif %}
+
+    {# 宠物选择 #}
+    {% if pets %}
+    <div style="margin-top:12px;">
+      <div style="font-size:12px;color:#64748b;margin-bottom:6px;">选宠物</div>
+      <div id="pet-chips" class="m-role-chips">
+        {% for p in pets %}
+        <button type="button" class="m-role-chip pet-chip {% if pet and p.id == pet.id %}active{% endif %}"
+                data-pet-id="{{ p.id }}" onclick="pickPet(this)">
+          {% if p.species == 'cat' %}🐱{% elif p.species == 'dog' %}🐶{% else %}🐾{% endif %}
+          {{ p.name or '未命名' }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# 2. 服务（chips 多选）#}
+  <div class="m-card">
+    <div class="m-card-title">✂ 选服务（可多选）<span class="count" id="picked-count">0</span></div>
+    {% if not groom_items %}
+    <div style="font-size:13px;color:#94a3b8;padding:14px 0;">
+      还没有美容服务品目。请先到桌面端
+      <a href="/admin/inventory?category=grooming" style="color:#3b82f6;">库存 → 美容服务</a> 维护。
+    </div>
+    {% else %}
+    <div class="m-role-chips" id="svc-chips">
+      {% for it in groom_items %}
+      <button type="button" class="m-role-chip svc-chip"
+              data-id="{{ it.id }}"
+              data-name="{{ it.name }}"
+              data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+              onclick="toggleSvc(this)">
+        {{ it.name }} ¥{{ '%.0f'|format(it.sell_price or 0) }}
+      </button>
+      {% endfor %}
+    </div>
+    <div id="picked-summary" style="margin-top:10px;font-size:14px;font-weight:700;color:#059669;display:none;">
+      合计 ¥<span id="grand-total">0</span>
+    </div>
+    {% endif %}
+  </div>
+
+  {# 3. 基本信息 #}
+  <div class="m-card">
+    <div class="m-card-title">📋 基本信息</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <label style="font-size:12px;color:#64748b;">日期
+        <input type="date" name="groom_date" value="{{ today }}" required
+               style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+      </label>
+      <label style="font-size:12px;color:#64748b;">开始时间
+        <input type="time" name="start_time" value="{{ now_time }}"
+               style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+      </label>
+    </div>
+    <label style="font-size:12px;color:#64748b;display:block;margin-top:8px;">美容师
+      <input name="groomer_name" value="{{ default_groomer }}" list="groomer-list" placeholder="选或输入"
+             style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
+      <datalist id="groomer-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
+    </label>
+  </div>
+
+  <button type="submit" class="m-btn" style="background:#16a34a;font-size:17px;padding:16px;" id="submit-btn" disabled>
+    ✓ 保存美容单
+  </button>
+</form>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const customerIdInput = $('customer_id');
+const petIdInput = $('pet_id');
+const submitBtn = $('submit-btn');
+
+function recalcSubmit() {
+  const hasCust = parseInt(customerIdInput.value || 0) > 0;
+  const hasPet = parseInt(petIdInput.value || 0) > 0;
+  const hasSvc = document.querySelectorAll('.svc-chip.active').length > 0;
+  submitBtn.disabled = !(hasCust && hasPet && hasSvc);
+}
+
+function recalcSummary() {
+  const chips = document.querySelectorAll('.svc-chip.active');
+  let total = 0;
+  chips.forEach(c => total += parseFloat(c.dataset.price || 0));
+  $('picked-count').textContent = chips.length;
+  $('grand-total').textContent = total.toFixed(0);
+  $('picked-summary').style.display = chips.length ? 'block' : 'none';
+  recalcSubmit();
+}
+
+function toggleSvc(btn) {
+  btn.classList.toggle('active');
+  // hidden input
+  const id = btn.dataset.id;
+  let hi = btn.querySelector('input[type=hidden]');
+  if (btn.classList.contains('active')) {
+    if (!hi) {
+      hi = document.createElement('input');
+      hi.type = 'hidden';
+      hi.name = 'service_id[]';
+      hi.value = id;
+      btn.appendChild(hi);
+    }
+  } else if (hi) {
+    hi.remove();
+  }
+  recalcSummary();
+}
+
+function pickPet(btn) {
+  document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  petIdInput.value = btn.dataset.petId;
+  recalcSubmit();
+}
+
+// 客户搜索
+let searchTimer = null;
+const search = $('cust-search');
+if (search) {
+  search.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = search.value.trim();
+    if (q.length < 2) { $('search-results').innerHTML = ''; return; }
+    searchTimer = setTimeout(async () => {
+      const resp = await fetch('/m/api/search-customer?q=' + encodeURIComponent(q));
+      const data = await resp.json();
+      const html = data.results.map(c => `
+        <div style="padding:10px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;">
+          <div style="font-weight:600;">${c.name || '—'} <span style="color:#64748b;font-family:ui-monospace,monospace;font-weight:400;">${c.phone || ''}</span></div>
+          ${c.pets.length ? `
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+              ${c.pets.map(p => `
+                <button type="button" onclick="pickFromSearch(${c.id}, '${(c.name||'').replace(/'/g,"\\'")}', '${c.phone||''}', ${p.id})"
+                  class="m-role-chip" style="font-size:12px;padding:5px 10px;">
+                  ${p.species === 'cat' ? '🐱' : (p.species === 'dog' ? '🐶' : '🐾')} ${p.name || '未命名'}
+                </button>
+              `).join('')}
+            </div>
+          ` : `<div style="font-size:11px;color:#94a3b8;margin-top:4px;">这位客户暂无宠物档案，请先在桌面端建档</div>`}
+        </div>
+      `).join('');
+      $('search-results').innerHTML = html || '<div style="font-size:13px;color:#94a3b8;padding:8px;">无结果</div>';
+    }, 250);
+  });
+}
+
+function pickFromSearch(cid, cname, cphone, pid) {
+  customerIdInput.value = cid;
+  petIdInput.value = pid;
+  $('picked-cust-name').textContent = cname;
+  $('picked-cust-phone').textContent = cphone;
+  $('picked-cust').style.display = 'block';
+  $('search-area').style.display = 'none';
+  recalcSubmit();
+}
+
+recalcSubmit();
+</script>
+
+{% endblock %}
