@@ -12320,8 +12320,9 @@ INVENTORY_CATEGORIES = {
         "neuro":      "神经外科",
     }},
     "treatment": {"label": "处置", "subs": {
-        "routine":   "一般处置",
-        "emergency": "紧急处置",
+        "routine":    "一般处置",
+        "emergency":  "紧急处置",
+        "anesthesia": "麻醉处置",
     }},
     "nursing": {"label": "护理", "subs": {
         "general":   "普通护理",
