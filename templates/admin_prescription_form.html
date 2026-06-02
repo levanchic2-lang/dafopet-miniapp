@@ -382,7 +382,12 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
  <td class="col-num"><input name="dose_amount_{{ idx }}" type="number" step="0.01" min="0" value="{{ _dose_amt }}" oninput="recalcDosage({{ idx }})"/></td>
  <td class="col-unit"><input name="dose_unit_{{ idx }}" value="{{ _dose_un }}" id="dose_unit_{{ idx }}" oninput="recalcDosage({{ idx }})"/></td>
  <td class="col-num"><input name="times_per_day_{{ idx }}" type="number" step="0.5" min="0" value="{{ _tpd }}" oninput="recalcDosage({{ idx }})"/></td>
- <td class="col-num"><input name="duration_days_{{ idx }}" type="number" step="1" min="0" value="{{ item.duration_days }}" oninput="recalcDosage({{ idx }})"/></td>
+ <td class="col-num">
+   <input name="duration_days_{{ idx }}" type="number" step="1" min="0" value="{{ item.duration_days }}" oninput="recalcDosage({{ idx }})"/>
+   <input name="schedule_times_{{ idx }}" placeholder="🕐 住院发药时刻" title="仅住院动物需填。CSV 24h，如 8,14,20"
+          value="{{ item.schedule_times or '' }}"
+          style="font-size:.7rem;margin-top:.15rem;width:100%;color:#7c3aed;"/>
+ </td>
  <td style="text-align:center;font-weight:600;color:#3b82f6;" id="total_times_{{ idx }}">—</td>
  <td class="col-num"><input name="unit_price_{{ idx }}" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.unit_price) }}" oninput="recalcRow({{ idx }})"/></td>
  <td class="col-num"><input name="quantity_num_{{ idx }}" type="number" step="0.01" min="0" value="{{ item.quantity_num }}" oninput="onQtyEdit({{ idx }})" id="quantity_num_{{ idx }}"/></td>
@@ -410,7 +415,11 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
  <td class="col-num"><input name="dose_amount_0" type="number" step="0.01" min="0" oninput="recalcDosage(0)"/></td>
  <td class="col-unit"><input name="dose_unit_0" id="dose_unit_0" oninput="recalcDosage(0)"/></td>
  <td class="col-num"><input name="times_per_day_0" type="number" step="0.5" min="0" oninput="recalcDosage(0)"/></td>
- <td class="col-num"><input name="duration_days_0" type="number" step="1" min="0" oninput="recalcDosage(0)"/></td>
+ <td class="col-num">
+   <input name="duration_days_0" type="number" step="1" min="0" oninput="recalcDosage(0)"/>
+   <input name="schedule_times_0" placeholder="🕐 住院发药时刻" title="仅住院动物需填。CSV 24h，如 8,14,20"
+          style="font-size:.7rem;margin-top:.15rem;width:100%;color:#7c3aed;"/>
+ </td>
  <td style="text-align:center;font-weight:600;color:#3b82f6;" id="total_times_0">—</td>
  <td class="col-num"><input name="unit_price_0" type="number" step="0.01" min="0" value="0.00" oninput="recalcRow(0)"/></td>
  <td class="col-num"><input name="quantity_num_0" type="number" step="0.01" min="0" value="1" oninput="onQtyEdit(0)" id="quantity_num_0"/></td>
@@ -646,7 +655,10 @@ function addDrugRow() {
  <td class="col-num"><input name="dose_amount_${idx}" type="number" step="0.01" min="0" oninput="recalcDosage(${idx})"/></td>
  <td class="col-unit"><input name="dose_unit_${idx}" id="dose_unit_${idx}" oninput="recalcDosage(${idx})"/></td>
  <td class="col-num"><input name="times_per_day_${idx}" type="number" step="0.5" min="0" oninput="recalcDosage(${idx})"/></td>
- <td class="col-num"><input name="duration_days_${idx}" type="number" step="1" min="0" oninput="recalcDosage(${idx})"/></td>
+ <td class="col-num">
+   <input name="duration_days_${idx}" type="number" step="1" min="0" oninput="recalcDosage(${idx})"/>
+   <input name="schedule_times_${idx}" placeholder="🕐 住院发药时刻" title="仅住院动物需填。CSV 24h，如 8,14,20" style="font-size:.7rem;margin-top:.15rem;width:100%;color:#7c3aed;"/>
+ </td>
  <td style="text-align:center;font-weight:600;color:#3b82f6;" id="total_times_${idx}">—</td>
  <td class="col-num"><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="0.00" oninput="recalcRow(${idx})"/></td>
  <td class="col-num"><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="1" oninput="onQtyEdit(${idx})" id="quantity_num_${idx}"/></td>
@@ -703,7 +715,10 @@ function _appendRow(it) {
  <td class="col-num"><input name="dose_amount_${idx}" type="number" step="0.01" min="0" value="${it.dose_amount||''}" oninput="recalcDosage(${idx})"/></td>
  <td class="col-unit"><input name="dose_unit_${idx}" id="dose_unit_${idx}" value="${esc(it.dose_unit)}" oninput="recalcDosage(${idx})"/></td>
  <td class="col-num"><input name="times_per_day_${idx}" type="number" step="0.5" min="0" value="${it.times_per_day||''}" oninput="recalcDosage(${idx})"/></td>
- <td class="col-num"><input name="duration_days_${idx}" type="number" step="1" min="0" value="${esc(it.duration_days)}" oninput="recalcDosage(${idx})"/></td>
+ <td class="col-num">
+   <input name="duration_days_${idx}" type="number" step="1" min="0" value="${esc(it.duration_days)}" oninput="recalcDosage(${idx})"/>
+   <input name="schedule_times_${idx}" placeholder="🕐 住院发药时刻" title="仅住院动物需填。CSV 24h，如 8,14,20" value="${esc(it.schedule_times||'')}" style="font-size:.7rem;margin-top:.15rem;width:100%;color:#7c3aed;"/>
+ </td>
  <td style="text-align:center;font-weight:600;color:#3b82f6;" id="total_times_${idx}">—</td>
  <td class="col-num"><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="${(it.unit_price||0).toFixed(2)}" oninput="recalcRow(${idx})"/></td>
  <td class="col-num"><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="${it.quantity_num||1}" oninput="onQtyEdit(${idx})" id="quantity_num_${idx}"/></td>

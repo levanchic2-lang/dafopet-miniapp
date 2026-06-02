@@ -1043,6 +1043,29 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_hosp_staff_token ON hospitalizations(staff_token) WHERE staff_token != ''"))
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_hosp_owner_token ON hospitalizations(owner_token) WHERE owner_token != ''"))
 
+            # medication_admin_logs 住院发药打勾
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS medication_admin_logs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "hospitalization_id INTEGER NOT NULL REFERENCES hospitalizations(id) ON DELETE CASCADE, "
+                "prescription_id INTEGER NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE, "
+                "prescription_item_id INTEGER NOT NULL REFERENCES prescription_items(id) ON DELETE CASCADE, "
+                "scheduled_at DATETIME NOT NULL, "
+                "day_index INTEGER DEFAULT 1, "
+                "dose_index INTEGER DEFAULT 1, "
+                "status VARCHAR(20) DEFAULT 'pending', "
+                "administered_at DATETIME DEFAULT NULL, "
+                "administered_by VARCHAR(80) DEFAULT '', "
+                "dose_actual VARCHAR(80) DEFAULT '', "
+                "notes VARCHAR(300) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_med_log_hosp ON medication_admin_logs(hospitalization_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_med_log_sched ON medication_admin_logs(scheduled_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_med_log_status ON medication_admin_logs(status)"))
+
             # weight_records 体重记录
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS weight_records ("
@@ -1089,6 +1112,7 @@ def _try_sqlite_migrations() -> None:
                     ("times_per_day", "REAL DEFAULT 0.0"),
                     ("item_unit", "VARCHAR(20) DEFAULT ''"),
                     ("print_note", "TEXT DEFAULT ''"),
+                    ("schedule_times", "VARCHAR(200) DEFAULT ''"),
                 ]:
                     if col not in pri_names:
                         conn.execute(text(f"ALTER TABLE prescription_items ADD COLUMN {col} {typ}"))

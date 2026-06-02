@@ -71,9 +71,130 @@
   </div>
   {% endif %}
 
-  <div class="card" style="margin-top:1rem;text-align:center;color:var(--muted);padding:1.5rem;">
-   <i data-lucide="construction" style="opacity:.5;"></i>
-   <p style="margin:.5rem 0 0;font-size:.9rem;">用药打勾 / 生命体征 / I/O / 进食 / 交班 等模块开发中（D3-D5）</p>
+  {# ─────────── 用药任务（D3） ─────────── #}
+  <div class="card" style="margin-top:1rem;" id="meds">
+   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;">
+    <h3 style="margin:0;font-size:1rem;"><i data-lucide="pill"></i> 用药任务
+     {% if today_logs %}<span style="color:var(--muted);font-size:.82rem;font-weight:400;">
+      · 今日 {{ today_logs|selectattr('status', 'equalto', 'done')|list|length }} / {{ today_logs|length }} 已完成</span>{% endif %}
+    </h3>
+    {% if visit and h.status == 'admitted' %}
+    <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="btn secondary" style="font-size:.78rem;">
+     <i data-lucide="plus"></i> 开新处方
+    </a>
+    {% endif %}
+   </div>
+
+   {# 漏药警示 #}
+   {% if overdue_logs %}
+   <div style="background:#fef2f2;border-left:4px solid #dc2626;padding:.6rem .8rem;border-radius:6px;margin-bottom:.65rem;">
+    <div style="font-weight:600;color:#991b1b;font-size:.88rem;">
+     <i data-lucide="alert-triangle"></i> 漏药 {{ overdue_logs|length }} 次（昨日及之前）
+    </div>
+    <div style="font-size:.78rem;color:#7f1d1d;margin-top:.3rem;">
+     {% for l in overdue_logs[:5] %}
+      • {{ l.scheduled_at.strftime('%m-%d %H:%M') }} · {{ l.prescription_item.drug_name }}{% if not loop.last %}<br>{% endif %}
+     {% endfor %}
+     {% if overdue_logs|length > 5 %}<br>...还有 {{ overdue_logs|length - 5 }} 条{% endif %}
+    </div>
+   </div>
+   {% endif %}
+
+   {% if not today_logs and not prescs %}
+   <div style="padding:1.5rem;text-align:center;color:var(--muted);">
+    <p style="margin:0;font-size:.88rem;">尚未开处方</p>
+    {% if visit and h.status == 'admitted' %}
+    <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="btn" style="margin-top:.5rem;font-size:.85rem;">开第一张处方</a>
+    {% endif %}
+   </div>
+   {% elif not today_logs %}
+   <div style="padding:1rem;color:var(--muted);font-size:.86rem;">
+    今日无发药任务。已有 {{ prescs|length }} 张处方，但都未填「住院发药时刻」 ——
+    去处方明细的「🕐」列填上 24h 时间（如 <code>8,14,20</code>）就会自动生成任务。
+   </div>
+   {% else %}
+   <div style="display:flex;flex-direction:column;gap:.4rem;">
+   {% for l in today_logs %}
+   {% set overdue = (l.status == 'pending' and l.scheduled_at < now) %}
+   <div style="display:flex;align-items:center;gap:.65rem;padding:.55rem .75rem;
+    background:{% if l.status == 'done' %}#ecfdf5{% elif l.status == 'skipped' %}#f3f4f6{% elif overdue %}#fef2f2{% else %}#fff{% endif %};
+    border:1px solid {% if l.status == 'done' %}#86efac{% elif overdue %}#fca5a5{% else %}var(--border){% endif %};
+    border-radius:6px;">
+    <div style="font-weight:700;font-size:1.05rem;color:{% if overdue %}#dc2626{% elif l.status == 'done' %}#047857{% else %}#1e40af{% endif %};min-width:55px;">
+     {{ l.scheduled_at.strftime('%H:%M') }}
+    </div>
+    <div style="flex:1;min-width:0;">
+     <div style="font-weight:600;font-size:.92rem;">{{ l.prescription_item.drug_name }}
+      <span style="color:var(--muted);font-weight:400;font-size:.78rem;margin-left:.3rem;">
+       {{ l.prescription_item.dose_amount }}{{ l.prescription_item.dose_unit }} · 第 {{ l.day_index }} 天第 {{ l.dose_index }} 次
+      </span>
+     </div>
+     {% if l.prescription_item.instructions %}
+     <div style="font-size:.75rem;color:#64748b;">{{ l.prescription_item.instructions }}</div>
+     {% endif %}
+     {% if l.status == 'done' %}
+     <div style="font-size:.74rem;color:#047857;margin-top:.15rem;">
+      ✓ {{ l.administered_by or '—' }} · {{ l.administered_at.strftime('%H:%M') if l.administered_at else '' }}
+      {% if l.dose_actual %} · 实际 {{ l.dose_actual }}{% endif %}
+      {% if l.notes %} · {{ l.notes }}{% endif %}
+     </div>
+     {% elif l.status == 'skipped' %}
+     <div style="font-size:.74rem;color:#6b7280;margin-top:.15rem;">
+      ⊘ 跳过 by {{ l.administered_by or '—' }}{% if l.notes %} · {{ l.notes }}{% endif %}
+     </div>
+     {% endif %}
+    </div>
+    {% if l.status == 'pending' and h.status == 'admitted' %}
+    <form method="post" action="/admin/medication-log/{{ l.id }}/check" style="margin:0;">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+     <button type="submit" class="btn" style="background:#16a34a;border-color:#16a34a;color:#fff;font-size:.82rem;padding:.4rem .8rem;">
+      <i data-lucide="check"></i> 打勾
+     </button>
+    </form>
+    <details style="margin:0;">
+     <summary class="btn secondary" style="font-size:.78rem;padding:.35rem .65rem;cursor:pointer;list-style:none;">⊘</summary>
+     <form method="post" action="/admin/medication-log/{{ l.id }}/skip" style="position:absolute;background:#fff;border:1px solid var(--border);padding:.5rem;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:10;margin-top:.3rem;min-width:200px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input name="notes" placeholder="跳过原因（可选）" style="width:100%;font-size:.82rem;margin-bottom:.3rem;"/>
+      <button type="submit" class="btn secondary" style="width:100%;font-size:.78rem;">确认跳过</button>
+     </form>
+    </details>
+    {% elif l.status == 'done' or l.status == 'skipped' %}
+    {% if h.status == 'admitted' %}
+    <form method="post" action="/admin/medication-log/{{ l.id }}/uncheck" style="margin:0;"
+          onsubmit="return confirm('撤销这条打卡？');">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+     <button type="submit" class="btn secondary" style="font-size:.74rem;padding:.3rem .55rem;color:#dc2626;" title="撤销">
+      <i data-lucide="rotate-ccw"></i>
+     </button>
+    </form>
+    {% endif %}
+    {% endif %}
+   </div>
+   {% endfor %}
+   </div>
+   {% endif %}
+
+   {# 处方列表 #}
+   {% if prescs %}
+   <div style="margin-top:1rem;padding-top:.75rem;border-top:1px dashed var(--border);">
+    <h4 style="margin:0 0 .4rem;font-size:.85rem;color:var(--muted);">本次住院的处方</h4>
+    {% for p in prescs %}
+    <a href="/admin/prescriptions/{{ p.id }}" style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;text-decoration:none;color:inherit;border-radius:5px;font-size:.85rem;">
+     <span style="color:var(--muted);">#{{ p.id }}</span>
+     <span>{{ p.prescribed_date or '—' }}</span>
+     <span style="color:var(--muted);">·</span>
+     <span>{{ p.items|length }} 种药</span>
+     <span style="margin-left:auto;color:var(--muted);font-size:.78rem;">{{ p.vet_name or '—' }}</span>
+    </a>
+    {% endfor %}
+   </div>
+   {% endif %}
+  </div>
+
+  <div class="card" style="margin-top:1rem;text-align:center;color:var(--muted);padding:1rem;">
+   <i data-lucide="construction" style="opacity:.5;width:18px;height:18px;"></i>
+   <span style="font-size:.85rem;margin-left:.3rem;">生命体征 / I/O / 进食 / 交班 模块（D4-D5）开发中</span>
   </div>
  </div>
 

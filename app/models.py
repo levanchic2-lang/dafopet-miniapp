@@ -344,6 +344,8 @@ class PrescriptionItem(Base):
     times_per_day: Mapped[float] = mapped_column(Float, default=0.0)      # 次/天
     item_unit: Mapped[str] = mapped_column(String(20), default="")        # 出库单位（粒/支/盒）
     print_note: Mapped[str] = mapped_column(Text, default="")             # 打印备注（客户可见）
+    # 住院发药定时（CSV 时刻表 "08:00,14:00,20:00"）；为空则不生成发药任务
+    schedule_times: Mapped[str] = mapped_column(String(200), default="")
 
     prescription = relationship("Prescription", back_populates="items")
     inventory_item = relationship("InventoryItem", foreign_keys=[item_id])
@@ -904,6 +906,39 @@ class Hospitalization(Base):
     customer = relationship("Customer", foreign_keys=[customer_id])
     visit    = relationship("Visit",    foreign_keys=[visit_id])
     cage     = relationship("Cage",     foreign_keys=[cage_id])
+
+
+class MedicationAdminLog(Base):
+    """住院发药打勾日志：每条 PrescriptionItem × 每个发药时刻 = 一行任务。
+
+    生成时机：处方 status=issued 且关联了 admitted 的住院时自动批量生成。
+    单条流程：pending → done/skipped/refused。
+    """
+    __tablename__ = "medication_admin_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hospitalization_id = mapped_column(ForeignKey("hospitalizations.id", ondelete="CASCADE"), nullable=False)
+    prescription_id      = mapped_column(ForeignKey("prescriptions.id", ondelete="CASCADE"), nullable=False)
+    prescription_item_id = mapped_column(ForeignKey("prescription_items.id", ondelete="CASCADE"), nullable=False)
+
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    day_index:    Mapped[int] = mapped_column(Integer, default=1)  # 用药第几天
+    dose_index:   Mapped[int] = mapped_column(Integer, default=1)  # 当天第几次
+
+    # pending / done / skipped / refused
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+
+    administered_at:   Mapped[datetime|None] = mapped_column(DateTime, nullable=True, default=None)
+    administered_by:   Mapped[str] = mapped_column(String(80), default="")  # 执行者 username
+    dose_actual:       Mapped[str] = mapped_column(String(80), default="")  # 实际给药量（可与处方默认值不同）
+    notes:             Mapped[str] = mapped_column(String(300), default="") # 备注 / 跳过原因
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    hospitalization   = relationship("Hospitalization", foreign_keys=[hospitalization_id])
+    prescription      = relationship("Prescription",   foreign_keys=[prescription_id])
+    prescription_item = relationship("PrescriptionItem", foreign_keys=[prescription_item_id])
 
 
 class WeightRecord(Base):

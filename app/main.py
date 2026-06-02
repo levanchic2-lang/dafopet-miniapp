@@ -96,6 +96,7 @@ from app.models import (
     GroomingOrder,
     Cage,
     Hospitalization,
+    MedicationAdminLog,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
@@ -10602,6 +10603,7 @@ def _parse_presc_items(form_data) -> list[dict]:
                 "times_per_day": times_per_day,
                 "item_unit": form_data.get(f"item_unit_{i}", "").strip(),
                 "print_note": form_data.get(f"print_note_{i}", "").strip(),
+                "schedule_times": form_data.get(f"schedule_times_{i}", "").strip(),
             })
         i += 1
     return items
@@ -10916,6 +10918,12 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
     if visit_id and presc.status != "draft":
         _sync_visit_invoice(db, visit_id, operator)
         db.commit()
+    # 关联住院 → 自动生成发药任务
+    try:
+        if _generate_med_logs_for_prescription(db, presc) > 0:
+            db.commit()
+    except Exception:
+        logger.exception("[med-logs] generate after presc create failed")
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已开具" if visit_id else f"/admin/prescriptions/{presc.id}?msg=处方单已创建", status_code=303)
 
 
@@ -11039,6 +11047,12 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
     if presc.visit_id and presc.status != "draft":
         _sync_visit_invoice(db, presc.visit_id, operator)
         db.commit()
+    # 关联住院 → 重生发药任务（保留已 done/skipped 的）
+    try:
+        if _generate_med_logs_for_prescription(db, presc) > 0:
+            db.commit()
+    except Exception:
+        logger.exception("[med-logs] generate after presc edit failed")
     return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=已保存", status_code=303)
 
 
@@ -18310,12 +18324,189 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
         Hospitalization.id != hosp_id,
         Hospitalization.cage_id != None,
     ).all()}
+    # 处方 + 用药任务（按时间排序）
+    prescs = db.query(Prescription).filter(
+        Prescription.visit_id == h.visit_id if h.visit_id else False,
+    ).order_by(Prescription.id.desc()).all()
+    # 今日发药任务（含漏药）+ 明日预览
+    from datetime import date as _date2, timedelta as _td
+    today_start = datetime.combine(_date2.today(), datetime.min.time())
+    today_end   = today_start + _td(days=1)
+    today_logs = db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.hospitalization_id == h.id,
+        MedicationAdminLog.scheduled_at >= today_start,
+        MedicationAdminLog.scheduled_at < today_end,
+    ).order_by(MedicationAdminLog.scheduled_at, MedicationAdminLog.id).all()
+    # 历史漏药（昨日及之前仍 pending）
+    overdue_logs = db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.hospitalization_id == h.id,
+        MedicationAdminLog.scheduled_at < today_start,
+        MedicationAdminLog.status == "pending",
+    ).order_by(MedicationAdminLog.scheduled_at).limit(20).all()
     return templates.TemplateResponse(request, "admin_inpatient_detail.html", {
         "request": request, "h": h, "cust": cust, "pet": pet, "cage": cage,
         "visit": visit, "avail_cages": avail_cages, "occupied_ids": occupied_ids,
         "status_zh": _HOSP_STATUS_ZH, "kind_zh": _CAGE_KIND_ZH,
         "calc_days": _calc_hosp_days,
         "now": datetime.utcnow(),
+        "prescs": prescs,
+        "today_logs": today_logs, "overdue_logs": overdue_logs,
         "csrf_token": _get_csrf_token(request),
         "title": f"住院 #{h.id}",
     })
+
+
+# ─── 发药日志生成 + 操作 ───
+def _parse_schedule_times(s: str) -> list[tuple[int, int]]:
+    """解析 "08:00,14:00,20:00" → [(8,0),(14,0),(20,0)]。容错：跳过非法项。"""
+    out = []
+    for chunk in (s or "").replace("，", ",").replace("、", ",").split(","):
+        c = chunk.strip()
+        if not c:
+            continue
+        # 支持 "8", "8:30", "08:00"
+        if ":" in c:
+            try:
+                hh, mm = c.split(":", 1)
+                h = int(hh); m = int(mm)
+            except Exception:
+                continue
+        else:
+            try:
+                h = int(c); m = 0
+            except Exception:
+                continue
+        if 0 <= h < 24 and 0 <= m < 60:
+            out.append((h, m))
+    return out
+
+
+def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> int:
+    """为处方批量生成用药日志（仅当处方关联到 admitted 住院时）。
+
+    规则：
+    - presc.status 必须 != 'draft' 且 != 'voided'
+    - 找到该 visit_id 对应的 admitted Hospitalization
+    - 每个 PrescriptionItem：
+      * 若 schedule_times 空 → 跳过（门诊外带药不需要打勾）
+      * 否则按 (duration_days × schedule_times) 生成日志
+      * 起始日：prescribed_date 或今天
+      * 先删本 item 的现有 pending 日志（重生），保留 done/skipped
+    返回新生成日志数。
+    """
+    if not presc or presc.status in ("draft", "voided"):
+        return 0
+    if not presc.visit_id:
+        return 0
+    hosp = db.query(Hospitalization).filter(
+        Hospitalization.visit_id == presc.visit_id,
+        Hospitalization.status == "admitted",
+    ).first()
+    if not hosp:
+        return 0
+    from datetime import date as _date2, timedelta as _td
+    # 起始日
+    start_date = None
+    if presc.prescribed_date:
+        try:
+            start_date = datetime.strptime(presc.prescribed_date, "%Y-%m-%d").date()
+        except Exception:
+            start_date = None
+    if not start_date:
+        start_date = _date2.today()
+
+    created = 0
+    for it in (presc.items or []):
+        times = _parse_schedule_times(it.schedule_times or "")
+        if not times:
+            continue
+        # 解析天数：duration_days 字段可能是 "7" 或 "症状缓解为止" 等
+        try:
+            n_days = int(str(it.duration_days or "").strip())
+        except Exception:
+            n_days = 7  # 默认 7 天，医生可以手动撤销/延长
+        n_days = max(1, min(n_days, 14))  # 上限 14 天
+        # 删本 item 的 pending（保留 done/skipped/refused）
+        db.query(MedicationAdminLog).filter(
+            MedicationAdminLog.prescription_item_id == it.id,
+            MedicationAdminLog.status == "pending",
+        ).delete(synchronize_session=False)
+        for day_n in range(n_days):
+            d = start_date + _td(days=day_n)
+            for dose_idx, (h, m) in enumerate(times, 1):
+                sched_at = datetime.combine(d, datetime.min.time()).replace(hour=h, minute=m)
+                db.add(MedicationAdminLog(
+                    hospitalization_id=hosp.id,
+                    prescription_id=presc.id,
+                    prescription_item_id=it.id,
+                    scheduled_at=sched_at,
+                    day_index=day_n + 1,
+                    dose_index=dose_idx,
+                    status="pending",
+                ))
+                created += 1
+    db.flush()
+    return created
+
+
+@app.post("/admin/medication-log/{log_id}/check")
+async def admin_medication_log_check(log_id: int, request: Request,
+                                       db: Session = Depends(get_db),
+                                       csrf_token: str = Form(""),
+                                       dose_actual: str = Form(""),
+                                       notes: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    log = db.get(MedicationAdminLog, log_id)
+    if not log:
+        raise HTTPException(404)
+    hosp = db.get(Hospitalization, log.hospitalization_id)
+    if not hosp or hosp.status != "admitted":
+        raise HTTPException(400, "住院已结束，不可补打卡")
+    log.status = "done"
+    log.administered_at = datetime.utcnow()
+    log.administered_by = request.session.get("admin_username", "")
+    log.dose_actual = (dose_actual or "").strip()[:80]
+    log.notes = (notes or "").strip()[:300]
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{log.hospitalization_id}#meds",
+                             status_code=303)
+
+
+@app.post("/admin/medication-log/{log_id}/skip")
+async def admin_medication_log_skip(log_id: int, request: Request,
+                                      db: Session = Depends(get_db),
+                                      csrf_token: str = Form(""),
+                                      notes: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    log = db.get(MedicationAdminLog, log_id)
+    if not log:
+        raise HTTPException(404)
+    log.status = "skipped"
+    log.administered_at = datetime.utcnow()
+    log.administered_by = request.session.get("admin_username", "")
+    log.notes = (notes or "").strip()[:300]
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{log.hospitalization_id}#meds",
+                             status_code=303)
+
+
+@app.post("/admin/medication-log/{log_id}/uncheck")
+async def admin_medication_log_uncheck(log_id: int, request: Request,
+                                         db: Session = Depends(get_db),
+                                         csrf_token: str = Form("")):
+    """撤销打卡（误操作时）。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    log = db.get(MedicationAdminLog, log_id)
+    if not log:
+        raise HTTPException(404)
+    log.status = "pending"
+    log.administered_at = None
+    log.administered_by = ""
+    log.dose_actual = ""
+    log.notes = ""
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{log.hospitalization_id}#meds",
+                             status_code=303)
