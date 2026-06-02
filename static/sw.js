@@ -5,7 +5,7 @@
  *   - API / 表单 POST：直通网络（不缓存）
  *   - 升级版本时改 CACHE_VERSION，自动清旧
  */
-const CACHE_VERSION = 'v167-hosp-vitals-io-feed-D4';
+const CACHE_VERSION = 'v168-hosp-handover-D5';
 const STATIC_CACHE = 'static-' + CACHE_VERSION;
 const PAGE_CACHE   = 'pages-' + CACHE_VERSION;
 

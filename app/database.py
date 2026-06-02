@@ -1118,6 +1118,20 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_feed_hosp ON feeding_logs(hospitalization_id, recorded_at)"))
 
+            # handover_notes 交班一句话
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS handover_notes ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "hospitalization_id INTEGER NOT NULL REFERENCES hospitalizations(id) ON DELETE CASCADE, "
+                "shift VARCHAR(20) DEFAULT 'morning', "
+                "content TEXT DEFAULT '', "
+                "recorded_by VARCHAR(80) DEFAULT '', "
+                "recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_handover_hosp ON handover_notes(hospitalization_id, recorded_at)"))
+
             # weight_records 体重记录
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS weight_records ("

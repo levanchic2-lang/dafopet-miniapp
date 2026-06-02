@@ -1007,6 +1007,20 @@ class FeedingLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class HandoverNote(Base):
+    """交班一句话：早/中/夜班轮转时留言。新班接手第一眼看到的就是上班的提醒。"""
+    __tablename__ = "handover_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hospitalization_id = mapped_column(ForeignKey("hospitalizations.id", ondelete="CASCADE"), nullable=False)
+    # morning(早) / afternoon(中) / night(夜)
+    shift: Mapped[str] = mapped_column(String(20), default="morning")
+    content: Mapped[str] = mapped_column(Text, default="")
+    recorded_by: Mapped[str] = mapped_column(String(80), default="")
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class WeightRecord(Base):
     """体重记录（用于体重曲线）"""
     __tablename__ = "weight_records"

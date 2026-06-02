@@ -100,6 +100,7 @@ from app.models import (
     VitalSignsLog,
     IOLog,
     FeedingLog,
+    HandoverNote,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
@@ -18367,6 +18368,11 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
     io_out_24h = sum((x.amount_ml or 0) for x in io_24h if x.direction == "out")
     # 体征异常标记
     vital_flag_map = {v.id: _vital_flags(pet.species if pet else "", v) for v in vitals}
+    # 交班记录（最新 10 条）
+    handovers = db.query(HandoverNote).filter(
+        HandoverNote.hospitalization_id == h.id,
+    ).order_by(HandoverNote.recorded_at.desc()).limit(10).all()
+    latest_handover = handovers[0] if handovers else None
     return templates.TemplateResponse(request, "admin_inpatient_detail.html", {
         "request": request, "h": h, "cust": cust, "pet": pet, "cage": cage,
         "visit": visit, "avail_cages": avail_cages, "occupied_ids": occupied_ids,
@@ -18380,6 +18386,8 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
         "vital_flag_map": vital_flag_map,
         "mm_color_zh": _MM_COLOR_ZH, "io_cat_zh": _IO_CATEGORY_ZH,
         "appetite_zh": _APPETITE_ZH,
+        "handovers": handovers, "latest_handover": latest_handover,
+        "shift_zh": _SHIFT_ZH, "current_shift": _guess_current_shift(),
         "csrf_token": _get_csrf_token(request),
         "title": f"住院 #{h.id}",
     })
@@ -18558,6 +18566,19 @@ _IO_CATEGORY_ZH = {
 _APPETITE_ZH = {
     0: "拒食 0", 1: "强饲 1", 2: "少量 2", 3: "正常 3", 4: "旺盛 4",
 }
+_SHIFT_ZH = {"morning": "早班", "afternoon": "中班", "night": "夜班"}
+
+
+def _guess_current_shift() -> str:
+    """按当前小时推断班次（北京时间）：早班 7-15，中班 15-22，夜班 22-7。"""
+    from datetime import timezone, timedelta as _td3
+    cn = timezone(_td3(hours=8))
+    h = datetime.now(cn).hour
+    if 7 <= h < 15:
+        return "morning"
+    if 15 <= h < 22:
+        return "afternoon"
+    return "night"
 
 
 def _check_hosp_writable(db: Session, hosp_id: int):
@@ -18706,6 +18727,48 @@ async def admin_inpatient_feeding_delete(hosp_id: int, log_id: int, request: Req
         db.delete(log)
         db.commit()
     return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已删除#feeding",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/handover")
+async def admin_inpatient_handover_create(hosp_id: int, request: Request,
+                                            db: Session = Depends(get_db),
+                                            csrf_token: str = Form(""),
+                                            shift: str = Form(""),
+                                            content: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _check_hosp_writable(db, hosp_id)
+    if shift not in _SHIFT_ZH:
+        shift = _guess_current_shift()
+    content = (content or "").strip()
+    if not content:
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=内容不能为空#handover",
+                                 status_code=303)
+    log = HandoverNote(
+        hospitalization_id=hosp_id,
+        shift=shift,
+        content=content[:2000],
+        recorded_by=request.session.get("admin_username", ""),
+    )
+    db.add(log)
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=交班已留言#handover",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/handover/{log_id}/delete")
+async def admin_inpatient_handover_delete(hosp_id: int, log_id: int, request: Request,
+                                            db: Session = Depends(get_db),
+                                            csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    _check_hosp_writable(db, hosp_id)
+    log = db.get(HandoverNote, log_id)
+    if log and log.hospitalization_id == hosp_id:
+        db.delete(log)
+        db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已删除#handover",
                              status_code=303)
 
 
