@@ -1072,7 +1072,7 @@
   <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/static/sw.js', { scope: '/' })
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
         .catch(function (e) { console.warn('[PWA] sw register failed:', e); });
     });
   }

@@ -781,6 +781,24 @@ async def wecom_domain_verify():
     return Response(content="f5g3FhGYiTN0VHR8", media_type="text/plain")
 
 
+# PWA：Service Worker 必须从能 claim 根作用域的路径加载。/static/sw.js 只能
+# claim /static/，所以同一个文件再从根路径 /sw.js 服务一份，scope:'/' 才合法。
+@app.get("/sw.js")
+async def pwa_service_worker():
+    from pathlib import Path as _Path
+    p = _Path(__file__).parent.parent / "static" / "sw.js"
+    if not p.exists():
+        return Response(status_code=404)
+    return FileResponse(
+        str(p),
+        media_type="application/javascript",
+        headers={
+            "Cache-Control": "no-cache",
+            "Service-Worker-Allowed": "/",
+        },
+    )
+
+
 # ─── 企微「接收消息」回调（语音/文字 agent 入口） ───
 # 配置位置：企业微信管理后台 → 自建应用 → 接收消息 → API 接收
 #   URL: https://dafopet.com/wecom/callback
