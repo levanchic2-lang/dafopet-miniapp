@@ -10186,6 +10186,7 @@ async def admin_followup_handle(
     action: str = Form(...),       # contacted / refer_visit / skip / reopen
     note: str = Form(""),
     tab_redirect: str = Form("today"),
+    next_url: str = Form(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -10227,7 +10228,10 @@ async def admin_followup_handle(
         raise HTTPException(400, f"未知操作 {action}")
     fu.updated_at = now
     db.commit()
-    return RedirectResponse(f"/admin/follow-ups?tab={tab_redirect}&msg=已更新", status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/follow-ups?tab={tab_redirect}&msg=已更新"),
+        status_code=303,
+    )
 
 
 # ═════════════════════════════════════════════════════════════════
@@ -18679,12 +18683,21 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
     return created
 
 
+def _safe_next(next_url: str, fallback: str) -> str:
+    """防开放重定向：必须以 / 开头且非 //。"""
+    nu = (next_url or "").strip()
+    if nu and nu.startswith("/") and not nu.startswith("//"):
+        return nu
+    return fallback
+
+
 @app.post("/admin/medication-log/{log_id}/check")
 async def admin_medication_log_check(log_id: int, request: Request,
                                        db: Session = Depends(get_db),
                                        csrf_token: str = Form(""),
                                        dose_actual: str = Form(""),
-                                       notes: str = Form("")):
+                                       notes: str = Form(""),
+                                       next_url: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     log = db.get(MedicationAdminLog, log_id)
@@ -18699,15 +18712,18 @@ async def admin_medication_log_check(log_id: int, request: Request,
     log.dose_actual = (dose_actual or "").strip()[:80]
     log.notes = (notes or "").strip()[:300]
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{log.hospitalization_id}#meds",
-                             status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/inpatient/{log.hospitalization_id}#meds"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/medication-log/{log_id}/skip")
 async def admin_medication_log_skip(log_id: int, request: Request,
                                       db: Session = Depends(get_db),
                                       csrf_token: str = Form(""),
-                                      notes: str = Form("")):
+                                      notes: str = Form(""),
+                                      next_url: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     log = db.get(MedicationAdminLog, log_id)
@@ -18718,14 +18734,17 @@ async def admin_medication_log_skip(log_id: int, request: Request,
     log.administered_by = request.session.get("admin_username", "")
     log.notes = (notes or "").strip()[:300]
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{log.hospitalization_id}#meds",
-                             status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/inpatient/{log.hospitalization_id}#meds"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/medication-log/{log_id}/uncheck")
 async def admin_medication_log_uncheck(log_id: int, request: Request,
                                          db: Session = Depends(get_db),
-                                         csrf_token: str = Form("")):
+                                         csrf_token: str = Form(""),
+                                         next_url: str = Form("")):
     """撤销打卡（误操作时）。"""
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -18740,8 +18759,10 @@ async def admin_medication_log_uncheck(log_id: int, request: Request,
     # 撤销后清掉漏药推送标记，超过 grace 仍不打勾时会再次提醒
     log.reminder_sent_at = None
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{log.hospitalization_id}#meds",
-                             status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/inpatient/{log.hospitalization_id}#meds"),
+        status_code=303,
+    )
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -18796,13 +18817,16 @@ async def admin_inpatient_vitals_create(hosp_id: int, request: Request,
                                           mm_color: str = Form(""),
                                           crt_sec: float = Form(0.0),
                                           weight_kg: float = Form(0.0),
-                                          notes: str = Form("")):
+                                          notes: str = Form(""),
+                                          next_url: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     _check_hosp_writable(db, hosp_id)
     if not any([temperature_c, hr, rr, mm_color, crt_sec, weight_kg]):
-        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=至少填一项体征#vitals",
-                                 status_code=303)
+        return RedirectResponse(
+            _safe_next(next_url, f"/admin/inpatient/{hosp_id}?msg=至少填一项体征#vitals"),
+            status_code=303,
+        )
     if mm_color not in _MM_COLOR_ZH and mm_color != "":
         mm_color = ""
     log = VitalSignsLog(
@@ -18818,8 +18842,10 @@ async def admin_inpatient_vitals_create(hosp_id: int, request: Request,
     )
     db.add(log)
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=体征已记录#vitals",
-                             status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/inpatient/{hosp_id}?msg=体征已记录#vitals"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/inpatient/{hosp_id}/vitals/{log_id}/delete")
@@ -18844,7 +18870,8 @@ async def admin_inpatient_io_create(hosp_id: int, request: Request,
                                       direction: str = Form("in"),
                                       category: str = Form("other"),
                                       amount_ml: float = Form(0.0),
-                                      notes: str = Form("")):
+                                      notes: str = Form(""),
+                                      next_url: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     _check_hosp_writable(db, hosp_id)
@@ -18862,8 +18889,10 @@ async def admin_inpatient_io_create(hosp_id: int, request: Request,
     )
     db.add(log)
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=I/O 已记录#io",
-                             status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/inpatient/{hosp_id}?msg=I/O 已记录#io"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/inpatient/{hosp_id}/io/{log_id}/delete")
@@ -18889,7 +18918,8 @@ async def admin_inpatient_feeding_create(hosp_id: int, request: Request,
                                            offered_g: float = Form(0.0),
                                            eaten_g: float = Form(0.0),
                                            appetite_score: int = Form(3),
-                                           notes: str = Form("")):
+                                           notes: str = Form(""),
+                                           next_url: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     _check_hosp_writable(db, hosp_id)
@@ -18906,8 +18936,10 @@ async def admin_inpatient_feeding_create(hosp_id: int, request: Request,
     )
     db.add(log)
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=进食已记录#feeding",
-                             status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/inpatient/{hosp_id}?msg=进食已记录#feeding"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/inpatient/{hosp_id}/feeding/{log_id}/delete")
@@ -19077,7 +19109,8 @@ async def admin_inpatient_handover_create(hosp_id: int, request: Request,
                                             db: Session = Depends(get_db),
                                             csrf_token: str = Form(""),
                                             shift: str = Form(""),
-                                            content: str = Form("")):
+                                            content: str = Form(""),
+                                            next_url: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     _check_hosp_writable(db, hosp_id)
@@ -19085,8 +19118,10 @@ async def admin_inpatient_handover_create(hosp_id: int, request: Request,
         shift = _guess_current_shift()
     content = (content or "").strip()
     if not content:
-        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=内容不能为空#handover",
-                                 status_code=303)
+        return RedirectResponse(
+            _safe_next(next_url, f"/admin/inpatient/{hosp_id}?msg=内容不能为空#handover"),
+            status_code=303,
+        )
     log = HandoverNote(
         hospitalization_id=hosp_id,
         shift=shift,
@@ -19095,8 +19130,10 @@ async def admin_inpatient_handover_create(hosp_id: int, request: Request,
     )
     db.add(log)
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=交班已留言#handover",
-                             status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/inpatient/{hosp_id}?msg=交班已留言#handover"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/inpatient/{hosp_id}/handover/{log_id}/delete")
@@ -19206,7 +19243,7 @@ def _m_ctx(request: Request, db: Session, *, active_tab: str) -> dict:
     """所有 /m/* 模板共用上下文。"""
     role = _current_mobile_role(request, db)
     uname = request.session.get("admin_username") or ""
-    store = request.session.get("admin_store") or ""
+    store = _get_admin_store(request)  # superadmin = "" = 全店
     return {
         "request": request,
         "csrf_token": _get_csrf_token(request),
@@ -19215,6 +19252,70 @@ def _m_ctx(request: Request, db: Session, *, active_tab: str) -> dict:
         "admin_username": uname,
         "admin_role": request.session.get("admin_role", "staff"),
         "admin_store": store,
+        # 简单顶部条用：拿原始 store 显示
+        "admin_store_label": request.session.get("admin_store") or "全部门店",
+    }
+
+
+def _m_badges(request: Request, db: Session) -> dict:
+    """首页待办徽章计数（漏药 / 待配药 / 回访 / 协议待签）。
+
+    门店隔离：staff 只数本店；superadmin 数全部。
+    住院相关的 store 比对用全名，所以要把短名转全名。
+    """
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    now = datetime.utcnow()
+
+    # 1. 漏药：scheduled_at <= now+5min，status=pending，关联 hosp 仍在 admitted
+    med_q = db.query(MedicationAdminLog).join(
+        Hospitalization, Hospitalization.id == MedicationAdminLog.hospitalization_id
+    ).filter(
+        MedicationAdminLog.status == "pending",
+        MedicationAdminLog.scheduled_at <= now,
+        Hospitalization.status == "admitted",
+    )
+    if store_short:
+        med_q = med_q.filter(or_(Hospitalization.store == store_short,
+                                  Hospitalization.store == store_full))
+    overdue_meds = med_q.count()
+
+    # 2. 待配药：status=issued 且 dispensed_at 空 且 未作废
+    presc_q = db.query(Prescription).filter(
+        Prescription.status == "issued",
+        Prescription.dispensed_at == None,  # noqa: E711
+        Prescription.voided_at == None,     # noqa: E711
+    )
+    # 处方表没存 store，通过 visit 关联（懒做：只数 visit 同店）
+    if store_short:
+        from app.models import Visit as _V
+        presc_q = presc_q.outerjoin(_V, _V.id == Prescription.visit_id).filter(
+            or_(_V.clinic_store == store_full,
+                _V.clinic_store == store_short,
+                _V.clinic_store == "",
+                _V.clinic_store == None)  # noqa: E711
+        )
+    pending_dispense = presc_q.count()
+
+    # 3. 回访：due / sent / phone_pending
+    fu_q = db.query(FollowUp).filter(
+        FollowUp.status.in_(["due", "sent", "phone_pending"])
+    )
+    if store_short:
+        fu_q = fu_q.filter(or_(FollowUp.store == store_short, FollowUp.store == ""))
+    due_followups = fu_q.count()
+
+    # 4. 协议待签
+    cs_q = db.query(ConsentTask).filter(ConsentTask.status == "pending")
+    if store_short:
+        cs_q = cs_q.filter(or_(ConsentTask.store == store_short, ConsentTask.store == ""))
+    pending_consents = cs_q.count()
+
+    return {
+        "overdue_meds": overdue_meds,
+        "pending_dispense": pending_dispense,
+        "due_followups": due_followups,
+        "pending_consents": pending_consents,
     }
 
 
@@ -19222,14 +19323,18 @@ def _m_ctx(request: Request, db: Session, *, active_tab: str) -> dict:
 async def m_doctor_home(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/doctor", status_code=303)
-    return templates.TemplateResponse(request, "m/home_doctor.html", _m_ctx(request, db, active_tab="today"))
+    ctx = _m_ctx(request, db, active_tab="today")
+    ctx["badges"] = _m_badges(request, db)
+    return templates.TemplateResponse(request, "m/home_doctor.html", ctx)
 
 
 @app.get("/m/nurse", response_class=HTMLResponse)
 async def m_nurse_home(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/nurse", status_code=303)
-    return templates.TemplateResponse(request, "m/home_nurse.html", _m_ctx(request, db, active_tab="today"))
+    ctx = _m_ctx(request, db, active_tab="today")
+    ctx["badges"] = _m_badges(request, db)
+    return templates.TemplateResponse(request, "m/home_nurse.html", ctx)
 
 
 @app.get("/m/groomer", response_class=HTMLResponse)
@@ -19260,3 +19365,247 @@ async def m_me(request: Request, db: Session = Depends(get_db)):
     ctx["mobile_role_raw"] = (u.mobile_role if u else "auto") or "auto"
     ctx["override_active"] = bool(request.session.get("mobile_role_override"))
     return templates.TemplateResponse(request, "m/me.html", ctx)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# M2 · 助理版核心页：住院 / 回访 / 待配药
+# ═════════════════════════════════════════════════════════════════════════════
+def _m_store_filters_hosp(query, store_short: str, store_full: str):
+    if store_short:
+        return query.filter(or_(Hospitalization.store == store_short,
+                                 Hospitalization.store == store_full))
+    return query
+
+
+@app.get("/m/inpatient", response_class=HTMLResponse)
+async def m_inpatient_list(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/inpatient", status_code=303)
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    q = db.query(Hospitalization).filter(Hospitalization.status == "admitted")
+    q = _m_store_filters_hosp(q, store_short, store_full)
+    hosps = q.order_by(Hospitalization.admitted_at.desc()).all()
+
+    now = datetime.utcnow()
+    cards = []
+    for h in hosps:
+        pet = db.get(Pet, h.pet_id) if h.pet_id else None
+        cust = db.get(Customer, h.customer_id) if h.customer_id else None
+        cage = db.get(Cage, h.cage_id) if h.cage_id else None
+        # overdue 数
+        overdue_n = db.query(MedicationAdminLog).filter(
+            MedicationAdminLog.hospitalization_id == h.id,
+            MedicationAdminLog.status == "pending",
+            MedicationAdminLog.scheduled_at <= now,
+        ).count()
+        days = _calc_hosp_days(h.admitted_at, h.discharged_at or now)
+        cards.append({
+            "h": h, "pet": pet, "cust": cust, "cage": cage,
+            "overdue_n": overdue_n, "days": days,
+        })
+    ctx = _m_ctx(request, db, active_tab="inpatient")
+    ctx["cards"] = cards
+    ctx["total_n"] = len(cards)
+    return templates.TemplateResponse(request, "m/inpatient_list.html", ctx)
+
+
+@app.get("/m/inpatient/{hosp_id}", response_class=HTMLResponse)
+async def m_inpatient_detail(hosp_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/inpatient/{hosp_id}", status_code=303)
+    h = db.get(Hospitalization, hosp_id)
+    if not h:
+        raise HTTPException(404)
+    # 门店校验
+    store_short = _get_admin_store(request)
+    if store_short:
+        store_full = _STORE_SHORT_TO_FULL.get(store_short, "")
+        if h.store not in (store_short, store_full):
+            raise HTTPException(403, "无权查看其他门店住院")
+
+    pet = db.get(Pet, h.pet_id) if h.pet_id else None
+    cust = db.get(Customer, h.customer_id) if h.customer_id else None
+    cage = db.get(Cage, h.cage_id) if h.cage_id else None
+
+    now = datetime.utcnow()
+    # 今日发药任务
+    today_start = datetime(now.year, now.month, now.day)
+    today_end = today_start + timedelta(days=1)
+    today_logs = db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.hospitalization_id == hosp_id,
+        MedicationAdminLog.scheduled_at >= today_start,
+        MedicationAdminLog.scheduled_at < today_end,
+    ).order_by(MedicationAdminLog.scheduled_at).all()
+    # 漏药（昨天/更早的 pending）
+    overdue_logs = db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.hospitalization_id == hosp_id,
+        MedicationAdminLog.status == "pending",
+        MedicationAdminLog.scheduled_at < today_start,
+    ).order_by(MedicationAdminLog.scheduled_at).all()
+
+    # 最新交班
+    latest_handover = db.query(HandoverNote).filter(
+        HandoverNote.hospitalization_id == hosp_id
+    ).order_by(HandoverNote.recorded_at.desc()).first()
+
+    # 最近 3 条体征
+    recent_vitals = db.query(VitalSignsLog).filter(
+        VitalSignsLog.hospitalization_id == hosp_id
+    ).order_by(VitalSignsLog.recorded_at.desc()).limit(3).all()
+
+    days = _calc_hosp_days(h.admitted_at, h.discharged_at or now)
+    ctx = _m_ctx(request, db, active_tab="inpatient")
+    ctx.update({
+        "h": h, "pet": pet, "cust": cust, "cage": cage,
+        "today_logs": [l for l in today_logs if l.prescription_item],
+        "overdue_logs": [l for l in overdue_logs if l.prescription_item],
+        "latest_handover": latest_handover,
+        "recent_vitals": recent_vitals,
+        "days": days,
+        "now": now,
+        "shift_zh": _SHIFT_ZH,
+        "current_shift": _guess_current_shift(),
+        "next_url": f"/m/inpatient/{hosp_id}",
+    })
+    return templates.TemplateResponse(request, "m/inpatient_detail.html", ctx)
+
+
+# ─── 回访 ───
+@app.get("/m/follow-ups", response_class=HTMLResponse)
+async def m_follow_ups(request: Request, tab: str = "today", db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/follow-ups", status_code=303)
+    store_short = _get_admin_store(request)
+    base = db.query(FollowUp)
+    if store_short:
+        base = base.filter(or_(FollowUp.store == store_short, FollowUp.store == ""))
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    if tab == "today":
+        rows = base.filter(
+            FollowUp.status.in_(["due", "sent", "phone_pending"]),
+            FollowUp.planned_date <= today_str,
+        ).order_by(FollowUp.planned_date.asc()).all()
+    elif tab == "responded":
+        rows = base.filter(
+            FollowUp.status == "responded",
+        ).order_by(FollowUp.response_at.desc().nullslast()).limit(50).all()
+    elif tab == "closed":
+        rows = base.filter(
+            FollowUp.status == "closed",
+        ).order_by(FollowUp.handled_at.desc().nullslast()).limit(50).all()
+    else:
+        rows = base.order_by(FollowUp.id.desc()).limit(50).all()
+    # 富化每行
+    enriched = []
+    for r in rows:
+        pet = db.get(Pet, r.pet_id) if r.pet_id else None
+        cust = db.get(Customer, r.customer_id) if r.customer_id else None
+        enriched.append({"fu": r, "pet": pet, "cust": cust})
+    ctx = _m_ctx(request, db, active_tab="follow_ups")
+    ctx.update({"rows": enriched, "tab": tab})
+    return templates.TemplateResponse(request, "m/follow_ups.html", ctx)
+
+
+# ─── 待配药 ───
+@app.get("/m/dispensing", response_class=HTMLResponse)
+async def m_dispensing_list(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/dispensing", status_code=303)
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    q = db.query(Prescription).filter(
+        Prescription.status == "issued",
+        Prescription.dispensed_at == None,   # noqa: E711
+        Prescription.voided_at == None,      # noqa: E711
+    )
+    from app.models import Visit as _V
+    if store_short:
+        q = q.outerjoin(_V, _V.id == Prescription.visit_id).filter(
+            or_(_V.clinic_store == store_full,
+                _V.clinic_store == store_short,
+                _V.clinic_store == "",
+                _V.clinic_store == None)  # noqa: E711
+        )
+    rows = q.order_by(Prescription.created_at.desc()).limit(100).all()
+    enriched = []
+    for p in rows:
+        pet = db.get(Pet, p.pet_id) if p.pet_id else None
+        cust = db.get(Customer, p.customer_id) if p.customer_id else None
+        item_cnt = len(p.items)
+        enriched.append({"p": p, "pet": pet, "cust": cust, "item_cnt": item_cnt})
+    ctx = _m_ctx(request, db, active_tab="dispensing")
+    ctx["rows"] = enriched
+    return templates.TemplateResponse(request, "m/dispensing_list.html", ctx)
+
+
+@app.get("/m/dispensing/{presc_id}", response_class=HTMLResponse)
+async def m_dispensing_detail(presc_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/dispensing/{presc_id}", status_code=303)
+    p = db.get(Prescription, presc_id)
+    if not p:
+        raise HTTPException(404)
+    pet = db.get(Pet, p.pet_id) if p.pet_id else None
+    cust = db.get(Customer, p.customer_id) if p.customer_id else None
+    # 检查管控药
+    has_controlled = False
+    for it in p.items:
+        if it.item_id:
+            inv = db.get(InventoryItem, it.item_id)
+            if inv and getattr(inv, "is_controlled", False):
+                has_controlled = True
+                break
+    ctx = _m_ctx(request, db, active_tab="dispensing")
+    ctx.update({
+        "p": p, "pet": pet, "cust": cust,
+        "has_controlled": has_controlled,
+    })
+    return templates.TemplateResponse(request, "m/dispensing_detail.html", ctx)
+
+
+@app.post("/m/dispensing/{presc_id}/mark")
+async def m_dispensing_mark(
+    presc_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    if not _admin_ok(request):
+        raise HTTPException(401)
+    _require_csrf(request, csrf_token)
+    p = db.get(Prescription, presc_id)
+    if not p:
+        raise HTTPException(404)
+    if p.dispensed_at is not None:
+        return RedirectResponse(f"/m/dispensing/{presc_id}?msg=该处方已配齐", status_code=303)
+    if p.status == "voided":
+        return RedirectResponse(f"/m/dispensing/{presc_id}?err=该处方已作废", status_code=303)
+    p.dispensed_at = datetime.utcnow()
+    p.dispensed_by = request.session.get("admin_username", "")
+    if p.status == "issued":
+        p.status = "dispensed"
+    db.commit()
+    return RedirectResponse("/m/dispensing?msg=已配齐 ✓", status_code=303)
+
+
+@app.post("/m/dispensing/{presc_id}/undo")
+async def m_dispensing_undo(
+    presc_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """撤销已配齐（误操作时）。"""
+    if not _admin_ok(request):
+        raise HTTPException(401)
+    _require_csrf(request, csrf_token)
+    p = db.get(Prescription, presc_id)
+    if not p:
+        raise HTTPException(404)
+    p.dispensed_at = None
+    p.dispensed_by = ""
+    if p.status == "dispensed":
+        p.status = "issued"
+    db.commit()
+    return RedirectResponse(f"/m/dispensing/{presc_id}?msg=已撤销配齐", status_code=303)

@@ -1,0 +1,77 @@
+{% extends "m/_base.html" %}
+{% block title %}回访{% endblock %}
+{% block topbar_title %}📞 客户回访{% endblock %}
+{% block topbar_sub %}{{ admin_store_label }} · {{ rows|length }} 条{% endblock %}
+
+{% block content %}
+
+{# tab 切换 #}
+<div style="display:flex;gap:4px;background:#fff;padding:4px;border-radius:10px;margin-bottom:10px;box-shadow:0 1px 2px rgba(15,23,42,0.04);">
+  <a href="/m/follow-ups?tab=today"     style="flex:1;text-align:center;padding:8px 6px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;{% if tab=='today' %}background:#0f172a;color:#fff;{% else %}color:#64748b;{% endif %}">今天</a>
+  <a href="/m/follow-ups?tab=responded" style="flex:1;text-align:center;padding:8px 6px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;{% if tab=='responded' %}background:#0f172a;color:#fff;{% else %}color:#64748b;{% endif %}">已反馈</a>
+  <a href="/m/follow-ups?tab=closed"    style="flex:1;text-align:center;padding:8px 6px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;{% if tab=='closed' %}background:#0f172a;color:#fff;{% else %}color:#64748b;{% endif %}">已完成</a>
+</div>
+
+{% if not rows %}
+  <div class="m-empty" style="padding-top:60px;">
+    <div class="emoji">📭</div>
+    <div>{% if tab=='today' %}今天没有待回访任务{% elif tab=='responded' %}最近没有客户反馈{% else %}最近没有已完成的{% endif %}</div>
+  </div>
+{% else %}
+  {% for r in rows %}
+  {% set fu = r.fu %}
+  <div class="m-card">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+      {% if fu.status == 'due' %}<span style="background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">🔴 到期</span>
+      {% elif fu.status == 'sent' %}<span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">🟡 已推送</span>
+      {% elif fu.status == 'phone_pending' %}<span style="background:#fce7f3;color:#9d174d;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">📞 需电话</span>
+      {% elif fu.status == 'responded' %}<span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">🟢 已反馈</span>
+      {% elif fu.status == 'closed' %}<span style="background:#e2e8f0;color:#475569;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">✓ 已完成</span>
+      {% endif %}
+      <span style="font-size:12px;color:#94a3b8;">{{ fu.planned_date or '—' }}</span>
+      {% if fu.round_name %}<span style="font-size:12px;color:#475569;">· {{ fu.round_name }}</span>{% endif %}
+    </div>
+    <div style="font-size:15px;font-weight:700;color:#0f172a;">
+      {{ r.pet.name if r.pet else '宠物' }}
+      <span style="color:#94a3b8;font-weight:500;font-size:13px;">· {{ r.cust.name if r.cust else '—' }}</span>
+    </div>
+    {% if r.cust and r.cust.phone %}
+    <div style="font-size:14px;color:#0f172a;margin-top:4px;font-family:ui-monospace,monospace;">
+      <a href="tel:{{ r.cust.phone }}" style="color:#3b82f6;">📞 {{ r.cust.phone }}</a>
+    </div>
+    {% endif %}
+
+    {% if fu.response_note %}
+    <div style="background:#f8fafc;padding:8px 10px;border-radius:8px;font-size:13px;color:#475569;margin-top:8px;">
+      <span style="color:#94a3b8;font-size:11px;">客户反馈：</span>
+      <div style="margin-top:2px;">{{ fu.response_note|truncate(80) }}</div>
+    </div>
+    {% endif %}
+
+    {% if fu.handle_note %}
+    <div style="font-size:12px;color:#64748b;margin-top:6px;">
+      📝 {{ fu.handle_note|truncate(60) }}
+    </div>
+    {% endif %}
+
+    {% if fu.status in ['due','sent','phone_pending','responded'] %}
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:#475569;padding:6px;background:#f8fafc;border-radius:8px;text-align:center;">📝 处理</summary>
+      <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="padding:10px 0 0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="next_url" value="/m/follow-ups?tab={{ tab }}"/>
+        <textarea name="note" rows="2" placeholder="处理备注（可选）"
+                  style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"></textarea>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button type="submit" name="action" value="contacted" class="m-btn" style="background:#16a34a;flex:1;font-size:13px;padding:10px;">✓ 已联系</button>
+          <button type="submit" name="action" value="refer_visit" class="m-btn outline" style="flex:1;font-size:13px;padding:10px;">🔄 改约</button>
+          <button type="submit" name="action" value="skip" class="m-btn secondary" style="flex:1;font-size:13px;padding:10px;">⊘ 跳过</button>
+        </div>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% endif %}
+
+{% endblock %}

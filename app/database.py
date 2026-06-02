@@ -499,6 +499,18 @@ def _try_sqlite_migrations() -> None:
             prx_names2 = {c[1] for c in prx_cols2}
             if "total_amount" not in prx_names2:
                 conn.execute(text("ALTER TABLE prescriptions ADD COLUMN total_amount REAL DEFAULT 0.0"))
+            # voided fields if missing (older DBs)
+            if "voided_by" not in prx_names2:
+                conn.execute(text("ALTER TABLE prescriptions ADD COLUMN voided_by VARCHAR(80) DEFAULT ''"))
+            if "voided_at" not in prx_names2:
+                conn.execute(text("ALTER TABLE prescriptions ADD COLUMN voided_at DATETIME DEFAULT NULL"))
+            if "void_reason" not in prx_names2:
+                conn.execute(text("ALTER TABLE prescriptions ADD COLUMN void_reason VARCHAR(200) DEFAULT ''"))
+            # M2 助理已配齐
+            if "dispensed_at" not in prx_names2:
+                conn.execute(text("ALTER TABLE prescriptions ADD COLUMN dispensed_at DATETIME DEFAULT NULL"))
+            if "dispensed_by" not in prx_names2:
+                conn.execute(text("ALTER TABLE prescriptions ADD COLUMN dispensed_by VARCHAR(80) DEFAULT ''"))
 
             prx_item_cols = conn.execute(text("PRAGMA table_info(prescription_items)")).fetchall()
             if not prx_item_cols:

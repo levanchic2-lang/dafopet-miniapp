@@ -6,63 +6,62 @@
 
 <div class="m-card">
   <div class="m-card-title">今日待办</div>
-  <a class="m-todo-row" href="/m/soon?title=漏药">
+
+  <a class="m-todo-row" href="/m/inpatient">
     <span class="m-todo-icon" style="background:#fee2e2;">💊</span>
     <div class="m-todo-body">
       <div class="m-todo-title">漏药提醒</div>
-      <div class="m-todo-sub">住院打勾任务</div>
+      <div class="m-todo-sub">{% if badges.overdue_meds %}{{ badges.overdue_meds }} 条到期未打勾{% else %}全部已处理{% endif %}</div>
     </div>
-    <span class="m-todo-badge">M2</span>
+    {% if badges.overdue_meds %}<span class="m-todo-badge">{{ badges.overdue_meds }}</span>
+    {% else %}<span class="m-todo-arrow">›</span>{% endif %}
   </a>
-  <a class="m-todo-row" href="/m/soon?title=待配药">
+
+  <a class="m-todo-row" href="/m/dispensing">
     <span class="m-todo-icon" style="background:#dbeafe;">📦</span>
     <div class="m-todo-body">
       <div class="m-todo-title">待配药</div>
-      <div class="m-todo-sub">处方只读 + 配齐打勾</div>
+      <div class="m-todo-sub">{% if badges.pending_dispense %}{{ badges.pending_dispense }} 张处方等取药{% else %}全部已配齐{% endif %}</div>
     </div>
-    <span class="m-todo-badge">M2</span>
+    {% if badges.pending_dispense %}<span class="m-todo-badge" style="background:#3b82f6;">{{ badges.pending_dispense }}</span>
+    {% else %}<span class="m-todo-arrow">›</span>{% endif %}
   </a>
-  <a class="m-todo-row" href="/m/soon?title=回访">
+
+  <a class="m-todo-row" href="/m/follow-ups">
     <span class="m-todo-icon" style="background:#fef3c7;">📞</span>
     <div class="m-todo-body">
       <div class="m-todo-title">客户回访</div>
-      <div class="m-todo-sub">短信/电话兜底</div>
+      <div class="m-todo-sub">{% if badges.due_followups %}{{ badges.due_followups }} 条待联系{% else %}今日无任务{% endif %}</div>
     </div>
-    <span class="m-todo-badge">M2</span>
+    {% if badges.due_followups %}<span class="m-todo-badge" style="background:#f59e0b;">{{ badges.due_followups }}</span>
+    {% else %}<span class="m-todo-arrow">›</span>{% endif %}
   </a>
+
   <a class="m-todo-row" href="/m/soon?title=协议待签">
     <span class="m-todo-icon" style="background:#e0e7ff;">📝</span>
     <div class="m-todo-body">
       <div class="m-todo-title">协议待签</div>
-      <div class="m-todo-sub">现场出示 + 业主签字</div>
+      <div class="m-todo-sub">{% if badges.pending_consents %}{{ badges.pending_consents }} 份未签字{% else %}全部已签{% endif %}</div>
     </div>
-    <span class="m-todo-badge">M2</span>
+    {% if badges.pending_consents %}<span class="m-todo-badge" style="background:#8b5cf6;">{{ badges.pending_consents }}</span>
+    {% else %}<span class="m-todo-arrow">›</span>{% endif %}
   </a>
 </div>
 
 <div class="m-section-label">快捷操作</div>
 <div class="m-quick-grid">
+  <a class="m-quick-tile" href="/m/inpatient">
+    <span class="emoji">🛏</span><span class="label">住院看板</span>
+  </a>
   <a class="m-quick-tile" href="/m/soon?title=搜客户">
     <span class="emoji">🔍</span><span class="label">搜客户</span>
   </a>
-  <a class="m-quick-tile" href="/m/soon?title=拍照入库">
+  <a class="m-quick-tile" href="/admin/inventory/import-photo">
     <span class="emoji">📸</span><span class="label">拍照入库</span>
   </a>
   <a class="m-quick-tile" href="/m/soon?title=扫笼牌">
-    <span class="emoji">🛏</span><span class="label">扫笼牌</span>
+    <span class="emoji">📷</span><span class="label">扫笼牌</span>
   </a>
-  <a class="m-quick-tile" href="/m/soon?title=收款">
-    <span class="emoji">💰</span><span class="label">收款</span>
-  </a>
-</div>
-
-<div class="m-divider"></div>
-
-<div class="m-card" style="background:#fffbeb;border:1px solid #fde68a;">
-  <div style="font-size:13px;color:#92400e;line-height:1.55;">
-    🚧 助理版手机端建设中。<b>M2</b> 即将上线：
-    住院打勾 / 体征 / 喂食 / 交班 / 待配药 / 回访。
-  </div>
 </div>
 
 {% endblock %}

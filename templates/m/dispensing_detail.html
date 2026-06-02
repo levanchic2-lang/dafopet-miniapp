@@ -1,0 +1,113 @@
+{% extends "m/_base.html" %}
+{% block title %}处方 #{{ p.id }} · 配药{% endblock %}
+{% block topbar_title %}📦 配药 #{{ p.id }}{% endblock %}
+{% block topbar_sub %}{{ pet.name if pet else '宠物' }} · {{ cust.name if cust else '—' }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/m/dispensing" class="m-icon-btn" title="返回">←</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="m-card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div>
+      <div style="font-size:11px;color:#94a3b8;letter-spacing:0.04em;">处方医生</div>
+      <div style="font-size:15px;font-weight:600;color:#0f172a;">{{ p.vet_name or '—' }}</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:#94a3b8;letter-spacing:0.04em;">开方日</div>
+      <div style="font-size:14px;color:#475569;">{{ p.prescribed_date or '—' }}</div>
+    </div>
+  </div>
+  {% if cust and cust.phone %}
+  <div style="background:#f8fafc;padding:8px 10px;border-radius:8px;font-size:13px;margin-top:6px;">
+    <a href="tel:{{ cust.phone }}" style="color:#3b82f6;font-family:ui-monospace,monospace;">📞 {{ cust.phone }}</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if has_controlled %}
+<div class="m-card" style="background:#fef2f2;border:1px solid #fca5a5;">
+  <div style="font-size:14px;font-weight:700;color:#991b1b;">⚠ 受管控药品</div>
+  <div style="font-size:12px;color:#7f1d1d;margin-top:4px;">配此处方需特别核对客户与药品信息（管控药复核功能 M2 后版本上线）。</div>
+</div>
+{% endif %}
+
+<div class="m-card">
+  <div class="m-card-title">💊 药品清单 <span class="count">{{ p.items|length }}</span></div>
+  {% for it in p.items %}
+  <div style="padding:12px 0;border-bottom:1px solid #f1f5f9;">
+    <div style="font-size:16px;font-weight:700;color:#0f172a;">
+      {{ loop.index }}. {{ it.drug_name }}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:13px;color:#475569;">
+      {% if it.dose_amount %}
+      <div><span style="color:#94a3b8;">单次：</span>{{ it.dose_amount }}{{ it.dose_unit or '' }}</div>
+      {% endif %}
+      {% if it.frequency %}
+      <div><span style="color:#94a3b8;">频次：</span>{{ it.frequency }}</div>
+      {% endif %}
+      {% if it.duration_days %}
+      <div><span style="color:#94a3b8;">天数：</span>{{ it.duration_days }}</div>
+      {% endif %}
+      {% if it.drug_type %}
+      <div><span style="color:#94a3b8;">途径：</span>{{ it.drug_type }}</div>
+      {% endif %}
+    </div>
+    {% if it.quantity %}
+    <div style="margin-top:8px;padding:6px 10px;background:#eff6ff;border-radius:8px;font-size:15px;font-weight:700;color:#1e40af;display:inline-block;">
+      取药：{{ it.quantity }}
+    </div>
+    {% endif %}
+    {% if it.instructions %}
+    <div style="font-size:12px;color:#64748b;margin-top:6px;line-height:1.5;">
+      💬 {{ it.instructions }}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% if p.notes %}
+<div class="m-card">
+  <div class="m-card-title">📝 备注</div>
+  <div style="font-size:14px;color:#475569;line-height:1.55;">{{ p.notes }}</div>
+</div>
+{% endif %}
+
+{% if p.dispensed_at %}
+<div class="m-card" style="background:#f0fdf4;border:1px solid #bbf7d0;">
+  <div style="font-size:14px;font-weight:700;color:#166534;">✓ 已配齐</div>
+  <div style="font-size:12px;color:#15803d;margin-top:4px;">
+    {{ p.dispensed_at.strftime('%Y-%m-%d %H:%M') }} · {{ p.dispensed_by or '—' }}
+  </div>
+  <form method="post" action="/m/dispensing/{{ p.id }}/undo" style="margin-top:10px;"
+        onsubmit="return confirm('撤销已配齐？')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <button type="submit" class="m-btn outline" style="font-size:13px;padding:8px;">↶ 撤销已配齐</button>
+  </form>
+</div>
+{% else %}
+<form method="post" action="/m/dispensing/{{ p.id }}/mark"
+      onsubmit="return confirm('确认所有药都已配齐？')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <button type="submit" class="m-btn" style="background:#16a34a;font-size:17px;padding:16px;">
+    ✓ 全部已配齐
+  </button>
+</form>
+{% endif %}
+
+<div class="m-section-label">桌面操作</div>
+<div class="m-list">
+  <a class="m-list-row" href="/admin/prescriptions/{{ p.id }}/print" target="_blank">
+    <span class="label">🖨 打印处方笺</span>
+    <span class="arrow">›</span>
+  </a>
+  <a class="m-list-row" href="/admin/prescriptions/{{ p.id }}">
+    <span class="label">🖥 桌面端详情</span>
+    <span class="arrow">›</span>
+  </a>
+</div>
+
+{% endblock %}

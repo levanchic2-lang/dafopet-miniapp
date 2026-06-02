@@ -1,0 +1,45 @@
+{% extends "m/_base.html" %}
+{% block title %}住院 · 看板{% endblock %}
+{% block topbar_title %}🛏 住院看板{% endblock %}
+{% block topbar_sub %}{{ admin_store_label }} · 在住 {{ total_n }}{% endblock %}
+
+{% block content %}
+
+{% if not cards %}
+  <div class="m-empty" style="padding-top:60px;">
+    <div class="emoji">🛏</div>
+    <div>当前没有住院中的宠物</div>
+  </div>
+{% else %}
+  {% for c in cards %}
+  {% set pet = c.pet %}
+  {% set sp = pet.species if pet else 'cat' %}
+  <a class="m-card" href="/m/inpatient/{{ c.h.id }}" style="display:block;padding:14px;text-decoration:none;color:inherit;">
+    <div style="display:flex;gap:12px;align-items:flex-start;">
+      <div style="width:50px;height:50px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">
+        {% if sp == 'cat' %}🐱{% elif sp == 'dog' %}🐶{% else %}🐾{% endif %}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:16px;font-weight:700;color:#0f172a;">{{ pet.name if pet else '宠物' }}</span>
+          {% if c.cage %}
+          <span style="background:#f1f5f9;color:#475569;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">{{ c.cage.code }}</span>
+          {% endif %}
+          <span style="color:#94a3b8;font-size:12px;">· {{ c.days }}天</span>
+        </div>
+        <div style="font-size:13px;color:#64748b;margin-top:3px;">
+          {{ c.cust.name if c.cust else '—' }}
+          {% if c.h.reason %} · {{ c.h.reason|truncate(20) }}{% endif %}
+        </div>
+      </div>
+      {% if c.overdue_n %}
+      <div style="background:#ef4444;color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;flex-shrink:0;">
+        💊 {{ c.overdue_n }}
+      </div>
+      {% endif %}
+    </div>
+  </a>
+  {% endfor %}
+{% endif %}
+
+{% endblock %}

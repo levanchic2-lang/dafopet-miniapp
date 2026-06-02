@@ -1,0 +1,238 @@
+{% extends "m/_base.html" %}
+{% block title %}{{ pet.name if pet else '宠物' }} · 住院{% endblock %}
+{% block topbar_title %}{% if pet %}{{ pet.name }}{% else %}住院{% endif %}{% endblock %}
+{% block topbar_sub %}
+{% if cage %}{{ cage.code }} · {% endif %}{{ days }}天 · {{ cust.name if cust else '—' }}
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="/m/inpatient" class="m-icon-btn" title="返回">←</a>
+{% endblock %}
+
+{% block content %}
+
+{# 漏药警示 #}
+{% if overdue_logs %}
+<div class="m-card" style="background:#fef2f2;border:1px solid #fca5a5;">
+  <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:8px;">
+    🔴 漏药 {{ overdue_logs|length }} 条
+  </div>
+  {% for l in overdue_logs[:5] %}
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px dashed #fecaca;">
+    <div>
+      <div style="font-size:14px;font-weight:600;color:#7f1d1d;">{{ l.prescription_item.drug_name }}</div>
+      <div style="font-size:11px;color:#b91c1c;">{{ l.scheduled_at.strftime('%m-%d %H:%M') }}</div>
+    </div>
+    <form method="post" action="/admin/medication-log/{{ l.id }}/check" style="margin:0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+      <button type="submit" class="m-btn" style="background:#16a34a;padding:8px 16px;width:auto;font-size:13px;">✓ 打勾</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 最新交班一句话 #}
+{% if latest_handover %}
+<div class="m-card" style="background:#fffbeb;border:1px solid #fde68a;">
+  <div style="font-size:11px;font-weight:700;color:#92400e;letter-spacing:0.06em;margin-bottom:6px;">
+    📋 {{ shift_zh.get(latest_handover.shift, latest_handover.shift) }}最新交班
+    <span style="float:right;color:#a16207;font-weight:500;">{{ latest_handover.recorded_at.strftime('%m-%d %H:%M') }}</span>
+  </div>
+  <div style="font-size:14px;color:#78350f;line-height:1.5;">{{ latest_handover.content }}</div>
+  <div style="font-size:11px;color:#a16207;margin-top:6px;">— {{ latest_handover.recorded_by or '—' }}</div>
+</div>
+{% endif %}
+
+{# 今日发药 #}
+<div class="m-card" id="meds">
+  <div class="m-card-title">
+    💊 今日发药
+    <span class="count">{{ today_logs|length }}</span>
+  </div>
+  {% if not today_logs %}
+  <div class="m-empty" style="padding:14px;"><div style="font-size:13px;">今天没有发药任务</div></div>
+  {% else %}
+  {% for l in today_logs %}
+  {% set is_done = l.status == 'done' %}
+  {% set is_skip = l.status == 'skipped' %}
+  {% set is_overdue = l.status == 'pending' and l.scheduled_at <= now %}
+  <div style="padding:12px 0;border-bottom:1px solid #f1f5f9;{% if is_done %}opacity:0.55;{% endif %}">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="font-size:13px;font-weight:700;color:{% if is_overdue %}#dc2626{% elif is_done %}#16a34a{% else %}#0f172a{% endif %};font-variant-numeric:tabular-nums;width:48px;">
+        {{ l.scheduled_at.strftime('%H:%M') }}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;font-weight:600;color:#0f172a;">
+          {{ l.prescription_item.drug_name }}
+          {% if is_done %}<span style="color:#16a34a;font-size:12px;font-weight:500;margin-left:4px;">✓</span>{% endif %}
+          {% if is_skip %}<span style="color:#94a3b8;font-size:12px;font-weight:500;margin-left:4px;">⊘ 跳过</span>{% endif %}
+        </div>
+        <div style="font-size:12px;color:#64748b;margin-top:2px;">
+          {% if l.prescription_item.dose_amount %}{{ l.prescription_item.dose_amount }}{{ l.prescription_item.dose_unit or '' }} · {% endif %}
+          {{ l.prescription_item.frequency or '' }}
+          {% if l.prescription_item.drug_type %} · {{ l.prescription_item.drug_type }}{% endif %}
+        </div>
+        {% if l.prescription_item.instructions %}
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">{{ l.prescription_item.instructions|truncate(40) }}</div>
+        {% endif %}
+        {% if is_done and l.administered_by %}
+        <div style="font-size:11px;color:#16a34a;margin-top:2px;">
+          {{ l.administered_at.strftime('%H:%M') }} · {{ l.administered_by }}{% if l.dose_actual %} · {{ l.dose_actual }}{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
+        {% if l.status == 'pending' %}
+        <form method="post" action="/admin/medication-log/{{ l.id }}/check" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+          <button type="submit" class="m-btn" style="background:#16a34a;padding:10px 16px;font-size:14px;width:auto;border-radius:8px;">✓ 打勾</button>
+        </form>
+        <form method="post" action="/admin/medication-log/{{ l.id }}/skip" style="margin:0;"
+              onsubmit="return confirm('跳过这一次？')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+          <button type="submit" class="m-btn secondary" style="padding:6px 12px;font-size:11px;width:auto;">⊘ 跳过</button>
+        </form>
+        {% else %}
+        <form method="post" action="/admin/medication-log/{{ l.id }}/uncheck" style="margin:0;"
+              onsubmit="return confirm('撤销打勾？')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+          <button type="submit" class="m-btn outline" style="padding:6px 10px;font-size:11px;width:auto;">↶ 撤销</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+
+{# 快速记录：体征 / 喂食 / I/O / 交班 折叠抽屉 #}
+<div class="m-card">
+  <div class="m-card-title">📝 快速记录</div>
+
+  <details style="margin-bottom:6px;">
+    <summary style="cursor:pointer;padding:10px;background:#f8fafc;border-radius:8px;font-size:14px;font-weight:600;">🌡 体征 (T / HR / RR / 体重)</summary>
+    <form method="post" action="/admin/inpatient/{{ h.id }}/vitals" style="padding:12px 4px 4px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <label style="font-size:12px;color:#64748b;">体温 °C
+          <input type="number" step="0.1" name="temperature_c" inputmode="decimal" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;"/>
+        </label>
+        <label style="font-size:12px;color:#64748b;">体重 kg
+          <input type="number" step="0.01" name="weight_kg" inputmode="decimal" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;"/>
+        </label>
+        <label style="font-size:12px;color:#64748b;">心率 HR
+          <input type="number" name="hr" inputmode="numeric" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;"/>
+        </label>
+        <label style="font-size:12px;color:#64748b;">呼吸 RR
+          <input type="number" name="rr" inputmode="numeric" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;"/>
+        </label>
+      </div>
+      <textarea name="notes" placeholder="备注（可选）" rows="2" style="width:100%;margin-top:8px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"></textarea>
+      <button type="submit" class="m-btn" style="margin-top:8px;">保存体征</button>
+    </form>
+  </details>
+
+  <details style="margin-bottom:6px;">
+    <summary style="cursor:pointer;padding:10px;background:#f8fafc;border-radius:8px;font-size:14px;font-weight:600;">🍽 进食</summary>
+    <form method="post" action="/admin/inpatient/{{ h.id }}/feeding" style="padding:12px 4px 4px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+      <label style="font-size:12px;color:#64748b;display:block;">食物种类
+        <input name="food_type" placeholder="如：处方粮 i/d" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+        <label style="font-size:12px;color:#64748b;">提供 g
+          <input type="number" name="offered_g" inputmode="numeric" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;"/>
+        </label>
+        <label style="font-size:12px;color:#64748b;">吃了 g
+          <input type="number" name="eaten_g" inputmode="numeric" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;"/>
+        </label>
+      </div>
+      <label style="font-size:12px;color:#64748b;display:block;margin-top:8px;">食欲 (0-4)
+        <select name="appetite_score" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;">
+          <option value="4">4 - 旺盛</option>
+          <option value="3" selected>3 - 正常</option>
+          <option value="2">2 - 一般</option>
+          <option value="1">1 - 差</option>
+          <option value="0">0 - 拒食</option>
+        </select>
+      </label>
+      <button type="submit" class="m-btn" style="margin-top:8px;">保存进食</button>
+    </form>
+  </details>
+
+  <details style="margin-bottom:6px;">
+    <summary style="cursor:pointer;padding:10px;background:#f8fafc;border-radius:8px;font-size:14px;font-weight:600;">💧 I/O 输液/排泄</summary>
+    <form method="post" action="/admin/inpatient/{{ h.id }}/io" style="padding:12px 4px 4px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+      <label style="font-size:12px;color:#64748b;display:block;">类型
+        <select name="direction" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;">
+          <option value="in">📥 摄入</option>
+          <option value="out">📤 排出</option>
+        </select>
+      </label>
+      <label style="font-size:12px;color:#64748b;display:block;margin-top:8px;">分类
+        <input name="category" placeholder="如：iv_fluid / urine / vomit" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
+      </label>
+      <label style="font-size:12px;color:#64748b;display:block;margin-top:8px;">量 ml
+        <input type="number" step="0.1" name="amount_ml" inputmode="decimal" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;"/>
+      </label>
+      <button type="submit" class="m-btn" style="margin-top:8px;">保存 I/O</button>
+    </form>
+  </details>
+
+  <details>
+    <summary style="cursor:pointer;padding:10px;background:#f8fafc;border-radius:8px;font-size:14px;font-weight:600;">🤝 交班一句话</summary>
+    <form method="post" action="/admin/inpatient/{{ h.id }}/handover" style="padding:12px 4px 4px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}"/>
+      <label style="font-size:12px;color:#64748b;display:block;">班次
+        <select name="shift" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;">
+          {% for k, v in shift_zh.items() %}
+          <option value="{{ k }}" {% if k == current_shift %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <textarea name="content" required rows="3" placeholder="如：上午精神好，食欲一般，下午观察腹部红疹"
+                style="width:100%;margin-top:8px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"></textarea>
+      <button type="submit" class="m-btn" style="margin-top:8px;">留言交班</button>
+    </form>
+  </details>
+</div>
+
+{# 最近体征（只读）#}
+{% if recent_vitals %}
+<div class="m-card">
+  <div class="m-card-title">🌡 最近体征</div>
+  {% for v in recent_vitals %}
+  <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+    <div style="color:#64748b;font-size:11px;">{{ v.recorded_at.strftime('%m-%d %H:%M') }} · {{ v.recorded_by or '—' }}</div>
+    <div style="margin-top:2px;">
+      {% if v.temperature_c %}T {{ v.temperature_c }}°C{% endif %}
+      {% if v.hr %} · HR {{ v.hr }}{% endif %}
+      {% if v.rr %} · RR {{ v.rr }}{% endif %}
+      {% if v.weight_kg %} · {{ v.weight_kg }}kg{% endif %}
+    </div>
+    {% if v.notes %}<div style="font-size:12px;color:#64748b;margin-top:2px;">{{ v.notes }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="m-section-label">桌面操作</div>
+<div class="m-list">
+  <a class="m-list-row" href="/admin/inpatient/{{ h.id }}">
+    <span class="label">🖥 桌面端详情（换笼/出院/打印笼牌）</span>
+    <span class="arrow">›</span>
+  </a>
+</div>
+
+{% endblock %}

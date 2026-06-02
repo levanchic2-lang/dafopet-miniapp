@@ -1,0 +1,37 @@
+{% extends "m/_base.html" %}
+{% block title %}待配药{% endblock %}
+{% block topbar_title %}📦 待配药{% endblock %}
+{% block topbar_sub %}{{ admin_store_label }} · {{ rows|length }} 张{% endblock %}
+
+{% block content %}
+
+{% if not rows %}
+  <div class="m-empty" style="padding-top:60px;">
+    <div class="emoji">✅</div>
+    <div>所有处方都已配齐</div>
+  </div>
+{% else %}
+  {% for r in rows %}
+  <a class="m-card" href="/m/dispensing/{{ r.p.id }}" style="display:block;text-decoration:none;color:inherit;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div style="font-size:11px;color:#94a3b8;">#{{ r.p.id }} · {{ r.p.prescribed_date or '—' }}</div>
+      <div style="font-size:11px;color:#3b82f6;font-weight:700;">📦 {{ r.item_cnt }} 种药</div>
+    </div>
+    <div style="font-size:16px;font-weight:700;color:#0f172a;">
+      {{ r.pet.name if r.pet else '宠物' }}
+      <span style="color:#94a3b8;font-weight:500;font-size:13px;">· {{ r.cust.name if r.cust else '—' }}</span>
+    </div>
+    {% if r.cust and r.cust.phone %}
+    <div style="font-size:13px;color:#475569;font-family:ui-monospace,monospace;margin-top:2px;">{{ r.cust.phone }}</div>
+    {% endif %}
+    {% if r.p.vet_name %}
+    <div style="font-size:12px;color:#64748b;margin-top:4px;">医生：{{ r.p.vet_name }}</div>
+    {% endif %}
+    {% if r.p.total_amount %}
+    <div style="font-size:13px;color:#059669;font-weight:700;margin-top:4px;">¥ {{ '%.2f'|format(r.p.total_amount) }}</div>
+    {% endif %}
+  </a>
+  {% endfor %}
+{% endif %}
+
+{% endblock %}

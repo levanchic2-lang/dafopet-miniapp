@@ -313,6 +313,9 @@ class Prescription(Base):
     voided_by:  Mapped[str] = mapped_column(String(80), default="")
     voided_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     void_reason: Mapped[str] = mapped_column(String(200), default="")
+    # M2 助理"已配齐"动作 — 标记客户带药取走 / 出院前配药完成
+    dispensed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    dispensed_by: Mapped[str] = mapped_column(String(80), default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
