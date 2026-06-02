@@ -1131,7 +1131,8 @@ def _run_llm_with_tools(db: Session, userid: str, user_text: str, ctx: dict) -> 
         {"role": "user", "content": user_text},
     ]
 
-    for _ in range(5):
+    logger.info("[wecom agent] user=%s text=%r", userid, user_text)
+    for hop in range(5):
         try:
             resp = client.chat.completions.create(
                 model=_llm_model(),
@@ -1145,7 +1146,9 @@ def _run_llm_with_tools(db: Session, userid: str, user_text: str, ctx: dict) -> 
             return f"❌ LLM 调用失败：{e}"
         msg = resp.choices[0].message
         if not msg.tool_calls:
-            return (msg.content or "").strip() or "（空回复）"
+            content = (msg.content or "").strip() or "（空回复）"
+            logger.info("[wecom agent] hop=%d FINAL text=%r", hop, content[:200])
+            return content
         # 执行工具
         messages.append({
             "role": "assistant",
@@ -1156,8 +1159,9 @@ def _run_llm_with_tools(db: Session, userid: str, user_text: str, ctx: dict) -> 
         })
         for tc in msg.tool_calls:
             name = tc.function.name
+            raw_args = tc.function.arguments or "{}"
             try:
-                args = json.loads(tc.function.arguments or "{}")
+                args = json.loads(raw_args)
             except Exception:
                 args = {}
             handler = TOOL_HANDLERS.get(name)
@@ -1169,12 +1173,15 @@ def _run_llm_with_tools(db: Session, userid: str, user_text: str, ctx: dict) -> 
                 except Exception as e:
                     logger.exception(f"tool {name} crashed")
                     result = f"❌ 工具 {name} 异常：{e}"
+            logger.info("[wecom agent] hop=%d tool=%s args=%s → %r",
+                        hop, name, raw_args[:200], (str(result) or "")[:200])
             # PENDING 结果直接返回给用户，不再让 LLM 续写
             if isinstance(result, str) and result.startswith("PENDING:"):
                 return result[len("PENDING:"):]
             messages.append({
                 "role": "tool", "tool_call_id": tc.id, "content": str(result),
             })
+    logger.warning("[wecom agent] hit 5-hop limit for user=%s text=%r", userid, user_text)
     return "（处理超出步数，请重新说一次）"
 
 
