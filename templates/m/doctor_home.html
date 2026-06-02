@@ -1,0 +1,128 @@
+{% extends "m/_base.html" %}
+{% block title %}今日 · 医生{% endblock %}
+{% block topbar_title %}👨‍⚕️ 医生工作台{% endblock %}
+
+{% block content %}
+
+{# 待办栏 #}
+<div class="m-card">
+  <div class="m-card-title">今日待办</div>
+
+  <a class="m-todo-row" href="/m/inpatient">
+    <span class="m-todo-icon" style="background:#fee2e2;">💊</span>
+    <div class="m-todo-body">
+      <div class="m-todo-title">漏药提醒</div>
+      <div class="m-todo-sub">{% if badges.overdue_meds %}{{ badges.overdue_meds }} 条待打勾{% else %}全部已处理{% endif %}</div>
+    </div>
+    {% if badges.overdue_meds %}<span class="m-todo-badge">{{ badges.overdue_meds }}</span>
+    {% else %}<span class="m-todo-arrow">›</span>{% endif %}
+  </a>
+
+  <a class="m-todo-row" href="/m/follow-ups">
+    <span class="m-todo-icon" style="background:#fef3c7;">📞</span>
+    <div class="m-todo-body">
+      <div class="m-todo-title">客户回访</div>
+      <div class="m-todo-sub">{% if badges.due_followups %}{{ badges.due_followups }} 条待联系{% else %}今日无任务{% endif %}</div>
+    </div>
+    {% if badges.due_followups %}<span class="m-todo-badge" style="background:#f59e0b;">{{ badges.due_followups }}</span>
+    {% else %}<span class="m-todo-arrow">›</span>{% endif %}
+  </a>
+
+  <a class="m-todo-row" href="/admin/applications?status=pending_manual">
+    <span class="m-todo-icon" style="background:#dcfce7;">🐱</span>
+    <div class="m-todo-body">
+      <div class="m-todo-title">TNR 待审核</div>
+      <div class="m-todo-sub">{% if pending_tnr_n %}{{ pending_tnr_n }} 份等审核{% else %}全部已审{% endif %}</div>
+    </div>
+    {% if pending_tnr_n %}<span class="m-todo-badge" style="background:#10b981;">{{ pending_tnr_n }}</span>
+    {% else %}<span class="m-todo-arrow">›</span>{% endif %}
+  </a>
+
+  <a class="m-todo-row" href="/m/soon?title=协议待签">
+    <span class="m-todo-icon" style="background:#e0e7ff;">📝</span>
+    <div class="m-todo-body">
+      <div class="m-todo-title">协议待签</div>
+      <div class="m-todo-sub">{% if badges.pending_consents %}{{ badges.pending_consents }} 份未签{% else %}全部已签{% endif %}</div>
+    </div>
+    {% if badges.pending_consents %}<span class="m-todo-badge" style="background:#8b5cf6;">{{ badges.pending_consents }}</span>
+    {% else %}<span class="m-todo-arrow">›</span>{% endif %}
+  </a>
+</div>
+
+{# 今日预约 #}
+<div class="m-card">
+  <div class="m-card-title">📅 今日预约 <span class="count">{{ today_appts|length }}</span></div>
+  {% if not today_appts %}
+  <div class="m-empty" style="padding:14px;"><div style="font-size:13px;">今天没有预约</div></div>
+  {% else %}
+  {% for a in today_appts %}
+  <div class="m-todo-row" style="cursor:default;">
+    <div style="font-size:13px;font-weight:700;color:#0f172a;width:50px;font-variant-numeric:tabular-nums;">
+      {{ a.appointment_time or '—' }}
+    </div>
+    <div class="m-todo-body">
+      <div class="m-todo-title">
+        {{ a.pet_name or '—' }}
+        <span style="color:#94a3b8;font-weight:500;font-size:13px;">· {{ a.customer_name or '—' }}</span>
+      </div>
+      <div class="m-todo-sub">
+        {% set cat = a.category %}
+        {% if cat == 'outpatient' %}🩺 门诊
+        {% elif cat == 'surgery' %}🔪 手术
+        {% elif cat == 'tnr' %}🐱 TNR
+        {% elif cat in ['beauty','grooming','washcare'] %}✂ 美容
+        {% else %}{{ cat }}{% endif %}
+        {% if a.service_name %} · {{ a.service_name|truncate(20) }}{% endif %}
+      </div>
+    </div>
+    {% if a.phone %}
+    <a href="tel:{{ a.phone }}" style="color:#3b82f6;font-size:18px;">📞</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+
+{# 快捷操作 #}
+<div class="m-section-label">快捷操作</div>
+<div class="m-quick-grid">
+  <a class="m-quick-tile" href="/m/customers">
+    <span class="emoji">🔍</span><span class="label">搜客户</span>
+  </a>
+  <a class="m-quick-tile" href="/m/soon?title=新建病历">
+    <span class="emoji">📝</span><span class="label">新建病历</span>
+    <span style="font-size:9px;color:#94a3b8;">M4</span>
+  </a>
+  <a class="m-quick-tile" href="/m/soon?title=开处方">
+    <span class="emoji">💊</span><span class="label">开处方</span>
+    <span style="font-size:9px;color:#94a3b8;">M5</span>
+  </a>
+  <a class="m-quick-tile" href="/m/soon?title=开检查单">
+    <span class="emoji">🔬</span><span class="label">开检查单</span>
+    <span style="font-size:9px;color:#94a3b8;">M6</span>
+  </a>
+</div>
+
+{# 我的最近病历 #}
+{% if my_visits %}
+<div class="m-card">
+  <div class="m-card-title">📝 我最近的病历</div>
+  {% for r in my_visits %}
+  <a class="m-todo-row" href="/m/visit/{{ r.v.id }}" style="padding:10px 0;">
+    <span class="m-todo-icon" style="background:#eff6ff;font-size:18px;">
+      {% if r.pet and r.pet.species == 'cat' %}🐱{% elif r.pet and r.pet.species == 'dog' %}🐶{% else %}📋{% endif %}
+    </span>
+    <div class="m-todo-body">
+      <div class="m-todo-title">
+        {{ r.pet.name if r.pet else '—' }}
+        {% if r.v.status == 'closed' %}<span style="font-size:11px;color:#94a3b8;">🔒</span>{% endif %}
+      </div>
+      <div class="m-todo-sub">{{ r.v.visit_date }} · {{ r.cust.name if r.cust else '—' }}{% if r.v.diagnosis %} · {{ r.v.diagnosis|truncate(20) }}{% endif %}</div>
+    </div>
+    <span class="m-todo-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

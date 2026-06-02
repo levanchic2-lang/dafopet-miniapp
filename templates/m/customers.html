@@ -1,0 +1,48 @@
+{% extends "m/_base.html" %}
+{% block title %}搜客户{% endblock %}
+{% block topbar_title %}🔍 搜客户{% endblock %}
+
+{% block content %}
+
+<form method="get" action="/m/customers" style="margin-bottom:10px;">
+  <input type="search" name="q" value="{{ q }}" autofocus
+         placeholder="输入手机号或姓名（至少 2 字）"
+         style="width:100%;padding:14px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;box-sizing:border-box;background:#fff;"/>
+</form>
+
+{% if not q %}
+  <div class="m-empty" style="padding-top:60px;">
+    <div class="emoji">🔍</div>
+    <div>输入手机号 / 姓名搜索</div>
+    <div style="font-size:12px;color:#cbd5e1;margin-top:6px;">支持中间数字（"137"）</div>
+  </div>
+{% elif not results %}
+  <div class="m-empty" style="padding-top:40px;">
+    <div class="emoji">🤷</div>
+    <div>没找到「{{ q }}」</div>
+    <div style="font-size:12px;color:#cbd5e1;margin-top:6px;">桌面端可以建档：<br/><a href="/admin/customers" style="color:#3b82f6;">前台 → 新建客户</a></div>
+  </div>
+{% else %}
+  {% for r in results %}
+  <a class="m-card" href="/m/customer/{{ r.c.id }}" style="display:block;text-decoration:none;color:inherit;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div style="font-size:16px;font-weight:700;color:#0f172a;">{{ r.c.name or '—' }}</div>
+      <div style="font-size:13px;color:#475569;font-family:ui-monospace,monospace;">{{ r.c.phone or '' }}</div>
+    </div>
+    {% if r.pets %}
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+      {% for p in r.pets %}
+      <span style="background:#f1f5f9;color:#475569;font-size:12px;padding:3px 8px;border-radius:10px;">
+        {% if p.species == 'cat' %}🐱{% elif p.species == 'dog' %}🐶{% else %}🐾{% endif %}
+        {{ p.name or '未命名' }}
+      </span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="font-size:12px;color:#94a3b8;margin-top:4px;">还没有宠物档案</div>
+    {% endif %}
+  </a>
+  {% endfor %}
+{% endif %}
+
+{% endblock %}

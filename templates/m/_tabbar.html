@@ -3,11 +3,11 @@
 <nav class="m-tabbar" role="navigation">
 
 {% if mobile_role == 'doctor' %}
-  <a class="m-tab {% if _t=='today' %}active{% endif %}"   href="/m/doctor"><span class="icon">📅</span>今日</a>
-  <a class="m-tab {% if _t=='visits' %}active{% endif %}"  href="/m/soon?title=病历"><span class="icon">📝</span>病历</a>
-  <a class="m-tab {% if _t=='inpatient' %}active{% endif %}" href="/m/soon?title=住院"><span class="icon">🛏</span>住院</a>
-  <a class="m-tab {% if _t=='customers' %}active{% endif %}" href="/m/soon?title=客户"><span class="icon">👤</span>客户</a>
-  <a class="m-tab {% if _t=='me' %}active{% endif %}"      href="/m/me"><span class="icon">⚙</span>我</a>
+  <a class="m-tab {% if _t=='today' %}active{% endif %}"      href="/m/doctor"><span class="icon">📅</span>今日</a>
+  <a class="m-tab {% if _t=='customers' %}active{% endif %}"  href="/m/customers"><span class="icon">🔍</span>客户</a>
+  <a class="m-tab {% if _t=='inpatient' %}active{% endif %}"  href="/m/inpatient"><span class="icon">🛏</span>住院</a>
+  <a class="m-tab {% if _t=='follow_ups' %}active{% endif %}" href="/m/follow-ups"><span class="icon">📞</span>回访</a>
+  <a class="m-tab {% if _t=='me' %}active{% endif %}"         href="/m/me"><span class="icon">⚙</span>我</a>
 
 {% elif mobile_role == 'nurse' %}
   <a class="m-tab {% if _t=='today' %}active{% endif %}"     href="/m/nurse"><span class="icon">📅</span>今日</a>

@@ -1,0 +1,191 @@
+{% extends "m/_base.html" %}
+{% block title %}病历 #{{ v.id }}{% endblock %}
+{% block topbar_title %}📝 病历 #{{ v.id }}{% endblock %}
+{% block topbar_sub %}
+{{ pet.name if pet else '—' }} · {{ v.visit_date or '—' }}
+{% if v.status == 'closed' %}· 🔒 已结束{% endif %}
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="javascript:history.back()" class="m-icon-btn" title="返回">←</a>
+{% endblock %}
+
+{% block content %}
+
+{# 顶部宠物/客户 #}
+<div class="m-card">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div style="width:42px;height:42px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;">
+      {% if pet and pet.species == 'cat' %}🐱{% elif pet and pet.species == 'dog' %}🐶{% else %}🐾{% endif %}
+    </div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:15px;font-weight:700;color:#0f172a;">{{ pet.name if pet else '—' }}</div>
+      <div style="font-size:12px;color:#64748b;">
+        {% if cust %}<a href="/m/customer/{{ cust.id }}" style="color:#3b82f6;">{{ cust.name or '—' }}</a>{% endif %}
+        {% if cust and cust.phone %} · <a href="tel:{{ cust.phone }}" style="color:#3b82f6;">{{ cust.phone }}</a>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:12px;color:#64748b;">
+    <span>医生：<b style="color:#0f172a;">{{ v.vet_name or '—' }}</b></span>
+    <span>类型：{{ v.visit_type or '—' }}</span>
+  </div>
+</div>
+
+{# SOAP #}
+{% if v.chief_complaint %}
+<div class="m-card">
+  <div class="m-card-title">📋 主诉</div>
+  <div style="font-size:14px;color:#1e293b;line-height:1.55;white-space:pre-wrap;">{{ v.chief_complaint }}</div>
+</div>
+{% endif %}
+
+{% if v.physical_exam %}
+<div class="m-card">
+  <div class="m-card-title">🩺 体格检查</div>
+  <div style="font-size:14px;color:#1e293b;line-height:1.55;white-space:pre-wrap;">{{ v.physical_exam }}</div>
+</div>
+{% endif %}
+
+{% if v.diagnosis %}
+<div class="m-card" style="background:#eff6ff;border:1px solid #bfdbfe;">
+  <div class="m-card-title" style="color:#1e40af;">🎯 诊断</div>
+  <div style="font-size:15px;color:#1e3a8a;line-height:1.55;font-weight:600;white-space:pre-wrap;">{{ v.diagnosis }}</div>
+</div>
+{% endif %}
+
+{% if v.treatment_plan %}
+<div class="m-card">
+  <div class="m-card-title">💉 处理方案</div>
+  <div style="font-size:14px;color:#1e293b;line-height:1.55;white-space:pre-wrap;">{{ v.treatment_plan }}</div>
+</div>
+{% endif %}
+
+{% if v.notes %}
+<div class="m-card">
+  <div class="m-card-title">📝 备注</div>
+  <div style="font-size:13px;color:#475569;line-height:1.55;white-space:pre-wrap;">{{ v.notes }}</div>
+</div>
+{% endif %}
+
+{# 处方 #}
+{% if prescriptions %}
+<div class="m-card">
+  <div class="m-card-title">💊 处方 <span class="count">{{ prescriptions|length }}</span></div>
+  {% for p in prescriptions %}
+  <a href="/m/dispensing/{{ p.id }}" style="display:block;padding:10px 0;border-bottom:1px solid #f1f5f9;text-decoration:none;color:inherit;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:14px;font-weight:600;color:#0f172a;">
+        处方 #{{ p.id }}
+        {% if p.status == 'draft' %}<span style="font-size:10px;color:#94a3b8;">草稿</span>
+        {% elif p.status == 'issued' %}<span style="font-size:10px;color:#3b82f6;">待配药</span>
+        {% elif p.status == 'dispensed' %}<span style="font-size:10px;color:#16a34a;">已配齐 ✓</span>
+        {% elif p.status == 'voided' %}<span style="font-size:10px;color:#dc2626;">已作废</span>
+        {% endif %}
+      </div>
+      {% if p.total_amount %}
+      <div style="font-size:13px;color:#059669;font-weight:700;">¥{{ '%.2f'|format(p.total_amount) }}</div>
+      {% endif %}
+    </div>
+    <div style="font-size:12px;color:#64748b;margin-top:4px;">
+      {% for it in p.items[:3] %}{{ it.drug_name }}{% if not loop.last %} · {% endif %}{% endfor %}
+      {% if p.items|length > 3 %} 等 {{ p.items|length }} 味{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 检查 #}
+{% if exam_rows %}
+<div class="m-card">
+  <div class="m-card-title">🔬 检查 <span class="count">{{ exam_rows|length }}</span></div>
+  {% for r in exam_rows %}
+  <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:14px;font-weight:600;color:#0f172a;">
+        检查单 #{{ r.eo.id }}
+        {% if r.eo.status == 'pending' %}<span style="font-size:10px;color:#f59e0b;">待出报告</span>
+        {% elif r.eo.status == 'completed' %}<span style="font-size:10px;color:#16a34a;">完成 ✓</span>
+        {% elif r.eo.status == 'voided' %}<span style="font-size:10px;color:#dc2626;">作废</span>
+        {% endif %}
+      </div>
+      <div style="font-size:11px;color:#94a3b8;">📎 {{ r.reports|length }} 报告</div>
+    </div>
+    <div style="font-size:12px;color:#64748b;margin-top:4px;">
+      {% for it in r.items[:3] %}{{ it.name }}{% if not loop.last %} · {% endif %}{% endfor %}
+      {% if r.items|length > 3 %} 等 {{ r.items|length }} 项{% endif %}
+    </div>
+    {% if r.reports %}
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
+      {% for rep in r.reports %}
+      <a href="/admin/exam-reports/{{ rep.id }}/view" target="_blank"
+         style="font-size:11px;background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:8px;text-decoration:none;">
+        📎 {{ rep.original_name|truncate(20) }}
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 疫苗 #}
+{% if vaccinations %}
+<div class="m-card">
+  <div class="m-card-title">💉 本次疫苗</div>
+  {% for vac in vaccinations %}
+  <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+    <b>{{ vac.vaccine_name or vac.vaccine_type }}</b>
+    {% if vac.batch_no %} · 批号 {{ vac.batch_no }}{% endif %}
+    {% if vac.next_due_date %}<br/><span style="color:#64748b;font-size:11px;">下次：{{ vac.next_due_date }}</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 驱虫 #}
+{% if dewormings %}
+<div class="m-card">
+  <div class="m-card-title">🪱 本次驱虫</div>
+  {% for d in dewormings %}
+  <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+    <b>{{ d.product_name or d.deworm_type }}</b>
+    {% if d.dose %} · {{ d.dose }}{% endif %}
+    {% if d.next_due_date %}<br/><span style="color:#64748b;font-size:11px;">下次：{{ d.next_due_date }}</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 住院 #}
+{% if hospitalization %}
+<div class="m-card" style="background:#fff7ed;border:1px solid #fed7aa;">
+  <div class="m-card-title" style="color:#9a3412;">🛏 关联住院</div>
+  <a href="/m/inpatient/{{ hospitalization.id }}" style="display:flex;justify-content:space-between;align-items:center;text-decoration:none;color:inherit;">
+    <div style="font-size:14px;color:#7c2d12;">
+      {% if hospitalization.status == 'admitted' %}🟢 住院中{% elif hospitalization.status == 'discharged' %}✓ 已出院{% else %}{{ hospitalization.status }}{% endif %}
+    </div>
+    <span style="color:#9a3412;">›</span>
+  </a>
+</div>
+{% endif %}
+
+{% if v.follow_up_note or v.follow_up_at %}
+<div class="m-card">
+  <div class="m-card-title">📞 回访</div>
+  {% if v.follow_up_at %}<div style="font-size:13px;">📅 {{ v.follow_up_at }}</div>{% endif %}
+  {% if v.follow_up_note %}<div style="font-size:13px;color:#475569;margin-top:4px;white-space:pre-wrap;">{{ v.follow_up_note }}</div>{% endif %}
+</div>
+{% endif %}
+
+<div class="m-section-label">桌面操作</div>
+<div class="m-list">
+  <a class="m-list-row" href="/admin/visits/{{ v.id }}">
+    <span class="label">🖥 桌面端病历（编辑 / 结束病历）</span>
+    <span class="arrow">›</span>
+  </a>
+</div>
+
+{% endblock %}

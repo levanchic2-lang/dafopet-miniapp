@@ -19294,14 +19294,10 @@ def _m_badges(request: Request, db: Session) -> dict:
         Prescription.dispensed_at == None,  # noqa: E711
         Prescription.voided_at == None,     # noqa: E711
     )
-    # 处方表没存 store，通过 visit 关联（懒做：只数 visit 同店）
+    # 处方表没存 store；通过 pet.store 关联过滤
     if store_short:
-        from app.models import Visit as _V
-        presc_q = presc_q.outerjoin(_V, _V.id == Prescription.visit_id).filter(
-            or_(_V.clinic_store == store_full,
-                _V.clinic_store == store_short,
-                _V.clinic_store == "",
-                _V.clinic_store == None)  # noqa: E711
+        presc_q = presc_q.outerjoin(Pet, Pet.id == Prescription.pet_id).filter(
+            or_(Pet.store == store_short, Pet.store == "", Pet.store == None)  # noqa: E711
         )
     pending_dispense = presc_q.count()
 
@@ -19333,7 +19329,52 @@ async def m_doctor_home(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse("/admin/login?next=/m/doctor", status_code=303)
     ctx = _m_ctx(request, db, active_tab="today")
     ctx["badges"] = _m_badges(request, db)
-    return templates.TemplateResponse(request, "m/home_doctor.html", ctx)
+
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # 今日预约（所有类别，按时间排）
+    appt_q = db.query(Appointment).filter(
+        Appointment.appointment_date == today_str,
+        Appointment.status.notin_(["cancelled", "rejected", "no_show"]),
+    )
+    if store_short:
+        appt_q = appt_q.filter(or_(Appointment.store == store_full,
+                                    Appointment.store == store_short))
+    today_appts = appt_q.order_by(Appointment.appointment_time.asc()).all()
+
+    # 待审 TNR
+    pending_tnr = db.query(Application).filter(
+        Application.status == ApplicationStatus.pending_manual.value,
+    )
+    if store_short:
+        pending_tnr = pending_tnr.filter(or_(
+            Application.clinic_store == store_full,
+            Application.clinic_store == store_short,
+        ))
+    pending_tnr_n = pending_tnr.count()
+
+    # 最近 5 个我开的病历
+    uname = request.session.get("admin_username") or ""
+    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
+    display_name = (u.display_name if u and u.display_name else uname)
+    my_visits = db.query(Visit).filter(
+        or_(Visit.vet_name == display_name, Visit.vet_name == uname,
+            Visit.created_by == uname),
+    ).order_by(Visit.id.desc()).limit(5).all()
+    enriched_visits = []
+    for v in my_visits:
+        pet = db.get(Pet, v.pet_id) if v.pet_id else None
+        cust = db.get(Customer, v.customer_id) if v.customer_id else None
+        enriched_visits.append({"v": v, "pet": pet, "cust": cust})
+
+    ctx.update({
+        "today_appts": today_appts,
+        "pending_tnr_n": pending_tnr_n,
+        "my_visits": enriched_visits,
+    })
+    return templates.TemplateResponse(request, "m/doctor_home.html", ctx)
 
 
 @app.get("/m/nurse", response_class=HTMLResponse)
@@ -19523,13 +19564,9 @@ async def m_dispensing_list(request: Request, db: Session = Depends(get_db)):
         Prescription.dispensed_at == None,   # noqa: E711
         Prescription.voided_at == None,      # noqa: E711
     )
-    from app.models import Visit as _V
     if store_short:
-        q = q.outerjoin(_V, _V.id == Prescription.visit_id).filter(
-            or_(_V.clinic_store == store_full,
-                _V.clinic_store == store_short,
-                _V.clinic_store == "",
-                _V.clinic_store == None)  # noqa: E711
+        q = q.outerjoin(Pet, Pet.id == Prescription.pet_id).filter(
+            or_(Pet.store == store_short, Pet.store == "", Pet.store == None)  # noqa: E711
         )
     rows = q.order_by(Prescription.created_at.desc()).limit(100).all()
     enriched = []
@@ -19845,6 +19882,120 @@ async def m_api_search_customer(
             } for p in pets],
         })
     return {"results": results}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# M3 · 医生只读层：客户搜索 / 客户档案 / 病历详情
+# ═════════════════════════════════════════════════════════════════════════════
+@app.get("/m/customers", response_class=HTMLResponse)
+async def m_customers_search(request: Request, q: str = "", db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/customers", status_code=303)
+    q = (q or "").strip()
+    results = []
+    if len(q) >= 2:
+        custs = db.query(Customer).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).order_by(Customer.id.desc()).limit(30).all()
+        for c in custs:
+            pets = db.query(Pet).filter(Pet.customer_id == c.id).order_by(Pet.id).all()
+            results.append({"c": c, "pets": pets})
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({"q": q, "results": results})
+    return templates.TemplateResponse(request, "m/customers.html", ctx)
+
+
+@app.get("/m/customer/{cust_id}", response_class=HTMLResponse)
+async def m_customer_profile(cust_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/customer/{cust_id}", status_code=303)
+    cust = db.get(Customer, cust_id)
+    if not cust:
+        raise HTTPException(404)
+    pets = db.query(Pet).filter(Pet.customer_id == cust_id).order_by(Pet.id).all()
+    wallet = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    packages = db.query(CustomerPackage).filter(
+        CustomerPackage.customer_id == cust_id,
+        CustomerPackage.used_count < CustomerPackage.total_uses,
+    ).order_by(CustomerPackage.id.desc()).all()
+    # 最近 10 个病历
+    visits = db.query(Visit).filter(Visit.customer_id == cust_id)\
+        .order_by(Visit.id.desc()).limit(10).all()
+    # 最近的住院（admitted 才显示）
+    admitted = db.query(Hospitalization).filter(
+        Hospitalization.customer_id == cust_id,
+        Hospitalization.status == "admitted",
+    ).order_by(Hospitalization.id.desc()).all()
+    enriched_visits = []
+    for v in visits:
+        p = db.get(Pet, v.pet_id) if v.pet_id else None
+        enriched_visits.append({"v": v, "pet": p})
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "cust": cust, "pets": pets,
+        "wallet": wallet, "packages": packages,
+        "visits": enriched_visits,
+        "admitted": admitted,
+    })
+    return templates.TemplateResponse(request, "m/customer_profile.html", ctx)
+
+
+@app.get("/m/visit/{visit_id}", response_class=HTMLResponse)
+async def m_visit_detail(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/visit/{visit_id}", status_code=303)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404)
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    cust = db.get(Customer, v.customer_id) if v.customer_id else None
+
+    prescriptions = db.query(Prescription).filter(Prescription.visit_id == visit_id)\
+        .order_by(Prescription.id.desc()).all()
+    exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id)\
+        .order_by(ExamOrder.id.desc()).all()
+    # 解析 exam items
+    exam_rows = []
+    for eo in exam_orders:
+        try:
+            items = json.loads(eo.items_json or "[]")
+        except Exception:
+            items = []
+        exam_rows.append({"eo": eo, "items": items, "reports": eo.reports})
+
+    # 视觉对齐：vaccinations / dewormings 与 visit 时间窗口
+    vaccinations = []
+    dewormings = []
+    if v.pet_id:
+        # 同就诊日的疫苗/驱虫（粗略关联）
+        vd = v.visit_date or ""
+        if vd:
+            vaccinations = db.query(Vaccination).filter(
+                Vaccination.pet_id == v.pet_id,
+                Vaccination.vaccinated_date == vd,
+                Vaccination.status == "active",
+            ).all()
+            dewormings = db.query(DewormingRecord).filter(
+                DewormingRecord.pet_id == v.pet_id,
+                DewormingRecord.deworm_date == vd,
+                DewormingRecord.status == "active",
+            ).all()
+
+    # 关联住院
+    hospitalization = db.query(Hospitalization).filter(
+        Hospitalization.visit_id == visit_id
+    ).first()
+
+    ctx = _m_ctx(request, db, active_tab="visits")
+    ctx.update({
+        "v": v, "pet": pet, "cust": cust,
+        "prescriptions": prescriptions,
+        "exam_rows": exam_rows,
+        "vaccinations": vaccinations,
+        "dewormings": dewormings,
+        "hospitalization": hospitalization,
+    })
+    return templates.TemplateResponse(request, "m/visit_detail.html", ctx)
 
 
 @app.post("/m/dispensing/{presc_id}/undo")
