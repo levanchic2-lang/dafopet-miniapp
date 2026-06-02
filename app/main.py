@@ -323,6 +323,12 @@ def _startup():
         _start_fu()
     except Exception as _e:
         logger.warning("回访调度器启动失败：%s", _e)
+    # 住院 漏药 + 接班提醒（每 5 分钟扫漏药 / 6:50 14:50 21:50 接班推送）
+    try:
+        from app.services.inpatient_dispatch import start_scheduler as _start_ip
+        _start_ip()
+    except Exception as _e:
+        logger.warning("住院调度器启动失败：%s", _e)
 
 
 @app.on_event("shutdown")
@@ -330,6 +336,11 @@ def _shutdown():
     try:
         from app.services.followup_dispatch import stop_scheduler as _stop_fu
         _stop_fu()
+    except Exception:
+        pass
+    try:
+        from app.services.inpatient_dispatch import stop_scheduler as _stop_ip
+        _stop_ip()
     except Exception:
         pass
 
@@ -18546,6 +18557,8 @@ async def admin_medication_log_uncheck(log_id: int, request: Request,
     log.administered_by = ""
     log.dose_actual = ""
     log.notes = ""
+    # 撤销后清掉漏药推送标记，超过 grace 仍不打勾时会再次提醒
+    log.reminder_sent_at = None
     db.commit()
     return RedirectResponse(f"/admin/inpatient/{log.hospitalization_id}#meds",
                              status_code=303)

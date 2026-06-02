@@ -932,6 +932,8 @@ class MedicationAdminLog(Base):
     administered_by:   Mapped[str] = mapped_column(String(80), default="")  # 执行者 username
     dose_actual:       Mapped[str] = mapped_column(String(80), default="")  # 实际给药量（可与处方默认值不同）
     notes:             Mapped[str] = mapped_column(String(300), default="") # 备注 / 跳过原因
+    # 漏药提醒：标记该条已推送过企微，避免每 5 分钟重复推
+    reminder_sent_at:  Mapped[datetime|None] = mapped_column(DateTime, nullable=True, default=None)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

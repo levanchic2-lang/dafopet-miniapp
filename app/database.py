@@ -1065,6 +1065,10 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_med_log_hosp ON medication_admin_logs(hospitalization_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_med_log_sched ON medication_admin_logs(scheduled_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_med_log_status ON medication_admin_logs(status)"))
+            # D8：漏药推送标记
+            ml_cols = conn.execute(text("PRAGMA table_info(medication_admin_logs)")).fetchall()
+            if ml_cols and "reminder_sent_at" not in {c[1] for c in ml_cols}:
+                conn.execute(text("ALTER TABLE medication_admin_logs ADD COLUMN reminder_sent_at DATETIME DEFAULT NULL"))
 
             # vital_signs_logs 生命体征
             conn.execute(text(
