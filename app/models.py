@@ -445,6 +445,9 @@ class InventoryItem(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)              # 下架/停用
     # 多门店分离：空 = 通用两店共享，"东环店" / "横岗店" = 仅该店
     store: Mapped[str] = mapped_column(String(40), default="")
+    # 进货单上的标准名 / 厂家名 别名，用于下次拍照入库时模糊匹配命中
+    # 格式：JSON 字符串数组 ["盐酸多西环素片 100mg×30片", ...]；显示仍用 name
+    aliases: Mapped[str] = mapped_column(Text, default="")
     last_counted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)  # 上次盘点时间
     # 门店级价格覆盖（JSON 字符串，方案 H）
     # 格式：{"东环店": {"sell": 99.5, "cost": 50}, "横岗店": {"sell": 105, "cost": 52}}

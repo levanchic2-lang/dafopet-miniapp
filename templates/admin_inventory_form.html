@@ -128,6 +128,19 @@
  <textarea name="notes" rows="2" style="width:100%;">{{ item.notes if item else '' }}</textarea>
  </div>
 
+ {% if item %}
+ <div style="grid-column:1/-1;">
+ <label style="display:block;font-weight:600;margin-bottom:0.35rem;">
+   进货识别别名
+   <span style="font-weight:400;color:var(--muted);font-size:.78rem;margin-left:.4rem;">
+     一行一个 · 上限 8 条 · 拍照入库累加时自动追加进货单上的标准名/厂家名
+   </span>
+ </label>
+ <textarea name="aliases_text" rows="3" style="width:100%;font-family:monospace;font-size:.85rem;"
+   placeholder="例如：&#10;盐酸多西环素片 100mg×30片&#10;Doxycycline Hyclate Tablets">{{ aliases_text or '' }}</textarea>
+ </div>
+ {% endif %}
+
  <div style="grid-column:1/-1;">
  <label style="display:block;font-weight:600;margin-bottom:0.35rem;">归属门店</label>
  {% if is_superadmin %}

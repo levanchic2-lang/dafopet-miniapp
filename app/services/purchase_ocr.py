@@ -163,11 +163,28 @@ def _strip_brand_prefix(s: str) -> str:
     return s
 
 
+def _candidate_names(it) -> list[str]:
+    """一个品目的所有可比对名称：name + aliases。"""
+    names = [(it.name or "").strip()]
+    raw = getattr(it, "aliases", "") or ""
+    if raw:
+        try:
+            arr = json.loads(raw)
+            if isinstance(arr, list):
+                for a in arr:
+                    s = str(a or "").strip()
+                    if s:
+                        names.append(s)
+        except Exception:
+            pass
+    return [n for n in names if n]
+
+
 def match_item_by_name(name: str, all_items: list) -> tuple[int, float]:
     """返回 (item_id, confidence)。0~1，1=完全一致。无匹配返回 (0, 0)。
     匹配策略：
-      1. 全名 normalize 后完全相等 → 1.0
-      2. 剥前缀后完全相等 → 0.95
+      1. 对每个品目，把 item.name 和 item.aliases 里的每个别名都当候选名跑一遍
+      2. 全名 normalize 后完全相等 → 1.0；剥前缀后完全相等 → 0.95
       3. SequenceMatcher（同时对原名 / 剥前缀名都跑一遍，取较优）
       4. 子串包含给加分到 0.9
     阈值：0.7
@@ -179,29 +196,59 @@ def match_item_by_name(name: str, all_items: list) -> tuple[int, float]:
     target_stripped = _normalize(_strip_brand_prefix(name))
     best = (0, 0.0)
     for it in all_items:
-        n_full = _normalize(it.name or "")
-        if not n_full:
-            continue
-        if n_full == target_full:
-            return (it.id, 1.0)
-        n_stripped = _normalize(_strip_brand_prefix(it.name or ""))
-        if target_stripped and (target_stripped == n_full or target_stripped == n_stripped):
-            return (it.id, 0.95)
-        # 4 个组合两两比，取最高
-        ratios = [SequenceMatcher(None, n_full, target_full).ratio()]
-        if target_stripped:
-            ratios.append(SequenceMatcher(None, n_full, target_stripped).ratio())
-            if n_stripped != n_full:
-                ratios.append(SequenceMatcher(None, n_stripped, target_stripped).ratio())
-                ratios.append(SequenceMatcher(None, n_stripped, target_full).ratio())
-        ratio = max(ratios)
-        # 子串包含加分
-        if (target_full in n_full or n_full in target_full or
-            (target_stripped and (target_stripped in n_full or n_full in target_stripped))):
-            ratio = max(ratio, 0.9)
-        if ratio > best[1]:
-            best = (it.id, ratio)
+        for cand in _candidate_names(it):
+            n_full = _normalize(cand)
+            if not n_full:
+                continue
+            if n_full == target_full:
+                return (it.id, 1.0)
+            n_stripped = _normalize(_strip_brand_prefix(cand))
+            if target_stripped and (target_stripped == n_full or target_stripped == n_stripped):
+                return (it.id, 0.95)
+            ratios = [SequenceMatcher(None, n_full, target_full).ratio()]
+            if target_stripped:
+                ratios.append(SequenceMatcher(None, n_full, target_stripped).ratio())
+                if n_stripped != n_full:
+                    ratios.append(SequenceMatcher(None, n_stripped, target_stripped).ratio())
+                    ratios.append(SequenceMatcher(None, n_stripped, target_full).ratio())
+            ratio = max(ratios)
+            if (target_full in n_full or n_full in target_full or
+                (target_stripped and (target_stripped in n_full or n_full in target_stripped))):
+                ratio = max(ratio, 0.9)
+            if ratio > best[1]:
+                best = (it.id, ratio)
     return best if best[1] >= 0.7 else (0, best[1])
+
+
+def add_alias_to_item(item, new_name: str) -> bool:
+    """在 InventoryItem.aliases JSON 数组里追加一个名字（去重，并避开 item.name 本身）。
+    返回 True 表示新增了一条；False 表示没变化。
+    调用方负责后续 db.commit()。
+    """
+    new_name = (new_name or "").strip()
+    if not new_name:
+        return False
+    if _normalize(new_name) == _normalize(item.name or ""):
+        return False  # 跟 name 完全一致，没必要存
+    raw = getattr(item, "aliases", "") or ""
+    aliases: list = []
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                aliases = [str(a).strip() for a in parsed if str(a).strip()]
+        except Exception:
+            aliases = []
+    # 去重（normalize 后比较）
+    norm_set = {_normalize(a) for a in aliases}
+    if _normalize(new_name) in norm_set:
+        return False
+    aliases.append(new_name)
+    # 上限 8 个，避免无限增长
+    if len(aliases) > 8:
+        aliases = aliases[-8:]
+    item.aliases = json.dumps(aliases, ensure_ascii=False)
+    return True
 
 
 def dedup_key(name: str, spec: str = "") -> str:

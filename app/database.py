@@ -677,6 +677,9 @@ def _try_sqlite_migrations() -> None:
             # inventory_items: 门店级价格覆盖（方案 H — JSON 字符串）
             if inv_item_cols and "store_overrides" not in inv_item_names:
                 conn.execute(text("ALTER TABLE inventory_items ADD COLUMN store_overrides TEXT DEFAULT ''"))
+            # inventory_items: 拍照入库识别别名（进货单上的标准名/厂家名）
+            if inv_item_cols and "aliases" not in inv_item_names:
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN aliases TEXT DEFAULT ''"))
 
             # stocktake_sessions 盘点会话表
             st_sess_cols = conn.execute(text("PRAGMA table_info(stocktake_sessions)")).fetchall()

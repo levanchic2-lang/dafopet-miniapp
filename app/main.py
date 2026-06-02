@@ -12919,6 +12919,9 @@ async def admin_inventory_import_photo_commit(
             if not item:
                 skipped += 1
                 continue
+            # 累加时把进货单上的标准名追加到 aliases，下次同样名能命中
+            from app.services.purchase_ocr import add_alias_to_item as _add_alias
+            _add_alias(item, name)
         else:  # create
             # 同批次内去重：相同 normalize(name+spec) 已经在本次创建过 → 直接复用
             dkey = _dedup_key(name, spec)
@@ -13187,6 +13190,14 @@ async def admin_inventory_edit_form(item_id: int, request: Request, db: Session 
         raise HTTPException(404)
     from app.services.pricing import parse_overrides as _po
     item.store_overrides_parsed = _po(item)
+    # 别名：JSON → 一行一个，给 textarea 用
+    aliases_text = ""
+    try:
+        arr = json.loads(item.aliases) if (item.aliases or "").strip() else []
+        if isinstance(arr, list):
+            aliases_text = "\n".join(str(a) for a in arr if str(a).strip())
+    except Exception:
+        aliases_text = ""
     return templates.TemplateResponse(request, "admin_inventory_form.html", {
         "request": request, "item": item,
         "categories": INVENTORY_CATEGORIES,
@@ -13194,6 +13205,7 @@ async def admin_inventory_edit_form(item_id: int, request: Request, db: Session 
         "title": f"编辑品目：{item.name}",
         "default_store": item.store or _get_admin_store(request),
         "is_superadmin": request.session.get("admin_role") == "superadmin",
+        "aliases_text": aliases_text,
     })
 
 
@@ -13243,6 +13255,8 @@ async def admin_inventory_edit(
     # 门店覆盖价（方案 H）
     override_sell_donghuan: str = Form(""), override_cost_donghuan: str = Form(""),
     override_sell_henggang: str = Form(""), override_cost_henggang: str = Form(""),
+    # 进货识别别名（一行一个）
+    aliases_text: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -13250,6 +13264,17 @@ async def admin_inventory_edit(
     if not item:
         raise HTTPException(404)
     item.name = name.strip() or item.name
+    # 别名：去重 + 去空，按行解析
+    if aliases_text is not None:
+        lines = [ln.strip() for ln in aliases_text.splitlines() if ln.strip()]
+        seen, deduped = set(), []
+        for ln in lines:
+            k = ln.lower().replace(" ", "")
+            if k in seen:
+                continue
+            seen.add(k)
+            deduped.append(ln[:200])
+        item.aliases = json.dumps(deduped[:8], ensure_ascii=False) if deduped else ""
     item.category = category; item.subcategory = subcategory
     item.is_service = (is_service == "1"); item.is_controlled = (is_controlled == "1")
     item.unit = unit; item.unit2 = unit2; item.unit2_ratio = unit2_ratio
