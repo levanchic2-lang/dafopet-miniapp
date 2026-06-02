@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+.hosp-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:.85rem 1rem; margin-bottom:.65rem; transition:border-color .1s; }
+.hosp-card:hover { border-color:#93c5fd; }
+.hosp-card.discharged { background:#f8fafc; opacity:.85; }
+.hosp-row { display:flex; align-items:center; gap:.65rem; flex-wrap:wrap; }
+.hosp-day-badge { background:#ecfdf5; color:#047857; padding:2px 8px; border-radius:4px; font-size:.78rem;
+  border:1px solid #6ee7b7; font-weight:600; }
+.hosp-day-badge.over { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
+.hosp-cage-tag { background:#eff6ff; color:#1e40af; padding:1px 8px; border-radius:4px; font-size:.78rem;
+  border:1px solid #bfdbfe; }
+.list-tab.active { background:#3b82f6; color:#fff; }
+</style>
+{% endblock %}
+
+{% block body %}
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
+
+<div class="page-head">
+ <h1><i data-lucide="bed-double"></i> 住院管理</h1>
+ <p class="ph-sub">入院 → 用药记录 → 出院结账闭环</p>
+ <div class="ph-actions">
+  <a href="/admin/cages" class="btn secondary"><i data-lucide="layout-grid"></i> 笼位管理</a>
+ </div>
+</div>
+
+<div class="list-tabs" style="margin-bottom:1rem;">
+ <a href="?status=admitted" class="list-tab {% if status == 'admitted' %}active{% endif %}">住院中</a>
+ <a href="?status=discharged" class="list-tab {% if status == 'discharged' %}active{% endif %}">已出院</a>
+ <a href="?status=cancelled" class="list-tab {% if status == 'cancelled' %}active{% endif %}">已取消</a>
+</div>
+
+{% if not rows %}
+<div class="card" style="text-align:center;padding:3rem;color:var(--muted);">
+ <i data-lucide="bed-double" style="width:48px;height:48px;opacity:.4;"></i>
+ <p style="margin-top:.65rem;">当前没有「{{ status_zh.get(status, status) }}」的住院记录</p>
+ <p style="font-size:.85rem;">新住院由病历详情页「转住院」按钮发起</p>
+</div>
+{% else %}
+{% for h in rows %}
+{% set days = calc_days(h.admitted_at, h.discharged_at or now) %}
+<a href="/admin/inpatient/{{ h.id }}" class="hosp-card {% if h.status == 'discharged' %}discharged{% endif %}" style="display:block;text-decoration:none;color:inherit;">
+ <div class="hosp-row">
+  <strong style="font-size:1.05rem;">{{ h.pet.name if h.pet else '宠物' }}</strong>
+  <span style="color:var(--muted);font-size:.85rem;">{{ h.customer.name if h.customer else '客户' }} · {{ h.customer.phone if h.customer else '—' }}</span>
+  {% if h.cage %}<span class="hosp-cage-tag">🏷 {{ h.cage.code }} · {{ kind_zh.get(h.cage.kind, h.cage.kind) }}</span>{% endif %}
+  <span class="hosp-day-badge {% if days >= 5 %}over{% endif %}">住 {{ days }} 天</span>
+  <span style="margin-left:auto;color:var(--muted);font-size:.78rem;">
+   {{ h.admitted_at.strftime('%m-%d %H:%M') if h.admitted_at else '—' }}
+   {% if h.discharged_at %}→ {{ h.discharged_at.strftime('%m-%d %H:%M') }}{% endif %}
+  </span>
+ </div>
+ {% if h.reason %}
+ <div style="margin-top:.4rem;font-size:.86rem;color:#475569;">{{ h.reason[:100] }}{% if h.reason|length > 100 %}…{% endif %}</div>
+ {% endif %}
+</a>
+{% endfor %}
+{% endif %}
+{% endblock %}

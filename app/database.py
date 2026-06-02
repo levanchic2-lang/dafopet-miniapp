@@ -994,6 +994,55 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dewor_pet ON deworming_records(pet_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dewor_date ON deworming_records(deworm_date)"))
 
+            # cages 笼位（住院模块基础）
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS cages ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "store VARCHAR(40) DEFAULT '', "
+                "code VARCHAR(40) DEFAULT '', "
+                "kind VARCHAR(20) DEFAULT 'general', "
+                "daily_rate REAL DEFAULT 0.0, "
+                "sort_order INTEGER DEFAULT 0, "
+                "notes TEXT DEFAULT '', "
+                "is_active INTEGER DEFAULT 1, "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cages_store ON cages(store)"))
+
+            # hospitalizations 住院档案
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS hospitalizations ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "cage_id INTEGER DEFAULT NULL REFERENCES cages(id) ON DELETE SET NULL, "
+                "invoice_id INTEGER DEFAULT NULL REFERENCES invoices(id) ON DELETE SET NULL, "
+                "store VARCHAR(40) DEFAULT '', "
+                "reason TEXT DEFAULT '', "
+                "admitted_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "expected_discharge_date VARCHAR(20) DEFAULT '', "
+                "discharged_at DATETIME DEFAULT NULL, "
+                "discharge_summary TEXT DEFAULT '', "
+                "daily_rate_override REAL DEFAULT 0.0, "
+                "status VARCHAR(20) DEFAULT 'admitted', "
+                "staff_token VARCHAR(40) DEFAULT '', "
+                "owner_token VARCHAR(40) DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "closed_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_hosp_pet ON hospitalizations(pet_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_hosp_status ON hospitalizations(status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_hosp_store ON hospitalizations(store)"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_hosp_staff_token ON hospitalizations(staff_token) WHERE staff_token != ''"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_hosp_owner_token ON hospitalizations(owner_token) WHERE owner_token != ''"))
+
             # weight_records 体重记录
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS weight_records ("

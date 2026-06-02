@@ -290,6 +290,10 @@
  <a href="/admin/visits/{{ v.id }}/discharge-print" target="_blank" class="btn secondary"
     style="font-size:.82rem;"><i data-lucide="clipboard-list"></i> 打印医嘱单</a>
  {% if not visit_closed %}
+ <a href="/admin/inpatient/new?visit_id={{ v.id }}" class="btn"
+    style="background:#0ea5e9;color:#fff;border-color:#0ea5e9;font-size:.82rem;">
+  <i data-lucide="bed-double"></i> 转住院
+ </a>
  <form method="post" action="/admin/visits/{{ v.id }}/close" style="display:inline;"
        onsubmit="return confirm('⚠ 确定结束本次病历？\n\n结束后病历及关联处方/检查单将不可修改，且按合规要求不能重开。\n如有遗漏只能新建一份病历做补充。');">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

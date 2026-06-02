@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+.hh-grid { display:grid; grid-template-columns: 1fr 320px; gap:1.25rem; align-items:start; }
+.info-line { display:flex; justify-content:space-between; padding:.4rem 0; border-bottom:1px dashed var(--border); font-size:.88rem; }
+.info-line:last-child { border-bottom:none; }
+.info-line label { color:var(--muted); }
+.banner-admitted { background:#dcfce7; border-left:4px solid #16a34a; padding:.7rem 1rem; border-radius:6px; color:#14532d; margin-bottom:1rem; }
+.banner-discharged { background:#fef3c7; border-left:4px solid #d97706; padding:.7rem 1rem; border-radius:6px; color:#78350f; margin-bottom:1rem; }
+.banner-cancelled { background:#f3f4f6; border-left:4px solid #6b7280; padding:.7rem 1rem; border-radius:6px; color:#374151; margin-bottom:1rem; }
+@media (max-width: 760px) { .hh-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block body %}
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
+
+{% set days = calc_days(h.admitted_at, h.discharged_at or now) %}
+
+<div class="page-head">
+ <div style="display:flex;align-items:center;gap:.75rem;">
+  <a href="/admin/inpatient?status={{ h.status }}" class="btn secondary"><i data-lucide="arrow-left"></i> 返回</a>
+  <div>
+   <h1 style="margin:0;"><i data-lucide="bed-double"></i> 住院 #{{ h.id }} · {{ pet.name if pet else '宠物' }}</h1>
+   <p class="ph-sub">{{ cust.name if cust else '客户' }} · {{ cust.phone if cust else '—' }} {% if visit %} · 病历 <a href="/admin/visits/{{ visit.id }}">#{{ visit.id }}</a>{% endif %}</p>
+  </div>
+ </div>
+</div>
+
+{% if h.status == 'admitted' %}
+<div class="banner-admitted">
+ <i data-lucide="check"></i> <b>住院中</b> · 已入住 {{ days }} 天 · 入院 {{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}
+</div>
+{% elif h.status == 'discharged' %}
+<div class="banner-discharged">
+ <i data-lucide="log-out"></i> <b>已出院</b> · 共住 {{ days }} 天 · {{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }} → {{ h.discharged_at.strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}
+ {% if h.invoice_id %} · <a href="/admin/invoices/{{ h.invoice_id }}" style="color:inherit;text-decoration:underline;">查看账单</a>{% endif %}
+</div>
+{% else %}
+<div class="banner-cancelled">
+ <i data-lucide="x-circle"></i> <b>已取消</b>
+</div>
+{% endif %}
+
+<div class="hh-grid">
+ <div>
+  <div class="card">
+   <h3 style="margin:0 0 .85rem;font-size:1rem;"><i data-lucide="file-text"></i> 住院信息</h3>
+   <div class="info-line"><label>入院时间</label><span>{{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span></div>
+   <div class="info-line"><label>预计出院</label><span>{{ h.expected_discharge_date or '—' }}</span></div>
+   {% if h.discharged_at %}<div class="info-line"><label>实际出院</label><span>{{ h.discharged_at.strftime('%Y-%m-%d %H:%M') }}</span></div>{% endif %}
+   <div class="info-line"><label>当前笼位</label><span>{% if cage %}{{ cage.code }} · {{ kind_zh.get(cage.kind, cage.kind) }} · ¥{{ '%.2f'|format(cage.daily_rate) }}/天{% else %}— 未指定{% endif %}</span></div>
+   <div class="info-line"><label>日费率</label><span>¥{{ '%.2f'|format(h.daily_rate_override if h.daily_rate_override > 0 else (cage.daily_rate if cage else 0)) }} {% if h.daily_rate_override > 0 %}<small style="color:var(--muted);">（已覆盖笼默认）</small>{% endif %}</span></div>
+   <div class="info-line"><label>主治医生</label><span>{{ visit.vet_name if visit else '—' }}</span></div>
+   <div class="info-line"><label>记录人</label><span>{{ h.created_by or '—' }}</span></div>
+   {% if h.closed_by %}<div class="info-line"><label>出院/取消人</label><span>{{ h.closed_by }}</span></div>{% endif %}
+  </div>
+
+  {% if h.reason %}
+  <div class="card" style="margin-top:1rem;">
+   <h3 style="margin:0 0 .65rem;font-size:.95rem;">📋 入院原因 / 病情</h3>
+   <p style="white-space:pre-wrap;font-size:.92rem;line-height:1.6;color:#1f2937;">{{ h.reason }}</p>
+  </div>
+  {% endif %}
+
+  {% if h.discharge_summary %}
+  <div class="card" style="margin-top:1rem;">
+   <h3 style="margin:0 0 .65rem;font-size:.95rem;">📝 出院小结</h3>
+   <p style="white-space:pre-wrap;font-size:.92rem;line-height:1.6;color:#1f2937;">{{ h.discharge_summary }}</p>
+  </div>
+  {% endif %}
+
+  <div class="card" style="margin-top:1rem;text-align:center;color:var(--muted);padding:1.5rem;">
+   <i data-lucide="construction" style="opacity:.5;"></i>
+   <p style="margin:.5rem 0 0;font-size:.9rem;">用药打勾 / 生命体征 / I/O / 进食 / 交班 等模块开发中（D3-D5）</p>
+  </div>
+ </div>
+
+ <div>
+  {% if h.status == 'admitted' %}
+  <div class="card">
+   <h3 style="margin:0 0 .75rem;font-size:.95rem;">🔁 换笼</h3>
+   <form method="post" action="/admin/inpatient/{{ h.id }}/transfer">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <select name="cage_id" style="width:100%;margin-bottom:.5rem;">
+     <option value="0">— 不指定 —</option>
+     {% for c in avail_cages %}
+     {% set is_occ = (c.id in occupied_ids) and (c.id != h.cage_id) %}
+     <option value="{{ c.id }}" {% if c.id == h.cage_id %}selected{% endif %} {% if is_occ %}disabled{% endif %}>
+      {{ c.code }} · {{ kind_zh.get(c.kind, c.kind) }} · ¥{{ '%.0f'|format(c.daily_rate) }}/天 {% if is_occ %}（占用中）{% endif %}
+     </option>
+     {% endfor %}
+    </select>
+    <button type="submit" class="btn secondary" style="width:100%;">保存换笼</button>
+   </form>
+  </div>
+
+  <div class="card" style="margin-top:1rem;">
+   <h3 style="margin:0 0 .75rem;font-size:.95rem;color:#92400e;"><i data-lucide="log-out"></i> 出院结账</h3>
+   <form method="post" action="/admin/inpatient/{{ h.id }}/discharge"
+         onsubmit="return confirm('确认出院？\n\n系统会自动算 {{ days }} 天笼费 + 同步处方/检查到收费单。');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <label style="font-size:.82rem;color:var(--muted);">出院小结（可选）</label>
+    <textarea name="discharge_summary" rows="3" style="width:100%;margin-top:.25rem;" placeholder="主要诊断 / 治疗经过 / 回家注意事项"></textarea>
+    <button type="submit" class="btn" style="width:100%;margin-top:.6rem;background:#d97706;color:#fff;border-color:#d97706;">
+     <i data-lucide="check"></i> 出院并结账
+    </button>
+   </form>
+  </div>
+
+  <div class="card" style="margin-top:1rem;">
+   <form method="post" action="/admin/inpatient/{{ h.id }}/cancel"
+         onsubmit="return confirm('误开入院？取消本次住院档案。');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <button type="submit" class="btn secondary" style="width:100%;color:#dc2626;">
+     <i data-lucide="x"></i> 误开 · 取消入院
+    </button>
+   </form>
+  </div>
+  {% endif %}
+
+  {% if h.invoice_id %}
+  <div class="card" style="margin-top:1rem;">
+   <h3 style="margin:0 0 .5rem;font-size:.95rem;">💰 关联账单</h3>
+   <a href="/admin/invoices/{{ h.invoice_id }}" class="btn secondary" style="width:100%;text-align:center;">查看账单 #{{ h.invoice_id }}</a>
+  </div>
+  {% endif %}
+ </div>
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="page-head">
+ <div style="display:flex;align-items:center;gap:.75rem;">
+  <a href="/admin/visits/{{ visit.id }}" class="btn secondary"><i data-lucide="arrow-left"></i> 返回病历</a>
+  <h1 style="margin:0;"><i data-lucide="bed-double"></i> 新建住院</h1>
+ </div>
+</div>
+
+<div class="card" style="max-width:600px;">
+ <div style="background:#f8fafc;padding:.75rem 1rem;border-radius:6px;margin-bottom:1rem;font-size:.9rem;">
+  <div><b>{{ pet.name if pet else '宠物' }}</b> · {{ cust.name if cust else '客户' }} · {{ cust.phone if cust else '—' }}</div>
+  <div style="color:var(--muted);font-size:.82rem;margin-top:.2rem;">病历 #{{ visit.id }} · {{ visit.visit_date or '—' }} · {{ visit.vet_name or '—' }}</div>
+ </div>
+
+ <form method="post" action="/admin/inpatient/admit">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="visit_id" value="{{ visit.id }}"/>
+
+  <label style="display:block;font-weight:600;margin-bottom:.3rem;">选择笼位</label>
+  <select name="cage_id" style="width:100%;margin-bottom:1rem;">
+   <option value="0">— 暂不指定 —</option>
+   {% for c in cages %}
+   {% set is_occ = c.id in occupied_ids %}
+   <option value="{{ c.id }}" {% if is_occ %}disabled{% endif %}>
+    {{ c.code }} · {{ kind_zh.get(c.kind, c.kind) }} · ¥{{ '%.0f'|format(c.daily_rate) }}/天 {% if is_occ %}（占用中）{% endif %}
+   </option>
+   {% endfor %}
+  </select>
+  {% if not cages %}
+  <div style="margin-top:-.7rem;margin-bottom:1rem;font-size:.82rem;color:#dc2626;">
+   ⚠ 当前门店「{{ store_short or '未绑定' }}」还没有笼位。<a href="/admin/cages">先去配置 →</a>
+  </div>
+  {% endif %}
+
+  <label style="display:block;font-weight:600;margin-bottom:.3rem;">入院原因 / 病情</label>
+  <textarea name="reason" rows="3" style="width:100%;margin-bottom:1rem;" required>{{ visit.chief_complaint or visit.diagnosis or '' }}</textarea>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:1rem;">
+   <div>
+    <label style="display:block;font-weight:600;margin-bottom:.3rem;">预计出院日期</label>
+    <input type="date" name="expected_discharge_date" style="width:100%;"/>
+   </div>
+   <div>
+    <label style="display:block;font-weight:600;margin-bottom:.3rem;">覆盖日费率（可选）</label>
+    <input type="number" step="0.01" min="0" name="daily_rate_override" value="0" style="width:100%;" placeholder="留 0 则用笼默认"/>
+   </div>
+  </div>
+
+  <div style="display:flex;gap:.5rem;">
+   <button type="submit" class="btn" style="flex:1;background:#0ea5e9;border-color:#0ea5e9;">
+    <i data-lucide="check"></i> 确认入院
+   </button>
+   <a href="/admin/visits/{{ visit.id }}" class="btn secondary">取消</a>
+  </div>
+ </form>
+</div>
+{% endblock %}

@@ -94,6 +94,8 @@ from app.models import (
     FollowUpTemplate,
     Disease,
     GroomingOrder,
+    Cage,
+    Hospitalization,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
@@ -14068,6 +14070,16 @@ def _gen_invoice_no(db: Session) -> str:
     return f"{today_str}-{count + 1}"
 
 
+def _calc_hosp_days(admitted_at, discharged_at) -> int:
+    """住院天数：过夜算 1 天。当天进当天出 = 0 天（笼费 0）。
+       进 6/2 22:00 → 出 6/3 06:00 = 1 天（过 1 夜）
+       进 6/2 06:00 → 出 6/4 22:00 = 2 天（过 2 夜）
+    """
+    if not admitted_at or not discharged_at:
+        return 0
+    return max(0, (discharged_at.date() - admitted_at.date()).days)
+
+
 def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "Invoice | None":
     """把就诊产生的处方 / 检查单 / 销售单自动同步到一张「待收款」收费单。
 
@@ -14145,6 +14157,35 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
                 "subtotal": float(it.subtotal or 0),
             })
             subtotal_sum += float(it.subtotal or 0)
+
+    # ── 4) 住院笼费（仅 discharged 计） ──
+    hosps = db.query(Hospitalization).filter(
+        Hospitalization.visit_id == visit_id,
+        Hospitalization.status == "discharged",
+    ).all()
+    for h in hosps:
+        days = _calc_hosp_days(h.admitted_at, h.discharged_at)
+        if days <= 0:
+            continue
+        rate = float(h.daily_rate_override or 0)
+        if rate <= 0 and h.cage_id:
+            _c = db.get(Cage, h.cage_id)
+            rate = float(_c.daily_rate if _c else 0)
+        sub = round(days * rate, 2)
+        if sub <= 0:
+            continue
+        cage_name = ""
+        if h.cage_id:
+            _c = db.get(Cage, h.cage_id)
+            cage_name = _c.code if _c else ""
+        line_items.append({
+            "ref_type": "hospitalization", "ref_id": h.id,
+            "description": f"[住院#{h.id}] 笼费 · {cage_name or '—'} × {days} 天",
+            "quantity": float(days),
+            "unit_price": rate,
+            "subtotal": sub,
+        })
+        subtotal_sum += sub
 
     subtotal_sum = round(subtotal_sum, 2)
 
@@ -17899,3 +17940,350 @@ async def api_prescription_recent(
         "ok": True, "id": p.id, "prescribed_date": p.prescribed_date,
         "vet_name": p.vet_name, "notes": p.notes, "items": items,
     }
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 住院管理（D1）：笼位 + 入院 + 出院（自动结账）
+# ════════════════════════════════════════════════════════════════════════
+
+_CAGE_KIND_ZH = {"general": "普通笼", "iso": "隔离笼", "icu": "ICU", "other": "其他"}
+_HOSP_STATUS_ZH = {"admitted": "住院中", "discharged": "已出院", "cancelled": "已取消"}
+
+
+def _gen_hosp_token(db: Session, field: str) -> str:
+    """生成唯一短 token（staff/owner 各一个）。"""
+    while True:
+        tk = secrets.token_urlsafe(12)
+        col = getattr(Hospitalization, field)
+        exists = db.query(Hospitalization.id).filter(col == tk).first()
+        if not exists:
+            return tk
+
+
+# ─── 笼位管理 ───
+@app.get("/admin/cages", response_class=HTMLResponse)
+async def admin_cages_list(request: Request, db: Session = Depends(get_db),
+                            store: str = ""):
+    require_admin(request)
+    admin_store = _get_admin_store(request)
+    if request.session.get("admin_role") == "superadmin":
+        wb_store = (store or "").strip()
+    else:
+        wb_store = admin_store
+    q = db.query(Cage).filter(Cage.is_active == True)
+    if wb_store:
+        q = q.filter(Cage.store == wb_store)
+    cages = q.order_by(Cage.store, Cage.sort_order, Cage.code).all()
+    # 占用情况：每个 cage 当前是否有 admitted 的住院
+    occupied_ids = {h.cage_id for h in db.query(Hospitalization)
+                    .filter(Hospitalization.status == "admitted",
+                            Hospitalization.cage_id != None).all()}
+    return templates.TemplateResponse(request, "admin_cages.html", {
+        "request": request, "cages": cages, "kind_zh": _CAGE_KIND_ZH,
+        "occupied_ids": occupied_ids,
+        "wb_store": wb_store, "csrf_token": _get_csrf_token(request),
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
+        "title": "笼位管理",
+    })
+
+
+@app.post("/admin/cages/create")
+async def admin_cages_create(request: Request, db: Session = Depends(get_db),
+                              csrf_token: str = Form(""),
+                              code: str = Form(""), kind: str = Form("general"),
+                              daily_rate: float = Form(0.0),
+                              store: str = Form(""), sort_order: int = Form(0),
+                              notes: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    code = code.strip()[:40]
+    if not code:
+        return RedirectResponse("/admin/cages?msg=笼号不能为空", status_code=303)
+    if kind not in _CAGE_KIND_ZH:
+        kind = "general"
+    # 超管可指定门店；员工自动归本店
+    if request.session.get("admin_role") == "superadmin":
+        cage_store = (store or "").strip()
+    else:
+        cage_store = _get_admin_store(request)
+    # 同店内笼号唯一
+    dup = db.query(Cage).filter(Cage.store == cage_store, Cage.code == code,
+                                 Cage.is_active == True).first()
+    if dup:
+        return RedirectResponse(f"/admin/cages?msg=笼号「{code}」已存在", status_code=303)
+    c = Cage(
+        store=cage_store, code=code, kind=kind,
+        daily_rate=max(0.0, float(daily_rate or 0)),
+        sort_order=int(sort_order or 0),
+        notes=notes.strip()[:500],
+        created_by=request.session.get("admin_username", ""),
+    )
+    db.add(c)
+    db.commit()
+    return RedirectResponse(f"/admin/cages?msg=已添加笼位 {code}", status_code=303)
+
+
+@app.post("/admin/cages/{cage_id}/edit")
+async def admin_cages_edit(cage_id: int, request: Request, db: Session = Depends(get_db),
+                            csrf_token: str = Form(""),
+                            code: str = Form(""), kind: str = Form("general"),
+                            daily_rate: float = Form(0.0),
+                            sort_order: int = Form(0), notes: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    c = db.get(Cage, cage_id)
+    if not c:
+        raise HTTPException(404, "笼位不存在")
+    c.code = (code or "").strip()[:40] or c.code
+    if kind in _CAGE_KIND_ZH:
+        c.kind = kind
+    c.daily_rate = max(0.0, float(daily_rate or 0))
+    c.sort_order = int(sort_order or 0)
+    c.notes = (notes or "").strip()[:500]
+    db.commit()
+    return RedirectResponse(f"/admin/cages?msg=已保存", status_code=303)
+
+
+@app.post("/admin/cages/{cage_id}/delete")
+async def admin_cages_delete(cage_id: int, request: Request, db: Session = Depends(get_db),
+                              csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    c = db.get(Cage, cage_id)
+    if not c:
+        raise HTTPException(404)
+    # 占用中不让删
+    occ = db.query(Hospitalization).filter(Hospitalization.cage_id == cage_id,
+                                            Hospitalization.status == "admitted").first()
+    if occ:
+        return RedirectResponse(f"/admin/cages?msg=笼位 {c.code} 当前有动物住院，不能删除", status_code=303)
+    c.is_active = False
+    db.commit()
+    return RedirectResponse(f"/admin/cages?msg=已删除笼位 {c.code}", status_code=303)
+
+
+# ─── 住院档案 ───
+@app.get("/admin/inpatient/new", response_class=HTMLResponse)
+async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_db),
+                                     visit_id: int = 0):
+    require_admin(request)
+    v = db.get(Visit, visit_id) if visit_id else None
+    if not v:
+        raise HTTPException(404, "请从某次就诊记录发起入院")
+    if (v.status or "open") == "closed":
+        raise HTTPException(400, "病历已结束，不能再开住院")
+    cust = db.get(Customer, v.customer_id) if v.customer_id else None
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    admin_store = _get_admin_store(request)
+    store_short = admin_store or (pet.store if pet else "") or ""
+    cages_q = db.query(Cage).filter(Cage.is_active == True)
+    if store_short:
+        cages_q = cages_q.filter(Cage.store == store_short)
+    cages = cages_q.order_by(Cage.sort_order, Cage.code).all()
+    occupied_ids = {h.cage_id for h in db.query(Hospitalization)
+                    .filter(Hospitalization.status == "admitted",
+                            Hospitalization.cage_id != None).all()}
+    return templates.TemplateResponse(request, "admin_inpatient_new.html", {
+        "request": request, "visit": v, "cust": cust, "pet": pet,
+        "cages": cages, "occupied_ids": occupied_ids,
+        "kind_zh": _CAGE_KIND_ZH, "store_short": store_short,
+        "csrf_token": _get_csrf_token(request),
+        "title": "新建住院",
+    })
+
+
+@app.post("/admin/inpatient/admit")
+async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
+                                  csrf_token: str = Form(""),
+                                  visit_id: int = Form(...),
+                                  cage_id: int = Form(0),
+                                  reason: str = Form(""),
+                                  expected_discharge_date: str = Form(""),
+                                  daily_rate_override: float = Form(0.0)):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    # 已有"住院中"档案 → 跳到那张
+    existing = db.query(Hospitalization).filter(
+        Hospitalization.pet_id == v.pet_id,
+        Hospitalization.status == "admitted",
+    ).first()
+    if existing:
+        return RedirectResponse(f"/admin/inpatient/{existing.id}?msg=该宠物已有住院中档案",
+                                 status_code=303)
+    # 校验笼位空闲
+    if cage_id:
+        cage = db.get(Cage, cage_id)
+        if not cage or not cage.is_active:
+            raise HTTPException(400, "笼位无效")
+        occ = db.query(Hospitalization).filter(
+            Hospitalization.cage_id == cage_id,
+            Hospitalization.status == "admitted",
+        ).first()
+        if occ:
+            raise HTTPException(400, f"笼位 {cage.code} 已被占用")
+    # 门店：取员工绑定店；超管取 visit 关联 pet.store
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        store_short = admin_store
+    else:
+        pet = db.get(Pet, v.pet_id) if v.pet_id else None
+        store_short = (pet.store if pet else "") or ""
+    h = Hospitalization(
+        pet_id=v.pet_id, customer_id=v.customer_id, visit_id=visit_id,
+        cage_id=cage_id or None,
+        store=store_short,
+        reason=(reason or v.chief_complaint or "")[:2000],
+        expected_discharge_date=(expected_discharge_date or "").strip()[:20],
+        daily_rate_override=max(0.0, float(daily_rate_override or 0)),
+        status="admitted",
+        staff_token=_gen_hosp_token(db, "staff_token"),
+        owner_token=_gen_hosp_token(db, "owner_token"),
+        created_by=request.session.get("admin_username", ""),
+    )
+    db.add(h)
+    db.flush()
+    _audit(db, request, "hospitalization_admit", detail={
+        "id": h.id, "pet_id": h.pet_id, "visit_id": visit_id,
+        "cage_id": cage_id, "store": store_short,
+    })
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{h.id}?msg=已入院",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/discharge")
+async def admin_inpatient_discharge(hosp_id: int, request: Request,
+                                      db: Session = Depends(get_db),
+                                      csrf_token: str = Form(""),
+                                      discharge_summary: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    h = db.get(Hospitalization, hosp_id)
+    if not h:
+        raise HTTPException(404)
+    if h.status != "admitted":
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=当前状态不可出院",
+                                 status_code=303)
+    h.status = "discharged"
+    h.discharged_at = datetime.utcnow()
+    h.discharge_summary = (discharge_summary or "").strip()[:5000]
+    h.closed_by = request.session.get("admin_username", "")
+    db.flush()
+    # 出院后同步收费单：加笼费明细
+    operator = request.session.get("admin_username", "admin")
+    if h.visit_id:
+        inv = _sync_visit_invoice(db, h.visit_id, operator)
+        if inv:
+            h.invoice_id = inv.id
+    _audit(db, request, "hospitalization_discharge",
+           detail={"id": h.id, "days": _calc_hosp_days(h.admitted_at, h.discharged_at)})
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已出院 · 账单已同步",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/transfer")
+async def admin_inpatient_transfer(hosp_id: int, request: Request,
+                                     db: Session = Depends(get_db),
+                                     csrf_token: str = Form(""),
+                                     cage_id: int = Form(0)):
+    """换笼。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    h = db.get(Hospitalization, hosp_id)
+    if not h or h.status != "admitted":
+        raise HTTPException(400, "状态不允许换笼")
+    if cage_id:
+        cage = db.get(Cage, cage_id)
+        if not cage or not cage.is_active:
+            raise HTTPException(400, "笼位无效")
+        occ = db.query(Hospitalization).filter(
+            Hospitalization.cage_id == cage_id,
+            Hospitalization.status == "admitted",
+            Hospitalization.id != hosp_id,
+        ).first()
+        if occ:
+            raise HTTPException(400, f"笼位 {cage.code} 已被占用")
+    h.cage_id = cage_id or None
+    _audit(db, request, "hospitalization_transfer",
+           detail={"id": h.id, "cage_id": cage_id})
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已换笼", status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/cancel")
+async def admin_inpatient_cancel(hosp_id: int, request: Request,
+                                   db: Session = Depends(get_db),
+                                   csrf_token: str = Form("")):
+    """误开作废（仅 admitted 可取消）。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    h = db.get(Hospitalization, hosp_id)
+    if not h or h.status != "admitted":
+        raise HTTPException(400)
+    h.status = "cancelled"
+    h.closed_by = request.session.get("admin_username", "")
+    _audit(db, request, "hospitalization_cancel", detail={"id": h.id})
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已取消", status_code=303)
+
+
+@app.get("/admin/inpatient", response_class=HTMLResponse)
+async def admin_inpatient_board(request: Request, db: Session = Depends(get_db),
+                                   status: str = "admitted", store: str = ""):
+    """住院看板：默认显示住院中（D1 用列表展示，D2 升级为卡片）。"""
+    require_admin(request)
+    admin_store = _get_admin_store(request)
+    if request.session.get("admin_role") == "superadmin":
+        wb_store = (store or "").strip()
+    else:
+        wb_store = admin_store
+    q = db.query(Hospitalization)
+    if status in ("admitted", "discharged", "cancelled"):
+        q = q.filter(Hospitalization.status == status)
+    if wb_store:
+        q = q.filter(Hospitalization.store == wb_store)
+    rows = q.order_by(Hospitalization.admitted_at.desc()).limit(200).all()
+    return templates.TemplateResponse(request, "admin_inpatient.html", {
+        "request": request, "rows": rows, "status": status,
+        "status_zh": _HOSP_STATUS_ZH, "kind_zh": _CAGE_KIND_ZH,
+        "wb_store": wb_store, "csrf_token": _get_csrf_token(request),
+        "calc_days": _calc_hosp_days,
+        "now": datetime.utcnow(),
+        "title": "住院管理",
+    })
+
+
+@app.get("/admin/inpatient/{hosp_id}", response_class=HTMLResponse)
+async def admin_inpatient_detail(hosp_id: int, request: Request,
+                                   db: Session = Depends(get_db)):
+    require_admin(request)
+    h = db.get(Hospitalization, hosp_id)
+    if not h:
+        raise HTTPException(404)
+    cust = db.get(Customer, h.customer_id) if h.customer_id else None
+    pet = db.get(Pet, h.pet_id) if h.pet_id else None
+    cage = db.get(Cage, h.cage_id) if h.cage_id else None
+    visit = db.get(Visit, h.visit_id) if h.visit_id else None
+    # 可换笼位（仅未占用 + 同店）
+    avail_q = db.query(Cage).filter(Cage.is_active == True)
+    if h.store:
+        avail_q = avail_q.filter(Cage.store == h.store)
+    avail_cages = avail_q.order_by(Cage.sort_order, Cage.code).all()
+    occupied_ids = {x.cage_id for x in db.query(Hospitalization).filter(
+        Hospitalization.status == "admitted",
+        Hospitalization.id != hosp_id,
+        Hospitalization.cage_id != None,
+    ).all()}
+    return templates.TemplateResponse(request, "admin_inpatient_detail.html", {
+        "request": request, "h": h, "cust": cust, "pet": pet, "cage": cage,
+        "visit": visit, "avail_cages": avail_cages, "occupied_ids": occupied_ids,
+        "status_zh": _HOSP_STATUS_ZH, "kind_zh": _CAGE_KIND_ZH,
+        "calc_days": _calc_hosp_days,
+        "now": datetime.utcnow(),
+        "csrf_token": _get_csrf_token(request),
+        "title": f"住院 #{h.id}",
+    })

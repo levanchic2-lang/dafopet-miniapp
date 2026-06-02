@@ -842,6 +842,70 @@ class GroomingOrder(Base):
     customer = relationship("Customer", foreign_keys=[customer_id])
 
 
+class Cage(Base):
+    """笼位：自由增删改，按门店分。
+    kind: general(普通) / iso(隔离) / icu / other
+    daily_rate: 每天住院费（元）；过夜算 1 天
+    """
+    __tablename__ = "cages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    store: Mapped[str] = mapped_column(String(40), default="")    # 短名 东环店/横岗店
+    code:  Mapped[str] = mapped_column(String(40), default="")    # 笼号 A1 / ICU-2 等
+    kind:  Mapped[str] = mapped_column(String(20), default="general")  # general/iso/icu/other
+    daily_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)   # 看板排序
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Hospitalization(Base):
+    """住院档案：从 visit 转入，到出院结账闭环。
+
+    时间规则：admitted_at → discharged_at 之间，每过午夜 00:00 算一天。
+    日数计算：max(1, (discharge_date - admit_date).days)
+    费率：优先 daily_rate_override > Cage.daily_rate
+    """
+    __tablename__ = "hospitalizations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="SET NULL"), nullable=True, default=None)
+    cage_id     = mapped_column(ForeignKey("cages.id",     ondelete="SET NULL"), nullable=True, default=None)
+    invoice_id  = mapped_column(ForeignKey("invoices.id",  ondelete="SET NULL"), nullable=True, default=None)
+
+    store: Mapped[str] = mapped_column(String(40), default="")   # 短名（冗余，方便筛选）
+    reason: Mapped[str] = mapped_column(Text, default="")        # 入院原因/初步诊断
+    admitted_at:    Mapped[datetime]      = mapped_column(DateTime, default=datetime.utcnow)
+    expected_discharge_date: Mapped[str]  = mapped_column(String(20), default="")  # YYYY-MM-DD
+    discharged_at:  Mapped[datetime|None] = mapped_column(DateTime, nullable=True, default=None)
+    discharge_summary: Mapped[str]        = mapped_column(Text, default="")
+
+    # 收费：留空走 Cage.daily_rate
+    daily_rate_override: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # admitted / discharged / cancelled
+    status: Mapped[str] = mapped_column(String(20), default="admitted")
+
+    # 扫码 token
+    staff_token: Mapped[str] = mapped_column(String(40), unique=True, default="")  # 员工扫 → admin 页
+    owner_token: Mapped[str] = mapped_column(String(40), unique=True, default="")  # 业主扫 → 只读 H5
+
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    closed_by:  Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    visit    = relationship("Visit",    foreign_keys=[visit_id])
+    cage     = relationship("Cage",     foreign_keys=[cage_id])
+
+
 class WeightRecord(Base):
     """体重记录（用于体重曲线）"""
     __tablename__ = "weight_records"
