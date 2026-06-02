@@ -1069,6 +1069,16 @@ def _try_sqlite_migrations() -> None:
             ml_cols = conn.execute(text("PRAGMA table_info(medication_admin_logs)")).fetchall()
             if ml_cols and "reminder_sent_at" not in {c[1] for c in ml_cols}:
                 conn.execute(text("ALTER TABLE medication_admin_logs ADD COLUMN reminder_sent_at DATETIME DEFAULT NULL"))
+            # 一次性清理：孤儿用药日志（关联的处方 / 处方明细已不存在）
+            # SQLite FK CASCADE 默认关，早期版本删处方时未显式删 log，留下垃圾
+            try:
+                conn.execute(text(
+                    "DELETE FROM medication_admin_logs WHERE "
+                    "prescription_id NOT IN (SELECT id FROM prescriptions) "
+                    "OR prescription_item_id NOT IN (SELECT id FROM prescription_items)"
+                ))
+            except Exception:
+                pass
 
             # vital_signs_logs 生命体征
             conn.execute(text(

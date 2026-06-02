@@ -108,7 +108,7 @@
      <i data-lucide="alert-triangle"></i> 漏药 {{ overdue_logs|length }} 次（昨日及之前）
     </div>
     <div style="font-size:.78rem;color:#7f1d1d;margin-top:.3rem;">
-     {% for l in overdue_logs[:5] %}
+     {% for l in overdue_logs[:5] if l.prescription_item %}
       • {{ l.scheduled_at.strftime('%m-%d %H:%M') }} · {{ l.prescription_item.drug_name }}{% if not loop.last %}<br>{% endif %}
      {% endfor %}
      {% if overdue_logs|length > 5 %}<br>...还有 {{ overdue_logs|length - 5 }} 条{% endif %}
@@ -130,7 +130,7 @@
    </div>
    {% else %}
    <div style="display:flex;flex-direction:column;gap:.4rem;">
-   {% for l in today_logs %}
+   {% for l in today_logs if l.prescription_item %}
    {% set overdue = (l.status == 'pending' and l.scheduled_at < now) %}
    <div style="display:flex;align-items:center;gap:.65rem;padding:.55rem .75rem;
     background:{% if l.status == 'done' %}#ecfdf5{% elif l.status == 'skipped' %}#f3f4f6{% elif overdue %}#fef2f2{% else %}#fff{% endif %};

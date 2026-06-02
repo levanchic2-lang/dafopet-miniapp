@@ -11037,7 +11037,12 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
         if _v and (_v.status or "open") == "closed":
             raise HTTPException(403, "所属病历已结束，处方不可修改")
     operator = request.session.get("admin_username", "admin")
-    # 先把旧明细的库存退回
+    # 先把旧明细的库存退回 + 清掉本处方的 pending 发药任务
+    # （旧 PrescriptionItem 删除后，孤儿 MedicationAdminLog 会指向不存在的 item_id）
+    db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.prescription_id == presc_id,
+        MedicationAdminLog.status == "pending",
+    ).delete(synchronize_session=False)
     for old in presc.items:
         if old.item_id and old.quantity_num > 0:
             _restore_inventory(db, old.item_id, old.quantity_num,
@@ -11090,6 +11095,10 @@ async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depe
             raise HTTPException(403, "所属病历已结束，处方不可删除。如确需作废请使用「作废」。")
     operator = request.session.get("admin_username", "admin")
     visit_id = presc.visit_id
+    # 清掉关联的住院发药任务（SQLite FK CASCADE 默认关，必须显式删）
+    db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.prescription_id == presc_id
+    ).delete(synchronize_session=False)
     for it in presc.items:
         if it.item_id and it.quantity_num > 0:
             _restore_inventory(db, it.item_id, it.quantity_num,
@@ -11126,6 +11135,11 @@ async def admin_presc_void(presc_id: int, request: Request, db: Session = Depend
     presc.voided_by = operator
     presc.voided_at = datetime.utcnow()
     presc.void_reason = (void_reason or "")[:200]
+    # 作废 → 删未执行的发药任务（保留 done/skipped 作为历史，不可篡改）
+    db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.prescription_id == presc_id,
+        MedicationAdminLog.status == "pending",
+    ).delete(synchronize_session=False)
     # 退款入钱包
     refund_msg = ""
     if refund_to_wallet in ("1", "true", "on") and presc.customer_id and refund_amount > 0:
