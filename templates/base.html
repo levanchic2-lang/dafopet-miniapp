@@ -1173,21 +1173,38 @@
   })();
   </script>
 
-  {# Lucide 图标渲染：扫描所有 data-lucide 属性并替换为 SVG #}
+  {# Lucide 图标渲染：扫描所有 data-lucide 属性并替换为 SVG
+     2026-06-02 修：MutationObserver 全树扫描 + 多 tab storage event 叠加导致
+     主线程卡死。改为：仅监听确实新增 data-lucide 的节点，节流到 250ms 调一次
+     createIcons，且观察期间临时 disconnect，防自身 mutation 触发回调。 #}
   <script>
     if (window.lucide) {
       lucide.createIcons({ attrs: { class: 'ico' } });
-      // 兼容 SPA 部分场景：MutationObserver 监听新加入的图标
+      var _icoPending = false;
       var _icoObserver = new MutationObserver(function (muts) {
+        if (_icoPending) return;          // 已经排队，跳过
+        // 快速过滤：只看节点级别属性 + 顶层 querySelector，缩短遍历
         var found = false;
-        muts.forEach(function (m) {
-          m.addedNodes && m.addedNodes.forEach(function (n) {
-            if (n.nodeType === 1 && (n.hasAttribute && n.hasAttribute('data-lucide') || n.querySelector && n.querySelector('[data-lucide]'))) {
-              found = true;
-            }
-          });
-        });
-        if (found) lucide.createIcons({ attrs: { class: 'ico' } });
+        for (var i = 0; i < muts.length && !found; i++) {
+          var nodes = muts[i].addedNodes;
+          if (!nodes) continue;
+          for (var j = 0; j < nodes.length && !found; j++) {
+            var n = nodes[j];
+            if (n.nodeType !== 1) continue;
+            if (n.hasAttribute && n.hasAttribute('data-lucide')) { found = true; break; }
+            // 子树搜索仅在浅层做一次，避免 1000+ 行 table 全树扫描
+            if (n.querySelector && n.querySelector('[data-lucide]')) { found = true; break; }
+          }
+        }
+        if (!found) return;
+        _icoPending = true;
+        // 节流：250ms 后再调一次 createIcons，期间停掉 observer
+        setTimeout(function () {
+          _icoObserver.disconnect();
+          try { lucide.createIcons({ attrs: { class: 'ico' } }); } catch (e) {}
+          _icoPending = false;
+          _icoObserver.observe(document.body, { childList: true, subtree: true });
+        }, 250);
       });
       _icoObserver.observe(document.body, { childList: true, subtree: true });
     }
