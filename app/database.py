@@ -917,6 +917,9 @@ def _try_sqlite_migrations() -> None:
                 # 企微通知偏好（CSV 存 disabled 的事件 key）
                 if "wecom_notify_disabled" not in au_names:
                     conn.execute(text("ALTER TABLE admin_users ADD COLUMN wecom_notify_disabled VARCHAR(500) DEFAULT ''"))
+                # M1 手机端身份：auto / doctor / nurse / groomer
+                if "mobile_role" not in au_names:
+                    conn.execute(text("ALTER TABLE admin_users ADD COLUMN mobile_role VARCHAR(20) DEFAULT 'auto'"))
 
             # wecom_customer_links: 企微外部联系人 ↔ Customer 映射表（Phase 3）
             wcl_cols = conn.execute(text("PRAGMA table_info(wecom_customer_links)")).fetchall()

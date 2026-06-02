@@ -110,6 +110,7 @@
  <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">角色</th>
  <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">门店</th>
  <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">企微 userid</th>
+ <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;" title="手机端默认进哪个版本">📱 手机端</th>
  <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">创建时间</th>
  <th style="padding:0.5rem 0.5rem;white-space:nowrap;">操作</th>
  </tr>
@@ -181,6 +182,17 @@
    {% endif %}
  </div>
  </td>
+ <td style="padding:0.55rem 0.75rem;white-space:nowrap;">
+ <form method="post" action="/admin/users/{{ u.id }}/set-mobile-role" style="margin:0;display:inline;">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <select name="mobile_role" onchange="this.form.submit()" style="font-size:0.82rem;padding:0.25rem 0.45rem;border-radius:6px;border:1px solid var(--border-strong);background:var(--card);cursor:pointer;">
+ <option value="auto"    {% if not u.mobile_role or u.mobile_role == 'auto' %}selected{% endif %}>自动</option>
+ <option value="doctor"  {% if u.mobile_role == 'doctor'  %}selected{% endif %}>医生</option>
+ <option value="nurse"   {% if u.mobile_role == 'nurse'   %}selected{% endif %}>助理</option>
+ <option value="groomer" {% if u.mobile_role == 'groomer' %}selected{% endif %}>美容师</option>
+ </select>
+ </form>
+ </td>
  <td style="padding:0.55rem 0.75rem;color:var(--muted);white-space:nowrap;">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
  <td style="padding:0.55rem 0.75rem;text-align:right;white-space:nowrap;">
  <div style="display:inline-flex;gap:0.4rem;justify-content:flex-end;align-items:center;">
@@ -203,7 +215,7 @@
  </td>
  </tr>
  {% else %}
- <tr><td colspan="7" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">暂无启用账号</td></tr>
+ <tr><td colspan="8" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">暂无启用账号</td></tr>
  {% endfor %}
  </tbody>
  </table>

@@ -1,0 +1,53 @@
+{% extends "m/_base.html" %}
+{% block title %}我 · 设置{% endblock %}
+{% block topbar_title %}⚙ 我的{% endblock %}
+
+{% block content %}
+
+<div class="m-user-card">
+  <div class="name">{{ admin_username }}</div>
+  <div class="meta">
+    {% if admin_role == 'superadmin' %}👑 超级管理员{% else %}🧑 员工{% endif %}
+    · {{ admin_store or '不限门店' }}
+  </div>
+</div>
+
+<div class="m-section-label">当前手机端身份</div>
+<div class="m-card">
+  <form method="post" action="/m/switch">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <div class="m-role-chips">
+      <button type="submit" name="target" value="doctor"
+              class="m-role-chip {% if mobile_role=='doctor' %}active{% endif %}">👨‍⚕️ 医生</button>
+      <button type="submit" name="target" value="nurse"
+              class="m-role-chip {% if mobile_role=='nurse' %}active{% endif %}">🧑‍🔬 助理</button>
+      <button type="submit" name="target" value="groomer"
+              class="m-role-chip {% if mobile_role=='groomer' %}active{% endif %}">✂ 美容师</button>
+      <button type="submit" name="target" value="auto"
+              class="m-role-chip {% if not override_active %}active{% endif %}">自动</button>
+    </div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:10px;line-height:1.5;">
+      默认身份：<b>{{ mobile_role_raw or 'auto' }}</b>
+      {% if override_active %} · 当前临时切到 <b>{{ mobile_role }}</b>{% endif %}
+      <br/>默认身份由超管在「人事 → 账号管理」分配。
+    </div>
+  </form>
+</div>
+
+<div class="m-section-label">应用</div>
+<div class="m-list">
+  <a class="m-list-row" href="/m/desktop">
+    <span class="label">🖥 切换到桌面版</span>
+    <span class="arrow">›</span>
+  </a>
+  <a class="m-list-row" href="/admin/logout">
+    <span class="label" style="color:#dc2626;">🚪 退出登录</span>
+    <span class="arrow">›</span>
+  </a>
+</div>
+
+<div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:24px;">
+  大风动物医院 · 手机版 v0.1 (M1)
+</div>
+
+{% endblock %}

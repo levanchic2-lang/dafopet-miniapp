@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="大风动物医院"/>
+  <link rel="manifest" href="/static/manifest.json"/>
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png"/>
+  <link rel="stylesheet" href="/static/m.css?v=1"/>
+  <title>{% block title %}大风动物医院{% endblock %}</title>
+</head>
+<body>
+
+{% if request.query_params.get('msg') %}
+<div class="m-msg">{{ request.query_params.get('msg') }}</div>
+{% endif %}
+{% if request.query_params.get('err') %}
+<div class="m-msg err">{{ request.query_params.get('err') }}</div>
+{% endif %}
+
+{% block topbar %}
+<div class="m-topbar">
+  <div class="m-topbar-inner">
+    <div>
+      <div class="m-topbar-title">{% block topbar_title %}大风动物医院{% endblock %}</div>
+      <div class="m-topbar-sub">{% block topbar_sub %}{{ admin_store or '全部门店' }} · {{ admin_username }}{% endblock %}</div>
+    </div>
+    <div class="m-topbar-actions">
+      {% block topbar_actions %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+<div class="m-content">
+  {% block content %}{% endblock %}
+</div>
+
+{% include "m/_tabbar.html" %}
+
+<script>
+// 注册 service worker（复用全站 sw.js）
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(()=>{});
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -3025,11 +3025,49 @@ async def admin_login_page(request: Request):
     """GET: 展示登录页（点击「登录」链接 / 未登录访问任意页 都会到这里）。"""
     # 已登录直接回工作台
     if _admin_ok(request):
-        return RedirectResponse("/admin/customers", status_code=303)
+        return RedirectResponse(_post_login_redirect(request), status_code=303)
     return templates.TemplateResponse(request, "admin_login.html", {
         "title": "医院后台登录",
         "csrf_token": _get_csrf_token(request),
     })
+
+
+# ═════════════════════════════════════════════════════════════
+# M1 · 手机 PWA 入口判断
+# - UA 检测 + cookie 「force_desktop」让用户强制桌面版
+# - mobile_role auto → 按 role 给默认
+# ═════════════════════════════════════════════════════════════
+_MOBILE_UA_PAT = re.compile(r"(iPhone|Android|iPod|Mobile|BlackBerry|IEMobile)", re.I)
+
+
+def _is_mobile_ua(request: Request) -> bool:
+    """是否手机 UA。平板（iPad）当桌面，因为屏幕够大。"""
+    if request.cookies.get("force_desktop") == "1":
+        return False
+    if request.query_params.get("desktop") == "1":
+        return False
+    if request.query_params.get("mobile") == "1":
+        return True
+    ua = request.headers.get("user-agent", "") or ""
+    if "iPad" in ua:
+        return False
+    return bool(_MOBILE_UA_PAT.search(ua))
+
+
+def _resolve_mobile_role(session_role: str, mobile_role: str) -> str:
+    """auto → 按角色推断；其他直接返回。"""
+    mr = (mobile_role or "auto").strip()
+    if mr in ("doctor", "nurse", "groomer"):
+        return mr
+    # auto：superadmin 默认 doctor，staff 默认 nurse
+    return "doctor" if session_role == "superadmin" else "nurse"
+
+
+def _post_login_redirect(request: Request) -> str:
+    """登录成功后跳哪：手机 → /m，桌面 → /admin/customers。"""
+    if _is_mobile_ua(request):
+        return "/m"
+    return "/admin"
 
 
 @app.post("/admin/login")
@@ -3057,14 +3095,16 @@ async def admin_login(
         request.session["admin_role"] = user.role
         request.session["admin_username"] = (user.username or "").strip()
         request.session["admin_store"] = user.store or ""
-        return RedirectResponse("/admin", status_code=303)
+        request.session["mobile_role"] = (user.mobile_role or "auto")
+        return RedirectResponse(_post_login_redirect(request), status_code=303)
 
     # 兜底：环境变量密码（用于迁移期 / 紧急登录，用户名须为 admin）
     if username == "admin" and password == settings.admin_password:
         request.session["admin"] = True
         request.session["admin_role"] = "superadmin"
         request.session["admin_username"] = "admin"
-        return RedirectResponse("/admin", status_code=303)
+        request.session["mobile_role"] = "auto"
+        return RedirectResponse(_post_login_redirect(request), status_code=303)
 
     # 失败时记日志，方便诊断（控制台 / journalctl 看得到）
     _diag_user = db.query(AdminUser).filter(AdminUser.username.like(f"%{username}%")).first()
@@ -3666,6 +3706,31 @@ async def admin_users_set_wecom_userid(
         f"/admin/hr?msg=已为「{user.username}」绑定企微 userid={new_uid or '（已清空）'}",
         status_code=303,
     )
+
+
+@app.post("/admin/users/{user_id}/set-mobile-role", name="admin_users_set_mobile_role")
+async def admin_users_set_mobile_role(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    mobile_role: str = Form("auto"),
+    csrf_token: str = Form(""),
+):
+    """设置员工手机端默认身份（doctor / nurse / groomer / auto）。"""
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404)
+    mr = (mobile_role or "auto").strip().lower()
+    if mr not in ("auto", "doctor", "nurse", "groomer"):
+        mr = "auto"
+    user.mobile_role = mr
+    _audit(db, request, "admin_user_set_mobile_role", application_id=None,
+           detail={"username": user.username, "mobile_role": mr})
+    db.commit()
+    return RedirectResponse(f"/admin/hr?msg=已为「{user.username}」设手机端身份={mr}", status_code=303)
 
 
 @app.post("/admin/wecom-notify/dispatch-now", name="admin_wecom_dispatch_now")
@@ -19079,3 +19144,119 @@ def _vital_flags(species: str, log: "VitalSignsLog") -> dict:
     if log.crt_sec and log.crt_sec >= 2:
         flags["CRT"] = "high"
     return flags
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# M1 · 手机 PWA 路由骨架
+# /m            根入口，按 mobile_role 派发
+# /m/doctor     医生首页（M3 起填内容）
+# /m/nurse      助理首页（M2 起填内容）
+# /m/groomer    美容师首页（M2.5 起填内容）
+# /m/me         「我」页（账号/门店/扫码/切换视图）
+# /m/desktop    强制切桌面（写 cookie + 跳 /admin）
+# /m/switch     切换 mobile_role 视图（仅 session，不改库）
+# ═════════════════════════════════════════════════════════════════════════════
+def _current_mobile_role(request: Request, db: Session) -> str:
+    """优先 session（允许临时切视图），否则查 DB。"""
+    # session 里如果存了 override，优先用
+    sv = request.session.get("mobile_role_override") or request.session.get("mobile_role")
+    if not sv:
+        uname = request.session.get("admin_username") or ""
+        u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
+        sv = (u.mobile_role if u else "auto") or "auto"
+        request.session["mobile_role"] = sv
+    return _resolve_mobile_role(request.session.get("admin_role", "staff"), sv)
+
+
+@app.get("/m", response_class=HTMLResponse)
+async def m_root(request: Request, db: Session = Depends(get_db)):
+    """手机入口：根据 mobile_role 派发到对应首页。"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m", status_code=303)
+    role = _current_mobile_role(request, db)
+    return RedirectResponse(f"/m/{role}", status_code=303)
+
+
+@app.get("/m/desktop")
+async def m_force_desktop(request: Request):
+    """强制切桌面视图（写 cookie）。"""
+    resp = RedirectResponse("/admin", status_code=303)
+    resp.set_cookie("force_desktop", "1", max_age=60 * 60 * 24 * 30, httponly=False, samesite="lax")
+    return resp
+
+
+@app.post("/m/switch")
+async def m_switch_role(
+    request: Request,
+    target: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    """临时切手机端视图（仅 session，不写库）。"""
+    if not _admin_ok(request):
+        raise HTTPException(401)
+    _require_csrf(request, csrf_token)
+    t = (target or "").strip().lower()
+    if t not in ("doctor", "nurse", "groomer", "auto"):
+        t = "auto"
+    request.session["mobile_role_override"] = t
+    return RedirectResponse("/m", status_code=303)
+
+
+def _m_ctx(request: Request, db: Session, *, active_tab: str) -> dict:
+    """所有 /m/* 模板共用上下文。"""
+    role = _current_mobile_role(request, db)
+    uname = request.session.get("admin_username") or ""
+    store = request.session.get("admin_store") or ""
+    return {
+        "request": request,
+        "csrf_token": _get_csrf_token(request),
+        "mobile_role": role,
+        "active_tab": active_tab,
+        "admin_username": uname,
+        "admin_role": request.session.get("admin_role", "staff"),
+        "admin_store": store,
+    }
+
+
+@app.get("/m/doctor", response_class=HTMLResponse)
+async def m_doctor_home(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/doctor", status_code=303)
+    return templates.TemplateResponse(request, "m/home_doctor.html", _m_ctx(request, db, active_tab="today"))
+
+
+@app.get("/m/nurse", response_class=HTMLResponse)
+async def m_nurse_home(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/nurse", status_code=303)
+    return templates.TemplateResponse(request, "m/home_nurse.html", _m_ctx(request, db, active_tab="today"))
+
+
+@app.get("/m/groomer", response_class=HTMLResponse)
+async def m_groomer_home(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/groomer", status_code=303)
+    return templates.TemplateResponse(request, "m/home_groomer.html", _m_ctx(request, db, active_tab="today"))
+
+
+@app.get("/m/soon", response_class=HTMLResponse)
+async def m_soon(request: Request, title: str = "敬请期待", db: Session = Depends(get_db)):
+    """占位页：还没开发的功能跳这里。"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m", status_code=303)
+    ctx = _m_ctx(request, db, active_tab="")
+    ctx["soon_title"] = title
+    return templates.TemplateResponse(request, "m/soon.html", ctx)
+
+
+@app.get("/m/me", response_class=HTMLResponse)
+async def m_me(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/me", status_code=303)
+    ctx = _m_ctx(request, db, active_tab="me")
+    # 当前 mobile_role 的"原始值"，和 override 区分开
+    uname = request.session.get("admin_username") or ""
+    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
+    ctx["mobile_role_raw"] = (u.mobile_role if u else "auto") or "auto"
+    ctx["override_active"] = bool(request.session.get("mobile_role_override"))
+    return templates.TemplateResponse(request, "m/me.html", ctx)

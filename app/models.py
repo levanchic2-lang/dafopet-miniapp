@@ -1510,6 +1510,10 @@ class AdminUser(Base):
     # 企微通知偏好：CSV 字符串，存「不想收的事件 key」（默认空 = 全部都收）
     # 可选事件：tnr_pending / rabies_submitted / consent_signed / appointment_created / workbench_digest
     wecom_notify_disabled: Mapped[str] = mapped_column(String(500), default="")
+    # 手机端默认身份：决定登录后跳哪个 /m/* 首页
+    # auto = 按 role 自动判（superadmin → doctor，其他 → nurse）
+    # doctor / nurse / groomer = 强制指定
+    mobile_role: Mapped[str] = mapped_column(String(20), default="auto")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
