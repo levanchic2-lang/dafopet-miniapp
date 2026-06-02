@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+<title>{{ title or '宠物住院信息' }}</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(180deg, #fef3c7 0%, #fff7ed 50%, #fff 100%);
+    min-height: 100vh; color: #1f2937; padding-bottom: 40px; }
+  .container { max-width: 480px; margin: 0 auto; padding: 16px; }
+  .clinic-head { text-align: center; padding: 12px 0 16px; }
+  .clinic-head .name { font-size: 16px; font-weight: 700; color: #b45309; }
+  .clinic-head .sub  { font-size: 12px; color: #92400e; margin-top: 4px; }
+  .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+  .pet-head { display: flex; gap: 12px; align-items: center; }
+  .pet-avatar { width: 60px; height: 60px; border-radius: 50%;
+    background: linear-gradient(135deg, #fce7f3, #fbcfe8); display: flex;
+    align-items: center; justify-content: center; font-size: 36px; flex-shrink: 0; }
+  .pet-avatar.dog { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+  .pet-name { font-size: 20px; font-weight: 700; line-height: 1.2; }
+  .pet-sub  { font-size: 12px; color: #6b7280; margin-top: 3px; }
+  .status-banner { background: #ecfdf5; color: #047857; padding: 10px 14px;
+    border-radius: 10px; font-size: 14px; margin-bottom: 12px; text-align: center; }
+  .status-banner.discharged { background: #fef3c7; color: #92400e; }
+  .placeholder { text-align: center; padding: 40px 20px; color: #6b7280; }
+  .footer-tip { font-size: 12px; color: #92400e; text-align: center;
+    margin-top: 16px; line-height: 1.6; }
+  .footer-tip strong { color: #b45309; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="clinic-head">
+      <div class="name">🏥 大风动物医院</div>
+      <div class="sub">宠物住院信息 · 主人查看</div>
+    </div>
+
+    {% if not h %}
+    <div class="card">
+      <div class="placeholder">
+        <div style="font-size:48px;opacity:.4;margin-bottom:12px;">🔍</div>
+        <p style="font-size:16px;font-weight:600;margin:0 0 6px;">页面不存在或已过期</p>
+        <p style="font-size:13px;margin:0;">请联系医院前台确认笼牌二维码是否正确</p>
+      </div>
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="pet-head">
+        <div class="pet-avatar {{ 'dog' if pet and pet.species == 'dog' else '' }}">
+          {{ '🐱' if pet and pet.species == 'cat' else '🐶' if pet and pet.species == 'dog' else '🐾' }}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div class="pet-name">{{ pet.name if pet else '宠物' }}</div>
+          <div class="pet-sub">
+            {% if pet %}{{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }}{% if pet.breed %} · {{ pet.breed }}{% endif %}{% endif %}
+            <br>主人 {{ cust.name if cust else '—' }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if h.status == 'admitted' %}
+    <div class="status-banner">
+      ✓ 住院中 · 入院 {{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}
+    </div>
+    {% elif h.status == 'discharged' %}
+    <div class="status-banner discharged">
+      🏠 已出院 · {{ h.discharged_at.strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}
+    </div>
+    {% endif %}
+
+    {# D7 会扩展：用药 / 喂食 / 体温今日已完成事件展示 #}
+    <div class="card">
+      <div class="placeholder">
+        <div style="font-size:36px;margin-bottom:10px;">📋</div>
+        <p style="font-size:14px;font-weight:600;margin:0 0 4px;">详细记录即将上线</p>
+        <p style="font-size:12px;margin:0;line-height:1.5;">您可以在 <strong>客户群</strong>查看宝宝照片、视频和我们的实时沟通。</p>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="footer-tip">
+      如有疑问，请在 <strong>客户群</strong>联系医生<br>
+      或拨打门店电话
+    </div>
+  </div>
+</body>
+</html>

@@ -472,6 +472,17 @@
    <a href="/admin/invoices/{{ h.invoice_id }}" class="btn secondary" style="width:100%;text-align:center;">查看账单 #{{ h.invoice_id }}</a>
   </div>
   {% endif %}
+
+  <div class="card" style="margin-top:1rem;">
+   <h3 style="margin:0 0 .5rem;font-size:.95rem;">🏷 笼牌</h3>
+   <a href="/admin/inpatient/{{ h.id }}/cage-tag" target="_blank" class="btn secondary" style="width:100%;text-align:center;">
+    <i data-lucide="qr-code"></i> 打印笼牌（含双二维码）
+   </a>
+   <div style="font-size:.74rem;color:var(--muted);margin-top:.4rem;line-height:1.5;">
+    员工扫 → 进档案打勾用药<br>
+    主人扫 → 只读宝宝住院情况
+   </div>
+  </div>
  </div>
 </div>
 {% endblock %}

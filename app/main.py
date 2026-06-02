@@ -18730,6 +18730,96 @@ async def admin_inpatient_feeding_delete(hosp_id: int, log_id: int, request: Req
                              status_code=303)
 
 
+# ─── D6：笼牌二维码 + 业主扫码登陆页 + 员工扫码跳转 ───
+def _hosp_external_url(token: str, kind: str) -> str:
+    """生成扫码外链。基址优先 settings.public_base_url，否则相对路径。"""
+    base = (settings.public_base_url or "").rstrip("/")
+    path = f"/inpatient/{kind}/{token}"
+    return f"{base}{path}" if base else path
+
+
+@app.get("/inpatient/staff/{token}")
+async def inpatient_staff_scan(token: str, request: Request, db: Session = Depends(get_db)):
+    """员工扫码 → 找到对应住院档案 → 已登录直跳详情，未登录引到登录页。"""
+    h = db.query(Hospitalization).filter(Hospitalization.staff_token == token).first()
+    if not h:
+        raise HTTPException(404, "二维码无效或档案已删除")
+    if not request.session.get("admin"):
+        # 带上目的地，登录后回来
+        return RedirectResponse(f"/admin/login?next=/admin/inpatient/{h.id}",
+                                 status_code=303)
+    return RedirectResponse(f"/admin/inpatient/{h.id}", status_code=303)
+
+
+@app.get("/inpatient/owner/{token}", response_class=HTMLResponse)
+async def inpatient_owner_scan(token: str, request: Request, db: Session = Depends(get_db)):
+    """业主扫码 → 只读 H5（D7 会渲染真正内容；D6 先放最小占位 + 友好提示）。"""
+    h = db.query(Hospitalization).filter(Hospitalization.owner_token == token).first()
+    if not h:
+        # 不暴露存在性 — 统一给一个"页面不存在"
+        return templates.TemplateResponse(request, "inpatient_owner.html", {
+            "request": request, "h": None, "title": "宠物住院信息",
+        })
+    pet = db.get(Pet, h.pet_id) if h.pet_id else None
+    cust = db.get(Customer, h.customer_id) if h.customer_id else None
+    return templates.TemplateResponse(request, "inpatient_owner.html", {
+        "request": request, "h": h, "pet": pet, "cust": cust,
+        "title": "宠物住院信息",
+    })
+
+
+@app.get("/admin/inpatient/{hosp_id}/qr/{kind}.png")
+async def admin_inpatient_qr_png(hosp_id: int, kind: str, request: Request,
+                                   db: Session = Depends(get_db)):
+    """生成二维码 PNG。kind ∈ staff/owner。"""
+    require_admin(request)
+    h = db.get(Hospitalization, hosp_id)
+    if not h:
+        raise HTTPException(404)
+    if kind not in ("staff", "owner"):
+        raise HTTPException(400)
+    token = h.staff_token if kind == "staff" else h.owner_token
+    if not token:
+        raise HTTPException(404, "token 缺失")
+    try:
+        import qrcode
+        from io import BytesIO
+    except ImportError:
+        raise HTTPException(500, "服务端缺少 qrcode 库")
+    url = _hosp_external_url(token, kind)
+    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M,
+                        box_size=10, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = BytesIO()
+    img.save(buf, "PNG")
+    buf.seek(0)
+    return Response(content=buf.read(), media_type="image/png",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.get("/admin/inpatient/{hosp_id}/cage-tag", response_class=HTMLResponse)
+async def admin_inpatient_cage_tag(hosp_id: int, request: Request,
+                                     db: Session = Depends(get_db)):
+    """笼牌打印页：含员工 / 业主双二维码，工作人员打印后贴笼。"""
+    require_admin(request)
+    h = db.get(Hospitalization, hosp_id)
+    if not h:
+        raise HTTPException(404)
+    pet = db.get(Pet, h.pet_id) if h.pet_id else None
+    cust = db.get(Customer, h.customer_id) if h.customer_id else None
+    cage = db.get(Cage, h.cage_id) if h.cage_id else None
+    return templates.TemplateResponse(request, "admin_cage_tag.html", {
+        "request": request, "h": h, "pet": pet, "cust": cust, "cage": cage,
+        "kind_zh": _CAGE_KIND_ZH,
+        "calc_days": _calc_hosp_days, "now": datetime.utcnow(),
+        "staff_url": _hosp_external_url(h.staff_token, "staff"),
+        "owner_url": _hosp_external_url(h.owner_token, "owner"),
+        "title": "笼牌",
+    })
+
+
 @app.post("/admin/inpatient/{hosp_id}/handover")
 async def admin_inpatient_handover_create(hosp_id: int, request: Request,
                                             db: Session = Depends(get_db),

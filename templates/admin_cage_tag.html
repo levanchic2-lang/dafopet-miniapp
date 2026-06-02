@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<title>笼牌 · {{ pet.name if pet else '宠物' }}</title>
+<style>
+  @page { size: A5 portrait; margin: 8mm; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    margin: 0; padding: 12mm; color: #1f2937; }
+  @media screen {
+    body { background: #f1f5f9; padding: 24px; }
+    .tag { background: #fff; max-width: 480px; margin: 0 auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,.08); border-radius: 8px; }
+    .toolbar { max-width: 480px; margin: 0 auto 16px; display: flex; gap: 8px; justify-content: flex-end; }
+    .toolbar a, .toolbar button { padding: .5rem 1rem; font-size: .85rem; border-radius: 6px;
+      background: #fff; border: 1px solid #cbd5e1; cursor: pointer; text-decoration: none; color: #1f2937; }
+    .toolbar button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+  }
+  .tag { padding: 16mm 12mm; }
+  .clinic { text-align: center; font-size: 13pt; font-weight: 600; color: #1f2937; padding-bottom: 6mm; border-bottom: 1px solid #cbd5e1; margin-bottom: 6mm; }
+  .top-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 4mm; }
+  .cage-no { font-size: 36pt; font-weight: 800; line-height: 1; }
+  .cage-meta { text-align: right; font-size: 9pt; color: #475569; }
+  .pet-block { background: #f8fafc; border-left: 4px solid #2563eb; padding: 4mm 5mm; border-radius: 4px; margin-bottom: 5mm; }
+  .pet-name { font-size: 18pt; font-weight: 700; line-height: 1.1; }
+  .pet-meta { font-size: 9pt; color: #475569; margin-top: 1mm; }
+  .reason { background: #fffbeb; border: 1px dashed #d97706; padding: 3mm 4mm; border-radius: 4px; font-size: 9pt; color: #78350f; margin-bottom: 5mm; min-height: 12mm; }
+  .reason-label { font-size: 8pt; color: #b45309; margin-bottom: 1mm; }
+  .qr-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+  .qr-box { text-align: center; }
+  .qr-box img { width: 100%; max-width: 38mm; height: auto; display: block; margin: 0 auto 2mm; }
+  .qr-label { font-size: 10pt; font-weight: 700; margin-bottom: 1mm; }
+  .qr-staff { color: #1d4ed8; }
+  .qr-owner { color: #b45309; }
+  .qr-hint { font-size: 7.5pt; color: #64748b; line-height: 1.35; }
+  .footer { margin-top: 5mm; text-align: center; font-size: 7.5pt; color: #94a3b8; border-top: 1px dashed #e5e7eb; padding-top: 3mm; }
+</style>
+</head>
+<body>
+  <div class="toolbar" style="display:flex;">
+    <a href="/admin/inpatient/{{ h.id }}">← 返回</a>
+    <button class="primary" onclick="window.print()">🖨 打印笼牌</button>
+  </div>
+
+  <div class="tag">
+    <div class="clinic">🏥 大风动物医院 · 住院笼牌</div>
+
+    <div class="top-row">
+      <div>
+        <div style="font-size:8pt;color:#64748b;">笼号</div>
+        <div class="cage-no">{{ cage.code if cage else '—' }}</div>
+      </div>
+      <div class="cage-meta">
+        {% if cage %}{{ kind_zh.get(cage.kind, cage.kind) }}<br>{% endif %}
+        住院 #{{ h.id }}<br>
+        入院 {{ h.admitted_at.strftime('%m-%d %H:%M') if h.admitted_at else '—' }}
+      </div>
+    </div>
+
+    <div class="pet-block">
+      <div class="pet-name">{{ '🐱' if pet and pet.species == 'cat' else '🐶' if pet and pet.species == 'dog' else '🐾' }} {{ pet.name if pet else '宠物' }}</div>
+      <div class="pet-meta">
+        {% if pet %}{{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }} · {{ pet.breed or '—' }} · {{ '公' if pet.gender == 'male' else '母' if pet.gender == 'female' else '—' }}{% endif %}
+        <br>
+        主人 {{ cust.name if cust else '—' }} · {{ cust.phone if cust else '—' }}
+      </div>
+    </div>
+
+    {% if h.reason %}
+    <div class="reason">
+      <div class="reason-label">入院原因 / 病情</div>
+      <div>{{ h.reason[:200] }}</div>
+    </div>
+    {% endif %}
+
+    <div class="qr-row">
+      <div class="qr-box">
+        <div class="qr-label qr-staff">👨‍⚕️ 员工扫码</div>
+        <img src="/admin/inpatient/{{ h.id }}/qr/staff.png" alt="员工二维码"/>
+        <div class="qr-hint">直接进入住院档案<br>打勾用药 / 记录体征</div>
+      </div>
+      <div class="qr-box">
+        <div class="qr-label qr-owner">🐾 主人扫码</div>
+        <img src="/admin/inpatient/{{ h.id }}/qr/owner.png" alt="业主二维码"/>
+        <div class="qr-hint">查看宝宝住院情况<br>用药 / 喂食 / 体温</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      笼牌请贴于笼门外侧 · 出院后撕除 · 系统：dafopet.com
+    </div>
+  </div>
+</body>
+</html>
