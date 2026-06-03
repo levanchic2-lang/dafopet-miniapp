@@ -43,7 +43,7 @@
 <div class="msg ok" style="margin-top:1rem;"><i data-lucide="check-circle-2"></i> 没有脏数据，所有品目的小类都已规范！</div>
 {% else %}
 
-<form method="post" action="/admin/inventory/cleanup-subcategory" id="cleanup-form"
+<form method="post" action="/admin/inventory-cleanup" id="cleanup-form"
       onsubmit="return confirmApply()">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
 

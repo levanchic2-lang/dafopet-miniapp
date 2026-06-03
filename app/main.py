@@ -13588,7 +13588,7 @@ def _match_subcat(item, idx: dict) -> dict:
             "new_label": picked[2], "hint": hint}
 
 
-@app.get("/admin/inventory/cleanup-subcategory", response_class=HTMLResponse)
+@app.get("/admin/inventory-cleanup", response_class=HTMLResponse)
 async def admin_inv_cleanup_preview(request: Request, db: Session = Depends(get_db)):
     require_admin(request)
     require_superadmin(request)
@@ -13619,7 +13619,7 @@ async def admin_inv_cleanup_preview(request: Request, db: Session = Depends(get_
     })
 
 
-@app.post("/admin/inventory/cleanup-subcategory")
+@app.post("/admin/inventory-cleanup")
 async def admin_inv_cleanup_apply(
     request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""),
@@ -13629,7 +13629,7 @@ async def admin_inv_cleanup_apply(
     require_superadmin(request)
     _require_csrf(request, csrf_token)
     if not apply_ids:
-        return RedirectResponse("/admin/inventory/cleanup-subcategory?msg=未选择任何条目", status_code=303)
+        return RedirectResponse("/admin/inventory-cleanup?msg=未选择任何条目", status_code=303)
     idx = _build_subcat_reverse_index()
     updated = 0
     cat_changed = 0
@@ -13648,7 +13648,7 @@ async def admin_inv_cleanup_apply(
         updated += 1
     db.commit()
     return RedirectResponse(
-        f"/admin/inventory/cleanup-subcategory?msg=已规范化 {updated} 个品目（其中 {cat_changed} 个连大类一起改了）",
+        f"/admin/inventory-cleanup?msg=已规范化 {updated} 个品目（其中 {cat_changed} 个连大类一起改了）",
         status_code=303,
     )
 
