@@ -1,0 +1,630 @@
+{% extends "uk/_base.html" %}
+{% block title %}预约管理 · 大风动物医院{% endblock %}
+
+{% block body %}
+
+{% set appointments = appointments | default([]) %}
+{% set grouped_appointments = grouped_appointments | default([]) %}
+{% set filters = filters | default({}) %}
+{% set stats = stats | default({}) %}
+
+<style>
+  /* ── 顶部头/统计/筛选/规则 — 新写 UK 风 ── */
+  .ap-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .ap-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .ap-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .ap-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .ap-head {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    gap: 24px; margin-bottom: 8px;
+  }
+  .ap-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .ap-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 8px;
+  }
+
+  hr.ap-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  /* TNR 月度配额 — 一行 N 卡 */
+  .ap-tnr-section { margin-bottom: 28px; }
+  .ap-tnr-head {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 3px; color: var(--ink-3);
+    font-style: italic; margin-bottom: 14px;
+  }
+  .ap-tnr-grid { display: flex; flex-wrap: wrap; gap: 14px; }
+  .ap-tnr-card {
+    flex: 1; min-width: 230px; border: 0.5px solid var(--hair-2);
+    padding: 14px 16px; background: var(--paper);
+  }
+  .ap-tnr-card .name {
+    font-family: var(--font-serif); font-size: 11pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 2px; margin-bottom: 10px;
+  }
+  .ap-tnr-card .bar {
+    height: 4px; background: var(--hair); margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .ap-tnr-card .bar .fill { height: 100%; transition: width .3s; }
+  .ap-tnr-card .fill.ok    { background: var(--accent-green); }
+  .ap-tnr-card .fill.warn  { background: var(--accent-amber); }
+  .ap-tnr-card .fill.full  { background: var(--accent-red); }
+  .ap-tnr-card .row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: var(--font-serif); font-size: 10pt;
+  }
+  .ap-tnr-card .row .nums {
+    font-family: var(--font-numeric); color: var(--ink);
+  }
+  .ap-tnr-card .row .nums b { font-size: 12pt; }
+  .ap-tnr-card .row .tag {
+    font-size: 8.5pt; padding: 2px 8px; letter-spacing: 1.5px;
+    border: 0.5px solid var(--hair-2); font-style: italic;
+  }
+  .ap-tnr-card .row .tag.open { background: var(--accent-green); color: var(--paper); border-color: var(--accent-green); font-style: normal; }
+  .ap-tnr-card .row .tag.full { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .ap-tnr-card .row .tag.closed { color: var(--accent-red); border-color: var(--accent-red); }
+  .ap-tnr-card form { margin-top: 10px; }
+  .ap-tnr-card form button {
+    width: 100%; padding: 6px 0; cursor: pointer;
+    background: transparent; border: 0.5px solid var(--hair);
+    font-family: var(--font-serif); font-size: 9.5pt;
+    letter-spacing: 1.5px; color: var(--ink-2); font-style: italic;
+  }
+  .ap-tnr-card form button:hover { color: var(--ink); border-color: var(--ink-3); }
+  .ap-tnr-foot {
+    font-size: 8.5pt; color: var(--ink-3); font-style: italic;
+    margin-top: 12px; letter-spacing: 0.5px; line-height: 1.6;
+  }
+
+  /* 统计 3 联 */
+  .stats-bar {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 16px; margin-bottom: 24px;
+  }
+  .stat-cell {
+    border: 0.5px solid var(--hair-2); background: var(--paper);
+    padding: 16px 18px; text-decoration: none; color: inherit;
+    transition: border-color .12s;
+  }
+  .stat-cell:hover { border-color: var(--ink); }
+  .stat-cell .stat-label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 3px; color: var(--ink-3); font-style: italic;
+  }
+  .stat-cell .stat-value {
+    font-family: var(--font-numeric); font-size: 22pt; font-weight: 700;
+    color: var(--ink); line-height: 1.15; margin-top: 6px;
+  }
+  .stat-cell .stat-value span {
+    font-family: var(--font-serif); font-size: 11pt; font-weight: 400;
+    color: var(--ink-3); font-style: italic; margin-left: 4px;
+  }
+  .stat-cell .stat-sub {
+    font-size: 9pt; color: var(--ink-3); font-style: italic;
+    letter-spacing: 0.5px; margin-top: 4px;
+  }
+
+  /* 筛选条 */
+  .filter-bar {
+    padding: 14px 16px; margin-bottom: 24px;
+    border: 0.5px solid var(--hair-2); background: var(--paper);
+    display: grid; gap: 12px;
+  }
+  .preset-btns { display: flex; gap: 0; border: 0.5px solid var(--hair); width: fit-content; }
+  .preset-btn {
+    padding: 7px 16px; cursor: pointer;
+    background: transparent; border: 0;
+    border-right: 0.5px solid var(--hair);
+    font-family: var(--font-serif); font-size: 10pt;
+    letter-spacing: 1.5px; color: var(--ink-2);
+    font-style: italic;
+  }
+  .preset-btn:last-child { border-right: 0; }
+  .preset-btn:hover { color: var(--ink); background: var(--bg); }
+  .preset-btn.active {
+    background: var(--ink); color: var(--paper);
+    font-style: normal; font-weight: 700;
+  }
+  .filter-row {
+    display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end;
+  }
+  .filter-field { display: flex; flex-direction: column; gap: 4px; }
+  .filter-field label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2px; color: var(--ink-3); font-style: italic;
+  }
+  .filter-field select, .filter-field input[type=date] {
+    font-family: var(--font-serif); font-size: 10pt;
+    border: 0.5px solid var(--hair); padding: 6px 10px;
+    background: var(--paper); color: var(--ink); outline: 0;
+    height: 32px; min-width: 130px;
+  }
+  .filter-field select:focus, .filter-field input:focus { border-color: var(--ink); }
+  .filter-apply {
+    background: var(--ink); color: var(--paper); border: 0;
+    padding: 7px 22px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10pt;
+    letter-spacing: 2px; font-weight: 700;
+    height: 32px; align-self: flex-end;
+  }
+  .filter-apply:hover { background: #000; }
+  #custom-range { display: flex; gap: 12px; align-items: flex-end; }
+  .range-sep {
+    padding-bottom: 8px; color: var(--ink-3); font-style: italic;
+    font-size: 9pt; font-family: var(--font-serif);
+  }
+
+  /* 折叠卡（创建预约 / 规则） */
+  .ap-collapse {
+    background: var(--paper); border: 0.5px solid var(--hair-2);
+    margin-bottom: 18px;
+  }
+  .ap-collapse > button {
+    width: 100%; padding: 14px 18px; cursor: pointer;
+    background: transparent; border: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--font-serif); font-size: 11pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 2.5px; text-align: left;
+  }
+  .ap-collapse > button .arrow {
+    font-style: italic; font-size: 9pt; color: var(--ink-3); letter-spacing: 1px;
+  }
+  .ap-collapse > div {
+    border-top: 0.5px solid var(--hair);
+    padding: 16px 18px;
+    font-family: var(--font-serif); font-size: 10pt;
+    line-height: 1.7; color: var(--ink-2);
+  }
+  .ap-collapse > div strong { color: var(--ink); letter-spacing: 1.5px; }
+  .ap-collapse > div ul { margin: 4px 0 12px; padding-left: 22px; }
+  .ap-collapse > div li { margin-bottom: 3px; }
+  .ap-collapse > div table {
+    border-collapse: collapse; width: 100%; margin-top: 8px;
+    font-size: 9.5pt;
+  }
+  .ap-collapse > div table th, .ap-collapse > div table td {
+    padding: 6px 10px; border-bottom: 0.5px solid var(--hair); text-align: left;
+  }
+  .ap-collapse > div table th {
+    background: var(--bg); font-weight: 700; color: var(--ink-3);
+    font-style: italic; letter-spacing: 1.5px; font-size: 8.5pt;
+  }
+
+  /* ───────────────────────────────────────────────────────
+     以下：override 旧版 admin_appointments_panel.html 的 class
+     让它的渲染贴近 UK 风（不改 include 本身）
+  ───────────────────────────────────────────────────────── */
+
+  /* 信息 msg 条 */
+  .msg.ok {
+    border: 0; border-left: 3px solid var(--accent-green);
+    background: #f5f9f6; padding: 10px 16px; margin: 14px 0;
+    font-family: var(--font-serif); font-size: 10pt; letter-spacing: 0.5px;
+    border-radius: 0; color: var(--ink-2);
+  }
+  .msg.err {
+    border: 0; border-left: 3px solid var(--accent-red);
+    background: #fcf5f4; padding: 10px 16px; margin: 14px 0;
+    font-family: var(--font-serif); font-size: 10pt; letter-spacing: 0.5px;
+    border-radius: 0; color: var(--accent-red);
+  }
+
+  /* card 通用 */
+  body .card {
+    background: var(--paper); border: 0.5px solid var(--hair-2);
+    border-radius: 0; box-shadow: none;
+    margin-bottom: 14px;
+  }
+
+  /* 创建预约表单：用 UK 衬线字体 */
+  body .card label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2px; color: var(--ink-3); font-style: italic;
+  }
+  body .card input[type=text], body .card input[type=date], body .card input[type=time],
+  body .card input[type=number], body .card select, body .card textarea {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    border: 0.5px solid var(--hair); border-radius: 0; padding: 7px 10px;
+    background: var(--paper); color: var(--ink); outline: 0;
+  }
+  body .card input:focus, body .card select:focus, body .card textarea:focus {
+    border-color: var(--ink); box-shadow: none;
+  }
+  body .card .btn {
+    background: var(--ink); color: var(--paper); border: 0; border-radius: 0;
+    padding: 8px 18px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10pt;
+    letter-spacing: 2px; font-weight: 700;
+  }
+  body .card .btn:hover { background: #000; }
+  body .card .btn.secondary {
+    background: var(--paper); color: var(--ink-2); border: 0.5px solid var(--hair);
+    font-style: italic; font-weight: 400;
+  }
+  body .card .btn.secondary:hover { color: var(--ink); border-color: var(--ink-3); }
+
+  /* 日期分组头 */
+  .date-group-header {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 14px;
+    gap: 12px;
+  }
+  .date-group-title {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 2px;
+  }
+  .date-group-title.is-today { color: var(--ink); }
+  .dg-chip {
+    font-family: var(--font-serif); font-size: 8.5pt; font-style: italic;
+    border-radius: 0; border-color: var(--hair); background: var(--paper);
+    color: var(--ink-3); padding: 2px 8px; letter-spacing: 1px; font-weight: 400;
+  }
+  .dg-chip.c-total { color: var(--ink-3); }
+  .dg-chip.c-pending {
+    background: var(--paper); color: var(--accent-amber); border-color: var(--accent-amber);
+  }
+  .dg-chip.c-tnr {
+    background: var(--paper); color: var(--ink-2); border-color: var(--ink-3);
+  }
+
+  /* 部门 header */
+  .dept-header {
+    background: var(--paper) !important;
+    color: var(--ink) !important;
+    border-radius: 0;
+    border-left: 3px solid var(--ink) !important;
+    padding: 6px 12px;
+    font-family: var(--font-serif); font-size: 10pt; letter-spacing: 2px;
+  }
+  .dept-header.dept-medical { border-left-color: var(--ink) !important; color: var(--ink) !important; }
+  .dept-header.dept-beauty {
+    border-left-color: var(--accent-amber) !important;
+    color: var(--accent-amber) !important;
+  }
+  .dept-count { color: var(--ink-3); font-style: italic; }
+
+  /* 时段小标题 */
+  .slot-header {
+    font-family: var(--font-serif); font-size: 9pt;
+    color: var(--ink-3); letter-spacing: 2px; font-style: italic; font-weight: 400;
+  }
+  .slot-header::after { background: var(--hair); }
+
+  /* 预约表 */
+  .appt-table { border-radius: 0; border: 0.5px solid var(--hair-2); }
+  .appt-table th {
+    background: var(--bg) !important;
+    font-family: var(--font-serif); font-size: 9pt;
+    color: var(--ink-3); letter-spacing: 1.5px; font-weight: 400;
+    border-bottom: 0.5px solid var(--hair) !important;
+  }
+  .appt-table td {
+    font-family: var(--font-serif); font-size: 10pt;
+    border-bottom: 0.5px solid var(--hair);
+    padding: 9px 8px;
+  }
+  .appt-table tr.appt-row .col-time { font-family: var(--font-numeric); color: var(--ink); }
+
+  /* 状态左条 */
+  .appt-status-rail { width: 3px; }
+
+  /* 卡片包 */
+  .appointment-card {
+    border-radius: 0; border: 0.5px solid var(--hair-2);
+    box-shadow: none;
+  }
+  .appointment-card:hover { box-shadow: none; border-color: var(--ink); }
+
+  /* 类型 pill */
+  .cat-pill {
+    border-radius: 0; font-family: var(--font-serif); font-style: italic;
+    font-size: 9pt; padding: 1px 8px; letter-spacing: 1px; font-weight: 400;
+  }
+  .cat-pill.c-tnr,
+  .cat-pill.c-surgery,
+  .cat-pill.c-outpatient,
+  .cat-pill.c-wash,
+  .cat-pill.c-beauty {
+    background: var(--paper); color: var(--ink-2); border-color: var(--hair);
+  }
+  .cat-pill.c-tnr        { color: var(--accent-green); border-color: var(--accent-green); }
+  .cat-pill.c-surgery    { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .cat-pill.c-outpatient { color: var(--ink); border-color: var(--ink-3); }
+  .cat-pill.c-beauty,
+  .cat-pill.c-wash       { color: var(--ink-2); border-color: var(--ink-3); font-style: italic; }
+
+  /* 行内 actions */
+  .row-actions button, .row-actions a.row-btn {
+    background: var(--paper); color: var(--ink-2);
+    border: 0.5px solid var(--hair); border-radius: 0;
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 1px; padding: 4px 10px;
+  }
+  .row-actions button:hover, .row-actions a.row-btn:hover {
+    color: var(--ink); border-color: var(--ink-3); background: var(--bg);
+  }
+  .row-actions .a-arrived {
+    background: var(--ink) !important; color: var(--paper) !important;
+    border-color: var(--ink) !important; font-weight: 700;
+  }
+  .row-actions .a-confirm {
+    background: var(--accent-green) !important; color: var(--paper) !important;
+    border-color: var(--accent-green) !important; font-weight: 700;
+  }
+  .row-actions .a-danger {
+    background: var(--paper) !important; color: var(--accent-red) !important;
+    border-color: var(--accent-red) !important;
+  }
+
+  /* panel-row 改约面板 */
+  .appt-table tr.appt-panel-row td { background: var(--bg) !important; }
+  .appt-table tr.appt-panel-row .panel-wrap {
+    border-top: 0.5px solid var(--ink) !important;
+  }
+  .appt-table tr.appt-panel-row .panel-wrap h4 {
+    font-family: var(--font-serif); font-size: 10pt; letter-spacing: 1.5px;
+    color: var(--ink-3); font-style: italic; font-weight: 400;
+  }
+</style>
+
+<div class="ap-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  <span>预约管理</span>
+</div>
+
+<div class="ap-head">
+  <div>
+    <h1>
+      预约管理
+      <span class="sub">创建与处理 TNR · 门诊 · 手术 · 美容</span>
+    </h1>
+  </div>
+</div>
+
+<hr class="ap-rule-double"/>
+
+{# ── TNR 月度配额 ── #}
+{% if request.session.get('admin') and stats.tnr_quota_status %}
+<div class="ap-tnr-section">
+  <div class="ap-tnr-head">T N R · 月 度 预 约 配 额</div>
+  <div class="ap-tnr-grid">
+    {% for sq in stats.tnr_quota_status %}
+    <div class="ap-tnr-card">
+      <div class="name">{{ sq.store }}</div>
+      {% set _raw_pct = (sq.monthly_count / sq.monthly_quota * 100)|int if sq.monthly_quota > 0 else 0 %}
+      {% set pct = [_raw_pct, 100]|min if _raw_pct >= 0 else 0 %}
+      <div class="bar">
+        <div class="fill {% if not sq.is_open %}full{% elif pct >= 80 %}warn{% else %}ok{% endif %}" style="width:{{ pct }}%;"></div>
+      </div>
+      <div class="row">
+        <span class="nums"><b>{{ sq.monthly_count }}</b> / {{ sq.monthly_quota }} <span style="color:var(--ink-3);font-style:italic;font-size:9pt;">已确认</span></span>
+        {% if not sq.accepting %}<span class="tag closed">手动关闭</span>
+        {% elif sq.monthly_count >= sq.monthly_quota %}<span class="tag full">已满员</span>
+        {% else %}<span class="tag open">接受预约</span>{% endif %}
+      </div>
+      <form method="post" action="/admin/tnr-quota/{{ sq.store_index }}/toggle">
+        <button type="submit">
+          {% if sq.accepting %}点击关闭预约{% else %}点击重新开放{% endif %}
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="ap-tnr-foot">
+    配额仅统计「已确认」TNR · 取消 / 爽约自动释放 · 手动关闭后小程序端无法提交新 TNR 预约
+  </div>
+</div>
+{% endif %}
+
+{# ── 统计 ── #}
+<div class="stats-bar">
+  <div class="stat-cell">
+    <div class="stat-label">今&nbsp;日&nbsp;有&nbsp;效&nbsp;预&nbsp;约</div>
+    <div class="stat-value">{{ stats.today_active | default(0) }}</div>
+    <div class="stat-sub">不含已取消 / 爽约</div>
+  </div>
+  <a class="stat-cell" href="?preset=month&appt_status=pending">
+    <div class="stat-label">待&nbsp;确&nbsp;认（今&nbsp;日&nbsp;起）</div>
+    <div class="stat-value" style="{% if stats.pending_total > 0 %}color:var(--accent-amber);{% endif %}">{{ stats.pending_total | default(0) }}</div>
+    <div class="stat-sub">{% if stats.pending_total > 0 %}点击查看 →{% else %}今日及未来全部{% endif %}</div>
+  </a>
+  <div class="stat-cell">
+    <div class="stat-label">今&nbsp;日&nbsp;TNR&nbsp;手&nbsp;术</div>
+    <div class="stat-value">{{ stats.tnr_today | default(0) }}<span> / {{ stats.tnr_daily_max | default(2) }}</span></div>
+    <div class="stat-sub">每店每日上限 {{ stats.tnr_daily_max | default(2) }} 台</div>
+  </div>
+</div>
+
+{# ── 筛选 ── #}
+<div class="filter-bar">
+  <form id="filter-form" method="get" action="/admin/appointments">
+    <div class="preset-btns">
+      <button type="button" class="preset-btn {% if filters.preset == 'today' %}active{% endif %}" data-preset="today">今日</button>
+      <button type="button" class="preset-btn {% if filters.preset == '3days' %}active{% endif %}" data-preset="3days">未来三日</button>
+      <button type="button" class="preset-btn {% if filters.preset == 'week' %}active{% endif %}" data-preset="week">本周</button>
+      <button type="button" class="preset-btn {% if filters.preset == 'month' %}active{% endif %}" data-preset="month">本月</button>
+      <button type="button" class="preset-btn {% if filters.preset == 'custom' %}active{% endif %}" data-preset="custom">自定义</button>
+    </div>
+    <input type="hidden" name="preset" id="input-preset" value="{{ filters.preset | default('today') }}"/>
+
+    <div class="filter-row">
+      <div id="custom-range" style="display:{% if filters.preset == 'custom' %}flex{% else %}none{% endif %};">
+        <div class="filter-field">
+          <label>开始日期</label>
+          <input type="date" name="df" id="input-df" value="{{ filters.date_from | default('') }}"/>
+        </div>
+        <div class="range-sep">→</div>
+        <div class="filter-field">
+          <label>结束日期</label>
+          <input type="date" name="dt" id="input-dt" value="{{ filters.date_to | default('') }}"/>
+        </div>
+      </div>
+      <div class="filter-field">
+        <label>状态</label>
+        <select name="appt_status">
+          <option value="">全部状态</option>
+          <option value="pending"   {% if filters.status == 'pending'    %}selected{% endif %}>待确认</option>
+          <option value="confirmed" {% if filters.status == 'confirmed'  %}selected{% endif %}>已确认</option>
+          <option value="completed" {% if filters.status == 'completed'  %}selected{% endif %}>已完成</option>
+          <option value="cancelled" {% if filters.status == 'cancelled'  %}selected{% endif %}>已取消</option>
+          <option value="no_show"   {% if filters.status == 'no_show'    %}selected{% endif %}>爽约</option>
+        </select>
+      </div>
+      {% if request.session.get('admin_role') == 'superadmin' %}
+      <div class="filter-field">
+        <label>门店</label>
+        <select name="appt_store">
+          <option value="">全部门店</option>
+          {% for s in stores | default([]) %}
+          <option value="{{ s }}" {% if filters.store == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="filter-field">
+        <label>类型</label>
+        <select name="appt_category">
+          <option value="">全部类型</option>
+          <option value="tnr"        {% if filters.category == 'tnr'        %}selected{% endif %}>TNR</option>
+          <option value="outpatient" {% if filters.category == 'outpatient' %}selected{% endif %}>门诊</option>
+          <option value="surgery"    {% if filters.category == 'surgery'    %}selected{% endif %}>手术</option>
+          <option value="beauty"     {% if filters.category == 'beauty'     %}selected{% endif %}>美容</option>
+        </select>
+      </div>
+      <button type="submit" class="filter-apply">筛&nbsp;选</button>
+    </div>
+  </form>
+</div>
+
+{# ── 预约规则（折叠） ── #}
+<div class="ap-collapse">
+  <button type="button" onclick="var b=this.nextElementSibling;var opening=b.style.display==='none';b.style.display=opening?'block':'none';this.querySelector('.arrow').textContent=opening?'收 起':'展 开';">
+    <span>预 约 规 则（仅 后 台 可 见）</span>
+    <span class="arrow">展 开</span>
+  </button>
+  <div style="display:none;">
+    <strong>时间冲突规则</strong>
+    <ul>
+      <li>同门店同日期的预约时间段不可重叠（按「开始时间 + 时长」计算区间）</li>
+      <li>已取消 / 爽约不参与冲突检测</li>
+      <li>改约时自动排除当前预约本身，再做冲突检测</li>
+      <li><strong>预约优先政策</strong>：有预约客人与临时到店客人冲突时，优先接待有预约记录的客人</li>
+    </ul>
+
+    <strong>TNR 手术专项</strong>
+    <ul>
+      <li>仅对申请状态「已通过/预通过/已预约」的用户显示 TNR 板块</li>
+      <li>预约时间须在 11:00–18:00 之间</li>
+      <li>每店每日上限 <strong>2 台</strong> TNR 手术（不含取消/爽约）</li>
+      <li>每店每月上限 <strong>30 个</strong>已确认 TNR 预约</li>
+      <li>单月爽约 <strong>3 次</strong>，账户限制 <strong>90 天</strong>不能新预约</li>
+      <li>时长固定 60 分钟，服务项目固定「TNR 手术安排」</li>
+    </ul>
+
+    <strong>申请编号去重</strong>
+    <ul>
+      <li>同一 TNR 申请编号只能存在一个有效预约（状态非取消/爽约）</li>
+      <li>需先取消原预约才能为同一申请重新预约</li>
+    </ul>
+
+    <strong>改约规则</strong>
+    <ul>
+      <li>只有「待确认」或「已确认」状态可改约</li>
+      <li>改约日期不能早于今天</li>
+      <li>改约后自动做时间冲突与 TNR 日限校验</li>
+      <li>若关联了 TNR 申请且申请状态为「已预约」，改约后同步更新申请的预约日期</li>
+    </ul>
+
+    <strong>状态联动</strong>
+    <ul>
+      <li>预约「确认」 → 关联 TNR 申请状态变为「已预约」</li>
+      <li>预约「取消」（申请为已预约）→ 关联申请回退「已通过」</li>
+      <li>预约「爽约」→ 关联申请状态变为「爽约」</li>
+      <li>「手术完成」不在预约管理里操作 — 须在 TNR 审核与手术登记中上传术前 + 术后影像后点击「标记手术已完成」</li>
+    </ul>
+
+    <strong>时段容量池（医疗类）</strong>
+    <ul>
+      <li>每小时 3 单位 · 上午 9 单位 · 下午 18 单位 · 晚上 12 单位</li>
+      <li>各类型占用：疫苗/驱虫 = 1 · 普通门诊 = 3 · TNR/手术 = 4 · 美容 / 洗护 = 0（独立排）</li>
+    </ul>
+
+    <strong>美容预约</strong>
+    <ul>
+      <li>独立美容师排班，不参与医疗容量池</li>
+      <li>可预约时段 <strong>13:00 – 22:00</strong>，每 30 分钟一个</li>
+      <li>服务：犬造型 · 犬洗护 · 猫造型 · 猫洗护；毛长：长 / 短</li>
+      <li>附加（各 +30 分钟）：去浮毛 · SPA · 护发素 · 纯手剪 · 药浴 · 去油</li>
+    </ul>
+    <table>
+      <thead><tr><th>服务 / 体型</th><th>造型</th><th>洗护（短毛）</th><th>洗护（长毛）</th></tr></thead>
+      <tbody>
+        <tr><td>犬·微小型 (≤4 kg)</td><td>90</td><td>30</td><td>30</td></tr>
+        <tr><td>犬·小型 (4–10 kg)</td><td>120</td><td>60</td><td>60</td></tr>
+        <tr><td>犬·中型 (10–15 kg)</td><td>150</td><td>60</td><td>90</td></tr>
+        <tr><td>犬·中大型 (15–25 kg)</td><td>180</td><td>90</td><td>120</td></tr>
+        <tr><td>犬·大型 (25 kg+)</td><td>210</td><td>120</td><td>150</td></tr>
+        <tr><td>猫·小型 (≤2.5 kg)</td><td>120</td><td>60</td><td>90</td></tr>
+        <tr><td>猫·中型 (2.5–4 kg)</td><td>120</td><td>90</td><td>120</td></tr>
+        <tr><td>猫·大型 (4 kg+)</td><td>150</td><td>120</td><td>150</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% set appt_redirect = 'appointments' %}
+{% include "includes/admin_appointments_panel.html" %}
+
+<script>
+(function () {
+  var presetBtns = document.querySelectorAll('.preset-btn');
+  var inputPreset = document.getElementById('input-preset');
+  var customRange = document.getElementById('custom-range');
+  var form = document.getElementById('filter-form');
+
+  presetBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var p = btn.dataset.preset;
+      inputPreset.value = p;
+      presetBtns.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      if (p === 'custom') {
+        customRange.style.display = 'flex';
+      } else {
+        customRange.style.display = 'none';
+        form.submit();
+      }
+    });
+  });
+
+  var dfIn = document.getElementById('input-df');
+  var dtIn = document.getElementById('input-dt');
+  if (dfIn && dtIn) {
+    dfIn.addEventListener('change', function () {
+      if (!dtIn.value || dtIn.value < dfIn.value) dtIn.value = dfIn.value;
+    });
+    dtIn.addEventListener('change', function () {
+      if (dfIn.value && dtIn.value < dfIn.value) dfIn.value = dtIn.value;
+    });
+  }
+})();
+</script>
+
+{% include "includes/admin_appointments_scripts.html" %}
+
+{% endblock %}

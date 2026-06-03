@@ -2962,7 +2962,7 @@ async def page_admin_appointments(
         "tnr_quota_status": _tnr_quota_status,
     }
 
-    return templates.TemplateResponse(request, "admin_appointments.html",
+    return templates.TemplateResponse(request, "uk/appointments.html",  # B9 UK 重写
         {
             "request":              request,
             "title":                "预约管理",
