@@ -138,30 +138,33 @@
 .pets-tbl .num { font-family: var(--font-numeric); }
 .pets-tbl .uk-pill { margin-left: 8px; }
 
-/* ── 主 tab nav ── */
+/* ── 主 tab：目录风 ── */
 .uk-tabs-main {
-  display: flex; gap: 22px; flex-wrap: wrap;
-  border-bottom: 0.5px solid var(--hair-2);
-  border-top: 0.5px solid var(--hair); /* 上方 hairline 视觉停顿 */
-  padding-top: 10px;
-  margin: 8px 0 24px;
+  border-top: 0.5px solid var(--hair);
+  border-bottom: 0.5px solid var(--hair);
+  padding: 14px 0;
+  margin: 8px 0 28px;
+  text-align: center;
 }
 .uk-tab-btn {
   background: transparent; border: 0; cursor: pointer;
   font-family: var(--font-serif);
-  font-size: 10pt; letter-spacing: 2px;
-  color: var(--ink-3);
-  padding: 8px 0 7px;
-  border-bottom: 1px solid transparent;
-  margin-bottom: -0.5px; outline: none;
+  font-size: 10pt; letter-spacing: 2.5px;
+  color: var(--ink-3); font-style: italic;
+  padding: 2px 0;
+  outline: none;
+  position: relative;
 }
-.uk-tab-btn .num { color: var(--ink-4); font-family: var(--font-numeric); font-size: 8.5pt; margin-left: 2px; }
+.uk-tab-btn:not(:last-child)::after {
+  content: "·"; margin: 0 12px; color: var(--ink-4);
+  font-style: normal;
+}
 .uk-tab-btn:hover { color: var(--ink); }
-.uk-tab-btn:hover .num { color: var(--ink-3); }
 .uk-tab-btn.active {
-  color: var(--ink); border-bottom-color: var(--ink); font-weight: 700;
+  color: var(--ink); font-weight: 700; font-style: normal;
+  text-decoration: underline; text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
 }
-.uk-tab-btn.active .num { color: var(--ink-2); }
 
 .uk-tab-content { display: none; }
 .uk-tab-content.active { display: block; }
@@ -452,14 +455,14 @@
     {# ── 主 tab nav ── #}
     {% if active_pet %}
     <nav class="uk-tabs-main">
-      <button class="uk-tab-btn {% if active_tab=='visits' %}active{% endif %}" data-tab="visits" onclick="switchTab('visits')">诊疗<span class="num">{{ visits|length }}</span></button>
-      <button class="uk-tab-btn {% if active_tab=='prescriptions' %}active{% endif %}" data-tab="prescriptions" onclick="switchTab('prescriptions')">处方<span class="num">{{ prescriptions|length }}</span></button>
-      <button class="uk-tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单<span class="num">{{ exam_orders|length }}</span></button>
-      <button class="uk-tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约<span class="num">{{ appointments|length }}</span></button>
-      <button class="uk-tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫<span class="num">{{ vaccinations|length + dewormings|length }}</span></button>
-      <button class="uk-tab-btn {% if active_tab=='grooming' %}active{% endif %}" data-tab="grooming" onclick="switchTab('grooming')">美容<span class="num">{{ groomings|length }}</span></button>
-      <button class="uk-tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售<span class="num">{{ pet_sales_orders|length }}</span></button>
-      <button class="uk-tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费<span class="num">{{ pet_invoices|length }}</span></button>
+      <button class="uk-tab-btn {% if active_tab=='visits' %}active{% endif %}" data-tab="visits" onclick="switchTab('visits')">诊疗</button>
+      <button class="uk-tab-btn {% if active_tab=='prescriptions' %}active{% endif %}" data-tab="prescriptions" onclick="switchTab('prescriptions')">处方</button>
+      <button class="uk-tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单</button>
+      <button class="uk-tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约</button>
+      <button class="uk-tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫</button>
+      <button class="uk-tab-btn {% if active_tab=='grooming' %}active{% endif %}" data-tab="grooming" onclick="switchTab('grooming')">美容</button>
+      <button class="uk-tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售</button>
+      <button class="uk-tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费</button>
       <button class="uk-tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重</button>
       <button class="uk-tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">文书</button>
       <button class="uk-tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包</button>
@@ -706,13 +709,14 @@
     <div class="aside-card">
       <h3>操作</h3>
       <div class="aside-actions">
-        <a class="uk-btn">发起协议签署</a>
         <a class="uk-btn ghost">发送短信</a>
-        <a class="uk-btn ghost">钱包充值</a>
-        <a class="uk-btn ghost">售卖套餐</a>
         <hr class="rule-hair"/>
         <a class="uk-btn danger ghost sm">归档客户</a>
       </div>
+      <p class="uk-mute" style="font-size:8.5pt;letter-spacing:1px;margin-top:14px;line-height:1.7;font-style:italic;">
+        协议签署 / 钱包充值 / 售卖套餐<br/>
+        将于 B3.2 移入对应 tab 内
+      </p>
     </div>
   </aside>
 
