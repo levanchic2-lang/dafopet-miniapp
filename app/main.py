@@ -7078,7 +7078,7 @@ async def page_admin_customer_detail(
 
     return templates.TemplateResponse(
         request,
-        "admin_customer_detail.html",
+        "uk/customer.html",  # B3.1 UK 重写；旧模板暂留
         {
             "cust": cust,
             "pets": pets,
