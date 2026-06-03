@@ -3383,7 +3383,7 @@ async def admin_changelog_page(request: Request):
                 })
     except Exception as e:
         commits = [{"short_hash": "—", "msg": f"无法读取 git log：{e}", "kind": "error", "scope": "", "author": "", "date": "", "subject": "", "full_hash": ""}]
-    return templates.TemplateResponse(request, "admin_changelog.html", {
+    return templates.TemplateResponse(request, "uk/changelog.html", {
         "request": request,
         "title": "开发日志",
         "commits": commits,
@@ -3501,7 +3501,7 @@ async def page_admin_audit_logs(
     distinct_actions = [r[0] for r in db.query(AuditLog.action).distinct().limit(50).all() if r[0]]
 
     total_pages = max(1, (total + page_size - 1) // page_size)
-    return templates.TemplateResponse(request, "admin_audit_logs.html", {
+    return templates.TemplateResponse(request, "uk/audit_logs.html", {
         "rows": rows,
         "total": total, "page": page, "total_pages": total_pages, "page_size": page_size,
         "q": q, "action": action, "actor": actor, "date_from": date_from, "date_to": date_to,
