@@ -236,6 +236,85 @@
     color: var(--accent-red) !important;
   }
 
+  /* ── 上传术前/术后影像 区（漏迁的 admin-upload* 样式） ── */
+  body .admin-upload {
+    margin-top: 14px; padding-top: 14px;
+    border-top: 0.5px solid var(--hair);
+  }
+  body .admin-upload p {
+    font-family: var(--font-serif); font-size: 10pt; margin: 0 0 8px;
+  }
+  body .admin-upload-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px 16px !important;
+    max-width: none;
+  }
+  @media (max-width: 720px) { body .admin-upload-grid { grid-template-columns: 1fr !important; } }
+  body .admin-upload-grid label {
+    margin: 0; font-weight: 700;
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink); letter-spacing: 1px;
+    display: flex; flex-direction: column; gap: 4px;
+    font-style: normal;
+  }
+  body .admin-upload-grid label input[type=file] {
+    height: auto !important; padding: 6px 8px !important;
+    font-size: 9pt !important; cursor: pointer;
+    border: 0.5px solid var(--hair) !important; border-radius: 0 !important;
+    background: var(--bg) !important;
+  }
+  body .admin-upload-submit {
+    width: 100%; margin-top: 12px;
+    background: var(--ink) !important; color: var(--paper) !important;
+    border: 0 !important; padding: 10px !important;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    letter-spacing: 2.5px; font-weight: 700;
+  }
+  body .admin-upload-submit:hover { background: #000 !important; }
+
+  /* 已上传缩略图区域 */
+  body .admin-upload .sub {
+    font-family: var(--font-serif); font-size: 9.5pt;
+    color: var(--ink-3); font-style: italic; letter-spacing: 0.5px;
+  }
+
+  /* 申请卡 .admin-app-lines p 紧凑化 */
+  body .admin-app-lines p { margin: 5px 0 0 !important; }
+
+  /* 现场确认按钮 cell */
+  body .card > div[style*="brand-bg-soft"] {
+    background: var(--bg) !important;
+    border: 0 !important;
+    border-left: 3px solid var(--ink) !important;
+    border-radius: 0 !important;
+  }
+  body .card > div[style*="brand-bg-soft"] .btn {
+    background: var(--ink) !important; color: var(--paper) !important;
+    border: 0 !important; border-radius: 0 !important;
+    padding: 8px 16px !important;
+    font-family: var(--font-serif); letter-spacing: 1.5px;
+  }
+
+  /* 审核 textarea */
+  body .admin-action-card input[type=text] {
+    height: 38px;
+  }
+
+  /* admin-action-card 审核 row */
+  body .admin-form-line {
+    grid-template-columns: 1fr auto !important;
+    gap: 10px !important;
+  }
+  body .admin-form-line button {
+    background: var(--paper) !important; color: var(--accent-red) !important;
+    border: 0.5px solid var(--accent-red) !important; border-radius: 0 !important;
+    padding: 8px 18px !important;
+    font-family: var(--font-serif); font-size: 10pt;
+    letter-spacing: 1.5px; font-weight: 400;
+  }
+  body .admin-form-line button:hover { background: #fcf5f4 !important; }
+
   /* AI 辅助 panel */
   body .ai-review-panel {
     background: var(--bg); border: 0; border-radius: 0;
