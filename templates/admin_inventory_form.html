@@ -25,7 +25,7 @@
 
  <div>
  <label style="display:block;font-weight:600;margin-bottom:0.35rem;">大类</label>
- <select name="category" id="cat-select" style="width:100%;" onchange="updateSubs()">
+ <select name="category" id="cat-select" style="width:100%;" onchange="updateSubs(true)">
  {% for cat_key, cat in categories.items() %}
  <option value="{{ cat_key }}" {% if item and item.category == cat_key %}selected{% elif not item and cat_key == 'medication' %}selected{% endif %}>{{ cat.label }}</option>
  {% endfor %}
@@ -34,7 +34,9 @@
 
  <div>
  <label style="display:block;font-weight:600;margin-bottom:0.35rem;">小类</label>
- <select name="subcategory" id="sub-select" style="width:100%;">
+ <select name="subcategory" id="sub-select" style="width:100%;" onchange="updateSubs(false)">
+ {# 留空选项：兼容历史无小类的数据 #}
+ <option value="" data-cat="*" {% if item and not item.subcategory %}selected{% endif %}>—（不分小类）</option>
  {% for cat_key, cat in categories.items() %}
  {% for sub_key, sub_label in cat.subs.items() %}
  <option value="{{ sub_key }}"
@@ -44,7 +46,19 @@
  </option>
  {% endfor %}
  {% endfor %}
+ {# 兜底：item.subcategory 不在预定义 subs 字典里（历史脏数据 / OCR 直存中文标签）
+    显式追加一个 selected option 把原值保留，避免被静默改成第一个 #}
+ {% if item and item.subcategory %}
+   {% set _matched = false %}
+   {% for cat_key, cat in categories.items() %}{% if item.subcategory in cat.subs %}{% set _matched = true %}{% endif %}{% endfor %}
+   {% if not _matched %}
+   <option value="{{ item.subcategory }}" data-cat="{{ item.category }}" selected>
+    {{ item.subcategory }} ⚠ 原值
+   </option>
+   {% endif %}
+ {% endif %}
  </select>
+ <div style="font-size:0.75rem;color:#94a3b8;margin-top:0.25rem;" id="sub-warn"></div>
  </div>
 
  <div style="grid-column:1/-1;display:flex;gap:1.5rem;">
@@ -172,15 +186,29 @@
 <script>
 const CATS = {{ categories | tojson }};
 
-function updateSubs() {
+function updateSubs(force) {
  const cat = document.getElementById('cat-select').value;
  const sub = document.getElementById('sub-select');
+ const warn = document.getElementById('sub-warn');
+ // 留空选项（data-cat="*"）和当前大类的 option 都显示
  Array.from(sub.options).forEach(o => {
- o.style.display = o.dataset.cat === cat ? '' : 'none';
+ const ok = (o.dataset.cat === cat) || (o.dataset.cat === '*');
+ o.style.display = ok ? '' : 'none';
  });
- // 选第一个可见的
- const first = Array.from(sub.options).find(o => o.dataset.cat === cat);
- if (first) sub.value = first.value;
+ // 当前选中的还在可见范围内 → 保留；force=true（用户手改大类）才回退
+ const cur = sub.options[sub.selectedIndex];
+ const visible = cur && (cur.dataset.cat === cat || cur.dataset.cat === '*');
+ if (!visible || force) {
+   const first = Array.from(sub.options).find(o => o.dataset.cat === cat || o.dataset.cat === '*');
+   if (first) sub.value = first.value;
+ }
+ // 警告：原值不在该大类标准小类里
+ if (warn) {
+   const opt = sub.options[sub.selectedIndex];
+   warn.textContent = (opt && opt.textContent.includes('⚠ 原值'))
+     ? '⚠ 当前小类是历史值，不在「' + (CATS[cat] && CATS[cat].label) + '」的标准小类里。如需规范，请重新选一个。'
+     : '';
+ }
 }
 
 function toggleStock() {
