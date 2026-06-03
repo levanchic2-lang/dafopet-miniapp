@@ -13653,6 +13653,76 @@ async def admin_inv_cleanup_apply(
     )
 
 
+# ─── 列表 vs 编辑表单一致性审计（只读） ───
+@app.get("/admin/inventory-audit", response_class=HTMLResponse)
+async def admin_inventory_audit(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    require_superadmin(request)
+    items = db.query(InventoryItem).filter(InventoryItem.is_active == True)\
+        .order_by(InventoryItem.id).all()
+    issues = []  # 仅记录不一致
+    n_total = 0
+    n_ok = 0
+    for it in items:
+        n_total += 1
+        problems = []
+
+        # === 大类一致性 ===
+        # 列表渲染：categories[it.category].label if found else it.category（fallback 原字符串）
+        # 表单渲染：select 里如果 it.category 是 categories 的 key → 显示该 cat.label
+        #          否则没有 selected option → 浏览器默认选第一个 = "药品"
+        cat_in_dict = it.category in INVENTORY_CATEGORIES
+        list_cat = INVENTORY_CATEGORIES[it.category]["label"] if cat_in_dict else (it.category or "—")
+        if cat_in_dict:
+            form_cat = INVENTORY_CATEGORIES[it.category]["label"]
+        else:
+            # 无匹配 → 表单 select 落到第一个 option = "药品"（medication）
+            form_cat = INVENTORY_CATEGORIES["medication"]["label"] + " ⚠默认"
+            problems.append(f"大类不一致：列表「{list_cat}」 vs 表单「{form_cat}」")
+
+        # === 小类一致性 ===
+        cur_sub = (it.subcategory or "").strip()
+        # 列表 fallback：categories[it.category].subs[cur_sub] if found else cur_sub or "—"
+        if cat_in_dict and cur_sub in INVENTORY_CATEGORIES[it.category].get("subs", {}):
+            list_sub = INVENTORY_CATEGORIES[it.category]["subs"][cur_sub]
+            form_sub = list_sub  # ✓ 完全匹配
+        elif not cur_sub:
+            list_sub = "—"
+            form_sub = "—（不分小类）"
+        else:
+            # 不在该 cat 的标准 subs 里：列表显示 raw，表单显示 ⚠ 原值 也是 raw
+            list_sub = cur_sub
+            # 还要看是不是在其他大类的 subs 里
+            in_other = any(cur_sub in c.get("subs", {}) for ck, c in INVENTORY_CATEGORIES.items() if ck != it.category)
+            if in_other:
+                form_sub = cur_sub + " ⚠ 原值（跨大类）"
+                problems.append(f"小类「{cur_sub}」属于其他大类，建议规范化")
+            else:
+                form_sub = cur_sub + " ⚠ 原值（脏数据）"
+                problems.append(f"小类「{cur_sub}」不在任何标准字典")
+
+        if problems:
+            issues.append({
+                "id": it.id, "name": it.name,
+                "list_cat": list_cat, "form_cat": form_cat,
+                "list_sub": list_sub, "form_sub": form_sub,
+                "unit": it.unit or "—",
+                "supplier": it.supplier or "—",
+                "stock_qty": it.stock_qty if not it.is_service else None,
+                "is_service": it.is_service,
+                "store": it.store or "（通用）",
+                "problems": problems,
+            })
+        else:
+            n_ok += 1
+
+    return templates.TemplateResponse(request, "admin_inventory_audit.html", {
+        "issues": issues, "n_total": n_total, "n_ok": n_ok,
+        "csrf_token": _get_csrf_token(request),
+        "title": "列表 vs 编辑表单一致性审计",
+    })
+
+
 @app.post("/admin/inventory/{item_id}/stock-in")
 async def admin_inventory_stock_in(
     item_id: int, request: Request, db: Session = Depends(get_db),

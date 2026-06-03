@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block body %}
+
+<div class="page-head">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    <a href="/admin/inventory" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回库存</a>
+    <div>
+      <h1><span class="ph-icon"><i data-lucide="search-check"></i></span>列表 vs 编辑表单一致性审计</h1>
+      <p class="ph-sub">逐个对比首页列表渲染 vs 编辑表单 select 选中值，列出不匹配的品目（仅扫 active 品目）</p>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1rem;">
+  <div class="card" style="padding:.75rem;text-align:center;">
+    <div style="font-size:.72rem;color:var(--muted);font-weight:600;">扫描品目数</div>
+    <div style="font-size:1.7rem;font-weight:800;color:#1e293b;">{{ n_total }}</div>
+  </div>
+  <div class="card" style="padding:.75rem;text-align:center;background:#f0fdf4;">
+    <div style="font-size:.72rem;color:#166534;font-weight:600;">完全一致 ✓</div>
+    <div style="font-size:1.7rem;font-weight:800;color:#16a34a;">{{ n_ok }}</div>
+  </div>
+  <div class="card" style="padding:.75rem;text-align:center;background:{% if issues %}#fef2f2{% else %}#f0fdf4{% endif %};">
+    <div style="font-size:.72rem;color:{% if issues %}#991b1b{% else %}#166534{% endif %};font-weight:600;">不一致 ⚠</div>
+    <div style="font-size:1.7rem;font-weight:800;color:{% if issues %}#dc2626{% else %}#16a34a{% endif %};">{{ issues|length }}</div>
+  </div>
+</div>
+
+{% if not issues %}
+<div class="msg ok" style="text-align:center;padding:2rem;">
+  <i data-lucide="check-circle-2" style="width:48px;height:48px;color:#16a34a;"></i>
+  <h2 style="margin:0.5rem 0;color:#166534;">🎉 完全一致！</h2>
+  <p style="color:#15803d;">所有 {{ n_total }} 个 active 品目的列表显示与编辑表单显示完全匹配，无需修复。</p>
+  <p style="font-size:.85rem;color:#16a34a;">
+    顺手提醒：本审计不检查【品名 / 单位 / 供应商 / 库存】这 4 个字段，
+    因为它们在列表和表单都直接 print <code>item.字段</code>，不存在转换 → 永远一致。
+  </p>
+</div>
+{% else %}
+
+<div class="msg" style="background:#fffbeb;border-color:#fcd34d;color:#92400e;margin-bottom:1rem;">
+  ⚠ 发现 <b>{{ issues|length }}</b> 个品目的列表与表单显示不一致。
+  下表逐条对比；可点"编辑"过去修。
+</div>
+
+<div class="data-table-wrap" style="overflow-x:auto;">
+  <table class="data-table" style="font-size:.85rem;min-width:1000px;">
+    <thead>
+      <tr>
+        <th>#ID</th>
+        <th>品名</th>
+        <th>列表显示</th>
+        <th style="text-align:center;">vs</th>
+        <th>编辑表单显示</th>
+        <th>问题</th>
+        <th style="text-align:right;">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in issues %}
+      <tr>
+        <td style="color:var(--muted);font-family:ui-monospace,monospace;">{{ r.id }}</td>
+        <td style="font-weight:600;">
+          {{ r.name }}
+          {% if r.is_service %}<br/><span style="font-size:.7rem;color:#3b82f6;">服务项目</span>{% endif %}
+          {% if r.store and r.store != '（通用）' %}<br/><span style="font-size:.7rem;color:#475569;">{{ r.store }}</span>{% endif %}
+        </td>
+        <td>
+          <div style="font-size:.75rem;color:var(--muted);">大类</div>
+          <div style="font-weight:600;">{{ r.list_cat }}</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem;">小类</div>
+          <div>{{ r.list_sub }}</div>
+        </td>
+        <td style="text-align:center;color:#94a3b8;font-size:1.2rem;">⇄</td>
+        <td>
+          <div style="font-size:.75rem;color:var(--muted);">大类</div>
+          <div style="font-weight:600;color:{% if r.form_cat != r.list_cat %}#dc2626{% else %}inherit{% endif %};">{{ r.form_cat }}</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem;">小类</div>
+          <div style="color:{% if r.form_sub != r.list_sub %}#dc2626{% else %}inherit{% endif %};">{{ r.form_sub }}</div>
+        </td>
+        <td style="font-size:.78rem;color:#991b1b;max-width:280px;">
+          {% for p in r.problems %}<div>• {{ p }}</div>{% endfor %}
+        </td>
+        <td style="text-align:right;white-space:nowrap;">
+          <a href="/admin/inventory/{{ r.id }}/edit" target="_blank"
+             class="btn secondary" style="font-size:.78rem;padding:.25rem .65rem;">编辑</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div style="margin-top:1rem;padding:.75rem 1rem;background:#f8fafc;border-radius:8px;font-size:.85rem;color:var(--muted);">
+  <b>问题类型说明：</b>
+  <ul style="margin:.4rem 0 0 1.2rem;padding:0;">
+    <li><b>小类「xxx」属于其他大类</b>：item.subcategory 是合法 key，但属于另一个大类（例如 category="药品" + subcategory="orthopedic" 应该归 surgery）。建议去 <a href="/admin/inventory-cleanup">小类规范化</a> 一键修。</li>
+    <li><b>小类「xxx」不在任何标准字典</b>：item.subcategory 是中文标签或乱码。同样建议去 <a href="/admin/inventory-cleanup">小类规范化</a>。</li>
+    <li><b>大类不一致</b>：item.category 不是 INVENTORY_CATEGORIES 的 key（极少见，可能是历史脏数据）。需手动改。</li>
+  </ul>
+</div>
+
+{% endif %}
+
+{% endblock %}
