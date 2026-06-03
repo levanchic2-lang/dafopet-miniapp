@@ -199,6 +199,7 @@
     {% if visit.status != 'closed' %}
       <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">编辑病历</a>
       <a href="/admin/inpatient/new?visit_id={{ visit.id }}" class="uk-btn ghost sm">转住院</a>
+      <a href="/admin/visits/{{ visit.id }}/anesthesia/new" class="uk-btn ghost sm">＋ 新建麻醉单</a>
       <a href="/admin/exam-orders/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建检查单</a>
       <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn primary sm">＋ 新建处方</a>
       {% if is_superadmin %}
@@ -405,6 +406,11 @@
       <h2>麻&nbsp;醉&nbsp;记&nbsp;录</h2>
       <span class="count">共 {{ anesth_orders|length }} 张</span>
     </div>
+    {% if visit.status != 'closed' %}
+    <div class="actions">
+      <a href="/admin/visits/{{ visit.id }}/anesthesia/new" class="uk-btn ghost sm">＋ 新建麻醉单</a>
+    </div>
+    {% endif %}
   </div>
   <table class="v-rel-tbl">
     <thead><tr><th>日期</th><th>ASA</th><th>状态</th><th>麻醉医师</th><th>复核人</th><th class="right">操作</th></tr></thead>
