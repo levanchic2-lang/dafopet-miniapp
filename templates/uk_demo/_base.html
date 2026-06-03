@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>{% block title %}DAFOPET — UK Minimal Demo{% endblock %}</title>
-  <link rel="stylesheet" href="/static/uk_minimal.css?v=1"/>
+  <title>{% block title %}大风动物医院{% endblock %}</title>
+  <link rel="stylesheet" href="/static/uk_minimal.css?v=2"/>
   {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -13,13 +13,13 @@
   <header class="uk-topbar">
     <div class="uk-topbar-inner">
       <div class="uk-brand">
-        DAFOPET <small>Animal Hospital</small>
+        大风动物医院 <small>est. 2024</small>
       </div>
       <nav class="uk-nav">
-        <a href="/admin/uk-demo/inventory"  class="{% if active == 'inventory' %}active{% endif %}">Inventory</a>
-        <a href="/admin/uk-demo/customer/1" class="{% if active == 'customer' %}active{% endif %}">Customers</a>
-        <a href="/admin/uk-demo/inpatient"  class="{% if active == 'inpatient' %}active{% endif %}">Wards</a>
-        <a href="/admin"                    class="{% if active == 'old' %}active{% endif %}">Legacy ▸</a>
+        <a href="/admin/uk-demo/inventory"  class="{% if active == 'inventory' %}active{% endif %}">库　存</a>
+        <a href="/admin/uk-demo/customer/1" class="{% if active == 'customer' %}active{% endif %}">客　户</a>
+        <a href="/admin/uk-demo/inpatient"  class="{% if active == 'inpatient' %}active{% endif %}">住　院</a>
+        <a href="/admin"                    class="{% if active == 'old' %}active{% endif %}">旧　版 ▸</a>
       </nav>
     </div>
   </header>
@@ -34,8 +34,8 @@
     {% block body %}{% endblock %}
   </main>
 
-  <footer style="text-align:center;padding:48px 0 32px;color:var(--ink-3);font-size:9pt;letter-spacing:3px;text-transform:uppercase;">
-    — Dafopet Animal Hospital · Established 2024 —
+  <footer style="text-align:center;padding:48px 0 32px;color:var(--ink-3);font-size:9pt;letter-spacing:5px;">
+    —　大风动物医院　·　创建于 2024　—
   </footer>
 
 </div>

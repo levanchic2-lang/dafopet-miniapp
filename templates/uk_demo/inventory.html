@@ -1,52 +1,51 @@
 {% extends "uk_demo/_base.html" %}
-{% block title %}Inventory · UK Demo{% endblock %}
+{% block title %}库存管理 · 大风动物医院{% endblock %}
 
 {% block body %}
 
 <div class="uk-breadcrumb">
-  <a href="/admin">Admin</a>
+  <a href="/admin">后台</a>
   <span class="sep">/</span>
-  <a href="/admin/inventory">Operations</a>
+  <a href="/admin/inventory">经营</a>
   <span class="sep">/</span>
-  <span>Inventory</span>
+  <span>库存管理</span>
 </div>
 
 <div class="uk-page-head">
   <div class="uk-row between">
     <div>
-      <h1 class="uk-h1">Inventory<span class="sub">库 存 管 理</span></h1>
-      <div class="meta">{{ total }} active items · last stocktake 2026-05-21</div>
+      <h1 class="uk-h1">库存管理<span class="sub">在册品目 {{ total }} 项 · 上次盘点 2026-05-21</span></h1>
     </div>
     <div style="display:flex;gap:12px;">
-      <a href="/admin/inventory-audit" class="uk-btn ghost sm">Audit</a>
-      <a href="/admin/inventory-cleanup" class="uk-btn ghost sm">Cleanup</a>
-      <a href="/admin/inventory/import-photo" class="uk-btn sm">Import</a>
-      <a href="/admin/inventory/create" class="uk-btn primary sm">+ New Item</a>
+      <a href="/admin/inventory-audit" class="uk-btn ghost sm">一致性审计</a>
+      <a href="/admin/inventory-cleanup" class="uk-btn ghost sm">小类规范化</a>
+      <a href="/admin/inventory/import-photo" class="uk-btn sm">拍照入库</a>
+      <a href="/admin/inventory/create" class="uk-btn primary sm">＋ 新建品目</a>
     </div>
   </div>
 </div>
 
 <hr class="rule-double"/>
 
-{# 4 个 KPI 卡片 #}
+{# 4 个 KPI #}
 <div class="uk-grid cols-4" style="margin-bottom:32px;">
   <div class="uk-kpi">
-    <div class="label">Total</div>
+    <div class="label">在册总数</div>
     <div class="value num">{{ total }}</div>
     <div class="sub">items active</div>
   </div>
   <div class="uk-kpi">
-    <div class="label">Out of Stock</div>
+    <div class="label">零库存</div>
     <div class="value num" style="color:var(--accent-red);">{{ zero_n }}</div>
     <div class="sub">需补货</div>
   </div>
   <div class="uk-kpi">
-    <div class="label">Low Stock</div>
+    <div class="label">低库存</div>
     <div class="value num" style="color:var(--accent-amber);">{{ low_n }}</div>
-    <div class="sub">below threshold</div>
+    <div class="sub">低于预警线</div>
   </div>
   <div class="uk-kpi">
-    <div class="label">Controlled</div>
+    <div class="label">管控品目</div>
     <div class="value num">{{ controlled_n }}</div>
     <div class="sub">麻醉 / 精神类</div>
   </div>
@@ -55,26 +54,26 @@
 {# 筛选条 #}
 <div class="uk-filter">
   <div class="grow">
-    <input type="search" class="uk-input" placeholder="Search by name, supplier..." value="{{ q }}"/>
+    <input type="search" class="uk-input" placeholder="按品名、供应商搜索…" value="{{ q }}"/>
   </div>
   <select class="uk-select" style="min-width:160px;">
-    <option>All Categories</option>
+    <option>全部大类</option>
     {% for k, c in categories.items() %}<option {% if category == k %}selected{% endif %}>{{ c.label }}</option>{% endfor %}
   </select>
   <select class="uk-select" style="min-width:160px;">
-    <option>All Sub-categories</option>
+    <option>全部小类</option>
   </select>
-  <button type="button" class="uk-btn sm">Filter</button>
-  <a href="/admin/uk-demo/inventory" class="uk-btn-link">clear</a>
+  <button type="button" class="uk-btn sm">筛　选</button>
+  <a href="/admin/uk-demo/inventory" class="uk-btn-link">清除</a>
 </div>
 
 {# 快速筛 chip #}
 <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;">
-  <button type="button" class="uk-quick-filter">Low Stock</button>
-  <button type="button" class="uk-quick-filter active">Out of Stock <span class="num">{{ zero_n }}</span></button>
-  <button type="button" class="uk-quick-filter">Controlled</button>
-  <button type="button" class="uk-quick-filter">Services</button>
-  <button type="button" class="uk-quick-filter">Expiring</button>
+  <button type="button" class="uk-quick-filter">低库存</button>
+  <button type="button" class="uk-quick-filter active">零库存 <span class="num">{{ zero_n }}</span></button>
+  <button type="button" class="uk-quick-filter">管控药品</button>
+  <button type="button" class="uk-quick-filter">服务项目</button>
+  <button type="button" class="uk-quick-filter">效期预警</button>
 </div>
 
 {# 表格 #}
@@ -82,14 +81,14 @@
   <thead>
     <tr>
       <th style="width:32px;"><input type="checkbox" class="uk-checkbox"/></th>
-      <th>Item</th>
-      <th>Category</th>
-      <th>Sub-category</th>
-      <th class="right">Stock</th>
-      <th class="right">Price</th>
-      <th>Unit</th>
-      <th>Supplier</th>
-      <th class="right">Action</th>
+      <th>品　名</th>
+      <th>大　类</th>
+      <th>小　类</th>
+      <th class="right">库　存</th>
+      <th class="right">售　价</th>
+      <th>单　位</th>
+      <th>供应商</th>
+      <th class="right">操　作</th>
     </tr>
   </thead>
   <tbody>
@@ -100,8 +99,8 @@
       <td><input type="checkbox" class="uk-checkbox"/></td>
       <td class="name">
         {{ it.name }}
-        {% if it.is_service %}<span class="uk-pill mute" style="margin-left:6px;">Service</span>{% endif %}
-        {% if it.is_controlled %}<span class="uk-pill red" style="margin-left:6px;">Controlled</span>{% endif %}
+        {% if it.is_service %}<span class="uk-pill mute" style="margin-left:6px;">服务</span>{% endif %}
+        {% if it.is_controlled %}<span class="uk-pill red" style="margin-left:6px;">管控</span>{% endif %}
         {% if it.store %}<div class="muted">{{ it.store }}</div>{% endif %}
       </td>
       <td>{{ categories[it.category].label if it.category in categories else it.category }}</td>
@@ -127,7 +126,7 @@
       <td class="uk-mute uk-italic">{{ it.unit }}{% if it.unit2 %} / {{ it.unit2 }}{% endif %}</td>
       <td class="uk-mute">{{ it.supplier or '—' }}</td>
       <td>
-        <a href="/admin/inventory/{{ it.id }}" class="uk-btn-link">Detail</a>
+        <a href="/admin/inventory/{{ it.id }}" class="uk-btn-link">详情</a>
       </td>
     </tr>
     {% endfor %}
@@ -135,15 +134,15 @@
 </table>
 
 <div class="uk-pager">
-  <div>Showing <span class="num">{{ items|length }}</span> of <span class="num">{{ total }}</span></div>
+  <div>共 <span class="num">{{ total }}</span> 项 · 当前显示 <span class="num">{{ items|length }}</span></div>
   <div>
-    <a>&laquo; Prev</a>
+    <a>« 上一页</a>
     <span class="current num">1</span>
     <a class="num">2</a>
     <a class="num">3</a>
     <span class="uk-mute">…</span>
     <a class="num">21</a>
-    <a>Next &raquo;</a>
+    <a>下一页 »</a>
   </div>
 </div>
 
