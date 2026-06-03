@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{ title or "大风动物医院" }}</title>
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+  <meta name="theme-color" content="#1a1a1a" />
+
+  {# UK Minimal 设计系统 — 唯一 CSS 入口 #}
+  <link rel="stylesheet" href="/static/uk_minimal.css?v=4" />
+
+  {# Lucide 图标 — 全衬线极简下只保留必要场景 #}
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+
+  {# 业务 JS 辅助（语音/体检/医嘱模板等） — 复用现有 #}
+  <script src="/static/voice_input.js" defer></script>
+  <script src="/static/exam_helper.js" defer></script>
+  <script src="/static/orders_helper.js" defer></script>
+  <script src="/static/diagnosis_autocomplete.js" defer></script>
+  <script src="/static/customer_context_sidebar.js" defer></script>
+
+  <style>
+    /* ── UK 桌面后台特有：顶部导航 ── */
+    .uk-ribbon { background: var(--paper); border-bottom: 0.5px solid var(--hair-2); }
+    .uk-ribbon-top {
+      max-width: 1480px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px 8px;
+    }
+    .uk-ribbon-brand {
+      font-family: var(--font-serif); font-size: 16pt;
+      letter-spacing: 4px; color: var(--ink);
+    }
+    .uk-ribbon-brand small {
+      font-size: 9pt; letter-spacing: 3px; color: var(--ink-3);
+      font-style: italic; margin-left: 8px; text-transform: lowercase;
+    }
+    .uk-ribbon-user {
+      font-size: 9.5pt; letter-spacing: 1.5px; color: var(--ink-2);
+      display: flex; gap: 18px; align-items: baseline;
+    }
+    .uk-ribbon-user .sep { color: var(--ink-4); }
+    .uk-ribbon-user a {
+      color: var(--ink); border-bottom: 0.5px solid var(--ink-3);
+      padding-bottom: 1px; font-style: italic;
+    }
+    .uk-ribbon-user a:hover { border-bottom-color: var(--ink); }
+
+    /* 主分组 tab */
+    .uk-ribbon-tabs {
+      max-width: 1480px; margin: 0 auto;
+      padding: 0 28px;
+      display: flex; gap: 32px;
+      border-bottom: 1px solid var(--ink);
+    }
+    .uk-ribbon-tab {
+      background: transparent; border: 0; cursor: pointer;
+      font-family: var(--font-serif);
+      font-size: 11pt; letter-spacing: 3px; color: var(--ink-3);
+      padding: 10px 0 8px; border-bottom: 2px solid transparent;
+      margin-bottom: -1px; outline: none;
+    }
+    .uk-ribbon-tab:hover { color: var(--ink); }
+    .uk-ribbon-tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+
+    /* 子图标行 — 极简文字版（无大 emoji） */
+    .uk-ribbon-icons {
+      display: none;
+      max-width: 1480px; margin: 0 auto;
+      padding: 14px 28px 16px;
+      gap: 28px; flex-wrap: wrap;
+    }
+    .uk-ribbon-icons.active { display: flex; }
+    .uk-ribbon-icon {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--font-serif);
+      font-size: 10pt; letter-spacing: 1.5px; color: var(--ink-2);
+      padding: 4px 0; border-bottom: 0.5px solid transparent;
+      position: relative;
+    }
+    .uk-ribbon-icon:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+    .uk-ribbon-icon.current { color: var(--ink); border-bottom-color: var(--ink); font-weight: 700; }
+    .uk-ribbon-icon [data-lucide] {
+      width: 14px; height: 14px; stroke-width: 1.2;
+      color: var(--ink-3); margin-right: 2px;
+    }
+    .uk-ribbon-icon:hover [data-lucide],
+    .uk-ribbon-icon.current [data-lucide] { color: var(--ink); }
+    .uk-ribbon-badge {
+      display: inline-block; min-width: 16px;
+      font-family: var(--font-numeric); font-size: 8.5pt;
+      font-style: italic;
+      border: 0.5px solid var(--accent-red);
+      color: var(--accent-red);
+      padding: 0 5px; margin-left: 4px;
+      line-height: 1.4;
+    }
+
+    /* 顶部待办横幅 */
+    .uk-pending-banner {
+      max-width: 1480px; margin: 0 auto;
+      padding: 12px 28px;
+      border-bottom: 0.5px solid var(--hair);
+      background: var(--bg-soft);
+      font-size: 10pt; letter-spacing: 1px;
+      display: flex; align-items: center; gap: 12px;
+      color: var(--accent-amber);
+      font-style: italic;
+    }
+    .uk-pending-banner strong { font-style: normal; font-family: var(--font-numeric); font-weight: 700; color: var(--ink); }
+    .uk-pending-banner a {
+      margin-left: auto;
+      color: var(--accent-amber);
+      border-bottom: 0.5px solid var(--accent-amber);
+      padding-bottom: 1px;
+    }
+
+    /* 主内容 wrap */
+    .uk-wrap {
+      max-width: 1480px; margin: 0 auto;
+      padding: 24px 28px 64px;
+    }
+
+    /* footer */
+    .uk-footer {
+      max-width: 1480px; margin: 0 auto;
+      padding: 32px 28px 24px;
+      border-top: 0.5px solid var(--hair-2);
+      font-size: 9pt; letter-spacing: 2px; color: var(--ink-3);
+      text-align: center;
+      font-style: italic;
+    }
+
+    /* 底部多标签快捷栏 (qtabs) — 先保留位置 */
+    .qtabs {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 90;
+      background: var(--paper); border-top: 0.5px solid var(--hair-2);
+      display: flex; gap: 0; overflow-x: auto;
+      padding: 0 8px;
+    }
+    .qtabs:empty { display: none; }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+{% set _path = request.url.path %}
+{% if request.session.get('admin') %}
+  {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing') or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam') or _path.startswith('/admin/follow-ups') or _path.startswith('/admin/inpatient') or _path.startswith('/admin/cages') %}
+    {% set _active_tab = 'medical' %}
+  {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory') or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales') or _path.startswith('/admin/feedback') or _path.startswith('/admin/packages') or _path.startswith('/admin/coupons') or _path.startswith('/admin/reports') %}
+    {% set _active_tab = 'business' %}
+  {% elif _path.startswith('/admin/hr') or _path.startswith('/admin/adoption') or _path.startswith('/admin/changelog') or _path.startswith('/showcase') %}
+    {% set _active_tab = 'system' %}
+  {% else %}
+    {% set _active_tab = 'reception' %}
+  {% endif %}
+{% else %}
+  {% set _active_tab = 'reception' %}
+{% endif %}
+
+<header class="uk-ribbon">
+  <div class="uk-ribbon-top">
+    <div class="uk-ribbon-brand">
+      大风动物医院 <small>est. 2024</small>
+    </div>
+    <div class="uk-ribbon-user">
+      {% if request.session.get('admin') %}
+        <span>{{ request.session.get('admin_username') or 'admin' }}</span>
+        {% if request.session.get('admin_store') %}<span class="sep">·</span><span>{{ request.session.get('admin_store') }}</span>{% endif %}
+        {% if request.session.get('admin_role') == 'superadmin' %}<span class="sep">·</span><span style="font-style:italic;">超级管理员</span>{% endif %}
+        <span class="sep">·</span>
+        <a href="/admin/logout">退出</a>
+      {% else %}
+        <a href="/admin/login">登录</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="uk-ribbon-tabs">
+    <button class="uk-ribbon-tab {% if _active_tab=='reception' %}active{% endif %}" data-tab="reception" onclick="switchRibbon('reception')">接&nbsp;待</button>
+    {% if request.session.get('admin') %}
+    <button class="uk-ribbon-tab {% if _active_tab=='medical' %}active{% endif %}" data-tab="medical" onclick="switchRibbon('medical')">医&nbsp;疗</button>
+    <button class="uk-ribbon-tab {% if _active_tab=='business' %}active{% endif %}" data-tab="business" onclick="switchRibbon('business')">经&nbsp;营</button>
+    <button class="uk-ribbon-tab {% if _active_tab=='system' %}active{% endif %}" data-tab="system" onclick="switchRibbon('system')">系&nbsp;统</button>
+    {% endif %}
+  </div>
+
+  {# 接待 #}
+  <div class="uk-ribbon-icons {% if _active_tab=='reception' %}active{% endif %}" data-tab-content="reception">
+    <a class="uk-ribbon-icon {% if _path=='/admin' %}current{% endif %}" href="/admin"><i data-lucide="cat"></i>TNR 申请</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/calendar') %}current{% endif %}" href="/admin/calendar"><i data-lucide="calendar"></i>日历</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/appointments') %}current{% endif %}" href="/admin/appointments" id="nav-appt-link">
+      <i data-lucide="clipboard-list"></i>预约管理<span id="nav-pending-badge" class="uk-ribbon-badge" style="display:none;"></span>
+    </a>
+    {% if request.session.get('admin') %}
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/customers') %}current{% endif %}" href="/admin/customers"><i data-lucide="home"></i>今日工作台</a>
+    {% endif %}
+  </div>
+
+  {% if request.session.get('admin') %}
+  {# 医疗 #}
+  <div class="uk-ribbon-icons {% if _active_tab=='medical' %}active{% endif %}" data-tab-content="medical">
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/dispensing') %}current{% endif %}" href="/admin/dispensing"><i data-lucide="pill"></i>发药台</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><i data-lucide="syringe"></i>疫苗管理</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/rabies') %}current{% endif %}" href="/admin/rabies"><i data-lucide="dog"></i>狂犬疫苗</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><i data-lucide="search"></i>病历查询</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/inpatient') or _path.startswith('/admin/cages') %}current{% endif %}" href="/admin/inpatient"><i data-lucide="bed-double"></i>住院管理</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/follow-ups') %}current{% endif %}" href="/admin/follow-ups" id="nav-followup-link">
+      <i data-lucide="phone"></i>回访管理<span id="nav-followup-badge" class="uk-ribbon-badge" style="display:none;"></span>
+    </a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/consent') %}current{% endif %}" href="/admin/consent-templates"><i data-lucide="pencil-line"></i>协议模板</a>
+  </div>
+
+  {# 经营 #}
+  <div class="uk-ribbon-icons {% if _active_tab=='business' %}active{% endif %}" data-tab-content="business">
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/invoices') %}current{% endif %}" href="/admin/invoices"><i data-lucide="receipt"></i>收银台</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/inventory') %}current{% endif %}" href="/admin/inventory"><i data-lucide="package"></i>库存管理</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/stocktake') %}current{% endif %}" href="/admin/stocktake"><i data-lucide="bar-chart-3"></i>循环盘点</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/packages') %}current{% endif %}" href="/admin/packages"><i data-lucide="ticket"></i>套餐目录</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/coupons') %}current{% endif %}" href="/admin/coupons"><i data-lucide="ticket"></i>优惠券</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/reports') %}current{% endif %}" href="/admin/reports/revenue"><i data-lucide="bar-chart-3"></i>收款统计</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/feedback') %}current{% endif %}" href="/admin/feedback" id="nav-feedback-link">
+      <i data-lucide="message-circle"></i>反馈<span id="nav-feedback-badge" class="uk-ribbon-badge" style="display:none;"></span>
+    </a>
+  </div>
+
+  {# 系统 #}
+  <div class="uk-ribbon-icons {% if _active_tab=='system' %}active{% endif %}" data-tab-content="system">
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/hr') %}current{% endif %}" href="/admin/hr"><i data-lucide="briefcase"></i>人事管理</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/adoption') %}current{% endif %}" href="/admin/adoption"><i data-lucide="cat"></i>待领养</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/showcase') %}current{% endif %}" href="/showcase"><i data-lucide="sparkles"></i>公布展示</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/changelog') %}current{% endif %}" href="/admin/changelog"><i data-lucide="pencil-line"></i>开发日志</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/audit-logs') %}current{% endif %}" href="/admin/audit-logs"><i data-lucide="shield-check"></i>审计日志</a>
+  </div>
+  {% endif %}
+</header>
+
+<script>
+function switchRibbon(tab) {
+  document.querySelectorAll('.uk-ribbon-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.uk-ribbon-icons').forEach(d => d.classList.toggle('active', d.dataset.tabContent === tab));
+}
+</script>
+
+<div id="uk-pending-banner" class="uk-pending-banner" style="display:none;">
+  <span>有 <strong id="pending-banner-count">0</strong> 条新预约待确认</span>
+  <a href="/admin/appointments?preset=month&appt_status=pending">立即查看 →</a>
+</div>
+
+{% if request.query_params.get('msg') %}
+<div class="uk-wrap" style="padding-top:16px;padding-bottom:0;">
+  <div class="uk-msg ok">{{ request.query_params.get('msg') }}</div>
+</div>
+{% endif %}
+{% if request.query_params.get('err') %}
+<div class="uk-wrap" style="padding-top:16px;padding-bottom:0;">
+  <div class="uk-msg err">{{ request.query_params.get('err') }}</div>
+</div>
+{% endif %}
+
+<main class="uk-wrap">
+{% block body %}{% endblock %}
+</main>
+
+<footer class="uk-footer">
+  图像识别结论仅供辅助参考 · 最终以到院核对与医生判断为准 · 严禁家养猫冒充流浪猫申请
+</footer>
+
+{% if request.session.get('admin') %}
+<div class="qtabs" id="qtabs"></div>
+{% endif %}
+
+<script>
+  // 渲染 lucide
+  if (window.lucide) window.lucide.createIcons();
+</script>
+
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

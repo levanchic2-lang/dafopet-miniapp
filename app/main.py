@@ -6428,9 +6428,10 @@ async def page_admin_customers(
         logger.warning("[workbench] build failed: %s", _e)
         wb = {"urgent": [], "weekly": [], "stock": []}
 
+    # B1 UK 重写：渲染新工作台模板；旧模板 admin_customers.html 暂留以备回滚
     return templates.TemplateResponse(
         request,
-        "admin_customers.html",
+        "uk/workbench.html",
         {
             "customers": customers,
             "q": q,
