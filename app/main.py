@@ -9899,7 +9899,10 @@ async def page_admin_visit_detail(
             eo._items_parsed = []
     _PRESC_STATUS_ZH = {"draft": "草稿", "issued": "已开具", "dispensed": "已发药"}
     _SO_STATUS_ZH = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
-    return templates.TemplateResponse(request, "admin_visit_form.html", {
+    # B5.1 UK 重写：默认走只读 uk/visit.html；?mode=edit 或 path 含 /edit-form 走老编辑模板
+    _mode = request.query_params.get("mode") or ("edit" if "/edit-form" in str(request.url.path) else "view")
+    _template = "uk/visit.html" if _mode == "view" else "admin_visit_form.html"
+    return templates.TemplateResponse(request, _template, {
         "visit": v,
         "cust": cust,
         "pet": pet,
@@ -9925,6 +9928,12 @@ async def page_admin_visit_detail(
         "msg": request.query_params.get("msg"),
         "is_superadmin": _is_superadmin(request),
     })
+
+
+@app.get("/admin/visits/{visit_id}/edit-form", response_class=HTMLResponse)
+async def page_admin_visit_edit_form(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    """B5.1 病历编辑（暂时复用老模板，B5.2 会 UK 重写）。"""
+    return await page_admin_visit_detail(visit_id, request, db)
 
 
 @app.post("/admin/visits/{visit_id}/edit")

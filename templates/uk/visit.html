@@ -1,0 +1,519 @@
+{% extends "uk/_base.html" %}
+{% block title %}病历 #{{ visit.id }} · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  /* ── 病历专有 ── */
+  .v-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .v-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .v-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .v-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .v-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 32px; margin-bottom: 8px;
+  }
+  .v-head h1 {
+    font-family: var(--font-serif); font-size: 32pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.1;
+  }
+  .v-head h1 .hash {
+    font-family: var(--font-numeric); font-size: 22pt; color: var(--ink-3);
+    font-weight: 400; vertical-align: 4px;
+  }
+  .v-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2.5px; margin-top: 12px;
+    line-height: 1.7;
+  }
+  .v-head h1 .sub b { color: var(--ink); font-style: normal; font-weight: 700; }
+  .v-head h1 .sub .sep { color: var(--ink-4); margin: 0 8px; }
+
+  .v-head .status {
+    display: inline-block; padding: 3px 12px; margin-left: 14px;
+    border: 0.5px solid var(--ink-3); font-size: 9pt; letter-spacing: 2px;
+    color: var(--ink-2); vertical-align: 12px;
+  }
+  .v-head .status.closed { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .v-head .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+  hr.v-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 36px;
+  }
+
+  /* 客户 + 宠物快查 */
+  .v-meta-row {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 24px; margin-bottom: 44px;
+  }
+  .v-meta {
+    border: 0.5px solid var(--hair-2); padding: 18px 22px;
+    background: var(--paper);
+  }
+  .v-meta h3 {
+    margin: 0 0 12px;
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 3px; color: var(--ink-3); font-weight: 400;
+    font-style: italic;
+  }
+  .v-meta .name {
+    font-family: var(--font-serif); font-size: 16pt; font-weight: 700;
+    color: var(--ink); margin-bottom: 8px;
+  }
+  .v-meta .meta-line {
+    font-size: 9.5pt; color: var(--ink-2); letter-spacing: 1px;
+    line-height: 1.7;
+  }
+  .v-meta .meta-line .lbl { color: var(--ink-3); font-style: italic; margin-right: 6px; }
+  .v-meta a { color: var(--ink); border-bottom: 0.5px solid var(--ink-3); }
+
+  /* ── SOAP 4 段 hero ── */
+  .v-soap { margin-bottom: 56px; }
+  .v-soap-item {
+    display: grid; grid-template-columns: 80px 1fr;
+    gap: 32px; margin-bottom: 40px;
+    padding-bottom: 32px;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .v-soap-item:last-child { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
+  .v-soap-roman {
+    font-family: var(--font-serif); font-size: 36pt; font-weight: 700;
+    color: var(--ink); line-height: 1; padding-top: 4px;
+    letter-spacing: 1px; font-style: italic;
+  }
+  .v-soap-body h2 {
+    margin: 0 0 14px;
+    font-family: var(--font-serif); font-size: 14pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 4px;
+  }
+  .v-soap-body .content {
+    font-family: var(--font-serif); font-size: 11.5pt;
+    color: var(--ink); line-height: 1.85; white-space: pre-wrap;
+  }
+  .v-soap-body .empty {
+    font-style: italic; color: var(--ink-3); letter-spacing: 2px;
+    font-size: 10pt;
+  }
+
+  /* 备注 + 复诊 */
+  .v-side-block {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 32px; margin-bottom: 48px;
+  }
+  .v-side-card {
+    border-top: 0.5px solid var(--hair);
+    padding: 18px 0 0;
+  }
+  .v-side-card h3 {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 3px; color: var(--ink-3); font-weight: 400;
+    font-style: italic; margin: 0 0 10px;
+  }
+  .v-side-card .content {
+    font-family: var(--font-serif); font-size: 11pt;
+    color: var(--ink-2); line-height: 1.8; white-space: pre-wrap;
+  }
+  .v-side-card .content.muted { color: var(--ink-3); font-style: italic; }
+
+  /* 关联记录 */
+  .v-rel-section { margin-top: 16px; margin-bottom: 32px; }
+  .v-rel-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .v-rel-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+  .v-rel-head .count {
+    font-family: var(--font-numeric); font-size: 10pt; color: var(--ink-3);
+  }
+  .v-rel-head .actions { display: flex; gap: 10px; }
+
+  .v-rel-tbl { width: 100%; border-collapse: collapse; }
+  .v-rel-tbl thead th {
+    text-align: left; font-family: var(--font-serif);
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    font-weight: 400; padding: 8px 6px;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .v-rel-tbl thead th.right { text-align: right; }
+  .v-rel-tbl tbody td {
+    padding: 10px 6px; border-bottom: 0.5px solid var(--hair);
+    font-size: 10pt; vertical-align: middle;
+  }
+  .v-rel-tbl tbody td.right { text-align: right; }
+  .v-rel-tbl tbody td.num {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .v-rel-tbl tbody tr:hover td { background: var(--bg); }
+  .v-rel-tbl .ink3 { color: var(--ink-3); }
+  .v-rel-tbl a { color: var(--ink); border-bottom: 0.5px solid var(--ink-3); padding-bottom: 1px; }
+
+  .v-rel-empty {
+    color: var(--ink-3); font-style: italic; padding: 18px 0;
+    font-size: 10pt; letter-spacing: 1px;
+  }
+</style>
+
+{# ─── 面包屑 ─── #}
+<div class="v-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  {% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name or '客户' }}</a>
+  <span class="sep">/</span>{% endif %}
+  <span>病历 #{{ visit.id }}</span>
+</div>
+
+{# ─── 头部 ─── #}
+<div class="v-head">
+  <div>
+    <h1>
+      病历 <span class="hash">#{{ visit.id }}</span>
+      {% if visit.status == 'closed' %}
+        <span class="status closed">已结束</span>
+      {% else %}
+        <span class="status">进行中</span>
+      {% endif %}
+      <span class="sub">
+        <b>{{ visit.visit_date or '日期未填' }}</b>
+        <span class="sep">·</span>
+        {{ visit_type_zh.get(visit.visit_type, visit.visit_type) }}
+        {% if visit.vet_name %}<span class="sep">·</span>主诊 {{ visit.vet_name }}{% endif %}
+        {% if pet %}<span class="sep">·</span>{{ pet.name }}{% if pet.species == 'cat' %}（猫）{% elif pet.species == 'dog' %}（犬）{% endif %}{% endif %}
+      </span>
+    </h1>
+  </div>
+  <div class="actions">
+    <a href="/admin/visits/{{ visit.id }}/print" class="uk-btn ghost sm" target="_blank">打印病历</a>
+    {% if visit.status != 'closed' %}
+      <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">编辑病历</a>
+      <a href="/admin/exam-orders/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建检查单</a>
+      <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn primary sm">＋ 新建处方</a>
+      {% if is_superadmin %}
+      <form method="post" action="/admin/visits/{{ visit.id }}/close" style="display:inline;" onsubmit="return confirm('结束病历后，处方、检查、本病历将不可改不可重开（合规要求）。确认结束？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <button type="submit" class="uk-btn ghost sm" style="color:var(--accent-red);border-color:var(--accent-red);">结束病历</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<hr class="v-rule-double"/>
+
+{# ─── 客户 / 宠物 快查 ─── #}
+<div class="v-meta-row">
+  <div class="v-meta">
+    <h3>客 户</h3>
+    {% if cust %}
+    <div class="name"><a href="/admin/customers/{{ cust.id }}">{{ cust.name or '—' }}</a></div>
+    <div class="meta-line">
+      <span class="lbl">编号</span>{{ cust.id }}
+      {% if cust.phone %}<span style="margin:0 8px;color:var(--ink-4);">·</span><span class="lbl">手机</span>{{ cust.phone }}{% endif %}
+    </div>
+    {% if cust.address %}<div class="meta-line"><span class="lbl">地址</span>{{ cust.address }}</div>{% endif %}
+    {% else %}
+    <div class="meta-line" style="font-style:italic;color:var(--ink-3);">客户信息缺失</div>
+    {% endif %}
+  </div>
+  <div class="v-meta">
+    <h3>宠 物</h3>
+    {% if pet %}
+    <div class="name">{{ pet.name or '未命名' }}</div>
+    <div class="meta-line">
+      <span class="lbl">种类</span>{% if pet.species == 'cat' %}猫{% elif pet.species == 'dog' %}犬{% else %}{{ pet.species }}{% endif %}
+      {% if pet.breed %}<span style="margin:0 8px;color:var(--ink-4);">·</span><span class="lbl">品种</span>{{ pet.breed }}{% endif %}
+      {% if pet.gender == 'male' %}<span style="margin:0 8px;color:var(--ink-4);">·</span>公{% elif pet.gender == 'female' %}<span style="margin:0 8px;color:var(--ink-4);">·</span>母{% endif %}
+      {% if pet.is_neutered %}<span style="margin:0 8px;color:var(--ink-4);">·</span>已绝育{% endif %}
+    </div>
+    {% if pet.medical_record_no %}<div class="meta-line"><span class="lbl">病历号</span>{{ pet.medical_record_no }}</div>{% endif %}
+    {% else %}
+    <div class="meta-line" style="font-style:italic;color:var(--ink-3);">宠物信息缺失</div>
+    {% endif %}
+  </div>
+</div>
+
+{# ─── SOAP 4 段 ─── #}
+<div class="v-soap">
+  <div class="v-soap-item">
+    <div class="v-soap-roman">I.</div>
+    <div class="v-soap-body">
+      <h2>主&nbsp;诉</h2>
+      {% if visit.chief_complaint %}
+      <div class="content">{{ visit.chief_complaint }}</div>
+      {% else %}
+      <div class="empty">未填写</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="v-soap-item">
+    <div class="v-soap-roman">II.</div>
+    <div class="v-soap-body">
+      <h2>体&nbsp;格&nbsp;检&nbsp;查</h2>
+      {% if visit.physical_exam %}
+      <div class="content">{{ visit.physical_exam }}</div>
+      {% else %}
+      <div class="empty">未填写</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="v-soap-item">
+    <div class="v-soap-roman">III.</div>
+    <div class="v-soap-body">
+      <h2>评&nbsp;估</h2>
+      {% if visit.diagnosis %}
+      <div class="content">{{ visit.diagnosis }}</div>
+      {% else %}
+      <div class="empty">未填写</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="v-soap-item">
+    <div class="v-soap-roman">IV.</div>
+    <div class="v-soap-body">
+      <h2>计&nbsp;划</h2>
+      {% if visit.treatment_plan %}
+      <div class="content">{{ visit.treatment_plan }}</div>
+      {% else %}
+      <div class="empty">未填写</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ─── 备注 + 复诊 ─── #}
+{% if visit.notes or visit.follow_up_note or visit.follow_up_at %}
+<div class="v-side-block">
+  <div class="v-side-card">
+    <h3>备 注</h3>
+    {% if visit.notes %}
+    <div class="content">{{ visit.notes }}</div>
+    {% else %}
+    <div class="content muted">无</div>
+    {% endif %}
+  </div>
+  <div class="v-side-card">
+    <h3>复 诊 安 排</h3>
+    {% if visit.follow_up_at or visit.follow_up_note %}
+    <div class="content">
+      {% if visit.follow_up_at %}<b>{{ visit.follow_up_at }}</b><br/>{% endif %}
+      {% if visit.follow_up_note %}{{ visit.follow_up_note }}{% endif %}
+    </div>
+    {% else %}
+    <div class="content muted">无</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ─── 关联记录 ─── #}
+
+{# 处方 #}
+<div class="v-rel-section">
+  <div class="v-rel-head">
+    <div>
+      <h2>处&nbsp;方</h2>
+      <span class="count">共 {{ prescriptions|length }} 张</span>
+    </div>
+    {% if visit.status != 'closed' %}
+    <div class="actions">
+      <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建处方</a>
+    </div>
+    {% endif %}
+  </div>
+  {% if prescriptions %}
+  <table class="v-rel-tbl">
+    <thead><tr><th>开方日期</th><th>药品数</th><th>状态</th><th>医师</th><th class="right">操作</th></tr></thead>
+    <tbody>
+      {% for p in prescriptions %}
+      <tr>
+        <td class="num">{{ p.prescribed_date or '—' }}</td>
+        <td class="num">{{ p.items|length }}</td>
+        <td>
+          {% if p.status == 'dispensed' %}<span class="uk-pill green">已发药</span>
+          {% elif p.status == 'issued' %}<span class="uk-pill">已开具</span>
+          {% elif p.status == 'draft' %}<span class="uk-pill mute">草稿</span>
+          {% else %}<span class="uk-pill mute">{{ presc_status_zh.get(p.status, p.status) }}</span>{% endif %}
+        </td>
+        <td class="ink3">{{ p.vet_name or '—' }}</td>
+        <td class="right"><a href="/admin/prescriptions/{{ p.id }}">查看 →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="v-rel-empty">本病历暂无处方</div>
+  {% endif %}
+</div>
+
+{# 检查单 #}
+<div class="v-rel-section">
+  <div class="v-rel-head">
+    <div>
+      <h2>检&nbsp;查&nbsp;单</h2>
+      <span class="count">共 {{ exam_orders|length }} 张</span>
+    </div>
+    {% if visit.status != 'closed' %}
+    <div class="actions">
+      <a href="/admin/exam-orders/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建检查单</a>
+    </div>
+    {% endif %}
+  </div>
+  {% if exam_orders %}
+  <table class="v-rel-tbl">
+    <thead><tr><th>创建时间</th><th>项目数</th><th>报告数</th><th>状态</th><th class="right">操作</th></tr></thead>
+    <tbody>
+      {% for e in exam_orders %}
+      <tr>
+        <td class="num">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
+        <td class="num">{{ e._items_parsed|length }}</td>
+        <td class="num">{{ e.reports|length }}</td>
+        <td>
+          {% if e.status == 'completed' %}<span class="uk-pill green">已出报告</span>
+          {% else %}<span class="uk-pill amber">待出报告</span>{% endif %}
+        </td>
+        <td class="right"><a href="/admin/exam-orders/{{ e.id }}">查看 →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="v-rel-empty">本病历暂无检查单</div>
+  {% endif %}
+</div>
+
+{# 麻醉 #}
+{% if anesth_orders %}
+<div class="v-rel-section">
+  <div class="v-rel-head">
+    <div>
+      <h2>麻&nbsp;醉&nbsp;记&nbsp;录</h2>
+      <span class="count">共 {{ anesth_orders|length }} 张</span>
+    </div>
+  </div>
+  <table class="v-rel-tbl">
+    <thead><tr><th>日期</th><th>麻醉方式</th><th>状态</th><th>医师</th><th class="right">操作</th></tr></thead>
+    <tbody>
+      {% for a in anesth_orders %}
+      <tr>
+        <td class="num">{{ a.anesth_date or '—' }}</td>
+        <td>{{ a.anesth_type or '—' }}</td>
+        <td>
+          {% if a.status == 'completed' %}<span class="uk-pill green">已完成</span>
+          {% else %}<span class="uk-pill amber">{{ a.status }}</span>{% endif %}
+        </td>
+        <td class="ink3">{{ a.vet_name or '—' }}</td>
+        <td class="right"><a href="/admin/visits/{{ visit.id }}/anesthesia/{{ a.id }}">查看 →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# 销售单 #}
+{% if sales_orders %}
+<div class="v-rel-section">
+  <div class="v-rel-head">
+    <div>
+      <h2>销&nbsp;售&nbsp;单</h2>
+      <span class="count">共 {{ sales_orders|length }} 张</span>
+    </div>
+  </div>
+  <table class="v-rel-tbl">
+    <thead><tr><th>日期</th><th>金额</th><th>状态</th><th class="right">操作</th></tr></thead>
+    <tbody>
+      {% for so in sales_orders %}
+      <tr>
+        <td class="num">{{ so.order_date or (so.created_at.strftime('%Y-%m-%d') if so.created_at else '—') }}</td>
+        <td class="num">¥{{ '%.2f'|format(so.total_amount or 0) }}</td>
+        <td>
+          {% if so.status == 'paid' %}<span class="uk-pill green">已收款</span>
+          {% elif so.status == 'pending' %}<span class="uk-pill amber">待付款</span>
+          {% else %}<span class="uk-pill mute">{{ so_status_zh.get(so.status, so.status) }}</span>{% endif %}
+        </td>
+        <td class="right"><a href="/admin/sales-orders/{{ so.id }}">查看 →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# 收费单 #}
+{% if invoices %}
+<div class="v-rel-section">
+  <div class="v-rel-head">
+    <div>
+      <h2>收&nbsp;费&nbsp;单</h2>
+      <span class="count">共 {{ invoices|length }} 张</span>
+    </div>
+  </div>
+  <table class="v-rel-tbl">
+    <thead><tr><th>单号</th><th>日期</th><th>金额</th><th>状态</th><th class="right">操作</th></tr></thead>
+    <tbody>
+      {% for inv in invoices %}
+      <tr>
+        <td class="num" style="font-size:9.5pt;">{{ inv.invoice_no or ('#' ~ inv.id) }}</td>
+        <td class="num">{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
+        <td class="num">¥{{ '%.2f'|format(inv.total_amount or 0) }}</td>
+        <td>
+          {% if inv.payment_status == 'paid' %}<span class="uk-pill green">已支付</span>
+          {% elif inv.payment_status == 'unpaid' %}<span class="uk-pill red">未支付</span>
+          {% else %}<span class="uk-pill mute">{{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}</span>{% endif %}
+        </td>
+        <td class="right"><a href="/admin/invoices/{{ inv.id }}">查看 →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# 回访 #}
+{% if followups %}
+<div class="v-rel-section">
+  <div class="v-rel-head">
+    <div>
+      <h2>回&nbsp;访</h2>
+      <span class="count">共 {{ followups|length }} 轮</span>
+    </div>
+  </div>
+  <table class="v-rel-tbl">
+    <thead><tr><th>计划日</th><th>轮次</th><th>状态</th><th>渠道</th><th class="right">操作</th></tr></thead>
+    <tbody>
+      {% for fu in followups %}
+      <tr>
+        <td class="num">{{ fu.planned_date or '—' }}</td>
+        <td>{{ fu.round_name or ('第 ' ~ fu.round_no ~ ' 轮') }}</td>
+        <td>
+          {% if fu.status == 'closed' %}<span class="uk-pill green">已完成</span>
+          {% elif fu.status == 'responded' %}<span class="uk-pill">客户已反馈</span>
+          {% elif fu.status == 'sent' %}<span class="uk-pill amber">已发送</span>
+          {% elif fu.status == 'phone_pending' %}<span class="uk-pill red">需电话</span>
+          {% elif fu.status == 'due' %}<span class="uk-pill amber">今日到期</span>
+          {% else %}<span class="uk-pill mute">{{ fu_status_zh.get(fu.status, fu.status) }}</span>{% endif %}
+        </td>
+        <td class="ink3">{{ fu.channel or '—' }}</td>
+        <td class="right"><a href="/admin/follow-ups/{{ fu.id }}">查看 →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}
