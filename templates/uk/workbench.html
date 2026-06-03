@@ -166,7 +166,8 @@
 <div class="uk-page-head">
   <div class="uk-row between">
     <div>
-      <h1 class="uk-h1">今日工作台<span class="sub">{{ wb_store or '全部门店' }} · {{ workbench.urgent[0].count if workbench.urgent else 0 }} 件紧急 · {{ (workbench.urgent|length + workbench.weekly|length + workbench.stock|length) }} 类提醒</span></h1>
+      {% set _urgent_total = workbench.urgent | map(attribute='count') | sum %}
+      <h1 class="uk-h1">今日工作台<span class="sub">{{ wb_store or '全部门店' }} · {{ _urgent_total }} 件紧急 · {{ (workbench.urgent|length + workbench.weekly|length + workbench.stock|length) }} 类提醒</span></h1>
     </div>
     <div style="display:flex;gap:10px;">
       <button class="uk-btn ghost sm" onclick="document.getElementById('newCustModal').classList.add('visible');">＋ 新增客户</button>
