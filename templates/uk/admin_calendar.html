@@ -64,9 +64,9 @@
   .time-col { width:56px; flex-shrink:0; }
   .hour-label { height:64px; display:flex; align-items:flex-start; justify-content:flex-end; padding-right:8px; padding-top:3px; font-size:0.68rem; color:var(--ink-3); font-variant-numeric:tabular-nums; }
   .day-cols { flex:1; display:grid; position:relative; }
-  .day-col { border-left:0.5px solid var(--hair); position:relative; }
+  .day-col { border-left:1px solid var(--hair); position:relative; }
   .day-col.today-bg { background:rgba(0,0,0,0.02); }
-  .hour-line { height:64px; border-bottom:0.5px solid var(--hair); cursor:pointer; }
+  .hour-line { height:64px; border-bottom:1px solid var(--hair); cursor:pointer; }
   .hour-line:hover { background:rgba(0,0,0,.03); }
   .half-line { position:absolute; left:0; right:0; border-top:1px dashed var(--hair); pointer-events:none; }
   .now-line { position:absolute; height:2px; background:var(--accent-red); z-index:5; pointer-events:none; transition:top 1s linear; }
@@ -115,6 +115,27 @@
   .create-choice-btn:hover { background:var(--bg); border-color:var(--ink); }
   .create-choice-btn .icon { font-size:1.5rem; display:block; margin-bottom:0.25rem; }
 
+  /* 修复 cal-modal 关闭按钮 + 标题分割线 */
+  body .cal-modal h3 {
+    font-family: var(--font-serif); font-size: 11pt !important;
+    letter-spacing: 2.5px; font-weight: 700;
+    border-bottom: 0.5px solid var(--ink) !important;
+    padding-bottom: 8px !important; margin: 0 0 14px !important;
+  }
+  body #create-modal .cal-modal > button:last-child,
+  body .cal-modal > button:last-child[onclick*="close"] {
+    background: var(--paper) !important; color: var(--ink-2) !important;
+    border: 0.5px solid var(--hair) !important; border-radius: 0 !important;
+    padding: 6px 18px !important;
+    font-family: var(--font-serif); font-size: 9.5pt !important;
+    letter-spacing: 1.5px; font-style: italic; font-weight: 400;
+    cursor: pointer; margin-top: 8px;
+    float: right;
+  }
+  body #create-modal .cal-modal > button:last-child:hover {
+    color: var(--ink) !important; border-color: var(--ink-3) !important;
+  }
+
   /* Toast */
   .cal-toast { position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%) translateY(60px); background:var(--ink); color:var(--paper); padding:0.5rem 1.2rem; font-size:0.88rem; z-index:2000; transition:transform 0.25s ease; pointer-events:none; }
   .cal-toast.show { transform:translateX(-50%) translateY(0); }
@@ -138,11 +159,19 @@
   body .cal-topbar .new-btn {
     background: var(--ink) !important; color: var(--paper) !important;
     border: 0 !important; border-radius: 0 !important;
-    font-family: var(--font-serif); font-size: 10pt;
+    font-family: var(--font-serif); font-size: 10pt !important;
     letter-spacing: 2px; font-weight: 700;
     padding: 8px 18px !important;
+    display: inline-flex !important; align-items: center !important;
+    gap: 6px !important; line-height: 1.3 !important;
   }
   body .cal-topbar .new-btn:hover { background: #000 !important; }
+  body .cal-topbar .new-btn i[data-lucide],
+  body .cal-topbar .new-btn svg {
+    width: 13px !important; height: 13px !important;
+    vertical-align: middle !important; display: inline-block !important;
+    flex-shrink: 0;
+  }
   body .cal-nav button {
     background: var(--paper) !important; color: var(--ink-2) !important;
     border: 0.5px solid var(--hair) !important; border-radius: 0 !important;
