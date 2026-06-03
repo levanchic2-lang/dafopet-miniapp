@@ -59,7 +59,10 @@
   .allday-cols { flex:1; display:grid; }
   .allday-cell { border-left:1px solid var(--hair); padding:2px; display:flex; flex-direction:column; gap:2px; }
   .allday-block-pill { font-size:0.71rem; padding:0.1rem 0.35rem; background:#e0e7ff; color:#3730a3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
-  .week-scroll { flex:1; overflow-y:auto; position:relative; }
+  .week-scroll { flex:1; overflow-y:scroll; scrollbar-gutter:stable; position:relative; }
+  /* header 行也预留同宽 scrollbar gutter，列才能对齐 */
+  .week-header-row, .allday-row { scrollbar-gutter:stable; overflow-y:scroll; }
+  .week-header-row::-webkit-scrollbar, .allday-row::-webkit-scrollbar { width: 0; }
   .week-grid { display:flex; position:relative; }
   .time-col { width:56px; flex-shrink:0; }
   .hour-label { height:64px; display:flex; align-items:flex-start; justify-content:flex-end; padding-right:8px; padding-top:3px; font-size:0.68rem; color:var(--ink-3); font-variant-numeric:tabular-nums; }
