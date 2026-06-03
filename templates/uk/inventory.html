@@ -1,0 +1,639 @@
+{% extends "uk/_base.html" %}
+{% block title %}库存管理 · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  /* 库存页专有 — 复用 uk_minimal 变量 */
+  .inv-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .inv-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .inv-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .inv-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .inv-head {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    gap: 24px; margin-bottom: 8px;
+  }
+  .inv-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0;
+    line-height: 1.15;
+  }
+  .inv-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 8px;
+  }
+  .inv-head h1 .sub .warn { color: var(--accent-amber); font-style: normal; }
+  .inv-head .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+  hr.inv-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 32px;
+  }
+
+  /* 4 KPI */
+  .inv-kpi-row {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 28px; margin-bottom: 32px;
+  }
+  .inv-kpi {
+    border: 0.5px solid var(--hair-2); padding: 20px 22px;
+    background: var(--paper);
+  }
+  .inv-kpi .lbl {
+    font-size: 9pt; letter-spacing: 3px; color: var(--ink-3);
+    text-transform: none;
+  }
+  .inv-kpi .val {
+    font-family: var(--font-numeric); color: var(--ink);
+    font-size: 26pt; font-weight: 700; line-height: 1.15;
+    margin: 6px 0 4px;
+  }
+  .inv-kpi .val.red   { color: var(--accent-red); }
+  .inv-kpi .val.amber { color: var(--accent-amber); }
+  .inv-kpi .sub {
+    font-size: 9pt; letter-spacing: 1.5px; color: var(--ink-3);
+    font-style: italic;
+  }
+
+  /* 门店切换条 */
+  .inv-store-bar {
+    font-size: 9.5pt; letter-spacing: 1.5px; color: var(--ink-3);
+    margin-bottom: 16px; padding-bottom: 12px;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .inv-store-bar a {
+    color: var(--ink-3); margin: 0 10px;
+    padding-bottom: 1px; border-bottom: 0.5px solid transparent;
+  }
+  .inv-store-bar a.active { color: var(--ink); border-bottom-color: var(--ink); font-weight: 700; }
+  .inv-store-bar .hint { color: var(--ink-4); font-style: italic; margin-left: 8px; }
+
+  /* 筛选区 */
+  .inv-filter {
+    display: flex; gap: 12px; align-items: center;
+    margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .inv-filter input[type=search],
+  .inv-filter .uk-input {
+    flex: 1; min-width: 220px;
+    border: 0; border-bottom: 0.5px solid var(--hair);
+    padding: 8px 0; background: transparent;
+    font-family: var(--font-serif); font-size: 11pt;
+    color: var(--ink); outline: 0;
+  }
+  .inv-filter input[type=search]:focus,
+  .inv-filter .uk-input:focus { border-bottom-color: var(--ink); }
+  .inv-filter select {
+    border: 0.5px solid var(--hair);
+    padding: 7px 10px;
+    background: var(--paper);
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink); outline: 0;
+    min-width: 150px;
+  }
+  .inv-filter select:focus { border-color: var(--ink); }
+
+  /* 快速筛 chip */
+  .inv-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; }
+  .inv-chip {
+    font-family: var(--font-serif); font-size: 9.5pt; letter-spacing: 1.5px;
+    padding: 5px 14px; border: 0.5px solid var(--hair);
+    background: var(--paper); color: var(--ink-2);
+    text-decoration: none; cursor: pointer;
+    font-style: italic;
+  }
+  .inv-chip:hover { color: var(--ink); border-color: var(--ink-3); }
+  .inv-chip.active {
+    background: var(--ink); color: var(--paper);
+    border-color: var(--ink); font-style: normal; font-weight: 700;
+  }
+  .inv-chip .num {
+    font-family: var(--font-numeric); font-style: normal;
+    margin-left: 4px; font-size: 9pt;
+  }
+
+  /* 表格 */
+  .inv-tbl { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  .inv-tbl thead th {
+    text-align: left; font-family: var(--font-serif);
+    font-size: 9.5pt; letter-spacing: 2.5px; color: var(--ink-3);
+    font-weight: 400; padding: 10px 8px;
+    border-bottom: 0.5px solid var(--ink);
+  }
+  .inv-tbl thead th.right { text-align: right; }
+  .inv-tbl tbody td {
+    padding: 11px 8px; border-bottom: 0.5px solid var(--hair);
+    font-size: 10.5pt; vertical-align: middle;
+  }
+  .inv-tbl tbody td.right { text-align: right; }
+  .inv-tbl tbody td.num {
+    font-family: var(--font-numeric); font-size: 10pt;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .inv-tbl tbody tr:hover td { background: var(--bg); }
+  .inv-tbl tbody tr.row-selected td { background: #f5f4f0 !important; }
+  .inv-tbl tbody tr.row-zero td  { background: #fafafa; }
+  .inv-tbl tbody tr.row-low td   { background: #fbfaf6; }
+  .inv-tbl .name { font-weight: 700; color: var(--ink); }
+  .inv-tbl .name .uk-pill { margin-left: 6px; }
+  .inv-tbl .ink3 { color: var(--ink-3); }
+  .inv-tbl .ink3-it { color: var(--ink-3); font-style: italic; }
+
+  /* 分页 */
+  .inv-pager {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-top: 12px; border-top: 0.5px solid var(--hair);
+    font-size: 10pt; color: var(--ink-3);
+    letter-spacing: 1.5px;
+  }
+  .inv-pager .num { font-family: var(--font-numeric); color: var(--ink); }
+  .inv-pager .pages a {
+    color: var(--ink-2); margin: 0 8px;
+    padding-bottom: 1px; border-bottom: 0.5px solid transparent;
+  }
+  .inv-pager .pages a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+  .inv-pager .pages .current {
+    color: var(--ink); font-weight: 700; margin: 0 8px;
+    border-bottom: 1px solid var(--ink); padding-bottom: 1px;
+  }
+
+  /* 复选框 */
+  .inv-checkbox {
+    appearance: none; -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border: 0.5px solid var(--ink-3);
+    background: var(--paper); cursor: pointer;
+    vertical-align: middle;
+  }
+  .inv-checkbox:checked {
+    background: var(--ink); border-color: var(--ink);
+    position: relative;
+  }
+  .inv-checkbox:checked::after {
+    content: ""; position: absolute; left: 3px; top: 0;
+    width: 4px; height: 8px;
+    border: solid var(--paper); border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+
+  /* 批量编辑底部条 */
+  .inv-bulk {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+    background: var(--paper); border: 0.5px solid var(--ink);
+    padding: 14px 20px; display: none;
+    align-items: center; gap: 10px; flex-wrap: wrap;
+    z-index: 980; max-width: 95vw;
+    font-family: var(--font-serif); font-size: 10pt;
+    box-shadow: 0 8px 24px rgba(26,26,26,.08);
+  }
+  .inv-bulk.visible { display: flex; }
+  .inv-bulk .count {
+    font-weight: 700; padding-right: 12px;
+    border-right: 0.5px solid var(--hair); color: var(--ink);
+    letter-spacing: 1px;
+  }
+  .inv-bulk .lbl { color: var(--ink-3); font-style: italic; letter-spacing: 1px; }
+  .inv-bulk select, .inv-bulk input[type=text], .inv-bulk input[type=number] {
+    border: 0.5px solid var(--hair);
+    padding: 5px 8px; background: var(--paper);
+    font-family: var(--font-serif); font-size: 9.5pt;
+    color: var(--ink); outline: 0;
+  }
+  .inv-bulk select:focus, .inv-bulk input:focus { border-color: var(--ink); }
+  .inv-bulk .btn-apply {
+    background: var(--ink); color: var(--paper); border: 0;
+    padding: 6px 16px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10pt;
+    letter-spacing: 2px; font-weight: 700;
+  }
+  .inv-bulk .btn-apply:hover { background: #000; }
+  .inv-bulk .btn-link {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--ink-3); font-family: var(--font-serif);
+    font-size: 9.5pt; letter-spacing: 1.5px; font-style: italic;
+    padding: 6px 8px;
+  }
+  .inv-bulk .btn-link:hover { color: var(--ink); }
+  .inv-bulk .btn-link.danger { color: var(--accent-red); }
+  .inv-bulk .clear-flag {
+    font-size: 8.5pt; color: var(--accent-red);
+    cursor: pointer; display: inline-flex; align-items: center; gap: 3px;
+  }
+  .inv-bulk .clear-flag input { margin: 0; }
+  .inv-bulk .sep-v {
+    border-left: 0.5px solid var(--hair); height: 22px; margin: 0 6px;
+  }
+
+  .inv-empty {
+    text-align: center; padding: 80px 24px;
+    color: var(--ink-3); font-style: italic;
+    font-size: 11pt; letter-spacing: 2px;
+  }
+  .inv-empty a {
+    color: var(--ink); border-bottom: 0.5px solid var(--ink-3);
+    padding-bottom: 1px; margin-left: 6px;
+  }
+  .inv-empty::before {
+    content: "—"; display: block;
+    font-size: 20pt; color: var(--ink-4);
+    margin-bottom: 20px; letter-spacing: 10px;
+  }
+</style>
+
+<div class="inv-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  <a href="/admin/inventory">经营</a>
+  <span class="sep">/</span>
+  <span>库存管理</span>
+</div>
+
+<div class="inv-head">
+  <h1>
+    库存管理
+    <span class="sub">
+      在册品目 <b style="color:var(--ink);font-family:var(--font-numeric);">{{ total }}</b> 项
+      {% if low_count > 0 %} · <span class="warn">{{ low_count }} 项低库存预警</span>{% endif %}
+    </span>
+  </h1>
+  <div class="actions">
+    {% if is_superadmin %}
+    <a href="/admin/inventory/import-xls" class="uk-btn ghost sm">导入小暖 Excel</a>
+    {% endif %}
+    <a href="/admin/inventory/import-photo" class="uk-btn ghost sm">拍照入库</a>
+    {% if is_superadmin %}
+    <a href="/admin/inventory-cleanup" class="uk-btn ghost sm">小类规范化</a>
+    <a href="/admin/inventory-audit" class="uk-btn ghost sm">一致性审计</a>
+    {% endif %}
+    <a href="/admin/inventory/narcotics-ledger" class="uk-btn ghost sm">麻醉台账</a>
+    <a href="/admin/inventory/create" class="uk-btn primary sm">＋ 新增品目</a>
+  </div>
+</div>
+
+<hr class="inv-rule-double"/>
+
+{# ─── 4 KPI ─── #}
+<div class="inv-kpi-row">
+  <div class="inv-kpi">
+    <div class="lbl">在册总数</div>
+    <div class="val">{{ total }}</div>
+    <div class="sub">全部已激活</div>
+  </div>
+  <div class="inv-kpi">
+    <div class="lbl">零库存</div>
+    <div class="val red">{{ zero_count }}</div>
+    <div class="sub">需补货</div>
+  </div>
+  <div class="inv-kpi">
+    <div class="lbl">低库存</div>
+    <div class="val amber">{{ low_count }}</div>
+    <div class="sub">低于预警线</div>
+  </div>
+  <div class="inv-kpi">
+    <div class="lbl">有效期预警</div>
+    <div class="val">{{ expiry_count }}</div>
+    <div class="sub">90 天内到期</div>
+  </div>
+</div>
+
+{# ─── 门店切换（仅超管）─── #}
+{% if is_superadmin %}
+<div class="inv-store-bar">
+  门店：
+  <a href="?store=" class="{% if not wb_store %}active{% endif %}">全部</a>
+  <a href="?store=东环店" class="{% if wb_store == '东环店' %}active{% endif %}">东环店</a>
+  <a href="?store=横岗店" class="{% if wb_store == '横岗店' %}active{% endif %}">横岗店</a>
+  <span class="hint">staff 自动锁本店 · 空标签 = 两店通用</span>
+</div>
+{% elif wb_store %}
+<div class="inv-store-bar">门店：<b style="color:var(--ink);">{{ wb_store }}</b>（含通用品目）</div>
+{% endif %}
+
+{# ─── 筛选 ─── #}
+<form method="get" id="inv-filter-form">
+  {% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}
+  <div class="inv-filter">
+    <input type="search" name="q" value="{{ q }}" placeholder="按品名 / 供应商搜索…"/>
+    <select name="category" id="filter-category" onchange="onFilterCategoryChange()">
+      <option value="">全部大类</option>
+      {% for cat_key, cat in categories.items() %}
+      <option value="{{ cat_key }}" {% if category == cat_key %}selected{% endif %}>{{ cat.label }}</option>
+      {% endfor %}
+    </select>
+    <select name="subcategory" id="filter-subcategory" {% if not category %}disabled{% endif %}>
+      <option value="">全部小类</option>
+      {% if category and categories.get(category) %}
+        {% for sk, sl in categories[category].get('subs', {}).items() %}
+        <option value="{{ sk }}" {% if subcategory == sk %}selected{% endif %}>{{ sl }}</option>
+        {% endfor %}
+      {% endif %}
+    </select>
+    <button type="submit" class="uk-btn sm">筛选</button>
+    {% if q or category or subcategory or low_stock or zero_stock or controlled or service_only or expiry_alert %}
+    <a href="/admin/inventory{% if wb_store %}?store={{ wb_store }}{% endif %}" class="uk-btn ghost sm">清除</a>
+    {% endif %}
+  </div>
+</form>
+
+{# ─── 快速筛 chip ─── #}
+<div class="inv-chips">
+  <a href="/admin/inventory?low_stock=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if low_stock == '1' %}active{% endif %}">库存预警{% if low_count > 0 %}<span class="num">{{ low_count }}</span>{% endif %}</a>
+  <a href="/admin/inventory?zero_stock=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if zero_stock == '1' %}active{% endif %}">零库存{% if zero_count > 0 %}<span class="num">{{ zero_count }}</span>{% endif %}</a>
+  <a href="/admin/inventory?controlled=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if controlled == '1' %}active{% endif %}">管控药品</a>
+  <a href="/admin/inventory?service_only=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if service_only == '1' %}active{% endif %}">服务项目</a>
+  <a href="/admin/inventory?expiry_alert=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if expiry_alert == '1' %}active{% endif %}">有效期预警{% if expiry_count > 0 %}<span class="num">{{ expiry_count }}</span>{% endif %}</a>
+</div>
+
+{# ─── 表格 ─── #}
+{% if items %}
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}" id="bulk-csrf"/>
+<table class="inv-tbl">
+  <thead>
+    <tr>
+      <th style="width:28px;"><input type="checkbox" class="inv-checkbox" id="bulk-select-all" title="全选本页"/></th>
+      <th>品名</th>
+      <th>大类</th>
+      <th>小类</th>
+      <th class="right">库存</th>
+      <th class="right">售价</th>
+      <th>单位</th>
+      <th>供应商</th>
+      <th class="right">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for it in items %}
+    {% set cat_label = categories[it.category].label if it.category in categories else it.category %}
+    {% set sub_label = categories[it.category].subs[it.subcategory] if it.category in categories and it.subcategory in categories[it.category].subs else it.subcategory %}
+    {% set is_low = (not it.is_service) and it.low_stock_min > 0 and it.stock_qty <= it.low_stock_min %}
+    {% set is_zero = (not it.is_service) and it.stock_qty <= 0 %}
+    <tr data-item-id="{{ it.id }}" class="{% if is_zero %}row-zero{% elif is_low %}row-low{% endif %}">
+      <td><input type="checkbox" class="inv-checkbox bulk-row" value="{{ it.id }}"/></td>
+      <td class="name">
+        {{ it.name }}
+        {% if it.is_controlled %}<span class="uk-pill red">管控</span>{% endif %}
+        {% if it.is_service %}<span class="uk-pill mute">服务</span>{% endif %}
+        {% if it.store %}<span class="uk-pill mute">{{ it.store }}</span>{% else %}<span class="uk-pill mute">通用</span>{% endif %}
+      </td>
+      <td class="ink3">{{ cat_label }}</td>
+      <td class="ink3-it">{{ sub_label or '—' }}</td>
+      <td class="right num">
+        {% if it.is_service %}<span class="ink3">—</span>
+        {% elif is_zero %}<span style="color:var(--accent-red);font-weight:700;">{{ '%.1f'|format(it.stock_qty) }}</span>
+        {% elif is_low %}<span style="color:var(--accent-amber);font-weight:700;">{{ '%.1f'|format(it.stock_qty) }}</span>
+        {% else %}{{ '%.1f'|format(it.stock_qty) }}{% endif %}
+      </td>
+      <td class="right num">
+        {% set _cs = request.session.get('admin_store', '') %}
+        {% set _ep = it | eff_price(_cs) %}
+        ¥{{ '%.2f'|format(_ep) }}
+        {% if _cs and (it | has_override(_cs)) %}<span title="本店覆盖价（默认 ¥{{ '%.2f'|format(it.sell_price) }}）" style="font-size:8pt;color:var(--ink-2);margin-left:2px;font-style:italic;">店</span>{% endif %}
+        {% set _summary = it | overrides_summary %}
+        {% if not _cs and _summary %}<div style="font-size:8.5pt;color:var(--ink-3);margin-top:1px;font-style:italic;">{{ _summary }}</div>{% endif %}
+      </td>
+      <td class="ink3-it">{{ it.unit }}{% if it.unit2 %} / {{ it.unit2 }}{% endif %}</td>
+      <td class="ink3">{{ it.supplier or '—' }}</td>
+      <td class="right">
+        <a href="/admin/inventory/{{ it.id }}?from_qs={{ request.url.query|urlencode }}" style="color:var(--ink);border-bottom:0.5px solid var(--ink-3);font-size:9.5pt;padding-bottom:1px;">详情 →</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ─── 分页 ─── #}
+<div class="inv-pager">
+  <div>共 <span class="num">{{ total }}</span> 项 · 本页 <span class="num">{{ items|length }}</span></div>
+  {% if total_pages > 1 %}
+  {% set qs = '&q=' ~ q ~ '&category=' ~ category ~ '&subcategory=' ~ subcategory ~ '&low_stock=' ~ low_stock ~ '&zero_stock=' ~ zero_stock ~ '&controlled=' ~ controlled ~ '&service_only=' ~ service_only ~ '&expiry_alert=' ~ expiry_alert %}
+  <div class="pages">
+    {% if page > 1 %}
+      <a href="?page=1{{ qs }}">« 首页</a>
+      <a href="?page={{ page-1 }}{{ qs }}">‹ 上一页</a>
+    {% endif %}
+    <span class="current">{{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+      <a href="?page={{ page+1 }}{{ qs }}">下一页 ›</a>
+      <a href="?page={{ total_pages }}{{ qs }}">末页 »</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% else %}
+<div class="inv-empty">
+  暂无品目<a href="/admin/inventory/create">立即新增 →</a>
+</div>
+{% endif %}
+
+{# ─── 批量编辑底部条 ─── #}
+<form id="bulk-form" method="post" action="/admin/inventory/bulk-edit" style="display:contents;">
+  <div class="inv-bulk" id="bulk-bar">
+    <span class="count">已选 <span id="bulk-count">0</span> 项</span>
+    <span class="lbl">大类</span>
+    <select name="category" id="bulk-category">
+      <option value="">不修改</option>
+      {% for k, c in categories.items() %}<option value="{{ k }}">{{ c.label }}</option>{% endfor %}
+    </select>
+    <span class="lbl">小类</span>
+    <select name="subcategory" id="bulk-subcategory" disabled>
+      <option value="">先选大类</option>
+    </select>
+    <span class="lbl">供应商</span>
+    <input type="text" name="supplier" id="bulk-supplier" placeholder="留空=不改" style="width:110px;"/>
+    <label class="clear-flag" title="勾上 → 把供应商批量清空">
+      <input type="checkbox" id="bulk-supplier-clear"/>清空
+    </label>
+    <span class="lbl">备注</span>
+    <input type="text" name="notes" id="bulk-notes" placeholder="留空=不改" style="width:130px;"/>
+    <label class="clear-flag" title="勾上 → 把备注批量清空">
+      <input type="checkbox" id="bulk-notes-clear"/>清空
+    </label>
+    <span class="lbl">单位</span>
+    <input type="text" name="unit" id="bulk-unit" placeholder="主" style="width:55px;"/>
+    <input type="text" name="unit2" id="bulk-unit2" placeholder="副" style="width:55px;"/>
+    <input type="number" step="0.01" min="1" name="unit2_ratio" id="bulk-unit2-ratio" placeholder="换算" style="width:60px;" title="1 副单位 = N 主单位"/>
+    {% if is_superadmin %}
+    <span class="lbl">门店</span>
+    <select name="store" id="bulk-store">
+      <option value="__keep__">不改</option>
+      <option value="">通用</option>
+      <option value="东环店">仅东环店</option>
+      <option value="横岗店">仅横岗店</option>
+    </select>
+    {% endif %}
+    <span class="lbl">服务</span>
+    <select name="is_service" id="bulk-is-service">
+      <option value="__keep__">不改</option>
+      <option value="1">是</option>
+      <option value="0">否</option>
+    </select>
+    <span class="lbl">管控</span>
+    <select name="is_controlled" id="bulk-is-controlled">
+      <option value="__keep__">不改</option>
+      <option value="1">是</option>
+      <option value="0">否</option>
+    </select>
+    <button type="button" class="btn-apply" onclick="bulkApply()">应&nbsp;用</button>
+    <button type="button" class="btn-link" onclick="bulkClear()">取消</button>
+    <span class="sep-v"></span>
+    <button type="button" class="btn-link" onclick="bulkBatchAction('deactivate')" title="批量下架（保留数据，业务关联不影响）">批量下架</button>
+    <button type="button" class="btn-link" onclick="bulkBatchAction('activate')" title="批量启用">批量启用</button>
+    <button type="button" class="btn-link danger" onclick="bulkBatchAction('delete')" title="批量真删除（有处方/收费/出入库记录的会被保留）">真删除</button>
+  </div>
+</form>
+
+<script>
+(function () {
+  var CATS = {{ categories|tojson }};
+
+  // 筛选区：大类变了 → 联动小类
+  window.onFilterCategoryChange = function() {
+    var fc = document.getElementById('filter-category');
+    var fs = document.getElementById('filter-subcategory');
+    if (!fc || !fs) return;
+    var cat = CATS[fc.value];
+    fs.innerHTML = '<option value="">全部小类</option>';
+    if (!cat) { fs.disabled = true; return; }
+    fs.disabled = false;
+    var subs = cat.subs || {};
+    Object.keys(subs).forEach(function(k){
+      var o = document.createElement('option');
+      o.value = k; o.textContent = subs[k];
+      fs.appendChild(o);
+    });
+  };
+
+  var bar = document.getElementById('bulk-bar');
+  var countEl = document.getElementById('bulk-count');
+  var selAll = document.getElementById('bulk-select-all');
+  var catSel = document.getElementById('bulk-category');
+  var subSel = document.getElementById('bulk-subcategory');
+
+  function selectedIds() {
+    return Array.from(document.querySelectorAll('.bulk-row:checked')).map(function(c){ return c.value; });
+  }
+  function refresh() {
+    var ids = selectedIds();
+    countEl.textContent = ids.length;
+    bar.classList.toggle('visible', ids.length > 0);
+    document.querySelectorAll('tr[data-item-id]').forEach(function(tr){
+      var cb = tr.querySelector('.bulk-row');
+      tr.classList.toggle('row-selected', cb && cb.checked);
+    });
+  }
+  document.querySelectorAll('.bulk-row').forEach(function(c){ c.addEventListener('change', refresh); });
+  if (selAll) selAll.addEventListener('change', function(){
+    document.querySelectorAll('.bulk-row').forEach(function(c){ c.checked = selAll.checked; });
+    refresh();
+  });
+
+  // 批量编辑：大类联动小类
+  catSel.addEventListener('change', function(){
+    subSel.innerHTML = '';
+    var cat = CATS[catSel.value];
+    if (!cat) {
+      subSel.disabled = true;
+      subSel.innerHTML = '<option value="">先选大类</option>';
+      return;
+    }
+    subSel.disabled = false;
+    var opt0 = document.createElement('option');
+    opt0.value = ''; opt0.textContent = '不改小类';
+    subSel.appendChild(opt0);
+    Object.keys(cat.subs || {}).forEach(function(k){
+      var o = document.createElement('option');
+      o.value = k; o.textContent = cat.subs[k];
+      subSel.appendChild(o);
+    });
+  });
+
+  window.bulkClear = function(){
+    document.querySelectorAll('.bulk-row').forEach(function(c){ c.checked = false; });
+    if (selAll) selAll.checked = false;
+    refresh();
+  };
+
+  window.bulkApply = function(){
+    var ids = selectedIds();
+    if (!ids.length) return;
+    var cat = catSel.value;
+    var sub = subSel.value;
+    var sup = document.getElementById('bulk-supplier').value.trim();
+    var supClear = document.getElementById('bulk-supplier-clear').checked;
+    var notes = document.getElementById('bulk-notes').value;
+    var notesClear = document.getElementById('bulk-notes-clear').checked;
+    var unit = document.getElementById('bulk-unit').value.trim();
+    var unit2 = document.getElementById('bulk-unit2').value.trim();
+    var unit2Ratio = document.getElementById('bulk-unit2-ratio').value.trim();
+    var storeEl = document.getElementById('bulk-store');
+    var storeVal = storeEl ? storeEl.value : '__keep__';
+    var changeStore = storeEl && storeVal !== '__keep__';
+    var isSvcEl = document.getElementById('bulk-is-service');
+    var isSvc = isSvcEl ? isSvcEl.value : '__keep__';
+    var changeIsSvc = isSvc !== '__keep__';
+    var isCtrlEl = document.getElementById('bulk-is-controlled');
+    var isCtrl = isCtrlEl ? isCtrlEl.value : '__keep__';
+    var changeIsCtrl = isCtrl !== '__keep__';
+    if (!cat && !sup && !supClear && !notes && !notesClear && !unit && !unit2 && !unit2Ratio && !changeStore && !changeIsSvc && !changeIsCtrl) {
+      alert('请至少选择一个要修改的字段');
+      return;
+    }
+    var msg = '确认批量修改这 ' + ids.length + ' 个品目？';
+    if (changeStore) msg += '\n门店：' + (storeVal === '' ? '通用（两店共享）' : '仅 ' + storeVal);
+    if (changeIsSvc) msg += '\n服务类目：' + (isSvc === '1' ? '是（不占库存）' : '否');
+    if (changeIsCtrl) msg += '\n麻醉/管控：' + (isCtrl === '1' ? '是' : '否');
+    if (!confirm(msg)) return;
+    var fd = new FormData();
+    fd.append('csrf_token', document.getElementById('bulk-csrf').value);
+    ids.forEach(function(id){ fd.append('item_ids', id); });
+    if (cat) fd.append('category', cat);
+    if (sub) fd.append('subcategory', sub);
+    if (supClear) fd.append('supplier_clear', '1');
+    else if (sup) fd.append('supplier', sup);
+    if (notesClear) fd.append('notes_clear', '1');
+    else if (notes) fd.append('notes', notes);
+    if (unit) fd.append('unit', unit);
+    if (unit2) fd.append('unit2', unit2);
+    if (unit2Ratio) fd.append('unit2_ratio', unit2Ratio);
+    if (changeStore) fd.append('store', storeVal);
+    if (changeIsSvc) fd.append('is_service', isSvc);
+    if (changeIsCtrl) fd.append('is_controlled', isCtrl);
+    fetch('/admin/inventory/bulk-edit', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function(r){
+        if (r.redirected) { window.location = r.url; return; }
+        return r.text().then(function(t){ alert('提交失败：' + (r.status + ' ' + t.slice(0, 200))); });
+      })
+      .catch(function(e){ alert('网络错误：' + e); });
+  };
+
+  window.bulkBatchAction = function(action) {
+    var ids = selectedIds();
+    if (!ids.length) { alert('请先勾选要操作的品目'); return; }
+    var msg;
+    if (action === 'deactivate') msg = '确认下架这 ' + ids.length + ' 个品目？\n（保留数据，列表里隐藏，可随时启用）';
+    else if (action === 'activate') msg = '确认启用这 ' + ids.length + ' 个品目？';
+    else if (action === 'delete') msg = '真删除这 ' + ids.length + ' 个品目？\n\n有处方/收费/出入库记录引用的会被自动保留（不删）。\n此操作不可恢复！';
+    else return;
+    if (!confirm(msg)) return;
+    var fd = new FormData();
+    fd.append('csrf_token', document.getElementById('bulk-csrf').value);
+    fd.append('action', action);
+    ids.forEach(function(id){ fd.append('item_ids', id); });
+    fetch('/admin/inventory/batch-action', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function(r){
+        if (r.redirected) { window.location = r.url; return; }
+        return r.text().then(function(t){ alert('提交失败：' + (r.status + ' ' + t.slice(0, 200))); });
+      })
+      .catch(function(e){ alert('网络错误：' + e); });
+  };
+})();
+</script>
+
+{% endblock %}

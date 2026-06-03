@@ -13283,7 +13283,7 @@ async def admin_inventory_list(
                             InventoryBatch.expiry_date != "",
                             InventoryBatch.expiry_date <= _alert_date)
                     .distinct().count())
-    return templates.TemplateResponse(request, "admin_inventory.html", {
+    return templates.TemplateResponse(request, "uk/inventory.html", {  # B4 UK 重写；旧模板暂留
         "request": request, "items": items, "total": total,
         "page": page, "total_pages": total_pages,
         "q": q, "category": category, "subcategory": subcategory, "low_stock": low_stock,
