@@ -1,0 +1,521 @@
+
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+
+{% set is_create = (mode == 'create') %}
+{% set inv = inv if not is_create else None %}
+
+<div class="page-head">
+ <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+ <a href="/admin/invoices" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 收银台</a>
+ <div>
+ {% if not is_create %}
+ <h1><span class="ph-icon"><i data-lucide="receipt"></i></span>收费单 <span style="font-family:monospace;font-size:0.95rem;color:#4b5563;">{{ inv.invoice_no }}</span>
+ {% if inv.payment_status == 'paid' %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已收款</span>
+ {% elif inv.payment_status == 'cancelled' %}<span class="pill pill-gray" style="margin-left:0.5rem;">已取消</span>
+ {% elif inv.payment_status == 'refunded' %}<span class="pill pill-no" style="margin-left:0.5rem;">已退款</span>
+ {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待收款</span>{% endif %}
+ </h1>
+ {% if cust %}<p class="ph-sub">{{ cust.name }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</p>{% endif %}
+ {% else %}
+ <h1><span class="ph-icon"><i data-lucide="receipt"></i></span>新建收费单</h1>
+ {% if cust %}<p class="ph-sub">{{ cust.name }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</p>{% endif %}
+ {% endif %}
+ </div>
+ </div>
+ {% if not is_create %}
+ <div class="ph-actions">
+ <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="btn secondary" style="font-size:0.85rem;"><i data-lucide="printer"></i> 打印票据</a>
+ </div>
+ {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:1rem;align-items:start;">
+
+ <!-- 左栏：明细 -->
+ <div>
+
+ {% if is_create %}
+ <!-- ===== 创建模式 ===== -->
+ <form method="post" action="/admin/invoices/create" id="inv-form">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/>
+ <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+ <input type="hidden" name="pet_id" value="{{ visit.pet_id if visit and visit.pet_id else 0 }}"/>
+
+ <!-- 日期 -->
+ <div class="card" style="margin-bottom:0.75rem;">
+ <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
+ <div style="flex:0 0 180px;">
+ <label>收费日期</label>
+ <input type="date" name="invoice_date" value="{{ today }}" required/>
+ </div>
+ <div style="flex:0 0 240px;">
+ <label>备注</label>
+ <input name="notes"/>
+ </div>
+ </div>
+ </div>
+
+ <!-- 明细表 -->
+ <div class="card" style="margin-bottom:0.75rem;padding:0;">
+ <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+ <span style="font-weight:700;font-size:0.95rem;">费用明细</span>
+ <button type="button" onclick="addRow()" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;"><i data-lucide="plus"></i> 手动添加项目</button>
+ </div>
+ <table class="items-table" style="width:100%;" id="items-table">
+ <thead>
+ <tr>
+ <th style="width:45%;">描述</th>
+ <th style="width:12%;text-align:center;">数量</th>
+ <th style="width:15%;text-align:right;">单价 (¥)</th>
+ <th style="width:15%;text-align:right;">小计 (¥)</th>
+ <th style="width:8%;"></th>
+ </tr>
+ </thead>
+ <tbody id="items-body">
+ {% for item in prefill_items %}
+ <tr class="item-row">
+ <td>
+ <input type="hidden" name="ref_type[]" value="{{ item.ref_type }}"/>
+ <input type="hidden" name="ref_id[]" value="{{ item.ref_id or '' }}"/>
+ <input name="desc[]" value="{{ item.description }}" required/>
+ </td>
+ <td style="text-align:center;">
+ <input name="qty[]" type="number" step="0.01" min="0" value="{{ item.quantity }}"
+ style="text-align:center;" oninput="calcRow(this)"/>
+ </td>
+ <td style="text-align:right;">
+ <input name="price[]" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.unit_price) }}"
+ style="text-align:right;" oninput="calcRow(this)"/>
+ </td>
+ <td style="text-align:right;">
+ <input name="subtotal_display" readonly value="{{ '%.2f'|format(item.subtotal) }}"
+ style="text-align:right;background:transparent;border:none;font-weight:600;"/>
+ </td>
+ <td style="text-align:center;">
+ <button type="button" onclick="removeRow(this)" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;"><i data-lucide="x"></i></button>
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ </div>
+
+ <!-- 合计 + 折扣 -->
+ <div class="card" style="margin-bottom:0.75rem;">
+ <div class="summary-row">
+ <span style="color:var(--muted);">小计</span>
+ <span id="subtotal-display">¥ 0.00</span>
+ </div>
+ <div class="summary-row">
+ <span style="color:var(--muted);">折扣 / 减免</span>
+ <div style="display:flex;align-items:center;gap:0.35rem;">
+ <span>¥</span>
+ <input name="discount_amount" id="discount-input" type="number" step="0.01" min="0" value="0"
+ style="width:90px;text-align:right;" oninput="calcTotal()"/>
+ </div>
+ </div>
+ <div class="summary-row" style="border-top:1px solid var(--border);padding-top:0.5rem;margin-top:0.25rem;">
+ <span style="font-weight:700;">实收金额</span>
+ <span class="summary-total" id="total-display">¥ 0.00</span>
+ </div>
+ </div>
+
+ <div style="display:flex;gap:0.6rem;">
+ <button type="submit" class="btn" style="flex:1;">保存收费单（待收款）</button>
+ {% if visit %}
+ <a href="/admin/visits/{{ visit.id }}" class="btn secondary">取消</a>
+ {% endif %}
+ </div>
+ </form>
+
+ {% else %}
+ <!-- ===== 查看模式 ===== -->
+
+ <!-- 明细表 -->
+ <div class="card" style="padding:0;margin-bottom:0.75rem;">
+ <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border);">
+ <span style="font-weight:700;font-size:0.95rem;">费用明细</span>
+ </div>
+ <table class="items-table data-table mobile-card" style="width:100%;">
+ <thead>
+ <tr>
+ <th style="width:50%;">描述</th>
+ <th style="width:12%;text-align:center;">数量</th>
+ <th style="width:16%;text-align:right;">单价 (¥)</th>
+ <th style="width:16%;text-align:right;">小计 (¥)</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for item in inv.items %}
+ <tr>
+ <td>{{ item.description }}</td>
+ <td data-label="数量" style="text-align:center;">{{ item.quantity }}</td>
+ <td data-label="单价 ¥" style="text-align:right;">{{ '%.2f'|format(item.unit_price) }}</td>
+ <td data-label="小计 ¥" style="text-align:right;font-weight:600;">{{ '%.2f'|format(item.subtotal) }}</td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ </div>
+
+ <!-- 汇总 -->
+ <div class="card" style="margin-bottom:0.75rem;">
+ <div class="summary-row">
+ <span style="color:var(--muted);">小计</span>
+ <span>¥ {{ '%.2f'|format(inv.subtotal) }}</span>
+ </div>
+ {% if inv.discount_amount> 0 %}
+ <div class="summary-row">
+ <span style="color:var(--muted);">折扣 / 减免</span>
+ <span style="color:#16a34a;">- ¥ {{ '%.2f'|format(inv.discount_amount) }}</span>
+ </div>
+ {% endif %}
+ <div class="summary-row" style="border-top:1px solid var(--border);padding-top:0.5rem;margin-top:0.25rem;">
+ <span style="font-weight:700;">实收金额</span>
+ <span class="summary-total">¥ {{ '%.2f'|format(inv.total_amount) }}</span>
+ </div>
+ {% if inv.payment_status == 'paid' %}
+ <div style="margin-top:0.75rem;padding:0.6rem 0.85rem;background:#d1fae5;border-radius:8px;font-size:0.85rem;color:#065f46;">
+ <i data-lucide="check-circle-2"></i> 已收款 · {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) }} ·
+ {{ inv.paid_at.strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
+ </div>
+ {% endif %}
+ </div>
+
+ <!-- 收款操作（仅待收款状态显示） -->
+ {% if inv.payment_status == 'unpaid' %}
+ <div class="card" style="margin-bottom:0.75rem;">
+   <h3 style="margin:0 0 .8rem;font-size:0.95rem;font-weight:700;">收款</h3>
+   <div style="display:flex;justify-content:space-between;align-items:baseline;padding:.5rem 0;margin-bottom:.6rem;border-bottom:1px solid #e5e7eb;">
+     <div>
+       <div style="font-size:.78rem;color:var(--muted);">应付</div>
+       <div style="font-size:1.1rem;font-weight:600;">¥{{ '%.2f'|format(inv.total_amount) }}</div>
+     </div>
+     <div>
+       <div style="font-size:.78rem;color:var(--muted);">已收</div>
+       <div style="font-size:1.1rem;font-weight:600;color:#10b981;">¥{{ '%.2f'|format(paid_sum) }}</div>
+     </div>
+     <div>
+       <div style="font-size:.78rem;color:var(--muted);">未收</div>
+       <div style="font-size:1.3rem;font-weight:700;color:{% if outstanding > 0 %}#dc2626{% else %}#10b981{% endif %};">¥{{ '%.2f'|format(outstanding) }}</div>
+     </div>
+   </div>
+
+   <p style="font-size:.8rem;color:var(--muted);margin:0 0 .6rem;"><i data-lucide="lightbulb"></i> 可拆分多种方式收款（混合支付）。每点一次"确认这一笔"会立刻入账。</p>
+
+   <form method="post" action="/admin/invoices/{{ inv.id }}/add-payment" id="pay-form">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+     <input type="hidden" name="method" id="pay-method-input" value="cash"/>
+
+     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin-bottom:.8rem;">
+       <button type="button" class="pay-btn selected" data-val="cash" onclick="selectPay(this)"><span class="icon" style="color:#15803d;"><i data-lucide="banknote"></i></span><span class="label">现金</span></button>
+       <button type="button" class="pay-btn" data-val="wechat" onclick="selectPay(this)"><span class="icon" style="color:#07c160;"><i data-lucide="message-circle"></i></span><span class="label">微信</span></button>
+       <button type="button" class="pay-btn" data-val="alipay" onclick="selectPay(this)"><span class="icon" style="color:#1677ff;"><i data-lucide="circle-dollar-sign"></i></span><span class="label">支付宝</span></button>
+       <button type="button" class="pay-btn" data-val="shouqianba" onclick="selectPay(this)"><span class="icon" style="color:#3b82f6;"><i data-lucide="smartphone"></i></span><span class="label">收钱吧</span></button>
+       <button type="button" class="pay-btn" data-val="meituan" onclick="selectPay(this)"><span class="icon" style="color:#ffc300;"><i data-lucide="utensils"></i></span><span class="label">美团</span></button>
+       <button type="button" class="pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="icon"><i data-lucide="link"></i></span><span class="label">第三方</span></button>
+       {# 钱包 / 套餐 / 押金 / 优惠券 始终显示，没有可用项时显示灰色提示 #}
+       <button type="button" class="pay-btn{% if wallet_balance <= 0 %} unavailable{% endif %}" data-val="wallet" onclick="selectPay(this)"
+               title="{% if wallet_balance > 0 %}客户钱包余额 ¥{{ '%.2f'|format(wallet_balance) }}{% else %}客户暂无钱包余额，点击仍可去客户档案充值{% endif %}">
+         <span class="icon"><i data-lucide="wallet"></i></span><span class="label">钱包<small style="display:block;font-size:.7rem;color:{% if wallet_balance > 0 %}#10b981{% else %}#9ca3af{% endif %};">¥{{ '%.0f'|format(wallet_balance) }}</small></span>
+       </button>
+       <button type="button" class="pay-btn{% if not active_packages %} unavailable{% endif %}" data-val="package" onclick="selectPay(this)">
+         <span class="icon"><i data-lucide="ticket"></i></span><span class="label">套餐<small style="display:block;font-size:.7rem;color:{% if active_packages %}#3b82f6{% else %}#9ca3af{% endif %};">{{ active_packages|length }} 张</small></span>
+       </button>
+       <button type="button" class="pay-btn{% if not available_deposits %} unavailable{% endif %}" data-val="deposit" onclick="selectPay(this)">
+         <span class="icon" style="color:#f59e0b;"><i data-lucide="landmark"></i></span><span class="label">押金<small style="display:block;font-size:.7rem;color:{% if available_deposits %}#f59e0b{% else %}#9ca3af{% endif %};">{{ available_deposits|length }} 笔</small></span>
+       </button>
+       <button type="button" class="pay-btn{% if not available_coupons %} unavailable{% endif %}" data-val="coupon" onclick="selectPay(this)">
+         <span class="icon"><i data-lucide="ticket"></i></span><span class="label">优惠券<small style="display:block;font-size:.7rem;color:{% if available_coupons %}#10b981{% else %}#9ca3af{% endif %};">{{ available_coupons|length }} 张</small></span>
+       </button>
+     </div>
+
+     {# 钱包 picker（钱包 ¥0 时的提示） #}
+     <div id="wal-pick-wrap" style="display:none;margin-bottom:.6rem;background:#eef2ff;border-radius:8px;padding:.6rem .8rem;">
+       {% if wallet_balance > 0 %}
+       <span style="font-size:.85rem;color:#3730a3;"><i data-lucide="wallet"></i> 客户钱包余额 <b>¥{{ '%.2f'|format(wallet_balance) }}</b>，本笔最多可扣 <b>¥{{ '%.2f'|format([wallet_balance, outstanding]|min) }}</b></span>
+       {% else %}
+       <span style="font-size:.85rem;color:#92400e;"><i data-lucide="alert-triangle"></i> 客户暂无钱包余额。
+         {% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=wallet" target="_blank" style="color:#3b82f6;">去充值 <i data-lucide="arrow-right"></i></a>{% endif %}
+       </span>
+       {% endif %}
+     </div>
+
+     {# 套餐 picker #}
+     <div id="pkg-pick-wrap" style="display:none;margin-bottom:.6rem;background:#f3f4f6;border-radius:8px;padding:.6rem .8rem;">
+       {% if active_packages %}
+       <label style="font-size:.85rem;color:#4b5563;display:block;margin-bottom:.3rem;">选套餐</label>
+       <select name="customer_package_id" style="width:100%;padding:.45rem;border:1px solid var(--border-strong);border-radius:6px;background:var(--card);">
+         <option value="">-- 选择 --</option>
+         {% for cp in active_packages %}
+         <option value="{{ cp.id }}">{{ cp.name }} · 剩 {{ cp.total_uses - cp.used_count }}/{{ cp.total_uses }}{% if cp.expires_at %} · {{ cp.expires_at }}到期{% endif %}</option>
+         {% endfor %}
+       </select>
+       {% else %}
+       <span style="font-size:.85rem;color:#92400e;"><i data-lucide="alert-triangle"></i> 客户暂无有效套餐。
+         {% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=packages" target="_blank" style="color:#3b82f6;">去售卖套餐 <i data-lucide="arrow-right"></i></a>{% endif %}
+       </span>
+       {% endif %}
+     </div>
+
+     {# 押金 picker #}
+     <div id="dep-pick-wrap" style="display:none;margin-bottom:.6rem;background:#fef3c7;border-radius:8px;padding:.6rem .8rem;">
+       {% if available_deposits %}
+       <label style="font-size:.85rem;color:#92400e;display:block;margin-bottom:.3rem;">选押金</label>
+       <select name="deposit_id" style="width:100%;padding:.45rem;border:1px solid #fde68a;border-radius:6px;background:#fff;">
+         <option value="">-- 选择 --</option>
+         {% for d in available_deposits %}
+         <option value="{{ d.id }}">{{ deposit_category_zh.get(d.category, d.category) }} · 剩 ¥{{ '%.2f'|format(d._remaining) }}（共收 ¥{{ '%.2f'|format(d.amount) }}）</option>
+         {% endfor %}
+       </select>
+       {% else %}
+       <span style="font-size:.85rem;color:#92400e;"><i data-lucide="alert-triangle"></i> 客户暂无押金。
+         {% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=deposits" target="_blank" style="color:#3b82f6;">去收押金 <i data-lucide="arrow-right"></i></a>{% endif %}
+       </span>
+       {% endif %}
+     </div>
+
+     {# 优惠券 picker #}
+     <div id="cpn-pick-wrap" style="display:none;margin-bottom:.6rem;background:#dcfce7;border-radius:8px;padding:.6rem .8rem;">
+       {% if available_coupons %}
+       <label style="font-size:.85rem;color:#166534;display:block;margin-bottom:.3rem;">选优惠券</label>
+       <select name="coupon_id" style="width:100%;padding:.45rem;border:1px solid #86efac;border-radius:6px;background:#fff;">
+         <option value="">-- 选择 --</option>
+         {% for c in available_coupons %}
+         <option value="{{ c.id }}">{{ c.title }}（{{ coupon_kind_zh.get(c.kind, c.kind) }}） · 可抵 ¥{{ '%.2f'|format(c._usable_amount) }}{% if c.expires_at %} · {{ c.expires_at }}到期{% endif %}</option>
+         {% endfor %}
+       </select>
+       {% else %}
+       <span style="font-size:.85rem;color:#92400e;"><i data-lucide="alert-triangle"></i> 客户暂无可用优惠券。
+         <a href="/admin/coupons" target="_blank" style="color:#3b82f6;">去发放 <i data-lucide="arrow-right"></i></a>
+       </span>
+       {% endif %}
+     </div>
+
+     <div style="display:flex;gap:.5rem;align-items:flex-end;margin-bottom:.6rem;">
+       <div style="flex:1;">
+         <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.2rem;">金额</label>
+         <input type="number" name="amount" step="0.01" min="0.01" max="{{ '%.2f'|format(outstanding) }}"
+                value="{{ '%.2f'|format(outstanding) }}" id="pay-amount-input"
+                style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;font-size:1rem;font-weight:600;">
+       </div>
+       <div style="flex:1;">
+         <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.2rem;">外部流水号（可选）</label>
+         <input type="text" name="ref_no" placeholder="微信/支付宝/收钱吧 交易号"
+                style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;">
+       </div>
+     </div>
+
+     <button type="submit" class="btn" style="width:100%;font-size:1rem;padding:.7rem;">
+       <i data-lucide="check"></i> 确认这一笔
+     </button>
+   </form>
+ </div>
+
+ {% if available_deposits %}
+ <div class="card" style="margin-bottom:.75rem;background:#fef3c7;">
+   <h3 style="margin:0 0 .5rem;font-size:.9rem;font-weight:700;color:#92400e;">⓪ 该客户有未结押金可抵扣</h3>
+   {% for d in available_deposits %}
+   <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-top:1px solid #fde68a;">
+     <div style="flex:1;font-size:.86rem;">
+       <strong>{{ deposit_category_zh.get(d.category, d.category) }} ¥{{ '%.2f'|format(d._remaining) }}</strong>
+       <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem;">（共收 ¥{{ '%.2f'|format(d.amount) }}{% if d.applied_amount %}，已用 ¥{{ '%.2f'|format(d.applied_amount) }}{% endif %}）</span>
+     </div>
+     <form method="post" action="/admin/deposits/{{ d.id }}/apply" style="margin:0;">
+       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+       <input type="hidden" name="invoice_id" value="{{ inv.id }}">
+       <button type="submit" class="btn" style="background:#f59e0b;border-color:#f59e0b;font-size:.82rem;padding:.35rem .85rem;">
+         抵扣此单
+       </button>
+     </form>
+   </div>
+   {% endfor %}
+ </div>
+ {% endif %}
+
+ <!-- 取消 -->
+ <div class="card">
+ <h3 style="margin:0 0 0.5rem;font-size:0.88rem;color:var(--muted);">危险操作</h3>
+ <form method="post" action="/admin/invoices/{{ inv.id }}/cancel"
+ onsubmit="return confirm('确认取消此收费单？')">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <button type="submit" class="btn secondary" style="width:100%;font-size:0.85rem;">取消此收费单</button>
+ </form>
+ </div>
+ {% endif %}
+
+ {% if inv.payment_status == 'cancelled' %}
+ <div class="card">
+ <h3 style="margin:0 0 0.5rem;font-size:0.88rem;color:var(--muted);">删除记录</h3>
+ <form method="post" action="/admin/invoices/{{ inv.id }}/delete"
+ onsubmit="return confirm('确认删除此收费单？此操作不可恢复。')">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <button type="submit" class="btn" style="width:100%;background:#dc2626;border-color:#dc2626;font-size:0.85rem;">删除此记录</button>
+ </form>
+ </div>
+ {% endif %}
+
+ {# 收款流水（无论 paid/unpaid 都显示） #}
+ {% if payments %}
+ <div class="card" style="margin-bottom:.75rem;">
+   <h3 style="margin:0 0 .5rem;font-size:.9rem;font-weight:700;">收款流水（{{ payments|length }} 笔）</h3>
+   <table style="width:100%;font-size:.83rem;">
+   {% for p in payments %}
+   <tr style="{% if p.status == 'cancelled' %}opacity:.4;text-decoration:line-through;{% endif %}border-bottom:1px solid #f3f4f6;">
+     <td style="padding:.4rem 0;">
+     {% if p.method == 'cash' %}<i data-lucide="banknote" style="color:#15803d;"></i> 现金
+     {% elif p.method == 'wechat' %}<i data-lucide="message-circle" style="color:#07c160;"></i> 微信
+     {% elif p.method == 'alipay' %}<i data-lucide="circle-dollar-sign" style="color:#1677ff;"></i> 支付宝
+     {% elif p.method == 'shouqianba' %}<i data-lucide="smartphone" style="color:#3b82f6;"></i> 收钱吧
+     {% elif p.method == 'meituan' %}<i data-lucide="utensils" style="color:#ffc300;"></i> 美团
+     {% elif p.method == 'third_party' %}<i data-lucide="link"></i> 第三方
+     {% elif p.method == 'wallet' %}<i data-lucide="wallet"></i> 钱包
+     {% elif p.method == 'package' %}<i data-lucide="ticket"></i> 套餐核销
+     {% elif p.method == 'deposit' %}<i data-lucide="landmark" style="color:#f59e0b;"></i> 押金抵扣
+     {% elif p.method == 'coupon' %}<i data-lucide="ticket"></i> 优惠券
+     {% else %}{{ p.method }}{% endif %}
+     {% if p.ref_no %}<span style="color:var(--muted);font-size:.75rem;margin-left:.4rem;">#{{ p.ref_no }}</span>{% endif %}
+     </td>
+     <td style="text-align:right;font-weight:600;">¥{{ '%.2f'|format(p.amount) }}</td>
+     <td style="text-align:right;color:var(--muted);font-size:.75rem;width:120px;">{{ p.created_at.strftime('%m-%d %H:%M') if p.created_at else '' }}<br>{{ p.operator or '' }}</td>
+     <td style="text-align:right;width:50px;">
+     {% if p.status == 'success' and request.session.get('admin_role') == 'superadmin' %}
+     <form method="post" action="/admin/invoices/{{ inv.id }}/payments/{{ p.id }}/void" style="display:inline;"
+           onsubmit="return confirm('撤销这笔 ¥{{ '%.2f'|format(p.amount) }}？')">
+       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+       <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.75rem;padding:0;">撤销</button>
+     </form>
+     {% endif %}
+     </td>
+   </tr>
+   {% endfor %}
+   </table>
+ </div>
+ {% endif %}
+
+ {% endif %}{# end view mode #}
+ </div>
+
+ <!-- 右栏：客户/宠物/就诊信息 -->
+ <div style="display:flex;flex-direction:column;gap:0.75rem;">
+
+ {% if cust %}
+ <div class="card">
+ <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">客户</div>
+ <div style="font-weight:700;font-size:1rem;margin-bottom:0.15rem;">{{ cust.name or '—' }}</div>
+ <div style="font-size:0.85rem;color:var(--muted);">{{ cust.phone or '—' }}</div>
+ {% if cust.address %}
+ <div style="font-size:0.82rem;color:var(--muted);margin-top:0.2rem;">{{ cust.address }}</div>
+ {% endif %}
+ <a href="/admin/customers/{{ cust.id }}" style="font-size:0.78rem;margin-top:0.5rem;display:inline-block;">档案 <i data-lucide="arrow-right"></i></a>
+ </div>
+ {% endif %}
+
+ {% set pet_obj = (visit.pet if visit and visit.pet else (inv.pet if inv and inv.pet else None)) %}
+ {% if pet_obj %}
+ <div class="card">
+ <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">宠物</div>
+ <div style="display:flex;align-items:center;gap:0.5rem;">
+ <span style="font-size:1.2rem;">{{ ('<i data-lucide="cat"></i>' if pet_obj.species == 'cat' else '<i data-lucide="dog"></i>' if pet_obj.species == 'dog' else '<i data-lucide="paw-print"></i>')|safe }}</span>
+ <span style="font-weight:700;">{{ pet_obj.name or '未命名' }}</span>
+ {% if pet_obj.gender == 'male' %}<span class="badge b-pending" style="font-size:0.68rem;">公</span>
+ {% elif pet_obj.gender == 'female' %}<span class="badge b-done" style="font-size:0.68rem;">母</span>{% endif %}
+ </div>
+ <div style="font-size:0.82rem;color:var(--muted);margin-top:0.25rem;">
+ {{ '猫' if pet_obj.species == 'cat' else '犬' if pet_obj.species == 'dog' else pet_obj.species }}
+ {% if pet_obj.breed %} · {{ pet_obj.breed }}{% endif %}
+ </div>
+ </div>
+ {% endif %}
+
+ {% if visit %}
+ <div class="card">
+ <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin-bottom:0.5rem;">关联就诊</div>
+ <div style="font-size:0.85rem;">就诊 #{{ visit.id }} · {{ visit.visit_date or '—' }}</div>
+ {% if visit.diagnosis %}
+ <div style="font-size:0.82rem;color:var(--muted);margin-top:0.2rem;">{{ visit.diagnosis[:60] }}{% if visit.diagnosis|length> 60 %}…{% endif %}</div>
+ {% endif %}
+ <a href="/admin/visits/{{ visit.id }}" style="font-size:0.78rem;margin-top:0.5rem;display:inline-block;">查看就诊记录 <i data-lucide="arrow-right"></i></a>
+ </div>
+ {% endif %}
+
+ {% if not is_create and inv %}
+ <div class="card" style="font-size:0.8rem;color:var(--muted);">
+ <div>创建：{{ inv.created_by or '—' }}</div>
+ <div>{{ inv.created_at.strftime('%Y-%m-%d %H:%M') if inv.created_at else '—' }}</div>
+ </div>
+ {% endif %}
+
+ </div>
+</div>
+
+<script>
+function calcRow(input) {
+ const row = input.closest('tr');
+ const qty = parseFloat(row.querySelector('input[name="qty[]"]').value) || 0;
+ const price = parseFloat(row.querySelector('input[name="price[]"]').value) || 0;
+ const sub = (qty * price).toFixed(2);
+ row.querySelector('input[name="subtotal_display"]').value = sub;
+ calcTotal();
+}
+
+function calcTotal() {
+ let subtotal = 0;
+ document.querySelectorAll('input[name="subtotal_display"]').forEach(el => {
+ subtotal += parseFloat(el.value) || 0;
+ });
+ const discount = parseFloat(document.getElementById('discount-input')?.value) || 0;
+ document.getElementById('subtotal-display').textContent = '¥ ' + subtotal.toFixed(2);
+ document.getElementById('total-display').textContent = '¥ ' + Math.max(0, subtotal - discount).toFixed(2);
+}
+
+function addRow() {
+ const tbody = document.getElementById('items-body');
+ const tr = document.createElement('tr');
+ tr.className = 'item-row';
+ tr.innerHTML = `
+ <td>
+ <input type="hidden" name="ref_type[]" value="manual"/>
+ <input type="hidden" name="ref_id[]" value=""/>
+ <input name="desc[]" required/>
+ </td>
+ <td style="text-align:center;">
+ <input name="qty[]" type="number" step="0.01" min="0" value="1" style="text-align:center;" oninput="calcRow(this)"/>
+ </td>
+ <td style="text-align:right;">
+ <input name="price[]" type="number" step="0.01" min="0" value="0" style="text-align:right;" oninput="calcRow(this)"/>
+ </td>
+ <td style="text-align:right;">
+ <input name="subtotal_display" readonly value="0.00" style="text-align:right;background:transparent;border:none;font-weight:600;"/>
+ </td>
+ <td style="text-align:center;">
+ <button type="button" onclick="removeRow(this)" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;">✕</button>
+ </td>`;
+ tbody.appendChild(tr);
+}
+
+function removeRow(btn) {
+ btn.closest('tr').remove();
+ calcTotal();
+}
+
+function selectPay(btn) {
+ document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('selected'));
+ btn.classList.add('selected');
+ var v = btn.dataset.val;
+ document.getElementById('pay-method-input').value = v;
+ ['wal-pick-wrap','pkg-pick-wrap','dep-pick-wrap','cpn-pick-wrap'].forEach(function(id){
+   var el = document.getElementById(id);
+   if (!el) return;
+   var want = (id === 'wal-pick-wrap' && v === 'wallet')
+           || (id === 'pkg-pick-wrap' && v === 'package')
+           || (id === 'dep-pick-wrap' && v === 'deposit')
+           || (id === 'cpn-pick-wrap' && v === 'coupon');
+   el.style.display = want ? 'block' : 'none';
+ });
+}
+
+// 初始化计算
+document.addEventListener('DOMContentLoaded', calcTotal);
+</script>

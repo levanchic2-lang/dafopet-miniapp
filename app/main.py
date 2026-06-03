@@ -15138,7 +15138,7 @@ async def admin_invoices_list(
         "unpaid_count": db.query(Invoice).filter(Invoice.payment_status == "unpaid").count(),
         "unpaid_total": round(sum((i.total_amount or 0) for i in db.query(Invoice).filter(Invoice.payment_status == "unpaid").all()), 2),
     }
-    return templates.TemplateResponse(request, "admin_invoices.html", {
+    return templates.TemplateResponse(request, "uk/invoices.html", {
         "invoices": invoices,
         "cust_map": cust_map,
         "inv_status_zh": _INV_STATUS_ZH,
@@ -15202,7 +15202,7 @@ async def admin_invoice_create_page(
     elif customer_id:
         cust = db.get(Customer, customer_id)
 
-    return templates.TemplateResponse(request, "admin_invoice_detail.html", {
+    return templates.TemplateResponse(request, "uk/invoice_detail.html", {
         "mode": "create",
         "visit": visit,
         "cust": cust,
