@@ -151,10 +151,62 @@
   .drug-table input[readonly] { background: var(--bg); font-weight: 700; }
   .drug-table .col-num input { text-align: right; font-family: var(--font-numeric); }
   .drug-table .col-unit input { text-align: center; }
-  .drug-table input[name^="schedule_times_"] {
-    height: 24px; font-size: 8.5pt; margin-top: 3px;
-    color: var(--ink-3); font-style: italic;
+  /* 住院发药时刻 popover */
+  .sch-cell { position: relative; }
+  .sch-toggle {
+    position: absolute; right: 3px; bottom: 3px;
+    background: var(--paper); color: var(--ink-3);
+    border: 0.5px solid var(--hair); cursor: pointer;
+    width: 18px; height: 16px; padding: 0;
+    font-family: var(--font-serif); font-size: 8pt;
+    letter-spacing: 0; line-height: 1;
   }
+  .sch-toggle:hover { color: var(--ink); border-color: var(--ink-3); }
+  .sch-toggle.has-val {
+    background: var(--accent-amber); color: var(--paper);
+    border-color: var(--accent-amber);
+  }
+  .sch-pop {
+    display: none; position: absolute;
+    top: calc(100% + 4px); right: 0; z-index: 200;
+    background: var(--paper); border: 0.5px solid var(--ink);
+    padding: 12px 14px; width: 220px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.08);
+  }
+  .sch-pop.open { display: block; }
+  .sch-pop label {
+    font-family: var(--font-serif); font-size: 9pt;
+    color: var(--ink-3); letter-spacing: 2px;
+    font-style: italic; display: block; margin-bottom: 6px;
+  }
+  .sch-pop input {
+    width: 100%; height: 30px; font-size: 10pt;
+    border: 0.5px solid var(--hair); padding: 6px 8px;
+    font-family: var(--font-numeric); color: var(--ink);
+    outline: 0; box-sizing: border-box;
+  }
+  .sch-pop input:focus { border-color: var(--ink); }
+  .sch-pop .hint {
+    font-size: 8.5pt; color: var(--ink-3); font-style: italic;
+    margin-top: 6px; line-height: 1.5; letter-spacing: 0.5px;
+  }
+  .sch-pop .actions {
+    display: flex; justify-content: flex-end; gap: 8px;
+    margin-top: 10px; padding-top: 8px;
+    border-top: 0.5px solid var(--hair);
+  }
+  .sch-pop .actions button {
+    background: var(--ink); color: var(--paper); border: 0;
+    padding: 5px 14px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2px; font-weight: 700;
+  }
+  .sch-pop .actions button.clear {
+    background: transparent; color: var(--ink-3);
+    border: 0.5px solid var(--hair); font-style: italic;
+  }
+  .sch-pop .actions button.clear:hover { color: var(--ink); border-color: var(--ink-3); }
+
   .drug-table .total-times {
     text-align: center; font-family: var(--font-numeric);
     font-weight: 700; color: var(--ink);
@@ -535,9 +587,18 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
                   <td class="col-num"><input name="dose_amount_{{ idx }}" type="number" step="0.01" min="0" value="{{ _dose_amt }}" oninput="recalcDosage({{ idx }})"/></td>
                   <td class="col-unit"><input name="dose_unit_{{ idx }}" value="{{ _dose_un }}" id="dose_unit_{{ idx }}" oninput="recalcDosage({{ idx }})"/></td>
                   <td class="col-num"><input name="times_per_day_{{ idx }}" type="number" step="0.5" min="0" value="{{ _tpd }}" oninput="recalcDosage({{ idx }})"/></td>
-                  <td class="col-num">
+                  <td class="col-num sch-cell">
                     <input name="duration_days_{{ idx }}" type="number" step="1" min="0" value="{{ item.duration_days }}" oninput="recalcDosage({{ idx }})"/>
-                    <input name="schedule_times_{{ idx }}" placeholder="住院发药时刻" title="仅住院动物需填。CSV 24h，如 8,14,20" value="{{ item.schedule_times or '' }}"/>
+                    <button type="button" class="sch-toggle {% if item.schedule_times %}has-val{% endif %}" onclick="toggleSchedule(this)" title="住院发药时刻">时</button>
+                    <div class="sch-pop">
+                      <label>住 院 发 药 时 刻</label>
+                      <input name="schedule_times_{{ idx }}" placeholder="如 8,14,20" value="{{ item.schedule_times or '' }}"/>
+                      <div class="hint">仅住院动物需填 · 24h CSV</div>
+                      <div class="actions">
+                        <button type="button" class="clear" onclick="clearSchedule(this)">清空</button>
+                        <button type="button" onclick="closeSchedule(this)">完&nbsp;成</button>
+                      </div>
+                    </div>
                   </td>
                   <td class="total-times" id="total_times_{{ idx }}">—</td>
                   <td class="col-num"><input name="unit_price_{{ idx }}" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.unit_price) }}" oninput="recalcRow({{ idx }})"/></td>
@@ -567,9 +628,18 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
                   <td class="col-num"><input name="dose_amount_0" type="number" step="0.01" min="0" oninput="recalcDosage(0)"/></td>
                   <td class="col-unit"><input name="dose_unit_0" id="dose_unit_0" oninput="recalcDosage(0)"/></td>
                   <td class="col-num"><input name="times_per_day_0" type="number" step="0.5" min="0" oninput="recalcDosage(0)"/></td>
-                  <td class="col-num">
+                  <td class="col-num sch-cell">
                     <input name="duration_days_0" type="number" step="1" min="0" oninput="recalcDosage(0)"/>
-                    <input name="schedule_times_0" placeholder="住院发药时刻" title="仅住院动物需填。CSV 24h，如 8,14,20"/>
+                    <button type="button" class="sch-toggle" onclick="toggleSchedule(this)" title="住院发药时刻">时</button>
+                    <div class="sch-pop">
+                      <label>住 院 发 药 时 刻</label>
+                      <input name="schedule_times_0" placeholder="如 8,14,20"/>
+                      <div class="hint">仅住院动物需填 · 24h CSV</div>
+                      <div class="actions">
+                        <button type="button" class="clear" onclick="clearSchedule(this)">清空</button>
+                        <button type="button" onclick="closeSchedule(this)">完&nbsp;成</button>
+                      </div>
+                    </div>
                   </td>
                   <td class="total-times" id="total_times_0">—</td>
                   <td class="col-num"><input name="unit_price_0" type="number" step="0.01" min="0" value="0.00" oninput="recalcRow(0)"/></td>
@@ -797,9 +867,18 @@ function addDrugRow() {
     <td class="col-num"><input name="dose_amount_${idx}" type="number" step="0.01" min="0" oninput="recalcDosage(${idx})"/></td>
     <td class="col-unit"><input name="dose_unit_${idx}" id="dose_unit_${idx}" oninput="recalcDosage(${idx})"/></td>
     <td class="col-num"><input name="times_per_day_${idx}" type="number" step="0.5" min="0" oninput="recalcDosage(${idx})"/></td>
-    <td class="col-num">
+    <td class="col-num sch-cell">
       <input name="duration_days_${idx}" type="number" step="1" min="0" oninput="recalcDosage(${idx})"/>
-      <input name="schedule_times_${idx}" placeholder="住院发药时刻" title="仅住院动物需填。CSV 24h，如 8,14,20"/>
+      <button type="button" class="sch-toggle" onclick="toggleSchedule(this)" title="住院发药时刻">时</button>
+      <div class="sch-pop">
+        <label>住 院 发 药 时 刻</label>
+        <input name="schedule_times_${idx}" placeholder="如 8,14,20"/>
+        <div class="hint">仅住院动物需填 · 24h CSV</div>
+        <div class="actions">
+          <button type="button" class="clear" onclick="clearSchedule(this)">清空</button>
+          <button type="button" onclick="closeSchedule(this)">完&nbsp;成</button>
+        </div>
+      </div>
     </td>
     <td class="total-times" id="total_times_${idx}">—</td>
     <td class="col-num"><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="0.00" oninput="recalcRow(${idx})"/></td>
@@ -811,6 +890,40 @@ function addDrugRow() {
   </tr>`;
   document.getElementById('drug-tbody').insertAdjacentHTML('beforeend', row);
 }
+
+// 住院发药时刻 popover
+function toggleSchedule(btn) {
+  var pop = btn.nextElementSibling;
+  document.querySelectorAll('.sch-pop.open').forEach(function(p){ if (p !== pop) p.classList.remove('open'); });
+  pop.classList.toggle('open');
+  if (pop.classList.contains('open')) { var inp = pop.querySelector('input'); if (inp) inp.focus(); }
+}
+function closeSchedule(btn) {
+  var pop = btn.closest('.sch-pop');
+  pop.classList.remove('open');
+  var inp = pop.querySelector('input');
+  var tgl = pop.previousElementSibling;
+  if (inp.value.trim()) tgl.classList.add('has-val'); else tgl.classList.remove('has-val');
+}
+function clearSchedule(btn) {
+  var pop = btn.closest('.sch-pop');
+  var inp = pop.querySelector('input');
+  inp.value = '';
+  var tgl = pop.previousElementSibling;
+  tgl.classList.remove('has-val');
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.sch-pop') && !e.target.closest('.sch-toggle')) {
+    document.querySelectorAll('.sch-pop.open').forEach(function(p){
+      p.classList.remove('open');
+      var inp = p.querySelector('input');
+      var tgl = p.previousElementSibling;
+      if (inp && tgl) {
+        if (inp.value.trim()) tgl.classList.add('has-val'); else tgl.classList.remove('has-val');
+      }
+    });
+  }
+});
 
 document.addEventListener('DOMContentLoaded', function() {
   recalcTotal();
@@ -852,9 +965,18 @@ function _appendRow(it) {
     <td class="col-num"><input name="dose_amount_${idx}" type="number" step="0.01" min="0" value="${it.dose_amount||''}" oninput="recalcDosage(${idx})"/></td>
     <td class="col-unit"><input name="dose_unit_${idx}" id="dose_unit_${idx}" value="${esc(it.dose_unit)}" oninput="recalcDosage(${idx})"/></td>
     <td class="col-num"><input name="times_per_day_${idx}" type="number" step="0.5" min="0" value="${it.times_per_day||''}" oninput="recalcDosage(${idx})"/></td>
-    <td class="col-num">
+    <td class="col-num sch-cell">
       <input name="duration_days_${idx}" type="number" step="1" min="0" value="${esc(it.duration_days)}" oninput="recalcDosage(${idx})"/>
-      <input name="schedule_times_${idx}" placeholder="住院发药时刻" title="仅住院动物需填。CSV 24h，如 8,14,20" value="${esc(it.schedule_times||'')}"/>
+      <button type="button" class="sch-toggle ${it.schedule_times?'has-val':''}" onclick="toggleSchedule(this)" title="住院发药时刻">时</button>
+      <div class="sch-pop">
+        <label>住 院 发 药 时 刻</label>
+        <input name="schedule_times_${idx}" placeholder="如 8,14,20" value="${esc(it.schedule_times||'')}"/>
+        <div class="hint">仅住院动物需填 · 24h CSV</div>
+        <div class="actions">
+          <button type="button" class="clear" onclick="clearSchedule(this)">清空</button>
+          <button type="button" onclick="closeSchedule(this)">完&nbsp;成</button>
+        </div>
+      </div>
     </td>
     <td class="total-times" id="total_times_${idx}">—</td>
     <td class="col-num"><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="${(it.unit_price||0).toFixed(2)}" oninput="recalcRow(${idx})"/></td>
