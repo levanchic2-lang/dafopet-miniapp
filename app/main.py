@@ -3530,7 +3530,7 @@ async def admin_hr_page(
     resigned_staff = _staff_q.filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
     expiring = _expiring_contracts(db)
     all_users = db.query(AdminUser).order_by(AdminUser.created_at).all()
-    return templates.TemplateResponse(request, "admin_hr.html", {
+    return templates.TemplateResponse(request, "uk/admin_hr.html", {  # B10 UK 重写
         "request": request, "title": "人事管理",
         "active_staff": active_staff, "resigned_staff": resigned_staff,
         "expiring": expiring,
