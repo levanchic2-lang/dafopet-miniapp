@@ -11017,6 +11017,12 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
             db.commit()
     except Exception:
         logger.exception("[med-logs] generate after presc create failed")
+    # 移动端 next_url 支持，{id} 占位 = 新建出的处方 id
+    next_url_raw = str(form.get("next_url") or "")
+    if next_url_raw:
+        nu = next_url_raw.replace("{id}", str(presc.id))
+        fallback = f"/admin/visits/{visit_id}?msg=处方单已开具" if visit_id else f"/admin/prescriptions/{presc.id}?msg=处方单已创建"
+        return RedirectResponse(_safe_next(nu, fallback), status_code=303)
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=处方单已开具" if visit_id else f"/admin/prescriptions/{presc.id}?msg=处方单已创建", status_code=303)
 
 
@@ -20085,6 +20091,175 @@ async def m_deworming_new(
         "default_vet": default_vet,
     })
     return templates.TemplateResponse(request, "m/deworming_new.html", ctx)
+
+
+@app.get("/m/visit/{visit_id}/prescribe", response_class=HTMLResponse)
+async def m_prescribe_new(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/visit/{visit_id}/prescribe", status_code=303)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404)
+    if (v.status or "open") == "closed":
+        return RedirectResponse(f"/m/visit/{visit_id}?err=病历已结束，不可开处方", status_code=303)
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    cust = db.get(Customer, v.customer_id) if v.customer_id else None
+    # 模板：按使用次数热排
+    templates_list = db.query(PrescriptionTemplate).order_by(
+        PrescriptionTemplate.use_count.desc(), PrescriptionTemplate.id.desc()
+    ).limit(20).all()
+    uname = request.session.get("admin_username") or ""
+    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
+    default_vet = (u.display_name if u and u.display_name else uname) or v.vet_name or ""
+    # 该宠物是否住院（决定是否要 schedule_times）
+    hosp_admitted = False
+    if v.pet_id:
+        hosp_admitted = db.query(Hospitalization).filter(
+            Hospitalization.pet_id == v.pet_id,
+            Hospitalization.status == "admitted",
+        ).first() is not None
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "v": v, "pet": pet, "cust": cust,
+        "templates_list": templates_list,
+        "default_vet": default_vet,
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "hosp_admitted": hosp_admitted,
+    })
+    return templates.TemplateResponse(request, "m/prescription_new.html", ctx)
+
+
+@app.get("/m/api/search-drug")
+async def m_api_search_drug(
+    request: Request,
+    q: str = "",
+    db: Session = Depends(get_db),
+):
+    if not _admin_ok(request):
+        return {"results": []}
+    q = (q or "").strip()
+    if not q:
+        return {"results": []}
+    store_short = _get_admin_store(request)
+    query = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, store_short
+    ).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.category.in_(["medication", "consumable"]),
+        InventoryItem.name.ilike(f"%{q}%"),
+    ).order_by(InventoryItem.is_controlled.desc(), InventoryItem.name).limit(15)
+    results = []
+    for it in query.all():
+        # 库存等级：> low_stock_min = green, > 0 = yellow, 0 = red
+        stock_level = "green"
+        if it.is_service:
+            stock_level = "green"
+        elif it.stock_qty <= 0:
+            stock_level = "red"
+        elif it.stock_qty <= (it.low_stock_min or 0):
+            stock_level = "yellow"
+        results.append({
+            "id": it.id, "name": it.name,
+            "unit": it.unit or "", "unit2": it.unit2 or "",
+            "sell_price": float(it.sell_price or 0),
+            "stock_qty": float(it.stock_qty or 0),
+            "stock_level": stock_level,
+            "is_controlled": bool(it.is_controlled),
+            "is_service": bool(it.is_service),
+        })
+    return {"results": results}
+
+
+@app.get("/m/api/recent-drugs")
+async def m_api_recent_drugs(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """当前用户最近 60 天开过的不同药品，按频次排序。"""
+    if not _admin_ok(request):
+        return {"results": []}
+    uname = request.session.get("admin_username") or ""
+    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
+    vet_names = list({n for n in [uname, (u.display_name if u else None)] if n})
+    if not vet_names:
+        return {"results": []}
+    from sqlalchemy import func as _f
+    since = datetime.utcnow() - timedelta(days=60)
+    rows = (
+        db.query(PrescriptionItem.item_id, PrescriptionItem.drug_name,
+                 _f.count(PrescriptionItem.id).label("n"))
+        .join(Prescription, Prescription.id == PrescriptionItem.prescription_id)
+        .filter(
+            Prescription.vet_name.in_(vet_names),
+            Prescription.created_at >= since,
+            Prescription.status != "voided",
+            PrescriptionItem.item_id.isnot(None),
+        )
+        .group_by(PrescriptionItem.item_id, PrescriptionItem.drug_name)
+        .order_by(_f.count(PrescriptionItem.id).desc())
+        .limit(12)
+        .all()
+    )
+    results = []
+    for r in rows:
+        inv = db.get(InventoryItem, r.item_id) if r.item_id else None
+        if not inv:
+            continue
+        stock_level = "green"
+        if inv.is_service:
+            stock_level = "green"
+        elif inv.stock_qty <= 0:
+            stock_level = "red"
+        elif inv.stock_qty <= (inv.low_stock_min or 0):
+            stock_level = "yellow"
+        results.append({
+            "id": inv.id, "name": inv.name,
+            "unit": inv.unit or "",
+            "sell_price": float(inv.sell_price or 0),
+            "stock_qty": float(inv.stock_qty or 0),
+            "stock_level": stock_level,
+            "is_controlled": bool(inv.is_controlled),
+            "n": int(r.n),
+        })
+    return {"results": results}
+
+
+@app.get("/m/api/presc-template/{tpl_id}")
+async def m_api_presc_template(
+    tpl_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not _admin_ok(request):
+        raise HTTPException(401)
+    tpl = db.get(PrescriptionTemplate, tpl_id)
+    if not tpl:
+        raise HTTPException(404)
+    try:
+        items = json.loads(tpl.items_json or "[]")
+    except Exception:
+        items = []
+    # 富化：补 item info
+    out = []
+    for it in items:
+        iid = it.get("item_id")
+        inv = db.get(InventoryItem, iid) if iid else None
+        out.append({
+            "item_id": iid,
+            "drug_name": it.get("drug_name", ""),
+            "drug_type": it.get("drug_type", "oral"),
+            "dose_amount": it.get("dose_amount", 0),
+            "dose_unit": it.get("dose_unit", ""),
+            "times_per_day": it.get("times_per_day", 0),
+            "frequency": it.get("frequency", ""),
+            "duration_days": it.get("duration_days", ""),
+            "quantity_num": it.get("quantity_num", 1),
+            "instructions": it.get("instructions", ""),
+            "schedule_times": it.get("schedule_times", ""),
+            "unit_price": float(inv.sell_price) if inv else float(it.get("unit_price", 0)),
+            "item_unit": (inv.unit if inv else "") or it.get("item_unit", ""),
+        })
+    return {"name": tpl.name, "notes": tpl.notes or "", "items": out}
 
 
 @app.get("/m/visit/{visit_id}", response_class=HTMLResponse)

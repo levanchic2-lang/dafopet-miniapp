@@ -71,6 +71,13 @@
 </div>
 {% endif %}
 
+{# 开处方按钮（病历未结束时显示）#}
+{% if v.status != 'closed' and mobile_role == 'doctor' %}
+<a href="/m/visit/{{ v.id }}/prescribe" class="m-btn" style="background:#1e40af;font-size:16px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;">
+  💊 开处方
+</a>
+{% endif %}
+
 {# 处方 #}
 {% if prescriptions %}
 <div class="m-card">
