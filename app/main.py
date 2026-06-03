@@ -13428,6 +13428,9 @@ async def admin_inventory_edit(
     aliases_text: str = Form(""),
     # 从列表第几页跳来的（保存后回该页，避免每次回到第 1 页）
     from_page: str = Form(""),
+    # 列表筛选条件 querystring（保存后回原筛选状态，
+    # 例如选了大类=medication & 小类=controlled & page=3）
+    from_qs: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -13470,10 +13473,21 @@ async def admin_inventory_edit(
         item.store = (store or "").strip()
     item.updated_at = datetime.utcnow()
     db.commit()
-    # 保存后优先回列表的原页码（用户的核心痛点：编辑第 10 页品目不要弹回第 1 页）
+    # 保存后优先回列表的原筛选状态 + 原页码（避免编辑后弹回第 1 页 / 弹回"全部"）
+    # from_qs 是 URL-encoded querystring，含 q / category / subcategory / page 等
+    _msg = f"已保存：{item.name[:30]}"
+    if from_qs:
+        # 安全：from_qs 是表单填的，可能被篡改；只接受 & 字符分隔的 k=v 串
+        # 不允许出现 / 开头（防开放重定向）
+        if "/" not in from_qs and "\\" not in from_qs:
+            from urllib.parse import quote
+            return RedirectResponse(
+                f"/admin/inventory?{from_qs}&msg={quote(_msg)}",
+                status_code=303,
+            )
     if (from_page or "").strip().isdigit():
         return RedirectResponse(
-            f"/admin/inventory?page={int(from_page)}&msg=已保存：{item.name[:30]}",
+            f"/admin/inventory?page={int(from_page)}&msg={_msg}",
             status_code=303,
         )
     return RedirectResponse(f"/admin/inventory/{item_id}?msg=已保存", status_code=303)

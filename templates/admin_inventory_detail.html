@@ -9,7 +9,8 @@
 <div class="page-head">
  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
  {% set _fp = request.query_params.get('from_page', '') %}
- <a href="/admin/inventory{% if _fp %}?page={{ _fp }}{% endif %}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 库存列表</a>
+ {% set _fqs = request.query_params.get('from_qs', '') %}
+ <a href="/admin/inventory{% if _fqs %}?{{ _fqs }}{% elif _fp %}?page={{ _fp }}{% endif %}" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 库存列表</a>
  <div>
  <h1><span class="ph-icon"><i data-lucide="package"></i></span>{{ item.name }}
  {% if item.is_controlled %}<span class="pill pill-warn" style="margin-left:0.5rem;"><i data-lucide="pill"></i> 管控</span>{% endif %}
@@ -20,7 +21,7 @@
  </div>
  </div>
  <div class="ph-actions">
- <a href="/admin/inventory/{{ item.id }}/edit{% if _fp %}?from_page={{ _fp }}{% endif %}" class="btn secondary" style="font-size:0.85rem;"><i data-lucide="pencil"></i> 编辑</a>
+ <a href="/admin/inventory/{{ item.id }}/edit{% if _fqs %}?from_qs={{ _fqs|urlencode }}{% elif _fp %}?from_page={{ _fp }}{% endif %}" class="btn secondary" style="font-size:0.85rem;"><i data-lucide="pencil"></i> 编辑</a>
  </div>
 </div>
 
@@ -236,7 +237,7 @@
  <!-- 下架 -->
  <div class="card">
  <h3 style="margin:0 0 0.75rem;font-size:0.95rem;color:var(--muted);">其他操作</h3>
- <a href="/admin/inventory/{{ item.id }}/edit{% if _fp %}?from_page={{ _fp }}{% endif %}" class="btn secondary" style="width:100%;display:block;text-align:center;margin-bottom:0.5rem;"><i data-lucide="pencil"></i> 编辑品目信息</a>
+ <a href="/admin/inventory/{{ item.id }}/edit{% if _fqs %}?from_qs={{ _fqs|urlencode }}{% elif _fp %}?from_page={{ _fp }}{% endif %}" class="btn secondary" style="width:100%;display:block;text-align:center;margin-bottom:0.5rem;"><i data-lucide="pencil"></i> 编辑品目信息</a>
  <form method="post" action="/admin/inventory/{{ item.id }}/deactivate" onsubmit="return confirm('确认下架「{{ item.name }}」？下架后不再显示于品目列表。')">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <button type="submit" class="btn secondary" style="width:100%;color:#dc2626;">下架品目</button>

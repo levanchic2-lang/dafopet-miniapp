@@ -13,7 +13,9 @@
  <form method="post" action="{{ '/admin/inventory/'~item.id~'/edit' if item else '/admin/inventory/create' }}">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  {% set _fp = request.query_params.get('from_page', '') %}
+ {% set _fqs = request.query_params.get('from_qs', '') %}
  {% if _fp %}<input type="hidden" name="from_page" value="{{ _fp }}"/>{% endif %}
+ {% if _fqs %}<input type="hidden" name="from_qs" value="{{ _fqs }}"/>{% endif %}
 
  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
  <div style="grid-column:1/-1;">
@@ -162,7 +164,7 @@
 
  <div style="display:flex;gap:0.75rem;">
  <button type="submit" class="btn">{{ '保存' if item else '创建' }}</button>
- <a href="{{ '/admin/inventory/'~item.id if item else '/admin/inventory' }}" class="btn secondary">取消</a>
+ <a href="{% if item %}/admin/inventory/{{ item.id }}{% if _fqs %}?from_qs={{ _fqs|urlencode }}{% elif _fp %}?from_page={{ _fp }}{% endif %}{% else %}/admin/inventory{% endif %}" class="btn secondary">取消</a>
  </div>
  </form>
 </div>

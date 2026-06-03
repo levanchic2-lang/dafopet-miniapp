@@ -174,7 +174,7 @@
  <td data-label="单位" style="color:var(--muted);">{{ it.unit }}{% if it.unit2 %} / {{ it.unit2 }}{% endif %}</td>
  <td data-label="供应商" style="color:var(--muted);font-size:0.82rem;">{{ it.supplier or '—' }}</td>
  <td class="actions" style="text-align:right;">
- <a href="/admin/inventory/{{ it.id }}?from_page={{ page }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">详情 <i data-lucide="arrow-right"></i></a>
+ <a href="/admin/inventory/{{ it.id }}?from_qs={{ request.url.query|urlencode }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">详情 <i data-lucide="arrow-right"></i></a>
  </td>
  </tr>
  {% endfor %}
