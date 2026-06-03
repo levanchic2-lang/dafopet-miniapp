@@ -41,7 +41,7 @@
  {% for sub_key, sub_label in cat.subs.items() %}
  <option value="{{ sub_key }}"
  data-cat="{{ cat_key }}"
- {% if item and item.subcategory == sub_key %}selected{% endif %}>
+ {% if item and item.subcategory == sub_key and item.category == cat_key %}selected{% endif %}>
  {{ sub_label }}
  </option>
  {% endfor %}
