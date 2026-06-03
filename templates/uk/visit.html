@@ -407,18 +407,22 @@
     </div>
   </div>
   <table class="v-rel-tbl">
-    <thead><tr><th>日期</th><th>麻醉方式</th><th>状态</th><th>医师</th><th class="right">操作</th></tr></thead>
+    <thead><tr><th>日期</th><th>ASA</th><th>状态</th><th>麻醉医师</th><th>复核人</th><th class="right">操作</th></tr></thead>
     <tbody>
       {% for a in anesth_orders %}
       <tr>
         <td class="num">{{ a.anesth_date or '—' }}</td>
-        <td>{{ a.anesth_type or '—' }}</td>
+        <td>{{ a.asa_grade or '—' }}</td>
         <td>
           {% if a.status == 'completed' %}<span class="uk-pill green">已完成</span>
+          {% elif a.status == 'issued' %}<span class="uk-pill">已开具</span>
+          {% elif a.status == 'voided' %}<span class="uk-pill mute">已作废</span>
+          {% elif a.status == 'draft' %}<span class="uk-pill mute">草稿</span>
           {% else %}<span class="uk-pill amber">{{ a.status }}</span>{% endif %}
         </td>
         <td class="ink3">{{ a.vet_name or '—' }}</td>
-        <td class="right"><a href="/admin/visits/{{ visit.id }}/anesthesia/{{ a.id }}">查看 →</a></td>
+        <td class="ink3">{{ a.cosigner or '—' }}</td>
+        <td class="right"><a href="/admin/anesthesia/{{ a.id }}">查看 →</a></td>
       </tr>
       {% endfor %}
     </tbody>
