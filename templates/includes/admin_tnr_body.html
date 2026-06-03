@@ -508,7 +508,7 @@
  <form method="post" action="/admin/app/{{ a.id }}/reject">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div class="admin-form-line">
- <input type="text" name="reason"/>
+ <input type="text" name="reason" placeholder="填写拒绝原因（可选）"/>
  <button type="submit" class="danger">{% if a.status in ['approved', 'scheduled'] %}审核拒绝（改未通过）{% else %}拒绝{% endif %}</button>
  </div>
  </form>

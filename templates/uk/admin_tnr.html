@@ -294,6 +294,51 @@
   /* 申请卡 .admin-app-lines p 紧凑化 */
   body .admin-app-lines p { margin: 5px 0 0 !important; }
 
+  /* 公开展示开关 row — 扁化 + 图标对齐 */
+  body .card > div[style*="ok-bg"],
+  body .card > div[style*="warn-bg"] {
+    background: var(--bg) !important;
+    border: 0 !important;
+    border-left: 3px solid var(--accent-green) !important;
+    border-radius: 0 !important;
+    padding: 6px 12px !important;
+    margin: 8px 0 !important;
+    min-height: 0 !important;
+  }
+  body .card > div[style*="warn-bg"] {
+    border-left-color: var(--accent-amber) !important;
+  }
+  body .card > div[style*="ok-bg"] > div,
+  body .card > div[style*="warn-bg"] > div {
+    font-size: 9.5pt !important; font-family: var(--font-serif);
+    color: var(--ink-2) !important; line-height: 1.4 !important;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  body .card > div[style*="ok-bg"] > div strong { color: var(--accent-green) !important; }
+  body .card > div[style*="warn-bg"] > div strong { color: var(--accent-amber) !important; }
+  body .card > div[style*="ok-bg"] .btn,
+  body .card > div[style*="warn-bg"] .btn {
+    background: var(--paper) !important; color: var(--ink-2) !important;
+    border: 0.5px solid var(--hair) !important; border-radius: 0 !important;
+    padding: 4px 10px !important;
+    font-family: var(--font-serif); font-size: 9pt !important;
+    letter-spacing: 1px; font-style: italic; font-weight: 400;
+    display: inline-flex !important; align-items: center !important;
+    gap: 4px !important; line-height: 1.3 !important;
+  }
+  body .card > div[style*="ok-bg"] .btn:hover,
+  body .card > div[style*="warn-bg"] .btn:hover {
+    color: var(--ink) !important; border-color: var(--ink-3) !important;
+  }
+  body .card > div[style*="ok-bg"] i[data-lucide],
+  body .card > div[style*="ok-bg"] svg,
+  body .card > div[style*="warn-bg"] i[data-lucide],
+  body .card > div[style*="warn-bg"] svg {
+    width: 13px !important; height: 13px !important;
+    vertical-align: middle !important; display: inline-block !important;
+    flex-shrink: 0;
+  }
+
   /* 现场确认按钮 cell — 扁化 + 图标对齐 */
   body .card > div[style*="brand-bg-soft"] {
     background: var(--bg) !important;
@@ -371,7 +416,12 @@
   body .admin-action-card {
     background: var(--paper); border: 0.5px solid var(--hair-2); border-radius: 0;
   }
-  body .admin-action-title { font-family: var(--font-serif); letter-spacing: 1.5px; }
+  body .admin-action-title {
+    font-family: var(--font-serif); letter-spacing: 2px;
+    font-size: 9pt !important; color: var(--ink-3) !important;
+    font-style: italic; font-weight: 400 !important;
+    margin: 0 0 6px !important;
+  }
 
   /* row2 grid */
   body .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
