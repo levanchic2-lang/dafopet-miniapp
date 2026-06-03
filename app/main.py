@@ -13973,7 +13973,7 @@ async def admin_stocktake_list(request: Request, db: Session = Depends(get_db)):
             "days_ago": days_ago,
         })
     open_sessions = [s for s in sessions if s.status == "open"]
-    return templates.TemplateResponse(request, "admin_stocktake.html", {
+    return templates.TemplateResponse(request, "uk/stocktake.html", {
         "request": request, "sessions": sessions,
         "open_sessions": open_sessions,
         "cycle_stats": cycle_stats,
@@ -14041,7 +14041,7 @@ async def admin_stocktake_session(
         items_q = items_q.filter(StocktakeItem.item_name.ilike(f"%{q}%"))
     sit_items = items_q.order_by(StocktakeItem.category, StocktakeItem.item_name).all()
     counted = sum(1 for x in sit_items if x.actual_qty is not None)
-    return templates.TemplateResponse(request, "admin_stocktake_session.html", {
+    return templates.TemplateResponse(request, "uk/stocktake_session.html", {
         "request": request, "sess": sess, "sit_items": sit_items,
         "q": q, "counted": counted,
         "categories": INVENTORY_CATEGORIES,

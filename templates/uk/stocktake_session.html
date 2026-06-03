@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}盘点会话 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin/inventory">库存管理</a><span class="sep">/</span><a href="/admin/stocktake">循环盘点</a><span class="sep">/</span><span>#{{ session.id if session else '盘点会话' }}</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>盘&nbsp;点&nbsp;会&nbsp;话
+      <span class="sub">逐行录入实际库存 · 自动比对差异</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_stocktake_session_body.html" %}
+{% endblock %}
