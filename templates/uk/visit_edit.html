@@ -62,26 +62,28 @@
     letter-spacing: 2.5px; color: var(--ink-3);
     font-style: italic;
   }
-  .ve-input, .ve-textarea, .ve-select {
+  /* 输入框 / 下拉 / 文本域 — 统一 box-border 同款高度 */
+  .ve-input, .ve-select {
     font-family: var(--font-serif); font-size: 10.5pt;
     color: var(--ink); background: var(--paper);
-    border: 0; border-bottom: 0.5px solid var(--hair);
-    padding: 8px 0; outline: 0;
+    border: 0.5px solid var(--hair);
+    padding: 8px 12px; outline: 0;
     width: 100%; box-sizing: border-box;
+    height: 38px; line-height: 1.4;
+    appearance: auto;  /* 保留 date / select 原生控件 */
   }
-  .ve-input:focus, .ve-textarea:focus, .ve-select:focus {
-    border-bottom-color: var(--ink); border-bottom-width: 1px;
-  }
-  .ve-select {
-    border: 0.5px solid var(--hair); padding: 7px 10px;
-    background: var(--paper);
+  .ve-input:focus, .ve-select:focus {
+    border-color: var(--ink);
   }
   .ve-textarea {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
     border: 0.5px solid var(--hair); padding: 12px 14px;
-    line-height: 1.7; resize: vertical;
-    font-family: var(--font-serif);
+    line-height: 1.7; resize: vertical; outline: 0;
+    width: 100%; box-sizing: border-box;
   }
-  .ve-textarea[readonly] {
+  .ve-textarea:focus { border-color: var(--ink); }
+  .ve-input[readonly], .ve-textarea[readonly], .ve-select[disabled] {
     background: var(--bg); color: var(--ink-2);
   }
   .ve-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
@@ -126,6 +128,38 @@
   }
 
   .ve-locked-notice b { font-style: normal; font-weight: 700; }
+
+  /* ── exam_helper / orders_helper / diagnosis_autocomplete 注入 chip 轻量降饱和 ── */
+  .exam-helper, .orders-helper { margin: 0 0 10px; }
+  .exam-helper-tag, .orders-helper-tag {
+    font-family: var(--font-serif); font-style: italic;
+    color: var(--ink-3) !important; letter-spacing: 1px;
+  }
+  .exam-tpl-btn, .orders-tpl-btn {
+    background: var(--ink) !important; color: var(--paper) !important;
+    border: 0.5px solid var(--ink) !important;
+    border-radius: 0 !important;
+    font-family: var(--font-serif) !important;
+    letter-spacing: 1.5px !important;
+    box-shadow: none !important;
+  }
+  .exam-chip, .orders-chip {
+    border-radius: 0 !important;
+    font-family: var(--font-serif) !important;
+    letter-spacing: 1px !important;
+    background: var(--paper) !important;
+    border-color: var(--hair-2) !important;
+    color: var(--ink-2) !important;
+  }
+  .exam-chip:hover, .orders-chip:hover {
+    background: var(--bg) !important; border-color: var(--ink-3) !important;
+    color: var(--ink) !important;
+  }
+  .exam-tpl-dropdown, .orders-tpl-dropdown {
+    border-radius: 0 !important; border: 0.5px solid var(--ink) !important;
+    box-shadow: 0 4px 14px rgba(0,0,0,.06) !important;
+  }
+  .exam-tpl-item b, .orders-tpl-item b { font-family: var(--font-serif); }
 </style>
 
 {# ─── 面包屑 ─── #}
