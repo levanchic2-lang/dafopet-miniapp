@@ -379,6 +379,45 @@
     font-family: var(--font-serif); font-size: 10pt; letter-spacing: 1.5px;
     color: var(--ink-3); font-style: italic; font-weight: 400;
   }
+
+  /* 关键：旧版 .kanban-wrap 用 100vw + -50vw margin 全宽 breakout
+     —— 在 UK 1280 容器里直接撑出屏幕。强制回归容器内 */
+  .kanban-wrap {
+    width: auto !important;
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding: 0 !important;
+    margin-top: 28px !important;
+  }
+  .kanban-wrap-header h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px;
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px;
+  }
+  .kanban-wrap-header .sub {
+    font-family: var(--font-serif); font-size: 9.5pt;
+    color: var(--ink-3); font-style: italic; letter-spacing: 1px;
+  }
+  .kanban-wrap-header .sub a { color: var(--ink); border-bottom: 0.5px solid var(--ink-3); padding-bottom: 1px; }
+
+  /* 日期块标题 */
+  .appt-day-header {
+    border-bottom: 0.5px solid var(--ink) !important;
+    padding-bottom: 8px; margin-bottom: 14px; margin-top: 20px;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  .appt-day-header > span:first-child {
+    font-family: var(--font-serif); font-size: 12pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 2px;
+  }
+  .appt-day-header.is-today > span:first-child::after {
+    content: " · 今天"; color: var(--ink-3); font-style: italic;
+    font-size: 9pt; font-weight: 400; letter-spacing: 1px;
+  }
 </style>
 
 <div class="ap-breadcrumb">
