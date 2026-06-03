@@ -1,0 +1,428 @@
+{% extends "uk/_base.html" %}
+{% block title %}{{ staff.name }} · 员工档案{% endblock %}
+
+{% block body %}
+
+<style>
+  .sd-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .sd-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .sd-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .sd-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .sd-head {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    gap: 24px; margin-bottom: 8px;
+  }
+  .sd-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .sd-head .pill-status {
+    display: inline-block; font-family: var(--font-serif); font-style: italic;
+    font-size: 10pt; padding: 2px 12px; margin-left: 14px;
+    border: 0.5px solid var(--hair); letter-spacing: 1.5px;
+    vertical-align: 6px;
+  }
+  .sd-head .pill-status.ok { color: var(--accent-green); border-color: var(--accent-green); }
+  .sd-head .pill-status.warn { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .sd-head .pill-status.gray { color: var(--ink-3); border-color: var(--hair); }
+  .sd-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 10px;
+  }
+  hr.sd-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  .sd-msg-ok {
+    border: 0; border-left: 3px solid var(--accent-green);
+    background: #f5f9f6; padding: 10px 16px; margin-bottom: 18px;
+    font-family: var(--font-serif); font-size: 10pt; color: var(--ink-2);
+  }
+  .sd-msg-err {
+    border: 0; border-left: 3px solid var(--accent-red);
+    background: #fcf5f4; padding: 10px 16px; margin-bottom: 18px;
+    font-family: var(--font-serif); font-size: 10pt; color: var(--accent-red);
+  }
+
+  .sd-section { margin-bottom: 32px; }
+  .sd-section-head {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 18px;
+  }
+  .sd-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+  .sd-section-head .count {
+    font-family: var(--font-numeric); font-size: 10pt; color: var(--ink-3);
+    font-feature-settings: "tnum"; font-variant-numeric: tabular-nums;
+  }
+
+  .sd-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 22px 28px; margin-bottom: 4px;
+  }
+  .sd-field-label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-style: italic;
+    margin-bottom: 6px;
+  }
+  .sd-field-value {
+    font-family: var(--font-serif); font-size: 11pt;
+    color: var(--ink); line-height: 1.5;
+  }
+  .sd-field-value.num {
+    font-family: var(--font-numeric); font-variant-numeric: tabular-nums;
+    font-size: 10.5pt;
+  }
+  .sd-field-value.dim { color: var(--ink-3); font-style: italic; }
+
+  .sd-sub-block {
+    margin-top: 24px; padding-top: 18px;
+    border-top: 0.5px solid var(--hair);
+  }
+  .sd-sub-block .sd-sub-label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-style: italic;
+    margin-bottom: 8px;
+  }
+  .sd-sub-block .sd-sub-value {
+    font-family: var(--font-serif); font-size: 11pt;
+    color: var(--ink); line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  /* contracts table */
+  .sd-tbl { width: 100%; border-collapse: collapse; font-family: var(--font-serif); }
+  .sd-tbl thead th {
+    font-size: 9pt; letter-spacing: 2px; color: var(--ink-3);
+    font-weight: 400; font-style: italic;
+    border-bottom: 0.5px solid var(--ink);
+    padding: 10px 12px; text-align: left;
+  }
+  .sd-tbl tbody td {
+    font-size: 10pt; color: var(--ink-2);
+    border-bottom: 0.5px solid var(--hair);
+    padding: 12px; vertical-align: middle;
+  }
+  .sd-tbl tbody td.num {
+    font-family: var(--font-numeric); font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .sd-tbl tbody tr.expired td { color: var(--ink-3); }
+  .sd-tbl tbody tr:hover td { background: var(--bg); }
+  .sd-empty {
+    font-family: var(--font-serif); font-style: italic;
+    color: var(--ink-3); font-size: 10pt; padding: 18px 4px;
+  }
+
+  .sd-pill {
+    display: inline-block; font-family: var(--font-serif); font-style: italic;
+    font-size: 9pt; padding: 2px 10px;
+    border: 0.5px solid var(--hair); letter-spacing: 1.5px;
+    color: var(--ink-2);
+  }
+  .sd-pill.ok { color: var(--accent-green); border-color: var(--accent-green); }
+  .sd-pill.warn { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .sd-pill.err { color: var(--accent-red); border-color: var(--accent-red); }
+  .sd-pill.gray { color: var(--ink-3); border-color: var(--hair); }
+
+  .sd-btn-edit {
+    background: var(--ink); color: var(--paper); border: 0;
+    padding: 8px 18px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10pt;
+    letter-spacing: 2px; font-weight: 700; text-decoration: none;
+    display: inline-block;
+  }
+  .sd-btn-edit:hover { background: #000; }
+  .sd-btn-add {
+    background: var(--paper); color: var(--ink-2);
+    border: 0.5px solid var(--hair);
+    padding: 6px 14px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10pt;
+    font-style: italic; text-decoration: none;
+  }
+  .sd-btn-add:hover { color: var(--ink); border-color: var(--ink-3); background: var(--bg); }
+  .sd-btn-back {
+    background: var(--paper); color: var(--ink-2);
+    border: 0.5px solid var(--hair);
+    padding: 6px 14px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10pt;
+    font-style: italic; text-decoration: none;
+    display: inline-block;
+  }
+  .sd-btn-back:hover { color: var(--ink); border-color: var(--ink-3); background: var(--bg); }
+  .sd-btn-del {
+    background: var(--paper); color: var(--accent-red);
+    border: 0.5px solid var(--accent-red);
+    padding: 4px 10px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 9pt;
+    font-style: italic;
+  }
+  .sd-btn-del:hover { background: #fcf5f4; }
+
+  /* add contract form */
+  .sd-add-form {
+    background: var(--bg); border: 0.5px solid var(--hair);
+    padding: 18px 20px; margin-bottom: 22px;
+  }
+  .sd-add-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 12px; }
+  .sd-add-form .row.full { grid-template-columns: 1fr; }
+  .sd-add-form label {
+    display: block; font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-style: italic; margin-bottom: 6px;
+  }
+  .sd-add-form input[type=text], .sd-add-form input[type=date],
+  .sd-add-form input[type=file], .sd-add-form select {
+    width: 100%; box-sizing: border-box;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 8px 12px;
+    outline: 0; height: 38px; line-height: 1.4; border-radius: 0;
+  }
+  .sd-add-form input:focus, .sd-add-form select:focus { border-color: var(--ink); }
+  .sd-add-form .actions { display: flex; gap: 12px; padding-top: 12px; border-top: 0.5px solid var(--hair); margin-top: 8px; }
+  .sd-add-form .actions button[type=submit] {
+    background: var(--ink); color: var(--paper); border: 0;
+    padding: 8px 22px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10pt;
+    letter-spacing: 2px; font-weight: 700;
+  }
+
+  .sd-bottom-bar {
+    display: flex; gap: 14px; padding-top: 20px; margin-top: 24px;
+    border-top: 0.5px solid var(--hair);
+  }
+</style>
+
+<div class="sd-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  <a href="/admin/hr">人事管理</a>
+  <span class="sep">/</span>
+  <span>{{ staff.name }}</span>
+</div>
+
+{% if msg %}<div class="sd-msg-ok">{{ msg }}</div>{% endif %}
+{% if err %}<div class="sd-msg-err">{{ err }}</div>{% endif %}
+
+<div class="sd-head">
+  <div>
+    <h1>
+      {{ staff.name }}
+      {% if staff.status == 'probation' %}<span class="pill-status warn">试&nbsp;用&nbsp;中</span>
+      {% elif staff.status == 'resigned' %}<span class="pill-status gray">已&nbsp;离&nbsp;职</span>
+      {% else %}<span class="pill-status ok">在&nbsp;职</span>{% endif %}
+      <span class="sub">{{ staff.position or '未填职位' }}{% if staff.store %} · {{ staff.store }}{% endif %}</span>
+    </h1>
+  </div>
+  {% if is_superadmin %}
+  <div>
+    <a href="/admin/staff/{{ staff.id }}/edit" class="sd-btn-edit">编&nbsp;辑&nbsp;档&nbsp;案</a>
+  </div>
+  {% endif %}
+</div>
+
+<hr class="sd-rule-double"/>
+
+{# ── 基本档案 ── #}
+<div class="sd-section">
+  <div class="sd-section-head"><h2>基&nbsp;本&nbsp;档&nbsp;案</h2></div>
+
+  <div class="sd-grid">
+    <div>
+      <div class="sd-field-label">手&nbsp;机&nbsp;号</div>
+      <div class="sd-field-value num">{{ staff.phone or '—' }}</div>
+    </div>
+    <div>
+      <div class="sd-field-label">性&nbsp;别</div>
+      <div class="sd-field-value">
+        {% if staff.gender == 'male' %}男{% elif staff.gender == 'female' %}女{% else %}<span class="dim">—</span>{% endif %}
+      </div>
+    </div>
+    <div>
+      <div class="sd-field-label">生&nbsp;日</div>
+      <div class="sd-field-value num">{{ staff.birthday or '—' }}</div>
+    </div>
+    <div>
+      <div class="sd-field-label">身&nbsp;份&nbsp;证</div>
+      <div class="sd-field-value num">
+        {% if staff.id_number and staff.id_number|length > 10 %}{{ staff.id_number[:6] }}****{{ staff.id_number[-4:] }}
+        {% elif staff.id_number %}{{ staff.id_number }}
+        {% else %}—{% endif %}
+      </div>
+    </div>
+    <div>
+      <div class="sd-field-label">入&nbsp;职&nbsp;日&nbsp;期</div>
+      <div class="sd-field-value num">{{ staff.hire_date or '—' }}</div>
+    </div>
+    <div>
+      <div class="sd-field-label">试&nbsp;用&nbsp;期&nbsp;结&nbsp;束</div>
+      <div class="sd-field-value num">{{ staff.probation_end_date or '—' }}</div>
+    </div>
+    {% if staff.status == 'resigned' %}
+    <div>
+      <div class="sd-field-label">离&nbsp;职&nbsp;日&nbsp;期</div>
+      <div class="sd-field-value num">{{ staff.resign_date or '—' }}</div>
+    </div>
+    <div>
+      <div class="sd-field-label">离&nbsp;职&nbsp;原&nbsp;因</div>
+      <div class="sd-field-value">{{ staff.resign_reason or '—' }}</div>
+    </div>
+    {% endif %}
+    {% if staff.admin_user %}
+    <div>
+      <div class="sd-field-label">关&nbsp;联&nbsp;账&nbsp;号</div>
+      <div class="sd-field-value">{{ staff.admin_user.username }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if staff.emergency_contact_name or staff.emergency_contact_phone %}
+  <div class="sd-sub-block">
+    <div class="sd-sub-label">紧&nbsp;急&nbsp;联&nbsp;系&nbsp;人</div>
+    <div class="sd-sub-value">
+      {{ staff.emergency_contact_name }}{% if staff.emergency_contact_relation %}（{{ staff.emergency_contact_relation }}）{% endif %}{% if staff.emergency_contact_phone %} · <span style="font-family:var(--font-numeric);">{{ staff.emergency_contact_phone }}</span>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if staff.notes %}
+  <div class="sd-sub-block">
+    <div class="sd-sub-label">备&nbsp;注</div>
+    <div class="sd-sub-value">{{ staff.notes }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{# ── 合同记录 ── #}
+<div class="sd-section">
+  <div class="sd-section-head">
+    <h2>合&nbsp;同&nbsp;记&nbsp;录 <span class="count">（{{ contracts|length }}）</span></h2>
+    {% if is_superadmin %}
+    <a href="javascript:void(0)" onclick="toggleAddContract()" class="sd-btn-add">＋ 添&nbsp;加&nbsp;合&nbsp;同</a>
+    {% endif %}
+  </div>
+
+  {% if is_superadmin %}
+  <div id="add-contract-form" class="sd-add-form" style="display:none;">
+    <form method="post" action="/admin/staff/{{ staff.id }}/contracts/create" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div class="row">
+        <div>
+          <label>合&nbsp;同&nbsp;类&nbsp;型</label>
+          <select name="contract_type">
+            <option value="formal">正式合同</option>
+            <option value="probation">试用期合同</option>
+            <option value="parttime">兼职合同</option>
+            <option value="labor">劳务合同</option>
+          </select>
+        </div>
+        <div>
+          <label>合&nbsp;同&nbsp;文&nbsp;件（PDF / 图片 / Word）</label>
+          <input type="file" name="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"/>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>合&nbsp;同&nbsp;开&nbsp;始&nbsp;日&nbsp;期</label>
+          <input type="date" name="start_date"/>
+        </div>
+        <div>
+          <label>合&nbsp;同&nbsp;结&nbsp;束&nbsp;日&nbsp;期（留&nbsp;空&nbsp;= 无&nbsp;固&nbsp;定&nbsp;期&nbsp;限）</label>
+          <input type="date" name="end_date"/>
+        </div>
+      </div>
+      <div class="row full">
+        <div>
+          <label>备&nbsp;注</label>
+          <input type="text" name="notes"/>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="submit">保&nbsp;存&nbsp;合&nbsp;同</button>
+        <a href="javascript:void(0)" onclick="toggleAddContract()" class="sd-btn-back">取&nbsp;消</a>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if contracts %}
+  <table class="sd-tbl">
+    <thead>
+      <tr>
+        <th style="width:12%;">类型</th>
+        <th style="width:26%;">有效期</th>
+        <th style="width:12%;">状态</th>
+        <th style="width:22%;">文件</th>
+        <th>备注</th>
+        {% if is_superadmin %}<th style="width:80px;text-align:right;"></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in contracts %}
+      {% set today = now_date %}
+      {% set expired = c.end_date and c.end_date < today %}
+      {% set expiring_soon = c.end_date and not expired and c.end_date <= expiry_30 %}
+      <tr {% if expired %}class="expired"{% endif %}>
+        <td>{{ contract_type_zh.get(c.contract_type, c.contract_type) }}</td>
+        <td class="num">
+          {{ c.start_date or '—' }}
+          {% if c.end_date %} 至 {{ c.end_date }}{% else %} 至 无固定期限{% endif %}
+        </td>
+        <td>
+          {% if not c.end_date %}
+            <span class="sd-pill ok">长期有效</span>
+          {% elif expired %}
+            <span class="sd-pill err">已过期</span>
+          {% elif expiring_soon %}
+            <span class="sd-pill warn">即将到期</span>
+          {% else %}
+            <span class="sd-pill ok">有效</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if c.file_path %}
+            <a href="/admin/staff/{{ staff.id }}/contracts/{{ c.id }}/file" target="_blank" style="color:var(--ink);border-bottom:0.5px solid var(--hair-2);font-size:9.5pt;">{{ c.original_filename or '查看文件' }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td style="color:var(--ink-3);font-style:italic;">{{ c.notes or '—' }}</td>
+        {% if is_superadmin %}
+        <td style="text-align:right;">
+          <form method="post" action="/admin/staff/{{ staff.id }}/contracts/{{ c.id }}/delete"
+                onsubmit="return confirm('确认删除此合同记录？')" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="sd-btn-del">删除</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="sd-empty">暂无合同记录 · 可在右上角 ＋添加合同</div>
+  {% endif %}
+</div>
+
+<div class="sd-bottom-bar">
+  <a href="/admin/hr" class="sd-btn-back">← 返&nbsp;回&nbsp;人&nbsp;事&nbsp;管&nbsp;理</a>
+</div>
+
+<script>
+function toggleAddContract() {
+  var el = document.getElementById('add-contract-form');
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+
+{% endblock %}

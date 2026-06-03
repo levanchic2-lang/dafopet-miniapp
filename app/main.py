@@ -4432,7 +4432,7 @@ async def admin_staff_detail(
     from datetime import date, timedelta
     today = date.today().isoformat()
     expiry_30 = (date.today() + timedelta(days=30)).isoformat()
-    return templates.TemplateResponse(request, "admin_staff_detail.html", {
+    return templates.TemplateResponse(request, "uk/staff_detail.html", {
         "request": request, "title": f"员工档案 · {staff.name}",
         "staff": staff, "contracts": contracts,
         "status_zh": _STAFF_STATUS_ZH, "contract_type_zh": _CONTRACT_TYPE_ZH,
