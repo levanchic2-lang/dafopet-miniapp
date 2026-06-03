@@ -45,19 +45,19 @@
 
   /* 周/日视图 */
   .week-outer { display:flex; flex-direction:column; height:100%; }
-  .week-header-row { display:flex; border-bottom:0.5px solid var(--hair); flex-shrink:0; }
+  .week-header-row { display:flex; border-bottom:1px solid var(--hair); flex-shrink:0; }
   .week-time-gutter { width:56px; flex-shrink:0; }
   .week-header-cols { flex:1; display:grid; }
-  .week-day-head { text-align:center; padding:0.4rem 0.2rem; border-left:0.5px solid var(--hair); font-size:0.82rem; cursor:pointer; user-select:none; }
+  .week-day-head { text-align:center; padding:0.4rem 0.2rem; border-left:1px solid var(--hair); font-size:0.82rem; cursor:pointer; user-select:none; }
   .week-day-head:hover { background:var(--bg); }
   .week-day-head .wdn { color:var(--ink-3); font-size:0.73rem; font-weight:500; letter-spacing:0.02em; }
   .week-day-head .wdd { font-size:1.1rem; font-weight:700; line-height:2; }
   .week-day-head.today-col .wdn { color:var(--ink); font-weight:600; }
   .week-day-head.today-col .wdd { background:var(--ink); color:var(--paper); border-radius:50%; width:2rem; height:2rem; display:inline-flex; align-items:center; justify-content:center; font-size:1rem; }
-  .allday-row { display:flex; border-bottom:0.5px solid var(--hair); flex-shrink:0; min-height:28px; }
+  .allday-row { display:flex; border-bottom:1px solid var(--hair); flex-shrink:0; min-height:28px; }
   .allday-gutter { width:56px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding-right:6px; font-size:0.68rem; color:var(--ink-3); }
   .allday-cols { flex:1; display:grid; }
-  .allday-cell { border-left:0.5px solid var(--hair); padding:2px; display:flex; flex-direction:column; gap:2px; }
+  .allday-cell { border-left:1px solid var(--hair); padding:2px; display:flex; flex-direction:column; gap:2px; }
   .allday-block-pill { font-size:0.71rem; padding:0.1rem 0.35rem; background:#e0e7ff; color:#3730a3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
   .week-scroll { flex:1; overflow-y:auto; position:relative; }
   .week-grid { display:flex; position:relative; }
