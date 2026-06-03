@@ -48,14 +48,25 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
 
   <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;">
-    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('match')">✓ 选中所有"可自动匹配"</button>
-    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('ambiguous')">✓ 选中所有"多候选"</button>
-    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('all')">✓ 全选</button>
+    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('match')"
+            {% if counts.match == 0 %}disabled title="本次没有可自动匹配的条目"{% endif %}>
+      ✓ 选中"可自动匹配"（{{ counts.match }}）
+    </button>
+    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('ambiguous')"
+            {% if counts.ambiguous == 0 %}disabled title="本次没有多候选条目"{% endif %}>
+      ✓ 选中"多候选"（{{ counts.ambiguous }}）
+    </button>
+    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('all')">✓ 全选可改 ({{ counts.match + counts.ambiguous }})</button>
     <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('none')">⊘ 清空</button>
     <span style="flex:1;"></span>
     <span style="font-size:.85rem;color:var(--muted);">已选 <b id="picked-n">0</b> / {{ rows|length }}</span>
     <button type="submit" class="btn" style="background:#16a34a;border-color:#16a34a;">应用选中</button>
   </div>
+  {% if counts.unknown %}
+  <div style="background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;padding:.5rem .75rem;border-radius:8px;font-size:.85rem;margin-bottom:.6rem;">
+    ⚠ 有 {{ counts.unknown }} 个品目「找不到匹配」（红底行），勾选框已禁用。请到 <a href="/admin/inventory" style="color:#991b1b;text-decoration:underline;">库存</a> 逐个点详情手动指定大类小类。
+  </div>
+  {% endif %}
 
   <div class="data-table-wrap" style="overflow-x:auto;">
     <table class="data-table" style="font-size:.85rem;min-width:900px;">
@@ -114,12 +125,15 @@ function updateCount() {
 }
 
 function checkAll(kind) {
+  // 'match' / 'ambiguous' = 排他选中（清掉其他，只勾该类）
+  // 'all'  = 勾全部可改
+  // 'none' = 全清
   document.querySelectorAll('.row-cb:not(:disabled)').forEach(cb => {
     const tr = cb.closest('tr');
     const st = tr.dataset.status;
-    if (kind === 'all') cb.checked = true;
+    if (kind === 'all')       cb.checked = true;
     else if (kind === 'none') cb.checked = false;
-    else if (kind === st) cb.checked = true;
+    else                       cb.checked = (kind === st);
   });
   updateCount();
 }
