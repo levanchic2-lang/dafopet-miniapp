@@ -4756,7 +4756,7 @@ async def admin_appointment_create_form(
     # 默认门店：限店员工锁本店；否则用宠物归属门店；否则空
     default_store_short = admin_store or (pet.store if pet else "") or ""
     default_store_full = _STORE_SHORT_TO_FULL.get(default_store_short, "")
-    return templates.TemplateResponse(request, "admin_appointment_create_form.html", {
+    return templates.TemplateResponse(request, "uk/appointment_create.html", {  # B 补 - UK 重写
         "cust": cust, "pet": pet, "pets": pets,
         "default_date": (date or "")[:10],
         "default_time": (time or "")[:5],

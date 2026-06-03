@@ -1,0 +1,232 @@
+{% extends "uk/_base.html" %}
+{% block title %}新建预约 · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  .ac-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .ac-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .ac-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .ac-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .ac-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 24px; margin-bottom: 8px;
+  }
+  .ac-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .ac-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 10px;
+  }
+  .ac-head h1 .sub b { color: var(--ink); font-style: normal; font-weight: 700; }
+  .ac-head h1 .sub .sep { color: var(--ink-4); margin: 0 8px; }
+  hr.ac-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  .ac-section { margin-bottom: 26px; max-width: 900px; }
+  .ac-section-head {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .ac-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+
+  .ac-row { display: grid; gap: 18px; margin-bottom: 14px; }
+  .ac-row.r2 { grid-template-columns: 1fr 1fr; }
+  .ac-row.r3 { grid-template-columns: 1fr 1fr 1fr; }
+  .ac-row.full { grid-template-columns: 1fr; }
+  @media (max-width: 768px) {
+    .ac-row.r2, .ac-row.r3 { grid-template-columns: 1fr; }
+  }
+
+  .ac-field { display: flex; flex-direction: column; gap: 6px; }
+  .ac-field label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-style: italic;
+  }
+  .ac-field label .req { color: var(--accent-red); font-style: normal; margin-left: 2px; }
+  .ac-input, .ac-select {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 8px 12px;
+    outline: 0; width: 100%; box-sizing: border-box;
+    height: 38px; line-height: 1.4;
+  }
+  .ac-input:focus, .ac-select:focus { border-color: var(--ink); }
+
+  .ac-textarea {
+    width: 100%; min-height: 90px;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 10px 14px;
+    line-height: 1.6; resize: vertical; outline: 0;
+    box-sizing: border-box;
+  }
+  .ac-textarea:focus { border-color: var(--ink); }
+
+  .ac-submit-bar {
+    display: flex; gap: 14px; align-items: center;
+    padding-top: 18px; margin-top: 18px;
+    border-top: 0.5px solid var(--hair);
+  }
+  .ac-submit-bar .submit-main {
+    flex: 0 0 auto; min-width: 220px;
+    background: var(--ink); color: var(--paper); border: 0;
+    padding: 12px 32px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 11pt;
+    letter-spacing: 3px; font-weight: 700;
+  }
+  .ac-submit-bar .submit-main:hover { background: #000; }
+</style>
+
+<div class="ac-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  <a href="/admin/appointments">预约管理</a>
+  <span class="sep">/</span>
+  <span>新建预约</span>
+</div>
+
+<div class="ac-head">
+  <div>
+    <h1>
+      新&nbsp;建&nbsp;预&nbsp;约
+      {% if cust or pet %}
+      <span class="sub">
+        {% if cust %}<b>{{ cust.name }}</b>{% if cust.phone %} · {{ cust.phone }}{% endif %}{% endif %}
+        {% if pet %}<span class="sep">·</span>{{ pet.name }}{% endif %}
+      </span>
+      {% endif %}
+    </h1>
+  </div>
+  <div>
+    <a href="javascript:history.back()" class="uk-btn ghost sm">← 返回</a>
+  </div>
+</div>
+
+<hr class="ac-rule-double"/>
+
+<form method="post" action="/admin/appointments/create">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="redirect_after" value="{{ return_to or 'admin' }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+  <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+
+  {# 类型 + 服务项目 #}
+  <div class="ac-section">
+    <div class="ac-section-head"><h2>基&nbsp;础&nbsp;信&nbsp;息</h2></div>
+
+    <div class="ac-row full">
+      <div class="ac-field">
+        <label>预&nbsp;约&nbsp;类&nbsp;型<span class="req">*</span></label>
+        <select name="category" required class="ac-select">
+          {% for k, zh in category_labels.items() %}
+          <option value="{{ k }}" {% if default_category == k %}selected{% endif %}>{{ zh }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="ac-row full">
+      <div class="ac-field">
+        <label>服&nbsp;务&nbsp;项&nbsp;目<span class="req">*</span></label>
+        <input name="service_name" required placeholder="如 体检 / 绝育 / 洗澡 / 接种狂犬" class="ac-input"/>
+      </div>
+    </div>
+  </div>
+
+  {# 客户 + 宠物 #}
+  <div class="ac-section">
+    <div class="ac-section-head"><h2>客&nbsp;户&nbsp;与&nbsp;宠&nbsp;物</h2></div>
+
+    <div class="ac-row r2">
+      <div class="ac-field">
+        <label>客&nbsp;户&nbsp;姓&nbsp;名<span class="req">*</span></label>
+        <input name="customer_name" required value="{{ cust.name if cust else '' }}" class="ac-input"/>
+      </div>
+      <div class="ac-field">
+        <label>手&nbsp;机&nbsp;号<span class="req">*</span></label>
+        <input name="phone" required value="{{ cust.phone if cust else '' }}" class="ac-input"/>
+      </div>
+    </div>
+
+    <div class="ac-row r2">
+      <div class="ac-field">
+        <label>宠&nbsp;物&nbsp;名<span class="req">*</span></label>
+        <input name="pet_name" required value="{{ pet.name if pet else '' }}" class="ac-input"/>
+      </div>
+      <div class="ac-field">
+        <label>宠&nbsp;物&nbsp;性&nbsp;别<span class="req">*</span></label>
+        <select name="pet_gender" required class="ac-select">
+          {% for k, zh in gender_labels.items() %}
+          <option value="{{ k }}" {% if pet and pet.gender == k %}selected{% endif %}>{{ zh }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  {# 门店 + 日期 + 时间 #}
+  <div class="ac-section">
+    <div class="ac-section-head"><h2>时&nbsp;间&nbsp;与&nbsp;门&nbsp;店</h2></div>
+
+    <div class="ac-row r3">
+      <div class="ac-field">
+        <label>门&nbsp;店<span class="req">*</span></label>
+        <select name="store" required class="ac-select">
+          {% for s in store_options %}
+          <option value="{{ s }}" {% if default_store_full == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ac-field">
+        <label>预&nbsp;约&nbsp;日&nbsp;期<span class="req">*</span></label>
+        <input name="appointment_date" type="date" required value="{{ default_date }}" class="ac-input"/>
+      </div>
+      <div class="ac-field">
+        <label>预&nbsp;约&nbsp;时&nbsp;间<span class="req">*</span></label>
+        <input name="appointment_time" type="time" required value="{{ default_time }}" class="ac-input"/>
+      </div>
+    </div>
+
+    <div class="ac-row r2">
+      <div class="ac-field">
+        <label>时&nbsp;长（分&nbsp;钟）</label>
+        <input name="duration_minutes" type="number" min="5" max="480" value="30" class="ac-input"/>
+      </div>
+      <div class="ac-field">
+        <label>关&nbsp;联 TNR 申&nbsp;请 ID（仅 TNR 类 型 用）</label>
+        <input name="related_application_id" placeholder="可选" type="number" min="0" class="ac-input"/>
+      </div>
+    </div>
+  </div>
+
+  {# 备注 #}
+  <div class="ac-section">
+    <div class="ac-section-head"><h2>备&nbsp;注</h2></div>
+    <div class="ac-row full">
+      <div class="ac-field">
+        <textarea name="notes" rows="3" class="ac-textarea" placeholder="可选 · 特殊要求 / 提醒等"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="ac-submit-bar" style="max-width:900px;">
+    <button type="submit" class="submit-main">创&nbsp;建&nbsp;预&nbsp;约</button>
+    <a href="javascript:history.back()" class="uk-btn ghost sm">取&nbsp;消</a>
+  </div>
+</form>
+
+{% endblock %}
