@@ -223,3 +223,84 @@ python _test/shoot.py viewportcheck visit  # 单跑
   - 模型拆分：`OPENAI_MODEL`（TNR 视觉审核用 doubao-1-5-vision-pro）/ `WECOM_AGENT_MODEL`（agent 用 doubao-1-5-pro 或 lite，便宜 3-4 倍；空则回退 OPENAI_MODEL）
   - 复用今日病历：`_resolve_or_list_visit` 自动找当天 open visit；无则列最近 3 次未结束病历让用户选「用病历 #N」/「新建病历」
   - 默认门店：`AdminUser.store` 直读（含超管，让超管也能有"常驻门店"）
+
+## UK 风格规范（B 系列重写）
+桌面后台正在按英伦极简（UK Minimal）风格分页重写。**所有新页 / 新模板必须严格遵守 7 条核心 + 9 条禁忌**，否则验收必退。
+
+### 7 条核心
+1. **字体全衬线 + 数字等宽**
+   - 中文 fallback：`Georgia, "Times New Roman", "Source Han Serif SC", serif`
+   - 数字：`tabular-nums lining-nums`，比正文略小 0.5pt
+   - italic 只用于标签 / 小灰字 / 占位，**正经导航必须正体**
+2. **颜色：纯黑 + 3 层灰 + 3 暗警示**
+   - 文字：`#1a1a1a` / `#4a4a4a` / `#8a8a8a`
+   - 强调：纯黑 `#1a1a1a`，**不是蓝**
+   - 警示：暗红 `#7a2828` / 暗琥珀 `#6b4423` / 暗绿 `#1d4d3a`
+3. **分隔：hairline 优先**
+   - `0.5px solid var(--hair)` 做一切分组
+   - section 之间靠**留白 40px**，不用 card 阴影
+   - 真强调用 `双横线`；圆角 = 0，阴影 = none
+4. **容器宽度 1280px**（不是 1480；1280 = 个人/书页感，1480 = 工业感）
+5. **节奏：留白 > 内容**
+   - 标题下 32px 才开始内容；区块间 40px；行高 1.7-1.8
+   - "宁愿翻一下，不要挤"
+6. **读写分离**（用户最强直觉，违反必退）
+   - 主区 tab = **看**（纯展示）
+   - 侧栏 = **做**（新建 / 操作动作）
+   - 严禁在主 tab 内放 CREATE 按钮
+7. **tab/nav 节制**
+   - 一行最多 8 个，超过分流到侧栏列表
+   - **不带 `(N)` 计数 badge**（噪声）
+   - active = 加粗 + 1px 下划线，**禁 italic 长 nav**
+
+### 9 条禁忌（错过会退）
+- ❌ 任何 emoji
+- ❌ 任何英文文案（含"est. 2024"、nav 英文、payment_method 直显 `wechat`/`cash`、状态字面 raw 落库）
+- ❌ 圆角 + 阴影
+- ❌ 饱和蓝色
+- ❌ tab 后挂 `(N)` 计数
+- ❌ 主区放 CREATE 按钮
+- ❌ italic + `·` 分隔做长 nav（之前换行破碎）
+- ❌ 顶部塞 chips 概要（信息密度过高，丢去侧栏 stat）
+- ❌ 容器宽 1480
+
+### 每个 tab/页面强制 4 段式
+1. **顶上工具栏**：`+ 新建` 按钮 + 筛选（如果有）
+2. **数据**：表或卡片时间线
+   - 列表型 → `<table class="uk-tbl-tab">`
+   - 详情型 / 时间线 → 卡片
+3. **空态**：italic 灰字 `"暂无 XX · 可在右侧 +新建 XX"`
+4. **分页**：底部 `共 N 条` + hairline
+
+### 关键文件
+- `static/uk_minimal.css`（~600 行）：设计系统
+  - 变量 `--ink/--paper/--bg/--hair/--accent-red/...`
+  - 组件 `.uk-card/.uk-btn/.uk-tbl/.uk-pill/.uk-kpi/.uk-tabs/.uk-filter/.uk-pager/.uk-msg`
+- `static/uk_global.css`（411 行）：overlay 层
+  - 映射老类名 `.btn/.card/.page-head/.data-table/.msg/.pill/.badge/.filter-card`
+- `templates/uk/_base.html`：UK 桌面基础页（不 extends base.html）
+- `templates/uk/workbench.html`：今日工作台（B1）
+- `templates/uk/customer.html`：客户档案 Hub（B3 完整三段 B3.1/3.2/3.3）
+
+### 完成进度
+- ✅ B1 今日工作台 + 全局顶部条
+- ✅ B3.1 客户档案 Hub（主区 + 侧栏 + 8 个医疗 tab 中 6 个）
+- ✅ B3.2 8 个低频 tab 内容（销售/收费/体重/文书/钱包/套餐/押金/优惠券）
+- ✅ B3.3 6 个新建 modal（协议签署/钱包充值/售套餐/收押金/发优惠券/发短信）+ 宠物编辑入口
+- ⏳ B4 库存列表
+- ⏳ B5 病历详情/表单（SOAP 必须罗马数字 I./II./III.）
+- ⏳ B6 住院看板
+- ⏳ B7 住院详情
+- ⏳ B8 收费单详情
+- ⏳ B9 预约管理
+- ⏳ B10 HR 人事
+
+### 不做
+- 打印页（处方/收费/检查）已是行业标准格式，**不动**
+- 手机 PWA（M0-M6）独立体系，**不动**
+
+### 常见 bug 教训
+- **Jinja2 dict.attr 陷阱**：context dict 必须用 `dict['key']` 访问，不要 `dict.key`。Jinja 优先下标，失败回退 `getattr`，命中 dict 内置 `items/keys/values/get/pop/update` 返回 bound method，500。
+- **CSS 优先级**：内联 `style="..."` > 外部 `!important`。改色生效不了先查内联。
+- **wallet 对象 vs wallet_balance**：context 传 `wallet_balance` 标量，不是 `wallet` 对象；模板写 `wallet.balance` 会 500（因为 wallet 变量不存在 → undefined.balance）。
+- **支付方式英文落库**：模板顶部需要 `pay_method_zh` 映射表覆盖 11 种（cash/wechat/alipay/shouqianba/meituan/third_party/wallet/package/deposit/coupon/mixed）
