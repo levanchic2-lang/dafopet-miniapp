@@ -20394,6 +20394,25 @@ async def m_api_presc_template(
 async def m_visit_detail(visit_id: int, request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse(f"/admin/login?next=/m/visit/{visit_id}", status_code=303)
+    # 一次性 debug：?debug=1 时返回 traceback 而不是 500
+    _debug_mode = request.query_params.get("debug") == "1"
+    try:
+        return await _m_visit_detail_impl(visit_id, request, db)
+    except HTTPException:
+        raise
+    except Exception as _e:
+        if _debug_mode:
+            import traceback
+            return HTMLResponse(
+                "<pre style='font-size:12px;padding:1em;'>"
+                + traceback.format_exc().replace("<", "&lt;")
+                + "</pre>",
+                status_code=500,
+            )
+        raise
+
+
+async def _m_visit_detail_impl(visit_id: int, request: Request, db: Session):
     v = db.get(Visit, visit_id)
     if not v:
         raise HTTPException(404)
@@ -20409,9 +20428,15 @@ async def m_visit_detail(visit_id: int, request: Request, db: Session = Depends(
     for eo in exam_orders:
         try:
             items = json.loads(eo.items_json or "[]")
+            if not isinstance(items, list):
+                items = []
         except Exception:
             items = []
-        exam_rows.append({"eo": eo, "items": items, "reports": eo.reports})
+        try:
+            reports = list(eo.reports or [])
+        except Exception:
+            reports = []
+        exam_rows.append({"eo": eo, "items": items, "reports": reports})
 
     # 视觉对齐：vaccinations / dewormings 与 visit 时间窗口
     vaccinations = []
