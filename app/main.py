@@ -11474,7 +11474,7 @@ async def page_admin_anesth_new(visit_id: int, request: Request, db: Session = D
         ctx["anesth_history"] = db.query(AnesthesiaOrder).filter(
             AnesthesiaOrder.pet_id == pet.id
         ).order_by(AnesthesiaOrder.id.desc()).limit(10).all()
-    return templates.TemplateResponse(request, "admin_anesthesia_form.html", ctx)
+    return templates.TemplateResponse(request, "uk/anesthesia.html", ctx)  # B8.5 UK 重写
 
 
 @app.post("/admin/anesthesia/create")
@@ -11579,7 +11579,7 @@ async def page_admin_anesth_detail(order_id: int, request: Request, db: Session 
             AnesthesiaOrder.id != order_id,
         ).order_by(AnesthesiaOrder.id.desc()).limit(10).all()
     ctx["msg"] = request.query_params.get("msg")
-    return templates.TemplateResponse(request, "admin_anesthesia_form.html", ctx)
+    return templates.TemplateResponse(request, "uk/anesthesia.html", ctx)  # B8.5 UK 重写
 
 
 @app.post("/admin/anesthesia/{order_id}/copy-as-new")
