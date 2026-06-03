@@ -1,0 +1,810 @@
+{% extends "uk/_base.html" %}
+{% block title %}住院 #{{ h.id }} · {{ pet.name if pet else '宠物' }} · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  /* ── 通用 ── */
+  .ipd-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .ipd-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .ipd-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .ipd-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .ipd-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 32px; margin-bottom: 8px;
+  }
+  .ipd-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .ipd-head h1 .hash {
+    font-family: var(--font-numeric); font-size: 20pt; color: var(--ink-3);
+    font-weight: 400; vertical-align: 4px;
+  }
+  .ipd-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2.5px; margin-top: 12px;
+  }
+  .ipd-head h1 .sub b { color: var(--ink); font-style: normal; font-weight: 700; }
+  .ipd-head h1 .sub .sep { color: var(--ink-4); margin: 0 8px; }
+  .ipd-head h1 .sub a { color: var(--ink); border-bottom: 0.5px solid var(--ink-3); }
+
+  hr.ipd-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  /* 状态横幅 */
+  .ipd-banner {
+    border-left: 3px solid; padding: 12px 18px;
+    margin-bottom: 24px;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    letter-spacing: 1px; color: var(--ink-2);
+  }
+  .ipd-banner b { color: var(--ink); font-weight: 700; letter-spacing: 2px; }
+  .ipd-banner.admitted   { border-color: var(--accent-green); background: #f5f9f6; }
+  .ipd-banner.discharged { border-color: var(--accent-amber); background: #fbfaf6; }
+  .ipd-banner.cancelled  { border-color: var(--ink-3);       background: var(--bg); }
+  .ipd-banner .nums { font-family: var(--font-numeric); }
+
+  /* 最新交班 alert */
+  .ipd-handover-alert {
+    display: flex; gap: 16px; align-items: flex-start;
+    padding: 14px 18px; margin-bottom: 28px;
+    border-left: 3px solid var(--accent-amber);
+    background: #fdfaf2;
+  }
+  .ipd-handover-alert .meta {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 1.5px; color: var(--ink-3);
+    font-style: italic; margin-bottom: 6px;
+    white-space: nowrap;
+  }
+  .ipd-handover-alert .meta b {
+    font-style: normal; font-weight: 700;
+    color: var(--ink); letter-spacing: 2px;
+  }
+  .ipd-handover-alert .content {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); line-height: 1.6; white-space: pre-wrap;
+  }
+  .ipd-handover-alert a {
+    color: var(--ink-2); border-bottom: 0.5px solid var(--ink-3);
+    padding-bottom: 1px; font-size: 9pt; font-style: italic; flex-shrink: 0;
+  }
+
+  /* ── grid main + aside ── */
+  .ipd-grid {
+    display: grid; grid-template-columns: 1fr 300px;
+    gap: 36px; align-items: start;
+  }
+  @media (max-width: 900px) {
+    .ipd-grid { grid-template-columns: 1fr; }
+  }
+
+  /* section card */
+  .ipd-section { margin-bottom: 40px; }
+  .ipd-section-head {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 18px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .ipd-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+  .ipd-section-head .count {
+    font-family: var(--font-numeric); font-size: 10pt; color: var(--ink-3);
+  }
+  .ipd-section-head .actions { display: flex; gap: 10px; align-items: center; }
+  .ipd-section-head .stat { font-family: var(--font-serif); font-size: 10pt; color: var(--ink-3); letter-spacing: 1px; }
+  .ipd-section-head .stat b { font-family: var(--font-numeric); color: var(--ink); font-style: normal; }
+  .ipd-section-head .stat b.over { color: var(--accent-amber); }
+  .ipd-section-head .stat b.warn { color: var(--accent-red); }
+
+  /* 住院信息 info-line */
+  .ipd-info-line {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 8px 0; border-bottom: 0.5px solid var(--hair);
+    font-size: 10pt;
+  }
+  .ipd-info-line:last-child { border-bottom: 0; }
+  .ipd-info-line .lbl { color: var(--ink-3); font-style: italic; letter-spacing: 1px; }
+  .ipd-info-line .val { color: var(--ink); font-family: var(--font-numeric); }
+  .ipd-info-line .val.txt { font-family: var(--font-serif); }
+
+  /* 入院原因 / 出院小结 */
+  .ipd-prose {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); line-height: 1.7; white-space: pre-wrap;
+  }
+
+  /* 漏药警示 */
+  .ipd-overdue {
+    border-left: 3px solid var(--accent-red);
+    background: #fcf5f4; padding: 12px 16px;
+    margin-bottom: 16px;
+    font-family: var(--font-serif); font-size: 10pt;
+  }
+  .ipd-overdue b { color: var(--accent-red); letter-spacing: 1.5px; }
+  .ipd-overdue ul { margin: 6px 0 0; padding-left: 20px; color: var(--ink-2); font-size: 9.5pt; }
+
+  /* 用药任务行 */
+  .ipd-med {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 14px; margin-bottom: 8px;
+    border: 0.5px solid var(--hair);
+  }
+  .ipd-med.done    { background: #f5f9f6; border-color: #d0e4d4; }
+  .ipd-med.skipped { background: var(--bg); }
+  .ipd-med.overdue { background: #fcf5f4; border-color: #e8c8c5; }
+  .ipd-med .time {
+    font-family: var(--font-numeric); font-size: 13pt; font-weight: 700;
+    color: var(--ink); min-width: 56px; letter-spacing: 1.5px;
+  }
+  .ipd-med.overdue .time { color: var(--accent-red); }
+  .ipd-med.done    .time { color: var(--accent-green); }
+  .ipd-med .body { flex: 1; min-width: 0; }
+  .ipd-med .drug {
+    font-family: var(--font-serif); font-size: 11pt; font-weight: 700;
+    color: var(--ink);
+  }
+  .ipd-med .drug .dose {
+    font-weight: 400; color: var(--ink-3); font-size: 9.5pt;
+    margin-left: 8px; font-style: italic; letter-spacing: 1px;
+  }
+  .ipd-med .ins {
+    font-size: 9pt; color: var(--ink-3); margin-top: 2px;
+    font-style: italic;
+  }
+  .ipd-med .signoff {
+    font-size: 8.5pt; color: var(--accent-green); margin-top: 4px;
+    font-family: var(--font-numeric); letter-spacing: 1px;
+  }
+  .ipd-med .signoff.skip { color: var(--ink-3); font-style: italic; }
+  .ipd-med .btn-check {
+    background: var(--accent-green); color: var(--paper);
+    border: 0; padding: 8px 18px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    letter-spacing: 2px; font-weight: 700;
+  }
+  .ipd-med .btn-check:hover { background: #163a2c; }
+  .ipd-med .btn-skip, .ipd-med .btn-undo {
+    background: transparent; border: 0.5px solid var(--hair);
+    padding: 6px 10px; cursor: pointer; color: var(--ink-3);
+    font-family: var(--font-serif); font-size: 9.5pt;
+    font-style: italic;
+  }
+  .ipd-med .btn-skip:hover, .ipd-med .btn-undo:hover {
+    color: var(--ink); border-color: var(--ink-3);
+  }
+  .ipd-med-skip-form {
+    position: absolute; background: var(--paper); border: 0.5px solid var(--ink);
+    padding: 10px; box-shadow: 0 4px 12px rgba(0,0,0,.06); z-index: 10;
+    margin-top: 4px; min-width: 220px;
+  }
+
+  /* 表单 grid（体征 / IO / 进食 / 交班） */
+  .ipd-form { margin-bottom: 20px; }
+  .ipd-form-grid {
+    display: grid; gap: 8px; margin-bottom: 10px;
+  }
+  .ipd-form-grid.vitals    { grid-template-columns: repeat(6, 1fr) auto; }
+  .ipd-form-grid.io        { grid-template-columns: 90px 130px 100px 1fr auto; }
+  .ipd-form-grid.feed      { grid-template-columns: 1.3fr 100px 100px 130px auto; }
+  .ipd-form-grid.handover  { grid-template-columns: 120px auto; }
+  .ipd-input, .ipd-select, .ipd-textarea {
+    font-family: var(--font-serif); font-size: 10pt; color: var(--ink);
+    background: var(--paper); border: 0.5px solid var(--hair);
+    padding: 7px 10px; outline: 0; box-sizing: border-box;
+    height: 34px;
+  }
+  .ipd-input:focus, .ipd-select:focus, .ipd-textarea:focus { border-color: var(--ink); }
+  .ipd-textarea {
+    height: auto; line-height: 1.6; padding: 10px 12px;
+    resize: vertical; width: 100%;
+  }
+  .ipd-form-grid input[type=text], .ipd-form-grid input[type=number], .ipd-form-grid select {
+    font-family: var(--font-serif); font-size: 10pt; color: var(--ink);
+    background: var(--paper); border: 0.5px solid var(--hair);
+    padding: 7px 10px; outline: 0; box-sizing: border-box; height: 34px;
+  }
+  .ipd-form-grid input:focus, .ipd-form-grid select:focus { border-color: var(--ink); }
+  .ipd-form-grid input.full { grid-column: 1 / -1; }
+  .ipd-form-grid .btn-record {
+    background: var(--ink); color: var(--paper); border: 0;
+    font-family: var(--font-serif); font-size: 10pt; font-weight: 700;
+    letter-spacing: 2px; padding: 7px 18px; cursor: pointer;
+    height: 34px; white-space: nowrap;
+  }
+  .ipd-form-grid .btn-record:hover { background: #000; }
+
+  /* 表格 */
+  .ipd-tbl { width: 100%; border-collapse: collapse; }
+  .ipd-tbl thead th {
+    text-align: left; font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-weight: 400;
+    padding: 8px 6px; border-bottom: 0.5px solid var(--hair);
+  }
+  .ipd-tbl thead th.right { text-align: right; }
+  .ipd-tbl tbody td {
+    padding: 9px 6px; border-bottom: 0.5px solid var(--hair);
+    font-size: 9.5pt; vertical-align: middle;
+  }
+  .ipd-tbl tbody td.num {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .ipd-tbl tbody td.over { color: var(--accent-red); font-weight: 700; }
+  .ipd-tbl tbody td.muted { color: var(--ink-3); font-style: italic; }
+  .ipd-tbl tbody tr:hover td { background: var(--bg); }
+  .ipd-tbl .del-btn {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--accent-red); font-size: 10pt;
+  }
+
+  /* IO / 进食 / 交班 行式记录 */
+  .ipd-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; margin-bottom: 6px;
+    border: 0.5px solid var(--hair);
+    font-family: var(--font-serif); font-size: 10pt;
+  }
+  .ipd-row.in    { background: #f8faf8; }
+  .ipd-row.out   { background: #fbfaf6; }
+  .ipd-row .dir {
+    font-weight: 700; letter-spacing: 2px; color: var(--ink);
+    min-width: 28px; font-size: 10.5pt;
+  }
+  .ipd-row .cat { min-width: 80px; color: var(--ink-2); }
+  .ipd-row .amt {
+    font-family: var(--font-numeric); font-weight: 700;
+    min-width: 70px; color: var(--ink);
+  }
+  .ipd-row .note { color: var(--ink-3); flex: 1; min-width: 0; font-size: 9.5pt; font-style: italic; }
+  .ipd-row .meta {
+    color: var(--ink-3); font-size: 8.5pt; font-family: var(--font-numeric);
+    letter-spacing: 0.5px; font-style: italic;
+  }
+
+  /* 进食 */
+  .ipd-feed.bad  { background: #fcf5f4; }
+  .ipd-feed.mid  { background: #fdfaf2; }
+  .ipd-feed.good { background: #f5f9f6; }
+  .ipd-feed .food { font-weight: 700; min-width: 120px; color: var(--ink); }
+  .ipd-feed .ate { font-family: var(--font-numeric); min-width: 90px; color: var(--ink); }
+  .ipd-feed .pct { font-family: var(--font-numeric); min-width: 50px; color: var(--ink-3); }
+  .ipd-feed .score {
+    border: 0.5px solid var(--hair); padding: 2px 8px;
+    font-size: 9pt; color: var(--ink-2); letter-spacing: 1px;
+  }
+
+  /* 交班 */
+  .ipd-handover {
+    display: flex; gap: 16px; padding: 12px 16px;
+    border: 0.5px solid var(--hair);
+    border-left: 3px solid var(--ink-3);
+    margin-bottom: 8px; background: var(--paper);
+  }
+  .ipd-handover.morning   { border-left-color: var(--ink); }
+  .ipd-handover.afternoon { border-left-color: var(--accent-amber); }
+  .ipd-handover.night     { border-left-color: var(--ink-2); }
+  .ipd-handover.latest    { background: #fdfaf2; }
+  .ipd-handover .meta {
+    min-width: 100px; font-size: 9pt;
+    color: var(--ink-3); font-style: italic; line-height: 1.6;
+    font-family: var(--font-serif);
+  }
+  .ipd-handover .meta .shift-name { color: var(--ink); font-weight: 700; font-style: normal; letter-spacing: 2px; }
+  .ipd-handover .content {
+    flex: 1; font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); line-height: 1.65; white-space: pre-wrap;
+  }
+  .ipd-handover .del-btn {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--accent-red); font-size: 11pt; align-self: flex-start;
+  }
+
+  /* 空态 */
+  .ipd-empty {
+    color: var(--ink-3); font-style: italic;
+    font-size: 9.5pt; padding: 14px 0; letter-spacing: 1px;
+  }
+
+  /* ── 侧栏 ── */
+  .ipd-aside { display: flex; flex-direction: column; gap: 18px; }
+  .ipd-aside-card {
+    border: 0.5px solid var(--hair-2);
+    padding: 16px 18px; background: var(--paper);
+  }
+  .ipd-aside-card h3 {
+    margin: 0 0 12px;
+    font-family: var(--font-serif); font-size: 10pt;
+    letter-spacing: 3px; color: var(--ink); font-weight: 700;
+  }
+  .ipd-aside-card label {
+    font-family: var(--font-serif); font-size: 9pt; color: var(--ink-3);
+    font-style: italic; letter-spacing: 1px;
+    display: block; margin-bottom: 4px;
+  }
+  .ipd-aside-card .uk-btn { width: 100%; justify-content: center; }
+  .ipd-aside-card .hint {
+    font-size: 8.5pt; color: var(--ink-3); margin-top: 8px;
+    line-height: 1.6; font-style: italic; letter-spacing: 0.5px;
+  }
+</style>
+
+{% set days = calc_days(h.admitted_at, h.discharged_at or now) %}
+
+{# 面包屑 #}
+<div class="ipd-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  <a href="/admin/inpatient">住院管理</a>
+  <span class="sep">/</span>
+  <span>住院 #{{ h.id }}</span>
+</div>
+
+{# 头部 #}
+<div class="ipd-head">
+  <div>
+    <h1>
+      住院 <span class="hash">#{{ h.id }}</span>
+      <span class="sub">
+        <b>{{ pet.name if pet else '未命名宠物' }}</b>
+        {% if pet and pet.species == 'cat' %}<span class="sep">·</span>猫{% elif pet and pet.species == 'dog' %}<span class="sep">·</span>犬{% endif %}
+        <span class="sep">·</span>{{ cust.name if cust else '客户' }}{% if cust and cust.phone %} · {{ cust.phone }}{% endif %}
+        {% if visit %}<span class="sep">·</span>病历 <a href="/admin/visits/{{ visit.id }}">#{{ visit.id }}</a>{% endif %}
+      </span>
+    </h1>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <a href="/admin/inpatient?status={{ h.status }}" class="uk-btn ghost sm">返回看板</a>
+  </div>
+</div>
+
+<hr class="ipd-rule-double"/>
+
+{# 状态横幅 #}
+{% if h.status == 'admitted' %}
+<div class="ipd-banner admitted">
+  <b>住院中</b> · 已入住 <span class="nums">{{ days }}</span> 天 · 入院 <span class="nums">{{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span>
+</div>
+{% elif h.status == 'discharged' %}
+<div class="ipd-banner discharged">
+  <b>已出院</b> · 共住 <span class="nums">{{ days }}</span> 天 · <span class="nums">{{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }} → {{ h.discharged_at.strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}</span>
+  {% if h.invoice_id %} · <a href="/admin/invoices/{{ h.invoice_id }}" style="color:var(--ink);border-bottom:0.5px solid var(--ink-3);">查看账单</a>{% endif %}
+</div>
+{% else %}
+<div class="ipd-banner cancelled">
+  <b>已取消</b>
+</div>
+{% endif %}
+
+{# 最新交班一句话 #}
+{% if latest_handover %}
+<div class="ipd-handover-alert">
+  <div style="flex:1;min-width:0;">
+    <div class="meta">
+      <b>{{ shift_zh.get(latest_handover.shift, latest_handover.shift) }}交班</b>
+      <span style="margin:0 6px;color:var(--ink-4);">·</span>
+      {{ latest_handover.recorded_by or '—' }}
+      <span style="margin:0 6px;color:var(--ink-4);">·</span>
+      {{ latest_handover.recorded_at.strftime('%m-%d %H:%M') }}
+    </div>
+    <div class="content">{{ latest_handover.content }}</div>
+  </div>
+  <a href="#handover">查看历史</a>
+</div>
+{% endif %}
+
+<div class="ipd-grid">
+  {# ─── 主区 ─── #}
+  <div>
+
+    {# 住院信息 #}
+    <div class="ipd-section">
+      <div class="ipd-section-head"><h2>住&nbsp;院&nbsp;信&nbsp;息</h2></div>
+      <div>
+        <div class="ipd-info-line"><span class="lbl">入院时间</span><span class="val">{{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span></div>
+        <div class="ipd-info-line"><span class="lbl">预计出院</span><span class="val">{{ h.expected_discharge_date or '—' }}</span></div>
+        {% if h.discharged_at %}<div class="ipd-info-line"><span class="lbl">实际出院</span><span class="val">{{ h.discharged_at.strftime('%Y-%m-%d %H:%M') }}</span></div>{% endif %}
+        <div class="ipd-info-line"><span class="lbl">当前笼位</span><span class="val txt">{% if cage %}<b>{{ cage.code }}</b> · {{ kind_zh.get(cage.kind, cage.kind) }} · ¥{{ '%.2f'|format(cage.daily_rate) }}/天{% else %}未指定{% endif %}</span></div>
+        <div class="ipd-info-line"><span class="lbl">日费率</span><span class="val">¥{{ '%.2f'|format(h.daily_rate_override if h.daily_rate_override > 0 else (cage.daily_rate if cage else 0)) }}{% if h.daily_rate_override > 0 %} <span style="font-size:8.5pt;color:var(--ink-3);font-style:italic;">已覆盖笼默认</span>{% endif %}</span></div>
+        <div class="ipd-info-line"><span class="lbl">主治医生</span><span class="val txt">{{ visit.vet_name if visit else '—' }}</span></div>
+        <div class="ipd-info-line"><span class="lbl">记录人</span><span class="val txt">{{ h.created_by or '—' }}</span></div>
+        {% if h.closed_by %}<div class="ipd-info-line"><span class="lbl">出院/取消人</span><span class="val txt">{{ h.closed_by }}</span></div>{% endif %}
+      </div>
+    </div>
+
+    {# 入院原因 #}
+    {% if h.reason %}
+    <div class="ipd-section">
+      <div class="ipd-section-head"><h2>入&nbsp;院&nbsp;原&nbsp;因&nbsp;/&nbsp;病&nbsp;情</h2></div>
+      <div class="ipd-prose">{{ h.reason }}</div>
+    </div>
+    {% endif %}
+
+    {# 出院小结 #}
+    {% if h.discharge_summary %}
+    <div class="ipd-section">
+      <div class="ipd-section-head"><h2>出&nbsp;院&nbsp;小&nbsp;结</h2></div>
+      <div class="ipd-prose">{{ h.discharge_summary }}</div>
+    </div>
+    {% endif %}
+
+    {# ── 用药任务 ── #}
+    <div class="ipd-section" id="meds">
+      <div class="ipd-section-head">
+        <div>
+          <h2>用&nbsp;药&nbsp;任&nbsp;务</h2>
+          {% if today_logs %}
+          <span class="stat">今日 <b>{{ today_logs|selectattr('status', 'equalto', 'done')|list|length }}</b> / <b>{{ today_logs|length }}</b> 已完成</span>
+          {% endif %}
+        </div>
+        {% if visit and h.status == 'admitted' %}
+        <div class="actions">
+          <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 开新处方</a>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if overdue_logs %}
+      <div class="ipd-overdue">
+        <b>漏药 {{ overdue_logs|length }} 次</b> · 昨日及之前
+        <ul>
+          {% for l in overdue_logs[:5] if l.prescription_item %}
+          <li>{{ l.scheduled_at.strftime('%m-%d %H:%M') }} · {{ l.prescription_item.drug_name }}</li>
+          {% endfor %}
+          {% if overdue_logs|length > 5 %}<li>还有 {{ overdue_logs|length - 5 }} 条…</li>{% endif %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if not today_logs and not prescs %}
+      <div class="ipd-empty" style="text-align:center;padding:32px 0;">
+        尚未开处方
+        {% if visit and h.status == 'admitted' %}<br/><a href="/admin/prescriptions/create?visit_id={{ visit.id }}" style="color:var(--ink);border-bottom:0.5px solid var(--ink-3);font-style:normal;">开第一张处方 →</a>{% endif %}
+      </div>
+      {% elif not today_logs %}
+      <div class="ipd-empty">
+        今日无发药任务。已有 {{ prescs|length }} 张处方，但都未填「住院发药时刻」 —— 去处方明细填上 24h 时间（如 8,14,20）就会自动生成任务。
+      </div>
+      {% else %}
+      <div>
+        {% for l in today_logs if l.prescription_item %}
+        {% set overdue = (l.status == 'pending' and l.scheduled_at < now) %}
+        <div class="ipd-med {{ 'done' if l.status == 'done' else 'skipped' if l.status == 'skipped' else 'overdue' if overdue else '' }}">
+          <div class="time">{{ l.scheduled_at.strftime('%H:%M') }}</div>
+          <div class="body">
+            <div class="drug">{{ l.prescription_item.drug_name }}<span class="dose">{{ l.prescription_item.dose_amount }}{{ l.prescription_item.dose_unit }} · 第 {{ l.day_index }} 天第 {{ l.dose_index }} 次</span></div>
+            {% if l.prescription_item.instructions %}<div class="ins">{{ l.prescription_item.instructions }}</div>{% endif %}
+            {% if l.status == 'done' %}
+            <div class="signoff">✓ {{ l.administered_by or '—' }} · {{ l.administered_at.strftime('%H:%M') if l.administered_at else '' }}{% if l.dose_actual %} · 实际 {{ l.dose_actual }}{% endif %}{% if l.notes %} · {{ l.notes }}{% endif %}</div>
+            {% elif l.status == 'skipped' %}
+            <div class="signoff skip">跳过 by {{ l.administered_by or '—' }}{% if l.notes %} · {{ l.notes }}{% endif %}</div>
+            {% endif %}
+          </div>
+          {% if l.status == 'pending' and h.status == 'admitted' %}
+          <form method="post" action="/admin/medication-log/{{ l.id }}/check" style="margin:0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="btn-check">打&nbsp;勾</button>
+          </form>
+          <details style="margin:0;position:relative;">
+            <summary class="btn-skip" style="cursor:pointer;list-style:none;">跳过</summary>
+            <form method="post" action="/admin/medication-log/{{ l.id }}/skip" class="ipd-med-skip-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+              <input name="notes" placeholder="跳过原因（可选）" class="ipd-input" style="width:100%;margin-bottom:6px;"/>
+              <button type="submit" class="btn-skip" style="width:100%;border-color:var(--ink-2);">确认跳过</button>
+            </form>
+          </details>
+          {% elif (l.status == 'done' or l.status == 'skipped') and h.status == 'admitted' %}
+          <form method="post" action="/admin/medication-log/{{ l.id }}/uncheck" style="margin:0;"
+                onsubmit="return confirm('撤销这条打卡？');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="btn-undo" title="撤销">撤销</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if prescs %}
+      <div style="margin-top:18px;padding-top:14px;border-top:0.5px solid var(--hair);">
+        <div class="ipd-section-head" style="padding:0;margin-bottom:8px;border:0;">
+          <h2 style="font-size:10pt;letter-spacing:2px;color:var(--ink-3);font-weight:400;font-style:italic;">本次住院的处方</h2>
+        </div>
+        {% for p in prescs %}
+        <a href="/admin/prescriptions/{{ p.id }}" style="display:flex;align-items:baseline;gap:10px;padding:7px 4px;border-bottom:0.5px solid var(--hair);text-decoration:none;color:var(--ink);font-size:10pt;">
+          <span style="color:var(--ink-3);font-family:var(--font-numeric);">#{{ p.id }}</span>
+          <span class="num" style="font-family:var(--font-numeric);">{{ p.prescribed_date or '—' }}</span>
+          <span style="color:var(--ink-3);">·</span>
+          <span>{{ p.items|length }} 种药</span>
+          <span style="margin-left:auto;color:var(--ink-3);font-style:italic;font-size:9.5pt;">{{ p.vet_name or '—' }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    {# ── 生命体征 ── #}
+    <div class="ipd-section" id="vitals">
+      <div class="ipd-section-head">
+        <div><h2>生&nbsp;命&nbsp;体&nbsp;征</h2><span class="stat" style="margin-left:12px;">最近 <b>{{ vitals|length }}</b> 条</span></div>
+      </div>
+      {% if h.status == 'admitted' %}
+      <form method="post" action="/admin/inpatient/{{ h.id }}/vitals" class="ipd-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <div class="ipd-form-grid vitals">
+          <input name="temperature_c" type="number" step="0.1" min="0" placeholder="T ℃"/>
+          <input name="hr" type="number" min="0" placeholder="HR"/>
+          <input name="rr" type="number" min="0" placeholder="RR"/>
+          <select name="mm_color">
+            <option value="">黏膜</option>
+            {% for k, v in mm_color_zh.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+          </select>
+          <input name="crt_sec" type="number" step="0.1" min="0" placeholder="CRT s"/>
+          <input name="weight_kg" type="number" step="0.01" min="0" placeholder="体重 kg"/>
+          <button type="submit" class="btn-record">记&nbsp;录</button>
+          <input name="notes" placeholder="备注（可选）" class="full"/>
+        </div>
+      </form>
+      {% endif %}
+      {% if vitals %}
+      <table class="ipd-tbl">
+        <thead><tr><th>时刻</th><th>T℃</th><th>HR</th><th>RR</th><th>黏膜</th><th>CRT</th><th>体重</th><th>记录</th><th></th></tr></thead>
+        <tbody>
+          {% for v in vitals %}
+          {% set flg = vital_flag_map.get(v.id, {}) %}
+          <tr>
+            <td class="num">{{ v.recorded_at.strftime('%m-%d %H:%M') }}</td>
+            <td class="num {% if flg.T %}over{% endif %}">{{ '%.1f'|format(v.temperature_c) if v.temperature_c else '—' }}{% if flg.T == 'high' %} ↑{% elif flg.T == 'low' %} ↓{% endif %}</td>
+            <td class="num {% if flg.HR %}over{% endif %}">{{ v.hr or '—' }}{% if flg.HR == 'high' %} ↑{% elif flg.HR == 'low' %} ↓{% endif %}</td>
+            <td class="num {% if flg.RR %}over{% endif %}">{{ v.rr or '—' }}{% if flg.RR == 'high' %} ↑{% elif flg.RR == 'low' %} ↓{% endif %}</td>
+            <td class="{% if flg.MM %}over{% endif %}">{{ mm_color_zh.get(v.mm_color, v.mm_color or '—') }}</td>
+            <td class="num {% if flg.CRT %}over{% endif %}">{{ '%.1fs'|format(v.crt_sec) if v.crt_sec else '—' }}</td>
+            <td class="num">{{ '%.2f'|format(v.weight_kg) if v.weight_kg else '—' }}</td>
+            <td class="muted" style="font-size:9pt;">{{ v.recorded_by or '—' }}{% if v.notes %}<br/>{{ v.notes }}{% endif %}</td>
+            <td>
+              {% if h.status == 'admitted' %}
+              <form method="post" action="/admin/inpatient/{{ h.id }}/vitals/{{ v.id }}/delete" style="margin:0;" onsubmit="return confirm('删除此条体征记录？');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                <button type="submit" class="del-btn">✕</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="ipd-empty">尚无体征记录</div>
+      {% endif %}
+    </div>
+
+    {# ── I/O ── #}
+    <div class="ipd-section" id="io">
+      <div class="ipd-section-head">
+        <h2>输&nbsp;液&nbsp;/&nbsp;输&nbsp;出</h2>
+        <span class="stat">
+          24h · 入 <b>{{ '%.0f'|format(io_in_24h) }}</b> ml · 出 <b>{{ '%.0f'|format(io_out_24h) }}</b> ml · 净 <b class="{% if io_in_24h - io_out_24h < 0 %}over{% endif %}">{{ '%+.0f'|format(io_in_24h - io_out_24h) }}</b> ml
+        </span>
+      </div>
+      {% if h.status == 'admitted' %}
+      <form method="post" action="/admin/inpatient/{{ h.id }}/io" class="ipd-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <div class="ipd-form-grid io">
+          <select name="direction" onchange="updateIOCategoryOptions(this)">
+            <option value="in">入</option>
+            <option value="out">出</option>
+          </select>
+          <select name="category" id="io-category">
+            <option value="iv_fluid">静脉输液</option>
+            <option value="oral">口服</option>
+            <option value="injection">注射</option>
+            <option value="in_other">其他(入)</option>
+          </select>
+          <input name="amount_ml" type="number" step="0.1" min="0" placeholder="量 ml" required/>
+          <input name="notes" placeholder="备注（药名、速度、性状…）"/>
+          <button type="submit" class="btn-record">记&nbsp;录</button>
+        </div>
+      </form>
+      <script>
+        function updateIOCategoryOptions(sel) {
+          var cat = document.getElementById('io-category');
+          cat.innerHTML = '';
+          var opts = sel.value === 'in'
+            ? [['iv_fluid','静脉输液'],['oral','口服'],['injection','注射'],['in_other','其他(入)']]
+            : [['urine','尿'],['stool','便'],['vomit','呕吐'],['drainage','引流'],['out_other','其他(出)']];
+          opts.forEach(function(o){
+            var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1];
+            cat.appendChild(op);
+          });
+        }
+      </script>
+      {% endif %}
+      {% if io_logs %}
+      <div>
+        {% for l in io_logs %}
+        <div class="ipd-row {{ l.direction }}">
+          <span class="dir">{{ '入' if l.direction == 'in' else '出' }}</span>
+          <span class="cat">{{ io_cat_zh.get(l.category, l.category) }}</span>
+          <span class="amt">{{ '%.0f'|format(l.amount_ml) }} ml</span>
+          <span class="note">{{ l.notes or '' }}</span>
+          <span class="meta">{{ l.recorded_at.strftime('%m-%d %H:%M') }} · {{ l.recorded_by or '—' }}</span>
+          {% if h.status == 'admitted' %}
+          <form method="post" action="/admin/inpatient/{{ h.id }}/io/{{ l.id }}/delete" style="margin:0;" onsubmit="return confirm('删除此条 I/O 记录？');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="del-btn" style="background:transparent;border:0;cursor:pointer;color:var(--accent-red);">✕</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="ipd-empty">尚无 I/O 记录</div>
+      {% endif %}
+    </div>
+
+    {# ── 进食 ── #}
+    <div class="ipd-section" id="feeding">
+      <div class="ipd-section-head">
+        <div><h2>进&nbsp;食</h2><span class="stat" style="margin-left:12px;">最近 <b>{{ feed_logs|length }}</b> 条</span></div>
+      </div>
+      {% if h.status == 'admitted' %}
+      <form method="post" action="/admin/inpatient/{{ h.id }}/feeding" class="ipd-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <div class="ipd-form-grid feed">
+          <input name="food_type" placeholder="食物（如 处方粮 / 罐头 / 强饲糊）" required/>
+          <input name="offered_g" type="number" step="1" min="0" placeholder="提供 g"/>
+          <input name="eaten_g" type="number" step="1" min="0" placeholder="吃了 g"/>
+          <select name="appetite_score">
+            {% for k, v in appetite_zh.items() %}<option value="{{ k }}" {% if k == 3 %}selected{% endif %}>{{ v }}</option>{% endfor %}
+          </select>
+          <button type="submit" class="btn-record">记&nbsp;录</button>
+          <input name="notes" placeholder="备注（可选）" class="full"/>
+        </div>
+      </form>
+      {% endif %}
+      {% if feed_logs %}
+      <div>
+        {% for f in feed_logs %}
+        {% set rate = (f.eaten_g / f.offered_g * 100) if f.offered_g > 0 else 0 %}
+        <div class="ipd-row ipd-feed {% if f.appetite_score <= 1 %}bad{% elif f.appetite_score == 2 %}mid{% else %}good{% endif %}">
+          <span class="food">{{ f.food_type or '—' }}</span>
+          <span class="ate">{{ '%.0f'|format(f.eaten_g) }} / {{ '%.0f'|format(f.offered_g) }} g</span>
+          {% if rate > 0 %}<span class="pct">{{ '%.0f'|format(rate) }}%</span>{% else %}<span class="pct"></span>{% endif %}
+          <span class="score">{{ appetite_zh.get(f.appetite_score, f.appetite_score) }}</span>
+          <span class="note">{{ f.notes or '' }}</span>
+          <span class="meta">{{ f.recorded_at.strftime('%m-%d %H:%M') }} · {{ f.recorded_by or '—' }}</span>
+          {% if h.status == 'admitted' %}
+          <form method="post" action="/admin/inpatient/{{ h.id }}/feeding/{{ f.id }}/delete" style="margin:0;" onsubmit="return confirm('删除？');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" style="background:transparent;border:0;cursor:pointer;color:var(--accent-red);">✕</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="ipd-empty">尚无进食记录</div>
+      {% endif %}
+    </div>
+
+    {# ── 交班 ── #}
+    <div class="ipd-section" id="handover">
+      <div class="ipd-section-head">
+        <div><h2>交&nbsp;班&nbsp;记&nbsp;录</h2><span class="stat" style="margin-left:12px;">最近 <b>{{ handovers|length }}</b> 条</span></div>
+      </div>
+      {% if h.status == 'admitted' %}
+      <form method="post" action="/admin/inpatient/{{ h.id }}/handover" class="ipd-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <div class="ipd-form-grid handover" style="grid-template-columns:120px 1fr auto;align-items:flex-start;">
+          <select name="shift">
+            {% for k, v in shift_zh.items() %}
+            <option value="{{ k }}" {% if k == current_shift %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+          <textarea name="content" rows="2" required class="ipd-textarea"
+            placeholder="给下个班的提醒：如「19:00 用过头孢，注意是否过敏」「半夜叫了一次，没拉肚子」「8 点要做 B 超」…"></textarea>
+          <button type="submit" class="btn-record">留&nbsp;交&nbsp;班</button>
+        </div>
+      </form>
+      {% endif %}
+      {% if handovers %}
+      <div>
+        {% for n in handovers %}
+        <div class="ipd-handover {{ n.shift }} {% if loop.index == 1 %}latest{% endif %}">
+          <div class="meta">
+            <div class="shift-name">{{ shift_zh.get(n.shift, n.shift) }}</div>
+            <div>{{ n.recorded_at.strftime('%m-%d %H:%M') }}</div>
+            <div>{{ n.recorded_by or '—' }}</div>
+          </div>
+          <div class="content">{{ n.content }}</div>
+          {% if h.status == 'admitted' %}
+          <form method="post" action="/admin/inpatient/{{ h.id }}/handover/{{ n.id }}/delete" style="margin:0;" onsubmit="return confirm('删除这条交班记录？');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="del-btn">✕</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="ipd-empty">尚无交班记录。新班接手前留一句话，下一班一打开就能看到。</div>
+      {% endif %}
+    </div>
+
+  </div>{# /main #}
+
+  {# ─── 侧栏 ─── #}
+  <aside class="ipd-aside">
+
+    {% if h.status == 'admitted' %}
+    <div class="ipd-aside-card">
+      <h3>换&nbsp;笼</h3>
+      <form method="post" action="/admin/inpatient/{{ h.id }}/transfer">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <select name="cage_id" class="ipd-select" style="width:100%;margin-bottom:10px;">
+          <option value="0">— 不指定 —</option>
+          {% for c in avail_cages %}
+          {% set is_occ = (c.id in occupied_ids) and (c.id != h.cage_id) %}
+          <option value="{{ c.id }}" {% if c.id == h.cage_id %}selected{% endif %} {% if is_occ %}disabled{% endif %}>
+            {{ c.code }} · {{ kind_zh.get(c.kind, c.kind) }} · ¥{{ '%.0f'|format(c.daily_rate) }}/天{% if is_occ %}（占用中）{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="uk-btn ghost sm">保存换笼</button>
+      </form>
+    </div>
+
+    <div class="ipd-aside-card">
+      <h3 style="color:var(--accent-amber);">出&nbsp;院&nbsp;结&nbsp;账</h3>
+      <form method="post" action="/admin/inpatient/{{ h.id }}/discharge"
+            onsubmit="return confirm('确认出院？\n\n系统会自动算 {{ days }} 天笼费 + 同步处方/检查到收费单。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <label>出院小结（可选）</label>
+        <textarea name="discharge_summary" rows="3" class="ipd-textarea" style="margin-bottom:10px;"
+                  placeholder="主要诊断 / 治疗经过 / 回家注意事项"></textarea>
+        <button type="submit" class="uk-btn primary sm">出&nbsp;院&nbsp;并&nbsp;结&nbsp;账</button>
+      </form>
+    </div>
+
+    <div class="ipd-aside-card">
+      <form method="post" action="/admin/inpatient/{{ h.id }}/cancel"
+            onsubmit="return confirm('误开入院？取消本次住院档案。');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <button type="submit" class="uk-btn danger ghost sm">误开 · 取消入院</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if h.invoice_id %}
+    <div class="ipd-aside-card">
+      <h3>关&nbsp;联&nbsp;账&nbsp;单</h3>
+      <a href="/admin/invoices/{{ h.invoice_id }}" class="uk-btn ghost sm">查看账单 #{{ h.invoice_id }}</a>
+    </div>
+    {% endif %}
+
+    <div class="ipd-aside-card">
+      <h3>笼&nbsp;牌</h3>
+      <a href="/admin/inpatient/{{ h.id }}/cage-tag" target="_blank" class="uk-btn ghost sm">打印笼牌（含双二维码）</a>
+      <p class="hint">
+        员工扫 → 进档案打勾用药<br/>
+        主人扫 → 只读宝宝住院情况
+      </p>
+    </div>
+
+  </aside>
+
+</div>{# /grid #}
+
+{% endblock %}

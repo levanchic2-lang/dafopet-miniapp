@@ -18954,7 +18954,7 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
         HandoverNote.hospitalization_id == h.id,
     ).order_by(HandoverNote.recorded_at.desc()).limit(10).all()
     latest_handover = handovers[0] if handovers else None
-    return templates.TemplateResponse(request, "admin_inpatient_detail.html", {
+    return templates.TemplateResponse(request, "uk/inpatient_detail.html", {  # B7 UK 重写
         "request": request, "h": h, "cust": cust, "pet": pet, "cage": cage,
         "visit": visit, "avail_cages": avail_cages, "occupied_ids": occupied_ids,
         "status_zh": _HOSP_STATUS_ZH, "kind_zh": _CAGE_KIND_ZH,
