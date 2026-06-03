@@ -4382,7 +4382,7 @@ async def admin_staff_create_get(request: Request, db: Session = Depends(get_db)
     if not _admin_ok(request):
         return templates.TemplateResponse(request, "admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
     require_superadmin(request)
-    return templates.TemplateResponse(request, "admin_staff_form.html", {
+    return templates.TemplateResponse(request, "uk/staff_form.html", {
         "request": request, "title": "新增员工", "staff": None,
         "position_options": _POSITION_OPTIONS,
         "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",
@@ -4450,7 +4450,7 @@ async def admin_staff_edit_get(staff_id: int, request: Request, db: Session = De
     staff = db.query(Staff).filter(Staff.id == staff_id).first()
     if not staff:
         raise HTTPException(404)
-    return templates.TemplateResponse(request, "admin_staff_form.html", {
+    return templates.TemplateResponse(request, "uk/staff_form.html", {
         "request": request, "title": f"编辑员工 · {staff.name}", "staff": staff,
         "position_options": _POSITION_OPTIONS,
         "store_options": _STORE_OPTIONS, "csrf_token": _get_csrf_token(request), "err": "",

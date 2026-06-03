@@ -1,0 +1,276 @@
+{% extends "uk/_base.html" %}
+{% block title %}{{ title }} · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  .sf-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .sf-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .sf-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .sf-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .sf-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 24px; margin-bottom: 8px;
+  }
+  .sf-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .sf-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 10px;
+  }
+  hr.sf-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  .sf-msg-err {
+    border: 0; border-left: 3px solid var(--accent-red);
+    background: #fcf5f4; padding: 10px 16px; margin-bottom: 18px;
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--accent-red);
+  }
+
+  .sf-section { margin-bottom: 26px; }
+  .sf-section-head {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .sf-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+
+  .sf-row { display: grid; gap: 18px; margin-bottom: 14px; }
+  .sf-row.r2 { grid-template-columns: 1fr 1fr; }
+  .sf-row.r3 { grid-template-columns: 1fr 1fr 1fr; }
+  .sf-row.full { grid-template-columns: 1fr; }
+  @media (max-width: 768px) {
+    .sf-row.r2, .sf-row.r3 { grid-template-columns: 1fr; }
+  }
+
+  .sf-field { display: flex; flex-direction: column; gap: 6px; }
+  .sf-field label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-style: italic;
+  }
+  .sf-field label .req { color: var(--accent-red); font-style: normal; margin-left: 2px; }
+  .sf-input, .sf-select {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 8px 12px;
+    outline: 0; width: 100%; box-sizing: border-box;
+    height: 38px; line-height: 1.4;
+  }
+  .sf-input:focus, .sf-select:focus { border-color: var(--ink); }
+
+  .sf-textarea {
+    width: 100%; min-height: 90px;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 10px 14px;
+    line-height: 1.6; resize: vertical; outline: 0;
+    box-sizing: border-box;
+  }
+  .sf-textarea:focus { border-color: var(--ink); }
+
+  .sf-submit-bar {
+    display: flex; gap: 14px; align-items: center;
+    padding-top: 18px; margin-top: 18px;
+    border-top: 0.5px solid var(--hair);
+  }
+  .sf-submit-bar .submit-main {
+    flex: 0 0 auto; min-width: 220px;
+    background: var(--ink); color: var(--paper); border: 0;
+    padding: 12px 32px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 11pt;
+    letter-spacing: 3px; font-weight: 700;
+  }
+  .sf-submit-bar .submit-main:hover { background: #000; }
+</style>
+
+<div class="sf-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  <a href="/admin/hr">人事管理</a>
+  <span class="sep">/</span>
+  <span>{{ '编辑员工' if staff else '新增员工' }}</span>
+</div>
+
+<div class="sf-head">
+  <div>
+    <h1>
+      {% if staff %}编&nbsp;辑&nbsp;员&nbsp;工{% else %}新&nbsp;增&nbsp;员&nbsp;工{% endif %}
+      {% if staff %}
+      <span class="sub">{{ staff.name }}{% if staff.store %} · {{ staff.store }}{% endif %}{% if staff.position %} · {{ staff.position }}{% endif %}</span>
+      {% else %}
+      <span class="sub">登&nbsp;记&nbsp;员&nbsp;工&nbsp;基&nbsp;础&nbsp;档&nbsp;案</span>
+      {% endif %}
+    </h1>
+  </div>
+  <div>
+    <a href="{{ '/admin/staff/' + staff.id|string if staff else '/admin/hr' }}" class="uk-btn ghost sm">← 返回</a>
+  </div>
+</div>
+
+<hr class="sf-rule-double"/>
+
+{% if err %}<div class="sf-msg-err">{{ err }}</div>{% endif %}
+
+<form method="post" action="{{ '/admin/staff/' + staff.id|string + '/edit' if staff else '/admin/staff/create' }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  {# 基本信息 #}
+  <div class="sf-section">
+    <div class="sf-section-head"><h2>基&nbsp;本&nbsp;信&nbsp;息</h2></div>
+
+    <div class="sf-row r2">
+      <div class="sf-field">
+        <label>姓&nbsp;名<span class="req">*</span></label>
+        <input type="text" name="name" required value="{{ staff.name if staff else '' }}" class="sf-input"/>
+      </div>
+      <div class="sf-field">
+        <label>性&nbsp;别</label>
+        <select name="gender" class="sf-select">
+          <option value="" {% if not staff or not staff.gender %}selected{% endif %}>—</option>
+          <option value="male" {% if staff and staff.gender == 'male' %}selected{% endif %}>男</option>
+          <option value="female" {% if staff and staff.gender == 'female' %}selected{% endif %}>女</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sf-row r2">
+      <div class="sf-field">
+        <label>生&nbsp;日</label>
+        <input type="date" name="birthday" value="{{ staff.birthday if staff else '' }}" class="sf-input"/>
+      </div>
+      <div class="sf-field">
+        <label>手&nbsp;机&nbsp;号</label>
+        <input type="tel" name="phone" value="{{ staff.phone if staff else '' }}" class="sf-input"/>
+      </div>
+    </div>
+
+    <div class="sf-row full">
+      <div class="sf-field">
+        <label>身&nbsp;份&nbsp;证&nbsp;号</label>
+        <input type="text" name="id_number" value="{{ staff.id_number if staff else '' }}" autocomplete="off" class="sf-input"/>
+      </div>
+    </div>
+  </div>
+
+  {# 工作信息 #}
+  <div class="sf-section">
+    <div class="sf-section-head"><h2>工&nbsp;作&nbsp;信&nbsp;息</h2></div>
+
+    <div class="sf-row r2">
+      <div class="sf-field">
+        <label>所&nbsp;在&nbsp;门&nbsp;店</label>
+        <select name="store" class="sf-select">
+          <option value="">—</option>
+          {% for opt in store_options %}
+          <option value="{{ opt }}" {% if staff and staff.store == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="sf-field">
+        <label>职&nbsp;位</label>
+        <select name="position" class="sf-select">
+          <option value="">—</option>
+          {% for opt in position_options %}
+          <option value="{{ opt }}" {% if staff and staff.position == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="sf-row r2">
+      <div class="sf-field">
+        <label>入&nbsp;职&nbsp;日&nbsp;期</label>
+        <input type="date" name="hire_date" value="{{ staff.hire_date if staff else '' }}" class="sf-input"/>
+      </div>
+      <div class="sf-field">
+        <label>试&nbsp;用&nbsp;期&nbsp;结&nbsp;束&nbsp;日&nbsp;期</label>
+        <input type="date" name="probation_end_date" value="{{ staff.probation_end_date if staff else '' }}" class="sf-input"/>
+      </div>
+    </div>
+
+    <div class="sf-row r2">
+      <div class="sf-field">
+        <label>在&nbsp;职&nbsp;状&nbsp;态</label>
+        <select name="status" onchange="toggleResign(this.value)" class="sf-select">
+          <option value="probation" {% if staff and staff.status == 'probation' %}selected{% endif %}>试用中</option>
+          <option value="active" {% if not staff or staff.status == 'active' %}selected{% endif %}>在职</option>
+          <option value="resigned" {% if staff and staff.status == 'resigned' %}selected{% endif %}>离职</option>
+        </select>
+      </div>
+      <div></div>
+    </div>
+
+    <div id="resign-section" style="display:{% if staff and staff.status == 'resigned' %}block{% else %}none{% endif %};">
+      <div class="sf-row r2">
+        <div class="sf-field">
+          <label>离&nbsp;职&nbsp;日&nbsp;期</label>
+          <input type="date" name="resign_date" value="{{ staff.resign_date if staff else '' }}" class="sf-input"/>
+        </div>
+        <div class="sf-field">
+          <label>离&nbsp;职&nbsp;原&nbsp;因</label>
+          <input type="text" name="resign_reason" value="{{ staff.resign_reason if staff else '' }}" class="sf-input"/>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# 紧急联系人 #}
+  <div class="sf-section">
+    <div class="sf-section-head"><h2>紧&nbsp;急&nbsp;联&nbsp;系&nbsp;人</h2></div>
+
+    <div class="sf-row r3">
+      <div class="sf-field">
+        <label>姓&nbsp;名</label>
+        <input type="text" name="emergency_contact_name" value="{{ staff.emergency_contact_name if staff else '' }}" class="sf-input"/>
+      </div>
+      <div class="sf-field">
+        <label>电&nbsp;话</label>
+        <input type="tel" name="emergency_contact_phone" value="{{ staff.emergency_contact_phone if staff else '' }}" class="sf-input"/>
+      </div>
+      <div class="sf-field">
+        <label>关&nbsp;系</label>
+        <input type="text" name="emergency_contact_relation" value="{{ staff.emergency_contact_relation if staff else '' }}" class="sf-input"/>
+      </div>
+    </div>
+  </div>
+
+  {# 备注 #}
+  <div class="sf-section">
+    <div class="sf-section-head"><h2>备&nbsp;注</h2></div>
+    <div class="sf-row full">
+      <div class="sf-field">
+        <textarea name="notes" rows="3" class="sf-textarea" placeholder="可选 · 个人特长 / 注意事项等"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="sf-submit-bar">
+    <button type="submit" class="submit-main">{% if staff %}保&nbsp;存&nbsp;修&nbsp;改{% else %}创&nbsp;建&nbsp;员&nbsp;工&nbsp;档&nbsp;案{% endif %}</button>
+    <a href="{{ '/admin/staff/' + staff.id|string if staff else '/admin/hr' }}" class="uk-btn ghost sm">取&nbsp;消</a>
+  </div>
+</form>
+
+<script>
+function toggleResign(val) {
+  document.getElementById('resign-section').style.display = val === 'resigned' ? 'block' : 'none';
+}
+// preserve notes value on edit
+{% if staff and staff.notes %}
+document.querySelector('textarea[name="notes"]').value = {{ staff.notes|tojson }};
+{% endif %}
+</script>
+
+{% endblock %}
