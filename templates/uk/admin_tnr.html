@@ -265,13 +265,25 @@
     background: var(--bg) !important;
   }
   body .admin-upload-submit {
-    width: 100%; margin-top: 12px;
+    width: auto !important; margin-top: 12px;
     background: var(--ink) !important; color: var(--paper) !important;
-    border: 0 !important; padding: 10px !important;
-    font-family: var(--font-serif); font-size: 10.5pt;
-    letter-spacing: 2.5px; font-weight: 700;
+    border: 0 !important; padding: 6px 18px !important;
+    font-family: var(--font-serif); font-size: 9.5pt !important;
+    letter-spacing: 2px; font-weight: 700;
   }
   body .admin-upload-submit:hover { background: #000 !important; }
+
+  /* 申请卡内 details 的 '修改' 小按钮 — 缩字号 + 缩 icon */
+  body .admin-app-lines details summary {
+    font-size: 8.5pt !important; color: var(--ink-3) !important;
+    font-family: var(--font-serif); font-style: italic;
+    letter-spacing: 0.5px;
+  }
+  body .admin-app-lines details summary i[data-lucide],
+  body .admin-app-lines details summary svg {
+    width: 11px !important; height: 11px !important;
+    vertical-align: -1px;
+  }
 
   /* 已上传缩略图区域 */
   body .admin-upload .sub {
