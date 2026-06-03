@@ -315,33 +315,29 @@ function confirmDewVoid(form, paidAmount) {
         <input name="product_name" id="product-name-input" value="{{ rec.product_name if rec else '' }}" placeholder="如 大宠爱 / 拜宠清" maxlength="120" class="dw-input"/>
       </div>
       <div class="dw-field">
-        <label>体&nbsp;重（kg）</label>
-        <input type="number" name="weight_kg" step="0.01" min="0" value="{{ '%.2f'|format(rec.weight_kg) if rec and rec.weight_kg else '' }}" placeholder="0.00" class="dw-input"/>
+        <label>剂&nbsp;量</label>
+        <input name="dose" value="{{ rec.dose if rec else '' }}" placeholder="如 1 片 / 2.5 ml" maxlength="80" class="dw-input"/>
       </div>
     </div>
 
     <div class="dw-row2">
-      <div class="dw-field">
-        <label>剂&nbsp;量</label>
-        <input name="dose" value="{{ rec.dose if rec else '' }}" placeholder="如 1 片 / 2.5 ml" maxlength="80" class="dw-input"/>
-      </div>
       <div class="dw-field">
         <label>接&nbsp;诊&nbsp;兽&nbsp;医</label>
         <input name="vet_name" value="{{ rec.vet_name if rec else '' }}" list="vet-list" placeholder="可选" maxlength="80" class="dw-input"/>
         <datalist id="vet-list">{% for v in vets %}<option value="{{ v }}">{% endfor %}</datalist>
       </div>
-    </div>
-
-    <div class="dw-row2">
       <div class="dw-field">
         <label>下&nbsp;次&nbsp;到&nbsp;期&nbsp;日</label>
         <input type="date" name="next_due_date" id="next-due-date" value="{{ rec.next_due_date if rec else next_due_default }}" class="dw-input"/>
         <div class="dw-input-hint">体内 +3 个月 / 体外 +1 个月 / 体内外 +3 个月 · 留空 = 不发提醒</div>
       </div>
+    </div>
+
+    <div class="dw-row2 full">
       <div class="dw-field">
         <label>收&nbsp;费&nbsp;金&nbsp;额 ¥</label>
-        <input type="number" name="charge_amount" step="0.01" min="0" id="charge-input" value="{{ '%.2f'|format(rec_charge_amount) if rec_charge_amount else '0.00' }}" placeholder="0 = 不收费" class="dw-input"/>
-        <div class="dw-input-hint">&gt; 0 自动生成收费单进收银台</div>
+        <input type="number" name="charge_amount" step="0.01" min="0" id="charge-input" value="{{ '%.2f'|format(rec_charge_amount) if rec_charge_amount else '0.00' }}" placeholder="0 = 不收费" class="dw-input" style="max-width:200px;"/>
+        <div class="dw-input-hint">&gt; 0 自动生成收费单进收银台 · 体重在体重 tab 单独录入</div>
       </div>
     </div>
 
