@@ -6,9 +6,9 @@
 /* ── 主 + 侧栏布局（match demo） ── */
 .cust-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 28px;
-  margin-top: 24px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 36px;
+  margin-top: 32px;
 }
 @media (max-width: 1100px) {
   .cust-grid { grid-template-columns: 1fr; }
@@ -16,8 +16,8 @@
 
 /* ── 上半 2 栏：联系方式 + 钱包 ── */
 .cust-top-pair {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
-  margin-bottom: 24px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+  margin-bottom: 40px;
 }
 
 .cust-contact-card {
@@ -92,7 +92,7 @@
 .cust-signals .chip.ok b   { color: var(--accent-green); }
 
 /* ── 宠物档案 卡片 ── */
-.pets-card { background: var(--paper); border: 0.5px solid var(--hair-2); margin-bottom: 24px; }
+.pets-card { background: var(--paper); border: 0.5px solid var(--hair-2); margin-bottom: 40px; }
 .pets-card-head {
   display: flex; justify-content: space-between; align-items: baseline;
   padding: 14px 22px; border-bottom: 0.5px solid var(--hair);
@@ -142,7 +142,9 @@
 .uk-tabs-main {
   display: flex; gap: 22px; flex-wrap: wrap;
   border-bottom: 0.5px solid var(--hair-2);
-  margin: 0 0 20px;
+  border-top: 0.5px solid var(--hair); /* 上方 hairline 视觉停顿 */
+  padding-top: 10px;
+  margin: 8px 0 24px;
 }
 .uk-tab-btn {
   background: transparent; border: 0; cursor: pointer;
@@ -362,18 +364,8 @@
   <h1 class="uk-h1">{{ cust.name or '未命名' }}<span class="sub">客户档案 · 编号 {{ cust.id }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</span></h1>
   <div class="meta">建档 {{ cust.created_at.strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source or '手工录入' }}</em></div>
 
-  {# 信号 chip #}
-  <div class="cust-signals">
-    <span class="chip">宠物 <b>{{ pets|length }}</b></span>
-    <span class="chip">病历 <b>{{ visits|length }}</b></span>
-    {% if unpaid_total > 0 %}<span class="chip danger">未付款 <b>¥{{ '%.2f'|format(unpaid_total) }}</b></span>{% endif %}
-    {% if held_deposits_total > 0 %}<span class="chip warn">押金待结 <b>¥{{ '%.2f'|format(held_deposits_total) }}</b></span>{% endif %}
-    {% if wallet_balance > 0 %}<span class="chip ok">钱包 <b>¥{{ '%.2f'|format(wallet_balance) }}</b></span>{% endif %}
-    {% if active_packages_count > 0 %}<span class="chip">套餐 <b>{{ active_packages_count }}</b> 张</span>{% endif %}
-  </div>
-
   {# 按钮在副标下方 - match demo #}
-  <div class="actions" style="margin-top:18px;">
+  <div class="actions" style="margin-top:20px;">
     {% if active_pet %}
     <a class="uk-btn sm" href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建病历</a>
     <a class="uk-btn sm" href="/admin/vaccinations/create-page?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入疫苗</a>
