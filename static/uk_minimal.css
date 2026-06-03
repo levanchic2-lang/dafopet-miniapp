@@ -541,15 +541,18 @@ p { margin: 0 0 var(--gap-3); }
 
 .uk-filter {
   display: flex;
-  gap: var(--gap-3);
+  gap: var(--gap-4);
   align-items: baseline;
   margin-bottom: var(--gap-3);
   padding-bottom: var(--gap-3);
   border-bottom: 0.5px solid var(--hair);
   flex-wrap: wrap;
 }
-.uk-filter > .grow { flex: 1; min-width: 240px; }
+.uk-filter > .grow { flex: 1 1 240px; min-width: 240px; }
 .uk-filter .uk-input { font-size: var(--t-md); }
+/* 关键：select 默认 width:100% 在 flex 容器里会撑满整行，
+   筛选条里需要让它收缩成内容宽度（受 min-width 控制） */
+.uk-filter .uk-select { width: auto; flex: 0 0 auto; }
 .uk-quick-filter {
   display: inline-flex;
   align-items: center;
