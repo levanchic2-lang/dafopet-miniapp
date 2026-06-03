@@ -5,7 +5,7 @@
  *   - API / 表单 POST：直通网络（不缓存）
  *   - 升级版本时改 CACHE_VERSION，自动清旧
  */
-const CACHE_VERSION = 'v181-m6-exam-tnr';
+const CACHE_VERSION = 'v182-ui-audit-fix';
 const STATIC_CACHE = 'static-' + CACHE_VERSION;
 const PAGE_CACHE   = 'pages-' + CACHE_VERSION;
 

@@ -19381,6 +19381,7 @@ async def m_doctor_home(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/doctor", status_code=303)
     ctx = _m_ctx(request, db, active_tab="today")
+    ctx["mobile_role"] = "doctor"  # 强制按路径渲染 tab
     ctx["badges"] = _m_badges(request, db)
 
     store_short = _get_admin_store(request)
@@ -19435,6 +19436,7 @@ async def m_nurse_home(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/nurse", status_code=303)
     ctx = _m_ctx(request, db, active_tab="today")
+    ctx["mobile_role"] = "nurse"  # 强制按路径渲染 tab
     ctx["badges"] = _m_badges(request, db)
     return templates.TemplateResponse(request, "m/home_nurse.html", ctx)
 
@@ -19709,6 +19711,7 @@ async def m_groomer_home_v2(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/groomer", status_code=303)
     ctx = _m_ctx(request, db, active_tab="today")
+    ctx["mobile_role"] = "groomer"  # 强制按路径渲染 tab
     store_short = _get_admin_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     appts = _m_today_beauty_appts(db, store_short, store_full)
@@ -19754,6 +19757,7 @@ async def m_grooming_list(request: Request, db: Session = Depends(get_db)):
             "before_n": before_n, "after_n": after_n,
         })
     ctx = _m_ctx(request, db, active_tab="grooming")
+    ctx["mobile_role"] = "groomer"
     ctx["rows"] = enriched
     return templates.TemplateResponse(request, "m/grooming_list.html", ctx)
 
@@ -19782,6 +19786,7 @@ async def m_grooming_new(
     ).all()]
     groom_items = _query_grooming_items(db, request)
     ctx = _m_ctx(request, db, active_tab="grooming")
+    ctx["mobile_role"] = "groomer"
     ctx.update({
         "cust": cust, "pet": pet, "appt": appt, "pets": pets,
         "groomers": groomers, "groom_items": groom_items,
@@ -19878,6 +19883,7 @@ async def m_grooming_detail(rec_id: int, request: Request, db: Session = Depends
     after_list = [p for p in (rec.after_photos or "").split(",") if p.strip()]
     locked, lock_reason = _is_grooming_locked(db, rec)
     ctx = _m_ctx(request, db, active_tab="grooming")
+    ctx["mobile_role"] = "groomer"
     ctx.update({
         "rec": rec, "pet": pet, "cust": cust,
         "services": services,

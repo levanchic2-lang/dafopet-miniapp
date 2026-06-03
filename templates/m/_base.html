@@ -27,7 +27,7 @@
   <div class="m-topbar-inner">
     <div>
       <div class="m-topbar-title">{% block topbar_title %}大风动物医院{% endblock %}</div>
-      <div class="m-topbar-sub">{% block topbar_sub %}{{ admin_store or '全部门店' }} · {{ admin_username }}{% endblock %}</div>
+      <div class="m-topbar-sub">{% block topbar_sub %}{{ admin_store_label or '全部门店' }} · {{ admin_username }}{% endblock %}</div>
     </div>
     <div class="m-topbar-actions">
       {% block topbar_actions %}{% endblock %}
