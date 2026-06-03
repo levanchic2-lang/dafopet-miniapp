@@ -12,7 +12,7 @@
 </div>
 
 <div class="uk-page-head">
-  <h1 class="uk-h1">{{ cust.name }}<span class="sub">客户档案　·　编号 {{ cust.id }}</span></h1>
+  <h1 class="uk-h1">{{ cust.name }}<span class="sub">客户档案 · 编号 {{ cust.id }}</span></h1>
   <div class="meta">建档 {{ cust.created_at.strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source or '手工录入' }}</em></div>
 
   <div class="actions">
@@ -59,7 +59,7 @@
           <div class="value num uk-price">{{ '%.2f'|format(wallet.balance if wallet else 0) }}</div>
           <div class="sub">
             累计充值 <span class="uk-price num">{{ '%.0f'|format(wallet.lifetime_recharge if wallet else 0) }}</span>
-            · 累计消费 <span class="uk-price num">{{ '%.0f'|format(wallet.lifetime_consume if wallet else 0) }}</span>
+ · 累计消费 <span class="uk-price num">{{ '%.0f'|format(wallet.lifetime_consume if wallet else 0) }}</span>
           </div>
         </div>
 
@@ -70,16 +70,16 @@
     <section class="uk-section">
       <div class="uk-card flush">
         <div style="padding:16px 24px;border-bottom:0.5px solid var(--hair);display:flex;justify-content:space-between;align-items:baseline;">
-          <h3 class="uk-h3" style="margin:0;">宠物档案　<span class="num" style="font-size:14pt;letter-spacing:1px;">（{{ pets|length }} 只）</span></h3>
+          <h3 class="uk-h3" style="margin:0;">宠物档案 <span class="num" style="font-size:14pt;letter-spacing:1px;">（{{ pets|length }} 只）</span></h3>
           <a class="uk-btn-link">＋ 新增宠物</a>
         </div>
         <table class="uk-tbl" style="margin:0;">
           <thead>
             <tr>
-              <th style="padding-left:24px;">姓　名</th>
-              <th>种　类</th>
-              <th>品　种</th>
-              <th>性　别</th>
+              <th style="padding-left:24px;">姓名</th>
+              <th>种类</th>
+              <th>品种</th>
+              <th>性别</th>
               <th>病历号</th>
               <th class="right" style="padding-right:24px;">最近就诊</th>
             </tr>
@@ -116,7 +116,7 @@
       <article class="uk-card" style="padding:20px 28px;">
         <div class="uk-row between" style="margin-bottom:8px;">
           <div>
-            <span class="uk-overline">就　诊　·　{% if v.visit_type == 'outpatient' %}门诊{% elif v.visit_type == 'followup' %}复诊{% elif v.visit_type == 'postop' %}术后{% elif v.visit_type == 'vaccine' %}疫苗{% else %}{{ v.visit_type }}{% endif %}</span>
+            <span class="uk-overline">就诊 · {% if v.visit_type == 'outpatient' %}门诊{% elif v.visit_type == 'followup' %}复诊{% elif v.visit_type == 'postop' %}术后{% elif v.visit_type == 'vaccine' %}疫苗{% else %}{{ v.visit_type }}{% endif %}</span>
             <h3 style="margin:4px 0 0;font-family:var(--font-serif);font-size:15pt;font-weight:700;letter-spacing:1px;">
               {{ v.diagnosis|truncate(60) if v.diagnosis else '门诊' }}
             </h3>
@@ -130,7 +130,7 @@
         <div class="uk-grid cols-2" style="gap:16px;font-size:11pt;">
           {% if v.chief_complaint %}
           <div>
-            <span class="uk-label">主　诉</span>
+            <span class="uk-label">主诉</span>
             <div style="margin-top:4px;">{{ v.chief_complaint|truncate(120) }}</div>
           </div>
           {% endif %}
@@ -157,7 +157,7 @@
   <aside>
 
     <div class="uk-card quiet">
-      <h3 class="uk-h3">速　览</h3>
+      <h3 class="uk-h3">速览</h3>
       <table style="width:100%;font-size:11pt;">
         <tr><td class="uk-mute" style="padding:6px 0;">宠物</td><td class="uk-right num">{{ pets|length }}</td></tr>
         <tr><td class="uk-mute" style="padding:6px 0;">病历</td><td class="uk-right num">{{ visits|length }}</td></tr>
@@ -185,7 +185,7 @@
     {% endif %}
 
     <div class="uk-card">
-      <h3 class="uk-h3">操　作</h3>
+      <h3 class="uk-h3">操作</h3>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <a class="uk-btn">发起协议签署</a>
         <a class="uk-btn ghost">发送短信</a>
