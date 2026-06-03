@@ -282,18 +282,37 @@
   /* 申请卡 .admin-app-lines p 紧凑化 */
   body .admin-app-lines p { margin: 5px 0 0 !important; }
 
-  /* 现场确认按钮 cell */
+  /* 现场确认按钮 cell — 扁化 + 图标对齐 */
   body .card > div[style*="brand-bg-soft"] {
     background: var(--bg) !important;
     border: 0 !important;
     border-left: 3px solid var(--ink) !important;
     border-radius: 0 !important;
+    padding: 6px 12px !important;
+    margin: 8px 0 !important;
+    min-height: 0 !important;
+  }
+  body .card > div[style*="brand-bg-soft"] > div {
+    font-size: 9.5pt !important; font-family: var(--font-serif);
+    color: var(--ink-2) !important; line-height: 1.4 !important;
+    display: inline-flex; align-items: center; gap: 6px;
   }
   body .card > div[style*="brand-bg-soft"] .btn {
     background: var(--ink) !important; color: var(--paper) !important;
     border: 0 !important; border-radius: 0 !important;
-    padding: 8px 16px !important;
+    padding: 5px 12px !important;
     font-family: var(--font-serif); letter-spacing: 1.5px;
+    font-size: 9.5pt !important;
+    display: inline-flex !important; align-items: center !important;
+    gap: 6px !important; line-height: 1.4 !important;
+  }
+  /* lucide icon 对齐：去掉 baseline → 改 center */
+  body .card > div[style*="brand-bg-soft"] i[data-lucide],
+  body .card > div[style*="brand-bg-soft"] svg {
+    width: 14px !important; height: 14px !important;
+    vertical-align: middle !important;
+    display: inline-block !important;
+    flex-shrink: 0;
   }
 
   /* 审核 textarea */
