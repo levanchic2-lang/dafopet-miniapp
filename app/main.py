@@ -9899,9 +9899,9 @@ async def page_admin_visit_detail(
             eo._items_parsed = []
     _PRESC_STATUS_ZH = {"draft": "草稿", "issued": "已开具", "dispensed": "已发药"}
     _SO_STATUS_ZH = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
-    # B5.1 UK 重写：默认走只读 uk/visit.html；?mode=edit 或 path 含 /edit-form 走老编辑模板
+    # B5.1+B5.2 UK 重写：默认走只读 uk/visit.html；/edit-form 或 ?mode=edit 走 uk/visit_edit.html
     _mode = request.query_params.get("mode") or ("edit" if "/edit-form" in str(request.url.path) else "view")
-    _template = "uk/visit.html" if _mode == "view" else "admin_visit_form.html"
+    _template = "uk/visit.html" if _mode == "view" else "uk/visit_edit.html"
     return templates.TemplateResponse(request, _template, {
         "visit": v,
         "cust": cust,

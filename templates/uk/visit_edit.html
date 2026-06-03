@@ -1,0 +1,338 @@
+{% extends "uk/_base.html" %}
+{% block title %}编辑病历 #{{ visit.id }} · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  .ve-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .ve-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .ve-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .ve-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .ve-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 32px; margin-bottom: 8px;
+  }
+  .ve-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.1;
+  }
+  .ve-head h1 .hash {
+    font-family: var(--font-numeric); font-size: 20pt; color: var(--ink-3);
+    font-weight: 400; vertical-align: 4px;
+  }
+  .ve-head h1 .sub {
+    display: block; font-size: 9.5pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2.5px; margin-top: 10px;
+  }
+  .ve-head h1 .sub b { color: var(--ink); font-style: normal; font-weight: 700; }
+  .ve-head h1 .sub .sep { color: var(--ink-4); margin: 0 8px; }
+  .ve-head .actions { display: flex; gap: 10px; }
+
+  hr.ve-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 36px;
+  }
+
+  /* 章节 */
+  .ve-section { margin-bottom: 48px; }
+  .ve-section-head {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 22px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .ve-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+  .ve-section-head .hint {
+    font-size: 9pt; color: var(--ink-3); font-style: italic;
+    letter-spacing: 1px;
+  }
+
+  /* 字段 */
+  .ve-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+  .ve-field > label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3);
+    font-style: italic;
+  }
+  .ve-input, .ve-textarea, .ve-select {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0; border-bottom: 0.5px solid var(--hair);
+    padding: 8px 0; outline: 0;
+    width: 100%; box-sizing: border-box;
+  }
+  .ve-input:focus, .ve-textarea:focus, .ve-select:focus {
+    border-bottom-color: var(--ink); border-bottom-width: 1px;
+  }
+  .ve-select {
+    border: 0.5px solid var(--hair); padding: 7px 10px;
+    background: var(--paper);
+  }
+  .ve-textarea {
+    border: 0.5px solid var(--hair); padding: 12px 14px;
+    line-height: 1.7; resize: vertical;
+    font-family: var(--font-serif);
+  }
+  .ve-textarea[readonly] {
+    background: var(--bg); color: var(--ink-2);
+  }
+  .ve-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .ve-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
+  .ve-row4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; }
+
+  /* SOAP 编辑：保留罗马数字风 */
+  .ve-soap-item {
+    display: grid; grid-template-columns: 56px 1fr;
+    gap: 22px; margin-bottom: 26px;
+    padding-bottom: 22px;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .ve-soap-item:last-child { border-bottom: 0; }
+  .ve-soap-roman {
+    font-family: var(--font-serif); font-size: 24pt; font-weight: 700;
+    color: var(--ink); line-height: 1; padding-top: 2px;
+    letter-spacing: 1px; font-style: italic;
+  }
+  .ve-soap-body label {
+    display: block;
+    font-family: var(--font-serif); font-size: 11.5pt;
+    font-weight: 700; color: var(--ink);
+    letter-spacing: 3px; margin-bottom: 10px;
+  }
+  .ve-soap-body .ve-textarea { min-height: 100px; }
+  .ve-soap-body textarea[name="physical_exam"] { min-height: 180px; }
+
+  /* 表单尾部按钮 */
+  .ve-form-actions {
+    display: flex; justify-content: flex-end; gap: 12px;
+    padding-top: 18px; margin-top: 6px;
+    border-top: 0.5px solid var(--hair);
+  }
+
+  .ve-locked-notice {
+    padding: 14px 18px; margin-bottom: 22px;
+    border: 0.5px solid var(--accent-amber);
+    background: #fbfaf6;
+    font-size: 9.5pt; color: var(--accent-amber);
+    letter-spacing: 1px; font-style: italic;
+  }
+
+  .ve-locked-notice b { font-style: normal; font-weight: 700; }
+</style>
+
+{# ─── 面包屑 ─── #}
+<div class="ve-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  {% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name or '客户' }}</a>
+  <span class="sep">/</span>{% endif %}
+  <a href="/admin/visits/{{ visit.id }}">病历 #{{ visit.id }}</a>
+  <span class="sep">/</span>
+  <span>编辑</span>
+</div>
+
+{# ─── 头部 ─── #}
+<div class="ve-head">
+  <div>
+    <h1>
+      编辑病历 <span class="hash">#{{ visit.id }}</span>
+      <span class="sub">
+        <b>{{ visit.visit_date or '日期未填' }}</b>
+        <span class="sep">·</span>
+        {{ visit_type_zh.get(visit.visit_type, visit.visit_type) }}
+        {% if visit.vet_name %}<span class="sep">·</span>主诊 {{ visit.vet_name }}{% endif %}
+        {% if pet %}<span class="sep">·</span>{{ pet.name }}{% endif %}
+      </span>
+    </h1>
+  </div>
+  <div class="actions">
+    <a href="/admin/visits/{{ visit.id }}" class="uk-btn ghost sm">返回详情</a>
+  </div>
+</div>
+
+<hr class="ve-rule-double"/>
+
+{% if visit.status == 'closed' %}
+<div class="ve-locked-notice">
+  <b>病历已结束</b> · 合规要求下不可修改、不可重开。如需追加记录请新建病历。
+</div>
+{% endif %}
+
+{# ─── 1. 基础信息（超管可改）─── #}
+<form method="post" action="/admin/visits/{{ visit.id }}/edit" class="ve-section" id="meta-form" {% if visit.status == 'closed' %}onsubmit="return false;"{% endif %}>
+  <div class="ve-section-head">
+    <h2>基&nbsp;础&nbsp;信&nbsp;息</h2>
+    {% if not is_superadmin %}
+    <span class="hint">仅超级管理员可改 · 你可改下面 SOAP 与复诊</span>
+    {% endif %}
+  </div>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  {# 保留 SOAP/复诊不动 #}
+  <input type="hidden" name="chief_complaint" value="{{ visit.chief_complaint or '' }}"/>
+  <input type="hidden" name="physical_exam" value="{{ visit.physical_exam or '' }}"/>
+  <input type="hidden" name="diagnosis" value="{{ visit.diagnosis or '' }}"/>
+  <input type="hidden" name="treatment_plan" value="{{ visit.treatment_plan or '' }}"/>
+  <input type="hidden" name="follow_up_note" value="{{ visit.follow_up_note or '' }}"/>
+  <input type="hidden" name="follow_up_at" value="{{ visit.follow_up_at or '' }}"/>
+
+  <div class="ve-row4">
+    <div class="ve-field">
+      <label>就诊日期</label>
+      <input type="date" name="visit_date" value="{{ visit.visit_date or '' }}" class="ve-input"
+             {% if not is_superadmin or visit.status == 'closed' %}readonly{% endif %} required/>
+    </div>
+    <div class="ve-field">
+      <label>就诊类型</label>
+      <select name="visit_type" class="ve-select"
+              {% if not is_superadmin or visit.status == 'closed' %}disabled{% endif %}>
+        {% for k, v in visit_type_zh.items() %}
+        <option value="{{ k }}" {% if visit.visit_type == k %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+      {% if not is_superadmin %}<input type="hidden" name="visit_type" value="{{ visit.visit_type or 'outpatient' }}"/>{% endif %}
+    </div>
+    <div class="ve-field">
+      <label>主诊医师</label>
+      <input name="vet_name" value="{{ visit.vet_name or '' }}" list="vet-list" class="ve-input"
+             {% if not is_superadmin or visit.status == 'closed' %}readonly{% endif %}/>
+      <datalist id="vet-list">
+        {% for v in vet_names %}<option value="{{ v }}">{% endfor %}
+      </datalist>
+    </div>
+    <div class="ve-field">
+      <label>关联宠物</label>
+      <select name="pet_id" class="ve-select"
+              {% if not is_superadmin or visit.status == 'closed' %}disabled{% endif %}>
+        {% for p in pets %}
+        <option value="{{ p.id }}" {% if visit.pet_id == p.id %}selected{% endif %}>{{ p.name or '未命名' }}{% if p.species == 'cat' %}（猫）{% elif p.species == 'dog' %}（犬）{% endif %}</option>
+        {% endfor %}
+      </select>
+      {% if not is_superadmin %}<input type="hidden" name="pet_id" value="{{ visit.pet_id or 0 }}"/>{% endif %}
+    </div>
+  </div>
+
+  {% if is_superadmin and visit.status != 'closed' %}
+  <div class="ve-form-actions">
+    <button type="submit" class="uk-btn primary sm">保&nbsp;存&nbsp;基&nbsp;础&nbsp;信&nbsp;息</button>
+  </div>
+  {% endif %}
+</form>
+
+{# ─── 2. SOAP 4 段 ─── #}
+<form method="post" action="/admin/visits/{{ visit.id }}/edit" class="ve-section" id="soap-form"
+      {% if visit.status == 'closed' %}onsubmit="return false;"{% endif %}>
+  <div class="ve-section-head">
+    <h2>SOAP &nbsp;病&nbsp;历</h2>
+    <span class="hint">语音输入 · 体检模板 · 医嘱模板 · 诊断联想已启用</span>
+  </div>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  {# 基础信息 + 复诊在本表单保持原值 #}
+  <input type="hidden" name="visit_date" value="{{ visit.visit_date or '' }}"/>
+  <input type="hidden" name="visit_type" value="{{ visit.visit_type or 'outpatient' }}"/>
+  <input type="hidden" name="vet_name" value="{{ visit.vet_name or '' }}"/>
+  <input type="hidden" name="pet_id" value="{{ visit.pet_id or 0 }}"/>
+  <input type="hidden" name="notes" value="{{ visit.notes or '' }}"/>
+  <input type="hidden" name="follow_up_note" value="{{ visit.follow_up_note or '' }}"/>
+  <input type="hidden" name="follow_up_at" value="{{ visit.follow_up_at or '' }}"/>
+
+  <div class="ve-soap-item">
+    <div class="ve-soap-roman">I.</div>
+    <div class="ve-soap-body">
+      <label>主&nbsp;诉</label>
+      <textarea name="chief_complaint" class="ve-textarea" data-voice="1"
+                {% if visit.status == 'closed' %}readonly{% endif %}
+                placeholder="客户主诉症状、起病时间、用药史…">{{ visit.chief_complaint or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="ve-soap-item">
+    <div class="ve-soap-roman">II.</div>
+    <div class="ve-soap-body">
+      <label>体&nbsp;格&nbsp;检&nbsp;查</label>
+      <textarea name="physical_exam" class="ve-textarea" data-voice="1" data-exam-helper="1"
+                {% if visit.status == 'closed' %}readonly{% endif %}
+                style="font-family: 'SF Mono', Menlo, Consolas, monospace;"
+                placeholder="T： HR： RR： BCS： CRT： MM： …">{{ visit.physical_exam or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="ve-soap-item">
+    <div class="ve-soap-roman">III.</div>
+    <div class="ve-soap-body">
+      <label>评&nbsp;估</label>
+      <textarea name="diagnosis" class="ve-textarea" data-voice="1" data-diagnosis-autocomplete="1"
+                {% if visit.status == 'closed' %}readonly{% endif %}
+                placeholder="主诊断 / 鉴别诊断 / 待排除…">{{ visit.diagnosis or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="ve-soap-item">
+    <div class="ve-soap-roman">IV.</div>
+    <div class="ve-soap-body">
+      <label>计&nbsp;划</label>
+      <textarea name="treatment_plan" class="ve-textarea" data-voice="1" data-orders-helper="1"
+                {% if visit.status == 'closed' %}readonly{% endif %}
+                placeholder="处方 / 检查 / 处置 / 客户教育 / 复诊安排…">{{ visit.treatment_plan or '' }}</textarea>
+    </div>
+  </div>
+
+  {% if visit.status != 'closed' %}
+  <div class="ve-form-actions">
+    <a href="/admin/visits/{{ visit.id }}" class="uk-btn ghost sm">取&nbsp;消</a>
+    <button type="submit" class="uk-btn primary sm">保&nbsp;存&nbsp;SOAP</button>
+  </div>
+  {% endif %}
+</form>
+
+{# ─── 3. 备注 + 复诊 ─── #}
+<form method="post" action="/admin/visits/{{ visit.id }}/edit" class="ve-section" id="followup-form"
+      {% if visit.status == 'closed' %}onsubmit="return false;"{% endif %}>
+  <div class="ve-section-head">
+    <h2>备&nbsp;注 &amp; 复&nbsp;诊&nbsp;安&nbsp;排</h2>
+  </div>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="visit_date" value="{{ visit.visit_date or '' }}"/>
+  <input type="hidden" name="visit_type" value="{{ visit.visit_type or 'outpatient' }}"/>
+  <input type="hidden" name="vet_name" value="{{ visit.vet_name or '' }}"/>
+  <input type="hidden" name="pet_id" value="{{ visit.pet_id or 0 }}"/>
+  <input type="hidden" name="chief_complaint" value="{{ visit.chief_complaint or '' }}"/>
+  <input type="hidden" name="physical_exam" value="{{ visit.physical_exam or '' }}"/>
+  <input type="hidden" name="diagnosis" value="{{ visit.diagnosis or '' }}"/>
+  <input type="hidden" name="treatment_plan" value="{{ visit.treatment_plan or '' }}"/>
+
+  <div class="ve-row2">
+    <div class="ve-field">
+      <label>备&nbsp;注（不打印到病历）</label>
+      <textarea name="notes" class="ve-textarea" rows="4" data-voice="1"
+                {% if visit.status == 'closed' %}readonly{% endif %}
+                placeholder="如：客户特殊情况、收费备忘、口头嘱托…">{{ visit.notes or '' }}</textarea>
+    </div>
+    <div class="ve-field">
+      <label>复&nbsp;诊&nbsp;安&nbsp;排</label>
+      <input type="date" name="follow_up_at" value="{{ visit.follow_up_at or '' }}" class="ve-input"
+             {% if visit.status == 'closed' %}readonly{% endif %}
+             style="margin-bottom:10px;"/>
+      <textarea name="follow_up_note" class="ve-textarea" rows="3" data-voice="1"
+                {% if visit.status == 'closed' %}readonly{% endif %}
+                placeholder="如：3 天后复查精神食欲、术后 7 天拆线…">{{ visit.follow_up_note or '' }}</textarea>
+    </div>
+  </div>
+
+  {% if visit.status != 'closed' %}
+  <div class="ve-form-actions">
+    <button type="submit" class="uk-btn primary sm">保&nbsp;存&nbsp;备&nbsp;注&nbsp;与&nbsp;复&nbsp;诊</button>
+  </div>
+  {% endif %}
+</form>
+
+{# 提示：语音 / 体检模板 / 医嘱模板 / 诊断联想 JS 已在 uk/_base.html 中加载（voice_input.js / exam_helper.js / orders_helper.js / diagnosis_autocomplete.js） #}
+
+{% endblock %}
