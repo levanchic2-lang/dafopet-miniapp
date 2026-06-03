@@ -5,6 +5,24 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: rgba(0,0,0,0.05); }
 
+/* iOS Safari 日期/时间输入框默认有最小宽度（约 132px），
+   在 grid-template-columns: 1fr 1fr 里会撑爆同行另一列。
+   min-width: 0 让 grid item 可以收缩；appearance: none 关掉部分原生样式。 */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="week"] {
+  min-width: 0;
+  max-width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* form 子元素 grid label 也要能收缩 */
+label { min-width: 0; }
+.fld-row > *, .row2 > * { min-width: 0; }
+
 html, body {
   margin: 0; padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",

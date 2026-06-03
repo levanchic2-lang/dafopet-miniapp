@@ -20009,6 +20009,45 @@ _VISIT_TYPE_ZH = {
 }
 
 
+@app.get("/m/pet/{pet_id}", response_class=HTMLResponse)
+async def m_pet_profile(pet_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/pet/{pet_id}", status_code=303)
+    pet = db.get(Pet, pet_id)
+    if not pet:
+        raise HTTPException(404)
+    cust = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    # 最近 10 病历（该宠物）
+    visits = db.query(Visit).filter(Visit.pet_id == pet_id)\
+        .order_by(Visit.id.desc()).limit(10).all()
+    # 疫苗 + 驱虫
+    vaccinations = db.query(Vaccination).filter(
+        Vaccination.pet_id == pet_id,
+        Vaccination.status == "active",
+    ).order_by(Vaccination.vaccinated_date.desc()).limit(10).all()
+    dewormings = db.query(DewormingRecord).filter(
+        DewormingRecord.pet_id == pet_id,
+        DewormingRecord.status == "active",
+    ).order_by(DewormingRecord.deworm_date.desc()).limit(10).all()
+    # 体重曲线（最近 6 条）
+    weights = db.query(WeightRecord).filter(WeightRecord.pet_id == pet_id)\
+        .order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc())\
+        .limit(6).all()
+    # 当前住院（如果有）
+    admitted = db.query(Hospitalization).filter(
+        Hospitalization.pet_id == pet_id,
+        Hospitalization.status == "admitted",
+    ).first()
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "pet": pet, "cust": cust,
+        "visits": visits, "vaccinations": vaccinations,
+        "dewormings": dewormings, "weights": weights,
+        "admitted": admitted,
+    })
+    return templates.TemplateResponse(request, "m/pet_profile.html", ctx)
+
+
 @app.get("/m/visit/new", response_class=HTMLResponse)
 async def m_visit_new(
     request: Request,
