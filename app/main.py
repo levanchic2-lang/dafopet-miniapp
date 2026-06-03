@@ -3064,7 +3064,23 @@ def _resolve_mobile_role(session_role: str, mobile_role: str) -> str:
 
 
 def _post_login_redirect(request: Request) -> str:
-    """登录成功后跳哪：手机 → /m，桌面 → /admin/customers。"""
+    """登录成功后跳哪。
+    优先级：?next=（白名单：以 / 开头不含 //）→ 手机 /m → 桌面 /admin。
+    """
+    nxt = (request.query_params.get("next") or "").strip()
+    if nxt and nxt.startswith("/") and not nxt.startswith("//"):
+        return nxt
+    # 也支持表单提交时 referer 里带的 next（POST 登录会丢 query_params）
+    referer = request.headers.get("referer", "") or ""
+    if "?next=" in referer:
+        try:
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(referer).query)
+            r_next = (qs.get("next", [""])[0] or "").strip()
+            if r_next.startswith("/") and not r_next.startswith("//"):
+                return r_next
+        except Exception:
+            pass
     if _is_mobile_ua(request):
         return "/m"
     return "/admin"
