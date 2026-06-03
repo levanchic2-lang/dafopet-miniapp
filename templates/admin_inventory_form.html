@@ -47,11 +47,14 @@
  {% endfor %}
  {% endfor %}
  {# 兜底：item.subcategory 不在预定义 subs 字典里（历史脏数据 / OCR 直存中文标签）
-    显式追加一个 selected option 把原值保留，避免被静默改成第一个 #}
+    显式追加一个 selected option 把原值保留，避免被静默改成第一个。
+    注意：Jinja2 的 {% set %} 在 for 循环内不泄漏外部作用域，必须用 namespace()。 #}
  {% if item and item.subcategory %}
-   {% set _matched = false %}
-   {% for cat_key, cat in categories.items() %}{% if item.subcategory in cat.subs %}{% set _matched = true %}{% endif %}{% endfor %}
-   {% if not _matched %}
+   {% set ns = namespace(matched=false) %}
+   {% for cat_key, cat in categories.items() %}
+     {% if item.subcategory in cat.subs %}{% set ns.matched = true %}{% endif %}
+   {% endfor %}
+   {% if not ns.matched %}
    <option value="{{ item.subcategory }}" data-cat="{{ item.category }}" selected>
     {{ item.subcategory }} ⚠ 原值
    </option>
