@@ -59,10 +59,16 @@
   .allday-cols { flex:1; display:grid; }
   .allday-cell { border-left:1px solid var(--hair); padding:2px; display:flex; flex-direction:column; gap:2px; }
   .allday-block-pill { font-size:0.71rem; padding:0.1rem 0.35rem; background:#e0e7ff; color:#3730a3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
-  .week-scroll { flex:1; overflow-y:scroll; scrollbar-gutter:stable; position:relative; }
-  /* header 行也预留同宽 scrollbar gutter，列才能对齐 */
-  .week-header-row, .allday-row { scrollbar-gutter:stable; overflow-y:scroll; }
-  .week-header-row::-webkit-scrollbar, .allday-row::-webkit-scrollbar { width: 0; }
+  .week-scroll { flex:1; overflow-y:scroll; position:relative; }
+  /* WebKit 滚动条改细 + 用 JS 量出来的宽度同步到 header padding-right */
+  .week-scroll::-webkit-scrollbar { width: 8px; }
+  .week-scroll::-webkit-scrollbar-track { background: var(--paper); }
+  .week-scroll::-webkit-scrollbar-thumb { background: var(--hair-2); }
+  .week-scroll::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+  /* 兼容 firefox */
+  .week-scroll { scrollbar-width: thin; scrollbar-color: var(--hair-2) var(--paper); }
+  /* header / allday 行预留 8px scrollbar gutter，跟 body 完美对齐 */
+  .week-header-row, .allday-row { padding-right: 8px; box-sizing: border-box; }
   .week-grid { display:flex; position:relative; }
   .time-col { width:56px; flex-shrink:0; }
   .hour-label { height:64px; display:flex; align-items:flex-start; justify-content:flex-end; padding-right:8px; padding-top:3px; font-size:0.68rem; color:var(--ink-3); font-variant-numeric:tabular-nums; }
