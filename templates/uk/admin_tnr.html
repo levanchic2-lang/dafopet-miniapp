@@ -154,9 +154,86 @@
     color: var(--ink-3); font-style: italic;
   }
 
-  /* 申请素材缩略图 */
+  /* ── 申请卡内部布局（原 admin.html extra_css 漏迁的） ── */
+  body .admin-app-top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 12px; flex-wrap: wrap;
+  }
+  body .admin-app-lines p {
+    margin: 6px 0 0; font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink-2); line-height: 1.6;
+  }
+  body .admin-app-lines p.sub {
+    margin: 0; font-size: 10pt; color: var(--ink-3); font-style: italic;
+  }
+  body .admin-app-meta {
+    font-family: var(--font-numeric); font-size: 9pt;
+    color: var(--ink-3); font-style: italic; white-space: nowrap;
+  }
+
+  /* 申请素材缩略图 — 76×76 hairline 网格 */
+  body .admin-app-thumb-row { margin-top: 12px; }
+  body .admin-app-thumb-label {
+    display: block; margin-bottom: 6px;
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 1.5px; color: var(--ink-3); font-style: italic;
+  }
+  body .admin-app-thumb-wrap {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start;
+  }
   body a.admin-app-thumb {
-    border-radius: 0; border: 0.5px solid var(--hair);
+    display: block !important;
+    width: 76px !important; height: 76px !important;
+    border: 0.5px solid var(--hair) !important; border-radius: 0 !important;
+    overflow: hidden; background: var(--bg);
+    flex-shrink: 0; text-decoration: none; box-sizing: border-box;
+  }
+  body a.admin-app-thumb:hover { border-color: var(--ink) !important; }
+  body a.admin-app-thumb img {
+    width: 100% !important; height: 100% !important;
+    object-fit: cover !important; display: block !important;
+  }
+
+  /* AI 辅助审核细节 */
+  body .ai-review-details summary {
+    user-select: none; font-family: var(--font-serif);
+    color: var(--ink-2); letter-spacing: 1.5px; cursor: pointer;
+  }
+  body .ai-review-block { margin-top: 10px; }
+  body .ai-review-block:first-child { margin-top: 0; }
+  body .ai-review-v { margin: 0; font-family: var(--font-serif); font-size: 10pt; }
+  body .ai-review-list { margin: 4px 0 0; padding-left: 20px; }
+  body .ai-review-list li { margin: 3px 0; }
+
+  /* admin-actions: 上传术前后 + 审核 区域 */
+  body .admin-actions {
+    margin-top: 14px; border-top: 0.5px solid var(--hair);
+    padding-top: 14px; display: grid; grid-template-columns: 1fr; gap: 12px;
+  }
+  body .admin-actions-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    align-items: start;
+  }
+  @media (max-width: 720px) {
+    body .admin-actions-row { grid-template-columns: 1fr; }
+    body .admin-app-meta { white-space: normal; }
+  }
+  body .admin-form-line {
+    display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+  }
+  body .admin-form-line input { width: 100%; }
+  body .admin-form-line button { white-space: nowrap; }
+  body .admin-form-stack { display: grid; gap: 8px; }
+
+  /* 拒绝原因 box */
+  body .card div[style*="fff1f0"] {
+    background: #fcf5f4 !important; border: 0 !important;
+    border-left: 3px solid var(--accent-red) !important;
+    border-radius: 0 !important; padding: 10px 14px !important;
+  }
+  body .card div[style*="fff1f0"] span[style*="b91c1c"],
+  body .card div[style*="fff1f0"] span[style*="7f1d1d"] {
+    color: var(--accent-red) !important;
   }
 
   /* AI 辅助 panel */
