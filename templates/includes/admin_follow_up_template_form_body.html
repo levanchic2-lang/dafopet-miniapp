@@ -1,0 +1,67 @@
+<div class="card" style="max-width:1100px;margin:0 auto;">
+ <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+   <a href="/admin/follow-up-templates" class="btn secondary" style="padding:.3rem .6rem;">← 返回</a>
+   <h1 style="margin:0;">📋 {{ '编辑模板' if tpl else '新建回访模板' }}</h1>
+   {% if tpl and tpl.is_builtin %}<span style="background:#ede9fe;color:#6b21a8;font-size:.72rem;padding:2px 8px;border-radius:3px;">内置</span>{% endif %}
+ </div>
+
+ {% if msg %}<div style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;padding:.5rem .8rem;border-radius:8px;margin-top:1rem;">{{ msg }}</div>{% endif %}
+
+ <form method="post" action="/admin/follow-up-templates/save" id="tplForm" style="margin-top:1rem;">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+   <input type="hidden" name="tpl_id" value="{{ tpl.id if tpl else 0 }}"/>
+   <input type="hidden" name="rounds_json" id="rounds_json" value=""/>
+
+   <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:.7rem;margin-bottom:.8rem;">
+     <div>
+       <label class="mini">模板名 *</label>
+       <input name="name" required value="{{ tpl.name if tpl else '' }}" style="width:100%;" maxlength="120"/>
+     </div>
+     <div>
+       <label class="mini">系统分类</label>
+       <select name="system" style="width:100%;">
+         <option value="">—</option>
+         {% for k, v in systems.items() %}<option value="{{ k }}" {% if tpl and tpl.system == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+       </select>
+     </div>
+     <div>
+       <label class="mini">优先级（0-100）</label>
+       <input type="number" name="priority" min="0" max="100" step="1" value="{{ tpl.priority if tpl else 50 }}" style="width:100%;"/>
+       <small style="font-size:.7rem;color:#94a3b8;">数值越高越优先匹配</small>
+     </div>
+     <div>
+       <label class="mini">启用</label>
+       <div style="padding-top:.4rem;">
+         <label style="cursor:pointer;"><input type="checkbox" name="is_active" value="1" {% if (tpl and tpl.is_active) or not tpl %}checked{% endif %}/> 启用此模板</label>
+       </div>
+     </div>
+   </div>
+
+   <div style="margin-bottom:.8rem;">
+     <label class="mini">关键词（英文逗号分隔，自动匹配诊断中的字符串）</label>
+     <textarea name="keywords" rows="2" style="width:100%;" placeholder="例：肠炎,IBD,炎症性肠病,胰腺炎,呕吐,腹泻">{{ tpl.keywords if tpl else '' }}</textarea>
+     <small style="font-size:.7rem;color:#94a3b8;">留空 = 此模板不参与关键词匹配（除非作为系统兜底模板）</small>
+   </div>
+
+   <div style="margin-bottom:.8rem;">
+     <label class="mini">备注</label>
+     <input name="notes" value="{{ tpl.notes if tpl else '' }}" style="width:100%;" placeholder="可选：模板用途、临床依据等"/>
+   </div>
+
+   <hr style="margin:1.2rem 0;border:none;border-top:1px dashed #cbd5e1;"/>
+
+   <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem;">
+     <h2 style="margin:0;font-size:1.1rem;">🔁 回访轮次</h2>
+     <small style="color:#64748b;">每一轮 = 一次客户反馈表单。day_offset 是相对就诊日的天数。</small>
+     <span style="flex:1;"></span>
+     <button type="button" onclick="addRound()" class="btn secondary">+ 增加一轮</button>
+   </div>
+
+   <div id="roundsContainer"></div>
+
+   <div style="margin-top:1.2rem;display:flex;gap:.6rem;">
+     <button type="submit" class="btn">💾 保存模板</button>
+     <a href="/admin/follow-up-templates" class="btn secondary">取消</a>
+   </div>
+ </form>
+</div>

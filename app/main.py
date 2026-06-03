@@ -10196,7 +10196,7 @@ async def page_admin_follow_ups(
     cust_ids = list({r.customer_id for r in rows if r.customer_id})
     custs = {c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
 
-    return templates.TemplateResponse(request, "admin_follow_ups.html", {
+    return templates.TemplateResponse(request, "uk/follow_ups.html", {
         "title": "回访管理",
         "rows": rows,
         "visits": visits,
@@ -10305,7 +10305,7 @@ async def page_admin_futpl_list(request: Request, db: Session = Depends(get_db))
             t._rounds = _json.loads(t.rounds_json or "[]")
         except Exception:
             t._rounds = []
-    return templates.TemplateResponse(request, "admin_follow_up_templates.html", {
+    return templates.TemplateResponse(request, "uk/follow_up_templates.html", {
         "tpls": tpls, "systems": _SYS,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
@@ -10317,7 +10317,7 @@ async def page_admin_futpl_new(request: Request, db: Session = Depends(get_db)):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     from app.data.vet_seed import SYSTEMS as _SYS
-    return templates.TemplateResponse(request, "admin_follow_up_template_form.html", {
+    return templates.TemplateResponse(request, "uk/follow_up_template_form.html", {
         "tpl": None, "rounds": [], "systems": _SYS,
         "question_types": _QUESTION_TYPES,
         "csrf_token": _get_csrf_token(request),
@@ -10337,7 +10337,7 @@ async def page_admin_futpl_edit(tpl_id: int, request: Request, db: Session = Dep
         rounds = _json.loads(tpl.rounds_json or "[]")
     except Exception:
         rounds = []
-    return templates.TemplateResponse(request, "admin_follow_up_template_form.html", {
+    return templates.TemplateResponse(request, "uk/follow_up_template_form.html", {
         "tpl": tpl, "rounds": rounds, "systems": _SYS,
         "question_types": _QUESTION_TYPES,
         "csrf_token": _get_csrf_token(request),

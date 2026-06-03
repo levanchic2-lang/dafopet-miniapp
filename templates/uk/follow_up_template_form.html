@@ -1,0 +1,155 @@
+{% extends "uk/_base.html" %}
+{% block title %}{% if tpl %}编辑模板{% else %}新建回访模板{% endif %} · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .ftf-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .ftf-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .ftf-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .ftf-bc .sep { margin:0 8px; color:var(--ink-4); }
+  hr.ftf-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .ftf-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:8px; }
+  .ftf-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15; }
+
+  body .card { background:var(--paper); border:0.5px solid var(--hair-2); border-radius:0 !important; box-shadow:none; padding:22px 26px; margin-bottom:18px; max-width:none !important; }
+  body .card > div:first-child > h1 { display:none; }
+  body .card > div:first-child > a.btn.secondary { display:none; }
+  body .card > div:first-child > span[style*="ede9fe"] { display:none; }
+
+  body .round-card { background:var(--bg) !important; border:0.5px solid var(--hair) !important; border-radius:0 !important; padding:16px 18px !important; margin-bottom:14px !important; }
+  body .round-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; font-family:var(--font-serif); }
+  body .round-head > span[style*="background:#3b82f6"] { background:var(--ink) !important; color:var(--paper) !important; border-radius:0 !important; width:28px !important; height:28px !important; font-family:var(--font-numeric) !important; }
+  body .question-item { background:var(--paper) !important; border:0.5px solid var(--hair) !important; border-radius:0 !important; padding:8px 10px !important; margin-bottom:6px !important; }
+  body .question-options textarea { font-family:var(--font-serif) !important; }
+  body .mini { font-family:var(--font-serif); font-style:italic; font-size:9.5pt; color:var(--ink-3); letter-spacing:1.5px; }
+
+  body input[type=text], body input[type=number], body input:not([type]), body select, body textarea {
+    font-family:var(--font-serif) !important; font-size:10pt !important; color:var(--ink) !important;
+    background:var(--paper) !important; border:0.5px solid var(--hair) !important;
+    border-radius:0 !important; padding:6px 10px !important; outline:0 !important;
+  }
+  body input:focus, body select:focus, body textarea:focus { border-color:var(--ink) !important; box-shadow:none !important; }
+
+  body .btn, body button {
+    background:var(--ink) !important; color:var(--paper) !important; border:0 !important;
+    border-radius:0 !important; padding:8px 18px !important; font-family:var(--font-serif) !important;
+    font-size:10pt !important; letter-spacing:2px !important; font-weight:700 !important;
+  }
+  body .btn.secondary, body button.secondary {
+    background:var(--paper) !important; color:var(--ink-2) !important;
+    border:0.5px solid var(--hair) !important; font-style:italic; font-weight:400 !important;
+  }
+  body .icon-btn { background:transparent !important; color:var(--ink-3) !important; border:0 !important; padding:4px !important; font-weight:400 !important; }
+  body .icon-btn:hover { color:var(--accent-red) !important; }
+  body label.mini { display:block; margin-bottom:4px; }
+</style>
+
+<div class="ftf-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/follow-ups">回访管理</a><span class="sep">/</span>
+  <a href="/admin/follow-up-templates">回访模板</a><span class="sep">/</span>
+  <span>{% if tpl %}编辑「{{ tpl.name }}」{% else %}新建模板{% endif %}</span>
+</div>
+
+<div class="ftf-head">
+  <div>
+    <h1>{% if tpl %}编&nbsp;辑&nbsp;模&nbsp;板{% else %}新&nbsp;建&nbsp;回&nbsp;访&nbsp;模&nbsp;板{% endif %}
+      {% if tpl and tpl.is_builtin %}<span style="display:inline-block; font-family:var(--font-serif); font-style:italic; font-size:10pt; padding:2px 12px; margin-left:14px; border:0.5px solid var(--ink-3); color:var(--ink); vertical-align:8px;">内&nbsp;置</span>{% endif %}
+    </h1>
+  </div>
+</div>
+
+<hr class="ftf-rule-double"/>
+
+{% include "includes/admin_follow_up_template_form_body.html" %}
+
+<script>
+const QUESTION_TYPES = {{ question_types|tojson }};
+let ROUNDS = {{ rounds|tojson }};
+
+function render() {
+  const c = document.getElementById('roundsContainer');
+  if (!ROUNDS.length) {
+    c.innerHTML = '<div style="background:var(--bg);border:0.5px solid var(--hair);padding:36px 20px;text-align:center;color:var(--ink-3);font-family:var(--font-serif);font-style:italic;">还没有轮次，点上方「＋ 增加一轮」开始配置</div>';
+    return;
+  }
+  c.innerHTML = '';
+  ROUNDS.forEach((r, ri) => {
+    const card = document.createElement('div');
+    card.className = 'round-card';
+    card.innerHTML = `
+      <div class="round-head">
+        <span style="background:#3b82f6;color:#fff;font-weight:600;width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${ri + 1}</span>
+        <input value="${escapeHtml(r.round_name || '')}" placeholder="轮次名（如：术后 3 天复查）" data-r="${ri}" data-f="round_name" style="flex:1;font-weight:600;"/>
+        <span class="mini">D+</span>
+        <input type="number" min="1" max="365" value="${r.day_offset || 1}" data-r="${ri}" data-f="day_offset" style="width:70px;"/>
+        <span class="mini">天</span>
+        <button type="button" class="icon-btn" onclick="rmRound(${ri})" title="删除此轮">×</button>
+      </div>
+      <div class="mini" style="margin-bottom:.3rem;">这轮问客户的问题：</div>
+      <div class="questions-list" data-r="${ri}"></div>
+      <button type="button" class="btn secondary" onclick="addQuestion(${ri})" style="margin-top:.4rem;">＋ 加一题</button>
+    `;
+    c.appendChild(card);
+    renderQuestions(ri);
+  });
+}
+
+function renderQuestions(ri) {
+  const list = document.querySelector(`.questions-list[data-r="${ri}"]`);
+  list.innerHTML = '';
+  (ROUNDS[ri].questions || []).forEach((q, qi) => {
+    const div = document.createElement('div');
+    div.className = 'question-item';
+    const typeOpts = Object.entries(QUESTION_TYPES).map(([k, v]) =>
+      `<option value="${k}" ${q.type === k ? 'selected' : ''}>${v}</option>`).join('');
+    const needsOptions = (q.type === 'select' || q.type === 'multi');
+    div.style.display = 'grid';
+    div.style.gridTemplateColumns = '110px 1fr 130px 30px';
+    div.style.gap = '8px';
+    div.style.alignItems = 'center';
+    div.innerHTML = `
+      <select data-r="${ri}" data-q="${qi}" data-f="type" onchange="onQType(${ri},${qi},this.value)">${typeOpts}</select>
+      <input value="${escapeHtml(q.label || '')}" placeholder="问题标签（如：精神状态）" data-r="${ri}" data-q="${qi}" data-f="label"/>
+      <input value="${escapeHtml(q.key || '')}" placeholder="字段 key" data-r="${ri}" data-q="${qi}" data-f="key" style="font-family:var(--font-numeric)!important;font-size:9.5pt!important;"/>
+      <button type="button" class="icon-btn" onclick="rmQuestion(${ri},${qi})" title="删除">×</button>
+      ${needsOptions ? `
+        <div class="question-options" style="grid-column:1/-1;margin-top:6px;">
+          <span class="mini">选项（每行一个）：</span>
+          <textarea rows="2" data-r="${ri}" data-q="${qi}" data-f="options" placeholder="正常&#10;软便&#10;拉稀" style="width:100%;">${(q.options || []).join('\n')}</textarea>
+        </div>` : ''}
+    `;
+    list.appendChild(div);
+  });
+}
+
+function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function addRound() { ROUNDS.push({day_offset:7, round_name:`第 ${ROUNDS.length+1} 轮`, questions:[]}); render(); }
+function rmRound(i) { if(!confirm(`删除第 ${i+1} 轮？`)) return; ROUNDS.splice(i,1); render(); }
+function addQuestion(ri) { ROUNDS[ri].questions=ROUNDS[ri].questions||[]; ROUNDS[ri].questions.push({key:'',type:'scale1to5',label:''}); renderQuestions(ri); }
+function rmQuestion(ri,qi) { ROUNDS[ri].questions.splice(qi,1); renderQuestions(ri); }
+function onQType(ri,qi,type) { ROUNDS[ri].questions[qi].type=type; renderQuestions(ri); }
+
+document.getElementById('roundsContainer').addEventListener('input', e => {
+  const el = e.target; const r=el.dataset.r, q=el.dataset.q, f=el.dataset.f;
+  if (r===undefined) return;
+  const ri = parseInt(r,10);
+  if (q===undefined) { if (f==='day_offset') ROUNDS[ri][f]=parseInt(el.value,10)||1; else ROUNDS[ri][f]=el.value; }
+  else { const qi=parseInt(q,10); ROUNDS[ri].questions[qi]=ROUNDS[ri].questions[qi]||{};
+    if (f==='options') ROUNDS[ri].questions[qi].options = el.value.split('\n').map(s=>s.trim()).filter(Boolean);
+    else ROUNDS[ri].questions[qi][f]=el.value; }
+});
+
+document.getElementById('tplForm').addEventListener('submit', e => {
+  for (let ri=0; ri<ROUNDS.length; ri++) {
+    const r=ROUNDS[ri];
+    for (let qi=0; qi<(r.questions||[]).length; qi++) {
+      const q=r.questions[qi];
+      if (!q.key || !q.label) { alert(`第 ${ri+1} 轮 第 ${qi+1} 题：key 和 label 都是必填`); e.preventDefault(); return; }
+      if (!/^[a-z][a-z0-9_]*$/i.test(q.key)) { alert(`第 ${ri+1} 轮 第 ${qi+1} 题：key 只能用英文字母+数字+下划线`); e.preventDefault(); return; }
+    }
+  }
+  document.getElementById('rounds_json').value = JSON.stringify(ROUNDS);
+});
+render();
+</script>
+{% endblock %}

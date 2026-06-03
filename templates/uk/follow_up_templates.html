@@ -1,0 +1,117 @@
+{% extends "uk/_base.html" %}
+{% block title %}回访模板 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .ft-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .ft-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .ft-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .ft-bc .sep { margin:0 8px; color:var(--ink-4); }
+  hr.ft-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .ft-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:8px; }
+  .ft-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15; }
+  .ft-head h1 .sub { display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px; }
+  .ft-btn { background:var(--ink); color:var(--paper); border:0; padding:8px 18px; cursor:pointer; font-family:var(--font-serif); font-size:10pt; letter-spacing:2px; font-weight:700; text-decoration:none; display:inline-block; }
+  .ft-btn.ghost { background:var(--paper); color:var(--ink-2); border:0.5px solid var(--hair); font-style:italic; font-weight:400; }
+  .ft-btn.ghost:hover { color:var(--ink); border-color:var(--ink-3); background:var(--bg); }
+  .ft-btn.sm { font-size:9pt; padding:4px 10px; letter-spacing:1.5px; }
+  .ft-btn.danger { background:var(--paper); color:var(--accent-red); border:0.5px solid var(--accent-red); font-style:italic; font-weight:400; }
+
+  .ft-info { border:0; border-left:3px solid var(--accent-amber); background:#fbfaf6; padding:10px 16px; margin-bottom:18px; font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); line-height:1.7; }
+  .ft-msg-ok { border:0; border-left:3px solid var(--accent-green); background:#f5f9f6; padding:10px 16px; margin-bottom:18px; font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); }
+
+  .ft-tbl { width:100%; border-collapse:collapse; font-family:var(--font-serif); border:0.5px solid var(--hair-2); }
+  .ft-tbl thead th { font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-weight:400; font-style:italic; border-bottom:0.5px solid var(--ink); padding:10px 12px; text-align:left; background:var(--paper); }
+  .ft-tbl tbody td { font-size:10pt; color:var(--ink-2); border-bottom:0.5px solid var(--hair); padding:12px; vertical-align:top; }
+  .ft-tbl tbody tr.dim td { color:var(--ink-3); }
+  .ft-tbl tbody tr:hover td { background:var(--bg); }
+  .ft-tbl .num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums; color:var(--ink); }
+  .ft-tbl .name { color:var(--ink); font-weight:700; text-decoration:none; border-bottom:0.5px solid var(--hair-2); }
+  .ft-kw { display:inline-block; background:var(--bg); border:0.5px solid var(--hair); font-size:9pt; padding:1px 8px; margin:1px 2px; color:var(--ink-2); font-style:italic; }
+
+  .ft-pill { display:inline-block; font-family:var(--font-serif); font-style:italic; font-size:9pt; padding:2px 10px; border:0.5px solid var(--hair); letter-spacing:1.5px; color:var(--ink-2); }
+  .ft-pill.ok { color:var(--accent-green); border-color:var(--accent-green); }
+  .ft-pill.err { color:var(--accent-red); border-color:var(--accent-red); }
+  .ft-pill.ink { color:var(--ink); border-color:var(--ink-3); background:var(--bg); }
+</style>
+
+<div class="ft-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/follow-ups">回访管理</a><span class="sep">/</span>
+  <span>回访模板</span>
+</div>
+
+{% if msg %}<div class="ft-msg-ok">{{ msg }}</div>{% endif %}
+
+<div class="ft-head">
+  <div>
+    <h1>回&nbsp;访&nbsp;模&nbsp;板
+      <span class="sub">按诊断关键词自动匹配并衍生多轮回访</span>
+    </h1>
+  </div>
+  <div>
+    <a href="/admin/follow-up-templates/new" class="ft-btn">＋ 新&nbsp;建&nbsp;模&nbsp;板</a>
+  </div>
+</div>
+
+<hr class="ft-rule-double"/>
+
+<div class="ft-info">
+  <b>工作原理</b>：医生在病例第 4 步填诊断（如「猫冠状病毒肠炎」）→ 系统按关键词匹配命中的模板 → 自动按模板的每一轮生成回访任务（visit_date + day_offset）→ 到点自动推送给客户。<br/>
+  内置模板可编辑、可禁用，但不可删除；自建模板可随时增删改。
+</div>
+
+<table class="ft-tbl">
+  <thead>
+    <tr>
+      <th style="width:60px;">优先</th>
+      <th>模板名</th>
+      <th style="width:110px;">系统</th>
+      <th>关键词（前 6 个）</th>
+      <th style="text-align:center; width:120px;">轮次</th>
+      <th style="text-align:center; width:80px;">状态</th>
+      <th style="text-align:center; width:200px;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in tpls %}
+    <tr class="{% if not t.is_active %}dim{% endif %}">
+      <td class="num">{{ t.priority }}</td>
+      <td>
+        <a href="/admin/follow-up-templates/{{ t.id }}/edit" class="name">{{ t.name }}</a>
+        {% if t.is_builtin %}<span class="ft-pill ink" style="margin-left:6px;">内置</span>{% endif %}
+      </td>
+      <td>{{ systems.get(t.system, t.system) or '—' }}</td>
+      <td>
+        {% set kws = (t.keywords or '').split(',')[:6] %}
+        {% for kw in kws %}<span class="ft-kw">{{ kw.strip() }}</span>{% endfor %}
+        {% if t.keywords and t.keywords.count(',') > 5 %}<span style="color:var(--ink-3); font-style:italic; font-size:9pt;">+ {{ t.keywords.count(',') - 5 }} 个</span>{% endif %}
+      </td>
+      <td style="text-align:center;" class="num">
+        {{ t._rounds|length }}
+        <div style="font-size:9pt; color:var(--ink-3); font-style:italic; font-family:var(--font-serif); margin-top:2px;">
+          {% for r in t._rounds %}D+{{ r.day_offset }}{% if not loop.last %}<span style="color:var(--ink-4);"> · </span>{% endif %}{% endfor %}
+        </div>
+      </td>
+      <td style="text-align:center;">
+        {% if t.is_active %}<span class="ft-pill ok">启用</span>{% else %}<span class="ft-pill err">禁用</span>{% endif %}
+      </td>
+      <td style="text-align:center;">
+        <a href="/admin/follow-up-templates/{{ t.id }}/edit" class="ft-btn ghost sm">编辑</a>
+        <form method="post" action="/admin/follow-up-templates/{{ t.id }}/toggle" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="ft-btn ghost sm">{{ '禁用' if t.is_active else '启用' }}</button>
+        </form>
+        {% if not t.is_builtin %}
+        <form method="post" action="/admin/follow-up-templates/{{ t.id }}/delete" style="display:inline;" onsubmit="return confirm('确认删除模板「{{ t.name }}」？该操作不可恢复。')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="ft-btn danger sm">删</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" style="padding:48px 20px; text-align:center; color:var(--ink-3); font-style:italic;">还没有任何模板 · 可在右上 ＋新建模板</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
