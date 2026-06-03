@@ -1017,12 +1017,12 @@
     <div class="aside-card">
       <h3>新建</h3>
       <div class="aside-actions">
-        <a class="uk-btn sm">发起协议签署</a>
-        <a class="uk-btn ghost sm">钱包充值</a>
-        <a class="uk-btn ghost sm">售卖套餐</a>
-        <a class="uk-btn ghost sm">收押金</a>
-        <a class="uk-btn ghost sm">发优惠券</a>
-        <a class="uk-btn ghost sm">发送短信</a>
+        <a class="uk-btn sm" href="#" onclick="document.getElementById('consentModal').classList.add('visible');return false;">发起协议签署</a>
+        <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('rechargeModal').classList.add('visible');return false;">钱包充值</a>
+        <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('sellPkgModal').classList.add('visible');return false;">售卖套餐</a>
+        <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('depositModal').classList.add('visible');return false;">收押金</a>
+        <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('couponModal').classList.add('visible');return false;">发优惠券</a>
+        <a class="uk-btn ghost sm" href="#" onclick="alert('短信功能将在后续版本加入。当前可通过协议签署 / 收费单页内的链接复制发送给客户。');return false;">发送短信</a>
       </div>
     </div>
 
@@ -1145,7 +1145,250 @@
   </div>
 </div>
 
+{# ─── 发起协议签署 modal ─── #}
+<div class="uk-modal-overlay" id="consentModal" onclick="if(event.target===this) this.classList.remove('visible');">
+  <div class="uk-modal">
+    <h3>发 起 协 议 签 署</h3>
+    <form method="post" action="/admin/consent-tasks/create">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+      <label class="field">协议模板
+        <select name="template_id" required>
+          {% if consent_templates %}
+            {% for t in consent_templates %}
+            <option value="{{ t.id }}">{{ t.name }}</option>
+            {% endfor %}
+          {% else %}
+            <option value="">（暂无已启用模板，请去「系统 → 协议模板」配置）</option>
+          {% endif %}
+        </select>
+      </label>
+      <label class="field">关联宠物（可选）
+        <select name="pet_id">
+          <option value="0">不指定</option>
+          {% for p in pets %}
+          <option value="{{ p.id }}" {% if p.id == active_pet_id %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="row2">
+        <label class="field">标题（可选覆盖）
+          <input name="title_override" placeholder="留空 = 用模板名"/>
+        </label>
+        <label class="field">过期日期（可选）
+          <input name="expires_at" placeholder="YYYY-MM-DD，留空 = 不限期"/>
+        </label>
+      </div>
+      <label class="field">备注
+        <textarea name="notes" rows="2" placeholder="可选"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('consentModal').classList.remove('visible');">取消</button>
+        <button type="submit" class="uk-btn primary sm">发 起 签 署</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ─── 钱包充值 modal ─── #}
+<div class="uk-modal-overlay" id="rechargeModal" onclick="if(event.target===this) this.classList.remove('visible');">
+  <div class="uk-modal">
+    <h3>钱 包 充 值</h3>
+    <p class="uk-mute" style="font-size:9pt;margin:-8px 0 14px;font-style:italic;letter-spacing:1px;">
+      生成未付款充值单，跳收银台选择收款方式后到账
+    </p>
+    <form method="post" action="/admin/wallets/{{ cust.id }}/recharge">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div class="row2">
+        <label class="field">充值金额（¥）
+          <input name="amount" type="number" step="0.01" min="0.01" placeholder="如：500" required/>
+        </label>
+        <label class="field">赠送金额（¥）
+          <input name="bonus" type="number" step="0.01" min="0" value="0" placeholder="如：50"/>
+        </label>
+      </div>
+      <label class="field">备注
+        <textarea name="note" rows="2" placeholder="可选"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('rechargeModal').classList.remove('visible');">取消</button>
+        <button type="submit" class="uk-btn primary sm">生 成 充 值 单</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ─── 售卖套餐 modal ─── #}
+<div class="uk-modal-overlay" id="sellPkgModal" onclick="if(event.target===this) this.classList.remove('visible');">
+  <div class="uk-modal">
+    <h3>售 卖 套 餐</h3>
+    <form method="post" action="/admin/customers/{{ cust.id }}/packages/sell">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <label class="field">套餐
+        <select name="product_id" required>
+          {% if package_products %}
+            {% for p in package_products %}
+            <option value="{{ p.id }}">{{ p.name }} · {{ p.total_uses }} 次 · ¥{{ '%.0f'|format(p.sell_price) }}</option>
+            {% endfor %}
+          {% else %}
+            <option value="">（暂无可售套餐，请去「经营 → 套餐目录」配置）</option>
+          {% endif %}
+        </select>
+      </label>
+      <div class="row2">
+        <label class="field">收款方式
+          <select name="pay_method">
+            <option value="cash">现金</option>
+            <option value="wechat">微信</option>
+            <option value="alipay">支付宝</option>
+            <option value="shouqianba">收钱吧</option>
+            <option value="wallet">钱包扣款</option>
+          </select>
+        </label>
+        <label class="field">关联宠物（可选）
+          <select name="pet_id">
+            <option value="0">不指定</option>
+            {% for p in pets %}
+            <option value="{{ p.id }}" {% if p.id == active_pet_id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <label class="field">自定义售价（可选，留空 = 目录价）
+        <input name="custom_price" type="number" step="0.01" min="0" placeholder="¥"/>
+      </label>
+      <label class="field">备注
+        <textarea name="note" rows="2" placeholder="可选"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('sellPkgModal').classList.remove('visible');">取消</button>
+        <button type="submit" class="uk-btn primary sm">售 卖</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ─── 收押金 modal ─── #}
+<div class="uk-modal-overlay" id="depositModal" onclick="if(event.target===this) this.classList.remove('visible');">
+  <div class="uk-modal">
+    <h3>收 押 金</h3>
+    <form method="post" action="/admin/deposits/create">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+      <div class="row2">
+        <label class="field">押金类别
+          <select name="category">
+            <option value="surgery">手术押金</option>
+            <option value="boarding">寄养押金</option>
+            <option value="beauty">美容押金</option>
+            <option value="other">其他</option>
+          </select>
+        </label>
+        <label class="field">金额（¥）
+          <input name="amount" type="number" step="0.01" min="0.01" placeholder="如：500" required/>
+        </label>
+      </div>
+      <div class="row2">
+        <label class="field">收款方式
+          <select name="pay_method">
+            <option value="cash">现金</option>
+            <option value="wechat">微信</option>
+            <option value="alipay">支付宝</option>
+            <option value="shouqianba">收钱吧</option>
+          </select>
+        </label>
+        <label class="field">关联宠物（可选）
+          <select name="pet_id">
+            <option value="0">不指定</option>
+            {% for p in pets %}
+            <option value="{{ p.id }}" {% if p.id == active_pet_id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <label class="field">备注
+        <textarea name="note" rows="2" placeholder="可选"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('depositModal').classList.remove('visible');">取消</button>
+        <button type="submit" class="uk-btn primary sm">收 押 金</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ─── 发优惠券 modal（仅超管）─── #}
+<div class="uk-modal-overlay" id="couponModal" onclick="if(event.target===this) this.classList.remove('visible');">
+  <div class="uk-modal">
+    <h3>发 放 优 惠 券</h3>
+    {% if request.session.get('admin_role') != 'superadmin' %}
+    <p class="uk-mute" style="font-style:italic;padding:24px 0;text-align:center;">
+      此操作仅超级管理员可执行
+    </p>
+    <div class="actions">
+      <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('couponModal').classList.remove('visible');">关闭</button>
+    </div>
+    {% else %}
+    <form method="post" action="/admin/coupons/issue">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+      <label class="field">券名称
+        <input name="title" placeholder="如：老客回馈券 / 9 折券" required/>
+      </label>
+      <div class="row2">
+        <label class="field">类型
+          <select name="kind" onchange="toggleCouponFields(this.value)">
+            <option value="cash">面额抵扣</option>
+            <option value="discount">折扣券</option>
+            <option value="free_item">兑换券</option>
+          </select>
+        </label>
+        <label class="field">数量
+          <input name="quantity" type="number" min="1" max="500" value="1"/>
+        </label>
+      </div>
+      <div class="row2">
+        <label class="field" id="fldFaceValue">面额（¥）
+          <input name="face_value" type="number" step="0.01" min="0" value="0"/>
+        </label>
+        <label class="field" id="fldDiscountPct" style="display:none;">折扣（如 90 = 9 折）
+          <input name="discount_pct" type="number" step="1" min="0" max="100" value="0"/>
+        </label>
+        <label class="field">最低消费门槛（¥）
+          <input name="min_amount" type="number" step="0.01" min="0" value="0"/>
+        </label>
+      </div>
+      <div class="row2">
+        <label class="field">过期日期（可选）
+          <input name="expires_at" placeholder="YYYY-MM-DD"/>
+        </label>
+        <label class="field">券码前缀（可选）
+          <input name="code_prefix" placeholder="如 VIP"/>
+        </label>
+      </div>
+      <label class="field">备注
+        <textarea name="notes" rows="2" placeholder="可选"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('couponModal').classList.remove('visible');">取消</button>
+        <button type="submit" class="uk-btn primary sm">发 放</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
 <script>
+function toggleCouponFields(kind) {
+  var fv = document.getElementById('fldFaceValue');
+  var dp = document.getElementById('fldDiscountPct');
+  if (kind === 'discount') {
+    fv.style.display = 'none'; dp.style.display = '';
+  } else {
+    fv.style.display = ''; dp.style.display = 'none';
+  }
+}
+
 function switchTab(tab) {
   document.querySelectorAll('.uk-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.uk-tab-content').forEach(d => d.classList.toggle('active', d.dataset.tabContent === tab));
