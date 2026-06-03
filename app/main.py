@@ -13493,6 +13493,166 @@ async def admin_inventory_edit(
     return RedirectResponse(f"/admin/inventory/{item_id}?msg=已保存", status_code=303)
 
 
+# ─── 小类规范化工具：扫脏数据 + 自动匹配 + 审批后批量改 ───
+def _build_subcat_reverse_index() -> dict:
+    """{中文 label → [(cat_key, sub_key, label), ...]}，含 alias 多对一。"""
+    idx: dict[str, list] = {}
+    # 直接 label 反查
+    for cat_key, cat in INVENTORY_CATEGORIES.items():
+        for sub_key, label in cat.get("subs", {}).items():
+            idx.setdefault(label, []).append((cat_key, sub_key, label))
+    # 常见 alias 手工映射（你描述的脏数据里出现的）
+    alias = {
+        "兽药+保健":   ("medication", "general", "普通药品"),
+        "一般处置":     ("treatment",  "routine", "一般处置"),
+        "院外实验室":   ("lab",        "external_lab", "院外送检"),
+        "院外送检":     ("lab",        "external_lab", "院外送检"),
+        "骨科手术":     ("surgery",    "orthopedic", "骨科手术"),
+        "软组织手术":   ("surgery",    "general",    "普外科手术"),
+        "眼科手术":     ("surgery",    "ophthalmic", "眼科手术"),
+        "口腔手术":     ("surgery",    "dental",     "口腔手术"),
+        "神经外科":     ("surgery",    "neuro",      "神经外科"),
+        "麻醉处置":     ("treatment",  "anesthesia", "麻醉处置"),
+        "紧急处置":     ("treatment",  "emergency",  "紧急处置"),
+        "麻药/精神类":  ("medication", "controlled", "麻药/精神类"),
+        "麻药":         ("medication", "controlled", "麻药/精神类"),
+        "精神类":       ("medication", "controlled", "麻药/精神类"),
+        "管控":         ("medication", "controlled", "麻药/精神类"),
+        "普通药品":     ("medication", "general",    "普通药品"),
+        "狂犬":         ("vaccine",    "rabies",     "狂犬疫苗"),
+        "狂犬疫苗":     ("vaccine",    "rabies",     "狂犬疫苗"),
+        "联苗":         ("vaccine",    "combo",      "联苗"),
+        "其他疫苗":     ("vaccine",    "other",      "其他疫苗"),
+        "体内驱虫":     ("antiparasitic", "internal", "体内驱虫"),
+        "体外驱虫":     ("antiparasitic", "external", "体外驱虫"),
+        "体内外同驱":   ("antiparasitic", "both",     "体内外同驱"),
+        "普通耗材":     ("consumable", "general",    "普通耗材"),
+        "耗材":         ("consumable", "general",    "普通耗材"),
+        "普通商品":     ("product",    "general",    "普通商品"),
+        "商品":         ("product",    "general",    "普通商品"),
+        "洗护":         ("grooming",   "washcare",   "洗护"),
+        "造型":         ("grooming",   "styling",    "造型"),
+        "附加服务":     ("grooming",   "addon",      "附加服务"),
+        "常规化验":     ("lab",        "routine_lab","常规化验"),
+        "DR":           ("imaging",    "dr",         "DR"),
+        "CT":           ("imaging",    "ct",         "CT"),
+        "核磁共振":     ("imaging",    "mri",        "核磁共振"),
+        "B超":          ("imaging",    "ultrasound", "B超"),
+        "常规光学显微镜": ("microscopy","optical",   "常规光学显微镜"),
+        "电子显微镜":   ("microscopy", "electron",   "电子显微镜"),
+        "普外科手术":   ("surgery",    "general",    "普外科手术"),
+        "普通护理":     ("nursing",    "general",    "普通护理"),
+        "隔离护理":     ("nursing",    "isolation",  "隔离护理"),
+    }
+    for k, v in alias.items():
+        idx.setdefault(k, []).append(v)
+    return idx
+
+
+def _match_subcat(item, idx: dict) -> dict:
+    """返回 {status, new_category, new_subcategory, new_label, hint}。
+    status: 'clean' 已规范 / 'match' 自动匹配到 / 'ambiguous' 多候选 / 'empty' 原值空 / 'unknown' 找不到
+    """
+    cur_cat = item.category or ""
+    cur_sub = (item.subcategory or "").strip()
+    # 已规范
+    if cur_cat in INVENTORY_CATEGORIES and cur_sub in INVENTORY_CATEGORIES[cur_cat].get("subs", {}):
+        return {"status": "clean", "new_category": cur_cat, "new_subcategory": cur_sub,
+                "new_label": INVENTORY_CATEGORIES[cur_cat]["subs"][cur_sub], "hint": ""}
+    if not cur_sub:
+        return {"status": "empty", "new_category": cur_cat, "new_subcategory": "",
+                "new_label": "", "hint": "原 subcategory 为空"}
+    # 反查
+    cands = idx.get(cur_sub) or []
+    if not cands:
+        # fuzzy
+        import difflib
+        all_labels = list(idx.keys())
+        close = difflib.get_close_matches(cur_sub, all_labels, n=1, cutoff=0.7)
+        if close:
+            cands = idx.get(close[0]) or []
+            hint_prefix = f"模糊匹配「{close[0]}」"
+        else:
+            return {"status": "unknown", "new_category": cur_cat, "new_subcategory": cur_sub,
+                    "new_label": cur_sub, "hint": "找不到对应规范小类，建议人工处理"}
+    else:
+        hint_prefix = ""
+    # 多候选：优先保留当前 category
+    same_cat = [c for c in cands if c[0] == cur_cat]
+    picked = same_cat[0] if same_cat else cands[0]
+    status = "match" if len(cands) == 1 else "ambiguous"
+    hint = (hint_prefix + f"候选 {len(cands)} 个").strip()
+    if picked[0] != cur_cat:
+        hint = (hint + f" · 大类将由 {cur_cat} → {picked[0]}").strip(" ·")
+    return {"status": status, "new_category": picked[0], "new_subcategory": picked[1],
+            "new_label": picked[2], "hint": hint}
+
+
+@app.get("/admin/inventory/cleanup-subcategory", response_class=HTMLResponse)
+async def admin_inv_cleanup_preview(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    require_superadmin(request)
+    idx = _build_subcat_reverse_index()
+    items = db.query(InventoryItem).filter(InventoryItem.is_active == True).order_by(InventoryItem.id).all()
+    rows = []
+    counts = {"clean": 0, "match": 0, "ambiguous": 0, "unknown": 0, "empty": 0}
+    for it in items:
+        r = _match_subcat(it, idx)
+        counts[r["status"]] += 1
+        if r["status"] == "clean":
+            continue
+        cur_cat_label = INVENTORY_CATEGORIES.get(it.category, {}).get("label", it.category or "—")
+        new_cat_label = INVENTORY_CATEGORIES.get(r["new_category"], {}).get("label", r["new_category"] or "—")
+        rows.append({
+            "id": it.id, "name": it.name,
+            "cur_cat": it.category or "", "cur_cat_label": cur_cat_label,
+            "cur_sub": it.subcategory or "",
+            "new_cat": r["new_category"], "new_cat_label": new_cat_label,
+            "new_sub": r["new_subcategory"], "new_label": r["new_label"],
+            "status": r["status"], "hint": r["hint"],
+            "cat_change": (it.category or "") != r["new_category"],
+        })
+    return templates.TemplateResponse(request, "admin_inventory_cleanup.html", {
+        "rows": rows, "counts": counts,
+        "csrf_token": _get_csrf_token(request),
+        "title": "小类规范化工具",
+    })
+
+
+@app.post("/admin/inventory/cleanup-subcategory")
+async def admin_inv_cleanup_apply(
+    request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    apply_ids: list[int] = Form(default=[]),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    if not apply_ids:
+        return RedirectResponse("/admin/inventory/cleanup-subcategory?msg=未选择任何条目", status_code=303)
+    idx = _build_subcat_reverse_index()
+    updated = 0
+    cat_changed = 0
+    for iid in apply_ids:
+        it = db.get(InventoryItem, iid)
+        if not it:
+            continue
+        r = _match_subcat(it, idx)
+        if r["status"] in ("clean", "unknown"):
+            continue
+        if r["new_category"] != (it.category or ""):
+            cat_changed += 1
+            it.category = r["new_category"]
+        it.subcategory = r["new_subcategory"]
+        it.updated_at = datetime.utcnow()
+        updated += 1
+    db.commit()
+    return RedirectResponse(
+        f"/admin/inventory/cleanup-subcategory?msg=已规范化 {updated} 个品目（其中 {cat_changed} 个连大类一起改了）",
+        status_code=303,
+    )
+
+
 @app.post("/admin/inventory/{item_id}/stock-in")
 async def admin_inventory_stock_in(
     item_id: int, request: Request, db: Session = Depends(get_db),

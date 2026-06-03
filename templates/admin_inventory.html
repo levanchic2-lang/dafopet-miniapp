@@ -70,6 +70,9 @@
  <a href="/admin/inventory/import-xls" class="btn secondary" style="font-size:0.88rem;" title="从小暖医生原生 Excel 导入药品/疫苗/驱虫等"><i data-lucide="upload"></i> 导入小暖 Excel</a>
  {% endif %}
  <a href="/admin/inventory/import-photo" class="btn secondary" style="font-size:0.88rem;"><i data-lucide="camera"></i> 拍照入库</a>
+ {% if is_superadmin %}
+ <a href="/admin/inventory/cleanup-subcategory" class="btn secondary" style="font-size:0.88rem;background:#eff6ff;border-color:#bfdbfe;color:#1e40af;" title="扫脏的小类数据，反查中文 label 自动匹配规范 key，审批后批量改"><i data-lucide="sparkles"></i> 小类规范化</a>
+ {% endif %}
  <a href="/admin/inventory/narcotics-ledger" class="btn secondary" style="font-size:0.88rem;background:#faf5ff;border-color:#d8b4fe;color:#7c3aed;" title="国标合规：麻醉/管控药双签字台账"><i data-lucide="shield-alert"></i> 麻醉台账</a>
  <a href="/admin/inventory/create" class="btn" style="font-size:0.88rem;"><i data-lucide="plus"></i> 新增品目</a>
  </div>

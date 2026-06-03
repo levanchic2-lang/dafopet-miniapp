@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block body %}
+
+{% if request.query_params.get('msg') %}
+<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>
+{% endif %}
+
+<div class="page-head">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    <a href="/admin/inventory" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回库存</a>
+    <div>
+      <h1><span class="ph-icon"><i data-lucide="sparkles"></i></span>小类规范化工具</h1>
+      <p class="ph-sub">扫所有 InventoryItem，找出小类不在标准字典里的脏数据，反查中文 label 自动匹配后批量修</p>
+    </div>
+  </div>
+</div>
+
+{# 统计卡片 #}
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.6rem;margin-bottom:1rem;">
+  <div class="card" style="padding:.7rem;text-align:center;">
+    <div style="font-size:.72rem;color:var(--muted);font-weight:600;">已规范</div>
+    <div style="font-size:1.4rem;font-weight:800;color:#16a34a;">{{ counts.clean }}</div>
+  </div>
+  <div class="card" style="padding:.7rem;text-align:center;background:#f0fdf4;">
+    <div style="font-size:.72rem;color:#166534;font-weight:600;">可自动匹配</div>
+    <div style="font-size:1.4rem;font-weight:800;color:#16a34a;">{{ counts.match }}</div>
+  </div>
+  <div class="card" style="padding:.7rem;text-align:center;background:#fffbeb;">
+    <div style="font-size:.72rem;color:#92400e;font-weight:600;">多候选</div>
+    <div style="font-size:1.4rem;font-weight:800;color:#d97706;">{{ counts.ambiguous }}</div>
+  </div>
+  <div class="card" style="padding:.7rem;text-align:center;background:#fef2f2;">
+    <div style="font-size:.72rem;color:#991b1b;font-weight:600;">找不到</div>
+    <div style="font-size:1.4rem;font-weight:800;color:#dc2626;">{{ counts.unknown }}</div>
+  </div>
+  <div class="card" style="padding:.7rem;text-align:center;">
+    <div style="font-size:.72rem;color:var(--muted);font-weight:600;">空小类</div>
+    <div style="font-size:1.4rem;font-weight:800;color:var(--muted);">{{ counts.empty }}</div>
+  </div>
+</div>
+
+{% if not rows %}
+<div class="msg ok" style="margin-top:1rem;"><i data-lucide="check-circle-2"></i> 没有脏数据，所有品目的小类都已规范！</div>
+{% else %}
+
+<form method="post" action="/admin/inventory/cleanup-subcategory" id="cleanup-form"
+      onsubmit="return confirmApply()">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;">
+    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('match')">✓ 选中所有"可自动匹配"</button>
+    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('ambiguous')">✓ 选中所有"多候选"</button>
+    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('all')">✓ 全选</button>
+    <button type="button" class="btn secondary" style="font-size:.82rem;" onclick="checkAll('none')">⊘ 清空</button>
+    <span style="flex:1;"></span>
+    <span style="font-size:.85rem;color:var(--muted);">已选 <b id="picked-n">0</b> / {{ rows|length }}</span>
+    <button type="submit" class="btn" style="background:#16a34a;border-color:#16a34a;">应用选中</button>
+  </div>
+
+  <div class="data-table-wrap" style="overflow-x:auto;">
+    <table class="data-table" style="font-size:.85rem;min-width:900px;">
+      <thead>
+        <tr>
+          <th style="width:32px;"><input type="checkbox" id="check-all"/></th>
+          <th>品名</th>
+          <th>当前 大类 / 小类</th>
+          <th style="text-align:center;">→</th>
+          <th>建议 大类 / 小类</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr data-status="{{ r.status }}"
+            style="background:{% if r.status == 'match' %}#f0fdf4{% elif r.status == 'ambiguous' %}#fffbeb{% elif r.status == 'unknown' %}#fef2f2{% else %}transparent{% endif %};">
+          <td>
+            <input type="checkbox" name="apply_ids" value="{{ r.id }}"
+                   {% if r.status == 'unknown' %}disabled title="找不到匹配，不能自动改"{% endif %}
+                   class="row-cb" onchange="updateCount()"/>
+          </td>
+          <td style="font-weight:600;">{{ r.name }}</td>
+          <td>
+            <div style="font-size:.78rem;color:var(--muted);">{{ r.cur_cat_label }}</div>
+            <div style="font-family:ui-monospace,monospace;color:{% if r.status == 'unknown' %}#dc2626{% else %}#475569{% endif %};">{{ r.cur_sub or '—' }}</div>
+          </td>
+          <td style="text-align:center;color:#94a3b8;">→</td>
+          <td>
+            <div style="font-size:.78rem;color:{% if r.cat_change %}#d97706;font-weight:700{% else %}var(--muted){% endif %};">
+              {{ r.new_cat_label }}{% if r.cat_change %} ⚠{% endif %}
+            </div>
+            <div style="color:{% if r.status == 'unknown' %}#94a3b8{% else %}#16a34a;font-weight:600{% endif %};">
+              {% if r.status == 'unknown' %}—（不修）{% else %}{{ r.new_label }}{% endif %}
+            </div>
+          </td>
+          <td style="font-size:.78rem;color:var(--muted);">
+            {% if r.status == 'match' %}<span class="pill pill-ok">自动匹配</span>
+            {% elif r.status == 'ambiguous' %}<span class="pill pill-warn">多候选</span>
+            {% elif r.status == 'unknown' %}<span class="pill" style="background:#fee2e2;color:#991b1b;">找不到</span>
+            {% elif r.status == 'empty' %}<span class="pill pill-gray">空</span>
+            {% endif %}
+            {% if r.hint %}<div style="margin-top:.2rem;">{{ r.hint }}</div>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+
+<script>
+function updateCount() {
+  const n = document.querySelectorAll('.row-cb:checked').length;
+  document.getElementById('picked-n').textContent = n;
+}
+
+function checkAll(kind) {
+  document.querySelectorAll('.row-cb:not(:disabled)').forEach(cb => {
+    const tr = cb.closest('tr');
+    const st = tr.dataset.status;
+    if (kind === 'all') cb.checked = true;
+    else if (kind === 'none') cb.checked = false;
+    else if (kind === st) cb.checked = true;
+  });
+  updateCount();
+}
+
+document.getElementById('check-all').addEventListener('change', (e) => {
+  document.querySelectorAll('.row-cb:not(:disabled)').forEach(cb => cb.checked = e.target.checked);
+  updateCount();
+});
+
+function confirmApply() {
+  const n = document.querySelectorAll('.row-cb:checked').length;
+  if (n === 0) { alert('请先选中要规范化的品目'); return false; }
+  return confirm('确认对选中的 ' + n + ' 个品目应用建议？此操作直接改 InventoryItem.category / subcategory，不可一键撤销（需手动逐个改回）。');
+}
+</script>
+
+{% endif %}
+
+{% endblock %}
