@@ -230,25 +230,31 @@
     margin-bottom: 14px;
   }
 
-  /* 创建预约表单：用 UK 衬线字体 */
+  /* 创建预约表单：用 UK 衬线字体 + 全宽输入框 */
   body .card label {
     font-family: var(--font-serif); font-size: 9pt;
     letter-spacing: 2px; color: var(--ink-3); font-style: italic;
+    display: block; margin-bottom: 4px;
   }
   body .card input[type=text], body .card input[type=date], body .card input[type=time],
   body .card input[type=number], body .card select, body .card textarea {
     font-family: var(--font-serif); font-size: 10.5pt;
-    border: 0.5px solid var(--hair); border-radius: 0; padding: 7px 10px;
+    border: 0.5px solid var(--hair) !important; border-radius: 0 !important;
+    padding: 8px 12px !important;
     background: var(--paper); color: var(--ink); outline: 0;
+    width: 100% !important; box-sizing: border-box !important;
+    height: 38px;
   }
+  body .card textarea { height: auto; min-height: 70px; line-height: 1.6; }
   body .card input:focus, body .card select:focus, body .card textarea:focus {
-    border-color: var(--ink); box-shadow: none;
+    border-color: var(--ink) !important; box-shadow: none !important;
   }
   body .card .btn {
     background: var(--ink); color: var(--paper); border: 0; border-radius: 0;
-    padding: 8px 18px; cursor: pointer;
-    font-family: var(--font-serif); font-size: 10pt;
-    letter-spacing: 2px; font-weight: 700;
+    padding: 10px 28px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 11pt;
+    letter-spacing: 2.5px; font-weight: 700;
+    width: auto !important; height: auto !important;
   }
   body .card .btn:hover { background: #000; }
   body .card .btn.secondary {
@@ -256,6 +262,37 @@
     font-style: italic; font-weight: 400;
   }
   body .card .btn.secondary:hover { color: var(--ink); border-color: var(--ink-3); }
+  body .card button[type=submit] {
+    background: var(--ink); color: var(--paper); border: 0;
+    padding: 10px 28px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 11pt;
+    letter-spacing: 2.5px; font-weight: 700;
+  }
+  body .card button[type=submit]:hover { background: #000; }
+
+  /* 创建预约 form 内 3 列网格修复 */
+  body .card .appt-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 16px !important;
+  }
+  body .card .appt-grid .wide { grid-column: span 3; }
+
+  /* 代预约说明黄框 → UK 风琥珀左边框 */
+  #create-appt-body .wide > div[style*="fffbeb"] {
+    background: #fbfaf6 !important;
+    border: 0 !important;
+    border-left: 3px solid var(--accent-amber) !important;
+    border-radius: 0 !important;
+    padding: 14px 18px !important;
+  }
+  #create-appt-body .wide > div[style*="fffbeb"] label {
+    color: var(--accent-amber) !important;
+    font-family: var(--font-serif); font-style: italic; letter-spacing: 2px;
+  }
+
+  /* 预约结果信息条修复（panel.html 顶部的 .msg） */
+  body > .msg.ok, body > .msg.err { display: none; }
 
   /* 日期分组头 */
   .date-group-header {
@@ -304,20 +341,32 @@
   }
   .slot-header::after { background: var(--hair); }
 
-  /* 预约表 */
-  .appt-table { border-radius: 0; border: 0.5px solid var(--hair-2); }
+  /* 预约表 — 无框，hairline row only */
+  .appt-table { border-radius: 0; border: 0; background: transparent; }
   .appt-table th {
-    background: var(--bg) !important;
+    background: transparent !important;
     font-family: var(--font-serif); font-size: 9pt;
     color: var(--ink-3); letter-spacing: 1.5px; font-weight: 400;
     border-bottom: 0.5px solid var(--hair) !important;
+    padding: 8px 10px !important;
   }
   .appt-table td {
     font-family: var(--font-serif); font-size: 10pt;
     border-bottom: 0.5px solid var(--hair);
-    padding: 9px 8px;
+    padding: 12px 10px !important;
   }
-  .appt-table tr.appt-row .col-time { font-family: var(--font-numeric); color: var(--ink); }
+  .appt-table tr.appt-row .col-time {
+    font-family: var(--font-numeric); color: var(--ink);
+    font-weight: 700; font-size: 11pt;
+  }
+  .appt-table tr.appt-row:hover td { background: var(--bg); }
+
+  /* 日期块去掉所有边框/背景 */
+  .appt-day-block {
+    background: transparent !important;
+    border: 0 !important; box-shadow: none !important;
+    padding: 0 !important; margin-bottom: 32px;
+  }
 
   /* 状态左条 */
   .appt-status-rail { width: 3px; }
