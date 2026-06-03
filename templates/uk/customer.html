@@ -266,16 +266,23 @@
   color: var(--ink); border-bottom: 0.5px solid var(--ink-3);
   padding-bottom: 1px; margin-left: 6px;
 }
-.tab-placeholder {
-  text-align: center; padding: 64px 24px;
-  color: var(--ink-3); font-style: italic;
-  font-size: 10pt; letter-spacing: 2px;
+/* 钱包顶部三联统计 */
+.wallet-summary {
+  display: grid; grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 32px; padding: 8px 0 4px;
+  border-bottom: 0.5px solid var(--hair);
+  margin-bottom: 8px;
 }
-.tab-placeholder::before {
-  content: "—"; display: block;
-  font-size: 18pt; color: var(--ink-4);
-  margin-bottom: 14px; letter-spacing: 8px;
+.wallet-stat .lbl {
+  font-size: 9pt; letter-spacing: 3px; color: var(--ink-3);
+  margin-bottom: 6px;
 }
+.wallet-stat .val {
+  font-family: var(--font-numeric); color: var(--ink);
+  font-size: 22pt; font-weight: 700; line-height: 1.1;
+}
+.wallet-stat .val .sym { font-size: 13pt; vertical-align: 4px; margin-right: 2px; color: var(--ink-2); }
+.wallet-stat .val.sub { font-size: 13pt; font-weight: 400; color: var(--ink-2); }
 
 /* ── 右侧栏 ── */
 .cust-aside { display: flex; flex-direction: column; gap: 18px; }
@@ -684,18 +691,308 @@
       {% endif %}
     </div>
 
-    {# ─── 占位 8 个 tab ─── #}
-    {% for ph in ['sales','invoices','weight','docs','wallet','packages','deposits','coupons'] %}
-    <div class="uk-tab-content {% if active_tab==ph %}active{% endif %}" data-tab-content="{{ ph }}">
-      <div class="tab-placeholder">
-        本标签在 B3.2 中重写<br/>
-        <span style="font-size:8.5pt;letter-spacing:2px;">如需查看，可临时切回旧版客户档案</span>
-        <div style="margin-top:18px;">
-          <a class="uk-btn ghost sm" href="?pet_id={{ active_pet_id }}&tab=visits">回诊疗</a>
+    {# ─── 销售 ─── #}
+    <div class="uk-tab-content {% if active_tab=='sales' %}active{% endif %}" data-tab-content="sales">
+      <div class="tab-action-bar">
+        <span class="tab-count">共 <b>{{ pet_sales_orders|length }}</b> 条</span>
+      </div>
+      {% if pet_sales_orders %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>日期</th><th>金额</th><th>支付方式</th><th>状态</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for so in pet_sales_orders %}
+          <tr>
+            <td class="num">{{ so.order_date or (so.created_at.strftime('%Y-%m-%d') if so.created_at else '—') }}</td>
+            <td class="num">¥{{ '%.2f'|format(so.total_amount or 0) }}</td>
+            <td>{{ so.payment_method or '—' }}</td>
+            <td>
+              {% if so.status == 'paid' %}<span class="uk-pill green">已收款</span>
+              {% elif so.status == 'pending' %}<span class="uk-pill amber">待付款</span>
+              {% elif so.status == 'voided' %}<span class="uk-pill mute">已作废</span>
+              {% else %}<span class="uk-pill mute">{{ so_status_zh.get(so.status, so.status) }}</span>{% endif %}
+            </td>
+            <td class="action right"><a href="/admin/sales-orders/{{ so.id }}">查看 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无销售订单</div>
+      {% endif %}
+    </div>
+
+    {# ─── 收费 ─── #}
+    <div class="uk-tab-content {% if active_tab=='invoices' %}active{% endif %}" data-tab-content="invoices">
+      <div class="tab-action-bar">
+        <span class="tab-count">
+          共 <b>{{ pet_invoices|length }}</b> 条{% if unpaid_total > 0 %}
+          <span style="margin-left:14px;color:var(--accent-red);">未付款 ¥{{ '%.2f'|format(unpaid_total) }}</span>
+          {% endif %}
+        </span>
+      </div>
+      {% if pet_invoices %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>单号</th><th>日期</th><th>金额</th><th>状态</th><th>支付方式</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for inv in pet_invoices %}
+          <tr>
+            <td class="num" style="font-size:9.5pt;">{{ inv.invoice_no or ('#' ~ inv.id) }}</td>
+            <td class="num">{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
+            <td class="num">¥{{ '%.2f'|format(inv.total_amount or 0) }}</td>
+            <td>
+              {% if inv.payment_status == 'paid' %}<span class="uk-pill green">已支付</span>
+              {% elif inv.payment_status == 'unpaid' %}<span class="uk-pill red">未支付</span>
+              {% elif inv.payment_status == 'refunded' %}<span class="uk-pill mute">已退款</span>
+              {% elif inv.payment_status == 'cancelled' %}<span class="uk-pill mute">已取消</span>
+              {% else %}<span class="uk-pill amber">{{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}</span>{% endif %}
+            </td>
+            <td class="uk-mute" style="font-size:9pt;">{{ inv.payment_method or '—' }}</td>
+            <td class="action right"><a href="/admin/invoices/{{ inv.id }}">查看 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无收费记录</div>
+      {% endif %}
+    </div>
+
+    {# ─── 体重 ─── #}
+    <div class="uk-tab-content {% if active_tab=='weight' %}active{% endif %}" data-tab-content="weight">
+      <div class="tab-action-bar">
+        <span class="tab-count">共 <b>{{ weight_records|length }}</b> 条 <span class="uk-mute" style="margin-left:14px;font-size:9pt;">按时间正序</span></span>
+      </div>
+      {% if weight_records %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>日期</th><th>体重</th><th>较上次</th><th>备注</th></tr></thead>
+        <tbody>
+          {% for wr in weight_records %}
+          {% set prev = weight_records[loop.index0 - 1] if loop.index0 > 0 else None %}
+          {% set delta = (wr.weight_kg - prev.weight_kg) if prev else 0 %}
+          <tr>
+            <td class="num">{{ wr.record_date or '—' }}</td>
+            <td class="num"><b>{{ '%.2f'|format(wr.weight_kg or 0) }}</b> kg</td>
+            <td class="num">
+              {% if prev %}
+                {% if delta > 0 %}<span style="color:var(--accent-amber);">+{{ '%.2f'|format(delta) }}</span>
+                {% elif delta < 0 %}<span style="color:var(--accent-green);">{{ '%.2f'|format(delta) }}</span>
+                {% else %}<span class="uk-mute">±0.00</span>{% endif %}
+              {% else %}<span class="uk-mute">—</span>{% endif %}
+            </td>
+            <td class="uk-mute" style="font-size:9.5pt;">{{ wr.notes or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无体重记录 · 病历中称重会自动写入此处</div>
+      {% endif %}
+    </div>
+
+    {# ─── 文书（协议签署 + 上传文书）─── #}
+    <div class="uk-tab-content {% if active_tab=='docs' %}active{% endif %}" data-tab-content="docs">
+      {% if consent_tasks %}
+      <h3 class="uk-h3" style="margin:0 0 10px;">协议签署</h3>
+      <table class="uk-tbl-tab">
+        <thead><tr><th>标题</th><th>发起</th><th>状态</th><th>已签时间</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for t in consent_tasks %}
+          <tr>
+            <td>{{ t.title or (t.template.name if t.template else '—') }}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ t.initiated_at.strftime('%Y-%m-%d') if t.initiated_at else '—' }}</td>
+            <td>
+              {% if t.status == 'signed' %}<span class="uk-pill green">已签</span>
+              {% elif t.status == 'pending' %}<span class="uk-pill amber">待签</span>
+              {% elif t.status == 'cancelled' %}<span class="uk-pill mute">已取消</span>
+              {% elif t.status == 'expired' %}<span class="uk-pill mute">已过期</span>
+              {% else %}<span class="uk-pill mute">{{ t.status }}</span>{% endif %}
+            </td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ t.signed_at.strftime('%Y-%m-%d %H:%M') if t.signed_at else '—' }}</td>
+            <td class="action right">
+              <a href="/admin/consent-tasks/{{ t.id }}">查看 →</a>
+              {% if consent_docs_map.get(t.id) %}
+              <a href="/uploads/{{ consent_docs_map.get(t.id).pdf_path }}" target="_blank" style="margin-left:10px;">PDF ↓</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if medical_docs %}
+      <h3 class="uk-h3" style="margin:{% if consent_tasks %}28px{% else %}0{% endif %} 0 10px;">上传文书</h3>
+      <table class="uk-tbl-tab">
+        <thead><tr><th>名称</th><th>类型</th><th>上传时间</th><th>大小</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for d in medical_docs %}
+          <tr>
+            <td>{{ d.title or d.original_name or '—' }}</td>
+            <td class="uk-mute">{{ d.doc_type }}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ d.uploaded_at.strftime('%Y-%m-%d') if d.uploaded_at else '—' }}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ (d.file_size / 1024)|round(0)|int }} KB</td>
+            <td class="action right"><a href="/uploads/{{ d.file_path }}" target="_blank">下载 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if not consent_tasks and not medical_docs %}
+      <div class="tab-empty">暂无文书记录 · 可在右侧「发起协议签署」</div>
+      {% endif %}
+    </div>
+
+    {# ─── 钱包 ─── #}
+    <div class="uk-tab-content {% if active_tab=='wallet' %}active{% endif %}" data-tab-content="wallet">
+      <div class="wallet-summary">
+        <div class="wallet-stat">
+          <div class="lbl">当前余额</div>
+          <div class="val"><span class="sym">¥</span>{{ '%.2f'|format(wallet_balance) }}</div>
+        </div>
+        <div class="wallet-stat">
+          <div class="lbl">累计充值</div>
+          <div class="val sub">¥{{ '%.2f'|format(wallet_lifetime_recharge) }}</div>
+        </div>
+        <div class="wallet-stat">
+          <div class="lbl">累计消费</div>
+          <div class="val sub">¥{{ '%.2f'|format(wallet_lifetime_consume) }}</div>
         </div>
       </div>
+
+      <h3 class="uk-h3" style="margin:24px 0 10px;">流水记录</h3>
+      {% if wallet_txs %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>时间</th><th>类型</th><th>金额</th><th>余额</th><th>方式 / 备注</th><th>经办</th></tr></thead>
+        <tbody>
+          {% for tx in wallet_txs %}
+          <tr>
+            <td class="num uk-mute" style="font-size:9pt;">{{ tx.created_at.strftime('%Y-%m-%d %H:%M') if tx.created_at else '—' }}</td>
+            <td>
+              {% if tx.type == 'recharge' %}<span class="uk-pill green">充值</span>
+              {% elif tx.type == 'consume' %}<span class="uk-pill">消费</span>
+              {% elif tx.type == 'refund' %}<span class="uk-pill amber">退款</span>
+              {% elif tx.type == 'adjust' %}<span class="uk-pill mute">调账</span>
+              {% else %}<span class="uk-pill mute">{{ tx.type }}</span>{% endif %}
+            </td>
+            <td class="num"><b>{% if tx.amount >= 0 %}+{% endif %}{{ '%.2f'|format(tx.amount or 0) }}</b></td>
+            <td class="num">¥{{ '%.2f'|format(tx.balance_after or 0) }}</td>
+            <td class="uk-mute" style="font-size:9pt;">{{ tx.pay_method or '' }}{% if tx.note %} · {{ tx.note }}{% endif %}</td>
+            <td class="uk-mute" style="font-size:9pt;">{{ tx.operator or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无流水 · 可在右侧「钱包充值」</div>
+      {% endif %}
     </div>
-    {% endfor %}
+
+    {# ─── 套餐 ─── #}
+    <div class="uk-tab-content {% if active_tab=='packages' %}active{% endif %}" data-tab-content="packages">
+      <div class="tab-action-bar">
+        <span class="tab-count">共 <b>{{ customer_packages|length }}</b> 张 · 活跃 <b>{{ active_packages_count }}</b></span>
+      </div>
+      {% if customer_packages %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>套餐名</th><th>类别</th><th>剩余</th><th>购买日期</th><th>到期</th><th>状态</th></tr></thead>
+        <tbody>
+          {% for cp in customer_packages %}
+          <tr>
+            <td><b>{{ cp.name }}</b></td>
+            <td class="uk-mute">{{ package_category_zh.get(cp.category, cp.category) }}</td>
+            <td class="num"><b>{{ (cp.total_uses or 0) - (cp.used_count or 0) }}</b> / {{ cp.total_uses or 0 }}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ cp.purchase_date or '—' }}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ cp.expires_at or '不限期' }}</td>
+            <td>
+              {% if cp.status == 'active' %}<span class="uk-pill green">活跃</span>
+              {% elif cp.status == 'exhausted' %}<span class="uk-pill mute">已用完</span>
+              {% elif cp.status == 'expired' %}<span class="uk-pill mute">已过期</span>
+              {% elif cp.status == 'refunded' %}<span class="uk-pill mute">已退款</span>
+              {% else %}<span class="uk-pill mute">{{ cp.status }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无套餐 · 可在右侧「售卖套餐」</div>
+      {% endif %}
+    </div>
+
+    {# ─── 押金 ─── #}
+    <div class="uk-tab-content {% if active_tab=='deposits' %}active{% endif %}" data-tab-content="deposits">
+      <div class="tab-action-bar">
+        <span class="tab-count">
+          共 <b>{{ deposits|length }}</b> 笔{% if held_deposits_total > 0 %}
+          <span style="margin-left:14px;">在押 <b>¥{{ '%.2f'|format(held_deposits_total) }}</b></span>
+          {% endif %}
+        </span>
+      </div>
+      {% if deposits %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>类别</th><th>金额</th><th>已抵扣</th><th>已退款</th><th>收款方式</th><th>状态</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for d in deposits %}
+          <tr>
+            <td>{{ deposit_category_zh.get(d.category, d.category) }}</td>
+            <td class="num"><b>¥{{ '%.2f'|format(d.amount or 0) }}</b></td>
+            <td class="num uk-mute">{% if d.applied_amount %}¥{{ '%.2f'|format(d.applied_amount) }}{% else %}—{% endif %}</td>
+            <td class="num uk-mute">{% if d.refunded_amount %}¥{{ '%.2f'|format(d.refunded_amount) }}{% else %}—{% endif %}</td>
+            <td class="uk-mute" style="font-size:9pt;">{{ d.pay_method or '—' }}</td>
+            <td>
+              {% if d.status == 'held' %}<span class="uk-pill amber">在押</span>
+              {% elif d.status == 'applied' %}<span class="uk-pill green">已抵扣</span>
+              {% elif d.status == 'refunded' %}<span class="uk-pill mute">已退款</span>
+              {% elif d.status == 'partial_refund' %}<span class="uk-pill">部分退款</span>
+              {% elif d.status == 'cancelled' %}<span class="uk-pill mute">已取消</span>
+              {% else %}<span class="uk-pill mute">{{ deposit_status_zh.get(d.status, d.status) }}</span>{% endif %}
+            </td>
+            <td class="action right"><a href="/admin/deposits/{{ d.id }}">查看 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无押金 · 可在右侧「收押金」</div>
+      {% endif %}
+    </div>
+
+    {# ─── 优惠券 ─── #}
+    <div class="uk-tab-content {% if active_tab=='coupons' %}active{% endif %}" data-tab-content="coupons">
+      <div class="tab-action-bar">
+        <span class="tab-count">共 <b>{{ coupons|length }}</b> 张 · 可用 <b>{{ active_coupons_count }}</b></span>
+      </div>
+      {% if coupons %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>券码</th><th>名称</th><th>类型</th><th>面值 / 折扣</th><th>门槛</th><th>到期</th><th>状态</th></tr></thead>
+        <tbody>
+          {% for c in coupons %}
+          <tr>
+            <td class="num" style="font-size:9pt;">{{ c.code }}</td>
+            <td>{{ c.title or '—' }}</td>
+            <td class="uk-mute">{{ coupon_kind_zh.get(c.kind, c.kind) }}</td>
+            <td class="num">
+              {% if c.kind == 'discount' %}{{ ((c.discount_pct or 0) * 10)|round(1) }} 折
+              {% else %}¥{{ '%.2f'|format(c.face_value or 0) }}{% endif %}
+            </td>
+            <td class="num uk-mute">{% if c.min_amount %}满 ¥{{ '%.0f'|format(c.min_amount) }}{% else %}—{% endif %}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ c.expires_at or '不限期' }}</td>
+            <td>
+              {% if c.status == 'issued' %}<span class="uk-pill green">可用</span>
+              {% elif c.status == 'used' %}<span class="uk-pill mute">已使用</span>
+              {% elif c.status == 'expired' %}<span class="uk-pill mute">已过期</span>
+              {% elif c.status == 'cancelled' %}<span class="uk-pill mute">已作废</span>
+              {% else %}<span class="uk-pill mute">{{ coupon_status_zh.get(c.status, c.status) }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无优惠券 · 可在右侧「发优惠券」</div>
+      {% endif %}
+    </div>
 
     {% endif %}{# active_pet #}
 
@@ -738,7 +1035,7 @@
           <span>销售订单</span><span class="num">{{ pet_sales_orders|length }}</span>
         </a>
         <a class="aside-row" onclick="switchTab('wallet')">
-          <span>钱包流水</span><span class="num">¥{{ '%.0f'|format(wallet.balance if wallet else 0) }}</span>
+          <span>钱包流水</span><span class="num">¥{{ '%.0f'|format(wallet_balance) }}</span>
         </a>
         <a class="aside-row" onclick="switchTab('packages')">
           <span>已购套餐</span><span class="num">{{ active_packages_count }}</span>
