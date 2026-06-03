@@ -138,32 +138,29 @@
 .pets-tbl .num { font-family: var(--font-numeric); }
 .pets-tbl .uk-pill { margin-left: 8px; }
 
-/* ── 主 tab：目录风 ── */
+/* ── 主 tab：8 个医疗类，一行展开 ── */
 .uk-tabs-main {
+  display: flex; justify-content: space-between; align-items: center;
   border-top: 0.5px solid var(--hair);
   border-bottom: 0.5px solid var(--hair);
-  padding: 14px 0;
+  padding: 13px 8px;
   margin: 8px 0 28px;
-  text-align: center;
+  flex-wrap: nowrap;
 }
 .uk-tab-btn {
   background: transparent; border: 0; cursor: pointer;
   font-family: var(--font-serif);
-  font-size: 10pt; letter-spacing: 2.5px;
-  color: var(--ink-3); font-style: italic;
-  padding: 2px 0;
+  font-size: 10.5pt; letter-spacing: 1.5px;
+  color: var(--ink-3);
+  padding: 4px 2px;
   outline: none;
-  position: relative;
-}
-.uk-tab-btn:not(:last-child)::after {
-  content: "·"; margin: 0 12px; color: var(--ink-4);
-  font-style: normal;
+  white-space: nowrap;
 }
 .uk-tab-btn:hover { color: var(--ink); }
 .uk-tab-btn.active {
-  color: var(--ink); font-weight: 700; font-style: normal;
-  text-decoration: underline; text-decoration-thickness: 1px;
-  text-underline-offset: 6px;
+  color: var(--ink); font-weight: 700;
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 3px;
 }
 
 .uk-tab-content { display: none; }
@@ -308,6 +305,24 @@
 }
 .aside-actions .uk-btn { width: 100%; justify-content: center; }
 .aside-actions hr.rule-hair { margin: 6px 0; }
+
+.aside-list { display: flex; flex-direction: column; }
+.aside-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 8px 2px; cursor: pointer;
+  border-bottom: 0.5px solid var(--hair);
+  font-size: 10pt; color: var(--ink-2);
+}
+.aside-row:last-child { border-bottom: 0; }
+.aside-row:hover { color: var(--ink); }
+.aside-row.active { color: var(--ink); font-weight: 700; }
+.aside-row.active .num { color: var(--ink-2); }
+.aside-row .num {
+  font-family: var(--font-numeric); font-size: 9.5pt; color: var(--ink-3);
+  letter-spacing: 0.5px;
+}
+.aside-row .num em { font-style: normal; }
+.aside-row .num em.danger { color: var(--accent-red); }
 
 /* 模态 */
 .uk-modal-overlay {
@@ -461,14 +476,8 @@
       <button class="uk-tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约</button>
       <button class="uk-tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫</button>
       <button class="uk-tab-btn {% if active_tab=='grooming' %}active{% endif %}" data-tab="grooming" onclick="switchTab('grooming')">美容</button>
-      <button class="uk-tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售</button>
-      <button class="uk-tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费</button>
       <button class="uk-tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重</button>
       <button class="uk-tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">文书</button>
-      <button class="uk-tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包</button>
-      <button class="uk-tab-btn {% if active_tab=='packages' %}active{% endif %}" data-tab="packages" onclick="switchTab('packages')">套餐</button>
-      <button class="uk-tab-btn {% if active_tab=='deposits' %}active{% endif %}" data-tab="deposits" onclick="switchTab('deposits')">押金</button>
-      <button class="uk-tab-btn {% if active_tab=='coupons' %}active{% endif %}" data-tab="coupons" onclick="switchTab('coupons')">优惠券</button>
     </nav>
 
     {# ─── 诊疗：CARD 时间轴（match demo） ─── #}
@@ -707,16 +716,44 @@
     </div>
 
     <div class="aside-card">
-      <h3>操作</h3>
+      <h3>新建</h3>
       <div class="aside-actions">
-        <a class="uk-btn ghost">发送短信</a>
-        <hr class="rule-hair"/>
-        <a class="uk-btn danger ghost sm">归档客户</a>
+        <a class="uk-btn sm">发起协议签署</a>
+        <a class="uk-btn ghost sm">钱包充值</a>
+        <a class="uk-btn ghost sm">售卖套餐</a>
+        <a class="uk-btn ghost sm">收押金</a>
+        <a class="uk-btn ghost sm">发优惠券</a>
+        <a class="uk-btn ghost sm">发送短信</a>
       </div>
-      <p class="uk-mute" style="font-size:8.5pt;letter-spacing:1px;margin-top:14px;line-height:1.7;font-style:italic;">
-        协议签署 / 钱包充值 / 售卖套餐<br/>
-        将于 B3.2 移入对应 tab 内
-      </p>
+    </div>
+
+    <div class="aside-card">
+      <h3>财务清单</h3>
+      <div class="aside-list">
+        <a class="aside-row" onclick="switchTab('invoices')">
+          <span>收费记录</span>
+          <span class="num">{{ pet_invoices|length }}{% if unpaid_total > 0 %} · <em class="danger">¥{{ '%.0f'|format(unpaid_total) }} 未付</em>{% endif %}</span>
+        </a>
+        <a class="aside-row" onclick="switchTab('sales')">
+          <span>销售订单</span><span class="num">{{ pet_sales_orders|length }}</span>
+        </a>
+        <a class="aside-row" onclick="switchTab('wallet')">
+          <span>钱包流水</span><span class="num">¥{{ '%.0f'|format(wallet.balance if wallet else 0) }}</span>
+        </a>
+        <a class="aside-row" onclick="switchTab('packages')">
+          <span>已购套餐</span><span class="num">{{ active_packages_count }}</span>
+        </a>
+        <a class="aside-row" onclick="switchTab('deposits')">
+          <span>押金</span><span class="num">{{ held_deposits_count }}</span>
+        </a>
+        <a class="aside-row" onclick="switchTab('coupons')">
+          <span>优惠券</span><span class="num">{{ active_coupons_count }}</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="aside-card">
+      <a class="uk-btn danger ghost sm" style="width:100%;">归档客户</a>
     </div>
   </aside>
 
@@ -813,6 +850,7 @@
 function switchTab(tab) {
   document.querySelectorAll('.uk-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.uk-tab-content').forEach(d => d.classList.toggle('active', d.dataset.tabContent === tab));
+  document.querySelectorAll('.aside-row').forEach(r => r.classList.toggle('active', r.getAttribute('onclick') && r.getAttribute('onclick').includes("'"+tab+"'")));
   const url = new URL(window.location.href);
   url.searchParams.set('tab', tab);
   history.replaceState(null, '', url.toString());
