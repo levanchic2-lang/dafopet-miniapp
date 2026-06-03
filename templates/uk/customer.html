@@ -779,6 +779,33 @@
       <div class="tab-action-bar">
         <span class="tab-count">共 <b>{{ weight_records|length }}</b> 条 <span class="uk-mute" style="margin-left:14px;font-size:9pt;">按时间正序</span></span>
       </div>
+
+      {# 录入新体重 #}
+      {% if active_pet %}
+      <form method="post" action="/admin/weight-records/create"
+            style="display:grid;grid-template-columns:140px 130px 1fr auto;gap:10px;align-items:end;margin-bottom:18px;padding:14px 16px;background:var(--bg);border-left:3px solid var(--ink);">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+        <input type="hidden" name="pet_id" value="{{ active_pet.id }}"/>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:9pt;letter-spacing:2px;color:var(--ink-3);font-style:italic;">
+          记 录 日 期
+          <input type="date" name="record_date" value="{{ today_str }}" required
+                 style="border:0.5px solid var(--hair);padding:7px 10px;font-family:var(--font-serif);font-size:10pt;color:var(--ink);background:var(--paper);outline:0;height:34px;"/>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:9pt;letter-spacing:2px;color:var(--ink-3);font-style:italic;">
+          体 重 (kg)
+          <input type="number" name="weight_kg" step="0.01" min="0.01" max="200" required placeholder="如 4.25"
+                 style="border:0.5px solid var(--hair);padding:7px 10px;font-family:var(--font-numeric);font-size:10pt;color:var(--ink);background:var(--paper);outline:0;height:34px;"/>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:9pt;letter-spacing:2px;color:var(--ink-3);font-style:italic;">
+          备 注（可 选）
+          <input name="notes" placeholder="如 术后 / 空腹"
+                 style="border:0.5px solid var(--hair);padding:7px 10px;font-family:var(--font-serif);font-size:10pt;color:var(--ink);background:var(--paper);outline:0;height:34px;"/>
+        </label>
+        <button type="submit" class="uk-btn primary sm" style="height:34px;">＋ 记 录</button>
+      </form>
+      {% endif %}
+
       {% if weight_records %}
       <table class="uk-tbl-tab">
         <thead><tr><th>日期</th><th>体重</th><th>较上次</th><th>备注</th></tr></thead>
@@ -802,7 +829,7 @@
         </tbody>
       </table>
       {% else %}
-      <div class="tab-empty">暂无体重记录 · 病历中称重会自动写入此处</div>
+      <div class="tab-empty">暂无体重记录 · 在上方填日期 + 体重 (kg) 即可记录</div>
       {% endif %}
     </div>
 
