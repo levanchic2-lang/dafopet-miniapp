@@ -30,6 +30,24 @@
   {% endif %}
 </div>
 
+{# 快捷新建按钮（医生用）#}
+{% if mobile_role == 'doctor' %}
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">
+  <a href="/m/visit/new?customer_id={{ cust.id }}{% if pets|length == 1 %}&pet_id={{ pets[0].id }}{% endif %}"
+     class="m-quick-tile" style="padding:10px 4px;">
+    <span class="emoji" style="font-size:20px;">📝</span><span class="label" style="font-size:11px;">病历</span>
+  </a>
+  <a href="/m/vaccination/new?customer_id={{ cust.id }}{% if pets|length == 1 %}&pet_id={{ pets[0].id }}{% endif %}"
+     class="m-quick-tile" style="padding:10px 4px;">
+    <span class="emoji" style="font-size:20px;">💉</span><span class="label" style="font-size:11px;">疫苗</span>
+  </a>
+  <a href="/m/deworming/new?customer_id={{ cust.id }}{% if pets|length == 1 %}&pet_id={{ pets[0].id }}{% endif %}"
+     class="m-quick-tile" style="padding:10px 4px;">
+    <span class="emoji" style="font-size:20px;">🪱</span><span class="label" style="font-size:11px;">驱虫</span>
+  </a>
+</div>
+{% endif %}
+
 {# 钱包 + 套餐 横向 #}
 {% if wallet or packages %}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
@@ -108,7 +126,13 @@
 
 {# 最近病历 #}
 <div class="m-card">
-  <div class="m-card-title">📝 最近病历 <span class="count">{{ visits|length }}</span></div>
+  <div class="m-card-title" style="display:flex;align-items:center;justify-content:space-between;">
+    <span>📝 最近病历 <span class="count">{{ visits|length }}</span></span>
+    <a href="/m/visit/new?customer_id={{ cust.id }}{% if pets|length == 1 %}&pet_id={{ pets[0].id }}{% endif %}"
+       style="background:#16a34a;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:8px;text-decoration:none;">
+      ➕ 新建
+    </a>
+  </div>
   {% if not visits %}
   <div class="m-empty" style="padding:14px;"><div style="font-size:13px;">还没有就诊记录</div></div>
   {% else %}

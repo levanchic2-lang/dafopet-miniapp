@@ -1,0 +1,117 @@
+{% extends "m/_base.html" %}
+{% block title %}新增疫苗{% endblock %}
+{% block topbar_title %}💉 新增疫苗{% endblock %}
+{% block topbar_sub %}{{ pet.name if pet else '—' }} · {{ cust.name if cust else '—' }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% if cust %}/m/customer/{{ cust.id }}{% else %}/m/doctor{% endif %}" class="m-icon-btn" title="取消">✕</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not cust %}
+<div class="m-card" style="background:#fef2f2;border:1px solid #fca5a5;">
+  <div style="color:#991b1b;font-size:13px;">请先从客户档案进入</div>
+  <a href="/m/customers" style="color:#3b82f6;font-size:13px;">→ 去搜客户</a>
+</div>
+{% else %}
+
+<form method="post" action="/admin/vaccinations/create">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+  <input type="hidden" name="pet_id" id="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="next_url" value="/m/customer/{{ cust.id }}"/>
+
+  {% if pets and pets|length > 1 %}
+  <div class="m-card">
+    <div class="m-card-title">🐾 选宠物</div>
+    <div class="m-role-chips">
+      {% for p in pets %}
+      <button type="button" class="m-role-chip pet-chip {% if pet and p.id == pet.id %}active{% endif %}"
+              data-pet-id="{{ p.id }}" onclick="pickPet(this)">
+        {% if p.species == 'cat' %}🐱{% elif p.species == 'dog' %}🐶{% else %}🐾{% endif %}
+        {{ p.name or '未命名' }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="m-card">
+    <div class="m-card-title">💉 疫苗信息</div>
+    <label style="font-size:12px;color:#64748b;display:block;">疫苗类型
+      <select name="vaccine_type" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;">
+        <option value="rabies">狂犬</option>
+        <option value="combo_3">三联（犬/猫）</option>
+        <option value="combo_6">六联</option>
+        <option value="canine_8">犬八联</option>
+        <option value="other" selected>其他</option>
+      </select>
+    </label>
+    <label style="font-size:12px;color:#64748b;display:block;margin-top:8px;">疫苗品名（品牌）
+      <input name="vaccine_name" list="vacc-list" placeholder="如：辉瑞卫佳壹"
+             style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
+      {% if vacc_items %}
+      <datalist id="vacc-list">{% for it in vacc_items %}<option value="{{ it.name }}">{% endfor %}</datalist>
+      {% endif %}
+    </label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+      <label style="font-size:12px;color:#64748b;">批号
+        <input name="batch_no" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+      </label>
+      <label style="font-size:12px;color:#64748b;">第几针
+        <input type="number" name="dose_number" value="1" min="1" max="99"
+               style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+      </label>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+      <label style="font-size:12px;color:#64748b;">接种日期
+        <input type="date" name="vaccinated_date" value="{{ today }}" required
+               style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+      </label>
+      <label style="font-size:12px;color:#64748b;">下次到期
+        <input type="date" name="next_due_date"
+               style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+      </label>
+    </div>
+    <label style="font-size:12px;color:#64748b;display:block;margin-top:8px;">医生
+      <input name="vet_name" value="{{ default_vet }}"
+             style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
+    </label>
+  </div>
+
+  <div class="m-card">
+    <div class="m-card-title">💰 收费</div>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <input type="checkbox" name="is_free" value="1"/>
+      <span style="font-size:14px;">免费疫苗（狂犬等）</span>
+    </label>
+    <label style="font-size:12px;color:#64748b;display:block;margin-top:10px;">收费 ¥
+      <input type="number" name="charge_amount" step="0.01" min="0" placeholder="0 留空 = 不收费 / 自动"
+             style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
+      <span style="font-size:11px;color:#94a3b8;">桌面端会自动生成待收款</span>
+    </label>
+  </div>
+
+  <div class="m-card">
+    <div class="m-card-title">📝 备注</div>
+    <textarea name="notes" rows="2"
+              style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"></textarea>
+  </div>
+
+  <button type="submit" class="m-btn" style="background:#16a34a;font-size:17px;padding:16px;">
+    ✓ 保存疫苗
+  </button>
+</form>
+
+<script>
+function pickPet(btn) {
+  document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pet_id').value = btn.dataset.petId;
+}
+</script>
+
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,188 @@
+{% extends "m/_base.html" %}
+{% set is_edit = (mode == 'edit') %}
+{% block title %}{% if is_edit %}编辑病历 #{{ v.id }}{% else %}新建病历{% endif %}{% endblock %}
+{% block topbar_title %}{% if is_edit %}📝 编辑病历{% else %}➕ 新建病历{% endif %}{% endblock %}
+{% block topbar_sub %}
+{% if pet %}{{ pet.name }} · {% endif %}{{ cust.name if cust else '' }}
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% if is_edit %}/m/visit/{{ v.id }}{% elif cust %}/m/customer/{{ cust.id }}{% else %}/m/doctor{% endif %}" class="m-icon-btn" title="取消">✕</a>
+{% endblock %}
+
+{% block content %}
+
+<form method="post"
+      action="{% if is_edit %}/admin/visits/{{ v.id }}/edit{% else %}/admin/visits/create{% endif %}"
+      id="vform">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  {% if not is_edit %}
+  <input type="hidden" name="customer_id" id="customer_id" value="{{ cust.id if cust else 0 }}"/>
+  <input type="hidden" name="pet_id" id="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="appointment_id" value="{{ appt.id if appt else 0 }}"/>
+  <input type="hidden" name="next_url" value="/m/visit/{id}"/>
+  {% else %}
+  <input type="hidden" name="pet_id" value="{{ v.pet_id or 0 }}"/>
+  <input type="hidden" name="next_url" value="/m/visit/{{ v.id }}"/>
+  {% endif %}
+
+  {# 客户/宠物 (仅新建 + 未预填时显示) #}
+  {% if not is_edit and not cust %}
+  <div class="m-card">
+    <div class="m-card-title">👤 客户 / 宠物</div>
+    <input type="search" id="cust-search" placeholder="搜手机号或姓名（≥ 2 字）"
+           style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
+    <div id="search-results" style="margin-top:8px;"></div>
+  </div>
+  {% endif %}
+
+  {% if cust or is_edit %}
+  <div class="m-card" style="background:#f0fdf4;border:1px solid #bbf7d0;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="font-size:22px;">
+        {% if pet and pet.species == 'cat' %}🐱{% elif pet and pet.species == 'dog' %}🐶{% else %}🐾{% endif %}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;color:#14532d;">{{ pet.name if pet else '—' }}</div>
+        <div style="font-size:12px;color:#166534;">{{ cust.name if cust else '—' }}{% if cust and cust.phone %} · {{ cust.phone }}{% endif %}</div>
+      </div>
+    </div>
+    {% if not is_edit and pets|length > 1 %}
+    <div style="margin-top:10px;">
+      <div style="font-size:11px;color:#166534;margin-bottom:4px;">换宠物：</div>
+      <div class="m-role-chips">
+        {% for p in pets %}
+        <button type="button" class="m-role-chip pet-chip {% if pet and p.id == pet.id %}active{% endif %}"
+                data-pet-id="{{ p.id }}" onclick="pickPet(this)">
+          {% if p.species == 'cat' %}🐱{% elif p.species == 'dog' %}🐶{% else %}🐾{% endif %}
+          {{ p.name or '未命名' }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# 基本信息 #}
+  <div class="m-card">
+    <div class="m-card-title">📋 基本信息</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <label style="font-size:12px;color:#64748b;">日期
+        <input type="date" name="visit_date" value="{{ v.visit_date if v else today }}" required
+               style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+      </label>
+      <label style="font-size:12px;color:#64748b;">类型
+        <select name="visit_type" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
+          {% for k, zh in visit_types.items() %}
+          <option value="{{ k }}" {% if v and v.visit_type == k %}selected{% elif not v and k == 'outpatient' %}selected{% endif %}>{{ zh }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <label style="font-size:12px;color:#64748b;display:block;margin-top:8px;">医生
+      <input name="vet_name" value="{{ v.vet_name if v else default_vet }}"
+             style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
+    </label>
+  </div>
+
+  {# SOAP #}
+  <div class="m-card">
+    <div class="m-card-title">📋 主诉</div>
+    <textarea name="chief_complaint" rows="3" placeholder="客户反映 / 来诊原因"
+              style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;">{{ v.chief_complaint if v else '' }}</textarea>
+  </div>
+
+  <div class="m-card">
+    <div class="m-card-title">🩺 体格检查</div>
+    <textarea name="physical_exam" rows="3" placeholder="T / HR / RR / 体重 / 视触叩听"
+              style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;">{{ v.physical_exam if v else '' }}</textarea>
+  </div>
+
+  <div class="m-card" style="background:#eff6ff;border:1px solid #bfdbfe;">
+    <div class="m-card-title" style="color:#1e40af;">🎯 诊断</div>
+    <textarea name="diagnosis" rows="2" placeholder="初步诊断 / 鉴别诊断"
+              style="width:100%;padding:10px;border:1px solid #93c5fd;border-radius:8px;font-size:15px;box-sizing:border-box;background:#fff;">{{ v.diagnosis if v else '' }}</textarea>
+  </div>
+
+  <div class="m-card">
+    <div class="m-card-title">💉 处理方案</div>
+    <textarea name="treatment_plan" rows="3" placeholder="治疗 / 用药 / 后续建议"
+              style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;">{{ v.treatment_plan if v else '' }}</textarea>
+  </div>
+
+  <div class="m-card">
+    <div class="m-card-title">📝 补充备注</div>
+    <textarea name="notes" rows="2" placeholder="可选"
+              style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">{{ v.notes if v else '' }}</textarea>
+  </div>
+
+  {# 回访 #}
+  <div class="m-card">
+    <div class="m-card-title">📞 回访</div>
+    <label style="font-size:12px;color:#64748b;display:block;">回访日期
+      <input type="date" name="follow_up_at" value="{{ v.follow_up_at if v else '' }}"
+             style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+    </label>
+    <textarea name="follow_up_note" rows="2" placeholder="回访备注（可选）"
+              style="width:100%;margin-top:8px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">{{ v.follow_up_note if v else '' }}</textarea>
+  </div>
+
+  <button type="submit" class="m-btn" style="background:#16a34a;font-size:17px;padding:16px;" id="submit-btn">
+    {% if is_edit %}✓ 保存修改{% else %}✓ 新建病历{% endif %}
+  </button>
+</form>
+
+{% if not is_edit and not cust %}
+<script>
+const $ = (id) => document.getElementById(id);
+let searchTimer = null;
+const search = $('cust-search');
+const customerIdInput = $('customer_id');
+const petIdInput = $('pet_id');
+
+search.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const q = search.value.trim();
+  if (q.length < 2) { $('search-results').innerHTML = ''; return; }
+  searchTimer = setTimeout(async () => {
+    const resp = await fetch('/m/api/search-customer?q=' + encodeURIComponent(q));
+    const data = await resp.json();
+    const html = data.results.map(c => `
+      <div style="padding:10px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;">
+        <div style="font-weight:600;">${c.name || '—'} <span style="color:#64748b;font-family:ui-monospace,monospace;font-weight:400;">${c.phone || ''}</span></div>
+        ${c.pets.length ? `
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+            ${c.pets.map(p => `
+              <button type="button" onclick="pickFromSearch(${c.id}, ${p.id}, '${(p.name||'').replace(/'/g,"\\'")}', '${p.species}')"
+                class="m-role-chip" style="font-size:12px;padding:5px 10px;">
+                ${p.species === 'cat' ? '🐱' : (p.species === 'dog' ? '🐶' : '🐾')} ${p.name || '未命名'}
+              </button>
+            `).join('')}
+          </div>
+        ` : `<div style="font-size:11px;color:#94a3b8;margin-top:4px;">无宠物档案</div>`}
+      </div>
+    `).join('');
+    $('search-results').innerHTML = html || '<div style="font-size:13px;color:#94a3b8;padding:8px;">无结果</div>';
+  }, 250);
+});
+
+function pickFromSearch(cid, pid, pname, species) {
+  customerIdInput.value = cid;
+  petIdInput.value = pid;
+  // 重新加载页面，参数预填
+  window.location.href = '/m/visit/new?customer_id=' + cid + '&pet_id=' + pid;
+}
+</script>
+{% endif %}
+
+<script>
+function pickPet(btn) {
+  document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  const pid = document.getElementById('pet_id');
+  if (pid) pid.value = btn.dataset.petId;
+}
+</script>
+
+{% endblock %}

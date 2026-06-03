@@ -9692,6 +9692,7 @@ async def admin_visit_create(
     treatment_plan: str = Form(""),
     notes: str = Form(""),
     vet_name: str = Form(""),
+    next_url: str = Form(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -9722,6 +9723,10 @@ async def admin_visit_create(
         if appt and appt.status == AppointmentStatus.confirmed.value:
             appt.status = AppointmentStatus.completed.value
             db.commit()
+    # 移动端 next_url 可带 {id} 占位
+    if next_url:
+        nu = next_url.replace("{id}", str(v.id))
+        return RedirectResponse(_safe_next(nu, f"/admin/visits/{v.id}?msg=就诊记录已创建"), status_code=303)
     if customer_id:
         return RedirectResponse(f"/admin/customers/{customer_id}?msg=就诊记录已创建", status_code=303)
     return RedirectResponse(f"/admin/visits/{v.id}?msg=就诊记录已创建", status_code=303)
@@ -9918,6 +9923,7 @@ async def admin_visit_edit(
     follow_up_note: str = Form(""),
     follow_up_at: str = Form(""),
     return_to: str = Form(""),  # "customer" 时保存后跳回客户档案
+    next_url: str = Form(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -9958,7 +9964,10 @@ async def admin_visit_edit(
     # 若来自客户档案，保存后回去
     if return_to == "customer" and v.customer_id:
         return RedirectResponse(f"/admin/customers/{v.customer_id}?pet_id={v.pet_id or 0}&tab=visits&msg=就诊已保存", status_code=303)
-    return RedirectResponse(f"/admin/visits/{visit_id}?msg=已保存", status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/visits/{visit_id}?msg=已保存"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/visits/{visit_id}/close")
@@ -15663,7 +15672,11 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
         msg_part += f"，收费单 ¥{charge_amount:.2f} 已生成待收款"
     elif not is_free:
         msg_part += "（未生成收费单：金额=0 且未关联有售价的库存品目）"
-    return RedirectResponse(f"{redirect}?msg={msg_part}", status_code=303)
+    next_url_raw = str(form.get("next_url") or "")
+    return RedirectResponse(
+        _safe_next(next_url_raw, f"{redirect}?msg={msg_part}"),
+        status_code=303,
+    )
 
 
 @app.get("/admin/vaccinations/{vacc_id}", response_class=HTMLResponse)
@@ -17367,6 +17380,7 @@ async def admin_deworming_create(
     inventory_item_id: int = Form(0),
     batch_no: str = Form(""),
     charge_amount: float = Form(0.0),
+    next_url: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -17432,7 +17446,10 @@ async def admin_deworming_create(
 
     db.commit()
     # 跳到驱虫详情页（与疫苗一致），用户可继续编辑/锁定/作废
-    return RedirectResponse(f"/admin/dewormings/{rec.id}?msg={msg}", status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/dewormings/{rec.id}?msg={msg}"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/dewormings/{rec_id}/delete")
@@ -19938,6 +19955,136 @@ async def m_customer_profile(cust_id: int, request: Request, db: Session = Depen
         "admitted": admitted,
     })
     return templates.TemplateResponse(request, "m/customer_profile.html", ctx)
+
+
+_VISIT_TYPE_ZH = {
+    "outpatient": "门诊",
+    "followup":   "复诊",
+    "postop":     "术后",
+    "vaccine":    "疫苗",
+    "surgery_consult": "术前面诊",
+    "other":      "其他",
+}
+
+
+@app.get("/m/visit/new", response_class=HTMLResponse)
+async def m_visit_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = 0,
+    pet_id: int = 0,
+    appointment_id: int = 0,
+):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/visit/new", status_code=303)
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    appt = db.get(Appointment, appointment_id) if appointment_id else None
+    if appt and not cust:
+        cust = db.get(Customer, appt.customer_id) if appt.customer_id else None
+        pet = db.get(Pet, appt.pet_id) if appt.pet_id else None
+    pets = []
+    if cust:
+        pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
+    uname = request.session.get("admin_username") or ""
+    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
+    default_vet = (u.display_name if u and u.display_name else uname) or ""
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "mode": "new", "v": None,
+        "cust": cust, "pet": pet, "pets": pets, "appt": appt,
+        "default_vet": default_vet,
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "visit_types": _VISIT_TYPE_ZH,
+    })
+    return templates.TemplateResponse(request, "m/visit_edit.html", ctx)
+
+
+@app.get("/m/visit/{visit_id}/edit", response_class=HTMLResponse)
+async def m_visit_edit_form(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/visit/{visit_id}/edit", status_code=303)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404)
+    if (v.status or "open") == "closed":
+        return RedirectResponse(f"/m/visit/{visit_id}?err=病历已结束，不可编辑", status_code=303)
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    cust = db.get(Customer, v.customer_id) if v.customer_id else None
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "mode": "edit", "v": v,
+        "cust": cust, "pet": pet, "pets": [],
+        "default_vet": v.vet_name or "",
+        "today": v.visit_date,
+        "visit_types": _VISIT_TYPE_ZH,
+    })
+    return templates.TemplateResponse(request, "m/visit_edit.html", ctx)
+
+
+@app.get("/m/vaccination/new", response_class=HTMLResponse)
+async def m_vaccination_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = 0,
+    pet_id: int = 0,
+):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/vaccination/new", status_code=303)
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    if pet and not cust:
+        cust = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    pets = []
+    if cust:
+        pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
+    # 疫苗品目（category=vaccine）
+    vacc_items = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+    ).filter(InventoryItem.category == "vaccine", InventoryItem.is_active == True).all()
+    uname = request.session.get("admin_username") or ""
+    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
+    default_vet = (u.display_name if u and u.display_name else uname) or ""
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "cust": cust, "pet": pet, "pets": pets,
+        "vacc_items": vacc_items,
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "default_vet": default_vet,
+    })
+    return templates.TemplateResponse(request, "m/vaccination_new.html", ctx)
+
+
+@app.get("/m/deworming/new", response_class=HTMLResponse)
+async def m_deworming_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = 0,
+    pet_id: int = 0,
+):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/deworming/new", status_code=303)
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    if pet and not cust:
+        cust = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    pets = []
+    if cust:
+        pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
+    deworm_items = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+    ).filter(InventoryItem.category == "antiparasitic", InventoryItem.is_active == True).all()
+    uname = request.session.get("admin_username") or ""
+    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
+    default_vet = (u.display_name if u and u.display_name else uname) or ""
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "cust": cust, "pet": pet, "pets": pets,
+        "deworm_items": deworm_items,
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "default_vet": default_vet,
+    })
+    return templates.TemplateResponse(request, "m/deworming_new.html", ctx)
 
 
 @app.get("/m/visit/{visit_id}", response_class=HTMLResponse)

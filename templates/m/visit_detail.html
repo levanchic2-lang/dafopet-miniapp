@@ -8,6 +8,9 @@
 
 {% block topbar_actions %}
 <a href="javascript:history.back()" class="m-icon-btn" title="返回">←</a>
+{% if v.status != 'closed' %}
+<a href="/m/visit/{{ v.id }}/edit" class="m-icon-btn" title="编辑" style="background:#dcfce7;color:#16a34a;">✏</a>
+{% endif %}
 {% endblock %}
 
 {% block content %}
