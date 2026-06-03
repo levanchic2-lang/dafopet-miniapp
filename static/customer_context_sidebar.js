@@ -43,7 +43,7 @@
       if (items.length) {
         cards.push(`
           <div class="card" style="padding:.75rem 1rem;">
-            <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.4rem;">📇 档案摘要</div>
+            <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.4rem;">档案摘要</div>
             <div style="font-size:.82rem;color:#475569;line-height:1.85;">${items.join('')}</div>
           </div>`);
       }
@@ -53,7 +53,7 @@
     if (data.wallet) {
       cards.push(`
         <div class="card" style="padding:.75rem 1rem;">
-          <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.35rem;">💰 钱包余额</div>
+          <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.35rem;">钱包余额</div>
           <div style="font-size:1.15rem;font-weight:700;color:#059669;">${moneyFmt(data.wallet.balance)}</div>
           <div style="font-size:.74rem;color:#94a3b8;margin-top:.15rem;">累计充值 ${moneyFmt(data.wallet.lifetime_recharge)}</div>
         </div>`);
@@ -66,7 +66,7 @@
       ).join("");
       cards.push(`
         <div class="card" style="padding:.75rem 1rem;background:#fef3c7;border-color:#fbbf24;">
-          <div style="font-size:.72rem;font-weight:700;color:#92400e;letter-spacing:.04em;margin-bottom:.35rem;">⚠ 健康警示</div>
+          <div style="font-size:.72rem;font-weight:700;color:#92400e;letter-spacing:.04em;margin-bottom:.35rem;">健康警示</div>
           ${items}
         </div>`);
     }
@@ -76,7 +76,7 @@
       cards.push(`
         <a href="/admin/invoices?status=unpaid" style="text-decoration:none;color:inherit;">
         <div class="card" style="padding:.75rem 1rem;background:#fef2f2;border-color:#fca5a5;">
-          <div style="font-size:.72rem;font-weight:700;color:#991b1b;letter-spacing:.04em;margin-bottom:.35rem;">💸 未付单据 <span style="background:#dc2626;color:#fff;padding:1px 6px;border-radius:8px;font-size:.65rem;margin-left:.3rem;">${data.unpaid.count}</span></div>
+          <div style="font-size:.72rem;font-weight:700;color:#991b1b;letter-spacing:.04em;margin-bottom:.35rem;">未付单据 <span style="background:#dc2626;color:#fff;padding:1px 6px;border-radius:8px;font-size:.65rem;margin-left:.3rem;">${data.unpaid.count}</span></div>
           <div style="font-size:1.05rem;font-weight:700;color:#b91c1c;">${moneyFmt(data.unpaid.total)}</div>
           <div style="font-size:.72rem;color:#7f1d1d;margin-top:.15rem;">→ 收银台处理</div>
         </div></a>`);
@@ -92,7 +92,7 @@
       ).join("");
       cards.push(`
         <div class="card" style="padding:.75rem 1rem;">
-          <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.35rem;">📋 最近就诊</div>
+          <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.35rem;">最近就诊</div>
           ${items}
         </div>`);
     }
@@ -109,7 +109,7 @@
       }).join("");
       cards.push(`
         <div class="card" style="padding:.75rem 1rem;">
-          <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.35rem;">💉 防疫近况</div>
+          <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.35rem;">防疫近况</div>
           ${items}
         </div>`);
     }
@@ -125,7 +125,7 @@
       }
       cards.push(`
         <div class="card" style="padding:.75rem 1rem;">
-          <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.35rem;">⚖ 体重</div>
+          <div style="font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:.35rem;">体重</div>
           <div style="font-size:1.05rem;font-weight:700;">${data.weight.current.toFixed(2)} kg${deltaTag}</div>
           <div style="font-size:.72rem;color:#94a3b8;margin-top:.15rem;">${data.weight.date}</div>
         </div>`);
