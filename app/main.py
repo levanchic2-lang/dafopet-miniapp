@@ -15925,7 +15925,7 @@ async def admin_vaccination_create_page(
     if pet_id:
         history = db.query(Vaccination).filter(Vaccination.pet_id == pet_id)\
             .order_by(Vaccination.vaccinated_date.desc(), Vaccination.id.desc()).limit(10).all()
-    return templates.TemplateResponse(request, "admin_vaccination_form.html", {
+    return templates.TemplateResponse(request, "uk/vaccination.html", {  # B 补 - UK 重写
         "mode": "create", "vacc": None,
         "pet": pet, "cust": cust,
         "vets": vets, "vacc_items": vacc_items,
@@ -16054,7 +16054,7 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
             Vaccination.pet_id == vacc.pet_id,
             Vaccination.id != vacc_id,
         ).order_by(Vaccination.vaccinated_date.desc(), Vaccination.id.desc()).limit(10).all()
-    return templates.TemplateResponse(request, "admin_vaccination_form.html", {
+    return templates.TemplateResponse(request, "uk/vaccination.html", {  # B 补 - UK 重写
         "mode": "edit", "vacc": vacc,
         "pet": pet, "cust": cust,
         "vets": vets, "vacc_items": vacc_items,
@@ -17627,7 +17627,7 @@ async def page_admin_deworming_create(
     if pet_id:
         history = db.query(DewormingRecord).filter(DewormingRecord.pet_id == pet_id)\
             .order_by(DewormingRecord.deworm_date.desc(), DewormingRecord.id.desc()).limit(10).all()
-    return templates.TemplateResponse(request, "admin_deworming_form.html", {
+    return templates.TemplateResponse(request, "uk/deworming.html", {  # B 补 - UK 重写
         "mode": "create", "rec": None,
         "cust": cust, "pet": pet, "vets": vets, "dew_items": dew_items,
         "today": today, "next_due_default": next_due,
@@ -17671,7 +17671,7 @@ async def page_admin_deworming_detail(rec_id: int, request: Request, db: Session
             DewormingRecord.pet_id == rec.pet_id,
             DewormingRecord.id != rec_id,
         ).order_by(DewormingRecord.deworm_date.desc(), DewormingRecord.id.desc()).limit(10).all()
-    return templates.TemplateResponse(request, "admin_deworming_form.html", {
+    return templates.TemplateResponse(request, "uk/deworming.html", {  # B 补 - UK 重写
         "mode": "edit", "rec": rec,
         "cust": cust, "pet": pet, "vets": vets, "dew_items": dew_items,
         "today": rec.deworm_date, "next_due_default": rec.next_due_date,

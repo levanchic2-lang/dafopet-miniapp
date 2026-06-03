@@ -1,0 +1,451 @@
+{% extends "uk/_base.html" %}
+{% block title %}{% if rec %}驱虫记录 #{{ rec.id }}{% else %}新建驱虫记录{% endif %} · 大风动物医院{% endblock %}
+
+{% block body %}
+
+{% set is_edit = (mode == 'edit') %}
+{% set _TYPE_ZH = {'external':'体外','internal':'体内','combo':'体内外'} %}
+
+<style>
+  .dw-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .dw-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .dw-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .dw-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .dw-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 32px; margin-bottom: 8px;
+  }
+  .dw-head h1 {
+    font-family: var(--font-serif); font-size: 26pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .dw-head h1 .no {
+    font-family: var(--font-numeric); font-size: 18pt; color: var(--ink-3);
+    font-weight: 400; vertical-align: 4px; margin-left: 6px;
+  }
+  .dw-head h1 .status {
+    display: inline-block; padding: 3px 12px; margin-left: 14px;
+    border: 0.5px solid var(--ink-3); font-size: 9pt; letter-spacing: 2px;
+    color: var(--ink-2); vertical-align: 8px; font-family: var(--font-serif);
+  }
+  .dw-head h1 .status.paid { background: var(--accent-green); color: var(--paper); border-color: var(--accent-green); }
+  .dw-head h1 .status.voided { background: var(--bg); color: var(--ink-3); }
+  .dw-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 12px;
+  }
+  .dw-head h1 .sub b { color: var(--ink); font-style: normal; font-weight: 700; }
+  .dw-head h1 .sub .sep { color: var(--ink-4); margin: 0 8px; }
+  .dw-head .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+  hr.dw-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  .dw-locked {
+    border-left: 3px solid var(--accent-red);
+    background: #fcf5f4; padding: 14px 18px; margin-bottom: 24px;
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink-2); line-height: 1.7;
+    display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap;
+  }
+  .dw-locked b { font-weight: 700; color: var(--accent-red); letter-spacing: 1.5px; }
+  .dw-locked .paid { color: var(--accent-amber); font-weight: 700; font-style: italic; }
+  .dw-locked .actions { display: flex; gap: 10px; flex-shrink: 0; align-self: center; }
+
+  .locked-form input, .locked-form select, .locked-form textarea,
+  .locked-form button[type="submit"] {
+    pointer-events: none !important; background: var(--bg) !important;
+    color: var(--ink-2) !important; cursor: not-allowed !important;
+  }
+  .locked-form button[type="submit"] { display: none !important; }
+
+  .dw-grid {
+    display: grid; grid-template-columns: minmax(0,1fr) 260px;
+    gap: 28px; align-items: start;
+  }
+  @media (max-width: 900px) { .dw-grid { grid-template-columns: 1fr; } }
+
+  .dw-section { margin-bottom: 28px; }
+  .dw-section-head {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .dw-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+
+  .dw-row2 {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 18px; margin-bottom: 14px;
+  }
+  .dw-row2.full { grid-template-columns: 1fr; }
+  @media (max-width: 768px) { .dw-row2 { grid-template-columns: 1fr; } }
+
+  .dw-field { display: flex; flex-direction: column; gap: 6px; }
+  .dw-field label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-style: italic;
+  }
+  .dw-field label .req { color: var(--accent-red); font-style: normal; margin-left: 2px; }
+  .dw-field label .hint {
+    color: var(--ink-4); font-style: italic; letter-spacing: 0.5px;
+    margin-left: 6px; font-size: 8.5pt;
+  }
+  .dw-input, .dw-select {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 8px 12px;
+    outline: 0; width: 100%; box-sizing: border-box;
+    height: 38px; line-height: 1.4;
+  }
+  .dw-input:focus, .dw-select:focus { border-color: var(--ink); }
+  .dw-input-hint {
+    font-size: 8.5pt; color: var(--ink-3); font-style: italic;
+    margin-top: 4px; letter-spacing: 0.5px;
+  }
+  .dw-textarea {
+    width: 100%; min-height: 70px;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 10px 14px;
+    line-height: 1.6; resize: vertical; outline: 0; box-sizing: border-box;
+  }
+  .dw-textarea:focus { border-color: var(--ink); }
+
+  .dw-submit-bar {
+    display: flex; gap: 14px; align-items: center;
+    padding-top: 18px; margin-top: 18px;
+    border-top: 0.5px solid var(--hair);
+  }
+  .dw-submit-bar .submit-main {
+    flex: 1; background: var(--ink); color: var(--paper); border: 0;
+    padding: 12px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 11pt;
+    letter-spacing: 3px; font-weight: 700;
+  }
+  .dw-submit-bar .submit-main:hover { background: #000; }
+
+  .dw-delete-zone { margin-top: 20px; padding-top: 14px; border-top: 0.5px solid var(--hair); }
+  .dw-delete-zone h3 {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2px; color: var(--ink-3); font-style: italic; margin: 0 0 10px;
+  }
+
+  .dw-aside { display: flex; flex-direction: column; gap: 18px; }
+  .dw-aside-card {
+    border: 0.5px solid var(--hair-2);
+    padding: 16px 18px; background: var(--paper);
+  }
+  .dw-aside-card h3 {
+    margin: 0 0 10px;
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 3px; color: var(--ink-3); font-weight: 400; font-style: italic;
+  }
+  .dw-aside-card .name {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); margin-bottom: 6px;
+  }
+  .dw-aside-card .meta {
+    font-size: 9.5pt; color: var(--ink-2); letter-spacing: 1px; line-height: 1.7;
+  }
+  .dw-history-row {
+    display: block; padding: 9px 0; text-decoration: none; color: inherit;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .dw-history-row:last-child { border-bottom: 0; }
+  .dw-history-row.voided { opacity: .5; }
+  .dw-history-row .r1 {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 9pt; color: var(--ink-3);
+  }
+  .dw-history-row .r1 .date { font-family: var(--font-numeric); }
+  .dw-history-row .r1 .type {
+    font-size: 8.5pt; padding: 1px 6px; letter-spacing: 1px;
+    background: var(--bg); border: 0.5px solid var(--hair);
+  }
+  .dw-history-row .r2 {
+    font-size: 10pt; color: var(--ink); margin-top: 3px; font-weight: 700;
+  }
+  .dw-history-row .r3 {
+    font-size: 8.5pt; margin-top: 2px; font-family: var(--font-numeric);
+    letter-spacing: 0.5px;
+  }
+  .dw-history-row .r3.ok { color: var(--accent-green); }
+  .dw-history-row .r3.expired { color: var(--accent-red); }
+</style>
+
+<div class="dw-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  {% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name }}</a>
+  <span class="sep">/</span>{% endif %}
+  <span>{% if is_edit %}驱虫记录 #{{ rec.id }}{% else %}新建驱虫记录{% endif %}</span>
+</div>
+
+<div class="dw-head">
+  <div>
+    <h1>
+      {% if is_edit %}驱虫记录 <span class="no">#{{ rec.id }}</span>{% else %}新建驱虫记录{% endif %}
+      {% if is_edit %}
+        {% if rec.status == 'voided' %}<span class="status voided">已作废</span>
+        {% elif rec.invoice_id %}<span class="status paid">已开单</span>{% endif %}
+      {% endif %}
+      <span class="sub">
+        {% if cust %}<b>{{ cust.name }}</b>{% endif %}
+        {% if pet %}<span class="sep">·</span>{{ pet.name }}{% if pet.species == 'cat' %}（猫）{% elif pet.species == 'dog' %}（犬）{% endif %}{% endif %}
+      </span>
+    </h1>
+  </div>
+  <div class="actions">
+    {% if is_edit and rec.invoice_id %}
+    <a href="/admin/invoices/{{ rec.invoice_id }}" class="uk-btn ghost sm">查看收费单</a>
+    {% endif %}
+    {% if cust %}
+    <a href="/admin/customers/{{ cust.id }}?pet_id={{ pet.id if pet else 0 }}&tab=vaccines" class="uk-btn ghost sm">返回客户</a>
+    {% endif %}
+  </div>
+</div>
+
+<hr class="dw-rule-double"/>
+
+{% if locked %}
+<div class="dw-locked">
+  <div style="flex:1;min-width:240px;">
+    <b>已锁定</b> · {{ lock_reason }}<br/>
+    「复制为新单」开下一次驱虫 · 或「作废」回退后重开
+    {% if paid_amount and paid_amount > 0 %}<br/><span class="paid">已收款 ¥{{ '%.2f'|format(paid_amount) }}</span> · 作废时可选退到客户钱包{% endif %}
+  </div>
+  <div class="actions">
+    <form method="post" action="/admin/dewormings/{{ rec.id }}/copy-as-new" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+      <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+      <button type="submit" class="uk-btn ghost sm">复制为新单</button>
+    </form>
+    {% if rec.status != 'voided' %}
+    <form method="post" action="/admin/dewormings/{{ rec.id }}/void" style="display:inline;" onsubmit="return confirmDewVoid(this, {{ paid_amount or 0 }})">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+      <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+      <input type="hidden" name="void_reason" value=""/>
+      <input type="hidden" name="refund_to_wallet" value=""/>
+      <input type="hidden" name="refund_amount" value="0"/>
+      <button type="submit" class="uk-btn danger sm">作&nbsp;废</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+<script>
+function confirmDewVoid(form, paidAmount) {
+  const reason = prompt('请填写作废原因（必填）：');
+  if (!reason || !reason.trim()) return false;
+  form.querySelector('input[name="void_reason"]').value = reason.trim();
+  if (paidAmount > 0) {
+    const amt = prompt('此单已收款 ¥' + paidAmount.toFixed(2) + '\n\n如需退到客户钱包，请输入退款金额（留空 = 不退）：', paidAmount.toFixed(2));
+    if (amt !== null && amt !== '' && parseFloat(amt) > 0) {
+      form.querySelector('input[name="refund_to_wallet"]').value = '1';
+      form.querySelector('input[name="refund_amount"]').value = parseFloat(amt).toFixed(2);
+    }
+  }
+  let m = '确认作废此驱虫记录？\n· 库存自动回退\n· 写入审计日志';
+  const refundVal = form.querySelector('input[name="refund_amount"]').value;
+  if (parseFloat(refundVal) > 0) m += '\n· 退款 ¥' + parseFloat(refundVal).toFixed(2) + ' 立即入客户钱包';
+  return confirm(m);
+}
+</script>
+{% endif %}
+
+<div class="dw-grid">
+<div>
+<form method="post"
+      action="{% if is_edit %}/admin/dewormings/{{ rec.id }}/edit{% else %}/admin/dewormings/create{% endif %}"
+      class="{% if locked %}locked-form{% endif %}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+
+  <div class="dw-section">
+    <div class="dw-section-head"><h2>驱&nbsp;虫&nbsp;信&nbsp;息</h2></div>
+
+    <div class="dw-row2">
+      <div class="dw-field">
+        <label>驱&nbsp;虫&nbsp;日&nbsp;期<span class="req">*</span></label>
+        <input type="date" name="deworm_date" value="{{ rec.deworm_date if rec else today }}" required class="dw-input"/>
+      </div>
+      <div class="dw-field">
+        <label>类&nbsp;型<span class="req">*</span></label>
+        <select name="deworm_type" id="deworm-type-sel" onchange="onTypeChange()" class="dw-select">
+          <option value="external" {% if rec and rec.deworm_type == 'external' %}selected{% endif %}>体外驱虫</option>
+          <option value="internal" {% if rec and rec.deworm_type == 'internal' %}selected{% endif %}>体内驱虫</option>
+          <option value="combo"    {% if rec and rec.deworm_type == 'combo'    %}selected{% endif %}>体内外同驱</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="dw-row2">
+      <div class="dw-field">
+        <label>库&nbsp;存&nbsp;关&nbsp;联&nbsp;品&nbsp;目<span class="hint">— 选了自动带药品名 / 售价 / 出库</span></label>
+        <select name="inventory_item_id" id="inv-item-sel" onchange="onInvItemChange()" class="dw-select">
+          <option value="0">— 不关联库存 —</option>
+          {% for it in dew_items %}
+          <option value="{{ it.id }}" data-name="{{ it.name }}" data-price="{{ it.sell_price or 0 }}" {% if rec and rec.inventory_item_id == it.id %}selected{% endif %}>
+            {{ it.name }}（库存 {{ it.stock_qty }} {{ it.unit }}）
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="dw-field">
+        <label>批&nbsp;号</label>
+        <input name="batch_no" value="{{ rec_batch_no or '' }}" placeholder="可选" maxlength="80" class="dw-input"/>
+      </div>
+    </div>
+
+    <div class="dw-row2">
+      <div class="dw-field">
+        <label>药&nbsp;品&nbsp;名&nbsp;称</label>
+        <input name="product_name" id="product-name-input" value="{{ rec.product_name if rec else '' }}" placeholder="如 大宠爱 / 拜宠清" maxlength="120" class="dw-input"/>
+      </div>
+      <div class="dw-field">
+        <label>体&nbsp;重（kg）</label>
+        <input type="number" name="weight_kg" step="0.01" min="0" value="{{ '%.2f'|format(rec.weight_kg) if rec and rec.weight_kg else '' }}" placeholder="0.00" class="dw-input"/>
+      </div>
+    </div>
+
+    <div class="dw-row2">
+      <div class="dw-field">
+        <label>剂&nbsp;量</label>
+        <input name="dose" value="{{ rec.dose if rec else '' }}" placeholder="如 1 片 / 2.5 ml" maxlength="80" class="dw-input"/>
+      </div>
+      <div class="dw-field">
+        <label>接&nbsp;诊&nbsp;兽&nbsp;医</label>
+        <input name="vet_name" value="{{ rec.vet_name if rec else '' }}" list="vet-list" placeholder="可选" maxlength="80" class="dw-input"/>
+        <datalist id="vet-list">{% for v in vets %}<option value="{{ v }}">{% endfor %}</datalist>
+      </div>
+    </div>
+
+    <div class="dw-row2">
+      <div class="dw-field">
+        <label>下&nbsp;次&nbsp;到&nbsp;期&nbsp;日</label>
+        <input type="date" name="next_due_date" id="next-due-date" value="{{ rec.next_due_date if rec else next_due_default }}" class="dw-input"/>
+        <div class="dw-input-hint">体内 +3 个月 / 体外 +1 个月 / 体内外 +3 个月 · 留空 = 不发提醒</div>
+      </div>
+      <div class="dw-field">
+        <label>收&nbsp;费&nbsp;金&nbsp;额 ¥</label>
+        <input type="number" name="charge_amount" step="0.01" min="0" id="charge-input" value="{{ '%.2f'|format(rec_charge_amount) if rec_charge_amount else '0.00' }}" placeholder="0 = 不收费" class="dw-input"/>
+        <div class="dw-input-hint">&gt; 0 自动生成收费单进收银台</div>
+      </div>
+    </div>
+
+    <div class="dw-row2 full">
+      <div class="dw-field">
+        <label>备&nbsp;注</label>
+        <textarea name="notes" class="dw-textarea" maxlength="500">{{ rec_clean_notes or '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="dw-submit-bar">
+    <button type="submit" class="submit-main">{% if is_edit %}保&nbsp;存&nbsp;修&nbsp;改{% else %}保&nbsp;存&nbsp;驱&nbsp;虫&nbsp;记&nbsp;录{% endif %}</button>
+    {% if cust %}
+    <a href="/admin/customers/{{ cust.id }}?pet_id={{ pet.id if pet else 0 }}&tab=vaccines" class="uk-btn ghost sm">取消</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if is_edit and not locked %}
+<div class="dw-delete-zone">
+  <h3>危&nbsp;险&nbsp;操&nbsp;作</h3>
+  <form method="post" action="/admin/dewormings/{{ rec.id }}/delete" onsubmit="return confirm('确认删除此驱虫记录？')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+    <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+    <button type="submit" class="uk-btn danger sm" style="width:100%;">删除此记录</button>
+  </form>
+</div>
+{% endif %}
+</div>{# /main #}
+
+<aside class="dw-aside">
+  {% if pet %}
+  <div class="dw-aside-card">
+    <h3>宠&nbsp;物</h3>
+    <div class="name">{{ pet.name or '未命名' }}</div>
+    <div class="meta">
+      {{ {'cat':'猫','dog':'犬'}.get(pet.species, pet.species) }}{% if pet.breed %} · {{ pet.breed }}{% endif %}
+      {% if pet.gender == 'male' %} · 公{% elif pet.gender == 'female' %} · 母{% endif %}
+      {% if pet.is_neutered %} · 已绝育{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if cust %}
+  <div class="dw-aside-card">
+    <h3>主&nbsp;人</h3>
+    <div class="name">{{ cust.name or '—' }}</div>
+    <div class="meta">{{ cust.phone or '—' }}</div>
+  </div>
+  {% endif %}
+
+  <div data-customer-context
+       data-customer-id="{{ cust.id if cust else 0 }}"
+       data-pet-id="{{ pet.id if pet else 0 }}"></div>
+
+  {% if deworm_history and deworm_history|length > 0 %}
+  {% set today_iso = today %}
+  <div class="dw-aside-card">
+    <h3>历&nbsp;史&nbsp;驱&nbsp;虫（{{ deworm_history|length }} 条）</h3>
+    {% for h in deworm_history %}
+    {% set is_voided = (h.status == 'voided') %}
+    {% set is_expired = (h.next_due_date and h.next_due_date < today_iso) %}
+    <a href="/admin/dewormings/{{ h.id }}" class="dw-history-row {% if is_voided %}voided{% endif %}">
+      <div class="r1">
+        <span class="date">{{ h.deworm_date or '—' }}</span>
+        <span class="type">{{ _TYPE_ZH.get(h.deworm_type, h.deworm_type) }}{% if h.weight_kg %} · {{ '%.1f'|format(h.weight_kg) }}kg{% endif %}</span>
+      </div>
+      <div class="r2">{{ h.product_name or '—' }}{% if h.dose %} <span style="color:var(--ink-3);font-weight:400;font-size:8.5pt;">{{ h.dose }}</span>{% endif %}</div>
+      {% if h.next_due_date %}
+      <div class="r3 {% if is_expired %}expired{% else %}ok{% endif %}">{% if is_expired %}已过期 {% else %}下次 {% endif %}{{ h.next_due_date }}</div>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</aside>
+</div>
+
+<script>
+function onTypeChange() {
+  const t = document.getElementById('deworm-type-sel').value;
+  const inp = document.getElementById('next-due-date');
+  const base = document.querySelector('input[name="deworm_date"]').value;
+  if (!base || !inp) return;
+  const dt = new Date(base);
+  if (Number.isNaN(dt.getTime())) return;
+  const monthsToAdd = (t === 'external') ? 1 : 3;
+  dt.setMonth(dt.getMonth() + monthsToAdd);
+  inp.value = dt.toISOString().slice(0, 10);
+}
+function onInvItemChange() {
+  const sel = document.getElementById('inv-item-sel');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.dataset.name) return;
+  const nameInput = document.getElementById('product-name-input');
+  if (nameInput && !nameInput.value.trim()) nameInput.value = opt.dataset.name || '';
+  const chargeInput = document.getElementById('charge-input');
+  if (chargeInput && opt.dataset.price && (parseFloat(chargeInput.value) || 0) === 0) {
+    chargeInput.value = parseFloat(opt.dataset.price).toFixed(2);
+  }
+}
+document.querySelector('input[name="deworm_date"]').addEventListener('change', onTypeChange);
+</script>
+
+{% endblock %}

@@ -1,0 +1,557 @@
+{% extends "uk/_base.html" %}
+{% block title %}{% if vacc %}接种记录 #{{ vacc.id }}{% else %}新建接种记录{% endif %} · 大风动物医院{% endblock %}
+
+{% block body %}
+
+{% set is_edit = (mode == 'edit') %}
+
+<style>
+  .vac-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .vac-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .vac-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .vac-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .vac-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 32px; margin-bottom: 8px;
+  }
+  .vac-head h1 {
+    font-family: var(--font-serif); font-size: 26pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .vac-head h1 .no {
+    font-family: var(--font-numeric); font-size: 18pt; color: var(--ink-3);
+    font-weight: 400; vertical-align: 4px; margin-left: 6px;
+  }
+  .vac-head h1 .status {
+    display: inline-block; padding: 3px 12px; margin-left: 14px;
+    border: 0.5px solid var(--ink-3); font-size: 9pt; letter-spacing: 2px;
+    color: var(--ink-2); vertical-align: 8px; font-family: var(--font-serif);
+  }
+  .vac-head h1 .status.paid { background: var(--accent-green); color: var(--paper); border-color: var(--accent-green); }
+  .vac-head h1 .status.free { color: var(--ink-2); font-style: italic; }
+  .vac-head h1 .status.wait { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .vac-head h1 .status.voided { background: var(--bg); color: var(--ink-3); }
+  .vac-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 12px;
+  }
+  .vac-head h1 .sub b { color: var(--ink); font-style: normal; font-weight: 700; }
+  .vac-head h1 .sub .sep { color: var(--ink-4); margin: 0 8px; }
+  .vac-head .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+  hr.vac-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  /* locked */
+  .vac-locked {
+    border-left: 3px solid var(--accent-red);
+    background: #fcf5f4; padding: 14px 18px; margin-bottom: 24px;
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink-2); line-height: 1.7;
+    display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap;
+  }
+  .vac-locked b { font-weight: 700; color: var(--accent-red); letter-spacing: 1.5px; }
+  .vac-locked .paid { color: var(--accent-amber); font-weight: 700; font-style: italic; }
+  .vac-locked .actions { display: flex; gap: 10px; flex-shrink: 0; align-self: center; }
+
+  .locked-form input, .locked-form select, .locked-form textarea,
+  .locked-form button[type="submit"] {
+    pointer-events: none !important; background: var(--bg) !important;
+    color: var(--ink-2) !important; cursor: not-allowed !important;
+  }
+  .locked-form button[type="submit"] { display: none !important; }
+
+  /* grid */
+  .vac-grid {
+    display: grid; grid-template-columns: minmax(0,1fr) 260px;
+    gap: 28px; align-items: start;
+  }
+  @media (max-width: 900px) { .vac-grid { grid-template-columns: 1fr; } }
+
+  /* section */
+  .vac-section { margin-bottom: 28px; }
+  .vac-section-head {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .vac-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+
+  .vac-row2 {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 18px; margin-bottom: 14px;
+  }
+  .vac-row2.full { grid-template-columns: 1fr; }
+  @media (max-width: 768px) { .vac-row2 { grid-template-columns: 1fr; } }
+
+  .vac-field { display: flex; flex-direction: column; gap: 6px; }
+  .vac-field label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-style: italic;
+  }
+  .vac-field label .req { color: var(--accent-red); font-style: normal; margin-left: 2px; }
+  .vac-field label .hint {
+    color: var(--ink-4); font-style: italic; letter-spacing: 0.5px;
+    margin-left: 6px; font-size: 8.5pt;
+  }
+  .vac-input, .vac-select {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 8px 12px;
+    outline: 0; width: 100%; box-sizing: border-box;
+    height: 38px; line-height: 1.4;
+  }
+  .vac-input:focus, .vac-select:focus { border-color: var(--ink); }
+  .vac-input-hint {
+    font-size: 8.5pt; color: var(--ink-3); font-style: italic;
+    margin-top: 4px; letter-spacing: 0.5px;
+  }
+  .vac-textarea {
+    width: 100%; min-height: 70px;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 10px 14px;
+    line-height: 1.6; resize: vertical; outline: 0; box-sizing: border-box;
+  }
+  .vac-textarea:focus { border-color: var(--ink); }
+
+  /* 收费设置 */
+  .vac-charge-card {
+    padding: 14px 16px; background: var(--bg);
+    border-left: 3px solid var(--accent-amber);
+  }
+  .vac-charge-card h3 {
+    font-family: var(--font-serif); font-size: 11pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 2.5px; margin: 0 0 10px;
+  }
+  .vac-charge-card .free-check {
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10.5pt; color: var(--ink);
+    padding: 8px 0;
+  }
+  .vac-charge-card .free-check input { width: 16px; height: 16px; cursor: pointer; }
+  .vac-charge-row {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .vac-charge-row label {
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink); font-weight: 700; letter-spacing: 1.5px;
+  }
+  .vac-charge-row input {
+    width: 150px; padding: 7px 10px; font-family: var(--font-numeric);
+    font-size: 11pt; border: 0.5px solid var(--hair);
+    background: var(--paper); color: var(--ink); outline: 0; height: 34px;
+  }
+  .vac-charge-row input:focus { border-color: var(--ink); }
+  .vac-charge-row .meta {
+    font-size: 9pt; color: var(--ink-3); font-style: italic; letter-spacing: 0.5px;
+  }
+  .vac-charge-hint {
+    font-size: 9pt; color: var(--ink-3); font-style: italic;
+    margin-top: 10px; line-height: 1.6; letter-spacing: 0.5px;
+  }
+
+  /* submit */
+  .vac-submit-bar {
+    display: flex; gap: 14px; align-items: center;
+    padding-top: 18px; margin-top: 18px;
+    border-top: 0.5px solid var(--hair);
+  }
+  .vac-submit-bar .submit-main {
+    flex: 1; background: var(--ink); color: var(--paper); border: 0;
+    padding: 12px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 11pt;
+    letter-spacing: 3px; font-weight: 700;
+  }
+  .vac-submit-bar .submit-main:hover { background: #000; }
+
+  .vac-delete-zone { margin-top: 20px; padding-top: 14px; border-top: 0.5px solid var(--hair); }
+  .vac-delete-zone h3 {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2px; color: var(--ink-3); font-style: italic; margin: 0 0 10px;
+  }
+
+  /* aside */
+  .vac-aside { display: flex; flex-direction: column; gap: 18px; }
+  .vac-aside-card {
+    border: 0.5px solid var(--hair-2);
+    padding: 16px 18px; background: var(--paper);
+  }
+  .vac-aside-card h3 {
+    margin: 0 0 10px;
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 3px; color: var(--ink-3); font-weight: 400; font-style: italic;
+  }
+  .vac-aside-card .name {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); margin-bottom: 6px;
+  }
+  .vac-aside-card .meta {
+    font-size: 9.5pt; color: var(--ink-2); letter-spacing: 1px; line-height: 1.7;
+  }
+  .vac-history-row {
+    display: block; padding: 9px 0; text-decoration: none; color: inherit;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .vac-history-row:last-child { border-bottom: 0; }
+  .vac-history-row.voided { opacity: .5; }
+  .vac-history-row .r1 {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 9pt; color: var(--ink-3);
+  }
+  .vac-history-row .r1 .date { font-family: var(--font-numeric); }
+  .vac-history-row .r1 .type {
+    font-size: 8.5pt; padding: 1px 6px; letter-spacing: 1px;
+    background: var(--bg); border: 0.5px solid var(--hair);
+  }
+  .vac-history-row .r2 {
+    font-size: 10pt; color: var(--ink); margin-top: 3px; font-weight: 700;
+  }
+  .vac-history-row .r3 {
+    font-size: 8.5pt; margin-top: 2px; font-family: var(--font-numeric);
+    letter-spacing: 0.5px;
+  }
+  .vac-history-row .r3.ok { color: var(--accent-green); }
+  .vac-history-row .r3.expired { color: var(--accent-red); }
+</style>
+
+<div class="vac-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  {% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name }}</a>
+  <span class="sep">/</span>{% else %}<a href="/admin/vaccinations">疫苗管理</a>
+  <span class="sep">/</span>{% endif %}
+  <span>{% if is_edit %}接种记录 #{{ vacc.id }}{% else %}新建接种记录{% endif %}</span>
+</div>
+
+<div class="vac-head">
+  <div>
+    <h1>
+      {% if is_edit %}接种记录 <span class="no">#{{ vacc.id }}</span>{% else %}新建接种记录{% endif %}
+      {% if is_edit %}
+        {% if vacc.status == 'voided' %}<span class="status voided">已作废</span>
+        {% elif vacc.invoice_id %}<span class="status paid">已开单</span>
+        {% elif vacc.is_free %}<span class="status free">免费</span>
+        {% else %}<span class="status wait">待收费</span>{% endif %}
+      {% endif %}
+      <span class="sub">
+        {% if cust %}<b>{{ cust.name }}</b>{% endif %}
+        {% if pet %}<span class="sep">·</span>{{ pet.name }}{% if pet.species == 'cat' %}（猫）{% elif pet.species == 'dog' %}（犬）{% endif %}{% endif %}
+      </span>
+    </h1>
+  </div>
+  <div class="actions">
+    {% if is_edit and vacc.invoice_id %}
+    <a href="/admin/invoices/{{ vacc.invoice_id }}" class="uk-btn ghost sm">查看收费单</a>
+    {% endif %}
+    {% if cust %}
+    <a href="/admin/customers/{{ cust.id }}" class="uk-btn ghost sm">返回客户</a>
+    {% else %}
+    <a href="/admin/vaccinations" class="uk-btn ghost sm">疫苗管理</a>
+    {% endif %}
+  </div>
+</div>
+
+<hr class="vac-rule-double"/>
+
+{% if locked %}
+<div class="vac-locked">
+  <div style="flex:1;min-width:240px;">
+    <b>已锁定</b> · {{ lock_reason }}<br/>
+    「复制为新单」开下一针 · 或「作废」回退后重开
+    {% if paid_amount and paid_amount > 0 %}<br/><span class="paid">已收款 ¥{{ '%.2f'|format(paid_amount) }}</span> · 作废时可选退到客户钱包{% endif %}
+  </div>
+  <div class="actions">
+    <form method="post" action="/admin/vaccinations/{{ vacc.id }}/copy-as-new" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="uk-btn ghost sm">复制为新单</button>
+    </form>
+    {% if vacc.status != 'voided' %}
+    <form method="post" action="/admin/vaccinations/{{ vacc.id }}/void" style="display:inline;" onsubmit="return confirmVaccVoid(this, {{ paid_amount or 0 }})">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="void_reason" value=""/>
+      <input type="hidden" name="refund_to_wallet" value=""/>
+      <input type="hidden" name="refund_amount" value="0"/>
+      <button type="submit" class="uk-btn danger sm">作&nbsp;废</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+<script>
+function confirmVaccVoid(form, paidAmount) {
+  const reason = prompt('请填写作废原因（必填）：');
+  if (!reason || !reason.trim()) return false;
+  form.querySelector('input[name="void_reason"]').value = reason.trim();
+  if (paidAmount > 0) {
+    const amt = prompt('此单已收款 ¥' + paidAmount.toFixed(2) + '\n\n如需退到客户钱包，请输入退款金额（留空 = 不退）：', paidAmount.toFixed(2));
+    if (amt !== null && amt !== '' && parseFloat(amt) > 0) {
+      form.querySelector('input[name="refund_to_wallet"]').value = '1';
+      form.querySelector('input[name="refund_amount"]').value = parseFloat(amt).toFixed(2);
+    }
+  }
+  let m = '确认作废此疫苗单？\n· 库存自动回退\n· 写入审计日志';
+  const refundVal = form.querySelector('input[name="refund_amount"]').value;
+  if (parseFloat(refundVal) > 0) m += '\n· 退款 ¥' + parseFloat(refundVal).toFixed(2) + ' 立即入客户钱包';
+  return confirm(m);
+}
+</script>
+{% endif %}
+
+<div class="vac-grid">
+<div>
+<form method="post"
+      action="{% if is_edit %}/admin/vaccinations/{{ vacc.id }}/edit{% else %}/admin/vaccinations/create{% endif %}"
+      class="{% if locked %}locked-form{% endif %}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+
+  <div class="vac-section">
+    <div class="vac-section-head"><h2>疫&nbsp;苗&nbsp;信&nbsp;息</h2></div>
+
+    <div class="vac-row2">
+      <div class="vac-field">
+        <label>疫&nbsp;苗&nbsp;类&nbsp;型<span class="req">*</span></label>
+        <select name="vaccine_type" id="vaccine-type-sel" onchange="onTypeChange()" class="vac-select">
+          {% for val, label in vacc_type_options.items() %}
+          <option value="{{ val }}" {% if (vacc and vacc.vaccine_type == val) or (not vacc and val == 'rabies') %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+          {% if vacc and vacc.vaccine_type and vacc.vaccine_type not in vacc_type_options %}
+          <option value="{{ vacc.vaccine_type }}" selected>{{ vacc_type_zh.get(vacc.vaccine_type, vacc.vaccine_type) }}（历史）</option>
+          {% endif %}
+        </select>
+      </div>
+      <div class="vac-field">
+        <label>品&nbsp;牌&nbsp;/&nbsp;商&nbsp;品&nbsp;名</label>
+        <input name="vaccine_name" value="{{ vacc.vaccine_name if vacc else '' }}" list="vacc-item-names" class="vac-input"/>
+        <datalist id="vacc-item-names">{% for item in vacc_items %}<option value="{{ item.name }}">{% endfor %}</datalist>
+      </div>
+    </div>
+
+    <div class="vac-row2 full">
+      <div class="vac-field">
+        <label>库&nbsp;存&nbsp;关&nbsp;联&nbsp;品&nbsp;目<span class="hint">— 选了自动带出品牌 / 批号 / 售价</span></label>
+        <select name="inventory_item_id" id="inv-item-sel" onchange="onItemChange()" class="vac-select">
+          <option value="">— 不关联库存 —</option>
+          {% set _cur_store = request.session.get('admin_store', '') %}
+          {% for item in vacc_items %}
+          {% set _ep = item | eff_price(_cur_store) %}
+          <option value="{{ item.id }}" data-price="{{ _ep }}" data-name="{{ item.name }}" data-batch="{{ item.latest_batch_no or '' }}" data-expiry="{{ item.latest_expiry_date or '' }}" {% if vacc and vacc.inventory_item_id == item.id %}selected{% endif %}>
+            {{ item.name }}（库存 {{ item.stock_qty }}{{ item.unit }} · ¥{{ '%.0f'|format(_ep) }}{% if item.latest_batch_no %} · 批 {{ item.latest_batch_no }}{% endif %}）
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="vac-row2">
+      <div class="vac-field">
+        <label>批&nbsp;次&nbsp;号</label>
+        <input name="batch_no" value="{{ vacc.batch_no if vacc else '' }}" class="vac-input"/>
+      </div>
+      <div class="vac-field">
+        <label>针&nbsp;次</label>
+        <select name="dose_number" class="vac-select">
+          {% for val, label in dose_zh.items() %}
+          <option value="{{ val }}" {% if vacc and vacc.dose_number == val %}selected{% elif not vacc and val == 1 %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="vac-row2">
+      <div class="vac-field">
+        <label>接&nbsp;诊&nbsp;兽&nbsp;医</label>
+        <input name="vet_name" value="{{ vacc.vet_name if vacc else '' }}" list="vet-list" class="vac-input"/>
+        <datalist id="vet-list">{% for v in vets %}<option value="{{ v }}">{% endfor %}</datalist>
+      </div>
+      <div class="vac-field">
+        <label>接&nbsp;种&nbsp;日&nbsp;期<span class="req">*</span></label>
+        <input type="date" name="vaccinated_date" value="{{ vacc.vaccinated_date if vacc else today }}" required class="vac-input"/>
+      </div>
+    </div>
+
+    <div class="vac-row2">
+      <div class="vac-field">
+        <label>下&nbsp;次&nbsp;到&nbsp;期&nbsp;日</label>
+        <input type="date" name="next_due_date" value="{{ vacc.next_due_date if vacc else '' }}" class="vac-input"/>
+        <div class="vac-input-hint">留空则不发提醒</div>
+      </div>
+      <div class="vac-field">
+        <label>备&nbsp;注</label>
+        <textarea name="notes" class="vac-textarea" style="min-height:38px;">{{ vacc.notes if vacc else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  {% if not is_edit %}
+  <div class="vac-section">
+    <div class="vac-charge-card" id="charge-card">
+      <h3>收&nbsp;费&nbsp;设&nbsp;置</h3>
+      <label class="free-check">
+        <input type="checkbox" name="is_free" value="1" id="is-free-chk" {% if vacc and vacc.is_free %}checked{% endif %} onchange="onFreeChange()"/>
+        <span>此次接种免费（如 政府狂犬疫苗，不生成收费单）</span>
+      </label>
+      <div id="charge-row" class="vac-charge-row">
+        <label>收费金额 ¥</label>
+        <input name="charge_amount" id="charge-amount" type="number" step="0.01" min="0" placeholder="0.00" value=""/>
+        <span class="meta">关联库存时自动带出售价 · 可手动改</span>
+      </div>
+      <div class="vac-charge-hint">
+        不勾「免费」+ 金额 &gt; 0 时，保存会自动生成收费单进入收银台待收款<br/>
+        关联库存时还会自动出库 1 单位 · 不关联只产生收费单
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="vac-submit-bar">
+    <button type="submit" class="submit-main">{% if is_edit %}保&nbsp;存&nbsp;修&nbsp;改{% else %}保&nbsp;存&nbsp;接&nbsp;种&nbsp;记&nbsp;录{% endif %}</button>
+    {% if cust %}
+    <a href="/admin/customers/{{ cust.id }}" class="uk-btn ghost sm">取消</a>
+    {% else %}
+    <a href="/admin/vaccinations" class="uk-btn ghost sm">取消</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if is_edit and not locked %}
+<div class="vac-delete-zone">
+  <h3>危&nbsp;险&nbsp;操&nbsp;作</h3>
+  <form method="post" action="/admin/vaccinations/{{ vacc.id }}/delete" onsubmit="return confirm('确认删除此接种记录？')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <button type="submit" class="uk-btn danger sm" style="width:100%;">删除此记录</button>
+  </form>
+</div>
+{% endif %}
+</div>{# /main #}
+
+<aside class="vac-aside">
+  {% if pet %}
+  <div class="vac-aside-card">
+    <h3>宠&nbsp;物</h3>
+    <div class="name">{{ pet.name or '未命名' }}</div>
+    <div class="meta">
+      {{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }}{% if pet.breed %} · {{ pet.breed }}{% endif %}
+      {% if pet.gender == 'male' %} · 公{% elif pet.gender == 'female' %} · 母{% endif %}
+      {% if pet.is_neutered %} · 已绝育{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if cust %}
+  <div class="vac-aside-card">
+    <h3>主&nbsp;人</h3>
+    <div class="name">{{ cust.name or '—' }}</div>
+    <div class="meta">{{ cust.phone or '—' }}</div>
+  </div>
+  {% endif %}
+
+  <div data-customer-context
+       data-customer-id="{{ cust.id if cust else 0 }}"
+       data-pet-id="{{ pet.id if pet else 0 }}"></div>
+
+  {% if is_edit and vacc and vacc.rabies_record_id %}
+  <div class="vac-aside-card">
+    <h3>来&nbsp;源</h3>
+    <div class="meta">
+      <a href="/admin/rabies/{{ vacc.rabies_record_id }}" style="color:var(--ink);border-bottom:0.5px solid var(--ink-3);">狂犬登记 #{{ vacc.rabies_record_id }} →</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if vacc_history and vacc_history|length > 0 %}
+  {% set today_iso = today %}
+  <div class="vac-aside-card">
+    <h3>历&nbsp;史&nbsp;疫&nbsp;苗（{{ vacc_history|length }} 条）</h3>
+    {% for h in vacc_history %}
+    {% set is_voided = (h.status == 'voided') %}
+    {% set is_expired = (h.next_due_date and h.next_due_date < today_iso) %}
+    <a href="/admin/vaccinations/{{ h.id }}" class="vac-history-row {% if is_voided %}voided{% endif %}">
+      <div class="r1">
+        <span class="date">{{ h.vaccinated_date or '—' }}</span>
+        <span class="type">{{ vacc_type_zh.get(h.vaccine_type, h.vaccine_type) }}{% if h.dose_number %} · {{ dose_zh.get(h.dose_number, '第'~h.dose_number~'针') }}{% endif %}</span>
+      </div>
+      <div class="r2">{{ h.vaccine_name or '—' }}{% if h.batch_no %} <span style="color:var(--ink-3);font-weight:400;font-size:8.5pt;font-family:var(--font-numeric);">批 {{ h.batch_no }}</span>{% endif %}</div>
+      {% if h.next_due_date %}
+      <div class="r3 {% if is_expired %}expired{% else %}ok{% endif %}">{% if is_expired %}已过期 {% else %}下次 {% endif %}{{ h.next_due_date }}</div>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</aside>
+</div>
+
+<script>
+function calcNextDue() {
+  const type = document.getElementById('vaccine-type-sel').value;
+  const doseEl = document.querySelector('select[name="dose_number"]');
+  const dose = doseEl ? parseInt(doseEl.value) : 1;
+  const dateEl = document.querySelector('input[name="vaccinated_date"]');
+  const dueEl = document.querySelector('input[name="next_due_date"]');
+  if (!dateEl || !dueEl || !dateEl.value) return;
+  const base = new Date(dateEl.value);
+  if (isNaN(base.getTime())) return;
+  let addDays = 0;
+  if (type === 'rabies') addDays = 365;
+  else if (['combo', 'combo_3', 'combo_6', 'canine_8'].includes(type)) addDays = (dose === 1 || dose === 2) ? 21 : 365;
+  else if (type === 'deworming') addDays = 90;
+  else return;
+  const due = new Date(base);
+  due.setDate(due.getDate() + addDays);
+  const y = due.getFullYear();
+  const m = String(due.getMonth() + 1).padStart(2, '0');
+  const d = String(due.getDate()).padStart(2, '0');
+  dueEl.value = `${y}-${m}-${d}`;
+}
+
+function onTypeChange() {
+  const type = document.getElementById('vaccine-type-sel').value;
+  const chk = document.getElementById('is-free-chk');
+  if (chk && type === 'rabies') chk.checked = true;
+  calcNextDue();
+}
+function onFreeChange() {}
+function onItemChange() {
+  const sel = document.getElementById('inv-item-sel');
+  const opt = sel.options[sel.selectedIndex];
+  const name = opt.dataset.name || '';
+  const batch = opt.dataset.batch || '';
+  const price = opt.dataset.price || '';
+  if (name) {
+    const nameInput = document.querySelector('input[name="vaccine_name"]');
+    if (nameInput && !nameInput.value) nameInput.value = name;
+  }
+  if (batch) {
+    const batchInput = document.querySelector('input[name="batch_no"]');
+    if (batchInput && !batchInput.value) batchInput.value = batch;
+  }
+  if (price && parseFloat(price) > 0) {
+    const amtInput = document.getElementById('charge-amount');
+    if (amtInput && !amtInput.value) amtInput.value = parseFloat(price).toFixed(2);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const chk = document.getElementById('is-free-chk');
+  if (chk) onTypeChange();
+  const doseEl = document.querySelector('select[name="dose_number"]');
+  const dateEl = document.querySelector('input[name="vaccinated_date"]');
+  if (doseEl) doseEl.addEventListener('change', calcNextDue);
+  if (dateEl) dateEl.addEventListener('change', calcNextDue);
+});
+</script>
+
+{% endblock %}
