@@ -1,0 +1,218 @@
+{% extends "uk/_base.html" %}
+{% block title %}TNR 审核与手术登记 · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  /* UK 头 */
+  .tnr-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .tnr-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .tnr-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .tnr-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .tnr-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .tnr-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 8px;
+  }
+  hr.tnr-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  /* ── 覆盖 admin.html 的旧 class ── */
+  /* 隐藏老 .page-head（我们自己写新头）+ msg 顶 */
+  body .page-head { display: none !important; }
+
+  /* 信息 msg 条 */
+  body .msg.ok {
+    border: 0; border-left: 3px solid var(--accent-green);
+    background: #f5f9f6; padding: 10px 16px; margin-bottom: 18px;
+    font-family: var(--font-serif); font-size: 10pt; letter-spacing: 0.5px;
+    border-radius: 0; color: var(--ink-2);
+  }
+  body .msg.err {
+    border: 0; border-left: 3px solid var(--accent-red);
+    background: #fcf5f4; padding: 10px 16px; margin-bottom: 18px;
+    font-family: var(--font-serif); font-size: 10pt; letter-spacing: 0.5px;
+    border-radius: 0; color: var(--accent-red);
+  }
+
+  /* card 通用 → UK 风 */
+  body .card {
+    background: var(--paper); border: 0.5px solid var(--hair-2);
+    border-radius: 0; box-shadow: none;
+    padding: 18px 22px; margin-bottom: 18px;
+  }
+
+  /* 筛选表单 inputs */
+  body .card label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2px; color: var(--ink-3); font-style: italic;
+    display: block; margin-bottom: 4px;
+  }
+  body .card input[type=text], body .card input[type=date], body .card input[type=time],
+  body .card input[type=number], body .card select, body .card textarea {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    border: 0.5px solid var(--hair) !important; border-radius: 0 !important;
+    padding: 8px 12px !important;
+    background: var(--paper); color: var(--ink); outline: 0;
+    width: 100%; box-sizing: border-box;
+    height: 38px;
+  }
+  body .card textarea { height: auto; min-height: 70px; line-height: 1.6; }
+  body .card input:focus, body .card select:focus, body .card textarea:focus {
+    border-color: var(--ink) !important; box-shadow: none !important;
+  }
+
+  /* 按钮 */
+  body .card button[type=submit], body .card .btn {
+    background: var(--ink); color: var(--paper); border: 0; border-radius: 0;
+    padding: 8px 22px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10pt;
+    letter-spacing: 2px; font-weight: 700;
+    width: auto; height: auto;
+  }
+  body .card .btn.secondary {
+    background: var(--paper); color: var(--ink-2); border: 0.5px solid var(--hair);
+    font-style: italic; font-weight: 400;
+  }
+  body .card .btn.danger, body .card .danger {
+    background: var(--paper); color: var(--accent-red); border: 0.5px solid var(--accent-red);
+    border-radius: 0;
+  }
+
+  /* admin-filter-actions */
+  body .admin-filter-actions {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--hair);
+    font-family: var(--font-serif); font-size: 10pt;
+  }
+  body .admin-filter-actions .admin-filter-check {
+    display: flex; gap: 8px; align-items: center; cursor: pointer;
+    color: var(--ink-2); font-style: italic;
+  }
+  body .admin-filter-actions .admin-filter-check input { width: 16px; height: 16px; cursor: pointer; }
+  body .admin-filter-actions .admin-query-btn {
+    background: var(--ink); color: var(--paper); border: 0;
+    padding: 8px 28px; cursor: pointer; border-radius: 0;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    letter-spacing: 2.5px; font-weight: 700;
+  }
+  body .admin-filter-actions .admin-query-btn:hover { background: #000; }
+
+  /* 统计 + pills */
+  body .card > div[style*="border-top"] {
+    border-top: 0.5px solid var(--hair) !important;
+    padding-top: 14px !important;
+    font-family: var(--font-serif);
+  }
+  body .card > div[style*="border-top"] strong {
+    font-family: var(--font-numeric); color: var(--ink) !important;
+    font-size: 12pt !important;
+  }
+
+  /* pills */
+  body .pill {
+    border-radius: 0 !important; font-family: var(--font-serif);
+    font-style: italic; font-size: 9pt; padding: 2px 10px;
+    border: 0.5px solid var(--hair); letter-spacing: 1px; font-weight: 400;
+    background: var(--paper); color: var(--ink-2);
+  }
+  body .pill.pill-warn   { color: var(--accent-amber); border-color: var(--accent-amber); }
+  body .pill.pill-ok     { color: var(--accent-green); border-color: var(--accent-green); }
+  body .pill.pill-info   { color: var(--ink); border-color: var(--ink-3); }
+  body .pill.pill-no     { color: var(--accent-red); border-color: var(--accent-red); }
+  body .pill.pill-gray   { color: var(--ink-3); border-color: var(--hair); }
+
+  /* apps grid */
+  body .apps-grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px; margin-top: 18px;
+  }
+  @media (max-width: 1100px) { body .apps-grid { grid-template-columns: 1fr; } }
+  body .apps-grid > .card {
+    padding: 18px 22px;
+  }
+  body .apps-grid h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px;
+  }
+  body .apps-grid h2 a {
+    color: var(--ink); border-bottom: 0.5px solid var(--ink-3); padding-bottom: 1px;
+  }
+  body .apps-grid .admin-app-meta {
+    font-family: var(--font-numeric); font-size: 9pt;
+    color: var(--ink-3); font-style: italic;
+  }
+
+  /* 申请素材缩略图 */
+  body a.admin-app-thumb {
+    border-radius: 0; border: 0.5px solid var(--hair);
+  }
+
+  /* AI 辅助 panel */
+  body .ai-review-panel {
+    background: var(--bg); border: 0; border-radius: 0;
+    border-left: 3px solid var(--ink-3);
+    font-family: var(--font-serif); font-size: 10pt;
+  }
+  body .ai-review-k {
+    font-family: var(--font-serif); color: var(--ink-3); font-style: italic;
+    letter-spacing: 1.5px; font-weight: 400;
+  }
+  body .ai-review-footnote { border-top: 0.5px solid var(--hair); color: var(--ink-3); font-style: italic; }
+
+  /* 危险操作 details */
+  body .card[style*="bg-elevated"] {
+    background: #fbfaf6 !important; border-color: var(--accent-amber) !important;
+  }
+  body .card details summary {
+    font-family: var(--font-serif); letter-spacing: 1.5px;
+    color: var(--accent-amber) !important;
+  }
+
+  /* admin-action-card */
+  body .admin-action-card {
+    background: var(--paper); border: 0.5px solid var(--hair-2); border-radius: 0;
+  }
+  body .admin-action-title { font-family: var(--font-serif); letter-spacing: 1.5px; }
+
+  /* row2 grid */
+  body .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* sub text */
+  body .sub { font-family: var(--font-serif); font-style: italic; color: var(--ink-3); }
+
+  /* 数据筛选行 grid */
+  body .tnr-filter-grid {
+    gap: 12px 16px !important;
+  }
+</style>
+
+<div class="tnr-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  <span>TNR 审核</span>
+</div>
+
+<div class="tnr-head">
+  <h1>
+    TNR 审核与手术登记
+    <span class="sub">处理申请 · 到院核对 · 上传术前后资料 · 标记公开展示同意</span>
+  </h1>
+</div>
+
+<hr class="tnr-rule-double"/>
+
+{% include "includes/admin_tnr_body.html" %}
+
+{% endblock %}

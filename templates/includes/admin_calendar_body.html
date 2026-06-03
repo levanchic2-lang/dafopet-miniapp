@@ -1,0 +1,768 @@
+<div class="cal-page">
+
+ <!-- ── 顶部工具栏 ── -->
+ <div class="cal-topbar">
+ <button class="btn new-btn" id="new-event-btn"><i data-lucide="plus"></i> 新建日程</button>
+ <div class="cal-nav">
+ <button id="prev-btn">‹</button>
+ <span id="cal-date-label"></span>
+ <button id="next-btn">›</button>
+ </div>
+ <div class="cal-actions">
+ <button class="btn secondary" id="today-btn">今</button>
+ <div class="view-sw">
+ <button data-view="day">日</button>
+ <button data-view="week" class="active">周</button>
+ <button data-view="month">月</button>
+ </div>
+ <select id="store-filter">
+ <option value="">全部门店</option>
+ <option value="东环店">东环店</option>
+ <option value="横岗店">横岗店</option>
+ </select>
+ </div>
+ </div>
+
+ <!-- ── 日历主体（JS 渲染） ── -->
+ <div class="cal-body" id="cal-body"></div>
+
+</div>
+
+<!-- ── 弹出卡片 ── -->
+<div class="cal-popup" id="cal-popup">
+ <button class="popup-close" onclick="closePopup()"><i data-lucide="x"></i></button>
+ <div class="popup-title" id="pp-title"></div>
+ <div class="popup-datetime" id="pp-datetime"></div>
+ <div class="popup-badges" id="pp-badges"></div>
+ <div id="pp-rows"></div>
+ <div class="popup-notes" id="pp-notes" style="display:none;"></div>
+ <div class="popup-actions" id="pp-actions"></div>
+</div>
+
+<!-- ── 改约 modal ── -->
+<div class="cal-modal-overlay" id="reschedule-modal">
+ <div class="cal-modal">
+ <h3><i data-lucide="calendar"></i> 改约</h3>
+ <label>新日期</label>
+ <input type="date" id="rs-date"/>
+ <label>新时间</label>
+ <input type="time" id="rs-time" step="300"/>
+ <div class="modal-btns">
+ <button class="btn" id="rs-confirm-btn">确认改约</button>
+ <button class="btn secondary" onclick="closeReschedule()">取消</button>
+ </div>
+ </div>
+</div>
+
+<!-- ── 新建日程选择 modal ── -->
+<div class="cal-modal-overlay" id="create-modal">
+ <div class="cal-modal">
+ <h3>新建日程</h3>
+ <div class="create-choice">
+ <button class="create-choice-btn" id="create-appt-btn">
+ <span class="icon"><i data-lucide="clipboard-list"></i></span>新建预约
+ </button>
+ <button class="create-choice-btn" id="create-block-btn">
+ <span class="icon"><i data-lucide="ban"></i></span>全天封锁<br><small style="color:var(--muted);font-size:0.75rem;">美容师休息等</small>
+ </button>
+ </div>
+ <div id="block-form" style="display:none;">
+ <label>标题</label>
+ <input type="text" id="block-title" style="margin-bottom:0.65rem;"/>
+ <label>日期</label>
+ <input type="date" id="block-date" style="margin-bottom:0.65rem;"/>
+ <label>门店</label>
+ <select id="block-store" style="margin-bottom:0.65rem;width:100%;">
+ <option value="">全部门店</option>
+ <option value="东环店">东环店</option>
+ <option value="横岗店">横岗店</option>
+ </select>
+ <label>备注（可选）</label>
+ <input type="text" id="block-notes" style="margin-bottom:0.65rem;"/>
+ <div class="modal-btns">
+ <button class="btn" id="block-save-btn">保存</button>
+ <button class="btn secondary" onclick="closeCreateModal()">取消</button>
+ </div>
+ </div>
+ <div style="text-align:right;margin-top:0.5rem;">
+ <button class="btn secondary" style="font-size:0.82rem;" onclick="closeCreateModal()">关闭</button>
+ </div>
+ </div>
+</div>
+
+<!-- ── Toast ── -->
+<div class="cal-toast" id="cal-toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// 全局状态
+// ═══════════════════════════════════════════════════════
+const CSRF = {{ csrf_token | tojson }};
+const ADMIN_STORE = {{ admin_store | tojson }};
+
+// 移动端默认切到 day 视图（7 列 week 在 360px 宽屏挤不下）
+let view = (window.innerWidth <= 768) ? 'day' : 'week';
+let curDate = new Date(); // 当前显示的参考日期
+let store = ADMIN_STORE || ''; // 门店筛选（短名）
+let events = []; // 预约列表
+let blocks = []; // 全天封锁列表
+let popupAppt = null; // 当前弹窗显示的预约
+
+// ═══════════════════════════════════════════════════════
+// 颜色方案
+// ═══════════════════════════════════════════════════════
+function getColor(appt) {
+ const cat = appt.category || '';
+ const svc = appt.service_name || '';
+ if (cat === 'tnr') return { bg:'#dcfce7', bd:'#16a34a', tx:'#166534' };
+ if (cat === 'surgery') return { bg:'#ffedd5', bd:'#ea580c', tx:'#9a3412' };
+ if (cat === 'outpatient') return { bg:'#ede9fe', bd:'#7c3aed', tx:'#5b21b6' };
+ if (['beauty','grooming','washcare'].includes(cat)) {
+ const isWash = /洗护|洗澡|药浴/.test(svc);
+ return isWash
+ ? { bg:'#dbeafe', bd:'#2563eb', tx:'#1e40af' }
+ : { bg:'#fce7f3', bd:'#db2777', tx:'#9d174d' };
+ }
+ return { bg:'#f3f4f6', bd:'#9ca3af', tx:'#374151' };
+}
+
+const STATUS_ZH = {
+ pending:'待确认', confirmed:'已确认', arrived:'已到店',
+ completed:'已完成', cancelled:'已取消', no_show:'未到店'
+};
+const CAT_ZH = {
+ tnr:'TNR', surgery:'手术', outpatient:'门诊',
+ beauty:'美容', grooming:'美容', washcare:'洗护'
+};
+const SPECIES_ZH = { cat:'猫', dog:'犬', exotic:'异宠', other:'其他' };
+const GENDER_ZH = { male:'公', female:'母', unknown:'未知' };
+
+// ═══════════════════════════════════════════════════════
+// 日期工具
+// ═══════════════════════════════════════════════════════
+function fmtDate(d) {
+ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function parseDate(s) { const p=s.split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+function sameDay(a,b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+function addDays(d,n) { const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+const WD_ZH = ['周日','周一','周二','周三','周四','周五','周六'];
+const MON_ZH = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+
+function getWeekDays(ref) {
+ // 周日起始
+ const start = new Date(ref);
+ start.setDate(start.getDate() - start.getDay());
+ return Array.from({length:7}, (_,i) => addDays(start,i));
+}
+function getMonthGrid(ref) {
+ const y=ref.getFullYear(), m=ref.getMonth();
+ const first=new Date(y,m,1);
+ const last=new Date(y,m+1,0);
+ const start=new Date(first); start.setDate(start.getDate()-start.getDay());
+ const end=new Date(last); end.setDate(end.getDate()+(6-end.getDay()));
+ const days=[];
+ for(let d=new Date(start); d<=end; d=addDays(d,1)) days.push(new Date(d));
+ return days;
+}
+function getDateRange() {
+ if (view==='day') {
+ return { start: fmtDate(curDate), end: fmtDate(curDate) };
+ } else if (view==='week') {
+ const days = getWeekDays(curDate);
+ return { start: fmtDate(days[0]), end: fmtDate(days[6]) };
+ } else {
+ const grid = getMonthGrid(curDate);
+ return { start: fmtDate(grid[0]), end: fmtDate(grid[grid.length-1]) };
+ }
+}
+function navigate(delta) {
+ const d = new Date(curDate);
+ if (view==='day') d.setDate(d.getDate()+delta);
+ else if (view==='week') d.setDate(d.getDate()+delta*7);
+ else d.setMonth(d.getMonth()+delta);
+ curDate=d;
+ fetchEvents();
+}
+function updateDateLabel() {
+ const el = document.getElementById('cal-date-label');
+ if (view==='day') {
+ el.textContent = curDate.getFullYear()+'年'+(curDate.getMonth()+1)+'月'+curDate.getDate()+'日';
+ } else if (view==='week') {
+ const days=getWeekDays(curDate);
+ el.textContent = days[0].getFullYear()+'年'+(days[0].getMonth()+1)+'月';
+ } else {
+ el.textContent = curDate.getFullYear()+'年'+(curDate.getMonth()+1)+'月';
+ }
+}
+
+// ═══════════════════════════════════════════════════════
+// 数据获取
+// ═══════════════════════════════════════════════════════
+async function fetchEvents() {
+ closePopup();
+ const {start,end} = getDateRange();
+ const res = await fetch(`/api/calendar/events?start=${start}&end=${end}&store=${encodeURIComponent(store)}`);
+ const data = await res.json();
+ events = data.appointments || [];
+ blocks = data.blocks || [];
+ render();
+}
+
+function eventsForDay(dateStr) {
+ return events.filter(e => e.date === dateStr);
+}
+function blocksForDay(dateStr) {
+ const s = store;
+ return blocks.filter(b => b.date === dateStr && (!s || !b.store || b.store === s));
+}
+
+// ═══════════════════════════════════════════════════════
+// 渲染分发
+// ═══════════════════════════════════════════════════════
+function render() {
+ updateDateLabel();
+ const body = document.getElementById('cal-body');
+ if (view==='month') renderMonth(body);
+ else if (view==='week') renderWeek(body, getWeekDays(curDate));
+ else renderDay(body, curDate);
+ updateNowLine();
+}
+
+// ═══════════════════════════════════════════════════════
+// 月视图
+// ═══════════════════════════════════════════════════════
+function renderMonth(body) {
+ const today = new Date(); today.setHours(0,0,0,0);
+ const grid = getMonthGrid(curDate);
+ const curM = curDate.getMonth();
+
+ let html = '<div class="month-grid">';
+ html += '<div class="month-header">';
+ ['日','一','二','三','四','五','六'].forEach(d => html += `<div>${d}</div>`);
+ html += '</div><div class="month-body" id="month-body">';
+
+ grid.forEach((d,i) => {
+ const ds = fmtDate(d);
+ const isToday = sameDay(d,today);
+ const isOther = d.getMonth()!==curM;
+ const dayEvts = eventsForDay(ds);
+ const dayBlocks = blocksForDay(ds);
+
+ html += `<div class="month-cell${isOther?' other-month':''}${isToday?' today':''}" data-date="${ds}" onclick="onMonthCellClick(event,'${ds}')">`;
+ html += `<div class="day-num${isToday?' today-circle':''}">${d.getDate()}</div>`;
+
+ // 全天封锁
+ dayBlocks.forEach(b => {
+ html += `<div class="month-block-pill" onclick="event.stopPropagation();openBlockPopup(event,${b.id})" title="${b.title}">${b.title}</div>`;
+ });
+
+ // 预约（最多3条）
+ const maxShow = 3 - dayBlocks.length;
+ dayEvts.slice(0, Math.max(0, maxShow)).forEach(e => {
+ const c=getColor(e);
+ const label = (e.time||'') + ' ' + (e.service_name || e.customer_name || '');
+ html += `<div class="month-event-pill" style="background:${c.bg};color:${c.tx};border-left:2px solid ${c.bd};"
+ onclick="event.stopPropagation();openApptPopup(event,${e.id})" title="${label}">${label}</div>`;
+ });
+ const more = dayEvts.length - Math.max(0, maxShow);
+ if (more> 0) html += `<div class="month-more" onclick="event.stopPropagation();drillToDay('${ds}')">还有${more}个</div>`;
+
+ html += '</div>';
+ });
+
+ html += '</div></div>';
+ body.innerHTML = html;
+}
+
+function onMonthCellClick(ev, dateStr) {
+ openCreateModal(dateStr, '');
+}
+function drillToDay(dateStr) {
+ curDate = parseDate(dateStr);
+ setView('day');
+}
+
+// ═══════════════════════════════════════════════════════
+// 周/日视图公共渲染
+// ═══════════════════════════════════════════════════════
+const HOUR_H = 64; // px per hour
+const START_H = 8;
+const END_H = 22;
+const TOTAL_H = (END_H - START_H) * HOUR_H;
+
+function timeToTop(timeStr) {
+ const [h,m] = (timeStr||'00:00').split(':').map(Number);
+ return (h - START_H) * HOUR_H + (m/60)*HOUR_H;
+}
+function durationToH(min) { return (min/60)*HOUR_H; }
+
+// 简单重叠布局
+function layoutEvents(evts) {
+ const sorted = [...evts].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+ const placed = []; // {endMin, col}
+ const result = [];
+ for (const e of sorted) {
+ const [sh,sm] = (e.time||'00:00').split(':').map(Number);
+ const startMin = sh*60+sm;
+ const endMin = startMin + Math.max(e.duration||30, 30);
+ const usedCols = placed.filter(p=>p.endMin>startMin).map(p=>p.col);
+ let col=0; while(usedCols.includes(col)) col++;
+ placed.push({endMin,col});
+ result.push({...e,_col:col});
+ }
+ const maxCol = result.length ? Math.max(...result.map(e=>e._col))+1 : 1;
+ return result.map(e=>({...e,_numCols:maxCol}));
+}
+
+function renderTimeGrid(days) {
+ // 返回 {gutter, allDayRow, scrollArea}
+ const numCols = days.length;
+ const today = new Date(); today.setHours(0,0,0,0);
+
+ // ── header ──
+ let headerHtml = '<div class="week-header-row">';
+ headerHtml += '<div class="week-time-gutter"></div>';
+ headerHtml += `<div class="week-header-cols" style="grid-template-columns:repeat(${numCols},1fr);">`;
+ days.forEach(d => {
+ const isToday = sameDay(d,today);
+ headerHtml += `<div class="week-day-head${isToday?' today-col':''}" onclick="drillToDay('${fmtDate(d)}')">
+ <div class="wdn">${WD_ZH[d.getDay()]}</div>
+ <div class="wdd">${d.getDate()}</div>
+ </div>`;
+ });
+ headerHtml += '</div></div>';
+
+ // ── all-day row ──
+ let allDayHtml = '<div class="allday-row">';
+ allDayHtml += '<div class="allday-gutter">全天</div>';
+ allDayHtml += `<div class="allday-cols" style="grid-template-columns:repeat(${numCols},1fr);">`;
+ days.forEach(d => {
+ const ds = fmtDate(d);
+ allDayHtml += '<div class="allday-cell">';
+ blocksForDay(ds).forEach(b => {
+ allDayHtml += `<div class="allday-block-pill" onclick="openBlockPopup(event,${b.id})" title="${b.title}">${b.title}</div>`;
+ });
+ allDayHtml += '</div>';
+ });
+ allDayHtml += '</div></div>';
+
+ // ── time grid ──
+ let gridHtml = `<div class="week-scroll" id="week-scroll">
+ <div class="week-grid">
+ <div class="time-col">`;
+ for (let h=START_H; h<END_H; h++) {
+ gridHtml += `<div class="hour-label">${h}:00</div>`;
+ }
+ gridHtml += `</div>
+ <div class="day-cols" id="day-cols-area" style="grid-template-columns:repeat(${numCols},1fr);">`;
+
+ const todayGridStr = fmtDate(new Date());
+ days.forEach(d => {
+ const ds = fmtDate(d);
+ const isTodayCol = ds === todayGridStr;
+ gridHtml += `<div class="day-col${isTodayCol?' today-bg':''}" data-date="${ds}">`;
+ for (let h=START_H; h<END_H; h++) {
+ const hm = String(h).padStart(2,'0')+':00';
+ gridHtml += `<div class="hour-line" onclick="onTimeClick(event,'${ds}','${hm}')"></div>`;
+ // 半小时虚线
+ const top = (h-START_H)*HOUR_H + HOUR_H/2;
+ gridHtml += `<div class="half-line" style="top:${top}px;"></div>`;
+ }
+ // 事件块
+ const dayEvts = layoutEvents(eventsForDay(ds));
+ dayEvts.forEach(e => {
+ const c = getColor(e);
+ const top = timeToTop(e.time);
+ const height = Math.max(durationToH(e.duration), 24);
+ if (top>= TOTAL_H || top < 0) return;
+ const w = 94 / e._numCols;
+ const left = e._col * (94 / e._numCols);
+ const label = (e.service_name || e.customer_name || '预约');
+ const evH = Math.min(height, TOTAL_H-top);
+ gridHtml += `<div class="cal-event" style="
+ top:${top}px; height:${evH}px;
+ left:${left+0.5}%; width:${w-1}%;
+ background:${c.bg}; color:${c.tx}; border-left-color:${c.bd};"
+ onclick="event.stopPropagation();openApptPopup(event,${e.id})">
+ <div class="ev-time">${e.time}${e.duration>30?' · '+e.duration+'分':''}</div>
+ <div class="ev-title">${label}</div>
+ ${evH>48 && e.customer_name ? '<div class="ev-cust">'+e.customer_name+'</div>' : ''}
+ </div>`;
+ });
+ gridHtml += '</div>';
+ });
+
+ gridHtml += `</div>
+ <div class="now-line" id="now-line" style="display:none;">
+ <div class="now-dot"></div>
+ </div>
+ </div>
+ </div>`;
+
+ return headerHtml + allDayHtml + gridHtml;
+}
+
+function renderWeek(body, days) {
+ body.innerHTML = '<div class="week-outer">' + renderTimeGrid(days) + '</div>';
+ scrollToNow();
+}
+function renderDay(body, d) {
+ body.innerHTML = '<div class="week-outer">' + renderTimeGrid([d]) + '</div>';
+ scrollToNow();
+}
+
+function onTimeClick(ev, dateStr, timeStr) {
+ openCreateModal(dateStr, timeStr);
+}
+
+// ═══════════════════════════════════════════════════════
+// 当前时间指示线
+// ═══════════════════════════════════════════════════════
+function updateNowLine() {
+ const line = document.getElementById('now-line');
+ if (!line) return;
+ const now = new Date();
+ const h = now.getHours(), m = now.getMinutes();
+ if (h < START_H || h>= END_H) { line.style.display='none'; return; }
+ const top = (h - START_H) * HOUR_H + (m / 60) * HOUR_H;
+
+ const today = new Date(); today.setHours(0,0,0,0);
+ let show = false;
+ if (view==='day') show = sameDay(curDate, today);
+ else if (view==='week') show = getWeekDays(curDate).some(d=>sameDay(d,today));
+ if (!show) { line.style.display='none'; return; }
+
+ const weekGrid = document.querySelector('.week-grid');
+ const cols = document.getElementById('day-cols-area');
+ if (!weekGrid || !cols) { line.style.display='none'; return; }
+
+ const gridRect = weekGrid.getBoundingClientRect();
+ const todayStr = fmtDate(today);
+
+ // 日视图：横贯整个 day-cols 区域
+ if (view === 'day') {
+ const colsRect = cols.getBoundingClientRect();
+ line.style.left = (colsRect.left - gridRect.left) + 'px';
+ line.style.width = colsRect.width + 'px';
+ } else {
+ // 周视图：只覆盖今天那一列
+ let found = false;
+ cols.querySelectorAll('.day-col').forEach(el => {
+ if (el.dataset.date === todayStr) {
+ const r = el.getBoundingClientRect();
+ line.style.left = (r.left - gridRect.left) + 'px';
+ line.style.width = r.width + 'px';
+ found = true;
+ }
+ });
+ if (!found) { line.style.display='none'; return; }
+ }
+ line.style.display = 'block';
+ line.style.top = top + 'px';
+}
+
+function scrollToNow() {
+ setTimeout(()=>{
+ const sc = document.getElementById('week-scroll');
+ if (!sc) return;
+ const now = new Date();
+ const h = Math.max(now.getHours()-1, START_H);
+ sc.scrollTop = (h-START_H)*HOUR_H;
+ }, 50);
+}
+
+// ═══════════════════════════════════════════════════════
+// 弹出卡片
+// ═══════════════════════════════════════════════════════
+function openApptPopup(ev, id) {
+ ev.stopPropagation();
+ const appt = events.find(e=>e.id===id);
+ if (!appt) return;
+ popupAppt = appt;
+
+ const c = getColor(appt);
+ document.getElementById('pp-title').textContent = appt.service_name || '预约';
+
+ // 日期时间
+ const dur = appt.duration ? `· 时长 ${appt.duration} 分钟` : '';
+ document.getElementById('pp-datetime').textContent = `${appt.date} ${WD_ZH[parseDate(appt.date).getDay()]} ${appt.time} ${dur}`;
+
+ // 标签
+ const badgesEl = document.getElementById('pp-badges');
+ const catZh = CAT_ZH[appt.category] || appt.category;
+ const stZh = STATUS_ZH[appt.status] || appt.status;
+ const stColor = {
+ pending:'#92400e', confirmed:'#1e40af', arrived:'#166534',
+ completed:'#166534', cancelled:'#991b1b', no_show:'#92400e'
+ }[appt.status] || '#374151';
+ const stBg = {
+ pending:'#fef3c7', confirmed:'#dbeafe', arrived:'#d1fae5',
+ completed:'#d1fae5', cancelled:'#fee2e2', no_show:'#fef3c7'
+ }[appt.status] || '#f3f4f6';
+ let badges = `<span class="popup-badge" style="background:${c.bg};color:${c.tx};border-color:${c.bd};">${catZh}</span>`;
+ badges += `<span class="popup-badge" style="background:${stBg};color:${stColor};border-color:${stColor}aa;">${stZh}</span>`;
+ if (appt.related_app_id) badges += `<a href="/admin#app-${appt.related_app_id}" class="popup-badge" style="background:#f0fdf4;color:#166534;border-color:#86efac;text-decoration:none;" title="跳转 TNR 申请详情">申请 #${appt.related_app_id} →</a>`;
+ badgesEl.innerHTML = badges;
+
+ // 详情行
+ let rows = '';
+ const spcZh = SPECIES_ZH[appt.pet_species] || '';
+ const genZh = GENDER_ZH[appt.pet_gender] || '';
+ const petLabel = [spcZh, appt.pet_name||'', genZh].filter(Boolean).join('·');
+ rows += row('项目', appt.service_name||'—');
+ // 联系人：有 customer_id → 蓝色链接，一键进客户档案
+ let contactCell = '—';
+ const contactText = [appt.customer_name, appt.phone].filter(Boolean).join(' · ');
+ if (appt.customer_id) {
+   const petQs = appt.pet_id ? '?pet_id=' + appt.pet_id : '';
+   contactCell = `<a href="/admin/customers/${appt.customer_id}${petQs}" style="color:var(--brand);text-decoration:none;font-weight:600;">${contactText || '客户档案'} →</a>`;
+ } else if (contactText) {
+   // 老预约没绑 customer_id → 降级为按电话搜索
+   const q = encodeURIComponent(appt.phone || appt.customer_name || '');
+   contactCell = `<a href="/admin/customers?q=${q}" style="color:var(--brand);text-decoration:none;">${contactText} 🔍</a>`;
+ }
+ rows += row('联系人', contactCell);
+ if (petLabel) {
+   // 宠物也加链接（如果有 customer_id + pet_id）
+   if (appt.customer_id && appt.pet_id) {
+     rows += row('对象', `<a href="/admin/customers/${appt.customer_id}?pet_id=${appt.pet_id}" style="color:var(--brand);text-decoration:none;">${petLabel}</a>`);
+   } else {
+     rows += row('对象', petLabel);
+   }
+ }
+ rows += row('门店', appt.store||'—');
+ if (appt.related_app_id) rows += row('关联申请', '#'+appt.related_app_id);
+ document.getElementById('pp-rows').innerHTML = rows;
+
+ // 备注
+ const notesEl = document.getElementById('pp-notes');
+ if (appt.notes) { notesEl.textContent = appt.notes; notesEl.style.display='block'; }
+ else notesEl.style.display='none';
+
+ // 操作按钮
+ const st = appt.status;
+ let btns = '';
+ if (st !== 'arrived' && st !== 'completed' && st !== 'cancelled' && st !== 'no_show')
+ btns += `<button class="btn-arrived" onclick="doStatus(${id},'arrived')">已到店</button>`;
+ if (st !== 'no_show' && st !== 'cancelled' && st !== 'completed')
+ btns += `<button class="btn-noshow" onclick="doStatus(${id},'no_show')">爽约</button>`;
+ if (st !== 'cancelled' && st !== 'completed')
+ btns += `<button class="btn-cancel" onclick="doCancel(${id})">取消</button>`;
+ if (st !== 'cancelled' && st !== 'completed')
+ btns += `<button onclick="openReschedule(${id})">改约</button>`;
+ btns += `<button class="btn-edit" onclick="window.location='/admin/appointments?search=${encodeURIComponent(appt.phone||appt.customer_name||'')}#appt-${id}'">编辑</button>`;
+ btns += `<span class="popup-created">创建 ${appt.created_at||''}</span>`;
+ document.getElementById('pp-actions').innerHTML = btns;
+
+ positionPopup(ev);
+}
+
+function row(label, val) {
+ return `<div class="popup-row"><span class="popup-label">${label}</span><span class="popup-val">${val}</span></div>`;
+}
+
+function openBlockPopup(ev, id) {
+ ev.stopPropagation();
+ const b = blocks.find(x=>x.id===id);
+ if (!b) return;
+ popupAppt = null;
+
+ document.getElementById('pp-title').textContent = b.title;
+ document.getElementById('pp-datetime').textContent = b.date + ' 全天';
+ document.getElementById('pp-badges').innerHTML = `<span class="popup-badge" style="background:#e0e7ff;color:#3730a3;border-color:#a5b4fc;">全天封锁</span>`;
+ let rows = '';
+ if (b.store) rows += row('门店', b.store);
+ if (b.notes) rows += row('备注', b.notes);
+ document.getElementById('pp-rows').innerHTML = rows;
+ document.getElementById('pp-notes').style.display='none';
+ document.getElementById('pp-actions').innerHTML = `
+ <button class="btn-cancel" onclick="doDeleteBlock(${b.id})">删除</button>
+ <span class="popup-created"></span>
+ `;
+ positionPopup(ev);
+}
+
+function positionPopup(ev) {
+ const popup = document.getElementById('cal-popup');
+ popup.classList.add('visible');
+ const x = ev.clientX, y = ev.clientY;
+ const pw = 340, ph = 400;
+ const vw = window.innerWidth, vh = window.innerHeight;
+ popup.style.left = Math.min(x+10, vw-pw-10) + 'px';
+ popup.style.top = Math.min(y+10, vh-ph-10) + 'px';
+}
+
+function closePopup() {
+ document.getElementById('cal-popup').classList.remove('visible');
+ popupAppt = null;
+}
+
+// ═══════════════════════════════════════════════════════
+// AJAX 状态操作
+// ═══════════════════════════════════════════════════════
+async function doStatus(id, status) {
+ const res = await fetch(`/api/calendar/appt/${id}/status`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, status })
+ });
+ const data = await res.json();
+ if (data.ok) { closePopup(); toast('操作成功'); fetchEvents(); }
+ else toast('错误：'+(data.error||'未知'));
+}
+
+async function doCancel(id) {
+ const reason = prompt('取消原因（可选）:') ?? null;
+ if (reason === null) return;
+ const res = await fetch(`/api/calendar/appt/${id}/status`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, status:'cancelled', cancel_reason: reason })
+ });
+ const data = await res.json();
+ if (data.ok) { closePopup(); toast('已取消'); fetchEvents(); }
+ else toast('错误：'+(data.error||'未知'));
+}
+
+async function doDeleteBlock(id) {
+ if (!confirm('删除此全天封锁？')) return;
+ const res = await fetch(`/api/calendar/blocks/${id}/delete`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF })
+ });
+ const data = await res.json();
+ if (data.ok) { closePopup(); toast('已删除'); fetchEvents(); }
+ else toast('错误：'+(data.error||''));
+}
+
+// ═══════════════════════════════════════════════════════
+// 改约
+// ═══════════════════════════════════════════════════════
+let rescheduleId = null;
+function openReschedule(id) {
+ rescheduleId = id;
+ const appt = events.find(e=>e.id===id);
+ document.getElementById('rs-date').value = appt?.date||'';
+ document.getElementById('rs-time').value = appt?.time||'';
+ document.getElementById('reschedule-modal').classList.add('visible');
+}
+function closeReschedule() {
+ document.getElementById('reschedule-modal').classList.remove('visible');
+ rescheduleId = null;
+}
+document.getElementById('rs-confirm-btn').addEventListener('click', async () => {
+ if (!rescheduleId) return;
+ const date = document.getElementById('rs-date').value;
+ const time = document.getElementById('rs-time').value;
+ const res = await fetch(`/api/calendar/appt/${rescheduleId}/reschedule`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, date, time })
+ });
+ const data = await res.json();
+ if (data.ok) { closeReschedule(); closePopup(); toast('改约成功'); fetchEvents(); }
+ else toast('错误：'+(data.error||''));
+});
+
+// ═══════════════════════════════════════════════════════
+// 新建日程
+// ═══════════════════════════════════════════════════════
+let createDate='', createTime='';
+function openCreateModal(date, time) {
+ createDate=date; createTime=time;
+ document.getElementById('block-date').value = date;
+ document.getElementById('block-form').style.display='none';
+ document.getElementById('create-modal').classList.add('visible');
+}
+function closeCreateModal() {
+ document.getElementById('create-modal').classList.remove('visible');
+ document.getElementById('block-form').style.display='none';
+}
+
+document.getElementById('create-appt-btn').addEventListener('click', () => {
+ closeCreateModal();
+ const url = '/admin/appointments/create'
+ + (createDate ? '?date='+createDate : '')
+ + (createTime ? (createDate?'&':'?')+'time='+createTime : '');
+ window.location.href = url;
+});
+
+document.getElementById('create-block-btn').addEventListener('click', () => {
+ document.getElementById('block-store').value = store;
+ document.getElementById('block-title').value = '';
+ document.getElementById('block-notes').value = '';
+ document.getElementById('create-appt-btn').parentElement.style.display='none'; // hide choice
+ document.getElementById('create-block-btn').parentElement.style.display='none';
+ document.getElementById('block-form').style.display='block';
+});
+
+document.getElementById('block-save-btn').addEventListener('click', async () => {
+ const title = document.getElementById('block-title').value.trim() || '全天封锁';
+ const date = document.getElementById('block-date').value;
+ const st = document.getElementById('block-store').value;
+ const notes = document.getElementById('block-notes').value.trim();
+ if (!date) { toast('请填写日期'); return; }
+ const res = await fetch('/api/calendar/blocks/create', {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, title, date, store: st, notes })
+ });
+ const data = await res.json();
+ if (data.ok) { closeCreateModal(); toast('已创建'); fetchEvents(); }
+ else toast('错误：'+(data.error||''));
+});
+
+// ═══════════════════════════════════════════════════════
+// Toast
+// ═══════════════════════════════════════════════════════
+let _toastTimer;
+function toast(msg) {
+ const el = document.getElementById('cal-toast');
+ el.textContent = msg;
+ el.classList.add('show');
+ clearTimeout(_toastTimer);
+ _toastTimer = setTimeout(()=>el.classList.remove('show'), 2500);
+}
+
+// ═══════════════════════════════════════════════════════
+// 视图切换
+// ═══════════════════════════════════════════════════════
+function setView(v) {
+ view = v;
+ document.querySelectorAll('.view-sw button').forEach(b=>{
+ b.classList.toggle('active', b.dataset.view===v);
+ });
+ fetchEvents();
+}
+
+// ═══════════════════════════════════════════════════════
+// 事件绑定
+// ═══════════════════════════════════════════════════════
+document.getElementById('prev-btn').addEventListener('click', ()=>navigate(-1));
+document.getElementById('next-btn').addEventListener('click', ()=>navigate(1));
+document.getElementById('today-btn').addEventListener('click', ()=>{ curDate=new Date(); fetchEvents(); });
+document.querySelectorAll('.view-sw button').forEach(b=>{
+ b.addEventListener('click', ()=>setView(b.dataset.view));
+});
+document.getElementById('store-filter').addEventListener('change', e=>{
+ store=e.target.value; fetchEvents();
+});
+document.getElementById('new-event-btn').addEventListener('click', ()=>openCreateModal('',''));
+
+// 点击遮罩/空白关闭弹窗
+document.addEventListener('click', e=>{
+ if (!document.getElementById('cal-popup').contains(e.target)) closePopup();
+ if (e.target===document.getElementById('reschedule-modal')) closeReschedule();
+ if (e.target===document.getElementById('create-modal')) closeCreateModal();
+});
+
+// 限制门店筛选器到管理员有权访问的门店
+if (ADMIN_STORE) {
+ const sel = document.getElementById('store-filter');
+ [...sel.options].forEach(o=>{ if(o.value && o.value!==ADMIN_STORE) o.disabled=true; });
+ sel.value = ADMIN_STORE;
+}
+
+// 每分钟刷新指示线
+setInterval(updateNowLine, 60000);
+
+// ── 初始化 ──
+fetchEvents();
+</script>

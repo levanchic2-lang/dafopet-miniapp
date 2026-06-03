@@ -2255,7 +2255,7 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
         .limit(30)
         .all()
     )
-    return templates.TemplateResponse(request, "admin.html",
+    return templates.TemplateResponse(request, "uk/admin_tnr.html",  # B 补 - UK 重写 TNR 审核
         {
             "request": request,
             "title": "TNR 审核与手术登记",
@@ -17357,7 +17357,7 @@ async def admin_adoption_agreement(pet_id: int, request: Request, db: Session = 
 @app.get("/admin/calendar", response_class=HTMLResponse)
 async def admin_calendar_page(request: Request, db: Session = Depends(get_db)):
     require_admin(request)
-    return templates.TemplateResponse(request, "admin_calendar.html", {
+    return templates.TemplateResponse(request, "uk/admin_calendar.html", {  # B 补 - UK 重写
         "csrf_token": _get_csrf_token(request),
         "admin_store": _get_admin_store(request),
     })
