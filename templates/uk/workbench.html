@@ -199,8 +199,8 @@
         <div class="wb-card-count">{{ c.count }}</div>
       </div>
       <div class="wb-items">
-        {% if c['items'] %}
-          {% for it in c['items'] %}
+        {% if c['previews'] %}
+          {% for it in c['previews'] %}
           <a href="{{ it.url or '#' }}" class="wb-item">
             <span class="wi-main">{{ it.label }}</span>
             {% if it.sub %}<span class="wi-sub">{{ it.sub }}</span>{% endif %}
@@ -232,8 +232,8 @@
         <div class="wb-card-count">{{ c.count }}</div>
       </div>
       <div class="wb-items">
-        {% if c['items'] %}
-          {% for it in c['items'] %}
+        {% if c['previews'] %}
+          {% for it in c['previews'] %}
           <a href="{{ it.url or '#' }}" class="wb-item">
             <span class="wi-main">{{ it.label }}</span>
             {% if it.sub %}<span class="wi-sub">{{ it.sub }}</span>{% endif %}
@@ -265,8 +265,8 @@
         <div class="wb-card-count">{{ c.count }}</div>
       </div>
       <div class="wb-items">
-        {% if c['items'] %}
-          {% for it in c['items'] %}
+        {% if c['previews'] %}
+          {% for it in c['previews'] %}
           <a href="{{ it.url or '#' }}" class="wb-item">
             <span class="wi-main">{{ it.label }}</span>
             {% if it.sub %}<span class="wi-sub">{{ it.sub }}</span>{% endif %}
