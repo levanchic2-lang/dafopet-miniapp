@@ -3,142 +3,232 @@
 
 {% block extra_head %}
 <style>
-/* ── 客户档案 Hub 专用 ── */
+/* ── 主 + 侧栏布局（match demo） ── */
+.cust-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 28px;
+  margin-top: 24px;
+}
+@media (max-width: 1100px) {
+  .cust-grid { grid-template-columns: 1fr; }
+}
 
-/* 顶部信号 chip 区 */
-.cust-signals { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+/* ── 上半 2 栏：联系方式 + 钱包 ── */
+.cust-top-pair {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  margin-bottom: 24px;
+}
+
+.cust-contact-card {
+  background: var(--paper); border: 0.5px solid var(--hair-2);
+  padding: 18px 22px;
+}
+.cust-contact-card h3 {
+  font-family: var(--font-serif); font-weight: 700;
+  font-size: 8.5pt; letter-spacing: 2px;
+  color: var(--ink-3); text-transform: uppercase;
+  margin: 0 0 12px;
+}
+.cust-contact-row {
+  display: grid; grid-template-columns: 64px 1fr;
+  gap: 6px; margin-bottom: 6px;
+  font-size: 10.5pt; line-height: 1.55;
+}
+.cust-contact-row .lbl {
+  color: var(--ink-3); font-style: italic;
+  font-size: 9.5pt;
+}
+.cust-contact-row .val { color: var(--ink); }
+.cust-contact-row .val.num { font-family: var(--font-numeric); }
+
+/* 钱包 KPI 卡 */
+.cust-wallet-card {
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  padding: 18px 22px;
+  background: var(--paper);
+}
+.cust-wallet-card .label {
+  font-family: var(--font-serif); font-weight: 700;
+  font-size: 8.5pt; letter-spacing: 2px;
+  color: var(--ink-3); text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.cust-wallet-card .amount {
+  font-family: var(--font-numeric); font-size: 28pt;
+  letter-spacing: 1px; line-height: 1; color: var(--ink);
+}
+.cust-wallet-card .amount::before {
+  content: "¥"; font-size: 16pt; color: var(--ink-3);
+  margin-right: 3px; font-style: italic;
+}
+.cust-wallet-card .sub {
+  font-size: 9pt; color: var(--ink-3);
+  font-style: italic; margin-top: 10px;
+}
+.cust-wallet-card .sub b {
+  color: var(--ink-2); font-family: var(--font-numeric);
+  font-style: normal; letter-spacing: 0.5px;
+}
+
+/* 顶部信号 chip */
+.cust-signals { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .cust-signals .chip {
   display: inline-flex; align-items: baseline; gap: 6px;
-  font-size: 9.5pt; letter-spacing: 1.5px;
-  padding: 4px 12px; border: 0.5px solid var(--hair-2);
+  font-size: 9pt; letter-spacing: 1.5px;
+  padding: 3px 10px; border: 0.5px solid var(--hair-2);
   color: var(--ink-2); font-style: italic;
 }
 .cust-signals .chip b {
   font-family: var(--font-numeric); font-style: normal;
   letter-spacing: 0.5px; color: var(--ink);
 }
-.cust-signals .chip.danger { border-color: var(--accent-red); color: var(--accent-red); }
+.cust-signals .chip.danger { border-color: var(--accent-red);   color: var(--accent-red); }
 .cust-signals .chip.danger b { color: var(--accent-red); }
 .cust-signals .chip.warn   { border-color: var(--accent-amber); color: var(--accent-amber); }
 .cust-signals .chip.warn b { color: var(--accent-amber); }
 .cust-signals .chip.ok     { border-color: var(--accent-green); color: var(--accent-green); }
 .cust-signals .chip.ok b   { color: var(--accent-green); }
 
-/* 客户信息卡 3 栏 */
-.cust-info-grid {
-  display: grid; grid-template-columns: 1fr 1fr 1fr;
-  gap: 0; margin: 16px 0 28px;
-  border: 0.5px solid var(--hair-2);
+/* ── 宠物档案 卡片 ── */
+.pets-card { background: var(--paper); border: 0.5px solid var(--hair-2); margin-bottom: 24px; }
+.pets-card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 14px 22px; border-bottom: 0.5px solid var(--hair);
 }
-.cust-info-grid > div {
-  padding: 14px 18px;
-  border-right: 0.5px solid var(--hair);
+.pets-card-head h3 {
+  margin: 0; font-family: var(--font-serif); font-weight: 700;
+  font-size: 8.5pt; letter-spacing: 2px; color: var(--ink-3);
+  text-transform: uppercase;
 }
-.cust-info-grid > div:last-child { border-right: 0; }
-.cust-info-grid h3 {
-  font-family: var(--font-serif); font-weight: 700;
-  font-size: 8.5pt; letter-spacing: 2px;
-  color: var(--ink-3); text-transform: uppercase;
-  margin: 0 0 10px;
+.pets-card-head .count {
+  font-family: var(--font-numeric); font-size: 13pt;
+  letter-spacing: 1px; color: var(--ink-2); margin-left: 6px;
 }
-.info-row { font-size: 10.5pt; margin-bottom: 4px; }
-.info-row .lbl { color: var(--ink-3); font-style: italic; margin-right: 6px; font-size: 9pt; }
-.info-row .val { color: var(--ink); }
-.info-row .val.num { font-family: var(--font-numeric); letter-spacing: 0.5px; }
-
-.wallet-amount {
-  font-family: var(--font-numeric); font-size: 22pt;
-  letter-spacing: 1px; color: var(--ink);
-  line-height: 1.1;
-}
-.wallet-amount::before { content: "¥"; font-size: 14pt; color: var(--ink-3); margin-right: 2px; font-style: italic; }
-.wallet-sub {
-  font-size: 9pt; color: var(--ink-3); font-style: italic;
-  margin-top: 4px;
-}
-.wallet-sub b { color: var(--ink-2); font-family: var(--font-numeric); font-style: normal; }
-
-/* 宠物选择器（横排文字 tab） */
-.pet-tabs {
-  display: flex; gap: 24px; flex-wrap: wrap;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--ink);
-}
-.pet-tab {
-  font-family: var(--font-serif);
-  font-size: 11pt; letter-spacing: 1.5px;
-  color: var(--ink-3);
-  padding: 8px 0 6px;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  display: inline-flex; align-items: baseline; gap: 6px;
-}
-.pet-tab:hover { color: var(--ink); }
-.pet-tab.active {
-  color: var(--ink); border-bottom-color: var(--ink);
-  font-weight: 700;
-}
-.pet-tab .meta {
-  font-size: 8.5pt; color: var(--ink-3); font-style: italic;
-  font-weight: 400; letter-spacing: 1px;
-}
-.pet-tab .pet-status {
-  font-size: 8pt; letter-spacing: 1.5px;
-  padding: 0 6px; border: 0.5px solid var(--ink-3);
-  color: var(--ink-3); font-style: italic;
-  font-weight: 400;
-}
-.pet-add {
-  margin-left: auto;
+.pets-card-head a {
   font-size: 9.5pt; color: var(--ink-2); letter-spacing: 1.5px;
-  padding: 8px 0 6px; font-style: italic;
-  border-bottom: 0.5px solid var(--ink-3);
+  font-style: italic; border-bottom: 0.5px solid var(--ink-3);
+  padding-bottom: 1px;
 }
-.pet-add:hover { color: var(--ink); border-bottom-color: var(--ink); }
+.pets-card-head a:hover { color: var(--ink); border-bottom-color: var(--ink); }
 
-/* ── 主 tab 行 ── */
+.pets-tbl { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+.pets-tbl thead th {
+  font-weight: 700; font-size: 8.5pt; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--ink-2);
+  padding: 10px 22px; text-align: left;
+  border-bottom: 0.5px solid var(--ink);
+}
+.pets-tbl thead th.right { text-align: right; }
+.pets-tbl tbody td {
+  padding: 12px 22px; border-bottom: 0.5px solid var(--hair);
+  vertical-align: middle;
+}
+.pets-tbl tbody td:last-child { text-align: right; padding-right: 22px; }
+.pets-tbl tbody tr:last-child td { border-bottom: 0; }
+.pets-tbl tbody tr:hover { background: var(--bg-soft); cursor: pointer; }
+.pets-tbl .pet-name {
+  font-weight: 700; font-size: 11pt; color: var(--ink);
+}
+.pets-tbl .pet-name.active {
+  text-decoration: underline; text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.pets-tbl .num { font-family: var(--font-numeric); }
+.pets-tbl .uk-pill { margin-left: 8px; }
+
+/* ── 主 tab nav ── */
 .uk-tabs-main {
-  display: flex; gap: 28px; flex-wrap: wrap;
+  display: flex; gap: 22px; flex-wrap: wrap;
   border-bottom: 0.5px solid var(--hair-2);
-  margin: 24px 0 20px;
+  margin: 0 0 20px;
 }
 .uk-tab-btn {
   background: transparent; border: 0; cursor: pointer;
   font-family: var(--font-serif);
-  font-size: 10.5pt; letter-spacing: 2px;
+  font-size: 10pt; letter-spacing: 2px;
   color: var(--ink-3);
   padding: 8px 0 7px;
   border-bottom: 1px solid transparent;
-  margin-bottom: -0.5px;
-  outline: none;
+  margin-bottom: -0.5px; outline: none;
 }
+.uk-tab-btn .num { color: var(--ink-4); font-family: var(--font-numeric); font-size: 8.5pt; margin-left: 2px; }
 .uk-tab-btn:hover { color: var(--ink); }
+.uk-tab-btn:hover .num { color: var(--ink-3); }
 .uk-tab-btn.active {
-  color: var(--ink); border-bottom-color: var(--ink);
-  font-weight: 700;
+  color: var(--ink); border-bottom-color: var(--ink); font-weight: 700;
 }
+.uk-tab-btn.active .num { color: var(--ink-2); }
 
 .uk-tab-content { display: none; }
 .uk-tab-content.active { display: block; }
 
-/* tab 内 action bar */
 .tab-action-bar {
   display: flex; align-items: baseline; gap: 12px;
-  padding-bottom: 12px;
-  margin-bottom: 14px;
+  padding-bottom: 12px; margin-bottom: 14px;
   border-bottom: 0.5px solid var(--hair);
 }
 .tab-count {
-  margin-left: auto;
-  font-size: 9.5pt; letter-spacing: 1.5px;
+  margin-left: auto; font-size: 9.5pt; letter-spacing: 1.5px;
   color: var(--ink-3); font-style: italic;
 }
 .tab-count b { color: var(--ink); font-family: var(--font-numeric); font-style: normal; }
 
-/* tab 内表格 */
+/* ── 病历时间轴卡片（demo 风） ── */
+.visit-card {
+  background: var(--paper); border: 0.5px solid var(--hair-2);
+  padding: 20px 26px; margin-bottom: 14px;
+}
+.visit-card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 8px;
+}
+.visit-card-head .overline {
+  font-size: 8.5pt; letter-spacing: 4px;
+  color: var(--ink-3); text-transform: uppercase;
+  font-style: italic;
+}
+.visit-card-head .title {
+  margin: 4px 0 0;
+  font-family: var(--font-serif); font-weight: 700;
+  font-size: 15pt; letter-spacing: 1px; color: var(--ink);
+}
+.visit-card-head .right { text-align: right; }
+.visit-card-head .date {
+  font-family: var(--font-numeric); font-size: 13pt;
+  letter-spacing: 1px; color: var(--ink);
+}
+.visit-card-head .vet {
+  font-size: 9.5pt; color: var(--ink-3);
+  font-style: italic; margin-top: 2px;
+}
+.visit-card-body {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 18px; margin-top: 12px; font-size: 10.5pt;
+}
+@media (max-width: 800px) { .visit-card-body { grid-template-columns: 1fr; } }
+.visit-card-body .label {
+  font-size: 8.5pt; letter-spacing: 1.5px; color: var(--ink-3);
+  text-transform: uppercase; margin-bottom: 4px;
+}
+.visit-card-body p { margin: 0; line-height: 1.6; }
+.visit-card-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 14px; padding-top: 10px;
+  border-top: 0.5px dashed var(--hair);
+}
+.visit-card-foot .pills { display: flex; gap: 6px; }
+.visit-card-foot .view {
+  font-size: 9.5pt; color: var(--ink); letter-spacing: 1.5px;
+  font-style: italic; border-bottom: 0.5px solid var(--ink-3);
+  padding-bottom: 1px;
+}
+.visit-card-foot .view:hover { border-bottom-color: var(--ink); }
+
+/* tab 通用表格 */
 .uk-tbl-tab {
-  width: 100%; border-collapse: collapse;
-  font-size: 10.5pt;
+  width: 100%; border-collapse: collapse; font-size: 10.5pt;
 }
 .uk-tbl-tab thead th {
   font-weight: 700; font-size: 8.5pt; letter-spacing: 2px;
@@ -148,8 +238,7 @@
 }
 .uk-tbl-tab thead th.right { text-align: right; }
 .uk-tbl-tab tbody td {
-  padding: 9px 10px;
-  border-bottom: 0.5px solid var(--hair);
+  padding: 9px 10px; border-bottom: 0.5px solid var(--hair);
   vertical-align: middle;
 }
 .uk-tbl-tab tbody td.right { text-align: right; font-family: var(--font-numeric); }
@@ -186,7 +275,36 @@
   margin-bottom: 14px; letter-spacing: 8px;
 }
 
-/* 模态（编辑客户、新增宠物、录入驱虫等通用） */
+/* ── 右侧栏 ── */
+.cust-aside { display: flex; flex-direction: column; gap: 18px; }
+.aside-card {
+  background: var(--paper); border: 0.5px solid var(--hair-2);
+  padding: 16px 20px;
+}
+.aside-card h3 {
+  margin: 0 0 12px;
+  font-family: var(--font-serif); font-weight: 700;
+  font-size: 8.5pt; letter-spacing: 2px;
+  color: var(--ink-3); text-transform: uppercase;
+}
+.aside-stat {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 6px 0;
+  font-size: 10pt;
+}
+.aside-stat .lbl { color: var(--ink-3); }
+.aside-stat .val { font-family: var(--font-numeric); color: var(--ink); }
+.aside-stat .val.danger { color: var(--accent-red); }
+.aside-stat .val.warn   { color: var(--accent-amber); }
+.aside-stat .val.ok     { color: var(--accent-green); }
+
+.aside-actions {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.aside-actions .uk-btn { width: 100%; justify-content: center; }
+.aside-actions hr.rule-hair { margin: 6px 0; }
+
+/* 模态 */
 .uk-modal-overlay {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,.4); z-index: 1100;
@@ -239,337 +357,374 @@
   <span>{{ cust.name or '未命名' }}</span>
 </div>
 
-{# 页头 #}
+{# 页头：名字 + 副标 + 按钮在下面（match demo） #}
 <div class="uk-page-head">
-  <div class="uk-row between">
-    <div>
-      <h1 class="uk-h1">{{ cust.name or '未命名' }}<span class="sub">客户档案 · 编号 {{ cust.id }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</span></h1>
-      <div class="meta">建档 {{ cust.created_at.strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source or '手工录入' }}</em></div>
+  <h1 class="uk-h1">{{ cust.name or '未命名' }}<span class="sub">客户档案 · 编号 {{ cust.id }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</span></h1>
+  <div class="meta">建档 {{ cust.created_at.strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source or '手工录入' }}</em></div>
 
-      {# 顶部信号 chip #}
-      <div class="cust-signals">
-        <span class="chip">宠物 <b>{{ pets|length }}</b></span>
-        <span class="chip">病历 <b>{{ visits|length }}</b></span>
-        {% if unpaid_total > 0 %}<span class="chip danger">未付款 <b>¥{{ '%.2f'|format(unpaid_total) }}</b></span>{% endif %}
-        {% if held_deposits_total > 0 %}<span class="chip warn">押金待结 <b>¥{{ '%.2f'|format(held_deposits_total) }}</b></span>{% endif %}
-        {% if wallet_balance > 0 %}<span class="chip ok">钱包 <b>¥{{ '%.2f'|format(wallet_balance) }}</b></span>{% endif %}
-        {% if active_packages_count > 0 %}<span class="chip">套餐 <b>{{ active_packages_count }}</b> 张</span>{% endif %}
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;flex-shrink:0;align-items:flex-start;">
-      <button class="uk-btn sm" onclick="document.getElementById('addPetModal').classList.add('visible');">＋ 添加宠物</button>
-      <button class="uk-btn ghost sm" onclick="document.getElementById('editCustModal').classList.add('visible');">编辑资料</button>
-    </div>
+  {# 信号 chip #}
+  <div class="cust-signals">
+    <span class="chip">宠物 <b>{{ pets|length }}</b></span>
+    <span class="chip">病历 <b>{{ visits|length }}</b></span>
+    {% if unpaid_total > 0 %}<span class="chip danger">未付款 <b>¥{{ '%.2f'|format(unpaid_total) }}</b></span>{% endif %}
+    {% if held_deposits_total > 0 %}<span class="chip warn">押金待结 <b>¥{{ '%.2f'|format(held_deposits_total) }}</b></span>{% endif %}
+    {% if wallet_balance > 0 %}<span class="chip ok">钱包 <b>¥{{ '%.2f'|format(wallet_balance) }}</b></span>{% endif %}
+    {% if active_packages_count > 0 %}<span class="chip">套餐 <b>{{ active_packages_count }}</b> 张</span>{% endif %}
+  </div>
+
+  {# 按钮在副标下方 - match demo #}
+  <div class="actions" style="margin-top:18px;">
+    {% if active_pet %}
+    <a class="uk-btn sm" href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建病历</a>
+    <a class="uk-btn sm" href="/admin/vaccinations/create-page?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入疫苗</a>
+    <a class="uk-btn sm" href="/admin/dewormings/create-page?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入驱虫</a>
+    <a class="uk-btn sm" href="/admin/grooming-orders/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 开美容单</a>
+    {% endif %}
+    <span class="uk-spacer"></span>
+    <button class="uk-btn ghost sm" onclick="document.getElementById('editCustModal').classList.add('visible');">编辑资料</button>
   </div>
 </div>
 
 <hr class="rule-double"/>
 
-{# 客户信息 3 栏 #}
-<div class="cust-info-grid">
+{# ── 主 + 侧 双栏 ── #}
+<div class="cust-grid">
+
+  {# 主列 #}
   <div>
-    <h3>联系方式</h3>
-    <div class="info-row">
-      <span class="lbl">手机</span>
-      <span class="val num">{{ cust.phone or '—' }}</span>
+
+    {# 联系方式 + 钱包 双卡 #}
+    <div class="cust-top-pair">
+      <div class="cust-contact-card">
+        <h3>联系方式</h3>
+        <div class="cust-contact-row">
+          <span class="lbl">手机</span>
+          <span class="val num">{{ cust.phone or '—' }}</span>
+        </div>
+        <div class="cust-contact-row">
+          <span class="lbl">地址</span>
+          <span class="val">{{ cust.address or '—' }}</span>
+        </div>
+        <div class="cust-contact-row">
+          <span class="lbl">备注</span>
+          <span class="val" style="color:var(--ink-3);font-style:italic;">{{ cust.notes|truncate(40) if cust.notes else '无' }}</span>
+        </div>
+      </div>
+
+      <div class="cust-wallet-card">
+        <div class="label">钱包余额</div>
+        <div class="amount">{{ '%.2f'|format(wallet_balance) }}</div>
+        <div class="sub">
+          累计充值 <b>¥{{ '%.0f'|format(wallet_lifetime_recharge) }}</b>
+          · 累计消费 <b>¥{{ '%.0f'|format(wallet_lifetime_consume) }}</b>
+        </div>
+      </div>
     </div>
-    <div class="info-row">
-      <span class="lbl">地址</span>
-      <span class="val">{{ cust.address or '—' }}</span>
+
+    {# 宠物档案 卡片 #}
+    {% if pets %}
+    <div class="pets-card">
+      <div class="pets-card-head">
+        <div>
+          <h3 style="display:inline-block;">宠物档案</h3><span class="count">（{{ pets|length }} 只）</span>
+        </div>
+        <a href="#" onclick="document.getElementById('addPetModal').classList.add('visible');return false;">＋ 添加宠物</a>
+      </div>
+      <table class="pets-tbl">
+        <thead>
+          <tr>
+            <th>姓名</th><th>种类</th><th>品种</th><th>性别</th><th>病历号</th><th class="right">最近就诊</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in pets %}
+          <tr onclick="window.location.href='?pet_id={{ p.id }}&tab={{ active_tab }}'">
+            <td>
+              <span class="pet-name {% if active_pet and p.id == active_pet.id %}active{% endif %}">{{ p.name or '未命名' }}</span>
+              {% if p.is_neutered %}<span class="uk-pill mute">已绝育</span>{% endif %}
+            </td>
+            <td style="font-style:italic;">{% if p.species == 'cat' %}猫{% elif p.species == 'dog' %}犬{% else %}{{ p.species }}{% endif %}</td>
+            <td style="color:var(--ink-3);">{{ p.breed or '—' }}</td>
+            <td style="font-style:italic;color:var(--ink-3);">{% if p.gender == 'male' %}公{% elif p.gender == 'female' %}母{% else %}—{% endif %}</td>
+            <td class="num" style="color:var(--ink-3);font-size:9pt;">{{ p.medical_record_no or '—' }}</td>
+            <td class="right num" style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{% set lv = latest_vacc_by_pet.get(p.id) %}{% if lv %}{{ lv.vaccinated_date }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    {% if cust.notes %}
-    <div class="info-row" style="margin-top:8px;">
-      <span class="lbl">备注</span>
-      <span class="val" style="font-style:italic;color:var(--ink-2);">{{ cust.notes|truncate(60) }}</span>
-    </div>
+    {% else %}
+    <div class="tab-empty" style="margin-bottom:24px;">该客户尚未添加宠物。<a href="#" onclick="document.getElementById('addPetModal').classList.add('visible');return false;">立即添加 →</a></div>
     {% endif %}
-  </div>
-  <div>
-    <h3>钱包余额</h3>
-    <div class="wallet-amount num">{{ '%.2f'|format(wallet_balance) }}</div>
-    <div class="wallet-sub">
-      累计充值 <b>¥{{ '%.0f'|format(wallet_lifetime_recharge) }}</b>
-      · 累计消费 <b>¥{{ '%.0f'|format(wallet_lifetime_consume) }}</b>
-    </div>
-  </div>
-  <div>
-    <h3>速览</h3>
-    <div class="info-row">
-      <span class="lbl">宠物</span><span class="val num">{{ pets|length }} 只</span>
-      <span class="lbl" style="margin-left:14px;">病历</span><span class="val num">{{ visits|length }} 条</span>
-    </div>
-    <div class="info-row">
-      <span class="lbl">套餐</span><span class="val num">{{ active_packages_count }} 张</span>
-      <span class="lbl" style="margin-left:14px;">押金</span><span class="val num">{{ held_deposits_count }} 笔</span>
-    </div>
-    <div class="info-row">
-      <span class="lbl">优惠券</span><span class="val num">{{ active_coupons_count }} 张</span>
-      <span class="lbl" style="margin-left:14px;">协议</span><span class="val num">{{ consent_tasks|selectattr('status','equalto','signed')|list|length }} 份</span>
-    </div>
-  </div>
-</div>
 
-{# ── 宠物选择器 ── #}
-{% if pets %}
-<div class="pet-tabs">
-  {% for p in pets %}
-  <a href="?pet_id={{ p.id }}&tab={{ active_tab }}" class="pet-tab {% if active_pet and p.id == active_pet.id %}active{% endif %}">
-    {{ p.name or '未命名' }}
-    <span class="meta">
-      {% if p.species == 'cat' %}猫{% elif p.species == 'dog' %}犬{% else %}{{ p.species }}{% endif %}
-      {% if p.gender == 'male' %} · 公{% elif p.gender == 'female' %} · 母{% endif %}
-      {% if p.is_neutered %} <span class="pet-status">已绝育</span>{% endif %}
-    </span>
-  </a>
-  {% endfor %}
-  <a href="#" class="pet-add" onclick="document.getElementById('addPetModal').classList.add('visible');return false;">＋ 添加宠物</a>
-</div>
-{% else %}
-<div class="tab-empty">该客户尚未添加宠物。<a href="#" onclick="document.getElementById('addPetModal').classList.add('visible');return false;">立即添加 →</a></div>
-{% endif %}
+    {# ── 主 tab nav ── #}
+    {% if active_pet %}
+    <nav class="uk-tabs-main">
+      <button class="uk-tab-btn {% if active_tab=='visits' %}active{% endif %}" data-tab="visits" onclick="switchTab('visits')">诊疗<span class="num">{{ visits|length }}</span></button>
+      <button class="uk-tab-btn {% if active_tab=='prescriptions' %}active{% endif %}" data-tab="prescriptions" onclick="switchTab('prescriptions')">处方<span class="num">{{ prescriptions|length }}</span></button>
+      <button class="uk-tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单<span class="num">{{ exam_orders|length }}</span></button>
+      <button class="uk-tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约<span class="num">{{ appointments|length }}</span></button>
+      <button class="uk-tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫<span class="num">{{ vaccinations|length + dewormings|length }}</span></button>
+      <button class="uk-tab-btn {% if active_tab=='grooming' %}active{% endif %}" data-tab="grooming" onclick="switchTab('grooming')">美容<span class="num">{{ groomings|length }}</span></button>
+      <button class="uk-tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售<span class="num">{{ pet_sales_orders|length }}</span></button>
+      <button class="uk-tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费<span class="num">{{ pet_invoices|length }}</span></button>
+      <button class="uk-tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重</button>
+      <button class="uk-tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">文书</button>
+      <button class="uk-tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包</button>
+      <button class="uk-tab-btn {% if active_tab=='packages' %}active{% endif %}" data-tab="packages" onclick="switchTab('packages')">套餐</button>
+      <button class="uk-tab-btn {% if active_tab=='deposits' %}active{% endif %}" data-tab="deposits" onclick="switchTab('deposits')">押金</button>
+      <button class="uk-tab-btn {% if active_tab=='coupons' %}active{% endif %}" data-tab="coupons" onclick="switchTab('coupons')">优惠券</button>
+    </nav>
 
-{# ── 主 tab + 内容 ── #}
-{% if active_pet %}
-<nav class="uk-tabs-main">
-  <button class="uk-tab-btn {% if active_tab=='visits' %}active{% endif %}" data-tab="visits" onclick="switchTab('visits')">诊疗 <span class="num">({{ visits|length }})</span></button>
-  <button class="uk-tab-btn {% if active_tab=='prescriptions' %}active{% endif %}" data-tab="prescriptions" onclick="switchTab('prescriptions')">处方 <span class="num">({{ prescriptions|length }})</span></button>
-  <button class="uk-tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单 <span class="num">({{ exam_orders|length }})</span></button>
-  <button class="uk-tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约 <span class="num">({{ appointments|length }})</span></button>
-  <button class="uk-tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫 <span class="num">({{ vaccinations|length + dewormings|length }})</span></button>
-  <button class="uk-tab-btn {% if active_tab=='grooming' %}active{% endif %}" data-tab="grooming" onclick="switchTab('grooming')">美容 <span class="num">({{ groomings|length }})</span></button>
-  <button class="uk-tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售 <span class="num">({{ pet_sales_orders|length }})</span></button>
-  <button class="uk-tab-btn {% if active_tab=='invoices' %}active{% endif %}" data-tab="invoices" onclick="switchTab('invoices')">收费 <span class="num">({{ pet_invoices|length }})</span></button>
-  <button class="uk-tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重</button>
-  <button class="uk-tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">文书</button>
-  <button class="uk-tab-btn {% if active_tab=='wallet' %}active{% endif %}" data-tab="wallet" onclick="switchTab('wallet')">钱包</button>
-  <button class="uk-tab-btn {% if active_tab=='packages' %}active{% endif %}" data-tab="packages" onclick="switchTab('packages')">套餐</button>
-  <button class="uk-tab-btn {% if active_tab=='deposits' %}active{% endif %}" data-tab="deposits" onclick="switchTab('deposits')">押金</button>
-  <button class="uk-tab-btn {% if active_tab=='coupons' %}active{% endif %}" data-tab="coupons" onclick="switchTab('coupons')">优惠券</button>
-</nav>
-
-{# ─── 诊疗 ─── #}
-<div class="uk-tab-content {% if active_tab=='visits' %}active{% endif %}" data-tab-content="visits">
-  <div class="tab-action-bar">
-    <a class="uk-btn primary sm" href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建就诊</a>
-    <span class="tab-count">共 <b>{{ visits|length }}</b> 条</span>
-  </div>
-  {% if visits %}
-  <table class="uk-tbl-tab">
-    <thead>
-      <tr>
-        <th>日期</th><th>类型</th><th>主诉</th><th>诊断</th><th>医生</th><th>回访</th><th class="right">操作</th>
-      </tr>
-    </thead>
-    <tbody>
+    {# ─── 诊疗：CARD 时间轴（match demo） ─── #}
+    <div class="uk-tab-content {% if active_tab=='visits' %}active{% endif %}" data-tab-content="visits">
+      {% if not visits %}
+      <div class="tab-empty">暂无诊疗记录。<a href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">新建就诊 →</a></div>
+      {% else %}
       {% for v in visits %}
-      <tr>
-        <td class="num">{{ v.visit_date }}</td>
-        <td><span class="uk-pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
-        <td class="truncate" title="{{ v.chief_complaint or '' }}">{{ v.chief_complaint or '—' }}</td>
-        <td class="truncate" title="{{ v.diagnosis or '' }}">{{ v.diagnosis or '—' }}</td>
-        <td>{{ v.vet_name or '—' }}</td>
-        <td>{% if v.follow_up_at %}<span class="uk-pill amber num">{{ v.follow_up_at }}</span>{% else %}<span class="uk-mute">—</span>{% endif %}</td>
-        <td class="action right"><a href="/admin/visits/{{ v.id }}?return_to=customer">查看 →</a></td>
-      </tr>
+      <article class="visit-card">
+        <div class="visit-card-head">
+          <div>
+            <div class="overline">就诊 · {{ visit_type_zh.get(v.visit_type, v.visit_type) }}</div>
+            <h3 class="title">{{ v.diagnosis|truncate(60) if v.diagnosis else '门诊' }}</h3>
+          </div>
+          <div class="right">
+            <div class="date">{{ v.visit_date }}</div>
+            <div class="vet">{{ v.vet_name or '—' }}</div>
+          </div>
+        </div>
+        <hr class="rule-hair"/>
+        <div class="visit-card-body">
+          {% if v.chief_complaint %}
+          <div>
+            <div class="label">主诉</div>
+            <p>{{ v.chief_complaint|truncate(200) }}</p>
+          </div>
+          {% endif %}
+          {% if v.treatment_plan %}
+          <div>
+            <div class="label">处理方案</div>
+            <p>{{ v.treatment_plan|truncate(200) }}</p>
+          </div>
+          {% endif %}
+        </div>
+        <div class="visit-card-foot">
+          <div class="pills">
+            <span class="uk-pill">{{ active_pet.name }}</span>
+            {% if v.status == 'closed' %}<span class="uk-pill mute">已结束</span>{% endif %}
+            {% if v.follow_up_at %}<span class="uk-pill amber">回访 {{ v.follow_up_at }}</span>{% endif %}
+          </div>
+          <a href="/admin/visits/{{ v.id }}?return_to=customer" class="view">查看详情 →</a>
+        </div>
+      </article>
       {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="tab-empty">暂无诊疗记录。<a href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">新建就诊 →</a></div>
-  {% endif %}
-</div>
-
-{# ─── 处方 ─── #}
-<div class="uk-tab-content {% if active_tab=='prescriptions' %}active{% endif %}" data-tab-content="prescriptions">
-  <div class="tab-action-bar">
-    <span class="tab-count">共 <b>{{ prescriptions|length }}</b> 张</span>
-  </div>
-  {% if prescriptions %}
-  <table class="uk-tbl-tab">
-    <thead>
-      <tr><th>开方日期</th><th>医生</th><th>药品数</th><th class="right">金额</th><th>状态</th><th class="right">操作</th></tr>
-    </thead>
-    <tbody>
-      {% for p in prescriptions %}
-      <tr>
-        <td class="num">{{ p.prescribed_date or '—' }}</td>
-        <td>{{ p.vet_name or '—' }}</td>
-        <td class="num">{{ p.items|length }}</td>
-        <td class="right num">{{ '%.2f'|format(p.total_amount or 0) }}</td>
-        <td>
-          {% if p.status == 'dispensed' %}<span class="uk-pill green">已发药</span>
-          {% elif p.status == 'issued' %}<span class="uk-pill">已开方</span>
-          {% elif p.status == 'draft' %}<span class="uk-pill mute">草稿</span>
-          {% elif p.status == 'cancelled' %}<span class="uk-pill mute">已取消</span>
-          {% else %}<span class="uk-pill amber">{{ p.status }}</span>{% endif %}
-        </td>
-        <td class="action right"><a href="/admin/prescriptions/{{ p.id }}">查看 →</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="tab-empty">暂无处方记录</div>
-  {% endif %}
-</div>
-
-{# ─── 检查单 ─── #}
-<div class="uk-tab-content {% if active_tab=='exams' %}active{% endif %}" data-tab-content="exams">
-  <div class="tab-action-bar">
-    <span class="tab-count">共 <b>{{ exam_orders|length }}</b> 单</span>
-  </div>
-  {% if exam_orders %}
-  <table class="uk-tbl-tab">
-    <thead><tr><th>创建时间</th><th>状态</th><th>报告数</th><th class="right">操作</th></tr></thead>
-    <tbody>
-      {% for e in exam_orders %}
-      <tr>
-        <td class="num">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
-        <td>
-          {% if e.status == 'completed' %}<span class="uk-pill green">已出报告</span>
-          {% else %}<span class="uk-pill amber">待出报告</span>{% endif %}
-        </td>
-        <td class="num">{{ e.reports|length }}</td>
-        <td class="action right"><a href="/admin/exam-orders/{{ e.id }}">查看 →</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="tab-empty">暂无检查单</div>
-  {% endif %}
-</div>
-
-{# ─── 预约 ─── #}
-<div class="uk-tab-content {% if active_tab=='appointments' %}active{% endif %}" data-tab-content="appointments">
-  <div class="tab-action-bar">
-    <a class="uk-btn primary sm" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增预约</a>
-    <span class="tab-count">共 <b>{{ appointments|length }}</b> 条</span>
-  </div>
-  {% if appointments %}
-  <table class="uk-tbl-tab">
-    <thead><tr><th>日期</th><th>时间</th><th>类型</th><th>项目</th><th>门店</th><th>状态</th></tr></thead>
-    <tbody>
-      {% for a in appointments %}
-      <tr>
-        <td class="num">{{ a.appointment_date }}</td>
-        <td class="num">{{ a.appointment_time }}</td>
-        <td>{{ {'tnr':'TNR','outpatient':'门诊','surgery':'手术','beauty':'美容','grooming':'造型','washcare':'洗护'}.get(a.category, a.category) }}</td>
-        <td class="truncate">{{ a.service_name or '—' }}</td>
-        <td>{{ a.store or '—' }}</td>
-        <td>
-          {% if a.status == 'confirmed' %}<span class="uk-pill green">已确认</span>
-          {% elif a.status == 'arrived' %}<span class="uk-pill">已到店</span>
-          {% elif a.status == 'completed' %}<span class="uk-pill mute">已完成</span>
-          {% elif a.status == 'cancelled' %}<span class="uk-pill mute">已取消</span>
-          {% elif a.status == 'no_show' %}<span class="uk-pill red">爽约</span>
-          {% else %}<span class="uk-pill amber">{{ a.status }}</span>{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="tab-empty">暂无预约记录</div>
-  {% endif %}
-</div>
-
-{# ─── 疫苗驱虫 ─── #}
-<div class="uk-tab-content {% if active_tab=='vaccines' %}active{% endif %}" data-tab-content="vaccines">
-  <div class="tab-action-bar">
-    <a class="uk-btn primary sm" href="/admin/vaccinations/create-page?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入疫苗</a>
-    <a class="uk-btn sm" href="/admin/dewormings/create-page?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入驱虫</a>
-    <span class="tab-count">疫苗 <b>{{ vaccinations|length }}</b> 驱虫 <b>{{ dewormings|length }}</b></span>
-  </div>
-
-  {% if vaccinations %}
-  <h3 class="uk-h3" style="margin-top:18px;">疫苗记录</h3>
-  <table class="uk-tbl-tab">
-    <thead><tr><th>接种日期</th><th>疫苗</th><th>批号</th><th>下次到期</th><th>医生</th><th class="right">操作</th></tr></thead>
-    <tbody>
-      {% for v in vaccinations %}
-      <tr>
-        <td class="num">{{ v.vaccinated_date }}</td>
-        <td>{{ vacc_type_zh.get(v.vaccine_type, v.vaccine_type) }}{% if v.vaccine_name %} <span class="uk-mute">· {{ v.vaccine_name }}</span>{% endif %}</td>
-        <td class="num uk-mute" style="font-size:9pt;">{{ v.batch_no or '—' }}</td>
-        <td class="num">{% if v.next_due_date %}{{ v.next_due_date }}{% else %}<span class="uk-mute">—</span>{% endif %}</td>
-        <td>{{ v.vet_name or '—' }}</td>
-        <td class="action right"><a href="/admin/vaccinations/{{ v.id }}">查看 →</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-
-  {% if dewormings %}
-  <h3 class="uk-h3" style="margin-top:24px;">驱虫记录</h3>
-  <table class="uk-tbl-tab">
-    <thead><tr><th>驱虫日期</th><th>类型</th><th>药品</th><th>下次到期</th><th>医生</th><th class="right">操作</th></tr></thead>
-    <tbody>
-      {% for d in dewormings %}
-      <tr>
-        <td class="num">{{ d.deworm_date }}</td>
-        <td>{% if d.deworm_type == 'external' %}体外{% elif d.deworm_type == 'internal' %}体内{% elif d.deworm_type == 'combo' %}同驱{% else %}{{ d.deworm_type }}{% endif %}</td>
-        <td>{{ d.product_name or '—' }}</td>
-        <td class="num">{% if d.next_due_date %}{{ d.next_due_date }}{% else %}<span class="uk-mute">—</span>{% endif %}</td>
-        <td>{{ d.vet_name or '—' }}</td>
-        <td class="action right"><a href="/admin/dewormings/{{ d.id }}">查看 →</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-
-  {% if not vaccinations and not dewormings %}
-  <div class="tab-empty">暂无疫苗或驱虫记录</div>
-  {% endif %}
-</div>
-
-{# ─── 美容 ─── #}
-<div class="uk-tab-content {% if active_tab=='grooming' %}active{% endif %}" data-tab-content="grooming">
-  <div class="tab-action-bar">
-    <a class="uk-btn primary sm" href="/admin/grooming-orders/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 开美容单</a>
-    <span class="tab-count">共 <b>{{ groomings|length }}</b> 单</span>
-  </div>
-  {% if groomings %}
-  <table class="uk-tbl-tab">
-    <thead><tr><th>美容日期</th><th>美容师</th><th>项目</th><th class="right">金额</th><th>状态</th><th class="right">操作</th></tr></thead>
-    <tbody>
-      {% for g in groomings %}
-      <tr>
-        <td class="num">{{ g.groom_date or '—' }}</td>
-        <td>{{ g.groomer_name or '—' }}</td>
-        <td class="truncate" style="max-width:280px;">{{ g.notes|truncate(50) if g.notes else '—' }}</td>
-        <td class="right num">{{ '%.2f'|format(g.total_amount or 0) }}</td>
-        <td>
-          {% if g.status == 'voided' %}<span class="uk-pill red">已作废</span>
-          {% elif g.invoice_id %}<span class="uk-pill green">已开单</span>
-          {% else %}<span class="uk-pill">未开单</span>{% endif %}
-        </td>
-        <td class="action right"><a href="/admin/grooming-orders/{{ g.id }}">查看 →</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="tab-empty">暂无美容记录</div>
-  {% endif %}
-</div>
-
-{# ─── 占位：销售/收费/体重/文书/钱包/套餐/押金/优惠券 ─── #}
-{% for ph in ['sales','invoices','weight','docs','wallet','packages','deposits','coupons'] %}
-<div class="uk-tab-content {% if active_tab==ph %}active{% endif %}" data-tab-content="{{ ph }}">
-  <div class="tab-placeholder">
-    本标签在 B3.2 中重写<br/>
-    <span style="font-size:8.5pt;letter-spacing:2px;">如需查看，可临时切回旧版客户档案</span>
-    <div style="margin-top:18px;">
-      <a class="uk-btn ghost sm" href="?pet_id={{ active_pet_id }}&tab=visits">回诊疗</a>
+      {% endif %}
     </div>
-  </div>
-</div>
-{% endfor %}
 
-{% endif %}{# active_pet #}
+    {# ─── 处方（表格） ─── #}
+    <div class="uk-tab-content {% if active_tab=='prescriptions' %}active{% endif %}" data-tab-content="prescriptions">
+      {% if prescriptions %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>开方日期</th><th>医生</th><th>药品数</th><th class="right">金额</th><th>状态</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for p in prescriptions %}
+          <tr>
+            <td class="num">{{ p.prescribed_date or '—' }}</td>
+            <td>{{ p.vet_name or '—' }}</td>
+            <td class="num">{{ p.items|length }}</td>
+            <td class="right num">{{ '%.2f'|format(p.total_amount or 0) }}</td>
+            <td>
+              {% if p.status == 'dispensed' %}<span class="uk-pill green">已发药</span>
+              {% elif p.status == 'issued' %}<span class="uk-pill">已开方</span>
+              {% elif p.status == 'draft' %}<span class="uk-pill mute">草稿</span>
+              {% elif p.status == 'cancelled' %}<span class="uk-pill mute">已取消</span>
+              {% else %}<span class="uk-pill amber">{{ p.status }}</span>{% endif %}
+            </td>
+            <td class="action right"><a href="/admin/prescriptions/{{ p.id }}">查看 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无处方记录</div>
+      {% endif %}
+    </div>
+
+    {# ─── 检查单 ─── #}
+    <div class="uk-tab-content {% if active_tab=='exams' %}active{% endif %}" data-tab-content="exams">
+      {% if exam_orders %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>创建时间</th><th>状态</th><th>报告数</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for e in exam_orders %}
+          <tr>
+            <td class="num">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
+            <td>
+              {% if e.status == 'completed' %}<span class="uk-pill green">已出报告</span>
+              {% else %}<span class="uk-pill amber">待出报告</span>{% endif %}
+            </td>
+            <td class="num">{{ e.reports|length }}</td>
+            <td class="action right"><a href="/admin/exam-orders/{{ e.id }}">查看 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无检查单</div>
+      {% endif %}
+    </div>
+
+    {# ─── 预约 ─── #}
+    <div class="uk-tab-content {% if active_tab=='appointments' %}active{% endif %}" data-tab-content="appointments">
+      <div class="tab-action-bar">
+        <a class="uk-btn primary sm" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增预约</a>
+        <span class="tab-count">共 <b>{{ appointments|length }}</b> 条</span>
+      </div>
+      {% if appointments %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>日期</th><th>时间</th><th>类型</th><th>项目</th><th>门店</th><th>状态</th></tr></thead>
+        <tbody>
+          {% for a in appointments %}
+          <tr>
+            <td class="num">{{ a.appointment_date }}</td>
+            <td class="num">{{ a.appointment_time }}</td>
+            <td>{{ {'tnr':'TNR','outpatient':'门诊','surgery':'手术','beauty':'美容','grooming':'造型','washcare':'洗护'}.get(a.category, a.category) }}</td>
+            <td class="truncate">{{ a.service_name or '—' }}</td>
+            <td>{{ a.store or '—' }}</td>
+            <td>
+              {% if a.status == 'confirmed' %}<span class="uk-pill green">已确认</span>
+              {% elif a.status == 'arrived' %}<span class="uk-pill">已到店</span>
+              {% elif a.status == 'completed' %}<span class="uk-pill mute">已完成</span>
+              {% elif a.status == 'cancelled' %}<span class="uk-pill mute">已取消</span>
+              {% elif a.status == 'no_show' %}<span class="uk-pill red">爽约</span>
+              {% else %}<span class="uk-pill amber">{{ a.status }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无预约记录</div>
+      {% endif %}
+    </div>
+
+    {# ─── 疫苗驱虫 ─── #}
+    <div class="uk-tab-content {% if active_tab=='vaccines' %}active{% endif %}" data-tab-content="vaccines">
+      {% if vaccinations %}
+      <h3 class="uk-h3" style="margin:0 0 10px;">疫苗记录</h3>
+      <table class="uk-tbl-tab">
+        <thead><tr><th>接种日期</th><th>疫苗</th><th>批号</th><th>下次到期</th><th>医生</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for v in vaccinations %}
+          <tr>
+            <td class="num">{{ v.vaccinated_date }}</td>
+            <td>{{ vacc_type_zh.get(v.vaccine_type, v.vaccine_type) }}{% if v.vaccine_name %} <span class="uk-mute">· {{ v.vaccine_name }}</span>{% endif %}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ v.batch_no or '—' }}</td>
+            <td class="num">{% if v.next_due_date %}{{ v.next_due_date }}{% else %}<span class="uk-mute">—</span>{% endif %}</td>
+            <td>{{ v.vet_name or '—' }}</td>
+            <td class="action right"><a href="/admin/vaccinations/{{ v.id }}">查看 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if dewormings %}
+      <h3 class="uk-h3" style="margin:24px 0 10px;">驱虫记录</h3>
+      <table class="uk-tbl-tab">
+        <thead><tr><th>驱虫日期</th><th>类型</th><th>药品</th><th>下次到期</th><th>医生</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for d in dewormings %}
+          <tr>
+            <td class="num">{{ d.deworm_date }}</td>
+            <td>{% if d.deworm_type == 'external' %}体外{% elif d.deworm_type == 'internal' %}体内{% elif d.deworm_type == 'combo' %}同驱{% else %}{{ d.deworm_type }}{% endif %}</td>
+            <td>{{ d.product_name or '—' }}</td>
+            <td class="num">{% if d.next_due_date %}{{ d.next_due_date }}{% else %}<span class="uk-mute">—</span>{% endif %}</td>
+            <td>{{ d.vet_name or '—' }}</td>
+            <td class="action right"><a href="/admin/dewormings/{{ d.id }}">查看 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if not vaccinations and not dewormings %}
+      <div class="tab-empty">暂无疫苗或驱虫记录</div>
+      {% endif %}
+    </div>
+
+    {# ─── 美容 ─── #}
+    <div class="uk-tab-content {% if active_tab=='grooming' %}active{% endif %}" data-tab-content="grooming">
+      {% if groomings %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>美容日期</th><th>美容师</th><th>项目</th><th class="right">金额</th><th>状态</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for g in groomings %}
+          <tr>
+            <td class="num">{{ g.groom_date or '—' }}</td>
+            <td>{{ g.groomer_name or '—' }}</td>
+            <td class="truncate" style="max-width:280px;">{{ g.notes|truncate(50) if g.notes else '—' }}</td>
+            <td class="right num">{{ '%.2f'|format(g.total_amount or 0) }}</td>
+            <td>
+              {% if g.status == 'voided' %}<span class="uk-pill red">已作废</span>
+              {% elif g.invoice_id %}<span class="uk-pill green">已开单</span>
+              {% else %}<span class="uk-pill">未开单</span>{% endif %}
+            </td>
+            <td class="action right"><a href="/admin/grooming-orders/{{ g.id }}">查看 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无美容记录</div>
+      {% endif %}
+    </div>
+
+    {# ─── 占位 8 个 tab ─── #}
+    {% for ph in ['sales','invoices','weight','docs','wallet','packages','deposits','coupons'] %}
+    <div class="uk-tab-content {% if active_tab==ph %}active{% endif %}" data-tab-content="{{ ph }}">
+      <div class="tab-placeholder">
+        本标签在 B3.2 中重写<br/>
+        <span style="font-size:8.5pt;letter-spacing:2px;">如需查看，可临时切回旧版客户档案</span>
+        <div style="margin-top:18px;">
+          <a class="uk-btn ghost sm" href="?pet_id={{ active_pet_id }}&tab=visits">回诊疗</a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    {% endif %}{# active_pet #}
+
+  </div>{# /main #}
+
+  {# ── 右侧栏 ── #}
+  <aside class="cust-aside">
+    <div class="aside-card">
+      <h3>速览</h3>
+      <div class="aside-stat"><span class="lbl">宠物</span><span class="val">{{ pets|length }}</span></div>
+      <div class="aside-stat"><span class="lbl">病历</span><span class="val">{{ visits|length }}</span></div>
+      <div class="aside-stat"><span class="lbl">套餐</span><span class="val">{{ active_packages_count }}</span></div>
+      <div class="aside-stat"><span class="lbl">押金</span><span class="val">{{ held_deposits_count }}</span></div>
+      <div class="aside-stat"><span class="lbl">优惠券</span><span class="val">{{ active_coupons_count }}</span></div>
+      {% if unpaid_total > 0 %}
+      <div class="aside-stat"><span class="lbl">未付款</span><span class="val danger">¥{{ '%.2f'|format(unpaid_total) }}</span></div>
+      {% endif %}
+    </div>
+
+    <div class="aside-card">
+      <h3>操作</h3>
+      <div class="aside-actions">
+        <a class="uk-btn">发起协议签署</a>
+        <a class="uk-btn ghost">发送短信</a>
+        <a class="uk-btn ghost">钱包充值</a>
+        <a class="uk-btn ghost">售卖套餐</a>
+        <hr class="rule-hair"/>
+        <a class="uk-btn danger ghost sm">归档客户</a>
+      </div>
+    </div>
+  </aside>
+
+</div>{# /cust-grid #}
 
 {# ─── 编辑客户模态 ─── #}
 <div class="uk-modal-overlay" id="editCustModal" onclick="if(event.target===this) this.classList.remove('visible');">
@@ -637,7 +792,7 @@
         </label>
       </div>
       <div class="row2">
-        <label class="field">毛色 / 颜色
+        <label class="field">毛色
           <input name="color_pattern" placeholder="如：黑白"/>
         </label>
         <label class="field">出生估计
@@ -662,7 +817,6 @@
 function switchTab(tab) {
   document.querySelectorAll('.uk-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.uk-tab-content').forEach(d => d.classList.toggle('active', d.dataset.tabContent === tab));
-  // 同步 URL
   const url = new URL(window.location.href);
   url.searchParams.set('tab', tab);
   history.replaceState(null, '', url.toString());
