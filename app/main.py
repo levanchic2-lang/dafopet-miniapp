@@ -15359,7 +15359,7 @@ async def admin_invoice_detail(
     )
     paid_sum = sum(float(p.amount or 0) for p in payments if p.status == "success")
     outstanding = max(0.0, float(inv.total_amount or 0) - paid_sum)
-    return templates.TemplateResponse(request, "admin_invoice_detail.html", {
+    return templates.TemplateResponse(request, "uk/invoice.html", {  # B8 UK 重写（view mode）
         "mode": "view",
         "inv": inv,
         "cust": cust,

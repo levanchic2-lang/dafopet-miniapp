@@ -1,0 +1,648 @@
+{% extends "uk/_base.html" %}
+{% block title %}收费单 {{ inv.invoice_no }} · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  .iv-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .iv-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .iv-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .iv-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .iv-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 32px; margin-bottom: 8px;
+  }
+  .iv-head h1 {
+    font-family: var(--font-serif); font-size: 26pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .iv-head h1 .no {
+    font-family: var(--font-numeric); font-size: 16pt; color: var(--ink-3);
+    font-weight: 400; vertical-align: 4px; margin-left: 6px;
+  }
+  .iv-head h1 .status {
+    display: inline-block; padding: 3px 12px; margin-left: 14px;
+    border: 0.5px solid var(--ink-3); font-size: 9pt; letter-spacing: 2px;
+    color: var(--ink-2); vertical-align: 8px;
+    font-weight: 400; font-family: var(--font-serif);
+  }
+  .iv-head h1 .status.paid { background: var(--accent-green); color: var(--paper); border-color: var(--accent-green); }
+  .iv-head h1 .status.unpaid { background: var(--paper); color: var(--accent-red); border-color: var(--accent-red); }
+  .iv-head h1 .status.cancelled { background: var(--bg); color: var(--ink-3); }
+  .iv-head h1 .status.refunded { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .iv-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 12px;
+  }
+  .iv-head h1 .sub b { color: var(--ink); font-style: normal; font-weight: 700; }
+  .iv-head h1 .sub .sep { color: var(--ink-4); margin: 0 8px; }
+  .iv-head .actions { display: flex; gap: 10px; align-items: center; }
+
+  hr.iv-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  .iv-grid {
+    display: grid; grid-template-columns: 1fr 320px;
+    gap: 36px; align-items: start;
+  }
+  @media (max-width: 900px) { .iv-grid { grid-template-columns: 1fr; } }
+
+  /* section */
+  .iv-section { margin-bottom: 36px; }
+  .iv-section-head {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 16px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .iv-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+
+  /* 明细表 */
+  .iv-items { width: 100%; border-collapse: collapse; }
+  .iv-items thead th {
+    text-align: left; font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-weight: 400;
+    padding: 10px 8px; border-bottom: 0.5px solid var(--ink);
+  }
+  .iv-items thead th.right  { text-align: right; }
+  .iv-items thead th.center { text-align: center; }
+  .iv-items tbody td {
+    padding: 11px 8px; border-bottom: 0.5px solid var(--hair);
+    font-size: 10.5pt; vertical-align: middle;
+  }
+  .iv-items tbody td.right  { text-align: right; }
+  .iv-items tbody td.center { text-align: center; }
+  .iv-items tbody td.num {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .iv-items tbody td.subtotal { font-weight: 700; color: var(--ink); }
+
+  /* 汇总 */
+  .iv-summary {
+    border-top: 0.5px solid var(--ink);
+    margin-top: 8px; padding-top: 12px;
+  }
+  .iv-summary-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 6px 0; font-size: 10.5pt;
+    font-family: var(--font-serif);
+  }
+  .iv-summary-row .lbl { color: var(--ink-3); font-style: italic; letter-spacing: 1.5px; }
+  .iv-summary-row .val { font-family: var(--font-numeric); color: var(--ink); }
+  .iv-summary-row .val.discount { color: var(--accent-green); }
+  .iv-summary-row.total {
+    border-top: 0.5px solid var(--hair); padding-top: 12px; margin-top: 6px;
+  }
+  .iv-summary-row.total .lbl {
+    font-style: normal; font-weight: 700; color: var(--ink);
+    font-size: 12pt; letter-spacing: 2px;
+  }
+  .iv-summary-row.total .val {
+    font-size: 18pt; font-weight: 700; color: var(--ink);
+  }
+  .iv-summary-row.total .val .sym {
+    font-size: 12pt; vertical-align: 3px; color: var(--ink-2);
+    margin-right: 2px;
+  }
+
+  /* 已付通知 */
+  .iv-paid-notice {
+    margin-top: 16px; padding: 10px 14px;
+    border-left: 3px solid var(--accent-green); background: #f5f9f6;
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink-2); letter-spacing: 1px;
+  }
+
+  /* ─── 收款区 ─── */
+  .iv-pay-stats {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px; padding: 14px 0; margin-bottom: 18px;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .iv-pay-stat .lbl {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    font-style: italic; margin-bottom: 4px;
+  }
+  .iv-pay-stat .val {
+    font-family: var(--font-numeric); font-size: 18pt; font-weight: 700;
+    color: var(--ink);
+  }
+  .iv-pay-stat .val .sym {
+    font-size: 11pt; vertical-align: 3px; color: var(--ink-2);
+    margin-right: 1px;
+  }
+  .iv-pay-stat .val.paid { color: var(--accent-green); }
+  .iv-pay-stat .val.unpaid { color: var(--accent-red); }
+
+  .iv-pay-hint {
+    font-size: 9pt; color: var(--ink-3); letter-spacing: 1px;
+    margin-bottom: 12px; font-style: italic;
+  }
+
+  .iv-pay-methods {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 6px; margin-bottom: 14px;
+  }
+  .iv-pay-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; padding: 12px 8px;
+    background: var(--paper); border: 0.5px solid var(--hair);
+    cursor: pointer; transition: border-color .12s;
+    font-family: var(--font-serif); color: var(--ink-2);
+  }
+  .iv-pay-btn:hover { border-color: var(--ink-3); color: var(--ink); }
+  .iv-pay-btn.selected {
+    background: var(--ink); color: var(--paper);
+    border-color: var(--ink);
+  }
+  .iv-pay-btn.selected .num { color: var(--paper); opacity: .85; }
+  .iv-pay-btn.unavailable { opacity: .45; }
+  .iv-pay-btn.unavailable.selected { background: var(--accent-amber); border-color: var(--accent-amber); opacity: 1; }
+  .iv-pay-btn .label {
+    font-size: 10pt; font-weight: 700; letter-spacing: 1.5px;
+  }
+  .iv-pay-btn .num {
+    font-family: var(--font-numeric); font-size: 8.5pt;
+    color: var(--ink-3); margin-top: 2px;
+  }
+
+  .iv-picker {
+    margin-bottom: 14px; padding: 10px 12px;
+    background: var(--bg); border-left: 3px solid var(--ink-3);
+    font-family: var(--font-serif); font-size: 10pt;
+  }
+  .iv-picker label {
+    display: block; font-size: 9pt; color: var(--ink-3);
+    font-style: italic; letter-spacing: 1.5px; margin-bottom: 4px;
+  }
+  .iv-picker select {
+    width: 100%; padding: 6px 10px; background: var(--paper);
+    border: 0.5px solid var(--hair); font-family: var(--font-serif);
+    font-size: 10pt; color: var(--ink); outline: 0;
+  }
+  .iv-picker select:focus { border-color: var(--ink); }
+  .iv-picker .warn { color: var(--accent-amber); font-style: italic; }
+  .iv-picker a { color: var(--ink); border-bottom: 0.5px solid var(--ink-3); padding-bottom: 1px; }
+
+  .iv-pay-form-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin-bottom: 14px;
+  }
+  .iv-pay-form-row label {
+    display: block; font-size: 9pt; color: var(--ink-3);
+    font-style: italic; letter-spacing: 1.5px; margin-bottom: 4px;
+  }
+  .iv-pay-form-row input {
+    width: 100%; padding: 8px 12px;
+    border: 0.5px solid var(--hair); font-family: var(--font-serif);
+    font-size: 11pt; color: var(--ink); outline: 0; box-sizing: border-box;
+  }
+  .iv-pay-form-row input:focus { border-color: var(--ink); }
+  .iv-pay-form-row input.big { font-family: var(--font-numeric); font-size: 14pt; font-weight: 700; }
+
+  .iv-pay-submit {
+    width: 100%; background: var(--ink); color: var(--paper);
+    border: 0; padding: 12px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 11pt;
+    letter-spacing: 3px; font-weight: 700;
+  }
+  .iv-pay-submit:hover { background: #000; }
+
+  /* 押金抵扣提示 */
+  .iv-deposit-tip {
+    margin-bottom: 24px; padding: 14px 18px;
+    border-left: 3px solid var(--accent-amber); background: #fbfaf6;
+  }
+  .iv-deposit-tip h3 {
+    margin: 0 0 10px; font-family: var(--font-serif);
+    font-size: 10pt; letter-spacing: 2px; color: var(--accent-amber);
+    font-weight: 700;
+  }
+  .iv-deposit-row {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 8px 0; border-top: 0.5px solid var(--hair);
+    font-family: var(--font-serif); font-size: 10pt;
+  }
+  .iv-deposit-row strong { color: var(--ink); }
+  .iv-deposit-row .meta { color: var(--ink-3); font-size: 9pt; font-style: italic; flex: 1; }
+
+  /* 收款流水 */
+  .iv-pay-log { width: 100%; border-collapse: collapse; }
+  .iv-pay-log tbody td {
+    padding: 9px 6px; border-bottom: 0.5px solid var(--hair);
+    font-size: 10pt; vertical-align: middle;
+  }
+  .iv-pay-log tbody td.num {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .iv-pay-log tbody td.right { text-align: right; }
+  .iv-pay-log tbody tr.cancelled td {
+    opacity: .4; text-decoration: line-through;
+  }
+  .iv-pay-log .ref { color: var(--ink-3); font-size: 9pt; margin-left: 6px; font-style: italic; }
+  .iv-pay-log .void {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--accent-red); font-size: 9pt; font-style: italic;
+  }
+
+  /* 危险操作 */
+  .iv-danger { margin-top: 32px; padding-top: 18px; border-top: 0.5px solid var(--hair); }
+  .iv-danger h3 {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2px; color: var(--ink-3); font-style: italic;
+    margin: 0 0 10px;
+  }
+
+  /* 侧栏 */
+  .iv-aside { display: flex; flex-direction: column; gap: 18px; }
+  .iv-aside-card {
+    border: 0.5px solid var(--hair-2);
+    padding: 16px 18px; background: var(--paper);
+  }
+  .iv-aside-card h3 {
+    margin: 0 0 10px;
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 3px; color: var(--ink-3); font-weight: 400;
+    font-style: italic;
+  }
+  .iv-aside-card .name {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); margin-bottom: 6px;
+  }
+  .iv-aside-card .meta {
+    font-size: 9.5pt; color: var(--ink-2); letter-spacing: 1px;
+    line-height: 1.7;
+  }
+  .iv-aside-card .meta .lbl { color: var(--ink-3); font-style: italic; margin-right: 4px; }
+  .iv-aside-card a.more {
+    display: inline-block; margin-top: 10px;
+    color: var(--ink); border-bottom: 0.5px solid var(--ink-3);
+    padding-bottom: 1px; font-size: 9pt; font-style: italic;
+  }
+</style>
+
+{# 面包屑 #}
+<div class="iv-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  <a href="/admin/invoices">收银台</a>
+  <span class="sep">/</span>
+  <span>收费单 {{ inv.invoice_no }}</span>
+</div>
+
+{# 头部 #}
+<div class="iv-head">
+  <div>
+    <h1>
+      收费单 <span class="no">{{ inv.invoice_no }}</span>
+      {% if inv.payment_status == 'paid' %}<span class="status paid">已收款</span>
+      {% elif inv.payment_status == 'cancelled' %}<span class="status cancelled">已取消</span>
+      {% elif inv.payment_status == 'refunded' %}<span class="status refunded">已退款</span>
+      {% else %}<span class="status unpaid">待收款</span>{% endif %}
+      <span class="sub">
+        {{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}
+        {% if cust %}<span class="sep">·</span><b>{{ cust.name }}</b>{% if cust.phone %} · {{ cust.phone }}{% endif %}{% endif %}
+        {% if visit %}<span class="sep">·</span>病历 <a href="/admin/visits/{{ visit.id }}" style="color:var(--ink);border-bottom:0.5px solid var(--ink-3);">#{{ visit.id }}</a>{% endif %}
+      </span>
+    </h1>
+  </div>
+  <div class="actions">
+    <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="uk-btn ghost sm">打印票据</a>
+  </div>
+</div>
+
+<hr class="iv-rule-double"/>
+
+<div class="iv-grid">
+  {# ─── 主区 ─── #}
+  <div>
+
+    {# 明细 #}
+    <div class="iv-section">
+      <div class="iv-section-head"><h2>收&nbsp;费&nbsp;明&nbsp;细</h2></div>
+      {% if inv.items %}
+      <table class="iv-items">
+        <thead>
+          <tr>
+            <th>描述</th>
+            <th class="center" style="width:90px;">数量</th>
+            <th class="right" style="width:110px;">单价 (¥)</th>
+            <th class="right" style="width:120px;">小计 (¥)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in inv.items %}
+          <tr>
+            <td>{{ item.description }}</td>
+            <td class="center num">{{ item.quantity }}</td>
+            <td class="right num">{{ '%.2f'|format(item.unit_price) }}</td>
+            <td class="right num subtotal">{{ '%.2f'|format(item.subtotal) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--ink-3);font-style:italic;padding:24px 0;">本收费单暂无明细</p>
+      {% endif %}
+
+      {# 汇总 #}
+      <div class="iv-summary">
+        <div class="iv-summary-row">
+          <span class="lbl">小计</span>
+          <span class="val">¥ {{ '%.2f'|format(inv.subtotal) }}</span>
+        </div>
+        {% if inv.discount_amount > 0 %}
+        <div class="iv-summary-row">
+          <span class="lbl">折扣 / 减免</span>
+          <span class="val discount">− ¥ {{ '%.2f'|format(inv.discount_amount) }}</span>
+        </div>
+        {% endif %}
+        <div class="iv-summary-row total">
+          <span class="lbl">实收金额</span>
+          <span class="val"><span class="sym">¥</span>{{ '%.2f'|format(inv.total_amount) }}</span>
+        </div>
+        {% if inv.payment_status == 'paid' %}
+        <div class="iv-paid-notice">
+          已收款 · {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) }} ·
+          {{ inv.paid_at.strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── 收款区（仅 unpaid） ── #}
+    {% if inv.payment_status == 'unpaid' %}
+    <div class="iv-section">
+      <div class="iv-section-head"><h2>收&nbsp;款</h2></div>
+
+      <div class="iv-pay-stats">
+        <div class="iv-pay-stat">
+          <div class="lbl">应&nbsp;付</div>
+          <div class="val"><span class="sym">¥</span>{{ '%.2f'|format(inv.total_amount) }}</div>
+        </div>
+        <div class="iv-pay-stat">
+          <div class="lbl">已&nbsp;收</div>
+          <div class="val paid"><span class="sym">¥</span>{{ '%.2f'|format(paid_sum) }}</div>
+        </div>
+        <div class="iv-pay-stat">
+          <div class="lbl">未&nbsp;收</div>
+          <div class="val {% if outstanding > 0 %}unpaid{% else %}paid{% endif %}"><span class="sym">¥</span>{{ '%.2f'|format(outstanding) }}</div>
+        </div>
+      </div>
+
+      <p class="iv-pay-hint">可拆分多种方式收款（混合支付） · 每点一次「确认这一笔」立即入账</p>
+
+      <form method="post" action="/admin/invoices/{{ inv.id }}/add-payment" id="pay-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="method" id="pay-method-input" value="cash"/>
+
+        <div class="iv-pay-methods">
+          <button type="button" class="iv-pay-btn selected" data-val="cash" onclick="selectPay(this)"><span class="label">现金</span></button>
+          <button type="button" class="iv-pay-btn" data-val="wechat" onclick="selectPay(this)"><span class="label">微信</span></button>
+          <button type="button" class="iv-pay-btn" data-val="alipay" onclick="selectPay(this)"><span class="label">支付宝</span></button>
+          <button type="button" class="iv-pay-btn" data-val="shouqianba" onclick="selectPay(this)"><span class="label">收钱吧</span></button>
+          <button type="button" class="iv-pay-btn" data-val="meituan" onclick="selectPay(this)"><span class="label">美团</span></button>
+          <button type="button" class="iv-pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="label">第三方</span></button>
+          <button type="button" class="iv-pay-btn{% if wallet_balance <= 0 %} unavailable{% endif %}" data-val="wallet" onclick="selectPay(this)">
+            <span class="label">钱包</span><span class="num">¥{{ '%.0f'|format(wallet_balance) }}</span>
+          </button>
+          <button type="button" class="iv-pay-btn{% if not active_packages %} unavailable{% endif %}" data-val="package" onclick="selectPay(this)">
+            <span class="label">套餐</span><span class="num">{{ active_packages|length }} 张</span>
+          </button>
+          <button type="button" class="iv-pay-btn{% if not available_deposits %} unavailable{% endif %}" data-val="deposit" onclick="selectPay(this)">
+            <span class="label">押金</span><span class="num">{{ available_deposits|length }} 笔</span>
+          </button>
+          <button type="button" class="iv-pay-btn{% if not available_coupons %} unavailable{% endif %}" data-val="coupon" onclick="selectPay(this)">
+            <span class="label">优惠券</span><span class="num">{{ available_coupons|length }} 张</span>
+          </button>
+        </div>
+
+        {# 钱包 picker #}
+        <div id="wal-pick-wrap" class="iv-picker" style="display:none;">
+          {% if wallet_balance > 0 %}
+          客户钱包余额 <b>¥{{ '%.2f'|format(wallet_balance) }}</b>，本笔最多可扣 <b>¥{{ '%.2f'|format([wallet_balance, outstanding]|min) }}</b>
+          {% else %}
+          <span class="warn">客户暂无钱包余额。{% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=wallet" target="_blank">去充值 →</a>{% endif %}</span>
+          {% endif %}
+        </div>
+
+        {# 套餐 picker #}
+        <div id="pkg-pick-wrap" class="iv-picker" style="display:none;">
+          {% if active_packages %}
+          <label>选套餐</label>
+          <select name="customer_package_id">
+            <option value="">— 选择 —</option>
+            {% for cp in active_packages %}
+            <option value="{{ cp.id }}">{{ cp.name }} · 剩 {{ cp.total_uses - cp.used_count }}/{{ cp.total_uses }}{% if cp.expires_at %} · {{ cp.expires_at }} 到期{% endif %}</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <span class="warn">客户暂无有效套餐。{% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=packages" target="_blank">去售卖套餐 →</a>{% endif %}</span>
+          {% endif %}
+        </div>
+
+        {# 押金 picker #}
+        <div id="dep-pick-wrap" class="iv-picker" style="display:none;">
+          {% if available_deposits %}
+          <label>选押金</label>
+          <select name="deposit_id">
+            <option value="">— 选择 —</option>
+            {% for d in available_deposits %}
+            <option value="{{ d.id }}">{{ deposit_category_zh.get(d.category, d.category) }} · 剩 ¥{{ '%.2f'|format(d._remaining) }}（共收 ¥{{ '%.2f'|format(d.amount) }}）</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <span class="warn">客户暂无押金。{% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=deposits" target="_blank">去收押金 →</a>{% endif %}</span>
+          {% endif %}
+        </div>
+
+        {# 优惠券 picker #}
+        <div id="cpn-pick-wrap" class="iv-picker" style="display:none;">
+          {% if available_coupons %}
+          <label>选优惠券</label>
+          <select name="coupon_id">
+            <option value="">— 选择 —</option>
+            {% for c in available_coupons %}
+            <option value="{{ c.id }}">{{ c.title }}（{{ coupon_kind_zh.get(c.kind, c.kind) }}） · 可抵 ¥{{ '%.2f'|format(c._usable_amount) }}{% if c.expires_at %} · {{ c.expires_at }} 到期{% endif %}</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <span class="warn">客户暂无可用优惠券。<a href="/admin/coupons" target="_blank">去发放 →</a></span>
+          {% endif %}
+        </div>
+
+        <div class="iv-pay-form-row">
+          <div>
+            <label>本笔金额</label>
+            <input type="number" name="amount" step="0.01" min="0.01" max="{{ '%.2f'|format(outstanding) }}"
+                   value="{{ '%.2f'|format(outstanding) }}" id="pay-amount-input" class="big"/>
+          </div>
+          <div>
+            <label>外部流水号（可选）</label>
+            <input type="text" name="ref_no" placeholder="微信 / 支付宝 / 收钱吧 交易号"/>
+          </div>
+        </div>
+
+        <button type="submit" class="iv-pay-submit">确&nbsp;认&nbsp;这&nbsp;一&nbsp;笔</button>
+      </form>
+    </div>
+
+    {# 押金抵扣特殊提示 #}
+    {% if available_deposits %}
+    <div class="iv-deposit-tip">
+      <h3>该客户有未结押金可抵扣</h3>
+      {% for d in available_deposits %}
+      <div class="iv-deposit-row">
+        <strong>{{ deposit_category_zh.get(d.category, d.category) }} ¥{{ '%.2f'|format(d._remaining) }}</strong>
+        <span class="meta">共收 ¥{{ '%.2f'|format(d.amount) }}{% if d.applied_amount %} · 已用 ¥{{ '%.2f'|format(d.applied_amount) }}{% endif %}</span>
+        <form method="post" action="/admin/deposits/{{ d.id }}/apply" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="invoice_id" value="{{ inv.id }}">
+          <button type="submit" class="uk-btn ghost sm" style="color:var(--accent-amber);border-color:var(--accent-amber);">抵扣此单</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {# 收款流水 #}
+    {% if payments %}
+    <div class="iv-section">
+      <div class="iv-section-head">
+        <h2>收&nbsp;款&nbsp;流&nbsp;水</h2>
+        <span style="font-family:var(--font-numeric);font-size:10pt;color:var(--ink-3);">共 {{ payments|length }} 笔</span>
+      </div>
+      <table class="iv-pay-log">
+        <tbody>
+          {% for p in payments %}
+          <tr class="{% if p.status == 'cancelled' %}cancelled{% endif %}">
+            <td>
+              {{ method_zh.get(p.method, p.method) }}
+              {% if p.ref_no %}<span class="ref">#{{ p.ref_no }}</span>{% endif %}
+            </td>
+            <td class="right num" style="font-weight:700;">¥{{ '%.2f'|format(p.amount) }}</td>
+            <td class="right num" style="color:var(--ink-3);font-size:9pt;font-style:italic;width:140px;">
+              {{ p.created_at.strftime('%m-%d %H:%M') if p.created_at else '' }}<br/>{{ p.operator or '' }}
+            </td>
+            <td class="right" style="width:60px;">
+              {% if p.status == 'success' and request.session.get('admin_role') == 'superadmin' %}
+              <form method="post" action="/admin/invoices/{{ inv.id }}/payments/{{ p.id }}/void" style="display:inline;"
+                    onsubmit="return confirm('撤销这笔 ¥{{ '%.2f'|format(p.amount) }}？')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="void">撤销</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {# 危险操作 #}
+    {% if inv.payment_status == 'unpaid' %}
+    <div class="iv-danger">
+      <h3>危&nbsp;险&nbsp;操&nbsp;作</h3>
+      <form method="post" action="/admin/invoices/{{ inv.id }}/cancel" onsubmit="return confirm('确认取消此收费单？')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <button type="submit" class="uk-btn ghost sm" style="color:var(--accent-red);border-color:var(--accent-red);">取消此收费单</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if inv.payment_status == 'cancelled' %}
+    <div class="iv-danger">
+      <h3>删&nbsp;除&nbsp;记&nbsp;录</h3>
+      <form method="post" action="/admin/invoices/{{ inv.id }}/delete" onsubmit="return confirm('确认删除此收费单？此操作不可恢复。')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <button type="submit" class="uk-btn danger sm">删除此记录</button>
+      </form>
+    </div>
+    {% endif %}
+
+  </div>{# /main #}
+
+  {# ─── 侧栏 ─── #}
+  <aside class="iv-aside">
+    {% if cust %}
+    <div class="iv-aside-card">
+      <h3>客&nbsp;户</h3>
+      <div class="name">{{ cust.name or '—' }}</div>
+      <div class="meta">
+        {% if cust.phone %}<span class="lbl">手机</span>{{ cust.phone }}<br/>{% endif %}
+        {% if cust.address %}<span class="lbl">地址</span>{{ cust.address }}{% endif %}
+      </div>
+      <a class="more" href="/admin/customers/{{ cust.id }}">查看档案 →</a>
+    </div>
+    {% endif %}
+
+    {% set pet_obj = (visit.pet if visit and visit.pet else (inv.pet if inv and inv.pet else None)) %}
+    {% if pet_obj %}
+    <div class="iv-aside-card">
+      <h3>宠&nbsp;物</h3>
+      <div class="name">{{ pet_obj.name or '未命名' }}</div>
+      <div class="meta">
+        <span class="lbl">种类</span>{% if pet_obj.species == 'cat' %}猫{% elif pet_obj.species == 'dog' %}犬{% else %}{{ pet_obj.species }}{% endif %}
+        {% if pet_obj.breed %} · <span class="lbl">品种</span>{{ pet_obj.breed }}{% endif %}
+        {% if pet_obj.gender == 'male' %} · 公{% elif pet_obj.gender == 'female' %} · 母{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if visit %}
+    <div class="iv-aside-card">
+      <h3>关&nbsp;联&nbsp;就&nbsp;诊</h3>
+      <div class="meta">病历 <b style="font-family:var(--font-numeric);color:var(--ink);">#{{ visit.id }}</b> · {{ visit.visit_date or '—' }}</div>
+      {% if visit.diagnosis %}
+      <div class="meta" style="margin-top:8px;line-height:1.5;">{{ visit.diagnosis[:60] }}{% if visit.diagnosis|length > 60 %}…{% endif %}</div>
+      {% endif %}
+      <a class="more" href="/admin/visits/{{ visit.id }}">查看病历 →</a>
+    </div>
+    {% endif %}
+
+    {% if inv %}
+    <div class="iv-aside-card">
+      <h3>创&nbsp;建&nbsp;信&nbsp;息</h3>
+      <div class="meta">
+        <span class="lbl">创建人</span>{{ inv.created_by or '—' }}<br/>
+        <span class="lbl">时间</span>{{ inv.created_at.strftime('%Y-%m-%d %H:%M') if inv.created_at else '—' }}
+      </div>
+    </div>
+    {% endif %}
+  </aside>
+
+</div>{# /grid #}
+
+<script>
+function selectPay(btn) {
+  document.querySelectorAll('.iv-pay-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  var v = btn.dataset.val;
+  document.getElementById('pay-method-input').value = v;
+  ['wal-pick-wrap','pkg-pick-wrap','dep-pick-wrap','cpn-pick-wrap'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    var want = (id === 'wal-pick-wrap' && v === 'wallet')
+            || (id === 'pkg-pick-wrap' && v === 'package')
+            || (id === 'dep-pick-wrap' && v === 'deposit')
+            || (id === 'cpn-pick-wrap' && v === 'coupon');
+    el.style.display = want ? 'block' : 'none';
+  });
+}
+</script>
+
+{% endblock %}
