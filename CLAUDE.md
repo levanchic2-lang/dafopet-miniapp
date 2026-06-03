@@ -124,6 +124,69 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
 - 出院 → 自动笼费写入 visit 收费单 + 绑 `invoice_id`
 - 业主只读 H5 不展示：剂量 / SOAP / 诊断 / 收费 / I/O 输液量 / HR/RR/MM/CRT / 交班记录
 
+## 手机 PWA（M0-M6 完整重构）
+桌面后台是医生/前台用的"完整工作台"；手机端是**现场快速动作**工具，按角色分三套：
+
+### 路由骨架
+- `/m` 入口：UA 检测 + session.mobile_role 派发到 `/m/doctor` / `/m/nurse` / `/m/groomer`
+- 登录后 `_post_login_redirect`：优先 `?next=` → referer 里的 `?next=` → UA 兜底（手机跳 `/m`，桌面跳 `/admin`）
+- 强制切换：URL 加 `?desktop=1` 临时桌面 / `?mobile=1` 临时手机 / `/m/desktop` 写 cookie 长期桌面
+- `AdminUser.mobile_role` 字段：auto / doctor / nurse / groomer（auto = superadmin → doctor，staff → nurse）
+
+### 三套 tab bar（按 `ctx.mobile_role` 渲染）
+| 角色 | tab |
+|---|---|
+| 医生 | 今日 / 客户 / 住院 / 回访 / 我（5）|
+| 助理 | 今日 / 住院 / 配药 / 回访 / 我（5）|
+| 美容师 | 今日 / 美容单 / 新建 / 我（4）|
+
+**注意 (M-audit 教训)**：tabbar 渲染按 `ctx.mobile_role`，不是 `session.mobile_role`。角色专属路由（`/m/doctor`、`/m/nurse`、`/m/groomer`、`/m/grooming*`）必须在 ctx 强制覆盖 `mobile_role`，否则用户 session 是 doctor 但访问 `/m/groomer` 会显示错误的 doctor tab。共享路由（`/m/inpatient`、`/m/follow-ups`、`/m/customers`）保持按 session role 渲染。
+
+### 6 阶段 + 1 自查（commit 历史里全在）
+- **M0**：补 GroomingOrder 前后照片 UI（数据库 `before_photos`/`after_photos` CSV 字段早有，UI 漏了）
+- **M1**：路由骨架 + UA/role 跳转 + tab bar + 我的页 + `mobile_role` 字段迁移
+- **M2**：助理版 — 住院打勾/体征/喂食/IO/交班 + 回访 + 待配药（`Prescription.dispensed_at` 新字段）
+- **M2.5**：美容师 — 今日预约 + 新建美容单（chip 多选 + 客户搜索 JSON API）+ 现场拍美容前后照
+- **M3**：医生只读层 — 今日 + 客户档案 + 病历详情（SOAP/处方/检查/疫苗/驱虫/住院）
+- **M4**：医生可写层 — 病历编辑 + 新建 + 疫苗/驱虫快速新建
+- **M5 圣杯**：开处方专屏 — 逐行卡片，药品搜索 180ms 节流 + 库存红黄绿 + 给药途径/频次 chip + 自动算取药量 + 模板套用 + 住院发药时刻表 + 底部固定栏合计
+- **M6**：开检查单（chip 多选 lab/imaging/microscopy）+ 报告拍照（capture=environment）+ TNR 审核
+
+### 后端复用模式
+**不重写业务逻辑**，全部走现有 `/admin/...` POST 路由，加 `next_url` 参数 + `_safe_next(next_url, fallback)` 防开放重定向。涉及：
+- `medication-log/{id}/check|skip|uncheck`
+- `inpatient/{id}/vitals|io|feeding|handover`
+- `follow-ups/{id}/handle`
+- `prescriptions/create` + `visits/create|edit` + `exam-orders/create|upload`
+- `vaccinations/create` + `dewormings/create`
+- `grooming-orders/{id}/upload-photos|delete-photo`
+- `app/{id}/manual-approve|reject`（TNR）
+
+create 类路由 `next_url` 支持 `{id}` 占位符，服务端 replace 为新建出的记录 id（visits / exam-orders / prescriptions 都用）。
+
+### `_m_ctx` + `_m_badges`
+- `_m_ctx` 统一注入：csrf_token, mobile_role, admin_username, admin_role, admin_store（过滤用，超管=""）, admin_store_label（**显示用**，看 session.admin_store 实际值，超管挂横岗店就显示"横岗店"）
+- `_base.html` 顶部条 topbar_sub 默认用 `admin_store_label`，**不用 admin_store**（M-audit 教训：两个变量混用会导致同一用户在不同页面看到不同门店标签）
+- `_m_badges`：4 个首页待办数 — overdue_meds / pending_dispense / due_followups / pending_consents，全部按 `Pet.store` 关联过滤（早期错用 `Visit.clinic_store` 不存在的字段，M3 修了）
+
+### Jinja2 坑（M-audit 找出来的 500 bug）
+**当模板上下文是 Python dict 时，不要用 `dict.attr` 访问，要用 `dict['attr']`**。原因：Jinja 先试下标，失败回退 `getattr`，dict 内置方法 `items / keys / values / get / pop / update` 会被命中返回 bound method，再切片或调用就 500。例：`exam_rows = [{"eo":..., "items":[...], "reports":[...]}]` 在模板里必须写 `r['items']`，写 `r.items` 会 500。SQLAlchemy model 没这问题（`p.items` 走属性返回 relationship）。
+
+### CSS（`static/m.css`）
+纯手写、不依赖框架，固定类名：`m-card` / `m-card-title` / `m-btn`（+ secondary/outline/danger）/ `m-empty` / `m-tabbar` / `m-tab` / `m-todo-row` / `m-todo-icon` / `m-todo-badge` / `m-quick-tile` / `m-role-chip`（active 高亮）/ `m-section-label` / `m-msg`（ok / err）。body padding-bottom: calc(64px + safe-area-inset-bottom)，tab bar 高 54px。
+
+### 手机不做的（按设计保留）
+- 收费单结算（多笔混合支付）/ 库存盘点 / 财务报表 / 员工与权限 / 配额管理 / TNR复核 / 预约创建（涉及 TNR 配额 / 容量 / 重复申请校验，桌面端做）
+- 受管控药品强制扫码 + 双人复核（未来迭代）
+
+### 自动化实测脚本
+`_test/shoot.py` 用 Playwright 跑 dafopet.com，模拟 iPhone 13 视口，登录后逐页截图保存 `_test/shots/`。CSS 改动后跑一遍可视化验证：
+```
+python _test/shoot.py all
+python _test/shoot.py viewportcheck visit  # 单跑
+```
+注意：`full_page=True` 截图会把 `position:fixed` 的 tab bar 画在初始 viewport 位置，看似遮挡内容，实际不是 bug——用 `full=False` 滚到底拍非全页确认。
+
 ## 小程序关键页面
 - `miniapp/pages/index/`：TNR 申请表单，多城市地址选择（深圳/东莞/惠州）
 - `miniapp/pages/appointment/`：预约页，提前检查门店配额和爽约封禁
