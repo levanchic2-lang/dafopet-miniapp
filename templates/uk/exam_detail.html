@@ -1,0 +1,490 @@
+{% extends "uk/_base.html" %}
+{% block title %}检查单 #{{ order.id }} · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  .ex-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .ex-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .ex-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .ex-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .ex-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 32px; margin-bottom: 8px;
+  }
+  .ex-head h1 {
+    font-family: var(--font-serif); font-size: 26pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .ex-head h1 .no {
+    font-family: var(--font-numeric); font-size: 18pt; color: var(--ink-3);
+    font-weight: 400; vertical-align: 4px; margin-left: 6px;
+  }
+  .ex-head h1 .status {
+    display: inline-block; padding: 3px 12px; margin-left: 14px;
+    border: 0.5px solid var(--ink-3); font-size: 9pt; letter-spacing: 2px;
+    color: var(--ink-2); vertical-align: 8px; font-family: var(--font-serif);
+  }
+  .ex-head h1 .status.done   { background: var(--accent-green); color: var(--paper); border-color: var(--accent-green); }
+  .ex-head h1 .status.wait   { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .ex-head h1 .status.voided { background: var(--bg); color: var(--ink-3); }
+  .ex-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 12px;
+  }
+  .ex-head h1 .sub b { color: var(--ink); font-style: normal; font-weight: 700; }
+  .ex-head h1 .sub .sep { color: var(--ink-4); margin: 0 8px; }
+  .ex-head h1 .sub a { color: var(--ink); border-bottom: 0.5px solid var(--ink-3); }
+  .ex-head .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+  hr.ex-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  /* locked notice */
+  .ex-locked {
+    border-left: 3px solid var(--accent-red);
+    background: #fcf5f4; padding: 14px 18px; margin-bottom: 24px;
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink-2); line-height: 1.7;
+  }
+  .ex-locked b { font-weight: 700; color: var(--accent-red); letter-spacing: 1.5px; }
+  .ex-locked .paid { color: var(--accent-amber); font-weight: 700; font-style: italic; }
+
+  .ex-grid {
+    display: grid; grid-template-columns: minmax(0,1fr) 260px;
+    gap: 28px; align-items: start;
+  }
+  @media (max-width: 900px) { .ex-grid { grid-template-columns: 1fr; } }
+
+  .ex-section { margin-bottom: 32px; }
+  .ex-section-head {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 16px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .ex-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+  .ex-section-head .count {
+    font-family: var(--font-numeric); font-size: 10pt; color: var(--ink-3);
+  }
+
+  /* 检查项目展示表 */
+  .ex-items { width: 100%; border-collapse: collapse; }
+  .ex-items thead th {
+    text-align: left; font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-weight: 400;
+    padding: 10px 8px; border-bottom: 0.5px solid var(--ink);
+  }
+  .ex-items thead th.right { text-align: right; }
+  .ex-items tbody td {
+    padding: 11px 8px; border-bottom: 0.5px solid var(--hair);
+    font-size: 10.5pt; vertical-align: middle;
+  }
+  .ex-items tbody td.right { text-align: right; }
+  .ex-items tbody td.num {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .ex-items tbody td.name { font-weight: 700; }
+  .ex-items tbody td.ink3 { color: var(--ink-3); }
+
+  .ex-summary {
+    border-top: 0.5px solid var(--ink); margin-top: 8px; padding-top: 12px;
+    display: flex; justify-content: flex-end; align-items: baseline;
+    font-family: var(--font-serif);
+  }
+  .ex-summary .lbl { color: var(--ink-3); font-style: italic; font-size: 10.5pt; letter-spacing: 2px; margin-right: 12px; }
+  .ex-summary .val { font-family: var(--font-numeric); font-size: 18pt; font-weight: 700; color: var(--ink); }
+  .ex-summary .sym { font-size: 12pt; vertical-align: 3px; color: var(--ink-2); margin-right: 2px; }
+
+  .ex-notes-block {
+    margin-top: 14px; padding: 10px 14px;
+    border-left: 3px solid var(--ink-3); background: var(--bg);
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink-2); line-height: 1.6;
+  }
+
+  /* 上传 form */
+  .ex-upload-form {
+    display: grid; grid-template-columns: 1fr 1fr auto;
+    gap: 12px; align-items: end;
+  }
+  .ex-upload-form label {
+    display: block; font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2px; color: var(--ink-3); font-style: italic;
+    margin-bottom: 4px;
+  }
+  .ex-upload-form input[type=file], .ex-upload-form select {
+    width: 100%; padding: 7px 10px; box-sizing: border-box;
+    border: 0.5px solid var(--hair); font-family: var(--font-serif);
+    font-size: 10pt; color: var(--ink); background: var(--paper); outline: 0;
+    height: 36px;
+  }
+  .ex-upload-form input:focus, .ex-upload-form select:focus { border-color: var(--ink); }
+
+  /* 已上传报告 grid */
+  .ex-report-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 14px;
+  }
+  .ex-report-card {
+    border: 0.5px solid var(--hair-2); background: var(--paper);
+    display: flex; flex-direction: column;
+  }
+  .ex-report-card .thumb {
+    width: 100%; aspect-ratio: 4/3; object-fit: cover;
+    background: var(--bg); display: block;
+  }
+  .ex-report-card .pdf-thumb {
+    width: 100%; aspect-ratio: 4/3; background: #fcf5f4;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-serif); font-size: 11pt; letter-spacing: 3px;
+    color: var(--accent-red); font-weight: 700;
+  }
+  .ex-report-card .foot {
+    padding: 8px 10px; font-family: var(--font-serif); font-size: 9pt;
+    color: var(--ink-3);
+  }
+  .ex-report-card .foot .label {
+    font-weight: 700; color: var(--ink); margin-bottom: 4px;
+    font-size: 10pt;
+  }
+  .ex-report-card .foot a {
+    color: var(--ink); border-bottom: 0.5px solid var(--ink-3);
+    padding-bottom: 1px; margin-right: 6px;
+  }
+  .ex-report-card .foot .type {
+    font-family: var(--font-numeric); letter-spacing: 1px; font-size: 8.5pt;
+    margin-left: 4px;
+  }
+  .ex-report-card .meta {
+    font-family: var(--font-numeric); font-size: 8.5pt; margin-top: 4px;
+    font-style: italic; color: var(--ink-3);
+  }
+  .ex-report-card .del {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--accent-red); font-size: 8.5pt; font-style: italic;
+    margin-top: 4px;
+  }
+
+  /* 侧栏 */
+  .ex-aside { display: flex; flex-direction: column; gap: 18px; }
+  .ex-aside-card {
+    border: 0.5px solid var(--hair-2);
+    padding: 16px 18px; background: var(--paper);
+  }
+  .ex-aside-card h3 {
+    margin: 0 0 10px;
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 3px; color: var(--ink-3); font-weight: 400;
+    font-style: italic;
+  }
+  .ex-aside-card .name {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); margin-bottom: 6px;
+  }
+  .ex-aside-card .meta {
+    font-size: 9.5pt; color: var(--ink-2); letter-spacing: 1px; line-height: 1.7;
+  }
+  .qr-box {
+    text-align: center; padding: 10px 0;
+  }
+  .qr-box img {
+    width: 180px; height: 180px; border: 0.5px solid var(--hair);
+    background: var(--paper);
+  }
+  .qr-box .hint {
+    font-size: 8.5pt; color: var(--ink-3); font-style: italic;
+    letter-spacing: 1px; margin: 8px 0 12px;
+  }
+  .ex-history-row {
+    display: block; padding: 9px 0; text-decoration: none; color: inherit;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .ex-history-row:last-child { border-bottom: 0; }
+  .ex-history-row.voided { opacity: .5; }
+  .ex-history-row .r1 {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 9pt; color: var(--ink-3);
+  }
+  .ex-history-row .r1 .date { font-family: var(--font-numeric); }
+  .ex-history-row .r1 .stat {
+    font-size: 8.5pt; padding: 1px 6px; letter-spacing: 1px;
+    border: 0.5px solid var(--hair-2);
+  }
+  .ex-history-row .r1 .stat.done { background: var(--accent-green); color: var(--paper); border-color: var(--accent-green); }
+  .ex-history-row .r1 .stat.wait { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .ex-history-row .r2 {
+    font-size: 10pt; color: var(--ink); margin-top: 4px; line-height: 1.5;
+  }
+</style>
+
+{% if msg %}
+<div style="padding:10px 14px;margin-top:24px;border-left:3px solid var(--ink);background:var(--bg);font-family:var(--font-serif);font-size:10pt;letter-spacing:1px;">{{ msg }}</div>
+{% endif %}
+
+<div class="ex-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  {% if visit %}<a href="/admin/visits/{{ visit.id }}">病历 #{{ visit.id }}</a>
+  <span class="sep">/</span>{% endif %}
+  <span>检查单 #{{ order.id }}</span>
+</div>
+
+<div class="ex-head">
+  <div>
+    <h1>
+      检查单 <span class="no">#{{ order.id }}</span>
+      {% if order.status == 'completed' %}<span class="status done">已出报告</span>
+      {% elif order.status == 'voided' %}<span class="status voided">已作废</span>
+      {% else %}<span class="status wait">待出报告</span>{% endif %}
+      <span class="sub">
+        {% if cust %}<b>{{ cust.name }}</b>{% endif %}
+        {% if pet %}<span class="sep">·</span>{{ pet.name }}{% if pet.species == 'cat' %}（猫）{% elif pet.species == 'dog' %}（犬）{% endif %}{% endif %}
+        <span class="sep">·</span>创建 <span style="font-family:var(--font-numeric);">{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        {% if visit %}<span class="sep">·</span>病历 <a href="/admin/visits/{{ visit.id }}">#{{ visit.id }}</a>{% endif %}
+      </span>
+    </h1>
+  </div>
+  <div class="actions">
+    <a href="/admin/exam-orders/{{ order.id }}/print" target="_blank" class="uk-btn ghost sm">打印报告</a>
+    {% if locked %}
+    <form method="post" action="/admin/exam-orders/{{ order.id }}/copy-as-new" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="uk-btn ghost sm">复制为新单</button>
+    </form>
+    {% if order.status != 'voided' %}
+    <form method="post" action="/admin/exam-orders/{{ order.id }}/void" style="display:inline;" onsubmit="return confirmExamVoid(this, {{ paid_amount or 0 }})">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="void_reason" value="">
+      <input type="hidden" name="refund_to_wallet" value="">
+      <input type="hidden" name="refund_amount" value="0">
+      <button type="submit" class="uk-btn danger sm">作&nbsp;废</button>
+    </form>
+    {% endif %}
+    {% else %}
+    <form method="post" action="/admin/exam-orders/{{ order.id }}/delete" style="display:inline;"
+          onsubmit="return confirm('删除此检查单及其所有报告？此操作不可恢复。')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="return_to" value="visit">
+      <button type="submit" class="uk-btn danger sm">删&nbsp;除</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<hr class="ex-rule-double"/>
+
+{% if locked %}
+<div class="ex-locked">
+  <b>检查项目已锁定</b> · {{ lock_reason }} · 不可增减<br/>
+  报告仍可继续上传 · 如需增减检查项请「复制为新单」开下一张
+  {% if paid_amount and paid_amount > 0 %}<br/><span class="paid">已收款 ¥{{ '%.2f'|format(paid_amount) }}</span> · 作废时可选退到客户钱包{% endif %}
+</div>
+<script>
+function confirmExamVoid(form, paidAmount) {
+  const reason = prompt('请填写作废原因（必填）：');
+  if (!reason || !reason.trim()) return false;
+  form.querySelector('input[name="void_reason"]').value = reason.trim();
+  if (paidAmount > 0) {
+    const amt = prompt('此单已收款 ¥' + paidAmount.toFixed(2) + '\n\n如需退到客户钱包，请输入退款金额（留空 = 不退）：', paidAmount.toFixed(2));
+    if (amt !== null && amt !== '' && parseFloat(amt) > 0) {
+      form.querySelector('input[name="refund_to_wallet"]').value = '1';
+      form.querySelector('input[name="refund_amount"]').value = parseFloat(amt).toFixed(2);
+    }
+  }
+  let m = '确认作废？写入审计日志';
+  const refundVal = form.querySelector('input[name="refund_amount"]').value;
+  if (parseFloat(refundVal) > 0) m += '\n· 退款 ¥' + parseFloat(refundVal).toFixed(2) + ' 立即入客户钱包';
+  return confirm(m);
+}
+</script>
+{% endif %}
+
+<div class="ex-grid">
+<div>
+
+  {# 检查项目 #}
+  <div class="ex-section">
+    <div class="ex-section-head">
+      <h2>检&nbsp;查&nbsp;项&nbsp;目</h2>
+      {% if items %}<span class="count">共 {{ items|length }} 项</span>{% endif %}
+    </div>
+    {% if items %}
+    <table class="ex-items">
+      <thead>
+        <tr>
+          <th>项目</th>
+          <th class="right" style="width:80px;">数量</th>
+          <th style="width:70px;">单位</th>
+          <th class="right" style="width:100px;">单价</th>
+          <th class="right" style="width:110px;">小计</th>
+          <th>备注</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(total=0) %}
+        {% for it in items %}
+        {% set sub = (it.subtotal or 0) | float %}
+        {% set ns.total = ns.total + sub %}
+        <tr>
+          <td class="name">{{ it.name }}</td>
+          <td class="right num">{{ it.qty or 1 }}</td>
+          <td class="ink3">{{ it.unit or '—' }}</td>
+          <td class="right num">{% if it.unit_price %}¥ {{ '%.2f'|format(it.unit_price | float) }}{% else %}—{% endif %}</td>
+          <td class="right num" style="font-weight:700;">{% if sub > 0 %}¥ {{ '%.2f'|format(sub) }}{% else %}—{% endif %}</td>
+          <td class="ink3">{{ it.notes or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if ns.total > 0 %}
+    <div class="ex-summary">
+      <span class="lbl">合&nbsp;计</span>
+      <span class="val"><span class="sym">¥</span>{{ '%.2f'|format(ns.total) }}</span>
+    </div>
+    {% endif %}
+    {% else %}
+    <p style="color:var(--ink-3);font-style:italic;padding:18px 0;">暂无检查项目</p>
+    {% endif %}
+    {% if order.notes %}
+    <div class="ex-notes-block">备注：{{ order.notes }}</div>
+    {% endif %}
+  </div>
+
+  {# 上传报告 #}
+  <div class="ex-section">
+    <div class="ex-section-head"><h2>上&nbsp;传&nbsp;报&nbsp;告（电脑端）</h2></div>
+    <form method="post" action="/admin/exam-orders/{{ order.id }}/upload" enctype="multipart/form-data" class="ex-upload-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div>
+        <label>选择文件（PDF / 图片）</label>
+        <input type="file" name="file" accept=".pdf,image/*" required/>
+      </div>
+      <div>
+        <label>归属项目（可选）</label>
+        <select name="item_label">
+          <option value="">— 不指定 —</option>
+          {% for it in items %}
+          <option value="{{ it.name }}">{{ it.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="uk-btn primary sm" style="height:36px;">上&nbsp;传</button>
+    </form>
+  </div>
+
+  {# 已上传报告 #}
+  <div class="ex-section">
+    <div class="ex-section-head">
+      <h2>已&nbsp;上&nbsp;传&nbsp;报&nbsp;告</h2>
+      {% if order.reports %}<span class="count">共 {{ order.reports|length }} 份</span>{% endif %}
+    </div>
+    {% if order.reports %}
+    <div class="ex-report-grid">
+      {% for rpt in order.reports %}
+      <div class="ex-report-card">
+        {% if rpt.file_type == 'pdf' %}
+        <div class="pdf-thumb">PDF</div>
+        {% else %}
+        <img class="thumb" src="/admin/exam-reports/{{ rpt.id }}/file" alt="报告" loading="lazy"/>
+        {% endif %}
+        <div class="foot">
+          {% if rpt.item_label %}<div class="label">{{ rpt.item_label }}</div>{% endif %}
+          <a href="/admin/exam-reports/{{ rpt.id }}/file" target="_blank">查看</a>
+          <a href="/admin/exam-reports/{{ rpt.id }}/file?download=1" download="{{ rpt.original_name or '' }}">下载</a>
+          <span class="type">{{ rpt.file_type | upper }}</span>
+          <div class="meta">{{ rpt.uploaded_by }} · {{ rpt.uploaded_at.strftime('%m-%d %H:%M') }}</div>
+          <form method="post" action="/admin/exam-orders/{{ order.id }}/delete-report/{{ rpt.id }}"
+                onsubmit="return confirm('删除此报告？')" style="margin:0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="del">删除</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:var(--ink-3);font-style:italic;padding:18px 0;">暂无上传报告</p>
+    {% endif %}
+  </div>
+
+</div>{# /main #}
+
+{# 侧栏 #}
+<aside class="ex-aside">
+  <div class="ex-aside-card hide-on-mobile">
+    <h3>手&nbsp;机&nbsp;扫&nbsp;码&nbsp;上&nbsp;传</h3>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin:0 0 8px;letter-spacing:0.5px;line-height:1.6;">助理用手机扫码即可拍照上传报告图片</p>
+    <div class="qr-box">
+      <img src="/admin/exam-orders/{{ order.id }}/qr.png?v={{ order.token_expires_at.strftime('%s') if order.token_expires_at else '0' }}" alt="上传二维码"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='block';"/>
+      <div style="display:none;color:var(--accent-red);font-size:9pt;padding:14px;background:#fcf5f4;">二维码生成失败，请刷新或联系管理员</div>
+    </div>
+    <p class="hint">
+      有效期 <span style="font-family:var(--font-numeric);">{{ order.token_expires_at.strftime('%m-%d %H:%M') if order.token_expires_at else '—' }}</span>（北京 +8）
+    </p>
+    <form method="post" action="/admin/exam-orders/{{ order.id }}/refresh-token">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="uk-btn ghost sm" style="width:100%;">刷新二维码</button>
+    </form>
+  </div>
+
+  {% if pet %}
+  <div class="ex-aside-card">
+    <h3>就&nbsp;诊&nbsp;宠&nbsp;物</h3>
+    <div class="name">{{ pet.name or '未命名' }}</div>
+    <div class="meta">
+      {{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }}
+      {% if pet.breed %} · {{ pet.breed }}{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if cust %}
+  <div class="ex-aside-card">
+    <h3>客&nbsp;户</h3>
+    <div class="name">{{ cust.name or '—' }}</div>
+    <div class="meta">{{ cust.phone or '—' }}</div>
+  </div>
+  {% endif %}
+
+  <div data-customer-context
+       data-customer-id="{{ cust.id if cust else 0 }}"
+       data-pet-id="{{ pet.id if pet else 0 }}"></div>
+
+  {% if exam_history and exam_history|length > 0 %}
+  <div class="ex-aside-card">
+    <h3>历&nbsp;史&nbsp;检&nbsp;查（{{ exam_history|length }} 条）</h3>
+    {% for h in exam_history %}
+    {% set is_voided = (h.status == 'voided') %}
+    <a href="/admin/exam-orders/{{ h.id }}" class="ex-history-row {% if is_voided %}voided{% endif %}">
+      <div class="r1">
+        <span class="date">{{ h.created_at.strftime('%Y-%m-%d') if h.created_at else '—' }}</span>
+        <span class="stat {% if h._has_report %}done{% else %}wait{% endif %}">#{{ h.id }} · {% if h._has_report %}已出{% else %}待出{% endif %}</span>
+      </div>
+      <div class="r2">
+        {% for it in h._items_parsed[:3] %}{{ it.name }}{% if not loop.last %} · {% endif %}{% endfor %}{% if h._items_parsed|length > 3 %} <span style="color:var(--ink-3);">+{{ h._items_parsed|length - 3 }}</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</aside>
+</div>
+
+<style>
+  @media (max-width: 900px) { .hide-on-mobile { display: none !important; } }
+</style>
+
+{% endblock %}

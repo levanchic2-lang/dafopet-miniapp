@@ -1,0 +1,423 @@
+{% extends "uk/_base.html" %}
+{% block title %}新建检查单 · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  .ex-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .ex-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .ex-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .ex-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .ex-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 32px; margin-bottom: 8px;
+  }
+  .ex-head h1 {
+    font-family: var(--font-serif); font-size: 26pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .ex-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2px; margin-top: 12px;
+  }
+  .ex-head h1 .sub b { color: var(--ink); font-style: normal; font-weight: 700; }
+  .ex-head h1 .sub .sep { color: var(--ink-4); margin: 0 8px; }
+  .ex-head h1 .sub a { color: var(--ink); border-bottom: 0.5px solid var(--ink-3); }
+
+  hr.ex-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  .ex-grid {
+    display: grid; grid-template-columns: minmax(0,1fr) 260px;
+    gap: 28px; align-items: start;
+  }
+  @media (max-width: 900px) { .ex-grid { grid-template-columns: 1fr; } }
+
+  .ex-section { margin-bottom: 32px; }
+  .ex-section-head {
+    border-bottom: 0.5px solid var(--ink);
+    padding-bottom: 8px; margin-bottom: 16px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .ex-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 3px; margin: 0;
+  }
+
+  /* items table */
+  .ex-items { width: 100%; border-collapse: collapse; }
+  .ex-items thead th {
+    text-align: left; font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-weight: 400;
+    padding: 10px 6px; border-bottom: 0.5px solid var(--ink);
+  }
+  .ex-items thead th.right { text-align: right; }
+  .ex-items thead th.center { text-align: center; }
+  .ex-items tbody td {
+    padding: 7px 5px; vertical-align: middle;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .ex-items tbody td input,
+  .ex-items tbody td select {
+    width: 100%; font-family: var(--font-serif); font-size: 10pt;
+    border: 0.5px solid var(--hair); padding: 6px 8px;
+    background: var(--paper); color: var(--ink);
+    box-sizing: border-box; height: 32px; outline: 0;
+  }
+  .ex-items tbody td input:focus { border-color: var(--ink); }
+  .ex-items tbody td.col-qty input,
+  .ex-items tbody td.col-price input { text-align: right; font-family: var(--font-numeric); }
+  .ex-items tbody td.col-unit input { text-align: center; }
+  .ex-items tbody td.col-sub {
+    text-align: right; font-family: var(--font-numeric);
+    font-weight: 700; color: var(--ink);
+  }
+  .ex-items .del-btn {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--accent-red); font-size: 11pt;
+  }
+  .col-name { min-width: 220px; }
+  .col-qty { width: 68px; }
+  .col-unit { width: 60px; }
+  .col-price { width: 84px; }
+  .col-sub { width: 92px; }
+  .col-notes { min-width: 110px; }
+  .col-del { width: 32px; text-align: center; }
+
+  /* drug dropdown */
+  .inv-search-wrap { position: relative; }
+  .inv-dropdown {
+    position: fixed; background: var(--paper);
+    border: 0.5px solid var(--ink); z-index: 9999;
+    max-height: 280px; overflow-y: auto; display: none;
+    min-width: 220px; box-shadow: 0 4px 14px rgba(0,0,0,.08);
+  }
+  .inv-dropdown-item {
+    padding: 8px 12px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 10pt;
+    border-bottom: 0.5px solid var(--hair); line-height: 1.4;
+  }
+  .inv-dropdown-item:last-child { border-bottom: 0; }
+  .inv-dropdown-item:hover { background: var(--bg); }
+  .inv-dropdown-item .meta {
+    font-size: 8.5pt; color: var(--ink-3); margin-top: 2px;
+    font-family: var(--font-numeric); font-style: italic;
+  }
+
+  /* 合计 */
+  .ex-grand-total {
+    display: flex; justify-content: flex-end; align-items: baseline;
+    padding-top: 12px; margin-top: 8px;
+    border-top: 0.5px solid var(--hair);
+    font-family: var(--font-serif);
+  }
+  .ex-grand-total .lbl { color: var(--ink-3); font-style: italic; font-size: 10.5pt; letter-spacing: 2px; margin-right: 12px; }
+  .ex-grand-total .val { font-family: var(--font-numeric); font-size: 18pt; font-weight: 700; color: var(--ink); }
+  .ex-grand-total .sym { font-size: 12pt; vertical-align: 3px; color: var(--ink-2); margin-right: 2px; }
+
+  /* 备注 */
+  .ex-notes-wrap label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-style: italic;
+    display: block; margin-bottom: 6px;
+  }
+  .ex-notes {
+    width: 100%; min-height: 70px;
+    font-family: var(--font-serif); font-size: 10.5pt;
+    color: var(--ink); background: var(--paper);
+    border: 0.5px solid var(--hair); padding: 10px 14px;
+    line-height: 1.6; resize: vertical; outline: 0; box-sizing: border-box;
+  }
+  .ex-notes:focus { border-color: var(--ink); }
+
+  /* submit bar */
+  .ex-submit-bar {
+    display: flex; gap: 14px; align-items: center;
+    padding-top: 18px; margin-top: 18px;
+    border-top: 0.5px solid var(--hair);
+  }
+  .ex-submit-bar .submit-main {
+    flex: 1; background: var(--ink); color: var(--paper); border: 0;
+    padding: 12px; cursor: pointer;
+    font-family: var(--font-serif); font-size: 11pt;
+    letter-spacing: 3px; font-weight: 700;
+  }
+  .ex-submit-bar .submit-main:hover { background: #000; }
+
+  /* 侧栏 */
+  .ex-aside { display: flex; flex-direction: column; gap: 18px; }
+  .ex-aside-card {
+    border: 0.5px solid var(--hair-2);
+    padding: 16px 18px; background: var(--paper);
+  }
+  .ex-aside-card h3 {
+    margin: 0 0 10px;
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 3px; color: var(--ink-3); font-weight: 400;
+    font-style: italic;
+  }
+  .ex-aside-card .name {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); margin-bottom: 6px;
+  }
+  .ex-aside-card .meta {
+    font-size: 9.5pt; color: var(--ink-2); letter-spacing: 1px;
+    line-height: 1.7;
+  }
+  .ex-history-row {
+    display: block; padding: 9px 0; text-decoration: none; color: inherit;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .ex-history-row:last-child { border-bottom: 0; }
+  .ex-history-row.voided { opacity: .5; }
+  .ex-history-row .r1 {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 9pt; color: var(--ink-3);
+  }
+  .ex-history-row .r1 .date { font-family: var(--font-numeric); }
+  .ex-history-row .r1 .stat {
+    font-size: 8.5pt; padding: 1px 6px; letter-spacing: 1px;
+    border: 0.5px solid var(--hair-2);
+  }
+  .ex-history-row .r1 .stat.done { background: var(--accent-green); color: var(--paper); border-color: var(--accent-green); }
+  .ex-history-row .r1 .stat.wait { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .ex-history-row .r2 {
+    font-size: 10pt; color: var(--ink); margin-top: 4px; line-height: 1.5;
+  }
+</style>
+
+<div class="ex-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  {% if visit %}<a href="/admin/visits/{{ visit.id }}">病历 #{{ visit.id }}</a>
+  <span class="sep">/</span>{% endif %}
+  <span>新建检查单</span>
+</div>
+
+<div class="ex-head">
+  <div>
+    <h1>
+      新建检查单
+      <span class="sub">
+        {% if cust %}<b>{{ cust.name }}</b>{% endif %}
+        {% if pet %}<span class="sep">·</span>{{ pet.name }}{% if pet.species == 'cat' %}（猫）{% elif pet.species == 'dog' %}（犬）{% endif %}{% endif %}
+        {% if visit %}<span class="sep">·</span>病历 <a href="/admin/visits/{{ visit.id }}">#{{ visit.id }}</a>{% endif %}
+      </span>
+    </h1>
+  </div>
+  <div>
+    {% if visit %}
+    <a href="/admin/visits/{{ visit.id }}" class="uk-btn ghost sm">返回病历</a>
+    {% endif %}
+  </div>
+</div>
+
+<hr class="ex-rule-double"/>
+
+<div class="ex-grid">
+<div>
+<form method="post" action="/admin/exam-orders/create">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/>
+
+  <div class="ex-section">
+    <div class="ex-section-head">
+      <h2>检&nbsp;查&nbsp;项&nbsp;目</h2>
+      <button type="button" class="uk-btn ghost sm" onclick="addItem()">＋ 添加项目</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="ex-items" id="item-table">
+        <thead>
+          <tr>
+            <th class="col-name">项目名称</th>
+            <th class="col-qty right">数量</th>
+            <th class="col-unit center">单位</th>
+            <th class="col-price right">单价 (¥)</th>
+            <th class="col-sub right">小计 (¥)</th>
+            <th class="col-notes">备注</th>
+            <th class="col-del"></th>
+          </tr>
+        </thead>
+        <tbody id="item-list"></tbody>
+      </table>
+    </div>
+    <div class="ex-grand-total">
+      <span class="lbl">合&nbsp;计</span>
+      <span class="val"><span class="sym">¥</span><span id="grand-total">0.00</span></span>
+    </div>
+  </div>
+
+  <div class="ex-section ex-notes-wrap">
+    <label>备&nbsp;注</label>
+    <textarea name="notes" class="ex-notes"></textarea>
+  </div>
+
+  <div class="ex-submit-bar">
+    <button type="submit" class="submit-main">开&nbsp;具&nbsp;检&nbsp;查&nbsp;单</button>
+    {% if visit %}
+    <a href="/admin/visits/{{ visit.id }}" class="uk-btn ghost sm">取消</a>
+    {% endif %}
+  </div>
+</form>
+</div>{# /main #}
+
+{# 侧栏 #}
+<aside class="ex-aside">
+  {% if cust %}
+  <div class="ex-aside-card">
+    <h3>客&nbsp;户</h3>
+    <div class="name">{{ cust.name or '—' }}</div>
+    <div class="meta">{{ cust.phone or '—' }}</div>
+  </div>
+  {% endif %}
+
+  {% if pet %}
+  <div class="ex-aside-card">
+    <h3>就&nbsp;诊&nbsp;宠&nbsp;物</h3>
+    <div class="name">{{ pet.name or '未命名' }}</div>
+    <div class="meta">
+      {{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }}
+      {% if pet.breed %} · {{ pet.breed }}{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div data-customer-context
+       data-customer-id="{{ cust.id if cust else 0 }}"
+       data-pet-id="{{ pet.id if pet else 0 }}"></div>
+
+  {% if exam_history and exam_history|length > 0 %}
+  <div class="ex-aside-card">
+    <h3>历&nbsp;史&nbsp;检&nbsp;查（{{ exam_history|length }} 条）</h3>
+    {% for h in exam_history %}
+    {% set is_voided = (h.status == 'voided') %}
+    <a href="/admin/exam-orders/{{ h.id }}" class="ex-history-row {% if is_voided %}voided{% endif %}">
+      <div class="r1">
+        <span class="date">{{ h.created_at.strftime('%Y-%m-%d') if h.created_at else '—' }}</span>
+        <span class="stat {% if h._has_report %}done{% else %}wait{% endif %}">#{{ h.id }} · {% if h._has_report %}已出{% else %}待出{% endif %}</span>
+      </div>
+      <div class="r2">
+        {% for it in h._items_parsed[:3] %}{{ it.name }}{% if not loop.last %} · {% endif %}{% endfor %}{% if h._items_parsed|length > 3 %} <span style="color:var(--ink-3);">+{{ h._items_parsed|length - 3 }}</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</aside>
+</div>
+
+<div class="inv-dropdown" id="global-dropdown"></div>
+
+<script>
+var _itemIdx = 0;
+var _searchTimer = null;
+
+function addItem(name, itemId, qty, unit, unitPrice, notes) {
+  var idx = _itemIdx++;
+  var tr = document.createElement('tr');
+  tr.id = 'item-row-' + idx;
+  tr.innerHTML = [
+    '<td class="col-name">',
+    '<div class="inv-search-wrap">',
+    '<input name="item_name_'+idx+'" value="'+(name||'')+'" autocomplete="off" ',
+    'oninput="onItemInput(this,'+idx+')" onblur="closeDropdown()"/>',
+    '<input type="hidden" name="item_id_'+idx+'" id="iid_'+idx+'" value="'+(itemId||'')+'">',
+    '</div></td>',
+    '<td class="col-qty"><input type="number" name="item_qty_'+idx+'" id="qty_'+idx+'" ',
+    'value="'+(qty!=null?qty:1)+'" min="0.01" step="0.01" oninput="calcRow('+idx+')"/></td>',
+    '<td class="col-unit"><input name="item_unit_'+idx+'" id="unit_'+idx+'" value="'+(unit||'')+'"/></td>',
+    '<td class="col-price"><input type="number" name="item_price_'+idx+'" id="price_'+idx+'" ',
+    'value="'+(unitPrice!=null?unitPrice:'')+'" min="0" step="0.01" oninput="calcRow('+idx+')"/></td>',
+    '<td class="col-sub" id="sub_'+idx+'">—</td>',
+    '<td class="col-notes"><input name="item_notes_'+idx+'" value="'+(notes||'')+'"/></td>',
+    '<td class="col-del"><button type="button" class="del-btn" onclick="removeItem(\'item-row-'+idx+'\')">✕</button></td>'
+  ].join('');
+  document.getElementById('item-list').appendChild(tr);
+  if (qty != null && unitPrice != null) calcRow(idx);
+}
+
+function removeItem(rowId) {
+  var row = document.getElementById(rowId);
+  if (row) { row.remove(); updateTotal(); }
+}
+
+function calcRow(idx) {
+  var qty = parseFloat(document.getElementById('qty_'+idx).value) || 0;
+  var price = parseFloat(document.getElementById('price_'+idx).value) || 0;
+  var sub = qty * price;
+  var cell = document.getElementById('sub_'+idx);
+  if (cell) cell.textContent = sub > 0 ? sub.toFixed(2) : '—';
+  updateTotal();
+}
+
+function updateTotal() {
+  var rows = document.querySelectorAll('#item-list tr');
+  var total = 0;
+  rows.forEach(function(tr) {
+    var id = tr.id.replace('item-row-', '');
+    var qty = parseFloat((document.getElementById('qty_'+id) || {}).value) || 0;
+    var price = parseFloat((document.getElementById('price_'+id) || {}).value) || 0;
+    total += qty * price;
+  });
+  document.getElementById('grand-total').textContent = total.toFixed(2);
+}
+
+function onItemInput(input, idx) {
+  var q = input.value.trim();
+  document.getElementById('iid_' + idx).value = '';
+  clearTimeout(_searchTimer);
+  if (q.length < 1) { hideDropdown(); return; }
+  _searchTimer = setTimeout(function() {
+    fetch('/api/inventory/search?q=' + encodeURIComponent(q))
+      .then(function(r) { return r.json(); })
+      .then(function(data) { showDropdown(data, input, idx); });
+  }, 200);
+}
+
+function showDropdown(items, input, idx) {
+  var dd = document.getElementById('global-dropdown');
+  if (!items.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = '';
+  items.forEach(function(it) {
+    var div = document.createElement('div');
+    div.className = 'inv-dropdown-item';
+    div.innerHTML = '<div>' + it.name + '</div>'
+      + '<div class="meta">¥' + it.sell_price.toFixed(2)
+      + ' / ' + (it.unit || '—')
+      + (it.is_service ? '' : ' · 库存 ' + it.stock_qty + (it.unit || ''))
+      + '</div>';
+    div.onmousedown = function(e) {
+      e.preventDefault();
+      input.value = it.name;
+      document.getElementById('iid_' + idx).value = it.id;
+      var unitEl = document.getElementById('unit_' + idx);
+      var priceEl = document.getElementById('price_' + idx);
+      if (unitEl && !unitEl.value.trim()) unitEl.value = it.unit || '';
+      if (priceEl && !priceEl.value.trim()) priceEl.value = it.sell_price.toFixed(2);
+      calcRow(idx);
+      hideDropdown();
+    };
+    dd.appendChild(div);
+  });
+  var rect = input.getBoundingClientRect();
+  dd.style.left = rect.left + 'px';
+  dd.style.width = Math.max(rect.width, 260) + 'px';
+  dd.style.top = (rect.bottom + 2) + 'px';
+  dd.style.display = 'block';
+}
+
+function hideDropdown() { document.getElementById('global-dropdown').style.display = 'none'; }
+function closeDropdown() { setTimeout(hideDropdown, 150); }
+
+addItem();
+</script>
+
+{% endblock %}

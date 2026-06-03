@@ -16590,7 +16590,7 @@ async def admin_exam_order_create_page(
                 h._items_parsed = []
             h._has_report = db.query(ExamReport).filter(ExamReport.exam_order_id == h.id).first() is not None
         history = history_q
-    return templates.TemplateResponse(request, "admin_exam_order_form.html", {
+    return templates.TemplateResponse(request, "uk/exam_form.html", {  # B8.7 UK 重写
         "visit": visit, "cust": cust, "pet": pet,
         "exam_order": None, "mode": "create",
         "exam_history": history,
@@ -16773,7 +16773,7 @@ async def admin_exam_order_detail(
                 h._items_parsed = []
             h._has_report = db.query(ExamReport).filter(ExamReport.exam_order_id == h.id).first() is not None
         history = history_q
-    return templates.TemplateResponse(request, "admin_exam_order_detail.html", {
+    return templates.TemplateResponse(request, "uk/exam_detail.html", {  # B8.7 UK 重写
         "order": order, "visit": visit, "cust": cust, "pet": pet,
         "items": items, "msg": msg,
         "exam_history": history,
