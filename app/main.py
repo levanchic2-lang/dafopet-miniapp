@@ -7852,7 +7852,7 @@ async def admin_consent_templates_list(request: Request, db: Session = Depends(g
         .all()
     )
     used_map = {tid: cnt for tid, cnt in used_rows if tid}
-    return templates.TemplateResponse(request, "admin_consent_templates.html", {
+    return templates.TemplateResponse(request, "uk/consent_templates.html", {
         "items": items, "used_map": used_map,
         "category_zh": _CONSENT_CATEGORY_ZH,
         "variables": _CONSENT_VARIABLES,
@@ -7869,7 +7869,7 @@ async def admin_consent_template_form(
         return RedirectResponse("/admin/login")
     require_superadmin(request)
     item = db.get(ConsentTemplate, tid) if tid else None
-    return templates.TemplateResponse(request, "admin_consent_template_form.html", {
+    return templates.TemplateResponse(request, "uk/consent_template_form.html", {
         "item": item,
         "category_zh": _CONSENT_CATEGORY_ZH,
         "variables": _CONSENT_VARIABLES,
@@ -8156,7 +8156,7 @@ async def admin_consent_task_detail(
         .order_by(ConsentAuditLog.created_at.asc())
         .all()
     )
-    return templates.TemplateResponse(request, "admin_consent_task_detail.html", {
+    return templates.TemplateResponse(request, "uk/consent_task_detail.html", {
         "task": task, "cust": cust, "pet": pet, "doc": doc,
         "status_zh": _CONSENT_STATUS_ZH,
         "category_zh": _CONSENT_CATEGORY_ZH,

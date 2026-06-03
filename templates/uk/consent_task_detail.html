@@ -1,0 +1,52 @@
+{% extends "uk/_base.html" %}
+{% block title %}{{ task.title }} · 协议任务{% endblock %}
+{% block extra_head %}
+<meta name="tab-label" content="协议·{{ task.title }}"/>
+<meta name="tab-kind" content="detail"/>
+{% endblock %}
+{% block body %}
+<style>
+  .ctd-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .ctd-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .ctd-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .ctd-bc .sep { margin:0 8px; color:var(--ink-4); }
+  hr.ctd-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+
+  body .page-head { display:none !important; }
+  body .msg.ok { border:0 !important; border-left:3px solid var(--accent-green) !important; background:#f5f9f6 !important; padding:10px 16px !important; margin-bottom:18px !important; font-family:var(--font-serif) !important; font-size:10pt !important; color:var(--ink-2) !important; border-radius:0 !important; }
+  body .card { background:var(--paper); border:0.5px solid var(--hair-2); border-radius:0 !important; box-shadow:none; padding:18px 22px; }
+  body .consent-preview { background:var(--paper); border:0.5px solid var(--hair-2); border-radius:0 !important; padding:30px 38px; font-family:var(--font-serif); line-height:1.85; max-width:760px; margin:0; }
+  body .consent-preview h1, body .consent-preview h2, body .consent-preview h3 { font-family:var(--font-serif); letter-spacing:1.5px; }
+  body .sig-block { margin-top:32px; padding-top:14px; border-top:0.5px solid var(--hair); }
+  body .sig-img { border:0.5px solid var(--hair) !important; border-radius:0 !important; padding:4px; background:var(--paper); }
+  body .copy-bar { background:var(--bg) !important; border:0.5px solid var(--hair); border-radius:0 !important; padding:8px 10px !important; font-family:var(--font-numeric) !important; font-size:9.5pt !important; }
+  body .copy-bar input { border:0.5px solid var(--hair) !important; border-radius:0 !important; background:var(--paper) !important; font-family:var(--font-numeric) !important; }
+
+  body .btn { background:var(--ink) !important; color:var(--paper) !important; border:0 !important; border-radius:0 !important; padding:8px 18px !important; font-family:var(--font-serif) !important; font-size:10pt !important; letter-spacing:2px !important; font-weight:700 !important; }
+  body .btn.secondary { background:var(--paper) !important; color:var(--ink-2) !important; border:0.5px solid var(--hair) !important; font-style:italic; font-weight:400 !important; }
+  body .btn.secondary:hover { color:var(--ink) !important; border-color:var(--ink-3) !important; background:var(--bg) !important; }
+
+  body aside > div { background:var(--paper) !important; border:0.5px solid var(--hair-2) !important; border-radius:0 !important; box-shadow:none !important; padding:16px 18px !important; }
+  body aside [style*="dcfce7"] { background:#f5f9f6 !important; border-color:var(--accent-green) !important; }
+  body aside [style*="dcfce7"] * { color:var(--accent-green) !important; }
+  body aside [style*="dcfce7"] a.btn { background:var(--accent-green) !important; border-color:var(--accent-green) !important; }
+
+  body .data-table-wrap { border:0.5px solid var(--hair-2); border-radius:0; background:var(--paper); }
+  body .data-table { width:100%; border-collapse:collapse; font-family:var(--font-serif); }
+  body .data-table thead th { font-size:9pt !important; letter-spacing:2px !important; color:var(--ink-3) !important; font-weight:400 !important; font-style:italic; border-bottom:0.5px solid var(--ink) !important; padding:10px 12px !important; text-align:left; }
+  body .data-table tbody td { font-size:10pt !important; color:var(--ink-2) !important; border-bottom:0.5px solid var(--hair) !important; padding:10px 12px !important; vertical-align:top; }
+
+  body [style*="fffbeb"] { background:#fbfaf6 !important; border-color:var(--accent-amber) !important; }
+  body [style*="ecfdf5"] { background:#f5f9f6 !important; border-color:var(--accent-green) !important; }
+</style>
+
+<div class="ctd-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/consent-templates">协议模板</a><span class="sep">/</span>
+  <span>#CT{{ '%06d'|format(task.id) }} {{ task.title }}</span>
+</div>
+
+<hr class="ctd-rule-double"/>
+
+{% include "includes/admin_consent_task_detail_body.html" %}
+{% endblock %}

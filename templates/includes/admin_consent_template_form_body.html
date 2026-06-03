@@ -1,0 +1,45 @@
+<form method="post" action="/admin/consent-templates/save" id="tmpl-form" style="display:grid;grid-template-columns:1fr 280px;gap:1rem;">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input type="hidden" name="template_id" value="{{ item.id if item else '' }}"/>
+ <input type="hidden" name="body_html" id="body-html-input"/>
+
+ <div class="editor-card">
+   <label style="display:block;font-weight:600;margin-bottom:.3rem;">模板名 *</label>
+   <input name="name" value="{{ item.name if item else '' }}" required maxlength="120"
+          placeholder="如 麻醉知情同意书"
+          style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;margin-bottom:1rem;"/>
+
+   <label style="display:block;font-weight:600;margin-bottom:.3rem;">类型</label>
+   <select name="category" style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;margin-bottom:1rem;">
+     {% for k, zh in category_zh.items() %}
+     <option value="{{ k }}" {% if item and item.category == k %}selected{% endif %}>{{ zh }}</option>
+     {% endfor %}
+   </select>
+
+   <label style="display:block;font-weight:600;margin-bottom:.3rem;">协议正文 *</label>
+   <div id="editor"></div>
+
+   <label style="display:block;font-weight:600;margin:1rem 0 .3rem;">备注（仅自己看）</label>
+   <textarea name="notes" rows="2"
+             style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;">{{ item.notes if item else '' }}</textarea>
+
+   <div style="display:flex;gap:.6rem;margin-top:1rem;">
+     <button type="submit" class="btn" style="font-size:.95rem;padding:.55rem 1.6rem;"><i data-lucide="check"></i> 保存</button>
+     <a href="/admin/consent-templates" class="btn secondary" style="font-size:.95rem;padding:.55rem 1.6rem;">取消</a>
+   </div>
+ </div>
+
+ <aside class="editor-card" style="position:sticky;top:1rem;height:fit-content;">
+   <h3 style="margin:0 0 .5rem;font-size:.95rem;"><i data-lucide="pin"></i> 可插入变量</h3>
+   <p style="font-size:.78rem;color:#6b7280;margin:0 0 .8rem;">点击插入到正文光标处。发起任务时自动替换为实际值。</p>
+   <div class="var-chips">
+     {% for v, label in variables.items() %}
+     <span class="var-chip" data-var="{{ v }}">{{ v }}<span class="zh">{{ label }}</span></span>
+     {% endfor %}
+   </div>
+   <hr style="border:0;border-top:1px solid #e5e7eb;margin:1rem 0;">
+   <h3 style="margin:0 0 .5rem;font-size:.95rem;"><i data-lucide="lightbulb"></i> 示例</h3>
+   <button type="button" class="btn secondary" style="font-size:.82rem;width:100%;margin-bottom:.4rem;" onclick="loadSample('anesthesia')"><i data-lucide="download"></i> 麻醉同意书示例</button>
+   <button type="button" class="btn secondary" style="font-size:.82rem;width:100%;margin-bottom:.4rem;" onclick="loadSample('vaccination')"><i data-lucide="download"></i> 疫苗同意书示例</button>
+ </aside>
+</form>

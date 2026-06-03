@@ -1,0 +1,118 @@
+{% extends "uk/_base.html" %}
+{% block title %}{% if item %}编辑协议模板{% else %}新建协议模板{% endif %} · 大风动物医院{% endblock %}
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+{% endblock %}
+{% block body %}
+<style>
+  .ctf-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .ctf-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .ctf-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .ctf-bc .sep { margin:0 8px; color:var(--ink-4); }
+  hr.ctf-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .ctf-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:8px; }
+  .ctf-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15; }
+  .ctf-head h1 .sub { display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px; }
+
+  body .editor-card { background:var(--paper) !important; border:0.5px solid var(--hair-2) !important; border-radius:0 !important; padding:22px 26px !important; }
+  body #editor { min-height:50vh; }
+  body .ql-toolbar { border:0.5px solid var(--hair) !important; border-radius:0 !important; border-bottom:0 !important; background:var(--bg); }
+  body .ql-container { border:0.5px solid var(--hair) !important; border-radius:0 !important; font-family:var(--font-serif) !important; }
+  body .ql-editor { font-family:var(--font-serif); font-size:11pt; line-height:1.8; }
+  body .ql-snow .ql-stroke { stroke:var(--ink-2); }
+  body .ql-snow .ql-fill { fill:var(--ink-2); }
+  body .ql-snow .ql-picker-label { color:var(--ink-2); }
+  body .ql-snow.ql-toolbar button:hover .ql-stroke, body .ql-snow.ql-toolbar button.ql-active .ql-stroke { stroke:var(--ink) !important; }
+  body .ql-snow.ql-toolbar button:hover .ql-fill, body .ql-snow.ql-toolbar button.ql-active .ql-fill { fill:var(--ink) !important; }
+
+  body input[type=text], body input:not([type]), body select, body textarea {
+    font-family:var(--font-serif) !important; font-size:10.5pt !important;
+    border:0.5px solid var(--hair) !important; border-radius:0 !important;
+    padding:8px 12px !important; background:var(--paper) !important; color:var(--ink) !important;
+  }
+  body input:focus, body select:focus, body textarea:focus { border-color:var(--ink) !important; box-shadow:none !important; }
+  body label { font-family:var(--font-serif); font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-style:italic; font-weight:400 !important; }
+
+  body .btn { background:var(--ink) !important; color:var(--paper) !important; border:0 !important; border-radius:0 !important; padding:8px 18px !important; font-family:var(--font-serif) !important; font-size:10pt !important; letter-spacing:2px !important; font-weight:700 !important; }
+  body .btn.secondary { background:var(--paper) !important; color:var(--ink-2) !important; border:0.5px solid var(--hair) !important; font-style:italic; font-weight:400 !important; }
+  body .btn.secondary:hover { color:var(--ink) !important; border-color:var(--ink-3) !important; background:var(--bg) !important; }
+
+  body .var-chip { background:var(--bg) !important; color:var(--ink) !important; border:0.5px solid var(--hair) !important; border-radius:0 !important; font-family:var(--font-numeric) !important; font-size:9.5pt !important; padding:3px 9px !important; }
+  body .var-chip:hover { background:var(--ink) !important; color:var(--paper) !important; border-color:var(--ink) !important; }
+  body .var-chip .zh { color:var(--ink-3) !important; font-family:var(--font-serif) !important; font-style:italic; }
+  body .var-chip:hover .zh { color:var(--paper) !important; }
+  body aside h3 { font-family:var(--font-serif); font-size:11pt; letter-spacing:2px; color:var(--ink); font-weight:700; }
+  body aside p { font-family:var(--font-serif); font-style:italic; font-size:9.5pt; color:var(--ink-3); line-height:1.6; }
+  body aside hr { border:0; border-top:0.5px solid var(--hair) !important; }
+  body .page-head { display:none !important; }
+</style>
+
+<div class="ctf-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/consent-templates">协议模板</a><span class="sep">/</span>
+  <span>{% if item %}编辑「{{ item.name }}」{% else %}新建模板{% endif %}</span>
+</div>
+
+<div class="ctf-head">
+  <div>
+    <h1>{% if item %}编&nbsp;辑&nbsp;模&nbsp;板{% else %}新&nbsp;建&nbsp;协&nbsp;议&nbsp;模&nbsp;板{% endif %}
+      <span class="sub">富文本撰写正文 · 点击右侧变量插入光标处</span>
+    </h1>
+  </div>
+  <div style="display:flex; gap:10px;">
+    <button type="submit" form="tmpl-form" class="btn">保&nbsp;存&nbsp;模&nbsp;板</button>
+    <a href="/admin/consent-templates" class="btn secondary">取&nbsp;消</a>
+  </div>
+</div>
+
+<hr class="ctf-rule-double"/>
+
+{% include "includes/admin_consent_template_form_body.html" %}
+
+<script>
+(function () {
+  var quill = new Quill('#editor', {
+    theme: 'snow',
+    placeholder: '在此撰写协议正文，需要动态填充的位置插入变量占位符（右侧点击）',
+    modules: {
+      toolbar: [
+        [{ 'header': [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline'],
+        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+        [{ 'indent': '-1' }, { 'indent': '+1' }],
+        [{ 'align': [] }],
+        ['blockquote'],
+        ['clean']
+      ]
+    }
+  });
+  {% if item and item.body_html %}quill.clipboard.dangerouslyPasteHTML({{ item.body_html|tojson }});{% endif %}
+
+  document.querySelectorAll('.var-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var v = chip.dataset.var;
+      var range = quill.getSelection(true);
+      quill.insertText(range.index, v, 'user');
+      quill.setSelection(range.index + v.length, 0);
+      quill.focus();
+    });
+  });
+
+  document.getElementById('tmpl-form').addEventListener('submit', function (e) {
+    var html = quill.root.innerHTML.trim();
+    if (!html || html === '<p><br></p>') { e.preventDefault(); alert('协议正文不能为空'); return false; }
+    document.getElementById('body-html-input').value = html;
+  });
+
+  var SAMPLES = {
+    anesthesia: '<h2 style="text-align:center;">麻醉知情同意书</h2><p>本人 <b>{{cust_name}}</b>（电话 {{cust_phone}}）作为宠物 <b>{{pet_name}}</b>（{{pet_species}} · {{pet_breed}} · {{pet_age}} · 体重 {{pet_weight}}kg）的主人，现就 {{date}} 在 {{clinic_name}} 由主治医师 <b>{{vet_name}}</b> 实施的麻醉操作，已充分知情：</p><ol><li>麻醉本身可能存在过敏、心肺抑制、低血压、苏醒延迟等风险。</li><li>术前已配合医师完成体检，但部分潜在异常可能未被发现。</li><li>同意院方根据术中实际情况调整麻醉方案。</li><li>本同意书有效期为本次诊疗过程。</li></ol><p>本人已阅读、理解并自愿签署。</p>',
+    vaccination: '<h2 style="text-align:center;">疫苗接种同意书</h2><p>本人 <b>{{cust_name}}</b> 作为宠物 <b>{{pet_name}}</b>（{{pet_species}} · {{pet_age}}）的主人，同意于 {{date}} 在 {{clinic_name}} 由主治医师 <b>{{vet_name}}</b> 为其接种疫苗，已知晓：</p><ol><li>疫苗接种后 24~48 小时可能出现轻度反应。</li><li>极少数情况下可能出现急性过敏反应。</li><li>请避免接种后 7 天内洗澡、剧烈运动或更换饲料。</li></ol><p>本人已阅读、理解并自愿签署。</p>'
+  };
+  window.loadSample = function (key) {
+    if (!confirm('载入示例会覆盖当前正文，确认？')) return;
+    quill.clipboard.dangerouslyPasteHTML(SAMPLES[key] || '');
+  };
+})();
+</script>
+{% endblock %}

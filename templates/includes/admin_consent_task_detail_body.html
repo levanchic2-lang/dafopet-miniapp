@@ -1,0 +1,229 @@
+{% block body %}
+
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
+
+{# 始终输出 csrf token，方便页面里所有表单 / 客户端 fetch 使用 #}
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+{% set base_url = (request.url.scheme ~ '://' ~ request.url.netloc) %}
+{% set sign_url = base_url ~ '/consent/' ~ task.token %}
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon"><i data-lucide="pencil-line"></i></span>{{ task.title }}</h1>
+ <p class="ph-sub">
+   #CT{{ '%06d'|format(task.id) }}
+   · 客户 {% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name }}</a>{% else %}—{% endif %}
+   {% if pet %} · 宠物 <b>{{ pet.name }}</b>{% endif %}
+   · 发起时间 {{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '—' }}
+ </p>
+ </div>
+ <div class="ph-actions">
+   {% if task.status == 'pending' %}
+   <form method="post" action="/admin/consent-tasks/{{ task.id }}/cancel" style="margin:0;"
+         onsubmit="return confirm('取消此签署任务？客户将不能再用旧链接签字。')">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <button type="submit" class="btn secondary" style="font-size:.85rem;">取消任务</button>
+   </form>
+   {% endif %}
+   {% if task.status in ('pending', 'cancelled') and request.session.get('admin_role') == 'superadmin' %}
+   <form method="post" action="/admin/consent-tasks/{{ task.id }}/delete" style="margin:0;"
+         onsubmit="return confirm('彻底删除这条任务？记录不可恢复。\n（如果只是想停用，请用'取消任务'。已签的任务不能删。）')">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <button type="submit" class="btn" style="font-size:.85rem;background:#fee2e2;color:#dc2626;border-color:#fca5a5;"><i data-lucide="trash-2"></i> 删除</button>
+   </form>
+   {% endif %}
+   <a href="/admin/customers/{{ task.customer_id }}?tab=docs" class="btn secondary" style="font-size:.85rem;"><i data-lucide="arrow-left"></i> 返回</a>
+ </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:1.2rem;align-items:start;">
+
+ <div>
+   <div class="consent-preview">
+     {{ task.snapshot_html|safe }}
+
+     {% if task.status == 'signed' and task.signature_path %}
+     <div class="sig-block">
+       <div style="font-size:.85rem;color:#666;margin-bottom:.5rem;">签字（客户）：</div>
+       <img class="sig-img" src="/uploads/{{ task.signature_path }}" alt="签字"/>
+       <div style="font-size:.75rem;color:#888;margin-top:.4rem;">
+         签署时间：{{ task.signed_at.strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}
+         {% if task.signed_ip %} · IP {{ task.signed_ip }}{% endif %}
+       </div>
+     </div>
+     {% endif %}
+   </div>
+ </div>
+
+ <aside style="display:flex;flex-direction:column;gap:1rem;">
+   {# 状态卡片 #}
+   <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.2rem;">
+     <div style="font-size:.78rem;color:#6b7280;letter-spacing:1px;margin-bottom:.3rem;">STATUS</div>
+     <div style="font-size:1.4rem;font-weight:700;">
+       {% if task.status == 'pending' %}<i data-lucide="hourglass"></i> 待签署
+       {% elif task.status == 'signed' %}<span style="color:#10b981;"><i data-lucide="check"></i> 已签署</span>
+       {% elif task.status == 'cancelled' %}<span style="color:#9ca3af;"><i data-lucide="x"></i> 已取消</span>
+       {% elif task.status == 'expired' %}<span style="color:#dc2626;">⌛ 已过期</span>
+       {% endif %}
+     </div>
+     {% if task.expires_at %}
+     <div style="font-size:.78rem;color:#6b7280;margin-top:.3rem;">有效期至 {{ task.expires_at }}</div>
+     {% endif %}
+   </div>
+
+   {# 签署链接 + 重发小程序通知 #}
+   {% if task.status == 'pending' %}
+   <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.2rem;">
+     <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem;"><i data-lucide="clipboard-list"></i> 签署链接</div>
+     <div class="copy-bar">
+       <input type="text" id="sign-url" value="{{ sign_url }}" readonly/>
+       <button type="button" class="btn" style="font-size:.78rem;padding:.35rem .7rem;"
+               onclick="copyUrl()">复制</button>
+     </div>
+     <p style="font-size:.78rem;color:#6b7280;margin:.6rem 0 0;">
+       复制链接微信发给客户，或点下方按钮直接给客户发短信。客户点开 <i data-lucide="arrow-right"></i> 签字 <i data-lucide="arrow-right"></i> 自动归档。
+     </p>
+     <form method="post" action="/admin/consent-tasks/{{ task.id }}/resend" style="margin-top:.7rem;">
+       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+       <button type="submit" class="btn secondary" style="width:100%;font-size:.82rem;padding:.4rem;">
+         <i data-lucide="smartphone"></i> 发短信给客户
+       </button>
+     </form>
+   </div>
+   {% endif %}
+
+   {# 打印 / 保存 PDF（仅已签） #}
+   {% if task.status == 'signed' %}
+   <div style="background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:1rem 1.2rem;">
+     <div style="font-size:.85rem;font-weight:600;color:#166534;margin-bottom:.5rem;"><i data-lucide="paperclip"></i> 已签署存档</div>
+     <div style="font-size:.78rem;color:#166534;margin-bottom:.6rem;">
+       签字数据 + 协议正文已加密保存。可一键打印或保存为 PDF 发送给客户/外院。
+     </div>
+     <a href="/admin/consent-tasks/{{ task.id }}/printable" target="_blank"
+        class="btn" style="display:block;width:100%;text-align:center;font-size:.85rem;padding:.5rem;background:#10b981;border-color:#10b981;color:#fff;text-decoration:none;">
+       <i data-lucide="printer"></i> 打印 / 另存为 PDF
+     </a>
+     <div style="font-size:.72rem;color:#166534;margin-top:.5rem;">
+       <i data-lucide="lightbulb"></i> 打开后点浏览器打印 <i data-lucide="arrow-right"></i> 目标选"另存为 PDF"即可下载。
+     </div>
+     {% if doc and doc.pdf_path %}
+     <a href="/uploads/{{ doc.pdf_path }}" target="_blank"
+        style="display:block;text-align:center;font-size:.75rem;color:#15803d;margin-top:.5rem;">
+       （亦可下载服务器侧自动生成的 PDF：{{ '%.1f KB'|format((doc.pdf_size or 0)/1024) }}）
+     </a>
+     {% endif %}
+   </div>
+   {% endif %}
+
+   {# 任务信息 #}
+   <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.2rem;font-size:.85rem;line-height:1.8;">
+     <div style="color:#6b7280;font-size:.78rem;letter-spacing:1px;margin-bottom:.3rem;">DETAILS</div>
+     <div><b>类型</b>　{{ category_zh.get(task.template.category if task.template else '', '—') }}</div>
+     <div><b>发起人</b>{{ task.initiated_by or '—' }}</div>
+     {% if task.notes %}<div><b>备注</b>　{{ task.notes }}</div>{% endif %}
+   </div>
+ </aside>
+</div>
+
+<script>
+function copyUrl(){
+  var u = document.getElementById('sign-url');
+  u.select();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(u.value).then(function(){
+      alert('已复制：' + u.value);
+    });
+  } else {
+    document.execCommand('copy');
+    alert('已复制');
+  }
+}
+</script>
+
+{# ─────────── 身份验证模式状态 ─────────── #}
+<div class="card" style="margin-top:1rem;{% if not sms_mode_enabled %}background:#fffbeb;border-color:#fcd34d;{% else %}background:#ecfdf5;border-color:#86efac;{% endif %}">
+  {% if sms_mode_enabled %}
+  <div style="display:flex;align-items:center;gap:.5rem;">
+    <span style="color:var(--ok-fg);display:inline-flex;align-items:center;"><i data-lucide="shield-check" style="width:1.4rem;height:1.4rem;"></i></span>
+    <div>
+      <div style="font-weight:600;color:#065f46;">短信验证码模式 已启用</div>
+      <div style="font-size:.82rem;color:#047857;margin-top:.2rem;">
+        客户必须收到短信里的 6 位验证码才能签字。法律证据链完整。
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div style="display:flex;align-items:flex-start;gap:.5rem;">
+    <span style="color:var(--warn-fg);display:inline-flex;align-items:center;"><i data-lucide="alert-triangle" style="width:1.4rem;height:1.4rem;"></i></span>
+    <div style="flex:1;">
+      <div style="font-weight:600;color:#92400e;">当前是「手机号匹配」兜底模式</div>
+      <div style="font-size:.82rem;color:#92400e;margin-top:.3rem;line-height:1.6;">
+        客户输入手机号后，后端跟客户档案对比是否一致。<strong>没有发短信</strong>。
+        <br/>
+        升级到「短信验证码」模式：等腾讯云签名 + 模板审核通过后，把模板 ID 写进
+        <code style="background:#fef3c7;padding:0 .3rem;border-radius:3px;">TENCENT_SMS_TMPL_CONSENT</code>
+        env 变量重启服务即可。
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# ─────────── 审计日志（证据链）─────────── #}
+{% if audit_logs %}
+<div class="card" style="margin-top:1rem;">
+  <h3 style="margin:0 0 .55rem;font-size:.95rem;"><i data-lucide="shield"></i> 审计日志（{{ audit_logs|length }} 条）</h3>
+  <p class="sub" style="margin:0 0 .85rem;font-size:.78rem;color:var(--muted);">
+    法律证据链：客户每次访问/验证/签字都被记录。文档与签字的 SHA256 哈希在签后被冻结，
+    任何后续篡改都可比对发现。
+  </p>
+  {% set event_zh = {
+    'link_opened': '<i data-lucide="link"></i> 打开链接',
+    'code_sent': '<i data-lucide="mail"></i> 发送验证码',
+    'code_verify_ok': '<i data-lucide="check-circle-2"></i> 身份验证通过',
+    'code_verify_fail': '<i data-lucide="x-circle"></i> 身份验证失败',
+    'sign_fail': '<i data-lucide="x-circle"></i> 签字失败',
+    'sign_success': '<i data-lucide="pen-tool"></i> 签字成功',
+    'sign_submit': '<i data-lucide="pencil-line"></i> 提交签字',
+  } %}
+  <div class="data-table-wrap" style="font-size:.82rem;">
+    <table class="data-table mobile-card">
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>事件</th>
+          <th>IP</th>
+          <th>手机号</th>
+          <th>哈希 / 备注</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in audit_logs %}
+        <tr>
+          <td data-label="时间" style="white-space:nowrap;color:var(--muted);">
+            {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else '—' }}
+          </td>
+          <td data-label="事件" style="font-weight:600;">
+            {{ event_zh.get(log.event, log.event)|safe }}
+          </td>
+          <td data-label="IP" style="font-family:monospace;font-size:.78rem;color:var(--muted);">
+            {{ log.ip or '—' }}
+          </td>
+          <td data-label="手机号" style="font-family:monospace;font-size:.78rem;">
+            {{ log.phone_masked or '—' }}
+          </td>
+          <td data-label="详情" style="font-size:.76rem;color:var(--muted);word-break:break-all;">
+            {% if log.doc_sha256 %}<div><i data-lucide="file-text"></i> {{ log.doc_sha256[:16] }}...</div>{% endif %}
+            {% if log.sig_sha256 %}<div><i data-lucide="pen-tool"></i> {{ log.sig_sha256[:16] }}...</div>{% endif %}
+            {% if log.user_agent %}<div title="{{ log.user_agent }}">UA: {{ log.user_agent[:30] }}{% if log.user_agent|length > 30 %}…{% endif %}</div>{% endif %}
+            {% if log.note %}<div>{{ log.note[:80] }}{% if log.note|length > 80 %}…{% endif %}</div>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
