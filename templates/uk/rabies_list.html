@@ -1,0 +1,142 @@
+{% extends "uk/_base.html" %}
+{% block title %}狂犬疫苗登记 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .rb-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .rb-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .rb-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .rb-bc .sep { margin:0 8px; color:var(--ink-4); }
+  .rb-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:8px; }
+  .rb-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15; }
+  .rb-head h1 .sub { display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px; }
+  .rb-head h1 .sub b { color:var(--ink); font-style:normal; font-weight:700; font-family:var(--font-numeric); }
+  hr.rb-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .rb-msg-ok { border:0; border-left:3px solid var(--accent-green); background:#f5f9f6; padding:10px 16px; margin-bottom:18px; font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); }
+
+  .rb-filter { border:0.5px solid var(--hair-2); padding:14px 18px; margin-bottom:20px; background:var(--paper); }
+  .rb-filter form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .rb-filter input[type=text], .rb-filter input[type=date], .rb-filter input:not([type]), .rb-filter select {
+    font-family:var(--font-serif); font-size:10pt; color:var(--ink); background:var(--paper);
+    border:0.5px solid var(--hair); padding:6px 10px; outline:0; height:34px; border-radius:0;
+  }
+  .rb-filter input:focus, .rb-filter select:focus { border-color:var(--ink); }
+  .rb-btn { background:var(--ink); color:var(--paper); border:0; padding:8px 18px; cursor:pointer; font-family:var(--font-serif); font-size:10pt; letter-spacing:2px; font-weight:700; text-decoration:none; display:inline-block; }
+  .rb-btn.ghost { background:var(--paper); color:var(--ink-2); border:0.5px solid var(--hair); font-style:italic; font-weight:400; }
+  .rb-btn.ghost:hover { color:var(--ink); border-color:var(--ink-3); background:var(--bg); }
+  .rb-btn.sm { font-size:9pt; padding:4px 10px; letter-spacing:1.5px; }
+
+  .rb-tbl { width:100%; border-collapse:collapse; font-family:var(--font-serif); border:0.5px solid var(--hair-2); }
+  .rb-tbl thead th { font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-weight:400; font-style:italic; border-bottom:0.5px solid var(--ink); padding:10px 12px; text-align:left; background:var(--paper); }
+  .rb-tbl tbody td { font-size:10pt; color:var(--ink-2); border-bottom:0.5px solid var(--hair); padding:12px; vertical-align:middle; }
+  .rb-tbl tbody td.num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums; color:var(--ink); }
+  .rb-tbl tbody tr.warn td { background:#fbfaf6; }
+  .rb-tbl tbody tr:hover td { background:var(--bg); }
+  .rb-tbl .name { color:var(--ink); font-weight:700; }
+  .rb-tbl .dim { color:var(--ink-3); font-style:italic; font-size:9pt; }
+  .rb-tbl .cert { font-family:var(--font-numeric); color:var(--accent-green); font-weight:700; }
+  .rb-tbl a.lnk { color:var(--ink); border-bottom:0.5px solid var(--hair-2); text-decoration:none; }
+
+  .rb-pill { display:inline-block; font-family:var(--font-serif); font-style:italic; font-size:9pt; padding:2px 10px; border:0.5px solid var(--hair); letter-spacing:1.5px; color:var(--ink-2); }
+  .rb-pill.warn { color:var(--accent-amber); border-color:var(--accent-amber); }
+  .rb-pill.ok { color:var(--accent-green); border-color:var(--accent-green); }
+  .rb-pill.ink { color:var(--ink); border-color:var(--ink-3); }
+  .rb-pill.gray { color:var(--ink-3); border-color:var(--hair); }
+  .rb-empty { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:11pt; padding:48px 20px; text-align:center; border:0.5px solid var(--hair-2); }
+  .rb-pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:20px 0; font-family:var(--font-serif); font-size:10pt; }
+  .rb-pager .info { color:var(--ink-3); font-style:italic; font-family:var(--font-numeric); }
+</style>
+
+<div class="rb-bc"><a href="/admin">后台</a><span class="sep">/</span><span>狂犬疫苗登记</span></div>
+
+{% if request.query_params.get('msg') %}<div class="rb-msg-ok">{{ request.query_params.get('msg') }}</div>{% endif %}
+
+<div class="rb-head">
+  <div>
+    <h1>狂&nbsp;犬&nbsp;疫&nbsp;苗&nbsp;登&nbsp;记
+      <span class="sub">共 <b>{{ total }}</b> 条登记记录 · 主人 / 医护双方电子签名</span>
+    </h1>
+  </div>
+  <div>
+    <a href="/admin/rabies/export/excel?status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}" class="rb-btn ghost">导&nbsp;出&nbsp;Excel</a>
+  </div>
+</div>
+
+<hr class="rb-rule-double"/>
+
+<div class="rb-filter">
+  <form method="get">
+    <input name="q" value="{{ q }}" placeholder="搜主人 / 手机 / 动物 / 证号" style="flex:1; min-width:200px;"/>
+    <select name="status" style="min-width:140px;">
+      <option value="">全部状态</option>
+      {% for k, zh in status_zh.items() %}<option value="{{ k }}" {% if status == k %}selected{% endif %}>{{ zh }}</option>{% endfor %}
+    </select>
+    <input type="date" name="date_from" value="{{ date_from }}" style="width:150px;"/>
+    <span style="font-family:var(--font-serif);font-style:italic;color:var(--ink-3);font-size:9.5pt;">至</span>
+    <input type="date" name="date_to" value="{{ date_to }}" style="width:150px;"/>
+    <button type="submit" class="rb-btn ghost">筛&nbsp;选</button>
+    {% if q or status or date_from or date_to %}<a href="/admin/rabies" class="rb-btn ghost">清&nbsp;除</a>{% endif %}
+  </form>
+</div>
+
+{% if records %}
+<table class="rb-tbl">
+  <thead>
+    <tr>
+      <th style="width:60px;">#</th>
+      <th>主人</th>
+      <th style="width:130px;">手机号</th>
+      <th>动物</th>
+      <th>免疫证号</th>
+      <th style="width:100px;">门店</th>
+      <th style="width:120px;">状态</th>
+      <th style="width:130px;">登记时间</th>
+      <th style="text-align:right; width:90px;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for rec in records %}
+    <tr class="{% if rec.status == 'staff_pending' %}warn{% endif %}">
+      <td class="dim num">#{{ rec.id }}</td>
+      <td>
+        <span class="name">
+          {% if rec.customer_id %}<a href="/admin/customers/{{ rec.customer_id }}" class="lnk">{{ rec.owner_name }}</a>
+          {% else %}{{ rec.owner_name }}{% endif %}
+        </span>
+        {% if rec.owner_name | is_invalid_name %}<a href="/admin/rabies/{{ rec.id }}" class="rb-pill warn" style="margin-left:6px; text-decoration:none;">姓名待补全</a>{% endif %}
+      </td>
+      <td class="num">{{ rec.owner_phone }}</td>
+      <td>
+        {% if rec.animal_name %}{{ rec.animal_name }}{% endif %}
+        {% if rec.animal_breed %}<span class="dim"> · {{ rec.animal_breed }}</span>{% endif %}
+      </td>
+      <td>
+        {% if rec.cert_no %}<span class="cert">{{ rec.cert_no }}</span>{% else %}<span class="dim">待录入</span>{% endif %}
+      </td>
+      <td class="dim">{{ rec.clinic_store or '—' }}</td>
+      <td>
+        {% if rec.status == 'staff_pending' %}<span class="rb-pill warn">待医护填写</span>
+        {% elif rec.status == 'owner_pending' %}<span class="rb-pill warn">待主人签字</span>
+        {% elif rec.status == 'completed' and not rec.cert_no %}<span class="rb-pill ink">待录证号</span>
+        {% elif rec.status == 'completed' %}<span class="rb-pill ok">已完成</span>
+        {% else %}<span class="rb-pill gray">{{ status_zh.get(rec.status, rec.status) }}</span>{% endif %}
+      </td>
+      <td class="dim num">{{ rec.created_at.strftime('%m-%d %H:%M') if rec.created_at else '—' }}</td>
+      <td style="text-align:right;"><a href="/admin/rabies/{{ rec.id }}" class="rb-btn ghost sm">详&nbsp;情</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if total_pages > 1 %}
+{% set qs = '&q='~q~'&status='~status~'&date_from='~date_from~'&date_to='~date_to %}
+<div class="rb-pager">
+  {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" class="rb-btn ghost sm">‹ 上&nbsp;一&nbsp;页</a>{% endif %}
+  <span class="info">第 {{ page }} / {{ total_pages }} 页</span>
+  {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}" class="rb-btn ghost sm">下&nbsp;一&nbsp;页 ›</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="rb-empty">暂无狂犬疫苗登记记录</div>
+{% endif %}
+{% endblock %}

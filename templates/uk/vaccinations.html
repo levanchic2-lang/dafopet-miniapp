@@ -1,0 +1,147 @@
+{% extends "uk/_base.html" %}
+{% block title %}疫苗管理 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .vc-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .vc-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .vc-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .vc-bc .sep { margin:0 8px; color:var(--ink-4); }
+  .vc-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:8px; }
+  .vc-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15; }
+  .vc-head h1 .sub { display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px; }
+  hr.vc-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .vc-msg-ok { border:0; border-left:3px solid var(--accent-green); background:#f5f9f6; padding:10px 16px; margin-bottom:18px; font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); }
+
+  .vc-filter { border:0.5px solid var(--hair-2); padding:14px 18px; margin-bottom:14px; background:var(--paper); }
+  .vc-filter form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .vc-filter input[type=text], .vc-filter input:not([type]), .vc-filter select {
+    font-family:var(--font-serif); font-size:10pt; color:var(--ink); background:var(--paper);
+    border:0.5px solid var(--hair); padding:6px 10px; outline:0; height:34px; border-radius:0;
+  }
+  .vc-filter input:focus, .vc-filter select:focus { border-color:var(--ink); }
+  .vc-btn { background:var(--ink); color:var(--paper); border:0; padding:8px 18px; cursor:pointer; font-family:var(--font-serif); font-size:10pt; letter-spacing:2px; font-weight:700; text-decoration:none; display:inline-block; }
+  .vc-btn:hover { background:#000; }
+  .vc-btn.ghost { background:var(--paper); color:var(--ink-2); border:0.5px solid var(--hair); font-style:italic; font-weight:400; }
+  .vc-btn.ghost:hover { color:var(--ink); border-color:var(--ink-3); background:var(--bg); }
+  .vc-btn.sm { font-size:9pt; padding:4px 10px; letter-spacing:1.5px; }
+
+  .vc-tabs { display:flex; gap:0; border-bottom:0.5px solid var(--hair); margin-bottom:20px; }
+  .vc-tab { font-family:var(--font-serif); font-size:11pt; padding:10px 22px; color:var(--ink-3); text-decoration:none; border-bottom:1px solid transparent; margin-bottom:-1px; letter-spacing:1.5px; }
+  .vc-tab:hover { color:var(--ink); }
+  .vc-tab.active { color:var(--ink); border-bottom-color:var(--ink); font-weight:700; }
+
+  .vc-tbl { width:100%; border-collapse:collapse; font-family:var(--font-serif); border:0.5px solid var(--hair-2); }
+  .vc-tbl thead th { font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-weight:400; font-style:italic; border-bottom:0.5px solid var(--ink); padding:10px 12px; text-align:left; background:var(--paper); }
+  .vc-tbl tbody td { font-size:10pt; color:var(--ink-2); border-bottom:0.5px solid var(--hair); padding:12px; vertical-align:middle; }
+  .vc-tbl tbody td.num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums; color:var(--ink); }
+  .vc-tbl tbody tr.warn td { background:#fbfaf6; }
+  .vc-tbl tbody tr.err td { background:#fcf5f4; }
+  .vc-tbl tbody tr:hover td { background:var(--bg); }
+  .vc-tbl .name { color:var(--ink); font-weight:700; }
+  .vc-tbl .dim { color:var(--ink-3); font-style:italic; font-size:9pt; }
+
+  .vc-pill { display:inline-block; font-family:var(--font-serif); font-style:italic; font-size:9pt; padding:2px 10px; border:0.5px solid var(--hair); letter-spacing:1.5px; color:var(--ink-2); }
+  .vc-pill.warn { color:var(--accent-amber); border-color:var(--accent-amber); }
+  .vc-pill.ok { color:var(--accent-green); border-color:var(--accent-green); }
+  .vc-pill.err { color:var(--accent-red); border-color:var(--accent-red); }
+  .vc-pill.gray { color:var(--ink-3); border-color:var(--hair); }
+  .vc-pill.ink { color:var(--ink); border-color:var(--ink-3); background:var(--bg); }
+  .vc-empty { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:11pt; padding:48px 20px; text-align:center; border:0.5px solid var(--hair-2); }
+</style>
+
+<div class="vc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>疫苗管理</span></div>
+
+{% if msg %}<div class="vc-msg-ok">{{ msg }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="vc-msg-ok">{{ request.query_params.get('msg') }}</div>{% endif %}
+
+<div class="vc-head">
+  <div>
+    <h1>疫&nbsp;苗&nbsp;管&nbsp;理
+      <span class="sub">全院宠物疫苗接种记录 · 自动到期提醒</span>
+    </h1>
+  </div>
+  <div style="display:flex; gap:10px;">
+    <form method="post" action="/admin/vaccinations/send-reminders" onsubmit="return confirm('将向 7 天内到期且尚未通知的主人发送微信提醒，继续？')" style="margin:0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="vc-btn ghost">发&nbsp;送&nbsp;到&nbsp;期&nbsp;提&nbsp;醒</button>
+    </form>
+    <a href="/admin/vaccinations/create" class="vc-btn">＋ 新&nbsp;建&nbsp;接&nbsp;种&nbsp;记&nbsp;录</a>
+  </div>
+</div>
+
+<hr class="vc-rule-double"/>
+
+<div class="vc-filter">
+  <form method="get">
+    <input name="q" value="{{ q }}" placeholder="搜宠物 / 主人 / 疫苗名" style="flex:1; min-width:240px;"/>
+    <select name="vaccine_type" style="min-width:160px;">
+      <option value="">全部疫苗类型</option>
+      {% for val, label in vacc_type_options.items() %}<option value="{{ val }}" {% if vaccine_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      {% for val, label in vacc_type_zh.items() if val not in vacc_type_options %}<option value="{{ val }}" {% if vaccine_type == val %}selected{% endif %}>{{ label }}（历史）</option>{% endfor %}
+    </select>
+    <input type="hidden" name="filter" value="{{ filter }}"/>
+    <button type="submit" class="vc-btn ghost">搜&nbsp;索</button>
+    {% if q or vaccine_type %}<a href="/admin/vaccinations?filter={{ filter }}" class="vc-btn ghost">清&nbsp;除</a>{% endif %}
+  </form>
+</div>
+
+<div class="vc-tabs">
+  {% for val, label in [('all','全部'),('soon','7 天内到期'),('overdue','已逾期')] %}
+  <a href="/admin/vaccinations?filter={{ val }}{% if q %}&q={{ q }}{% endif %}{% if vaccine_type %}&vaccine_type={{ vaccine_type }}{% endif %}" class="vc-tab {% if filter == val %}active{% endif %}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+{% if records %}
+<table class="vc-tbl">
+  <thead>
+    <tr>
+      <th>宠物</th>
+      <th>主人</th>
+      <th>疫苗</th>
+      <th style="width:90px;">针次</th>
+      <th style="width:120px;">接种日期</th>
+      <th style="width:150px;">下次到期</th>
+      <th style="width:90px;">收费</th>
+      <th style="text-align:right; width:90px;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for vacc in records %}
+    {% set is_overdue = vacc.next_due_date and vacc.next_due_date < today %}
+    {% set is_soon = vacc.next_due_date and vacc.next_due_date >= today and vacc.next_due_date <= soon %}
+    <tr class="{% if is_overdue %}err{% elif is_soon %}warn{% endif %}">
+      <td class="name">{% if vacc.pet %}{{ vacc.pet.name or '未命名' }}{% else %}—{% endif %}</td>
+      <td>{% if vacc.customer %}{{ vacc.customer.name or '—' }}{% else %}—{% endif %}</td>
+      <td>
+        <span class="vc-pill ink">{{ vacc_type_zh.get(vacc.vaccine_type, vacc.vaccine_type) }}</span>
+        {% if vacc.vaccine_name %}<span class="dim" style="margin-left:6px;">{{ vacc.vaccine_name }}</span>{% endif %}
+      </td>
+      <td class="dim">{{ dose_zh.get(vacc.dose_number) or ('第' ~ vacc.dose_number ~ '针') }}</td>
+      <td class="num">{{ vacc.vaccinated_date or '—' }}</td>
+      <td class="num">
+        {% if vacc.next_due_date %}
+          {% if is_overdue %}<span class="vc-pill err">{{ vacc.next_due_date }}</span>
+          {% elif is_soon %}<span class="vc-pill warn">{{ vacc.next_due_date }}</span>
+          {% else %}{{ vacc.next_due_date }}{% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        {% if vacc.is_free %}<span class="vc-pill gray">免费</span>
+        {% elif vacc.invoice_id %}<span class="vc-pill ok">已开单</span>
+        {% else %}<span class="vc-pill warn">待收费</span>{% endif %}
+      </td>
+      <td style="text-align:right;">
+        <a href="/admin/vaccinations/{{ vacc.id }}" class="vc-btn ghost sm">编&nbsp;辑</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="vc-empty">
+  {% if filter == 'soon' %}暂无 7 天内到期的接种记录
+  {% elif filter == 'overdue' %}暂无逾期未接种记录
+  {% else %}暂无疫苗接种记录 · 可在右上 ＋新建接种记录{% endif %}
+</div>
+{% endif %}
+{% endblock %}

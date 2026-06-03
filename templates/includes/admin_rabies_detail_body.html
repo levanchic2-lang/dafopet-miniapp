@@ -1,0 +1,308 @@
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+{% if err %}<div class="msg err"><i data-lucide="alert-triangle"></i> {{ err }}</div>{% endif %}
+{% if owner_name_invalid %}
+<div class="card" style="background:#fef3c7;border-color:#fbbf24;color:#92400e;margin-bottom:1rem;padding:.75rem 1rem;display:flex;gap:.6rem;align-items:flex-start;">
+  <i data-lucide="alert-triangle" style="flex-shrink:0;margin-top:2px;color:#d97706;"></i>
+  <div style="flex:1;font-size:.88rem;line-height:1.55;">
+    <b>姓名待补全</b>：当前主人姓名为「{{ rec.owner_name }}」，疑似从老系统导入的占位称谓（X小姐 / X先生 / X女士）。
+    请在下方「主人填写信息」表单里改成真实全名后保存，系统会自动同步到客户档案。
+  </div>
+</div>
+{% endif %}
+
+{% if locked %}
+<div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.7rem;">
+  <div style="font-size:1.4rem;">🔒</div>
+  <div style="flex:1;">
+    <div style="font-weight:600;color:#78350f;">此狂犬登记已锁定（{{ lock_reason }}）</div>
+    <div style="font-size:.82rem;color:#7c2d12;margin-top:.15rem;">
+      <b>主人与宠物信息</b>不可修改（合规要求）。<b>医护填写部分</b>（厂家/批号/日期/医护签名）<u>仍可补录与更正</u>。
+    </div>
+  </div>
+</div>
+<style>
+  /* 锁定的是主人/宠物档案那张表；医护那张表仍可编辑 */
+  .locked-form input, .locked-form select, .locked-form textarea, .locked-form button[type="submit"] {
+    pointer-events: none !important;
+    background-color: #f8fafc !important;
+    color: #64748b !important;
+  }
+  .locked-form button[type="submit"] { display: none !important; }
+</style>
+{% endif %}
+
+<div class="page-head">
+ <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+ <a href="/admin/rabies" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回列表</a>
+ <div>
+ <h1><span class="ph-icon"><i data-lucide="dog"></i></span>狂犬疫苗登记 #{{ rec.id }}
+ {% if rec.status == 'completed' and rec.cert_no %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已完成</span>
+ {% elif rec.status == 'completed' %}<span class="pill pill-info" style="margin-left:0.5rem;">待录证号</span>
+ {% elif rec.status == 'staff_pending' %}<span class="pill pill-warn" style="margin-left:0.5rem;">待医护填写</span>
+ {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待主人签字</span>{% endif %}
+ </h1>
+ <p class="ph-sub">
+   {% if rec.customer_id %}
+     <a href="/admin/customers/{{ rec.customer_id }}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{{ rec.owner_name }} <i data-lucide="external-link" style="width:12px;height:12px;vertical-align:-2px;"></i></a>
+   {% else %}
+     {{ rec.owner_name }}
+   {% endif %}
+   · {{ rec.owner_phone }} · 登记于 {{ rec.created_at.strftime('%Y-%m-%d %H:%M') if rec.created_at else '—' }}
+   {% if rec.pet_id %}
+     · <a href="/admin/customers/{{ rec.customer_id }}#pet-{{ rec.pet_id }}" style="color:#1d4ed8;text-decoration:none;">查看宠物档案 <i data-lucide="paw-print" style="width:12px;height:12px;vertical-align:-2px;"></i></a>
+   {% endif %}
+ </p>
+ </div>
+ </div>
+</div>
+
+<!-- 流程进度 -->
+<div class="card step-progress-card" style="margin-bottom:1rem;">
+ <div class="step-progress-row" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+ <span class="step-badge step-done">① 主人填写 <i data-lucide="check"></i></span>
+ <span class="step-arrow" style="color:var(--muted);"><i data-lucide="arrow-right"></i></span>
+ <span class="step-badge {% if rec.status == 'completed' %}step-done{% else %}step-pending{% endif %}">
+ ② 医护填写{% if rec.status == 'completed' %} <i data-lucide="check"></i>{% endif %}
+ </span>
+ <span class="step-arrow" style="color:var(--muted);"><i data-lucide="arrow-right"></i></span>
+ <span class="step-badge {% if rec.status == 'completed' %}step-pending{% else %}step-wait{% endif %}">③ 注射疫苗</span>
+ <span class="step-arrow" style="color:var(--muted);"><i data-lucide="arrow-right"></i></span>
+ <span class="step-badge {% if rec.cert_no %}step-done{% else %}step-wait{% endif %}">
+ ④ 录入证号{% if rec.cert_no %} <i data-lucide="check"></i>{% endif %}
+ </span>
+ </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 360px;gap:1rem;align-items:start;">
+
+ <!-- 左：信息 + 医护填写 -->
+ <div>
+
+ <!-- 主人提交信息 -->
+ <div class="card" style="margin-bottom:1rem;">
+ <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 0.85rem;">
+   <h3 style="margin:0;font-size:0.95rem;">主人填写信息</h3>
+   <span style="font-size:.75rem;color:var(--muted);">字段可编辑，保存后同步客户/宠物档案</span>
+ </div>
+
+ <form method="post" action="/admin/rabies/{{ rec.id }}/edit-owner" class="{% if locked %}locked-form{% endif %}" onsubmit="this.querySelector('button[type=submit]').textContent='保存中…'">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 1rem;">
+ <div>
+ <div style="font-size:0.78rem;font-weight:600;color:var(--muted);margin-bottom:0.5rem;">动物主人</div>
+ <label style="font-size:.78rem;color:var(--muted);">姓名 {% if owner_name_invalid %}<span style="color:#d97706;">（待补全）</span>{% endif %}</label>
+ <input type="text" name="owner_name" value="{{ rec.owner_name }}" required maxlength="120"
+        placeholder="真实全名（不可仅填 X先生 / X女士）"
+        style="width:100%;{% if owner_name_invalid %}border-color:#f59e0b;background:#fffbeb;{% endif %}"/>
+ <label style="font-size:.78rem;color:var(--muted);margin-top:.4rem;">手机号</label>
+ <input type="tel" name="owner_phone" value="{{ rec.owner_phone }}" maxlength="40" style="width:100%;"/>
+ <label style="font-size:.78rem;color:var(--muted);margin-top:.4rem;">地址</label>
+ <input type="text" name="owner_address" value="{{ rec.owner_address or '' }}" maxlength="500" style="width:100%;"/>
+ </div>
+ <div>
+ <div style="font-size:0.78rem;font-weight:600;color:var(--muted);margin-bottom:0.5rem;">动物基本情况</div>
+ <label style="font-size:.78rem;color:var(--muted);">动物名称</label>
+ <input type="text" name="animal_name" value="{{ rec.animal_name or '' }}" maxlength="80" style="width:100%;"/>
+ <label style="font-size:.78rem;color:var(--muted);margin-top:.4rem;">品种</label>
+ <input type="text" name="animal_breed" value="{{ rec.animal_breed or '' }}" maxlength="80" style="width:100%;"/>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.4rem;">
+   <div>
+     <label style="font-size:.78rem;color:var(--muted);">出生年月/年龄</label>
+     <input type="text" name="animal_dob" value="{{ rec.animal_dob or '' }}" maxlength="40" style="width:100%;"/>
+   </div>
+   <div>
+     <label style="font-size:.78rem;color:var(--muted);">性别</label>
+     <select name="animal_gender" style="width:100%;">
+       <option value="" {% if not rec.animal_gender %}selected{% endif %}>不详</option>
+       <option value="male" {% if rec.animal_gender == 'male' %}selected{% endif %}>公（雄）</option>
+       <option value="female" {% if rec.animal_gender == 'female' %}selected{% endif %}>母（雌）</option>
+     </select>
+   </div>
+ </div>
+ <label style="font-size:.78rem;color:var(--muted);margin-top:.4rem;">毛色</label>
+ <input type="text" name="animal_color" value="{{ rec.animal_color or '' }}" maxlength="80" style="width:100%;"/>
+ </div>
+ </div>
+ <div style="margin-top:.85rem;display:flex;justify-content:flex-end;">
+   <button type="submit" class="secondary" style="font-size:.85rem;padding:.4rem 1rem;"><i data-lucide="save"></i> 保存修改</button>
+ </div>
+ </form>
+
+ <!-- 主人签名 -->
+ <div style="margin-top:0.85rem;">
+ <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem;">动物主人签名</div>
+ {% if rec.owner_signature_path %}
+ <div style="border:1px solid var(--border);border-radius:8px;padding:0.5rem;background:#fafafa;display:inline-block;">
+ <img src="/admin/rabies/{{ rec.id }}/signature/owner" style="max-height:80px;display:block;" alt="主人签名"/>
+ </div>
+ <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem;">
+ 签名时间：{{ rec.owner_signed_at.strftime('%Y-%m-%d %H:%M') if rec.owner_signed_at else '—' }}
+ </div>
+ {% else %}
+ <span style="color:var(--muted);font-size:0.88rem;">暂无签名</span>
+ {% endif %}
+ </div>
+ </div>
+
+ <!-- 医护填写表单 -->
+ <div class="card">
+ <h3 style="margin:0 0 0.85rem;font-size:0.95rem;">
+ {% if rec.status == 'completed' %}医护填写信息（已完成，可修改）{% else %}② 医护填写疫苗信息{% endif %}
+ </h3>
+ <form method="post" action="/admin/rabies/{{ rec.id }}/fill">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.6rem 0.75rem;">
+ <div>
+ <label>疫苗厂家 <span style="color:#d97706;">*</span></label>
+ <input name="vaccine_manufacturer" value="{{ rec.vaccine_manufacturer }}" required/>
+ </div>
+ <div>
+ <label>批号</label>
+ <input name="vaccine_batch_no" value="{{ rec.vaccine_batch_no }}"/>
+ </div>
+ <div>
+ <label>免疫时间</label>
+ <input type="date" name="vaccine_date" value="{{ rec.vaccine_date or today }}"/>
+ </div>
+ <div>
+ <label>免疫人员（医护）</label>
+ <input name="staff_name" value="{{ rec.staff_name }}" list="vet-list"/>
+ <datalist id="vet-list">{% for n in vet_names %}<option value="{{ n }}">{% endfor %}</datalist>
+ </div>
+ </div>
+
+ <!-- 医护签名 -->
+ <div style="margin-top:0.85rem;">
+ <label style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:0.4rem;">
+ 免疫人员签名
+ {% if rec.staff_signature_path %}<span style="font-weight:400;color:#15803d;font-size:0.78rem;">（已有签名，重签将覆盖）</span>{% endif %}
+ </label>
+ {% if rec.staff_signature_path %}
+ <div style="border:1px solid var(--border);border-radius:8px;padding:0.5rem;background:#fafafa;display:inline-block;margin-bottom:0.5rem;">
+ <img src="/admin/rabies/{{ rec.id }}/signature/staff" style="max-height:60px;display:block;" alt="医护签名"/>
+ </div><br/>
+ {% endif %}
+ <input type="hidden" name="staff_signature" id="staff_signature" value=""/>
+ <div class="sig-wrap staff-sig-box" style="max-width:33%;">
+ <canvas id="staff-sig-canvas" height="200"></canvas>
+ <div class="sig-toolbar"><button type="button" onclick="clearStaffSig()">清除重签</button></div>
+ </div>
+ <div style="font-size:0.76rem;color:var(--muted);margin-top:0.25rem;">
+ {% if rec.staff_signature_path %}已有签名，如不需修改可留空。{% else %}请在上方签名。{% endif %}
+ </div>
+ </div>
+
+ <div style="margin-top:1rem;">
+ <button type="submit" class="btn" id="fill-submit-btn">保存医护信息</button>
+ </div>
+ </form>
+ </div>
+
+ </div>
+
+ <!-- 右：操作面板 -->
+ <div style="display:flex;flex-direction:column;gap:1rem;">
+
+ <!-- 录入免疫证号（录入即锁定整条记录） -->
+ <div class="card">
+ <h3 style="margin:0 0 0.75rem;font-size:0.95rem;">④ 录入免疫证号</h3>
+ {% if rec.cert_no %}
+ <div style="font-size:1.1rem;font-weight:700;color:#166534;margin-bottom:0.5rem;">{{ rec.cert_no }}</div>
+ <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:.5rem .7rem;font-size:.78rem;color:#991b1b;line-height:1.5;">
+   🔒 证号已录入，整条记录已锁定不可修改。<br/>
+   如需更正请联系超管「作废重开」。
+ </div>
+ {% else %}
+ <form method="post" action="/admin/rabies/{{ rec.id }}/cert-no" onsubmit="return confirm('⚠ 录入免疫证号后整条记录将被锁定不可改。确认录入？')">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <input name="cert_no" value="" placeholder="请输入官方证号" style="width:100%;margin-bottom:0.5rem;"/>
+ <button type="submit" class="btn" style="width:100%;">录入证号并锁定</button>
+ </form>
+ <p style="font-size:0.76rem;color:var(--muted);margin-top:0.5rem;">
+ 注射疫苗后，在官方系统录入数据，获得免疫证号再填写此处。<br/>
+ <b style="color:#dc2626;">⚠ 录入后整条记录将锁定不可修改</b>
+ </p>
+ {% endif %}
+ </div>
+
+ <!-- 关联档案 -->
+ <div class="card">
+ <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:var(--muted);">关联档案</h3>
+ {% if rec.customer_id %}
+ <a href="/admin/customers/{{ rec.customer_id }}" class="btn secondary" style="width:100%;display:block;text-align:center;margin-bottom:0.5rem;font-size:0.85rem;">
+ <i data-lucide="user"></i> 查看客户档案
+ </a>
+ {% endif %}
+ {% if rec.pet_id %}
+ <a href="/admin/pets/{{ rec.pet_id }}" class="btn secondary" style="width:100%;display:block;text-align:center;font-size:0.85rem;">
+ <i data-lucide="paw-print"></i> 查看宠物档案
+ </a>
+ {% endif %}
+ {% if not rec.customer_id and not rec.pet_id %}
+ <p style="font-size:0.82rem;color:var(--muted);">暂无关联档案</p>
+ {% endif %}
+ </div>
+
+ <!-- 导出单条 -->
+ <div class="card">
+ <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:var(--muted);">导出</h3>
+ <a href="/admin/rabies/export/excel?q={{ rec.owner_phone }}"
+ class="btn secondary" style="width:100%;display:block;text-align:center;font-size:0.85rem;">
+ <i data-lucide="arrow-down"></i> 导出此记录 Excel
+ </a>
+ </div>
+
+ <!-- 删除 -->
+ <div class="card">
+ <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:var(--muted);">危险操作</h3>
+ <form method="post" action="/admin/rabies/{{ rec.id }}/delete"
+ onsubmit="return confirm('确认删除登记 #{{ rec.id }}（{{ rec.owner_name }}）？此操作不可恢复。')">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <button type="submit" class="btn"
+ style="width:100%;background:#dc2626;border-color:#dc2626;font-size:0.85rem;">
+ 删除此记录
+ </button>
+ </form>
+ </div>
+
+ </div>
+</div>
+
+<script>
+const staffCanvas = document.getElementById('staff-sig-canvas');
+const staffCtx = staffCanvas.getContext('2d');
+let staffDrawing = false, staffHasSig = false;
+
+function resizeStaffCanvas() {
+ const w = staffCanvas.parentElement.clientWidth;
+ staffCanvas.width = w;
+ staffCanvas.height = 200;
+ staffCtx.strokeStyle = '#1a1a1a';
+ staffCtx.lineWidth = 2.5;
+ staffCtx.lineCap = 'round';
+ staffCtx.lineJoin = 'round';
+}
+resizeStaffCanvas();
+window.addEventListener('resize', resizeStaffCanvas);
+
+function getPos(e, cv) {
+ const r = cv.getBoundingClientRect();
+ const src = e.touches ? e.touches[0] : e;
+ return { x: src.clientX - r.left, y: src.clientY - r.top };
+}
+staffCanvas.addEventListener('mousedown', e => { staffDrawing=true; const p=getPos(e,staffCanvas); staffCtx.beginPath(); staffCtx.moveTo(p.x,p.y); });
+staffCanvas.addEventListener('mousemove', e => { if(!staffDrawing)return; const p=getPos(e,staffCanvas); staffCtx.lineTo(p.x,p.y); staffCtx.stroke(); staffHasSig=true; });
+staffCanvas.addEventListener('mouseup', ()=>staffDrawing=false);
+staffCanvas.addEventListener('mouseleave', ()=>staffDrawing=false);
+staffCanvas.addEventListener('touchstart', e=>{e.preventDefault();staffDrawing=true;const p=getPos(e,staffCanvas);staffCtx.beginPath();staffCtx.moveTo(p.x,p.y);},{passive:false});
+staffCanvas.addEventListener('touchmove', e=>{e.preventDefault();if(!staffDrawing)return;const p=getPos(e,staffCanvas);staffCtx.lineTo(p.x,p.y);staffCtx.stroke();staffHasSig=true;},{passive:false});
+staffCanvas.addEventListener('touchend', ()=>staffDrawing=false);
+
+function clearStaffSig() { staffCtx.clearRect(0,0,staffCanvas.width,staffCanvas.height); staffHasSig=false; }
+
+document.getElementById('fill-submit-btn').closest('form').addEventListener('submit', function(e) {
+ if (staffHasSig) {
+ document.getElementById('staff_signature').value = staffCanvas.toDataURL('image/png');
+ }
+});
+</script>

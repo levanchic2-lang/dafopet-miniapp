@@ -1,0 +1,214 @@
+{% extends "uk/_base.html" %}
+{% block title %}发药台 · 大风动物医院{% endblock %}
+
+{% block body %}
+<style>
+  .dp-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .dp-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .dp-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .dp-bc .sep { margin:0 8px; color:var(--ink-4); }
+  .dp-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:8px; }
+  .dp-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15; }
+  .dp-head h1 .sub { display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px; }
+  .dp-head h1 .sub b { color:var(--ink); font-style:normal; font-weight:700; font-family:var(--font-numeric); }
+  .dp-head h1 .sub .sep { color:var(--ink-4); margin:0 8px; }
+  hr.dp-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .dp-msg-ok { border:0; border-left:3px solid var(--accent-green); background:#f5f9f6; padding:10px 16px; margin-bottom:18px; font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); }
+  .dp-msg-err { border:0; border-left:3px solid var(--accent-red); background:#fcf5f4; padding:10px 16px; margin-bottom:18px; font-family:var(--font-serif); font-size:10pt; color:var(--accent-red); }
+
+  .dp-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:0; border:0.5px solid var(--hair-2); margin-bottom:24px; }
+  .dp-stat { padding:18px 22px; border-right:0.5px solid var(--hair); }
+  .dp-stat:last-child { border-right:0; }
+  .dp-stat .lab { font-family:var(--font-serif); font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); font-style:italic; margin-bottom:8px; }
+  .dp-stat .num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums; font-size:24pt; font-weight:700; color:var(--ink); }
+  .dp-stat.warn .num { color:var(--accent-amber); }
+  .dp-stat.ok .num { color:var(--accent-green); }
+
+  .dp-filter { border:0.5px solid var(--hair-2); padding:14px 18px; margin-bottom:20px; background:var(--paper); }
+  .dp-filter .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .dp-filter .row + .row { margin-top:10px; padding-top:10px; border-top:0.5px solid var(--hair); }
+  .dp-filter input[type=text], .dp-filter input[type=date], .dp-filter input:not([type]), .dp-filter select {
+    font-family:var(--font-serif); font-size:10pt; color:var(--ink); background:var(--paper);
+    border:0.5px solid var(--hair); padding:6px 10px; outline:0; height:34px; box-sizing:border-box; border-radius:0;
+  }
+  .dp-filter input:focus, .dp-filter select:focus { border-color:var(--ink); }
+  .dp-chip { font-family:var(--font-serif); font-size:9.5pt; padding:5px 12px; text-decoration:none; border:0.5px solid var(--hair); color:var(--ink-2); font-style:italic; }
+  .dp-chip:hover { color:var(--ink); border-color:var(--ink-3); }
+  .dp-chip.active { background:var(--ink); color:var(--paper); border-color:var(--ink); font-style:normal; }
+  .dp-btn { background:var(--ink); color:var(--paper); border:0; padding:6px 16px; cursor:pointer; font-family:var(--font-serif); font-size:10pt; letter-spacing:2px; font-weight:700; }
+  .dp-btn.ghost { background:var(--paper); color:var(--ink-2); border:0.5px solid var(--hair); font-style:italic; font-weight:400; }
+  .dp-btn.ghost:hover { color:var(--ink); border-color:var(--ink-3); background:var(--bg); }
+  .dp-btn.sm { font-size:9pt; padding:4px 10px; letter-spacing:1.5px; }
+
+  .dp-batch { background:var(--bg); border:0.5px solid var(--hair); padding:10px 16px; margin-bottom:14px; display:flex; align-items:center; gap:14px; font-family:var(--font-serif); font-size:10pt; }
+  .dp-batch label { display:flex; align-items:center; gap:6px; cursor:pointer; color:var(--ink-2); }
+  .dp-batch .cnt { margin-left:auto; font-style:italic; color:var(--ink-3); font-family:var(--font-numeric); font-size:9.5pt; }
+
+  .dp-tbl { width:100%; border-collapse:collapse; font-family:var(--font-serif); border:0.5px solid var(--hair-2); }
+  .dp-tbl thead th { font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-weight:400; font-style:italic; border-bottom:0.5px solid var(--ink); padding:10px 12px; text-align:left; background:var(--paper); }
+  .dp-tbl tbody td { font-size:10pt; color:var(--ink-2); border-bottom:0.5px solid var(--hair); padding:12px; vertical-align:middle; }
+  .dp-tbl tbody td.num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums; color:var(--ink); }
+  .dp-tbl tbody tr:hover td { background:var(--bg); }
+  .dp-tbl .name { color:var(--ink); font-weight:700; }
+  .dp-tbl .dim { color:var(--ink-3); font-style:italic; font-size:9pt; }
+
+  .dp-pill { display:inline-block; font-family:var(--font-serif); font-style:italic; font-size:9pt; padding:2px 10px; border:0.5px solid var(--hair); letter-spacing:1.5px; color:var(--ink-2); }
+  .dp-pill.warn { color:var(--accent-amber); border-color:var(--accent-amber); }
+  .dp-pill.ok { color:var(--accent-green); border-color:var(--accent-green); }
+  .dp-pill.gray { color:var(--ink-3); border-color:var(--hair); }
+  .dp-empty { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:11pt; padding:48px 20px; text-align:center; border:0.5px solid var(--hair-2); }
+</style>
+
+<div class="dp-bc"><a href="/admin">后台</a><span class="sep">/</span><span>发药台</span></div>
+
+{% if request.query_params.get('msg') %}<div class="dp-msg-ok">{{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('err') %}<div class="dp-msg-err">{{ request.query_params.get('err') }}</div>{% endif %}
+
+<div class="dp-head">
+  <div>
+    <h1>发&nbsp;药&nbsp;台
+      <span class="sub">待发药 <b>{{ pending_count }}</b><span class="sep">·</span>今日已发 <b>{{ today_dispensed }}</b><span class="sep">·</span>本月处方总量 <b>{{ month_total }}</b></span>
+    </h1>
+  </div>
+</div>
+
+<hr class="dp-rule-double"/>
+
+<div class="dp-stats">
+  <div class="dp-stat warn"><div class="lab">待&nbsp;发&nbsp;药</div><div class="num">{{ pending_count }}</div></div>
+  <div class="dp-stat ok"><div class="lab">今&nbsp;日&nbsp;已&nbsp;发</div><div class="num">{{ today_dispensed }}</div></div>
+  <div class="dp-stat"><div class="lab">本&nbsp;月&nbsp;处&nbsp;方&nbsp;总&nbsp;量</div><div class="num">{{ month_total }}</div></div>
+</div>
+
+<div class="dp-filter">
+  <form method="get" id="filter-form">
+    <div class="row">
+      <input name="q" value="{{ q }}" placeholder="搜客户 / 宠物 / 药品" style="flex:1; min-width:240px;"/>
+      <select name="vet" style="width:160px;">
+        <option value="">全部医生</option>
+        {% for v in vets %}<option value="{{ v }}" {% if vet == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+      </select>
+      <select name="status" style="width:140px;">
+        <option value="issued" {% if status == 'issued' %}selected{% endif %}>待发药</option>
+        <option value="dispensed" {% if status == 'dispensed' %}selected{% endif %}>已发药</option>
+        <option value="draft" {% if status == 'draft' %}selected{% endif %}>草稿</option>
+        <option value="all" {% if status == 'all' %}selected{% endif %}>全部状态</option>
+      </select>
+      <button type="submit" class="dp-btn ghost">筛&nbsp;选</button>
+      {% if q or vet or date_from or date_to or quick or status != 'issued' %}
+      <a href="/admin/dispensing" class="dp-btn ghost">清&nbsp;除</a>
+      {% endif %}
+    </div>
+    <div class="row">
+      {% for qk, ql in [('today','今日'),('week','本周'),('month','本月')] %}
+      <a href="/admin/dispensing?status={{ status }}&vet={{ vet }}&q={{ q }}&quick={{ qk }}" class="dp-chip {% if quick == qk %}active{% endif %}">{{ ql }}</a>
+      {% endfor %}
+      <span style="font-family:var(--font-serif);font-style:italic;color:var(--ink-3);font-size:9.5pt;margin-left:10px;">自&nbsp;定&nbsp;义：</span>
+      <input type="hidden" name="quick" value=""/>
+      <input name="date_from" type="date" value="{{ date_from }}" style="width:150px;"/>
+      <span style="color:var(--ink-3);font-style:italic;">至</span>
+      <input name="date_to" type="date" value="{{ date_to }}" style="width:150px;"/>
+    </div>
+  </form>
+</div>
+
+<form method="post" action="/admin/dispensing/bulk-dispense" id="bulk-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  {% if prescs %}
+    {% if status == 'issued' or status == 'all' %}
+    <div class="dp-batch">
+      <label><input type="checkbox" id="check-all" onchange="toggleAll(this)"/> 全选本页</label>
+      <button type="submit" class="dp-btn sm" onclick="return confirm('确认批量发药？')">批&nbsp;量&nbsp;确&nbsp;认&nbsp;发&nbsp;药</button>
+      <span class="cnt" id="selected-count">已选 0 张</span>
+    </div>
+    {% endif %}
+
+    <table class="dp-tbl">
+      <thead>
+        <tr>
+          {% if status == 'issued' or status == 'all' %}<th style="width:36px;"></th>{% endif %}
+          <th style="width:120px;">开单时间</th>
+          <th>患者 / 宠物</th>
+          <th>药品摘要</th>
+          <th style="text-align:right; width:100px;">金额</th>
+          <th style="width:90px;">医生</th>
+          <th style="width:90px;">状态</th>
+          <th style="text-align:right; width:200px;">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in prescs %}
+        {% set cust = cust_map.get(p.customer_id) %}
+        {% set pet = pet_map.get(p.pet_id) %}
+        {% set drug_names = p.items | map(attribute='drug_name') | list %}
+        <tr>
+          {% if status == 'issued' or status == 'all' %}
+          <td style="text-align:center;">
+            {% if p.status == 'issued' %}
+            <input type="checkbox" name="presc_ids" value="{{ p.id }}" class="row-check" onchange="updateCount()"/>
+            {% endif %}
+          </td>
+          {% endif %}
+          <td class="num dim" style="white-space:nowrap;">{{ p.prescribed_date or p.created_at.strftime('%Y-%m-%d') }}</td>
+          <td>
+            <div class="name">{{ cust.name if cust else '—' }}</div>
+            <div class="dim">{% if pet %}{{ pet.name }}{% else %}—{% endif %}</div>
+          </td>
+          <td>
+            {% if drug_names %}
+              {{ drug_names[:2] | join('、') }}
+              {% if drug_names | length > 2 %}<span class="dim"> 等 {{ drug_names | length }} 种</span>{% endif %}
+            {% else %}<span class="dim">—</span>{% endif %}
+          </td>
+          <td class="num" style="text-align:right; white-space:nowrap;">¥{{ '%.2f'|format(p.total_amount) }}</td>
+          <td class="dim">{{ p.vet_name or '—' }}</td>
+          <td>
+            {% if p.status == 'issued' %}<span class="dp-pill warn">待发药</span>
+            {% elif p.status == 'dispensed' %}<span class="dp-pill ok">已发药</span>
+            {% else %}<span class="dp-pill gray">草稿</span>{% endif %}
+          </td>
+          <td style="text-align:right;">
+            <div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
+              {% if p.status == 'issued' %}
+              <form method="post" action="/admin/dispensing/{{ p.id }}/dispense" style="margin:0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                <button type="submit" class="dp-btn sm">确&nbsp;认&nbsp;发&nbsp;药</button>
+              </form>
+              {% endif %}
+              {% if p.status == 'dispensed' and request.session.get('admin_role') == 'superadmin' %}
+              <form method="post" action="/admin/dispensing/{{ p.id }}/undispense" style="margin:0;" onsubmit="return confirm('确认撤回至待发药？')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                <button type="submit" class="dp-btn ghost sm">撤&nbsp;回</button>
+              </form>
+              {% endif %}
+              <a href="/admin/prescriptions/{{ p.id }}" class="dp-btn ghost sm">查&nbsp;看</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="dp-empty">{% if status == 'issued' %}当前无待发药处方单{% else %}暂无符合条件的处方单{% endif %}</div>
+  {% endif %}
+</form>
+
+<script>
+function toggleAll(master) {
+  document.querySelectorAll('.row-check').forEach(function(cb) { cb.checked = master.checked; });
+  updateCount();
+}
+function updateCount() {
+  var n = document.querySelectorAll('.row-check:checked').length;
+  var el = document.getElementById('selected-count');
+  if (el) el.textContent = '已选 ' + n + ' 张';
+  var master = document.getElementById('check-all');
+  if (master) {
+    var all = document.querySelectorAll('.row-check');
+    master.indeterminate = n > 0 && n < all.length;
+    master.checked = all.length > 0 && n === all.length;
+  }
+}
+</script>
+{% endblock %}

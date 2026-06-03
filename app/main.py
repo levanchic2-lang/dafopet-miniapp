@@ -12007,7 +12007,7 @@ async def admin_dispensing(
         Prescription.vet_name != ""
     ).distinct().order_by(Prescription.vet_name).all()]
 
-    return templates.TemplateResponse(request, "admin_dispensing.html", {
+    return templates.TemplateResponse(request, "uk/dispensing.html", {
         "request": request,
         "prescs": prescs, "cust_map": cust_map, "pet_map": pet_map,
         "q": q, "status": status, "vet": vet,
@@ -15885,7 +15885,7 @@ async def admin_vaccinations_list(
         )
 
     records = query.limit(300).all()
-    return templates.TemplateResponse(request, "admin_vaccinations.html", {
+    return templates.TemplateResponse(request, "uk/vaccinations.html", {
         "records": records, "q": q, "filter": filter,
         "vaccine_type": vaccine_type,
         "vacc_type_zh": _VACC_TYPE_ZH,
@@ -16228,7 +16228,7 @@ async def admin_rabies_list(
     page_size = 30
     records = query.order_by(RabiesVaccineRecord.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
     total_pages = max(1, (total + page_size - 1) // page_size)
-    return templates.TemplateResponse(request, "admin_rabies_list.html", {
+    return templates.TemplateResponse(request, "uk/rabies_list.html", {
         "records": records, "total": total, "page": page,
         "total_pages": total_pages, "page_size": page_size,
         "q": q, "status": status, "date_from": date_from, "date_to": date_to,
@@ -16248,7 +16248,7 @@ async def admin_rabies_detail(rec_id: int, request: Request, db: Session = Depen
     ).all()
     vet_names = [v[0] for v in vets]
     locked, lock_reason = _is_rabies_locked(db, rec)
-    return templates.TemplateResponse(request, "admin_rabies_detail.html", {
+    return templates.TemplateResponse(request, "uk/rabies_detail.html", {
         "rec": rec,
         "vet_names": vet_names,
         "status_zh": _RABIES_STATUS_ZH,
