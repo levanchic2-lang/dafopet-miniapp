@@ -1,0 +1,203 @@
+{% extends "uk_demo/_base.html" %}
+{% block title %}{{ cust.name }} · UK Demo{% endblock %}
+
+{% block body %}
+
+<div class="uk-breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <a href="/admin/customers">Customers</a>
+  <span class="sep">/</span>
+  <span>{{ cust.name }}</span>
+</div>
+
+<div class="uk-page-head">
+  <h1 class="uk-h1">{{ cust.name }}<span class="sub">Customer Record · {{ cust.id }}</span></h1>
+  <div class="meta">Created {{ cust.created_at.strftime('%Y - %m - %d') }} · Source <em>{{ cust.source or 'manual' }}</em></div>
+
+  <div class="actions">
+    <a class="uk-btn sm">+ New Visit</a>
+    <a class="uk-btn sm">+ Vaccination</a>
+    <a class="uk-btn sm">+ Deworming</a>
+    <a class="uk-btn sm">+ Grooming</a>
+    <span class="uk-spacer"></span>
+    <a class="uk-btn ghost sm">Edit Profile</a>
+  </div>
+</div>
+
+<hr class="rule-double"/>
+
+<div class="uk-grid main-aside" style="margin-top:24px;">
+
+  {# ── 主列 ── #}
+  <div>
+
+    {# 客户基本信息 + 钱包 #}
+    <section class="uk-section">
+      <div class="uk-grid cols-2">
+
+        <div class="uk-card">
+          <h3 class="uk-h3">Contact</h3>
+          <table style="width:100%;font-size:11pt;">
+            <tr>
+              <td class="uk-mute uk-italic" style="padding:4px 0;width:80px;">Phone</td>
+              <td class="num">{{ cust.phone or '—' }}</td>
+            </tr>
+            <tr>
+              <td class="uk-mute uk-italic" style="padding:4px 0;">Address</td>
+              <td>{{ cust.address or '—' }}</td>
+            </tr>
+            <tr>
+              <td class="uk-mute uk-italic" style="padding:4px 0;">Notes</td>
+              <td class="uk-mute uk-italic">{{ cust.notes|truncate(40) if cust.notes else 'No notes' }}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="uk-kpi" style="background:var(--paper);">
+          <div class="label">Wallet Balance</div>
+          <div class="value num uk-price">{{ '%.2f'|format(wallet.balance if wallet else 0) }}</div>
+          <div class="sub">
+            Lifetime <span class="uk-price num">{{ '%.0f'|format(wallet.lifetime_recharge if wallet else 0) }}</span>
+            · Spent <span class="uk-price num">{{ '%.0f'|format(wallet.lifetime_consume if wallet else 0) }}</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    {# 宠物列表 #}
+    <section class="uk-section">
+      <div class="uk-card flush">
+        <div style="padding:16px 24px;border-bottom:0.5px solid var(--hair);display:flex;justify-content:space-between;align-items:baseline;">
+          <h3 class="uk-h3" style="margin:0;">Pets <span class="num" style="font-size:14pt;letter-spacing:1px;">({{ pets|length }})</span></h3>
+          <a class="uk-btn-link">+ add pet</a>
+        </div>
+        <table class="uk-tbl" style="margin:0;">
+          <thead>
+            <tr>
+              <th style="padding-left:24px;">Name</th>
+              <th>Species</th>
+              <th>Breed</th>
+              <th>Gender</th>
+              <th>Record No.</th>
+              <th class="right" style="padding-right:24px;">Last Visit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in pets %}
+            <tr>
+              <td class="name" style="padding-left:24px;">
+                <a href="/m/pet/{{ p.id }}" class="link">{{ p.name or 'Unnamed' }}</a>
+                {% if p.is_neutered %}<span class="uk-pill mute" style="margin-left:6px;">Neutered</span>{% endif %}
+              </td>
+              <td class="uk-italic">{% if p.species == 'cat' %}Cat{% elif p.species == 'dog' %}Dog{% else %}{{ p.species }}{% endif %}</td>
+              <td class="uk-mute">{{ p.breed or '—' }}</td>
+              <td class="uk-italic uk-mute">{% if p.gender == 'male' %}M{% elif p.gender == 'female' %}F{% else %}—{% endif %}</td>
+              <td class="num uk-mute" style="font-size:9pt;">{{ p.medical_record_no or '—' }}</td>
+              <td class="right uk-mute uk-italic num" style="padding-right:24px;font-size:9.5pt;">—</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {# 病历时间线 #}
+    <section class="uk-section">
+      <h2 class="uk-h2">Medical History</h2>
+
+      {% if not visits %}
+      <div class="uk-empty">No visits recorded</div>
+      {% else %}
+
+      {% for v in visits %}
+      {% set pet = pet_map.get(v.pet_id) %}
+      <article class="uk-card" style="padding:20px 28px;">
+        <div class="uk-row between" style="margin-bottom:8px;">
+          <div>
+            <span class="uk-overline">Visit · {{ v.visit_type }}</span>
+            <h3 style="margin:4px 0 0;font-family:var(--font-serif);font-size:15pt;font-weight:700;letter-spacing:1px;">
+              {{ v.diagnosis|truncate(60) if v.diagnosis else 'Outpatient' }}
+            </h3>
+          </div>
+          <div class="uk-right">
+            <div class="num" style="font-size:13pt;letter-spacing:1px;">{{ v.visit_date }}</div>
+            <div class="uk-mute uk-italic" style="font-size:9pt;">{{ v.vet_name or '—' }}</div>
+          </div>
+        </div>
+        <hr class="rule-hair"/>
+        <div class="uk-grid cols-2" style="gap:16px;font-size:11pt;">
+          {% if v.chief_complaint %}
+          <div>
+            <span class="uk-label">Chief Complaint</span>
+            <div style="margin-top:4px;">{{ v.chief_complaint|truncate(120) }}</div>
+          </div>
+          {% endif %}
+          {% if v.treatment_plan %}
+          <div>
+            <span class="uk-label">Treatment</span>
+            <div style="margin-top:4px;">{{ v.treatment_plan|truncate(120) }}</div>
+          </div>
+          {% endif %}
+        </div>
+        <div class="uk-row" style="margin-top:14px;gap:6px;">
+          {% if pet %}<span class="uk-pill">{{ pet.name }}</span>{% endif %}
+          {% if v.status == 'closed' %}<span class="uk-pill mute">Closed</span>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+
+      {% endif %}
+    </section>
+
+  </div>
+
+  {# ── 侧栏 ── #}
+  <aside>
+
+    <div class="uk-card quiet">
+      <h3 class="uk-h3">At a Glance</h3>
+      <table style="width:100%;font-size:11pt;">
+        <tr><td class="uk-mute" style="padding:6px 0;">Pets</td><td class="uk-right num">{{ pets|length }}</td></tr>
+        <tr><td class="uk-mute" style="padding:6px 0;">Visits</td><td class="uk-right num">{{ visits|length }}</td></tr>
+        <tr><td class="uk-mute" style="padding:6px 0;">Packages</td><td class="uk-right num">{{ packages|length }}</td></tr>
+        <tr><td class="uk-mute" style="padding:6px 0;">Unpaid</td><td class="uk-right uk-price num" style="color:var(--accent-red);">{{ '%.2f'|format(unpaid_total) }}</td></tr>
+      </table>
+    </div>
+
+    {% if packages %}
+    <div class="uk-card">
+      <div class="uk-card-head">
+        <h3 class="uk-h3">Packages</h3>
+        <span class="count">{{ packages|length }}</span>
+      </div>
+      {% for pkg in packages %}
+      <div style="padding:10px 0;border-bottom:0.5px solid var(--hair);">
+        <div class="uk-row between">
+          <span style="font-weight:700;">{{ pkg.name }}</span>
+          <span class="num">{{ pkg.total_uses - pkg.used_count }} / {{ pkg.total_uses }}</span>
+        </div>
+        <div class="uk-mute uk-italic" style="font-size:9pt;margin-top:2px;">{{ pkg.category or 'general' }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="uk-card">
+      <h3 class="uk-h3">Actions</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <a class="uk-btn">Send Consent</a>
+        <a class="uk-btn ghost">Send SMS</a>
+        <a class="uk-btn ghost">Recharge Wallet</a>
+        <a class="uk-btn ghost">Sell Package</a>
+        <hr class="rule-hair"/>
+        <a class="uk-btn danger ghost sm">Archive Customer</a>
+      </div>
+    </div>
+
+  </aside>
+
+</div>
+
+{% endblock %}

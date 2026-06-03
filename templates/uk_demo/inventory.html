@@ -1,0 +1,150 @@
+{% extends "uk_demo/_base.html" %}
+{% block title %}Inventory · UK Demo{% endblock %}
+
+{% block body %}
+
+<div class="uk-breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <a href="/admin/inventory">Operations</a>
+  <span class="sep">/</span>
+  <span>Inventory</span>
+</div>
+
+<div class="uk-page-head">
+  <div class="uk-row between">
+    <div>
+      <h1 class="uk-h1">Inventory<span class="sub">库 存 管 理</span></h1>
+      <div class="meta">{{ total }} active items · last stocktake 2026-05-21</div>
+    </div>
+    <div style="display:flex;gap:12px;">
+      <a href="/admin/inventory-audit" class="uk-btn ghost sm">Audit</a>
+      <a href="/admin/inventory-cleanup" class="uk-btn ghost sm">Cleanup</a>
+      <a href="/admin/inventory/import-photo" class="uk-btn sm">Import</a>
+      <a href="/admin/inventory/create" class="uk-btn primary sm">+ New Item</a>
+    </div>
+  </div>
+</div>
+
+<hr class="rule-double"/>
+
+{# 4 个 KPI 卡片 #}
+<div class="uk-grid cols-4" style="margin-bottom:32px;">
+  <div class="uk-kpi">
+    <div class="label">Total</div>
+    <div class="value num">{{ total }}</div>
+    <div class="sub">items active</div>
+  </div>
+  <div class="uk-kpi">
+    <div class="label">Out of Stock</div>
+    <div class="value num" style="color:var(--accent-red);">{{ zero_n }}</div>
+    <div class="sub">需补货</div>
+  </div>
+  <div class="uk-kpi">
+    <div class="label">Low Stock</div>
+    <div class="value num" style="color:var(--accent-amber);">{{ low_n }}</div>
+    <div class="sub">below threshold</div>
+  </div>
+  <div class="uk-kpi">
+    <div class="label">Controlled</div>
+    <div class="value num">{{ controlled_n }}</div>
+    <div class="sub">麻醉 / 精神类</div>
+  </div>
+</div>
+
+{# 筛选条 #}
+<div class="uk-filter">
+  <div class="grow">
+    <input type="search" class="uk-input" placeholder="Search by name, supplier..." value="{{ q }}"/>
+  </div>
+  <select class="uk-select" style="min-width:160px;">
+    <option>All Categories</option>
+    {% for k, c in categories.items() %}<option {% if category == k %}selected{% endif %}>{{ c.label }}</option>{% endfor %}
+  </select>
+  <select class="uk-select" style="min-width:160px;">
+    <option>All Sub-categories</option>
+  </select>
+  <button type="button" class="uk-btn sm">Filter</button>
+  <a href="/admin/uk-demo/inventory" class="uk-btn-link">clear</a>
+</div>
+
+{# 快速筛 chip #}
+<div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;">
+  <button type="button" class="uk-quick-filter">Low Stock</button>
+  <button type="button" class="uk-quick-filter active">Out of Stock <span class="num">{{ zero_n }}</span></button>
+  <button type="button" class="uk-quick-filter">Controlled</button>
+  <button type="button" class="uk-quick-filter">Services</button>
+  <button type="button" class="uk-quick-filter">Expiring</button>
+</div>
+
+{# 表格 #}
+<table class="uk-tbl">
+  <thead>
+    <tr>
+      <th style="width:32px;"><input type="checkbox" class="uk-checkbox"/></th>
+      <th>Item</th>
+      <th>Category</th>
+      <th>Sub-category</th>
+      <th class="right">Stock</th>
+      <th class="right">Price</th>
+      <th>Unit</th>
+      <th>Supplier</th>
+      <th class="right">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for it in items %}
+    {% set is_low = (not it.is_service) and it.low_stock_min > 0 and it.stock_qty <= it.low_stock_min %}
+    {% set is_zero = (not it.is_service) and it.stock_qty <= 0 %}
+    <tr>
+      <td><input type="checkbox" class="uk-checkbox"/></td>
+      <td class="name">
+        {{ it.name }}
+        {% if it.is_service %}<span class="uk-pill mute" style="margin-left:6px;">Service</span>{% endif %}
+        {% if it.is_controlled %}<span class="uk-pill red" style="margin-left:6px;">Controlled</span>{% endif %}
+        {% if it.store %}<div class="muted">{{ it.store }}</div>{% endif %}
+      </td>
+      <td>{{ categories[it.category].label if it.category in categories else it.category }}</td>
+      <td class="uk-mute">
+        {% if it.category in categories and it.subcategory in categories[it.category].subs %}
+          {{ categories[it.category].subs[it.subcategory] }}
+        {% else %}
+          {{ it.subcategory or '—' }}
+        {% endif %}
+      </td>
+      <td class="right num">
+        {% if it.is_service %}
+          <span class="uk-mute">—</span>
+        {% elif is_zero %}
+          <span style="color:var(--accent-red);">{{ '%.1f'|format(it.stock_qty) }}</span>
+        {% elif is_low %}
+          <span style="color:var(--accent-amber);">{{ '%.1f'|format(it.stock_qty) }}</span>
+        {% else %}
+          {{ '%.1f'|format(it.stock_qty) }}
+        {% endif %}
+      </td>
+      <td class="right uk-price num">{{ '%.2f'|format(it.sell_price or 0) }}</td>
+      <td class="uk-mute uk-italic">{{ it.unit }}{% if it.unit2 %} / {{ it.unit2 }}{% endif %}</td>
+      <td class="uk-mute">{{ it.supplier or '—' }}</td>
+      <td>
+        <a href="/admin/inventory/{{ it.id }}" class="uk-btn-link">Detail</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="uk-pager">
+  <div>Showing <span class="num">{{ items|length }}</span> of <span class="num">{{ total }}</span></div>
+  <div>
+    <a>&laquo; Prev</a>
+    <span class="current num">1</span>
+    <a class="num">2</a>
+    <a class="num">3</a>
+    <span class="uk-mute">…</span>
+    <a class="num">21</a>
+    <a>Next &raquo;</a>
+  </div>
+</div>
+
+{% endblock %}

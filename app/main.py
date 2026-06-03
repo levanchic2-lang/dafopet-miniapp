@@ -13723,6 +13723,75 @@ async def admin_inventory_audit(request: Request, db: Session = Depends(get_db))
     })
 
 
+# ─── UK Minimal 风格 Demo（只读，仅 superadmin）───
+@app.get("/admin/uk-demo/inventory", response_class=HTMLResponse)
+async def uk_demo_inventory(request: Request, db: Session = Depends(get_db),
+                              q: str = "", category: str = ""):
+    require_admin(request); require_superadmin(request)
+    query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    if q:
+        query = query.filter(or_(InventoryItem.name.ilike(f"%{q}%"),
+                                  InventoryItem.supplier.ilike(f"%{q}%")))
+    if category:
+        query = query.filter(InventoryItem.category == category)
+    items = query.order_by(InventoryItem.name).limit(50).all()
+    total = db.query(InventoryItem).filter(InventoryItem.is_active == True).count()
+    zero_n = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.is_service == False,
+        InventoryItem.stock_qty <= 0,
+    ).count()
+    low_n = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.is_service == False,
+        InventoryItem.low_stock_min > 0,
+        InventoryItem.stock_qty <= InventoryItem.low_stock_min,
+        InventoryItem.stock_qty > 0,
+    ).count()
+    controlled_n = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.is_controlled == True,
+    ).count()
+    return templates.TemplateResponse(request, "uk_demo/inventory.html", {
+        "items": items, "total": total,
+        "zero_n": zero_n, "low_n": low_n, "controlled_n": controlled_n,
+        "q": q, "category": category,
+        "categories": INVENTORY_CATEGORIES,
+        "active": "inventory",
+    })
+
+
+@app.get("/admin/uk-demo/customer/{cust_id}", response_class=HTMLResponse)
+async def uk_demo_customer(cust_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request); require_superadmin(request)
+    cust = db.get(Customer, cust_id)
+    if not cust:
+        raise HTTPException(404)
+    pets = db.query(Pet).filter(Pet.customer_id == cust_id).order_by(Pet.id).all()
+    wallet = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    packages = db.query(CustomerPackage).filter(
+        CustomerPackage.customer_id == cust_id,
+        CustomerPackage.used_count < CustomerPackage.total_uses,
+    ).order_by(CustomerPackage.id.desc()).all()
+    visits = db.query(Visit).filter(Visit.customer_id == cust_id)\
+        .order_by(Visit.id.desc()).limit(8).all()
+    pet_map = {p.id: p for p in pets}
+    # 未付款金额估算（简单求和 unpaid invoices）
+    from app.models import Invoice
+    from sqlalchemy import func as _sqfn
+    unpaid_total = db.query(_sqfn.sum(Invoice.total_amount)).filter(
+        Invoice.customer_id == cust_id,
+        Invoice.payment_status == "unpaid",
+    ).scalar() or 0
+    return templates.TemplateResponse(request, "uk_demo/customer.html", {
+        "cust": cust, "pets": pets, "wallet": wallet,
+        "packages": packages, "visits": visits,
+        "pet_map": pet_map,
+        "unpaid_total": float(unpaid_total),
+        "active": "customer",
+    })
+
+
 @app.post("/admin/inventory/{item_id}/stock-in")
 async def admin_inventory_stock_in(
     item_id: int, request: Request, db: Session = Depends(get_db),

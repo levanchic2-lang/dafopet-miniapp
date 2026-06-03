@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{% block title %}DAFOPET — UK Minimal Demo{% endblock %}</title>
+  <link rel="stylesheet" href="/static/uk_minimal.css?v=1"/>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+<div class="uk-shell">
+
+  <header class="uk-topbar">
+    <div class="uk-topbar-inner">
+      <div class="uk-brand">
+        DAFOPET <small>Animal Hospital</small>
+      </div>
+      <nav class="uk-nav">
+        <a href="/admin/uk-demo/inventory"  class="{% if active == 'inventory' %}active{% endif %}">Inventory</a>
+        <a href="/admin/uk-demo/customer/1" class="{% if active == 'customer' %}active{% endif %}">Customers</a>
+        <a href="/admin/uk-demo/inpatient"  class="{% if active == 'inpatient' %}active{% endif %}">Wards</a>
+        <a href="/admin"                    class="{% if active == 'old' %}active{% endif %}">Legacy ▸</a>
+      </nav>
+    </div>
+  </header>
+
+  {% if request.query_params.get('msg') %}
+  <div class="uk-container">
+    <div class="uk-msg ok">{{ request.query_params.get('msg') }}</div>
+  </div>
+  {% endif %}
+
+  <main class="uk-container {% block container_class %}{% endblock %}">
+    {% block body %}{% endblock %}
+  </main>
+
+  <footer style="text-align:center;padding:48px 0 32px;color:var(--ink-3);font-size:9pt;letter-spacing:3px;text-transform:uppercase;">
+    — Dafopet Animal Hospital · Established 2024 —
+  </footer>
+
+</div>
+</body>
+</html>
