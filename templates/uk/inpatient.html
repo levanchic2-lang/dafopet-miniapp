@@ -1,0 +1,384 @@
+{% extends "uk/_base.html" %}
+{% block title %}住院管理 · 大风动物医院{% endblock %}
+
+{% block body %}
+
+<style>
+  .ip-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .ip-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .ip-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .ip-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .ip-head {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    gap: 24px; margin-bottom: 8px;
+  }
+  .ip-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .ip-head h1 .sub {
+    display: block; font-size: 10pt; font-weight: 400; font-style: italic;
+    color: var(--ink-3); letter-spacing: 2.5px; margin-top: 8px;
+  }
+  .ip-head h1 .sub b { color: var(--ink); font-family: var(--font-numeric); font-style: normal; }
+  .ip-head .actions { display: flex; gap: 12px; align-items: center; }
+
+  hr.ip-rule-double {
+    border: 0; height: 4px;
+    border-top: 0.5px solid var(--ink);
+    border-bottom: 0.5px solid var(--ink);
+    margin: 18px 0 28px;
+  }
+
+  /* 视图切换 + 状态 tab */
+  .ip-toolbar {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 16px; flex-wrap: wrap;
+    padding-bottom: 14px; margin-bottom: 24px;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .ip-status-tabs { display: flex; gap: 24px; align-items: baseline; }
+  .ip-status-tabs a {
+    font-family: var(--font-serif); font-size: 10.5pt;
+    letter-spacing: 2px; color: var(--ink-3);
+    text-decoration: none; padding: 2px 0;
+    font-style: italic;
+  }
+  .ip-status-tabs a:hover { color: var(--ink); }
+  .ip-status-tabs a.active {
+    color: var(--ink); font-weight: 700; font-style: normal;
+    border-bottom: 1px solid var(--ink); padding-bottom: 3px;
+  }
+  .ip-status-tabs a .num {
+    font-family: var(--font-numeric); margin-left: 4px;
+    font-size: 9.5pt; color: var(--ink-3); font-style: normal;
+  }
+  .ip-status-tabs a.active .num { color: var(--ink); }
+
+  .ip-view-toggle {
+    display: inline-flex; border: 0.5px solid var(--hair);
+  }
+  .ip-view-toggle a {
+    font-family: var(--font-serif); font-size: 9.5pt;
+    letter-spacing: 1.5px; padding: 6px 16px;
+    color: var(--ink-2); text-decoration: none;
+    border-right: 0.5px solid var(--hair);
+    font-style: italic;
+  }
+  .ip-view-toggle a:last-child { border-right: 0; }
+  .ip-view-toggle a:hover { color: var(--ink); background: var(--bg); }
+  .ip-view-toggle a.active {
+    background: var(--ink); color: var(--paper);
+    font-style: normal; font-weight: 700;
+  }
+
+  /* 门店切换 */
+  .ip-store-bar {
+    font-size: 9.5pt; letter-spacing: 1.5px; color: var(--ink-3);
+    margin-bottom: 16px; padding-bottom: 12px;
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .ip-store-bar a {
+    color: var(--ink-3); margin: 0 10px;
+    padding-bottom: 1px; border-bottom: 0.5px solid transparent;
+  }
+  .ip-store-bar a.active { color: var(--ink); border-bottom-color: var(--ink); font-weight: 700; }
+  .ip-store-bar .hint { color: var(--ink-4); font-style: italic; margin-left: 8px; }
+
+  /* ── 卡片视图 ── */
+  .ip-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  .ip-card {
+    background: var(--paper);
+    border: 0.5px solid var(--hair-2);
+    padding: 18px 20px; text-decoration: none; color: inherit;
+    display: flex; flex-direction: column; gap: 12px;
+    transition: border-color .12s;
+  }
+  .ip-card:hover { border-color: var(--ink); }
+  .ip-card.discharged { opacity: .65; background: var(--bg); }
+  .ip-card.cancelled  { opacity: .45; background: var(--bg); }
+
+  .ip-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .ip-card-name {
+    font-family: var(--font-serif); font-size: 14pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; line-height: 1.2;
+  }
+  .ip-card-name .species {
+    font-size: 9pt; color: var(--ink-3); font-weight: 400;
+    font-style: italic; margin-left: 6px; letter-spacing: 1.5px;
+  }
+  .ip-card-customer {
+    font-size: 9.5pt; color: var(--ink-3); margin-top: 4px;
+    font-style: italic; letter-spacing: 1px;
+  }
+  .ip-card-cage {
+    font-family: var(--font-numeric); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1.5px;
+    border: 0.5px solid var(--ink); padding: 4px 10px;
+    line-height: 1.1; white-space: nowrap;
+  }
+  .ip-card-cage.iso { border-color: var(--accent-red); color: var(--accent-red); }
+  .ip-card-cage.icu { border-color: var(--accent-amber); color: var(--accent-amber); }
+  .ip-card-cage.none { border-style: dashed; color: var(--accent-amber); border-color: var(--accent-amber); }
+
+  .ip-card-meta {
+    display: flex; gap: 18px; align-items: baseline;
+    border-top: 0.5px solid var(--hair); padding-top: 12px;
+    font-size: 9.5pt; color: var(--ink-3); letter-spacing: 1px;
+  }
+  .ip-card-meta .lbl { font-style: italic; }
+  .ip-card-meta .val { font-family: var(--font-numeric); color: var(--ink); font-weight: 700; }
+  .ip-card-meta .val.over { color: var(--accent-amber); }
+
+  .ip-card-reason {
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink-2); line-height: 1.6;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; min-height: 32px;
+  }
+  .ip-card-reason.empty { font-style: italic; color: var(--ink-4); }
+
+  .ip-card-foot {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 8.5pt; color: var(--ink-3); letter-spacing: 1.5px;
+    font-family: var(--font-numeric); font-style: italic;
+  }
+
+  /* ── 笼位图视图 ── */
+  .ip-cage-summary {
+    font-size: 9.5pt; color: var(--ink-3); letter-spacing: 1.5px;
+    margin-bottom: 16px; font-style: italic;
+  }
+  .ip-cage-summary b { font-family: var(--font-numeric); color: var(--ink); font-style: normal; }
+
+  .ip-cage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .ip-cage-tile {
+    background: var(--paper);
+    border: 0.5px solid var(--hair-2);
+    padding: 14px 16px; min-height: 116px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    text-decoration: none; color: inherit;
+    transition: border-color .12s;
+  }
+  .ip-cage-tile:hover { border-color: var(--ink); }
+  .ip-cage-tile.empty {
+    border-style: dashed; opacity: .55;
+  }
+  .ip-cage-tile.empty:hover { opacity: 1; border-color: var(--ink-3); }
+  .ip-cage-tile.occupied { border-color: var(--ink); border-width: 0.5px; background: #fbfaf6; }
+  .ip-cage-tile.occupied.iso { background: #fcf5f4; border-color: var(--accent-red); }
+  .ip-cage-tile.occupied.icu { background: #fbf6f0; border-color: var(--accent-amber); }
+
+  .ip-cage-code {
+    font-family: var(--font-numeric); font-size: 16pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1.5px; line-height: 1;
+  }
+  .ip-cage-kind {
+    font-family: var(--font-serif); font-size: 8.5pt; letter-spacing: 2px;
+    color: var(--ink-3); font-style: italic; margin-top: 4px;
+  }
+  .ip-cage-pet {
+    font-family: var(--font-serif); font-size: 11pt; font-weight: 700;
+    color: var(--ink); margin-top: 10px;
+  }
+  .ip-cage-meta {
+    font-size: 9pt; color: var(--ink-3); margin-top: 2px;
+    font-style: italic; letter-spacing: 0.5px;
+  }
+  .ip-cage-days {
+    font-family: var(--font-numeric); font-size: 9.5pt;
+    color: var(--ink-2);
+  }
+  .ip-cage-days.over { color: var(--accent-amber); font-weight: 700; }
+  .ip-cage-empty-rate {
+    font-family: var(--font-serif); font-size: 9pt;
+    color: var(--ink-3); font-style: italic;
+    letter-spacing: 1px;
+  }
+
+  /* 空态 */
+  .ip-empty {
+    text-align: center; padding: 80px 24px;
+    color: var(--ink-3); font-style: italic;
+    font-size: 11pt; letter-spacing: 2px;
+  }
+  .ip-empty a {
+    color: var(--ink); border-bottom: 0.5px solid var(--ink-3);
+    padding-bottom: 1px; margin-left: 6px;
+  }
+  .ip-empty::before {
+    content: "—"; display: block;
+    font-size: 20pt; color: var(--ink-4);
+    margin-bottom: 20px; letter-spacing: 10px;
+  }
+</style>
+
+<div class="ip-breadcrumb">
+  <a href="/admin">后台</a>
+  <span class="sep">/</span>
+  <a href="/admin/inpatient">医疗</a>
+  <span class="sep">/</span>
+  <span>住院管理</span>
+</div>
+
+<div class="ip-head">
+  <h1>
+    住院管理
+    <span class="sub">
+      实时看板
+      {% if status == 'admitted' %} · 当前在押 <b>{{ rows|length }}</b> 只{% endif %}
+    </span>
+  </h1>
+  <div class="actions">
+    <a href="/admin/cages" class="uk-btn ghost sm">笼位配置</a>
+  </div>
+</div>
+
+<hr class="ip-rule-double"/>
+
+{# 门店切换（仅超管）#}
+{% if request.session.get('admin_role') == 'superadmin' %}
+<div class="ip-store-bar">
+  门店：
+  <a href="?status={{ status }}&view={{ view }}&store=" class="{% if not wb_store %}active{% endif %}">全部</a>
+  <a href="?status={{ status }}&view={{ view }}&store=东环店" class="{% if wb_store == '东环店' %}active{% endif %}">东环店</a>
+  <a href="?status={{ status }}&view={{ view }}&store=横岗店" class="{% if wb_store == '横岗店' %}active{% endif %}">横岗店</a>
+  <span class="hint">staff 自动锁本店</span>
+</div>
+{% elif wb_store %}
+<div class="ip-store-bar">门店：<b style="color:var(--ink);">{{ wb_store }}</b></div>
+{% endif %}
+
+{# 工具栏：状态 tabs + 视图切换 #}
+<div class="ip-toolbar">
+  <div class="ip-status-tabs">
+    <a href="?status=admitted&view={{ view }}{% if wb_store %}&store={{ wb_store }}{% endif %}" class="{% if status == 'admitted' %}active{% endif %}">住院中{% if status == 'admitted' %}<span class="num">{{ rows|length }}</span>{% endif %}</a>
+    <a href="?status=discharged&view={{ view }}{% if wb_store %}&store={{ wb_store }}{% endif %}" class="{% if status == 'discharged' %}active{% endif %}">已出院</a>
+    <a href="?status=cancelled&view={{ view }}{% if wb_store %}&store={{ wb_store }}{% endif %}" class="{% if status == 'cancelled' %}active{% endif %}">已取消</a>
+  </div>
+  <div class="ip-view-toggle">
+    <a href="?status={{ status }}&view=cards{% if wb_store %}&store={{ wb_store }}{% endif %}" class="{% if view != 'cages' %}active{% endif %}">卡片</a>
+    <a href="?status={{ status }}&view=cages{% if wb_store %}&store={{ wb_store }}{% endif %}" class="{% if view == 'cages' %}active{% endif %}">笼位图</a>
+  </div>
+</div>
+
+{# ─── 卡片视图 ─── #}
+{% if view != 'cages' %}
+  {% if not rows %}
+  <div class="ip-empty">
+    当前没有「{{ status_zh.get(status, status) }}」的住院记录
+    {% if status == 'admitted' %}<br/><span style="font-size:9pt;letter-spacing:1.5px;display:block;margin-top:12px;">新住院由病历详情页「转住院」按钮发起</span>{% endif %}
+  </div>
+  {% else %}
+  <div class="ip-cards">
+    {% for h in rows %}
+    {% set days = calc_days(h.admitted_at, h.discharged_at or now) %}
+    {% set rx = presc_map.get(h.visit_id) %}
+    <a href="/admin/inpatient/{{ h.id }}"
+       class="ip-card {% if h.status == 'discharged' %}discharged{% elif h.status == 'cancelled' %}cancelled{% endif %}">
+      <div class="ip-card-head">
+        <div>
+          <div class="ip-card-name">
+            {{ h.pet.name if h.pet else '未命名宠物' }}
+            <span class="species">{% if h.pet and h.pet.species == 'cat' %}猫{% elif h.pet and h.pet.species == 'dog' %}犬{% endif %}</span>
+          </div>
+          <div class="ip-card-customer">
+            {{ h.customer.name if h.customer else '—' }}
+            {% if h.customer and h.customer.phone %} · {{ h.customer.phone }}{% endif %}
+          </div>
+        </div>
+        {% if h.cage %}
+          <div class="ip-card-cage {{ h.cage.kind }}">{{ h.cage.code }}</div>
+        {% else %}
+          <div class="ip-card-cage none">未分笼</div>
+        {% endif %}
+      </div>
+
+      <div class="ip-card-reason {% if not h.reason %}empty{% endif %}">{{ h.reason or '无入院原因记录' }}</div>
+
+      <div class="ip-card-meta">
+        <div>
+          <span class="lbl">住院 </span>
+          <span class="val {% if days >= 5 %}over{% endif %}">{{ days }}</span>
+          <span class="lbl"> 天</span>
+        </div>
+        {% if rx %}
+        <div>
+          <span class="lbl">处方 </span>
+          <span class="val">{{ rx.count }}</span>
+          <span class="lbl"> 张</span>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="ip-card-foot">
+        <span>入院 {{ h.admitted_at.strftime('%m-%d %H:%M') if h.admitted_at else '—' }}</span>
+        {% if h.expected_discharge_date and h.status == 'admitted' %}
+          <span>预计出 {{ h.expected_discharge_date[5:] }}</span>
+        {% elif h.discharged_at %}
+          <span>已出 {{ h.discharged_at.strftime('%m-%d %H:%M') }}</span>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+{# ─── 笼位图视图 ─── #}
+{% else %}
+  <div class="ip-cage-summary">
+    共 <b>{{ all_cages|length }}</b> 个笼位 · 占用 <b>{{ occ_map|length }}</b> · 空闲 <b>{{ all_cages|length - occ_map|length }}</b>
+  </div>
+  {% if not all_cages %}
+  <div class="ip-empty">
+    还没有配置笼位<a href="/admin/cages">去配置 →</a>
+  </div>
+  {% else %}
+  <div class="ip-cage-grid">
+    {% for c in all_cages %}
+      {% set h = occ_map.get(c.id) %}
+      {% if h %}
+      {% set days = calc_days(h.admitted_at, now) %}
+      <a href="/admin/inpatient/{{ h.id }}" class="ip-cage-tile occupied {{ c.kind }}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div class="ip-cage-code">{{ c.code }}</div>
+            <div class="ip-cage-kind">{{ kind_zh.get(c.kind, c.kind) }}</div>
+          </div>
+          <span class="ip-cage-days {% if days >= 5 %}over{% endif %}">{{ days }} 天</span>
+        </div>
+        <div>
+          <div class="ip-cage-pet">{{ h.pet.name if h.pet else '—' }}</div>
+          <div class="ip-cage-meta">
+            {{ h.customer.name if h.customer else '' }}
+            {% if h.pet and h.pet.species == 'cat' %} · 猫{% elif h.pet and h.pet.species == 'dog' %} · 犬{% endif %}
+          </div>
+        </div>
+      </a>
+      {% else %}
+      <div class="ip-cage-tile empty">
+        <div>
+          <div class="ip-cage-code">{{ c.code }}</div>
+          <div class="ip-cage-kind">{{ kind_zh.get(c.kind, c.kind) }}</div>
+        </div>
+        <div class="ip-cage-empty-rate">空闲 · ¥{{ '%.0f'|format(c.daily_rate) }}/天</div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endif %}
+
+{% endblock %}

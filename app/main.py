@@ -18876,7 +18876,7 @@ async def admin_inpatient_board(request: Request, db: Session = Depends(get_db),
             if h.cage_id:
                 occ_map[h.cage_id] = h
 
-    return templates.TemplateResponse(request, "admin_inpatient.html", {
+    return templates.TemplateResponse(request, "uk/inpatient.html", {  # B6 UK 重写
         "request": request, "rows": rows, "status": status, "view": view,
         "status_zh": _HOSP_STATUS_ZH, "kind_zh": _CAGE_KIND_ZH,
         "wb_store": wb_store, "csrf_token": _get_csrf_token(request),
