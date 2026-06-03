@@ -393,8 +393,8 @@
   <div class="actions" style="margin-top:20px;">
     {% if active_pet %}
     <a class="uk-btn sm" href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建病历</a>
-    <a class="uk-btn sm" href="/admin/vaccinations/create-page?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入疫苗</a>
-    <a class="uk-btn sm" href="/admin/dewormings/create-page?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入驱虫</a>
+    <a class="uk-btn sm" href="/admin/vaccinations/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入疫苗</a>
+    <a class="uk-btn sm" href="/admin/dewormings/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入驱虫</a>
     <a class="uk-btn sm" href="/admin/grooming-orders/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 开美容单</a>
     {% endif %}
     <span class="uk-spacer"></span>

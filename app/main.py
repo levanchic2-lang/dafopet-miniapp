@@ -9683,7 +9683,7 @@ async def page_admin_visit_create(
                 Customer.phone.ilike(f"%{search_q}%"),
             )
         ).limit(10).all()
-    return templates.TemplateResponse(request, "admin_visit_form.html", {
+    return templates.TemplateResponse(request, "uk/visit_create.html", {  # B 补 - UK 重写
         "cust": cust,
         "pet": pet,
         "pets": pets,
@@ -17955,7 +17955,7 @@ async def page_admin_grooming_create(
         history = db.query(GroomingOrder).filter(GroomingOrder.pet_id == pet.id)\
             .order_by(GroomingOrder.id.desc()).limit(10).all()
     groom_items = _query_grooming_items(db, request)
-    return templates.TemplateResponse(request, "admin_grooming_form.html", {
+    return templates.TemplateResponse(request, "uk/grooming.html", {  # B 补 - UK 重写
         "mode": "create", "rec": None,
         "cust": cust, "pet": pet, "appt": appt,
         "groomers": groomers, "groom_items": groom_items,
@@ -18066,7 +18066,7 @@ async def page_admin_grooming_detail(rec_id: int, request: Request, db: Session 
             GroomingOrder.pet_id == rec.pet_id, GroomingOrder.id != rec_id,
         ).order_by(GroomingOrder.id.desc()).limit(10).all()
     groom_items = _query_grooming_items(db, request)
-    return templates.TemplateResponse(request, "admin_grooming_form.html", {
+    return templates.TemplateResponse(request, "uk/grooming.html", {  # B 补 - UK 重写
         "mode": "edit", "rec": rec, "rec_services": services,
         "cust": cust, "pet": pet, "appt": appt,
         "groomers": groomers, "groom_items": groom_items,
