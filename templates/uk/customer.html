@@ -691,6 +691,8 @@
       {% endif %}
     </div>
 
+    {% set pay_method_zh = {'cash':'现金','wechat':'微信','alipay':'支付宝','shouqianba':'收钱吧','meituan':'美团','third_party':'第三方','wallet':'钱包','package':'套餐','deposit':'押金','coupon':'优惠券','mixed':'混合'} %}
+
     {# ─── 销售 ─── #}
     <div class="uk-tab-content {% if active_tab=='sales' %}active{% endif %}" data-tab-content="sales">
       <div class="tab-action-bar">
@@ -704,7 +706,7 @@
           <tr>
             <td class="num">{{ so.order_date or (so.created_at.strftime('%Y-%m-%d') if so.created_at else '—') }}</td>
             <td class="num">¥{{ '%.2f'|format(so.total_amount or 0) }}</td>
-            <td>{{ so.payment_method or '—' }}</td>
+            <td>{{ pay_method_zh.get(so.payment_method, so.payment_method) or '—' }}</td>
             <td>
               {% if so.status == 'paid' %}<span class="uk-pill green">已收款</span>
               {% elif so.status == 'pending' %}<span class="uk-pill amber">待付款</span>
@@ -746,7 +748,7 @@
               {% elif inv.payment_status == 'cancelled' %}<span class="uk-pill mute">已取消</span>
               {% else %}<span class="uk-pill amber">{{ inv_status_zh.get(inv.payment_status, inv.payment_status) }}</span>{% endif %}
             </td>
-            <td class="uk-mute" style="font-size:9pt;">{{ inv.payment_method or '—' }}</td>
+            <td class="uk-mute" style="font-size:9pt;">{{ pay_method_zh.get(inv.payment_method, inv.payment_method) or '—' }}</td>
             <td class="action right"><a href="/admin/invoices/{{ inv.id }}">查看 →</a></td>
           </tr>
           {% endfor %}
@@ -877,7 +879,7 @@
             </td>
             <td class="num"><b>{% if tx.amount >= 0 %}+{% endif %}{{ '%.2f'|format(tx.amount or 0) }}</b></td>
             <td class="num">¥{{ '%.2f'|format(tx.balance_after or 0) }}</td>
-            <td class="uk-mute" style="font-size:9pt;">{{ tx.pay_method or '' }}{% if tx.note %} · {{ tx.note }}{% endif %}</td>
+            <td class="uk-mute" style="font-size:9pt;">{{ pay_method_zh.get(tx.pay_method, tx.pay_method) or '' }}{% if tx.note %} · {{ tx.note }}{% endif %}</td>
             <td class="uk-mute" style="font-size:9pt;">{{ tx.operator or '—' }}</td>
           </tr>
           {% endfor %}
@@ -939,7 +941,7 @@
             <td class="num"><b>¥{{ '%.2f'|format(d.amount or 0) }}</b></td>
             <td class="num uk-mute">{% if d.applied_amount %}¥{{ '%.2f'|format(d.applied_amount) }}{% else %}—{% endif %}</td>
             <td class="num uk-mute">{% if d.refunded_amount %}¥{{ '%.2f'|format(d.refunded_amount) }}{% else %}—{% endif %}</td>
-            <td class="uk-mute" style="font-size:9pt;">{{ d.pay_method or '—' }}</td>
+            <td class="uk-mute" style="font-size:9pt;">{{ pay_method_zh.get(d.pay_method, d.pay_method) or '—' }}</td>
             <td>
               {% if d.status == 'held' %}<span class="uk-pill amber">在押</span>
               {% elif d.status == 'applied' %}<span class="uk-pill green">已抵扣</span>
