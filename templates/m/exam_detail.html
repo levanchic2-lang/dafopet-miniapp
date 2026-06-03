@@ -1,0 +1,89 @@
+{% extends "m/_base.html" %}
+{% block title %}检查单 #{{ order.id }}{% endblock %}
+{% block topbar_title %}🔬 检查单 #{{ order.id }}{% endblock %}
+{% block topbar_sub %}{{ pet.name if pet else '—' }} · {{ v.visit_date if v else '' }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% if v %}/m/visit/{{ v.id }}{% else %}/m/doctor{% endif %}" class="m-icon-btn" title="返回">←</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="m-card">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div style="font-size:11px;color:#94a3b8;">状态</div>
+      <div style="font-size:15px;font-weight:600;">
+        {% if order.status == 'pending' %}<span style="color:#f59e0b;">⏳ 待出报告</span>
+        {% elif order.status == 'completed' %}<span style="color:#16a34a;">✓ 已完成</span>
+        {% elif order.status == 'voided' %}<span style="color:#dc2626;">🚫 已作废</span>
+        {% endif %}
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:#94a3b8;">📎 报告</div>
+      <div style="font-size:18px;font-weight:700;color:#3b82f6;">{{ reports|length }}</div>
+    </div>
+  </div>
+</div>
+
+{# 检查项目 #}
+<div class="m-card">
+  <div class="m-card-title">🧪 检查项目 <span class="count">{{ items|length }}</span></div>
+  {% for it in items %}
+  <div style="padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-size:14px;font-weight:600;">{{ loop.index }}. {{ it.name }}</div>
+    {% if it.unit_price %}
+    <div style="font-size:12px;color:#059669;font-weight:700;">¥{{ '%.0f'|format(it.unit_price) }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{# 已上传报告 #}
+{% if reports %}
+<div class="m-card">
+  <div class="m-card-title">📎 已上传报告</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+    {% for r in reports %}
+    <a href="/admin/exam-reports/{{ r.id }}/view" target="_blank"
+       style="aspect-ratio:1;border:1px solid #e2e8f0;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;text-decoration:none;color:inherit;padding:6px;">
+      <div style="font-size:30px;">{% if r.file_type == 'pdf' %}📄{% else %}🖼{% endif %}</div>
+      <div style="font-size:10px;color:#64748b;text-align:center;margin-top:4px;overflow:hidden;text-overflow:ellipsis;width:100%;">{{ r.original_name|truncate(15) }}</div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# 上传报告 #}
+{% if order.status != 'voided' %}
+<div class="m-card">
+  <div class="m-card-title">📤 上传报告</div>
+  <form method="post" action="/admin/exam-orders/{{ order.id }}/upload" enctype="multipart/form-data"
+        id="upload-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="next_url" value="{{ next_url }}"/>
+    <input type="text" name="item_label" placeholder="标注归属项（可选，如：血常规）"
+           style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:10px;"/>
+    <label class="m-btn" style="background:#16a34a;font-size:15px;padding:14px;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;">
+      📷 拍照 / 选文件
+      <input type="file" name="file" accept="image/*,application/pdf" capture="environment"
+             onchange="document.getElementById('upload-form').submit()" style="display:none;"/>
+    </label>
+    <div style="font-size:11px;color:#94a3b8;margin-top:6px;text-align:center;">
+      支持 JPG / PNG / PDF（≤ 20MB）· 上传后自动标记为已完成
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="m-section-label">桌面操作</div>
+<div class="m-list">
+  <a class="m-list-row" href="/admin/exam-orders/{{ order.id }}">
+    <span class="label">🖥 桌面端详情（出报告 / 作废）</span>
+    <span class="arrow">›</span>
+  </a>
+</div>
+
+{% endblock %}

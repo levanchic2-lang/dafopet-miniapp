@@ -1,0 +1,149 @@
+{% extends "m/_base.html" %}
+{% block title %}TNR #{{ row.id }}{% endblock %}
+{% block topbar_title %}🐱 TNR #{{ row.id }}{% endblock %}
+{% block topbar_sub %}{{ row.cat_nickname or '未命名' }} · {{ row.applicant_name }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/m/tnr" class="m-icon-btn" title="返回">←</a>
+{% if row.phone %}
+<a href="tel:{{ row.phone }}" class="m-icon-btn" title="拨打" style="background:#dcfce7;color:#16a34a;">📞</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+{# 状态 #}
+<div class="m-card">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <div style="font-size:11px;color:#94a3b8;">当前状态</div>
+      <div style="font-size:15px;font-weight:600;">
+        {% if row.status == 'pending_manual' %}⏳ 待人工审核
+        {% elif row.status == 'pre_approved' %}🔵 预通过（待复核）
+        {% elif row.status == 'approved' %}✅ 已通过
+        {% elif row.status == 'rejected' %}🚫 已拒绝
+        {% else %}{{ row.status }}{% endif %}
+      </div>
+    </div>
+    {% if row.ai_is_likely_stray is not none %}
+    <div style="text-align:center;background:#f8fafc;padding:8px 12px;border-radius:8px;">
+      <div style="font-size:13px;font-weight:600;">
+        AI: {% if row.ai_is_likely_stray %}✅ 流浪{% else %}❌ 非流浪{% endif %}
+      </div>
+      {% if row.ai_confidence %}
+      <div style="font-size:11px;color:#64748b;">置信 {{ '%.0f'|format(row.ai_confidence * 100) }}%</div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# 照片 #}
+{% if images %}
+<div class="m-card">
+  <div class="m-card-title">📷 申请照片 <span class="count">{{ images|length }}</span></div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+    {% for m in images %}
+    <a href="/file/{{ m.id }}" target="_blank"
+       style="aspect-ratio:1;border-radius:8px;overflow:hidden;background:#f8fafc;">
+      <img src="/file/{{ m.id }}" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if videos %}
+<div class="m-card">
+  <div class="m-card-title">🎬 申请视频 <span class="count">{{ videos|length }}</span></div>
+  {% for m in videos %}
+  <video src="/file/{{ m.id }}" controls style="width:100%;border-radius:8px;margin-bottom:6px;background:#000;"></video>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 猫咪信息 #}
+<div class="m-card">
+  <div class="m-card-title">🐱 猫咪信息</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+    <div><span style="color:#94a3b8;">昵称：</span><b>{{ row.cat_nickname or '—' }}</b></div>
+    <div><span style="color:#94a3b8;">性别：</span>{% if row.cat_gender == 'male' %}公{% elif row.cat_gender == 'female' %}母{% else %}未知{% endif %}</div>
+    <div><span style="color:#94a3b8;">毛色：</span>{{ row.cat_color or '—' }}</div>
+    <div><span style="color:#94a3b8;">品种：</span>{{ row.cat_breed or '—' }}</div>
+    <div><span style="color:#94a3b8;">年龄：</span>{{ row.age_estimate or '—' }}</div>
+    <div><span style="color:#94a3b8;">体重：</span>{{ row.weight_estimate or '—' }}</div>
+  </div>
+  {% if row.health_note %}
+  <div style="margin-top:8px;font-size:13px;">
+    <span style="color:#94a3b8;">健康备注：</span>{{ row.health_note }}
+  </div>
+  {% endif %}
+</div>
+
+{# 申请人 #}
+<div class="m-card">
+  <div class="m-card-title">👤 申请人</div>
+  <div style="font-size:14px;font-weight:600;">{{ row.applicant_name }}</div>
+  {% if row.phone %}
+  <div style="font-size:13px;margin-top:2px;"><a href="tel:{{ row.phone }}" style="color:#3b82f6;font-family:ui-monospace,monospace;">📞 {{ row.phone }}</a></div>
+  {% endif %}
+  {% if row.address %}
+  <div style="font-size:12px;color:#64748b;margin-top:6px;">📍 {{ row.address }}</div>
+  {% endif %}
+  {% if row.clinic_store %}
+  <div style="font-size:12px;color:#475569;margin-top:6px;">🏥 预约门店：<b>{{ row.clinic_store }}</b>{% if row.appointment_at %} · {{ row.appointment_at }}{% endif %}</div>
+  {% endif %}
+  {% if row.post_surgery_plan %}
+  <div style="font-size:12px;color:#475569;margin-top:6px;">🐾 术后打算：{{ row.post_surgery_plan }}</div>
+  {% endif %}
+  {% if row.is_proxy %}
+  <div style="background:#fef3c7;color:#92400e;font-size:11px;padding:6px 8px;border-radius:6px;margin-top:8px;">
+    🤝 代申请：{{ row.proxy_name }}（{{ row.proxy_phone }}）{% if row.proxy_relation %} · {{ row.proxy_relation }}{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{# 审核动作 #}
+{% if row.status in ['pending_manual', 'pre_approved'] %}
+<form method="post" action="/admin/app/{{ row.id }}/manual-approve" style="margin-bottom:8px;"
+      onsubmit="return confirm('确认通过这份 TNR 申请？')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/tnr"/>
+  <button type="submit" class="m-btn" style="background:#16a34a;font-size:17px;padding:16px;">
+    ✓ 通过
+  </button>
+</form>
+
+<form method="post" action="/admin/app/{{ row.id }}/reject"
+      onsubmit="return rejectConfirm(this)">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/tnr"/>
+  <input type="hidden" name="reason" id="reason-input" value=""/>
+  <button type="submit" class="m-btn danger" style="font-size:15px;padding:14px;">
+    ✗ 拒绝
+  </button>
+</form>
+<script>
+function rejectConfirm(form) {
+  const r = prompt('拒绝原因（必填，会发给申请人）：');
+  if (!r || !r.trim()) return false;
+  form.querySelector('#reason-input').value = r.trim();
+  return true;
+}
+</script>
+{% elif row.status == 'rejected' and row.reject_reason %}
+<div class="m-card" style="background:#fef2f2;border:1px solid #fca5a5;">
+  <div style="font-weight:700;color:#991b1b;">🚫 拒绝原因</div>
+  <div style="font-size:13px;color:#7f1d1d;margin-top:6px;">{{ row.reject_reason }}</div>
+</div>
+{% endif %}
+
+<div class="m-section-label">桌面操作</div>
+<div class="m-list">
+  <a class="m-list-row" href="/admin/applications/{{ row.id }}">
+    <span class="label">🖥 桌面端详情（完整 AI 报告 / 复核）</span>
+    <span class="arrow">›</span>
+  </a>
+</div>
+
+{% endblock %}

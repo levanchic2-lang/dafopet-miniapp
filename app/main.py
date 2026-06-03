@@ -5165,7 +5165,7 @@ async def admin_appointment_reschedule(
 
 
 @app.post("/admin/app/{app_id}/manual-approve")
-async def manual_approve(app_id: int, request: Request, db: Session = Depends(get_db), csrf_token: str = Form("")):
+async def manual_approve(app_id: int, request: Request, db: Session = Depends(get_db), csrf_token: str = Form(""), next_url: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     row = db.get(Application, app_id)
@@ -5195,6 +5195,8 @@ async def manual_approve(app_id: int, request: Request, db: Session = Depends(ge
         submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
+    if next_url:
+        return RedirectResponse(_safe_next(next_url, "/admin"), status_code=303)
     return _admin_back(request, app_id)
 
 
@@ -5225,6 +5227,7 @@ async def manual_reject(
     reason: str = Form(""),
     csrf_token: str = Form(""),
     db: Session = Depends(get_db),
+    next_url: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -5255,6 +5258,8 @@ async def manual_reject(
         reason=(reason or "不符合申请条件")[:20],
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
+    if next_url:
+        return RedirectResponse(_safe_next(next_url, "/admin"), status_code=303)
     return _admin_back(request, app_id)
 
 
@@ -16306,6 +16311,11 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
     if order.visit_id:
         _sync_visit_invoice(db, order.visit_id, request.session.get("admin_username", ""))
         db.commit()
+    # M6 移动端 next_url（{id} 占位 = 新建检查单 id）
+    next_url_raw = str(form.get("next_url") or "")
+    if next_url_raw:
+        nu = next_url_raw.replace("{id}", str(order.id))
+        return RedirectResponse(_safe_next(nu, f"/admin/exam-orders/{order.id}"), status_code=303)
     return RedirectResponse(f"/admin/exam-orders/{order.id}", status_code=303)
 
 
@@ -16443,6 +16453,7 @@ async def admin_exam_order_upload(
     file: UploadFile = File(...),
     item_label: str = Form(""),
     csrf_token: str = Form(""),
+    next_url: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -16476,7 +16487,10 @@ async def admin_exam_order_upload(
     order.status = "completed"
     order.updated_at = datetime.utcnow()
     db.commit()
-    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=报告已上传", status_code=303)
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/exam-orders/{order_id}?msg=报告已上传"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/exam-orders/{order_id}/refresh-token")
@@ -20091,6 +20105,98 @@ async def m_deworming_new(
         "default_vet": default_vet,
     })
     return templates.TemplateResponse(request, "m/deworming_new.html", ctx)
+
+
+@app.get("/m/visit/{visit_id}/exam", response_class=HTMLResponse)
+async def m_exam_new(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/visit/{visit_id}/exam", status_code=303)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404)
+    if (v.status or "open") == "closed":
+        return RedirectResponse(f"/m/visit/{visit_id}?err=病历已结束，不可开检查", status_code=303)
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    cust = db.get(Customer, v.customer_id) if v.customer_id else None
+    # 检查品目：category in (lab/imaging/microscopy)
+    exam_items = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+    ).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.category.in_(["lab", "imaging", "microscopy"]),
+    ).order_by(InventoryItem.category, InventoryItem.subcategory, InventoryItem.name).all()
+    # 按 category 分组
+    grouped = {"lab": [], "imaging": [], "microscopy": []}
+    for it in exam_items:
+        grouped.setdefault(it.category, []).append(it)
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "v": v, "pet": pet, "cust": cust,
+        "grouped": grouped,
+    })
+    return templates.TemplateResponse(request, "m/exam_new.html", ctx)
+
+
+@app.get("/m/exam-order/{order_id}", response_class=HTMLResponse)
+async def m_exam_detail(order_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/exam-order/{order_id}", status_code=303)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    v = db.get(Visit, order.visit_id) if order.visit_id else None
+    pet = db.get(Pet, v.pet_id) if v and v.pet_id else None
+    cust = db.get(Customer, v.customer_id) if v and v.customer_id else None
+    try:
+        items = json.loads(order.items_json or "[]")
+    except Exception:
+        items = []
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "order": order, "v": v, "pet": pet, "cust": cust,
+        "items": items, "reports": order.reports,
+        "next_url": f"/m/exam-order/{order_id}",
+    })
+    return templates.TemplateResponse(request, "m/exam_detail.html", ctx)
+
+
+# TNR 审核
+@app.get("/m/tnr", response_class=HTMLResponse)
+async def m_tnr_list(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/tnr", status_code=303)
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    q = db.query(Application).filter(
+        Application.status.in_([
+            ApplicationStatus.pending_manual.value,
+            ApplicationStatus.pre_approved.value,
+        ])
+    )
+    if store_short:
+        q = q.filter(or_(
+            Application.clinic_store == store_full,
+            Application.clinic_store == store_short,
+        ))
+    rows = q.order_by(Application.created_at.desc()).limit(50).all()
+    ctx = _m_ctx(request, db, active_tab="tnr")
+    ctx["rows"] = rows
+    return templates.TemplateResponse(request, "m/tnr_list.html", ctx)
+
+
+@app.get("/m/tnr/{app_id}", response_class=HTMLResponse)
+async def m_tnr_detail(app_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/tnr/{app_id}", status_code=303)
+    row = db.get(Application, app_id)
+    if not row:
+        raise HTTPException(404)
+    # 照片
+    images = [m for m in row.media if m.kind == MediaKind.application_image.value]
+    videos = [m for m in row.media if m.kind == MediaKind.application_video.value]
+    ctx = _m_ctx(request, db, active_tab="tnr")
+    ctx.update({"row": row, "images": images, "videos": videos})
+    return templates.TemplateResponse(request, "m/tnr_detail.html", ctx)
 
 
 @app.get("/m/visit/{visit_id}/prescribe", response_class=HTMLResponse)

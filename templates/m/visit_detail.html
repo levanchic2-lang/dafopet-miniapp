@@ -71,11 +71,16 @@
 </div>
 {% endif %}
 
-{# 开处方按钮（病历未结束时显示）#}
+{# 开处方 / 开检查 按钮（病历未结束时显示）#}
 {% if v.status != 'closed' and mobile_role == 'doctor' %}
-<a href="/m/visit/{{ v.id }}/prescribe" class="m-btn" style="background:#1e40af;font-size:16px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;">
-  💊 开处方
-</a>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+  <a href="/m/visit/{{ v.id }}/prescribe" class="m-btn" style="background:#1e40af;font-size:15px;padding:14px;display:flex;align-items:center;justify-content:center;gap:6px;margin:0;">
+    💊 开处方
+  </a>
+  <a href="/m/visit/{{ v.id }}/exam" class="m-btn" style="background:#0369a1;font-size:15px;padding:14px;display:flex;align-items:center;justify-content:center;gap:6px;margin:0;">
+    🔬 开检查
+  </a>
+</div>
 {% endif %}
 
 {# 处方 #}
@@ -111,7 +116,7 @@
 <div class="m-card">
   <div class="m-card-title">🔬 检查 <span class="count">{{ exam_rows|length }}</span></div>
   {% for r in exam_rows %}
-  <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+  <a href="/m/exam-order/{{ r.eo.id }}" style="display:block;padding:10px 0;border-bottom:1px solid #f1f5f9;text-decoration:none;color:inherit;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div style="font-size:14px;font-weight:600;color:#0f172a;">
         检查单 #{{ r.eo.id }}
@@ -136,7 +141,7 @@
       {% endfor %}
     </div>
     {% endif %}
-  </div>
+  </a>
   {% endfor %}
 </div>
 {% endif %}

@@ -1,0 +1,57 @@
+{% extends "m/_base.html" %}
+{% block title %}TNR 待审{% endblock %}
+{% block topbar_title %}🐱 TNR 待审{% endblock %}
+{% block topbar_sub %}{{ admin_store_label }} · {{ rows|length }} 份{% endblock %}
+
+{% block topbar_actions %}
+<a href="/m/doctor" class="m-icon-btn" title="返回">←</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not rows %}
+  <div class="m-empty" style="padding-top:60px;">
+    <div class="emoji">🎉</div>
+    <div>没有待审 TNR 申请</div>
+  </div>
+{% else %}
+  {% for a in rows %}
+  <a class="m-card" href="/m/tnr/{{ a.id }}" style="display:block;text-decoration:none;color:inherit;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div style="font-size:11px;color:#94a3b8;">#{{ a.id }} · {{ a.created_at.strftime('%m-%d %H:%M') }}</div>
+      {% if a.status == 'pending_manual' %}
+      <span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">⏳ 待审</span>
+      {% elif a.status == 'pre_approved' %}
+      <span style="background:#dbeafe;color:#1e40af;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">🔵 预通过</span>
+      {% endif %}
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="font-size:30px;">🐱</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;font-weight:700;color:#0f172a;">
+          {{ a.cat_nickname or '未命名' }}
+          {% if a.cat_gender == 'male' %}<span style="color:#3b82f6;font-size:12px;">♂</span>
+          {% elif a.cat_gender == 'female' %}<span style="color:#ec4899;font-size:12px;">♀</span>
+          {% endif %}
+        </div>
+        <div style="font-size:12px;color:#64748b;">
+          {{ a.applicant_name or '—' }} · {{ a.phone or '—' }}
+        </div>
+        {% if a.clinic_store %}
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">📍 {{ a.clinic_store }}</div>
+        {% endif %}
+      </div>
+      {% if a.ai_is_likely_stray is not none %}
+      <div style="text-align:center;">
+        <div style="font-size:18px;">
+          {% if a.ai_is_likely_stray %}✓{% else %}✗{% endif %}
+        </div>
+        <div style="font-size:9px;color:#94a3b8;">AI</div>
+      </div>
+      {% endif %}
+    </div>
+  </a>
+  {% endfor %}
+{% endif %}
+
+{% endblock %}

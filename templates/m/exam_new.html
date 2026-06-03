@@ -1,0 +1,155 @@
+{% extends "m/_base.html" %}
+{% block title %}开检查单{% endblock %}
+{% block topbar_title %}🔬 开检查单{% endblock %}
+{% block topbar_sub %}{{ pet.name if pet else '—' }} · {{ v.visit_date }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/m/visit/{{ v.id }}" class="m-icon-btn" title="取消">✕</a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.exam-chip { background:#f1f5f9;color:#475569;padding:8px 12px;border-radius:14px;font-size:13px;font-weight:600;border:1px solid transparent;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px; }
+.exam-chip.active { background:#0369a1;color:#fff;border-color:#0369a1; }
+.exam-chip .price { font-size:11px;opacity:0.7;font-weight:400; }
+.exam-cat-title { font-size:13px;font-weight:700;color:#0f172a;letter-spacing:0.04em;margin:10px 4px 8px; }
+.fixed-save { position:fixed;left:0;right:0;bottom:64px;background:#fff;border-top:1px solid #e2e8f0;padding:10px 12px;display:flex;align-items:center;gap:8px;z-index:10; }
+.fixed-save .total { font-size:13px;color:#64748b; }
+.fixed-save .total b { font-size:17px;color:#059669; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<form method="post" action="/admin/exam-orders/create" id="exam-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="visit_id" value="{{ v.id }}"/>
+  <input type="hidden" name="next_url" value="/m/exam-order/{id}"/>
+
+  {# 化验 #}
+  {% if grouped.lab %}
+  <div class="exam-cat-title">🧪 化验</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;">
+    {% for it in grouped.lab %}
+    <button type="button" class="exam-chip"
+            data-id="{{ it.id }}"
+            data-name="{{ it.name }}"
+            data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+            data-unit="{{ it.unit or '次' }}"
+            onclick="pickExam(this)">
+      {{ it.name }} <span class="price">¥{{ '%.0f'|format(it.sell_price or 0) }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# 影像 #}
+  {% if grouped.imaging %}
+  <div class="exam-cat-title">📷 影像</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;">
+    {% for it in grouped.imaging %}
+    <button type="button" class="exam-chip"
+            data-id="{{ it.id }}"
+            data-name="{{ it.name }}"
+            data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+            data-unit="{{ it.unit or '次' }}"
+            onclick="pickExam(this)">
+      {{ it.name }} <span class="price">¥{{ '%.0f'|format(it.sell_price or 0) }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# 显微镜 #}
+  {% if grouped.microscopy %}
+  <div class="exam-cat-title">🔬 镜检</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;">
+    {% for it in grouped.microscopy %}
+    <button type="button" class="exam-chip"
+            data-id="{{ it.id }}"
+            data-name="{{ it.name }}"
+            data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+            data-unit="{{ it.unit or '次' }}"
+            onclick="pickExam(this)">
+      {{ it.name }} <span class="price">¥{{ '%.0f'|format(it.sell_price or 0) }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not grouped.lab and not grouped.imaging and not grouped.microscopy %}
+  <div class="m-empty" style="padding-top:60px;">
+    <div class="emoji">🔬</div>
+    <div>还没有检查项目</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:6px;">桌面端 → 库存 → 化验/影像/镜检</div>
+  </div>
+  {% endif %}
+
+  {# 整单备注 #}
+  <div class="m-card" style="margin-top:14px;">
+    <div class="m-card-title">📝 备注</div>
+    <textarea name="notes" rows="2" placeholder="可选"
+              style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"></textarea>
+  </div>
+
+  {# 隐藏的项目 input（JS 动态填）#}
+  <div id="picked-items"></div>
+
+  <div style="height:80px;"></div>
+
+  <div class="fixed-save">
+    <div class="total">已选 <b id="picked-n">0</b> 项 · <b id="grand-total">¥ 0.00</b></div>
+    <button type="submit" class="m-btn" style="flex:1;margin:0;background:#16a34a;font-size:15px;padding:12px;" id="save-btn" disabled>
+      ✓ 开单
+    </button>
+  </div>
+</form>
+
+<script>
+let pickedIdx = 0;
+const picked = new Map(); // id -> {id, name, price, unit}
+
+function pickExam(btn) {
+  const id = btn.dataset.id;
+  if (picked.has(id)) {
+    picked.delete(id);
+    btn.classList.remove('active');
+  } else {
+    picked.set(id, {
+      id: id,
+      name: btn.dataset.name,
+      price: parseFloat(btn.dataset.price || 0),
+      unit: btn.dataset.unit || '次',
+    });
+    btn.classList.add('active');
+  }
+  rebuildHidden();
+}
+
+function rebuildHidden() {
+  const wrap = document.getElementById('picked-items');
+  wrap.innerHTML = '';
+  let i = 0, total = 0;
+  picked.forEach((v) => {
+    wrap.insertAdjacentHTML('beforeend', `
+      <input type="hidden" name="item_name_${i}" value="${escapeHtml(v.name)}"/>
+      <input type="hidden" name="item_id_${i}" value="${v.id}"/>
+      <input type="hidden" name="item_qty_${i}" value="1"/>
+      <input type="hidden" name="item_price_${i}" value="${v.price}"/>
+      <input type="hidden" name="item_unit_${i}" value="${escapeHtml(v.unit)}"/>
+      <input type="hidden" name="item_notes_${i}" value=""/>
+    `);
+    total += v.price;
+    i++;
+  });
+  document.getElementById('picked-n').textContent = picked.size;
+  document.getElementById('grand-total').textContent = '¥ ' + total.toFixed(2);
+  document.getElementById('save-btn').disabled = picked.size === 0;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+
+{% endblock %}
