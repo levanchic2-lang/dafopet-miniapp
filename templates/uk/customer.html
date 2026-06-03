@@ -450,12 +450,24 @@
       <table class="pets-tbl">
         <thead>
           <tr>
-            <th>姓名</th><th>种类</th><th>品种</th><th>性别</th><th>病历号</th><th class="right">最近就诊</th>
+            <th>姓名</th><th>种类</th><th>品种</th><th>性别</th><th>病历号</th><th>最近就诊</th><th class="right">操作</th>
           </tr>
         </thead>
         <tbody>
           {% for p in pets %}
-          <tr onclick="window.location.href='?pet_id={{ p.id }}&tab={{ active_tab }}'">
+          <tr onclick="window.location.href='?pet_id={{ p.id }}&tab={{ active_tab }}'"
+              data-pet-id="{{ p.id }}"
+              data-pet-name="{{ p.name or '' }}"
+              data-pet-species="{{ p.species or 'cat' }}"
+              data-pet-breed="{{ p.breed or '' }}"
+              data-pet-gender="{{ p.gender or 'unknown' }}"
+              data-pet-birthday="{{ p.birthday_estimate or '' }}"
+              data-pet-neutered="{{ '1' if p.is_neutered else '0' }}"
+              data-pet-color="{{ p.color_pattern or '' }}"
+              data-pet-stray="{{ '1' if p.is_stray else '0' }}"
+              data-pet-microchip="{{ p.microchip_id or '' }}"
+              data-pet-store="{{ p.store or '' }}"
+              data-pet-notes="{{ p.notes or '' }}">
             <td>
               <span class="pet-name {% if active_pet and p.id == active_pet.id %}active{% endif %}">{{ p.name or '未命名' }}</span>
               {% if p.is_neutered %}<span class="uk-pill mute">已绝育</span>{% endif %}
@@ -464,7 +476,10 @@
             <td style="color:var(--ink-3);">{{ p.breed or '—' }}</td>
             <td style="font-style:italic;color:var(--ink-3);">{% if p.gender == 'male' %}公{% elif p.gender == 'female' %}母{% else %}—{% endif %}</td>
             <td class="num" style="color:var(--ink-3);font-size:9pt;">{{ p.medical_record_no or '—' }}</td>
-            <td class="right num" style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{% set lv = latest_vacc_by_pet.get(p.id) %}{% if lv %}{{ lv.vaccinated_date }}{% else %}—{% endif %}</td>
+            <td class="num" style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{% set lv = latest_vacc_by_pet.get(p.id) %}{% if lv %}{{ lv.vaccinated_date }}{% else %}—{% endif %}</td>
+            <td class="right action">
+              <a href="#" onclick="event.stopPropagation();openEditPet(this.closest('tr'));return false;">编辑</a>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -1145,6 +1160,85 @@
   </div>
 </div>
 
+{# ─── 编辑宠物 modal（JS 预填）─── #}
+<div class="uk-modal-overlay" id="editPetModal" onclick="if(event.target===this) this.classList.remove('visible');">
+  <div class="uk-modal">
+    <h3>编 辑 宠 物 资 料</h3>
+    <form method="post" id="editPetForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div class="row2">
+        <label class="field">名字
+          <input name="name" id="ep_name" required/>
+        </label>
+        <label class="field">种类
+          <select name="species" id="ep_species">
+            <option value="cat">猫</option>
+            <option value="dog">犬</option>
+            <option value="other">其他</option>
+          </select>
+        </label>
+      </div>
+      <div class="row2">
+        <label class="field">品种
+          <input name="breed" id="ep_breed" list="breed-list-edit"/>
+          <datalist id="breed-list-edit">
+            {% for b in breed_cats %}<option value="{{ b }}">{% endfor %}
+            {% for b in breed_dogs %}<option value="{{ b }}">{% endfor %}
+          </datalist>
+        </label>
+        <label class="field">性别
+          <select name="gender" id="ep_gender">
+            <option value="unknown">未知</option>
+            <option value="male">公</option>
+            <option value="female">母</option>
+          </select>
+        </label>
+      </div>
+      <div class="row2">
+        <label class="field">毛色
+          <input name="color_pattern" id="ep_color"/>
+        </label>
+        <label class="field">出生估计
+          <input name="birthday_estimate" id="ep_birthday" placeholder="如：2023-06"/>
+        </label>
+      </div>
+      <div class="row2">
+        <label class="field">是否绝育
+          <select name="is_neutered" id="ep_neutered">
+            <option value="0">否</option>
+            <option value="1">是</option>
+          </select>
+        </label>
+        <label class="field">是否流浪
+          <select name="is_stray" id="ep_stray">
+            <option value="0">否</option>
+            <option value="1">是</option>
+          </select>
+        </label>
+      </div>
+      <div class="row2">
+        <label class="field">芯片号
+          <input name="microchip_id" id="ep_microchip"/>
+        </label>
+        <label class="field">归属门店
+          <select name="store" id="ep_store">
+            <option value="">未指定</option>
+            <option value="东环店">东环店</option>
+            <option value="横岗店">横岗店</option>
+          </select>
+        </label>
+      </div>
+      <label class="field">备注
+        <textarea name="notes" id="ep_notes" rows="2"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('editPetModal').classList.remove('visible');">取消</button>
+        <button type="submit" class="uk-btn primary sm">保 存 修 改</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 {# ─── 发起协议签署 modal ─── #}
 <div class="uk-modal-overlay" id="consentModal" onclick="if(event.target===this) this.classList.remove('visible');">
   <div class="uk-modal">
@@ -1379,6 +1473,24 @@
 </div>
 
 <script>
+function openEditPet(row) {
+  var d = row.dataset;
+  var form = document.getElementById('editPetForm');
+  form.action = '/admin/customers/{{ cust.id }}/pets/' + d.petId + '/edit';
+  document.getElementById('ep_name').value      = d.petName || '';
+  document.getElementById('ep_species').value   = d.petSpecies || 'cat';
+  document.getElementById('ep_breed').value     = d.petBreed || '';
+  document.getElementById('ep_gender').value    = d.petGender || 'unknown';
+  document.getElementById('ep_birthday').value  = d.petBirthday || '';
+  document.getElementById('ep_neutered').value  = d.petNeutered || '0';
+  document.getElementById('ep_stray').value     = d.petStray || '0';
+  document.getElementById('ep_color').value     = d.petColor || '';
+  document.getElementById('ep_microchip').value = d.petMicrochip || '';
+  document.getElementById('ep_store').value     = d.petStore || '';
+  document.getElementById('ep_notes').value     = d.petNotes || '';
+  document.getElementById('editPetModal').classList.add('visible');
+}
+
 function toggleCouponFields(kind) {
   var fv = document.getElementById('fldFaceValue');
   var dp = document.getElementById('fldDiscountPct');
