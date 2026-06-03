@@ -1,0 +1,409 @@
+/* ============================================================
+ *  UK Global — 全站英伦极简覆盖层
+ *  策略：覆盖 base.html 的 CSS 变量 + 重写常用类（btn/card/table 等）
+ *  加载顺序：base.html 内联 :root → 这个文件最后 → 覆盖所有
+ *
+ *  原则：
+ *    1. 字体全衬线
+ *    2. 主色 #1a1a1a 黑（替换 brand 蓝 #3b8ec1）
+ *    3. 圆角全砍（10px → 2px）
+ *    4. 阴影全砍
+ *    5. 老类名映射 UK 风
+ * ============================================================ */
+
+/* === 0. 引入 UK 变量定义（基础层） === */
+@import url("/static/uk_minimal.css");
+
+/* === 1. 覆盖 base.html 的 CSS 变量 ===
+   这一段是最高杠杆点：base.html 里所有 var(--brand) / var(--radius)
+   引用都会立即变身。 */
+:root {
+  /* 中性背景 — 保持米色 */
+  --bg:           #fafaf9;
+  --bg-elevated:  #f5f4f1;
+  --card:         #ffffff;
+  --text:         #1a1a1a;
+  --muted:        #555;
+  --border:       #e5e5e5;
+  --border-strong:#d8d8d8;
+  --input-border: #1a1a1a;
+
+  /* 品牌：蓝 → 黑 */
+  --brand-light:  #d8d8d8;
+  --brand:        #1a1a1a;
+  --brand-dark:   #000000;
+  --brand-fg:     #ffffff;
+  --brand-bg-soft:#f5f4f1;
+  --accent-warm:  #6b4423;
+  --accent:       #1a1a1a;
+  --accent-hover: #000000;
+
+  /* 状态色：去饱和成英伦克制 */
+  --ok-fg:     #1d4d3a;
+  --ok-bg:     transparent;
+  --warn-fg:   #6b4423;
+  --warn-bg:   transparent;
+  --danger-fg: #7a2828;
+  --danger-bg: transparent;
+  --info-fg:   #2d3748;
+  --info-bg:   transparent;
+
+  /* 圆角全砍 */
+  --radius-sm:   0;
+  --radius:      0;
+  --radius-md:   0;
+  --radius-lg:   0;
+  --radius-pill: 0;
+
+  /* 阴影全砍 */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow:    none;
+  --shadow-lg: none;
+}
+
+/* === 2. body 字体全衬线 === */
+body {
+  font-family: var(--font-serif) !important;
+  background-image: none !important;
+  line-height: 1.55 !important;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+a { color: var(--ink); }
+a:hover { border-bottom-color: var(--ink) !important; }
+
+/* === 3. 顶栏 / 全局导航 === */
+header, nav, .topbar, .header {
+  background: var(--paper) !important;
+  border-bottom: 0.5px solid var(--hair-2) !important;
+  box-shadow: none !important;
+}
+
+/* === 4. 页头 page-head === */
+.page-head {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 0 var(--gap-3) 0 !important;
+  margin-bottom: var(--gap-3) !important;
+  border-bottom: none !important;
+}
+.page-head h1 {
+  font-family: var(--font-serif) !important;
+  font-weight: 400 !important;
+  font-size: 26pt !important;
+  letter-spacing: 3px !important;
+  color: var(--ink) !important;
+  margin: 0 0 var(--gap-2) !important;
+}
+.page-head .ph-sub,
+.page-head p {
+  font-size: 9.5pt !important;
+  letter-spacing: 2px !important;
+  color: var(--ink-3) !important;
+  font-style: italic;
+}
+.page-head .ph-icon { display: none !important; }
+.page-head .ph-actions {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+/* 页头底加双横线（英伦招牌） */
+.page-head + * { padding-top: 0; }
+.page-head::after {
+  content: "";
+  display: block;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  height: 4px;
+  margin-top: var(--gap-3);
+}
+
+/* === 5. 按钮 .btn === */
+.btn,
+button.btn,
+a.btn,
+input[type="submit"],
+input[type="button"] {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-serif) !important;
+  font-size: 9.5pt !important;
+  letter-spacing: 2.5px !important;
+  text-transform: uppercase;
+  padding: 6px 16px !important;
+  border: 0.5px solid var(--ink) !important;
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  transition: background .15s, color .15s !important;
+  cursor: pointer;
+}
+.btn:hover { background: var(--paper) !important; color: var(--ink) !important; }
+
+.btn.secondary,
+.btn-secondary,
+.btn.outline {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+}
+.btn.secondary:hover,
+.btn-secondary:hover,
+.btn.outline:hover {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+}
+
+.btn.danger,
+button.danger,
+.btn-danger {
+  border-color: var(--accent-red) !important;
+  background: var(--paper) !important;
+  color: var(--accent-red) !important;
+}
+.btn.danger:hover,
+button.danger:hover,
+.btn-danger:hover {
+  background: var(--accent-red) !important;
+  color: var(--paper) !important;
+}
+
+/* === 6. 卡片 .card === */
+.card {
+  background: var(--paper) !important;
+  border: 0.5px solid var(--hair-2) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 18px 22px !important;
+}
+
+/* === 7. 筛选条 .filter-card === */
+.filter-card {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 0.5px solid var(--hair) !important;
+  border-radius: 0 !important;
+  padding: 0 0 var(--gap-3) 0 !important;
+  margin-bottom: var(--gap-3) !important;
+  box-shadow: none !important;
+}
+.filter-row {
+  display: flex; gap: var(--gap-3); align-items: baseline; flex-wrap: wrap;
+}
+
+/* === 8. 数据表 .data-table === */
+.data-table-wrap {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow-x: auto;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-serif) !important;
+  font-size: 11pt;
+}
+.data-table thead th {
+  font-weight: 700 !important;
+  font-size: 8.5pt !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase;
+  color: var(--ink-2) !important;
+  background: transparent !important;
+  border-top: 1px solid var(--ink) !important;
+  border-bottom: 1px solid var(--ink) !important;
+  padding: 8px 12px !important;
+  text-align: left;
+}
+.data-table tbody td {
+  padding: 8px 12px !important;
+  border-bottom: 0.5px solid var(--hair) !important;
+  background: transparent !important;
+  vertical-align: middle;
+}
+.data-table tbody tr:hover { background: var(--bg-soft) !important; }
+.data-table tbody tr:hover td { background: var(--bg-soft) !important; }
+
+/* === 9. 消息条 .msg === */
+.msg {
+  background: var(--bg-soft) !important;
+  border: none !important;
+  border-left: 2px solid var(--ink) !important;
+  border-radius: 0 !important;
+  padding: 12px 16px !important;
+  margin-bottom: var(--gap-3) !important;
+  font-style: italic;
+  font-size: 10.5pt !important;
+  color: var(--ink) !important;
+  box-shadow: none !important;
+}
+.msg.ok      { border-left-color: var(--accent-green) !important; color: var(--accent-green) !important; }
+.msg.err     { border-left-color: var(--accent-red) !important;   color: var(--accent-red) !important; }
+.msg.warn,
+.msg.warning { border-left-color: var(--accent-amber) !important; color: var(--accent-amber) !important; }
+.msg.info    { border-left-color: var(--accent-blue) !important;  color: var(--accent-blue) !important; }
+
+/* === 10. Pills / Badges === */
+.pill,
+.badge {
+  display: inline-block !important;
+  font-family: var(--font-serif) !important;
+  font-size: 8pt !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase;
+  font-style: italic;
+  padding: 1px 8px !important;
+  border: 0.5px solid var(--ink-2) !important;
+  background: transparent !important;
+  color: var(--ink-2) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  white-space: nowrap;
+}
+.pill.pill-ok,    .badge.b-ok,    .badge.b-done    { border-color: var(--accent-green) !important; color: var(--accent-green) !important; }
+.pill.pill-warn,  .badge.b-warn,  .badge.b-pending { border-color: var(--accent-amber) !important; color: var(--accent-amber) !important; }
+.pill.pill-danger,.badge.b-no,    .badge.b-bad,
+.pill.pill-error                                  { border-color: var(--accent-red) !important;   color: var(--accent-red) !important; }
+.pill.pill-info                                   { border-color: var(--accent-blue) !important;  color: var(--accent-blue) !important; }
+.pill.pill-gray,  .badge.b-gray                   { border-color: var(--ink-4) !important;       color: var(--ink-4) !important; }
+.pill.pill-purple                                 { border-color: var(--accent-blue) !important;  color: var(--accent-blue) !important; }
+
+/* === 11. 输入框 === */
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="tel"],
+input[type="number"],
+input[type="date"],
+input[type="time"],
+input[type="password"],
+select,
+textarea {
+  font-family: var(--font-serif) !important;
+  font-size: 11pt !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 0.5px solid var(--ink-2) !important;
+  border-radius: 0 !important;
+  padding: 6px 8px !important;
+  color: var(--ink) !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transition: border-color .15s !important;
+}
+input[type="text"]:focus,
+input[type="search"]:focus,
+input[type="email"]:focus,
+input[type="tel"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+input[type="time"]:focus,
+input[type="password"]:focus,
+select:focus,
+textarea:focus {
+  border-bottom: 1px solid var(--ink) !important;
+}
+
+/* checkbox / radio: 方框极简 */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 14px !important; height: 14px !important;
+  border: 0.5px solid var(--ink-2) !important;
+  background: var(--paper) !important;
+  cursor: pointer; position: relative;
+  margin: 0 4px 0 0;
+}
+input[type="radio"] { border-radius: 50% !important; }
+input[type="checkbox"]:checked::after {
+  content: ''; position: absolute; inset: 2px; background: var(--ink);
+}
+input[type="radio"]:checked::after {
+  content: ''; position: absolute; inset: 3px; background: var(--ink); border-radius: 50%;
+}
+
+label { font-family: var(--font-serif); color: var(--ink); }
+
+/* === 12. Lucide 图标：保留但收紧 === */
+[data-lucide], .ico {
+  stroke-width: 1.2 !important;
+  color: var(--ink-2) !important;
+}
+[data-lucide] svg { stroke-width: 1.2 !important; }
+
+/* === 13. 链接 === */
+a.link {
+  border-bottom: 0.5px solid var(--ink-3);
+  font-style: italic;
+}
+a.link:hover { border-bottom-color: var(--ink); }
+
+/* === 14. 各种 sticky / 浮层 === */
+.sticky-bar, .filter-sticky, .toolbar {
+  background: var(--paper) !important;
+  border-bottom: 0.5px solid var(--hair-2) !important;
+  box-shadow: none !important;
+}
+
+/* === 15. tab 切换条 (常用 .tabs .tab) === */
+.tabs {
+  border-bottom: 0.5px solid var(--hair) !important;
+  display: flex; gap: var(--gap-5);
+}
+.tab,
+.tab-link {
+  font-family: var(--font-serif) !important;
+  font-size: 10pt !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase;
+  padding: 8px 0 !important;
+  border-bottom: 1px solid transparent !important;
+  color: var(--ink-3) !important;
+  background: transparent !important;
+}
+.tab.active,
+.tab-link.active {
+  color: var(--ink) !important;
+  border-bottom-color: var(--ink) !important;
+}
+
+/* === 16. 字段标签 / 表单行 === */
+.row2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-3);
+}
+.row2 > div, .row2 > label, .row2 > .field {
+  min-width: 0;
+}
+
+/* === 17. 关闭打印页样式不要被影响 === */
+.print-stage, .print-toolbar { font-family: initial !important; }
+.rx-frame, .inv-clinic-en, .anesth-frame { font-family: initial !important; }
+
+/* === 18. 工作流提示条 / 蓝底 info 卡 — 收紧成 italic info === */
+[style*="background:#eff6ff"],
+[style*="background:#f0f9ff"],
+[style*="background:#dbeafe"] {
+  background: var(--bg-soft) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink) !important;
+  border-radius: 0 !important;
+}
+
+/* === 19. brand bg-soft 蓝色块全去 === */
+[style*="background:var(--brand-bg-soft)"],
+.brand-soft, .info-card {
+  background: var(--bg-soft) !important;
+  border-color: var(--hair) !important;
+  border-radius: 0 !important;
+}
+
+/* === 20. 数字使用 numeric serif === */
+.num, .stat-num, .kpi-num, .amount {
+  font-family: var(--font-numeric) !important;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: 0.5px;
+}
