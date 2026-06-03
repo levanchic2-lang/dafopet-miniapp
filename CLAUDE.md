@@ -5,7 +5,11 @@
 - **后端**：FastAPI + SQLAlchemy 2.0 + SQLite，入口 `app/main.py`
 - **模板**：Jinja2，位于 `templates/`
 - **小程序**：微信小程序，位于 `miniapp/`
-- **部署**：git push main → webhook 自动部署服务器，无需手动登录
+- **部署**：git push main → webhook 自动部署服务器；webhook 失效时用本机 SSH 一键脚本
+  - 服务器：`ubuntu@119.91.235.101`（腾讯轻量云，hostname `VM-0-10-ubuntu`）
+  - 本机已配 `~/.ssh/config` alias `tnr-server` + 部署 key `~/.ssh/tnr_deploy`
+  - 一键命令：`ssh tnr-server "cd /srv/tnr-app/releases/current && sudo git fetch origin main && sudo git reset --hard origin/main && sudo systemctl restart tnr-app"`
+  - sudo 时会弹腾讯云微信扫码 banner，正常 sudo 自动通过不需扫
 
 ## 门店
 - 大风动物医院（东环店）— 短名 `东环店`
