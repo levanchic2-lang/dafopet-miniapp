@@ -60,15 +60,17 @@
   .allday-cell { border-left:1px solid var(--hair); padding:2px; display:flex; flex-direction:column; gap:2px; }
   .allday-block-pill { font-size:0.71rem; padding:0.1rem 0.35rem; background:#e0e7ff; color:#3730a3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
   .week-scroll { flex:1; overflow-y:scroll; position:relative; }
-  /* WebKit 滚动条改细 + 用 JS 量出来的宽度同步到 header padding-right */
-  .week-scroll::-webkit-scrollbar { width: 8px; }
+  /* WebKit 滚动条美化（仅视觉，不锁宽度） */
   .week-scroll::-webkit-scrollbar-track { background: var(--paper); }
   .week-scroll::-webkit-scrollbar-thumb { background: var(--hair-2); }
   .week-scroll::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
   /* 兼容 firefox */
-  .week-scroll { scrollbar-width: thin; scrollbar-color: var(--hair-2) var(--paper); }
-  /* header / allday 行预留 8px scrollbar gutter，跟 body 完美对齐 */
-  .week-header-row, .allday-row { padding-right: 8px; box-sizing: border-box; }
+  .week-scroll { scrollbar-color: var(--hair-2) var(--paper); }
+  /* header / allday 行 padding-right 由 JS 量出来的 --sb-w 注入（精确匹配真实 scrollbar 宽度） */
+  .week-header-row, .allday-row {
+    padding-right: var(--sb-w, 15px) !important;
+    box-sizing: border-box !important;
+  }
   .week-grid { display:flex; position:relative; }
   .time-col { width:56px; flex-shrink:0; }
   .hour-label { height:64px; display:flex; align-items:flex-start; justify-content:flex-end; padding-right:8px; padding-top:3px; font-size:0.68rem; color:var(--ink-3); font-variant-numeric:tabular-nums; }
@@ -274,6 +276,29 @@
   <span class="sep">/</span>
   <span>日历</span>
 </div>
+
+<script>
+// 量真实 scrollbar 宽度（系统/浏览器决定）→ CSS var --sb-w
+// 同步给 header / allday 行做 padding-right，让列宽精确匹配 body
+(function() {
+  function measure() {
+    var outer = document.createElement('div');
+    outer.style.cssText = 'visibility:hidden;overflow:scroll;width:100px;height:100px;position:absolute;top:-9999px;';
+    document.body.appendChild(outer);
+    var inner = document.createElement('div');
+    inner.style.width = '100%';
+    outer.appendChild(inner);
+    var w = outer.offsetWidth - inner.offsetWidth;
+    outer.remove();
+    document.documentElement.style.setProperty('--sb-w', w + 'px');
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', measure);
+  } else {
+    measure();
+  }
+})();
+</script>
 
 {% include "includes/admin_calendar_body.html" %}
 
