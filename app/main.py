@@ -10993,7 +10993,7 @@ async def page_admin_presc_create(
     if pet_id:
         history = db.query(Prescription).filter(Prescription.pet_id == pet_id)\
             .order_by(Prescription.id.desc()).limit(10).all()
-    return templates.TemplateResponse(request, "admin_prescription_form.html", {
+    return templates.TemplateResponse(request, "uk/prescription.html", {  # B8.6 UK 重写
         "presc": None, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
         "presc_status_zh": _PRESC_STATUS_ZH,
@@ -11078,7 +11078,7 @@ async def page_admin_presc_detail(presc_id: int, request: Request, db: Session =
             Prescription.pet_id == presc.pet_id,
             Prescription.id != presc_id,
         ).order_by(Prescription.id.desc()).limit(10).all()
-    return templates.TemplateResponse(request, "admin_prescription_form.html", {
+    return templates.TemplateResponse(request, "uk/prescription.html", {  # B8.6 UK 重写
         "presc": presc, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
         "presc_status_zh": _PRESC_STATUS_ZH,
