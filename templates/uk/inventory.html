@@ -455,10 +455,13 @@
     <label class="clear-flag" title="勾上 → 把备注批量清空">
       <input type="checkbox" id="bulk-notes-clear"/>清空
     </label>
-    <span class="lbl">单位</span>
-    <input type="text" name="unit" id="bulk-unit" placeholder="主" style="width:55px;"/>
-    <input type="text" name="unit2" id="bulk-unit2" placeholder="副" style="width:55px;"/>
-    <input type="number" step="0.01" min="1" name="unit2_ratio" id="bulk-unit2-ratio" placeholder="换算" style="width:60px;" title="1 副单位 = N 主单位"/>
+    <span class="unit-group" style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
+      <span class="lbl">单位</span>
+      <input type="text" name="unit" id="bulk-unit" placeholder="主" style="width:55px;"/>
+      <input type="text" name="unit2" id="bulk-unit2" placeholder="副" style="width:55px;"/>
+      <span class="lbl" style="margin-left:4px;">换算</span>
+      <input type="number" step="0.01" min="1" name="unit2_ratio" id="bulk-unit2-ratio" placeholder="N" style="width:55px;" title="1 副单位 = N 主单位"/>
+    </span>
     {% if is_superadmin %}
     <span class="lbl">门店</span>
     <select name="store" id="bulk-store">
