@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}待领养管理 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>待领养管理</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>待&nbsp;领&nbsp;养
+      <span class="sub">流浪猫狗领养信息发布与管理</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_adoption_list_body.html" %}
+{% endblock %}

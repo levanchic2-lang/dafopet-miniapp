@@ -17228,7 +17228,7 @@ async def api_adoption_video(pet_id: int, db: Session = Depends(get_db)):
 async def admin_adoption_list(request: Request, db: Session = Depends(get_db)):
     require_admin(request)
     pets = db.query(AdoptionPet).order_by(AdoptionPet.sort_order, AdoptionPet.id.desc()).all()
-    return templates.TemplateResponse(request, "admin_adoption_list.html", {
+    return templates.TemplateResponse(request, "uk/adoption_list.html", {
         "pets": pets, "status_zh": _ADOPTION_STATUS_ZH,
     })
 
@@ -17236,7 +17236,7 @@ async def admin_adoption_list(request: Request, db: Session = Depends(get_db)):
 @app.get("/admin/adoption/new", response_class=HTMLResponse)
 async def admin_adoption_new_form(request: Request):
     require_admin(request)
-    return templates.TemplateResponse(request, "admin_adoption_form.html", {
+    return templates.TemplateResponse(request, "uk/adoption_form.html", {
         "pet": None, "status_zh": _ADOPTION_STATUS_ZH,
     })
 
@@ -17275,7 +17275,7 @@ async def admin_adoption_detail(pet_id: int, request: Request, db: Session = Dep
     pet = db.get(AdoptionPet, pet_id)
     if not pet:
         raise HTTPException(404)
-    return templates.TemplateResponse(request, "admin_adoption_form.html", {
+    return templates.TemplateResponse(request, "uk/adoption_form.html", {
         "pet": pet, "status_zh": _ADOPTION_STATUS_ZH,
         "msg": request.query_params.get("msg"),
     })

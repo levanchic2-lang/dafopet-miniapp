@@ -1,0 +1,18 @@
+{% extends "uk/_base.html" %}
+{% block title %}公布展示 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}
+body .case { background:var(--paper) !important; border:0.5px solid var(--hair-2) !important; border-radius:0 !important; box-shadow:none !important; margin-bottom:18px; }
+body .case-head { background:var(--bg) !important; border-bottom:0.5px solid var(--hair) !important; padding:14px 20px !important; }
+</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>公布展示</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>公&nbsp;布&nbsp;展&nbsp;示
+      <span class="sub">TNR 已审核案例 · 公开展示</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/showcase_body.html" %}
+{% endblock %}
