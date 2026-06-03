@@ -11784,7 +11784,7 @@ async def page_admin_narcotics_ledger(
     if store:
         items_q = items_q.filter((InventoryItem.store == store) | (InventoryItem.store == "") | (InventoryItem.store.is_(None)))
     items_list = items_q.order_by(InventoryItem.name).all()
-    return templates.TemplateResponse(request, "admin_narcotics_ledger.html", {
+    return templates.TemplateResponse(request, "uk/narcotics_ledger.html", {
         "rows": rows, "items_list": items_list,
         "item_id": item_id, "source": source,
         "date_from": date_from, "date_to": date_to,
@@ -11809,7 +11809,7 @@ async def page_admin_narcotics_manual(request: Request, db: Session = Depends(ge
     items_list = items_q.order_by(InventoryItem.name).all()
     staff_list = db.query(Staff.name).filter(Staff.status.in_(["active", "probation"])).all()
     staff_names = [s[0] for s in staff_list]
-    return templates.TemplateResponse(request, "admin_narcotics_manual.html", {
+    return templates.TemplateResponse(request, "uk/narcotics_manual.html", {
         "items_list": items_list, "staff_names": staff_names,
         "today": datetime.utcnow().strftime("%Y-%m-%d"),
         "csrf_token": _get_csrf_token(request),
@@ -12733,7 +12733,7 @@ async def api_inventory_search(
 async def admin_inventory_import_xls_page(request: Request):
     require_admin(request)
     require_superadmin(request)
-    return templates.TemplateResponse(request, "admin_inventory_import_xls.html", {
+    return templates.TemplateResponse(request, "uk/inventory_import_xls.html", {
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
         "err": request.query_params.get("err"),
@@ -12790,7 +12790,7 @@ async def admin_inventory_import_xls_preview(
                     f.unlink(missing_ok=True)
         except Exception:
             pass
-        return templates.TemplateResponse(request, "admin_inventory_import_xls.html", {
+        return templates.TemplateResponse(request, "uk/inventory_import_xls.html", {
             "csrf_token": _get_csrf_token(request),
             "preview": preview,
             "warnings": warnings[:20],
@@ -12949,7 +12949,7 @@ async def admin_inventory_batch_action(
 async def admin_inventory_import_photo_page(request: Request, db: Session = Depends(get_db)):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
-    return templates.TemplateResponse(request, "admin_inventory_import_photo.html", {
+    return templates.TemplateResponse(request, "uk/inventory_import_photo.html", {
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -13622,7 +13622,7 @@ async def admin_inv_cleanup_preview(request: Request, db: Session = Depends(get_
             "status": r["status"], "hint": r["hint"],
             "cat_change": (it.category or "") != r["new_category"],
         })
-    return templates.TemplateResponse(request, "admin_inventory_cleanup.html", {
+    return templates.TemplateResponse(request, "uk/inventory_cleanup.html", {
         "rows": rows, "counts": counts,
         "csrf_token": _get_csrf_token(request),
         "title": "小类规范化工具",
@@ -13726,7 +13726,7 @@ async def admin_inventory_audit(request: Request, db: Session = Depends(get_db))
         else:
             n_ok += 1
 
-    return templates.TemplateResponse(request, "admin_inventory_audit.html", {
+    return templates.TemplateResponse(request, "uk/inventory_audit.html", {
         "issues": issues, "n_total": n_total, "n_ok": n_ok,
         "csrf_token": _get_csrf_token(request),
         "title": "列表 vs 编辑表单一致性审计",

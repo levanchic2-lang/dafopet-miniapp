@@ -1,0 +1,147 @@
+
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+{% if err %}<div class="msg err"><i data-lucide="alert-triangle"></i> {{ err }}</div>{% endif %}
+
+<div class="page-head">
+  <div>
+    <h1><span class="ph-icon"><i data-lucide="upload"></i></span>从小暖医生导入药品/疫苗/驱虫</h1>
+    <p class="ph-sub">支持小暖原生导出的 .xls / .xlsx（37 列格式）</p>
+  </div>
+  <div class="ph-actions">
+    <a href="/admin/inventory" class="btn secondary" style="font-size:.85rem;"><i data-lucide="arrow-left"></i> 返回库存</a>
+  </div>
+</div>
+
+{% if not preview %}
+{# Step 1：上传文件 #}
+<div class="card" style="padding:1.5rem;">
+  <h3 style="margin:0 0 .8rem;font-size:1rem;">第 1 步：上传小暖导出的 Excel</h3>
+  <form method="post" action="/admin/inventory/import-xls/preview" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <label>选择文件（.xls / .xlsx）</label>
+    <input type="file" name="file" accept=".xls,.xlsx" required style="margin-bottom:1rem;"/>
+
+    <label>归属门店</label>
+    <select name="store" style="max-width:300px;">
+      <option value="">通用（两店共享）</option>
+      <option value="东环店">东环店</option>
+      <option value="横岗店">横岗店</option>
+    </select>
+    <p style="font-size:.78rem;color:var(--muted);margin:.4rem 0 1.2rem;">
+      建议选「通用」—— 药品/疫苗等通常两店共用，导入后可单独编辑修改归属。
+    </p>
+
+    <button type="submit" class="btn"><i data-lucide="upload"></i> 上传并预览</button>
+  </form>
+
+  <div style="margin-top:1.5rem;padding:.8rem 1rem;background:#f8fafc;border-left:3px solid #3b82f6;border-radius:0 6px 6px 0;font-size:.85rem;line-height:1.7;color:#475569;">
+    <b style="color:#1e293b;">字段映射规则：</b><br>
+    • <b>所属目录</b> 自动识别：药品 / 疫苗 / 驱虫 / 消耗品 / 商品 / 处置 / 美容 / 化验<br>
+    • <b>名称 + 价格 + 库存 + 单位</b> 直接映射<br>
+    • <b>是否管控 + 麻醉药品</b> 任一为「是」→ 管控药品<br>
+    • <b>供应商</b> 是数字 ID（暂存「小暖#1」，后续可在库存页修改）<br>
+    • <b>药品成分 + 品牌 + 拼音 + 通用名 + 处方标记</b> 拼到「备注」<br>
+    • <b>会员价 / 入库参考价 / 条形码 / 投药方式等</b> 我们系统没对应概念，不导入
+  </div>
+</div>
+
+{% else %}
+{# Step 2：预览 + 选择策略 #}
+<div class="card" style="padding:1.5rem;">
+  <h3 style="margin:0 0 .8rem;font-size:1rem;">第 2 步：试运行预览 · 文件 {{ filename }}</h3>
+
+  <div style="display:flex;gap:.5rem;margin:0 0 1rem;flex-wrap:wrap;">
+    <div style="background:#dbeafe;color:#1e40af;padding:.55rem 1rem;border-radius:8px;">
+      <b style="font-size:1.15rem;display:block;">{{ preview.total }}</b>
+      <span style="font-size:.78rem;">总条数</span>
+    </div>
+    <div style="background:#dcfce7;color:#166534;padding:.55rem 1rem;border-radius:8px;">
+      <b style="font-size:1.15rem;display:block;">{{ preview.new_count }}</b>
+      <span style="font-size:.78rem;">新建</span>
+    </div>
+    <div style="background:#fef3c7;color:#92400e;padding:.55rem 1rem;border-radius:8px;">
+      <b style="font-size:1.15rem;display:block;">{{ preview.update_count }}</b>
+      <span style="font-size:.78rem;">已存在（按名+类别匹配）</span>
+    </div>
+  </div>
+
+  {% if warnings %}
+  <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:.5rem .8rem;margin:0 0 1rem;font-size:.82rem;color:#92400e;">
+    <b>⚠ 警告（前 20 条）：</b>
+    <ul style="margin:.3rem 0 0;padding-left:1.2rem;">
+      {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <h4 style="margin:1rem 0 .5rem;font-size:.9rem;">前 20 条样本</h4>
+  <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem;min-width:900px;">
+      <thead style="background:#f8fafc;">
+        <tr>
+          <th style="padding:.4rem .6rem;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border);">操作</th>
+          <th style="padding:.4rem .6rem;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border);">名称</th>
+          <th style="padding:.4rem .6rem;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border);">类别</th>
+          <th style="padding:.4rem .6rem;text-align:right;white-space:nowrap;border-bottom:1px solid var(--border);">售价</th>
+          <th style="padding:.4rem .6rem;text-align:right;white-space:nowrap;border-bottom:1px solid var(--border);">进价</th>
+          <th style="padding:.4rem .6rem;text-align:right;white-space:nowrap;border-bottom:1px solid var(--border);">库存</th>
+          <th style="padding:.4rem .6rem;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border);">单位</th>
+          <th style="padding:.4rem .6rem;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border);">管控</th>
+          <th style="padding:.4rem .6rem;text-align:left;border-bottom:1px solid var(--border);">备注</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in preview.samples %}
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:.35rem .6rem;">
+            {% if r._action == 'new' %}<span style="color:#15803d;font-weight:600;">+ 新建</span>
+            {% else %}<span style="color:#d97706;font-weight:600;">↻ 已存在 #{{ r._existing_id }}</span>{% endif %}
+          </td>
+          <td style="padding:.35rem .6rem;font-weight:500;">{{ r.name }}</td>
+          <td style="padding:.35rem .6rem;color:var(--muted);">{{ r.category }}{% if r.subcategory %} · {{ r.subcategory }}{% endif %}</td>
+          <td style="padding:.35rem .6rem;text-align:right;">¥{{ '%.2f'|format(r.sell_price) }}</td>
+          <td style="padding:.35rem .6rem;text-align:right;color:var(--muted);">¥{{ '%.2f'|format(r.cost_price) }}</td>
+          <td style="padding:.35rem .6rem;text-align:right;">{{ '%g'|format(r.stock_qty) }}</td>
+          <td style="padding:.35rem .6rem;">{{ r.unit }}{% if r.unit2 %} / {{ r.unit2 }}{% endif %}</td>
+          <td style="padding:.35rem .6rem;">{% if r.is_controlled %}<span style="color:#dc2626;">⚠ 管控</span>{% else %}—{% endif %}</td>
+          <td style="padding:.35rem .6rem;color:var(--muted);font-size:.72rem;">{{ r.notes[:60] }}{% if r.notes|length > 60 %}…{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h4 style="margin:1.5rem 0 .5rem;font-size:.9rem;">第 3 步：选择导入策略</h4>
+  <form method="post" action="/admin/inventory/import-xls/commit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <div style="display:grid;gap:.5rem;max-width:600px;">
+      <label style="display:flex;gap:.5rem;padding:.6rem .85rem;border:1px solid var(--border);border-radius:6px;cursor:pointer;">
+        <input type="radio" name="strategy" value="skip" checked/>
+        <div>
+          <b>跳过已存在（推荐 / 最安全）</b>
+          <div style="font-size:.78rem;color:var(--muted);">已存在的品目原样保留，只新建缺失的 {{ preview.new_count }} 条</div>
+        </div>
+      </label>
+      <label style="display:flex;gap:.5rem;padding:.6rem .85rem;border:1px solid var(--border);border-radius:6px;cursor:pointer;">
+        <input type="radio" name="strategy" value="update"/>
+        <div>
+          <b>更新价格 / 库存 / 供应商</b>
+          <div style="font-size:.78rem;color:var(--muted);">已存在品目仅更新价钱和库存等字段，不动备注</div>
+        </div>
+      </label>
+      <label style="display:flex;gap:.5rem;padding:.6rem .85rem;border:1px solid var(--border);border-radius:6px;cursor:pointer;">
+        <input type="radio" name="strategy" value="overwrite"/>
+        <div>
+          <b style="color:#dc2626;">完全覆盖（危险）</b>
+          <div style="font-size:.78rem;color:var(--muted);">已存在品目所有字段都用 Excel 数据替换</div>
+        </div>
+      </label>
+    </div>
+    <div style="margin-top:1.2rem;display:flex;gap:.5rem;">
+      <a href="/admin/inventory/import-xls" class="btn secondary">取消重新上传</a>
+      <button type="submit" class="btn"><i data-lucide="check"></i> 确认导入 {{ preview.total }} 条</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+

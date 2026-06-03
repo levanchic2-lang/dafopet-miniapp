@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}导入小暖 / Excel · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin/inventory">库存管理</a><span class="sep">/</span><span>导入小暖 / Excel</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>导&nbsp;入&nbsp;小&nbsp;暖 / Excel
+      <span class="sub">批量导入 Excel 进货单或老系统 csv</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_inventory_import_xls_body.html" %}
+{% endblock %}

@@ -1,0 +1,420 @@
+
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon"><i data-lucide="camera"></i></span>进货单拍照入库</h1>
+ <p class="ph-sub">拍下进货单照片 · 系统自动识别商品 · 一键批量入库</p>
+ </div>
+ <div class="ph-actions">
+ <a href="/admin/inventory" class="btn secondary"><i data-lucide="arrow-left"></i> 返回库存</a>
+ </div>
+</div>
+
+<div class="card" style="padding:1.2rem;">
+ <div class="ip-uploader" id="dropzone">
+   <div class="icon"><i data-lucide="camera"></i></div>
+   <div style="font-size:1rem;font-weight:600;margin-top:.4rem;">点击或拖拽进货单照片到此</div>
+   <div class="hint">最多 5 张 · 支持 jpg / png / webp · 单张越清晰识别越准</div>
+   <input type="file" id="file-input" accept="image/*" multiple style="display:none;">
+   <div class="ip-thumbs" id="thumbs"></div>
+ </div>
+
+ <div class="ip-loading" id="loading">
+   <span class="spin"></span> 正在识别 ... 通常需要 5~15 秒
+ </div>
+
+ <div id="error" style="display:none;margin-top:.8rem;padding:.7rem 1rem;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:.88rem;"></div>
+
+ <div id="result" style="display:none;margin-top:1rem;">
+   <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6rem;">
+     <h3 style="margin:0;font-size:1rem;">识别结果（共 <span id="row-count">0</span> 行 · 可编辑）</h3>
+     <div style="font-size:.82rem;color:var(--muted);">
+       <span style="display:inline-block;width:10px;height:10px;background:#10b981;border-radius:2px;vertical-align:middle;"></span> 已匹配
+       <span style="display:inline-block;width:10px;height:10px;background:#f59e0b;border-radius:2px;vertical-align:middle;margin-left:.6rem;"></span> 新增
+     </div>
+   </div>
+
+   <form method="post" action="/admin/inventory/import-photo/commit" id="commit-form">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+     <input type="hidden" name="row_count" id="row-count-input" value="0">
+
+     <div style="overflow-x:auto;">
+       <table class="ip-result-tbl">
+         <thead>
+           <tr>
+             <th style="width:30px;"><i data-lucide="check"></i></th>
+             <th style="width:80px;">操作</th>
+             <th style="min-width:160px;">品名</th>
+             <th style="width:80px;">规格</th>
+             <th style="width:75px;">数量</th>
+             <th style="width:60px;">包装单位</th>
+             <th style="width:70px;" title="包装内最小单位数（1盒=N片）">×N</th>
+             <th style="width:60px;" title="发药/拆零用的最小单位">最小单位</th>
+             <th style="width:90px;" title="按包装单位的进价">进价/件</th>
+             <th style="width:100px;text-align:right;" title="数量 × 进价">小计</th>
+             <th style="width:110px;">批号</th>
+             <th style="width:130px;">有效期</th>
+             <th style="width:140px;">匹配</th>
+           </tr>
+         </thead>
+         <tbody id="rows"></tbody>
+       </table>
+     </div>
+
+     <div style="margin-top:.85rem;padding:.7rem 1rem;background:var(--brand-bg-soft);border:1px solid var(--brand-light);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+       <div style="font-size:.85rem;color:var(--brand-dark);">入库合计金额（含跳过项排除）</div>
+       <div style="font-size:1.45rem;font-weight:800;color:var(--brand-dark);">¥ <span id="grand-total">0.00</span></div>
+     </div>
+
+     <div style="margin-top:1rem;display:flex;gap:.6rem;justify-content:flex-end;">
+       <button type="button" class="btn secondary" onclick="resetUpload()">重新拍照识别</button>
+       <button type="submit" class="btn" id="commit-btn"><i data-lucide="check"></i> 全部入库</button>
+     </div>
+   </form>
+
+   <details style="margin-top:1rem;font-size:.82rem;color:var(--muted);">
+     <summary style="cursor:pointer;">查看模型原始输出（调试用）</summary>
+     <pre id="raw-output" style="background:#f3f4f6;padding:.6rem;border-radius:4px;overflow-x:auto;font-size:.78rem;max-height:200px;"></pre>
+   </details>
+ </div>
+</div>
+
+<script>
+(function () {
+  var dz = document.getElementById('dropzone');
+  var input = document.getElementById('file-input');
+  var thumbs = document.getElementById('thumbs');
+  var loading = document.getElementById('loading');
+  var errBox = document.getElementById('error');
+  var resultBox = document.getElementById('result');
+  var rowsTbody = document.getElementById('rows');
+  var picked = [];
+
+  dz.addEventListener('click', function (e) {
+    if (e.target.tagName === 'INPUT') return;
+    input.click();
+  });
+  input.addEventListener('change', function () {
+    pickFiles(Array.from(input.files || []));
+  });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('dragover'); });
+  });
+  dz.addEventListener('drop', function (e) {
+    var fs = Array.from(e.dataTransfer.files || []).filter(function (f) { return /^image\//.test(f.type); });
+    pickFiles(fs);
+  });
+
+  function pickFiles(fs) {
+    var raw = fs.slice(0, 5);
+    if (raw.length === 0) return;
+    // 浏览器侧压缩到 ≤ 2400px、JPEG q=0.85，避免 19MB 原图超过模型 10MB 限制
+    Promise.all(raw.map(compressImage)).then(function (compressed) {
+      picked = compressed;
+      renderThumbs();
+      startRecognize();
+    }).catch(function (e) {
+      showError('图片预处理失败：' + e.message);
+    });
+  }
+
+  // 在浏览器把大图压成 JPEG ≤ 2400px / q=0.85
+  function compressImage(file) {
+    return new Promise(function (resolve, reject) {
+      if (!/^image\//.test(file.type)) { resolve(file); return; }
+      var img = new Image();
+      img.onload = function () {
+        var maxSide = 2400;
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (Math.max(w, h) > maxSide) {
+          var r = maxSide / Math.max(w, h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function (blob) {
+          if (!blob) { resolve(file); return; }
+          // 若压缩后仍 >5MB，进一步降质
+          if (blob.size > 5 * 1024 * 1024) {
+            canvas.toBlob(function (b2) {
+              resolve(new File([b2 || blob], (file.name || 'photo') + '.jpg', { type: 'image/jpeg' }));
+            }, 'image/jpeg', 0.7);
+          } else {
+            resolve(new File([blob], (file.name || 'photo') + '.jpg', { type: 'image/jpeg' }));
+          }
+          URL.revokeObjectURL(img.src);
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function () { reject(new Error('图片解码失败')); };
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  function renderThumbs() {
+    thumbs.innerHTML = '';
+    picked.forEach(function (f) {
+      var img = new Image();
+      img.src = URL.createObjectURL(f);
+      thumbs.appendChild(img);
+    });
+  }
+
+  function showError(msg) {
+    errBox.textContent = '⚠ ' + msg;
+    errBox.style.display = 'block';
+  }
+  function hideError() { errBox.style.display = 'none'; }
+
+  function startRecognize() {
+    hideError();
+    resultBox.style.display = 'none';
+    loading.classList.add('active');
+    var fd = new FormData();
+    picked.forEach(function (f) { fd.append('files', f); });
+
+    fetch('/admin/inventory/import-photo/recognize', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        loading.classList.remove('active');
+        if (!data.ok) {
+          showError(data.error || '识别失败');
+          if (data.raw) {
+            document.getElementById('raw-output').textContent = data.raw;
+            resultBox.style.display = 'block';
+            document.querySelector('#result details').open = true;
+          }
+          return;
+        }
+        renderResult(data.items);
+      })
+      .catch(function (e) {
+        loading.classList.remove('active');
+        showError('网络错误：' + e);
+      });
+  }
+
+  function renderResult(items) {
+    rowsTbody.innerHTML = '';
+    if (!items || items.length === 0) {
+      showError('未识别出任何商品行。可能是图片不清，或图上只有合计而无商品明细。');
+      return;
+    }
+    items.forEach(function (it, i) {
+      var matched = it.matched_id && it.matched_id > 0;
+      var fuzzy = matched && (it.match_confidence || 0) < 1;
+      var tr = document.createElement('tr');
+      tr.className = 'ip-row ' + (matched ? 'matched' : 'unmatched');
+      tr.innerHTML =
+        '<td class="col-check" data-label=""><input type="checkbox" data-row="' + i + '" class="ip-check" checked></td>' +
+        '<td class="col-action" data-label="操作">' +
+          '<select name="row' + i + '_action" class="ip-action">' +
+            (matched
+              ? '<option value="reuse" selected>累加</option><option value="create">新增</option><option value="skip">跳过</option>'
+              : '<option value="create" selected>新增</option><option value="skip">跳过</option>') +
+          '</select>' +
+          (matched ? '<input type="hidden" name="row' + i + '_item_id" value="' + it.matched_id + '">' : '') +
+        '</td>' +
+        '<td class="col-name" data-label="品名"><input name="row' + i + '_name" value="' + escapeHtml(it.name) + '" required></td>' +
+        '<td class="col-spec" data-label="规格"><input name="row' + i + '_spec" value="' + escapeHtml(it.spec) + '" placeholder="如10mg"></td>' +
+        '<td class="col-qty" data-label="数量"><input name="row' + i + '_qty" type="number" step="0.01" min="0" value="' + (it.qty || '') + '"></td>' +
+        '<td class="col-unit" data-label="包装单位"><input name="row' + i + '_unit" value="' + escapeHtml(it.unit || it.pack_unit || it.matched_unit2 || it.matched_unit || '') + '" placeholder="盒"></td>' +
+        '<td class="col-packsize" data-label="×N（包装内）"><input name="row' + i + '_pack_size" type="number" step="1" min="0" value="' + (it.pack_size || it.matched_unit2_ratio || '') + '" placeholder="30"></td>' +
+        '<td class="col-mainunit" data-label="最小单位"><input name="row' + i + '_main_unit" value="' + escapeHtml(it.main_unit || it.matched_unit || '') + '" placeholder="片"></td>' +
+        '<td class="col-price" data-label="进价/件"><input name="row' + i + '_unit_price" type="number" step="0.01" min="0" value="' + (it.unit_price || '') + '"></td>' +
+        '<td class="col-subtotal" data-label="小计 ¥"><div class="ip-subtotal" data-row="' + i + '">¥0.00</div></td>' +
+        '<td class="col-batch" data-label="批号"><input name="row' + i + '_batch_no" value="' + escapeHtml(it.batch_no) + '" placeholder="选填"></td>' +
+        '<td class="col-expiry" data-label="有效期"><input name="row' + i + '_expiry_date" type="date" value="' + escapeHtml(it.expiry_date) + '"></td>' +
+        '<td class="ip-match-cell col-match" data-label="匹配">' +
+          (matched
+            ? '<span class="ip-badge ' + (fuzzy ? 'fuzzy' : 'matched') + '" data-act="search">' +
+                (fuzzy ? '相似 ' + (it.match_confidence * 100).toFixed(0) + '%' : '✓ 已有') +
+              '</span>' +
+              '<div class="ip-match-name" style="font-size:.72rem;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="' + escapeHtml(it.matched_name || '') + '">' +
+                escapeHtml(it.matched_name || '') +
+                (it.matched_stock !== undefined ? ' · 现存 ' + it.matched_stock : '') +
+              '</div>'
+            : '<span class="ip-badge new" data-act="search">＋ 新品目</span>' +
+              '<div class="ip-match-name" style="font-size:.72rem;color:var(--muted);margin-top:2px;"></div>'
+          ) +
+        '</td>';
+      rowsTbody.appendChild(tr);
+
+      // checkbox 控制 action=skip
+      var sel = tr.querySelector('.ip-action');
+      var chk = tr.querySelector('.ip-check');
+      chk.addEventListener('change', function () {
+        if (!chk.checked) {
+          sel.dataset.prev = sel.value;
+          sel.value = 'skip';
+          tr.classList.add('skipped');
+        } else {
+          sel.value = sel.dataset.prev || (matched ? 'reuse' : 'create');
+          tr.classList.remove('skipped');
+        }
+      });
+
+      // 徽章点击 → 弹搜索框，映射到已有品目
+      var badge = tr.querySelector('.ip-badge');
+      if (badge) {
+        badge.addEventListener('click', function (e) {
+          var defaultQ = tr.querySelector('input[name="row' + i + '_name"]').value;
+          openSearchPopover(badge, i, tr, defaultQ);
+        });
+      }
+
+      // 数量 / 进价变 → 重算小计 + 合计；勾选切换也要重算（跳过的不计入合计）
+      var qtyEl = tr.querySelector('input[name="row' + i + '_qty"]');
+      var priceEl = tr.querySelector('input[name="row' + i + '_unit_price"]');
+      if (qtyEl) qtyEl.addEventListener('input', recalcAll);
+      if (priceEl) priceEl.addEventListener('input', recalcAll);
+      chk.addEventListener('change', recalcAll);
+      sel.addEventListener('change', recalcAll);
+    });
+    document.getElementById('row-count').textContent = items.length;
+    document.getElementById('row-count-input').value = items.length;
+    resultBox.style.display = 'block';
+    recalcAll();
+  }
+
+  function recalcAll() {
+    var rows = rowsTbody.querySelectorAll('tr');
+    var grand = 0;
+    rows.forEach(function (tr, idx) {
+      var qty = parseFloat((tr.querySelector('input[name^="row"][name$="_qty"]') || {}).value || 0) || 0;
+      var price = parseFloat((tr.querySelector('input[name^="row"][name$="_unit_price"]') || {}).value || 0) || 0;
+      var sub = qty * price;
+      var subEl = tr.querySelector('.ip-subtotal');
+      if (subEl) subEl.textContent = '¥' + sub.toFixed(2);
+      // 跳过 / 取消勾选的不计入合计
+      var actionEl = tr.querySelector('.ip-action');
+      var chkEl = tr.querySelector('.ip-check');
+      var skipped = (actionEl && actionEl.value === 'skip') || (chkEl && !chkEl.checked);
+      if (!skipped) grand += sub;
+    });
+    var gEl = document.getElementById('grand-total');
+    if (gEl) gEl.textContent = grand.toFixed(2);
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, function (m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+    });
+  }
+
+  window.resetUpload = function () {
+    picked = [];
+    input.value = '';
+    thumbs.innerHTML = '';
+    resultBox.style.display = 'none';
+    hideError();
+  };
+
+  // ── 搜索弹层 ──
+  var popover = null;
+  var searchTimer = null;
+  function closePopover() {
+    if (popover) { popover.remove(); popover = null; }
+    document.querySelectorAll('.ip-popover-overlay').forEach(function(o){ o.remove(); });
+  }
+  function openSearchPopover(anchor, rowIdx, tr, defaultQ) {
+    closePopover();
+    var overlay = document.createElement('div');
+    overlay.className = 'ip-popover-overlay';
+    overlay.addEventListener('click', closePopover);
+    document.body.appendChild(overlay);
+
+    var box = document.createElement('div');
+    box.className = 'ip-popover';
+    box.innerHTML =
+      '<input class="q" type="text" placeholder="搜索已有品目（名称/拼音/关键词）" autofocus>' +
+      '<div class="results"><div class="hint">输入关键词搜索…</div></div>' +
+      '<div class="hint">点选 = 映射；不选 = 新增</div>';
+    document.body.appendChild(box);
+    // 定位：anchor 下方
+    var rect = anchor.getBoundingClientRect();
+    box.style.left = Math.max(8, Math.min(window.innerWidth - 330, rect.right - 320)) + 'px';
+    box.style.top  = (rect.bottom + 6) + 'px';
+    popover = box;
+
+    var q = box.querySelector('input.q');
+    var results = box.querySelector('.results');
+    function doSearch(term) {
+      if (!term.trim()) { results.innerHTML = '<div class="hint">输入关键词搜索…</div>'; return; }
+      fetch('/api/inventory/search?q=' + encodeURIComponent(term), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var items = data.items || [];
+          if (!items.length) { results.innerHTML = '<div class="hint">没找到匹配品目</div>'; return; }
+          results.innerHTML = '';
+          items.forEach(function (it) {
+            var d = document.createElement('div');
+            d.className = 'result';
+            d.innerHTML =
+              '<div>' + escapeHtml(it.name) + '</div>' +
+              '<div class="meta">现存 ' + it.stock_qty + ' ' + escapeHtml(it.unit || '') +
+              ' · 进价 ¥' + (it.cost_price || 0).toFixed(2) + '</div>';
+            d.addEventListener('click', function () { applyMapping(rowIdx, tr, it); });
+            results.appendChild(d);
+          });
+        })
+        .catch(function () { results.innerHTML = '<div class="hint">网络错误</div>'; });
+    }
+    q.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () { doSearch(q.value); }, 200);
+    });
+    q.value = defaultQ || '';
+    if (q.value) doSearch(q.value);
+    setTimeout(function () { q.focus(); q.select(); }, 50);
+  }
+
+  function applyMapping(rowIdx, tr, it) {
+    // 切到 reuse + 写 hidden item_id
+    var sel = tr.querySelector('.ip-action');
+    // 确保有 reuse option
+    if (!sel.querySelector('option[value="reuse"]')) {
+      var opt = document.createElement('option');
+      opt.value = 'reuse'; opt.textContent = '累加';
+      sel.insertBefore(opt, sel.firstChild);
+    }
+    sel.value = 'reuse';
+    // 写或更新 hidden item_id
+    var hid = tr.querySelector('input[name="row' + rowIdx + '_item_id"]');
+    if (!hid) {
+      hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = 'row' + rowIdx + '_item_id';
+      sel.parentNode.appendChild(hid);
+    }
+    hid.value = it.id;
+    // 更新行样式 + 徽章 + 名字
+    tr.classList.remove('unmatched'); tr.classList.add('matched');
+    var cell = tr.querySelector('.ip-match-cell');
+    cell.innerHTML =
+      '<span class="ip-badge matched" data-act="search">✓ 已映射</span>' +
+      '<div class="ip-match-name" style="font-size:.72rem;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="' + escapeHtml(it.name) + '">' +
+        escapeHtml(it.name) + ' · 现存 ' + it.stock_qty +
+      '</div>';
+    cell.querySelector('.ip-badge').addEventListener('click', function () {
+      var defaultQ = tr.querySelector('input[name="row' + rowIdx + '_name"]').value;
+      openSearchPopover(cell.querySelector('.ip-badge'), rowIdx, tr, defaultQ);
+    });
+    // 单位 / 进价 如果空且 reuse 项有，可选填充
+    var unitInput = tr.querySelector('input[name="row' + rowIdx + '_unit"]');
+    if (unitInput && !unitInput.value && it.unit) unitInput.value = it.unit;
+    closePopover();
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closePopover();
+  });
+})();
+</script>

@@ -1,0 +1,52 @@
+{% extends "uk/_base.html" %}
+{% block title %}拍照入库 · 大风动物医院{% endblock %}
+{% block extra_head %}
+<style>
+.ip-uploader { border: 0.5px dashed var(--ink-3); border-radius: 0; padding: 2rem 1.5rem; text-align: center; background: var(--bg); cursor: pointer; transition: all .15s; }
+.ip-uploader.dragover { border-color: var(--ink); background: var(--paper); }
+.ip-uploader .icon { font-size: 2.5rem; }
+.ip-uploader .hint { color: var(--ink-3); font-family: var(--font-serif); font-style: italic; font-size: 10pt; margin-top: .35rem; }
+.ip-thumbs { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .8rem; justify-content: center; }
+.ip-thumbs img { width: 90px; height: 90px; object-fit: cover; border: 0.5px solid var(--hair); }
+.ip-loading { display: none; padding: 1.5rem; text-align: center; background: var(--bg); border: 0.5px solid var(--hair); margin-top: .8rem; color: var(--ink-3); font-family: var(--font-serif); font-style: italic; }
+.ip-loading.active { display: block; }
+.ip-loading .spin { display: inline-block; width: 22px; height: 22px; border: 3px solid var(--hair); border-top-color: var(--ink); border-radius: 50%; animation: ipspin 0.6s linear infinite; vertical-align: middle; margin-right: .5rem; }
+@keyframes ipspin { to { transform: rotate(360deg); } }
+.ip-result-tbl { width: 100%; border-collapse: collapse; font-family: var(--font-serif); font-size: 10pt; margin-top: .8rem; border: 0.5px solid var(--hair-2); }
+.ip-result-tbl th, .ip-result-tbl td { padding: .45rem .5rem; border-bottom: 0.5px solid var(--hair); vertical-align: middle; }
+.ip-result-tbl thead th { background: var(--paper); font-size: 9pt; color: var(--ink-3); font-weight: 400; font-style: italic; letter-spacing: 1.5px; border-bottom: 0.5px solid var(--ink); }
+.ip-result-tbl input, .ip-result-tbl select { width: 100%; box-sizing: border-box; padding: .25rem .35rem; font-size: 10pt; border: 0.5px solid var(--hair); border-radius: 0; background: var(--paper); font-family: var(--font-serif); }
+.ip-result-tbl input[type="number"] { text-align: right; font-family: var(--font-numeric); }
+.ip-row.matched { background: #f5f9f6; }
+.ip-row.unmatched { background: #fbfaf6; }
+.ip-row.skipped { opacity: 0.4; }
+.ip-result-tbl td.col-subtotal { text-align: right; }
+.ip-subtotal { font-weight: 700; color: var(--accent-green); font-size: 11pt; font-family: var(--font-numeric); padding: .25rem .4rem; }
+.ip-badge { font-family: var(--font-serif); font-style: italic; font-size: 9pt; padding: 2px 8px; white-space: nowrap; cursor: pointer; user-select: none; border: 0.5px solid var(--hair); border-radius: 0; background: var(--paper); }
+.ip-badge:hover { background: var(--bg); }
+.ip-badge.matched { color: var(--accent-green); border-color: var(--accent-green); }
+.ip-badge.fuzzy { color: var(--accent-amber); border-color: var(--accent-amber); }
+.ip-badge.new { color: var(--ink); border-color: var(--ink-3); }
+.ip-popover { position: fixed; z-index: 1200; background: var(--paper); border: 0.5px solid var(--ink); border-radius: 0; box-shadow: 0 8px 24px rgba(0,0,0,.15); padding: .7rem; width: 320px; max-width: 90vw; }
+.ip-popover input.q { width: 100%; padding: .45rem .6rem; font-size: 10pt; border: 0.5px solid var(--hair); border-radius: 0; font-family: var(--font-serif); }
+.ip-popover .results { margin-top: .5rem; max-height: 260px; overflow-y: auto; border-top: 0.5px solid var(--hair); }
+.ip-popover .result { padding: .5rem .6rem; border-bottom: 0.5px solid var(--hair); cursor: pointer; font-family: var(--font-serif); font-size: 10pt; }
+.ip-popover .result:hover { background: var(--bg); }
+.ip-popover .result .meta { font-size: 9pt; color: var(--ink-3); font-style: italic; margin-top: 2px; }
+.ip-popover .hint { font-family: var(--font-serif); font-style: italic; font-size: 9pt; color: var(--ink-3); margin-top: .5rem; text-align: center; }
+.ip-popover-overlay { position: fixed; inset: 0; z-index: 1199; }
+</style>
+{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin/inventory">库存管理</a><span class="sep">/</span><span>拍照入库</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>拍&nbsp;照&nbsp;入&nbsp;库
+      <span class="sub">上传进货单照片 · 多模态视觉大模型识别 · 批量录入</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_inventory_import_photo_body.html" %}
+{% endblock %}

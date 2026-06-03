@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}小类规范化 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin/inventory">库存管理</a><span class="sep">/</span><span>小类规范化</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>小&nbsp;类&nbsp;规&nbsp;范&nbsp;化
+      <span class="sub">合并脏 subcategory · 归并到统一目录</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_inventory_cleanup_body.html" %}
+{% endblock %}

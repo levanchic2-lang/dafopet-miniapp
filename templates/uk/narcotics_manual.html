@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}麻醉台账新增品类 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin/inventory">库存管理</a><span class="sep">/</span><a href="/admin/narcotics">麻醉台账</a><span class="sep">/</span><span>新增品类</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>新&nbsp;增&nbsp;麻&nbsp;醉&nbsp;品&nbsp;类
+      <span class="sub">登记受管控药品基础信息</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_narcotics_manual_body.html" %}
+{% endblock %}
