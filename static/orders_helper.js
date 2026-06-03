@@ -192,7 +192,7 @@
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'orders-tpl-btn';
-    btn.textContent = '📋 医嘱模板 ▾';
+    btn.textContent = '医嘱模板 ▾';
     helper.appendChild(btn);
 
     const hint = document.createElement('span');

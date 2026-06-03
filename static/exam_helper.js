@@ -188,7 +188,7 @@
     const tplBtn = document.createElement('button');
     tplBtn.type = 'button';
     tplBtn.className = 'exam-tpl-btn';
-    tplBtn.textContent = '📋 模板 ▾';
+    tplBtn.textContent = '模板 ▾';
     row1.appendChild(tplBtn);
     CHIPS.filter(c => c.group === 'verdict').forEach(c => row1.appendChild(makeChip(textarea, c)));
 

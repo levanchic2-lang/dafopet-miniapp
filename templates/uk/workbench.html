@@ -169,16 +169,41 @@
       {% set _urgent_total = workbench.urgent | map(attribute='count') | sum %}
       <h1 class="uk-h1">今日工作台<span class="sub">{{ wb_store or '全部门店' }} · {{ _urgent_total }} 件紧急 · {{ (workbench.urgent|length + workbench.weekly|length + workbench.stock|length) }} 类提醒</span></h1>
     </div>
-    <div style="display:flex;gap:10px;">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      {# 快速搜索（顶部，直接交到 /admin/customers?q= 同页刷新） #}
+      <form method="get" action="/admin/customers" style="display:inline-flex;align-items:center;gap:6px;">
+        <input type="search" name="q" value="{{ q }}" placeholder="按姓名 / 手机号速查 …"
+               autocomplete="off"
+               style="font-family:var(--font-serif);font-size:10pt;letter-spacing:1px;
+                      border:0;border-bottom:0.5px solid var(--hair);
+                      padding:6px 4px;outline:0;width:200px;background:transparent;color:var(--ink);"/>
+        {% if is_superadmin and wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}
+      </form>
       <button class="uk-btn ghost sm" onclick="document.getElementById('newCustModal').classList.add('visible');">＋ 新增客户</button>
       {% if is_superadmin %}
-      <form method="get" action="/admin/customers" style="display:inline-flex;gap:8px;align-items:baseline;">
-        <select name="store" class="uk-select" style="min-width:130px;" onchange="this.form.submit()">
-          <option value="" {% if not wb_store %}selected{% endif %}>全部门店</option>
-          <option value="东环店" {% if wb_store == '东环店' %}selected{% endif %}>东环店</option>
-          <option value="横岗店" {% if wb_store == '横岗店' %}selected{% endif %}>横岗店</option>
-        </select>
-      </form>
+      <div style="display:inline-flex;border:0.5px solid var(--hair);">
+        <a href="/admin/customers{% if q %}?q={{ q }}{% endif %}"
+           class="store-pill {% if not wb_store %}active{% endif %}">全部门店</a>
+        <a href="/admin/customers?store=东环店{% if q %}&q={{ q }}{% endif %}"
+           class="store-pill {% if wb_store == '东环店' %}active{% endif %}">东环店</a>
+        <a href="/admin/customers?store=横岗店{% if q %}&q={{ q }}{% endif %}"
+           class="store-pill {% if wb_store == '横岗店' %}active{% endif %}">横岗店</a>
+      </div>
+      <style>
+        .store-pill {
+          font-family: var(--font-serif); font-size: 9.5pt;
+          letter-spacing: 1.5px; padding: 6px 14px;
+          color: var(--ink-2); text-decoration: none;
+          border-right: 0.5px solid var(--hair);
+          font-style: italic;
+        }
+        .store-pill:last-child { border-right: 0; }
+        .store-pill:hover { color: var(--ink); background: var(--bg); }
+        .store-pill.active {
+          background: var(--ink); color: var(--paper);
+          font-style: normal; font-weight: 700;
+        }
+      </style>
       {% endif %}
     </div>
   </div>
