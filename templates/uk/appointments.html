@@ -341,25 +341,43 @@
   }
   .slot-header::after { background: var(--hair); }
 
-  /* 预约表 — 无框，hairline row only */
-  .appt-table { border-radius: 0; border: 0; background: transparent; }
+  /* 预约表 — 无框，hairline row only + 全宽 */
+  .appt-table {
+    border-radius: 0; border: 0; background: transparent;
+    width: 100% !important; table-layout: fixed;
+    border-collapse: collapse;
+  }
+  /* 列宽分配：8 列共 ~1280-32px = 1248 */
+  .appt-table .col-time    { width: 88px; }
+  .appt-table .col-cat     { width: 78px; }
+  .appt-table .col-svc     { width: auto; }      /* 项目 — 剩余空间 */
+  .appt-table .col-cust    { width: 200px; }     /* 客户名 + 手机两行 */
+  .appt-table .col-pet     { width: 110px; }
+  .appt-table .col-store   { width: 80px; }
+  .appt-table .col-status  { width: 80px; }
+  .appt-table .col-actions { width: 200px; }
   .appt-table th {
     background: transparent !important;
     font-family: var(--font-serif); font-size: 9pt;
     color: var(--ink-3); letter-spacing: 1.5px; font-weight: 400;
     border-bottom: 0.5px solid var(--hair) !important;
     padding: 8px 10px !important;
+    text-align: left;
   }
   .appt-table td {
     font-family: var(--font-serif); font-size: 10pt;
     border-bottom: 0.5px solid var(--hair);
     padding: 12px 10px !important;
+    vertical-align: middle;
   }
   .appt-table tr.appt-row .col-time {
     font-family: var(--font-numeric); color: var(--ink);
     font-weight: 700; font-size: 11pt;
   }
   .appt-table tr.appt-row:hover td { background: var(--bg); }
+  .appt-table .col-actions {
+    text-align: right;
+  }
 
   /* 日期块去掉所有边框/背景 */
   .appt-day-block {
