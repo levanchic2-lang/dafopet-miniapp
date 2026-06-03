@@ -73,8 +73,8 @@
 
   /* grid */
   .px-grid {
-    display: grid; grid-template-columns: minmax(0,1fr) 320px;
-    gap: 32px; align-items: start;
+    display: grid; grid-template-columns: minmax(0,1fr) 260px;
+    gap: 28px; align-items: start;
   }
   @media (max-width: 900px) { .px-grid { grid-template-columns: 1fr; } }
 
@@ -474,19 +474,19 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
         <div style="overflow-x:auto;">
           <table class="drug-table">
             <colgroup>
-              <col style="width:180px;">
-              <col style="width:80px;">
-              <col style="width:88px;">
-              <col style="width:58px;">
-              <col style="width:64px;">
-              <col style="width:80px;">
-              <col style="width:54px;">
-              <col style="width:88px;">
-              <col style="width:80px;">
-              <col style="width:58px;">
-              <col style="width:96px;">
-              <col style="width:140px;">
-              <col class="no-print" style="width:34px;">
+              <col style="min-width:240px;">  {# 项目名称 — 弹性扩展，长药名优先 #}
+              <col style="width:72px;">       {# 使用方法 #}
+              <col style="width:80px;">       {# 单次用量 #}
+              <col style="width:52px;">       {# 单位 #}
+              <col style="width:58px;">       {# 次/天 #}
+              <col style="width:72px;">       {# 天数 #}
+              <col style="width:48px;">       {# 总次 #}
+              <col style="width:78px;">       {# 单价 #}
+              <col style="width:72px;">       {# 数量 #}
+              <col style="width:52px;">       {# 单位 #}
+              <col style="width:86px;">       {# 小计 #}
+              <col style="width:120px;">      {# 特殊说明 #}
+              <col class="no-print" style="width:30px;">
             </colgroup>
             <thead>
               <tr class="group-row">
