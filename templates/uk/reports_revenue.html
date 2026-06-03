@@ -1,0 +1,20 @@
+{% extends "uk/_base.html" %}
+{% block title %}收款统计 · 大风动物医院{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}
+body canvas { filter: grayscale(0.15) contrast(1.05); }
+</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>收款统计</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>收&nbsp;款&nbsp;统&nbsp;计
+      <span class="sub">日趋势 / 支付方式 / 门店分布 · 可导出 Excel</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_reports_revenue_body.html" %}
+{% endblock %}

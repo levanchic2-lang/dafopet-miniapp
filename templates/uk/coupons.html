@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}优惠券 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>优惠券</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>优&nbsp;惠&nbsp;券
+      <span class="sub">自家发放 · 自家核销 · 现金 / 折扣 / 免费项目 三类</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_coupons_body.html" %}
+{% endblock %}

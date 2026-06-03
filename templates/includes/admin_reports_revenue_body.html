@@ -1,0 +1,348 @@
+{% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+<div class="page-head">
+ <div>
+ <h1><span class="ph-icon"><i data-lucide="bar-chart-3"></i></span>收款统计</h1>
+ <p class="ph-sub">{{ label }} · 共 {{ total_count }} 笔 · 实收 ¥{{ '%.2f'|format(total_amount) }}</p>
+ </div>
+ <div class="ph-actions">
+ <a href="/admin/reports/revenue/export?preset={{ preset }}&date_from={{ df }}&date_to={{ dt }}&store={{ store }}"
+    class="btn secondary" style="font-size:.85rem;"><i data-lucide="arrow-down"></i> 导出 Excel</a>
+ </div>
+</div>
+
+{# 日期预设 + 自定义 #}
+<div class="rev-section">
+  <div class="preset-tabs">
+    {% for k, zh in [('today','今日'),('yesterday','昨日'),('week','本周'),('month','本月'),('last_month','上月'),('year','本年'),('custom','自定义')] %}
+    <a class="preset-tab {% if preset == k %}active{% endif %}"
+       href="?preset={{ k }}&store={{ store }}{% if k == 'custom' %}&date_from={{ df }}&date_to={{ dt }}{% endif %}">{{ zh }}</a>
+    {% endfor %}
+  </div>
+  <form method="get" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+    <input type="hidden" name="preset" value="custom"/>
+    <input type="date" name="date_from" value="{{ df }}" style="font-size:.85rem;padding:.3rem .5rem;"/>
+    <span style="color:var(--muted);">至</span>
+    <input type="date" name="date_to" value="{{ dt }}" style="font-size:.85rem;padding:.3rem .5rem;"/>
+    {% if is_superadmin and not admin_store_short %}
+    <select name="store" style="font-size:.85rem;padding:.3rem .5rem;">
+      <option value="">全部门店</option>
+      {% for s in store_options %}<option value="{{ s }}" {% if s == store %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+    {% endif %}
+    <button type="submit" class="btn secondary" style="font-size:.85rem;">应用</button>
+  </form>
+</div>
+
+{# ════════════════════════════════════════════
+   区块 1：财务收入（每天对账 — 严格现金口径）
+   ════════════════════════════════════════════ #}
+<div style="margin-bottom:.5rem;display:flex;align-items:baseline;gap:.6rem;">
+  <h2 style="margin:0;font-size:1.05rem;font-weight:800;"><i data-lucide="wallet"></i> 财务收入</h2>
+  <span style="color:var(--muted);font-size:.82rem;">每天对账用 · 实际收到的现金/电子钱</span>
+</div>
+<div class="rev-summary">
+  <div class="rev-card green">
+    <div class="lbl">财务收入合计</div>
+    <div class="val">¥{{ '%.2f'|format(finance_total) }}</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">现金类 + 充值实收</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">现金类合计</div>
+    <div class="val">¥{{ '%.2f'|format(finance_cash_total) }}</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">收费单收到的真实金</div>
+  </div>
+  <div class="rev-card blue">
+    <div class="lbl">钱包充值实收</div>
+    <div class="val">¥{{ '%.2f'|format(wallet_recharge_total) }}</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">{{ wallet_recharges_count }} 笔（不含赠送）</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">收款笔数 / 单均</div>
+    <div class="val" style="font-size:1.25rem;">{{ total_count }} 笔 · ¥{{ '%.0f'|format(avg) }}</div>
+  </div>
+</div>
+
+{# 现金类拆解小表 #}
+<div class="rev-section">
+  <h3 style="margin-bottom:.55rem;"><i data-lucide="credit-card"></i> 现金类支付方式拆解</h3>
+  {% if finance_methods_list %}
+  <table class="rev-table">
+    <thead><tr><th>方式</th><th>笔数</th><th style="text-align:right;">金额</th><th style="text-align:right;">占比</th></tr></thead>
+    <tbody>
+    {% for m in finance_methods_list %}
+    <tr>
+      <td>{{ m.label }}</td>
+      <td>{{ m.count }}</td>
+      <td class="amount">¥{{ '%.2f'|format(m.amount) }}</td>
+      <td style="text-align:right;color:var(--muted);">{{ '%.1f'|format(m.amount * 100 / finance_cash_total) if finance_cash_total else '0' }}%</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="color:var(--muted);padding:1.5rem;text-align:center;">区间内无现金类收款</div>
+  {% endif %}
+</div>
+
+{# ════════════════════════════════════════════
+   区块 2：业务收入（营业规模 — 实际"卖出去"的服务/产品）
+   ════════════════════════════════════════════ #}
+<div style="margin:1.25rem 0 .5rem;display:flex;align-items:baseline;gap:.6rem;">
+  <h2 style="margin:0;font-size:1.05rem;font-weight:800;"><i data-lucide="bar-chart-3"></i> 业务收入</h2>
+  <span style="color:var(--muted);font-size:.82rem;">营业量 · 实际卖出去的服务和商品</span>
+</div>
+<div class="rev-summary">
+  <div class="rev-card blue">
+    <div class="lbl">业务收入合计</div>
+    <div class="val">¥{{ '%.2f'|format(business_total) }}</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">现金类 + 钱包扣款 + 套餐 + 押金抵扣 + 优惠券抵扣</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">现金类</div>
+    <div class="val">¥{{ '%.2f'|format(finance_cash_total) }}</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">非现金抵扣合计</div>
+    <div class="val">¥{{ '%.2f'|format(business_noncash_total) }}</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">钱包/套餐/押金/优惠券</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">套餐售卖（独立）</div>
+    <div class="val">¥{{ '%.2f'|format(pkg_sold_total) }}</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">{{ pkg_sold_count }} 份 · 不算入业务收入</div>
+  </div>
+</div>
+
+{# 非现金抵扣拆解小表 #}
+<div class="rev-section">
+  <h3 style="margin-bottom:.55rem;"><i data-lucide="package"></i> 非现金抵扣拆解</h3>
+  {% if business_noncash_list %}
+  <table class="rev-table">
+    <thead><tr><th>方式</th><th>笔数</th><th style="text-align:right;">金额</th><th style="text-align:right;">说明</th></tr></thead>
+    <tbody>
+    {% for m in business_noncash_list %}
+    <tr>
+      <td>{{ m.label }}</td>
+      <td>{{ m.count }}</td>
+      <td class="amount">¥{{ '%.2f'|format(m.amount) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">
+        {% if m.method == 'wallet' %}
+          含本金约 ¥{{ '%.2f'|format(wallet_consume_principal_est) }} · 赠送约 ¥{{ '%.2f'|format(wallet_consume_bonus_est) }}
+        {% elif m.method == 'package' %}套餐核销
+        {% elif m.method == 'deposit' %}押金抵扣
+        {% elif m.method == 'coupon' %}优惠券抵扣
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="color:var(--muted);padding:1.5rem;text-align:center;">区间内无非现金抵扣</div>
+  {% endif %}
+</div>
+
+{# 押金独立小表（流水大不进业务收入合计） #}
+<div class="rev-summary" style="margin-top:.85rem;">
+  <div class="rev-card">
+    <div class="lbl">期间收押金</div>
+    <div class="val">¥{{ '%.2f'|format(deposit_in) }}</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">期间退押金</div>
+    <div class="val">¥{{ '%.2f'|format(deposit_refund) }}</div>
+  </div>
+  <div class="rev-card">
+    <div class="lbl">净财务流入（粗算）</div>
+    <div class="val" style="font-size:1.35rem;">¥{{ '%.2f'|format(total_amount + wallet_recharge_total + pkg_sold_total + deposit_in - deposit_refund) }}</div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.2rem;">实收 + 充值 + 套餐 + 押金 - 退押</div>
+  </div>
+</div>
+
+{# 日趋势图 #}
+<div class="rev-section">
+  <h3><i data-lucide="trending-up"></i> 日趋势（{{ daily_series|length }} 天）</h3>
+  <div class="chart-box compact"><canvas id="daily-chart"></canvas></div>
+</div>
+
+{# 按支付方式 #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+  <div class="rev-section">
+    <h3><i data-lucide="credit-card"></i> 按支付方式</h3>
+    <div class="chart-box"><canvas id="method-chart"></canvas></div>
+    <table class="rev-table" style="margin-top:.8rem;">
+      <thead><tr><th>方式</th><th>笔数</th><th style="text-align:right;">金额</th><th style="text-align:right;">占比</th></tr></thead>
+      <tbody>
+      {% for m in by_method_list %}
+      <tr>
+        <td>{{ m.label }}</td>
+        <td>{{ m.count }}</td>
+        <td class="amount">¥{{ '%.2f'|format(m.amount) }}</td>
+        <td style="text-align:right;color:var(--muted);">{{ '%.1f'|format(m.amount * 100 / total_amount) if total_amount else '0' }}%</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if by_store_list %}
+  <div class="rev-section">
+    <h3><i data-lucide="store"></i> 按门店</h3>
+    <div class="chart-box"><canvas id="store-chart"></canvas></div>
+    <table class="rev-table" style="margin-top:.8rem;">
+      <thead><tr><th>门店</th><th>笔数</th><th style="text-align:right;">金额</th></tr></thead>
+      <tbody>
+      {% for s in by_store_list %}
+      <tr><td>{{ s.store }}</td><td>{{ s.count }}</td><td class="amount">¥{{ '%.2f'|format(s.amount) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rev-section">
+    <h3><i data-lucide="package"></i> 按收费类型</h3>
+    {% if by_category_list %}
+    <table class="rev-table">
+      <thead><tr><th>类型</th><th style="text-align:right;">金额</th></tr></thead>
+      <tbody>
+      {% for c in by_category_list %}
+      <tr><td>{{ c.label }}</td><td class="amount">¥{{ '%.2f'|format(c.amount) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="color:var(--muted);padding:2rem;text-align:center;">区间内无收款</div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if by_store_list and by_category_list %}
+<div class="rev-section">
+  <h3><i data-lucide="package"></i> 按收费类型</h3>
+  <table class="rev-table">
+    <thead><tr><th>类型</th><th style="text-align:right;">金额</th></tr></thead>
+    <tbody>
+    {% for c in by_category_list %}
+    <tr><td>{{ c.label }}</td><td class="amount">¥{{ '%.2f'|format(c.amount) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# 按门店 × 支付方式 二维拆分 #}
+{% if by_store_method_list and by_store_method_list|length > 0 %}
+<div class="rev-section">
+  <h3><i data-lucide="store"></i> 按门店 × 支付方式</h3>
+  <table class="rev-table">
+    <thead>
+      <tr>
+        <th>门店</th><th>笔数</th>
+        <th style="text-align:right;">现金类</th>
+        <th style="text-align:right;">非现金抵扣</th>
+        <th style="text-align:right;">合计</th>
+        <th style="font-size:.78rem;color:var(--muted);">明细</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in by_store_method_list %}
+    <tr>
+      <td><strong>{{ s.store }}</strong></td>
+      <td>{{ s.count }}</td>
+      <td style="text-align:right;">¥{{ '%.2f'|format(s.cash_total) }}</td>
+      <td style="text-align:right;color:var(--muted);">¥{{ '%.2f'|format(s.noncash_total) }}</td>
+      <td class="amount">¥{{ '%.2f'|format(s.total) }}</td>
+      <td style="font-size:.74rem;color:var(--muted);line-height:1.6;">
+        {% for m, amt in s.methods.items() %}
+          {% set zh = {'cash':'现金','wechat':'微信','alipay':'支付宝','shouqianba':'收钱吧','meituan':'美团','third_party':'第三方','wallet':'钱包','package':'套餐','deposit':'押金','coupon':'优惠券'}.get(m, m) %}
+          <span style="display:inline-block;margin-right:.65rem;">{{ zh }} ¥{{ '%.0f'|format(amt) }}</span>
+        {% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# 按收款员 · 人均收款 #}
+{% if by_operator_list %}
+<div class="rev-section">
+  <h3><i data-lucide="users"></i> 按收款员（人均收款，不算提成）</h3>
+  <table class="rev-table">
+    <thead><tr><th>收款员</th><th>笔数</th><th style="text-align:right;">总收款金额</th><th style="text-align:right;">单均</th></tr></thead>
+    <tbody>
+    {% for o in by_operator_list %}
+    <tr>
+      <td>{{ o.operator }}</td>
+      <td>{{ o.count }}</td>
+      <td class="amount">¥{{ '%.2f'|format(o.amount) }}</td>
+      <td style="text-align:right;color:var(--muted);">¥{{ '%.0f'|format(o.amount / o.count) if o.count else '0' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<script id="daily-data" type="application/json">{{ daily_series|tojson }}</script>
+<script id="method-data" type="application/json">{{ by_method_list|tojson }}</script>
+{% if by_store_list %}<script id="store-data" type="application/json">{{ by_store_list|tojson }}</script>{% endif %}
+
+<script>
+(function () {
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif';
+
+  // 日趋势
+  var daily = JSON.parse(document.getElementById('daily-data').textContent);
+  new Chart(document.getElementById('daily-chart'), {
+    type: 'line',
+    data: {
+      labels: daily.map(function(d){ return d.date.slice(5); }),
+      datasets: [{ label: '实收 ¥', data: daily.map(function(d){ return d.amount; }),
+                   borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)',
+                   tension: .25, fill: true, pointRadius: 2 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+               plugins: { legend: { display: false } },
+               scales: { y: { beginAtZero: true } } }
+  });
+
+  // 按支付方式饼图
+  var method = JSON.parse(document.getElementById('method-data').textContent);
+  if (method.length) {
+    new Chart(document.getElementById('method-chart'), {
+      type: 'doughnut',
+      data: {
+        labels: method.map(function(m){ return m.label; }),
+        datasets: [{ data: method.map(function(m){ return m.amount; }),
+                     backgroundColor: ['#10b981','#3b82f6','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316'] }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+                 plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } } }
+    });
+  }
+
+  // 按门店柱图
+  var storeEl = document.getElementById('store-data');
+  if (storeEl) {
+    var store = JSON.parse(storeEl.textContent);
+    new Chart(document.getElementById('store-chart'), {
+      type: 'bar',
+      data: {
+        labels: store.map(function(s){ return s.store; }),
+        datasets: [{ label: '金额', data: store.map(function(s){ return s.amount; }), backgroundColor: '#3b82f6' }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+                 plugins: { legend: { display: false } },
+                 scales: { y: { beginAtZero: true } } }
+    });
+  }
+})();
+</script>
+

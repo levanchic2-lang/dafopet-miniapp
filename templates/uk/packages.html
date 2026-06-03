@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}套餐目录 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>套餐目录</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>套&nbsp;餐&nbsp;目&nbsp;录
+      <span class="sub">洗澡卡 / 造型卡 / 健康包 · 售卖与核销</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_packages_body.html" %}
+{% endblock %}

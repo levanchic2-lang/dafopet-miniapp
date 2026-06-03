@@ -5868,7 +5868,7 @@ async def admin_feedback_page(request: Request, status: str = "", db: Session = 
                 pass
         feed_list.append({"fb": fb, "img_urls": img_urls})
     pending_count = db.query(Feedback).filter(Feedback.status == "pending").count()
-    return templates.TemplateResponse(request, "admin_feedback.html", {
+    return templates.TemplateResponse(request, "uk/feedback.html", {
         "request": request,
         "title": "客户反馈",
         "feed_list": feed_list,
@@ -8800,7 +8800,7 @@ async def admin_coupons_list(
         "expired":   db.query(Coupon).filter(Coupon.status == "expired").count(),
         "cancelled": db.query(Coupon).filter(Coupon.status == "cancelled").count(),
     }
-    return templates.TemplateResponse(request, "admin_coupons.html", {
+    return templates.TemplateResponse(request, "uk/coupons.html", {
         "rows": rows,
         "cust_map": cust_map,
         "status": status,
@@ -8943,7 +8943,7 @@ async def admin_packages_list(request: Request, db: Session = Depends(get_db), s
         .all()
     )
     sold_map = {pid: cnt for pid, cnt in sold_rows if pid}
-    return templates.TemplateResponse(request, "admin_packages.html", {
+    return templates.TemplateResponse(request, "uk/packages.html", {
         "items": items,
         "sold_map": sold_map,
         "category_zh": _PACKAGE_CATEGORY_ZH,
@@ -14986,7 +14986,7 @@ async def admin_reports_revenue(
     deposit_in = sum(float(d.amount or 0) for d in deps)
     deposit_refund = sum(float(d.refunded_amount or 0) for d in deps if d.refunded_at and df <= d.refunded_at.strftime("%Y-%m-%d") <= dt)
 
-    return templates.TemplateResponse(request, "admin_reports_revenue.html", {
+    return templates.TemplateResponse(request, "uk/reports_revenue.html", {
         "label": label,
         "df": df, "dt": dt,
         "preset": preset,

@@ -1,0 +1,62 @@
+
+<div class="page-head">
+ <div>
+ <h1>
+ <span class="ph-icon"><i data-lucide="message-circle"></i></span>客户反馈
+ {% if pending_count> 0 %}<span class="pill pill-warn" style="margin-left:0.4rem;">{{ pending_count }} 待处理</span>{% endif %}
+ </h1>
+ <p class="ph-sub">小程序用户提交的意见、Bug 反馈与功能建议</p>
+ </div>
+</div>
+
+<div class="list-tabs">
+ <a href="/admin/feedback" class="list-tab {% if not status_filter %}active{% endif %}">全部</a>
+ <a href="/admin/feedback?status=pending" class="list-tab {% if status_filter=='pending' %}active{% endif %}">待处理</a>
+ <a href="/admin/feedback?status=resolved" class="list-tab {% if status_filter=='resolved' %}active{% endif %}">已处理</a>
+</div>
+
+{% if not feed_list %}
+<div class="empty-card">
+ <div class="empty-icon"><i data-lucide="message-circle"></i></div>
+ 暂无反馈记录
+</div>
+{% else %}
+<div class="fb-list">
+{% for row in feed_list %}
+{% set fb = row.fb %}
+<div class="fb-card {{ 'resolved' if fb.status == 'resolved' }}" id="fb-{{fb.id}}">
+ <div class="fb-card-head">
+ <span class="fb-id">#{{fb.id}}{% if fb.openid %} · {{fb.openid[:12]}}…{% endif %}</span>
+ <span style="display:flex;align-items:center;gap:0.5rem;">
+ {% if fb.status == 'pending' %}
+ <span class="pill pill-warn"><i data-lucide="hourglass"></i> 待处理</span>
+ {% else %}
+ <span class="pill pill-ok"><i data-lucide="check"></i> 已处理</span>
+ {% endif %}
+ <span class="fb-time">{{ fb.created_at.strftime('%Y-%m-%d %H:%M') if fb.created_at }}</span>
+ </span>
+ </div>
+ <div class="fb-body">
+ <div class="fb-content">{{fb.content}}</div>
+ {% if row.img_urls %}
+ <div class="fb-images">
+ {% for url in row.img_urls %}
+ <img src="{{url}}" onclick="window.open(this.src)" title="点击查看原图"/>
+ {% endfor %}
+ </div>
+ {% endif %}
+ {% if fb.admin_note %}
+ <div class="fb-admin-note"><i data-lucide="pencil-line"></i> 处理备注：{{fb.admin_note}}</div>
+ {% endif %}
+ </div>
+ {% if fb.status == 'pending' %}
+ <form class="fb-resolve-form" method="post" action="/admin/feedback/{{fb.id}}/resolve">
+ <input type="hidden" name="csrf_token" value="{{csrf_token}}"/>
+ <textarea name="admin_note"></textarea>
+ <button type="submit" class="btn" style="font-size:0.85rem;white-space:nowrap;"><i data-lucide="check"></i> 标记已处理</button>
+ </form>
+ {% endif %}
+</div>
+{% endfor %}
+</div>
+{% endif %}

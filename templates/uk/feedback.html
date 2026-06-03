@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}用户反馈 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>用户反馈</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>用&nbsp;户&nbsp;反&nbsp;馈
+      <span class="sub">小程序 / H5 渠道反馈集中处理</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_feedback_body.html" %}
+{% endblock %}
