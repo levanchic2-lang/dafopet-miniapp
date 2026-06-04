@@ -25,9 +25,12 @@
 .so-table input[readonly] { background:var(--bg) !important; color:var(--ink) !important; font-weight:700; font-family:var(--font-numeric) !important; text-align:right; }
 .so-total-row td { background:var(--bg) !important; font-family:var(--font-serif); font-weight:700; padding:12px 10px !important; border-bottom:0 !important; }
 
-/* 「类型」列隐藏 — 表头第 2 个 + 单元格 .col-type-hidden 都塌缩为 0 宽 */
-.so-table th:nth-child(2) { display:none; }
-.so-table td.col-type-hidden { width:0 !important; padding:0 !important; border:none !important; font-size:0 !important; min-width:0 !important; }
+/* 「类型」列隐藏 — 表头和单元格都"占位但 0 宽 + 不可见"，避免 display:none 让后续列左移 */
+.so-table th:nth-child(2),
+.so-table td.col-type-hidden {
+  width: 0 !important; padding: 0 !important; border: none !important;
+  font-size: 0 !important; min-width: 0 !important; overflow: hidden;
+}
 
 /* 库存搜索下拉框 */
 .inv-search-wrap { position:relative; }
