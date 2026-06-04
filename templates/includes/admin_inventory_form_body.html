@@ -96,11 +96,11 @@
  <input name="cost_price" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.cost_price) if item else '0.00' }}" style="width:100%;"/>
  </div>
 
- {# ── 门店覆盖价（方案 H）─ 不填用默认价 ── #}
- <div style="grid-column:1/-1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.75rem 1rem;">
+ {# ── 门店覆盖价（仅服务项目可用）─ 有库存品目通过两条独立记录天然分店 ── #}
+ <div id="store-overrides-block" style="grid-column:1/-1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.75rem 1rem;">
    <div style="font-weight:600;margin-bottom:.5rem;font-size:.9rem;color:#1e293b;">
-     🏪 门店价格覆盖
-     <small style="color:#64748b;font-weight:400;font-size:.78rem;">（不填用上方默认价；填了员工开单时按当前门店自动取）</small>
+     门店价格覆盖
+     <small style="color:#64748b;font-weight:400;font-size:.78rem;">（仅服务项目用：同一服务两店差价；有库存品目请在每家门店各建一条独立记录）</small>
    </div>
    {% set _ov = (item.store_overrides if item else '') %}
    {% set _ov_dh = (item.store_overrides_parsed.get('东环店', {}) if (item and item.store_overrides_parsed) else {}) %}

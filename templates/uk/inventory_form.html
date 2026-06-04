@@ -35,4 +35,45 @@ body .uk-wrap .uk-wrap-form-actions { padding-top:18px; border-top:0.5px solid v
 <hr class="ukc-rule-double"/>
 
 {% include "includes/admin_inventory_form_body.html" %}
+
+<script>
+const CATS = {{ categories | tojson }};
+
+function updateSubs(force) {
+  const cat = document.getElementById('cat-select').value;
+  const sub = document.getElementById('sub-select');
+  const warn = document.getElementById('sub-warn');
+  Array.from(sub.options).forEach(o => {
+    const ok = (o.dataset.cat === cat) || (o.dataset.cat === '*');
+    o.style.display = ok ? '' : 'none';
+  });
+  const cur = sub.options[sub.selectedIndex];
+  const visible = cur && (cur.dataset.cat === cat || cur.dataset.cat === '*');
+  if (!visible || force) {
+    const first = Array.from(sub.options).find(o => o.dataset.cat === cat || o.dataset.cat === '*');
+    if (first) sub.value = first.value;
+  }
+  if (warn) {
+    const opt = sub.options[sub.selectedIndex];
+    warn.textContent = (opt && opt.textContent.includes('⚠ 原值'))
+      ? '⚠ 当前小类是历史值，不在「' + (CATS[cat] && CATS[cat].label) + '」的标准小类里。如需规范，请重新选一个。'
+      : '';
+  }
+}
+
+function toggleStock() {
+  const isService = document.getElementById('is-service-cb').checked;
+  // 库存相关字段：服务项目隐藏（不占库存）
+  const stockFields = document.getElementById('stock-fields');
+  if (stockFields) stockFields.style.display = isService ? 'none' : '';
+  const lowStock = document.getElementById('low-stock-field');
+  if (lowStock) lowStock.style.display = isService ? 'none' : '';
+  // 门店价格覆盖：仅服务项目可用；有库存品目通过两条独立记录天然分店
+  const ovBlock = document.getElementById('store-overrides-block');
+  if (ovBlock) ovBlock.style.display = isService ? '' : 'none';
+}
+
+updateSubs();
+toggleStock();
+</script>
 {% endblock %}
