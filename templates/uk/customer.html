@@ -498,6 +498,7 @@
       <button class="uk-tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约</button>
       <button class="uk-tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫</button>
       <button class="uk-tab-btn {% if active_tab=='grooming' %}active{% endif %}" data-tab="grooming" onclick="switchTab('grooming')">美容</button>
+      <button class="uk-tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售单</button>
       <button class="uk-tab-btn {% if active_tab=='weight' %}active{% endif %}" data-tab="weight" onclick="switchTab('weight')">体重</button>
       <button class="uk-tab-btn {% if active_tab=='docs' %}active{% endif %}" data-tab="docs" onclick="switchTab('docs')">文书</button>
     </nav>
@@ -1062,6 +1063,7 @@
         <a class="uk-btn sm" href="#" onclick="document.getElementById('consentModal').classList.add('visible');return false;">发起协议签署</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('rechargeModal').classList.add('visible');return false;">钱包充值</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('sellPkgModal').classList.add('visible');return false;">售卖套餐</a>
+        <a class="uk-btn ghost sm" href="/admin/sales-orders/create?customer_id={{ cust.id }}{% if active_pet %}&pet_id={{ active_pet.id }}{% endif %}">售卖商品</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('depositModal').classList.add('visible');return false;">收押金</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('couponModal').classList.add('visible');return false;">发优惠券</a>
         <a class="uk-btn ghost sm" href="#" onclick="alert('短信功能将在后续版本加入。当前可通过协议签署 / 收费单页内的链接复制发送给客户。');return false;">发送短信</a>
