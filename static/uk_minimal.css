@@ -67,9 +67,12 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
-/* 数字 / 输入框 等宽 — 强制 Windows 老系统 Georgia 也走 tabular */
-input, select, textarea, .num,
-.uk-tbl td, .uk-tbl-tab td,
+/* 数字 / 输入框 等宽 — 强制 Windows 老系统 Georgia 也走 tabular
+   覆盖所有桌面后台容器，凡是页面文字都按 tabular 渲染数字
+   不影响中文字间距，只让数字 "0123" 每位等宽 */
+html, body, input, select, textarea, button,
+table, td, th, p, span, div, a, li, dd, dt, b, strong, em, i, small,
+.num, .uk-tbl td, .uk-tbl-tab td, .uk-wrap *,
 [data-numeric], code, kbd, samp {
   font-variant-numeric: lining-nums tabular-nums !important;
   font-feature-settings: "lnum" 1, "tnum" 1 !important;

@@ -80,7 +80,7 @@
                onclick="copyUrl()">复制</button>
      </div>
      <p style="font-size:.78rem;color:#6b7280;margin:.6rem 0 0;">
-       复制链接微信发给客户，或点下方按钮直接给客户发短信。客户点开 <i data-lucide="arrow-right"></i> 签字 <i data-lucide="arrow-right"></i> 自动归档。
+       复制链接微信发给客户，或点下方按钮直接给客户发短信。客户点开 → 签字 → 自动归档。
      </p>
      <form method="post" action="/admin/consent-tasks/{{ task.id }}/resend" style="margin-top:.7rem;">
        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

@@ -12,7 +12,12 @@
   .ctd-bc .sep { margin:0 8px; color:var(--ink-4); }
   hr.ctd-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
 
-  body .page-head { display:none !important; }
+  /* 只隐藏老 page-head 里的标题图标 + h1 + ph-sub，保留右侧操作按钮 */
+  body .page-head { display:flex !important; justify-content:flex-end; align-items:center; gap:10px; padding:0 !important; margin:0 0 14px; background:transparent !important; border:0 !important; }
+  body .page-head > div:first-child { display:none !important; }
+  body .page-head .ph-actions { display:flex; gap:8px; }
+  body .page-head .ph-actions form, body .page-head .ph-actions a { display:inline-block; }
+  body .page-head .ph-actions [data-lucide] { display:none; }
   body .msg.ok { border:0 !important; border-left:3px solid var(--accent-green) !important; background:#f5f9f6 !important; padding:10px 16px !important; margin-bottom:18px !important; font-family:var(--font-serif) !important; font-size:10pt !important; color:var(--ink-2) !important; border-radius:0 !important; }
   body .card { background:var(--paper); border:0.5px solid var(--hair-2); border-radius:0 !important; box-shadow:none; padding:18px 22px; }
   body .consent-preview { background:var(--paper); border:0.5px solid var(--hair-2); border-radius:0 !important; padding:30px 38px; font-family:var(--font-serif); line-height:1.85; max-width:760px; margin:0; }
@@ -29,7 +34,9 @@
   body aside > div { background:var(--paper) !important; border:0.5px solid var(--hair-2) !important; border-radius:0 !important; box-shadow:none !important; padding:16px 18px !important; }
   body aside [style*="dcfce7"] { background:#f5f9f6 !important; border-color:var(--accent-green) !important; }
   body aside [style*="dcfce7"] * { color:var(--accent-green) !important; }
-  body aside [style*="dcfce7"] a.btn { background:var(--accent-green) !important; border-color:var(--accent-green) !important; }
+  body aside [style*="dcfce7"] a.btn { background:var(--accent-green) !important; border-color:var(--accent-green) !important; color:var(--paper) !important; padding:10px 16px !important; letter-spacing:2px; font-weight:700; font-style:normal !important; }
+  body aside [style*="dcfce7"] a.btn * { color:var(--paper) !important; }
+  body aside [style*="dcfce7"] a.btn [data-lucide] { display:none; }
 
   body .data-table-wrap { border:0.5px solid var(--hair-2); border-radius:0; background:var(--paper); }
   body .data-table { width:100%; border-collapse:collapse; font-family:var(--font-serif); }
