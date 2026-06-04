@@ -1,18 +1,193 @@
 {% extends "uk/_base.html" %}
-{% block title %}公布展示 · 大风动物医院{% endblock %}
+{% block title %}公布展示 · TNR 术前术后{% endblock %}
 {% block body %}
 <style>{% include "uk/_chrome.css" %}
-body .case { background:var(--paper) !important; border:0.5px solid var(--hair-2) !important; border-radius:0 !important; box-shadow:none !important; margin-bottom:18px; }
-body .case-head { background:var(--bg) !important; border-bottom:0.5px solid var(--hair) !important; padding:14px 20px !important; }
+
+/* ── 隐藏原 body 顶部的重复标题卡（我们用面包屑下的 UK 标题） ── */
+.uk-wrap > .card:first-of-type { display: none; }
+
+/* 案例卡 */
+.case {
+  background: var(--paper);
+  border: 0.5px solid var(--hair-2);
+  border-radius: 0;
+  box-shadow: none;
+  margin-bottom: 22px;
+}
+.case-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 22px;
+  background: var(--bg);
+  border-bottom: 0.5px solid var(--hair);
+}
+.case-head h3 {
+  font-family: var(--font-serif);
+  font-size: 13pt;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--ink);
+  margin: 0;
+}
+.case-head .meta {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 9.5pt;
+  letter-spacing: 1.5px;
+  color: var(--ink-3);
+}
+.case-head .meta [data-lucide] { display:none; }
+.case-head .counts {
+  margin-left: auto;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 9.5pt;
+  color: var(--ink-3);
+  letter-spacing: 1.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 术前 / 术后 两列 */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+.pair-col {
+  padding: 18px 22px;
+}
+.pair-col + .pair-col {
+  border-left: 0.5px solid var(--hair);
+}
+.pair-col > strong {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 10pt;
+  letter-spacing: 3px;
+  color: var(--ink-3);
+  font-style: italic;
+  font-weight: 400;
+  margin-bottom: 10px;
+}
+.pair-col > strong span { color: var(--ink-3); letter-spacing: 0; }
+
+/* 缩略图网格 */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+}
+.photo-grid a {
+  display: block;
+  border: 0.5px solid var(--hair);
+  background: var(--bg);
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  transition: border-color .15s;
+}
+.photo-grid a:hover {
+  border-color: var(--ink);
+}
+.photo-grid img,
+.photo-grid video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.no-img {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 10pt;
+  color: var(--ink-3);
+  margin: 0;
+  padding: 28px 0;
+  text-align: center;
+  border: 0.5px dashed var(--hair);
+}
+
+/* 翻页条 */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 0 6px;
+  font-family: var(--font-serif);
+  font-size: 10pt;
+}
+.pagination a,
+.pagination .cur,
+.pagination .disabled {
+  display: inline-block;
+  min-width: 32px;
+  padding: 6px 12px;
+  text-align: center;
+  border: 0.5px solid var(--hair);
+  color: var(--ink-2);
+  text-decoration: none;
+  font-family: var(--font-numeric);
+}
+.pagination a:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+  background: var(--bg);
+}
+.pagination .cur {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+  font-weight: 700;
+}
+.pagination .disabled {
+  color: var(--ink-4);
+  border-color: var(--hair);
+  background: var(--bg);
+  cursor: default;
+}
+.pagination [data-lucide] { display:none; }
+
+/* 空案例 */
+.uk-wrap .card.empty {
+  background: var(--paper);
+  border: 0.5px solid var(--hair-2);
+  border-radius: 0;
+  padding: 48px 24px !important;
+  text-align: center;
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--ink-3);
+  font-size: 11pt;
+}
+
+@media (max-width: 768px) {
+  .pair { grid-template-columns: 1fr; }
+  .pair-col + .pair-col { border-left: 0; border-top: 0.5px solid var(--hair); }
+  .case-head { padding: 10px 16px; }
+  .pair-col { padding: 14px 16px; }
+}
 </style>
-<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>公布展示</span></div>
+
+<div class="ukc-bc">
+  <a href="/admin">后台</a><span class="sep">/</span><span>公布展示</span>
+</div>
+
 <div class="ukc-head">
   <div>
     <h1>公&nbsp;布&nbsp;展&nbsp;示
-      <span class="sub">TNR 已审核案例 · 公开展示</span>
+      <span class="sub">TNR 术前术后 · 经救助人同意 · 用于公益宣传与 TNR 科普 · 不涉及申请人隐私信息</span>
     </h1>
   </div>
+  {% if total %}
+  <div style="font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:10pt; letter-spacing:1.5px;">
+    共 <b style="font-family:var(--font-numeric); color:var(--ink); font-style:normal; font-weight:700;">{{ total }}</b> 个案例
+  </div>
+  {% endif %}
 </div>
+
 <hr class="ukc-rule-double"/>
+
 {% include "includes/showcase_body.html" %}
 {% endblock %}

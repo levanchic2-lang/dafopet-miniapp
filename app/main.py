@@ -6271,7 +6271,7 @@ async def page_showcase(request: Request, db: Session = Depends(get_db),
     total_pages = max(1, (total + page_size - 1) // page_size)
     page        = min(page, total_pages)
     items       = all_items[(page - 1) * page_size : page * page_size]
-    return templates.TemplateResponse(request, "showcase.html",
+    return templates.TemplateResponse(request, "uk/showcase.html",
         {
             "request": request,
             "title": "公布展示 · TNR 术前术后",
