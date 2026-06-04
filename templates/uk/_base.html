@@ -12,6 +12,18 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.9/400.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.9/700.css">
+  {# 等思源宋体加载完再显示页面，避免 Georgia→思源宋体 的字重切换闪烁；1.5s 兜底防止卡死 #}
+  <script>
+  (function(){
+    if (!document.fonts || !document.fonts.ready) return;
+    var html = document.documentElement;
+    html.style.visibility = 'hidden';
+    var shown = false;
+    var show = function(){ if (shown) return; shown = true; html.style.visibility = ''; };
+    document.fonts.ready.then(show);
+    setTimeout(show, 1500);
+  })();
+  </script>
 
   {# UK Minimal 设计系统 — 唯一 CSS 入口 #}
   <link rel="stylesheet" href="/static/uk_minimal.css?v=5" />

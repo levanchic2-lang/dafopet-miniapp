@@ -1139,6 +1139,8 @@
     <h3>添 加 宠 物</h3>
     <form method="post" action="/admin/customers/{{ cust.id }}/pets/add">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      {# 超管也带上当前 session 的归属门店，让 _gen_medical_record_no 生成病历号 #}
+      <input type="hidden" name="store" value="{{ request.session.get('admin_store', '') }}"/>
       <div class="row2">
         <label class="field">名字
           <input name="name" placeholder="如：大米" required/>

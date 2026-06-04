@@ -7,6 +7,17 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.9/400.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.9/700.css">
+  <script>
+  (function(){
+    if (!document.fonts || !document.fonts.ready) return;
+    var html = document.documentElement;
+    html.style.visibility = 'hidden';
+    var shown = false;
+    var show = function(){ if (shown) return; shown = true; html.style.visibility = ''; };
+    document.fonts.ready.then(show);
+    setTimeout(show, 1500);
+  })();
+  </script>
   <link rel="stylesheet" href="/static/uk_minimal.css?v=5" />
   <style>
     body {
