@@ -8023,6 +8023,29 @@ async def admin_consent_task_create(
     cust = db.get(Customer, customer_id)
     if not cust:
         return RedirectResponse("/admin?msg=客户不存在", status_code=303)
+
+    # 重复发起校验：1 小时内同一客户 + 同一模板 + 同一宠物 + 仍 pending 的任务
+    # 防止用户连点两下生成两条僵尸任务（客户签的是后一条、前一条永远停在待签署）
+    from datetime import timedelta as _td
+    one_hour_ago = datetime.utcnow() - _td(hours=1)
+    _dup_q = db.query(ConsentTask).filter(
+        ConsentTask.customer_id == customer_id,
+        ConsentTask.template_id == tpl.id,
+        ConsentTask.status == "pending",
+        ConsentTask.initiated_at >= one_hour_ago,
+    )
+    if pet_id:
+        _dup_q = _dup_q.filter(ConsentTask.pet_id == pet_id)
+    else:
+        _dup_q = _dup_q.filter(ConsentTask.pet_id.is_(None))
+    _dup = _dup_q.order_by(ConsentTask.id.desc()).first()
+    if _dup:
+        from urllib.parse import quote as _q
+        msg = f"已存在未签的相同协议（#CT{_dup.id:06d}），请等客户先签完或在该任务详情页「取消任务」后再重发"
+        return RedirectResponse(
+            f"/admin/customers/{customer_id}?tab=docs&msg={_q(msg)}",
+            status_code=303,
+        )
     pet = db.get(Pet, pet_id) if pet_id else None
     visit = db.get(Visit, visit_id) if visit_id else None
     # 取宠物体重 / 年龄
