@@ -799,6 +799,61 @@ async def wecom_domain_verify():
     return Response(content="f5g3FhGYiTN0VHR8", media_type="text/plain")
 
 
+# ─── 小程序「普通链接二维码规则」校验文件 + 兜底网页 ───
+# 微信扫码 https://dafopet.com/miniapp/* → 打开小程序 pages/index/index（TNR 申请）
+# 非微信扫码（支付宝/相机）→ 落到下方兜底 HTML
+@app.get("/miniapp/{filename}.txt", response_class=Response)
+async def miniapp_verify_file(filename: str):
+    """微信小程序后台「下载校验文件」→ 上传到 static/wechat/ → 此路由代理出来。
+    防遍历：filename 限制为 [\\w\\-]+，且文件必须真实存在于 static/wechat/。
+    """
+    import re
+    from pathlib import Path as _Path
+    if not re.fullmatch(r"[\w\-]+", filename):
+        return Response(status_code=404)
+    p = _Path(__file__).parent.parent / "static" / "wechat" / f"{filename}.txt"
+    if not p.exists():
+        return Response(status_code=404)
+    return Response(content=p.read_text(encoding="utf-8"), media_type="text/plain")
+
+
+_MINIAPP_FALLBACK_HTML = """<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>大风动物医院 · 流浪猫 TNR 申请</title>
+<style>
+  body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif;
+         color:#1a1a1a; background:#f7f5f0; margin:0; padding:0;
+         display:flex; min-height:100vh; align-items:center; justify-content:center; }
+  .box { max-width:520px; padding:48px 36px; text-align:center; }
+  h1 { font-size:22pt; letter-spacing:4px; margin:0 0 18px; }
+  .sub { font-style:italic; color:#8a8a8a; letter-spacing:2px; font-size:11pt; margin-bottom:32px; }
+  hr { border:0; height:4px; border-top:0.5px solid #1a1a1a; border-bottom:0.5px solid #1a1a1a; margin:24px auto 28px; max-width:80px; }
+  p { font-size:11pt; line-height:1.85; color:#4a4a4a; letter-spacing:0.5px; }
+  .tip { background:#fff; border:0.5px solid #d4d4d4; padding:18px 22px; margin-top:24px; font-size:10.5pt; line-height:1.75; }
+  .tip b { letter-spacing:1.5px; }
+  a { color:#1a1a1a; border-bottom:0.5px solid #8a8a8a; text-decoration:none; }
+</style></head><body>
+<div class="box">
+  <h1>大风动物医院</h1>
+  <div class="sub">始 于 2018</div>
+  <hr/>
+  <p>本页是小程序入口。<br/>请用 <b>微信「扫一扫」</b> 重新扫描二维码<br/>即可打开「流浪猫 TNR 申请」小程序。</p>
+  <div class="tip">
+    没装微信？可访问 <a href="/">在线 H5 申请页</a>，或拨打 <b>东环店 / 横岗店</b> 前台电话咨询。
+  </div>
+</div>
+</body></html>
+"""
+
+@app.get("/miniapp", response_class=HTMLResponse)
+@app.get("/miniapp/", response_class=HTMLResponse)
+@app.get("/miniapp/tnr", response_class=HTMLResponse)
+@app.get("/miniapp/index", response_class=HTMLResponse)
+async def miniapp_fallback():
+    return HTMLResponse(content=_MINIAPP_FALLBACK_HTML)
+
+
 # PWA：Service Worker 必须从能 claim 根作用域的路径加载。/static/sw.js 只能
 # claim /static/，所以同一个文件再从根路径 /sw.js 服务一份，scope:'/' 才合法。
 @app.get("/sw.js")
