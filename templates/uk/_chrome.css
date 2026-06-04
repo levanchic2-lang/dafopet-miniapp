@@ -3,6 +3,13 @@
 /* 老设计变量 → UK 变量映射（body 里 var(--muted) 等不会变 undefined） */
 .uk-wrap { --muted:var(--ink-3); --ok-fg:var(--accent-green); --ok-bg:#f5f9f6; --warn-fg:var(--accent-amber); --warn-bg:#fbfaf6; --err-fg:var(--accent-red); --err-bg:#fcf5f4; --brand-dark:var(--ink); --brand-bg-soft:var(--bg); --brand-light:var(--hair); --brand:var(--ink); --text:var(--ink); --border:var(--hair); --border-strong:var(--ink-3); --card:var(--paper); --bg-elevated:var(--bg); --accent:var(--ink); --radius:0; --shadow:none; }
 
+/* 老模板的 .row2 双列网格（base.html 提供，UK 没有 → 显式补） */
+.uk-wrap .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px 18px; }
+.uk-wrap .row2 > * { min-width:0; }
+.uk-wrap .row2 label { display:block; margin-bottom:6px; }
+.uk-wrap .row2 input, .uk-wrap .row2 select, .uk-wrap .row2 textarea { width:100% !important; box-sizing:border-box; }
+@media (max-width:600px) { .uk-wrap .row2 { grid-template-columns:1fr; } }
+
 .ukc-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
 .ukc-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; text-decoration:none; }
 .ukc-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
