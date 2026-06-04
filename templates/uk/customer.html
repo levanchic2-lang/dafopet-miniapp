@@ -1137,7 +1137,7 @@
 <div class="uk-modal-overlay" id="addPetModal" onclick="if(event.target===this) this.classList.remove('visible');">
   <div class="uk-modal">
     <h3>添 加 宠 物</h3>
-    <form method="post" action="/admin/customers/{{ cust.id }}/pets/create">
+    <form method="post" action="/admin/customers/{{ cust.id }}/pets/add">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
       <div class="row2">
         <label class="field">名字
@@ -1171,8 +1171,8 @@
         <label class="field">毛色
           <input name="color_pattern" placeholder="如：黑白"/>
         </label>
-        <label class="field">出生估计
-          <input name="birthday_estimate" placeholder="如：2023-06"/>
+        <label class="field">出生估计（年月）
+          <input type="month" name="birthday_estimate" min="2005-01" max="2030-12"/>
         </label>
       </div>
       <label class="field">是否绝育
