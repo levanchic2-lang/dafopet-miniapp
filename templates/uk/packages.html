@@ -9,6 +9,14 @@
       <span class="sub">洗澡卡 / 造型卡 / 健康包 · 售卖与核销</span>
     </h1>
   </div>
+  {% if request.session.get('admin_role') == 'superadmin' %}
+  <div>
+    <button type="button" onclick="document.getElementById('new-pkg-modal').classList.add('visible'); document.getElementById('pkg-modal-title').textContent = '新建套餐';"
+            style="background:var(--ink); color:var(--paper); border:0; padding:8px 18px; cursor:pointer; font-family:var(--font-serif); font-size:10pt; letter-spacing:2px; font-weight:700; border-radius:0;">
+      ＋ 新&nbsp;建&nbsp;套&nbsp;餐
+    </button>
+  </div>
+  {% endif %}
 </div>
 <hr class="ukc-rule-double"/>
 {% include "includes/admin_packages_body.html" %}

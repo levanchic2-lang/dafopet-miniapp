@@ -13365,7 +13365,7 @@ async def admin_inventory_list(
 @app.get("/admin/inventory/create", response_class=HTMLResponse)
 async def admin_inventory_create_form(request: Request, db: Session = Depends(get_db)):
     require_admin(request)
-    return templates.TemplateResponse(request, "admin_inventory_form.html", {
+    return templates.TemplateResponse(request, "uk/inventory_form.html", {
         "request": request, "item": None,
         "categories": INVENTORY_CATEGORIES,
         "csrf_token": request.session.get("csrf_token", ""),
@@ -13432,7 +13432,7 @@ async def admin_inventory_edit_form(item_id: int, request: Request, db: Session 
             aliases_text = "\n".join(str(a) for a in arr if str(a).strip())
     except Exception:
         aliases_text = ""
-    return templates.TemplateResponse(request, "admin_inventory_form.html", {
+    return templates.TemplateResponse(request, "uk/inventory_form.html", {
         "request": request, "item": item,
         "categories": INVENTORY_CATEGORIES,
         "csrf_token": request.session.get("csrf_token", ""),

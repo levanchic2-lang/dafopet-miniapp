@@ -1,0 +1,38 @@
+{% extends "uk/_base.html" %}
+{% block title %}{% if item %}编辑品目{% else %}新增品目{% endif %} · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}
+/* inventory form 特定覆盖 */
+body .uk-wrap > .card { max-width:none !important; margin:0 !important; }
+body .uk-wrap h1 { display:none; }  /* 隐藏 body 里的老 h1，用面包屑下的新标题 */
+body .uk-wrap [style*="brand-bg-soft"] { background:#fbfaf6 !important; border:0 !important; border-left:3px solid var(--accent-amber) !important; border-radius:0 !important; padding:10px 16px !important; font-family:var(--font-serif) !important; color:var(--ink-2) !important; }
+body .uk-wrap [style*="brand-bg-soft"] a { color:var(--ink) !important; border-bottom:0.5px solid var(--hair-2) !important; text-decoration:none !important; }
+body .uk-wrap [style*="background:#f8fafc"] { background:var(--bg) !important; border:0.5px solid var(--hair) !important; border-radius:0 !important; }
+body .uk-wrap [style*="background:#f8fafc"] > div:first-child { color:var(--ink) !important; font-family:var(--font-serif) !important; letter-spacing:2px; font-weight:700; }
+body .uk-wrap [style*="background:#f8fafc"] small { font-family:var(--font-serif) !important; font-style:italic; color:var(--ink-3) !important; }
+body .uk-wrap label { font-family:var(--font-serif) !important; font-size:9.5pt !important; letter-spacing:1.5px; color:var(--ink-3) !important; font-style:italic; font-weight:400 !important; }
+body .uk-wrap label small { font-style:italic; color:var(--ink-3) !important; font-weight:400 !important; }
+body .uk-wrap input[type=checkbox] { width:14px; height:14px; accent-color:var(--ink); }
+body .uk-wrap label span { color:var(--ink-2) !important; font-style:normal; font-weight:400 !important; }
+body .uk-wrap .uk-wrap-form-actions { padding-top:18px; border-top:0.5px solid var(--hair); margin-top:24px; }
+</style>
+
+<div class="ukc-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/inventory">库存管理</a><span class="sep">/</span>
+  <span>{% if item %}编辑「{{ item.name }}」{% else %}新增品目{% endif %}</span>
+</div>
+
+<div class="ukc-head">
+  <div>
+    <h1 style="font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15;">
+      {% if item %}编&nbsp;辑&nbsp;品&nbsp;目{% else %}新&nbsp;增&nbsp;品&nbsp;目{% endif %}
+      <span style="display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px;">{% if item %}{{ item.name }}{% else %}登记基础品目信息 · 价格 / 单位 / 门店覆盖{% endif %}</span>
+    </h1>
+  </div>
+</div>
+
+<hr class="ukc-rule-double"/>
+
+{% include "includes/admin_inventory_form_body.html" %}
+{% endblock %}

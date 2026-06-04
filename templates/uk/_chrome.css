@@ -1,4 +1,8 @@
 /* UK chrome shared overrides — included by inventory/narcotics/etc wrapper pages */
+
+/* 老设计变量 → UK 变量映射（body 里 var(--muted) 等不会变 undefined） */
+.uk-wrap { --muted:var(--ink-3); --ok-fg:var(--accent-green); --ok-bg:#f5f9f6; --warn-fg:var(--accent-amber); --warn-bg:#fbfaf6; --err-fg:var(--accent-red); --err-bg:#fcf5f4; --brand-dark:var(--ink); --brand-bg-soft:var(--bg); --brand-light:var(--hair); --brand:var(--ink); --text:var(--ink); --border:var(--hair); --border-strong:var(--ink-3); --card:var(--paper); --bg-elevated:var(--bg); --accent:var(--ink); --radius:0; --shadow:none; }
+
 .ukc-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
 .ukc-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; text-decoration:none; }
 .ukc-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
