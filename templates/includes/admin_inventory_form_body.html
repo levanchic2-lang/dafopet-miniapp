@@ -96,35 +96,6 @@
  <input name="cost_price" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.cost_price) if item else '0.00' }}" style="width:100%;"/>
  </div>
 
- {# ── 门店覆盖价（仅服务项目可用）─ 有库存品目通过两条独立记录天然分店 ── #}
- <div id="store-overrides-block" style="grid-column:1/-1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.75rem 1rem;">
-   <div style="font-weight:600;margin-bottom:.5rem;font-size:.9rem;color:#1e293b;">
-     门店价格覆盖
-     <small style="color:#64748b;font-weight:400;font-size:.78rem;">（仅服务项目用：同一服务两店差价；有库存品目请在每家门店各建一条独立记录）</small>
-   </div>
-   {% set _ov = (item.store_overrides if item else '') %}
-   {% set _ov_dh = (item.store_overrides_parsed.get('东环店', {}) if (item and item.store_overrides_parsed) else {}) %}
-   {% set _ov_hg = (item.store_overrides_parsed.get('横岗店', {}) if (item and item.store_overrides_parsed) else {}) %}
-   <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem 1rem;">
-     <div>
-       <label style="display:block;font-size:.82rem;color:#64748b;margin-bottom:.2rem;">东环店 售价</label>
-       <input name="override_sell_donghuan" type="number" step="0.01" min="0" placeholder="留空 = 用默认价" value="{{ _ov_dh.get('sell', '') if _ov_dh.get('sell') is not none else '' }}" style="width:100%;"/>
-     </div>
-     <div>
-       <label style="display:block;font-size:.82rem;color:#64748b;margin-bottom:.2rem;">东环店 进价</label>
-       <input name="override_cost_donghuan" type="number" step="0.01" min="0" placeholder="留空 = 用默认价" value="{{ _ov_dh.get('cost', '') if _ov_dh.get('cost') is not none else '' }}" style="width:100%;"/>
-     </div>
-     <div>
-       <label style="display:block;font-size:.82rem;color:#64748b;margin-bottom:.2rem;">横岗店 售价</label>
-       <input name="override_sell_henggang" type="number" step="0.01" min="0" placeholder="留空 = 用默认价" value="{{ _ov_hg.get('sell', '') if _ov_hg.get('sell') is not none else '' }}" style="width:100%;"/>
-     </div>
-     <div>
-       <label style="display:block;font-size:.82rem;color:#64748b;margin-bottom:.2rem;">横岗店 进价</label>
-       <input name="override_cost_henggang" type="number" step="0.01" min="0" placeholder="留空 = 用默认价" value="{{ _ov_hg.get('cost', '') if _ov_hg.get('cost') is not none else '' }}" style="width:100%;"/>
-     </div>
-   </div>
- </div>
-
  <div id="stock-fields">
  {% if not item %}
  <label style="display:block;font-weight:600;margin-bottom:0.35rem;">初始库存</label>
@@ -161,18 +132,18 @@
  {% endif %}
 
  <div style="grid-column:1/-1;">
- <label style="display:block;font-weight:600;margin-bottom:0.35rem;">归属门店</label>
+ <label style="display:block;font-weight:600;margin-bottom:0.35rem;">归属门店 <span style="color:#d97706;">*</span></label>
  {% if is_superadmin %}
- <select name="store" style="width:100%;">
-   <option value="" {% if not default_store %}selected{% endif %}>通用（两店共享）</option>
-   <option value="东环店" {% if default_store == '东环店' %}selected{% endif %}>仅东环店</option>
-   <option value="横岗店" {% if default_store == '横岗店' %}selected{% endif %}>仅横岗店</option>
+ <select name="store" required style="width:100%;">
+   {% if not default_store and not item %}<option value="" disabled selected>— 请选择门店 —</option>{% endif %}
+   <option value="东环店" {% if (item and item.store == '东环店') or (not item and default_store == '东环店') %}selected{% endif %}>东环店</option>
+   <option value="横岗店" {% if (item and item.store == '横岗店') or (not item and default_store == '横岗店') %}selected{% endif %}>横岗店</option>
  </select>
- <div style="font-size:.78rem;color:var(--muted);margin-top:.25rem;">通用品目两店都能看到/使用；选具体门店则只在该店出现。</div>
+ <div style="font-size:.78rem;color:var(--muted);margin-top:.25rem;">每个品目必须归属一家店；两店共用的商品请在每家店各建一条独立记录（库存物理隔离）。</div>
  {% else %}
- <input value="{{ default_store or '通用' }}" disabled style="width:100%;background:#f8fafc;color:#64748b;"/>
+ <input value="{{ default_store }}" disabled style="width:100%;background:#f8fafc;color:#64748b;"/>
  <input type="hidden" name="store" value="{{ default_store }}"/>
- <div style="font-size:.78rem;color:var(--muted);margin-top:.25rem;">自动归属本店；如需调整请联系管理员。</div>
+ <div style="font-size:.78rem;color:var(--muted);margin-top:.25rem;">自动归属本店；如需调整请联系超管。</div>
  {% endif %}
  </div>
  </div>

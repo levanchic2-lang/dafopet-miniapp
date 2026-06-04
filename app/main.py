@@ -1009,16 +1009,23 @@ def _resolve_store_for_create(request: "Request", explicit: str = "") -> str:
     优先级：
       1. 表单显式传了 explicit（superadmin 在切换器里选了具体门店）
       2. staff 自动归本店
-      3. 兜底空字符串（通用）
+    校验：必须是「东环店」或「横岗店」之一，不再允许空字符串（通用）。
     """
     explicit = (explicit or "").strip()
-    if explicit in ("东环店", "横岗店", ""):
-        # 注意：superadmin 选「通用」=""，要尊重它
-        # staff 不允许 explicit 越过本店
-        if request.session.get("admin_role") == "superadmin":
+    if request.session.get("admin_role") == "superadmin":
+        # superadmin 必须显式选一家店
+        if explicit in ("东环店", "横岗店"):
             return explicit
+        # 没选 → 退到 session.admin_store；仍为空 → 抛错
+        fallback = request.session.get("admin_store", "") or ""
+        if fallback in ("东环店", "横岗店"):
+            return fallback
+        raise HTTPException(400, "请选择归属门店：东环店 或 横岗店（每个品目必须归属一家店）")
     # staff：永远是本店
-    return request.session.get("admin_store", "") or ""
+    fallback = request.session.get("admin_store", "") or ""
+    if fallback not in ("东环店", "横岗店"):
+        raise HTTPException(400, "员工账号缺少有效门店归属，请联系管理员")
+    return fallback
 
 
 def _age_estimate_to_birthday(s: str) -> str:
@@ -13548,22 +13555,15 @@ async def admin_inventory_edit(
     item.sell_price = sell_price; item.cost_price = cost_price
     item.low_stock_min = low_stock_min
     item.supplier = supplier; item.notes = notes
-    # 处理门店覆盖：留空 → 清除；填了 → set
-    from app.services.pricing import set_override as _set_ov, clear_override as _clr_ov
-    def _apply(_store, _sell, _cost):
-        s = (_sell or "").strip()
-        c = (_cost or "").strip()
-        if not s and not c:
-            _clr_ov(item, _store)
-            return
-        _set_ov(item, _store,
-                sell=float(s) if s else None,
-                cost=float(c) if c else None)
-    _apply("东环店", override_sell_donghuan, override_cost_donghuan)
-    _apply("横岗店", override_sell_henggang, override_cost_henggang)
-    # 门店：staff 无权改；superadmin 可改
+    # 门店价格覆盖已废弃（每个品目独立归属一家店）。任何编辑都强制清空 store_overrides，
+    # 避免老数据继续影响 eff_price 计算。
+    item.store_overrides = ""
+    # 门店：staff 无权改；superadmin 可改，但必须是 东环店 / 横岗店 之一
     if request.session.get("admin_role") == "superadmin":
-        item.store = (store or "").strip()
+        new_store = (store or "").strip()
+        if new_store not in ("东环店", "横岗店"):
+            raise HTTPException(400, "归属门店必须是 东环店 或 横岗店，不允许空（每个品目必须归属一家店）")
+        item.store = new_store
     item.updated_at = datetime.utcnow()
     db.commit()
     # 保存后优先回列表的原筛选状态 + 原页码（避免编辑后弹回第 1 页 / 弹回"全部"）

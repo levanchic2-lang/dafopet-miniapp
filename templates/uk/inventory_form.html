@@ -63,14 +63,11 @@ function updateSubs(force) {
 
 function toggleStock() {
   const isService = document.getElementById('is-service-cb').checked;
-  // 库存相关字段：服务项目隐藏（不占库存）
+  // 服务项目不占库存：库存输入 / 低库存预警线隐藏
   const stockFields = document.getElementById('stock-fields');
   if (stockFields) stockFields.style.display = isService ? 'none' : '';
   const lowStock = document.getElementById('low-stock-field');
   if (lowStock) lowStock.style.display = isService ? 'none' : '';
-  // 门店价格覆盖：仅服务项目可用；有库存品目通过两条独立记录天然分店
-  const ovBlock = document.getElementById('store-overrides-block');
-  if (ovBlock) ovBlock.style.display = isService ? '' : 'none';
 }
 
 updateSubs();

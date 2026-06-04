@@ -309,10 +309,10 @@
   <a href="?store=" class="{% if not wb_store %}active{% endif %}">全部</a>
   <a href="?store=东环店" class="{% if wb_store == '东环店' %}active{% endif %}">东环店</a>
   <a href="?store=横岗店" class="{% if wb_store == '横岗店' %}active{% endif %}">横岗店</a>
-  <span class="hint">staff 自动锁本店 · 空标签 = 两店通用</span>
+  <span class="hint">staff 自动锁本店 · 品目按门店物理隔离</span>
 </div>
 {% elif wb_store %}
-<div class="inv-store-bar">门店：<b style="color:var(--ink);">{{ wb_store }}</b>（含通用品目）</div>
+<div class="inv-store-bar">门店：<b style="color:var(--ink);">{{ wb_store }}</b></div>
 {% endif %}
 
 {# ─── 筛选 ─── #}
@@ -379,7 +379,7 @@
         {{ it.name }}
         {% if it.is_controlled %}<span class="uk-pill red">管控</span>{% endif %}
         {% if it.is_service %}<span class="uk-pill mute">服务</span>{% endif %}
-        {% if it.store %}<span class="uk-pill mute">{{ it.store }}</span>{% else %}<span class="uk-pill mute">通用</span>{% endif %}
+        {% if it.store %}<span class="uk-pill mute">{{ it.store }}</span>{% else %}<span class="uk-pill amber" title="历史遗留无归属，请编辑指定门店">⚠ 未归属</span>{% endif %}
       </td>
       <td class="ink3">{{ cat_label }}</td>
       <td class="ink3-it">{{ sub_label or '—' }}</td>
@@ -466,9 +466,8 @@
     <span class="lbl">门店</span>
     <select name="store" id="bulk-store">
       <option value="__keep__">不改</option>
-      <option value="">通用</option>
-      <option value="东环店">仅东环店</option>
-      <option value="横岗店">仅横岗店</option>
+      <option value="东环店">改为 东环店</option>
+      <option value="横岗店">改为 横岗店</option>
     </select>
     {% endif %}
     <span class="lbl">服务</span>
@@ -589,7 +588,7 @@
       return;
     }
     var msg = '确认批量修改这 ' + ids.length + ' 个品目？';
-    if (changeStore) msg += '\n门店：' + (storeVal === '' ? '通用（两店共享）' : '仅 ' + storeVal);
+    if (changeStore) msg += '\n门店：改为 ' + storeVal;
     if (changeIsSvc) msg += '\n服务类目：' + (isSvc === '1' ? '是（不占库存）' : '否');
     if (changeIsCtrl) msg += '\n麻醉/管控：' + (isCtrl === '1' ? '是' : '否');
     if (!confirm(msg)) return;
