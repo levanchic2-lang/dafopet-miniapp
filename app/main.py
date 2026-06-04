@@ -3138,7 +3138,7 @@ def _post_login_redirect(request: Request) -> str:
             pass
     if _is_mobile_ua(request):
         return "/m"
-    return "/admin"
+    return "/admin/customers"
 
 
 @app.post("/admin/login")

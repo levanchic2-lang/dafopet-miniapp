@@ -228,14 +228,14 @@
 
   {# 接待 #}
   <div class="uk-ribbon-icons {% if _active_tab=='reception' %}active{% endif %}" data-tab-content="reception">
+    {% if request.session.get('admin') %}
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/customers') %}current{% endif %}" href="/admin/customers"><i data-lucide="home"></i>今日工作台</a>
+    {% endif %}
     <a class="uk-ribbon-icon {% if _path=='/admin' %}current{% endif %}" href="/admin"><i data-lucide="cat"></i>TNR 申请</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/calendar') %}current{% endif %}" href="/admin/calendar"><i data-lucide="calendar"></i>日历</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/appointments') %}current{% endif %}" href="/admin/appointments" id="nav-appt-link">
       <i data-lucide="clipboard-list"></i>预约管理<span id="nav-pending-badge" class="uk-ribbon-badge" style="display:none;"></span>
     </a>
-    {% if request.session.get('admin') %}
-    <a class="uk-ribbon-icon {% if _path.startswith('/admin/customers') %}current{% endif %}" href="/admin/customers"><i data-lucide="home"></i>今日工作台</a>
-    {% endif %}
   </div>
 
   {% if request.session.get('admin') %}

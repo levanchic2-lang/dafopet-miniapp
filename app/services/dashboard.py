@@ -110,10 +110,11 @@ def build_followup_today(db: Session, store_short: str) -> dict:
         q = q.filter(FollowUp.store == store_short)
     rows = q.order_by(FollowUp.planned_date.asc()).all()
     items = []
+    _fu_status_zh = {"pending":"待处理","due":"到期","phone_pending":"电话待催","sent":"已发送","responded":"已回复","closed":"已关闭","skipped":"已忽略"}
     for fu in rows[:3]:
         items.append({
             "label": _cust_label(fu.customer, fu.pet),
-            "sub": f"{fu.planned_date} · {fu.status}",
+            "sub": f"{fu.planned_date} · {_fu_status_zh.get(fu.status, fu.status)}",
             "url": f"/admin/follow-ups",
         })
     return {
