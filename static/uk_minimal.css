@@ -9,13 +9,13 @@
  *    5. tabular-nums 数字 + letter-spacing 标题
  * ============================================================ */
 
-/* 数字字体策略（解决 Win7 思源宋体 + Georgia ClearType 微距漂移）：
-   直接用真等宽字体 Consolas（Vista+ 自带）/ Courier New（XP+ 自带）。
-   等宽字体每个字符 advance width 物理相同，不依赖任何 OT 特性。
-   通过 unicode-range 限定，中文/英文字母继续走 Noto Serif SC 不变。*/
+/* 数字字体策略：保持衬线风格（UK 极简衬线美学）。
+   Cambria 是 Vista+ 自带的衬线字体，数字默认 tabular。
+   Win7 ClearType 下可能有 0.5-1px 视觉微距漂移（接受），
+   但风格统一漂亮，不偏代码感。中文继续 Noto Serif SC。*/
 @font-face {
   font-family: 'UK Digits';
-  src: local('Consolas'), local('Courier New'), local('Lucida Console');
+  src: local('Cambria'), local('Constantia'), local('Georgia'), local('Times New Roman');
   unicode-range: U+0030-0039, U+002D, U+002E, U+003A, U+002F, U+0028, U+0029, U+00A5, U+FFE5;
 }
 
