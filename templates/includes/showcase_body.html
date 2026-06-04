@@ -28,8 +28,9 @@
           {% for m in it.before %}
             {% set fp = m.stored_path.lower() %}
             {% if fp.endswith('.mp4') or fp.endswith('.webm') or fp.endswith('.mov') or fp.endswith('.mkv') %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener">
-              <video playsinline preload="none" muted><source src="/file/{{ m.id }}" type="video/mp4" /></video>
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" class="is-video" title="点击播放视频">
+              <video playsinline preload="metadata" muted><source src="/file/{{ m.id }}" type="video/mp4" /></video>
+              <span class="vbadge"><span class="vplay">▶</span><span class="vlabel">视&nbsp;频</span></span>
             </a>
             {% else %}
             <a href="/file/{{ m.id }}" target="_blank" rel="noopener">
@@ -51,8 +52,9 @@
           {% for m in it.after %}
             {% set fp = m.stored_path.lower() %}
             {% if fp.endswith('.mp4') or fp.endswith('.webm') or fp.endswith('.mov') or fp.endswith('.mkv') %}
-            <a href="/file/{{ m.id }}" target="_blank" rel="noopener">
-              <video playsinline preload="none" muted><source src="/file/{{ m.id }}" type="video/mp4" /></video>
+            <a href="/file/{{ m.id }}" target="_blank" rel="noopener" class="is-video" title="点击播放视频">
+              <video playsinline preload="metadata" muted><source src="/file/{{ m.id }}" type="video/mp4" /></video>
+              <span class="vbadge"><span class="vplay">▶</span><span class="vlabel">视&nbsp;频</span></span>
             </a>
             {% else %}
             <a href="/file/{{ m.id }}" target="_blank" rel="noopener">
