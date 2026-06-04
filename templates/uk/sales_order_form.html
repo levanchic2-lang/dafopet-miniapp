@@ -4,9 +4,15 @@
 <style>{% include "uk/_chrome.css" %}
 
 /* ── 销售单专属：明细表 + 库存搜索下拉 ── */
-.so-table { width:100%; border-collapse:collapse; font-family:var(--font-serif); font-size:10pt; table-layout:fixed; }
-.so-table th { text-align:left; padding:8px 10px; font-weight:400; font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:2px; border-bottom:0.5px solid var(--ink); white-space:nowrap; }
-.so-table td { padding:8px 10px; vertical-align:middle; border-bottom:0.5px solid var(--hair); }
+.so-table { width:100%; border-collapse:collapse; font-family:var(--font-serif); font-size:10pt; }
+.so-table th { text-align:left; padding:8px 8px; font-weight:400; font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:2px; border-bottom:0.5px solid var(--ink); white-space:nowrap; }
+.so-table td { padding:8px 6px; vertical-align:middle; border-bottom:0.5px solid var(--hair); }
+.so-table th:nth-child(1) { width:32%; }     /* 名称 */
+.so-table th:nth-child(3) { width:14%; }     /* 单价 */
+.so-table th:nth-child(4) { width:10%; }     /* 数量 */
+.so-table th:nth-child(5) { width:14%; }     /* 小计 */
+.so-table th:nth-child(6) { width:auto; }    /* 备注 — 剩余空间 */
+.so-table th:nth-child(7) { width:42px; }    /* × 删除 */
 .so-table input, .so-table select {
   width:100% !important; box-sizing:border-box;
   padding:6px 10px !important; font-size:10pt !important;
