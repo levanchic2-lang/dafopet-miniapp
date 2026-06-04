@@ -61,8 +61,14 @@
     </div>
     <div style="background:#fef3c7;color:#92400e;padding:.55rem 1rem;border-radius:8px;">
       <b style="font-size:1.15rem;display:block;">{{ preview.update_count }}</b>
-      <span style="font-size:.78rem;">已存在（按名+类别匹配）</span>
+      <span style="font-size:.78rem;">本店已存在</span>
     </div>
+    {% if preview.cross_store_count and preview.cross_store_count > 0 %}
+    <div style="background:#fbfaf6;color:#6b4423;padding:.55rem 1rem;border-radius:8px;border:1px solid #d4b896;">
+      <b style="font-size:1.15rem;display:block;">{{ preview.cross_store_count }}</b>
+      <span style="font-size:.78rem;">别店有同名（可继承属性）</span>
+    </div>
+    {% endif %}
   </div>
 
   {% if warnings %}
@@ -95,6 +101,7 @@
         <tr style="border-bottom:1px solid var(--border);">
           <td style="padding:.35rem .6rem;">
             {% if r._action == 'new' %}<span style="color:#15803d;font-weight:600;">+ 新建</span>
+            {% elif r._action == 'cross_store' %}<span style="color:#6b4423;font-weight:600;" title="别店有同名 #{{ r._cross_store_id }}，可继承属性">+ 新建 · 别店{{ r._cross_store_name or '某店' }}有同名 #{{ r._cross_store_id }}</span>
             {% else %}<span style="color:#d97706;font-weight:600;">↻ 已存在 #{{ r._existing_id }}</span>{% endif %}
           </td>
           <td style="padding:.35rem .6rem;font-weight:500;">{{ r.name }}</td>
@@ -137,6 +144,23 @@
         </div>
       </label>
     </div>
+
+    {% if preview.cross_store_count and preview.cross_store_count > 0 %}
+    <div style="margin-top:1rem;padding:.85rem 1rem;background:#fbfaf6;border:1px solid #d4b896;border-radius:6px;">
+      <label style="display:flex;gap:.6rem;align-items:flex-start;cursor:pointer;">
+        <input type="checkbox" name="inherit_meta" value="1" checked style="margin-top:.25rem;"/>
+        <div>
+          <b style="color:#6b4423;">从别店继承属性（推荐）</b>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:.2rem;line-height:1.55;">
+            检测到 <b>{{ preview.cross_store_count }}</b> 条品目在别店（如横岗店）已有同名同类记录。
+            勾上后，新建到本店时会复用别店那条的 <b>小类 / 单位 / 管控属性 / 进货识别别名</b>，
+            省去重头维护。<b>价格 / 库存 / 供应商</b> 仍用本次 Excel 数据（本店专属）。
+          </div>
+        </div>
+      </label>
+    </div>
+    {% endif %}
+
     <div style="margin-top:1.2rem;display:flex;gap:.5rem;">
       <a href="/admin/inventory/import-xls" class="btn secondary">取消重新上传</a>
       <button type="submit" class="btn"><i data-lucide="check"></i> 确认导入 {{ preview.total }} 条</button>

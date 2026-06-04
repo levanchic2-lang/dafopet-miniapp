@@ -176,44 +176,93 @@ def parse_xls_to_records(path: str) -> tuple[list[dict[str, Any]], list[str]]:
 
 
 def preview_import(db, records: list[dict[str, Any]], store: str = "") -> dict:
-    """试运行：按 (name, category, store) 检查冲突，返回统计 + 前 20 条预览。"""
+    """试运行：按 (name, category, store) 检查冲突，返回统计 + 前 20 条预览。
+
+    额外检测：跨店是否有同名同类品目（用于"继承属性"提示）。
+    """
     from app.models import InventoryItem
     new_count = 0
     update_count = 0
+    cross_store_count = 0   # 本店无 + 别店有 = 可继承属性
     samples = []
+    # 一次性查所有同名同类品目（包括别店的），按 (name, category) 索引
+    if records:
+        all_names = list({r["name"] for r in records})
+        rows = db.query(InventoryItem).filter(InventoryItem.name.in_(all_names)).all()
+        by_key: dict[tuple[str, str, str], InventoryItem] = {}
+        for it in rows:
+            by_key[(it.name, it.category, it.store or "")] = it
+    else:
+        by_key = {}
     for r in records:
-        existing = db.query(InventoryItem).filter(
-            InventoryItem.name == r["name"],
-            InventoryItem.category == r["category"],
-            InventoryItem.store == store,
-        ).first()
-        action = "update" if existing else "new"
-        if existing:
+        same_store = by_key.get((r["name"], r["category"], store))
+        if same_store:
+            action = "update"
             update_count += 1
+            cross_store_ref = None
         else:
+            # 本店没 → 检查别店是否有同名同类
+            cross_store_ref = None
+            for (n, c, s), it in by_key.items():
+                if n == r["name"] and c == r["category"] and s != store:
+                    cross_store_ref = it
+                    break
+            if cross_store_ref:
+                action = "cross_store"   # 本店新建 + 可继承属性
+                cross_store_count += 1
+            else:
+                action = "new"
             new_count += 1
         if len(samples) < 20:
-            samples.append({**r, "_action": action, "_existing_id": existing.id if existing else None})
+            samples.append({
+                **r,
+                "_action": action,
+                "_existing_id": same_store.id if same_store else None,
+                "_cross_store_id": cross_store_ref.id if cross_store_ref else None,
+                "_cross_store_name": cross_store_ref.store if cross_store_ref else "",
+            })
     return {
         "total": len(records),
         "new_count": new_count,
         "update_count": update_count,
+        "cross_store_count": cross_store_count,
         "samples": samples,
     }
 
 
-def commit_import(db, records: list[dict[str, Any]], store: str = "", strategy: str = "skip") -> dict:
+def commit_import(
+    db,
+    records: list[dict[str, Any]],
+    store: str = "",
+    strategy: str = "skip",
+    inherit_meta: bool = False,
+) -> dict:
     """正式导入。
 
     strategy:
       skip   - 已存在则跳过（默认，最安全）
       update - 已存在则更新价格/库存/供应商，不动 notes
       overwrite - 完全覆盖
+
+    inherit_meta:
+      True  - 新建到本店时，若别店有同名同类品目，把 subcategory / unit / unit2 /
+              unit2_ratio / is_controlled / aliases / notes 从别店那条复制过来
+              （价格 / 库存 / 供应商 / is_service 仍用本次导入的数据）
+      False - 完全用本次导入的数据，新建一条独立记录
     """
     from app.models import InventoryItem
     created = 0
     updated = 0
     skipped = 0
+    cross_inherited = 0
+    # 预查别店同名同类品目（仅 inherit_meta 时需要）
+    cross_map: dict[tuple[str, str], InventoryItem] = {}
+    if inherit_meta and records:
+        all_names = list({r["name"] for r in records})
+        rows = db.query(InventoryItem).filter(InventoryItem.name.in_(all_names)).all()
+        for it in rows:
+            if (it.store or "") != store:
+                cross_map.setdefault((it.name, it.category), it)
     for r in records:
         existing = db.query(InventoryItem).filter(
             InventoryItem.name == r["name"],
@@ -242,15 +291,22 @@ def commit_import(db, records: list[dict[str, Any]], store: str = "", strategy: 
                     setattr(existing, k, r[k])
             updated += 1
         else:
+            # 新建到本店
+            cross = cross_map.get((r["name"], r["category"])) if inherit_meta else None
+            if cross:
+                cross_inherited += 1
             item = InventoryItem(
                 name=r["name"],
                 category=r["category"],
-                subcategory=r["subcategory"],
+                # 元数据：有 inherit + 别店参考 → 优先用别店；否则用本次导入
+                subcategory=(cross.subcategory if cross and cross.subcategory else r["subcategory"]),
                 is_service=r["is_service"],
-                is_controlled=r["is_controlled"],
-                unit=r["unit"],
-                unit2=r["unit2"],
-                unit2_ratio=r["unit2_ratio"],
+                is_controlled=(cross.is_controlled if cross else r["is_controlled"]),
+                unit=(cross.unit if cross and cross.unit else r["unit"]),
+                unit2=(cross.unit2 if cross and cross.unit2 else r["unit2"]),
+                unit2_ratio=(cross.unit2_ratio if cross and cross.unit2_ratio else r["unit2_ratio"]),
+                aliases=(cross.aliases if cross and cross.aliases else ""),
+                # 价格 / 库存 / 供应商 / notes 永远用本次导入的（这是本店专属数据）
                 sell_price=r["sell_price"],
                 cost_price=r["cost_price"],
                 stock_qty=r["stock_qty"],
@@ -262,4 +318,9 @@ def commit_import(db, records: list[dict[str, Any]], store: str = "", strategy: 
             db.add(item)
             created += 1
     db.commit()
-    return {"created": created, "updated": updated, "skipped": skipped}
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "cross_inherited": cross_inherited,
+    }

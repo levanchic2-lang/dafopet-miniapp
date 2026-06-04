@@ -12887,6 +12887,7 @@ async def admin_inventory_import_xls_commit(
     request: Request,
     db: Session = Depends(get_db),
     strategy: str = Form("skip"),
+    inherit_meta: str = Form(""),
     csrf_token: str = Form(""),
 ):
     require_admin(request)
@@ -12904,14 +12905,18 @@ async def admin_inventory_import_xls_commit(
     except Exception as e:
         return RedirectResponse(f"/admin/inventory/import-xls?err=读取缓存失败：{e}", status_code=303)
     from app.services.inventory_import import commit_import
-    stat = commit_import(db, records, store=store, strategy=strategy)
+    _inherit = inherit_meta.lower() in ("1", "true", "on", "yes")
+    stat = commit_import(db, records, store=store, strategy=strategy, inherit_meta=_inherit)
     # 清理缓存 + session 凭证
     try:
         cache_path.unlink(missing_ok=True)
     except Exception:
         pass
     request.session.pop("_inv_import_token", None)
-    msg = f"导入完成：新建 {stat['created']} / 更新 {stat['updated']} / 跳过 {stat['skipped']}"
+    parts = [f"新建 {stat['created']}", f"更新 {stat['updated']}", f"跳过 {stat['skipped']}"]
+    if stat.get("cross_inherited"):
+        parts.append(f"继承别店属性 {stat['cross_inherited']}")
+    msg = "导入完成：" + " / ".join(parts)
     return RedirectResponse(f"/admin/inventory?msg={msg}", status_code=303)
 
 
