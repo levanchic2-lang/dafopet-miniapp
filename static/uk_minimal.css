@@ -64,6 +64,15 @@ html, body {
   font-feature-settings: "lnum" 1, "tnum" 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 数字 / 输入框 等宽 — 强制 Windows 老系统 Georgia 也走 tabular */
+input, select, textarea, .num,
+.uk-tbl td, .uk-tbl-tab td,
+[data-numeric], code, kbd, samp {
+  font-variant-numeric: lining-nums tabular-nums !important;
+  font-feature-settings: "lnum" 1, "tnum" 1 !important;
 }
 a { color: inherit; text-decoration: none; }
 a.link { border-bottom: 0.5px solid var(--ink-3); transition: border-color .15s; }
