@@ -1197,6 +1197,8 @@
     <h3>编 辑 宠 物 资 料</h3>
     <form method="post" id="editPetForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      {# 编辑保存时若 pet.store 为空就用当前 session 的归属门店补一下，触发病历号兜底生成 #}
+      <input type="hidden" name="store" value="{{ request.session.get('admin_store', '') }}"/>
       <div class="row2">
         <label class="field">名字
           <input name="name" id="ep_name" required/>
