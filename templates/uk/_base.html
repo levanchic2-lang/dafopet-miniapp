@@ -149,11 +149,31 @@
 
 {% set _path = request.url.path %}
 {% if request.session.get('admin') %}
-  {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing') or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam') or _path.startswith('/admin/follow-ups') or _path.startswith('/admin/inpatient') or _path.startswith('/admin/cages') %}
+  {#
+    匹配顺序：从最具体到最一般。
+    医疗：所有 follow-up*（含 templates / form）+ consent*（含 templates / tasks）+ 既有医疗路由
+    经营：财务 + 库存 + 销售 + 营销 + 反馈 + 报表 + 麻醉台账（已在 inventory 下，但 narcotics 独立路径也兜底）
+    系统：HR + 员工档案 + 待领养 + 日志 + 审计 + 公开展示
+    其余：接待
+  #}
+  {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing')
+       or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies')
+       or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam')
+       or _path.startswith('/admin/follow-up') or _path.startswith('/admin/inpatient')
+       or _path.startswith('/admin/cages') or _path.startswith('/admin/consent')
+       or _path.startswith('/admin/medication') %}
     {% set _active_tab = 'medical' %}
-  {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory') or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales') or _path.startswith('/admin/feedback') or _path.startswith('/admin/packages') or _path.startswith('/admin/coupons') or _path.startswith('/admin/reports') %}
+  {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory')
+        or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales')
+        or _path.startswith('/admin/feedback') or _path.startswith('/admin/packages')
+        or _path.startswith('/admin/coupons') or _path.startswith('/admin/reports')
+        or _path.startswith('/admin/narcotics') or _path.startswith('/admin/wallet')
+        or _path.startswith('/admin/deposit') %}
     {% set _active_tab = 'business' %}
-  {% elif _path.startswith('/admin/hr') or _path.startswith('/admin/adoption') or _path.startswith('/admin/changelog') or _path.startswith('/showcase') %}
+  {% elif _path.startswith('/admin/hr') or _path.startswith('/admin/staff')
+        or _path.startswith('/admin/adoption') or _path.startswith('/admin/changelog')
+        or _path.startswith('/admin/audit-logs') or _path.startswith('/admin/users')
+        or _path.startswith('/showcase') %}
     {% set _active_tab = 'system' %}
   {% else %}
     {% set _active_tab = 'reception' %}
