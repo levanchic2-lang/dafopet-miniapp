@@ -1,5 +1,3 @@
-{% block body %}
-
 {% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
 
 {# 始终输出 csrf token，方便页面里所有表单 / 客户端 fetch 使用 #}
