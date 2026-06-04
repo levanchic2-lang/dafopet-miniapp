@@ -11,7 +11,7 @@
 
 :root {
   /* ── 字体 ── */
-  --font-serif:   Georgia, "Times New Roman", "Source Han Serif SC", "STSong", "宋体", serif;
+  --font-serif:   "Noto Serif SC", Georgia, "Times New Roman", "Source Han Serif SC", "STSong", "宋体", serif;
   --font-numeric: "Georgia", "Times New Roman", ui-serif, serif;
 
   /* ── 颜色（单色阶）── */
