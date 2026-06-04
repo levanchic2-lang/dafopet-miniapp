@@ -315,7 +315,6 @@ function confirmSoVoid(form) { return confirmVoidWithRefund(form, 0); }
 
 {% endif %}
 
-{% block scripts %}
 <script>
 var _soRowCount = {{ o.items|length if o and o.items else 1 }};
 var _itemTypeOptions = `{% for k, zh in item_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}`;
