@@ -1,7 +1,56 @@
 {% extends "uk/_base.html" %}
 {% block title %}{% if order %}销售单 #{{ order.id }}{% else %}新建销售单{% endif %} · 大风动物医院{% endblock %}
 {% block body %}
-<style>{% include "uk/_chrome.css" %}</style>
+<style>{% include "uk/_chrome.css" %}
+
+/* ── 销售单专属：明细表 + 库存搜索下拉 ── */
+.so-table { width:100%; border-collapse:collapse; font-family:var(--font-serif); font-size:10pt; table-layout:fixed; }
+.so-table th { text-align:left; padding:8px 10px; font-weight:400; font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:2px; border-bottom:0.5px solid var(--ink); white-space:nowrap; }
+.so-table td { padding:8px 10px; vertical-align:middle; border-bottom:0.5px solid var(--hair); }
+.so-table input, .so-table select {
+  width:100% !important; box-sizing:border-box;
+  padding:6px 10px !important; font-size:10pt !important;
+  font-family:var(--font-serif) !important;
+  border:0.5px solid var(--hair) !important; border-radius:0 !important;
+  background:var(--paper) !important; color:var(--ink) !important;
+  height:34px;
+}
+.so-table input:focus, .so-table select:focus { border-color:var(--ink) !important; outline:0; }
+.so-table input[readonly] { background:var(--bg) !important; color:var(--ink) !important; font-weight:700; font-family:var(--font-numeric) !important; text-align:right; }
+.so-total-row td { background:var(--bg) !important; font-family:var(--font-serif); font-weight:700; padding:12px 10px !important; border-bottom:0 !important; }
+
+/* 「类型」列隐藏 — 表头第 2 个 + 单元格 .col-type-hidden 都塌缩为 0 宽 */
+.so-table th:nth-child(2) { display:none; }
+.so-table td.col-type-hidden { width:0 !important; padding:0 !important; border:none !important; font-size:0 !important; min-width:0 !important; }
+
+/* 库存搜索下拉框 */
+.inv-search-wrap { position:relative; }
+.inv-dropdown { position:absolute; top:100%; left:0; right:0; background:var(--paper); border:0.5px solid var(--ink); box-shadow:0 4px 16px rgba(0,0,0,.10); z-index:100; max-height:240px; overflow-y:auto; display:none; min-width:240px; font-family:var(--font-serif); }
+.inv-dropdown-item { padding:8px 12px; cursor:pointer; font-size:10pt; line-height:1.45; border-bottom:0.5px solid var(--hair); color:var(--ink-2); }
+.inv-dropdown-item:last-child { border-bottom:0; }
+.inv-dropdown-item:hover { background:var(--bg); color:var(--ink); }
+.inv-dropdown-item .item-meta { font-size:9pt; color:var(--ink-3); font-style:italic; margin-top:2px; }
+
+/* 删除按钮 */
+.so-table .btn.danger {
+  background:var(--paper) !important; color:var(--accent-red) !important;
+  border:0.5px solid var(--accent-red) !important; border-radius:0 !important;
+  padding:4px 10px !important; height:auto !important;
+  font-family:var(--font-serif) !important; font-style:italic; font-weight:400;
+}
+.so-table .btn.danger:hover { background:#fcf5f4 !important; }
+
+/* "添加项目" 按钮 */
+.uk-wrap [onclick*="addItem"] {
+  background:var(--paper) !important; color:var(--ink-2) !important;
+  border:0.5px solid var(--hair) !important; border-radius:0 !important;
+  font-family:var(--font-serif) !important; font-style:italic; font-weight:400 !important;
+  padding:6px 14px !important;
+}
+.uk-wrap [onclick*="addItem"]:hover { color:var(--ink) !important; border-color:var(--ink-3) !important; background:var(--bg) !important; }
+
+@media print { .no-print { display:none !important; } }
+</style>
 <div class="ukc-bc">
   <a href="/admin">后台</a><span class="sep">/</span>
   <a href="/admin/sales-orders">销售单</a><span class="sep">/</span>
