@@ -1,7 +1,94 @@
 {% extends "uk/_base.html" %}
 {% block title %}套餐目录 · 大风动物医院{% endblock %}
 {% block body %}
-<style>{% include "uk/_chrome.css" %}</style>
+<style>{% include "uk/_chrome.css" %}
+
+/* 新建/编辑套餐模态框 UK 化 */
+body #new-pkg-modal { background: rgba(26,26,26,0.45) !important; }
+body #new-pkg-modal > div {
+  background: var(--paper) !important;
+  border: 0.5px solid var(--ink) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,.18) !important;
+  padding: 28px 32px !important;
+  width: 520px !important;
+}
+body #pkg-modal-title {
+  font-family: var(--font-serif) !important;
+  font-size: 18pt !important;
+  letter-spacing: 3px;
+  font-weight: 700;
+  color: var(--ink) !important;
+  border-bottom: 0.5px solid var(--ink);
+  padding-bottom: 12px;
+  margin-bottom: 18px !important;
+}
+body #pkg-form label {
+  display: block !important;
+  margin-top: 14px;
+  margin-bottom: 6px;
+  font-family: var(--font-serif);
+  font-size: 9.5pt;
+  letter-spacing: 1.5px;
+  color: var(--ink-3);
+  font-style: italic;
+}
+body #pkg-form label:first-of-type { margin-top: 0; }
+body #pkg-form label span {
+  display: inline;
+  color: var(--ink-3) !important;
+  font-style: italic;
+  font-size: 9pt !important;
+  font-weight: 400 !important;
+  letter-spacing: 1px !important;
+}
+body #pkg-form input, body #pkg-form select {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box;
+  font-family: var(--font-serif) !important;
+  font-size: 10.5pt !important;
+  border: 0.5px solid var(--hair) !important;
+  border-radius: 0 !important;
+  padding: 8px 12px !important;
+  height: 38px !important;
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+}
+body #pkg-form input:focus, body #pkg-form select:focus {
+  border-color: var(--ink) !important;
+  outline: none !important;
+}
+body #pkg-form input[readonly] {
+  background: var(--bg) !important;
+  color: var(--ink-3) !important;
+}
+body #pkg-form > div:last-child {
+  margin-top: 22px !important;
+  padding-top: 16px !important;
+  border-top: 0.5px solid var(--hair) !important;
+}
+body #pkg-form > div:last-child button {
+  border-radius: 0 !important;
+  font-family: var(--font-serif) !important;
+  font-size: 10pt !important;
+  letter-spacing: 2px !important;
+  font-weight: 700 !important;
+  padding: 10px 0 !important;
+}
+body #pkg-form > div:last-child button.btn:not(.secondary) {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+  border: 0 !important;
+}
+body #pkg-form > div:last-child button.btn.secondary {
+  background: var(--paper) !important;
+  color: var(--ink-2) !important;
+  border: 0.5px solid var(--hair) !important;
+  font-style: italic;
+  font-weight: 400 !important;
+}
+</style>
 <div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>套餐目录</span></div>
 <div class="ukc-head">
   <div>
