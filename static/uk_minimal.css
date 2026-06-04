@@ -11,16 +11,14 @@
 
 /* Win7 等老系统上思源宋体（Noto Serif SC）的数字是比例字宽，
    且 jsdelivr 的子集裁掉了 OpenType tnum 特性 → 数字宽窄不齐。
-   解法：把 ASCII 数字 0-9 + 横线/句点/冒号/斜杠 强制 fallback 到 Georgia，
-   Georgia 在 Windows 所有版本都自带且内置 tabular-nums。
-   通过 unicode-range 限定，中文继续走 Noto Serif SC，不互相干扰。*/
+   Georgia 虽然带 tnum，但 Win7 ClearType 小字号渲染仍有微距漂移。
+   解法：用 Cambria（Vista 起内置 · 等宽数字默认开 tabular）作为数字专用字体，
+   再退到 Georgia、Consolas（等宽兜底）。
+   通过 unicode-range 把 ASCII 数字 + 标点强制走这套，中文继续 Noto Serif SC。*/
 @font-face {
   font-family: 'UK Digits';
-  src: local('Georgia'), local('Times New Roman');
+  src: local('Cambria'), local('Constantia'), local('Georgia'), local('Consolas');
   unicode-range: U+0030-0039, U+002D, U+002E, U+003A, U+002F, U+0028, U+0029, U+00A5, U+FFE5;
-  font-display: block;
-  font-weight: 400 700;
-  font-style: normal;
 }
 
 :root {
