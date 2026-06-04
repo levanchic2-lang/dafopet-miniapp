@@ -411,7 +411,7 @@
 <div class="inv-pager">
   <div>共 <span class="num">{{ total }}</span> 项 · 本页 <span class="num">{{ items|length }}</span></div>
   {% if total_pages > 1 %}
-  {% set qs = '&q=' ~ q ~ '&category=' ~ category ~ '&subcategory=' ~ subcategory ~ '&low_stock=' ~ low_stock ~ '&zero_stock=' ~ zero_stock ~ '&controlled=' ~ controlled ~ '&service_only=' ~ service_only ~ '&expiry_alert=' ~ expiry_alert %}
+  {% set qs = '&q=' ~ q ~ '&category=' ~ category ~ '&subcategory=' ~ subcategory ~ '&low_stock=' ~ low_stock ~ '&zero_stock=' ~ zero_stock ~ '&controlled=' ~ controlled ~ '&service_only=' ~ service_only ~ '&expiry_alert=' ~ expiry_alert ~ '&store=' ~ (wb_store or '') %}
   <div class="pages">
     {% if page > 1 %}
       <a href="?page=1{{ qs }}">« 首页</a>
