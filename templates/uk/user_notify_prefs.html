@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}通知偏好 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin/hr">人事管理</a><span class="sep">/</span><span>通知偏好</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>通&nbsp;知&nbsp;偏&nbsp;好
+      <span class="sub">{% if user %}{{ user.username }} · {% endif %}订阅消息 / 短信 / 电话 推送规则</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_user_notify_prefs_body.html" %}
+{% endblock %}

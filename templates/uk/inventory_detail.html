@@ -1,0 +1,24 @@
+{% extends "uk/_base.html" %}
+{% block title %}{{ item.name }} · 库存详情{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/inventory">库存管理</a><span class="sep">/</span>
+  <span>{{ item.name }}</span>
+</div>
+<div class="ukc-head">
+  <div>
+    <h1>{{ item.name }}
+      <span class="sub">
+        {{ categories.get(item.category, {}).get('label', item.category) }}
+        {% if item.subcategory %} · {{ item.subcategory }}{% endif %}
+        {% if item.is_controlled %} · 受管控{% endif %}
+        {% if item.is_service %} · 服务项目{% endif %}
+      </span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_inventory_detail_body.html" %}
+{% endblock %}

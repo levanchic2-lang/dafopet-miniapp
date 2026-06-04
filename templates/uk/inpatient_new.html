@@ -1,0 +1,19 @@
+{% extends "uk/_base.html" %}
+{% block title %}转住院 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/inpatient">住院管理</a><span class="sep">/</span>
+  <span>转住院</span>
+</div>
+<div class="ukc-head">
+  <div>
+    <h1>转&nbsp;住&nbsp;院
+      <span class="sub">{% if visit %}病例 #{{ visit.id }}{% endif %}{% if pet %} · {{ pet.name }}{% endif %}{% if cust %} · {{ cust.name }}{% endif %} · 选笼位 + 入院原因</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_inpatient_new_body.html" %}
+{% endblock %}

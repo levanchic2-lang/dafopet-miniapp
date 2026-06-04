@@ -2187,7 +2187,7 @@ async def api_app_status(app_id: int, db: Session = Depends(get_db)):
 @app.get("/admin", response_class=HTMLResponse)
 async def page_admin(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
-        return templates.TemplateResponse(request, "admin_login.html",
+        return templates.TemplateResponse(request, "uk/login.html",
             {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
         )
     qp = request.query_params
@@ -2843,7 +2843,7 @@ async def page_admin_appointments(
     appt_category: str = Query(""),
 ):
     if not _admin_ok(request):
-        return templates.TemplateResponse(request, "admin_login.html",
+        return templates.TemplateResponse(request, "uk/login.html",
             {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
         )
 
@@ -3081,7 +3081,7 @@ async def admin_login_page(request: Request):
     # 已登录直接回工作台
     if _admin_ok(request):
         return RedirectResponse(_post_login_redirect(request), status_code=303)
-    return templates.TemplateResponse(request, "admin_login.html", {
+    return templates.TemplateResponse(request, "uk/login.html", {
         "title": "医院后台登录",
         "csrf_token": _get_csrf_token(request),
     })
@@ -3187,7 +3187,7 @@ async def admin_login(
     else:
         logger.warning("[login fail] 输入='%s' 数据库里找不到该账号", username)
 
-    return templates.TemplateResponse(request, "admin_login.html",
+    return templates.TemplateResponse(request, "uk/login.html",
         {"request": request, "title": "医院后台登录", "error": "账号或密码不正确", "csrf_token": _get_csrf_token(request)},
         status_code=401,
     )
@@ -3947,7 +3947,7 @@ async def admin_wecom_sidebar(
             Deposit.status == "held",
         ).count()
 
-    return templates.TemplateResponse(request, "admin_wecom_sidebar.html", {
+    return templates.TemplateResponse(request, "uk/wecom_sidebar.html", {
         "external_userid": external_userid,
         "link": link,
         "cust": cust,
@@ -3996,7 +3996,7 @@ async def admin_wecom_customers_list(
     )
     counts = {s: n for s, n in counts_raw}
     counts["total"] = sum(counts.values())
-    return templates.TemplateResponse(request, "admin_wecom_customers.html", {
+    return templates.TemplateResponse(request, "uk/wecom_customers.html", {
         "links": links, "counts": counts, "status": status, "q": q,
         "page": page, "total": total,
         "total_pages": max(1, (total + page_size - 1) // page_size),
@@ -4303,7 +4303,7 @@ async def admin_users_notify_prefs(
             raise HTTPException(403, "只能修改自己的通知偏好")
     from app.services.wecom_notify import EVENT_KEYS
     disabled_set = {k.strip() for k in (user.wecom_notify_disabled or "").split(",") if k.strip()}
-    return templates.TemplateResponse(request, "admin_user_notify_prefs.html", {
+    return templates.TemplateResponse(request, "uk/user_notify_prefs.html", {
         "user": user,
         "event_keys": EVENT_KEYS,
         "disabled_set": disabled_set,
@@ -4435,7 +4435,7 @@ async def admin_staff_list(request: Request):
 @app.get("/admin/staff/create", response_class=HTMLResponse)
 async def admin_staff_create_get(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
-        return templates.TemplateResponse(request, "admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+        return templates.TemplateResponse(request, "uk/login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
     require_superadmin(request)
     return templates.TemplateResponse(request, "uk/staff_form.html", {
         "request": request, "title": "新增员工", "staff": None,
@@ -4479,7 +4479,7 @@ async def admin_staff_detail(
     msg: str = Query(""), err: str = Query(""),
 ):
     if not _admin_ok(request):
-        return templates.TemplateResponse(request, "admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+        return templates.TemplateResponse(request, "uk/login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
     staff = db.query(Staff).filter(Staff.id == staff_id).first()
     if not staff:
         raise HTTPException(404)
@@ -4500,7 +4500,7 @@ async def admin_staff_detail(
 @app.get("/admin/staff/{staff_id}/edit", response_class=HTMLResponse)
 async def admin_staff_edit_get(staff_id: int, request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
-        return templates.TemplateResponse(request, "admin_login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
+        return templates.TemplateResponse(request, "uk/login.html", {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)})
     require_superadmin(request)
     staff = db.query(Staff).filter(Staff.id == staff_id).first()
     if not staff:
@@ -12193,7 +12193,7 @@ async def page_admin_so_create(
     if customer_id:
         history = db.query(SalesOrder).filter(SalesOrder.customer_id == customer_id)\
             .order_by(SalesOrder.id.desc()).limit(10).all()
-    return templates.TemplateResponse(request, "admin_sales_order_form.html", {
+    return templates.TemplateResponse(request, "uk/sales_order_form.html", {
         "order": None, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "so_status_zh": _SO_STATUS_ZH, "item_type_zh": _SO_ITEM_TYPE_ZH,
         "payment_methods": _PAYMENT_METHOD_OPTIONS,
@@ -12270,7 +12270,7 @@ async def page_admin_so_list(
             c = db.get(Customer, o.customer_id)
             if c:
                 cust_map[o.customer_id] = c
-    return templates.TemplateResponse(request, "admin_sales_orders.html", {
+    return templates.TemplateResponse(request, "uk/sales_orders.html", {
         "orders": orders, "cust_map": cust_map,
         "so_status_zh": _SO_STATUS_ZH,
         "total": total, "page": page, "page_size": page_size,
@@ -12297,7 +12297,7 @@ async def page_admin_so_detail(order_id: int, request: Request, db: Session = De
             SalesOrder.customer_id == order.customer_id,
             SalesOrder.id != order_id,
         ).order_by(SalesOrder.id.desc()).limit(10).all()
-    return templates.TemplateResponse(request, "admin_sales_order_form.html", {
+    return templates.TemplateResponse(request, "uk/sales_order_form.html", {
         "order": order, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "so_status_zh": _SO_STATUS_ZH, "item_type_zh": _SO_ITEM_TYPE_ZH,
         "payment_methods": _PAYMENT_METHOD_OPTIONS,
@@ -13463,7 +13463,7 @@ async def admin_inventory_detail(item_id: int, request: Request, db: Session = D
     from datetime import date as _date, timedelta as _timedelta
     today_str = _date.today().isoformat()
     alert_date_str = (_date.today() + _timedelta(days=90)).isoformat()
-    return templates.TemplateResponse(request, "admin_inventory_detail.html", {
+    return templates.TemplateResponse(request, "uk/inventory_detail.html", {
         "request": request, "item": item, "txs": txs,
         "tx_total": tx_total, "page": page,
         "tx_pages": max(1, (tx_total + page_size - 1) // page_size),
@@ -18632,7 +18632,7 @@ async def admin_cages_list(request: Request, db: Session = Depends(get_db),
     occupied_ids = {h.cage_id for h in db.query(Hospitalization)
                     .filter(Hospitalization.status == "admitted",
                             Hospitalization.cage_id != None).all()}
-    return templates.TemplateResponse(request, "admin_cages.html", {
+    return templates.TemplateResponse(request, "uk/cages.html", {
         "request": request, "cages": cages, "kind_zh": _CAGE_KIND_ZH,
         "occupied_ids": occupied_ids,
         "wb_store": wb_store, "csrf_token": _get_csrf_token(request),
@@ -18737,7 +18737,7 @@ async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_d
     occupied_ids = {h.cage_id for h in db.query(Hospitalization)
                     .filter(Hospitalization.status == "admitted",
                             Hospitalization.cage_id != None).all()}
-    return templates.TemplateResponse(request, "admin_inpatient_new.html", {
+    return templates.TemplateResponse(request, "uk/inpatient_new.html", {
         "request": request, "visit": v, "cust": cust, "pet": pet,
         "cages": cages, "occupied_ids": occupied_ids,
         "kind_zh": _CAGE_KIND_ZH, "store_short": store_short,

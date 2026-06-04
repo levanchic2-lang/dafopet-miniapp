@@ -1,0 +1,59 @@
+
+{% if msg %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ msg }}</div>{% endif %}
+
+<div class="page-head">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    <a href="/admin/hr" class="btn secondary" style="font-size:0.82rem;padding:0.35rem 0.75rem;"><i data-lucide="arrow-left"></i> 返回员工管理</a>
+    <div>
+      <h1><span class="ph-icon"><i data-lucide="bell"></i></span>企微通知偏好</h1>
+      <p class="ph-sub">
+        {{ user.username }}{% if user.display_name %} · {{ user.display_name }}{% endif %}
+        {% if user.store %} · {{ user.store }}{% endif %}
+        {% if user.wecom_userid %} · 企微 userid：<code>{{ user.wecom_userid }}</code>{% else %}
+          <span style="color:#d97706;">（未绑定企微 userid，所有推送都不会到达）</span>
+        {% endif %}
+      </p>
+    </div>
+  </div>
+</div>
+
+<form method="post" action="/admin/users/{{ user.id }}/notify-prefs">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  <div class="card" style="padding:1.2rem;">
+    <h3 style="margin:0 0 0.4rem;font-size:0.95rem;">选择要接收的提醒类型</h3>
+    <p style="margin:0 0 1rem;color:var(--muted);font-size:.82rem;">
+      勾选 = 收到该类企业微信卡片；取消 = 不再打扰。「📨 推送企微」按钮也会跳过这里关掉的项。
+    </p>
+
+    <div style="display:grid;gap:.75rem;">
+      {% for key, label in event_keys.items() %}
+      <label style="display:flex;align-items:flex-start;gap:.6rem;padding:.7rem .85rem;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:{% if key not in disabled_set %}#f0f9ff{% else %}var(--card){% endif %};transition:background .15s;">
+        <input type="checkbox" name="enabled_{{ key }}" {% if key not in disabled_set %}checked{% endif %} style="margin-top:3px;flex-shrink:0;"/>
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:.9rem;">{{ label }}</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:2px;">
+            {% if key == 'tnr_pending' %}小程序提交的 TNR 申请，AI 判定不确定 → 进入待人工审核
+            {% elif key == 'rabies_submitted' %}主人完成手写签字 → 通知医护接待打针
+            {% elif key == 'consent_signed' %}客户在 H5 完成签字 → 通知协议发起人
+            {% elif key == 'appointment_created' %}客户在小程序创建预约 → 通知对应门店
+            {% elif key == 'workbench_digest' %}超管点「📨 推送企微」时推送的今日工作台摘要
+            {% endif %}
+          </div>
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div style="margin-top:1.2rem;display:flex;gap:.6rem;justify-content:flex-end;">
+      <a href="/admin/hr" class="btn secondary" style="font-size:.85rem;">取消</a>
+      <button type="submit" class="btn" style="font-size:.85rem;"><i data-lucide="save"></i> 保存偏好</button>
+    </div>
+  </div>
+</form>
+
+<div class="card" style="margin-top:1rem;padding:.85rem 1rem;background:#fafbfc;font-size:.82rem;color:var(--muted);">
+  <i data-lucide="info" style="vertical-align:-2px;"></i>
+  规则补充：超管收到所有门店的事件；门店员工只收到自己门店的事件；这里勾选影响所有门店。
+</div>
+

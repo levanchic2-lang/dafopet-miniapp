@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}销售单 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>销售单</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>销&nbsp;售&nbsp;单
+      <span class="sub">非诊疗的零售出货 · 宠物用品 / 商品零售</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_sales_orders_body.html" %}
+{% endblock %}

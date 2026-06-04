@@ -1,0 +1,15 @@
+{% extends "uk/_base.html" %}
+{% block title %}企微客户绑定 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>企微客户绑定</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>企&nbsp;微&nbsp;客&nbsp;户&nbsp;绑&nbsp;定
+      <span class="sub">企业微信外部联系人 ↔ 系统客户档案 关联管理</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_wecom_customers_body.html" %}
+{% endblock %}

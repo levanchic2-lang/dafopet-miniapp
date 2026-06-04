@@ -1,0 +1,19 @@
+{% extends "uk/_base.html" %}
+{% block title %}{% if order %}销售单 #{{ order.id }}{% else %}新建销售单{% endif %} · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<div class="ukc-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/sales-orders">销售单</a><span class="sep">/</span>
+  <span>{% if order %}#{{ order.id }}{% else %}新建{% endif %}</span>
+</div>
+<div class="ukc-head">
+  <div>
+    <h1>{% if order %}销&nbsp;售&nbsp;单&nbsp;详&nbsp;情{% else %}新&nbsp;建&nbsp;销&nbsp;售&nbsp;单{% endif %}
+      <span class="sub">{% if order %}#SO{{ '%06d'|format(order.id) }}{% else %}非诊疗零售单据 · 录入商品 + 收款{% endif %}</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+{% include "includes/admin_sales_order_form_body.html" %}
+{% endblock %}
