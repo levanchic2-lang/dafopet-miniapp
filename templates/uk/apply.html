@@ -1,0 +1,158 @@
+{% extends "uk/_base.html" %}
+{% block title %}流浪猫绝育（TNR）申请 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}
+
+/* ── 申请表表单 UK 样式 ── */
+.uk-wrap #f { color-scheme: light; }
+.uk-wrap #f h2 {
+  font-family: var(--font-serif);
+  font-size: 13pt; letter-spacing: 3px;
+  color: var(--ink); font-weight: 700;
+  border-bottom: 0.5px solid var(--ink);
+  padding-bottom: 8px; margin: 28px 0 16px;
+}
+.uk-wrap #f label {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 9.5pt; letter-spacing: 2px;
+  color: var(--ink-3); font-style: italic;
+  margin: 16px 0 6px; font-weight: 400;
+}
+.uk-wrap #f .input-lg,
+.uk-wrap #f input[type=text],
+.uk-wrap #f input[type=tel],
+.uk-wrap #f input[type=number],
+.uk-wrap #f input[type=date],
+.uk-wrap #f input:not([type]),
+.uk-wrap #f select,
+.uk-wrap #f textarea {
+  width: 100%; box-sizing: border-box;
+  font-family: var(--font-serif);
+  font-size: 11pt; color: var(--ink);
+  background: var(--paper);
+  border: 0.5px solid var(--hair);
+  padding: 10px 12px; outline: 0;
+  min-height: 42px;
+  border-radius: 0;
+  line-height: 1.5;
+}
+.uk-wrap #f textarea { min-height: 90px; resize: vertical; }
+.uk-wrap #f input:focus, .uk-wrap #f select:focus, .uk-wrap #f textarea:focus {
+  border-color: var(--ink);
+}
+.uk-wrap #f input[type=checkbox] { width: 14px; height: 14px; min-height: 0; accent-color: var(--ink); margin-right: 6px; vertical-align: middle; }
+.uk-wrap #f input[type=file] { padding: 8px; font-size: 10pt; }
+.uk-wrap #f input[type=file]::file-selector-button,
+.uk-wrap #f input[type=file]::-webkit-file-upload-button {
+  font-family: var(--font-serif); font-size: 10pt;
+  letter-spacing: 1.5px; font-style: italic;
+  padding: 6px 14px; margin-right: 12px;
+  border: 0.5px solid var(--hair); border-radius: 0;
+  background: var(--bg); color: var(--ink-2); cursor: pointer;
+}
+.uk-wrap #f input[type=file]::file-selector-button:hover,
+.uk-wrap #f input[type=file]::-webkit-file-upload-button:hover {
+  background: var(--paper); color: var(--ink); border-color: var(--ink-3);
+}
+
+.uk-wrap #f .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+@media (max-width: 600px) { .uk-wrap #f .row2 { grid-template-columns: 1fr; } }
+
+.uk-wrap #f .sub {
+  font-family: var(--font-serif); font-style: italic;
+  font-size: 9.5pt; color: var(--ink-3); letter-spacing: 1px;
+}
+.uk-wrap #f .addr-hint { font-family: var(--font-serif); font-style: italic; color: var(--ink-3); font-size: 9.5pt; letter-spacing: 1px; margin: 6px 0 4px; }
+.uk-wrap #f .addr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 8px; }
+@media (max-width: 560px) { .uk-wrap #f .addr-grid { grid-template-columns: 1fr; } }
+.uk-wrap #f .addr-scope {
+  margin: 8px 0 6px; padding: 10px 14px;
+  background: var(--bg);
+  border: 0.5px solid var(--hair);
+  font-family: var(--font-serif); font-weight: 700;
+  font-size: 10.5pt; letter-spacing: 1px; color: var(--ink);
+}
+.uk-wrap #f .age-inline { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+.uk-wrap #f .age-inline .age-num { flex: 1; min-width: 0; }
+.uk-wrap #f .age-inline select.age-unit { flex: 0 0 108px; }
+
+.uk-wrap #f button, .uk-wrap #f button[type=submit] {
+  background: var(--ink); color: var(--paper);
+  border: 0; padding: 12px 28px; cursor: pointer;
+  font-family: var(--font-serif); font-size: 11pt;
+  letter-spacing: 3px; font-weight: 700;
+  border-radius: 0;
+}
+.uk-wrap #f button:hover { background: #000; }
+.uk-wrap #f button.secondary, .uk-wrap #f button#btnLoc {
+  background: var(--paper); color: var(--ink-2);
+  border: 0.5px solid var(--hair);
+  font-style: italic; font-weight: 400;
+  font-size: 10pt; padding: 8px 18px; letter-spacing: 1.5px;
+}
+.uk-wrap #f button.secondary:hover, .uk-wrap #f button#btnLoc:hover {
+  color: var(--ink); border-color: var(--ink-3); background: var(--bg);
+}
+
+.uk-wrap .msg.ok, .uk-wrap .msg.err {
+  font-family: var(--font-serif); font-size: 10.5pt;
+  padding: 12px 16px; margin: 14px 0;
+  border-radius: 0; border: 0; border-left: 3px solid var(--ink);
+}
+.uk-wrap .msg.ok { background: #f5f9f6; border-left-color: var(--accent-green); color: var(--ink-2); }
+.uk-wrap .msg.err { background: #fcf5f4; border-left-color: var(--accent-red); color: var(--accent-red); }
+
+/* 顶部"推荐小程序"卡片 */
+.uk-wrap .apply-banner {
+  background: var(--paper); border: 0.5px solid var(--hair-2);
+  border-radius: 0; padding: 16px 20px;
+  margin-bottom: 22px;
+  display: flex; align-items: flex-start; gap: 14px;
+  font-family: var(--font-serif);
+}
+.uk-wrap .apply-banner [data-lucide] { display: none; }
+.uk-wrap .apply-banner-checkbox {
+  width: 16px; height: 16px;
+  border: 0.5px solid var(--ink-3);
+  margin-top: 4px; flex-shrink: 0;
+}
+.uk-wrap .apply-banner-title { font-weight: 700; font-size: 11pt; color: var(--ink); letter-spacing: 1.5px; margin-bottom: 4px; }
+.uk-wrap .apply-banner-body { font-size: 10pt; color: var(--ink-2); line-height: 1.65; }
+.uk-wrap .apply-banner-body b { color: var(--ink); font-weight: 700; }
+.uk-wrap .apply-banner-foot { font-style: italic; color: var(--ink-3); font-size: 9.5pt; margin-top: 6px; letter-spacing: 0.5px; }
+
+.uk-wrap .apply-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+.uk-wrap .apply-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; text-decoration:none; }
+.uk-wrap .apply-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+.uk-wrap .apply-bc .sep { margin:0 8px; color:var(--ink-4); }
+.uk-wrap hr.apply-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+.uk-wrap .apply-head { margin-bottom:8px; }
+.uk-wrap .apply-head h1 {
+  font-family:var(--font-serif); font-size:28pt; font-weight:700;
+  color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15;
+}
+.uk-wrap .apply-head h1 .sub {
+  display:block; font-size:10pt; font-weight:400; font-style:italic;
+  color:var(--ink-3); letter-spacing:2px; margin-top:10px;
+}
+</style>
+
+<div class="apply-bc">
+  <a href="/admin">后台</a><span class="sep">/</span><span>流浪猫绝育（TNR）申请</span>
+</div>
+
+<div class="apply-head">
+  <h1>流&nbsp;浪&nbsp;猫&nbsp;绝&nbsp;育（TNR）申&nbsp;请
+    <span class="sub">请如实填写信息并上传能反映猫咪室外 / 流浪场景的清晰照片 · 可同时上传短视频辅助说明 · 通过预审后医院将与您联系预约到院时间</span>
+  </h1>
+</div>
+
+<hr class="apply-rule-double"/>
+
+{% include "includes/apply_body.html" %}
+{% endblock %}
+
+{% block scripts %}
+{% include "includes/apply_scripts.html" %}
+{% endblock %}

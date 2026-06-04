@@ -1,0 +1,237 @@
+<script>
+const STATUS_ZH = {
+ pending_ai: "系统处理中",
+ pending_manual: "待人工审核",
+ pre_approved: "预通过（待复核）",
+ approved: "审核已通过",
+ scheduled: "已预约",
+ no_show: "爽约",
+ cancelled: "已取消",
+ rejected: "未通过",
+ arrived_verified: "已到院核对",
+ surgery_completed: "手术已完成"
+};
+function statusLabel(code) {
+ return STATUS_ZH[code] || code;
+}
+document.getElementById("f").addEventListener("submit", async (e) => {
+ e.preventDefault();
+ if (typeof window.__syncAddressField === "function") window.__syncAddressField();
+ if (typeof window.__syncAgeEstimate === "function") window.__syncAgeEstimate();
+ const out = document.getElementById("out");
+ out.innerHTML = "";
+ const dSel = document.getElementById("addr_district");
+ const sSel = document.getElementById("addr_street");
+ const det = document.getElementById("address_detail");
+ const d = dSel && dSel.value ? dSel.value.trim() : "";
+ const s = sSel && sSel.value ? sSel.value.trim() : "";
+ const t = det && det.value ? det.value.trim() : "";
+ if (!d || !s || !t) {
+ out.innerHTML = '<div class="msg err">请选择区、街道，并填写详细地址。</div>';
+ return;
+ }
+ const ageH = document.getElementById("age_estimate");
+ if (!ageH || !String(ageH.value || "").trim()) {
+ out.innerHTML = '<div class="msg err">请选择出生年月。</div>';
+ return;
+ }
+ const imgInp = e.target.elements.namedItem("images");
+ const fl = imgInp && imgInp.files;
+ if (!fl || fl.length < 1) {
+ out.innerHTML = '<div class="msg err">请至少上传 1 张申请照片。</div>';
+ return;
+ }
+ const addrVal = (document.getElementById("address") && document.getElementById("address").value) ? document.getElementById("address").value.trim() : "";
+ if (addrVal.length> 500) {
+ out.innerHTML = '<div class="msg err">地址总长度不能超过 500 字，请缩短详细地址。</div>';
+ return;
+ }
+ const fd = new FormData(e.target);
+ fd.set("agree_ear_tip", e.target.agree_ear_tip.checked ? "true" : "false");
+ fd.set("agree_no_pet_fraud", e.target.agree_no_pet_fraud.checked ? "true" : "false");
+ try {
+ const r = await fetch("/api/apply", { method: "POST", body: fd });
+ const j = await r.json().catch(() => ({}));
+ if (!r.ok) throw new Error(j.detail || "提交失败");
+ let html = '<div class="msg ok">' + (j.message || "已提交") + "</div>";
+ if (j.ai_summary) {
+ const st = statusLabel(j.status);
+ html += "<p style='margin-top:0.75rem;font-size:0.9rem;color:var(--muted);'>";
+ html += "申请编号：<strong>#" + j.id + "</strong>；当前状态：<strong>" + st + "</strong>。";
+ if (j.ai_summary.auto_approved) html += " <strong>系统已自动预审通过</strong>，请留意医院电话/短信通知并按约定时间到院。";
+ else html += " 医院工作人员将在后台查看您的资料，请<strong>保持手机畅通</strong>；如需补材料会与您联系。";
+ html += "</p>";
+ html += "<p style='margin-top:0.5rem;font-size:0.88rem;color:var(--muted);'>";
+ html += "<strong>您无需在此页继续操作。</strong>审核结果会以登记方式通知；带猫到院、手术与术后展示由医院在系统中登记。";
+ html += "</p>";
+ }
+ out.innerHTML = html;
+ e.target.reset();
+ if (typeof window.__resetAgeEstimateUI === "function") window.__resetAgeEstimateUI();
+ if (typeof window.__resetAddressCascade === "function") window.__resetAddressCascade();
+ const loc = document.getElementById("locText");
+ if (loc) loc.textContent = "定位：未获取（可选）";
+ } catch (err) {
+ out.innerHTML = '<div class="msg err">' + err.message + "</div>";
+ }
+});
+
+document.getElementById("btnLoc").addEventListener("click", () => {
+ if (!navigator.geolocation) {
+ alert("当前浏览器不支持定位。");
+ return;
+ }
+ navigator.geolocation.getCurrentPosition(
+ async (pos) => {
+ const { latitude, longitude } = pos.coords;
+ document.getElementById("location_lat").value = String(latitude);
+ document.getElementById("location_lng").value = String(longitude);
+ const el = document.getElementById("locText");
+ if (el) el.textContent = "定位：已获取，正在解析地址…";
+ try {
+ const qs = new URLSearchParams({ lat: String(latitude), lng: String(longitude) });
+ const r = await fetch("/api/geocode/regeo?" + qs.toString());
+ const j = await r.json().catch(() => ({}));
+ if (j && j.ok && j.address) {
+ if (el) el.textContent = "定位：" + j.address;
+ } else {
+ if (j && String(j.amap_infocode) === "10009") {
+ if (el) el.textContent = "定位：地址解析失败（高德Key类型不匹配：需要 Web服务 Key）";
+ } else {
+ if (el) el.textContent = "定位：已获取（未解析出地址）";
+ }
+ }
+ } catch (e) {
+ if (el) el.textContent = "定位：已获取（地址解析失败）";
+ }
+ },
+ (err) => {
+ const el = document.getElementById("locText");
+ const msg = (err && err.code === 1) ? "您拒绝了定位权限（可选，不影响提交）"
+            : (err && err.code === 3) ? "定位超时（可选，不影响提交；可手动填写地址）"
+            : "定位获取失败（可选，不影响提交）";
+ if (el) el.textContent = "定位：" + msg;
+ },
+ { enableHighAccuracy: false, timeout: 12000, maximumAge: 60000 }
+ );
+});
+
+// 静默自动尝试定位 — 失败仅写入 locText，不弹任何 alert
+setTimeout(() => {
+ const lat = document.getElementById("location_lat")?.value?.trim();
+ const lng = document.getElementById("location_lng")?.value?.trim();
+ if (!lat && !lng && navigator.geolocation) {
+   document.getElementById("btnLoc")?.click();
+ }
+}, 600);
+
+</script>
+
+<script type="application/json" id="shenzhen-regions-data">{{ shenzhen_regions | default({}, true) | tojson }}</script>
+<script>
+(function initAddressCascade() {
+ const FIXED_PROV = "广东省";
+ const FIXED_CITY = "深圳市";
+ const distSel = document.getElementById("addr_district");
+ const strSel = document.getElementById("addr_street");
+ const detailEl = document.getElementById("address_detail");
+ const hiddenAddr = document.getElementById("address");
+ if (!distSel || !hiddenAddr) return;
+
+ let sz = null;
+
+ function fillSelect(sel, items, placeholder) {
+ sel.innerHTML = "";
+ const ph = document.createElement("option");
+ ph.value = "";
+ ph.textContent = placeholder;
+ sel.appendChild(ph);
+ for (const it of items) {
+ const op = document.createElement("option");
+ op.value = it;
+ op.textContent = it;
+ sel.appendChild(op);
+ }
+ }
+
+ function syncAddressField() {
+ const d = distSel.value.trim();
+ const s = strSel.value.trim();
+ const t = (detailEl.value || "").trim();
+ let prefix = "";
+ if (d && s) prefix = FIXED_PROV + FIXED_CITY + d + s;
+ else if (d) prefix = FIXED_PROV + FIXED_CITY + d;
+ if (!prefix && !t) {
+ hiddenAddr.value = "";
+ return;
+ }
+ hiddenAddr.value = t ? (prefix ? prefix + " " + t : t) : prefix;
+ }
+
+ function onDist() {
+ const di = distSel.value;
+ const streets =
+ di && sz && sz[di] ? [...sz[di]].sort((a, b) => String(a).localeCompare(b, "zh")) : [];
+ fillSelect(strSel, streets, "请选择街道 / 乡镇");
+ syncAddressField();
+ }
+
+ distSel.addEventListener("change", onDist);
+ strSel.addEventListener("change", syncAddressField);
+ detailEl.addEventListener("input", syncAddressField);
+
+ window.__syncAddressField = syncAddressField;
+ window.__resetAddressCascade = function () {
+ if (!sz) {
+ fillSelect(distSel, [], "请选择区 / 县");
+ fillSelect(strSel, [], "请选择街道 / 乡镇");
+ } else {
+ fillSelect(distSel, Object.keys(sz).sort(), "请选择区 / 县");
+ fillSelect(strSel, [], "请选择街道 / 乡镇");
+ }
+ detailEl.value = "";
+ syncAddressField();
+ };
+
+ function finishLoad(data) {
+ sz = data && typeof data === "object" ? data : null;
+ if (!sz || !Object.keys(sz).length) {
+ fillSelect(distSel, [], "数据未加载");
+ fillSelect(strSel, [], "请选择街道 / 乡镇");
+ return;
+ }
+ fillSelect(distSel, Object.keys(sz).sort(), "请选择区 / 县");
+ fillSelect(strSel, [], "请选择街道 / 乡镇");
+ syncAddressField();
+ }
+
+ const embeddedEl = document.getElementById("shenzhen-regions-data");
+ if (embeddedEl) {
+ try {
+ const raw = embeddedEl.textContent.trim();
+ if (raw) {
+ const parsed = JSON.parse(raw);
+ if (parsed && typeof parsed === "object" && Object.keys(parsed).length) {
+ finishLoad(parsed);
+ return;
+ }
+ }
+ } catch (e) {
+ /* 继续走网络 */
+ }
+ }
+
+ fetch("/api/regions/shenzhen")
+ .then((r) => (r.ok ? r.json() : Promise.reject()))
+ .then(finishLoad)
+ .catch(() =>
+ fetch("/static/shenzhen_regions.json")
+ .then((r) => (r.ok ? r.json() : Promise.reject()))
+ .then(finishLoad)
+ .catch(() => {
+ fillSelect(distSel, [], "加载失败（请确认已启动后端并刷新）");
+ fillSelect(strSel, [], "请选择街道 / 乡镇");
+ })
+ );
+})();
+</script>

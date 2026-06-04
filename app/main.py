@@ -966,7 +966,7 @@ async def wecom_callback_receive(
 async def page_apply(request: Request):
     return templates.TemplateResponse(
         request,
-        "apply.html",
+        "uk/apply.html",
         {
             "title": settings.app_name,
             "shenzhen_regions": _shenzhen_regions_embed(),
