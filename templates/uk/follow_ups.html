@@ -16,18 +16,18 @@
 
   body .page-head { display:none !important; }
   body .msg.ok { border:0; border-left:3px solid var(--accent-green); background:#f5f9f6; padding:10px 16px; margin-bottom:18px; font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); border-radius:0; }
-  body .btn, body button { border-radius:0 !important; font-family:var(--font-serif) !important; }
+  body .uk-wrap .btn, body .uk-wrap button[type=submit], body .uk-wrap form button { border-radius:0 !important; font-family:var(--font-serif) !important; }
   body .btn { background:var(--ink) !important; color:var(--paper) !important; border:0 !important; padding:8px 18px !important; font-size:10pt !important; letter-spacing:2px !important; font-weight:700 !important; }
   body .btn.secondary { background:var(--paper) !important; color:var(--ink-2) !important; border:0.5px solid var(--hair) !important; font-style:italic; font-weight:400 !important; }
   body .btn.secondary:hover { color:var(--ink) !important; border-color:var(--ink-3) !important; background:var(--bg) !important; }
 
-  body .fu-tabs { display:flex; gap:0; border-bottom:0.5px solid var(--hair); margin:14px 0 18px; }
-  body .fu-tab { background:transparent !important; color:var(--ink-3) !important; padding:10px 22px !important; border-radius:0 !important; border-bottom:1px solid transparent; margin-bottom:-1px; font-family:var(--font-serif); font-size:11pt; letter-spacing:1.5px; }
+  body .fu-tabs { display:flex; gap:0; border-bottom:0.5px solid var(--hair); margin:14px 0 18px; flex-wrap:nowrap !important; align-items:center; }
+  body .fu-tab { background:transparent !important; color:var(--ink-3) !important; padding:10px 22px !important; border-radius:0 !important; border-bottom:1px solid transparent; margin-bottom:-1px; font-family:var(--font-serif); font-size:11pt; letter-spacing:1.5px; white-space:nowrap; }
   body .fu-tab:hover { color:var(--ink) !important; }
   body .fu-tab.active { background:transparent !important; color:var(--ink) !important; border-bottom-color:var(--ink); font-weight:700; }
-  body .fu-tab .badge { background:var(--bg) !important; color:var(--ink-2) !important; font-family:var(--font-numeric); border:0.5px solid var(--hair); padding:0 6px; border-radius:0; font-size:9pt; }
+  body .fu-tab .badge { background:var(--bg) !important; color:var(--ink-2) !important; font-family:var(--font-numeric); border:0.5px solid var(--hair); padding:0 6px; border-radius:0; font-size:9pt; margin-left:4px; }
   body .fu-tab.active .badge { background:var(--ink) !important; color:var(--paper) !important; border-color:var(--ink); }
-  body .fu-mine-toggle { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:10pt; }
+  body .fu-mine-toggle { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:10pt; margin-left:auto !important; margin-top:0 !important; flex-basis:auto !important; display:inline-flex !important; align-items:center; gap:6px; white-space:nowrap; padding:10px 0; }
 
   body .data-table-wrap { border:0.5px solid var(--hair-2); border-radius:0; background:var(--paper); }
   body .data-table { width:100%; border-collapse:collapse; font-family:var(--font-serif); }

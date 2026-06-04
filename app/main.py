@@ -9458,7 +9458,7 @@ async def page_admin_visits(
             p = db.get(Pet, v.pet_id)
             if p:
                 pet_map[v.pet_id] = p
-    return templates.TemplateResponse(request, "admin_visits.html", {
+    return templates.TemplateResponse(request, "uk/visits.html", {
         "visits": visits,
         "cust_map": cust_map,
         "pet_map": pet_map,

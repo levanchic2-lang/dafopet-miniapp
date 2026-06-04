@@ -1,0 +1,133 @@
+{% extends "uk/_base.html" %}
+{% block title %}病历查询 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .vs-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .vs-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .vs-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .vs-bc .sep { margin:0 8px; color:var(--ink-4); }
+  hr.vs-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .vs-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:8px; }
+  .vs-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15; }
+  .vs-head h1 .sub { display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px; }
+  .vs-head h1 .sub b { color:var(--ink); font-style:normal; font-weight:700; font-family:var(--font-numeric); }
+
+  .vs-tip { border:0; border-left:3px solid var(--accent-amber); background:#fbfaf6; padding:10px 16px; margin-bottom:18px; font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); line-height:1.7; }
+  .vs-tip a { color:var(--ink); border-bottom:0.5px solid var(--hair-2); text-decoration:none; font-weight:700; }
+
+  .vs-filter { border:0.5px solid var(--hair-2); padding:14px 18px; margin-bottom:14px; background:var(--paper); }
+  .vs-filter form { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .vs-filter input[type=text], .vs-filter input[type=date], .vs-filter input:not([type]), .vs-filter select {
+    font-family:var(--font-serif); font-size:10pt; color:var(--ink); background:var(--paper);
+    border:0.5px solid var(--hair); padding:6px 10px; outline:0; height:34px; border-radius:0; box-sizing:border-box;
+  }
+  .vs-filter input:focus, .vs-filter select:focus { border-color:var(--ink); }
+  .vs-btn { background:var(--ink); color:var(--paper); border:0; padding:8px 18px; cursor:pointer; font-family:var(--font-serif); font-size:10pt; letter-spacing:2px; font-weight:700; text-decoration:none; display:inline-block; }
+  .vs-btn.ghost { background:var(--paper); color:var(--ink-2); border:0.5px solid var(--hair); font-style:italic; font-weight:400; }
+  .vs-btn.ghost:hover { color:var(--ink); border-color:var(--ink-3); background:var(--bg); }
+  .vs-btn.sm { font-size:9pt; padding:4px 10px; letter-spacing:1.5px; }
+
+  .vs-tbl { width:100%; border-collapse:collapse; font-family:var(--font-serif); border:0.5px solid var(--hair-2); }
+  .vs-tbl thead th { font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-weight:400; font-style:italic; border-bottom:0.5px solid var(--ink); padding:10px 12px; text-align:left; background:var(--paper); }
+  .vs-tbl tbody td { font-size:10pt; color:var(--ink-2); border-bottom:0.5px solid var(--hair); padding:12px; vertical-align:middle; }
+  .vs-tbl tbody td.num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums; color:var(--ink); }
+  .vs-tbl tbody tr:hover td { background:var(--bg); }
+  .vs-tbl .name { color:var(--ink); font-weight:700; text-decoration:none; border-bottom:0.5px solid var(--hair-2); }
+  .vs-tbl .dim { color:var(--ink-3); font-style:italic; font-size:9pt; }
+  .vs-pill { display:inline-block; font-family:var(--font-serif); font-style:italic; font-size:9pt; padding:2px 10px; border:0.5px solid var(--ink-3); letter-spacing:1.5px; color:var(--ink); background:var(--bg); }
+  .vs-empty { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:11pt; padding:48px 20px; text-align:center; border:0.5px solid var(--hair-2); }
+  .vs-pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:20px 0; font-family:var(--font-serif); font-size:10pt; }
+  .vs-pager .info { color:var(--ink-3); font-style:italic; font-family:var(--font-numeric); }
+</style>
+
+<div class="vs-bc"><a href="/admin">后台</a><span class="sep">/</span><span>病历查询</span></div>
+
+<div class="vs-head">
+  <div>
+    <h1>就&nbsp;诊&nbsp;病&nbsp;历（全&nbsp;院&nbsp;查&nbsp;询）
+      <span class="sub">共 <b>{{ total }}</b> 条记录 · 跨客户的诊疗搜索视图</span>
+    </h1>
+  </div>
+  <div>
+    <a href="/admin/customers" class="vs-btn">进&nbsp;入&nbsp;客&nbsp;户&nbsp;档&nbsp;案</a>
+  </div>
+</div>
+
+<hr class="vs-rule-double"/>
+
+<div class="vs-tip">
+  <b>新工作流提示</b>：诊疗 / 处方 / 检查单等已整合到客户档案 Hub。请从 <a href="/admin/customers">客户档案</a> 进入对应客户的宠物诊疗 tab 操作。本页保留用于全院搜索 / 历史查询。
+</div>
+
+<div class="vs-filter">
+  <form method="get" action="/admin/visits">
+    <input name="q" value="{{ filters.q or '' }}" placeholder="搜客户 / 宠物 / 诊断" style="flex:1; min-width:240px;"/>
+    <select name="visit_type" style="min-width:140px;">
+      <option value="">全部类型</option>
+      {% for k, zh in visit_type_zh.items() %}
+      <option value="{{ k }}" {% if filters.visit_type == k %}selected{% endif %}>{{ zh }}</option>
+      {% endfor %}
+    </select>
+    <input type="date" name="date_from" value="{{ filters.date_from or '' }}" style="width:150px;"/>
+    <span style="font-family:var(--font-serif);font-style:italic;color:var(--ink-3);font-size:9.5pt;">至</span>
+    <input type="date" name="date_to" value="{{ filters.date_to or '' }}" style="width:150px;"/>
+    <button type="submit" class="vs-btn ghost">查&nbsp;询</button>
+    {% if filters.q or filters.visit_type or filters.date_from or filters.date_to %}
+    <a href="/admin/visits" class="vs-btn ghost">清&nbsp;除</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if visits %}
+<table class="vs-tbl">
+  <thead>
+    <tr>
+      <th style="width:110px;">日期</th>
+      <th style="width:100px;">类型</th>
+      <th>客户</th>
+      <th>宠物</th>
+      <th>诊断</th>
+      <th style="width:100px;">医生</th>
+      <th style="text-align:right; width:80px;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for v in visits %}
+    <tr>
+      <td class="num dim" style="white-space:nowrap;">{{ v.visit_date or '—' }}</td>
+      <td><span class="vs-pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
+      <td>
+        {% set c = cust_map.get(v.customer_id) %}
+        {% if c %}<a href="/admin/customers/{{ c.id }}" class="name">{{ c.name or c.phone or '—' }}</a>{% else %}—{% endif %}
+      </td>
+      <td>
+        {% set p = pet_map.get(v.pet_id) %}
+        {% if p %}{{ p.name or '—' }}{% else %}—{% endif %}
+      </td>
+      <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ v.diagnosis or '—' }}</td>
+      <td class="dim">{{ v.vet_name or '—' }}</td>
+      <td style="text-align:right;">
+        <a href="/admin/visits/{{ v.id }}?return_to=customer" class="vs-btn ghost sm">查&nbsp;看</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if total > page_size %}
+{% set qs = '&q='~filters.q~'&visit_type='~filters.visit_type~'&date_from='~filters.date_from~'&date_to='~filters.date_to %}
+<div class="vs-pager">
+  {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" class="vs-btn ghost sm">‹ 上&nbsp;一&nbsp;页</a>{% endif %}
+  <span class="info">第 {{ page }} / {{ ((total-1)//page_size+1) }} 页</span>
+  {% if page * page_size < total %}<a href="?page={{ page+1 }}{{ qs }}" class="vs-btn ghost sm">下&nbsp;一&nbsp;页 ›</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="vs-empty">
+  {% if filters.q or filters.visit_type %}没有匹配的就诊记录 · <a href="/admin/visits" style="color:var(--ink); border-bottom:0.5px solid var(--hair-2);">清除筛选</a>
+  {% else %}暂无就诊记录 · 请到 <a href="/admin/customers" style="color:var(--ink); border-bottom:0.5px solid var(--hair-2);">客户档案</a> 找到客户后创建就诊
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
