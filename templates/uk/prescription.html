@@ -789,7 +789,8 @@ function showDropdown(idx, items, input) {
     var div = document.createElement('div');
     div.className = 'inv-dropdown-item';
     var stock = it.is_service ? '服务' : ('库存 ' + it.stock_qty + it.unit);
-    div.innerHTML = '<div>' + it.name + (it.is_controlled ? ' <span style="color:var(--accent-red);font-style:italic;font-size:8.5pt;">管控</span>' : '') + '</div>'
+    var storeTag = it.store ? ' <span style="color:var(--ink-3);font-size:8.5pt;font-style:italic;">[' + it.store + ']</span>' : '';
+    div.innerHTML = '<div>' + it.name + storeTag + (it.is_controlled ? ' <span style="color:var(--accent-red);font-style:italic;font-size:8.5pt;">管控</span>' : '') + '</div>'
       + '<div class="item-meta">¥' + it.sell_price.toFixed(2) + ' / ' + it.unit + ' · ' + stock + '</div>';
     div.onmousedown = function(e) {
       e.preventDefault();

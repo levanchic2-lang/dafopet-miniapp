@@ -12663,6 +12663,7 @@ async def api_inventory_search(
             "stock_qty": it.stock_qty,
             "is_service": it.is_service,
             "is_controlled": it.is_controlled,
+            "store": it.store or "",
         }
         for it in items
     ]
