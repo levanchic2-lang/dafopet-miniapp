@@ -17544,6 +17544,31 @@ async def admin_microscopy_create(order_id: int, request: Request, db: Session =
     )
 
 
+@app.post("/admin/microscopy-reports/{report_id}/regen-pdf")
+async def admin_microscopy_regen(report_id: int, request: Request, db: Session = Depends(get_db)):
+    """重新生成 PDF（首次生成失败 / weasyprint 后装时补救）"""
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    report = db.get(MicroscopyReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    from app.services.microscopy_pdf import generate_microscopy_pdf
+    _, err = generate_microscopy_pdf(db, report.id)
+    if err:
+        return RedirectResponse(
+            f"/admin/exam-orders/{report.exam_order_id}?msg=PDF 重新生成失败：{err}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/admin/exam-orders/{report.exam_order_id}?msg=PDF 已重新生成",
+        status_code=303,
+    )
+
+
 @app.post("/admin/microscopy-reports/{report_id}/delete")
 async def admin_microscopy_delete(report_id: int, request: Request, db: Session = Depends(get_db)):
     require_admin(request)

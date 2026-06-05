@@ -385,7 +385,13 @@ function confirmExamVoid(form, paidAmount) {
             {{ mr.vet_name or '—' }} · {{ mr.created_at.strftime('%Y-%m-%d %H:%M') if mr.created_at else '' }}
           </span>
         </div>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          {% if not mr.exam_report_id %}
+          <form method="post" action="/admin/microscopy-reports/{{ mr.id }}/regen-pdf" style="margin:0;display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="uk-btn ghost sm" style="font-size:9pt;color:var(--accent-red);">⟳ 生成 PDF</button>
+          </form>
+          {% endif %}
           <a href="/admin/microscopy-reports/{{ mr.id }}/edit" class="uk-btn ghost sm" style="text-decoration:none;font-size:9pt;">编辑</a>
           <form method="post" action="/admin/microscopy-reports/{{ mr.id }}/delete" style="margin:0;display:inline;"
                 onsubmit="return confirm('确认删除此显微镜报告？同时会删除生成的 PDF 和镜下照片。');">
