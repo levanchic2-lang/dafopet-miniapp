@@ -9310,6 +9310,41 @@ _DEPOSIT_STATUS_ZH = {
 }
 
 
+@app.get("/admin/deposits/{dep_id}")
+async def admin_deposit_view(dep_id: int, request: Request, db: Session = Depends(get_db)):
+    """押金「查看」→ 跳客户档案 押金 tab 并锚定该行"""
+    require_admin(request)
+    dep = db.get(Deposit, dep_id)
+    if not dep:
+        raise HTTPException(404, "押金记录不存在")
+    if not dep.customer_id:
+        return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse(
+        f"/admin/customer/{dep.customer_id}?tab=deposits&hl=deposit-{dep_id}#deposit-{dep_id}",
+        status_code=303,
+    )
+
+
+@app.get("/admin/follow-ups/{fu_id}")
+async def admin_follow_up_view(fu_id: int, request: Request, db: Session = Depends(get_db)):
+    """回访「查看」→ 跳回访列表并锚定该行（带 q=回访ID 便于定位）"""
+    require_admin(request)
+    fu = db.get(FollowUp, fu_id)
+    if not fu:
+        raise HTTPException(404, "回访任务不存在")
+    # 优先跳关联病历的回访区块
+    if fu.visit_id:
+        return RedirectResponse(
+            f"/admin/visits/{fu.visit_id}?hl=fu-{fu_id}#fu-{fu_id}",
+            status_code=303,
+        )
+    # 兜底回访列表
+    return RedirectResponse(
+        f"/admin/follow-ups?hl=fu-{fu_id}#fu-{fu_id}",
+        status_code=303,
+    )
+
+
 @app.post("/admin/deposits/create")
 async def admin_deposit_create(
     request: Request,

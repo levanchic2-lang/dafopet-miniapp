@@ -508,7 +508,7 @@
     <thead><tr><th>计划日</th><th>轮次</th><th>状态</th><th>渠道</th><th class="right">操作</th></tr></thead>
     <tbody>
       {% for fu in followups %}
-      <tr>
+      <tr id="fu-{{ fu.id }}" {% if request.query_params.get('hl') == 'fu-' ~ fu.id %}style="background:#fef9f0;"{% endif %}>
         <td class="num">{{ fu.planned_date or '—' }}</td>
         <td>{{ fu.round_name or ('第 ' ~ fu.round_no ~ ' 轮') }}</td>
         <td>

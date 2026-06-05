@@ -979,7 +979,7 @@
         <thead><tr><th>类别</th><th>金额</th><th>已抵扣</th><th>已退款</th><th>收款方式</th><th>状态</th><th class="right">操作</th></tr></thead>
         <tbody>
           {% for d in deposits %}
-          <tr>
+          <tr id="deposit-{{ d.id }}" {% if request.query_params.get('hl') == 'deposit-' ~ d.id %}style="background:#fef9f0;"{% endif %}>
             <td>{{ deposit_category_zh.get(d.category, d.category) }}</td>
             <td class="num"><b>¥{{ '%.2f'|format(d.amount or 0) }}</b></td>
             <td class="num uk-mute">{% if d.applied_amount %}¥{{ '%.2f'|format(d.applied_amount) }}{% else %}—{% endif %}</td>
