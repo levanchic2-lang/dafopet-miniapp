@@ -16,7 +16,21 @@ logger = logging.getLogger(__name__)
 
 
 PDF_CSS = """
-@page { size: A4; margin: 16mm 14mm 22mm 14mm; }
+/* @page 占位，footer 用 .format() 注入到 @bottom-center */
+@page {
+  size: A4;
+  margin: 16mm 14mm 18mm 14mm;
+  @bottom-center {
+    content: "__FOOTER_TEXT__";
+    font-family: "Noto Serif CJK SC", "Noto Sans CJK SC", serif;
+    font-size: 7.5pt;
+    color: #999;
+    border-top: 0.3px solid #eee;
+    padding-top: 3pt;
+    vertical-align: top;
+    white-space: nowrap;
+  }
+}
 * { box-sizing: border-box; }
 body {
   font-family: "Noto Serif CJK SC", "Noto Sans CJK SC", "WenQuanYi Zen Hei",
@@ -51,7 +65,7 @@ h2.sec { font-size: 11pt; margin: 12pt 0 6pt; padding-bottom: 2pt; border-bottom
 
 .sig-row { margin-top: 18pt; padding-top: 8pt; border-top: 0.5px solid #ccc; display: flex; justify-content: space-between; font-size: 9.5pt; }
 .sig-row .lbl { color: #666; }
-.foot { position: fixed; bottom: 8mm; left: 14mm; right: 14mm; text-align: center; font-size: 7.5pt; color: #999; border-top: 0.3px solid #eee; padding-top: 3pt; }
+/* .foot 用 string-set 取内容，渲染交给 @bottom-center */
 """
 
 
@@ -167,8 +181,11 @@ def _build_html(report, cust, pet, clinic_name: str) -> str:
 
     created_at = report.created_at.strftime("%Y-%m-%d %H:%M") if report.created_at else ""
 
+    footer_text = f"本报告由 {clinic_name} 出具 · 单号 MR{report.id:06d}"
+    # 转义引号防 CSS 注入
+    css_filled = PDF_CSS.replace("__FOOTER_TEXT__", footer_text.replace('"', '\\"'))
     return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"/><style>{PDF_CSS}</style></head>
+<html><head><meta charset="utf-8"/><style>{css_filled}</style></head>
 <body>
 <div class="clinic">{clinic_name}</div>
 <div class="sub">DaFo Animal Hospital · Microscopy Report</div>
@@ -205,7 +222,6 @@ def _build_html(report, cust, pet, clinic_name: str) -> str:
   <div><span class="lbl">报告日期：</span>{created_at}</div>
 </div>
 
-<div class="foot">本报告由 {clinic_name} 出具 · 单号 MR{report.id:06d}</div>
 </body></html>
 """
 
