@@ -141,10 +141,17 @@
  {% else %}<span class="pill pill-ok"><i data-lucide="check"></i> 已完成</span>{% endif %}
  </td>
  <td data-label="创建时间" style="color:var(--muted);font-size:0.82rem;">{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
- <td class="actions" style="text-align:right;">
- <a href="/admin/stocktake/{{ s.id }}" class="btn {% if s.status == 'open' %}{% else %}secondary{% endif %}" style="font-size:0.78rem;padding:0.3rem 0.7rem;">
+ <td class="actions" style="text-align:right;white-space:nowrap;">
+ <a href="/admin/stocktake/{{ s.id }}" class="btn {% if s.status == 'open' %}secondary{% else %}secondary{% endif %}" style="font-size:0.78rem;padding:0.3rem 0.7rem;">
  {% if s.status == 'open' %}继续盘点{% else %}查看{% endif %}
  </a>
+ {% if s.status == 'open' %}
+ <form method="post" action="/admin/stocktake/{{ s.id }}/submit" style="display:inline;margin-left:.3rem;"
+       onsubmit="return confirm('确认结束并提交盘点「{{ s.name }}」？\n\n已填写实盘数量的品目 → 写入库存调整流水（变成正式记录）\n未填写的品目 → 保持原系统库存不变\n\n提交后此盘点单转「已完成」状态，无法修改或删除。')">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+   <button type="submit" class="btn" style="font-size:0.78rem;padding:0.3rem 0.7rem;background:#16a34a;color:#fff;border-color:#16a34a;">结束盘点</button>
+ </form>
+ {% endif %}
  {% if s.status == 'open' and is_super %}
  <form method="post" action="/admin/stocktake/{{ s.id }}/delete" style="display:inline;margin-left:.3rem;"
        onsubmit="return confirm('确认删除盘点会话「{{ s.name }}」？\n已填写的实盘数据会一起删，不可恢复。\n（仅适用于误开 / 试运行的盘点单，已提交的不能删）')">
