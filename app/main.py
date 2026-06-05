@@ -14163,6 +14163,27 @@ async def admin_stocktake_session(
     })
 
 
+@app.post("/admin/stocktake/{session_id}/delete")
+async def admin_stocktake_delete(
+    session_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """删除盘点会话（仅 status=open 且超管可操作，已完成的盘点不允许删，保留审计）。"""
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    sess = db.get(StocktakeSession, session_id)
+    if not sess:
+        raise HTTPException(404)
+    if sess.status != "open":
+        return RedirectResponse(f"/admin/stocktake?err=该盘点已 {sess.status}，不可删除（已完成的盘点保留审计）", status_code=303)
+    name = sess.name
+    db.delete(sess)  # 级联删除 stocktake_items
+    db.commit()
+    from urllib.parse import quote as _q
+    return RedirectResponse(f"/admin/stocktake?msg={_q('已删除盘点会话：' + name)}", status_code=303)
+
+
 @app.get("/admin/stocktake/{session_id}/export")
 async def admin_stocktake_export(
     session_id: int, request: Request, db: Session = Depends(get_db),

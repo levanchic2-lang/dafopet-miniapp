@@ -145,6 +145,13 @@
  <a href="/admin/stocktake/{{ s.id }}" class="btn {% if s.status == 'open' %}{% else %}secondary{% endif %}" style="font-size:0.78rem;padding:0.3rem 0.7rem;">
  {% if s.status == 'open' %}继续盘点{% else %}查看{% endif %}
  </a>
+ {% if s.status == 'open' and is_super %}
+ <form method="post" action="/admin/stocktake/{{ s.id }}/delete" style="display:inline;margin-left:.3rem;"
+       onsubmit="return confirm('确认删除盘点会话「{{ s.name }}」？\n已填写的实盘数据会一起删，不可恢复。\n（仅适用于误开 / 试运行的盘点单，已提交的不能删）')">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+   <button type="submit" class="danger" style="font-size:0.78rem;padding:0.3rem 0.6rem;">删除</button>
+ </form>
+ {% endif %}
  </td>
  </tr>
  {% endfor %}
