@@ -1,0 +1,264 @@
+{% extends "uk/_base.html" %}
+{% block title %}显微镜报告 · 检查单 #{{ order.id }}{% endblock %}
+
+{% block body %}
+
+<style>
+  .mr-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .mr-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .mr-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .mr-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .mr-head h1 {
+    font-family: var(--font-serif); font-size: 26pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0 0 6px; line-height: 1.15;
+  }
+  .mr-meta { font-size: 10pt; color: var(--ink-2); font-style: italic; margin-bottom: 18px; }
+  .mr-meta .sep { margin: 0 8px; color: var(--ink-4); }
+
+  .mr-section {
+    background: var(--paper); padding: 22px 24px;
+    border-top: 0.5px solid var(--hair); margin-bottom: 0;
+  }
+  .mr-section-head h2 {
+    font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 2px; margin: 0 0 12px;
+  }
+
+  .mr-field { margin-bottom: 14px; }
+  .mr-field label {
+    display: block; font-size: 9pt; letter-spacing: 1.5px;
+    color: var(--ink-3); margin-bottom: 4px; font-family: var(--font-serif);
+  }
+  .mr-field input[type="text"], .mr-field select, .mr-field textarea {
+    width: 100%; box-sizing: border-box; padding: 8px 10px;
+    font-family: var(--font-serif); font-size: 11pt; color: var(--ink);
+    background: var(--paper); border: 0.5px solid var(--ink-3); border-radius: 0;
+    transition: border-color .15s;
+  }
+  .mr-field input[type="text"]:focus, .mr-field select:focus, .mr-field textarea:focus {
+    border-color: var(--ink); outline: none;
+  }
+  .mr-field textarea { min-height: 90px; line-height: 1.7; resize: vertical; }
+
+  .mr-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .mr-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+
+  /* 检出物表 */
+  .mr-find-table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+  .mr-find-table th, .mr-find-table td {
+    border: 0.5px solid var(--hair); padding: 8px 10px; text-align: left;
+  }
+  .mr-find-table th { background: var(--bg-elevated); font-family: var(--font-serif); letter-spacing: 1px; }
+  .mr-find-table td.name { font-family: var(--font-serif); width: 45%; }
+  .mr-grade-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mr-grade-cell label {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; font-size: 10pt; cursor: pointer;
+    border: 0.5px solid var(--hair); user-select: none;
+    font-family: var(--font-serif);
+  }
+  .mr-grade-cell input[type="radio"] { margin: 0; }
+  .mr-grade-cell input[type="radio"]:checked + span { font-weight: 700; }
+  .mr-grade-cell label:has(input:checked) {
+    background: var(--ink); color: var(--paper); border-color: var(--ink);
+  }
+
+  /* 照片上传 */
+  .mr-photo-input {
+    display: block; padding: 14px; text-align: center;
+    border: 0.5px dashed var(--ink-3); background: var(--bg-elevated);
+    font-family: var(--font-serif); font-size: 10.5pt; color: var(--ink-2);
+    cursor: pointer; transition: background .15s;
+  }
+  .mr-photo-input:hover { background: var(--paper); }
+  .mr-photo-hint { font-size: 9pt; color: var(--ink-3); font-style: italic; margin-top: 6px; }
+  .mr-photo-preview {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px; margin-top: 10px;
+  }
+  .mr-photo-preview img {
+    width: 100%; height: 100px; object-fit: cover;
+    border: 0.5px solid var(--hair);
+  }
+
+  .mr-submit-row {
+    margin-top: 28px; padding-top: 18px;
+    border-top: 0.5px solid var(--ink);
+    display: flex; justify-content: flex-end; gap: 12px;
+  }
+</style>
+
+<div class="mr-breadcrumb">
+  <a href="/admin/customer/{{ cust.id }}">{{ cust.name if cust else '客户' }}</a>
+  <span class="sep">›</span>
+  <a href="/admin/visits/{{ visit.id }}">病历 #{{ visit.id }}</a>
+  <span class="sep">›</span>
+  <a href="/admin/exam-orders/{{ order.id }}">检查单 #{{ order.id }}</a>
+  <span class="sep">›</span>
+  <span>{% if report %}编辑{% else %}新建{% endif %}显微镜报告</span>
+</div>
+
+<div class="mr-head">
+  <h1>{% if report %}编辑{% else %}生成{% endif %}显微镜报告</h1>
+  <div class="mr-meta">
+    {{ pet.name if pet else '宠物' }}
+    {% if pet and pet.species %}（{{ '犬' if pet.species == 'dog' else '猫' if pet.species == 'cat' else pet.species }}）{% endif %}
+    <span class="sep">·</span> {{ cust.name if cust else '—' }}
+    {% if cust and cust.phone %} <span class="sep">·</span> {{ cust.phone }}{% endif %}
+    <span class="sep">·</span> 检查单 #{{ order.id }}
+  </div>
+</div>
+
+<form method="post" action="/admin/exam-orders/{{ order.id }}/microscopy/create" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  {# 基本信息 #}
+  <div class="mr-section">
+    <div class="mr-section-head"><h2>基&nbsp;本&nbsp;信&nbsp;息</h2></div>
+
+    <div class="mr-row2">
+      <div class="mr-field">
+        <label>归属检查项 <span style="color:var(--accent-red);">*</span></label>
+        <select name="item_label" required>
+          {% if not micro_items %}
+          <option value="">— 该检查单未识别到显微镜类项目 —</option>
+          {% endif %}
+          {% for it in micro_items %}
+          <option value="{{ it.name }}" {% if report and report.item_label == it.name %}selected{% endif %}>{{ it.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mr-field">
+        <label>报告兽医 <span style="color:var(--accent-red);">*</span></label>
+        <select name="vet_name" required>
+          <option value="">— 请选择 —</option>
+          {% for v in vet_names %}
+          <option value="{{ v }}" {% if report and report.vet_name == v %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="mr-row2">
+      <div class="mr-field">
+        <label>标本部位 / 来源</label>
+        <input type="text" name="sample_site" placeholder="例：右耳道分泌物 / 腹部皮肤刮片"
+               value="{{ report.sample_site if report else '' }}"/>
+      </div>
+      <div class="mr-field">
+        <label>放大倍数</label>
+        <select name="magnification">
+          <option value="">— 选择 —</option>
+          {% for m in mags %}
+          <option value="{{ m }}" {% if report and report.magnification == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  {# 镜下照片 #}
+  <div class="mr-section">
+    <div class="mr-section-head"><h2>镜&nbsp;下&nbsp;照&nbsp;片</h2></div>
+    <label class="mr-photo-input">
+      <input type="file" name="photos" accept="image/*" multiple capture="environment"
+             style="display:none;" onchange="previewMicroPhotos(this);"/>
+      📷 点击选择 / 拍摄照片（可多张，JPG/PNG/WEBP，每张 ≤ 10 MB）
+    </label>
+    <div class="mr-photo-hint">手机端选择会直接调用相机；电脑端可一次选多张</div>
+    <div id="mr-photo-preview" class="mr-photo-preview"></div>
+    {% if report and cur_photos %}
+    <div class="mr-photo-hint" style="margin-top:8px;">注：保存后会覆盖原有照片</div>
+    <div class="mr-photo-preview">
+      {% for p in cur_photos %}<img src="/uploads/{{ p }}" alt="已上传"/>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {# 检出物 #}
+  <div class="mr-section">
+    <div class="mr-section-head"><h2>检&nbsp;出&nbsp;物（勾选发现项 + 等级）</h2></div>
+    <table class="mr-find-table">
+      <thead>
+        <tr><th>项目</th><th>等级</th></tr>
+      </thead>
+      <tbody>
+        {% for f in default_findings %}
+        <tr>
+          <td class="name">{{ f }}</td>
+          <td>
+            <input type="hidden" name="finding_name" value="{{ f }}"/>
+            <div class="mr-grade-cell">
+              {% for g in grades %}
+              <label>
+                <input type="radio" name="finding_grade" value="{{ g }}"
+                       {% if cur_findings.get(f) == g %}checked{% elif not cur_findings.get(f) and g == '阴性' %}checked{% endif %}/>
+                <span>{{ g }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div style="margin-top:14px;padding-top:14px;border-top:0.5px dashed var(--hair);">
+      <div style="font-size:9pt;color:var(--ink-3);letter-spacing:1.5px;margin-bottom:8px;font-family:var(--font-serif);">
+        其他自定义项（可选，最多 3 行）
+      </div>
+      {% for i in range(3) %}
+      <div style="display:flex;gap:8px;margin-bottom:6px;">
+        <input type="text" name="finding_extra_name" placeholder="项目名" style="flex:2;padding:6px 8px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--hair);"/>
+        <input type="text" name="finding_extra_grade" placeholder="数量 / 等级" style="flex:1;padding:6px 8px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--hair);"/>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# 文字描述 #}
+  <div class="mr-section">
+    <div class="mr-section-head"><h2>镜&nbsp;下&nbsp;所&nbsp;见 / 结&nbsp;论 / 建&nbsp;议</h2></div>
+
+    <div class="mr-field">
+      <label>镜下所见（补充描述，可选）</label>
+      <textarea name="narrative" placeholder="如：油镜下可见大量出芽生殖的卵圆形孢子，密集分布；伴少量球菌……">{{ report.narrative if report else '' }}</textarea>
+    </div>
+
+    <div class="mr-field">
+      <label>结论</label>
+      <textarea name="conclusion" placeholder="如：耳道马拉色菌感染（++），合并细菌性外耳炎">{{ report.conclusion if report else '' }}</textarea>
+    </div>
+
+    <div class="mr-field">
+      <label>建议</label>
+      <textarea name="advice" placeholder="如：建议每日清耳 + 局部抗真菌治疗，14 天复查显微镜">{{ report.advice if report else '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="mr-submit-row">
+    <a href="/admin/exam-orders/{{ order.id }}" class="uk-btn ghost">取&nbsp;消</a>
+    <button type="submit" class="uk-btn primary">保&nbsp;存&nbsp;并&nbsp;生&nbsp;成&nbsp;PDF</button>
+  </div>
+</form>
+
+<script>
+function previewMicroPhotos(input) {
+  var box = document.getElementById('mr-photo-preview');
+  box.innerHTML = '';
+  if (!input.files) return;
+  for (var i = 0; i < input.files.length; i++) {
+    var f = input.files[i];
+    if (!f.type || f.type.indexOf('image/') !== 0) continue;
+    var img = document.createElement('img');
+    img.src = URL.createObjectURL(f);
+    box.appendChild(img);
+  }
+}
+</script>
+
+{% endblock %}

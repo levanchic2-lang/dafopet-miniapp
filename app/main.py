@@ -71,6 +71,7 @@ from app.models import (
     TnrStoreConfig,
     ExamOrder,
     ExamReport,
+    MicroscopyReport,
     CalendarBlock,
     DewormingRecord,
     WeightRecord,
@@ -17034,11 +17035,31 @@ async def admin_exam_order_detail(
                 h._items_parsed = []
             h._has_report = db.query(ExamReport).filter(ExamReport.exam_order_id == h.id).first() is not None
         history = history_q
+    # 判定本检查单是否包含显微镜类项目（→ 是否显示「生成显微镜报告」入口）
+    micro_items = []
+    for it in items:
+        iid = it.get("item_id") if isinstance(it, dict) else None
+        if iid:
+            inv = db.get(InventoryItem, int(iid))
+            if inv and (inv.category or "") == "microscopy":
+                micro_items.append({"name": it.get("name") or inv.name, "item_id": iid})
+        else:
+            # 无 item_id 兜底：名称含关键词也算
+            n = (it.get("name") if isinstance(it, dict) else "") or ""
+            if any(k in n for k in ("镜检", "镜下", "刮片", "涂片", "粪检", "皮肤检查", "耳道分泌", "阴道脱落", "显微")):
+                micro_items.append({"name": n, "item_id": None})
+    has_microscopy = len(micro_items) > 0
+    # 已生成的显微镜报告（按 exam_order_id 反查）
+    micro_reports = db.query(MicroscopyReport).filter(
+        MicroscopyReport.exam_order_id == order_id
+    ).order_by(MicroscopyReport.id.desc()).all()
     return templates.TemplateResponse(request, "uk/exam_detail.html", {  # B8.7 UK 重写
         "order": order, "visit": visit, "cust": cust, "pet": pet,
         "items": items, "msg": msg,
         "exam_history": history,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
+        "has_microscopy": has_microscopy, "micro_items": micro_items,
+        "micro_reports": micro_reports,
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -17238,6 +17259,227 @@ async def admin_exam_order_copy_as_new(
         except Exception:
             pass
     return RedirectResponse(f"/admin/exam-orders/{new_order.id}?msg=已复制为新单", status_code=303)
+
+
+# ─── 显微镜检查报告（皮肤刮片 / 耳道分泌物 / 粪检 等手工出报告）─────────────
+_MICRO_DEFAULT_FINDINGS = [
+    "马拉色菌", "球菌", "杆菌", "真菌菌丝/孢子",
+    "螨虫（蠕形螨/疥螨/耳螨）", "寄生虫卵",
+    "上皮细胞", "白细胞", "红细胞",
+]
+_MICRO_GRADES = ["阴性", "+", "++", "+++"]
+_MICRO_MAGS = ["10x", "40x", "100x（油镜）"]
+_MICRO_PHOTO_EXT_OK = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
+_MICRO_PHOTO_MAX = 10 * 1024 * 1024  # 10 MB / 张
+
+
+def _micro_form_ctx(request: "Request", db: Session, order: "ExamOrder",
+                    report: "MicroscopyReport | None" = None):
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    items = json.loads(order.items_json or "[]")
+    micro_items = []
+    for it in items:
+        iid = it.get("item_id") if isinstance(it, dict) else None
+        is_micro = False
+        if iid:
+            inv = db.get(InventoryItem, int(iid))
+            if inv and (inv.category or "") == "microscopy":
+                is_micro = True
+                micro_items.append({"name": it.get("name") or inv.name})
+        if not is_micro:
+            n = (it.get("name") if isinstance(it, dict) else "") or ""
+            if any(k in n for k in ("镜检", "镜下", "刮片", "涂片", "粪检", "皮肤检查", "耳道分泌", "阴道脱落", "显微")):
+                micro_items.append({"name": n})
+    # 兽医候选
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%")
+    ).all()
+    vet_names = [v[0] for v in vets]
+    # 已有 findings（编辑模式）
+    cur_findings = {}
+    if report:
+        try:
+            for f in json.loads(report.findings_json or "[]") or []:
+                cur_findings[f.get("name", "")] = f.get("grade", "")
+        except Exception:
+            pass
+    cur_photos = []
+    if report:
+        try:
+            cur_photos = json.loads(report.photos_json or "[]") or []
+        except Exception:
+            cur_photos = []
+    return {
+        "order": order, "visit": visit, "cust": cust, "pet": pet,
+        "micro_items": micro_items, "vet_names": vet_names,
+        "default_findings": _MICRO_DEFAULT_FINDINGS,
+        "grades": _MICRO_GRADES, "mags": _MICRO_MAGS,
+        "report": report, "cur_findings": cur_findings, "cur_photos": cur_photos,
+        "csrf_token": _get_csrf_token(request),
+    }
+
+
+@app.get("/admin/exam-orders/{order_id}/microscopy/new", response_class=HTMLResponse)
+async def page_admin_microscopy_new(order_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    locked, _ = _is_exam_order_locked(db, order)
+    # 报告允许在 locked 后继续补（与上传图片同口径）
+    ctx = _micro_form_ctx(request, db, order, report=None)
+    ctx["locked"] = locked
+    return templates.TemplateResponse(request, "uk/microscopy_form.html", ctx)
+
+
+@app.get("/admin/microscopy-reports/{report_id}/edit", response_class=HTMLResponse)
+async def page_admin_microscopy_edit(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    report = db.get(MicroscopyReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    order = db.get(ExamOrder, report.exam_order_id)
+    if not order:
+        raise HTTPException(404)
+    # 限店权限
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    ctx = _micro_form_ctx(request, db, order, report=report)
+    ctx["locked"] = False
+    return templates.TemplateResponse(request, "uk/microscopy_form.html", ctx)
+
+
+@app.post("/admin/exam-orders/{order_id}/microscopy/create")
+async def admin_microscopy_create(order_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust_id = visit.customer_id if visit else None
+    pet_id = visit.pet_id if visit else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+
+    item_label = str(form.get("item_label", "")).strip()[:120]
+    vet_name = str(form.get("vet_name", "")).strip()[:80]
+    magnification = str(form.get("magnification", "")).strip()[:20]
+    sample_site = str(form.get("sample_site", "")).strip()[:120]
+    narrative = str(form.get("narrative", "")).strip()
+    conclusion = str(form.get("conclusion", "")).strip()
+    advice = str(form.get("advice", "")).strip()
+
+    if not item_label:
+        raise HTTPException(400, "请选择归属检查项")
+    if not vet_name:
+        raise HTTPException(400, "兽医必填")
+
+    # 结构化检出物（form keys: finding_name[], finding_grade[]）
+    names = form.getlist("finding_name") if hasattr(form, "getlist") else []
+    grades = form.getlist("finding_grade") if hasattr(form, "getlist") else []
+    findings = []
+    for i, n in enumerate(names):
+        n = (n or "").strip()
+        g = (grades[i] if i < len(grades) else "") or ""
+        if n and g and g != "阴性":
+            findings.append({"name": n, "grade": g})
+    # 额外自定义项 finding_extra_name[] / finding_extra_grade[]
+    ex_names = form.getlist("finding_extra_name") if hasattr(form, "getlist") else []
+    ex_grades = form.getlist("finding_extra_grade") if hasattr(form, "getlist") else []
+    for i, n in enumerate(ex_names):
+        n = (n or "").strip()
+        g = ((ex_grades[i] if i < len(ex_grades) else "") or "").strip()
+        if n and g:
+            findings.append({"name": n[:60], "grade": g[:20]})
+
+    store = _get_op_store(request) or (pet.store if pet else "") or ""
+
+    report = MicroscopyReport(
+        exam_order_id=order_id,
+        customer_id=cust_id, pet_id=pet_id, visit_id=order.visit_id,
+        item_label=item_label, vet_name=vet_name,
+        magnification=magnification, sample_site=sample_site,
+        findings_json=json.dumps(findings, ensure_ascii=False),
+        narrative=narrative, conclusion=conclusion, advice=advice,
+        photos_json="[]", store=store,
+        operator=request.session.get("admin_username", "admin"),
+    )
+    db.add(report)
+    db.flush()  # 拿到 id
+
+    # 处理照片上传
+    photo_files = form.getlist("photos") if hasattr(form, "getlist") else []
+    saved_paths = []
+    photo_dir = Path("uploads") / "microscopy_photos" / str(report.id)
+    photo_dir.mkdir(parents=True, exist_ok=True)
+    for f in photo_files:
+        if not hasattr(f, "filename") or not f.filename:
+            continue
+        ext = Path(f.filename).suffix.lower()
+        if ext not in _MICRO_PHOTO_EXT_OK:
+            continue
+        data = await f.read()
+        if not data or len(data) > _MICRO_PHOTO_MAX:
+            continue
+        name = f"p_{secrets.token_hex(6)}{ext}"
+        (photo_dir / name).write_bytes(data)
+        saved_paths.append(f"microscopy_photos/{report.id}/{name}")
+    report.photos_json = json.dumps(saved_paths, ensure_ascii=False)
+    db.commit()
+
+    # 渲染 PDF（失败不阻塞，给出提示信息）
+    from app.services.microscopy_pdf import generate_microscopy_pdf
+    _, err = generate_microscopy_pdf(db, report.id)
+    if err:
+        return RedirectResponse(
+            f"/admin/exam-orders/{order_id}?msg=报告已保存，PDF 生成失败：{err}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/admin/exam-orders/{order_id}?msg=显微镜报告已生成并上传",
+        status_code=303,
+    )
+
+
+@app.post("/admin/microscopy-reports/{report_id}/delete")
+async def admin_microscopy_delete(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    report = db.get(MicroscopyReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    order_id = report.exam_order_id
+    # 删 PDF（ExamReport 一并删）
+    if report.exam_report_id:
+        er = db.get(ExamReport, report.exam_report_id)
+        if er:
+            try:
+                if er.file_path:
+                    Path(er.file_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+            db.delete(er)
+    # 删原始照片目录
+    try:
+        import shutil
+        ph_dir = Path("uploads") / "microscopy_photos" / str(report.id)
+        if ph_dir.exists():
+            shutil.rmtree(ph_dir, ignore_errors=True)
+    except Exception:
+        pass
+    db.delete(report)
+    db.commit()
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=显微镜报告已删除", status_code=303)
 
 
 @app.get("/admin/exam-orders/{order_id}/qr.png")

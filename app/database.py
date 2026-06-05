@@ -907,6 +907,33 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_exam_reports_order ON exam_reports(exam_order_id)"))
 
+            # microscopy_reports：显微镜检查报告（皮肤/耳道/粪检 等手工出报告）
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS microscopy_reports ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "exam_order_id INTEGER NOT NULL REFERENCES exam_orders(id) ON DELETE CASCADE, "
+                "exam_report_id INTEGER REFERENCES exam_reports(id) ON DELETE SET NULL, "
+                "customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER REFERENCES pets(id) ON DELETE SET NULL, "
+                "visit_id INTEGER REFERENCES visits(id) ON DELETE SET NULL, "
+                "item_label VARCHAR(120) DEFAULT '', "
+                "vet_name VARCHAR(80) DEFAULT '', "
+                "magnification VARCHAR(20) DEFAULT '', "
+                "sample_site VARCHAR(120) DEFAULT '', "
+                "findings_json TEXT DEFAULT '[]', "
+                "narrative TEXT DEFAULT '', "
+                "conclusion TEXT DEFAULT '', "
+                "advice TEXT DEFAULT '', "
+                "photos_json TEXT DEFAULT '[]', "
+                "store VARCHAR(40) DEFAULT '', "
+                "operator VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_micro_order ON microscopy_reports(exam_order_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_micro_store ON microscopy_reports(store)"))
+
             # vaccinations: 补 reminder_sent_at 列
             vacc_cols = conn.execute(text("PRAGMA table_info(vaccinations)")).fetchall()
             if vacc_cols:

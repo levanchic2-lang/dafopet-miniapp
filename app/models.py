@@ -1633,3 +1633,34 @@ class NarcoticsLedger(Base):
     inventory_item = relationship("InventoryItem", foreign_keys=[item_id])
     visit          = relationship("Visit",         foreign_keys=[visit_id])
     anesth_order   = relationship("AnesthesiaOrder", foreign_keys=[anesth_order_id])
+
+
+class MicroscopyReport(Base):
+    """显微镜检查报告（皮肤刮片 / 耳道分泌物 / 粪检 / 阴道脱落细胞等）
+    - 关联 ExamOrder 上的某一项（item_label 标识）
+    - findings_json 存结构化检出物及等级
+    - 生成的 PDF 同时写入 ExamReport（exam_report_id 反向链接），自动出现在已上传报告列表
+    """
+    __tablename__ = "microscopy_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exam_order_id   = mapped_column(ForeignKey("exam_orders.id", ondelete="CASCADE"), nullable=False)
+    exam_report_id  = mapped_column(ForeignKey("exam_reports.id", ondelete="SET NULL"), nullable=True, default=None)
+    customer_id     = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id          = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    visit_id        = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    item_label:     Mapped[str] = mapped_column(String(120), default="")   # 归属检查项名称
+    vet_name:       Mapped[str] = mapped_column(String(80),  default="")
+    magnification:  Mapped[str] = mapped_column(String(20),  default="")   # 10x / 40x / 100x
+    sample_site:    Mapped[str] = mapped_column(String(120), default="")   # 左耳 / 右耳 / 腹部 等
+    findings_json:  Mapped[str] = mapped_column(Text, default="[]")        # [{"name":"马拉色菌","grade":"++"}]
+    narrative:      Mapped[str] = mapped_column(Text, default="")          # 镜下所见自由文本
+    conclusion:     Mapped[str] = mapped_column(Text, default="")
+    advice:         Mapped[str] = mapped_column(Text, default="")
+    photos_json:    Mapped[str] = mapped_column(Text, default="[]")        # ["microscopy_photos/<id>/xxx.jpg", ...]
+
+    store:          Mapped[str] = mapped_column(String(40), default="", index=True)
+    operator:       Mapped[str] = mapped_column(String(80), default="")
+    created_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

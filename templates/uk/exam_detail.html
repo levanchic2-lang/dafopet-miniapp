@@ -362,6 +362,44 @@ function confirmExamVoid(form, paidAmount) {
     {% endif %}
   </div>
 
+  {# 显微镜报告入口（仅当本单含显微镜项目）#}
+  {% if has_microscopy %}
+  <div class="ex-section" style="background:#fafaf6;border-left:3px solid #6b4423;">
+    <div class="ex-section-head" style="display:flex;align-items:center;justify-content:space-between;">
+      <h2>显&nbsp;微&nbsp;镜&nbsp;报&nbsp;告（手工出报告）</h2>
+      <a href="/admin/exam-orders/{{ order.id }}/microscopy/new" class="uk-btn primary sm" style="text-decoration:none;">
+        📝 生 成 显 微 镜 报 告
+      </a>
+    </div>
+    <p style="font-size:9.5pt;color:var(--ink-2);line-height:1.7;margin:6px 0 10px;font-style:italic;">
+      本检查单包含显微镜类项目（如皮肤刮片 / 耳道分泌物 / 粪检）。点右侧入口上传镜下照片 + 勾选检出物 + 写所见 → 系统自动生成 PDF 并归档到已上传报告。
+    </p>
+    {% if micro_reports %}
+    <div style="margin-top:8px;border-top:0.5px dashed var(--hair);padding-top:10px;">
+      <div style="font-size:9pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:6px;font-family:var(--font-serif);">已生成显微镜报告</div>
+      {% for mr in micro_reports %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--hair);">
+        <div style="font-size:10pt;">
+          <b>{{ mr.item_label or '显微镜报告' }}</b>
+          <span style="color:var(--ink-3);margin-left:10px;font-size:9pt;">
+            {{ mr.vet_name or '—' }} · {{ mr.created_at.strftime('%Y-%m-%d %H:%M') if mr.created_at else '' }}
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <a href="/admin/microscopy-reports/{{ mr.id }}/edit" class="uk-btn ghost sm" style="text-decoration:none;font-size:9pt;">编辑</a>
+          <form method="post" action="/admin/microscopy-reports/{{ mr.id }}/delete" style="margin:0;display:inline;"
+                onsubmit="return confirm('确认删除此显微镜报告？同时会删除生成的 PDF 和镜下照片。');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="uk-btn ghost sm" style="font-size:9pt;color:var(--accent-red);">删除</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {# 上传报告 #}
   <div class="ex-section">
     <div class="ex-section-head"><h2>上&nbsp;传&nbsp;报&nbsp;告（电脑端）</h2></div>
