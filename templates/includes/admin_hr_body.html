@@ -251,13 +251,23 @@
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div class="row2" style="margin-top:0.6rem;">
  <div>
- <label for="new_username">用户名</label>
- <input type="text" id="new_username" name="username" required autocomplete="off" placeholder="如 lianggu / 梁天兵"/>
+ <label for="new_displayname">显示名（医生真名）</label>
+ <input type="text" id="new_displayname" name="display_name" autocomplete="off" placeholder="如 梁天兵 / 张春林"
+        oninput="syncUsername(this.value)"/>
+ <small style="font-size:.72rem;color:var(--muted);">用户名会自动用这个，不用重复输</small>
  </div>
  <div>
  <label for="new_password">初始密码（至少6位）</label>
  <input type="password" id="new_password" name="password" required minlength="6" autocomplete="new-password"/>
  </div>
+ </div>
+ <div class="row2" style="margin-top:0.6rem;">
+ <div>
+ <label for="new_username">用户名（默认跟显示名一致，可改）</label>
+ <input type="text" id="new_username" name="username" required autocomplete="off" placeholder="自动填充" data-user-edited="0"
+        oninput="this.dataset.userEdited='1'"/>
+ </div>
+ <div></div>
  </div>
  <div class="row2" style="margin-top:0.6rem;">
  <div>
@@ -287,5 +297,13 @@
 function toggleReset(id) {
  var el = document.getElementById('reset-' + id);
  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+// 新建账号：显示名 → 用户名自动同步（除非用户手动改过用户名）
+function syncUsername(val) {
+ var un = document.getElementById('new_username');
+ if (!un) return;
+ if (un.dataset.userEdited === '1' && un.value && un.value !== val) return;
+ un.value = val;
+ un.dataset.userEdited = '0';
 }
 </script>

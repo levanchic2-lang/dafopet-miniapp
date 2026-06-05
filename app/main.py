@@ -3626,12 +3626,17 @@ async def admin_users_create(
     password: str = Form(...),
     role: str = Form("staff"),
     store: str = Form(""),
+    display_name: str = Form(""),
     csrf_token: str = Form(""),
 ):
     require_admin(request)
     require_superadmin(request)
     _require_csrf(request, csrf_token)
     username = username.strip()
+    display_name = display_name.strip()
+    # 没填显示名 → 用用户名当显示名（用户没在 UI 里手动填，但同一个字段保存两份）
+    if not display_name:
+        display_name = username
     if not username or not password:
         return RedirectResponse("/admin/hr?err=用户名和密码不能为空", status_code=303)
     if len(password) < 6:
@@ -3642,7 +3647,8 @@ async def admin_users_create(
     existing = db.query(AdminUser).filter(AdminUser.username == username).first()
     if existing:
         return RedirectResponse(f"/admin/hr?err=用户名已存在：{username}", status_code=303)
-    new_user = AdminUser(username=username, password_hash=_pwd_ctx.hash(password), role=role, is_active=True, store=store)
+    new_user = AdminUser(username=username, password_hash=_pwd_ctx.hash(password),
+                          role=role, is_active=True, store=store, display_name=display_name)
     db.add(new_user)
     db.flush()  # 获取 new_user.id
     _audit(db, request, "admin_user_create", application_id=None, detail={"username": username, "role": role})
