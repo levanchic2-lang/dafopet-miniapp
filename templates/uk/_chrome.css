@@ -38,15 +38,16 @@ body .btn, body button[type=submit] {
   cursor:pointer;
 }
 body .btn.secondary, body button.secondary {
-  background:var(--paper) !important; color:var(--ink-2) !important;
-  border:0.5px solid var(--hair) !important; font-style:italic; font-weight:400 !important;
+  background:#f5f0e3 !important; color:var(--ink) !important;
+  border:1px solid var(--ink-3) !important; font-style:italic; font-weight:400 !important;
 }
-body .btn.secondary:hover { color:var(--ink) !important; border-color:var(--ink-3) !important; background:var(--bg) !important; }
+body .btn.secondary:hover { color:var(--paper) !important; border-color:var(--ink) !important; background:var(--ink) !important; }
 body .danger {
-  background:var(--paper) !important; color:var(--accent-red) !important;
-  border:0.5px solid var(--accent-red) !important; border-radius:0 !important;
+  background:#fbf2f0 !important; color:var(--accent-red) !important;
+  border:1px solid var(--accent-red) !important; border-radius:0 !important;
   font-family:var(--font-serif) !important; font-style:italic;
 }
+body .danger:hover { background:var(--accent-red) !important; color:var(--paper) !important; }
 body .pill, body .badge { border-radius:0 !important; font-family:var(--font-serif); font-style:italic; font-size:9pt; padding:2px 10px; border:0.5px solid var(--hair); background:var(--paper); color:var(--ink-2); font-weight:400; letter-spacing:1.5px; }
 body .pill.pill-warn, body .badge.b-pending { color:var(--accent-amber); border-color:var(--accent-amber); }
 body .pill.pill-ok, body .badge.b-ok { color:var(--accent-green); border-color:var(--accent-green); }

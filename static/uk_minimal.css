@@ -324,11 +324,13 @@ p { margin: 0 0 var(--gap-3); }
   letter-spacing: 2.5px;
   text-transform: uppercase;
   padding: 6px 16px;
-  border: 0.5px solid var(--ink);
-  background: var(--paper);
+  /* 1px 实边框比 0.5px 在所有屏幕都清晰可辨 */
+  border: 1px solid var(--ink);
+  /* 极淡暖米色底，给按钮一个"实体感"而不只是空白 */
+  background: #faf6ed;
   color: var(--ink);
   cursor: pointer;
-  transition: background .15s, color .15s;
+  transition: background .15s, color .15s, border-color .15s;
 }
 .uk-btn:hover {
   background: var(--ink);
@@ -337,27 +339,36 @@ p { margin: 0 0 var(--gap-3); }
 .uk-btn:focus { outline: 1px dotted var(--ink); outline-offset: 3px; }
 .uk-btn[disabled] {
   border-color: var(--ink-3); color: var(--ink-3); cursor: not-allowed;
-  background: transparent;
+  background: #f0eee8;
 }
-.uk-btn[disabled]:hover { background: transparent; color: var(--ink-3); }
+.uk-btn[disabled]:hover { background: #f0eee8; color: var(--ink-3); }
 
 .uk-btn.primary {
   background: var(--ink);
   color: var(--paper);
+  border-color: var(--ink);
 }
 .uk-btn.primary:hover {
-  background: var(--paper);
+  background: #000;
+  color: var(--paper);
+  border-color: #000;
+}
+/* ghost：次要按钮也明确可读 — 中灰边框 + 深米底 + 深字 */
+.uk-btn.ghost {
+  border-color: var(--ink-3);
+  background: #f5f0e3;
   color: var(--ink);
 }
-.uk-btn.ghost {
-  border-color: var(--hair-2);
-  color: var(--ink-2);
+.uk-btn.ghost:hover {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
 }
-.uk-btn.ghost:hover { background: var(--bg-soft); color: var(--ink); }
 
 .uk-btn.danger {
   border-color: var(--accent-red);
   color: var(--accent-red);
+  background: #fbf2f0;
 }
 .uk-btn.danger:hover { background: var(--accent-red); color: var(--paper); }
 
