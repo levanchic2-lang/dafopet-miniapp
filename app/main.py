@@ -1003,6 +1003,15 @@ def _apply_store_filter(query, store_field, store_short: str):
     return query.filter(or_(store_field == store_short, store_field == ""))
 
 
+def _get_op_store(request: "Request") -> str:
+    """日常开单场景的"当前操作门店"。所有角色（含超管）都按 session.admin_store 过滤。
+    与 _get_admin_store 的区别：超管不再返回空。
+    用法：处方 / 检查 / 销售 / 美容 / 疫苗 等单据的品目选择，必须按此过滤，
+    避免横岗店登录的超管开单时选到东环店的库存。
+    """
+    return request.session.get("admin_store", "") or ""
+
+
 def _resolve_store_for_create(request: "Request", explicit: str = "") -> str:
     """决定新建「目录类」记录归属哪个门店。
 
@@ -7076,7 +7085,7 @@ async def page_admin_customer_detail(
 
     # 录入驱虫弹窗用：本店可用的驱虫品目（含最近一批的批号）
     deworm_items = _apply_store_filter(
-        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
     ).filter(
         InventoryItem.category == "antiparasitic",
         InventoryItem.stock_qty > 0,
@@ -12632,8 +12641,8 @@ async def api_inventory_search(
 ):
     """JSON autocomplete for inventory items — used by prescription/sales order forms."""
     query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
-    # 多门店：staff 只看本店+通用；superadmin 全看
-    query = _apply_store_filter(query, InventoryItem.store, _get_admin_store(request))
+    # 多门店：所有角色按 session.admin_store 过滤（含超管），库存物理隔离
+    query = _apply_store_filter(query, InventoryItem.store, _get_op_store(request))
     if category:
         query = query.filter(InventoryItem.category == category)
     if q:
@@ -12641,7 +12650,7 @@ async def api_inventory_search(
     items = query.order_by(InventoryItem.name).limit(30).all()
     # 按当前员工的门店取「有效售价」（默认价 + 该店覆盖）
     from app.services.pricing import effective_sell_price as _eff
-    _cur_store = _get_admin_store(request)
+    _cur_store = _get_op_store(request)
     return [
         {
             "id": it.id,
@@ -12812,7 +12821,8 @@ async def api_inventory_search(
         return {"items": []}
     q = (q or "").strip()
     qq = db.query(InventoryItem).filter(InventoryItem.is_active == True)
-    qq = _apply_store_filter(qq, InventoryItem.store, _get_admin_store(request))
+    # 日常开单/选品按当前操作门店过滤，含超管
+    qq = _apply_store_filter(qq, InventoryItem.store, _get_op_store(request))
     if q:
         like = f"%{q}%"
         qq = qq.filter(InventoryItem.name.like(like))
@@ -13101,7 +13111,7 @@ async def admin_inventory_import_photo_recognize(
 
     # 对每行做品目匹配（按当前用户门店过滤，避免跨店误匹配）
     _match_q = db.query(InventoryItem).filter(InventoryItem.is_active == True)
-    _match_q = _apply_store_filter(_match_q, InventoryItem.store, _get_admin_store(request))
+    _match_q = _apply_store_filter(_match_q, InventoryItem.store, _get_op_store(request))
     all_items = _match_q.all()
     for it in result["items"]:
         matched_id, conf = match_item_by_name(it["name"], all_items)
@@ -13222,7 +13232,7 @@ async def admin_inventory_import_photo_commit(
                         InventoryItem.is_active == True,
                         InventoryItem.name == name,
                     )
-                    _dup_q = _apply_store_filter(_dup_q, InventoryItem.store, _get_admin_store(request))
+                    _dup_q = _apply_store_filter(_dup_q, InventoryItem.store, _get_op_store(request))
                     db_dup = _dup_q.first()
                     if db_dup:
                         item = db_dup
@@ -16164,7 +16174,7 @@ async def admin_vaccination_create_page(
         Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")
     ).all()]
     vacc_items = _apply_store_filter(
-        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
     ).filter(
         InventoryItem.category.in_(["vaccine", "antiparasitic"]),
         InventoryItem.stock_qty > 0,
@@ -16292,7 +16302,7 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
         Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")
     ).all()]
     vacc_items = _apply_store_filter(
-        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
     ).filter(
         InventoryItem.category.in_(["vaccine", "antiparasitic"])
     ).order_by(InventoryItem.name).all()
@@ -16545,7 +16555,7 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
     if not existing_vacc:
         # 查找狂犬疫苗库存品目（优先匹配名称含"狂犬"的）
         rabies_item = _apply_store_filter(
-            db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+            db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
         ).filter(
             InventoryItem.category == "vaccine",
             InventoryItem.name.ilike("%狂犬%"),
@@ -17866,7 +17876,7 @@ async def page_admin_deworming_create(
     ).all()
     vets = [v[0] for v in vets_q]
     dew_items = _apply_store_filter(
-        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
     ).filter(
         InventoryItem.category == "antiparasitic",
         InventoryItem.is_active == True,
@@ -17903,7 +17913,7 @@ async def page_admin_deworming_detail(rec_id: int, request: Request, db: Session
     ).all()
     vets = [v[0] for v in vets_q]
     dew_items = _apply_store_filter(
-        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
     ).filter(
         InventoryItem.category == "antiparasitic",
         InventoryItem.is_active == True,
@@ -18177,7 +18187,7 @@ def _parse_grooming_services(form) -> list:
 def _query_grooming_items(db: Session, request: Request):
     """美容服务项库存（category=grooming）。"""
     q = _apply_store_filter(
-        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
     ).filter(
         InventoryItem.category == "grooming",
         InventoryItem.is_active == True,
@@ -20807,7 +20817,7 @@ async def m_vaccination_new(
         pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
     # 疫苗品目（category=vaccine）
     vacc_items = _apply_store_filter(
-        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
     ).filter(InventoryItem.category == "vaccine", InventoryItem.is_active == True).all()
     uname = request.session.get("admin_username") or ""
     default_vet = uname or ""
@@ -20838,7 +20848,7 @@ async def m_deworming_new(
     if cust:
         pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
     deworm_items = _apply_store_filter(
-        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
     ).filter(InventoryItem.category == "antiparasitic", InventoryItem.is_active == True).all()
     uname = request.session.get("admin_username") or ""
     u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
@@ -20866,7 +20876,7 @@ async def m_exam_new(visit_id: int, request: Request, db: Session = Depends(get_
     cust = db.get(Customer, v.customer_id) if v.customer_id else None
     # 检查品目：category in (lab/imaging/microscopy)
     exam_items = _apply_store_filter(
-        db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
+        db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
     ).filter(
         InventoryItem.is_active == True,
         InventoryItem.category.in_(["lab", "imaging", "microscopy"]),
@@ -20992,7 +21002,8 @@ async def m_api_search_drug(
     q = (q or "").strip()
     if not q:
         return {"results": []}
-    store_short = _get_admin_store(request)
+    # 开处方场景：按当前操作门店过滤（含超管）
+    store_short = _get_op_store(request)
     query = _apply_store_filter(
         db.query(InventoryItem), InventoryItem.store, store_short
     ).filter(
@@ -21052,10 +21063,14 @@ async def m_api_recent_drugs(
         .limit(12)
         .all()
     )
+    op_store = _get_op_store(request)
     results = []
     for r in rows:
         inv = db.get(InventoryItem, r.item_id) if r.item_id else None
         if not inv:
+            continue
+        # 跨店历史不展示：当前操作门店不一致 → 跳过
+        if op_store and (inv.store or "") != op_store:
             continue
         stock_level = "green"
         if inv.is_service:
