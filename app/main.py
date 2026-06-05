@@ -9296,10 +9296,12 @@ async def admin_customer_package_refund(
 # ---------------------------------------------------------------------------
 
 _DEPOSIT_CATEGORY_ZH = {
-    "surgery":  "手术押金",
-    "boarding": "寄养押金",
-    "beauty":   "美容押金",
-    "other":    "其他押金",
+    "surgery":     "手术押金",
+    "boarding":    "寄养押金",
+    "beauty":      "美容押金",
+    "hospital":    "住院押金",
+    "prepaid":     "预付款",
+    "other":       "其他押金",
 }
 _DEPOSIT_STATUS_ZH = {
     "held":           "已收待结",
@@ -14892,7 +14894,10 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
 
 _INV_STATUS_ZH = {"unpaid": "待收款", "paid": "已收款", "cancelled": "已取消"}
 _INV_PAY_ZH    = {
-    "cash": "现金", "wechat": "微信支付", "alipay": "支付宝",
+    "cash": "现金", "wechat": "微信", "alipay": "支付宝",
+    "shouqianba": "收钱吧", "meituan": "美团", "third_party": "第三方",
+    "wallet": "钱包", "package": "套餐", "deposit": "押金", "coupon": "优惠券",
+    "mixed": "混合支付",
     "card": "刷卡", "groupbuy": "团购", "prepaid": "预付款",
     "free": "赠送 / 零结算",
 }
