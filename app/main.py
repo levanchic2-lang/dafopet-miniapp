@@ -3103,13 +3103,21 @@ _MOBILE_UA_PAT = re.compile(r"(iPhone|Android|iPod|Mobile|BlackBerry|IEMobile)",
 
 
 def _is_mobile_ua(request: Request) -> bool:
-    """是否手机 UA。平板（iPad）当桌面，因为屏幕够大。"""
+    """是否手机 UA。平板（iPad）当桌面，因为屏幕够大。
+
+    优先级（高 → 低）：
+      ?mobile=1 强制手机（覆盖一切，最高优先级）
+      ?desktop=1 强制桌面
+      force_desktop cookie（来自 /m/desktop，30 天有效）
+      UA 自动检测
+    """
+    # 显式 ?mobile=1 优先级最高，可以覆盖 force_desktop cookie（用于清理）
+    if request.query_params.get("mobile") == "1":
+        return True
     if request.cookies.get("force_desktop") == "1":
         return False
     if request.query_params.get("desktop") == "1":
         return False
-    if request.query_params.get("mobile") == "1":
-        return True
     ua = request.headers.get("user-agent", "") or ""
     if "iPad" in ua:
         return False
@@ -19843,6 +19851,14 @@ async def m_force_desktop(request: Request):
     """强制切桌面视图（写 cookie）。"""
     resp = RedirectResponse("/admin", status_code=303)
     resp.set_cookie("force_desktop", "1", max_age=60 * 60 * 24 * 30, httponly=False, samesite="lax")
+    return resp
+
+
+@app.get("/m/auto")
+async def m_clear_force_desktop(request: Request):
+    """清除 force_desktop cookie，恢复 UA 自动检测，跳回 /m。"""
+    resp = RedirectResponse("/m", status_code=303)
+    resp.delete_cookie("force_desktop")
     return resp
 
 
