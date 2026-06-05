@@ -15779,8 +15779,25 @@ async def admin_cashier_multi_pay_submit(
             f"/admin/cashier/multi-pay?customer_id={customer_id}&msg=请勾选至少一张待收单",
             status_code=303,
         )
-    paid_count = 0
-    paid_total = 0.0
+    # 折扣 / 减免（可选）— 按选中单 outstanding 比例分摊
+    disc_mode = (form.get("discount_mode") or "none").strip()  # none / pct / amount
+    try:
+        disc_value = float((form.get("discount_value") or "0").strip() or 0)
+    except ValueError:
+        disc_value = 0.0
+    if disc_mode == "pct":
+        if disc_value > 1.0:
+            disc_value = disc_value / 100.0  # 80 → 0.8
+        if disc_value <= 0 or disc_value > 1.0:
+            disc_mode = "none"; disc_value = 0.0
+    elif disc_mode == "amount":
+        if disc_value <= 0:
+            disc_mode = "none"; disc_value = 0.0
+    else:
+        disc_mode = "none"; disc_value = 0.0
+
+    # 第一遍：算出每张 outstanding，过滤掉已付清
+    inv_rows = []
     for iid in inv_ids:
         inv = db.get(Invoice, iid)
         if not inv or inv.customer_id != customer_id or inv.payment_status == "paid":
@@ -15788,20 +15805,68 @@ async def admin_cashier_multi_pay_submit(
         outstanding = max(0.0, float(inv.total_amount or 0) - _invoice_paid_sum(db, inv.id))
         if outstanding <= 0:
             continue
-        db.add(Payment(
-            invoice_id=inv.id, customer_id=customer_id,
-            method=method, amount=round(outstanding, 2),
-            ref_no=ref_no, status="success",
-            store=store, operator=operator,
-            note=f"合并结算（{len(inv_ids)} 单）",
-        ))
-        db.flush()
+        inv_rows.append({"inv": inv, "out": outstanding})
+    if not inv_rows:
+        return RedirectResponse(
+            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg=勾选的单都无未收金额",
+            status_code=303,
+        )
+    grand_out = sum(r["out"] for r in inv_rows)
+    if disc_mode == "pct":
+        total_discount = round(grand_out * (1.0 - disc_value), 2)
+    elif disc_mode == "amount":
+        total_discount = round(min(disc_value, grand_out), 2)
+    else:
+        total_discount = 0.0
+
+    # 第二遍：按比例分摊减免（最后一张吃尾差），逐张写流水
+    paid_count = 0
+    paid_total = 0.0
+    discount_total = 0.0
+    note_tag = f"合并结算（{len(inv_rows)} 单）"
+    for idx, r in enumerate(inv_rows):
+        inv = r["inv"]
+        out = r["out"]
+        if total_discount > 0:
+            if idx < len(inv_rows) - 1:
+                share = round(total_discount * (out / grand_out), 2)
+            else:
+                share = round(total_discount - discount_total, 2)
+            share = max(0.0, min(share, out))
+        else:
+            share = 0.0
+        actual = round(out - share, 2)
+        # 实付流水
+        if actual > 0:
+            db.add(Payment(
+                invoice_id=inv.id, customer_id=customer_id,
+                method=method, amount=actual,
+                ref_no=ref_no, status="success",
+                store=store, operator=operator,
+                note=note_tag,
+            ))
+            db.flush()
+        # 减免流水（method=free）
+        if share > 0:
+            db.add(Payment(
+                invoice_id=inv.id, customer_id=customer_id,
+                method="free", amount=share,
+                ref_no="", status="success",
+                store=store, operator=operator,
+                note=f"{note_tag} · 减免分摊",
+            ))
+            db.flush()
+            discount_total += share
         _invoice_recompute_status(db, inv)
         paid_count += 1
-        paid_total += outstanding
+        paid_total += actual
     db.commit()
+    if total_discount > 0:
+        msg = f"已合并结算 {paid_count} 单 · 应收 ¥{grand_out:.2f} − 减免 ¥{total_discount:.2f} = 实收 ¥{paid_total:.2f}"
+    else:
+        msg = f"已合并结算 {paid_count} 单 · ¥{paid_total:.2f}"
     return RedirectResponse(
-        f"/admin/invoices?status=paid&msg=已合并结算 {paid_count} 单 · ¥{paid_total:.2f}",
+        f"/admin/invoices?status=paid&msg={msg}",
         status_code=303,
     )
 

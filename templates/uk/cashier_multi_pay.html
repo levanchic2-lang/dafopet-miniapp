@@ -99,6 +99,33 @@
     <span class="val"><span class="sym">¥</span><span id="mp-grand">{{ '%.2f'|format(grand_total) }}</span></span>
   </div>
 
+  {# 折扣 / 减免（可选）#}
+  <div class="mp-card">
+    <h2>折 扣 / 减 免（可 选）</h2>
+    <div class="mp-methods" style="margin-top:0;">
+      <button type="button" class="mp-method-btn selected" data-mode="none" onclick="selectDisc(this)">无</button>
+      <button type="button" class="mp-method-btn" data-mode="pct" onclick="selectDisc(this)">按 折 率</button>
+      <button type="button" class="mp-method-btn" data-mode="amount" onclick="selectDisc(this)">减 免 金 额</button>
+    </div>
+    <input type="hidden" name="discount_mode" id="mp-disc-mode" value="none"/>
+    <div class="mp-row2" id="mp-disc-input-wrap" style="display:none;">
+      <div class="mp-field">
+        <label id="mp-disc-label">折率（填 80 = 8 折；100 = 不折）</label>
+        <input type="number" name="discount_value" id="mp-disc-value" min="0" step="0.01" placeholder="80" oninput="recalcGrand()"/>
+      </div>
+      <div class="mp-field" style="display:flex; align-items:flex-end;">
+        <span style="font-size:9.5pt; color:var(--ink-3); font-style:italic;" id="mp-disc-hint">
+          按各张未收金额比例分摊到每张单
+        </span>
+      </div>
+    </div>
+    <div style="margin-top:10px; font-size:10.5pt; font-family:var(--font-serif); display:none;" id="mp-disc-preview">
+      <span style="color:var(--ink-3); letter-spacing:1px;">折后实收：</span>
+      <b style="font-family:var(--font-numeric); color:var(--accent-red); font-size:14pt;">¥<span id="mp-after">0.00</span></b>
+      <span style="color:var(--ink-3); margin-left:10px; font-style:italic;">（减免 ¥<span id="mp-disc-amt">0.00</span>）</span>
+    </div>
+  </div>
+
   <div class="mp-card">
     <h2>支 付 方 式</h2>
     <div class="mp-methods">
@@ -145,6 +172,33 @@ function onRowToggle(cb) {
   document.getElementById('mp-all').checked = (all.length === checked.length);
   recalcGrand();
 }
+function selectDisc(btn) {
+  document.querySelectorAll('.mp-card .mp-method-btn[data-mode]').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  const mode = btn.dataset.mode;
+  document.getElementById('mp-disc-mode').value = mode;
+  const wrap = document.getElementById('mp-disc-input-wrap');
+  const label = document.getElementById('mp-disc-label');
+  const hint = document.getElementById('mp-disc-hint');
+  const valEl = document.getElementById('mp-disc-value');
+  if (mode === 'pct') {
+    wrap.style.display = '';
+    label.textContent = '折率（填 80 = 8 折；100 = 不折）';
+    hint.textContent = '示例：80 表示每张单按 80% 收，相当于打 8 折';
+    valEl.placeholder = '80';
+    valEl.max = '100';
+  } else if (mode === 'amount') {
+    wrap.style.display = '';
+    label.textContent = '减免总金额（¥）';
+    hint.textContent = '按各张未收金额比例分摊到每张单，最后一张吃尾差';
+    valEl.placeholder = '50';
+    valEl.removeAttribute('max');
+  } else {
+    wrap.style.display = 'none';
+    valEl.value = '';
+  }
+  recalcGrand();
+}
 function recalcGrand() {
   let sum = 0, cnt = 0;
   document.querySelectorAll('.mp-cb:checked').forEach(cb => {
@@ -152,9 +206,29 @@ function recalcGrand() {
     sum += amt; cnt += 1;
   });
   document.getElementById('mp-grand').textContent = sum.toFixed(2);
-  document.getElementById('mp-grand-btn').textContent = sum.toFixed(2);
   document.getElementById('mp-cnt').textContent = cnt;
-  document.getElementById('mp-submit').disabled = (cnt === 0);
+  // 折后实收
+  const mode = document.getElementById('mp-disc-mode').value;
+  const dv = parseFloat(document.getElementById('mp-disc-value').value) || 0;
+  let discount = 0;
+  if (mode === 'pct') {
+    let pct = dv > 1 ? dv / 100 : dv;
+    if (pct > 0 && pct <= 1) discount = sum * (1 - pct);
+  } else if (mode === 'amount') {
+    discount = Math.min(dv, sum);
+  }
+  discount = Math.max(0, Math.min(discount, sum));
+  const after = sum - discount;
+  const previewEl = document.getElementById('mp-disc-preview');
+  if (discount > 0) {
+    previewEl.style.display = '';
+    document.getElementById('mp-after').textContent = after.toFixed(2);
+    document.getElementById('mp-disc-amt').textContent = discount.toFixed(2);
+  } else {
+    previewEl.style.display = 'none';
+  }
+  document.getElementById('mp-grand-btn').textContent = after.toFixed(2);
+  document.getElementById('mp-submit').disabled = (cnt === 0 || after < 0);
 }
 </script>
 {% endif %}
