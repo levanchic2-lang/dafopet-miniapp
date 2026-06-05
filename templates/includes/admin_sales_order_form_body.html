@@ -363,7 +363,8 @@ function showSoDropdown(idx, items, input) {
  var div = document.createElement('div');
  div.className = 'inv-dropdown-item';
  var stock = it.is_service ? '服务' : ('库存:' + it.stock_qty + it.unit);
- div.innerHTML = '<div>' + it.name + (it.is_controlled ? ' <span style="color:#92400e;font-size:0.72rem;">管控</span>' : '') + '</div>'
+ var storeTag = it.store ? ' <span style="color:#888;font-size:0.72rem;font-style:italic;">[' + it.store + ']</span>' : '';
+ div.innerHTML = '<div>' + it.name + storeTag + (it.is_controlled ? ' <span style="color:#92400e;font-size:0.72rem;">管控</span>' : '') + '</div>'
  + '<div class="item-meta">¥' + it.sell_price.toFixed(2) + ' / ' + it.unit + ' &nbsp;·&nbsp; ' + stock + '</div>';
  div.onmousedown = function(e) {
  e.preventDefault();
@@ -371,6 +372,25 @@ function showSoDropdown(idx, items, input) {
  };
  dd.appendChild(div);
  });
+ // fixed 定位 + 自动翻向，防被 section 容器 overflow 裁剪
+ var rect = input.getBoundingClientRect();
+ var width = Math.max(rect.width, 320);
+ dd.style.width = width + 'px';
+ var left = rect.left;
+ if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+ if (left < 8) left = 8;
+ dd.style.left = left + 'px';
+ var maxH = Math.floor(window.innerHeight * 0.52);
+ var spaceBelow = window.innerHeight - rect.bottom - 12;
+ var spaceAbove = rect.top - 12;
+ if (spaceBelow >= 240 || spaceBelow >= spaceAbove) {
+   dd.style.top = (rect.bottom + 2) + 'px';
+   dd.style.maxHeight = Math.min(maxH, spaceBelow) + 'px';
+ } else {
+   var h = Math.min(maxH, spaceAbove);
+   dd.style.top = (rect.top - h - 2) + 'px';
+   dd.style.maxHeight = h + 'px';
+ }
  dd.style.display = 'block';
 }
 

@@ -234,8 +234,8 @@
   .inv-dropdown {
     position: fixed; background: var(--paper);
     border: 0.5px solid var(--ink); z-index: 9999;
-    max-height: 280px; overflow-y: auto; display: none;
-    min-width: 220px; box-shadow: 0 4px 14px rgba(0,0,0,.08);
+    max-height: 52vh; overflow-y: auto; display: none;
+    min-width: 320px; box-shadow: 0 6px 18px rgba(0,0,0,.12);
   }
   .inv-dropdown-item {
     padding: 8px 12px; cursor: pointer;
@@ -811,11 +811,28 @@ function showDropdown(idx, items, input) {
     };
     dd.appendChild(div);
   });
+  // 先设宽度，让浏览器算实际高度
   var rect = input.getBoundingClientRect();
-  dd.style.left = rect.left + 'px';
-  dd.style.width = rect.width + 'px';
-  dd.style.top = (rect.bottom + 2) + 'px';
+  var width = Math.max(rect.width, 320);
+  dd.style.width = width + 'px';
+  // 防左右溢出
+  var left = rect.left;
+  if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+  if (left < 8) left = 8;
+  dd.style.left = left + 'px';
   dd.style.display = 'block';
+  // 自动翻向：先放下方，若下方空间不够则放上方
+  var maxH = Math.floor(window.innerHeight * 0.52);
+  var spaceBelow = window.innerHeight - rect.bottom - 12;
+  var spaceAbove = rect.top - 12;
+  if (spaceBelow >= 240 || spaceBelow >= spaceAbove) {
+    dd.style.top = (rect.bottom + 2) + 'px';
+    dd.style.maxHeight = Math.min(maxH, spaceBelow) + 'px';
+  } else {
+    var h = Math.min(maxH, spaceAbove);
+    dd.style.top = (rect.top - h - 2) + 'px';
+    dd.style.maxHeight = h + 'px';
+  }
 }
 
 function selectInventoryItem(idx, it, input) {
