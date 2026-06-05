@@ -855,24 +855,22 @@ def _try_sqlite_migrations() -> None:
                 if inv_cols and "store" not in inv_col_names:
                     conn.execute(text("ALTER TABLE invoices ADD COLUMN store VARCHAR(40) DEFAULT ''"))
                     conn.execute(text("CREATE INDEX IF NOT EXISTS idx_invoices_store ON invoices(store)"))
-                    _store_map = {
-                        "大风动物医院（东环店）": "东环店",
-                        "大风动物医院（横岗店）": "横岗店",
-                    }
-                    for full, short in _store_map.items():
-                        conn.execute(text(
-                            "UPDATE invoices SET store = :short "
-                            "WHERE (store IS NULL OR store = '') AND visit_id IN ("
-                            "  SELECT id FROM visits WHERE clinic_store = :full"
-                            ")"
-                        ), {"full": full, "short": short})
-                    conn.execute(text(
-                        "UPDATE invoices SET store = ("
-                        "  SELECT store FROM pets WHERE pets.id = invoices.pet_id"
-                        ") "
-                        "WHERE (store IS NULL OR store = '') AND pet_id IS NOT NULL"
-                    ))
-                    conn.commit()
+                # 不管列是新加的还是早就存在的，凡是空 store 都按 pet.store 回填
+                # （visits 表没有 clinic_store 列，store 信息只有 Pet 有）
+                conn.execute(text(
+                    "UPDATE invoices SET store = ("
+                    "  SELECT store FROM pets WHERE pets.id = invoices.pet_id"
+                    ") "
+                    "WHERE (store IS NULL OR store = '') AND pet_id IS NOT NULL"
+                ))
+                conn.execute(text(
+                    "UPDATE invoices SET store = ("
+                    "  SELECT p.store FROM visits v JOIN pets p ON p.id = v.pet_id "
+                    "  WHERE v.id = invoices.visit_id"
+                    ") "
+                    "WHERE (store IS NULL OR store = '') AND visit_id IS NOT NULL"
+                ))
+                conn.commit()
             except Exception as _e:
                 print(f"[migrations] invoices.store skipped: {_e}")
 

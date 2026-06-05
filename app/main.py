@@ -14818,17 +14818,17 @@ _INV_PAY_ZH    = {
 
 def _resolve_invoice_store(db: Session, *, visit_id=None, pet_id=None, customer_id=None, fallback: str = "") -> str:
     """推断发票应归属的门店短名。
-    优先级：visit.clinic_store → pet.store → fallback（通常传 _get_op_store(request)）"""
-    if visit_id:
-        v = db.get(Visit, visit_id)
-        if v and v.clinic_store:
-            short = _STORE_FULL_TO_SHORT.get(v.clinic_store, "")
-            if short:
-                return short
+    优先级：pet.store → visit.pet.store → fallback (_get_op_store(request))"""
     if pet_id:
         p = db.get(Pet, pet_id)
         if p and p.store:
             return p.store
+    if visit_id:
+        v = db.get(Visit, visit_id)
+        if v and v.pet_id:
+            p = db.get(Pet, v.pet_id)
+            if p and p.store:
+                return p.store
     return fallback or ""
 
 
