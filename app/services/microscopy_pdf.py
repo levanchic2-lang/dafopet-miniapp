@@ -19,8 +19,8 @@ PDF_CSS = """
 @page { size: A4; margin: 16mm 14mm 14mm 14mm; }
 * { box-sizing: border-box; }
 body {
-  font-family: "PingFang SC", "Microsoft YaHei", "Source Han Sans CN",
-               "Noto Sans CJK SC", "WenQuanYi Zen Hei", sans-serif;
+  font-family: "Noto Serif CJK SC", "Noto Sans CJK SC", "WenQuanYi Zen Hei",
+               "Source Han Sans CN", "PingFang SC", "Microsoft YaHei", serif;
   font-size: 10.5pt; color: #1a1a1a; line-height: 1.7;
 }
 .clinic { text-align: center; font-size: 17pt; letter-spacing: 4px; margin-bottom: 1pt; }
@@ -35,8 +35,11 @@ body {
 h2.sec { font-size: 11pt; margin: 12pt 0 6pt; padding-bottom: 2pt; border-bottom: 1px solid #333; letter-spacing: 1px; }
 
 .photo-grid { display: flex; flex-wrap: wrap; gap: 6pt; margin: 4pt 0 6pt; }
-.photo-cell { width: 30%; box-sizing: border-box; }
-.photo-cell img { width: 100%; height: auto; border: 0.5px solid #999; display: block; }
+.photo-cell { width: 32%; box-sizing: border-box; page-break-inside: avoid; }
+.photo-cell img {
+  width: 100%; max-height: 140pt; object-fit: cover;
+  border: 0.5px solid #999; display: block;
+}
 
 .find-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
 .find-table th, .find-table td { padding: 4pt 6pt; border: 0.5px solid #bbb; }
@@ -52,16 +55,46 @@ h2.sec { font-size: 11pt; margin: 12pt 0 6pt; padding-bottom: 2pt; border-bottom
 """
 
 
-def _img_data_uri(path: Path) -> Optional[str]:
+def _img_data_uri(path: Path, max_dim: int = 1000, quality: int = 78) -> Optional[str]:
+    """读图 → Pillow 缩到 max_dim 边长 → JPEG 嵌入 base64
+    缩图是关键：手机原图 5-8MB × 多张 = PDF 暴涨 24MB / 几百页
+    """
     if not path.exists():
         return None
     try:
-        b = path.read_bytes()
+        from PIL import Image, ImageOps
+    except Exception:
+        # 没 Pillow 就直接 base64 原图（仍能嵌入）
+        try:
+            b = path.read_bytes()
+        except Exception:
+            return None
+        ext = path.suffix.lower().lstrip(".")
+        mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}.get(ext, "jpeg")
+        return f"data:image/{mime};base64,{base64.b64encode(b).decode('ascii')}"
+
+    try:
+        with Image.open(path) as im:
+            # 处理 EXIF 方向
+            im = ImageOps.exif_transpose(im)
+            # 转 RGB（PNG 带透明也兜底为白底）
+            if im.mode in ("RGBA", "LA", "P"):
+                bg = Image.new("RGB", im.size, (255, 255, 255))
+                if im.mode == "P":
+                    im = im.convert("RGBA")
+                bg.paste(im, mask=im.split()[-1] if im.mode in ("RGBA", "LA") else None)
+                im = bg
+            elif im.mode != "RGB":
+                im = im.convert("RGB")
+            # 缩到 max_dim
+            im.thumbnail((max_dim, max_dim), Image.LANCZOS)
+            import io as _io
+            buf = _io.BytesIO()
+            im.save(buf, format="JPEG", quality=quality, optimize=True, progressive=True)
+            data = buf.getvalue()
+        return f"data:image/jpeg;base64,{base64.b64encode(data).decode('ascii')}"
     except Exception:
         return None
-    ext = path.suffix.lower().lstrip(".")
-    mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}.get(ext, "jpeg")
-    return f"data:image/{mime};base64,{base64.b64encode(b).decode('ascii')}"
 
 
 def _build_html(report, cust, pet, clinic_name: str) -> str:
