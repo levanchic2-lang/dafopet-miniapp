@@ -11546,7 +11546,7 @@ def _anesth_form_context(request, db, *, order=None, visit=None, cust=None,
     ).all()
     cosigner_names = [n[0] for n in nurses if n[0] not in vet_names] + vet_names
     # 候选药：麻醉/管控药 + 服务类（吸入麻醉等）
-    store = _get_admin_store(request) or ""
+    store = _get_op_store(request)
     cand_q = db.query(InventoryItem).filter(InventoryItem.is_active == True)
     cand_q = cand_q.filter(
         (InventoryItem.is_controlled == True) |
@@ -11554,7 +11554,7 @@ def _anesth_form_context(request, db, *, order=None, visit=None, cust=None,
         (InventoryItem.name.ilike("%麻%"))
     )
     if store:
-        cand_q = cand_q.filter((InventoryItem.store == store) | (InventoryItem.store == "") | (InventoryItem.store.is_(None)))
+        cand_q = cand_q.filter(InventoryItem.store == store)
     candidates = cand_q.order_by(InventoryItem.name).limit(200).all()
     today = datetime.utcnow().strftime("%Y-%m-%d")
     return {
@@ -11615,7 +11615,7 @@ async def admin_anesth_create(request: Request, db: Session = Depends(get_db)):
             if p and p.store:
                 store = p.store
     if not store:
-        store = _get_admin_store(request) or ""
+        store = _get_op_store(request) or ""
     order = AnesthesiaOrder(
         visit_id=visit_id or None,
         customer_id=customer_id or None,
@@ -11905,7 +11905,7 @@ async def page_admin_narcotics_ledger(
 async def page_admin_narcotics_manual(request: Request, db: Session = Depends(get_db)):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
-    store = _get_admin_store(request) or ""
+    store = _get_op_store(request)
     items_q = db.query(InventoryItem).filter(InventoryItem.is_active == True)
     items_q = items_q.filter(
         (InventoryItem.is_controlled == True) |
@@ -11913,7 +11913,7 @@ async def page_admin_narcotics_manual(request: Request, db: Session = Depends(ge
         (InventoryItem.name.ilike("%麻%"))
     )
     if store:
-        items_q = items_q.filter((InventoryItem.store == store) | (InventoryItem.store == "") | (InventoryItem.store.is_(None)))
+        items_q = items_q.filter(InventoryItem.store == store)
     items_list = items_q.order_by(InventoryItem.name).all()
     staff_list = db.query(Staff.name).filter(Staff.status.in_(["active", "probation"])).all()
     staff_names = [s[0] for s in staff_list]
@@ -11951,7 +11951,7 @@ async def admin_narcotics_manual_submit(request: Request, db: Session = Depends(
     item_name = (inv.name if inv else str(form.get("item_name", "")).strip())[:120]
     if not item_name:
         raise HTTPException(400, "请选择或填写药品名称")
-    store = (inv.store if inv else "") or _get_admin_store(request) or ""
+    store = (inv.store if inv else "") or _get_op_store(request) or ""
     # 同步实物库存（仅对有库存的非服务类品目）
     if inv and not inv.is_service:
         if direction == "in":
