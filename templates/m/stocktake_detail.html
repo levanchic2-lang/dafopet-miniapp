@@ -1,0 +1,116 @@
+{% extends "m/_base.html" %}
+{% block title %}{{ sess.name }}{% endblock %}
+{% block topbar_title %}<a href="/m/stocktake" style="color:inherit;text-decoration:none;">‹ 盘点</a>{% endblock %}
+{% block topbar_sub %}已盘 {{ counted }} / {{ total }} · {{ admin_store_label }}{% endblock %}
+
+{% block content %}
+
+{% if request.query_params.get('msg') %}
+<div class="m-msg ok">{{ request.query_params.get('msg') }}</div>
+{% endif %}
+{% if request.query_params.get('err') %}
+<div class="m-msg err">{{ request.query_params.get('err') }}</div>
+{% endif %}
+
+{# 顶部统计 + 筛选 #}
+<div class="m-card" style="padding:12px 14px;">
+  <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:#0f172a;">{{ sess.name }}</div>
+  {# 进度条 #}
+  {% set pct = (counted * 100 // total) if total else 0 %}
+  <div style="margin-top:8px;height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;">
+    <div style="width:{{ pct }}%;height:100%;background:linear-gradient(90deg,#10b981,#3b82f6);transition:width .3s;"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-top:4px;">
+    <span>{{ counted }} / {{ total }} · {{ pct }}%</span>
+    <span>剩 {{ total - counted }} 项</span>
+  </div>
+
+  {# 筛选 chip + 搜索 #}
+  <form method="get" action="/m/stocktake/{{ sess.id }}" style="margin-top:10px;display:flex;gap:6px;">
+    <input type="text" name="q" value="{{ q }}" placeholder="🔍 搜品名"
+           style="flex:1;padding:8px 10px;font-size:14px;border:1px solid #e2e8f0;border-radius:8px;">
+    <input type="hidden" name="filter" value="{{ filter }}"/>
+    <button type="submit" style="padding:8px 14px;background:#3b82f6;color:#fff;border:0;border-radius:8px;font-size:14px;font-weight:700;">搜</button>
+  </form>
+  <div style="display:flex;gap:6px;margin-top:8px;">
+    <a href="?filter=all&q={{ q }}" class="m-role-chip {% if filter == 'all' %}active{% endif %}" style="font-size:12px;padding:5px 12px;">全部</a>
+    <a href="?filter=uncounted&q={{ q }}" class="m-role-chip {% if filter == 'uncounted' %}active{% endif %}" style="font-size:12px;padding:5px 12px;">未盘 · {{ total - counted }}</a>
+    <a href="?filter=variance&q={{ q }}" class="m-role-chip {% if filter == 'variance' %}active{% endif %}" style="font-size:12px;padding:5px 12px;">有差异</a>
+  </div>
+</div>
+
+{# 品目列表 #}
+{% if not sit_items %}
+  <div class="m-empty" style="padding-top:40px;">
+    <div class="emoji">{% if filter == 'uncounted' %}✅{% elif filter == 'variance' %}🎯{% else %}🔍{% endif %}</div>
+    <div>
+      {% if filter == 'uncounted' %}所有项都已盘完
+      {% elif filter == 'variance' %}没有差异项
+      {% elif q %}没找到「{{ q }}」
+      {% else %}该盘点单暂无品目{% endif %}
+    </div>
+  </div>
+{% else %}
+  {% for si in sit_items %}
+  {% set is_counted = si.actual_qty is not none %}
+  {% set has_var = is_counted and si.variance != 0 %}
+  <div class="m-card" style="padding:12px 14px;{% if has_var %}border-left:3px solid #f59e0b;{% elif is_counted %}border-left:3px solid #10b981;{% endif %}">
+    <form method="post" action="/m/stocktake/{{ sess.id }}/save-one">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="item_id" value="{{ si.id }}"/>
+      <input type="hidden" name="next_url" value="/m/stocktake/{{ sess.id }}?filter={{ filter }}&q={{ q }}&msg=已保存"/>
+
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:15px;font-weight:700;color:#0f172a;line-height:1.35;">{{ si.item_name }}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
+            {{ categories[si.category].label if si.category in categories else si.category }}
+            · 系统库存 <b style="color:#475569;font-family:ui-monospace,monospace;">{{ si.system_qty }}</b> {{ si.unit }}
+          </div>
+        </div>
+        {% if is_counted %}
+          {% if has_var %}
+            <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-weight:700;white-space:nowrap;">
+              差异 {% if si.variance > 0 %}+{% endif %}{{ '%g'|format(si.variance) }}
+            </span>
+          {% else %}
+            <span style="font-size:10px;background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px;font-weight:700;white-space:nowrap;">✓ 已盘</span>
+          {% endif %}
+        {% else %}
+          <span style="font-size:10px;background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:10px;white-space:nowrap;">未盘</span>
+        {% endif %}
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+        <span style="font-size:12px;color:#64748b;white-space:nowrap;">实盘 →</span>
+        <input type="number" name="actual_qty" step="0.01" min="0" inputmode="decimal"
+               value="{{ '%g'|format(si.actual_qty) if is_counted else '' }}"
+               placeholder="数量"
+               style="flex:1;min-width:0;padding:10px 12px;font-size:18px;font-weight:700;color:#0f172a;border:2px solid {% if is_counted %}#10b981{% else %}#cbd5e1{% endif %};border-radius:10px;text-align:center;font-family:ui-monospace,monospace;">
+        <span style="font-size:12px;color:#94a3b8;white-space:nowrap;">{{ si.unit }}</span>
+      </div>
+
+      {# 备注（可选，默认折叠） #}
+      <details style="margin-top:8px;" {% if si.notes %}open{% endif %}>
+        <summary style="font-size:11px;color:#94a3b8;cursor:pointer;user-select:none;">+ 备注</summary>
+        <input type="text" name="notes" value="{{ si.notes or '' }}" placeholder="损耗 / 误差原因等"
+               style="width:100%;box-sizing:border-box;margin-top:6px;padding:8px 10px;font-size:13px;border:1px solid #e2e8f0;border-radius:8px;">
+      </details>
+
+      <button type="submit" style="margin-top:10px;width:100%;padding:11px;background:#3b82f6;color:#fff;border:0;border-radius:10px;font-size:15px;font-weight:700;">
+        💾 保&nbsp;存
+      </button>
+    </form>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div style="margin-top:14px;padding:12px 14px;background:#fef3c7;border-radius:10px;font-size:11.5px;color:#92400e;line-height:1.65;">
+  <b>提示</b><br/>
+  • 每项填完点保存，自动回到本页继续盘下一项<br/>
+  • 实盘填 0 代表"实物为 0"；留空代表"还没盘"<br/>
+  • <b>有差异</b>的项会变橙色边框，方便回查<br/>
+  • 全部盘完后请到电脑端"确认提交盘点"，生成调整流水
+</div>
+
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "m/_base.html" %}
+{% block title %}盘点任务{% endblock %}
+{% block topbar_title %}📋 盘点任务{% endblock %}
+{% block topbar_sub %}{{ admin_store_label }} · {{ rows|length }} 个进行中{% endblock %}
+
+{% block content %}
+
+{% if request.query_params.get('msg') %}
+<div class="m-msg ok">{{ request.query_params.get('msg') }}</div>
+{% endif %}
+{% if request.query_params.get('err') %}
+<div class="m-msg err">{{ request.query_params.get('err') }}</div>
+{% endif %}
+
+{% if not rows %}
+  <div class="m-empty" style="padding-top:60px;">
+    <div class="emoji">✅</div>
+    <div>当前门店没有进行中的盘点</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:8px;">
+      盘点由超管在电脑端发起后，会出现在这里
+    </div>
+  </div>
+{% else %}
+  {% for r in rows %}
+  {% set pct = (r.counted * 100 // r.total) if r.total else 0 %}
+  <a class="m-card" href="/m/stocktake/{{ r.sess.id }}?filter=uncounted" style="display:block;text-decoration:none;color:inherit;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:11px;color:#94a3b8;">#{{ r.sess.id }} · {{ r.sess.created_at.strftime('%Y-%m-%d %H:%M') if r.sess.created_at else '—' }}</div>
+      <div style="font-size:11px;color:#d97706;font-weight:700;">{{ r.counted }} / {{ r.total }}</div>
+    </div>
+    <div style="font-size:16px;font-weight:700;color:#0f172a;line-height:1.35;">
+      {{ r.sess.name }}
+    </div>
+    {% if r.sess.operator %}
+    <div style="font-size:12px;color:#64748b;margin-top:4px;">发起人：{{ r.sess.operator }}</div>
+    {% endif %}
+    {# 进度条 #}
+    <div style="margin-top:10px;height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;">
+      <div style="width:{{ pct }}%;height:100%;background:linear-gradient(90deg,#10b981,#3b82f6);"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-top:4px;">
+      <span>已盘 {{ pct }}%</span>
+      <span>剩 {{ r.total - r.counted }} 项</span>
+    </div>
+  </a>
+  {% endfor %}
+{% endif %}
+
+<div style="margin-top:20px;padding:14px 16px;background:#fef3c7;border-radius:10px;font-size:12px;color:#92400e;line-height:1.6;">
+  <b>💡 使用说明</b><br/>
+  1. 点击进入盘点会话<br/>
+  2. 默认显示未盘项；可切换"全部 / 未盘 / 有差异"<br/>
+  3. 逐项填写实盘数量 → 点保存（自动跳下一项）<br/>
+  4. 全部盘完后回电脑确认提交
+</div>
+
+{% endblock %}

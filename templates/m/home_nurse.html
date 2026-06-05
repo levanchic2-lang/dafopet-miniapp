@@ -46,6 +46,16 @@
     {% if badges.pending_consents %}<span class="m-todo-badge" style="background:#8b5cf6;">{{ badges.pending_consents }}</span>
     {% else %}<span class="m-todo-arrow">›</span>{% endif %}
   </a>
+
+  <a class="m-todo-row" href="/m/stocktake">
+    <span class="m-todo-icon" style="background:#fde68a;">📋</span>
+    <div class="m-todo-body">
+      <div class="m-todo-title">盘点任务</div>
+      <div class="m-todo-sub">{% if badges.open_stocktakes %}{{ badges.open_stocktakes }} 个进行中{% else %}无进行中盘点{% endif %}</div>
+    </div>
+    {% if badges.open_stocktakes %}<span class="m-todo-badge" style="background:#d97706;">{{ badges.open_stocktakes }}</span>
+    {% else %}<span class="m-todo-arrow">›</span>{% endif %}
+  </a>
 </div>
 
 <div class="m-section-label">快捷操作</div>

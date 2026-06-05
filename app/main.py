@@ -19947,11 +19947,19 @@ def _m_badges(request: Request, db: Session) -> dict:
         cs_q = cs_q.filter(or_(ConsentTask.store == store_short, ConsentTask.store == ""))
     pending_consents = cs_q.count()
 
+    # 5. 进行中的盘点：StocktakeSession 没有 store 字段，按 StocktakeItem 关联的 InventoryItem.store 判断
+    st_q = db.query(StocktakeSession).filter(StocktakeSession.status == "open")
+    if store_short:
+        # 通过 session.name 包含门店名作为近似判断（创建时 session_name 含 store）
+        st_q = st_q.filter(StocktakeSession.name.like(f"%{store_short}%"))
+    open_stocktakes = st_q.count()
+
     return {
         "overdue_meds": overdue_meds,
         "pending_dispense": pending_dispense,
         "due_followups": due_followups,
         "pending_consents": pending_consents,
+        "open_stocktakes": open_stocktakes,
     }
 
 
@@ -20262,6 +20270,106 @@ async def m_dispensing_mark(
         p.status = "dispensed"
     db.commit()
     return RedirectResponse("/m/dispensing?msg=已配齐 ✓", status_code=303)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# M7 · 移动端循环盘点：列表 / 会话详情 / 保存
+# 用法：超管在桌面发起盘点单 → 医生/助理拿手机进入对应会话 → 逐项填实盘 → 保存
+# 提交（status=open → completed）仍由桌面操作，避免误提交
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.get("/m/stocktake", response_class=HTMLResponse)
+async def m_stocktake_list(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/stocktake", status_code=303)
+    store_short = _get_admin_store(request)
+    q = db.query(StocktakeSession).filter(StocktakeSession.status == "open")
+    if store_short:
+        q = q.filter(StocktakeSession.name.like(f"%{store_short}%"))
+    sessions = q.order_by(StocktakeSession.created_at.desc()).all()
+    # 每个会话算下进度
+    enriched = []
+    for s in sessions:
+        total = db.query(StocktakeItem).filter(StocktakeItem.session_id == s.id).count()
+        counted = db.query(StocktakeItem).filter(
+            StocktakeItem.session_id == s.id,
+            StocktakeItem.actual_qty.isnot(None),
+        ).count()
+        enriched.append({"sess": s, "total": total, "counted": counted})
+    ctx = _m_ctx(request, db, active_tab="")
+    ctx["rows"] = enriched
+    return templates.TemplateResponse(request, "m/stocktake_list.html", ctx)
+
+
+@app.get("/m/stocktake/{session_id}", response_class=HTMLResponse)
+async def m_stocktake_detail(session_id: int, request: Request, db: Session = Depends(get_db),
+                              q: str = Query(""), filter: str = Query("all")):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/stocktake/{session_id}", status_code=303)
+    sess = db.get(StocktakeSession, session_id)
+    if not sess:
+        raise HTTPException(404)
+    items_q = db.query(StocktakeItem).filter(StocktakeItem.session_id == session_id)
+    if q:
+        items_q = items_q.filter(StocktakeItem.item_name.ilike(f"%{q}%"))
+    if filter == "uncounted":
+        items_q = items_q.filter(StocktakeItem.actual_qty.is_(None))
+    elif filter == "variance":
+        items_q = items_q.filter(StocktakeItem.actual_qty.isnot(None),
+                                  StocktakeItem.variance != 0)
+    sit_items = items_q.order_by(StocktakeItem.category, StocktakeItem.item_name).all()
+    # 全量统计（不受筛选影响）
+    total = db.query(StocktakeItem).filter(StocktakeItem.session_id == session_id).count()
+    counted = db.query(StocktakeItem).filter(
+        StocktakeItem.session_id == session_id,
+        StocktakeItem.actual_qty.isnot(None),
+    ).count()
+    ctx = _m_ctx(request, db, active_tab="")
+    ctx.update({
+        "sess": sess, "sit_items": sit_items,
+        "q": q, "filter": filter,
+        "total": total, "counted": counted,
+        "categories": INVENTORY_CATEGORIES,
+    })
+    return templates.TemplateResponse(request, "m/stocktake_detail.html", ctx)
+
+
+@app.post("/m/stocktake/{session_id}/save-one")
+async def m_stocktake_save_one(
+    session_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    item_id: int = Form(...),
+    actual_qty: str = Form(""),
+    notes: str = Form(""),
+    next_url: str = Form(""),
+):
+    """单条保存（移动端逐项录入，省得整页提交）。"""
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/stocktake/{session_id}", status_code=303)
+    _require_csrf(request, csrf_token)
+    sess = db.get(StocktakeSession, session_id)
+    if not sess or sess.status != "open":
+        return RedirectResponse(f"/m/stocktake/{session_id}?err=盘点已完成或不存在", status_code=303)
+    si = db.query(StocktakeItem).filter(
+        StocktakeItem.id == item_id,
+        StocktakeItem.session_id == session_id,
+    ).first()
+    if not si:
+        return RedirectResponse(f"/m/stocktake/{session_id}?err=该项不存在", status_code=303)
+    v = (actual_qty or "").strip()
+    if v == "":
+        si.actual_qty = None
+        si.variance = 0.0
+    else:
+        try:
+            si.actual_qty = float(v)
+            si.variance = si.actual_qty - si.system_qty
+        except ValueError:
+            return RedirectResponse(f"/m/stocktake/{session_id}?err=数量格式错误", status_code=303)
+    si.notes = (notes or "").strip()[:500]
+    db.commit()
+    target = _safe_next(next_url, f"/m/stocktake/{session_id}?msg=已保存")
+    return RedirectResponse(target, status_code=303)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
