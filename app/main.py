@@ -9605,15 +9605,12 @@ def _visit_store_short(db: Session, v: Visit) -> str:
 
 def _resolve_vet_username(db: Session, vet_name: str) -> str:
     """把 Visit.vet_name（医生真名）映射到 AdminUser.username。
-    顺序：display_name 完全匹配 → username 完全匹配 → 返回 vet_name 原样。
+    用户名本身就是医生真名，所以只需 username 完全匹配 → 找不到则返回原样。
     用于 FollowUp.assigned_to，让"只看我的"能正确过滤。
     """
     name = (vet_name or "").strip()
     if not name:
         return ""
-    u = db.query(AdminUser).filter(AdminUser.display_name == name, AdminUser.is_active == True).first()
-    if u:
-        return u.username
     u = db.query(AdminUser).filter(AdminUser.username == name, AdminUser.is_active == True).first()
     if u:
         return u.username
@@ -20004,11 +20001,8 @@ async def m_doctor_home(request: Request, db: Session = Depends(get_db)):
 
     # 最近 5 个我开的病历
     uname = request.session.get("admin_username") or ""
-    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
-    display_name = (u.display_name if u and u.display_name else uname)
     my_visits = db.query(Visit).filter(
-        or_(Visit.vet_name == display_name, Visit.vet_name == uname,
-            Visit.created_by == uname),
+        or_(Visit.vet_name == uname, Visit.created_by == uname),
     ).order_by(Visit.id.desc()).limit(5).all()
     enriched_visits = []
     for v in my_visits:
@@ -20761,8 +20755,7 @@ async def m_visit_new(
     if cust:
         pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
     uname = request.session.get("admin_username") or ""
-    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
-    default_vet = (u.display_name if u and u.display_name else uname) or ""
+    default_vet = uname or ""
     ctx = _m_ctx(request, db, active_tab="customers")
     ctx.update({
         "mode": "new", "v": None,
@@ -20817,8 +20810,7 @@ async def m_vaccination_new(
         db.query(InventoryItem), InventoryItem.store, _get_admin_store(request)
     ).filter(InventoryItem.category == "vaccine", InventoryItem.is_active == True).all()
     uname = request.session.get("admin_username") or ""
-    u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
-    default_vet = (u.display_name if u and u.display_name else uname) or ""
+    default_vet = uname or ""
     ctx = _m_ctx(request, db, active_tab="customers")
     ctx.update({
         "cust": cust, "pet": pet, "pets": pets,

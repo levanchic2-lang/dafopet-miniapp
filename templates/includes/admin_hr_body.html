@@ -104,7 +104,6 @@
  <thead>
  <tr style="border-bottom:2px solid var(--border);">
  <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">用户名</th>
- <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">显示名（医生）</th>
  <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">角色</th>
  <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">门店</th>
  <th style="text-align:left;padding:0.5rem 0.5rem;font-weight:600;white-space:nowrap;">企微 userid</th>
@@ -123,17 +122,6 @@
  <td style="padding:0.55rem 0.75rem;white-space:nowrap;">
  {{ u.username }}
  {% if u.username == current_username %}<span style="font-size:0.75rem;color:var(--muted);margin-left:6px;">（当前）</span>{% endif %}
- </td>
- <td style="padding:0.55rem 0.75rem;white-space:nowrap;">
- <form method="post" action="/admin/users/{{ u.id }}/set-display-name"
-       style="margin:0;display:inline-flex;gap:.35rem;align-items:center;"
-       onsubmit="this.querySelector('button').textContent='保存中'">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-  <input type="text" name="display_name" value="{{ u.display_name or '' }}"
-         placeholder="医生真名" maxlength="80"
-         style="width:130px;font-size:.85rem;padding:.25rem .5rem;border:1px solid var(--border-strong);border-radius:6px;background:var(--card);"/>
-  <button type="submit" class="secondary" style="font-size:.78rem;padding:.25rem .65rem;white-space:nowrap;">保存</button>
- </form>
  </td>
  <td style="padding:0.55rem 0.75rem;white-space:nowrap;">
  {% if u.username != current_username %}
