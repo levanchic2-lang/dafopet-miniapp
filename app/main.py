@@ -10971,12 +10971,11 @@ def _is_sales_order_locked(db: Session, so: "SalesOrder") -> tuple[bool, str]:
 
 
 def _is_anesthesia_locked(db: Session, a: "AnesthesiaOrder") -> tuple[bool, str]:
+    """对齐处方单：voided / 关联收费已付 才锁。issued 本身不锁，可删。"""
     if not a:
         return False, ""
     if getattr(a, "status", "") == "voided":
         return True, "已作废"
-    if getattr(a, "status", "") == "issued":
-        return True, "已开具"
     if a.visit_id and _invoice_paid_for_visit(db, a.visit_id):
         return True, "关联收费单已付款"
     return False, ""
@@ -11849,6 +11848,53 @@ async def admin_anesth_print(order_id: int, request: Request, db: Session = Depe
         "pet_weight": pet_weight, "pet_age": pet_age,
         "clinic_name": clinic_name,
     })
+
+
+@app.post("/admin/anesthesia/{order_id}/delete")
+async def admin_anesth_delete(order_id: int, request: Request, db: Session = Depends(get_db),
+                              csrf_token: str = Form("")):
+    """未锁定的麻醉单 (issued 但 visit 未结、收费未付) 可真删除：
+       - 回库
+       - 物理删除该单关联的管控药台账条目（视为从未发生）
+       - 删 items + order
+       - 重同步发票
+    已锁定（关联收费已付）→ 必须走 /void。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    order = db.get(AnesthesiaOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    locked, reason = _is_anesthesia_locked(db, order)
+    if locked:
+        raise HTTPException(400, f"麻醉单已锁定（{reason}），不可删除。请使用「作废」。")
+    if order.visit_id:
+        v = db.get(Visit, order.visit_id)
+        if v and (v.status or "open") == "closed":
+            raise HTTPException(403, "所属病历已结束，麻醉单不可删除。如确需作废请使用「作废」。")
+    operator = request.session.get("admin_username", "admin")
+    visit_id = order.visit_id
+    # 1) 回库（非服务类）
+    for it in order.items:
+        inv = db.get(InventoryItem, it.item_id) if it.item_id else None
+        if inv and not inv.is_service and not it.is_service and (it.total_qty or 0) > 0:
+            _restore_inventory(db, inv.id, it.total_qty, "anesthesia",
+                               order_id, operator, f"删除麻醉单#{order_id}回库")
+    # 2) 物理删该单关联的台账条目（真删 = 视为从未发生）
+    db.query(NarcoticsLedger).filter(
+        NarcoticsLedger.anesth_order_id == order_id
+    ).delete(synchronize_session=False)
+    # 3) 删 order（cascade 删 items）
+    db.delete(order)
+    db.commit()
+    # 4) 重同步病例发票
+    if visit_id:
+        _sync_visit_invoice(db, visit_id, operator)
+        db.commit()
+    return RedirectResponse(
+        f"/admin/visits/{visit_id}?msg=麻醉单已删除" if visit_id else "/admin/visits",
+        status_code=303,
+    )
 
 
 @app.post("/admin/anesthesia/{order_id}/void")

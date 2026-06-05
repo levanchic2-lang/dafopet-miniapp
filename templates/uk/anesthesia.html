@@ -507,11 +507,22 @@ function confirmAnesthVoid(form, paidAmount) {
   </div>
   {% elif order and order.status == 'issued' and not readonly %}
   <div class="an-submit-bar">
-    <form method="post" action="/admin/anesthesia/{{ order.id }}/void" onsubmit="return confirm('作废后会自动回库 + 反写台账，确定吗？')" style="display:inline;">
+    {% if locked %}
+    <form method="post" action="/admin/anesthesia/{{ order.id }}/void" onsubmit="return confirmAnesthVoid(this, {{ paid_amount or 0 }})" style="display:inline;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="void_reason" value=""/>
+      <input type="hidden" name="refund_to_wallet" value=""/>
+      <input type="hidden" name="refund_amount" value="0"/>
       <button type="submit" class="uk-btn danger sm">作 废 此 麻 醉 单</button>
     </form>
-    <span style="color:var(--ink-3);font-size:9.5pt;font-style:italic;letter-spacing:1px;">已开具的麻醉单不可改，如需修改请作废后重开</span>
+    <span style="color:var(--ink-3);font-size:9.5pt;font-style:italic;letter-spacing:1px;">已锁定（{{ lock_reason }}），不能真删，只能作废</span>
+    {% else %}
+    <form method="post" action="/admin/anesthesia/{{ order.id }}/delete" onsubmit="return confirm('确认删除此麻醉单？\n\n· 已出库的药品自动回库\n· 关联的管控药台账条目一并物理删除\n· 此单将从数据库消失（不留作废痕迹）\n\n如该单已收过款或病历已结，请改用「作废」。')" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="uk-btn danger sm">删 除 此 麻 醉 单</button>
+    </form>
+    <span style="color:var(--ink-3);font-size:9.5pt;font-style:italic;letter-spacing:1px;">已开具的麻醉单不可改，如需修改请删除后重开</span>
+    {% endif %}
   </div>
   {% endif %}
 </form>
