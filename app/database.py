@@ -848,30 +848,33 @@ def _try_sqlite_migrations() -> None:
             ))
 
             # invoices: 补 store 列 + 索引；历史数据通过 visit.clinic_store / pet.store 回填
-            inv_cols = conn.execute(text("PRAGMA table_info(invoices)")).fetchall()
-            inv_col_names = {c[1] for c in inv_cols} if inv_cols else set()
-            if inv_cols and "store" not in inv_col_names:
-                conn.execute(text("ALTER TABLE invoices ADD COLUMN store VARCHAR(40) DEFAULT ''"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_invoices_store ON invoices(store)"))
-                # 回填：先按 visit.clinic_store → 短名映射；再用 pet.store 兜底
-                _store_map = {
-                    "大风动物医院（东环店）": "东环店",
-                    "大风动物医院（横岗店）": "横岗店",
-                }
-                for full, short in _store_map.items():
+            # 独立 try：即使外层早期迁移有冷不丁的失败也要把这步跑掉
+            try:
+                inv_cols = conn.execute(text("PRAGMA table_info(invoices)")).fetchall()
+                inv_col_names = {c[1] for c in inv_cols} if inv_cols else set()
+                if inv_cols and "store" not in inv_col_names:
+                    conn.execute(text("ALTER TABLE invoices ADD COLUMN store VARCHAR(40) DEFAULT ''"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_invoices_store ON invoices(store)"))
+                    _store_map = {
+                        "大风动物医院（东环店）": "东环店",
+                        "大风动物医院（横岗店）": "横岗店",
+                    }
+                    for full, short in _store_map.items():
+                        conn.execute(text(
+                            "UPDATE invoices SET store = :short "
+                            "WHERE (store IS NULL OR store = '') AND visit_id IN ("
+                            "  SELECT id FROM visits WHERE clinic_store = :full"
+                            ")"
+                        ), {"full": full, "short": short})
                     conn.execute(text(
-                        "UPDATE invoices SET store = :short "
-                        "WHERE (store IS NULL OR store = '') AND visit_id IN ("
-                        "  SELECT id FROM visits WHERE clinic_store = :full"
-                        ")"
-                    ), {"full": full, "short": short})
-                # pet.store 兜底（visit 没填或不对应时）
-                conn.execute(text(
-                    "UPDATE invoices SET store = ("
-                    "  SELECT store FROM pets WHERE pets.id = invoices.pet_id"
-                    ") "
-                    "WHERE (store IS NULL OR store = '') AND pet_id IS NOT NULL"
-                ))
+                        "UPDATE invoices SET store = ("
+                        "  SELECT store FROM pets WHERE pets.id = invoices.pet_id"
+                        ") "
+                        "WHERE (store IS NULL OR store = '') AND pet_id IS NOT NULL"
+                    ))
+                    conn.commit()
+            except Exception as _e:
+                print(f"[migrations] invoices.store skipped: {_e}")
 
             # vaccinations 疫苗接种记录
             conn.execute(text(
