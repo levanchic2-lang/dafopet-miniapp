@@ -1,0 +1,161 @@
+{% extends "uk/_base.html" %}
+{% block title %}合并结算 · {{ cust.name }}{% endblock %}
+
+{% block body %}
+<style>
+  .mp-head h1 { font-family:var(--font-serif); font-size:24pt; font-weight:700; color:var(--ink); margin:0 0 6px; letter-spacing:1px; }
+  .mp-head .meta { font-size:10pt; color:var(--ink-2); font-style:italic; margin-bottom:18px; }
+  .mp-head .meta a { color:var(--ink-2); }
+
+  .mp-card { background:var(--paper); padding:22px 24px; border-top:0.5px solid var(--hair); margin-bottom:0; }
+  .mp-card h2 { font-family:var(--font-serif); font-size:13pt; font-weight:700; color:var(--ink); letter-spacing:2px; margin:0 0 14px; }
+
+  .mp-tbl { width:100%; border-collapse:collapse; font-size:10.5pt; }
+  .mp-tbl th, .mp-tbl td { padding:9px 10px; border-bottom:0.5px solid var(--hair); vertical-align:middle; }
+  .mp-tbl th { font-family:var(--font-serif); letter-spacing:1.5px; color:var(--ink-3); font-weight:600; font-size:9.5pt; text-align:left; }
+  .mp-tbl td.num { font-family:var(--font-numeric); text-align:right; }
+  .mp-tbl tr.muted { color:var(--ink-3); }
+  .mp-tbl tr.selected { background:#fafaf6; }
+
+  .mp-total { display:flex; justify-content:space-between; align-items:baseline; padding:18px 24px; background:var(--bg); border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); }
+  .mp-total .lbl { font-family:var(--font-serif); font-size:11pt; letter-spacing:2px; color:var(--ink-2); }
+  .mp-total .val { font-family:var(--font-numeric); font-size:22pt; color:var(--ink); font-weight:700; }
+  .mp-total .val .sym { font-size:14pt; vertical-align:2pt; margin-right:2px; }
+
+  .mp-methods { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0; }
+  .mp-method-btn { padding:12px 22px; border:0.5px solid var(--hair); background:var(--paper); font-family:var(--font-serif); font-size:11pt; cursor:pointer; letter-spacing:1px; min-width:96px; text-align:center; }
+  .mp-method-btn.selected { background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:700; }
+
+  .mp-row2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:12px; }
+  .mp-field label { display:block; font-size:9pt; letter-spacing:1.5px; color:var(--ink-3); margin-bottom:4px; font-family:var(--font-serif); }
+  .mp-field input { width:100%; box-sizing:border-box; padding:8px 10px; font-family:var(--font-serif); font-size:11pt; color:var(--ink); background:var(--paper); border:0.5px solid var(--ink-3); border-radius:0; }
+  .mp-field input:focus { border-color:var(--ink); outline:none; }
+
+  .mp-submit-row { margin-top:24px; padding-top:18px; border-top:0.5px solid var(--ink); display:flex; justify-content:flex-end; gap:12px; }
+
+  .mp-empty { padding:60px 0; text-align:center; color:var(--ink-3); font-style:italic; font-family:var(--font-serif); }
+  .mp-tip { padding:10px 14px; margin-bottom:18px; background:#fef9f0; border-left:3px solid #6b4423; font-size:9.5pt; color:var(--ink-2); font-style:italic; line-height:1.7; }
+</style>
+
+<div style="margin:24px 0 16px; font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); font-style:italic;">
+  <a href="/admin/invoices" style="color:var(--ink-3);">收银台</a>
+  <span style="margin:0 8px; color:var(--ink-4);">›</span>
+  合并结算
+</div>
+
+<div class="mp-head">
+  <h1>合 并 结 算</h1>
+  <div class="meta">
+    客户：<a href="/admin/customer/{{ cust.id }}" style="border-bottom:0.5px solid var(--hair-2);">{{ cust.name }}</a>
+    {% if cust.phone %} · 手机 {{ cust.phone }}{% endif %}
+    {% if request.query_params.get('msg') %}
+    <span style="margin-left:16px; color:var(--accent-red);">{{ request.query_params.get('msg') }}</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if not rows %}
+<div class="mp-empty">该客户暂无待收账单</div>
+{% else %}
+
+<form method="post" action="/admin/cashier/multi-pay" id="mpForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+  <input type="hidden" name="method" id="mp-method-input" value="cash"/>
+
+  <div class="mp-tip">
+    勾选下面要一起结算的发票，选择一种支付方式 → 系统按每张未收金额逐张创建收款流水。<br/>
+    钱包 / 套餐 / 押金 / 优惠券因需精确调度，请回到单张发票详情页结算。
+  </div>
+
+  <div class="mp-card">
+    <h2>待 收 账 单</h2>
+    <table class="mp-tbl">
+      <thead>
+        <tr>
+          <th style="width:30px;"><input type="checkbox" id="mp-all" checked onclick="toggleAll(this)"/></th>
+          <th>单号</th>
+          <th>宠物</th>
+          <th>日期</th>
+          <th class="num">未收金额</th>
+        </tr>
+      </thead>
+      <tbody id="mp-tbody">
+      {% for r in rows %}
+        <tr class="selected">
+          <td><input type="checkbox" name="invoice_ids" value="{{ r.inv.id }}" checked class="mp-cb" onchange="onRowToggle(this)"/></td>
+          <td><a href="/admin/invoices/{{ r.inv.id }}" target="_blank" style="border-bottom:0.5px solid var(--hair-2);">{{ r.inv.invoice_no }}</a></td>
+          <td>{{ r.pet.name if r.pet else '—' }}</td>
+          <td class="muted">{{ r.inv.invoice_date or '—' }}</td>
+          <td class="num" data-amt="{{ r.outstanding }}"><b>¥ {{ '%.2f'|format(r.outstanding) }}</b></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mp-total">
+    <span class="lbl">已 选 合 计</span>
+    <span class="val"><span class="sym">¥</span><span id="mp-grand">{{ '%.2f'|format(grand_total) }}</span></span>
+  </div>
+
+  <div class="mp-card">
+    <h2>支 付 方 式</h2>
+    <div class="mp-methods">
+      <button type="button" class="mp-method-btn selected" data-val="cash" onclick="selectMethod(this)">现 金</button>
+      <button type="button" class="mp-method-btn" data-val="wechat" onclick="selectMethod(this)">微 信</button>
+      <button type="button" class="mp-method-btn" data-val="alipay" onclick="selectMethod(this)">支 付 宝</button>
+      <button type="button" class="mp-method-btn" data-val="shouqianba" onclick="selectMethod(this)">收 钱 吧</button>
+      <button type="button" class="mp-method-btn" data-val="meituan" onclick="selectMethod(this)">美 团</button>
+      <button type="button" class="mp-method-btn" data-val="third_party" onclick="selectMethod(this)">第 三 方</button>
+    </div>
+
+    <div class="mp-row2">
+      <div class="mp-field">
+        <label>外部流水号（可选 · 跨所有勾选单共用）</label>
+        <input type="text" name="ref_no" placeholder="微信 / 支付宝 / 收钱吧 交易号"/>
+      </div>
+      <div class="mp-field" style="display:flex; align-items:flex-end;">
+        <span style="font-size:9.5pt; color:var(--ink-3); font-style:italic;">每张单将单独生成一笔收款流水</span>
+      </div>
+    </div>
+
+    <div class="mp-submit-row">
+      <a href="/admin/invoices" class="uk-btn ghost">取 消</a>
+      <button type="submit" class="uk-btn primary" id="mp-submit">确&nbsp;认&nbsp;结&nbsp;算&nbsp;<span id="mp-cnt">{{ rows|length }}</span>&nbsp;单 · ¥<span id="mp-grand-btn">{{ '%.2f'|format(grand_total) }}</span></button>
+    </div>
+  </div>
+</form>
+
+<script>
+function selectMethod(btn) {
+  document.querySelectorAll('.mp-method-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('mp-method-input').value = btn.dataset.val;
+}
+function toggleAll(cb) {
+  document.querySelectorAll('.mp-cb').forEach(x => { x.checked = cb.checked; });
+  recalcGrand();
+}
+function onRowToggle(cb) {
+  cb.closest('tr').classList.toggle('selected', cb.checked);
+  // 同步全选框
+  const all = document.querySelectorAll('.mp-cb');
+  const checked = document.querySelectorAll('.mp-cb:checked');
+  document.getElementById('mp-all').checked = (all.length === checked.length);
+  recalcGrand();
+}
+function recalcGrand() {
+  let sum = 0, cnt = 0;
+  document.querySelectorAll('.mp-cb:checked').forEach(cb => {
+    const amt = parseFloat(cb.closest('tr').querySelector('[data-amt]').dataset.amt) || 0;
+    sum += amt; cnt += 1;
+  });
+  document.getElementById('mp-grand').textContent = sum.toFixed(2);
+  document.getElementById('mp-grand-btn').textContent = sum.toFixed(2);
+  document.getElementById('mp-cnt').textContent = cnt;
+  document.getElementById('mp-submit').disabled = (cnt === 0);
+}
+</script>
+{% endif %}
+{% endblock %}

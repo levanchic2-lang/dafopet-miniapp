@@ -15675,12 +15675,34 @@ async def admin_invoices_list(
         "unpaid_count": len(unpaid_all),
         "unpaid_total": round(sum((i.total_amount or 0) for i in unpaid_all), 2),
     }
+    # 同客户多张未付发票聚合（用于顶部合并结算入口）
+    multi_pay_groups = []
+    if status in ("", "unpaid"):
+        _unpaid_q = db.query(Invoice).filter(
+            Invoice.payment_status == "unpaid",
+            Invoice.customer_id.is_not(None),
+        )
+        if wb_store:
+            _unpaid_q = _unpaid_q.filter(Invoice.store == wb_store)
+        _by_cust: dict[int, list] = {}
+        for u in _unpaid_q.all():
+            _by_cust.setdefault(u.customer_id, []).append(u)
+        for cid, lst in _by_cust.items():
+            if len(lst) >= 2:
+                c = db.get(Customer, cid)
+                multi_pay_groups.append({
+                    "customer": c,
+                    "count": len(lst),
+                    "total": round(sum(float(i.total_amount or 0) for i in lst), 2),
+                })
+        multi_pay_groups.sort(key=lambda g: -g["total"])
     return templates.TemplateResponse(request, "uk/invoices.html", {
         "invoices": invoices,
         "cust_map": cust_map,
         "inv_status_zh": _INV_STATUS_ZH,
         "inv_pay_zh": _INV_PAY_ZH,
         "inv_stats": inv_stats,
+        "multi_pay_groups": multi_pay_groups,
         "q": q,
         "status": status,
         "wb_store": wb_store,
@@ -15688,6 +15710,100 @@ async def admin_invoices_list(
         "stores": ["东环店", "横岗店"],
         "csrf_token": _get_csrf_token(request),
     })
+
+
+@app.get("/admin/cashier/multi-pay", response_class=HTMLResponse)
+async def admin_cashier_multi_pay_page(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """同客户多张未付发票合并结算页。"""
+    require_admin(request)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404, "客户不存在")
+    admin_store = _get_admin_store(request)
+    q = db.query(Invoice).filter(
+        Invoice.customer_id == customer_id,
+        Invoice.payment_status == "unpaid",
+    )
+    if admin_store:
+        q = q.filter(Invoice.store == admin_store)
+    invoices = q.order_by(Invoice.id.asc()).all()
+    # 计算每张 outstanding（=total - 已付）
+    rows = []
+    grand_total = 0.0
+    for inv in invoices:
+        paid = _invoice_paid_sum(db, inv.id)
+        outstanding = max(0.0, float(inv.total_amount or 0) - paid)
+        if outstanding <= 0:
+            continue
+        rows.append({"inv": inv, "outstanding": outstanding, "pet": inv.pet})
+        grand_total += outstanding
+    return templates.TemplateResponse(request, "uk/cashier_multi_pay.html", {
+        "cust": cust,
+        "rows": rows,
+        "grand_total": round(grand_total, 2),
+        "wb_store": admin_store or "",
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/cashier/multi-pay")
+async def admin_cashier_multi_pay_submit(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """提交合并结算：对选中的每张发票按 outstanding 创建 Payment + 自动结清。"""
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    customer_id = int(form.get("customer_id") or 0)
+    if not customer_id:
+        raise HTTPException(400, "customer_id 必填")
+    method = str(form.get("method") or "cash").strip()
+    ref_no = (form.get("ref_no") or "").strip()[:120]
+    operator = request.session.get("admin_username", "admin")
+    store = _get_admin_store(request)
+    # 仅支持简单支付方式（钱包/套餐/押金/优惠券需精确调度，请单笔结算）
+    simple_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party"}
+    if method not in simple_methods:
+        return RedirectResponse(
+            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg=合并结算暂只支持现金/微信/支付宝/收钱吧/美团/第三方",
+            status_code=303,
+        )
+    inv_ids = [int(x) for x in form.getlist("invoice_ids") if str(x).isdigit()]
+    if not inv_ids:
+        return RedirectResponse(
+            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg=请勾选至少一张待收单",
+            status_code=303,
+        )
+    paid_count = 0
+    paid_total = 0.0
+    for iid in inv_ids:
+        inv = db.get(Invoice, iid)
+        if not inv or inv.customer_id != customer_id or inv.payment_status == "paid":
+            continue
+        outstanding = max(0.0, float(inv.total_amount or 0) - _invoice_paid_sum(db, inv.id))
+        if outstanding <= 0:
+            continue
+        db.add(Payment(
+            invoice_id=inv.id, customer_id=customer_id,
+            method=method, amount=round(outstanding, 2),
+            ref_no=ref_no, status="success",
+            store=store, operator=operator,
+            note=f"合并结算（{len(inv_ids)} 单）",
+        ))
+        db.flush()
+        _invoice_recompute_status(db, inv)
+        paid_count += 1
+        paid_total += outstanding
+    db.commit()
+    return RedirectResponse(
+        f"/admin/invoices?status=paid&msg=已合并结算 {paid_count} 单 · ¥{paid_total:.2f}",
+        status_code=303,
+    )
 
 
 @app.get("/admin/invoices/create", response_class=HTMLResponse)

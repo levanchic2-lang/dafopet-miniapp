@@ -113,6 +113,24 @@
   {% endfor %}
 </div>
 
+{% if multi_pay_groups %}
+<div style="margin:14px 0 18px; padding:14px 18px; background:#fef9f0; border-left:3px solid #6b4423;">
+  <div style="font-family:var(--font-serif); font-size:11pt; letter-spacing:1.5px; color:var(--ink); margin-bottom:8px;">
+    <b>同 客 户 多 张 待 收</b><span style="color:var(--ink-3); font-style:italic; font-size:9.5pt; margin-left:10px;">可一次勾选多张合并结算</span>
+  </div>
+  <div style="display:flex; gap:18px; flex-wrap:wrap;">
+    {% for g in multi_pay_groups %}
+    <a href="/admin/cashier/multi-pay?customer_id={{ g.customer.id }}" style="display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border:0.5px solid var(--ink-3); background:var(--paper); text-decoration:none; color:var(--ink); font-family:var(--font-serif); font-size:10pt;">
+      <span><b>{{ g.customer.name }}</b></span>
+      <span style="color:var(--ink-3); font-style:italic;">{{ g.count }} 单</span>
+      <span style="font-family:var(--font-numeric); color:var(--accent-red); font-weight:700;">¥{{ '%.2f'|format(g.total) }}</span>
+      <span style="color:var(--ink-3); font-size:9pt;">→ 合并结算</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% if invoices %}
 {% set _SP = {'cat':'猫','dog':'犬','other':'其他'} %}
 {% set _GN = {'male':'♂','female':'♀','unknown':''} %}
