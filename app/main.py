@@ -10786,7 +10786,14 @@ async def api_followup_badge(request: Request, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 _PRESC_STATUS_ZH = {"draft": "草稿", "issued": "已开具", "dispensed": "已发药"}
-_DRUG_TYPE_ZH = {"oral": "口服", "topical": "外用", "injection": "注射", "eye_drop": "滴眼", "other": "其他"}
+_DRUG_TYPE_ZH = {
+    "oral": "口服", "topical": "外用",
+    "subcutaneous": "皮下", "intramuscular": "肌肉", "intravenous": "静脉",
+    "injection": "注射（其他）",
+    "eye_drop": "滴眼", "ear_drop": "滴耳", "nasal": "鼻喷",
+    "nebulize": "雾化", "enema": "灌肠", "rectal": "直肠给药",
+    "service": "处置 / 服务", "other": "其他",
+}
 
 
 def _parse_presc_items(form_data) -> list[dict]:

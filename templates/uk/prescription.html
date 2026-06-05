@@ -151,7 +151,7 @@
   .drug-table input[readonly] { background: var(--bg); font-weight: 700; }
   .drug-table .col-num input { text-align: right; font-family: var(--font-numeric); }
   .drug-table .col-unit input { text-align: center; }
-  /* 住院发药时刻 popover */
+  /* 住院发药时刻 popover：position:fixed + JS 计算，避免被 table/section overflow 裁剪 */
   .sch-cell { position: relative; }
   .sch-toggle {
     position: absolute; right: 3px; bottom: 3px;
@@ -167,13 +167,26 @@
     border-color: var(--accent-amber);
   }
   .sch-pop {
-    display: none; position: absolute;
-    top: calc(100% + 4px); right: 0; z-index: 200;
+    display: none; position: fixed; z-index: 9999;
     background: var(--paper); border: 0.5px solid var(--ink);
-    padding: 12px 14px; width: 220px;
-    box-shadow: 0 6px 18px rgba(0,0,0,.08);
+    padding: 12px 14px; width: 240px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.18);
   }
   .sch-pop.open { display: block; }
+
+  /* 服务类品目：灰显投药信息 */
+  tr.is-service .col-num input,
+  tr.is-service .col-unit input,
+  tr.is-service td > select[name^="drug_type"],
+  tr.is-service .total-times {
+    color: var(--ink-3); font-style: italic;
+  }
+  tr.is-service input[disabled],
+  tr.is-service select[disabled] {
+    background: #f6f6f3; color: var(--ink-3);
+    cursor: not-allowed;
+  }
+  tr.is-service .total-times::after { content: ""; }
   .sch-pop label {
     font-family: var(--font-serif); font-size: 9pt;
     color: var(--ink-3); letter-spacing: 2px;
@@ -814,6 +827,9 @@ function selectInventoryItem(idx, it, input) {
   if (doseUnitEl && !doseUnitEl.value) doseUnitEl.value = it.unit || '';
   var itemUnitEl = document.getElementById('item_unit_' + idx);
   if (itemUnitEl && !itemUnitEl.value) itemUnitEl.value = it.unit || '';
+  // 服务类品目：行进入"服务模式" → 灰显投药字段
+  var tr = input.closest('tr');
+  if (tr) _toggleServiceRow(tr, !!it.is_service);
   closeDropdown(idx);
   recalcRow(idx);
 }
@@ -892,12 +908,68 @@ function addDrugRow() {
   document.getElementById('drug-tbody').insertAdjacentHTML('beforeend', row);
 }
 
-// 住院发药时刻 popover
+// 住院发药时刻 popover：fixed 定位，按按钮位置算坐标，超出视口自动翻到按钮上方
+function _positionSchPop(btn, pop) {
+  var r = btn.getBoundingClientRect();
+  var popW = 240, popH = 130;
+  // 默认放按钮右下；若右溢出 → 贴右边；若下溢出 → 翻到按钮上方
+  var left = r.right - popW;
+  if (left < 8) left = 8;
+  var top = r.bottom + 6;
+  if (top + popH > window.innerHeight - 8) top = r.top - popH - 6;
+  if (top < 8) top = 8;
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+}
 function toggleSchedule(btn) {
   var pop = btn.nextElementSibling;
   document.querySelectorAll('.sch-pop.open').forEach(function(p){ if (p !== pop) p.classList.remove('open'); });
+  var willOpen = !pop.classList.contains('open');
   pop.classList.toggle('open');
-  if (pop.classList.contains('open')) { var inp = pop.querySelector('input'); if (inp) inp.focus(); }
+  if (willOpen) {
+    _positionSchPop(btn, pop);
+    var inp = pop.querySelector('input'); if (inp) inp.focus();
+  }
+}
+// 窗口缩放/滚动时实时校正打开的 popover
+window.addEventListener('scroll', function() {
+  document.querySelectorAll('.sch-pop.open').forEach(function(p){
+    var btn = p.previousElementSibling;
+    if (btn) _positionSchPop(btn, p);
+  });
+}, true);
+window.addEventListener('resize', function() {
+  document.querySelectorAll('.sch-pop.open').forEach(function(p){
+    var btn = p.previousElementSibling;
+    if (btn) _positionSchPop(btn, p);
+  });
+});
+
+// 服务类品目：灰显投药信息（保留数量/价格/小计）
+function _toggleServiceRow(tr, isService) {
+  tr.classList.toggle('is-service', !!isService);
+  var disableFields = [
+    'drug_type', 'dose_amount', 'dose_unit',
+    'times_per_day', 'duration_days', 'schedule_times',
+  ];
+  disableFields.forEach(function(f) {
+    var el = tr.querySelector('[name^="' + f + '_"]');
+    if (!el) return;
+    if (isService) {
+      // 清空数值字段（保留 drug_type → 自动设为 service）
+      if (f === 'drug_type') {
+        el.value = 'service';
+      } else {
+        el.value = '';
+      }
+      el.disabled = true;
+    } else {
+      el.disabled = false;
+    }
+  });
+  // 总次单元格显示 "—"
+  var tt = tr.querySelector('.total-times');
+  if (tt && isService) tt.textContent = '—';
 }
 function closeSchedule(btn) {
   var pop = btn.closest('.sch-pop');
@@ -931,6 +1003,11 @@ document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('input[name^="times_per_day_"]').forEach(function(el) {
     var idx = el.name.split('_').pop();
     recalcTotalTimes(idx);
+  });
+  // 已存档的处方：drug_type==service 的行直接灰显
+  document.querySelectorAll('#drug-tbody tr').forEach(function(tr) {
+    var sel = tr.querySelector('select[name^="drug_type_"]');
+    if (sel && sel.value === 'service') _toggleServiceRow(tr, true);
   });
 });
 
