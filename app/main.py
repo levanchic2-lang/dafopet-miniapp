@@ -6463,6 +6463,9 @@ async def page_admin_customers(
     """
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
+    # 手机 UA 进桌面工作台 → 直接转手机 PWA。force_desktop cookie / ?desktop=1 可绕过
+    if _is_mobile_ua(request):
+        return RedirectResponse("/m", status_code=302)
     PAGE_SIZE = 30
     query = db.query(Customer)
     q = q.strip()
