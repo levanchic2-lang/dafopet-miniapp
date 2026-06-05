@@ -7744,6 +7744,7 @@ async def admin_wallet_recharge(
         total_amount    = amt,
         payment_status  = "unpaid",
         notes           = notes_payload,
+        store           = _get_op_store(request) or "",
         created_by      = admin_name,
     )
     db.add(inv)
@@ -14815,6 +14816,22 @@ _INV_PAY_ZH    = {
 }
 
 
+def _resolve_invoice_store(db: Session, *, visit_id=None, pet_id=None, customer_id=None, fallback: str = "") -> str:
+    """推断发票应归属的门店短名。
+    优先级：visit.clinic_store → pet.store → fallback（通常传 _get_op_store(request)）"""
+    if visit_id:
+        v = db.get(Visit, visit_id)
+        if v and v.clinic_store:
+            short = _STORE_FULL_TO_SHORT.get(v.clinic_store, "")
+            if short:
+                return short
+    if pet_id:
+        p = db.get(Pet, pet_id)
+        if p and p.store:
+            return p.store
+    return fallback or ""
+
+
 def _gen_invoice_no(db: Session) -> str:
     """生成收费单号：YYYYMMDD-N（当天第几张）"""
     from datetime import date
@@ -14901,6 +14918,7 @@ def _sync_sales_order_invoice(db: Session, order_id: int, admin_name: str = "") 
             total_amount=round(subtotal_sum, 2),
             payment_status="unpaid",
             notes=f"销售单 #{order_id}",
+            store=_resolve_invoice_store(db, pet_id=order.pet_id, customer_id=order.customer_id),
             created_by=admin_name or "system",
         )
         db.add(inv)
@@ -15071,6 +15089,7 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
             inv.total_amount = 0.0
         return inv
 
+    _resolved_store = _resolve_invoice_store(db, visit_id=visit_id, pet_id=visit.pet_id, customer_id=visit.customer_id)
     if inv is None:
         inv = Invoice(
             invoice_no=_gen_invoice_no(db),
@@ -15081,6 +15100,7 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
             payment_status="unpaid",
             subtotal=subtotal_sum,
             total_amount=subtotal_sum,
+            store=_resolved_store,
             created_by=admin_name or "auto",
         )
         db.add(inv)
@@ -15093,6 +15113,8 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         inv.subtotal = subtotal_sum
         inv.total_amount = round(subtotal_sum - (inv.discount_amount or 0), 2)
         inv.updated_at = datetime.utcnow()
+        if not (inv.store or "") and _resolved_store:
+            inv.store = _resolved_store
         # 顺便同步客户/宠物（visit 可能换过宠物或主人）
         if visit.customer_id:
             inv.customer_id = visit.customer_id
@@ -15505,9 +15527,20 @@ async def admin_invoices_list(
     db: Session = Depends(get_db),
     q: str = "",
     status: str = "",
+    store: str = "",
 ):
     require_admin(request)
+    # 门店过滤：staff 自动锁本店；superadmin 通过 ?store= 切换（"" = 全部）
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        wb_store = admin_store
+    else:
+        wb_store = (store or "").strip()
+    is_super = (request.session.get("admin_role") == "superadmin")
+
     query = db.query(Invoice).order_by(Invoice.id.desc())
+    if wb_store:
+        query = query.filter(Invoice.store == wb_store)
     if status:
         query = query.filter(Invoice.payment_status == status)
     if q:
@@ -15521,18 +15554,24 @@ async def admin_invoices_list(
     for inv in invoices:
         if inv.customer_id and inv.customer_id not in cust_map:
             cust_map[inv.customer_id] = db.get(Customer, inv.customer_id)
-    # 统计数据
+    # 统计数据（同样按 wb_store 过滤）
     from datetime import date as _date
     today_str = _date.today().isoformat()
-    today_paid_sum = db.query(Invoice).filter(
+    def _stat_q():
+        q2 = db.query(Invoice)
+        if wb_store:
+            q2 = q2.filter(Invoice.store == wb_store)
+        return q2
+    today_paid_sum = _stat_q().filter(
         Invoice.payment_status == "paid",
         Invoice.invoice_date == today_str,
     ).all()
+    unpaid_all = _stat_q().filter(Invoice.payment_status == "unpaid").all()
     inv_stats = {
         "today_paid_total": round(sum((i.total_amount or 0) for i in today_paid_sum), 2),
         "today_paid_count": len(today_paid_sum),
-        "unpaid_count": db.query(Invoice).filter(Invoice.payment_status == "unpaid").count(),
-        "unpaid_total": round(sum((i.total_amount or 0) for i in db.query(Invoice).filter(Invoice.payment_status == "unpaid").all()), 2),
+        "unpaid_count": len(unpaid_all),
+        "unpaid_total": round(sum((i.total_amount or 0) for i in unpaid_all), 2),
     }
     return templates.TemplateResponse(request, "uk/invoices.html", {
         "invoices": invoices,
@@ -15542,6 +15581,9 @@ async def admin_invoices_list(
         "inv_stats": inv_stats,
         "q": q,
         "status": status,
+        "wb_store": wb_store,
+        "is_super": is_super,
+        "stores": ["东环店", "横岗店"],
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -15668,6 +15710,7 @@ async def admin_invoice_create(
         total_amount    = total,
         payment_status  = "unpaid",
         notes           = notes,
+        store           = _resolve_invoice_store(db, visit_id=visit_id, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
         created_by      = admin_name,
     )
     db.add(inv)
@@ -16486,6 +16529,7 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
             total_amount    = charge_amount,
             payment_status  = "unpaid",
             notes           = f"疫苗接种 #{vacc.id}",
+            store           = _resolve_invoice_store(db, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
             created_by      = admin_name,
         )
         db.add(inv)
@@ -18635,6 +18679,7 @@ async def admin_deworming_create(
             total_amount    = charge_amount,
             payment_status  = "unpaid",
             notes           = f"驱虫 #{rec.id}",
+            store           = _resolve_invoice_store(db, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
             created_by      = admin_name,
         )
         db.add(inv)
@@ -18875,6 +18920,7 @@ async def admin_grooming_create(request: Request, db: Session = Depends(get_db))
             subtotal=actual_charge, discount_amount=0.0, total_amount=actual_charge,
             payment_status="unpaid",
             notes=f"美容 #{rec.id}",
+            store=_resolve_invoice_store(db, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
             created_by=operator,
         )
         db.add(inv)

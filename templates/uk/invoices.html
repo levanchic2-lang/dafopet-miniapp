@@ -82,18 +82,34 @@
 </div>
 {% endif %}
 
+{# 门店切换条 #}
+<div style="margin-bottom:14px;padding:.55rem 1rem;background:var(--bg);border:0.5px solid var(--hair);display:flex;align-items:center;gap:1rem;flex-wrap:wrap;font-family:var(--font-serif);">
+  <span style="font-size:.92rem;letter-spacing:1px;">当前门店：<b style="color:var(--ink);">{{ wb_store or '全部' }}</b></span>
+  {% if is_super %}
+  <span style="color:var(--ink-3);font-style:italic;font-size:.85rem;">切换 →</span>
+  <a href="?store=&status={{ status }}{% if q %}&q={{ q }}{% endif %}" class="iv-btn ghost sm" style="text-decoration:none;{% if not wb_store %}background:var(--ink);color:var(--paper);border-color:var(--ink);{% endif %}">全 部</a>
+  {% for s in stores %}
+  <a href="?store={{ s }}&status={{ status }}{% if q %}&q={{ q }}{% endif %}" class="iv-btn ghost sm" style="text-decoration:none;{% if wb_store == s %}background:var(--ink);color:var(--paper);border-color:var(--ink);{% endif %}">{{ s }}</a>
+  {% endfor %}
+  <span style="margin-left:auto;color:var(--ink-3);font-style:italic;font-size:.82rem;">超管可切换；员工自动锁本店</span>
+  {% else %}
+  <span style="margin-left:auto;color:var(--ink-3);font-style:italic;font-size:.82rem;">员工账号自动锁定本店</span>
+  {% endif %}
+</div>
+
 <div class="iv-filter">
   <form method="get">
     <input name="q" value="{{ q }}" placeholder="搜单号 / 客户 / 宠物" style="flex:1; min-width:200px;"/>
     <input type="hidden" name="status" value="{{ status }}"/>
+    <input type="hidden" name="store" value="{{ wb_store }}"/>
     <button type="submit" class="iv-btn ghost">搜&nbsp;索</button>
-    {% if q %}<a href="/admin/invoices?status={{ status }}" class="iv-btn ghost">清&nbsp;除</a>{% endif %}
+    {% if q %}<a href="/admin/invoices?status={{ status }}&store={{ wb_store }}" class="iv-btn ghost">清&nbsp;除</a>{% endif %}
   </form>
 </div>
 
 <div class="iv-tabs">
   {% for val, label in [('','全部'),('unpaid','待收款'),('paid','已收款'),('cancelled','已取消')] %}
-  <a href="/admin/invoices?status={{ val }}{% if q %}&q={{ q }}{% endif %}" class="iv-tab {% if status == val %}active{% endif %}">{{ label }}</a>
+  <a href="/admin/invoices?status={{ val }}&store={{ wb_store }}{% if q %}&q={{ q }}{% endif %}" class="iv-tab {% if status == val %}active{% endif %}">{{ label }}</a>
   {% endfor %}
 </div>
 
