@@ -1,0 +1,255 @@
+{% extends "uk/_base.html" %}
+{% block title %}押金 #{{ dep.id }} · {{ cust.name if cust else '客户' }}{% endblock %}
+
+{% block body %}
+<style>
+  .dd-bc { margin:24px 0 16px; font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); font-style:italic; }
+  .dd-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .dd-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .dd-bc .sep { margin:0 8px; color:var(--ink-4); }
+
+  .dd-head h1 { font-family:var(--font-serif); font-size:26pt; font-weight:700; color:var(--ink); margin:0 0 6px; letter-spacing:1px; line-height:1.15; }
+  .dd-head h1 .no { font-family:var(--font-numeric); font-size:18pt; color:var(--ink-3); font-weight:400; vertical-align:4px; margin-left:6px; }
+  .dd-head h1 .pill { display:inline-block; padding:3px 12px; margin-left:14px; border:0.5px solid var(--ink-3); font-size:9pt; letter-spacing:2px; color:var(--ink-2); vertical-align:8px; font-family:var(--font-serif); }
+  .dd-head h1 .pill.held    { color:#7a4a14; border-color:#7a4a14; }
+  .dd-head h1 .pill.applied { color:#1d4d3a; border-color:#1d4d3a; }
+  .dd-head h1 .pill.refunded{ color:var(--ink-3); }
+  .dd-head h1 .pill.cancelled{ color:var(--ink-3); background:var(--bg); }
+  .dd-meta { font-size:10pt; color:var(--ink-2); font-style:italic; margin-bottom:18px; }
+  .dd-meta .sep { margin:0 8px; color:var(--ink-4); }
+
+  .dd-grid { display:grid; grid-template-columns:2fr 1fr; gap:24px; }
+  @media (max-width:960px) { .dd-grid { grid-template-columns:1fr; } }
+
+  .dd-sec { background:var(--paper); padding:22px 24px; border-top:0.5px solid var(--hair); margin-bottom:0; }
+  .dd-sec h2 { font-family:var(--font-serif); font-size:13pt; font-weight:700; color:var(--ink); letter-spacing:2px; margin:0 0 14px; display:flex; align-items:center; justify-content:space-between; }
+  .dd-sec h2 .count { font-size:9pt; color:var(--ink-3); letter-spacing:1.5px; font-weight:400; font-style:italic; }
+
+  .dd-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:0; border:0.5px solid var(--hair); }
+  .dd-kpi { padding:18px 16px; border-right:0.5px solid var(--hair); text-align:center; }
+  .dd-kpi:last-child { border-right:0; }
+  .dd-kpi .lbl { font-size:9pt; letter-spacing:1.5px; color:var(--ink-3); font-family:var(--font-serif); margin-bottom:6px; }
+  .dd-kpi .val { font-family:var(--font-numeric); font-size:22pt; color:var(--ink); font-weight:700; }
+  .dd-kpi .val.green { color:var(--accent-green); }
+  .dd-kpi .val.red   { color:var(--accent-red); }
+  .dd-kpi .val.amber { color:#7a4a14; }
+  .dd-kpi .val .sym  { font-size:13pt; vertical-align:2pt; margin-right:1px; }
+
+  .dd-tbl { width:100%; border-collapse:collapse; font-size:10.5pt; }
+  .dd-tbl th, .dd-tbl td { padding:9px 10px; border-bottom:0.5px solid var(--hair); }
+  .dd-tbl th { font-family:var(--font-serif); letter-spacing:1.5px; font-size:9pt; color:var(--ink-3); font-weight:600; text-align:left; }
+  .dd-tbl td.num { font-family:var(--font-numeric); text-align:right; }
+  .dd-tbl tr:last-child td { border-bottom:0; }
+
+  .dd-meta-tbl { width:100%; border-collapse:collapse; font-size:10.5pt; }
+  .dd-meta-tbl td { padding:6px 0; border-bottom:0.5px dashed var(--hair); vertical-align:top; }
+  .dd-meta-tbl td:first-child { width:30%; color:var(--ink-3); font-style:italic; letter-spacing:1px; padding-right:10px; }
+  .dd-meta-tbl tr:last-child td { border-bottom:0; }
+
+  .dd-empty { padding:24px 0; text-align:center; color:var(--ink-3); font-style:italic; font-size:10pt; }
+  .dd-aside h3 { font-family:var(--font-serif); font-size:11pt; letter-spacing:2px; color:var(--ink); margin:0 0 12px; }
+  .dd-aside .btn-row { display:flex; flex-direction:column; gap:8px; }
+  .dd-note { white-space:pre-wrap; font-size:10pt; color:var(--ink-2); line-height:1.7; padding:8px 0; }
+</style>
+
+<div class="dd-bc">
+  <a href="/admin/customers/{{ cust.id }}?tab=deposits">{{ cust.name if cust else '客户' }}</a>
+  <span class="sep">›</span>
+  <span>押金 #{{ dep.id }}</span>
+</div>
+
+<div class="dd-head">
+  <h1>
+    {{ category_zh.get(dep.category, dep.category) }}<span class="no">#{{ dep.id }}</span>
+    {% if dep.status == 'held' %}<span class="pill held">在押</span>
+    {% elif dep.status == 'applied' %}<span class="pill applied">已抵扣</span>
+    {% elif dep.status == 'refunded' %}<span class="pill refunded">已退款</span>
+    {% elif dep.status == 'partial_refund' %}<span class="pill held">部分退还</span>
+    {% elif dep.status == 'cancelled' %}<span class="pill cancelled">已作废</span>
+    {% endif %}
+  </h1>
+  <div class="dd-meta">
+    {{ cust.name if cust else '—' }}
+    {% if cust and cust.phone %} <span class="sep">·</span> {{ cust.phone }}{% endif %}
+    {% if pet %} <span class="sep">·</span> {{ pet.name }}{% endif %}
+    <span class="sep">·</span> 收 {{ dep.created_at.strftime('%Y-%m-%d %H:%M') if dep.created_at else '—' }}
+    {% if dep.operator %} <span class="sep">·</span> 收款 {{ dep.operator }}{% endif %}
+  </div>
+</div>
+
+{% if msg %}
+<div style="padding:10px 14px;margin-bottom:18px;border-left:3px solid var(--ink);background:var(--bg);font-family:var(--font-serif);font-size:10pt;letter-spacing:1px;">{{ msg }}</div>
+{% endif %}
+
+{# KPI #}
+<div class="dd-kpi-grid">
+  <div class="dd-kpi">
+    <div class="lbl">收 取 金 额</div>
+    <div class="val"><span class="sym">¥</span>{{ '%.2f'|format(dep.amount or 0) }}</div>
+  </div>
+  <div class="dd-kpi">
+    <div class="lbl">已 抵 扣</div>
+    <div class="val green"><span class="sym">¥</span>{{ '%.2f'|format(dep.applied_amount or 0) }}</div>
+  </div>
+  <div class="dd-kpi">
+    <div class="lbl">已 退 款</div>
+    <div class="val">{% if dep.refunded_amount %}<span class="sym">¥</span>{{ '%.2f'|format(dep.refunded_amount) }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="dd-kpi">
+    <div class="lbl">剩 余 可 用</div>
+    <div class="val amber"><span class="sym">¥</span>{{ '%.2f'|format(remaining) }}</div>
+  </div>
+</div>
+
+<div class="dd-grid" style="margin-top:24px;">
+  <div>
+    {# 基础信息 #}
+    <div class="dd-sec">
+      <h2>基 础 信 息</h2>
+      <table class="dd-meta-tbl">
+        <tr><td>押金类别</td><td>{{ category_zh.get(dep.category, dep.category) }}</td></tr>
+        <tr><td>收款方式</td><td>{{ pay_zh.get(dep.pay_method, dep.pay_method) or '—' }}</td></tr>
+        <tr><td>状态</td><td>{{ status_zh.get(dep.status, dep.status) }}</td></tr>
+        <tr><td>所属门店</td><td>{{ dep.store or '—' }}</td></tr>
+        <tr><td>关联预约</td><td>
+          {% if appointment %}<a href="/admin/appointments?id={{ appointment.id }}" style="border-bottom:0.5px solid var(--hair-2);">预约 #{{ appointment.id }}</a>
+          {% else %}<span style="color:var(--ink-3);">—</span>{% endif %}
+        </td></tr>
+        <tr><td>关联病例</td><td>
+          {% if visit %}<a href="/admin/visits/{{ visit.id }}" style="border-bottom:0.5px solid var(--hair-2);">病例 #{{ visit.id }}</a>
+          {% else %}<span style="color:var(--ink-3);">—</span>{% endif %}
+        </td></tr>
+        {% if dep.note %}
+        <tr><td>备注</td><td><div class="dd-note">{{ dep.note }}</div></td></tr>
+        {% endif %}
+      </table>
+    </div>
+
+    {# 抵扣流水 #}
+    <div class="dd-sec">
+      <h2>抵 扣 流 水 <span class="count">{{ apply_rows|length }} 笔</span></h2>
+      {% if apply_rows %}
+      <table class="dd-tbl">
+        <thead><tr><th>时间</th><th>抵扣金额</th><th>关联发票</th><th>经办人</th></tr></thead>
+        <tbody>
+          {% for r in apply_rows %}
+          <tr>
+            <td style="color:var(--ink-3);">{{ r.at.strftime('%Y-%m-%d %H:%M') if r.at else '—' }}</td>
+            <td class="num"><b>¥{{ '%.2f'|format(r.amount) }}</b></td>
+            <td>
+              {% if r.invoice %}
+                <a href="/admin/invoices/{{ r.invoice.id }}" style="border-bottom:0.5px solid var(--hair-2);">{{ r.invoice.invoice_no }}</a>
+                <span style="color:var(--ink-3); font-size:9pt; margin-left:6px;">¥{{ '%.2f'|format(r.invoice.total_amount or 0) }}</span>
+              {% else %}<span style="color:var(--ink-3);">—</span>{% endif %}
+            </td>
+            <td style="color:var(--ink-2);">{{ r.actor or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="dd-empty">未发生抵扣</div>
+      {% endif %}
+    </div>
+
+    {# 退款流水 #}
+    <div class="dd-sec">
+      <h2>退 款 流 水 <span class="count">{{ refund_rows|length }} 笔</span></h2>
+      {% if refund_rows %}
+      <table class="dd-tbl">
+        <thead><tr><th>时间</th><th>退款金额</th><th>经办人</th></tr></thead>
+        <tbody>
+          {% for r in refund_rows %}
+          <tr>
+            <td style="color:var(--ink-3);">{{ r.at.strftime('%Y-%m-%d %H:%M') if r.at else '—' }}</td>
+            <td class="num"><b style="color:var(--accent-red);">¥{{ '%.2f'|format(r.amount) }}</b></td>
+            <td style="color:var(--ink-2);">{{ r.actor or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if dep.note %}
+      <div style="margin-top:10px; padding-top:10px; border-top:0.5px dashed var(--hair);">
+        <div style="font-size:9pt; color:var(--ink-3); letter-spacing:1.5px; margin-bottom:4px; font-family:var(--font-serif);">退款备注</div>
+        <div class="dd-note">{{ dep.note }}</div>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="dd-empty">未发生退款</div>
+      {% endif %}
+    </div>
+
+    {% if cancel_row %}
+    <div class="dd-sec">
+      <h2>作 废 记 录</h2>
+      <div class="dd-note">
+        <b style="color:var(--accent-red);">已作废</b>
+        · {{ cancel_row.at.strftime('%Y-%m-%d %H:%M') if cancel_row.at else '—' }}
+        · {{ cancel_row.actor or '—' }}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# 右侧操作 #}
+  <div class="dd-aside">
+    <div class="dd-sec">
+      <h3>操 作</h3>
+      <div class="btn-row">
+
+        {# 抵扣到新发票 #}
+        {% if dep.status in ('held', 'partial_refund') and remaining > 0 and other_invoices %}
+        <details style="border:0.5px solid var(--hair); padding:10px 12px;">
+          <summary style="cursor:pointer; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; color:var(--ink);">
+            抵扣到指定发票
+          </summary>
+          <form method="post" action="/admin/deposits/{{ dep.id }}/apply" style="margin-top:10px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <label style="font-size:9pt; color:var(--ink-3); letter-spacing:1px; display:block; margin-bottom:4px;">选未付发票</label>
+            <select name="invoice_id" required style="width:100%; padding:6px 8px; font-family:var(--font-serif); font-size:10pt; border:0.5px solid var(--ink-3);">
+              <option value="">— 选择 —</option>
+              {% for inv in other_invoices %}
+              <option value="{{ inv.id }}">{{ inv.invoice_no }} · ¥{{ '%.2f'|format(inv.total_amount or 0) }}</option>
+              {% endfor %}
+            </select>
+            <label style="font-size:9pt; color:var(--ink-3); letter-spacing:1px; display:block; margin:8px 0 4px;">抵扣金额（留空=用满 ¥{{ '%.2f'|format(remaining) }}）</label>
+            <input type="number" name="apply_amount" step="0.01" min="0" max="{{ '%.2f'|format(remaining) }}" placeholder="{{ '%.2f'|format(remaining) }}" style="width:100%; padding:6px 8px; font-family:var(--font-numeric); font-size:10pt; border:0.5px solid var(--ink-3);"/>
+            <button type="submit" class="uk-btn primary sm" style="margin-top:10px; width:100%;">确 认 抵 扣</button>
+          </form>
+        </details>
+        {% endif %}
+
+        {# 退款 #}
+        {% if dep.status in ('held', 'partial_refund') and remaining > 0 %}
+        <details style="border:0.5px solid var(--hair); padding:10px 12px;">
+          <summary style="cursor:pointer; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; color:var(--ink);">
+            退还押金
+          </summary>
+          <form method="post" action="/admin/deposits/{{ dep.id }}/refund" style="margin-top:10px;"
+                onsubmit="return confirm('确认退还押金？')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <label style="font-size:9pt; color:var(--ink-3); letter-spacing:1px; display:block; margin-bottom:4px;">退款金额（留空=退完剩余 ¥{{ '%.2f'|format(remaining) }}）</label>
+            <input type="number" name="refund_amount" step="0.01" min="0" max="{{ '%.2f'|format(remaining) }}" placeholder="{{ '%.2f'|format(remaining) }}" style="width:100%; padding:6px 8px; font-family:var(--font-numeric); font-size:10pt; border:0.5px solid var(--ink-3);"/>
+            <label style="font-size:9pt; color:var(--ink-3); letter-spacing:1px; display:block; margin:8px 0 4px;">退款原因（可选）</label>
+            <textarea name="note" rows="2" style="width:100%; padding:6px 8px; font-family:var(--font-serif); font-size:10pt; border:0.5px solid var(--ink-3); resize:vertical;"></textarea>
+            <button type="submit" class="uk-btn danger sm" style="margin-top:10px; width:100%;">确 认 退 款</button>
+          </form>
+        </details>
+        {% endif %}
+
+        {# 作废（仅 held + 未抵扣 + 未退） #}
+        {% if dep.status == 'held' and not dep.applied_amount and not dep.refunded_amount %}
+        <form method="post" action="/admin/deposits/{{ dep.id }}/cancel"
+              onsubmit="return confirm('确认作废这笔押金？仅当未抵扣未退款时可操作，作废后可由系统按需冲账。')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="uk-btn ghost sm" style="width:100%; color:var(--accent-red); border-color:var(--accent-red);">作 废 此 押 金</button>
+        </form>
+        {% endif %}
+
+        <a href="/admin/customers/{{ cust.id }}?tab=deposits" class="uk-btn ghost sm" style="text-decoration:none; text-align:center;">返 回 客 户 档 案</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

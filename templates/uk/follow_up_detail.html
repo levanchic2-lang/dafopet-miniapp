@@ -1,0 +1,249 @@
+{% extends "uk/_base.html" %}
+{% block title %}回访 #{{ fu.id }} · {{ fu.round_name or '术后回访' }}{% endblock %}
+
+{% block body %}
+<style>
+  .fd-bc { margin:24px 0 16px; font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); font-style:italic; }
+  .fd-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .fd-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .fd-bc .sep { margin:0 8px; color:var(--ink-4); }
+
+  .fd-head h1 { font-family:var(--font-serif); font-size:26pt; font-weight:700; color:var(--ink); margin:0 0 6px; letter-spacing:1px; line-height:1.15; }
+  .fd-head h1 .no { font-family:var(--font-numeric); font-size:18pt; color:var(--ink-3); font-weight:400; vertical-align:4px; margin-left:6px; }
+  .fd-head h1 .pill { display:inline-block; padding:3px 12px; margin-left:14px; border:0.5px solid var(--ink-3); font-size:9pt; letter-spacing:2px; color:var(--ink-2); vertical-align:8px; font-family:var(--font-serif); }
+  .fd-head h1 .pill.green   { color:#1d4d3a; border-color:#1d4d3a; }
+  .fd-head h1 .pill.amber   { color:#7a4a14; border-color:#7a4a14; }
+  .fd-head h1 .pill.red     { color:var(--accent-red); border-color:var(--accent-red); }
+  .fd-meta { font-size:10pt; color:var(--ink-2); font-style:italic; margin-bottom:18px; }
+  .fd-meta .sep { margin:0 8px; color:var(--ink-4); }
+
+  .fd-grid { display:grid; grid-template-columns:2fr 1fr; gap:24px; }
+  @media (max-width:960px) { .fd-grid { grid-template-columns:1fr; } }
+
+  .fd-sec { background:var(--paper); padding:22px 24px; border-top:0.5px solid var(--hair); margin-bottom:0; }
+  .fd-sec h2 { font-family:var(--font-serif); font-size:13pt; font-weight:700; color:var(--ink); letter-spacing:2px; margin:0 0 14px; display:flex; align-items:center; justify-content:space-between; }
+  .fd-sec h2 .count { font-size:9pt; color:var(--ink-3); letter-spacing:1.5px; font-weight:400; font-style:italic; }
+
+  .fd-meta-tbl { width:100%; border-collapse:collapse; font-size:10.5pt; }
+  .fd-meta-tbl td { padding:6px 0; border-bottom:0.5px dashed var(--hair); vertical-align:top; }
+  .fd-meta-tbl td:first-child { width:30%; color:var(--ink-3); font-style:italic; letter-spacing:1px; padding-right:10px; }
+  .fd-meta-tbl tr:last-child td { border-bottom:0; }
+
+  /* 时间线 */
+  .fd-timeline { list-style:none; margin:0; padding:0; }
+  .fd-timeline li { position:relative; padding:10px 0 10px 26px; border-bottom:0.5px dashed var(--hair); }
+  .fd-timeline li:last-child { border-bottom:0; }
+  .fd-timeline li:before {
+    content: ""; position:absolute; left:7px; top:18px;
+    width:8px; height:8px; border-radius:50%;
+    background:var(--ink-3); border:2px solid var(--paper);
+    box-shadow:0 0 0 1px var(--ink-3);
+  }
+  .fd-timeline li.created:before  { background:#888; }
+  .fd-timeline li.sent:before     { background:#3b82f6; }
+  .fd-timeline li.responded:before{ background:#16a34a; }
+  .fd-timeline li.handled:before  { background:#1a1a1a; }
+  .fd-timeline li.notif:before    { background:#d1d5db; }
+  .fd-timeline li:after {
+    content:""; position:absolute; left:10px; top:24px; bottom:-12px;
+    width:1px; background:var(--hair);
+  }
+  .fd-timeline li:last-child:after { display:none; }
+  .fd-timeline .at { font-size:9pt; color:var(--ink-3); font-family:var(--font-numeric); letter-spacing:0.5px; }
+  .fd-timeline .text { font-size:10.5pt; color:var(--ink); margin-top:2px; line-height:1.55; white-space:pre-wrap; }
+
+  /* 反馈结构化 */
+  .fd-resp-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px 24px; }
+  .fd-resp-grid .row { display:flex; gap:10px; padding:6px 0; border-bottom:0.5px dashed var(--hair); }
+  .fd-resp-grid .row .k { color:var(--ink-3); font-style:italic; letter-spacing:1px; min-width:80px; }
+  .fd-resp-grid .row .v { color:var(--ink); font-weight:500; }
+
+  .fd-empty { padding:24px 0; text-align:center; color:var(--ink-3); font-style:italic; font-size:10pt; }
+  .fd-note  { white-space:pre-wrap; font-size:10pt; color:var(--ink-2); line-height:1.7; padding:8px 12px; background:var(--bg); border-left:3px solid var(--ink-3); }
+
+  .fd-aside h3 { font-family:var(--font-serif); font-size:11pt; letter-spacing:2px; color:var(--ink); margin:0 0 12px; }
+  .fd-aside .btn-row { display:flex; flex-direction:column; gap:8px; }
+</style>
+
+<div class="fd-bc">
+  {% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name }}</a>{% else %}<span>客户</span>{% endif %}
+  <span class="sep">›</span>
+  {% if visit %}<a href="/admin/visits/{{ visit.id }}">病例 #{{ visit.id }}</a>{% else %}<span>病例</span>{% endif %}
+  <span class="sep">›</span>
+  <span>回访 #{{ fu.id }}</span>
+</div>
+
+<div class="fd-head">
+  <h1>
+    {{ fu.round_name or '术后回访' }}<span class="no">#{{ fu.id }}</span>
+    {% if fu.status == 'closed' %}<span class="pill green">已完成</span>
+    {% elif fu.status == 'responded' %}<span class="pill green">客户已反馈</span>
+    {% elif fu.status == 'sent' %}<span class="pill amber">已发送</span>
+    {% elif fu.status == 'phone_pending' %}<span class="pill red">需电话</span>
+    {% elif fu.status == 'due' %}<span class="pill amber">今日到期</span>
+    {% elif fu.status == 'skipped' %}<span class="pill">已跳过</span>
+    {% else %}<span class="pill">未到期</span>
+    {% endif %}
+  </h1>
+  <div class="fd-meta">
+    {{ cust.name if cust else '—' }}
+    {% if pet %} <span class="sep">·</span> {{ pet.name }}{% endif %}
+    <span class="sep">·</span> 计划 {{ fu.planned_date or '—' }}
+    {% if fu.template_name %} <span class="sep">·</span> {{ fu.template_name }}{% endif %}
+    <span class="sep">·</span> 第 {{ fu.round_no }} 轮
+  </div>
+</div>
+
+{% if msg %}
+<div style="padding:10px 14px;margin-bottom:18px;border-left:3px solid var(--ink);background:var(--bg);font-family:var(--font-serif);font-size:10pt;letter-spacing:1px;">{{ msg }}</div>
+{% endif %}
+
+<div class="fd-grid">
+  <div>
+    {# 基础信息 #}
+    <div class="fd-sec">
+      <h2>基 础 信 息</h2>
+      <table class="fd-meta-tbl">
+        <tr><td>关联病例</td><td>
+          {% if visit %}<a href="/admin/visits/{{ visit.id }}" style="border-bottom:0.5px solid var(--hair-2);">病例 #{{ visit.id }}</a>
+          <span style="color:var(--ink-3); font-size:9.5pt; margin-left:8px;">{{ visit.visit_date or '' }} {{ visit.visit_type or '' }}</span>
+          {% else %}<span style="color:var(--ink-3);">—</span>{% endif %}
+        </td></tr>
+        <tr><td>计划日期</td><td><b>{{ fu.planned_date or '—' }}</b></td></tr>
+        <tr><td>轮次</td><td>{{ fu.round_name or ('第 ' ~ fu.round_no ~ ' 轮') }}</td></tr>
+        <tr><td>渠道</td><td>{{ fu.channel or '—' }}</td></tr>
+        <tr><td>负责人</td><td>{{ fu.assigned_to or '—' }}</td></tr>
+        <tr><td>所属门店</td><td>{{ fu.store or '—' }}</td></tr>
+        <tr><td>当前状态</td><td>{{ fu_status_zh.get(fu.status, fu.status) }}</td></tr>
+        {% if fu.handled_at %}
+        <tr><td>处理人 / 时间</td><td>{{ fu.handled_by or '—' }} · {{ fu.handled_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+        {% endif %}
+        {% if fu.handle_note %}
+        <tr><td>处理备注</td><td><div class="fd-note">{{ fu.handle_note }}</div></td></tr>
+        {% endif %}
+      </table>
+    </div>
+
+    {# 客户反馈 #}
+    <div class="fd-sec">
+      <h2>客 户 反 馈
+        {% if fu.response %}<span class="count">{{ fu.response }}{% if fu.response_at %} · {{ fu.response_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</span>{% endif %}
+      </h2>
+      {% if response_items %}
+      <div class="fd-resp-grid">
+        {% for item in response_items %}
+        <div class="row">
+          <span class="k">{{ item.k }}</span>
+          <span class="v">{{ item.v }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if fu.response_note %}
+      <div style="margin-top:14px;">
+        <div style="font-size:9pt; color:var(--ink-3); letter-spacing:1.5px; margin-bottom:6px; font-family:var(--font-serif);">客户描述</div>
+        <div class="fd-note">{{ fu.response_note }}</div>
+      </div>
+      {% endif %}
+      {% if not response_items and not fu.response_note %}
+      <div class="fd-empty">客户暂未通过短链反馈</div>
+      {% endif %}
+    </div>
+
+    {# 时间线 #}
+    <div class="fd-sec">
+      <h2>时 间 线 <span class="count">{{ timeline|length }} 条</span></h2>
+      {% if timeline %}
+      <ul class="fd-timeline">
+        {% for ev in timeline %}
+        <li class="{{ ev.kind }}">
+          <div class="at">{{ ev.at.strftime('%Y-%m-%d %H:%M') if ev.at else '—' }}</div>
+          <div class="text">{{ ev.text }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="fd-empty">暂无事件</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# 右侧操作 #}
+  <div class="fd-aside">
+    <div class="fd-sec">
+      <h3>状 态 切 换 / 处 理</h3>
+      <div class="btn-row">
+
+        {% if fu.status in ('pending', 'due', 'sent', 'phone_pending', 'responded') %}
+        <details style="border:0.5px solid var(--hair); padding:10px 12px;">
+          <summary style="cursor:pointer; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; color:var(--ink);">
+            标 已 联 系 / 已 完 成
+          </summary>
+          <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="margin-top:10px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <input type="hidden" name="action" value="contacted"/>
+            <input type="hidden" name="next_url" value="/admin/follow-ups/{{ fu.id }}/detail"/>
+            <label style="font-size:9pt; color:var(--ink-3); letter-spacing:1px; display:block; margin-bottom:4px;">处理备注</label>
+            <textarea name="note" rows="2" placeholder="客户反馈情况、是否好转等" style="width:100%; padding:6px 8px; font-family:var(--font-serif); font-size:10pt; border:0.5px solid var(--ink-3); resize:vertical;"></textarea>
+            <button type="submit" class="uk-btn primary sm" style="margin-top:10px; width:100%;">完 成 回 访</button>
+          </form>
+        </details>
+
+        <details style="border:0.5px solid var(--hair); padding:10px 12px;">
+          <summary style="cursor:pointer; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; color:#7a4a14;">
+            建 议 回 诊
+          </summary>
+          <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="margin-top:10px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <input type="hidden" name="action" value="refer_visit"/>
+            <input type="hidden" name="next_url" value="/admin/follow-ups/{{ fu.id }}/detail"/>
+            <label style="font-size:9pt; color:var(--ink-3); letter-spacing:1px; display:block; margin-bottom:4px;">备注（症状/建议复诊原因）</label>
+            <textarea name="note" rows="2" style="width:100%; padding:6px 8px; font-family:var(--font-serif); font-size:10pt; border:0.5px solid var(--ink-3); resize:vertical;"></textarea>
+            <button type="submit" class="uk-btn sm" style="margin-top:10px; width:100%; background:#7a4a14; color:var(--paper); border-color:#7a4a14;">标 建 议 回 诊</button>
+          </form>
+        </details>
+
+        <details style="border:0.5px solid var(--hair); padding:10px 12px;">
+          <summary style="cursor:pointer; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; color:var(--ink-3);">
+            跳 过 此 轮
+          </summary>
+          <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="margin-top:10px;"
+                onsubmit="return confirm('确认跳过这轮回访？')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <input type="hidden" name="action" value="skip"/>
+            <input type="hidden" name="next_url" value="/admin/follow-ups/{{ fu.id }}/detail"/>
+            <label style="font-size:9pt; color:var(--ink-3); letter-spacing:1px; display:block; margin-bottom:4px;">原因（可选）</label>
+            <textarea name="note" rows="2" style="width:100%; padding:6px 8px; font-family:var(--font-serif); font-size:10pt; border:0.5px solid var(--ink-3); resize:vertical;"></textarea>
+            <button type="submit" class="uk-btn ghost sm" style="margin-top:10px; width:100%;">跳 过 此 轮</button>
+          </form>
+        </details>
+        {% endif %}
+
+        {% if fu.status in ('closed', 'skipped') %}
+        <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle"
+              onsubmit="return confirm('重新打开此回访任务？')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="action" value="reopen"/>
+          <input type="hidden" name="next_url" value="/admin/follow-ups/{{ fu.id }}/detail"/>
+          <button type="submit" class="uk-btn ghost sm" style="width:100%;">重 新 打 开</button>
+        </form>
+        {% endif %}
+
+        {% if visit %}
+        <a href="/admin/visits/{{ visit.id }}" class="uk-btn ghost sm" style="text-decoration:none; text-align:center;">返 回 病 例</a>
+        {% endif %}
+        <a href="/admin/follow-ups" class="uk-btn ghost sm" style="text-decoration:none; text-align:center;">返 回 回 访 列 表</a>
+      </div>
+    </div>
+
+    {% if fu.feedback_token %}
+    <div class="fd-sec" style="margin-top:16px;">
+      <h3>客 户 反 馈 短 链</h3>
+      <div style="font-size:9pt; color:var(--ink-3); letter-spacing:1px; font-style:italic; margin-bottom:6px;">用于客户在小程序 / H5 端提交反馈</div>
+      <div style="padding:8px 10px; background:var(--bg); font-family:var(--font-numeric); font-size:9pt; word-break:break-all; color:var(--ink-2);">/follow-up/{{ fu.feedback_token }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

@@ -9312,39 +9312,137 @@ _DEPOSIT_STATUS_ZH = {
 }
 
 
-@app.get("/admin/deposits/{dep_id}")
-async def admin_deposit_view(dep_id: int, request: Request, db: Session = Depends(get_db)):
-    """押金「查看」→ 跳客户档案 押金 tab 并锚定该行"""
+@app.get("/admin/deposits/{dep_id}", response_class=HTMLResponse)
+@app.get("/admin/deposits/{dep_id}/detail", response_class=HTMLResponse)
+async def admin_deposit_detail(dep_id: int, request: Request, db: Session = Depends(get_db)):
+    """押金独立详情页：抬头 / 抵扣流水 / 退款流水 / 操作。"""
     require_admin(request)
     dep = db.get(Deposit, dep_id)
     if not dep:
         raise HTTPException(404, "押金记录不存在")
-    if not dep.customer_id:
-        return RedirectResponse("/admin", status_code=303)
-    return RedirectResponse(
-        f"/admin/customers/{dep.customer_id}?tab=deposits&hl=deposit-{dep_id}",
-        status_code=303,
-    )
+    # 限店权限
+    admin_store = _get_admin_store(request)
+    if admin_store and dep.store and dep.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店押金")
+    cust = db.get(Customer, dep.customer_id) if dep.customer_id else None
+    pet = db.get(Pet, dep.pet_id) if dep.pet_id else None
+    visit = db.get(Visit, dep.visit_id) if dep.visit_id else None
+    appointment = db.get(Appointment, dep.appointment_id) if dep.appointment_id else None
+    applied_inv = db.get(Invoice, dep.applied_invoice_id) if dep.applied_invoice_id else None
+    # 抵扣 / 退款流水从 AuditLog 解析
+    audits = db.query(AuditLog).filter(
+        AuditLog.action.in_(("deposit_apply", "deposit_refund", "deposit_cancel"))
+    ).order_by(AuditLog.id.asc()).all()
+    apply_rows = []
+    refund_rows = []
+    cancel_row = None
+    for a in audits:
+        try:
+            d = json.loads(a.detail or "{}")
+        except Exception:
+            d = {}
+        if d.get("deposit_id") != dep_id:
+            continue
+        if a.action == "deposit_apply":
+            inv = db.get(Invoice, d.get("invoice_id")) if d.get("invoice_id") else None
+            apply_rows.append({
+                "amount": float(d.get("amount") or 0),
+                "invoice": inv,
+                "actor": a.actor, "at": a.created_at,
+            })
+        elif a.action == "deposit_refund":
+            refund_rows.append({
+                "amount": float(d.get("amount") or 0),
+                "actor": a.actor, "at": a.created_at,
+            })
+        elif a.action == "deposit_cancel":
+            cancel_row = {"actor": a.actor, "at": a.created_at}
+    # 同客户其他未付发票（用于"抵扣到新单"下拉）
+    other_invoices = []
+    if cust:
+        other_invoices = db.query(Invoice).filter(
+            Invoice.customer_id == cust.id,
+            Invoice.payment_status == "unpaid",
+        ).order_by(Invoice.id.desc()).limit(20).all()
+    remaining = float(dep.amount or 0) - float(dep.applied_amount or 0) - float(dep.refunded_amount or 0)
+    if remaining < 0:
+        remaining = 0.0
+    return templates.TemplateResponse(request, "uk/deposit_detail.html", {
+        "dep": dep, "cust": cust, "pet": pet, "visit": visit, "appointment": appointment,
+        "applied_inv": applied_inv,
+        "apply_rows": apply_rows, "refund_rows": refund_rows, "cancel_row": cancel_row,
+        "remaining": round(remaining, 2),
+        "other_invoices": other_invoices,
+        "category_zh": _DEPOSIT_CATEGORY_ZH,
+        "status_zh": _DEPOSIT_STATUS_ZH,
+        "pay_zh": _INV_PAY_ZH,
+        "msg": request.query_params.get("msg"),
+        "csrf_token": _get_csrf_token(request),
+    })
 
 
-@app.get("/admin/follow-ups/{fu_id}")
-async def admin_follow_up_view(fu_id: int, request: Request, db: Session = Depends(get_db)):
-    """回访「查看」→ 跳回访列表并锚定该行（带 q=回访ID 便于定位）"""
+@app.get("/admin/follow-ups/{fu_id}", response_class=HTMLResponse)
+@app.get("/admin/follow-ups/{fu_id}/detail", response_class=HTMLResponse)
+async def admin_follow_up_detail(fu_id: int, request: Request, db: Session = Depends(get_db)):
+    """回访独立详情页：抬头 / 时间线 / 客户反馈 / 状态切换 / 操作。"""
     require_admin(request)
     fu = db.get(FollowUp, fu_id)
     if not fu:
         raise HTTPException(404, "回访任务不存在")
-    # 优先跳关联病历的回访区块
-    if fu.visit_id:
-        return RedirectResponse(
-            f"/admin/visits/{fu.visit_id}?hl=fu-{fu_id}#fu-{fu_id}",
-            status_code=303,
-        )
-    # 兜底回访列表
-    return RedirectResponse(
-        f"/admin/follow-ups?hl=fu-{fu_id}#fu-{fu_id}",
-        status_code=303,
-    )
+    admin_store = _get_admin_store(request)
+    if admin_store and fu.store and fu.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店回访")
+    cust = db.get(Customer, fu.customer_id) if fu.customer_id else None
+    pet = db.get(Pet, fu.pet_id) if fu.pet_id else None
+    visit = db.get(Visit, fu.visit_id) if fu.visit_id else None
+    # 反馈结构化数据
+    response_items: list[dict] = []
+    try:
+        rd = json.loads(fu.response_data or "{}")
+        if isinstance(rd, dict):
+            for k, v in rd.items():
+                response_items.append({"k": k, "v": v if not isinstance(v, (list, dict)) else json.dumps(v, ensure_ascii=False)})
+    except Exception:
+        pass
+    # 推送 / 反馈日志（从 NotificationLog 反查 — 关键词匹配）
+    from app.models import NotificationLog as _NL
+    notif_rows = db.query(_NL).filter(
+        _NL.payload.like(f"%followup#{fu_id}%")
+    ).order_by(_NL.id.asc()).all() if cust else []
+    # 时间线
+    timeline = []
+    if fu.created_at:
+        timeline.append({"kind": "created", "at": fu.created_at, "text": "回访任务已生成"})
+    if fu.sent_at:
+        timeline.append({"kind": "sent", "at": fu.sent_at,
+                         "text": f"已发送（{fu.channel or '渠道未指定'}）"})
+    for n in notif_rows:
+        timeline.append({"kind": "notif", "at": n.created_at,
+                         "text": f"通知 · {n.channel} · {'成功' if n.success else '失败'}"})
+    if fu.response_at:
+        timeline.append({"kind": "responded", "at": fu.response_at,
+                         "text": f"客户反馈 · {fu.response or ''} · {fu.response_note or ''}"})
+    if fu.handled_at:
+        timeline.append({"kind": "handled", "at": fu.handled_at,
+                         "text": f"医院处理（{fu.handled_by or '—'}）· {fu.handle_note or ''}"})
+    timeline.sort(key=lambda x: x["at"] or datetime.min)
+    fu_status_zh = {
+        "pending": "未到期",
+        "due": "今日到期",
+        "sent": "已发送",
+        "responded": "客户已反馈",
+        "phone_pending": "需电话",
+        "closed": "已完成",
+        "skipped": "已跳过",
+    }
+    return templates.TemplateResponse(request, "uk/follow_up_detail.html", {
+        "fu": fu, "cust": cust, "pet": pet, "visit": visit,
+        "response_items": response_items,
+        "timeline": timeline,
+        "fu_status_zh": fu_status_zh,
+        "msg": request.query_params.get("msg"),
+        "csrf_token": _get_csrf_token(request),
+    })
 
 
 @app.post("/admin/deposits/create")
