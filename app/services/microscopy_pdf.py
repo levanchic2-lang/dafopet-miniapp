@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 PDF_CSS = """
-@page { size: A4; margin: 16mm 14mm 14mm 14mm; }
+@page { size: A4; margin: 16mm 14mm 22mm 14mm; }
 * { box-sizing: border-box; }
 body {
   font-family: "Noto Serif CJK SC", "Noto Sans CJK SC", "WenQuanYi Zen Hei",
@@ -51,7 +51,7 @@ h2.sec { font-size: 11pt; margin: 12pt 0 6pt; padding-bottom: 2pt; border-bottom
 
 .sig-row { margin-top: 18pt; padding-top: 8pt; border-top: 0.5px solid #ccc; display: flex; justify-content: space-between; font-size: 9.5pt; }
 .sig-row .lbl { color: #666; }
-.foot { position: fixed; bottom: 5mm; left: 14mm; right: 14mm; text-align: center; font-size: 7.5pt; color: #999; border-top: 0.3px solid #eee; padding-top: 2pt; }
+.foot { position: fixed; bottom: 8mm; left: 14mm; right: 14mm; text-align: center; font-size: 7.5pt; color: #999; border-top: 0.3px solid #eee; padding-top: 3pt; }
 """
 
 
