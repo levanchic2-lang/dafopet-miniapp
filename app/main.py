@@ -16008,6 +16008,96 @@ async def admin_invoice_cancel(
     return RedirectResponse(f"/admin/invoices/{inv_id}?msg=收费单已取消", status_code=303)
 
 
+@app.post("/admin/invoices/{inv_id}/apply-discount")
+async def admin_invoice_apply_discount(
+    inv_id: int, request: Request, db: Session = Depends(get_db),
+):
+    """整单折扣：填折率（如 0.7 = 7折）或折扣金额，写 Invoice.discount_amount 并重算 total。
+    规则：
+    - 已付清（paid）拒绝改 — 必须先撤回收款
+    - 部分已收时仍可改，但折后总额必须 ≥ 已收 = sum(Payments)
+    - mode=pct：折率 0.1-1.0；mode=amount：直接填减免金额
+    """
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404, "收费单不存在")
+    if inv.payment_status == "paid":
+        return RedirectResponse(
+            f"/admin/invoices/{inv_id}?msg=已付清的单子不能改折扣，请先撤回收款",
+            status_code=303,
+        )
+    if inv.payment_status == "cancelled":
+        return RedirectResponse(
+            f"/admin/invoices/{inv_id}?msg=已取消的单子不能改折扣",
+            status_code=303,
+        )
+    mode = (form.get("mode") or "pct").strip()
+    reason = (form.get("reason") or "").strip()[:200]
+    subtotal = float(inv.subtotal or 0)
+    if subtotal <= 0:
+        return RedirectResponse(
+            f"/admin/invoices/{inv_id}?msg=小计为 0，无可折扣",
+            status_code=303,
+        )
+
+    if mode == "pct":
+        # 用户填 70 或 0.7 都识别为 7 折
+        raw = (form.get("discount_pct") or "").strip()
+        try:
+            pct = float(raw)
+        except Exception:
+            raise HTTPException(400, "折率格式错误")
+        if pct > 1.0:
+            pct = pct / 100.0
+        if pct <= 0 or pct > 1.0:
+            raise HTTPException(400, "折率应在 1-100 之间（如填 70 = 7 折）")
+        discount_amt = round(subtotal * (1.0 - pct), 2)
+    elif mode == "amount":
+        try:
+            discount_amt = float((form.get("discount_amount") or "").strip())
+        except Exception:
+            raise HTTPException(400, "折扣金额格式错误")
+        if discount_amt < 0 or discount_amt > subtotal:
+            raise HTTPException(400, f"折扣金额应在 0-{subtotal:.2f} 之间")
+    elif mode == "clear":
+        discount_amt = 0.0
+    else:
+        raise HTTPException(400, "mode 参数错误")
+
+    new_total = round(subtotal - discount_amt, 2)
+    # 部分已收时：折后总额不能小于已收
+    paid_sum = sum(float(p.amount or 0) for p in db.query(Payment).filter(
+        Payment.invoice_id == inv_id, Payment.status == "active"
+    ).all())
+    if new_total < paid_sum - 0.005:
+        return RedirectResponse(
+            f"/admin/invoices/{inv_id}?msg=折后总额 ¥{new_total:.2f} 小于已收 ¥{paid_sum:.2f}，请先撤回部分收款再改折扣",
+            status_code=303,
+        )
+
+    inv.discount_amount = discount_amt
+    inv.total_amount = new_total
+    # 备注追加（不覆盖原 notes）
+    if reason:
+        suffix = f"\n[折扣 {datetime.now().strftime('%Y-%m-%d %H:%M')}] {reason}"
+        inv.notes = (inv.notes or "") + suffix
+    # 若已收 == 折后总额，自动结清
+    if abs(paid_sum - new_total) < 0.005 and new_total > 0:
+        inv.payment_status = "paid"
+    elif paid_sum > 0:
+        inv.payment_status = "partial"
+    else:
+        inv.payment_status = "unpaid"
+    inv.updated_at = datetime.utcnow()
+    db.commit()
+    msg = (f"已应用折扣：原价 ¥{subtotal:.2f} − ¥{discount_amt:.2f} = ¥{new_total:.2f}"
+           if discount_amt > 0 else "已清除折扣")
+    return RedirectResponse(f"/admin/invoices/{inv_id}?msg={msg}", status_code=303)
+
+
 @app.get("/admin/invoices/{inv_id}/print", response_class=HTMLResponse)
 async def admin_invoice_print(
     inv_id: int,

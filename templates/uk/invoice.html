@@ -379,6 +379,62 @@
           {{ inv.paid_at.strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
         </div>
         {% endif %}
+
+        {# 应用折扣（未付/部分付 才能改）#}
+        {% if inv.payment_status in ('unpaid', 'partial') %}
+        <details style="margin-top:14px;padding-top:12px;border-top:0.5px solid var(--hair);">
+          <summary style="cursor:pointer;font-size:9.5pt;letter-spacing:1.5px;color:var(--ink-2);font-family:var(--font-serif);user-select:none;">
+            ✎ 应用折扣 / 减免
+          </summary>
+          <form method="post" action="/admin/invoices/{{ inv.id }}/apply-discount" style="margin-top:12px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+              <div style="flex:0 0 auto;">
+                <label style="display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;font-family:var(--font-serif);">方式</label>
+                <select name="mode" id="discMode" style="padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);">
+                  <option value="pct">按折率</option>
+                  <option value="amount">按减免金额</option>
+                  <option value="clear">清除折扣</option>
+                </select>
+              </div>
+              <div style="flex:0 0 100px;" id="discPctBox">
+                <label style="display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;font-family:var(--font-serif);">折率</label>
+                <input type="number" name="discount_pct" placeholder="如 70 = 7折" min="1" max="100" step="1"
+                       style="width:100%;box-sizing:border-box;padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);"/>
+              </div>
+              <div style="flex:0 0 120px;display:none;" id="discAmtBox">
+                <label style="display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;font-family:var(--font-serif);">减免金额</label>
+                <input type="number" name="discount_amount" placeholder="如 120" min="0" max="{{ '%.2f'|format(inv.subtotal) }}" step="0.01"
+                       style="width:100%;box-sizing:border-box;padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);"/>
+              </div>
+              <div style="flex:1;min-width:160px;">
+                <label style="display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;font-family:var(--font-serif);">原因（可选）</label>
+                <input type="text" name="reason" placeholder="老顾客 / 节日活动 / 抹零"
+                       style="width:100%;box-sizing:border-box;padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);"/>
+              </div>
+              <div style="flex:0 0 auto;">
+                <button type="submit" class="uk-btn primary sm" style="height:32px;">应用</button>
+              </div>
+            </div>
+            <div style="font-size:8.5pt;color:var(--ink-3);font-style:italic;margin-top:6px;">
+              填 70 = 7 折（应收 = 小计 × 0.7）；填 80 = 8 折；按金额则直接减免 N 元
+              {% if inv.discount_amount > 0 %} · 当前已减免 ¥{{ '%.2f'|format(inv.discount_amount) }}{% endif %}
+            </div>
+          </form>
+        </details>
+        <script>
+        (function(){
+          var sel = document.getElementById('discMode');
+          if (!sel) return;
+          function refresh() {
+            document.getElementById('discPctBox').style.display = (sel.value === 'pct') ? '' : 'none';
+            document.getElementById('discAmtBox').style.display = (sel.value === 'amount') ? '' : 'none';
+          }
+          sel.addEventListener('change', refresh);
+          refresh();
+        })();
+        </script>
+        {% endif %}
       </div>
     </div>
 
