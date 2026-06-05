@@ -27,9 +27,15 @@
     font-family: var(--font-serif); font-size: 13pt; font-weight: 700;
     color: var(--ink); letter-spacing: 2px; margin: 0 0 12px;
   }
+  .mr-subhead {
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink-2); letter-spacing: 1.5px;
+    margin: 14px 0 6px; padding-bottom: 4px;
+    border-bottom: 0.5px dashed var(--hair);
+  }
 
   .mr-field { margin-bottom: 14px; }
-  .mr-field label {
+  .mr-field label.fld {
     display: block; font-size: 9pt; letter-spacing: 1.5px;
     color: var(--ink-3); margin-bottom: 4px; font-family: var(--font-serif);
   }
@@ -37,42 +43,57 @@
     width: 100%; box-sizing: border-box; padding: 8px 10px;
     font-family: var(--font-serif); font-size: 11pt; color: var(--ink);
     background: var(--paper); border: 0.5px solid var(--ink-3); border-radius: 0;
-    transition: border-color .15s;
   }
-  .mr-field input[type="text"]:focus, .mr-field select:focus, .mr-field textarea:focus {
+  .mr-field input:focus, .mr-field select:focus, .mr-field textarea:focus {
     border-color: var(--ink); outline: none;
   }
   .mr-field textarea { min-height: 90px; line-height: 1.7; resize: vertical; }
 
   .mr-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-  .mr-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+
+  /* 模板切换 chip */
+  .mr-tpl-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mr-tpl-chips label {
+    padding: 6px 16px; border: 0.5px solid var(--hair);
+    font-family: var(--font-serif); font-size: 10.5pt; cursor: pointer;
+    user-select: none; letter-spacing: 1px;
+  }
+  .mr-tpl-chips input[type="radio"] { display: none; }
+  .mr-tpl-chips label:has(input:checked) {
+    background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 700;
+  }
 
   /* 检出物表 */
   .mr-find-table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
   .mr-find-table th, .mr-find-table td {
-    border: 0.5px solid var(--hair); padding: 8px 10px; text-align: left;
+    border: 0.5px solid var(--hair); padding: 6px 10px; text-align: left;
+    vertical-align: middle;
   }
   .mr-find-table th { background: var(--bg-elevated); font-family: var(--font-serif); letter-spacing: 1px; }
-  .mr-find-table td.name { font-family: var(--font-serif); width: 45%; }
-  .mr-grade-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mr-find-table td.name { font-family: var(--font-serif); width: 38%; }
+
+  .mr-grade-cell { display: flex; gap: 4px; flex-wrap: wrap; }
   .mr-grade-cell label {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 10px; font-size: 10pt; cursor: pointer;
+    display: inline-flex; align-items: center;
+    padding: 3px 12px; font-size: 10pt; cursor: pointer;
     border: 0.5px solid var(--hair); user-select: none;
-    font-family: var(--font-serif);
+    font-family: var(--font-serif); min-width: 36px; justify-content: center;
   }
-  .mr-grade-cell input[type="radio"] { margin: 0; }
-  .mr-grade-cell input[type="radio"]:checked + span { font-weight: 700; }
+  .mr-grade-cell input[type="radio"] { display: none; }
   .mr-grade-cell label:has(input:checked) {
-    background: var(--ink); color: var(--paper); border-color: var(--ink);
+    background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 700;
   }
+
+  /* 模板分组：JS 切换 .visible */
+  .mr-tpl-block { display: none; }
+  .mr-tpl-block.visible { display: block; }
 
   /* 照片上传 */
   .mr-photo-input {
     display: block; padding: 14px; text-align: center;
     border: 0.5px dashed var(--ink-3); background: var(--bg-elevated);
     font-family: var(--font-serif); font-size: 10.5pt; color: var(--ink-2);
-    cursor: pointer; transition: background .15s;
+    cursor: pointer;
   }
   .mr-photo-input:hover { background: var(--paper); }
   .mr-photo-hint { font-size: 9pt; color: var(--ink-3); font-style: italic; margin-top: 6px; }
@@ -89,6 +110,12 @@
     margin-top: 28px; padding-top: 18px;
     border-top: 0.5px solid var(--ink);
     display: flex; justify-content: flex-end; gap: 12px;
+  }
+
+  .mr-tip-callout {
+    margin: 6px 0 14px; padding: 8px 12px;
+    background: #fef9f0; border-left: 3px solid #6b4423;
+    font-size: 9.5pt; color: var(--ink-2); line-height: 1.7; font-style: italic;
   }
 </style>
 
@@ -113,8 +140,9 @@
   </div>
 </div>
 
-<form method="post" action="/admin/exam-orders/{{ order.id }}/microscopy/create" enctype="multipart/form-data">
+<form method="post" action="/admin/exam-orders/{{ order.id }}/microscopy/create" enctype="multipart/form-data" id="mrForm">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="template_type" id="mr-template-type" value="{{ active_tpl }}"/>
 
   {# 基本信息 #}
   <div class="mr-section">
@@ -122,7 +150,7 @@
 
     <div class="mr-row2">
       <div class="mr-field">
-        <label>归属检查项 <span style="color:var(--accent-red);">*</span></label>
+        <label class="fld">归属检查项 <span style="color:var(--accent-red);">*</span></label>
         <select name="item_label" required>
           {% if not micro_items %}
           <option value="">— 该检查单未识别到显微镜类项目 —</option>
@@ -133,7 +161,7 @@
         </select>
       </div>
       <div class="mr-field">
-        <label>报告兽医 <span style="color:var(--accent-red);">*</span></label>
+        <label class="fld">报告兽医 <span style="color:var(--accent-red);">*</span></label>
         <select name="vet_name" required>
           <option value="">— 请选择 —</option>
           {% for v in vet_names %}
@@ -145,12 +173,12 @@
 
     <div class="mr-row2">
       <div class="mr-field">
-        <label>标本部位 / 来源</label>
+        <label class="fld">标本部位 / 来源</label>
         <input type="text" name="sample_site" placeholder="例：右耳道分泌物 / 腹部皮肤刮片"
                value="{{ report.sample_site if report else '' }}"/>
       </div>
       <div class="mr-field">
-        <label>放大倍数</label>
+        <label class="fld">放大倍数</label>
         <select name="magnification">
           <option value="">— 选择 —</option>
           {% for m in mags %}
@@ -158,6 +186,19 @@
           {% endfor %}
         </select>
       </div>
+    </div>
+
+    <div class="mr-field">
+      <label class="fld">报告模板 <span style="color:var(--accent-red);">*</span></label>
+      <div class="mr-tpl-chips" id="mr-tpl-chips">
+        {% for t in tpl_list %}
+        <label>
+          <input type="radio" name="_tpl_radio" value="{{ t.key }}" {% if active_tpl == t.key %}checked{% endif %}/>
+          {{ t.label }}
+        </label>
+        {% endfor %}
+      </div>
+      <div class="mr-photo-hint">切换模板会显示对应字段表；未选项目不会写入 PDF</div>
     </div>
   </div>
 
@@ -179,38 +220,117 @@
     {% endif %}
   </div>
 
-  {# 检出物 #}
+  {# 半定量说明 #}
   <div class="mr-section">
-    <div class="mr-section-head"><h2>检&nbsp;出&nbsp;物（勾选发现项 + 等级）</h2></div>
-    <table class="mr-find-table">
-      <thead>
-        <tr><th>项目</th><th>等级</th></tr>
-      </thead>
-      <tbody>
-        {% for f in default_findings %}
-        <tr>
-          <td class="name">{{ f }}</td>
-          <td>
-            <input type="hidden" name="finding_name" value="{{ f }}"/>
-            <div class="mr-grade-cell">
-              {% for g in grades %}
-              <label>
-                <input type="radio" name="finding_grade" value="{{ g }}"
-                       {% if cur_findings.get(f) == g %}checked{% elif not cur_findings.get(f) and g == '阴性' %}checked{% endif %}/>
-                <span>{{ g }}</span>
-              </label>
-              {% endfor %}
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="mr-section-head"><h2>检&nbsp;出&nbsp;物（按模板分段）</h2></div>
+    <div class="mr-tip-callout">
+      <b>半定量标准</b>：- 视野下未见　|　+ 1-5/视野（少量）　|　++ 5-15/视野（中等量）　|　+++ &gt;15/视野（大量）<br/>
+      <b>寄生虫定性</b>：检出 ≥1 个 = 阳性；未检出 = 阴性
+    </div>
 
-    <div style="margin-top:14px;padding-top:14px;border-top:0.5px dashed var(--hair);">
-      <div style="font-size:9pt;color:var(--ink-3);letter-spacing:1.5px;margin-bottom:8px;font-family:var(--font-serif);">
-        其他自定义项（可选，最多 3 行）
-      </div>
+    {# 4 模板分别渲染 #}
+    {% for tpl_key in ['skin', 'ear', 'fecal', 'general'] %}
+    {% set tpl = templates[tpl_key] %}
+    <div class="mr-tpl-block {% if active_tpl == tpl_key %}visible{% endif %}" data-tpl="{{ tpl_key }}">
+
+      {# 镜检可见（半定量） #}
+      {% if tpl.microbe %}
+      <div class="mr-subhead">▌ 镜检可见 — 微生物 / 细胞 / 颗粒（半定量）</div>
+      <table class="mr-find-table">
+        <thead><tr><th>项目</th><th style="width:62%;">等级</th></tr></thead>
+        <tbody>
+          {% for name in tpl.microbe %}
+          {% set row_idx = loop.index0 %}
+          <tr>
+            <td class="name">{{ name }}</td>
+            <td>
+              <div class="mr-grade-cell">
+                {% for g in grades %}
+                <label>
+                  <input type="radio" name="grade_microbe_{{ row_idx }}_{{ tpl_key }}"
+                         data-input-name="grade_microbe_{{ row_idx }}"
+                         data-tpl="{{ tpl_key }}"
+                         value="{{ g }}"
+                         {% if cur.microbe.get(name) == g %}checked
+                         {% elif not cur.microbe.get(name) and g == '-' %}checked{% endif %}/>
+                  {{ g }}
+                </label>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {# 寄生虫定性 #}
+      {% if tpl.parasite %}
+      <div class="mr-subhead" style="margin-top:18px;">▌ 寄生虫定性</div>
+      <table class="mr-find-table">
+        <thead><tr><th>项目</th><th style="width:62%;">结果</th></tr></thead>
+        <tbody>
+          {% for name in tpl.parasite %}
+          {% set row_idx = loop.index0 %}
+          <tr>
+            <td class="name">{{ name }}</td>
+            <td>
+              <div class="mr-grade-cell">
+                {% for g in para_opts %}
+                <label>
+                  <input type="radio" name="grade_parasite_{{ row_idx }}_{{ tpl_key }}"
+                         data-input-name="grade_parasite_{{ row_idx }}"
+                         data-tpl="{{ tpl_key }}"
+                         value="{{ g }}"
+                         {% if cur.parasite.get(name) == g %}checked
+                         {% elif not cur.parasite.get(name) and g == '阴性' %}checked{% endif %}/>
+                  {{ g }}
+                </label>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {# 病理可见 #}
+      {% if tpl.pathology %}
+      <div class="mr-subhead" style="margin-top:18px;">▌ 病理可见 / 大体描述</div>
+      <table class="mr-find-table">
+        <thead><tr><th>项目</th><th style="width:62%;">结果</th></tr></thead>
+        <tbody>
+          {% for pa in tpl.pathology %}
+          {% set row_idx = loop.index0 %}
+          <tr>
+            <td class="name">{{ pa.name }}</td>
+            <td>
+              <div class="mr-grade-cell">
+                {% for g in pa.options %}
+                <label>
+                  <input type="radio" name="grade_pathology_{{ row_idx }}_{{ tpl_key }}"
+                         data-input-name="grade_pathology_{{ row_idx }}"
+                         data-tpl="{{ tpl_key }}"
+                         value="{{ g }}"
+                         {% if cur.pathology.get(pa.name) == g %}checked{% endif %}/>
+                  {{ g }}
+                </label>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+    </div>
+    {% endfor %}
+
+    {# 自定义补充项 #}
+    <div style="margin-top:18px;padding-top:14px;border-top:0.5px dashed var(--hair);">
+      <div class="mr-subhead" style="border:0;padding:0;margin:0 0 8px;">▌ 其他自定义项（可选）</div>
       {% for i in range(3) %}
       <div style="display:flex;gap:8px;margin-bottom:6px;">
         <input type="text" name="finding_extra_name" placeholder="项目名" style="flex:2;padding:6px 8px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--hair);"/>
@@ -225,17 +345,17 @@
     <div class="mr-section-head"><h2>镜&nbsp;下&nbsp;所&nbsp;见 / 结&nbsp;论 / 建&nbsp;议</h2></div>
 
     <div class="mr-field">
-      <label>镜下所见（补充描述，可选）</label>
+      <label class="fld">镜下所见（补充描述，可选）</label>
       <textarea name="narrative" placeholder="如：油镜下可见大量出芽生殖的卵圆形孢子，密集分布；伴少量球菌……">{{ report.narrative if report else '' }}</textarea>
     </div>
 
     <div class="mr-field">
-      <label>结论</label>
+      <label class="fld">结论</label>
       <textarea name="conclusion" placeholder="如：耳道马拉色菌感染（++），合并细菌性外耳炎">{{ report.conclusion if report else '' }}</textarea>
     </div>
 
     <div class="mr-field">
-      <label>建议</label>
+      <label class="fld">建议</label>
       <textarea name="advice" placeholder="如：建议每日清耳 + 局部抗真菌治疗，14 天复查显微镜">{{ report.advice if report else '' }}</textarea>
     </div>
   </div>
@@ -247,6 +367,31 @@
 </form>
 
 <script>
+// ─── 模板切换 ──────────────────────────────────
+function switchTpl(key) {
+  document.getElementById('mr-template-type').value = key;
+  document.querySelectorAll('.mr-tpl-block').forEach(function(b){
+    b.classList.toggle('visible', b.dataset.tpl === key);
+  });
+  // 关键：把不可见模板内的 radio 全部 disabled，避免 POST 提交时把别模板的值带进去
+  document.querySelectorAll('.mr-tpl-block input[type="radio"]').forEach(function(r){
+    r.disabled = (r.dataset.tpl !== key);
+  });
+  // 可见模板内：把 radio 的 name 改成最终提交的形式（grade_<cat>_<idx>）
+  // 不可见的保留原 name 即可（已 disabled，不会提交）
+  document.querySelectorAll('.mr-tpl-block.visible input[type="radio"]').forEach(function(r){
+    r.name = r.dataset.inputName;
+  });
+}
+
+document.querySelectorAll('#mr-tpl-chips input[type="radio"]').forEach(function(r){
+  r.addEventListener('change', function(){ switchTpl(this.value); });
+});
+
+// 初始化
+switchTpl(document.getElementById('mr-template-type').value);
+
+// ─── 照片预览 ──────────────────────────────────
 function previewMicroPhotos(input) {
   var box = document.getElementById('mr-photo-preview');
   box.innerHTML = '';

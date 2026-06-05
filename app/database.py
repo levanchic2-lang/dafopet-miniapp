@@ -933,6 +933,11 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_micro_order ON microscopy_reports(exam_order_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_micro_store ON microscopy_reports(store)"))
+            # 补 template_type 列（早期建表的旧库）
+            mr_cols = conn.execute(text("PRAGMA table_info(microscopy_reports)")).fetchall()
+            mr_col_names = {c[1] for c in mr_cols} if mr_cols else set()
+            if mr_cols and "template_type" not in mr_col_names:
+                conn.execute(text("ALTER TABLE microscopy_reports ADD COLUMN template_type VARCHAR(20) DEFAULT 'general'"))
 
             # vaccinations: 补 reminder_sent_at 列
             vacc_cols = conn.execute(text("PRAGMA table_info(vaccinations)")).fetchall()

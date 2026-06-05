@@ -1651,6 +1651,7 @@ class MicroscopyReport(Base):
     visit_id        = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
 
     item_label:     Mapped[str] = mapped_column(String(120), default="")   # 归属检查项名称
+    template_type:  Mapped[str] = mapped_column(String(20),  default="general")  # skin / ear / fecal / general
     vet_name:       Mapped[str] = mapped_column(String(80),  default="")
     magnification:  Mapped[str] = mapped_column(String(20),  default="")   # 10x / 40x / 100x
     sample_site:    Mapped[str] = mapped_column(String(120), default="")   # 左耳 / 右耳 / 腹部 等

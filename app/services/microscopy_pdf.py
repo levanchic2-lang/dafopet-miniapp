@@ -96,25 +96,34 @@ def _build_html(report, cust, pet, clinic_name: str) -> str:
         if cells:
             photo_html = '<h2 class="sec">镜下照片</h2><div class="photo-grid">' + "".join(cells) + '</div>'
 
-    # 检出物表
-    find_html = ""
-    if findings:
+    # 检出物：按 cat 拆 3 段（镜检可见 / 寄生虫 / 病理可见）
+    def _render_table(title: str, items: list, value_col_label: str) -> str:
+        if not items:
+            return ""
         rows = []
-        for f in findings:
+        for f in items:
             name = (f.get("name") or "").strip()
             grade = (f.get("grade") or "").strip()
             if not name:
                 continue
             cls = "find-grade-neg" if grade in ("", "阴性", "-") else "find-grade-pos"
-            grade_show = grade or "—"
-            rows.append(f'<tr><td>{name}</td><td class="{cls}">{grade_show}</td></tr>')
-        if rows:
-            find_html = (
-                '<h2 class="sec">检出物</h2>'
-                '<table class="find-table"><thead><tr><th style="width:60%;">项目</th>'
-                '<th>等级 / 数量</th></tr></thead><tbody>'
-                + "".join(rows) + '</tbody></table>'
-            )
+            rows.append(f'<tr><td>{name}</td><td class="{cls}">{grade or "—"}</td></tr>')
+        if not rows:
+            return ""
+        return (
+            f'<h2 class="sec">{title}</h2>'
+            f'<table class="find-table"><thead><tr><th style="width:60%;">项目</th>'
+            f'<th>{value_col_label}</th></tr></thead><tbody>'
+            + "".join(rows) + '</tbody></table>'
+        )
+    microbe_items   = [f for f in findings if f.get("cat", "microbe") == "microbe"]
+    parasite_items  = [f for f in findings if f.get("cat") == "parasite"]
+    pathology_items = [f for f in findings if f.get("cat") == "pathology"]
+    find_html = (
+        _render_table("镜下所见（半定量）", microbe_items, "等级")
+        + _render_table("寄生虫定性",     parasite_items, "结果")
+        + _render_table("病理可见",       pathology_items, "结果")
+    )
 
     narrative = (report.narrative or "").strip()
     conclusion = (report.conclusion or "").strip()

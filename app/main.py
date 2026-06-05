@@ -17262,13 +17262,86 @@ async def admin_exam_order_copy_as_new(
 
 
 # ─── 显微镜检查报告（皮肤刮片 / 耳道分泌物 / 粪检 等手工出报告）─────────────
-_MICRO_DEFAULT_FINDINGS = [
-    "马拉色菌", "球菌", "杆菌", "真菌菌丝/孢子",
-    "螨虫（蠕形螨/疥螨/耳螨）", "寄生虫卵",
-    "上皮细胞", "白细胞", "红细胞",
-]
-_MICRO_GRADES = ["阴性", "+", "++", "+++"]
+# 按 3 张 Word 模板拆字段：每张含 3 段 — 镜检可见 / 寄生虫定性 / 病理可见
+_MICRO_GRADES = ["-", "+", "++", "+++"]   # 半定量
+_MICRO_PARA_OPTS = ["阴性", "阳性"]
 _MICRO_MAGS = ["10x", "40x", "100x（油镜）"]
+
+_MICRO_TEMPLATES = {
+    "skin": {
+        "label": "皮肤检查",
+        "microbe": [
+            "球菌", "链球菌", "杆菌", "绿脓杆菌", "破伤风梭菌", "分歧杆菌",
+            "酵母菌", "马拉色菌", "念珠菌", "真菌孢子",
+            "嗜中性粒细胞", "嗜酸性粒细胞", "嗜碱性粒细胞",
+            "巨噬细胞", "淋巴细胞", "红细胞", "上皮细胞", "角质细胞",
+        ],
+        "parasite": ["蠕形螨", "疥螨", "羌螨", "其他螨虫"],
+        "pathology": [
+            {"name": "伍德氏灯检查", "options": ["阴性", "阳性", "未检"]},
+            {"name": "毛根",     "options": ["生长期>50%", "休止期>50%", "未观察"]},
+            {"name": "毛干",     "options": ["无损伤", "朽木样", "断裂", "未观察"]},
+        ],
+    },
+    "ear": {
+        "label": "耳道检查",
+        "microbe": [
+            "脂滴", "球菌", "链球菌", "杆菌", "绿脓杆菌", "分歧杆菌",
+            "酵母菌", "马拉色菌", "念珠菌", "真菌孢子",
+            "嗜中性粒细胞", "嗜酸性粒细胞", "嗜碱性粒细胞",
+            "巨噬细胞", "淋巴细胞", "红细胞", "上皮细胞", "角质细胞", "异常细胞",
+        ],
+        "parasite": ["蠕形螨", "疥螨", "羌螨", "其他螨虫"],
+        "pathology": [
+            {"name": "耳道皮肤",       "options": ["无损", "破溃", "化脓"]},
+            {"name": "分泌物颜色",     "options": ["褐色", "黄绿色", "黑色", "无色透明"]},
+            {"name": "耳道分泌物形态", "options": ["干燥", "粘稠", "油性", "水样"]},
+        ],
+    },
+    "fecal": {
+        "label": "粪便检查",
+        "microbe": [
+            "弯曲杆菌", "螺旋杆菌", "分歧杆菌", "球菌/杆菌比", "产气荚膜梭菌",
+            "螺旋体", "酵母菌", "霍乱弧菌",
+            "嗜中性粒细胞", "嗜酸性粒细胞", "巨噬细胞", "淋巴细胞", "成纤维细胞",
+            "红细胞", "上皮细胞",
+            "淀粉颗粒", "脂滴", "植物纤维", "肌纤维",
+        ],
+        "parasite": [
+            "蛔虫卵", "钩虫卵", "绦虫卵", "鞭虫卵",
+            "滴虫", "贾第鞭毛虫", "阿米巴虫", "球虫",
+        ],
+        "pathology": [
+            {"name": "形状（布里斯托分级）", "options": ["1级", "2级", "3级", "4级", "5级", "6级", "7级"]},
+            {"name": "颜色", "options": ["类红色", "类黄色", "类绿色", "类黑色", "类灰色"]},
+            {"name": "气味", "options": ["微臭", "酸臭", "腥臭", "恶臭"]},
+        ],
+    },
+    "general": {
+        "label": "通用",
+        "microbe": [
+            "马拉色菌", "球菌", "杆菌", "真菌菌丝/孢子",
+            "上皮细胞", "白细胞", "红细胞",
+        ],
+        "parasite": ["螨虫", "寄生虫卵"],
+        "pathology": [],
+    },
+}
+
+# 模板顺序（前端 chip 顺序 + 默认推断）
+_MICRO_TEMPLATE_ORDER = ["skin", "ear", "fecal", "general"]
+
+
+def _infer_micro_template(item_label: str) -> str:
+    """根据归属检查项名字推断默认模板。"""
+    s = (item_label or "")
+    if any(k in s for k in ("皮肤", "刮片", "毛", "癣")):
+        return "skin"
+    if any(k in s for k in ("耳", "外耳", "中耳")):
+        return "ear"
+    if any(k in s for k in ("粪", "便", "肠")):
+        return "fecal"
+    return "general"
 _MICRO_PHOTO_EXT_OK = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 _MICRO_PHOTO_MAX = 10 * 1024 * 1024  # 10 MB / 张
 
@@ -17298,12 +17371,14 @@ def _micro_form_ctx(request: "Request", db: Session, order: "ExamOrder",
         Staff.position.ilike("%医%")
     ).all()
     vet_names = [v[0] for v in vets]
-    # 已有 findings（编辑模式）
-    cur_findings = {}
+    # 已有 findings（编辑模式）：拆成 3 段字典 cur[cat][name] = grade
+    cur = {"microbe": {}, "parasite": {}, "pathology": {}}
     if report:
         try:
             for f in json.loads(report.findings_json or "[]") or []:
-                cur_findings[f.get("name", "")] = f.get("grade", "")
+                cat = f.get("cat", "microbe")
+                if cat in cur:
+                    cur[cat][f.get("name", "")] = f.get("grade", "")
         except Exception:
             pass
     cur_photos = []
@@ -17312,12 +17387,22 @@ def _micro_form_ctx(request: "Request", db: Session, order: "ExamOrder",
             cur_photos = json.loads(report.photos_json or "[]") or []
         except Exception:
             cur_photos = []
+    # 默认模板
+    if report and report.template_type in _MICRO_TEMPLATES:
+        active_tpl = report.template_type
+    else:
+        # 没指定 → 按当前选中的检查项名字推断；若仍无 → general
+        first_name = (micro_items[0]["name"] if micro_items else "")
+        active_tpl = _infer_micro_template(first_name)
+    # 模板列表（含 label）按固定顺序
+    tpl_list = [{"key": k, "label": _MICRO_TEMPLATES[k]["label"]} for k in _MICRO_TEMPLATE_ORDER]
     return {
         "order": order, "visit": visit, "cust": cust, "pet": pet,
         "micro_items": micro_items, "vet_names": vet_names,
-        "default_findings": _MICRO_DEFAULT_FINDINGS,
-        "grades": _MICRO_GRADES, "mags": _MICRO_MAGS,
-        "report": report, "cur_findings": cur_findings, "cur_photos": cur_photos,
+        "templates": _MICRO_TEMPLATES, "tpl_list": tpl_list,
+        "active_tpl": active_tpl,
+        "grades": _MICRO_GRADES, "para_opts": _MICRO_PARA_OPTS, "mags": _MICRO_MAGS,
+        "report": report, "cur": cur, "cur_photos": cur_photos,
         "csrf_token": _get_csrf_token(request),
     }
 
@@ -17368,6 +17453,9 @@ async def admin_microscopy_create(order_id: int, request: Request, db: Session =
     pet = db.get(Pet, pet_id) if pet_id else None
 
     item_label = str(form.get("item_label", "")).strip()[:120]
+    template_type = str(form.get("template_type", "general")).strip()
+    if template_type not in _MICRO_TEMPLATES:
+        template_type = "general"
     vet_name = str(form.get("vet_name", "")).strip()[:80]
     magnification = str(form.get("magnification", "")).strip()[:20]
     sample_site = str(form.get("sample_site", "")).strip()[:120]
@@ -17380,30 +17468,39 @@ async def admin_microscopy_create(order_id: int, request: Request, db: Session =
     if not vet_name:
         raise HTTPException(400, "兽医必填")
 
-    # 结构化检出物（form keys: finding_name[], finding_grade[]）
-    names = form.getlist("finding_name") if hasattr(form, "getlist") else []
-    grades = form.getlist("finding_grade") if hasattr(form, "getlist") else []
-    findings = []
-    for i, n in enumerate(names):
-        n = (n or "").strip()
-        g = (grades[i] if i < len(grades) else "") or ""
-        if n and g and g != "阴性":
-            findings.append({"name": n, "grade": g})
-    # 额外自定义项 finding_extra_name[] / finding_extra_grade[]
+    # 结构化检出物：按 active 模板的字段列表 + 表单中提交的 grade_<cat>_<idx>
+    tpl = _MICRO_TEMPLATES[template_type]
+    findings: list[dict] = []
+    # 1) 镜检可见（半定量）— 仅记非阴性（非"-"且非空）
+    for i, name in enumerate(tpl["microbe"]):
+        g = (form.get(f"grade_microbe_{i}", "") or "").strip()
+        if g and g not in ("-", "阴性"):
+            findings.append({"cat": "microbe", "name": name, "grade": g})
+    # 2) 寄生虫定性 — 全记（阴性也保留，表明已检）
+    for i, name in enumerate(tpl["parasite"]):
+        g = (form.get(f"grade_parasite_{i}", "") or "").strip()
+        if g:
+            findings.append({"cat": "parasite", "name": name, "grade": g})
+    # 3) 病理可见 — 全记（医生选了才有意义）
+    for i, pa in enumerate(tpl["pathology"]):
+        g = (form.get(f"grade_pathology_{i}", "") or "").strip()
+        if g:
+            findings.append({"cat": "pathology", "name": pa["name"], "grade": g})
+    # 4) 额外自定义项（任意行，归入 microbe 段）
     ex_names = form.getlist("finding_extra_name") if hasattr(form, "getlist") else []
     ex_grades = form.getlist("finding_extra_grade") if hasattr(form, "getlist") else []
     for i, n in enumerate(ex_names):
         n = (n or "").strip()
         g = ((ex_grades[i] if i < len(ex_grades) else "") or "").strip()
         if n and g:
-            findings.append({"name": n[:60], "grade": g[:20]})
+            findings.append({"cat": "microbe", "name": n[:60], "grade": g[:20]})
 
     store = _get_op_store(request) or (pet.store if pet else "") or ""
 
     report = MicroscopyReport(
         exam_order_id=order_id,
         customer_id=cust_id, pet_id=pet_id, visit_id=order.visit_id,
-        item_label=item_label, vet_name=vet_name,
+        item_label=item_label, template_type=template_type, vet_name=vet_name,
         magnification=magnification, sample_site=sample_site,
         findings_json=json.dumps(findings, ensure_ascii=False),
         narrative=narrative, conclusion=conclusion, advice=advice,
