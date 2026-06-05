@@ -14019,30 +14019,44 @@ async def admin_batch_deplete(
 # ──────────────────────────────────────────────────────────────
 
 @app.get("/admin/stocktake", response_class=HTMLResponse)
-async def admin_stocktake_list(request: Request, db: Session = Depends(get_db)):
+async def admin_stocktake_list(request: Request, db: Session = Depends(get_db),
+                                store: str = Query("")):
     require_admin(request)
     from datetime import date as _date, timedelta as _timedelta
+    # 决定本次浏览的门店：
+    #   - staff：永远是本店，忽略 ?store=
+    #   - superadmin：?store= 优先；没传则 session.admin_store；都没有 → 强制选一个
+    is_super = request.session.get("admin_role") == "superadmin"
+    admin_store = request.session.get("admin_store", "") or ""
+    if is_super:
+        wb_store = (store or "").strip()
+        if wb_store not in ("东环店", "横岗店"):
+            wb_store = admin_store if admin_store in ("东环店", "横岗店") else "横岗店"
+    else:
+        wb_store = admin_store if admin_store in ("东环店", "横岗店") else ""
+        if not wb_store:
+            raise HTTPException(400, "员工账号缺少有效门店归属，请联系管理员")
     sessions = (db.query(StocktakeSession)
                 .order_by(StocktakeSession.created_at.desc())
                 .limit(30).all())
-    # 统计每个大类最近盘点时间
+    # 统计每个大类最近盘点时间（仅本店）
     cycle_stats = []
     today = _date.today()
-    _stocktake_store = _get_admin_store(request)
     for cat_key, cat_info in INVENTORY_CATEGORIES.items():
-        item_cnt = _apply_store_filter(
-            db.query(InventoryItem), InventoryItem.store, _stocktake_store
-        ).filter(
+        base_q = db.query(InventoryItem).filter(
             InventoryItem.is_active == True,
             InventoryItem.is_service == False,
             InventoryItem.category == cat_key,
-        ).count()
+            InventoryItem.store == wb_store,
+        )
+        item_cnt = base_q.count()
         if item_cnt == 0:
             continue
         last_row = (db.query(InventoryItem.last_counted_at)
                     .filter(InventoryItem.is_active == True,
                             InventoryItem.is_service == False,
                             InventoryItem.category == cat_key,
+                            InventoryItem.store == wb_store,
                             InventoryItem.last_counted_at.isnot(None))
                     .order_by(InventoryItem.last_counted_at.desc())
                     .first())
@@ -14063,6 +14077,8 @@ async def admin_stocktake_list(request: Request, db: Session = Depends(get_db)):
         "categories": INVENTORY_CATEGORIES,
         "csrf_token": request.session.get("csrf_token", ""),
         "title": "循环盘点",
+        "wb_store": wb_store,
+        "is_super": is_super,
     })
 
 
@@ -14072,23 +14088,37 @@ async def admin_stocktake_create(
     csrf_token: str = Form(""),
     category_filter: str = Form(""),
     name: str = Form(""),
+    store: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
     operator = request.session.get("admin_username", "")
+    # 决定本次盘点的归属门店
+    is_super = request.session.get("admin_role") == "superadmin"
+    admin_store = request.session.get("admin_store", "") or ""
+    if is_super:
+        wb_store = (store or "").strip()
+        if wb_store not in ("东环店", "横岗店"):
+            wb_store = admin_store if admin_store in ("东环店", "横岗店") else ""
+        if wb_store not in ("东环店", "横岗店"):
+            return RedirectResponse("/admin/stocktake?err=请先选择门店再发起盘点", status_code=303)
+    else:
+        wb_store = admin_store if admin_store in ("东环店", "横岗店") else ""
+        if not wb_store:
+            return RedirectResponse("/admin/stocktake?err=员工账号缺少有效门店归属，请联系管理员", status_code=303)
     query = db.query(InventoryItem).filter(
         InventoryItem.is_active == True,
         InventoryItem.is_service == False,
+        InventoryItem.store == wb_store,
     )
-    query = _apply_store_filter(query, InventoryItem.store, _get_admin_store(request))
     if category_filter:
         query = query.filter(InventoryItem.category == category_filter)
     items = query.order_by(InventoryItem.category, InventoryItem.name).all()
     if not items:
-        return RedirectResponse("/admin/stocktake?err=该类别暂无品目", status_code=303)
+        return RedirectResponse(f"/admin/stocktake?store={wb_store}&err={wb_store}该类别暂无品目", status_code=303)
     cat_label = INVENTORY_CATEGORIES.get(category_filter, {}).get("label", "全部") if category_filter else "全部"
     from datetime import date as _date
-    session_name = name.strip() or f"{_date.today()} {cat_label}盘点"
+    session_name = name.strip() or f"{_date.today()} {wb_store} {cat_label}盘点"
     sess = StocktakeSession(
         name=session_name,
         category_filter=category_filter,
