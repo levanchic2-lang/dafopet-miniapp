@@ -1542,6 +1542,20 @@ function switchTab(tab) {
   url.searchParams.set('tab', tab);
   history.replaceState(null, '', url.toString());
 }
+
+// 高亮 hl=xxx 命中的行并滚动到视图
+(function() {
+  const hl = new URLSearchParams(window.location.search).get('hl');
+  if (!hl) return;
+  const el = document.getElementById(hl);
+  if (!el) return;
+  setTimeout(function() {
+    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+    el.style.transition = 'background-color 1.2s';
+    el.style.background = '#fef3c7';
+    setTimeout(function() { el.style.background = ''; }, 2500);
+  }, 200);
+})();
 </script>
 
 {% endblock %}

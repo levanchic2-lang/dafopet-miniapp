@@ -528,4 +528,20 @@
 </div>
 {% endif %}
 
+<script>
+// 高亮 hl=xxx 命中的行并滚动到视图（押金/回访等"查看"按钮跳过来时）
+(function() {
+  const hl = new URLSearchParams(window.location.search).get('hl');
+  if (!hl) return;
+  const el = document.getElementById(hl);
+  if (!el) return;
+  setTimeout(function() {
+    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+    el.style.transition = 'background-color 1.2s';
+    el.style.background = '#fef3c7';
+    setTimeout(function() { el.style.background = ''; }, 2500);
+  }, 200);
+})();
+</script>
+
 {% endblock %}

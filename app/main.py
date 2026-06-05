@@ -9322,7 +9322,7 @@ async def admin_deposit_view(dep_id: int, request: Request, db: Session = Depend
     if not dep.customer_id:
         return RedirectResponse("/admin", status_code=303)
     return RedirectResponse(
-        f"/admin/customer/{dep.customer_id}?tab=deposits&hl=deposit-{dep_id}#deposit-{dep_id}",
+        f"/admin/customers/{dep.customer_id}?tab=deposits&hl=deposit-{dep_id}",
         status_code=303,
     )
 
