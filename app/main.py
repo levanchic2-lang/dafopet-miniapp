@@ -14133,6 +14133,109 @@ async def admin_stocktake_session(
     })
 
 
+@app.get("/admin/stocktake/{session_id}/export")
+async def admin_stocktake_export(
+    session_id: int, request: Request, db: Session = Depends(get_db),
+):
+    """导出盘点表为 Excel：打印出来给员工现场实盘填写，汇总后再回到系统录入。"""
+    require_admin(request)
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+    except ImportError:
+        raise HTTPException(500, "openpyxl 未安装")
+    sess = db.get(StocktakeSession, session_id)
+    if not sess:
+        raise HTTPException(404)
+    rows = (
+        db.query(StocktakeItem)
+        .filter(StocktakeItem.session_id == session_id)
+        .order_by(StocktakeItem.category, StocktakeItem.item_name)
+        .all()
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "现场盘点单"
+    # 标题
+    ws.merge_cells("A1:H1")
+    title_cell = ws["A1"]
+    title_cell.value = f"现场盘点单 · {sess.name}"
+    title_cell.font = Font(bold=True, size=14)
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+    # 元信息行
+    ws.merge_cells("A2:H2")
+    meta_cell = ws["A2"]
+    cat_label = INVENTORY_CATEGORIES.get(sess.category_filter, {}).get("label", "全部") if sess.category_filter else "全部"
+    meta_cell.value = f"盘点日期：____ 年 __ 月 __ 日    门店：____________    类别：{cat_label}    盘点人：____________    复核人：____________"
+    meta_cell.alignment = Alignment(horizontal="left", vertical="center")
+    meta_cell.font = Font(size=10)
+    # 表头
+    headers = ["序号", "品名", "大类", "系统库存", "单位", "实盘数量", "差异", "备注"]
+    ws.append([])  # 空行
+    ws.append(headers)
+    head_row = ws.max_row
+    head_fill = PatternFill("solid", fgColor="EFEFEF")
+    thin = Side(border_style="thin", color="888888")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for c in ws[head_row]:
+        c.font = Font(bold=True, size=11)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.fill = head_fill
+        c.border = border
+    # 数据行（实盘数量 / 差异 / 备注 留空给手写）
+    _CAT = {k: v.get("label", k) for k, v in INVENTORY_CATEGORIES.items()}
+    for idx, r in enumerate(rows, start=1):
+        ws.append([
+            idx,
+            r.item_name,
+            _CAT.get(r.category, r.category),
+            r.system_qty,
+            r.unit,
+            "",  # 实盘数量 — 手写
+            "",  # 差异 — 手算
+            "",  # 备注 — 手写
+        ])
+        # 给每行加边框 + 设行高便于手写
+        cur_row = ws.max_row
+        ws.row_dimensions[cur_row].height = 22
+        for col_idx, c in enumerate(ws[cur_row], start=1):
+            c.border = border
+            c.alignment = Alignment(horizontal="center" if col_idx not in (2, 8) else "left", vertical="center")
+            if col_idx == 4:
+                c.number_format = "0.##"
+    # 列宽（A4 打印友好）
+    widths = {"A": 6, "B": 32, "C": 10, "D": 10, "E": 8, "F": 12, "G": 10, "H": 24}
+    for col, w in widths.items():
+        ws.column_dimensions[col].width = w
+    # 打印设置：A4 横向 + 适配宽度
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.print_options.horizontalCentered = True
+    ws.print_title_rows = f"{head_row}:{head_row}"  # 每页重复表头
+    # 底部签字栏
+    ws.append([])
+    last = ws.max_row + 1
+    ws.cell(row=last, column=1).value = f"共 {len(rows)} 项 · 已盘 ____ 项 · 差异 ____ 项"
+    ws.merge_cells(start_row=last, start_column=1, end_row=last, end_column=4)
+    ws.cell(row=last, column=5).value = "盘点员签字："
+    ws.cell(row=last, column=7).value = "复核员签字："
+    ws.row_dimensions[last].height = 36
+
+    import io
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    safe_name = "".join(c for c in (sess.name or f"session_{session_id}") if c.isalnum() or c in "._- ")[:40].strip() or f"session_{session_id}"
+    fname = f"盘点单_{safe_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    from urllib.parse import quote as _q
+    return Response(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_q(fname)}"},
+    )
+
+
 @app.post("/admin/stocktake/{session_id}/save")
 async def admin_stocktake_save(
     session_id: int, request: Request, db: Session = Depends(get_db),

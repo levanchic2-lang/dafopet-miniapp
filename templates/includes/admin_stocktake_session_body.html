@@ -104,6 +104,9 @@
  <div style="flex:1;font-size:0.88rem;color:var(--muted);">
  已填写 <strong id="filled-count">{{ counted }}</strong> / {{ sit_items|length }} 个品目
  </div>
+ <a href="/admin/stocktake/{{ sess.id }}/export" class="btn secondary" style="font-size:0.9rem;text-decoration:none;" title="导出 Excel 打印给员工现场实盘填写">
+ ↓ 导出盘点单
+ </a>
  <button type="submit" formaction="/admin/stocktake/{{ sess.id }}/save"
  class="btn secondary" style="font-size:0.9rem;">
  <i data-lucide="save"></i> 暂存草稿
