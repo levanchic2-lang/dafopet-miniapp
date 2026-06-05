@@ -15239,17 +15239,23 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
 # ---------------------------------------------------------------------------
 
 _REVENUE_PAY_ZH = {
-    "cash":     "现金",
-    "wechat":   "微信",
-    "alipay":   "支付宝",
-    "card":     "刷卡",
-    "groupbuy": "团购",
-    "prepaid":  "预付款",
-    "wallet":   "钱包",
-    "package":  "套餐核销",
-    "deposit":  "押金抵扣",
-    "other":    "其他",
-    "":         "未指定",
+    "cash":        "现金",
+    "wechat":      "微信",
+    "alipay":      "支付宝",
+    "shouqianba":  "收钱吧",
+    "meituan":     "美团",
+    "third_party": "第三方",
+    "card":        "刷卡",
+    "groupbuy":    "团购",
+    "prepaid":     "预付款",
+    "wallet":      "钱包",
+    "package":     "套餐核销",
+    "deposit":     "押金抵扣",
+    "coupon":      "优惠券",
+    "free":        "赠送 / 零结算",
+    "mixed":       "混合支付",
+    "other":       "其他",
+    "":            "未指定",
 }
 
 
