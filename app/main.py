@@ -15063,6 +15063,18 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         return None
     from datetime import date as _date
 
+    # ── 关键：先收集已结清 (paid / refunded / partial) 发票里覆盖的 (ref_type, ref_id) ──
+    # 这些条目已经走过收款链路，不能再次进新发票，否则同一笔处方/检查会被重复计费。
+    settled_refs: set[tuple[str, int]] = set()
+    settled_invs = db.query(Invoice).filter(
+        Invoice.visit_id == visit_id,
+        Invoice.payment_status.in_(("paid", "partial", "refunded")),
+    ).all()
+    for s_inv in settled_invs:
+        for s_it in (s_inv.items or []):
+            if s_it.ref_type and s_it.ref_id:
+                settled_refs.add((s_it.ref_type, int(s_it.ref_id)))
+
     line_items: list[dict] = []
     subtotal_sum = 0.0
 
@@ -15072,6 +15084,8 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         Prescription.status != "draft",
     ).all()
     for p in prescs:
+        if ("prescription", p.id) in settled_refs:
+            continue  # 整张处方已在已结清发票里，跳过
         for it in (p.items or []):
             if not it.drug_name or (it.subtotal or 0) <= 0:
                 continue
@@ -15087,6 +15101,8 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
     # ── 2) 检查单 ──
     exams = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).all()
     for eo in exams:
+        if ("exam_order", eo.id) in settled_refs:
+            continue  # 已结清，跳过
         try:
             eitems = json.loads(eo.items_json or "[]")
         except Exception:
@@ -15113,6 +15129,8 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         SalesOrder.status != "cancelled",
     ).all()
     for so in sos:
+        if ("sales_order", so.id) in settled_refs:
+            continue
         for it in (so.items or []):
             if (it.subtotal or 0) <= 0:
                 continue
@@ -15131,6 +15149,8 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         Hospitalization.status == "discharged",
     ).all()
     for h in hosps:
+        if ("hospitalization", h.id) in settled_refs:
+            continue
         days = _calc_hosp_days(h.admitted_at, h.discharged_at)
         if days <= 0:
             continue
