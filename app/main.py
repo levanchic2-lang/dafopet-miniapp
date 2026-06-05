@@ -12295,11 +12295,13 @@ async def admin_so_create(request: Request, db: Session = Depends(get_db)):
             _deduct_inventory(db, it["item_id"], it["quantity"],
                               "sales_order", order.id, operator, f"销售单#{order.id}")
     db.commit()
-    # 同步收费单（若关联就诊）
+    # 同步收费单
     if visit_id:
         _sync_visit_invoice(db, visit_id, operator)
-        db.commit()
-    return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已创建" if visit_id else f"/admin/sales-orders/{order.id}?msg=销售单已创建", status_code=303)
+    else:
+        _sync_sales_order_invoice(db, order.id, operator)
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已创建" if visit_id else f"/admin/sales-orders/{order.id}?msg=销售单已创建·收银台已生成待收款单", status_code=303)
 
 
 @app.get("/admin/sales-orders", response_class=HTMLResponse)
@@ -12405,7 +12407,9 @@ async def admin_so_edit(order_id: int, request: Request, db: Session = Depends(g
     db.commit()
     if order.visit_id:
         _sync_visit_invoice(db, order.visit_id, operator)
-        db.commit()
+    else:
+        _sync_sales_order_invoice(db, order.id, operator)
+    db.commit()
     return RedirectResponse(f"/admin/sales-orders/{order_id}?msg=已保存", status_code=303)
 
 
@@ -12443,6 +12447,9 @@ async def admin_so_delete(order_id: int, request: Request, db: Session = Depends
         if it.item_id and it.quantity > 0:
             _restore_inventory(db, it.item_id, it.quantity,
                                "sales_order", order_id, operator, f"删除销售单#{order_id}退回")
+    # 先清理独立发票（在删 order 之前，避免 FK 风险）
+    if not visit_id:
+        _delete_so_invoice(db, order_id)
     db.delete(order)
     db.commit()
     if visit_id:
@@ -12488,6 +12495,13 @@ async def admin_so_void(order_id: int, request: Request, db: Session = Depends(g
     if visit_id:
         try:
             _sync_visit_invoice(db, visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    else:
+        # 独立销售单作废 → 清掉对应的未付发票（已付的保留作历史档案）
+        try:
+            _delete_so_invoice(db, order_id)
             db.commit()
         except Exception:
             pass
@@ -14819,6 +14833,118 @@ def _calc_hosp_days(admitted_at, discharged_at) -> int:
     if not admitted_at or not discharged_at:
         return 0
     return max(0, (discharged_at.date() - admitted_at.date()).days)
+
+
+def _sync_sales_order_invoice(db: Session, order_id: int, admin_name: str = "") -> "Invoice | None":
+    """独立销售单（无关联病例）自动生成 / 更新一张「未关联病例」的发票，让收银台能收到款。
+    - 已 paid / cancelled / refunded → 不动
+    - 已存在 unpaid → 替换明细 + 重算总额
+    - 无 → 新建 unpaid 发票
+    - 销售单本身被删 → 调用方传 0 表示清空对应发票（外部判断后调用 _delete_so_invoice）
+    """
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        return None
+    # 已关联病例的销售单不走这里，走 _sync_visit_invoice
+    if order.visit_id:
+        return None
+    if order.status == "cancelled":
+        _delete_so_invoice(db, order_id)
+        return None
+
+    # 找已有 invoice：通过 InvoiceItem.ref_type=sales_order + ref_id=order_id 反查
+    existing_item = (
+        db.query(InvoiceItem)
+        .join(Invoice, InvoiceItem.invoice_id == Invoice.id)
+        .filter(
+            InvoiceItem.ref_type == "sales_order",
+            InvoiceItem.ref_id == order_id,
+            Invoice.visit_id.is_(None),
+        )
+        .first()
+    )
+    inv = db.get(Invoice, existing_item.invoice_id) if existing_item else None
+
+    # 已结清 → 不能改
+    if inv and inv.payment_status in ("paid", "refunded", "cancelled"):
+        return inv
+
+    # 算明细
+    line_items = []
+    subtotal_sum = 0.0
+    for it in (order.items or []):
+        if (it.subtotal or 0) <= 0:
+            continue
+        line_items.append({
+            "ref_type": "sales_order", "ref_id": order_id,
+            "description": f"[销售#{order_id}] {it.item_name}",
+            "quantity": float(it.quantity or 0),
+            "unit_price": float(it.unit_price or 0),
+            "subtotal": float(it.subtotal or 0),
+        })
+        subtotal_sum += float(it.subtotal or 0)
+
+    if not line_items:
+        # 销售单变空 → 删旧发票
+        _delete_so_invoice(db, order_id)
+        return None
+
+    if inv is None:
+        from datetime import date as _date
+        inv = Invoice(
+            customer_id=order.customer_id,
+            visit_id=None,
+            pet_id=order.pet_id,
+            invoice_date=order.order_date or _date.today().isoformat(),
+            subtotal=round(subtotal_sum, 2),
+            discount_amount=0.0,
+            total_amount=round(subtotal_sum, 2),
+            payment_status="unpaid",
+            notes=f"销售单 #{order_id}",
+            created_by=admin_name or "system",
+        )
+        db.add(inv)
+        db.flush()
+        # 生成 invoice_no
+        try:
+            inv.invoice_no = _gen_invoice_no(db)
+        except Exception:
+            pass
+    else:
+        # 清旧明细
+        for old in list(inv.items):
+            db.delete(old)
+        db.flush()
+        inv.subtotal = round(subtotal_sum, 2)
+        inv.total_amount = round(subtotal_sum - (inv.discount_amount or 0), 2)
+        inv.updated_at = datetime.utcnow()
+
+    for li in line_items:
+        db.add(InvoiceItem(invoice_id=inv.id, **li))
+    db.flush()
+    return inv
+
+
+def _delete_so_invoice(db: Session, order_id: int) -> None:
+    """销售单删除 / 作废时同步删未付的独立发票（已付的保留作为档案）"""
+    item = (
+        db.query(InvoiceItem)
+        .join(Invoice, InvoiceItem.invoice_id == Invoice.id)
+        .filter(
+            InvoiceItem.ref_type == "sales_order",
+            InvoiceItem.ref_id == order_id,
+            Invoice.visit_id.is_(None),
+        )
+        .first()
+    )
+    if not item:
+        return
+    inv = db.get(Invoice, item.invoice_id)
+    if not inv:
+        return
+    if inv.payment_status == "unpaid":
+        db.delete(inv)
+        db.flush()
 
 
 def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "Invoice | None":
