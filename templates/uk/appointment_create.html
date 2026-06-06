@@ -216,10 +216,13 @@ function acLookupCustomer() {
           if (!nameEl.value && data.name) nameEl.value = data.name;
           // hidden customer_id
           document.querySelector('input[name="customer_id"]').value = data.customer_id;
-          // banner 信息
-          const info = '客户档案 #' + data.customer_id +
-                       (data.name ? ' · ' + data.name : '') +
-                       ' · 名下 ' + (data.pets || []).length + ' 只宠物';
+          // banner 信息（重客户警示）
+          let info = '客户档案 #' + data.customer_id +
+                     (data.name ? ' · ' + data.name : '') +
+                     ' · 名下 ' + (data.pets || []).length + ' 只宠物';
+          if (data.duplicate_count && data.duplicate_count > 1) {
+            info += ' · ⚠ 同号 ' + data.duplicate_count + ' 个档案';
+          }
           document.getElementById('ac-banner-info').textContent = info;
           // 宠物 chip
           const chipsEl = document.getElementById('ac-pet-chips');
@@ -248,8 +251,11 @@ function acLookupCustomer() {
                 chip.style.background = 'var(--ink)';
                 chip.style.color = 'var(--paper)';
                 chip.style.fontWeight = '700';
-                // 填表
+                // 填表 — 同步切到该宠物归属的 customer_id（多客户重档时关键）
                 document.querySelector('input[name="pet_id"]').value = p.id;
+                if (p.customer_id) {
+                  document.querySelector('input[name="customer_id"]').value = p.customer_id;
+                }
                 document.getElementById('ac-pet-name').value = p.name || '';
                 if (p.gender) document.getElementById('ac-pet-gender').value = p.gender;
               };

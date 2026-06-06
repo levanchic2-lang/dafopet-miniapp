@@ -14801,38 +14801,50 @@ async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_
     if not phone or len(phone) < 6:
         return {"found": False}
     p = phone.strip()
-    # 主手机号优先；找不到再查备用手机号（CSV 子串）
-    cust = db.query(Customer).filter(Customer.phone == p).first()
-    if not cust:
-        # 用 LIKE 粗筛后 Python 精确匹配 CSV 段
+    # 主手机号匹配（可能有多条重客户档案）
+    matched = db.query(Customer).filter(Customer.phone == p).all()
+    # 主号匹配不到才查备用号 CSV
+    if not matched:
         candidates = db.query(Customer).filter(Customer.phones_extra.like(f"%{p}%")).all()
         for c in candidates:
             extras = [x.strip() for x in (c.phones_extra or "").split(",") if x.strip()]
             if p in extras:
-                cust = c
-                break
-    if not cust:
+                matched.append(c)
+    if not matched:
         return {"found": False}
-    pets = db.query(Pet).filter(Pet.customer_id == cust.id).all()
-    invalid_name = _is_invalid_name(cust.name)
+    # 主客户：选名下宠物最多的那条作为代表（用于填客户名/地址）
+    cust_with_pets: list[tuple] = []
+    all_pets_seen: set[tuple] = set()  # (name_lower, species) 去重
+    aggregated_pets: list[dict] = []
+    for c in matched:
+        pets = db.query(Pet).filter(Pet.customer_id == c.id).all()
+        cust_with_pets.append((c, len(pets), pets))
+        for pet in pets:
+            key = ((pet.name or "").strip().lower(), pet.species or "")
+            if key in all_pets_seen:
+                continue
+            all_pets_seen.add(key)
+            aggregated_pets.append({
+                "id": pet.id,
+                "customer_id": c.id,    # 关键：每只宠物携带自己的 customer_id
+                "name": pet.name,
+                "breed": pet.breed,
+                "gender": pet.gender,
+                "birthday_estimate": pet.birthday_estimate,
+                "color_pattern": pet.color_pattern,
+                "species": pet.species,
+            })
+    cust_with_pets.sort(key=lambda x: -x[1])
+    primary = cust_with_pets[0][0]
+    invalid_name = _is_invalid_name(primary.name)
     return {
         "found": True,
-        "customer_id": cust.id,
-        "name": cust.name or "",          # 始终回原始姓名（旧版若占位则前端可让用户改写）
+        "customer_id": primary.id,
+        "name": primary.name or "",
         "name_invalid": invalid_name,
-        "address": cust.address,
-        "pets": [
-            {
-                "id": p.id,
-                "name": p.name,
-                "breed": p.breed,
-                "gender": p.gender,
-                "birthday_estimate": p.birthday_estimate,
-                "color_pattern": p.color_pattern,
-                "species": p.species,
-            }
-            for p in pets
-        ],
+        "address": primary.address,
+        "duplicate_count": len(matched) if len(matched) > 1 else 0,
+        "pets": aggregated_pets,
     }
 
 
