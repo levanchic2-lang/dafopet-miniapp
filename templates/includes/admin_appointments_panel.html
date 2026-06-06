@@ -185,7 +185,8 @@
  </div>
  <div>
  <label style="margin:0 0 0.35rem;">预约时间</label>
- <input id="admin_appt_time" type="time" name="appointment_time" required/>
+ <input id="admin_appt_time" type="time" name="appointment_time" required step="900"
+        title="按 15 分钟一档；如 16:00 / 16:15 / 16:30 / 16:45"/>
  {# 美容可用时段提示（美容类型时通过 JS 填充） #}
  <div id="beauty-slots-row" style="display:none;margin-top:0.45rem;">
  <div id="beauty-slots-loading" style="display:none;font-size:0.8rem;color:#6b7280;">查询中…</div>
@@ -451,7 +452,7 @@
  </div>
  <div>
  <label style="font-size:0.78rem;margin:0 0 0.2rem;">新时间</label>
- <input type="time" name="new_time" value="{{ appt.appointment_time }}" required>
+ <input type="time" name="new_time" value="{{ appt.appointment_time }}" step="900" required>
  </div>
  <div>
  <label style="font-size:0.78rem;margin:0 0 0.2rem;">时长（分钟）</label>

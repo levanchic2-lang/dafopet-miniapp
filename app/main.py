@@ -6506,6 +6506,11 @@ async def page_admin_customers(
     PAGE_SIZE = 30
     query = db.query(Customer)
     q = q.strip()
+    # 速查：q 是 11 位手机号且唯一命中 → 直接跳客户档案
+    if q and len(q) == 11 and q.isdigit():
+        _hit = db.query(Customer).filter(Customer.phone == q).all()
+        if len(_hit) == 1:
+            return RedirectResponse(f"/admin/customers/{_hit[0].id}", status_code=303)
     if q:
         query = query.filter(
             or_(
@@ -14753,7 +14758,7 @@ async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_
     return {
         "found": True,
         "customer_id": cust.id,
-        "name": "" if invalid_name else cust.name,
+        "name": cust.name or "",          # 始终回原始姓名（旧版若占位则前端可让用户改写）
         "name_invalid": invalid_name,
         "address": cust.address,
         "pets": [

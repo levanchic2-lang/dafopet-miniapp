@@ -105,8 +105,9 @@
    </div>
    <div>
      <label style="display:block;font-weight:600;margin-bottom:.3rem;">预约时间 *</label>
-     <input name="appointment_time" type="time" required value="{{ default_time }}"
-            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"/>
+     <input name="appointment_time" type="time" required step="900" value="{{ default_time }}"
+            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"
+            title="按 15 分钟一档；如 16:00 / 16:15 / 16:30 / 16:45"/>
    </div>
  </div>
 
