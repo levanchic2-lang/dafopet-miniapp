@@ -681,6 +681,10 @@ Page({
       }
       const openid = await this.ensureOpenid();
       const payload = Object.assign({}, this.data.form, { openid });
+      // 若用户在 banner 里选了已有宠物 chip → 带 pet_id 给后端绑定到 Pet 档案
+      if (this.data.selectedPetId) {
+        payload.pet_id = this.data.selectedPetId;
+      }
       // 缓存手机号供下次配额检查使用
       if (payload.phone && /^1\d{10}$/.test((payload.phone || "").trim())) {
         try { wx.setStorageSync("USER_PHONE", payload.phone.trim()); } catch(e2) {}

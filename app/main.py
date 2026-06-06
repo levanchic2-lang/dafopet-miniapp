@@ -5683,6 +5683,18 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
         _appt_cust_id = _appt_cust.id
     except Exception:
         _appt_cust_id = None
+    # ── 解析前端传的 pet_id（老顾客在预约页选了已有宠物 chip）──
+    _appt_pet_id: int | None = None
+    _raw_pet_id = (payload or {}).get("pet_id")
+    if _raw_pet_id not in (None, "", 0, "0"):
+        try:
+            _maybe_pet_id = int(_raw_pet_id)
+            _maybe_pet = db.get(Pet, _maybe_pet_id) if _maybe_pet_id > 0 else None
+            # 安全：宠物必须属于该客户，不允许跨客户绑
+            if _maybe_pet and _appt_cust_id and _maybe_pet.customer_id == _appt_cust_id:
+                _appt_pet_id = _maybe_pet_id
+        except (TypeError, ValueError):
+            pass
     row = Appointment(
         wechat_openid=openid,
         category=str(fields["category"]),
@@ -5707,6 +5719,7 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
         proxy_phone=_proxy_phone_raw if _is_proxy_api else "",
         proxy_relation=_proxy_rel_raw if _is_proxy_api else "",
         customer_id=_appt_cust_id,
+        pet_id=_appt_pet_id,
     )
     db.add(row)
     db.commit()
