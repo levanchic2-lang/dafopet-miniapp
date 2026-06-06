@@ -119,26 +119,9 @@ function confirmGroomVoid(form, paidAmount) {
        <datalist id="groomer-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
      </div>
      <div>
-       <label>开始时间</label>
-       <input type="time" name="start_time" value="{{ rec.start_time if rec else '' }}"/>
-     </div>
-     <div>
-       <label>结束时间</label>
-       <input type="time" name="end_time" value="{{ rec.end_time if rec else '' }}"/>
-     </div>
-     <div>
-       <label>体型</label>
-       <select name="pet_size">
-         <option value="">—</option>
-         {% for k, v in pet_sizes.items() %}<option value="{{ k }}" {% if rec and rec.pet_size == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
-       </select>
-     </div>
-     <div>
-       <label>毛长</label>
-       <select name="coat_length">
-         <option value="">—</option>
-         {% for k, v in coat_lengths.items() %}<option value="{{ k }}" {% if rec and rec.coat_length == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
-       </select>
+       <label>助理</label>
+       <input name="assistant_name" value="{{ rec.assistant_name if rec else '' }}" list="assistant-list" placeholder="选择或输入（可选）"/>
+       <datalist id="assistant-list">{% for g in assistants or groomers %}<option value="{{ g }}">{% endfor %}</datalist>
      </div>
    </div>
  </div>

@@ -610,7 +610,7 @@
     {# ─── 预约 ─── #}
     <div class="uk-tab-content {% if active_tab=='appointments' %}active{% endif %}" data-tab-content="appointments">
       <div class="tab-action-bar">
-        <a class="uk-btn primary sm" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新增预约</a>
+        <a class="uk-btn primary sm" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}&return_to=customer:{{ cust.id }}">＋ 新增预约</a>
         <span class="tab-count">共 <b>{{ appointments|length }}</b> 条</span>
       </div>
       {% if appointments %}

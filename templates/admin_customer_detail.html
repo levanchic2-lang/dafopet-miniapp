@@ -651,7 +651,7 @@
  {# ── 预约 ── #}
  <div class="tab-content {% if active_tab=='appointments' %}active{% endif %}" data-tab-content="appointments">
  <div class="tab-action-bar">
- <a class="btn" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}"><i data-lucide="plus"></i> 新增预约</a>
+ <a class="btn" href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}&return_to=customer:{{ cust.id }}"><i data-lucide="plus"></i> 新增预约</a>
  </div>
  {% if appointments %}
  <table class="data-table mobile-card">
