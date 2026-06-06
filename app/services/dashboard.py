@@ -98,37 +98,6 @@ def build_appt_today(db: Session, store_short: str) -> dict:
     }
 
 
-def build_visit_today(db: Session, store_short: str) -> dict:
-    """今日候诊队列：当日挂号但还没结束的病例 (status=open)。"""
-    today = _today_str()
-    q = db.query(Visit).filter(
-        Visit.visit_date == today,
-        # status 为 open / 空 都算未结束（向后兼容老数据）
-        or_(Visit.status == "open", Visit.status == "", Visit.status.is_(None)),
-    )
-    if store_short:
-        # Visit 没有 store 字段，通过 pet.store 过滤
-        q = q.join(Pet, Visit.pet_id == Pet.id).filter(Pet.store == store_short)
-    rows = q.order_by(Visit.created_at.desc()).all()
-    all_items = []
-    for v in rows:
-        cust = db.get(Customer, v.customer_id) if v.customer_id else None
-        pet = db.get(Pet, v.pet_id) if v.pet_id else None
-        time_str = v.created_at.strftime("%H:%M") if v.created_at else ""
-        all_items.append({
-            "label": f"{time_str}　{cust.name if cust else '客户'}",
-            "sub": f"{pet.name if pet else '宠物'} · {v.chief_complaint[:24] if v.chief_complaint else '待填主诉'}",
-            "url": f"/admin/visits/{v.id}",
-        })
-    return {
-        "key": "visit_today", "title": "今日候诊", "icon": "stethoscope",
-        "count": len(rows), "previews": all_items[:3],
-        "items_all": all_items,  # hover 展开用完整队列
-        "all_url": "/admin/visits?date=" + today,
-        "tone": "info",
-    }
-
-
 def build_followup_today(db: Session, store_short: str) -> dict:
     """通用今日待回访（FollowUp status due/pending 且日期 <= 今天）。"""
     today = _today_str()
@@ -604,7 +573,6 @@ def build_workbench(db: Session, store_short: str = "") -> dict:
     """返回 {urgent: [...], weekly: [...], stock: [...]} 三组卡片。"""
     urgent = [
         build_appt_today(db, store_short),
-        build_visit_today(db, store_short),
         build_followup_today(db, store_short),
         build_consent_pending(db, store_short),
         build_rabies_pending(db, store_short),

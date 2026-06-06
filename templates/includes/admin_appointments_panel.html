@@ -392,14 +392,6 @@
  <button type="submit" class="a-arrived">已到店</button>
  </form>
  {% endif %}
- {% if appt.status == 'arrived' %}
- <form method="post" action="/admin/visits/quick-register" style="display:inline;"
-       title="挂号开诊 → 自动建病例并绑定该预约">
- <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
- <input type="hidden" name="appointment_id" value="{{ appt.id }}">
- <button type="submit" class="a-confirm" style="background:#1a1a1a;color:#fff;border-color:#1a1a1a;font-weight:700;">＋ 开诊挂号</button>
- </form>
- {% endif %}
  {% if appt.status not in ['cancelled','completed'] %}
  <button type="button" onclick="toggleApptPanel('cancel-{{ appt.id }}')">取消</button>
  <button type="button" onclick="toggleApptPanel('rs-{{ appt.id }}')">改约</button>
