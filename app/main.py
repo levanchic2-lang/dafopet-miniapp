@@ -7477,6 +7477,12 @@ async def page_admin_customer_detail(
     # ── 头部信号 chip 数据 ──
     unpaid_total = round(sum((i.total_amount or 0) for i in cust_invoices if i.payment_status == "unpaid"), 2)
     held_deposits_total = round(sum((d.amount or 0) for d in deposits if d.status in ("held", "partial_refund")), 2)
+    # 押金剩余可用（=收-已抵扣-已退）+ 押金累计已抵扣（用于客户档案顶部押金卡显示）
+    deposits_remaining_total = round(sum(
+        max(0.0, float(d.amount or 0) - float(d.applied_amount or 0) - float(d.refunded_amount or 0))
+        for d in deposits if d.status in ("held", "partial_refund")
+    ), 2)
+    deposits_applied_total = round(sum(float(d.applied_amount or 0) for d in deposits), 2)
 
     # ── 协议签署任务 + 已归档 PDF ──
     consent_tasks = (
@@ -7549,6 +7555,8 @@ async def page_admin_customer_detail(
             "active_coupons_count": active_coupons_count,
             "unpaid_total": unpaid_total,
             "held_deposits_total": held_deposits_total,
+            "deposits_remaining_total": deposits_remaining_total,
+            "deposits_applied_total": deposits_applied_total,
             "coupon_kind_zh": _COUPON_KIND_ZH,
             "coupon_status_zh": _COUPON_STATUS_ZH,
             # 协议签署

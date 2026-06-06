@@ -448,11 +448,31 @@
       </div>
 
       <div class="cust-wallet-card">
-        <div class="label">钱包余额</div>
-        <div class="amount">{{ '%.2f'|format(wallet_balance) }}</div>
-        <div class="sub">
-          累计充值 <b>¥{{ '%.0f'|format(wallet_lifetime_recharge) }}</b>
-          · 累计消费 <b>¥{{ '%.0f'|format(wallet_lifetime_consume) }}</b>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          {# 钱包 #}
+          <div>
+            <div class="label">钱包余额</div>
+            <div class="amount">{{ '%.2f'|format(wallet_balance) }}</div>
+            <div class="sub">
+              累计充值 <b>¥{{ '%.0f'|format(wallet_lifetime_recharge) }}</b>
+              · 累计消费 <b>¥{{ '%.0f'|format(wallet_lifetime_consume) }}</b>
+            </div>
+          </div>
+          {# 押金（点击跳押金 tab）#}
+          <div style="border-left:0.5px solid var(--hair); padding-left:16px;">
+            <div class="label">押金可用</div>
+            <a href="?tab=deposits" style="text-decoration:none; color:inherit;">
+              <div class="amount" style="color:{% if deposits_remaining_total > 0 %}#7a4a14{% else %}var(--ink-3){% endif %};">{{ '%.2f'|format(deposits_remaining_total or 0) }}</div>
+            </a>
+            <div class="sub">
+              {% if held_deposits_count > 0 %}
+                共 <b>{{ held_deposits_count }}</b> 笔 · 累计收 <b>¥{{ '%.0f'|format(held_deposits_total or 0) }}</b>
+                · 已抵扣 <b>¥{{ '%.0f'|format(deposits_applied_total or 0) }}</b>
+              {% else %}
+                暂无押金 · 可在右侧「收押金」
+              {% endif %}
+            </div>
+          </div>
         </div>
       </div>
     </div>
