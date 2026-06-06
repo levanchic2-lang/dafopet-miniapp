@@ -14692,6 +14692,34 @@ def _save_signature(data_url: str, prefix: str) -> str:
 
 # ── 公开 API：手机号查询客户 ──────────────────────────────────────────────────
 
+@app.get("/api/wechat/my-profile")
+async def api_wechat_my_profile(openid: str = Query(""), db: Session = Depends(get_db)):
+    """小程序预约页用：按 openid 查是否已绑定档案。已绑→返回客户+宠物列表"""
+    openid = (openid or "").strip()
+    if not openid:
+        return {"bound": False}
+    cust = db.query(Customer).filter(Customer.wechat_openid == openid).first()
+    if not cust:
+        return {"bound": False}
+    pets = db.query(Pet).filter(Pet.customer_id == cust.id).all()
+    return {
+        "bound": True,
+        "customer_id": cust.id,
+        "name": cust.name or "",
+        "phone": cust.phone or "",
+        "pets": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "breed": p.breed,
+                "gender": p.gender,
+                "species": p.species,
+            }
+            for p in pets
+        ],
+    }
+
+
 @app.get("/api/customer/lookup")
 async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_db)):
     if not phone or len(phone) < 6:

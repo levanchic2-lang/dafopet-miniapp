@@ -22,6 +22,13 @@ Page({
 
   _timer: null,
 
+  onLoad(options) {
+    // 上游页（如预约页）跳过来时可带 phone 预填
+    if (options && options.phone) {
+      try { this.setData({ phone: decodeURIComponent(options.phone) }); } catch (e) {}
+    }
+  },
+
   onPhoneInput(e) { this.setData({ phone: (e.detail.value || "").trim(), error: "" }); },
   onCodeInput(e)  { this.setData({ code:  (e.detail.value || "").trim(), error: "" }); },
 

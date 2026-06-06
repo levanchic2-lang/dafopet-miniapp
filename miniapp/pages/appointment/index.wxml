@@ -172,12 +172,35 @@
       </view>
     </block>
 
+    <!-- 老顾客识别 banner -->
+    <view wx:if="{{boundProfile.bound}}" class="profile-banner profile-banner-ok">
+      <view class="profile-banner-title">✓ 识别到老顾客：{{boundProfile.name || '已绑档案'}}</view>
+      <view class="profile-banner-sub">名下 {{boundProfile.pets.length}} 只宠物 · 点击下方选择本次就诊宠物</view>
+      <view wx:if="{{boundProfile.pets.length > 0}}" class="profile-pet-chips">
+        <view wx:for="{{boundProfile.pets}}" wx:key="id"
+              class="profile-pet-chip {{selectedPetId === item.id ? 'selected' : ''}}"
+              data-petid="{{item.id}}" data-petname="{{item.name}}" data-petgender="{{item.gender}}"
+              bindtap="onSelectMyPet">
+          <text class="chip-name">{{item.name || '未命名'}}</text>
+          <text class="chip-meta">{{item.species === 'cat' ? '猫' : item.species === 'dog' ? '犬' : ''}}{{item.breed ? ' · ' + item.breed : ''}}</text>
+        </view>
+      </view>
+      <view wx:else class="profile-pet-empty">该档案暂无宠物 · 下面填新宠物即可</view>
+    </view>
+
+    <!-- 未绑老顾客 banner -->
+    <view wx:if="{{lookupHit && !boundProfile.bound}}" class="profile-banner profile-banner-tip">
+      <view class="profile-banner-title">该手机号已有客户档案</view>
+      <view class="profile-banner-sub">绑定后可在「我的档案」查看历史就诊、押金、套餐等</view>
+      <view class="profile-bind-btn" bindtap="goBind">→ 立即绑定档案（30 秒）</view>
+    </view>
+
     <!-- 联系信息 -->
     <view class="label">联系人姓名</view>
     <input class="input" value="{{form.customer_name}}" data-k="customer_name" bindinput="onInput" />
 
     <view class="label">手机号</view>
-    <input class="input" type="number" maxlength="11" value="{{form.phone}}" data-k="phone" bindinput="onInput" />
+    <input class="input" type="number" maxlength="11" value="{{form.phone}}" data-k="phone" bindinput="onInput" bindblur="onPhoneBlur" />
 
     <view class="label">宠物名称</view>
     <input class="input" value="{{form.pet_name}}" data-k="pet_name" bindinput="onInput" />

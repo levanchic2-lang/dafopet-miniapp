@@ -23,6 +23,11 @@ Page({
   data: {
     loading: true,
     submitting: false,
+    // 老顾客识别
+    boundProfile: { bound: false, pets: [] },
+    selectedPetId: 0,
+    lookupHit: false,
+    lookupPhone: "",
     categories: [],
     stores: [],
     petGenders: [],
@@ -108,6 +113,75 @@ Page({
       if (options.category)      this._prefill.category = decodeURIComponent(options.category);
     }
     this.loadConfig();
+    this.loadMyProfile();
+  },
+
+  onShow() {
+    // bind 页 navigateBack 回来时重新查档案 → 显示新绑定的客户信息
+    if (this._mounted) this.loadMyProfile();
+    this._mounted = true;
+  },
+
+  // 老顾客识别：用 openid 查档案
+  async loadMyProfile() {
+    try {
+      const openid = await this.ensureOpenid();
+      const { getJson } = require("../../utils/api");
+      const data = await getJson("/api/wechat/my-profile?openid=" + encodeURIComponent(openid));
+      if (data && data.bound) {
+        const patch = { boundProfile: data };
+        // 自动填客户名 + 手机号（如果用户表单还没填）
+        if (!this.data.form.customer_name && data.name) {
+          patch["form.customer_name"] = data.name;
+        }
+        if (!this.data.form.phone && data.phone) {
+          patch["form.phone"] = data.phone;
+        }
+        this.setData(patch);
+      } else {
+        this.setData({ boundProfile: { bound: false, pets: [] } });
+      }
+    } catch (e) {
+      // 静默：识别失败不影响预约流程
+    }
+  },
+
+  // 点击宠物 chip 自动填本次预约的宠物信息
+  onSelectMyPet(e) {
+    const petId = Number(e.currentTarget.dataset.petid || 0);
+    const petName = String(e.currentTarget.dataset.petname || "");
+    const petGender = String(e.currentTarget.dataset.petgender || "unknown");
+    const idx = (this.data.petGenders || []).findIndex(g => g.value === petGender);
+    this.setData({
+      selectedPetId: petId,
+      "form.pet_name": petName,
+      "form.pet_gender": petGender,
+      petGenderIndex: idx >= 0 ? idx : 0,
+    });
+  },
+
+  // 手机号失焦时如果未绑老顾客，查这个号有没有档案
+  async onPhoneBlur(e) {
+    const phone = String((e.detail && e.detail.value) || this.data.form.phone || "").trim();
+    if (this.data.boundProfile.bound) return; // 已绑就不查
+    if (!/^1\d{10}$/.test(phone)) {
+      this.setData({ lookupHit: false });
+      return;
+    }
+    if (phone === this.data.lookupPhone) return; // 没变就不重复查
+    try {
+      const { getJson } = require("../../utils/api");
+      const data = await getJson("/api/customer/lookup?phone=" + encodeURIComponent(phone));
+      this.setData({
+        lookupHit: !!(data && data.found),
+        lookupPhone: phone,
+      });
+    } catch (e) {}
+  },
+
+  // 跳绑定页 → 完成后 navigateBack 自动回来
+  goBind() {
+    wx.navigateTo({ url: "/pages/bind/bind?phone=" + encodeURIComponent(this.data.form.phone || "") });
   },
 
   async ensureOpenid() {
