@@ -110,19 +110,20 @@ def build_visit_today(db: Session, store_short: str) -> dict:
         # Visit 没有 store 字段，通过 pet.store 过滤
         q = q.join(Pet, Visit.pet_id == Pet.id).filter(Pet.store == store_short)
     rows = q.order_by(Visit.created_at.desc()).all()
-    items = []
-    for v in rows[:3]:
+    all_items = []
+    for v in rows:
         cust = db.get(Customer, v.customer_id) if v.customer_id else None
         pet = db.get(Pet, v.pet_id) if v.pet_id else None
         time_str = v.created_at.strftime("%H:%M") if v.created_at else ""
-        items.append({
+        all_items.append({
             "label": f"{time_str}　{cust.name if cust else '客户'}",
             "sub": f"{pet.name if pet else '宠物'} · {v.chief_complaint[:24] if v.chief_complaint else '待填主诉'}",
             "url": f"/admin/visits/{v.id}",
         })
     return {
         "key": "visit_today", "title": "今日候诊", "icon": "stethoscope",
-        "count": len(rows), "previews": items,
+        "count": len(rows), "previews": all_items[:3],
+        "items_all": all_items,  # hover 展开用完整队列
         "all_url": "/admin/visits?date=" + today,
         "tone": "info",
     }

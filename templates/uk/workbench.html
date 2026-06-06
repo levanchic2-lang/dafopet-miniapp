@@ -35,6 +35,44 @@
 }
 .wb-card.has-items { background: var(--paper); }
 .wb-card.zero { background: transparent; }
+
+/* 完整队列 hover 弹层（用于今日候诊等需要看全的卡片） */
+.wb-card { position: relative; }
+.wb-expand {
+  display: none;
+  position: absolute;
+  top: 100%; left: 0; right: 0;
+  margin-top: 2px;
+  background: var(--paper);
+  border: 0.5px solid var(--ink-3);
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  z-index: 50;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.wb-card:hover .wb-expand,
+.wb-card:focus-within .wb-expand { display: block; }
+.wb-expand-head {
+  padding: 6px 14px 8px;
+  border-bottom: 0.5px solid var(--hair);
+  font-family: var(--font-serif);
+  font-size: 9pt;
+  letter-spacing: 1.5px;
+  color: var(--ink-3);
+  font-style: italic;
+}
+.wb-expand .wb-item {
+  display: flex; flex-direction: column;
+  padding: 8px 14px;
+  border-bottom: 0.5px solid var(--hair);
+  text-decoration: none;
+  color: var(--ink);
+}
+.wb-expand .wb-item:last-child { border-bottom: 0; }
+.wb-expand .wb-item:hover { background: var(--bg); }
+.wb-expand .wi-main { font-size: 10pt; font-weight: 600; }
+.wb-expand .wi-sub  { font-size: 8.5pt; color: var(--ink-3); font-style: italic; margin-top: 2px; }
 .wb-card-head {
   display: flex; align-items: baseline; justify-content: space-between;
   margin-bottom: 8px;
@@ -219,7 +257,7 @@
   </div>
   <div class="wb-grid">
     {% for c in workbench.urgent %}
-    <div class="wb-card {% if c.count == 0 %}zero{% elif c.tone == 'danger' %}danger{% elif c.tone == 'warn' %}warn{% else %}info{% endif %} {% if c.count > 0 %}has-items{% endif %}">
+    <div class="wb-card {% if c.count == 0 %}zero{% elif c.tone == 'danger' %}danger{% elif c.tone == 'warn' %}warn{% else %}info{% endif %} {% if c.count > 0 %}has-items{% endif %}" tabindex="0">
       <div class="wb-card-head">
         <div class="wb-card-title">{{ c.title }}</div>
         <div class="wb-card-count">{{ c.count }}</div>
@@ -238,6 +276,18 @@
       </div>
       {% if c.all_url and c.count > 0 %}
       <div class="wb-foot"><a href="{{ c.all_url }}">{{ c.all_label or '全部 →' }}</a></div>
+      {% endif %}
+      {# 有完整队列 + 超过预览数时，hover 显示完整列表 #}
+      {% if c['items_all'] and c['items_all']|length > c['previews']|length %}
+      <div class="wb-expand">
+        <div class="wb-expand-head">完整队列 · 共 {{ c.count }} 条 · 鼠标移开关闭</div>
+        {% for it in c['items_all'] %}
+        <a href="{{ it.url or '#' }}" class="wb-item">
+          <span class="wi-main">{{ it.label }}</span>
+          {% if it.sub %}<span class="wi-sub">{{ it.sub }}</span>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
       {% endif %}
     </div>
     {% endfor %}

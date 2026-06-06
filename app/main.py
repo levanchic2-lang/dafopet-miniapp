@@ -9963,33 +9963,54 @@ async def admin_visit_quick_register(
     csrf_token: str = Form(""),
     customer_id: int = Form(0),
     pet_id: int = Form(0),
+    appointment_id: int = Form(0),
     visit_type: str = Form("outpatient"),
 ):
-    """快捷挂号：一键建一个 open Visit (今日日期 + 默认门诊类型) → 跳详情页让医生现场填。"""
+    """快捷挂号：一键建一个 open Visit (今日日期 + 默认门诊类型) → 跳详情页让医生现场填。
+    若带 appointment_id：从预约反查客户/宠物/visit_type，并把预约状态置 completed。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
+    appt = None
+    if appointment_id:
+        appt = db.get(Appointment, appointment_id)
+        if not appt:
+            raise HTTPException(404, "预约不存在")
+        # 从预约反查
+        if not customer_id and appt.customer_id:
+            customer_id = appt.customer_id
+        if not pet_id and appt.pet_id:
+            pet_id = appt.pet_id
+        # category → visit_type 推断（门诊保留 outpatient；其他类目原样）
+        if appt.category and visit_type == "outpatient":
+            visit_type = appt.category
     if not customer_id:
         raise HTTPException(400, "缺少客户")
     cust = db.get(Customer, customer_id)
     if not cust:
         raise HTTPException(404, "客户不存在")
-    # pet_id 可选；前端通常会传当前 active_pet
     pet = db.get(Pet, pet_id) if pet_id else None
     if pet and pet.customer_id != customer_id:
         raise HTTPException(400, "宠物不属于该客户")
     v = Visit(
         customer_id=customer_id,
         pet_id=pet_id or None,
+        appointment_id=appointment_id or None,
         visit_date=datetime.utcnow().strftime("%Y-%m-%d"),
         visit_type=(visit_type or "outpatient").strip()[:40],
         vet_name=request.session.get("admin_username", "")[:80],
         created_by=request.session.get("admin_username", "admin"),
         status="open",
+        # 主诉用预约的服务名兜底，方便医生看上下文
+        chief_complaint=(appt.service_name or "") if appt else "",
     )
     db.add(v)
     db.commit()
     db.refresh(v)
+    # 预约 → completed（避免再"已到店"的状态卡住）
+    if appt and appt.status != AppointmentStatus.completed.value:
+        appt.status = AppointmentStatus.completed.value
+        db.commit()
     return RedirectResponse(f"/admin/visits/{v.id}?msg=已挂号·请填写主诉与诊断", status_code=303)
 
 
