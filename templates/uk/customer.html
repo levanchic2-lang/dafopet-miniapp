@@ -1088,6 +1088,9 @@
       <div class="aside-actions">
         <a class="uk-btn sm" href="#" onclick="document.getElementById('consentModal').classList.add('visible');return false;">发起协议签署</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('rechargeModal').classList.add('visible');return false;">钱包充值</a>
+        {% if request.session.get('admin_role') == 'superadmin' %}
+        <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('walletAdjustModal').classList.add('visible');return false;" style="color:#7a4a14;border-color:#7a4a14;">⚙ 钱包调账</a>
+        {% endif %}
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('sellPkgModal').classList.add('visible');return false;">售卖套餐</a>
         <a class="uk-btn ghost sm" href="/admin/sales-orders/create?customer_id={{ cust.id }}{% if active_pet %}&pet_id={{ active_pet.id }}{% endif %}">售卖商品</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('depositModal').classList.add('visible');return false;">收押金</a>
@@ -1374,6 +1377,35 @@
   </div>
 </div>
 
+{# ─── 钱包调账 modal（仅超管）─── #}
+{% if request.session.get('admin_role') == 'superadmin' %}
+<div class="uk-modal-overlay" id="walletAdjustModal" onclick="if(event.target===this) this.classList.remove('visible');">
+  <div class="uk-modal">
+    <h3>钱 包 调 账</h3>
+    <p class="uk-mute" style="font-size:9pt;margin:-8px 0 14px;font-style:italic;letter-spacing:1px;">
+      不开收费单直接增减钱包余额。<b style="color:var(--accent-red);font-style:normal;">仅超管可操作，必须填备注，写入审计。</b>
+    </p>
+    <form method="post" action="/admin/wallets/{{ cust.id }}/adjust"
+          onsubmit="return confirm('确认调账？该操作直接改变客户钱包余额，已写审计日志。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <label class="field">调账金额（正可加 / 负可扣）
+        <input name="amount" type="number" step="0.01" placeholder="例：80 加余额 / -50 扣余额" required/>
+        <span style="font-size:9pt;color:var(--ink-3);font-style:italic;letter-spacing:1px;display:block;margin-top:4px;">
+          当前余额：¥{{ '%.2f'|format(wallet_balance or 0) }}
+        </span>
+      </label>
+      <label class="field">备注（必填）
+        <textarea name="note" rows="2" placeholder="如：补录自旧系统差额 / 旧系统已消费但新系统漏扣 / 系统迁移调账" required></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('walletAdjustModal').classList.remove('visible');">取消</button>
+        <button type="submit" class="uk-btn primary sm" style="background:#7a4a14;border-color:#7a4a14;">确 认 调 账</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 {# ─── 售卖套餐 modal ─── #}
 <div class="uk-modal-overlay" id="sellPkgModal" onclick="if(event.target===this) this.classList.remove('visible');">
   <div class="uk-modal">
@@ -1393,12 +1425,13 @@
       </label>
       <div class="row2">
         <label class="field">收款方式
-          <select name="pay_method">
+          <select name="pay_method" id="sp-pay-method" onchange="onSellPayChange()">
             <option value="cash">现金</option>
             <option value="wechat">微信</option>
             <option value="alipay">支付宝</option>
             <option value="shouqianba">收钱吧</option>
             <option value="wallet">钱包扣款</option>
+            <option value="external">⤴ 旧系统/外部已付（补录老卡）</option>
           </select>
         </label>
         <label class="field">关联宠物（可选）
@@ -1413,9 +1446,35 @@
       <label class="field">自定义售价（可选，留空 = 目录价）
         <input name="custom_price" type="number" step="0.01" min="0" placeholder="¥"/>
       </label>
+
+      {# 补录老卡专用 fieldset：默认隐藏，选「旧系统/外部已付」时展开 #}
+      <fieldset id="sp-legacy-fields" style="display:none; border:0.5px dashed var(--accent-amber); padding:10px 14px; margin:8px 0; background:#fef9f0;">
+        <legend style="font-family:var(--font-serif); font-size:9.5pt; letter-spacing:1.5px; color:#7a4a14; padding:0 8px;">补 录 老 卡</legend>
+        <div class="row2">
+          <label class="field">真实购买日
+            <input name="custom_purchase_date" type="date" placeholder="留空 = 今天" />
+          </label>
+          <label class="field">已用次数
+            <input name="used_count" type="number" min="0" step="1" placeholder="0" />
+          </label>
+        </div>
+        <label class="field">总次数（覆盖，可选）
+          <input name="custom_total_uses" type="number" min="1" step="1" placeholder="如 10（留空 = 目录默认）" />
+        </label>
+        <div style="font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:1px; margin-top:4px;">
+          示例：老系统买的 10 次洗澡卡用了 3 次 → 总 10、已用 3，新系统显示剩 7 次
+        </div>
+      </fieldset>
+
       <label class="field">备注
-        <textarea name="note" rows="2" placeholder="可选"></textarea>
+        <textarea name="note" rows="2" placeholder="可选；补录时建议写：补录自老系统"></textarea>
       </label>
+      <script>
+      function onSellPayChange() {
+        const v = document.getElementById('sp-pay-method').value;
+        document.getElementById('sp-legacy-fields').style.display = (v === 'external') ? '' : 'none';
+      }
+      </script>
       <div class="actions">
         <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('sellPkgModal').classList.remove('visible');">取消</button>
         <button type="submit" class="uk-btn primary sm">售 卖</button>

@@ -9530,6 +9530,10 @@ async def admin_customer_buy_package(
     pet_id: int = Form(0),
     custom_price: str = Form(""),     # 留空 → 按目录价
     note: str = Form(""),
+    # 补录老系统卡专用（可选）
+    used_count: str = Form("0"),        # 已用次数（旧系统消耗过的）
+    custom_purchase_date: str = Form(""),  # 真实购买日 YYYY-MM-DD（留空 = 今天）
+    custom_total_uses: str = Form(""),  # 自定义总次（旧系统卡不同套餐时）
 ):
     """给客户售卖一份套餐 → 新建 CustomerPackage。
     若 pay_method == 'wallet' → 自动从钱包扣款；否则只记账（外部已收）。
@@ -9550,11 +9554,34 @@ async def admin_customer_buy_package(
     if price < 0:
         price = 0.0
 
-    from datetime import date, timedelta
+    from datetime import date, timedelta, datetime as _dt
     today = date.today()
+    # 真实购买日（补录老卡用）
+    purchase_d = today
+    if (custom_purchase_date or "").strip():
+        try:
+            purchase_d = _dt.strptime(custom_purchase_date.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            purchase_d = today
     expires = ""
     if prod.validity_days and prod.validity_days > 0:
-        expires = (today + timedelta(days=prod.validity_days)).isoformat()
+        expires = (purchase_d + timedelta(days=prod.validity_days)).isoformat()
+    # 已用次数（补录老卡用）
+    try:
+        used_n = max(0, int(used_count or 0))
+    except (TypeError, ValueError):
+        used_n = 0
+    # 总次（旧系统不同套餐时允许覆盖）
+    try:
+        total_n = int((custom_total_uses or "").strip() or prod.total_uses or 0)
+    except (TypeError, ValueError):
+        total_n = prod.total_uses
+    if total_n < 1:
+        total_n = prod.total_uses
+    if used_n > total_n:
+        used_n = total_n
+    # 状态：已用满 → exhausted
+    initial_status = "exhausted" if used_n >= total_n else "active"
 
     cp = CustomerPackage(
         customer_id=customer_id,
@@ -9562,13 +9589,13 @@ async def admin_customer_buy_package(
         product_id=prod.id,
         name=prod.name,
         category=prod.category,
-        total_uses=prod.total_uses,
-        used_count=0,
+        total_uses=total_n,
+        used_count=used_n,
         sell_price=price,
         unit_price=prod.unit_price,
-        purchase_date=today.isoformat(),
+        purchase_date=purchase_d.isoformat(),
         expires_at=expires,
-        status="active",
+        status=initial_status,
         store=_get_admin_store(request),
         operator=request.session.get("admin_username", "admin"),
         note=(note or "").strip(),
@@ -9576,6 +9603,7 @@ async def admin_customer_buy_package(
     db.add(cp); db.flush()
 
     # 如果用钱包支付，立刻扣款
+    # pay_method = 'external' / 'imported' / 'legacy' → 视为旧系统/外部已付，不动钱包不写发票
     if pay_method == "wallet":
         wallet = _get_or_create_wallet(db, customer_id)
         try:
