@@ -392,6 +392,14 @@
   {# 按钮在副标下方 - match demo #}
   <div class="actions" style="margin-top:20px;">
     {% if active_pet %}
+    {# 一键挂号：建 open Visit + 跳详情，门诊默认 #}
+    <form method="post" action="/admin/visits/quick-register" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+      <input type="hidden" name="pet_id" value="{{ active_pet.id }}"/>
+      <input type="hidden" name="visit_type" value="outpatient"/>
+      <button type="submit" class="uk-btn primary sm" title="一键挂号建病例 (默认门诊)">＋ 挂&nbsp;号</button>
+    </form>
     <a class="uk-btn sm" href="/admin/visits/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 新建病历</a>
     <a class="uk-btn sm" href="/admin/vaccinations/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入疫苗</a>
     <a class="uk-btn sm" href="/admin/dewormings/create?customer_id={{ cust.id }}&pet_id={{ active_pet.id }}">＋ 录入驱虫</a>

@@ -9956,6 +9956,43 @@ async def page_admin_visit_create(
     })
 
 
+@app.post("/admin/visits/quick-register")
+async def admin_visit_quick_register(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    customer_id: int = Form(0),
+    pet_id: int = Form(0),
+    visit_type: str = Form("outpatient"),
+):
+    """快捷挂号：一键建一个 open Visit (今日日期 + 默认门诊类型) → 跳详情页让医生现场填。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    if not customer_id:
+        raise HTTPException(400, "缺少客户")
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404, "客户不存在")
+    # pet_id 可选；前端通常会传当前 active_pet
+    pet = db.get(Pet, pet_id) if pet_id else None
+    if pet and pet.customer_id != customer_id:
+        raise HTTPException(400, "宠物不属于该客户")
+    v = Visit(
+        customer_id=customer_id,
+        pet_id=pet_id or None,
+        visit_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        visit_type=(visit_type or "outpatient").strip()[:40],
+        vet_name=request.session.get("admin_username", "")[:80],
+        created_by=request.session.get("admin_username", "admin"),
+        status="open",
+    )
+    db.add(v)
+    db.commit()
+    db.refresh(v)
+    return RedirectResponse(f"/admin/visits/{v.id}?msg=已挂号·请填写主诉与诊断", status_code=303)
+
+
 @app.post("/admin/visits/create")
 async def admin_visit_create(
     request: Request,
