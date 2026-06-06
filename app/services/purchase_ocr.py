@@ -149,6 +149,24 @@ def _normalize(s: str) -> str:
     return out
 
 
+def _extract_alternates(s: str) -> list[str]:
+    """提取字符串里括号 / 引号内的内容作为备选名。
+    例：'口腔抗菌剂（口炎康）' → ['口炎康']
+        '宠尔康[复方氟康唑]' → ['复方氟康唑']
+    """
+    if not s:
+        return []
+    import re
+    alts: list[str] = []
+    # 中英文括号 / 方括号 / 直角引号
+    for pattern in (r"[（(]([^（()）]+)[)）]", r"[【\[]([^【】\[\]]+)[】\]]", r"「([^「」]+)」"):
+        for m in re.finditer(pattern, s):
+            inner = m.group(1).strip()
+            if inner and len(inner) >= 2:
+                alts.append(inner)
+    return alts
+
+
 def _strip_brand_prefix(s: str) -> str:
     """去掉开头的"厂家："或"品牌-"前缀，便于跨厂家匹配。
     例：'萌邦：宠尔康（复方氟康唑乳膏）' → '宠尔康（复方氟康唑乳膏）'
@@ -183,40 +201,72 @@ def _candidate_names(it) -> list[str]:
 def match_item_by_name(name: str, all_items: list) -> tuple[int, float]:
     """返回 (item_id, confidence)。0~1，1=完全一致。无匹配返回 (0, 0)。
     匹配策略：
-      1. 对每个品目，把 item.name 和 item.aliases 里的每个别名都当候选名跑一遍
-      2. 全名 normalize 后完全相等 → 1.0；剥前缀后完全相等 → 0.95
-      3. SequenceMatcher（同时对原名 / 剥前缀名都跑一遍，取较优）
-      4. 子串包含给加分到 0.9
+      1. 候选名集合：item.name + aliases + 各自括号内备选名
+      2. 目标名集合：name + 剥前缀名 + 括号内备选名
+      3. 任一对完全相等 → 1.0；剥前缀后相等 → 0.95
+      4. 任一对子串包含 → 0.9（短名 ≥ 2 字才算）
+      5. SequenceMatcher 各对比，取最高
     阈值：0.7
     """
     from difflib import SequenceMatcher
-    target_full = _normalize(name)
-    if not target_full:
+
+    def _all_forms(s: str) -> list[str]:
+        """生成一个名字的所有可比对形式（去重）"""
+        forms = []
+        if not s:
+            return forms
+        nf = _normalize(s)
+        if nf:
+            forms.append(nf)
+        ns = _normalize(_strip_brand_prefix(s))
+        if ns and ns not in forms:
+            forms.append(ns)
+        # 括号内备选
+        for alt in _extract_alternates(s):
+            na = _normalize(alt)
+            if na and na not in forms:
+                forms.append(na)
+            nas = _normalize(_strip_brand_prefix(alt))
+            if nas and nas not in forms:
+                forms.append(nas)
+        return forms
+
+    target_forms = _all_forms(name)
+    if not target_forms:
         return (0, 0.0)
-    target_stripped = _normalize(_strip_brand_prefix(name))
     best = (0, 0.0)
     for it in all_items:
         for cand in _candidate_names(it):
-            n_full = _normalize(cand)
-            if not n_full:
+            cand_forms = _all_forms(cand)
+            if not cand_forms:
                 continue
-            if n_full == target_full:
-                return (it.id, 1.0)
-            n_stripped = _normalize(_strip_brand_prefix(cand))
-            if target_stripped and (target_stripped == n_full or target_stripped == n_stripped):
-                return (it.id, 0.95)
-            ratios = [SequenceMatcher(None, n_full, target_full).ratio()]
-            if target_stripped:
-                ratios.append(SequenceMatcher(None, n_full, target_stripped).ratio())
-                if n_stripped != n_full:
-                    ratios.append(SequenceMatcher(None, n_stripped, target_stripped).ratio())
-                    ratios.append(SequenceMatcher(None, n_stripped, target_full).ratio())
-            ratio = max(ratios)
-            if (target_full in n_full or n_full in target_full or
-                (target_stripped and (target_stripped in n_full or n_full in target_stripped))):
-                ratio = max(ratio, 0.9)
-            if ratio > best[1]:
-                best = (it.id, ratio)
+            # 完全相等
+            for tf in target_forms:
+                for cf in cand_forms:
+                    if tf == cf:
+                        # 第一个完全相等就 1.0（即使是 alias 也算高质量匹配）
+                        return (it.id, 1.0)
+            # 子串包含（要求短的那个 ≥ 2 字符避免误命中如"水"）
+            sub_hit = False
+            for tf in target_forms:
+                for cf in cand_forms:
+                    short, long_ = (tf, cf) if len(tf) <= len(cf) else (cf, tf)
+                    if len(short) >= 2 and short in long_:
+                        sub_hit = True
+                        break
+                if sub_hit:
+                    break
+            # SequenceMatcher 最高 ratio
+            max_ratio = 0.0
+            for tf in target_forms:
+                for cf in cand_forms:
+                    r = SequenceMatcher(None, tf, cf).ratio()
+                    if r > max_ratio:
+                        max_ratio = r
+            if sub_hit:
+                max_ratio = max(max_ratio, 0.9)
+            if max_ratio > best[1]:
+                best = (it.id, max_ratio)
     return best if best[1] >= 0.7 else (0, best[1])
 
 
