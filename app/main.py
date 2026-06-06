@@ -16367,54 +16367,97 @@ async def admin_cashier_multi_pay_submit(
     else:
         total_discount = 0.0
 
-    # 第二遍：按比例分摊减免（最后一张吃尾差），逐张写流水
-    paid_count = 0
-    paid_total = 0.0
-    discount_total = 0.0
-    note_tag = f"合并结算（{len(inv_rows)} 单）"
+    # 折扣只在第一笔混合支付时一次性应用（避免每轮重复加减免流水）
+    # 通过 form.discount_applied 标记：已经应用过的不再写减免
+    discount_already_applied = (form.get("discount_applied") == "1")
+    if discount_already_applied:
+        total_discount = 0.0
+
+    # 应收（折扣分摊后） = out - share_per_inv
+    inv_actuals: list[float] = []
+    discount_share_used = 0.0
     for idx, r in enumerate(inv_rows):
-        inv = r["inv"]
         out = r["out"]
         if total_discount > 0:
             if idx < len(inv_rows) - 1:
                 share = round(total_discount * (out / grand_out), 2)
             else:
-                share = round(total_discount - discount_total, 2)
+                share = round(total_discount - discount_share_used, 2)
             share = max(0.0, min(share, out))
         else:
             share = 0.0
-        actual = round(out - share, 2)
-        # 实付流水
-        if actual > 0:
-            db.add(Payment(
-                invoice_id=inv.id, customer_id=customer_id,
-                method=method, amount=actual,
-                ref_no=ref_no, status="success",
-                store=store, operator=operator,
-                note=note_tag,
-            ))
-            db.flush()
-        # 减免流水（method=free）
+        inv_actuals.append(round(out - share, 2))
         if share > 0:
+            # 立刻写减免流水（这一次性事件）
             db.add(Payment(
-                invoice_id=inv.id, customer_id=customer_id,
+                invoice_id=r["inv"].id, customer_id=customer_id,
                 method="free", amount=share,
                 ref_no="", status="success",
                 store=store, operator=operator,
-                note=f"{note_tag} · 减免分摊",
+                note=f"合并结算 · 减免分摊（{len(inv_rows)} 单）",
             ))
             db.flush()
-            discount_total += share
+            discount_share_used += share
+    actuals_total = round(sum(inv_actuals), 2)
+
+    # 本轮要消化的金额（混合支付时可指定本笔金额，默认 = 全部应收）
+    try:
+        round_amount = float((form.get("round_amount") or "").strip() or actuals_total)
+    except ValueError:
+        round_amount = actuals_total
+    round_amount = max(0.0, min(round_amount, actuals_total))
+    if round_amount <= 0:
+        return RedirectResponse(
+            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg=本笔金额为 0",
+            status_code=303,
+        )
+
+    # 按顺序消化：每张单先满足，剩余转下一张
+    paid_count = 0
+    paid_total = 0.0
+    note_tag = f"合并结算（{len(inv_rows)} 单 · {method}）"
+    remaining = round_amount
+    for idx, r in enumerate(inv_rows):
+        if remaining <= 0:
+            break
+        inv = r["inv"]
+        actual_due = inv_actuals[idx]
+        # 现在的 outstanding（考虑减免已写流水后）
+        cur_out = max(0.0, actual_due)
+        if cur_out <= 0:
+            continue
+        take = min(remaining, cur_out)
+        db.add(Payment(
+            invoice_id=inv.id, customer_id=customer_id,
+            method=method, amount=round(take, 2),
+            ref_no=ref_no, status="success",
+            store=store, operator=operator,
+            note=note_tag,
+        ))
+        db.flush()
         _invoice_recompute_status(db, inv)
         paid_count += 1
-        paid_total += actual
+        paid_total += take
+        remaining = round(remaining - take, 2)
     db.commit()
+
+    # 剩余未付（含其他单的）
+    still_outstanding = round(actuals_total - round_amount, 2)
+    from urllib.parse import quote as _q
+    if still_outstanding > 0.005:
+        # 还有未付 → 回合并结算页让用户走下一种支付方式
+        msg_text = f"本笔 {method} 收 ¥{paid_total:.2f}（{paid_count} 单部分/已收）· 剩余 ¥{still_outstanding:.2f} 请继续选支付方式"
+        return RedirectResponse(
+            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg={_q(msg_text, safe='')}",
+            status_code=303,
+        )
+    # 全部付清 → 回已收款 tab
     if total_discount > 0:
-        msg = f"已合并结算 {paid_count} 单 · 应收 ¥{grand_out:.2f} − 减免 ¥{total_discount:.2f} = 实收 ¥{paid_total:.2f}"
+        msg = f"已合并结算 {len(inv_rows)} 单 · 应收 ¥{grand_out:.2f} − 减免 ¥{total_discount:.2f} = 实收 ¥{actuals_total:.2f}"
     else:
-        msg = f"已合并结算 {paid_count} 单 · ¥{paid_total:.2f}"
+        msg = f"已合并结算 {len(inv_rows)} 单 · ¥{actuals_total:.2f}"
     return RedirectResponse(
-        f"/admin/invoices?status=paid&msg={msg}",
+        f"/admin/invoices?status=paid&msg={_q(msg, safe='')}",
         status_code=303,
     )
 
@@ -16651,7 +16694,33 @@ async def admin_invoice_detail(
         "paid_sum": paid_sum,
         "outstanding": outstanding,
         "method_zh": _REVENUE_PAY_ZH,
+        # 同客户其他待收单（用于本页直接勾选合并结算）
+        "other_unpaid": _other_unpaid_for_invoice(db, inv) if inv.customer_id else [],
     })
+
+
+def _other_unpaid_for_invoice(db: Session, current_inv: Invoice) -> list:
+    """同客户其他未结清的发票（unpaid + partial），按 id 升序。返回 [{inv, outstanding, items_preview}]"""
+    rows = db.query(Invoice).filter(
+        Invoice.customer_id == current_inv.customer_id,
+        Invoice.id != current_inv.id,
+        Invoice.payment_status.in_(("unpaid", "partial")),
+    ).order_by(Invoice.id.asc()).all()
+    out = []
+    for r in rows:
+        paid = _invoice_paid_sum(db, r.id)
+        outstanding = max(0.0, float(r.total_amount or 0) - paid)
+        if outstanding <= 0:
+            continue
+        # 取明细描述前 60 字符做预览
+        items_preview = " · ".join(
+            (i.description or "")[:24] for i in (r.items or [])[:3]
+        )
+        if len(r.items or []) > 3:
+            items_preview += f" 等 {len(r.items)} 项"
+        out.append({"inv": r, "outstanding": round(outstanding, 2),
+                    "items_preview": items_preview, "pet": r.pet})
+    return out
 
 
 def _invoice_paid_sum(db: Session, inv_id: int) -> float:
@@ -16687,7 +16756,12 @@ async def admin_invoice_add_payment(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """添加一笔收款（混合支付：可重复调用直到 sum >= total）。"""
+    """添加一笔收款（混合支付：可重复调用直到 sum >= total）。
+    支持「同客户多张待收单一起付」— 前端勾选其他单 id 通过 invoice_ids[] 传入：
+      - 金额按勾选顺序 (current invoice 第一，其余按 id 升序) 分摊
+      - 现金/微信/支付宝/钱包等 simple 方式可跨多单
+      - 套餐/押金/优惠券 只支持单张 (current invoice)，因为绑特定明细行
+    """
     require_admin(request)
     form = await request.form()
     _require_csrf(request, str(form.get("csrf_token", "")))
@@ -16700,17 +16774,44 @@ async def admin_invoice_add_payment(
     method = str(form.get("method") or "cash").strip()
     operator = request.session.get("admin_username", "admin")
     store = _get_admin_store(request)
-    outstanding = max(0.0, float(inv.total_amount or 0) - _invoice_paid_sum(db, inv.id))
-    if outstanding <= 0:
+
+    # ── 合并结算：解析勾选的其他待收单 id ──
+    extra_ids = [int(x) for x in form.getlist("extra_invoice_ids") if str(x).isdigit()]
+    # 跨单收款方式白名单（钱包/套餐/押金/优惠券因为带特殊 ref，多单暂不支持）
+    cross_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party"}
+    multi_target = bool(extra_ids) and method in cross_methods
+    if extra_ids and not multi_target:
+        # 选了多张但方式不支持 → 提示后只对当前单生效
+        from urllib.parse import quote as _q
+        _warn = _q("钱包/套餐/押金/优惠券暂只支持单张发票结算；已只结当前单。", safe="")
+        # 继续走 single-invoice 流程
+    target_invs = [inv]
+    if multi_target:
+        for eid in extra_ids:
+            e = db.get(Invoice, eid)
+            if not e or e.customer_id != inv.customer_id:
+                continue
+            if e.payment_status == "paid":
+                continue
+            target_invs.append(e)
+
+    outstanding_current = max(0.0, float(inv.total_amount or 0) - _invoice_paid_sum(db, inv.id))
+    outstanding_total = outstanding_current
+    if multi_target:
+        for t in target_invs[1:]:
+            outstanding_total += max(0.0, float(t.total_amount or 0) - _invoice_paid_sum(db, t.id))
+    if outstanding_total <= 0:
         _invoice_recompute_status(db, inv); db.commit()
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已无欠款", status_code=303)
     try:
-        want = float(form.get("amount") or outstanding)
+        want = float(form.get("amount") or outstanding_total)
     except (TypeError, ValueError):
-        want = outstanding
-    want = max(0.0, min(want, outstanding))
+        want = outstanding_total
+    want = max(0.0, min(want, outstanding_total))
     if want <= 0:
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=金额需大于 0", status_code=303)
+    if not multi_target and want > outstanding_current:
+        want = outstanding_current
 
     ref_id: int | None = None
     ref_no = (form.get("ref_no") or "").strip()[:120]
@@ -16823,21 +16924,46 @@ async def admin_invoice_add_payment(
         ref_id = c.id
 
     # cash / wechat / alipay / shouqianba / meituan / third_party — 无 side effect
-    # 加这笔 Payment
-    db.add(Payment(
-        invoice_id=inv.id,
-        customer_id=inv.customer_id,
-        method=method,
-        amount=want,
-        ref_id=ref_id,
-        ref_no=ref_no,
-        status="success",
-        store=store,
-        operator=operator,
-        note=note,
-    ))
-    db.flush()
-    _invoice_recompute_status(db, inv)
+    # 单张：直接给当前发票写一笔
+    # 多张（multi_target=True）：按 target_invs 顺序分摊 want，每张独立 Payment
+    if multi_target:
+        remaining = want
+        for t in target_invs:
+            if remaining <= 0:
+                break
+            t_out = max(0.0, float(t.total_amount or 0) - _invoice_paid_sum(db, t.id))
+            if t_out <= 0:
+                continue
+            pay_amt = round(min(remaining, t_out), 2)
+            if pay_amt <= 0:
+                continue
+            _t_note = note
+            if t.id != inv.id and not _t_note:
+                _t_note = f"合并结算 (源单 #{inv.id})"
+            db.add(Payment(
+                invoice_id=t.id, customer_id=t.customer_id,
+                method=method, amount=pay_amt,
+                ref_id=None, ref_no=ref_no, status="success",
+                store=store, operator=operator, note=_t_note,
+            ))
+            db.flush()
+            _invoice_recompute_status(db, t)
+            remaining = round(remaining - pay_amt, 2)
+    else:
+        db.add(Payment(
+            invoice_id=inv.id,
+            customer_id=inv.customer_id,
+            method=method,
+            amount=want,
+            ref_id=ref_id,
+            ref_no=ref_no,
+            status="success",
+            store=store,
+            operator=operator,
+            note=note,
+        ))
+        db.flush()
+        _invoice_recompute_status(db, inv)
     # 充值单付清 → 把钱真正打进钱包（幂等）
     try:
         _maybe_credit_wallet_from_invoice(db, inv, request)
