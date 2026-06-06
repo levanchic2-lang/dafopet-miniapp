@@ -44,7 +44,10 @@
   body .fu-status-pill.closed, body .fu-status-pill.skipped { color:var(--ink-3); border-color:var(--hair); }
   body .fu-overdue { color:var(--accent-red); font-weight:700; font-family:var(--font-numeric); }
 
-  body .fu-action-btn { border-radius:0 !important; font-family:var(--font-serif) !important; background:var(--paper) !important; border:0.5px solid var(--hair) !important; color:var(--ink-2) !important; font-style:italic; font-weight:400 !important; font-size:9pt !important; padding:4px 10px !important; }
+  body .fu-row-actions { display:flex !important; flex-wrap:wrap; gap:6px; justify-content:flex-end; align-items:center; min-width:240px; }
+  body .fu-row-actions form { display:inline-block; margin:0; }
+  body .fu-row-actions > * { flex:0 0 auto; }
+  body .fu-action-btn { border-radius:0 !important; font-family:var(--font-serif) !important; background:var(--paper) !important; border:0.5px solid var(--hair) !important; color:var(--ink-2) !important; font-style:italic; font-weight:400 !important; font-size:9pt !important; padding:4px 10px !important; margin:0 !important; white-space:nowrap; line-height:1.5; }
   body .fu-action-btn:hover { color:var(--ink) !important; border-color:var(--ink-3) !important; background:var(--bg) !important; }
   body .fu-action-btn.primary { background:var(--ink) !important; color:var(--paper) !important; border:0 !important; font-style:normal !important; font-weight:700 !important; }
   body .fu-action-btn.warn { background:var(--paper) !important; color:var(--accent-amber) !important; border:0.5px solid var(--accent-amber) !important; }
