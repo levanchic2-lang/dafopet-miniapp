@@ -19765,11 +19765,30 @@ async def admin_grooming_create(request: Request, db: Session = Depends(get_db))
         )
         db.add(inv)
         db.flush()
-        db.add(InvoiceItem(
-            invoice_id=inv.id, ref_type="grooming", ref_id=rec.id,
-            description=f"美容服务（{len(services)} 项）",
-            quantity=1.0, unit_price=actual_charge, subtotal=actual_charge,
-        ))
+        # 按每项服务拆明细，让客户看清楚 — 而不是合并成「美容服务（3 项）」
+        # 如果有 charge_amount 覆盖总价 (custom_charge != sum(subtotals))，差额作为「折扣 / 加价」单独成行
+        items_total = round(sum(float(s.get("subtotal") or 0) for s in services), 2)
+        for s in services:
+            sub = round(float(s.get("subtotal") or 0), 2)
+            if sub <= 0:
+                continue
+            qty = float(s.get("qty") or 1)
+            price = float(s.get("price") or 0)
+            name = (s.get("name") or "美容服务").strip()
+            note = (s.get("notes") or "").strip()
+            db.add(InvoiceItem(
+                invoice_id=inv.id, ref_type="grooming", ref_id=rec.id,
+                description=f"[美容#{rec.id}] {name}" + (f" · {note}" if note else ""),
+                quantity=qty, unit_price=price, subtotal=sub,
+            ))
+        # 价格覆盖差额（手动改总价时）
+        if abs(actual_charge - items_total) > 0.005:
+            diff = round(actual_charge - items_total, 2)
+            db.add(InvoiceItem(
+                invoice_id=inv.id, ref_type="grooming", ref_id=rec.id,
+                description=("[美容#" + str(rec.id) + "] 整单折扣 / 减免") if diff < 0 else ("[美容#" + str(rec.id) + "] 整单加价"),
+                quantity=1.0, unit_price=diff, subtotal=diff,
+            ))
         rec.invoice_id = inv.id
         msg += f"，收费单 ¥{actual_charge:.2f} 已生成待收款"
 
