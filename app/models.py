@@ -818,6 +818,7 @@ class GroomingOrder(Base):
     start_time:  Mapped[str] = mapped_column(String(10), default="")
     end_time:    Mapped[str] = mapped_column(String(10), default="")
     groomer_name: Mapped[str] = mapped_column(String(80), default="")
+    assistant_name: Mapped[str] = mapped_column(String(80), default="")
 
     # 服务清单 JSON：[{name, qty, price, subtotal, notes}]
     services_json: Mapped[str] = mapped_column(Text, default="[]")

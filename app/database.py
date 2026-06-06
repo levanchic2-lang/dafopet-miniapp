@@ -1773,6 +1773,14 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_grooming_customer ON grooming_orders(customer_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_grooming_date ON grooming_orders(groom_date)"))
 
+            # grooming_orders: 补 assistant_name 列
+            try:
+                _gr_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(grooming_orders)")).fetchall()}
+                if "assistant_name" not in _gr_cols:
+                    conn.execute(text("ALTER TABLE grooming_orders ADD COLUMN assistant_name VARCHAR(80) DEFAULT ''"))
+            except Exception as _e:
+                print(f"[migrations] grooming_orders.assistant_name skipped: {_e}")
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

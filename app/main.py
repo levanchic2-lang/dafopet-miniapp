@@ -19303,6 +19303,8 @@ async def page_admin_grooming_create(
     groomers = [s[0] for s in db.query(Staff.name).filter(
         Staff.status.in_(["active", "probation"]),
     ).all()]
+    # 助理候选 = 所有在职员工（医生 / 美容师 / 助理 都可担任助理）
+    assistants = groomers[:]
     today = datetime.utcnow().strftime("%Y-%m-%d")
     history = []
     if pet:
@@ -19312,7 +19314,7 @@ async def page_admin_grooming_create(
     return templates.TemplateResponse(request, "uk/grooming.html", {  # B 补 - UK 重写
         "mode": "create", "rec": None,
         "cust": cust, "pet": pet, "appt": appt,
-        "groomers": groomers, "groom_items": groom_items,
+        "groomers": groomers, "assistants": assistants, "groom_items": groom_items,
         "pet_sizes": _GROOMING_PET_SIZES, "coat_lengths": _GROOMING_COAT_LENGTHS,
         "today": today,
         "grooming_history": history,
@@ -19342,13 +19344,10 @@ async def admin_grooming_create(request: Request, db: Session = Depends(get_db))
         pet_id=pet_id or None,
         appointment_id=appointment_id or None,
         groom_date=str(form.get("groom_date", "")).strip()[:20],
-        start_time=str(form.get("start_time", "")).strip()[:10],
-        end_time=str(form.get("end_time", "")).strip()[:10],
         groomer_name=str(form.get("groomer_name", "")).strip()[:80],
+        assistant_name=str(form.get("assistant_name", "")).strip()[:80],
         services_json=json.dumps(services, ensure_ascii=False),
         total_amount=total,
-        pet_size=str(form.get("pet_size", "")).strip()[:20],
-        coat_length=str(form.get("coat_length", "")).strip()[:20],
         skin_condition=str(form.get("skin_condition", "")).strip()[:200],
         behavior_note=str(form.get("behavior_note", "")).strip()[:200],
         store=store,
@@ -19409,6 +19408,7 @@ async def page_admin_grooming_detail(rec_id: int, request: Request, db: Session 
     groomers = [s[0] for s in db.query(Staff.name).filter(
         Staff.status.in_(["active", "probation"]),
     ).all()]
+    assistants = groomers[:]
     locked, lock_reason = _is_grooming_locked(db, rec)
     paid_amount = _doc_paid_amount(db, "grooming", rec_id) if locked else 0.0
     try:
@@ -19424,7 +19424,7 @@ async def page_admin_grooming_detail(rec_id: int, request: Request, db: Session 
     return templates.TemplateResponse(request, "uk/grooming.html", {  # B 补 - UK 重写
         "mode": "edit", "rec": rec, "rec_services": services,
         "cust": cust, "pet": pet, "appt": appt,
-        "groomers": groomers, "groom_items": groom_items,
+        "groomers": groomers, "assistants": assistants, "groom_items": groom_items,
         "pet_sizes": _GROOMING_PET_SIZES, "coat_lengths": _GROOMING_COAT_LENGTHS,
         "today": rec.groom_date,
         "grooming_history": history,
@@ -19447,13 +19447,10 @@ async def admin_grooming_edit(rec_id: int, request: Request, db: Session = Depen
         raise HTTPException(400, f"美容单已锁定（{reason}），不可修改。请「复制为新单」或「作废」。")
     services = _parse_grooming_services(form)
     rec.groom_date = str(form.get("groom_date", "")).strip()[:20]
-    rec.start_time = str(form.get("start_time", "")).strip()[:10]
-    rec.end_time = str(form.get("end_time", "")).strip()[:10]
     rec.groomer_name = str(form.get("groomer_name", "")).strip()[:80]
+    rec.assistant_name = str(form.get("assistant_name", "")).strip()[:80]
     rec.services_json = json.dumps(services, ensure_ascii=False)
     rec.total_amount = round(sum(s["subtotal"] for s in services), 2)
-    rec.pet_size = str(form.get("pet_size", "")).strip()[:20]
-    rec.coat_length = str(form.get("coat_length", "")).strip()[:20]
     rec.skin_condition = str(form.get("skin_condition", "")).strip()[:200]
     rec.behavior_note = str(form.get("behavior_note", "")).strip()[:200]
     rec.notes = str(form.get("notes", "")).strip()
