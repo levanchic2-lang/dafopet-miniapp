@@ -6550,10 +6550,14 @@ async def page_admin_customers(
         if len(_hit) == 1:
             return RedirectResponse(f"/admin/customers/{_hit[0].id}", status_code=303)
     if q:
+        # 子查询：宠物名命中的客户 id
+        _pet_owner_ids = db.query(Pet.customer_id).filter(Pet.name.ilike(f"%{q}%"))
         query = query.filter(
             or_(
                 Customer.name.ilike(f"%{q}%"),
                 Customer.phone.ilike(f"%{q}%"),
+                Customer.phones_extra.ilike(f"%{q}%"),
+                Customer.id.in_(_pet_owner_ids),
             )
         )
     total = query.count()
