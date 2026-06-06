@@ -16188,7 +16188,11 @@ async def admin_invoices_list(
     if wb_store:
         query = query.filter(Invoice.store == wb_store)
     if status:
-        query = query.filter(Invoice.payment_status == status)
+        # 「待收款」tab 同时显示 unpaid + partial（部分收过的也需要继续收）
+        if status == "unpaid":
+            query = query.filter(Invoice.payment_status.in_(("unpaid", "partial")))
+        else:
+            query = query.filter(Invoice.payment_status == status)
     if q:
         from sqlalchemy import or_
         cids = [c.id for c in db.query(Customer.id).filter(
@@ -16212,7 +16216,7 @@ async def admin_invoices_list(
         Invoice.payment_status == "paid",
         Invoice.invoice_date == today_str,
     ).all()
-    unpaid_all = _stat_q().filter(Invoice.payment_status == "unpaid").all()
+    unpaid_all = _stat_q().filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
     inv_stats = {
         "today_paid_total": round(sum((i.total_amount or 0) for i in today_paid_sum), 2),
         "today_paid_count": len(today_paid_sum),
@@ -16223,7 +16227,7 @@ async def admin_invoices_list(
     multi_pay_groups = []
     if status in ("", "unpaid"):
         _unpaid_q = db.query(Invoice).filter(
-            Invoice.payment_status == "unpaid",
+            Invoice.payment_status.in_(("unpaid", "partial")),
             Invoice.customer_id.is_not(None),
         )
         if wb_store:

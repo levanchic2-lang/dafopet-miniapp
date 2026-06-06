@@ -440,8 +440,8 @@
       </div>
     </div>
 
-    {# ── 收款区（仅 unpaid） ── #}
-    {% if inv.payment_status == 'unpaid' %}
+    {# ── 收款区（unpaid 或 partial 都允许继续收款） ── #}
+    {% if inv.payment_status in ('unpaid', 'partial') %}
     <div class="iv-section">
       <div class="iv-section-head"><h2>收&nbsp;款</h2></div>
 
@@ -636,7 +636,7 @@
     {% endif %}
 
     {# 危险操作 #}
-    {% if inv.payment_status == 'unpaid' %}
+    {% if inv.payment_status in ('unpaid', 'partial') %}
     <div class="iv-danger">
       <h3>危&nbsp;险&nbsp;操&nbsp;作</h3>
       <form method="post" action="/admin/invoices/{{ inv.id }}/cancel" onsubmit="return confirm('确认取消此收费单？')">

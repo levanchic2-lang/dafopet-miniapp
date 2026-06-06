@@ -171,11 +171,12 @@
         {% if inv.payment_status == 'paid' %}<span class="iv-pill ok">已收款</span>
         {% elif inv.payment_status == 'cancelled' %}<span class="iv-pill gray">已取消</span>
         {% elif inv.payment_status == 'refunded' %}<span class="iv-pill err">已退款</span>
+        {% elif inv.payment_status == 'partial' %}<span class="iv-pill warn">部分收款</span>
         {% else %}<span class="iv-pill warn">待收款</span>{% endif %}
       </td>
       <td class="dim">{{ inv_pay_zh.get(inv.payment_method, inv.payment_method) if inv.payment_method else '—' }}</td>
       <td style="text-align:right;">
-        {% if inv.payment_status == 'unpaid' %}
+        {% if inv.payment_status in ('unpaid', 'partial') %}
           <a href="/admin/invoices/{{ inv.id }}" class="iv-btn sm">收&nbsp;款</a>
         {% else %}
           <a href="/admin/invoices/{{ inv.id }}" class="iv-btn ghost sm">查&nbsp;看</a>
