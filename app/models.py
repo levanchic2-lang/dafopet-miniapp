@@ -262,6 +262,8 @@ class Customer(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(120), default="")
     phone: Mapped[str] = mapped_column(String(40), default="")
+    # 备用手机号（一个客户可能有多个号码 — 老公/老婆/家人 等），CSV 存储
+    phones_extra: Mapped[str] = mapped_column(String(500), default="")
     wechat_openid: Mapped[str] = mapped_column(String(64), default="")
     id_number: Mapped[str] = mapped_column(String(40), default="")
     address: Mapped[str] = mapped_column(String(500), default="")

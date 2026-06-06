@@ -418,6 +418,12 @@
           <span class="lbl">手机</span>
           <span class="val num">{{ cust.phone or '—' }}</span>
         </div>
+        {% if cust.phones_extra %}
+        <div class="cust-contact-row">
+          <span class="lbl">备用</span>
+          <span class="val num" style="font-style:italic; color:var(--ink-2);">{{ cust.phones_extra }}</span>
+        </div>
+        {% endif %}
         <div class="cust-contact-row">
           <span class="lbl">地址</span>
           <span class="val">{{ cust.address or '—' }}</span>
@@ -1112,10 +1118,15 @@
         <label class="field">姓名
           <input name="name" value="{{ cust.name or '' }}" required/>
         </label>
-        <label class="field">手机号
+        <label class="field">主手机号
           <input name="phone" value="{{ cust.phone or '' }}"/>
         </label>
       </div>
+      <label class="field">备用手机号
+        <textarea name="phones_extra" rows="2"
+                  placeholder="一个客户多个号码：每行一个，或用逗号 / 分号分隔">{{ cust.phones_extra or '' }}</textarea>
+        <span style="font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:1px; display:block; margin-top:4px;">如老公/老婆/家人号码 — 速查 / 老顾客识别会同时匹配这些号码</span>
+      </label>
       <label class="field">地址
         <input name="address" value="{{ cust.address or '' }}"/>
       </label>

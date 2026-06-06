@@ -6508,7 +6508,12 @@ async def page_admin_customers(
     q = q.strip()
     # 速查：q 是 11 位手机号且唯一命中 → 直接跳客户档案
     if q and len(q) == 11 and q.isdigit():
-        _hit = db.query(Customer).filter(Customer.phone == q).all()
+        _hit = db.query(Customer).filter(
+            or_(Customer.phone == q, Customer.phones_extra.like(f"%{q}%"))
+        ).all()
+        # 备用号是 CSV 子串 — Python 二次精确过滤
+        _hit = [c for c in _hit
+                if c.phone == q or q in [x.strip() for x in (c.phones_extra or "").split(",") if x.strip()]]
         if len(_hit) == 1:
             return RedirectResponse(f"/admin/customers/{_hit[0].id}", status_code=303)
     if q:
@@ -7264,6 +7269,7 @@ async def admin_customer_edit(
     csrf_token: str = Form(""),
     name: str = Form(""),
     phone: str = Form(""),
+    phones_extra: str = Form(""),
     address: str = Form(""),
     notes: str = Form(""),
     source: str = Form(""),
@@ -7287,6 +7293,17 @@ async def admin_customer_edit(
             raise HTTPException(403, "无权编辑其他门店的客户")
     cust.name = name.strip()[:120]
     cust.phone = phone.strip()[:40]
+    # 备用手机号：用户可用换行 / 逗号 / 中文逗号 / 空格 / 分号分隔，统一存为 CSV
+    import re as _re
+    raw_extras = _re.split(r"[\s,，;；、]+", (phones_extra or "").strip())
+    cleaned = []
+    seen = {cust.phone.strip()}
+    for p in raw_extras:
+        p = p.strip()
+        if p and p not in seen:
+            seen.add(p)
+            cleaned.append(p[:40])
+    cust.phones_extra = ",".join(cleaned)[:500]
     cust.address = address.strip()[:500]
     cust.notes = notes.strip()
     # source 只在传了非空值时更新，避免历史"老系统导入"被清空
@@ -14750,7 +14767,17 @@ async def api_wechat_my_profile(openid: str = Query(""), db: Session = Depends(g
 async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_db)):
     if not phone or len(phone) < 6:
         return {"found": False}
-    cust = db.query(Customer).filter(Customer.phone == phone.strip()).first()
+    p = phone.strip()
+    # 主手机号优先；找不到再查备用手机号（CSV 子串）
+    cust = db.query(Customer).filter(Customer.phone == p).first()
+    if not cust:
+        # 用 LIKE 粗筛后 Python 精确匹配 CSV 段
+        candidates = db.query(Customer).filter(Customer.phones_extra.like(f"%{p}%")).all()
+        for c in candidates:
+            extras = [x.strip() for x in (c.phones_extra or "").split(",") if x.strip()]
+            if p in extras:
+                cust = c
+                break
     if not cust:
         return {"found": False}
     pets = db.query(Pet).filter(Pet.customer_id == cust.id).all()

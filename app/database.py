@@ -435,6 +435,14 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)"))
 
+            # customers: 补 phones_extra (备用手机号 CSV)
+            try:
+                _cust_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(customers)")).fetchall()}
+                if "phones_extra" not in _cust_cols:
+                    conn.execute(text("ALTER TABLE customers ADD COLUMN phones_extra VARCHAR(500) DEFAULT ''"))
+            except Exception as _e:
+                print(f"[migrations] customers.phones_extra skipped: {_e}")
+
             # pets 宠物档案表
             pet_cols = conn.execute(text("PRAGMA table_info(pets)")).fetchall()
             if not pet_cols:
