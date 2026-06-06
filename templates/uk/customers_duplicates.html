@@ -1,0 +1,116 @@
+{% extends "uk/_base.html" %}
+{% block title %}重号客户清理 · 大风动物医院{% endblock %}
+
+{% block body %}
+<style>
+  .dup-bc { margin:24px 0 16px; font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); font-style:italic; }
+  .dup-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .dup-bc .sep { margin:0 8px; color:var(--ink-4); }
+
+  .dup-head h1 { font-family:var(--font-serif); font-size:26pt; font-weight:700; color:var(--ink); margin:0 0 6px; letter-spacing:1px; }
+  .dup-head .sub { font-size:10pt; color:var(--ink-3); font-style:italic; letter-spacing:1.5px; margin-bottom:18px; }
+
+  .dup-group { background:var(--paper); border-top:0.5px solid var(--hair); padding:18px 22px; margin-bottom:18px; }
+  .dup-group h3 { font-family:var(--font-serif); font-size:13pt; font-weight:700; color:var(--ink); letter-spacing:2px; margin:0 0 14px; display:flex; align-items:baseline; justify-content:space-between; }
+  .dup-group h3 .phone { font-family:var(--font-numeric); color:var(--accent-red); }
+  .dup-group h3 .cnt { font-size:9.5pt; color:var(--ink-3); font-style:italic; letter-spacing:1.5px; font-weight:400; }
+
+  .dup-tbl { width:100%; border-collapse:collapse; font-size:10.5pt; margin-bottom:12px; }
+  .dup-tbl th, .dup-tbl td { padding:8px 10px; border-bottom:0.5px solid var(--hair); vertical-align:middle; }
+  .dup-tbl th { font-family:var(--font-serif); font-size:9pt; letter-spacing:1.5px; color:var(--ink-3); font-weight:600; text-align:left; }
+  .dup-tbl td.num { text-align:right; font-family:var(--font-numeric); }
+  .dup-tbl tr.has-data td { background:#fafaf6; }
+
+  .dup-radio { width:18px; height:18px; cursor:pointer; }
+  .dup-merge-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; background:var(--ink); color:var(--paper); border:0; cursor:pointer; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; }
+  .dup-merge-btn:hover { opacity:.9; }
+  .dup-merge-btn[disabled] { background:var(--ink-3); cursor:not-allowed; }
+
+  .dup-empty { padding:60px 0; text-align:center; color:var(--ink-3); font-style:italic; font-size:11pt; }
+  .dup-tip { background:#fef9f0; border-left:3px solid #6b4423; padding:10px 14px; font-size:10pt; color:var(--ink-2); line-height:1.7; font-style:italic; margin-bottom:18px; }
+  .dup-tip b { color:var(--ink); font-style:normal; }
+
+  .dup-msg { padding:10px 14px; margin-bottom:14px; border-left:3px solid var(--ink); background:var(--bg); font-family:var(--font-serif); font-size:10pt; letter-spacing:1px; }
+</style>
+
+<div class="dup-bc">
+  <a href="/admin">后台</a><span class="sep">›</span><span>重号客户清理</span>
+</div>
+
+<div class="dup-head">
+  <h1>重 号 客 户 清 理</h1>
+  <div class="sub">同手机号 2+ 个档案 · 共 {{ total_groups }} 组 / {{ total_customers }} 条客户</div>
+</div>
+
+{% if msg %}
+<div class="dup-msg">{{ msg }}</div>
+{% endif %}
+
+{% if total_groups == 0 %}
+<div class="dup-empty">✓ 数据库里没有重号客户，干净。</div>
+{% else %}
+
+<div class="dup-tip">
+  <b>操作步骤：</b>每组选一个作为「主档案」（保留），其他客户的宠物 / 病例 / 预约 / 收费 / 钱包等所有数据自动迁过去，副档案删除。<br/>
+  <b>建议：</b>选有业务记录最多的那条作为主（已自动按宠物 ≥ 病历 + 收费的权重排序，置顶默认勾选）。<br/>
+  <b>备注：</b>副档案的 wechat openid / 地址 / 备注 / 备用号 都会并入主档案；钱包余额自动累加。
+</div>
+
+{% for g in groups %}
+<form class="dup-group" method="post" action="/admin/customers/duplicates/merge"
+      onsubmit="return confirm('确认把同号其他 {{ g.rows|length - 1 }} 条客户合并到选中的主档案？\n\n· 所有宠物/病例/预约/收费/钱包/套餐/押金 全部迁移\n· 副档案物理删除\n· 不可恢复');">
+  <h3>
+    <span class="phone">{{ g.phone }}</span>
+    <span class="cnt">{{ g.rows|length }} 条 · 选主合并</span>
+  </h3>
+
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  <table class="dup-tbl">
+    <thead>
+      <tr>
+        <th style="width:40px;">主</th>
+        <th>客户</th>
+        <th class="num">宠物</th>
+        <th class="num">病历</th>
+        <th class="num">收费单</th>
+        <th class="num">预约</th>
+        <th>来源</th>
+        <th>建档</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in g.rows %}
+      <tr {% if r.score > 0 %}class="has-data"{% endif %}>
+        <td>
+          <input type="radio" name="primary_id" value="{{ r.c.id }}" class="dup-radio"
+                 {% if r.c.id == g.suggested_primary_id %}checked{% endif %} required/>
+        </td>
+        <td>
+          <a href="/admin/customers/{{ r.c.id }}" target="_blank" style="border-bottom:0.5px solid var(--hair-2);">
+            #{{ r.c.id }} {{ r.c.name or '未命名' }}
+          </a>
+          {% if r.c.wechat_openid %}<span style="color:#1d4d3a;font-size:9pt;font-style:italic;margin-left:6px;">· 已绑微信</span>{% endif %}
+        </td>
+        <td class="num">{% if r.n_pets %}<b>{{ r.n_pets }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
+        <td class="num">{% if r.n_visits %}<b>{{ r.n_visits }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
+        <td class="num">{% if r.n_invoices %}<b>{{ r.n_invoices }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
+        <td class="num">{% if r.n_appts %}<b>{{ r.n_appts }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
+        <td style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{{ r.c.source or '—' }}</td>
+        <td style="color:var(--ink-3);font-style:italic;font-size:9.5pt;font-family:var(--font-numeric);">{{ r.c.created_at.strftime('%Y-%m-%d') if r.c.created_at else '—' }}</td>
+        <td style="text-align:right;"><a href="/admin/customers/{{ r.c.id }}" target="_blank" style="font-size:9pt;font-style:italic;color:var(--ink-3);">查看 →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div style="text-align:right;">
+    <button type="submit" class="dup-merge-btn">→ 合 并 此 组</button>
+  </div>
+</form>
+{% endfor %}
+
+{% endif %}
+
+{% endblock %}

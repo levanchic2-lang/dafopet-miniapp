@@ -6687,6 +6687,171 @@ def _customer_blockers(db: Session, customer_id: int) -> list[str]:
     return blockers
 
 
+def _merge_customers(db: Session, primary_id: int, secondary_ids: list[int]) -> dict:
+    """把 secondary 客户们的所有附属数据合并到 primary，然后删 secondary。
+    返回每张表迁移的行数 + wallet 余额合并明细。"""
+    moved: dict = {}
+    # 1) 简单 customer_id 重定向 — 一律 UPDATE SET customer_id = primary
+    redirect_tables = [
+        ("pet", Pet),
+        ("visit", Visit),
+        ("appointment", Appointment),
+        ("invoice", Invoice),
+        ("prescription", Prescription),
+        ("sales_order", SalesOrder),
+        ("grooming_order", GroomingOrder),
+        ("vaccination", Vaccination),
+        ("deworming", DewormingRecord),
+        ("customer_package", CustomerPackage),
+        ("deposit", Deposit),
+        ("coupon", Coupon),
+        ("consent_task", ConsentTask),
+        ("follow_up", FollowUp),
+        ("exam_order_via_visit", None),  # ExamOrder 没 customer_id，靠 visit 链
+    ]
+    for label, cls in redirect_tables:
+        if cls is None:
+            continue
+        if not hasattr(cls, "customer_id"):
+            continue
+        try:
+            n = db.query(cls).filter(cls.customer_id.in_(secondary_ids)).update(
+                {cls.customer_id: primary_id}, synchronize_session=False,
+            )
+            if n: moved[label] = n
+        except Exception as _e:
+            logger.warning("[merge cust] %s skip: %s", label, _e)
+    # 病例号尝试 — Application（流浪猫申请，可能挂 customer_id 也可能不挂，安全跳过）
+    # 2) 钱包合并 — 副 wallet 的流水迁到主 wallet，余额累加，删副 wallet
+    try:
+        primary_wallet = db.query(Wallet).filter(Wallet.customer_id == primary_id).first()
+        sec_wallets = db.query(Wallet).filter(Wallet.customer_id.in_(secondary_ids)).all()
+        for sw in sec_wallets:
+            if primary_wallet is None:
+                # 主没钱包，直接改副 wallet 的 customer_id 成主，跳过
+                sw.customer_id = primary_id
+                primary_wallet = sw
+                continue
+            # 迁流水
+            db.query(WalletTransaction).filter(WalletTransaction.wallet_id == sw.id).update(
+                {WalletTransaction.wallet_id: primary_wallet.id}, synchronize_session=False,
+            )
+            # 余额累加
+            primary_wallet.balance = round(float(primary_wallet.balance or 0) + float(sw.balance or 0), 2)
+            primary_wallet.balance_principal = round(float(primary_wallet.balance_principal or 0) + float(sw.balance_principal or 0), 2)
+            primary_wallet.balance_bonus = round(float(primary_wallet.balance_bonus or 0) + float(sw.balance_bonus or 0), 2)
+            primary_wallet.lifetime_recharge = round(float(primary_wallet.lifetime_recharge or 0) + float(sw.lifetime_recharge or 0), 2)
+            primary_wallet.lifetime_consume = round(float(primary_wallet.lifetime_consume or 0) + float(sw.lifetime_consume or 0), 2)
+            primary_wallet.updated_at = datetime.utcnow()
+            db.delete(sw)
+            moved["wallet_merged"] = (moved.get("wallet_merged") or 0) + 1
+    except Exception as _e:
+        logger.warning("[merge cust] wallet skip: %s", _e)
+    # 3) 合并 secondary 客户的元信息（备注 / 备用号 / openid / 地址）到 primary 后再删
+    primary = db.get(Customer, primary_id)
+    if primary is not None:
+        sec_custs = db.query(Customer).filter(Customer.id.in_(secondary_ids)).all()
+        # 备用号汇总
+        all_phones: list[str] = [x.strip() for x in (primary.phones_extra or "").split(",") if x.strip()]
+        for sc in sec_custs:
+            if sc.phone and sc.phone != primary.phone and sc.phone not in all_phones:
+                all_phones.append(sc.phone)
+            for x in (sc.phones_extra or "").split(","):
+                xs = x.strip()
+                if xs and xs != primary.phone and xs not in all_phones:
+                    all_phones.append(xs)
+            # openid（主没有但副有 → 迁）
+            if not primary.wechat_openid and sc.wechat_openid:
+                primary.wechat_openid = sc.wechat_openid
+            # address（主没有但副有 → 迁）
+            if not primary.address and sc.address:
+                primary.address = sc.address
+            # 备注追加
+            if sc.notes and sc.notes.strip():
+                tag = f"[合并自 #{sc.id}] {sc.notes.strip()}"
+                primary.notes = ((primary.notes or "") + "\n" + tag).strip()
+            # 姓名升级：主是占位名 + 副是正常名 → 用副的
+            if _is_invalid_name(primary.name) and not _is_invalid_name(sc.name):
+                primary.name = sc.name
+        primary.phones_extra = ",".join(all_phones)[:500]
+        primary.updated_at = datetime.utcnow()
+        # 4) 删 secondary
+        for sc in sec_custs:
+            db.delete(sc)
+        moved["customers_deleted"] = len(sec_custs)
+    db.flush()
+    return moved
+
+
+@app.get("/admin/customers/duplicates", response_class=HTMLResponse)
+async def admin_customers_duplicates_page(request: Request, db: Session = Depends(get_db)):
+    """重号客户清理页：列出所有同手机号 2+ 的客户档案组。"""
+    require_admin(request)
+    require_superadmin(request)
+    from sqlalchemy import func as _f
+    dup_phones = db.query(Customer.phone).filter(Customer.phone != "").group_by(Customer.phone)\
+        .having(_f.count(Customer.id) > 1).all()
+    groups = []
+    for (ph,) in dup_phones:
+        rows = db.query(Customer).filter(Customer.phone == ph).order_by(Customer.id.asc()).all()
+        enriched = []
+        for c in rows:
+            n_pets = db.query(Pet).filter(Pet.customer_id == c.id).count()
+            n_visits = db.query(Visit).filter(Visit.customer_id == c.id).count()
+            n_invoices = db.query(Invoice).filter(Invoice.customer_id == c.id).count()
+            n_appts = db.query(Appointment).filter(Appointment.customer_id == c.id).count()
+            # 用 (n_pets, n_visits, n_invoices, -id) 综合分判主候选
+            score = n_pets * 10 + n_visits + n_invoices + n_appts
+            enriched.append({
+                "c": c, "n_pets": n_pets, "n_visits": n_visits,
+                "n_invoices": n_invoices, "n_appts": n_appts,
+                "score": score,
+            })
+        # 主候选：评分最高那条
+        enriched.sort(key=lambda x: (-x["score"], x["c"].id))
+        suggested_primary_id = enriched[0]["c"].id
+        groups.append({"phone": ph, "rows": enriched, "suggested_primary_id": suggested_primary_id})
+    return templates.TemplateResponse(request, "uk/customers_duplicates.html", {
+        "groups": groups,
+        "total_groups": len(groups),
+        "total_customers": sum(len(g["rows"]) for g in groups),
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/customers/duplicates/merge")
+async def admin_customers_merge_post(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    require_superadmin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    try:
+        primary_id = int(form.get("primary_id") or 0)
+    except ValueError:
+        raise HTTPException(400, "primary_id 格式错")
+    if not primary_id:
+        raise HTTPException(400, "缺 primary_id")
+    primary = db.get(Customer, primary_id)
+    if not primary:
+        raise HTTPException(404, "primary 客户不存在")
+    # secondaries：所有同手机号其他客户
+    secondaries = db.query(Customer).filter(
+        Customer.phone == primary.phone, Customer.id != primary_id,
+    ).all()
+    if not secondaries:
+        return RedirectResponse("/admin/customers/duplicates?msg=该号码已无重号客户", status_code=303)
+    sec_ids = [s.id for s in secondaries]
+    moved = _merge_customers(db, primary_id, sec_ids)
+    _audit(db, request, "merge_customers", application_id=None,
+           detail={"primary_id": primary_id, "secondary_ids": sec_ids, "moved": moved})
+    db.commit()
+    parts = [f"{k}: {v}" for k, v in moved.items()]
+    from urllib.parse import quote as _q
+    msg = _q(f"已合并 {len(secondaries)} 条到 #{primary_id}（{' / '.join(parts)}）", safe="")
+    return RedirectResponse(f"/admin/customers/duplicates?msg={msg}", status_code=303)
+
+
 @app.post("/admin/customers/{customer_id}/delete")
 async def admin_customer_delete(
     customer_id: int,

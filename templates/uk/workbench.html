@@ -219,6 +219,7 @@
       </form>
       <button class="uk-btn ghost sm" onclick="document.getElementById('newCustModal').classList.add('visible');">＋ 新增客户</button>
       {% if is_superadmin %}
+      <a href="/admin/customers/duplicates" class="uk-btn ghost sm" style="text-decoration:none; color:var(--accent-red); border-color:var(--accent-red);" title="同手机号重号档案合并">⚠ 重号清理</a>
       <div style="display:inline-flex;border:0.5px solid var(--hair);">
         <a href="/admin/customers{% if q %}?q={{ q }}{% endif %}"
            class="store-pill {% if not wb_store %}active{% endif %}">全部门店</a>
