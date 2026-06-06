@@ -6608,9 +6608,25 @@ async def admin_customer_create(
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
+    phone_clean = phone.strip()[:40]
+    # 同手机号已有档案 → 不建新档，直接跳已有档案（提示一下）
+    if phone_clean:
+        existing = db.query(Customer).filter(Customer.phone == phone_clean).first()
+        if not existing:
+            # 备用号也算
+            cands = db.query(Customer).filter(Customer.phones_extra.like(f"%{phone_clean}%")).all()
+            for c in cands:
+                extras = [x.strip() for x in (c.phones_extra or "").split(",") if x.strip()]
+                if phone_clean in extras:
+                    existing = c
+                    break
+        if existing:
+            from urllib.parse import quote as _q
+            msg = _q(f"该手机号已有客户档案 #{existing.id}「{existing.name or '未命名'}」，已跳转。如需新增请使用其他手机号。", safe="")
+            return RedirectResponse(f"/admin/customers/{existing.id}?msg={msg}", status_code=303)
     cust = Customer(
         name=name.strip()[:120],
-        phone=phone.strip()[:40],
+        phone=phone_clean,
         address=address.strip()[:500],
         notes=notes.strip(),
         source=source.strip()[:40] or "manual",
@@ -6618,6 +6634,99 @@ async def admin_customer_create(
     db.add(cust)
     db.commit()
     return RedirectResponse(f"/admin/customers/{cust.id}?msg=客户已创建", status_code=303)
+
+
+def _customer_blockers(db: Session, customer_id: int) -> list[str]:
+    """统计客户的业务关联记录。返回非空 list 表示有记录，不能删。"""
+    blockers: list[str] = []
+    n_visits = db.query(Visit).filter(Visit.customer_id == customer_id).count()
+    if n_visits: blockers.append(f"{n_visits} 条病历")
+    n_appts = db.query(Appointment).filter(Appointment.customer_id == customer_id).count()
+    if n_appts: blockers.append(f"{n_appts} 条预约")
+    n_invoices = db.query(Invoice).filter(Invoice.customer_id == customer_id).count()
+    if n_invoices: blockers.append(f"{n_invoices} 张收费单")
+    n_presc = db.query(Prescription).filter(Prescription.customer_id == customer_id).count()
+    if n_presc: blockers.append(f"{n_presc} 张处方")
+    n_so = db.query(SalesOrder).filter(SalesOrder.customer_id == customer_id).count()
+    if n_so: blockers.append(f"{n_so} 张销售单")
+    n_groom = db.query(GroomingOrder).filter(GroomingOrder.customer_id == customer_id).count()
+    if n_groom: blockers.append(f"{n_groom} 张美容单")
+    n_vacc = db.query(Vaccination).filter(Vaccination.customer_id == customer_id).count()
+    if n_vacc: blockers.append(f"{n_vacc} 条疫苗记录")
+    n_dew = db.query(DewormingRecord).filter(DewormingRecord.customer_id == customer_id).count()
+    if n_dew: blockers.append(f"{n_dew} 条驱虫记录")
+    # 钱包流水 / 套餐 / 押金 / 优惠券
+    try:
+        wallet = db.query(Wallet).filter(Wallet.customer_id == customer_id).first()
+        if wallet:
+            n_wtx = db.query(WalletTransaction).filter(WalletTransaction.wallet_id == wallet.id).count()
+            if n_wtx: blockers.append(f"{n_wtx} 条钱包流水")
+    except Exception:
+        pass
+    try:
+        n_pkg = db.query(CustomerPackage).filter(CustomerPackage.customer_id == customer_id).count()
+        if n_pkg: blockers.append(f"{n_pkg} 个套餐")
+    except Exception:
+        pass
+    try:
+        n_dep = db.query(Deposit).filter(Deposit.customer_id == customer_id).count()
+        if n_dep: blockers.append(f"{n_dep} 笔押金")
+    except Exception:
+        pass
+    try:
+        n_coup = db.query(Coupon).filter(Coupon.customer_id == customer_id).count()
+        if n_coup: blockers.append(f"{n_coup} 张优惠券")
+    except Exception:
+        pass
+    # 协议任务也算
+    try:
+        n_consent = db.query(ConsentTask).filter(ConsentTask.customer_id == customer_id).count()
+        if n_consent: blockers.append(f"{n_consent} 张协议")
+    except Exception:
+        pass
+    return blockers
+
+
+@app.post("/admin/customers/{customer_id}/delete")
+async def admin_customer_delete(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """删除客户档案 — 仅在没有任何业务关联记录时允许。
+    会级联删除 customer 名下所有 Pet（同样未有业务记录的）。
+    """
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404, "客户不存在")
+    blockers = _customer_blockers(db, customer_id)
+    if blockers:
+        msg = "该客户有业务记录（" + " / ".join(blockers) + "），不允许删除。"
+        from urllib.parse import quote as _q
+        return RedirectResponse(f"/admin/customers/{customer_id}?msg={_q(msg, safe='')}", status_code=303)
+    # 客户名下的宠物也要确保没记录（理论上若客户无记录，宠物大概率也没。但稳妥起见再扫一遍）
+    pets = db.query(Pet).filter(Pet.customer_id == customer_id).all()
+    for pet in pets:
+        if (
+            db.query(Visit).filter(Visit.pet_id == pet.id).count()
+            or db.query(Appointment).filter(Appointment.pet_id == pet.id).count()
+            or db.query(Invoice).filter(Invoice.pet_id == pet.id).count()
+            or db.query(Vaccination).filter(Vaccination.pet_id == pet.id).count()
+            or db.query(Prescription).filter(Prescription.pet_id == pet.id).count()
+        ):
+            from urllib.parse import quote as _q
+            msg = _q(f"宠物「{pet.name}」仍有业务记录，不能删除客户。", safe="")
+            return RedirectResponse(f"/admin/customers/{customer_id}?msg={msg}", status_code=303)
+    _audit(db, request, "delete_customer", application_id=None,
+           detail={"customer_id": customer_id, "name": cust.name, "phone": cust.phone, "pets_deleted": len(pets)})
+    # ORM cascade 会自动删 pets（Customer.pets 配了 cascade="all, delete-orphan"）
+    db.delete(cust)
+    db.commit()
+    return RedirectResponse("/admin/customers?msg=客户档案已删除", status_code=303)
 
 
 # ─────────── 老系统客户 xls 批量导入（superadmin only）───────────
@@ -7231,6 +7340,8 @@ async def page_admin_customer_detail(
             "active_pet": active_pet,
             "active_pet_id": active_pet_id,
             "active_tab": tab,
+            # 是否可删客户档案（无任何业务记录才能删）
+            "cust_blockers": _customer_blockers(db, customer_id),
             # 客户级
             "applications": applications,
             "sales_orders": cust_sales_orders,
@@ -7608,9 +7719,10 @@ async def admin_customer_delete_pet(
     if n_presc: blockers.append(f"{n_presc} 张处方")
 
     if blockers:
+        from urllib.parse import quote as _q
         msg = f"该宠物有关联记录（{' / '.join(blockers)}），不允许删除。如确需清理请先处理对应记录。"
         return RedirectResponse(
-            f"/admin/customers/{customer_id}?pet_id={pet_id}&err={msg}",
+            f"/admin/customers/{customer_id}?pet_id={pet_id}&msg={_q(msg, safe='')}",
             status_code=303,
         )
 

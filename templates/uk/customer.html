@@ -399,10 +399,23 @@
     {% endif %}
     <span class="uk-spacer"></span>
     <button class="uk-btn ghost sm" onclick="document.getElementById('editCustModal').classList.add('visible');">编辑资料</button>
+    {% if not cust_blockers %}
+    <form method="post" action="/admin/customers/{{ cust.id }}/delete" style="display:inline;margin-left:6px;"
+          onsubmit="return confirm('确认删除客户档案「{{ cust.name or '未命名' }}」？\n\n· 该客户没有任何业务记录（病历/收费/预约 等）\n· 名下宠物会一并删除\n· 不可恢复\n\n仅用于清理错建/重号档案。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="uk-btn ghost sm" style="color:var(--accent-red);border-color:var(--accent-red);">删除档案</button>
+    </form>
+    {% else %}
+    <span class="uk-btn ghost sm" style="color:var(--ink-3);font-style:italic;cursor:not-allowed;letter-spacing:1px;" title="有业务记录无法删除：{{ cust_blockers|join(' / ') }}">已有业务记录 · 不可删</span>
+    {% endif %}
   </div>
 </div>
 
 <hr class="rule-double"/>
+
+{% if request.query_params.get('msg') %}
+<div style="padding:10px 14px;margin-bottom:14px;border-left:3px solid var(--ink);background:var(--bg);font-family:var(--font-serif);font-size:10pt;letter-spacing:1px;">{{ request.query_params.get('msg') }}</div>
+{% endif %}
 
 {# ── 主 + 侧 双栏 ── #}
 <div class="cust-grid">
@@ -485,6 +498,13 @@
             <td class="num" style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{% set lv = latest_vacc_by_pet.get(p.id) %}{% if lv %}{{ lv.vaccinated_date }}{% else %}—{% endif %}</td>
             <td class="right action">
               <a href="#" onclick="event.stopPropagation();openEditPet(this.closest('tr'));return false;">编辑</a>
+              <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ p.id }}/delete"
+                    style="display:inline;margin-left:8px;"
+                    onclick="event.stopPropagation();"
+                    onsubmit="return confirm('确认删除宠物「{{ p.name or '未命名' }}」？\n\n· 系统会检查是否有病历/收费/疫苗 等记录\n· 有记录会拒绝删除并提示原因\n· 仅清理误录/重复档案');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                <button type="submit" style="background:transparent;border:0;color:var(--accent-red);font-style:italic;cursor:pointer;padding:0;font-size:9.5pt;letter-spacing:1px;">删除</button>
+              </form>
             </td>
           </tr>
           {% endfor %}
