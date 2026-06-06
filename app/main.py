@@ -16743,17 +16743,36 @@ async def admin_invoice_add_payment(
             return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐与客户不匹配", status_code=303)
         if cp.status != "active" or cp.used_count >= cp.total_uses:
             return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐已失效或用完", status_code=303)
+        # 解析勾选的明细项 ids → 拼明细描述写到流水里
+        covered_ids = [int(x) for x in form.getlist("pkg_covered_item_ids") if str(x).isdigit()]
+        covered_desc = ""
+        if covered_ids:
+            covered_items = db.query(InvoiceItem).filter(
+                InvoiceItem.invoice_id == inv.id,
+                InvoiceItem.id.in_(covered_ids),
+            ).all()
+            if covered_items:
+                covered_desc = " · ".join(
+                    f"{i.description.split('] ')[-1] if '] ' in i.description else i.description}（¥{i.subtotal:.2f}）"
+                    for i in covered_items
+                )
         cp.used_count += 1
         if cp.used_count >= cp.total_uses:
             cp.status = "exhausted"
+        _redemption_note = f"收费单 {inv.invoice_no or inv.id}"
+        if covered_desc:
+            _redemption_note += f" · 抵扣：{covered_desc}"
         db.add(PackageRedemption(
             customer_package_id=cp.id, customer_id=cp.customer_id,
             pet_id=inv.pet_id or cp.pet_id, visit_id=inv.visit_id, invoice_id=inv.id,
             used_count=1, remaining_after=cp.total_uses - cp.used_count,
             store=store, operator=operator,
-            note=f"收费单 {inv.invoice_no or inv.id}",
+            note=_redemption_note,
         ))
         ref_id = cp.id
+        # 加到 Payment.note 让收款流水也看到
+        if covered_desc:
+            note = (note + " · " if note else "") + f"套餐抵扣：{covered_desc}"
 
     # ── 押金抵扣 ──
     elif method == "deposit":

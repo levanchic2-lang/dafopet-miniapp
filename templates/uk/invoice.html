@@ -504,6 +504,30 @@
             <option value="{{ cp.id }}">{{ cp.name }} · 剩 {{ cp.total_uses - cp.used_count }}/{{ cp.total_uses }}{% if cp.expires_at %} · {{ cp.expires_at }} 到期{% endif %}</option>
             {% endfor %}
           </select>
+
+          {# 勾选要抵扣的明细项 → 自动算金额 + 流水写清楚抵扣哪几项 #}
+          {% if inv.items %}
+          <div style="margin-top:10px; padding:8px 10px; border:0.5px solid var(--hair); background:var(--bg);">
+            <label style="font-size:9.5pt; letter-spacing:1.5px; color:var(--ink-2); font-style:italic; font-family:var(--font-serif); display:block; margin-bottom:6px;">
+              勾选本卡要抵扣的项目 → 自动算本笔金额
+            </label>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              {% for item in inv.items %}
+              <label style="display:flex; align-items:center; gap:8px; font-size:10pt; cursor:pointer;">
+                <input type="checkbox" class="pkg-cov-cb" name="pkg_covered_item_ids" value="{{ item.id }}"
+                       data-amt="{{ item.subtotal }}"
+                       data-desc="{{ item.description }}"
+                       onchange="updatePkgAmount()"/>
+                <span style="flex:1;">{{ item.description }}</span>
+                <span style="font-family:var(--font-numeric); color:var(--ink-2);">¥{{ '%.2f'|format(item.subtotal) }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <div style="margin-top:6px; font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:1px;">
+              勾选后会写入流水「套餐抵扣：xxx」便于核对
+            </div>
+          </div>
+          {% endif %}
           {% else %}
           <span class="warn">客户暂无有效套餐。{% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=packages" target="_blank">去售卖套餐 →</a>{% endif %}</span>
           {% endif %}
@@ -698,6 +722,17 @@ function selectPay(btn) {
             || (id === 'cpn-pick-wrap' && v === 'coupon');
     el.style.display = want ? 'block' : 'none';
   });
+}
+
+// 套餐抵扣：勾选哪几项 → 自动算本笔金额
+function updatePkgAmount() {
+  var sum = 0;
+  document.querySelectorAll('.pkg-cov-cb:checked').forEach(function(cb){
+    sum += parseFloat(cb.dataset.amt || '0');
+  });
+  if (sum > 0) {
+    document.getElementById('pay-amount-input').value = sum.toFixed(2);
+  }
 }
 </script>
 
