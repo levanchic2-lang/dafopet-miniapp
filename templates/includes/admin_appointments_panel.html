@@ -400,6 +400,14 @@
  <button type="button" onclick="toggleApptPanel('cancel-{{ appt.id }}')">取消</button>
  <button type="button" onclick="toggleApptPanel('rs-{{ appt.id }}')">改约</button>
  {% endif %}
+ {# 已取消且员工后台建的：可删除 (小程序自助单留档不可删) #}
+ {% if appt.status == 'cancelled' and (appt.source or '')|lower not in ['miniapp','wechat'] %}
+ <form method="post" action="/admin/appointments/{{ appt.id }}/delete" style="display:inline;"
+       onsubmit="return confirm('确认删除此已取消预约？不可恢复。');">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+   <button type="submit" class="danger" style="color:#dc2626;border-color:#dc2626;background:transparent;">删除</button>
+ </form>
+ {% endif %}
  <a class="row-btn" href="/admin/calendar" title="在日历查看"><i data-lucide="calendar"></i></a>
  </div>
  </td>

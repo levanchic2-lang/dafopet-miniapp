@@ -5303,6 +5303,38 @@ async def manual_approve(app_id: int, request: Request, db: Session = Depends(ge
     return _admin_back(request, app_id)
 
 
+@app.post("/admin/appointments/{appointment_id}/delete")
+async def admin_appointment_delete(
+    appointment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """删除预约：
+       - 仅 source=admin (员工后台建的) 且 status=cancelled 可删
+       - source=miniapp (小程序自助) 必须保留作记录，绝不能删
+    """
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    row = db.get(Appointment, appointment_id)
+    if not row:
+        raise HTTPException(404)
+    if row.status != AppointmentStatus.cancelled.value:
+        raise HTTPException(400, "只能删除已取消的预约。请先取消。")
+    src = (row.source or "").strip().lower()
+    # admin / empty / 任何非 miniapp 的来源都允许删；miniapp / wechat 必须留档
+    if src in ("miniapp", "wechat"):
+        raise HTTPException(403, "小程序自助预约必须留档，不可删除。")
+    _audit(db, request, "delete_appointment", application_id=None,
+           detail={"appointment_id": appointment_id, "phone": row.phone, "source": src})
+    db.delete(row)
+    db.commit()
+    referer = request.headers.get("referer", "")
+    if referer and "/admin/" in referer:
+        return RedirectResponse(referer, status_code=303)
+    return RedirectResponse("/admin/appointments?msg=预约已删除", status_code=303)
+
+
 @app.post("/admin/app/{app_id}/delete-draft")
 async def admin_delete_draft(
     app_id: int,
