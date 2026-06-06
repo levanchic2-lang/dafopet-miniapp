@@ -4982,7 +4982,8 @@ async def admin_appointment_create(
                 _admin_appt_pet_id = pet_id
         row = Appointment(
             category=str(fields["category"]),
-            status=AppointmentStatus.pending.value,
+            # 后台/日历建的：员工录入即视为已确认，不再走"待确认"中间态
+            status=AppointmentStatus.confirmed.value,
             service_name=str(fields["service_name"]),
             customer_name=str(fields["customer_name"]),
             phone=str(fields["phone"]),
