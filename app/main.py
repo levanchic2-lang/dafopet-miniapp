@@ -9920,12 +9920,20 @@ async def admin_deposit_apply(
         d.status = "applied"
     else:
         d.status = "partial_refund"  # 占位待退
-    # 如果 want 覆盖全单 → 收费单直接 paid
-    if want >= float(inv.total_amount or 0) - 1e-6:
-        inv.payment_method = inv.payment_method or "deposit"
-        inv.payment_status = "paid"
-        inv.paid_at = datetime.utcnow()
+    # 写 Payment 流水：让发票的 paid_sum / 状态都正确反映押金抵扣
+    operator = request.session.get("admin_username", "admin")
+    store = _get_admin_store(request)
+    db.add(Payment(
+        invoice_id=inv.id, customer_id=inv.customer_id,
+        method="deposit", amount=round(want, 2),
+        ref_id=d.id, ref_no="", status="success",
+        store=store, operator=operator,
+        note=f"押金抵扣 #{d.id}（{_DEPOSIT_CATEGORY_ZH.get(d.category, d.category)}）",
+    ))
+    db.flush()
     inv.notes = ((inv.notes or "") + f"\n[抵扣押金 #{d.id} ¥{want:.2f}]").strip()
+    # 重算 invoice 状态（paid / partial / unpaid）
+    _invoice_recompute_status(db, inv)
     db.commit()
     _audit(db, request, "deposit_apply", application_id=None,
            detail={"deposit_id": dep_id, "invoice_id": invoice_id, "amount": want})
