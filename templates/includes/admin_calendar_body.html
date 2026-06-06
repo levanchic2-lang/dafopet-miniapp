@@ -679,9 +679,12 @@ function closeCreateModal() {
 
 document.getElementById('create-appt-btn').addEventListener('click', () => {
  closeCreateModal();
- const url = '/admin/appointments/create'
- + (createDate ? '?date='+createDate : '')
- + (createTime ? (createDate?'&':'?')+'time='+createTime : '');
+ const params = [];
+ if (createDate) params.push('date='+encodeURIComponent(createDate));
+ if (createTime) params.push('time='+encodeURIComponent(createTime));
+ // 提交后跳回日历（保留当前看的那一周/天）
+ params.push('return_to=calendar');
+ const url = '/admin/appointments/create' + (params.length ? '?' + params.join('&') : '');
  window.location.href = url;
 });
 
