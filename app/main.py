@@ -12758,6 +12758,10 @@ async def admin_so_copy_as_new(order_id: int, request: Request, db: Session = De
 # ─────────────────────────────────────────────
 
 INVENTORY_CATEGORIES = {
+    "reception": {"label": "接待", "subs": {
+        "registration": "挂号",
+        "consultation": "咨询",
+    }},
     "medication": {"label": "药品", "subs": {
         "controlled": "麻药/精神类",
         "general":    "普通药品",
@@ -13849,6 +13853,10 @@ def _build_subcat_reverse_index() -> dict:
         "神经外科":     ("surgery",    "neuro",      "神经外科"),
         "麻醉处置":     ("treatment",  "anesthesia", "麻醉处置"),
         "紧急处置":     ("treatment",  "emergency",  "紧急处置"),
+        "挂号":         ("reception",  "registration", "挂号"),
+        "咨询":         ("reception",  "consultation", "咨询"),
+        "接诊":         ("reception",  "registration", "挂号"),
+        "门诊挂号":     ("reception",  "registration", "挂号"),
         "麻药/精神类":  ("medication", "controlled", "麻药/精神类"),
         "麻药":         ("medication", "controlled", "麻药/精神类"),
         "精神类":       ("medication", "controlled", "麻药/精神类"),
