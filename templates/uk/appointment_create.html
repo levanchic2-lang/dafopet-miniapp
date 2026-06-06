@@ -295,8 +295,18 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <div class="ac-field">
         <label>预&nbsp;约&nbsp;时&nbsp;间<span class="req">*</span></label>
-        <input name="appointment_time" type="time" required step="900" value="{{ default_time }}" class="ac-input"
-               title="预约按 15 分钟为一档；如 16:00 / 16:15 / 16:30 / 16:45"/>
+        <select name="appointment_time" required class="ac-select">
+          {# 生成 24h × 4 = 96 个 15 分钟档位 #}
+          {% set _slots = [] %}
+          {% for h in range(24) %}
+            {% for m in [0, 15, 30, 45] %}
+              {% set _ = _slots.append('%02d:%02d'|format(h, m)) %}
+            {% endfor %}
+          {% endfor %}
+          {% for s in _slots %}
+          <option value="{{ s }}" {% if default_time == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
       </div>
     </div>
 

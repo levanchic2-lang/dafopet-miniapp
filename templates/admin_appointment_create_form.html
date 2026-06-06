@@ -105,9 +105,13 @@
    </div>
    <div>
      <label style="display:block;font-weight:600;margin-bottom:.3rem;">预约时间 *</label>
-     <input name="appointment_time" type="time" required step="900" value="{{ default_time }}"
-            style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;"
-            title="按 15 分钟一档；如 16:00 / 16:15 / 16:30 / 16:45"/>
+     <select name="appointment_time" required
+             style="width:100%;padding:.5rem;border:1px solid var(--border-strong);border-radius:6px;">
+       {% for h in range(24) %}{% for m in [0, 15, 30, 45] %}
+       {% set _s = '%02d:%02d'|format(h, m) %}
+       <option value="{{ _s }}" {% if default_time == _s %}selected{% endif %}>{{ _s }}</option>
+       {% endfor %}{% endfor %}
+     </select>
    </div>
  </div>
 
