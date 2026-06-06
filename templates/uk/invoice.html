@@ -416,9 +416,11 @@
                 <button type="submit" class="uk-btn primary sm" style="height:32px;">应用</button>
               </div>
             </div>
-            <div style="font-size:8.5pt;color:var(--ink-3);font-style:italic;margin-top:6px;">
-              填 70 = 7 折（应收 = 小计 × 0.7）；填 80 = 8 折；按金额则直接减免 N 元
-              {% if inv.discount_amount > 0 %} · 当前已减免 ¥{{ '%.2f'|format(inv.discount_amount) }}{% endif %}
+            <div style="font-size:8.5pt;color:var(--ink-3);font-style:italic;margin-top:6px;line-height:1.7;">
+              <b style="color:var(--ink-2);font-style:normal;">按折率</b>：只对<b style="color:var(--ink-2);font-style:normal;">未付部分</b>打折（套餐核销/已收款不重复打折）<br/>
+              · 填 88 = 8.8 折 → 未付 × 0.88；填 70 = 7 折 → 未付 × 0.7<br/>
+              <b style="color:var(--ink-2);font-style:normal;">按金额</b>：直接减免 N 元（不论是否已付）
+              {% if inv.discount_amount > 0 %}<br/>· 当前已减免 ¥{{ '%.2f'|format(inv.discount_amount) }}{% endif %}
             </div>
           </form>
         </details>

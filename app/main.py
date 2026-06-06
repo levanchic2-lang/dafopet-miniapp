@@ -17066,6 +17066,14 @@ async def admin_invoice_apply_discount(
             status_code=303,
         )
 
+    # 先算已收金额（套餐 / 现金 / 微信 等所有 success 流水）
+    paid_sum = sum(float(p.amount or 0) for p in db.query(Payment).filter(
+        Payment.invoice_id == inv_id, Payment.status == "success"
+    ).all())
+    # 折扣基数 = 未付部分 (subtotal - 已付)
+    # 这样套餐已经核销过的次数不会被二次打折
+    discount_base = max(0.0, subtotal - paid_sum)
+
     if mode == "pct":
         # 用户填 70 或 0.7 都识别为 7 折
         raw = (form.get("discount_pct") or "").strip()
@@ -17077,13 +17085,17 @@ async def admin_invoice_apply_discount(
             pct = pct / 100.0
         if pct <= 0 or pct > 1.0:
             raise HTTPException(400, "折率应在 1-100 之间（如填 70 = 7 折）")
-        discount_amt = round(subtotal * (1.0 - pct), 2)
+        # 折扣只打在未付的部分上（套餐等已结算金额按原价算）
+        discount_amt = round(discount_base * (1.0 - pct), 2)
     elif mode == "amount":
         try:
             discount_amt = float((form.get("discount_amount") or "").strip())
         except Exception:
             raise HTTPException(400, "折扣金额格式错误")
-        if discount_amt < 0 or discount_amt > subtotal:
+        if discount_amt < 0:
+            raise HTTPException(400, "折扣金额不能为负")
+        # 金额模式：仍允许整单扣（不限制只在未付部分），但不能超过 subtotal
+        if discount_amt > subtotal:
             raise HTTPException(400, f"折扣金额应在 0-{subtotal:.2f} 之间")
     elif mode == "clear":
         discount_amt = 0.0
@@ -17091,10 +17103,6 @@ async def admin_invoice_apply_discount(
         raise HTTPException(400, "mode 参数错误")
 
     new_total = round(subtotal - discount_amt, 2)
-    # 部分已收时：折后总额不能小于已收
-    paid_sum = sum(float(p.amount or 0) for p in db.query(Payment).filter(
-        Payment.invoice_id == inv_id, Payment.status == "active"
-    ).all())
     if new_total < paid_sum - 0.005:
         return RedirectResponse(
             f"/admin/invoices/{inv_id}?msg=折后总额 ¥{new_total:.2f} 小于已收 ¥{paid_sum:.2f}，请先撤回部分收款再改折扣",
