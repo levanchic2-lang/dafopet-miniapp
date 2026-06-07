@@ -42,7 +42,7 @@
       <div class="ukm-row-sub">
         {{ a.appointment_time or '—' }}
         <span style="margin:0 5px;color:var(--ink-4);">·</span>
-        {{ {'tnr':'TNR','outpatient':'门诊','surgery':'手术','beauty':'美容','vaccination':'疫苗','other':'其他'}.get(a.category, a.category or '—') }}
+        {{ {'tnr':'TNR','outpatient':'门诊','surgery':'手术','beauty':'美容','grooming':'美容','washcare':'洗护','vaccination':'疫苗','vaccine':'疫苗','deworming':'驱虫','exam':'检查','consultation':'咨询','other':'其他'}.get(a.category, a.category or '—') }}
       </div>
     </div>
     {% if a.status == 'pending' %}<span class="ukm-pill amber">待确认</span>
