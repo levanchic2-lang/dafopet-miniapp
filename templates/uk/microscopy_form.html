@@ -342,21 +342,32 @@
 
   {# 文字描述 #}
   <div class="mr-section">
-    <div class="mr-section-head"><h2>镜&nbsp;下&nbsp;所&nbsp;见 / 结&nbsp;论 / 建&nbsp;议</h2></div>
+    <div class="mr-section-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;">镜&nbsp;下&nbsp;所&nbsp;见 / 结&nbsp;论 / 建&nbsp;议</h2>
+      <button type="button" id="mr-ai-btn" class="uk-btn ghost"
+              style="padding:6px 14px;font-size:10.5pt;letter-spacing:1.5px;"
+              onclick="aiDraftMicroscopy()">
+        ✦ AI&nbsp;一&nbsp;键&nbsp;生&nbsp;成
+      </button>
+    </div>
+    <div class="mr-photo-hint" style="margin:2px 0 12px;">
+      根据已勾选的检出物 + 标本部位自动生成三段文字稿；生成后可手动微调
+    </div>
+    <div id="mr-ai-msg" style="display:none;font-size:10pt;padding:8px 12px;margin-bottom:12px;font-style:italic;"></div>
 
     <div class="mr-field">
       <label class="fld">镜下所见（补充描述，可选）</label>
-      <textarea name="narrative" placeholder="如：油镜下可见大量出芽生殖的卵圆形孢子，密集分布；伴少量球菌……">{{ report.narrative if report else '' }}</textarea>
+      <textarea name="narrative" id="mr-narrative" placeholder="如：油镜下可见大量出芽生殖的卵圆形孢子，密集分布；伴少量球菌……">{{ report.narrative if report else '' }}</textarea>
     </div>
 
     <div class="mr-field">
       <label class="fld">结论</label>
-      <textarea name="conclusion" placeholder="如：耳道马拉色菌感染（++），合并细菌性外耳炎">{{ report.conclusion if report else '' }}</textarea>
+      <textarea name="conclusion" id="mr-conclusion" placeholder="如：耳道马拉色菌感染（++），合并细菌性外耳炎">{{ report.conclusion if report else '' }}</textarea>
     </div>
 
     <div class="mr-field">
       <label class="fld">建议</label>
-      <textarea name="advice" placeholder="如：建议每日清耳 + 局部抗真菌治疗，14 天复查显微镜">{{ report.advice if report else '' }}</textarea>
+      <textarea name="advice" id="mr-advice" placeholder="如：建议每日清耳 + 局部抗真菌治疗，14 天复查显微镜">{{ report.advice if report else '' }}</textarea>
     </div>
   </div>
 
@@ -390,6 +401,103 @@ document.querySelectorAll('#mr-tpl-chips input[type="radio"]').forEach(function(
 
 // 初始化
 switchTpl(document.getElementById('mr-template-type').value);
+
+// ─── AI 一键生成 ────────────────────────────────
+async function aiDraftMicroscopy() {
+  var btn = document.getElementById('mr-ai-btn');
+  var msg = document.getElementById('mr-ai-msg');
+  function showMsg(text, kind) {
+    msg.style.display = 'block';
+    msg.textContent = text;
+    if (kind === 'err') {
+      msg.style.background = '#fdf2f2'; msg.style.borderLeft = '3px solid #7a2828'; msg.style.color = '#7a2828';
+    } else if (kind === 'ok') {
+      msg.style.background = '#f0f7f3'; msg.style.borderLeft = '3px solid #1d4d3a'; msg.style.color = '#1d4d3a';
+    } else {
+      msg.style.background = '#fef9f0'; msg.style.borderLeft = '3px solid #6b4423'; msg.style.color = '#6b4423';
+    }
+  }
+
+  // 收集当前可见模板的所有 radio 选择
+  var tplKey = document.getElementById('mr-template-type').value;
+  var visBlock = document.querySelector('.mr-tpl-block[data-tpl="' + tplKey + '"]');
+  var findings = [];
+  if (visBlock) {
+    // 镜检（microbe）：只记非「-」
+    visBlock.querySelectorAll('table.mr-find-table').forEach(function(tbl, tblIdx){
+      // 通过前一个 mr-subhead 判断段
+      var prev = tbl.previousElementSibling;
+      while (prev && !prev.classList.contains('mr-subhead')) prev = prev.previousElementSibling;
+      var head = prev ? prev.textContent : '';
+      var cat = 'microbe';
+      if (head.indexOf('寄生虫') >= 0) cat = 'parasite';
+      else if (head.indexOf('病理') >= 0) cat = 'pathology';
+      tbl.querySelectorAll('tbody tr').forEach(function(tr){
+        var nameTd = tr.querySelector('td.name');
+        var checked = tr.querySelector('input[type="radio"]:checked');
+        if (!nameTd || !checked) return;
+        var name = nameTd.textContent.trim();
+        var grade = checked.value;
+        // microbe 段：略过「-」减少噪音
+        if (cat === 'microbe' && grade === '-') return;
+        findings.push({cat: cat, name: name, grade: grade});
+      });
+    });
+  }
+
+  // 自定义补充行
+  var extraNames = document.querySelectorAll('input[name="finding_extra_name"]');
+  var extraGrades = document.querySelectorAll('input[name="finding_extra_grade"]');
+  var extras = [];
+  for (var i = 0; i < extraNames.length; i++) {
+    var n = (extraNames[i].value || '').trim();
+    var g = ((extraGrades[i] && extraGrades[i].value) || '').trim();
+    if (n && g) extras.push({name: n, grade: g});
+  }
+
+  if (findings.length === 0 && extras.length === 0) {
+    showMsg('请先在上方表格里勾选至少一项检出物', 'err');
+    return;
+  }
+
+  var payload = {
+    template_type: tplKey,
+    item_label:    (document.querySelector('select[name="item_label"]') || {}).value || '',
+    sample_site:   (document.querySelector('input[name="sample_site"]') || {}).value || '',
+    magnification: (document.querySelector('select[name="magnification"]') || {}).value || '',
+    pet_species:   {{ (pet.species if pet else '')|tojson }},
+    findings: findings,
+    extras: extras,
+    narrative_user: document.getElementById('mr-narrative').value || ''
+  };
+
+  btn.disabled = true;
+  var oldHtml = btn.innerHTML;
+  btn.innerHTML = '生&nbsp;成&nbsp;中…';
+  showMsg('正在调用模型，约 3-8 秒…', 'info');
+
+  try {
+    var resp = await fetch('/admin/microscopy/ai-draft', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    var data = await resp.json();
+    if (!data.ok) {
+      showMsg('生成失败：' + (data.error || '未知错误'), 'err');
+      return;
+    }
+    if (data.narrative)  document.getElementById('mr-narrative').value  = data.narrative;
+    if (data.conclusion) document.getElementById('mr-conclusion').value = data.conclusion;
+    if (data.advice)     document.getElementById('mr-advice').value     = data.advice;
+    showMsg('已生成 · 请人工复核后保存', 'ok');
+  } catch (e) {
+    showMsg('网络错误：' + e, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
+}
 
 // ─── 照片预览 ──────────────────────────────────
 function previewMicroPhotos(input) {

@@ -15,7 +15,7 @@ from urllib.parse import quote
 
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from passlib.context import CryptContext
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 import httpx
 from sqlalchemy import func, or_
@@ -18722,6 +18722,30 @@ async def page_admin_microscopy_edit(report_id: int, request: Request, db: Sessi
     ctx = _micro_form_ctx(request, db, order, report=report)
     ctx["locked"] = False
     return templates.TemplateResponse(request, "uk/microscopy_form.html", ctx)
+
+
+@app.post("/admin/microscopy/ai-draft")
+async def admin_microscopy_ai_draft(request: Request, db: Session = Depends(get_db)):
+    """根据医生已勾选的镜检数据，调 LLM 生成"镜下所见 / 结论 / 建议"三段文字稿。
+    入参：application/json
+      {
+        template_type, item_label, sample_site, magnification, pet_species,
+        findings: [{cat, name, grade}],
+        extras:   [{name, grade}],
+        narrative_user: str
+      }
+    出参：{ok, narrative, conclusion, advice, error?}
+    """
+    require_admin(request)
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "请求体不是 JSON"}, status_code=400)
+    if not isinstance(payload, dict):
+        return JSONResponse({"ok": False, "error": "请求体格式错误"}, status_code=400)
+    from app.services.microscopy_ai import draft_microscopy_text
+    result = await draft_microscopy_text(payload)
+    return JSONResponse(result)
 
 
 @app.post("/admin/exam-orders/{order_id}/microscopy/create")
