@@ -1,0 +1,86 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}库存 · 大风动物医院{% endblock %}
+{% block topbar_title %}库&nbsp;存{% endblock %}
+{% block topbar_back %}<a href="/m/me" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/admin/inventory/import-photo">+&nbsp;拍&nbsp;照&nbsp;入&nbsp;库</a>
+{% endblock %}
+
+{% block content %}
+
+{# KPI #}
+<div class="ukm-kpi-grid">
+  <a href="/m/inventory?filter=low" class="ukm-kpi" style="text-decoration:none;">
+    <div class="lbl">低&nbsp;库&nbsp;存</div>
+    <div class="val" style="{% if low_count > 0 %}color:var(--accent-amber);{% endif %}">{{ low_count }}<span class="unit">项</span></div>
+  </a>
+  <a href="/m/inventory?filter=zero" class="ukm-kpi" style="text-decoration:none;">
+    <div class="lbl">零&nbsp;库&nbsp;存</div>
+    <div class="val" style="{% if zero_count > 0 %}color:var(--accent-red);{% endif %}">{{ zero_count }}<span class="unit">项</span></div>
+  </a>
+  <a href="/m/inventory?filter=expiry" class="ukm-kpi" style="text-decoration:none;">
+    <div class="lbl">效&nbsp;期&nbsp;近</div>
+    <div class="val" style="{% if expiry_count > 0 %}color:var(--accent-amber);{% endif %}">{{ expiry_count }}<span class="unit">批</span></div>
+  </a>
+  <a href="/m/inventory?filter=controlled" class="ukm-kpi" style="text-decoration:none;">
+    <div class="lbl">管&nbsp;控&nbsp;药</div>
+    <div class="val">{{ controlled_count }}<span class="unit">种</span></div>
+  </a>
+</div>
+
+{# 筛选 chips #}
+<div class="ukm-chips" style="margin-bottom:14px;">
+  <a class="ukm-chip {% if filter == 'all' %}checked{% endif %}" href="/m/inventory{% if q %}?q={{ q|urlencode }}{% endif %}">全&nbsp;部</a>
+  <a class="ukm-chip {% if filter == 'low' %}checked{% endif %}" href="/m/inventory?filter=low{% if q %}&q={{ q|urlencode }}{% endif %}">低&nbsp;库&nbsp;存</a>
+  <a class="ukm-chip {% if filter == 'zero' %}checked{% endif %}" href="/m/inventory?filter=zero{% if q %}&q={{ q|urlencode }}{% endif %}">零&nbsp;库&nbsp;存</a>
+  <a class="ukm-chip {% if filter == 'expiry' %}checked{% endif %}" href="/m/inventory?filter=expiry{% if q %}&q={{ q|urlencode }}{% endif %}">效&nbsp;期&nbsp;近</a>
+  <a class="ukm-chip {% if filter == 'controlled' %}checked{% endif %}" href="/m/inventory?filter=controlled{% if q %}&q={{ q|urlencode }}{% endif %}">管&nbsp;控</a>
+</div>
+
+<form method="get" action="/m/inventory">
+  {% if filter != 'all' %}<input type="hidden" name="filter" value="{{ filter }}"/>{% endif %}
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="品名 / 供应商"/>
+    {% if q %}<a href="/m/inventory{% if filter != 'all' %}?filter={{ filter }}{% endif %}" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+  </div>
+</form>
+
+{% if items %}
+<div class="ukm-section-head">
+  <h2>共&nbsp;&nbsp;{{ items|length }}&nbsp;&nbsp;项</h2>
+</div>
+
+<div class="ukm-row-group">
+  {% for it in items %}
+  <a class="ukm-row" href="/m/inventory/{{ it.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ it.name }}
+        {% if it.is_controlled %}<span class="ukm-pill red" style="margin-left:6px;">管控</span>{% endif %}
+        {% if it.is_service %}<span class="ukm-pill" style="margin-left:6px;">服务</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ categories[it.category]['label'] if it.category in categories else (it.category or '—') }}
+        {% if it.supplier %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ it.supplier }}{% endif %}
+        {% if it.store %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ it.store }}{% endif %}
+      </div>
+    </div>
+    {% if not it.is_service %}
+    <div class="ukm-row-right ukm-num">
+      <span style="color:{% if it.stock_qty <= 0 %}var(--accent-red){% elif it.low_stock_min > 0 and it.stock_qty <= it.low_stock_min %}var(--accent-amber){% else %}var(--ink){% endif %};font-weight:600;">{{ '%g'|format(it.stock_qty or 0) }}</span>
+      <span class="ukm-italic" style="font-size:11px;margin-left:2px;">{{ it.unit or '' }}</span>
+    </div>
+    {% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;品&nbsp;目</div>
+  {% if q %}没有匹配「{{ q }}」的品目{% elif filter == 'low' %}没有低库存品目{% elif filter == 'zero' %}没有零库存品目{% else %}还没有库存品目{% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

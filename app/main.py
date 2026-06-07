@@ -22910,6 +22910,101 @@ async def m_invoice_detail(inv_id: int, request: Request, db: Session = Depends(
     return templates.TemplateResponse(request, "m_uk/invoice_detail.html", ctx)
 
 
+@app.get("/m/inventory", response_class=HTMLResponse)
+async def m_inventory_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    filter: str = "all",   # all / low / zero / controlled / expiry
+    category: str = "",
+):
+    """库存列表：搜索 + 筛选 + 低/零库存预警"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/inventory", status_code=303)
+    from datetime import date as _date, timedelta as _timedelta
+    store_short = _get_admin_store(request)
+    query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
+    query = _apply_store_filter(query, InventoryItem.store, store_short)
+    if q:
+        query = query.filter(or_(
+            InventoryItem.name.ilike(f"%{q}%"),
+            InventoryItem.supplier.ilike(f"%{q}%"),
+        ))
+    if category:
+        query = query.filter(InventoryItem.category == category)
+    if filter == "low":
+        query = query.filter(
+            InventoryItem.is_service == False,
+            InventoryItem.stock_qty <= InventoryItem.low_stock_min,
+            InventoryItem.low_stock_min > 0,
+        )
+    elif filter == "zero":
+        query = query.filter(InventoryItem.is_service == False, InventoryItem.stock_qty <= 0)
+    elif filter == "controlled":
+        query = query.filter(InventoryItem.is_controlled == True)
+    elif filter == "expiry":
+        alert_date = (_date.today() + _timedelta(days=90)).isoformat()
+        expiry_ids = (db.query(InventoryBatch.item_id)
+                      .filter(InventoryBatch.is_depleted == False,
+                              InventoryBatch.expiry_date != "",
+                              InventoryBatch.expiry_date <= alert_date)
+                      .distinct().subquery())
+        query = query.filter(InventoryItem.id.in_(expiry_ids))
+    items = query.order_by(InventoryItem.category, InventoryItem.name).limit(80).all()
+    # KPI
+    base_q = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, store_short
+    ).filter(InventoryItem.is_active == True)
+    low_count = base_q.filter(
+        InventoryItem.is_service == False,
+        InventoryItem.stock_qty <= InventoryItem.low_stock_min,
+        InventoryItem.low_stock_min > 0,
+    ).count()
+    zero_count = base_q.filter(
+        InventoryItem.is_service == False,
+        InventoryItem.stock_qty <= 0,
+    ).count()
+    controlled_count = base_q.filter(InventoryItem.is_controlled == True).count()
+    alert_date = (_date.today() + _timedelta(days=90)).isoformat()
+    expiry_count = (db.query(InventoryBatch.item_id)
+                    .filter(InventoryBatch.is_depleted == False,
+                            InventoryBatch.expiry_date != "",
+                            InventoryBatch.expiry_date <= alert_date)
+                    .distinct().count())
+    ctx = _m_ctx(request, db, active_tab="me")
+    ctx.update({
+        "items": items, "q": q, "filter": filter, "category": category,
+        "low_count": low_count, "zero_count": zero_count,
+        "controlled_count": controlled_count, "expiry_count": expiry_count,
+        "categories": INVENTORY_CATEGORIES,
+    })
+    return templates.TemplateResponse(request, "m_uk/inventory.html", ctx)
+
+
+@app.get("/m/inventory/{item_id}", response_class=HTMLResponse)
+async def m_inventory_detail(item_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/inventory/{item_id}", status_code=303)
+    item = db.get(InventoryItem, item_id)
+    if not item:
+        raise HTTPException(404)
+    txs = (db.query(InventoryTransaction)
+           .filter(InventoryTransaction.item_id == item_id)
+           .order_by(InventoryTransaction.created_at.desc()).limit(20).all())
+    batches = (db.query(InventoryBatch)
+               .filter(InventoryBatch.item_id == item_id)
+               .order_by(InventoryBatch.expiry_date).all())
+    from datetime import date as _date, timedelta as _timedelta
+    today_str = _date.today().isoformat()
+    alert_date_str = (_date.today() + _timedelta(days=90)).isoformat()
+    ctx = _m_ctx(request, db, active_tab="me")
+    ctx.update({
+        "item": item, "txs": txs, "batches": batches,
+        "today_str": today_str, "alert_date_str": alert_date_str,
+    })
+    return templates.TemplateResponse(request, "m_uk/inventory_detail.html", ctx)
+
+
 @app.get("/m/appointments", response_class=HTMLResponse)
 async def m_appointments_list(
     request: Request,

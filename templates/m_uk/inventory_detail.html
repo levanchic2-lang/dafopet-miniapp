@@ -1,0 +1,146 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}{{ item.name }} · 库存{% endblock %}
+{% block topbar_title %}品&nbsp;目{% endblock %}
+{% block topbar_back %}<a href="/m/inventory" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/admin/inventory/{{ item.id }}">桌&nbsp;面&nbsp;端</a>
+{% endblock %}
+
+{% block content %}
+
+{% set _tx_type_zh = {'in':'入库','out':'出库','adjust':'盘点','return':'退货'} %}
+
+<div class="ukm-page-head">
+  <h1>{{ item.name }}
+    {% if item.is_controlled %}<span class="ukm-pill red" style="margin-left:6px;vertical-align:middle;">管控</span>{% endif %}
+    {% if item.is_service %}<span class="ukm-pill" style="margin-left:6px;vertical-align:middle;">服务</span>{% endif %}
+  </h1>
+  <div class="meta">
+    {{ item.category or '—' }}
+    {% if item.subcategory %}<span class="sep">·</span>{{ item.subcategory }}{% endif %}
+    {% if item.store %}<span class="sep">·</span>{{ item.store }}{% endif %}
+  </div>
+</div>
+
+{# 核心数字 KPI #}
+{% if not item.is_service %}
+<div class="ukm-kpi-grid" style="grid-template-columns:1fr 1fr 1fr;">
+  <div class="ukm-kpi">
+    <div class="lbl">当&nbsp;前&nbsp;库&nbsp;存</div>
+    <div class="val" style="color:{% if item.stock_qty <= 0 %}var(--accent-red){% elif item.low_stock_min > 0 and item.stock_qty <= item.low_stock_min %}var(--accent-amber){% else %}var(--ink){% endif %};">{{ '%g'|format(item.stock_qty or 0) }}<span class="unit">{{ item.unit }}</span></div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">售&nbsp;价</div>
+    <div class="val">¥&nbsp;{{ '%g'|format(item.sell_price or 0) }}</div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">进&nbsp;价</div>
+    <div class="val">¥&nbsp;{{ '%g'|format(item.cost_price or 0) }}</div>
+  </div>
+</div>
+{% endif %}
+
+{# 基础资料 #}
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% if item.unit %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">主&nbsp;单&nbsp;位</span>
+      <span>{{ item.unit }}</span>
+    </div>
+    {% endif %}
+    {% if item.unit2 %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">副&nbsp;单&nbsp;位</span>
+      <span>{{ item.unit2 }}&nbsp;·&nbsp;1{{ item.unit2 }}&nbsp;=&nbsp;<span class="ukm-num">{{ '%g'|format(item.unit2_ratio or 1) }}</span>{{ item.unit }}</span>
+    </div>
+    {% endif %}
+    {% if item.low_stock_min and item.low_stock_min > 0 %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">预&nbsp;警&nbsp;线</span>
+      <span class="ukm-num">{{ '%g'|format(item.low_stock_min) }}&nbsp;{{ item.unit }}</span>
+    </div>
+    {% endif %}
+    {% if item.supplier %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">供&nbsp;应&nbsp;商</span>
+      <span>{{ item.supplier }}</span>
+    </div>
+    {% endif %}
+    {% if not item.requires_report %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">无&nbsp;需&nbsp;出&nbsp;报&nbsp;告</span>
+      <span class="ukm-italic">是</span>
+    </div>
+    {% endif %}
+    {% if item.notes %}
+    <div style="padding:6px 0;font-size:12px;color:var(--ink-2);font-style:italic;line-height:1.6;">{{ item.notes }}</div>
+    {% endif %}
+  </div>
+</div>
+
+{# 批次 #}
+{% if batches %}
+<div class="ukm-section-head"><h2>批&nbsp;次&nbsp;&nbsp;·&nbsp;{{ batches|length }}</h2></div>
+<div class="ukm-row-group">
+  {% for b in batches %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:14px;">
+        {% if b.batch_no %}<span class="ukm-mono" style="font-style:normal;">{{ b.batch_no }}</span>{% else %}—{% endif %}
+        {% if b.is_depleted %}<span class="ukm-pill" style="margin-left:6px;">已耗尽</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {% if b.expiry_date %}
+          {% if b.expiry_date <= today_str %}
+            <span style="color:var(--accent-red);font-style:normal;">已&nbsp;过&nbsp;期&nbsp;{{ b.expiry_date }}</span>
+          {% elif b.expiry_date <= alert_date_str %}
+            <span style="color:var(--accent-amber);font-style:normal;">{{ b.expiry_date }}&nbsp;到&nbsp;期</span>
+          {% else %}
+            效期 {{ b.expiry_date }}
+          {% endif %}
+        {% else %}
+          无效期
+        {% endif %}
+        {% if b.received_date %}<span style="margin:0 5px;color:var(--ink-4);">·</span>入 {{ b.received_date }}{% endif %}
+      </div>
+    </div>
+    <div class="ukm-row-right ukm-num">{{ '%g'|format(b.quantity or 0) }}<span class="ukm-italic" style="font-size:11px;margin-left:2px;">{{ item.unit or '' }}</span></div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 最近流水 #}
+{% if txs %}
+<div class="ukm-section-head"><h2>最&nbsp;近&nbsp;流&nbsp;水&nbsp;·&nbsp;{{ txs|length }}</h2></div>
+<div class="ukm-row-group">
+  {% for t in txs %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:13px;">
+        {{ _tx_type_zh.get(t.tx_type, t.tx_type) }}
+        {% if t.note %}<span class="ukm-italic" style="font-size:11px;margin-left:6px;color:var(--ink-3);">{{ t.note[:18] }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ t.created_at.strftime('%m-%d %H:%M') if t.created_at else '—' }}
+        {% if t.operator %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ t.operator }}{% endif %}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        余 <span class="ukm-num" style="font-style:normal;">{{ '%g'|format(t.qty_after or 0) }}</span>
+      </div>
+    </div>
+    <div class="ukm-row-right ukm-num" style="color:{% if t.tx_type == 'in' %}var(--accent-green){% elif t.tx_type == 'out' %}var(--accent-red){% else %}var(--ink-2){% endif %};">
+      {% if t.tx_type == 'in' %}+{% elif t.tx_type == 'out' %}−{% endif %}{{ '%g'|format(t.qty or 0) }}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/inventory/{{ item.id }}/edit" class="ukm-btn ghost block">编&nbsp;辑</a>
+  <a href="/admin/inventory/import-photo" class="ukm-btn block">+&nbsp;拍&nbsp;照&nbsp;入&nbsp;库</a>
+</div>
+
+{% endblock %}
