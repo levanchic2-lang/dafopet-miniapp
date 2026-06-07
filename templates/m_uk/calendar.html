@@ -1,0 +1,174 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}日历 · 大风动物医院{% endblock %}
+{% block topbar_title %}日&nbsp;历{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/m/appointments/new">+&nbsp;新&nbsp;建</a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .cal-head {
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 10px var(--gutter); margin: 0 calc(0px - var(--gutter)) 8px;
+    border-top: 0.5px solid var(--hair);
+    border-bottom: 0.5px solid var(--hair);
+    background: var(--paper);
+  }
+  .cal-head a {
+    font-family: var(--font-serif); font-size: 16pt; font-weight: 300;
+    color: var(--ink-2); padding: 4px 14px; line-height: 1;
+  }
+  .cal-head h2 {
+    font-family: var(--font-serif); font-size: 14pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1.5px; margin: 0;
+  }
+  .cal-head .sub { font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:1px; margin-left:6px; }
+
+  /* 周名行 */
+  .cal-wk {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    margin: 0 calc(0px - var(--gutter));
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .cal-wk div {
+    padding: 8px 0; text-align:center;
+    font-family: var(--font-serif); font-size: 10pt;
+    color: var(--ink-3); font-style:italic; letter-spacing: 1.5px;
+  }
+  .cal-wk div.weekend { color: var(--ink); font-style: normal; font-weight: 600; }
+
+  /* 日期网格 */
+  .cal-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    margin: 0 calc(0px - var(--gutter)) 14px;
+  }
+  .cal-cell {
+    aspect-ratio: 1;
+    border-right: 0.5px solid var(--hair);
+    border-bottom: 0.5px solid var(--hair);
+    background: var(--paper);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: flex-start; padding-top: 6px;
+    text-decoration: none; color: var(--ink);
+    position: relative;
+    font-family: var(--font-serif);
+  }
+  .cal-cell:nth-child(7n) { border-right: none; }
+  .cal-cell.out { color: var(--ink-4); background: var(--bg); }
+  .cal-cell.today { background: var(--bg-elevated); }
+  .cal-cell.today::before {
+    content: ""; position: absolute; top: 0;
+    left: 22%; right: 22%; height: 1.5px;
+    background: var(--ink);
+  }
+  .cal-cell .day {
+    font-size: 13pt; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+  .cal-cell.today .day { color: var(--ink); font-weight: 700; }
+  .cal-cell.out .day { font-weight: 400; }
+  .cal-cell .n {
+    font-size: 9pt; color: var(--ink-3); font-style: italic;
+    margin-top: 2px; letter-spacing: 0.5px;
+  }
+  .cal-cell .dots {
+    display: flex; gap: 2px; margin-top: 3px;
+    justify-content: center; flex-wrap: wrap; max-width: 80%;
+  }
+  .cal-cell .dot {
+    width: 4px; height: 4px;
+    background: var(--ink-2);
+  }
+  .cal-cell .dot.pending  { background: var(--accent-amber); }
+  .cal-cell .dot.confirmed{ background: var(--ink); }
+  .cal-cell .dot.arrived  { background: var(--accent-green); }
+  .cal-cell .dot.completed{ background: var(--accent-green); }
+  .cal-cell .dot.no_show  { background: var(--accent-red); }
+
+  /* 颗粒计数（多个时压缩为 +N） */
+  .cal-cell .more {
+    font-size: 8.5pt; color: var(--ink-3); font-style: italic;
+    margin-top: 1px;
+  }
+
+  /* 图例 */
+  .cal-legend {
+    display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+    margin: 6px var(--gutter) 14px;
+    font-family: var(--font-serif); font-size: 9pt; color: var(--ink-3);
+    font-style: italic; letter-spacing: 1px;
+  }
+  .cal-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .cal-legend i {
+    display: inline-block; width: 6px; height: 6px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# 月份导航 #}
+<div class="cal-head">
+  <a href="/m/calendar?ym={{ prev_ym }}">‹</a>
+  <h2>{{ year }}&nbsp;年&nbsp;{{ month }}&nbsp;月<span class="sub">{{ total_month }}&nbsp;条</span></h2>
+  <a href="/m/calendar?ym={{ next_ym }}">›</a>
+</div>
+
+{# 跳到今天 #}
+{% if today_iso[:7] != '%04d-%02d'|format(year, month) %}
+<div style="text-align:center;margin-bottom:8px;">
+  <a href="/m/calendar" style="font-family:var(--font-serif);font-size:10pt;letter-spacing:1.5px;color:var(--ink-2);border-bottom:0.5px solid var(--hair);">回&nbsp;今&nbsp;天</a>
+</div>
+{% endif %}
+
+{# 周名 #}
+<div class="cal-wk">
+  <div class="weekend">日</div>
+  <div>一</div>
+  <div>二</div>
+  <div>三</div>
+  <div>四</div>
+  <div>五</div>
+  <div class="weekend">六</div>
+</div>
+
+{# 网格 #}
+<div class="cal-grid">
+  {% for c in cells %}
+  <a class="cal-cell {% if not c.in_month %}out{% endif %} {% if c.is_today %}today{% endif %}"
+     href="/m/appointments?scope=today&d={{ c.iso }}">
+    <span class="day">{{ c.day }}</span>
+    {% if c.bucket %}
+      <span class="n">{{ c.bucket.total }}</span>
+      <div class="dots">
+        {% set bucket = c.bucket %}
+        {% set dots_total = (bucket.pending or 0) + (bucket.confirmed or 0) + (bucket.arrived or 0) + (bucket.completed or 0) + (bucket.no_show or 0) %}
+        {% set shown = 0 %}
+        {% if bucket.pending %}{% for i in range([bucket.pending, 4]|min) %}<span class="dot pending"></span>{% set shown = shown + 1 %}{% endfor %}{% endif %}
+        {% if bucket.confirmed %}{% for i in range([bucket.confirmed, 4 - shown]|min) %}{% if shown < 4 %}<span class="dot confirmed"></span>{% set shown = shown + 1 %}{% endif %}{% endfor %}{% endif %}
+        {% if bucket.arrived %}{% for i in range([bucket.arrived, 4 - shown]|min) %}{% if shown < 4 %}<span class="dot arrived"></span>{% set shown = shown + 1 %}{% endif %}{% endfor %}{% endif %}
+        {% if bucket.completed %}{% for i in range([bucket.completed, 4 - shown]|min) %}{% if shown < 4 %}<span class="dot completed"></span>{% set shown = shown + 1 %}{% endif %}{% endfor %}{% endif %}
+        {% if bucket.no_show %}{% for i in range([bucket.no_show, 4 - shown]|min) %}{% if shown < 4 %}<span class="dot no_show"></span>{% set shown = shown + 1 %}{% endif %}{% endfor %}{% endif %}
+      </div>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+{# 图例 #}
+<div class="cal-legend">
+  <span><i style="background:var(--accent-amber);"></i>待确认</span>
+  <span><i style="background:var(--ink);"></i>已确认</span>
+  <span><i style="background:var(--accent-green);"></i>到店/完成</span>
+  <span><i style="background:var(--accent-red);"></i>爽约</span>
+</div>
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/m/appointments" class="ukm-btn ghost block">列&nbsp;表&nbsp;视&nbsp;图</a>
+  <a href="/m/appointments/new" class="ukm-btn block">+&nbsp;新&nbsp;建&nbsp;预&nbsp;约</a>
+</div>
+
+{% endblock %}

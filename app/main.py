@@ -23472,6 +23472,103 @@ async def m_appointment_detail(appt_id: int, request: Request, db: Session = Dep
     return templates.TemplateResponse(request, "m_uk/appointment_detail.html", ctx)
 
 
+@app.get("/m/calendar", response_class=HTMLResponse)
+async def m_calendar(
+    request: Request,
+    db: Session = Depends(get_db),
+    ym: str = "",   # YYYY-MM；空则当月
+):
+    """手机端月历总览：每天一格 + 该天预约数 + 状态色点"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/calendar", status_code=303)
+    from datetime import date as _date, timedelta as _td
+    from calendar import monthrange
+
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+
+    today = _date.today()
+    today_iso = today.isoformat()
+    # 解析 ym
+    try:
+        if ym:
+            yy, mm = map(int, ym.split("-"))
+        else:
+            yy, mm = today.year, today.month
+        cur_first = _date(yy, mm, 1)
+    except Exception:
+        cur_first = _date(today.year, today.month, 1)
+        yy, mm = cur_first.year, cur_first.month
+
+    # 上 / 下个月
+    if mm == 1:
+        prev_ym = f"{yy-1:04d}-12"
+    else:
+        prev_ym = f"{yy:04d}-{mm-1:02d}"
+    if mm == 12:
+        next_ym = f"{yy+1:04d}-01"
+    else:
+        next_ym = f"{yy:04d}-{mm+1:02d}"
+
+    # 查这个月所有预约
+    _, days_in_month = monthrange(yy, mm)
+    month_start = cur_first.isoformat()
+    month_end = _date(yy, mm, days_in_month).isoformat()
+
+    q = db.query(Appointment).filter(
+        Appointment.appointment_date >= month_start,
+        Appointment.appointment_date <= month_end,
+        Appointment.status.notin_(["cancelled", "rejected"]),
+    )
+    if store_short:
+        q = q.filter(or_(Appointment.store == store_short, Appointment.store == store_full))
+    appts = q.all()
+
+    # 按日期分桶 + 状态计数
+    day_buckets: dict[str, dict] = {}
+    for a in appts:
+        d = a.appointment_date or ""
+        if not d:
+            continue
+        b = day_buckets.setdefault(d, {"total": 0, "pending": 0, "confirmed": 0, "arrived": 0, "completed": 0, "no_show": 0})
+        b["total"] += 1
+        st = a.status if a.status in b else "confirmed"
+        b[st] = b.get(st, 0) + 1
+
+    # 生成 6 周 × 7 天的网格（多出来的前后补灰）
+    # 周日开头 = 0
+    first_weekday = cur_first.weekday()  # 周一=0
+    # 转成 周日=0
+    first_weekday_sun = (first_weekday + 1) % 7
+    grid_start = cur_first - _td(days=first_weekday_sun)
+    cells = []
+    for i in range(42):
+        d = grid_start + _td(days=i)
+        iso = d.isoformat()
+        in_month = (d.month == mm and d.year == yy)
+        b = day_buckets.get(iso, None)
+        cells.append({
+            "iso": iso,
+            "day": d.day,
+            "in_month": in_month,
+            "is_today": iso == today_iso,
+            "bucket": b,
+        })
+        if i >= 35 and d.month != mm:
+            # 第 6 周如果全在下个月，可剪掉。这里保留以稳定 6 周高度。
+            pass
+
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({
+        "year": yy, "month": mm,
+        "cells": cells,
+        "prev_ym": prev_ym, "next_ym": next_ym,
+        "today_iso": today_iso,
+        "total_month": len(appts),
+    })
+    return templates.TemplateResponse(request, "m_uk/calendar.html", ctx)
+
+
 @app.get("/m/appointments", response_class=HTMLResponse)
 async def m_appointments_list(
     request: Request,
