@@ -62,7 +62,7 @@
  <div style="font-size:0.75rem;color:#94a3b8;margin-top:0.25rem;" id="sub-warn"></div>
  </div>
 
- <div style="grid-column:1/-1;display:flex;gap:1.5rem;">
+ <div style="grid-column:1/-1;display:flex;gap:1.5rem;flex-wrap:wrap;">
  <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
  <input type="checkbox" name="is_service" value="1" {% if item and item.is_service %}checked{% endif %} id="is-service-cb" onchange="toggleStock()"/>
  <span style="font-weight:600;">服务项目（不占库存）</span>
@@ -70,6 +70,10 @@
  <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
  <input type="checkbox" name="is_controlled" value="1" {% if item and item.is_controlled %}checked{% endif %}/>
  <span style="font-weight:600;">管控药品（麻药/精神类）</span>
+ </label>
+ <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;" title="检查类纯收费项 (保定费/拍片操作费) 勾上 → 工作台「未出检查报告」不再误报">
+ <input type="checkbox" name="report_exempt" value="1" {% if item and item.requires_report == False %}checked{% endif %}/>
+ <span style="font-weight:600;">无需出报告（检查类纯收费项）</span>
  </label>
  </div>
 

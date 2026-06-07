@@ -14043,6 +14043,7 @@ async def admin_inventory_create(
     name: str = Form(""), category: str = Form("medication"),
     subcategory: str = Form(""), is_service: str = Form("0"),
     is_controlled: str = Form("0"),
+    report_exempt: str = Form("0"),
     unit: str = Form("个"), unit2: str = Form(""), unit2_ratio: float = Form(1.0),
     sell_price: float = Form(0.0), cost_price: float = Form(0.0),
     stock_qty: float = Form(0.0), low_stock_min: float = Form(0.0),
@@ -14057,6 +14058,7 @@ async def admin_inventory_create(
     item = InventoryItem(
         name=name.strip(), category=category, subcategory=subcategory,
         is_service=(is_service == "1"), is_controlled=(is_controlled == "1"),
+        requires_report=(report_exempt != "1"),  # 反向：勾免报告 → requires_report=False
         unit=unit, unit2=unit2, unit2_ratio=unit2_ratio,
         sell_price=sell_price, cost_price=cost_price,
         stock_qty=stock_qty, low_stock_min=low_stock_min,
@@ -14142,6 +14144,7 @@ async def admin_inventory_edit(
     name: str = Form(""), category: str = Form("medication"),
     subcategory: str = Form(""), is_service: str = Form("0"),
     is_controlled: str = Form("0"),
+    report_exempt: str = Form("0"),
     unit: str = Form("个"), unit2: str = Form(""), unit2_ratio: float = Form(1.0),
     sell_price: float = Form(0.0), cost_price: float = Form(0.0),
     low_stock_min: float = Form(0.0),
@@ -14177,6 +14180,7 @@ async def admin_inventory_edit(
         item.aliases = json.dumps(deduped[:8], ensure_ascii=False) if deduped else ""
     item.category = category; item.subcategory = subcategory
     item.is_service = (is_service == "1"); item.is_controlled = (is_controlled == "1")
+    item.requires_report = (report_exempt != "1")
     item.unit = unit; item.unit2 = unit2; item.unit2_ratio = unit2_ratio
     item.sell_price = sell_price; item.cost_price = cost_price
     item.low_stock_min = low_stock_min

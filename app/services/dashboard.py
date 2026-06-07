@@ -150,8 +150,18 @@ def build_exam_report_pending(db: Session, store_short: str) -> dict:
             items = _json.loads(eo.items_json or "[]")
         except Exception:
             items = []
-        # 没明细项的单子跳过（数据不全）
-        item_names = [(i.get("name") or "").strip() for i in items if (i.get("name") or "").strip()]
+        # 没明细项的单子跳过（数据不全）+ 过滤掉「不需要出报告」的纯收费项
+        item_names = []
+        for i in items:
+            n = (i.get("name") or "").strip()
+            if not n:
+                continue
+            iid = i.get("item_id")
+            if iid:
+                inv = db.get(InventoryItem, int(iid))
+                if inv is not None and getattr(inv, "requires_report", True) is False:
+                    continue  # 该项无需报告
+            item_names.append(n)
         if not item_names:
             continue
         reports = db.query(ExamReport).filter(ExamReport.exam_order_id == eo.id).all()

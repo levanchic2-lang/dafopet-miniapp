@@ -440,6 +440,8 @@ class InventoryItem(Base):
     subcategory: Mapped[str] = mapped_column(String(60), default="")
     is_service: Mapped[bool] = mapped_column(Boolean, default=False)            # 服务项目不占库存
     is_controlled: Mapped[bool] = mapped_column(Boolean, default=False)         # 精神类/麻药管控标记
+    # 检查类品目专用：是否需要出报告（保定费 / 拍片操作费 等纯收费项 → False，工作台不再提醒）
+    requires_report: Mapped[bool] = mapped_column(Boolean, default=True)
     unit: Mapped[str] = mapped_column(String(20), default="个")                 # 主单位（片/ml/盒/次）
     unit2: Mapped[str] = mapped_column(String(20), default="")                  # 副单位（盒/瓶）
     unit2_ratio: Mapped[float] = mapped_column(Float, default=1.0)              # 1副单位 = N主单位

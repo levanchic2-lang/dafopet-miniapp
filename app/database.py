@@ -700,6 +700,9 @@ def _try_sqlite_migrations() -> None:
             # inventory_items: 拍照入库识别别名（进货单上的标准名/厂家名）
             if inv_item_cols and "aliases" not in inv_item_names:
                 conn.execute(text("ALTER TABLE inventory_items ADD COLUMN aliases TEXT DEFAULT ''"))
+            # inventory_items: 是否需要出报告（检查项专用，纯收费项可设 False 避免工作台误报"未出报告"）
+            if inv_item_cols and "requires_report" not in inv_item_names:
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN requires_report BOOLEAN DEFAULT 1"))
 
             # stocktake_sessions 盘点会话表
             st_sess_cols = conn.execute(text("PRAGMA table_info(stocktake_sessions)")).fetchall()
