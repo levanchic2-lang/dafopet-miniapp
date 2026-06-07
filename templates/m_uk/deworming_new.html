@@ -48,8 +48,21 @@
 
   <div class="ukm-field">
     <label class="lbl">药&nbsp;品&nbsp;名&nbsp;称</label>
-    <input class="ukm-input" type="text" name="product_name" list="dw-list" placeholder="如：博来恩"/>
-    {% if deworm_items %}<datalist id="dw-list">{% for it in deworm_items %}<option value="{{ it.name }}">{% endfor %}</datalist>{% endif %}
+    <input class="ukm-input" type="text" name="product_name" id="dw-name-input"
+           placeholder="点下方品名 chip 或自输" autocomplete="off"
+           oninput="filterInvChips('dw')"/>
+    {% if deworm_items %}
+    <div class="ukm-chips" id="dw-chips" style="margin-top:8px;gap:5px;">
+      {% for it in deworm_items %}
+      <button type="button" class="ukm-chip inv-chip" data-name="{{ it.name }}"
+              onclick="pickInvName('dw', '{{ it.name|replace("'", "\\'") }}')"
+              style="font-size:11px;padding:5px 10px;line-height:1.3;min-height:28px;">
+        {{ it.name }}
+      </button>
+      {% endfor %}
+    </div>
+    <div class="hint">共 {{ deworm_items|length }} 种库存驱虫药 · 输入关键字可过滤</div>
+    {% endif %}
   </div>
 
   <div class="ukm-row2">
@@ -83,6 +96,21 @@ function pickPet(btn) {
   document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('checked'));
   btn.classList.add('checked');
   document.getElementById('pet_id').value = btn.dataset.petId;
+}
+// 输入关键字过滤库存品名 chip
+function filterInvChips(prefix) {
+  const input = document.getElementById(prefix + '-name-input');
+  const kw = (input.value || '').trim().toLowerCase();
+  const chips = document.querySelectorAll('#' + prefix + '-chips .inv-chip');
+  chips.forEach(c => {
+    const name = (c.dataset.name || '').toLowerCase();
+    c.style.display = (!kw || name.indexOf(kw) >= 0) ? '' : 'none';
+  });
+}
+function pickInvName(prefix, name) {
+  const input = document.getElementById(prefix + '-name-input');
+  input.value = name;
+  filterInvChips(prefix);
 }
 </script>
 

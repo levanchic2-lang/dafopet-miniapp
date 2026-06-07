@@ -40,18 +40,29 @@
   <div class="ukm-field">
     <label class="lbl">疫&nbsp;苗&nbsp;类&nbsp;型</label>
     <select class="ukm-select" name="vaccine_type">
-      <option value="rabies">狂&nbsp;犬</option>
-      <option value="combo_3">三&nbsp;联</option>
-      <option value="combo_6">六&nbsp;联</option>
-      <option value="canine_8">犬&nbsp;八&nbsp;联</option>
-      <option value="other" selected>其&nbsp;他</option>
+      <option value="rabies">狂&nbsp;犬&nbsp;疫&nbsp;苗</option>
+      <option value="combo" selected>联&nbsp;苗</option>
+      <option value="other">其&nbsp;他</option>
     </select>
   </div>
 
   <div class="ukm-field">
     <label class="lbl">疫&nbsp;苗&nbsp;品&nbsp;名</label>
-    <input class="ukm-input" type="text" name="vaccine_name" list="vacc-list" placeholder="如：辉瑞卫佳壹"/>
-    {% if vacc_items %}<datalist id="vacc-list">{% for it in vacc_items %}<option value="{{ it.name }}">{% endfor %}</datalist>{% endif %}
+    <input class="ukm-input" type="text" name="vaccine_name" id="vacc-name-input"
+           placeholder="点下方品名 chip 或自输" autocomplete="off"
+           oninput="filterInvChips('vacc')"/>
+    {% if vacc_items %}
+    <div class="ukm-chips" id="vacc-chips" style="margin-top:8px;gap:5px;">
+      {% for it in vacc_items %}
+      <button type="button" class="ukm-chip inv-chip" data-name="{{ it.name }}"
+              onclick="pickInvName('vacc', '{{ it.name|replace("'", "\\'") }}')"
+              style="font-size:11px;padding:5px 10px;line-height:1.3;min-height:28px;">
+        {{ it.name }}
+      </button>
+      {% endfor %}
+    </div>
+    <div class="hint">共 {{ vacc_items|length }} 种库存疫苗 · 输入关键字可过滤</div>
+    {% endif %}
   </div>
 
   <div class="ukm-row2">
@@ -92,6 +103,22 @@ function pickPet(btn) {
   document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('checked'));
   btn.classList.add('checked');
   document.getElementById('pet_id').value = btn.dataset.petId;
+}
+// 输入关键字过滤库存品名 chip
+function filterInvChips(prefix) {
+  const input = document.getElementById(prefix + '-name-input');
+  const kw = (input.value || '').trim().toLowerCase();
+  const chips = document.querySelectorAll('#' + prefix + '-chips .inv-chip');
+  chips.forEach(c => {
+    const name = (c.dataset.name || '').toLowerCase();
+    c.style.display = (!kw || name.indexOf(kw) >= 0) ? '' : 'none';
+  });
+}
+// 点击 chip 填入 input
+function pickInvName(prefix, name) {
+  const input = document.getElementById(prefix + '-name-input');
+  input.value = name;
+  filterInvChips(prefix);
 }
 </script>
 
