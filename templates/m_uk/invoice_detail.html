@@ -92,13 +92,12 @@
     <div class="ukm-row-body">
       <div class="ukm-row-title" style="font-size:14px;">{{ it.description or '—' }}</div>
       <div class="ukm-row-sub">
-        <span class="ukm-num" style="font-style:normal;">{{ it.quantity or 0 }}</span>
-        {% if it.unit %}&nbsp;{{ it.unit }}{% endif %}
-        <span style="margin:0 5px;color:var(--ink-4);">·</span>
-        <span class="ukm-num" style="font-style:normal;">¥{{ '%.2f'|format(it.unit_price or 0) }}</span>/单价
+        <span class="ukm-num" style="font-style:normal;">{{ '%g'|format(it.quantity or 0) }}</span>
+        <span style="margin:0 5px;color:var(--ink-4);">×</span>
+        <span class="ukm-num" style="font-style:normal;">¥{{ '%.2f'|format(it.unit_price or 0) }}</span>
       </div>
     </div>
-    <div class="ukm-row-right ukm-num">¥&nbsp;{{ '%.2f'|format(it.amount or 0) }}</div>
+    <div class="ukm-row-right ukm-num">¥&nbsp;{{ '%.2f'|format(it.subtotal or 0) }}</div>
   </div>
   {% endfor %}
 </div>
