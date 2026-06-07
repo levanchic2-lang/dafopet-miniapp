@@ -440,8 +440,14 @@ def _try_sqlite_migrations() -> None:
                 _cust_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(customers)")).fetchall()}
                 if "phones_extra" not in _cust_cols:
                     conn.execute(text("ALTER TABLE customers ADD COLUMN phones_extra VARCHAR(500) DEFAULT ''"))
+                # 员工内购档案标记 + 关联员工
+                if "is_internal" not in _cust_cols:
+                    conn.execute(text("ALTER TABLE customers ADD COLUMN is_internal BOOLEAN DEFAULT 0"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_customers_is_internal ON customers(is_internal)"))
+                if "internal_staff_id" not in _cust_cols:
+                    conn.execute(text("ALTER TABLE customers ADD COLUMN internal_staff_id INTEGER DEFAULT NULL"))
             except Exception as _e:
-                print(f"[migrations] customers.phones_extra skipped: {_e}")
+                print(f"[migrations] customers.phones_extra/is_internal skipped: {_e}")
 
             # pets 宠物档案表
             pet_cols = conn.execute(text("PRAGMA table_info(pets)")).fetchall()

@@ -446,6 +446,15 @@
       <label class="field">备注
         <textarea name="notes" rows="2"></textarea>
       </label>
+      {% if is_superadmin %}
+      <label class="field" style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:var(--bg);border-left:2px solid var(--accent-amber);cursor:pointer;">
+        <input type="checkbox" name="is_internal" value="1" style="margin-top:3px;"/>
+        <span style="font-family:var(--font-serif);font-size:10.5pt;color:var(--ink);line-height:1.5;">
+          员&nbsp;工&nbsp;内&nbsp;购&nbsp;档&nbsp;案<br/>
+          <span style="font-size:9pt;color:var(--ink-3);font-style:italic;letter-spacing:0.3px;">勾上后：开单单价默认按进价填、所有业绩/收入报表排除</span>
+        </span>
+      </label>
+      {% endif %}
       <div class="actions">
         <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('newCustModal').classList.remove('visible');">取消</button>
         <button type="submit" class="uk-btn primary sm">保 存</button>

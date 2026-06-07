@@ -269,6 +269,10 @@ class Customer(Base):
     address: Mapped[str] = mapped_column(String(500), default="")
     source: Mapped[str] = mapped_column(String(40), default="")   # tnr / outpatient / beauty / surgery / manual
     notes: Mapped[str] = mapped_column(Text, default="")
+    # 员工内购档案：True 时单价按进价填、所有业绩/收入报表排除
+    is_internal: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # 关联的员工（可选，用于内购报表归属）
+    internal_staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id", ondelete="SET NULL"), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

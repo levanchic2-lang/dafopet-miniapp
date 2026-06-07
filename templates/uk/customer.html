@@ -386,8 +386,10 @@
 
 {# 页头：名字 + 副标 + 按钮在下面（match demo） #}
 <div class="uk-page-head">
-  <h1 class="uk-h1">{{ cust.name or '未命名' }}<span class="sub">客户档案 · 编号 {{ cust.id }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</span></h1>
-  <div class="meta">建档 {{ cust.created_at.strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source or '手工录入' }}</em></div>
+  <h1 class="uk-h1">{{ cust.name or '未命名' }}
+    {% if cust.is_internal %}<span style="display:inline-block;font-family:var(--font-serif);font-size:10pt;letter-spacing:2px;padding:2px 10px;margin-left:10px;border:0.5px solid var(--accent-amber);color:var(--accent-amber);vertical-align:middle;font-weight:400;">员&nbsp;工&nbsp;内&nbsp;购</span>{% endif %}
+    <span class="sub">客户档案 · 编号 {{ cust.id }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</span></h1>
+  <div class="meta">建档 {{ cust.created_at.strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source or '手工录入' }}</em>{% if cust.is_internal %} · <em style="color:var(--accent-amber);">内购单按进价开单、不计入业绩报表</em>{% endif %}</div>
 
   {# 按钮在副标下方 - match demo #}
   <div class="actions" style="margin-top:20px;">

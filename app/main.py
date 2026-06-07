@@ -6658,6 +6658,8 @@ async def admin_customer_create(
     notes: str = Form(""),
     source: str = Form("manual"),
     next_url: str = Form(""),
+    is_internal: str = Form(""),           # "1" = 员工内购档案
+    internal_staff_id: str = Form(""),     # 关联员工 id（可选）
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -6683,12 +6685,19 @@ async def admin_customer_create(
                 sep = "&" if "?" in target else "?"
                 return RedirectResponse(f"{target}{sep}msg={msg}", status_code=303)
             return RedirectResponse(f"/admin/customers/{existing.id}?msg={msg}", status_code=303)
+    # 员工内购档案：仅超管可建
+    _is_internal = (is_internal == "1") and (request.session.get("admin_role") == "superadmin")
+    _staff_id: int | None = None
+    if _is_internal and internal_staff_id.strip().isdigit():
+        _staff_id = int(internal_staff_id.strip())
     cust = Customer(
         name=name.strip()[:120],
         phone=phone_clean,
         address=address.strip()[:500],
         notes=notes.strip(),
-        source=source.strip()[:40] or "manual",
+        source=("employee_internal" if _is_internal else (source.strip()[:40] or "manual")),
+        is_internal=_is_internal,
+        internal_staff_id=_staff_id,
     )
     db.add(cust)
     db.commit()
