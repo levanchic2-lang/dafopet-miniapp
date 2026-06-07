@@ -22513,8 +22513,15 @@ async def m_api_search_customer(
     q = (q or "").strip()
     if len(q) < 2:
         return {"results": []}
+    # 宠物名也命中
+    _pet_owner_ids = db.query(Pet.customer_id).filter(Pet.name.ilike(f"%{q}%"))
     custs = db.query(Customer).filter(
-        or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        or_(
+            Customer.name.ilike(f"%{q}%"),
+            Customer.phone.ilike(f"%{q}%"),
+            Customer.phones_extra.ilike(f"%{q}%"),
+            Customer.id.in_(_pet_owner_ids),
+        )
     ).order_by(Customer.id.desc()).limit(10).all()
     results = []
     for c in custs:
@@ -22525,7 +22532,8 @@ async def m_api_search_customer(
             "phone": c.phone or "",
             "pets": [{
                 "id": p.id, "name": p.name or "",
-                "species": p.species, "breed": p.breed or "",
+                "species": p.species or "", "breed": p.breed or "",
+                "gender": p.gender or "unknown",
             } for p in pets],
         })
     return {"results": results}
@@ -22541,8 +22549,15 @@ async def m_customers_search(request: Request, q: str = "", db: Session = Depend
     q = (q or "").strip()
     results = []
     if len(q) >= 2:
+        # 宠物名命中的客户 id（子查询）
+        _pet_owner_ids = db.query(Pet.customer_id).filter(Pet.name.ilike(f"%{q}%"))
         custs = db.query(Customer).filter(
-            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+            or_(
+                Customer.name.ilike(f"%{q}%"),
+                Customer.phone.ilike(f"%{q}%"),
+                Customer.phones_extra.ilike(f"%{q}%"),   # 备用号
+                Customer.id.in_(_pet_owner_ids),          # 按宠物名搜
+            )
         ).order_by(Customer.id.desc()).limit(30).all()
         for c in custs:
             pets = db.query(Pet).filter(Pet.customer_id == c.id).order_by(Pet.id).all()

@@ -39,6 +39,14 @@
       <input type="radio" name="category" value="beauty" {% if category_default == 'beauty' %}checked{% endif %} onchange="onCategoryChange(this)"/>
       美&nbsp;容
     </label>
+    <label class="ukm-chip {% if category_default == 'grooming' %}checked{% endif %}">
+      <input type="radio" name="category" value="grooming" {% if category_default == 'grooming' %}checked{% endif %} onchange="onCategoryChange(this)"/>
+      造&nbsp;型
+    </label>
+    <label class="ukm-chip {% if category_default == 'washcare' %}checked{% endif %}">
+      <input type="radio" name="category" value="washcare" {% if category_default == 'washcare' %}checked{% endif %} onchange="onCategoryChange(this)"/>
+      洗&nbsp;护
+    </label>
     <label class="ukm-chip {% if category_default == 'tnr' %}checked{% endif %}">
       <input type="radio" name="category" value="tnr" {% if category_default == 'tnr' %}checked{% endif %} onchange="onCategoryChange(this)"/>
       T&nbsp;N&nbsp;R
@@ -74,16 +82,24 @@
   <div class="ukm-row2">
     <div class="ukm-field">
       <label class="lbl">客&nbsp;户&nbsp;姓&nbsp;名<span class="req">*</span></label>
-      <input class="ukm-input" type="text" name="customer_name" required maxlength="120" placeholder="王女士"/>
+      <input class="ukm-input" type="text" name="customer_name" id="ac_cust_name" required maxlength="120" placeholder="王女士"/>
     </div>
     <div class="ukm-field">
       <label class="lbl">手&nbsp;机&nbsp;号<span class="req">*</span></label>
-      <input class="ukm-input ukm-mono" type="tel" name="phone" required inputmode="numeric" maxlength="40"/>
+      <input class="ukm-input ukm-mono" type="tel" name="phone" id="ac_phone" required inputmode="numeric" maxlength="40" autocomplete="off"/>
+      <div class="hint" id="ac_phone_hint">输 11 位号码自动识别老顾客</div>
     </div>
   </div>
-  <div class="ukm-field">
+  <input type="hidden" name="customer_id" id="ac_customer_id" value="0"/>
+  <input type="hidden" name="pet_id" id="ac_pet_id" value="0"/>
+  {# 识别后宠物 chip 列表（多宠物时让选） #}
+  <div class="ukm-field" id="ac_pet_picker" style="display:none;">
+    <label class="lbl">已&nbsp;识&nbsp;别&nbsp;宠&nbsp;物&nbsp;·&nbsp;点&nbsp;击&nbsp;选&nbsp;择</label>
+    <div class="ukm-chips" id="ac_pet_chips"></div>
+  </div>
+  <div class="ukm-field" id="ac_pet_name_field">
     <label class="lbl">宠&nbsp;物&nbsp;名<span class="req">*</span></label>
-    <input class="ukm-input" type="text" name="pet_name" required maxlength="120"/>
+    <input class="ukm-input" type="text" name="pet_name" id="ac_pet_name" required maxlength="120"/>
   </div>
   {% else %}
   {# 已预填客户：把字段塞进 hidden inputs（POST 路由还是要这些字段） #}
@@ -94,7 +110,7 @@
 
   <div class="ukm-field">
     <label class="lbl">宠&nbsp;物&nbsp;性&nbsp;别</label>
-    <div class="ukm-chips">
+    <div class="ukm-chips" id="ac_gender_chips">
       <label class="ukm-chip checked"><input type="radio" name="pet_gender" value="unknown" checked/>未&nbsp;知</label>
       <label class="ukm-chip"><input type="radio" name="pet_gender" value="male"/>公</label>
       <label class="ukm-chip"><input type="radio" name="pet_gender" value="female"/>母</label>
@@ -191,6 +207,90 @@ document.querySelectorAll('.ukm-chip').forEach(chip => {
     });
   }
 });
+
+// ─── 手机号自动识别老顾客 ──────────────────────
+(function(){
+  const phoneInput = document.getElementById('ac_phone');
+  if (!phoneInput) return;
+  const $ = (id) => document.getElementById(id);
+  let timer = null;
+
+  function setGenderChip(g) {
+    document.querySelectorAll('#ac_gender_chips input[name="pet_gender"]').forEach(r => {
+      r.checked = (r.value === g);
+      r.closest('.ukm-chip').classList.toggle('checked', r.checked);
+    });
+  }
+
+  function fillPet(p) {
+    $('ac_pet_id').value = p.id;
+    $('ac_pet_name').value = p.name || '';
+    if (p.gender) setGenderChip(p.gender);
+  }
+
+  function renderPetChips(pets) {
+    const wrap = $('ac_pet_chips');
+    wrap.innerHTML = '';
+    if (!pets.length) {
+      $('ac_pet_picker').style.display = 'none';
+      return;
+    }
+    pets.forEach((p, i) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'ukm-chip' + (i === 0 ? ' checked' : '');
+      chip.textContent = (p.name || '未命名') + (p.breed ? ' · ' + p.breed : '');
+      chip.addEventListener('click', () => {
+        wrap.querySelectorAll('.ukm-chip').forEach(c => c.classList.remove('checked'));
+        chip.classList.add('checked');
+        fillPet(p);
+      });
+      wrap.appendChild(chip);
+    });
+    $('ac_pet_picker').style.display = 'block';
+    fillPet(pets[0]);
+  }
+
+  function setHint(text, color) {
+    const h = $('ac_phone_hint');
+    h.textContent = text;
+    h.style.color = color || 'var(--ink-3)';
+  }
+
+  async function recognize(phone) {
+    if (!/^1\d{10}$/.test(phone)) {
+      setHint('输 11 位号码自动识别老顾客');
+      return;
+    }
+    setHint('正在识别…');
+    try {
+      const resp = await fetch('/m/api/search-customer?q=' + encodeURIComponent(phone));
+      const data = await resp.json();
+      // 精确匹配 phone 的客户
+      const hit = (data.results || []).find(c => (c.phone || '').replace(/\s/g,'') === phone);
+      if (!hit) {
+        $('ac_customer_id').value = 0;
+        $('ac_pet_id').value = 0;
+        $('ac_pet_picker').style.display = 'none';
+        setHint('未识别·将作为新客户创建');
+        return;
+      }
+      $('ac_customer_id').value = hit.id;
+      if (hit.name && !$('ac_cust_name').value) $('ac_cust_name').value = hit.name;
+      else if (hit.name) $('ac_cust_name').value = hit.name;
+      renderPetChips(hit.pets || []);
+      setHint('已识别 · 客户 #' + hit.id + (hit.pets.length > 1 ? ' · ' + hit.pets.length + ' 只宠物，请选' : ''), 'var(--accent-green)');
+    } catch(e) {
+      setHint('识别失败：' + e, 'var(--accent-red)');
+    }
+  }
+
+  phoneInput.addEventListener('input', () => {
+    clearTimeout(timer);
+    const v = phoneInput.value.replace(/\s/g, '');
+    timer = setTimeout(() => recognize(v), 300);
+  });
+})();
 </script>
 
 {% endblock %}
