@@ -496,12 +496,7 @@
         <div>
           <h3 style="display:inline-block;">宠物档案</h3><span class="count">（{{ pets|length }} 只）</span>
         </div>
-        <div style="display:flex;gap:14px;align-items:center;">
-          {% if pets|length >= 3 %}
-          <a href="/admin/customers/{{ cust.id }}/pets/dedup" style="font-family:var(--font-serif);font-style:italic;font-size:9.5pt;color:var(--ink-3);letter-spacing:1px;border-bottom:0.5px solid var(--hair);" title="批量清理重名宠物（小程序导入产生）">重&nbsp;名&nbsp;清&nbsp;理</a>
-          {% endif %}
-          <a href="#" onclick="document.getElementById('addPetModal').classList.add('visible');return false;">＋ 添加宠物</a>
-        </div>
+        <a href="#" onclick="document.getElementById('addPetModal').classList.add('visible');return false;">＋ 添加宠物</a>
       </div>
       <table class="pets-tbl">
         <thead>
