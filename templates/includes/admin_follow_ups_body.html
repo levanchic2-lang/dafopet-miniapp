@@ -110,12 +110,14 @@
   </td>
   <td data-label="处理人">{{ fu.assigned_to or '—' }}</td>
   <td data-label="状态">
-   <span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span>
+   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+    <span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span>
+    {% if fu.response %}
+     <span style="font-size:.72rem;color:#10b981;letter-spacing:.5px;">{{ response_zh.get(fu.response, fu.response) }}</span>
+    {% endif %}
+   </div>
    {% if fu.channel and fu.status not in ('pending','due','phone_pending') %}
     <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem;letter-spacing:.5px;">{{ channel_zh.get(fu.channel, fu.channel) }}</div>
-   {% endif %}
-   {% if fu.response %}
-    <div style="font-size:.72rem;color:#10b981;margin-top:.2rem;">{{ response_zh.get(fu.response, fu.response) }}</div>
    {% endif %}
   </td>
   <td class="actions fu-row-actions">
