@@ -1191,6 +1191,17 @@
       <label class="field">来源
         <input name="source" value="{{ cust.source or '' }}"/>
       </label>
+      {% if request.session.get('admin_role') == 'superadmin' %}
+      <div style="padding:10px 12px;margin:6px 0;background:#fafaf6;border-left:3px solid #6b4423;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0;">
+          <input type="checkbox" name="is_internal" value="1" {% if cust.is_internal %}checked{% endif %} style="flex-shrink:0;width:16px;height:16px;margin:0;"/>
+          <span style="font-family:var(--font-serif);font-size:10.5pt;font-weight:700;color:var(--ink);letter-spacing:1.5px;">员&nbsp;工&nbsp;内&nbsp;购&nbsp;档&nbsp;案</span>
+        </label>
+        <div style="font-family:var(--font-serif);font-size:9pt;color:var(--ink-3);font-style:italic;letter-spacing:0.5px;line-height:1.7;margin-top:6px;margin-left:26px;">
+          勾上 = 开单按进价填、业绩报表排除；可随时取消恢复正常档案
+        </div>
+      </div>
+      {% endif %}
       <div class="actions">
         <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('editCustModal').classList.remove('visible');">取消</button>
         <button type="submit" class="uk-btn primary sm">保 存</button>

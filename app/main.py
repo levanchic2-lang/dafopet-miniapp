@@ -7662,6 +7662,7 @@ async def admin_customer_edit(
     address: str = Form(""),
     notes: str = Form(""),
     source: str = Form(""),
+    is_internal: str = Form(""),   # "1" = 员工内购档案，"" = 取消勾选
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -7699,6 +7700,14 @@ async def admin_customer_edit(
     new_source = source.strip()[:40]
     if new_source:
         cust.source = new_source
+    # 员工内购档案标记：仅超管可改，普通员工传也忽略
+    if request.session.get("admin_role") == "superadmin":
+        new_internal = (is_internal == "1")
+        if new_internal != bool(cust.is_internal):
+            cust.is_internal = new_internal
+            # 首次标记为内购时自动改 source（除非用户也手填了 source）
+            if new_internal and not new_source:
+                cust.source = "employee_internal"
     db.commit()
     return RedirectResponse(f"/admin/customers/{customer_id}?msg=已保存", status_code=303)
 
