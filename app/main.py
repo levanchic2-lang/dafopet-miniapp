@@ -16439,14 +16439,12 @@ async def admin_cashier_multi_pay_submit(
             share = 0.0
         inv_actuals.append(round(out - share, 2))
         if share > 0:
-            # 立刻写减免流水（这一次性事件）
-            db.add(Payment(
-                invoice_id=r["inv"].id, customer_id=customer_id,
-                method="free", amount=share,
-                ref_no="", status="success",
-                store=store, operator=operator,
-                note=f"合并结算 · 减免分摊（{len(inv_rows)} 单）",
-            ))
+            # ★ 折扣直接折进发票本体：discount_amount += share, total_amount -= share
+            # 这样三联（应付/已收/未收）反映真实情况，不再写 Payment(method=free) 误导
+            inv_obj = r["inv"]
+            inv_obj.discount_amount = round(float(inv_obj.discount_amount or 0) + share, 2)
+            inv_obj.total_amount = round(float(inv_obj.total_amount or 0) - share, 2)
+            inv_obj.notes = (inv_obj.notes or "") + f"\n[合并结算减免 {datetime.now().strftime('%Y-%m-%d %H:%M')}] 分摊 ¥{share:.2f}（共 {len(inv_rows)} 单）"
             db.flush()
             discount_share_used += share
     actuals_total = round(sum(inv_actuals), 2)
