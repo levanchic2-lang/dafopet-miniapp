@@ -16572,11 +16572,13 @@ async def admin_cashier_multi_pay_submit(
         if cur_out <= 0:
             continue
         take = min(remaining, cur_out)
+        # store 优先用发票本身的（保证收款统计「按门店」准确）
+        _pay_store = store or (inv.store or "")
         db.add(Payment(
             invoice_id=inv.id, customer_id=customer_id,
             method=method, amount=round(take, 2),
             ref_no=ref_no, status="success",
-            store=store, operator=operator,
+            store=_pay_store, operator=operator,
             note=note_tag,
         ))
         db.flush()
@@ -16918,7 +16920,9 @@ async def admin_invoice_add_payment(
 
     method = str(form.get("method") or "cash").strip()
     operator = request.session.get("admin_username", "admin")
-    store = _get_admin_store(request)
+    # store 优先取发票本身的 store（更准确，超管未挂店时 _get_admin_store=""），
+    # 这样收款统计「按门店」就不会出现「未指定」
+    store = _get_admin_store(request) or (inv.store or "")
 
     # ── 合并结算：解析勾选的其他待收单 id ──
     extra_ids = [int(x) for x in form.getlist("extra_invoice_ids") if str(x).isdigit()]
