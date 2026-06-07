@@ -1,0 +1,50 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}检查单{% endblock %}
+{% block topbar_title %}检&nbsp;查&nbsp;单{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-chips" style="margin-bottom:14px;">
+  <a class="ukm-chip {% if status == 'pending' %}checked{% endif %}" href="/m/exam-orders?status=pending{% if q %}&q={{ q|urlencode }}{% endif %}">待&nbsp;报&nbsp;告</a>
+  <a class="ukm-chip {% if status == 'completed' %}checked{% endif %}" href="/m/exam-orders?status=completed{% if q %}&q={{ q|urlencode }}{% endif %}">已&nbsp;完&nbsp;成</a>
+  <a class="ukm-chip {% if not status %}checked{% endif %}" href="/m/exam-orders{% if q %}?q={{ q|urlencode }}{% endif %}">全&nbsp;部</a>
+</div>
+
+<form method="get" action="/m/exam-orders">
+  {% if status %}<input type="hidden" name="status" value="{{ status }}"/>{% endif %}
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="检查单号"/>
+    {% if q %}<a href="/m/exam-orders{% if status %}?status={{ status }}{% endif %}" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+  </div>
+</form>
+
+{% if rows %}
+<div class="ukm-section-head"><h2>共&nbsp;{{ rows|length }}&nbsp;张</h2></div>
+<div class="ukm-row-group">
+  {% for r in rows %}
+  <a class="ukm-row" href="/m/exam-order/{{ r.eo.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">#{{ r.eo.id }}
+        {% if r.pet %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.pet.name }}{% endif %}
+        {% if r.cust %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ r.v.visit_date if r.v else '—' }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.items_n }} 项
+        {% if r.reports_n > 0 %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.reports_n }} 份报告{% endif %}
+      </div>
+    </div>
+    {% if r.eo.status == 'pending' %}<span class="ukm-pill amber">待报告</span>
+    {% elif r.eo.status == 'completed' %}<span class="ukm-pill green">完成</span>
+    {% elif r.eo.status == 'voided' %}<span class="ukm-pill red">作废</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty"><div class="big">无&nbsp;检&nbsp;查&nbsp;单</div></div>
+{% endif %}
+
+{% endblock %}

@@ -22976,6 +22976,75 @@ async def m_reports_revenue(
     return templates.TemplateResponse(request, "m_uk/revenue_report.html", ctx)
 
 
+@app.get("/m/prescriptions", response_class=HTMLResponse)
+async def m_prescriptions_list(request: Request, db: Session = Depends(get_db),
+                                q: str = "", status: str = ""):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/prescriptions", status_code=303)
+    store_short = _get_admin_store(request)
+    query = db.query(Prescription).order_by(Prescription.id.desc())
+    if store_short:
+        query = query.outerjoin(Pet, Pet.id == Prescription.pet_id).filter(
+            or_(Pet.store == store_short, Pet.store == "", Pet.store == None)  # noqa: E711
+        )
+    if status:
+        query = query.filter(Prescription.status == status)
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        if q.isdigit():
+            query = query.filter(or_(Prescription.id == int(q), Prescription.customer_id.in_(cids)))
+        else:
+            query = query.filter(Prescription.customer_id.in_(cids))
+    items = query.limit(80).all()
+    rows = []
+    for p in items:
+        pet = db.get(Pet, p.pet_id) if p.pet_id else None
+        c = db.get(Customer, p.customer_id) if p.customer_id else None
+        rows.append({"p": p, "pet": pet, "cust": c})
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({"rows": rows, "q": q, "status": status})
+    return templates.TemplateResponse(request, "m_uk/prescriptions.html", ctx)
+
+
+@app.get("/m/exam-orders", response_class=HTMLResponse)
+async def m_exam_orders_list(request: Request, db: Session = Depends(get_db),
+                              q: str = "", status: str = ""):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/exam-orders", status_code=303)
+    store_short = _get_admin_store(request)
+    query = db.query(ExamOrder).order_by(ExamOrder.id.desc())
+    if store_short:
+        query = query.outerjoin(Visit, Visit.id == ExamOrder.visit_id).outerjoin(
+            Pet, Pet.id == Visit.pet_id
+        ).filter(or_(Pet.store == store_short, Pet.store == "", Pet.store == None))  # noqa: E711
+    if status:
+        query = query.filter(ExamOrder.status == status)
+    if q:
+        if q.isdigit():
+            query = query.filter(ExamOrder.id == int(q))
+    items = query.limit(80).all()
+    rows = []
+    for eo in items:
+        v = db.get(Visit, eo.visit_id) if eo.visit_id else None
+        pet = db.get(Pet, v.pet_id) if v and v.pet_id else None
+        c = db.get(Customer, v.customer_id) if v and v.customer_id else None
+        try:
+            items_data = json.loads(eo.items_json or "[]")
+        except Exception:
+            items_data = []
+        try:
+            reports_cnt = len(list(eo.reports or []))
+        except Exception:
+            reports_cnt = 0
+        rows.append({"eo": eo, "v": v, "pet": pet, "cust": c,
+                     "items_n": len(items_data), "reports_n": reports_cnt})
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({"rows": rows, "q": q, "status": status})
+    return templates.TemplateResponse(request, "m_uk/exam_orders.html", ctx)
+
+
 @app.get("/m/vaccinations", response_class=HTMLResponse)
 async def m_vaccinations_list(request: Request, db: Session = Depends(get_db), q: str = ""):
     if not _admin_ok(request):
