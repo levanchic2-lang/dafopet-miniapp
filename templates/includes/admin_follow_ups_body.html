@@ -51,7 +51,7 @@
  <th>诊断 / 主诉</th>
  <th style="width:64px;">处理人</th>
  <th style="width:110px;">状态</th>
- <th style="text-align:right;width:340px;">操作</th>
+ <th style="text-align:right;width:380px;">操作</th>
  </tr>
  </thead>
  <tbody>
@@ -122,7 +122,7 @@
    {% if v %}<a href="/admin/visits/{{ v.id }}" class="fu-action-btn">病例</a>{% endif %}
    {% if fu.feedback_token and fu.status in ('pending','due','phone_pending','sent') %}
    <button type="button" class="fu-action-btn"
-           onclick="copyFeedbackLink(this, '{{ fu.feedback_token }}')"><i data-lucide="clipboard-list"></i> 复制反馈链接</button>
+           onclick="copyFeedbackLink(this, '{{ fu.feedback_token }}')"><i data-lucide="clipboard-list"></i> 复制链接</button>
    {% endif %}
    {% if fu.status in ('pending','due','phone_pending','sent') %}
    <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
