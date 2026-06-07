@@ -116,12 +116,12 @@ def build_followup_today(db: Session, store_short: str) -> dict:
         items.append({
             "label": _cust_label(fu.customer, fu.pet),
             "sub": f"{fu.planned_date} · {_fu_status_zh.get(fu.status, fu.status)}",
-            "url": f"/admin/follow-ups",
+            "url": "/admin/follow-ups?tab=today",
         })
     return {
         "key": "followup_today", "title": "待回访任务", "icon": "phone",
         "count": len(rows), "previews": items,
-        "all_url": "/admin/follow-ups?status=due",
+        "all_url": "/admin/follow-ups?tab=today",
         "tone": "danger",
     }
 

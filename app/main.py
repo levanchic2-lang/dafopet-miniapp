@@ -10852,8 +10852,10 @@ async def page_admin_follow_ups(
 
     # 4 个 tab 的过滤条件
     if tab == "today":
-        q = base.filter(FollowUp.planned_date == today,
-                        FollowUp.status.in_(["pending", "due"]))
+        # 今日 = 计划日期 ≤ 今天 (含逾期) 且仍可操作（与工作台「待回访任务」口径一致）
+        q = base.filter(FollowUp.planned_date != "",
+                        FollowUp.planned_date <= today,
+                        FollowUp.status.in_(["pending", "due", "phone_pending"]))
         order = (FollowUp.planned_date.asc(), FollowUp.id.desc())
     elif tab == "overdue":
         q = base.filter(FollowUp.planned_date < today,
@@ -10886,7 +10888,7 @@ async def page_admin_follow_ups(
             qq = qq.filter(FollowUp.assigned_to == username)
         return filter_(qq).count()
     counts = {
-        "today":   _count(lambda x: x.filter(FollowUp.planned_date == today, FollowUp.status.in_(["pending", "due"]))),
+        "today":   _count(lambda x: x.filter(FollowUp.planned_date != "", FollowUp.planned_date <= today, FollowUp.status.in_(["pending", "due", "phone_pending"]))),
         "overdue": _count(lambda x: x.filter(FollowUp.planned_date < today, FollowUp.status.in_(["pending", "due", "phone_pending"]))),
         "sent":    _count(lambda x: x.filter(FollowUp.status.in_(["sent", "responded"]))),
         "done":    _count(lambda x: x.filter(FollowUp.status.in_(["closed", "skipped"]))),
