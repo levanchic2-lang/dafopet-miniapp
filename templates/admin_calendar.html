@@ -780,6 +780,8 @@ function openApptPopup(ev, id) {
  let btns = '';
  if (st !== 'arrived' && st !== 'completed' && st !== 'cancelled' && st !== 'no_show')
  btns += `<button class="btn-arrived" onclick="doStatus(${id},'arrived')">已到店</button>`;
+ if (st === 'arrived')
+ btns += `<button class="btn-completed" style="background:#1d4d3a;color:#fdfcf8;border-color:#1d4d3a;" onclick="doStatus(${id},'completed')">已完成</button>`;
  if (st !== 'no_show' && st !== 'cancelled' && st !== 'completed')
  btns += `<button class="btn-noshow" onclick="doStatus(${id},'no_show')">爽约</button>`;
  if (st !== 'cancelled' && st !== 'completed')

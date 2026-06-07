@@ -396,6 +396,14 @@
  <button type="submit" class="a-arrived">已到店</button>
  </form>
  {% endif %}
+ {% if appt.status == 'arrived' %}
+ <form method="post" action="{{ request.url_for('admin_appointment_status', appointment_id=appt.id) }}">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+ <input type="hidden" name="redirect_after" value="appointments">
+ <input type="hidden" name="status" value="completed">
+ <button type="submit" class="a-completed" style="background:#1d4d3a;color:#fdfcf8;border-color:#1d4d3a;">已完成</button>
+ </form>
+ {% endif %}
  {% if appt.status not in ['cancelled','completed'] %}
  <button type="button" onclick="toggleApptPanel('cancel-{{ appt.id }}')">取消</button>
  <button type="button" onclick="toggleApptPanel('rs-{{ appt.id }}')">改约</button>
