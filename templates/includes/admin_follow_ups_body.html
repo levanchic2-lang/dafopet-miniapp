@@ -118,7 +118,8 @@
     <div style="font-size:.72rem;color:#10b981;margin-top:.2rem;">{{ response_zh.get(fu.response, fu.response) }}</div>
    {% endif %}
   </td>
-  <td class="actions fu-row-actions" style="text-align:right;">
+  <td class="actions fu-row-actions">
+   <div class="actions-inner">
    {% if v %}<a href="/admin/visits/{{ v.id }}" class="fu-action-btn">病例</a>{% endif %}
    {% if fu.feedback_token and fu.status in ('pending','due','phone_pending','sent') %}
    <button type="button" class="fu-action-btn"
@@ -151,6 +152,7 @@
     <button class="fu-action-btn"><i data-lucide="rotate-ccw"></i> 重新打开</button>
    </form>
    {% endif %}
+   </div>
   </td>
  </tr>
  {% endfor %}

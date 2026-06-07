@@ -45,9 +45,11 @@
   body .fu-status-pill.closed, body .fu-status-pill.skipped { color:var(--ink-3); border-color:var(--hair); }
   body .fu-overdue { color:var(--accent-red); font-weight:700; font-family:var(--font-numeric); }
 
-  body .fu-row-actions { display:flex !important; flex-wrap:wrap; gap:4px; justify-content:flex-end; align-items:flex-start; }
-  body .fu-row-actions form { display:inline-block; margin:0; }
-  body .fu-row-actions > * { flex:0 0 auto; }
+  /* 不直接给 TD 用 flex（会破坏 table-cell 行高），用 TD 内部 div 包裹 */
+  body td.fu-row-actions { text-align:right; }
+  body td.fu-row-actions > .actions-inner { display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end; align-items:flex-start; }
+  body td.fu-row-actions form { display:inline-block; margin:0; }
+  body td.fu-row-actions .actions-inner > * { flex:0 0 auto; }
   body .fu-action-btn {
     border-radius:0 !important;
     font-family:var(--font-serif) !important;
