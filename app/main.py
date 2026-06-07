@@ -7942,6 +7942,107 @@ async def admin_customer_merge_pet(
     )
 
 
+def _pet_business_record_count(db: Session, pet_id: int) -> dict:
+    """统计宠物的业务关联条数，用于查重清理时判断是否安全可删。"""
+    out = {
+        "visits": db.query(Visit).filter(Visit.pet_id == pet_id).count(),
+        "appts": db.query(Appointment).filter(Appointment.pet_id == pet_id).count(),
+        "invoices": db.query(Invoice).filter(Invoice.pet_id == pet_id).count(),
+        "vaccinations": db.query(Vaccination).filter(Vaccination.pet_id == pet_id).count(),
+        "prescriptions": db.query(Prescription).filter(Prescription.pet_id == pet_id).count(),
+    }
+    try:
+        out["dewormings"] = db.query(DewormingRecord).filter(DewormingRecord.pet_id == pet_id).count()
+    except Exception:
+        out["dewormings"] = 0
+    try:
+        out["grooming"] = db.query(GroomingOrder).filter(GroomingOrder.pet_id == pet_id).count()
+    except Exception:
+        out["grooming"] = 0
+    out["total"] = sum(v for v in out.values() if isinstance(v, int))
+    return out
+
+
+@app.get("/admin/customers/{customer_id}/pets/dedup", response_class=HTMLResponse)
+async def admin_customer_pets_dedup(
+    customer_id: int, request: Request, db: Session = Depends(get_db),
+):
+    """该客户名下重名宠物查重 + 批量清理（仅删无业务记录的）"""
+    require_admin(request)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404)
+    all_pets = db.query(Pet).filter(Pet.customer_id == customer_id).order_by(Pet.id).all()
+    # 按 (name, species, gender) 分组
+    groups: dict[tuple, list[dict]] = {}
+    for p in all_pets:
+        key = ((p.name or "").strip(), p.species or "", p.gender or "")
+        groups.setdefault(key, []).append({
+            "pet": p,
+            "records": _pet_business_record_count(db, p.id),
+        })
+    # 只保留重复的（>1 只）
+    dup_groups = []
+    for key, items in groups.items():
+        if len(items) < 2:
+            continue
+        # 排序：有业务记录的排前面（不可删）
+        items.sort(key=lambda x: (-x["records"]["total"], x["pet"].id))
+        dup_groups.append({"name": key[0] or "未命名", "species": key[1], "gender": key[2], "items": items})
+    # 重复组按 名字 + 数量降序
+    dup_groups.sort(key=lambda g: (-len(g["items"]), g["name"]))
+
+    ctx = {
+        "request": request, "cust": cust,
+        "dup_groups": dup_groups,
+        "total_pets": len(all_pets),
+        "total_dup_pets": sum(len(g["items"]) for g in dup_groups),
+        "csrf_token": _get_csrf_token(request),
+    }
+    return templates.TemplateResponse(request, "uk/customer_pets_dedup.html", ctx)
+
+
+@app.post("/admin/customers/{customer_id}/pets/dedup")
+async def admin_customer_pets_dedup_submit(
+    customer_id: int, request: Request, db: Session = Depends(get_db),
+):
+    """批量删除勾选的重复宠物（带二次保险：再次检查无业务记录）"""
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    pet_ids = [int(x) for x in form.getlist("pet_ids") if str(x).isdigit()]
+    if not pet_ids:
+        from urllib.parse import quote as _q
+        return RedirectResponse(
+            f"/admin/customers/{customer_id}/pets/dedup?msg={_q('未勾选任何宠物', safe='')}",
+            status_code=303,
+        )
+    deleted = []
+    skipped = []
+    for pid in pet_ids:
+        p = db.get(Pet, pid)
+        if not p or p.customer_id != customer_id:
+            continue
+        recs = _pet_business_record_count(db, pid)
+        if recs["total"] > 0:
+            skipped.append(f"#{pid}「{p.name or '未命名'}」 有 {recs['total']} 条业务记录")
+            continue
+        db.delete(p)
+        deleted.append(p.name or '未命名')
+    db.commit()
+    from urllib.parse import quote as _q
+    parts = []
+    if deleted:
+        parts.append(f"删除 {len(deleted)} 只: {', '.join(deleted[:10])}{'...' if len(deleted) > 10 else ''}")
+    if skipped:
+        parts.append(f"跳过 {len(skipped)} 只（有业务记录）")
+    msg = " · ".join(parts) or "无变化"
+    return RedirectResponse(
+        f"/admin/customers/{customer_id}?msg={_q(msg, safe='')}",
+        status_code=303,
+    )
+
+
 @app.post("/admin/customers/{customer_id}/pets/{pet_id}/delete")
 async def admin_customer_delete_pet(
     customer_id: int,
