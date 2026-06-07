@@ -125,7 +125,7 @@
 <div class="ukm-section-head"><h2>检&nbsp;查&nbsp;&nbsp;·&nbsp;{{ exam_rows|length }}</h2></div>
 <div class="ukm-row-group">
   {% for r in exam_rows %}
-  <a class="ukm-row" href="/admin/exam-orders/{{ r['eo'].id }}">
+  <a class="ukm-row" href="/m/exam-order/{{ r['eo'].id }}">
     <div class="ukm-row-body">
       <div class="ukm-row-title">检&nbsp;查&nbsp;#{{ r['eo'].id }}
         {% if r['reports']|length > 0 %}<span class="ukm-italic" style="font-size:11px;margin-left:6px;">{{ r['reports']|length }} 份报告</span>{% endif %}
