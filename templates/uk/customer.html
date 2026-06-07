@@ -416,6 +416,16 @@
 {% if request.query_params.get('msg') %}
 <div style="padding:10px 14px;margin-bottom:14px;border-left:3px solid var(--ink);background:var(--bg);font-family:var(--font-serif);font-size:10pt;letter-spacing:1px;">{{ request.query_params.get('msg') }}</div>
 {% endif %}
+{% if request.query_params.get('appointment_err') %}
+<div style="padding:12px 16px;margin-bottom:14px;border:0.5px solid var(--accent-red);background:#fdf6f6;color:var(--accent-red);font-family:var(--font-serif);font-size:10.5pt;letter-spacing:0.5px;line-height:1.6;">
+  <b style="letter-spacing:1.5px;">预&nbsp;约&nbsp;失&nbsp;败&nbsp;&nbsp;</b>{{ request.query_params.get('appointment_err') }}
+</div>
+{% endif %}
+{% if request.query_params.get('appointment_ok') %}
+<div style="padding:12px 16px;margin-bottom:14px;border:0.5px solid var(--accent-green);background:#f6faf8;color:var(--accent-green);font-family:var(--font-serif);font-size:10.5pt;letter-spacing:1.5px;">
+  ✓&nbsp;&nbsp;预&nbsp;约&nbsp;已&nbsp;创&nbsp;建
+</div>
+{% endif %}
 
 {# ── 主 + 侧 双栏 ── #}
 <div class="cust-grid">
