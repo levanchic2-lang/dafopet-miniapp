@@ -108,27 +108,21 @@
   <input type="hidden" name="pet_name" value="{{ pet.name if pet else '' }}"/>
   {% endif %}
 
-  <div class="ukm-field">
-    <label class="lbl">宠&nbsp;物&nbsp;性&nbsp;别</label>
-    <div class="ukm-chips" id="ac_gender_chips">
-      <label class="ukm-chip checked"><input type="radio" name="pet_gender" value="unknown" checked/>未&nbsp;知</label>
-      <label class="ukm-chip"><input type="radio" name="pet_gender" value="male"/>公</label>
-      <label class="ukm-chip"><input type="radio" name="pet_gender" value="female"/>母</label>
-    </div>
-  </div>
+  {# 宠物性别 hidden（后端必填，前端不显示；识别老顾客时由 JS 自动填） #}
+  <input type="hidden" name="pet_gender" id="ac_pet_gender" value="unknown"/>
 
-  {# 门店 #}
+  {# 门店：value 必须是全名「大风动物医院（X店）」后端才认 #}
   <div class="ukm-field">
     <label class="lbl">门&nbsp;店<span class="req">*</span></label>
     {% if is_superadmin %}
     <select class="ukm-select" name="store" required>
       {% if not default_store %}<option value="" disabled selected>— 选择门店 —</option>{% endif %}
-      <option value="东环店" {% if default_store == '东环店' %}selected{% endif %}>东环店</option>
-      <option value="横岗店" {% if default_store == '横岗店' %}selected{% endif %}>横岗店</option>
+      <option value="大风动物医院（东环店）" {% if default_store == '东环店' %}selected{% endif %}>东环店</option>
+      <option value="大风动物医院（横岗店）" {% if default_store == '横岗店' %}selected{% endif %}>横岗店</option>
     </select>
     {% else %}
     <input class="ukm-input" type="text" value="{{ default_store }}" disabled style="color:var(--ink-3);"/>
-    <input type="hidden" name="store" value="{{ default_store }}"/>
+    <input type="hidden" name="store" value="{% if default_store == '东环店' %}大风动物医院（东环店）{% elif default_store == '横岗店' %}大风动物医院（横岗店）{% else %}{{ default_store }}{% endif %}"/>
     {% endif %}
   </div>
 
@@ -216,10 +210,9 @@ document.querySelectorAll('.ukm-chip').forEach(chip => {
   let timer = null;
 
   function setGenderChip(g) {
-    document.querySelectorAll('#ac_gender_chips input[name="pet_gender"]').forEach(r => {
-      r.checked = (r.value === g);
-      r.closest('.ukm-chip').classList.toggle('checked', r.checked);
-    });
+    // 性别 chip 已删除，只设 hidden value
+    const h = $('ac_pet_gender');
+    if (h) h.value = g || 'unknown';
   }
 
   function fillPet(p) {
