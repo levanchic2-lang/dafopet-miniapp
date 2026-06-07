@@ -403,6 +403,11 @@ function confirmVaccVoid(form, paidAmount) {
         <input type="checkbox" name="is_free" value="1" id="is-free-chk" {% if vacc and vacc.is_free %}checked{% endif %} onchange="onFreeChange()"/>
         <span>此次接种免费（如 政府狂犬疫苗，不生成收费单）</span>
       </label>
+      {# 红字醒目提示：仅在勾选了免费 + 非狂犬类型时显示 #}
+      <div id="free-warn" style="display:none; margin:8px 0 10px; padding:10px 14px; background:#fef2f2; border-left:4px solid var(--accent-red); color:var(--accent-red); font-family:var(--font-serif); font-size:11pt; font-weight:700; letter-spacing:1.5px; line-height:1.7;">
+        ⚠ 当前不是狂犬疫苗，确定要免费？<br/>
+        <span style="font-size:9.5pt; font-weight:400; font-style:italic; color:var(--ink-2); letter-spacing:1px;">通常只有政府狂犬才免费 · 其他疫苗免费会漏收费 · 请确认是否要把上面那个勾取消</span>
+      </div>
       <div id="charge-row" class="vac-charge-row">
         <label>收费金额 ¥</label>
         <input name="charge_amount" id="charge-amount" type="number" step="0.01" min="0" placeholder="0.00" value=""/>
@@ -517,13 +522,27 @@ function calcNextDue() {
   dueEl.value = `${y}-${m}-${d}`;
 }
 
+function _updateFreeWarn() {
+  const type = document.getElementById('vaccine-type-sel').value;
+  const chk = document.getElementById('is-free-chk');
+  const warn = document.getElementById('free-warn');
+  if (!chk || !warn) return;
+  // 勾了免费 + 非狂犬 → 红字醒目警示
+  warn.style.display = (chk.checked && type !== 'rabies') ? '' : 'none';
+}
 function onTypeChange() {
   const type = document.getElementById('vaccine-type-sel').value;
   const chk = document.getElementById('is-free-chk');
-  if (chk && type === 'rabies') chk.checked = true;
+  if (chk) {
+    // 狂犬 → 自动勾上；非狂犬 → 自动取消（防止 sticky 状态忘改）
+    chk.checked = (type === 'rabies');
+  }
+  _updateFreeWarn();
   calcNextDue();
 }
-function onFreeChange() {}
+function onFreeChange() {
+  _updateFreeWarn();
+}
 function onItemChange() {
   const sel = document.getElementById('inv-item-sel');
   const opt = sel.options[sel.selectedIndex];
