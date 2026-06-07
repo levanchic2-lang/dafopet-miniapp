@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no"/>
+  <meta name="theme-color" content="#fdfcf8"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="大风动物医院"/>
+  <link rel="manifest" href="/static/manifest.json"/>
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png"/>
+  <link rel="stylesheet" href="/static/uk_m.css?v=1"/>
+  <title>{% block title %}大风动物医院{% endblock %}</title>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+{% if request.query_params.get('msg') %}
+<div class="ukm-msg ok">{{ request.query_params.get('msg') }}</div>
+{% endif %}
+{% if request.query_params.get('err') %}
+<div class="ukm-msg err">{{ request.query_params.get('err') }}</div>
+{% endif %}
+
+{% block topbar %}
+<div class="ukm-topbar">
+  <div class="ukm-topbar-inner">
+    <div class="ukm-topbar-l">
+      {% block topbar_back %}{% endblock %}
+      <div style="min-width:0;">
+        <div class="ukm-topbar-title">{% block topbar_title %}大风动物医院{% endblock %}</div>
+        <div class="ukm-topbar-sub">{% block topbar_sub %}{{ admin_store_label or '全部门店' }} · {{ admin_username }}{% endblock %}</div>
+      </div>
+    </div>
+    <div class="ukm-topbar-r">
+      {% block topbar_actions %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+<div class="ukm-content">
+  {% block content %}{% endblock %}
+</div>
+
+{% block fab %}{% endblock %}
+
+{% include "m_uk/_tabbar.html" %}
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(()=>{});
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

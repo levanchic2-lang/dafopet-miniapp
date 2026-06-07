@@ -1,0 +1,19 @@
+{# UK-Minimal 底部 5-tab (统一角色，按权限隐藏单按钮，不隐藏 tab) #}
+{% set _t = active_tab or '' %}
+<nav class="ukm-tabbar" role="navigation">
+  <a class="ukm-tab {% if _t=='today' %}active{% endif %}" href="/m">
+    <span class="glyph">·</span>今&nbsp;日
+  </a>
+  <a class="ukm-tab {% if _t=='customers' %}active{% endif %}" href="/m/customers">
+    <span class="glyph">○</span>客&nbsp;户
+  </a>
+  <a class="ukm-tab {% if _t=='medical' %}active{% endif %}" href="/m/medical">
+    <span class="glyph">◇</span>医&nbsp;疗
+  </a>
+  <a class="ukm-tab {% if _t=='finance' %}active{% endif %}" href="/m/finance">
+    <span class="glyph">¥</span>财&nbsp;务
+  </a>
+  <a class="ukm-tab {% if _t=='me' %}active{% endif %}" href="/m/me">
+    <span class="glyph">▢</span>我
+  </a>
+</nav>

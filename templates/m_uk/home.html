@@ -1,0 +1,105 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}今日 · 大风动物医院{% endblock %}
+{% block topbar_title %}今&nbsp;日{% endblock %}
+{% block topbar_sub %}{{ admin_store_label or '全部门店' }}<span style="margin:0 6px;color:var(--ink-4);">·</span>{{ today_str }}{% endblock %}
+
+{% block content %}
+
+{# 待办 KPI 4 格 #}
+<div class="ukm-kpi-grid">
+  <a href="/m/inpatient" class="ukm-kpi" style="text-decoration:none;">
+    <div class="lbl">漏&nbsp;药</div>
+    <div class="val">{{ badges.overdue_meds }}<span class="unit">条</span></div>
+  </a>
+  <a href="/m/dispensing" class="ukm-kpi" style="text-decoration:none;">
+    <div class="lbl">待&nbsp;配&nbsp;药</div>
+    <div class="val">{{ badges.pending_dispense }}<span class="unit">单</span></div>
+  </a>
+  <a href="/m/follow-ups" class="ukm-kpi" style="text-decoration:none;">
+    <div class="lbl">待&nbsp;回&nbsp;访</div>
+    <div class="val">{{ badges.due_followups }}<span class="unit">项</span></div>
+  </a>
+  <a href="/m/tnr" class="ukm-kpi" style="text-decoration:none;">
+    <div class="lbl">待&nbsp;审&nbsp;TNR</div>
+    <div class="val">{{ pending_tnr_n }}<span class="unit">单</span></div>
+  </a>
+</div>
+
+{# 今日预约 #}
+<div class="ukm-section-head">
+  <h2>今&nbsp;日&nbsp;预&nbsp;约</h2>
+  {% if today_appts_total > today_appts|length %}
+  <a href="/m/appointments?d={{ today_str }}" class="more">全部&nbsp;{{ today_appts_total }}&nbsp;›</a>
+  {% endif %}
+</div>
+
+{% if today_appts %}
+<div class="ukm-row-group">
+  {% for a in today_appts %}
+  <a href="/admin/appointments/{{ a.id }}" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ a.customer_name or '—' }} · {{ a.pet_name or '—' }}</div>
+      <div class="ukm-row-sub">
+        {{ a.appointment_time or '—' }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        {{ {'tnr':'TNR','outpatient':'门诊','surgery':'手术','beauty':'美容','vaccination':'疫苗','other':'其他'}.get(a.category, a.category or '—') }}
+      </div>
+    </div>
+    {% if a.status == 'pending' %}<span class="ukm-pill amber">待确认</span>
+    {% elif a.status == 'confirmed' %}<span class="ukm-pill">已确认</span>
+    {% elif a.status == 'arrived' %}<span class="ukm-pill ink">已到店</span>
+    {% elif a.status == 'completed' %}<span class="ukm-pill green">已完成</span>
+    {% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;预&nbsp;约</div>
+  今日无预约 · 可在「预约」tab 新建
+</div>
+{% endif %}
+
+{# 我最近的病历 #}
+<div class="ukm-section-head">
+  <h2>我&nbsp;最&nbsp;近&nbsp;的&nbsp;病&nbsp;历</h2>
+</div>
+
+{% if my_visits %}
+<div class="ukm-row-group">
+  {% for r in my_visits %}
+  <a href="/m/visits/{{ r.v.id }}" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">
+        #{{ r.v.id }}&nbsp;·&nbsp;{{ r.pet.name if r.pet else '—' }}
+        {% if r.cust %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ r.v.visit_date or '—' }}
+        {% if r.v.chief_complaint %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.v.chief_complaint[:24] }}{% endif %}
+      </div>
+    </div>
+    {% if r.v.status == 'closed' %}<span class="ukm-pill">已结束</span>
+    {% else %}<span class="ukm-pill amber">进行中</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty"><div class="big">暂&nbsp;无&nbsp;病&nbsp;历</div>开一个病历即可在这里看到</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+
+<div class="ukm-btn-row">
+  <a href="/m/visits/new" class="ukm-btn block">新&nbsp;建&nbsp;病&nbsp;历</a>
+</div>
+<div class="ukm-btn-row">
+  <a href="/m/appointments/new" class="ukm-btn ghost block">新&nbsp;建&nbsp;预&nbsp;约</a>
+  <a href="/m/customers/new" class="ukm-btn ghost block">新&nbsp;建&nbsp;客&nbsp;户</a>
+</div>
+
+<div class="ukm-fineprint">大&nbsp;风&nbsp;动&nbsp;物&nbsp;医&nbsp;院</div>
+
+{% endblock %}

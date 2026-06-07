@@ -1,0 +1,118 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}{{ cust.name or '客户' }} · 档案{% endblock %}
+{% block topbar_title %}客&nbsp;户{% endblock %}
+{% block topbar_back %}<a href="/m/customers" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/admin/customers/{{ cust.id }}/edit">编&nbsp;辑</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>{{ cust.name or '—' }}</h1>
+  <div class="meta">
+    <span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ cust.phone or '' }}</span>
+    {% if cust.address %}<span class="sep">·</span>{{ cust.address }}{% endif %}
+  </div>
+</div>
+
+{# 钱包 + 套餐 KPI #}
+{% if wallet or packages %}
+<div class="ukm-kpi-grid">
+  <div class="ukm-kpi">
+    <div class="lbl">钱&nbsp;包&nbsp;余&nbsp;额</div>
+    <div class="val">¥&nbsp;{{ '%.0f'|format(wallet.balance) if wallet else '0' }}</div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">在&nbsp;用&nbsp;套&nbsp;餐</div>
+    <div class="val">{{ packages|length }}<span class="unit">个</span></div>
+  </div>
+</div>
+{% endif %}
+
+{# 宠物列表 #}
+<div class="ukm-section-head">
+  <h2>宠&nbsp;物</h2>
+  <a class="more" href="/m/customer/{{ cust.id }}/pets/new">+&nbsp;加&nbsp;宠&nbsp;物</a>
+</div>
+
+{% if pets %}
+<div class="ukm-row-group">
+  {% for p in pets %}
+  <a class="ukm-row" href="/m/pet/{{ p.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ p.name or '未命名' }}
+        {% if p.life_status == 'deceased' %}<span class="ukm-pill" style="margin-left:6px;">已故</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {% if p.species == 'cat' %}猫{% elif p.species == 'dog' %}狗{% else %}{{ p.species }}{% endif %}
+        {% if p.breed %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ p.breed }}{% endif %}
+        {% if p.gender == 'male' %}<span style="margin:0 5px;color:var(--ink-4);">·</span>公
+        {% elif p.gender == 'female' %}<span style="margin:0 5px;color:var(--ink-4);">·</span>母{% endif %}
+        {% if p.is_neutered %}<span style="margin:0 5px;color:var(--ink-4);">·</span>已绝育{% endif %}
+      </div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;宠&nbsp;物&nbsp;档&nbsp;案</div>
+  <a href="/m/customer/{{ cust.id }}/pets/new" style="color:var(--ink);border-bottom:0.5px solid var(--ink);">+ 加宠物</a>
+</div>
+{% endif %}
+
+{# 住院中 #}
+{% if admitted %}
+<div class="ukm-section-head"><h2>住&nbsp;院&nbsp;中</h2></div>
+<div class="ukm-row-group">
+  {% for h in admitted %}
+  <a class="ukm-row" href="/m/inpatient/{{ h.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ h.cage_code or '—' }}&nbsp;·&nbsp;{{ h.reason[:20] if h.reason else '住院观察' }}</div>
+      <div class="ukm-row-sub">入院 {{ h.admitted_at.strftime('%m-%d') if h.admitted_at else '—' }}</div>
+    </div>
+    <span class="ukm-pill amber">住院</span>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 最近病历 #}
+<div class="ukm-section-head">
+  <h2>最&nbsp;近&nbsp;病&nbsp;历</h2>
+  <a class="more" href="/m/visits/new?customer_id={{ cust.id }}">+&nbsp;新&nbsp;建</a>
+</div>
+
+{% if visits %}
+<div class="ukm-row-group">
+  {% for r in visits %}
+  <a class="ukm-row" href="/m/visits/{{ r.v.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">
+        #{{ r.v.id }}
+        {% if r.pet %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.pet.name }}{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ r.v.visit_date or '—' }}
+        {% if r.v.chief_complaint %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.v.chief_complaint[:20] }}{% endif %}
+      </div>
+    </div>
+    {% if r.v.status == 'closed' %}<span class="ukm-pill">已结束</span>{% else %}<span class="ukm-pill amber">进行中</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty"><div class="big">暂&nbsp;无&nbsp;病&nbsp;历</div></div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/m/appointments/new?customer_id={{ cust.id }}" class="ukm-btn ghost block">+&nbsp;新&nbsp;建&nbsp;预&nbsp;约</a>
+  <a href="/m/invoices?customer_id={{ cust.id }}" class="ukm-btn ghost block">收&nbsp;费&nbsp;单</a>
+</div>
+
+{% endblock %}

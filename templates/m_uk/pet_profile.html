@@ -1,0 +1,153 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}{{ pet.name }} · 档案{% endblock %}
+{% block topbar_title %}宠&nbsp;物{% endblock %}
+{% block topbar_back %}<a href="{% if cust %}/m/customer/{{ cust.id }}{% else %}/m/customers{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/admin/pets/{{ pet.id }}/edit">编&nbsp;辑</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>{{ pet.name or '未命名' }}
+    {% if pet.life_status == 'deceased' %}<span class="ukm-pill" style="margin-left:8px;vertical-align:middle;">已故</span>{% endif %}
+  </h1>
+  <div class="meta">
+    {% if pet.species == 'cat' %}猫{% elif pet.species == 'dog' %}狗{% else %}{{ pet.species }}{% endif %}
+    {% if pet.breed %}<span class="sep">·</span>{{ pet.breed }}{% endif %}
+    {% if pet.gender == 'male' %}<span class="sep">·</span>公
+    {% elif pet.gender == 'female' %}<span class="sep">·</span>母{% endif %}
+    {% if pet.is_neutered %}<span class="sep">·</span>已绝育{% endif %}
+    {% if cust %}<span class="sep">·</span><a href="/m/customer/{{ cust.id }}" style="color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ cust.name }}</a>{% endif %}
+  </div>
+</div>
+
+{# 基础资料 卡片 #}
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% if pet.medical_record_no %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;">
+      <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">病&nbsp;历&nbsp;号</span>
+      <span class="ukm-mono" style="font-size:13px;">{{ pet.medical_record_no }}</span>
+    </div>
+    {% endif %}
+    {% if pet.birthday_estimate %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;">
+      <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">生&nbsp;日</span>
+      <span style="font-size:13px;">{{ pet.birthday_estimate }}</span>
+    </div>
+    {% endif %}
+    {% if pet.color_pattern %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;">
+      <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">毛&nbsp;色</span>
+      <span style="font-size:13px;">{{ pet.color_pattern }}</span>
+    </div>
+    {% endif %}
+    {% if pet.microchip_id %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;">
+      <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">芯&nbsp;片&nbsp;号</span>
+      <span class="ukm-mono" style="font-size:12px;">{{ pet.microchip_id }}</span>
+    </div>
+    {% endif %}
+    {% if pet.store %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;">
+      <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">归&nbsp;属&nbsp;门&nbsp;店</span>
+      <span style="font-size:13px;">{{ pet.store }}</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# 住院中 #}
+{% if admitted %}
+<div class="ukm-section-head"><h2>住&nbsp;院&nbsp;中</h2></div>
+<div class="ukm-row-group">
+  <a class="ukm-row" href="/m/inpatient/{{ admitted.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ admitted.cage_code or '—' }}&nbsp;·&nbsp;{{ admitted.reason[:20] if admitted.reason else '住院观察' }}</div>
+      <div class="ukm-row-sub">入院 {{ admitted.admitted_at.strftime('%m-%d') if admitted.admitted_at else '—' }}</div>
+    </div>
+    <span class="ukm-pill amber">住院</span>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+</div>
+{% endif %}
+
+{# 最近病历 #}
+<div class="ukm-section-head">
+  <h2>最&nbsp;近&nbsp;病&nbsp;历</h2>
+  <a class="more" href="/m/visits/new?pet_id={{ pet.id }}">+&nbsp;新&nbsp;建</a>
+</div>
+
+{% if visits %}
+<div class="ukm-row-group">
+  {% for v in visits %}
+  <a class="ukm-row" href="/m/visits/{{ v.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">#{{ v.id }}&nbsp;·&nbsp;{{ v.visit_date or '—' }}</div>
+      <div class="ukm-row-sub">{{ v.chief_complaint[:30] if v.chief_complaint else '—' }}</div>
+    </div>
+    {% if v.status == 'closed' %}<span class="ukm-pill">已结束</span>{% else %}<span class="ukm-pill amber">进行中</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty"><div class="big">暂&nbsp;无&nbsp;病&nbsp;历</div></div>
+{% endif %}
+
+{# 疫苗 #}
+{% if vaccinations %}
+<div class="ukm-section-head"><h2>疫&nbsp;苗</h2></div>
+<div class="ukm-row-group">
+  {% for vc in vaccinations %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:14px;">{{ vc.vaccine_name or '—' }}</div>
+      <div class="ukm-row-sub">{{ vc.vaccinated_date or '—' }}{% if vc.next_due_date %}<span style="margin:0 5px;color:var(--ink-4);">·</span>下次 {{ vc.next_due_date }}{% endif %}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 驱虫 #}
+{% if dewormings %}
+<div class="ukm-section-head"><h2>驱&nbsp;虫</h2></div>
+<div class="ukm-row-group">
+  {% for d in dewormings %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:14px;">{{ d.product_name or '—' }}</div>
+      <div class="ukm-row-sub">{{ d.deworm_date or '—' }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{% if d.deworm_type == 'internal' %}体内{% elif d.deworm_type == 'external' %}体外{% else %}体内外{% endif %}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 体重曲线 #}
+{% if weights %}
+<div class="ukm-section-head"><h2>体&nbsp;重</h2></div>
+<div class="ukm-row-group">
+  {% for w in weights %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:14px;">{{ '%.2f'|format(w.weight_kg) }}&nbsp;<span class="ukm-italic">kg</span></div>
+      <div class="ukm-row-sub">{{ w.record_date or '—' }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/m/visits/new?pet_id={{ pet.id }}" class="ukm-btn block">+&nbsp;新&nbsp;建&nbsp;病&nbsp;历</a>
+</div>
+<div class="ukm-btn-row">
+  <a href="/m/vaccinations/new?pet_id={{ pet.id }}" class="ukm-btn ghost block">疫&nbsp;苗</a>
+  <a href="/m/dewormings/new?pet_id={{ pet.id }}" class="ukm-btn ghost block">驱&nbsp;虫</a>
+</div>
+
+{% endblock %}

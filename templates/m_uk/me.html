@@ -1,0 +1,53 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}我 · 大风动物医院{% endblock %}
+{% block topbar_title %}我{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>{{ admin_username }}</h1>
+  <div class="meta">
+    {% if admin_role == 'superadmin' %}超级管理员{% else %}员&nbsp;工{% endif %}
+    <span class="sep">·</span>
+    {{ admin_store_label or '全部门店' }}
+  </div>
+</div>
+
+<div class="ukm-section-head"><h2>账&nbsp;号</h2></div>
+<div class="ukm-row-group">
+  <a class="ukm-row" href="/admin/profile">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">个&nbsp;人&nbsp;资&nbsp;料</div>
+      <div class="ukm-row-sub">企微绑定&nbsp;·&nbsp;密码&nbsp;·&nbsp;门店</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a class="ukm-row" href="/admin/hr">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">人&nbsp;事</div>
+      <div class="ukm-row-sub">员工档案&nbsp;·&nbsp;账号管理</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+</div>
+
+<div class="ukm-section-head"><h2>应&nbsp;用</h2></div>
+<div class="ukm-row-group">
+  <a class="ukm-row" href="/m/desktop">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">切&nbsp;换&nbsp;桌&nbsp;面&nbsp;版</div>
+      <div class="ukm-row-sub">大屏完整工作台</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a class="ukm-row" href="/admin/logout">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="color:var(--accent-red);">退&nbsp;出&nbsp;登&nbsp;录</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+</div>
+
+<div class="ukm-fineprint">大&nbsp;风&nbsp;动&nbsp;物&nbsp;医&nbsp;院&nbsp;&nbsp;手&nbsp;机&nbsp;端&nbsp;UK</div>
+
+{% endblock %}

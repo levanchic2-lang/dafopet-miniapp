@@ -1,0 +1,96 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}医疗 · 大风动物医院{% endblock %}
+{% block topbar_title %}医&nbsp;疗{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>医&nbsp;疗</h1>
+  <div class="meta">病历&nbsp;·&nbsp;处方&nbsp;·&nbsp;检查&nbsp;·&nbsp;住院&nbsp;·&nbsp;疫苗&nbsp;·&nbsp;驱虫</div>
+</div>
+
+<div class="ukm-row-group">
+  <a href="/m/visits" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">病&nbsp;历</div>
+      <div class="ukm-row-sub">SOAP&nbsp;·&nbsp;主诉&nbsp;·&nbsp;诊断&nbsp;·&nbsp;治疗方案</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/prescriptions" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">处&nbsp;方</div>
+      <div class="ukm-row-sub">开药&nbsp;·&nbsp;按次给药计算&nbsp;·&nbsp;模板</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/exam-orders" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">检&nbsp;查&nbsp;单</div>
+      <div class="ukm-row-sub">化验&nbsp;·&nbsp;影像&nbsp;·&nbsp;显微镜</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/inpatient" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">住&nbsp;院</div>
+      <div class="ukm-row-sub">笼位&nbsp;·&nbsp;用药打勾&nbsp;·&nbsp;体征&nbsp;·&nbsp;交班</div>
+    </div>
+    {% if badges.overdue_meds > 0 %}<span class="ukm-pill red">漏药&nbsp;{{ badges.overdue_meds }}</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/dispensing" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">配&nbsp;药</div>
+      <div class="ukm-row-sub">未配药处方</div>
+    </div>
+    {% if badges.pending_dispense > 0 %}<span class="ukm-pill amber">{{ badges.pending_dispense }}</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/follow-ups" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">回&nbsp;访</div>
+      <div class="ukm-row-sub">诊后回访任务</div>
+    </div>
+    {% if badges.due_followups > 0 %}<span class="ukm-pill amber">{{ badges.due_followups }}</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/vaccinations" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">疫&nbsp;苗</div>
+      <div class="ukm-row-sub">接种记录&nbsp;·&nbsp;到期提醒</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/dewormings" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">驱&nbsp;虫</div>
+      <div class="ukm-row-sub">体内&nbsp;/&nbsp;体外驱虫记录</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/grooming" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">美&nbsp;容</div>
+      <div class="ukm-row-sub">洗浴&nbsp;·&nbsp;修剪&nbsp;·&nbsp;前后照片</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/tnr" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">T&nbsp;N&nbsp;R&nbsp;&nbsp;复&nbsp;核</div>
+      <div class="ukm-row-sub">流浪猫绝育申请</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  <a href="/m/consents" class="ukm-row">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">医&nbsp;疗&nbsp;文&nbsp;书</div>
+      <div class="ukm-row-sub">协议签署&nbsp;·&nbsp;PDF&nbsp;归档</div>
+    </div>
+    {% if badges.pending_consents > 0 %}<span class="ukm-pill amber">{{ badges.pending_consents }}</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+</div>
+
+{% endblock %}

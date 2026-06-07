@@ -1,0 +1,67 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}客户 · 大风动物医院{% endblock %}
+{% block topbar_title %}客&nbsp;户{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/m/customers/new">+&nbsp;新&nbsp;建</a>
+{% endblock %}
+
+{% block content %}
+
+<form method="get" action="/m/customers">
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" name="q" value="{{ q }}" autofocus
+           placeholder="手机号 / 姓名 / 宠物名（≥2 字）"/>
+    {% if q %}<a href="/m/customers" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+  </div>
+</form>
+
+{% if not q %}
+  <div class="ukm-empty">
+    <div class="big">搜&nbsp;索&nbsp;客&nbsp;户</div>
+    输入手机号、姓名或宠物名<br/>支持中间数字片段
+  </div>
+
+  <div class="ukm-divider"></div>
+  <div class="ukm-btn-row">
+    <a href="/m/customers/new" class="ukm-btn block">+&nbsp;新&nbsp;建&nbsp;客&nbsp;户</a>
+  </div>
+
+{% elif not results %}
+  <div class="ukm-empty">
+    <div class="big">未&nbsp;找&nbsp;到</div>
+    没有匹配「{{ q }}」的客户
+  </div>
+  <div class="ukm-divider"></div>
+  <div class="ukm-btn-row">
+    <a href="/m/customers/new?phone={{ q|urlencode }}" class="ukm-btn block">用「{{ q }}」建&nbsp;新&nbsp;档</a>
+  </div>
+
+{% else %}
+  <div class="ukm-section-head">
+    <h2>找&nbsp;到&nbsp;{{ results|length }}&nbsp;条</h2>
+  </div>
+  <div class="ukm-row-group">
+    {% for r in results %}
+    <a class="ukm-row" href="/m/customer/{{ r.c.id }}">
+      <div class="ukm-row-body">
+        <div class="ukm-row-title">{{ r.c.name or '—' }}</div>
+        <div class="ukm-row-sub">
+          <span class="ukm-mono" style="color:var(--ink-2);font-style:normal;">{{ r.c.phone or '' }}</span>
+          {% if r.pets %}
+            <span style="margin:0 5px;color:var(--ink-4);">·</span>
+            {% for p in r.pets[:3] %}{{ p.name or '未命名' }}{% if not loop.last %}&nbsp;{% endif %}{% endfor %}
+            {% if r.pets|length > 3 %}…{% endif %}
+          {% else %}
+            <span style="margin:0 5px;color:var(--ink-4);">·</span>
+            <span class="ukm-italic">无宠物</span>
+          {% endif %}
+        </div>
+      </div>
+      <span class="ukm-row-arrow">›</span>
+    </a>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% endblock %}

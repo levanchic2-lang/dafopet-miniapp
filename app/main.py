@@ -6608,6 +6608,7 @@ async def admin_customer_create(
     address: str = Form(""),
     notes: str = Form(""),
     source: str = Form("manual"),
+    next_url: str = Form(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -6627,6 +6628,11 @@ async def admin_customer_create(
         if existing:
             from urllib.parse import quote as _q
             msg = _q(f"该手机号已有客户档案 #{existing.id}「{existing.name or '未命名'}」，已跳转。如需新增请使用其他手机号。", safe="")
+            # next_url 模板支持 {id} 占位
+            if next_url:
+                target = _safe_next(next_url.replace("{id}", str(existing.id)), f"/admin/customers/{existing.id}")
+                sep = "&" if "?" in target else "?"
+                return RedirectResponse(f"{target}{sep}msg={msg}", status_code=303)
             return RedirectResponse(f"/admin/customers/{existing.id}?msg={msg}", status_code=303)
     cust = Customer(
         name=name.strip()[:120],
@@ -6637,6 +6643,10 @@ async def admin_customer_create(
     )
     db.add(cust)
     db.commit()
+    if next_url:
+        target = _safe_next(next_url.replace("{id}", str(cust.id)), f"/admin/customers/{cust.id}")
+        sep = "&" if "?" in target else "?"
+        return RedirectResponse(f"{target}{sep}msg=客户已创建", status_code=303)
     return RedirectResponse(f"/admin/customers/{cust.id}?msg=客户已创建", status_code=303)
 
 
@@ -7653,6 +7663,7 @@ async def admin_customer_add_pet(
     notes: str = Form(""),
     store: str = Form(""),                # 短名：东环店/横岗店
     life_status: str = Form("alive"),     # alive/deceased
+    next_url: str = Form(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
@@ -7684,6 +7695,13 @@ async def admin_customer_add_pet(
     )
     db.add(pet)
     db.commit()
+    if next_url:
+        target = _safe_next(
+            next_url.replace("{pet_id}", str(pet.id)).replace("{id}", str(customer_id)),
+            f"/admin/customers/{customer_id}",
+        )
+        sep = "&" if "?" in target else "?"
+        return RedirectResponse(f"{target}{sep}msg=宠物已添加", status_code=303)
     return RedirectResponse(f"/admin/customers/{customer_id}?msg=宠物已添加", status_code=303)
 
 
@@ -21544,11 +21562,57 @@ def _current_mobile_role(request: Request, db: Session) -> str:
 
 @app.get("/m", response_class=HTMLResponse)
 async def m_root(request: Request, db: Session = Depends(get_db)):
-    """手机入口：根据 mobile_role 派发到对应首页。"""
+    """UK-Minimal 统一首页（取代原三角色分离）。"""
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m", status_code=303)
-    role = _current_mobile_role(request, db)
-    return RedirectResponse(f"/m/{role}", status_code=303)
+    ctx = _m_ctx(request, db, active_tab="today")
+    ctx["badges"] = _m_badges(request, db)
+
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # 今日预约（前 8 条）
+    appt_q = db.query(Appointment).filter(
+        Appointment.appointment_date == today_str,
+        Appointment.status.notin_(["cancelled", "rejected", "no_show"]),
+    )
+    if store_short:
+        appt_q = appt_q.filter(or_(Appointment.store == store_full,
+                                    Appointment.store == store_short))
+    today_appts = appt_q.order_by(Appointment.appointment_time.asc()).limit(8).all()
+    today_appts_total = appt_q.count()
+
+    # 待审 TNR
+    pending_tnr = db.query(Application).filter(
+        Application.status == ApplicationStatus.pending_manual.value,
+    )
+    if store_short:
+        pending_tnr = pending_tnr.filter(or_(
+            Application.clinic_store == store_full,
+            Application.clinic_store == store_short,
+        ))
+    pending_tnr_n = pending_tnr.count()
+
+    # 我最近 5 个病历
+    uname = request.session.get("admin_username") or ""
+    my_visits = db.query(Visit).filter(
+        or_(Visit.vet_name == uname, Visit.created_by == uname),
+    ).order_by(Visit.id.desc()).limit(5).all()
+    enriched_visits = []
+    for v in my_visits:
+        pet = db.get(Pet, v.pet_id) if v.pet_id else None
+        cust = db.get(Customer, v.customer_id) if v.customer_id else None
+        enriched_visits.append({"v": v, "pet": pet, "cust": cust})
+
+    ctx.update({
+        "today_appts": today_appts,
+        "today_appts_total": today_appts_total,
+        "pending_tnr_n": pending_tnr_n,
+        "my_visits": enriched_visits,
+        "today_str": today_str,
+    })
+    return templates.TemplateResponse(request, "m_uk/home.html", ctx)
 
 
 @app.get("/m/desktop")
@@ -21669,11 +21733,16 @@ def _m_badges(request: Request, db: Session) -> dict:
 
 
 @app.get("/m/doctor", response_class=HTMLResponse)
-async def m_doctor_home(request: Request, db: Session = Depends(get_db)):
+async def m_doctor_home_legacy(request: Request):
+    """旧角色首页 → 统一首页（UK 重构）"""
+    return RedirectResponse("/m", status_code=303)
+
+
+async def m_doctor_home_OBSOLETE(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/doctor", status_code=303)
     ctx = _m_ctx(request, db, active_tab="today")
-    ctx["mobile_role"] = "doctor"  # 强制按路径渲染 tab
+    ctx["mobile_role"] = "doctor"
     ctx["badges"] = _m_badges(request, db)
 
     store_short = _get_admin_store(request)
@@ -21721,16 +21790,31 @@ async def m_doctor_home(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/m/nurse", response_class=HTMLResponse)
-async def m_nurse_home(request: Request, db: Session = Depends(get_db)):
-    if not _admin_ok(request):
-        return RedirectResponse("/admin/login?next=/m/nurse", status_code=303)
-    ctx = _m_ctx(request, db, active_tab="today")
-    ctx["mobile_role"] = "nurse"  # 强制按路径渲染 tab
-    ctx["badges"] = _m_badges(request, db)
-    return templates.TemplateResponse(request, "m/home_nurse.html", ctx)
+async def m_nurse_home_legacy(request: Request):
+    """旧角色首页 → 统一首页"""
+    return RedirectResponse("/m", status_code=303)
 
 
 # M1 占位的 /m/groomer 由 M2.5 的 m_groomer_home_v2 覆盖
+
+
+@app.get("/m/medical", response_class=HTMLResponse)
+async def m_medical_hub(request: Request, db: Session = Depends(get_db)):
+    """医疗 tab：病历 / 处方 / 检查 / 住院 / 配药 / 疫苗 / 驱虫 / 回访"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/medical", status_code=303)
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx["badges"] = _m_badges(request, db)
+    return templates.TemplateResponse(request, "m_uk/medical_hub.html", ctx)
+
+
+@app.get("/m/finance", response_class=HTMLResponse)
+async def m_finance_hub(request: Request, db: Session = Depends(get_db)):
+    """财务 tab：收费单 / 钱包 / 套餐 / 押金 / 优惠券 / 收款报表"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/finance", status_code=303)
+    ctx = _m_ctx(request, db, active_tab="finance")
+    return templates.TemplateResponse(request, "m_uk/finance_hub.html", ctx)
 
 
 @app.get("/m/soon", response_class=HTMLResponse)
@@ -21753,7 +21837,7 @@ async def m_me(request: Request, db: Session = Depends(get_db)):
     u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
     ctx["mobile_role_raw"] = (u.mobile_role if u else "auto") or "auto"
     ctx["override_active"] = bool(request.session.get("mobile_role_override"))
-    return templates.TemplateResponse(request, "m/me.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/me.html", ctx)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -22095,12 +22179,16 @@ def _m_today_beauty_appts(db: Session, store_short: str, store_full: str):
 
 
 @app.get("/m/groomer", response_class=HTMLResponse)
-async def m_groomer_home_v2(request: Request, db: Session = Depends(get_db)):
-    """美容师首页（覆盖 M1 占位版）。"""
+async def m_groomer_home_legacy(request: Request):
+    """旧角色首页 → 统一首页"""
+    return RedirectResponse("/m", status_code=303)
+
+
+async def m_groomer_home_OBSOLETE(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/groomer", status_code=303)
     ctx = _m_ctx(request, db, active_tab="today")
-    ctx["mobile_role"] = "groomer"  # 强制按路径渲染 tab
+    ctx["mobile_role"] = "groomer"
     store_short = _get_admin_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     appts = _m_today_beauty_appts(db, store_short, store_full)
@@ -22347,7 +22435,32 @@ async def m_customers_search(request: Request, q: str = "", db: Session = Depend
             results.append({"c": c, "pets": pets})
     ctx = _m_ctx(request, db, active_tab="customers")
     ctx.update({"q": q, "results": results})
-    return templates.TemplateResponse(request, "m/customers.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/customers.html", ctx)
+
+
+@app.get("/m/customers/new", response_class=HTMLResponse)
+async def m_customer_new_form(request: Request, db: Session = Depends(get_db)):
+    """手机端新建客户表单"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/customers/new", status_code=303)
+    ctx = _m_ctx(request, db, active_tab="customers")
+    return templates.TemplateResponse(request, "m_uk/customer_new.html", ctx)
+
+
+@app.get("/m/customer/{cust_id}/pets/new", response_class=HTMLResponse)
+async def m_pet_new_form(cust_id: int, request: Request, db: Session = Depends(get_db)):
+    """手机端给已有客户加宠物"""
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/customer/{cust_id}/pets/new", status_code=303)
+    cust = db.get(Customer, cust_id)
+    if not cust:
+        raise HTTPException(404)
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx["cust"] = cust
+    # 默认门店：自己绑的店；超管空就让选
+    ctx["default_store"] = request.session.get("admin_store") or ""
+    ctx["is_superadmin"] = (request.session.get("admin_role") == "superadmin")
+    return templates.TemplateResponse(request, "m_uk/pet_new.html", ctx)
 
 
 @app.get("/m/customer/{cust_id}", response_class=HTMLResponse)
@@ -22382,7 +22495,7 @@ async def m_customer_profile(cust_id: int, request: Request, db: Session = Depen
         "visits": enriched_visits,
         "admitted": admitted,
     })
-    return templates.TemplateResponse(request, "m/customer_profile.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/customer_profile.html", ctx)
 
 
 _VISIT_TYPE_ZH = {
@@ -22431,7 +22544,7 @@ async def m_pet_profile(pet_id: int, request: Request, db: Session = Depends(get
         "dewormings": dewormings, "weights": weights,
         "admitted": admitted,
     })
-    return templates.TemplateResponse(request, "m/pet_profile.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/pet_profile.html", ctx)
 
 
 @app.get("/m/visit/new", response_class=HTMLResponse)

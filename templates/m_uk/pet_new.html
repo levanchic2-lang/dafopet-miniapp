@@ -1,0 +1,96 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}加宠物{% endblock %}
+{% block topbar_title %}加&nbsp;宠&nbsp;物{% endblock %}
+{% block topbar_back %}<a href="/m/customer/{{ cust.id }}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>{{ cust.name }}</h1>
+  <div class="meta"><span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ cust.phone }}</span></div>
+</div>
+
+<form method="post" action="/admin/customers/{{ cust.id }}/pets/add" class="ukm-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/customer/{{ cust.id }}"/>
+
+  <div class="ukm-field">
+    <label class="lbl">宠&nbsp;物&nbsp;名<span class="req">*</span></label>
+    <input class="ukm-input" type="text" name="name" required autofocus
+           maxlength="120" placeholder="例：奶茶"/>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">物&nbsp;种</label>
+    <div class="ukm-chips">
+      <label class="ukm-chip"><input type="radio" name="species" value="cat" checked/>猫</label>
+      <label class="ukm-chip"><input type="radio" name="species" value="dog"/>狗</label>
+      <label class="ukm-chip"><input type="radio" name="species" value="other"/>其他</label>
+    </div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">性&nbsp;别</label>
+    <div class="ukm-chips">
+      <label class="ukm-chip"><input type="radio" name="gender" value="unknown" checked/>未&nbsp;知</label>
+      <label class="ukm-chip"><input type="radio" name="gender" value="male"/>公</label>
+      <label class="ukm-chip"><input type="radio" name="gender" value="female"/>母</label>
+    </div>
+  </div>
+
+  <div class="ukm-row2">
+    <div class="ukm-field">
+      <label class="lbl">品&nbsp;种</label>
+      <input class="ukm-input" type="text" name="breed" maxlength="80" placeholder="如：中华田园猫"/>
+    </div>
+    <div class="ukm-field">
+      <label class="lbl">毛&nbsp;色</label>
+      <input class="ukm-input" type="text" name="color_pattern" maxlength="80" placeholder="如：橘白"/>
+    </div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">生&nbsp;日&nbsp;/&nbsp;年&nbsp;龄</label>
+    <input class="ukm-input" type="text" name="birthday_estimate" maxlength="40"
+           placeholder="如：2023-05 / 约 2 岁 / 3 月龄"/>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">其&nbsp;他</label>
+    <div class="ukm-chips">
+      <label class="ukm-chip"><input type="checkbox" name="is_neutered" value="1"/>已绝育</label>
+      <label class="ukm-chip"><input type="checkbox" name="is_stray" value="1"/>流浪/救助</label>
+    </div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">芯&nbsp;片&nbsp;号</label>
+    <input class="ukm-input ukm-mono" type="text" name="microchip_id" maxlength="40" placeholder="可空"/>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">归&nbsp;属&nbsp;门&nbsp;店<span class="req">*</span></label>
+    {% if is_superadmin %}
+    <select class="ukm-select" name="store" required>
+      {% if not default_store %}<option value="" disabled selected>— 选择门店 —</option>{% endif %}
+      <option value="东环店" {% if default_store == '东环店' %}selected{% endif %}>东环店</option>
+      <option value="横岗店" {% if default_store == '横岗店' %}selected{% endif %}>横岗店</option>
+    </select>
+    {% else %}
+    <input class="ukm-input" type="text" value="{{ default_store }}" disabled style="color:var(--ink-3);"/>
+    <input type="hidden" name="store" value="{{ default_store }}"/>
+    {% endif %}
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">备&nbsp;注</label>
+    <textarea class="ukm-textarea" name="notes" placeholder="过敏 / 性格 / 既往病史，可空"></textarea>
+  </div>
+
+  <div class="ukm-btn-row">
+    <a href="/m/customer/{{ cust.id }}" class="ukm-btn ghost block">取&nbsp;消</a>
+    <button type="submit" class="ukm-btn block">添&nbsp;加</button>
+  </div>
+</form>
+
+{% endblock %}

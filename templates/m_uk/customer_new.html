@@ -1,0 +1,45 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}新建客户{% endblock %}
+{% block topbar_title %}新&nbsp;建&nbsp;客&nbsp;户{% endblock %}
+{% block topbar_back %}<a href="/m/customers" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<form method="post" action="/admin/customers/create" class="ukm-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/customer/{id}"/>
+  <input type="hidden" name="source" value="mobile"/>
+
+  <div class="ukm-field">
+    <label class="lbl">姓&nbsp;名<span class="req">*</span></label>
+    <input class="ukm-input" type="text" name="name" required autofocus
+           autocomplete="off" maxlength="120" placeholder="例：王女士"/>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">手&nbsp;机&nbsp;号<span class="req">*</span></label>
+    <input class="ukm-input ukm-mono" type="tel" name="phone" required
+           inputmode="numeric" maxlength="40"
+           value="{{ request.query_params.get('phone', '') }}"
+           placeholder="11 位手机号"/>
+    <div class="hint">同号已存在 → 自动跳已有档案，不重复建档</div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">地&nbsp;址</label>
+    <input class="ukm-input" type="text" name="address" maxlength="500"
+           placeholder="可空"/>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">备&nbsp;注</label>
+    <textarea class="ukm-textarea" name="notes" placeholder="过敏 / 特殊偏好 / 其他备注，可空"></textarea>
+  </div>
+
+  <div class="ukm-btn-row">
+    <a href="/m/customers" class="ukm-btn ghost block">取&nbsp;消</a>
+    <button type="submit" class="ukm-btn block">创&nbsp;建</button>
+  </div>
+</form>
+
+{% endblock %}
