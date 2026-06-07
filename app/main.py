@@ -23001,6 +23001,7 @@ async def m_inventory_detail(item_id: int, request: Request, db: Session = Depen
     ctx.update({
         "item": item, "txs": txs, "batches": batches,
         "today_str": today_str, "alert_date_str": alert_date_str,
+        "categories": INVENTORY_CATEGORIES,
     })
     return templates.TemplateResponse(request, "m_uk/inventory_detail.html", ctx)
 

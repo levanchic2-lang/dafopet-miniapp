@@ -16,8 +16,11 @@
     {% if item.is_service %}<span class="ukm-pill" style="margin-left:6px;vertical-align:middle;">服务</span>{% endif %}
   </h1>
   <div class="meta">
-    {{ item.category or '—' }}
-    {% if item.subcategory %}<span class="sep">·</span>{{ item.subcategory }}{% endif %}
+    {{ categories[item.category]['label'] if item.category in categories else (item.category or '—') }}
+    {% if item.subcategory %}
+      {% set _subs = categories[item.category]['subs'] if item.category in categories else {} %}
+      <span class="sep">·</span>{{ _subs[item.subcategory] if item.subcategory in _subs else item.subcategory }}
+    {% endif %}
     {% if item.store %}<span class="sep">·</span>{{ item.store }}{% endif %}
   </div>
 </div>
