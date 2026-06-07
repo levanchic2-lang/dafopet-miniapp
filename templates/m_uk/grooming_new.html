@@ -59,6 +59,14 @@
     桌面端 → 库存 → 美容服务 维护
   </div>
   {% else %}
+  {# 搜索过滤（前端纯 JS，无需网络） #}
+  <div class="ukm-search" style="margin-bottom:10px;">
+    <span class="ic">⌕</span>
+    <input type="search" id="svc-search" placeholder="搜服务名 / 价格" autocomplete="off"
+           oninput="filterSvc(this.value)"/>
+    <button type="button" id="svc-search-clear" style="display:none;font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;background:transparent;border:none;cursor:pointer;"
+            onclick="document.getElementById('svc-search').value='';filterSvc('');this.style.display='none';">清&nbsp;除</button>
+  </div>
   <div class="ukm-chips" id="svc-chips" style="margin-bottom:14px;">
     {% for it in groom_items %}
     <button type="button" class="ukm-chip svc-chip"
@@ -70,6 +78,7 @@
     </button>
     {% endfor %}
   </div>
+  <div id="svc-no-match" style="display:none;font-family:var(--font-serif);font-size:11px;font-style:italic;color:var(--ink-3);text-align:center;padding:10px;letter-spacing:1px;">未&nbsp;匹&nbsp;配</div>
   <div id="picked-summary" style="display:none;margin-bottom:14px;padding:10px 12px;background:var(--bg-elevated);border:0.5px solid var(--hair);font-family:var(--font-serif);font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">
     合&nbsp;计&nbsp;&nbsp;<span class="ukm-num" style="font-size:18px;font-weight:700;color:var(--ink);letter-spacing:0.5px;">¥&nbsp;<span id="grand-total">0</span></span>
   </div>
@@ -120,6 +129,25 @@ function recalcSummary() {
   $('grand-total').textContent = total.toFixed(0);
   $('picked-summary').style.display = chips.length ? 'block' : 'none';
   recalcSubmit();
+}
+
+function filterSvc(q) {
+  const kw = (q || '').trim().toLowerCase();
+  const chips = document.querySelectorAll('.svc-chip');
+  let shown = 0;
+  chips.forEach(c => {
+    const name = (c.dataset.name || '').toLowerCase();
+    const price = (c.dataset.price || '');
+    const hit = !kw || name.indexOf(kw) >= 0 || price.indexOf(kw) >= 0;
+    // 已勾选的永远显示，避免用户搜索时找不到之前选的
+    const force = c.classList.contains('checked');
+    c.style.display = (hit || force) ? '' : 'none';
+    if (hit || force) shown++;
+  });
+  const noMatch = document.getElementById('svc-no-match');
+  if (noMatch) noMatch.style.display = (shown === 0 && kw) ? 'block' : 'none';
+  const clearBtn = document.getElementById('svc-search-clear');
+  if (clearBtn) clearBtn.style.display = kw ? 'inline' : 'none';
 }
 
 function toggleSvc(btn) {
