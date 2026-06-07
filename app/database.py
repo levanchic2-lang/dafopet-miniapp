@@ -1062,6 +1062,9 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE visits ADD COLUMN closed_at DATETIME DEFAULT NULL"))
                 if "closed_by" not in vst_names_v2:
                     conn.execute(text("ALTER TABLE visits ADD COLUMN closed_by VARCHAR(80) DEFAULT ''"))
+                # 关闭回访（主人带回家自治不需要医院回访）
+                if "followup_disabled" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN followup_disabled BOOLEAN DEFAULT 0"))
 
             # deworming_records 驱虫记录
             conn.execute(text(

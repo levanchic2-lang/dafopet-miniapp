@@ -123,29 +123,9 @@
   <td class="actions fu-row-actions">
    <div class="actions-inner">
    {% if v %}<a href="/admin/visits/{{ v.id }}" class="fu-action-btn">病例</a>{% endif %}
-   {% if fu.feedback_token and fu.status in ('pending','due','phone_pending','sent') %}
-   <button type="button" class="fu-action-btn"
-           onclick="copyFeedbackLink(this, '{{ fu.feedback_token }}')"><i data-lucide="clipboard-list"></i> 复制链接</button>
-   {% endif %}
    {% if fu.status in ('pending','due','phone_pending','sent') %}
-   <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-    <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
-    <input type="hidden" name="action" value="contacted"/>
-    <button class="fu-action-btn primary" onclick="return confirm('已联系并好转？')"><i data-lucide="check"></i> 已联系</button>
-   </form>
-   <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-    <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
-    <input type="hidden" name="action" value="refer_visit"/>
-    <button class="fu-action-btn warn"><i data-lucide="rotate-cw"></i> 转复诊</button>
-   </form>
-   <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-    <input type="hidden" name="tab_redirect" value="{{ tab }}"/>
-    <input type="hidden" name="action" value="skip"/>
-    <button class="fu-action-btn" onclick="return confirm('忽略此回访？')"><i data-lucide="x"></i> 忽略</button>
-   </form>
+   <button type="button" class="fu-action-btn primary"
+           onclick="openFuModal({{ fu.id }}, {{ (p.name or '宠物')|tojson }}, {{ (fu.round_name or '')|tojson }}, '{{ tab }}')"><i data-lucide="edit-3"></i> 回访详情</button>
    {% else %}
    <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -180,21 +160,75 @@
 </div>
 {% endif %}
 
+<!-- 回访详情 modal —— 一个按钮记录全部结果 -->
+<div id="fu-modal" style="display:none;position:fixed;inset:0;background:rgba(26,26,26,.45);z-index:9999;align-items:center;justify-content:center;">
+ <div style="background:var(--paper);border:0.5px solid var(--ink);max-width:480px;width:92%;padding:28px 32px;font-family:var(--font-serif);">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:0.5px solid var(--hair);padding-bottom:12px;margin-bottom:18px;">
+   <h2 style="font-size:18pt;font-weight:700;margin:0;letter-spacing:1.5px;">回&nbsp;访&nbsp;详&nbsp;情</h2>
+   <button type="button" onclick="closeFuModal()" style="background:none;border:0;font-size:18pt;color:var(--ink-3);cursor:pointer;">×</button>
+  </div>
+  <div id="fu-modal-target" style="font-size:10pt;color:var(--ink-2);font-style:italic;margin-bottom:18px;letter-spacing:1px;"></div>
+  <form id="fu-modal-form" method="post" action="" onsubmit="return validateFuForm()">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+   <input type="hidden" name="tab_redirect" value="today"/>
+   <input type="hidden" name="action" id="fu-action-input" value=""/>
+
+   <div style="font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin-bottom:8px;">结&nbsp;果</div>
+   <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px;">
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid var(--hair);cursor:pointer;font-size:10.5pt;" class="fu-opt">
+     <input type="radio" name="result" value="contacted" onchange="pickFuResult(this)"/>
+     <span>已联系&nbsp;·&nbsp;客户反馈恢复良好</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid var(--hair);cursor:pointer;font-size:10.5pt;" class="fu-opt">
+     <input type="radio" name="result" value="refer_visit" onchange="pickFuResult(this)"/>
+     <span>仍有症状&nbsp;·&nbsp;建议复诊（标记为待安排）</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid var(--hair);cursor:pointer;font-size:10.5pt;" class="fu-opt">
+     <input type="radio" name="result" value="skip" onchange="pickFuResult(this)"/>
+     <span>未联系上&nbsp;/&nbsp;无需跟进&nbsp;·&nbsp;关闭本轮</span>
+    </label>
+   </div>
+
+   <div style="font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin-bottom:8px;">备&nbsp;注&nbsp;<span style="color:var(--ink-4);font-style:italic;">（可选）</span></div>
+   <textarea name="note" rows="3" style="width:100%;padding:8px 10px;border:0.5px solid var(--hair);font-family:var(--font-serif);font-size:10pt;line-height:1.6;resize:vertical;box-sizing:border-box;margin-bottom:18px;" placeholder="如：症状描述、客户原话、下一步计划…"></textarea>
+
+   <div style="display:flex;gap:10px;justify-content:flex-end;">
+    <button type="button" onclick="closeFuModal()" class="fu-btn ghost">取&nbsp;消</button>
+    <button type="submit" class="fu-btn">保&nbsp;存&nbsp;结&nbsp;果</button>
+   </div>
+  </form>
+ </div>
+</div>
+
 <script>
-function copyFeedbackLink(btn, token) {
-  var url = window.location.origin + '/follow-up/' + token;
-  var done = function() {
-    var orig = btn.textContent;
-    btn.textContent = '✓ 已复制';
-    setTimeout(function(){ btn.textContent = orig; }, 1500);
-  };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(url).then(done, function() {
-      // fallback
-      prompt('复制下方链接发给客户：', url);
-    });
-  } else {
-    prompt('复制下方链接发给客户：', url);
-  }
+function openFuModal(fuId, petName, roundName, tab) {
+  var modal = document.getElementById('fu-modal');
+  var form = document.getElementById('fu-modal-form');
+  form.action = '/admin/follow-ups/' + fuId + '/handle';
+  form.querySelector('[name=tab_redirect]').value = tab || 'today';
+  document.getElementById('fu-modal-target').textContent = petName + (roundName ? ' · ' + roundName : '');
+  // reset
+  document.getElementById('fu-action-input').value = '';
+  form.querySelectorAll('input[name=result]').forEach(function(r){ r.checked=false; });
+  form.querySelectorAll('.fu-opt').forEach(function(l){ l.style.borderColor='var(--hair)'; l.style.background='var(--paper)'; });
+  form.querySelector('textarea[name=note]').value = '';
+  modal.style.display = 'flex';
 }
+function closeFuModal() { document.getElementById('fu-modal').style.display = 'none'; }
+function pickFuResult(input) {
+  document.getElementById('fu-action-input').value = input.value;
+  document.querySelectorAll('.fu-opt').forEach(function(l){ l.style.borderColor='var(--hair)'; l.style.background='var(--paper)'; });
+  input.parentElement.style.borderColor = 'var(--ink)';
+  input.parentElement.style.background = 'var(--bg)';
+}
+function validateFuForm() {
+  if (!document.getElementById('fu-action-input').value) {
+    alert('请选择一个结果');
+    return false;
+  }
+  return true;
+}
+document.getElementById('fu-modal').addEventListener('click', function(e) {
+  if (e.target.id === 'fu-modal') closeFuModal();
+});
 </script>

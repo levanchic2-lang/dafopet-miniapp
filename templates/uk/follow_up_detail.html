@@ -79,7 +79,7 @@
     {% if fu.status == 'closed' %}<span class="pill green">已完成</span>
     {% elif fu.status == 'responded' %}<span class="pill green">客户已反馈</span>
     {% elif fu.status == 'sent' %}<span class="pill amber">已发送</span>
-    {% elif fu.status == 'phone_pending' %}<span class="pill red">需电话</span>
+    {% elif fu.status == 'phone_pending' %}<span class="pill red">待联系</span>
     {% elif fu.status == 'due' %}<span class="pill amber">今日到期</span>
     {% elif fu.status == 'skipped' %}<span class="pill">已跳过</span>
     {% else %}<span class="pill">未到期</span>

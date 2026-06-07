@@ -424,6 +424,8 @@ class Visit(Base):
     status: Mapped[str] = mapped_column(String(20), default="open")         # open / closed
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     closed_by: Mapped[str] = mapped_column(String(80), default="")
+    # 主人带回家自治、不需要医院回访 → 勾选关闭，所有 pending 自动取消，未来 sync 不再衍生
+    followup_disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

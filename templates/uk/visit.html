@@ -496,14 +496,32 @@
 {% endif %}
 
 {# 回访 #}
-{% if followups %}
 <div class="v-rel-section">
   <div class="v-rel-head">
     <div>
       <h2>回&nbsp;访</h2>
-      <span class="count">共 {{ followups|length }} 轮</span>
+      {% if followups %}<span class="count">共 {{ followups|length }} 轮</span>
+      {% elif visit.followup_disabled %}<span class="count" style="color:var(--accent-red);">已关闭</span>
+      {% else %}<span class="count">无</span>{% endif %}
     </div>
+    {% if visit.status != 'closed' %}
+    <form method="post" action="/admin/visits/{{ visit.id }}/followup-toggle" style="display:inline;"
+          onsubmit="return confirm('{% if visit.followup_disabled %}重新开启该病历的自动回访？{% else %}关闭后，所有未发送的回访会取消，未来也不再自动衍生。\n适用于：主人带回家自治、客户拒绝回访等。\n\n确认关闭？{% endif %}');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="/admin/visits/{{ visit.id }}"/>
+      <button type="submit" class="uk-btn ghost sm"
+              style="{% if visit.followup_disabled %}color:var(--accent-green);border-color:var(--accent-green);{% else %}color:var(--accent-red);border-color:var(--accent-red);{% endif %}">
+        {% if visit.followup_disabled %}重新开启回访{% else %}关闭回访{% endif %}
+      </button>
+    </form>
+    {% endif %}
   </div>
+  {% if visit.followup_disabled %}
+  <div style="padding:10px 14px;background:#fbfaf6;border-left:3px solid var(--accent-amber);font-family:var(--font-serif);font-size:10pt;color:var(--ink-2);font-style:italic;letter-spacing:.5px;">
+    本病历已关闭自动回访 · 不会衍生新轮次（点上方按钮可重新开启）
+  </div>
+  {% endif %}
+{% if followups %}
   <table class="v-rel-tbl">
     <thead><tr><th>计划日</th><th>轮次</th><th>状态</th><th>渠道</th><th class="right">操作</th></tr></thead>
     <tbody>
@@ -515,7 +533,7 @@
           {% if fu.status == 'closed' %}<span class="uk-pill green">已完成</span>
           {% elif fu.status == 'responded' %}<span class="uk-pill">客户已反馈</span>
           {% elif fu.status == 'sent' %}<span class="uk-pill amber">已发送</span>
-          {% elif fu.status == 'phone_pending' %}<span class="uk-pill red">需电话</span>
+          {% elif fu.status == 'phone_pending' %}<span class="uk-pill red">待联系</span>
           {% elif fu.status == 'due' %}<span class="uk-pill amber">今日到期</span>
           {% else %}<span class="uk-pill mute">{{ fu_status_zh.get(fu.status, fu.status) }}</span>{% endif %}
         </td>
@@ -525,8 +543,8 @@
       {% endfor %}
     </tbody>
   </table>
-</div>
 {% endif %}
+</div>
 
 <script>
 // 高亮 hl=xxx 命中的行并滚动到视图（押金/回访等"查看"按钮跳过来时）

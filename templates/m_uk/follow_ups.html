@@ -30,7 +30,7 @@
       </div>
       {% if fu.status == 'due' %}<span class="ukm-pill red">到期</span>
       {% elif fu.status == 'sent' %}<span class="ukm-pill amber">已推送</span>
-      {% elif fu.status == 'phone_pending' %}<span class="ukm-pill amber">需电话</span>
+      {% elif fu.status == 'phone_pending' %}<span class="ukm-pill amber">待联系</span>
       {% elif fu.status == 'responded' %}<span class="ukm-pill green">已反馈</span>
       {% elif fu.status == 'closed' %}<span class="ukm-pill">已完成</span>{% endif %}
     </div>

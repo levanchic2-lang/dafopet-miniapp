@@ -10318,6 +10318,13 @@ def _sync_followup_for_visit(db: Session, v: Visit) -> None:
     assignee = _resolve_vet_username(db, v.vet_name or "")[:80]
     store = _visit_store_short(db, v)
 
+    # 病历级别关闭回访（主人带回家自治）→ 取消所有未发送的，已发送的保留作历史
+    if getattr(v, "followup_disabled", False):
+        for fu in existing:
+            if fu.status in ("pending", "due"):
+                db.delete(fu)
+        return
+
     if not templates or not base_date:
         # 没匹配到 / 无就诊日期 → 删除所有未发送的
         for fu in existing:
@@ -10643,7 +10650,7 @@ async def page_admin_visit_detail(
         "inv_status_zh": _INV_STATUS_ZH,
         "fu_status_zh": {
             "pending": "待回访", "due": "今日到期", "sent": "已发送等反馈",
-            "responded": "客户已反馈", "phone_pending": "需电话兜底",
+            "responded": "客户已反馈", "phone_pending": "待联系",
             "closed": "已完成", "skipped": "已忽略",
         },
         "csrf_token": _get_csrf_token(request),
@@ -10752,6 +10759,32 @@ async def admin_visit_close(visit_id: int, request: Request,
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=病历已结束", status_code=303)
 
 
+@app.post("/admin/visits/{visit_id}/followup-toggle")
+async def admin_visit_followup_toggle(visit_id: int, request: Request,
+                                       csrf_token: str = Form(""),
+                                       next_url: str = Form(""),
+                                       db: Session = Depends(get_db)):
+    """切换病历级别「自动回访」开关。关闭 → 已 pending 全取消、未来不衍生；重新开启 → 重新衍生。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    admin_store = _get_admin_store(request)
+    if admin_store and v.pet_id:
+        pet = db.get(Pet, v.pet_id)
+        if pet and pet.store and pet.store != admin_store:
+            raise HTTPException(403, "无权操作其他门店的就诊记录")
+    v.followup_disabled = not bool(getattr(v, "followup_disabled", False))
+    db.commit()
+    # sync：关闭 → 删 pending；开启 → 重新衍生
+    _sync_followup_for_visit(db, v)
+    db.commit()
+    msg = "已关闭后续回访" if v.followup_disabled else "已重新开启回访"
+    fb = f"/admin/visits/{visit_id}?msg={msg}"
+    return RedirectResponse(_safe_next(next_url, fb), status_code=303)
+
+
 @app.post("/api/visits/{visit_id}/autosave")
 async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depends(get_db)):
     """SOAP 7 步工作流的实时自动保存。仅接受 JSON。只更新文本字段，不动 pet_id/date/type 等。"""
@@ -10823,7 +10856,7 @@ _FOLLOWUP_STATUS_ZH = {
     "due":           "今日到期",
     "sent":          "已发送",
     "responded":     "客户已反馈",
-    "phone_pending": "需电话兜底",
+    "phone_pending": "待联系",
     "closed":        "已完成",
     "skipped":       "已忽略",
 }
