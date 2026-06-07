@@ -2372,6 +2372,10 @@ def _admin_appointment_redirect_base(redirect_after: str) -> str:
         cid = val.split(":", 1)[1]
         if cid.isdigit():
             return f"/m/customer/{cid}"
+    if val.startswith("mobile_appt:"):
+        aid = val.split(":", 1)[1]
+        if aid.isdigit():
+            return f"/m/appointment/{aid}"
     return "/admin"
 
 
@@ -5061,6 +5065,8 @@ async def admin_appointment_status(
     status = (status or "").strip()
     anchor = f"appt-{appointment_id}"
     if status not in _ALLOWED_APPOINTMENT_STATUSES:
+        if redirect_base.startswith("/m"):
+            return RedirectResponse(redirect_base + "?err=" + quote("无效的预约状态", safe=""), status_code=303)
         return RedirectResponse(redirect_base + "?appointment_err=" + quote("无效的预约状态", safe="") + f"#{anchor}", status_code=303)
     row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
     if not row:
@@ -5130,6 +5136,9 @@ async def admin_appointment_status(
         )
     # 尽量回到操作前的筛选页面（保留 preset/df/dt/appt_status 等参数）
     referer = request.headers.get("referer", "")
+    # /m 路由用 msg/err；admin 路由保持 appointment_ok 兼容现有锚点
+    if redirect_base.startswith("/m"):
+        return RedirectResponse(redirect_base + "?msg=" + quote("状态已更新", safe=""), status_code=303)
     if referer and "/admin/appointments" in referer:
         from urllib.parse import urlparse as _urlparse, urlencode as _urlencode, parse_qs as _parse_qs
         _parsed = _urlparse(referer)
@@ -21901,7 +21910,7 @@ async def m_inpatient_list(request: Request, db: Session = Depends(get_db)):
     ctx = _m_ctx(request, db, active_tab="inpatient")
     ctx["cards"] = cards
     ctx["total_n"] = len(cards)
-    return templates.TemplateResponse(request, "m/inpatient_list.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/inpatient_list.html", ctx)
 
 
 @app.get("/m/inpatient/{hosp_id}", response_class=HTMLResponse)
@@ -21962,7 +21971,7 @@ async def m_inpatient_detail(hosp_id: int, request: Request, db: Session = Depen
         "current_shift": _guess_current_shift(),
         "next_url": f"/m/inpatient/{hosp_id}",
     })
-    return templates.TemplateResponse(request, "m/inpatient_detail.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/inpatient_detail.html", ctx)
 
 
 # ─── 回访 ───
@@ -21998,7 +22007,7 @@ async def m_follow_ups(request: Request, tab: str = "today", db: Session = Depen
         enriched.append({"fu": r, "pet": pet, "cust": cust})
     ctx = _m_ctx(request, db, active_tab="follow_ups")
     ctx.update({"rows": enriched, "tab": tab})
-    return templates.TemplateResponse(request, "m/follow_ups.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/follow_ups.html", ctx)
 
 
 # ─── 待配药 ───
@@ -22257,7 +22266,7 @@ async def m_grooming_list(request: Request, db: Session = Depends(get_db)):
     ctx = _m_ctx(request, db, active_tab="grooming")
     ctx["mobile_role"] = "groomer"
     ctx["rows"] = enriched
-    return templates.TemplateResponse(request, "m/grooming_list.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/grooming_list.html", ctx)
 
 
 @app.get("/m/grooming/new", response_class=HTMLResponse)
@@ -22292,7 +22301,7 @@ async def m_grooming_new(
         "now_time": datetime.utcnow().strftime("%H:%M"),
         "default_groomer": request.session.get("admin_username", ""),
     })
-    return templates.TemplateResponse(request, "m/grooming_new.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/grooming_new.html", ctx)
 
 
 @app.post("/m/grooming/create")
@@ -22386,7 +22395,7 @@ async def m_grooming_detail(rec_id: int, request: Request, db: Session = Depends
         "locked": locked, "lock_reason": lock_reason,
         "next_url": f"/m/grooming/{rec_id}",
     })
-    return templates.TemplateResponse(request, "m/grooming_detail.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/grooming_detail.html", ctx)
 
 
 @app.post("/m/grooming/{rec_id}/done")
@@ -22700,7 +22709,7 @@ async def m_vaccination_new(
         "today": datetime.utcnow().strftime("%Y-%m-%d"),
         "default_vet": default_vet,
     })
-    return templates.TemplateResponse(request, "m/vaccination_new.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/vaccination_new.html", ctx)
 
 
 @app.get("/m/deworming/new", response_class=HTMLResponse)
@@ -22732,7 +22741,7 @@ async def m_deworming_new(
         "today": datetime.utcnow().strftime("%Y-%m-%d"),
         "default_vet": default_vet,
     })
-    return templates.TemplateResponse(request, "m/deworming_new.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/deworming_new.html", ctx)
 
 
 @app.get("/m/visit/{visit_id}/exam", response_class=HTMLResponse)
@@ -23332,6 +23341,26 @@ async def m_inventory_detail(item_id: int, request: Request, db: Session = Depen
     return templates.TemplateResponse(request, "m_uk/inventory_detail.html", ctx)
 
 
+@app.get("/m/appointment/{appt_id}", response_class=HTMLResponse)
+async def m_appointment_detail(appt_id: int, request: Request, db: Session = Depends(get_db)):
+    """手机端预约详情：信息 + 状态动作（确认/到店/完成/取消/爽约）"""
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/appointment/{appt_id}", status_code=303)
+    a = db.get(Appointment, appt_id)
+    if not a:
+        raise HTTPException(404)
+    # 关联客户
+    cust = db.get(Customer, a.customer_id) if a.customer_id else None
+    pet  = db.get(Pet, a.pet_id) if a.pet_id else None
+    # 关联 TNR 申请（如果有）
+    related_app = None
+    if a.related_application_id:
+        related_app = db.get(Application, a.related_application_id)
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({"a": a, "cust": cust, "pet": pet, "related_app": related_app})
+    return templates.TemplateResponse(request, "m_uk/appointment_detail.html", ctx)
+
+
 @app.get("/m/appointments", response_class=HTMLResponse)
 async def m_appointments_list(
     request: Request,
@@ -23501,7 +23530,7 @@ async def m_tnr_list(request: Request, db: Session = Depends(get_db)):
     rows = q.order_by(Application.created_at.desc()).limit(50).all()
     ctx = _m_ctx(request, db, active_tab="tnr")
     ctx["rows"] = rows
-    return templates.TemplateResponse(request, "m/tnr_list.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/tnr_list.html", ctx)
 
 
 @app.get("/m/tnr/{app_id}", response_class=HTMLResponse)
@@ -23516,7 +23545,7 @@ async def m_tnr_detail(app_id: int, request: Request, db: Session = Depends(get_
     videos = [m for m in row.media if m.kind == MediaKind.application_video.value]
     ctx = _m_ctx(request, db, active_tab="tnr")
     ctx.update({"row": row, "images": images, "videos": videos})
-    return templates.TemplateResponse(request, "m/tnr_detail.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/tnr_detail.html", ctx)
 
 
 @app.get("/m/visit/{visit_id}/prescribe", response_class=HTMLResponse)

@@ -1,0 +1,91 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}新增驱虫{% endblock %}
+{% block topbar_title %}新&nbsp;增&nbsp;驱&nbsp;虫{% endblock %}
+{% block topbar_back %}<a href="{% if cust %}/m/customer/{{ cust.id }}{% else %}/m/dewormings{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% if not cust %}
+<div class="ukm-empty">
+  <div class="big">先&nbsp;选&nbsp;客&nbsp;户</div>
+  <a href="/m/customers" style="color:var(--ink);border-bottom:0.5px solid var(--ink);">去搜客户</a>
+</div>
+
+{% else %}
+
+<div class="ukm-page-head">
+  <h1>{{ pet.name if pet else '宠物' }}
+    <span class="ukm-italic" style="font-size:14px;margin-left:6px;">{{ cust.name }}</span>
+  </h1>
+</div>
+
+<form method="post" action="/admin/dewormings/create" class="ukm-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+  <input type="hidden" name="pet_id" id="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="next_url" value="/m/customer/{{ cust.id }}"/>
+
+  {% if pets and pets|length > 1 %}
+  <div class="ukm-field">
+    <label class="lbl">选&nbsp;宠&nbsp;物</label>
+    <div class="ukm-chips">
+      {% for p in pets %}
+      <button type="button" class="ukm-chip pet-chip {% if pet and p.id == pet.id %}checked{% endif %}"
+              data-pet-id="{{ p.id }}" onclick="pickPet(this)">{{ p.name or '未命名' }}</button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="ukm-field">
+    <label class="lbl">类&nbsp;型</label>
+    <select class="ukm-select" name="deworm_type">
+      <option value="external" selected>体&nbsp;外</option>
+      <option value="internal">体&nbsp;内</option>
+      <option value="combo">体&nbsp;内&nbsp;外&nbsp;同&nbsp;驱</option>
+    </select>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">药&nbsp;品&nbsp;名&nbsp;称</label>
+    <input class="ukm-input" type="text" name="product_name" list="dw-list" placeholder="如：博来恩"/>
+    {% if deworm_items %}<datalist id="dw-list">{% for it in deworm_items %}<option value="{{ it.name }}">{% endfor %}</datalist>{% endif %}
+  </div>
+
+  <div class="ukm-row2">
+    <div class="ukm-field"><label class="lbl">体&nbsp;重&nbsp;kg</label><input class="ukm-input ukm-num" type="number" step="0.01" name="weight_kg" inputmode="decimal"/></div>
+    <div class="ukm-field"><label class="lbl">剂&nbsp;量</label><input class="ukm-input" type="text" name="dose" placeholder="如 1支"/></div>
+  </div>
+
+  <div class="ukm-row2">
+    <div class="ukm-field"><label class="lbl">驱&nbsp;虫&nbsp;日&nbsp;期<span class="req">*</span></label><input class="ukm-input" type="date" name="deworm_date" value="{{ today }}" required/></div>
+    <div class="ukm-field"><label class="lbl">下&nbsp;次&nbsp;到&nbsp;期</label><input class="ukm-input" type="date" name="next_due_date"/></div>
+  </div>
+
+  <div class="ukm-field"><label class="lbl">批&nbsp;号</label><input class="ukm-input ukm-mono" type="text" name="batch_no"/></div>
+  <div class="ukm-field"><label class="lbl">医&nbsp;生</label><input class="ukm-input" type="text" name="vet_name" value="{{ default_vet }}"/></div>
+
+  <div class="ukm-field">
+    <label class="lbl">收&nbsp;费&nbsp;¥</label>
+    <input class="ukm-input ukm-num" type="number" name="charge_amount" step="0.01" min="0" placeholder="留空 = 不收费"/>
+  </div>
+
+  <div class="ukm-field"><label class="lbl">备&nbsp;注</label><textarea class="ukm-textarea" name="notes" style="min-height:64px;"></textarea></div>
+
+  <div class="ukm-btn-row">
+    <a href="/m/customer/{{ cust.id }}" class="ukm-btn ghost block">取&nbsp;消</a>
+    <button type="submit" class="ukm-btn block">保&nbsp;存&nbsp;驱&nbsp;虫</button>
+  </div>
+</form>
+
+<script>
+function pickPet(btn) {
+  document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('checked'));
+  btn.classList.add('checked');
+  document.getElementById('pet_id').value = btn.dataset.petId;
+}
+</script>
+
+{% endif %}
+
+{% endblock %}

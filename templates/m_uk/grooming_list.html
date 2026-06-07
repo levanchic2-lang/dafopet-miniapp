@@ -1,0 +1,46 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}美容单{% endblock %}
+{% block topbar_title %}美&nbsp;容&nbsp;单{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/m/grooming/new">+&nbsp;新&nbsp;建</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not rows %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;美&nbsp;容&nbsp;单</div>
+  还没有美容单
+</div>
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/m/grooming/new" class="ukm-btn block">+&nbsp;新&nbsp;建&nbsp;美&nbsp;容&nbsp;单</a>
+</div>
+
+{% else %}
+<div class="ukm-section-head"><h2>共&nbsp;&nbsp;{{ rows|length }}&nbsp;&nbsp;单</h2></div>
+<div class="ukm-row-group">
+  {% for r in rows %}
+  {% set rec = r.r %}
+  <a class="ukm-row" href="/m/grooming/{{ rec.id }}" {% if rec.status == 'voided' %}style="opacity:0.5;"{% endif %}>
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ r.pet.name if r.pet else '宠物' }}
+        <span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name if r.cust else '—' }}</span>
+      </div>
+      <div class="ukm-row-sub">
+        #{{ rec.id }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ rec.groom_date or '—' }}
+        {% if rec.groomer_name %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ rec.groomer_name }}{% endif %}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>照片&nbsp;{{ r.before_n }}/{{ r.after_n }}
+      </div>
+    </div>
+    {% if rec.total_amount %}<div class="ukm-row-right ukm-num">¥&nbsp;{{ '%.0f'|format(rec.total_amount) }}</div>{% endif %}
+    {% if rec.status == 'voided' %}<span class="ukm-pill" style="margin-left:6px;">作废</span>
+    {% elif rec.invoice_id %}<span class="ukm-pill green" style="margin-left:6px;">已开单</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

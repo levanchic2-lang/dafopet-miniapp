@@ -1,0 +1,157 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}TNR #{{ row.id }}{% endblock %}
+{% block topbar_title %}T&nbsp;N&nbsp;R&nbsp;#{{ row.id }}{% endblock %}
+{% block topbar_back %}<a href="/m/tnr" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  {% if row.phone %}<a class="ukm-topbar-action" href="tel:{{ row.phone }}">拨&nbsp;号</a>{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>{{ row.cat_nickname or '未命名' }}
+    {% if row.status == 'pending_manual' %}<span class="ukm-pill amber" style="margin-left:6px;vertical-align:middle;">待&nbsp;审</span>
+    {% elif row.status == 'pre_approved' %}<span class="ukm-pill" style="margin-left:6px;vertical-align:middle;">预通过</span>
+    {% elif row.status == 'approved' %}<span class="ukm-pill green" style="margin-left:6px;vertical-align:middle;">已通过</span>
+    {% elif row.status == 'rejected' %}<span class="ukm-pill red" style="margin-left:6px;vertical-align:middle;">已拒绝</span>
+    {% else %}<span class="ukm-pill" style="margin-left:6px;vertical-align:middle;">{{ row.status }}</span>{% endif %}
+  </h1>
+  <div class="meta">
+    申请人&nbsp;<span style="color:var(--ink);font-style:normal;">{{ row.applicant_name or '—' }}</span>
+    {% if row.phone %}<span class="sep">·</span><a href="tel:{{ row.phone }}" class="ukm-mono" style="font-style:normal;color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ row.phone }}</a>{% endif %}
+  </div>
+</div>
+
+{# AI 判定 #}
+{% if row.ai_is_likely_stray is not none %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid {% if row.ai_is_likely_stray %}var(--accent-green){% else %}var(--accent-red){% endif %};">
+    <div class="ukm-card-title" style="color:{% if row.ai_is_likely_stray %}var(--accent-green){% else %}var(--accent-red){% endif %};">
+      A&nbsp;I&nbsp;&nbsp;判&nbsp;定&nbsp;&nbsp;{% if row.ai_is_likely_stray %}流&nbsp;浪{% else %}非&nbsp;流&nbsp;浪{% endif %}
+    </div>
+    {% if row.ai_confidence %}
+    <div class="ukm-card-sub">置信&nbsp;<span class="ukm-num" style="font-style:normal;">{{ '%.0f'|format(row.ai_confidence * 100) }}%</span></div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# 照片 #}
+{% if images %}
+<div class="ukm-section-head"><h2>申&nbsp;请&nbsp;照&nbsp;片&nbsp;&nbsp;·&nbsp;{{ images|length }}</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+      {% for m in images %}
+      <a href="/file/{{ m.id }}" target="_blank" style="aspect-ratio:1;background:var(--bg-elevated);overflow:hidden;border:0.5px solid var(--hair);">
+        <img src="/file/{{ m.id }}" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if videos %}
+<div class="ukm-section-head"><h2>申&nbsp;请&nbsp;视&nbsp;频&nbsp;&nbsp;·&nbsp;{{ videos|length }}</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% for m in videos %}
+    <video src="/file/{{ m.id }}" controls style="width:100%;background:#000;margin-bottom:6px;"></video>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# 猫咪信息 #}
+<div class="ukm-section-head"><h2>猫&nbsp;咪&nbsp;信&nbsp;息</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:13px;">
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">昵&nbsp;称</span><br/><b>{{ row.cat_nickname or '—' }}</b></div>
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">性&nbsp;别</span><br/>{% if row.cat_gender == 'male' %}公{% elif row.cat_gender == 'female' %}母{% else %}未知{% endif %}</div>
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">毛&nbsp;色</span><br/>{{ row.cat_color or '—' }}</div>
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">品&nbsp;种</span><br/>{{ row.cat_breed or '—' }}</div>
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">年&nbsp;龄</span><br/>{{ row.age_estimate or '—' }}</div>
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">体&nbsp;重</span><br/>{{ row.weight_estimate or '—' }}</div>
+    </div>
+    {% if row.health_note %}
+    <div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--hair);font-size:12px;color:var(--ink-2);font-style:italic;line-height:1.7;">
+      <span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);font-style:normal;">健&nbsp;康&nbsp;备&nbsp;注</span><br/>
+      {{ row.health_note }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# 申请人 + 门店 + 术后 #}
+<div class="ukm-section-head"><h2>申&nbsp;请&nbsp;信&nbsp;息</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% if row.address %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;align-items:flex-start;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;flex-shrink:0;">地&nbsp;址</span>
+      <span style="text-align:right;flex:1;margin-left:12px;">{{ row.address }}</span>
+    </div>
+    {% endif %}
+    {% if row.clinic_store %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">门&nbsp;店</span>
+      <span>{{ row.clinic_store }}{% if row.appointment_at %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ row.appointment_at }}{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if row.post_surgery_plan %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;align-items:flex-start;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;flex-shrink:0;">术&nbsp;后</span>
+      <span style="text-align:right;flex:1;margin-left:12px;">{{ row.post_surgery_plan }}</span>
+    </div>
+    {% endif %}
+    {% if row.is_proxy %}
+    <div style="margin-top:8px;padding:8px 10px;background:var(--bg-elevated);border-left:2px solid var(--accent-amber);font-size:12px;line-height:1.6;">
+      <b style="color:var(--accent-amber);letter-spacing:1px;">代&nbsp;申&nbsp;请</b><br/>
+      {{ row.proxy_name }}{% if row.proxy_phone %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ row.proxy_phone }}{% endif %}{% if row.proxy_relation %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ row.proxy_relation }}{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# 审核动作 #}
+{% if row.status in ['pending_manual', 'pre_approved'] %}
+<form method="post" action="/admin/app/{{ row.id }}/manual-approve" style="margin-top:14px;"
+      onsubmit="return confirm('确认通过这份 TNR 申请？')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/tnr"/>
+  <button type="submit" class="ukm-btn block">✓&nbsp;通&nbsp;过</button>
+</form>
+
+<form method="post" action="/admin/app/{{ row.id }}/reject" style="margin-top:8px;"
+      onsubmit="return rejectConfirm(this)">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/tnr"/>
+  <input type="hidden" name="reason" id="reason-input" value=""/>
+  <button type="submit" class="ukm-btn hair block" style="color:var(--accent-red);border-color:var(--accent-red);">✗&nbsp;拒&nbsp;绝</button>
+</form>
+<script>
+function rejectConfirm(form) {
+  const r = prompt('拒绝原因（必填，会发给申请人）：');
+  if (!r || !r.trim()) return false;
+  form.querySelector('#reason-input').value = r.trim();
+  return true;
+}
+</script>
+
+{% elif row.status == 'rejected' and row.reject_reason %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-red);">
+    <div class="ukm-card-title" style="color:var(--accent-red);">拒&nbsp;绝&nbsp;原&nbsp;因</div>
+    <div class="ukm-card-sub">{{ row.reject_reason }}</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/applications/{{ row.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;·&nbsp;完&nbsp;整&nbsp;A&nbsp;I&nbsp;报&nbsp;告</a>
+</div>
+
+{% endblock %}

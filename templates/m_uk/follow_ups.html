@@ -1,0 +1,83 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}客户回访{% endblock %}
+{% block topbar_title %}客&nbsp;户&nbsp;回&nbsp;访{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-chips" style="margin-bottom:14px;">
+  <a class="ukm-chip {% if tab=='today' %}checked{% endif %}" href="/m/follow-ups?tab=today">今&nbsp;天</a>
+  <a class="ukm-chip {% if tab=='responded' %}checked{% endif %}" href="/m/follow-ups?tab=responded">已&nbsp;反&nbsp;馈</a>
+  <a class="ukm-chip {% if tab=='closed' %}checked{% endif %}" href="/m/follow-ups?tab=closed">已&nbsp;完&nbsp;成</a>
+</div>
+
+{% if not rows %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;任&nbsp;务</div>
+  {% if tab=='today' %}今天没有待回访任务{% elif tab=='responded' %}最近没有客户反馈{% else %}最近没有已完成的{% endif %}
+</div>
+
+{% else %}
+<div class="ukm-section-head"><h2>共&nbsp;&nbsp;{{ rows|length }}&nbsp;&nbsp;条</h2></div>
+
+{% for r in rows %}
+{% set fu = r.fu %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid {% if fu.status == 'due' %}var(--accent-red){% elif fu.status == 'sent' or fu.status == 'phone_pending' %}var(--accent-amber){% elif fu.status == 'responded' %}var(--accent-green){% else %}var(--hair){% endif %};">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div class="ukm-card-title">{{ r.pet.name if r.pet else '宠物' }}
+        <span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name if r.cust else '—' }}</span>
+      </div>
+      {% if fu.status == 'due' %}<span class="ukm-pill red">到期</span>
+      {% elif fu.status == 'sent' %}<span class="ukm-pill amber">已推送</span>
+      {% elif fu.status == 'phone_pending' %}<span class="ukm-pill amber">需电话</span>
+      {% elif fu.status == 'responded' %}<span class="ukm-pill green">已反馈</span>
+      {% elif fu.status == 'closed' %}<span class="ukm-pill">已完成</span>{% endif %}
+    </div>
+    <div class="ukm-card-sub">
+      {{ fu.planned_date or '—' }}
+      {% if fu.round_name %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ fu.round_name }}{% endif %}
+    </div>
+    {% if r.cust and r.cust.phone %}
+    <div style="margin-top:8px;">
+      <a href="tel:{{ r.cust.phone }}" class="ukm-mono" style="font-style:normal;color:var(--ink);font-size:15px;font-weight:600;border-bottom:0.5px solid var(--ink);">{{ r.cust.phone }}</a>
+    </div>
+    {% endif %}
+
+    {% if fu.response_note %}
+    <div style="margin-top:10px;padding:8px 10px;background:var(--bg-elevated);border-left:0.5px solid var(--hair);font-size:12px;color:var(--ink-2);line-height:1.6;">
+      <span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">客&nbsp;户&nbsp;反&nbsp;馈</span><br/>
+      <span style="font-style:italic;">{{ fu.response_note|truncate(100) }}</span>
+    </div>
+    {% endif %}
+
+    {% if fu.handle_note %}
+    <div style="margin-top:6px;font-size:12px;color:var(--ink-3);font-style:italic;line-height:1.6;">
+      {{ fu.handle_note|truncate(80) }}
+    </div>
+    {% endif %}
+
+    {% if fu.status in ['due','sent','phone_pending','responded'] %}
+    <details style="margin-top:12px;padding-top:10px;border-top:0.5px solid var(--hair);">
+      <summary style="cursor:pointer;font-size:11px;letter-spacing:2px;color:var(--ink-2);font-weight:700;text-align:center;list-style:none;">
+        ＋&nbsp;&nbsp;处&nbsp;&nbsp;理
+      </summary>
+      <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="margin-top:10px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="next_url" value="/m/follow-ups?tab={{ tab }}"/>
+        <textarea name="note" class="ukm-textarea" placeholder="处理备注（可选）" style="min-height:64px;"></textarea>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button type="submit" name="action" value="contacted" class="ukm-btn block" style="font-size:12px;padding:10px;letter-spacing:1px;">已&nbsp;联&nbsp;系</button>
+          <button type="submit" name="action" value="refer_visit" class="ukm-btn ghost block" style="font-size:12px;padding:10px;letter-spacing:1px;">改&nbsp;约</button>
+          <button type="submit" name="action" value="skip" class="ukm-btn hair block" style="font-size:12px;padding:10px;letter-spacing:1px;">跳&nbsp;过</button>
+        </div>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% endif %}
+
+{% endblock %}

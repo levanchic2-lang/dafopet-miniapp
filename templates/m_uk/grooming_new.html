@@ -1,0 +1,194 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}新建美容单{% endblock %}
+{% block topbar_title %}新&nbsp;建&nbsp;美&nbsp;容&nbsp;单{% endblock %}
+{% block topbar_back %}<a href="/m/grooming" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<form method="post" action="/m/grooming/create" class="ukm-form" id="grm-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="customer_id" id="customer_id" value="{{ cust.id if cust else 0 }}"/>
+  <input type="hidden" name="pet_id" id="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="appointment_id" value="{{ appt.id if appt else 0 }}"/>
+
+  {# 客户/宠物 #}
+  <div class="ukm-section-head"><h2>客&nbsp;户&nbsp;/&nbsp;宠&nbsp;物</h2></div>
+
+  <div id="picked-cust" style="{% if not cust %}display:none;{% endif %}">
+    <div class="ukm-card-group">
+      <div class="ukm-card" style="border-left:2px solid var(--ink);">
+        <div class="ukm-card-title" id="picked-cust-name">{{ cust.name if cust else '' }}</div>
+        <div class="ukm-card-sub"><span class="ukm-mono" id="picked-cust-phone" style="font-style:normal;color:var(--ink-2);">{{ cust.phone if cust else '' }}</span></div>
+      </div>
+    </div>
+    {% if cust %}
+    <div style="margin:-8px 0 14px;">
+      <a href="/m/grooming/new" style="font-family:var(--font-serif);font-size:11px;color:var(--ink-3);letter-spacing:1.5px;border-bottom:0.5px solid var(--hair);">↶&nbsp;&nbsp;换&nbsp;&nbsp;客&nbsp;&nbsp;户</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <div id="search-area" style="{% if cust %}display:none;{% endif %}">
+    <div class="ukm-search">
+      <span class="ic">⌕</span>
+      <input type="search" id="cust-search" placeholder="手机号 / 姓名（≥2 字）"/>
+    </div>
+    <div id="search-results" style="margin-bottom:14px;"></div>
+  </div>
+
+  {% if pets %}
+  <div class="ukm-field">
+    <label class="lbl">选&nbsp;宠&nbsp;物</label>
+    <div class="ukm-chips" id="pet-chips">
+      {% for p in pets %}
+      <button type="button" class="ukm-chip pet-chip {% if pet and p.id == pet.id %}checked{% endif %}"
+              data-pet-id="{{ p.id }}" onclick="pickPet(this)">
+        {{ p.name or '未命名' }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# 服务 #}
+  <div class="ukm-section-head"><h2>选&nbsp;服&nbsp;务&nbsp;&nbsp;·&nbsp;<span id="picked-count">0</span></h2></div>
+
+  {% if not groom_items %}
+  <div class="ukm-empty">
+    <div class="big">无&nbsp;服&nbsp;务&nbsp;品&nbsp;目</div>
+    桌面端 → 库存 → 美容服务 维护
+  </div>
+  {% else %}
+  <div class="ukm-chips" id="svc-chips" style="margin-bottom:14px;">
+    {% for it in groom_items %}
+    <button type="button" class="ukm-chip svc-chip"
+            data-id="{{ it.id }}"
+            data-name="{{ it.name }}"
+            data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+            onclick="toggleSvc(this)">
+      {{ it.name }}&nbsp;<span class="ukm-italic" style="font-size:11px;font-style:italic;margin-left:2px;">¥{{ '%.0f'|format(it.sell_price or 0) }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  <div id="picked-summary" style="display:none;margin-bottom:14px;padding:10px 12px;background:var(--bg-elevated);border:0.5px solid var(--hair);font-family:var(--font-serif);font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">
+    合&nbsp;计&nbsp;&nbsp;<span class="ukm-num" style="font-size:18px;font-weight:700;color:var(--ink);letter-spacing:0.5px;">¥&nbsp;<span id="grand-total">0</span></span>
+  </div>
+  {% endif %}
+
+  {# 基本信息 #}
+  <div class="ukm-section-head"><h2>基&nbsp;本&nbsp;信&nbsp;息</h2></div>
+
+  <div class="ukm-field">
+    <label class="lbl">日&nbsp;期<span class="req">*</span></label>
+    <input class="ukm-input" type="date" name="groom_date" value="{{ today }}" required/>
+  </div>
+
+  <div class="ukm-row2">
+    <div class="ukm-field">
+      <label class="lbl">美&nbsp;容&nbsp;师</label>
+      <input class="ukm-input" type="text" name="groomer_name" value="{{ default_groomer }}" list="groomer-list" placeholder="选或输入"/>
+      <datalist id="groomer-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
+    </div>
+    <div class="ukm-field">
+      <label class="lbl">助&nbsp;理</label>
+      <input class="ukm-input" type="text" name="assistant_name" list="assistant-list" placeholder="可选"/>
+      <datalist id="assistant-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
+    </div>
+  </div>
+
+  <button type="submit" class="ukm-btn block" id="submit-btn" disabled>保&nbsp;存&nbsp;美&nbsp;容&nbsp;单</button>
+</form>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const customerIdInput = $('customer_id');
+const petIdInput = $('pet_id');
+const submitBtn = $('submit-btn');
+
+function recalcSubmit() {
+  const hasCust = parseInt(customerIdInput.value || 0) > 0;
+  const hasPet = parseInt(petIdInput.value || 0) > 0;
+  const hasSvc = document.querySelectorAll('.svc-chip.checked').length > 0;
+  submitBtn.disabled = !(hasCust && hasPet && hasSvc);
+}
+
+function recalcSummary() {
+  const chips = document.querySelectorAll('.svc-chip.checked');
+  let total = 0;
+  chips.forEach(c => total += parseFloat(c.dataset.price || 0));
+  $('picked-count').textContent = chips.length;
+  $('grand-total').textContent = total.toFixed(0);
+  $('picked-summary').style.display = chips.length ? 'block' : 'none';
+  recalcSubmit();
+}
+
+function toggleSvc(btn) {
+  btn.classList.toggle('checked');
+  const id = btn.dataset.id;
+  let hi = btn.querySelector('input[type=hidden]');
+  if (btn.classList.contains('checked')) {
+    if (!hi) {
+      hi = document.createElement('input');
+      hi.type = 'hidden'; hi.name = 'service_id[]'; hi.value = id;
+      btn.appendChild(hi);
+    }
+  } else if (hi) {
+    hi.remove();
+  }
+  recalcSummary();
+}
+
+function pickPet(btn) {
+  document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('checked'));
+  btn.classList.add('checked');
+  petIdInput.value = btn.dataset.petId;
+  recalcSubmit();
+}
+
+let searchTimer = null;
+const search = $('cust-search');
+if (search) {
+  search.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = search.value.trim();
+    if (q.length < 2) { $('search-results').innerHTML = ''; return; }
+    searchTimer = setTimeout(async () => {
+      const resp = await fetch('/m/api/search-customer?q=' + encodeURIComponent(q));
+      const data = await resp.json();
+      const html = data.results.map(c => `
+        <div style="border:0.5px solid var(--hair);background:var(--paper);padding:10px 12px;margin-bottom:6px;">
+          <div style="font-family:var(--font-serif);font-weight:600;font-size:14px;color:var(--ink);">
+            ${c.name || '—'}
+            <span class="ukm-mono" style="font-weight:400;color:var(--ink-2);font-style:normal;margin-left:6px;font-size:12px;">${c.phone || ''}</span>
+          </div>
+          ${c.pets.length ? `
+            <div class="ukm-chips" style="margin-top:8px;">
+              ${c.pets.map(p => `
+                <button type="button" onclick="pickFromSearch(${c.id}, '${(c.name||'').replace(/'/g,"\\'")}', '${c.phone||''}', ${p.id})"
+                  class="ukm-chip" style="font-size:12px;padding:5px 12px;min-height:30px;">
+                  ${p.name || '未命名'}
+                </button>
+              `).join('')}
+            </div>
+          ` : `<div class="ukm-italic" style="font-size:11px;margin-top:4px;">这位客户暂无宠物档案</div>`}
+        </div>
+      `).join('');
+      $('search-results').innerHTML = html || '<div class="ukm-empty" style="padding:14px;">无&nbsp;结&nbsp;果</div>';
+    }, 250);
+  });
+}
+
+function pickFromSearch(cid, cname, cphone, pid) {
+  customerIdInput.value = cid;
+  petIdInput.value = pid;
+  $('picked-cust-name').textContent = cname;
+  $('picked-cust-phone').textContent = cphone;
+  $('picked-cust').style.display = 'block';
+  $('search-area').style.display = 'none';
+  recalcSubmit();
+}
+
+recalcSubmit();
+</script>
+
+{% endblock %}

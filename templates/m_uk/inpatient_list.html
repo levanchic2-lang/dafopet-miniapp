@@ -1,0 +1,39 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}住院看板{% endblock %}
+{% block topbar_title %}住&nbsp;院&nbsp;看&nbsp;板{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% if not cards %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;住&nbsp;院</div>
+  当前没有住院中的宠物
+</div>
+
+{% else %}
+<div class="ukm-section-head"><h2>在&nbsp;住&nbsp;&nbsp;{{ total_n }}</h2></div>
+
+<div class="ukm-row-group">
+  {% for c in cards %}
+  <a class="ukm-row" href="/m/inpatient/{{ c.h.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ c.pet.name if c.pet else '宠物' }}
+        {% if c.cage %}<span class="ukm-italic" style="font-size:11px;margin-left:6px;font-style:normal;background:var(--paper);border:0.5px solid var(--hair);padding:1px 6px;letter-spacing:1px;">{{ c.cage.code }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ c.cust.name if c.cust else '—' }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        <span class="ukm-num" style="font-style:normal;color:var(--ink-2);">{{ c.days }}</span>&nbsp;天
+        {% if c.h.reason %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ c.h.reason|truncate(20) }}{% endif %}
+      </div>
+    </div>
+    {% if c.overdue_n %}<span class="ukm-pill red">漏药&nbsp;{{ c.overdue_n }}</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+
+{% endif %}
+
+{% endblock %}

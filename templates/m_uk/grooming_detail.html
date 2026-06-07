@@ -1,0 +1,174 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}美容单 #{{ rec.id }}{% endblock %}
+{% block topbar_title %}美&nbsp;容&nbsp;#{{ rec.id }}{% endblock %}
+{% block topbar_back %}<a href="/m/grooming" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>{{ pet.name if pet else '宠物' }}
+    <span class="ukm-italic" style="font-size:14px;margin-left:6px;">{{ cust.name if cust else '—' }}</span>
+    {% if rec.status == 'voided' %}<span class="ukm-pill red" style="margin-left:6px;vertical-align:middle;">作废</span>{% endif %}
+  </h1>
+  <div class="meta">
+    {{ rec.groom_date or '—' }}
+    <span class="sep">·</span>
+    美容师&nbsp;<span style="color:var(--ink);font-style:normal;">{{ rec.groomer_name or '—' }}</span>
+    {% if rec.assistant_name %}<span class="sep">·</span>助理&nbsp;<span style="color:var(--ink);font-style:normal;">{{ rec.assistant_name }}</span>{% endif %}
+  </div>
+</div>
+
+{% if rec.status == 'voided' %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-red);">
+    <div class="ukm-card-title" style="color:var(--accent-red);">此&nbsp;单&nbsp;已&nbsp;作&nbsp;废</div>
+    {% if rec.void_reason %}<div class="ukm-card-sub">{{ rec.void_reason }}</div>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if locked %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-amber);">
+    <div class="ukm-card-title" style="color:var(--accent-amber);">已&nbsp;锁&nbsp;定</div>
+    <div class="ukm-card-sub">{{ lock_reason }}</div>
+  </div>
+</div>
+{% endif %}
+
+{# 金额 KPI #}
+{% if rec.total_amount %}
+<div class="ukm-kpi-grid" style="grid-template-columns:1fr 1fr;">
+  <div class="ukm-kpi">
+    <div class="lbl">合&nbsp;计</div>
+    <div class="val">¥&nbsp;{{ '%.0f'|format(rec.total_amount) }}</div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">服&nbsp;务</div>
+    <div class="val">{{ services|length }}<span class="unit">项</span></div>
+  </div>
+</div>
+{% endif %}
+
+{# 服务清单 #}
+{% if services %}
+<div class="ukm-section-head"><h2>服&nbsp;务&nbsp;清&nbsp;单</h2></div>
+<div class="ukm-row-group">
+  {% for s in services %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:14px;">{{ s.name }}</div>
+    </div>
+    {% if s.subtotal %}<div class="ukm-row-right ukm-num">¥&nbsp;{{ '%.0f'|format(s.subtotal) }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 美容前 #}
+<div class="ukm-section-head"><h2>美&nbsp;容&nbsp;前&nbsp;&nbsp;·&nbsp;{{ before_list|length }}</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% if before_list %}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">
+      {% for url in before_list %}
+      <div style="position:relative;aspect-ratio:1;background:var(--bg-elevated);overflow:hidden;border:0.5px solid var(--hair);">
+        <a href="{{ url }}" target="_blank">
+          <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+        </a>
+        {% if not locked and rec.status != 'voided' %}
+        <form method="post" action="/admin/grooming-orders/{{ rec.id }}/delete-photo"
+              style="position:absolute;top:3px;right:3px;"
+              onsubmit="return confirm('删除？')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="kind" value="before"/>
+          <input type="hidden" name="photo_url" value="{{ url }}"/>
+          <input type="hidden" name="next_url" value="{{ next_url }}"/>
+          <button type="submit" style="background:var(--accent-red);color:var(--paper);border:none;width:22px;height:22px;font-family:var(--font-serif);font-size:11px;line-height:1;padding:0;border-radius:0;">✕</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if not locked and rec.status != 'voided' %}
+    <form method="post" action="/admin/grooming-orders/{{ rec.id }}/upload-photos" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="kind" value="before"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}"/>
+      <label class="ukm-btn ghost block" style="cursor:pointer;">
+        拍&nbsp;美&nbsp;容&nbsp;前&nbsp;照&nbsp;片
+        <input type="file" name="photos" accept="image/*" capture="environment" multiple
+               onchange="this.form.submit()" style="display:none;">
+      </label>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{# 美容后 #}
+<div class="ukm-section-head"><h2>美&nbsp;容&nbsp;后&nbsp;&nbsp;·&nbsp;{{ after_list|length }}</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% if after_list %}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">
+      {% for url in after_list %}
+      <div style="position:relative;aspect-ratio:1;background:var(--bg-elevated);overflow:hidden;border:0.5px solid var(--hair);">
+        <a href="{{ url }}" target="_blank">
+          <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+        </a>
+        {% if not locked and rec.status != 'voided' %}
+        <form method="post" action="/admin/grooming-orders/{{ rec.id }}/delete-photo"
+              style="position:absolute;top:3px;right:3px;"
+              onsubmit="return confirm('删除？')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="kind" value="after"/>
+          <input type="hidden" name="photo_url" value="{{ url }}"/>
+          <input type="hidden" name="next_url" value="{{ next_url }}"/>
+          <button type="submit" style="background:var(--accent-red);color:var(--paper);border:none;width:22px;height:22px;font-family:var(--font-serif);font-size:11px;line-height:1;padding:0;border-radius:0;">✕</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if not locked and rec.status != 'voided' %}
+    <form method="post" action="/admin/grooming-orders/{{ rec.id }}/upload-photos" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="kind" value="after"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}"/>
+      <label class="ukm-btn block" style="cursor:pointer;">
+        拍&nbsp;美&nbsp;容&nbsp;后&nbsp;照&nbsp;片
+        <input type="file" name="photos" accept="image/*" capture="environment" multiple
+               onchange="this.form.submit()" style="display:none;">
+      </label>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{# 状况记录 #}
+{% if rec.skin_condition or rec.behavior_note or rec.notes %}
+<div class="ukm-section-head"><h2>状&nbsp;况&nbsp;记&nbsp;录</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% if rec.skin_condition %}<div style="margin-bottom:6px;font-size:13px;"><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">皮&nbsp;肤</span><br/>{{ rec.skin_condition }}</div>{% endif %}
+    {% if rec.behavior_note %}<div style="margin-bottom:6px;font-size:13px;"><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">行&nbsp;为</span><br/>{{ rec.behavior_note }}</div>{% endif %}
+    {% if rec.notes %}<div style="font-size:13px;color:var(--ink-2);font-style:italic;line-height:1.6;">{{ rec.notes }}</div>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if not rec.end_time and not locked and rec.status != 'voided' %}
+<form method="post" action="/m/grooming/{{ rec.id }}/done">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <button type="submit" class="ukm-btn block">✓&nbsp;完&nbsp;成&nbsp;美&nbsp;容</button>
+</form>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/grooming-orders/{{ rec.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;·&nbsp;编&nbsp;辑&nbsp;/&nbsp;收&nbsp;费</a>
+</div>
+
+{% endblock %}

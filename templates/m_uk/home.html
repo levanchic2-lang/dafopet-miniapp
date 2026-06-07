@@ -36,7 +36,7 @@
 {% if today_appts %}
 <div class="ukm-row-group">
   {% for a in today_appts %}
-  <a href="/admin/appointments/{{ a.id }}" class="ukm-row">
+  <a href="/m/appointment/{{ a.id }}" class="ukm-row">
     <div class="ukm-row-body">
       <div class="ukm-row-title">{{ a.customer_name or '—' }} · {{ a.pet_name or '—' }}</div>
       <div class="ukm-row-sub">

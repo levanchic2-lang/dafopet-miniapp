@@ -1,0 +1,48 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}TNR 待审{% endblock %}
+{% block topbar_title %}T&nbsp;N&nbsp;R&nbsp;待&nbsp;审{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% if not rows %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;待&nbsp;审&nbsp;申&nbsp;请</div>
+  所有 TNR 申请都已处理
+</div>
+
+{% else %}
+<div class="ukm-section-head"><h2>共&nbsp;&nbsp;{{ rows|length }}&nbsp;&nbsp;份</h2></div>
+<div class="ukm-row-group">
+  {% for a in rows %}
+  <a class="ukm-row" href="/m/tnr/{{ a.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ a.cat_nickname or '未命名' }}
+        {% if a.cat_gender == 'male' %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">公</span>
+        {% elif a.cat_gender == 'female' %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">母</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        #{{ a.id }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        {{ a.applicant_name or '—' }}
+        {% if a.phone %}<span style="margin:0 5px;color:var(--ink-4);">·</span><span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ a.phone }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ a.created_at.strftime('%m-%d %H:%M') if a.created_at else '—' }}
+        {% if a.clinic_store %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ a.clinic_store }}{% endif %}
+        {% if a.ai_is_likely_stray is not none %}
+          <span style="margin:0 5px;color:var(--ink-4);">·</span>
+          AI&nbsp;{% if a.ai_is_likely_stray %}<span style="color:var(--accent-green);font-style:normal;">流浪</span>{% else %}<span style="color:var(--accent-red);font-style:normal;">非流浪</span>{% endif %}
+        {% endif %}
+      </div>
+    </div>
+    {% if a.status == 'pending_manual' %}<span class="ukm-pill amber">待&nbsp;审</span>
+    {% elif a.status == 'pre_approved' %}<span class="ukm-pill">预通过</span>
+    {% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

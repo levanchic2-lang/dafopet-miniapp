@@ -1,0 +1,100 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}新增疫苗{% endblock %}
+{% block topbar_title %}新&nbsp;增&nbsp;疫&nbsp;苗{% endblock %}
+{% block topbar_back %}<a href="{% if cust %}/m/customer/{{ cust.id }}{% else %}/m/vaccinations{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% if not cust %}
+<div class="ukm-empty">
+  <div class="big">先&nbsp;选&nbsp;客&nbsp;户</div>
+  <a href="/m/customers" style="color:var(--ink);border-bottom:0.5px solid var(--ink);">去搜客户</a>
+</div>
+
+{% else %}
+
+<div class="ukm-page-head">
+  <h1>{{ pet.name if pet else '宠物' }}
+    <span class="ukm-italic" style="font-size:14px;margin-left:6px;">{{ cust.name }}</span>
+  </h1>
+</div>
+
+<form method="post" action="/admin/vaccinations/create" class="ukm-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+  <input type="hidden" name="pet_id" id="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="next_url" value="/m/customer/{{ cust.id }}"/>
+
+  {% if pets and pets|length > 1 %}
+  <div class="ukm-field">
+    <label class="lbl">选&nbsp;宠&nbsp;物</label>
+    <div class="ukm-chips">
+      {% for p in pets %}
+      <button type="button" class="ukm-chip pet-chip {% if pet and p.id == pet.id %}checked{% endif %}"
+              data-pet-id="{{ p.id }}" onclick="pickPet(this)">{{ p.name or '未命名' }}</button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="ukm-field">
+    <label class="lbl">疫&nbsp;苗&nbsp;类&nbsp;型</label>
+    <select class="ukm-select" name="vaccine_type">
+      <option value="rabies">狂&nbsp;犬</option>
+      <option value="combo_3">三&nbsp;联</option>
+      <option value="combo_6">六&nbsp;联</option>
+      <option value="canine_8">犬&nbsp;八&nbsp;联</option>
+      <option value="other" selected>其&nbsp;他</option>
+    </select>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">疫&nbsp;苗&nbsp;品&nbsp;名</label>
+    <input class="ukm-input" type="text" name="vaccine_name" list="vacc-list" placeholder="如：辉瑞卫佳壹"/>
+    {% if vacc_items %}<datalist id="vacc-list">{% for it in vacc_items %}<option value="{{ it.name }}">{% endfor %}</datalist>{% endif %}
+  </div>
+
+  <div class="ukm-row2">
+    <div class="ukm-field"><label class="lbl">批&nbsp;号</label><input class="ukm-input ukm-mono" type="text" name="batch_no"/></div>
+    <div class="ukm-field"><label class="lbl">第&nbsp;几&nbsp;针</label><input class="ukm-input ukm-num" type="number" name="dose_number" value="1" min="1" max="99"/></div>
+  </div>
+
+  <div class="ukm-row2">
+    <div class="ukm-field"><label class="lbl">接&nbsp;种&nbsp;日&nbsp;期<span class="req">*</span></label><input class="ukm-input" type="date" name="vaccinated_date" value="{{ today }}" required/></div>
+    <div class="ukm-field"><label class="lbl">下&nbsp;次&nbsp;到&nbsp;期</label><input class="ukm-input" type="date" name="next_due_date"/></div>
+  </div>
+
+  <div class="ukm-field"><label class="lbl">医&nbsp;生</label><input class="ukm-input" type="text" name="vet_name" value="{{ default_vet }}"/></div>
+
+  <div class="ukm-field">
+    <label class="ukm-chip" style="cursor:pointer;">
+      <input type="checkbox" name="is_free" value="1"/>
+      免&nbsp;费&nbsp;疫&nbsp;苗&nbsp;（&nbsp;狂&nbsp;犬&nbsp;等&nbsp;）
+    </label>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">收&nbsp;费&nbsp;¥</label>
+    <input class="ukm-input ukm-num" type="number" name="charge_amount" step="0.01" min="0" placeholder="留空 = 不收费 / 自动"/>
+    <div class="hint">桌面端会自动生成待收款</div>
+  </div>
+
+  <div class="ukm-field"><label class="lbl">备&nbsp;注</label><textarea class="ukm-textarea" name="notes" style="min-height:64px;"></textarea></div>
+
+  <div class="ukm-btn-row">
+    <a href="/m/customer/{{ cust.id }}" class="ukm-btn ghost block">取&nbsp;消</a>
+    <button type="submit" class="ukm-btn block">保&nbsp;存&nbsp;疫&nbsp;苗</button>
+  </div>
+</form>
+
+<script>
+function pickPet(btn) {
+  document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('checked'));
+  btn.classList.add('checked');
+  document.getElementById('pet_id').value = btn.dataset.petId;
+}
+</script>
+
+{% endif %}
+
+{% endblock %}

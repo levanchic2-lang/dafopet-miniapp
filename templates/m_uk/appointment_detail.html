@@ -1,0 +1,150 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}预约 #{{ a.id }}{% endblock %}
+{% block topbar_title %}预&nbsp;约&nbsp;#{{ a.id }}{% endblock %}
+{% block topbar_back %}<a href="/m/appointments" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% set _cat_zh = {'tnr':'TNR','outpatient':'门诊','surgery':'手术','beauty':'美容','grooming':'美容','washcare':'洗护'} %}
+{% set _status_zh = {'pending':'待确认','confirmed':'已确认','arrived':'已到店','completed':'已完成','cancelled':'已取消','no_show':'爽约'} %}
+
+<div class="ukm-page-head">
+  <h1>{{ a.customer_name or '—' }}
+    {% if a.pet_name %}<span class="ukm-italic" style="font-size:14px;margin-left:6px;">{{ a.pet_name }}</span>{% endif %}
+  </h1>
+  <div class="meta">
+    {{ a.appointment_date or '—' }}<span class="sep">·</span>{{ a.appointment_time or '—' }}
+    {% if a.duration_minutes %}<span class="sep">·</span>{{ a.duration_minutes }}&nbsp;分钟{% endif %}
+  </div>
+  {% if a.phone %}
+  <div class="meta"><a href="tel:{{ a.phone }}" class="ukm-mono" style="font-style:normal;color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ a.phone }}</a></div>
+  {% endif %}
+</div>
+
+{# 状态 + 类别 #}
+<div class="ukm-kpi-grid" style="grid-template-columns:1fr 1fr;">
+  <div class="ukm-kpi">
+    <div class="lbl">类&nbsp;别</div>
+    <div class="val" style="font-size:18px;">{{ _cat_zh.get(a.category, a.category or '—') }}</div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">状&nbsp;态</div>
+    <div class="val" style="font-size:18px;color:{% if a.status == 'pending' %}var(--accent-amber){% elif a.status == 'completed' %}var(--accent-green){% elif a.status == 'no_show' or a.status == 'cancelled' %}var(--accent-red){% else %}var(--ink){% endif %};">{{ _status_zh.get(a.status, a.status) }}</div>
+  </div>
+</div>
+
+{# 信息卡 #}
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% if a.service_name %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">服&nbsp;务&nbsp;项&nbsp;目</span>
+      <span>{{ a.service_name }}</span>
+    </div>
+    {% endif %}
+    {% if a.store %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">门&nbsp;店</span>
+      <span>{{ a.store }}</span>
+    </div>
+    {% endif %}
+    {% if a.pet_gender %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">宠&nbsp;物&nbsp;性&nbsp;别</span>
+      <span>{% if a.pet_gender == 'male' %}公{% elif a.pet_gender == 'female' %}母{% else %}未知{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if a.notes %}
+    <div style="margin-top:6px;font-size:12px;color:var(--ink-2);font-style:italic;line-height:1.6;">{{ a.notes }}</div>
+    {% endif %}
+  </div>
+</div>
+
+{# 代申请 / TNR 关联 #}
+{% if a.is_proxy %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-amber);">
+    <div class="ukm-card-title" style="color:var(--accent-amber);">代&nbsp;申&nbsp;请</div>
+    <div class="ukm-card-sub">{{ a.proxy_name or '—' }}{% if a.proxy_phone %}<span style="margin:0 5px;color:var(--ink-4);">·</span><span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ a.proxy_phone }}</span>{% endif %}{% if a.proxy_relation %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ a.proxy_relation }}{% endif %}</div>
+  </div>
+</div>
+{% endif %}
+
+{% if related_app %}
+<div class="ukm-section-head"><h2>关&nbsp;联&nbsp;T&nbsp;N&nbsp;R&nbsp;申&nbsp;请</h2></div>
+<div class="ukm-row-group">
+  <a class="ukm-row" href="/m/tnr/{{ related_app.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">#{{ related_app.id }}&nbsp;·&nbsp;{{ related_app.cat_nickname or '未命名' }}</div>
+      <div class="ukm-row-sub">{{ related_app.created_at.strftime('%Y-%m-%d') if related_app.created_at else '—' }}</div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+</div>
+{% endif %}
+
+{# 客户档案入口 #}
+{% if cust %}
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/m/customer/{{ cust.id }}" class="ukm-btn ghost block">客&nbsp;户&nbsp;档&nbsp;案</a>
+  {% if a.phone %}<a href="tel:{{ a.phone }}" class="ukm-btn block">拨&nbsp;打&nbsp;电&nbsp;话</a>{% endif %}
+</div>
+{% endif %}
+
+{# 状态动作 #}
+{% if a.status in ['pending', 'confirmed', 'arrived'] %}
+<div class="ukm-section-head"><h2>状&nbsp;态&nbsp;动&nbsp;作</h2></div>
+
+{% if a.status == 'pending' %}
+<form method="post" action="/admin/appointments/{{ a.id }}/status" style="margin-bottom:8px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="status" value="confirmed"/>
+  <input type="hidden" name="redirect_after" value="mobile_appt:{{ a.id }}"/>
+  <button type="submit" class="ukm-btn block">确&nbsp;认&nbsp;预&nbsp;约</button>
+</form>
+{% endif %}
+
+{% if a.status == 'confirmed' %}
+<form method="post" action="/admin/appointments/{{ a.id }}/status" style="margin-bottom:8px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="status" value="arrived"/>
+  <input type="hidden" name="redirect_after" value="mobile_appt:{{ a.id }}"/>
+  <button type="submit" class="ukm-btn block">标&nbsp;记&nbsp;已&nbsp;到&nbsp;店</button>
+</form>
+{% endif %}
+
+{% if a.status == 'arrived' %}
+<form method="post" action="/admin/appointments/{{ a.id }}/status" style="margin-bottom:8px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="status" value="completed"/>
+  <input type="hidden" name="redirect_after" value="mobile_appt:{{ a.id }}"/>
+  <button type="submit" class="ukm-btn block">标&nbsp;记&nbsp;已&nbsp;完&nbsp;成</button>
+</form>
+{% endif %}
+
+<form method="post" action="/admin/appointments/{{ a.id }}/status" style="margin-bottom:8px;"
+      onsubmit="return confirm('确认取消这个预约？')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="status" value="cancelled"/>
+  <input type="hidden" name="redirect_after" value="mobile"/>
+  <button type="submit" class="ukm-btn hair block">取&nbsp;消&nbsp;预&nbsp;约</button>
+</form>
+
+<form method="post" action="/admin/appointments/{{ a.id }}/status"
+      onsubmit="return confirm('标记为爽约？将累计爽约记录用于封禁判定。')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="status" value="no_show"/>
+  <input type="hidden" name="redirect_after" value="mobile"/>
+  <button type="submit" class="ukm-btn hair block" style="color:var(--accent-red);border-color:var(--accent-red);">标&nbsp;记&nbsp;爽&nbsp;约</button>
+</form>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  {% if a.visit_id %}<a href="/m/visit/{{ a.visit_id }}" class="ukm-btn ghost block">关&nbsp;联&nbsp;病&nbsp;历</a>
+  {% elif a.status in ['confirmed', 'arrived'] %}<a href="/m/visit/new?appointment_id={{ a.id }}" class="ukm-btn block">+&nbsp;开&nbsp;病&nbsp;历</a>{% endif %}
+  <a href="/admin/appointments#appt-{{ a.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端</a>
+</div>
+
+{% endblock %}

@@ -1,0 +1,289 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}{{ pet.name if pet else '宠物' }} · 住院{% endblock %}
+{% block topbar_title %}{% if pet %}{{ pet.name }}{% else %}住院{% endif %}{% endblock %}
+{% block topbar_back %}<a href="/m/inpatient" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/admin/inpatient/{{ h.id }}">桌&nbsp;面&nbsp;端</a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  details.ukm-drawer summary {
+    list-style: none; cursor: pointer;
+    padding: 12px 14px; background: var(--paper);
+    border-top: 0.5px solid var(--hair);
+    font-family: var(--font-serif);
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 2px; color: var(--ink);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  details.ukm-drawer summary::-webkit-details-marker { display: none; }
+  details.ukm-drawer summary::after {
+    content: "＋"; color: var(--ink-3); font-weight: 400; font-size: 16px;
+  }
+  details.ukm-drawer[open] summary::after { content: "−"; }
+  details.ukm-drawer:last-child summary { border-bottom: 0.5px solid var(--hair); }
+  details.ukm-drawer[open]:not(:last-child) summary { border-bottom: 0.5px dashed var(--hair); }
+  details.ukm-drawer .body { padding: 14px var(--gutter); background: var(--paper); border-bottom: 0.5px solid var(--hair); }
+
+  /* 药物行 */
+  .med-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px var(--gutter);
+    background: var(--paper);
+    border-bottom: 0.5px solid var(--hair);
+  }
+  .med-row.done { opacity: 0.5; }
+  .med-row.overdue .med-time { color: var(--accent-red); font-weight: 700; }
+  .med-time {
+    font-family: var(--font-num); font-variant-numeric: tabular-nums;
+    font-size: 14px; font-weight: 700; color: var(--ink); flex-shrink: 0;
+    width: 50px;
+  }
+  .med-body { flex: 1; min-width: 0; }
+  .med-name {
+    font-family: var(--font-serif); font-size: 14px; font-weight: 700;
+    color: var(--ink); margin-bottom: 2px;
+  }
+  .med-sub {
+    font-family: var(--font-serif); font-size: 11px;
+    color: var(--ink-3); font-style: italic; letter-spacing: 0.5px;
+  }
+  .med-act { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+  .med-act button {
+    font-family: var(--font-serif); font-size: 12px; letter-spacing: 1px;
+    padding: 8px 14px; min-height: 36px;
+    background: var(--ink); color: var(--paper);
+    border: 0.5px solid var(--ink); border-radius: 0;
+  }
+  .med-act .skip {
+    background: transparent; color: var(--ink-3);
+    border-color: var(--hair); font-size: 11px;
+    padding: 4px 10px; min-height: 28px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>{{ pet.name if pet else '宠物' }}
+    {% if cage %}<span class="ukm-italic" style="font-size:13px;margin-left:6px;font-style:normal;background:var(--paper);border:0.5px solid var(--hair);padding:1px 6px;letter-spacing:1px;">{{ cage.code }}</span>{% endif %}
+  </h1>
+  <div class="meta">
+    <span class="ukm-num" style="font-style:normal;">{{ days }}</span>&nbsp;天
+    {% if cust %}<span class="sep">·</span><a href="/m/customer/{{ cust.id }}" style="color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ cust.name }}</a>{% endif %}
+    {% if h.reason %}<span class="sep">·</span>{{ h.reason }}{% endif %}
+  </div>
+</div>
+
+{# 漏药警示 #}
+{% if overdue_logs %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-red);">
+    <div class="ukm-card-title" style="color:var(--accent-red);">漏&nbsp;药&nbsp;&nbsp;{{ overdue_logs|length }}&nbsp;条</div>
+    {% for l in overdue_logs[:5] %}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:0.5px dashed var(--hair);">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--ink);">{{ l.prescription_item.drug_name }}</div>
+        <div style="font-size:11px;color:var(--accent-red);font-style:italic;">{{ l.scheduled_at.strftime('%m-%d %H:%M') }}</div>
+      </div>
+      <form method="post" action="/admin/medication-log/{{ l.id }}/check" style="margin:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+        <button type="submit" style="font-family:var(--font-serif);font-size:12px;letter-spacing:1.5px;padding:6px 14px;background:var(--ink);color:var(--paper);border:0.5px solid var(--ink);border-radius:0;">打&nbsp;勾</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# 最新交班一句话 #}
+{% if latest_handover %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-amber);">
+    <div class="ukm-card-title" style="color:var(--accent-amber);">
+      {{ shift_zh.get(latest_handover.shift, latest_handover.shift) }}&nbsp;最&nbsp;新&nbsp;交&nbsp;班
+      <span style="float:right;font-size:10px;color:var(--ink-3);font-style:italic;letter-spacing:0.5px;font-weight:400;">{{ latest_handover.recorded_at.strftime('%m-%d %H:%M') }}</span>
+    </div>
+    <div style="font-size:13px;color:var(--ink);line-height:1.6;">{{ latest_handover.content }}</div>
+    <div style="font-size:11px;color:var(--ink-3);font-style:italic;margin-top:6px;">— {{ latest_handover.recorded_by or '—' }}</div>
+  </div>
+</div>
+{% endif %}
+
+{# 今日发药 #}
+<div class="ukm-section-head" id="meds"><h2>今&nbsp;日&nbsp;发&nbsp;药&nbsp;&nbsp;·&nbsp;{{ today_logs|length }}</h2></div>
+
+{% if not today_logs %}
+<div class="ukm-empty"><div class="big">今&nbsp;天&nbsp;没&nbsp;有&nbsp;发&nbsp;药</div></div>
+{% else %}
+<div style="margin:0 calc(0px - var(--gutter)) 14px;">
+  {% for l in today_logs %}
+  {% set is_done = l.status == 'done' %}
+  {% set is_skip = l.status == 'skipped' %}
+  {% set is_overdue = l.status == 'pending' and l.scheduled_at <= now %}
+  <div class="med-row{% if is_done %} done{% endif %}{% if is_overdue %} overdue{% endif %}">
+    <div class="med-time">{{ l.scheduled_at.strftime('%H:%M') }}</div>
+    <div class="med-body">
+      <div class="med-name">{{ l.prescription_item.drug_name }}
+        {% if is_done %}<span class="ukm-italic" style="font-size:11px;margin-left:4px;color:var(--accent-green);">已勾</span>{% endif %}
+        {% if is_skip %}<span class="ukm-italic" style="font-size:11px;margin-left:4px;">跳过</span>{% endif %}
+      </div>
+      <div class="med-sub">
+        {% if l.prescription_item.dose_amount %}{{ l.prescription_item.dose_amount }}{{ l.prescription_item.dose_unit or '' }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{% endif %}
+        {{ l.prescription_item.frequency or '' }}
+        {% if l.prescription_item.drug_type %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ l.prescription_item.drug_type }}{% endif %}
+      </div>
+      {% if is_done and l.administered_by %}
+      <div class="med-sub" style="color:var(--accent-green);">
+        {{ l.administered_at.strftime('%H:%M') }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ l.administered_by }}{% if l.dose_actual %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ l.dose_actual }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="med-act">
+      {% if l.status == 'pending' %}
+      <form method="post" action="/admin/medication-log/{{ l.id }}/check" style="margin:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+        <button type="submit">打&nbsp;勾</button>
+      </form>
+      <form method="post" action="/admin/medication-log/{{ l.id }}/skip" style="margin:0;"
+            onsubmit="return confirm('跳过这一次？')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+        <button type="submit" class="skip">跳&nbsp;过</button>
+      </form>
+      {% else %}
+      <form method="post" action="/admin/medication-log/{{ l.id }}/uncheck" style="margin:0;"
+            onsubmit="return confirm('撤销打勾？')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+        <button type="submit" class="skip">撤&nbsp;销</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 快速记录抽屉 #}
+<div class="ukm-section-head"><h2>快&nbsp;速&nbsp;记&nbsp;录</h2></div>
+<div style="margin:0 calc(0px - var(--gutter)) 14px;">
+
+<details class="ukm-drawer">
+  <summary>体&nbsp;征&nbsp;&nbsp;T&nbsp;/&nbsp;H&nbsp;R&nbsp;/&nbsp;R&nbsp;R&nbsp;/&nbsp;体&nbsp;重</summary>
+  <div class="body">
+    <form method="post" action="/admin/inpatient/{{ h.id }}/vitals">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">体&nbsp;温&nbsp;°C</label><input class="ukm-input ukm-num" type="number" step="0.1" name="temperature_c" inputmode="decimal"/></div>
+        <div class="ukm-field"><label class="lbl">体&nbsp;重&nbsp;kg</label><input class="ukm-input ukm-num" type="number" step="0.01" name="weight_kg" inputmode="decimal"/></div>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">心&nbsp;率&nbsp;H&nbsp;R</label><input class="ukm-input ukm-num" type="number" name="hr" inputmode="numeric"/></div>
+        <div class="ukm-field"><label class="lbl">呼&nbsp;吸&nbsp;R&nbsp;R</label><input class="ukm-input ukm-num" type="number" name="rr" inputmode="numeric"/></div>
+      </div>
+      <div class="ukm-field"><textarea class="ukm-textarea" name="notes" placeholder="备注·可选" style="min-height:60px;"></textarea></div>
+      <button type="submit" class="ukm-btn block">保&nbsp;存&nbsp;体&nbsp;征</button>
+    </form>
+  </div>
+</details>
+
+<details class="ukm-drawer">
+  <summary>进&nbsp;食</summary>
+  <div class="body">
+    <form method="post" action="/admin/inpatient/{{ h.id }}/feeding">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+      <div class="ukm-field"><label class="lbl">食&nbsp;物&nbsp;种&nbsp;类</label><input class="ukm-input" type="text" name="food_type" placeholder="如：处方粮 i/d"/></div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">提&nbsp;供&nbsp;g</label><input class="ukm-input ukm-num" type="number" name="offered_g" inputmode="numeric"/></div>
+        <div class="ukm-field"><label class="lbl">吃&nbsp;了&nbsp;g</label><input class="ukm-input ukm-num" type="number" name="eaten_g" inputmode="numeric"/></div>
+      </div>
+      <div class="ukm-field">
+        <label class="lbl">食&nbsp;欲&nbsp;0&nbsp;-&nbsp;4</label>
+        <select class="ukm-select" name="appetite_score">
+          <option value="4">4&nbsp;·&nbsp;旺盛</option>
+          <option value="3" selected>3&nbsp;·&nbsp;正常</option>
+          <option value="2">2&nbsp;·&nbsp;一般</option>
+          <option value="1">1&nbsp;·&nbsp;差</option>
+          <option value="0">0&nbsp;·&nbsp;拒食</option>
+        </select>
+      </div>
+      <button type="submit" class="ukm-btn block">保&nbsp;存&nbsp;进&nbsp;食</button>
+    </form>
+  </div>
+</details>
+
+<details class="ukm-drawer">
+  <summary>I&nbsp;/&nbsp;O&nbsp;&nbsp;输&nbsp;液&nbsp;/&nbsp;排&nbsp;泄</summary>
+  <div class="body">
+    <form method="post" action="/admin/inpatient/{{ h.id }}/io">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#meds"/>
+      <div class="ukm-field">
+        <label class="lbl">类&nbsp;型</label>
+        <select class="ukm-select" name="direction">
+          <option value="in">摄&nbsp;入</option>
+          <option value="out">排&nbsp;出</option>
+        </select>
+      </div>
+      <div class="ukm-field"><label class="lbl">分&nbsp;类</label><input class="ukm-input" type="text" name="category" placeholder="iv_fluid / urine / vomit"/></div>
+      <div class="ukm-field"><label class="lbl">量&nbsp;m&nbsp;l</label><input class="ukm-input ukm-num" type="number" step="0.1" name="amount_ml" inputmode="decimal"/></div>
+      <button type="submit" class="ukm-btn block">保&nbsp;存&nbsp;I&nbsp;/&nbsp;O</button>
+    </form>
+  </div>
+</details>
+
+<details class="ukm-drawer">
+  <summary>交&nbsp;班&nbsp;一&nbsp;句&nbsp;话</summary>
+  <div class="body">
+    <form method="post" action="/admin/inpatient/{{ h.id }}/handover">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}"/>
+      <div class="ukm-field">
+        <label class="lbl">班&nbsp;次</label>
+        <select class="ukm-select" name="shift">
+          {% for k, v in shift_zh.items() %}
+          <option value="{{ k }}" {% if k == current_shift %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ukm-field"><textarea class="ukm-textarea" name="content" required placeholder="如：上午精神好，食欲一般，下午观察腹部红疹" style="min-height:80px;"></textarea></div>
+      <button type="submit" class="ukm-btn block">留&nbsp;言&nbsp;交&nbsp;班</button>
+    </form>
+  </div>
+</details>
+
+</div>
+
+{# 最近体征 #}
+{% if recent_vitals %}
+<div class="ukm-section-head"><h2>最&nbsp;近&nbsp;体&nbsp;征</h2></div>
+<div class="ukm-row-group">
+  {% for v in recent_vitals %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:13px;">
+        {% if v.temperature_c %}T&nbsp;<span class="ukm-num" style="font-style:normal;">{{ v.temperature_c }}</span>&nbsp;°C{% endif %}
+        {% if v.hr %}<span style="margin:0 5px;color:var(--ink-4);">·</span>HR&nbsp;<span class="ukm-num" style="font-style:normal;">{{ v.hr }}</span>{% endif %}
+        {% if v.rr %}<span style="margin:0 5px;color:var(--ink-4);">·</span>RR&nbsp;<span class="ukm-num" style="font-style:normal;">{{ v.rr }}</span>{% endif %}
+        {% if v.weight_kg %}<span style="margin:0 5px;color:var(--ink-4);">·</span><span class="ukm-num" style="font-style:normal;">{{ v.weight_kg }}</span>&nbsp;kg{% endif %}
+      </div>
+      <div class="ukm-row-sub">{{ v.recorded_at.strftime('%m-%d %H:%M') }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ v.recorded_by or '—' }}{% if v.notes %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ v.notes|truncate(20) }}{% endif %}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/inpatient/{{ h.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;·&nbsp;换&nbsp;笼&nbsp;/&nbsp;出&nbsp;院</a>
+</div>
+
+{% endblock %}
