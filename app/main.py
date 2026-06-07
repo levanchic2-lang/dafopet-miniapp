@@ -1224,6 +1224,19 @@ def _time_to_minutes(t: str) -> int:
     return int(h) * 60 + int(m)
 
 
+_BEAUTY_TRACK = {"beauty", "grooming", "washcare"}
+_MEDICAL_TRACK = {"tnr", "surgery", "outpatient"}
+
+
+def _appt_track(category: str) -> str:
+    """预约线归类：美容线 vs 医疗线（不同员工不同场地，两线并行不互相挡）。"""
+    if category in _BEAUTY_TRACK:
+        return "beauty"
+    if category in _MEDICAL_TRACK:
+        return "medical"
+    return "other"
+
+
 def _check_appointment_conflict(
     db: "Session",
     store: str,
@@ -1231,8 +1244,16 @@ def _check_appointment_conflict(
     appointment_time: str,
     duration_minutes: int,
     exclude_id: int | None = None,
+    category: str = "",
 ) -> "Appointment | None":
-    """检查同门店同日是否存在时间重叠的预约（排除已取消/爽约）。重叠则返回冲突预约记录，否则返回 None。"""
+    """检查同门店同日同业务线是否存在时间重叠的预约（排除已取消/爽约）。
+    业务线划分：
+      - 美容线：beauty / grooming / washcare（美容师独立场地）
+      - 医疗线：tnr / surgery / outpatient（医生独立场地）
+    跨线并行不冲突。
+    重叠返回冲突记录，否则返回 None。
+    """
+    new_track = _appt_track(category)
     q = (
         db.query(Appointment)
         .filter(
@@ -1247,6 +1268,9 @@ def _check_appointment_conflict(
     new_start = _time_to_minutes(appointment_time)
     new_end = new_start + duration_minutes
     for appt in existing:
+        # 跨线并行 → 不挡
+        if new_track and _appt_track(appt.category) != new_track:
+            continue
         a_start = _time_to_minutes(appt.appointment_time)
         a_end = a_start + appt.duration_minutes
         if new_start < a_end and new_end > a_start:
@@ -4961,6 +4985,7 @@ async def admin_appointment_create(
             appointment_date=str(fields["appointment_date"]),
             appointment_time=str(fields["appointment_time"]),
             duration_minutes=int(fields["duration_minutes"]),
+            category=str(fields["category"]),
         )
         if conflict:
             raise HTTPException(
@@ -5236,6 +5261,7 @@ async def admin_appointment_reschedule(
         appointment_time=new_time,
         duration_minutes=target_duration,
         exclude_id=appointment_id,
+        category=row.category,
     )
     if conflict:
         return _admin_appointment_redirect(
@@ -5710,6 +5736,7 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
         appointment_date=str(fields["appointment_date"]),
         appointment_time=str(fields["appointment_time"]),
         duration_minutes=int(fields["duration_minutes"]),
+        category=str(fields["category"]),
     )
     if conflict:
         raise HTTPException(
