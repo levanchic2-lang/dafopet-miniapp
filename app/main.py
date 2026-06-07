@@ -2359,11 +2359,19 @@ def _admin_appointment_redirect_base(redirect_after: str) -> str:
         return "/admin/appointments"
     if val == "calendar":
         return "/admin/calendar"
+    if val == "mobile":
+        return "/m/appointments"
+    if val == "mobile_today":
+        return "/m"
     # 从客户档案进来：return_to=customer:123 → 跳回 /admin/customers/123
     if val.startswith("customer:"):
         cid = val.split(":", 1)[1]
         if cid.isdigit():
             return f"/admin/customers/{cid}"
+    if val.startswith("mobile_customer:"):
+        cid = val.split(":", 1)[1]
+        if cid.isdigit():
+            return f"/m/customer/{cid}"
     return "/admin"
 
 
@@ -5023,9 +5031,14 @@ async def admin_appointment_create(
             },
         )
         db.commit()
+        # /m 路由用 msg/err；admin 路由保持 appointment_ok/err 兼容现有锚点
+        if redirect_base.startswith("/m"):
+            return RedirectResponse(redirect_base + "?msg=" + quote(f"预约 #{row.id} 已创建", safe=""), status_code=303)
         return RedirectResponse(redirect_base + f"?appointment_ok=create#appt-{row.id}", status_code=303)
     except HTTPException as e:
         db.rollback()
+        if redirect_base.startswith("/m"):
+            return RedirectResponse(redirect_base + "?err=" + quote(str(e.detail)[:160], safe=""), status_code=303)
         return RedirectResponse(
             redirect_base + "?appointment_err=" + quote(str(e.detail)[:160], safe=""),
             status_code=303,
@@ -22895,6 +22908,116 @@ async def m_invoice_detail(inv_id: int, request: Request, db: Session = Depends(
         "coupon_kind_zh": _COUPON_KIND_ZH,
     })
     return templates.TemplateResponse(request, "m_uk/invoice_detail.html", ctx)
+
+
+@app.get("/m/appointments", response_class=HTMLResponse)
+async def m_appointments_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    scope: str = "today",   # today / week / pending / all
+    d: str = "",            # 指定日期
+):
+    """预约列表：今日/本周/待确认/全部 + 搜索"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/appointments", status_code=303)
+    store_short = _get_admin_store(request)
+    store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    today_str = d.strip() or datetime.utcnow().strftime("%Y-%m-%d")
+    from datetime import datetime as _dt, timedelta as _td
+    today_dt = _dt.strptime(today_str, "%Y-%m-%d")
+    week_end_str = (today_dt + _td(days=6)).strftime("%Y-%m-%d")
+
+    base = db.query(Appointment).order_by(
+        Appointment.appointment_date.asc(),
+        Appointment.appointment_time.asc(),
+    )
+    if store_short:
+        base = base.filter(or_(Appointment.store == store_short, Appointment.store == store_full))
+
+    if scope == "today":
+        base = base.filter(Appointment.appointment_date == today_str)
+    elif scope == "week":
+        base = base.filter(Appointment.appointment_date >= today_str,
+                            Appointment.appointment_date <= week_end_str)
+    elif scope == "pending":
+        base = base.filter(Appointment.status == AppointmentStatus.pending.value)
+
+    # 默认排除取消 / 拒绝 / 爽约
+    if scope != "all":
+        base = base.filter(Appointment.status.notin_(["cancelled", "rejected", "no_show"]))
+
+    if q:
+        base = base.filter(or_(
+            Appointment.customer_name.ilike(f"%{q}%"),
+            Appointment.phone.ilike(f"%{q}%"),
+            Appointment.pet_name.ilike(f"%{q}%"),
+        ))
+
+    appts = base.limit(80).all()
+
+    # 按日期分组
+    grouped: dict[str, list] = {}
+    for a in appts:
+        grouped.setdefault(a.appointment_date or "—", []).append(a)
+    # 待确认计数
+    pending_count = db.query(Appointment).filter(
+        Appointment.status == AppointmentStatus.pending.value,
+    )
+    if store_short:
+        pending_count = pending_count.filter(or_(Appointment.store == store_short, Appointment.store == store_full))
+    pending_n = pending_count.count()
+
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({
+        "appts": appts, "grouped": grouped,
+        "scope": scope, "q": q, "d": today_str,
+        "pending_n": pending_n,
+    })
+    return templates.TemplateResponse(request, "m_uk/appointments.html", ctx)
+
+
+@app.get("/m/appointments/new", response_class=HTMLResponse)
+async def m_appointment_new_form(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = 0,
+    pet_id: int = 0,
+    category: str = "outpatient",
+):
+    """手机端新建预约表单"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/appointments/new", status_code=303)
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    pets = []
+    if cust:
+        pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
+    store_short = _get_admin_store(request) or (request.session.get("admin_store") or "")
+    is_super = (request.session.get("admin_role") == "superadmin")
+    # TNR 配额信息（如果当前选了某个店）
+    tnr_info = None
+    if store_short:
+        cfg = _get_tnr_store_config(db, store_short)
+        year_month = datetime.utcnow().strftime("%Y-%m")
+        used = _get_tnr_monthly_confirmed_count(db, store_short, year_month)
+        tnr_info = {
+            "accepting": bool(cfg.tnr_accepting),
+            "quota": cfg.tnr_monthly_quota,
+            "used": used,
+            "remaining": max(0, cfg.tnr_monthly_quota - used),
+            "year_month": year_month,
+        }
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({
+        "cust": cust, "pet": pet, "pets": pets,
+        "default_store": store_short,
+        "is_superadmin": is_super,
+        "category_default": category,
+        "tnr_info": tnr_info,
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+    })
+    return templates.TemplateResponse(request, "m_uk/appointment_new.html", ctx)
 
 
 @app.get("/m/exam-order/{order_id}", response_class=HTMLResponse)

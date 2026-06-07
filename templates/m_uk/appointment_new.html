@@ -1,0 +1,196 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}新建预约{% endblock %}
+{% block topbar_title %}新&nbsp;建&nbsp;预&nbsp;约{% endblock %}
+{% block topbar_back %}<a href="{% if cust %}/m/customer/{{ cust.id }}{% else %}/m/appointments{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{# 已选客户/宠物 #}
+{% if cust %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--ink);">
+    <div class="ukm-card-title">{{ cust.name or '—' }}</div>
+    <div class="ukm-card-sub">
+      <span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ cust.phone or '' }}</span>
+      {% if pet %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ pet.name }}{% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<form method="post" action="/admin/appointments/create" class="ukm-form" id="appt-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="redirect_after" value="mobile"/>
+  {% if cust %}<input type="hidden" name="customer_id" value="{{ cust.id }}"/>{% endif %}
+  {% if pet %}<input type="hidden" name="pet_id" value="{{ pet.id }}"/>{% endif %}
+
+  {# 类别 chips #}
+  <div class="ukm-section-head"><h2>类&nbsp;别<span class="req" style="color:var(--accent-red);margin-left:4px;">*</span></h2></div>
+  <div class="ukm-chips" style="margin-bottom:18px;">
+    <label class="ukm-chip {% if category_default == 'outpatient' %}checked{% endif %}">
+      <input type="radio" name="category" value="outpatient" {% if category_default == 'outpatient' %}checked{% endif %} onchange="onCategoryChange(this)"/>
+      门&nbsp;诊
+    </label>
+    <label class="ukm-chip {% if category_default == 'surgery' %}checked{% endif %}">
+      <input type="radio" name="category" value="surgery" {% if category_default == 'surgery' %}checked{% endif %} onchange="onCategoryChange(this)"/>
+      手&nbsp;术
+    </label>
+    <label class="ukm-chip {% if category_default == 'beauty' %}checked{% endif %}">
+      <input type="radio" name="category" value="beauty" {% if category_default == 'beauty' %}checked{% endif %} onchange="onCategoryChange(this)"/>
+      美&nbsp;容
+    </label>
+    <label class="ukm-chip {% if category_default == 'tnr' %}checked{% endif %}">
+      <input type="radio" name="category" value="tnr" {% if category_default == 'tnr' %}checked{% endif %} onchange="onCategoryChange(this)"/>
+      T&nbsp;N&nbsp;R
+    </label>
+  </div>
+
+  {# TNR 月度配额信息 #}
+  {% if tnr_info %}
+  <div id="tnr-quota-banner" class="ukm-card-group" style="display:{% if category_default == 'tnr' %}block{% else %}none{% endif %};">
+    <div class="ukm-card" style="border-left:2px solid {% if tnr_info.remaining > 0 and tnr_info.accepting %}var(--accent-green){% else %}var(--accent-red){% endif %};">
+      <div class="ukm-card-title" style="color:{% if tnr_info.remaining > 0 and tnr_info.accepting %}var(--accent-green){% else %}var(--accent-red){% endif %};">
+        T&nbsp;N&nbsp;R&nbsp;&nbsp;{{ tnr_info.year_month }}
+        {% if not tnr_info.accepting %}&nbsp;·&nbsp;暂&nbsp;停{% endif %}
+      </div>
+      <div class="ukm-card-sub">
+        本月已用&nbsp;<span class="ukm-num" style="font-style:normal;color:var(--ink-2);">{{ tnr_info.used }}</span>&nbsp;/&nbsp;<span class="ukm-num" style="font-style:normal;">{{ tnr_info.quota }}</span>
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        剩余&nbsp;<span class="ukm-num" style="font-style:normal;color:{% if tnr_info.remaining > 0 %}var(--accent-green){% else %}var(--accent-red){% endif %};">{{ tnr_info.remaining }}</span>&nbsp;个
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# 服务项目 #}
+  <div class="ukm-field">
+    <label class="lbl">服&nbsp;务&nbsp;项&nbsp;目<span class="req">*</span></label>
+    <input class="ukm-input" type="text" name="service_name" required
+           placeholder="例：常规门诊 / 公猫绝育 / 全身洗剪" maxlength="120"/>
+  </div>
+
+  {# 客户/宠物（仅未预填时） #}
+  {% if not cust %}
+  <div class="ukm-row2">
+    <div class="ukm-field">
+      <label class="lbl">客&nbsp;户&nbsp;姓&nbsp;名<span class="req">*</span></label>
+      <input class="ukm-input" type="text" name="customer_name" required maxlength="120" placeholder="王女士"/>
+    </div>
+    <div class="ukm-field">
+      <label class="lbl">手&nbsp;机&nbsp;号<span class="req">*</span></label>
+      <input class="ukm-input ukm-mono" type="tel" name="phone" required inputmode="numeric" maxlength="40"/>
+    </div>
+  </div>
+  <div class="ukm-field">
+    <label class="lbl">宠&nbsp;物&nbsp;名<span class="req">*</span></label>
+    <input class="ukm-input" type="text" name="pet_name" required maxlength="120"/>
+  </div>
+  {% else %}
+  {# 已预填客户：把字段塞进 hidden inputs（POST 路由还是要这些字段） #}
+  <input type="hidden" name="customer_name" value="{{ cust.name }}"/>
+  <input type="hidden" name="phone" value="{{ cust.phone }}"/>
+  <input type="hidden" name="pet_name" value="{{ pet.name if pet else '' }}"/>
+  {% endif %}
+
+  <div class="ukm-field">
+    <label class="lbl">宠&nbsp;物&nbsp;性&nbsp;别</label>
+    <div class="ukm-chips">
+      <label class="ukm-chip checked"><input type="radio" name="pet_gender" value="unknown" checked/>未&nbsp;知</label>
+      <label class="ukm-chip"><input type="radio" name="pet_gender" value="male"/>公</label>
+      <label class="ukm-chip"><input type="radio" name="pet_gender" value="female"/>母</label>
+    </div>
+  </div>
+
+  {# 门店 #}
+  <div class="ukm-field">
+    <label class="lbl">门&nbsp;店<span class="req">*</span></label>
+    {% if is_superadmin %}
+    <select class="ukm-select" name="store" required>
+      {% if not default_store %}<option value="" disabled selected>— 选择门店 —</option>{% endif %}
+      <option value="东环店" {% if default_store == '东环店' %}selected{% endif %}>东环店</option>
+      <option value="横岗店" {% if default_store == '横岗店' %}selected{% endif %}>横岗店</option>
+    </select>
+    {% else %}
+    <input class="ukm-input" type="text" value="{{ default_store }}" disabled style="color:var(--ink-3);"/>
+    <input type="hidden" name="store" value="{{ default_store }}"/>
+    {% endif %}
+  </div>
+
+  <div class="ukm-row2">
+    <div class="ukm-field">
+      <label class="lbl">日&nbsp;期<span class="req">*</span></label>
+      <input class="ukm-input" type="date" name="appointment_date" required value="{{ today }}"/>
+    </div>
+    <div class="ukm-field">
+      <label class="lbl">时&nbsp;间<span class="req">*</span></label>
+      <select class="ukm-select" name="appointment_time" required>
+        {% for h in range(8, 22) %}
+          {% for m in [0, 15, 30, 45] %}
+            {% set hh = '%02d' % h %}
+            {% set mm = '%02d' % m %}
+            <option value="{{ hh }}:{{ mm }}" {% if hh == '10' and mm == '00' %}selected{% endif %}>{{ hh }}:{{ mm }}</option>
+          {% endfor %}
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">时&nbsp;长&nbsp;（分钟）</label>
+    <div class="ukm-chips">
+      {% for m in [15, 30, 45, 60, 90, 120] %}
+      <label class="ukm-chip {% if m == 30 %}checked{% endif %}">
+        <input type="radio" name="duration_minutes" value="{{ m }}" {% if m == 30 %}checked{% endif %}/>
+        {{ m }}
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">备&nbsp;注&nbsp;（可选）</label>
+    <textarea class="ukm-textarea" name="notes" placeholder="可空" style="min-height:64px;"></textarea>
+  </div>
+
+  {# TNR 关联申请编号 #}
+  <div class="ukm-field" id="tnr-related-field" style="display:{% if category_default == 'tnr' %}block{% else %}none{% endif %};">
+    <label class="lbl">关&nbsp;联&nbsp;T&nbsp;N&nbsp;R&nbsp;申&nbsp;请&nbsp;编&nbsp;号</label>
+    <input class="ukm-input ukm-num" type="text" name="related_application_id" inputmode="numeric" placeholder="可空"/>
+    <div class="hint">小程序申请的 #编号；自建可空</div>
+  </div>
+
+  <div class="ukm-btn-row">
+    <a href="{% if cust %}/m/customer/{{ cust.id }}{% else %}/m/appointments{% endif %}" class="ukm-btn ghost block">取&nbsp;消</a>
+    <button type="submit" class="ukm-btn block">创&nbsp;建&nbsp;预&nbsp;约</button>
+  </div>
+</form>
+
+<script>
+function onCategoryChange(input) {
+  // chip 视觉切换
+  document.querySelectorAll('input[name="category"]').forEach(r => {
+    r.closest('.ukm-chip').classList.toggle('checked', r.checked);
+  });
+  const v = input.value;
+  const isTnr = (v === 'tnr');
+  const banner = document.getElementById('tnr-quota-banner');
+  if (banner) banner.style.display = isTnr ? 'block' : 'none';
+  document.getElementById('tnr-related-field').style.display = isTnr ? 'block' : 'none';
+}
+
+// chip 通用切换（用于性别 / 时长 chip）
+document.querySelectorAll('.ukm-chip').forEach(chip => {
+  const radio = chip.querySelector('input[type="radio"]');
+  if (radio) {
+    radio.addEventListener('change', () => {
+      // 同 name 的全部清掉 checked，把当前的加上
+      const name = radio.name;
+      document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+        r.closest('.ukm-chip').classList.toggle('checked', r.checked);
+      });
+    });
+  }
+});
+</script>
+
+{% endblock %}
