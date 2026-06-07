@@ -1,0 +1,47 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}套餐{% endblock %}
+{% block topbar_title %}套&nbsp;餐{% endblock %}
+{% block topbar_back %}<a href="/m/finance" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<form method="get" action="/m/packages">
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="客户名 / 手机号"/>
+    {% if q %}<a href="/m/packages" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+  </div>
+</form>
+
+{% if rows %}
+<div class="ukm-section-head"><h2>近&nbsp;{{ rows|length }}&nbsp;个</h2></div>
+<div class="ukm-row-group">
+  {% for r in rows %}
+  <a class="ukm-row" href="{% if r.cust %}/m/customer/{{ r.cust.id }}{% else %}#{% endif %}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ r.cp.package_name or '套餐' }}
+        {% if r.cust %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        已用&nbsp;<span class="ukm-num" style="font-style:normal;">{{ r.cp.used_count }}</span>&nbsp;/&nbsp;<span class="ukm-num" style="font-style:normal;">{{ r.cp.total_uses }}</span>&nbsp;次
+        {% if r.cp.expires_at %}<span style="margin:0 5px;color:var(--ink-4);">·</span>过期 {{ r.cp.expires_at.strftime('%Y-%m-%d') if r.cp.expires_at.strftime else r.cp.expires_at }}{% endif %}
+      </div>
+    </div>
+    {% if r.cp.status == 'active' %}<span class="ukm-pill green">在用</span>
+    {% elif r.cp.status == 'exhausted' %}<span class="ukm-pill">用完</span>
+    {% elif r.cp.status == 'expired' %}<span class="ukm-pill amber">已过期</span>
+    {% else %}<span class="ukm-pill">{{ r.cp.status }}</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty"><div class="big">无&nbsp;套&nbsp;餐</div></div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/packages" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;·&nbsp;售&nbsp;套&nbsp;餐</a>
+</div>
+
+{% endblock %}

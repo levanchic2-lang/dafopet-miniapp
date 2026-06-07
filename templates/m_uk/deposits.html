@@ -1,0 +1,57 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}押金{% endblock %}
+{% block topbar_title %}押&nbsp;金{% endblock %}
+{% block topbar_back %}<a href="/m/finance" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-chips" style="margin-bottom:14px;">
+  <a class="ukm-chip {% if status == 'active' %}checked{% endif %}" href="/m/deposits?status=active{% if q %}&q={{ q|urlencode }}{% endif %}">在&nbsp;持&nbsp;有</a>
+  <a class="ukm-chip {% if status == 'all' %}checked{% endif %}" href="/m/deposits?status=all{% if q %}&q={{ q|urlencode }}{% endif %}">全&nbsp;部</a>
+</div>
+
+<form method="get" action="/m/deposits">
+  <input type="hidden" name="status" value="{{ status }}"/>
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="客户名 / 手机号"/>
+    {% if q %}<a href="/m/deposits?status={{ status }}" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+  </div>
+</form>
+
+{% if rows %}
+<div class="ukm-section-head"><h2>共&nbsp;{{ rows|length }}&nbsp;笔</h2></div>
+<div class="ukm-row-group">
+  {% for r in rows %}
+  <a class="ukm-row" href="{% if r.cust %}/m/customer/{{ r.cust.id }}{% else %}#{% endif %}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ deposit_category_zh.get(r.d.category, r.d.category or '押金') }}
+        {% if r.cust %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ r.d.created_at.strftime('%Y-%m-%d') if r.d.created_at else '—' }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        收&nbsp;<span class="ukm-num" style="font-style:normal;">¥{{ '%.0f'|format(r.d.amount or 0) }}</span>
+        {% if r.d.applied_amount and r.d.applied_amount > 0 %}<span style="margin:0 5px;color:var(--ink-4);">·</span>已抵&nbsp;<span class="ukm-num" style="font-style:normal;color:var(--ink-2);">¥{{ '%.0f'|format(r.d.applied_amount) }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="ukm-row-right ukm-num" style="color:{% if r.remaining > 0 %}var(--ink){% else %}var(--ink-3){% endif %};font-weight:600;">¥&nbsp;{{ '%.0f'|format(r.remaining) }}</div>
+    {% if r.d.status == 'held' %}<span class="ukm-pill" style="margin-left:6px;">持有</span>
+    {% elif r.d.status == 'partial_refund' %}<span class="ukm-pill amber" style="margin-left:6px;">部分</span>
+    {% elif r.d.status == 'refunded' %}<span class="ukm-pill green" style="margin-left:6px;">已退</span>
+    {% elif r.d.status == 'applied' %}<span class="ukm-pill green" style="margin-left:6px;">已用</span>
+    {% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty"><div class="big">无&nbsp;押&nbsp;金</div></div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/deposits" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;·&nbsp;收&nbsp;押&nbsp;金</a>
+</div>
+
+{% endblock %}

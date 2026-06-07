@@ -1,0 +1,46 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}驱虫{% endblock %}
+{% block topbar_title %}驱&nbsp;虫{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% set _dw_zh = {'internal':'体内','external':'体外','both':'体内外'} %}
+
+<form method="get" action="/m/dewormings">
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="客户名 / 手机号"/>
+    {% if q %}<a href="/m/dewormings" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+  </div>
+</form>
+
+{% if rows %}
+<div class="ukm-section-head"><h2>近&nbsp;{{ rows|length }}&nbsp;条</h2></div>
+<div class="ukm-row-group">
+  {% for r in rows %}
+  <a class="ukm-row" href="{% if r.pet %}/m/pet/{{ r.pet.id }}{% elif r.cust %}/m/customer/{{ r.cust.id }}{% else %}#{% endif %}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ r.d.product_name or '—' }}
+        <span class="ukm-italic" style="font-size:11px;margin-left:6px;">{{ _dw_zh.get(r.d.deworm_type, r.d.deworm_type or '') }}</span>
+      </div>
+      <div class="ukm-row-sub">
+        {{ r.pet.name if r.pet else '—' }}{% if r.cust %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.cust.name }}{% endif %}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.d.deworm_date or '—' }}
+        {% if r.d.next_due_date %}<span style="margin:0 5px;color:var(--ink-4);">·</span>下次 {{ r.d.next_due_date }}{% endif %}
+      </div>
+    </div>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty"><div class="big">无&nbsp;记&nbsp;录</div></div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/dewormings" class="ukm-btn hair block">桌&nbsp;面&nbsp;端</a>
+</div>
+
+{% endblock %}

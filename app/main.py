@@ -22976,6 +22976,199 @@ async def m_reports_revenue(
     return templates.TemplateResponse(request, "m_uk/revenue_report.html", ctx)
 
 
+@app.get("/m/vaccinations", response_class=HTMLResponse)
+async def m_vaccinations_list(request: Request, db: Session = Depends(get_db), q: str = ""):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/vaccinations", status_code=303)
+    store_short = _get_admin_store(request)
+    query = db.query(Vaccination).filter(Vaccination.status == "active").order_by(Vaccination.id.desc())
+    if store_short:
+        query = query.outerjoin(Pet, Pet.id == Vaccination.pet_id).filter(
+            or_(Pet.store == store_short, Pet.store == "", Pet.store == None)  # noqa: E711
+        )
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(Vaccination.customer_id.in_(cids))
+    items = query.limit(50).all()
+    rows = []
+    for v in items:
+        p = db.get(Pet, v.pet_id) if v.pet_id else None
+        c = db.get(Customer, v.customer_id) if v.customer_id else None
+        rows.append({"v": v, "pet": p, "cust": c})
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({"rows": rows, "q": q,
+                "title": "疫苗", "subtitle": "接种记录 · 到期提醒",
+                "back_url": "/m/medical"})
+    return templates.TemplateResponse(request, "m_uk/vaccinations.html", ctx)
+
+
+@app.get("/m/dewormings", response_class=HTMLResponse)
+async def m_dewormings_list(request: Request, db: Session = Depends(get_db), q: str = ""):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/dewormings", status_code=303)
+    store_short = _get_admin_store(request)
+    query = db.query(DewormingRecord).filter(DewormingRecord.status == "active").order_by(DewormingRecord.id.desc())
+    if store_short:
+        query = query.outerjoin(Pet, Pet.id == DewormingRecord.pet_id).filter(
+            or_(Pet.store == store_short, Pet.store == "", Pet.store == None)  # noqa: E711
+        )
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(DewormingRecord.customer_id.in_(cids))
+    items = query.limit(50).all()
+    rows = []
+    for d in items:
+        p = db.get(Pet, d.pet_id) if d.pet_id else None
+        c = db.get(Customer, d.customer_id) if d.customer_id else None
+        rows.append({"d": d, "pet": p, "cust": c})
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({"rows": rows, "q": q})
+    return templates.TemplateResponse(request, "m_uk/dewormings.html", ctx)
+
+
+@app.get("/m/sales", response_class=HTMLResponse)
+async def m_sales_list(request: Request, db: Session = Depends(get_db), q: str = ""):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/sales", status_code=303)
+    store_short = _get_admin_store(request)
+    query = db.query(SalesOrder).order_by(SalesOrder.id.desc())
+    if store_short:
+        query = query.filter(or_(SalesOrder.store == store_short, SalesOrder.store == ""))
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(SalesOrder.customer_id.in_(cids))
+    items = query.limit(50).all()
+    rows = []
+    for s in items:
+        c = db.get(Customer, s.customer_id) if s.customer_id else None
+        rows.append({"s": s, "cust": c})
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({"rows": rows, "q": q})
+    return templates.TemplateResponse(request, "m_uk/sales.html", ctx)
+
+
+@app.get("/m/packages", response_class=HTMLResponse)
+async def m_packages_list(request: Request, db: Session = Depends(get_db), q: str = ""):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/packages", status_code=303)
+    query = db.query(CustomerPackage).order_by(CustomerPackage.id.desc())
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(CustomerPackage.customer_id.in_(cids))
+    items = query.limit(50).all()
+    rows = []
+    for cp in items:
+        c = db.get(Customer, cp.customer_id) if cp.customer_id else None
+        rows.append({"cp": cp, "cust": c})
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({"rows": rows, "q": q})
+    return templates.TemplateResponse(request, "m_uk/packages.html", ctx)
+
+
+@app.get("/m/deposits", response_class=HTMLResponse)
+async def m_deposits_list(request: Request, db: Session = Depends(get_db), q: str = "",
+                          status: str = "active"):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/deposits", status_code=303)
+    query = db.query(Deposit).order_by(Deposit.id.desc())
+    if status == "active":
+        query = query.filter(Deposit.status.in_(["held", "partial_refund"]))
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(Deposit.customer_id.in_(cids))
+    items = query.limit(50).all()
+    rows = []
+    for d in items:
+        c = db.get(Customer, d.customer_id) if d.customer_id else None
+        remaining = max(0.0, float(d.amount or 0) - float(d.applied_amount or 0) - float(d.refunded_amount or 0))
+        rows.append({"d": d, "cust": c, "remaining": remaining})
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({"rows": rows, "q": q, "status": status,
+                "deposit_category_zh": _DEPOSIT_CATEGORY_ZH})
+    return templates.TemplateResponse(request, "m_uk/deposits.html", ctx)
+
+
+@app.get("/m/coupons", response_class=HTMLResponse)
+async def m_coupons_list(request: Request, db: Session = Depends(get_db), q: str = "",
+                         status: str = "issued"):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/coupons", status_code=303)
+    query = db.query(Coupon).order_by(Coupon.id.desc())
+    if status:
+        query = query.filter(Coupon.status == status)
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(or_(Coupon.customer_id.in_(cids), Coupon.customer_id == None))  # noqa: E711
+    items = query.limit(50).all()
+    rows = []
+    for c in items:
+        cust = db.get(Customer, c.customer_id) if c.customer_id else None
+        rows.append({"c": c, "cust": cust})
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({"rows": rows, "q": q, "status": status,
+                "coupon_kind_zh": _COUPON_KIND_ZH})
+    return templates.TemplateResponse(request, "m_uk/coupons.html", ctx)
+
+
+@app.get("/m/wallets", response_class=HTMLResponse)
+async def m_wallets_list(request: Request, db: Session = Depends(get_db), q: str = ""):
+    """钱包列表 = 有余额的客户钱包；空时引导去客户搜索充值"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/wallets", status_code=303)
+    query = db.query(Wallet).filter(Wallet.balance > 0).order_by(Wallet.balance.desc())
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(Wallet.customer_id.in_(cids))
+    items = query.limit(50).all()
+    rows = []
+    for w in items:
+        c = db.get(Customer, w.customer_id) if w.customer_id else None
+        rows.append({"w": w, "cust": c})
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({"rows": rows, "q": q})
+    return templates.TemplateResponse(request, "m_uk/wallets.html", ctx)
+
+
+@app.get("/m/consents", response_class=HTMLResponse)
+async def m_consents_list(request: Request, db: Session = Depends(get_db), q: str = "",
+                          status: str = ""):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/consents", status_code=303)
+    store_short = _get_admin_store(request)
+    query = db.query(ConsentTask).order_by(ConsentTask.id.desc())
+    if store_short:
+        query = query.filter(or_(ConsentTask.store == store_short, ConsentTask.store == ""))
+    if status:
+        query = query.filter(ConsentTask.status == status)
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        query = query.filter(ConsentTask.customer_id.in_(cids))
+    items = query.limit(50).all()
+    rows = []
+    for t in items:
+        c = db.get(Customer, t.customer_id) if t.customer_id else None
+        rows.append({"t": t, "cust": c})
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({"rows": rows, "q": q, "status": status})
+    return templates.TemplateResponse(request, "m_uk/consents.html", ctx)
+
+
 @app.get("/m/inventory", response_class=HTMLResponse)
 async def m_inventory_list(
     request: Request,

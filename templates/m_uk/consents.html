@@ -1,0 +1,54 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}医疗文书{% endblock %}
+{% block topbar_title %}医&nbsp;疗&nbsp;文&nbsp;书{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-chips" style="margin-bottom:14px;">
+  <a class="ukm-chip {% if status == 'pending' %}checked{% endif %}" href="/m/consents?status=pending{% if q %}&q={{ q|urlencode }}{% endif %}">待&nbsp;签</a>
+  <a class="ukm-chip {% if status == 'signed' %}checked{% endif %}" href="/m/consents?status=signed{% if q %}&q={{ q|urlencode }}{% endif %}">已&nbsp;签</a>
+  <a class="ukm-chip {% if not status %}checked{% endif %}" href="/m/consents{% if q %}?q={{ q|urlencode }}{% endif %}">全&nbsp;部</a>
+</div>
+
+<form method="get" action="/m/consents">
+  {% if status %}<input type="hidden" name="status" value="{{ status }}"/>{% endif %}
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="客户名 / 手机号"/>
+    {% if q %}<a href="/m/consents{% if status %}?status={{ status }}{% endif %}" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+  </div>
+</form>
+
+{% if rows %}
+<div class="ukm-section-head"><h2>共&nbsp;{{ rows|length }}&nbsp;份</h2></div>
+<div class="ukm-row-group">
+  {% for r in rows %}
+  <a class="ukm-row" href="/admin/consent-tasks/{{ r.t.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ r.t.template_name or '协议' }}
+        {% if r.cust %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ r.t.created_at.strftime('%Y-%m-%d') if r.t.created_at else '—' }}
+        {% if r.t.operator %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.t.operator }}{% endif %}
+      </div>
+    </div>
+    {% if r.t.status == 'pending' %}<span class="ukm-pill amber">待签</span>
+    {% elif r.t.status == 'signed' %}<span class="ukm-pill green">已签</span>
+    {% elif r.t.status == 'cancelled' %}<span class="ukm-pill">取消</span>
+    {% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty"><div class="big">无&nbsp;文&nbsp;书</div></div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/consent-templates" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;·&nbsp;模&nbsp;板</a>
+</div>
+
+{% endblock %}
