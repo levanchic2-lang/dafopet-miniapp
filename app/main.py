@@ -12991,11 +12991,19 @@ async def admin_so_create(request: Request, db: Session = Depends(get_db)):
                               "sales_order", order.id, operator, f"销售单#{order.id}")
     db.commit()
     # 同步收费单
+    inv = None
     if visit_id:
         _sync_visit_invoice(db, visit_id, operator)
     else:
-        _sync_sales_order_invoice(db, order.id, operator)
+        inv = _sync_sales_order_invoice(db, order.id, operator)
     db.commit()
+    # next_url：支持 {order_id} / {invoice_id} 占位（手机端跳收款页用）
+    nu_raw = str(form.get("next_url", "")).strip()
+    if nu_raw:
+        nu = nu_raw.replace("{order_id}", str(order.id))
+        nu = nu.replace("{invoice_id}", str(inv.id) if inv else "0")
+        fb = f"/admin/visits/{visit_id}" if visit_id else f"/admin/sales-orders/{order.id}"
+        return RedirectResponse(_safe_next(nu, fb), status_code=303)
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=销售单已创建" if visit_id else f"/admin/sales-orders/{order.id}?msg=销售单已创建·收银台已生成待收款单", status_code=303)
 
 
@@ -22856,6 +22864,30 @@ async def m_deworming_new(
     return templates.TemplateResponse(request, "m_uk/deworming_new.html", ctx)
 
 
+@app.get("/m/sales/new", response_class=HTMLResponse)
+async def m_sales_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = 0,
+    pet_id: int = 0,
+):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/sales/new", status_code=303)
+    cust = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    if pet and not cust:
+        cust = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    pets = []
+    if cust:
+        pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({
+        "cust": cust, "pet": pet, "pets": pets,
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+    })
+    return templates.TemplateResponse(request, "m_uk/sales_new.html", ctx)
+
+
 @app.get("/m/visit/{visit_id}/exam", response_class=HTMLResponse)
 async def m_exam_new(visit_id: int, request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
@@ -23843,6 +23875,52 @@ async def m_api_search_drug(
             "stock_qty": float(it.stock_qty or 0),
             "stock_level": stock_level,
             "is_controlled": bool(it.is_controlled),
+            "is_service": bool(it.is_service),
+        })
+    return {"results": results, "is_internal_pricing": is_internal}
+
+
+@app.get("/m/api/search-product")
+async def m_api_search_product(
+    request: Request,
+    q: str = "",
+    customer_id: int = 0,
+    db: Session = Depends(get_db),
+):
+    """销售单专用：全品类（药品/耗材/食品/用品/服务都允许），按操作门店过滤。"""
+    if not _admin_ok(request):
+        return {"results": []}
+    q = (q or "").strip()
+    if not q:
+        return {"results": []}
+    is_internal = False
+    if customer_id:
+        _c = db.get(Customer, customer_id)
+        is_internal = bool(_c and _c.is_internal)
+    store_short = _get_op_store(request)
+    query = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, store_short
+    ).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.name.ilike(f"%{q}%"),
+    ).order_by(InventoryItem.name).limit(15)
+    results = []
+    for it in query.all():
+        if it.is_service:
+            stock_level = "green"
+        elif (it.stock_qty or 0) <= 0:
+            stock_level = "red"
+        elif (it.stock_qty or 0) <= (it.low_stock_min or 0):
+            stock_level = "yellow"
+        else:
+            stock_level = "green"
+        eff_price = float(it.cost_price or 0) if is_internal else float(it.sell_price or 0)
+        results.append({
+            "id": it.id, "name": it.name,
+            "unit": it.unit or "",
+            "sell_price": eff_price,
+            "stock_qty": float(it.stock_qty or 0),
+            "stock_level": stock_level,
             "is_service": bool(it.is_service),
         })
     return {"results": results, "is_internal_pricing": is_internal}

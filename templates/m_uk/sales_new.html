@@ -1,0 +1,187 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}新建销售单{% endblock %}
+{% block topbar_title %}新&nbsp;建&nbsp;销&nbsp;售&nbsp;单{% endblock %}
+{% block topbar_back %}<a href="{% if cust %}/m/customer/{{ cust.id }}{% else %}/m/sales{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% if not cust %}
+<div class="ukm-empty">
+  <div class="big">先&nbsp;选&nbsp;客&nbsp;户</div>
+  <a href="/m/customers" style="color:var(--ink);border-bottom:0.5px solid var(--ink);">去搜客户</a>
+</div>
+
+{% else %}
+
+<div class="ukm-page-head">
+  <h1>{{ cust.name }}
+    {% if pet %}<span class="ukm-italic" style="font-size:14px;margin-left:6px;">{{ pet.name }}</span>{% endif %}
+  </h1>
+</div>
+
+<form method="post" action="/admin/sales-orders/create" class="ukm-form" id="so-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+  <input type="hidden" name="pet_id" id="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="order_date" value="{{ today }}"/>
+  <input type="hidden" name="status" value="pending"/>
+  <input type="hidden" name="next_url" value="/m/invoices/{invoice_id}"/>
+
+  {% if pets and pets|length > 1 %}
+  <div class="ukm-field">
+    <label class="lbl">关&nbsp;联&nbsp;宠&nbsp;物</label>
+    <div class="ukm-chips">
+      {% for p in pets %}
+      <button type="button" class="ukm-chip pet-chip {% if pet and p.id == pet.id %}checked{% endif %}"
+              data-pet-id="{{ p.id }}" onclick="pickPet(this)">{{ p.name or '未命名' }}</button>
+      {% endfor %}
+      <button type="button" class="ukm-chip pet-chip" data-pet-id="0" onclick="pickPet(this)">无</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="ukm-field">
+    <label class="lbl">搜&nbsp;商&nbsp;品</label>
+    <input class="ukm-input" type="search" id="prod-search" placeholder="≥2 字 · 药品 / 耗材 / 食品 / 用品 / 服务"
+           autocomplete="off"/>
+    <div id="prod-results" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="ukm-section-head"><h2>明&nbsp;细&nbsp;&nbsp;·&nbsp;<span id="picked-count">0</span></h2></div>
+
+  <div id="picked-list"></div>
+
+  <div id="empty-hint" class="ukm-empty" style="padding:20px 0;">
+    <div class="big">还&nbsp;没&nbsp;商&nbsp;品</div>
+    上方搜一下，点击结果即可加入
+  </div>
+
+  <div id="total-summary" style="display:none;margin:14px 0;padding:12px;background:var(--bg-elevated);border:0.5px solid var(--hair);font-family:var(--font-serif);">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">合&nbsp;计</span>
+      <span class="ukm-num" style="font-size:22px;font-weight:700;color:var(--ink);">¥&nbsp;<span id="grand-total">0.00</span></span>
+    </div>
+  </div>
+
+  <div class="ukm-btn-row">
+    <a href="/m/customer/{{ cust.id }}" class="ukm-btn ghost block">取&nbsp;消</a>
+    <button type="submit" class="ukm-btn block" id="submit-btn" disabled>创&nbsp;建&nbsp;并&nbsp;去&nbsp;收&nbsp;款</button>
+  </div>
+</form>
+
+<script>
+const CUST_ID = {{ cust.id }};
+const $ = (id) => document.getElementById(id);
+let picked = []; // [{id, name, unit, price, qty}]
+let rowIdx = 0;
+
+function pickPet(btn) {
+  document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('checked'));
+  btn.classList.add('checked');
+  $('pet_id').value = btn.dataset.petId;
+}
+
+function recalc() {
+  let total = 0;
+  picked.forEach(p => total += (p.price * p.qty));
+  $('grand-total').textContent = total.toFixed(2);
+  $('picked-count').textContent = picked.length;
+  $('total-summary').style.display = picked.length ? 'block' : 'none';
+  $('empty-hint').style.display = picked.length ? 'none' : 'block';
+  $('submit-btn').disabled = picked.length === 0;
+}
+
+function renderList() {
+  const html = picked.map((p, i) => `
+    <div class="ukm-card" style="margin-bottom:8px;padding:10px 12px;">
+      <input type="hidden" name="item_id_${i}" value="${p.id}"/>
+      <input type="hidden" name="item_name_${i}" value="${p.name.replace(/"/g, '&quot;')}"/>
+      <input type="hidden" name="item_type_${i}" value="product"/>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+        <div style="flex:1;font-family:var(--font-serif);font-size:14px;font-weight:600;">${p.name}</div>
+        <button type="button" onclick="removeRow(${i})" style="background:transparent;border:none;color:var(--accent-red);font-size:16px;padding:0 4px;cursor:pointer;">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <label class="lbl" style="font-size:10px;">单&nbsp;价&nbsp;¥</label>
+          <input class="ukm-input ukm-num" type="number" name="unit_price_${i}" value="${p.price.toFixed(2)}" step="0.01" min="0"
+                 oninput="updateRow(${i}, 'price', this.value)" inputmode="decimal"/>
+        </div>
+        <div>
+          <label class="lbl" style="font-size:10px;">数&nbsp;量${p.unit ? '&nbsp;(' + p.unit + ')' : ''}</label>
+          <input class="ukm-input ukm-num" type="number" name="quantity_${i}" value="${p.qty}" step="0.01" min="0.01"
+                 oninput="updateRow(${i}, 'qty', this.value)" inputmode="decimal"/>
+        </div>
+      </div>
+      <div style="margin-top:6px;text-align:right;font-family:var(--font-serif);font-size:12px;color:var(--ink-3);">
+        小计 <span class="ukm-num" style="color:var(--ink);font-weight:600;">¥&nbsp;${(p.price * p.qty).toFixed(2)}</span>
+      </div>
+    </div>
+  `).join('');
+  $('picked-list').innerHTML = html;
+  recalc();
+}
+
+function updateRow(i, key, val) {
+  const v = parseFloat(val) || 0;
+  picked[i][key] = v;
+  // 只更新合计，不重渲染（保住焦点）
+  let total = 0;
+  picked.forEach(p => total += (p.price * p.qty));
+  $('grand-total').textContent = total.toFixed(2);
+}
+
+function removeRow(i) {
+  picked.splice(i, 1);
+  renderList();
+}
+
+function addItem(it) {
+  // 若已加过同一品目 → qty + 1
+  const found = picked.find(p => p.id === it.id);
+  if (found) {
+    found.qty = parseFloat(found.qty) + 1;
+  } else {
+    picked.push({id: it.id, name: it.name, unit: it.unit || '', price: parseFloat(it.sell_price || 0), qty: 1});
+  }
+  renderList();
+  // 清搜索栏
+  $('prod-search').value = '';
+  $('prod-results').innerHTML = '';
+}
+
+let searchTimer = null;
+$('prod-search').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const q = $('prod-search').value.trim();
+  if (q.length < 2) { $('prod-results').innerHTML = ''; return; }
+  searchTimer = setTimeout(async () => {
+    const resp = await fetch('/m/api/search-product?customer_id=' + CUST_ID + '&q=' + encodeURIComponent(q));
+    const data = await resp.json();
+    const html = (data.results || []).map(r => {
+      const dot = r.stock_level === 'red' ? '●' : (r.stock_level === 'yellow' ? '●' : '●');
+      const dotColor = r.stock_level === 'red' ? 'var(--accent-red)' : (r.stock_level === 'yellow' ? 'var(--accent-amber)' : 'var(--accent-green)');
+      const stockLabel = r.is_service ? '服务' : (r.stock_qty > 0 ? '库存 ' + r.stock_qty + (r.unit || '') : '缺货');
+      return `
+        <div onclick='addItem(${JSON.stringify(r)})'
+             style="border:0.5px solid var(--hair);background:var(--paper);padding:10px 12px;margin-bottom:6px;cursor:pointer;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+            <div style="font-family:var(--font-serif);font-weight:600;font-size:14px;color:var(--ink);">${r.name}</div>
+            <div class="ukm-num" style="font-weight:700;color:var(--ink);">¥&nbsp;${r.sell_price.toFixed(2)}</div>
+          </div>
+          <div style="margin-top:4px;font-family:var(--font-serif);font-size:11px;color:var(--ink-3);letter-spacing:1px;">
+            <span style="color:${dotColor};">${dot}</span>&nbsp;${stockLabel}
+          </div>
+        </div>
+      `;
+    }).join('');
+    $('prod-results').innerHTML = html || '<div class="ukm-italic" style="padding:8px;font-size:12px;">无&nbsp;匹&nbsp;配</div>';
+  }, 180);
+});
+
+recalc();
+</script>
+
+{% endif %}
+
+{% endblock %}
