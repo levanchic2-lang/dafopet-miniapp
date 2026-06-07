@@ -50,7 +50,7 @@
  <th style="width:72px;">类型</th>
  <th>诊断 / 主诉</th>
  <th style="width:64px;">处理人</th>
- <th style="width:110px;">状态</th>
+ <th style="width:150px;">状态</th>
  <th style="text-align:right;width:380px;">操作</th>
  </tr>
  </thead>
@@ -110,7 +110,7 @@
   </td>
   <td data-label="处理人">{{ fu.assigned_to or '—' }}</td>
   <td data-label="状态">
-   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+   <div style="display:flex;align-items:center;gap:6px;white-space:nowrap;">
     <span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span>
     {% if fu.response %}
      <span style="font-size:.72rem;color:#10b981;letter-spacing:.5px;">{{ response_zh.get(fu.response, fu.response) }}</span>
