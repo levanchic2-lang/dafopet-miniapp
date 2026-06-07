@@ -22617,7 +22617,7 @@ async def m_visit_new(
         pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
     uname = request.session.get("admin_username") or ""
     default_vet = uname or ""
-    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "mode": "new", "v": None,
         "cust": cust, "pet": pet, "pets": pets, "appt": appt,
@@ -22639,7 +22639,7 @@ async def m_visit_edit_form(visit_id: int, request: Request, db: Session = Depen
         return RedirectResponse(f"/m/visit/{visit_id}?err=病历已结束，不可编辑", status_code=303)
     pet = db.get(Pet, v.pet_id) if v.pet_id else None
     cust = db.get(Customer, v.customer_id) if v.customer_id else None
-    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "mode": "edit", "v": v,
         "cust": cust, "pet": pet, "pets": [],
@@ -22672,7 +22672,7 @@ async def m_vaccination_new(
     ).filter(InventoryItem.category == "vaccine", InventoryItem.is_active == True).all()
     uname = request.session.get("admin_username") or ""
     default_vet = uname or ""
-    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "cust": cust, "pet": pet, "pets": pets,
         "vacc_items": vacc_items,
@@ -22704,7 +22704,7 @@ async def m_deworming_new(
     uname = request.session.get("admin_username") or ""
     u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
     default_vet = (u.display_name if u and u.display_name else uname) or ""
-    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "cust": cust, "pet": pet, "pets": pets,
         "deworm_items": deworm_items,
@@ -22736,7 +22736,7 @@ async def m_exam_new(visit_id: int, request: Request, db: Session = Depends(get_
     grouped = {"lab": [], "imaging": [], "microscopy": []}
     for it in exam_items:
         grouped.setdefault(it.category, []).append(it)
-    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "v": v, "pet": pet, "cust": cust,
         "grouped": grouped,
@@ -22846,7 +22846,7 @@ async def m_prescribe_new(visit_id: int, request: Request, db: Session = Depends
             Hospitalization.pet_id == v.pet_id,
             Hospitalization.status == "admitted",
         ).first() is not None
-    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "v": v, "pet": pet, "cust": cust,
         "templates_list": templates_list,
@@ -23047,7 +23047,7 @@ async def m_visit_detail(visit_id: int, request: Request, db: Session = Depends(
         Hospitalization.visit_id == visit_id
     ).first()
 
-    ctx = _m_ctx(request, db, active_tab="visits")
+    ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "v": v, "pet": pet, "cust": cust,
         "prescriptions": prescriptions,
