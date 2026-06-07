@@ -35,6 +35,7 @@ from app.models import (
     CustomerPackage, Coupon,
     Customer, Pet,
     RabiesVaccineRecord,
+    ExamOrder, ExamReport,
 )
 
 _STORE_SHORT_TO_FULL = {
@@ -122,6 +123,71 @@ def build_followup_today(db: Session, store_short: str) -> dict:
         "count": len(rows), "previews": items,
         "all_url": "/admin/follow-ups?status=due",
         "tone": "danger",
+    }
+
+
+def build_exam_report_pending(db: Session, store_short: str) -> dict:
+    """未出检查报告：检查单已开但缺少对应报告的项目。
+    粒度到「项」：一张检查单 6 项，其中 X 光/血常规 已上传，B 超 没上传 → 算 1 个待出。
+    若一张报告 item_label="" (无归属项)，视为通用报告覆盖全部项。
+    限近 30 天的检查单，避免老数据噪声。
+    """
+    import json as _json
+    cutoff = datetime.now() - timedelta(days=30)
+    q = db.query(ExamOrder).filter(
+        ExamOrder.status != "voided",
+        ExamOrder.created_at >= cutoff,
+    )
+    if store_short:
+        q = q.join(Visit, ExamOrder.visit_id == Visit.id, isouter=True)\
+             .join(Pet, Visit.pet_id == Pet.id, isouter=True)\
+             .filter(or_(Pet.store == store_short, Pet.store == None))
+    rows = q.order_by(ExamOrder.created_at.desc()).all()
+
+    pending: list[dict] = []
+    for eo in rows:
+        try:
+            items = _json.loads(eo.items_json or "[]")
+        except Exception:
+            items = []
+        # 没明细项的单子跳过（数据不全）
+        item_names = [(i.get("name") or "").strip() for i in items if (i.get("name") or "").strip()]
+        if not item_names:
+            continue
+        reports = db.query(ExamReport).filter(ExamReport.exam_order_id == eo.id).all()
+        reported_labels = {(r.item_label or "").strip() for r in reports}
+        # 如果有任何报告的 item_label 为空 → 视为通用，覆盖全部
+        has_generic = "" in reported_labels and reports
+        if has_generic:
+            continue
+        missing = [n for n in item_names if n not in reported_labels]
+        if not missing:
+            continue
+        pending.append({"eo": eo, "missing": missing})
+
+    # 老的先排前面（更紧迫）
+    pending.sort(key=lambda x: x["eo"].created_at or datetime.min)
+
+    items_preview = []
+    for p in pending[:3]:
+        eo = p["eo"]
+        visit = db.get(Visit, eo.visit_id) if eo.visit_id else None
+        cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+        pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+        date_str = eo.created_at.strftime("%m-%d") if eo.created_at else "—"
+        miss = " / ".join(p["missing"][:2])
+        if len(p["missing"]) > 2:
+            miss += f" 等 {len(p['missing'])} 项"
+        items_preview.append({
+            "label": f"{date_str}　{cust.name if cust else '—'}",
+            "sub": f"{pet.name if pet else '宠物'} · 缺：{miss}",
+            "url": f"/admin/exam-orders/{eo.id}",
+        })
+    return {
+        "key": "exam_reports_pending", "title": "未出检查报告", "icon": "file-text",
+        "count": len(pending), "previews": items_preview,
+        "all_url": "/admin/visits",
+        "tone": "warn",
     }
 
 
@@ -574,6 +640,7 @@ def build_workbench(db: Session, store_short: str = "") -> dict:
     urgent = [
         build_appt_today(db, store_short),
         build_followup_today(db, store_short),
+        build_exam_report_pending(db, store_short),
         build_consent_pending(db, store_short),
         build_rabies_pending(db, store_short),
         build_invoice_unpaid(db, store_short),
