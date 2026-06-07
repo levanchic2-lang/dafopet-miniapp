@@ -106,6 +106,77 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
   - 收款统计：`/admin/reports/revenue` 用 Chart.js 出日趋势/支付方式/门店分布，按 Payment 表聚合，可导出 Excel
   - 启动迁移：`app/database.py` 用 `CREATE TABLE IF NOT EXISTS` 风格幂等建表 + 索引
 
+## 近期迭代记录（2026-06）
+本会话内做的所有调整，按主题归档：
+
+### 跨门店数据隔离
+- 新增 `_get_op_store(request)`：与 `_get_admin_store` 区别 —— **不返回 ""**，超管也走 `session.admin_store`（让超管挂某店时只看该店库存）
+- 所有"开单类"表单（处方 / 检查单 / 销售单 / 美容单 / 疫苗 / 驱虫等）品目下拉只列**当前操作店**的 InventoryItem
+- 库存物理隔离：每个品目归属一家店；两店共用商品建两条独立记录（不再用 store_overrides；编辑时强制清空 store_overrides）
+
+### 客户/宠物管理
+- `Customer.phones_extra`：CSV 备用号；搜索支持主号 / 备用号 / 宠物名
+- **新建客户号码查重**：同 phone 已存在 → 阻止创建，跳转到已有档案（解决"同事不搜直接新建批量重号"问题）
+- **客户/宠物删除**：仅在**无任何业务记录**时可删（visit / appointment / invoice / vaccination / deworming / grooming / sales / wallet_tx / package / deposit / coupon / followup / consent / inpatient 全空）
+- **客户合并工具**：`/admin/customers/duplicates`（超管）列出同号客户，`_merge_customers()` 批量改 14 张表 FK + 审计日志
+- **预约新建时识别多宠**：原只识别一只 → 现在按 phone 拉全部 pets
+
+### 收费 / 支付（混合支付收尾）
+- **折扣只作用于未付部分**：`discount_base = max(0, subtotal - paid_sum)`；折扣率 / 抹零都按这个基数算（解决"用洗澡卡扣 75 后剩 55 还要打 8.8 折"问题）
+- **押金抵扣写 Payment 行**：method=deposit, ref_id=dep.id；并调 `_invoice_recompute_status`（之前只更新 `Deposit.applied_amount` → 单据显示金额没减）
+- **跨单合并结算**：`add-payment` 接 `extra_invoice_ids[]`，简单支付方式（现金/微信/支付宝/收钱吧/美团/三方）可跨单分摊；钱包 / 套餐 / 押金 / 券**仍单单结算**
+- `_other_unpaid_for_invoice()`：发票详情页右侧列同客户其他未付单
+- 收款区在 `payment_status in (unpaid, partial)` 都显示（之前 partial 隐藏）
+- "应付/已收/未收" 三联统计加 id，JS 即时更新
+- 套餐核销可选明细：`pkg_covered_item_ids[]` 勾选要抵扣的 InvoiceItem（防止套餐扣到不该扣的项目）
+
+### 钱包 / 押金 / 套餐
+- **押金余额**：客户档案钱包卡左 wallet 右"押金可用余额"（= held - applied）双列显示
+- **钱包余额调整**：超管 `/admin/wallets/{id}/adjust`（写 WalletTransaction kind=adjust + 审计日志，普通员工无此权限）
+- **旧系统套餐导入**：售套餐表单支持 method=external + 自定义购买日期 + 已用次数（带 75 元洗澡卡的客户可直接录"已用 5 次/共 10 次"）
+
+### 工作台（dashboard）
+- 删除：今日候诊卡（用户反馈"鸡肋"，撤回挂号路由）
+- 新增：**未出检查报告**卡 `build_exam_report_pending`
+  - 按 store 过滤 → 列 N 天内已开但未上传报告的 ExamOrder
+  - 跳过 `InventoryItem.requires_report == False` 的项目（保定费/拍片操作费等纯收费项）
+- 工作台所有卡片按 `Pet.store` / `Appointment.store` 关联过滤
+
+### 库存"无需出报告"标记（最新）
+- `InventoryItem.requires_report` Boolean 默认 True
+- 启动迁移自动 ALTER TABLE
+- 库存编辑表单加 checkbox「无需出报告（检查类纯收费项）」与 is_service / is_controlled 并排
+- create / edit POST 接 `report_exempt`：勾上 → `requires_report=False`
+- `build_exam_report_pending` 跳过该类项目
+- 部署后自动 SQL：`name LIKE %保定费% / %拍片费% / %操作费% / %辐射保定% / %麻醉保定%` 批量标 False
+- 已生效项目：#2522 辐射保定费
+
+### 美容单
+- 删除字段：start_time / end_time / body_size / coat_length（用户嫌冗余）
+- 新增字段：`GroomingOrder.assistant_name`（陪同助理）
+- 美容订单按服务项目拆 InvoiceItem（之前合并成"美容服务（3 项）"）
+
+### 接种
+- 疫苗表单"此次免费"+ "非狂犬"组合 → 红色警告 `⚠ 当前不是狂犬疫苗，确定要免费？`
+- type chip 切换到非狂犬时 JS 自动取消"免费"勾选
+
+### 预约
+- 新建预约支持智能号码识别（同客户多宠物全列）
+- 时间段下拉 96 选项（15 min 步进；原 `<input type="time" step="900">` 浏览器不遵守）
+- 取消后 `return_to` 回原路由
+- **小程序来源已取消预约不可删**；admin 来源可删（区分 `Appointment.source`）
+
+### 显微镜报告 / 报告 PDF
+- 新增 `MicroscopyReport` 模型 + 3 张模板（耳螨 / 真菌 / 寄生虫）
+- 报告导出 PDF：WeasyPrint，照片 Pillow 缩到 1000px JPEG 78%，`page-break-inside: avoid`
+- 页脚改用 `@page @bottom-center { content: ... }`（弃用 position:fixed，解决遮挡）
+- 服务器依赖：`apt install fonts-noto-cjk libpango-1.0-0 libpangoft2-1.0-0 libcairo2` + `pip install weasyprint`
+
+### Jinja2 常见坑 (重申)
+- **context dict 必须 `d['key']`**，不要 `d.key`（命中 `items/keys/values/get/pop/update` 返回 bound method 500）
+- wallet 用标量 `wallet_balance` 传，不要传 `wallet` 对象（undefined.balance 500）
+- 支付方式英文落库 → 模板顶部建 `pay_method_zh` 映射 11 种全中文
+
 ## TNR 业务规则
 - 每店每月最多 30 个已确认 TNR 预约（`TnrStoreConfig.tnr_monthly_quota`）
 - 爽约（no_show）≥3 次/月 → 封禁 90 天
@@ -190,6 +261,82 @@ python _test/shoot.py all
 python _test/shoot.py viewportcheck visit  # 单跑
 ```
 注意：`full_page=True` 截图会把 `position:fixed` 的 tab bar 画在初始 viewport 位置，看似遮挡内容，实际不是 bug——用 `full=False` 滚到底拍非全页确认。
+
+## 手机 PWA UK 重构（P0-P8 完整体系，覆盖原 M0-M6）
+**目标**：手机端从「现场快速动作」工具升级到「完整办公终端」，可手机办公全流程。同时彻底洗掉原 M0-M6 的 iOS-app 风（圆角/蓝色/emoji），改成与桌面 `uk_minimal.css` 同色板的衬线极简风。
+
+### 决策点（用户拍板）
+1. **覆盖式上线**：旧 `templates/m/*.html` 暂留作回滚兜底，新模板放 `templates/m_uk/*.html`，路由逐模块切；不走 `/m2/*` 灰度。
+2. **角色 tab 合并**：原医生/助理/美容师三套 tab bar 合并成统一 5 个：`今日 / 客户 / 医疗 / 财务 / 我`，按权限隐藏单按钮不隐藏整 tab。
+3. **收费单完整等同桌面**：混合支付 / 跨单合并 / 钱包 / 套餐 / 押金 / 优惠券 / 撤销全做，目标真正脱机办公。
+
+### 设计系统（`static/uk_m.css` ~600 行）
+与桌面 `uk_minimal.css` **严格同色板**，但栅格、字号、点击区按 375-414px 视口与 44pt 拇指热区重算：
+- **字体全衬线**：`Georgia, "Source Han Serif SC", serif` + `tabular-nums lining-nums`，body 15px
+- **色板**：`--ink` `#1a1a1a` / `--ink-2` `#4a4a4a` / `--ink-3` `#8a8a8a` / `--paper` `#fdfcf8` / `--bg` `#f4f1ec` / `--hair` `#d8d4cc`；3 暗警示 `--accent-red` `#7a2828` / `--accent-amber` `#6b4423` / `--accent-green` `#1d4d3a`
+- **0 圆角 0 阴影 0.5px hairline**；容器宽 = 屏宽 - 32px（gutter 16）
+- **底部 tab 高 56px**（拇指距 44pt + 余量），active = 顶部 1px hairline + 衬线加粗，纯文字+单字符 glyph（`·` `○` `◇` `¥` `▢`）
+- **常用类名**：`ukm-card`/`ukm-card-group`/`ukm-row`/`ukm-row-group`/`ukm-btn` (+ghost/hair/danger)/`ukm-chip` (active = `.checked`)/`ukm-kpi-grid`/`ukm-kpi`/`ukm-pill` (+ink/red/amber/green)/`ukm-search`/`ukm-empty`/`ukm-section-head`/`ukm-page-head`/`ukm-fineprint`/`ukm-num`/`ukm-mono`/`ukm-italic`
+- **iOS 日期输入框 min-width 132px 撑爆 grid** → 在 `*` 层加 `min-width:0; -webkit-appearance:none`
+
+### 路由骨架（`templates/m_uk/`）
+| 路由 | 模板 | 阶段 |
+|---|---|---|
+| `/m` | `home.html` | P0 |
+| `/m/medical` `/m/finance` `/m/me` | `medical_hub.html` `finance_hub.html` `me.html` | P0 |
+| `/m/customers` `/m/customers/new` `/m/customer/{id}` `/m/customer/{id}/pets/new` `/m/pet/{id}` | `customers*.html` `customer_*.html` `pet_*.html` | P1 |
+| `/m/visits` `/m/visit/{id}` `/m/visit/{id}/edit` `/m/visit/new` | `visits.html` `visit_detail.html` `visit_edit.html` | P2 |
+| `/m/visit/{id}/prescribe` `/m/dispensing` `/m/dispensing/{id}` `/m/visit/{id}/exam` `/m/exam-order/{id}` | `prescription_new.html` `dispensing_*.html` `exam_*.html` | P3 |
+| `/m/invoices` `/m/invoices/{id}` | `invoices.html` `invoice_detail.html` | P4 |
+| `/m/appointments` `/m/appointments/new` | `appointments.html` `appointment_new.html` | P5 |
+| `/m/inventory` `/m/inventory/{id}` | `inventory.html` `inventory_detail.html` | P6 |
+| `/m/customer/{id}/wallet/recharge` `/m/reports/revenue` | `wallet_recharge.html` `revenue_report.html` | P7 |
+| `/admin/hr` `/admin/admin-users` `/admin/tnr-config` | 链接到桌面端 | P8 |
+
+旧 `/m/doctor` `/m/nurse` `/m/groomer` 改为 303 跳 `/m`（兼容性），原 M5 圣杯逻辑完整保留只换皮（药品搜索 180ms / chip 途径频次 / 自动算量 / 库存红黄绿 / 模板套用 / 住院发药时刻表 / 底部固定栏合计）。
+
+### 9 阶段产出
+- **P0 基础设施**：`uk_m.css` + `_base.html` + `_tabbar.html` + 3 个 hub（home/medical/finance/me）+ 替换 `_m_ctx` 注入
+- **P1 客户/宠物 CRUD**：新建客户/宠物表单 + 桌面 `/admin/customers/create` `/admin/customers/{id}/pets/add` 加 `next_url` 参数（含 `{id}` 占位）
+- **P2 病历 + SOAP**：列表 3 视角 (今日/我的/全部) + 详情 SOAP 分段 (S/O/A/P) + 编辑共用模板 + 客户搜索内联 JSON API
+- **P3 处方 + 检查单**：5 个模板按 UK 重做，M5 圣杯保留全部 JS 只换皮；exam_detail 加 `has_microscopy` 显示「显微镜报告」入口
+- **P4 收费单 + 多笔混合支付**：列表 4 格 KPI + 3 状态 chip；详情 3 联 KPI (应付/已收/未收) + 10 种支付方式 chip 切换 + 5 种 sub-panel（流水号/钱包余额/套餐选+明细/押金选/券选）+ 跨单合并自动累加金额 + 撤销按钮（超管）；桌面 `add-payment` `payments/{id}/void` 加 `next_url`
+- **P5 预约 + TNR 配额校验**：列表 4 chip 视角按日期分组 + 状态多色 pill；新建类别 chip + TNR 实时显示月度配额 banner (绿/红边框)；POST 走桌面 `/admin/appointments/create` + `redirect_after=mobile/mobile_customer:{id}` 新增目标 + 重定向到 `/m` 时改用 `msg/err` 参数
+- **P6 库存**：列表 4 格 KPI (低/零/效期/管控) + 5 chip 筛选 + 库存量颜色编码 (零=红/低=琥珀)；详情 3 联 KPI + 批次 (过期红/将到期琥珀) + 流水 (入绿/出红/调整灰)；拍照入库走桌面 `/admin/inventory/import-photo` 已 UK 化
+- **P7 财务（精简版）**：钱包充值 (quick amount chip 100/200/500/1000/2000/5000) → 走桌面生成未付收费单 → 跳收款页；收款日报 4 时段 + 按支付方式分组 + 衬线 bar 占比图（不依赖 Chart.js）
+- **P8 HR / 权限 / TNR 配额**：低频设置型功能直接链桌面端（`/admin/hr` `/admin/admin-users` `/admin/tnr-config`），避免双套 UI 维护
+
+### 后端复用模式（next_url 体系）
+不重写业务逻辑：所有写操作走桌面 `/admin/...` POST + `next_url={id}` 占位回跳。本轮新加 `next_url` 参数的路由：
+- `/admin/customers/create`（含同号自动跳已有档案场景）
+- `/admin/customers/{id}/pets/add`
+- `/admin/invoices/{id}/add-payment`
+- `/admin/invoices/{id}/payments/{pid}/void`
+- `/admin/appointments/create`（通过 `redirect_after=mobile/mobile_customer:{id}` 触发，目标判断是 `/m` 时用 `msg/err`）
+
+### 统一上下文 `_m_ctx`
+```python
+{request, csrf_token, mobile_role, active_tab, admin_username, admin_role,
+ admin_store (过滤用), admin_store_label (显示用)}
+```
+新 tabbar 不再依赖 `mobile_role`，纯按 `active_tab` 决定高亮（今日/客户/医疗/财务/我）。旧 M3 教训依然有效：`admin_store_label` 显示，`admin_store` 用于过滤；两个变量混用会导致同一用户在不同页面看到不同门店标签。
+
+### Jinja2 dict 陷阱（依旧）
+context dict 必须 `d['key']`，不要 `d.key`。本轮 invoice detail 的 `exam_rows = [{"eo":..., "items":[...]}]` 在 visit_detail 模板里继续遵守 `r['items']` 而非 `r.items`。
+
+### 截图自检脚本（每阶段一个）
+- `_test/shoot_uk.py` (P0+P1)
+- `_test/shoot_uk_p2.py` ~ `_test/shoot_uk_p7.py`
+- 每阶段保存到 `_test/shots_uk_p{N}/`，Playwright iPhone 13 视口截图 → 肉眼复核 → 修溢出/英文/分类映射 → 再截直到干净
+- 修过的典型 bug：home 预约类别 `washcare/grooming` 漏映射、me 末尾误留英文 "UK"、inventory 详情 category 显示英文（漏传 categories ctx）、invoice 明细 `amount → subtotal` 字段名错
+
+### 旧 `templates/m/*.html` 处理策略
+旧 M1-M6 模板 28 个**暂不删**，路由全部已切到 `m_uk/`，旧模板成孤儿但保留作回滚保险。下个迭代周期（实际跑 1-2 个月稳定）可统一删除。
+
+### 模型依赖（Inventory 等）
+- `InventoryItem.requires_report`：检查类纯收费项（保定费/拍片操作费）勾上 → 工作台「未出检查报告」不再误报；详情页显示「无需出报告 是」
+- `InventoryItem.aliases`：JSON 数组（上限 8 条），拍照入库累加时自动追加进货单标准名/厂家名做 fuzzy 匹配
+- `InventoryItem.requires_report`、`is_controlled`、`is_service` 三个 boolean flag 互不影响
 
 ## 小程序关键页面
 - `miniapp/pages/index/`：TNR 申请表单，多城市地址选择（深圳/东莞/惠州）
