@@ -1,0 +1,65 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}病历 · 大风动物医院{% endblock %}
+{% block topbar_title %}病&nbsp;历{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/m/visit/new">+&nbsp;新&nbsp;建</a>
+{% endblock %}
+
+{% block content %}
+
+{# 视角切换 chips #}
+<div class="ukm-chips" style="margin-bottom:14px;">
+  <a class="ukm-chip {% if scope == 'today' %}checked{% endif %}" href="/m/visits?scope=today{% if q %}&q={{ q|urlencode }}{% endif %}">今&nbsp;日</a>
+  <a class="ukm-chip {% if scope == 'mine' %}checked{% endif %}" href="/m/visits?scope=mine{% if q %}&q={{ q|urlencode }}{% endif %}">我&nbsp;的</a>
+  <a class="ukm-chip {% if scope == 'all' %}checked{% endif %}" href="/m/visits?scope=all{% if q %}&q={{ q|urlencode }}{% endif %}">全&nbsp;部</a>
+</div>
+
+<form method="get" action="/m/visits">
+  <input type="hidden" name="scope" value="{{ scope }}"/>
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" name="q" value="{{ q }}"
+           placeholder="客户名 / 手机号 / 病历号"/>
+    {% if q %}<a href="/m/visits?scope={{ scope }}" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+  </div>
+</form>
+
+{% if rows %}
+<div class="ukm-section-head">
+  <h2>{{ '今日 ' + today_str if scope == 'today' else ('我开的' if scope == 'mine' else '最近') }}&nbsp;·&nbsp;{{ rows|length }}&nbsp;条</h2>
+</div>
+
+<div class="ukm-row-group">
+  {% for r in rows %}
+  <a class="ukm-row" href="/m/visit/{{ r.v.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">
+        #{{ r.v.id }}
+        {% if r.pet %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.pet.name }}{% endif %}
+        {% if r.cust %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ r.v.visit_date or '—' }}
+        {% if r.v.vet_name %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.v.vet_name }}{% endif %}
+        {% if r.v.chief_complaint %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.v.chief_complaint[:22] }}{% endif %}
+      </div>
+    </div>
+    {% if r.v.status == 'closed' %}<span class="ukm-pill">已结束</span>{% else %}<span class="ukm-pill amber">进行中</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;病&nbsp;历</div>
+  {% if q %}没有匹配「{{ q }}」的病历{% elif scope == 'today' %}今日还没开病历{% elif scope == 'mine' %}你还没开病历{% else %}还没开过病历{% endif %}
+</div>
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/m/visit/new" class="ukm-btn block">+&nbsp;新&nbsp;建&nbsp;病&nbsp;历</a>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,193 @@
+{% extends "m_uk/_base.html" %}
+{% set is_edit = (mode == 'edit') %}
+{% block title %}{% if is_edit %}编辑病历 #{{ v.id }}{% else %}新建病历{% endif %}{% endblock %}
+{% block topbar_title %}{% if is_edit %}编&nbsp;辑&nbsp;病&nbsp;历{% else %}新&nbsp;建&nbsp;病&nbsp;历{% endif %}{% endblock %}
+{% block topbar_back %}
+<a href="{% if is_edit %}/m/visit/{{ v.id }}{% elif cust %}/m/customer/{{ cust.id }}{% else %}/m/visits{% endif %}" class="ukm-topbar-back">‹</a>
+{% endblock %}
+
+{% block content %}
+
+<form method="post"
+      action="{% if is_edit %}/admin/visits/{{ v.id }}/edit{% else %}/admin/visits/create{% endif %}"
+      class="ukm-form" id="vform">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  {% if not is_edit %}
+  <input type="hidden" name="customer_id" id="customer_id" value="{{ cust.id if cust else 0 }}"/>
+  <input type="hidden" name="pet_id"      id="pet_id"      value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="appointment_id" value="{{ appt.id if appt else 0 }}"/>
+  <input type="hidden" name="next_url" value="/m/visit/{id}"/>
+  {% else %}
+  <input type="hidden" name="pet_id" value="{{ v.pet_id or 0 }}"/>
+  <input type="hidden" name="next_url" value="/m/visit/{{ v.id }}"/>
+  {% endif %}
+
+  {# 客户/宠物搜索（仅新建且未预填） #}
+  {% if not is_edit and not cust %}
+  <div class="ukm-section-head"><h2>客&nbsp;户&nbsp;/&nbsp;宠&nbsp;物</h2></div>
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" id="cust-search" placeholder="手机号 / 姓名（≥2 字）"/>
+  </div>
+  <div id="search-results" style="margin-bottom:18px;"></div>
+  {% endif %}
+
+  {# 已选客户/宠物 #}
+  {% if cust or is_edit %}
+  <div class="ukm-card-group">
+    <div class="ukm-card" style="border-left:2px solid var(--ink);">
+      <div class="ukm-card-title">{{ pet.name if pet else '—' }}
+        {% if pet and pet.species == 'cat' %}<span class="ukm-italic" style="font-size:11px;margin-left:6px;">猫</span>
+        {% elif pet and pet.species == 'dog' %}<span class="ukm-italic" style="font-size:11px;margin-left:6px;">狗</span>{% endif %}
+      </div>
+      <div class="ukm-card-sub">
+        {{ cust.name if cust else '—' }}
+        {% if cust and cust.phone %}<span style="margin:0 5px;color:var(--ink-4);">·</span><span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ cust.phone }}</span>{% endif %}
+      </div>
+      {% if not is_edit and pets and pets|length > 1 %}
+      <div style="margin-top:10px;">
+        <div style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:6px;">换&nbsp;宠&nbsp;物</div>
+        <div class="ukm-chips">
+          {% for p in pets %}
+          <button type="button" class="ukm-chip pet-chip {% if pet and p.id == pet.id %}checked{% endif %}"
+                  data-pet-id="{{ p.id }}" onclick="pickPet(this)">
+            {{ p.name or '未命名' }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# 基本信息 #}
+  <div class="ukm-section-head"><h2>基&nbsp;本&nbsp;信&nbsp;息</h2></div>
+
+  <div class="ukm-row2">
+    <div class="ukm-field">
+      <label class="lbl">日&nbsp;期<span class="req">*</span></label>
+      <input class="ukm-input" type="date" name="visit_date" required
+             value="{{ v.visit_date if v else today }}"/>
+    </div>
+    <div class="ukm-field">
+      <label class="lbl">类&nbsp;型</label>
+      <select class="ukm-select" name="visit_type">
+        {% for k, zh in visit_types.items() %}
+        <option value="{{ k }}"
+          {% if v and v.visit_type == k %}selected
+          {% elif not v and k == 'outpatient' %}selected{% endif %}>{{ zh }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">医&nbsp;生<span class="req">*</span></label>
+    <input class="ukm-input" type="text" name="vet_name" required
+           value="{{ v.vet_name if v else default_vet }}"
+           placeholder="医生姓名"/>
+  </div>
+
+  {# SOAP #}
+  <div class="ukm-section-head"><h2>主&nbsp;诉&nbsp;&nbsp;S</h2></div>
+  <div class="ukm-field">
+    <textarea class="ukm-textarea" name="chief_complaint"
+              placeholder="客户反映 / 来诊原因">{{ v.chief_complaint if v else '' }}</textarea>
+  </div>
+
+  <div class="ukm-section-head"><h2>体&nbsp;格&nbsp;检&nbsp;查&nbsp;&nbsp;O</h2></div>
+  <div class="ukm-field">
+    <textarea class="ukm-textarea" name="physical_exam"
+              placeholder="T / HR / RR / 体重 / 视触叩听">{{ v.physical_exam if v else '' }}</textarea>
+  </div>
+
+  <div class="ukm-section-head"><h2>诊&nbsp;断&nbsp;&nbsp;A</h2></div>
+  <div class="ukm-field">
+    <textarea class="ukm-textarea" name="diagnosis" style="min-height:72px;"
+              placeholder="初步诊断 / 鉴别诊断">{{ v.diagnosis if v else '' }}</textarea>
+  </div>
+
+  <div class="ukm-section-head"><h2>处&nbsp;理&nbsp;方&nbsp;案&nbsp;&nbsp;P</h2></div>
+  <div class="ukm-field">
+    <textarea class="ukm-textarea" name="treatment_plan"
+              placeholder="治疗 / 用药 / 后续建议">{{ v.treatment_plan if v else '' }}</textarea>
+  </div>
+
+  <div class="ukm-section-head"><h2>补&nbsp;充&nbsp;备&nbsp;注</h2></div>
+  <div class="ukm-field">
+    <textarea class="ukm-textarea" name="notes" style="min-height:64px;"
+              placeholder="可选">{{ v.notes if v else '' }}</textarea>
+  </div>
+
+  {# 回访 #}
+  <div class="ukm-section-head"><h2>回&nbsp;访</h2></div>
+  <div class="ukm-field">
+    <label class="lbl">回&nbsp;访&nbsp;日&nbsp;期</label>
+    <input class="ukm-input" type="date" name="follow_up_at"
+           value="{{ v.follow_up_at if v else '' }}"/>
+  </div>
+  <div class="ukm-field">
+    <textarea class="ukm-textarea" name="follow_up_note" style="min-height:64px;"
+              placeholder="回访备注 · 可选">{{ v.follow_up_note if v else '' }}</textarea>
+  </div>
+
+  <div class="ukm-btn-row">
+    <a href="{% if is_edit %}/m/visit/{{ v.id }}{% elif cust %}/m/customer/{{ cust.id }}{% else %}/m/visits{% endif %}" class="ukm-btn ghost block">取&nbsp;消</a>
+    <button type="submit" class="ukm-btn block">{% if is_edit %}保&nbsp;存{% else %}创&nbsp;建{% endif %}</button>
+  </div>
+</form>
+
+{% if not is_edit and not cust %}
+<script>
+const $ = (id) => document.getElementById(id);
+let searchTimer = null;
+const search = $('cust-search');
+const customerIdInput = $('customer_id');
+const petIdInput = $('pet_id');
+
+search.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const q = search.value.trim();
+  if (q.length < 2) { $('search-results').innerHTML = ''; return; }
+  searchTimer = setTimeout(async () => {
+    const resp = await fetch('/m/api/search-customer?q=' + encodeURIComponent(q));
+    const data = await resp.json();
+    const html = data.results.map(c => `
+      <div style="border:0.5px solid var(--hair);background:var(--paper);padding:10px 12px;margin-bottom:6px;">
+        <div style="font-family:var(--font-serif);font-weight:600;font-size:14px;color:var(--ink);">
+          ${c.name || '—'}
+          <span class="ukm-mono" style="font-weight:400;color:var(--ink-2);font-style:normal;margin-left:6px;font-size:12px;">${c.phone || ''}</span>
+        </div>
+        ${c.pets.length ? `
+          <div class="ukm-chips" style="margin-top:8px;">
+            ${c.pets.map(p => `
+              <button type="button" onclick="pickFromSearch(${c.id}, ${p.id})"
+                class="ukm-chip" style="font-size:12px;padding:5px 12px;min-height:30px;">
+                ${p.name || '未命名'}
+              </button>
+            `).join('')}
+          </div>
+        ` : `<div class="ukm-italic" style="font-size:11px;margin-top:4px;">无宠物档案</div>`}
+      </div>
+    `).join('');
+    $('search-results').innerHTML = html || '<div class="ukm-empty" style="padding:14px;">无&nbsp;结&nbsp;果</div>';
+  }, 250);
+});
+
+function pickFromSearch(cid, pid) {
+  window.location.href = '/m/visit/new?customer_id=' + cid + '&pet_id=' + pid;
+}
+</script>
+{% endif %}
+
+<script>
+function pickPet(btn) {
+  document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('checked'));
+  btn.classList.add('checked');
+  const pid = document.getElementById('pet_id');
+  if (pid) pid.value = btn.dataset.petId;
+}
+</script>
+
+{% endblock %}

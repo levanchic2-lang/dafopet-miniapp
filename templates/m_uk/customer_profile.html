@@ -83,13 +83,13 @@
 {# 最近病历 #}
 <div class="ukm-section-head">
   <h2>最&nbsp;近&nbsp;病&nbsp;历</h2>
-  <a class="more" href="/m/visits/new?customer_id={{ cust.id }}">+&nbsp;新&nbsp;建</a>
+  <a class="more" href="/m/visit/new?customer_id={{ cust.id }}">+&nbsp;新&nbsp;建</a>
 </div>
 
 {% if visits %}
 <div class="ukm-row-group">
   {% for r in visits %}
-  <a class="ukm-row" href="/m/visits/{{ r.v.id }}">
+  <a class="ukm-row" href="/m/visit/{{ r.v.id }}">
     <div class="ukm-row-body">
       <div class="ukm-row-title">
         #{{ r.v.id }}

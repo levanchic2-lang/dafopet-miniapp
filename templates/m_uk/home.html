@@ -69,7 +69,7 @@
 {% if my_visits %}
 <div class="ukm-row-group">
   {% for r in my_visits %}
-  <a href="/m/visits/{{ r.v.id }}" class="ukm-row">
+  <a href="/m/visit/{{ r.v.id }}" class="ukm-row">
     <div class="ukm-row-body">
       <div class="ukm-row-title">
         #{{ r.v.id }}&nbsp;·&nbsp;{{ r.pet.name if r.pet else '—' }}
@@ -93,7 +93,7 @@
 <div class="ukm-divider"></div>
 
 <div class="ukm-btn-row">
-  <a href="/m/visits/new" class="ukm-btn block">新&nbsp;建&nbsp;病&nbsp;历</a>
+  <a href="/m/visit/new" class="ukm-btn block">新&nbsp;建&nbsp;病&nbsp;历</a>
 </div>
 <div class="ukm-btn-row">
   <a href="/m/appointments/new" class="ukm-btn ghost block">新&nbsp;建&nbsp;预&nbsp;约</a>

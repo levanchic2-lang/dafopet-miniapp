@@ -76,13 +76,13 @@
 {# 最近病历 #}
 <div class="ukm-section-head">
   <h2>最&nbsp;近&nbsp;病&nbsp;历</h2>
-  <a class="more" href="/m/visits/new?pet_id={{ pet.id }}">+&nbsp;新&nbsp;建</a>
+  <a class="more" href="/m/visit/new?pet_id={{ pet.id }}">+&nbsp;新&nbsp;建</a>
 </div>
 
 {% if visits %}
 <div class="ukm-row-group">
   {% for v in visits %}
-  <a class="ukm-row" href="/m/visits/{{ v.id }}">
+  <a class="ukm-row" href="/m/visit/{{ v.id }}">
     <div class="ukm-row-body">
       <div class="ukm-row-title">#{{ v.id }}&nbsp;·&nbsp;{{ v.visit_date or '—' }}</div>
       <div class="ukm-row-sub">{{ v.chief_complaint[:30] if v.chief_complaint else '—' }}</div>
@@ -143,7 +143,7 @@
 
 <div class="ukm-divider"></div>
 <div class="ukm-btn-row">
-  <a href="/m/visits/new?pet_id={{ pet.id }}" class="ukm-btn block">+&nbsp;新&nbsp;建&nbsp;病&nbsp;历</a>
+  <a href="/m/visit/new?pet_id={{ pet.id }}" class="ukm-btn block">+&nbsp;新&nbsp;建&nbsp;病&nbsp;历</a>
 </div>
 <div class="ukm-btn-row">
   <a href="/m/vaccinations/new?pet_id={{ pet.id }}" class="ukm-btn ghost block">疫&nbsp;苗</a>

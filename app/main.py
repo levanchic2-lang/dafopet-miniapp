@@ -22547,6 +22547,55 @@ async def m_pet_profile(pet_id: int, request: Request, db: Session = Depends(get
     return templates.TemplateResponse(request, "m_uk/pet_profile.html", ctx)
 
 
+@app.get("/m/visits", response_class=HTMLResponse)
+async def m_visits_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    scope: str = "today",   # today / mine / all
+):
+    """病历列表：今日 / 我的 / 全部，可搜索宠物名/客户名/病历号"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/visits", status_code=303)
+    store_short = _get_admin_store(request)
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    uname = request.session.get("admin_username") or ""
+
+    base = db.query(Visit)
+    if scope == "today":
+        base = base.filter(Visit.visit_date == today_str)
+    elif scope == "mine":
+        base = base.filter(or_(Visit.vet_name == uname, Visit.created_by == uname))
+    # all：不加额外条件，默认按 id 倒序取最近
+
+    # 门店隔离：通过 pet.store
+    if store_short:
+        base = base.outerjoin(Pet, Pet.id == Visit.pet_id).filter(
+            or_(Pet.store == store_short, Pet.store == "", Pet.store == None)  # noqa: E711
+        )
+
+    # 搜索
+    q = (q or "").strip()
+    if q:
+        if q.isdigit():
+            base = base.filter(Visit.id == int(q))
+        else:
+            base = base.outerjoin(Customer, Customer.id == Visit.customer_id).filter(
+                or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+            )
+
+    visits = base.order_by(Visit.id.desc()).limit(50).all()
+    rows = []
+    for v in visits:
+        p = db.get(Pet, v.pet_id) if v.pet_id else None
+        c = db.get(Customer, v.customer_id) if v.customer_id else None
+        rows.append({"v": v, "pet": p, "cust": c})
+
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({"rows": rows, "scope": scope, "q": q, "today_str": today_str})
+    return templates.TemplateResponse(request, "m_uk/visits.html", ctx)
+
+
 @app.get("/m/visit/new", response_class=HTMLResponse)
 async def m_visit_new(
     request: Request,
@@ -22576,7 +22625,7 @@ async def m_visit_new(
         "today": datetime.utcnow().strftime("%Y-%m-%d"),
         "visit_types": _VISIT_TYPE_ZH,
     })
-    return templates.TemplateResponse(request, "m/visit_edit.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/visit_edit.html", ctx)
 
 
 @app.get("/m/visit/{visit_id}/edit", response_class=HTMLResponse)
@@ -22598,7 +22647,7 @@ async def m_visit_edit_form(visit_id: int, request: Request, db: Session = Depen
         "today": v.visit_date,
         "visit_types": _VISIT_TYPE_ZH,
     })
-    return templates.TemplateResponse(request, "m/visit_edit.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/visit_edit.html", ctx)
 
 
 @app.get("/m/vaccination/new", response_class=HTMLResponse)
@@ -22992,7 +23041,7 @@ async def m_visit_detail(visit_id: int, request: Request, db: Session = Depends(
         "dewormings": dewormings,
         "hospitalization": hospitalization,
     })
-    return templates.TemplateResponse(request, "m/visit_detail.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/visit_detail.html", ctx)
 
 
 @app.post("/m/dispensing/{presc_id}/undo")
