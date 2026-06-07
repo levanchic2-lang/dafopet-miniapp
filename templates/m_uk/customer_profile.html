@@ -17,18 +17,16 @@
 </div>
 
 {# 钱包 + 套餐 KPI #}
-{% if wallet or packages %}
 <div class="ukm-kpi-grid">
-  <div class="ukm-kpi">
+  <a href="/m/customer/{{ cust.id }}/wallet/recharge" class="ukm-kpi" style="text-decoration:none;">
     <div class="lbl">钱&nbsp;包&nbsp;余&nbsp;额</div>
     <div class="val">¥&nbsp;{{ '%.0f'|format(wallet.balance) if wallet else '0' }}</div>
-  </div>
+  </a>
   <div class="ukm-kpi">
     <div class="lbl">在&nbsp;用&nbsp;套&nbsp;餐</div>
     <div class="val">{{ packages|length }}<span class="unit">个</span></div>
   </div>
 </div>
-{% endif %}
 
 {# 宠物列表 #}
 <div class="ukm-section-head">

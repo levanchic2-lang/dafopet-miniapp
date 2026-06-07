@@ -22910,6 +22910,72 @@ async def m_invoice_detail(inv_id: int, request: Request, db: Session = Depends(
     return templates.TemplateResponse(request, "m_uk/invoice_detail.html", ctx)
 
 
+@app.get("/m/customer/{cust_id}/wallet/recharge", response_class=HTMLResponse)
+async def m_wallet_recharge_form(cust_id: int, request: Request, db: Session = Depends(get_db)):
+    """手机端钱包充值表单"""
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/customer/{cust_id}/wallet/recharge", status_code=303)
+    cust = db.get(Customer, cust_id)
+    if not cust:
+        raise HTTPException(404)
+    wallet = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "cust": cust,
+        "wallet_balance": float(wallet.balance) if wallet else 0.0,
+    })
+    return templates.TemplateResponse(request, "m_uk/wallet_recharge.html", ctx)
+
+
+@app.get("/m/reports/revenue", response_class=HTMLResponse)
+async def m_reports_revenue(
+    request: Request,
+    db: Session = Depends(get_db),
+    preset: str = "today",  # today / 7d / 30d / month
+):
+    """手机端收款报表（精简版：当日 / 近 7 天 / 近 30 天 / 本月）"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/reports/revenue", status_code=303)
+    from datetime import date as _date, timedelta as _td
+    store_short = _get_admin_store(request)
+    today = _date.today()
+    if preset == "today":
+        d_from = today.isoformat(); d_to = today.isoformat(); label = "今日"
+    elif preset == "7d":
+        d_from = (today - _td(days=6)).isoformat(); d_to = today.isoformat(); label = "近 7 天"
+    elif preset == "30d":
+        d_from = (today - _td(days=29)).isoformat(); d_to = today.isoformat(); label = "近 30 天"
+    else:  # month
+        d_from = today.replace(day=1).isoformat(); d_to = today.isoformat(); label = "本月"
+    # 按 Payment 表聚合
+    q = db.query(Payment).filter(
+        Payment.status == "success",
+        Payment.created_at >= datetime.strptime(d_from, "%Y-%m-%d"),
+        Payment.created_at < datetime.strptime(d_to, "%Y-%m-%d") + timedelta(days=1),
+    )
+    if store_short:
+        q = q.filter(Payment.store == store_short)
+    rows = q.all()
+    total = round(sum(float(p.amount or 0) for p in rows), 2)
+    count = len(rows)
+    by_method = {}
+    for p in rows:
+        m = p.method or "other"
+        by_method.setdefault(m, {"count": 0, "total": 0.0})
+        by_method[m]["count"] += 1
+        by_method[m]["total"] = round(by_method[m]["total"] + float(p.amount or 0), 2)
+    # 按金额排序
+    method_list = sorted(by_method.items(), key=lambda x: -x[1]["total"])
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({
+        "preset": preset, "label": label, "d_from": d_from, "d_to": d_to,
+        "total": total, "count": count,
+        "method_list": method_list,
+        "method_zh": _REVENUE_PAY_ZH,
+    })
+    return templates.TemplateResponse(request, "m_uk/revenue_report.html", ctx)
+
+
 @app.get("/m/inventory", response_class=HTMLResponse)
 async def m_inventory_list(
     request: Request,

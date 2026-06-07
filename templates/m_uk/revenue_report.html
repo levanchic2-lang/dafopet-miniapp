@@ -1,0 +1,79 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}收款报表 · 大风动物医院{% endblock %}
+{% block topbar_title %}收&nbsp;款&nbsp;报&nbsp;表{% endblock %}
+{% block topbar_back %}<a href="/m/finance" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-chips" style="margin-bottom:14px;">
+  <a class="ukm-chip {% if preset == 'today' %}checked{% endif %}" href="/m/reports/revenue?preset=today">今&nbsp;日</a>
+  <a class="ukm-chip {% if preset == '7d' %}checked{% endif %}" href="/m/reports/revenue?preset=7d">7&nbsp;天</a>
+  <a class="ukm-chip {% if preset == '30d' %}checked{% endif %}" href="/m/reports/revenue?preset=30d">30&nbsp;天</a>
+  <a class="ukm-chip {% if preset == 'month' %}checked{% endif %}" href="/m/reports/revenue?preset=month">本&nbsp;月</a>
+</div>
+
+<div class="ukm-page-head">
+  <h1>{{ label }}</h1>
+  <div class="meta">{{ d_from }}{% if d_from != d_to %}<span class="sep">→</span>{{ d_to }}{% endif %}</div>
+</div>
+
+<div class="ukm-kpi-grid">
+  <div class="ukm-kpi">
+    <div class="lbl">收&nbsp;款&nbsp;合&nbsp;计</div>
+    <div class="val">¥&nbsp;{{ '%.0f'|format(total) }}</div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">笔&nbsp;数</div>
+    <div class="val">{{ count }}<span class="unit">笔</span></div>
+  </div>
+</div>
+
+{% if method_list %}
+<div class="ukm-section-head"><h2>按&nbsp;支&nbsp;付&nbsp;方&nbsp;式</h2></div>
+<div class="ukm-row-group">
+  {% for method, data in method_list %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:14px;">{{ method_zh.get(method, method) }}</div>
+      <div class="ukm-row-sub">
+        {{ data['count'] }} 笔
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        占&nbsp;<span class="ukm-num" style="font-style:normal;">{{ '%.0f'|format(data['total'] / total * 100 if total > 0 else 0) }}%</span>
+      </div>
+    </div>
+    <div class="ukm-row-right ukm-num" style="font-size:15px;font-weight:700;color:var(--ink);">¥&nbsp;{{ '%.0f'|format(data['total']) }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+{# 简单 bar 可视化 #}
+<div class="ukm-section-head"><h2>占&nbsp;比&nbsp;图</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% for method, data in method_list %}
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-2);margin-bottom:4px;font-family:var(--font-serif);letter-spacing:1px;">
+        <span>{{ method_zh.get(method, method) }}</span>
+        <span class="ukm-num" style="color:var(--ink);">¥&nbsp;{{ '%.0f'|format(data['total']) }}</span>
+      </div>
+      <div style="height:6px;background:var(--bg-elevated);border:0.5px solid var(--hair);">
+        <div style="height:100%;width:{{ '%.0f'|format(data['total'] / total * 100 if total > 0 else 0) }}%;background:var(--ink);"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% else %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;收&nbsp;款</div>
+  {{ label }}没有收款记录
+</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/reports/revenue" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;详&nbsp;细&nbsp;报&nbsp;表</a>
+</div>
+
+{% endblock %}

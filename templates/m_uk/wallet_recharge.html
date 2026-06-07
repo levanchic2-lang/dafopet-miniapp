@@ -1,0 +1,57 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}钱包充值 · {{ cust.name }}{% endblock %}
+{% block topbar_title %}钱&nbsp;包&nbsp;充&nbsp;值{% endblock %}
+{% block topbar_back %}<a href="/m/customer/{{ cust.id }}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>{{ cust.name }}</h1>
+  <div class="meta">
+    <span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ cust.phone or '' }}</span>
+    <span class="sep">·</span>
+    当前余额&nbsp;<span class="ukm-num" style="font-style:normal;color:var(--ink);font-weight:700;">¥&nbsp;{{ '%.2f'|format(wallet_balance) }}</span>
+  </div>
+</div>
+
+<form method="post" action="/admin/wallets/{{ cust.id }}/recharge" class="ukm-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  <div class="ukm-field">
+    <label class="lbl">充&nbsp;值&nbsp;金&nbsp;额<span class="req">*</span></label>
+    <input class="ukm-input ukm-num" type="number" step="0.01" min="0.01"
+           name="amount" required inputmode="decimal" placeholder="¥"/>
+    <div class="ukm-chips" style="margin-top:8px;">
+      {% for v in [100, 200, 500, 1000, 2000, 5000] %}
+      <label class="ukm-chip" onclick="document.querySelector('[name=amount]').value={{ v }};">{{ v }}</label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">赠&nbsp;送&nbsp;金&nbsp;额&nbsp;（可选）</label>
+    <input class="ukm-input ukm-num" type="number" step="0.01" min="0" name="bonus" value="0" inputmode="decimal"/>
+    <div class="hint">如「充 1000 送 100」就填 100</div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">备&nbsp;注&nbsp;（可选）</label>
+    <textarea class="ukm-textarea" name="note" placeholder="可空" style="min-height:64px;"></textarea>
+  </div>
+
+  <div class="ukm-card-group">
+    <div class="ukm-card" style="border-left:2px solid var(--accent-amber);">
+      <div class="ukm-card-title" style="color:var(--accent-amber);">提&nbsp;交&nbsp;后</div>
+      <div class="ukm-card-sub">
+        会生成一张未付收费单 → 跳到收款页选择支付方式（现金/微信/支付宝/...）→ 收款完成钱包才入账
+      </div>
+    </div>
+  </div>
+
+  <div class="ukm-btn-row">
+    <a href="/m/customer/{{ cust.id }}" class="ukm-btn ghost block">取&nbsp;消</a>
+    <button type="submit" class="ukm-btn block">生&nbsp;成&nbsp;充&nbsp;值&nbsp;单</button>
+  </div>
+</form>
+
+{% endblock %}
