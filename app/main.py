@@ -17008,6 +17008,11 @@ async def admin_invoice_add_payment(
     except Exception as _e:
         logger.warning("[wallet_recharge_credit] failed: %s", _e)
     db.commit()
+    nu = (form.get("next_url") or "").strip()
+    if nu:
+        target = _safe_next(nu.replace("{id}", str(inv_id)), f"/admin/invoices/{inv_id}")
+        sep = "&" if "?" in target else "?"
+        return RedirectResponse(f"{target}{sep}msg=已加 ¥{want:.2f}", status_code=303)
     return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已加 ¥{want:.2f}", status_code=303)
 
 
@@ -17018,6 +17023,7 @@ async def admin_invoice_payment_void(
     request: Request,
     db: Session = Depends(get_db),
     csrf_token: str = Form(""),
+    next_url: str = Form(""),
 ):
     """撤销一笔收款（错收时用，会回滚钱包/套餐/押金/优惠券副作用）。仅 superadmin。"""
     require_admin(request)
@@ -17073,6 +17079,10 @@ async def admin_invoice_payment_void(
     db.flush()
     _invoice_recompute_status(db, inv)
     db.commit()
+    if next_url:
+        target = _safe_next(next_url.replace("{id}", str(inv_id)), f"/admin/invoices/{inv_id}")
+        sep = "&" if "?" in target else "?"
+        return RedirectResponse(f"{target}{sep}msg=已撤销 ¥{p.amount:.2f}", status_code=303)
     return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已撤销 ¥{p.amount:.2f}", status_code=303)
 
 
@@ -22742,6 +22752,149 @@ async def m_exam_new(visit_id: int, request: Request, db: Session = Depends(get_
         "grouped": grouped,
     })
     return templates.TemplateResponse(request, "m_uk/exam_new.html", ctx)
+
+
+@app.get("/m/invoices", response_class=HTMLResponse)
+async def m_invoices_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    status: str = "unpaid",       # unpaid / paid / all
+    customer_id: int = 0,
+):
+    """收费单列表：未结清 / 已收款 / 全部 + 按客户筛选 + 搜索"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/invoices", status_code=303)
+    store_short = _get_admin_store(request)
+    query = db.query(Invoice).order_by(Invoice.id.desc())
+    if store_short:
+        query = query.filter(Invoice.store == store_short)
+    if status == "unpaid":
+        query = query.filter(Invoice.payment_status.in_(("unpaid", "partial")))
+    elif status == "paid":
+        query = query.filter(Invoice.payment_status == "paid")
+    if customer_id:
+        query = query.filter(Invoice.customer_id == customer_id)
+    if q:
+        cids = [c.id for c in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+        if q.isdigit():
+            query = query.filter(or_(
+                Invoice.id == int(q),
+                Invoice.customer_id.in_(cids),
+            ))
+        else:
+            query = query.filter(Invoice.customer_id.in_(cids))
+    invoices = query.limit(80).all()
+    rows = []
+    for inv in invoices:
+        c = db.get(Customer, inv.customer_id) if inv.customer_id else None
+        p = db.get(Pet, inv.pet_id) if inv.pet_id else None
+        paid = _invoice_paid_sum(db, inv.id)
+        outstanding = max(0.0, float(inv.total_amount or 0) - paid)
+        rows.append({"inv": inv, "cust": c, "pet": p,
+                     "paid": paid, "outstanding": outstanding})
+    # KPI: 今日已收 + 未付总欠款
+    from datetime import date as _date
+    today_str = _date.today().isoformat()
+    base_q = db.query(Invoice)
+    if store_short:
+        base_q = base_q.filter(Invoice.store == store_short)
+    today_paid = base_q.filter(
+        Invoice.payment_status == "paid",
+        Invoice.invoice_date == today_str,
+    ).all()
+    unpaid_all = base_q.filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
+    kpi = {
+        "today_paid_total": round(sum(float(i.total_amount or 0) for i in today_paid), 2),
+        "today_paid_count": len(today_paid),
+        "unpaid_count": len(unpaid_all),
+        "unpaid_total": round(sum(
+            max(0.0, float(i.total_amount or 0) - _invoice_paid_sum(db, i.id))
+            for i in unpaid_all
+        ), 2),
+    }
+    customer = db.get(Customer, customer_id) if customer_id else None
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({
+        "rows": rows, "q": q, "status": status,
+        "customer": customer, "customer_id": customer_id,
+        "kpi": kpi, "today_str": today_str,
+    })
+    return templates.TemplateResponse(request, "m_uk/invoices.html", ctx)
+
+
+@app.get("/m/invoices/{inv_id}", response_class=HTMLResponse)
+async def m_invoice_detail(inv_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/invoices/{inv_id}", status_code=303)
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404)
+    cust  = db.get(Customer, inv.customer_id) if inv.customer_id else None
+    pet   = db.get(Pet, inv.pet_id) if inv.pet_id else None
+    visit = db.get(Visit, inv.visit_id) if inv.visit_id else None
+    # 钱包
+    wallet_balance = 0.0
+    if inv.customer_id:
+        w = db.query(Wallet).filter(Wallet.customer_id == inv.customer_id).first()
+        wallet_balance = float(w.balance) if w else 0.0
+    # 有效套餐
+    active_packages = []
+    if inv.customer_id:
+        active_packages = db.query(CustomerPackage).filter(
+            CustomerPackage.customer_id == inv.customer_id,
+            CustomerPackage.status == "active",
+        ).order_by(CustomerPackage.id.desc()).all()
+    # 押金
+    available_deposits = []
+    if inv.customer_id:
+        for d in db.query(Deposit).filter(
+            Deposit.customer_id == inv.customer_id,
+            Deposit.status.in_(["held", "partial_refund"]),
+        ).order_by(Deposit.id.desc()).all():
+            remaining = d.amount - (d.applied_amount or 0) - (d.refunded_amount or 0)
+            if remaining > 0:
+                d._remaining = remaining
+                available_deposits.append(d)
+    # 优惠券
+    available_coupons = []
+    if inv.customer_id:
+        for c in db.query(Coupon).filter(
+            ((Coupon.customer_id == inv.customer_id) | (Coupon.customer_id.is_(None))),
+            Coupon.status == "issued",
+        ).order_by(Coupon.id.desc()).all():
+            if _coupon_is_expired(c):
+                continue
+            usable = _coupon_compute_amount(c, float(inv.total_amount or 0))
+            if usable > 0:
+                c._usable_amount = usable
+                available_coupons.append(c)
+    # 已加的 Payment 流水
+    payments = db.query(Payment).filter(
+        Payment.invoice_id == inv_id
+    ).order_by(Payment.id.desc()).all()
+    paid_sum = sum(float(p.amount or 0) for p in payments if p.status == "success")
+    outstanding = max(0.0, float(inv.total_amount or 0) - paid_sum)
+    is_super = (request.session.get("admin_role") == "superadmin")
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({
+        "inv": inv, "cust": cust, "pet": pet, "visit": visit,
+        "wallet_balance": wallet_balance,
+        "active_packages": active_packages,
+        "available_deposits": available_deposits,
+        "available_coupons": available_coupons,
+        "payments": payments,
+        "paid_sum": paid_sum,
+        "outstanding": outstanding,
+        "method_zh": _REVENUE_PAY_ZH,
+        "other_unpaid": _other_unpaid_for_invoice(db, inv) if inv.customer_id else [],
+        "is_super": is_super,
+        "deposit_category_zh": _DEPOSIT_CATEGORY_ZH,
+        "coupon_kind_zh": _COUPON_KIND_ZH,
+    })
+    return templates.TemplateResponse(request, "m_uk/invoice_detail.html", ctx)
 
 
 @app.get("/m/exam-order/{order_id}", response_class=HTMLResponse)

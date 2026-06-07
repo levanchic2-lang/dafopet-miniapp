@@ -1,0 +1,98 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}收费单 · 大风动物医院{% endblock %}
+{% block topbar_title %}收&nbsp;费&nbsp;单{% endblock %}
+{% block topbar_back %}<a href="/m/finance" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{# KPI #}
+<div class="ukm-kpi-grid">
+  <div class="ukm-kpi">
+    <div class="lbl">今&nbsp;日&nbsp;已&nbsp;收</div>
+    <div class="val">¥&nbsp;{{ '%.0f'|format(kpi.today_paid_total) }}</div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">今&nbsp;日&nbsp;笔&nbsp;数</div>
+    <div class="val">{{ kpi.today_paid_count }}<span class="unit">笔</span></div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">未&nbsp;付&nbsp;张&nbsp;数</div>
+    <div class="val">{{ kpi.unpaid_count }}<span class="unit">张</span></div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">未&nbsp;付&nbsp;欠&nbsp;款</div>
+    <div class="val" style="color:{% if kpi.unpaid_total > 0 %}var(--accent-red){% else %}var(--ink){% endif %};">¥&nbsp;{{ '%.0f'|format(kpi.unpaid_total) }}</div>
+  </div>
+</div>
+
+{# 按客户筛选时 banner #}
+{% if customer %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--ink);">
+    <div class="ukm-card-title">{{ customer.name }}</div>
+    <div class="ukm-card-sub">
+      <span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ customer.phone or '' }}</span>
+      <span style="margin:0 5px;color:var(--ink-4);">·</span>
+      <a href="/m/invoices" style="color:var(--ink-3);font-style:italic;">清&nbsp;除&nbsp;筛&nbsp;选</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# 状态切换 chips #}
+<div class="ukm-chips" style="margin-bottom:14px;">
+  <a class="ukm-chip {% if status == 'unpaid' %}checked{% endif %}" href="/m/invoices?status=unpaid{% if customer_id %}&customer_id={{ customer_id }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">未&nbsp;结&nbsp;清</a>
+  <a class="ukm-chip {% if status == 'paid' %}checked{% endif %}" href="/m/invoices?status=paid{% if customer_id %}&customer_id={{ customer_id }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">已&nbsp;收&nbsp;款</a>
+  <a class="ukm-chip {% if status == 'all' %}checked{% endif %}" href="/m/invoices?status=all{% if customer_id %}&customer_id={{ customer_id }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">全&nbsp;部</a>
+</div>
+
+<form method="get" action="/m/invoices">
+  <input type="hidden" name="status" value="{{ status }}"/>
+  {% if customer_id %}<input type="hidden" name="customer_id" value="{{ customer_id }}"/>{% endif %}
+  <div class="ukm-search">
+    <span class="ic">⌕</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="客户名 / 手机号 / 单号"/>
+    {% if q %}<a href="/m/invoices?status={{ status }}{% if customer_id %}&customer_id={{ customer_id }}{% endif %}" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+  </div>
+</form>
+
+{% if rows %}
+<div class="ukm-section-head">
+  <h2>共&nbsp;&nbsp;{{ rows|length }}&nbsp;&nbsp;张</h2>
+</div>
+
+<div class="ukm-row-group">
+  {% for r in rows %}
+  <a class="ukm-row" href="/m/invoices/{{ r.inv.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">
+        #{{ r.inv.id }}
+        {% if r.cust %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.cust.name }}{% endif %}
+        {% if r.pet %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.pet.name }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ r.inv.invoice_date or '—' }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        应付&nbsp;<span class="ukm-num" style="color:var(--ink-2);font-style:normal;">¥{{ '%.0f'|format(r.inv.total_amount or 0) }}</span>
+        {% if r.outstanding > 0 %}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        欠&nbsp;<span class="ukm-num" style="color:var(--accent-red);font-style:normal;">¥{{ '%.0f'|format(r.outstanding) }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if r.inv.payment_status == 'paid' %}<span class="ukm-pill green">已&nbsp;收</span>
+    {% elif r.inv.payment_status == 'partial' %}<span class="ukm-pill amber">部&nbsp;分</span>
+    {% else %}<span class="ukm-pill red">未&nbsp;付</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="ukm-empty">
+  <div class="big">无&nbsp;收&nbsp;费&nbsp;单</div>
+  {% if q %}没有匹配「{{ q }}」的收费单{% elif status == 'unpaid' %}所有单都已收清{% elif status == 'paid' %}还没有已收款的单{% else %}还没有收费单{% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

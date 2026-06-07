@@ -1,0 +1,358 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}收费单 #{{ inv.id }}{% endblock %}
+{% block topbar_title %}收&nbsp;费&nbsp;单&nbsp;#{{ inv.id }}{% endblock %}
+{% block topbar_back %}<a href="/m/invoices" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block extra_css %}
+<style>
+  .pay-method-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .pay-method-grid .ukm-chip {
+    padding: 10px 4px; min-height: 44px;
+    text-align: center; justify-content: center;
+    font-size: 12px;
+  }
+  .pay-method-grid .ukm-chip.checked {
+    background: var(--ink); color: var(--paper);
+    border-color: var(--ink); font-weight: 700;
+  }
+  .pay-sub {
+    display: none; margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--bg-elevated);
+    border: 0.5px solid var(--hair);
+  }
+  .pay-sub.active { display: block; }
+  .pay-sub .lbl {
+    font-family: var(--font-serif); font-size: 10px;
+    letter-spacing: 1.5px; color: var(--ink-3);
+    margin-bottom: 6px; display: block;
+  }
+  .selector-row {
+    padding: 8px 0; border-bottom: 0.5px solid var(--hair);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .selector-row:last-child { border-bottom: none; }
+  .selector-row input[type="radio"] { transform: scale(1.2); }
+  .selector-row .info { flex: 1; min-width: 0; }
+  .selector-row .name { font-family: var(--font-serif); font-size: 13px; color: var(--ink); }
+  .selector-row .meta { font-family: var(--font-serif); font-size: 11px; color: var(--ink-3); font-style: italic; margin-top: 2px; }
+  .selector-row .amt {
+    font-family: var(--font-serif); font-size: 14px;
+    font-variant-numeric: tabular-nums; color: var(--ink-2);
+    flex-shrink: 0;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# 头部 #}
+<div class="ukm-page-head">
+  <h1>#{{ inv.id }}
+    {% if inv.payment_status == 'paid' %}<span class="ukm-pill green" style="margin-left:8px;vertical-align:middle;">已&nbsp;收</span>
+    {% elif inv.payment_status == 'partial' %}<span class="ukm-pill amber" style="margin-left:8px;vertical-align:middle;">部&nbsp;分</span>
+    {% else %}<span class="ukm-pill red" style="margin-left:8px;vertical-align:middle;">未&nbsp;付</span>{% endif %}
+  </h1>
+  <div class="meta">
+    {{ inv.invoice_date or '—' }}
+    {% if cust %}<span class="sep">·</span><a href="/m/customer/{{ cust.id }}" style="color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ cust.name }}</a>{% endif %}
+    {% if pet %}<span class="sep">·</span>{{ pet.name }}{% endif %}
+  </div>
+  {% if cust and cust.phone %}
+  <div class="meta"><a href="tel:{{ cust.phone }}" class="ukm-mono" style="font-style:normal;color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ cust.phone }}</a></div>
+  {% endif %}
+</div>
+
+{# 三联 KPI #}
+<div class="ukm-kpi-grid" style="grid-template-columns:1fr 1fr 1fr;">
+  <div class="ukm-kpi">
+    <div class="lbl">应&nbsp;付</div>
+    <div class="val">¥&nbsp;{{ '%.0f'|format(inv.total_amount or 0) }}</div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">已&nbsp;收</div>
+    <div class="val">¥&nbsp;{{ '%.0f'|format(paid_sum) }}</div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">未&nbsp;收</div>
+    <div class="val" style="color:{% if outstanding > 0 %}var(--accent-red){% else %}var(--ink){% endif %};">¥&nbsp;{{ '%.0f'|format(outstanding) }}</div>
+  </div>
+</div>
+
+{# 明细 #}
+<div class="ukm-section-head"><h2>明&nbsp;细&nbsp;&nbsp;·&nbsp;{{ inv.items|length }}&nbsp;项</h2></div>
+<div class="ukm-row-group">
+  {% for it in inv.items %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:14px;">{{ it.description or '—' }}</div>
+      <div class="ukm-row-sub">
+        <span class="ukm-num" style="font-style:normal;">{{ it.quantity or 0 }}</span>
+        {% if it.unit %}&nbsp;{{ it.unit }}{% endif %}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        <span class="ukm-num" style="font-style:normal;">¥{{ '%.2f'|format(it.unit_price or 0) }}</span>/单价
+      </div>
+    </div>
+    <div class="ukm-row-right ukm-num">¥&nbsp;{{ '%.2f'|format(it.amount or 0) }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+{# 已收款 #}
+{% if payments %}
+<div class="ukm-section-head"><h2>已&nbsp;收&nbsp;款&nbsp;&nbsp;·&nbsp;{{ payments|length }}&nbsp;笔</h2></div>
+<div class="ukm-row-group">
+  {% for p in payments %}
+  <div class="ukm-row" style="cursor:default;{% if p.status == 'cancelled' %}opacity:0.5;{% endif %}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:13px;">
+        {{ method_zh.get(p.method, p.method) }}
+        {% if p.status == 'cancelled' %}<span class="ukm-pill" style="margin-left:6px;">已撤销</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub">
+        {{ p.created_at.strftime('%m-%d %H:%M') if p.created_at else '—' }}
+        {% if p.operator %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ p.operator }}{% endif %}
+        {% if p.ref_no %}<span style="margin:0 5px;color:var(--ink-4);">·</span><span class="ukm-mono" style="font-style:normal;">{{ p.ref_no[:12] }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="ukm-row-right ukm-num">¥&nbsp;{{ '%.2f'|format(p.amount or 0) }}</div>
+    {% if is_super and p.status == 'success' %}
+    <form method="post" action="/admin/invoices/{{ inv.id }}/payments/{{ p.id }}/void" style="margin-left:8px;"
+          onsubmit="return confirm('撤销这笔 ¥{{ '%.2f'|format(p.amount) }}？将回滚副作用。')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="/m/invoices/{{ inv.id }}"/>
+      <button type="submit" style="background:none;border:none;color:var(--accent-red);font-family:var(--font-serif);font-size:12px;padding:4px;cursor:pointer;">撤</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 加收款表单 (未付清才显示) #}
+{% if inv.payment_status != 'paid' %}
+<div class="ukm-section-head"><h2>加&nbsp;一&nbsp;笔&nbsp;收&nbsp;款</h2></div>
+
+<form method="post" action="/admin/invoices/{{ inv.id }}/add-payment" class="ukm-form" id="pay-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/invoices/{{ inv.id }}"/>
+  <input type="hidden" name="method" id="pay-method" value="cash"/>
+
+  {# 支付方式 grid #}
+  <div class="pay-method-grid">
+    {% for k, zh in [
+      ('cash','现金'),('wechat','微信'),('alipay','支付宝'),
+      ('shouqianba','收钱吧'),('meituan','美团'),('third_party','第三方'),
+      ('wallet','钱包'),('package','套餐'),('deposit','押金'),
+      ('coupon','优惠券')
+    ] %}
+    <label class="ukm-chip {% if k == 'cash' %}checked{% endif %}" data-method="{{ k }}" onclick="pickMethod('{{ k }}')">
+      {{ zh }}
+    </label>
+    {% endfor %}
+  </div>
+
+  {# 金额 #}
+  <div class="ukm-field">
+    <label class="lbl">金&nbsp;额&nbsp;¥</label>
+    <input class="ukm-input ukm-num" type="number" step="0.01" min="0" name="amount"
+           value="{{ '%.2f'|format(outstanding) }}" inputmode="decimal" id="pay-amount"/>
+    <div class="hint">未收 ¥{{ '%.2f'|format(outstanding) }}；默认填全额，可改</div>
+  </div>
+
+  {# 现金/微信等通用 - ref_no #}
+  <div class="pay-sub active" id="sub-simple">
+    <label class="lbl">流&nbsp;水&nbsp;号&nbsp;（可选）</label>
+    <input class="ukm-input ukm-mono" type="text" name="ref_no" placeholder="如:微信单号末 6 位" maxlength="120"/>
+  </div>
+
+  {# 钱包 #}
+  <div class="pay-sub" id="sub-wallet">
+    <div style="font-family:var(--font-serif);font-size:13px;color:var(--ink);">
+      钱包余额&nbsp;&nbsp;<span class="ukm-num" style="font-size:18px;font-weight:700;">¥&nbsp;{{ '%.2f'|format(wallet_balance) }}</span>
+    </div>
+    {% if wallet_balance <= 0 %}
+    <div class="hint" style="color:var(--accent-red);">余额不足，请改方式或先充值</div>
+    {% endif %}
+  </div>
+
+  {# 套餐 #}
+  <div class="pay-sub" id="sub-package">
+    {% if active_packages %}
+    <div class="lbl">选&nbsp;择&nbsp;套&nbsp;餐</div>
+    {% for cp in active_packages %}
+    <div class="selector-row">
+      <input type="radio" name="customer_package_id" value="{{ cp.id }}" id="pkg-{{ cp.id }}" {% if loop.first %}checked{% endif %}/>
+      <label for="pkg-{{ cp.id }}" class="info" style="cursor:pointer;">
+        <div class="name">{{ cp.package_name or '套餐' }}</div>
+        <div class="meta">剩 {{ cp.total_uses - cp.used_count }} 次 / 共 {{ cp.total_uses }} 次</div>
+      </label>
+    </div>
+    {% endfor %}
+    <div style="margin-top:10px;">
+      <div class="lbl">仅&nbsp;抵&nbsp;扣&nbsp;以&nbsp;下&nbsp;明&nbsp;细&nbsp;（不选&nbsp;=&nbsp;全部）</div>
+      {% for it in inv.items %}
+      <label class="selector-row" style="cursor:pointer;">
+        <input type="checkbox" name="pkg_covered_item_ids" value="{{ it.id }}"/>
+        <div class="info">
+          <div class="name">{{ it.description }}</div>
+          <div class="meta">¥{{ '%.2f'|format(it.amount or 0) }}</div>
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="hint">客户没有有效套餐</div>
+    {% endif %}
+  </div>
+
+  {# 押金 #}
+  <div class="pay-sub" id="sub-deposit">
+    {% if available_deposits %}
+    <div class="lbl">选&nbsp;择&nbsp;押&nbsp;金</div>
+    {% for d in available_deposits %}
+    <div class="selector-row">
+      <input type="radio" name="deposit_id" value="{{ d.id }}" id="dep-{{ d.id }}" {% if loop.first %}checked{% endif %}/>
+      <label for="dep-{{ d.id }}" class="info" style="cursor:pointer;">
+        <div class="name">{{ deposit_category_zh.get(d.category, d.category or '押金') }}</div>
+        <div class="meta">{{ d.created_at.strftime('%m-%d') if d.created_at else '—' }}</div>
+      </label>
+      <div class="amt">¥&nbsp;{{ '%.2f'|format(d._remaining) }}</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="hint">客户没有可用押金</div>
+    {% endif %}
+  </div>
+
+  {# 优惠券 #}
+  <div class="pay-sub" id="sub-coupon">
+    {% if available_coupons %}
+    <div class="lbl">选&nbsp;择&nbsp;优&nbsp;惠&nbsp;券</div>
+    {% for c in available_coupons %}
+    <div class="selector-row">
+      <input type="radio" name="coupon_id" value="{{ c.id }}" id="cp-{{ c.id }}" {% if loop.first %}checked{% endif %}/>
+      <label for="cp-{{ c.id }}" class="info" style="cursor:pointer;">
+        <div class="name">{{ c.name or coupon_kind_zh.get(c.kind, c.kind) }}</div>
+        <div class="meta">{{ coupon_kind_zh.get(c.kind, c.kind) }}{% if c.expires_at %}<span style="margin:0 5px;color:var(--ink-4);">·</span>过期 {{ c.expires_at.strftime('%Y-%m-%d') if c.expires_at.strftime else c.expires_at }}{% endif %}</div>
+      </label>
+      <div class="amt">¥&nbsp;{{ '%.2f'|format(c._usable_amount) }}</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="hint">没有可用优惠券</div>
+    {% endif %}
+  </div>
+
+  {# 跨单合并（仅 simple methods） #}
+  {% if other_unpaid %}
+  <div class="pay-sub active" id="sub-multi" style="margin-top:14px;">
+    <div class="lbl">同&nbsp;客&nbsp;户&nbsp;其&nbsp;他&nbsp;待&nbsp;收&nbsp;单（勾&nbsp;选&nbsp;合&nbsp;并）</div>
+    <div class="hint">仅现金/微信/支付宝/收钱吧/美团/三方支持跨单</div>
+    {% for o in other_unpaid %}
+    <label class="selector-row" style="cursor:pointer;">
+      <input type="checkbox" name="extra_invoice_ids" value="{{ o.inv.id }}" class="extra-checkbox"/>
+      <div class="info">
+        <div class="name">#{{ o.inv.id }}{% if o.pet %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ o.pet.name }}{% endif %}</div>
+        <div class="meta">{{ o.inv.invoice_date or '—' }}{% if o.items_preview %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ o.items_preview }}{% endif %}</div>
+      </div>
+      <div class="amt">¥&nbsp;{{ '%.2f'|format(o.outstanding) }}</div>
+    </label>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# 备注 #}
+  <div class="ukm-field" style="margin-top:14px;">
+    <label class="lbl">备&nbsp;注&nbsp;（可选）</label>
+    <input class="ukm-input" type="text" name="note" maxlength="500" placeholder="可空"/>
+  </div>
+
+  <div class="ukm-btn-row">
+    <button type="submit" class="ukm-btn block">提&nbsp;交&nbsp;收&nbsp;款</button>
+  </div>
+</form>
+{% endif %}
+
+{# 信息：visit 关联 / 折扣 #}
+{% if visit or inv.notes %}
+<div class="ukm-section-head"><h2>其&nbsp;他</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    {% if visit %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">关&nbsp;联&nbsp;病&nbsp;历</span>
+      <a href="/m/visit/{{ visit.id }}" style="color:var(--ink);border-bottom:0.5px solid var(--hair);">#{{ visit.id }}</a>
+    </div>
+    {% endif %}
+    {% if inv.discount_amount and inv.discount_amount > 0 %}
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
+      <span style="color:var(--ink-3);font-size:11px;letter-spacing:1.5px;">已&nbsp;折&nbsp;扣</span>
+      <span class="ukm-num">¥&nbsp;{{ '%.2f'|format(inv.discount_amount) }}</span>
+    </div>
+    {% endif %}
+    {% if inv.notes %}
+    <div style="font-size:12px;color:var(--ink-2);line-height:1.6;margin-top:6px;font-style:italic;">{{ inv.notes }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="ukm-btn ghost block">打&nbsp;印</a>
+  <a href="/admin/invoices/{{ inv.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端</a>
+</div>
+
+<script>
+const SIMPLE_METHODS = ['cash','wechat','alipay','shouqianba','meituan','third_party'];
+
+function pickMethod(m) {
+  document.getElementById('pay-method').value = m;
+  // chip 切换 active
+  document.querySelectorAll('.pay-method-grid .ukm-chip').forEach(c => {
+    c.classList.toggle('checked', c.dataset.method === m);
+  });
+  // 显示对应 sub-panel
+  document.querySelectorAll('.pay-sub').forEach(s => s.classList.remove('active'));
+  if (SIMPLE_METHODS.includes(m)) {
+    document.getElementById('sub-simple').classList.add('active');
+  } else {
+    const sub = document.getElementById('sub-' + m);
+    if (sub) sub.classList.add('active');
+  }
+  // 跨单合并仅 simple 支持
+  const multi = document.getElementById('sub-multi');
+  if (multi) {
+    multi.classList.toggle('active', SIMPLE_METHODS.includes(m));
+    if (!SIMPLE_METHODS.includes(m)) {
+      // 清掉跨单勾选
+      multi.querySelectorAll('.extra-checkbox').forEach(c => c.checked = false);
+    }
+  }
+}
+
+// 监听跨单勾选 → 金额自动累加
+document.querySelectorAll('.extra-checkbox').forEach(c => {
+  c.addEventListener('change', updateAmountFromMulti);
+});
+
+function updateAmountFromMulti() {
+  const baseOutstanding = {{ outstanding }};
+  let extra = 0;
+  document.querySelectorAll('.extra-checkbox:checked').forEach(c => {
+    const row = c.closest('.selector-row');
+    const amtText = row.querySelector('.amt').textContent.replace(/[^0-9.]/g,'');
+    extra += parseFloat(amtText || 0);
+  });
+  const total = baseOutstanding + extra;
+  document.getElementById('pay-amount').value = total.toFixed(2);
+}
+</script>
+
+{% endblock %}
