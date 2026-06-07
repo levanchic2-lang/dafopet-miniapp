@@ -11403,6 +11403,35 @@ _DRUG_TYPE_ZH = {
 }
 
 
+def _customer_is_internal(db: Session, customer_id: int) -> bool:
+    """检查客户是否为员工内购档案。"""
+    if not customer_id:
+        return False
+    c = db.get(Customer, customer_id)
+    return bool(c and c.is_internal)
+
+
+def _apply_internal_pricing(db: Session, items: list[dict], customer_id: int) -> bool:
+    """如果客户是员工内购档案，把 items 列表里每行的 unit_price 替换为 InventoryItem.cost_price，
+    并重算 subtotal。返回 True 表示已应用内购价。
+    items 字典需要至少包含 item_id / quantity_num / unit_price / subtotal 键。"""
+    if not _customer_is_internal(db, customer_id):
+        return False
+    for it in items:
+        iid = it.get("item_id")
+        if not iid:
+            continue
+        inv = db.get(InventoryItem, int(iid))
+        if not inv:
+            continue
+        cost = float(inv.cost_price or 0)
+        # 数量字段在 prescription_items=quantity_num，sales_items=quantity，exam_items=qty
+        qty = float(it.get("quantity_num") or it.get("quantity") or it.get("qty") or 1)
+        it["unit_price"] = cost
+        it["subtotal"] = round(qty * cost, 2)
+    return True
+
+
 def _parse_presc_items(form_data) -> list[dict]:
     items = []
     i = 0
@@ -11739,6 +11768,8 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
         if _v and (_v.status or "open") == "closed":
             raise HTTPException(403, "该病历已结束，不可新增处方；如需追加请新建病历")
     parsed_items = _parse_presc_items(form)
+    # 员工内购档案：单价改填进价
+    _apply_internal_pricing(db, parsed_items, customer_id)
     total = round(sum(it["subtotal"] for it in parsed_items), 2)
     operator = request.session.get("admin_username", "admin")
     presc = Prescription(
@@ -12927,6 +12958,8 @@ async def admin_so_create(request: Request, db: Session = Depends(get_db)):
     visit_id = int(form.get("visit_id", 0) or 0)
     pet_id = int(form.get("pet_id", 0) or 0)
     items = _parse_so_items(form)
+    # 员工内购档案：单价改填进价
+    _apply_internal_pricing(db, items, customer_id)
     total = round(sum(it["subtotal"] for it in items), 2)
     operator = request.session.get("admin_username", "admin")
     order = SalesOrder(
@@ -15936,10 +15969,13 @@ async def admin_reports_revenue(
     df, dt, label = _revenue_date_range(preset, date_from, date_to)
 
     # 已收款的收费单（paid_at 在区间内）
+    # 员工内购档案不计入业绩报表（is_internal=True 的 customer 全部排除）
+    _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     base_q = db.query(Invoice).filter(
         Invoice.payment_status == "paid",
         Invoice.invoice_date >= df,
         Invoice.invoice_date <= dt,
+        ~Invoice.customer_id.in_(_internal_ids_sub),
     )
     rows = base_q.order_by(Invoice.paid_at.desc()).all()
 
@@ -16208,10 +16244,13 @@ async def admin_reports_revenue_export(
     if admin_store_short:
         store = admin_store_short
     df, dt, label = _revenue_date_range(preset, date_from, date_to)
+    # 员工内购档案不计入业绩报表
+    _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     rows = db.query(Invoice).filter(
         Invoice.payment_status == "paid",
         Invoice.invoice_date >= df,
         Invoice.invoice_date <= dt,
+        ~Invoice.customer_id.in_(_internal_ids_sub),
     ).order_by(Invoice.paid_at.asc()).all()
 
     if store:
@@ -16302,11 +16341,12 @@ async def admin_invoices_list(
     for inv in invoices:
         if inv.customer_id and inv.customer_id not in cust_map:
             cust_map[inv.customer_id] = db.get(Customer, inv.customer_id)
-    # 统计数据（同样按 wb_store 过滤）
+    # 统计数据（同样按 wb_store 过滤；员工内购档案排除）
     from datetime import date as _date
     today_str = _date.today().isoformat()
+    _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     def _stat_q():
-        q2 = db.query(Invoice)
+        q2 = db.query(Invoice).filter(~Invoice.customer_id.in_(_internal_ids_sub))
         if wb_store:
             q2 = q2.filter(Invoice.store == wb_store)
         return q2
@@ -18267,6 +18307,12 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
                 "notes":      str(form.get(f"item_notes_{idx}") or "").strip(),
             })
         idx += 1
+
+    # 员工内购档案：单价改填进价
+    if visit_id:
+        _v = db.get(Visit, visit_id)
+        if _v and _v.customer_id:
+            _apply_internal_pricing(db, items, _v.customer_id)
 
     token, exp = _exam_order_token(db)
     order = ExamOrder(
@@ -22853,10 +22899,11 @@ async def m_invoices_list(
         outstanding = max(0.0, float(inv.total_amount or 0) - paid)
         rows.append({"inv": inv, "cust": c, "pet": p,
                      "paid": paid, "outstanding": outstanding})
-    # KPI: 今日已收 + 未付总欠款
+    # KPI: 今日已收 + 未付总欠款（员工内购档案排除）
     from datetime import date as _date
     today_str = _date.today().isoformat()
-    base_q = db.query(Invoice)
+    _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
+    base_q = db.query(Invoice).filter(~Invoice.customer_id.in_(_internal_ids_sub))
     if store_short:
         base_q = base_q.filter(Invoice.store == store_short)
     today_paid = base_q.filter(
@@ -22992,11 +23039,13 @@ async def m_reports_revenue(
         d_from = (today - _td(days=29)).isoformat(); d_to = today.isoformat(); label = "近 30 天"
     else:  # month
         d_from = today.replace(day=1).isoformat(); d_to = today.isoformat(); label = "本月"
-    # 按 Payment 表聚合
+    # 按 Payment 表聚合（员工内购档案排除）
+    _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     q = db.query(Payment).filter(
         Payment.status == "success",
         Payment.created_at >= datetime.strptime(d_from, "%Y-%m-%d"),
         Payment.created_at < datetime.strptime(d_to, "%Y-%m-%d") + timedelta(days=1),
+        ~Payment.customer_id.in_(_internal_ids_sub),
     )
     if store_short:
         q = q.filter(Payment.store == store_short)
@@ -23626,6 +23675,7 @@ async def m_prescribe_new(visit_id: int, request: Request, db: Session = Depends
 async def m_api_search_drug(
     request: Request,
     q: str = "",
+    customer_id: int = 0,
     db: Session = Depends(get_db),
 ):
     if not _admin_ok(request):
@@ -23633,6 +23683,11 @@ async def m_api_search_drug(
     q = (q or "").strip()
     if not q:
         return {"results": []}
+    # 员工内购客户 → 单价按进价填
+    is_internal = False
+    if customer_id:
+        _c = db.get(Customer, customer_id)
+        is_internal = bool(_c and _c.is_internal)
     # 开处方场景：按当前操作门店过滤（含超管）
     store_short = _get_op_store(request)
     query = _apply_store_filter(
@@ -23652,16 +23707,20 @@ async def m_api_search_drug(
             stock_level = "red"
         elif it.stock_qty <= (it.low_stock_min or 0):
             stock_level = "yellow"
+        # 内购客户：sell_price 透明替换为 cost_price，前端 JS 无需改动
+        eff_price = float(it.cost_price or 0) if is_internal else float(it.sell_price or 0)
         results.append({
             "id": it.id, "name": it.name,
             "unit": it.unit or "", "unit2": it.unit2 or "",
-            "sell_price": float(it.sell_price or 0),
+            "sell_price": eff_price,
+            "cost_price": float(it.cost_price or 0),
+            "is_internal_pricing": is_internal,
             "stock_qty": float(it.stock_qty or 0),
             "stock_level": stock_level,
             "is_controlled": bool(it.is_controlled),
             "is_service": bool(it.is_service),
         })
-    return {"results": results}
+    return {"results": results, "is_internal_pricing": is_internal}
 
 
 @app.get("/m/api/recent-drugs")

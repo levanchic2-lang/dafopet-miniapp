@@ -389,7 +389,8 @@ function onDrugSearch(input) {
   updateSaveBtn();
   clearTimeout(searchTimer);
   searchTimer = setTimeout(async () => {
-    const resp = await fetch('/m/api/search-drug?q=' + encodeURIComponent(q));
+    const _cid = document.querySelector('input[name=customer_id]')?.value || 0;
+    const resp = await fetch('/m/api/search-drug?q=' + encodeURIComponent(q) + '&customer_id=' + _cid);
     const data = await resp.json();
     showSearchPop(row, data.results);
   }, 180);
