@@ -1,0 +1,153 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}开检查单{% endblock %}
+{% block topbar_title %}开&nbsp;检&nbsp;查{% endblock %}
+{% block topbar_back %}<a href="/m/visit/{{ v.id }}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block extra_css %}
+<style>
+  .exam-bottom-bar {
+    position: fixed; left: 0; right: 0;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    background: var(--paper);
+    border-top: 0.5px solid var(--hair-strong);
+    padding: 10px var(--gutter); z-index: 12;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .exam-bottom-bar .stat {
+    flex: 1; font-family: var(--font-serif);
+    font-size: 11px; letter-spacing: 1.5px; color: var(--ink-3);
+  }
+  .exam-bottom-bar .stat b {
+    font-size: 18px; color: var(--ink); letter-spacing: 0.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .exam-bottom-bar .ukm-btn { flex: 1.4; min-height: 40px; padding: 10px 14px; }
+  .exam-chip-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .exam-chip-grid .ukm-chip { padding: 7px 11px; font-size: 12.5px; }
+  .exam-chip-grid .price {
+    font-size: 10px; opacity: 0.7;
+    margin-left: 5px; letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head" style="margin-bottom:10px;">
+  <h1 style="font-size:18px;">{{ pet.name if pet else '—' }}
+    <span class="ukm-italic" style="font-size:13px;margin-left:6px;">病历&nbsp;#{{ v.id }}</span>
+  </h1>
+  <div class="meta">{{ v.visit_date }}</div>
+</div>
+
+<form method="post" action="/admin/exam-orders/create" id="exam-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="visit_id" value="{{ v.id }}"/>
+  <input type="hidden" name="next_url" value="/m/exam-order/{id}"/>
+
+  {% if grouped.lab %}
+  <div class="ukm-section-head"><h2>化&nbsp;验</h2></div>
+  <div class="exam-chip-grid">
+    {% for it in grouped.lab %}
+    <button type="button" class="ukm-chip"
+            data-id="{{ it.id }}" data-name="{{ it.name }}"
+            data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+            data-unit="{{ it.unit or '次' }}" onclick="pickExam(this)">
+      {{ it.name }}<span class="price">¥{{ '%.0f'|format(it.sell_price or 0) }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if grouped.imaging %}
+  <div class="ukm-section-head"><h2>影&nbsp;像</h2></div>
+  <div class="exam-chip-grid">
+    {% for it in grouped.imaging %}
+    <button type="button" class="ukm-chip"
+            data-id="{{ it.id }}" data-name="{{ it.name }}"
+            data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+            data-unit="{{ it.unit or '次' }}" onclick="pickExam(this)">
+      {{ it.name }}<span class="price">¥{{ '%.0f'|format(it.sell_price or 0) }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if grouped.microscopy %}
+  <div class="ukm-section-head"><h2>镜&nbsp;检</h2></div>
+  <div class="exam-chip-grid">
+    {% for it in grouped.microscopy %}
+    <button type="button" class="ukm-chip"
+            data-id="{{ it.id }}" data-name="{{ it.name }}"
+            data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+            data-unit="{{ it.unit or '次' }}" onclick="pickExam(this)">
+      {{ it.name }}<span class="price">¥{{ '%.0f'|format(it.sell_price or 0) }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not grouped.lab and not grouped.imaging and not grouped.microscopy %}
+  <div class="ukm-empty">
+    <div class="big">无&nbsp;检&nbsp;查&nbsp;项&nbsp;目</div>
+    桌面端 → 库存 → 化验 / 影像 / 镜检
+  </div>
+  {% endif %}
+
+  <div class="ukm-section-head"><h2>整&nbsp;单&nbsp;备&nbsp;注</h2></div>
+  <div class="ukm-field">
+    <textarea class="ukm-textarea" name="notes" style="min-height:64px;" placeholder="可选"></textarea>
+  </div>
+
+  <div id="picked-items"></div>
+  <div style="height:80px;"></div>
+
+  <div class="exam-bottom-bar">
+    <div class="stat">已&nbsp;选&nbsp;<b id="picked-n">0</b>&nbsp;项<br/><b id="grand-total" style="font-size:14px;">¥&nbsp;0.00</b></div>
+    <button type="submit" class="ukm-btn" id="save-btn" disabled>开&nbsp;单</button>
+  </div>
+</form>
+
+<script>
+const picked = new Map();
+function pickExam(btn) {
+  const id = btn.dataset.id;
+  if (picked.has(id)) {
+    picked.delete(id);
+    btn.classList.remove('checked');
+  } else {
+    picked.set(id, {
+      id, name: btn.dataset.name,
+      price: parseFloat(btn.dataset.price || 0),
+      unit: btn.dataset.unit || '次',
+    });
+    btn.classList.add('checked');
+  }
+  rebuildHidden();
+}
+function rebuildHidden() {
+  const wrap = document.getElementById('picked-items');
+  wrap.innerHTML = '';
+  let i = 0, total = 0;
+  picked.forEach((v) => {
+    wrap.insertAdjacentHTML('beforeend', `
+      <input type="hidden" name="item_name_${i}" value="${escapeHtml(v.name)}"/>
+      <input type="hidden" name="item_id_${i}" value="${v.id}"/>
+      <input type="hidden" name="item_qty_${i}" value="1"/>
+      <input type="hidden" name="item_price_${i}" value="${v.price}"/>
+      <input type="hidden" name="item_unit_${i}" value="${escapeHtml(v.unit)}"/>
+      <input type="hidden" name="item_notes_${i}" value=""/>
+    `);
+    total += v.price; i++;
+  });
+  document.getElementById('picked-n').textContent = picked.size;
+  document.getElementById('grand-total').textContent = '¥ ' + total.toFixed(2);
+  document.getElementById('save-btn').disabled = picked.size === 0;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+
+{% endblock %}

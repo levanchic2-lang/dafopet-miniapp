@@ -1,0 +1,504 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}开处方{% endblock %}
+{% block topbar_title %}开&nbsp;处&nbsp;方{% endblock %}
+{% block topbar_back %}<a href="/m/visit/{{ v.id }}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block extra_css %}
+<style>
+  .rx-row {
+    background: var(--paper);
+    border-top: 0.5px solid var(--hair);
+    border-bottom: 0.5px solid var(--hair);
+    padding: 14px var(--gutter);
+    margin: 0 calc(0px - var(--gutter)) 14px;
+    position: relative;
+  }
+  .rx-row + .rx-row { border-top: none; }
+  .rx-row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .rx-num {
+    font-family: var(--font-serif); font-weight: 700;
+    color: var(--ink-2); font-size: 13px;
+    width: 22px; flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .rx-drug-input {
+    flex: 1; padding: 10px 12px; min-height: 42px;
+    border: 0.5px solid var(--ink-3); background: var(--paper);
+    font-family: var(--font-serif); font-size: 15px; font-weight: 600;
+    color: var(--ink); border-radius: 0;
+    -webkit-appearance: none; appearance: none;
+  }
+  .rx-drug-input:focus { outline: none; border-color: var(--ink); }
+  .rx-rm {
+    color: var(--accent-red); background: none; border: none;
+    font-family: var(--font-serif); font-size: 18px; padding: 4px 8px;
+    flex-shrink: 0; cursor: pointer; line-height: 1;
+  }
+
+  /* 搜索弹窗 */
+  .rx-search-pop {
+    position: absolute; top: 52px; left: var(--gutter); right: var(--gutter);
+    background: var(--paper);
+    border: 0.5px solid var(--hair-strong);
+    max-height: 280px; overflow-y: auto; z-index: 30;
+  }
+  .rx-search-row {
+    padding: 10px 12px;
+    border-bottom: 0.5px solid var(--hair);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .rx-search-row:active { background: var(--bg-elevated); }
+  .rx-search-row:last-child { border-bottom: none; }
+  .stock-pill {
+    font-family: var(--font-serif);
+    font-size: 10px; letter-spacing: 1.2px; font-weight: 600;
+    padding: 2px 7px; flex-shrink: 0;
+    border: 0.5px solid var(--hair);
+  }
+  .stock-pill.green { background: var(--accent-green); color: var(--paper); border-color: var(--accent-green); }
+  .stock-pill.yellow { background: var(--accent-amber); color: var(--paper); border-color: var(--accent-amber); }
+  .stock-pill.red { background: var(--accent-red); color: var(--paper); border-color: var(--accent-red); }
+
+  /* chip 行 */
+  .rx-chip-row { margin-top: 10px; }
+  .rx-chip-row .lbl {
+    display: block;
+    font-family: var(--font-serif); font-size: 10px; font-weight: 700;
+    color: var(--ink-3); letter-spacing: 2px; margin-bottom: 5px;
+  }
+  .rx-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .rx-mini-chip {
+    background: var(--paper); color: var(--ink-2);
+    padding: 5px 11px; font-size: 12px;
+    border: 0.5px solid var(--hair);
+    font-family: var(--font-serif); cursor: pointer; user-select: none;
+    letter-spacing: 0.5px; line-height: 1.4;
+  }
+  .rx-mini-chip.active {
+    background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 700;
+  }
+
+  .rx-fld-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+    margin-top: 10px;
+  }
+  .rx-fld-row label {
+    display: block;
+    font-family: var(--font-serif); font-size: 10px; color: var(--ink-3);
+    letter-spacing: 1.2px; margin-bottom: 4px;
+  }
+  .rx-fld-row input {
+    width: 100%; box-sizing: border-box;
+    padding: 8px 10px; min-height: 38px;
+    border: 0.5px solid var(--ink-3); background: var(--paper);
+    font-family: var(--font-serif); font-size: 14px; color: var(--ink);
+    border-radius: 0; -webkit-appearance: none; appearance: none;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  .rx-fld-row input[readonly] {
+    background: var(--bg-elevated);
+    color: var(--ink); font-weight: 700;
+  }
+  .rx-fld-row input:focus { outline: none; border-color: var(--ink); }
+
+  .rx-instr-input {
+    width: 100%; box-sizing: border-box;
+    padding: 8px 10px; margin-top: 10px;
+    border: 0.5px solid var(--hair); background: var(--paper);
+    font-family: var(--font-serif); font-size: 13px;
+    color: var(--ink); border-radius: 0;
+  }
+
+  .rx-sched-input {
+    width: 100%; box-sizing: border-box;
+    padding: 8px 10px; margin-top: 4px;
+    border: 0.5px solid var(--accent-amber); background: #fef9f0;
+    font-family: var(--font-num); font-size: 13px;
+    color: var(--ink); border-radius: 0;
+  }
+
+  .rx-controlled-tag {
+    display: inline-block; padding: 2px 8px;
+    font-family: var(--font-serif); font-size: 10px; letter-spacing: 1.5px;
+    background: var(--accent-red); color: var(--paper);
+    border: 0.5px solid var(--accent-red);
+    margin-bottom: 6px;
+  }
+  .rx-stock-info {
+    font-family: var(--font-serif); font-size: 11px;
+    margin-bottom: 4px; letter-spacing: 0.5px;
+  }
+
+  .rx-bottom-bar {
+    position: fixed; left: 0; right: 0;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    background: var(--paper);
+    border-top: 0.5px solid var(--hair-strong);
+    padding: 10px var(--gutter); z-index: 12;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .rx-bottom-bar .total {
+    flex: 1; font-family: var(--font-serif);
+    font-size: 11px; letter-spacing: 1.5px; color: var(--ink-3);
+  }
+  .rx-bottom-bar .total b {
+    font-size: 18px; color: var(--ink); letter-spacing: 0.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .rx-bottom-bar .ukm-btn { flex: 1.4; min-height: 40px; padding: 10px 14px; }
+
+  /* 模板套用面板 */
+  details.rx-tpl {
+    background: var(--paper);
+    border-top: 0.5px solid var(--hair);
+    border-bottom: 0.5px solid var(--hair);
+    margin: 0 calc(0px - var(--gutter)) 14px;
+    padding: 12px var(--gutter);
+  }
+  details.rx-tpl summary {
+    list-style: none; cursor: pointer;
+    font-family: var(--font-serif); font-size: 11px;
+    letter-spacing: 2px; color: var(--ink-2); font-weight: 700;
+  }
+  details.rx-tpl summary::-webkit-details-marker { display: none; }
+  details.rx-tpl summary::before {
+    content: "＋ "; color: var(--ink-3); font-weight: 400;
+  }
+  details.rx-tpl[open] summary::before { content: "− "; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head" style="margin-bottom:10px;">
+  <h1 style="font-size:18px;">{{ pet.name if pet else '—' }}
+    <span class="ukm-italic" style="font-size:13px;margin-left:6px;">病历&nbsp;#{{ v.id }}</span>
+    {% if hosp_admitted %}<span class="ukm-pill amber" style="margin-left:6px;">住院中</span>{% endif %}
+  </h1>
+  <div class="meta">{{ today }}</div>
+</div>
+
+<form method="post" action="/admin/prescriptions/create" id="rx-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="visit_id" value="{{ v.id }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
+  <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="prescribed_date" value="{{ today }}"/>
+  <input type="hidden" name="next_url" value="/m/visit/{{ v.id }}"/>
+  <input type="hidden" name="status" value="issued"/>
+
+  <div class="ukm-field">
+    <label class="lbl">医&nbsp;生<span class="req">*</span></label>
+    <input class="ukm-input" type="text" name="vet_name" value="{{ default_vet }}" required/>
+  </div>
+
+  {% if templates_list %}
+  <details class="rx-tpl">
+    <summary>套&nbsp;用&nbsp;模&nbsp;板&nbsp;&nbsp;·&nbsp;&nbsp;{{ templates_list|length }}</summary>
+    <div class="rx-chips" style="margin-top:10px;">
+      {% for t in templates_list %}
+      <button type="button" class="rx-mini-chip" data-tpl-id="{{ t.id }}" onclick="loadTpl(this)">
+        {{ t.name }}{% if t.use_count %}<span class="ukm-italic" style="font-size:10px;margin-left:4px;">×{{ t.use_count }}</span>{% endif %}
+      </button>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+  <div id="rx-items"></div>
+
+  <button type="button" onclick="addRow()" class="ukm-btn ghost block" style="margin-bottom:14px;">
+    +&nbsp;加&nbsp;一&nbsp;味&nbsp;药
+  </button>
+
+  <div class="ukm-section-head"><h2>整&nbsp;方&nbsp;备&nbsp;注</h2></div>
+  <div class="ukm-field">
+    <textarea class="ukm-textarea" name="notes" placeholder="给客户的整体用药提示，可选" style="min-height:64px;"></textarea>
+  </div>
+
+  <div style="height:80px;"></div>
+
+  <div class="rx-bottom-bar">
+    <div class="total">合&nbsp;计<br/><b id="grand-total">¥&nbsp;0.00</b></div>
+    <button type="submit" class="ukm-btn" id="save-btn" disabled>保&nbsp;存&nbsp;处&nbsp;方</button>
+  </div>
+</form>
+
+{# 模板片段 #}
+<template id="rx-row-tpl">
+<div class="rx-row" data-idx="__IDX__">
+  <input type="hidden" name="item_id___IDX__" class="rx-item-id"/>
+  <input type="hidden" name="quantity____IDX__" class="rx-display-qty"/>
+  <input type="hidden" name="item_unit___IDX__" class="rx-item-unit"/>
+
+  <div class="rx-row-head">
+    <span class="rx-num">__NUMSTR__</span>
+    <input type="text" name="drug_name___IDX__" class="rx-drug-input rx-search"
+           placeholder="搜药名（≥ 1 字）" autocomplete="off" oninput="onDrugSearch(this)"/>
+    <button type="button" class="rx-rm" onclick="rmRow(this)">✕</button>
+  </div>
+  <div class="rx-controlled-tag" style="display:none;">受&nbsp;管&nbsp;控&nbsp;药&nbsp;品</div>
+  <div class="rx-stock-info" style="display:none;"></div>
+
+  <div class="rx-chip-row">
+    <span class="lbl">给&nbsp;药&nbsp;途&nbsp;径</span>
+    <div class="rx-chips">
+      {% for k, zh in [('oral','口服'),('subq','皮下'),('im','肌注'),('iv','静脉'),('topical','外用'),('inh','雾化')] %}
+      <button type="button" class="rx-mini-chip{% if k == 'oral' %} active{% endif %}" data-route="{{ k }}" onclick="pickRoute(this)">{{ zh }}</button>
+      {% endfor %}
+      <input type="hidden" name="drug_type___IDX__" value="oral" class="rx-route"/>
+    </div>
+  </div>
+
+  <div class="rx-chip-row">
+    <span class="lbl">频&nbsp;次</span>
+    <div class="rx-chips">
+      {% for f, tpd in [('qd',1),('bid',2),('tid',3),('qid',4),('q8h',3),('q12h',2),('q24h',1),('q48h',0.5),('prn',0)] %}
+      <button type="button" class="rx-mini-chip" data-freq="{{ f }}" data-tpd="{{ tpd }}" onclick="pickFreq(this)">{{ f }}</button>
+      {% endfor %}
+      <input type="hidden" name="frequency___IDX__" class="rx-freq"/>
+      <input type="hidden" name="times_per_day___IDX__" class="rx-tpd"/>
+    </div>
+  </div>
+
+  <div class="rx-fld-row">
+    <label>单&nbsp;次&nbsp;量<input type="number" step="0.01" inputmode="decimal" name="dose_amount___IDX__" class="rx-dose" oninput="recalc(this)"/></label>
+    <label>单&nbsp;位<input type="text" name="dose_unit___IDX__" class="rx-dose-unit" placeholder="mg/ml/片"/></label>
+    <label>天&nbsp;数<input type="number" min="1" inputmode="numeric" name="duration_days___IDX__" class="rx-days" value="3" oninput="recalc(this)"/></label>
+  </div>
+
+  <div class="rx-fld-row">
+    <label>取&nbsp;药&nbsp;量<input type="number" step="0.01" inputmode="decimal" name="quantity_num___IDX__" class="rx-qty" oninput="recalc(this)"/></label>
+    <label>单&nbsp;价&nbsp;¥<input type="number" step="0.01" inputmode="decimal" name="unit_price___IDX__" class="rx-price" oninput="recalc(this)"/></label>
+    <label>小&nbsp;计<input type="text" class="rx-subtotal" readonly value="0.00"/></label>
+  </div>
+
+  {% if hosp_admitted %}
+  <div style="margin-top:10px;">
+    <span class="lbl" style="display:block;font-family:var(--font-serif);font-size:10px;font-weight:700;color:var(--accent-amber);letter-spacing:1.5px;margin-bottom:4px;">住&nbsp;院&nbsp;发&nbsp;药&nbsp;时&nbsp;刻&nbsp;表&nbsp;&nbsp;CSV&nbsp;如&nbsp;8,14,20</span>
+    <input type="text" name="schedule_times___IDX__" class="rx-sched-input" placeholder="8,14,20"/>
+  </div>
+  {% else %}
+  <input type="hidden" name="schedule_times___IDX__" value=""/>
+  {% endif %}
+
+  <input type="text" name="instructions___IDX__" class="rx-instr-input"
+         placeholder="医嘱（饭后服 / 摇匀使用 等）"/>
+</div>
+</template>
+
+<script>
+const NUM_CIRCLED = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫'];
+let rowCount = 0;
+const HOSP_ADMITTED = {{ 'true' if hosp_admitted else 'false' }};
+
+function addRow(prefill) {
+  const tpl = document.getElementById('rx-row-tpl');
+  let html = tpl.innerHTML.replaceAll('__IDX__', String(rowCount));
+  html = html.replaceAll('__NUMSTR__', NUM_CIRCLED[rowCount] || (rowCount+1));
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const row = wrap.firstElementChild;
+  document.getElementById('rx-items').appendChild(row);
+  if (prefill) applyPrefill(row, prefill);
+  rowCount++;
+  updateSaveBtn();
+  return row;
+}
+
+function rmRow(btn) {
+  btn.closest('.rx-row').remove();
+  recalcGrand();
+  updateSaveBtn();
+}
+
+function pickRoute(btn) {
+  const row = btn.closest('.rx-row');
+  row.querySelectorAll('[data-route]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  row.querySelector('.rx-route').value = btn.dataset.route;
+}
+
+function pickFreq(btn) {
+  const row = btn.closest('.rx-row');
+  row.querySelectorAll('[data-freq]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  row.querySelector('.rx-freq').value = btn.dataset.freq;
+  row.querySelector('.rx-tpd').value = btn.dataset.tpd || '';
+  autoQty(row);
+}
+
+function autoQty(row) {
+  const dose = parseFloat(row.querySelector('.rx-dose').value || 0);
+  const tpd = parseFloat(row.querySelector('.rx-tpd').value || 0);
+  const days = parseFloat(row.querySelector('.rx-days').value || 0);
+  if (dose > 0 && tpd > 0 && days > 0) {
+    const total = dose * tpd * days;
+    const qtyInput = row.querySelector('.rx-qty');
+    if (!qtyInput.dataset.userTouched) {
+      qtyInput.value = total.toFixed(2);
+    }
+  }
+  recalc(row);
+}
+
+function recalc(elem) {
+  const row = elem.closest ? elem.closest('.rx-row') : elem;
+  if (elem.classList && elem.classList.contains('rx-qty')) {
+    elem.dataset.userTouched = '1';
+  }
+  if (elem.classList && (elem.classList.contains('rx-dose') || elem.classList.contains('rx-days'))) {
+    autoQty(row);
+    return;
+  }
+  const qty = parseFloat(row.querySelector('.rx-qty').value || 0);
+  const price = parseFloat(row.querySelector('.rx-price').value || 0);
+  const sub = qty * price;
+  row.querySelector('.rx-subtotal').value = sub.toFixed(2);
+  const unit = row.querySelector('.rx-item-unit').value || '';
+  row.querySelector('.rx-display-qty').value = qty > 0 ? (qty + unit) : '';
+  recalcGrand();
+}
+
+function recalcGrand() {
+  let total = 0;
+  document.querySelectorAll('.rx-row').forEach(r => {
+    total += parseFloat(r.querySelector('.rx-subtotal').value || 0);
+  });
+  document.getElementById('grand-total').textContent = '¥ ' + total.toFixed(2);
+}
+
+function updateSaveBtn() {
+  const rows = document.querySelectorAll('.rx-row');
+  let valid = false;
+  rows.forEach(r => {
+    if (r.querySelector('.rx-drug-input').value.trim()) valid = true;
+  });
+  document.getElementById('save-btn').disabled = !valid;
+}
+
+let searchTimer = null, activeSearchRow = null;
+
+function onDrugSearch(input) {
+  const row = input.closest('.rx-row');
+  activeSearchRow = row;
+  const q = input.value.trim();
+  document.querySelectorAll('.rx-search-pop').forEach(p => p.remove());
+  if (!q) { updateSaveBtn(); return; }
+  updateSaveBtn();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(async () => {
+    const resp = await fetch('/m/api/search-drug?q=' + encodeURIComponent(q));
+    const data = await resp.json();
+    showSearchPop(row, data.results);
+  }, 180);
+}
+
+function showSearchPop(row, results) {
+  const old = row.querySelector('.rx-search-pop');
+  if (old) old.remove();
+  if (!results || results.length === 0) {
+    const pop = document.createElement('div');
+    pop.className = 'rx-search-pop';
+    pop.innerHTML = '<div class="rx-search-row" style="color:var(--ink-3);justify-content:center;cursor:default;font-style:italic;">无匹配 · 可继续输入自由药名</div>';
+    row.appendChild(pop);
+    return;
+  }
+  const pop = document.createElement('div');
+  pop.className = 'rx-search-pop';
+  pop.innerHTML = results.map(it => `
+    <div class="rx-search-row" onclick='pickDrug(${JSON.stringify(it).replace(/'/g, "&#39;")})'>
+      <div style="flex:1;min-width:0;">
+        <div style="font-family:var(--font-serif);font-weight:600;font-size:14px;color:var(--ink);">
+          ${it.name}${it.is_controlled ? ' <span style="font-size:10px;color:var(--accent-red);letter-spacing:1px;">受管控</span>' : ''}
+        </div>
+        <div style="font-family:var(--font-serif);font-size:11px;color:var(--ink-3);margin-top:2px;font-style:italic;letter-spacing:0.5px;">
+          ¥${it.sell_price.toFixed(2)}/${it.unit || '主单位'} · 库存 ${it.stock_qty.toFixed(1)}${it.unit || ''}
+        </div>
+      </div>
+      <span class="stock-pill ${it.stock_level}">${it.stock_level === 'green' ? '充足' : (it.stock_level === 'yellow' ? '偏低' : '缺货')}</span>
+    </div>
+  `).join('');
+  row.appendChild(pop);
+}
+
+function pickDrug(it) {
+  const row = activeSearchRow;
+  if (!row) return;
+  row.querySelector('.rx-drug-input').value = it.name;
+  row.querySelector('.rx-item-id').value = it.id;
+  row.querySelector('.rx-item-unit').value = it.unit || '';
+  if (it.sell_price > 0 && !row.querySelector('.rx-price').value) {
+    row.querySelector('.rx-price').value = it.sell_price.toFixed(2);
+  }
+  row.querySelector('.rx-controlled-tag').style.display = it.is_controlled ? 'inline-block' : 'none';
+  const stockInfo = row.querySelector('.rx-stock-info');
+  stockInfo.style.display = 'block';
+  const color = it.stock_level === 'red' ? 'var(--accent-red)' : (it.stock_level === 'yellow' ? 'var(--accent-amber)' : 'var(--accent-green)');
+  stockInfo.style.color = color;
+  stockInfo.textContent = `库存 ${it.stock_qty.toFixed(1)} ${it.unit || ''} · ¥${it.sell_price.toFixed(2)}/${it.unit || '单位'}`;
+  row.querySelector('.rx-search-pop')?.remove();
+  recalc(row.querySelector('.rx-price'));
+  updateSaveBtn();
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.rx-row')) {
+    document.querySelectorAll('.rx-search-pop').forEach(p => p.remove());
+  }
+});
+
+async function loadTpl(btn) {
+  const tplId = btn.dataset.tplId;
+  const resp = await fetch('/m/api/presc-template/' + tplId);
+  if (!resp.ok) return alert('加载失败');
+  const data = await resp.json();
+  if (!confirm(`套用模板「${data.name}」？现有 ${rowCount} 行会保留，模板 ${data.items.length} 项会追加。`)) return;
+  for (const it of data.items) { addRow(it); }
+  if (data.notes) {
+    const note = document.querySelector('textarea[name=notes]');
+    note.value = note.value ? (note.value + '\n' + data.notes) : data.notes;
+  }
+  recalcGrand();
+  updateSaveBtn();
+}
+
+function applyPrefill(row, p) {
+  if (p.drug_name) row.querySelector('.rx-drug-input').value = p.drug_name;
+  if (p.item_id) row.querySelector('.rx-item-id').value = p.item_id;
+  if (p.dose_amount) row.querySelector('.rx-dose').value = p.dose_amount;
+  if (p.dose_unit) row.querySelector('.rx-dose-unit').value = p.dose_unit;
+  if (p.duration_days) row.querySelector('.rx-days').value = p.duration_days;
+  if (p.unit_price) row.querySelector('.rx-price').value = p.unit_price;
+  if (p.item_unit) row.querySelector('.rx-item-unit').value = p.item_unit;
+  if (p.schedule_times) {
+    const sched = row.querySelector('[name^=schedule_times_]');
+    if (sched) sched.value = p.schedule_times;
+  }
+  if (p.instructions) {
+    row.querySelector('[name^=instructions_]').value = p.instructions;
+  }
+  if (p.drug_type) {
+    const rbtn = row.querySelector(`[data-route="${p.drug_type}"]`);
+    if (rbtn) pickRoute(rbtn);
+  }
+  if (p.frequency) {
+    const fbtn = row.querySelector(`[data-freq="${p.frequency}"]`);
+    if (fbtn) pickFreq(fbtn);
+    else {
+      row.querySelector('.rx-freq').value = p.frequency;
+      row.querySelector('.rx-tpd').value = p.times_per_day || '';
+    }
+  }
+  if (p.quantity_num) {
+    row.querySelector('.rx-qty').value = p.quantity_num;
+    row.querySelector('.rx-qty').dataset.userTouched = '1';
+  }
+  recalc(row.querySelector('.rx-price'));
+}
+
+addRow();
+</script>
+
+{% endblock %}

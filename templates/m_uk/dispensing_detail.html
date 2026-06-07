@@ -1,0 +1,98 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}处方 #{{ p.id }} · 配药{% endblock %}
+{% block topbar_title %}配&nbsp;药&nbsp;#{{ p.id }}{% endblock %}
+{% block topbar_back %}<a href="/m/dispensing" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% set _route_zh = {'oral':'口服','subq':'皮下','im':'肌注','iv':'静脉','topical':'外用','inh':'雾化'} %}
+
+<div class="ukm-page-head">
+  <h1>{{ pet.name if pet else '宠物' }}
+    <span class="ukm-italic" style="font-size:14px;margin-left:6px;">{{ cust.name if cust else '—' }}</span>
+  </h1>
+  <div class="meta">
+    医生&nbsp;<span style="color:var(--ink);font-style:normal;">{{ p.vet_name or '—' }}</span>
+    <span class="sep">·</span>
+    开方&nbsp;<span style="color:var(--ink);font-style:normal;">{{ p.prescribed_date or '—' }}</span>
+    {% if cust and cust.phone %}
+    <span class="sep">·</span>
+    <a href="tel:{{ cust.phone }}" class="ukm-mono" style="font-style:normal;color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ cust.phone }}</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if has_controlled %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-red);">
+    <div class="ukm-card-title" style="color:var(--accent-red);">受&nbsp;管&nbsp;控&nbsp;药&nbsp;品</div>
+    <div class="ukm-card-sub" style="color:var(--accent-red);">配此处方需特别核对客户与药品信息</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="ukm-section-head"><h2>药&nbsp;品&nbsp;清&nbsp;单&nbsp;&nbsp;·&nbsp;{{ p.items|length }}&nbsp;味</h2></div>
+<div class="ukm-card-group">
+  {% for it in p.items %}
+  <div class="ukm-card">
+    <div class="ukm-card-title">{{ loop.index }}.&nbsp;{{ it.drug_name }}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-top:8px;font-size:12px;">
+      {% if it.dose_amount %}
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">单&nbsp;次</span><br/><span class="ukm-num" style="font-size:14px;">{{ it.dose_amount }}{{ it.dose_unit or '' }}</span></div>
+      {% endif %}
+      {% if it.frequency %}
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">频&nbsp;次</span><br/><span style="font-size:14px;">{{ it.frequency }}</span></div>
+      {% endif %}
+      {% if it.duration_days %}
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">天&nbsp;数</span><br/><span class="ukm-num" style="font-size:14px;">{{ it.duration_days }}</span></div>
+      {% endif %}
+      {% if it.drug_type %}
+      <div><span style="font-size:10px;letter-spacing:1.5px;color:var(--ink-3);">途&nbsp;径</span><br/><span style="font-size:14px;">{{ _route_zh.get(it.drug_type, it.drug_type) }}</span></div>
+      {% endif %}
+    </div>
+    {% if it.quantity %}
+    <div style="margin-top:10px;padding:8px 10px;border-top:0.5px solid var(--hair);font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">
+      取&nbsp;药&nbsp;&nbsp;<span class="ukm-num" style="font-size:15px;color:var(--ink);font-weight:700;letter-spacing:0.5px;">{{ it.quantity }}</span>
+    </div>
+    {% endif %}
+    {% if it.instructions %}
+    <div style="margin-top:8px;font-size:12px;color:var(--ink-2);line-height:1.6;font-style:italic;">{{ it.instructions }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% if p.notes %}
+<div class="ukm-section-head"><h2>整&nbsp;方&nbsp;备&nbsp;注</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div style="font-size:13px;line-height:1.6;color:var(--ink-2);white-space:pre-wrap;">{{ p.notes }}</div>
+  </div>
+</div>
+{% endif %}
+
+{% if p.dispensed_at %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-green);">
+    <div class="ukm-card-title" style="color:var(--accent-green);">已&nbsp;配&nbsp;齐</div>
+    <div class="ukm-card-sub">{{ p.dispensed_at.strftime('%Y-%m-%d %H:%M') }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ p.dispensed_by or '—' }}</div>
+  </div>
+</div>
+<form method="post" action="/m/dispensing/{{ p.id }}/undo" onsubmit="return confirm('撤销已配齐？')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <button type="submit" class="ukm-btn hair block">撤&nbsp;销&nbsp;已&nbsp;配&nbsp;齐</button>
+</form>
+{% else %}
+<form method="post" action="/m/dispensing/{{ p.id }}/mark" onsubmit="return confirm('确认所有药都已配齐？')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <button type="submit" class="ukm-btn block">全&nbsp;部&nbsp;已&nbsp;配&nbsp;齐</button>
+</form>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/prescriptions/{{ p.id }}/print" target="_blank" class="ukm-btn ghost block">打&nbsp;印</a>
+  <a href="/admin/prescriptions/{{ p.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端</a>
+</div>
+
+{% endblock %}

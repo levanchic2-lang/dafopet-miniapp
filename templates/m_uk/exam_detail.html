@@ -1,0 +1,82 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}检查单 #{{ order.id }}{% endblock %}
+{% block topbar_title %}检&nbsp;查&nbsp;#{{ order.id }}{% endblock %}
+{% block topbar_back %}<a href="{% if v %}/m/visit/{{ v.id }}{% else %}/m/medical{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>检&nbsp;查&nbsp;单&nbsp;#{{ order.id }}
+    {% if order.status == 'pending' %}<span class="ukm-pill amber" style="margin-left:8px;vertical-align:middle;">待报告</span>
+    {% elif order.status == 'completed' %}<span class="ukm-pill green" style="margin-left:8px;vertical-align:middle;">完成</span>
+    {% elif order.status == 'voided' %}<span class="ukm-pill red" style="margin-left:8px;vertical-align:middle;">作废</span>{% endif %}
+  </h1>
+  <div class="meta">
+    {{ pet.name if pet else '—' }}
+    {% if v %}<span class="sep">·</span>{{ v.visit_date }}{% endif %}
+    {% if reports %}<span class="sep">·</span>{{ reports|length }}&nbsp;份报告{% endif %}
+  </div>
+</div>
+
+<div class="ukm-section-head"><h2>检&nbsp;查&nbsp;项&nbsp;目&nbsp;·&nbsp;{{ items|length }}</h2></div>
+<div class="ukm-row-group">
+  {% for it in items %}
+  <div class="ukm-row" style="cursor:default;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title" style="font-size:14px;">{{ loop.index }}.&nbsp;{{ it.name }}</div>
+    </div>
+    {% if it.unit_price %}
+    <div class="ukm-row-right ukm-num">¥&nbsp;{{ '%.0f'|format(it.unit_price) }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% if reports %}
+<div class="ukm-section-head"><h2>已&nbsp;上&nbsp;传&nbsp;报&nbsp;告</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+      {% for r in reports %}
+      <a href="/admin/exam-reports/{{ r.id }}/view" target="_blank"
+         style="aspect-ratio:1;border:0.5px solid var(--hair);display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-elevated);text-decoration:none;color:inherit;padding:8px;">
+        <div style="font-family:var(--font-serif);font-size:24px;font-weight:300;color:var(--ink-2);line-height:1;">{% if r.file_type == 'pdf' %}PDF{% else %}IMG{% endif %}</div>
+        <div style="font-size:10px;color:var(--ink-3);text-align:center;margin-top:6px;overflow:hidden;text-overflow:ellipsis;width:100%;font-style:italic;letter-spacing:0.5px;">{{ r.original_name|truncate(12) }}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if order.status != 'voided' %}
+<div class="ukm-section-head"><h2>上&nbsp;传&nbsp;报&nbsp;告</h2></div>
+<form method="post" action="/admin/exam-orders/{{ order.id }}/upload" enctype="multipart/form-data" id="upload-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="{{ next_url }}"/>
+  <div class="ukm-field">
+    <label class="lbl">归&nbsp;属&nbsp;项&nbsp;（可选）</label>
+    <input class="ukm-input" type="text" name="item_label" placeholder="如：血常规"/>
+  </div>
+  <label class="ukm-btn block" style="cursor:pointer;">
+    拍&nbsp;照&nbsp;/&nbsp;选&nbsp;文&nbsp;件
+    <input type="file" name="file" accept="image/*,application/pdf" capture="environment"
+           onchange="document.getElementById('upload-form').submit()" style="display:none;"/>
+  </label>
+  <div class="ukm-fineprint">JPG&nbsp;/&nbsp;PNG&nbsp;/&nbsp;PDF&nbsp;&nbsp;·&nbsp;&nbsp;上限&nbsp;20MB&nbsp;&nbsp;·&nbsp;&nbsp;上传后自动标记完成</div>
+</form>
+{% endif %}
+
+{% if order.status == 'completed' and has_microscopy %}
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/exam-orders/{{ order.id }}/microscopy/new" class="ukm-btn ghost block">显&nbsp;微&nbsp;镜&nbsp;报&nbsp;告</a>
+</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/exam-orders/{{ order.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;打&nbsp;开</a>
+</div>
+
+{% endblock %}

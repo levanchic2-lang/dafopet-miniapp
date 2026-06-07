@@ -22005,7 +22005,7 @@ async def m_dispensing_list(request: Request, db: Session = Depends(get_db)):
         enriched.append({"p": p, "pet": pet, "cust": cust, "item_cnt": item_cnt})
     ctx = _m_ctx(request, db, active_tab="dispensing")
     ctx["rows"] = enriched
-    return templates.TemplateResponse(request, "m/dispensing_list.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/dispensing_list.html", ctx)
 
 
 @app.get("/m/dispensing/{presc_id}", response_class=HTMLResponse)
@@ -22030,7 +22030,7 @@ async def m_dispensing_detail(presc_id: int, request: Request, db: Session = Dep
         "p": p, "pet": pet, "cust": cust,
         "has_controlled": has_controlled,
     })
-    return templates.TemplateResponse(request, "m/dispensing_detail.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/dispensing_detail.html", ctx)
 
 
 @app.post("/m/dispensing/{presc_id}/mark")
@@ -22741,7 +22741,7 @@ async def m_exam_new(visit_id: int, request: Request, db: Session = Depends(get_
         "v": v, "pet": pet, "cust": cust,
         "grouped": grouped,
     })
-    return templates.TemplateResponse(request, "m/exam_new.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/exam_new.html", ctx)
 
 
 @app.get("/m/exam-order/{order_id}", response_class=HTMLResponse)
@@ -22758,13 +22758,28 @@ async def m_exam_detail(order_id: int, request: Request, db: Session = Depends(g
         items = json.loads(order.items_json or "[]")
     except Exception:
         items = []
-    ctx = _m_ctx(request, db, active_tab="customers")
+    # 是否含显微镜项目（用于显示"显微镜报告"入口）
+    has_microscopy = False
+    for it in items:
+        iid = it.get("item_id") if isinstance(it, dict) else None
+        if iid:
+            inv = db.get(InventoryItem, int(iid))
+            if inv and (inv.category or "") == "microscopy":
+                has_microscopy = True
+                break
+        if not has_microscopy:
+            n = (it.get("name") if isinstance(it, dict) else "") or ""
+            if any(k in n for k in ("镜检", "镜下", "刮片", "涂片", "粪检", "皮肤检查", "耳道分泌", "阴道脱落", "显微")):
+                has_microscopy = True
+                break
+    ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "order": order, "v": v, "pet": pet, "cust": cust,
         "items": items, "reports": order.reports,
+        "has_microscopy": has_microscopy,
         "next_url": f"/m/exam-order/{order_id}",
     })
-    return templates.TemplateResponse(request, "m/exam_detail.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/exam_detail.html", ctx)
 
 
 # TNR 审核
@@ -22839,7 +22854,7 @@ async def m_prescribe_new(visit_id: int, request: Request, db: Session = Depends
         "today": datetime.utcnow().strftime("%Y-%m-%d"),
         "hosp_admitted": hosp_admitted,
     })
-    return templates.TemplateResponse(request, "m/prescription_new.html", ctx)
+    return templates.TemplateResponse(request, "m_uk/prescription_new.html", ctx)
 
 
 @app.get("/m/api/search-drug")

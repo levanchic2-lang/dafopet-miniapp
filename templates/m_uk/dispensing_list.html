@@ -1,0 +1,45 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}待配药 · 大风动物医院{% endblock %}
+{% block topbar_title %}待&nbsp;配&nbsp;药{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% if not rows %}
+<div class="ukm-empty">
+  <div class="big">已&nbsp;配&nbsp;齐</div>
+  所有处方都已配齐
+</div>
+{% else %}
+
+<div class="ukm-section-head">
+  <h2>共&nbsp;&nbsp;{{ rows|length }}&nbsp;&nbsp;张</h2>
+</div>
+
+<div class="ukm-row-group">
+  {% for r in rows %}
+  <a class="ukm-row" href="/m/dispensing/{{ r.p.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ r.pet.name if r.pet else '宠物' }}
+        <span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name if r.cust else '—' }}</span>
+      </div>
+      <div class="ukm-row-sub">
+        #{{ r.p.id }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        {{ r.p.prescribed_date or '—' }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>
+        {{ r.item_cnt }} 味
+        {% if r.p.vet_name %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.p.vet_name }}{% endif %}
+      </div>
+    </div>
+    {% if r.p.total_amount %}
+    <div class="ukm-row-right ukm-num">¥&nbsp;{{ '%.0f'|format(r.p.total_amount) }}</div>
+    {% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+
+{% endif %}
+
+{% endblock %}
