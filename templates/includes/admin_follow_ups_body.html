@@ -44,15 +44,14 @@
  <table class="data-table mobile-card">
  <thead>
  <tr>
- <th>计划回访日</th>
- <th>客户</th>
- <th>宠物</th>
- <th>就诊类型</th>
+ <th style="width:96px;">计划日</th>
+ <th style="width:130px;">客户</th>
+ <th style="width:140px;">宠物</th>
+ <th style="width:72px;">类型</th>
  <th>诊断 / 主诉</th>
- <th>处理人</th>
- <th>渠道</th>
- <th>状态</th>
- <th style="text-align:right;">操作</th>
+ <th style="width:64px;">处理人</th>
+ <th style="width:110px;">状态</th>
+ <th style="text-align:right;width:340px;">操作</th>
  </tr>
  </thead>
  <tbody>
@@ -60,8 +59,8 @@
  {% set v = visits.get(fu.visit_id) %}
  {% set p = pets.get(fu.pet_id) %}
  {% set c = customers.get(fu.customer_id) %}
- <tr>
-  <td data-label="计划回访日">
+ <tr style="vertical-align:top;">
+  <td data-label="计划日">
    {% if fu.planned_date < today_str and fu.status in ('pending','due','phone_pending') %}
     <span class="fu-overdue">{{ fu.planned_date }}</span>
    {% else %}
@@ -78,8 +77,8 @@
    <div style="color:var(--muted);font-size:.78rem;">{{ p.species or '' }} {{ p.breed or '' }}</div>
    {% else %}—{% endif %}
   </td>
-  <td data-label="就诊类型">{% if v %}<span class="pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>{% else %}—{% endif %}</td>
-  <td data-label="诊断" style="max-width:320px;">
+  <td data-label="类型">{% if v %}<span class="pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>{% else %}—{% endif %}</td>
+  <td data-label="诊断 / 主诉" style="max-width:360px;">
    {% if v %}
     <div style="font-size:.85rem;">{{ (v.diagnosis or v.chief_complaint or '—')[:80] }}</div>
     <div style="color:var(--muted);font-size:.75rem;">就诊日：{{ v.visit_date }}</div>
@@ -110,16 +109,15 @@
    {% endif %}
   </td>
   <td data-label="处理人">{{ fu.assigned_to or '—' }}</td>
-  <td data-label="渠道">
-   {% if fu.channel %}<span class="pill">{{ channel_zh.get(fu.channel, fu.channel) }}</span>
-   {% else %}<span style="color:var(--muted);">—</span>{% endif %}
+  <td data-label="状态">
+   <span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span>
+   {% if fu.channel and fu.status not in ('pending','due','phone_pending') %}
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem;letter-spacing:.5px;">{{ channel_zh.get(fu.channel, fu.channel) }}</div>
+   {% endif %}
    {% if fu.response %}
-    <div style="font-size:.75rem;color:#10b981;margin-top:.2rem;">
-     {{ response_zh.get(fu.response, fu.response) }}
-    </div>
+    <div style="font-size:.72rem;color:#10b981;margin-top:.2rem;">{{ response_zh.get(fu.response, fu.response) }}</div>
    {% endif %}
   </td>
-  <td data-label="状态"><span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span></td>
   <td class="actions fu-row-actions" style="text-align:right;">
    {% if v %}<a href="/admin/visits/{{ v.id }}" class="fu-action-btn">病例</a>{% endif %}
    {% if fu.feedback_token and fu.status in ('pending','due','phone_pending','sent') %}
