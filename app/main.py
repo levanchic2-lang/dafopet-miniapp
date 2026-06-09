@@ -23331,6 +23331,35 @@ async def m_sales_list(request: Request, db: Session = Depends(get_db), q: str =
     return templates.TemplateResponse(request, "m_uk/sales.html", ctx)
 
 
+@app.get("/m/sales/{order_id}", response_class=HTMLResponse)
+async def m_sales_detail(order_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/sales/{order_id}", status_code=303)
+    order = db.get(SalesOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    cust = db.get(Customer, order.customer_id) if order.customer_id else None
+    pet = db.get(Pet, order.pet_id) if order.pet_id else None
+    # 关联 invoice（独立销售单自动同步）
+    inv = None
+    if not order.visit_id:
+        inv_item = (
+            db.query(InvoiceItem)
+            .join(Invoice, InvoiceItem.invoice_id == Invoice.id)
+            .filter(InvoiceItem.ref_type == "sales_order", InvoiceItem.ref_id == order_id,
+                    Invoice.visit_id.is_(None))
+            .first()
+        )
+        if inv_item:
+            inv = db.get(Invoice, inv_item.invoice_id)
+    ctx = _m_ctx(request, db, active_tab="finance")
+    ctx.update({
+        "order": order, "cust": cust, "pet": pet, "inv": inv,
+        "so_status_zh": _SO_STATUS_ZH,
+    })
+    return templates.TemplateResponse(request, "m_uk/sale_detail.html", ctx)
+
+
 @app.get("/m/packages", response_class=HTMLResponse)
 async def m_packages_list(request: Request, db: Session = Depends(get_db), q: str = ""):
     if not _admin_ok(request):

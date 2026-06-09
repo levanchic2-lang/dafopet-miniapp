@@ -1,0 +1,70 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}销售单 #{{ order.id }}{% endblock %}
+{% block topbar_title %}销&nbsp;售&nbsp;单{% endblock %}
+{% block topbar_back %}<a href="/m/sales" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>#{{ order.id }}
+    {% if order.status == 'pending' %}<span class="ukm-pill amber" style="margin-left:8px;vertical-align:middle;">待处理</span>
+    {% elif order.status == 'paid' %}<span class="ukm-pill green" style="margin-left:8px;vertical-align:middle;">已结</span>
+    {% elif order.status == 'cancelled' %}<span class="ukm-pill" style="margin-left:8px;vertical-align:middle;">已取消</span>
+    {% else %}<span class="ukm-pill" style="margin-left:8px;vertical-align:middle;">{{ so_status_zh.get(order.status, order.status) }}</span>{% endif %}
+  </h1>
+  <div class="meta">
+    {{ order.order_date or '—' }}
+    {% if cust %}<span class="sep">·</span><a href="/m/customer/{{ cust.id }}" style="color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ cust.name }}</a>{% endif %}
+    {% if pet %}<span class="sep">·</span>{{ pet.name }}{% endif %}
+  </div>
+</div>
+
+{# 明细 #}
+<div class="ukm-section-head"><h2>明&nbsp;细&nbsp;·&nbsp;{{ order.items|length }}&nbsp;项</h2></div>
+<div class="ukm-card-group">
+{% for it in order.items %}
+  <div class="ukm-card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+      <div style="flex:1;font-family:var(--font-serif);font-size:14px;font-weight:600;color:var(--ink);">{{ it.item_name }}</div>
+      <div class="ukm-num" style="font-weight:700;color:var(--ink);">¥&nbsp;{{ '%.2f'|format(it.subtotal or 0) }}</div>
+    </div>
+    <div style="margin-top:4px;font-family:var(--font-serif);font-size:11px;color:var(--ink-3);letter-spacing:.5px;">
+      {{ '%g'|format(it.quantity or 0) }} × ¥{{ '%.2f'|format(it.unit_price or 0) }}
+      {% if it.notes %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ it.notes }}{% endif %}
+    </div>
+  </div>
+{% else %}
+  <div class="ukm-empty"><div class="big">无&nbsp;明&nbsp;细</div></div>
+{% endfor %}
+</div>
+
+{# 合计 #}
+<div style="margin:14px 0;padding:12px;background:var(--bg-elevated);border:0.5px solid var(--hair);font-family:var(--font-serif);">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;">
+    <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">合&nbsp;计</span>
+    <span class="ukm-num" style="font-size:22px;font-weight:700;color:var(--ink);">¥&nbsp;{{ '%.2f'|format(order.total_amount or 0) }}</span>
+  </div>
+</div>
+
+{% if order.notes %}
+<div class="ukm-section-head"><h2>备&nbsp;注</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div style="font-size:13px;color:var(--ink-2);line-height:1.7;white-space:pre-wrap;">{{ order.notes }}</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  {% if inv %}
+    <a href="/m/invoices/{{ inv.id }}" class="ukm-btn block">
+      {% if inv.payment_status == 'paid' %}查&nbsp;看&nbsp;收&nbsp;费&nbsp;单{% else %}去&nbsp;收&nbsp;款{% endif %}
+    </a>
+  {% endif %}
+</div>
+<div class="ukm-btn-row">
+  <a href="/admin/sales-orders/{{ order.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;·&nbsp;编&nbsp;辑&nbsp;/&nbsp;作&nbsp;废</a>
+</div>
+
+{% endblock %}
