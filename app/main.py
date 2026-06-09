@@ -11484,6 +11484,58 @@ def _apply_internal_pricing(db: Session, items: list[dict], customer_id: int) ->
     return True
 
 
+def _apply_single_use_pack_billing(db: Session, items: list[dict]) -> None:
+    """整支/整瓶计费：扫描 items，若品目 single_use_pack=True，则把数量向上取整到副单位整数倍，并重算 subtotal。
+    数量字段兼容：prescription_items=quantity_num，sales_items=quantity（数字版 quantity_num/qty），exam_items=qty
+    """
+    for it in items:
+        iid = it.get("item_id")
+        if not iid:
+            continue
+        inv = db.get(InventoryItem, int(iid))
+        if not inv or not getattr(inv, "single_use_pack", False):
+            continue
+        # 取数字 qty 字段
+        qty_keys = ("quantity_num", "quantity", "qty")
+        qty_key = None
+        for k in qty_keys:
+            v = it.get(k)
+            if isinstance(v, (int, float)) and v > 0:
+                qty_key = k; break
+        if qty_key is None:
+            continue
+        old_qty = float(it[qty_key] or 0)
+        new_qty = _billable_qty(inv, old_qty)
+        if abs(new_qty - old_qty) < 1e-6:
+            continue
+        it[qty_key] = new_qty
+        # 重算 subtotal
+        up = float(it.get("unit_price") or 0)
+        it["subtotal"] = round(new_qty * up, 2)
+        # 销售单的 quantity 字符串字段也同步（如有）
+        if "quantity" in it and not isinstance(it.get("quantity"), (int, float)):
+            it["quantity"] = f"{new_qty:g}"
+
+
+def _billable_qty(item: "InventoryItem | None", qty: float) -> float:
+    """整支/整瓶计费：开 0.1ml = 开 1 整支 → 向上取整到副单位整数倍。
+    - item.single_use_pack=False 或 item 为空 → 原样返回
+    - ratio = max(1.0, unit2_ratio)；qty 向上取整到 ratio 的整数倍
+    - 例：unit2_ratio=1.0（1支=1ml），qty=0.1 → 1.0；qty=1.5 → 2.0
+    """
+    if not item or not getattr(item, "single_use_pack", False):
+        return qty
+    try:
+        ratio = float(item.unit2_ratio or 1.0)
+    except (TypeError, ValueError):
+        ratio = 1.0
+    if ratio <= 0:
+        ratio = 1.0
+    import math as _math
+    units = _math.ceil((qty - 1e-9) / ratio) if qty > 0 else 0
+    return round(units * ratio, 4)
+
+
 def _parse_presc_items(form_data) -> list[dict]:
     items = []
     i = 0
@@ -11820,6 +11872,8 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
         if _v and (_v.status or "open") == "closed":
             raise HTTPException(403, "该病历已结束，不可新增处方；如需追加请新建病历")
     parsed_items = _parse_presc_items(form)
+    # 整支/整瓶计费：开 0.1ml = 开 1 整支（向上取整到副单位整数倍）
+    _apply_single_use_pack_billing(db, parsed_items)
     # 员工内购档案：单价改填进价
     _apply_internal_pricing(db, parsed_items, customer_id)
     total = round(sum(it["subtotal"] for it in parsed_items), 2)
@@ -13245,6 +13299,8 @@ async def admin_so_create(request: Request, db: Session = Depends(get_db)):
     visit_id = int(form.get("visit_id", 0) or 0)
     pet_id = int(form.get("pet_id", 0) or 0)
     items = _parse_so_items(form)
+    # 整支/整瓶计费：开 0.1ml = 开 1 整支
+    _apply_single_use_pack_billing(db, items)
     # 员工内购档案：单价改填进价
     _apply_internal_pricing(db, items, customer_id)
     total = round(sum(it["subtotal"] for it in items), 2)
@@ -14472,6 +14528,7 @@ async def admin_inventory_create(
     subcategory: str = Form(""), is_service: str = Form("0"),
     is_controlled: str = Form("0"),
     report_exempt: str = Form("0"),
+    single_use_pack: str = Form("0"),
     unit: str = Form("个"), unit2: str = Form(""), unit2_ratio: float = Form(1.0),
     sell_price: float = Form(0.0), cost_price: float = Form(0.0),
     stock_qty: float = Form(0.0), low_stock_min: float = Form(0.0),
@@ -14487,6 +14544,7 @@ async def admin_inventory_create(
         name=name.strip(), category=category, subcategory=subcategory,
         is_service=(is_service == "1"), is_controlled=(is_controlled == "1"),
         requires_report=(report_exempt != "1"),  # 反向：勾免报告 → requires_report=False
+        single_use_pack=(single_use_pack == "1"),
         unit=unit, unit2=unit2, unit2_ratio=unit2_ratio,
         sell_price=sell_price, cost_price=cost_price,
         stock_qty=stock_qty, low_stock_min=low_stock_min,
@@ -14573,6 +14631,7 @@ async def admin_inventory_edit(
     subcategory: str = Form(""), is_service: str = Form("0"),
     is_controlled: str = Form("0"),
     report_exempt: str = Form("0"),
+    single_use_pack: str = Form("0"),
     unit: str = Form("个"), unit2: str = Form(""), unit2_ratio: float = Form(1.0),
     sell_price: float = Form(0.0), cost_price: float = Form(0.0),
     low_stock_min: float = Form(0.0),
@@ -14609,6 +14668,7 @@ async def admin_inventory_edit(
     item.category = category; item.subcategory = subcategory
     item.is_service = (is_service == "1"); item.is_controlled = (is_controlled == "1")
     item.requires_report = (report_exempt != "1")
+    item.single_use_pack = (single_use_pack == "1")
     item.unit = unit; item.unit2 = unit2; item.unit2_ratio = unit2_ratio
     item.sell_price = sell_price; item.cost_price = cost_price
     item.low_stock_min = low_stock_min
@@ -18629,7 +18689,8 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
             })
         idx += 1
 
-    # 员工内购档案：单价改填进价
+    # 整支/整瓶计费 + 员工内购档案：单价改填进价
+    _apply_single_use_pack_billing(db, items)
     if visit_id:
         _v = db.get(Visit, visit_id)
         if _v and _v.customer_id:
@@ -24265,6 +24326,9 @@ async def m_api_search_drug(
             "stock_level": stock_level,
             "is_controlled": bool(it.is_controlled),
             "is_service": bool(it.is_service),
+            "single_use_pack": bool(getattr(it, "single_use_pack", False)),
+            "unit2": it.unit2 or "",
+            "unit2_ratio": float(it.unit2_ratio or 1.0),
         })
     return {"results": results, "is_internal_pricing": is_internal}
 

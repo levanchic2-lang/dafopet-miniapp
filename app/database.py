@@ -709,6 +709,9 @@ def _try_sqlite_migrations() -> None:
             # inventory_items: 是否需要出报告（检查项专用，纯收费项可设 False 避免工作台误报"未出报告"）
             if inv_item_cols and "requires_report" not in inv_item_names:
                 conn.execute(text("ALTER TABLE inventory_items ADD COLUMN requires_report BOOLEAN DEFAULT 1"))
+            # inventory_items: 整支/整瓶计费（玻璃瓶针剂等，开 0.1ml 与开 1ml 同价、同扣 1 整支）
+            if inv_item_cols and "single_use_pack" not in inv_item_names:
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN single_use_pack BOOLEAN DEFAULT 0"))
 
             # stocktake_sessions 盘点会话表
             st_sess_cols = conn.execute(text("PRAGMA table_info(stocktake_sessions)")).fetchall()

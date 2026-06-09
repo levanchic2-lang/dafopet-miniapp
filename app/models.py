@@ -448,6 +448,8 @@ class InventoryItem(Base):
     is_controlled: Mapped[bool] = mapped_column(Boolean, default=False)         # 精神类/麻药管控标记
     # 检查类品目专用：是否需要出报告（保定费 / 拍片操作费 等纯收费项 → False，工作台不再提醒）
     requires_report: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 整支/整瓶计费（玻璃瓶针剂等单次开封即整支算）：开 0.1ml 与开 1ml 同价、同扣 1 整支
+    single_use_pack: Mapped[bool] = mapped_column(Boolean, default=False)
     unit: Mapped[str] = mapped_column(String(20), default="个")                 # 主单位（片/ml/盒/次）
     unit2: Mapped[str] = mapped_column(String(20), default="")                  # 副单位（盒/瓶）
     unit2_ratio: Mapped[float] = mapped_column(Float, default=1.0)              # 1副单位 = N主单位

@@ -75,6 +75,10 @@
  <input type="checkbox" name="report_exempt" value="1" {% if item and item.requires_report == False %}checked{% endif %}/>
  <span style="font-weight:600;">无需出报告（检查类纯收费项）</span>
  </label>
+ <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;" title="玻璃瓶针剂等单次开封即整支算：无论开 0.1ml 还是 1ml，都按 1 整支扣库存 + 按 1 整支收费">
+ <input type="checkbox" name="single_use_pack" value="1" {% if item and item.single_use_pack %}checked{% endif %}/>
+ <span style="font-weight:600;">整支/整瓶计费（开封不可拆零）</span>
+ </label>
  </div>
 
  <div>
