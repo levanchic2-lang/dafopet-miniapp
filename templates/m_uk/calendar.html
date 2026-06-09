@@ -78,14 +78,15 @@
     justify-content: center; flex-wrap: wrap; max-width: 80%;
   }
   .cal-cell .dot {
-    width: 4px; height: 4px;
+    width: 6px; height: 6px; box-sizing: border-box;
     background: var(--ink-2);
   }
-  .cal-cell .dot.pending  { background: var(--accent-amber); }
-  .cal-cell .dot.confirmed{ background: var(--ink); }
-  .cal-cell .dot.arrived  { background: var(--accent-green); }
-  .cal-cell .dot.completed{ background: var(--accent-green); }
-  .cal-cell .dot.no_show  { background: var(--accent-red); }
+  /* 形状+填充双重区分：暗色板小点单靠颜色难辨，用 方/圆 + 实心/空心 编码 */
+  .cal-cell .dot.pending  { background: transparent; border: 1px solid var(--accent-amber); }   /* 空心方 */
+  .cal-cell .dot.confirmed{ background: var(--ink); }                                            /* 实心方 */
+  .cal-cell .dot.arrived,
+  .cal-cell .dot.completed{ background: var(--accent-green); border-radius: 50%; }               /* 实心圆 */
+  .cal-cell .dot.no_show  { background: transparent; border: 1px solid var(--accent-red); border-radius: 50%; } /* 空心圆 */
 
   /* 颗粒计数（多个时压缩为 +N） */
   .cal-cell .more {
@@ -102,8 +103,12 @@
   }
   .cal-legend span { display: inline-flex; align-items: center; gap: 4px; }
   .cal-legend i {
-    display: inline-block; width: 6px; height: 6px;
+    display: inline-block; width: 9px; height: 9px; box-sizing: border-box;
   }
+  .cal-legend i.pending  { background: transparent; border: 1px solid var(--accent-amber); }
+  .cal-legend i.confirmed{ background: var(--ink); }
+  .cal-legend i.arrived  { background: var(--accent-green); border-radius: 50%; }
+  .cal-legend i.no_show  { background: transparent; border: 1px solid var(--accent-red); border-radius: 50%; }
 </style>
 {% endblock %}
 
@@ -159,10 +164,10 @@
 
 {# 图例 #}
 <div class="cal-legend">
-  <span><i style="background:var(--accent-amber);"></i>待确认</span>
-  <span><i style="background:var(--ink);"></i>已确认</span>
-  <span><i style="background:var(--accent-green);"></i>到店/完成</span>
-  <span><i style="background:var(--accent-red);"></i>爽约</span>
+  <span><i class="pending"></i>待确认</span>
+  <span><i class="confirmed"></i>已确认</span>
+  <span><i class="arrived"></i>到店/完成</span>
+  <span><i class="no_show"></i>爽约</span>
 </div>
 
 <div class="ukm-divider"></div>
