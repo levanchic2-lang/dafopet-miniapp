@@ -21995,7 +21995,7 @@ async def m_root(request: Request, db: Session = Depends(get_db)):
     ctx = _m_ctx(request, db, active_tab="today")
     ctx["badges"] = _m_badges(request, db)
 
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
 
@@ -22099,7 +22099,7 @@ def _m_badges(request: Request, db: Session) -> dict:
     门店隔离：staff 只数本店；superadmin 数全部。
     住院相关的 store 比对用全名，所以要把短名转全名。
     """
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     now = datetime.utcnow()
 
@@ -22172,7 +22172,7 @@ async def m_doctor_home_OBSOLETE(request: Request, db: Session = Depends(get_db)
     ctx["mobile_role"] = "doctor"
     ctx["badges"] = _m_badges(request, db)
 
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
 
@@ -22281,7 +22281,7 @@ def _m_store_filters_hosp(query, store_short: str, store_full: str):
 async def m_inpatient_list(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/inpatient", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     q = db.query(Hospitalization).filter(Hospitalization.status == "admitted")
     q = _m_store_filters_hosp(q, store_short, store_full)
@@ -22376,7 +22376,7 @@ async def m_inpatient_detail(hosp_id: int, request: Request, db: Session = Depen
 async def m_follow_ups(request: Request, tab: str = "today", db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/follow-ups", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     base = db.query(FollowUp)
     if store_short:
         base = base.filter(or_(FollowUp.store == store_short, FollowUp.store == ""))
@@ -22412,7 +22412,7 @@ async def m_follow_ups(request: Request, tab: str = "today", db: Session = Depen
 async def m_dispensing_list(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/dispensing", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     q = db.query(Prescription).filter(
         Prescription.status == "issued",
@@ -22495,7 +22495,7 @@ async def m_dispensing_mark(
 async def m_stocktake_list(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/stocktake", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     q = db.query(StocktakeSession).filter(StocktakeSession.status == "open")
     if store_short:
         q = q.filter(StocktakeSession.name.like(f"%{store_short}%"))
@@ -22616,7 +22616,7 @@ async def m_groomer_home_OBSOLETE(request: Request, db: Session = Depends(get_db
         return RedirectResponse("/admin/login?next=/m/groomer", status_code=303)
     ctx = _m_ctx(request, db, active_tab="today")
     ctx["mobile_role"] = "groomer"
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     appts = _m_today_beauty_appts(db, store_short, store_full)
     # 最近 3 个美容单
@@ -22642,7 +22642,7 @@ async def m_groomer_home_OBSOLETE(request: Request, db: Session = Depends(get_db
 async def m_grooming_list(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/grooming", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     q = db.query(GroomingOrder)
     if store_short:
@@ -22999,7 +22999,7 @@ async def m_visits_list(
     """病历列表：今日 / 我的 / 全部，可搜索宠物名/客户名/病历号"""
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/visits", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
     uname = request.session.get("admin_username") or ""
 
@@ -23221,7 +23221,7 @@ async def m_invoices_list(
     """收费单列表：未结清 / 已收款 / 全部 + 按客户筛选 + 搜索"""
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/invoices", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     query = db.query(Invoice).order_by(Invoice.id.desc())
     if store_short:
         query = query.filter(Invoice.store == store_short)
@@ -23381,7 +23381,7 @@ async def m_reports_revenue(
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/reports/revenue", status_code=303)
     from datetime import date as _date, timedelta as _td
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     today = _date.today()
     if preset == "today":
         d_from = today.isoformat(); d_to = today.isoformat(); label = "今日"
@@ -23427,7 +23427,7 @@ async def m_prescriptions_list(request: Request, db: Session = Depends(get_db),
                                 q: str = "", status: str = ""):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/prescriptions", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     query = db.query(Prescription).order_by(Prescription.id.desc())
     if store_short:
         query = query.outerjoin(Pet, Pet.id == Prescription.pet_id).filter(
@@ -23459,7 +23459,7 @@ async def m_exam_orders_list(request: Request, db: Session = Depends(get_db),
                               q: str = "", status: str = ""):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/exam-orders", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     query = db.query(ExamOrder).order_by(ExamOrder.id.desc())
     if store_short:
         query = query.outerjoin(Visit, Visit.id == ExamOrder.visit_id).outerjoin(
@@ -23495,7 +23495,7 @@ async def m_exam_orders_list(request: Request, db: Session = Depends(get_db),
 async def m_vaccinations_list(request: Request, db: Session = Depends(get_db), q: str = ""):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/vaccinations", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     query = db.query(Vaccination).filter(Vaccination.status == "active").order_by(Vaccination.id.desc())
     if store_short:
         query = query.outerjoin(Pet, Pet.id == Vaccination.pet_id).filter(
@@ -23523,7 +23523,7 @@ async def m_vaccinations_list(request: Request, db: Session = Depends(get_db), q
 async def m_dewormings_list(request: Request, db: Session = Depends(get_db), q: str = ""):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/dewormings", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     query = db.query(DewormingRecord).filter(DewormingRecord.status == "active").order_by(DewormingRecord.id.desc())
     if store_short:
         query = query.outerjoin(Pet, Pet.id == DewormingRecord.pet_id).filter(
@@ -23549,7 +23549,7 @@ async def m_dewormings_list(request: Request, db: Session = Depends(get_db), q: 
 async def m_sales_list(request: Request, db: Session = Depends(get_db), q: str = ""):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/sales", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     query = db.query(SalesOrder).order_by(SalesOrder.id.desc())
     if store_short:
         query = query.filter(or_(SalesOrder.store == store_short, SalesOrder.store == ""))
@@ -23692,7 +23692,7 @@ async def m_consents_list(request: Request, db: Session = Depends(get_db), q: st
                           status: str = ""):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/consents", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     query = db.query(ConsentTask).order_by(ConsentTask.id.desc())
     if store_short:
         query = query.filter(or_(ConsentTask.store == store_short, ConsentTask.store == ""))
@@ -23725,7 +23725,7 @@ async def m_inventory_list(
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/inventory", status_code=303)
     from datetime import date as _date, timedelta as _timedelta
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     query = db.query(InventoryItem).filter(InventoryItem.is_active == True)
     query = _apply_store_filter(query, InventoryItem.store, store_short)
     if q:
@@ -23849,7 +23849,7 @@ async def m_calendar(
     from datetime import date as _date, timedelta as _td
     from calendar import monthrange
 
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
 
     today = _date.today()
@@ -23945,7 +23945,7 @@ async def m_appointments_list(
     """预约列表：今日/本周/待确认/全部 + 搜索"""
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/appointments", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     today_str = d.strip() or datetime.utcnow().strftime("%Y-%m-%d")
     from datetime import datetime as _dt, timedelta as _td
@@ -24087,7 +24087,7 @@ async def m_exam_detail(order_id: int, request: Request, db: Session = Depends(g
 async def m_tnr_list(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/tnr", status_code=303)
-    store_short = _get_admin_store(request)
+    store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
     q = db.query(Application).filter(
         Application.status.in_([
