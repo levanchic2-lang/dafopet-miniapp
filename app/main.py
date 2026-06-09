@@ -23080,6 +23080,9 @@ async def m_visit_new(
     if appt and not cust:
         cust = db.get(Customer, appt.customer_id) if appt.customer_id else None
         pet = db.get(Pet, appt.pet_id) if appt.pet_id else None
+    if pet and not cust:
+        # 从宠物档案页只带了 pet_id 进来时，反查所属客户，免得再搜一遍
+        cust = db.get(Customer, pet.customer_id) if pet.customer_id else None
     pets = []
     if cust:
         pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
