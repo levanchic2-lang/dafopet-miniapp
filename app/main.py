@@ -77,6 +77,7 @@ from app.models import (
     WeightRecord,
     MedicalDocument,
     PrescriptionTemplate,
+    ExamTemplate,
     FollowUp,
     Wallet,
     WalletTransaction,
@@ -20969,6 +20970,95 @@ async def api_presc_template_delete(tpl_id: int, request: Request, db: Session =
     body = await request.json()
     _require_csrf(request, body.get("csrf_token", ""))
     tpl = db.get(PrescriptionTemplate, tpl_id)
+    if tpl:
+        db.delete(tpl)
+        db.commit()
+    return {"ok": True}
+
+
+# ── 检查单模板（套餐） ─────────────────────────────────────────────
+
+@app.get("/api/exam-templates")
+async def api_exam_templates_list(request: Request, db: Session = Depends(get_db)):
+    """列出所有检查模板（按使用次数倒序）。"""
+    require_admin(request)
+    rows = db.query(ExamTemplate).order_by(
+        ExamTemplate.use_count.desc(), ExamTemplate.id.desc()
+    ).limit(200).all()
+    out = []
+    for r in rows:
+        try:
+            items = json.loads(r.items_json or "[]")
+        except Exception:
+            items = []
+        out.append({
+            "id": r.id, "name": r.name, "category": r.category,
+            "use_count": r.use_count, "item_count": len(items),
+            # 让前端一次拿到摘要预览
+            "item_names": [str(it.get("name") or "")[:14] for it in items[:4]],
+        })
+    return out
+
+
+@app.get("/api/exam-templates/{tpl_id}")
+async def api_exam_template_get(tpl_id: int, request: Request, db: Session = Depends(get_db)):
+    """获取模板详情 + 使用计数 +1。"""
+    require_admin(request)
+    tpl = db.get(ExamTemplate, tpl_id)
+    if not tpl:
+        return {"ok": False, "error": "模板不存在"}
+    tpl.use_count = (tpl.use_count or 0) + 1
+    db.commit()
+    # 重算单价：若 item_id 仍存在 → 用最新库存价覆盖（套餐价格随时间漂移）
+    raw_items = json.loads(tpl.items_json or "[]")
+    op_store = _get_op_store(request)
+    refreshed = []
+    for it in raw_items:
+        iid = it.get("item_id") or 0
+        inv = db.get(InventoryItem, int(iid)) if iid else None
+        if inv:
+            from app.services.pricing import effective_sell_price as _eff
+            it["unit_price"] = float(_eff(inv, op_store))
+            it["unit"] = inv.unit or it.get("unit") or ""
+        refreshed.append(it)
+    return {
+        "ok": True,
+        "id": tpl.id, "name": tpl.name, "notes": tpl.notes,
+        "items": refreshed,
+    }
+
+
+@app.post("/api/exam-templates/create")
+async def api_exam_template_create(request: Request, db: Session = Depends(get_db)):
+    """从当前检查单表单保存为模板。"""
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    name = (body.get("name") or "").strip()[:120]
+    if not name:
+        return {"ok": False, "error": "请填写模板名称"}
+    items = body.get("items", [])
+    if not isinstance(items, list) or not items:
+        return {"ok": False, "error": "模板至少包含 1 个检查项"}
+    tpl = ExamTemplate(
+        name=name,
+        category=(body.get("category") or "").strip()[:40],
+        items_json=json.dumps(items, ensure_ascii=False),
+        notes=(body.get("notes") or "").strip()[:500],
+        created_by=request.session.get("admin_username", ""),
+    )
+    db.add(tpl)
+    db.commit()
+    db.refresh(tpl)
+    return {"ok": True, "id": tpl.id, "name": tpl.name}
+
+
+@app.post("/api/exam-templates/{tpl_id}/delete")
+async def api_exam_template_delete(tpl_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    tpl = db.get(ExamTemplate, tpl_id)
     if tpl:
         db.delete(tpl)
         db.commit()

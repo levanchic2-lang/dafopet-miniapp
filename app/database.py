@@ -1309,6 +1309,21 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_presc_tmpl_name ON prescription_templates(name)"))
 
+            # exam_templates 检查单套餐模板（猫三联 / 犬血液生化 等常用组合）
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS exam_templates ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "name VARCHAR(120) DEFAULT '', "
+                "category VARCHAR(40) DEFAULT '', "
+                "items_json TEXT DEFAULT '[]', "
+                "notes TEXT DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "use_count INTEGER DEFAULT 0"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_exam_tmpl_name ON exam_templates(name)"))
+
             # calendar_blocks 全天封锁日程
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS calendar_blocks ("

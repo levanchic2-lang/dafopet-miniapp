@@ -46,6 +46,15 @@
   <input type="hidden" name="visit_id" value="{{ v.id }}"/>
   <input type="hidden" name="next_url" value="/m/exam-order/{id}"/>
 
+  {# 套用模板 #}
+  <div class="ukm-section-head" style="margin-top:0;">
+    <h2>套&nbsp;用&nbsp;模&nbsp;板</h2>
+    <a href="javascript:void(0)" class="more" onclick="saveAsExamTemplate()">＋&nbsp;存为模板</a>
+  </div>
+  <div class="exam-chip-grid" id="exam-tpl-chips" style="margin-bottom:14px;">
+    <span class="ukm-italic" style="font-size:12px;color:var(--ink-3);letter-spacing:1px;">加载中…</span>
+  </div>
+
   {% if grouped.lab %}
   <div class="ukm-section-head"><h2>化&nbsp;验</h2></div>
   <div class="exam-chip-grid">
@@ -148,6 +157,103 @@ function rebuildHidden() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// ─── 检查模板 ─────────────────────────────────────────
+function loadExamTemplates() {
+  fetch('/api/exam-templates', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(rows => {
+      const box = document.getElementById('exam-tpl-chips');
+      if (!rows || !rows.length) {
+        box.innerHTML = '<span class="ukm-italic" style="font-size:11px;color:var(--ink-3);letter-spacing:.5px;">还没有模板 · 选好检查项后点「存为模板」</span>';
+        return;
+      }
+      box.innerHTML = '';
+      rows.forEach(t => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'ukm-chip';
+        chip.style.padding = '7px 11px';
+        chip.style.fontSize = '12.5px';
+        chip.innerHTML = '+ ' + t.name + '<span class="price">' + t.item_count + ' 项</span>';
+        chip.onclick = () => applyExamTemplate(t.id);
+        // 长按删除
+        let pressTimer = null;
+        chip.addEventListener('touchstart', () => {
+          pressTimer = setTimeout(() => {
+            if (confirm('删除模板「' + t.name + '」？')) deleteExamTemplate(t.id);
+          }, 700);
+        });
+        chip.addEventListener('touchend', () => { clearTimeout(pressTimer); });
+        chip.addEventListener('touchmove', () => { clearTimeout(pressTimer); });
+        box.appendChild(chip);
+      });
+    })
+    .catch(() => {
+      document.getElementById('exam-tpl-chips').innerHTML = '<span class="ukm-italic" style="color:var(--accent-red);font-size:11px;">加载失败</span>';
+    });
+}
+
+function applyExamTemplate(tplId) {
+  fetch('/api/exam-templates/' + tplId, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { alert(data.error || '模板加载失败'); return; }
+      (data.items || []).forEach(it => {
+        if (!it.item_id) return;
+        // 找到对应 chip 自动勾选
+        const chip = document.querySelector(`.ukm-chip[data-id="${it.item_id}"]`);
+        if (chip && !chip.classList.contains('checked')) {
+          pickExam(chip);
+        } else if (!chip) {
+          // 项目可能不在当前店库存里 → 仍把它加入隐藏 picked
+          picked.set(String(it.item_id), {
+            id: String(it.item_id),
+            name: it.name || '',
+            price: parseFloat(it.unit_price || 0),
+            unit: it.unit || '次',
+          });
+        }
+      });
+      rebuildHidden();
+    })
+    .catch(e => alert('网络错误：' + e));
+}
+
+function deleteExamTemplate(tplId) {
+  fetch('/api/exam-templates/' + tplId + '/delete', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ csrf_token: '{{ csrf_token }}' }),
+  }).then(loadExamTemplates);
+}
+
+function saveAsExamTemplate() {
+  const items = [];
+  picked.forEach(v => {
+    items.push({
+      name: v.name, item_id: parseInt(v.id) || 0,
+      qty: 1, unit: v.unit, unit_price: v.price, notes: '',
+    });
+  });
+  if (!items.length) { alert('请先选至少 1 个检查项'); return; }
+  const name = prompt('模板名称（如「猫三联」「犬血液生化」）', '');
+  if (!name || !name.trim()) return;
+  fetch('/api/exam-templates/create', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ csrf_token: '{{ csrf_token }}', name: name.trim(), items }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) { alert(d.error || '保存失败'); return; }
+      alert('已保存模板「' + d.name + '」');
+      loadExamTemplates();
+    })
+    .catch(e => alert('网络错误：' + e));
+}
+
+loadExamTemplates();
 </script>
 
 {% endblock %}

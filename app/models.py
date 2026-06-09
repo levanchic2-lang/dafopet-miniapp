@@ -1056,6 +1056,20 @@ class WeightRecord(Base):
     pet = relationship("Pet", backref="weight_records", foreign_keys=[pet_id])
 
 
+class ExamTemplate(Base):
+    """检查单套餐模板（常用检查组合一键套用，如『猫三联』『犬血液生化』）"""
+    __tablename__ = "exam_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), default="")            # 模板名
+    category: Mapped[str] = mapped_column(String(40), default="")         # 标签
+    items_json: Mapped[str] = mapped_column(Text, default="[]")           # 项目明细 JSON
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    use_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class PrescriptionTemplate(Base):
     """处方套餐模板（常用处方一键套用）"""
     __tablename__ = "prescription_templates"

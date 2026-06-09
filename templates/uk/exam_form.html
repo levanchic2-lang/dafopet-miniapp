@@ -228,6 +228,17 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
   <input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/>
 
+  {# 套餐模板 #}
+  <div class="ex-section" style="margin-bottom:18px;">
+    <div class="ex-section-head" style="padding-bottom:6px;margin-bottom:10px;">
+      <h2 style="font-size:11pt;letter-spacing:2px;">套&nbsp;用&nbsp;模&nbsp;板</h2>
+      <button type="button" class="uk-btn ghost sm" onclick="saveAsExamTemplate()">＋ 存为模板</button>
+    </div>
+    <div id="exam-tpl-chips" style="display:flex;flex-wrap:wrap;gap:6px;font-family:var(--font-serif);font-size:10pt;color:var(--ink-3);">
+      <span style="font-style:italic;letter-spacing:1px;">加载中…</span>
+    </div>
+  </div>
+
   <div class="ex-section">
     <div class="ex-section-head">
       <h2>检&nbsp;查&nbsp;项&nbsp;目</h2>
@@ -417,6 +428,104 @@ function showDropdown(items, input, idx) {
 function hideDropdown() { document.getElementById('global-dropdown').style.display = 'none'; }
 function closeDropdown() { setTimeout(hideDropdown, 150); }
 
+// ─── 检查模板 ────────────────────────────────────────
+function loadExamTemplates() {
+  fetch('/api/exam-templates', { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (rows) {
+      var box = document.getElementById('exam-tpl-chips');
+      if (!rows || !rows.length) {
+        box.innerHTML = '<span style="font-style:italic;color:var(--ink-3);letter-spacing:1px;">还没有模板 · 配好检查项后点「存为模板」即可保存</span>';
+        return;
+      }
+      box.innerHTML = '';
+      rows.forEach(function (t) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'uk-btn ghost sm';
+        chip.style.padding = '4px 10px';
+        chip.style.fontSize = '10pt';
+        chip.title = '套用模板「' + t.name + '」（' + t.item_count + ' 项' + (t.use_count ? ' · 用过 ' + t.use_count + ' 次' : '') + '）';
+        chip.innerHTML = '+ ' + t.name + ' <span style="color:var(--ink-3);font-style:italic;margin-left:4px;">' + t.item_count + ' 项</span>';
+        chip.onclick = function () { applyExamTemplate(t.id, t.name); };
+        // 长按 / 右键删除
+        chip.oncontextmenu = function (e) {
+          e.preventDefault();
+          if (!confirm('删除模板「' + t.name + '」？')) return;
+          deleteExamTemplate(t.id);
+        };
+        box.appendChild(chip);
+      });
+    })
+    .catch(function () {
+      document.getElementById('exam-tpl-chips').innerHTML = '<span style="font-style:italic;color:var(--accent-red);">加载失败</span>';
+    });
+}
+
+function applyExamTemplate(tplId, tplName) {
+  fetch('/api/exam-templates/' + tplId, { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data.ok) { alert(data.error || '模板加载失败'); return; }
+      // 清空现有空行（保留有内容的）
+      var rows = document.querySelectorAll('#item-list tr');
+      rows.forEach(function (tr) {
+        var nameInp = tr.querySelector('input[name^="item_name_"]');
+        if (nameInp && !nameInp.value.trim()) tr.remove();
+      });
+      (data.items || []).forEach(function (it) {
+        addItem(it.name || '', it.item_id || '', it.qty || 1, it.unit || '', it.unit_price || 0, it.notes || '');
+      });
+    })
+    .catch(function (e) { alert('网络错误：' + e); });
+}
+
+function deleteExamTemplate(tplId) {
+  fetch('/api/exam-templates/' + tplId + '/delete', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ csrf_token: '{{ csrf_token }}' }),
+  }).then(loadExamTemplates);
+}
+
+function saveAsExamTemplate() {
+  // 收集当前 item 列表
+  var items = [];
+  document.querySelectorAll('#item-list tr').forEach(function (tr) {
+    var name = (tr.querySelector('input[name^="item_name_"]') || {}).value || '';
+    if (!name.trim()) return;
+    var idInp = tr.querySelector('input[name^="item_id_"]');
+    var qtyInp = tr.querySelector('input[name^="item_qty_"]');
+    var unitInp = tr.querySelector('input[name^="item_unit_"]');
+    var priceInp = tr.querySelector('input[name^="item_price_"]');
+    var notesInp = tr.querySelector('input[name^="item_notes_"]');
+    items.push({
+      name: name.trim(),
+      item_id: parseInt(idInp ? idInp.value : 0) || 0,
+      qty: parseFloat(qtyInp ? qtyInp.value : 1) || 1,
+      unit: unitInp ? unitInp.value : '',
+      unit_price: parseFloat(priceInp ? priceInp.value : 0) || 0,
+      notes: notesInp ? notesInp.value : '',
+    });
+  });
+  if (!items.length) { alert('请先添加至少 1 个检查项'); return; }
+  var name = prompt('模板名称（如「猫三联」「犬血液生化」）', '');
+  if (!name || !name.trim()) return;
+  fetch('/api/exam-templates/create', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ csrf_token: '{{ csrf_token }}', name: name.trim(), items: items }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.ok) { alert(d.error || '保存失败'); return; }
+      alert('已保存模板「' + d.name + '」');
+      loadExamTemplates();
+    })
+    .catch(function (e) { alert('网络错误：' + e); });
+}
+
+loadExamTemplates();
 addItem();
 </script>
 
