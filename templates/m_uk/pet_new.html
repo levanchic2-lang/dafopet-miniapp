@@ -61,10 +61,17 @@
   </div>
 
   <div class="ukm-field">
-    <label class="lbl">生&nbsp;日&nbsp;/&nbsp;年&nbsp;龄</label>
-    <input class="ukm-input" type="text" name="birthday_estimate" maxlength="40"
-           placeholder="如：2023-05 / 约 2 岁 / 3 月龄"/>
+    <label class="lbl">出&nbsp;生&nbsp;日&nbsp;期</label>
+    <input class="ukm-input" type="month" name="birthday_estimate" id="birthday_month"/>
+    <div class="ukm-fineprint" style="margin-top:6px;">点击在日历选年 / 月，不确定可留空</div>
   </div>
+  <script>
+    // 上限设为本月，避免选到未来的出生月份
+    (function(){
+      var el = document.getElementById('birthday_month');
+      if (el) { var d = new Date(); el.max = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+    })();
+  </script>
 
   <div class="ukm-field">
     <label class="lbl">其&nbsp;他</label>
