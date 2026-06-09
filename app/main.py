@@ -13419,8 +13419,11 @@ async def api_inventory_search(
             "name": it.name,
             "category": it.category,
             "unit": it.unit,
+            "unit2": it.unit2 or "",
+            "unit2_ratio": float(it.unit2_ratio or 1.0),
             "sell_price": _eff(it, _cur_store),  # 关键：替换为有效价
             "default_price": it.sell_price,       # 留默认价做参考
+            "cost_price": float(it.cost_price or 0),
             "stock_qty": it.stock_qty,
             "is_service": it.is_service,
             "is_controlled": it.is_controlled,
@@ -13593,8 +13596,11 @@ async def api_inventory_search(
     return {"items": [
         {
             "id": r.id, "name": r.name, "unit": r.unit,
+            "unit2": r.unit2 or "",
+            "unit2_ratio": float(r.unit2_ratio or 1.0),
             "stock_qty": float(r.stock_qty or 0),
             "cost_price": float(r.cost_price or 0),
+            "sell_price": float(r.sell_price or 0),
         }
         for r in rows
     ]}
@@ -13888,6 +13894,8 @@ async def admin_inventory_import_photo_recognize(
                 it["matched_unit2"] = m.unit2 or ""
                 it["matched_unit2_ratio"] = float(m.unit2_ratio or 1.0)
                 it["matched_stock"] = float(m.stock_qty or 0)
+                it["matched_sell_price"] = float(m.sell_price or 0)
+                it["matched_cost_price"] = float(m.cost_price or 0)
                 # 高置信匹配时，把已有品目的 spec/unit 反填进 OCR 行，省得用户手填
                 if conf >= 0.85:
                     if not it.get("spec") and m.notes:
@@ -13963,7 +13971,13 @@ async def admin_inventory_import_photo_commit(
         except (TypeError, ValueError):
             pack_size = 0.0
         main_unit_in = (form.get(f"row{i}_main_unit") or "").strip()
-        pack_unit_in = (form.get(f"row{i}_pack_unit") or "").strip()
+        # 兼容：副单位字段名同时支持 row{i}_pack_unit（旧字段）与 row{i}_unit（OCR 购买单位 = 副单位）
+        pack_unit_in = (form.get(f"row{i}_pack_unit") or form.get(f"row{i}_unit") or "").strip()
+        # 默认售价（人工填，可空 → 不动）
+        try:
+            sell_price_in = float(form.get(f"row{i}_sell_price") or 0)
+        except (TypeError, ValueError):
+            sell_price_in = 0.0
 
         # 取得或新建 item
         if action == "reuse":
@@ -14025,7 +14039,7 @@ async def admin_inventory_import_photo_commit(
                         unit=_main_u[:20],
                         unit2=_unit2[:20],
                         unit2_ratio=_unit2_ratio,
-                        sell_price=0.0,
+                        sell_price=sell_price_in if sell_price_in > 0 else 0.0,
                         cost_price=_cost_per_main,
                         stock_qty=0.0,
                         low_stock_min=0.0,
@@ -14052,6 +14066,9 @@ async def admin_inventory_import_photo_commit(
         item.stock_qty = qty_before + effective_qty
         if effective_unit_price > 0:
             item.cost_price = effective_unit_price  # 用最新进价更新（按主单位）
+        # 售价：用户在表单显式填了且与现有不同 → 更新（按主单位）
+        if sell_price_in > 0 and abs(float(item.sell_price or 0) - sell_price_in) > 0.001:
+            item.sell_price = sell_price_in
         # 流水按"换算后"的主单位记
         _note_pack = ""
         if effective_qty != qty:
