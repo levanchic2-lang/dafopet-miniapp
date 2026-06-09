@@ -1,0 +1,146 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}{{ task.title }} · 协议{% endblock %}
+{% block topbar_title %}医&nbsp;疗&nbsp;文&nbsp;书{% endblock %}
+{% block topbar_back %}<a href="/m/consents" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block extra_css %}
+<style>
+  .consent-snapshot {
+    background: var(--paper);
+    border: 0.5px solid var(--hair);
+    padding: 18px 16px;
+    font-family: var(--font-serif);
+    font-size: 14px; line-height: 1.85; color: var(--ink);
+    overflow-x: auto;
+  }
+  .consent-snapshot * { max-width: 100%; }
+  .consent-snapshot img { height: auto; }
+  .sig-wrap { margin-top: 16px; padding-top: 12px; border-top: 0.5px solid var(--hair); }
+  .sig-wrap img { border: 0.5px solid var(--hair); background: var(--paper); padding: 4px; }
+  .copy-row { display: flex; gap: 6px; align-items: stretch; }
+  .copy-row input {
+    flex: 1; min-width: 0;
+    font-family: var(--font-mono, monospace); font-size: 12px;
+    padding: 8px 10px; border: 0.5px solid var(--hair);
+    background: var(--paper); color: var(--ink-2);
+  }
+  .copy-row .ukm-btn { white-space: nowrap; padding: 8px 14px; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
+  .kv .k { font-size: 11px; letter-spacing: 1.5px; color: var(--ink-3); white-space: nowrap; }
+  .kv .v { font-size: 13px; color: var(--ink); text-align: right; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head">
+  <h1>{{ task.title }}</h1>
+  <div class="meta">
+    {% if task.status == 'pending' %}<span class="ukm-pill amber">待签</span>
+    {% elif task.status == 'signed' %}<span class="ukm-pill green">已签</span>
+    {% elif task.status == 'cancelled' %}<span class="ukm-pill">已取消</span>
+    {% elif task.status == 'expired' %}<span class="ukm-pill red">已过期</span>{% endif %}
+    {% if cust %}<span class="sep">·</span><a href="/m/customer/{{ cust.id }}" style="color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ cust.name }}</a>{% endif %}
+    {% if pet %}<span class="sep">·</span>{{ pet.name }}{% endif %}
+  </div>
+</div>
+
+{# 已签：打印 / 存档 #}
+{% if task.status == 'signed' %}
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div class="ukm-card-title" style="color:var(--accent-green);">已&nbsp;签&nbsp;署&nbsp;存&nbsp;档</div>
+    <div class="ukm-card-sub" style="margin:6px 0 12px;line-height:1.6;">签字数据 + 协议正文已加密保存，可打印或另存为 PDF 发给客户 / 外院。</div>
+    <a href="/admin/consent-tasks/{{ task.id }}/printable" target="_blank" class="ukm-btn block">打&nbsp;印&nbsp;/&nbsp;另&nbsp;存&nbsp;为&nbsp;P&nbsp;D&nbsp;F</a>
+    {% if doc and doc.pdf_path %}
+    <a href="/uploads/{{ doc.pdf_path }}" target="_blank" class="ukm-btn hair block" style="margin-top:8px;">下&nbsp;载&nbsp;服&nbsp;务&nbsp;器&nbsp;P&nbsp;D&nbsp;F&nbsp;·&nbsp;{{ '%.1f KB'|format((doc.pdf_size or 0)/1024) }}</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# 待签：签署链接 + 发短信 #}
+{% if task.status == 'pending' %}
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div class="ukm-card-title">签&nbsp;署&nbsp;链&nbsp;接</div>
+    <div class="copy-row" style="margin:10px 0;">
+      <input type="text" id="sign-url" value="{{ sign_url }}" readonly/>
+      <button type="button" class="ukm-btn" onclick="copyUrl()">复&nbsp;制</button>
+    </div>
+    <div class="ukm-card-sub" style="line-height:1.6;margin-bottom:10px;">复制链接微信发给客户，或点下方发短信。客户点开 → 签字 → 自动归档。</div>
+    <form method="post" action="/admin/consent-tasks/{{ task.id }}/resend">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="next_url" value="/m/consent-task/{{ task.id }}">
+      <button type="submit" class="ukm-btn ghost block">发&nbsp;短&nbsp;信&nbsp;给&nbsp;客&nbsp;户</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{# 协议正文快照 #}
+<div class="ukm-section-head"><h2>协&nbsp;议&nbsp;正&nbsp;文</h2></div>
+<div class="consent-snapshot">
+  {{ task.snapshot_html|safe }}
+  {% if task.status == 'signed' and task.signature_path %}
+  <div class="sig-wrap">
+    <div class="ukm-card-sub" style="margin-bottom:6px;">客户签字</div>
+    <img src="/uploads/{{ task.signature_path }}" alt="签字"/>
+    <div class="ukm-card-sub" style="margin-top:6px;">
+      签署时间 {{ task.signed_at.strftime('%Y-%m-%d %H:%M') if task.signed_at else '—' }}{% if task.signed_ip %}<span class="sep">·</span>IP {{ task.signed_ip }}{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# 任务信息 #}
+<div class="ukm-section-head"><h2>任&nbsp;务&nbsp;信&nbsp;息</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div class="kv"><span class="k">编&nbsp;号</span><span class="v ukm-mono">#CT{{ '%06d'|format(task.id) }}</span></div>
+    <div class="kv"><span class="k">类&nbsp;型</span><span class="v">{{ category_zh.get(task.template.category if task.template else '', '—') }}</span></div>
+    <div class="kv"><span class="k">状&nbsp;态</span><span class="v">{{ status_zh.get(task.status, task.status) }}</span></div>
+    <div class="kv"><span class="k">发&nbsp;起&nbsp;人</span><span class="v">{{ task.initiated_by or '—' }}</span></div>
+    <div class="kv"><span class="k">发&nbsp;起&nbsp;时&nbsp;间</span><span class="v">{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '—' }}</span></div>
+    {% if task.expires_at %}<div class="kv"><span class="k">有&nbsp;效&nbsp;期&nbsp;至</span><span class="v">{{ task.expires_at }}</span></div>{% endif %}
+    {% if task.notes %}<div class="kv"><span class="k">备&nbsp;注</span><span class="v">{{ task.notes }}</span></div>{% endif %}
+  </div>
+</div>
+
+{# 危险操作：待签可取消；待签/已取消超管可删 #}
+{% if task.status == 'pending' %}
+<div class="ukm-btn-row" style="margin-top:8px;">
+  <form method="post" action="/admin/consent-tasks/{{ task.id }}/cancel" style="flex:1;"
+        onsubmit="return confirm('取消此签署任务？客户将不能再用旧链接签字。')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="next_url" value="/m/consent-task/{{ task.id }}">
+    <button type="submit" class="ukm-btn hair block">取&nbsp;消&nbsp;任&nbsp;务</button>
+  </form>
+</div>
+{% endif %}
+{% if task.status in ('pending', 'cancelled') and admin_role == 'superadmin' %}
+<div class="ukm-btn-row">
+  <form method="post" action="/admin/consent-tasks/{{ task.id }}/delete" style="flex:1;"
+        onsubmit="return confirm('彻底删除这条任务？记录不可恢复。')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="next_url" value="/m/consents">
+    <button type="submit" class="ukm-btn danger block">删&nbsp;除&nbsp;任&nbsp;务</button>
+  </form>
+</div>
+{% endif %}
+
+<script>
+function copyUrl(){
+  var u = document.getElementById('sign-url');
+  u.focus(); u.select(); u.setSelectionRange(0, 99999);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(u.value).then(function(){ alert('已复制'); },
+                                                function(){ alert('复制失败，请长按手动复制'); });
+  } else {
+    try { document.execCommand('copy'); alert('已复制'); }
+    catch(e){ alert('复制失败，请长按手动复制'); }
+  }
+}
+</script>
+
+{% endblock %}

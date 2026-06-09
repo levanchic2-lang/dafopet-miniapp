@@ -8670,27 +8670,30 @@ def _try_push_consent_notice(db: Session, task: "ConsentTask", cust: "Customer |
 async def admin_consent_task_resend(
     task_id: int, request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""),
+    next_url: str = Form(""),
 ):
     """手动重发签字链接短信。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
+    _base = _safe_next(next_url, f"/admin/consent-tasks/{task_id}")
+    def _r(m):
+        return RedirectResponse(f"{_base}{'&' if '?' in _base else '?'}msg={m}", status_code=303)
     task = db.get(ConsentTask, task_id)
     if not task:
         raise HTTPException(404)
     if task.status != "pending":
-        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=仅待签状态可重发", status_code=303)
+        return _r("仅待签状态可重发")
     cust = db.get(Customer, task.customer_id) if task.customer_id else None
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
     if not cust or not (cust.phone or "").strip():
-        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=客户无手机号，请直接复制链接微信发送", status_code=303)
+        return _r("客户无手机号，请直接复制链接微信发送")
     has_tencent = bool((settings.tencent_sms_tmpl_consent or "").strip())
     has_gateway = bool((settings.sms_gateway_url or "").strip())
     if not (has_tencent or has_gateway):
-        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=未配置短信通道，请直接复制链接微信发送", status_code=303)
+        return _r("未配置短信通道，请直接复制链接微信发送")
     ok = _try_send_consent_sms(db, task, cust, pet)
-    msg = "已发送短信" if ok else "短信发送失败，请稍后重试或复制链接微信发"
-    return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg={msg}", status_code=303)
+    return _r("已发送短信" if ok else "短信发送失败，请稍后重试或复制链接微信发")
 
 
 @app.get("/admin/consent-tasks/{task_id}", response_class=HTMLResponse)
@@ -9196,6 +9199,7 @@ async def admin_consent_task_regen_pdf(
 async def admin_consent_task_delete(
     task_id: int, request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""),
+    next_url: str = Form(""),
 ):
     """彻底删除任务（仅 pending / cancelled 状态可删 — 已签的有法律凭证不能动）。"""
     if not request.session.get("admin"):
@@ -9211,33 +9215,38 @@ async def admin_consent_task_delete(
             status_code=303,
         )
     cust_id = task.customer_id
+    title = task.title
     db.delete(task)   # CASCADE 会顺带清掉关联的 ConsentDocument（如果有）
     db.commit()
     _audit(db, request, "consent_task_delete", application_id=None,
-           detail={"task_id": task_id, "customer_id": cust_id, "title": task.title})
+           detail={"task_id": task_id, "customer_id": cust_id, "title": title})
     db.commit()
-    return RedirectResponse(
-        f"/admin/customers/{cust_id}?tab=docs&msg=已删除协议任务",
-        status_code=303,
-    )
+    # 删除后任务已不存在，回跳列表（移动端回 /m/consents，桌面回客户档案）
+    dest = _safe_next(next_url, f"/admin/customers/{cust_id}?tab=docs")
+    sep = "&" if "?" in dest else "?"
+    return RedirectResponse(f"{dest}{sep}msg=已删除协议任务", status_code=303)
 
 
 @app.post("/admin/consent-tasks/{task_id}/cancel")
 async def admin_consent_task_cancel(
     task_id: int, request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""),
+    next_url: str = Form(""),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
+    _base = _safe_next(next_url, f"/admin/consent-tasks/{task_id}")
+    def _r(m):
+        return RedirectResponse(f"{_base}{'&' if '?' in _base else '?'}msg={m}", status_code=303)
     task = db.get(ConsentTask, task_id)
     if not task:
         raise HTTPException(404)
     if task.status != "pending":
-        return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=只能取消待签状态", status_code=303)
+        return _r("只能取消待签状态")
     task.status = "cancelled"
     db.commit()
-    return RedirectResponse(f"/admin/consent-tasks/{task_id}?msg=已取消", status_code=303)
+    return _r("已取消")
 
 
 @app.post("/admin/consent-templates/{tid}/toggle")
@@ -23739,6 +23748,28 @@ async def m_consents_list(request: Request, db: Session = Depends(get_db), q: st
     ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({"rows": rows, "q": q, "status": status})
     return templates.TemplateResponse(request, "m_uk/consents.html", ctx)
+
+
+@app.get("/m/consent-task/{task_id}", response_class=HTMLResponse)
+async def m_consent_task_detail(task_id: int, request: Request, db: Session = Depends(get_db)):
+    """手机端协议任务详情：已签可看正文+签名+打印存档；待签可复制链接/发短信。"""
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/consent-task/{task_id}", status_code=303)
+    task = db.get(ConsentTask, task_id)
+    if not task:
+        raise HTTPException(404)
+    cust = db.get(Customer, task.customer_id) if task.customer_id else None
+    pet = db.get(Pet, task.pet_id) if task.pet_id else None
+    doc = db.query(ConsentDocument).filter(ConsentDocument.task_id == task_id).first()
+    sign_url = f"{request.url.scheme}://{request.url.netloc}/consent/{task.token}"
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({
+        "task": task, "cust": cust, "pet": pet, "doc": doc,
+        "sign_url": sign_url,
+        "status_zh": _CONSENT_STATUS_ZH,
+        "category_zh": _CONSENT_CATEGORY_ZH,
+    })
+    return templates.TemplateResponse(request, "m_uk/consent_detail.html", ctx)
 
 
 @app.get("/m/inventory", response_class=HTMLResponse)
