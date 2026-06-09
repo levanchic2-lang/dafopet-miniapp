@@ -5,6 +5,11 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: rgba(0,0,0,0.05); }
 
+/* 全局：去除 input[type=number] 上下三角小标 */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none !important; margin:0 !important; }
+input[type=number] { -moz-appearance:textfield !important; appearance:textfield !important; }
+
 /* iOS Safari 日期/时间输入框默认有最小宽度（约 132px），
    在 grid-template-columns: 1fr 1fr 里会撑爆同行另一列。
    min-width: 0 让 grid item 可以收缩；appearance: none 关掉部分原生样式。 */

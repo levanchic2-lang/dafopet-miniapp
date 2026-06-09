@@ -1,3 +1,9 @@
+/* 全局：去除 input[type=number] 上下三角小标（碍事 + 容易误触）
+ * 放在文件顶部，所有 number 输入框无论后续样式如何都不再出现 spinner */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none !important; margin:0 !important; }
+input[type=number] { -moz-appearance:textfield !important; appearance:textfield !important; }
+
 /* ============================================================
  *  UK Minimal — 大风动物医院 桌面后台 全衬线·纯黑·极简
  *  设计语言来源：admin_invoice_print.html 的"英伦极简"
