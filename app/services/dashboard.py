@@ -196,7 +196,7 @@ def build_exam_report_pending(db: Session, store_short: str) -> dict:
     return {
         "key": "exam_reports_pending", "title": "未出检查报告", "icon": "file-text",
         "count": len(pending), "previews": items_preview,
-        "all_url": "/admin/visits",
+        "all_url": "/admin/exam-reports/pending",
         "tone": "warn",
     }
 

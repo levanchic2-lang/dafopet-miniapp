@@ -18818,6 +18818,79 @@ async def admin_exam_order_print(
     })
 
 
+@app.get("/admin/exam-reports/pending", response_class=HTMLResponse)
+async def admin_exam_reports_pending(
+    request: Request,
+    db: Session = Depends(get_db),
+    days: int = Query(30),
+):
+    """未出检查报告全院清单（工作台卡片『全部 →』跳过来）。
+    粒度到「项」：一张检查单 6 项，已上传 X 个、缺 Y 个 → 列 Y 项。
+    item_label="" 的通用报告视为覆盖全部项 → 不算缺。
+    """
+    require_admin(request)
+    days = max(1, min(days, 365))
+    cutoff = datetime.now() - timedelta(days=days)
+    store_short = _get_admin_store(request)
+    q = db.query(ExamOrder).filter(
+        ExamOrder.status != "voided",
+        ExamOrder.created_at >= cutoff,
+    )
+    if store_short:
+        q = q.join(Visit, ExamOrder.visit_id == Visit.id, isouter=True)\
+             .join(Pet, Visit.pet_id == Pet.id, isouter=True)\
+             .filter(or_(Pet.store == store_short, Pet.store == None))
+    rows = q.order_by(ExamOrder.created_at.asc()).all()  # 老的在前（紧迫）
+
+    pending_rows = []
+    for eo in rows:
+        try:
+            items = json.loads(eo.items_json or "[]")
+        except Exception:
+            items = []
+        item_names = []
+        for it in items:
+            n = (it.get("name") or "").strip()
+            if not n:
+                continue
+            iid = it.get("item_id")
+            if iid:
+                inv = db.get(InventoryItem, int(iid))
+                if inv is not None and getattr(inv, "requires_report", True) is False:
+                    continue
+            item_names.append(n)
+        if not item_names:
+            continue
+        reports = db.query(ExamReport).filter(ExamReport.exam_order_id == eo.id).all()
+        # 显微镜报告也算
+        micro = db.query(MicroscopyReport).filter(MicroscopyReport.exam_order_id == eo.id).all()
+        reported_labels = {(r.item_label or "").strip() for r in reports}
+        reported_labels |= {(m.item_label or "").strip() for m in micro}
+        if "" in reported_labels and (reports or micro):
+            continue  # 有通用报告
+        missing = [n for n in item_names if n not in reported_labels]
+        if not missing:
+            continue
+        visit = db.get(Visit, eo.visit_id) if eo.visit_id else None
+        cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+        pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+        # 紧迫度：> 7 天红、> 3 天琥珀、其余正常
+        age_days = (datetime.now() - eo.created_at).days if eo.created_at else 0
+        urgency = "red" if age_days > 7 else ("amber" if age_days > 3 else "")
+        pending_rows.append({
+            "eo": eo, "visit": visit, "cust": cust, "pet": pet,
+            "missing": missing, "done": len(item_names) - len(missing),
+            "total": len(item_names), "age_days": age_days, "urgency": urgency,
+        })
+
+    return templates.TemplateResponse(request, "uk/exam_reports_pending.html", {
+        "rows": pending_rows,
+        "days": days,
+        "csrf_token": _get_csrf_token(request),
+        "store_label": store_short or "全部门店",
+    })
+
+
 @app.get("/admin/exam-orders/{order_id}", response_class=HTMLResponse)
 async def admin_exam_order_detail(
     order_id: int, request: Request, db: Session = Depends(get_db),
