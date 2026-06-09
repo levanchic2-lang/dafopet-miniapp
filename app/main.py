@@ -13779,6 +13779,8 @@ async def admin_inventory_bulk_edit(
     store: str = Form("__keep__"),
     is_service: str = Form("__keep__"),
     is_controlled: str = Form("__keep__"),
+    requires_report: str = Form("__keep__"),
+    single_use_pack: str = Form("__keep__"),
     unit: str = Form(""),
     unit2: str = Form(""),
     unit2_ratio: str = Form(""),
@@ -13809,6 +13811,8 @@ async def admin_inventory_bulk_edit(
         return RedirectResponse("/admin/inventory?msg=门店值无效", status_code=303)
     change_is_service = is_service in ("0", "1")
     change_is_controlled = is_controlled in ("0", "1")
+    change_requires_report = requires_report in ("0", "1")
+    change_single_use_pack = single_use_pack in ("0", "1")
     unit = (unit or "").strip()[:20]
     unit2 = (unit2 or "").strip()[:20]
     ratio_val = None
@@ -13823,6 +13827,7 @@ async def admin_inventory_bulk_edit(
     do_notes_clear = notes_clear == "1"
     if not (category or supplier or do_supplier_clear or notes or do_notes_clear
             or change_store or change_is_service or change_is_controlled
+            or change_requires_report or change_single_use_pack
             or unit or unit2 or ratio_val is not None):
         return RedirectResponse("/admin/inventory?msg=请至少选一个要修改的字段", status_code=303)
 
@@ -13849,6 +13854,10 @@ async def admin_inventory_bulk_edit(
             it.is_service = (is_service == "1")
         if change_is_controlled:
             it.is_controlled = (is_controlled == "1")
+        if change_requires_report:
+            it.requires_report = (requires_report == "1")
+        if change_single_use_pack:
+            it.single_use_pack = (single_use_pack == "1")
         if unit:
             it.unit = unit
         if unit2:

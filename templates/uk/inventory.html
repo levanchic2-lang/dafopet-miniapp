@@ -482,6 +482,18 @@
       <option value="1">是</option>
       <option value="0">否</option>
     </select>
+    <span class="lbl" title="检查类纯收费项 (保定费/拍片操作费) 设「免」→ 工作台不再误报「未出报告」">出报告</span>
+    <select name="requires_report" id="bulk-requires-report">
+      <option value="__keep__">不改</option>
+      <option value="1">需</option>
+      <option value="0">免</option>
+    </select>
+    <span class="lbl" title="玻璃瓶针剂等开封不可拆零：开 0.1ml 与开 1ml 同价同扣 1 整支">整支计费</span>
+    <select name="single_use_pack" id="bulk-single-use-pack">
+      <option value="__keep__">不改</option>
+      <option value="1">是</option>
+      <option value="0">否</option>
+    </select>
     <button type="button" class="btn-apply" onclick="bulkApply()">应&nbsp;用</button>
     <button type="button" class="btn-link" onclick="bulkClear()">取消</button>
     <span class="sep-v"></span>
@@ -583,7 +595,14 @@
     var isCtrlEl = document.getElementById('bulk-is-controlled');
     var isCtrl = isCtrlEl ? isCtrlEl.value : '__keep__';
     var changeIsCtrl = isCtrl !== '__keep__';
-    if (!cat && !sup && !supClear && !notes && !notesClear && !unit && !unit2 && !unit2Ratio && !changeStore && !changeIsSvc && !changeIsCtrl) {
+    var reqRepEl = document.getElementById('bulk-requires-report');
+    var reqRep = reqRepEl ? reqRepEl.value : '__keep__';
+    var changeReqRep = reqRep !== '__keep__';
+    var supEl = document.getElementById('bulk-single-use-pack');
+    var sup_ = supEl ? supEl.value : '__keep__';
+    var changeSup = sup_ !== '__keep__';
+    if (!cat && !sup && !supClear && !notes && !notesClear && !unit && !unit2 && !unit2Ratio
+        && !changeStore && !changeIsSvc && !changeIsCtrl && !changeReqRep && !changeSup) {
       alert('请至少选择一个要修改的字段');
       return;
     }
@@ -591,6 +610,8 @@
     if (changeStore) msg += '\n门店：改为 ' + storeVal;
     if (changeIsSvc) msg += '\n服务类目：' + (isSvc === '1' ? '是（不占库存）' : '否');
     if (changeIsCtrl) msg += '\n麻醉/管控：' + (isCtrl === '1' ? '是' : '否');
+    if (changeReqRep) msg += '\n出报告：' + (reqRep === '1' ? '需' : '免（检查类纯收费项）');
+    if (changeSup) msg += '\n整支/整瓶计费：' + (sup_ === '1' ? '是（开封不可拆零）' : '否');
     if (!confirm(msg)) return;
     var fd = new FormData();
     fd.append('csrf_token', document.getElementById('bulk-csrf').value);
@@ -607,6 +628,8 @@
     if (changeStore) fd.append('store', storeVal);
     if (changeIsSvc) fd.append('is_service', isSvc);
     if (changeIsCtrl) fd.append('is_controlled', isCtrl);
+    if (changeReqRep) fd.append('requires_report', reqRep);
+    if (changeSup) fd.append('single_use_pack', sup_);
     fetch('/admin/inventory/bulk-edit', { method: 'POST', body: fd, credentials: 'same-origin' })
       .then(function(r){
         if (r.redirected) { window.location = r.url; return; }
