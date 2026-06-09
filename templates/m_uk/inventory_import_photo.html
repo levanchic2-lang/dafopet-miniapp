@@ -1,0 +1,291 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}拍照入库{% endblock %}
+{% block topbar_title %}拍&nbsp;照&nbsp;入&nbsp;库{% endblock %}
+{% block topbar_back %}<a href="/m/inventory" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<div class="ukm-page-head" style="margin-bottom:14px;">
+  <h1 style="font-size:22px;">拍&nbsp;照&nbsp;入&nbsp;库</h1>
+  <div class="meta">进货单照片 · 大模型识别 · 批量录入</div>
+</div>
+
+<div style="padding:10px 12px;background:#fef9f0;border-left:3px solid #d4a06a;font-family:var(--font-serif);font-size:11px;line-height:1.6;color:#6b4423;margin-bottom:14px;">
+  <b style="font-style:normal;letter-spacing:.5px;">字段说明（新人参考）</b><br/>
+  <span style="color:#8a6a48;">主单位 = 发药/拆零最小单位（片/ml）· 副单位 = 外包装（盒/瓶）· ×N = 1副单位含 N 主单位 · 进价按副单位 · 售价按主单位 · 已匹配品目以库存为准、不可改单位</span>
+</div>
+
+<div id="dropzone" style="border:0.5px dashed var(--ink-3);background:var(--paper);padding:30px 16px;text-align:center;cursor:pointer;">
+  <div style="font-family:var(--font-serif);font-size:32px;color:var(--ink-2);">⌖</div>
+  <div style="font-family:var(--font-serif);font-size:15px;color:var(--ink);margin-top:8px;letter-spacing:1px;font-weight:600;">点&nbsp;此&nbsp;拍&nbsp;照&nbsp;/&nbsp;选&nbsp;图</div>
+  <div style="font-family:var(--font-serif);font-size:11px;color:var(--ink-3);margin-top:6px;font-style:italic;letter-spacing:.5px;">最多 5 张 · 越清晰识别越准</div>
+  <input type="file" id="file-input" accept="image/*" capture="environment" multiple style="display:none;">
+  <div id="thumbs" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:12px;"></div>
+</div>
+
+<div id="loading" style="display:none;margin-top:14px;padding:12px;background:var(--bg-elevated);border:0.5px solid var(--hair);text-align:center;font-family:var(--font-serif);font-size:13px;color:var(--ink-2);">
+  正在识别 · 通常 5~15 秒…
+</div>
+
+<div id="error" style="display:none;margin-top:14px;padding:10px 12px;background:#fcf5f4;border-left:3px solid var(--accent-red);font-family:var(--font-serif);font-size:12px;color:var(--accent-red);"></div>
+
+<div id="result" style="display:none;margin-top:14px;">
+  <div class="ukm-section-head">
+    <h2>识&nbsp;别&nbsp;结&nbsp;果&nbsp;·&nbsp;<span id="row-count">0</span>&nbsp;行</h2>
+  </div>
+
+  <form method="post" action="/admin/inventory/import-photo/commit" id="commit-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="row_count" id="row-count-input" value="0">
+    <input type="hidden" name="next_url" value="/m/inventory">
+
+    <div id="rows"></div>
+
+    <div style="margin:14px 0;padding:12px;background:var(--bg-elevated);border:0.5px solid var(--hair);font-family:var(--font-serif);">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">入&nbsp;库&nbsp;合&nbsp;计</span>
+        <span class="ukm-num" style="font-size:22px;font-weight:700;color:var(--ink);">¥&nbsp;<span id="grand-total">0.00</span></span>
+      </div>
+    </div>
+
+    <div class="ukm-btn-row">
+      <button type="button" onclick="resetUpload()" class="ukm-btn ghost block">重&nbsp;新&nbsp;拍&nbsp;照</button>
+      <button type="submit" class="ukm-btn block" id="commit-btn">全&nbsp;部&nbsp;入&nbsp;库</button>
+    </div>
+  </form>
+</div>
+
+<style>
+.mi-card { background:var(--paper); border:0.5px solid var(--hair); padding:12px; margin-bottom:10px; }
+.mi-card.matched { border-left:3px solid var(--accent-green); }
+.mi-card.unmatched { border-left:3px solid var(--accent-amber); }
+.mi-card.skipped { opacity:.45; }
+.mi-card .name-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.mi-card .name-row input.name { flex:1; font-family:var(--font-serif); font-size:14px; font-weight:600; padding:6px 8px; border:0.5px solid var(--hair); background:var(--paper); color:var(--ink); }
+.mi-card .badge { font-family:var(--font-serif); font-size:10px; padding:2px 8px; border:0.5px solid var(--hair); font-style:italic; letter-spacing:1px; white-space:nowrap; }
+.mi-card .badge.matched { color:var(--accent-green); border-color:var(--accent-green); background:#f5f9f6; }
+.mi-card .badge.fuzzy { color:var(--accent-amber); border-color:var(--accent-amber); background:#fbfaf6; }
+.mi-card .badge.new { color:var(--accent-amber); border-color:var(--accent-amber); background:#fbfaf6; }
+.mi-card .matched-name { font-family:var(--font-serif); font-size:10px; color:var(--ink-3); font-style:italic; margin-bottom:8px; padding-left:2px; }
+.mi-card .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; }
+.mi-card .grid.cols3 { grid-template-columns:1fr 1fr 1fr; }
+.mi-card .field { display:flex; flex-direction:column; }
+.mi-card .field .lbl { font-family:var(--font-serif); font-size:9px; letter-spacing:1.5px; color:var(--ink-3); margin-bottom:3px; font-style:italic; }
+.mi-card .field input { padding:6px 8px; border:0.5px solid var(--hair); background:var(--paper); font-family:var(--font-serif); font-size:13px; color:var(--ink); min-width:0; box-sizing:border-box; width:100%; }
+.mi-card .field input[readonly] { background:#f4f1ec; color:var(--ink-2); cursor:not-allowed; }
+.mi-card .field input.num { font-variant-numeric:tabular-nums lining-nums; }
+.mi-card .actions-row { display:flex; align-items:center; gap:8px; margin-top:10px; padding-top:10px; border-top:0.5px solid var(--hair); }
+.mi-card .actions-row select { padding:5px 8px; border:0.5px solid var(--hair); font-family:var(--font-serif); font-size:12px; background:var(--paper); color:var(--ink); }
+.mi-card .subtotal { flex:1; text-align:right; font-family:var(--font-serif); font-size:13px; color:var(--ink-3); }
+.mi-card .subtotal b { color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums lining-nums; }
+#thumbs img { width:60px; height:60px; object-fit:cover; border:0.5px solid var(--hair); }
+</style>
+
+<script>
+(function () {
+  var dz = document.getElementById('dropzone');
+  var input = document.getElementById('file-input');
+  var thumbs = document.getElementById('thumbs');
+  var loading = document.getElementById('loading');
+  var errBox = document.getElementById('error');
+  var resultBox = document.getElementById('result');
+  var rowsCnt = document.getElementById('rows');
+  var picked = [];
+
+  dz.addEventListener('click', function (e) {
+    if (e.target.tagName === 'INPUT') return;
+    input.click();
+  });
+  input.addEventListener('change', function () {
+    pickFiles(Array.from(input.files || []));
+  });
+
+  function pickFiles(fs) {
+    var raw = fs.slice(0, 5);
+    if (raw.length === 0) return;
+    Promise.all(raw.map(compressImage)).then(function (compressed) {
+      picked = compressed;
+      renderThumbs();
+      startRecognize();
+    }).catch(function (e) {
+      showError('图片预处理失败：' + e.message);
+    });
+  }
+
+  function compressImage(file) {
+    return new Promise(function (resolve, reject) {
+      if (!/^image\//.test(file.type)) { resolve(file); return; }
+      var img = new Image();
+      img.onload = function () {
+        var maxSide = 2400;
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (Math.max(w, h) > maxSide) {
+          var r = maxSide / Math.max(w, h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function (blob) {
+          if (!blob) { resolve(file); return; }
+          if (blob.size > 5 * 1024 * 1024) {
+            canvas.toBlob(function (b2) {
+              resolve(new File([b2 || blob], (file.name || 'photo') + '.jpg', { type: 'image/jpeg' }));
+            }, 'image/jpeg', 0.7);
+          } else {
+            resolve(new File([blob], (file.name || 'photo') + '.jpg', { type: 'image/jpeg' }));
+          }
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function () { reject(new Error('图片解码失败')); };
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  function renderThumbs() {
+    thumbs.innerHTML = '';
+    picked.forEach(function (f) {
+      var img = new Image();
+      img.src = URL.createObjectURL(f);
+      thumbs.appendChild(img);
+    });
+  }
+
+  function showError(msg) { errBox.textContent = '⚠ ' + msg; errBox.style.display = 'block'; }
+  function hideError() { errBox.style.display = 'none'; }
+
+  function startRecognize() {
+    hideError();
+    resultBox.style.display = 'none';
+    loading.style.display = 'block';
+    var fd = new FormData();
+    picked.forEach(function (f) { fd.append('files', f); });
+
+    fetch('/admin/inventory/import-photo/recognize', { method:'POST', body:fd, credentials:'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        loading.style.display = 'none';
+        if (!data.ok) { showError(data.error || '识别失败'); return; }
+        renderResult(data.items);
+      })
+      .catch(function (e) {
+        loading.style.display = 'none';
+        showError('网络错误：' + e);
+      });
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, function (m) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m];
+    });
+  }
+
+  function renderResult(items) {
+    rowsCnt.innerHTML = '';
+    if (!items || items.length === 0) {
+      showError('未识别出任何商品行');
+      return;
+    }
+    items.forEach(function (it, i) {
+      var matched = it.matched_id && it.matched_id > 0;
+      var fuzzy = matched && (it.match_confidence || 0) < 1;
+      var lock = matched ? ' readonly' : '';
+      var mainU = matched ? (it.matched_unit || '') : (it.main_unit || it.matched_unit || '');
+      var packU = matched ? (it.matched_unit2 || it.matched_unit || '') : (it.unit || it.pack_unit || it.matched_unit2 || it.matched_unit || '');
+      var packN = matched ? (it.matched_unit2_ratio || '') : (it.pack_size || it.matched_unit2_ratio || '');
+      var costV = (it.unit_price != null && it.unit_price !== '') ? it.unit_price : (matched && it.matched_cost_price ? it.matched_cost_price : '');
+      var sellV = matched && it.matched_sell_price ? it.matched_sell_price : '';
+      var badgeHtml = matched
+        ? '<span class="badge ' + (fuzzy ? 'fuzzy' : 'matched') + '">' + (fuzzy ? '相似 ' + (it.match_confidence*100).toFixed(0) + '%' : '✓ 已有') + '</span>'
+        : '<span class="badge new">＋ 新</span>';
+      var matchedNameHtml = matched && it.matched_name
+        ? '<div class="matched-name">' + escapeHtml(it.matched_name) + (it.matched_stock !== undefined ? ' · 现存 ' + it.matched_stock : '') + '</div>'
+        : '';
+
+      var card = document.createElement('div');
+      card.className = 'mi-card ' + (matched ? 'matched' : 'unmatched');
+      card.dataset.row = i;
+      card.innerHTML =
+        '<div class="name-row">' +
+          '<input class="name" name="row' + i + '_name" value="' + escapeHtml(it.name) + '" placeholder="品名" required>' +
+          badgeHtml +
+        '</div>' +
+        matchedNameHtml +
+        '<div class="grid">' +
+          '<div class="field"><span class="lbl">规&nbsp;格</span><input name="row' + i + '_spec" value="' + escapeHtml(it.spec || '') + '" placeholder="如10mg"></div>' +
+          '<div class="field"><span class="lbl">数&nbsp;量</span><input class="num" name="row' + i + '_qty" type="number" step="0.01" min="0" inputmode="decimal" value="' + (it.qty || '') + '"></div>' +
+        '</div>' +
+        '<div class="grid cols3" style="margin-top:8px;">' +
+          '<div class="field"><span class="lbl">主单位</span><input name="row' + i + '_main_unit" value="' + escapeHtml(mainU) + '" placeholder="片"' + lock + '></div>' +
+          '<div class="field"><span class="lbl">副单位</span><input name="row' + i + '_unit" value="' + escapeHtml(packU) + '" placeholder="盒"' + lock + '></div>' +
+          '<div class="field"><span class="lbl">×N</span><input class="num" name="row' + i + '_pack_size" type="number" step="1" min="0" inputmode="numeric" value="' + packN + '" placeholder="30"' + lock + '></div>' +
+        '</div>' +
+        '<div class="grid" style="margin-top:8px;">' +
+          '<div class="field"><span class="lbl">进价/件</span><input class="num" name="row' + i + '_unit_price" type="number" step="0.01" min="0" inputmode="decimal" value="' + costV + '"></div>' +
+          '<div class="field"><span class="lbl">售价/主</span><input class="num" name="row' + i + '_sell_price" type="number" step="0.01" min="0" inputmode="decimal" value="' + sellV + '" placeholder="' + (matched ? '保持' : '请填') + '"></div>' +
+        '</div>' +
+        '<div class="grid" style="margin-top:8px;">' +
+          '<div class="field"><span class="lbl">批&nbsp;号</span><input name="row' + i + '_batch_no" value="' + escapeHtml(it.batch_no || '') + '" placeholder="选填"></div>' +
+          '<div class="field"><span class="lbl">有效期</span><input name="row' + i + '_expiry_date" type="date" value="' + escapeHtml(it.expiry_date || '') + '"></div>' +
+        '</div>' +
+        '<div class="actions-row">' +
+          '<select name="row' + i + '_action" class="action-sel">' +
+            (matched
+              ? '<option value="reuse" selected>累加</option><option value="create">新增</option><option value="skip">跳过</option>'
+              : '<option value="create" selected>新增</option><option value="skip">跳过</option>') +
+          '</select>' +
+          (matched ? '<input type="hidden" name="row' + i + '_item_id" value="' + it.matched_id + '">' : '') +
+          '<div class="subtotal">小计 <b class="sub-val">¥0.00</b></div>' +
+        '</div>';
+      rowsCnt.appendChild(card);
+
+      var qtyEl = card.querySelector('input[name="row' + i + '_qty"]');
+      var priceEl = card.querySelector('input[name="row' + i + '_unit_price"]');
+      var sel = card.querySelector('.action-sel');
+      if (qtyEl) qtyEl.addEventListener('input', recalcAll);
+      if (priceEl) priceEl.addEventListener('input', recalcAll);
+      sel.addEventListener('change', function () {
+        if (sel.value === 'skip') card.classList.add('skipped'); else card.classList.remove('skipped');
+        var locked = (sel.value === 'reuse');
+        ['main_unit', 'unit', 'pack_size'].forEach(function (fld) {
+          var inp = card.querySelector('input[name="row' + i + '_' + fld + '"]');
+          if (!inp) return;
+          if (locked) inp.setAttribute('readonly', 'readonly'); else inp.removeAttribute('readonly');
+        });
+        recalcAll();
+      });
+    });
+    document.getElementById('row-count').textContent = items.length;
+    document.getElementById('row-count-input').value = items.length;
+    resultBox.style.display = 'block';
+    recalcAll();
+  }
+
+  function recalcAll() {
+    var cards = rowsCnt.querySelectorAll('.mi-card');
+    var grand = 0;
+    cards.forEach(function (card) {
+      var qty = parseFloat((card.querySelector('input[name$="_qty"]') || {}).value || 0) || 0;
+      var price = parseFloat((card.querySelector('input[name$="_unit_price"]') || {}).value || 0) || 0;
+      var sub = qty * price;
+      var sv = card.querySelector('.sub-val');
+      if (sv) sv.textContent = '¥' + sub.toFixed(2);
+      var actEl = card.querySelector('.action-sel');
+      var skipped = actEl && actEl.value === 'skip';
+      if (!skipped) grand += sub;
+    });
+    document.getElementById('grand-total').textContent = grand.toFixed(2);
+  }
+
+  window.resetUpload = function () {
+    picked = [];
+    input.value = '';
+    thumbs.innerHTML = '';
+    resultBox.style.display = 'none';
+    hideError();
+  };
+})();
+</script>
+
+{% endblock %}

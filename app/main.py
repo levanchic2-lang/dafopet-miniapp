@@ -14104,7 +14104,12 @@ async def admin_inventory_import_photo_commit(
     parts = [f"新增 {created} 个品目", f"{stocked_in} 笔入库"]
     if merged: parts.append(f"自动合并 {merged} 行同名")
     if skipped: parts.append(f"跳过 {skipped} 行")
-    return RedirectResponse(f"/admin/inventory?msg=入库完成：{'，'.join(parts)}", status_code=303)
+    msg = f"入库完成：{'，'.join(parts)}"
+    nu = str(form.get("next_url", "")).strip()
+    if nu:
+        sep = "&" if "?" in nu else "?"
+        return RedirectResponse(_safe_next(nu + sep + "msg=" + msg, f"/admin/inventory?msg={msg}"), status_code=303)
+    return RedirectResponse(f"/admin/inventory?msg={msg}", status_code=303)
 
 
 @app.get("/admin/inventory", response_class=HTMLResponse)
@@ -23511,6 +23516,14 @@ async def m_inventory_list(
         "categories": INVENTORY_CATEGORIES,
     })
     return templates.TemplateResponse(request, "m_uk/inventory.html", ctx)
+
+
+@app.get("/m/inventory/import-photo", response_class=HTMLResponse)
+async def m_inventory_import_photo(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/inventory/import-photo", status_code=303)
+    ctx = _m_ctx(request, db, active_tab="finance")
+    return templates.TemplateResponse(request, "m_uk/inventory_import_photo.html", ctx)
 
 
 @app.get("/m/inventory/{item_id}", response_class=HTMLResponse)
