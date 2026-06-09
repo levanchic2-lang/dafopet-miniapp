@@ -45,6 +45,25 @@
        <b style="font-style:normal;letter-spacing:.5px;">字段说明（新人参考）</b>
        <span style="color:#8a6a48;">主单位 = 发药/拆零的最小单位（片/ml/支） · 副单位 = 进货外包装（盒/瓶） · ×N = 1副单位含 N 主单位 · 进价按副单位计 · 售价按主单位计 · 已匹配的品目以库存档案为准、不可改单位</span>
      </div>
+     {# 默认大类 / 小类（仅作用于本次「新增」的品目；「累加」用库存档案的分类） #}
+     <div style="margin-bottom:.85rem;padding:.6rem .9rem;background:var(--paper);border:0.5px solid var(--hair);display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-family:var(--font-serif);font-size:10pt;">
+       <span style="letter-spacing:1px;color:var(--ink-3);">本次新增品目的默认分类</span>
+       <label style="display:inline-flex;align-items:center;gap:5px;">
+         大类
+         <select id="default-category" onchange="onDefaultCategoryChange()" style="padding:4px 8px;border:0.5px solid var(--hair);font-family:var(--font-serif);font-size:10pt;">
+           {% for k, c in categories.items() %}
+           <option value="{{ k }}" {% if k == 'medication' %}selected{% endif %}>{{ c.label }}</option>
+           {% endfor %}
+         </select>
+       </label>
+       <label style="display:inline-flex;align-items:center;gap:5px;">
+         小类
+         <select id="default-subcategory" style="padding:4px 8px;border:0.5px solid var(--hair);font-family:var(--font-serif);font-size:10pt;">
+           {# 由 JS 根据大类联动填充 #}
+         </select>
+       </label>
+       <span style="margin-left:auto;color:var(--ink-3);font-style:italic;letter-spacing:.5px;">提示：进货单通常同一大类，先在这里选好；个别行可在入库后到「库存编辑」改</span>
+     </div>
      <div style="overflow-x:auto;">
        <table class="ip-result-tbl">
          <thead>
@@ -88,6 +107,39 @@
 </div>
 
 <script>
+// ─── 默认大类 / 小类联动 ────────────────────────────────
+const __CATS = {{ categories|tojson }};
+function onDefaultCategoryChange() {
+  const catSel = document.getElementById('default-category');
+  const subSel = document.getElementById('default-subcategory');
+  const cat = catSel.value;
+  const subs = (__CATS[cat] && __CATS[cat].subs) || {};
+  subSel.innerHTML = '';
+  // 第一项空 = 不指定小类
+  const optEmpty = document.createElement('option');
+  optEmpty.value = ''; optEmpty.textContent = '— 不指定 —';
+  subSel.appendChild(optEmpty);
+  Object.keys(subs).forEach(function (k) {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = subs[k].label || k;
+    subSel.appendChild(o);
+  });
+  // 常用默认：medication → general，vaccine → 不指定
+  if (cat === 'medication' && subs['general']) subSel.value = 'general';
+  syncRowCategories();
+}
+function syncRowCategories() {
+  const cat = (document.getElementById('default-category') || {}).value || 'medication';
+  const sub = (document.getElementById('default-subcategory') || {}).value || '';
+  document.querySelectorAll('.row-category').forEach(function (inp) { inp.value = cat; });
+  document.querySelectorAll('.row-subcategory').forEach(function (inp) { inp.value = sub; });
+}
+document.addEventListener('change', function (e) {
+  if (e.target && e.target.id === 'default-subcategory') syncRowCategories();
+});
+// 初始化下拉
+onDefaultCategoryChange();
+
 (function () {
   var dz = document.getElementById('dropzone');
   var input = document.getElementById('file-input');
@@ -234,6 +286,8 @@
               : '<option value="create" selected>新增</option><option value="skip">跳过</option>') +
           '</select>' +
           (matched ? '<input type="hidden" name="row' + i + '_item_id" value="' + it.matched_id + '">' : '') +
+          '<input type="hidden" class="row-category" name="row' + i + '_category" value="">' +
+          '<input type="hidden" class="row-subcategory" name="row' + i + '_subcategory" value="">' +
         '</td>' +
         '<td class="col-name" data-label="品名"><input name="row' + i + '_name" value="' + escapeHtml(it.name) + '" required></td>' +
         '<td class="col-spec" data-label="规格"><input name="row' + i + '_spec" value="' + escapeHtml(it.spec) + '" placeholder="如10mg"></td>' +
@@ -316,6 +370,7 @@
     document.getElementById('row-count').textContent = items.length;
     document.getElementById('row-count-input').value = items.length;
     resultBox.style.display = 'block';
+    if (typeof syncRowCategories === 'function') syncRowCategories();
     recalcAll();
   }
 

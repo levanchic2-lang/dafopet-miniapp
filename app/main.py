@@ -14145,6 +14145,7 @@ async def admin_inventory_import_photo_page(request: Request, db: Session = Depe
         return RedirectResponse("/admin/login")
     return templates.TemplateResponse(request, "uk/inventory_import_photo.html", {
         "csrf_token": _get_csrf_token(request),
+        "categories": INVENTORY_CATEGORIES,
     })
 
 
@@ -14276,6 +14277,9 @@ async def admin_inventory_import_photo_commit(
         batch_no = (form.get(f"row{i}_batch_no") or "").strip()
         expiry = (form.get(f"row{i}_expiry_date") or "").strip()[:10]
         spec = (form.get(f"row{i}_spec") or "").strip()
+        # 大类 / 小类（用户在表单选；空 fallback 到 medication / general 兼容旧行为）
+        row_category = (form.get(f"row{i}_category") or "").strip() or "medication"
+        row_subcategory = (form.get(f"row{i}_subcategory") or "").strip()
         # 包装信息（OCR 新增字段）— 创建时记到 unit2/unit2_ratio；reuse 时用于单位换算
         try:
             pack_size = float(form.get(f"row{i}_pack_size") or 0)
@@ -14346,7 +14350,8 @@ async def admin_inventory_import_photo_commit(
                     _cost_per_main = unit_price / _ratio if _ratio > 1 else unit_price
                     item = InventoryItem(
                         name=name[:200],
-                        category="medication",
+                        category=row_category[:60],
+                        subcategory=row_subcategory[:60],
                         unit=_main_u[:20],
                         unit2=_unit2[:20],
                         unit2_ratio=_unit2_ratio,
@@ -24009,6 +24014,7 @@ async def m_inventory_import_photo(request: Request, db: Session = Depends(get_d
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/inventory/import-photo", status_code=303)
     ctx = _m_ctx(request, db, active_tab="finance")
+    ctx["categories"] = INVENTORY_CATEGORIES
     return templates.TemplateResponse(request, "m_uk/inventory_import_photo.html", ctx)
 
 
