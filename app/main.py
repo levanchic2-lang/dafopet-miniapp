@@ -22075,6 +22075,32 @@ async def m_switch_role(
     return RedirectResponse("/m", status_code=303)
 
 
+@app.post("/m/switch-store")
+async def m_switch_store(
+    request: Request,
+    store: str = Form(""),
+    csrf_token: str = Form(""),
+    next_url: str = Form("/m/me"),
+):
+    """超管手机端切换"当前挂靠门店"（仅 session，不写库）。
+
+    - 仅 superadmin 可用；店员的 session.admin_store 锁死本店，不允许切。
+    - 写 session['admin_store']，由 _get_op_store 读取 → 影响手机列表/首页待办/开单品目过滤。
+    - 空字符串 = 全部门店（超管看全店）。
+    """
+    if not _admin_ok(request):
+        raise HTTPException(401)
+    _require_csrf(request, csrf_token)
+    if request.session.get("admin_role") != "superadmin":
+        # 店员无权切店，原样回去
+        return RedirectResponse(_safe_next(next_url, "/m/me"), status_code=303)
+    s = (store or "").strip()
+    if s not in ("东环店", "横岗店", ""):
+        s = ""
+    request.session["admin_store"] = s
+    return RedirectResponse(_safe_next(next_url, "/m/me"), status_code=303)
+
+
 def _m_ctx(request: Request, db: Session, *, active_tab: str) -> dict:
     """所有 /m/* 模板共用上下文。"""
     role = _current_mobile_role(request, db)

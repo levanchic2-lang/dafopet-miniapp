@@ -13,6 +13,25 @@
   </div>
 </div>
 
+{% if admin_role == 'superadmin' %}
+<div class="ukm-section-head"><h2>当&nbsp;前&nbsp;门&nbsp;店</h2></div>
+<form method="post" action="/m/switch-store" class="ukm-card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="next_url" value="/m/me">
+  <div class="ukm-row-sub" style="margin-bottom:12px;line-height:1.6;">
+    手机端的列表、首页待办、开单品目都按所选门店过滤。<br>选「全部门店」可看全店。
+  </div>
+  <div class="ukm-chips">
+    <button type="submit" name="store" value="东环店"
+            class="ukm-chip {% if admin_store_label == '东环店' %}checked{% endif %}">东&nbsp;环&nbsp;店</button>
+    <button type="submit" name="store" value="横岗店"
+            class="ukm-chip {% if admin_store_label == '横岗店' %}checked{% endif %}">横&nbsp;岗&nbsp;店</button>
+    <button type="submit" name="store" value=""
+            class="ukm-chip {% if admin_store_label == '全部门店' %}checked{% endif %}">全&nbsp;部&nbsp;门&nbsp;店</button>
+  </div>
+</form>
+{% endif %}
+
 <div class="ukm-section-head"><h2>账&nbsp;号</h2></div>
 <div class="ukm-row-group">
   <a class="ukm-row" href="/admin/profile">
