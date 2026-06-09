@@ -23744,7 +23744,8 @@ async def m_consents_list(request: Request, db: Session = Depends(get_db), q: st
     rows = []
     for t in items:
         c = db.get(Customer, t.customer_id) if t.customer_id else None
-        rows.append({"t": t, "cust": c})
+        p = db.get(Pet, t.pet_id) if t.pet_id else None
+        rows.append({"t": t, "cust": c, "pet": p})
     ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({"rows": rows, "q": q, "status": status})
     return templates.TemplateResponse(request, "m_uk/consents.html", ctx)

@@ -26,12 +26,10 @@
   {% for r in rows %}
   <a class="ukm-row" href="/m/consent-task/{{ r.t.id }}">
     <div class="ukm-row-body">
-      <div class="ukm-row-title">{{ r.t.title or '协议' }}
-        {% if r.cust %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name }}</span>{% endif %}
-      </div>
+      <div class="ukm-row-title">{{ r.cust.name if r.cust else '—' }}{% if r.pet %}<span class="ukm-italic" style="font-size:13px;margin-left:6px;color:var(--ink-2);">{{ r.pet.name }}</span>{% endif %}</div>
       <div class="ukm-row-sub">
-        {{ r.t.initiated_at.strftime('%Y-%m-%d') if r.t.initiated_at else '—' }}
-        {% if r.t.initiated_by %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.t.initiated_by }}{% endif %}
+        {{ r.t.title[:16] ~ '…' if r.t.title and r.t.title|length > 16 else (r.t.title or '协议') }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.t.initiated_at.strftime('%Y-%m-%d') if r.t.initiated_at else '—' }}
       </div>
     </div>
     {% if r.t.status == 'pending' %}<span class="ukm-pill amber">待签</span>
