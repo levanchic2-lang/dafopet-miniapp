@@ -18868,11 +18868,22 @@ async def admin_exam_order_detail(
     micro_reports = db.query(MicroscopyReport).filter(
         MicroscopyReport.exam_order_id == order_id
     ).order_by(MicroscopyReport.id.desc()).all()
+    # 已被某份报告认领的项目名 set（用于上传下拉灰显「已上传」+ 项目卡片状态）
+    assigned_labels = set()
+    for rpt in (order.reports or []):
+        lbl = (rpt.item_label or "").strip()
+        if lbl:
+            assigned_labels.add(lbl)
+    for mr in micro_reports:
+        lbl = (mr.item_label or "").strip()
+        if lbl:
+            assigned_labels.add(lbl)
     return templates.TemplateResponse(request, "uk/exam_detail.html", {  # B8.7 UK 重写
         "order": order, "visit": visit, "cust": cust, "pet": pet,
         "items": items, "msg": msg,
         "exam_history": history,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
+        "assigned_labels": assigned_labels,
         "has_microscopy": has_microscopy, "micro_items": micro_items,
         "micro_reports": micro_reports,
         "csrf_token": _get_csrf_token(request),
@@ -24298,11 +24309,24 @@ async def m_exam_detail(order_id: int, request: Request, db: Session = Depends(g
             if any(k in n for k in ("镜检", "镜下", "刮片", "涂片", "粪检", "皮肤检查", "耳道分泌", "阴道脱落", "显微")):
                 has_microscopy = True
                 break
+    assigned_labels = set()
+    for rpt in (order.reports or []):
+        lbl = (rpt.item_label or "").strip()
+        if lbl:
+            assigned_labels.add(lbl)
+    micro_reports_m = db.query(MicroscopyReport).filter(
+        MicroscopyReport.exam_order_id == order_id
+    ).all()
+    for mr in micro_reports_m:
+        lbl = (mr.item_label or "").strip()
+        if lbl:
+            assigned_labels.add(lbl)
     ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "order": order, "v": v, "pet": pet, "cust": cust,
         "items": items, "reports": order.reports,
         "has_microscopy": has_microscopy,
+        "assigned_labels": assigned_labels,
         "next_url": f"/m/exam-order/{order_id}",
     })
     return templates.TemplateResponse(request, "m_uk/exam_detail.html", ctx)

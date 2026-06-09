@@ -23,7 +23,11 @@
   {% for it in items %}
   <div class="ukm-row" style="cursor:default;">
     <div class="ukm-row-body">
-      <div class="ukm-row-title" style="font-size:14px;">{{ loop.index }}.&nbsp;{{ it.name }}</div>
+      <div class="ukm-row-title" style="font-size:14px;">{{ loop.index }}.&nbsp;{{ it.name }}
+        {% if it.name in assigned_labels %}
+        <span style="margin-left:6px;font-size:10px;padding:1px 6px;border:0.5px solid var(--accent-green);color:var(--accent-green);font-weight:700;letter-spacing:.5px;font-style:normal;">✓&nbsp;已出</span>
+        {% endif %}
+      </div>
     </div>
     {% if it.unit_price %}
     <div class="ukm-row-right ukm-num">¥&nbsp;{{ '%.0f'|format(it.unit_price) }}</div>
@@ -39,9 +43,14 @@
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
       {% for r in reports %}
       <a href="/admin/exam-reports/{{ r.id }}/view" target="_blank"
-         style="aspect-ratio:1;border:0.5px solid var(--hair);display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-elevated);text-decoration:none;color:inherit;padding:8px;">
-        <div style="font-family:var(--font-serif);font-size:24px;font-weight:300;color:var(--ink-2);line-height:1;">{% if r.file_type == 'pdf' %}PDF{% else %}IMG{% endif %}</div>
-        <div style="font-size:10px;color:var(--ink-3);text-align:center;margin-top:6px;overflow:hidden;text-overflow:ellipsis;width:100%;font-style:italic;letter-spacing:0.5px;">{{ r.original_name|truncate(12) }}</div>
+         style="aspect-ratio:1;border:0.5px solid {% if r.item_label %}var(--accent-green){% else %}var(--hair){% endif %};display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-elevated);text-decoration:none;color:inherit;padding:6px;">
+        <div style="font-family:var(--font-serif);font-size:22px;font-weight:300;color:var(--ink-2);line-height:1;">{% if r.file_type == 'pdf' %}PDF{% else %}IMG{% endif %}</div>
+        {% if r.item_label %}
+        <div style="font-size:10px;color:var(--accent-green);text-align:center;margin-top:4px;font-weight:700;letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;width:100%;white-space:nowrap;">✓&nbsp;{{ r.item_label|truncate(8) }}</div>
+        {% else %}
+        <div style="font-size:9px;color:var(--ink-3);text-align:center;margin-top:4px;font-style:italic;letter-spacing:.5px;">未指定</div>
+        {% endif %}
+        <div style="font-size:9px;color:var(--ink-3);text-align:center;margin-top:2px;overflow:hidden;text-overflow:ellipsis;width:100%;white-space:nowrap;font-style:italic;">{{ r.original_name|truncate(10) }}</div>
       </a>
       {% endfor %}
     </div>
@@ -55,9 +64,41 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
   <input type="hidden" name="next_url" value="{{ next_url }}"/>
   <div class="ukm-field">
-    <label class="lbl">归&nbsp;属&nbsp;项&nbsp;（可选）</label>
-    <input class="ukm-input" type="text" name="item_label" placeholder="如：血常规"/>
+    <label class="lbl">归&nbsp;属&nbsp;项&nbsp;（可选 · 点选避免重复）</label>
+    <input type="hidden" name="item_label" id="picked-item-label" value=""/>
+    <div class="ukm-chips" id="item-label-chips" style="gap:5px;">
+      {% for it in items %}
+      {% set _done = it.name in assigned_labels %}
+      <button type="button"
+              class="ukm-chip {% if _done %}hair{% endif %}"
+              data-label="{{ it.name }}"
+              data-done="{% if _done %}1{% else %}0{% endif %}"
+              onclick="pickLabel(this)"
+              style="font-size:11px;padding:5px 10px;{% if _done %}opacity:.55;color:var(--ink-3);{% endif %}">
+        {{ it.name }}{% if _done %}&nbsp;·&nbsp;✓{% endif %}
+      </button>
+      {% endfor %}
+    </div>
   </div>
+  <script>
+    function pickLabel(btn) {
+      const cur = btn.dataset.label;
+      const hid = document.getElementById('picked-item-label');
+      // 点已勾的 → 取消
+      if (btn.classList.contains('checked')) {
+        btn.classList.remove('checked');
+        hid.value = '';
+        return;
+      }
+      // 提示已上传过该项
+      if (btn.dataset.done === '1') {
+        if (!confirm('该项已有一份报告，确定重复上传？')) return;
+      }
+      document.querySelectorAll('#item-label-chips .ukm-chip').forEach(c => c.classList.remove('checked'));
+      btn.classList.add('checked');
+      hid.value = cur;
+    }
+  </script>
   <label class="ukm-btn block" style="cursor:pointer;">
     拍&nbsp;照&nbsp;/&nbsp;选&nbsp;文&nbsp;件
     <input type="file" name="file" accept="image/*,application/pdf" capture="environment"

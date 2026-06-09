@@ -156,8 +156,13 @@
     color: var(--ink-3);
   }
   .ex-report-card .foot .label {
-    font-weight: 700; color: var(--ink); margin-bottom: 4px;
-    font-size: 10pt;
+    display: inline-block; padding: 1px 8px;
+    background: var(--bg); border: 0.5px solid var(--accent-green); color: var(--accent-green);
+    font-weight: 700; margin-bottom: 6px;
+    font-size: 9pt; letter-spacing: .5px;
+  }
+  .ex-report-card .foot .label.unassigned {
+    border-color: var(--hair); color: var(--ink-3); font-weight: 400; font-style: italic;
   }
   .ex-report-card .foot a {
     color: var(--ink); border-bottom: 0.5px solid var(--ink-3);
@@ -338,7 +343,11 @@ function confirmExamVoid(form, paidAmount) {
         {% set sub = (it.subtotal or 0) | float %}
         {% set ns.total = ns.total + sub %}
         <tr>
-          <td class="name">{{ it.name }}</td>
+          <td class="name">{{ it.name }}
+            {% if it.name in assigned_labels %}
+            <span style="margin-left:6px;font-size:8.5pt;padding:1px 6px;background:var(--bg);border:0.5px solid var(--accent-green);color:var(--accent-green);font-weight:700;letter-spacing:.5px;">✓ 已出报告</span>
+            {% endif %}
+          </td>
           <td class="right num">{{ it.qty or 1 }}</td>
           <td class="ink3">{{ it.unit or '—' }}</td>
           <td class="right num">{% if it.unit_price %}¥ {{ '%.2f'|format(it.unit_price | float) }}{% else %}—{% endif %}</td>
@@ -420,7 +429,10 @@ function confirmExamVoid(form, paidAmount) {
         <select name="item_label">
           <option value="">— 不指定 —</option>
           {% for it in items %}
-          <option value="{{ it.name }}">{{ it.name }}</option>
+          {% set _done = it.name in assigned_labels %}
+          <option value="{{ it.name }}" {% if _done %}style="color:var(--ink-3);"{% endif %}>
+            {{ it.name }}{% if _done %}　·　已上传{% endif %}
+          </option>
           {% endfor %}
         </select>
       </div>
@@ -444,7 +456,11 @@ function confirmExamVoid(form, paidAmount) {
         <img class="thumb" src="/admin/exam-reports/{{ rpt.id }}/file" alt="报告" loading="lazy"/>
         {% endif %}
         <div class="foot">
-          {% if rpt.item_label %}<div class="label">{{ rpt.item_label }}</div>{% endif %}
+          {% if rpt.item_label %}
+          <div class="label">✓&nbsp;{{ rpt.item_label }}</div>
+          {% else %}
+          <div class="label unassigned">未指定归属</div>
+          {% endif %}
           <a href="/admin/exam-reports/{{ rpt.id }}/file" target="_blank">查看</a>
           <a href="/admin/exam-reports/{{ rpt.id }}/file?download=1" download="{{ rpt.original_name or '' }}">下载</a>
           <span class="type">{{ rpt.file_type | upper }}</span>
