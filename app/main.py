@@ -10481,8 +10481,7 @@ async def admin_visit_create(
     if next_url:
         nu = next_url.replace("{id}", str(v.id))
         return RedirectResponse(_safe_next(nu, f"/admin/visits/{v.id}?msg=就诊记录已创建"), status_code=303)
-    if customer_id:
-        return RedirectResponse(f"/admin/customers/{customer_id}?msg=就诊记录已创建", status_code=303)
+    # 桌面端：创建后直接进新病历的 SOAP 页（不再跳回客户档案落到第一只宠物，省两步）
     return RedirectResponse(f"/admin/visits/{v.id}?msg=就诊记录已创建", status_code=303)
 
 
