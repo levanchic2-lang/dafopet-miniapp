@@ -22360,12 +22360,63 @@ def _m_badges(request: Request, db: Session) -> dict:
         st_q = st_q.filter(StocktakeSession.name.like(f"%{store_short}%"))
     open_stocktakes = st_q.count()
 
+    # 6. 待录入报告：30 天内已开、未上传报告、且至少一个项目需要报告的检查单
+    from datetime import timedelta as _td
+    exam_cutoff = datetime.utcnow() - _td(days=30)
+    exam_q = db.query(ExamOrder).filter(
+        ExamOrder.status != "voided",
+        ExamOrder.created_at >= exam_cutoff,
+        ~db.query(ExamReport.id).filter(ExamReport.exam_order_id == ExamOrder.id).exists(),
+    )
+    if store_short:
+        exam_q = exam_q.outerjoin(Visit, Visit.id == ExamOrder.visit_id).outerjoin(
+            Pet, Pet.id == Visit.pet_id
+        ).filter(or_(Pet.store == store_short, Pet.store == "", Pet.store == None))  # noqa: E711
+    exam_report_pending = 0
+    for eo in exam_q.all():
+        try:
+            idata = json.loads(eo.items_json or "[]")
+        except Exception:
+            idata = []
+        # 至少一个项目需要报告（跳过保定费/操作费等纯收费项）
+        for it in idata:
+            iid = it.get("item_id") if isinstance(it, dict) else None
+            inv = db.get(InventoryItem, iid) if iid else None
+            if inv is not None and not inv.requires_report:
+                continue
+            exam_report_pending += 1
+            break
+
+    # 7. 库存预警（低/零库存）+ 库存过期（90 天内到期批次）
+    from datetime import date as _date, timedelta as _timedelta
+    inv_base = _apply_store_filter(
+        db.query(InventoryItem).filter(InventoryItem.is_active == True),
+        InventoryItem.store, store_short,
+    )
+    low_stock = inv_base.filter(
+        InventoryItem.is_service == False,
+        InventoryItem.stock_qty <= InventoryItem.low_stock_min,
+        InventoryItem.low_stock_min > 0,
+    ).count()
+    _alert_date = (_date.today() + _timedelta(days=90)).isoformat()
+    exp_q = db.query(InventoryBatch.item_id).join(
+        InventoryItem, InventoryItem.id == InventoryBatch.item_id
+    ).filter(
+        InventoryBatch.expiry_date != "",
+        InventoryBatch.expiry_date <= _alert_date,
+    )
+    exp_q = _apply_store_filter(exp_q, InventoryItem.store, store_short)
+    inventory_expiry = exp_q.distinct().count()
+
     return {
         "overdue_meds": overdue_meds,
         "pending_dispense": pending_dispense,
         "due_followups": due_followups,
         "pending_consents": pending_consents,
         "open_stocktakes": open_stocktakes,
+        "exam_report_pending": exam_report_pending,
+        "low_stock": low_stock,
+        "inventory_expiry": inventory_expiry,
     }
 
 
