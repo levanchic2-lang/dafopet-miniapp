@@ -92,6 +92,8 @@ from app.models import (
     AnesthesiaOrder,
     AnesthesiaOrderItem,
     NarcoticsLedger,
+    AnesthesiaMonitorSheet,
+    AnesthesiaMonitorEntry,
     FollowUpTemplate,
     Disease,
     GroomingOrder,
@@ -12596,6 +12598,241 @@ async def admin_anesth_void(order_id: int, request: Request, db: Session = Depen
     return RedirectResponse(f"/admin/visits/{visit_id}?msg=麻醉单已作废{refund_msg}" if visit_id else f"/admin/anesthesia/{order_id}?msg=已作废{refund_msg}", status_code=303)
 
 
+# ════════════════════════════════════════════════════════════════
+# 麻醉监护表（手术中逐时段生命体征 · 手机录入 + PDF 导出）
+# 与麻醉单（AnesthesiaOrder）刻意分开：那是药/计费/管控药台账，这是逐时段监护。
+# ════════════════════════════════════════════════════════════════
+_ANMON_DEPTH_ZH = {"light": "偏浅", "adequate": "适宜", "deep": "偏深"}
+
+
+def _anmon_now() -> datetime:
+    """北京时间（监护时间戳人面向，统一 utc+8 存+显，自洽）。"""
+    return datetime.utcnow() + timedelta(hours=8)
+
+
+def _anmon_guard(request: Request, sheet: "AnesthesiaMonitorSheet") -> None:
+    """门店隔离：staff 只能看本店的监护表。"""
+    store_short = _get_admin_store(request)
+    if store_short and sheet.store:
+        store_full = _STORE_SHORT_TO_FULL.get(store_short, "")
+        if sheet.store not in (store_short, store_full):
+            raise HTTPException(403, "无权查看其他门店的麻醉监护表")
+
+
+def _anmon_entry_flag(species: str, e: "AnesthesiaMonitorEntry") -> dict:
+    """麻醉监护常见报警标记（参考，universal）：'bad' 红 / 'warn' 琥珀。"""
+    f = {}
+    if e.spo2:
+        f["spo2"] = "bad" if e.spo2 < 90 else ("warn" if e.spo2 < 95 else "")
+    if e.temperature_c:
+        t = e.temperature_c
+        f["temp"] = "bad" if (t < 36.0 or t > 40.0) else ("warn" if (t < 37.0 or t > 39.5) else "")
+    if e.hr:
+        f["hr"] = "bad" if e.hr < 50 else ("warn" if e.hr < 60 else "")
+    if e.rr:
+        f["rr"] = "bad" if e.rr < 6 else ("warn" if e.rr < 8 else "")
+    return f
+
+
+@app.post("/admin/visits/{visit_id}/anesthesia-monitor/create")
+async def admin_anmon_create(visit_id: int, request: Request, db: Session = Depends(get_db),
+                             csrf_token: str = Form(""), next_url: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "病历不存在")
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    # 一台手术一张监护表：已有未结束的直接复用，避免重复建
+    existing = db.query(AnesthesiaMonitorSheet).filter(
+        AnesthesiaMonitorSheet.visit_id == visit_id,
+        AnesthesiaMonitorSheet.status == "open",
+    ).order_by(AnesthesiaMonitorSheet.id.desc()).first()
+    if existing:
+        return RedirectResponse(f"/m/anesthesia-monitor/{existing.id}", status_code=303)
+    store = (pet.store if pet else "") or _get_op_store(request)
+    weight = 0.0
+    if pet:
+        lw = db.query(WeightRecord).filter(WeightRecord.pet_id == pet.id)\
+            .order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
+        if lw:
+            weight = float(lw.weight_kg or 0)
+    now = _anmon_now()
+    sheet = AnesthesiaMonitorSheet(
+        visit_id=visit_id, customer_id=v.customer_id, pet_id=v.pet_id,
+        monitor_date=now.strftime("%Y-%m-%d"),
+        start_time=now.strftime("%H:%M"),
+        anesthetist=request.session.get("admin_username", "") or "",
+        weight_kg=weight, store=store,
+        created_by=request.session.get("admin_username", "") or "",
+    )
+    db.add(sheet)
+    db.commit()
+    return RedirectResponse(f"/m/anesthesia-monitor/{sheet.id}", status_code=303)
+
+
+@app.get("/m/anesthesia-monitor/{sheet_id}", response_class=HTMLResponse)
+async def m_anmon_detail(sheet_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/anesthesia-monitor/{sheet_id}", status_code=303)
+    sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
+    if not sheet:
+        raise HTTPException(404)
+    _anmon_guard(request, sheet)
+    pet = db.get(Pet, sheet.pet_id) if sheet.pet_id else None
+    cust = db.get(Customer, sheet.customer_id) if sheet.customer_id else None
+    species = pet.species if pet else ""
+    entries = list(sheet.entries)
+    flags = {e.id: _anmon_entry_flag(species, e) for e in entries}
+
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({
+        "sheet": sheet, "pet": pet, "cust": cust,
+        "entries": entries, "flags": flags,
+        "depth_zh": _ANMON_DEPTH_ZH,
+        "now_hhmm": _anmon_now().strftime("%H:%M"),
+        "next_url": f"/m/anesthesia-monitor/{sheet_id}",
+    })
+    return templates.TemplateResponse(request, "m_uk/anesthesia_monitor.html", ctx)
+
+
+@app.post("/admin/anesthesia-monitor/{sheet_id}/entry")
+async def admin_anmon_entry(sheet_id: int, request: Request, db: Session = Depends(get_db),
+                            csrf_token: str = Form(""), next_url: str = Form(""),
+                            time_hhmm: str = Form(""),
+                            hr: int = Form(0), rr: int = Form(0), spo2: int = Form(0),
+                            etco2: int = Form(0), temperature_c: float = Form(0.0),
+                            bp_sys: int = Form(0), bp_dia: int = Form(0), bp_map: int = Form(0),
+                            agent_pct: float = Form(0.0), o2_flow: float = Form(0.0),
+                            depth: str = Form(""), event: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
+    if not sheet:
+        raise HTTPException(404)
+    _anmon_guard(request, sheet)
+    fb = f"/m/anesthesia-monitor/{sheet_id}"
+    if sheet.status == "closed":
+        return RedirectResponse(_safe_next(next_url, fb + "?err=监护已结束，不可再记录"), status_code=303)
+    if not any([hr, rr, spo2, etco2, temperature_c, bp_sys, bp_dia, bp_map, agent_pct, o2_flow, depth, (event or "").strip()]):
+        return RedirectResponse(_safe_next(next_url, fb + "?err=至少填一项再记录#log"), status_code=303)
+    # 时间：默认现在（北京时间）；可手动覆盖 HH:MM（补录）
+    rec = _anmon_now()
+    th = (time_hhmm or "").strip()
+    if th:
+        try:
+            hh, mm = th.split(":")
+            rec = rec.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
+        except Exception:
+            pass
+    if depth not in _ANMON_DEPTH_ZH:
+        depth = ""
+    db.add(AnesthesiaMonitorEntry(
+        sheet_id=sheet_id, recorded_at=rec,
+        recorded_by=request.session.get("admin_username", "") or "",
+        hr=max(0, int(hr or 0)), rr=max(0, int(rr or 0)), spo2=max(0, int(spo2 or 0)),
+        etco2=max(0, int(etco2 or 0)), temperature_c=max(0.0, float(temperature_c or 0)),
+        bp_sys=max(0, int(bp_sys or 0)), bp_dia=max(0, int(bp_dia or 0)), bp_map=max(0, int(bp_map or 0)),
+        agent_pct=max(0.0, float(agent_pct or 0)), o2_flow=max(0.0, float(o2_flow or 0)),
+        depth=depth, event=(event or "").strip()[:200],
+    ))
+    sheet.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(_safe_next(next_url, fb + "?msg=已记录#log"), status_code=303)
+
+
+@app.post("/admin/anesthesia-monitor/{sheet_id}/entry/{entry_id}/delete")
+async def admin_anmon_entry_delete(sheet_id: int, entry_id: int, request: Request,
+                                   db: Session = Depends(get_db),
+                                   csrf_token: str = Form(""), next_url: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
+    if not sheet:
+        raise HTTPException(404)
+    _anmon_guard(request, sheet)
+    e = db.get(AnesthesiaMonitorEntry, entry_id)
+    if e and e.sheet_id == sheet_id:
+        db.delete(e)
+        db.commit()
+    return RedirectResponse(_safe_next(next_url, f"/m/anesthesia-monitor/{sheet_id}?msg=已删除#log"), status_code=303)
+
+
+@app.post("/admin/anesthesia-monitor/{sheet_id}/update-header")
+async def admin_anmon_update_header(sheet_id: int, request: Request, db: Session = Depends(get_db),
+                                    csrf_token: str = Form(""), next_url: str = Form(""),
+                                    procedure: str = Form(""), anesthetist: str = Form(""),
+                                    surgeon: str = Form(""), asa_grade: str = Form(""),
+                                    agent: str = Form(""), weight_kg: float = Form(0.0),
+                                    monitor_date: str = Form(""), start_time: str = Form(""),
+                                    end_time: str = Form(""), notes: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
+    if not sheet:
+        raise HTTPException(404)
+    _anmon_guard(request, sheet)
+    sheet.procedure = (procedure or "").strip()[:200]
+    sheet.anesthetist = (anesthetist or "").strip()[:80]
+    sheet.surgeon = (surgeon or "").strip()[:80]
+    sheet.asa_grade = (asa_grade or "").strip()[:10]
+    sheet.agent = (agent or "").strip()[:80]
+    sheet.weight_kg = max(0.0, float(weight_kg or 0))
+    sheet.monitor_date = (monitor_date or "").strip()[:20]
+    sheet.start_time = (start_time or "").strip()[:10]
+    sheet.end_time = (end_time or "").strip()[:10]
+    sheet.notes = (notes or "").strip()
+    sheet.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(_safe_next(next_url, f"/m/anesthesia-monitor/{sheet_id}?msg=已保存表头"), status_code=303)
+
+
+@app.post("/admin/anesthesia-monitor/{sheet_id}/close")
+async def admin_anmon_close(sheet_id: int, request: Request, db: Session = Depends(get_db),
+                            csrf_token: str = Form(""), next_url: str = Form(""), reopen: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
+    if not sheet:
+        raise HTTPException(404)
+    _anmon_guard(request, sheet)
+    if reopen:
+        sheet.status = "open"
+        sheet.closed_at = None
+        msg = "已重新开启"
+    else:
+        sheet.status = "closed"
+        sheet.closed_at = datetime.utcnow()
+        if not sheet.end_time:
+            sheet.end_time = _anmon_now().strftime("%H:%M")
+        msg = "监护已结束"
+    sheet.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(_safe_next(next_url, f"/m/anesthesia-monitor/{sheet_id}?msg={msg}"), status_code=303)
+
+
+@app.get("/admin/anesthesia-monitor/{sheet_id}/pdf")
+async def admin_anmon_pdf(sheet_id: int, request: Request, db: Session = Depends(get_db),
+                          download: int = Query(0)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/anesthesia-monitor/{sheet_id}", status_code=303)
+    sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
+    if not sheet:
+        raise HTTPException(404)
+    _anmon_guard(request, sheet)
+    from app.services.anesthesia_monitor_pdf import generate_monitor_pdf
+    rel, err = generate_monitor_pdf(db, sheet_id)
+    if not rel:
+        return RedirectResponse(f"/m/anesthesia-monitor/{sheet_id}?err=" + quote(f"PDF 生成失败：{err}"), status_code=303)
+    from fastapi.responses import FileResponse
+    abs_path = Path("uploads") / rel
+    fname = f"麻醉监护_{(sheet.pet.name if sheet.pet else sheet.id)}_{sheet.monitor_date or ''}.pdf"
+    safe_name = quote(fname)
+    disp = "attachment" if download else "inline"
+    return FileResponse(str(abs_path), media_type="application/pdf",
+                        headers={"Content-Disposition": f"{disp}; filename*=UTF-8''{safe_name}"})
+
+
 # ─── 麻醉/管控药台账 ─────────────────────────────────────────────
 @app.get("/admin/inventory/narcotics-ledger", response_class=HTMLResponse)
 async def page_admin_narcotics_ledger(
@@ -24166,6 +24403,11 @@ async def m_visit_detail(visit_id: int, request: Request, db: Session = Depends(
         Hospitalization.visit_id == visit_id
     ).first()
 
+    # 关联麻醉监护表
+    anmon_sheets = db.query(AnesthesiaMonitorSheet).filter(
+        AnesthesiaMonitorSheet.visit_id == visit_id
+    ).order_by(AnesthesiaMonitorSheet.id.desc()).all()
+
     ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "v": v, "pet": pet, "cust": cust,
@@ -24174,6 +24416,7 @@ async def m_visit_detail(visit_id: int, request: Request, db: Session = Depends(
         "vaccinations": vaccinations,
         "dewormings": dewormings,
         "hospitalization": hospitalization,
+        "anmon_sheets": anmon_sheets,
     })
     return templates.TemplateResponse(request, "m_uk/visit_detail.html", ctx)
 

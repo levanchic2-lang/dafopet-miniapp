@@ -1677,3 +1677,71 @@ class MicroscopyReport(Base):
     operator:       Mapped[str] = mapped_column(String(80), default="")
     created_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ════════════════════════════════════════════════════════════════
+# 麻醉监护表（手术中逐时段生命体征监护）
+# 与 AnesthesiaOrder（麻醉单）刻意分开：麻醉单 = 用了哪些麻醉药 + 剂量 +
+# 双人复核（计费/管控药台账）；监护表 = 手术过程中每隔几分钟记一次
+# HR/RR/SpO₂/EtCO₂/体温/血压/麻醉浓度…，导出 PDF 给主人或麻醉师看。
+# ════════════════════════════════════════════════════════════════
+class AnesthesiaMonitorSheet(Base):
+    """麻醉监护表（一次手术麻醉 = 一张表，下挂多条时间点 entry）。"""
+    __tablename__ = "anesthesia_monitor_sheets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="SET NULL"), nullable=True, default=None, index=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+
+    monitor_date: Mapped[str] = mapped_column(String(20), default="")    # YYYY-MM-DD
+    procedure:    Mapped[str] = mapped_column(String(200), default="")   # 术式 / 手术名称
+    anesthetist:  Mapped[str] = mapped_column(String(80), default="")    # 麻醉师 / 监护人
+    surgeon:      Mapped[str] = mapped_column(String(80), default="")    # 术者
+    asa_grade:    Mapped[str] = mapped_column(String(10), default="")    # I~V
+    agent:        Mapped[str] = mapped_column(String(80), default="")    # 主麻醉药（异氟烷/丙泊酚…）
+    weight_kg:    Mapped[float] = mapped_column(Float, default=0.0)      # 麻醉时体重快照
+    start_time:   Mapped[str] = mapped_column(String(10), default="")    # HH:MM 麻醉开始
+    end_time:     Mapped[str] = mapped_column(String(10), default="")    # HH:MM 麻醉结束
+    notes:        Mapped[str] = mapped_column(Text, default="")          # 总体备注
+
+    status:       Mapped[str] = mapped_column(String(20), default="open")  # open / closed
+    store:        Mapped[str] = mapped_column(String(40), default="", index=True)
+    created_by:   Mapped[str] = mapped_column(String(80), default="")
+    closed_at:    Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    created_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    entries  = relationship("AnesthesiaMonitorEntry", back_populates="sheet",
+                            cascade="all, delete-orphan",
+                            order_by="AnesthesiaMonitorEntry.recorded_at")
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+    visit    = relationship("Visit",    foreign_keys=[visit_id])
+
+
+class AnesthesiaMonitorEntry(Base):
+    """麻醉监护表的一个时间点（一行）。数值 0 / 空 = 未测。"""
+    __tablename__ = "anesthesia_monitor_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sheet_id: Mapped[int] = mapped_column(ForeignKey("anesthesia_monitor_sheets.id", ondelete="CASCADE"), nullable=False, index=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    recorded_by: Mapped[str] = mapped_column(String(80), default="")
+
+    hr:        Mapped[int]   = mapped_column(Integer, default=0)    # 心率 bpm
+    rr:        Mapped[int]   = mapped_column(Integer, default=0)    # 呼吸 /min
+    spo2:      Mapped[int]   = mapped_column(Integer, default=0)    # 血氧 %
+    etco2:     Mapped[int]   = mapped_column(Integer, default=0)    # 呼末 CO₂ mmHg
+    temperature_c: Mapped[float] = mapped_column(Float, default=0.0)  # 体温 ℃
+    bp_sys:    Mapped[int]   = mapped_column(Integer, default=0)    # 收缩压
+    bp_dia:    Mapped[int]   = mapped_column(Integer, default=0)    # 舒张压
+    bp_map:    Mapped[int]   = mapped_column(Integer, default=0)    # 平均动脉压
+    agent_pct: Mapped[float] = mapped_column(Float, default=0.0)    # 麻醉药浓度 %
+    o2_flow:   Mapped[float] = mapped_column(Float, default=0.0)    # 氧流量 L/min
+    depth:     Mapped[str]   = mapped_column(String(20), default="")   # light / adequate / deep
+    event:     Mapped[str]   = mapped_column(String(200), default="")  # 事件 / 备注
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    sheet = relationship("AnesthesiaMonitorSheet", back_populates="entries")

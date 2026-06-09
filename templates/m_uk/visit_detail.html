@@ -38,6 +38,35 @@
 </div>
 {% endif %}
 
+{# 麻醉监护（手术中逐时段生命体征监护，可导出 PDF 给主人/麻醉师） #}
+{% if anmon_sheets or v.status != 'closed' %}
+<div class="ukm-section-head"><h2>麻&nbsp;醉&nbsp;监&nbsp;护</h2></div>
+{% if anmon_sheets %}
+<div class="ukm-row-group">
+  {% for s in anmon_sheets %}
+  <a class="ukm-row" href="/m/anesthesia-monitor/{{ s.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">监&nbsp;护&nbsp;表&nbsp;AM{{ '%06d'|format(s.id) }}</div>
+      <div class="ukm-row-sub">
+        {{ s.monitor_date or '—' }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ s.entries|length }} 条记录
+        {% if s.procedure %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ s.procedure }}{% endif %}
+      </div>
+    </div>
+    {% if s.status == 'open' %}<span class="ukm-pill amber">监护中</span>{% else %}<span class="ukm-pill green">已结束</span>{% endif %}
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if v.status != 'closed' %}
+<form method="post" action="/admin/visits/{{ v.id }}/anesthesia-monitor/create" style="margin-top:10px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/visit/{{ v.id }}"/>
+  <button type="submit" class="ukm-btn ghost block">＋&nbsp;{% if anmon_sheets %}继&nbsp;续&nbsp;/&nbsp;新&nbsp;建{% else %}新&nbsp;建&nbsp;麻&nbsp;醉&nbsp;监&nbsp;护{% endif %}</button>
+</form>
+{% endif %}
+{% endif %}
+
 {# SOAP 段 #}
 {% set has_soap = (v.chief_complaint or v.physical_exam or v.diagnosis or v.treatment_plan or v.notes) %}
 {% if has_soap %}

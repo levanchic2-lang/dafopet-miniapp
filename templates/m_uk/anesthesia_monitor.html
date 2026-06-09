@@ -1,0 +1,234 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}麻醉监护 · {{ pet.name if pet else '' }}{% endblock %}
+{% block topbar_title %}麻&nbsp;醉&nbsp;监&nbsp;护{% endblock %}
+{% block topbar_back %}<a href="{% if sheet.visit_id %}/m/visit/{{ sheet.visit_id }}{% elif cust %}/m/customer/{{ cust.id }}{% else %}/m{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_actions %}
+  <a class="ukm-topbar-action" href="/admin/anesthesia-monitor/{{ sheet.id }}/pdf" target="_blank">P&nbsp;D&nbsp;F</a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  details.ukm-drawer summary {
+    list-style: none; cursor: pointer;
+    padding: 12px 14px; background: var(--paper);
+    border-top: 0.5px solid var(--hair);
+    font-family: var(--font-serif);
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 2px; color: var(--ink);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  details.ukm-drawer summary::-webkit-details-marker { display: none; }
+  details.ukm-drawer summary::after {
+    content: "＋"; color: var(--ink-3); font-weight: 400; font-size: 16px;
+  }
+  details.ukm-drawer[open] summary::after { content: "−"; }
+  details.ukm-drawer summary { border-bottom: 0.5px solid var(--hair); }
+  details.ukm-drawer .body { padding: 14px var(--gutter); background: var(--paper); border-bottom: 0.5px solid var(--hair); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% macro fcolor(flag) %}{% if flag == 'bad' %}color:var(--accent-red);font-weight:700;{% elif flag == 'warn' %}color:var(--accent-amber);font-weight:700;{% endif %}{% endmacro %}
+
+{# 头部 #}
+<div class="ukm-page-head">
+  <h1>{{ pet.name if pet else '—' }}
+    {% if sheet.status == 'closed' %}<span class="ukm-pill" style="margin-left:8px;vertical-align:middle;">已结束</span>
+    {% else %}<span class="ukm-pill amber" style="margin-left:8px;vertical-align:middle;">监护中</span>{% endif %}
+  </h1>
+  <div class="meta">
+    {{ sheet.monitor_date or '—' }}
+    {% if cust %}<span class="sep">·</span><a href="/m/customer/{{ cust.id }}" style="color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ cust.name }}</a>{% endif %}
+    <span class="sep">·</span>单号&nbsp;<span class="ukm-mono" style="font-style:normal;">AM{{ '%06d'|format(sheet.id) }}</span>
+  </div>
+  <div class="meta">
+    {% if sheet.procedure %}术式&nbsp;<span style="color:var(--ink);font-style:normal;">{{ sheet.procedure }}</span><span class="sep">·</span>{% endif %}
+    麻醉/监护&nbsp;<span style="color:var(--ink);font-style:normal;">{{ sheet.anesthetist or '—' }}</span>
+    {% if sheet.start_time %}<span class="sep">·</span>{{ sheet.start_time }}{% if sheet.end_time %}~{{ sheet.end_time }}{% endif %}{% endif %}
+  </div>
+</div>
+
+{# ── 记录当前（仅监护中） ── #}
+{% if sheet.status != 'closed' %}
+<div class="ukm-section-head"><h2>记&nbsp;录&nbsp;当&nbsp;前</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <form method="post" action="/admin/anesthesia-monitor/{{ sheet.id }}/entry" id="entryForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}"/>
+      <input type="hidden" name="depth" id="depthInput" value=""/>
+
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">心&nbsp;率&nbsp;HR</label>
+          <input class="ukm-input ukm-num" type="number" name="hr" inputmode="numeric" placeholder="bpm"/></div>
+        <div class="ukm-field"><label class="lbl">呼&nbsp;吸&nbsp;RR</label>
+          <input class="ukm-input ukm-num" type="number" name="rr" inputmode="numeric" placeholder="/min"/></div>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">血&nbsp;氧&nbsp;SpO₂</label>
+          <input class="ukm-input ukm-num" type="number" name="spo2" inputmode="numeric" placeholder="%"/></div>
+        <div class="ukm-field"><label class="lbl">呼末&nbsp;EtCO₂</label>
+          <input class="ukm-input ukm-num" type="number" name="etco2" inputmode="numeric" placeholder="mmHg"/></div>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">体&nbsp;温&nbsp;℃</label>
+          <input class="ukm-input ukm-num" type="number" step="0.1" name="temperature_c" inputmode="decimal" placeholder="℃"/></div>
+        <div class="ukm-field"><label class="lbl">麻醉浓度&nbsp;%</label>
+          <input class="ukm-input ukm-num" type="number" step="0.1" name="agent_pct" inputmode="decimal" placeholder="如 2.0"/></div>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">收&nbsp;缩&nbsp;压</label>
+          <input class="ukm-input ukm-num" type="number" name="bp_sys" inputmode="numeric" placeholder="SYS"/></div>
+        <div class="ukm-field"><label class="lbl">舒&nbsp;张&nbsp;压</label>
+          <input class="ukm-input ukm-num" type="number" name="bp_dia" inputmode="numeric" placeholder="DIA"/></div>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">平均压&nbsp;MAP</label>
+          <input class="ukm-input ukm-num" type="number" name="bp_map" inputmode="numeric" placeholder="MAP"/></div>
+        <div class="ukm-field"><label class="lbl">氧流量&nbsp;L/min</label>
+          <input class="ukm-input ukm-num" type="number" step="0.1" name="o2_flow" inputmode="decimal" placeholder="L/min"/></div>
+      </div>
+
+      <div class="ukm-field">
+        <label class="lbl">麻&nbsp;醉&nbsp;深&nbsp;度</label>
+        <div class="ukm-chips" id="depthChips">
+          <span class="ukm-chip" data-depth="light">偏&nbsp;浅</span>
+          <span class="ukm-chip" data-depth="adequate">适&nbsp;宜</span>
+          <span class="ukm-chip" data-depth="deep">偏&nbsp;深</span>
+        </div>
+      </div>
+
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">事&nbsp;件&nbsp;/&nbsp;备&nbsp;注</label>
+          <input class="ukm-input" type="text" name="event" maxlength="200" placeholder="如 给药·体动·拔管…"/></div>
+        <div class="ukm-field"><label class="lbl">时&nbsp;间</label>
+          <input class="ukm-input ukm-num" type="text" name="time_hhmm" placeholder="默认现在 {{ now_hhmm }}"/></div>
+      </div>
+
+      <button type="submit" class="ukm-btn block" style="margin-top:6px;">记&nbsp;录&nbsp;当&nbsp;前&nbsp;（{{ now_hhmm }}）</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{# ── 监护时间轴 ── #}
+<div class="ukm-section-head" id="log"><h2>监&nbsp;护&nbsp;记&nbsp;录&nbsp;&nbsp;·&nbsp;{{ entries|length }}</h2></div>
+{% if entries %}
+<div class="ukm-row-group">
+  {% for e in entries %}
+  {% set fl = flags.get(e.id, {}) %}
+  <div class="ukm-row" style="cursor:default;align-items:flex-start;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">
+        <span class="ukm-num">{{ e.recorded_at.strftime('%H:%M') }}</span>
+        {% if e.recorded_by %}<span class="ukm-italic" style="font-size:11px;margin-left:8px;">{{ e.recorded_by }}</span>{% endif %}
+      </div>
+      <div class="ukm-row-sub" style="line-height:1.9;">
+        {% if e.hr %}<span style="{{ fcolor(fl.get('hr')) }}">HR&nbsp;{{ e.hr }}</span>{% endif %}
+        {% if e.rr %}<span class="sep">·</span><span style="{{ fcolor(fl.get('rr')) }}">RR&nbsp;{{ e.rr }}</span>{% endif %}
+        {% if e.spo2 %}<span class="sep">·</span><span style="{{ fcolor(fl.get('spo2')) }}">SpO₂&nbsp;{{ e.spo2 }}%</span>{% endif %}
+        {% if e.etco2 %}<span class="sep">·</span>EtCO₂&nbsp;{{ e.etco2 }}{% endif %}
+        {% if e.temperature_c %}<span class="sep">·</span><span style="{{ fcolor(fl.get('temp')) }}">T&nbsp;{{ '%g'|format(e.temperature_c) }}</span>{% endif %}
+        {% if e.bp_sys or e.bp_dia %}<span class="sep">·</span>BP&nbsp;{{ e.bp_sys or '—' }}/{{ e.bp_dia or '—' }}{% if e.bp_map %}({{ e.bp_map }}){% endif %}{% endif %}
+        {% if e.agent_pct %}<span class="sep">·</span>麻醉&nbsp;{{ '%g'|format(e.agent_pct) }}%{% endif %}
+        {% if e.o2_flow %}<span class="sep">·</span>O₂&nbsp;{{ '%g'|format(e.o2_flow) }}{% endif %}
+        {% if e.depth %}<span class="sep">·</span>深度&nbsp;{{ depth_zh.get(e.depth, e.depth) }}{% endif %}
+      </div>
+      {% if e.event %}<div class="ukm-row-sub" style="color:var(--ink);margin-top:2px;">▸ {{ e.event }}</div>{% endif %}
+    </div>
+    {% if sheet.status != 'closed' %}
+    <form method="post" action="/admin/anesthesia-monitor/{{ sheet.id }}/entry/{{ e.id }}/delete" style="margin:0;"
+          onsubmit="return confirm('删除这条 {{ e.recorded_at.strftime('%H:%M') }} 记录？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#log"/>
+      <button type="submit" class="ukm-btn hair" style="padding:4px 10px;font-size:12px;color:var(--accent-red);border-color:var(--hair);">删</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-empty">
+  <div class="big">尚&nbsp;无&nbsp;记&nbsp;录</div>
+  {% if sheet.status != 'closed' %}上方填数值点「记录当前」开始监护{% else %}本次监护无记录{% endif %}
+</div>
+{% endif %}
+
+{# ── 表头编辑（抽屉） ── #}
+<details class="ukm-drawer" style="margin-top:18px;">
+  <summary>表&nbsp;头&nbsp;信&nbsp;息&nbsp;（术式&nbsp;/&nbsp;麻醉师&nbsp;/&nbsp;ASA&nbsp;…）</summary>
+  <div class="body">
+    <form method="post" action="/admin/anesthesia-monitor/{{ sheet.id }}/update-header">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}"/>
+      <div class="ukm-field"><label class="lbl">术&nbsp;式&nbsp;/&nbsp;手&nbsp;术&nbsp;名</label>
+        <input class="ukm-input" type="text" name="procedure" value="{{ sheet.procedure }}" placeholder="如 母猫绝育"/></div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">麻醉/监护人</label>
+          <input class="ukm-input" type="text" name="anesthetist" value="{{ sheet.anesthetist }}"/></div>
+        <div class="ukm-field"><label class="lbl">术&nbsp;者</label>
+          <input class="ukm-input" type="text" name="surgeon" value="{{ sheet.surgeon }}"/></div>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">ASA&nbsp;分级</label>
+          <input class="ukm-input" type="text" name="asa_grade" value="{{ sheet.asa_grade }}" placeholder="I~V"/></div>
+        <div class="ukm-field"><label class="lbl">主麻醉药</label>
+          <input class="ukm-input" type="text" name="agent" value="{{ sheet.agent }}" placeholder="异氟烷…"/></div>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">体&nbsp;重&nbsp;kg</label>
+          <input class="ukm-input ukm-num" type="number" step="0.01" name="weight_kg" value="{{ '%g'|format(sheet.weight_kg) if sheet.weight_kg else '' }}"/></div>
+        <div class="ukm-field"><label class="lbl">日&nbsp;期</label>
+          <input class="ukm-input ukm-num" type="date" name="monitor_date" value="{{ sheet.monitor_date }}"/></div>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">麻醉开始</label>
+          <input class="ukm-input ukm-num" type="text" name="start_time" value="{{ sheet.start_time }}" placeholder="HH:MM"/></div>
+        <div class="ukm-field"><label class="lbl">麻醉结束</label>
+          <input class="ukm-input ukm-num" type="text" name="end_time" value="{{ sheet.end_time }}" placeholder="HH:MM"/></div>
+      </div>
+      <div class="ukm-field"><label class="lbl">总&nbsp;体&nbsp;备&nbsp;注</label>
+        <textarea class="ukm-textarea" name="notes" style="min-height:54px;">{{ sheet.notes }}</textarea></div>
+      <button type="submit" class="ukm-btn ghost block">保&nbsp;存&nbsp;表&nbsp;头</button>
+    </form>
+  </div>
+</details>
+
+{# ── 导出 + 结束 ── #}
+<div class="ukm-divider"></div>
+<div class="ukm-btn-row">
+  <a href="/admin/anesthesia-monitor/{{ sheet.id }}/pdf" target="_blank" class="ukm-btn block">导&nbsp;出&nbsp;P&nbsp;D&nbsp;F</a>
+  <a href="/admin/anesthesia-monitor/{{ sheet.id }}/pdf?download=1" class="ukm-btn hair block">下&nbsp;载</a>
+</div>
+<form method="post" action="/admin/anesthesia-monitor/{{ sheet.id }}/close" style="margin-top:10px;"
+      onsubmit="return confirm('{% if sheet.status == 'closed' %}重新开启监护，可继续记录？{% else %}结束本次麻醉监护？结束后不可再加记录（可重新开启）。{% endif %}');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="{{ next_url }}"/>
+  {% if sheet.status == 'closed' %}
+  <input type="hidden" name="reopen" value="1"/>
+  <button type="submit" class="ukm-btn ghost block" style="color:var(--accent-green);border-color:var(--accent-green);">重&nbsp;新&nbsp;开&nbsp;启&nbsp;监&nbsp;护</button>
+  {% else %}
+  <button type="submit" class="ukm-btn ghost block" style="color:var(--accent-red);border-color:var(--accent-red);">结&nbsp;束&nbsp;监&nbsp;护</button>
+  {% endif %}
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // 麻醉深度 chip：单选，写入 hidden input
+  var chips = document.querySelectorAll('#depthChips .ukm-chip');
+  var hidden = document.getElementById('depthInput');
+  chips.forEach(function (c) {
+    c.addEventListener('click', function () {
+      var on = c.classList.contains('checked');
+      chips.forEach(function (x) { x.classList.remove('checked'); });
+      if (!on) { c.classList.add('checked'); hidden.value = c.dataset.depth; }
+      else { hidden.value = ''; }
+    });
+  });
+})();
+</script>
+{% endblock %}

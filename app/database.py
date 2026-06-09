@@ -1758,6 +1758,57 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_store_date ON narcotics_ledger(store, event_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_source ON narcotics_ledger(source)"))
 
+            # ── 麻醉监护表（手术中逐时段生命体征 · 手机录入 + PDF 导出）─────
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS anesthesia_monitor_sheets ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "monitor_date VARCHAR(20) DEFAULT '', "
+                "procedure VARCHAR(200) DEFAULT '', "
+                "anesthetist VARCHAR(80) DEFAULT '', "
+                "surgeon VARCHAR(80) DEFAULT '', "
+                "asa_grade VARCHAR(10) DEFAULT '', "
+                "agent VARCHAR(80) DEFAULT '', "
+                "weight_kg REAL DEFAULT 0.0, "
+                "start_time VARCHAR(10) DEFAULT '', "
+                "end_time VARCHAR(10) DEFAULT '', "
+                "notes TEXT DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'open', "
+                "store VARCHAR(40) DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "closed_at DATETIME DEFAULT NULL, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmon_visit ON anesthesia_monitor_sheets(visit_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmon_store_date ON anesthesia_monitor_sheets(store, monitor_date)"))
+
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS anesthesia_monitor_entries ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "sheet_id INTEGER NOT NULL REFERENCES anesthesia_monitor_sheets(id) ON DELETE CASCADE, "
+                "recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "recorded_by VARCHAR(80) DEFAULT '', "
+                "hr INTEGER DEFAULT 0, "
+                "rr INTEGER DEFAULT 0, "
+                "spo2 INTEGER DEFAULT 0, "
+                "etco2 INTEGER DEFAULT 0, "
+                "temperature_c REAL DEFAULT 0.0, "
+                "bp_sys INTEGER DEFAULT 0, "
+                "bp_dia INTEGER DEFAULT 0, "
+                "bp_map INTEGER DEFAULT 0, "
+                "agent_pct REAL DEFAULT 0.0, "
+                "o2_flow REAL DEFAULT 0.0, "
+                "depth VARCHAR(20) DEFAULT '', "
+                "event VARCHAR(200) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmon_entry_sheet ON anesthesia_monitor_entries(sheet_id, recorded_at)"))
+
             # 美容单
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS grooming_orders ("
