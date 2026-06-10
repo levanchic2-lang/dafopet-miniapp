@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+# ── 强制进程时区为北京（Asia/Shanghai），必须在任何 datetime/time 调用前执行 ──
+# 系统统一按北京时间运作：无论运行主机在哪个时区、是否挂全局 VPN，
+# datetime.now() / date.today() / time.localtime() / strftime 都返回北京时间。
+# datetime.utcnow() 不受影响（始终 UTC，显示侧已有的 +8 转换照常正确）。
+import os as _os
+import time as _time
+_os.environ["TZ"] = "Asia/Shanghai"
+if hasattr(_time, "tzset"):          # Unix（Linux 服务器 / macOS）生效；Windows 无 tzset 跳过
+    _time.tzset()
+# ────────────────────────────────────────────────────────────────────────────
+
 import asyncio
 import json
 import logging
