@@ -12201,6 +12201,12 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
             db.commit()
     except Exception:
         logger.exception("[med-logs] generate after presc edit failed")
+    # 移动端 next_url 支持（{id} 占位 + msg 回跳）；手机编辑后回配药详情
+    next_url_raw = str(form.get("next_url") or "")
+    if next_url_raw:
+        nu = next_url_raw.replace("{id}", str(presc_id))
+        sep = "&" if "?" in nu else "?"
+        return RedirectResponse(_safe_next(f"{nu}{sep}msg=处方已保存", f"/admin/prescriptions/{presc_id}?msg=已保存"), status_code=303)
     return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=已保存", status_code=303)
 
 
