@@ -338,7 +338,7 @@ class PrescriptionItem(Base):
     prescription_id: Mapped[int] = mapped_column(ForeignKey("prescriptions.id", ondelete="CASCADE"))
     item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
     drug_name: Mapped[str] = mapped_column(String(120), default="")
-    drug_type: Mapped[str] = mapped_column(String(40), default="oral")
+    drug_type: Mapped[str] = mapped_column(String(40), default="")  # 给药途径默认留空，须医生主动选（避免静默落口服）
     dosage: Mapped[str] = mapped_column(String(80), default="")
     frequency: Mapped[str] = mapped_column(String(80), default="")
     duration_days: Mapped[str] = mapped_column(String(40), default="")

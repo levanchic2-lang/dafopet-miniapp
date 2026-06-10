@@ -11590,7 +11590,7 @@ def _parse_presc_items(form_data) -> list[dict]:
             items.append({
                 "item_id": item_id,
                 "drug_name": name,
-                "drug_type": form_data.get(f"drug_type_{i}", "oral").strip(),
+                "drug_type": form_data.get(f"drug_type_{i}", "").strip(),
                 "dosage": dosage_legacy,
                 "frequency": freq_legacy,
                 "duration_days": form_data.get(f"duration_days_{i}", "").strip(),
@@ -24765,7 +24765,7 @@ async def m_api_presc_template(
         out.append({
             "item_id": iid,
             "drug_name": it.get("drug_name", ""),
-            "drug_type": it.get("drug_type", "oral"),
+            "drug_type": it.get("drug_type", ""),
             "dose_amount": it.get("dose_amount", 0),
             "dose_unit": it.get("dose_unit", ""),
             "times_per_day": it.get("times_per_day", 0),

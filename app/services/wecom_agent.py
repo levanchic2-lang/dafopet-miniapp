@@ -829,6 +829,7 @@ def _execute_create_prescription_draft(db: Session, userid: str, args: dict) -> 
         db.add(PrescriptionItem(
             prescription_id=presc.id,
             drug_name=c["drug_name"],
+            drug_type="",  # 给药途径留空，由医生回系统补选（不静默落口服）
             dose_amount=c["dose_amount"],
             dose_unit=c["dose_unit"],
             times_per_day=c["times_per_day"],
