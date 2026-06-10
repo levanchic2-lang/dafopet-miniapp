@@ -16,6 +16,9 @@
   'enema':'灌肠','rectal':'直肠','service':'服务','procedure':'操作','other':'其他'
 } %}
 
+{% if err %}<div class="ukm-card" style="border-left:2px solid var(--accent-red);margin-bottom:10px;"><div style="color:var(--accent-red);font-size:13px;">{{ err }}</div></div>{% endif %}
+{% if msg %}<div class="ukm-card" style="border-left:2px solid var(--accent-green);margin-bottom:10px;"><div style="color:var(--accent-green);font-size:13px;">{{ msg }}</div></div>{% endif %}
+
 <div class="ukm-page-head">
   <h1>{{ pet.name if pet else '宠物' }}
     <span class="ukm-italic" style="font-size:14px;margin-left:6px;">{{ cust.name if cust else '—' }}</span>
@@ -148,6 +151,13 @@
 {% endif %}
 
 <div class="ukm-divider"></div>
+{% if not locked and not visit_closed %}
+<a href="/m/prescription/{{ p.id }}/edit" class="ukm-btn block" style="margin-bottom:10px;">编&nbsp;辑&nbsp;处&nbsp;方（改药 / 数量 / 剂量）</a>
+{% elif locked %}
+<div class="ukm-card" style="margin-bottom:10px;"><div style="font-size:12px;color:var(--ink-3);font-style:italic;">已锁定（{{ lock_reason }}），不能整单改；上方「仅改用法」可改文字，或去桌面端作废重开。</div></div>
+{% elif visit_closed %}
+<div class="ukm-card" style="margin-bottom:10px;"><div style="font-size:12px;color:var(--ink-3);font-style:italic;">病历已结束，处方不可修改。</div></div>
+{% endif %}
 <div class="ukm-btn-row">
   <a href="/admin/prescriptions/{{ p.id }}/print" target="_blank" class="ukm-btn ghost block">打&nbsp;印</a>
   <a href="/admin/prescriptions/{{ p.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端</a>

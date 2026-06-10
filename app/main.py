@@ -23033,12 +23033,17 @@ async def m_dispensing_detail(presc_id: int, request: Request, db: Session = Dep
             if inv and getattr(inv, "is_controlled", False):
                 has_controlled = True
                 break
+    locked, lock_reason = _is_prescription_locked(db, p)
+    _v = db.get(Visit, p.visit_id) if p.visit_id else None
+    visit_closed = bool(_v and (_v.status or "open") == "closed")
     ctx = _m_ctx(request, db, active_tab="dispensing")
     ctx.update({
         "p": p, "pet": pet, "cust": cust,
         "has_controlled": has_controlled,
         "drug_type_zh": _DRUG_TYPE_ZH,
         "drug_type_options": _DRUG_TYPE_OPTIONS, "drug_type_canon": _DRUG_TYPE_CANON,
+        "locked": locked, "lock_reason": lock_reason, "visit_closed": visit_closed,
+        "err": request.query_params.get("err"), "msg": request.query_params.get("msg"),
     })
     return templates.TemplateResponse(request, "m_uk/dispensing_detail.html", ctx)
 
@@ -24776,6 +24781,58 @@ async def m_prescribe_new(visit_id: int, request: Request, db: Session = Depends
         "default_vet": default_vet,
         "today": datetime.utcnow().strftime("%Y-%m-%d"),
         "hosp_admitted": hosp_admitted,
+    })
+    return templates.TemplateResponse(request, "m_uk/prescription_new.html", ctx)
+
+
+@app.get("/m/prescription/{presc_id}/edit", response_class=HTMLResponse)
+async def m_prescribe_edit(presc_id: int, request: Request, db: Session = Depends(get_db)):
+    """手机端完整编辑已有处方（复用新建屏，带 is_edit 预填明细）。"""
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/prescription/{presc_id}/edit", status_code=303)
+    presc = db.get(Prescription, presc_id)
+    if not presc:
+        raise HTTPException(404)
+    locked, reason = _is_prescription_locked(db, presc)
+    if locked:
+        return RedirectResponse(f"/m/dispensing/{presc_id}?err=处方已锁定（{reason}），不可修改", status_code=303)
+    v = db.get(Visit, presc.visit_id) if presc.visit_id else None
+    if v and (v.status or "open") == "closed":
+        return RedirectResponse(f"/m/dispensing/{presc_id}?err=病历已结束，不可修改", status_code=303)
+    pet = db.get(Pet, presc.pet_id) if presc.pet_id else None
+    cust = db.get(Customer, presc.customer_id) if presc.customer_id else None
+    templates_list = db.query(PrescriptionTemplate).order_by(
+        PrescriptionTemplate.use_count.desc(), PrescriptionTemplate.id.desc()
+    ).limit(20).all()
+    hosp_admitted = False
+    if presc.pet_id:
+        hosp_admitted = db.query(Hospitalization).filter(
+            Hospitalization.pet_id == presc.pet_id,
+            Hospitalization.status == "admitted",
+        ).first() is not None
+    # 整瓶计费行：预填单价用「每瓶价」(否则再保存会把有效单价误当每瓶价算错)
+    pack_meta = _presc_pack_meta(db, presc)
+    items = []
+    for it in (presc.items or []):
+        pm = pack_meta.get(it.id)
+        items.append({
+            "drug_name": it.drug_name or "", "item_id": it.item_id or "",
+            "dose_amount": it.dose_amount or "", "dose_unit": it.dose_unit or "",
+            "duration_days": it.duration_days or "",
+            "unit_price": (pm["pack_price"] if pm else (it.unit_price or "")),
+            "item_unit": it.item_unit or "", "schedule_times": it.schedule_times or "",
+            "instructions": it.instructions or "", "drug_type": it.drug_type or "",
+            "frequency": it.frequency or "", "times_per_day": it.times_per_day or "",
+            "quantity_num": it.quantity_num or "",
+            "single_use_pack": bool(pm), "unit2_ratio": (pm["ratio"] if pm else 1),
+        })
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({
+        "is_edit": True, "presc": presc, "v": v, "pet": pet, "cust": cust,
+        "templates_list": templates_list,
+        "default_vet": presc.vet_name or "",
+        "today": presc.prescribed_date or datetime.utcnow().strftime("%Y-%m-%d"),
+        "hosp_admitted": hosp_admitted, "presc_items": items,
     })
     return templates.TemplateResponse(request, "m_uk/prescription_new.html", ctx)
 

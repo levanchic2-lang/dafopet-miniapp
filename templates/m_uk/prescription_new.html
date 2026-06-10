@@ -1,7 +1,7 @@
 {% extends "m_uk/_base.html" %}
-{% block title %}开处方{% endblock %}
-{% block topbar_title %}开&nbsp;处&nbsp;方{% endblock %}
-{% block topbar_back %}<a href="/m/visit/{{ v.id }}" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block title %}{% if is_edit %}编辑处方 #{{ presc.id }}{% else %}开处方{% endif %}{% endblock %}
+{% block topbar_title %}{% if is_edit %}编&nbsp;辑&nbsp;处&nbsp;方{% else %}开&nbsp;处&nbsp;方{% endif %}{% endblock %}
+{% block topbar_back %}<a href="{% if is_edit %}/m/dispensing/{{ presc.id }}{% else %}/m/visit/{{ v.id }}{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -173,20 +173,21 @@
 
 <div class="ukm-page-head" style="margin-bottom:10px;">
   <h1 style="font-size:18px;">{{ pet.name if pet else '—' }}
-    <span class="ukm-italic" style="font-size:13px;margin-left:6px;">病历&nbsp;#{{ v.id }}</span>
+    {% if is_edit %}<span class="ukm-italic" style="font-size:13px;margin-left:6px;">处方&nbsp;#{{ presc.id }}</span>
+    {% elif v %}<span class="ukm-italic" style="font-size:13px;margin-left:6px;">病历&nbsp;#{{ v.id }}</span>{% endif %}
     {% if hosp_admitted %}<span class="ukm-pill amber" style="margin-left:6px;">住院中</span>{% endif %}
   </h1>
   <div class="meta">{{ today }}</div>
 </div>
 
-<form method="post" action="/admin/prescriptions/create" id="rx-form">
+<form method="post" action="{% if is_edit %}/admin/prescriptions/{{ presc.id }}/edit{% else %}/admin/prescriptions/create{% endif %}" id="rx-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-  <input type="hidden" name="visit_id" value="{{ v.id }}"/>
-  <input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/>
-  <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
+  <input type="hidden" name="visit_id" value="{{ (presc.visit_id if is_edit else v.id) or 0 }}"/>
+  <input type="hidden" name="customer_id" value="{{ (presc.customer_id if is_edit else (cust.id if cust else 0)) or 0 }}"/>
+  <input type="hidden" name="pet_id" value="{{ (presc.pet_id if is_edit else (pet.id if pet else 0)) or 0 }}"/>
   <input type="hidden" name="prescribed_date" value="{{ today }}"/>
-  <input type="hidden" name="next_url" value="/m/visit/{{ v.id }}"/>
-  <input type="hidden" name="status" value="issued"/>
+  <input type="hidden" name="next_url" value="{% if is_edit %}/m/dispensing/{{ presc.id }}{% else %}/m/visit/{{ v.id }}{% endif %}"/>
+  <input type="hidden" name="status" value="{{ presc.status if is_edit else 'issued' }}"/>
 
   <div class="ukm-field">
     <label class="lbl">医&nbsp;生<span class="req">*</span></label>
@@ -214,14 +215,14 @@
 
   <div class="ukm-section-head"><h2>整&nbsp;方&nbsp;备&nbsp;注</h2></div>
   <div class="ukm-field">
-    <textarea class="ukm-textarea" name="notes" placeholder="给客户的整体用药提示，可选" style="min-height:64px;"></textarea>
+    <textarea class="ukm-textarea" name="notes" placeholder="给客户的整体用药提示，可选" style="min-height:64px;">{{ presc.notes if is_edit else '' }}</textarea>
   </div>
 
   <div style="height:80px;"></div>
 
   <div class="rx-bottom-bar">
     <div class="total">合&nbsp;计<br/><b id="grand-total">¥&nbsp;0.00</b></div>
-    <button type="submit" class="ukm-btn" id="save-btn" disabled>保&nbsp;存&nbsp;处&nbsp;方</button>
+    <button type="submit" class="ukm-btn" id="save-btn" disabled>{% if is_edit %}保&nbsp;存&nbsp;修&nbsp;改{% else %}保&nbsp;存&nbsp;处&nbsp;方{% endif %}</button>
   </div>
 </form>
 
@@ -368,7 +369,15 @@ function recalc(elem) {
   }
   const qty = parseFloat(row.querySelector('.rx-qty').value || 0);
   const price = parseFloat(row.querySelector('.rx-price').value || 0);
-  const sub = qty * price;
+  let sub;
+  if (row.dataset.sup === '1') {
+    // 整支/整瓶计费：单价=每瓶价；小计=向上取整瓶数×每瓶价（开 5ml = 1 瓶）
+    let ratio = parseFloat(row.dataset.ratio) || 1; if (ratio <= 0) ratio = 1;
+    const bottles = qty > 0 ? Math.ceil((qty - 1e-9) / ratio) : 0;
+    sub = bottles * price;
+  } else {
+    sub = qty * price;
+  }
   row.querySelector('.rx-subtotal').value = sub.toFixed(2);
   const unit = row.querySelector('.rx-item-unit').value || '';
   row.querySelector('.rx-display-qty').value = qty > 0 ? (qty + unit) : '';
@@ -444,6 +453,11 @@ function pickDrug(it) {
   row.querySelector('.rx-drug-input').value = it.name;
   row.querySelector('.rx-item-id').value = it.id;
   row.querySelector('.rx-item-unit').value = it.unit || '';
+  // 整支/整瓶计费 → 标记该行，实时合计按整瓶算（售价即每瓶价）
+  if (it.single_use_pack) {
+    row.dataset.sup = '1';
+    row.dataset.ratio = (it.unit2_ratio && it.unit2_ratio > 0) ? it.unit2_ratio : 1;
+  } else { delete row.dataset.sup; delete row.dataset.ratio; }
   if (it.sell_price > 0 && !row.querySelector('.rx-price').value) {
     row.querySelector('.rx-price').value = it.sell_price.toFixed(2);
   }
@@ -482,6 +496,10 @@ async function loadTpl(btn) {
 function applyPrefill(row, p) {
   if (p.drug_name) row.querySelector('.rx-drug-input').value = p.drug_name;
   if (p.item_id) row.querySelector('.rx-item-id').value = p.item_id;
+  if (p.single_use_pack) {
+    row.dataset.sup = '1';
+    row.dataset.ratio = (p.unit2_ratio && p.unit2_ratio > 0) ? p.unit2_ratio : 1;
+  }
   if (p.dose_amount) row.querySelector('.rx-dose').value = p.dose_amount;
   if (p.dose_unit) row.querySelector('.rx-dose-unit').value = p.dose_unit;
   if (p.duration_days) row.querySelector('.rx-days').value = p.duration_days;
@@ -513,7 +531,19 @@ function applyPrefill(row, p) {
   recalc(row.querySelector('.rx-price'));
 }
 
+{% if is_edit %}
+// 编辑模式：预填已有明细
+const _editItems = {{ presc_items|tojson }};
+if (_editItems && _editItems.length) {
+  _editItems.forEach(function (it) { addRow(it); });
+  updateSaveBtn();
+  recalcGrand();
+} else {
+  addRow();
+}
+{% else %}
 addRow();
+{% endif %}
 </script>
 
 {% endblock %}
