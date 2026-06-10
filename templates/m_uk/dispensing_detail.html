@@ -99,6 +99,54 @@
 </form>
 {% endif %}
 
+{# 仅改用法：超管可改纯文字字段（途径/频次/用法/说明），不动金额/库存/账单 #}
+{% if admin_role == 'superadmin' and p.items and p.status != 'voided' %}
+<div class="ukm-divider"></div>
+<details class="ukm-card-group">
+  <summary style="cursor:pointer;list-style:none;font-family:var(--font-serif);font-size:14px;font-weight:700;letter-spacing:1.5px;color:var(--ink);padding:4px 2px;">
+    仅&nbsp;改&nbsp;用&nbsp;法
+    <span class="ukm-italic" style="font-weight:400;font-size:11px;letter-spacing:0.5px;color:var(--ink-3);">不动金额 / 库存 / 账单</span>
+  </summary>
+  <form method="post" action="/admin/prescriptions/{{ p.id }}/edit-usage" style="margin-top:10px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="next_url" value="/m/dispensing/{id}"/>
+    {% for it in p.items %}
+    <div class="ukm-card" style="margin-bottom:10px;">
+      <div class="ukm-card-title">{{ loop.index }}.&nbsp;{{ it.drug_name }}</div>
+      <div style="margin-top:10px;">
+        <label style="display:block;font-size:10px;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:3px;">途&nbsp;径</label>
+        <select name="usage_drug_type_{{ it.id }}" style="width:100%;box-sizing:border-box;padding:8px;border:0.5px solid var(--hair);background:var(--paper);font-family:var(--font-serif);font-size:14px;color:var(--ink);">
+          <option value="" {% if not it.drug_type %}selected{% endif %}>— 未选 —</option>
+          {% for k, zh in drug_type_zh.items() %}
+          <option value="{{ k }}" {% if it.drug_type == k %}selected{% endif %}>{{ zh }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+        <div>
+          <label style="display:block;font-size:10px;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:3px;">频&nbsp;次</label>
+          <input name="usage_frequency_{{ it.id }}" value="{{ it.frequency or '' }}" style="width:100%;box-sizing:border-box;padding:8px;border:0.5px solid var(--hair);background:var(--paper);font-family:var(--font-serif);font-size:14px;color:var(--ink);"/>
+        </div>
+        <div>
+          <label style="display:block;font-size:10px;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:3px;">用&nbsp;法&nbsp;/&nbsp;用&nbsp;量</label>
+          <input name="usage_dosage_{{ it.id }}" value="{{ it.dosage or '' }}" style="width:100%;box-sizing:border-box;padding:8px;border:0.5px solid var(--hair);background:var(--paper);font-family:var(--font-serif);font-size:14px;color:var(--ink);"/>
+        </div>
+      </div>
+      <div style="margin-top:8px;">
+        <label style="display:block;font-size:10px;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:3px;">用&nbsp;法&nbsp;说&nbsp;明（内部）</label>
+        <textarea name="usage_instructions_{{ it.id }}" style="width:100%;box-sizing:border-box;padding:8px;border:0.5px solid var(--hair);background:var(--paper);font-family:var(--font-serif);font-size:14px;color:var(--ink);resize:vertical;min-height:42px;">{{ it.instructions or '' }}</textarea>
+      </div>
+      <div style="margin-top:8px;">
+        <label style="display:block;font-size:10px;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:3px;">打&nbsp;印&nbsp;备&nbsp;注（客户可见）</label>
+        <textarea name="usage_print_note_{{ it.id }}" style="width:100%;box-sizing:border-box;padding:8px;border:0.5px solid var(--hair);background:var(--paper);font-family:var(--font-serif);font-size:14px;color:var(--ink);resize:vertical;min-height:42px;">{{ it.print_note or '' }}</textarea>
+      </div>
+    </div>
+    {% endfor %}
+    <button type="submit" class="ukm-btn block">保&nbsp;存&nbsp;用&nbsp;法</button>
+  </form>
+</details>
+{% endif %}
+
 <div class="ukm-divider"></div>
 <div class="ukm-btn-row">
   <a href="/admin/prescriptions/{{ p.id }}/print" target="_blank" class="ukm-btn ghost block">打&nbsp;印</a>

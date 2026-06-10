@@ -12117,8 +12117,16 @@ async def admin_presc_edit_usage(presc_id: int, request: Request, db: Session = 
         _audit_doc_action(db, "prescription", presc_id, "edit_usage", operator,
                           extra=" | ".join(changes)[:480])
         db.commit()
-        return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=用法已更新", status_code=303)
-    return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=无改动", status_code=303)
+    # 移动端 next_url 支持（{id} 占位）；带 msg 查询参数回跳
+    next_url_raw = str(form.get("next_url") or "")
+    if next_url_raw:
+        nu = next_url_raw.replace("{id}", str(presc_id))
+        sep = "&" if "?" in nu else "?"
+        nu = f"{nu}{sep}msg={'用法已更新' if changes else '无改动'}"
+        return RedirectResponse(_safe_next(nu, f"/admin/prescriptions/{presc_id}"), status_code=303)
+    return RedirectResponse(
+        f"/admin/prescriptions/{presc_id}?msg={'用法已更新' if changes else '无改动'}",
+        status_code=303)
 
 
 @app.post("/admin/prescriptions/{presc_id}/delete")
@@ -22892,6 +22900,7 @@ async def m_dispensing_detail(presc_id: int, request: Request, db: Session = Dep
     ctx.update({
         "p": p, "pet": pet, "cust": cust,
         "has_controlled": has_controlled,
+        "drug_type_zh": _DRUG_TYPE_ZH,
     })
     return templates.TemplateResponse(request, "m_uk/dispensing_detail.html", ctx)
 
