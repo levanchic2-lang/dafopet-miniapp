@@ -11572,9 +11572,15 @@ def _apply_internal_pricing(db: Session, items: list[dict], customer_id: int) ->
 
 
 def _apply_single_use_pack_billing(db: Session, items: list[dict]) -> None:
-    """整支/整瓶计费：扫描 items，若品目 single_use_pack=True，则把数量向上取整到副单位整数倍，并重算 subtotal。
-    数量字段兼容：prescription_items=quantity_num，sales_items=quantity（数字版 quantity_num/qty），exam_items=qty
+    """整支/整瓶计费（整瓶价模式）：品目 single_use_pack=True 时——
+    - 数量保留「真实用量/剂量」(如 5ml)，不再改写成整瓶量 → 处方笺/收费单「数量」列显示真实剂量，发药人知道抽多少
+    - 售价按【每瓶/每支】填（unit_price 即每副单位价），计费 = 向上取整瓶数 × 每瓶价（5ml → 1 瓶 → 10 元）
+    - unit_price 回写为「每主单位」有效价 = 金额 ÷ 数量，保证单据上「单价 × 数量 = 金额」自洽
+    - 库存仍按整瓶扣：由 _deduct_inventory / _restore_inventory 对 single_use_pack 自动向上取整处理
+    - 对 ratio=1 的针剂（1 支=1 主单位）行为与原先一致（每支价=每主单位价，整数剂量不变）
+    数量字段兼容：prescription_items=quantity_num，sales_items=quantity（数字版），exam_items=qty
     """
+    import math as _math
     for it in items:
         iid = it.get("item_id")
         if not iid:
@@ -11591,17 +11597,21 @@ def _apply_single_use_pack_billing(db: Session, items: list[dict]) -> None:
                 qty_key = k; break
         if qty_key is None:
             continue
-        old_qty = float(it[qty_key] or 0)
-        new_qty = _billable_qty(inv, old_qty)
-        if abs(new_qty - old_qty) < 1e-6:
+        real_qty = float(it[qty_key] or 0)
+        if real_qty <= 0:
             continue
-        it[qty_key] = new_qty
-        # 重算 subtotal
-        up = float(it.get("unit_price") or 0)
-        it["subtotal"] = round(new_qty * up, 2)
-        # 销售单的 quantity 字符串字段也同步（如有）
-        if "quantity" in it and not isinstance(it.get("quantity"), (int, float)):
-            it["quantity"] = f"{new_qty:g}"
+        try:
+            ratio = float(inv.unit2_ratio or 1.0)
+        except (TypeError, ValueError):
+            ratio = 1.0
+        if ratio <= 0:
+            ratio = 1.0
+        bottles = _math.ceil((real_qty - 1e-9) / ratio)
+        per_pack = float(it.get("unit_price") or 0)   # 整瓶计费：单价 = 每瓶/每支价
+        subtotal = round(bottles * per_pack, 2)
+        it["subtotal"] = subtotal
+        # 数量保留真实剂量（不改 it[qty_key]）；单价回写为有效每主单位价，保证 单价 × 数量 = 金额
+        it["unit_price"] = round(subtotal / real_qty, 6) if real_qty > 0 else per_pack
 
 
 def _billable_qty(item: "InventoryItem | None", qty: float) -> float:
@@ -11681,6 +11691,10 @@ def _deduct_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_
     inv = db.get(InventoryItem, item_id)
     if not inv or inv.is_service:
         return
+    # 整支/整瓶计费：库存按整支/整瓶扣（开 5ml = 用掉 1 整瓶 100ml）。
+    # 对已是整瓶量的旧数据幂等（ceil(100/100)*100=100），不会重复放大。
+    if getattr(inv, "single_use_pack", False):
+        qty = _billable_qty(inv, qty)
     before = inv.stock_qty
     inv.stock_qty = round(before - qty, 4)
     db.add(InventoryTransaction(
@@ -11697,6 +11711,9 @@ def _restore_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref
     inv = db.get(InventoryItem, item_id)
     if not inv or inv.is_service:
         return
+    # 与 _deduct_inventory 对称：整支/整瓶计费按整瓶退，保证扣/退一致。
+    if getattr(inv, "single_use_pack", False):
+        qty = _billable_qty(inv, qty)
     before = inv.stock_qty
     inv.stock_qty = round(before + qty, 4)
     db.add(InventoryTransaction(
@@ -12113,6 +12130,9 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
         db.delete(old)
     db.flush()
     parsed_items = _parse_presc_items(form)
+    # 与新建一致：整支/整瓶计费 + 员工内购价（编辑路由此前漏调，导致整瓶计费在改单后失效）
+    _apply_single_use_pack_billing(db, parsed_items)
+    _apply_internal_pricing(db, parsed_items, presc.customer_id or 0)
     total = round(sum(it["subtotal"] for it in parsed_items), 2)
     presc.prescribed_date = str(form.get("prescribed_date", "")).strip()[:20]
     presc.vet_name = str(form.get("vet_name", "")).strip()[:80]
@@ -13576,6 +13596,9 @@ async def admin_so_edit(order_id: int, request: Request, db: Session = Depends(g
         db.delete(old)
     db.flush()
     items = _parse_so_items(form)
+    # 与新建一致：整支/整瓶计费 + 员工内购价（编辑路由此前漏调）
+    _apply_single_use_pack_billing(db, items)
+    _apply_internal_pricing(db, items, order.customer_id or 0)
     total = round(sum(it["subtotal"] for it in items), 2)
     order.order_date = str(form.get("order_date", "")).strip()[:20]
     order.status = str(form.get("status", "pending")).strip()

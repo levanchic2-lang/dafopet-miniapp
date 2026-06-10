@@ -88,6 +88,7 @@
  <div>
  <label style="display:block;font-weight:600;margin-bottom:0.35rem;">默认售价（元/主单位）<small style="color:#9ca3af;font-weight:400;">未配置门店覆盖时使用</small></label>
  <input name="sell_price" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.sell_price) if item else '0.00' }}" style="width:100%;"/>
+ <small id="sell_price_pack_hint" style="display:none;color:#6b4423;font-weight:400;margin-top:.3rem;line-height:1.5;">勾选了整支/整瓶计费：此处按<b>每瓶 / 每支</b>价填（如一瓶盐水 10 元就填 10）。开方时剂量仍按主单位（ml）写，发药人照常知道抽多少，按整瓶收费。</small>
  </div>
 
  <div>
@@ -162,3 +163,13 @@
  </div>
  </form>
 </div>
+<script>
+(function () {
+  var cb = document.querySelector('input[name="single_use_pack"]');
+  var hint = document.getElementById('sell_price_pack_hint');
+  if (!cb || !hint) return;
+  function sync() { hint.style.display = cb.checked ? 'block' : 'none'; }
+  cb.addEventListener('change', sync);
+  sync();
+})();
+</script>
