@@ -11475,6 +11475,37 @@ _DRUG_TYPE_ZH = {
     "service": "处置 / 服务", "procedure": "操作", "other": "其他",
 }
 
+# 给药途径下拉选项：每个中文一项（去重），用标准 key。
+# 上面 _DRUG_TYPE_ZH 是「全量翻译表」含历史别名（把落库的 po/sc/im 等转中文显示用），
+# 这里是「下拉可选项」，避免 口服×2 / 皮下×3 等重复。
+_DRUG_TYPE_OPTIONS = [
+    ("oral", "口服"),
+    ("topical", "外用"),
+    ("subcutaneous", "皮下"),
+    ("intramuscular", "肌肉"),
+    ("intravenous", "静脉"),
+    ("injection", "注射（其他）"),
+    ("eye_drop", "滴眼"),
+    ("ear_drop", "滴耳"),
+    ("nasal", "鼻喷"),
+    ("nebulize", "雾化"),
+    ("enema", "灌肠"),
+    ("rectal", "直肠给药"),
+    ("service", "处置 / 服务"),
+    ("procedure", "操作"),
+    ("other", "其他"),
+]
+
+# 历史别名 → 标准 key：旧处方落库可能是 po/sc/subq/im/iv/inh 等，
+# 编辑时据此把下拉预选到对应的标准选项（否则会误显示「未选」）。
+_DRUG_TYPE_CANON = {
+    "po": "oral",
+    "sc": "subcutaneous", "subq": "subcutaneous",
+    "im": "intramuscular",
+    "iv": "intravenous",
+    "inh": "nebulize", "inhalation": "nebulize",
+}
+
 
 def _customer_is_internal(db: Session, customer_id: int) -> bool:
     """检查客户是否为员工内购档案。"""
@@ -11872,6 +11903,7 @@ async def page_admin_presc_create(
     return templates.TemplateResponse(request, "uk/prescription.html", {  # B8.6 UK 重写
         "presc": None, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
+        "drug_type_options": _DRUG_TYPE_OPTIONS, "drug_type_canon": _DRUG_TYPE_CANON,
         "presc_status_zh": _PRESC_STATUS_ZH,
         "presc_history": history,
         "today": today, "csrf_token": _get_csrf_token(request), "mode": "create",
@@ -11961,6 +11993,7 @@ async def page_admin_presc_detail(presc_id: int, request: Request, db: Session =
     return templates.TemplateResponse(request, "uk/prescription.html", {  # B8.6 UK 重写
         "presc": presc, "visit": visit, "cust": cust, "pet": pet, "pets": pets,
         "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
+        "drug_type_options": _DRUG_TYPE_OPTIONS, "drug_type_canon": _DRUG_TYPE_CANON,
         "presc_status_zh": _PRESC_STATUS_ZH,
         "presc_history": history,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
@@ -22901,6 +22934,7 @@ async def m_dispensing_detail(presc_id: int, request: Request, db: Session = Dep
         "p": p, "pet": pet, "cust": cust,
         "has_controlled": has_controlled,
         "drug_type_zh": _DRUG_TYPE_ZH,
+        "drug_type_options": _DRUG_TYPE_OPTIONS, "drug_type_canon": _DRUG_TYPE_CANON,
     })
     return templates.TemplateResponse(request, "m_uk/dispensing_detail.html", ctx)
 

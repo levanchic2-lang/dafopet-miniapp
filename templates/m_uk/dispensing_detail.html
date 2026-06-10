@@ -117,8 +117,8 @@
         <label style="display:block;font-size:10px;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:3px;">途&nbsp;径</label>
         <select name="usage_drug_type_{{ it.id }}" style="width:100%;box-sizing:border-box;padding:8px;border:0.5px solid var(--hair);background:var(--paper);font-family:var(--font-serif);font-size:14px;color:var(--ink);">
           <option value="" {% if not it.drug_type %}selected{% endif %}>— 未选 —</option>
-          {% for k, zh in drug_type_zh.items() %}
-          <option value="{{ k }}" {% if it.drug_type == k %}selected{% endif %}>{{ zh }}</option>
+          {% for k, zh in drug_type_options %}
+          <option value="{{ k }}" {% if drug_type_canon.get(it.drug_type, it.drug_type) == k %}selected{% endif %}>{{ zh }}</option>
           {% endfor %}
         </select>
       </div>
