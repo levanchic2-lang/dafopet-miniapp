@@ -81,6 +81,17 @@
 .mi-card .badge.fuzzy { color:var(--accent-amber); border-color:var(--accent-amber); background:#fbfaf6; }
 .mi-card .badge.new { color:var(--accent-amber); border-color:var(--accent-amber); background:#fbfaf6; }
 .mi-card .matched-name { font-family:var(--font-serif); font-size:10px; color:var(--ink-3); font-style:italic; margin-bottom:8px; padding-left:2px; }
+.mi-card .badge[data-act="search"] { cursor:pointer; }
+.mi-rematch { font-family:var(--font-serif); font-size:11px; color:var(--accent-amber); letter-spacing:.5px; margin-bottom:8px; padding:4px 0; cursor:pointer; display:inline-block; border-bottom:0.5px dotted var(--accent-amber); }
+/* 手动选品弹层 */
+.ipm-overlay { position:fixed; inset:0; z-index:1199; background:rgba(0,0,0,.25); }
+.ipm-pop { position:fixed; z-index:1200; left:50%; transform:translateX(-50%); width:calc(100vw - 32px); max-width:420px; background:var(--paper); border:0.5px solid var(--ink); box-shadow:0 8px 28px rgba(0,0,0,.2); padding:12px; }
+.ipm-pop input.q { width:100%; box-sizing:border-box; padding:9px 10px; font-size:15px; border:0.5px solid var(--hair); background:var(--paper); font-family:var(--font-serif); color:var(--ink); }
+.ipm-pop .results { margin-top:8px; max-height:46vh; overflow-y:auto; border-top:0.5px solid var(--hair); }
+.ipm-pop .result { padding:10px 8px; border-bottom:0.5px solid var(--hair); cursor:pointer; font-family:var(--font-serif); font-size:14px; color:var(--ink); }
+.ipm-pop .result:active { background:var(--bg); }
+.ipm-pop .result .meta { font-size:11px; color:var(--ink-3); font-style:italic; margin-top:2px; }
+.ipm-pop .hint { font-family:var(--font-serif); font-style:italic; font-size:11px; color:var(--ink-3); margin-top:8px; text-align:center; }
 .mi-card .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; }
 .mi-card .grid.cols3 { grid-template-columns:1fr 1fr 1fr; }
 .mi-card .field { display:flex; flex-direction:column; }
@@ -109,7 +120,9 @@ function onDefaultCategoryChange() {
   subSel.appendChild(emp);
   Object.keys(subs).forEach(function (k) {
     const o = document.createElement('option');
-    o.value = k; o.textContent = subs[k].label || k;
+    // subs[k] 可能是中文字符串（如 "麻药/精神类"）或 {label}；优先取中文，避免显示英文 key
+    o.value = k;
+    o.textContent = (typeof subs[k] === 'string') ? subs[k] : ((subs[k] && subs[k].label) || k);
     subSel.appendChild(o);
   });
   if (cat === 'medication' && subs['general']) subSel.value = 'general';
@@ -241,8 +254,8 @@ onDefaultCategoryChange();
       var costV = (it.unit_price != null && it.unit_price !== '') ? it.unit_price : (matched && it.matched_cost_price ? it.matched_cost_price : '');
       var sellV = matched && it.matched_sell_price ? it.matched_sell_price : '';
       var badgeHtml = matched
-        ? '<span class="badge ' + (fuzzy ? 'fuzzy' : 'matched') + '">' + (fuzzy ? '相似 ' + (it.match_confidence*100).toFixed(0) + '%' : '✓ 已有') + '</span>'
-        : '<span class="badge new">＋ 新</span>';
+        ? '<span class="badge ' + (fuzzy ? 'fuzzy' : 'matched') + '" data-act="search">' + (fuzzy ? '相似 ' + (it.match_confidence*100).toFixed(0) + '%' : '✓ 已有') + '</span>'
+        : '<span class="badge new" data-act="search">＋ 新</span>';
       var matchedNameHtml = matched && it.matched_name
         ? '<div class="matched-name">' + escapeHtml(it.matched_name) + (it.matched_stock !== undefined ? ' · 现存 ' + it.matched_stock : '') + '</div>'
         : '';
@@ -256,6 +269,7 @@ onDefaultCategoryChange();
           badgeHtml +
         '</div>' +
         matchedNameHtml +
+        '<div class="mi-rematch" data-act="search">⇄ 手动选品 / 改匹配</div>' +
         '<div class="grid">' +
           '<div class="field"><span class="lbl">规&nbsp;格</span><input name="row' + i + '_spec" value="' + escapeHtml(it.spec || '') + '" placeholder="如10mg"></div>' +
           '<div class="field"><span class="lbl">数&nbsp;量</span><input class="num" name="row' + i + '_qty" type="number" step="0.01" min="0" inputmode="decimal" value="' + (it.qty || '') + '"></div>' +
@@ -324,6 +338,127 @@ onDefaultCategoryChange();
     });
     document.getElementById('grand-total').textContent = grand.toFixed(2);
   }
+
+  // ─── 手动选品 / 改匹配 ───────────────────────────────
+  var searchTimer = null, popover = null, overlayEl = null;
+  function closePopover() {
+    if (popover) { popover.remove(); popover = null; }
+    if (overlayEl) { overlayEl.remove(); overlayEl = null; }
+  }
+  // 事件委托：点徽章或「⇄ 手动选品 / 改匹配」都弹搜索框
+  rowsCnt.addEventListener('click', function (e) {
+    var trigger = e.target.closest('[data-act="search"]');
+    if (!trigger) return;
+    var card = trigger.closest('.mi-card');
+    if (!card) return;
+    var rowIdx = card.dataset.row;
+    var defaultQ = (card.querySelector('input[name="row' + rowIdx + '_name"]') || {}).value || '';
+    openSearchPopover(rowIdx, card, defaultQ);
+  });
+
+  function openSearchPopover(rowIdx, card, defaultQ) {
+    closePopover();
+    overlayEl = document.createElement('div');
+    overlayEl.className = 'ipm-overlay';
+    overlayEl.addEventListener('click', closePopover);
+    document.body.appendChild(overlayEl);
+
+    var box = document.createElement('div');
+    box.className = 'ipm-pop';
+    box.innerHTML =
+      '<input class="q" type="text" placeholder="搜索已有品目（名称/关键词）">' +
+      '<div class="results"><div class="hint">输入关键词搜索…</div></div>' +
+      '<div class="hint">点选 = 映射并累加；不选直接关闭 = 保持新增</div>';
+    document.body.appendChild(box);
+    box.style.top = '80px';
+    popover = box;
+
+    var q = box.querySelector('input.q');
+    var results = box.querySelector('.results');
+    function doSearch(term) {
+      if (!term.trim()) { results.innerHTML = '<div class="hint">输入关键词搜索…</div>'; return; }
+      fetch('/api/inventory/search?q=' + encodeURIComponent(term), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var items = Array.isArray(data) ? data : (data.items || []);
+          if (!items.length) { results.innerHTML = '<div class="hint">没找到匹配品目</div>'; return; }
+          results.innerHTML = '';
+          items.forEach(function (it) {
+            var d = document.createElement('div');
+            d.className = 'result';
+            d.innerHTML =
+              '<div>' + escapeHtml(it.name) + '</div>' +
+              '<div class="meta">现存 ' + it.stock_qty + ' ' + escapeHtml(it.unit || '') +
+              ' · 进价 ¥' + (it.cost_price || 0).toFixed(2) + '</div>';
+            d.addEventListener('click', function () { applyMapping(rowIdx, card, it); });
+            results.appendChild(d);
+          });
+        })
+        .catch(function () { results.innerHTML = '<div class="hint">网络错误</div>'; });
+    }
+    q.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () { doSearch(q.value); }, 200);
+    });
+    q.value = defaultQ || '';
+    if (q.value) doSearch(q.value);
+    setTimeout(function () { q.focus(); q.select(); }, 60);
+  }
+
+  function applyMapping(rowIdx, card, it) {
+    // 动作切到「累加」(reuse)，没有该选项就补一个
+    var sel = card.querySelector('.action-sel');
+    if (sel && !sel.querySelector('option[value="reuse"]')) {
+      var opt = document.createElement('option');
+      opt.value = 'reuse'; opt.textContent = '累加';
+      sel.insertBefore(opt, sel.firstChild);
+    }
+    if (sel) sel.value = 'reuse';
+    card.classList.remove('skipped');
+    // 写/更新 hidden item_id
+    var hid = card.querySelector('input[name="row' + rowIdx + '_item_id"]');
+    if (!hid) {
+      hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = 'row' + rowIdx + '_item_id';
+      (card.querySelector('.actions-row') || card).appendChild(hid);
+    }
+    hid.value = it.id;
+    // 行样式 + 徽章
+    card.classList.remove('unmatched'); card.classList.add('matched');
+    var badge = card.querySelector('.name-row .badge');
+    if (badge) { badge.className = 'badge matched'; badge.setAttribute('data-act', 'search'); badge.textContent = '✓ 已映射'; }
+    // matched-name：没有就插到 name-row 之后
+    var mn = card.querySelector('.matched-name');
+    if (!mn) {
+      mn = document.createElement('div');
+      mn.className = 'matched-name';
+      var nameRow = card.querySelector('.name-row');
+      nameRow.parentNode.insertBefore(mn, nameRow.nextSibling);
+    }
+    mn.textContent = it.name + ' · 现存 ' + it.stock_qty;
+    // 单位以库存为准 + 锁定
+    var lockFields = {
+      'main_unit': it.unit || '',
+      'unit': it.unit2 || it.unit || '',
+      'pack_size': (it.unit2_ratio && it.unit2_ratio > 1) ? it.unit2_ratio : ''
+    };
+    Object.keys(lockFields).forEach(function (fld) {
+      var inp = card.querySelector('input[name="row' + rowIdx + '_' + fld + '"]');
+      if (!inp) return;
+      inp.value = lockFields[fld];
+      inp.setAttribute('readonly', 'readonly');
+      inp.title = '已匹配品目 · 单位以库存档案为准';
+    });
+    // 价格：空才反填
+    var sellInp = card.querySelector('input[name="row' + rowIdx + '_sell_price"]');
+    if (sellInp && !sellInp.value && it.sell_price) sellInp.value = it.sell_price;
+    var costInp = card.querySelector('input[name="row' + rowIdx + '_unit_price"]');
+    if (costInp && !costInp.value && it.cost_price) costInp.value = it.cost_price;
+    closePopover();
+    recalcAll();
+  }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePopover(); });
 
   window.resetUpload = function () {
     picked = [];
