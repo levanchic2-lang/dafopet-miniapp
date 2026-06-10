@@ -43,9 +43,9 @@
   <div class="ukm-card">
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
       {% for m in images %}
-      <a href="/file/{{ m.id }}" target="_blank" style="aspect-ratio:1;background:var(--bg-elevated);overflow:hidden;border:0.5px solid var(--hair);">
+      <div onclick="ukmLightbox('/file/{{ m.id }}')" style="aspect-ratio:1;background:var(--bg-elevated);overflow:hidden;border:0.5px solid var(--hair);cursor:pointer;">
         <img src="/file/{{ m.id }}" style="width:100%;height:100%;object-fit:cover;display:block;"/>
-      </a>
+      </div>
       {% endfor %}
     </div>
   </div>
@@ -153,5 +153,30 @@ function rejectConfirm(form) {
 <div class="ukm-btn-row">
   <a href="/admin/applications/{{ row.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;·&nbsp;完&nbsp;整&nbsp;A&nbsp;I&nbsp;报&nbsp;告</a>
 </div>
+
+{# 页内看大图浮层：替代 target=_blank（在 App 内置浏览器里打开原图无返回按钮会卡死）#}
+<div id="ukmLb" onclick="ukmLightboxClose()"
+     style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);
+            align-items:center;justify-content:center;padding:16px;">
+  <span style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:18px;
+               color:#fff;font-size:34px;line-height:1;font-family:serif;">×</span>
+  <img id="ukmLbImg" src="" alt="" style="max-width:100%;max-height:100%;object-fit:contain;display:block;"/>
+  <div style="position:absolute;bottom:calc(env(safe-area-inset-bottom) + 16px);left:0;right:0;
+              text-align:center;color:rgba(255,255,255,.7);font-size:13px;font-family:serif;">点&nbsp;任&nbsp;意&nbsp;处&nbsp;关&nbsp;闭</div>
+</div>
+<script>
+function ukmLightbox(src){
+  var lb=document.getElementById('ukmLb');
+  document.getElementById('ukmLbImg').src=src;
+  lb.style.display='flex';
+  document.body.style.overflow='hidden';
+}
+function ukmLightboxClose(){
+  var lb=document.getElementById('ukmLb');
+  lb.style.display='none';
+  document.getElementById('ukmLbImg').src='';
+  document.body.style.overflow='';
+}
+</script>
 
 {% endblock %}
