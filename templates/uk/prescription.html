@@ -659,7 +659,8 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
                 {% set _dose_un = item.dose_unit or '' %}
                 {% set _tpd = item.times_per_day or '' %}
                 {% set _i_unit = item.item_unit or item.quantity or '' %}
-                <tr>
+                {% set _pm = pack_meta.get(item.id) if pack_meta else None %}
+                <tr{% if _pm %} data-sup="1" data-ratio="{{ _pm['ratio'] }}"{% endif %}>
                   <td>
                     <div class="inv-search-wrap">
                       <input name="drug_name_{{ idx }}" value="{{ item.drug_name }}" required autocomplete="off"
@@ -697,7 +698,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
                     </div>
                   </td>
                   <td class="total-times" id="total_times_{{ idx }}">—</td>
-                  <td class="col-num"><input name="unit_price_{{ idx }}" type="number" step="0.01" min="0" value="{{ '%.2f'|format(item.unit_price) }}" oninput="recalcRow({{ idx }})"/></td>
+                  <td class="col-num"><input name="unit_price_{{ idx }}" type="number" step="0.01" min="0" value="{{ '%.2f'|format(_pm['pack_price'] if _pm else item.unit_price) }}" oninput="recalcRow({{ idx }})"/>{% if _pm %}<div style="font-size:8pt;color:var(--accent-amber);font-style:italic;margin-top:2px;">每瓶价 · 整瓶计费</div>{% endif %}</td>
                   <td class="col-num"><input name="quantity_num_{{ idx }}" type="number" step="0.01" min="0" value="{{ item.quantity_num }}" oninput="onQtyEdit({{ idx }})" id="quantity_num_{{ idx }}"/></td>
                   <td class="col-unit"><input name="item_unit_{{ idx }}" value="{{ _i_unit }}" id="item_unit_{{ idx }}" oninput="recalcDosage({{ idx }})"/></td>
                   <td class="col-num"><input name="subtotal_{{ idx }}" type="number" step="0.01" readonly value="{{ '%.2f'|format(item.subtotal) }}" id="subtotal_{{ idx }}"/></td>
@@ -845,9 +846,20 @@ var _drugTypeOptions = `<option value="" selected>— 未选 —</option>{% for 
 var _searchTimers = {};
 
 function recalcRow(idx) {
-  var qty = parseFloat(document.querySelector('[name="quantity_num_' + idx + '"]').value) || 0;
+  var qtyEl = document.querySelector('[name="quantity_num_' + idx + '"]');
+  var qty = parseFloat(qtyEl && qtyEl.value) || 0;
   var price = parseFloat(document.querySelector('[name="unit_price_' + idx + '"]').value) || 0;
-  var sub = Math.round(qty * price * 100) / 100;
+  var tr = qtyEl ? qtyEl.closest('tr') : null;
+  var sub;
+  if (tr && tr.dataset.sup === '1') {
+    // 整支/整瓶计费：单价 = 每瓶价；小计 = 向上取整瓶数 × 每瓶价（开 5ml = 1 瓶）
+    var ratio = parseFloat(tr.dataset.ratio) || 1;
+    if (ratio <= 0) ratio = 1;
+    var bottles = qty > 0 ? Math.ceil((qty - 1e-9) / ratio) : 0;
+    sub = Math.round(bottles * price * 100) / 100;
+  } else {
+    sub = Math.round(qty * price * 100) / 100;
+  }
   var el = document.getElementById('subtotal_' + idx);
   if (el) el.value = sub.toFixed(2);
   recalcTotal();
@@ -923,14 +935,23 @@ function selectInventoryItem(idx, it, input) {
   input.value = it.name;
   document.getElementById('item_id_' + idx).value = it.id;
   var priceEl = document.querySelector('[name="unit_price_' + idx + '"]');
-  if (priceEl) priceEl.value = it.sell_price.toFixed(2);
+  if (priceEl) priceEl.value = it.sell_price.toFixed(2);  // 整瓶计费品目：售价即每瓶价
   var doseUnitEl = document.getElementById('dose_unit_' + idx);
   if (doseUnitEl && !doseUnitEl.value) doseUnitEl.value = it.unit || '';
   var itemUnitEl = document.getElementById('item_unit_' + idx);
   if (itemUnitEl && !itemUnitEl.value) itemUnitEl.value = it.unit || '';
   // 服务类品目：行进入"服务模式" → 灰显投药字段
   var tr = input.closest('tr');
-  if (tr) _toggleServiceRow(tr, !!it.is_service);
+  if (tr) {
+    _toggleServiceRow(tr, !!it.is_service);
+    // 整支/整瓶计费 → 标记该行，让实时合计按整瓶算
+    if (it.single_use_pack) {
+      tr.dataset.sup = '1';
+      tr.dataset.ratio = (it.unit2_ratio && it.unit2_ratio > 0) ? it.unit2_ratio : 1;
+    } else {
+      delete tr.dataset.sup; delete tr.dataset.ratio;
+    }
+  }
   closeDropdown(idx);
   recalcRow(idx);
 }
@@ -1136,7 +1157,8 @@ function _appendRow(it) {
     typeOpts += `<option value="${k}" ${_selKey===k?'selected':''}>${zh}</option>`;
   }
   const esc = s => (s||'').toString().replace(/"/g,'&quot;');
-  const row = `<tr>
+  const _supAttr = it.single_use_pack ? ` data-sup="1" data-ratio="${(it.unit2_ratio && it.unit2_ratio > 0) ? it.unit2_ratio : 1}"` : '';
+  const row = `<tr${_supAttr}>
     <td><div class="inv-search-wrap">
       <input name="drug_name_${idx}" value="${esc(it.drug_name)}" required autocomplete="off" oninput="onDrugInput(this, ${idx})" onblur="closeDropdown(${idx})"/>
       <input type="hidden" name="item_id_${idx}" value="${it.item_id||''}" id="item_id_${idx}"/>

@@ -11633,6 +11633,31 @@ def _billable_qty(item: "InventoryItem | None", qty: float) -> float:
     return round(units * ratio, 4)
 
 
+def _presc_pack_meta(db: Session, presc: "Prescription") -> dict:
+    """整支/整瓶计费行的「每瓶价」+ ratio，供编辑表单与实时合计用。
+    返回 {prescription_item_id: {"pack_price": 每瓶价, "ratio": 1副单位=N主单位}}。
+    每瓶价由 subtotal ÷ 瓶数 反推（存的 unit_price 是有效每主单位价，不能直接当每瓶价）。
+    """
+    import math as _math
+    meta: dict = {}
+    if not presc:
+        return meta
+    for it in (presc.items or []):
+        if not it.item_id:
+            continue
+        inv = db.get(InventoryItem, it.item_id)
+        if not inv or not getattr(inv, "single_use_pack", False):
+            continue
+        ratio = float(inv.unit2_ratio or 1.0)
+        if ratio <= 0:
+            ratio = 1.0
+        qn = float(it.quantity_num or 0)
+        bottles = _math.ceil((qn - 1e-9) / ratio) if qn > 0 else 0
+        pack_price = round(float(it.subtotal or 0) / bottles, 2) if bottles > 0 else float(it.unit_price or 0)
+        meta[it.id] = {"pack_price": pack_price, "ratio": ratio}
+    return meta
+
+
 def _parse_presc_items(form_data) -> list[dict]:
     items = []
     i = 0
@@ -11754,6 +11779,23 @@ def _invoice_paid_for_visit(db: Session, visit_id: int) -> bool:
     ).first() is not None
 
 
+def _doc_is_settled(db: Session, doc_type: str, doc_id: int) -> bool:
+    """该单据（处方/检查/销售）本身是否已进入收款流程：其明细出现在 paid/partial 的发票里。
+
+    用「按单据」而不是「按整张病历」判断锁定——避免同一病历里别的单据（如检查单）
+    付了款，就把这张未付的处方/检查也连带锁死。
+    """
+    if not doc_id or not doc_type:
+        return False
+    return db.query(InvoiceItem.id).join(
+        Invoice, InvoiceItem.invoice_id == Invoice.id
+    ).filter(
+        InvoiceItem.ref_type == doc_type,
+        InvoiceItem.ref_id == doc_id,
+        Invoice.payment_status.in_(("paid", "partial")),
+    ).first() is not None
+
+
 def _is_prescription_locked(db: Session, p: "Prescription") -> tuple[bool, str]:
     if not p:
         return False, ""
@@ -11761,8 +11803,8 @@ def _is_prescription_locked(db: Session, p: "Prescription") -> tuple[bool, str]:
         return True, "已作废"
     if getattr(p, "status", "") == "dispensed":
         return True, "已发药"
-    if p.visit_id and _invoice_paid_for_visit(db, p.visit_id):
-        return True, "关联收费单已付款"
+    if _doc_is_settled(db, "prescription", p.id):
+        return True, "本处方收费单已付款"
     return False, ""
 
 
@@ -11773,8 +11815,8 @@ def _is_sales_order_locked(db: Session, so: "SalesOrder") -> tuple[bool, str]:
         return True, "已作废"
     if getattr(so, "status", "") == "paid":
         return True, "已付款"
-    if so.visit_id and _invoice_paid_for_visit(db, so.visit_id):
-        return True, "关联收费单已付款"
+    if _doc_is_settled(db, "sales_order", so.id):
+        return True, "本销售单收费单已付款"
     return False, ""
 
 
@@ -11798,8 +11840,8 @@ def _is_exam_order_locked(db: Session, eo: "ExamOrder") -> tuple[bool, str]:
     has_report = db.query(ExamReport).filter(ExamReport.exam_order_id == eo.id).first() is not None
     if has_report:
         return True, "检查报告已上传"
-    if eo.visit_id and _invoice_paid_for_visit(db, eo.visit_id):
-        return True, "关联收费单已付款"
+    if _doc_is_settled(db, "exam_order", eo.id):
+        return True, "本检查单收费单已付款"
     return False, ""
 
 
@@ -12036,6 +12078,9 @@ async def page_admin_presc_detail(presc_id: int, request: Request, db: Session =
     vet_names = [v[0] for v in vets]
     locked, lock_reason = _is_prescription_locked(db, presc)
     paid_amount = _doc_paid_amount(db, "prescription", presc_id) if locked else 0.0
+    # 整支/整瓶计费行：编辑表单要显示「每瓶价」(否则会把存的有效单价误当每瓶价 → 再保存算错)。
+    # 由 subtotal ÷ 瓶数 反推每瓶价；同时给前端 ratio 让"实时合计"按整瓶算。
+    pack_meta = _presc_pack_meta(db, presc)
     history = []
     if presc.pet_id:
         history = db.query(Prescription).filter(
@@ -12047,7 +12092,7 @@ async def page_admin_presc_detail(presc_id: int, request: Request, db: Session =
         "vet_names": vet_names, "drug_type_zh": _DRUG_TYPE_ZH,
         "drug_type_options": _DRUG_TYPE_OPTIONS, "drug_type_canon": _DRUG_TYPE_CANON,
         "presc_status_zh": _PRESC_STATUS_ZH,
-        "presc_history": history,
+        "presc_history": history, "pack_meta": pack_meta,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "csrf_token": _get_csrf_token(request), "mode": "edit",
         "msg": request.query_params.get("msg"),
@@ -13898,6 +13943,7 @@ async def api_inventory_search(
             "stock_qty": it.stock_qty,
             "is_service": it.is_service,
             "is_controlled": it.is_controlled,
+            "single_use_pack": bool(it.single_use_pack),  # 整支/整瓶计费 → 前端按整瓶算小计
             "store": it.store or "",
         }
         for it in items
