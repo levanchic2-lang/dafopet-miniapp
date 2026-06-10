@@ -592,6 +592,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
                   </td>
                   <td>
                     <select name="drug_type_{{ idx }}">
+                      <option value="" {% if not item.drug_type %}selected{% endif %}>— 未选 —</option>
                       {% for k, zh in drug_type_zh.items() %}
                       <option value="{{ k }}" {% if item.drug_type == k %}selected{% endif %}>{{ zh }}</option>
                       {% endfor %}
@@ -635,6 +636,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
                   </td>
                   <td>
                     <select name="drug_type_0">
+                      <option value="" selected>— 未选 —</option>
                       {% for k, zh in drug_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}
                     </select>
                   </td>
@@ -757,7 +759,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
 {% block scripts %}
 <script>
 var _drugRowCount = {{ p.items|length if p and p.items else 1 }};
-var _drugTypeOptions = `{% for k, zh in drug_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}`;
+var _drugTypeOptions = `<option value="" selected>— 未选 —</option>{% for k, zh in drug_type_zh.items() %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}`;
 var _searchTimers = {};
 
 function recalcRow(idx) {
@@ -1045,7 +1047,7 @@ function _clearRows() {
 function _appendRow(it) {
   const idx = _drugRowCount++;
   const types = {{ drug_type_zh | tojson }};
-  let typeOpts = '';
+  let typeOpts = `<option value="" ${it.drug_type?'':'selected'}>— 未选 —</option>`;
   for (const k in types) {
     typeOpts += `<option value="${k}" ${it.drug_type===k?'selected':''}>${types[k]}</option>`;
   }
