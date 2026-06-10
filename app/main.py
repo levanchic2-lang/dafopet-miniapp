@@ -5490,6 +5490,41 @@ async def verify_cat(app_id: int, request: Request, db: Session = Depends(get_db
     # 只设核实标记 — 「到店」和「核实是同一只猫」是两个独立动作
     row.staff_cat_verified = True
     _audit(db, request, "verify_cat", application_id=app_id)
+    # 现场确认即"到的就是这只猫"，申请素材照片本身就是这只猫的术前面貌 →
+    # 自动复制为术前照片，前台只需再补传「有异常」的术前照即可，免去重复上传。
+    # 物理复制（不共用文件路径），让申请素材与术前照片各自独立，删一个不影响另一个。
+    # 幂等：仅当当前没有任何术前文件时才复制（重复点确认 / 已手动传过术前都不再复制）。
+    try:
+        existing_before = db.query(MediaFile).filter(
+            MediaFile.application_id == app_id,
+            MediaFile.kind == MediaKind.surgery_before.value,
+        ).count()
+        if existing_before == 0:
+            app_images = db.query(MediaFile).filter(
+                MediaFile.application_id == app_id,
+                MediaFile.kind == MediaKind.application_image.value,
+            ).all()
+            base = Path(settings.upload_dir) / str(app_id)
+            base.mkdir(parents=True, exist_ok=True)
+            copied = 0
+            for m in app_images:
+                src = Path(m.stored_path)
+                if not src.exists():
+                    continue
+                dest = base / f"surg_bi_{secrets.token_hex(6)}{src.suffix}"
+                shutil.copy2(src, dest)
+                db.add(MediaFile(
+                    application_id=app_id,
+                    kind=MediaKind.surgery_before.value,
+                    stored_path=str(dest),
+                    original_name=m.original_name or src.name,
+                ))
+                copied += 1
+            if copied:
+                _audit(db, request, "auto_copy_application_to_before",
+                       application_id=app_id, detail={"copied": copied})
+    except Exception:
+        logger.exception("[verify_cat] 申请素材自动转术前照片失败 app_id=%s", app_id)
     db.commit()
     return _admin_back(request, app_id)
 

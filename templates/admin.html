@@ -543,6 +543,7 @@
  <div style="margin:.75rem 0;padding:.6rem .85rem;background:var(--brand-bg-soft);border:1px solid var(--brand-light);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;">
    <div style="font-size:.85rem;color:var(--brand-dark);">
      <i data-lucide="info"></i> 核对申请素材后，确认到院的就是这只猫
+     <div style="font-size:.78rem;color:var(--ink-3,#8a8a8a);margin-top:.2rem;">确认后，申请素材照片将自动作为术前照片，无需重复上传，只需再补传有异常的术前照</div>
    </div>
    <form method="post" action="/admin/app/{{ a.id }}/verify-cat" style="margin:0;">
      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
