@@ -329,6 +329,13 @@ def _load_china_pcas() -> dict:
 
 @app.on_event("startup")
 def _startup():
+    # 部署后看这行即可确认进程时区已钉死北京（不受主机/VPN 影响）
+    logger.info(
+        "时区 TZ=%s | 本地 now=%s | UTC=%s",
+        _os.environ.get("TZ", "(未设置)"),
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+    )
     init_db()
     asyncio.get_event_loop().create_task(_surgery_reminder_loop())
     asyncio.get_event_loop().create_task(_vaccine_reminder_loop())
