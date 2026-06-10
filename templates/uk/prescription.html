@@ -71,6 +71,40 @@
   }
   .locked-form button[type="submit"] { display: none !important; }
 
+  /* 锁定后「仅改用法」面板（超管） */
+  .px-usage {
+    border: 0.5px solid var(--hair); background: var(--paper);
+    padding: 18px 20px; margin-bottom: 24px;
+    font-family: var(--font-serif);
+  }
+  .px-usage > h3 {
+    margin: 0 0 4px; font-size: 11pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 2px;
+  }
+  .px-usage > p.hint {
+    margin: 0 0 16px; font-size: 9pt; font-style: italic; color: var(--ink-3);
+  }
+  .px-usage .urow { padding: 12px 0; border-top: 0.5px solid var(--hair); }
+  .px-usage .urow:first-of-type { border-top: 0; }
+  .px-usage .uname {
+    font-size: 10.5pt; font-weight: 700; color: var(--ink); margin-bottom: 8px;
+  }
+  .px-usage .ufields {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 14px;
+  }
+  .px-usage .ufull { grid-column: 1 / -1; }
+  .px-usage label {
+    display: block; font-size: 8.5pt; color: var(--ink-3);
+    letter-spacing: 1px; margin-bottom: 3px;
+  }
+  .px-usage input, .px-usage select, .px-usage textarea {
+    width: 100%; box-sizing: border-box; padding: 5px 8px;
+    border: 0.5px solid var(--hair); background: var(--paper);
+    font-family: var(--font-serif); font-size: 9.5pt; color: var(--ink);
+  }
+  .px-usage textarea { resize: vertical; min-height: 38px; }
+  .px-usage .uactions { margin-top: 16px; text-align: right; }
+
   /* grid */
   .px-grid {
     display: grid; grid-template-columns: minmax(0,1fr) 260px;
@@ -475,6 +509,54 @@ function confirmVoidWithRefund(form, paidAmount) {
 }
 function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
 </script>
+
+{# 仅改用法通道：处方锁定（已付款/已发药）后，超管仍可改纯文字字段，不动账单 #}
+{% if request.session.get('admin_role') == 'superadmin' and p and p.items and p.status != 'voided' %}
+<details class="px-usage no-print">
+  <summary style="cursor:pointer; list-style:none; font-size:10pt; font-weight:700; color:var(--ink); letter-spacing:1.5px; margin-bottom:4px;">
+    仅改用法（不动金额 / 库存 / 账单）
+  </summary>
+  <p class="hint">改给药途径 / 频次 / 用法 / 用法说明 / 打印备注等纯文字；不退库存、不重算收费单。仅超管可用，留审计日志。</p>
+  <form method="post" action="/admin/prescriptions/{{ p.id }}/edit-usage">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    {% for item in p.items %}
+    <div class="urow">
+      <div class="uname">{{ item.drug_name }}{% if item.quantity %} · {{ item.quantity }}{% endif %}</div>
+      <div class="ufields">
+        <div>
+          <label>给药途径</label>
+          <select name="usage_drug_type_{{ item.id }}">
+            <option value="" {% if not item.drug_type %}selected{% endif %}>— 未选 —</option>
+            {% for k, zh in drug_type_zh.items() %}
+            <option value="{{ k }}" {% if item.drug_type == k %}selected{% endif %}>{{ zh }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>频次</label>
+          <input name="usage_frequency_{{ item.id }}" value="{{ item.frequency or '' }}"/>
+        </div>
+        <div>
+          <label>用法 / 用量</label>
+          <input name="usage_dosage_{{ item.id }}" value="{{ item.dosage or '' }}"/>
+        </div>
+        <div class="ufull">
+          <label>用法说明（内部）</label>
+          <textarea name="usage_instructions_{{ item.id }}">{{ item.instructions or '' }}</textarea>
+        </div>
+        <div class="ufull">
+          <label>打印备注（客户可见）</label>
+          <textarea name="usage_print_note_{{ item.id }}">{{ item.print_note or '' }}</textarea>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    <div class="uactions">
+      <button type="submit" class="uk-btn sm">保存用法</button>
+    </div>
+  </form>
+</details>
+{% endif %}
 {% endif %}
 
 <div class="px-grid">

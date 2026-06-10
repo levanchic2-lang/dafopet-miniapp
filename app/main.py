@@ -12071,6 +12071,56 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
     return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=已保存", status_code=303)
 
 
+# 仅改「用法」纯文字字段（给药途径 / 频次 / 用法 / 用法说明 / 打印备注）。
+# 即使处方已锁定（关联收费单已付款 / 已发药）也允许超管改——因为这些字段
+# 不影响金额 / 库存 / 账单。后端绝不碰 item_id / 数量 / 单价 / subtotal，
+# 不退还或扣减库存，不调 _sync_visit_invoice，账单一分钱不动。
+@app.post("/admin/prescriptions/{presc_id}/edit-usage")
+async def admin_presc_edit_usage(presc_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    # 仅超管可用此「绕过锁改用法」通道
+    if request.session.get("admin_role") != "superadmin":
+        raise HTTPException(403, "仅超级管理员可修改已锁定处方的用法")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    presc = db.get(Prescription, presc_id)
+    if not presc:
+        raise HTTPException(404)
+    if getattr(presc, "status", "") == "voided":
+        raise HTTPException(400, "处方已作废，不可修改")
+    operator = request.session.get("admin_username", "admin")
+    changes = []
+    for it in presc.items:
+        pk = it.id
+        if f"usage_drug_type_{pk}" not in form:
+            continue  # 该行未提交（防御）
+        new_drug_type = str(form.get(f"usage_drug_type_{pk}", "")).strip()[:40]
+        new_frequency = str(form.get(f"usage_frequency_{pk}", "")).strip()[:80]
+        new_dosage = str(form.get(f"usage_dosage_{pk}", "")).strip()[:80]
+        new_instructions = str(form.get(f"usage_instructions_{pk}", "")).strip()
+        new_print_note = str(form.get(f"usage_print_note_{pk}", "")).strip()
+        row_changed = []
+        for field, old_v, new_v in (
+            ("drug_type", it.drug_type, new_drug_type),
+            ("frequency", it.frequency, new_frequency),
+            ("dosage", it.dosage, new_dosage),
+            ("instructions", it.instructions, new_instructions),
+            ("print_note", it.print_note, new_print_note),
+        ):
+            if (old_v or "") != (new_v or ""):
+                setattr(it, field, new_v)
+                row_changed.append(f"{field}:'{old_v}'→'{new_v}'")
+        if row_changed:
+            changes.append(f"#{pk}({it.drug_name}) " + "; ".join(row_changed))
+    if changes:
+        _audit_doc_action(db, "prescription", presc_id, "edit_usage", operator,
+                          extra=" | ".join(changes)[:480])
+        db.commit()
+        return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=用法已更新", status_code=303)
+    return RedirectResponse(f"/admin/prescriptions/{presc_id}?msg=无改动", status_code=303)
+
+
 @app.post("/admin/prescriptions/{presc_id}/delete")
 async def admin_presc_delete(presc_id: int, request: Request, db: Session = Depends(get_db),
                               csrf_token: str = Form("")):
