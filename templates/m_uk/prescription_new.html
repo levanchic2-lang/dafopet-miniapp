@@ -245,9 +245,9 @@
     <span class="lbl">给&nbsp;药&nbsp;途&nbsp;径</span>
     <div class="rx-chips">
       {% for k, zh in [('oral','口服'),('subq','皮下'),('im','肌注'),('iv','静脉'),('topical','外用'),('inh','雾化')] %}
-      <button type="button" class="rx-mini-chip{% if k == 'oral' %} active{% endif %}" data-route="{{ k }}" onclick="pickRoute(this)">{{ zh }}</button>
+      <button type="button" class="rx-mini-chip" data-route="{{ k }}" onclick="pickRoute(this)">{{ zh }}</button>
       {% endfor %}
-      <input type="hidden" name="drug_type___IDX__" value="oral" class="rx-route"/>
+      <input type="hidden" name="drug_type___IDX__" value="" class="rx-route"/>
     </div>
   </div>
 

@@ -65,6 +65,13 @@
 {% endblock %}
 
 {% block content %}
+{% set _route_zh = {
+  'oral':'口服','po':'口服','subq':'皮下','sc':'皮下','subcutaneous':'皮下',
+  'im':'肌注','intramuscular':'肌注','iv':'静脉','intravenous':'静脉','topical':'外用',
+  'inh':'雾化','nebulize':'雾化','inhalation':'雾化','injection':'注射',
+  'eye_drop':'滴眼','ear_drop':'滴耳','nasal':'鼻喷','enema':'灌肠','rectal':'直肠',
+  'service':'服务','procedure':'操作','other':'其他'
+} %}
 
 <div class="ukm-page-head">
   <h1>{{ pet.name if pet else '宠物' }}
@@ -134,7 +141,7 @@
       <div class="med-sub">
         {% if l.prescription_item.dose_amount %}{{ l.prescription_item.dose_amount }}{{ l.prescription_item.dose_unit or '' }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{% endif %}
         {{ l.prescription_item.frequency or '' }}
-        {% if l.prescription_item.drug_type %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ l.prescription_item.drug_type }}{% endif %}
+        {% if l.prescription_item.drug_type %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ _route_zh.get(l.prescription_item.drug_type, l.prescription_item.drug_type) }}{% endif %}
       </div>
       {% if is_done and l.administered_by %}
       <div class="med-sub" style="color:var(--accent-green);">
