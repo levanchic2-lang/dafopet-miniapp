@@ -10798,6 +10798,7 @@ async def admin_visit_edit(
 @app.post("/admin/visits/{visit_id}/close")
 async def admin_visit_close(visit_id: int, request: Request,
                             csrf_token: str = Form(""),
+                            next_url: str = Form(""),
                             db: Session = Depends(get_db)):
     """结束病历。结束后病历及关联处方/检查不可改；按合规要求不可重开。"""
     require_admin(request)
@@ -10811,8 +10812,16 @@ async def admin_visit_close(visit_id: int, request: Request,
         pet = db.get(Pet, v.pet_id)
         if pet and pet.store and pet.store != admin_store:
             raise HTTPException(403, "无权操作其他门店的就诊记录")
+
+    def _close_redirect(msg: str):
+        if next_url:
+            nu = next_url.replace("{id}", str(visit_id))
+            sep = "&" if "?" in nu else "?"
+            return RedirectResponse(_safe_next(f"{nu}{sep}msg={msg}", f"/admin/visits/{visit_id}?msg={msg}"), status_code=303)
+        return RedirectResponse(f"/admin/visits/{visit_id}?msg={msg}", status_code=303)
+
     if (v.status or "open") == "closed":
-        return RedirectResponse(f"/admin/visits/{visit_id}?msg=该病历已是结束状态", status_code=303)
+        return _close_redirect("该病历已是结束状态")
     v.status = "closed"
     v.closed_at = datetime.utcnow()
     v.closed_by = request.session.get("admin_username", "") or ""
@@ -10820,7 +10829,7 @@ async def admin_visit_close(visit_id: int, request: Request,
     _audit(db, request, "visit_close",
            detail={"visit_id": v.id, "pet_id": v.pet_id, "customer_id": v.customer_id})
     db.commit()
-    return RedirectResponse(f"/admin/visits/{visit_id}?msg=病历已结束", status_code=303)
+    return _close_redirect("病历已结束")
 
 
 @app.post("/admin/visits/{visit_id}/followup-toggle")

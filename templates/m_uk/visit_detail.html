@@ -259,6 +259,30 @@
 {% endif %}
 
 <div class="ukm-divider"></div>
+
+{# 结束病历（不可重开，合规要求）#}
+{% if v.status != 'closed' %}
+<div class="ukm-section-head"><h2>结&nbsp;束&nbsp;病&nbsp;历</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div style="font-size:12px;color:var(--ink-3);font-style:italic;margin-bottom:10px;line-height:1.6;">结束后病历及关联处方 / 检查不可再改、不可重开（行业合规）。请确认所有开单、收费已完成。</div>
+    <form method="post" action="/admin/visits/{{ v.id }}/close"
+          onsubmit="return confirm('确认结束病历 #{{ v.id }}？\n\n· 病历及关联处方/检查将不可修改\n· 按合规要求不可重开\n\n请确认所有开单、收费已完成。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="/m/visit/{{ v.id }}"/>
+      <button type="submit" class="ukm-btn block" style="background:var(--accent-red);border-color:var(--accent-red);color:#fff;">✓&nbsp;结&nbsp;束&nbsp;病&nbsp;历</button>
+    </form>
+  </div>
+</div>
+{% else %}
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div style="font-size:12px;color:var(--ink-3);font-style:italic;">病历已于 {{ v.closed_at.strftime('%Y-%m-%d %H:%M') if v.closed_at else '—' }} 结束{% if v.closed_by %} · {{ v.closed_by }}{% endif %} · 不可重开</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="ukm-divider"></div>
 <div class="ukm-btn-row">
   <a href="/admin/visits/{{ v.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;打&nbsp;开</a>
 </div>
