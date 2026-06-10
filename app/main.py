@@ -21654,8 +21654,24 @@ def _parse_schedule_times(s: str) -> list[tuple[int, int]]:
     return out
 
 
-# 住院处方默认给药时刻（医生忘填时兜底）：上午10点 + 晚上8点（BID），覆盖绝大多数病例
-_DEFAULT_INPATIENT_SCHEDULE = "10,20"
+# 住院处方医生没填时刻表时，按给药频次推默认发药时刻（覆盖绝大多数病例）：
+#   SID/qd/q24h（一天一次）→ 以开方时间（北京整点）为默认
+#   BID/q12h（一天两次）   → 10,20      （上午10点 / 晚8点）
+#   TID/q8h（一天三次）    → 10,15,20   （上午10点 / 下午3点 / 晚8点）
+#   QID/q6h（一天四次）    → 10,13,17,21（上午10点 / 下午1点 / 下午5点 / 晚9点）
+#   q48h / prn / 一天四次以上 / 未知   → 空串（需人工排时间）
+def _default_schedule_for_freq(freq: str, opened_hour: int) -> str:
+    f = (freq or "").strip().lower()
+    if f in ("qd", "q24h", "sid"):
+        h = opened_hour if 0 <= opened_hour <= 23 else 10
+        return str(h)
+    if f in ("bid", "q12h"):
+        return "10,20"
+    if f in ("tid", "q8h"):
+        return "10,15,20"
+    if f in ("qid", "q6h"):
+        return "10,13,17,21"
+    return ""
 
 
 def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> int:
@@ -21665,7 +21681,8 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
     - presc.status 必须 != 'draft' 且 != 'voided'
     - 找到该 visit_id 对应的 admitted Hospitalization
     - 每个 PrescriptionItem：
-      * 若 schedule_times 空 → 跳过（门诊外带药不需要打勾）
+      * schedule_times 空 → 按给药频次推默认（见 _default_schedule_for_freq）；
+        频次也推不出（prn/q48h/未知）→ 跳过
       * 否则按 (duration_days × schedule_times) 生成日志
       * 起始日：prescribed_date 或今天
       * 先删本 item 的现有 pending 日志（重生），保留 done/skipped
@@ -21692,14 +21709,20 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
     if not start_date:
         start_date = _date2.today()
 
+    # 开方时间（北京整点），SID 默认用它
+    try:
+        opened_hour = (presc.created_at + _td(hours=8)).hour
+    except Exception:
+        opened_hour = 10
+
     created = 0
     for it in (presc.items or []):
         times = _parse_schedule_times(it.schedule_times or "")
         if not times:
-            # 住院处方但医生忘填时刻表 → 套默认 BID（上午10点 / 晚上8点），
-            # 保证仍生成每日发药打勾任务（特殊用药医生自行改时刻表）。
+            # 住院处方但医生没填时刻表 → 按给药频次套默认（SID 用开方时间 / BID 10,20 /
+            # TID 10,15,20 / QID 10,13,17,21；q48h·prn·>4次/天 → 空，需人工排）。
             # 注：本函数只在存在 admitted 住院时才会执行到这里，故默认仅作用于住院处方。
-            times = _parse_schedule_times(_DEFAULT_INPATIENT_SCHEDULE)
+            times = _parse_schedule_times(_default_schedule_for_freq(it.frequency, opened_hour))
         if not times:
             continue
         # 解析天数：duration_days 字段可能是 "7" 或 "症状缓解为止" 等

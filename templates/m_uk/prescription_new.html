@@ -276,8 +276,8 @@
 
   {% if hosp_admitted %}
   <div style="margin-top:10px;">
-    <span class="lbl" style="display:block;font-family:var(--font-serif);font-size:10px;font-weight:700;color:var(--accent-amber);letter-spacing:1.5px;margin-bottom:4px;">住&nbsp;院&nbsp;发&nbsp;药&nbsp;时&nbsp;刻&nbsp;表&nbsp;&nbsp;默&nbsp;认&nbsp;10,20&nbsp;（上午10点/晚8点），特殊药改此处</span>
-    <input type="text" name="schedule_times___IDX__" class="rx-sched-input" placeholder="10,20" value="10,20"/>
+    <span class="lbl" style="display:block;font-family:var(--font-serif);font-size:10px;font-weight:700;color:var(--accent-amber);letter-spacing:1.5px;margin-bottom:4px;">住&nbsp;院&nbsp;发&nbsp;药&nbsp;时&nbsp;刻&nbsp;表&nbsp;&nbsp;按&nbsp;频&nbsp;次&nbsp;自&nbsp;动&nbsp;填，可&nbsp;改</span>
+    <input type="text" name="schedule_times___IDX__" class="rx-sched-input" placeholder="选频次后自动填" oninput="this.dataset.userTouched='1'"/>
   </div>
   {% else %}
   <input type="hidden" name="schedule_times___IDX__" value=""/>
@@ -326,7 +326,21 @@ function pickFreq(btn) {
   btn.classList.add('active');
   row.querySelector('.rx-freq').value = btn.dataset.freq;
   row.querySelector('.rx-tpd').value = btn.dataset.tpd || '';
+  fillSchedDefault(row, btn.dataset.freq);
   autoQty(row);
+}
+
+// 给药频次 → 默认住院发药时刻（与后端 _default_schedule_for_freq 一致）
+const FREQ_SCHED = {bid:'10,20', q12h:'10,20', tid:'10,15,20', q8h:'10,15,20', qid:'10,13,17,21', q6h:'10,13,17,21'};
+function fillSchedDefault(row, freq) {
+  const sched = row.querySelector('.rx-sched-input');
+  if (!sched) return;                      // 非住院无此输入
+  if (sched.dataset.userTouched) return;   // 医生手改过则不覆盖
+  if (freq === 'qd' || freq === 'q24h') {
+    sched.value = String(new Date().getHours());   // 一天一次 → 当前（开方）整点
+  } else {
+    sched.value = FREQ_SCHED[freq] || '';          // prn/q48h 等 → 清空待人工
+  }
 }
 
 function autoQty(row) {
@@ -475,7 +489,7 @@ function applyPrefill(row, p) {
   if (p.item_unit) row.querySelector('.rx-item-unit').value = p.item_unit;
   if (p.schedule_times) {
     const sched = row.querySelector('[name^=schedule_times_]');
-    if (sched) sched.value = p.schedule_times;
+    if (sched) { sched.value = p.schedule_times; sched.dataset.userTouched = '1'; }
   }
   if (p.instructions) {
     row.querySelector('[name^=instructions_]').value = p.instructions;
