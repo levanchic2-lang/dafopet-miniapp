@@ -21654,6 +21654,10 @@ def _parse_schedule_times(s: str) -> list[tuple[int, int]]:
     return out
 
 
+# 住院处方默认给药时刻（医生忘填时兜底）：上午10点 + 晚上8点（BID），覆盖绝大多数病例
+_DEFAULT_INPATIENT_SCHEDULE = "10,20"
+
+
 def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> int:
     """为处方批量生成用药日志（仅当处方关联到 admitted 住院时）。
 
@@ -21691,6 +21695,11 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
     created = 0
     for it in (presc.items or []):
         times = _parse_schedule_times(it.schedule_times or "")
+        if not times:
+            # 住院处方但医生忘填时刻表 → 套默认 BID（上午10点 / 晚上8点），
+            # 保证仍生成每日发药打勾任务（特殊用药医生自行改时刻表）。
+            # 注：本函数只在存在 admitted 住院时才会执行到这里，故默认仅作用于住院处方。
+            times = _parse_schedule_times(_DEFAULT_INPATIENT_SCHEDULE)
         if not times:
             continue
         # 解析天数：duration_days 字段可能是 "7" 或 "症状缓解为止" 等

@@ -276,8 +276,8 @@
 
   {% if hosp_admitted %}
   <div style="margin-top:10px;">
-    <span class="lbl" style="display:block;font-family:var(--font-serif);font-size:10px;font-weight:700;color:var(--accent-amber);letter-spacing:1.5px;margin-bottom:4px;">住&nbsp;院&nbsp;发&nbsp;药&nbsp;时&nbsp;刻&nbsp;表&nbsp;&nbsp;CSV&nbsp;如&nbsp;8,14,20</span>
-    <input type="text" name="schedule_times___IDX__" class="rx-sched-input" placeholder="8,14,20"/>
+    <span class="lbl" style="display:block;font-family:var(--font-serif);font-size:10px;font-weight:700;color:var(--accent-amber);letter-spacing:1.5px;margin-bottom:4px;">住&nbsp;院&nbsp;发&nbsp;药&nbsp;时&nbsp;刻&nbsp;表&nbsp;&nbsp;默&nbsp;认&nbsp;10,20&nbsp;（上午10点/晚8点），特殊药改此处</span>
+    <input type="text" name="schedule_times___IDX__" class="rx-sched-input" placeholder="10,20" value="10,20"/>
   </div>
   {% else %}
   <input type="hidden" name="schedule_times___IDX__" value=""/>
