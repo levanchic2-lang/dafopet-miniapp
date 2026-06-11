@@ -247,7 +247,9 @@ templates.env.filters["parse_json"] = _filter_parse_json
 
 
 def _filter_pet_age(birthday: str) -> str:
-    """把 'YYYY-MM-DD' 出生日期渲染成「X 岁」或「Y 个月」可读年龄。
+    """把 'YYYY-MM-DD' 出生日期渲染成「X 岁 Y 个月」可读年龄（随当前日期自动变化）。
+    - 满 1 岁：「X 岁」或「X 岁 Y 个月」（Y>0 时）
+    - 不满 1 岁：「Y 个月」；不满 1 个月：「N 天」
     非日期格式（老数据如 '2岁'）原样返回。"""
     if not birthday:
         return "—"
@@ -260,14 +262,18 @@ def _filter_pet_age(birthday: str) -> str:
     try:
         from datetime import date as _date
         parts = s.replace("/", "-").split("-")
-        y, m, d = int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 1
+        y, m = int(parts[0]), int(parts[1])
+        d = int(parts[2]) if len(parts) > 2 and parts[2].strip() else 1
         today = _date.today()
-        years = today.year - y - (1 if (today.month, today.day) < (m, d) else 0)
+        total_months = (today.year - y) * 12 + (today.month - m) - (1 if today.day < d else 0)
+        total_months = max(0, total_months)
+        years, months = divmod(total_months, 12)
         if years >= 1:
-            return f"{years} 岁"
-        months = (today.year - y) * 12 + (today.month - m) - (1 if today.day < d else 0)
-        months = max(0, months)
-        return f"{months} 个月"
+            return f"{years} 岁 {months} 个月" if months else f"{years} 岁"
+        if total_months >= 1:
+            return f"{total_months} 个月"
+        days = (today - _date(y, m, min(d, 28))).days
+        return f"{max(0, days)} 天"
     except Exception:
         return s
 

@@ -238,6 +238,7 @@
       {% if pet.breed %}<span style="margin:0 8px;color:var(--ink-4);">·</span><span class="lbl">品种</span>{{ pet.breed }}{% endif %}
       {% if pet.gender == 'male' %}<span style="margin:0 8px;color:var(--ink-4);">·</span>公{% elif pet.gender == 'female' %}<span style="margin:0 8px;color:var(--ink-4);">·</span>母{% endif %}
       {% if pet.is_neutered %}<span style="margin:0 8px;color:var(--ink-4);">·</span>已绝育{% endif %}
+      {% if pet.birthday_estimate %}<span style="margin:0 8px;color:var(--ink-4);">·</span><span class="lbl">年龄</span>{{ pet.birthday_estimate | pet_age }}{% endif %}
     </div>
     {% if pet.medical_record_no %}<div class="meta-line"><span class="lbl">病历号</span>{{ pet.medical_record_no }}</div>{% endif %}
     {% else %}

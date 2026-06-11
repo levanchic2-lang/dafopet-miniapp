@@ -36,6 +36,10 @@
       <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">生&nbsp;日</span>
       <span style="font-size:13px;">{{ pet.birthday_estimate }}</span>
     </div>
+    <div style="display:flex;justify-content:space-between;padding:4px 0;">
+      <span style="font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">年&nbsp;龄</span>
+      <span style="font-size:13px;">{{ pet.birthday_estimate | pet_age }}</span>
+    </div>
     {% endif %}
     {% if pet.color_pattern %}
     <div style="display:flex;justify-content:space-between;padding:4px 0;">
