@@ -16759,20 +16759,31 @@ async def admin_reports_revenue(
             daily_amount[k] += float(r.total_amount or 0)
     daily_series = [{"date": k, "amount": round(v, 2)} for k, v in sorted(daily_amount.items())]
 
-    # 按收费来源类型（处方/检查/手术/其他）—— 通过 invoice.notes / visit 关联推断
-    # 简化：用 invoice_no 前缀 / notes 关键词 / visit_id 关联推断
-    by_category: dict[str, float] = {"处方": 0.0, "检查单": 0.0, "销售单": 0.0, "其他": 0.0}
-    for r in rows:
-        n = (r.notes or "") + (r.invoice_no or "")
-        if "处方" in n or "Rx" in n.upper() or "PRESC" in n.upper():
-            by_category["处方"] += float(r.total_amount or 0)
-        elif "检查" in n or "EXAM" in n.upper():
-            by_category["检查单"] += float(r.total_amount or 0)
-        elif "销售" in n or "SO" in n.upper():
-            by_category["销售单"] += float(r.total_amount or 0)
-        else:
-            by_category["其他"] += float(r.total_amount or 0)
-    by_category_list = [{"label": k, "amount": round(v, 2)} for k, v in by_category.items() if v > 0]
+    # 按收费来源类型 —— 通过 InvoiceItem.ref_type 聚合（权威分类，不再字符串匹配）
+    _REF_TYPE_ZH = {
+        "prescription":   "处方",
+        "exam_order":     "检查单",
+        "sales_order":    "销售单",
+        "vaccination":    "疫苗",
+        "deworming":      "驱虫",
+        "grooming":       "美容",
+        "hospitalization":"住院笼费",
+        "anesthesia":     "麻醉",
+        "manual":         "手工录入",
+        "wallet_recharge":"钱包充值",
+        "":               "其他",
+    }
+    by_category: dict[str, float] = {}
+    if invoice_ids:
+        item_rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id.in_(invoice_ids)).all()
+        for it in item_rows:
+            rt = (it.ref_type or "").strip()
+            label = _REF_TYPE_ZH.get(rt, rt or "其他")
+            by_category[label] = by_category.get(label, 0.0) + float(it.subtotal or 0)
+    by_category_list = sorted(
+        [{"label": k, "amount": round(v, 2)} for k, v in by_category.items() if v > 0],
+        key=lambda x: -x["amount"],
+    )
 
     # 钱包充值（区间内）
     wallet_recharge_q = db.query(WalletTransaction).filter(

@@ -98,16 +98,7 @@
   <div class="rev-card blue">
     <div class="lbl">业务收入合计</div>
     <div class="val">¥{{ '%.2f'|format(business_total) }}</div>
-    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">现金类 + 钱包扣款 + 套餐 + 押金抵扣 + 优惠券抵扣</div>
-  </div>
-  <div class="rev-card">
-    <div class="lbl">现金类</div>
-    <div class="val">¥{{ '%.2f'|format(finance_cash_total) }}</div>
-  </div>
-  <div class="rev-card">
-    <div class="lbl">非现金抵扣合计</div>
-    <div class="val">¥{{ '%.2f'|format(business_noncash_total) }}</div>
-    <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">钱包/套餐/押金/优惠券</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">所有支付方式之和（含抵扣）</div>
   </div>
   <div class="rev-card">
     <div class="lbl">套餐售卖（独立）</div>
@@ -116,49 +107,117 @@
   </div>
 </div>
 
-{# 非现金抵扣拆解小表 #}
+{# 业务收入按支付方式逐笔列出（做账用） #}
 <div class="rev-section">
-  <h3 style="margin-bottom:.55rem;"><i data-lucide="package"></i> 非现金抵扣拆解</h3>
-  {% if business_noncash_list %}
+  <h3 style="margin-bottom:.55rem;"><i data-lucide="layers"></i> 业务收入 · 按支付方式逐笔</h3>
+  {% if by_method_list %}
   <table class="rev-table">
-    <thead><tr><th>方式</th><th>笔数</th><th style="text-align:right;">金额</th><th style="text-align:right;">说明</th></tr></thead>
+    <thead><tr><th style="width:24%;">支付方式</th><th style="width:14%;">笔数</th><th style="text-align:right;width:22%;">金额</th><th style="text-align:right;">说明</th></tr></thead>
     <tbody>
-    {% for m in business_noncash_list %}
+    {# 现金类（实际进账，做账时算"现金收入"） #}
+    {% if finance_methods_list %}
+    <tr style="background:#f5f9f6;"><td colspan="4" style="font-weight:700;color:#1d4d3a;padding:.45rem .7rem;font-size:.85rem;">现金类（实际进账）</td></tr>
+    {% for m in finance_methods_list %}
     <tr>
-      <td>{{ m.label }}</td>
-      <td>{{ m.count }}</td>
+      <td style="padding-left:1.3rem;">{{ m.label }}</td>
+      <td>{{ m.count }} 笔</td>
       <td class="amount">¥{{ '%.2f'|format(m.amount) }}</td>
       <td style="text-align:right;color:var(--muted);font-size:.78rem;">
-        {% if m.method == 'wallet' %}
-          含本金约 ¥{{ '%.2f'|format(wallet_consume_principal_est) }} · 赠送约 ¥{{ '%.2f'|format(wallet_consume_bonus_est) }}
-        {% elif m.method == 'package' %}套餐核销
-        {% elif m.method == 'deposit' %}押金抵扣
-        {% elif m.method == 'coupon' %}优惠券抵扣
+        {% if m.method == 'cash' %}收银台现金
+        {% elif m.method == 'wechat' %}微信支付
+        {% elif m.method == 'alipay' %}支付宝
+        {% elif m.method == 'shouqianba' %}收钱吧
+        {% elif m.method == 'meituan' %}美团团购核销
+        {% elif m.method == 'third_party' %}三方平台代收
         {% endif %}
       </td>
     </tr>
     {% endfor %}
+    <tr style="background:#fafafa;font-weight:700;">
+      <td style="padding-left:1.3rem;">小计 · 现金类</td>
+      <td>{{ finance_methods_list|sum(attribute='count') }} 笔</td>
+      <td class="amount">¥{{ '%.2f'|format(finance_cash_total) }}</td>
+      <td></td>
+    </tr>
+    {% endif %}
+    {# 非现金抵扣类（不进现金，但要冲业绩） #}
+    {% if business_noncash_list %}
+    <tr style="background:#fbfaf6;"><td colspan="4" style="font-weight:700;color:#6b4423;padding:.45rem .7rem;font-size:.85rem;">非现金抵扣（业绩入账 · 不进现金）</td></tr>
+    {% for m in business_noncash_list %}
+    <tr>
+      <td style="padding-left:1.3rem;">{{ m.label }}</td>
+      <td>{{ m.count }} 笔</td>
+      <td class="amount">¥{{ '%.2f'|format(m.amount) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">
+        {% if m.method == 'wallet' %}
+          本金 ¥{{ '%.2f'|format(wallet_consume_principal_est) }} + 赠送 ¥{{ '%.2f'|format(wallet_consume_bonus_est) }}
+        {% elif m.method == 'package' %}套餐核销
+        {% elif m.method == 'deposit' %}押金抵扣（不算新进账）
+        {% elif m.method == 'coupon' %}优惠券抵扣（不算新进账）
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    <tr style="background:#fafafa;font-weight:700;">
+      <td style="padding-left:1.3rem;">小计 · 非现金抵扣</td>
+      <td>{{ business_noncash_list|sum(attribute='count') }} 笔</td>
+      <td class="amount">¥{{ '%.2f'|format(business_noncash_total) }}</td>
+      <td></td>
+    </tr>
+    {% endif %}
+    <tr style="border-top:2px solid var(--ink);font-weight:800;background:var(--bg);">
+      <td>总&nbsp;计</td>
+      <td>{{ by_method_list|sum(attribute='count') }} 笔</td>
+      <td class="amount" style="font-size:1.05rem;">¥{{ '%.2f'|format(business_total) }}</td>
+      <td></td>
+    </tr>
     </tbody>
   </table>
   {% else %}
-  <div style="color:var(--muted);padding:1.5rem;text-align:center;">区间内无非现金抵扣</div>
+  <div style="color:var(--muted);padding:1.5rem;text-align:center;">区间内无业务收入</div>
   {% endif %}
 </div>
 
-{# 押金独立小表（流水大不进业务收入合计） #}
-<div class="rev-summary" style="margin-top:.85rem;">
-  <div class="rev-card">
-    <div class="lbl">期间收押金</div>
-    <div class="val">¥{{ '%.2f'|format(deposit_in) }}</div>
-  </div>
-  <div class="rev-card">
-    <div class="lbl">期间退押金</div>
-    <div class="val">¥{{ '%.2f'|format(deposit_refund) }}</div>
-  </div>
-  <div class="rev-card">
-    <div class="lbl">净财务流入（粗算）</div>
-    <div class="val" style="font-size:1.35rem;">¥{{ '%.2f'|format(total_amount + wallet_recharge_total + pkg_sold_total + deposit_in - deposit_refund) }}</div>
-    <div style="font-size:.7rem;color:var(--muted);margin-top:.2rem;">实收 + 充值 + 套餐 + 押金 - 退押</div>
+{# 净财务流入：做账维度逐笔展开 #}
+<div class="rev-section">
+  <h3 style="margin-bottom:.55rem;"><i data-lucide="trending-up"></i> 净财务流入 · 现金流出入</h3>
+  <table class="rev-table">
+    <thead><tr><th style="width:34%;">流入项</th><th style="text-align:right;">金额</th><th style="text-align:right;">说明</th></tr></thead>
+    <tbody>
+    <tr>
+      <td><b style="color:#1d4d3a;">＋ 实收现金类</b></td>
+      <td class="amount">¥{{ '%.2f'|format(finance_cash_total) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">现金 / 微信 / 支付宝 / 收钱吧 / 美团 / 三方</td>
+    </tr>
+    <tr>
+      <td><b style="color:#1d4d3a;">＋ 钱包充值</b></td>
+      <td class="amount">¥{{ '%.2f'|format(wallet_recharge_total) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">{{ wallet_recharges_count }} 笔 · 客户充进卡</td>
+    </tr>
+    <tr>
+      <td><b style="color:#1d4d3a;">＋ 套餐售卖</b></td>
+      <td class="amount">¥{{ '%.2f'|format(pkg_sold_total) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">{{ pkg_sold_count }} 份 · 预收款（核销时不算流入）</td>
+    </tr>
+    <tr>
+      <td><b style="color:#1d4d3a;">＋ 收押金</b></td>
+      <td class="amount">¥{{ '%.2f'|format(deposit_in) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">代客户暂存</td>
+    </tr>
+    <tr>
+      <td><b style="color:#7a2828;">－ 退押金</b></td>
+      <td class="amount" style="color:#7a2828;">－¥{{ '%.2f'|format(deposit_refund) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">押金原路退还</td>
+    </tr>
+    <tr style="border-top:2px solid var(--ink);font-weight:800;background:var(--bg);">
+      <td>净&nbsp;财&nbsp;务&nbsp;流&nbsp;入</td>
+      <td class="amount" style="font-size:1.05rem;">¥{{ '%.2f'|format(finance_cash_total + wallet_recharge_total + pkg_sold_total + deposit_in - deposit_refund) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;font-style:italic;">实收 + 充值 + 套餐 + 押金 − 退押</td>
+    </tr>
+    </tbody>
+  </table>
+  <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem;font-style:italic;line-height:1.6;">
+    说明：钱包扣款 / 套餐核销 / 押金抵扣 / 优惠券抵扣属于<b>已收过的钱被使用</b>，不算新的现金流入；钱包充值 / 收押金 / 套餐售卖则属于<b>预收款</b>（新进账）。
   </div>
 </div>
 
