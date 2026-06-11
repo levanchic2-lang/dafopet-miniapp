@@ -124,8 +124,11 @@
    <div class="actions-inner">
    {% if v %}<a href="/admin/visits/{{ v.id }}" class="fu-action-btn">病例</a>{% endif %}
    {% if fu.status in ('pending','due','phone_pending','sent') %}
-   <button type="button" class="fu-action-btn primary"
-           onclick="openFuModal({{ fu.id }}, {{ (p.name or '宠物')|tojson }}, {{ (fu.round_name or '')|tojson }}, '{{ tab }}')"><i data-lucide="edit-3"></i> 回访详情</button>
+   <button type="button" class="fu-action-btn primary fu-detail-btn"
+           data-fu-id="{{ fu.id }}"
+           data-pet-name="{{ p.name if p else '宠物' }}"
+           data-round-name="{{ fu.round_name or '' }}"
+           data-tab="{{ tab }}"><i data-lucide="edit-3"></i> 回访详情</button>
    {% else %}
    <form method="post" action="/admin/follow-ups/{{ fu.id }}/handle" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -230,5 +233,16 @@ function validateFuForm() {
 }
 document.getElementById('fu-modal').addEventListener('click', function(e) {
   if (e.target.id === 'fu-modal') closeFuModal();
+});
+// 事件委托绑定「回访详情」按钮（data-* 取参，避免 onclick 内嵌引号转义问题）
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.fu-detail-btn');
+  if (!btn) return;
+  openFuModal(
+    parseInt(btn.dataset.fuId, 10),
+    btn.dataset.petName || '宠物',
+    btn.dataset.roundName || '',
+    btn.dataset.tab || 'today'
+  );
 });
 </script>
