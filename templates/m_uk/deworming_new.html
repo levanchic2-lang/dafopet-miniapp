@@ -70,9 +70,21 @@
     <div class="ukm-field"><label class="lbl">剂&nbsp;量</label><input class="ukm-input" type="text" name="dose" placeholder="如 1支"/></div>
   </div>
 
+  <div class="ukm-field">
+    <label class="lbl">数&nbsp;量&nbsp;（出库&nbsp;×&nbsp;收费）</label>
+    <input class="ukm-input ukm-num" type="number" name="qty" value="1" min="1" step="1" inputmode="numeric"/>
+  </div>
+
   <div class="ukm-row2">
     <div class="ukm-field"><label class="lbl">驱&nbsp;虫&nbsp;日&nbsp;期<span class="req">*</span></label><input class="ukm-input" type="date" name="deworm_date" value="{{ today }}" required/></div>
     <div class="ukm-field"><label class="lbl">下&nbsp;次&nbsp;到&nbsp;期</label><input class="ukm-input" type="date" name="next_due_date"/></div>
+  </div>
+
+  <div class="ukm-chips" style="margin-top:-6px;margin-bottom:12px;gap:5px;">
+    <button type="button" class="ukm-chip" style="font-size:11px;padding:5px 10px;" onclick="dueIn(7)">+1周</button>
+    <button type="button" class="ukm-chip" style="font-size:11px;padding:5px 10px;" onclick="dueIn(14)">+2周</button>
+    <button type="button" class="ukm-chip" style="font-size:11px;padding:5px 10px;" onclick="dueIn(30)">+1月</button>
+    <button type="button" class="ukm-chip" style="font-size:11px;padding:5px 10px;" onclick="dueIn(90)">+3月</button>
   </div>
 
   <div class="ukm-field"><label class="lbl">批&nbsp;号</label><input class="ukm-input ukm-mono" type="text" name="batch_no"/></div>
@@ -111,6 +123,14 @@ function pickInvName(prefix, name) {
   const input = document.getElementById(prefix + '-name-input');
   input.value = name;
   filterInvChips(prefix);
+}
+// 下次到期日快捷 chip
+function dueIn(days) {
+  const base = document.querySelector('input[name="deworm_date"]').value;
+  const dt = base ? new Date(base) : new Date();
+  if (Number.isNaN(dt.getTime())) return;
+  dt.setDate(dt.getDate() + days);
+  document.querySelector('input[name="next_due_date"]').value = dt.toISOString().slice(0, 10);
 }
 </script>
 

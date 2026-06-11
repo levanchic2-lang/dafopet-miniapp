@@ -20528,10 +20528,12 @@ async def admin_deworming_create(
     inventory_item_id: int = Form(0),
     batch_no: str = Form(""),
     charge_amount: float = Form(0.0),
+    qty: float = Form(1.0),
     next_url: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
+    qty = max(1.0, qty or 1.0)
     # batch_no 临时存到 notes 末尾（DewormingRecord 模型没该字段，避免迁移）
     notes_full = notes.strip()
     if batch_no.strip():
@@ -20555,11 +20557,11 @@ async def admin_deworming_create(
     admin_name = request.session.get("admin_username", "")
     msg = "驱虫已录入"
 
-    # 库存出库 1 单位
+    # 库存出库（按数量）
     if inventory_item_id:
         try:
-            _deduct_inventory(db, inventory_item_id, 1.0, "deworming", rec.id, admin_name,
-                              note=f"{rec.product_name or '驱虫'} 使用出库")
+            _deduct_inventory(db, inventory_item_id, qty, "deworming", rec.id, admin_name,
+                              note=f"{rec.product_name or '驱虫'} 使用出库 ×{qty:g}")
         except Exception as _e:
             logger.warning("[deworming] inventory deduct failed: %s", _e)
 
@@ -20585,8 +20587,8 @@ async def admin_deworming_create(
             ref_type    = "deworming",
             ref_id      = rec.id,
             description = rec.product_name or "驱虫",
-            quantity    = 1.0,
-            unit_price  = charge_amount,
+            quantity    = qty,
+            unit_price  = round(charge_amount / qty, 2) if qty > 0 else charge_amount,
             subtotal    = charge_amount,
         ))
         # 反向挂到驱虫记录上（支持锁定/退款路径）

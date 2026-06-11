@@ -314,9 +314,15 @@ function confirmDewVoid(form, paidAmount) {
         <label>药&nbsp;品&nbsp;名&nbsp;称</label>
         <input name="product_name" id="product-name-input" value="{{ rec.product_name if rec else '' }}" placeholder="如 大宠爱 / 拜宠清" maxlength="120" class="dw-input"/>
       </div>
-      <div class="dw-field">
-        <label>剂&nbsp;量</label>
-        <input name="dose" value="{{ rec.dose if rec else '' }}" placeholder="如 1 片 / 2.5 ml" maxlength="80" class="dw-input"/>
+      <div class="dw-field" style="display:grid;grid-template-columns:1fr 110px;gap:10px;">
+        <div>
+          <label>剂&nbsp;量</label>
+          <input name="dose" value="{{ rec.dose if rec else '' }}" placeholder="如 1 片 / 2.5 ml" maxlength="80" class="dw-input"/>
+        </div>
+        <div>
+          <label>数&nbsp;量<span class="hint">出库×收费</span></label>
+          <input type="number" name="qty" id="dw-qty" value="1" min="1" step="1" class="dw-input" oninput="onQtyChange()"/>
+        </div>
       </div>
     </div>
 
@@ -329,7 +335,14 @@ function confirmDewVoid(form, paidAmount) {
       <div class="dw-field">
         <label>下&nbsp;次&nbsp;到&nbsp;期&nbsp;日</label>
         <input type="date" name="next_due_date" id="next-due-date" value="{{ rec.next_due_date if rec else next_due_default }}" class="dw-input"/>
-        <div class="dw-input-hint">体内 +3 个月 / 体外 +1 个月 / 体内外 +3 个月 · 留空 = 不发提醒</div>
+        <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;">
+          <button type="button" class="uk-btn ghost sm" style="padding:2px 10px;font-size:8.5pt;" onclick="setNextDue(7)">+1&nbsp;周</button>
+          <button type="button" class="uk-btn ghost sm" style="padding:2px 10px;font-size:8.5pt;" onclick="setNextDue(14)">+2&nbsp;周</button>
+          <button type="button" class="uk-btn ghost sm" style="padding:2px 10px;font-size:8.5pt;" onclick="setNextDue(30)">+1&nbsp;月</button>
+          <button type="button" class="uk-btn ghost sm" style="padding:2px 10px;font-size:8.5pt;" onclick="setNextDue(90)">+3&nbsp;月</button>
+          <button type="button" class="uk-btn ghost sm" style="padding:2px 10px;font-size:8.5pt;" onclick="document.getElementById('next-due-date').value=''">不提醒</button>
+        </div>
+        <div class="dw-input-hint">常规：体内 +3 个月 / 体外 +1 个月 · 紧急驱虫（如每周一次连用两周）点 +1 周</div>
       </div>
     </div>
 
@@ -430,16 +443,35 @@ function onTypeChange() {
   dt.setMonth(dt.getMonth() + monthsToAdd);
   inp.value = dt.toISOString().slice(0, 10);
 }
+function _unitPrice() {
+  const sel = document.getElementById('inv-item-sel');
+  const opt = sel ? sel.options[sel.selectedIndex] : null;
+  return opt ? (parseFloat(opt.dataset.price) || 0) : 0;
+}
+function _qty() {
+  return Math.max(1, parseFloat((document.getElementById('dw-qty') || {}).value) || 1);
+}
+function _recalcCharge() {
+  const price = _unitPrice();
+  if (price <= 0) return;  // 没选库存品目 → 不动手填的金额
+  const chargeInput = document.getElementById('charge-input');
+  if (chargeInput) chargeInput.value = (price * _qty()).toFixed(2);
+}
 function onInvItemChange() {
   const sel = document.getElementById('inv-item-sel');
   const opt = sel.options[sel.selectedIndex];
   if (!opt || !opt.dataset.name) return;
   const nameInput = document.getElementById('product-name-input');
   if (nameInput && !nameInput.value.trim()) nameInput.value = opt.dataset.name || '';
-  const chargeInput = document.getElementById('charge-input');
-  if (chargeInput && opt.dataset.price && (parseFloat(chargeInput.value) || 0) === 0) {
-    chargeInput.value = parseFloat(opt.dataset.price).toFixed(2);
-  }
+  _recalcCharge();
+}
+function onQtyChange() { _recalcCharge(); }
+function setNextDue(days) {
+  const base = document.querySelector('input[name="deworm_date"]').value;
+  const dt = base ? new Date(base) : new Date();
+  if (Number.isNaN(dt.getTime())) return;
+  dt.setDate(dt.getDate() + days);
+  document.getElementById('next-due-date').value = dt.toISOString().slice(0, 10);
 }
 document.querySelector('input[name="deworm_date"]').addEventListener('change', onTypeChange);
 </script>
