@@ -102,6 +102,12 @@
     <input name="q" value="{{ q }}" placeholder="搜单号 / 客户 / 宠物" style="flex:1; min-width:200px;"/>
     <input type="hidden" name="status" value="{{ status }}"/>
     <input type="hidden" name="store" value="{{ wb_store }}"/>
+    {% if status == 'paid' %}
+    <input type="hidden" name="preset" value="{{ preset }}"/>
+    <input type="hidden" name="date_from" value="{{ date_from }}"/>
+    <input type="hidden" name="date_to" value="{{ date_to }}"/>
+    <input type="hidden" name="method" value="{{ method }}"/>
+    {% endif %}
     <button type="submit" class="iv-btn ghost">搜&nbsp;索</button>
     {% if q %}<a href="/admin/invoices?status={{ status }}&store={{ wb_store }}" class="iv-btn ghost">清&nbsp;除</a>{% endif %}
   </form>
@@ -112,6 +118,40 @@
   <a href="/admin/invoices?status={{ val }}&store={{ wb_store }}{% if q %}&q={{ q }}{% endif %}" class="iv-tab {% if status == val %}active{% endif %}">{{ label }}</a>
   {% endfor %}
 </div>
+
+{% if status == 'paid' %}
+{% set _qkeep = '&q=' ~ q if q else '' %}
+<div class="iv-filter" style="display:block;">
+  <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px;">
+    <span style="font-family:var(--font-serif); font-size:10pt; color:var(--ink-3); letter-spacing:1px;">日期</span>
+    {% for pk, pl in [('today','今日'),('yesterday','昨日'),('week','本周'),('month','本月'),('last_month','上月'),('year','本年')] %}
+    <a href="?status=paid&store={{ wb_store }}&preset={{ pk }}{% if method %}&method={{ method }}{% endif %}{{ _qkeep }}"
+       class="iv-btn ghost sm" style="text-decoration:none;{% if preset == pk %}background:var(--ink);color:var(--paper);border-color:var(--ink);{% endif %}">{{ pl }}</a>
+    {% endfor %}
+  </div>
+  <form method="get" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+    <input type="hidden" name="status" value="paid"/>
+    <input type="hidden" name="store" value="{{ wb_store }}"/>
+    {% if q %}<input type="hidden" name="q" value="{{ q }}"/>{% endif %}
+    <input type="hidden" name="preset" value="custom"/>
+    <input type="date" name="date_from" value="{{ date_from }}"/>
+    <span style="color:var(--ink-3);">~</span>
+    <input type="date" name="date_to" value="{{ date_to }}"/>
+    <span style="font-family:var(--font-serif); font-size:10pt; color:var(--ink-3); letter-spacing:1px; margin-left:6px;">方式</span>
+    <select name="method" style="font-family:var(--font-serif); font-size:10pt; height:34px; border:0.5px solid var(--hair); background:var(--paper); padding:0 8px;">
+      <option value="">全部方式</option>
+      {% for mk, ml in method_options %}<option value="{{ mk }}" {% if method == mk %}selected{% endif %}>{{ ml }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="iv-btn ghost sm">筛&nbsp;选</button>
+    {% if method or preset == 'custom' %}<a href="?status=paid&store={{ wb_store }}&preset=today{{ _qkeep }}" class="iv-btn ghost sm">重&nbsp;置</a>{% endif %}
+    <span style="margin-left:auto; font-family:var(--font-serif); font-size:10pt; color:var(--ink-2);">
+      <span style="color:var(--ink-3);">{{ date_label }}</span>
+      共收 <b style="font-family:var(--font-numeric); color:var(--accent-green);">¥ {{ '%.2f'|format(inv_stats.range_paid_total or 0) }}</b>
+      <span style="color:var(--ink-3); font-style:italic;">· {{ inv_stats.range_settle_count or 0 }} 笔结算 / {{ inv_stats.range_paid_count or 0 }} 单</span>
+    </span>
+  </form>
+</div>
+{% endif %}
 
 {% if multi_pay_groups %}
 <div style="margin:14px 0 18px; padding:14px 18px; background:#fef9f0; border-left:3px solid #6b4423;">
@@ -131,9 +171,86 @@
 </div>
 {% endif %}
 
-{% if invoices %}
 {% set _SP = {'cat':'猫','dog':'犬','other':'其他'} %}
 {% set _GN = {'male':'♂','female':'♀','unknown':''} %}
+
+{% if status == 'paid' %}
+{# ── 已收款：按"一起结算"聚合，合并单可展开看拆分 ── #}
+{% if settlements %}
+<table class="iv-tbl">
+  <thead>
+    <tr>
+      <th>客户</th>
+      <th style="width:240px;">单据</th>
+      <th style="width:150px;">收款时间</th>
+      <th style="width:130px;">收款方式</th>
+      <th style="text-align:right; width:130px;">实收金额</th>
+      <th style="text-align:right; width:90px;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in settlements %}
+    {% set sidx = loop.index %}
+    <tr class="settle-main"{% if s.is_group %} onclick="toggleSettle({{ sidx }})" style="cursor:pointer;"{% endif %}>
+      <td>
+        {% if s.customer %}
+          <a href="/admin/customers/{{ s.customer.id }}" class="name" style="text-decoration:none; border-bottom:0.5px solid var(--hair-2);" onclick="event.stopPropagation();">{{ s.customer.name }}</a>
+          {% if s.customer.phone %}<div class="dim" style="font-family:var(--font-numeric);">{{ s.customer.phone }}</div>{% endif %}
+        {% else %}<span class="dim">散客</span>{% endif %}
+      </td>
+      <td>
+        {% if s.is_group %}
+          <span id="settle-arrow-{{ sidx }}" style="display:inline-block; width:12px; color:var(--ink-3);">▸</span>
+          <b>合并 {{ s.count }} 单</b>
+          <span class="dim" style="font-style:italic;">点击展开</span>
+        {% else %}
+          <span class="no">{{ s.invoices[0].invoice_no }}</span>
+          {% if s.invoices[0].pet %}<div class="dim">{{ s.invoices[0].pet.name }}</div>{% endif %}
+        {% endif %}
+      </td>
+      <td class="num dim">{{ s.paid_at.strftime('%m-%d %H:%M') if s.paid_at else '—' }}</td>
+      <td class="dim">{{ s.methods|join(' + ') if s.methods else '—' }}</td>
+      <td class="total" style="text-align:right;">¥ {{ '%.2f'|format(s.total) }}</td>
+      <td style="text-align:right;">
+        {% if not s.is_group %}
+          <a href="/admin/invoices/{{ s.invoices[0].id }}" class="iv-btn ghost sm" onclick="event.stopPropagation();">查&nbsp;看</a>
+        {% else %}
+          <span class="dim" style="font-style:italic;">{{ s.count }} 单</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% if s.is_group %}
+      {% for inv in s.invoices %}
+      <tr class="settle-sub settle-sub-{{ sidx }}" style="display:none; background:#faf8f3;">
+        <td style="color:var(--ink-3); padding-left:24px;">↳</td>
+        <td>
+          <span class="no">{{ inv.invoice_no }}</span>
+          {% if inv.pet %}<span class="dim" style="margin-left:6px;">{{ inv.pet.name }}</span>{% endif %}
+        </td>
+        <td class="num dim">{{ inv.invoice_date or '—' }}</td>
+        <td class="dim">{{ inv_pay_zh.get(inv.payment_method, inv.payment_method) if inv.payment_method else '—' }}</td>
+        <td class="total" style="text-align:right; color:var(--ink-2);">¥ {{ '%.2f'|format(inv.total_amount) }}</td>
+        <td style="text-align:right;"><a href="/admin/invoices/{{ inv.id }}" class="iv-btn ghost sm">查&nbsp;看</a></td>
+      </tr>
+      {% endfor %}
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+<script>
+function toggleSettle(idx) {
+  var rows = document.querySelectorAll('.settle-sub-' + idx);
+  var arrow = document.getElementById('settle-arrow-' + idx);
+  var opening = rows.length && rows[0].style.display === 'none';
+  rows.forEach(function (r) { r.style.display = opening ? 'table-row' : 'none'; });
+  if (arrow) arrow.textContent = opening ? '▾' : '▸';
+}
+</script>
+{% else %}
+<div class="iv-empty">该区间暂无已收款 · 换个日期或收款方式试试</div>
+{% endif %}
+
+{% elif invoices %}
 <table class="iv-tbl">
   <thead>
     <tr>

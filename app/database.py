@@ -1539,6 +1539,28 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_pay_invoice ON payments(invoice_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_pay_method_time ON payments(method, created_at)"))
+            # 合并结算批次号
+            _pay_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(payments)")).fetchall()}
+            if "batch_no" not in _pay_cols:
+                conn.execute(text("ALTER TABLE payments ADD COLUMN batch_no VARCHAR(40) DEFAULT NULL"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_pay_batch ON payments(batch_no)"))
+                # 历史回填：同客户 / 同支付方式 / 同一秒内、且覆盖 ≥2 张不同发票的成功收款
+                # = 一次合并结算 → 赋同一 batch_no（"H" + 该组最小 payment id）
+                _groups = conn.execute(text(
+                    "SELECT customer_id, method, strftime('%Y-%m-%d %H:%M:%S', created_at) AS sec, "
+                    "       MIN(id) AS min_id, COUNT(DISTINCT invoice_id) AS n_inv "
+                    "FROM payments "
+                    "WHERE status='success' AND customer_id IS NOT NULL "
+                    "GROUP BY customer_id, method, sec "
+                    "HAVING n_inv >= 2"
+                )).fetchall()
+                for g in _groups:
+                    cid, method, sec, min_id, _n = g
+                    conn.execute(text(
+                        "UPDATE payments SET batch_no = :bn "
+                        "WHERE status='success' AND customer_id = :cid AND method = :m "
+                        "AND strftime('%Y-%m-%d %H:%M:%S', created_at) = :sec AND batch_no IS NULL"
+                    ), {"bn": f"H{min_id}", "cid": cid, "m": method, "sec": sec})
 
             # ── 优惠券 ────────────────────────────────────
             conn.execute(text(

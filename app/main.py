@@ -16990,6 +16990,10 @@ async def admin_invoices_list(
     q: str = "",
     status: str = "",
     store: str = "",
+    preset: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    method: str = "",
 ):
     require_admin(request)
     # 门店过滤：staff 自动锁本店；superadmin 通过 ?store= 切换（"" = 全部）
@@ -17000,6 +17004,14 @@ async def admin_invoices_list(
         wb_store = (store or "").strip()
     is_super = (request.session.get("admin_role") == "superadmin")
 
+    # 客户名/电话搜索 → 客户 id 列表（待收 & 已收都用）
+    cids = None
+    if q:
+        from sqlalchemy import or_ as _or_q
+        cids = [c.id for c in db.query(Customer.id).filter(
+            _or_q(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        ).all()]
+
     query = db.query(Invoice).order_by(Invoice.id.desc())
     if wb_store:
         query = query.filter(Invoice.store == wb_store)
@@ -17009,11 +17021,7 @@ async def admin_invoices_list(
             query = query.filter(Invoice.payment_status.in_(("unpaid", "partial")))
         else:
             query = query.filter(Invoice.payment_status == status)
-    if q:
-        from sqlalchemy import or_
-        cids = [c.id for c in db.query(Customer.id).filter(
-            or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
-        ).all()]
+    if cids is not None:
         query = query.filter(Invoice.customer_id.in_(cids))
     invoices = query.limit(200).all()
     cust_map = {}
@@ -17061,6 +17069,84 @@ async def admin_invoices_list(
                     "total": round(sum(float(i.total_amount or 0) for i in lst), 2),
                 })
         multi_pay_groups.sort(key=lambda g: -g["total"])
+
+    # ── 「已收款」tab：按日期 + 收款方式筛选，并把"一起结算"的单聚成一笔 ──
+    settlements = None
+    date_label = ""
+    cur_preset = preset or "today"
+    df = dt = ""
+    method_options = [(k, _REVENUE_PAY_ZH.get(k, k)) for k in
+                      ("cash", "wechat", "alipay", "shouqianba", "meituan", "third_party",
+                       "wallet", "package", "deposit", "coupon")]
+    if status == "paid":
+        from sqlalchemy import func as _func, or_ as _or_p, and_ as _and_p
+        df, dt, date_label = _revenue_date_range(cur_preset, date_from, date_to)
+        pq = db.query(Invoice).filter(Invoice.payment_status == "paid")
+        if wb_store:
+            pq = pq.filter(Invoice.store == wb_store)
+        if cids is not None:
+            pq = pq.filter(Invoice.customer_id.in_(cids))
+        # 日期按 paid_at（实收时间）落区间；老数据 paid_at 为空则回退 invoice_date
+        pq = pq.filter(_or_p(
+            _and_p(Invoice.paid_at.is_not(None), _func.date(Invoice.paid_at) >= df, _func.date(Invoice.paid_at) <= dt),
+            _and_p(Invoice.paid_at.is_(None), Invoice.invoice_date >= df, Invoice.invoice_date <= dt),
+        ))
+        paid_invoices = pq.order_by(Invoice.paid_at.desc()).all()
+        pids = [i.id for i in paid_invoices]
+        pay_by_inv: dict[int, list] = {}
+        if pids:
+            for p in db.query(Payment).filter(Payment.invoice_id.in_(pids), Payment.status == "success").all():
+                pay_by_inv.setdefault(p.invoice_id, []).append(p)
+        # 收款方式筛选：该发票需有此 method 的成功收款
+        if method:
+            paid_invoices = [i for i in paid_invoices
+                             if any((pp.method or "") == method for pp in pay_by_inv.get(i.id, []))]
+        # 代表批次：每张单取「有 batch_no 的最近一笔」；无 → 独立成单
+        def _rep_batch(invid: int):
+            ps = sorted(pay_by_inv.get(invid, []), key=lambda x: (x.created_at or datetime.min), reverse=True)
+            for pp in ps:
+                if pp.batch_no:
+                    return pp.batch_no
+            return None
+        groups: dict[str, list] = {}
+        order: list[str] = []
+        for inv in paid_invoices:
+            b = _rep_batch(inv.id)
+            key = b if b else f"single-{inv.id}"
+            if key not in groups:
+                groups[key] = []; order.append(key)
+            groups[key].append(inv)
+        settlements = []
+        for key in order:
+            invs = groups[key]
+            gp_pays = [pp for inv in invs for pp in pay_by_inv.get(inv.id, [])]
+            methods_zh: list[str] = []
+            for pp in gp_pays:
+                ml = _INV_PAY_ZH.get(pp.method, pp.method)
+                if ml not in methods_zh:
+                    methods_zh.append(ml)
+            paid_ats = [pp.created_at for pp in gp_pays if pp.created_at]
+            paid_at = max(paid_ats) if paid_ats else invs[0].paid_at
+            c0 = invs[0].customer_id
+            cust0 = cust_map.get(c0) or (db.get(Customer, c0) if c0 else None)
+            if c0 and c0 not in cust_map:
+                cust_map[c0] = cust0
+            settlements.append({
+                "is_group": len(invs) >= 2,
+                "invoices": invs,
+                "customer": cust0,
+                "total": round(sum(float(i.total_amount or 0) for i in invs), 2),
+                "paid_amt": round(sum(float(pp.amount or 0) for pp in gp_pays), 2),
+                "methods": methods_zh,
+                "paid_at": paid_at,
+                "count": len(invs),
+            })
+        # 顶部「区间已收」统计
+        paid_range_total = round(sum(s["total"] for s in settlements), 2)
+        inv_stats["range_paid_total"] = paid_range_total
+        inv_stats["range_paid_count"] = len(paid_invoices)
+        inv_stats["range_settle_count"] = len(settlements)
+
     return templates.TemplateResponse(request, "uk/invoices.html", {
         "invoices": invoices,
         "cust_map": cust_map,
@@ -17073,6 +17159,9 @@ async def admin_invoices_list(
         "wb_store": wb_store,
         "is_super": is_super,
         "stores": ["东环店", "横岗店"],
+        "settlements": settlements,
+        "preset": cur_preset, "date_from": date_from, "date_to": date_to,
+        "date_label": date_label, "method": method, "method_options": method_options,
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -17231,6 +17320,7 @@ async def admin_cashier_multi_pay_submit(
     paid_count = 0
     paid_total = 0.0
     note_tag = f"合并结算（{len(inv_rows)} 单 · {method}）"
+    batch_no = _new_settlement_batch_no() if len(inv_rows) >= 2 else None
     remaining = round_amount
     for idx, r in enumerate(inv_rows):
         if remaining <= 0:
@@ -17249,7 +17339,7 @@ async def admin_cashier_multi_pay_submit(
             method=method, amount=round(take, 2),
             ref_no=ref_no, status="success",
             store=_pay_store, operator=operator,
-            note=note_tag,
+            note=note_tag, batch_no=batch_no,
         ))
         db.flush()
         _invoice_recompute_status(db, inv)
@@ -17540,6 +17630,11 @@ def _other_unpaid_for_invoice(db: Session, current_inv: Invoice) -> list:
     return out
 
 
+def _new_settlement_batch_no() -> str:
+    """生成一次合并结算的批次号（一笔钱付多张单 → 共享此号，收银台据此聚合显示）。"""
+    return "B" + datetime.now().strftime("%Y%m%d%H%M%S") + secrets.token_hex(2)
+
+
 def _invoice_paid_sum(db: Session, inv_id: int) -> float:
     """已收款金额合计（仅 success 状态）。"""
     rows = db.query(Payment).filter(
@@ -17747,6 +17842,7 @@ async def admin_invoice_add_payment(
     # 多张（multi_target=True）：按 target_invs 顺序分摊 want，每张独立 Payment
     if multi_target:
         remaining = want
+        batch_no = _new_settlement_batch_no()
         for t in target_invs:
             if remaining <= 0:
                 break
@@ -17763,7 +17859,7 @@ async def admin_invoice_add_payment(
                 invoice_id=t.id, customer_id=t.customer_id,
                 method=method, amount=pay_amt,
                 ref_id=None, ref_no=ref_no, status="success",
-                store=store, operator=operator, note=_t_note,
+                store=store, operator=operator, note=_t_note, batch_no=batch_no,
             ))
             db.flush()
             _invoice_recompute_status(db, t)

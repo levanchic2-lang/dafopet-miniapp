@@ -1280,6 +1280,9 @@ class Payment(Base):
     store:    Mapped[str] = mapped_column(String(40), default="")
     operator: Mapped[str] = mapped_column(String(80), default="")
     note:     Mapped[str] = mapped_column(Text, default="")
+    # 合并结算批次号：同一次结算（一笔钱付了多张单）的所有 Payment 共享一个 batch_no，
+    # 收银台「已收款」据此把一起收的单聚成一笔显示。单单结算为 NULL。
+    batch_no: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     invoice  = relationship("Invoice",  foreign_keys=[invoice_id])
