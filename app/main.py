@@ -17130,11 +17130,15 @@ async def admin_invoices_list(
         for key in order:
             invs = groups[key]
             gp_pays = [pp for inv in invs for pp in pay_by_inv.get(inv.id, [])]
-            methods_zh: list[str] = []
+            # 收款方式按金额聚合 → [(方式中文, 金额)]，让混合支付（如 美团489+收钱吧371）一目了然
+            _mb: dict[str, float] = {}
             for pp in gp_pays:
                 ml = _INV_PAY_ZH.get(pp.method, pp.method)
-                if ml not in methods_zh:
-                    methods_zh.append(ml)
+                _mb[ml] = _mb.get(ml, 0.0) + float(pp.amount or 0)
+            method_breakdown = sorted(
+                [{"label": k, "amount": round(v, 2)} for k, v in _mb.items()],
+                key=lambda x: -x["amount"],
+            )
             paid_ats = [pp.created_at for pp in gp_pays if pp.created_at]
             paid_at = max(paid_ats) if paid_ats else invs[0].paid_at
             c0 = invs[0].customer_id
@@ -17147,7 +17151,7 @@ async def admin_invoices_list(
                 "customer": cust0,
                 "total": round(sum(float(i.total_amount or 0) for i in invs), 2),
                 "paid_amt": round(sum(float(pp.amount or 0) for pp in gp_pays), 2),
-                "methods": methods_zh,
+                "methods": method_breakdown,
                 "paid_at": paid_at,
                 "count": len(invs),
             })

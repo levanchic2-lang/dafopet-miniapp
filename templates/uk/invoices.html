@@ -201,15 +201,19 @@
       <td>
         {% if s.is_group %}
           <span id="settle-arrow-{{ sidx }}" style="display:inline-block; width:12px; color:var(--ink-3);">▸</span>
-          <b>合并 {{ s.count }} 单</b>
-          <span class="dim" style="font-style:italic;">点击展开</span>
+          <b>合并单</b>
         {% else %}
           <span class="no">{{ s.invoices[0].invoice_no }}</span>
           {% if s.invoices[0].pet %}<div class="dim">{{ s.invoices[0].pet.name }}</div>{% endif %}
         {% endif %}
       </td>
       <td class="num dim">{{ s.paid_at.strftime('%m-%d %H:%M') if s.paid_at else '—' }}</td>
-      <td class="dim">{{ s.methods|join(' + ') if s.methods else '—' }}</td>
+      <td class="dim" style="line-height:1.5;">
+        {% if s.methods|length > 1 %}
+          {% for mb in s.methods %}<span>{{ mb.label }} <span class="num">¥{{ '%.2f'|format(mb.amount) }}</span></span>{% if not loop.last %}<br/>{% endif %}{% endfor %}
+        {% elif s.methods %}{{ s.methods[0].label }}
+        {% else %}—{% endif %}
+      </td>
       <td class="total" style="text-align:right;">¥ {{ '%.2f'|format(s.total) }}</td>
       <td style="text-align:right;">
         {% if not s.is_group %}
