@@ -19008,6 +19008,15 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
         created_by=request.session.get("admin_username", ""),
     )
     db.add(order)
+    db.flush()
+    # 库存出库：关联了库存品目且非服务项的检查（试剂盒类如 猫IGE / 试纸 等）
+    _eo_operator = request.session.get("admin_username", "admin")
+    for it in items:
+        iid = it.get("item_id")
+        qty = float(it.get("qty") or 0)
+        if iid and qty > 0:
+            _deduct_inventory(db, int(iid), qty, "exam_order", order.id, _eo_operator,
+                              note=f"检查单#{order.id} {it.get('name') or ''}")
     db.commit()
     db.refresh(order)
     # 同步收费单
@@ -19353,6 +19362,18 @@ async def admin_exam_order_delete(
         if _v and (_v.status or "open") == "closed":
             raise HTTPException(403, "所属病历已结束，检查单不可删除。如确需作废请使用「作废」。")
     visit_id = order.visit_id
+    # 回退库存（与开单时的出库对称）
+    try:
+        _eo_items = json.loads(order.items_json or "[]")
+    except Exception:
+        _eo_items = []
+    _eo_operator = request.session.get("admin_username", "admin")
+    for it in _eo_items:
+        iid = it.get("item_id")
+        qty = float(it.get("qty") or 0)
+        if iid and qty > 0:
+            _restore_inventory(db, int(iid), qty, "exam_order", order_id, _eo_operator,
+                               note=f"删除检查单#{order_id} 退回")
     # 先删本地报告文件
     for rpt in list(order.reports or []):
         try:
@@ -19389,6 +19410,17 @@ async def admin_exam_order_void(
     order.voided_by = operator
     order.voided_at = datetime.utcnow()
     order.void_reason = (void_reason or "")[:200]
+    # 回退库存（与开单时的出库对称）
+    try:
+        _eo_items = json.loads(order.items_json or "[]")
+    except Exception:
+        _eo_items = []
+    for it in _eo_items:
+        iid = it.get("item_id")
+        qty = float(it.get("qty") or 0)
+        if iid and qty > 0:
+            _restore_inventory(db, int(iid), qty, "exam_order", order_id, operator,
+                               note=f"作废检查单#{order_id} 退回")
     refund_msg = ""
     if refund_to_wallet in ("1", "true", "on") and order.visit_id and refund_amount > 0:
         visit = db.get(Visit, order.visit_id)
@@ -19435,6 +19467,18 @@ async def admin_exam_order_copy_as_new(
         created_by=operator,
     )
     db.add(new_order)
+    db.flush()
+    # 库存出库（与新建检查单一致）
+    try:
+        _cp_items = json.loads(src.items_json or "[]")
+    except Exception:
+        _cp_items = []
+    for it in _cp_items:
+        iid = it.get("item_id")
+        qty = float(it.get("qty") or 0)
+        if iid and qty > 0:
+            _deduct_inventory(db, int(iid), qty, "exam_order", new_order.id, operator,
+                              note=f"检查单#{new_order.id} {it.get('name') or ''}（复制）")
     _audit_doc_action(db, "exam_order", new_order.id, "copy_from", operator, extra=f"src={order_id}")
     db.commit()
     db.refresh(new_order)
