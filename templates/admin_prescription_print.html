@@ -109,6 +109,39 @@
 
 {% block toolbar_extra %}
 <span style="opacity:.8;font-size:12px;">建议 <b>A5 横向</b>（国标处方笺规格）</span>
+<span style="margin-left:14px;opacity:.8;font-size:12px;">打印联：</span>
+<button type="button" class="lian-toggle" data-lian="一" onclick="toggleLian(this)"
+        style="padding:3px 10px;font-size:12px;cursor:pointer;border:1px solid #888;background:#2e7d32;color:#fff;border-radius:3px;">第一联·留存</button>
+<button type="button" class="lian-toggle" data-lian="二" onclick="toggleLian(this)"
+        style="padding:3px 10px;font-size:12px;cursor:pointer;border:1px solid #888;background:#2e7d32;color:#fff;border-radius:3px;">第二联·药房</button>
+<button type="button" class="lian-toggle" data-lian="三" onclick="toggleLian(this)"
+        style="padding:3px 10px;font-size:12px;cursor:pointer;border:1px solid #888;background:#2e7d32;color:#fff;border-radius:3px;">第三联·客户</button>
+<script>
+function toggleLian(btn) {
+  var lian = btn.dataset.lian;
+  var frame = document.querySelector('.rx-frame[data-lian="' + lian + '"]');
+  if (!frame) return;
+  var on = frame.style.display !== 'none';
+  if (on) {
+    // 至少保留一联
+    var visible = document.querySelectorAll('.rx-frame:not([style*="display: none"])').length;
+    if (visible <= 1) { alert('至少保留一联'); return; }
+    frame.style.display = 'none';
+    btn.style.background = '#555';
+  } else {
+    frame.style.display = '';
+    btn.style.background = '#2e7d32';
+  }
+  // 重算分页：可见的最后一联不强制分页（避免打出空白尾页）
+  var frames = Array.prototype.slice.call(document.querySelectorAll('.rx-frame'))
+    .filter(function (f) { return f.style.display !== 'none'; });
+  frames.forEach(function (f, i) {
+    var isLast = (i === frames.length - 1);
+    f.style.pageBreakAfter = isLast ? 'auto' : 'always';
+    f.style.breakAfter = isLast ? 'auto' : 'page';
+  });
+}
+</script>
 {% endblock %}
 
 {% block content %}
@@ -120,7 +153,7 @@
   ('三', '动物主人/饲养单位留存'),
 ] %}
 {% for lian_no, lian_role in lian_list %}
-<div class="rx-frame">
+<div class="rx-frame" data-lian="{{ lian_no }}">
   <div class="rx-title">{{ clinic_name or '大风动物医院' }} 处方笺</div>
 
   <div class="rx-row">
