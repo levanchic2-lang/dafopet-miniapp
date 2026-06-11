@@ -10126,7 +10126,7 @@ async def admin_deposit_apply(
         d.status = "partial_refund"  # 占位待退
     # 写 Payment 流水：让发票的 paid_sum / 状态都正确反映押金抵扣
     operator = request.session.get("admin_username", "admin")
-    store = _get_admin_store(request)
+    store = _get_admin_store(request) or (inv.store or "")  # 超管收款 _get_admin_store 返回空 → 回退发票门店
     db.add(Payment(
         invoice_id=inv.id, customer_id=inv.customer_id,
         method="deposit", amount=round(want, 2),
@@ -16819,13 +16819,23 @@ async def admin_reports_revenue(
         "wallet_recharge":"钱包充值",
         "":               "其他",
     }
+    # 折扣后净额：每张单的折扣（明细原价合计 − 实收 total_amount）按比例摊到各类型，
+    # 使「按收费类型」各项之和 = 业务收入（折扣后），便于对账。
     by_category: dict[str, float] = {}
     if invoice_ids:
         item_rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id.in_(invoice_ids)).all()
+        _items_by_inv: dict[int, list] = {}
         for it in item_rows:
-            rt = (it.ref_type or "").strip()
-            label = _REF_TYPE_ZH.get(rt, rt or "其他")
-            by_category[label] = by_category.get(label, 0.0) + float(it.subtotal or 0)
+            _items_by_inv.setdefault(it.invoice_id, []).append(it)
+        _inv_total_map = {r.id: float(r.total_amount or 0) for r in rows}
+        for _iid, _its in _items_by_inv.items():
+            _gross = sum(float(it.subtotal or 0) for it in _its)
+            _net_total = _inv_total_map.get(_iid, _gross)
+            _ratio = (_net_total / _gross) if _gross > 0 else 1.0
+            for it in _its:
+                rt = (it.ref_type or "").strip()
+                label = _REF_TYPE_ZH.get(rt, rt or "其他")
+                by_category[label] = by_category.get(label, 0.0) + float(it.subtotal or 0) * _ratio
     by_category_list = sorted(
         [{"label": k, "amount": round(v, 2)} for k, v in by_category.items() if v > 0],
         key=lambda x: -x["amount"],
@@ -17859,7 +17869,7 @@ async def admin_invoice_add_payment(
                 invoice_id=t.id, customer_id=t.customer_id,
                 method=method, amount=pay_amt,
                 ref_id=None, ref_no=ref_no, status="success",
-                store=store, operator=operator, note=_t_note, batch_no=batch_no,
+                store=(store or t.store or ""), operator=operator, note=_t_note, batch_no=batch_no,
             ))
             db.flush()
             _invoice_recompute_status(db, t)
@@ -17873,7 +17883,7 @@ async def admin_invoice_add_payment(
             ref_id=ref_id,
             ref_no=ref_no,
             status="success",
-            store=store,
+            store=(store or inv.store or ""),  # 超管收款 store 为空 → 回退发票门店，避免「按门店」统计漏单
             operator=operator,
             note=note,
         ))

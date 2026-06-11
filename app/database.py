@@ -1562,6 +1562,21 @@ def _try_sqlite_migrations() -> None:
                         "AND strftime('%Y-%m-%d %H:%M:%S', created_at) = :sec AND batch_no IS NULL"
                     ), {"bn": f"H{min_id}", "cid": cid, "m": method, "sec": sec})
 
+            # 回填收款门店：历史上「超管收款」会写空 store（_get_admin_store 超管返回空），
+            # 导致「按门店」收款统计漏单。补成对应发票的门店。自限：无空 store 时跳过。
+            _has_blank_store = conn.execute(text(
+                "SELECT 1 FROM payments WHERE store IS NULL OR store='' LIMIT 1"
+            )).first()
+            if _has_blank_store:
+                conn.execute(text(
+                    "UPDATE payments SET store = ("
+                    "  SELECT i.store FROM invoices i WHERE i.id = payments.invoice_id"
+                    ") "
+                    "WHERE (store IS NULL OR store='') "
+                    "AND EXISTS (SELECT 1 FROM invoices i WHERE i.id = payments.invoice_id "
+                    "            AND i.store IS NOT NULL AND i.store != '')"
+                ))
+
             # ── 优惠券 ────────────────────────────────────
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS coupons ("

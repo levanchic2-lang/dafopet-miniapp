@@ -262,7 +262,7 @@
   </div>
   {% else %}
   <div class="rev-section">
-    <h3><i data-lucide="package"></i> 按收费类型</h3>
+    <h3><i data-lucide="package"></i> 按收费类型 <span style="font-weight:400;color:var(--muted);font-size:0.8em;">（折扣后净额）</span></h3>
     {% if by_category_list %}
     <table class="rev-table">
       <thead><tr><th>类型</th><th style="text-align:right;">金额</th></tr></thead>
@@ -281,7 +281,7 @@
 
 {% if by_store_list and by_category_list %}
 <div class="rev-section">
-  <h3><i data-lucide="package"></i> 按收费类型</h3>
+  <h3><i data-lucide="package"></i> 按收费类型 <span style="font-weight:400;color:var(--muted);font-size:0.8em;">（折扣后净额）</span></h3>
   <table class="rev-table">
     <thead><tr><th>类型</th><th style="text-align:right;">金额</th></tr></thead>
     <tbody>
