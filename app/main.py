@@ -17145,18 +17145,23 @@ async def admin_invoices_list(
             cust0 = cust_map.get(c0) or (db.get(Customer, c0) if c0 else None)
             if c0 and c0 not in cust_map:
                 cust_map[c0] = cust0
+            _full_total = round(sum(float(i.total_amount or 0) for i in invs), 2)
+            # 选了某收款方式时：本行金额 + 合计只取「该方式」的部分（避免把同一单里别的方式金额一起算进去）
+            _method_amt = round(sum(float(pp.amount or 0) for pp in gp_pays if (pp.method or "") == method), 2) if method else None
             settlements.append({
                 "is_group": len(invs) >= 2,
                 "invoices": invs,
                 "customer": cust0,
-                "total": round(sum(float(i.total_amount or 0) for i in invs), 2),
+                "total": _full_total,
+                "display_amt": (_method_amt if method else _full_total),
+                "method_amt": _method_amt,
                 "paid_amt": round(sum(float(pp.amount or 0) for pp in gp_pays), 2),
                 "methods": method_breakdown,
                 "paid_at": paid_at,
                 "count": len(invs),
             })
-        # 顶部「区间已收」统计
-        paid_range_total = round(sum(s["total"] for s in settlements), 2)
+        # 顶部「区间已收」统计（选了方式 → 只合计该方式金额）
+        paid_range_total = round(sum(s["display_amt"] for s in settlements), 2)
         inv_stats["range_paid_total"] = paid_range_total
         inv_stats["range_paid_count"] = len(paid_invoices)
         inv_stats["range_settle_count"] = len(settlements)
@@ -17176,6 +17181,7 @@ async def admin_invoices_list(
         "settlements": settlements,
         "preset": cur_preset, "date_from": date_from, "date_to": date_to,
         "date_label": date_label, "method": method, "method_options": method_options,
+        "method_label": (_REVENUE_PAY_ZH.get(method, method) if method else ""),
         "csrf_token": _get_csrf_token(request),
     })
 

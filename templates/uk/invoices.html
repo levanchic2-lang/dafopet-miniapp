@@ -209,12 +209,13 @@
       </td>
       <td class="num dim">{{ s.paid_at.strftime('%m-%d %H:%M') if s.paid_at else '—' }}</td>
       <td class="dim" style="line-height:1.5;">
-        {% if s.methods|length > 1 %}
+        {% if method %}{{ method_label }}
+        {% elif s.methods|length > 1 %}
           {% for mb in s.methods %}<span>{{ mb.label }} <span class="num">¥{{ '%.2f'|format(mb.amount) }}</span></span>{% if not loop.last %}<br/>{% endif %}{% endfor %}
         {% elif s.methods %}{{ s.methods[0].label }}
         {% else %}—{% endif %}
       </td>
-      <td class="total" style="text-align:right;">¥ {{ '%.2f'|format(s.total) }}</td>
+      <td class="total" style="text-align:right;">¥ {{ '%.2f'|format(s.display_amt) }}</td>
       <td style="text-align:right;">
         {% if not s.is_group %}
           <a href="/admin/invoices/{{ s.invoices[0].id }}" class="iv-btn ghost sm" onclick="event.stopPropagation();">查&nbsp;看</a>
