@@ -188,7 +188,15 @@ body[data-size="T80"] .dc-orders { font-size: 9.5pt; padding: 6px 8px; }
         <td>{{ it.dose_text or '' }}</td>
         <td>{{ ('%g 次/天'|format(it.times_per_day)) if it.times_per_day else (it.frequency or '') }}</td>
         <td>{{ it.duration_days or '' }}</td>
-        <td>{% if it.drug_type == 'oral' %}口服 PO{% elif it.drug_type == 'topical' %}外用{% elif it.drug_type == 'injection' %}注射{% else %}{{ it.drug_type }}{% endif %}</td>
+        <td>{{ {
+          'oral':'口服 PO','po':'口服 PO','topical':'外用',
+          'subcutaneous':'皮下 SC','subq':'皮下 SC','sc':'皮下 SC',
+          'intramuscular':'肌注 IM','im':'肌注 IM',
+          'intravenous':'静注 IV','iv':'静注 IV',
+          'injection':'注射','eye_drop':'滴眼','ear_drop':'滴耳','nasal':'鼻喷',
+          'nebulize':'雾化','inh':'雾化','inhalation':'雾化','enema':'灌肠','rectal':'直肠给药',
+          'service':'处置','procedure':'操作','other':'其他',
+        }.get(it.drug_type, it.drug_type or '—') }}</td>
         <td class="r">{{ '%g'|format(it.quantity_num or 0) }} {{ it.item_unit or '' }}</td>
       </tr>
     {% endfor %}

@@ -204,7 +204,15 @@ function toggleLian(btn) {
             <td>{{ ('%g%s'|format(it.dose_amount, it.dose_unit)) if it.dose_amount else (it.dosage or '') }}</td>
             <td>{{ ('%g'|format(it.times_per_day)) if it.times_per_day else '' }}</td>
             <td>{{ it.duration_days or '' }}</td>
-            <td>{% if it.drug_type == 'oral' %}口服 PO{% elif it.drug_type == 'topical' %}外用{% elif it.drug_type == 'injection' %}注射{% else %}{{ it.drug_type }}{% endif %}</td>
+            <td>{{ {
+              'oral':'口服 PO','po':'口服 PO','topical':'外用',
+              'subcutaneous':'皮下 SC','subq':'皮下 SC','sc':'皮下 SC',
+              'intramuscular':'肌注 IM','im':'肌注 IM',
+              'intravenous':'静注 IV','iv':'静注 IV',
+              'injection':'注射','eye_drop':'滴眼','ear_drop':'滴耳','nasal':'鼻喷',
+              'nebulize':'雾化','inh':'雾化','inhalation':'雾化','enema':'灌肠','rectal':'直肠给药',
+              'service':'处置','procedure':'操作','other':'其他',
+            }.get(it.drug_type, it.drug_type or '—') }}</td>
             <td style="text-align:right;">{{ '%.2f'|format(it.unit_price or 0) }}</td>
             <td style="text-align:right;">{{ '%g'|format(it.quantity_num or 0) }}</td>
             <td style="text-align:right;">{{ '%.2f'|format(it.subtotal or 0) }}</td>
