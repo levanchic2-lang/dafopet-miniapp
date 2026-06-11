@@ -181,15 +181,23 @@ body[data-size="T80"] .mr-sig { display: none; }
     Rx{{ '%06d'|format(presc.id) }} · {{ presc.prescribed_date or (presc.created_at.strftime('%Y-%m-%d') if presc.created_at else '') }}
     {% if presc.vet_name %} · 处方医师 {{ presc.vet_name }}{% endif %}
   </div>
+  {% set _route_zh = {
+    'oral':'口服 PO','po':'口服 PO','topical':'外用',
+    'subcutaneous':'皮下注射 SC','subq':'皮下注射 SC','sc':'皮下注射 SC',
+    'intramuscular':'肌肉注射 IM','im':'肌肉注射 IM',
+    'intravenous':'静脉注射 IV','iv':'静脉注射 IV',
+    'injection':'注射','eye_drop':'滴眼','ear_drop':'滴耳','nasal':'鼻喷',
+    'nebulize':'雾化','inh':'雾化','inhalation':'雾化','enema':'灌肠','rectal':'直肠给药',
+    'service':'处置','procedure':'操作','other':'其他',
+  } %}
   <table class="mr-tbl">
     <thead>
       <tr>
         <th style="width:auto;">Drug · 药品</th>
-        <th style="width:16%;">Dose · 用量</th>
-        <th style="width:12%;">Freq · 频次</th>
-        <th style="width:9%;">Days · 天</th>
-        <th style="width:13%;">Route · 用法</th>
-        <th style="width:13%;" class="r">Qty · 数量</th>
+        <th style="width:18%;">Dose · 用量</th>
+        <th style="width:14%;">Freq · 频次</th>
+        <th style="width:10%;">Days · 天</th>
+        <th style="width:18%;">Route · 用法</th>
       </tr>
     </thead>
     <tbody>
@@ -199,8 +207,7 @@ body[data-size="T80"] .mr-sig { display: none; }
         <td>{{ ('%g%s'|format(it.dose_amount, it.dose_unit)) if it.dose_amount else (it.dosage or '') }}</td>
         <td>{{ ('%g 次/天'|format(it.times_per_day)) if it.times_per_day else (it.frequency or '') }}</td>
         <td>{{ it.duration_days or '' }}</td>
-        <td>{% if it.drug_type == 'oral' %}口服 PO{% elif it.drug_type == 'topical' %}外用{% elif it.drug_type == 'injection' %}注射{% else %}{{ it.drug_type }}{% endif %}</td>
-        <td class="r">{{ '%g'|format(it.quantity_num or 0) }} {{ it.item_unit or '' }}</td>
+        <td>{{ _route_zh.get(it.drug_type, it.drug_type or '—') }}</td>
       </tr>
     {% endfor %}
     </tbody>
