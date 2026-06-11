@@ -288,6 +288,13 @@ def generate_microscopy_pdf(db: Session, report_id: int) -> tuple[Optional[str],
         db.flush()
         report.exam_report_id = er.id
 
+    # 出了报告 → 检查单状态同步为已完成（与手动上传报告路径一致）
+    from app.models import ExamOrder as _ExamOrder
+    _eo = db.get(_ExamOrder, report.exam_order_id) if report.exam_order_id else None
+    if _eo and _eo.status not in ("completed", "voided"):
+        _eo.status = "completed"
+        _eo.updated_at = datetime.utcnow()
+
     db.commit()
     logger.info("[microscopy_pdf] 生成 report=%s → %s", report.id, out_path)
     return str(out_path), None
