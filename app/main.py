@@ -1258,6 +1258,32 @@ def _appt_track(category: str) -> str:
     return "other"
 
 
+def _check_calendar_block(
+    db: "Session",
+    store: str,
+    appointment_date: str,
+    category: str,
+) -> str | None:
+    """检查日期是否被全天封锁（按业务线）。封锁返回错误提示，否则 None。
+    track 语义：beauty 只挡美容线（美容/洗护/造型），medical 只挡医疗线，all 全挡。
+    """
+    if not appointment_date:
+        return None
+    blocks = db.query(CalendarBlock).filter(
+        CalendarBlock.block_date == appointment_date,
+        or_(CalendarBlock.store == store, CalendarBlock.store == ""),
+    ).all()
+    if not blocks:
+        return None
+    new_track = _appt_track(category)
+    for b in blocks:
+        bt = (b.track or "all").strip() or "all"
+        if bt == "all" or bt == new_track:
+            track_zh = {"beauty": "美容线", "medical": "医疗线", "all": "全部业务"}.get(bt, bt)
+            return f"{appointment_date} 该门店已封锁（{b.title or '全天封锁'} · {track_zh}），请改约其他日期。"
+    return None
+
+
 def _check_appointment_conflict(
     db: "Session",
     store: str,
@@ -4988,6 +5014,11 @@ async def admin_appointment_create(
         time_err = _check_outpatient_time(str(fields["category"]), str(fields["appointment_time"]))
         if time_err:
             raise HTTPException(400, time_err)
+        # 全天封锁校验（按业务线：美容师休息只挡美容线）
+        block_err = _check_calendar_block(
+            db, str(fields["store"]), str(fields["appointment_date"]), str(fields["category"]))
+        if block_err:
+            raise HTTPException(400, block_err)
         # 时段容量校验
         cap_err = _check_slot_capacity(
             db,
@@ -5713,7 +5744,11 @@ async def api_beauty_slots(
     if date and store:
         try:
             datetime.strptime(date, "%Y-%m-%d")
-            slots = _beauty_slots_for_date(db, store, date, service, duration)
+            # 当天美容线被封锁（美容师休息 / 全店封锁）→ 无可约时段
+            if _check_calendar_block(db, store, date, "beauty"):
+                slots = []
+            else:
+                slots = _beauty_slots_for_date(db, store, date, service, duration)
         except Exception:
             slots = []
 
@@ -5775,6 +5810,11 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
     time_err = _check_outpatient_time(str(fields["category"]), str(fields["appointment_time"]))
     if time_err:
         raise HTTPException(400, time_err)
+    # 全天封锁校验（按业务线：美容师休息只挡美容线）
+    block_err = _check_calendar_block(
+        db, str(fields["store"]), str(fields["appointment_date"]), str(fields["category"]))
+    if block_err:
+        raise HTTPException(400, block_err)
     cap_err = _check_slot_capacity(
         db,
         store=str(fields["store"]),
@@ -20224,6 +20264,7 @@ async def api_calendar_events(
         "title": b.title,
         "date":  b.block_date,
         "store": b.store,
+        "track": (b.track or "all"),
         "notes": b.notes,
     } for b in blocks]
 
@@ -20240,10 +20281,14 @@ async def api_calendar_block_create(request: Request, db: Session = Depends(get_
     block_store = str(body.get("store", "")).strip()[:40]
     if admin_store:
         block_store = admin_store
+    _track = str(body.get("track", "all")).strip()
+    if _track not in ("beauty", "medical", "all"):
+        _track = "all"
     block = CalendarBlock(
         title=str(body.get("title", "")).strip()[:200] or "全天封锁",
         block_date=str(body.get("date", "")).strip()[:20],
         store=block_store,
+        track=_track,
         notes=str(body.get("notes", "")).strip()[:500],
         created_by=request.session.get("admin_username", ""),
     )

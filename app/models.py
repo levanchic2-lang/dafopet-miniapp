@@ -777,6 +777,8 @@ class CalendarBlock(Base):
     title: Mapped[str] = mapped_column(String(200), default="")         # 标题，如"美容师休息"
     block_date: Mapped[str] = mapped_column(String(20), default="")     # YYYY-MM-DD
     store: Mapped[str] = mapped_column(String(40), default="")          # 短名；空=全部门店
+    # 封锁业务线：beauty=美容线（美容/洗护/造型）/ medical=医疗线（门诊/手术/TNR）/ all=全部
+    track: Mapped[str] = mapped_column(String(20), default="all")
     notes: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

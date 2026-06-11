@@ -77,6 +77,12 @@
  <option value="东环店">东环店</option>
  <option value="横岗店">横岗店</option>
  </select>
+ <label>封锁范围</label>
+ <select id="block-track" style="margin-bottom:0.65rem;width:100%;">
+ <option value="beauty" selected>仅美容线（美容/洗护/造型）— 美容师休息用这个</option>
+ <option value="medical">仅医疗线（门诊/手术/TNR）— 医生休息用这个</option>
+ <option value="all">全部业务（节假日全店关门）</option>
+ </select>
  <label>备注（可选）</label>
  <input type="text" id="block-notes" style="margin-bottom:0.65rem;"/>
  <div class="modal-btns">
@@ -254,7 +260,8 @@ function renderMonth(body) {
 
  // 全天封锁
  dayBlocks.forEach(b => {
- html += `<div class="month-block-pill" onclick="event.stopPropagation();openBlockPopup(event,${b.id})" title="${b.title}">${b.title}</div>`;
+ const tz = {beauty:'美容', medical:'医疗', all:'全部'}[b.track || 'all'] || '全部';
+ html += `<div class="month-block-pill" onclick="event.stopPropagation();openBlockPopup(event,${b.id})" title="${b.title}（封锁${tz}线）">${b.title}·${tz}</div>`;
  });
 
  // 预约（最多3条）
@@ -341,7 +348,8 @@ function renderTimeGrid(days) {
  const ds = fmtDate(d);
  allDayHtml += '<div class="allday-cell">';
  blocksForDay(ds).forEach(b => {
- allDayHtml += `<div class="allday-block-pill" onclick="openBlockPopup(event,${b.id})" title="${b.title}">${b.title}</div>`;
+ const tz = {beauty:'美容', medical:'医疗', all:'全部'}[b.track || 'all'] || '全部';
+ allDayHtml += `<div class="allday-block-pill" onclick="openBlockPopup(event,${b.id})" title="${b.title}（封锁${tz}线）">${b.title}·${tz}</div>`;
  });
  allDayHtml += '</div>';
  });
@@ -572,9 +580,13 @@ function openBlockPopup(ev, id) {
 
  document.getElementById('pp-title').textContent = b.title;
  document.getElementById('pp-datetime').textContent = b.date + ' 全天';
- document.getElementById('pp-badges').innerHTML = `<span class="popup-badge" style="background:#e0e7ff;color:#3730a3;border-color:#a5b4fc;">全天封锁</span>`;
+ const trackZh = {beauty:'仅美容线', medical:'仅医疗线', all:'全部业务'}[b.track || 'all'] || '全部业务';
+ document.getElementById('pp-badges').innerHTML =
+   `<span class="popup-badge" style="background:#e0e7ff;color:#3730a3;border-color:#a5b4fc;">全天封锁</span>` +
+   `<span class="popup-badge" style="background:#fef3c7;color:#92400e;border-color:#fcd34d;">${trackZh}</span>`;
  let rows = '';
  if (b.store) rows += row('门店', b.store);
+ rows += row('封锁范围', trackZh + (b.track === 'beauty' ? '（医疗预约不受影响）' : b.track === 'medical' ? '（美容预约不受影响）' : ''));
  if (b.notes) rows += row('备注', b.notes);
  document.getElementById('pp-rows').innerHTML = rows;
  document.getElementById('pp-notes').style.display='none';
@@ -703,11 +715,12 @@ document.getElementById('block-save-btn').addEventListener('click', async () => 
  const title = document.getElementById('block-title').value.trim() || '全天封锁';
  const date = document.getElementById('block-date').value;
  const st = document.getElementById('block-store').value;
+ const track = document.getElementById('block-track').value || 'all';
  const notes = document.getElementById('block-notes').value.trim();
  if (!date) { toast('请填写日期'); return; }
  const res = await fetch('/api/calendar/blocks/create', {
  method:'POST', headers:{'Content-Type':'application/json'},
- body: JSON.stringify({ csrf_token: CSRF, title, date, store: st, notes })
+ body: JSON.stringify({ csrf_token: CSRF, title, date, store: st, track, notes })
  });
  const data = await res.json();
  if (data.ok) { closeCreateModal(); toast('已创建'); fetchEvents(); }
