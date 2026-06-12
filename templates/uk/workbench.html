@@ -416,14 +416,32 @@
   {% if total_pages > 1 %}
   <div class="uk-pager">
     <div>共 <span class="num">{{ total }}</span> 位</div>
-    <div>
+    <div style="display:flex;align-items:center;gap:0.6rem;">
       {% if page > 1 %}<a href="?q={{ q }}&page={{ page - 1 }}{% if wb_store %}&store={{ wb_store }}{% endif %}">« 上一页</a>{% endif %}
       <span class="current num">{{ page }}</span>
       <span class="uk-mute">/</span>
       <span class="num">{{ total_pages }}</span>
       {% if page < total_pages %}<a href="?q={{ q }}&page={{ page + 1 }}{% if wb_store %}&store={{ wb_store }}{% endif %}">下一页 »</a>{% endif %}
+      <span style="display:flex;align-items:center;gap:0.3rem;font-size:0.85rem;color:var(--ink-3);">
+        跳至
+        <input id="cust-page-jump" type="number" min="1" max="{{ total_pages }}" value="{{ page }}"
+          style="width:3.5rem;padding:0.15rem 0.3rem;border:0.5px solid var(--hair);font-family:inherit;font-size:0.85rem;text-align:center;background:var(--paper);">
+        页
+        <a id="cust-page-go" href="#" style="font-size:0.85rem;">跳转</a>
+      </span>
     </div>
   </div>
+  <script>
+  (function(){
+    var inp = document.getElementById('cust-page-jump');
+    var btn = document.getElementById('cust-page-go');
+    var max = {{ total_pages }};
+    var base = '?q={{ q }}{% if wb_store %}&store={{ wb_store }}{% endif %}&page=';
+    function go(){var p=parseInt(inp.value);if(p>=1&&p<=max)location.href=base+p;}
+    btn.addEventListener('click',function(e){e.preventDefault();go();});
+    inp.addEventListener('keydown',function(e){if(e.key==='Enter')go();});
+  })();
+  </script>
   {% endif %}
   {% endif %}
 </section>
