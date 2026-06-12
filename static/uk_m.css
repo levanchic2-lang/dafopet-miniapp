@@ -449,11 +449,6 @@ button { font: inherit; cursor: pointer; }
   font-weight: 400; font-style: italic;
   letter-spacing: 0;
 }
-.ukm-tab .ukm-tab-ic {
-  width: 21px; height: 21px; margin-bottom: 4px;
-  display: block;
-}
-.ukm-tab.active .ukm-tab-ic { stroke-width: 1.35; }
 .ukm-tab.active {
   color: var(--ink); font-weight: 700;
 }
