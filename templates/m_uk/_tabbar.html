@@ -2,42 +2,45 @@
 {% set _t = active_tab or '' %}
 <nav class="ukm-tabbar" role="navigation">
   <a class="ukm-tab {% if _t=='today' %}active{% endif %}" href="/m">
-    {# 今日：日历 + 当日圆点 #}
-    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="3.5" y="5" width="17" height="15.5" rx="1.6"/>
-      <path d="M3.5 9.5h17M8 3.3v3.4M16 3.3v3.4"/>
-      <circle cx="12" cy="14.8" r="1.5" fill="currentColor" stroke="none"/>
+    {# 今日：日历（直角细线）#}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">
+      <rect x="4" y="5.5" width="16" height="14.5"/>
+      <line x1="4" y1="9.5" x2="20" y2="9.5"/>
+      <line x1="8" y1="3.5" x2="8" y2="7"/><line x1="16" y1="3.5" x2="16" y2="7"/>
+      <rect x="11" y="12.7" width="2" height="2" fill="currentColor" stroke="none"/>
     </svg>今&nbsp;日
   </a>
   <a class="ukm-tab {% if _t=='customers' %}active{% endif %}" href="/m/customers">
-    {# 客户：两个人 #}
-    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="8.8" cy="8.2" r="3.2"/>
-      <path d="M3 19.2c0-3.1 2.6-5.2 5.8-5.2s5.8 2.1 5.8 5.2"/>
-      <path d="M16 5.4a3 3 0 0 1 0 5.7"/>
-      <path d="M17.4 14.2c2 .6 3.2 2.4 3.2 4.9"/>
+    {# 客户：两个人（细线）#}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">
+      <circle cx="9" cy="8" r="2.8"/>
+      <path d="M4 19c0-2.9 2.2-4.9 5-4.9s5 2 5 4.9"/>
+      <path d="M15.4 5.7a2.7 2.7 0 0 1 0 5.1"/>
+      <path d="M16.8 14.4c1.9.5 3.2 2.2 3.2 4.6"/>
     </svg>客&nbsp;户
   </a>
   <a class="ukm-tab {% if _t=='medical' %}active{% endif %}" href="/m/medical">
-    {# 医疗：医药箱 + 十字 #}
-    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="3.3" y="6.3" width="17.4" height="13" rx="2"/>
-      <path d="M8.4 6.3V5.2a1.6 1.6 0 0 1 1.6-1.6h4a1.6 1.6 0 0 1 1.6 1.6v1.1"/>
-      <path d="M12 9.4v6.6M8.7 12.7h6.6"/>
+    {# 医疗：医药箱 + 十字（直角细线）#}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">
+      <rect x="3.5" y="7" width="17" height="12.5"/>
+      <path d="M9 7V5.2h6V7"/>
+      <line x1="12" y1="10.3" x2="12" y2="16.2"/><line x1="9" y1="13.2" x2="15" y2="13.2"/>
     </svg>医&nbsp;疗
   </a>
   <a class="ukm-tab {% if _t=='finance' %}active{% endif %}" href="/m/finance">
-    {# 财务：¥ 硬币 #}
-    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="8.4"/>
-      <path d="M8.7 8.2 12 11.6l3.3-3.4M12 11.6v6M9.3 13.3h5.4M9.3 15.4h5.4"/>
+    {# 财务：¥ 硬币（细线）#}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">
+      <circle cx="12" cy="12" r="8"/>
+      <path d="M9 8.6 12 11.7 15 8.6"/>
+      <line x1="12" y1="11.5" x2="12" y2="16.4"/>
+      <line x1="9.6" y1="13" x2="14.4" y2="13"/><line x1="9.6" y1="15" x2="14.4" y2="15"/>
     </svg>财&nbsp;务
   </a>
   <a class="ukm-tab {% if _t=='me' %}active{% endif %}" href="/m/me">
-    {# 我：单人 #}
-    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="12" cy="8.2" r="3.5"/>
-      <path d="M5.4 19.6c0-3.7 3-6.1 6.6-6.1s6.6 2.4 6.6 6.1"/>
+    {# 我：单人（细线）#}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">
+      <circle cx="12" cy="8" r="3"/>
+      <path d="M6 19.5c0-3.3 2.7-5.6 6-5.6s6 2.3 6 5.6"/>
     </svg>我
   </a>
 </nav>
