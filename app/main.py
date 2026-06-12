@@ -7527,10 +7527,11 @@ async def page_admin_customer_detail(
     cust_sales_orders = db.query(SalesOrder).filter(SalesOrder.customer_id == customer_id).order_by(SalesOrder.id.desc()).limit(100).all()
     cust_invoices = db.query(Invoice).filter(Invoice.customer_id == customer_id).order_by(Invoice.id.desc()).limit(100).all()
 
-    # ── 所有宠物的"最近一次"疫苗/驱虫（用于宠物列表行上展示）──
+    # ── 所有宠物的"最近一次"疫苗/驱虫/就诊（用于宠物列表行上展示）──
     all_pet_ids = [p.id for p in pets]
     latest_vacc_by_pet: dict[int, "Vaccination"] = {}
     latest_deworm_by_pet: dict[int, "DewormingRecord"] = {}
+    last_visit_date_by_pet: dict[int, str] = {}
     if all_pet_ids:
         for v in db.query(Vaccination).filter(Vaccination.pet_id.in_(all_pet_ids)).order_by(Vaccination.vaccinated_date.desc(), Vaccination.id.desc()).all():
             if v.pet_id not in latest_vacc_by_pet:
@@ -7538,6 +7539,11 @@ async def page_admin_customer_detail(
         for d in db.query(DewormingRecord).filter(DewormingRecord.pet_id.in_(all_pet_ids)).order_by(DewormingRecord.deworm_date.desc(), DewormingRecord.id.desc()).all():
             if d.pet_id not in latest_deworm_by_pet:
                 latest_deworm_by_pet[d.pet_id] = d
+        for row in db.query(Visit.pet_id, func.max(Visit.visit_date)).filter(
+            Visit.pet_id.in_(all_pet_ids),
+            Visit.visit_date != "",
+        ).group_by(Visit.pet_id).all():
+            last_visit_date_by_pet[row[0]] = row[1]
 
     # ── 宠物级数据（仅取选中宠物的，节省查询）──
     if active_pet:
@@ -7701,6 +7707,7 @@ async def page_admin_customer_detail(
             "groomings": groomings,
             "latest_vacc_by_pet": latest_vacc_by_pet,
             "latest_deworm_by_pet": latest_deworm_by_pet,
+            "last_visit_date_by_pet": last_visit_date_by_pet,
             "weight_records": weight_records,
             "medical_docs": medical_docs,
             "pet_invoices": pet_invoices,

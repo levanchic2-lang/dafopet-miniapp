@@ -528,7 +528,7 @@
             <td style="font-style:italic;color:var(--ink-3);">{% if p.gender == 'male' %}公{% elif p.gender == 'female' %}母{% else %}—{% endif %}</td>
             <td class="num" style="font-size:9.5pt;" title="{{ p.birthday_estimate or '' }}">{{ p.birthday_estimate | pet_age }}</td>
             <td class="num" style="color:var(--ink-3);font-size:9pt;">{{ p.medical_record_no or '—' }}</td>
-            <td class="num" style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{% set lv = latest_vacc_by_pet.get(p.id) %}{% if lv %}{{ lv.vaccinated_date }}{% else %}—{% endif %}</td>
+            <td class="num" style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{% set lvd = last_visit_date_by_pet.get(p.id) %}{% if lvd %}{{ lvd }}{% else %}—{% endif %}</td>
             <td class="right action">
               <a href="#" onclick="event.stopPropagation();openEditPet(this.closest('tr'));return false;">编辑</a>
               <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ p.id }}/delete"
