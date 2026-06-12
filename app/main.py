@@ -22775,12 +22775,37 @@ async def m_root(request: Request, db: Session = Depends(get_db)):
         cust = db.get(Customer, v.customer_id) if v.customer_id else None
         enriched_visits.append({"v": v, "pet": pet, "cust": cust})
 
+    # Hero：问候语 + 姓名 + 日期（北京时间）
+    from datetime import timedelta as _td
+    _bj = datetime.utcnow() + _td(hours=8)
+    _h = _bj.hour
+    greeting = ("早上好" if _h < 9 else "上午好" if _h < 12 else "中午好"
+                if _h < 14 else "下午好" if _h < 18 else "晚上好")
+    date_label = f"周{'一二三四五六日'[_bj.weekday()]} · {_bj.month} 月 {_bj.day} 日"
+    _u = db.query(AdminUser).filter(AdminUser.username == uname).first() if uname else None
+    admin_display = (_u.display_name if _u and _u.display_name else uname) or "你好"
+
+    # 待办：统一成一个列表，模板里非 0 的大数字排前、全 0 的折叠成一行
+    b = ctx["badges"]
+    todos = [
+        {"label": "待 配 药",   "val": b.get("pending_dispense", 0),     "unit": "单", "href": "/m/dispensing",                 "tone": ""},
+        {"label": "待 回 访",   "val": b.get("due_followups", 0),        "unit": "项", "href": "/m/follow-ups",                 "tone": ""},
+        {"label": "待录入报告", "val": b.get("exam_report_pending", 0),  "unit": "单", "href": "/m/exam-orders?status=pending", "tone": "red"},
+        {"label": "漏 药",     "val": b.get("overdue_meds", 0),         "unit": "条", "href": "/m/inpatient",                  "tone": "red"},
+        {"label": "库 存 过 期", "val": b.get("inventory_expiry", 0),     "unit": "项", "href": "/m/inventory?filter=expiry",     "tone": "amber"},
+        {"label": "库 存 预 警", "val": b.get("low_stock", 0),            "unit": "项", "href": "/m/inventory?filter=low",        "tone": "red"},
+        {"label": "待 签 协 议", "val": b.get("pending_consents", 0),     "unit": "份", "href": "/m/consents?status=pending",     "tone": ""},
+        {"label": "待 审 TNR",  "val": pending_tnr_n,                    "unit": "单", "href": "/m/tnr",                        "tone": ""},
+    ]
+
     ctx.update({
         "today_appts": today_appts,
         "today_appts_total": today_appts_total,
         "pending_tnr_n": pending_tnr_n,
         "my_visits": enriched_visits,
         "today_str": today_str,
+        "greeting": greeting, "date_label": date_label, "admin_display": admin_display,
+        "todos": todos,
     })
     return templates.TemplateResponse(request, "m_uk/home.html", ctx)
 

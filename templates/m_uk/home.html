@@ -5,41 +5,35 @@
 
 {% block content %}
 
-{# 待办 KPI #}
-<div class="ukm-kpi-grid">
-  <a href="/m/inpatient" class="ukm-kpi" style="text-decoration:none;">
-    <div class="lbl">漏&nbsp;药</div>
-    <div class="val"{% if badges.overdue_meds %} style="color:var(--accent-red);"{% endif %}>{{ badges.overdue_meds }}<span class="unit">条</span></div>
-  </a>
-  <a href="/m/dispensing" class="ukm-kpi" style="text-decoration:none;">
-    <div class="lbl">待&nbsp;配&nbsp;药</div>
-    <div class="val">{{ badges.pending_dispense }}<span class="unit">单</span></div>
-  </a>
-  <a href="/m/exam-orders?status=pending" class="ukm-kpi" style="text-decoration:none;">
-    <div class="lbl">待&nbsp;录&nbsp;入&nbsp;报&nbsp;告</div>
-    <div class="val"{% if badges.exam_report_pending %} style="color:var(--accent-red);"{% endif %}>{{ badges.exam_report_pending }}<span class="unit">单</span></div>
-  </a>
-  <a href="/m/follow-ups" class="ukm-kpi" style="text-decoration:none;">
-    <div class="lbl">待&nbsp;回&nbsp;访</div>
-    <div class="val">{{ badges.due_followups }}<span class="unit">项</span></div>
-  </a>
-  <a href="/m/consents?status=pending" class="ukm-kpi" style="text-decoration:none;">
-    <div class="lbl">待&nbsp;签&nbsp;协&nbsp;议</div>
-    <div class="val">{{ badges.pending_consents }}<span class="unit">份</span></div>
-  </a>
-  <a href="/m/tnr" class="ukm-kpi" style="text-decoration:none;">
-    <div class="lbl">待&nbsp;审&nbsp;TNR</div>
-    <div class="val">{{ pending_tnr_n }}<span class="unit">单</span></div>
-  </a>
-  <a href="/m/inventory?filter=low" class="ukm-kpi" style="text-decoration:none;">
-    <div class="lbl">库&nbsp;存&nbsp;预&nbsp;警</div>
-    <div class="val"{% if badges.low_stock %} style="color:var(--accent-red);"{% endif %}>{{ badges.low_stock }}<span class="unit">项</span></div>
-  </a>
-  <a href="/m/inventory?filter=expiry" class="ukm-kpi" style="text-decoration:none;">
-    <div class="lbl">库&nbsp;存&nbsp;过&nbsp;期</div>
-    <div class="val"{% if badges.inventory_expiry %} style="color:var(--accent-amber);"{% endif %}>{{ badges.inventory_expiry }}<span class="unit">项</span></div>
-  </a>
+{# Hero 问候 #}
+<div class="ukm-hero">
+  <div class="ukm-hero-date">{{ date_label }}</div>
+  <h1 class="ukm-hero-title">{{ greeting }}，{{ admin_display }}</h1>
 </div>
+
+{% set _todo_hot = todos | selectattr('val') | sort(attribute='val', reverse=true) | list %}
+{% set _todo_zero = todos | rejectattr('val') | list %}
+
+{# 待办：需要处理（仅非 0，大数字） #}
+<div class="ukm-section-label">需 要 处 理</div>
+{% if _todo_hot %}
+<div class="ukm-todo-list">
+  {% for t in _todo_hot %}
+  <a href="{{ t.href }}" class="ukm-todo">
+    <span class="ukm-todo-lbl">{{ t.label }}</span>
+    <span class="ukm-todo-val{% if t.tone %} {{ t.tone }}{% endif %}">{{ t.val }}<span class="u">{{ t.unit }}</span></span>
+    <span class="ukm-todo-arr">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ukm-allclear">今 日 待 办 已 清 空 · 辛苦了</div>
+{% endif %}
+
+{# 全为 0 的折叠成一行灰字 #}
+{% if _todo_zero %}
+<div class="ukm-todo-zero">{% for t in _todo_zero %}{{ t.label | replace(' ', '') }} {{ t.val }}{% if not loop.last %}&nbsp;·&nbsp;{% endif %}{% endfor %}</div>
+{% endif %}
 
 {# 今日预约 #}
 <div class="ukm-section-head">

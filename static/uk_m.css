@@ -161,6 +161,63 @@ button { font: inherit; cursor: pointer; }
   letter-spacing: 0.8px;
 }
 
+/* ─── 今日首页：Hero 问候 ─────────────────────── */
+.ukm-hero { padding: 16px 0 14px; }
+.ukm-hero-date {
+  font-family: var(--font-serif); font-size: 12px; font-style: italic;
+  color: var(--ink-3); letter-spacing: .5px; margin-bottom: 6px;
+}
+.ukm-hero-title {
+  font-family: var(--font-serif); font-size: 25px; font-weight: 700;
+  color: var(--ink); margin: 0; letter-spacing: .5px; line-height: 1.25;
+}
+
+/* 独立小节标签（比 section-head 更轻，单独占一行） */
+.ukm-section-label {
+  font-family: var(--font-serif); font-size: 11px; font-weight: 600;
+  color: var(--ink-3); letter-spacing: 2.5px; margin: 6px 0 2px;
+}
+
+/* ─── 待办：需要处理（非 0 大数字行） ─────────── */
+.ukm-todo-list {
+  border-top: 0.5px solid var(--hair);
+  margin: 6px calc(0px - var(--gutter)) 0;   /* 通栏 hairline */
+}
+.ukm-todo {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px var(--gutter);
+  border-bottom: 0.5px solid var(--hair);
+  text-decoration: none; color: var(--ink);
+}
+.ukm-todo:active { background: var(--bg-elevated); }
+.ukm-todo-lbl {
+  flex: 1; font-family: var(--font-serif); font-size: 15px;
+  color: var(--ink-2); letter-spacing: .5px;
+}
+.ukm-todo-val {
+  font-family: var(--font-serif); font-variant-numeric: tabular-nums lining-nums;
+  font-size: 21px; font-weight: 700; color: var(--ink); line-height: 1;
+}
+.ukm-todo-val.red   { color: var(--accent-red); }
+.ukm-todo-val.amber { color: var(--accent-amber); }
+.ukm-todo-val .u {
+  font-size: 11px; font-weight: 400; color: var(--ink-3);
+  margin-left: 3px; letter-spacing: 0;
+}
+.ukm-todo-arr { color: var(--ink-4); font-size: 16px; width: 8px; text-align: center; }
+
+.ukm-todo-zero {
+  font-family: var(--font-serif); font-size: 11px; font-style: italic;
+  color: var(--ink-3); letter-spacing: .3px; line-height: 1.7;
+  padding: 10px 0 2px;
+}
+.ukm-allclear {
+  font-family: var(--font-serif); font-size: 13px; color: var(--ink-3);
+  letter-spacing: 2px; padding: 18px 0; text-align: center;
+  border-top: 0.5px solid var(--hair); border-bottom: 0.5px solid var(--hair);
+  margin: 6px calc(0px - var(--gutter)) 0;
+}
+
 /* ─── 卡片 ──────────────────────────────────── */
 .ukm-card {
   background: var(--paper);
