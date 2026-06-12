@@ -16641,8 +16641,8 @@ async def admin_reports_revenue(
     _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     base_q = db.query(Invoice).filter(
         Invoice.payment_status == "paid",
-        Invoice.invoice_date >= df,
-        Invoice.invoice_date <= dt,
+        func.date(Invoice.paid_at) >= df,
+        func.date(Invoice.paid_at) <= dt,
         ~Invoice.customer_id.in_(_internal_ids_sub),
     )
     rows = base_q.order_by(Invoice.paid_at.desc()).all()
@@ -16800,7 +16800,7 @@ async def admin_reports_revenue(
         daily_amount[cur.isoformat()] = 0.0
         cur += _td(days=1)
     for r in rows:
-        k = (r.invoice_date or "")[:10]
+        k = r.paid_at.date().isoformat() if r.paid_at else (r.invoice_date or "")[:10]
         if k in daily_amount:
             daily_amount[k] += float(r.total_amount or 0)
     daily_series = [{"date": k, "amount": round(v, 2)} for k, v in sorted(daily_amount.items())]
@@ -16937,8 +16937,8 @@ async def admin_reports_revenue_export(
     _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     rows = db.query(Invoice).filter(
         Invoice.payment_status == "paid",
-        Invoice.invoice_date >= df,
-        Invoice.invoice_date <= dt,
+        func.date(Invoice.paid_at) >= df,
+        func.date(Invoice.paid_at) <= dt,
         ~Invoice.customer_id.in_(_internal_ids_sub),
     ).order_by(Invoice.paid_at.asc()).all()
 
@@ -17049,7 +17049,7 @@ async def admin_invoices_list(
         return q2
     today_paid_sum = _stat_q().filter(
         Invoice.payment_status == "paid",
-        Invoice.invoice_date == today_str,
+        func.date(Invoice.paid_at) == today_str,
     ).all()
     unpaid_all = _stat_q().filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
     inv_stats = {
@@ -24090,7 +24090,7 @@ async def m_invoices_list(
         base_q = base_q.filter(Invoice.store == store_short)
     today_paid = base_q.filter(
         Invoice.payment_status == "paid",
-        Invoice.invoice_date == today_str,
+        func.date(Invoice.paid_at) == today_str,
     ).all()
     unpaid_all = base_q.filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
     kpi = {
