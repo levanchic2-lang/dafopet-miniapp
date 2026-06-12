@@ -238,7 +238,22 @@
   {% if page > 1 %}<a href="?q={{ q }}&page={{ page - 1 }}{% if wb_store %}&store={{ wb_store }}{% endif %}" class="btn secondary" style="font-size:0.85rem;">‹ 上一页</a>{% endif %}
   <span style="font-size:0.88rem;color:var(--muted);">第 {{ page }} / {{ total_pages }} 页</span>
   {% if page < total_pages %}<a href="?q={{ q }}&page={{ page + 1 }}{% if wb_store %}&store={{ wb_store }}{% endif %}" class="btn secondary" style="font-size:0.85rem;">下一页 ›</a>{% endif %}
+  <span style="display:flex;align-items:center;gap:0.3rem;font-size:0.85rem;color:var(--muted);">
+    跳至
+    <input id="page-jump" type="number" min="1" max="{{ total_pages }}" value="{{ page }}"
+      style="width:4rem;padding:0.2rem 0.4rem;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;text-align:center;">
+    页
+    <button onclick="(function(){var p=parseInt(document.getElementById('page-jump').value);if(p>=1&&p<={{ total_pages }})location.href='?q={{ q }}&page='+p+'{% if wb_store %}&store={{ wb_store }}{% endif %}'})()" class="btn secondary" style="font-size:0.85rem;padding:0.2rem 0.6rem;">跳转</button>
+  </span>
 </div>
+<script>
+document.getElementById('page-jump').addEventListener('keydown', function(e){
+  if(e.key==='Enter'){
+    var p=parseInt(this.value);
+    if(p>=1&&p<={{ total_pages }})location.href='?q={{ q }}&page='+p+'{% if wb_store %}&store={{ wb_store }}{% endif %}';
+  }
+});
+</script>
 {% endif %}
 
 {% else %}
