@@ -2,18 +2,42 @@
 {% set _t = active_tab or '' %}
 <nav class="ukm-tabbar" role="navigation">
   <a class="ukm-tab {% if _t=='today' %}active{% endif %}" href="/m">
-    <span class="glyph">·</span>今&nbsp;日
+    {# 今日：日历 + 当日圆点 #}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3.5" y="5" width="17" height="15.5" rx="1.6"/>
+      <path d="M3.5 9.5h17M8 3.3v3.4M16 3.3v3.4"/>
+      <circle cx="12" cy="14.8" r="1.5" fill="currentColor" stroke="none"/>
+    </svg>今&nbsp;日
   </a>
   <a class="ukm-tab {% if _t=='customers' %}active{% endif %}" href="/m/customers">
-    <span class="glyph">○</span>客&nbsp;户
+    {# 客户：两个人 #}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="8.8" cy="8.2" r="3.2"/>
+      <path d="M3 19.2c0-3.1 2.6-5.2 5.8-5.2s5.8 2.1 5.8 5.2"/>
+      <path d="M16 5.4a3 3 0 0 1 0 5.7"/>
+      <path d="M17.4 14.2c2 .6 3.2 2.4 3.2 4.9"/>
+    </svg>客&nbsp;户
   </a>
   <a class="ukm-tab {% if _t=='medical' %}active{% endif %}" href="/m/medical">
-    <span class="glyph">◇</span>医&nbsp;疗
+    {# 医疗：医药箱 + 十字 #}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3.3" y="6.3" width="17.4" height="13" rx="2"/>
+      <path d="M8.4 6.3V5.2a1.6 1.6 0 0 1 1.6-1.6h4a1.6 1.6 0 0 1 1.6 1.6v1.1"/>
+      <path d="M12 9.4v6.6M8.7 12.7h6.6"/>
+    </svg>医&nbsp;疗
   </a>
   <a class="ukm-tab {% if _t=='finance' %}active{% endif %}" href="/m/finance">
-    <span class="glyph">¥</span>财&nbsp;务
+    {# 财务：¥ 硬币 #}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.4"/>
+      <path d="M8.7 8.2 12 11.6l3.3-3.4M12 11.6v6M9.3 13.3h5.4M9.3 15.4h5.4"/>
+    </svg>财&nbsp;务
   </a>
   <a class="ukm-tab {% if _t=='me' %}active{% endif %}" href="/m/me">
-    <span class="glyph">▢</span>我
+    {# 我：单人 #}
+    <svg class="ukm-tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="8.2" r="3.5"/>
+      <path d="M5.4 19.6c0-3.7 3-6.1 6.6-6.1s6.6 2.4 6.6 6.1"/>
+    </svg>我
   </a>
 </nav>
