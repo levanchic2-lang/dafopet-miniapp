@@ -121,7 +121,8 @@ function onDefaultCategoryChange() {
   subSel.appendChild(optEmpty);
   Object.keys(subs).forEach(function (k) {
     const o = document.createElement('option');
-    o.value = k; o.textContent = subs[k].label || k;
+    // subs[k] 多为中文字符串（如 "通用"），少数为 {label}；优先取中文，避免显示英文 key
+    o.value = k; o.textContent = (typeof subs[k] === 'string') ? subs[k] : ((subs[k] && subs[k].label) || k);
     subSel.appendChild(o);
   });
   // 常用默认：medication → general，vaccine → 不指定
