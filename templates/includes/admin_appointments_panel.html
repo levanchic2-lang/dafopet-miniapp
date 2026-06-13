@@ -41,6 +41,8 @@
  <form method="post" action="{{ request.url_for('admin_appointment_create') }}" style="margin-top:0.85rem;display:grid;gap:0.75rem;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}"/>
+ <input type="hidden" name="customer_id" id="admin_appt_customer_id" value="0"/>
+ <input type="hidden" name="pet_id"      id="admin_appt_pet_id"      value="0"/>
  <div class="appt-grid">
  <div>
  <label style="margin:0 0 0.35rem;">预约类型</label>

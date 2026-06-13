@@ -484,4 +484,52 @@
     });
   }
 })();
+
+// ── URL 参数预填：从客户档案 / 其他页面携带参数自动展开并预填新建表单 ──
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  if (!params.get('open_create')) return;
+
+  // 展开新建表单面板
+  var body = document.getElementById('create-appt-body');
+  var arrow = document.querySelector('.create-arrow');
+  if (body) body.style.display = 'block';
+  if (arrow) arrow.textContent = '▲';
+
+  // 预填字段
+  var pPhone    = params.get('prefill_phone')       || '';
+  var pName     = params.get('prefill_name')        || '';
+  var pPet      = params.get('prefill_pet')         || '';
+  var pGender   = params.get('prefill_gender')      || '';
+  var pCustId   = params.get('prefill_customer_id') || '';
+  var pPetId    = params.get('prefill_pet_id')      || '';
+  var pCategory = params.get('prefill_category')    || '';
+  var pStore    = params.get('prefill_store')        || '';
+
+  var phoneEl    = document.getElementById('admin_appt_phone');
+  var custEl     = document.getElementById('admin_appt_customer_name');
+  var petEl      = document.getElementById('admin_appt_pet_name');
+  var genderEl   = document.getElementById('admin_appt_pet_gender');
+  var custIdEl   = document.getElementById('admin_appt_customer_id');
+  var petIdEl    = document.getElementById('admin_appt_pet_id');
+  var catEl      = document.getElementById('admin_appt_category');
+  var storeEl    = document.getElementById('admin_appt_store');
+
+  if (phoneEl  && pPhone)    phoneEl.value  = pPhone;
+  if (custEl   && pName)     custEl.value   = pName;
+  if (petEl    && pPet)      petEl.value    = pPet;
+  if (genderEl && pGender)   genderEl.value = pGender;
+  if (custIdEl && pCustId)   custIdEl.value = pCustId;
+  if (petIdEl  && pPetId)    petIdEl.value  = pPetId;
+  if (catEl    && pCategory) { catEl.value  = pCategory; catEl.dispatchEvent(new Event('change')); }
+  if (storeEl  && pStore)    storeEl.value  = pStore;
+
+  // 预填后自动触发客户档案查询
+  if (phoneEl && pPhone && typeof lookupCustomerByPhone === 'function') {
+    lookupCustomerByPhone(pPhone);
+  }
+
+  // 滚动到新建表单
+  if (body) setTimeout(function(){ body.scrollIntoView({behavior:'smooth', block:'center'}); }, 100);
+})();
 </script>
