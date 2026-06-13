@@ -17301,7 +17301,7 @@ async def admin_invoices_list(
         "unpaid_count": len(unpaid_all),
         "unpaid_total": round(sum((i.total_amount or 0) for i in unpaid_all), 2),
     }
-    # 同客户多张未付发票聚合（用于顶部合并结算入口）
+    # 同客户同宠物多张未付发票聚合（用于顶部合并结算入口）
     multi_pay_groups = []
     if status in ("", "unpaid"):
         _unpaid_q = db.query(Invoice).filter(
@@ -17310,14 +17310,19 @@ async def admin_invoices_list(
         )
         if wb_store:
             _unpaid_q = _unpaid_q.filter(Invoice.store == wb_store)
-        _by_cust: dict[int, list] = {}
+        # 按 (customer_id, pet_id) 分组：同客户同宠物才合并为一行
+        _by_cust_pet: dict[tuple, list] = {}
         for u in _unpaid_q.all():
-            _by_cust.setdefault(u.customer_id, []).append(u)
-        for cid, lst in _by_cust.items():
+            key = (u.customer_id, u.pet_id)  # pet_id=None 的按无宠物分一组
+            _by_cust_pet.setdefault(key, []).append(u)
+        for (cid, pid), lst in _by_cust_pet.items():
             if len(lst) >= 2:
                 c = db.get(Customer, cid)
+                p = db.get(Pet, pid) if pid else None
                 multi_pay_groups.append({
                     "customer": c,
+                    "pet": p,
+                    "pet_id": pid or 0,
                     "count": len(lst),
                     "total": round(sum(float(i.total_amount or 0) for i in lst), 2),
                 })
@@ -17434,8 +17439,9 @@ async def admin_cashier_multi_pay_page(
     customer_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    pet_id: int = 0,
 ):
-    """同客户多张未付发票合并结算页。"""
+    """同客户同宠物多张未付发票合并结算页。"""
     require_admin(request)
     cust = db.get(Customer, customer_id)
     if not cust:
@@ -17443,8 +17449,10 @@ async def admin_cashier_multi_pay_page(
     admin_store = _get_admin_store(request)
     q = db.query(Invoice).filter(
         Invoice.customer_id == customer_id,
-        Invoice.payment_status == "unpaid",
+        Invoice.payment_status.in_(("unpaid", "partial")),
     )
+    if pet_id:
+        q = q.filter(Invoice.pet_id == pet_id)
     if admin_store:
         q = q.filter(Invoice.store == admin_store)
     invoices = q.order_by(Invoice.id.asc()).all()
@@ -17458,8 +17466,11 @@ async def admin_cashier_multi_pay_page(
             continue
         rows.append({"inv": inv, "outstanding": outstanding, "pet": inv.pet})
         grand_total += outstanding
+    pet = db.get(Pet, pet_id) if pet_id else None
     return templates.TemplateResponse(request, "uk/cashier_multi_pay.html", {
         "cust": cust,
+        "pet": pet,
+        "pet_id": pet_id,
         "rows": rows,
         "grand_total": round(grand_total, 2),
         "wb_store": admin_store or "",
@@ -17479,6 +17490,8 @@ async def admin_cashier_multi_pay_submit(
     customer_id = int(form.get("customer_id") or 0)
     if not customer_id:
         raise HTTPException(400, "customer_id 必填")
+    _mp_pet_id = int(form.get("pet_id") or 0)
+    _mp_qs = f"customer_id={customer_id}" + (f"&pet_id={_mp_pet_id}" if _mp_pet_id else "")
     method = str(form.get("method") or "cash").strip()
     ref_no = (form.get("ref_no") or "").strip()[:120]
     operator = request.session.get("admin_username", "admin")
@@ -17487,13 +17500,13 @@ async def admin_cashier_multi_pay_submit(
     simple_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party"}
     if method not in simple_methods:
         return RedirectResponse(
-            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg=合并结算暂只支持现金/微信/支付宝/收钱吧/美团/第三方",
+            f"/admin/cashier/multi-pay?{_mp_qs}&msg=合并结算暂只支持现金/微信/支付宝/收钱吧/美团/第三方",
             status_code=303,
         )
     inv_ids = [int(x) for x in form.getlist("invoice_ids") if str(x).isdigit()]
     if not inv_ids:
         return RedirectResponse(
-            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg=请勾选至少一张待收单",
+            f"/admin/cashier/multi-pay?{_mp_qs}&msg=请勾选至少一张待收单",
             status_code=303,
         )
     # 折扣 / 减免（可选）— 按选中单 outstanding 比例分摊
@@ -17525,7 +17538,7 @@ async def admin_cashier_multi_pay_submit(
         inv_rows.append({"inv": inv, "out": outstanding})
     if not inv_rows:
         return RedirectResponse(
-            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg=勾选的单都无未收金额",
+            f"/admin/cashier/multi-pay?{_mp_qs}&msg=勾选的单都无未收金额",
             status_code=303,
         )
     grand_out = sum(r["out"] for r in inv_rows)
@@ -17575,7 +17588,7 @@ async def admin_cashier_multi_pay_submit(
     round_amount = max(0.0, min(round_amount, actuals_total))
     if round_amount <= 0:
         return RedirectResponse(
-            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg=本笔金额为 0",
+            f"/admin/cashier/multi-pay?{_mp_qs}&msg=本笔金额为 0",
             status_code=303,
         )
 
@@ -17618,7 +17631,7 @@ async def admin_cashier_multi_pay_submit(
         # 还有未付 → 回合并结算页让用户走下一种支付方式
         msg_text = f"本笔 {method} 收 ¥{paid_total:.2f}（{paid_count} 单部分/已收）· 剩余 ¥{still_outstanding:.2f} 请继续选支付方式"
         return RedirectResponse(
-            f"/admin/cashier/multi-pay?customer_id={customer_id}&msg={_q(msg_text, safe='')}",
+            f"/admin/cashier/multi-pay?{_mp_qs}&msg={_q(msg_text, safe='')}",
             status_code=303,
         )
     # 全部付清 → 回已收款 tab

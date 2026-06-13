@@ -48,6 +48,7 @@
   <div class="meta">
     客户：<a href="/admin/customer/{{ cust.id }}" style="border-bottom:0.5px solid var(--hair-2);">{{ cust.name }}</a>
     {% if cust.phone %} · 手机 {{ cust.phone }}{% endif %}
+    {% if pet %} · 宠物 <b>{{ pet.name }}</b>{% endif %}
     {% if request.query_params.get('msg') %}
     <span style="margin-left:16px; color:var(--accent-red);">{{ request.query_params.get('msg') }}</span>
     {% endif %}
@@ -61,6 +62,7 @@
 <form method="post" action="/admin/cashier/multi-pay" id="mpForm">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
   <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+  <input type="hidden" name="pet_id" value="{{ pet_id or 0 }}"/>
   <input type="hidden" name="method" id="mp-method-input" value="cash"/>
 
   <div class="mp-tip">

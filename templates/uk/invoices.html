@@ -160,8 +160,8 @@
   </div>
   <div style="display:flex; gap:18px; flex-wrap:wrap;">
     {% for g in multi_pay_groups %}
-    <a href="/admin/cashier/multi-pay?customer_id={{ g.customer.id }}" style="display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border:0.5px solid var(--ink-3); background:var(--paper); text-decoration:none; color:var(--ink); font-family:var(--font-serif); font-size:10pt;">
-      <span><b>{{ g.customer.name }}</b></span>
+    <a href="/admin/cashier/multi-pay?customer_id={{ g.customer.id }}{% if g.pet_id %}&pet_id={{ g.pet_id }}{% endif %}" style="display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border:0.5px solid var(--ink-3); background:var(--paper); text-decoration:none; color:var(--ink); font-family:var(--font-serif); font-size:10pt;">
+      <span><b>{{ g.customer.name }}</b>{% if g.pet %} · <span style="font-style:italic; color:var(--ink-2);">{{ g.pet.name }}</span>{% endif %}</span>
       <span style="color:var(--ink-3); font-style:italic;">{{ g.count }} 单</span>
       <span style="font-family:var(--font-numeric); color:var(--accent-red); font-weight:700;">¥{{ '%.2f'|format(g.total) }}</span>
       <span style="color:var(--ink-3); font-size:9pt;">→ 合并结算</span>
