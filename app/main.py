@@ -1305,7 +1305,7 @@ def _check_appointment_conflict(
       - 美容线：beauty / grooming / washcare（美容师独立场地）
       - 医疗线：tnr / surgery / outpatient（医生独立场地）
     跨线并行不冲突。
-    美容线额外规则：猫进烘干机阶段（主动护理60分钟后）可并发 ≤60min 犬服务。
+    美容线额外规则：猫进烘干机阶段（主动护理60分钟后）可并发 ≤120min 犬服务（允许延伸到猫结束后）。
     重叠返回冲突记录，否则返回 None。
     """
     new_track = _appt_track(category)
@@ -2554,7 +2554,7 @@ def _beauty_slots_for_date(
 ) -> list[str]:
     """
     返回指定日期门店美容师可接受的开始时间列表（HH:MM 字符串）。
-    实现猫进烘干机时可并发做 ≤60min 犬洗护的规则。
+    实现猫进烘干机时可并发做 ≤120min 犬洗护的规则（允许延伸到猫结束后）。
     """
     _inactive = {AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value}
     bookings = (
@@ -2613,10 +2613,10 @@ def _beauty_slots_for_date(
             for bs, be in cat_active:
                 if _overlaps(start, end, bs, be):
                     return False
-            # 烘干机窗口：仅 ≤60min 且完全落在窗口内才允许
+            # 烘干机窗口：≤120min 且从窗口开始（允许延伸到猫结束后）
             for dws, dwe in cat_dryer:
                 if _overlaps(start, end, dws, dwe):
-                    if not (new_duration <= 60 and start >= dws and end <= dwe):
+                    if not (new_duration <= 120 and start >= dws):
                         return False
         elif is_new_cat:
             # 猫：需要完全空闲（不能与任何阶段重叠）
