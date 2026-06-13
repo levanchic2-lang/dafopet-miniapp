@@ -81,16 +81,16 @@
   .co-pay-amount-wrap label { font-size:8.5pt; letter-spacing:1.5px; color:var(--ink-3); }
   .co-pay-amount { font-family:var(--font-numeric); font-size:22pt; font-weight:700; color:var(--accent-red); }
 
-  .co-methods { display:flex; gap:8px; flex-wrap:wrap; }
-  .co-method { padding:10px 14px; border:0.5px solid var(--hair); background:var(--paper); font-family:var(--font-serif); font-size:10pt; cursor:pointer; letter-spacing:0.5px; min-width:72px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .co-methods { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .co-method { box-sizing:border-box; height:54px; padding:0 14px; border:0.5px solid var(--hair); background:var(--paper); font-family:var(--font-serif); font-size:10pt; cursor:pointer; letter-spacing:0.5px; min-width:76px; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
   .co-method.active { background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:700; }
-  .co-method .m-sub { font-size:8pt; opacity:.75; font-family:var(--font-numeric); }
+  .co-method .m-sub { font-size:8pt; opacity:.75; font-family:var(--font-numeric); line-height:1; }
 
-  .co-ref-field { display:flex; flex-direction:column; gap:4px; }
+  .co-ref-field { display:flex; flex-direction:column; gap:4px; justify-content:center; }
   .co-ref-field label { font-size:8.5pt; letter-spacing:1.5px; color:var(--ink-3); }
-  .co-ref-input { padding:8px 12px; font-family:var(--font-serif); font-size:10.5pt; border:0.5px solid var(--ink-3); border-radius:0; width:150px; }
+  .co-ref-input { box-sizing:border-box; height:34px; padding:0 12px; font-family:var(--font-serif); font-size:10.5pt; border:0.5px solid var(--ink-3); border-radius:0; width:150px; }
 
-  .co-submit { margin-left:auto; padding:16px 32px; background:var(--ink); color:var(--paper); font-family:var(--font-serif); font-size:13pt; letter-spacing:3px; border:none; cursor:pointer; white-space:nowrap; }
+  .co-submit { box-sizing:border-box; height:54px; margin-left:auto; padding:0 32px; background:var(--ink); color:var(--paper); font-family:var(--font-serif); font-size:13pt; letter-spacing:3px; border:none; cursor:pointer; white-space:nowrap; }
   .co-submit:active { opacity:.8; }
 
   .co-msg { padding:10px 20px; margin-bottom:14px; background:#fef0f0; border-left:3px solid var(--accent-red); font-size:10pt; color:var(--accent-red); }
