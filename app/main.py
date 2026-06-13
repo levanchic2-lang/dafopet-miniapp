@@ -16849,6 +16849,31 @@ def _delete_so_invoice(db: Session, order_id: int) -> None:
         db.flush()
 
 
+def _delete_grooming_invoice(db: Session, rec: "GroomingOrder") -> None:
+    """美容单删除 / 作废时同步删未付的关联发票（已付/部分付的保留作为档案）。
+    优先用 GroomingOrder.invoice_id 直连；兜底按 InvoiceItem ref 反查。"""
+    inv = None
+    if getattr(rec, "invoice_id", None):
+        inv = db.get(Invoice, rec.invoice_id)
+    if inv is None:
+        item = (
+            db.query(InvoiceItem)
+            .join(Invoice, InvoiceItem.invoice_id == Invoice.id)
+            .filter(
+                InvoiceItem.ref_type == "grooming",
+                InvoiceItem.ref_id == rec.id,
+            )
+            .first()
+        )
+        if item:
+            inv = db.get(Invoice, item.invoice_id)
+    if inv is None:
+        return
+    if inv.payment_status in ("unpaid", "cancelled"):
+        db.delete(inv)
+        db.flush()
+
+
 def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "Invoice | None":
     """把就诊产生的处方 / 检查单 / 销售单自动同步到一张「待收款」收费单。
 
@@ -21901,10 +21926,12 @@ async def admin_grooming_delete(rec_id: int, request: Request, db: Session = Dep
         raise HTTPException(400, f"美容单已锁定（{reason}），不可删除。请使用「作废」。")
     cust_id = rec.customer_id
     pet_id = rec.pet_id
+    # 同步删除未付的关联收费单（已付的保留作档案），避免收银台残留孤儿单
+    _delete_grooming_invoice(db, rec)
     db.delete(rec)
     db.commit()
     if cust_id:
-        return RedirectResponse(f"/admin/customers/{cust_id}?pet_id={pet_id}&msg=美容单已删除", status_code=303)
+        return RedirectResponse(f"/admin/customers/{cust_id}?pet_id={pet_id}&msg=美容单已删除（关联未付收费单已清理）", status_code=303)
     return RedirectResponse("/admin/customers?msg=美容单已删除", status_code=303)
 
 
@@ -21947,6 +21974,11 @@ async def admin_grooming_void(rec_id: int, request: Request, db: Session = Depen
             refund_msg = f" · ¥{refund_amount:.2f} 已退入客户钱包"
             _audit_doc_action(db, "grooming", rec_id, "refund_to_wallet",
                               operator, extra=f"amount={refund_amount}")
+    # 关联未付收费单 → 同步作废（已付/部分付的保留作档案，避免收银台残留）
+    if rec.invoice_id:
+        _ginv = db.get(Invoice, rec.invoice_id)
+        if _ginv and _ginv.payment_status == "unpaid":
+            _ginv.payment_status = "cancelled"
     _audit_doc_action(db, "grooming", rec_id, "void", operator, void_reason)
     db.commit()
     return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已作废{refund_msg}", status_code=303)

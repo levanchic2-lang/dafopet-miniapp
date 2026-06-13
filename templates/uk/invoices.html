@@ -274,7 +274,7 @@ function toggleSettle(idx) {
     {% set cust = cust_map.get(inv.customer_id) %}
     {% set p = inv.pet %}
     <tr>
-      <td class="no">{{ inv.invoice_no }}</td>
+      <td class="no"><a href="/admin/invoices/{{ inv.id }}" style="text-decoration:none; color:inherit; border-bottom:0.5px solid var(--hair-2);">{{ inv.invoice_no }}</a></td>
       <td>
         {% if cust %}
           <a href="/admin/customers/{{ cust.id }}{% if p %}?pet_id={{ p.id }}{% endif %}" class="name" style="text-decoration:none; border-bottom:0.5px solid var(--hair-2);">{{ cust.name }}</a>
