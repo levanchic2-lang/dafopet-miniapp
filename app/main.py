@@ -3026,7 +3026,11 @@ async def page_admin_appointments(
     if appt_store:
         q = q.filter(Appointment.store == appt_store)
     if appt_category:
-        q = q.filter(Appointment.category == appt_category)
+        # beauty/grooming/washcare 归为同一美容线，筛任意一个都显示全部
+        if appt_category == "beauty":
+            q = q.filter(Appointment.category.in_(["beauty", "grooming", "washcare"]))
+        else:
+            q = q.filter(Appointment.category == appt_category)
     # 门店权限过滤
     _appt_admin_store = _get_admin_store(request)
     if _appt_admin_store:
@@ -5075,7 +5079,7 @@ async def admin_appointment_create(
                 f"时间冲突：该门店 {conflict.appointment_date} {conflict.appointment_time} 已有预约"
                 f"（#{conflict.id} {conflict.customer_name}），请换一个时间段。",
             )
-        _is_beauty = str(fields["category"]) == AppointmentCategory.beauty.value
+        _is_beauty = str(fields["category"]) in {"beauty", "grooming", "washcare"}
         _is_proxy_bool = bool(is_proxy and is_proxy.strip())
         # ── 自动创建/合并客户档案 ──
         # 优先用表单传入的 customer_id（从客户档案页发起的新建预约会带）
