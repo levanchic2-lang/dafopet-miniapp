@@ -182,6 +182,18 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
 - 爽约（no_show）≥3 次/月 → 封禁 90 天
 - 手术完成必须先上传术前 + 术后各至少 1 个文件
 
+## 数据清理 — 病历去重清理台
+- 入口：系统 ribbon「病历去重」(`/admin/data-cleanup/visit-duplicates`)，仅非 staff 可见
+- 用途：批量导入历史病历产生大量重复时，按「同宠物 + 同就诊日期」归组删除
+- 权限：超管 + **二次口令** `DATA_PURGE_PASSWORD`（仅服务器 `.env`，留空则工具禁用）+ CSRF
+- 删除走 `_purge_visit_deep()`：**显式逐表级联**（SQLite 未开 `PRAGMA foreign_keys`，不能靠 DB 级联）
+  - 连带删：处方(+明细+发药日志) / 检查单(+报告+显微镜) / 账单(+明细+收款) / 销售单 / 麻醉单 / 回访 / 体重 / 文书 / 签署
+  - 安全护栏：挂**住院档案**或**管制药品台账**的病历自动跳过不删
+  - 财务护栏：已**成功收款**的账单保留（仅脱钩 `visit_id`），不删
+  - 押金 / 套餐核销：保留单据仅脱钩
+- 每条删除写审计 `AuditLog action=visit_purge`
+- 部署后需在服务器 `.env` 设 `DATA_PURGE_PASSWORD=xxx` 并重启才能启用
+
 ## 病历合规规则（病历结束系统）
 - `Visit.status`：open / closed；closed 后病历及关联**处方/检查单**不可改、不可重开（行业惯例）
 - 「✓ 结束病历」按钮在病历详情页头部，二次确认走 `/admin/visits/{id}/close`
