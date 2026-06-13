@@ -65,6 +65,7 @@
     height: 38px; line-height: 1.4;
   }
   .ac-input:focus, .ac-select:focus { border-color: var(--ink); }
+  .ac-input[readonly] { background: #f5f4f0; color: var(--ink-3); }
 
   .ac-textarea {
     width: 100%; min-height: 90px;
@@ -75,6 +76,36 @@
     box-sizing: border-box;
   }
   .ac-textarea:focus { border-color: var(--ink); }
+
+  /* 美容附加区域 */
+  #ac-beauty-section {
+    margin-top: 16px; padding: 14px 16px;
+    border: 0.5px solid var(--hair); background: #fafaf6;
+  }
+  #ac-beauty-section .beauty-label {
+    font-family: var(--font-serif); font-size: 9pt;
+    letter-spacing: 2.5px; color: var(--ink-3); font-style: italic;
+    display: block; margin-bottom: 8px;
+  }
+  .ac-addon-grid {
+    display: flex; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 12px;
+  }
+  .ac-addon-item {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-serif); font-size: 10pt; cursor: pointer;
+  }
+  .ac-addon-item input { width: 15px; height: 15px; cursor: pointer; }
+
+  /* 时段提示 */
+  #ac-slots-row { margin-top: 4px; }
+  #ac-slots-hint {
+    font-family: var(--font-serif); font-size: 9.5pt; font-style: italic;
+    color: var(--accent-amber); letter-spacing: 1px;
+  }
+  #ac-duration-hint {
+    font-family: var(--font-serif); font-size: 9.5pt; font-style: italic;
+    color: var(--accent-green); letter-spacing: 1px;
+  }
 
   .ac-submit-bar {
     display: flex; gap: 14px; align-items: center;
@@ -128,22 +159,73 @@
   <div class="ac-section">
     <div class="ac-section-head"><h2>基&nbsp;础&nbsp;信&nbsp;息</h2></div>
 
-    <div class="ac-row full">
+    <div class="ac-row r2">
       <div class="ac-field">
         <label>预&nbsp;约&nbsp;类&nbsp;型<span class="req">*</span></label>
-        <select name="category" required class="ac-select">
+        <select name="category" id="ac-category" required class="ac-select" onchange="acOnCategoryChange()">
           {% for k, zh in category_labels.items() %}
           <option value="{{ k }}" {% if default_category == k %}selected{% endif %}>{{ zh }}</option>
           {% endfor %}
         </select>
       </div>
-    </div>
-
-    <div class="ac-row full">
       <div class="ac-field">
         <label>服&nbsp;务&nbsp;项&nbsp;目<span class="req">*</span></label>
-        <input name="service_name" required placeholder="如 体检 / 绝育 / 洗澡 / 接种狂犬" class="ac-input"/>
+        {# 文本输入（TNR / 手术 / 门诊用） #}
+        <input name="service_name" id="ac-svc-text" class="ac-input"
+               placeholder="如 体检 / 绝育 / 洗澡 / 接种狂犬"/>
+        {# 美容下拉 #}
+        <select name="service_name" id="ac-svc-beauty" class="ac-select" style="display:none;" disabled
+                onchange="acOnBeautyServiceChange()">
+          <option value="猫洗护">猫洗护</option>
+          <option value="猫造型">猫造型</option>
+          <option value="犬洗护">犬洗护</option>
+          <option value="犬造型">犬造型</option>
+        </select>
       </div>
+    </div>
+
+    {# 美容附加字段（仅美容类型显示） #}
+    <div id="ac-beauty-section" style="display:none;">
+      <span class="beauty-label">附&nbsp;加&nbsp;服&nbsp;务&nbsp;项&nbsp;目（可&nbsp;多&nbsp;选）</span>
+      <div class="ac-addon-grid">
+        {% for addon in ['去浮毛','SPA','护发素','纯手剪','药浴','去油'] %}
+        <label class="ac-addon-item">
+          <input type="checkbox" name="addon_services" value="{{ addon }}" onchange="acUpdateBeautyDuration()"/>
+          {{ addon }}
+        </label>
+        {% endfor %}
+      </div>
+      <div class="ac-row r2" style="margin-bottom:8px;">
+        <div class="ac-field" id="ac-size-dog-wrap">
+          <label>体&nbsp;型（犬）</label>
+          <select id="ac-size-dog" name="pet_size" class="ac-select" onchange="acUpdateBeautyDuration()">
+            <option value="">请选择体型</option>
+            <option value="微小型犬（4kg 以下）">微小型犬（4kg 以下）</option>
+            <option value="小型犬（4–10kg）">小型犬（4–10kg）</option>
+            <option value="中型犬（10–15kg）">中型犬（10–15kg）</option>
+            <option value="中大型犬（15–25kg）">中大型犬（15–25kg）</option>
+            <option value="大型犬（25kg 以上）">大型犬（25kg 以上）</option>
+          </select>
+        </div>
+        <div class="ac-field" id="ac-size-cat-wrap" style="display:none;">
+          <label>体&nbsp;型（猫）</label>
+          <select id="ac-size-cat" name="pet_size" class="ac-select" onchange="acUpdateBeautyDuration()">
+            <option value="">请选择体型</option>
+            <option value="大型猫（4kg 以上）">大型猫（4kg 以上）</option>
+            <option value="中型猫（2.5–4kg）">中型猫（2.5–4kg）</option>
+            <option value="小型猫（2.5kg 以下）">小型猫（2.5kg 以下）</option>
+          </select>
+        </div>
+        <div class="ac-field">
+          <label>毛&nbsp;发&nbsp;长&nbsp;度</label>
+          <select id="ac-coat" name="coat_length" class="ac-select" onchange="acUpdateBeautyDuration()">
+            <option value="">请选择</option>
+            <option value="长毛">长毛</option>
+            <option value="短毛">短毛</option>
+          </select>
+        </div>
+      </div>
+      <div id="ac-duration-hint" style="display:none;"></div>
     </div>
   </div>
 
@@ -194,94 +276,6 @@
     </div>
   </div>
 
-<script>
-let acLookupTimer = null;
-function acLookupCustomer() {
-  clearTimeout(acLookupTimer);
-  const phone = document.getElementById('ac-phone').value.trim();
-  const banner = document.getElementById('ac-cust-banner');
-  const newHint = document.getElementById('ac-newcust-hint');
-  if (phone.length < 7) {
-    banner.style.display = 'none';
-    newHint.style.display = 'none';
-    return;
-  }
-  acLookupTimer = setTimeout(function() {
-    fetch('/api/customer/lookup?phone=' + encodeURIComponent(phone))
-      .then(r => r.json())
-      .then(data => {
-        if (data.found) {
-          // 自动填客户名（若空）
-          const nameEl = document.getElementById('ac-cust-name');
-          if (!nameEl.value && data.name) nameEl.value = data.name;
-          // hidden customer_id
-          document.querySelector('input[name="customer_id"]').value = data.customer_id;
-          // banner 信息（重客户警示）
-          let info = '客户档案 #' + data.customer_id +
-                     (data.name ? ' · ' + data.name : '') +
-                     ' · 名下 ' + (data.pets || []).length + ' 只宠物';
-          if (data.duplicate_count && data.duplicate_count > 1) {
-            info += ' · ⚠ 同号 ' + data.duplicate_count + ' 个档案';
-          }
-          document.getElementById('ac-banner-info').textContent = info;
-          // 宠物 chip
-          const chipsEl = document.getElementById('ac-pet-chips');
-          chipsEl.innerHTML = '';
-          if (!data.pets || !data.pets.length) {
-            chipsEl.innerHTML = '<span style="font-size:9.5pt; color:var(--ink-3); font-style:italic;">该客户暂无宠物档案，提交后将建立新宠物</span>';
-          } else {
-            const speciesZh = {cat:'猫', dog:'犬', other:'其他'};
-            data.pets.forEach(p => {
-              const chip = document.createElement('button');
-              chip.type = 'button';
-              chip.dataset.petId = p.id;
-              chip.dataset.petName = p.name || '';
-              chip.dataset.petGender = p.gender || '';
-              chip.style.cssText = 'padding:8px 16px; border:0.5px solid var(--ink-3); background:var(--paper); font-family:var(--font-serif); font-size:10.5pt; cursor:pointer; letter-spacing:1px;';
-              const sp = speciesZh[p.species] || p.species || '';
-              chip.innerHTML = '<b>' + (p.name || '未命名') + '</b>' +
-                               (sp ? ' <span style="color:var(--ink-3); font-style:italic; font-size:9pt; margin-left:4px;">' + sp + (p.breed ? ' · ' + p.breed : '') + '</span>' : '');
-              chip.onclick = function() {
-                // 高亮选中态
-                chipsEl.querySelectorAll('button').forEach(b => {
-                  b.style.background = 'var(--paper)';
-                  b.style.color = 'var(--ink)';
-                  b.style.fontWeight = '400';
-                });
-                chip.style.background = 'var(--ink)';
-                chip.style.color = 'var(--paper)';
-                chip.style.fontWeight = '700';
-                // 填表 — 同步切到该宠物归属的 customer_id（多客户重档时关键）
-                document.querySelector('input[name="pet_id"]').value = p.id;
-                if (p.customer_id) {
-                  document.querySelector('input[name="customer_id"]').value = p.customer_id;
-                }
-                document.getElementById('ac-pet-name').value = p.name || '';
-                if (p.gender) document.getElementById('ac-pet-gender').value = p.gender;
-              };
-              chipsEl.appendChild(chip);
-            });
-          }
-          banner.style.display = '';
-          newHint.style.display = 'none';
-        } else {
-          banner.style.display = 'none';
-          newHint.style.display = '';
-          // 清掉关联 id
-          document.querySelector('input[name="customer_id"]').value = '0';
-          document.querySelector('input[name="pet_id"]').value = '0';
-        }
-      })
-      .catch(() => {});
-  }, 300);
-}
-// 页面加载时如果已经带 phone（从客户档案跳过来），主动查一次
-document.addEventListener('DOMContentLoaded', function() {
-  const phone = document.getElementById('ac-phone').value.trim();
-  if (phone.length >= 7) acLookupCustomer();
-});
-</script>
-
   {# 门店 + 日期 + 时间 #}
   <div class="ac-section">
     <div class="ac-section-head"><h2>时&nbsp;间&nbsp;与&nbsp;门&nbsp;店</h2></div>
@@ -289,7 +283,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="ac-row r3">
       <div class="ac-field">
         <label>门&nbsp;店<span class="req">*</span></label>
-        <select name="store" required class="ac-select">
+        <select name="store" id="ac-store" required class="ac-select">
           {% for s in store_options %}
           <option value="{{ s }}" {% if default_store_full == s %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
@@ -297,11 +291,12 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <div class="ac-field">
         <label>预&nbsp;约&nbsp;日&nbsp;期<span class="req">*</span></label>
-        <input name="appointment_date" type="date" required value="{{ default_date }}" class="ac-input"/>
+        <input name="appointment_date" id="ac-date" type="date" required value="{{ default_date }}" class="ac-input"
+               onchange="acScheduleBeautySlots()"/>
       </div>
       <div class="ac-field">
         <label>预&nbsp;约&nbsp;时&nbsp;间<span class="req">*</span></label>
-        <select name="appointment_time" required class="ac-select">
+        <select name="appointment_time" id="ac-time" required class="ac-select">
           {# 生成 24h × 4 = 96 个 15 分钟档位 #}
           {% set _slots = [] %}
           {% for h in range(24) %}
@@ -316,12 +311,17 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
 
+    {# 可用时段提示（美容专用） #}
+    <div id="ac-slots-row" style="display:none;">
+      <div id="ac-slots-hint"></div>
+    </div>
+
     <div class="ac-row r2">
       <div class="ac-field">
         <label>时&nbsp;长（分&nbsp;钟）</label>
-        <input name="duration_minutes" type="number" min="5" max="480" value="30" class="ac-input"/>
+        <input name="duration_minutes" id="ac-duration" type="number" min="5" max="480" value="30" class="ac-input"/>
       </div>
-      <div class="ac-field">
+      <div class="ac-field" id="ac-tnr-related-wrap" style="display:none;">
         <label>关&nbsp;联 TNR 申&nbsp;请 ID（仅 TNR 类 型 用）</label>
         <input name="related_application_id" placeholder="可选" type="number" min="0" class="ac-input"/>
       </div>
@@ -343,5 +343,261 @@ document.addEventListener('DOMContentLoaded', function() {
     <a href="javascript:history.back()" class="uk-btn ghost sm">取&nbsp;消</a>
   </div>
 </form>
+
+<script>
+// ─── 美容时长估算（与后端 _calc_beauty_duration 保持一致）───
+function acCalcBeautyDuration(sn, sz, cl, addonCount) {
+  var isWash = sn.indexOf('洗护') >= 0;
+  var isLong = cl === '长毛';
+  var base = 60;
+  if (sn.indexOf('犬') >= 0) {
+    if (sz.indexOf('微小型') >= 0)      base = isWash ? 30 : 90;
+    else if (sz.indexOf('小型犬') >= 0) base = isWash ? 60 : 120;
+    else if (sz.indexOf('中大型') >= 0) base = isWash ? (isLong ? 120 : 90) : 180;
+    else if (sz.indexOf('中型犬') >= 0) base = isWash ? (isLong ? 90 : 60) : 150;
+    else if (sz.indexOf('大型犬') >= 0) base = isWash ? (isLong ? 150 : 120) : 210;
+  } else if (sn.indexOf('猫') >= 0) {
+    if (sz.indexOf('大型猫') >= 0)      base = isWash ? (isLong ? 150 : 120) : 150;
+    else if (sz.indexOf('中型猫') >= 0) base = isWash ? (isLong ? 120 : 90) : 120;
+    else if (sz.indexOf('小型猫') >= 0) base = isWash ? (isLong ? 90 : 60) : 120;
+  }
+  base += addonCount * 30;
+  return base;
+}
+
+function acGetBeautySvc()   { return document.getElementById('ac-svc-beauty').value || ''; }
+function acGetBeautySize() {
+  var dogWrap = document.getElementById('ac-size-dog-wrap');
+  if (dogWrap && dogWrap.style.display !== 'none') {
+    return document.getElementById('ac-size-dog').value || '';
+  }
+  return document.getElementById('ac-size-cat').value || '';
+}
+function acGetBeautyCoat()  { return document.getElementById('ac-coat').value || ''; }
+function acGetAddonCount() {
+  return document.querySelectorAll('#ac-beauty-section input[name="addon_services"]:checked').length;
+}
+
+// 同步体型行可见性（猫/犬）
+function acSyncSizeVisibility() {
+  var sn = acGetBeautySvc();
+  var isDog = sn.indexOf('犬') >= 0;
+  var dogWrap = document.getElementById('ac-size-dog-wrap');
+  var catWrap = document.getElementById('ac-size-cat-wrap');
+  if (!dogWrap || !catWrap) return;
+  dogWrap.style.display = isDog ? '' : 'none';
+  catWrap.style.display = isDog ? 'none' : '';
+  // 禁用/启用对应 select（避免非活跃值被提交）
+  document.getElementById('ac-size-dog').disabled = !isDog;
+  document.getElementById('ac-size-cat').disabled = !!isDog;
+}
+
+// 更新时长 + 提示
+function acUpdateBeautyDuration() {
+  var sn = acGetBeautySvc();
+  var sz = acGetBeautySize();
+  var cl = acGetBeautyCoat();
+  var ac = acGetAddonCount();
+  var dur = acCalcBeautyDuration(sn, sz, cl, ac);
+  document.getElementById('ac-duration').value = dur;
+  var hint = document.getElementById('ac-duration-hint');
+  if (dur > 0) {
+    var h = Math.floor(dur / 60), m = dur % 60;
+    hint.textContent = '预计占用时间：' + (h > 0 ? h + ' 小时' : '') + (m > 0 ? m + ' 分钟' : '');
+    hint.style.display = '';
+  } else {
+    hint.style.display = 'none';
+  }
+  acScheduleBeautySlots();
+}
+
+// 查询可用时段
+var acSlotsTimer = null;
+function acScheduleBeautySlots() {
+  clearTimeout(acSlotsTimer);
+  var cat = document.getElementById('ac-category').value;
+  var slotsRow = document.getElementById('ac-slots-row');
+  if (!['beauty','grooming','washcare'].includes(cat)) {
+    slotsRow.style.display = 'none';
+    return;
+  }
+  acSlotsTimer = setTimeout(acFetchBeautySlots, 300);
+}
+
+function acFetchBeautySlots() {
+  var sn   = acGetBeautySvc();
+  var sz   = acGetBeautySize();
+  var cl   = acGetBeautyCoat();
+  var ac   = document.querySelectorAll('#ac-beauty-section input[name="addon_services"]:checked');
+  var addons = Array.from(ac).map(function(cb){ return cb.value; }).join(',');
+  var date = document.getElementById('ac-date').value;
+  var storeEl = document.getElementById('ac-store');
+  var store = storeEl ? storeEl.value : '';
+  var hint = document.getElementById('ac-slots-hint');
+  var slotsRow = document.getElementById('ac-slots-row');
+
+  if (!sn || !date) { slotsRow.style.display = 'none'; return; }
+
+  hint.textContent = '正在查询可用时段…';
+  slotsRow.style.display = '';
+
+  var qs = 'service=' + encodeURIComponent(sn)
+         + '&pet_size=' + encodeURIComponent(sz)
+         + '&coat_length=' + encodeURIComponent(cl)
+         + '&addons=' + encodeURIComponent(addons)
+         + '&date=' + encodeURIComponent(date)
+         + '&store=' + encodeURIComponent(store);
+
+  fetch('/api/appointments/beauty-slots?' + qs)
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      var slots = data.slots || [];
+      var dur = data.duration_minutes || 0;
+      if (!slots.length) {
+        hint.style.color = 'var(--accent-red)';
+        hint.textContent = '当天暂无可用时段，请选择其他日期。';
+      } else {
+        hint.style.color = 'var(--accent-green)';
+        hint.textContent = '可用时段：' + slots.join('  ·  ');
+        // 更新时长（以 API 返回为准）
+        if (dur) document.getElementById('ac-duration').value = dur;
+      }
+    })
+    .catch(function() {
+      hint.style.color = 'var(--ink-3)';
+      hint.textContent = '时段查询失败，请手动填写时长。';
+    });
+}
+
+// 类型切换
+function acOnCategoryChange() {
+  var cat = document.getElementById('ac-category').value;
+  var isBeauty = ['beauty','grooming','washcare'].includes(cat);
+  var isTnr    = cat === 'tnr';
+
+  // 服务项目切换
+  var svcText   = document.getElementById('ac-svc-text');
+  var svcBeauty = document.getElementById('ac-svc-beauty');
+  if (isBeauty) {
+    svcText.style.display = 'none'; svcText.disabled = true; svcText.removeAttribute('required');
+    svcBeauty.style.display = ''; svcBeauty.disabled = false; svcBeauty.setAttribute('required','');
+  } else {
+    svcText.style.display = ''; svcText.disabled = false; svcText.setAttribute('required','');
+    svcBeauty.style.display = 'none'; svcBeauty.disabled = true; svcBeauty.removeAttribute('required');
+  }
+
+  // 美容附加区域
+  var beautySection = document.getElementById('ac-beauty-section');
+  beautySection.style.display = isBeauty ? '' : 'none';
+
+  // TNR 关联 ID
+  var tnrWrap = document.getElementById('ac-tnr-related-wrap');
+  if (tnrWrap) tnrWrap.style.display = isTnr ? '' : 'none';
+
+  // 美容时锁定横岗店
+  var storeEl = document.getElementById('ac-store');
+  if (storeEl) {
+    if (isBeauty) {
+      for (var i = 0; i < storeEl.options.length; i++) {
+        if (storeEl.options[i].value.indexOf('横岗') >= 0) {
+          storeEl.value = storeEl.options[i].value;
+          break;
+        }
+      }
+      storeEl.disabled = true;
+    } else {
+      storeEl.disabled = false;
+    }
+  }
+
+  if (isBeauty) {
+    acSyncSizeVisibility();
+    acUpdateBeautyDuration();
+  } else {
+    document.getElementById('ac-slots-row').style.display = 'none';
+    document.getElementById('ac-duration-hint').style.display = 'none';
+  }
+}
+
+// 美容服务切换时同步体型
+function acOnBeautyServiceChange() {
+  acSyncSizeVisibility();
+  acUpdateBeautyDuration();
+}
+
+// ─── 客户档案查询 ───
+let acLookupTimer = null;
+function acLookupCustomer() {
+  clearTimeout(acLookupTimer);
+  const phone = document.getElementById('ac-phone').value.trim();
+  const banner = document.getElementById('ac-cust-banner');
+  const newHint = document.getElementById('ac-newcust-hint');
+  if (phone.length < 7) {
+    banner.style.display = 'none';
+    newHint.style.display = 'none';
+    return;
+  }
+  acLookupTimer = setTimeout(function() {
+    fetch('/api/customer/lookup?phone=' + encodeURIComponent(phone))
+      .then(r => r.json())
+      .then(data => {
+        if (data.found) {
+          const nameEl = document.getElementById('ac-cust-name');
+          if (!nameEl.value && data.name) nameEl.value = data.name;
+          document.querySelector('input[name="customer_id"]').value = data.customer_id;
+          let info = '客户档案 #' + data.customer_id +
+                     (data.name ? ' · ' + data.name : '') +
+                     ' · 名下 ' + (data.pets || []).length + ' 只宠物';
+          if (data.duplicate_count && data.duplicate_count > 1) {
+            info += ' · ⚠ 同号 ' + data.duplicate_count + ' 个档案';
+          }
+          document.getElementById('ac-banner-info').textContent = info;
+          const chipsEl = document.getElementById('ac-pet-chips');
+          chipsEl.innerHTML = '';
+          if (!data.pets || !data.pets.length) {
+            chipsEl.innerHTML = '<span style="font-size:9.5pt; color:var(--ink-3); font-style:italic;">该客户暂无宠物档案，提交后将建立新宠物</span>';
+          } else {
+            const speciesZh = {cat:'猫', dog:'犬', other:'其他'};
+            data.pets.forEach(p => {
+              const chip = document.createElement('button');
+              chip.type = 'button';
+              chip.dataset.petId = p.id;
+              chip.style.cssText = 'padding:8px 16px; border:0.5px solid var(--ink-3); background:var(--paper); font-family:var(--font-serif); font-size:10.5pt; cursor:pointer; letter-spacing:1px;';
+              const sp = speciesZh[p.species] || p.species || '';
+              chip.innerHTML = '<b>' + (p.name || '未命名') + '</b>' +
+                               (sp ? ' <span style="color:var(--ink-3); font-style:italic; font-size:9pt; margin-left:4px;">' + sp + (p.breed ? ' · ' + p.breed : '') + '</span>' : '');
+              chip.onclick = function() {
+                chipsEl.querySelectorAll('button').forEach(b => {
+                  b.style.background = 'var(--paper)'; b.style.color = 'var(--ink)'; b.style.fontWeight = '400';
+                });
+                chip.style.background = 'var(--ink)'; chip.style.color = 'var(--paper)'; chip.style.fontWeight = '700';
+                document.querySelector('input[name="pet_id"]').value = p.id;
+                if (p.customer_id) document.querySelector('input[name="customer_id"]').value = p.customer_id;
+                document.getElementById('ac-pet-name').value = p.name || '';
+                if (p.gender) document.getElementById('ac-pet-gender').value = p.gender;
+              };
+              chipsEl.appendChild(chip);
+            });
+          }
+          banner.style.display = '';
+          newHint.style.display = 'none';
+        } else {
+          banner.style.display = 'none';
+          newHint.style.display = '';
+          document.querySelector('input[name="customer_id"]').value = '0';
+          document.querySelector('input[name="pet_id"]').value = '0';
+        }
+      })
+      .catch(() => {});
+  }, 300);
+}
+
+// 页面加载初始化
+document.addEventListener('DOMContentLoaded', function() {
+  acOnCategoryChange();  // 根据默认类型初始化显示状态
+  const phone = document.getElementById('ac-phone').value.trim();
+  if (phone.length >= 7) acLookupCustomer();
+});
+</script>
 
 {% endblock %}

@@ -4966,7 +4966,8 @@ async def admin_appointment_create_form(
         "default_store_full": default_store_full,
         "store_options": _CLINIC_STORES,   # 全名
         "admin_store_short": admin_store,
-        "category_labels": _APPOINTMENT_CATEGORY_LABELS,
+        "category_labels": {k: v for k, v in _APPOINTMENT_CATEGORY_LABELS.items()
+                            if k in ("tnr", "outpatient", "surgery", "beauty")},
         "gender_labels": _PET_GENDER_LABELS,
         "return_to": return_to or "",
         "csrf_token": _get_csrf_token(request),
