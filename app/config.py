@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # 会话密钥：重启后登录仍有效；生产环境务必修改
     session_secret: str = "dev-change-session-secret-in-env"
 
+    # 数据清理「二次口令」：删除病历及关联数据这类高危操作的额外口令。
+    # 留空 = 工具禁用（任何人都进不去）；务必只写在服务器 .env，不要提交进仓库。
+    data_purge_password: str = ""
+
     # 微信小程序订阅消息（推荐国内推送方式）
     wechat_appid: str = ""
     wechat_appsecret: str = ""

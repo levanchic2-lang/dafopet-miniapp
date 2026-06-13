@@ -11210,6 +11210,228 @@ async def admin_visit_delete(
 
 
 # ---------------------------------------------------------------------------
+# 数据清理 — 病历去重（超管 + 二次口令）
+#   FK 在 SQLite 未开启级联（PRAGMA foreign_keys 关闭），所以全部子表显式删除。
+# ---------------------------------------------------------------------------
+
+def _visit_attachment_stats(db: Session, vid: int) -> dict:
+    """统计一条病历挂了多少关联数据，用于删除前预览。"""
+    presc = db.query(func.count(Prescription.id)).filter(Prescription.visit_id == vid).scalar() or 0
+    exam  = db.query(func.count(ExamOrder.id)).filter(ExamOrder.visit_id == vid).scalar() or 0
+    inv_ids = [r[0] for r in db.query(Invoice.id).filter(Invoice.visit_id == vid).all()]
+    inv = len(inv_ids)
+    paid = 0.0
+    if inv_ids:
+        paid = float(db.query(func.coalesce(func.sum(Payment.amount), 0.0)).filter(
+            Payment.invoice_id.in_(inv_ids), Payment.status == "success",
+        ).scalar() or 0.0)
+    has_hosp = bool(db.query(Hospitalization.id).filter(Hospitalization.visit_id == vid).first())
+    has_narc = bool(db.query(NarcoticsLedger.id).filter(NarcoticsLedger.visit_id == vid).first())
+    return {
+        "presc": presc, "exam": exam, "invoice": inv, "paid": round(paid, 2),
+        "has_hosp": has_hosp, "has_narc": has_narc,
+        "locked": has_hosp or has_narc,
+    }
+
+
+def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = True) -> dict:
+    """彻底删除一条病历 + 关联医疗数据（处方/检查/账单/销售/麻醉/体重/文书/回访等）。
+    安全护栏：挂有住院档案或管制药品台账 → 拒删（返回 skipped）。
+    财务护栏：已成功收款的发票默认保留（脱钩 visit_id），不删，避免破坏对账。"""
+    vid = visit.id
+    cnt = {"prescription": 0, "exam_order": 0, "invoice": 0, "invoice_kept": 0,
+           "sales_order": 0, "anesthesia": 0, "weight": 0, "medical_doc": 0,
+           "monitor_sheet": 0, "consent_task": 0, "consent_doc": 0,
+           "followup": 0, "microscopy": 0}
+
+    if db.query(Hospitalization.id).filter(Hospitalization.visit_id == vid).first():
+        return {"visit_id": vid, "skipped": True, "reason": "挂有住院档案", "cnt": cnt}
+    if db.query(NarcoticsLedger.id).filter(NarcoticsLedger.visit_id == vid).first():
+        return {"visit_id": vid, "skipped": True, "reason": "挂有管制药品台账", "cnt": cnt}
+
+    # 处方（+ 处方明细 ORM 级联；发药日志手动删）
+    for p in db.query(Prescription).filter(Prescription.visit_id == vid).all():
+        db.query(MedicationAdminLog).filter(
+            MedicationAdminLog.prescription_id == p.id).delete(synchronize_session=False)
+        db.delete(p)
+        cnt["prescription"] += 1
+
+    # 检查单（+ 检查报告 ORM 级联；显微镜报告手动删）
+    for eo in db.query(ExamOrder).filter(ExamOrder.visit_id == vid).all():
+        db.query(MicroscopyReport).filter(
+            MicroscopyReport.exam_order_id == eo.id).delete(synchronize_session=False)
+        db.delete(eo)
+        cnt["exam_order"] += 1
+    # 残留：仅挂 visit_id 的显微镜报告
+    cnt["microscopy"] += db.query(MicroscopyReport).filter(
+        MicroscopyReport.visit_id == vid).delete(synchronize_session=False)
+
+    # 发票（+ 明细/收款 手动删；已收款则保留脱钩）
+    for inv in db.query(Invoice).filter(Invoice.visit_id == vid).all():
+        paid = float(db.query(func.coalesce(func.sum(Payment.amount), 0.0)).filter(
+            Payment.invoice_id == inv.id, Payment.status == "success").scalar() or 0.0)
+        if keep_paid_invoices and paid > 0:
+            inv.visit_id = None
+            cnt["invoice_kept"] += 1
+            continue
+        db.query(Payment).filter(Payment.invoice_id == inv.id).delete(synchronize_session=False)
+        for pr in db.query(PackageRedemption).filter(PackageRedemption.invoice_id == inv.id).all():
+            pr.invoice_id = None
+        for dp in db.query(Deposit).filter(Deposit.applied_invoice_id == inv.id).all():
+            dp.applied_invoice_id = None
+        db.delete(inv)  # invoice_items ORM 级联
+        cnt["invoice"] += 1
+
+    # 销售单（+ 明细 ORM 级联）
+    for so in db.query(SalesOrder).filter(SalesOrder.visit_id == vid).all():
+        db.delete(so)
+        cnt["sales_order"] += 1
+
+    # 麻醉单（+ 明细 ORM 级联）
+    for ao in db.query(AnesthesiaOrder).filter(AnesthesiaOrder.visit_id == vid).all():
+        db.delete(ao)
+        cnt["anesthesia"] += 1
+
+    # 其余纯 visit_id 关联：直接删
+    cnt["weight"]        += db.query(WeightRecord).filter(WeightRecord.visit_id == vid).delete(synchronize_session=False)
+    cnt["medical_doc"]   += db.query(MedicalDocument).filter(MedicalDocument.visit_id == vid).delete(synchronize_session=False)
+    cnt["monitor_sheet"] += db.query(AnesthesiaMonitorSheet).filter(AnesthesiaMonitorSheet.visit_id == vid).delete(synchronize_session=False)
+    cnt["consent_task"]  += db.query(ConsentTask).filter(ConsentTask.visit_id == vid).delete(synchronize_session=False)
+    cnt["consent_doc"]   += db.query(ConsentDocument).filter(ConsentDocument.visit_id == vid).delete(synchronize_session=False)
+    cnt["followup"]      += db.query(FollowUp).filter(FollowUp.visit_id == vid).delete(synchronize_session=False)
+
+    # 押金 / 套餐核销：保留单据，仅脱钩
+    db.query(Deposit).filter(Deposit.visit_id == vid).update({"visit_id": None}, synchronize_session=False)
+    db.query(PackageRedemption).filter(PackageRedemption.visit_id == vid).update({"visit_id": None}, synchronize_session=False)
+
+    db.delete(visit)
+    return {"visit_id": vid, "skipped": False, "reason": "", "cnt": cnt}
+
+
+@app.get("/admin/data-cleanup/visit-duplicates", response_class=HTMLResponse)
+async def admin_visit_dup_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    store: str = "",
+):
+    """病历去重清理台：按 (宠物, 就诊日期) 归组列出疑似重复病历。超管 + 二次口令。"""
+    require_admin(request)
+    require_superadmin(request)
+    purge_enabled = bool((settings.data_purge_password or "").strip())
+
+    admin_store = _get_admin_store(request)
+    wb_store = store or admin_store  # 超管可传 store 过滤
+    # 找出 (pet_id, visit_date) 出现 >=2 次的组
+    q = db.query(Visit.pet_id, Visit.visit_date, func.count(Visit.id).label("c")).filter(
+        Visit.pet_id.is_not(None), Visit.visit_date.is_not(None), Visit.visit_date != "",
+    )
+    dup_keys = [(r.pet_id, r.visit_date) for r in
+                q.group_by(Visit.pet_id, Visit.visit_date).having(func.count(Visit.id) >= 2).all()]
+
+    groups = []
+    for pid, vdate in dup_keys:
+        pet = db.get(Pet, pid)
+        if not pet:
+            continue
+        if wb_store and (pet.store or "") != wb_store:
+            continue
+        cust = db.get(Customer, pet.customer_id) if pet.customer_id else None
+        visits = db.query(Visit).filter(
+            Visit.pet_id == pid, Visit.visit_date == vdate,
+        ).order_by(Visit.id.asc()).all()
+        rows = []
+        for v in visits:
+            st = _visit_attachment_stats(db, v.id)
+            snippet = " / ".join(x for x in [
+                (v.chief_complaint or "").strip()[:24],
+                (v.diagnosis or "").strip()[:24],
+            ] if x)
+            rows.append({"v": v, "st": st, "snippet": snippet})
+        groups.append({
+            "pet": pet, "cust": cust, "date": vdate,
+            "count": len(visits), "rows": rows,
+        })
+    # 多组的排前面（按宠物名 + 日期）
+    groups.sort(key=lambda g: (g["pet"].name or "", g["date"]))
+
+    return templates.TemplateResponse(request, "uk/data_cleanup_visits.html", {
+        "groups": groups,
+        "group_count": len(groups),
+        "total_dup_visits": sum(g["count"] for g in groups),
+        "purge_enabled": purge_enabled,
+        "wb_store": wb_store,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+        "err": request.query_params.get("err"),
+    })
+
+
+@app.post("/admin/data-cleanup/visit-duplicates/delete")
+async def admin_visit_dup_delete(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """批量删除选中的重复病历 + 关联数据。超管 + 二次口令 + CSRF。"""
+    require_admin(request)
+    require_superadmin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    from urllib.parse import quote as _q
+
+    configured = (settings.data_purge_password or "").strip()
+    if not configured:
+        return RedirectResponse(
+            "/admin/data-cleanup/visit-duplicates?err=" + _q("二次口令未配置：请在服务器 .env 设置 DATA_PURGE_PASSWORD", safe=""),
+            status_code=303,
+        )
+    supplied = str(form.get("purge_password") or "").strip()
+    if not secrets.compare_digest(supplied, configured):
+        return RedirectResponse(
+            "/admin/data-cleanup/visit-duplicates?err=" + _q("二次口令错误，未执行任何删除", safe=""),
+            status_code=303,
+        )
+
+    vids = [int(x) for x in form.getlist("visit_ids") if str(x).isdigit()]
+    if not vids:
+        return RedirectResponse(
+            "/admin/data-cleanup/visit-duplicates?err=" + _q("未勾选任何病历", safe=""),
+            status_code=303,
+        )
+
+    deleted, skipped = 0, []
+    agg = {}
+    for vid in vids:
+        v = db.get(Visit, vid)
+        if not v:
+            continue
+        res = _purge_visit_deep(db, v, keep_paid_invoices=True)
+        if res.get("skipped"):
+            skipped.append(f"#{vid}（{res['reason']}）")
+            continue
+        deleted += 1
+        for k, n in res["cnt"].items():
+            agg[k] = agg.get(k, 0) + n
+        _audit(db, request, "visit_purge", detail={"visit_id": vid, "cnt": res["cnt"]})
+    db.commit()
+
+    parts = [f"已删除 {deleted} 条病历"]
+    _zh = {"prescription": "处方", "exam_order": "检查单", "invoice": "账单",
+           "invoice_kept": "保留已收款账单", "sales_order": "销售单", "anesthesia": "麻醉单",
+           "followup": "回访", "weight": "体重记录", "medical_doc": "文书",
+           "consent_task": "签署任务", "consent_doc": "签署归档", "microscopy": "显微镜报告",
+           "monitor_sheet": "麻醉监护单"}
+    extra = [f"{_zh[k]}×{agg[k]}" for k in _zh if agg.get(k)]
+    if extra:
+        parts.append("连带：" + "、".join(extra))
+    if skipped:
+        parts.append("跳过（受保护）：" + "、".join(skipped))
+    return RedirectResponse(
+        "/admin/data-cleanup/visit-duplicates?msg=" + _q(" · ".join(parts), safe=""),
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------------------------
 # 回访管理 — 列表 / 操作
 # ---------------------------------------------------------------------------
 

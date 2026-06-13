@@ -1,0 +1,196 @@
+{% extends "uk/_base.html" %}
+{% block title %}病历去重清理台 · 大风动物医院{% endblock %}
+
+{% block body %}
+<style>
+  .dc-wrap { max-width:1280px; margin:0 auto; }
+  .dc-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .dc-bc a { color:var(--ink-3); }
+  .dc-head h1 { font-family:var(--font-serif); font-size:26pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0 0 6px; }
+  .dc-head .sub { font-family:var(--font-serif); font-style:italic; font-size:10pt; color:var(--ink-3); letter-spacing:1px; }
+  hr.dc-rule { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:16px 0 24px; }
+
+  .dc-warn { border-left:4px solid var(--accent-red); background:#fef0f0; padding:14px 18px; margin-bottom:18px; font-family:var(--font-serif); font-size:10.5pt; color:var(--accent-red); line-height:1.7; }
+  .dc-warn b { font-weight:700; }
+  .dc-note { border-left:4px solid var(--accent-amber); background:#fbf6ee; padding:14px 18px; margin-bottom:18px; font-family:var(--font-serif); font-size:10.5pt; color:var(--accent-amber); line-height:1.7; }
+  .dc-msg-ok { border-left:3px solid var(--accent-green); background:#f0faf4; padding:10px 16px; margin-bottom:16px; font-size:10pt; color:var(--accent-green); }
+  .dc-msg-err { border-left:3px solid var(--accent-red); background:#fef0f0; padding:10px 16px; margin-bottom:16px; font-size:10pt; color:var(--accent-red); }
+
+  .dc-stats { display:flex; gap:32px; margin-bottom:18px; font-family:var(--font-serif); }
+  .dc-stat .num { font-family:var(--font-numeric); font-size:22pt; font-weight:700; color:var(--ink); }
+  .dc-stat .lab { font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-style:italic; }
+
+  .dc-tools { display:flex; gap:10px; align-items:center; margin-bottom:18px; flex-wrap:wrap; }
+  .dc-tool-btn { padding:7px 14px; border:0.5px solid var(--ink-3); background:var(--paper); font-family:var(--font-serif); font-size:9.5pt; letter-spacing:1px; cursor:pointer; }
+  .dc-tool-btn:hover { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+
+  .dc-group { border:0.5px solid var(--hair); margin-bottom:18px; }
+  .dc-group-head { display:flex; align-items:baseline; gap:14px; padding:10px 16px; background:var(--bg); border-bottom:0.5px solid var(--hair); }
+  .dc-group-pet { font-family:var(--font-serif); font-size:13pt; font-weight:700; color:var(--ink); letter-spacing:1px; }
+  .dc-group-sub { font-size:9.5pt; color:var(--ink-3); font-style:italic; }
+  .dc-group-date { margin-left:auto; font-family:var(--font-numeric); font-size:10pt; color:var(--ink-2); }
+  .dc-group-count { font-family:var(--font-numeric); color:var(--accent-red); font-weight:700; }
+
+  .dc-tbl { width:100%; border-collapse:collapse; font-size:10pt; }
+  .dc-tbl th { padding:6px 12px; text-align:left; border-bottom:0.5px solid var(--hair); font-size:8.5pt; letter-spacing:1px; color:var(--ink-3); font-weight:600; }
+  .dc-tbl td { padding:9px 12px; border-bottom:0.5px dashed var(--hair); vertical-align:top; }
+  .dc-tbl tr:last-child td { border-bottom:none; }
+  .dc-tbl tr.locked { background:#faf7f2; }
+  .dc-id { font-family:var(--font-numeric); color:var(--ink-2); }
+  .dc-snip { color:var(--ink-2); }
+  .dc-meta { font-size:8.5pt; color:var(--ink-3); font-style:italic; }
+  .dc-att { font-family:var(--font-numeric); font-size:9pt; }
+  .dc-badge { display:inline-block; padding:1px 7px; border:0.5px solid var(--hair-2); font-size:8pt; letter-spacing:.5px; margin-right:4px; font-family:var(--font-serif); }
+  .dc-badge.paid { color:var(--accent-red); border-color:var(--accent-red); }
+  .dc-badge.lock { color:var(--accent-amber); border-color:var(--accent-amber); }
+
+  .dc-confirm { position:sticky; bottom:0; background:var(--paper); border-top:1.5px solid var(--ink); padding:16px 0; margin-top:24px; display:flex; align-items:center; gap:16px; }
+  .dc-confirm label { font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); letter-spacing:1px; }
+  .dc-confirm input[type=password] { padding:9px 12px; font-family:var(--font-serif); font-size:11pt; border:0.5px solid var(--ink); width:200px; }
+  .dc-sel-count { font-family:var(--font-numeric); color:var(--accent-red); font-weight:700; }
+  .dc-del-btn { margin-left:auto; padding:14px 34px; background:var(--accent-red); color:#fff; font-family:var(--font-serif); font-size:12pt; letter-spacing:3px; border:none; cursor:pointer; }
+  .dc-del-btn:disabled { background:var(--hair-2); cursor:not-allowed; }
+  .dc-empty { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); padding:40px; text-align:center; }
+</style>
+
+<div class="dc-wrap">
+  <div class="dc-bc"><a href="/admin">后台</a> &nbsp;›&nbsp; 数据清理 &nbsp;›&nbsp; 病历去重</div>
+
+  <div class="dc-head">
+    <h1>病 历 去 重 清 理 台</h1>
+    <div class="sub">按「同宠物 + 同就诊日期」归组，勾选要删除的重复病历 · 删除连带处方 / 检查 / 账单</div>
+  </div>
+  <hr class="dc-rule"/>
+
+  {% if msg %}<div class="dc-msg-ok">{{ msg }}</div>{% endif %}
+  {% if err %}<div class="dc-msg-err">{{ err }}</div>{% endif %}
+
+  <div class="dc-warn">
+    <b>⚠ 高危不可逆操作。</b>删除后病历及其连带的处方 / 检查单 / 账单将永久消失，无法恢复。
+    请只删除<b>确认重复的导入数据</b>。<br/>
+    保护规则：① 挂有<b>住院档案</b>或<b>管制药品台账</b>的病历会自动跳过不删；
+    ② 已<b>成功收款</b>的账单会保留（仅与病历脱钩），不会被删除。
+  </div>
+
+  {% if not purge_enabled %}
+  <div class="dc-note">
+    <b>二次口令未启用。</b>请在服务器 <code>.env</code> 中设置 <code>DATA_PURGE_PASSWORD=你的口令</code> 并重启服务后，才能执行删除。
+    （口令只写在服务器，不提交进仓库。）
+  </div>
+  {% endif %}
+
+  <div class="dc-stats">
+    <div class="dc-stat"><div class="num">{{ group_count }}</div><div class="lab">重复组</div></div>
+    <div class="dc-stat"><div class="num">{{ total_dup_visits }}</div><div class="lab">涉及病历</div></div>
+  </div>
+
+  {% if groups %}
+  <form method="post" action="/admin/data-cleanup/visit-duplicates/delete" id="dcForm"
+        onsubmit="return dcConfirm()">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+    <div class="dc-tools">
+      <button type="button" class="dc-tool-btn" onclick="dcKeepFirst()">每组保留第一条 · 勾选其余</button>
+      <button type="button" class="dc-tool-btn" onclick="dcSelectNone()">全不选</button>
+      <span style="font-size:9pt; color:var(--ink-3); font-style:italic;">第一条 = 该组 id 最小（通常最早建立）</span>
+    </div>
+
+    {% for g in groups %}
+    <div class="dc-group" data-group>
+      <div class="dc-group-head">
+        <span class="dc-group-pet">{{ g['pet'].name }}</span>
+        <span class="dc-group-sub">
+          {% if g['cust'] %}{{ g['cust'].name }}{% if g['cust'].phone %} · {{ g['cust'].phone }}{% endif %}{% endif %}
+          {% if g['pet'].store %} · {{ g['pet'].store }}{% endif %}
+        </span>
+        <span class="dc-group-date">{{ g['date'] }} · <span class="dc-group-count">{{ g['count'] }} 条</span></span>
+      </div>
+      <table class="dc-tbl">
+        <thead>
+          <tr>
+            <th style="width:36px;"></th>
+            <th style="width:64px;">病历号</th>
+            <th>主诉 / 诊断</th>
+            <th style="width:200px;">关联数据</th>
+            <th style="width:180px;">建立信息</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in g['rows'] %}
+          <tr class="{% if r['st'].locked %}locked{% endif %}">
+            <td>
+              {% if r['st'].locked %}
+              <span title="受保护，不可删">🔒</span>
+              {% else %}
+              <input type="checkbox" name="visit_ids" value="{{ r['v'].id }}" class="dc-cb" onchange="dcUpdate()"/>
+              {% endif %}
+            </td>
+            <td class="dc-id">#{{ r['v'].id }}</td>
+            <td>
+              <div class="dc-snip">{{ r['snippet'] or '（空病历）' }}</div>
+              {% if r['v'].vet_name %}<div class="dc-meta">医师 {{ r['v'].vet_name }}</div>{% endif %}
+            </td>
+            <td class="dc-att">
+              {% if r['st'].presc %}<span class="dc-badge">处方 {{ r['st'].presc }}</span>{% endif %}
+              {% if r['st'].exam %}<span class="dc-badge">检查 {{ r['st'].exam }}</span>{% endif %}
+              {% if r['st'].invoice %}<span class="dc-badge">账单 {{ r['st'].invoice }}</span>{% endif %}
+              {% if r['st'].paid %}<span class="dc-badge paid">已收款 ¥{{ '%.0f'|format(r['st'].paid) }}</span>{% endif %}
+              {% if r['st'].has_hosp %}<span class="dc-badge lock">住院</span>{% endif %}
+              {% if r['st'].has_narc %}<span class="dc-badge lock">管制药</span>{% endif %}
+              {% if not (r['st'].presc or r['st'].exam or r['st'].invoice) %}<span class="dc-meta">无关联</span>{% endif %}
+            </td>
+            <td>
+              <div class="dc-meta">{{ r['v'].created_at.strftime('%Y-%m-%d %H:%M') if r['v'].created_at else '—' }}</div>
+              {% if r['v'].created_by %}<div class="dc-meta">{{ r['v'].created_by }}</div>{% endif %}
+              {% if r['v'].status == 'closed' %}<div class="dc-meta">已结束</div>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+
+    <div class="dc-confirm">
+      <label>二次口令</label>
+      <input type="password" name="purge_password" id="dcPwd" autocomplete="off" placeholder="服务器 .env 口令"
+             {% if not purge_enabled %}disabled{% endif %}/>
+      <span style="font-family:var(--font-serif); font-size:10pt; color:var(--ink-2);">
+        已选 <span class="dc-sel-count" id="dcSelCount">0</span> 条
+      </span>
+      <button type="submit" class="dc-del-btn" id="dcDelBtn" disabled>确 认 删 除</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="dc-empty">未发现重复病历（同宠物 + 同日期 ≥ 2 条）{% if wb_store %} · 门店：{{ wb_store }}{% endif %}</div>
+  {% endif %}
+</div>
+
+<script>
+var PURGE_ENABLED = {{ 'true' if purge_enabled else 'false' }};
+
+function dcUpdate() {
+  var n = document.querySelectorAll('.dc-cb:checked').length;
+  document.getElementById('dcSelCount').textContent = n;
+  var btn = document.getElementById('dcDelBtn');
+  btn.disabled = !(n > 0 && PURGE_ENABLED);
+}
+function dcKeepFirst() {
+  document.querySelectorAll('[data-group]').forEach(function(grp){
+    var cbs = grp.querySelectorAll('.dc-cb');
+    cbs.forEach(function(cb, i){ cb.checked = (i > 0); }); // 第一个可删项之外全选
+  });
+  dcUpdate();
+}
+function dcSelectNone() {
+  document.querySelectorAll('.dc-cb').forEach(function(cb){ cb.checked = false; });
+  dcUpdate();
+}
+function dcConfirm() {
+  var n = document.querySelectorAll('.dc-cb:checked').length;
+  if (n === 0) { alert('未勾选任何病历'); return false; }
+  if (!document.getElementById('dcPwd').value.trim()) { alert('请输入二次口令'); return false; }
+  return confirm('确认永久删除选中的 ' + n + ' 条病历及其连带的处方 / 检查 / 账单？此操作不可恢复。');
+}
+</script>
+{% endblock %}

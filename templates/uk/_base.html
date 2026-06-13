@@ -192,7 +192,7 @@
   {% elif _path.startswith('/admin/hr') or _path.startswith('/admin/staff')
         or _path.startswith('/admin/adoption') or _path.startswith('/admin/changelog')
         or _path.startswith('/admin/audit-logs') or _path.startswith('/admin/users')
-        or _path.startswith('/showcase') %}
+        or _path.startswith('/admin/data-cleanup') or _path.startswith('/showcase') %}
     {% set _active_tab = 'system' %}
   {% else %}
     {% set _active_tab = 'reception' %}
@@ -274,6 +274,9 @@
     <a class="uk-ribbon-icon {% if _path.startswith('/showcase') %}current{% endif %}" href="/showcase"><i data-lucide="sparkles"></i>公布展示</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/changelog') %}current{% endif %}" href="/admin/changelog"><i data-lucide="pencil-line"></i>开发日志</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/audit-logs') %}current{% endif %}" href="/admin/audit-logs"><i data-lucide="shield-check"></i>审计日志</a>
+    {% if request.session.get('admin_role') != 'staff' %}
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/data-cleanup') %}current{% endif %}" href="/admin/data-cleanup/visit-duplicates"><i data-lucide="trash-2"></i>病历去重</a>
+    {% endif %}
   </div>
   {% endif %}
 </header>
