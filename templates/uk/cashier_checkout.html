@@ -85,6 +85,14 @@
   .co-method { box-sizing:border-box; height:54px; padding:0 14px; border:0.5px solid var(--hair); background:var(--paper); font-family:var(--font-serif); font-size:10pt; cursor:pointer; letter-spacing:0.5px; min-width:76px; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
   .co-method.active { background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:700; }
   .co-method .m-sub { font-size:8pt; opacity:.75; font-family:var(--font-numeric); line-height:1; }
+  .co-method-unavail { opacity:.4; }
+  .co-method-unavail:not(.active) { cursor:not-allowed; }
+
+  /* 套餐/押金/优惠券选择器行 */
+  .co-pickers { border-bottom:0.5px solid var(--hair); background:var(--bg); }
+  .co-pickers-inner { max-width:1100px; margin:0 auto; padding:10px 0; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .co-pick-sel { padding:8px 12px; font-family:var(--font-serif); font-size:10.5pt; border:0.5px solid var(--ink); background:var(--paper); min-width:280px; }
+  .co-pick-hint { font-size:9pt; color:var(--ink-3); font-style:italic; }
 
   .co-ref-field { display:flex; flex-direction:column; gap:4px; justify-content:center; }
   .co-ref-field label { font-size:8.5pt; letter-spacing:1.5px; color:var(--ink-3); }
@@ -235,109 +243,7 @@
     </div>
   </div>
 
-  {# ── 套餐 / 押金 / 优惠券面板（仅对主单 primary_invoice_id 生效）── #}
-  {% if active_packages or available_deposits or available_coupons %}
-  <div class="co-panel">
-    <div class="co-panel-head">套 餐 / 押 金 / 优 惠 券</div>
-
-    {# 套餐 #}
-    {% if active_packages %}
-    <details style="border:0.5px solid var(--hair); margin-bottom:8px;">
-      <summary style="cursor:pointer; padding:10px 14px; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1px; user-select:none; background:var(--bg);">
-        套餐核销 · {{ active_packages|length }} 张有效
-      </summary>
-      <div style="padding:14px 16px;">
-        <form method="post" action="/admin/invoices/{{ primary_invoice_id }}/add-payment">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-          <input type="hidden" name="method" value="package"/>
-          <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
-          <div class="co-field-row">
-            <div class="co-field">
-              <label>选择套餐</label>
-              <select name="customer_package_id" style="min-width:260px;">
-                <option value="">— 选择 —</option>
-                {% for cp in active_packages %}
-                <option value="{{ cp.id }}">{{ cp.name }} · 剩 {{ cp.total_uses - cp.used_count }}/{{ cp.total_uses }}{% if cp.expires_at %} · {{ cp.expires_at }} 到期{% endif %}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="co-field">
-              <label>金额（¥）</label>
-              <input type="number" name="amount" step="0.01" min="0.01" placeholder="{{ '%.2f'|format(outstanding) }}" style="width:120px;"/>
-            </div>
-            <button type="submit" class="co-chip active" style="align-self:flex-end; padding:10px 20px;">核销套餐</button>
-          </div>
-          {% if inv_ids|length > 1 %}
-          <div class="co-sub-note">套餐将核销到第一张单（#{{ primary_invoice_id }}），如有多张单请分别处理</div>
-          {% endif %}
-        </form>
-      </div>
-    </details>
-    {% endif %}
-
-    {# 押金 #}
-    {% if available_deposits %}
-    <details style="border:0.5px solid var(--hair); margin-bottom:8px;">
-      <summary style="cursor:pointer; padding:10px 14px; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1px; user-select:none; background:var(--bg);">
-        押金抵扣 · {{ available_deposits|length }} 笔可用
-      </summary>
-      <div style="padding:14px 16px;">
-        <form method="post" action="/admin/invoices/{{ primary_invoice_id }}/add-payment">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-          <input type="hidden" name="method" value="deposit"/>
-          <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
-          <div class="co-field-row">
-            <div class="co-field">
-              <label>选择押金</label>
-              <select name="deposit_id" style="min-width:260px;">
-                <option value="">— 选择 —</option>
-                {% for d in available_deposits %}
-                <option value="{{ d.id }}">{{ deposit_category_zh.get(d.category, d.category) }} · 剩 ¥{{ '%.2f'|format(d._remaining) }}（共收 ¥{{ '%.2f'|format(d.amount) }}）</option>
-                {% endfor %}
-              </select>
-            </div>
-            <button type="submit" class="co-chip active" style="align-self:flex-end; padding:10px 20px;">抵扣押金</button>
-          </div>
-          {% if inv_ids|length > 1 %}
-          <div class="co-sub-note">押金将抵扣到第一张单（#{{ primary_invoice_id }}），如有多张单请分别处理</div>
-          {% endif %}
-        </form>
-      </div>
-    </details>
-    {% endif %}
-
-    {# 优惠券 #}
-    {% if available_coupons %}
-    <details style="border:0.5px solid var(--hair); margin-bottom:8px;">
-      <summary style="cursor:pointer; padding:10px 14px; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1px; user-select:none; background:var(--bg);">
-        优惠券 · {{ available_coupons|length }} 张可用
-      </summary>
-      <div style="padding:14px 16px;">
-        <form method="post" action="/admin/invoices/{{ primary_invoice_id }}/add-payment">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-          <input type="hidden" name="method" value="coupon"/>
-          <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
-          <div class="co-field-row">
-            <div class="co-field">
-              <label>选择优惠券</label>
-              <select name="coupon_id" style="min-width:260px;">
-                <option value="">— 选择 —</option>
-                {% for c in available_coupons %}
-                <option value="{{ c.id }}">{{ c.title }}（{{ coupon_kind_zh.get(c.kind, c.kind) }}） · 可抵 ¥{{ '%.2f'|format(c._usable_amount) }}{% if c.expires_at %} · {{ c.expires_at }} 到期{% endif %}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <button type="submit" class="co-chip active" style="align-self:flex-end; padding:10px 20px;">核销优惠券</button>
-          </div>
-          {% if inv_ids|length > 1 %}
-          <div class="co-sub-note">优惠券将核销到第一张单（#{{ primary_invoice_id }}），如有多张单请分别处理</div>
-          {% endif %}
-        </form>
-      </div>
-    </details>
-    {% endif %}
-  </div>
-  {% endif %}
+  {# 套餐 / 押金 / 优惠券 已并入底部收款栏的支付方式 #}
 
   {# ── 底部留白（防被 fixed bar 遮挡） ── #}
   <div style="height:120px;"></div>
@@ -346,7 +252,7 @@
 
 {% if group_list %}
 {# ── 固定收款栏 ── #}
-<form method="post" action="/admin/cashier/multi-pay" id="coForm">
+<form method="post" action="/admin/cashier/multi-pay" id="coForm" onsubmit="return coOnSubmit()">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
   <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
   <input type="hidden" name="pet_id" value="0"/>
@@ -358,8 +264,40 @@
   <input type="hidden" name="discount_value" id="co-disc-val-hidden" value=""/>
   <input type="hidden" name="embed" value="{{ '1' if embed else '' }}"/>
   <input type="hidden" name="checkout_back" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
+  {# 套餐/押金/优惠券走单单 add-payment（主单），用 next_url 回跳本结账台 #}
+  <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
 
   <div class="co-pay-bar">
+  {# 复杂方式的选择器行（套餐/押金/优惠券，按需出现在收款栏上方） #}
+  <div class="co-pickers" id="co-pickers" style="display:none;">
+    <div class="co-pickers-inner">
+      {% if active_packages %}
+      <select name="customer_package_id" id="pick-package" class="co-pick-sel" style="display:none;">
+        <option value="">— 选择套餐 —</option>
+        {% for cp in active_packages %}
+        <option value="{{ cp.id }}">{{ cp.name }} · 剩 {{ cp.total_uses - cp.used_count }}/{{ cp.total_uses }}{% if cp.expires_at %} · {{ cp.expires_at }} 到期{% endif %}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      {% if available_deposits %}
+      <select name="deposit_id" id="pick-deposit" class="co-pick-sel" style="display:none;">
+        <option value="">— 选择押金 —</option>
+        {% for d in available_deposits %}
+        <option value="{{ d.id }}">{{ deposit_category_zh.get(d.category, d.category) }} · 剩 ¥{{ '%.2f'|format(d._remaining) }}（共收 ¥{{ '%.2f'|format(d.amount) }}）</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      {% if available_coupons %}
+      <select name="coupon_id" id="pick-coupon" class="co-pick-sel" style="display:none;">
+        <option value="">— 选择优惠券 —</option>
+        {% for c in available_coupons %}
+        <option value="{{ c.id }}">{{ c.title }}（{{ coupon_kind_zh.get(c.kind, c.kind) }}） · 可抵 ¥{{ '%.2f'|format(c._usable_amount) }}{% if c.expires_at %} · {{ c.expires_at }} 到期{% endif %}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <span id="co-pick-hint" class="co-pick-hint"></span>
+    </div>
+  </div>
   <div class="co-pay-bar-inner">
     <div class="co-pay-amount-wrap">
       <label>本次待收</label>
@@ -370,13 +308,26 @@
       {% set methods_all = [
         ('cash','现金',None), ('wechat','微信',None), ('alipay','支付宝',None),
         ('shouqianba','收钱吧',None), ('meituan','美团',None), ('third_party','第三方',None),
-        ('wallet','钱包','%.0f'|format(wallet_balance)),
+        ('wallet','钱包','¥%.0f'|format(wallet_balance)),
       ] %}
       {% for val, label, sub in methods_all %}
-      <button type="button" class="co-method{% if loop.first %} active{% endif %}{% if val == 'wallet' and wallet_balance <= 0 %} co-method-dim{% endif %}"
+      <button type="button" class="co-method{% if loop.first %} active{% endif %}"
               data-val="{{ val }}" onclick="coSelectMethod(this)">
         {{ label }}
-        {% if sub is not none %}<span class="m-sub">¥{{ sub }}</span>{% endif %}
+        {% if sub is not none %}<span class="m-sub">{{ sub }}</span>{% endif %}
+      </button>
+      {% endfor %}
+      {# 套餐 / 押金 / 优惠券：单单核销到主单 #}
+      {% set complex_methods = [
+        ('package','套餐', active_packages|length),
+        ('deposit','押金', available_deposits|length),
+        ('coupon','优惠券', available_coupons|length),
+      ] %}
+      {% for val, label, n in complex_methods %}
+      <button type="button" class="co-method co-method-complex{% if n == 0 %} co-method-unavail{% endif %}"
+              data-val="{{ val }}" {% if n == 0 %}data-unavail="1"{% endif %} onclick="coSelectMethod(this)">
+        {{ label }}
+        <span class="m-sub">{% if n > 0 %}{{ n }} 张{% else %}暂无{% endif %}</span>
       </button>
       {% endfor %}
     </div>
@@ -394,6 +345,10 @@
 
 <script>
 var CO_OUTSTANDING = {{ outstanding }};
+var CO_MULTIPAY_URL = '/admin/cashier/multi-pay';
+var CO_ADDPAY_URL = '/admin/invoices/{{ primary_invoice_id }}/add-payment';
+var CO_COMPLEX = {package:'套餐', deposit:'押金', coupon:'优惠券'};
+var CO_PICK_ID = {package:'pick-package', deposit:'pick-deposit', coupon:'pick-coupon'};
 
 function coDone(msg) {
   try { window.parent.postMessage({type:'checkout-done', msg: msg || ''}, '*'); }
@@ -401,9 +356,42 @@ function coDone(msg) {
 }
 
 function coSelectMethod(btn) {
+  if (btn.dataset.unavail) {
+    var nm = CO_COMPLEX[btn.dataset.val] || '该方式';
+    alert('客户暂无可用' + nm);
+    return;
+  }
   document.querySelectorAll('.co-method').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('co-method-val').value = btn.dataset.val;
+  var v = btn.dataset.val;
+  document.getElementById('co-method-val').value = v;
+
+  var form = document.getElementById('coForm');
+  var isComplex = !!CO_COMPLEX[v];
+  // 套餐/押金/优惠券 → 单单核销到主单 add-payment；其余 → 合并 multi-pay
+  form.action = isComplex ? CO_ADDPAY_URL : CO_MULTIPAY_URL;
+
+  // 选择器行：只显示当前复杂方式对应的下拉
+  document.querySelectorAll('.co-pick-sel').forEach(function(s){ s.style.display = 'none'; });
+  var pickers = document.getElementById('co-pickers');
+  var hint = document.getElementById('co-pick-hint');
+  if (isComplex) {
+    pickers.style.display = '';
+    var sel = document.getElementById(CO_PICK_ID[v]);
+    if (sel) sel.style.display = '';
+    hint.textContent = '{{ "本组多张时，仅核销到第一张单 #" ~ primary_invoice_id if inv_ids|length > 1 else "" }}';
+  } else {
+    pickers.style.display = 'none';
+  }
+}
+
+function coOnSubmit() {
+  var v = document.getElementById('co-method-val').value;
+  if (CO_COMPLEX[v]) {
+    var sel = document.getElementById(CO_PICK_ID[v]);
+    if (sel && !sel.value) { alert('请选择要使用的' + CO_COMPLEX[v]); return false; }
+  }
+  return true;
 }
 
 function coSelectDisc(btn) {
