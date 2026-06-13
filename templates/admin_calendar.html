@@ -621,6 +621,7 @@ function renderTimeGrid(days) {
  const left = e._col * (94 / e._numCols);
  const label = (e.service_name || e.customer_name || '预约');
  const evH = Math.min(height, TOTAL_H-top);
+ const isDayView = numCols === 1;
  gridHtml += `<div class="cal-event" style="
  top:${top}px; height:${evH}px;
  left:${left+0.5}%; width:${w-1}%;
@@ -629,6 +630,7 @@ function renderTimeGrid(days) {
  <div class="ev-time">${e.time}${e.duration>30?' · '+e.duration+'分':''}</div>
  <div class="ev-title">${label}</div>
  ${evH>48 && e.customer_name ? '<div class="ev-cust">'+e.customer_name+'</div>' : ''}
+ ${isDayView && e.pet_name && evH>48 ? '<div class="ev-cust" style="font-style:italic;">'+e.pet_name+'</div>' : ''}
  </div>`;
  });
  gridHtml += '</div>';
