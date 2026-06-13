@@ -320,6 +320,9 @@
   </div>
   <div class="actions">
     <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="uk-btn ghost sm">打印票据</a>
+    {% if same_pet_day_invs %}
+    <a href="/admin/invoices/combined-print?ids={{ inv.id }}{% for r in same_pet_day_invs %},{{ r.id }}{% endfor %}" target="_blank" class="uk-btn ghost sm">合并打印 ({{ same_pet_day_invs|length + 1 }}张)</a>
+    {% endif %}
   </div>
 </div>
 

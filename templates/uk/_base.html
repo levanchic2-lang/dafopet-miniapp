@@ -180,7 +180,9 @@
        or _path.startswith('/admin/cages') or _path.startswith('/admin/consent')
        or _path.startswith('/admin/medication') %}
     {% set _active_tab = 'medical' %}
-  {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory')
+  {% elif _path.startswith('/admin/invoices') %}
+    {% set _active_tab = 'cashier' %}
+  {% elif _path.startswith('/admin/inventory')
         or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales')
         or _path.startswith('/admin/feedback') or _path.startswith('/admin/packages')
         or _path.startswith('/admin/coupons') or _path.startswith('/admin/reports')
@@ -223,6 +225,7 @@
     <button class="uk-ribbon-tab {% if _active_tab=='medical' %}active{% endif %}" data-tab="medical" onclick="switchRibbon('medical')">医&nbsp;疗</button>
     <button class="uk-ribbon-tab {% if _active_tab=='business' %}active{% endif %}" data-tab="business" onclick="switchRibbon('business')">经&nbsp;营</button>
     <button class="uk-ribbon-tab {% if _active_tab=='system' %}active{% endif %}" data-tab="system" onclick="switchRibbon('system')">系&nbsp;统</button>
+    <a class="uk-ribbon-tab {% if _active_tab=='cashier' %}active{% endif %}" href="/admin/invoices" style="text-decoration:none;">收&nbsp;银&nbsp;台</a>
     {% endif %}
   </div>
 
