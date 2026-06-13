@@ -17518,6 +17518,40 @@ async def admin_cashier_checkout_page(
     w = db.query(Wallet).filter(Wallet.customer_id == cust.id).first()
     wallet_balance = float(w.balance) if w else 0.0
 
+    # 有效套餐
+    active_packages = (
+        db.query(CustomerPackage)
+        .filter(CustomerPackage.customer_id == cust.id, CustomerPackage.status == "active")
+        .order_by(CustomerPackage.id.desc())
+        .all()
+    )
+
+    # 可用押金（有余额）
+    available_deposits = []
+    for d in db.query(Deposit).filter(
+        Deposit.customer_id == cust.id,
+        Deposit.status.in_(["held", "partial_refund"]),
+    ).all():
+        _rem = float(d.amount) - float(d.applied_amount or 0) - float(d.refunded_amount or 0)
+        if _rem > 0:
+            d._remaining = _rem
+            available_deposits.append(d)
+
+    # 可用优惠券
+    available_coupons = []
+    for c in db.query(Coupon).filter(
+        Coupon.status == "issued",
+    ).filter(
+        or_(Coupon.customer_id == None, Coupon.customer_id == cust.id)
+    ).all():
+        if not _coupon_is_expired(c):
+            _usable = _coupon_compute_amount(c, float(outstanding))
+            if _usable > 0:
+                c._usable_amount = _usable
+                available_coupons.append(c)
+
+    primary_invoice_id = selected_invs[0].id if selected_invs else invoice_id
+
     return templates.TemplateResponse(request, "uk/cashier_checkout.html", {
         "cust": cust,
         "trigger_invoice_id": invoice_id,
@@ -17525,6 +17559,7 @@ async def admin_cashier_checkout_page(
         "group_list": group_list,
         "selected_invs": selected_invs,
         "inv_ids": [i.id for i in selected_invs],
+        "primary_invoice_id": primary_invoice_id,
         "other_pet_count": other_pet_count,
         "other_pet_total": other_pet_total,
         "total_subtotal": total_subtotal,
@@ -17533,6 +17568,11 @@ async def admin_cashier_checkout_page(
         "paid_sum": paid_sum,
         "outstanding": outstanding,
         "wallet_balance": wallet_balance,
+        "active_packages": active_packages,
+        "available_deposits": available_deposits,
+        "available_coupons": available_coupons,
+        "deposit_category_zh": _DEPOSIT_CATEGORY_ZH,
+        "coupon_kind_zh": _COUPON_KIND_ZH,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
     })
@@ -17600,13 +17640,26 @@ async def admin_cashier_multi_pay_submit(
     ref_no = (form.get("ref_no") or "").strip()[:120]
     operator = request.session.get("admin_username", "admin")
     store = _get_admin_store(request)
-    # 仅支持简单支付方式（钱包/套餐/押金/优惠券需精确调度，请单笔结算）
-    simple_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party"}
-    if method not in simple_methods:
+    # checkout 页传入的回跳 URL（用于部分支付后继续收款）
+    checkout_back = (form.get("checkout_back") or "").strip()
+    # 合并结算支持：现金/微信/支付宝/收钱吧/美团/第三方/钱包
+    # 套餐/押金/优惠券因需绑特定记录，由 checkout 页直接 POST 到 add-payment
+    allowed_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party", "wallet"}
+    if method not in allowed_methods:
+        _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
         return RedirectResponse(
-            f"/admin/cashier/multi-pay?{_mp_qs}&msg=合并结算暂只支持现金/微信/支付宝/收钱吧/美团/第三方",
+            f"{_back}&msg=不支持的支付方式",
             status_code=303,
         )
+    # 钱包：预先拿对象（后面还需要校验余额）
+    _wallet_obj = None
+    if method == "wallet":
+        if not customer_id:
+            return RedirectResponse(
+                f"{checkout_back or '/admin/cashier/multi-pay?' + _mp_qs}&msg=无客户绑定，无法用钱包",
+                status_code=303,
+            )
+        _wallet_obj = _get_or_create_wallet(db, customer_id)
     inv_ids = [int(x) for x in form.getlist("invoice_ids") if str(x).isdigit()]
     if not inv_ids:
         return RedirectResponse(
@@ -17691,10 +17744,17 @@ async def admin_cashier_multi_pay_submit(
         round_amount = actuals_total
     round_amount = max(0.0, min(round_amount, actuals_total))
     if round_amount <= 0:
-        return RedirectResponse(
-            f"/admin/cashier/multi-pay?{_mp_qs}&msg=本笔金额为 0",
-            status_code=303,
-        )
+        _back0 = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+        return RedirectResponse(f"{_back0}&msg=本笔金额为 0", status_code=303)
+
+    # 钱包：校验余额（actuals_total 已算出后才能校验）
+    if method == "wallet" and _wallet_obj is not None:
+        if float(_wallet_obj.balance) < round_amount - 0.005:
+            _back0 = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+            return RedirectResponse(
+                f"{_back0}&msg=钱包余额不足（余额 ¥{_wallet_obj.balance:.2f}，需支付 ¥{round_amount:.2f}）",
+                status_code=303,
+            )
 
     # 按顺序消化：每张单先满足，剩余转下一张
     paid_count = 0
@@ -17714,10 +17774,18 @@ async def admin_cashier_multi_pay_submit(
         take = min(remaining, cur_out)
         # store 优先用发票本身的（保证收款统计「按门店」准确）
         _pay_store = store or (inv.store or "")
+        _ref_id = None
+        if method == "wallet" and _wallet_obj is not None:
+            _wtx = _wallet_apply_tx(
+                db, _wallet_obj, tx_type="consume", amount=take,
+                invoice_id=inv.id, operator=operator, store=_pay_store,
+                note=f"合并结算 {inv.invoice_no or inv.id}",
+            )
+            _ref_id = _wtx.id
         db.add(Payment(
             invoice_id=inv.id, customer_id=customer_id,
             method=method, amount=round(take, 2),
-            ref_no=ref_no, status="success",
+            ref_id=_ref_id, ref_no=ref_no, status="success",
             store=_pay_store, operator=operator,
             note=note_tag, batch_no=batch_no,
         ))
@@ -17732,12 +17800,9 @@ async def admin_cashier_multi_pay_submit(
     still_outstanding = round(actuals_total - round_amount, 2)
     from urllib.parse import quote as _q
     if still_outstanding > 0.005:
-        # 还有未付 → 回合并结算页让用户走下一种支付方式
         msg_text = f"本笔 {method} 收 ¥{paid_total:.2f}（{paid_count} 单部分/已收）· 剩余 ¥{still_outstanding:.2f} 请继续选支付方式"
-        return RedirectResponse(
-            f"/admin/cashier/multi-pay?{_mp_qs}&msg={_q(msg_text, safe='')}",
-            status_code=303,
-        )
+        _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+        return RedirectResponse(f"{_back}&msg={_q(msg_text, safe='')}", status_code=303)
     # 全部付清 → 回已收款 tab
     if total_discount > 0:
         msg = f"已合并结算 {len(inv_rows)} 单 · 应收 ¥{grand_out:.2f} − 减免 ¥{total_discount:.2f} = 实收 ¥{actuals_total:.2f}"
