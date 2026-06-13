@@ -170,9 +170,30 @@
       </div>
       <div class="ac-field">
         <label>服&nbsp;务&nbsp;项&nbsp;目<span class="req">*</span></label>
-        {# 文本输入（TNR / 手术 / 门诊用） #}
+        {# 文本输入（TNR 用） #}
         <input name="service_name" id="ac-svc-text" class="ac-input"
-               placeholder="如 体检 / 绝育 / 洗澡 / 接种狂犬"/>
+               placeholder="TNR 手术安排"/>
+        {# 门诊下拉 #}
+        <select name="service_name" id="ac-svc-outpatient" class="ac-select" style="display:none;" disabled>
+          <option value="疫苗/驱虫">疫苗 / 驱虫</option>
+          <option value="体检">体检</option>
+          <option value="呼吸道">呼吸道</option>
+          <option value="胃肠道">胃肠道</option>
+          <option value="泌尿道">泌尿道</option>
+          <option value="皮肤">皮肤</option>
+          <option value="口腔">口腔</option>
+          <option value="行动异常">行动异常</option>
+          <option value="心内科">心内科</option>
+          <option value="肾内科">肾内科</option>
+        </select>
+        {# 手术下拉 #}
+        <select name="service_name" id="ac-svc-surgery" class="ac-select" style="display:none;" disabled>
+          <option value="绝育手术">绝育手术</option>
+          <option value="骨科手术">骨科手术</option>
+          <option value="软组织手术">软组织手术</option>
+          <option value="眼科手术">眼科手术</option>
+          <option value="神经外科手术">神经外科手术</option>
+        </select>
         {# 美容下拉 #}
         <select name="service_name" id="ac-svc-beauty" class="ac-select" style="display:none;" disabled
                 onchange="acOnBeautyServiceChange()">
@@ -476,15 +497,20 @@ function acOnCategoryChange() {
   var isTnr    = cat === 'tnr';
 
   // 服务项目切换
-  var svcText   = document.getElementById('ac-svc-text');
-  var svcBeauty = document.getElementById('ac-svc-beauty');
-  if (isBeauty) {
-    svcText.style.display = 'none'; svcText.disabled = true; svcText.removeAttribute('required');
-    svcBeauty.style.display = ''; svcBeauty.disabled = false; svcBeauty.setAttribute('required','');
-  } else {
-    svcText.style.display = ''; svcText.disabled = false; svcText.setAttribute('required','');
-    svcBeauty.style.display = 'none'; svcBeauty.disabled = true; svcBeauty.removeAttribute('required');
+  var svcText       = document.getElementById('ac-svc-text');
+  var svcOutpatient = document.getElementById('ac-svc-outpatient');
+  var svcSurgery    = document.getElementById('ac-svc-surgery');
+  var svcBeauty     = document.getElementById('ac-svc-beauty');
+  function _showSvc(el) {
+    [svcText, svcOutpatient, svcSurgery, svcBeauty].forEach(function(e) {
+      e.style.display = 'none'; e.disabled = true; e.removeAttribute('required');
+    });
+    el.style.display = ''; el.disabled = false; el.setAttribute('required','');
   }
+  if (isBeauty)            _showSvc(svcBeauty);
+  else if (cat === 'outpatient') _showSvc(svcOutpatient);
+  else if (cat === 'surgery')    _showSvc(svcSurgery);
+  else                           _showSvc(svcText);  // tnr
 
   // 美容附加区域
   var beautySection = document.getElementById('ac-beauty-section');
