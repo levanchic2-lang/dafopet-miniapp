@@ -1,4 +1,4 @@
-{% extends "uk/_base.html" %}
+{% extends layout|default("uk/_base.html") %}
 {% block title %}结账台 · {{ cust.name }}{% endblock %}
 
 {% block body %}
@@ -97,12 +97,15 @@
   .co-msg-ok { padding:10px 20px; margin-bottom:14px; background:#f0faf4; border-left:3px solid var(--accent-green); font-size:10pt; color:var(--accent-green); }
 </style>
 
+{% set _es = '&embed=1' if embed else '' %}
 <div class="co-wrap">
+  {% if not embed %}
   <div class="co-bc">
     <a href="/admin/invoices">收银台</a>
     <span style="margin:0 8px; color:var(--ink-4);">›</span>
     结账台
   </div>
+  {% endif %}
 
   {% if msg %}
   <div class="co-msg">{{ msg }}</div>
@@ -125,13 +128,13 @@
     <div class="co-merge-text">
       该客户还有 <em>{{ other_pet_count }}</em> 只其他宠物的待付订单，共 <em>¥{{ '%.2f'|format(other_pet_total) }}</em>，是否一起收款？
     </div>
-    <a href="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope=all" class="co-merge-btn">合并收费</a>
-    <a href="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope=pet" class="co-merge-btn ghost">仅此宠物</a>
+    <a href="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope=all{{ _es }}" class="co-merge-btn">合并收费</a>
+    <a href="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope=pet{{ _es }}" class="co-merge-btn ghost">仅此宠物</a>
   </div>
   {% elif scope == 'all' and other_pet_count > 0 %}
   <div class="co-merge-banner" style="border-left-color:var(--accent-green); background:#f0faf4;">
     <div class="co-merge-text" style="color:var(--accent-green);">已合并该客户全部宠物的待付订单</div>
-    <a href="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope=pet" class="co-merge-btn ghost" style="font-size:9pt;">仅当前宠物</a>
+    <a href="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope=pet{{ _es }}" class="co-merge-btn ghost" style="font-size:9pt;">仅当前宠物</a>
   </div>
   {% endif %}
 
@@ -178,6 +181,17 @@
   </div>
   {% endfor %}
 
+  {% if not group_list %}
+  <div class="co-section" style="padding:48px 20px; text-align:center;">
+    <div style="font-family:var(--font-serif); font-size:15pt; color:var(--accent-green); letter-spacing:1px;">该客户已无待收账单</div>
+    <div style="font-size:10pt; color:var(--ink-3); font-style:italic; margin-top:8px;">所有订单已结清</div>
+    {% if embed %}
+    <button type="button" onclick="coDone('已结清')" class="co-merge-btn" style="margin-top:22px; display:inline-block; cursor:pointer;">完 成 · 关 闭</button>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if group_list %}
   {# ── 汇总 ── #}
   <div class="co-totals">
     <table>
@@ -236,7 +250,7 @@
         <form method="post" action="/admin/invoices/{{ primary_invoice_id }}/add-payment">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
           <input type="hidden" name="method" value="package"/>
-          <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}"/>
+          <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
           <div class="co-field-row">
             <div class="co-field">
               <label>选择套餐</label>
@@ -271,7 +285,7 @@
         <form method="post" action="/admin/invoices/{{ primary_invoice_id }}/add-payment">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
           <input type="hidden" name="method" value="deposit"/>
-          <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}"/>
+          <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
           <div class="co-field-row">
             <div class="co-field">
               <label>选择押金</label>
@@ -302,7 +316,7 @@
         <form method="post" action="/admin/invoices/{{ primary_invoice_id }}/add-payment">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
           <input type="hidden" name="method" value="coupon"/>
-          <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}"/>
+          <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
           <div class="co-field-row">
             <div class="co-field">
               <label>选择优惠券</label>
@@ -327,8 +341,10 @@
 
   {# ── 底部留白（防被 fixed bar 遮挡） ── #}
   <div style="height:120px;"></div>
+  {% endif %}{# group_list #}
 </div>
 
+{% if group_list %}
 {# ── 固定收款栏 ── #}
 <form method="post" action="/admin/cashier/multi-pay" id="coForm">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -340,7 +356,8 @@
   <input type="hidden" name="method" id="co-method-val" value="cash"/>
   <input type="hidden" name="discount_mode" id="co-disc-mode" value="none"/>
   <input type="hidden" name="discount_value" id="co-disc-val-hidden" value=""/>
-  <input type="hidden" name="checkout_back" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}"/>
+  <input type="hidden" name="embed" value="{{ '1' if embed else '' }}"/>
+  <input type="hidden" name="checkout_back" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
 
   <div class="co-pay-bar">
   <div class="co-pay-bar-inner">
@@ -373,9 +390,15 @@
   </div>{# co-pay-bar-inner #}
   </div>{# co-pay-bar #}
 </form>
+{% endif %}{# group_list #}
 
 <script>
 var CO_OUTSTANDING = {{ outstanding }};
+
+function coDone(msg) {
+  try { window.parent.postMessage({type:'checkout-done', msg: msg || ''}, '*'); }
+  catch(e) { window.top.location = '/admin/invoices?status=paid'; }
+}
 
 function coSelectMethod(btn) {
   document.querySelectorAll('.co-method').forEach(b => b.classList.remove('active'));

@@ -17325,6 +17325,7 @@ async def admin_invoices_list(
                     "pet_id": pid or 0,
                     "count": len(lst),
                     "total": round(sum(float(i.total_amount or 0) for i in lst), 2),
+                    "first_invoice_id": min(i.id for i in lst),
                 })
         multi_pay_groups.sort(key=lambda g: -g["total"])
 
@@ -17440,6 +17441,7 @@ async def admin_cashier_checkout_page(
     db: Session = Depends(get_db),
     invoice_id: int = 0,
     scope: str = "pet",  # "pet" = 仅同宠物；"all" = 合并该客户全部宠物
+    embed: int = 0,      # 1 = 在收银台弹窗 iframe 内渲染（去顶部导航）
 ):
     """统一结账台 — 聚合明细行，一次收清。"""
     require_admin(request)
@@ -17556,6 +17558,8 @@ async def admin_cashier_checkout_page(
         "cust": cust,
         "trigger_invoice_id": invoice_id,
         "scope": scope,
+        "embed": embed,
+        "layout": "uk/_embed_base.html" if embed else "uk/_base.html",
         "group_list": group_list,
         "selected_invs": selected_invs,
         "inv_ids": [i.id for i in selected_invs],
@@ -17642,6 +17646,8 @@ async def admin_cashier_multi_pay_submit(
     store = _get_admin_store(request)
     # checkout 页传入的回跳 URL（用于部分支付后继续收款）
     checkout_back = (form.get("checkout_back") or "").strip()
+    # embed=1 表示在收银台弹窗 iframe 内结算，全部付清后通知父窗口关闭弹窗
+    is_embed = (form.get("embed") == "1")
     # 合并结算支持：现金/微信/支付宝/收钱吧/美团/第三方/钱包
     # 套餐/押金/优惠券因需绑特定记录，由 checkout 页直接 POST 到 add-payment
     allowed_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party", "wallet"}
@@ -17803,11 +17809,21 @@ async def admin_cashier_multi_pay_submit(
         msg_text = f"本笔 {method} 收 ¥{paid_total:.2f}（{paid_count} 单部分/已收）· 剩余 ¥{still_outstanding:.2f} 请继续选支付方式"
         _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
         return RedirectResponse(f"{_back}&msg={_q(msg_text, safe='')}", status_code=303)
-    # 全部付清 → 回已收款 tab
+    # 全部付清
     if total_discount > 0:
         msg = f"已合并结算 {len(inv_rows)} 单 · 应收 ¥{grand_out:.2f} − 减免 ¥{total_discount:.2f} = 实收 ¥{actuals_total:.2f}"
     else:
         msg = f"已合并结算 {len(inv_rows)} 单 · ¥{actuals_total:.2f}"
+    # 弹窗 iframe 内：返回小页面通知父窗口关闭弹窗并刷新列表
+    if is_embed:
+        import json as _json
+        _msg_js = _json.dumps(msg)
+        return HTMLResponse(
+            "<!doctype html><meta charset='utf-8'><script>"
+            "try{window.parent.postMessage({type:'checkout-done',msg:" + _msg_js + "},'*');}"
+            "catch(e){window.top.location='/admin/invoices?status=paid';}"
+            "</script>结算完成"
+        )
     return RedirectResponse(
         f"/admin/invoices?status=paid&msg={_q(msg, safe='')}",
         status_code=303,

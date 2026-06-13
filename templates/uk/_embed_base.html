@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{ title or "结账台" }}</title>
+
+  {# Noto Serif SC（思源宋体）— 与桌面端同字体 #}
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.9/400.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.9/700.css">
+
+  {# UK Minimal 设计系统 #}
+  <link rel="stylesheet" href="/static/uk_minimal.css?v=9" />
+
+  <style>
+    /* 嵌入弹窗内的页面：去掉外层留白，背景透明跟随弹窗 */
+    body { margin:0; background:var(--paper); }
+    /* 弹窗内不需要顶部导航，主体直接顶到上沿 */
+    .co-wrap { padding-top:8px !important; }
+  </style>
+</head>
+<body data-embed="1">
+  {% block body %}{% endblock %}
+</body>
+</html>
