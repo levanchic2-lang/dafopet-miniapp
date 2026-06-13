@@ -1272,12 +1272,20 @@ def _check_calendar_block(
 ) -> str | None:
     """检查日期是否被全天封锁（按业务线）。封锁返回错误提示，否则 None。
     track 语义：beauty 只挡美容线（美容/洗护/造型），medical 只挡医疗线，all 全挡。
+    store 可传全名或短名，两种格式均可匹配。
     """
     if not appointment_date:
         return None
+    # store 可能是全名（大风动物医院（东环店））或短名（东环店），统一转为两者均可比较
+    store_short = _STORE_FULL_TO_SHORT.get(store, store)
+    store_full  = _STORE_SHORT_TO_FULL.get(store, store)
     blocks = db.query(CalendarBlock).filter(
         CalendarBlock.block_date == appointment_date,
-        or_(CalendarBlock.store == store, CalendarBlock.store == ""),
+        or_(
+            CalendarBlock.store == store_short,
+            CalendarBlock.store == store_full,
+            CalendarBlock.store == "",
+        ),
     ).all()
     if not blocks:
         return None

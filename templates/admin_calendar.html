@@ -312,6 +312,12 @@
  <option value="东环店">东环店</option>
  <option value="横岗店">横岗店</option>
  </select>
+ <label>封锁业务线</label>
+ <select id="block-track" style="margin-bottom:0.65rem;width:100%;">
+ <option value="beauty">美容线（美容/洗护/造型）</option>
+ <option value="medical">医疗线（门诊/手术/TNR）</option>
+ <option value="all">全部业务</option>
+ </select>
  <label>备注（可选）</label>
  <input type="text" id="block-notes" style="margin-bottom:0.65rem;"/>
  <div class="modal-btns">
@@ -935,11 +941,12 @@ document.getElementById('block-save-btn').addEventListener('click', async () => 
  const title = document.getElementById('block-title').value.trim() || '全天封锁';
  const date = document.getElementById('block-date').value;
  const st = document.getElementById('block-store').value;
+ const track = document.getElementById('block-track').value;
  const notes = document.getElementById('block-notes').value.trim();
  if (!date) { toast('请填写日期'); return; }
  const res = await fetch('/api/calendar/blocks/create', {
  method:'POST', headers:{'Content-Type':'application/json'},
- body: JSON.stringify({ csrf_token: CSRF, title, date, store: st, notes })
+ body: JSON.stringify({ csrf_token: CSRF, title, date, store: st, track, notes })
  });
  const data = await res.json();
  if (data.ok) { closeCreateModal(); toast('已创建'); fetchEvents(); }
