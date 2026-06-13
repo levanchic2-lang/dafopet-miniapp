@@ -53,7 +53,10 @@
   .co-pay-bar {
     position:fixed; left:0; right:0; bottom:0; z-index:100;
     background:var(--paper); border-top:1.5px solid var(--ink);
-    padding:14px 32px; display:flex; align-items:center; gap:20px;
+  }
+  .co-pay-bar-inner {
+    max-width:1100px; margin:0 auto;
+    padding:14px 0; display:flex; align-items:center; gap:20px;
   }
   .co-pay-amount-wrap { display:flex; flex-direction:column; gap:4px; }
   .co-pay-amount-wrap label { font-size:8.5pt; letter-spacing:1.5px; color:var(--ink-3); }
@@ -186,6 +189,7 @@
   <input type="hidden" name="method" id="co-method-val" value="cash"/>
 
   <div class="co-pay-bar">
+  <div class="co-pay-bar-inner">
     <div class="co-pay-amount-wrap">
       <label>本次待收</label>
       <div class="co-pay-amount" id="co-outstanding-display">¥{{ '%.2f'|format(outstanding) }}</div>
@@ -208,7 +212,8 @@
     </div>
 
     <button type="submit" class="co-submit" id="co-submit-btn">确认收款</button>
-  </div>
+  </div>{# co-pay-bar-inner #}
+  </div>{# co-pay-bar #}
 </form>
 
 <script>
