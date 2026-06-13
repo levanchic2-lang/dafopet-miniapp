@@ -528,7 +528,7 @@
  {% else %}<span class="pill pill-gray">未驱虫</span>{% endif %}
  </td>
  <td onclick="event.stopPropagation();" class="pet-actions-cell">
- <a href="/admin/appointments/create?customer_id={{ cust.id }}&pet_id={{ p.id }}&return_to=customer:{{ cust.id }}" style="font-size:0.78rem;color:var(--brand);text-decoration:none;margin-right:0.6rem;">预约</a>
+ <a href="/admin/appointments?open_create=1&prefill_customer_id={{ cust.id }}&prefill_pet_id={{ p.id }}&prefill_phone={{ cust.phone|urlencode }}&prefill_name={{ cust.name|urlencode }}&prefill_pet={{ (p.name or '')|urlencode }}&prefill_gender={{ p.gender or '' }}" style="font-size:0.78rem;color:var(--brand);text-decoration:none;margin-right:0.6rem;">预约</a>
  <a href="#" onclick="event.preventDefault();openEditPet({{ p.id }})" style="font-size:0.78rem;color:#6b7280;text-decoration:none;margin-right:0.6rem;">编辑</a>
  <a href="#" onclick="event.preventDefault();openMergePet({{ p.id }}, '{{ (p.name or '未命名')|e }}')" style="font-size:0.78rem;color:#d97706;text-decoration:none;margin-right:0.6rem;" title="把这只宠物合并到客户的另一只宠物（业务记录全迁移）">合并</a>
  <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ p.id }}/delete" style="display:inline;" onsubmit="return confirm('确认删除宠物「{{ p.name or '未命名' }}」？\n\n只有无业务记录（无病历/预约/收费单/疫苗等）才能删除，否则系统会拒绝。');">
