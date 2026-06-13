@@ -7057,6 +7057,203 @@ async def admin_customers_merge_post(request: Request, db: Session = Depends(get
     return RedirectResponse(f"/admin/customers/duplicates?msg={msg}", status_code=303)
 
 
+# ─────────── 数据整理中心 ───────────
+
+@app.get("/admin/customers/cleanup", response_class=HTMLResponse)
+async def admin_customers_cleanup_page(request: Request, db: Session = Depends(get_db)):
+    """数据整理：无宠物客户 / 无电话客户 / 重名客户 / 空白病历。superadmin only。"""
+    require_admin(request)
+    require_superadmin(request)
+    from sqlalchemy import func as _f, exists as _ex
+
+    # --- 无宠物客户 ---
+    has_pet_sq = _ex().where(Pet.customer_id == Customer.id)
+    no_pet_raw = db.query(Customer).filter(~has_pet_sq).order_by(Customer.id.asc()).limit(500).all()
+    no_pet_list = []
+    for c in no_pet_raw:
+        bl = _customer_blockers(db, c.id)
+        no_pet_list.append({"c": c, "blockers": bl})
+
+    # --- 无电话客户 ---
+    no_phone_raw = db.query(Customer).filter(
+        (Customer.phone.is_(None)) | (Customer.phone == "")
+    ).order_by(Customer.id.asc()).limit(500).all()
+    no_phone_list = []
+    for c in no_phone_raw:
+        bl = _customer_blockers(db, c.id)
+        no_phone_list.append({"c": c, "blockers": bl})
+
+    # --- 重名客户（按姓名分组，排除空名 / 占位名）---
+    dup_names = (
+        db.query(Customer.name)
+        .filter(Customer.name.isnot(None), Customer.name != "")
+        .group_by(Customer.name)
+        .having(_f.count(Customer.id) > 1)
+        .all()
+    )
+    name_groups = []
+    for (nm,) in dup_names:
+        if _is_invalid_name(nm):
+            continue  # 跳过 "未命名" / "客户xxxx" 这类占位名
+        rows = db.query(Customer).filter(Customer.name == nm).order_by(Customer.id.asc()).all()
+        enriched = []
+        for c in rows:
+            n_pets     = db.query(Pet).filter(Pet.customer_id == c.id).count()
+            n_visits   = db.query(Visit).filter(Visit.customer_id == c.id).count()
+            n_invoices = db.query(Invoice).filter(Invoice.customer_id == c.id).count()
+            n_appts    = db.query(Appointment).filter(Appointment.customer_id == c.id).count()
+            score = n_pets * 10 + n_visits + n_invoices + n_appts
+            enriched.append({
+                "c": c, "n_pets": n_pets, "n_visits": n_visits,
+                "n_invoices": n_invoices, "n_appts": n_appts, "score": score,
+            })
+        enriched.sort(key=lambda x: (-x["score"], x["c"].id))
+        name_groups.append({
+            "name": nm, "rows": enriched,
+            "suggested_primary_id": enriched[0]["c"].id,
+        })
+
+    # --- 空白病历（诊断 + 处理方案均为空，无有效处方）---
+    empty_visits_raw = (
+        db.query(Visit)
+        .filter(
+            (Visit.diagnosis.is_(None)) | (Visit.diagnosis == ""),
+            (Visit.treatment_plan.is_(None)) | (Visit.treatment_plan == ""),
+            Visit.status == "open",
+        )
+        .order_by(Visit.id.asc())
+        .limit(500)
+        .all()
+    )
+    empty_visit_list = []
+    for v in empty_visits_raw:
+        n_rx = db.query(Prescription).filter(
+            Prescription.visit_id == v.id,
+            Prescription.status != "voided",
+        ).count()
+        cust = db.get(Customer, v.customer_id) if v.customer_id else None
+        pet  = db.get(Pet, v.pet_id) if v.pet_id else None
+        empty_visit_list.append({
+            "v": v,
+            "n_rx": n_rx,
+            "cust_name": cust.name if cust else "—",
+            "pet_name": pet.name if pet else "—",
+        })
+
+    return templates.TemplateResponse(request, "uk/customers_cleanup.html", {
+        "no_pet_list": no_pet_list,
+        "no_phone_list": no_phone_list,
+        "name_groups": name_groups,
+        "empty_visit_list": empty_visit_list,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/customers/cleanup/delete-batch")
+async def admin_customers_cleanup_delete_batch(request: Request, db: Session = Depends(get_db)):
+    """批量删除无宠物 / 无电话客户（只删无业务记录的）。"""
+    require_admin(request)
+    require_superadmin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    ids = [int(x) for x in form.getlist("customer_ids") if str(x).isdigit()]
+    deleted = skipped = 0
+    for cid in ids:
+        cust = db.get(Customer, cid)
+        if not cust:
+            continue
+        if _customer_blockers(db, cid):
+            skipped += 1
+            continue
+        pets = db.query(Pet).filter(Pet.customer_id == cid).all()
+        pet_blocked = any(
+            db.query(Visit).filter(Visit.pet_id == p.id).count()
+            or db.query(Appointment).filter(Appointment.pet_id == p.id).count()
+            or db.query(Invoice).filter(Invoice.pet_id == p.id).count()
+            or db.query(Vaccination).filter(Vaccination.pet_id == p.id).count()
+            or db.query(Prescription).filter(Prescription.pet_id == p.id).count()
+            for p in pets
+        )
+        if pet_blocked:
+            skipped += 1
+            continue
+        _audit(db, request, "delete_customer", application_id=None,
+               detail={"customer_id": cid, "name": cust.name, "phone": cust.phone, "batch": True})
+        db.delete(cust)
+        deleted += 1
+    db.commit()
+    from urllib.parse import quote as _q
+    tail = f"，跳过 {skipped} 条（有业务记录）" if skipped else ""
+    msg = _q(f"已删除 {deleted} 条客户{tail}", safe="")
+    return RedirectResponse(f"/admin/customers/cleanup?msg={msg}", status_code=303)
+
+
+@app.post("/admin/customers/cleanup/merge-name-dups")
+async def admin_customers_merge_name_dups(request: Request, db: Session = Depends(get_db)):
+    """把同名客户合并到选定的主档案。"""
+    require_admin(request)
+    require_superadmin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    try:
+        primary_id = int(form.get("primary_id") or 0)
+    except ValueError:
+        raise HTTPException(400, "primary_id 格式错")
+    if not primary_id:
+        raise HTTPException(400, "缺 primary_id")
+    primary = db.get(Customer, primary_id)
+    if not primary:
+        raise HTTPException(404, "主档案不存在")
+    secondaries = db.query(Customer).filter(
+        Customer.name == primary.name, Customer.id != primary_id,
+    ).all()
+    if not secondaries:
+        return RedirectResponse("/admin/customers/cleanup?msg=该名字已无重名客户", status_code=303)
+    sec_ids = [s.id for s in secondaries]
+    moved = _merge_customers(db, primary_id, sec_ids)
+    _audit(db, request, "merge_customers", application_id=None,
+           detail={"primary_id": primary_id, "secondary_ids": sec_ids, "moved": moved, "by_name": True})
+    db.commit()
+    from urllib.parse import quote as _q
+    parts = [f"{k}: {v}" for k, v in moved.items()]
+    msg = _q(f"已合并 {len(secondaries)} 条「{primary.name}」到 #{primary_id}（{' / '.join(parts)}）", safe="")
+    return RedirectResponse(f"/admin/customers/cleanup?msg={msg}", status_code=303)
+
+
+@app.post("/admin/visits/cleanup-empty")
+async def admin_visits_cleanup_empty(request: Request, db: Session = Depends(get_db)):
+    """批量删除诊断/处理方案均空且无处方的病历（仍需 open 状态）。"""
+    require_admin(request)
+    require_superadmin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    ids = [int(x) for x in form.getlist("visit_ids") if str(x).isdigit()]
+    deleted = skipped = 0
+    for vid in ids:
+        v = db.get(Visit, vid)
+        if not v:
+            continue
+        if (v.diagnosis or "").strip() or (v.treatment_plan or "").strip():
+            skipped += 1
+            continue
+        n_rx = db.query(Prescription).filter(
+            Prescription.visit_id == v.id, Prescription.status != "voided",
+        ).count()
+        if n_rx:
+            skipped += 1
+            continue
+        _audit(db, request, "delete_visit", application_id=None,
+               detail={"visit_id": vid, "chief_complaint": v.chief_complaint, "batch_cleanup": True})
+        db.delete(v)
+        deleted += 1
+    db.commit()
+    from urllib.parse import quote as _q
+    tail = f"，跳过 {skipped} 条（已有内容）" if skipped else ""
+    msg = _q(f"已删除 {deleted} 条空白病历{tail}", safe="")
+    return RedirectResponse(f"/admin/customers/cleanup?msg={msg}", status_code=303)
+
+
 @app.post("/admin/customers/{customer_id}/delete")
 async def admin_customer_delete(
     customer_id: int,

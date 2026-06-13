@@ -1,0 +1,345 @@
+{% extends "uk/_base.html" %}
+{% block title %}数据整理 · 大风动物医院{% endblock %}
+
+{% block body %}
+<style>
+  .cl-bc { margin:24px 0 16px; font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); font-style:italic; }
+  .cl-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .cl-bc .sep { margin:0 8px; }
+
+  .cl-head h1 { font-family:var(--font-serif); font-size:26pt; font-weight:700; color:var(--ink); margin:0 0 6px; letter-spacing:1px; }
+  .cl-head .sub { font-size:10pt; color:var(--ink-3); font-style:italic; letter-spacing:1.5px; margin-bottom:24px; }
+
+  .cl-msg { padding:10px 14px; margin-bottom:18px; border-left:3px solid var(--ink); background:var(--bg); font-family:var(--font-serif); font-size:10pt; letter-spacing:1px; }
+
+  /* 区块 */
+  .cl-section { background:var(--paper); border-top:2px solid var(--ink); margin-bottom:32px; padding:20px 24px; }
+  .cl-section-title { font-family:var(--font-serif); font-size:15pt; font-weight:700; color:var(--ink); letter-spacing:2px; margin:0 0 6px; }
+  .cl-section-sub { font-size:9.5pt; color:var(--ink-3); font-style:italic; letter-spacing:1.2px; margin-bottom:14px; }
+
+  .cl-tip { background:#fef9f0; border-left:3px solid #6b4423; padding:10px 14px; font-size:10pt; color:var(--ink-2); line-height:1.7; font-style:italic; margin-bottom:16px; }
+  .cl-tip b { color:var(--ink); font-style:normal; }
+
+  /* 表格 */
+  .cl-tbl { width:100%; border-collapse:collapse; font-size:10.5pt; margin-bottom:14px; }
+  .cl-tbl th, .cl-tbl td { padding:8px 10px; border-bottom:0.5px solid var(--hair); vertical-align:middle; }
+  .cl-tbl th { font-family:var(--font-serif); font-size:9pt; letter-spacing:1.5px; color:var(--ink-3); font-weight:600; text-align:left; }
+  .cl-tbl td.num { text-align:right; font-family:var(--font-numeric); }
+  .cl-tbl tr.has-block td { background:#fdf5f5; }
+  .cl-tbl tr.has-data td { background:#fafaf6; }
+
+  .cl-check { width:16px; height:16px; cursor:pointer; }
+  .cl-block-label { font-size:8.5pt; color:var(--accent-red); font-style:italic; }
+
+  /* 按钮行 */
+  .cl-actions { display:flex; align-items:center; gap:12px; margin-top:8px; }
+  .cl-btn-del { padding:8px 18px; background:var(--accent-red); color:#fff; border:0; cursor:pointer; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; }
+  .cl-btn-del:hover { opacity:.85; }
+  .cl-btn-merge { padding:8px 18px; background:var(--ink); color:var(--paper); border:0; cursor:pointer; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; }
+  .cl-btn-merge:hover { opacity:.9; }
+  .cl-btn-sel { background:none; border:0.5px solid var(--hair); padding:6px 12px; cursor:pointer; font-size:9.5pt; color:var(--ink-3); font-family:var(--font-serif); }
+  .cl-btn-sel:hover { color:var(--ink); }
+
+  .cl-empty { padding:28px 0; text-align:center; color:var(--ink-3); font-style:italic; font-size:10.5pt; }
+
+  /* 重名组 */
+  .cl-name-group { border:0.5px solid var(--hair); margin-bottom:18px; padding:16px 20px; }
+  .cl-name-group h3 { font-family:var(--font-serif); font-size:12pt; font-weight:700; color:var(--ink); letter-spacing:2px; margin:0 0 12px; display:flex; justify-content:space-between; align-items:baseline; }
+  .cl-name-group h3 .cnt { font-size:9.5pt; color:var(--ink-3); font-style:italic; font-weight:400; }
+  .cl-radio { width:16px; height:16px; cursor:pointer; }
+</style>
+
+<div class="cl-bc">
+  <a href="/admin">后台</a><span class="sep">›</span><span>数据整理</span>
+</div>
+
+<div class="cl-head">
+  <h1>数 据 整 理</h1>
+  <div class="sub">批量清理无效客户档案 · 合并重名 · 删除空白病历</div>
+</div>
+
+{% if msg %}
+<div class="cl-msg">{{ msg }}</div>
+{% endif %}
+
+
+{# ═══════════════════════════ 无宠物客户 ═══════════════════════════ #}
+<div class="cl-section">
+  <div class="cl-section-title">无宠物客户</div>
+  <div class="cl-section-sub">
+    名下没有登记任何宠物的客户档案
+    · 共 {{ no_pet_list|length }} 条
+  </div>
+
+  {% if no_pet_list %}
+  <div class="cl-tip">
+    <b>仅删除无业务记录的行（灰底）。</b>有业务记录（红底标注）的行系统会自动跳过，勾选也无妨。
+  </div>
+  <form method="post" action="/admin/customers/cleanup/delete-batch"
+        onsubmit="return confirm('确认批量删除选中的无宠物客户？\n无业务记录才会实际删除，有记录的行自动跳过。');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <table class="cl-tbl">
+      <thead>
+        <tr>
+          <th style="width:36px;"><input type="checkbox" class="cl-check" onchange="clToggleAll(this,'no_pet')" title="全选/全不选"/></th>
+          <th>客户</th>
+          <th>电话</th>
+          <th>来源</th>
+          <th>建档</th>
+          <th>阻止删除原因</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in no_pet_list %}
+        <tr {% if row['blockers'] %}class="has-block"{% endif %}>
+          <td>
+            <input type="checkbox" name="customer_ids" value="{{ row['c'].id }}"
+                   class="cl-check no_pet"
+                   {% if not row['blockers'] %}checked{% endif %}
+                   {% if row['blockers'] %}disabled title="{{ row['blockers']|join(' / ') }}"{% endif %}/>
+          </td>
+          <td>
+            <a href="/admin/customers/{{ row['c'].id }}" target="_blank" style="border-bottom:0.5px solid var(--hair);">
+              #{{ row['c'].id }} {{ row['c'].name or '未命名' }}
+            </a>
+          </td>
+          <td style="font-family:var(--font-numeric); color:var(--ink-2);">{{ row['c'].phone or '—' }}</td>
+          <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt;">{{ row['c'].source or '—' }}</td>
+          <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt; font-family:var(--font-numeric);">
+            {{ row['c'].created_at.strftime('%Y-%m-%d') if row['c'].created_at else '—' }}
+          </td>
+          <td class="cl-block-label">{{ row['blockers']|join(' · ') if row['blockers'] else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="cl-actions">
+      <button type="submit" class="cl-btn-del">删除选中</button>
+      <button type="button" class="cl-btn-sel" onclick="clToggleAllByClass('no_pet',true)">全选可删</button>
+      <button type="button" class="cl-btn-sel" onclick="clToggleAllByClass('no_pet',false)">全不选</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="cl-empty">暂无无宠物客户</div>
+  {% endif %}
+</div>
+
+
+{# ═══════════════════════════ 无电话客户 ═══════════════════════════ #}
+<div class="cl-section">
+  <div class="cl-section-title">无电话客户</div>
+  <div class="cl-section-sub">
+    没有登记手机号的客户档案
+    · 共 {{ no_phone_list|length }} 条
+  </div>
+
+  {% if no_phone_list %}
+  <div class="cl-tip">
+    <b>仅删除无业务记录的行。</b>有记录的行会自动跳过。
+  </div>
+  <form method="post" action="/admin/customers/cleanup/delete-batch"
+        onsubmit="return confirm('确认批量删除选中的无电话客户？');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <table class="cl-tbl">
+      <thead>
+        <tr>
+          <th style="width:36px;"><input type="checkbox" class="cl-check" onchange="clToggleAll(this,'no_phone')" title="全选/全不选"/></th>
+          <th>客户</th>
+          <th>来源</th>
+          <th>建档</th>
+          <th>阻止删除原因</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in no_phone_list %}
+        <tr {% if row['blockers'] %}class="has-block"{% endif %}>
+          <td>
+            <input type="checkbox" name="customer_ids" value="{{ row['c'].id }}"
+                   class="cl-check no_phone"
+                   {% if not row['blockers'] %}checked{% endif %}
+                   {% if row['blockers'] %}disabled title="{{ row['blockers']|join(' / ') }}"{% endif %}/>
+          </td>
+          <td>
+            <a href="/admin/customers/{{ row['c'].id }}" target="_blank" style="border-bottom:0.5px solid var(--hair);">
+              #{{ row['c'].id }} {{ row['c'].name or '未命名' }}
+            </a>
+          </td>
+          <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt;">{{ row['c'].source or '—' }}</td>
+          <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt; font-family:var(--font-numeric);">
+            {{ row['c'].created_at.strftime('%Y-%m-%d') if row['c'].created_at else '—' }}
+          </td>
+          <td class="cl-block-label">{{ row['blockers']|join(' · ') if row['blockers'] else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="cl-actions">
+      <button type="submit" class="cl-btn-del">删除选中</button>
+      <button type="button" class="cl-btn-sel" onclick="clToggleAllByClass('no_phone',true)">全选可删</button>
+      <button type="button" class="cl-btn-sel" onclick="clToggleAllByClass('no_phone',false)">全不选</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="cl-empty">暂无无电话客户</div>
+  {% endif %}
+</div>
+
+
+{# ═══════════════════════════ 重名客户 ═══════════════════════════ #}
+<div class="cl-section">
+  <div class="cl-section-title">重名客户</div>
+  <div class="cl-section-sub">
+    同姓名 2+ 个档案（排除占位名）
+    · 共 {{ name_groups|length }} 组
+  </div>
+
+  {% if name_groups %}
+  <div class="cl-tip">
+    <b>选主档案 → 合并：</b>同名其他客户的宠物 / 病历 / 预约 / 收费 / 钱包全部迁到主档案，副档案删除。电话号码并入备用号。<br/>
+    <b>注意：</b>重名不代表同一人，请人工确认后再操作。
+  </div>
+  {% for g in name_groups %}
+  <form class="cl-name-group" method="post" action="/admin/customers/cleanup/merge-name-dups"
+        onsubmit="return confirm('确认把「{{ g['name'] }}」同名其他 {{ g['rows']|length - 1 }} 条合并到选中的主档案？\n\n所有宠物/病历/预约/收费/钱包全部迁移，副档案物理删除，不可恢复。');">
+    <h3>
+      <span>{{ g['name'] }}</span>
+      <span class="cnt">{{ g['rows']|length }} 条 · 选主合并</span>
+    </h3>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <table class="cl-tbl">
+      <thead>
+        <tr>
+          <th style="width:36px;">主</th>
+          <th>客户</th>
+          <th>电话</th>
+          <th class="num">宠物</th>
+          <th class="num">病历</th>
+          <th class="num">收费单</th>
+          <th class="num">预约</th>
+          <th>建档</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in g['rows'] %}
+        <tr {% if r['score'] > 0 %}class="has-data"{% endif %}>
+          <td>
+            <input type="radio" name="primary_id" value="{{ r['c'].id }}" class="cl-radio"
+                   {% if r['c'].id == g['suggested_primary_id'] %}checked{% endif %} required/>
+          </td>
+          <td>
+            <a href="/admin/customers/{{ r['c'].id }}" target="_blank" style="border-bottom:0.5px solid var(--hair);">
+              #{{ r['c'].id }} {{ r['c'].name or '未命名' }}
+            </a>
+            {% if r['c'].wechat_openid %}<span style="color:#1d4d3a;font-size:9pt;font-style:italic;margin-left:6px;">· 已绑微信</span>{% endif %}
+          </td>
+          <td style="font-family:var(--font-numeric); font-size:10pt; color:var(--ink-2);">{{ r['c'].phone or '—' }}</td>
+          <td class="num">{% if r['n_pets'] %}<b>{{ r['n_pets'] }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
+          <td class="num">{% if r['n_visits'] %}<b>{{ r['n_visits'] }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
+          <td class="num">{% if r['n_invoices'] %}<b>{{ r['n_invoices'] }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
+          <td class="num">{% if r['n_appts'] %}<b>{{ r['n_appts'] }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
+          <td style="color:var(--ink-3);font-style:italic;font-size:9.5pt;font-family:var(--font-numeric);">
+            {{ r['c'].created_at.strftime('%Y-%m-%d') if r['c'].created_at else '—' }}
+          </td>
+          <td style="text-align:right;">
+            <a href="/admin/customers/{{ r['c'].id }}" target="_blank" style="font-size:9pt;font-style:italic;color:var(--ink-3);">查看 →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="text-align:right;">
+      <button type="submit" class="cl-btn-merge">→ 合并此组</button>
+    </div>
+  </form>
+  {% endfor %}
+  {% else %}
+  <div class="cl-empty">暂无重名客户（已排除占位名）</div>
+  {% endif %}
+</div>
+
+
+{# ═══════════════════════════ 空白病历 ═══════════════════════════ #}
+<div class="cl-section">
+  <div class="cl-section-title">空白病历</div>
+  <div class="cl-section-sub">
+    诊断 + 处理方案均为空 · 无有效处方 · 仍为 open 状态
+    · 共 {{ empty_visit_list|length }} 条
+  </div>
+
+  {% if empty_visit_list %}
+  <div class="cl-tip">
+    <b>即使有主诉也可删除。</b>如有处方（未作废）系统会自动跳过。
+  </div>
+  <form method="post" action="/admin/visits/cleanup-empty"
+        onsubmit="return confirm('确认批量删除选中的空白病历？\n有处方的病历会自动跳过。');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <table class="cl-tbl">
+      <thead>
+        <tr>
+          <th style="width:36px;"><input type="checkbox" class="cl-check" onchange="clToggleAll(this,'empty_visit')" title="全选/全不选"/></th>
+          <th>病历</th>
+          <th>客户</th>
+          <th>宠物</th>
+          <th>主诉</th>
+          <th>就诊日期</th>
+          <th class="num">处方数</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in empty_visit_list %}
+        <tr {% if row['n_rx'] %}class="has-block"{% endif %}>
+          <td>
+            <input type="checkbox" name="visit_ids" value="{{ row['v'].id }}"
+                   class="cl-check empty_visit"
+                   {% if not row['n_rx'] %}checked{% endif %}
+                   {% if row['n_rx'] %}disabled title="有 {{ row['n_rx'] }} 条有效处方，不可删"{% endif %}/>
+          </td>
+          <td>
+            <a href="/admin/visits/{{ row['v'].id }}" target="_blank" style="border-bottom:0.5px solid var(--hair);">
+              #{{ row['v'].id }}
+            </a>
+          </td>
+          <td>
+            {% if row['v'].customer_id %}
+            <a href="/admin/customers/{{ row['v'].customer_id }}" target="_blank" style="font-size:10pt;border-bottom:0.5px solid var(--hair);">
+              {{ row['cust_name'] }}
+            </a>
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:10pt;">{{ row['pet_name'] }}</td>
+          <td style="font-size:9.5pt; color:var(--ink-3); max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            {{ row['v'].chief_complaint or '—' }}
+          </td>
+          <td style="font-family:var(--font-numeric); font-size:9.5pt; color:var(--ink-3);">{{ row['v'].visit_date or '—' }}</td>
+          <td class="num cl-block-label">{% if row['n_rx'] %}{{ row['n_rx'] }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="cl-actions">
+      <button type="submit" class="cl-btn-del">删除选中</button>
+      <button type="button" class="cl-btn-sel" onclick="clToggleAllByClass('empty_visit',true)">全选可删</button>
+      <button type="button" class="cl-btn-sel" onclick="clToggleAllByClass('empty_visit',false)">全不选</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="cl-empty">暂无空白病历</div>
+  {% endif %}
+</div>
+
+
+<script>
+function clToggleAll(masterCb, cls) {
+  document.querySelectorAll('input.cl-check.' + cls).forEach(function(cb) {
+    if (!cb.disabled) cb.checked = masterCb.checked;
+  });
+}
+function clToggleAllByClass(cls, checked) {
+  document.querySelectorAll('input.cl-check.' + cls).forEach(function(cb) {
+    if (!cb.disabled) cb.checked = checked;
+  });
+}
+</script>
+
+{% endblock %}

@@ -220,6 +220,7 @@
       <button class="uk-btn ghost sm" onclick="document.getElementById('newCustModal').classList.add('visible');">＋ 新增客户</button>
       {% if is_superadmin %}
       <a href="/admin/customers/duplicates" class="uk-btn ghost sm" style="text-decoration:none; color:var(--accent-red); border-color:var(--accent-red);" title="同手机号重号档案合并">⚠ 重号清理</a>
+      <a href="/admin/customers/cleanup" class="uk-btn ghost sm" style="text-decoration:none; color:var(--accent-amber); border-color:var(--accent-amber);" title="批量清理无宠物/无电话客户、重名合并、空白病历删除">数据整理</a>
       <div style="display:inline-flex;border:0.5px solid var(--hair);">
         <a href="/admin/customers{% if q %}?q={{ q }}{% endif %}"
            class="store-pill {% if not wb_store %}active{% endif %}">全部门店</a>
