@@ -1337,7 +1337,7 @@ def _check_appointment_conflict(
 
         # 美容线烘干机并发规则：
         # 已有预约是猫服务 → 前60分钟主动护理，之后烘干机阶段
-        # 烘干机阶段内，≤60min 犬服务可以并发（完全落在烘干机窗口内）
+        # 烘干机阶段内，≤120min 犬服务可以从烘干机窗口开始并发（允许延伸到猫结束后）
         if new_track == "beauty" and is_new_dog and not is_new_cat:
             existing_sn = appt.service_name or ""
             if "猫" in existing_sn:
@@ -1345,10 +1345,9 @@ def _check_appointment_conflict(
                 dryer_start = cat_active_end
                 dryer_end = a_end
                 if dryer_start < dryer_end:
-                    # 新服务完全落在烘干机窗口内且 ≤60min → 允许并发
-                    if (duration_minutes <= 60
-                            and new_start >= dryer_start
-                            and new_end <= dryer_end):
+                    # 犬服务从烘干机窗口开始，时长 ≤120min → 允许并发（可延伸至猫结束后）
+                    if (duration_minutes <= 120
+                            and new_start >= dryer_start):
                         continue  # 允许，不算冲突
 
         return appt
