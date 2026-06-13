@@ -20710,10 +20710,29 @@ async def api_calendar_events(
         pets_q = db.query(Pet).filter(Pet.id.in_(pet_ids)).all()
         pet_map = {p.id: p for p in pets_q}
 
+    # 若预约未关联 pet_id 但有 customer_id，且该客户仅一只宠物 → 自动推断
+    cust_ids_no_pet = list({a.customer_id for a in appts if not a.pet_id and a.customer_id})
+    single_pet_map: dict = {}   # customer_id → Pet（仅一只宠物时才填入）
+    if cust_ids_no_pet:
+        from sqlalchemy import func as _func_cp
+        rows = (
+            db.query(Pet.customer_id, Pet.id, Pet.name, Pet.species, Pet.gender)
+            .filter(Pet.customer_id.in_(cust_ids_no_pet))
+            .all()
+        )
+        cust_pet_counts: dict[int, list] = {}
+        for r in rows:
+            cust_pet_counts.setdefault(r.customer_id, []).append(r)
+        for cid, pets in cust_pet_counts.items():
+            if len(pets) == 1:
+                single_pet_map[cid] = pets[0]
+
     appt_list = []
     for a in appts:
         pet = pet_map.get(a.pet_id) if a.pet_id else None
-        species = pet.species if pet else ("cat" if a.category == "tnr" else "")
+        if not pet and a.customer_id:
+            pet = single_pet_map.get(a.customer_id)
+        species = (pet.species if pet else None) or ("cat" if a.category == "tnr" else "")
         store_short = _STORE_FULL_TO_SHORT.get(a.store or "", a.store or "")
         appt_list.append({
             "id":             a.id,

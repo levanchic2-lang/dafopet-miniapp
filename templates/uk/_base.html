@@ -257,7 +257,6 @@
 
   {# 经营 #}
   <div class="uk-ribbon-icons {% if _active_tab=='business' %}active{% endif %}" data-tab-content="business">
-    <a class="uk-ribbon-icon {% if _path.startswith('/admin/invoices') %}current{% endif %}" href="/admin/invoices"><i data-lucide="receipt"></i>收银台</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/inventory') %}current{% endif %}" href="/admin/inventory"><i data-lucide="package"></i>库存管理</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/stocktake') %}current{% endif %}" href="/admin/stocktake"><i data-lucide="bar-chart-3"></i>循环盘点</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/packages') %}current{% endif %}" href="/admin/packages"><i data-lucide="ticket"></i>套餐目录</a>
