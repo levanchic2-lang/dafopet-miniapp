@@ -1298,12 +1298,14 @@ def _check_appointment_conflict(
     duration_minutes: int,
     exclude_id: int | None = None,
     category: str = "",
+    service_name: str = "",
 ) -> "Appointment | None":
     """检查同门店同日同业务线是否存在时间重叠的预约（排除已取消/爽约）。
     业务线划分：
       - 美容线：beauty / grooming / washcare（美容师独立场地）
       - 医疗线：tnr / surgery / outpatient（医生独立场地）
     跨线并行不冲突。
+    美容线额外规则：猫进烘干机阶段（主动护理60分钟后）可并发 ≤60min 犬服务。
     重叠返回冲突记录，否则返回 None。
     """
     new_track = _appt_track(category)
@@ -1320,14 +1322,36 @@ def _check_appointment_conflict(
     existing = q.all()
     new_start = _time_to_minutes(appointment_time)
     new_end = new_start + duration_minutes
+
+    is_new_dog = "犬" in (service_name or "")
+    is_new_cat = "猫" in (service_name or "")
+
     for appt in existing:
         # 跨线并行 → 不挡
         if new_track and _appt_track(appt.category) != new_track:
             continue
         a_start = _time_to_minutes(appt.appointment_time)
-        a_end = a_start + appt.duration_minutes
-        if new_start < a_end and new_end > a_start:
-            return appt
+        a_end = a_start + (appt.duration_minutes or 60)
+        if not (new_start < a_end and new_end > a_start):
+            continue  # 不重叠
+
+        # 美容线烘干机并发规则：
+        # 已有预约是猫服务 → 前60分钟主动护理，之后烘干机阶段
+        # 烘干机阶段内，≤60min 犬服务可以并发（完全落在烘干机窗口内）
+        if new_track == "beauty" and is_new_dog and not is_new_cat:
+            existing_sn = appt.service_name or ""
+            if "猫" in existing_sn:
+                cat_active_end = a_start + 60
+                dryer_start = cat_active_end
+                dryer_end = a_end
+                if dryer_start < dryer_end:
+                    # 新服务完全落在烘干机窗口内且 ≤60min → 允许并发
+                    if (duration_minutes <= 60
+                            and new_start >= dryer_start
+                            and new_end <= dryer_end):
+                        continue  # 允许，不算冲突
+
+        return appt
     return None
 
 
@@ -5044,6 +5068,7 @@ async def admin_appointment_create(
             appointment_time=str(fields["appointment_time"]),
             duration_minutes=int(fields["duration_minutes"]),
             category=str(fields["category"]),
+            service_name=str(fields["service_name"]),
         )
         if conflict:
             raise HTTPException(
@@ -5320,6 +5345,7 @@ async def admin_appointment_reschedule(
         duration_minutes=target_duration,
         exclude_id=appointment_id,
         category=row.category,
+        service_name=row.service_name or "",
     )
     if conflict:
         return _admin_appointment_redirect(
@@ -5839,6 +5865,7 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
         appointment_time=str(fields["appointment_time"]),
         duration_minutes=int(fields["duration_minutes"]),
         category=str(fields["category"]),
+        service_name=str(fields.get("service_name") or ""),
     )
     if conflict:
         raise HTTPException(
