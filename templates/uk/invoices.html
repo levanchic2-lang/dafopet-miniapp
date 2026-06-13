@@ -299,7 +299,7 @@ function toggleSettle(idx) {
       <td class="dim">{{ inv_pay_zh.get(inv.payment_method, inv.payment_method) if inv.payment_method else '—' }}</td>
       <td style="text-align:right;">
         {% if inv.payment_status in ('unpaid', 'partial') %}
-          <a href="/admin/invoices/{{ inv.id }}" class="iv-btn sm">收&nbsp;款</a>
+          <a href="/admin/cashier/checkout?invoice_id={{ inv.id }}" class="iv-btn sm">收&nbsp;款</a>
         {% else %}
           <a href="/admin/invoices/{{ inv.id }}" class="iv-btn ghost sm">查&nbsp;看</a>
         {% endif %}

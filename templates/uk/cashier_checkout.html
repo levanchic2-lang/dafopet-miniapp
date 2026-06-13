@@ -1,0 +1,221 @@
+{% extends "uk/_base.html" %}
+{% block title %}结账台 · {{ cust.name }}{% endblock %}
+
+{% block body %}
+<style>
+  .co-wrap { max-width: 1100px; margin: 0 auto; padding: 0 0 80px; }
+
+  /* ── 顶部面包屑 ── */
+  .co-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); font-style:italic; margin:20px 0 14px; }
+  .co-bc a { color:var(--ink-3); }
+
+  /* ── 客户信息条 ── */
+  .co-cust-bar { display:flex; gap:32px; align-items:baseline; padding:14px 20px; background:var(--paper); border:0.5px solid var(--hair); margin-bottom:12px; }
+  .co-cust-name { font-family:var(--font-serif); font-size:16pt; font-weight:700; color:var(--ink); }
+  .co-cust-sub { font-family:var(--font-numeric); font-size:10pt; color:var(--ink-3); }
+  .co-cust-wallet { margin-left:auto; font-size:10pt; color:var(--ink-2); }
+  .co-cust-wallet b { font-family:var(--font-numeric); color:var(--accent-green); }
+
+  /* ── 合并提示 banner ── */
+  .co-merge-banner { display:flex; align-items:center; gap:14px; padding:12px 20px; margin-bottom:16px; background:#fef9f0; border-left:4px solid #6b4423; }
+  .co-merge-text { font-family:var(--font-serif); font-size:10.5pt; color:var(--ink); flex:1; }
+  .co-merge-text em { color:var(--accent-red); font-style:normal; font-weight:700; }
+  .co-merge-btn { padding:8px 20px; border:0.5px solid var(--ink); background:var(--ink); color:var(--paper); font-family:var(--font-serif); font-size:10pt; letter-spacing:1px; text-decoration:none; white-space:nowrap; }
+  .co-merge-btn.ghost { background:var(--paper); color:var(--ink); }
+
+  /* ── 明细区 ── */
+  .co-section { background:var(--paper); border:0.5px solid var(--hair); margin-bottom:0; }
+  .co-section + .co-section { border-top:none; }
+
+  .co-pet-head { display:flex; align-items:baseline; gap:12px; padding:10px 20px; background:var(--bg); border-bottom:0.5px solid var(--hair); }
+  .co-pet-name { font-family:var(--font-serif); font-size:12pt; font-weight:700; color:var(--ink); letter-spacing:1px; }
+  .co-pet-sub  { font-size:9pt; color:var(--ink-3); font-style:italic; }
+  .co-date-tag { margin-left:auto; font-family:var(--font-numeric); font-size:9.5pt; color:var(--ink-3); }
+
+  .co-items { width:100%; border-collapse:collapse; font-size:10pt; }
+  .co-items th { padding:6px 16px; text-align:left; border-bottom:0.5px solid var(--hair); font-size:8.5pt; letter-spacing:1.5px; color:var(--ink-3); font-weight:600; }
+  .co-items td { padding:8px 16px; border-bottom:0.5px dashed var(--hair); vertical-align:middle; }
+  .co-items td.r { text-align:right; }
+  .co-items td.c { text-align:center; }
+  .co-items tr:last-child td { border-bottom:none; }
+  .co-items .subtotal-row td { padding:7px 16px; background:var(--bg); font-weight:600; }
+
+  /* ── 汇总 ── */
+  .co-totals { background:var(--paper); border:0.5px solid var(--hair); border-top:none; padding:16px 20px; }
+  .co-totals table { margin-left:auto; width:320px; border-collapse:collapse; font-size:10.5pt; }
+  .co-totals td { padding:4px 8px; }
+  .co-totals td:last-child { text-align:right; font-family:var(--font-numeric); font-weight:600; }
+  .co-totals .grand { border-top:1.5px solid var(--ink); font-size:15pt; }
+  .co-totals .grand td { padding-top:8px; }
+  .co-totals .dim { color:var(--ink-3); font-size:9.5pt; }
+
+  /* ── 收款区（固定底栏） ── */
+  .co-pay-bar {
+    position:fixed; left:0; right:0; bottom:0; z-index:100;
+    background:var(--paper); border-top:1.5px solid var(--ink);
+    padding:14px 32px; display:flex; align-items:center; gap:20px;
+  }
+  .co-pay-amount-wrap { display:flex; flex-direction:column; gap:4px; }
+  .co-pay-amount-wrap label { font-size:8.5pt; letter-spacing:1.5px; color:var(--ink-3); }
+  .co-pay-amount { font-family:var(--font-numeric); font-size:22pt; font-weight:700; color:var(--accent-red); }
+
+  .co-methods { display:flex; gap:8px; flex-wrap:wrap; }
+  .co-method { padding:10px 18px; border:0.5px solid var(--hair); background:var(--paper); font-family:var(--font-serif); font-size:10.5pt; cursor:pointer; letter-spacing:1px; min-width:80px; text-align:center; }
+  .co-method.active { background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:700; }
+
+  .co-ref-field { display:flex; flex-direction:column; gap:4px; }
+  .co-ref-field label { font-size:8.5pt; letter-spacing:1.5px; color:var(--ink-3); }
+  .co-ref-input { padding:8px 12px; font-family:var(--font-serif); font-size:10.5pt; border:0.5px solid var(--ink-3); border-radius:0; width:160px; }
+
+  .co-submit { margin-left:auto; padding:16px 36px; background:var(--ink); color:var(--paper); font-family:var(--font-serif); font-size:13pt; letter-spacing:3px; border:none; cursor:pointer; }
+  .co-submit:active { opacity:.8; }
+
+  .co-msg { padding:10px 20px; margin-bottom:14px; background:#fef0f0; border-left:3px solid var(--accent-red); font-size:10pt; color:var(--accent-red); }
+</style>
+
+<div class="co-wrap">
+  <div class="co-bc">
+    <a href="/admin/invoices">收银台</a>
+    <span style="margin:0 8px; color:var(--ink-4);">›</span>
+    结账台
+  </div>
+
+  {% if msg %}
+  <div class="co-msg">{{ msg }}</div>
+  {% endif %}
+
+  {# ── 客户信息条 ── #}
+  <div class="co-cust-bar">
+    <div>
+      <div class="co-cust-name">{{ cust.name }}</div>
+      {% if cust.phone %}<div class="co-cust-sub">{{ cust.phone }}</div>{% endif %}
+    </div>
+    <div class="co-cust-wallet">
+      钱包余额 <b>¥{{ '%.2f'|format(wallet_balance) }}</b>
+    </div>
+  </div>
+
+  {# ── 合并 / 分开 banner ── #}
+  {% if other_pet_count > 0 and scope == 'pet' %}
+  <div class="co-merge-banner">
+    <div class="co-merge-text">
+      该客户还有 <em>{{ other_pet_count }}</em> 只其他宠物的待付订单，共 <em>¥{{ '%.2f'|format(other_pet_total) }}</em>，是否一起收款？
+    </div>
+    <a href="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope=all" class="co-merge-btn">合并收费</a>
+    <a href="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope=pet" class="co-merge-btn ghost">仅此宠物</a>
+  </div>
+  {% elif scope == 'all' and other_pet_count > 0 %}
+  <div class="co-merge-banner" style="border-left-color:var(--accent-green); background:#f0faf4;">
+    <div class="co-merge-text" style="color:var(--accent-green);">已合并该客户全部宠物的待付订单</div>
+    <a href="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope=pet" class="co-merge-btn ghost" style="font-size:9pt;">仅当前宠物</a>
+  </div>
+  {% endif %}
+
+  {# ── 明细列表 ── #}
+  {% set _sp = {'cat':'猫','dog':'犬','other':'其他'} %}
+  {% set _gn = {'male':'♂','female':'♀'} %}
+  {% for g in group_list %}
+  <div class="co-section">
+    <div class="co-pet-head">
+      {% if g['pet'] %}
+      <span class="co-pet-name">{{ g['pet'].name }}</span>
+      <span class="co-pet-sub">
+        {{ _sp.get(g['pet'].species, g['pet'].species or '') }}{% if g['pet'].breed %} · {{ g['pet'].breed }}{% endif %}{% if _gn.get(g['pet'].gender) %} · {{ _gn.get(g['pet'].gender) }}{% endif %}
+      </span>
+      {% else %}
+      <span class="co-pet-name" style="font-style:italic; color:var(--ink-3);">无宠物档案</span>
+      {% endif %}
+      {% if g['date'] %}<span class="co-date-tag">{{ g['date'] }}</span>{% endif %}
+    </div>
+    <table class="co-items">
+      <thead>
+        <tr>
+          <th style="width:55%;">项目名称</th>
+          <th style="width:10%; text-align:center;">数量</th>
+          <th style="width:17%; text-align:right;">单价 (¥)</th>
+          <th style="width:18%; text-align:right;">小计 (¥)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in g['items'] %}
+        <tr>
+          <td>{{ it.description }}</td>
+          <td class="c" style="font-family:var(--font-numeric);">{{ it.quantity | int if it.quantity == it.quantity | int else it.quantity }}</td>
+          <td class="r" style="font-family:var(--font-numeric);">{{ '%.2f'|format(it.unit_price) }}</td>
+          <td class="r" style="font-family:var(--font-numeric); font-weight:600;">{{ '%.2f'|format(it.subtotal) }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="subtotal-row">
+          <td colspan="3" style="text-align:right; color:var(--ink-3); letter-spacing:1.5px; font-size:9pt;">本组小计</td>
+          <td class="r" style="font-family:var(--font-numeric);">¥ {{ '%.2f'|format(g['group_total']) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+
+  {# ── 汇总 ── #}
+  <div class="co-totals">
+    <table>
+      <tr class="dim"><td>商品小计</td><td>¥ {{ '%.2f'|format(total_subtotal) }}</td></tr>
+      {% if total_discount > 0 %}
+      <tr class="dim"><td>折扣 / 减免</td><td>– ¥ {{ '%.2f'|format(total_discount) }}</td></tr>
+      {% endif %}
+      {% if paid_sum > 0 %}
+      <tr class="dim"><td>已收款</td><td>– ¥ {{ '%.2f'|format(paid_sum) }}</td></tr>
+      {% endif %}
+      <tr class="grand">
+        <td style="font-family:var(--font-serif); letter-spacing:2px;">本次待收</td>
+        <td style="color:var(--accent-red);">¥ {{ '%.2f'|format(outstanding) }}</td>
+      </tr>
+    </table>
+  </div>
+
+  {# ── 底部留白（防被 fixed bar 遮挡） ── #}
+  <div style="height:90px;"></div>
+</div>
+
+{# ── 固定收款栏 ── #}
+<form method="post" action="/admin/cashier/multi-pay" id="coForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="customer_id" value="{{ cust.id }}"/>
+  <input type="hidden" name="pet_id" value="0"/>
+  {% for iid in inv_ids %}
+  <input type="hidden" name="invoice_ids" value="{{ iid }}"/>
+  {% endfor %}
+  <input type="hidden" name="method" id="co-method-val" value="cash"/>
+
+  <div class="co-pay-bar">
+    <div class="co-pay-amount-wrap">
+      <label>本次待收</label>
+      <div class="co-pay-amount" id="co-outstanding-display">¥{{ '%.2f'|format(outstanding) }}</div>
+    </div>
+
+    <div class="co-methods" id="co-methods">
+      {% set methods = [
+        ('cash','现金'), ('wechat','微信'), ('alipay','支付宝'),
+        ('shouqianba','收钱吧'), ('meituan','美团'), ('third_party','第三方'),
+      ] %}
+      {% for val, label in methods %}
+      <button type="button" class="co-method{% if loop.first %} active{% endif %}"
+              data-val="{{ val }}" onclick="coSelectMethod(this)">{{ label }}</button>
+      {% endfor %}
+    </div>
+
+    <div class="co-ref-field">
+      <label>单号 / 备注（选填）</label>
+      <input type="text" name="ref_no" class="co-ref-input" placeholder="收款单号…" maxlength="120"/>
+    </div>
+
+    <button type="submit" class="co-submit" id="co-submit-btn">确认收款</button>
+  </div>
+</form>
+
+<script>
+function coSelectMethod(btn) {
+  document.querySelectorAll('.co-method').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('co-method-val').value = btn.dataset.val;
+}
+</script>
+{% endblock %}

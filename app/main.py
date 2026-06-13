@@ -17434,6 +17434,110 @@ async def admin_invoices_list(
     })
 
 
+@app.get("/admin/cashier/checkout", response_class=HTMLResponse)
+async def admin_cashier_checkout_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    invoice_id: int = 0,
+    scope: str = "pet",  # "pet" = 仅同宠物；"all" = 合并该客户全部宠物
+):
+    """统一结账台 — 聚合明细行，一次收清。"""
+    require_admin(request)
+    if not invoice_id:
+        raise HTTPException(400, "invoice_id 必填")
+    trigger_inv = db.get(Invoice, invoice_id)
+    if not trigger_inv:
+        raise HTTPException(404, "收费单不存在")
+    if not trigger_inv.customer_id:
+        return RedirectResponse(f"/admin/invoices/{invoice_id}", status_code=303)
+    cust = db.get(Customer, trigger_inv.customer_id)
+    if not cust:
+        return RedirectResponse(f"/admin/invoices/{invoice_id}", status_code=303)
+
+    admin_store = _get_admin_store(request)
+    base_q = db.query(Invoice).filter(
+        Invoice.customer_id == cust.id,
+        Invoice.payment_status.in_(("unpaid", "partial")),
+    )
+    if admin_store:
+        base_q = base_q.filter(Invoice.store == admin_store)
+    all_pending = base_q.order_by(Invoice.id.asc()).all()
+
+    trigger_pet_id = trigger_inv.pet_id
+    if scope == "all":
+        selected_invs = all_pending
+    else:
+        if trigger_pet_id:
+            selected_invs = [i for i in all_pending if i.pet_id == trigger_pet_id]
+        else:
+            selected_invs = [i for i in all_pending if not i.pet_id]
+            if trigger_inv not in selected_invs:
+                selected_invs = [trigger_inv]
+
+    # 其他宠物的待付单（用于"是否合并"banner）
+    selected_ids = {i.id for i in selected_invs}
+    other_pet_pending = [i for i in all_pending if i.id not in selected_ids]
+    other_pet_count  = len({i.pet_id for i in other_pet_pending if i.pet_id})
+    other_pet_total  = round(sum(float(i.total_amount or 0) for i in other_pet_pending), 2)
+
+    # 拉所有关联宠物
+    pet_ids = {i.pet_id for i in selected_invs if i.pet_id}
+    pet_map = {p.id: p for p in db.query(Pet).filter(Pet.id.in_(pet_ids)).all()} if pet_ids else {}
+
+    # 按 (pet_id, invoice_date) 分组，把明细行合并
+    from collections import OrderedDict
+    groups: OrderedDict = OrderedDict()
+    for inv in selected_invs:
+        pet = pet_map.get(inv.pet_id) if inv.pet_id else None
+        pet_sort = (pet.name if pet else "\xff")   # 无宠物排最后
+        key = (pet_sort, inv.pet_id or 0, inv.invoice_date or "")
+        if key not in groups:
+            groups[key] = {
+                "pet": pet,
+                "date": inv.invoice_date or "",
+                "items": [],
+                "inv_ids": [],
+                "group_total": 0.0,
+            }
+        groups[key]["inv_ids"].append(inv.id)
+        for it in inv.items:
+            groups[key]["items"].append(it)
+            groups[key]["group_total"] += float(it.subtotal or 0)
+
+    group_list = sorted(groups.values(), key=lambda g: (
+        g["pet"].name if g["pet"] else "\xff",
+        g["date"],
+    ))
+
+    total_subtotal = round(sum(float(i.subtotal or 0) for i in selected_invs), 2)
+    total_discount = round(sum(float(i.discount_amount or 0) for i in selected_invs), 2)
+    total_amount   = round(sum(float(i.total_amount or 0) for i in selected_invs), 2)
+    paid_sum       = round(sum(_invoice_paid_sum(db, i.id) for i in selected_invs), 2)
+    outstanding    = round(max(0.0, total_amount - paid_sum), 2)
+
+    w = db.query(Wallet).filter(Wallet.customer_id == cust.id).first()
+    wallet_balance = float(w.balance) if w else 0.0
+
+    return templates.TemplateResponse(request, "uk/cashier_checkout.html", {
+        "cust": cust,
+        "trigger_invoice_id": invoice_id,
+        "scope": scope,
+        "group_list": group_list,
+        "selected_invs": selected_invs,
+        "inv_ids": [i.id for i in selected_invs],
+        "other_pet_count": other_pet_count,
+        "other_pet_total": other_pet_total,
+        "total_subtotal": total_subtotal,
+        "total_discount": total_discount,
+        "total_amount": total_amount,
+        "paid_sum": paid_sum,
+        "outstanding": outstanding,
+        "wallet_balance": wallet_balance,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
 @app.get("/admin/cashier/multi-pay", response_class=HTMLResponse)
 async def admin_cashier_multi_pay_page(
     customer_id: int,
