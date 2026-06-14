@@ -8008,6 +8008,8 @@ async def page_admin_customer_detail(
             "vacc_type_zh": _VACC_TYPE_ZH,
             "today_str": today_str,
             "soon_str": soon_str,
+            "msg": request.query_params.get("msg"),
+            "err": request.query_params.get("err"),
             "csrf_token": _get_csrf_token(request),
             "admin_store": _get_admin_store(request),
             # 品种联想（datalist）
@@ -11034,6 +11036,7 @@ async def page_admin_visit_detail(
         "csrf_token": _get_csrf_token(request),
         "mode": "edit",
         "msg": request.query_params.get("msg"),
+        "err": request.query_params.get("err"),
         "is_superadmin": _is_superadmin(request),
     })
 
@@ -11217,21 +11220,51 @@ async def admin_visit_delete(
     request: Request,
     db: Session = Depends(get_db),
     csrf_token: str = Form(""),
+    purge_password: str = Form(""),
+    next_url: str = Form(""),
 ):
+    """单条病历彻底删除（去重补充）：超管 + 二次口令。
+    连带删处方/检查/未付账单等关联数据（与批量去重台同一套 _purge_visit_deep）。
+    护栏：挂住院/管制药的病历跳过；已收款账单保留脱钩。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
-    # 病历法定档案：只有超管能删
     require_superadmin(request)
     _require_csrf(request, csrf_token)
+    from urllib.parse import quote as _q
     v = db.get(Visit, visit_id)
     if not v:
         raise HTTPException(404, "就诊记录不存在")
     customer_id = v.customer_id
-    db.delete(v)
+    fallback = (f"/admin/customers/{customer_id}" if customer_id else "/admin/visits")
+    back = _safe_next(next_url, fallback)
+    _sep = "&" if "?" in back else "?"
+    # 失败时留在病历详情页（病历还在，可重试口令）
+    stay = f"/admin/visits/{visit_id}"
+
+    # 二次口令（与病历去重清理台同一把锁 DATA_PURGE_PASSWORD）
+    configured = (settings.data_purge_password or "").strip()
+    if not configured:
+        return RedirectResponse(
+            f"{stay}?err=" + _q("二次口令未配置（服务器 .env 设 DATA_PURGE_PASSWORD）", safe=""),
+            status_code=303,
+        )
+    if not secrets.compare_digest((purge_password or "").strip(), configured):
+        return RedirectResponse(f"{stay}?err=" + _q("二次口令错误，未删除", safe=""), status_code=303)
+
+    res = _purge_visit_deep(db, v, keep_paid_invoices=True)
+    if res.get("skipped"):
+        db.rollback()
+        return RedirectResponse(
+            f"{stay}?err=" + _q(f"该病历受保护未删除（{res['reason']}）", safe=""),
+            status_code=303,
+        )
+    _audit(db, request, "visit_purge", detail={"visit_id": visit_id, "single": True, "cnt": res["cnt"]})
     db.commit()
-    if customer_id:
-        return RedirectResponse(f"/admin/customers/{customer_id}?msg=就诊记录已删除", status_code=303)
-    return RedirectResponse("/admin/visits?msg=就诊记录已删除", status_code=303)
+    _zh = {"prescription": "处方", "exam_order": "检查单", "invoice": "账单",
+           "sales_order": "销售单", "anesthesia": "麻醉单", "followup": "回访"}
+    extra = "、".join(f"{_zh[k]}×{res['cnt'][k]}" for k in _zh if res["cnt"].get(k))
+    msg = "病历已删除" + (f"（连带 {extra}）" if extra else "")
+    return RedirectResponse(f"{back}{_sep}msg=" + _q(msg, safe=""), status_code=303)
 
 
 # ---------------------------------------------------------------------------

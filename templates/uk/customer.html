@@ -375,6 +375,9 @@
 
 {% block body %}
 
+{% if msg %}<div style="border-left:3px solid var(--accent-green); background:#f0faf4; padding:10px 16px; margin:10px 0; font-size:10pt; color:var(--accent-green);">{{ msg }}</div>{% endif %}
+{% if err %}<div style="border-left:3px solid var(--accent-red); background:#fef0f0; padding:10px 16px; margin:10px 0; font-size:10pt; color:var(--accent-red);">{{ err }}</div>{% endif %}
+
 {# 面包屑 #}
 <div class="uk-breadcrumb">
   <a href="/admin">后台</a>
