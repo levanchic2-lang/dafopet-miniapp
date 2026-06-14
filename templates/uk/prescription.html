@@ -850,18 +850,36 @@ function recalcRow(idx) {
   var qty = parseFloat(qtyEl && qtyEl.value) || 0;
   var price = parseFloat(document.querySelector('[name="unit_price_' + idx + '"]').value) || 0;
   var tr = qtyEl ? qtyEl.closest('tr') : null;
-  var sub;
-  if (tr && tr.dataset.sup === '1') {
+  var sub, bottles = 0, isSup = !!(tr && tr.dataset.sup === '1');
+  if (isSup) {
     // 整支/整瓶计费：单价 = 每瓶价；小计 = 向上取整瓶数 × 每瓶价（开 5ml = 1 瓶）
     var ratio = parseFloat(tr.dataset.ratio) || 1;
     if (ratio <= 0) ratio = 1;
-    var bottles = qty > 0 ? Math.ceil((qty - 1e-9) / ratio) : 0;
+    bottles = qty > 0 ? Math.ceil((qty - 1e-9) / ratio) : 0;
     sub = Math.round(bottles * price * 100) / 100;
   } else {
     sub = Math.round(qty * price * 100) / 100;
   }
   var el = document.getElementById('subtotal_' + idx);
-  if (el) el.value = sub.toFixed(2);
+  if (el) {
+    el.value = sub.toFixed(2);
+    // 整瓶计费：在小计下方显式标出「按整瓶/整支收费」，避免误以为按 ml 计
+    var cell = el.closest('td');
+    if (cell) {
+      var hint = cell.querySelector('.pack-hint');
+      if (isSup) {
+        if (!hint) {
+          hint = document.createElement('div');
+          hint.className = 'pack-hint';
+          hint.style.cssText = 'font-size:8pt;color:var(--accent-amber);font-style:italic;margin-top:2px;line-height:1.3;';
+          cell.appendChild(hint);
+        }
+        hint.textContent = bottles > 0 ? ('整瓶计费 ' + bottles + ' 瓶/支 × ¥' + price.toFixed(2)) : '整瓶/整支计费';
+      } else if (hint) {
+        hint.remove();
+      }
+    }
+  }
   recalcTotal();
 }
 
@@ -1130,6 +1148,11 @@ document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('#drug-tbody tr').forEach(function(tr) {
     var sel = tr.querySelector('select[name^="drug_type_"]');
     if (sel && sel.value === 'service') _toggleServiceRow(tr, true);
+  });
+  // 整瓶/整支计费行：载入即显示「N 瓶 × 每瓶价」提示
+  document.querySelectorAll('#drug-tbody tr[data-sup="1"]').forEach(function(tr) {
+    var qn = tr.querySelector('input[name^="quantity_num_"]');
+    if (qn) recalcRow(qn.name.split('_').pop());
   });
 });
 

@@ -113,6 +113,9 @@
 }
 .pets-card-head a:hover { color: var(--ink); border-bottom-color: var(--ink); }
 
+/* 宠物多时（>5）固定高度滚动框：只占约 5 行，快速够到下方诊疗/美容/销售等 tab */
+.pets-scroll.scrollable { max-height: 264px; overflow-y: auto; }
+.pets-scroll.scrollable .pets-tbl thead th { position: sticky; top: 0; background: var(--paper); z-index: 2; }
 .pets-tbl { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
 .pets-tbl thead th {
   font-weight: 700; font-size: 8.5pt; letter-spacing: 2px;
@@ -501,6 +504,7 @@
         </div>
         <a href="#" onclick="document.getElementById('addPetModal').classList.add('visible');return false;">＋ 添加宠物</a>
       </div>
+      <div class="pets-scroll {% if pets|length > 5 %}scrollable{% endif %}">
       <table class="pets-tbl">
         <thead>
           <tr>
@@ -546,6 +550,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>{# pets-scroll #}
     </div>
     {% else %}
     <div class="tab-empty" style="margin-bottom:24px;">该客户尚未添加宠物。<a href="#" onclick="document.getElementById('addPetModal').classList.add('visible');return false;">立即添加 →</a></div>
