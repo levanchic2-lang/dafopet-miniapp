@@ -509,7 +509,7 @@
         </thead>
         <tbody>
           {% for p in pets %}
-          <tr onclick="window.location.href='?pet_id={{ p.id }}&tab={{ active_tab }}'"
+          <tr onclick="switchPet({{ p.id }})"
               data-pet-id="{{ p.id }}"
               data-pet-name="{{ p.name or '' }}"
               data-pet-species="{{ p.species or 'cat' }}"
@@ -1701,6 +1701,31 @@ function switchTab(tab) {
   url.searchParams.set('tab', tab);
   history.replaceState(null, '', url.toString());
 }
+
+// 切换宠物：保持滚动位置（避免每次跳回顶部，反复滚动找诊疗/处方等 tab）
+function switchPet(pid) {
+  try { sessionStorage.setItem('custScroll', JSON.stringify({c: {{ cust.id }}, y: window.scrollY})); } catch(e) {}
+  var url = new URL(window.location.href);
+  url.searchParams.set('pet_id', pid);   // 当前 tab 已在 url 里（switchTab replaceState），一并保留
+  window.location.href = url.toString();
+}
+
+// 载入后恢复切换宠物前的滚动位置
+(function() {
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  var raw; try { raw = sessionStorage.getItem('custScroll'); } catch(e) { return; }
+  if (!raw) return;
+  try {
+    var o = JSON.parse(raw);
+    sessionStorage.removeItem('custScroll');
+    if (!o || o.c !== {{ cust.id }} || typeof o.y !== 'number') return;
+    var restore = function() { window.scrollTo(0, o.y); };
+    restore();
+    window.addEventListener('load', restore);
+    setTimeout(restore, 60);
+    setTimeout(restore, 220);
+  } catch(e) {}
+})();
 
 // 高亮 hl=xxx 命中的行并滚动到视图
 (function() {
