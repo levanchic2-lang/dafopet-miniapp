@@ -106,6 +106,46 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
   - 收款统计：`/admin/reports/revenue` 用 Chart.js 出日趋势/支付方式/门店分布，按 Payment 表聚合，可导出 Excel
   - 启动迁移：`app/database.py` 用 `CREATE TABLE IF NOT EXISTS` 风格幂等建表 + 索引
 
+## 近期迭代记录（2026-06-14）
+
+### 收银台 / 结账台
+- **收银台升级为顶级导航**（接待/医疗/经营/系统 之后），不再藏在经营子菜单
+- **统一结账台** `/admin/cashier/checkout?invoice_id=X&scope=pet|all`：聚合同客户（可跨宠物）待付明细，banner 提示是否合并收费
+- **结账台改为收银台页内弹窗（iframe modal）**：列表点「收款」当前页弹窗，不跳转；完成 → iframe `postMessage` 通知父窗口关弹窗+刷新；embed 模式走 `uk/_embed_base.html`（无顶部导航）
+- **结账台补全支付方式**：现金/微信/支付宝/收钱吧/美团/第三方/钱包（走 `multi-pay`，钱包已扩展支持）+ 套餐/押金/优惠券（单单核销到主单 `add-payment`，next_url 回跳）+ 折扣/减免面板
+- 收银台列表单号可点击 → 收费单详情（可删孤儿单）
+
+### 数据删除（高危，超管 + 二次口令 DATA_PURGE_PASSWORD）
+- **病历去重清理台** + **单条病历删除**（病历详情页头部按钮）：均用 `_purge_visit_deep` 深度级联删（处方/检查/未付账单/销售/麻醉/回访等），住院/管制药病历跳过、已收款账单保留脱钩
+- 误删可救：今早全库备份 `data/tnr.db.retagbak`，外科式还原（ATTACH 备份库 + 按 visit_id 复制行回 live，保留原始 id）
+- 详见 [[project_data_purge]]
+
+### 美容单删除/作废
+- 删/作废美容单 → 同步删/作废**未付**的关联收费单（`_delete_grooming_invoice`），不再残留孤儿单在收银台
+
+### 时区（收款时间差 8 小时修复）
+- 时间戳按惯例存 UTC（`datetime.utcnow`），展示侧需 +8。新增 `bjtime` Jinja 过滤器（UTC→北京），应用到收银台/收费单/收款流水所有时间显示
+- 营收日期分桶改用北京日期 `func.date(paid_at,'+8 hours')`（今日卡/区间/趋势/收银台已收款），避免午夜跨天误算
+
+### 库存整瓶/整支计费
+- `InventoryItem.single_use_pack`=True 的品目（玻璃瓶针剂/盐水等，开 0.1ml 也按整支扣+收费）
+- **处方出库列按副单位（瓶/支）展示**：数量显瓶数（可改→回写 ml=瓶×ratio）、单位显瓶、单价每瓶、小计=瓶×每瓶。底层 `quantity_num` 仍存主单位(ml)，后端扣库存/计费不变（无数据迁移）；**打印按用户决定保留 ml（实际用量）**
+- 库存 `stock_qty` 存主单位(ml)；`_billable_qty` 对 single_use_pack 向上取整到整瓶 ml
+
+### 客户档案 / 速查
+- 客户来源中文化：新增 `source_zh` 过滤器（warmsoft_import_dh→历史导入 / surgery→手术 等），已是中文的原样透传
+- 速查支持**病历号**检索（visit id 带#前缀 / 宠物病历号 DC|HC...）
+- 宠物 >5 只时列表固定高度滚动框（sticky 表头）；切换宠物用 sessionStorage 保持滚动位置不跳顶
+
+### 预约
+- 修复新建预约：①美容锁横岗店时 select 被 disabled 不提交 → 报 `store Field required`，改用隐藏镜像 input；②可用时段 JS 读 `data.slots` 但接口返回 `available_slots` → 永远空，改读正确字段
+- 新建预约支持**按宠物名/手机尾号/客户名搜索带出主人**（复用 `/m/api/search-customer`），解决日历点时段建约时不知道主人电话的问题
+
+### WarmSoft 导入数据修复
+- 东环导入数据门店标签写空 → 4164 只宠物重标"东环店"（判据：店空+有 warmsoft 病历）
+- 导入处方"整张复制两份"去重：9069 张处方删 31338 行重复明细（仅动「每明细成偶数份」的完美 2×/4×/8× 多重集）
+- 详见 [[project_warmsoft_import]]
+
 ## 近期迭代记录（2026-06）
 本会话内做的所有调整，按主题归档：
 
