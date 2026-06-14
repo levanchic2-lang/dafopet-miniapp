@@ -6765,16 +6765,31 @@ async def page_admin_customers(
         if len(_hit) == 1:
             return RedirectResponse(f"/admin/customers/{_hit[0].id}", status_code=303)
     if q:
+        # 病历号：可能带 # 前缀（病历 #20789），也可能是宠物档案的病历号 DC2606xxxx
+        q_clean = q.lstrip("#＃").strip()
         # 子查询：宠物名命中的客户 id
         _pet_owner_ids = db.query(Pet.customer_id).filter(Pet.name.ilike(f"%{q}%"))
-        query = query.filter(
-            or_(
-                Customer.name.ilike(f"%{q}%"),
-                Customer.phone.ilike(f"%{q}%"),
-                Customer.phones_extra.ilike(f"%{q}%"),
-                Customer.id.in_(_pet_owner_ids),
-            )
-        )
+        _conds = [
+            Customer.name.ilike(f"%{q}%"),
+            Customer.phone.ilike(f"%{q}%"),
+            Customer.phones_extra.ilike(f"%{q}%"),
+            Customer.id.in_(_pet_owner_ids),
+        ]
+        if q_clean:
+            # 宠物病历号（DC.../HC...）
+            _conds.append(Customer.id.in_(
+                db.query(Pet.customer_id).filter(Pet.medical_record_no.ilike(f"%{q_clean}%"))
+            ))
+        if q_clean.isdigit():
+            vid = int(q_clean)
+            # 病历(visit)号 → 该病历所属客户（直连 customer_id 或经宠物）
+            _conds.append(Customer.id.in_(
+                db.query(Visit.customer_id).filter(Visit.id == vid, Visit.customer_id.isnot(None))
+            ))
+            _conds.append(Customer.id.in_(
+                db.query(Pet.customer_id).join(Visit, Visit.pet_id == Pet.id).filter(Visit.id == vid)
+            ))
+        query = query.filter(or_(*_conds))
     total = query.count()
     customers = query.order_by(Customer.id.desc()).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).all()
 
