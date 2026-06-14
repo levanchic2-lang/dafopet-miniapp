@@ -92,6 +92,13 @@
 </div>
 {% endif %}
 
+{# 修改预约（时间/日期/类别/项目）#}
+{% if a.status in ['pending', 'confirmed', 'arrived'] %}
+<div class="ukm-btn-row" style="margin-top:8px;">
+  <a href="/m/appointment/{{ a.id }}/edit" class="ukm-btn block">修&nbsp;改&nbsp;预&nbsp;约</a>
+</div>
+{% endif %}
+
 {# 状态动作 #}
 {% if a.status in ['pending', 'confirmed', 'arrived'] %}
 <div class="ukm-section-head"><h2>状&nbsp;态&nbsp;动&nbsp;作</h2></div>

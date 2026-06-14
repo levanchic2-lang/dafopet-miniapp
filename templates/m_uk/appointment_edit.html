@@ -1,0 +1,115 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}修改预约 #{{ a.id }}{% endblock %}
+{% block topbar_title %}修&nbsp;改&nbsp;预&nbsp;约{% endblock %}
+{% block topbar_back %}<a href="/m/appointment/{{ a.id }}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% set cur_time = a.appointment_time or '10:00' %}
+
+{# 客户/宠物（只读，改约不动客户） #}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--ink);">
+    <div class="ukm-card-title">{{ a.customer_name or '—' }}
+      {% if a.pet_name %}<span class="ukm-italic" style="font-size:13px;margin-left:6px;">{{ a.pet_name }}</span>{% endif %}
+    </div>
+    <div class="ukm-card-sub">预约&nbsp;#{{ a.id }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ a.appointment_date }} {{ cur_time }}</div>
+  </div>
+</div>
+
+<form method="post" action="/m/appointment/{{ a.id }}/edit" class="ukm-form" id="appt-edit-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  {# 类别 chips #}
+  <div class="ukm-section-head"><h2>类&nbsp;别</h2></div>
+  <div class="ukm-chips" style="margin-bottom:18px;">
+    {% for val, label in [('outpatient','门 诊'),('surgery','手 术'),('beauty','美 容'),('grooming','造 型'),('washcare','洗 护'),('tnr','T N R')] %}
+    <label class="ukm-chip {% if a.category == val %}checked{% endif %}">
+      <input type="radio" name="new_category" value="{{ val }}" {% if a.category == val %}checked{% endif %}/>
+      {{ label }}
+    </label>
+    {% endfor %}
+  </div>
+
+  {# 服务项目（可加附加项目，自由填写） #}
+  <div class="ukm-field">
+    <label class="lbl">服&nbsp;务&nbsp;项&nbsp;目</label>
+    <input class="ukm-input" type="text" name="new_service_name" maxlength="120"
+           value="{{ a.service_name or '' }}"
+           placeholder="例：全身洗剪 + 剪指甲 + 挤肛门腺"/>
+    <div class="hint">改造型 / 加附加项目，直接在这里改写</div>
+  </div>
+
+  {# 门店 #}
+  <div class="ukm-field">
+    <label class="lbl">门&nbsp;店</label>
+    {% if admin_role == 'superadmin' %}
+    <select class="ukm-select" name="new_store">
+      <option value="大风动物医院（东环店）" {% if a.store == '大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
+      <option value="大风动物医院（横岗店）" {% if a.store == '大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
+    </select>
+    {% else %}
+    <input class="ukm-input" type="text" value="{{ a.store }}" disabled style="color:var(--ink-3);"/>
+    {% endif %}
+  </div>
+
+  {# 日期 + 时间 #}
+  <div class="ukm-row2">
+    <div class="ukm-field">
+      <label class="lbl">日&nbsp;期</label>
+      <input class="ukm-input" type="date" name="new_date" required value="{{ a.appointment_date }}"/>
+    </div>
+    <div class="ukm-field">
+      <label class="lbl">时&nbsp;间</label>
+      <select class="ukm-select" name="new_time" required>
+        <option value="{{ cur_time }}" selected>{{ cur_time }}</option>
+        {% for h in range(8, 22) %}
+          {% for m in [0, 15, 30, 45] %}
+            {% set t = '%02d:%02d'|format(h, m) %}
+            {% if t != cur_time %}<option value="{{ t }}">{{ t }}</option>{% endif %}
+          {% endfor %}
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  {# 时长 #}
+  <div class="ukm-field">
+    <label class="lbl">时&nbsp;长&nbsp;（分钟）</label>
+    <div class="ukm-chips">
+      {% for m in [15, 30, 45, 60, 90, 120] %}
+      <label class="ukm-chip {% if m == a.duration_minutes %}checked{% endif %}">
+        <input type="radio" name="new_duration" value="{{ m }}" {% if m == a.duration_minutes %}checked{% endif %}/>
+        {{ m }}
+      </label>
+      {% endfor %}
+    </div>
+    {% if a.duration_minutes and a.duration_minutes not in [15,30,45,60,90,120] %}
+    <div class="hint">当前时长 {{ a.duration_minutes }} 分钟；不点则保持不变</div>
+    {% endif %}
+  </div>
+
+  {# 备注 #}
+  <div class="ukm-field">
+    <label class="lbl">备&nbsp;注&nbsp;（可选）</label>
+    <textarea class="ukm-textarea" name="new_notes" placeholder="可空" style="min-height:64px;">{{ a.notes or '' }}</textarea>
+  </div>
+
+  <div class="ukm-btn-row">
+    <a href="/m/appointment/{{ a.id }}" class="ukm-btn ghost block">取&nbsp;消</a>
+    <button type="submit" class="ukm-btn block">保&nbsp;存&nbsp;修&nbsp;改</button>
+  </div>
+</form>
+
+<script>
+// chip 视觉切换（类别 / 时长）
+document.querySelectorAll('.ukm-chip input[type="radio"]').forEach(function(r){
+  r.addEventListener('change', function(){
+    document.querySelectorAll('input[name="'+r.name+'"]').forEach(function(x){
+      x.closest('.ukm-chip').classList.toggle('checked', x.checked);
+    });
+  });
+});
+</script>
+
+{% endblock %}

@@ -109,6 +109,25 @@
   .cal-legend i.confirmed{ background: var(--ink); }
   .cal-legend i.arrived  { background: var(--accent-green); border-radius: 50%; }
   .cal-legend i.no_show  { background: transparent; border: 1px solid var(--accent-red); border-radius: 50%; }
+  .cal-legend i.blocked  {
+    background: repeating-linear-gradient(135deg, var(--paper), var(--paper) 2px, var(--accent-amber) 2px, var(--accent-amber) 3px);
+    border: 0.5px solid var(--accent-amber);
+  }
+
+  /* 全天封锁（美容师休息 / 全店封锁）：斜纹底 + 小字 */
+  .cal-cell.blocked {
+    background: repeating-linear-gradient(
+      135deg, var(--paper), var(--paper) 4px, #efeae0 4px, #efeae0 5px);
+  }
+  .cal-cell.blocked.out { opacity: 0.6; }
+  .cal-cell .blk {
+    margin-top: 2px; font-size: 7.5pt; line-height: 1.1;
+    font-style: italic; letter-spacing: 0; text-align: center;
+    width: 96%; word-break: break-all;
+  }
+  .cal-cell .blk.beauty  { color: var(--accent-amber); }
+  .cal-cell .blk.medical { color: var(--accent-red); }
+  .cal-cell .blk.all     { color: var(--accent-red); }
 </style>
 {% endblock %}
 
@@ -142,9 +161,12 @@
 {# 网格 #}
 <div class="cal-grid">
   {% for c in cells %}
-  <a class="cal-cell {% if not c.in_month %}out{% endif %} {% if c.is_today %}today{% endif %}"
+  <a class="cal-cell {% if not c.in_month %}out{% endif %} {% if c.is_today %}today{% endif %} {% if c.blocks %}blocked{% endif %}"
      href="/m/appointments?scope=today&d={{ c.iso }}">
     <span class="day">{{ c.day }}</span>
+    {% for blk in c.blocks %}
+    <span class="blk {{ blk.track }}">{{ blk.title }}</span>
+    {% endfor %}
     {% if c.bucket %}
       <span class="n">{{ c.bucket.total }}</span>
       <div class="dots">
@@ -168,6 +190,7 @@
   <span><i class="confirmed"></i>已确认</span>
   <span><i class="arrived"></i>到店/完成</span>
   <span><i class="no_show"></i>爽约</span>
+  <span><i class="blocked"></i>休息/封锁</span>
 </div>
 
 <div class="ukm-divider"></div>

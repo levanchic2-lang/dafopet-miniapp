@@ -25611,6 +25611,138 @@ async def m_appointment_detail(appt_id: int, request: Request, db: Session = Dep
     return templates.TemplateResponse(request, "m_uk/appointment_detail.html", ctx)
 
 
+@app.get("/m/appointment/{appt_id}/edit", response_class=HTMLResponse)
+async def m_appointment_edit_form(appt_id: int, request: Request, db: Session = Depends(get_db)):
+    """手机端改约表单：改 日期/时间/时长/类别/服务项目/备注。"""
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/appointment/{appt_id}/edit", status_code=303)
+    a = db.get(Appointment, appt_id)
+    if not a:
+        raise HTTPException(404)
+    # 限店员工只能改本店
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if a.store and a.store not in (full, admin_store):
+            raise HTTPException(403)
+    if a.status in (AppointmentStatus.cancelled.value, AppointmentStatus.completed.value,
+                    AppointmentStatus.no_show.value):
+        return RedirectResponse(f"/m/appointment/{appt_id}?err=" + quote("当前状态不允许修改", safe=""),
+                                status_code=303)
+    cust = db.get(Customer, a.customer_id) if a.customer_id else None
+    pet  = db.get(Pet, a.pet_id) if a.pet_id else None
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({"a": a, "cust": cust, "pet": pet})
+    return templates.TemplateResponse(request, "m_uk/appointment_edit.html", ctx)
+
+
+@app.post("/m/appointment/{appt_id}/edit")
+async def m_appointment_edit_save(
+    appt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    new_store: str = Form(""),
+    new_date: str = Form(""),
+    new_time: str = Form(""),
+    new_duration: str = Form(""),
+    new_category: str = Form(""),
+    new_service_name: str = Form(""),
+    new_notes: str = Form(""),
+):
+    """手机端改约保存：复用桌面同款校验链（封锁/TNR/门诊时段/容量/冲突），回跳详情。"""
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    _require_csrf(request, csrf_token)
+    a = db.get(Appointment, appt_id)
+    if not a:
+        raise HTTPException(404)
+    edit_url = f"/m/appointment/{appt_id}/edit"
+
+    def _bad(msg: str) -> RedirectResponse:
+        return RedirectResponse(f"{edit_url}?err=" + quote(msg, safe=""), status_code=303)
+
+    # 限店员工只能改本店
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if a.store and a.store not in (full, admin_store):
+            return _bad("无权操作其他门店的预约")
+    if a.status in (AppointmentStatus.cancelled.value, AppointmentStatus.completed.value,
+                    AppointmentStatus.no_show.value):
+        return _bad("当前状态不允许修改")
+
+    new_date = (new_date or "").strip()
+    new_time = (new_time or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_date):
+        return _bad("日期格式应为 YYYY-MM-DD")
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", new_time):
+        return _bad("时间格式应为 HH:MM")
+    try:
+        date_obj = datetime.strptime(new_date, "%Y-%m-%d").date()
+    except ValueError:
+        return _bad("无效的日期")
+    if date_obj < datetime.now().date():
+        return _bad("日期不能早于今天")
+
+    # 门店：限店员工锁本店，超管可改
+    if admin_store:
+        target_store = _STORE_SHORT_TO_FULL.get(admin_store, a.store)
+    else:
+        target_store = (new_store or "").strip() or a.store
+    if target_store not in _ALLOWED_CLINIC_STORES:
+        return _bad("无效的门店")
+
+    dur_raw = (new_duration or "").strip()
+    target_duration = int(dur_raw) if dur_raw.isdigit() and 10 <= int(dur_raw) <= 480 else a.duration_minutes
+    target_category = (new_category or "").strip() or a.category
+    target_service = (new_service_name or "").strip() or a.service_name
+    target_notes = (new_notes or "").strip()
+
+    # 校验链（与桌面 create/reschedule 同源）
+    blk_err = _check_calendar_block(db, target_store, new_date, target_category)
+    if blk_err:
+        return _bad(blk_err)
+    tnr_err = _check_tnr_constraints(
+        db, category=target_category, store=target_store,
+        appointment_date=new_date, appointment_time=new_time, phone="", exclude_id=appt_id)
+    if tnr_err:
+        return _bad(tnr_err)
+    time_err = _check_outpatient_time(target_category, new_time)
+    if time_err:
+        return _bad(time_err)
+    cap_err = _check_slot_capacity(
+        db, store=target_store, appointment_date=new_date, appointment_time=new_time,
+        category=target_category, service_name=target_service, exclude_id=appt_id)
+    if cap_err:
+        return _bad(cap_err)
+    conflict = _check_appointment_conflict(
+        db, store=target_store, appointment_date=new_date, appointment_time=new_time,
+        duration_minutes=target_duration, exclude_id=appt_id,
+        category=target_category, service_name=target_service)
+    if conflict:
+        return _bad(f"时间冲突：{conflict.appointment_date} {conflict.appointment_time} 已有预约"
+                    f"（#{conflict.id} {conflict.customer_name}），请换时段")
+
+    old = {"store": a.store, "date": a.appointment_date, "time": a.appointment_time,
+           "duration": a.duration_minutes, "category": a.category, "service": a.service_name}
+    a.store = target_store
+    a.appointment_date = new_date
+    a.appointment_time = new_time
+    a.duration_minutes = target_duration
+    a.category = target_category
+    a.service_name = target_service
+    a.notes = target_notes
+    a.updated_at = datetime.utcnow()
+    _audit(db, request, "appointment_edit_mobile", application_id=a.related_application_id, detail={
+        "appointment_id": a.id, "old": old,
+        "new": {"store": a.store, "date": a.appointment_date, "time": a.appointment_time,
+                "duration": a.duration_minutes, "category": a.category, "service": a.service_name},
+    })
+    db.commit()
+    return RedirectResponse(f"/m/appointment/{appt_id}?msg=" + quote("已修改预约", safe=""), status_code=303)
+
+
 @app.get("/m/calendar", response_class=HTMLResponse)
 async def m_calendar(
     request: Request,
@@ -25674,6 +25806,26 @@ async def m_calendar(
         st = a.status if a.status in b else "confirmed"
         b[st] = b.get(st, 0) + 1
 
+    # 全天封锁（美容师休息 / 全店封锁）— 按业务线 + 门店匹配（空门店=全部）
+    blk_q = db.query(CalendarBlock).filter(
+        CalendarBlock.block_date >= month_start,
+        CalendarBlock.block_date <= month_end,
+    )
+    if store_short:
+        blk_q = blk_q.filter(or_(
+            CalendarBlock.store == store_short,
+            CalendarBlock.store == store_full,
+            CalendarBlock.store == "",
+        ))
+    block_buckets: dict[str, list] = {}
+    _track_zh = {"beauty": "美容", "medical": "医疗", "all": "全部"}
+    for blk in blk_q.all():
+        block_buckets.setdefault(blk.block_date or "", []).append({
+            "title": blk.title or "全天封锁",
+            "track": (blk.track or "all").strip() or "all",
+            "track_zh": _track_zh.get((blk.track or "all").strip() or "all", "全部"),
+        })
+
     # 生成 6 周 × 7 天的网格（多出来的前后补灰）
     # 周日开头 = 0
     first_weekday = cur_first.weekday()  # 周一=0
@@ -25692,6 +25844,7 @@ async def m_calendar(
             "in_month": in_month,
             "is_today": iso == today_iso,
             "bucket": b,
+            "blocks": block_buckets.get(iso, []),
         })
         if i >= 35 and d.month != mm:
             # 第 6 周如果全在下个月，可剪掉。这里保留以稳定 6 周高度。
