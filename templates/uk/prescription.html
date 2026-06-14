@@ -660,7 +660,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
                 {% set _tpd = item.times_per_day or '' %}
                 {% set _i_unit = item.item_unit or item.quantity or '' %}
                 {% set _pm = pack_meta.get(item.id) if pack_meta else None %}
-                <tr{% if _pm %} data-sup="1" data-ratio="{{ _pm['ratio'] }}"{% endif %}>
+                <tr{% if _pm %} data-sup="1" data-ratio="{{ _pm['ratio'] }}" data-unit2="{{ _pm['unit2'] }}"{% endif %}>
                   <td>
                     <div class="inv-search-wrap">
                       <input name="drug_name_{{ idx }}" value="{{ item.drug_name }}" required autocomplete="off"
@@ -861,26 +861,61 @@ function recalcRow(idx) {
     sub = Math.round(qty * price * 100) / 100;
   }
   var el = document.getElementById('subtotal_' + idx);
-  if (el) {
-    el.value = sub.toFixed(2);
-    // 整瓶计费：在小计下方显式标出「按整瓶/整支收费」，避免误以为按 ml 计
-    var cell = el.closest('td');
-    if (cell) {
-      var hint = cell.querySelector('.pack-hint');
-      if (isSup) {
-        if (!hint) {
-          hint = document.createElement('div');
-          hint.className = 'pack-hint';
-          hint.style.cssText = 'font-size:8pt;color:var(--accent-amber);font-style:italic;margin-top:2px;line-height:1.3;';
-          cell.appendChild(hint);
-        }
-        hint.textContent = bottles > 0 ? ('整瓶计费 ' + bottles + ' 瓶/支 × ¥' + price.toFixed(2)) : '整瓶/整支计费';
-      } else if (hint) {
-        hint.remove();
-      }
-    }
-  }
+  if (el) el.value = sub.toFixed(2);
+  // 整瓶/整支计费：出库「数量 + 单位」按副单位（瓶/支）展示，
+  // 真实 quantity_num 仍存主单位(ml) 供后端扣库存/计费（不动后端）。
+  _supDisplay(idx, tr, isSup, bottles, qtyEl);
   recalcTotal();
+}
+
+// 渲染整瓶行的「出库数量(瓶)」可编辑框 + 「单位=瓶」，隐藏底层 ml 输入。
+function _supDisplay(idx, tr, isSup, bottles, qtyEl) {
+  if (!qtyEl) return;
+  var ratio = tr ? (parseFloat(tr.dataset.ratio) || 1) : 1;
+  if (ratio <= 0) ratio = 1;
+  var unit2 = (tr && tr.dataset.unit2) ? tr.dataset.unit2 : '瓶';
+  var qCell = qtyEl.closest('td');
+  var uEl = document.getElementById('item_unit_' + idx);
+  var uCell = uEl ? uEl.closest('td') : null;
+  if (isSup) {
+    // 数量：显示瓶数（可改 → 回写 ml = 瓶 × ratio）
+    qtyEl.style.display = 'none';
+    if (qCell) {
+      var bin = qCell.querySelector('.sup-bottles');
+      if (!bin) {
+        bin = document.createElement('input');
+        bin.type = 'number'; bin.step = '1'; bin.min = '0';
+        bin.className = 'sup-bottles';
+        bin.style.cssText = 'width:100%;font-family:var(--font-numeric);';
+        bin.addEventListener('input', function() {
+          var b = parseFloat(bin.value) || 0;
+          var rt = parseFloat(tr.dataset.ratio) || 1; if (rt <= 0) rt = 1;
+          qtyEl.value = b > 0 ? (b * rt) : 0;
+          qtyEl.dataset.userEdited = '1';
+          recalcRow(idx);
+        });
+        qCell.appendChild(bin);
+      }
+      if (document.activeElement !== bin) bin.value = bottles || '';
+    }
+    // 单位：固定显示副单位（瓶/支），隐藏 ml 输入（其值仍提交，保持后端不变）
+    if (uEl) uEl.style.display = 'none';
+    if (uCell) {
+      var ud = uCell.querySelector('.sup-unit');
+      if (!ud) {
+        ud = document.createElement('span');
+        ud.className = 'sup-unit';
+        ud.style.cssText = 'font-style:italic;color:var(--ink-2);';
+        uCell.appendChild(ud);
+      }
+      ud.textContent = unit2;
+    }
+  } else {
+    qtyEl.style.display = '';
+    if (qCell) { var b2 = qCell.querySelector('.sup-bottles'); if (b2) b2.remove(); }
+    if (uEl) uEl.style.display = '';
+    if (uCell) { var u2 = uCell.querySelector('.sup-unit'); if (u2) u2.remove(); }
+  }
 }
 
 function recalcTotal() {
@@ -966,6 +1001,7 @@ function selectInventoryItem(idx, it, input) {
     if (it.single_use_pack) {
       tr.dataset.sup = '1';
       tr.dataset.ratio = (it.unit2_ratio && it.unit2_ratio > 0) ? it.unit2_ratio : 1;
+      tr.dataset.unit2 = it.unit2 || '瓶';
     } else {
       delete tr.dataset.sup; delete tr.dataset.ratio;
     }
@@ -1180,7 +1216,7 @@ function _appendRow(it) {
     typeOpts += `<option value="${k}" ${_selKey===k?'selected':''}>${zh}</option>`;
   }
   const esc = s => (s||'').toString().replace(/"/g,'&quot;');
-  const _supAttr = it.single_use_pack ? ` data-sup="1" data-ratio="${(it.unit2_ratio && it.unit2_ratio > 0) ? it.unit2_ratio : 1}"` : '';
+  const _supAttr = it.single_use_pack ? ` data-sup="1" data-ratio="${(it.unit2_ratio && it.unit2_ratio > 0) ? it.unit2_ratio : 1}" data-unit2="${esc(it.unit2||'瓶')}"` : '';
   const row = `<tr${_supAttr}>
     <td><div class="inv-search-wrap">
       <input name="drug_name_${idx}" value="${esc(it.drug_name)}" required autocomplete="off" oninput="onDrugInput(this, ${idx})" onblur="closeDropdown(${idx})"/>

@@ -12260,7 +12260,7 @@ def _presc_pack_meta(db: Session, presc: "Prescription") -> dict:
         qn = float(it.quantity_num or 0)
         bottles = _math.ceil((qn - 1e-9) / ratio) if qn > 0 else 0
         pack_price = round(float(it.subtotal or 0) / bottles, 2) if bottles > 0 else float(it.unit_price or 0)
-        meta[it.id] = {"pack_price": pack_price, "ratio": ratio}
+        meta[it.id] = {"pack_price": pack_price, "ratio": ratio, "unit2": inv.unit2 or "瓶", "bottles": bottles}
     return meta
 
 
