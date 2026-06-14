@@ -254,6 +254,14 @@
   <div class="ac-section">
     <div class="ac-section-head"><h2>客&nbsp;户&nbsp;与&nbsp;宠&nbsp;物</h2></div>
 
+    {# 宠物名 / 手机号 快速搜索 — 不知道电话时按宠物名找主人 #}
+    <div class="ac-field" style="position:relative; margin-bottom:16px;">
+      <label>搜&nbsp;索&nbsp;宠&nbsp;物&nbsp;/&nbsp;主&nbsp;人<span style="color:var(--ink-3); font-style:italic; font-size:9pt; margin-left:8px;">输宠物名 / 手机尾号 / 客户名，选中自动带出电话</span></label>
+      <input id="ac-search" class="ac-input" autocomplete="off" placeholder="如：汤圆 / 黄小姐 / 7394"
+             oninput="acPetSearch()" onfocus="acPetSearch()"/>
+      <div id="ac-search-dd" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:30; background:var(--paper); border:0.5px solid var(--ink); max-height:320px; overflow-y:auto; box-shadow:0 6px 24px rgba(0,0,0,.12);"></div>
+    </div>
+
     {# 老顾客识别 banner #}
     <div id="ac-cust-banner" style="display:none; margin-bottom:14px; padding:12px 16px; background:#fafaf6; border-left:3px solid var(--accent-green);">
       <div style="font-family:var(--font-serif); font-size:11pt; letter-spacing:1.5px; color:var(--accent-green); margin-bottom:8px;">
@@ -558,6 +566,88 @@ function acOnBeautyServiceChange() {
   acUpdateBeautyDuration();
 }
 
+// ─── 宠物名 / 手机号 / 客户名 快速搜索（不知道电话时用）───
+let acSearchTimer = null;
+function acPetSearch() {
+  clearTimeout(acSearchTimer);
+  var q = document.getElementById('ac-search').value.trim();
+  var dd = document.getElementById('ac-search-dd');
+  if (q.length < 2) { dd.style.display = 'none'; dd.innerHTML = ''; return; }
+  acSearchTimer = setTimeout(function() {
+    fetch('/m/api/search-customer?q=' + encodeURIComponent(q))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var results = data.results || [];
+        dd.innerHTML = '';
+        if (!results.length) {
+          dd.innerHTML = '<div style="padding:12px 16px; color:var(--ink-3); font-style:italic; font-size:10pt;">未找到 · 直接填手机号即可新建</div>';
+          dd.style.display = ''; return;
+        }
+        var spZh = {cat:'猫', dog:'犬', other:'其他'};
+        results.forEach(function(c) {
+          var pets = (c.pets && c.pets.length) ? c.pets : [null];
+          pets.forEach(function(p) {
+            var row = document.createElement('div');
+            row.style.cssText = 'padding:9px 16px; border-bottom:0.5px solid var(--hair); cursor:pointer; display:flex; align-items:baseline; gap:10px;';
+            row.onmouseover = function() { row.style.background = 'var(--bg)'; };
+            row.onmouseout = function() { row.style.background = ''; };
+            var sp = p ? (spZh[p.species] || p.species || '') : '';
+            var petLabel = (p && p.name)
+              ? ('<b>' + p.name + '</b>' + (sp ? ' <span style="color:var(--ink-3);font-style:italic;font-size:9pt;">' + sp + (p.breed ? ' · ' + p.breed : '') + '</span>' : ''))
+              : '<span style="color:var(--ink-3);font-style:italic;">（无宠物档案）</span>';
+            row.innerHTML = '<span style="flex:1;font-size:10.5pt;">' + petLabel + '</span>'
+              + '<span style="color:var(--ink-2);font-family:var(--font-serif);font-size:10pt;">' + (c.name || '—') + '</span>'
+              + '<span style="color:var(--ink-3);font-family:var(--font-numeric);font-size:9.5pt;">' + (c.phone || '') + '</span>';
+            row.onclick = function() { acPickResult(c, p); };
+            dd.appendChild(row);
+          });
+        });
+        dd.style.display = '';
+      })
+      .catch(function() { dd.style.display = 'none'; });
+  }, 200);
+}
+
+function acPickResult(c, p) {
+  document.getElementById('ac-search-dd').style.display = 'none';
+  document.getElementById('ac-search').value = '';
+  document.getElementById('ac-phone').value = c.phone || '';
+  document.getElementById('ac-cust-name').value = c.name || '';
+  document.querySelector('input[name="customer_id"]').value = c.id || 0;
+  if (p && p.id) {
+    document.querySelector('input[name="pet_id"]').value = p.id;
+    document.getElementById('ac-pet-name').value = p.name || '';
+    if (p.gender) document.getElementById('ac-pet-gender').value = p.gender;
+  } else {
+    document.querySelector('input[name="pet_id"]').value = 0;
+  }
+  // 渲染老顾客 banner + 宠物 chips（可在同主人下再切宠物）
+  var banner = document.getElementById('ac-cust-banner');
+  document.getElementById('ac-banner-info').textContent =
+    '客户档案 #' + c.id + (c.name ? ' · ' + c.name : '') + ' · 名下 ' + (c.pets || []).length + ' 只宠物';
+  var chipsEl = document.getElementById('ac-pet-chips');
+  chipsEl.innerHTML = '';
+  var spZh = {cat:'猫', dog:'犬', other:'其他'};
+  (c.pets || []).forEach(function(pp) {
+    var chip = document.createElement('button');
+    chip.type = 'button';
+    chip.style.cssText = 'padding:8px 16px; border:0.5px solid var(--ink-3); background:var(--paper); font-family:var(--font-serif); font-size:10.5pt; cursor:pointer; letter-spacing:1px;';
+    var sp = spZh[pp.species] || pp.species || '';
+    chip.innerHTML = '<b>' + (pp.name || '未命名') + '</b>' + (sp ? ' <span style="color:var(--ink-3);font-style:italic;font-size:9pt;margin-left:4px;">' + sp + (pp.breed ? ' · ' + pp.breed : '') + '</span>' : '');
+    if (p && pp.id === p.id) { chip.style.background = 'var(--ink)'; chip.style.color = 'var(--paper)'; chip.style.fontWeight = '700'; }
+    chip.onclick = function() {
+      chipsEl.querySelectorAll('button').forEach(function(b) { b.style.background = 'var(--paper)'; b.style.color = 'var(--ink)'; b.style.fontWeight = '400'; });
+      chip.style.background = 'var(--ink)'; chip.style.color = 'var(--paper)'; chip.style.fontWeight = '700';
+      document.querySelector('input[name="pet_id"]').value = pp.id;
+      document.getElementById('ac-pet-name').value = pp.name || '';
+      if (pp.gender) document.getElementById('ac-pet-gender').value = pp.gender;
+    };
+    chipsEl.appendChild(chip);
+  });
+  banner.style.display = '';
+  document.getElementById('ac-newcust-hint').style.display = 'none';
+}
+
 // ─── 客户档案查询 ───
 let acLookupTimer = null;
 function acLookupCustomer() {
@@ -630,6 +720,13 @@ document.addEventListener('DOMContentLoaded', function() {
   acOnCategoryChange();  // 根据默认类型初始化显示状态
   const phone = document.getElementById('ac-phone').value.trim();
   if (phone.length >= 7) acLookupCustomer();
+  // 点击搜索框外部 → 收起结果下拉
+  document.addEventListener('click', function(e) {
+    var wrap = document.getElementById('ac-search');
+    var dd = document.getElementById('ac-search-dd');
+    if (!dd) return;
+    if (e.target !== wrap && !dd.contains(e.target)) dd.style.display = 'none';
+  });
 });
 </script>
 
