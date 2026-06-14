@@ -32,24 +32,6 @@
 </form>
 {% endif %}
 
-<div class="ukm-section-head"><h2>账&nbsp;号</h2></div>
-<div class="ukm-row-group">
-  <a class="ukm-row" href="/admin/profile">
-    <div class="ukm-row-body">
-      <div class="ukm-row-title">个&nbsp;人&nbsp;资&nbsp;料</div>
-      <div class="ukm-row-sub">企微绑定&nbsp;·&nbsp;密码&nbsp;·&nbsp;门店</div>
-    </div>
-    <span class="ukm-row-arrow">›</span>
-  </a>
-  <a class="ukm-row" href="/admin/hr">
-    <div class="ukm-row-body">
-      <div class="ukm-row-title">人&nbsp;事</div>
-      <div class="ukm-row-sub">员工档案&nbsp;·&nbsp;账号管理</div>
-    </div>
-    <span class="ukm-row-arrow">›</span>
-  </a>
-</div>
-
 <div class="ukm-section-head"><h2>管&nbsp;理</h2></div>
 <div class="ukm-row-group">
   <a class="ukm-row" href="/m/inventory">
@@ -72,28 +54,22 @@
 <div class="ukm-row-group">
   <a class="ukm-row" href="/admin/hr">
     <div class="ukm-row-body">
-      <div class="ukm-row-title">人&nbsp;事&nbsp;·&nbsp;员&nbsp;工</div>
-      <div class="ukm-row-sub">员工档案&nbsp;·&nbsp;岗位&nbsp;·&nbsp;入职&nbsp;·&nbsp;离职</div>
+      <div class="ukm-row-title">人&nbsp;事&nbsp;·&nbsp;员&nbsp;工&nbsp;·&nbsp;账&nbsp;号</div>
+      <div class="ukm-row-sub">员工档案&nbsp;·&nbsp;登录账号&nbsp;·&nbsp;角色&nbsp;·&nbsp;企微绑定</div>
     </div>
     <span class="ukm-row-arrow">›</span>
   </a>
   {% if admin_role == 'superadmin' %}
-  <a class="ukm-row" href="/admin/admin-users">
-    <div class="ukm-row-body">
-      <div class="ukm-row-title">账&nbsp;号&nbsp;·&nbsp;权&nbsp;限</div>
-      <div class="ukm-row-sub">登录账号&nbsp;·&nbsp;角色&nbsp;·&nbsp;企微绑定</div>
-    </div>
-    <span class="ukm-row-arrow">›</span>
-  </a>
-  <a class="ukm-row" href="/admin/tnr-config">
+  <a class="ukm-row" href="/admin/appointments">
     <div class="ukm-row-body">
       <div class="ukm-row-title">T&nbsp;N&nbsp;R&nbsp;月&nbsp;度&nbsp;配&nbsp;额</div>
-      <div class="ukm-row-sub">每店月配额&nbsp;·&nbsp;开关&nbsp;·&nbsp;预约审核</div>
+      <div class="ukm-row-sub">每店月配额&nbsp;·&nbsp;接受开关&nbsp;·&nbsp;爽约封禁</div>
     </div>
     <span class="ukm-row-arrow">›</span>
   </a>
   {% endif %}
 </div>
+<div class="ukm-fineprint" style="text-align:left;margin:8px 2px 0;">人&nbsp;事&nbsp;/&nbsp;账&nbsp;号&nbsp;/&nbsp;配&nbsp;额&nbsp;为&nbsp;低&nbsp;频&nbsp;设&nbsp;置，点&nbsp;开&nbsp;后&nbsp;为&nbsp;桌&nbsp;面&nbsp;版&nbsp;界&nbsp;面</div>
 
 <div class="ukm-section-head"><h2>应&nbsp;用</h2></div>
 <div class="ukm-row-group">
