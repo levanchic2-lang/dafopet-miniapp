@@ -435,19 +435,14 @@ button { font: inherit; cursor: pointer; }
 }
 .ukm-tab {
   flex: 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   height: var(--tabbar-h);
   text-decoration: none; color: var(--ink-3);
   font-family: var(--font-serif);
-  font-size: 11px;
-  letter-spacing: 2px;
+  font-size: 15px;
+  letter-spacing: 1px;
   position: relative;
   font-weight: 600;
-}
-.ukm-tab .glyph {
-  font-size: 16px; line-height: 1; margin-bottom: 4px;
-  font-weight: 400; font-style: italic;
-  letter-spacing: 0;
 }
 .ukm-tab.active {
   color: var(--ink); font-weight: 700;

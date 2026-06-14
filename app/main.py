@@ -25697,7 +25697,7 @@ async def m_calendar(
             # 第 6 周如果全在下个月，可剪掉。这里保留以稳定 6 周高度。
             pass
 
-    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx = _m_ctx(request, db, active_tab="calendar")
     ctx.update({
         "year": yy, "month": mm,
         "cells": cells,
