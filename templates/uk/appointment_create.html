@@ -309,6 +309,8 @@
           <option value="{{ s }}" {% if default_store_full == s %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
         </select>
+        {# 美容锁定门店时 select 被 disabled 不会提交，用此隐藏镜像保证 store 仍随表单提交 #}
+        <input type="hidden" name="store" id="ac-store-hidden" disabled/>
       </div>
       <div class="ac-field">
         <label>预&nbsp;约&nbsp;日&nbsp;期<span class="req">*</span></label>
@@ -472,7 +474,7 @@ function acFetchBeautySlots() {
   fetch('/api/appointments/beauty-slots?' + qs)
     .then(function(r){ return r.json(); })
     .then(function(data) {
-      var slots = data.slots || [];
+      var slots = data.available_slots || data.slots || [];
       var dur = data.duration_minutes || 0;
       if (!slots.length) {
         hint.style.color = 'var(--accent-red)';
@@ -522,6 +524,7 @@ function acOnCategoryChange() {
 
   // 美容时锁定横岗店
   var storeEl = document.getElementById('ac-store');
+  var storeHidden = document.getElementById('ac-store-hidden');
   if (storeEl) {
     if (isBeauty) {
       for (var i = 0; i < storeEl.options.length; i++) {
@@ -531,8 +534,12 @@ function acOnCategoryChange() {
         }
       }
       storeEl.disabled = true;
+      // disabled 的 select 不会提交 → 启用隐藏镜像携带门店值
+      if (storeHidden) { storeHidden.value = storeEl.value; storeHidden.disabled = false; }
     } else {
       storeEl.disabled = false;
+      // 可选门店时由 select 提交，隐藏镜像禁用避免重复提交
+      if (storeHidden) { storeHidden.disabled = true; storeHidden.value = ''; }
     }
   }
 
