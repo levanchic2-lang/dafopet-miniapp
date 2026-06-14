@@ -312,7 +312,7 @@
       {% elif inv.payment_status == 'refunded' %}<span class="status refunded">已退款</span>
       {% else %}<span class="status unpaid">待收款</span>{% endif %}
       <span class="sub">
-        {{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}
+        {{ inv.invoice_date or ((inv.created_at | bjtime).strftime('%Y-%m-%d') if inv.created_at else '—') }}
         {% if cust %}<span class="sep">·</span><b>{{ cust.name }}</b>{% if cust.phone %} · {{ cust.phone }}{% endif %}{% endif %}
         {% if visit %}<span class="sep">·</span>病历 <a href="/admin/visits/{{ visit.id }}" style="color:var(--ink);border-bottom:0.5px solid var(--ink-3);">#{{ visit.id }}</a>{% endif %}
       </span>
@@ -379,7 +379,7 @@
         {% if inv.payment_status == 'paid' %}
         <div class="iv-paid-notice">
           已收款 · {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) }} ·
-          {{ inv.paid_at.strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
+          {{ (inv.paid_at | bjtime).strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
         </div>
         {% endif %}
 
@@ -646,7 +646,7 @@
             </td>
             <td class="right num" style="font-weight:700;">¥{{ '%.2f'|format(p.amount) }}</td>
             <td class="right num" style="color:var(--ink-3);font-size:9pt;font-style:italic;width:140px;">
-              {{ p.created_at.strftime('%m-%d %H:%M') if p.created_at else '' }}<br/>{{ p.operator or '' }}
+              {{ (p.created_at | bjtime).strftime('%m-%d %H:%M') if p.created_at else '' }}<br/>{{ p.operator or '' }}
             </td>
             <td class="right" style="width:60px;">
               {% if p.status == 'success' and request.session.get('admin_role') == 'superadmin' %}
@@ -730,7 +730,7 @@
       <h3>创&nbsp;建&nbsp;信&nbsp;息</h3>
       <div class="meta">
         <span class="lbl">创建人</span>{{ inv.created_by or '—' }}<br/>
-        <span class="lbl">时间</span>{{ inv.created_at.strftime('%Y-%m-%d %H:%M') if inv.created_at else '—' }}
+        <span class="lbl">时间</span>{{ (inv.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if inv.created_at else '—' }}
       </div>
     </div>
     {% endif %}

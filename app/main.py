@@ -313,6 +313,19 @@ def _filter_source_zh(source: str) -> str:
 templates.env.filters["source_zh"] = _filter_source_zh
 
 
+# UTC → 北京时间（UTC+8）。数据库时间戳按惯例存 UTC（datetime.utcnow），
+# 人面向展示统一过此过滤器：{{ dt | bjtime }}.strftime(...)。dt 为空返回 None。
+def _filter_bjtime(dt):
+    if not dt:
+        return None
+    try:
+        return dt + timedelta(hours=8)
+    except Exception:
+        return dt
+
+templates.env.filters["bjtime"] = _filter_bjtime
+
+
 # 门店级价格覆盖（方案 H）— Jinja 全局过滤器
 # 用法：{{ item | eff_price(current_store) }}
 from app.services.pricing import (
@@ -17204,8 +17217,8 @@ async def admin_reports_revenue(
     _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     base_q = db.query(Invoice).filter(
         Invoice.payment_status == "paid",
-        func.date(Invoice.paid_at) >= df,
-        func.date(Invoice.paid_at) <= dt,
+        func.date(Invoice.paid_at, '+8 hours') >= df,
+        func.date(Invoice.paid_at, '+8 hours') <= dt,
         ~Invoice.customer_id.in_(_internal_ids_sub),
     )
     rows = base_q.order_by(Invoice.paid_at.desc()).all()
@@ -17363,7 +17376,7 @@ async def admin_reports_revenue(
         daily_amount[cur.isoformat()] = 0.0
         cur += _td(days=1)
     for r in rows:
-        k = r.paid_at.date().isoformat() if r.paid_at else (r.invoice_date or "")[:10]
+        k = (r.paid_at + timedelta(hours=8)).date().isoformat() if r.paid_at else (r.invoice_date or "")[:10]
         if k in daily_amount:
             daily_amount[k] += float(r.total_amount or 0)
     daily_series = [{"date": k, "amount": round(v, 2)} for k, v in sorted(daily_amount.items())]
@@ -17500,8 +17513,8 @@ async def admin_reports_revenue_export(
     _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     rows = db.query(Invoice).filter(
         Invoice.payment_status == "paid",
-        func.date(Invoice.paid_at) >= df,
-        func.date(Invoice.paid_at) <= dt,
+        func.date(Invoice.paid_at, '+8 hours') >= df,
+        func.date(Invoice.paid_at, '+8 hours') <= dt,
         ~Invoice.customer_id.in_(_internal_ids_sub),
     ).order_by(Invoice.paid_at.asc()).all()
 
@@ -17523,7 +17536,7 @@ async def admin_reports_revenue_export(
     for r in rows:
         cust = db.get(Customer, r.customer_id) if r.customer_id else None
         ws.append([
-            r.paid_at.strftime("%Y-%m-%d %H:%M") if r.paid_at else "",
+            (r.paid_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if r.paid_at else "",
             r.invoice_no or "",
             (cust.name if cust else ""),
             r.pet_id or "",
@@ -17612,7 +17625,7 @@ async def admin_invoices_list(
         return q2
     today_paid_sum = _stat_q().filter(
         Invoice.payment_status == "paid",
-        func.date(Invoice.paid_at) == today_str,
+        func.date(Invoice.paid_at, '+8 hours') == today_str,
     ).all()
     unpaid_all = _stat_q().filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
     inv_stats = {
@@ -17667,7 +17680,7 @@ async def admin_invoices_list(
             pq = pq.filter(Invoice.customer_id.in_(cids))
         # 日期按 paid_at（实收时间）落区间；老数据 paid_at 为空则回退 invoice_date
         pq = pq.filter(_or_p(
-            _and_p(Invoice.paid_at.is_not(None), _func.date(Invoice.paid_at) >= df, _func.date(Invoice.paid_at) <= dt),
+            _and_p(Invoice.paid_at.is_not(None), _func.date(Invoice.paid_at, '+8 hours') >= df, _func.date(Invoice.paid_at, '+8 hours') <= dt),
             _and_p(Invoice.paid_at.is_(None), Invoice.invoice_date >= df, Invoice.invoice_date <= dt),
         ))
         paid_invoices = pq.order_by(Invoice.paid_at.desc()).all()
@@ -24956,7 +24969,7 @@ async def m_invoices_list(
         base_q = base_q.filter(Invoice.store == store_short)
     today_paid = base_q.filter(
         Invoice.payment_status == "paid",
-        func.date(Invoice.paid_at) == today_str,
+        func.date(Invoice.paid_at, '+8 hours') == today_str,
     ).all()
     unpaid_all = base_q.filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
     kpi = {

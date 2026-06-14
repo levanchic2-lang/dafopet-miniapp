@@ -207,7 +207,7 @@
           {% if s.invoices[0].pet %}<div class="dim">{{ s.invoices[0].pet.name }}</div>{% endif %}
         {% endif %}
       </td>
-      <td class="num dim">{{ s.paid_at.strftime('%m-%d %H:%M') if s.paid_at else '—' }}</td>
+      <td class="num dim">{{ (s.paid_at | bjtime).strftime('%m-%d %H:%M') if s.paid_at else '—' }}</td>
       <td class="dim" style="line-height:1.5;">
         {% if method %}{{ method_label }}
         {% elif s.methods|length > 1 %}
