@@ -79,6 +79,15 @@
 
   {# 客户/宠物（仅未预填时） #}
   {% if not cust %}
+  {# 搜索带出主人：宠物名 / 手机尾号 / 客户名 #}
+  <div class="ukm-field" style="position:relative;">
+    <label class="lbl">搜&nbsp;索&nbsp;老&nbsp;顾&nbsp;客</label>
+    <input class="ukm-input" type="text" id="ac_search" autocomplete="off"
+           placeholder="宠物名 / 手机尾号 / 客户名"
+           oninput="acPetSearch()" onfocus="acPetSearch()"/>
+    <div id="ac_search_dd" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:30; background:var(--paper); border:0.5px solid var(--ink); max-height:300px; overflow-y:auto; box-shadow:0 6px 24px rgba(0,0,0,.12);"></div>
+    <div class="hint">输关键词下拉选择，或直接在下方填写新客户</div>
+  </div>
   <div class="ukm-row2">
     <div class="ukm-field">
       <label class="lbl">客&nbsp;户&nbsp;姓&nbsp;名<span class="req">*</span></label>
@@ -202,6 +211,75 @@ document.querySelectorAll('.ukm-chip').forEach(chip => {
   }
 });
 
+// ─── 搜索带出主人：宠物名 / 手机尾号 / 客户名 ───────────
+var acSearchTimer = null;
+function acPetSearch() {
+  clearTimeout(acSearchTimer);
+  var inp = document.getElementById('ac_search');
+  if (!inp) return;
+  var q = inp.value.trim();
+  var dd = document.getElementById('ac_search_dd');
+  if (q.length < 2) { dd.style.display = 'none'; dd.innerHTML = ''; return; }
+  acSearchTimer = setTimeout(function() {
+    fetch('/m/api/search-customer?q=' + encodeURIComponent(q))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var results = data.results || [];
+        dd.innerHTML = '';
+        if (!results.length) {
+          dd.innerHTML = '<div style="padding:11px 14px; color:var(--ink-3); font-style:italic; font-size:10pt;">未找到 · 直接在下方填写新客户</div>';
+          dd.style.display = ''; return;
+        }
+        var spZh = {cat:'猫', dog:'犬', other:'其他'};
+        results.forEach(function(c) {
+          var pets = (c.pets && c.pets.length) ? c.pets : [null];
+          pets.forEach(function(p) {
+            var row = document.createElement('div');
+            row.style.cssText = 'padding:10px 14px; border-bottom:0.5px solid var(--hair); cursor:pointer;';
+            var sp = p ? (spZh[p.species] || p.species || '') : '';
+            var petLabel = (p && p.name)
+              ? ('<b>' + p.name + '</b>' + (sp ? ' <span style="color:var(--ink-3);font-style:italic;font-size:9pt;">' + sp + (p.breed ? ' · ' + p.breed : '') + '</span>' : ''))
+              : '<span style="color:var(--ink-3);font-style:italic;">（无宠物档案）</span>';
+            row.innerHTML = '<div style="font-size:10.5pt;">' + petLabel + '</div>'
+              + '<div style="margin-top:2px;color:var(--ink-2);font-size:9.5pt;">' + (c.name || '—')
+              + ' <span style="color:var(--ink-3);font-family:var(--font-numeric);">' + (c.phone || '') + '</span></div>';
+            row.onclick = function() { acPickResult(c, p); };
+            dd.appendChild(row);
+          });
+        });
+        dd.style.display = '';
+      })
+      .catch(function() { dd.style.display = 'none'; });
+  }, 200);
+}
+
+function acPickResult(c, p) {
+  document.getElementById('ac_search_dd').style.display = 'none';
+  document.getElementById('ac_search').value = '';
+  document.getElementById('ac_phone').value = c.phone || '';
+  document.getElementById('ac_cust_name').value = c.name || '';
+  document.getElementById('ac_customer_id').value = c.id || 0;
+  if (p && p.id) {
+    document.getElementById('ac_pet_id').value = p.id;
+    document.getElementById('ac_pet_name').value = p.name || '';
+    if (p.gender) document.getElementById('ac_pet_gender').value = p.gender;
+  } else {
+    document.getElementById('ac_pet_id').value = 0;
+  }
+  var hint = document.getElementById('ac_phone_hint');
+  hint.textContent = '已选 · 客户 #' + c.id + (c.name ? ' · ' + c.name : '') + ' · 名下 ' + (c.pets || []).length + ' 只宠物';
+  hint.style.color = 'var(--accent-green)';
+  // 渲染同主人下宠物 chips，可再切宠物
+  if (window._acRenderChips) window._acRenderChips(c.pets || [], p && p.id);
+}
+
+// 点击外部关闭下拉
+document.addEventListener('click', function(e) {
+  var dd = document.getElementById('ac_search_dd');
+  var inp = document.getElementById('ac_search');
+  if (dd && inp && !dd.contains(e.target) && e.target !== inp) dd.style.display = 'none';
+});
+
 // ─── 手机号自动识别老顾客 ──────────────────────
 (function(){
   const phoneInput = document.getElementById('ac_phone');
@@ -221,17 +299,23 @@ document.querySelectorAll('.ukm-chip').forEach(chip => {
     if (p.gender) setGenderChip(p.gender);
   }
 
-  function renderPetChips(pets) {
+  function renderPetChips(pets, selectedId) {
     const wrap = $('ac_pet_chips');
     wrap.innerHTML = '';
     if (!pets.length) {
       $('ac_pet_picker').style.display = 'none';
       return;
     }
+    // 若指定了已选宠物则高亮它，否则默认第一只
+    let selIdx = 0;
+    if (selectedId) {
+      const i = pets.findIndex(p => p.id === selectedId);
+      if (i >= 0) selIdx = i;
+    }
     pets.forEach((p, i) => {
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'ukm-chip' + (i === 0 ? ' checked' : '');
+      chip.className = 'ukm-chip' + (i === selIdx ? ' checked' : '');
       chip.textContent = (p.name || '未命名') + (p.breed ? ' · ' + p.breed : '');
       chip.addEventListener('click', () => {
         wrap.querySelectorAll('.ukm-chip').forEach(c => c.classList.remove('checked'));
@@ -241,8 +325,9 @@ document.querySelectorAll('.ukm-chip').forEach(chip => {
       wrap.appendChild(chip);
     });
     $('ac_pet_picker').style.display = 'block';
-    fillPet(pets[0]);
+    fillPet(pets[selIdx]);
   }
+  window._acRenderChips = renderPetChips;
 
   function setHint(text, color) {
     const h = $('ac_phone_hint');
