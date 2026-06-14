@@ -104,7 +104,7 @@
             </a>
           </td>
           <td style="font-family:var(--font-numeric); color:var(--ink-2);">{{ row['c'].phone or '—' }}</td>
-          <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt;">{{ row['c'].source or '—' }}</td>
+          <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt;">{{ row['c'].source | source_zh }}</td>
           <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt; font-family:var(--font-numeric);">
             {{ row['c'].created_at.strftime('%Y-%m-%d') if row['c'].created_at else '—' }}
           </td>
@@ -164,7 +164,7 @@
               #{{ row['c'].id }} {{ row['c'].name or '未命名' }}
             </a>
           </td>
-          <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt;">{{ row['c'].source or '—' }}</td>
+          <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt;">{{ row['c'].source | source_zh }}</td>
           <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt; font-family:var(--font-numeric);">
             {{ row['c'].created_at.strftime('%Y-%m-%d') if row['c'].created_at else '—' }}
           </td>

@@ -288,6 +288,31 @@ def _filter_is_invalid_name(name: str) -> bool:
 templates.env.filters["is_invalid_name"] = _filter_is_invalid_name
 
 
+# 客户来源 → 中文（UK 规范：列表/详情不显示英文 raw 值）。
+# 已是中文的来源（如「老客户补录」「随机到诊-…」）原样返回。
+_CUSTOMER_SOURCE_ZH = {
+    "manual":             "手工录入",
+    "rabies":             "狂犬登记",
+    "tnr":                "TNR 申请",
+    "wecom":              "企微对接",
+    "mobile":             "小程序",
+    "import":             "批量导入",
+    "warmsoft_import":     "历史导入",
+    "warmsoft_import_dh":  "历史导入",
+    "surgery":            "手术",
+    "outpatient":         "门诊",
+    "beauty":             "美容",
+}
+
+def _filter_source_zh(source: str) -> str:
+    s = (source or "").strip()
+    if not s:
+        return "手工录入"
+    return _CUSTOMER_SOURCE_ZH.get(s, s)
+
+templates.env.filters["source_zh"] = _filter_source_zh
+
+
 # 门店级价格覆盖（方案 H）— Jinja 全局过滤器
 # 用法：{{ item | eff_price(current_store) }}
 from app.services.pricing import (
