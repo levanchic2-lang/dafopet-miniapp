@@ -38,7 +38,13 @@
 
   .ep-missing { font-size:10pt; color:var(--ink); line-height:1.7; }
   .ep-missing .pill { display:inline-block; padding:2px 9px; border:0.5px solid var(--accent-red); color:var(--accent-red); margin:1px 3px 1px 0; font-size:9pt; letter-spacing:.5px; background:var(--paper); font-weight:600; }
+  .ep-missing .pill.done { border-color:var(--accent-green); color:var(--accent-green); }
   .ep-progress { font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:1px; margin-top:6px; }
+
+  .ep-tabs { display:flex; gap:0; margin-bottom:18px; border-bottom:0.5px solid var(--hair); }
+  .ep-tabs a { font-family:var(--font-serif); font-size:12pt; color:var(--ink-3); letter-spacing:2px; padding:8px 22px 12px; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .ep-tabs a:hover { color:var(--ink); }
+  .ep-tabs a.active { color:var(--ink); font-weight:700; border-bottom-color:var(--ink); }
 
   .ep-action { text-align:right; white-space:nowrap; }
   .ep-action a { display:inline-block; padding:6px 14px; background:var(--ink); color:var(--paper); font-size:10pt; font-family:var(--font-serif); font-weight:700; letter-spacing:1.5px; text-decoration:none; }
@@ -48,24 +54,93 @@
   .ep-empty .big { font-size:18pt; color:var(--ink-2); font-style:normal; font-weight:700; letter-spacing:2px; margin-bottom:14px; }
 </style>
 
-<div class="ep-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin">今日工作台</a><span class="sep">/</span><span>未出检查报告</span></div>
+<div class="ep-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin">今日工作台</a><span class="sep">/</span><span>检查报告</span></div>
 
 <div class="ep-head">
   <div>
+    {% if view == 'done' %}
+    <h1>已&nbsp;出&nbsp;检&nbsp;查&nbsp;报&nbsp;告
+      <span class="sub">{{ store_label }} · 共 <b>{{ done_rows|length }}</b> 张已出 · 近 <b>{{ days }}</b> 天</span>
+    </h1>
+    {% else %}
     <h1>未&nbsp;出&nbsp;检&nbsp;查&nbsp;报&nbsp;告
       <span class="sub">{{ store_label }} · 共 <b>{{ rows|length }}</b> 张待补 · 近 <b>{{ days }}</b> 天</span>
     </h1>
+    {% endif %}
   </div>
   <div class="ep-filter">
     时间
-    <a href="?days=7"  class="{% if days == 7 %}active{% endif %}">7&nbsp;天</a>
-    <a href="?days=30" class="{% if days == 30 %}active{% endif %}">30&nbsp;天</a>
-    <a href="?days=90" class="{% if days == 90 %}active{% endif %}">90&nbsp;天</a>
+    <a href="?view={{ view }}&days=7"  class="{% if days == 7 %}active{% endif %}">7&nbsp;天</a>
+    <a href="?view={{ view }}&days=30" class="{% if days == 30 %}active{% endif %}">30&nbsp;天</a>
+    <a href="?view={{ view }}&days=90" class="{% if days == 90 %}active{% endif %}">90&nbsp;天</a>
   </div>
+</div>
+
+<div class="ep-tabs">
+  <a href="?view=pending&days={{ days }}" class="{% if view != 'done' %}active{% endif %}">未&nbsp;出&nbsp;报&nbsp;告</a>
+  <a href="?view=done&days={{ days }}" class="{% if view == 'done' %}active{% endif %}">已&nbsp;出&nbsp;报&nbsp;告</a>
 </div>
 
 <hr class="ep-rule-double"/>
 
+{% if view == 'done' %}
+{# ───── 已出报告 ───── #}
+{% if done_rows %}
+<div class="ep-tbl-wrap">
+  <table class="ep-tbl">
+    <thead>
+      <tr>
+        <th style="width:130px;">开单日期</th>
+        <th style="width:170px;">客户</th>
+        <th style="width:160px;">宠物</th>
+        <th>已出报告项目</th>
+        <th style="width:130px;text-align:right;">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in done_rows %}
+      <tr>
+        <td>
+          <div class="ep-date">
+            {{ r.eo.created_at.strftime('%Y-%m-%d') if r.eo.created_at else '—' }}
+            {% if r.latest %}<span class="age" style="color:var(--accent-green);">出于&nbsp;{{ (r.latest | bjtime).strftime('%m-%d %H:%M') }}</span>{% endif %}
+          </div>
+        </td>
+        <td>
+          <div class="ep-cust">
+            {% if r.cust %}<a href="/admin/customers/{{ r.cust.id }}" style="color:var(--ink);border-bottom:0.5px solid var(--hair);">{{ r.cust.name or '—' }}</a>{% else %}—{% endif %}
+            {% if r.cust and r.cust.phone %}<span class="phone">{{ r.cust.phone }}</span>{% endif %}
+          </div>
+        </td>
+        <td>
+          <div class="ep-pet">
+            {{ r.pet.name if r.pet else '—' }}
+            {% if r.pet %}<span class="breed">{% if r.pet.species == 'cat' %}猫{% elif r.pet.species == 'dog' %}犬{% else %}{{ r.pet.species or '' }}{% endif %}{% if r.pet.breed %} · {{ r.pet.breed }}{% endif %}</span>{% endif %}
+          </div>
+        </td>
+        <td>
+          <div class="ep-missing">
+            {% for m in r.labels %}<span class="pill done">{{ m }}</span>{% endfor %}
+          </div>
+          <div class="ep-progress">检&nbsp;查&nbsp;单&nbsp;#{{ r.eo.id }}&nbsp;·&nbsp;共&nbsp;{{ r.n_files }}&nbsp;份报告</div>
+        </td>
+        <td class="ep-action"><a href="/admin/exam-orders/{{ r.eo.id }}">查&nbsp;看&nbsp;报&nbsp;告&nbsp;→</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="ep-tbl-wrap">
+  <div class="ep-empty">
+    <div class="big">暂&nbsp;无&nbsp;已&nbsp;出&nbsp;报&nbsp;告</div>
+    近&nbsp;{{ days }}&nbsp;天没有已出报告的检查单
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+{# ───── 未出报告 ───── #}
 {% if rows %}
 <div class="ep-tbl-wrap">
   <table class="ep-tbl">
@@ -118,6 +193,7 @@
     近&nbsp;{{ days }}&nbsp;天没有待补报告的检查单
   </div>
 </div>
+{% endif %}
 {% endif %}
 
 {% endblock %}

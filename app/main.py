@@ -20088,13 +20088,16 @@ async def admin_exam_reports_pending(
     request: Request,
     db: Session = Depends(get_db),
     days: int = Query(30),
+    view: str = Query("pending"),   # pending=未出 / done=已出
 ):
-    """未出检查报告全院清单（工作台卡片『全部 →』跳过来）。
+    """检查报告清单（工作台卡片『全部 →』跳过来）。
     粒度到「项」：一张检查单 6 项，已上传 X 个、缺 Y 个 → 列 Y 项。
     item_label="" 的通用报告视为覆盖全部项 → 不算缺。
+    view=done：列近 N 天内已出齐 / 已出报告的检查单，方便快速定位已出报告。
     """
     require_admin(request)
     days = max(1, min(days, 365))
+    view = "done" if view == "done" else "pending"
     cutoff = datetime.now() - timedelta(days=days)
     store_short = _get_admin_store(request)
     q = db.query(ExamOrder).filter(
@@ -20106,6 +20109,42 @@ async def admin_exam_reports_pending(
              .join(Pet, Visit.pet_id == Pet.id, isouter=True)\
              .filter(or_(Pet.store == store_short, Pet.store == None))
     rows = q.order_by(ExamOrder.created_at.asc()).all()  # 老的在前（紧迫）
+
+    # ── 已出报告视图 ──────────────────────────────────────────
+    if view == "done":
+        done_rows = []
+        for eo in rows:
+            reports = db.query(ExamReport).filter(ExamReport.exam_order_id == eo.id).all()
+            micro = db.query(MicroscopyReport).filter(MicroscopyReport.exam_order_id == eo.id).all()
+            if not reports and not micro:
+                continue
+            labels, seen = [], set()
+            for r in reports:
+                lab = (r.item_label or "").strip() or "通用报告"
+                if lab not in seen:
+                    seen.add(lab); labels.append(lab)
+            for m in micro:
+                lab = (m.item_label or "").strip() or "显微镜报告"
+                if lab not in seen:
+                    seen.add(lab); labels.append(lab)
+            times = [r.uploaded_at for r in reports if r.uploaded_at] \
+                  + [m.created_at for m in micro if m.created_at]
+            latest = max(times) if times else eo.created_at
+            visit = db.get(Visit, eo.visit_id) if eo.visit_id else None
+            cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+            pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+            done_rows.append({
+                "eo": eo, "visit": visit, "cust": cust, "pet": pet,
+                "labels": labels, "n_files": len(reports) + len(micro), "latest": latest,
+            })
+        done_rows.sort(key=lambda x: x["latest"] or datetime.min, reverse=True)  # 最近出的在前
+        return templates.TemplateResponse(request, "uk/exam_reports_pending.html", {
+            "view": "done",
+            "rows": [], "done_rows": done_rows,
+            "days": days,
+            "csrf_token": _get_csrf_token(request),
+            "store_label": store_short or "全部门店",
+        })
 
     pending_rows = []
     for eo in rows:
@@ -20149,7 +20188,9 @@ async def admin_exam_reports_pending(
         })
 
     return templates.TemplateResponse(request, "uk/exam_reports_pending.html", {
+        "view": "pending",
         "rows": pending_rows,
+        "done_rows": [],
         "days": days,
         "csrf_token": _get_csrf_token(request),
         "store_label": store_short or "全部门店",
