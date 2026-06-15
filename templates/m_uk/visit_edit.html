@@ -141,6 +141,10 @@
 {% if not is_edit and not cust %}
 <script>
 const $ = (id) => document.getElementById(id);
+// 防 XSS：客户/宠物名拼进 innerHTML 前转义
+const vEsc = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 let searchTimer = null;
 const search = $('cust-search');
 const customerIdInput = $('customer_id');
@@ -156,15 +160,15 @@ search.addEventListener('input', () => {
     const html = data.results.map(c => `
       <div style="border:0.5px solid var(--hair);background:var(--paper);padding:10px 12px;margin-bottom:6px;">
         <div style="font-family:var(--font-serif);font-weight:600;font-size:14px;color:var(--ink);">
-          ${c.name || '—'}
-          <span class="ukm-mono" style="font-weight:400;color:var(--ink-2);font-style:normal;margin-left:6px;font-size:12px;">${c.phone || ''}</span>
+          ${vEsc(c.name || '—')}
+          <span class="ukm-mono" style="font-weight:400;color:var(--ink-2);font-style:normal;margin-left:6px;font-size:12px;">${vEsc(c.phone || '')}</span>
         </div>
         ${c.pets.length ? `
           <div class="ukm-chips" style="margin-top:8px;">
             ${c.pets.map(p => `
               <button type="button" onclick="pickFromSearch(${c.id}, ${p.id})"
                 class="ukm-chip" style="font-size:12px;padding:5px 12px;min-height:30px;">
-                ${p.name || '未命名'}
+                ${vEsc(p.name || '未命名')}
               </button>
             `).join('')}
           </div>

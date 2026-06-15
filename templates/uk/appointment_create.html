@@ -567,6 +567,12 @@ function acOnBeautyServiceChange() {
 }
 
 // ─── 宠物名 / 手机号 / 客户名 快速搜索（不知道电话时用）───
+// 防 XSS：宠物名/客户名可能含 < > 等，拼进 innerHTML 前必须转义
+function acEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 let acSearchTimer = null;
 function acPetSearch() {
   clearTimeout(acSearchTimer);
@@ -593,11 +599,11 @@ function acPetSearch() {
             row.onmouseout = function() { row.style.background = ''; };
             var sp = p ? (spZh[p.species] || p.species || '') : '';
             var petLabel = (p && p.name)
-              ? ('<b>' + p.name + '</b>' + (sp ? ' <span style="color:var(--ink-3);font-style:italic;font-size:9pt;">' + sp + (p.breed ? ' · ' + p.breed : '') + '</span>' : ''))
+              ? ('<b>' + acEsc(p.name) + '</b>' + (sp ? ' <span style="color:var(--ink-3);font-style:italic;font-size:9pt;">' + acEsc(sp) + (p.breed ? ' · ' + acEsc(p.breed) : '') + '</span>' : ''))
               : '<span style="color:var(--ink-3);font-style:italic;">（无宠物档案）</span>';
             row.innerHTML = '<span style="flex:1;font-size:10.5pt;">' + petLabel + '</span>'
-              + '<span style="color:var(--ink-2);font-family:var(--font-serif);font-size:10pt;">' + (c.name || '—') + '</span>'
-              + '<span style="color:var(--ink-3);font-family:var(--font-numeric);font-size:9.5pt;">' + (c.phone || '') + '</span>';
+              + '<span style="color:var(--ink-2);font-family:var(--font-serif);font-size:10pt;">' + acEsc(c.name || '—') + '</span>'
+              + '<span style="color:var(--ink-3);font-family:var(--font-numeric);font-size:9.5pt;">' + acEsc(c.phone || '') + '</span>';
             row.onclick = function() { acPickResult(c, p); };
             dd.appendChild(row);
           });
@@ -633,7 +639,7 @@ function acPickResult(c, p) {
     chip.type = 'button';
     chip.style.cssText = 'padding:8px 16px; border:0.5px solid var(--ink-3); background:var(--paper); font-family:var(--font-serif); font-size:10.5pt; cursor:pointer; letter-spacing:1px;';
     var sp = spZh[pp.species] || pp.species || '';
-    chip.innerHTML = '<b>' + (pp.name || '未命名') + '</b>' + (sp ? ' <span style="color:var(--ink-3);font-style:italic;font-size:9pt;margin-left:4px;">' + sp + (pp.breed ? ' · ' + pp.breed : '') + '</span>' : '');
+    chip.innerHTML = '<b>' + acEsc(pp.name || '未命名') + '</b>' + (sp ? ' <span style="color:var(--ink-3);font-style:italic;font-size:9pt;margin-left:4px;">' + acEsc(sp) + (pp.breed ? ' · ' + acEsc(pp.breed) : '') + '</span>' : '');
     if (p && pp.id === p.id) { chip.style.background = 'var(--ink)'; chip.style.color = 'var(--paper)'; chip.style.fontWeight = '700'; }
     chip.onclick = function() {
       chipsEl.querySelectorAll('button').forEach(function(b) { b.style.background = 'var(--paper)'; b.style.color = 'var(--ink)'; b.style.fontWeight = '400'; });

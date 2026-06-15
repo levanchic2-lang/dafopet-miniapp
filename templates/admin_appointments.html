@@ -524,6 +524,7 @@
       </div>
       {# 开关按钮 #}
       <form method="post" action="/admin/tnr-quota/{{ sq.store_index }}/toggle" style="margin-top:0.55rem;">
+        <input type="hidden" name="csrf_token" value="{{ request.session.get('csrf_token','') }}">
         <button type="submit" style="width:100%;padding:0.4rem 0;border-radius:8px;border:1px solid var(--border-strong);font-size:0.82rem;font-weight:700;cursor:pointer;background:{% if sq.accepting %}#fee2e2{% else %}#f0fdf4{% endif %};color:{% if sq.accepting %}#991b1b{% else %}#166534{% endif %};">
           {% if sq.accepting %}<i data-lucide="lock"></i> 点击关闭预约{% else %}<i data-lucide="unlock"></i> 点击重新开放{% endif %}
         </button>

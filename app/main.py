@@ -127,7 +127,46 @@ from app.services.wechat_miniapp import push_application_result, push_appointmen
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name)
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, session_cookie="tnr_session")
+
+
+def _resolve_session_secret() -> str:
+    """会话签名密钥安全兜底。
+    若 .env 未覆盖 session_secret（仍是仓库内公开默认值），则自动生成一个强随机密钥
+    并持久化到 data/.session_secret（重启后仍有效），避免「用公开密钥签名 cookie →
+    任何人可伪造 admin 会话」的严重漏洞。不依赖运维记得改 .env。"""
+    default = "dev-change-session-secret-in-env"
+    sec = settings.session_secret or ""
+    if sec and sec != default:
+        return sec
+    key_path = Path(settings.database_url.replace("sqlite:///", "")).resolve().parent / ".session_secret"
+    try:
+        if key_path.exists():
+            saved = key_path.read_text(encoding="utf-8").strip()
+            if saved:
+                logger.warning("session_secret 未在 .env 配置，已使用持久化随机密钥 %s", key_path)
+                return saved
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+        new_key = secrets.token_urlsafe(48)
+        key_path.write_text(new_key, encoding="utf-8")
+        try:
+            _os.chmod(key_path, 0o600)
+        except Exception:
+            pass
+        logger.warning("⚠ session_secret 仍为默认值，已自动生成并持久化随机密钥到 %s。"
+                       "建议在服务器 .env 显式配置 SESSION_SECRET。", key_path)
+        return new_key
+    except Exception as e:
+        # 兜底失败也绝不用公开默认值上线：用一次性随机密钥（重启即失效，迫使重新登录但不致被伪造）
+        logger.error("持久化 session_secret 失败(%s)，本次启动使用一次性随机密钥", e)
+        return secrets.token_urlsafe(48)
+
+
+_SESSION_SECRET = _resolve_session_secret()
+if settings.admin_password == "123456":
+    logger.warning("⚠ admin_password 仍为默认值 123456，存在弱口令登录风险，请在服务器 .env 配置 ADMIN_PASSWORD。")
+
+app.add_middleware(SessionMiddleware, secret_key=_SESSION_SECRET, session_cookie="tnr_session",
+                   https_only=True, same_site="lax", max_age=60 * 60 * 12)
 
 _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -1052,6 +1091,24 @@ def _get_admin_store(request: "Request") -> str:
     if request.session.get("admin_role") == "superadmin":
         return ""
     return request.session.get("admin_store", "")
+
+
+def _store_short(value: str) -> str:
+    """把门店值（全名或短名）归一成短名。"""
+    v = (value or "").strip()
+    return _STORE_FULL_TO_SHORT.get(v, v)
+
+
+def _assert_store_access(request: "Request", *obj_stores) -> None:
+    """跨门店越权护栏：非超管员工只能访问本店对象，跨店抛 403。
+    obj_stores 可传多个候选门店值（全名/短名均可），任一匹配即放行；
+    全部为空（未标门店的历史数据）则放行（避免误伤旧数据）。"""
+    mine = _get_admin_store(request)  # 超管 → ""，不限
+    if not mine:
+        return
+    targets = {_store_short(s) for s in obj_stores if (s or "").strip()}
+    if targets and mine not in targets:
+        raise HTTPException(status_code=403, detail="无权访问其他门店的数据")
 
 
 def _apply_store_filter(query, store_field, store_short: str):
@@ -5511,10 +5568,13 @@ async def admin_appointment_delete(
            detail={"appointment_id": appointment_id, "phone": row.phone, "source": src})
     db.delete(row)
     db.commit()
-    referer = request.headers.get("referer", "")
-    if referer and "/admin/" in referer:
-        return RedirectResponse(referer, status_code=303)
-    return RedirectResponse("/admin/appointments?msg=预约已删除", status_code=303)
+    # referer 仅取路径做同站回跳，过开放重定向护栏（防 http://evil/admin/x 这类绕过）
+    from urllib.parse import urlparse as _urlparse
+    try:
+        ref_path = _urlparse(request.headers.get("referer", "")).path or ""
+    except Exception:
+        ref_path = ""
+    return RedirectResponse(_safe_next(ref_path, "/admin/appointments?msg=预约已删除"), status_code=303)
 
 
 @app.post("/admin/app/{app_id}/delete-draft")
@@ -5784,6 +5844,8 @@ async def admin_tnr_quota_toggle(
     """管理员手动开关门店 TNR 预约接受状态。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login", status_code=302)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
     stores = list(_CLINIC_STORES)
     if store_index < 0 or store_index >= len(stores):
         raise HTTPException(400, "无效的门店编号")
@@ -5793,7 +5855,14 @@ async def admin_tnr_quota_toggle(
     cfg.updated_by = request.session.get("admin_user", "admin")
     cfg.updated_at = datetime.utcnow()
     db.commit()
-    next_url = request.headers.get("referer") or "/admin/appointments"
+    # referer 仅用于同站回跳，过开放重定向护栏
+    from urllib.parse import urlparse as _urlparse
+    ref = request.headers.get("referer") or ""
+    try:
+        ref_path = _urlparse(ref).path or ""
+    except Exception:
+        ref_path = ""
+    next_url = _safe_next(ref_path, "/admin/appointments")
     return RedirectResponse(next_url, status_code=302)
 
 
@@ -6243,10 +6312,12 @@ async def admin_feedback_resolve(
     feedback_id: int,
     request: Request,
     admin_note: str = Form(""),
+    csrf_token: str = Form(""),
     db: Session = Depends(get_db),
 ):
     if not request.session.get("admin"):
         raise HTTPException(403)
+    _require_csrf(request, csrf_token)
     from app.models import Feedback
     fb = db.get(Feedback, feedback_id)
     if not fb:
@@ -8855,8 +8926,12 @@ async def admin_consent_template_save(
 
 def _consent_render_snapshot(template_body: str, *, cust=None, pet=None, visit=None,
                               vet_name="", clinic_name="", pet_weight=0.0, pet_age="") -> str:
-    """把模板里的 {{变量}} 替换成实际值。HTML 安全，不再做 escape（Quill 已经是 HTML）。"""
+    """把模板里的 {{变量}} 替换成实际值。
+    模板正文是超管在富文本编辑器里写的可信 HTML（保留原样）；但替换进去的变量值
+    来自客户/宠物录入（如宠物名），可能含 <script> 等，**必须 HTML 转义**后再嵌入，
+    否则在无登录的 /consent/{token} 公开页与员工后台造成存储型 XSS。"""
     from datetime import date as _date
+    from markupsafe import escape as _esc
     vals = {
         "{{cust_name}}":  (cust.name if cust else ""),
         "{{cust_phone}}": (cust.phone if cust else ""),
@@ -8873,7 +8948,7 @@ def _consent_render_snapshot(template_body: str, *, cust=None, pet=None, visit=N
     }
     out = template_body or ""
     for k, v in vals.items():
-        out = out.replace(k, str(v or "—"))
+        out = out.replace(k, str(_esc(str(v or "—"))))
     return out
 
 
@@ -11010,6 +11085,7 @@ async def page_admin_visit_detail(
         raise HTTPException(404, "就诊记录不存在")
     cust = db.get(Customer, v.customer_id) if v.customer_id else None
     pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
     pets = db.query(Pet).filter(Pet.customer_id == v.customer_id).all() if v.customer_id else []
     vets = db.query(Staff.name).filter(
         Staff.status.in_(["active", "probation"]),
@@ -11101,6 +11177,8 @@ async def admin_visit_edit(
     v = db.get(Visit, visit_id)
     if not v:
         raise HTTPException(404, "就诊记录不存在")
+    _pet_for_store = db.get(Pet, v.pet_id) if v.pet_id else None
+    _assert_store_access(request, _pet_for_store.store if _pet_for_store else "")
     # 病历是法定档案：基础信息（日期/类型/医生/宠物）非超管不允许改
     _new_pet_id = pet_id or v.pet_id
     _new_date   = visit_date.strip()[:20]
@@ -18387,6 +18465,7 @@ async def admin_invoice_detail(
     cust  = db.get(Customer, inv.customer_id) if inv.customer_id else None
     pet   = db.get(Pet,      inv.pet_id)      if inv.pet_id      else None
     visit = db.get(Visit,    inv.visit_id)    if inv.visit_id    else None
+    _assert_store_access(request, inv.store, pet.store if pet else "")
     # 该客户可用的钱包余额 + 有效套餐（用于结算时选择）
     wallet_balance = 0.0
     active_packages = []
@@ -18553,6 +18632,8 @@ async def admin_invoice_add_payment(
     inv = db.get(Invoice, inv_id)
     if not inv:
         raise HTTPException(404)
+    _pet_for_store = db.get(Pet, inv.pet_id) if inv.pet_id else None
+    _assert_store_access(request, inv.store, _pet_for_store.store if _pet_for_store else "")
     if inv.payment_status == "paid":
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已收款，请勿重复", status_code=303)
 
@@ -18703,7 +18784,7 @@ async def admin_invoice_add_payment(
         usable = _coupon_compute_amount(c, float(inv.total_amount or 0))
         if usable <= 0:
             return RedirectResponse(f"/admin/invoices/{inv_id}?msg=未达使用门槛或券无效", status_code=303)
-        want = min(want, usable, outstanding)
+        want = min(want, usable, outstanding_current)
         c.status = "used"
         c.used_invoice_id = inv.id
         c.used_amount = want
@@ -18787,6 +18868,8 @@ async def admin_invoice_payment_void(
     inv = db.get(Invoice, inv_id)
     if not inv:
         raise HTTPException(404)
+    _pet_for_store = db.get(Pet, inv.pet_id) if inv.pet_id else None
+    _assert_store_access(request, inv.store, _pet_for_store.store if _pet_for_store else "")
     # 回滚副作用
     if p.method == "wallet" and p.ref_id:
         wallet = _get_or_create_wallet(db, p.customer_id)
@@ -19519,9 +19602,11 @@ async def admin_vaccination_copy_as_new(vacc_id: int, request: Request, db: Sess
 
 
 @app.post("/admin/vaccinations/send-reminders")
-async def admin_send_vaccine_reminders(request: Request, db: Session = Depends(get_db)):
+async def admin_send_vaccine_reminders(request: Request, db: Session = Depends(get_db),
+                                        csrf_token: str = Form("")):
     """手动批量发送 7 天内到期的疫苗提醒（幂等：同一条记录只发一次）。"""
     require_admin(request)
+    _require_csrf(request, csrf_token)
     result = _run_vaccine_reminders(db)
     msg = f"提醒发送完成：成功 {result['sent']} 条，跳过 {result['skipped']} 条（无 openid），失败 {result['errors']} 条"
     return RedirectResponse(f"/admin/vaccinations?msg={quote(msg, safe='')}", status_code=303)
@@ -19728,6 +19813,7 @@ async def admin_rabies_edit_owner(rec_id: int, request: Request, db: Session = D
     if locked:
         raise HTTPException(400, f"狂犬登记已锁定（{reason}），不可修改。")
     form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
     new_owner_name = str(form.get("owner_name", rec.owner_name)).strip()
     if new_owner_name and _is_invalid_name(new_owner_name):
         return RedirectResponse(
@@ -22926,6 +23012,7 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
         raise HTTPException(404)
     cust = db.get(Customer, h.customer_id) if h.customer_id else None
     pet = db.get(Pet, h.pet_id) if h.pet_id else None
+    _assert_store_access(request, h.store, pet.store if pet else "")
     cage = db.get(Cage, h.cage_id) if h.cage_id else None
     visit = db.get(Visit, h.visit_id) if h.visit_id else None
     # 可换笼位（仅未占用 + 同店）
@@ -23129,9 +23216,9 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
 
 
 def _safe_next(next_url: str, fallback: str) -> str:
-    """防开放重定向：必须以 / 开头且非 //。"""
+    """防开放重定向：必须以 / 开头，且非 // 或 /\\（部分浏览器把 \\ 规范化为 / → 协议相对跳转）。"""
     nu = (next_url or "").strip()
-    if nu and nu.startswith("/") and not nu.startswith("//"):
+    if nu and nu.startswith("/") and not nu.startswith("//") and "\\" not in nu and not nu.startswith("/\\"):
         return nu
     return fallback
 
@@ -24704,6 +24791,7 @@ async def m_pet_profile(pet_id: int, request: Request, db: Session = Depends(get
     pet = db.get(Pet, pet_id)
     if not pet:
         raise HTTPException(404)
+    _assert_store_access(request, pet.store)
     cust = db.get(Customer, pet.customer_id) if pet.customer_id else None
     # 最近 10 病历（该宠物）
     visits = db.query(Visit).filter(Visit.pet_id == pet_id)\
@@ -25042,6 +25130,7 @@ async def m_invoice_detail(inv_id: int, request: Request, db: Session = Depends(
     cust  = db.get(Customer, inv.customer_id) if inv.customer_id else None
     pet   = db.get(Pet, inv.pet_id) if inv.pet_id else None
     visit = db.get(Visit, inv.visit_id) if inv.visit_id else None
+    _assert_store_access(request, inv.store, pet.store if pet else "")
     # 钱包
     wallet_balance = 0.0
     if inv.customer_id:
