@@ -1306,7 +1306,8 @@ async function copyLastPresc() {
   const r = await fetch('/api/prescriptions/recent?' + params);
   const data = await r.json();
   if (!data.ok) { alert(data.error || '无历史处方'); return; }
-  if (!confirm(`找到上次处方（${data.items.length} 项），将替换当前药品，确定？`)) return;
+  const _src = data.from_other_pet ? `（来自同客户的另一宠物「${data.src_pet_name || '—'}」，请核对）` : '';
+  if (!confirm(`找到上次处方（${data.items.length} 项）${_src}，将替换当前药品，确定？`)) return;
   _clearRows();
   (data.items || []).forEach(_appendRow);
   recalcTotal();

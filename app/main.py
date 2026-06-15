@@ -22622,20 +22622,28 @@ async def api_prescription_recent(
     request: Request = None,
     db: Session = Depends(get_db),
 ):
-    """返回该宠物（或客户）最近一张处方的明细，供「复制上次处方」用。"""
+    """返回该宠物（或客户）最近一张处方的明细，供「复制上次处方」用。
+    先按宠物找；找不到再退回到同客户的最近一张（覆盖导入产生重复宠物档案、
+    或同客户换了宠物档案的场景 —— 否则会误报「无历史处方」）。"""
     require_admin(request)
-    q = db.query(Prescription)
-    if pet_id:
-        q = q.filter(Prescription.pet_id == pet_id)
-    elif customer_id:
-        q = q.filter(Prescription.customer_id == customer_id)
-    else:
+    if not pet_id and not customer_id:
         return {"ok": False, "error": "缺少 pet_id 或 customer_id"}
-    if exclude_visit_id:
-        q = q.filter(Prescription.visit_id != exclude_visit_id)
-    p = q.order_by(Prescription.id.desc()).first()
+
+    def _latest(filter_col, val):
+        qq = db.query(Prescription).filter(filter_col == val)
+        if exclude_visit_id:
+            qq = qq.filter(Prescription.visit_id != exclude_visit_id)
+        return qq.order_by(Prescription.id.desc()).first()
+
+    p = _latest(Prescription.pet_id, pet_id) if pet_id else None
+    from_other_pet = False
+    if not p and customer_id:
+        p = _latest(Prescription.customer_id, customer_id)
+        # 命中的是同客户但不同宠物档案的处方 → 提示前端
+        from_other_pet = bool(p and pet_id and p.pet_id and p.pet_id != pet_id)
     if not p:
         return {"ok": False, "error": "无历史处方"}
+    _src_pet = db.get(Pet, p.pet_id) if p.pet_id else None
     items = [{
         "drug_name": it.drug_name, "item_id": it.item_id,
         "drug_type": it.drug_type, "dosage": it.dosage,
@@ -22653,6 +22661,8 @@ async def api_prescription_recent(
     return {
         "ok": True, "id": p.id, "prescribed_date": p.prescribed_date,
         "vet_name": p.vet_name, "notes": p.notes, "items": items,
+        "from_other_pet": from_other_pet,
+        "src_pet_name": (_src_pet.name if _src_pet else ""),
     }
 
 
