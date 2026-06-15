@@ -8,9 +8,12 @@
 
 {% block extra_css %}
 <style>
+  /* 防任何横向溢出导致最右列被裁 / 缩放后顶部留白 */
+  html, body { overflow-x: hidden; max-width: 100%; }
+
   .cal-head {
     display:flex; align-items:center; justify-content:space-between;
-    padding: 10px var(--gutter); margin: 0 calc(0px - var(--gutter)) 8px;
+    padding: 10px 4px; margin: 0 0 8px;
     border-top: 0.5px solid var(--hair);
     border-bottom: 0.5px solid var(--hair);
     background: var(--paper);
@@ -28,7 +31,7 @@
   /* 周名行 */
   .cal-wk {
     display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-    margin: 0 calc(0px - var(--gutter));
+    margin: 0;
     border-bottom: 0.5px solid var(--hair);
   }
   .cal-wk div {
@@ -41,7 +44,10 @@
   /* 日期网格 */
   .cal-grid {
     display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-    margin: 0 calc(0px - var(--gutter)) 14px;
+    margin: 0 0 14px;
+    border-top: 0.5px solid var(--hair);
+    border-left: 0.5px solid var(--hair);
+    border-right: 0.5px solid var(--hair);
   }
   .cal-cell {
     aspect-ratio: 1;
