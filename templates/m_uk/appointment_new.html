@@ -24,42 +24,102 @@
   {% if cust %}<input type="hidden" name="customer_id" value="{{ cust.id }}"/>{% endif %}
   {% if pet %}<input type="hidden" name="pet_id" value="{{ pet.id }}"/>{% endif %}
 
-  {# 类别 chips #}
+  {# 类别 chips（门诊 / 手术 / 美容 / TNR，与桌面一致） #}
   <div class="ukm-section-head"><h2>类&nbsp;别<span class="req" style="color:var(--accent-red);margin-left:4px;">*</span></h2></div>
-  <div class="ukm-chips" style="margin-bottom:18px;">
-    <label class="ukm-chip {% if category_default == 'outpatient' %}checked{% endif %}">
-      <input type="radio" name="category" value="outpatient" {% if category_default == 'outpatient' %}checked{% endif %} onchange="onCategoryChange(this)"/>
-      门&nbsp;诊
+  <div class="ukm-chips" style="margin-bottom:16px;">
+    {% set _cd = category_default if category_default in ['outpatient','surgery','beauty','tnr'] else 'outpatient' %}
+    {% for val, label in [('outpatient','门 诊'),('surgery','手 术'),('beauty','美 容'),('tnr','T N R')] %}
+    <label class="ukm-chip {% if _cd == val %}checked{% endif %}">
+      <input type="radio" name="category" value="{{ val }}" {% if _cd == val %}checked{% endif %} onchange="onCategoryChange()"/>
+      {{ label }}
     </label>
-    <label class="ukm-chip {% if category_default == 'surgery' %}checked{% endif %}">
-      <input type="radio" name="category" value="surgery" {% if category_default == 'surgery' %}checked{% endif %} onchange="onCategoryChange(this)"/>
-      手&nbsp;术
-    </label>
-    <label class="ukm-chip {% if category_default == 'beauty' %}checked{% endif %}">
-      <input type="radio" name="category" value="beauty" {% if category_default == 'beauty' %}checked{% endif %} onchange="onCategoryChange(this)"/>
-      美&nbsp;容
-    </label>
-    <label class="ukm-chip {% if category_default == 'grooming' %}checked{% endif %}">
-      <input type="radio" name="category" value="grooming" {% if category_default == 'grooming' %}checked{% endif %} onchange="onCategoryChange(this)"/>
-      造&nbsp;型
-    </label>
-    <label class="ukm-chip {% if category_default == 'washcare' %}checked{% endif %}">
-      <input type="radio" name="category" value="washcare" {% if category_default == 'washcare' %}checked{% endif %} onchange="onCategoryChange(this)"/>
-      洗&nbsp;护
-    </label>
-    <label class="ukm-chip {% if category_default == 'tnr' %}checked{% endif %}">
-      <input type="radio" name="category" value="tnr" {% if category_default == 'tnr' %}checked{% endif %} onchange="onCategoryChange(this)"/>
-      T&nbsp;N&nbsp;R
-    </label>
+    {% endfor %}
+  </div>
+
+  {# 服务项目：按类别切换（TNR=文本 / 门诊·手术·美容=下拉） #}
+  <div class="ukm-field">
+    <label class="lbl">服&nbsp;务&nbsp;项&nbsp;目<span class="req">*</span></label>
+    <input class="ukm-input" type="text" id="svc_text" name="service_name" maxlength="120"
+           placeholder="TNR 手术安排" style="display:none;" disabled/>
+    <select class="ukm-select" id="svc_outpatient" name="service_name" style="display:none;" disabled>
+      <option value="疫苗/驱虫">疫苗 / 驱虫</option>
+      <option value="体检">体检</option>
+      <option value="呼吸道">呼吸道</option>
+      <option value="胃肠道">胃肠道</option>
+      <option value="泌尿道">泌尿道</option>
+      <option value="皮肤">皮肤</option>
+      <option value="口腔">口腔</option>
+      <option value="行动异常">行动异常</option>
+      <option value="心内科">心内科</option>
+      <option value="肾内科">肾内科</option>
+    </select>
+    <select class="ukm-select" id="svc_surgery" name="service_name" style="display:none;" disabled>
+      <option value="绝育手术">绝育手术</option>
+      <option value="骨科手术">骨科手术</option>
+      <option value="软组织手术">软组织手术</option>
+      <option value="眼科手术">眼科手术</option>
+      <option value="神经外科手术">神经外科手术</option>
+    </select>
+    <select class="ukm-select" id="svc_beauty" name="service_name" style="display:none;" disabled onchange="onBeautySvcChange()">
+      <option value="猫洗护">猫洗护</option>
+      <option value="猫造型">猫造型</option>
+      <option value="犬洗护">犬洗护</option>
+      <option value="犬造型">犬造型</option>
+    </select>
+  </div>
+
+  {# 美容附加区（仅美容显示） #}
+  <div id="beauty_section" style="display:none;">
+    <div class="ukm-field">
+      <label class="lbl">附&nbsp;加&nbsp;项&nbsp;目（可&nbsp;多&nbsp;选）</label>
+      <div class="ukm-chips">
+        {% for addon in ['去浮毛','SPA','护发素','纯手剪','药浴','去油'] %}
+        <label class="ukm-chip" id="addon_chip_{{ loop.index }}">
+          <input type="checkbox" name="addon_services" value="{{ addon }}" onchange="onAddonChange(this)"/>
+          {{ addon }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="ukm-row2">
+      <div class="ukm-field" id="size_dog_wrap">
+        <label class="lbl">体&nbsp;型（犬）</label>
+        <select class="ukm-select" id="size_dog" name="pet_size" onchange="updateBeautyDuration()">
+          <option value="">请选择</option>
+          <option value="微小型犬（4kg 以下）">微小型犬（4kg 以下）</option>
+          <option value="小型犬（4–10kg）">小型犬（4–10kg）</option>
+          <option value="中型犬（10–15kg）">中型犬（10–15kg）</option>
+          <option value="中大型犬（15–25kg）">中大型犬（15–25kg）</option>
+          <option value="大型犬（25kg 以上）">大型犬（25kg 以上）</option>
+        </select>
+      </div>
+      <div class="ukm-field" id="size_cat_wrap" style="display:none;">
+        <label class="lbl">体&nbsp;型（猫）</label>
+        <select class="ukm-select" id="size_cat" name="pet_size" disabled onchange="updateBeautyDuration()">
+          <option value="">请选择</option>
+          <option value="大型猫（4kg 以上）">大型猫（4kg 以上）</option>
+          <option value="中型猫（2.5–4kg）">中型猫（2.5–4kg）</option>
+          <option value="小型猫（2.5kg 以下）">小型猫（2.5kg 以下）</option>
+        </select>
+      </div>
+      <div class="ukm-field">
+        <label class="lbl">毛&nbsp;发</label>
+        <select class="ukm-select" id="coat" name="coat_length" onchange="updateBeautyDuration()">
+          <option value="">请选择</option>
+          <option value="长毛">长毛</option>
+          <option value="短毛">短毛</option>
+        </select>
+      </div>
+    </div>
+    <div id="dur_hint" class="hint" style="display:none;color:var(--accent-green);margin-bottom:6px;"></div>
   </div>
 
   {# TNR 月度配额信息 #}
   {% if tnr_info %}
-  <div id="tnr-quota-banner" class="ukm-card-group" style="display:{% if category_default == 'tnr' %}block{% else %}none{% endif %};">
+  <div id="tnr-quota-banner" class="ukm-card-group" style="display:{% if _cd == 'tnr' %}block{% else %}none{% endif %};">
     <div class="ukm-card" style="border-left:2px solid {% if tnr_info.remaining > 0 and tnr_info.accepting %}var(--accent-green){% else %}var(--accent-red){% endif %};">
       <div class="ukm-card-title" style="color:{% if tnr_info.remaining > 0 and tnr_info.accepting %}var(--accent-green){% else %}var(--accent-red){% endif %};">
-        T&nbsp;N&nbsp;R&nbsp;&nbsp;{{ tnr_info.year_month }}
-        {% if not tnr_info.accepting %}&nbsp;·&nbsp;暂&nbsp;停{% endif %}
+        T&nbsp;N&nbsp;R&nbsp;&nbsp;{{ tnr_info.year_month }}{% if not tnr_info.accepting %}&nbsp;·&nbsp;暂&nbsp;停{% endif %}
       </div>
       <div class="ukm-card-sub">
         本月已用&nbsp;<span class="ukm-num" style="font-style:normal;color:var(--ink-2);">{{ tnr_info.used }}</span>&nbsp;/&nbsp;<span class="ukm-num" style="font-style:normal;">{{ tnr_info.quota }}</span>
@@ -70,16 +130,8 @@
   </div>
   {% endif %}
 
-  {# 服务项目 #}
-  <div class="ukm-field">
-    <label class="lbl">服&nbsp;务&nbsp;项&nbsp;目<span class="req">*</span></label>
-    <input class="ukm-input" type="text" name="service_name" required
-           placeholder="例：常规门诊 / 公猫绝育 / 全身洗剪" maxlength="120"/>
-  </div>
-
   {# 客户/宠物（仅未预填时） #}
   {% if not cust %}
-  {# 搜索带出主人：宠物名 / 手机尾号 / 客户名 #}
   <div class="ukm-field" style="position:relative;">
     <label class="lbl">搜&nbsp;索&nbsp;老&nbsp;顾&nbsp;客</label>
     <input class="ukm-input" type="text" id="ac_search" autocomplete="off"
@@ -101,7 +153,6 @@
   </div>
   <input type="hidden" name="customer_id" id="ac_customer_id" value="0"/>
   <input type="hidden" name="pet_id" id="ac_pet_id" value="0"/>
-  {# 识别后宠物 chip 列表（多宠物时让选） #}
   <div class="ukm-field" id="ac_pet_picker" style="display:none;">
     <label class="lbl">已&nbsp;识&nbsp;别&nbsp;宠&nbsp;物&nbsp;·&nbsp;点&nbsp;击&nbsp;选&nbsp;择</label>
     <div class="ukm-chips" id="ac_pet_chips"></div>
@@ -111,42 +162,42 @@
     <input class="ukm-input" type="text" name="pet_name" id="ac_pet_name" required maxlength="120"/>
   </div>
   {% else %}
-  {# 已预填客户：把字段塞进 hidden inputs（POST 路由还是要这些字段） #}
   <input type="hidden" name="customer_name" value="{{ cust.name }}"/>
   <input type="hidden" name="phone" value="{{ cust.phone }}"/>
   <input type="hidden" name="pet_name" value="{{ pet.name if pet else '' }}"/>
   {% endif %}
 
-  {# 宠物性别 hidden（后端必填，前端不显示；识别老顾客时由 JS 自动填） #}
   <input type="hidden" name="pet_gender" id="ac_pet_gender" value="unknown"/>
 
-  {# 门店：value 必须是全名「大风动物医院（X店）」后端才认 #}
+  {# 门店 #}
   <div class="ukm-field">
     <label class="lbl">门&nbsp;店<span class="req">*</span></label>
     {% if is_superadmin %}
-    <select class="ukm-select" name="store" required>
+    <select class="ukm-select" name="store" id="m_store_select" required>
       {% if not default_store %}<option value="" disabled selected>— 选择门店 —</option>{% endif %}
       <option value="大风动物医院（东环店）" {% if default_store == '东环店' %}selected{% endif %}>东环店</option>
       <option value="大风动物医院（横岗店）" {% if default_store == '横岗店' %}selected{% endif %}>横岗店</option>
     </select>
     {% else %}
     <input class="ukm-input" type="text" value="{{ default_store }}" disabled style="color:var(--ink-3);"/>
-    <input type="hidden" name="store" value="{% if default_store == '东环店' %}大风动物医院（东环店）{% elif default_store == '横岗店' %}大风动物医院（横岗店）{% else %}{{ default_store }}{% endif %}"/>
+    <input type="hidden" name="store" id="m_store_staff" value="{% if default_store == '东环店' %}大风动物医院（东环店）{% elif default_store == '横岗店' %}大风动物医院（横岗店）{% else %}{{ default_store }}{% endif %}"/>
     {% endif %}
+    {# 美容锁横岗店时用此隐藏镜像携带门店值 #}
+    <input type="hidden" name="store" id="m_store_lock" disabled/>
+    <div class="hint" id="store_lock_hint" style="display:none;color:var(--accent-amber);">美容已锁定横岗店</div>
   </div>
 
   <div class="ukm-row2">
     <div class="ukm-field">
       <label class="lbl">日&nbsp;期<span class="req">*</span></label>
-      <input class="ukm-input" type="date" name="appointment_date" required value="{{ today }}"/>
+      <input class="ukm-input" type="date" name="appointment_date" id="m_date" required value="{{ today }}" onchange="scheduleSlots()"/>
     </div>
     <div class="ukm-field">
       <label class="lbl">时&nbsp;间<span class="req">*</span></label>
-      <select class="ukm-select" name="appointment_time" required>
-        {% for h in range(8, 22) %}
+      <select class="ukm-select" name="appointment_time" id="m_time" required>
+        {% for h in range(8, 23) %}
           {% for m in [0, 15, 30, 45] %}
-            {% set hh = '%02d' % h %}
-            {% set mm = '%02d' % m %}
+            {% set hh = '%02d' % h %}{% set mm = '%02d' % m %}
             <option value="{{ hh }}:{{ mm }}" {% if hh == '10' and mm == '00' %}selected{% endif %}>{{ hh }}:{{ mm }}</option>
           {% endfor %}
         {% endfor %}
@@ -154,25 +205,26 @@
     </div>
   </div>
 
-  <div class="ukm-field">
-    <label class="lbl">时&nbsp;长&nbsp;（分钟）</label>
-    <div class="ukm-chips">
-      {% for m in [15, 30, 45, 60, 90, 120] %}
-      <label class="ukm-chip {% if m == 30 %}checked{% endif %}">
-        <input type="radio" name="duration_minutes" value="{{ m }}" {% if m == 30 %}checked{% endif %}/>
-        {{ m }}
-      </label>
-      {% endfor %}
-    </div>
+  {# 可用时段提示（美容专用） #}
+  <div class="ukm-field" id="slots_row" style="display:none;">
+    <label class="lbl">可&nbsp;用&nbsp;时&nbsp;段</label>
+    <div id="slots_hint" class="hint" style="line-height:1.7;"></div>
   </div>
 
+  {# 时长 #}
+  <div class="ukm-field">
+    <label class="lbl">时&nbsp;长&nbsp;（分钟）</label>
+    <input class="ukm-input ukm-num" type="number" name="duration_minutes" id="m_duration" min="5" max="480" value="30"/>
+  </div>
+
+  {# 备注 #}
   <div class="ukm-field">
     <label class="lbl">备&nbsp;注&nbsp;（可选）</label>
     <textarea class="ukm-textarea" name="notes" placeholder="可空" style="min-height:64px;"></textarea>
   </div>
 
   {# TNR 关联申请编号 #}
-  <div class="ukm-field" id="tnr-related-field" style="display:{% if category_default == 'tnr' %}block{% else %}none{% endif %};">
+  <div class="ukm-field" id="tnr-related-field" style="display:{% if _cd == 'tnr' %}block{% else %}none{% endif %};">
     <label class="lbl">关&nbsp;联&nbsp;T&nbsp;N&nbsp;R&nbsp;申&nbsp;请&nbsp;编&nbsp;号</label>
     <input class="ukm-input ukm-num" type="text" name="related_application_id" inputmode="numeric" placeholder="可空"/>
     <div class="hint">小程序申请的 #编号；自建可空</div>
@@ -185,31 +237,163 @@
 </form>
 
 <script>
-function onCategoryChange(input) {
-  // chip 视觉切换
-  document.querySelectorAll('input[name="category"]').forEach(r => {
+// ─── 类别 → 服务项目 / 美容区 / 门店锁 切换 ─────────────
+function curCategory() {
+  var r = document.querySelector('input[name="category"]:checked');
+  return r ? r.value : 'outpatient';
+}
+function showSvc(activeId) {
+  ['svc_text','svc_outpatient','svc_surgery','svc_beauty'].forEach(function(id){
+    var e = document.getElementById(id);
+    e.style.display = 'none'; e.disabled = true; e.removeAttribute('required');
+  });
+  var el = document.getElementById(activeId);
+  el.style.display = ''; el.disabled = false; el.setAttribute('required','');
+}
+function applyStoreLock(isBeauty) {
+  var henggang = '大风动物医院（横岗店）';
+  var sel = document.getElementById('m_store_select');
+  var staff = document.getElementById('m_store_staff');
+  var lock = document.getElementById('m_store_lock');
+  var hint = document.getElementById('store_lock_hint');
+  if (isBeauty) {
+    if (sel) { for (var i=0;i<sel.options.length;i++){ if(sel.options[i].value.indexOf('横岗')>=0){ sel.value=sel.options[i].value; break; } } sel.disabled = true; }
+    if (staff) staff.disabled = true;
+    lock.value = henggang; lock.disabled = false;
+    if (hint) hint.style.display = '';
+  } else {
+    lock.disabled = true; lock.value = '';
+    if (sel) sel.disabled = false;
+    if (staff) staff.disabled = false;
+    if (hint) hint.style.display = 'none';
+  }
+}
+function effectiveStore() {
+  var lock = document.getElementById('m_store_lock');
+  if (lock && !lock.disabled) return lock.value;
+  var sel = document.getElementById('m_store_select');
+  if (sel) return sel.value;
+  var staff = document.getElementById('m_store_staff');
+  return staff ? staff.value : '';
+}
+function onCategoryChange() {
+  document.querySelectorAll('input[name="category"]').forEach(function(r){
     r.closest('.ukm-chip').classList.toggle('checked', r.checked);
   });
-  const v = input.value;
-  const isTnr = (v === 'tnr');
-  const banner = document.getElementById('tnr-quota-banner');
-  if (banner) banner.style.display = isTnr ? 'block' : 'none';
-  document.getElementById('tnr-related-field').style.display = isTnr ? 'block' : 'none';
+  var cat = curCategory();
+  var isBeauty = (cat === 'beauty');
+  var isTnr = (cat === 'tnr');
+  if (isBeauty) showSvc('svc_beauty');
+  else if (cat === 'outpatient') showSvc('svc_outpatient');
+  else if (cat === 'surgery') showSvc('svc_surgery');
+  else showSvc('svc_text');
+  document.getElementById('beauty_section').style.display = isBeauty ? '' : 'none';
+  var banner = document.getElementById('tnr-quota-banner'); if (banner) banner.style.display = isTnr ? 'block' : 'none';
+  var rel = document.getElementById('tnr-related-field'); if (rel) rel.style.display = isTnr ? 'block' : 'none';
+  applyStoreLock(isBeauty);
+  if (isBeauty) { syncSizeVis(); updateBeautyDuration(); }
+  else { document.getElementById('slots_row').style.display = 'none'; }
+}
+function onAddonChange(cb) {
+  cb.closest('.ukm-chip').classList.toggle('checked', cb.checked);
+  updateBeautyDuration();
 }
 
-// chip 通用切换（用于性别 / 时长 chip）
-document.querySelectorAll('.ukm-chip').forEach(chip => {
-  const radio = chip.querySelector('input[type="radio"]');
-  if (radio) {
-    radio.addEventListener('change', () => {
-      // 同 name 的全部清掉 checked，把当前的加上
-      const name = radio.name;
-      document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
-        r.closest('.ukm-chip').classList.toggle('checked', r.checked);
-      });
-    });
+// ─── 美容时长估算（与后端 _calc_beauty_duration 一致）───
+function calcBeautyDuration(sn, sz, cl, addonCount) {
+  var isWash = sn.indexOf('洗护') >= 0;
+  var isLong = cl === '长毛';
+  var base = 60;
+  if (sn.indexOf('犬') >= 0) {
+    if (sz.indexOf('微小型') >= 0)      base = isWash ? 30 : 90;
+    else if (sz.indexOf('小型犬') >= 0) base = isWash ? 60 : 120;
+    else if (sz.indexOf('中大型') >= 0) base = isWash ? (isLong ? 120 : 90) : 180;
+    else if (sz.indexOf('中型犬') >= 0) base = isWash ? (isLong ? 90 : 60) : 150;
+    else if (sz.indexOf('大型犬') >= 0) base = isWash ? (isLong ? 150 : 120) : 210;
+  } else if (sn.indexOf('猫') >= 0) {
+    if (sz.indexOf('大型猫') >= 0)      base = isWash ? (isLong ? 150 : 120) : 150;
+    else if (sz.indexOf('中型猫') >= 0) base = isWash ? (isLong ? 120 : 90) : 120;
+    else if (sz.indexOf('小型猫') >= 0) base = isWash ? (isLong ? 90 : 60) : 120;
   }
-});
+  base += addonCount * 30;
+  return base;
+}
+function getBeautySvc()  { return document.getElementById('svc_beauty').value || ''; }
+function getBeautySize() {
+  var dw = document.getElementById('size_dog_wrap');
+  if (dw && dw.style.display !== 'none') return document.getElementById('size_dog').value || '';
+  return document.getElementById('size_cat').value || '';
+}
+function getBeautyCoat() { return document.getElementById('coat').value || ''; }
+function getAddonCount() { return document.querySelectorAll('#beauty_section input[name="addon_services"]:checked').length; }
+function syncSizeVis() {
+  var sn = getBeautySvc();
+  var isDog = sn.indexOf('犬') >= 0;
+  var dw = document.getElementById('size_dog_wrap');
+  var cw = document.getElementById('size_cat_wrap');
+  dw.style.display = isDog ? '' : 'none';
+  cw.style.display = isDog ? 'none' : '';
+  document.getElementById('size_dog').disabled = !isDog;
+  document.getElementById('size_cat').disabled = !!isDog;
+}
+function onBeautySvcChange() { syncSizeVis(); updateBeautyDuration(); }
+function updateBeautyDuration() {
+  var dur = calcBeautyDuration(getBeautySvc(), getBeautySize(), getBeautyCoat(), getAddonCount());
+  document.getElementById('m_duration').value = dur;
+  var h = document.getElementById('dur_hint');
+  if (dur > 0) {
+    var hh = Math.floor(dur/60), mm = dur % 60;
+    h.textContent = '预计占用 ' + (hh>0 ? hh + ' 小时 ' : '') + (mm>0 ? mm + ' 分钟' : '');
+    h.style.display = '';
+  } else { h.style.display = 'none'; }
+  scheduleSlots();
+}
+
+// ─── 可用时段查询（美容） ───────────────────────────
+var slotsTimer = null;
+function scheduleSlots() {
+  clearTimeout(slotsTimer);
+  if (curCategory() !== 'beauty') { document.getElementById('slots_row').style.display = 'none'; return; }
+  slotsTimer = setTimeout(fetchSlots, 300);
+}
+function fetchSlots() {
+  var sn = getBeautySvc();
+  var date = document.getElementById('m_date').value;
+  var row = document.getElementById('slots_row');
+  var hint = document.getElementById('slots_hint');
+  if (!sn || !date) { row.style.display = 'none'; return; }
+  var ac = document.querySelectorAll('#beauty_section input[name="addon_services"]:checked');
+  var addons = Array.from(ac).map(function(cb){ return cb.value; }).join(',');
+  row.style.display = '';
+  hint.style.color = 'var(--ink-3)';
+  hint.textContent = '正在查询可用时段…';
+  var qs = 'service=' + encodeURIComponent(sn)
+         + '&pet_size=' + encodeURIComponent(getBeautySize())
+         + '&coat_length=' + encodeURIComponent(getBeautyCoat())
+         + '&addons=' + encodeURIComponent(addons)
+         + '&date=' + encodeURIComponent(date)
+         + '&store=' + encodeURIComponent(effectiveStore());
+  fetch('/api/appointments/beauty-slots?' + qs)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var slots = data.available_slots || data.slots || [];
+      var dur = data.duration_minutes || 0;
+      if (!slots.length) {
+        hint.style.color = 'var(--accent-red)';
+        hint.textContent = '当天暂无可用时段，请换日期。';
+      } else {
+        hint.style.color = 'var(--accent-green)';
+        hint.textContent = slots.join('   ·   ');
+        if (dur) document.getElementById('m_duration').value = dur;
+      }
+    })
+    .catch(function(){
+      hint.style.color = 'var(--ink-3)';
+      hint.textContent = '时段查询失败，可手动填时长。';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', onCategoryChange);
 
 // ─── 搜索带出主人：宠物名 / 手机尾号 / 客户名 ───────────
 // 防 XSS：宠物名/客户名等可能含 <script> 等，拼进 innerHTML 前必须转义
@@ -258,7 +442,6 @@ function acPetSearch() {
       .catch(function() { dd.style.display = 'none'; });
   }, 200);
 }
-
 function acPickResult(c, p) {
   document.getElementById('ac_search_dd').style.display = 'none';
   document.getElementById('ac_search').value = '';
@@ -275,11 +458,8 @@ function acPickResult(c, p) {
   var hint = document.getElementById('ac_phone_hint');
   hint.textContent = '已选 · 客户 #' + c.id + (c.name ? ' · ' + c.name : '') + ' · 名下 ' + (c.pets || []).length + ' 只宠物';
   hint.style.color = 'var(--accent-green)';
-  // 渲染同主人下宠物 chips，可再切宠物
   if (window._acRenderChips) window._acRenderChips(c.pets || [], p && p.id);
 }
-
-// 点击外部关闭下拉
 document.addEventListener('click', function(e) {
   var dd = document.getElementById('ac_search_dd');
   var inp = document.getElementById('ac_search');
@@ -292,32 +472,13 @@ document.addEventListener('click', function(e) {
   if (!phoneInput) return;
   const $ = (id) => document.getElementById(id);
   let timer = null;
-
-  function setGenderChip(g) {
-    // 性别 chip 已删除，只设 hidden value
-    const h = $('ac_pet_gender');
-    if (h) h.value = g || 'unknown';
-  }
-
-  function fillPet(p) {
-    $('ac_pet_id').value = p.id;
-    $('ac_pet_name').value = p.name || '';
-    if (p.gender) setGenderChip(p.gender);
-  }
-
+  function setGenderChip(g) { const h = $('ac_pet_gender'); if (h) h.value = g || 'unknown'; }
+  function fillPet(p) { $('ac_pet_id').value = p.id; $('ac_pet_name').value = p.name || ''; if (p.gender) setGenderChip(p.gender); }
   function renderPetChips(pets, selectedId) {
-    const wrap = $('ac_pet_chips');
-    wrap.innerHTML = '';
-    if (!pets.length) {
-      $('ac_pet_picker').style.display = 'none';
-      return;
-    }
-    // 若指定了已选宠物则高亮它，否则默认第一只
+    const wrap = $('ac_pet_chips'); wrap.innerHTML = '';
+    if (!pets.length) { $('ac_pet_picker').style.display = 'none'; return; }
     let selIdx = 0;
-    if (selectedId) {
-      const i = pets.findIndex(p => p.id === selectedId);
-      if (i >= 0) selIdx = i;
-    }
+    if (selectedId) { const i = pets.findIndex(p => p.id === selectedId); if (i >= 0) selIdx = i; }
     pets.forEach((p, i) => {
       const chip = document.createElement('button');
       chip.type = 'button';
@@ -325,8 +486,7 @@ document.addEventListener('click', function(e) {
       chip.textContent = (p.name || '未命名') + (p.breed ? ' · ' + p.breed : '');
       chip.addEventListener('click', () => {
         wrap.querySelectorAll('.ukm-chip').forEach(c => c.classList.remove('checked'));
-        chip.classList.add('checked');
-        fillPet(p);
+        chip.classList.add('checked'); fillPet(p);
       });
       wrap.appendChild(chip);
     });
@@ -334,41 +494,25 @@ document.addEventListener('click', function(e) {
     fillPet(pets[selIdx]);
   }
   window._acRenderChips = renderPetChips;
-
-  function setHint(text, color) {
-    const h = $('ac_phone_hint');
-    h.textContent = text;
-    h.style.color = color || 'var(--ink-3)';
-  }
-
+  function setHint(text, color) { const h = $('ac_phone_hint'); h.textContent = text; h.style.color = color || 'var(--ink-3)'; }
   async function recognize(phone) {
-    if (!/^1\d{10}$/.test(phone)) {
-      setHint('输 11 位号码自动识别老顾客');
-      return;
-    }
+    if (!/^1\d{10}$/.test(phone)) { setHint('输 11 位号码自动识别老顾客'); return; }
     setHint('正在识别…');
     try {
       const resp = await fetch('/m/api/search-customer?q=' + encodeURIComponent(phone));
       const data = await resp.json();
-      // 精确匹配 phone 的客户
       const hit = (data.results || []).find(c => (c.phone || '').replace(/\s/g,'') === phone);
       if (!hit) {
-        $('ac_customer_id').value = 0;
-        $('ac_pet_id').value = 0;
+        $('ac_customer_id').value = 0; $('ac_pet_id').value = 0;
         $('ac_pet_picker').style.display = 'none';
-        setHint('未识别·将作为新客户创建');
-        return;
+        setHint('未识别·将作为新客户创建'); return;
       }
       $('ac_customer_id').value = hit.id;
-      if (hit.name && !$('ac_cust_name').value) $('ac_cust_name').value = hit.name;
-      else if (hit.name) $('ac_cust_name').value = hit.name;
+      if (hit.name) $('ac_cust_name').value = hit.name;
       renderPetChips(hit.pets || []);
       setHint('已识别 · 客户 #' + hit.id + (hit.pets.length > 1 ? ' · ' + hit.pets.length + ' 只宠物，请选' : ''), 'var(--accent-green)');
-    } catch(e) {
-      setHint('识别失败：' + e, 'var(--accent-red)');
-    }
+    } catch(e) { setHint('识别失败：' + e, 'var(--accent-red)'); }
   }
-
   phoneInput.addEventListener('input', () => {
     clearTimeout(timer);
     const v = phoneInput.value.replace(/\s/g, '');
