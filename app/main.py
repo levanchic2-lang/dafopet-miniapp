@@ -25868,6 +25868,7 @@ async def m_appointments_list(
     q: str = "",
     scope: str = "today",   # today / week / pending / all
     d: str = "",            # 指定日期
+    track: str = "",        # all / medical / beauty 业务线筛选
 ):
     """预约列表：今日/本周/待确认/全部 + 搜索"""
     if not _admin_ok(request):
@@ -25905,6 +25906,16 @@ async def m_appointments_list(
             Appointment.pet_name.ilike(f"%{q}%"),
         ))
 
+    # 业务线筛选：美容线 = 美容/造型/洗护；医疗线 = 其余（门诊/手术/TNR/疫苗/驱虫…）
+    track = (track or "").strip().lower()
+    if track == "beauty":
+        base = base.filter(Appointment.category.in_(list(_BEAUTY_TRACK)))
+    elif track == "medical":
+        base = base.filter(or_(
+            Appointment.category.notin_(list(_BEAUTY_TRACK)),
+            Appointment.category.is_(None),
+        ))
+
     appts = base.limit(80).all()
 
     # 按日期分组
@@ -25922,7 +25933,7 @@ async def m_appointments_list(
     ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "appts": appts, "grouped": grouped,
-        "scope": scope, "q": q, "d": today_str,
+        "scope": scope, "q": q, "d": today_str, "track": track,
         "pending_n": pending_n,
     })
     return templates.TemplateResponse(request, "m_uk/appointments.html", ctx)

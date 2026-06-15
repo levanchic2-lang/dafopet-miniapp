@@ -12,19 +12,32 @@
 {% set _cat_zh = {'tnr':'TNR','outpatient':'门诊','surgery':'手术','beauty':'美容','grooming':'美容','washcare':'洗护'} %}
 {% set _status_zh = {'pending':'待确认','confirmed':'已确认','arrived':'已到店','completed':'已完成','cancelled':'已取消','no_show':'爽约'} %}
 
+{% set _qd = '&d=' ~ d if d else '' %}
+{% set _qq = '&q=' ~ (q|urlencode) if q else '' %}
+{% set _qt = '&track=' ~ track if track else '' %}
+
+<div class="ukm-chips" style="margin-bottom:10px;">
+  <a class="ukm-chip {% if scope == 'today' %}checked{% endif %}" href="/m/appointments?scope=today{{ _qd }}{{ _qq }}{{ _qt }}">今&nbsp;日</a>
+  <a class="ukm-chip {% if scope == 'week' %}checked{% endif %}" href="/m/appointments?scope=week{{ _qd }}{{ _qq }}{{ _qt }}">本&nbsp;周</a>
+  <a class="ukm-chip {% if scope == 'pending' %}checked{% endif %}" href="/m/appointments?scope=pending{{ _qq }}{{ _qt }}">待&nbsp;确&nbsp;认{% if pending_n %}&nbsp;{{ pending_n }}{% endif %}</a>
+  <a class="ukm-chip {% if scope == 'all' %}checked{% endif %}" href="/m/appointments?scope=all{{ _qd }}{{ _qq }}{{ _qt }}">全&nbsp;部</a>
+</div>
+
+{# 业务线筛选：医疗 vs 美容 #}
 <div class="ukm-chips" style="margin-bottom:14px;">
-  <a class="ukm-chip {% if scope == 'today' %}checked{% endif %}" href="/m/appointments?scope=today{% if q %}&q={{ q|urlencode }}{% endif %}">今&nbsp;日</a>
-  <a class="ukm-chip {% if scope == 'week' %}checked{% endif %}" href="/m/appointments?scope=week{% if q %}&q={{ q|urlencode }}{% endif %}">本&nbsp;周</a>
-  <a class="ukm-chip {% if scope == 'pending' %}checked{% endif %}" href="/m/appointments?scope=pending{% if q %}&q={{ q|urlencode }}{% endif %}">待&nbsp;确&nbsp;认{% if pending_n %}&nbsp;{{ pending_n }}{% endif %}</a>
-  <a class="ukm-chip {% if scope == 'all' %}checked{% endif %}" href="/m/appointments?scope=all{% if q %}&q={{ q|urlencode }}{% endif %}">全&nbsp;部</a>
+  <a class="ukm-chip {% if not track %}checked{% endif %}" href="/m/appointments?scope={{ scope }}{{ _qd }}{{ _qq }}">全&nbsp;部&nbsp;线</a>
+  <a class="ukm-chip {% if track == 'medical' %}checked{% endif %}" href="/m/appointments?scope={{ scope }}{{ _qd }}{{ _qq }}&amp;track=medical">医&nbsp;疗</a>
+  <a class="ukm-chip {% if track == 'beauty' %}checked{% endif %}" href="/m/appointments?scope={{ scope }}{{ _qd }}{{ _qq }}&amp;track=beauty">美&nbsp;容</a>
 </div>
 
 <form method="get" action="/m/appointments">
   <input type="hidden" name="scope" value="{{ scope }}"/>
+  {% if d %}<input type="hidden" name="d" value="{{ d }}"/>{% endif %}
+  {% if track %}<input type="hidden" name="track" value="{{ track }}"/>{% endif %}
   <div class="ukm-search">
     <span class="ic">⌕</span>
     <input type="search" name="q" value="{{ q }}" placeholder="客户名 / 手机号 / 宠物名"/>
-    {% if q %}<a href="/m/appointments?scope={{ scope }}" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
+    {% if q %}<a href="/m/appointments?scope={{ scope }}{{ _qd }}{{ _qt }}" style="font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;">清&nbsp;除</a>{% endif %}
   </div>
 </form>
 
