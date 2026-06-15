@@ -22618,21 +22618,24 @@ async def api_exam_template_delete(tpl_id: int, request: Request, db: Session = 
 async def api_prescription_recent(
     pet_id: int = Query(0),
     customer_id: int = Query(0),
-    exclude_visit_id: int = Query(0),
+    exclude_visit_id: int = Query(0),   # 兼容旧前端；仅在没传 exclude_presc_id 时不再用于排除
+    exclude_presc_id: int = Query(0),   # 编辑时排除「正在编辑的这张」，而非整个就诊
     request: Request = None,
     db: Session = Depends(get_db),
 ):
     """返回该宠物（或客户）最近一张处方的明细，供「复制上次处方」用。
-    先按宠物找；找不到再退回到同客户的最近一张（覆盖导入产生重复宠物档案、
-    或同客户换了宠物档案的场景 —— 否则会误报「无历史处方」）。"""
+    - 先按宠物找；找不到再退回到同客户的最近一张（覆盖导入产生重复宠物档案、
+      或同客户换了宠物档案的场景 —— 否则会误报「无历史处方」）。
+    - 只排除正在编辑的那一张处方本身（exclude_presc_id），**不排除整次就诊**，
+      这样同一次就诊里先开的处方也能被「复制上次」拿到（如住院多日逐日开方）。"""
     require_admin(request)
     if not pet_id and not customer_id:
         return {"ok": False, "error": "缺少 pet_id 或 customer_id"}
 
     def _latest(filter_col, val):
         qq = db.query(Prescription).filter(filter_col == val)
-        if exclude_visit_id:
-            qq = qq.filter(Prescription.visit_id != exclude_visit_id)
+        if exclude_presc_id:
+            qq = qq.filter(Prescription.id != exclude_presc_id)
         return qq.order_by(Prescription.id.desc()).first()
 
     p = _latest(Prescription.pet_id, pet_id) if pet_id else None

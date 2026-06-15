@@ -1197,6 +1197,7 @@ const CSRF_TOKEN = {{ csrf_token | tojson }};
 const PRESC_PET_ID = {{ (p.pet_id if p else (pet.id if pet else 0)) or 0 }};
 const PRESC_CUST_ID = {{ (p.customer_id if p else (cust.id if cust else 0)) or 0 }};
 const PRESC_VISIT_ID = {{ (visit.id if visit else (p.visit_id if p else 0)) or 0 }};
+const PRESC_ID = {{ (presc.id if presc else 0) or 0 }};
 
 function _showModal(id) { document.getElementById(id).classList.add('show'); }
 function _hideModal(id) { document.getElementById(id).classList.remove('show'); }
@@ -1301,7 +1302,7 @@ async function copyLastPresc() {
   const params = new URLSearchParams({
     pet_id: PRESC_PET_ID || 0,
     customer_id: PRESC_CUST_ID || 0,
-    exclude_visit_id: PRESC_VISIT_ID || 0,
+    exclude_presc_id: PRESC_ID || 0,
   });
   const r = await fetch('/api/prescriptions/recent?' + params);
   const data = await r.json();
