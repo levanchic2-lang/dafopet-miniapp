@@ -27,7 +27,7 @@
 
   /* 周名行 */
   .cal-wk {
-    display: grid; grid-template-columns: repeat(7, 1fr);
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
     margin: 0 calc(0px - var(--gutter));
     border-bottom: 0.5px solid var(--hair);
   }
@@ -40,11 +40,12 @@
 
   /* 日期网格 */
   .cal-grid {
-    display: grid; grid-template-columns: repeat(7, 1fr);
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
     margin: 0 calc(0px - var(--gutter)) 14px;
   }
   .cal-cell {
     aspect-ratio: 1;
+    min-width: 0; overflow: hidden;
     border-right: 0.5px solid var(--hair);
     border-bottom: 0.5px solid var(--hair);
     background: var(--paper);
@@ -121,9 +122,10 @@
   }
   .cal-cell.blocked.out { opacity: 0.6; }
   .cal-cell .blk {
-    margin-top: 2px; font-size: 7.5pt; line-height: 1.1;
+    margin-top: 2px; font-size: 7pt; line-height: 1.1;
     font-style: italic; letter-spacing: 0; text-align: center;
-    width: 96%; word-break: break-all;
+    width: 100%; max-width: 100%; overflow: hidden;
+    word-break: break-all;
   }
   .cal-cell .blk.beauty  { color: var(--accent-amber); }
   .cal-cell .blk.medical { color: var(--accent-red); }
