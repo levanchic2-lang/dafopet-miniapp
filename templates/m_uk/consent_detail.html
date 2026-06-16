@@ -51,9 +51,9 @@
   <div class="ukm-card">
     <div class="ukm-card-title" style="color:var(--accent-green);">已&nbsp;签&nbsp;署&nbsp;存&nbsp;档</div>
     <div class="ukm-card-sub" style="margin:6px 0 12px;line-height:1.6;">签字数据 + 协议正文已加密保存，可打印或另存为 PDF 发给客户 / 外院。</div>
-    <a href="/admin/consent-tasks/{{ task.id }}/printable" target="_blank" class="ukm-btn block">打&nbsp;印&nbsp;/&nbsp;另&nbsp;存&nbsp;为&nbsp;P&nbsp;D&nbsp;F</a>
+    <a href="/admin/consent-tasks/{{ task.id }}/printable" class="ukm-btn block">打&nbsp;印&nbsp;/&nbsp;另&nbsp;存&nbsp;为&nbsp;P&nbsp;D&nbsp;F</a>
     {% if doc and doc.pdf_path %}
-    <a href="/uploads/{{ doc.pdf_path }}" target="_blank" class="ukm-btn hair block" style="margin-top:8px;">下&nbsp;载&nbsp;服&nbsp;务&nbsp;器&nbsp;P&nbsp;D&nbsp;F&nbsp;·&nbsp;{{ '%.1f KB'|format((doc.pdf_size or 0)/1024) }}</a>
+    <a href="/uploads/{{ doc.pdf_path }}" class="ukm-btn hair block" style="margin-top:8px;">下&nbsp;载&nbsp;服&nbsp;务&nbsp;器&nbsp;P&nbsp;D&nbsp;F&nbsp;·&nbsp;{{ '%.1f KB'|format((doc.pdf_size or 0)/1024) }}</a>
     {% endif %}
   </div>
 </div>

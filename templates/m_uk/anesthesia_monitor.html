@@ -3,7 +3,7 @@
 {% block topbar_title %}麻&nbsp;醉&nbsp;监&nbsp;护{% endblock %}
 {% block topbar_back %}<a href="{% if sheet.visit_id %}/m/visit/{{ sheet.visit_id }}{% elif cust %}/m/customer/{{ cust.id }}{% else %}/m{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
 {% block topbar_actions %}
-  <a class="ukm-topbar-action" href="/admin/anesthesia-monitor/{{ sheet.id }}/pdf" target="_blank">P&nbsp;D&nbsp;F</a>
+  <a class="ukm-topbar-action" href="/admin/anesthesia-monitor/{{ sheet.id }}/pdf">P&nbsp;D&nbsp;F</a>
 {% endblock %}
 
 {% block extra_css %}
@@ -198,9 +198,10 @@
 {# ── 导出 + 结束 ── #}
 <div class="ukm-divider"></div>
 <div class="ukm-btn-row">
-  <a href="/admin/anesthesia-monitor/{{ sheet.id }}/pdf" target="_blank" class="ukm-btn block">导&nbsp;出&nbsp;P&nbsp;D&nbsp;F</a>
+  <a href="/admin/anesthesia-monitor/{{ sheet.id }}/pdf" class="ukm-btn block">导&nbsp;出&nbsp;P&nbsp;D&nbsp;F</a>
   <a href="/admin/anesthesia-monitor/{{ sheet.id }}/pdf?download=1" class="ukm-btn hair block">下&nbsp;载</a>
 </div>
+<div class="hint" style="text-align:center;margin-top:6px;">安卓如「导出」打不开，点「下载」保存后用文件管理器打开</div>
 <form method="post" action="/admin/anesthesia-monitor/{{ sheet.id }}/close" style="margin-top:10px;"
       onsubmit="return confirm('{% if sheet.status == 'closed' %}重新开启监护，可继续记录？{% else %}结束本次麻醉监护？结束后不可再加记录（可重新开启）。{% endif %}');">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
