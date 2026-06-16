@@ -332,6 +332,13 @@
       {% endfor %}
     </div>
 
+    <div class="co-pay-amount-wrap" id="co-round-wrap" style="min-width:128px;">
+      <label>本笔实收（混合支付改小）</label>
+      <input type="number" step="0.01" min="0" name="round_amount" id="co-round-amount"
+             class="co-ref-input" style="font-family:var(--font-numeric); font-size:15pt; font-weight:700; color:var(--accent-red); padding:6px 8px;"
+             value="{{ '%.2f'|format(outstanding) }}"/>
+    </div>
+
     <div class="co-ref-field">
       <label>单号 / 备注（选填）</label>
       <input type="text" name="ref_no" class="co-ref-input" placeholder="收款单号…" maxlength="120"/>
@@ -370,6 +377,9 @@ function coSelectMethod(btn) {
   var isComplex = !!CO_COMPLEX[v];
   // 套餐/押金/优惠券 → 单单核销到主单 add-payment；其余 → 合并 multi-pay
   form.action = isComplex ? CO_ADDPAY_URL : CO_MULTIPAY_URL;
+  // 套餐/押金/优惠券按券面额核销，不走「本笔实收」拆分 → 隐藏金额框
+  var rw = document.getElementById('co-round-wrap');
+  if (rw) rw.style.display = isComplex ? 'none' : '';
 
   // 选择器行：只显示当前复杂方式对应的下拉
   document.querySelectorAll('.co-pick-sel').forEach(function(s){ s.style.display = 'none'; });
@@ -390,6 +400,19 @@ function coOnSubmit() {
   if (CO_COMPLEX[v]) {
     var sel = document.getElementById(CO_PICK_ID[v]);
     if (sel && !sel.value) { alert('请选择要使用的' + CO_COMPLEX[v]); return false; }
+    return true;
+  }
+  // 简单方式：校验「本笔实收」金额
+  var amtEl = document.getElementById('co-round-amount');
+  var amt = parseFloat(amtEl && amtEl.value) || 0;
+  var maxEl = document.getElementById('co-outstanding-display');
+  var maxAmt = parseFloat((maxEl ? maxEl.textContent : '').replace(/[^0-9.]/g, '')) || 0;
+  if (amt <= 0) { alert('请填写本笔实收金额'); return false; }
+  if (amt > maxAmt + 0.005) {
+    if (!confirm('本笔实收 ¥' + amt.toFixed(2) + ' 超过待收 ¥' + maxAmt.toFixed(2) + '，将按待收金额收取，继续？')) return false;
+  } else if (amt < maxAmt - 0.005) {
+    // 混合支付：本笔少收，收完会提示继续收下一笔
+    return confirm('本笔收 ¥' + amt.toFixed(2) + '（混合支付）· 余 ¥' + (maxAmt - amt).toFixed(2) + ' 收完后继续选下一种支付方式，确定？');
   }
   return true;
 }
@@ -418,9 +441,16 @@ function coSelectDisc(btn) {
     document.getElementById('co-disc-preview').style.display = 'none';
     document.getElementById('co-disc-val-hidden').value = '';
     document.getElementById('co-outstanding-display').textContent = '¥' + CO_OUTSTANDING.toFixed(2);
+    coSetRound(CO_OUTSTANDING);
     return;
   }
   coRecalc();
+}
+
+// 把「本笔实收」默认值同步成折后待收（用户可再改小做混合支付）
+function coSetRound(v) {
+  var el = document.getElementById('co-round-amount');
+  if (el) el.value = (v || 0).toFixed(2);
 }
 
 function coRecalc() {
@@ -446,6 +476,7 @@ function coRecalc() {
     preview.style.display = 'none';
     document.getElementById('co-outstanding-display').textContent = '¥' + CO_OUTSTANDING.toFixed(2);
   }
+  coSetRound(after);
 }
 </script>
 {% endblock %}
