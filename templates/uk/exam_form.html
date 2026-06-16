@@ -224,7 +224,7 @@
 
 <div class="ex-grid">
 <div>
-<form method="post" action="/admin/exam-orders/create">
+<form method="post" action="{% if mode == 'edit' and exam_order %}/admin/exam-orders/{{ exam_order.id }}/edit{% else %}/admin/exam-orders/create{% endif %}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
   <input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/>
 
@@ -272,8 +272,10 @@
   </div>
 
   <div class="ex-submit-bar">
-    <button type="submit" class="submit-main">开&nbsp;具&nbsp;检&nbsp;查&nbsp;单</button>
-    {% if visit %}
+    <button type="submit" class="submit-main">{% if mode == 'edit' %}保&nbsp;存&nbsp;修&nbsp;改{% else %}开&nbsp;具&nbsp;检&nbsp;查&nbsp;单{% endif %}</button>
+    {% if mode == 'edit' and exam_order %}
+    <a href="/admin/exam-orders/{{ exam_order.id }}" class="uk-btn ghost sm">取消</a>
+    {% elif visit %}
     <a href="/admin/visits/{{ visit.id }}" class="uk-btn ghost sm">取消</a>
     {% endif %}
   </div>
@@ -526,7 +528,16 @@ function saveAsExamTemplate() {
 }
 
 loadExamTemplates();
-addItem();
+// 编辑模式：回填已有项目；否则起一行空白
+var EXAM_EDIT_ITEMS = {{ (exam_items if mode == 'edit' else []) | tojson }};
+if (EXAM_EDIT_ITEMS && EXAM_EDIT_ITEMS.length) {
+  EXAM_EDIT_ITEMS.forEach(function (it) {
+    addItem(it.name || '', it.item_id || '', (it.qty != null ? it.qty : 1),
+            it.unit || '', (it.unit_price != null ? it.unit_price : 0), it.notes || '');
+  });
+} else {
+  addItem();
+}
 </script>
 
 {% endblock %}

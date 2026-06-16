@@ -20086,6 +20086,125 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
     return RedirectResponse(f"/admin/exam-orders/{order.id}", status_code=303)
 
 
+@app.get("/admin/exam-orders/{order_id}/edit", response_class=HTMLResponse)
+async def admin_exam_order_edit_page(order_id: int, request: Request, db: Session = Depends(get_db)):
+    """检查单编辑表单（未出报告 / 未付款时可改项目）。"""
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404, "检查单不存在")
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+    pet  = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    locked, reason = _is_exam_order_locked(db, order)
+    if locked:
+        return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=已锁定（{reason}），不可编辑", status_code=303)
+    if visit and (visit.status or "open") == "closed":
+        return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=所属病历已结束，不可编辑", status_code=303)
+    try:
+        exam_items = json.loads(order.items_json or "[]")
+    except Exception:
+        exam_items = []
+    history = []
+    if pet:
+        history_q = db.query(ExamOrder).join(Visit, ExamOrder.visit_id == Visit.id)\
+            .filter(Visit.pet_id == pet.id, ExamOrder.id != order_id)\
+            .order_by(ExamOrder.id.desc()).limit(10).all()
+        for h in history_q:
+            try:
+                h._items_parsed = json.loads(h.items_json or "[]")
+            except Exception:
+                h._items_parsed = []
+            h._has_report = db.query(ExamReport).filter(ExamReport.exam_order_id == h.id).first() is not None
+        history = history_q
+    return templates.TemplateResponse(request, "uk/exam_form.html", {
+        "visit": visit, "cust": cust, "pet": pet,
+        "exam_order": order, "mode": "edit",
+        "exam_items": exam_items,
+        "exam_history": history,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/exam-orders/{order_id}/edit")
+async def admin_exam_order_edit(order_id: int, request: Request, db: Session = Depends(get_db)):
+    """保存检查单项目修改：先把旧项目库存退回，写入新项目再重新出库，最后同步收费单。"""
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404, "检查单不存在")
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    locked, reason = _is_exam_order_locked(db, order)
+    if locked:
+        raise HTTPException(400, f"检查单已锁定（{reason}），不可编辑。")
+    if visit and (visit.status or "open") == "closed":
+        raise HTTPException(403, "所属病历已结束，检查单不可编辑。")
+
+    operator = request.session.get("admin_username", "admin")
+    # 1) 退回旧项目库存
+    try:
+        old_items = json.loads(order.items_json or "[]")
+    except Exception:
+        old_items = []
+    for it in old_items:
+        iid = it.get("item_id")
+        qty = float(it.get("qty") or 0)
+        if iid and qty > 0:
+            _restore_inventory(db, int(iid), qty, "exam_order", order_id, operator,
+                               note=f"编辑检查单#{order_id} 退回旧项目")
+
+    # 2) 收集新项目（与 create 同逻辑）
+    items: list[dict] = []
+    idx = 0
+    while idx < 30:
+        name = str(form.get(f"item_name_{idx}") or "").strip()
+        if name:
+            try:
+                qty        = float(form.get(f"item_qty_{idx}")   or 1)
+                unit_price = float(form.get(f"item_price_{idx}") or 0)
+            except (ValueError, TypeError):
+                qty, unit_price = 1.0, 0.0
+            items.append({
+                "name":       name,
+                "item_id":    int(form.get(f"item_id_{idx}") or 0) or None,
+                "qty":        qty,
+                "unit":       str(form.get(f"item_unit_{idx}")  or "").strip(),
+                "unit_price": unit_price,
+                "subtotal":   round(qty * unit_price, 2),
+                "notes":      str(form.get(f"item_notes_{idx}") or "").strip(),
+            })
+        idx += 1
+    _apply_single_use_pack_billing(db, items)
+    if visit and visit.customer_id:
+        _apply_internal_pricing(db, items, visit.customer_id)
+
+    # 3) 写入新项目 + 重新出库
+    order.notes = str(form.get("notes") or "").strip()
+    order.items_json = json.dumps(items, ensure_ascii=False)
+    db.flush()
+    for it in items:
+        iid = it.get("item_id")
+        qty = float(it.get("qty") or 0)
+        if iid and qty > 0:
+            _deduct_inventory(db, int(iid), qty, "exam_order", order_id, operator,
+                              note=f"编辑检查单#{order_id} {it.get('name') or ''}")
+    _audit_doc_action(db, "exam_order", order_id, "edit", operator, extra=f"items={len(items)}")
+    db.commit()
+    # 4) 同步收费单
+    if order.visit_id:
+        try:
+            _sync_visit_invoice(db, order.visit_id, operator)
+            db.commit()
+        except Exception:
+            pass
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=检查单已更新", status_code=303)
+
+
 # 报告类型自动识别 → 不同标题 / 颜色 / 网格
 _REPORT_STYLES = {
     "ultrasound": {

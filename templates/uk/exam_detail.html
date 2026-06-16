@@ -278,6 +278,7 @@
     </form>
     {% endif %}
     {% else %}
+    <a href="/admin/exam-orders/{{ order.id }}/edit" class="uk-btn ghost sm">编&nbsp;辑</a>
     <form method="post" action="/admin/exam-orders/{{ order.id }}/delete" style="display:inline;"
           onsubmit="return confirm('删除此检查单及其所有报告？此操作不可恢复。')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
