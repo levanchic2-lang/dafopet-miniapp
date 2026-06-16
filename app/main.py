@@ -410,6 +410,34 @@ def _load_china_pcas() -> dict:
     return _china_pcas
 
 
+_scheduler_lock_fp = None  # 持有整个进程生命周期，勿被 GC（否则锁释放）
+
+
+def _acquire_scheduler_lock() -> bool:
+    """抢占式单实例锁：多 worker 中只有一个能拿到 → 它负责跑定时任务。
+    用 fcntl.flock 独占非阻塞；进程退出时锁自动释放，由其他 worker 接管。
+    非 POSIX（如本地 Windows 开发）无 fcntl → 直接返回 True（单进程，照常跑）。"""
+    global _scheduler_lock_fp
+    try:
+        import fcntl
+    except ImportError:
+        return True
+    try:
+        lock_path = Path(settings.database_url.replace("sqlite:///", "")).resolve().parent / ".scheduler.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        _scheduler_lock_fp = open(lock_path, "w")
+        fcntl.flock(_scheduler_lock_fp.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except (OSError, BlockingIOError):
+        if _scheduler_lock_fp is not None:
+            try:
+                _scheduler_lock_fp.close()
+            except Exception:
+                pass
+            _scheduler_lock_fp = None
+        return False
+
+
 @app.on_event("startup")
 def _startup():
     # 部署后看这行即可确认进程时区已钉死北京（不受主机/VPN 影响）
@@ -420,6 +448,13 @@ def _startup():
         datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
     )
     init_db()
+    # 多进程（uvicorn --workers）下，定时任务/提醒只能在「一个」worker 里跑，
+    # 否则回访/漏药/疫苗/手术提醒会被推送 N 份。用 flock 抢一把独占锁：
+    # 抢到的 worker 才启动调度器，锁随该进程退出自动释放（另一 worker 接管）。
+    if not _acquire_scheduler_lock():
+        logger.info("本 worker 未抢到调度锁，跳过定时任务（由持锁 worker 负责）")
+        return
+    logger.info("本 worker 持有调度锁，启动定时任务")
     asyncio.get_event_loop().create_task(_surgery_reminder_loop())
     asyncio.get_event_loop().create_task(_vaccine_reminder_loop())
     # 回访任务调度器（每小时跑一次）

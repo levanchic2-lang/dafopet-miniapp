@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.pool import NullPool, QueuePool
 
@@ -19,6 +19,25 @@ engine = create_engine(
     # SQLite 用 NullPool：每个请求独立连接，彻底避免连接池耗尽导致的 504
     poolclass=NullPool if _is_sqlite else QueuePool,
 )
+
+
+if _is_sqlite:
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _rec):
+        """多进程（uvicorn --workers）安全：
+        - WAL：读不阻塞写、写不阻塞读，并发下不易报 database is locked
+        - busy_timeout：拿不到写锁时最多等 5s 而不是立刻 500
+        - synchronous=NORMAL：WAL 下兼顾安全与速度
+        """
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=5000")
+            cur.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cur.close()
+
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
