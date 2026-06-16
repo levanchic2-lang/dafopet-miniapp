@@ -841,14 +841,18 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
 
 {% block scripts %}
 <script>
-var _drugRowCount = {{ p.items|length if p and p.items else 1 }};
+{# 必须用 presc（真实上下文变量）；p 是 {% block body %} 里的 {% set %} 别名，
+   嵌套的 {% block scripts %} 看不到它 → 之前恒为 1，导致编辑多项处方时新增行 idx
+   与既有行碰撞、新行价格/单位写不进去。 #}
+var _drugRowCount = {{ presc.items|length if presc and presc.items else 1 }};
 var _drugTypeOptions = `<option value="" selected>— 未选 —</option>{% for k, zh in drug_type_options %}<option value="{{ k }}">{{ zh }}</option>{% endfor %}`;
 var _searchTimers = {};
 
 function recalcRow(idx) {
   var qtyEl = document.querySelector('[name="quantity_num_' + idx + '"]');
   var qty = parseFloat(qtyEl && qtyEl.value) || 0;
-  var price = parseFloat(document.querySelector('[name="unit_price_' + idx + '"]').value) || 0;
+  var priceInput = document.querySelector('[name="unit_price_' + idx + '"]');
+  var price = parseFloat(priceInput && priceInput.value) || 0;
   var tr = qtyEl ? qtyEl.closest('tr') : null;
   var sub, bottles = 0, isSup = !!(tr && tr.dataset.sup === '1');
   if (isSup) {
@@ -986,7 +990,8 @@ function showDropdown(idx, items, input) {
 
 function selectInventoryItem(idx, it, input) {
   input.value = it.name;
-  document.getElementById('item_id_' + idx).value = it.id;
+  var idEl = document.getElementById('item_id_' + idx);
+  if (idEl) idEl.value = it.id;
   var priceEl = document.querySelector('[name="unit_price_' + idx + '"]');
   if (priceEl) priceEl.value = it.sell_price.toFixed(2);  // 整瓶计费品目：售价即每瓶价
   var doseUnitEl = document.getElementById('dose_unit_' + idx);
