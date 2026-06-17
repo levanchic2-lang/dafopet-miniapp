@@ -395,12 +395,18 @@
               <div style="flex:0 0 auto;">
                 <label style="display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;font-family:var(--font-serif);">方式</label>
                 <select name="mode" id="discMode" style="padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);">
+                  <option value="target">目标金额</option>
                   <option value="pct">按折率</option>
                   <option value="amount">按减免金额</option>
                   <option value="clear">清除折扣</option>
                 </select>
               </div>
-              <div style="flex:0 0 100px;" id="discPctBox">
+              <div style="flex:0 0 120px;" id="discTargetBox">
+                <label style="display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;font-family:var(--font-serif);">目标金额（想收）</label>
+                <input type="number" name="discount_target" placeholder="如 50" min="0" max="{{ '%.2f'|format(inv.subtotal) }}" step="1"
+                       style="width:100%;box-sizing:border-box;padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);"/>
+              </div>
+              <div style="flex:0 0 100px;display:none;" id="discPctBox">
                 <label style="display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;font-family:var(--font-serif);">折率</label>
                 <input type="number" name="discount_pct" placeholder="如 70 = 7折" min="1" max="100" step="1"
                        style="width:100%;box-sizing:border-box;padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);"/>
@@ -420,8 +426,8 @@
               </div>
             </div>
             <div style="font-size:8.5pt;color:var(--ink-3);font-style:italic;margin-top:6px;line-height:1.7;">
-              <b style="color:var(--ink-2);font-style:normal;">按折率</b>：只对<b style="color:var(--ink-2);font-style:normal;">未付部分</b>打折（套餐核销/已收款不重复打折）<br/>
-              · 填 88 = 8.8 折 → 未付 × 0.88；填 70 = 7 折 → 未付 × 0.7<br/>
+              <b style="color:var(--ink-2);font-style:normal;">目标金额</b>：直接填想收的钱（如 50），减免额自动算出，免去心算<br/>
+              <b style="color:var(--ink-2);font-style:normal;">按折率</b>：只对<b style="color:var(--ink-2);font-style:normal;">未付部分</b>打折，折后<b style="color:var(--ink-2);font-style:normal;">四舍五入取整</b>（填 70 = 7 折）<br/>
               <b style="color:var(--ink-2);font-style:normal;">按金额</b>：直接减免 N 元（不论是否已付）
               {% if inv.discount_amount > 0 %}<br/>· 当前已减免 ¥{{ '%.2f'|format(inv.discount_amount) }}{% endif %}
             </div>
@@ -432,6 +438,7 @@
           var sel = document.getElementById('discMode');
           if (!sel) return;
           function refresh() {
+            document.getElementById('discTargetBox').style.display = (sel.value === 'target') ? '' : 'none';
             document.getElementById('discPctBox').style.display = (sel.value === 'pct') ? '' : 'none';
             document.getElementById('discAmtBox').style.display = (sel.value === 'amount') ? '' : 'none';
           }

@@ -223,7 +223,7 @@
     <div class="co-chips" id="co-disc-chips">
       <button type="button" class="co-chip active" data-disc="none" onclick="coSelectDisc(this)">无优惠</button>
       <button type="button" class="co-chip" data-disc="pct" onclick="coSelectDisc(this)">按折率</button>
-      <button type="button" class="co-chip" data-disc="amount" onclick="coSelectDisc(this)">减免金额</button>
+      <button type="button" class="co-chip" data-disc="target" onclick="coSelectDisc(this)">目标金额</button>
     </div>
     <div id="co-disc-input-wrap" style="display:none;">
       <div class="co-field-row">
@@ -238,8 +238,8 @@
       <span style="color:var(--ink-3); margin-left:10px; font-style:italic;">（减免 ¥<span id="co-disc-amt">0.00</span>）</span>
     </div>
     <div class="co-hint">
-      按折率：对未付余额打折，填 88 = 8.8 折 ·
-      按金额：直接减免指定金额（按各单比例分摊）
+      按折率：填 88 = 8.8 折（结果四舍五入取整）·
+      目标金额：直接填想收的钱（如 50），减免额自动算出
     </div>
   </div>
 
@@ -417,28 +417,31 @@ function coOnSubmit() {
   return true;
 }
 
+// UI 选择的优惠方式（none/pct/target）；真正提交给后端的统一折算成「减免金额」(amount)
+var coUiMode = 'none';
+
 function coSelectDisc(btn) {
   document.querySelectorAll('#co-disc-chips .co-chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  var mode = btn.dataset.disc;
-  document.getElementById('co-disc-mode').value = mode;
+  coUiMode = btn.dataset.disc;
   var wrap = document.getElementById('co-disc-input-wrap');
   var lbl  = document.getElementById('co-disc-label');
   var inp  = document.getElementById('co-disc-value');
-  if (mode === 'pct') {
+  if (coUiMode === 'pct') {
     wrap.style.display = '';
-    lbl.textContent = '折率（填 80 = 8 折；100 = 不折）';
-    inp.placeholder = '80';
+    lbl.textContent = '折率（填 70 = 7 折；100 = 不折，自动取整）';
+    inp.placeholder = '70';
     inp.max = '100';
-  } else if (mode === 'amount') {
+  } else if (coUiMode === 'target') {
     wrap.style.display = '';
-    lbl.textContent = '减免总金额（¥）';
+    lbl.textContent = '目标金额（想收多少就填多少，¥）';
     inp.placeholder = '50';
     inp.removeAttribute('max');
   } else {
     wrap.style.display = 'none';
     inp.value = '';
     document.getElementById('co-disc-preview').style.display = 'none';
+    document.getElementById('co-disc-mode').value = 'none';
     document.getElementById('co-disc-val-hidden').value = '';
     document.getElementById('co-outstanding-display').textContent = '¥' + CO_OUTSTANDING.toFixed(2);
     coSetRound(CO_OUTSTANDING);
@@ -454,18 +457,26 @@ function coSetRound(v) {
 }
 
 function coRecalc() {
-  var mode = document.getElementById('co-disc-mode').value;
-  var raw  = parseFloat(document.getElementById('co-disc-value').value) || 0;
-  document.getElementById('co-disc-val-hidden').value = raw || '';
-  var discount = 0;
-  if (mode === 'pct') {
+  var raw = parseFloat(document.getElementById('co-disc-value').value) || 0;
+  var discount = 0, after = CO_OUTSTANDING;
+  if (coUiMode === 'pct') {
     var pct = raw > 1 ? raw / 100 : raw;
-    if (pct > 0 && pct <= 1) discount = CO_OUTSTANDING * (1 - pct);
-  } else if (mode === 'amount') {
-    discount = Math.min(raw, CO_OUTSTANDING);
+    if (pct > 0 && pct <= 1) {
+      after = Math.round(CO_OUTSTANDING * pct);   // 折后四舍五入取整
+      discount = CO_OUTSTANDING - after;
+    }
+  } else if (coUiMode === 'target') {
+    var target = Math.round(raw);                  // 目标金额取整
+    if (target >= 0 && target < CO_OUTSTANDING) {
+      after = target;
+      discount = CO_OUTSTANDING - target;
+    }
   }
-  discount = Math.max(0, discount);
-  var after = CO_OUTSTANDING - discount;
+  discount = Math.max(0, Math.min(discount, CO_OUTSTANDING));
+  after = CO_OUTSTANDING - discount;
+  // 统一以「减免金额」提交（值=算好的减免额，含取整）
+  document.getElementById('co-disc-mode').value = discount > 0.005 ? 'amount' : 'none';
+  document.getElementById('co-disc-val-hidden').value = discount > 0.005 ? discount.toFixed(2) : '';
   var preview = document.getElementById('co-disc-preview');
   if (discount > 0.005) {
     preview.style.display = '';

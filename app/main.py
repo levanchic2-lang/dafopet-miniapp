@@ -19133,6 +19133,23 @@ async def admin_invoice_apply_discount(
             raise HTTPException(400, "折率应在 1-100 之间（如填 70 = 7 折）")
         # 折扣只打在未付的部分上（套餐等已结算金额按原价算）
         discount_amt = round(discount_base * (1.0 - pct), 2)
+        # 折后整单总额四舍五入取整，避免出现小数（方便收款/对账）
+        _new_total_int = round(subtotal - discount_amt)
+        discount_amt = round(subtotal - _new_total_int, 2)
+        if discount_amt < 0:
+            discount_amt = 0.0
+    elif mode == "target":
+        # 目标金额：直接填想收的钱，减免额 = 小计 − 目标，自动算出（取整）
+        try:
+            target = float((form.get("discount_target") or "").strip())
+        except Exception:
+            raise HTTPException(400, "目标金额格式错误")
+        target = round(target)
+        if target < 0:
+            raise HTTPException(400, "目标金额不能为负")
+        if target > subtotal:
+            target = subtotal   # 高于小计 = 不减免
+        discount_amt = round(subtotal - target, 2)
     elif mode == "amount":
         try:
             discount_amt = float((form.get("discount_amount") or "").strip())
