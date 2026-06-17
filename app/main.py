@@ -21806,6 +21806,29 @@ async def api_calendar_appt_edit_service(appt_id: int, request: Request, db: Ses
     return {"ok": True}
 
 
+@app.post("/api/calendar/appt/{appt_id}/note")
+async def api_calendar_appt_note(appt_id: int, request: Request, db: Session = Depends(get_db)):
+    """日历弹窗 AJAX 改备注：主人临时加需求 / 其他说明，仅改 notes，不动排期。"""
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    row = db.get(Appointment, appt_id)
+    if not row:
+        return {"ok": False, "error": "预约不存在"}
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if row.store and row.store != full_store:
+            return {"ok": False, "error": "无权操作其他门店的预约"}
+    row.notes = str(body.get("notes") or "").strip()[:1000]
+    row.updated_at = datetime.utcnow()
+    _audit(db, request, "appointment_note",
+           application_id=row.related_application_id,
+           detail={"appointment_id": row.id})
+    db.commit()
+    return {"ok": True, "notes": row.notes}
+
+
 
 # ── 驱虫记录 / 体重记录 / 医疗文书 ────────────────────────────────
 

@@ -80,6 +80,19 @@
  </div>
 </div>
 
+<!-- ── 备注 modal（临时加需求/说明） ── -->
+<div class="cal-modal-overlay" id="note-modal">
+ <div class="cal-modal">
+ <h3><i data-lucide="sticky-note"></i> 备注 / 临时需求</h3>
+ <label>记录（主人临时加项、特殊要求等）</label>
+ <textarea id="nt-text" rows="4" maxlength="1000" style="width:100%;margin-bottom:0.65rem;resize:vertical;" placeholder="如：另加修剪指甲 / 主人 15:30 才到 / 怕吹风机"></textarea>
+ <div class="modal-btns">
+ <button class="btn" id="nt-confirm-btn">保存</button>
+ <button class="btn secondary" onclick="closeNote()">取消</button>
+ </div>
+ </div>
+</div>
+
 <!-- ── 新建日程选择 modal ── -->
 <div class="cal-modal-overlay" id="create-modal">
  <div class="cal-modal">
@@ -589,6 +602,8 @@ function openApptPopup(ev, id) {
  btns += `<button onclick="openReschedule(${id})">改约</button>`;
  if (st !== 'cancelled' && st !== 'completed')
  btns += `<button class="btn-edit" onclick="openEditService(${id})">改项目</button>`;
+ if (st !== 'cancelled')
+ btns += `<button onclick="openNote(${id})">备注</button>`;
  btns += `<span class="popup-created">创建 ${appt.created_at||''}</span>`;
  document.getElementById('pp-actions').innerHTML = btns;
 
@@ -737,6 +752,33 @@ document.getElementById('es-confirm-btn').addEventListener('click', async () => 
 });
 
 // ═══════════════════════════════════════════════════════
+// 备注 / 临时需求（只改 notes）
+// ═══════════════════════════════════════════════════════
+let noteId = null;
+function openNote(id) {
+ noteId = id;
+ const appt = events.find(e=>e.id===id) || {};
+ document.getElementById('nt-text').value = appt.notes || '';
+ document.getElementById('note-modal').classList.add('visible');
+ setTimeout(function(){ document.getElementById('nt-text').focus(); }, 50);
+}
+function closeNote() {
+ document.getElementById('note-modal').classList.remove('visible');
+ noteId = null;
+}
+document.getElementById('nt-confirm-btn').addEventListener('click', async () => {
+ if (!noteId) return;
+ const notes = document.getElementById('nt-text').value;
+ const res = await fetch(`/api/calendar/appt/${noteId}/note`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, notes })
+ });
+ const data = await res.json();
+ if (data.ok) { closeNote(); closePopup(); toast('备注已保存'); fetchEvents(); }
+ else toast('错误：'+(data.error||''));
+});
+
+// ═══════════════════════════════════════════════════════
 // 新建日程
 // ═══════════════════════════════════════════════════════
 let createDate='', createTime='';
@@ -829,6 +871,7 @@ document.addEventListener('click', e=>{
  if (!document.getElementById('cal-popup').contains(e.target)) closePopup();
  if (e.target===document.getElementById('reschedule-modal')) closeReschedule();
  if (e.target===document.getElementById('editsvc-modal')) closeEditService();
+ if (e.target===document.getElementById('note-modal')) closeNote();
  if (e.target===document.getElementById('create-modal')) closeCreateModal();
 });
 
