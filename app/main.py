@@ -18649,6 +18649,69 @@ def _invoice_recompute_status(db: Session, inv: Invoice) -> None:
         inv.paid_at = None
 
 
+@app.post("/admin/invoices/{inv_id}/split")
+async def admin_invoice_split(
+    inv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    item_ids: list[int] = Form([]),
+):
+    """拆单：把勾选的明细行拆到一张新收费单，原单留下其余项。
+    各自独立收款/打折（如皮肤检查走美团、药走钱包），记录精确不混。
+    限制：仅未收款、无折扣、至少留 1 项在原单。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404, "收费单不存在")
+    _pet = db.get(Pet, inv.pet_id) if inv.pet_id else None
+    _assert_store_access(request, inv.store, _pet.store if _pet else "")
+    if inv.payment_status != "unpaid" or _invoice_paid_sum(db, inv.id) > 0:
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已收款的单不能拆，请先撤回收款", status_code=303)
+    if float(inv.discount_amount or 0) > 0:
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=请先清除整单折扣再拆单，拆完各单单独打折", status_code=303)
+    all_items = list(inv.items)
+    if len(all_items) < 2:
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=只有一项，无需拆单", status_code=303)
+    sel = {int(x) for x in item_ids if str(x).isdigit()}
+    chosen = [it for it in all_items if it.id in sel]
+    if not chosen:
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=请勾选要拆出的项目", status_code=303)
+    if len(chosen) >= len(all_items):
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=不能拆出全部项目，至少留一项在原单", status_code=303)
+
+    new_inv = Invoice(
+        invoice_no=_gen_invoice_no(db),
+        customer_id=inv.customer_id, pet_id=inv.pet_id, visit_id=inv.visit_id,
+        invoice_date=inv.invoice_date, store=inv.store,
+        created_by=request.session.get("admin_username", "admin"),
+        payment_status="unpaid",
+    )
+    db.add(new_inv)
+    db.flush()
+    for it in chosen:
+        it.invoice_id = new_inv.id
+    db.flush()
+
+    def _recompute(i: Invoice) -> None:
+        items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == i.id).all()
+        sub = round(sum(float(x.subtotal or 0) for x in items), 2)
+        i.subtotal = sub
+        i.total_amount = round(sub - float(i.discount_amount or 0), 2)
+        i.updated_at = datetime.utcnow()
+
+    _recompute(inv)
+    _recompute(new_inv)
+    db.commit()
+    _audit(db, request, "invoice_split", application_id=None,
+           detail={"from_invoice": inv.id, "new_invoice": new_inv.id,
+                   "moved_item_ids": [it.id for it in chosen]})
+    from urllib.parse import quote as _q
+    msg = f"已拆出 {len(chosen)} 项到新单 {new_inv.invoice_no}（在下方『其他待收单』可勾选一起收，或单独收款）"
+    return RedirectResponse(f"/admin/invoices/{inv_id}?msg={_q(msg, safe='')}#pay", status_code=303)
+
+
 @app.post("/admin/invoices/{inv_id}/add-payment")
 async def admin_invoice_add_payment(
     inv_id: int,

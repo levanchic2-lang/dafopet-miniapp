@@ -447,6 +447,40 @@
         })();
         </script>
         {% endif %}
+
+        {# 拆单：分项目分别收费（仅未收款 / 无折扣 / 多于一项）#}
+        {% if inv.payment_status == 'unpaid' and paid_sum == 0 and inv.discount_amount == 0 and (inv.items|length) > 1 %}
+        <details style="margin-top:10px;padding-top:12px;border-top:0.5px solid var(--hair);">
+          <summary style="cursor:pointer;font-size:9.5pt;letter-spacing:1.5px;color:var(--ink-2);font-family:var(--font-serif);user-select:none;">
+            ✂ 拆单（分项目分别收费）
+          </summary>
+          <form method="post" action="/admin/invoices/{{ inv.id }}/split" style="margin-top:12px;" onsubmit="return splitConfirm(this)">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <div style="font-size:9pt;color:var(--ink-3);font-style:italic;margin-bottom:8px;line-height:1.7;">
+              勾选要<b style="color:var(--ink-2);font-style:normal;">拆出</b>到新单的项目，原单保留其余项；两张单各自独立收款 / 打折（如皮肤检查走美团、药走钱包）
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              {% for it in inv.items %}
+              <label style="display:flex;align-items:center;gap:10px;padding:6px 10px;border:0.5px solid var(--hair);background:var(--paper);cursor:pointer;">
+                <input type="checkbox" name="item_ids" value="{{ it.id }}" class="split-cb"/>
+                <span style="flex:1;font-size:10pt;color:var(--ink-2);">{{ it.description }}</span>
+                <span style="font-family:var(--font-numeric);color:var(--ink);min-width:80px;text-align:right;">¥{{ '%.2f'|format(it.subtotal) }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <button type="submit" class="uk-btn primary sm" style="margin-top:10px;height:32px;">拆出选中项 → 新建收费单</button>
+          </form>
+        </details>
+        <script>
+        function splitConfirm(form){
+          var cbs = form.querySelectorAll('.split-cb');
+          var checked = form.querySelectorAll('.split-cb:checked');
+          if (checked.length === 0){ alert('请勾选要拆出的项目'); return false; }
+          if (checked.length >= cbs.length){ alert('不能拆出全部项目，至少留一项在原单'); return false; }
+          return confirm('确定把勾选的 ' + checked.length + ' 项拆到新收费单？拆完两单各自单独收款。');
+        }
+        </script>
+        {% endif %}
       </div>
     </div>
 
