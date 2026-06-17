@@ -11684,7 +11684,9 @@ async def page_admin_follow_ups(
     today = date.today().isoformat()
     username = request.session.get("admin_username") or ""
     is_superadmin = request.session.get("admin_role") == "superadmin"
-    q = (q or "").strip()
+    # 注意：下方业务代码会把局部变量 q 复用为 SQLAlchemy 查询对象，
+    # 故搜索关键词单独存 kw，避免被覆盖（曾导致 f.q 变成 Query → urlencode 崩）。
+    kw = (q or "").strip()
     handler = (handler or "").strip()
     vtype = (vtype or "").strip()
     store = (store or "").strip()
@@ -11700,12 +11702,12 @@ async def page_admin_follow_ups(
         if vtype:
             _vt_visit_ids = db.query(Visit.id).filter(Visit.visit_type == vtype)
             qq = qq.filter(FollowUp.visit_id.in_(_vt_visit_ids))
-        if q:
-            _pet_ids = db.query(Pet.id).filter(Pet.name.ilike(f"%{q}%"))
+        if kw:
+            _pet_ids = db.query(Pet.id).filter(Pet.name.ilike(f"%{kw}%"))
             _cust_ids = db.query(Customer.id).filter(or_(
-                Customer.name.ilike(f"%{q}%"),
-                Customer.phone.ilike(f"%{q}%"),
-                Customer.phones_extra.ilike(f"%{q}%"),
+                Customer.name.ilike(f"%{kw}%"),
+                Customer.phone.ilike(f"%{kw}%"),
+                Customer.phones_extra.ilike(f"%{kw}%"),
             ))
             qq = qq.filter(or_(
                 FollowUp.pet_id.in_(_pet_ids),
@@ -11782,7 +11784,7 @@ async def page_admin_follow_ups(
         "page": page,
         "total_pages": total_pages,
         "total": total,
-        "f": {"handler": handler, "vtype": vtype, "store": store, "q": q},
+        "f": {"handler": handler, "vtype": vtype, "store": store, "q": kw},
         "handlers": handlers,
         "is_superadmin": is_superadmin,
         "status_zh":   _FOLLOWUP_STATUS_ZH,
