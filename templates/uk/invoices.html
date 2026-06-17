@@ -160,7 +160,7 @@
   </div>
   <div style="display:flex; gap:18px; flex-wrap:wrap;">
     {% for g in multi_pay_groups %}
-    <a href="/admin/cashier/checkout?invoice_id={{ g.first_invoice_id }}" onclick="return openCheckout('/admin/cashier/checkout?invoice_id={{ g.first_invoice_id }}&embed=1')" style="display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border:0.5px solid var(--ink-3); background:var(--paper); text-decoration:none; color:var(--ink); font-family:var(--font-serif); font-size:10pt;">
+    <a href="/admin/invoices/{{ g.first_invoice_id }}#pay" style="display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border:0.5px solid var(--ink-3); background:var(--paper); text-decoration:none; color:var(--ink); font-family:var(--font-serif); font-size:10pt;">
       <span><b>{{ g.customer.name }}</b>{% if g.pet %} · <span style="font-style:italic; color:var(--ink-2);">{{ g.pet.name }}</span>{% endif %}</span>
       <span style="color:var(--ink-3); font-style:italic;">{{ g.count }} 单</span>
       <span style="font-family:var(--font-numeric); color:var(--accent-red); font-weight:700;">¥{{ '%.2f'|format(g.total) }}</span>
@@ -299,7 +299,7 @@ function toggleSettle(idx) {
       <td class="dim">{{ inv_pay_zh.get(inv.payment_method, inv.payment_method) if inv.payment_method else '—' }}</td>
       <td style="text-align:right;">
         {% if inv.payment_status in ('unpaid', 'partial') %}
-          <a href="/admin/cashier/checkout?invoice_id={{ inv.id }}" class="iv-btn sm" onclick="return openCheckout('/admin/cashier/checkout?invoice_id={{ inv.id }}&embed=1')">收&nbsp;款</a>
+          <a href="/admin/invoices/{{ inv.id }}#pay" class="iv-btn sm">收&nbsp;款</a>
         {% else %}
           <a href="/admin/invoices/{{ inv.id }}" class="iv-btn ghost sm">查&nbsp;看</a>
         {% endif %}
@@ -317,72 +317,4 @@ function toggleSettle(idx) {
 </div>
 {% endif %}
 
-{# ── 结账台弹窗 ── #}
-<div id="checkoutModal" class="ck-modal" aria-hidden="true">
-  <div class="ck-modal-backdrop" onclick="closeCheckout()"></div>
-  <div class="ck-modal-box" role="dialog" aria-modal="true">
-    <div class="ck-modal-head">
-      <span class="ck-modal-title">结&nbsp;账&nbsp;台</span>
-      <button type="button" class="ck-modal-close" onclick="closeCheckout()" title="关闭">×</button>
-    </div>
-    <iframe id="checkoutFrame" class="ck-modal-frame" src="about:blank" frameborder="0"></iframe>
-  </div>
-</div>
-
-<style>
-  .ck-modal { display:none; position:fixed; inset:0; z-index:1000; }
-  .ck-modal.open { display:block; }
-  .ck-modal-backdrop { position:absolute; inset:0; background:rgba(26,26,26,0.45); }
-  .ck-modal-box {
-    position:absolute; top:3vh; left:50%; transform:translateX(-50%);
-    width:min(1160px, 94vw); height:94vh;
-    background:var(--paper); border:0.5px solid var(--ink);
-    display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,0.25);
-  }
-  .ck-modal-head {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:12px 20px; border-bottom:0.5px solid var(--hair); flex:0 0 auto;
-  }
-  .ck-modal-title { font-family:var(--font-serif); font-size:13pt; font-weight:700; letter-spacing:3px; color:var(--ink); }
-  .ck-modal-close {
-    border:none; background:none; font-size:24pt; line-height:1; color:var(--ink-3);
-    cursor:pointer; padding:0 6px; font-family:var(--font-serif);
-  }
-  .ck-modal-close:hover { color:var(--ink); }
-  .ck-modal-frame { flex:1 1 auto; width:100%; border:none; background:var(--paper); }
-</style>
-
-<script>
-function openCheckout(url) {
-  var modal = document.getElementById('checkoutModal');
-  var frame = document.getElementById('checkoutFrame');
-  frame.src = url;
-  modal.classList.add('open');
-  modal.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';
-  return false; // 阻止 <a> 默认跳转
-}
-function closeCheckout() {
-  var modal = document.getElementById('checkoutModal');
-  var frame = document.getElementById('checkoutFrame');
-  modal.classList.remove('open');
-  modal.setAttribute('aria-hidden', 'true');
-  frame.src = 'about:blank';
-  document.body.style.overflow = '';
-}
-// 结账完成：iframe 内 postMessage 通知 → 关闭弹窗 + 刷新列表
-window.addEventListener('message', function(ev) {
-  if (ev.data && ev.data.type === 'checkout-done') {
-    var msg = ev.data.msg || '收款完成';
-    closeCheckout();
-    var sep = window.location.href.indexOf('?') >= 0 ? '&' : '?';
-    // 刷新到已收款 tab 并带提示
-    window.location.href = '/admin/invoices?status=paid&msg=' + encodeURIComponent(msg);
-  }
-});
-// Esc 关闭
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeCheckout();
-});
-</script>
 {% endblock %}
