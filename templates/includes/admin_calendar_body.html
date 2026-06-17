@@ -54,6 +54,32 @@
  </div>
 </div>
 
+<!-- ── 改项目 modal ── -->
+<div class="cal-modal-overlay" id="editsvc-modal">
+ <div class="cal-modal">
+ <h3><i data-lucide="edit-3"></i> 改项目</h3>
+ <label>类别</label>
+ <select id="es-category" style="width:100%;margin-bottom:0.65rem;">
+   <option value="outpatient">门诊</option>
+   <option value="surgery">手术</option>
+   <option value="beauty">美容</option>
+   <option value="grooming">造型</option>
+   <option value="washcare">洗护</option>
+   <option value="tnr">TNR</option>
+ </select>
+ <label>服务项目</label>
+ <input type="text" id="es-service" maxlength="120" placeholder="如 犬造型 / 犬洗护 / 公猫绝育" style="margin-bottom:0.65rem;"/>
+ <label>时长（分钟）</label>
+ <input type="number" id="es-duration" min="10" max="480" step="5" style="margin-bottom:0.65rem;"/>
+ <label>备注（可选）</label>
+ <input type="text" id="es-notes" maxlength="200" style="margin-bottom:0.65rem;"/>
+ <div class="modal-btns">
+ <button class="btn" id="es-confirm-btn">保存</button>
+ <button class="btn secondary" onclick="closeEditService()">取消</button>
+ </div>
+ </div>
+</div>
+
 <!-- ── 新建日程选择 modal ── -->
 <div class="cal-modal-overlay" id="create-modal">
  <div class="cal-modal">
@@ -561,7 +587,8 @@ function openApptPopup(ev, id) {
  btns += `<button class="btn-cancel" onclick="doCancel(${id})">取消</button>`;
  if (st !== 'cancelled' && st !== 'completed')
  btns += `<button onclick="openReschedule(${id})">改约</button>`;
- btns += `<button class="btn-edit" onclick="window.location='/admin/appointments?search=${encodeURIComponent(appt.phone||appt.customer_name||'')}#appt-${id}'">编辑</button>`;
+ if (st !== 'cancelled' && st !== 'completed')
+ btns += `<button class="btn-edit" onclick="openEditService(${id})">改项目</button>`;
  btns += `<span class="popup-created">创建 ${appt.created_at||''}</span>`;
  document.getElementById('pp-actions').innerHTML = btns;
 
@@ -677,6 +704,39 @@ document.getElementById('rs-confirm-btn').addEventListener('click', async () => 
 });
 
 // ═══════════════════════════════════════════════════════
+// 改项目（类别 / 服务 / 时长 / 备注）
+// ═══════════════════════════════════════════════════════
+let editSvcId = null;
+function openEditService(id) {
+ editSvcId = id;
+ const appt = events.find(e=>e.id===id) || {};
+ document.getElementById('es-category').value = appt.category || 'outpatient';
+ document.getElementById('es-service').value = appt.service_name || '';
+ document.getElementById('es-duration').value = appt.duration || 30;
+ document.getElementById('es-notes').value = appt.notes || '';
+ document.getElementById('editsvc-modal').classList.add('visible');
+}
+function closeEditService() {
+ document.getElementById('editsvc-modal').classList.remove('visible');
+ editSvcId = null;
+}
+document.getElementById('es-confirm-btn').addEventListener('click', async () => {
+ if (!editSvcId) return;
+ const category = document.getElementById('es-category').value;
+ const service_name = document.getElementById('es-service').value.trim();
+ const duration = document.getElementById('es-duration').value;
+ const notes = document.getElementById('es-notes').value;
+ if (!service_name) { toast('请填写服务项目'); return; }
+ const res = await fetch(`/api/calendar/appt/${editSvcId}/edit-service`, {
+ method:'POST', headers:{'Content-Type':'application/json'},
+ body: JSON.stringify({ csrf_token: CSRF, category, service_name, duration, notes })
+ });
+ const data = await res.json();
+ if (data.ok) { closeEditService(); closePopup(); toast('已改项目'); fetchEvents(); }
+ else toast('错误：'+(data.error||''));
+});
+
+// ═══════════════════════════════════════════════════════
 // 新建日程
 // ═══════════════════════════════════════════════════════
 let createDate='', createTime='';
@@ -768,6 +828,7 @@ document.getElementById('new-event-btn').addEventListener('click', ()=>openCreat
 document.addEventListener('click', e=>{
  if (!document.getElementById('cal-popup').contains(e.target)) closePopup();
  if (e.target===document.getElementById('reschedule-modal')) closeReschedule();
+ if (e.target===document.getElementById('editsvc-modal')) closeEditService();
  if (e.target===document.getElementById('create-modal')) closeCreateModal();
 });
 

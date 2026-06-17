@@ -21748,6 +21748,64 @@ async def api_calendar_appt_reschedule(appt_id: int, request: Request, db: Sessi
     return {"ok": True}
 
 
+@app.post("/api/calendar/appt/{appt_id}/edit-service")
+async def api_calendar_appt_edit_service(appt_id: int, request: Request, db: Session = Depends(get_db)):
+    """日历弹窗 AJAX 改项目：改类别 / 服务项目 / 时长 / 备注（无需取消重约）。"""
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    row = db.get(Appointment, appt_id)
+    if not row:
+        return {"ok": False, "error": "预约不存在"}
+    # 限店员工只能改本店预约
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if row.store and row.store != full_store:
+            return {"ok": False, "error": "无权操作其他门店的预约"}
+    if row.status in (AppointmentStatus.completed.value, AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value):
+        return {"ok": False, "error": f"当前状态（{_APPOINTMENT_STATUS_LABELS.get(row.status, row.status)}）不允许改项目"}
+
+    new_cat = str(body.get("category", "")).strip()
+    new_service = str(body.get("service_name", "")).strip()[:120]
+    if new_cat and new_cat not in _APPOINTMENT_CATEGORY_LABELS:
+        return {"ok": False, "error": "无效的类别"}
+    if not new_service:
+        return {"ok": False, "error": "请填写服务项目"}
+    # 时长（分钟）
+    try:
+        new_dur = int(str(body.get("duration", "")).strip() or row.duration_minutes)
+    except (ValueError, TypeError):
+        new_dur = row.duration_minutes
+    if not (10 <= new_dur <= 480):
+        new_dur = row.duration_minutes
+
+    target_cat = new_cat or row.category
+    # 改成 TNR 时要过 TNR 规则（配额/每日上限等），排除自身
+    if target_cat == AppointmentCategory.tnr.value and target_cat != row.category:
+        tnr_err = _check_tnr_constraints(
+            db, category=target_cat, store=row.store or "",
+            appointment_date=row.appointment_date, appointment_time=row.appointment_time,
+            phone="", exclude_id=appt_id,
+        )
+        if tnr_err:
+            return {"ok": False, "error": tnr_err}
+
+    old = {"category": row.category, "service_name": row.service_name, "duration": row.duration_minutes}
+    row.category = target_cat
+    row.service_name = new_service
+    row.duration_minutes = new_dur
+    if "notes" in body:
+        row.notes = str(body.get("notes") or "").strip()[:1000]
+    row.updated_at = datetime.utcnow()
+    _audit(db, request, "appointment_edit_service",
+           application_id=row.related_application_id,
+           detail={"appointment_id": row.id, "old": old,
+                   "new": {"category": row.category, "service_name": row.service_name, "duration": row.duration_minutes}})
+    db.commit()
+    return {"ok": True}
+
+
 
 # ── 驱虫记录 / 体重记录 / 医疗文书 ────────────────────────────────
 
