@@ -11672,17 +11672,48 @@ async def page_admin_follow_ups(
     db: Session = Depends(get_db),
     tab: str = Query("today"),     # today / overdue / sent / done
     mine: int = Query(0),          # 1=只看我的
+    handler: str = Query(""),      # 处理人 assigned_to
+    vtype: str = Query(""),        # 就诊类型（关联 Visit.visit_type）
+    store: str = Query(""),        # 门店（超管可筛）
+    q: str = Query(""),            # 关键词：客户名/手机/宠物名
     page: int = Query(1),
 ):
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     from datetime import date
     today = date.today().isoformat()
-
-    base = _followup_filtered_query(db, request)
     username = request.session.get("admin_username") or ""
-    if mine and username:
-        base = base.filter(FollowUp.assigned_to == username)
+    is_superadmin = request.session.get("admin_role") == "superadmin"
+    q = (q or "").strip()
+    handler = (handler or "").strip()
+    vtype = (vtype or "").strip()
+    store = (store or "").strip()
+
+    def _apply_filters(qq):
+        """把筛选条件套到任意 FollowUp 查询上（列表与各 tab 计数共用，口径一致）。"""
+        if mine and username:
+            qq = qq.filter(FollowUp.assigned_to == username)
+        if handler:
+            qq = qq.filter(FollowUp.assigned_to == handler)
+        if is_superadmin and store:
+            qq = qq.filter(FollowUp.store == store)
+        if vtype:
+            _vt_visit_ids = db.query(Visit.id).filter(Visit.visit_type == vtype)
+            qq = qq.filter(FollowUp.visit_id.in_(_vt_visit_ids))
+        if q:
+            _pet_ids = db.query(Pet.id).filter(Pet.name.ilike(f"%{q}%"))
+            _cust_ids = db.query(Customer.id).filter(or_(
+                Customer.name.ilike(f"%{q}%"),
+                Customer.phone.ilike(f"%{q}%"),
+                Customer.phones_extra.ilike(f"%{q}%"),
+            ))
+            qq = qq.filter(or_(
+                FollowUp.pet_id.in_(_pet_ids),
+                FollowUp.customer_id.in_(_cust_ids),
+            ))
+        return qq
+
+    base = _apply_filters(_followup_filtered_query(db, request))
 
     # 4 个 tab 的过滤条件
     if tab == "today":
@@ -11717,9 +11748,7 @@ async def page_admin_follow_ups(
 
     # 4 个 tab 各自总数（用于 tab 上的数字徽章）
     def _count(filter_):
-        qq = _followup_filtered_query(db, request)
-        if mine and username:
-            qq = qq.filter(FollowUp.assigned_to == username)
+        qq = _apply_filters(_followup_filtered_query(db, request))
         return filter_(qq).count()
     counts = {
         "today":   _count(lambda x: x.filter(FollowUp.planned_date != "", FollowUp.planned_date <= today, FollowUp.status.in_(["pending", "due", "phone_pending"]))),
@@ -11737,6 +11766,10 @@ async def page_admin_follow_ups(
     cust_ids = list({r.customer_id for r in rows if r.customer_id})
     custs = {c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
 
+    # 处理人下拉（本店范围内 FollowUp 出现过的 assigned_to）
+    _handler_rows = _followup_filtered_query(db, request).with_entities(FollowUp.assigned_to).distinct().all()
+    handlers = sorted({(h[0] or "").strip() for h in _handler_rows if (h[0] or "").strip()})
+
     return templates.TemplateResponse(request, "uk/follow_ups.html", {
         "title": "回访管理",
         "rows": rows,
@@ -11749,6 +11782,9 @@ async def page_admin_follow_ups(
         "page": page,
         "total_pages": total_pages,
         "total": total,
+        "f": {"handler": handler, "vtype": vtype, "store": store, "q": q},
+        "handlers": handlers,
+        "is_superadmin": is_superadmin,
         "status_zh":   _FOLLOWUP_STATUS_ZH,
         "response_zh": _FOLLOWUP_RESPONSE_ZH,
         "channel_zh":  _FOLLOWUP_CHANNEL_ZH,

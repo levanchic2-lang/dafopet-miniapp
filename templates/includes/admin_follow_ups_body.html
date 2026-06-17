@@ -25,19 +25,63 @@
  </div>
 </div>
 
+{# 当前筛选条件拼成 query 片段，保证切 tab / 翻页 / 勾「只看我的」时筛选不丢 #}
+{% set f = f if f is defined else {} %}
+{% set fqs %}{% if f.handler %}&handler={{ f.handler|urlencode }}{% endif %}{% if f.vtype %}&vtype={{ f.vtype|urlencode }}{% endif %}{% if f.store %}&store={{ f.store|urlencode }}{% endif %}{% if f.q %}&q={{ f.q|urlencode }}{% endif %}{% endset %}
+
 <div class="fu-tabs">
  {% for key, label in [('today','今日待回访'), ('overdue','逾期未处理'), ('sent','已发送等反馈'), ('done','已完成')] %}
- <a class="fu-tab {% if tab == key %}active{% endif %}" href="?tab={{ key }}{% if mine %}&mine=1{% endif %}">
+ <a class="fu-tab {% if tab == key %}active{% endif %}" href="?tab={{ key }}{{ fqs }}{% if mine %}&mine=1{% endif %}">
   {{ label }}
   {% if counts[key] %}<span class="badge">{{ counts[key] }}</span>{% endif %}
  </a>
  {% endfor %}
  <label class="fu-mine-toggle">
   <input type="checkbox" {% if mine %}checked{% endif %}
-         onchange="location.href='?tab={{ tab }}'+(this.checked?'&mine=1':'')"/>
+         onchange="location.href='?tab={{ tab }}{{ fqs }}'+(this.checked?'&mine=1':'')"/>
   只看我的
  </label>
 </div>
+
+{# ── 筛选栏 ── #}
+<form method="get" class="fu-filterbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:0 0 18px;font-family:var(--font-serif);">
+ <input type="hidden" name="tab" value="{{ tab }}"/>
+ {% if mine %}<input type="hidden" name="mine" value="1"/>{% endif %}
+ {% set _fld = "padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);color:var(--ink);" %}
+ {% set _lbl = "display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;" %}
+ <div>
+  <label style="{{ _lbl }}">搜索</label>
+  <input type="text" name="q" value="{{ f.q or '' }}" placeholder="客户 / 手机 / 宠物" style="{{ _fld }}width:180px;"/>
+ </div>
+ <div>
+  <label style="{{ _lbl }}">处理人</label>
+  <select name="handler" style="{{ _fld }}">
+   <option value="">全部</option>
+   {% for h in handlers %}<option value="{{ h }}" {% if f.handler == h %}selected{% endif %}>{{ h }}</option>{% endfor %}
+  </select>
+ </div>
+ <div>
+  <label style="{{ _lbl }}">类型</label>
+  <select name="vtype" style="{{ _fld }}">
+   <option value="">全部</option>
+   {% for k, zh in visit_type_zh.items() %}<option value="{{ k }}" {% if f.vtype == k %}selected{% endif %}>{{ zh }}</option>{% endfor %}
+  </select>
+ </div>
+ {% if is_superadmin %}
+ <div>
+  <label style="{{ _lbl }}">门店</label>
+  <select name="store" style="{{ _fld }}">
+   <option value="">全部门店</option>
+   <option value="东环店" {% if f.store == '东环店' %}selected{% endif %}>东环店</option>
+   <option value="横岗店" {% if f.store == '横岗店' %}selected{% endif %}>横岗店</option>
+  </select>
+ </div>
+ {% endif %}
+ <button type="submit" class="fu-btn">筛&nbsp;选</button>
+ {% if f.q or f.handler or f.vtype or f.store %}
+ <a href="?tab={{ tab }}{% if mine %}&mine=1{% endif %}" class="fu-btn ghost">重&nbsp;置</a>
+ {% endif %}
+</form>
 
 {% if rows %}
 <div class="data-table-wrap">
@@ -147,9 +191,9 @@
 
 {% if total_pages > 1 %}
 <div style="display:flex;gap:.5rem;margin-top:1rem;align-items:center;justify-content:center;font-size:.88rem;">
- {% if page > 1 %}<a href="?tab={{ tab }}&page={{ page-1 }}{% if mine %}&mine=1{% endif %}" class="btn secondary">‹ 上一页</a>{% endif %}
+ {% if page > 1 %}<a href="?tab={{ tab }}&page={{ page-1 }}{{ fqs }}{% if mine %}&mine=1{% endif %}" class="btn secondary">‹ 上一页</a>{% endif %}
  <span style="color:var(--muted);">第 {{ page }} / {{ total_pages }} 页 · 共 {{ total }} 条</span>
- {% if page < total_pages %}<a href="?tab={{ tab }}&page={{ page+1 }}{% if mine %}&mine=1{% endif %}" class="btn secondary">下一页 ›</a>{% endif %}
+ {% if page < total_pages %}<a href="?tab={{ tab }}&page={{ page+1 }}{{ fqs }}{% if mine %}&mine=1{% endif %}" class="btn secondary">下一页 ›</a>{% endif %}
 </div>
 {% endif %}
 
