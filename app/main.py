@@ -21610,6 +21610,60 @@ async def admin_calendar_page(request: Request, db: Session = Depends(get_db)):
     })
 
 
+_APPT_CATEGORY_SHORT = {
+    "tnr": "TNR", "outpatient": "门诊", "surgery": "手术",
+    "beauty": "美容", "grooming": "造型", "washcare": "洗护",
+}
+
+
+@app.get("/api/appointments/upcoming-reminders")
+async def api_appointment_reminders(request: Request, db: Session = Depends(get_db)):
+    """返回「即将开始」的预约（默认 15 分钟内、尚未到店/取消），供前端轮询弹提醒。
+    按当前员工门店过滤；进程时区已钉北京，datetime.now() 即北京时间。"""
+    if not _admin_ok(request):
+        return {"reminders": []}
+    lead = 15  # 提前提醒分钟数
+    now = datetime.now()
+    today = now.date().isoformat()
+    store_short = _get_admin_store(request)  # 超管为空 = 不限
+    q = db.query(Appointment).filter(
+        Appointment.appointment_date == today,
+        Appointment.status.in_([
+            AppointmentStatus.pending.value, AppointmentStatus.confirmed.value,
+        ]),
+    )
+    if store_short:
+        full = _STORE_SHORT_TO_FULL.get(store_short, store_short)
+        q = q.filter(or_(Appointment.store == store_short, Appointment.store == full))
+    out = []
+    for a in q.all():
+        t = (a.appointment_time or "").strip()
+        if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", t):
+            continue
+        try:
+            appt_dt = datetime.strptime(f"{a.appointment_date} {t}", "%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
+        mins = (appt_dt - now).total_seconds() / 60.0
+        # 提前 lead 分钟内 ~ 开始后 2 分钟内：进入提醒窗
+        if not (-2 <= mins <= lead):
+            continue
+        pet = db.get(Pet, a.pet_id) if a.pet_id else None
+        out.append({
+            "id": a.id,
+            "time": t,
+            "minutes": int(round(mins)),
+            "category": _APPT_CATEGORY_SHORT.get(a.category or "", a.category or ""),
+            "service": a.service_name or "",
+            "customer": a.customer_name or "",
+            "phone": a.phone or "",
+            "pet": (pet.name if pet else None) or a.pet_name or "",
+            "store": _STORE_FULL_TO_SHORT.get(a.store or "", a.store or ""),
+        })
+    out.sort(key=lambda r: r["minutes"])
+    return {"reminders": out, "lead": lead}
+
+
 @app.get("/api/calendar/events")
 async def api_calendar_events(
     request: Request,
