@@ -341,6 +341,8 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE appointments ADD COLUMN proxy_phone VARCHAR(40) DEFAULT ''"))
             if "proxy_relation" not in appointment_names:
                 conn.execute(text("ALTER TABLE appointments ADD COLUMN proxy_relation VARCHAR(40) DEFAULT ''"))
+            if "reminder_pushed_at" not in appointment_names:
+                conn.execute(text("ALTER TABLE appointments ADD COLUMN reminder_pushed_at DATETIME DEFAULT NULL"))
 
             # 性能：常用筛选字段加索引（存在则跳过）
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status)"))

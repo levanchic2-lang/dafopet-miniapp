@@ -469,6 +469,12 @@ def _startup():
         _start_ip()
     except Exception as _e:
         logger.warning("住院调度器启动失败：%s", _e)
+    # 预约开始前 15 分钟企微提醒（每分钟扫一次）
+    try:
+        from app.services.appointment_dispatch import start_scheduler as _start_appt
+        _start_appt()
+    except Exception as _e:
+        logger.warning("预约提醒调度器启动失败：%s", _e)
 
 
 @app.on_event("shutdown")

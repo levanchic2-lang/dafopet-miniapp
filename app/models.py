@@ -137,6 +137,9 @@ class Appointment(Base):
     customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
     pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
 
+    # 开始前 15 分钟企微提醒：推过一次即记时间，避免重复推
+    reminder_pushed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
