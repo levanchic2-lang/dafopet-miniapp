@@ -23086,7 +23086,10 @@ async def api_prescription_recent(
 # 住院管理（D1）：笼位 + 入院 + 出院（自动结账）
 # ════════════════════════════════════════════════════════════════════════
 
-_CAGE_KIND_ZH = {"general": "普通笼", "iso": "隔离笼", "icu": "ICU", "other": "其他"}
+_CAGE_KIND_ZH = {
+    "general": "普通笼", "small": "小号笼", "medium": "中号笼", "large": "大号笼",
+    "single": "单间", "iso": "隔离笼", "icu": "ICU", "other": "其他",
+}
 _HOSP_STATUS_ZH = {"admitted": "住院中", "discharged": "已出院", "cancelled": "已取消"}
 
 

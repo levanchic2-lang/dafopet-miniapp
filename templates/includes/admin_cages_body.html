@@ -65,15 +65,11 @@
    <span class="cage-kind-tag">空闲</span>
    {% endif %}
   </div>
-  <div style="display:flex;gap:.3rem;">
-   <button type="submit" class="btn secondary" style="font-size:.78rem;padding:.25rem .55rem;">保存</button>
-  </div>
- </form>
- <form method="post" action="/admin/cages/{{ c.id }}/delete" style="display:contents;"
-       onsubmit="return confirm('确认删除笼位 {{ c.code }}？历史住院记录不受影响。')">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-  <div style="grid-column:7;text-align:right;padding:0 .7rem .7rem;margin-top:-.5rem;">
-   <button type="submit" class="btn secondary" style="font-size:.74rem;padding:.18rem .5rem;color:#dc2626;">删除</button>
+  <div style="display:flex;gap:.4rem;justify-content:flex-end;align-items:center;">
+   <button type="submit" class="btn secondary" style="font-size:.78rem;padding:.25rem .6rem;">保存</button>
+   <button type="submit" formaction="/admin/cages/{{ c.id }}/delete"
+           onclick="return confirm('确认删除笼位 {{ c.code }}？历史住院记录不受影响。')"
+           class="btn secondary" style="font-size:.78rem;padding:.25rem .6rem;color:#dc2626;border-color:#dc2626;">删除</button>
   </div>
  </form>
  {% endfor %}
