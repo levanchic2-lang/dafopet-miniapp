@@ -886,6 +886,25 @@ class Cage(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class CageRateRule(Base):
+    """住院日费率「规则表」（参考用，不强制套用）。
+    例：大型犬 80 / 中型犬 60 / 小型犬·猫 50 / ICU 200。
+    新建住院时展示给员工看「这只大概多少钱一天」，员工据此手填日费率。
+    """
+    __tablename__ = "cage_rate_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    store: Mapped[str] = mapped_column(String(40), default="")    # 短名；空=通用
+    label: Mapped[str] = mapped_column(String(80), default="")    # 如 大型犬 / 中型犬 / 猫 / ICU
+    daily_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Hospitalization(Base):
     """住院档案：从 visit 转入，到出院结账闭环。
 

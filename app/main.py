@@ -110,6 +110,7 @@ from app.models import (
     Disease,
     GroomingOrder,
     Cage,
+    CageRateRule,
     Hospitalization,
     MedicationAdminLog,
     VitalSignsLog,
@@ -23121,9 +23122,14 @@ async def admin_cages_list(request: Request, db: Session = Depends(get_db),
     occupied_ids = {h.cage_id for h in db.query(Hospitalization)
                     .filter(Hospitalization.status == "admitted",
                             Hospitalization.cage_id != None).all()}
+    # 日费率规则（参考用）：本店 + 通用
+    rr_q = db.query(CageRateRule).filter(CageRateRule.is_active == True)
+    if wb_store:
+        rr_q = rr_q.filter(or_(CageRateRule.store == wb_store, CageRateRule.store == ""))
+    rate_rules = rr_q.order_by(CageRateRule.sort_order, CageRateRule.id).all()
     return templates.TemplateResponse(request, "uk/cages.html", {
         "request": request, "cages": cages, "kind_zh": _CAGE_KIND_ZH,
-        "occupied_ids": occupied_ids,
+        "occupied_ids": occupied_ids, "rate_rules": rate_rules,
         "wb_store": wb_store, "csrf_token": _get_csrf_token(request),
         "is_superadmin": request.session.get("admin_role") == "superadmin",
         "title": "笼位管理",
@@ -23205,6 +23211,60 @@ async def admin_cages_delete(cage_id: int, request: Request, db: Session = Depen
     return RedirectResponse(f"/admin/cages?msg=已删除笼位 {c.code}", status_code=303)
 
 
+# ─── 日费率规则（参考表） ───
+@app.post("/admin/cage-rates/create")
+async def admin_cage_rates_create(request: Request, db: Session = Depends(get_db),
+                                   csrf_token: str = Form(""),
+                                   label: str = Form(""), daily_rate: float = Form(0.0),
+                                   store: str = Form(""), sort_order: int = Form(0)):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    label = (label or "").strip()[:80]
+    if not label:
+        return RedirectResponse("/admin/cages?msg=费率名称不能为空", status_code=303)
+    if request.session.get("admin_role") == "superadmin":
+        rr_store = (store or "").strip()
+    else:
+        rr_store = _get_admin_store(request)
+    db.add(CageRateRule(
+        store=rr_store, label=label,
+        daily_rate=max(0.0, float(daily_rate or 0)),
+        sort_order=int(sort_order or 0),
+        created_by=request.session.get("admin_username", ""),
+    ))
+    db.commit()
+    return RedirectResponse(f"/admin/cages?msg=已添加费率规则 {label}", status_code=303)
+
+
+@app.post("/admin/cage-rates/{rule_id}/edit")
+async def admin_cage_rates_edit(rule_id: int, request: Request, db: Session = Depends(get_db),
+                                 csrf_token: str = Form(""),
+                                 label: str = Form(""), daily_rate: float = Form(0.0),
+                                 sort_order: int = Form(0)):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    r = db.get(CageRateRule, rule_id)
+    if not r:
+        raise HTTPException(404, "费率规则不存在")
+    r.label = (label or "").strip()[:80] or r.label
+    r.daily_rate = max(0.0, float(daily_rate or 0))
+    r.sort_order = int(sort_order or 0)
+    db.commit()
+    return RedirectResponse("/admin/cages?msg=已保存费率规则", status_code=303)
+
+
+@app.post("/admin/cage-rates/{rule_id}/delete")
+async def admin_cage_rates_delete(rule_id: int, request: Request, db: Session = Depends(get_db),
+                                   csrf_token: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    r = db.get(CageRateRule, rule_id)
+    if r:
+        r.is_active = False
+        db.commit()
+    return RedirectResponse("/admin/cages?msg=已删除费率规则", status_code=303)
+
+
 # ─── 住院档案 ───
 @app.get("/admin/inpatient/new", response_class=HTMLResponse)
 async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_db),
@@ -23226,9 +23286,14 @@ async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_d
     occupied_ids = {h.cage_id for h in db.query(Hospitalization)
                     .filter(Hospitalization.status == "admitted",
                             Hospitalization.cage_id != None).all()}
+    # 日费率规则（参考用）：本店 + 通用
+    rr_q = db.query(CageRateRule).filter(CageRateRule.is_active == True)
+    if store_short:
+        rr_q = rr_q.filter(or_(CageRateRule.store == store_short, CageRateRule.store == ""))
+    rate_rules = rr_q.order_by(CageRateRule.sort_order, CageRateRule.id).all()
     return templates.TemplateResponse(request, "uk/inpatient_new.html", {
         "request": request, "visit": v, "cust": cust, "pet": pet,
-        "cages": cages, "occupied_ids": occupied_ids,
+        "cages": cages, "occupied_ids": occupied_ids, "rate_rules": rate_rules,
         "kind_zh": _CAGE_KIND_ZH, "store_short": store_short,
         "csrf_token": _get_csrf_token(request),
         "title": "新建住院",

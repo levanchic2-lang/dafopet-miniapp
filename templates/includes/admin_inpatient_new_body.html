@@ -21,7 +21,7 @@
    {% for c in cages %}
    {% set is_occ = c.id in occupied_ids %}
    <option value="{{ c.id }}" {% if is_occ %}disabled{% endif %}>
-    {{ c.code }} · {{ kind_zh.get(c.kind, c.kind) }} · ¥{{ '%.0f'|format(c.daily_rate) }}/天 {% if is_occ %}（占用中）{% endif %}
+    {{ c.code }} · {{ kind_zh.get(c.kind, c.kind) }} {% if is_occ %}（占用中）{% endif %}
    </option>
    {% endfor %}
   </select>
@@ -34,16 +34,36 @@
   <label style="display:block;font-weight:600;margin-bottom:.3rem;">入院原因 / 病情</label>
   <textarea name="reason" rows="3" style="width:100%;margin-bottom:1rem;" required>{{ visit.chief_complaint or visit.diagnosis or '' }}</textarea>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:1rem;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:.5rem;">
    <div>
     <label style="display:block;font-weight:600;margin-bottom:.3rem;">预计出院日期</label>
     <input type="date" name="expected_discharge_date" style="width:100%;"/>
    </div>
    <div>
-    <label style="display:block;font-weight:600;margin-bottom:.3rem;">覆盖日费率（可选）</label>
-    <input type="number" step="0.01" min="0" name="daily_rate_override" value="0" style="width:100%;" placeholder="留 0 则用笼默认"/>
+    <label style="display:block;font-weight:600;margin-bottom:.3rem;">日费率（每天 ¥）</label>
+    <input type="number" step="0.01" min="0" name="daily_rate_override" id="rateInput" value="0" style="width:100%;" placeholder="按下方规则手填"/>
    </div>
   </div>
+
+  {# 日费率规则参考：点一下即可填入 #}
+  {% if rate_rules %}
+  <div style="background:#fbfaf6;border:0.5px solid var(--hair);padding:.6rem .8rem;margin-bottom:1rem;font-size:.85rem;">
+   <div style="color:var(--muted);font-size:.78rem;margin-bottom:.45rem;">日费率参考（点一下填入上方）：</div>
+   <div style="display:flex;flex-wrap:wrap;gap:.4rem;">
+    {% for r in rate_rules %}
+    <button type="button" onclick="document.getElementById('rateInput').value={{ '%.2f'|format(r.daily_rate) }};"
+            style="font-family:var(--font-serif);font-size:.85rem;padding:.3rem .7rem;border:0.5px solid var(--ink-3);background:var(--paper);cursor:pointer;">
+     {{ r.label }} <b style="font-family:var(--font-numeric);">¥{{ '%.0f'|format(r.daily_rate) }}</b>/天
+    </button>
+    {% endfor %}
+   </div>
+   <div style="color:var(--muted);font-size:.74rem;margin-top:.45rem;font-style:italic;">可在 <a href="/admin/cages">笼位管理</a> 维护这些规则</div>
+  </div>
+  {% else %}
+  <div style="font-size:.8rem;color:var(--muted);margin-bottom:1rem;">
+   还没配日费率规则，可在 <a href="/admin/cages">笼位管理</a> 里加（如 大型犬 80 / 中型犬 60 / 猫 50），方便手填。
+  </div>
+  {% endif %}
 
   <div style="display:flex;gap:.5rem;align-items:stretch;">
    <button type="submit" class="btn" style="flex:1;">确&nbsp;认&nbsp;入&nbsp;院</button>

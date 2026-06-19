@@ -8,7 +8,7 @@
 
 <div class="card" style="margin-bottom:1rem;">
  <h3 style="margin:0 0 .65rem;font-size:1rem;"><i data-lucide="plus"></i> 新增笼位</h3>
- <form method="post" action="/admin/cages/create" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 80px;gap:.5rem;align-items:end;">
+ <form method="post" action="/admin/cages/create" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 80px;gap:.5rem;align-items:end;">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
   <div>
    <label style="display:block;font-size:.82rem;color:var(--muted);margin-bottom:.2rem;">笼号</label>
@@ -19,10 +19,6 @@
    <select name="kind" style="width:100%;">
     {% for k, v in kind_zh.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
    </select>
-  </div>
-  <div>
-   <label style="display:block;font-size:.82rem;color:var(--muted);margin-bottom:.2rem;">每日费率 ¥</label>
-   <input type="number" step="0.01" min="0" name="daily_rate" value="0" style="width:100%;"/>
   </div>
   {% if is_superadmin %}
   <div>
@@ -46,7 +42,7 @@
 
 <div class="card" style="padding:0;">
  <div class="cage-row head">
-  <div>笼号</div><div>备注</div><div>类型</div><div>日费率</div><div>排序</div><div>状态</div><div>操作</div>
+  <div>笼号</div><div>备注</div><div>类型</div><div>排序</div><div>状态</div><div>操作</div>
  </div>
  {% for c in cages %}
  <form method="post" action="/admin/cages/{{ c.id }}/edit" class="cage-row">
@@ -56,7 +52,6 @@
   <select name="kind">
    {% for k, v in kind_zh.items() %}<option value="{{ k }}" {% if c.kind == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
   </select>
-  <input type="number" step="0.01" min="0" name="daily_rate" value="{{ c.daily_rate }}" />
   <input type="number" name="sort_order" value="{{ c.sort_order }}" />
   <div>
    {% if c.id in occupied_ids %}
@@ -76,4 +71,60 @@
  {% if not cages %}
  <div style="padding:2rem;text-align:center;color:var(--muted);">尚无笼位 · 通过上方表单添加</div>
  {% endif %}
+</div>
+
+{# ── 日费率规则（参考表）── #}
+<div class="card" style="margin-top:1.4rem;">
+ <h3 style="margin:0 0 .35rem;font-size:1rem;"><i data-lucide="list-checks"></i> 日费率规则（参考）</h3>
+ <p class="ph-sub" style="margin:0 0 .8rem;font-size:.82rem;color:var(--muted);">
+  在这里维护「大概多少钱一天」的对照表（如 大型犬 / 中型犬 / 猫 / ICU）。
+  新建住院时会显示给同事看，由同事据此手填日费率，笼位本身不再单独设费率。
+ </p>
+ <form method="post" action="/admin/cage-rates/create" style="display:grid;grid-template-columns:1fr 120px {% if is_superadmin %}1fr {% endif %}80px 80px;gap:.5rem;align-items:end;margin-bottom:1rem;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <div>
+   <label style="display:block;font-size:.82rem;color:var(--muted);margin-bottom:.2rem;">名称</label>
+   <input name="label" required placeholder="如 大型犬 / 中型犬 / 猫 / ICU" style="width:100%;"/>
+  </div>
+  <div>
+   <label style="display:block;font-size:.82rem;color:var(--muted);margin-bottom:.2rem;">日费率 ¥</label>
+   <input type="number" step="0.01" min="0" name="daily_rate" value="0" style="width:100%;"/>
+  </div>
+  {% if is_superadmin %}
+  <div>
+   <label style="display:block;font-size:.82rem;color:var(--muted);margin-bottom:.2rem;">门店</label>
+   <select name="store" style="width:100%;">
+    <option value="">通用</option>
+    <option value="东环店">东环店</option>
+    <option value="横岗店">横岗店</option>
+   </select>
+  </div>
+  {% endif %}
+  <div>
+   <label style="display:block;font-size:.82rem;color:var(--muted);margin-bottom:.2rem;">排序</label>
+   <input type="number" name="sort_order" value="0" style="width:100%;"/>
+  </div>
+  <button type="submit" class="btn">添加</button>
+ </form>
+
+ <div style="border-top:0.5px solid var(--hair);">
+  <div class="rr-row head"><div>名称</div><div>日费率 ¥</div><div>排序</div><div>操作</div></div>
+  {% for r in rate_rules %}
+  <form method="post" action="/admin/cage-rates/{{ r.id }}/edit" class="rr-row">
+   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+   <input name="label" value="{{ r.label }}" />
+   <input type="number" step="0.01" min="0" name="daily_rate" value="{{ r.daily_rate }}" />
+   <input type="number" name="sort_order" value="{{ r.sort_order }}" />
+   <div style="display:flex;gap:.4rem;justify-content:flex-end;align-items:center;">
+    <button type="submit" class="btn secondary" style="font-size:.78rem;padding:.25rem .6rem;">保存</button>
+    <button type="submit" formaction="/admin/cage-rates/{{ r.id }}/delete"
+            onclick="return confirm('删除费率规则「{{ r.label }}」？')"
+            class="btn secondary" style="font-size:.78rem;padding:.25rem .6rem;color:#dc2626;border-color:#dc2626;">删除</button>
+   </div>
+  </form>
+  {% endfor %}
+  {% if not rate_rules %}
+  <div style="padding:1.4rem;text-align:center;color:var(--muted);font-style:italic;">尚无费率规则 · 通过上方表单添加（如 大型犬 80 / 中型犬 60 / 猫 50）</div>
+  {% endif %}
+ </div>
 </div>
