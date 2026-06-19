@@ -18780,6 +18780,17 @@ async def admin_invoice_add_payment(
     if inv.payment_status == "paid":
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已收款，请勿重复", status_code=303)
 
+    # 超管补单：可指定「结算时间」（北京），让营收算到正确那天（员工漏结账时用）。留空=现在。
+    _settle_utc = None
+    if request.session.get("admin_role") == "superadmin":
+        _sa = (form.get("settle_at") or "").strip()
+        if _sa:
+            try:
+                _settle_utc = datetime.strptime(_sa[:16], "%Y-%m-%dT%H:%M") - timedelta(hours=8)
+            except ValueError:
+                _settle_utc = None
+    _pay_id_before = db.query(func.max(Payment.id)).scalar() or 0
+
     method = str(form.get("method") or "cash").strip()
     operator = request.session.get("admin_username", "admin")
     # store 优先取发票本身的 store（更准确，超管未挂店时 _get_admin_store=""），
@@ -18976,6 +18987,15 @@ async def admin_invoice_add_payment(
         ))
         db.flush()
         _invoice_recompute_status(db, inv)
+    # 超管补单：把本次新建的收款流水 + 已付清发票的结算时间改成指定时间
+    if _settle_utc is not None:
+        for _np in db.query(Payment).filter(Payment.id > _pay_id_before).all():
+            _np.created_at = _settle_utc
+        for _t in target_invs:
+            if _t.payment_status == "paid":
+                _t.paid_at = _settle_utc
+        _audit(db, request, "payment_backdate",
+               detail={"invoice_id": inv.id, "settle_at": _settle_utc.isoformat()})
     # 充值单付清 → 把钱真正打进钱包（幂等）
     try:
         _maybe_credit_wallet_from_invoice(db, inv, request)
@@ -19060,6 +19080,37 @@ async def admin_invoice_payment_void(
         sep = "&" if "?" in target else "?"
         return RedirectResponse(f"{target}{sep}msg=已撤销 ¥{p.amount:.2f}", status_code=303)
     return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已撤销 ¥{p.amount:.2f}", status_code=303)
+
+
+@app.post("/admin/invoices/{inv_id}/set-paid-at")
+async def admin_invoice_set_paid_at(
+    inv_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), settle_at: str = Form(""),
+):
+    """超管改「结算时间」：把已收款发票的 paid_at + 其收款流水时间改成指定的北京时间，
+    让营收报表算到正确那天（员工漏结账导致日期错时用）。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404, "收费单不存在")
+    _pet = db.get(Pet, inv.pet_id) if inv.pet_id else None
+    _assert_store_access(request, inv.store, _pet.store if _pet else "")
+    if inv.payment_status != "paid":
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=只有已收款的单可改结算时间", status_code=303)
+    sa = (settle_at or "").strip()
+    try:
+        utc = datetime.strptime(sa[:16], "%Y-%m-%dT%H:%M") - timedelta(hours=8)
+    except ValueError:
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=结算时间格式不对", status_code=303)
+    inv.paid_at = utc
+    for p in db.query(Payment).filter(Payment.invoice_id == inv_id, Payment.status == "success").all():
+        p.created_at = utc
+    _audit(db, request, "invoice_set_paid_at",
+           detail={"invoice_id": inv_id, "paid_at": utc.isoformat()})
+    db.commit()
+    return RedirectResponse(f"/admin/invoices/{inv_id}?msg=已改结算时间", status_code=303)
 
 
 @app.post("/admin/invoices/{inv_id}/pay")

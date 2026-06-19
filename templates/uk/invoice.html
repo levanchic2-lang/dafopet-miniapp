@@ -381,6 +381,19 @@
           已收款 · {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) }} ·
           {{ (inv.paid_at | bjtime).strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
         </div>
+        {% if request.session.get('admin_role') == 'superadmin' %}
+        <details style="margin-top:8px;">
+          <summary style="cursor:pointer;font-size:9pt;letter-spacing:1px;color:var(--ink-3);font-style:italic;user-select:none;">改结算时间（超管 · 补单纠正营收日期）</summary>
+          <form method="post" action="/admin/invoices/{{ inv.id }}/set-paid-at" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <input type="datetime-local" name="settle_at"
+                   value="{{ (inv.paid_at | bjtime).strftime('%Y-%m-%dT%H:%M') if inv.paid_at else '' }}"
+                   style="padding:5px 8px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);"/>
+            <button type="submit" class="uk-btn ghost sm">保存结算时间</button>
+            <span style="font-size:8.5pt;color:var(--ink-3);font-style:italic;">改这一单的收款时间 → 营收算到正确那天</span>
+          </form>
+        </details>
+        {% endif %}
         {% endif %}
 
         {# 应用折扣（未付/部分付 才能改）#}
@@ -649,6 +662,16 @@
             <input type="text" name="ref_no" placeholder="微信 / 支付宝 / 收钱吧 交易号"/>
           </div>
         </div>
+
+        {% if request.session.get('admin_role') == 'superadmin' %}
+        <div class="iv-pay-form-row">
+          <div style="flex:1;">
+            <label>结算时间（超管补单 · 留空 = 现在）</label>
+            <input type="datetime-local" name="settle_at"/>
+            <div style="font-size:8.5pt;color:var(--ink-3);font-style:italic;margin-top:3px;">员工漏结账时，填「当天实际收钱」的时间，营收就会算到那一天</div>
+          </div>
+        </div>
+        {% endif %}
 
         <button type="submit" class="iv-pay-submit">确&nbsp;认&nbsp;这&nbsp;一&nbsp;笔</button>
       </form>
