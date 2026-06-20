@@ -256,7 +256,7 @@
 
     {# 宠物名 / 手机号 快速搜索 — 不知道电话时按宠物名找主人 #}
     <div class="ac-field" style="position:relative; margin-bottom:16px;">
-      <label>搜&nbsp;索&nbsp;宠&nbsp;物&nbsp;/&nbsp;主&nbsp;人<span style="color:var(--ink-3); font-style:italic; font-size:9pt; margin-left:8px;">输宠物名 / 手机尾号 / 客户名，选中自动带出电话</span></label>
+      <label>搜&nbsp;索&nbsp;宠&nbsp;物&nbsp;/&nbsp;主&nbsp;人<span style="color:var(--ink-3); font-style:italic; font-size:9pt; margin-left:8px;">输宠物名 / 手机尾号 / 客户名 · 同名太多可加空格组合，如「馒头 文」</span></label>
       <input id="ac-search" class="ac-input" autocomplete="off" placeholder="如：汤圆 / 黄小姐 / 7394"
              oninput="acPetSearch()" onfocus="acPetSearch()"/>
       <div id="ac-search-dd" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:30; background:var(--paper); border:0.5px solid var(--ink); max-height:320px; overflow-y:auto; box-shadow:0 6px 24px rgba(0,0,0,.12);"></div>
@@ -608,6 +608,12 @@ function acPetSearch() {
             dd.appendChild(row);
           });
         });
+        if (data.truncated) {
+          var more = document.createElement('div');
+          more.style.cssText = 'padding:9px 16px; color:var(--accent-amber); font-style:italic; font-size:9.5pt; background:var(--bg);';
+          more.textContent = '结果较多，已截断 · 加空格补主人名/手机尾号缩小范围（如「' + q.split(/\s+/)[0] + ' 文」）';
+          dd.appendChild(more);
+        }
         dd.style.display = '';
       })
       .catch(function() { dd.style.display = 'none'; });
