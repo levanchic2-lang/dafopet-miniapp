@@ -10476,7 +10476,9 @@ async def admin_deposit_create(
         amount=amt,
         pay_method=pay_method,
         status="held",
-        store=_get_admin_store(request),
+        # 用 _get_op_store：超管也按其挂的门店落店，否则超管收的押金 store 为空 →
+        # 营收报表按门店筛时整笔押金消失（曾导致 6/14、6/16、6/19 押金漏统计）
+        store=_get_op_store(request),
         operator=request.session.get("admin_username", "admin"),
         note=(note or "").strip()[:500],
     )
