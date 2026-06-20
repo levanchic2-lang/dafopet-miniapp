@@ -1600,6 +1600,12 @@
       <label class="field">备注
         <textarea name="note" rows="2" placeholder="可选"></textarea>
       </label>
+      {% if request.session.get('admin_role') == 'superadmin' %}
+      <label class="field">收款时间（超管补登 · 留空 = 现在）
+        <input type="datetime-local" name="settle_at"/>
+        <span style="font-size:8.5pt;color:var(--ink-3);font-style:italic;">漏登记时，填实际收钱那天的时间，营收会算到那一天</span>
+      </label>
+      {% endif %}
       <div class="actions">
         <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('depositModal').classList.remove('visible');">取消</button>
         <button type="submit" class="uk-btn primary sm">收 押 金</button>

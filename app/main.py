@@ -10454,6 +10454,7 @@ async def admin_deposit_create(
     amount: str = Form(...),
     pay_method: str = Form("cash"),
     note: str = Form(""),
+    settle_at: str = Form(""),
 ):
     """收押金。amount > 0。"""
     if not request.session.get("admin"):
@@ -10467,6 +10468,15 @@ async def admin_deposit_create(
         return RedirectResponse(f"/admin/customers/{customer_id}?tab=deposits&msg=押金需大于 0", status_code=303)
     if category not in _DEPOSIT_CATEGORY_ZH:
         category = "other"
+    # 超管补登：可指定收款时间（北京）→ 营收算到正确那天（漏登记时用）。留空=现在。
+    _created_at = None
+    if request.session.get("admin_role") == "superadmin":
+        _sa = (settle_at or "").strip()
+        if _sa:
+            try:
+                _created_at = datetime.strptime(_sa[:16], "%Y-%m-%dT%H:%M") - timedelta(hours=8)
+            except ValueError:
+                _created_at = None
     d = Deposit(
         customer_id=customer_id,
         pet_id=pet_id or None,
@@ -10482,6 +10492,8 @@ async def admin_deposit_create(
         operator=request.session.get("admin_username", "admin"),
         note=(note or "").strip()[:500],
     )
+    if _created_at is not None:
+        d.created_at = _created_at   # 超管补登：落到指定那天
     db.add(d); db.commit()
     _audit(db, request, "deposit_create", application_id=None,
            detail={"customer_id": customer_id, "amount": amt, "category": category})
