@@ -13,7 +13,7 @@
     <div class="case-head">
       <h3>案例 #{{ a.id }}{% if a.cat_nickname %} · {{ a.cat_nickname }}{% endif %}</h3>
       <span class="meta">
-        {{ a.updated_at.strftime('%Y-%m-%d') if a.updated_at else '—' }}
+        {{ (a.updated_at | bjtime).strftime('%Y-%m-%d') if a.updated_at else '—' }}
         {% if a.phone %} · 尾号 {{ a.phone[-4:] }}{% endif %}
       </span>
       <span class="counts">术前 {{ it.before | length }} 张 · 术后 {{ it.after | length }} 张</span>

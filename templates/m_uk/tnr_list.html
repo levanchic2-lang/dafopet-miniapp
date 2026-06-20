@@ -28,7 +28,7 @@
         {% if a.phone %}<span style="margin:0 5px;color:var(--ink-4);">·</span><span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ a.phone }}</span>{% endif %}
       </div>
       <div class="ukm-row-sub">
-        {{ a.created_at.strftime('%m-%d %H:%M') if a.created_at else '—' }}
+        {{ (a.created_at | bjtime).strftime('%m-%d %H:%M') if a.created_at else '—' }}
         {% if a.clinic_store %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ a.clinic_store }}{% endif %}
         {% if a.ai_is_likely_stray is not none %}
           <span style="margin:0 5px;color:var(--ink-4);">·</span>

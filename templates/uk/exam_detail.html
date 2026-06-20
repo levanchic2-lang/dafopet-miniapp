@@ -256,7 +256,7 @@
       <span class="sub">
         {% if cust %}<b>{{ cust.name }}</b>{% endif %}
         {% if pet %}<span class="sep">·</span>{{ pet.name }}{% if pet.species == 'cat' %}（猫）{% elif pet.species == 'dog' %}（犬）{% endif %}{% endif %}
-        <span class="sep">·</span>创建 <span style="font-family:var(--font-numeric);">{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        <span class="sep">·</span>创建 <span style="font-family:var(--font-numeric);">{{ (order.created_at | bjtime).strftime('%Y-%m-%d %H:%M') }}</span>
         {% if visit %}<span class="sep">·</span>病历 <a href="/admin/visits/{{ visit.id }}">#{{ visit.id }}</a>{% endif %}
       </span>
     </h1>
@@ -392,7 +392,7 @@ function confirmExamVoid(form, paidAmount) {
         <div style="font-size:10pt;">
           <b>{{ mr.item_label or '显微镜报告' }}</b>
           <span style="color:var(--ink-3);margin-left:10px;font-size:9pt;">
-            {{ mr.vet_name or '—' }} · {{ mr.created_at.strftime('%Y-%m-%d %H:%M') if mr.created_at else '' }}
+            {{ mr.vet_name or '—' }} · {{ (mr.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if mr.created_at else '' }}
           </span>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -465,7 +465,7 @@ function confirmExamVoid(form, paidAmount) {
           <a href="/admin/exam-reports/{{ rpt.id }}/file" target="_blank">查看</a>
           <a href="/admin/exam-reports/{{ rpt.id }}/file?download=1" download="{{ rpt.original_name or '' }}">下载</a>
           <span class="type">{{ rpt.file_type | upper }}</span>
-          <div class="meta">{{ rpt.uploaded_by }} · {{ rpt.uploaded_at.strftime('%m-%d %H:%M') }}</div>
+          <div class="meta">{{ rpt.uploaded_by }} · {{ (rpt.uploaded_at | bjtime).strftime('%m-%d %H:%M') }}</div>
           <form method="post" action="/admin/exam-orders/{{ order.id }}/delete-report/{{ rpt.id }}"
                 onsubmit="return confirm('删除此报告？')" style="margin:0;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -493,7 +493,7 @@ function confirmExamVoid(form, paidAmount) {
       <div style="display:none;color:var(--accent-red);font-size:9pt;padding:14px;background:#fcf5f4;">二维码生成失败，请刷新或联系管理员</div>
     </div>
     <p class="hint">
-      有效期 <span style="font-family:var(--font-numeric);">{{ order.token_expires_at.strftime('%m-%d %H:%M') if order.token_expires_at else '—' }}</span>（北京 +8）
+      有效期 <span style="font-family:var(--font-numeric);">{{ (order.token_expires_at | bjtime).strftime('%m-%d %H:%M') if order.token_expires_at else '—' }}</span>（北京 +8）
     </p>
     <form method="post" action="/admin/exam-orders/{{ order.id }}/refresh-token">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -531,7 +531,7 @@ function confirmExamVoid(form, paidAmount) {
     {% set is_voided = (h.status == 'voided') %}
     <a href="/admin/exam-orders/{{ h.id }}" class="ex-history-row {% if is_voided %}voided{% endif %}">
       <div class="r1">
-        <span class="date">{{ h.created_at.strftime('%Y-%m-%d') if h.created_at else '—' }}</span>
+        <span class="date">{{ (h.created_at | bjtime).strftime('%Y-%m-%d') if h.created_at else '—' }}</span>
         <span class="stat {% if h._has_report %}done{% else %}wait{% endif %}">#{{ h.id }} · {% if h._has_report %}已出{% else %}待出{% endif %}</span>
       </div>
       <div class="r2">

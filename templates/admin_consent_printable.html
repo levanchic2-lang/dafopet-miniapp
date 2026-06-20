@@ -40,7 +40,7 @@
   <div class="cs-meta">
     {% if cust %}<div>客户：<b>{{ cust.name or '' }}</b>　电话：{{ cust.phone or '' }}</div>{% endif %}
     {% if pet %}<div>宠物：<b>{{ pet.name or '' }}</b>{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
-    <div>发起时间：{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }} · 单号 CT{{ '%06d'|format(task.id) }}</div>
+    <div>发起时间：{{ (task.initiated_at | bjtime).strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }} · 单号 CT{{ '%06d'|format(task.id) }}</div>
   </div>
 
   <div class="cs-body">{{ task.snapshot_html|safe }}</div>
@@ -55,7 +55,7 @@
         <div style="color:#aaa;font-size:9pt;">（未签字）</div>
         {% endif %}
         <div class="cs-meta-small">
-          签署时间：{{ task.signed_at.strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}<br/>
+          签署时间：{{ (task.signed_at | bjtime).strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}<br/>
           签署 IP：{{ task.signed_ip or '—' }}
         </div>
       </div>

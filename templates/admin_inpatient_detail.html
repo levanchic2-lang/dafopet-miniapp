@@ -30,11 +30,11 @@
 
 {% if h.status == 'admitted' %}
 <div class="banner-admitted">
- <i data-lucide="check"></i> <b>住院中</b> · 已入住 {{ days }} 天 · 入院 {{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}
+ <i data-lucide="check"></i> <b>住院中</b> · 已入住 {{ days }} 天 · 入院 {{ (h.admitted_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}
 </div>
 {% elif h.status == 'discharged' %}
 <div class="banner-discharged">
- <i data-lucide="log-out"></i> <b>已出院</b> · 共住 {{ days }} 天 · {{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }} → {{ h.discharged_at.strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}
+ <i data-lucide="log-out"></i> <b>已出院</b> · 共住 {{ days }} 天 · {{ (h.admitted_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }} → {{ (h.discharged_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}
  {% if h.invoice_id %} · <a href="/admin/invoices/{{ h.invoice_id }}" style="color:inherit;text-decoration:underline;">查看账单</a>{% endif %}
 </div>
 {% else %}
@@ -51,7 +51,7 @@
   <div style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:#713f12;margin-bottom:.2rem;">
    <b>📋 {{ shift_zh.get(latest_handover.shift, latest_handover.shift) }}交班</b>
    <span>· {{ latest_handover.recorded_by or '—' }}</span>
-   <span>· {{ latest_handover.recorded_at.strftime('%m-%d %H:%M') }}</span>
+   <span>· {{ (latest_handover.recorded_at | bjtime).strftime('%m-%d %H:%M') }}</span>
   </div>
   <div style="font-size:.95rem;color:#422006;white-space:pre-wrap;line-height:1.5;">{{ latest_handover.content }}</div>
  </div>
@@ -63,9 +63,9 @@
  <div>
   <div class="card">
    <h3 style="margin:0 0 .85rem;font-size:1rem;"><i data-lucide="file-text"></i> 住院信息</h3>
-   <div class="info-line"><label>入院时间</label><span>{{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span></div>
+   <div class="info-line"><label>入院时间</label><span>{{ (h.admitted_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span></div>
    <div class="info-line"><label>预计出院</label><span>{{ h.expected_discharge_date or '—' }}</span></div>
-   {% if h.discharged_at %}<div class="info-line"><label>实际出院</label><span>{{ h.discharged_at.strftime('%Y-%m-%d %H:%M') }}</span></div>{% endif %}
+   {% if h.discharged_at %}<div class="info-line"><label>实际出院</label><span>{{ (h.discharged_at | bjtime).strftime('%Y-%m-%d %H:%M') }}</span></div>{% endif %}
    <div class="info-line"><label>当前笼位</label><span>{% if cage %}{{ cage.code }} · {{ kind_zh.get(cage.kind, cage.kind) }} · ¥{{ '%.2f'|format(cage.daily_rate) }}/天{% else %}— 未指定{% endif %}</span></div>
    <div class="info-line"><label>日费率</label><span>¥{{ '%.2f'|format(h.daily_rate_override if h.daily_rate_override > 0 else (cage.daily_rate if cage else 0)) }} {% if h.daily_rate_override > 0 %}<small style="color:var(--muted);">（已覆盖笼默认）</small>{% endif %}</span></div>
    <div class="info-line"><label>主治医生</label><span>{{ visit.vet_name if visit else '—' }}</span></div>
@@ -109,7 +109,7 @@
     </div>
     <div style="font-size:.78rem;color:#7f1d1d;margin-top:.3rem;">
      {% for l in overdue_logs[:5] if l.prescription_item %}
-      • {{ l.scheduled_at.strftime('%m-%d %H:%M') }} · {{ l.prescription_item.drug_name }}{% if not loop.last %}<br>{% endif %}
+      • {{ (l.scheduled_at | bjtime).strftime('%m-%d %H:%M') }} · {{ l.prescription_item.drug_name }}{% if not loop.last %}<br>{% endif %}
      {% endfor %}
      {% if overdue_logs|length > 5 %}<br>...还有 {{ overdue_logs|length - 5 }} 条{% endif %}
     </div>
@@ -137,7 +137,7 @@
     border:1px solid {% if l.status == 'done' %}#86efac{% elif overdue %}#fca5a5{% else %}var(--border){% endif %};
     border-radius:6px;">
     <div style="font-weight:700;font-size:1.05rem;color:{% if overdue %}#dc2626{% elif l.status == 'done' %}#047857{% else %}#1e40af{% endif %};min-width:55px;">
-     {{ l.scheduled_at.strftime('%H:%M') }}
+     {{ (l.scheduled_at | bjtime).strftime('%H:%M') }}
     </div>
     <div style="flex:1;min-width:0;">
      <div style="font-weight:600;font-size:.92rem;">{{ l.prescription_item.drug_name }}
@@ -150,7 +150,7 @@
      {% endif %}
      {% if l.status == 'done' %}
      <div style="font-size:.74rem;color:#047857;margin-top:.15rem;">
-      ✓ {{ l.administered_by or '—' }} · {{ l.administered_at.strftime('%H:%M') if l.administered_at else '' }}
+      ✓ {{ l.administered_by or '—' }} · {{ (l.administered_at | bjtime).strftime('%H:%M') if l.administered_at else '' }}
       {% if l.dose_actual %} · 实际 {{ l.dose_actual }}{% endif %}
       {% if l.notes %} · {{ l.notes }}{% endif %}
      </div>
@@ -239,7 +239,7 @@
     {% for v in vitals %}
     {% set flg = vital_flag_map.get(v.id, {}) %}
     <tr>
-     <td>{{ v.recorded_at.strftime('%m-%d %H:%M') }}</td>
+     <td>{{ (v.recorded_at | bjtime).strftime('%m-%d %H:%M') }}</td>
      <td style="{% if flg.T %}color:#dc2626;font-weight:600;{% endif %}">{{ '%.1f'|format(v.temperature_c) if v.temperature_c else '—' }}{% if flg.T == 'high' %} ↑{% elif flg.T == 'low' %} ↓{% endif %}</td>
      <td style="{% if flg.HR %}color:#dc2626;font-weight:600;{% endif %}">{{ v.hr or '—' }}{% if flg.HR == 'high' %} ↑{% elif flg.HR == 'low' %} ↓{% endif %}</td>
      <td style="{% if flg.RR %}color:#dc2626;font-weight:600;{% endif %}">{{ v.rr or '—' }}{% if flg.RR == 'high' %} ↑{% elif flg.RR == 'low' %} ↓{% endif %}</td>
@@ -314,7 +314,7 @@
     <span style="min-width:80px;">{{ io_cat_zh.get(l.category, l.category) }}</span>
     <span style="font-weight:600;min-width:70px;">{{ '%.0f'|format(l.amount_ml) }} ml</span>
     <span style="color:#475569;flex:1;min-width:0;">{{ l.notes or '' }}</span>
-    <span style="color:var(--muted);font-size:.74rem;">{{ l.recorded_at.strftime('%m-%d %H:%M') }} · {{ l.recorded_by or '—' }}</span>
+    <span style="color:var(--muted);font-size:.74rem;">{{ (l.recorded_at | bjtime).strftime('%m-%d %H:%M') }} · {{ l.recorded_by or '—' }}</span>
     {% if h.status == 'admitted' %}
     <form method="post" action="/admin/inpatient/{{ h.id }}/io/{{ l.id }}/delete" style="margin:0;" onsubmit="return confirm('删除此条 I/O 记录？');">
      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -357,7 +357,7 @@
     {% if rate > 0 %}<span style="min-width:54px;color:var(--muted);">{{ '%.0f'|format(rate) }}%</span>{% else %}<span style="min-width:54px;"></span>{% endif %}
     <span class="hc-pill" style="font-size:.74rem;border:1px solid #e5e7eb;">{{ appetite_zh.get(f.appetite_score, f.appetite_score) }}</span>
     <span style="color:#475569;flex:1;min-width:0;font-size:.78rem;">{{ f.notes or '' }}</span>
-    <span style="color:var(--muted);font-size:.74rem;">{{ f.recorded_at.strftime('%m-%d %H:%M') }} · {{ f.recorded_by or '—' }}</span>
+    <span style="color:var(--muted);font-size:.74rem;">{{ (f.recorded_at | bjtime).strftime('%m-%d %H:%M') }} · {{ f.recorded_by or '—' }}</span>
     {% if h.status == 'admitted' %}
     <form method="post" action="/admin/inpatient/{{ h.id }}/feeding/{{ f.id }}/delete" style="margin:0;" onsubmit="return confirm('删除？');">
      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -399,7 +399,7 @@
    <div style="display:flex;gap:.6rem;padding:.55rem .75rem;background:{% if loop.index == 1 %}#fefce8{% else %}#fafafa{% endif %};border-radius:6px;border-left:3px solid {% if n.shift == 'morning' %}#3b82f6{% elif n.shift == 'afternoon' %}#f97316{% else %}#7c3aed{% endif %};">
     <div style="font-size:.74rem;color:var(--muted);min-width:90px;line-height:1.4;">
      <div style="font-weight:600;color:#1f2937;">{{ shift_zh.get(n.shift, n.shift) }}</div>
-     <div>{{ n.recorded_at.strftime('%m-%d %H:%M') }}</div>
+     <div>{{ (n.recorded_at | bjtime).strftime('%m-%d %H:%M') }}</div>
      <div>{{ n.recorded_by or '—' }}</div>
     </div>
     <div style="flex:1;font-size:.9rem;white-space:pre-wrap;line-height:1.5;color:#1f2937;">{{ n.content }}</div>

@@ -126,7 +126,7 @@
         {% if t.note %}<span class="ukm-italic" style="font-size:11px;margin-left:6px;color:var(--ink-3);">{{ t.note[:18] }}</span>{% endif %}
       </div>
       <div class="ukm-row-sub">
-        {{ t.created_at.strftime('%m-%d %H:%M') if t.created_at else '—' }}
+        {{ (t.created_at | bjtime).strftime('%m-%d %H:%M') if t.created_at else '—' }}
         {% if t.operator %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ t.operator }}{% endif %}
         <span style="margin:0 5px;color:var(--ink-4);">·</span>
         余 <span class="ukm-num" style="font-style:normal;">{{ '%g'|format(t.qty_after or 0) }}</span>

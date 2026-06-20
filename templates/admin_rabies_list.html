@@ -91,7 +91,7 @@
  {% endif %}
  </td>
  <td data-label="登记时间" style="color:var(--muted);font-size:0.8rem;">
- {{ rec.created_at.strftime('%m-%d %H:%M') if rec.created_at else '—' }}
+ {{ (rec.created_at | bjtime).strftime('%m-%d %H:%M') if rec.created_at else '—' }}
  </td>
  <td class="actions" style="text-align:right;">
  <a href="/admin/rabies/{{ rec.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">详情 <i data-lucide="arrow-right"></i></a>

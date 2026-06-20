@@ -29,7 +29,7 @@
         {% if r.cust %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name }}</span>{% endif %}
       </div>
       <div class="ukm-row-sub">
-        {{ r.d.created_at.strftime('%Y-%m-%d') if r.d.created_at else '—' }}
+        {{ (r.d.created_at | bjtime).strftime('%Y-%m-%d') if r.d.created_at else '—' }}
         <span style="margin:0 5px;color:var(--ink-4);">·</span>
         收&nbsp;<span class="ukm-num" style="font-style:normal;">¥{{ '%.0f'|format(r.d.amount or 0) }}</span>
         {% if r.d.applied_amount and r.d.applied_amount > 0 %}<span style="margin:0 5px;color:var(--ink-4);">·</span>已抵&nbsp;<span class="ukm-num" style="font-style:normal;color:var(--ink-2);">¥{{ '%.0f'|format(r.d.applied_amount) }}</span>{% endif %}

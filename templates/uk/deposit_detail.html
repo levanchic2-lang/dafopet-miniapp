@@ -72,7 +72,7 @@
     {{ cust.name if cust else '—' }}
     {% if cust and cust.phone %} <span class="sep">·</span> {{ cust.phone }}{% endif %}
     {% if pet %} <span class="sep">·</span> {{ pet.name }}{% endif %}
-    <span class="sep">·</span> 收 {{ dep.created_at.strftime('%Y-%m-%d %H:%M') if dep.created_at else '—' }}
+    <span class="sep">·</span> 收 {{ (dep.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if dep.created_at else '—' }}
     {% if dep.operator %} <span class="sep">·</span> 收款 {{ dep.operator }}{% endif %}
   </div>
 </div>
@@ -134,7 +134,7 @@
         <tbody>
           {% for r in apply_rows %}
           <tr>
-            <td style="color:var(--ink-3);">{{ r.at.strftime('%Y-%m-%d %H:%M') if r.at else '—' }}</td>
+            <td style="color:var(--ink-3);">{{ (r.at | bjtime).strftime('%Y-%m-%d %H:%M') if r.at else '—' }}</td>
             <td class="num"><b>¥{{ '%.2f'|format(r.amount) }}</b></td>
             <td>
               {% if r.invoice %}
@@ -161,7 +161,7 @@
         <tbody>
           {% for r in refund_rows %}
           <tr>
-            <td style="color:var(--ink-3);">{{ r.at.strftime('%Y-%m-%d %H:%M') if r.at else '—' }}</td>
+            <td style="color:var(--ink-3);">{{ (r.at | bjtime).strftime('%Y-%m-%d %H:%M') if r.at else '—' }}</td>
             <td class="num"><b style="color:var(--accent-red);">¥{{ '%.2f'|format(r.amount) }}</b></td>
             <td style="color:var(--ink-2);">{{ r.actor or '—' }}</td>
           </tr>
@@ -184,7 +184,7 @@
       <h2>作 废 记 录</h2>
       <div class="dd-note">
         <b style="color:var(--accent-red);">已作废</b>
-        · {{ cancel_row.at.strftime('%Y-%m-%d %H:%M') if cancel_row.at else '—' }}
+        · {{ (cancel_row.at | bjtime).strftime('%Y-%m-%d %H:%M') if cancel_row.at else '—' }}
         · {{ cancel_row.actor or '—' }}
       </div>
     </div>

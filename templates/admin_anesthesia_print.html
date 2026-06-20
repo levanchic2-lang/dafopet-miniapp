@@ -144,7 +144,7 @@
   <div class="an-row">
     <div class="field"><span class="lbl">年(日)龄</span><span class="val">{{ pet_age or '' }}</span></div>
     <div class="field"><span class="lbl">ASA 分级</span><span class="val">{{ order.asa_grade or '—' }}</span></div>
-    <div class="field"><span class="lbl">麻醉日期</span><span class="val">{{ order.anesth_date or (order.created_at.strftime('%Y-%m-%d') if order.created_at else '') }}</span></div>
+    <div class="field"><span class="lbl">麻醉日期</span><span class="val">{{ order.anesth_date or ((order.created_at | bjtime).strftime('%Y-%m-%d') if order.created_at else '') }}</span></div>
     <div class="field"><span class="lbl">起止时间</span><span class="val">{{ (order.start_time or '—') ~ ' ~ ' ~ (order.end_time or '—') }}</span></div>
   </div>
 

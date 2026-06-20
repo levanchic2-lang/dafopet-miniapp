@@ -140,7 +140,7 @@
  {% if s.status == 'open' %}<span class="pill pill-warn">进行中</span>
  {% else %}<span class="pill pill-ok"><i data-lucide="check"></i> 已完成</span>{% endif %}
  </td>
- <td data-label="创建时间" style="color:var(--muted);font-size:0.82rem;">{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+ <td data-label="创建时间" style="color:var(--muted);font-size:0.82rem;">{{ (s.created_at | bjtime).strftime('%Y-%m-%d %H:%M') }}</td>
  <td class="actions" style="text-align:right;white-space:nowrap;">
  <a href="/admin/stocktake/{{ s.id }}" class="btn {% if s.status == 'open' %}secondary{% else %}secondary{% endif %}" style="font-size:0.78rem;padding:0.3rem 0.7rem;">
  {% if s.status == 'open' %}继续盘点{% else %}查看{% endif %}

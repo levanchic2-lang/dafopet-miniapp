@@ -252,7 +252,7 @@
  {% if inv.payment_status == 'paid' %}
  <div style="margin-top:0.75rem;padding:0.6rem 0.85rem;background:#d1fae5;border-radius:8px;font-size:0.85rem;color:#065f46;">
  <i data-lucide="check-circle-2"></i> 已收款 · {{ inv_pay_zh.get(inv.payment_method, inv.payment_method) }} ·
- {{ inv.paid_at.strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
+ {{ (inv.paid_at | bjtime).strftime('%Y-%m-%d %H:%M') if inv.paid_at else '—' }}
  </div>
  {% endif %}
  </div>
@@ -452,7 +452,7 @@
      {% if p.ref_no %}<span style="color:var(--muted);font-size:.75rem;margin-left:.4rem;">#{{ p.ref_no }}</span>{% endif %}
      </td>
      <td style="text-align:right;font-weight:600;">¥{{ '%.2f'|format(p.amount) }}</td>
-     <td style="text-align:right;color:var(--muted);font-size:.75rem;width:120px;">{{ p.created_at.strftime('%m-%d %H:%M') if p.created_at else '' }}<br>{{ p.operator or '' }}</td>
+     <td style="text-align:right;color:var(--muted);font-size:.75rem;width:120px;">{{ (p.created_at | bjtime).strftime('%m-%d %H:%M') if p.created_at else '' }}<br>{{ p.operator or '' }}</td>
      <td style="text-align:right;width:50px;">
      {% if p.status == 'success' and request.session.get('admin_role') == 'superadmin' %}
      <form method="post" action="/admin/invoices/{{ inv.id }}/payments/{{ p.id }}/void" style="display:inline;"
@@ -517,7 +517,7 @@
  {% if not is_create and inv %}
  <div class="card" style="font-size:0.8rem;color:var(--muted);">
  <div>创建：{{ inv.created_by or '—' }}</div>
- <div>{{ inv.created_at.strftime('%Y-%m-%d %H:%M') if inv.created_at else '—' }}</div>
+ <div>{{ (inv.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if inv.created_at else '—' }}</div>
  </div>
  {% endif %}
 

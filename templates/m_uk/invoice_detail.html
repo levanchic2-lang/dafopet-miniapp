@@ -219,7 +219,7 @@
       <input type="radio" name="deposit_id" value="{{ d.id }}" id="dep-{{ d.id }}" {% if loop.first %}checked{% endif %}/>
       <label for="dep-{{ d.id }}" class="info" style="cursor:pointer;">
         <div class="name">{{ deposit_category_zh.get(d.category, d.category or '押金') }}</div>
-        <div class="meta">{{ d.created_at.strftime('%m-%d') if d.created_at else '—' }}</div>
+        <div class="meta">{{ (d.created_at | bjtime).strftime('%m-%d') if d.created_at else '—' }}</div>
       </label>
       <div class="amt">¥&nbsp;{{ '%.2f'|format(d._remaining) }}</div>
     </div>

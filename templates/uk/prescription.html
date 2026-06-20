@@ -813,7 +813,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
       <h3>创&nbsp;建&nbsp;信&nbsp;息</h3>
       <div class="meta">
         <span class="lbl">创建人</span>{{ p.created_by or '—' }}<br/>
-        <span class="lbl">时间</span>{{ p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else '' }}
+        <span class="lbl">时间</span>{{ (p.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if p.created_at else '' }}
       </div>
     </div>
     {% endif %}
@@ -825,7 +825,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
       {% set is_voided = (h.status == 'voided') %}
       <a href="/admin/prescriptions/{{ h.id }}" class="px-history-row {% if is_voided %}voided{% endif %}">
         <div class="r1">
-          <span class="date">{{ h.prescribed_date or h.created_at.strftime('%Y-%m-%d') }}</span>
+          <span class="date">{{ h.prescribed_date or (h.created_at | bjtime).strftime('%Y-%m-%d') }}</span>
           <span class="id">#{{ h.id }} · {{ presc_status_zh.get(h.status, h.status) }}</span>
         </div>
         <div class="r2">

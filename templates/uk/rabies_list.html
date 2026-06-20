@@ -120,7 +120,7 @@
         {% elif rec.status == 'completed' %}<span class="rb-pill ok">已完成</span>
         {% else %}<span class="rb-pill gray">{{ status_zh.get(rec.status, rec.status) }}</span>{% endif %}
       </td>
-      <td class="dim num">{{ rec.created_at.strftime('%m-%d %H:%M') if rec.created_at else '—' }}</td>
+      <td class="dim num">{{ (rec.created_at | bjtime).strftime('%m-%d %H:%M') if rec.created_at else '—' }}</td>
       <td style="text-align:right;"><a href="/admin/rabies/{{ rec.id }}" class="rb-btn ghost sm">详&nbsp;情</a></td>
     </tr>
     {% endfor %}

@@ -168,7 +168,7 @@ function toggleLian(btn) {
   <div class="rx-row">
     <div class="field"><span class="lbl">体重</span><span class="val">{{ ('%.2fKg'|format(pet_weight)) if pet_weight else '' }}</span></div>
     <div class="field"><span class="lbl">年(日)龄</span><span class="val">{{ pet_age or '' }}</span></div>
-    <div class="field" style="flex:1.4;"><span class="lbl">开具日期</span><span class="val">{{ presc.prescribed_date or (presc.created_at.strftime('%Y-%m-%d %H:%M') if presc.created_at else '') }}</span></div>
+    <div class="field" style="flex:1.4;"><span class="lbl">开具日期</span><span class="val">{{ presc.prescribed_date or ((presc.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if presc.created_at else '') }}</span></div>
   </div>
 
   <div class="rx-body">

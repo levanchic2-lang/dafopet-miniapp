@@ -121,7 +121,7 @@
   <div class="ukm-row" style="cursor:default;align-items:flex-start;">
     <div class="ukm-row-body">
       <div class="ukm-row-title">
-        <span class="ukm-num">{{ e.recorded_at.strftime('%H:%M') }}</span>
+        <span class="ukm-num">{{ (e.recorded_at | bjtime).strftime('%H:%M') }}</span>
         {% if e.recorded_by %}<span class="ukm-italic" style="font-size:11px;margin-left:8px;">{{ e.recorded_by }}</span>{% endif %}
       </div>
       <div class="ukm-row-sub" style="line-height:1.9;">
@@ -139,7 +139,7 @@
     </div>
     {% if sheet.status != 'closed' %}
     <form method="post" action="/admin/anesthesia-monitor/{{ sheet.id }}/entry/{{ e.id }}/delete" style="margin:0;"
-          onsubmit="return confirm('删除这条 {{ e.recorded_at.strftime('%H:%M') }} 记录？');">
+          onsubmit="return confirm('删除这条 {{ (e.recorded_at | bjtime).strftime('%H:%M') }} 记录？');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
       <input type="hidden" name="next_url" value="{{ next_url }}#log"/>
       <button type="submit" class="ukm-btn hair" style="padding:4px 10px;font-size:12px;color:var(--accent-red);border-color:var(--hair);">删</button>

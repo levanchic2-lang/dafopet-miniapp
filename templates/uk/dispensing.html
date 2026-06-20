@@ -150,7 +150,7 @@
             {% endif %}
           </td>
           {% endif %}
-          <td class="num dim" style="white-space:nowrap;">{{ p.prescribed_date or p.created_at.strftime('%Y-%m-%d') }}</td>
+          <td class="num dim" style="white-space:nowrap;">{{ p.prescribed_date or (p.created_at | bjtime).strftime('%Y-%m-%d') }}</td>
           <td>
             <div class="name">{{ cust.name if cust else '—' }}</div>
             <div class="dim">{% if pet %}{{ pet.name }}{% else %}—{% endif %}</div>

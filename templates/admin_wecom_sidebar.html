@@ -170,7 +170,7 @@
       <div class="name">{{ cust.name }}{% if link.remark_name and link.remark_name != cust.name %} · <span style="color:#6b7280;font-weight:500;">{{ link.remark_name }}</span>{% endif %}</div>
       <div class="meta">
         📱 {{ cust.phone or '未填手机' }}
-        {% if cust.created_at %} · 建档 {{ cust.created_at.strftime('%y-%m-%d') }}{% endif %}
+        {% if cust.created_at %} · 建档 {{ (cust.created_at | bjtime).strftime('%y-%m-%d') }}{% endif %}
       </div>
     </div>
     <a href="/admin/customers/{{ cust.id }}" target="_blank" style="font-size:.7rem;color:#1d4ed8;">完整档案 →</a>

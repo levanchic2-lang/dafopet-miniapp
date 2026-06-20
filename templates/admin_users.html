@@ -40,7 +40,7 @@
  {% if u.role == 'superadmin' %}<span class="badge b-done">超级管理员</span>{% else %}<span class="badge b-pending">员工</span>{% endif %}
  {% endif %}
  </td>
- <td style="padding:0.55rem 0.75rem;color:var(--muted);">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+ <td style="padding:0.55rem 0.75rem;color:var(--muted);">{{ (u.created_at | bjtime).strftime('%Y-%m-%d') }}</td>
  <td style="padding:0.55rem 0.75rem;text-align:right;">
  <div style="display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;">
  {% if u.username != current_username %}
@@ -84,7 +84,7 @@
  <tr style="border-bottom:1px solid var(--border);">
  <td style="padding:0.5rem 0.75rem;">{{ u.username }}</td>
  <td style="padding:0.5rem 0.75rem;">{% if u.role == 'superadmin' %}<span class="badge b-done">超级管理员</span>{% else %}<span class="badge b-pending">员工</span>{% endif %}</td>
- <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+ <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ (u.created_at | bjtime).strftime('%Y-%m-%d') }}</td>
  <td style="padding:0.5rem 0.75rem;text-align:right;">
  <form method="post" action="/admin/users/{{ u.id }}/toggle" style="margin:0;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

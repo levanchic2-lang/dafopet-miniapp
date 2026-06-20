@@ -375,11 +375,11 @@
 {# 状态横幅 #}
 {% if h.status == 'admitted' %}
 <div class="ipd-banner admitted">
-  <b>住院中</b> · 已入住 <span class="nums">{{ days }}</span> 天 · 入院 <span class="nums">{{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span>
+  <b>住院中</b> · 已入住 <span class="nums">{{ days }}</span> 天 · 入院 <span class="nums">{{ (h.admitted_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span>
 </div>
 {% elif h.status == 'discharged' %}
 <div class="ipd-banner discharged">
-  <b>已出院</b> · 共住 <span class="nums">{{ days }}</span> 天 · <span class="nums">{{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }} → {{ h.discharged_at.strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}</span>
+  <b>已出院</b> · 共住 <span class="nums">{{ days }}</span> 天 · <span class="nums">{{ (h.admitted_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }} → {{ (h.discharged_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}</span>
   {% if h.invoice_id %} · <a href="/admin/invoices/{{ h.invoice_id }}" style="color:var(--ink);border-bottom:0.5px solid var(--ink-3);">查看账单</a>{% endif %}
 </div>
 {% else %}
@@ -397,7 +397,7 @@
       <span style="margin:0 6px;color:var(--ink-4);">·</span>
       {{ latest_handover.recorded_by or '—' }}
       <span style="margin:0 6px;color:var(--ink-4);">·</span>
-      {{ latest_handover.recorded_at.strftime('%m-%d %H:%M') }}
+      {{ (latest_handover.recorded_at | bjtime).strftime('%m-%d %H:%M') }}
     </div>
     <div class="content">{{ latest_handover.content }}</div>
   </div>
@@ -413,9 +413,9 @@
     <div class="ipd-section">
       <div class="ipd-section-head"><h2>住&nbsp;院&nbsp;信&nbsp;息</h2></div>
       <div>
-        <div class="ipd-info-line"><span class="lbl">入院时间</span><span class="val">{{ h.admitted_at.strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span></div>
+        <div class="ipd-info-line"><span class="lbl">入院时间</span><span class="val">{{ (h.admitted_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span></div>
         <div class="ipd-info-line"><span class="lbl">预计出院</span><span class="val">{{ h.expected_discharge_date or '—' }}</span></div>
-        {% if h.discharged_at %}<div class="ipd-info-line"><span class="lbl">实际出院</span><span class="val">{{ h.discharged_at.strftime('%Y-%m-%d %H:%M') }}</span></div>{% endif %}
+        {% if h.discharged_at %}<div class="ipd-info-line"><span class="lbl">实际出院</span><span class="val">{{ (h.discharged_at | bjtime).strftime('%Y-%m-%d %H:%M') }}</span></div>{% endif %}
         <div class="ipd-info-line"><span class="lbl">当前笼位</span><span class="val txt">{% if cage %}<b>{{ cage.code }}</b> · {{ kind_zh.get(cage.kind, cage.kind) }} · ¥{{ '%.2f'|format(cage.daily_rate) }}/天{% else %}未指定{% endif %}</span></div>
         <div class="ipd-info-line"><span class="lbl">日费率</span><span class="val">¥{{ '%.2f'|format(h.daily_rate_override if h.daily_rate_override > 0 else (cage.daily_rate if cage else 0)) }}{% if h.daily_rate_override > 0 %} <span style="font-size:8.5pt;color:var(--ink-3);font-style:italic;">已覆盖笼默认</span>{% endif %}</span></div>
         <div class="ipd-info-line"><span class="lbl">主治医生</span><span class="val txt">{{ visit.vet_name if visit else '—' }}</span></div>
@@ -461,7 +461,7 @@
         <b>漏药 {{ overdue_logs|length }} 次</b> · 昨日及之前
         <ul>
           {% for l in overdue_logs[:5] if l.prescription_item %}
-          <li>{{ l.scheduled_at.strftime('%m-%d %H:%M') }} · {{ l.prescription_item.drug_name }}</li>
+          <li>{{ (l.scheduled_at | bjtime).strftime('%m-%d %H:%M') }} · {{ l.prescription_item.drug_name }}</li>
           {% endfor %}
           {% if overdue_logs|length > 5 %}<li>还有 {{ overdue_logs|length - 5 }} 条…</li>{% endif %}
         </ul>
@@ -482,12 +482,12 @@
         {% for l in today_logs if l.prescription_item %}
         {% set overdue = (l.status == 'pending' and l.scheduled_at < now) %}
         <div class="ipd-med {{ 'done' if l.status == 'done' else 'skipped' if l.status == 'skipped' else 'overdue' if overdue else '' }}">
-          <div class="time">{{ l.scheduled_at.strftime('%H:%M') }}</div>
+          <div class="time">{{ (l.scheduled_at | bjtime).strftime('%H:%M') }}</div>
           <div class="body">
             <div class="drug">{{ l.prescription_item.drug_name }}<span class="dose">{{ l.prescription_item.dose_amount }}{{ l.prescription_item.dose_unit }} · 第 {{ l.day_index }} 天第 {{ l.dose_index }} 次</span></div>
             {% if l.prescription_item.instructions %}<div class="ins">{{ l.prescription_item.instructions }}</div>{% endif %}
             {% if l.status == 'done' %}
-            <div class="signoff">✓ {{ l.administered_by or '—' }} · {{ l.administered_at.strftime('%H:%M') if l.administered_at else '' }}{% if l.dose_actual %} · 实际 {{ l.dose_actual }}{% endif %}{% if l.notes %} · {{ l.notes }}{% endif %}</div>
+            <div class="signoff">✓ {{ l.administered_by or '—' }} · {{ (l.administered_at | bjtime).strftime('%H:%M') if l.administered_at else '' }}{% if l.dose_actual %} · 实际 {{ l.dose_actual }}{% endif %}{% if l.notes %} · {{ l.notes }}{% endif %}</div>
             {% elif l.status == 'skipped' %}
             <div class="signoff skip">跳过 by {{ l.administered_by or '—' }}{% if l.notes %} · {{ l.notes }}{% endif %}</div>
             {% endif %}
@@ -565,7 +565,7 @@
           {% for v in vitals %}
           {% set flg = vital_flag_map.get(v.id, {}) %}
           <tr>
-            <td class="num">{{ v.recorded_at.strftime('%m-%d %H:%M') }}</td>
+            <td class="num">{{ (v.recorded_at | bjtime).strftime('%m-%d %H:%M') }}</td>
             <td class="num {% if flg.T %}over{% endif %}">{{ '%.1f'|format(v.temperature_c) if v.temperature_c else '—' }}{% if flg.T == 'high' %} ↑{% elif flg.T == 'low' %} ↓{% endif %}</td>
             <td class="num {% if flg.HR %}over{% endif %}">{{ v.hr or '—' }}{% if flg.HR == 'high' %} ↑{% elif flg.HR == 'low' %} ↓{% endif %}</td>
             <td class="num {% if flg.RR %}over{% endif %}">{{ v.rr or '—' }}{% if flg.RR == 'high' %} ↑{% elif flg.RR == 'low' %} ↓{% endif %}</td>
@@ -639,7 +639,7 @@
           <span class="cat">{{ io_cat_zh.get(l.category, l.category) }}</span>
           <span class="amt">{{ '%.0f'|format(l.amount_ml) }} ml</span>
           <span class="note">{{ l.notes or '' }}</span>
-          <span class="meta">{{ l.recorded_at.strftime('%m-%d %H:%M') }} · {{ l.recorded_by or '—' }}</span>
+          <span class="meta">{{ (l.recorded_at | bjtime).strftime('%m-%d %H:%M') }} · {{ l.recorded_by or '—' }}</span>
           {% if h.status == 'admitted' %}
           <form method="post" action="/admin/inpatient/{{ h.id }}/io/{{ l.id }}/delete" style="margin:0;" onsubmit="return confirm('删除此条 I/O 记录？');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -684,7 +684,7 @@
           {% if rate > 0 %}<span class="pct">{{ '%.0f'|format(rate) }}%</span>{% else %}<span class="pct"></span>{% endif %}
           <span class="score">{{ appetite_zh.get(f.appetite_score, f.appetite_score) }}</span>
           <span class="note">{{ f.notes or '' }}</span>
-          <span class="meta">{{ f.recorded_at.strftime('%m-%d %H:%M') }} · {{ f.recorded_by or '—' }}</span>
+          <span class="meta">{{ (f.recorded_at | bjtime).strftime('%m-%d %H:%M') }} · {{ f.recorded_by or '—' }}</span>
           {% if h.status == 'admitted' %}
           <form method="post" action="/admin/inpatient/{{ h.id }}/feeding/{{ f.id }}/delete" style="margin:0;" onsubmit="return confirm('删除？');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -725,7 +725,7 @@
         <div class="ipd-handover {{ n.shift }} {% if loop.index == 1 %}latest{% endif %}">
           <div class="meta">
             <div class="shift-name">{{ shift_zh.get(n.shift, n.shift) }}</div>
-            <div>{{ n.recorded_at.strftime('%m-%d %H:%M') }}</div>
+            <div>{{ (n.recorded_at | bjtime).strftime('%m-%d %H:%M') }}</div>
             <div>{{ n.recorded_by or '—' }}</div>
           </div>
           <div class="content">{{ n.content }}</div>

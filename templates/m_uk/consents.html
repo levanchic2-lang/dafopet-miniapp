@@ -29,7 +29,7 @@
       <div class="ukm-row-title">{{ r.cust.name if r.cust else '—' }}{% if r.pet %}<span class="ukm-italic" style="font-size:13px;margin-left:6px;color:var(--ink-2);">{{ r.pet.name }}</span>{% endif %}</div>
       <div class="ukm-row-sub">
         {{ r.t.title[:16] ~ '…' if r.t.title and r.t.title|length > 16 else (r.t.title or '协议') }}
-        <span style="margin:0 5px;color:var(--ink-4);">·</span>{{ r.t.initiated_at.strftime('%Y-%m-%d') if r.t.initiated_at else '—' }}
+        <span style="margin:0 5px;color:var(--ink-4);">·</span>{{ (r.t.initiated_at | bjtime).strftime('%Y-%m-%d') if r.t.initiated_at else '—' }}
       </div>
     </div>
     {% if r.t.status == 'pending' %}<span class="ukm-pill amber">待签</span>

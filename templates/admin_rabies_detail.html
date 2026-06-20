@@ -118,7 +118,7 @@
    {% else %}
      {{ rec.owner_name }}
    {% endif %}
-   · {{ rec.owner_phone }} · 登记于 {{ rec.created_at.strftime('%Y-%m-%d %H:%M') if rec.created_at else '—' }}
+   · {{ rec.owner_phone }} · 登记于 {{ (rec.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if rec.created_at else '—' }}
    {% if rec.pet_id %}
      · <a href="/admin/customers/{{ rec.customer_id }}#pet-{{ rec.pet_id }}" style="color:#1d4ed8;text-decoration:none;">查看宠物档案 <i data-lucide="paw-print" style="width:12px;height:12px;vertical-align:-2px;"></i></a>
    {% endif %}
@@ -207,7 +207,7 @@
  <img src="/admin/rabies/{{ rec.id }}/signature/owner" style="max-height:80px;display:block;" alt="主人签名"/>
  </div>
  <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem;">
- 签名时间：{{ rec.owner_signed_at.strftime('%Y-%m-%d %H:%M') if rec.owner_signed_at else '—' }}
+ 签名时间：{{ (rec.owner_signed_at | bjtime).strftime('%Y-%m-%d %H:%M') if rec.owner_signed_at else '—' }}
  </div>
  {% else %}
  <span style="color:var(--muted);font-size:0.88rem;">暂无签名</span>

@@ -408,7 +408,7 @@
         <td class="phone">{{ c.phone or '—' }}</td>
         <td style="color:var(--ink-3);font-size:10pt;">{{ c.address|truncate(28) if c.address else '—' }}</td>
         <td style="color:var(--ink-3);font-size:9pt;letter-spacing:1.5px;font-style:italic;">{{ c.source | source_zh }}</td>
-        <td class="right" style="color:var(--ink-3);font-size:9.5pt;">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
+        <td class="right" style="color:var(--ink-3);font-size:9.5pt;">{{ (c.created_at | bjtime).strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
       </tr>
       {% endfor %}
     </tbody>

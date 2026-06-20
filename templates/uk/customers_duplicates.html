@@ -98,7 +98,7 @@
         <td class="num">{% if r.n_invoices %}<b>{{ r.n_invoices }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
         <td class="num">{% if r.n_appts %}<b>{{ r.n_appts }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
         <td style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{{ r.c.source | source_zh }}</td>
-        <td style="color:var(--ink-3);font-style:italic;font-size:9.5pt;font-family:var(--font-numeric);">{{ r.c.created_at.strftime('%Y-%m-%d') if r.c.created_at else '—' }}</td>
+        <td style="color:var(--ink-3);font-style:italic;font-size:9.5pt;font-family:var(--font-numeric);">{{ (r.c.created_at | bjtime).strftime('%Y-%m-%d') if r.c.created_at else '—' }}</td>
         <td style="text-align:right;"><a href="/admin/customers/{{ r.c.id }}" target="_blank" style="font-size:9pt;font-style:italic;color:var(--ink-3);">查看 →</a></td>
       </tr>
       {% endfor %}

@@ -265,7 +265,7 @@
 {% if visit_closed %}
 <div class="msg" style="background:#fef3c7;border-left:4px solid #d97706;color:#78350f;padding:0.7rem 0.95rem;border-radius:6px;margin-bottom:0.75rem;display:flex;align-items:center;gap:0.55rem;">
  <i data-lucide="lock"></i>
- <span><b>病历已结束</b> · 由 {{ v.closed_by or '—' }} 于 {{ v.closed_at.strftime('%Y-%m-%d %H:%M') if v.closed_at else '—' }} 关闭。
+ <span><b>病历已结束</b> · 由 {{ v.closed_by or '—' }} 于 {{ (v.closed_at | bjtime).strftime('%Y-%m-%d %H:%M') if v.closed_at else '—' }} 关闭。
  病历及关联处方/检查单不可再修改（合规要求，不可重开）。如需追加请新建病历。</span>
 </div>
 {% endif %}
@@ -398,7 +398,7 @@
      <span style="background:#dbeafe;color:#1e40af;font-weight:600;width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.85rem;">{{ fu.round_no }}</span>
      <div style="flex:1;min-width:140px;">
        <div style="font-weight:600;">{{ fu.round_name or ('第 ' ~ fu.round_no ~ ' 轮') }}</div>
-       <div style="color:#64748b;font-size:.78rem;">📅 {{ fu.planned_date or '—' }}{% if fu.sent_at %} · 已发于 {{ fu.sent_at.strftime('%m-%d %H:%M') }}{% endif %}</div>
+       <div style="color:#64748b;font-size:.78rem;">📅 {{ fu.planned_date or '—' }}{% if fu.sent_at %} · 已发于 {{ (fu.sent_at | bjtime).strftime('%m-%d %H:%M') }}{% endif %}</div>
      </div>
      <span style="background:{{ _STATUS_BG.get(fu.status, '#e2e8f0') }};color:{{ _STATUS_FG.get(fu.status, '#475569') }};font-size:.72rem;padding:3px 10px;border-radius:4px;font-weight:600;">{{ fu_status_zh.get(fu.status, fu.status) }}</span>
      {% if fu.response == 'needs_visit' %}<span style="background:#fef3c7;color:#92400e;font-size:.72rem;padding:3px 10px;border-radius:4px;">需复诊</span>{% endif %}
@@ -480,7 +480,7 @@
 
  {# 自动保存状态条 #}
  <div class="save-bar">
- <span class="saved-hint" id="autosave-status" style="font-size:0.9rem;"><i data-lucide="check"></i> 自动保存 · 最后更新 {{ v.updated_at.strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
+ <span class="saved-hint" id="autosave-status" style="font-size:0.9rem;"><i data-lucide="check"></i> 自动保存 · 最后更新 {{ (v.updated_at | bjtime).strftime('%Y-%m-%d %H:%M') if v.updated_at else '—' }}</span>
  </div>
 </form>
 
@@ -616,7 +616,7 @@
  <div class="record-item" style="cursor:default;align-items:flex-start;">
  <a href="/admin/exam-orders/{{ eo.id }}" style="display:block;flex:1;text-decoration:none;color:inherit;">
  <div style="display:flex;align-items:center;gap:0.65rem;flex-wrap:wrap;">
- <span class="ri-date">{{ eo.created_at.strftime('%m-%d %H:%M') if eo.created_at else '—' }}</span>
+ <span class="ri-date">{{ (eo.created_at | bjtime).strftime('%m-%d %H:%M') if eo.created_at else '—' }}</span>
  <span class="pill {% if eo.status == 'completed' %}pill-ok{% else %}pill-warn{% endif %}">
  {{ '已出报告' if eo.status == 'completed' else '待出报告' }}
  </span>

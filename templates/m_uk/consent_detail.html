@@ -87,7 +87,7 @@
     <div class="ukm-card-sub" style="margin-bottom:6px;">客户签字</div>
     <img src="/uploads/{{ task.signature_path }}" alt="签字"/>
     <div class="ukm-card-sub" style="margin-top:6px;">
-      签署时间 {{ task.signed_at.strftime('%Y-%m-%d %H:%M') if task.signed_at else '—' }}{% if task.signed_ip %}<span class="sep">·</span>IP {{ task.signed_ip }}{% endif %}
+      签署时间 {{ (task.signed_at | bjtime).strftime('%Y-%m-%d %H:%M') if task.signed_at else '—' }}{% if task.signed_ip %}<span class="sep">·</span>IP {{ task.signed_ip }}{% endif %}
     </div>
   </div>
   {% endif %}
@@ -101,7 +101,7 @@
     <div class="kv"><span class="k">类&nbsp;型</span><span class="v">{{ category_zh.get(task.template.category if task.template else '', '—') }}</span></div>
     <div class="kv"><span class="k">状&nbsp;态</span><span class="v">{{ status_zh.get(task.status, task.status) }}</span></div>
     <div class="kv"><span class="k">发&nbsp;起&nbsp;人</span><span class="v">{{ task.initiated_by or '—' }}</span></div>
-    <div class="kv"><span class="k">发&nbsp;起&nbsp;时&nbsp;间</span><span class="v">{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '—' }}</span></div>
+    <div class="kv"><span class="k">发&nbsp;起&nbsp;时&nbsp;间</span><span class="v">{{ (task.initiated_at | bjtime).strftime('%Y-%m-%d %H:%M') if task.initiated_at else '—' }}</span></div>
     {% if task.expires_at %}<div class="kv"><span class="k">有&nbsp;效&nbsp;期&nbsp;至</span><span class="v">{{ task.expires_at }}</span></div>{% endif %}
     {% if task.notes %}<div class="kv"><span class="k">备&nbsp;注</span><span class="v">{{ task.notes }}</span></div>{% endif %}
   </div>

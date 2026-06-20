@@ -25,7 +25,7 @@
   {% set pct = (r.counted * 100 // r.total) if r.total else 0 %}
   <a class="m-card" href="/m/stocktake/{{ r.sess.id }}?filter=uncounted" style="display:block;text-decoration:none;color:inherit;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div style="font-size:11px;color:#94a3b8;">#{{ r.sess.id }} · {{ r.sess.created_at.strftime('%Y-%m-%d %H:%M') if r.sess.created_at else '—' }}</div>
+      <div style="font-size:11px;color:#94a3b8;">#{{ r.sess.id }} · {{ (r.sess.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if r.sess.created_at else '—' }}</div>
       <div style="font-size:11px;color:#d97706;font-weight:700;">{{ r.counted }} / {{ r.total }}</div>
     </div>
     <div style="font-size:16px;font-weight:700;color:#0f172a;line-height:1.35;">

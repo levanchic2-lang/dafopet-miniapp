@@ -53,7 +53,7 @@
       <div class="cage-meta">
         {% if cage %}{{ kind_zh.get(cage.kind, cage.kind) }}<br>{% endif %}
         住院 #{{ h.id }}<br>
-        入院 {{ h.admitted_at.strftime('%m-%d %H:%M') if h.admitted_at else '—' }}
+        入院 {{ (h.admitted_at | bjtime).strftime('%m-%d %H:%M') if h.admitted_at else '—' }}
       </div>
     </div>
 

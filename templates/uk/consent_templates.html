@@ -77,7 +77,7 @@
       </td>
       <td>{{ category_zh.get(t.category, t.category) }}</td>
       <td class="num" style="text-align:right;">{{ used_map.get(t.id, 0) }} 次</td>
-      <td class="num dim">{{ t.updated_at.strftime('%Y-%m-%d %H:%M') if t.updated_at else '—' }}</td>
+      <td class="num dim">{{ (t.updated_at | bjtime).strftime('%Y-%m-%d %H:%M') if t.updated_at else '—' }}</td>
       <td>
         {% if t.is_active %}<span class="ct-pill ok">上架</span>{% else %}<span class="ct-pill gray">下架</span>{% endif %}
       </td>

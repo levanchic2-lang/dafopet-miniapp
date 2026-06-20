@@ -69,7 +69,7 @@
   <a class="ukm-row" href="/m/inpatient/{{ h.id }}">
     <div class="ukm-row-body">
       <div class="ukm-row-title">{{ h.cage_code or '—' }}&nbsp;·&nbsp;{{ h.reason[:20] if h.reason else '住院观察' }}</div>
-      <div class="ukm-row-sub">入院 {{ h.admitted_at.strftime('%m-%d') if h.admitted_at else '—' }}</div>
+      <div class="ukm-row-sub">入院 {{ (h.admitted_at | bjtime).strftime('%m-%d') if h.admitted_at else '—' }}</div>
     </div>
     <span class="ukm-pill amber">住院</span>
     <span class="ukm-row-arrow">›</span>

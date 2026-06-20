@@ -324,11 +324,11 @@
       </div>
 
       <div class="ip-card-foot">
-        <span>入院 {{ h.admitted_at.strftime('%m-%d %H:%M') if h.admitted_at else '—' }}</span>
+        <span>入院 {{ (h.admitted_at | bjtime).strftime('%m-%d %H:%M') if h.admitted_at else '—' }}</span>
         {% if h.expected_discharge_date and h.status == 'admitted' %}
           <span>预计出 {{ h.expected_discharge_date[5:] }}</span>
         {% elif h.discharged_at %}
-          <span>已出 {{ h.discharged_at.strftime('%m-%d %H:%M') }}</span>
+          <span>已出 {{ (h.discharged_at | bjtime).strftime('%m-%d %H:%M') }}</span>
         {% endif %}
       </div>
     </a>

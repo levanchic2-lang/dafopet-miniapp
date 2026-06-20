@@ -140,7 +140,7 @@
               {% if not (r['st'].presc or r['st'].exam or r['st'].invoice) %}<span class="dc-meta">无关联</span>{% endif %}
             </td>
             <td>
-              <div class="dc-meta">{{ r['v'].created_at.strftime('%Y-%m-%d %H:%M') if r['v'].created_at else '—' }}</div>
+              <div class="dc-meta">{{ (r['v'].created_at | bjtime).strftime('%Y-%m-%d %H:%M') if r['v'].created_at else '—' }}</div>
               {% if r['v'].created_by %}<div class="dc-meta">{{ r['v'].created_by }}</div>{% endif %}
               {% if r['v'].status == 'closed' %}<div class="dc-meta">已结束</div>{% endif %}
             </td>

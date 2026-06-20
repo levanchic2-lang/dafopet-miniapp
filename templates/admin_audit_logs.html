@@ -72,7 +72,7 @@
       {% for r in rows %}
       <tr style="border-bottom:1px solid #f1f5f9;">
         <td style="padding:.4rem .5rem;color:#64748b;font-size:.78rem;font-variant-numeric:tabular-nums;white-space:nowrap;">
-          {{ r.created_at.strftime('%Y-%m-%d %H:%M:%S') if r.created_at else '—' }}
+          {{ (r.created_at | bjtime).strftime('%Y-%m-%d %H:%M:%S') if r.created_at else '—' }}
         </td>
         <td style="padding:.4rem .5rem;">
           {% if r._doc_type %}<span style="font-weight:600;color:#1e293b;">{{ r._doc_type_zh }}</span>{% else %}<span style="color:#94a3b8;">—</span>{% endif %}

@@ -106,7 +106,7 @@
           <td style="font-family:var(--font-numeric); color:var(--ink-2);">{{ row['c'].phone or '—' }}</td>
           <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt;">{{ row['c'].source | source_zh }}</td>
           <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt; font-family:var(--font-numeric);">
-            {{ row['c'].created_at.strftime('%Y-%m-%d') if row['c'].created_at else '—' }}
+            {{ (row['c'].created_at | bjtime).strftime('%Y-%m-%d') if row['c'].created_at else '—' }}
           </td>
           <td class="cl-block-label">{{ row['blockers']|join(' · ') if row['blockers'] else '' }}</td>
         </tr>
@@ -166,7 +166,7 @@
           </td>
           <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt;">{{ row['c'].source | source_zh }}</td>
           <td style="color:var(--ink-3); font-style:italic; font-size:9.5pt; font-family:var(--font-numeric);">
-            {{ row['c'].created_at.strftime('%Y-%m-%d') if row['c'].created_at else '—' }}
+            {{ (row['c'].created_at | bjtime).strftime('%Y-%m-%d') if row['c'].created_at else '—' }}
           </td>
           <td class="cl-block-label">{{ row['blockers']|join(' · ') if row['blockers'] else '' }}</td>
         </tr>
@@ -239,7 +239,7 @@
           <td class="num">{% if r['n_invoices'] %}<b>{{ r['n_invoices'] }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
           <td class="num">{% if r['n_appts'] %}<b>{{ r['n_appts'] }}</b>{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
           <td style="color:var(--ink-3);font-style:italic;font-size:9.5pt;font-family:var(--font-numeric);">
-            {{ r['c'].created_at.strftime('%Y-%m-%d') if r['c'].created_at else '—' }}
+            {{ (r['c'].created_at | bjtime).strftime('%Y-%m-%d') if r['c'].created_at else '—' }}
           </td>
           <td style="text-align:right;">
             <a href="/admin/customers/{{ r['c'].id }}" target="_blank" style="font-size:9pt;font-style:italic;color:var(--ink-3);">查看 →</a>

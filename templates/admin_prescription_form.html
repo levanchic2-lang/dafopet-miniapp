@@ -490,7 +490,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
  {% if is_edit and p %}
  <div class="card" style="font-size:0.82rem;color:var(--muted);">
  <div>创建：{{ p.created_by or '—' }}</div>
- <div>{{ p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else '' }}</div>
+ <div>{{ (p.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if p.created_at else '' }}</div>
  </div>
  {% endif %}
 
@@ -502,7 +502,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
    {% set is_voided = (h.status == 'voided') %}
    <a href="/admin/prescriptions/{{ h.id }}" style="display:block;padding:.4rem 0;border-bottom:1px dashed #e2e8f0;text-decoration:none;color:inherit;{% if is_voided %}opacity:.5;{% endif %}">
      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:#475569;">
-       <span style="font-variant-numeric:tabular-nums;">{{ h.prescribed_date or h.created_at.strftime('%Y-%m-%d') }}</span>
+       <span style="font-variant-numeric:tabular-nums;">{{ h.prescribed_date or (h.created_at | bjtime).strftime('%Y-%m-%d') }}</span>
        <span style="font-size:.7rem;background:#f1f5f9;padding:1px 6px;border-radius:3px;">
          #{{ h.id }} · {{ presc_status_zh.get(h.status, h.status) }}
        </span>

@@ -167,7 +167,7 @@ body[data-size="T80"] .dc-orders { font-size: 9.5pt; padding: 6px 8px; }
 <div class="dc-sec"><span class="zh">处方用药</span><span class="en">Prescriptions</span></div>
 {% for presc in prescriptions %}
 <div style="margin-bottom:8px;font-size:9.5pt;">
-  <div style="color:#666;">Rx{{ '%06d'|format(presc.id) }} · {{ presc.created_at.strftime('%Y-%m-%d') if presc.created_at else '' }}
+  <div style="color:#666;">Rx{{ '%06d'|format(presc.id) }} · {{ (presc.created_at | bjtime).strftime('%Y-%m-%d') if presc.created_at else '' }}
   {% if presc.vet_name %} · 处方医师 {{ presc.vet_name }}{% endif %}
   </div>
   <table class="dc-tbl">

@@ -18,7 +18,7 @@
   {% for a in rows %}
   <a class="m-card" href="/m/tnr/{{ a.id }}" style="display:block;text-decoration:none;color:inherit;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-      <div style="font-size:11px;color:#94a3b8;">#{{ a.id }} · {{ a.created_at.strftime('%m-%d %H:%M') }}</div>
+      <div style="font-size:11px;color:#94a3b8;">#{{ a.id }} · {{ (a.created_at | bjtime).strftime('%m-%d %H:%M') }}</div>
       {% if a.status == 'pending_manual' %}
       <span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">⏳ 待审</span>
       {% elif a.status == 'pre_approved' %}

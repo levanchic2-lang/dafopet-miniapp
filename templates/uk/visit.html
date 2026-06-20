@@ -393,7 +393,7 @@
     <tbody>
       {% for e in exam_orders %}
       <tr>
-        <td class="num">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
+        <td class="num">{{ (e.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
         <td class="num">{{ e._items_parsed|length }}</td>
         <td class="num">{{ e.reports|length }}</td>
         <td>
@@ -462,7 +462,7 @@
     <tbody>
       {% for so in sales_orders %}
       <tr>
-        <td class="num">{{ so.order_date or (so.created_at.strftime('%Y-%m-%d') if so.created_at else '—') }}</td>
+        <td class="num">{{ so.order_date or ((so.created_at | bjtime).strftime('%Y-%m-%d') if so.created_at else '—') }}</td>
         <td class="num">¥{{ '%.2f'|format(so.total_amount or 0) }}</td>
         <td>
           {% if so.status == 'paid' %}<span class="uk-pill green">已收款</span>
@@ -492,7 +492,7 @@
       {% for inv in invoices %}
       <tr>
         <td class="num" style="font-size:9.5pt;">{{ inv.invoice_no or ('#' ~ inv.id) }}</td>
-        <td class="num">{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
+        <td class="num">{{ inv.invoice_date or ((inv.created_at | bjtime).strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
         <td class="num">¥{{ '%.2f'|format(inv.total_amount or 0) }}</td>
         <td>
           {% if inv.payment_status == 'paid' %}<span class="uk-pill green">已支付</span>

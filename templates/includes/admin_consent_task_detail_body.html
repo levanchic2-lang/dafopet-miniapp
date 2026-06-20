@@ -13,7 +13,7 @@
    #CT{{ '%06d'|format(task.id) }}
    · 客户 {% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name }}</a>{% else %}—{% endif %}
    {% if pet %} · 宠物 <b>{{ pet.name }}</b>{% endif %}
-   · 发起时间 {{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '—' }}
+   · 发起时间 {{ (task.initiated_at | bjtime).strftime('%Y-%m-%d %H:%M') if task.initiated_at else '—' }}
  </p>
  </div>
  <div class="ph-actions">
@@ -46,7 +46,7 @@
        <div style="font-size:.85rem;color:#666;margin-bottom:.5rem;">签字（客户）：</div>
        <img class="sig-img" src="/uploads/{{ task.signature_path }}" alt="签字"/>
        <div style="font-size:.75rem;color:#888;margin-top:.4rem;">
-         签署时间：{{ task.signed_at.strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}
+         签署时间：{{ (task.signed_at | bjtime).strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}
          {% if task.signed_ip %} · IP {{ task.signed_ip }}{% endif %}
        </div>
      </div>
@@ -200,7 +200,7 @@ function copyUrl(){
         {% for log in audit_logs %}
         <tr>
           <td data-label="时间" style="white-space:nowrap;color:var(--muted);">
-            {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else '—' }}
+            {{ (log.created_at | bjtime).strftime('%Y-%m-%d %H:%M:%S') if log.created_at else '—' }}
           </td>
           <td data-label="事件" style="font-weight:600;">
             {{ event_zh.get(log.event, log.event)|safe }}

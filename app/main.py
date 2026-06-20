@@ -1769,8 +1769,8 @@ def _serialize_appointment(row: Appointment) -> dict:
         "pet_size": row.pet_size or "",
         "coat_length": row.coat_length or "",
         "addon_services": row.addon_services or "",
-        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
-        "updated_at": row.updated_at.strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
+        "created_at": (row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+        "updated_at": (row.updated_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
     }
 
 
@@ -2001,7 +2001,7 @@ async def api_apply(
             status_text="审核已通过",
             phone_masked=app_row.phone,
             note="请按约定时间携带猫咪到院",
-            submitted_at=app_row.created_at.strftime("%Y-%m-%d %H:%M") if app_row.created_at else "",
+            submitted_at=(app_row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if app_row.created_at else "",
             action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         )
     elif new_status == ApplicationStatus.pre_approved.value:
@@ -2013,7 +2013,7 @@ async def api_apply(
             status_text="预通过（待复核）",
             phone_masked=app_row.phone,
             note="医院将尽快人工复核，请保持手机畅通",
-            submitted_at=app_row.created_at.strftime("%Y-%m-%d %H:%M") if app_row.created_at else "",
+            submitted_at=(app_row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if app_row.created_at else "",
             action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         )
     elif new_status == ApplicationStatus.pending_manual.value:
@@ -2022,7 +2022,7 @@ async def api_apply(
             application_id=aid,
             openid=app_row.wechat_openid,
             applicant_name=app_row.applicant_name,
-            submitted_at=app_row.created_at.strftime("%Y-%m-%d %H:%M") if app_row.created_at else "",
+            submitted_at=(app_row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if app_row.created_at else "",
         )
         # 同步推送到员工企业微信
         try:
@@ -2348,7 +2348,7 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
             status_text="审核已通过",
             phone_masked=row.phone,
             note="请按约定时间携带猫咪到院",
-            submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+            submitted_at=(row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
             action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         )
     elif new_status == ApplicationStatus.pre_approved.value:
@@ -2360,7 +2360,7 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
             status_text="预通过（待复核）",
             phone_masked=row.phone,
             note="医院将尽快人工复核，请保持手机畅通",
-            submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+            submitted_at=(row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
             action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         )
     elif new_status == ApplicationStatus.pending_manual.value:
@@ -2369,7 +2369,7 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
             application_id=app_id,
             openid=row.wechat_openid,
             applicant_name=row.applicant_name,
-            submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+            submitted_at=(row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         )
         # 同步推送到员工企业微信
         try:
@@ -2433,13 +2433,13 @@ async def api_app_status(app_id: int, db: Session = Depends(get_db)):
         "address": row.address or "",
         "note": notes,
         "reject_reason": notes,
-        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
-        "updated_at": row.updated_at.strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
+        "created_at": (row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+        "updated_at": (row.updated_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
         "notifications": [
             {
                 "channel": n.channel,
                 "success": bool(n.success),
-                "created_at": n.created_at.strftime("%Y-%m-%d %H:%M") if n.created_at else "",
+                "created_at": (n.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if n.created_at else "",
             }
             for n in (row.notifications or [])
         ],
@@ -2989,7 +2989,7 @@ async def api_admin_customer_context(
             last_visit = db.query(Visit.visit_date).filter(Visit.customer_id == customer_id)\
                 .order_by(Visit.visit_date.desc(), Visit.id.desc()).first()
             data["summary"] = {
-                "register_date": cust.created_at.strftime("%Y-%m-%d") if cust.created_at else "",
+                "register_date": (cust.created_at + timedelta(hours=8)).strftime("%Y-%m-%d") if cust.created_at else "",
                 "pet_count": int(pet_count),
                 "lifetime_paid": round(float(paid_total), 2),
                 "last_visit": (last_visit[0] if last_visit else "") or "",
@@ -5576,7 +5576,7 @@ async def manual_approve(app_id: int, request: Request, db: Session = Depends(ge
         status_text="审核已通过",
         phone_masked=row.phone,
         note="请按约定时间携带猫咪到院",
-        submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+        submitted_at=(row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
     if next_url:
@@ -6153,8 +6153,8 @@ async def api_wechat_my_apps(payload: dict = Body(...), db: Session = Depends(ge
                 "cat_gender": row.cat_gender or "",
                 "age_estimate": row.age_estimate or "",
                 "health_note_brief": hn,
-                "created_at": row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
-                "updated_at": row.updated_at.strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
+                "created_at": (row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+                "updated_at": (row.updated_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
             }
         )
     return {"openid": openid, "items": items}
@@ -6648,7 +6648,7 @@ async def api_showcase(request: Request, db: Session = Depends(get_db)):
             "cat_gender": a.cat_gender,
             "address": a.address or "",
             "store": a.clinic_store or "",
-            "surgery_date": a.updated_at.strftime("%Y-%m-%d") if a.updated_at else "",
+            "surgery_date": (a.updated_at + timedelta(hours=8)).strftime("%Y-%m-%d") if a.updated_at else "",
             "applicant_masked": masked_name,
             "before_images": before_imgs,
             "after_images": after_imgs,
@@ -6762,7 +6762,7 @@ async def mark_scheduled(
         status_text="已预约",
         phone_masked=row.phone,
         note="请按约定时间携带猫咪到院",
-        submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+        submitted_at=(row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
     return _admin_back(request, app_id)
@@ -6803,7 +6803,7 @@ async def mark_cancelled(
         status_text="已取消",
         phone_masked=row.phone,
         note=(row.reject_reason or "如需帮助请联系医院")[:20],
-        submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+        submitted_at=(row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
     return _admin_back(request, app_id)
@@ -6839,7 +6839,7 @@ async def mark_no_show(
         status_text="爽约",
         phone_masked=row.phone,
         note="如需改期请联系医院",
-        submitted_at=row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+        submitted_at=(row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
     return _admin_back(request, app_id)
@@ -21861,7 +21861,7 @@ async def api_calendar_events(
             "duration":       a.duration_minutes or 30,
             "notes":          a.notes or "",
             "related_app_id": a.related_application_id,
-            "created_at":     a.created_at.strftime("%m-%d %H:%M") if a.created_at else "",
+            "created_at":     (a.created_at + timedelta(hours=8)).strftime("%m-%d %H:%M") if a.created_at else "",
             "customer_id":    a.customer_id,
             "pet_id":         a.pet_id,
         })

@@ -289,7 +289,7 @@ function confirmVaccVoid(form, paidAmount) {
  {% if is_edit and vacc %}
  <div class="card" style="font-size:0.8rem;color:var(--muted);">
    <div>创建：{{ vacc.created_by or '—' }}</div>
-   <div>{{ vacc.created_at.strftime('%Y-%m-%d %H:%M') if vacc.created_at else '—' }}</div>
+   <div>{{ (vacc.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if vacc.created_at else '—' }}</div>
    {% if vacc.rabies_record_id %}
    <div style="margin-top:0.4rem;">
      <a href="/admin/rabies/{{ vacc.rabies_record_id }}" style="font-size:0.8rem;">

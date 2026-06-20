@@ -223,7 +223,7 @@
             {% elif c.source == 'rabies' %}<span class="pill pill-info">狂犬疫苗</span>
             {% else %}<span class="pill pill-gray">{{ c.source or '—' }}</span>{% endif %}
           </td>
-          <td data-label="创建时间" style="color:var(--muted);font-size:0.82rem;">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
+          <td data-label="创建时间" style="color:var(--muted);font-size:0.82rem;">{{ (c.created_at | bjtime).strftime('%Y-%m-%d') if c.created_at else '—' }}</td>
           <td class="actions" style="text-align:right;" onclick="event.stopPropagation();">
             <a href="/admin/customers/{{ c.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 <i data-lucide="arrow-right"></i></a>
           </td>

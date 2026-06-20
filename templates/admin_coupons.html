@@ -184,7 +184,7 @@
    {% elif c.status == 'expired' %}<span class="pill pill-warn">已过期</span>
    {% elif c.status == 'cancelled' %}<span class="pill pill-gray">已作废</span>{% endif %}
    </td>
-   <td data-label="发放" style="font-size:.78rem;color:var(--muted);">{{ c.issued_at.strftime('%Y-%m-%d') if c.issued_at else '' }}<br>{{ c.issued_by }}</td>
+   <td data-label="发放" style="font-size:.78rem;color:var(--muted);">{{ (c.issued_at | bjtime).strftime('%Y-%m-%d') if c.issued_at else '' }}<br>{{ c.issued_by }}</td>
    {% if is_superadmin %}
    <td class="actions">
    {% if c.status == 'issued' %}

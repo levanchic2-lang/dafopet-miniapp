@@ -395,7 +395,7 @@
   <h1 class="uk-h1">{{ cust.name or '未命名' }}
     {% if cust.is_internal %}<span style="display:inline-block;font-family:var(--font-serif);font-size:10pt;letter-spacing:2px;padding:2px 10px;margin-left:10px;border:0.5px solid var(--accent-amber);color:var(--accent-amber);vertical-align:middle;font-weight:400;">员&nbsp;工&nbsp;内&nbsp;购</span>{% endif %}
     <span class="sub">客户档案 · 编号 {{ cust.id }}{% if cust.phone %} · {{ cust.phone }}{% endif %}</span></h1>
-  <div class="meta">建档 {{ cust.created_at.strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source | source_zh }}</em>{% if cust.is_internal %} · <em style="color:var(--accent-amber);">内购单按进价开单、不计入业绩报表</em>{% endif %}</div>
+  <div class="meta">建档 {{ (cust.created_at | bjtime).strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source | source_zh }}</em>{% if cust.is_internal %} · <em style="color:var(--accent-amber);">内购单按进价开单、不计入业绩报表</em>{% endif %}</div>
 
   {# 按钮在副标下方 - match demo #}
   <div class="actions" style="margin-top:20px;">
@@ -652,7 +652,7 @@
         <tbody>
           {% for e in exam_orders %}
           <tr>
-            <td class="num">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
+            <td class="num">{{ (e.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
             <td>
               {% if e.status == 'completed' %}<span class="uk-pill green">已出报告</span>
               {% else %}<span class="uk-pill amber">待出报告</span>{% endif %}
@@ -787,7 +787,7 @@
         <tbody>
           {% for so in pet_sales_orders %}
           <tr>
-            <td class="num">{{ so.order_date or (so.created_at.strftime('%Y-%m-%d') if so.created_at else '—') }}</td>
+            <td class="num">{{ so.order_date or ((so.created_at | bjtime).strftime('%Y-%m-%d') if so.created_at else '—') }}</td>
             <td class="num">¥{{ '%.2f'|format(so.total_amount or 0) }}</td>
             <td>{{ pay_method_zh.get(so.payment_method, so.payment_method) or '—' }}</td>
             <td>
@@ -822,7 +822,7 @@
           {% for inv in pet_invoices %}
           <tr>
             <td class="num" style="font-size:9.5pt;">{{ inv.invoice_no or ('#' ~ inv.id) }}</td>
-            <td class="num">{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
+            <td class="num">{{ inv.invoice_date or ((inv.created_at | bjtime).strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
             <td class="num">¥{{ '%.2f'|format(inv.total_amount or 0) }}</td>
             <td>
               {% if inv.payment_status == 'paid' %}<span class="uk-pill green">已支付</span>
@@ -911,7 +911,7 @@
           {% for t in consent_tasks %}
           <tr>
             <td>{{ t.title or (t.template.name if t.template else '—') }}</td>
-            <td class="num uk-mute" style="font-size:9pt;">{{ t.initiated_at.strftime('%Y-%m-%d') if t.initiated_at else '—' }}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ (t.initiated_at | bjtime).strftime('%Y-%m-%d') if t.initiated_at else '—' }}</td>
             <td>
               {% if t.status == 'signed' %}<span class="uk-pill green">已签</span>
               {% elif t.status == 'pending' %}<span class="uk-pill amber">待签</span>
@@ -919,7 +919,7 @@
               {% elif t.status == 'expired' %}<span class="uk-pill mute">已过期</span>
               {% else %}<span class="uk-pill mute">{{ t.status }}</span>{% endif %}
             </td>
-            <td class="num uk-mute" style="font-size:9pt;">{{ t.signed_at.strftime('%Y-%m-%d %H:%M') if t.signed_at else '—' }}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ (t.signed_at | bjtime).strftime('%Y-%m-%d %H:%M') if t.signed_at else '—' }}</td>
             <td class="action right">
               <a href="/admin/consent-tasks/{{ t.id }}">查看 →</a>
               {% if consent_docs_map.get(t.id) %}
@@ -941,7 +941,7 @@
           <tr>
             <td>{{ d.title or d.original_name or '—' }}</td>
             <td class="uk-mute">{{ d.doc_type }}</td>
-            <td class="num uk-mute" style="font-size:9pt;">{{ d.uploaded_at.strftime('%Y-%m-%d') if d.uploaded_at else '—' }}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ (d.uploaded_at | bjtime).strftime('%Y-%m-%d') if d.uploaded_at else '—' }}</td>
             <td class="num uk-mute" style="font-size:9pt;">{{ (d.file_size / 1024)|round(0)|int }} KB</td>
             <td class="action right"><a href="/uploads/{{ d.file_path }}" target="_blank">下载 →</a></td>
           </tr>
@@ -979,7 +979,7 @@
         <tbody>
           {% for tx in wallet_txs %}
           <tr>
-            <td class="num uk-mute" style="font-size:9pt;">{{ tx.created_at.strftime('%Y-%m-%d %H:%M') if tx.created_at else '—' }}</td>
+            <td class="num uk-mute" style="font-size:9pt;">{{ (tx.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if tx.created_at else '—' }}</td>
             <td>
               {% if tx.type == 'recharge' %}<span class="uk-pill green">充值</span>
               {% elif tx.type == 'consume' %}<span class="uk-pill">消费</span>

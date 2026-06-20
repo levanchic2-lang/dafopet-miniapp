@@ -136,7 +136,7 @@
  </td>
  {% endif %}
  <td data-label="开单时间" style="color:var(--muted);font-size:0.82rem;white-space:nowrap;">
- {{ p.prescribed_date or p.created_at.strftime('%Y-%m-%d') }}
+ {{ p.prescribed_date or (p.created_at | bjtime).strftime('%Y-%m-%d') }}
  </td>
  <td>
  <div style="font-weight:600;">{{ cust.name if cust else '—' }}</div>

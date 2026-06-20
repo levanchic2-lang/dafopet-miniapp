@@ -123,7 +123,7 @@ body[data-size="T80"] .rpt-sig { display: none; }
     <div class="row"><span class="lbl">病历号</span><span class="val">{{ pet.medical_record_no if pet else '' }}</span></div>
     <div class="row"><span class="lbl">性别</span><span class="val">{{ {'male':'公','female':'母'}.get(pet.gender, pet.gender or '') if pet else '' }}</span></div>
     <div class="row"><span class="lbl">毛色</span><span class="val">{{ pet.color_pattern if pet else '' }}</span></div>
-    <div class="row"><span class="lbl">送检日</span><span class="val">{{ order.created_at.strftime('%Y-%m-%d') if order.created_at else '' }}</span></div>
+    <div class="row"><span class="lbl">送检日</span><span class="val">{{ (order.created_at | bjtime).strftime('%Y-%m-%d') if order.created_at else '' }}</span></div>
     <div class="row"><span class="lbl">单号</span><span class="val" style="font-family:monospace;">EX{{ '%06d'|format(order.id) }}</span></div>
   </div>
 
@@ -157,7 +157,7 @@ body[data-size="T80"] .rpt-sig { display: none; }
   <div class="rpt-pdf-card">
     <i data-lucide="file-text"></i> <strong>{{ r.original_name }}</strong>
     {% if r.item_label %} — {{ r.item_label }}{% endif %}
-    <div style="margin-top:4px;font-size:8pt;color:#888;">上传于 {{ r.uploaded_at.strftime('%Y-%m-%d %H:%M') if r.uploaded_at else '' }}</div>
+    <div style="margin-top:4px;font-size:8pt;color:#888;">上传于 {{ (r.uploaded_at | bjtime).strftime('%Y-%m-%d %H:%M') if r.uploaded_at else '' }}</div>
   </div>
   {% endfor %}
   {% endif %}

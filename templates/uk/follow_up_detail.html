@@ -116,7 +116,7 @@
         <tr><td>所属门店</td><td>{{ fu.store or '—' }}</td></tr>
         <tr><td>当前状态</td><td>{{ fu_status_zh.get(fu.status, fu.status) }}</td></tr>
         {% if fu.handled_at %}
-        <tr><td>处理人 / 时间</td><td>{{ fu.handled_by or '—' }} · {{ fu.handled_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+        <tr><td>处理人 / 时间</td><td>{{ fu.handled_by or '—' }} · {{ (fu.handled_at | bjtime).strftime('%Y-%m-%d %H:%M') }}</td></tr>
         {% endif %}
         {% if fu.handle_note %}
         <tr><td>处理备注</td><td><div class="fd-note">{{ fu.handle_note }}</div></td></tr>
@@ -127,7 +127,7 @@
     {# 客户反馈 #}
     <div class="fd-sec">
       <h2>客 户 反 馈
-        {% if fu.response %}<span class="count">{{ fu.response }}{% if fu.response_at %} · {{ fu.response_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</span>{% endif %}
+        {% if fu.response %}<span class="count">{{ fu.response }}{% if fu.response_at %} · {{ (fu.response_at | bjtime).strftime('%Y-%m-%d %H:%M') }}{% endif %}</span>{% endif %}
       </h2>
       {% if response_items %}
       <div class="fd-resp-grid">
@@ -157,7 +157,7 @@
       <ul class="fd-timeline">
         {% for ev in timeline %}
         <li class="{{ ev.kind }}">
-          <div class="at">{{ ev.at.strftime('%Y-%m-%d %H:%M') if ev.at else '—' }}</div>
+          <div class="at">{{ (ev.at | bjtime).strftime('%Y-%m-%d %H:%M') if ev.at else '—' }}</div>
           <div class="text">{{ ev.text }}</div>
         </li>
         {% endfor %}

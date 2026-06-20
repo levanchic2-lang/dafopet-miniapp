@@ -178,7 +178,7 @@ body[data-size="T80"] .mr-sig { display: none; }
 {% for presc in prescriptions %}
 <div style="margin-bottom:10px;">
   <div style="font-size:9.5pt;color:#666;margin-bottom:2px;">
-    Rx{{ '%06d'|format(presc.id) }} · {{ presc.prescribed_date or (presc.created_at.strftime('%Y-%m-%d') if presc.created_at else '') }}
+    Rx{{ '%06d'|format(presc.id) }} · {{ presc.prescribed_date or ((presc.created_at | bjtime).strftime('%Y-%m-%d') if presc.created_at else '') }}
     {% if presc.vet_name %} · 处方医师 {{ presc.vet_name }}{% endif %}
   </div>
   {% set _route_zh = {
@@ -222,7 +222,7 @@ body[data-size="T80"] .mr-sig { display: none; }
 {% for eo in exam_orders %}
 {% set _items = eo._items_parsed %}
 <div style="margin-bottom:8px;font-size:9.5pt;">
-  <div style="color:#666;">EX{{ '%06d'|format(eo.id) }} · {{ eo.created_at.strftime('%Y-%m-%d') if eo.created_at else '' }}</div>
+  <div style="color:#666;">EX{{ '%06d'|format(eo.id) }} · {{ (eo.created_at | bjtime).strftime('%Y-%m-%d') if eo.created_at else '' }}</div>
   <div style="margin-top:2px;">
     {% for it in _items %}<span style="display:inline-block;background:#f3f4f6;padding:2px 8px;margin:2px 4px 2px 0;border-radius:3px;">{{ it.name }}{% if it.notes %} · {{ it.notes }}{% endif %}</span>{% endfor %}
   </div>

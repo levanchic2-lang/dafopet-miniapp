@@ -179,7 +179,7 @@
  </select>
  </form>
  </td>
- <td style="padding:0.55rem 0.75rem;color:var(--muted);white-space:nowrap;">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+ <td style="padding:0.55rem 0.75rem;color:var(--muted);white-space:nowrap;">{{ (u.created_at | bjtime).strftime('%Y-%m-%d') }}</td>
  <td style="padding:0.55rem 0.75rem;text-align:right;white-space:nowrap;">
  <div style="display:inline-flex;gap:0.4rem;justify-content:flex-end;align-items:center;">
  <button type="button" class="secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;white-space:nowrap;" onclick="toggleReset({{ u.id }})">重置密码</button>
@@ -218,7 +218,7 @@
  <td style="padding:0.5rem 0.75rem;">{{ u.username }}</td>
  <td style="padding:0.5rem 0.75rem;">{% if u.role == 'superadmin' %}<span class="pill pill-purple">超级管理员</span>{% else %}<span class="pill pill-info">员工</span>{% endif %}</td>
  <td style="padding:0.5rem 0.75rem;">{% if u.store %}<span class="pill pill-info">{{ u.store }}</span>{% else %}<span style="color:var(--muted);font-size:0.8rem;">不限</span>{% endif %}</td>
- <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+ <td style="padding:0.5rem 0.75rem;color:var(--muted);">{{ (u.created_at | bjtime).strftime('%Y-%m-%d') }}</td>
  <td style="padding:0.5rem 0.75rem;text-align:right;">
  <form method="post" action="/admin/users/{{ u.id }}/toggle" style="margin:0;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

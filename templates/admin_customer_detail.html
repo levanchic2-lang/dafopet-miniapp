@@ -463,7 +463,7 @@
  {% if cust.source %}<div><b>来源</b>{{ cust.source }}</div>{% endif %}
  {% if cust.id_number %}<div><b>证件号</b>{{ cust.id_number }}</div>{% endif %}
  <div><b>客户ID</b>#{{ cust.id }}</div>
- <div><b>创建时间</b>{{ cust.created_at.strftime('%Y-%m-%d') if cust.created_at else '—' }}</div>
+ <div><b>创建时间</b>{{ (cust.created_at | bjtime).strftime('%Y-%m-%d') if cust.created_at else '—' }}</div>
  </div>
  {% if cust.notes %}
  <div style="margin-top:0.4rem;font-size:0.82rem;color:#6b7280;background:rgba(255,255,255,0.5);padding:0.35rem 0.6rem;border-radius:6px;">
@@ -632,7 +632,7 @@
  <tbody>
  {% for e in exam_orders %}
  <tr>
- <td>{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
+ <td>{{ (e.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if e.created_at else '—' }}</td>
  <td>
  {% if e.status == 'completed' %}<span class="pill pill-ok">已出报告</span>
  {% else %}<span class="pill pill-warn">待出报告</span>{% endif %}
@@ -859,7 +859,7 @@
  {% else %}<span class="pill pill-warn">待收款</span>{% endif %}
  </td>
  <td>{{ inv.payment_method or '—' }}</td>
- <td style="color:var(--muted);font-size:.82rem;">{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
+ <td style="color:var(--muted);font-size:.82rem;">{{ inv.invoice_date or ((inv.created_at | bjtime).strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
  <td style="text-align:right;white-space:nowrap;">
    <a href="/admin/invoices/{{ inv.id }}" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">查看</a>
    <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;"><i data-lucide="printer"></i> 打印</a>
@@ -931,7 +931,7 @@
    {% set ct_doc = consent_docs_map.get(ct.id) %}
    <tr>
      <td><strong>{{ ct.title }}</strong>
-       {% if ct.status == 'signed' and ct.signed_at %}<div style="font-size:.72rem;color:var(--muted);">签于 {{ ct.signed_at.strftime('%Y-%m-%d %H:%M') }}</div>{% endif %}
+       {% if ct.status == 'signed' and ct.signed_at %}<div style="font-size:.72rem;color:var(--muted);">签于 {{ (ct.signed_at | bjtime).strftime('%Y-%m-%d %H:%M') }}</div>{% endif %}
      </td>
      <td>
      {% if ct.status == 'pending' %}<span class="pill pill-warn"><i data-lucide="hourglass"></i> 待签</span>
@@ -941,7 +941,7 @@
      {% endif %}
      </td>
      <td style="color:var(--muted);font-size:.82rem;">{{ ct.initiated_by or '—' }}</td>
-     <td style="color:var(--muted);font-size:.82rem;">{{ ct.initiated_at.strftime('%Y-%m-%d %H:%M') if ct.initiated_at else '—' }}</td>
+     <td style="color:var(--muted);font-size:.82rem;">{{ (ct.initiated_at | bjtime).strftime('%Y-%m-%d %H:%M') if ct.initiated_at else '—' }}</td>
      <td style="color:var(--muted);font-size:.82rem;">{{ ct.expires_at or '不限期' }}</td>
      <td style="text-align:right;white-space:nowrap;">
        <a href="/admin/consent-tasks/{{ ct.id }}" class="btn secondary" style="font-size:.78rem;padding:.2rem .55rem;">查看</a>
@@ -972,7 +972,7 @@
  <td>{{ d.title or '—' }}</td>
  <td>{{ d.original_name }}</td>
  <td>{{ '%.1f KB'|format((d.file_size or 0) / 1024) }}</td>
- <td>{{ d.uploaded_at.strftime('%Y-%m-%d %H:%M') if d.uploaded_at else '—' }}</td>
+ <td>{{ (d.uploaded_at | bjtime).strftime('%Y-%m-%d %H:%M') if d.uploaded_at else '—' }}</td>
  <td>{{ d.uploaded_by or '—' }}</td>
  <td>
  <a href="/admin/medical-docs/{{ d.id }}/file" target="_blank">下载</a>
@@ -1026,7 +1026,7 @@
      <tbody>
      {% for tx in wallet_txs %}
      <tr>
-       <td>{{ tx.created_at.strftime('%Y-%m-%d %H:%M') if tx.created_at else '—' }}</td>
+       <td>{{ (tx.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if tx.created_at else '—' }}</td>
        <td>
        {% if tx.type == 'recharge' %}<span class="pill pill-info">充值</span>
        {% elif tx.type == 'consume' %}<span class="pill pill-warn">消费</span>
@@ -1138,7 +1138,7 @@
        {% if d.applied_invoice_id %}<br/><a href="/admin/invoices/{{ d.applied_invoice_id }}">收费#{{ d.applied_invoice_id }}</a>{% endif %}
        </td>
        <td style="color:var(--muted);font-size:.82rem;">{{ {'cash':'现金','wechat':'微信','alipay':'支付宝','card':'刷卡'}.get(d.pay_method, d.pay_method) }}</td>
-       <td style="color:var(--muted);font-size:.78rem;">{{ d.created_at.strftime('%Y-%m-%d %H:%M') if d.created_at else '—' }}</td>
+       <td style="color:var(--muted);font-size:.78rem;">{{ (d.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if d.created_at else '—' }}</td>
        <td>
        {% if remaining > 0 and d.status in ('held', 'partial_refund') %}
        <form method="post" action="/admin/deposits/{{ d.id }}/refund" style="display:inline;"

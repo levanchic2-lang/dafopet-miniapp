@@ -93,7 +93,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:0.5px dashed var(--hair);">
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--ink);">{{ l.prescription_item.drug_name }}</div>
-        <div style="font-size:11px;color:var(--accent-red);font-style:italic;">{{ l.scheduled_at.strftime('%m-%d %H:%M') }}</div>
+        <div style="font-size:11px;color:var(--accent-red);font-style:italic;">{{ (l.scheduled_at | bjtime).strftime('%m-%d %H:%M') }}</div>
       </div>
       <form method="post" action="/admin/medication-log/{{ l.id }}/check" style="margin:0;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -112,7 +112,7 @@
   <div class="ukm-card" style="border-left:2px solid var(--accent-amber);">
     <div class="ukm-card-title" style="color:var(--accent-amber);">
       {{ shift_zh.get(latest_handover.shift, latest_handover.shift) }}&nbsp;最&nbsp;新&nbsp;交&nbsp;班
-      <span style="float:right;font-size:10px;color:var(--ink-3);font-style:italic;letter-spacing:0.5px;font-weight:400;">{{ latest_handover.recorded_at.strftime('%m-%d %H:%M') }}</span>
+      <span style="float:right;font-size:10px;color:var(--ink-3);font-style:italic;letter-spacing:0.5px;font-weight:400;">{{ (latest_handover.recorded_at | bjtime).strftime('%m-%d %H:%M') }}</span>
     </div>
     <div style="font-size:13px;color:var(--ink);line-height:1.6;">{{ latest_handover.content }}</div>
     <div style="font-size:11px;color:var(--ink-3);font-style:italic;margin-top:6px;">— {{ latest_handover.recorded_by or '—' }}</div>
@@ -132,7 +132,7 @@
   {% set is_skip = l.status == 'skipped' %}
   {% set is_overdue = l.status == 'pending' and l.scheduled_at <= now %}
   <div class="med-row{% if is_done %} done{% endif %}{% if is_overdue %} overdue{% endif %}">
-    <div class="med-time">{{ l.scheduled_at.strftime('%H:%M') }}</div>
+    <div class="med-time">{{ (l.scheduled_at | bjtime).strftime('%H:%M') }}</div>
     <div class="med-body">
       <div class="med-name">{{ l.prescription_item.drug_name }}
         {% if is_done %}<span class="ukm-italic" style="font-size:11px;margin-left:4px;color:var(--accent-green);">已勾</span>{% endif %}
@@ -145,7 +145,7 @@
       </div>
       {% if is_done and l.administered_by %}
       <div class="med-sub" style="color:var(--accent-green);">
-        {{ l.administered_at.strftime('%H:%M') }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ l.administered_by }}{% if l.dose_actual %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ l.dose_actual }}{% endif %}
+        {{ (l.administered_at | bjtime).strftime('%H:%M') }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ l.administered_by }}{% if l.dose_actual %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ l.dose_actual }}{% endif %}
       </div>
       {% endif %}
     </div>
@@ -281,7 +281,7 @@
         {% if v.rr %}<span style="margin:0 5px;color:var(--ink-4);">·</span>RR&nbsp;<span class="ukm-num" style="font-style:normal;">{{ v.rr }}</span>{% endif %}
         {% if v.weight_kg %}<span style="margin:0 5px;color:var(--ink-4);">·</span><span class="ukm-num" style="font-style:normal;">{{ v.weight_kg }}</span>&nbsp;kg{% endif %}
       </div>
-      <div class="ukm-row-sub">{{ v.recorded_at.strftime('%m-%d %H:%M') }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ v.recorded_by or '—' }}{% if v.notes %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ v.notes|truncate(20) }}{% endif %}</div>
+      <div class="ukm-row-sub">{{ (v.recorded_at | bjtime).strftime('%m-%d %H:%M') }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ v.recorded_by or '—' }}{% if v.notes %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ v.notes|truncate(20) }}{% endif %}</div>
     </div>
   </div>
   {% endfor %}

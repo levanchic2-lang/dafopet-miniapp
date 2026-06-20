@@ -179,7 +179,7 @@
    {% set is_voided = (h.status == 'voided') %}
    <a href="/admin/exam-orders/{{ h.id }}" style="display:block;padding:.4rem 0;border-bottom:1px dashed #e2e8f0;text-decoration:none;color:inherit;{% if is_voided %}opacity:.5;{% endif %}">
      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:#475569;">
-       <span style="font-variant-numeric:tabular-nums;">{{ h.created_at.strftime('%Y-%m-%d') if h.created_at else '—' }}</span>
+       <span style="font-variant-numeric:tabular-nums;">{{ (h.created_at | bjtime).strftime('%Y-%m-%d') if h.created_at else '—' }}</span>
        <span style="font-size:.7rem;padding:1px 6px;border-radius:3px;{% if h._has_report %}background:#dcfce7;color:#166534;{% else %}background:#fef3c7;color:#92400e;{% endif %}">
          #{{ h.id }} · {% if h._has_report %}✓ 已出报告{% else %}待出报告{% endif %}
        </span>

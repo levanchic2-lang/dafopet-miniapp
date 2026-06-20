@@ -73,7 +73,7 @@
  {% else %}
  <span class="pill pill-ok"><i data-lucide="check"></i> 已处理</span>
  {% endif %}
- <span class="fb-time">{{ fb.created_at.strftime('%Y-%m-%d %H:%M') if fb.created_at }}</span>
+ <span class="fb-time">{{ (fb.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if fb.created_at }}</span>
  </span>
  </div>
  <div class="fb-body">

@@ -380,7 +380,7 @@ function confirmSoVoid(form) { return confirmVoidWithRefund(form, 0); }
  {% if is_edit and o %}
  <div class="card" style="font-size:0.82rem;color:var(--muted);">
  <div>创建：{{ o.created_by or '—' }}</div>
- <div>{{ o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '' }}</div>
+ <div>{{ (o.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if o.created_at else '' }}</div>
  </div>
  {% endif %}
 

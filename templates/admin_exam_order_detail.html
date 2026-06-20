@@ -37,7 +37,7 @@
         {% if order.status == 'completed' %}<span class="pill pill-ok" style="margin-left:0.5rem;"><i data-lucide="check"></i> 已出报告</span>
         {% else %}<span class="pill pill-warn" style="margin-left:0.5rem;">待出报告</span>{% endif %}
       </h1>
-      <p class="ph-sub">{% if pet %}{{ pet.name }}{% if cust %} · {{ cust.name }}{% endif %} · {% endif %}创建于 {{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+      <p class="ph-sub">{% if pet %}{{ pet.name }}{% if cust %} · {{ cust.name }}{% endif %} · {% endif %}创建于 {{ (order.created_at | bjtime).strftime('%Y-%m-%d %H:%M') }}</p>
     </div>
   </div>
   <div class="ph-actions">
@@ -195,7 +195,7 @@ function confirmExamVoid(form, paidAmount) {
           <span style="color:var(--muted);margin:0 .25rem;">·</span>
           <a href="/admin/exam-reports/{{ rpt.id }}/file?download=1" title="保存到本地" download="{{ rpt.original_name or '' }}">下载</a>
           <span style="color:var(--muted);margin-left:0.4rem;">{{ rpt.file_type | upper }}</span>
-          <div style="color:var(--muted);margin-top:0.15rem;">{{ rpt.uploaded_by }} · {{ rpt.uploaded_at.strftime('%m-%d %H:%M') }}</div>
+          <div style="color:var(--muted);margin-top:0.15rem;">{{ rpt.uploaded_by }} · {{ (rpt.uploaded_at | bjtime).strftime('%m-%d %H:%M') }}</div>
           <form method="post" action="/admin/exam-orders/{{ order.id }}/delete-report/{{ rpt.id }}"
                 onsubmit="return confirm('删除此报告？')" style="margin-top:0.3rem;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -225,7 +225,7 @@ function confirmExamVoid(form, paidAmount) {
       <div style="display:none;color:var(--danger-fg);font-size:.82rem;padding:1rem;background:var(--danger-bg);border-radius:8px;">二维码生成失败，请刷新或联系管理员</div>
     </div>
     <p style="font-size:0.75rem;color:var(--muted);text-align:center;margin:0.3rem 0 0.5rem;">
-      有效期：{{ order.token_expires_at.strftime('%m-%d %H:%M') if order.token_expires_at else '—' }}（北京时间+8）
+      有效期：{{ (order.token_expires_at | bjtime).strftime('%m-%d %H:%M') if order.token_expires_at else '—' }}（北京时间+8）
     </p>
     <form method="post" action="/admin/exam-orders/{{ order.id }}/refresh-token">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -262,7 +262,7 @@ function confirmExamVoid(form, paidAmount) {
     {% set is_voided = (h.status == 'voided') %}
     <a href="/admin/exam-orders/{{ h.id }}" style="display:block;padding:.4rem 0;border-bottom:1px dashed #e2e8f0;text-decoration:none;color:inherit;{% if is_voided %}opacity:.5;{% endif %}">
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:#475569;">
-        <span style="font-variant-numeric:tabular-nums;">{{ h.created_at.strftime('%Y-%m-%d') if h.created_at else '—' }}</span>
+        <span style="font-variant-numeric:tabular-nums;">{{ (h.created_at | bjtime).strftime('%Y-%m-%d') if h.created_at else '—' }}</span>
         <span style="font-size:.7rem;padding:1px 6px;border-radius:3px;{% if h._has_report %}background:#dcfce7;color:#166534;{% else %}background:#fef3c7;color:#92400e;{% endif %}">
           #{{ h.id }} · {% if h._has_report %}✓ 已出报告{% else %}待出报告{% endif %}
         </span>

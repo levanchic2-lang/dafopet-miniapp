@@ -153,7 +153,7 @@
  <tbody>
  {% for tx in txs %}
  <tr style="border-bottom:1px solid var(--border);">
- <td style="padding:0.5rem 1rem;color:var(--muted);font-size:0.8rem;">{{ tx.created_at.strftime('%m-%d %H:%M') }}</td>
+ <td style="padding:0.5rem 1rem;color:var(--muted);font-size:0.8rem;">{{ (tx.created_at | bjtime).strftime('%m-%d %H:%M') }}</td>
  <td data-label="类型" style="padding:0.5rem 0.75rem;">
  {% if tx.tx_type == 'in' %}<span style="color:#15803d;font-weight:600;"><i data-lucide="arrow-up"></i> 入库</span>
  {% elif tx.tx_type == 'out' %}<span style="color:#dc2626;font-weight:600;"><i data-lucide="arrow-down"></i> 出库</span>

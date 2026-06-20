@@ -103,7 +103,7 @@ body[data-size="A5_LAND"] .inv-items { font-size: 9pt; }
 
 <div class="inv-meta-row">
   <span>Invoice No. <strong>{{ inv.invoice_no or ('INV' ~ '%06d'|format(inv.id)) }}</strong></span>
-  <span>Date: <strong>{{ inv.invoice_date or (inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '—') }}</strong></span>
+  <span>Date: <strong>{{ inv.invoice_date or ((inv.created_at | bjtime).strftime('%Y-%m-%d') if inv.created_at else '—') }}</strong></span>
 </div>
 
 <hr class="inv-rule-thin" />

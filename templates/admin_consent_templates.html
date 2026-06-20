@@ -37,7 +37,7 @@
    <td><strong>{{ t.name }}</strong>{% if t.notes %}<div style="font-size:.75rem;color:var(--muted);">{{ t.notes[:60] }}</div>{% endif %}</td>
    <td data-label="类型">{{ category_zh.get(t.category, t.category) }}</td>
    <td data-label="已使用" style="text-align:right;color:var(--muted);">{{ used_map.get(t.id, 0) }} 次</td>
-   <td data-label="更新时间" style="color:var(--muted);font-size:.82rem;">{{ t.updated_at.strftime('%Y-%m-%d %H:%M') if t.updated_at else '—' }}</td>
+   <td data-label="更新时间" style="color:var(--muted);font-size:.82rem;">{{ (t.updated_at | bjtime).strftime('%Y-%m-%d %H:%M') if t.updated_at else '—' }}</td>
    <td data-label="状态">{% if t.is_active %}<span class="pill pill-info">上架</span>{% else %}<span class="pill pill-gray">下架</span>{% endif %}</td>
    {% if is_superadmin %}
    <td class="actions" style="text-align:right;">

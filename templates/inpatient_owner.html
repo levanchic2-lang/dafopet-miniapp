@@ -77,11 +77,11 @@
 
     {% if h.status == 'admitted' %}
     <div class="status-banner">
-      ✓ 住院中 · 已 <b>{{ days }}</b> 天 · 入院 {{ h.admitted_at.strftime('%m-%d %H:%M') if h.admitted_at else '—' }}
+      ✓ 住院中 · 已 <b>{{ days }}</b> 天 · 入院 {{ (h.admitted_at | bjtime).strftime('%m-%d %H:%M') if h.admitted_at else '—' }}
     </div>
     {% elif h.status == 'discharged' %}
     <div class="status-banner discharged">
-      🏠 已出院 · {{ h.discharged_at.strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}
+      🏠 已出院 · {{ (h.discharged_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}
     </div>
     {% endif %}
 
@@ -106,7 +106,7 @@
             <div class="t-title">{{ e.title }}</div>
             <div class="t-sub">{{ e.subtitle }}</div>
           </div>
-          <div class="t-time">{{ e.at.strftime('%m-%d %H:%M') }}</div>
+          <div class="t-time">{{ (e.at | bjtime).strftime('%m-%d %H:%M') }}</div>
         </div>
         {% endfor %}
       </div>
