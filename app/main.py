@@ -25235,29 +25235,31 @@ async def m_api_search_customer(
     q = (q or "").strip()
     if len(q) < 2:
         return {"results": []}
-    # 宠物名也命中
-    _pet_owner_ids = db.query(Pet.customer_id).filter(Pet.name.ilike(f"%{q}%"))
-    custs = db.query(Customer).filter(
-        or_(
-            Customer.name.ilike(f"%{q}%"),
-            Customer.phone.ilike(f"%{q}%"),
-            Customer.phones_extra.ilike(f"%{q}%"),
-            Customer.id.in_(_pet_owner_ids),
-        )
-    ).order_by(Customer.id.desc()).limit(10).all()
-    ql = q.lower()
+    # 支持空格组合（AND）：如「馒头 文」= 宠物/主人含「馒头」且含「文」，缩小范围。
+    tokens = [t for t in q.split() if t][:4]
+    if not tokens:
+        return {"results": []}
+    LIMIT = 60
+    cq = db.query(Customer)
+    for t in tokens:
+        _owner_ids_t = db.query(Pet.customer_id).filter(Pet.name.ilike(f"%{t}%"))
+        cq = cq.filter(or_(
+            Customer.name.ilike(f"%{t}%"),
+            Customer.phone.ilike(f"%{t}%"),
+            Customer.phones_extra.ilike(f"%{t}%"),
+            Customer.id.in_(_owner_ids_t),
+        ))
+    custs = cq.order_by(Customer.id.desc()).limit(LIMIT + 1).all()
+    truncated = len(custs) > LIMIT
+    custs = custs[:LIMIT]
+    tokens_low = [t.lower() for t in tokens]
     results = []
     for c in custs:
         pets = db.query(Pet).filter(Pet.customer_id == c.id).order_by(Pet.id).all()
-        # 命中是因为「主人名/电话」→ 列全部宠物（找的是主人）；
-        # 仅因为「宠物名」命中 → 只列匹配的那几只（避免列出主人名下一堆不相干的宠物）
-        owner_match = (ql in (c.name or "").lower()
-                       or ql in (c.phone or "").lower()
-                       or ql in (c.phones_extra or "").lower())
-        if not owner_match:
-            _matched = [p for p in pets if ql in (p.name or "").lower()]
-            if _matched:
-                pets = _matched
+        # 列出匹配到关键词的宠物（任一 token）；若一只都不匹配（纯按主人名/电话命中）→ 列全部
+        _matched = [p for p in pets if any(tl in (p.name or "").lower() for tl in tokens_low)]
+        if _matched:
+            pets = _matched
         results.append({
             "id": c.id,
             "name": c.name or "",
@@ -25268,7 +25270,7 @@ async def m_api_search_customer(
                 "gender": p.gender or "unknown",
             } for p in pets],
         })
-    return {"results": results}
+    return {"results": results, "truncated": truncated}
 
 
 # ═════════════════════════════════════════════════════════════════════════════
