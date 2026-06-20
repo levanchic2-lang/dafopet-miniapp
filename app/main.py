@@ -17596,16 +17596,32 @@ async def admin_reports_revenue(
     pkg_sold = pkg_sold_q.all()
     pkg_sold_total = sum(float(p.sell_price or 0) for p in pkg_sold)
 
-    # 押金净流入（收 - 退）
+    # 押金净流入（收 - 退）。按北京日期分桶（func.date +8h）。
     dep_q = db.query(Deposit).filter(
-        Deposit.created_at >= df + " 00:00:00",
-        Deposit.created_at <= dt + " 23:59:59",
+        func.date(Deposit.created_at, '+8 hours') >= df,
+        func.date(Deposit.created_at, '+8 hours') <= dt,
     )
     if store:
         dep_q = dep_q.filter(Deposit.store == store)
-    deps = dep_q.all()
-    deposit_in = sum(float(d.amount or 0) for d in deps)
-    deposit_refund = sum(float(d.refunded_amount or 0) for d in deps if d.refunded_at and df <= d.refunded_at.strftime("%Y-%m-%d") <= dt)
+    deposit_in = sum(float(d.amount or 0) for d in dep_q.all())
+    # 退押金：从审计日志逐笔取（每笔退款一条 deposit_refund，含 amount + 时间）。
+    # 这样「早先收、今天退」的押金也能算到今天，且按实退金额而非累计 refunded_amount。
+    _refund_audits = db.query(AuditLog).filter(
+        AuditLog.action == "deposit_refund",
+        func.date(AuditLog.created_at, '+8 hours') >= df,
+        func.date(AuditLog.created_at, '+8 hours') <= dt,
+    ).all()
+    deposit_refund = 0.0
+    for _ra in _refund_audits:
+        try:
+            _rd = json.loads(_ra.detail or "{}")
+        except Exception:
+            _rd = {}
+        if store:
+            _dep = db.get(Deposit, _rd.get("deposit_id")) if _rd.get("deposit_id") else None
+            if not _dep or (_dep.store or "") != store:
+                continue
+        deposit_refund += float(_rd.get("amount") or 0)
 
     return templates.TemplateResponse(request, "uk/reports_revenue.html", {
         "label": label,
