@@ -25245,9 +25245,19 @@ async def m_api_search_customer(
             Customer.id.in_(_pet_owner_ids),
         )
     ).order_by(Customer.id.desc()).limit(10).all()
+    ql = q.lower()
     results = []
     for c in custs:
         pets = db.query(Pet).filter(Pet.customer_id == c.id).order_by(Pet.id).all()
+        # 命中是因为「主人名/电话」→ 列全部宠物（找的是主人）；
+        # 仅因为「宠物名」命中 → 只列匹配的那几只（避免列出主人名下一堆不相干的宠物）
+        owner_match = (ql in (c.name or "").lower()
+                       or ql in (c.phone or "").lower()
+                       or ql in (c.phones_extra or "").lower())
+        if not owner_match:
+            _matched = [p for p in pets if ql in (p.name or "").lower()]
+            if _matched:
+                pets = _matched
         results.append({
             "id": c.id,
             "name": c.name or "",
