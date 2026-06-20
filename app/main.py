@@ -11307,6 +11307,7 @@ async def admin_visit_close(visit_id: int, request: Request,
     v.status = "closed"
     v.closed_at = datetime.utcnow()
     v.closed_by = request.session.get("admin_username", "") or ""
+    _freeze_visit_store(db, visit_id, _get_op_store(request))  # 结束病历=锁定 → 冻结门店
     db.commit()
     _audit(db, request, "visit_close",
            detail={"visit_id": v.id, "pet_id": v.pet_id, "customer_id": v.customer_id})
@@ -16983,6 +16984,17 @@ def _resolve_invoice_store(db: Session, *, visit_id=None, pet_id=None, customer_
     return fallback or ""
 
 
+def _freeze_visit_store(db: Session, visit_id, op_store: str) -> None:
+    """锁定事件（收款/出报告/结束病历）时把「操作门店」冻结到病历上：
+    visit.store 为空才写（已有不覆盖）。这样一旦锁定，门店永久固定，
+    之后无论谁(哪家店账号)打印导出，都按这个店，不再回退宠物归属店。"""
+    if not visit_id or not (op_store or ""):
+        return
+    v = db.get(Visit, visit_id)
+    if v is not None and not (getattr(v, "store", "") or ""):
+        v.store = op_store
+
+
 def _print_clinic_store(visit, pet) -> str:
     """打印抬头门店短名：优先这次就诊的「操作门店」(visit.store)，回退宠物归属店。
     跨店就诊时收据/报告显示实际操作的店。"""
@@ -19035,6 +19047,10 @@ async def admin_invoice_add_payment(
         ))
         db.flush()
         _invoice_recompute_status(db, inv)
+    # 锁定即冻结：收款是锁定事件 → 把操作门店冻结到相关病历（visit.store 为空才写）
+    for _t in target_invs:
+        if getattr(_t, "visit_id", None):
+            _freeze_visit_store(db, _t.visit_id, store)
     # 超管补单：把本次新建的收款流水 + 已付清发票的结算时间改成指定时间
     if _settle_utc is not None:
         for _np in db.query(Payment).filter(Payment.id > _pay_id_before).all():
@@ -19432,8 +19448,8 @@ async def admin_invoice_print(
         .order_by(Payment.id.asc())
         .all()
     )
-    # 门店全名 / 英文：按「这一单的门店」(操作门店)推断，跨店就诊不再跟宠物归属店
-    _rcpt_store = (inv.store or "") or (pet.store if pet else "")
+    # 门店全名 / 英文：优先「就诊操作门店」(冻结后永久固定) → 发票门店 → 宠物归属店
+    _rcpt_store = (visit.store if visit and getattr(visit, "store", "") else "") or (inv.store or "") or (pet.store if pet else "")
     clinic_name_zh = "大风动物医院"
     clinic_name_en = "DaFo Animal Hospital"
     if _rcpt_store:
@@ -20778,6 +20794,7 @@ async def admin_exam_order_upload(
     db.add(report)
     order.status = "completed"
     order.updated_at = datetime.utcnow()
+    _freeze_visit_store(db, order.visit_id, _get_op_store(request))  # 出报告=锁定 → 冻结门店
     db.commit()
     return RedirectResponse(
         _safe_next(next_url, f"/admin/exam-orders/{order_id}?msg=报告已上传"),
