@@ -11001,6 +11001,7 @@ async def admin_visit_create(
         treatment_plan=treatment_plan.strip(),
         notes=notes.strip(),
         vet_name=vet_name.strip()[:80],
+        store=_get_op_store(request),   # 操作门店：这次就诊在哪做的
         created_by=request.session.get("admin_username", "admin"),
     )
     db.add(v)
@@ -11070,9 +11071,10 @@ async def admin_visit_print(visit_id: int, request: Request, db: Session = Depen
 
     clinic_name_zh = "大风动物医院"
     clinic_name_en = "DaFo Animal Hospital"
-    if pet and pet.store:
-        clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
-        clinic_name_en = f"DaFo Animal Hospital · {pet.store.replace('店', '')}"
+    _pcs = _print_clinic_store(visit, pet)
+    if _pcs:
+        clinic_name_zh = f"大风动物医院（{_pcs.replace('店', '分院')}）"
+        clinic_name_en = f"DaFo Animal Hospital · {_pcs.replace('店', '')}"
 
     return templates.TemplateResponse(request, "admin_visit_print.html", {
         "visit": visit, "cust": cust, "pet": pet,
@@ -11115,9 +11117,10 @@ async def admin_visit_discharge_print(visit_id: int, request: Request, db: Sessi
 
     clinic_name_zh = "大风动物医院"
     clinic_name_en = "DaFo Animal Hospital"
-    if pet and pet.store:
-        clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
-        clinic_name_en = f"DaFo Animal Hospital · {pet.store.replace('店', '')}"
+    _pcs = _print_clinic_store(visit, pet)
+    if _pcs:
+        clinic_name_zh = f"大风动物医院（{_pcs.replace('店', '分院')}）"
+        clinic_name_en = f"DaFo Animal Hospital · {_pcs.replace('店', '')}"
 
     return templates.TemplateResponse(request, "admin_discharge_print.html", {
         "visit": visit, "cust": cust, "pet": pet,
@@ -12910,10 +12913,11 @@ async def admin_presc_print(presc_id: int, request: Request, db: Session = Depen
                 pet_age = f"{years} 岁"
         except Exception:
             pet_age = pet.birthday_estimate or ""
-    # 门店全名（处方笺标题里 "（横岗分院）" 等）
+    # 门店全名（处方笺标题里 "（横岗分院）" 等）：按操作门店
     clinic_name = "大风动物医院"
-    if pet and pet.store:
-        clinic_name = f"大风动物医院（{pet.store.replace('店', '分院')}）"
+    _pcs = _print_clinic_store(visit, pet)
+    if _pcs:
+        clinic_name = f"大风动物医院（{_pcs.replace('店', '分院')}）"
     return templates.TemplateResponse(request, "admin_prescription_print.html", {
         "presc": presc, "visit": visit, "cust": cust, "pet": pet,
         "pet_weight": pet_weight, "pet_age": pet_age,
@@ -16960,7 +16964,12 @@ _INV_PAY_ZH    = {
 
 def _resolve_invoice_store(db: Session, *, visit_id=None, pet_id=None, customer_id=None, fallback: str = "") -> str:
     """推断发票应归属的门店短名。
-    优先级：pet.store → visit.pet.store → fallback (_get_op_store(request))"""
+    优先级：visit.store（这次就诊在哪做的=操作门店）→ pet.store → visit.pet.store → fallback。
+    跨店就诊（如东环宠物来横岗）按「操作门店」走，账单/收据/营收落到实际操作店。"""
+    if visit_id:
+        v = db.get(Visit, visit_id)
+        if v and (v.store or ""):
+            return v.store
     if pet_id:
         p = db.get(Pet, pet_id)
         if p and p.store:
@@ -16972,6 +16981,14 @@ def _resolve_invoice_store(db: Session, *, visit_id=None, pet_id=None, customer_
             if p and p.store:
                 return p.store
     return fallback or ""
+
+
+def _print_clinic_store(visit, pet) -> str:
+    """打印抬头门店短名：优先这次就诊的「操作门店」(visit.store)，回退宠物归属店。
+    跨店就诊时收据/报告显示实际操作的店。"""
+    if visit is not None and getattr(visit, "store", ""):
+        return visit.store
+    return (pet.store if (pet is not None and getattr(pet, "store", "")) else "")
 
 
 def _gen_invoice_no(db: Session) -> str:
@@ -17395,7 +17412,7 @@ async def admin_reports_revenue(
     )
     rows = base_q.order_by(Invoice.paid_at.desc()).all()
 
-    # 如果有门店筛选：通过 visit.pet.store 关联（invoice 没有 store 字段，但能通过 pet）
+    # 门店筛选：优先按发票本身的 store（=操作门店，跨店就诊也对），inv.store 为空时回退宠物归属店
     if store:
         from app.models import Pet as _Pet
         pet_store_map = {}
@@ -17403,7 +17420,8 @@ async def admin_reports_revenue(
         if pet_ids:
             for p in db.query(_Pet).filter(_Pet.id.in_(pet_ids)).all():
                 pet_store_map[p.id] = p.store or ""
-        rows = [r for r in rows if pet_store_map.get(r.pet_id, "") == store]
+        rows = [r for r in rows
+                if ((r.store or "") or pet_store_map.get(r.pet_id, "")) == store]
 
     # 汇总
     total_amount = sum(float(r.total_amount or 0) for r in rows)
@@ -18546,9 +18564,10 @@ async def admin_invoice_combined_print_view(
         })
     clinic_name_zh = "大风动物医院"
     clinic_name_en = "DaFo Animal Hospital"
-    if pet and pet.store:
-        clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
-        clinic_name_en = f"DaFo Animal Hospital · {pet.store.replace('店', '')}"
+    _pcs = _print_clinic_store(visit, pet)
+    if _pcs:
+        clinic_name_zh = f"大风动物医院（{_pcs.replace('店', '分院')}）"
+        clinic_name_en = f"DaFo Animal Hospital · {_pcs.replace('店', '')}"
     grand_total = round(sum(float(i.total_amount or 0) for i in invoices), 2)
     return templates.TemplateResponse(request, "admin_invoice_combined_print.html", {
         "sections": sections,
@@ -18823,9 +18842,8 @@ async def admin_invoice_add_payment(
 
     method = str(form.get("method") or "cash").strip()
     operator = request.session.get("admin_username", "admin")
-    # store 优先取发票本身的 store（更准确，超管未挂店时 _get_admin_store=""），
-    # 这样收款统计「按门店」就不会出现「未指定」
-    store = _get_admin_store(request) or (inv.store or "")
+    # store 取「操作门店」（超管也按其挂的店），回退发票门店；避免超管收款落空 / 跨店错算
+    store = _get_op_store(request) or (inv.store or "")
 
     # ── 合并结算：解析勾选的其他待收单 id ──
     extra_ids = [int(x) for x in form.getlist("extra_invoice_ids") if str(x).isdigit()]
@@ -19414,12 +19432,13 @@ async def admin_invoice_print(
         .order_by(Payment.id.asc())
         .all()
     )
-    # 门店全名 / 英文（根据宠物所属门店推断）
+    # 门店全名 / 英文：按「这一单的门店」(操作门店)推断，跨店就诊不再跟宠物归属店
+    _rcpt_store = (inv.store or "") or (pet.store if pet else "")
     clinic_name_zh = "大风动物医院"
     clinic_name_en = "DaFo Animal Hospital"
-    if pet and pet.store:
-        clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
-        clinic_name_en = f"DaFo Animal Hospital · {pet.store.replace('店', '')}"
+    if _rcpt_store:
+        clinic_name_zh = f"大风动物医院（{_rcpt_store.replace('店', '分院')}）"
+        clinic_name_en = f"DaFo Animal Hospital · {_rcpt_store.replace('店', '')}"
     return templates.TemplateResponse(request, "admin_invoice_print.html", {
         "inv": inv,
         "cust": cust,
@@ -20515,10 +20534,11 @@ async def admin_exam_order_print(
     style = _detect_report_style(items)
     image_reports = [r for r in order.reports if (r.file_type or "image").lower() != "pdf"]
     pdf_reports   = [r for r in order.reports if (r.file_type or "").lower() == "pdf"]
-    # clinic 名
+    # clinic 名：按操作门店
     clinic_name_zh = "大风动物医院"
-    if pet and pet.store:
-        clinic_name_zh = f"大风动物医院（{pet.store.replace('店', '分院')}）"
+    _pcs = _print_clinic_store(visit, pet)
+    if _pcs:
+        clinic_name_zh = f"大风动物医院（{_pcs.replace('店', '分院')}）"
     return templates.TemplateResponse(request, "admin_exam_print.html", {
         "order": order, "visit": visit, "cust": cust, "pet": pet,
         "items": items,

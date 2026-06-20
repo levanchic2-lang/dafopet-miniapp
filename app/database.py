@@ -1089,6 +1089,9 @@ def _try_sqlite_migrations() -> None:
                 # 关闭回访（主人带回家自治不需要医院回访）
                 if "followup_disabled" not in vst_names_v2:
                     conn.execute(text("ALTER TABLE visits ADD COLUMN followup_disabled BOOLEAN DEFAULT 0"))
+                # 操作门店（这次就诊在哪做的，短名）→ 账单/收据/营收按它走，跨店就诊不再跟宠物归属店
+                if "store" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN store VARCHAR(40) DEFAULT ''"))
 
             # deworming_records 驱虫记录
             conn.execute(text(

@@ -413,6 +413,7 @@ class Visit(Base):
 
     visit_date: Mapped[str] = mapped_column(String(20), default="")        # YYYY-MM-DD
     visit_type: Mapped[str] = mapped_column(String(40), default="outpatient")  # outpatient/followup/postop/vaccine/surgery_consult/other
+    store: Mapped[str] = mapped_column(String(40), default="")              # 操作门店短名：这次就诊在哪家店做的（账单/收据/营收按它走）
     chief_complaint: Mapped[str] = mapped_column(Text, default="")          # 主诉
     physical_exam: Mapped[str] = mapped_column(Text, default="")            # 体格检查（体温/体重/心率等）
     diagnosis: Mapped[str] = mapped_column(Text, default="")                # 诊断结论
