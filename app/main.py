@@ -25209,8 +25209,39 @@ async def m_grooming_create(request: Request, db: Session = Depends(get_db)):
             if inv and not inv.is_service:
                 _deduct_inventory(db, iid, qty, "grooming", rec.id, operator,
                                   note=f"美容#{rec.id} {s.get('name','')}")
+    # 自动生成收费单（金额 > 0 时）——与桌面端 /admin/grooming-orders/create 一致，
+    # 让美容师手机开单后收银台立即出现待收款记录
+    msg = "美容单已建"
+    if total > 0:
+        inv = Invoice(
+            invoice_no=_gen_invoice_no(db),
+            customer_id=customer_id or None,
+            pet_id=pet_id or None,
+            invoice_date=rec.groom_date or datetime.now().strftime("%Y-%m-%d"),
+            subtotal=total, discount_amount=0.0, total_amount=total,
+            payment_status="unpaid",
+            notes=f"美容 #{rec.id}",
+            store=_resolve_invoice_store(db, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
+            created_by=operator,
+        )
+        db.add(inv)
+        db.flush()
+        for s in services:
+            sub = round(float(s.get("subtotal") or 0), 2)
+            if sub <= 0:
+                continue
+            qty = float(s.get("qty") or 1)
+            price = float(s.get("price") or 0)
+            name = (s.get("name") or "美容服务").strip()
+            db.add(InvoiceItem(
+                invoice_id=inv.id, ref_type="grooming", ref_id=rec.id,
+                description=f"[美容#{rec.id}] {name}",
+                quantity=qty, unit_price=price, subtotal=sub,
+            ))
+        rec.invoice_id = inv.id
+        msg += f"，收费单 ¥{total:.2f} 已生成待收款"
     db.commit()
-    return RedirectResponse(f"/m/grooming/{rec.id}?msg=美容单已建", status_code=303)
+    return RedirectResponse(f"/m/grooming/{rec.id}?msg={msg}", status_code=303)
 
 
 @app.get("/m/grooming/{rec_id}", response_class=HTMLResponse)
