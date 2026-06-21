@@ -184,7 +184,7 @@ body[data-size="T80"] .dc-orders { font-size: 9.5pt; padding: 6px 8px; }
     <tbody>
     {% for it in presc.items %}
       <tr>
-        <td>{{ it.drug_name }}{% if it.instructions %}<div style="font-size:8.5pt;color:#666;">{{ it.instructions }}</div>{% endif %}</td>
+        <td>{{ it.drug_name }}</td>{# 特殊说明(instructions)为内部信息，医嘱单打印不显示 #}
         <td>{{ it.dose_text or '' }}</td>
         <td>{{ ('%g 次/天'|format(it.times_per_day)) if it.times_per_day else (it.frequency or '') }}</td>
         <td>{{ it.duration_days or '' }}</td>

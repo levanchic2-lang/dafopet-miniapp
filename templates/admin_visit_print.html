@@ -203,7 +203,7 @@ body[data-size="T80"] .mr-sig { display: none; }
     <tbody>
     {% for it in presc.items %}
       <tr>
-        <td>{{ it.drug_name }}{% if it.instructions %}<div style="font-size:8.5pt;color:#666;">{{ it.instructions }}</div>{% endif %}</td>
+        <td>{{ it.drug_name }}</td>{# 特殊说明(instructions)为内部信息，病历打印不显示 #}
         <td>{{ ('%g%s'|format(it.dose_amount, it.dose_unit)) if it.dose_amount else (it.dosage or '') }}</td>
         <td>{{ ('%g 次/天'|format(it.times_per_day)) if it.times_per_day else (it.frequency or '') }}</td>
         <td>{{ it.duration_days or '' }}</td>

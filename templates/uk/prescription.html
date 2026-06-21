@@ -1457,7 +1457,7 @@ function printFromPreview() { window.print(); }
   <div class="presc-modal" style="width:820px;max-width:95vw;">
     <div id="preview-body"></div>
     <div class="actions">
-      <button type="button" class="uk-btn primary sm" onclick="printFromPreview()">打 印</button>
+      {# 预览仅供内部查看（含特殊说明），不提供打印；打印走「打印处方笺（国标）」 #}
       <button type="button" class="uk-btn ghost sm" onclick="_hideModal('preview-modal')">关 闭</button>
     </div>
   </div>
