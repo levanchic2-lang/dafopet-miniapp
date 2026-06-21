@@ -159,6 +159,10 @@
 </div>
 {% endif %}
 
+{% if not locked and rec.status != 'voided' %}
+<a href="/m/grooming/{{ rec.id }}/edit" class="ukm-btn ghost block" style="margin-bottom:10px;">✎&nbsp;编&nbsp;辑&nbsp;项&nbsp;目&nbsp;/&nbsp;信&nbsp;息</a>
+{% endif %}
+
 {% if not rec.end_time and not locked and rec.status != 'voided' %}
 <form method="post" action="/m/grooming/{{ rec.id }}/done">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

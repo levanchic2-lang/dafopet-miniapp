@@ -1,0 +1,144 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}编辑美容单 #{{ rec.id }}{% endblock %}
+{% block topbar_title %}编&nbsp;辑&nbsp;美&nbsp;容&nbsp;#{{ rec.id }}{% endblock %}
+{% block topbar_back %}<a href="/m/grooming/{{ rec.id }}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+<form method="post" action="/m/grooming/{{ rec.id }}/edit" class="ukm-form" id="grm-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+
+  {# 客户/宠物（编辑时固定，不可改） #}
+  <div class="ukm-section-head"><h2>客&nbsp;户&nbsp;/&nbsp;宠&nbsp;物</h2></div>
+  <div class="ukm-card-group">
+    <div class="ukm-card" style="border-left:2px solid var(--ink);">
+      <div class="ukm-card-title">{{ pet.name if pet else '—' }}
+        <span class="ukm-italic" style="font-size:13px;margin-left:6px;">{{ cust.name if cust else '—' }}</span>
+      </div>
+      {% if cust and cust.phone %}<div class="ukm-card-sub"><span class="ukm-mono" style="font-style:normal;color:var(--ink-2);">{{ cust.phone }}</span></div>{% endif %}
+    </div>
+  </div>
+
+  {# 服务 #}
+  <div class="ukm-section-head"><h2>选&nbsp;服&nbsp;务&nbsp;&nbsp;·&nbsp;<span id="picked-count">0</span></h2></div>
+
+  {% if not groom_items and not extra_chips %}
+  <div class="ukm-empty">
+    <div class="big">无&nbsp;服&nbsp;务&nbsp;品&nbsp;目</div>
+    桌面端 → 库存 → 美容服务 维护
+  </div>
+  {% else %}
+  <div class="ukm-search" style="margin-bottom:10px;">
+    <span class="ic">⌕</span>
+    <input type="search" id="svc-search" placeholder="搜服务名 / 价格" autocomplete="off"
+           oninput="filterSvc(this.value)"/>
+    <button type="button" id="svc-search-clear" style="display:none;font-family:var(--font-serif);font-size:13px;color:var(--ink-3);padding:4px 6px;background:transparent;border:none;cursor:pointer;"
+            onclick="document.getElementById('svc-search').value='';filterSvc('');this.style.display='none';">清&nbsp;除</button>
+  </div>
+  <div class="ukm-chips" id="svc-chips" style="margin-bottom:14px;">
+    {# 已停用但本单已选的品目，置顶并默认勾选，避免编辑丢失 #}
+    {% for s in extra_chips %}
+    <button type="button" class="ukm-chip svc-chip checked"
+            data-id="{{ s.item_id }}"
+            data-name="{{ s.name }}"
+            data-price="{{ '%.2f'|format(s.price or 0) }}"
+            onclick="toggleSvc(this)">
+      {{ s.name }}&nbsp;<span class="ukm-italic" style="font-size:11px;font-style:italic;margin-left:2px;">¥{{ '%.0f'|format(s.price or 0) }}</span>
+      <input type="hidden" name="service_id[]" value="{{ s.item_id }}"/>
+    </button>
+    {% endfor %}
+    {% for it in groom_items %}
+    <button type="button" class="ukm-chip svc-chip {% if it.id in selected_ids %}checked{% endif %}"
+            data-id="{{ it.id }}"
+            data-name="{{ it.name }}"
+            data-price="{{ '%.2f'|format(it.sell_price or 0) }}"
+            onclick="toggleSvc(this)">
+      {{ it.name }}&nbsp;<span class="ukm-italic" style="font-size:11px;font-style:italic;margin-left:2px;">¥{{ '%.0f'|format(it.sell_price or 0) }}</span>
+      {% if it.id in selected_ids %}<input type="hidden" name="service_id[]" value="{{ it.id }}"/>{% endif %}
+    </button>
+    {% endfor %}
+  </div>
+  <div id="svc-no-match" style="display:none;font-family:var(--font-serif);font-size:11px;font-style:italic;color:var(--ink-3);text-align:center;padding:10px;letter-spacing:1px;">未&nbsp;匹&nbsp;配</div>
+  <div id="picked-summary" style="display:none;margin-bottom:14px;padding:10px 12px;background:var(--bg-elevated);border:0.5px solid var(--hair);font-family:var(--font-serif);font-size:11px;letter-spacing:1.5px;color:var(--ink-3);">
+    合&nbsp;计&nbsp;&nbsp;<span class="ukm-num" style="font-size:18px;font-weight:700;color:var(--ink);letter-spacing:0.5px;">¥&nbsp;<span id="grand-total">0</span></span>
+  </div>
+  {% endif %}
+
+  {% if manual_count %}
+  <div style="margin:-4px 0 14px;font-family:var(--font-serif);font-size:11px;font-style:italic;color:var(--accent-amber);letter-spacing:1px;line-height:1.6;">
+    另含&nbsp;{{ manual_count }}&nbsp;个手动录入项目（保存时自动保留，如需修改请用桌面端）
+  </div>
+  {% endif %}
+
+  {# 基本信息 #}
+  <div class="ukm-section-head"><h2>基&nbsp;本&nbsp;信&nbsp;息</h2></div>
+  <div class="ukm-field">
+    <label class="lbl">日&nbsp;期<span class="req">*</span></label>
+    <input class="ukm-input" type="date" name="groom_date" value="{{ rec.groom_date }}" required/>
+  </div>
+  <div class="ukm-row2">
+    <div class="ukm-field">
+      <label class="lbl">美&nbsp;容&nbsp;师</label>
+      <input class="ukm-input" type="text" name="groomer_name" value="{{ rec.groomer_name or '' }}" list="groomer-list" placeholder="选或输入"/>
+      <datalist id="groomer-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
+    </div>
+    <div class="ukm-field">
+      <label class="lbl">助&nbsp;理</label>
+      <input class="ukm-input" type="text" name="assistant_name" value="{{ rec.assistant_name or '' }}" list="assistant-list" placeholder="可选"/>
+      <datalist id="assistant-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
+    </div>
+  </div>
+
+  <button type="submit" class="ukm-btn block" id="submit-btn">保&nbsp;存&nbsp;修&nbsp;改</button>
+</form>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function recalcSummary() {
+  const chips = document.querySelectorAll('.svc-chip.checked');
+  let total = 0;
+  chips.forEach(c => total += parseFloat(c.dataset.price || 0));
+  $('picked-count').textContent = chips.length;
+  $('grand-total').textContent = total.toFixed(0);
+  $('picked-summary').style.display = chips.length ? 'block' : 'none';
+}
+
+function filterSvc(q) {
+  const kw = (q || '').trim().toLowerCase();
+  const chips = document.querySelectorAll('.svc-chip');
+  let shown = 0;
+  chips.forEach(c => {
+    const name = (c.dataset.name || '').toLowerCase();
+    const price = (c.dataset.price || '');
+    const hit = !kw || name.indexOf(kw) >= 0 || price.indexOf(kw) >= 0;
+    const force = c.classList.contains('checked');
+    c.style.display = (hit || force) ? '' : 'none';
+    if (hit || force) shown++;
+  });
+  const noMatch = $('svc-no-match');
+  if (noMatch) noMatch.style.display = (shown === 0 && kw) ? 'block' : 'none';
+  const clearBtn = $('svc-search-clear');
+  if (clearBtn) clearBtn.style.display = kw ? 'inline' : 'none';
+}
+
+function toggleSvc(btn) {
+  btn.classList.toggle('checked');
+  const id = btn.dataset.id;
+  let hi = btn.querySelector('input[type=hidden]');
+  if (btn.classList.contains('checked')) {
+    if (!hi) {
+      hi = document.createElement('input');
+      hi.type = 'hidden'; hi.name = 'service_id[]'; hi.value = id;
+      btn.appendChild(hi);
+    }
+  } else if (hi) {
+    hi.remove();
+  }
+  recalcSummary();
+}
+
+recalcSummary();
+</script>
+
+{% endblock %}

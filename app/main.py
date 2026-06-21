@@ -17161,6 +17161,72 @@ def _delete_grooming_invoice(db: Session, rec: "GroomingOrder") -> None:
         db.flush()
 
 
+def _resync_grooming_invoice(db: Session, rec: "GroomingOrder", request: "Request") -> None:
+    """美容单服务/金额变更后，重建关联「未付」收费单的明细与金额。
+    - 已付的收费单不动（此时美容单本身已锁定，不会走到这里）
+    - 已有未付收费单 → 清掉旧美容明细按当前服务重建 + 重算金额
+    - 无收费单且金额>0 → 新建一张未付收费单
+    - 金额=0 → 不创建
+    """
+    try:
+        services = json.loads(rec.services_json or "[]")
+    except Exception:
+        services = []
+    total = round(sum(float(s.get("subtotal") or 0) for s in services), 2)
+    inv = db.get(Invoice, rec.invoice_id) if getattr(rec, "invoice_id", None) else None
+    if inv and inv.payment_status != "unpaid":
+        return  # 已付/部分付/已取消的不动
+    operator = request.session.get("admin_username", "admin")
+    if inv is None:
+        if total <= 0:
+            return
+        inv = Invoice(
+            invoice_no=_gen_invoice_no(db),
+            customer_id=rec.customer_id or None,
+            pet_id=rec.pet_id or None,
+            invoice_date=rec.groom_date or datetime.now().strftime("%Y-%m-%d"),
+            subtotal=total, discount_amount=0.0, total_amount=total,
+            payment_status="unpaid",
+            notes=f"美容 #{rec.id}",
+            store=_resolve_invoice_store(db, pet_id=rec.pet_id, customer_id=rec.customer_id, fallback=_get_op_store(request)),
+            created_by=operator,
+        )
+        db.add(inv)
+        db.flush()
+        rec.invoice_id = inv.id
+    else:
+        # 清掉旧的美容明细后按当前服务重建
+        db.query(InvoiceItem).filter(
+            InvoiceItem.invoice_id == inv.id,
+            InvoiceItem.ref_type == "grooming",
+            InvoiceItem.ref_id == rec.id,
+        ).delete(synchronize_session=False)
+        db.flush()
+    for s in services:
+        sub = round(float(s.get("subtotal") or 0), 2)
+        if sub <= 0:
+            continue
+        qty = float(s.get("qty") or 1)
+        price = float(s.get("price") or 0)
+        name = (s.get("name") or "美容服务").strip()
+        note = (s.get("notes") or "").strip()
+        db.add(InvoiceItem(
+            invoice_id=inv.id, ref_type="grooming", ref_id=rec.id,
+            description=f"[美容#{rec.id}] {name}" + (f" · {note}" if note else ""),
+            quantity=qty, unit_price=price, subtotal=sub,
+        ))
+    db.flush()
+    # 按发票全部明细之和重算金额（兼容混单），保留已设折扣
+    items_sum = round(sum(
+        float(it.subtotal or 0)
+        for it in db.query(InvoiceItem).filter(InvoiceItem.invoice_id == inv.id).all()
+    ), 2)
+    inv.subtotal = items_sum
+    inv.total_amount = round(items_sum - float(inv.discount_amount or 0), 2)
+    inv.updated_at = datetime.utcnow()
+    db.flush()
+
+
 def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "Invoice | None":
     """把就诊产生的处方 / 检查单 / 销售单自动同步到一张「待收款」收费单。
 
@@ -22654,8 +22720,10 @@ async def admin_grooming_edit(rec_id: int, request: Request, db: Session = Depen
     rec.behavior_note = str(form.get("behavior_note", "")).strip()[:200]
     rec.notes = str(form.get("notes", "")).strip()
     rec.updated_at = datetime.utcnow()
+    # 同步未付收费单（增删服务后让收银台金额跟着变）
+    _resync_grooming_invoice(db, rec, request)
     db.commit()
-    return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已保存", status_code=303)
+    return RedirectResponse(f"/admin/grooming-orders/{rec_id}?msg=已保存（收费单已同步）", status_code=303)
 
 
 @app.post("/admin/grooming-orders/{rec_id}/delete")
@@ -25242,6 +25310,88 @@ async def m_grooming_create(request: Request, db: Session = Depends(get_db)):
         msg += f"，收费单 ¥{total:.2f} 已生成待收款"
     db.commit()
     return RedirectResponse(f"/m/grooming/{rec.id}?msg={msg}", status_code=303)
+
+
+@app.get("/m/grooming/{rec_id}/edit", response_class=HTMLResponse)
+async def m_grooming_edit_page(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/grooming/{rec_id}/edit", status_code=303)
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    locked, lock_reason = _is_grooming_locked(db, rec)
+    if locked:
+        return RedirectResponse(f"/m/grooming/{rec_id}?err=已锁定（{lock_reason}），不可编辑", status_code=303)
+    cust = db.get(Customer, rec.customer_id) if rec.customer_id else None
+    pet = db.get(Pet, rec.pet_id) if rec.pet_id else None
+    try:
+        services = json.loads(rec.services_json or "[]")
+    except Exception:
+        services = []
+    groom_items = _query_grooming_items(db, request)
+    avail_ids = {gi.id for gi in groom_items}
+    selected_ids = {int(s["item_id"]) for s in services if s.get("item_id")}
+    # 已停用但本单已选的品目 → 补成额外 chip，避免编辑时丢失
+    extra_chips = [s for s in services if s.get("item_id") and int(s["item_id"]) not in avail_ids]
+    manual_count = len([s for s in services if not s.get("item_id")])
+    groomers = [s[0] for s in db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+    ).all()]
+    ctx = _m_ctx(request, db, active_tab="grooming")
+    ctx["mobile_role"] = "groomer"
+    ctx.update({
+        "rec": rec, "cust": cust, "pet": pet,
+        "groom_items": groom_items, "selected_ids": selected_ids,
+        "extra_chips": extra_chips, "manual_count": manual_count,
+        "groomers": groomers,
+    })
+    return templates.TemplateResponse(request, "m_uk/grooming_edit.html", ctx)
+
+
+@app.post("/m/grooming/{rec_id}/edit")
+async def m_grooming_edit(rec_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        raise HTTPException(401)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    rec = db.get(GroomingOrder, rec_id)
+    if not rec:
+        raise HTTPException(404)
+    locked, lock_reason = _is_grooming_locked(db, rec)
+    if locked:
+        return RedirectResponse(f"/m/grooming/{rec_id}?err=已锁定（{lock_reason}），不可编辑", status_code=303)
+    # 手动录入项（无 item_id，桌面端开的）原样保留，避免丢失
+    try:
+        existing = json.loads(rec.services_json or "[]")
+    except Exception:
+        existing = []
+    manual_keep = [s for s in existing if not s.get("item_id")]
+    # chip 多选 → 按当前库存价重建
+    services = []
+    for sid in form.getlist("service_id[]"):
+        try:
+            iid = int(sid)
+        except Exception:
+            continue
+        inv = db.get(InventoryItem, iid)
+        if not inv:
+            continue
+        price = float(inv.sell_price or 0)
+        services.append({
+            "name": inv.name, "item_id": iid, "qty": 1.0,
+            "price": price, "subtotal": round(price, 2), "notes": "",
+        })
+    services += manual_keep
+    rec.services_json = json.dumps(services, ensure_ascii=False)
+    rec.total_amount = round(sum(float(s.get("subtotal") or 0) for s in services), 2)
+    rec.groom_date = str(form.get("groom_date", "")).strip()[:20] or rec.groom_date
+    rec.groomer_name = str(form.get("groomer_name", "")).strip()[:80] or rec.groomer_name
+    rec.assistant_name = str(form.get("assistant_name", "")).strip()[:80]
+    rec.updated_at = datetime.utcnow()
+    # 同步未付收费单（增删服务后让收银台金额跟着变）
+    _resync_grooming_invoice(db, rec, request)
+    db.commit()
+    return RedirectResponse(f"/m/grooming/{rec_id}?msg=已保存（收费单已同步）", status_code=303)
 
 
 @app.get("/m/grooming/{rec_id}", response_class=HTMLResponse)
