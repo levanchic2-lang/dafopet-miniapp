@@ -212,6 +212,20 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
 - 页脚改用 `@page @bottom-center { content: ... }`（弃用 position:fixed，解决遮挡）
 - 服务器依赖：`apt install fonts-noto-cjk libpango-1.0-0 libpangoft2-1.0-0 libcairo2` + `pip install weasyprint`
 
+### B超 / 超声报告（AI 辅助，2026-06-23）
+- 复用显微镜报告同款套路：`UltrasoundReport` 模型挂 ExamOrder，出 PDF 回写 ExamReport（自动进「已上传报告」）
+- **测量字段动态**：`measurements_json` 存分组键值 `[{group, rows:[{name,value,unit}]}]`，机器导出多少存多少，心超/腹部/泌尿共用一套结构（用户拍板：不写死指标）
+- 工作流：检查单详情页「📊 生成B超报告」→ 上传机器测量 PDF（电子版/文字可复制）+ 超声图片 + 医生主观描述 → 解析 → 起草 → 编辑页微调 → 出 PDF
+- 解析：`app/services/ultrasound_report.py`
+  - `extract_pdf_text`（pypdf 抽文字）→ `structure_measurements`（LLM 整理成动态分组，temp=0）→ `draft_ultrasound_text`（LLM 结合宠物信息+测量值+主观描述出「超声所见/提示/建议」，temp=0.4）
+  - 模型优先级 `WECOM_AGENT_MODEL` > `OPENAI_MODEL`（复用 settings.openai_*）
+- 出 PDF：`app/services/ultrasound_pdf.py`（WeasyPrint，逐组渲染测量表 + 影像网格 + 三段正文，HTML 全 `_esc` 转义）
+- 路由：`/admin/exam-orders/{id}/ultrasound/new|create` · `/admin/ultrasound-reports/{id}/edit|save|delete|regen-pdf` · `/admin/ultrasound/ai-draft`(JSON，编辑页重跑 AI)
+- 编辑页测量表用 JS 序列化进隐藏 `measurements_json` 字段提交（避免按下标拆字段时删行/删组错位）
+- 入口识别：`InventoryItem.subcategory=="ultrasound"` 或名称含 B超/彩超/超声/心超
+- 异常值判断：v1 交给 AI 按经验描述，**未建参考值库**
+- 服务器依赖：`pip install pypdf`（weasyprint/Pillow 已有）
+
 ### Jinja2 常见坑 (重申)
 - **context dict 必须 `d['key']`**，不要 `d.key`（命中 `items/keys/values/get/pop/update` 返回 bound method 500）
 - wallet 用标量 `wallet_balance` 传，不要传 `wallet` 对象（undefined.balance 500）
