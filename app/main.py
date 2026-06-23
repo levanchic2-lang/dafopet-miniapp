@@ -22122,13 +22122,70 @@ _XRAY_TEMPLATES = {
             ]},
         ],
     },
+    "spine": {
+        "label": "脊椎（颈/胸/腰）",
+        "measurements": [],
+        "structures": [
+            {"name": "椎体序列 / 对位", "multi": True, "labels": [
+                {"tag": "正常", "desc": "各椎体排列连续、对位良好"},
+                {"tag": "半脱位", "desc": "椎体相对移位、关节突对位异常"},
+                {"tag": "脱位", "desc": "完全错位，多伴外伤"},
+                {"tag": "成角", "desc": "脊柱后凸/侧凸/前凸异常"},
+                {"tag": "移行椎", "desc": "腰骶/胸腰交界过渡椎，先天变异"},
+            ]},
+            {"name": "椎体形态 / 密度", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "楔形变(压缩骨折)", "desc": "椎体前缘塌陷，外伤/病理性"},
+                {"tag": "溶骨", "desc": "肿瘤/感染破坏"},
+                {"tag": "硬化", "desc": "密度增高"},
+                {"tag": "畸形椎(蝶形椎/半椎体)", "desc": "先天发育异常，短尾犬常见"},
+            ]},
+            {"name": "椎间隙", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "变窄", "desc": "椎间盘退变/突出（IVDD）"},
+                {"tag": "增宽", "desc": ""},
+                {"tag": "椎间盘钙化", "desc": "退变矿化，软骨营养不良犬常见"},
+            ]},
+            {"name": "终板", "multi": True, "labels": [
+                {"tag": "光滑/正常", "desc": ""},
+                {"tag": "不规则·硬化·溶骨", "desc": "相邻终板侵蚀+椎间隙变窄 → 椎间盘脊椎炎(discospondylitis)典型征象"},
+            ]},
+            {"name": "脊椎病（骨赘）", "multi": True, "labels": [
+                {"tag": "无", "desc": ""},
+                {"tag": "腹侧骨赘/骨桥", "desc": "spondylosis deformans，嘴样或桥接骨赘，退行性"},
+                {"tag": "多发", "desc": "多个椎间隙受累"},
+            ]},
+            {"name": "关节突 / 椎间孔", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "关节突退行性变", "desc": ""},
+                {"tag": "椎间孔狭窄", "desc": "可压迫神经根"},
+            ]},
+            {"name": "棘突 / 横突", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "骨折", "desc": ""},
+                {"tag": "畸形", "desc": ""},
+            ]},
+            {"name": "椎管 / 脊髓（平片间接）", "multi": True, "labels": [
+                {"tag": "未见异常", "desc": "平片仅能间接评估"},
+                {"tag": "可疑占位/狭窄", "desc": "建议脊髓造影 / CT / MRI 进一步评估"},
+            ]},
+            {"name": "椎旁软组织", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "肿胀", "desc": ""},
+                {"tag": "矿化", "desc": ""},
+            ]},
+        ],
+    },
 }
-_XRAY_REGION_ORDER = ["thorax", "abdomen", "msk", "joint"]
+_XRAY_REGION_ORDER = ["thorax", "abdomen", "msk", "joint", "spine"]
 
 
 def _infer_xray_region(item_label: str) -> str:
     """按检查项名字推断默认部位。"""
     s = (item_label or "")
+    # 脊椎优先（"胸椎/腰椎"含"胸"会误入胸部，须先判）
+    if any(k in s for k in ("椎", "脊柱", "脊椎", "颈椎", "胸椎", "腰椎", "骶")):
+        return "spine"
     if any(k in s for k in ("关节", "髋", "肘", "膝", "腕", "跗")):
         return "joint"
     if any(k in s for k in ("胸", "肺", "心")):

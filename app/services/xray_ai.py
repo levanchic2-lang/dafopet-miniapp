@@ -43,6 +43,7 @@ _SYSTEM_PROMPT = """你是宠物医院资深放射科医生，正在根据【医
 
 _REGION_LABEL = {
     "thorax": "胸部", "abdomen": "腹部", "msk": "肌骨/四肢", "joint": "关节",
+    "spine": "脊椎（颈/胸/腰）",
 }
 
 
