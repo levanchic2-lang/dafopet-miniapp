@@ -182,8 +182,9 @@
       {% for p in cur_photos %}<a href="/uploads/{{ p }}" target="_blank"><img src="/uploads/{{ p }}"/></a>{% endfor %}
     </div>
     {% endif %}
-    <input type="file" name="photos" accept="image/*" multiple/>
-    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin-top:6px;">{{ '可继续追加，' if cur_photos else '' }}将排版进报告 PDF（自动压缩，单张 ≤ 15MB）。</p>
+    <input type="file" id="xray-photo-input" name="photos" accept="image/*" multiple onchange="addXrayFiles(this)"/>
+    <div id="xray-new-previews" class="xr-photos" style="margin-top:10px;"></div>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin-top:6px;">可多次点击「选择文件」逐张追加（不会覆盖之前选的）；将排版进报告 PDF（自动压缩，单张 ≤ 15MB）。</p>
   </div>
 
   <div class="xr-actions">
@@ -321,6 +322,40 @@ async function aiDraft() {
   } finally {
     btn.disabled = false; btn.textContent = old;
   }
+}
+
+// ── 影像累加上传（原生 file 输入每次选会覆盖，这里用 DataTransfer 累加）──
+let xrayDT = new DataTransfer();
+function renderXrayPreviews() {
+  const wrap = document.getElementById('xray-new-previews');
+  wrap.innerHTML = '';
+  Array.from(xrayDT.files).forEach((f, i) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'position:relative;display:inline-block;';
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(f);
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.textContent = '✕';
+    btn.style.cssText = 'position:absolute;top:3px;right:3px;background:var(--accent-red);color:#fff;border:none;width:22px;height:22px;line-height:1;cursor:pointer;font-family:var(--font-serif);';
+    btn.onclick = () => removeXrayFile(i);
+    div.appendChild(img); div.appendChild(btn);
+    wrap.appendChild(div);
+  });
+}
+function addXrayFiles(input) {
+  Array.from(input.files).forEach(f => {
+    const dup = Array.from(xrayDT.files).some(x => x.name === f.name && x.size === f.size);
+    if (!dup) xrayDT.items.add(f);
+  });
+  input.files = xrayDT.files;
+  renderXrayPreviews();
+}
+function removeXrayFile(idx) {
+  const dt = new DataTransfer();
+  Array.from(xrayDT.files).forEach((f, i) => { if (i !== idx) dt.items.add(f); });
+  xrayDT = dt;
+  document.getElementById('xray-photo-input').files = xrayDT.files;
+  renderXrayPreviews();
 }
 
 document.getElementById('xrayForm').addEventListener('submit', function () {
