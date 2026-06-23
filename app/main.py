@@ -21119,6 +21119,35 @@ _MICRO_TEMPLATES = {
             {"name": "气味", "options": ["微臭", "酸臭", "腥臭", "恶臭"]},
         ],
     },
+    "urine": {
+        "label": "尿沉渣",
+        "microbe": [
+            "红细胞", "白细胞（脓细胞）", "鳞状上皮细胞", "移行上皮细胞", "肾小管上皮细胞",
+            "细菌", "酵母菌/真菌", "黏液丝", "脂滴", "精子",
+            "草酸钙结晶", "磷酸铵镁结晶（鸟粪石）", "尿酸盐结晶", "胆红素结晶", "非晶形结晶",
+        ],
+        "parasite": ["毛滴虫", "微丝蚴"],
+        "pathology": [
+            {"name": "管型", "options": ["无", "透明管型", "颗粒管型", "细胞管型", "蜡样管型"]},
+            {"name": "外观", "options": ["清亮", "微浊", "浑浊", "血样"]},
+            {"name": "结晶主类", "options": ["无", "草酸钙", "磷酸铵镁", "尿酸盐", "胆红素", "胱氨酸", "非晶形"]},
+        ],
+    },
+    "cytology": {
+        "label": "肿物细胞学",
+        "microbe": [
+            "嗜中性粒细胞", "嗜酸性粒细胞", "淋巴细胞", "浆细胞", "巨噬细胞", "肥大细胞",
+            "红细胞", "细菌", "上皮细胞", "间叶细胞", "圆形细胞",
+        ],
+        "parasite": [],
+        "pathology": [
+            {"name": "细胞构成", "options": ["以上皮细胞为主", "以间叶细胞为主", "以圆形细胞为主", "以炎性细胞为主", "混合性"]},
+            {"name": "核异型（恶性特征）", "options": ["无", "轻度", "中度", "显著"]},
+            {"name": "背景", "options": ["清洁", "出血", "炎性", "坏死", "黏液"]},
+            {"name": "采样质量", "options": ["满意", "细胞量少", "血液稀释"]},
+            {"name": "倾向判读", "options": ["良性", "炎性/反应性", "增生", "可疑肿瘤（建议活检）", "恶性倾向"]},
+        ],
+    },
     "general": {
         "label": "通用",
         "microbe": [
@@ -21131,7 +21160,7 @@ _MICRO_TEMPLATES = {
 }
 
 # 模板顺序（前端 chip 顺序 + 默认推断）
-_MICRO_TEMPLATE_ORDER = ["skin", "ear", "fecal", "general"]
+_MICRO_TEMPLATE_ORDER = ["skin", "ear", "fecal", "urine", "cytology", "general"]
 
 
 def _infer_micro_template(item_label: str) -> str:
@@ -21143,6 +21172,10 @@ def _infer_micro_template(item_label: str) -> str:
         return "ear"
     if any(k in s for k in ("粪", "便", "肠")):
         return "fecal"
+    if any(k in s for k in ("尿沉渣", "尿液", "尿常规", "尿检", "尿有形")):
+        return "urine"
+    if any(k in s for k in ("细胞学", "穿刺", "针吸", "抽吸", "肿物", "肿瘤", "包块", "新生物", "FNA")):
+        return "cytology"
     return "general"
 _MICRO_PHOTO_EXT_OK = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 _MICRO_PHOTO_MAX = 10 * 1024 * 1024  # 10 MB / 张

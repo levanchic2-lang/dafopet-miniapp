@@ -228,8 +228,9 @@
       <b>寄生虫定性</b>：检出 ≥1 个 = 阳性；未检出 = 阴性
     </div>
 
-    {# 4 模板分别渲染 #}
-    {% for tpl_key in ['skin', 'ear', 'fecal', 'general'] %}
+    {# 各模板分别渲染（顺序取自 tpl_list） #}
+    {% for t in tpl_list %}
+    {% set tpl_key = t.key %}
     {% set tpl = templates[tpl_key] %}
     <div class="mr-tpl-block {% if active_tpl == tpl_key %}visible{% endif %}" data-tpl="{{ tpl_key }}">
 
