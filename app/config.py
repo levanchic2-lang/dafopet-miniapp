@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     openai_base_url: str = ""
     openai_model: str = "gpt-4o-mini"
 
+    # DeepSeek（OpenAI 兼容）：仅用于「报告类文字生成」（B超起草 / 显微镜·粪检起草）。
+    # 配了 deepseek_api_key 即启用；视觉类任务（TNR 审核 / 进货单识别）仍走豆包视觉。
+    # model 可选 deepseek-chat（V3，快/便宜）或 deepseek-reasoner（R1，推理更强/略慢）。
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-chat"
+
     # 自动通过：仅当 AI 判定为疑似流浪猫且置信度 >= 该值（0~1）
     stray_auto_approve_min_confidence: float = 0.78
 

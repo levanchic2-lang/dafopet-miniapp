@@ -99,22 +99,19 @@ def _format_payload(payload: dict) -> str:
 
 
 async def draft_microscopy_text(payload: dict) -> dict[str, Any]:
-    if not settings.openai_api_key:
-        return {"ok": False, "error": "未配置 OPENAI_API_KEY"}
+    from app.services.report_llm import report_llm_configured, report_text_client_model
+    if not report_llm_configured():
+        return {"ok": False, "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}
 
     try:
-        from openai import AsyncOpenAI
+        from openai import AsyncOpenAI  # noqa: F401
     except ImportError:
         return {"ok": False, "error": "缺少 openai 库"}
 
-    base = (settings.openai_base_url or "").strip() or None
-    client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=base)
-
     user_text = _format_payload(payload)
 
-    # 模型优先级：WECOM_AGENT_MODEL（便宜版） > OPENAI_MODEL
-    model = (getattr(settings, "wecom_agent_model", "") or "").strip() or \
-        (settings.openai_model or "gpt-4o-mini")
+    # 报告文字统一走 DeepSeek（已配置）否则回退豆包文本
+    client, model, _ = report_text_client_model()
 
     try:
         resp = await client.chat.completions.create(

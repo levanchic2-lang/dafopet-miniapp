@@ -51,17 +51,6 @@ def extract_pdf_text(path: Path) -> str:
         return ""
 
 
-def _client():
-    from openai import AsyncOpenAI
-    base = (settings.openai_base_url or "").strip() or None
-    return AsyncOpenAI(api_key=settings.openai_api_key, base_url=base)
-
-
-def _model() -> str:
-    return (getattr(settings, "wecom_agent_model", "") or "").strip() or \
-        (settings.openai_model or "gpt-4o-mini")
-
-
 def _strip_md(raw: str) -> str:
     raw = (raw or "").strip()
     if raw.startswith("```"):
@@ -95,8 +84,9 @@ _STRUCT_SYSTEM = """你是宠物医院超声测量数据整理助手。
 
 async def structure_measurements(raw_text: str, exam_type: str = "cardiac") -> dict[str, Any]:
     """杂乱 PDF 文字 → 动态分组测量 JSON。返回 {ok, groups, error?}"""
-    if not settings.openai_api_key:
-        return {"ok": False, "groups": [], "error": "未配置 OPENAI_API_KEY"}
+    from app.services.report_llm import report_llm_configured, report_text_client_model
+    if not report_llm_configured():
+        return {"ok": False, "groups": [], "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}
     if not (raw_text or "").strip():
         return {"ok": False, "groups": [], "error": "PDF 未提取到文字（可能是扫描件 / 图片型 PDF）"}
     try:
@@ -105,9 +95,10 @@ async def structure_measurements(raw_text: str, exam_type: str = "cardiac") -> d
         return {"ok": False, "groups": [], "error": "缺少 openai 库"}
 
     user = f"【检查类型】{_EXAM_TYPE_LABEL.get(exam_type, '通用超声')}\n\n【机器导出测量文本】\n{raw_text[:8000]}"
+    client, model, _ = report_text_client_model()
     try:
-        resp = await _client().chat.completions.create(
-            model=_model(),
+        resp = await client.chat.completions.create(
+            model=model,
             messages=[{"role": "system", "content": _STRUCT_SYSTEM},
                       {"role": "user", "content": user}],
             temperature=0.0,
@@ -214,17 +205,19 @@ def _format_draft_payload(payload: dict) -> str:
 
 async def draft_ultrasound_text(payload: dict) -> dict[str, Any]:
     """生成超声所见/结论/建议三段。返回 {ok, findings, conclusion, advice, error?}"""
-    if not settings.openai_api_key:
-        return {"ok": False, "error": "未配置 OPENAI_API_KEY"}
+    from app.services.report_llm import report_llm_configured, report_text_client_model
+    if not report_llm_configured():
+        return {"ok": False, "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}
     try:
         from openai import AsyncOpenAI  # noqa: F401
     except ImportError:
         return {"ok": False, "error": "缺少 openai 库"}
 
     user_text = _format_draft_payload(payload)
+    client, model, _ = report_text_client_model()
     try:
-        resp = await _client().chat.completions.create(
-            model=_model(),
+        resp = await client.chat.completions.create(
+            model=model,
             messages=[{"role": "system", "content": _DRAFT_SYSTEM},
                       {"role": "user", "content": user_text}],
             temperature=0.4,
