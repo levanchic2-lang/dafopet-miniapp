@@ -441,6 +441,17 @@ context dict 必须 `d['key']`，不要 `d.key`。本轮 invoice detail 的 `exa
   - 复用今日病历：`_resolve_or_list_visit` 自动找当天 open visit；无则列最近 3 次未结束病历让用户选「用病历 #N」/「新建病历」
   - 默认门店：`AdminUser.store` 直读（含超管，让超管也能有"常驻门店"）
 
+## 大模型配置（三类用途，按任务路由）
+所有 LLM 客户端走 OpenAI 兼容接口（`AsyncOpenAI`），按用途分三套：
+- **视觉类**（TNR 审核 `purchase_ocr` 进货单识别）→ `OPENAI_MODEL`（豆包视觉 `doubao-1-5-vision-pro-32k`，base=火山引擎 ark）。**必须有视觉能力，不能换 DeepSeek。**
+- **企微 agent**（语音/文字 agent）→ `WECOM_AGENT_MODEL`（豆包文本 `doubao-1-5-pro-32k`，便宜 3-4 倍；空则回退 `OPENAI_MODEL`）。
+- **报告类文字生成**（B超起草 / 显微镜·粪检起草）→ 统一走 `app/services/report_llm.py` 的 `report_text_client_model()`：
+  - 配了 `DEEPSEEK_API_KEY` → 用 **DeepSeek**（OpenAI 兼容，base 默认 `https://api.deepseek.com`，model 默认 `deepseek-chat`）；否则回退豆包文本模型。
+  - `DEEPSEEK_MODEL` 可选 `deepseek-chat`（V3，快）或 `deepseek-reasoner`（R1，推理更强但慢）。
+  - **R1 坑（重要）**：`deepseek-reasoner` 的 `max_tokens` 含思维链（reasoning_content）额度，太小会把正式回答截断成空。`report_text_client_model()` 返回 `is_reasoner` 标志，调用方在推理模型下把 `max_tokens` 提到 6000-8000（仅按实际用量计费）。
+  - 返回 4 元组 `(client, model, provider, is_reasoner)`，3 个调用点：`ultrasound_report.structure_measurements / draft_ultrasound_text`、`microscopy_ai.draft_microscopy_text`。
+- 服务器 `.env` 配置项：`OPENAI_API_KEY/OPENAI_BASE_URL/OPENAI_MODEL`、`WECOM_AGENT_MODEL`、`DEEPSEEK_API_KEY`(+可选 `DEEPSEEK_MODEL`)。**key 只放服务器 `.env`，绝不进仓库。**注意 `.env` 别存成 CRLF（老行有 `\r`，新加行用 `\n`）。
+
 ## UK 风格规范（B 系列重写）
 桌面后台正在按英伦极简（UK Minimal）风格分页重写。**所有新页 / 新模板必须严格遵守 7 条核心 + 9 条禁忌**，否则验收必退。
 
