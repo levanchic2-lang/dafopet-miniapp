@@ -416,6 +416,45 @@ function confirmExamVoid(form, paidAmount) {
   </div>
   {% endif %}
 
+  {# B超 / 超声报告入口（仅当本单含 B超/超声项目）#}
+  {% if has_ultrasound %}
+  <div class="ex-section" style="background:#f7faf8;border-left:3px solid #1d4d3a;">
+    <div class="ex-section-head" style="display:flex;align-items:center;justify-content:space-between;">
+      <h2>B&nbsp;超&nbsp;/&nbsp;超&nbsp;声&nbsp;报&nbsp;告（AI 辅助）</h2>
+      <a href="/admin/exam-orders/{{ order.id }}/ultrasound/new" class="uk-btn primary sm" style="text-decoration:none;">
+        📊 生 成 B 超 报 告
+      </a>
+    </div>
+    <p style="font-size:9.5pt;color:var(--ink-2);line-height:1.7;margin:6px 0 10px;font-style:italic;">
+      上传 B超机导出的测量 PDF + 超声图片 + 填写医生主观描述（肿瘤 / 囊肿 / 积液等）→ 系统自动解析测量值并生成「超声所见 / 提示 / 建议」草稿 → 核对微调后出 PDF 并归档到已上传报告。
+    </p>
+    {% if ultrasound_reports %}
+    <div style="margin-top:8px;border-top:0.5px dashed var(--hair);padding-top:10px;">
+      <div style="font-size:9pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:6px;font-family:var(--font-serif);">已生成 B超报告</div>
+      {% for ur in ultrasound_reports %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--hair);">
+        <div style="font-size:10pt;">
+          <b>{{ ur.item_label or 'B超报告' }}</b>
+          {% if not ur.exam_report_id %}<span style="color:var(--accent-amber);font-size:8.5pt;margin-left:8px;">草稿·未出PDF</span>{% endif %}
+          <span style="color:var(--ink-3);margin-left:10px;font-size:9pt;">
+            {{ ur.vet_name or '—' }} · {{ (ur.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if ur.created_at else '' }}
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a href="/admin/ultrasound-reports/{{ ur.id }}/edit" class="uk-btn ghost sm" style="text-decoration:none;font-size:9pt;">编辑</a>
+          <form method="post" action="/admin/ultrasound-reports/{{ ur.id }}/delete" style="margin:0;display:inline;"
+                onsubmit="return confirm('确认删除此 B超报告？同时会删除生成的 PDF 和超声图片。');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="uk-btn ghost sm" style="font-size:9pt;color:var(--accent-red);">删除</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {# 上传报告 #}
   <div class="ex-section">
     <div class="ex-section-head"><h2>上&nbsp;传&nbsp;报&nbsp;告（电脑端）</h2></div>

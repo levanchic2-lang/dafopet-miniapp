@@ -1,0 +1,251 @@
+{% extends "uk/_base.html" %}
+{% block title %}编辑 B超报告 #{{ report.id }}{% endblock %}
+
+{% block body %}
+
+<style>
+  .us-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .us-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .us-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .us-bc .sep { margin:0 8px; color:var(--ink-4); }
+
+  .us-head { display:flex; justify-content:space-between; align-items:flex-end; }
+  .us-head h1 { font-family:var(--font-serif); font-size:26pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0 0 6px; }
+  .us-meta { font-size:10pt; color:var(--ink-2); font-style:italic; margin-bottom:18px; }
+  .us-meta .sep { margin:0 8px; color:var(--ink-4); }
+
+  .us-msg { background:#f3f6f3; border-left:3px solid #1d4d3a; padding:10px 14px; font-size:10pt; color:var(--ink-2); margin-bottom:18px; line-height:1.6; }
+
+  .us-card { background:var(--paper); border:0.5px solid var(--hair); padding:22px 24px; margin-bottom:18px; }
+  .us-card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:6px; border-bottom:0.5px solid var(--hair); }
+  .us-card-head h2 { font-family:var(--font-serif); font-size:12pt; font-weight:700; color:var(--ink); letter-spacing:2px; margin:0; }
+
+  .us-field { margin-bottom:16px; }
+  .us-field > label { display:block; font-size:9.5pt; letter-spacing:1px; color:var(--ink-3); margin-bottom:5px; }
+  .us-input, .us-select, .us-text { width:100%; font-family:var(--font-serif); font-size:11pt; color:var(--ink);
+    background:#fff; border:0.5px solid var(--hair); padding:9px 11px; box-sizing:border-box; }
+  .us-text { min-height:120px; line-height:1.75; resize:vertical; }
+  .us-row3 { display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:14px; }
+
+  /* 测量分组 */
+  .ms-group { border:0.5px solid var(--hair); margin-bottom:14px; }
+  .ms-group-bar { display:flex; align-items:center; gap:8px; background:#f7f6f1; padding:8px 10px; border-bottom:0.5px solid var(--hair); }
+  .ms-group-bar input { flex:1; font-family:var(--font-serif); font-size:10.5pt; font-weight:700; color:var(--ink); background:transparent; border:none; border-bottom:0.5px solid transparent; padding:3px 2px; }
+  .ms-group-bar input:focus { border-bottom-color:var(--ink-3); outline:none; }
+  .ms-del { font-family:var(--font-serif); font-size:9pt; color:var(--accent-red); background:transparent; border:0.5px solid var(--hair); padding:3px 9px; cursor:pointer; }
+  .ms-tbl { width:100%; border-collapse:collapse; }
+  .ms-tbl td { border-bottom:0.5px solid var(--hair); padding:4px 6px; }
+  .ms-tbl input { width:100%; font-family:var(--font-serif); font-size:10pt; color:var(--ink); border:none; background:transparent; padding:5px 4px; box-sizing:border-box; }
+  .ms-tbl input:focus { outline:none; background:#fffdf5; }
+  .ms-tbl td.c-name { width:46%; } .ms-tbl td.c-val { width:24%; } .ms-tbl td.c-unit { width:18%; } .ms-tbl td.c-x { width:36px; text-align:center; }
+  .ms-rowdel { font-family:var(--font-serif); font-size:11pt; color:var(--ink-4); background:transparent; border:none; cursor:pointer; }
+  .ms-rowdel:hover { color:var(--accent-red); }
+  .ms-addrow, .ms-addgroup { font-family:var(--font-serif); font-size:9.5pt; color:var(--ink-2); background:#fff; border:0.5px solid var(--hair); padding:6px 14px; cursor:pointer; letter-spacing:1px; }
+  .ms-addrow { margin:8px 10px; } .ms-addgroup { margin-top:4px; }
+
+  .us-btn-sm { font-family:var(--font-serif); font-size:9.5pt; color:var(--ink-2); background:#fff; border:0.5px solid var(--hair); padding:7px 14px; cursor:pointer; letter-spacing:1px; }
+  .us-btn-sm:hover { border-color:var(--ink-3); color:var(--ink); }
+
+  .us-actions { display:flex; gap:12px; align-items:center; margin:8px 0 50px; }
+  .us-submit { font-family:var(--font-serif); font-size:12pt; font-weight:700; letter-spacing:2px; color:var(--paper); background:var(--ink); border:none; padding:13px 30px; cursor:pointer; }
+  .us-submit:hover { background:var(--ink-2); }
+  .us-cancel { font-family:var(--font-serif); font-size:10pt; color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .us-cancel:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .us-photos { display:flex; flex-wrap:wrap; gap:8px; }
+  .us-photos img { width:110px; height:110px; object-fit:cover; border:0.5px solid var(--hair); }
+</style>
+
+<div class="us-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/exam-orders/{{ order.id }}">检查单 #{{ order.id }}</a><span class="sep">/</span>
+  <span>编辑 B超报告</span>
+</div>
+
+<div class="us-head"><div><h1>编&nbsp;辑&nbsp;B&nbsp;超&nbsp;报&nbsp;告</h1></div></div>
+<div class="us-meta">
+  {{ pet.name if pet else '—' }}
+  {% if pet %}<span class="sep">·</span>{% if pet.species == 'cat' %}猫{% elif pet.species == 'dog' %}犬{% else %}{{ pet.species or '' }}{% endif %}{% if pet.breed %} · {{ pet.breed }}{% endif %}{% endif %}
+  <span class="sep">·</span>{{ cust.name if cust else '—' }}
+</div>
+
+{% if msg %}<div class="us-msg">{{ msg }}</div>{% endif %}
+
+<form method="post" action="/admin/ultrasound-reports/{{ report.id }}/save" id="us-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="exam_type" id="exam_type" value="{{ report.exam_type }}"/>
+  <input type="hidden" name="measurements_json" id="measurements_json"/>
+
+  <div class="us-card">
+    <div class="us-card-head"><h2>基&nbsp;本&nbsp;信&nbsp;息</h2></div>
+    <div class="us-row3">
+      <div class="us-field">
+        <label>检查类型</label>
+        <select class="us-select" onchange="document.getElementById('exam_type').value=this.value">
+          {% for t in exam_types %}<option value="{{ t.key }}" {% if t.key == report.exam_type %}selected{% endif %}>{{ t.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="us-field">
+        <label>报告医师</label>
+        <input class="us-input" name="vet_name" value="{{ report.vet_name }}" list="vet-list"/>
+        <datalist id="vet-list">{% for v in vet_names %}<option value="{{ v }}">{% endfor %}</datalist>
+      </div>
+      <div class="us-field">
+        <label>设备 / 探头</label>
+        <input class="us-input" name="device" value="{{ report.device }}"/>
+      </div>
+    </div>
+    <div class="us-field">
+      <label>归属检查项</label>
+      <input class="us-input" name="item_label" value="{{ report.item_label }}"/>
+    </div>
+  </div>
+
+  {% if photos %}
+  <div class="us-card">
+    <div class="us-card-head"><h2>超&nbsp;声&nbsp;影&nbsp;像（{{ photos|length }}）</h2></div>
+    <div class="us-photos">
+      {% for p in photos %}<a href="/uploads/{{ p }}" target="_blank"><img src="/uploads/{{ p }}"/></a>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="us-card">
+    <div class="us-card-head">
+      <h2>测&nbsp;量&nbsp;数&nbsp;据</h2>
+      <button type="button" class="ms-addgroup" onclick="addGroup()">+ 加一组</button>
+    </div>
+    <div id="ms-groups"></div>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin:6px 0 0;line-height:1.6;">字段不固定，机器导出多少就是多少；可自由增删行/组。值留空的行不会出现在报告里。</p>
+  </div>
+
+  <div class="us-card">
+    <div class="us-card-head"><h2>医&nbsp;生&nbsp;主&nbsp;观&nbsp;描&nbsp;述</h2></div>
+    <textarea class="us-text" name="vet_findings" id="vet_findings" style="min-height:80px;">{{ report.vet_findings }}</textarea>
+  </div>
+
+  <div class="us-card">
+    <div class="us-card-head">
+      <h2>报&nbsp;告&nbsp;正&nbsp;文</h2>
+      <button type="button" class="us-btn-sm" id="ai-btn" onclick="reDraft()">⚙ 用当前数据重新生成文字稿</button>
+    </div>
+    <div class="us-field">
+      <label>超声所见</label>
+      <textarea class="us-text" name="findings" id="findings">{{ report.findings }}</textarea>
+    </div>
+    <div class="us-field">
+      <label>超声提示（结论）</label>
+      <textarea class="us-text" name="conclusion" id="conclusion" style="min-height:80px;">{{ report.conclusion }}</textarea>
+    </div>
+    <div class="us-field">
+      <label>建议</label>
+      <textarea class="us-text" name="advice" id="advice" style="min-height:80px;">{{ report.advice }}</textarea>
+    </div>
+  </div>
+
+  <div class="us-actions">
+    <button type="submit" class="us-submit">✓ 保 存 并 出 PDF</button>
+    <a href="/admin/exam-orders/{{ order.id }}" class="us-cancel">返回检查单</a>
+  </div>
+</form>
+
+<script>
+const INIT_GROUPS = {{ groups | tojson }};
+const REPORT_ID = {{ report.id }};
+
+function rowHtml(r) {
+  r = r || {name:'', value:'', unit:''};
+  const esc = s => (s||'').replace(/"/g,'&quot;');
+  return `<tr>
+    <td class="c-name"><input class="r-name" placeholder="指标名" value="${esc(r.name)}"/></td>
+    <td class="c-val"><input class="r-value" placeholder="数值" value="${esc(r.value)}"/></td>
+    <td class="c-unit"><input class="r-unit" placeholder="单位" value="${esc(r.unit)}"/></td>
+    <td class="c-x"><button type="button" class="ms-rowdel" onclick="this.closest('tr').remove()">✕</button></td>
+  </tr>`;
+}
+
+function groupHtml(g) {
+  g = g || {group:'', rows:[]};
+  const esc = s => (s||'').replace(/"/g,'&quot;');
+  const rows = (g.rows && g.rows.length ? g.rows : [{}]).map(rowHtml).join('');
+  return `<div class="ms-group">
+    <div class="ms-group-bar">
+      <input class="g-name" placeholder="分组名（如 M测量·左室）" value="${esc(g.group)}"/>
+      <button type="button" class="ms-del" onclick="this.closest('.ms-group').remove()">删组</button>
+    </div>
+    <table class="ms-tbl"><tbody>${rows}</tbody></table>
+    <button type="button" class="ms-addrow" onclick="addRow(this)">+ 加一行</button>
+  </div>`;
+}
+
+function addRow(btn) {
+  const tbody = btn.closest('.ms-group').querySelector('tbody');
+  tbody.insertAdjacentHTML('beforeend', rowHtml());
+}
+function addGroup() {
+  document.getElementById('ms-groups').insertAdjacentHTML('beforeend', groupHtml());
+}
+
+function renderGroups(groups) {
+  const wrap = document.getElementById('ms-groups');
+  wrap.innerHTML = (groups && groups.length ? groups : [{group:'',rows:[{}]}]).map(groupHtml).join('');
+}
+
+function collectGroups() {
+  const out = [];
+  document.querySelectorAll('#ms-groups .ms-group').forEach(g => {
+    const gname = (g.querySelector('.g-name').value || '').trim();
+    const rows = [];
+    g.querySelectorAll('tbody tr').forEach(tr => {
+      const name = (tr.querySelector('.r-name').value || '').trim();
+      if (!name) return;
+      rows.push({
+        name: name,
+        value: (tr.querySelector('.r-value').value || '').trim(),
+        unit: (tr.querySelector('.r-unit').value || '').trim(),
+      });
+    });
+    if (rows.length) out.push({group: gname, rows: rows});
+  });
+  return out;
+}
+
+document.getElementById('us-form').addEventListener('submit', function() {
+  document.getElementById('measurements_json').value = JSON.stringify(collectGroups());
+});
+
+async function reDraft() {
+  const btn = document.getElementById('ai-btn');
+  btn.disabled = true; const old = btn.textContent; btn.textContent = '正在生成…';
+  try {
+    const resp = await fetch('/admin/ultrasound/ai-draft', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        report_id: REPORT_ID,
+        exam_type: document.getElementById('exam_type').value,
+        item_label: document.querySelector('[name=item_label]').value,
+        device: document.querySelector('[name=device]').value,
+        vet_findings: document.getElementById('vet_findings').value,
+        groups: collectGroups(),
+      })
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      if (!document.getElementById('findings').value.trim() || confirm('用 AI 结果覆盖当前正文？')) {
+        document.getElementById('findings').value = data.findings || '';
+        document.getElementById('conclusion').value = data.conclusion || '';
+        document.getElementById('advice').value = data.advice || '';
+      }
+    } else {
+      alert('生成失败：' + (data.error || '未知错误'));
+    }
+  } catch (e) {
+    alert('请求失败：' + e);
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+
+renderGroups(INIT_GROUPS);
+</script>
+
+{% endblock %}

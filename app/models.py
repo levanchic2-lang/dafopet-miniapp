@@ -1723,6 +1723,42 @@ class MicroscopyReport(Base):
     updated_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class UltrasoundReport(Base):
+    """B超 / 超声检查报告（心超 / 腹部 / 泌尿生殖 等）
+    - 关联 ExamOrder 上的某一项（item_label 标识）
+    - 测量字段不固定：measurements_json 存「动态分组」，机器导出多少存多少
+    - 工作流：上传机器导出的测量 PDF + B超图片 + 医生主观描述
+      → 系统解析 PDF 测量值 + LLM 结合宠物信息生成「所见/结论/建议」三段
+      → 医生微调 → 出 PDF（写入 ExamReport，自动进已上传报告）
+    """
+    __tablename__ = "ultrasound_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exam_order_id   = mapped_column(ForeignKey("exam_orders.id", ondelete="CASCADE"), nullable=False)
+    exam_report_id  = mapped_column(ForeignKey("exam_reports.id", ondelete="SET NULL"), nullable=True, default=None)
+    customer_id     = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id          = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    visit_id        = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    item_label:     Mapped[str] = mapped_column(String(120), default="")   # 归属检查项名称
+    exam_type:      Mapped[str] = mapped_column(String(20),  default="cardiac")  # cardiac/abdominal/urogenital/general（仅标签提示，不约束字段）
+    device:         Mapped[str] = mapped_column(String(120), default="")   # 设备型号 / 探头
+    vet_name:       Mapped[str] = mapped_column(String(80),  default="")
+    # 动态测量分组：[{"group":"2D测量·主动脉与主动脉瓣","rows":[{"name":"LA Diam","value":"0.96","unit":"cm"}]}]
+    measurements_json: Mapped[str] = mapped_column(Text, default="[]")
+    raw_pdf_path:   Mapped[str] = mapped_column(String(500), default="")   # 上传的机器测量 PDF 原件（留档）
+    vet_findings:   Mapped[str] = mapped_column(Text, default="")          # 医生主观描述（肿瘤/囊肿/积液等机器测不出的）
+    findings:       Mapped[str] = mapped_column(Text, default="")          # 超声所见（AI 生成，可编辑）
+    conclusion:     Mapped[str] = mapped_column(Text, default="")          # 超声提示 / 结论
+    advice:         Mapped[str] = mapped_column(Text, default="")          # 建议
+    photos_json:    Mapped[str] = mapped_column(Text, default="[]")        # ["ultrasound_photos/<id>/xxx.jpg", ...]
+
+    store:          Mapped[str] = mapped_column(String(40), default="", index=True)
+    operator:       Mapped[str] = mapped_column(String(80), default="")
+    created_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # ════════════════════════════════════════════════════════════════
 # 麻醉监护表（手术中逐时段生命体征监护）
 # 与 AnesthesiaOrder（麻醉单）刻意分开：麻醉单 = 用了哪些麻醉药 + 剂量 +

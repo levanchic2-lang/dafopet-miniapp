@@ -83,6 +83,7 @@ from app.models import (
     ExamOrder,
     ExamReport,
     MicroscopyReport,
+    UltrasoundReport,
     CalendarBlock,
     DewormingRecord,
     WeightRecord,
@@ -11480,15 +11481,19 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
         db.delete(p)
         cnt["prescription"] += 1
 
-    # 检查单（+ 检查报告 ORM 级联；显微镜报告手动删）
+    # 检查单（+ 检查报告 ORM 级联；显微镜/B超报告手动删）
     for eo in db.query(ExamOrder).filter(ExamOrder.visit_id == vid).all():
         db.query(MicroscopyReport).filter(
             MicroscopyReport.exam_order_id == eo.id).delete(synchronize_session=False)
+        db.query(UltrasoundReport).filter(
+            UltrasoundReport.exam_order_id == eo.id).delete(synchronize_session=False)
         db.delete(eo)
         cnt["exam_order"] += 1
-    # 残留：仅挂 visit_id 的显微镜报告
+    # 残留：仅挂 visit_id 的显微镜/B超报告
     cnt["microscopy"] += db.query(MicroscopyReport).filter(
         MicroscopyReport.visit_id == vid).delete(synchronize_session=False)
+    db.query(UltrasoundReport).filter(
+        UltrasoundReport.visit_id == vid).delete(synchronize_session=False)
 
     # 发票（+ 明细/收款 手动删；已收款则保留脱钩）
     for inv in db.query(Invoice).filter(Invoice.visit_id == vid).all():
@@ -20795,6 +20800,12 @@ async def admin_exam_order_detail(
     micro_reports = db.query(MicroscopyReport).filter(
         MicroscopyReport.exam_order_id == order_id
     ).order_by(MicroscopyReport.id.desc()).all()
+    # B超 / 超声项目 + 已生成报告
+    us_items = _us_detect_items(db, items)
+    has_ultrasound = len(us_items) > 0
+    ultrasound_reports = db.query(UltrasoundReport).filter(
+        UltrasoundReport.exam_order_id == order_id
+    ).order_by(UltrasoundReport.id.desc()).all()
     # 已被某份报告认领的项目名 set（用于上传下拉灰显「已上传」+ 项目卡片状态）
     assigned_labels = set()
     for rpt in (order.reports or []):
@@ -20813,6 +20824,8 @@ async def admin_exam_order_detail(
         "assigned_labels": assigned_labels,
         "has_microscopy": has_microscopy, "micro_items": micro_items,
         "micro_reports": micro_reports,
+        "has_ultrasound": has_ultrasound, "us_items": us_items,
+        "ultrasound_reports": ultrasound_reports,
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -21415,6 +21428,376 @@ async def admin_microscopy_delete(report_id: int, request: Request, db: Session 
     db.delete(report)
     db.commit()
     return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=显微镜报告已删除", status_code=303)
+
+
+# ════════════════════════════════════════════════════════════════
+# B超 / 超声报告（PDF 测量值自动解析 + AI 生成所见/结论/建议）
+# ════════════════════════════════════════════════════════════════
+_US_PHOTO_EXT_OK = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
+_US_PHOTO_MAX = 12 * 1024 * 1024  # 12 MB / 张
+_US_PDF_MAX = 25 * 1024 * 1024
+_US_EXAM_TYPES = [
+    {"key": "cardiac", "label": "心脏彩超"},
+    {"key": "abdominal", "label": "腹部B超"},
+    {"key": "urogenital", "label": "泌尿/生殖"},
+    {"key": "general", "label": "通用超声"},
+]
+_US_EXAM_TYPE_KEYS = {t["key"] for t in _US_EXAM_TYPES}
+
+
+def _us_detect_items(db: Session, items: list) -> list:
+    """检查单里属于 B超/超声 的项目（subcategory=ultrasound 或名称含关键词）。"""
+    out = []
+    for it in items:
+        iid = it.get("item_id") if isinstance(it, dict) else None
+        name = (it.get("name") if isinstance(it, dict) else "") or ""
+        is_us = False
+        if iid:
+            inv = db.get(InventoryItem, int(iid))
+            if inv and (inv.subcategory or "") == "ultrasound":
+                is_us = True
+                name = it.get("name") or inv.name
+        if not is_us and any(k in name for k in ("B超", "彩超", "超声", "心超", "心脏彩超", "腹部B超")):
+            is_us = True
+        if is_us:
+            out.append({"name": name, "item_id": iid})
+    return out
+
+
+def _us_pet_payload(pet) -> dict:
+    """组装宠物信息给 AI。"""
+    if not pet:
+        return {}
+    age = ""
+    if getattr(pet, "birth_date", None):
+        age = str(pet.birth_date)
+    return {
+        "pet_species": pet.species or "",
+        "pet_breed": pet.breed or "",
+        "pet_sex": getattr(pet, "gender", "") or getattr(pet, "sex", "") or "",
+        "pet_age": age,
+        "pet_weight": str(getattr(pet, "weight", "") or ""),
+    }
+
+
+@app.get("/admin/exam-orders/{order_id}/ultrasound/new", response_class=HTMLResponse)
+async def page_admin_ultrasound_new(order_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    items = json.loads(order.items_json or "[]")
+    us_items = _us_detect_items(db, items)
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%"),
+    ).all()
+    vet_names = [v[0] for v in vets]
+    return templates.TemplateResponse(request, "uk/ultrasound_new.html", {
+        "order": order, "visit": visit, "cust": cust, "pet": pet,
+        "us_items": us_items, "vet_names": vet_names,
+        "exam_types": _US_EXAM_TYPES,
+        "default_vet": request.session.get("admin_username", ""),
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/exam-orders/{order_id}/ultrasound/create")
+async def admin_ultrasound_create(order_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust_id = visit.customer_id if visit else None
+    pet_id = visit.pet_id if visit else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+
+    item_label = str(form.get("item_label", "")).strip()[:120]
+    exam_type = str(form.get("exam_type", "cardiac")).strip()
+    if exam_type not in _US_EXAM_TYPE_KEYS:
+        exam_type = "cardiac"
+    device = str(form.get("device", "")).strip()[:120]
+    vet_name = str(form.get("vet_name", "")).strip()[:80]
+    vet_findings = str(form.get("vet_findings", "")).strip()
+    if not item_label:
+        raise HTTPException(400, "请选择归属检查项")
+    if not vet_name:
+        raise HTTPException(400, "兽医必填")
+
+    store = _get_op_store(request) or (pet.store if pet else "") or ""
+    operator = request.session.get("admin_username", "admin")
+
+    report = UltrasoundReport(
+        exam_order_id=order_id,
+        customer_id=cust_id, pet_id=pet_id, visit_id=order.visit_id,
+        item_label=item_label, exam_type=exam_type, device=device, vet_name=vet_name,
+        measurements_json="[]", vet_findings=vet_findings,
+        findings="", conclusion="", advice="", photos_json="[]",
+        store=store, operator=operator,
+    )
+    db.add(report)
+    db.flush()  # 拿 id
+
+    # 保存机器测量 PDF 原件 + B超图片
+    upload_dir = Path("uploads") / "ultrasound_photos" / str(report.id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved_photos: list[str] = []
+    raw_pdf_path = ""
+
+    pdf_file = form.get("measure_pdf")
+    if pdf_file is not None and hasattr(pdf_file, "filename") and pdf_file.filename:
+        if Path(pdf_file.filename).suffix.lower() == ".pdf":
+            data = await pdf_file.read()
+            if data and len(data) <= _US_PDF_MAX:
+                pdf_name = f"measure_{secrets.token_hex(6)}.pdf"
+                (upload_dir / pdf_name).write_bytes(data)
+                raw_pdf_path = f"ultrasound_photos/{report.id}/{pdf_name}"
+
+    for f in (form.getlist("photos") if hasattr(form, "getlist") else []):
+        if not hasattr(f, "filename") or not f.filename:
+            continue
+        ext = Path(f.filename).suffix.lower()
+        if ext not in _US_PHOTO_EXT_OK:
+            continue
+        data = await f.read()
+        if not data or len(data) > _US_PHOTO_MAX:
+            continue
+        name = f"p_{secrets.token_hex(6)}{ext}"
+        (upload_dir / name).write_bytes(data)
+        saved_photos.append(f"ultrasound_photos/{report.id}/{name}")
+
+    report.raw_pdf_path = raw_pdf_path
+    report.photos_json = json.dumps(saved_photos, ensure_ascii=False)
+
+    # 解析 PDF 测量值 → 结构化
+    warn = ""
+    from app.services.ultrasound_report import (
+        extract_pdf_text, structure_measurements, draft_ultrasound_text,
+    )
+    groups: list = []
+    if raw_pdf_path:
+        raw_text = extract_pdf_text(upload_dir / Path(raw_pdf_path).name)
+        sres = await structure_measurements(raw_text, exam_type)
+        if sres.get("ok"):
+            groups = sres.get("groups") or []
+        else:
+            warn += f" 测量解析未成功（{sres.get('error', '')}），可在编辑页手动补录。"
+    report.measurements_json = json.dumps(groups, ensure_ascii=False)
+
+    # AI 生成所见/结论/建议
+    payload = {
+        "exam_type": exam_type, "item_label": item_label, "device": device,
+        "groups": groups, "vet_findings": vet_findings,
+        **_us_pet_payload(pet),
+    }
+    dres = await draft_ultrasound_text(payload)
+    if dres.get("ok"):
+        report.findings = dres.get("findings", "")
+        report.conclusion = dres.get("conclusion", "")
+        report.advice = dres.get("advice", "")
+    else:
+        warn += f" AI 文字稿生成未成功（{dres.get('error', '')}），可在编辑页手动填写或重试。"
+
+    db.commit()
+    msg = "B超报告草稿已生成，请核对后保存出 PDF。" + warn
+    return RedirectResponse(f"/admin/ultrasound-reports/{report.id}/edit?msg={msg}", status_code=303)
+
+
+@app.get("/admin/ultrasound-reports/{report_id}/edit", response_class=HTMLResponse)
+async def page_admin_ultrasound_edit(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    report = db.get(UltrasoundReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    order = db.get(ExamOrder, report.exam_order_id)
+    if not order:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    cust = db.get(Customer, report.customer_id) if report.customer_id else None
+    pet = db.get(Pet, report.pet_id) if report.pet_id else None
+    try:
+        groups = json.loads(report.measurements_json or "[]") or []
+    except Exception:
+        groups = []
+    try:
+        photos = json.loads(report.photos_json or "[]") or []
+    except Exception:
+        photos = []
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%"),
+    ).all()
+    return templates.TemplateResponse(request, "uk/ultrasound_edit.html", {
+        "report": report, "order": order, "cust": cust, "pet": pet,
+        "groups": groups, "photos": photos,
+        "vet_names": [v[0] for v in vets],
+        "exam_types": _US_EXAM_TYPES,
+        "msg": request.query_params.get("msg"),
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+def _us_parse_measurements_form(form) -> list:
+    """从编辑页表单解析动态测量分组。
+    编辑页 JS 在提交前把整张测量表序列化进隐藏字段 measurements_json，
+    这里反序列化 + 清洗（避免按下标拆字段时删行/删组造成的错位）。"""
+    raw = str(form.get("measurements_json", "") or "").strip()
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+    groups = []
+    for g in data:
+        if not isinstance(g, dict):
+            continue
+        rows = []
+        for r in (g.get("rows") or []):
+            if not isinstance(r, dict):
+                continue
+            nm = str(r.get("name", "")).strip()
+            if not nm:
+                continue
+            rows.append({
+                "name": nm[:80],
+                "value": str(r.get("value", "")).strip()[:40],
+                "unit": str(r.get("unit", "")).strip()[:20],
+            })
+        if rows:
+            groups.append({"group": str(g.get("group", "")).strip()[:120], "rows": rows})
+    return groups
+
+
+@app.post("/admin/ultrasound-reports/{report_id}/save")
+async def admin_ultrasound_save(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    report = db.get(UltrasoundReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+
+    exam_type = str(form.get("exam_type", report.exam_type or "cardiac")).strip()
+    if exam_type in _US_EXAM_TYPE_KEYS:
+        report.exam_type = exam_type
+    report.item_label = str(form.get("item_label", report.item_label or "")).strip()[:120]
+    report.device = str(form.get("device", "")).strip()[:120]
+    report.vet_name = str(form.get("vet_name", "")).strip()[:80] or report.vet_name
+    report.vet_findings = str(form.get("vet_findings", "")).strip()
+    report.findings = str(form.get("findings", "")).strip()
+    report.conclusion = str(form.get("conclusion", "")).strip()
+    report.advice = str(form.get("advice", "")).strip()
+    report.measurements_json = json.dumps(_us_parse_measurements_form(form), ensure_ascii=False)
+    report.updated_at = datetime.utcnow()
+    db.commit()
+
+    from app.services.ultrasound_pdf import generate_ultrasound_pdf
+    _, err = generate_ultrasound_pdf(db, report.id)
+    if err:
+        return RedirectResponse(
+            f"/admin/exam-orders/{report.exam_order_id}?msg=报告已保存，PDF 生成失败：{err}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/admin/exam-orders/{report.exam_order_id}?msg=B超报告已生成并上传",
+        status_code=303,
+    )
+
+
+@app.post("/admin/ultrasound/ai-draft")
+async def admin_ultrasound_ai_draft(request: Request, db: Session = Depends(get_db)):
+    """编辑页「重新生成文字稿」：用当前测量值 + 主观描述重跑 AI。
+    入参 JSON：{report_id, exam_type, item_label, device, vet_findings, groups:[...]}
+    出参：{ok, findings, conclusion, advice, error?}"""
+    require_admin(request)
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "请求体不是 JSON"}, status_code=400)
+    if not isinstance(payload, dict):
+        return JSONResponse({"ok": False, "error": "请求体格式错误"}, status_code=400)
+    pet = None
+    rid = payload.get("report_id")
+    if rid:
+        rep = db.get(UltrasoundReport, int(rid))
+        if rep and rep.pet_id:
+            pet = db.get(Pet, rep.pet_id)
+    full = {**payload, **_us_pet_payload(pet)}
+    from app.services.ultrasound_report import draft_ultrasound_text
+    result = await draft_ultrasound_text(full)
+    return JSONResponse(result)
+
+
+@app.post("/admin/ultrasound-reports/{report_id}/regen-pdf")
+async def admin_ultrasound_regen(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    report = db.get(UltrasoundReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    from app.services.ultrasound_pdf import generate_ultrasound_pdf
+    _, err = generate_ultrasound_pdf(db, report.id)
+    if err:
+        return RedirectResponse(
+            f"/admin/exam-orders/{report.exam_order_id}?msg=PDF 重新生成失败：{err}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/admin/exam-orders/{report.exam_order_id}?msg=PDF 已重新生成",
+        status_code=303,
+    )
+
+
+@app.post("/admin/ultrasound-reports/{report_id}/delete")
+async def admin_ultrasound_delete(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    report = db.get(UltrasoundReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    order_id = report.exam_order_id
+    if report.exam_report_id:
+        er = db.get(ExamReport, report.exam_report_id)
+        if er:
+            try:
+                if er.file_path:
+                    Path(er.file_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+            db.delete(er)
+    try:
+        import shutil
+        ph_dir = Path("uploads") / "ultrasound_photos" / str(report.id)
+        if ph_dir.exists():
+            shutil.rmtree(ph_dir, ignore_errors=True)
+    except Exception:
+        pass
+    db.delete(report)
+    db.commit()
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=B超报告已删除", status_code=303)
 
 
 @app.get("/admin/exam-orders/{order_id}/qr.png")

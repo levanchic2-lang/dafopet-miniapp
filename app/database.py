@@ -1007,6 +1007,35 @@ def _try_sqlite_migrations() -> None:
             if mr_cols and "template_type" not in mr_col_names:
                 conn.execute(text("ALTER TABLE microscopy_reports ADD COLUMN template_type VARCHAR(20) DEFAULT 'general'"))
 
+            # ultrasound_reports：B超 / 超声检查报告（心超/腹部/泌尿 等，测量字段动态）
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS ultrasound_reports ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "exam_order_id INTEGER NOT NULL REFERENCES exam_orders(id) ON DELETE CASCADE, "
+                "exam_report_id INTEGER REFERENCES exam_reports(id) ON DELETE SET NULL, "
+                "customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER REFERENCES pets(id) ON DELETE SET NULL, "
+                "visit_id INTEGER REFERENCES visits(id) ON DELETE SET NULL, "
+                "item_label VARCHAR(120) DEFAULT '', "
+                "exam_type VARCHAR(20) DEFAULT 'cardiac', "
+                "device VARCHAR(120) DEFAULT '', "
+                "vet_name VARCHAR(80) DEFAULT '', "
+                "measurements_json TEXT DEFAULT '[]', "
+                "raw_pdf_path VARCHAR(500) DEFAULT '', "
+                "vet_findings TEXT DEFAULT '', "
+                "findings TEXT DEFAULT '', "
+                "conclusion TEXT DEFAULT '', "
+                "advice TEXT DEFAULT '', "
+                "photos_json TEXT DEFAULT '[]', "
+                "store VARCHAR(40) DEFAULT '', "
+                "operator VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_us_order ON ultrasound_reports(exam_order_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_us_store ON ultrasound_reports(store)"))
+
             # vaccinations: 补 reminder_sent_at 列
             vacc_cols = conn.execute(text("PRAGMA table_info(vaccinations)")).fetchall()
             if vacc_cols:
