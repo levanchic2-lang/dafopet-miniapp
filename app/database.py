@@ -1036,6 +1036,36 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_us_order ON ultrasound_reports(exam_order_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_us_store ON ultrasound_reports(store)"))
 
+            # xray_reports：X光/放射报告（胸/腹/肌骨/关节，医生读片 + AI 帮写）
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS xray_reports ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "exam_order_id INTEGER NOT NULL REFERENCES exam_orders(id) ON DELETE CASCADE, "
+                "exam_report_id INTEGER REFERENCES exam_reports(id) ON DELETE SET NULL, "
+                "customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER REFERENCES pets(id) ON DELETE SET NULL, "
+                "visit_id INTEGER REFERENCES visits(id) ON DELETE SET NULL, "
+                "item_label VARCHAR(120) DEFAULT '', "
+                "region VARCHAR(20) DEFAULT 'thorax', "
+                "projection VARCHAR(120) DEFAULT '', "
+                "image_quality VARCHAR(40) DEFAULT '', "
+                "vet_name VARCHAR(80) DEFAULT '', "
+                "findings_json TEXT DEFAULT '[]', "
+                "measurements_json TEXT DEFAULT '[]', "
+                "vet_findings TEXT DEFAULT '', "
+                "findings TEXT DEFAULT '', "
+                "conclusion TEXT DEFAULT '', "
+                "advice TEXT DEFAULT '', "
+                "photos_json TEXT DEFAULT '[]', "
+                "store VARCHAR(40) DEFAULT '', "
+                "operator VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_xray_order ON xray_reports(exam_order_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_xray_store ON xray_reports(store)"))
+
             # vaccinations: 补 reminder_sent_at 列
             vacc_cols = conn.execute(text("PRAGMA table_info(vaccinations)")).fetchall()
             if vacc_cols:

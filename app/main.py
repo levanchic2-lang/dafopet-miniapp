@@ -84,6 +84,7 @@ from app.models import (
     ExamReport,
     MicroscopyReport,
     UltrasoundReport,
+    XrayReport,
     CalendarBlock,
     DewormingRecord,
     WeightRecord,
@@ -11487,13 +11488,17 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
             MicroscopyReport.exam_order_id == eo.id).delete(synchronize_session=False)
         db.query(UltrasoundReport).filter(
             UltrasoundReport.exam_order_id == eo.id).delete(synchronize_session=False)
+        db.query(XrayReport).filter(
+            XrayReport.exam_order_id == eo.id).delete(synchronize_session=False)
         db.delete(eo)
         cnt["exam_order"] += 1
-    # 残留：仅挂 visit_id 的显微镜/B超报告
+    # 残留：仅挂 visit_id 的显微镜/B超/X光报告
     cnt["microscopy"] += db.query(MicroscopyReport).filter(
         MicroscopyReport.visit_id == vid).delete(synchronize_session=False)
     db.query(UltrasoundReport).filter(
         UltrasoundReport.visit_id == vid).delete(synchronize_session=False)
+    db.query(XrayReport).filter(
+        XrayReport.visit_id == vid).delete(synchronize_session=False)
 
     # 发票（+ 明细/收款 手动删；已收款则保留脱钩）
     for inv in db.query(Invoice).filter(Invoice.visit_id == vid).all():
@@ -20806,6 +20811,12 @@ async def admin_exam_order_detail(
     ultrasound_reports = db.query(UltrasoundReport).filter(
         UltrasoundReport.exam_order_id == order_id
     ).order_by(UltrasoundReport.id.desc()).all()
+    # X光 / 放射项目 + 已生成报告
+    xray_items = _xray_detect_items(db, items)
+    has_xray = len(xray_items) > 0
+    xray_reports = db.query(XrayReport).filter(
+        XrayReport.exam_order_id == order_id
+    ).order_by(XrayReport.id.desc()).all()
     # 已被某份报告认领的项目名 set（用于上传下拉灰显「已上传」+ 项目卡片状态）
     assigned_labels = set()
     for rpt in (order.reports or []):
@@ -20826,6 +20837,8 @@ async def admin_exam_order_detail(
         "micro_reports": micro_reports,
         "has_ultrasound": has_ultrasound, "us_items": us_items,
         "ultrasound_reports": ultrasound_reports,
+        "has_xray": has_xray, "xray_items": xray_items,
+        "xray_reports": xray_reports,
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -21835,6 +21848,624 @@ async def admin_ultrasound_delete(report_id: int, request: Request, db: Session 
     db.delete(report)
     db.commit()
     return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=B超报告已删除", status_code=303)
+
+
+# ════════════════════════════════════════════════════════════════
+# X 光 / 放射报告（医生读片 + AI 帮写中文报告，v2 结构化字典）
+# AI 不读片诊断，只把医生的结构化勾选 + 描述整理成「X线所见/提示/建议」
+# ════════════════════════════════════════════════════════════════
+_XRAY_PHOTO_EXT_OK = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
+_XRAY_PHOTO_MAX = 15 * 1024 * 1024  # 15 MB / 张
+_XRAY_IMAGE_QUALITY = ["满意", "体位欠正", "曝光不足", "曝光过度", "运动伪影"]
+
+_XRAY_TEMPLATES = {
+    "thorax": {
+        "label": "胸部片",
+        "measurements": [{"name": "VHS", "unit": ""}, {"name": "VLAS", "unit": ""}],
+        "structures": [
+            {"name": "肺野 / 肺型", "multi": True, "labels": [
+                {"tag": "正常", "desc": "血管纹理由肺门向外渐细，肺野清晰"},
+                {"tag": "肺泡型", "desc": "肺泡内气体被液体/细胞取代；支气管充气征、边界模糊均质致密影、肺叶征。见于肺炎、肺水肿、肺出血"},
+                {"tag": "间质型-非结构性", "desc": "弥漫磨玻璃样、血管支气管缘模糊。见于早期肺水肿、间质性肺炎、纤维化、老龄退行"},
+                {"tag": "间质型-结构性(结节)", "desc": "一个或多个边界清的软组织结节。见于转移瘤、真菌肉芽肿"},
+                {"tag": "支气管型", "desc": "支气管壁增厚，轨道征/甜甜圈征。见于慢性支气管炎、猫哮喘、过敏"},
+                {"tag": "血管型", "desc": "肺动/静脉增粗或变细；肺静脉粗→左心衰，肺动脉粗→心丝虫，变细→低血容量"},
+                {"tag": "混合型", "desc": "上述多型并存"},
+                {"tag": "肺不张", "desc": "肺叶塌陷、体积缩小、纵隔向患侧移位"},
+                {"tag": "肺过度膨胀", "desc": "膈变平、肺野透亮度增高。见于哮喘/气道阻塞"},
+                {"tag": "肺肿块(>3cm)", "desc": "单个较大软组织占位，需注明肺叶"},
+            ]},
+            {"name": "心影", "multi": True, "labels": [
+                {"tag": "正常", "desc": "VHS 在参考范围（犬≈8.5–10.7，猫≈6.7–8.1）"},
+                {"tag": "全心增大", "desc": "各向均增大，VHS 升高"},
+                {"tag": "左房增大", "desc": "气管隆突抬高、左房后缘膨隆；二尖瓣病/分流早期"},
+                {"tag": "左室增大", "desc": "心尖延长、心腰饱满"},
+                {"tag": "右心增大", "desc": "反 D 字、胸骨接触面增宽；肺高压/心丝虫"},
+                {"tag": "球形心", "desc": "心包积液，心影圆而锐利、搏动消失"},
+            ]},
+            {"name": "胸膜腔", "multi": True, "labels": [
+                {"tag": "正常", "desc": "无游离液气"},
+                {"tag": "胸腔积液", "desc": "肺叶回缩、叶间裂显影、心膈缘模糊"},
+                {"tag": "气胸", "desc": "肺叶回缩+无纹理透亮区，心影抬离胸骨"},
+                {"tag": "胸膜增厚/粘连", "desc": "慢性胸膜炎遗留"},
+            ]},
+            {"name": "气管 / 支气管", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "移位", "desc": "占位或心增大推移"},
+                {"tag": "塌陷", "desc": "管腔变扁，呼气相加重；小型犬常见"},
+                {"tag": "狭窄", "desc": ""},
+                {"tag": "扩张", "desc": ""},
+            ]},
+            {"name": "纵隔", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "增宽", "desc": "占位·淋巴结·脂肪"},
+                {"tag": "积气", "desc": ""},
+                {"tag": "积液", "desc": ""},
+            ]},
+            {"name": "大血管", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "主动脉增宽", "desc": ""},
+                {"tag": "后腔静脉增宽", "desc": "右心衰·容量过负荷"},
+                {"tag": "肺动脉段突出", "desc": "肺高压"},
+            ]},
+            {"name": "膈", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "抬高", "desc": ""},
+                {"tag": "轮廓不清", "desc": "腹压·积液"},
+                {"tag": "膈疝", "desc": "腹腔脏器入胸"},
+            ]},
+            {"name": "胸廓骨骼 / 软组织", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "肋骨骨折", "desc": ""},
+                {"tag": "溶骨", "desc": "肿瘤"},
+                {"tag": "胸椎畸形", "desc": ""},
+                {"tag": "皮下气肿", "desc": ""},
+                {"tag": "体壁占位", "desc": ""},
+            ]},
+            {"name": "食道（若显影）", "multi": True, "labels": [
+                {"tag": "正常不可见", "desc": ""},
+                {"tag": "扩张(巨食道)", "desc": ""},
+                {"tag": "异物", "desc": ""},
+                {"tag": "积气", "desc": ""},
+            ]},
+        ],
+    },
+    "abdomen": {
+        "label": "腹部片",
+        "measurements": [],
+        "structures": [
+            {"name": "腹腔浆膜对比度", "multi": True, "labels": [
+                {"tag": "正常", "desc": "各脏器边缘清晰"},
+                {"tag": "对比度减低", "desc": "腹水、腹膜炎、瘦弱/幼龄（脂肪少）"},
+                {"tag": "对比度增高", "desc": "脂肪过多/气腹背景"},
+                {"tag": "游离气体", "desc": "胃肠穿孔、近期手术；膈下/腹壁下游离气"},
+                {"tag": "异常矿化", "desc": "结石、钙化淋巴结、肿瘤矿化"},
+            ]},
+            {"name": "肝", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "肿大", "desc": "胃轴后移、肝缘超肋弓"},
+                {"tag": "缩小", "desc": ""},
+                {"tag": "边缘占位", "desc": ""},
+            ]},
+            {"name": "脾", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "弥漫肿大", "desc": ""},
+                {"tag": "局灶占位", "desc": ""},
+                {"tag": "移位", "desc": ""},
+            ]},
+            {"name": "肾（左/右）", "multi": True, "labels": [
+                {"tag": "正常", "desc": "犬≈2.5–3.5×L2椎长，猫≈2–3×"},
+                {"tag": "增大", "desc": ""},
+                {"tag": "缩小", "desc": ""},
+                {"tag": "肾盂结石", "desc": ""},
+                {"tag": "占位", "desc": ""},
+            ]},
+            {"name": "膀胱", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "结石", "desc": "矿化影"},
+                {"tag": "壁增厚", "desc": ""},
+                {"tag": "占位", "desc": ""},
+                {"tag": "轮廓消失", "desc": "破裂+腹水"},
+            ]},
+            {"name": "胃", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "扩张", "desc": "气·液·食物"},
+                {"tag": "胃扭转(GDV)", "desc": "双泡/分隔征，急症"},
+                {"tag": "异物", "desc": ""},
+                {"tag": "壁增厚", "desc": ""},
+                {"tag": "幽门移位", "desc": ""},
+            ]},
+            {"name": "小肠", "multi": True, "labels": [
+                {"tag": "正常", "desc": "犬<1.6×L5椎高；猫<12mm"},
+                {"tag": "气性扩张", "desc": ""},
+                {"tag": "液性扩张", "desc": ""},
+                {"tag": "异物", "desc": "团块·线性"},
+                {"tag": "梗阻", "desc": "两群肠径差异"},
+                {"tag": "套叠", "desc": ""},
+            ]},
+            {"name": "大肠 / 结肠", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "巨结肠", "desc": "粪便嵌塞"},
+                {"tag": "移位", "desc": ""},
+                {"tag": "异物", "desc": ""},
+            ]},
+            {"name": "前列腺 / 子宫", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "前列腺增大", "desc": "良性增生·脓肿·肿瘤"},
+                {"tag": "前列腺矿化", "desc": "肿瘤倾向"},
+                {"tag": "子宫增大", "desc": "蓄脓·妊娠"},
+            ]},
+            {"name": "腹腔肿块 / 腹膜后 / 骨性", "multi": True, "labels": [
+                {"tag": "腹腔肿块", "desc": "注明位置+推断来源器官"},
+                {"tag": "腹膜后增宽", "desc": "出血·尿漏·淋巴结肿大"},
+                {"tag": "腰椎/骨盆退行性变", "desc": "骨赘·脊椎病"},
+                {"tag": "骨折", "desc": ""},
+                {"tag": "移行椎", "desc": ""},
+            ]},
+        ],
+    },
+    "msk": {
+        "label": "肌骨（长骨/四肢）",
+        "measurements": [],
+        "structures": [
+            {"name": "骨皮质", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "变薄", "desc": ""},
+                {"tag": "增厚", "desc": "慢性应力"},
+                {"tag": "虫蚀样溶解", "desc": "侵袭"},
+            ]},
+            {"name": "骨密度 / 骨髓腔", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "硬化(密度增高)", "desc": ""},
+                {"tag": "骨质疏松(密度减低)", "desc": ""},
+                {"tag": "溶骨区", "desc": ""},
+            ]},
+            {"name": "骨膜反应", "multi": True, "labels": [
+                {"tag": "无", "desc": ""},
+                {"tag": "光滑实性", "desc": "良性·慢性"},
+                {"tag": "层状(洋葱皮)", "desc": ""},
+                {"tag": "不规则·日光放射状", "desc": "侵袭·肿瘤"},
+                {"tag": "Codman三角", "desc": "侵袭"},
+            ]},
+            {"name": "骨破坏方式", "multi": True, "labels": [
+                {"tag": "地图状", "desc": "边界清，良性"},
+                {"tag": "虫蚀状", "desc": ""},
+                {"tag": "渗透状", "desc": "边界不清，侵袭性"},
+            ]},
+            {"name": "骨折", "multi": True, "labels": [
+                {"tag": "无", "desc": ""},
+                {"tag": "完全", "desc": ""},
+                {"tag": "不完全(青枝)", "desc": ""},
+                {"tag": "横", "desc": ""}, {"tag": "斜", "desc": ""}, {"tag": "螺旋", "desc": ""},
+                {"tag": "粉碎", "desc": ""}, {"tag": "撕脱", "desc": ""},
+                {"tag": "生长板(Salter-Harris)", "desc": "I–V 型，详填于描述"},
+            ]},
+            {"name": "骨折移位 / 对线", "multi": True, "labels": [
+                {"tag": "无移位", "desc": ""},
+                {"tag": "成角", "desc": ""},
+                {"tag": "旋转", "desc": ""},
+                {"tag": "重叠短缩", "desc": ""},
+                {"tag": "关节内", "desc": ""},
+            ]},
+            {"name": "生长板 / 骨龄", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "早闭", "desc": ""},
+                {"tag": "损伤", "desc": ""},
+                {"tag": "与年龄不符", "desc": ""},
+            ]},
+            {"name": "软组织", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "肿胀", "desc": ""},
+                {"tag": "气肿", "desc": ""},
+                {"tag": "矿化", "desc": ""},
+                {"tag": "异物", "desc": ""},
+                {"tag": "缺损", "desc": ""},
+            ]},
+            {"name": "骨肿瘤倾向", "multi": True, "labels": [
+                {"tag": "无侵袭征象", "desc": ""},
+                {"tag": "侵袭性(疑原发骨肿瘤)", "desc": "溶骨+侵袭性骨膜反应+移行区宽+软组织肿胀；骨肉瘤好发干骺端、不跨关节"},
+            ]},
+        ],
+    },
+    "joint": {
+        "label": "关节",
+        "measurements": [{"name": "Norberg角", "unit": "°"}],
+        "structures": [
+            {"name": "关节间隙", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "变窄", "desc": "软骨磨损"},
+                {"tag": "增宽", "desc": "积液·脱位"},
+            ]},
+            {"name": "软骨下骨 / 关节面", "multi": True, "labels": [
+                {"tag": "光滑", "desc": ""},
+                {"tag": "硬化", "desc": "DJD"},
+                {"tag": "糜烂", "desc": "侵蚀性·免疫介导/感染"},
+                {"tag": "囊性变", "desc": ""},
+            ]},
+            {"name": "骨赘 / 内生赘", "multi": True, "labels": [
+                {"tag": "无", "desc": ""},
+                {"tag": "轻", "desc": ""}, {"tag": "中", "desc": ""}, {"tag": "重", "desc": "退行性关节病 DJD 分级"},
+            ]},
+            {"name": "关节内", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "游离体", "desc": "关节鼠·OCD碎片"},
+                {"tag": "矿化", "desc": ""},
+            ]},
+            {"name": "关节肿胀 / 积液", "multi": True, "labels": [
+                {"tag": "无", "desc": ""},
+                {"tag": "有", "desc": "关节囊膨隆、软组织密度增加"},
+            ]},
+            {"name": "脱位", "multi": True, "labels": [
+                {"tag": "无", "desc": ""},
+                {"tag": "半脱位", "desc": ""},
+                {"tag": "全脱位", "desc": "注明方向"},
+            ]},
+            {"name": "髋关节（HD）", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "半脱位", "desc": ""},
+                {"tag": "股骨头颈DJD", "desc": ""},
+                {"tag": "髋臼变浅", "desc": ""},
+                {"tag": "Norberg角异常(<105°)", "desc": "填具体角度于测量"},
+            ]},
+            {"name": "肘关节（ED）", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "内侧冠突病", "desc": ""},
+                {"tag": "OCD", "desc": ""},
+                {"tag": "钩突不愈合", "desc": ""},
+                {"tag": "关节不匹配", "desc": ""},
+            ]},
+            {"name": "膝关节", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "前十字韧带断裂间接征", "desc": "关节积液+胫骨前移"},
+                {"tag": "髌骨脱位", "desc": ""},
+                {"tag": "OCD", "desc": ""},
+            ]},
+        ],
+    },
+}
+_XRAY_REGION_ORDER = ["thorax", "abdomen", "msk", "joint"]
+
+
+def _infer_xray_region(item_label: str) -> str:
+    """按检查项名字推断默认部位。"""
+    s = (item_label or "")
+    if any(k in s for k in ("关节", "髋", "肘", "膝", "腕", "跗")):
+        return "joint"
+    if any(k in s for k in ("胸", "肺", "心")):
+        return "thorax"
+    if any(k in s for k in ("腹", "肝", "肾", "膀胱", "肠", "胃")):
+        return "abdomen"
+    if any(k in s for k in ("骨", "肢", "四肢", "桡", "尺", "股", "胫", "肌")):
+        return "msk"
+    return "thorax"
+
+
+def _xray_detect_items(db: Session, items: list) -> list:
+    """检查单里属于 X光/放射 的项目（subcategory=xray 或名称含关键词）。"""
+    out = []
+    for it in items:
+        iid = it.get("item_id") if isinstance(it, dict) else None
+        name = (it.get("name") if isinstance(it, dict) else "") or ""
+        is_x = False
+        if iid:
+            inv = db.get(InventoryItem, int(iid))
+            if inv and (inv.subcategory or "") in ("xray", "radiograph"):
+                is_x = True
+                name = it.get("name") or inv.name
+        if not is_x and any(k in name for k in ("X光", "X线", "DR", "拍片", "放射", "平片", "radiograph")):
+            is_x = True
+        if is_x:
+            out.append({"name": name, "item_id": iid})
+    return out
+
+
+def _xray_enrich_findings(region: str, findings: list) -> list:
+    """给每个勾选的 tag 补上 desc（喂 AI 用）。findings=[{structure,tags,note}]"""
+    tpl = _XRAY_TEMPLATES.get(region) or {}
+    desc_map = {}
+    for st in tpl.get("structures", []):
+        for lb in st.get("labels", []):
+            desc_map[(st["name"], lb["tag"])] = lb.get("desc", "")
+    out = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        sname = str(f.get("structure", "")).strip()
+        tags = [str(t).strip() for t in (f.get("tags") or []) if str(t).strip()]
+        if not sname or not tags:
+            continue
+        items = [{"tag": t, "desc": desc_map.get((sname, t), "")} for t in tags]
+        out.append({"structure": sname, "items": items, "note": str(f.get("note", "")).strip()})
+    return out
+
+
+def _xray_parse_findings(form) -> list:
+    """编辑/录入页 JS 把结构化勾选序列化进隐藏字段 findings_json。"""
+    raw = str(form.get("findings_json", "") or "").strip()
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+    out = []
+    for f in data:
+        if not isinstance(f, dict):
+            continue
+        sname = str(f.get("structure", "")).strip()[:120]
+        tags = [str(t).strip()[:60] for t in (f.get("tags") or []) if str(t).strip()]
+        note = str(f.get("note", "")).strip()[:300]
+        if sname and (tags or note):
+            out.append({"structure": sname, "tags": tags, "note": note})
+    return out
+
+
+def _xray_form_ctx(request: "Request", db: Session, order: "ExamOrder",
+                   report: "XrayReport | None" = None):
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    items = json.loads(order.items_json or "[]")
+    xray_items = _xray_detect_items(db, items)
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%"),
+    ).all()
+    cur_findings = []
+    cur_measure = []
+    cur_photos = []
+    if report:
+        try:
+            cur_findings = json.loads(report.findings_json or "[]") or []
+        except Exception:
+            cur_findings = []
+        try:
+            cur_measure = json.loads(report.measurements_json or "[]") or []
+        except Exception:
+            cur_measure = []
+        try:
+            cur_photos = json.loads(report.photos_json or "[]") or []
+        except Exception:
+            cur_photos = []
+    if report and report.region in _XRAY_TEMPLATES:
+        active_region = report.region
+    else:
+        active_region = _infer_xray_region(xray_items[0]["name"] if xray_items else "")
+    region_list = [{"key": k, "label": _XRAY_TEMPLATES[k]["label"]} for k in _XRAY_REGION_ORDER]
+    return {
+        "order": order, "visit": visit, "cust": cust, "pet": pet,
+        "xray_items": xray_items, "vet_names": [v[0] for v in vets],
+        "templates": _XRAY_TEMPLATES, "region_list": region_list,
+        "active_region": active_region, "image_quality_opts": _XRAY_IMAGE_QUALITY,
+        "report": report, "cur_findings": cur_findings,
+        "cur_measure": cur_measure, "cur_photos": cur_photos,
+        "csrf_token": _get_csrf_token(request),
+    }
+
+
+@app.get("/admin/exam-orders/{order_id}/xray/new", response_class=HTMLResponse)
+async def page_admin_xray_new(order_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    ctx = _xray_form_ctx(request, db, order, report=None)
+    return templates.TemplateResponse(request, "uk/xray_form.html", ctx)
+
+
+@app.get("/admin/xray-reports/{report_id}/edit", response_class=HTMLResponse)
+async def page_admin_xray_edit(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    report = db.get(XrayReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    order = db.get(ExamOrder, report.exam_order_id)
+    if not order:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    ctx = _xray_form_ctx(request, db, order, report=report)
+    ctx["msg"] = request.query_params.get("msg")
+    return templates.TemplateResponse(request, "uk/xray_form.html", ctx)
+
+
+def _xray_apply_form(report: "XrayReport", form, request: "Request"):
+    region = str(form.get("region", "thorax")).strip()
+    if region not in _XRAY_TEMPLATES:
+        region = "thorax"
+    report.region = region
+    report.item_label = str(form.get("item_label", "")).strip()[:120]
+    report.projection = str(form.get("projection", "")).strip()[:120]
+    report.image_quality = str(form.get("image_quality", "")).strip()[:40]
+    report.vet_name = str(form.get("vet_name", "")).strip()[:80] or report.vet_name
+    report.vet_findings = str(form.get("vet_findings", "")).strip()
+    report.findings = str(form.get("findings", "")).strip()
+    report.conclusion = str(form.get("conclusion", "")).strip()
+    report.advice = str(form.get("advice", "")).strip()
+    report.findings_json = json.dumps(_xray_parse_findings(form), ensure_ascii=False)
+    report.measurements_json = json.dumps(_us_parse_measurements_form(form), ensure_ascii=False)
+
+
+@app.post("/admin/exam-orders/{order_id}/xray/create")
+async def admin_xray_create(order_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust_id = visit.customer_id if visit else None
+    pet_id = visit.pet_id if visit else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    if not str(form.get("vet_name", "")).strip():
+        raise HTTPException(400, "兽医必填")
+    store = _get_op_store(request) or (pet.store if pet else "") or ""
+    report = XrayReport(
+        exam_order_id=order_id, customer_id=cust_id, pet_id=pet_id, visit_id=order.visit_id,
+        photos_json="[]", store=store,
+        operator=request.session.get("admin_username", "admin"),
+    )
+    _xray_apply_form(report, form, request)
+    db.add(report)
+    db.flush()
+    # 照片
+    upload_dir = Path("uploads") / "xray_photos" / str(report.id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for f in (form.getlist("photos") if hasattr(form, "getlist") else []):
+        if not hasattr(f, "filename") or not f.filename:
+            continue
+        ext = Path(f.filename).suffix.lower()
+        if ext not in _XRAY_PHOTO_EXT_OK:
+            continue
+        data = await f.read()
+        if not data or len(data) > _XRAY_PHOTO_MAX:
+            continue
+        name = f"p_{secrets.token_hex(6)}{ext}"
+        (upload_dir / name).write_bytes(data)
+        saved.append(f"xray_photos/{report.id}/{name}")
+    report.photos_json = json.dumps(saved, ensure_ascii=False)
+    db.commit()
+    from app.services.xray_pdf import generate_xray_pdf
+    _, err = generate_xray_pdf(db, report.id)
+    if err:
+        return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=报告已保存，PDF 生成失败：{err}", status_code=303)
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=X光报告已生成并上传", status_code=303)
+
+
+@app.post("/admin/xray-reports/{report_id}/save")
+async def admin_xray_save(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    report = db.get(XrayReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    _xray_apply_form(report, form, request)
+    report.updated_at = datetime.utcnow()
+    # 追加新上传照片
+    new_saved = []
+    upload_dir = Path("uploads") / "xray_photos" / str(report.id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    for f in (form.getlist("photos") if hasattr(form, "getlist") else []):
+        if not hasattr(f, "filename") or not f.filename:
+            continue
+        ext = Path(f.filename).suffix.lower()
+        if ext not in _XRAY_PHOTO_EXT_OK:
+            continue
+        data = await f.read()
+        if not data or len(data) > _XRAY_PHOTO_MAX:
+            continue
+        name = f"p_{secrets.token_hex(6)}{ext}"
+        (upload_dir / name).write_bytes(data)
+        new_saved.append(f"xray_photos/{report.id}/{name}")
+    if new_saved:
+        try:
+            cur = json.loads(report.photos_json or "[]") or []
+        except Exception:
+            cur = []
+        report.photos_json = json.dumps(cur + new_saved, ensure_ascii=False)
+    db.commit()
+    from app.services.xray_pdf import generate_xray_pdf
+    _, err = generate_xray_pdf(db, report.id)
+    if err:
+        return RedirectResponse(f"/admin/exam-orders/{report.exam_order_id}?msg=报告已保存，PDF 生成失败：{err}", status_code=303)
+    return RedirectResponse(f"/admin/exam-orders/{report.exam_order_id}?msg=X光报告已更新", status_code=303)
+
+
+@app.post("/admin/xray/ai-draft")
+async def admin_xray_ai_draft(request: Request, db: Session = Depends(get_db)):
+    """根据医生勾选的结构化所见 + 测量 + 主观描述，调 LLM 生成「X线所见/提示/建议」。
+    入参 JSON：{report_id?, region, projection, image_quality, item_label,
+              vet_findings, findings:[{structure,tags,note}], measurements:[...]}"""
+    require_admin(request)
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "请求体不是 JSON"}, status_code=400)
+    if not isinstance(payload, dict):
+        return JSONResponse({"ok": False, "error": "请求体格式错误"}, status_code=400)
+    region = str(payload.get("region", "thorax"))
+    if region not in _XRAY_TEMPLATES:
+        region = "thorax"
+    pet = None
+    rid = payload.get("report_id")
+    if rid:
+        rep = db.get(XrayReport, int(rid))
+        if rep and rep.pet_id:
+            pet = db.get(Pet, rep.pet_id)
+    full = {
+        "region": region,
+        "region_label": _XRAY_TEMPLATES[region]["label"],
+        "projection": payload.get("projection", ""),
+        "image_quality": payload.get("image_quality", ""),
+        "item_label": payload.get("item_label", ""),
+        "vet_findings": payload.get("vet_findings", ""),
+        "findings": _xray_enrich_findings(region, payload.get("findings") or []),
+        "measurements": payload.get("measurements") or [],
+        **_us_pet_payload(pet),
+    }
+    from app.services.xray_ai import draft_xray_text
+    result = await draft_xray_text(full)
+    return JSONResponse(result)
+
+
+@app.post("/admin/xray-reports/{report_id}/regen-pdf")
+async def admin_xray_regen(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    report = db.get(XrayReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    from app.services.xray_pdf import generate_xray_pdf
+    _, err = generate_xray_pdf(db, report.id)
+    if err:
+        return RedirectResponse(f"/admin/exam-orders/{report.exam_order_id}?msg=PDF 重新生成失败：{err}", status_code=303)
+    return RedirectResponse(f"/admin/exam-orders/{report.exam_order_id}?msg=PDF 已重新生成", status_code=303)
+
+
+@app.post("/admin/xray-reports/{report_id}/delete")
+async def admin_xray_delete(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    report = db.get(XrayReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    order_id = report.exam_order_id
+    if report.exam_report_id:
+        er = db.get(ExamReport, report.exam_report_id)
+        if er:
+            try:
+                if er.file_path:
+                    Path(er.file_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+            db.delete(er)
+    try:
+        import shutil
+        ph_dir = Path("uploads") / "xray_photos" / str(report.id)
+        if ph_dir.exists():
+            shutil.rmtree(ph_dir, ignore_errors=True)
+    except Exception:
+        pass
+    db.delete(report)
+    db.commit()
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=X光报告已删除", status_code=303)
 
 
 @app.get("/admin/exam-orders/{order_id}/qr.png")

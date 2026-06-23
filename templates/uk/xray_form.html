@@ -1,0 +1,335 @@
+{% extends "uk/_base.html" %}
+{% block title %}{{ '编辑' if report else '生成' }} X光报告 · 检查单 #{{ order.id }}{% endblock %}
+
+{% block body %}
+
+<style>
+  .xr-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .xr-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .xr-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .xr-bc .sep { margin:0 8px; color:var(--ink-4); }
+
+  .xr-head h1 { font-family:var(--font-serif); font-size:26pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0 0 6px; }
+  .xr-meta { font-size:10pt; color:var(--ink-2); font-style:italic; margin-bottom:18px; }
+  .xr-meta .sep { margin:0 8px; color:var(--ink-4); }
+  .xr-msg { background:#f3f6f3; border-left:3px solid #1d4d3a; padding:10px 14px; font-size:10pt; color:var(--ink-2); margin-bottom:18px; line-height:1.6; }
+
+  .xr-card { background:var(--paper); border:0.5px solid var(--hair); padding:22px 24px; margin-bottom:18px; }
+  .xr-card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:6px; border-bottom:0.5px solid var(--hair); }
+  .xr-card-head h2 { font-family:var(--font-serif); font-size:12pt; font-weight:700; color:var(--ink); letter-spacing:2px; margin:0; }
+  .xr-card h2.solo { font-family:var(--font-serif); font-size:12pt; font-weight:700; letter-spacing:2px; margin:0 0 14px; padding-bottom:6px; border-bottom:0.5px solid var(--hair); }
+
+  .xr-field { margin-bottom:16px; }
+  .xr-field > label { display:block; font-size:9.5pt; letter-spacing:1px; color:var(--ink-3); margin-bottom:5px; }
+  .xr-field .req { color:var(--accent-red); margin-left:2px; }
+  .xr-input, .xr-select, .xr-text { width:100%; font-family:var(--font-serif); font-size:11pt; color:var(--ink); background:#fff; border:0.5px solid var(--hair); padding:9px 11px; box-sizing:border-box; }
+  .xr-text { min-height:96px; line-height:1.75; resize:vertical; }
+  .xr-row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+
+  .xr-chips { display:flex; flex-wrap:wrap; gap:7px; }
+  .xr-region-chip { font-family:var(--font-serif); font-size:11pt; color:var(--ink-2); background:#fff; border:0.5px solid var(--hair); padding:8px 18px; cursor:pointer; letter-spacing:1px; }
+  .xr-region-chip.checked { color:var(--paper); background:var(--ink); border-color:var(--ink); font-weight:700; }
+
+  .xr-struct { padding:10px 0; border-bottom:0.5px solid var(--hair); }
+  .xr-struct:last-child { border-bottom:none; }
+  .xr-struct-name { font-family:var(--font-serif); font-size:10.5pt; font-weight:700; color:var(--ink); margin-bottom:7px; letter-spacing:.5px; }
+  .xr-tag { font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); background:#fff; border:0.5px solid var(--hair); padding:5px 12px; cursor:pointer; user-select:none; }
+  .xr-tag.checked { color:var(--paper); background:#3a3a3a; border-color:#3a3a3a; font-weight:600; }
+  .xr-tag[title]:hover { border-color:var(--ink-3); }
+  .xr-note { width:100%; font-family:var(--font-serif); font-size:9.5pt; color:var(--ink); background:#fcfbf7; border:0.5px solid var(--hair); padding:6px 9px; margin-top:7px; box-sizing:border-box; }
+
+  .ms-table { width:100%; border-collapse:collapse; }
+  .ms-table td { border-bottom:0.5px solid var(--hair); padding:3px 6px; }
+  .ms-table input { width:100%; font-family:var(--font-serif); font-size:10pt; border:none; background:transparent; padding:5px 4px; box-sizing:border-box; }
+  .ms-table input:focus { outline:none; background:#fffdf5; }
+  .ms-table td.c-name{width:50%;} .ms-table td.c-val{width:26%;} .ms-table td.c-unit{width:16%;} .ms-table td.c-x{width:34px;text-align:center;}
+  .ms-rowdel { font-size:11pt; color:var(--ink-4); background:transparent; border:none; cursor:pointer; }
+  .ms-rowdel:hover { color:var(--accent-red); }
+  .ms-addrow { font-family:var(--font-serif); font-size:9.5pt; color:var(--ink-2); background:#fff; border:0.5px solid var(--hair); padding:6px 14px; cursor:pointer; margin-top:8px; letter-spacing:1px; }
+
+  .xr-btn-sm { font-family:var(--font-serif); font-size:9.5pt; color:var(--ink-2); background:#fff; border:0.5px solid var(--hair); padding:7px 14px; cursor:pointer; letter-spacing:1px; }
+  .xr-btn-sm:hover { border-color:var(--ink-3); color:var(--ink); }
+  .xr-photos { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .xr-photos img { width:120px; height:120px; object-fit:cover; background:#000; border:0.5px solid var(--hair); }
+
+  .xr-actions { display:flex; gap:12px; align-items:center; margin:8px 0 50px; }
+  .xr-submit { font-family:var(--font-serif); font-size:12pt; font-weight:700; letter-spacing:2px; color:var(--paper); background:var(--ink); border:none; padding:13px 30px; cursor:pointer; }
+  .xr-submit:hover { background:var(--ink-2); }
+  .xr-cancel { font-family:var(--font-serif); font-size:10pt; color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .xr-cancel:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+</style>
+
+<div class="xr-bc">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  <a href="/admin/exam-orders/{{ order.id }}">检查单 #{{ order.id }}</a><span class="sep">/</span>
+  <span>{{ '编辑' if report else '生成' }} X光报告</span>
+</div>
+
+<div class="xr-head"><h1>{{ '编 辑' if report else '生 成' }}&nbsp;X&nbsp;光&nbsp;报&nbsp;告</h1></div>
+<div class="xr-meta">
+  {{ pet.name if pet else '—' }}
+  {% if pet %}<span class="sep">·</span>{% if pet.species == 'cat' %}猫{% elif pet.species == 'dog' %}犬{% else %}{{ pet.species or '' }}{% endif %}{% if pet.breed %} · {{ pet.breed }}{% endif %}{% endif %}
+  <span class="sep">·</span>{{ cust.name if cust else '—' }}
+</div>
+
+{% if msg %}<div class="xr-msg">{{ msg }}</div>{% endif %}
+
+<form method="post"
+      action="{% if report %}/admin/xray-reports/{{ report.id }}/save{% else %}/admin/exam-orders/{{ order.id }}/xray/create{% endif %}"
+      enctype="multipart/form-data" id="xrayForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="region" id="region" value="{{ active_region }}"/>
+  <input type="hidden" name="findings_json" id="findings_json"/>
+  <input type="hidden" name="measurements_json" id="measurements_json"/>
+
+  {# 基本信息 #}
+  <div class="xr-card">
+    <h2 class="solo">基&nbsp;本&nbsp;信&nbsp;息</h2>
+    <div class="xr-field">
+      <label>检查部位<span class="req">*</span></label>
+      <div class="xr-chips" id="region-chips">
+        {% for r in region_list %}
+        <div class="xr-region-chip {% if r.key == active_region %}checked{% endif %}" data-key="{{ r.key }}" onclick="pickRegion(this)">{{ r.label }}</div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="xr-row3">
+      <div class="xr-field">
+        <label>归属检查项<span class="req">*</span></label>
+        {% if xray_items %}
+        <select class="xr-select" name="item_label" required>
+          {% for it in xray_items %}<option value="{{ it.name }}" {% if report and report.item_label == it.name %}selected{% endif %}>{{ it.name }}</option>{% endfor %}
+          <option value="X光检查" {% if report and report.item_label == 'X光检查' %}selected{% endif %}>X光检查（其他）</option>
+        </select>
+        {% else %}
+        <input class="xr-input" name="item_label" value="{{ report.item_label if report else 'X光检查' }}" required/>
+        {% endif %}
+      </div>
+      <div class="xr-field">
+        <label>报告医师<span class="req">*</span></label>
+        <input class="xr-input" name="vet_name" value="{{ report.vet_name if report else '' }}" list="vet-list" required placeholder="选或输入"/>
+        <datalist id="vet-list">{% for v in vet_names %}<option value="{{ v }}">{% endfor %}</datalist>
+      </div>
+      <div class="xr-field">
+        <label>图像质量</label>
+        <select class="xr-select" name="image_quality">
+          <option value="">—</option>
+          {% for q in image_quality_opts %}<option value="{{ q }}" {% if report and report.image_quality == q %}selected{% endif %}>{{ q }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="xr-field">
+      <label>投照体位</label>
+      <input class="xr-input" name="projection" value="{{ report.projection if report else '' }}" placeholder="如：右侧位 + 腹背位"/>
+    </div>
+  </div>
+
+  {# 结构化勾选（按部位） #}
+  <div class="xr-card">
+    <h2 class="solo">影&nbsp;像&nbsp;勾&nbsp;选&nbsp;所&nbsp;见</h2>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin:-6px 0 12px;line-height:1.6;">点选异常标签（鼠标悬停看解释）；勾「正常/无」会自动清掉同结构其他选项；每结构可补充自由描述。</p>
+    {% for r in region_list %}
+    {% set tpl = templates[r.key] %}
+    <div class="xr-region-block" data-region="{{ r.key }}" style="{% if r.key != active_region %}display:none;{% endif %}">
+      {% for st in tpl['structures'] %}
+      <div class="xr-struct" data-structure="{{ st['name'] }}">
+        <div class="xr-struct-name">{{ st['name'] }}</div>
+        <div class="xr-chips">
+          {% for lb in st['labels'] %}
+          <span class="xr-tag" data-tag="{{ lb['tag'] }}"{% if lb['desc'] %} title="{{ lb['desc'] }}"{% endif %} onclick="toggleTag(this)">{{ lb['tag'] }}</span>
+          {% endfor %}
+        </div>
+        <input class="xr-note" data-note placeholder="补充描述（部位 / 范围 / 程度，可空）"/>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {# 测量值 #}
+  <div class="xr-card">
+    <div class="xr-card-head"><h2>测&nbsp;量&nbsp;值</h2><button type="button" class="ms-addrow" onclick="addMeasureRow()">+ 加一行</button></div>
+    <table class="ms-table"><tbody id="measure-rows"></tbody></table>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin:8px 0 0;">如 VHS、Norberg 角；按部位自动给常用项，可改/增删，留空不进报告。</p>
+  </div>
+
+  {# 医生综合描述 #}
+  <div class="xr-card">
+    <h2 class="solo">医&nbsp;生&nbsp;综&nbsp;合&nbsp;描&nbsp;述</h2>
+    <textarea class="xr-text" name="vet_findings" id="vet_findings" style="min-height:80px;" placeholder="勾选之外需要补充的整体印象 / 重点发现，可空">{{ report.vet_findings if report else '' }}</textarea>
+  </div>
+
+  {# 报告正文 #}
+  <div class="xr-card">
+    <div class="xr-card-head">
+      <h2>报&nbsp;告&nbsp;正&nbsp;文</h2>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span id="ai-status" style="font-size:9pt;color:var(--ink-3);font-style:italic;"></span>
+        <button type="button" class="xr-btn-sm" id="ai-btn" onclick="aiDraft()">⚙ AI 生成「所见/提示/建议」</button>
+      </div>
+    </div>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin:-4px 0 12px;line-height:1.6;">AI 不读片，只把上方勾选 + 描述整理成中文报告；生成后可手动微调。</p>
+    <div class="xr-field"><label>X线所见</label><textarea class="xr-text" name="findings" id="findings">{{ report.findings if report else '' }}</textarea></div>
+    <div class="xr-field"><label>提示（结论）</label><textarea class="xr-text" name="conclusion" id="conclusion" style="min-height:80px;">{{ report.conclusion if report else '' }}</textarea></div>
+    <div class="xr-field"><label>建议</label><textarea class="xr-text" name="advice" id="advice" style="min-height:80px;">{{ report.advice if report else '' }}</textarea></div>
+  </div>
+
+  {# 影像 #}
+  <div class="xr-card">
+    <h2 class="solo">X&nbsp;光&nbsp;影&nbsp;像</h2>
+    {% if cur_photos %}
+    <div class="xr-photos">
+      {% for p in cur_photos %}<a href="/uploads/{{ p }}" target="_blank"><img src="/uploads/{{ p }}"/></a>{% endfor %}
+    </div>
+    {% endif %}
+    <input type="file" name="photos" accept="image/*" multiple/>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin-top:6px;">{{ '可继续追加，' if cur_photos else '' }}将排版进报告 PDF（自动压缩，单张 ≤ 15MB）。</p>
+  </div>
+
+  <div class="xr-actions">
+    <button type="submit" class="xr-submit">✓ 保 存 并 出 PDF</button>
+    <a href="/admin/exam-orders/{{ order.id }}" class="xr-cancel">返回检查单</a>
+  </div>
+</form>
+
+<script>
+const TEMPLATES = {{ templates | tojson }};
+const INIT_REGION = {{ active_region | tojson }};
+const INIT_FINDINGS = {{ cur_findings | tojson }};
+const INIT_MEASURE = {{ cur_measure | tojson }};
+const REPORT_ID = {{ report.id if report else 'null' }};
+const NORMAL_TAGS = ['正常', '无', '正常不可见', '无侵袭征象', '无移位'];
+
+function pickRegion(el) {
+  const key = el.dataset.key;
+  document.querySelectorAll('#region-chips .xr-region-chip').forEach(c => c.classList.toggle('checked', c === el));
+  document.getElementById('region').value = key;
+  document.querySelectorAll('.xr-region-block').forEach(b => b.style.display = (b.dataset.region === key) ? '' : 'none');
+  renderMeasure(key);
+}
+
+function toggleTag(el) {
+  const struct = el.closest('.xr-struct');
+  const tag = el.dataset.tag;
+  const willCheck = !el.classList.contains('checked');
+  if (willCheck && NORMAL_TAGS.includes(tag)) {
+    struct.querySelectorAll('.xr-tag.checked').forEach(t => t.classList.remove('checked'));
+  } else if (willCheck) {
+    struct.querySelectorAll('.xr-tag.checked').forEach(t => { if (NORMAL_TAGS.includes(t.dataset.tag)) t.classList.remove('checked'); });
+  }
+  el.classList.toggle('checked');
+}
+
+function collectFindings() {
+  const block = document.querySelector('.xr-region-block[data-region="' + document.getElementById('region').value + '"]');
+  const out = [];
+  if (!block) return out;
+  block.querySelectorAll('.xr-struct').forEach(st => {
+    const structure = st.dataset.structure;
+    const tags = Array.from(st.querySelectorAll('.xr-tag.checked')).map(t => t.dataset.tag);
+    const note = (st.querySelector('[data-note]').value || '').trim();
+    if (tags.length || note) out.push({ structure, tags, note });
+  });
+  return out;
+}
+
+function prefillFindings() {
+  if (!INIT_FINDINGS || !INIT_FINDINGS.length) return;
+  const block = document.querySelector('.xr-region-block[data-region="' + INIT_REGION + '"]');
+  if (!block) return;
+  INIT_FINDINGS.forEach(f => {
+    block.querySelectorAll('.xr-struct').forEach(st => {
+      if (st.dataset.structure !== f.structure) return;
+      (f.tags || []).forEach(tag => {
+        st.querySelectorAll('.xr-tag').forEach(t => { if (t.dataset.tag === tag) t.classList.add('checked'); });
+      });
+      if (f.note) st.querySelector('[data-note]').value = f.note;
+    });
+  });
+}
+
+// ── 测量值 ──
+function measureRowHtml(r) {
+  r = r || { name: '', value: '', unit: '' };
+  const esc = s => (s || '').replace(/"/g, '&quot;');
+  return `<tr>
+    <td class="c-name"><input class="m-name" placeholder="指标名" value="${esc(r.name)}"/></td>
+    <td class="c-val"><input class="m-value" placeholder="数值" value="${esc(r.value)}"/></td>
+    <td class="c-unit"><input class="m-unit" placeholder="单位" value="${esc(r.unit)}"/></td>
+    <td class="c-x"><button type="button" class="ms-rowdel" onclick="this.closest('tr').remove()">✕</button></td>
+  </tr>`;
+}
+function renderMeasure(region) {
+  const tbody = document.getElementById('measure-rows');
+  let rows = [];
+  const defaults = (TEMPLATES[region] && TEMPLATES[region].measurements) || [];
+  // 编辑模式且当前是初始部位：用已存测量；否则用该部位默认项
+  if (region === INIT_REGION && INIT_MEASURE && INIT_MEASURE.length) {
+    rows = INIT_MEASURE.map(m => ({ name: m.name || '', value: m.value || '', unit: m.unit || '' }));
+  } else {
+    rows = defaults.map(m => ({ name: m.name || '', value: '', unit: m.unit || '' }));
+  }
+  if (!rows.length) rows = [{ name: '', value: '', unit: '' }];
+  tbody.innerHTML = rows.map(measureRowHtml).join('');
+}
+function addMeasureRow() {
+  document.getElementById('measure-rows').insertAdjacentHTML('beforeend', measureRowHtml());
+}
+function collectMeasure() {
+  const out = [];
+  document.querySelectorAll('#measure-rows tr').forEach(tr => {
+    const name = (tr.querySelector('.m-name').value || '').trim();
+    if (!name) return;
+    out.push({ name, value: (tr.querySelector('.m-value').value || '').trim(), unit: (tr.querySelector('.m-unit').value || '').trim() });
+  });
+  return out;
+}
+
+// ── AI 起草 ──
+async function aiDraft() {
+  const btn = document.getElementById('ai-btn');
+  const status = document.getElementById('ai-status');
+  btn.disabled = true; const old = btn.textContent; btn.textContent = '正在生成…';
+  status.style.color = 'var(--ink-3)'; status.textContent = 'AI 整理中，请稍候（推理模型约十几秒）…';
+  const t0 = performance.now();
+  try {
+    const resp = await fetch('/admin/xray/ai-draft', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        report_id: REPORT_ID,
+        region: document.getElementById('region').value,
+        projection: document.querySelector('[name=projection]').value,
+        image_quality: document.querySelector('[name=image_quality]').value,
+        item_label: document.querySelector('[name=item_label]').value,
+        vet_findings: document.getElementById('vet_findings').value,
+        findings: collectFindings(),
+        measurements: collectMeasure(),
+      })
+    });
+    const data = await resp.json();
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    if (data.ok) {
+      document.getElementById('findings').value = data.findings || '';
+      document.getElementById('conclusion').value = data.conclusion || '';
+      document.getElementById('advice').value = data.advice || '';
+      status.style.color = 'var(--accent-green)'; status.textContent = `✓ 已生成（用时 ${secs}s）`;
+    } else {
+      status.style.color = 'var(--accent-red)'; status.textContent = '✗ 失败：' + (data.error || '未知错误');
+    }
+  } catch (e) {
+    status.style.color = 'var(--accent-red)'; status.textContent = '✗ 请求失败：' + e;
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+
+document.getElementById('xrayForm').addEventListener('submit', function () {
+  document.getElementById('findings_json').value = JSON.stringify(collectFindings());
+  document.getElementById('measurements_json').value = JSON.stringify(collectMeasure());
+});
+
+prefillFindings();
+renderMeasure(INIT_REGION);
+</script>
+
+{% endblock %}

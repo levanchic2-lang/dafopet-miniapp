@@ -455,6 +455,45 @@ function confirmExamVoid(form, paidAmount) {
   </div>
   {% endif %}
 
+  {# X光 / 放射报告入口（仅当本单含 X光项目）#}
+  {% if has_xray %}
+  <div class="ex-section" style="background:#f7f8fa;border-left:3px solid #2b3a55;">
+    <div class="ex-section-head" style="display:flex;align-items:center;justify-content:space-between;">
+      <h2>X&nbsp;光&nbsp;/&nbsp;放&nbsp;射&nbsp;报&nbsp;告（医生读片 + AI 帮写）</h2>
+      <a href="/admin/exam-orders/{{ order.id }}/xray/new" class="uk-btn primary sm" style="text-decoration:none;">
+        🩻 生 成 X 光 报 告
+      </a>
+    </div>
+    <p style="font-size:9.5pt;color:var(--ink-2);line-height:1.7;margin:6px 0 10px;font-style:italic;">
+      按部位（胸/腹/肌骨/关节）勾选异常征象 + 填测量值/主观描述 → AI 整理成「X线所见 / 提示 / 建议」中文报告 → 配 X光图出 PDF。AI 不读片诊断，判读以医师为准。
+    </p>
+    {% if xray_reports %}
+    <div style="margin-top:8px;border-top:0.5px dashed var(--hair);padding-top:10px;">
+      <div style="font-size:9pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:6px;font-family:var(--font-serif);">已生成 X光报告</div>
+      {% for xr in xray_reports %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--hair);">
+        <div style="font-size:10pt;">
+          <b>{{ xr.item_label or 'X光报告' }}</b>
+          {% if not xr.exam_report_id %}<span style="color:var(--accent-amber);font-size:8.5pt;margin-left:8px;">未出PDF</span>{% endif %}
+          <span style="color:var(--ink-3);margin-left:10px;font-size:9pt;">
+            {{ xr.vet_name or '—' }} · {{ (xr.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if xr.created_at else '' }}
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a href="/admin/xray-reports/{{ xr.id }}/edit" class="uk-btn ghost sm" style="text-decoration:none;font-size:9pt;">编辑</a>
+          <form method="post" action="/admin/xray-reports/{{ xr.id }}/delete" style="margin:0;display:inline;"
+                onsubmit="return confirm('确认删除此 X光报告？同时会删除生成的 PDF 和影像。');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button type="submit" class="uk-btn ghost sm" style="font-size:9pt;color:var(--accent-red);">删除</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {# 上传报告 #}
   <div class="ex-section">
     <div class="ex-section-head"><h2>上&nbsp;传&nbsp;报&nbsp;告（电脑端）</h2></div>

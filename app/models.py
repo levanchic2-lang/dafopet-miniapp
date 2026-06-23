@@ -1759,6 +1759,44 @@ class UltrasoundReport(Base):
     updated_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class XrayReport(Base):
+    """X 光 / 放射检查报告（胸部 / 腹部 / 肌骨 / 关节）
+    - 关联 ExamOrder 上的某一项（item_label 标识）
+    - 走「医生读片 + AI 帮写中文报告」模式：AI 不读片诊断，只把医生的结构化勾选 + 描述
+      整理成「X线所见 / 提示 / 建议」三段
+    - findings_json 存结构化勾选：[{"structure":"肺野/肺型","tags":["肺泡型"],"note":"右中肺叶"}]
+    - 生成 PDF 写入 ExamReport（exam_report_id 反链），自动进已上传报告
+    """
+    __tablename__ = "xray_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exam_order_id   = mapped_column(ForeignKey("exam_orders.id", ondelete="CASCADE"), nullable=False)
+    exam_report_id  = mapped_column(ForeignKey("exam_reports.id", ondelete="SET NULL"), nullable=True, default=None)
+    customer_id     = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id          = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    visit_id        = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    item_label:     Mapped[str] = mapped_column(String(120), default="")   # 归属检查项名称
+    region:         Mapped[str] = mapped_column(String(20),  default="thorax")  # thorax/abdomen/msk/joint
+    projection:     Mapped[str] = mapped_column(String(120), default="")   # 体位/投照（右侧位+腹背位等）
+    image_quality:  Mapped[str] = mapped_column(String(40),  default="")   # 满意/体位欠正/曝光不足…
+    vet_name:       Mapped[str] = mapped_column(String(80),  default="")
+    # 结构化勾选：[{"structure":..., "tags":[...], "note":...}]
+    findings_json:  Mapped[str] = mapped_column(Text, default="[]")
+    # 测量值（VHS/Norberg角等）：[{"name":..., "value":..., "unit":...}]
+    measurements_json: Mapped[str] = mapped_column(Text, default="[]")
+    vet_findings:   Mapped[str] = mapped_column(Text, default="")          # 医生综合主观描述
+    findings:       Mapped[str] = mapped_column(Text, default="")          # X线所见（AI 生成，可编辑）
+    conclusion:     Mapped[str] = mapped_column(Text, default="")          # 提示 / 结论
+    advice:         Mapped[str] = mapped_column(Text, default="")          # 建议
+    photos_json:    Mapped[str] = mapped_column(Text, default="[]")        # ["xray_photos/<id>/xxx.jpg", ...]
+
+    store:          Mapped[str] = mapped_column(String(40), default="", index=True)
+    operator:       Mapped[str] = mapped_column(String(80), default="")
+    created_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # ════════════════════════════════════════════════════════════════
 # 麻醉监护表（手术中逐时段生命体征监护）
 # 与 AnesthesiaOrder（麻醉单）刻意分开：麻醉单 = 用了哪些麻醉药 + 剂量 +
