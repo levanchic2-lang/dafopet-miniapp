@@ -132,8 +132,8 @@
     {% set tpl = templates[r.key] %}
     <div class="xr-region-block" data-region="{{ r.key }}" style="{% if r.key != active_region %}display:none;{% endif %}">
       {% for st in tpl['structures'] %}
-      <div class="xr-struct" data-structure="{{ st['name'] }}">
-        <div class="xr-struct-name">{{ st['name'] }}</div>
+      <div class="xr-struct" data-structure="{{ st['name'] }}" data-multi="{{ 'true' if st['multi'] else 'false' }}">
+        <div class="xr-struct-name">{{ st['name'] }}{% if not st['multi'] %} <span style="font-size:8.5pt;color:var(--ink-3);font-style:italic;font-weight:400;">· 单选</span>{% endif %}</div>
         <div class="xr-chips">
           {% for lb in st['labels'] %}
           <span class="xr-tag" data-tag="{{ lb['tag'] }}"{% if lb['desc'] %} title="{{ lb['desc'] }}"{% endif %} onclick="toggleTag(this)">{{ lb['tag'] }}</span>
@@ -150,7 +150,8 @@
   <div class="xr-card">
     <div class="xr-card-head"><h2>测&nbsp;量&nbsp;值</h2><button type="button" class="ms-addrow" onclick="addMeasureRow()">+ 加一行</button></div>
     <table class="ms-table"><tbody id="measure-rows"></tbody></table>
-    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin:8px 0 0;">如 VHS、Norberg 角；按部位自动给常用项，可改/增删，留空不进报告。</p>
+    <div id="di-hint" style="margin-top:10px;font-size:9.5pt;line-height:1.7;"></div>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin:8px 0 0;">如 VHS、Norberg 角、DI 分离指数；按部位自动给常用项，可改/增删，留空不进报告。</p>
   </div>
 
   {# 医生综合描述 #}
@@ -213,7 +214,8 @@ function toggleTag(el) {
   const struct = el.closest('.xr-struct');
   const tag = el.dataset.tag;
   const willCheck = !el.classList.contains('checked');
-  if (willCheck && NORMAL_TAGS.includes(tag)) {
+  const single = struct.dataset.multi === 'false';
+  if (willCheck && (single || NORMAL_TAGS.includes(tag))) {
     struct.querySelectorAll('.xr-tag.checked').forEach(t => t.classList.remove('checked'));
   } else if (willCheck) {
     struct.querySelectorAll('.xr-tag.checked').forEach(t => { if (NORMAL_TAGS.includes(t.dataset.tag)) t.classList.remove('checked'); });
@@ -272,9 +274,43 @@ function renderMeasure(region) {
   }
   if (!rows.length) rows = [{ name: '', value: '', unit: '' }];
   tbody.innerHTML = rows.map(measureRowHtml).join('');
+  wireDiHint();
 }
 function addMeasureRow() {
   document.getElementById('measure-rows').insertAdjacentHTML('beforeend', measureRowHtml());
+  wireDiHint();
+}
+
+// ── DI 分离指数风险提示（仅髋关节早筛）──
+function diRisk(v) {
+  const x = parseFloat(v);
+  if (isNaN(x)) return null;
+  if (x < 0.3) return { txt: '低风险', color: 'var(--accent-green)' };
+  if (x < 0.7) return { txt: '风险渐增', color: 'var(--accent-amber)' };
+  return { txt: '高风险', color: 'var(--accent-red)' };
+}
+function updateDiHint() {
+  const box = document.getElementById('di-hint');
+  if (!box) return;
+  if (document.getElementById('region').value !== 'hip_screen') { box.innerHTML = ''; return; }
+  const parts = [];
+  document.querySelectorAll('#measure-rows tr').forEach(tr => {
+    const name = (tr.querySelector('.m-name').value || '').trim();
+    if (!/DI/i.test(name)) return;
+    const val = (tr.querySelector('.m-value').value || '').trim();
+    const r = diRisk(val);
+    if (r) parts.push(`<span style="color:${r.color};font-weight:700;">${name} ${val} → ${r.txt}</span>`);
+  });
+  box.innerHTML = parts.length
+    ? ('DI 风险参考：' + parts.join('　·　') + '<div style="color:var(--ink-3);font-style:italic;margin-top:3px;font-size:9pt;">阈值 0.3 / 0.7 仅作参考，实际因品种而异；最终判读以医师为准。</div>')
+    : '';
+}
+function wireDiHint() {
+  document.querySelectorAll('#measure-rows .m-value, #measure-rows .m-name').forEach(inp => {
+    inp.removeEventListener('input', updateDiHint);
+    inp.addEventListener('input', updateDiHint);
+  });
+  updateDiHint();
 }
 function collectMeasure() {
   const out = [];

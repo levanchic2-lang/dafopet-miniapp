@@ -22176,13 +22176,50 @@ _XRAY_TEMPLATES = {
             ]},
         ],
     },
+    "hip_screen": {
+        "label": "髋关节早筛",
+        "measurements": [
+            {"name": "DI(左)", "unit": ""},
+            {"name": "DI(右)", "unit": ""},
+            {"name": "Norberg角(左)", "unit": "°"},
+            {"name": "Norberg角(右)", "unit": "°"},
+        ],
+        "structures": [
+            {"name": "摄片体位（已拍）", "multi": True, "labels": [
+                {"tag": "撑开位", "desc": "PennHIP distraction view，测 DI 分离指数用"},
+                {"tag": "压迫位", "desc": "compression view，与撑开位配对算 DI"},
+                {"tag": "髋伸展位", "desc": "标准腹背髋伸展位，看 Norberg 角与 DJD"},
+            ]},
+            {"name": "FCI 分级", "multi": False, "labels": [
+                {"tag": "A(正常)", "desc": "髋关节正常，无松弛/DJD"},
+                {"tag": "B(近正常)", "desc": "轻微不匹配或轻度松弛"},
+                {"tag": "C(轻度)", "desc": "轻度发育不良"},
+                {"tag": "D(中度)", "desc": "中度发育不良"},
+                {"tag": "E(重度)", "desc": "重度发育不良，明显 DJD"},
+            ]},
+            {"name": "DJD 退行性征象", "multi": True, "labels": [
+                {"tag": "无", "desc": ""},
+                {"tag": "轻", "desc": "股骨头颈轻微骨赘 / Morgan 线"},
+                {"tag": "中", "desc": "明确骨赘 + 髋臼缘硬化"},
+                {"tag": "重", "desc": "广泛骨赘、关节面重塑"},
+            ]},
+            {"name": "髋臼覆盖 / 半脱位", "multi": True, "labels": [
+                {"tag": "正常", "desc": "股骨头大部覆盖于髋臼内"},
+                {"tag": "半脱位", "desc": "股骨头部分脱出、关节间隙增宽"},
+                {"tag": "髋臼变浅", "desc": "髋臼背缘发育不足、覆盖减少"},
+            ]},
+        ],
+    },
 }
-_XRAY_REGION_ORDER = ["thorax", "abdomen", "msk", "joint", "spine"]
+_XRAY_REGION_ORDER = ["thorax", "abdomen", "msk", "joint", "spine", "hip_screen"]
 
 
 def _infer_xray_region(item_label: str) -> str:
     """按检查项名字推断默认部位。"""
     s = (item_label or "")
+    # 髋关节早筛优先（PennHIP/撑开/分离指数/早筛）
+    if any(k in s for k in ("早筛", "PennHIP", "撑开", "分离指数")) or ("髋" in s and "发育不良" in s):
+        return "hip_screen"
     # 脊椎优先（"胸椎/腰椎"含"胸"会误入胸部，须先判）
     if any(k in s for k in ("椎", "脊柱", "脊椎", "颈椎", "胸椎", "腰椎", "骶")):
         return "spine"
