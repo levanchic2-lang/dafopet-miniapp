@@ -126,8 +126,12 @@
   <div class="us-card">
     <div class="us-card-head">
       <h2>报&nbsp;告&nbsp;正&nbsp;文</h2>
-      <button type="button" class="us-btn-sm" id="ai-btn" onclick="reDraft()">⚙ 用当前数据重新生成文字稿</button>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span id="ai-status" style="font-size:9pt;color:var(--ink-3);font-style:italic;"></span>
+        <button type="button" class="us-btn-sm" id="ai-btn" onclick="reDraft()">⚙ 用当前数据重新生成文字稿</button>
+      </div>
     </div>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin:-4px 0 12px;line-height:1.6;">改了上方测量数据或医生主观描述后点此重跑；相同数据生成结果基本一致属正常。</p>
     <div class="us-field">
       <label>超声所见</label>
       <textarea class="us-text" name="findings" id="findings">{{ report.findings }}</textarea>
@@ -213,9 +217,20 @@ document.getElementById('us-form').addEventListener('submit', function() {
   document.getElementById('measurements_json').value = JSON.stringify(collectGroups());
 });
 
+function flashField(el) {
+  if (!el) return;
+  el.style.transition = 'background-color 0.15s';
+  el.style.backgroundColor = '#fff6d9';
+  setTimeout(() => { el.style.backgroundColor = ''; }, 900);
+}
+
 async function reDraft() {
   const btn = document.getElementById('ai-btn');
+  const status = document.getElementById('ai-status');
   btn.disabled = true; const old = btn.textContent; btn.textContent = '正在生成…';
+  status.style.color = 'var(--ink-3)';
+  status.textContent = 'DeepSeek 推理中，请稍候（约十几秒）…';
+  const t0 = performance.now();
   try {
     const resp = await fetch('/admin/ultrasound/ai-draft', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -229,17 +244,24 @@ async function reDraft() {
       })
     });
     const data = await resp.json();
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
     if (data.ok) {
-      if (!document.getElementById('findings').value.trim() || confirm('用 AI 结果覆盖当前正文？')) {
-        document.getElementById('findings').value = data.findings || '';
-        document.getElementById('conclusion').value = data.conclusion || '';
-        document.getElementById('advice').value = data.advice || '';
-      }
+      const f = document.getElementById('findings');
+      const c = document.getElementById('conclusion');
+      const a = document.getElementById('advice');
+      f.value = data.findings || '';
+      c.value = data.conclusion || '';
+      a.value = data.advice || '';
+      flashField(f); flashField(c); flashField(a);
+      status.style.color = 'var(--accent-green)';
+      status.textContent = `✓ 已重新生成（DeepSeek · 用时 ${secs}s）`;
     } else {
-      alert('生成失败：' + (data.error || '未知错误'));
+      status.style.color = 'var(--accent-red)';
+      status.textContent = '✗ 生成失败：' + (data.error || '未知错误');
     }
   } catch (e) {
-    alert('请求失败：' + e);
+    status.style.color = 'var(--accent-red)';
+    status.textContent = '✗ 请求失败：' + e;
   } finally {
     btn.disabled = false; btn.textContent = old;
   }
