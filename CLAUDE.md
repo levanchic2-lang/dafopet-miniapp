@@ -226,6 +226,17 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
 - 异常值判断：v1 交给 AI 按经验描述，**未建参考值库**
 - 服务器依赖：`pip install pypdf`（weasyprint/Pillow 已有）
 
+### X 光 / 放射报告（医生读片 + AI 帮写，2026-06-23）
+- **设计原则**：AI **不读片、不下影像诊断**（通用多模态模型读 X 光不够专业），只把医生的结构化勾选 + 描述整理成「X线所见 / 提示 / 建议」中文报告。读片仍由医生完成。
+- 复用显微镜/B超套路：`XrayReport` 模型挂 ExamOrder，出 PDF 回写 ExamReport
+- **v2 结构化字典**（`_XRAY_TEMPLATES`，4 部位：thorax/abdomen/msk/joint）：每部位多个解剖结构，每结构一组异常标签 `{tag, desc}`，desc 既做 UI 悬停提示、也喂 AI 当上下文。标签按标准放射学系统性读片框架编写。
+- 录入页 `uk/xray_form.html`（单页）：部位 chip 切换 → 每结构标签多选（「正常/无」与其他互斥）+ 自由描述 + 测量值（VHS/Norberg角，按部位给默认行，可增删）+ 综合描述 → 「AI 生成」按钮(走 DeepSeek) → 三段正文可改 → 上传 X光图。结构化勾选 JS 序列化进隐藏 `findings_json`，测量进 `measurements_json`
+- service：`xray_ai.draft_xray_text`（DeepSeek，强调"整理润色非诊断"）/ `xray_pdf.generate_xray_pdf`
+- 路由：`/admin/exam-orders/{id}/xray/new|create` · `/admin/xray-reports/{id}/edit|save|delete|regen-pdf` · `/admin/xray/ai-draft`(JSON)
+- 入口识别：`InventoryItem.subcategory=="xray"` 或名称含 X光/X线/DR/拍片/放射/平片
+- **v3 待办**（用户已认可，暂缓）：骨折细到 Salter-Harris 每型单列、髋发育不良按 OFA/PennHIP 分级、更多标签细分
+- 商用「AI 读片」备选：国内宠智灵(有 API/SDK 可对接)、谛宝诚、深圳 Vetoo；都需商务询价。A 方向(本功能)零订阅、数据不出境
+
 ### Jinja2 常见坑 (重申)
 - **context dict 必须 `d['key']`**，不要 `d.key`（命中 `items/keys/values/get/pop/update` 返回 bound method 500）
 - wallet 用标量 `wallet_balance` 传，不要传 `wallet` 对象（undefined.balance 500）
