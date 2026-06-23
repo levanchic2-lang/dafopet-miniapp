@@ -21587,6 +21587,10 @@ async def admin_ultrasound_create(order_id: int, request: Request, db: Session =
         sres = await structure_measurements(raw_text, exam_type)
         if sres.get("ok"):
             groups = sres.get("groups") or []
+            # 医生没手填设备时，用 PDF 里识别出的设备/探头自动填充
+            if not device and sres.get("device"):
+                device = str(sres.get("device") or "").strip()[:120]
+                report.device = device
         else:
             warn += f" 测量解析未成功（{sres.get('error', '')}），可在编辑页手动补录。"
     report.measurements_json = json.dumps(groups, ensure_ascii=False)

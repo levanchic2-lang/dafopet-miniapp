@@ -64,10 +64,11 @@ def _strip_md(raw: str) -> str:
 
 
 _STRUCT_SYSTEM = """你是宠物医院超声测量数据整理助手。
-任务：把超声机导出的测量数据文本，整理成「分组」结构的 JSON。测量项目不固定，原文有多少就整理多少，不要增删、不要编造数值。
+任务：把超声机导出的测量数据文本，整理成「分组」结构的 JSON，并顺带识别设备/探头信息。测量项目不固定，原文有多少就整理多少，不要增删、不要编造数值。
 
 输出严格的 JSON 对象（不要 markdown 包裹），结构：
-{"groups": [
+{"device": "设备型号 / 探头信息（从原文里找，如 机型名、Probe、探头频率等；没有就空串）",
+ "groups": [
   {"group": "分组名（如 2D测量·主动脉与主动脉瓣 / M测量·左室 / Doppler·二尖瓣；原文有层级就拼起来）",
    "rows": [{"name":"指标名(如 LA Diam)", "value":"数值(如 0.96，纯数字或比值，去掉单位)", "unit":"单位(如 cm/cm/s/mmHg/%，没有就空串)"}]}
 ]}
@@ -78,7 +79,8 @@ _STRUCT_SYSTEM = """你是宠物医院超声测量数据整理助手。
 3. name 用原文指标名（中英文都保留原样，如 "LVIDd"、"MV E/A"、"EF(Teich)"）。
 4. value 只放数值/比值本身，把单位拆到 unit。比值类(如 LA/Ao:1.07)的 unit 留空。
 5. 不要把页眉页脚、宠物信息、"Page"、医院名当成测量项。
-6. 若完全没有可识别的测量数据，返回 {"groups": []}。
+6. device 只填设备/探头相关信息（机型、探头型号、探头频率等），不确定就留空串，不要把医院名/客户名/日期当设备。
+7. 若完全没有可识别的测量数据，groups 返回 []（device 仍按原文识别）。
 """
 
 
@@ -119,6 +121,7 @@ async def structure_measurements(raw_text: str, exam_type: str = "cardiac") -> d
     if not isinstance(groups_in, list):
         return {"ok": False, "groups": [], "error": "模型输出缺少 groups 数组"}
 
+    device = str(data.get("device", "")).strip()[:120] if isinstance(data, dict) else ""
     groups = []
     for g in groups_in:
         if not isinstance(g, dict):
@@ -137,7 +140,7 @@ async def structure_measurements(raw_text: str, exam_type: str = "cardiac") -> d
             })
         if rows:
             groups.append({"group": str(g.get("group", "")).strip()[:120], "rows": rows})
-    return {"ok": True, "groups": groups}
+    return {"ok": True, "groups": groups, "device": device}
 
 
 _DRAFT_SYSTEM = """你是宠物医院资深超声科医生，正在书写正式超声报告。
