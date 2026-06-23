@@ -234,7 +234,9 @@ draft → pending_ai → pending_manual → pre_approved → approved → schedu
 - service：`xray_ai.draft_xray_text`（DeepSeek，强调"整理润色非诊断"）/ `xray_pdf.generate_xray_pdf`
 - 路由：`/admin/exam-orders/{id}/xray/new|create` · `/admin/xray-reports/{id}/edit|save|delete|regen-pdf` · `/admin/xray/ai-draft`(JSON)
 - 入口识别：`InventoryItem.subcategory=="xray"` 或名称含 X光/X线/DR/拍片/放射/平片
-- **v3 待办**（用户已认可，暂缓）：骨折细到 Salter-Harris 每型单列、髋发育不良按 OFA/PennHIP 分级、更多标签细分
+- 部位：thorax/abdomen/msk/joint/spine(脊椎颈胸腰)/**hip_screen(髋关节早筛)**
+- **髋关节早筛**(hip_screen)：PennHIP DI(分离指数,左/右) + Norberg角(左/右) + FCI 分级(A-E,单选) + DJD + 髋臼覆盖；DI 前端按阈值实时风险提示(<0.3 低/0.3-0.7 渐增/>0.7 高，注明因品种而异)；AI 提示词含髋早筛判读规则(双侧评估、以较差侧为准、繁育建议)。表单结构支持 `multi=false` 单选(FCI 用)
+- **v3 待办**（暂缓）：骨折细到 Salter-Harris 每型、肘 IEWG 分级、椎间盘 Hansen 分型 + 节段定位、肺型细分、心脏腔室组合自动提示
 - 商用「AI 读片」备选：国内宠智灵(有 API/SDK 可对接)、谛宝诚、深圳 Vetoo；都需商务询价。A 方向(本功能)零订阅、数据不出境
 
 ### Jinja2 常见坑 (重申)
