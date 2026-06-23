@@ -111,7 +111,7 @@ async def draft_microscopy_text(payload: dict) -> dict[str, Any]:
     user_text = _format_payload(payload)
 
     # 报告文字统一走 DeepSeek（已配置）否则回退豆包文本
-    client, model, _ = report_text_client_model()
+    client, model, _, is_reasoner = report_text_client_model()
 
     try:
         resp = await client.chat.completions.create(
@@ -121,7 +121,7 @@ async def draft_microscopy_text(payload: dict) -> dict[str, Any]:
                 {"role": "user", "content": user_text},
             ],
             temperature=0.4,
-            max_tokens=900,
+            max_tokens=6000 if is_reasoner else 900,
         )
     except Exception as e:
         logger.warning("[microscopy_ai] API failed: %s", e)

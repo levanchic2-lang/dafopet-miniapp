@@ -97,14 +97,14 @@ async def structure_measurements(raw_text: str, exam_type: str = "cardiac") -> d
         return {"ok": False, "groups": [], "error": "缺少 openai 库"}
 
     user = f"【检查类型】{_EXAM_TYPE_LABEL.get(exam_type, '通用超声')}\n\n【机器导出测量文本】\n{raw_text[:8000]}"
-    client, model, _ = report_text_client_model()
+    client, model, _, is_reasoner = report_text_client_model()
     try:
         resp = await client.chat.completions.create(
             model=model,
             messages=[{"role": "system", "content": _STRUCT_SYSTEM},
                       {"role": "user", "content": user}],
             temperature=0.0,
-            max_tokens=3000,
+            max_tokens=8000 if is_reasoner else 3000,
         )
     except Exception as e:
         logger.warning("[ultrasound] structure API failed: %s", e)
@@ -217,14 +217,14 @@ async def draft_ultrasound_text(payload: dict) -> dict[str, Any]:
         return {"ok": False, "error": "缺少 openai 库"}
 
     user_text = _format_draft_payload(payload)
-    client, model, _ = report_text_client_model()
+    client, model, _, is_reasoner = report_text_client_model()
     try:
         resp = await client.chat.completions.create(
             model=model,
             messages=[{"role": "system", "content": _DRAFT_SYSTEM},
                       {"role": "user", "content": user_text}],
             temperature=0.4,
-            max_tokens=1400,
+            max_tokens=8000 if is_reasoner else 1400,
         )
     except Exception as e:
         logger.warning("[ultrasound] draft API failed: %s", e)
