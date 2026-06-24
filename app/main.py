@@ -12825,6 +12825,7 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
         vet_name=str(form.get("vet_name", "")).strip()[:80],
         status=str(form.get("status", "issued")).strip(),
         total_amount=total,
+        package_price=_parse_money(form.get("package_price")),
         notes=str(form.get("notes", "")).strip(),
         created_by=operator,
     )
@@ -12977,6 +12978,7 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
     presc.pet_id = int(form.get("pet_id", 0) or 0) or presc.pet_id
     presc.status = str(form.get("status", "issued")).strip()
     presc.total_amount = total
+    presc.package_price = _parse_money(form.get("package_price"))
     presc.notes = str(form.get("notes", "")).strip()
     for it in parsed_items:
         db.add(PrescriptionItem(prescription_id=presc_id, **it))
@@ -17253,6 +17255,15 @@ def _resync_grooming_invoice(db: Session, rec: "GroomingOrder", request: "Reques
     db.flush()
 
 
+def _parse_money(v) -> float:
+    """解析金额字段为非负浮点；空/非法 → 0.0。"""
+    try:
+        x = float(str(v).strip() or 0)
+        return round(x, 2) if x > 0 else 0.0
+    except Exception:
+        return 0.0
+
+
 def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "Invoice | None":
     """把就诊产生的处方 / 检查单 / 销售单自动同步到一张「待收款」收费单。
 
@@ -17292,17 +17303,31 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
     for p in prescs:
         if ("prescription", p.id) in settled_refs:
             continue  # 整张处方已在已结清发票里，跳过
+        doc_lines: list[dict] = []
+        doc_sum = 0.0
         for it in (p.items or []):
             if not it.drug_name or (it.subtotal or 0) <= 0:
                 continue
-            line_items.append({
+            doc_lines.append({
                 "ref_type": "prescription", "ref_id": p.id,
                 "description": f"[处方#{p.id}] {it.drug_name}",
                 "quantity": float(it.quantity_num or 0),
                 "unit_price": float(it.unit_price or 0),
                 "subtotal": float(it.subtotal or 0),
             })
-            subtotal_sum += float(it.subtotal or 0)
+            doc_sum += float(it.subtotal or 0)
+        # 打包价（整单议价）：保留明细 + 加一行差额，使本处方合计 = 打包价
+        pkg = float(getattr(p, "package_price", 0) or 0)
+        if pkg > 0 and doc_lines and abs(round(pkg - doc_sum, 2)) > 0.005:
+            diff = round(pkg - doc_sum, 2)
+            doc_lines.append({
+                "ref_type": "prescription", "ref_id": p.id,
+                "description": f"[处方#{p.id}] 打包议价调整（议价 ¥{pkg:.2f}）",
+                "quantity": 1.0, "unit_price": diff, "subtotal": diff,
+            })
+            doc_sum = round(pkg, 2)
+        line_items.extend(doc_lines)
+        subtotal_sum += doc_sum
 
     # ── 2) 检查单 ──
     exams = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).all()
@@ -17313,6 +17338,8 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
             eitems = json.loads(eo.items_json or "[]")
         except Exception:
             eitems = []
+        doc_lines = []
+        doc_sum = 0.0
         for it in eitems:
             name = (it.get("name") or "").strip()
             if not name:
@@ -17322,12 +17349,23 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
             sub = round(qty * price, 2)
             if sub <= 0:
                 continue
-            line_items.append({
+            doc_lines.append({
                 "ref_type": "exam_order", "ref_id": eo.id,
                 "description": f"[检查#{eo.id}] {name}",
                 "quantity": qty, "unit_price": price, "subtotal": sub,
             })
-            subtotal_sum += sub
+            doc_sum += sub
+        pkg = float(getattr(eo, "package_price", 0) or 0)
+        if pkg > 0 and doc_lines and abs(round(pkg - doc_sum, 2)) > 0.005:
+            diff = round(pkg - doc_sum, 2)
+            doc_lines.append({
+                "ref_type": "exam_order", "ref_id": eo.id,
+                "description": f"[检查#{eo.id}] 打包议价调整（议价 ¥{pkg:.2f}）",
+                "quantity": 1.0, "unit_price": diff, "subtotal": diff,
+            })
+            doc_sum = round(pkg, 2)
+        line_items.extend(doc_lines)
+        subtotal_sum += doc_sum
 
     # ── 3) 销售单 ──
     sos = db.query(SalesOrder).filter(
@@ -20426,6 +20464,7 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
         visit_id=visit_id,
         items_json=json.dumps(items, ensure_ascii=False),
         notes=notes,
+        package_price=_parse_money(form.get("package_price")),
         upload_token=token,
         token_expires_at=exp,
         created_by=request.session.get("admin_username", ""),
@@ -20553,6 +20592,7 @@ async def admin_exam_order_edit(order_id: int, request: Request, db: Session = D
 
     # 3) 写入新项目 + 重新出库
     order.notes = str(form.get("notes") or "").strip()
+    order.package_price = _parse_money(form.get("package_price"))
     order.items_json = json.dumps(items, ensure_ascii=False)
     db.flush()
     for it in items:

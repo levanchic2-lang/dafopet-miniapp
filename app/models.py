@@ -318,6 +318,8 @@ class Prescription(Base):
     vet_name: Mapped[str] = mapped_column(String(80), default="")
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft / issued / dispensed / voided
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    # 打包价（整单议价总额）：>0 时收费单按此价出（保留明细 + 加一行差额调整）；0=按明细合计
+    package_price: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[str] = mapped_column(Text, default="")
     voided_by:  Mapped[str] = mapped_column(String(80), default="")
     voided_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
@@ -742,6 +744,8 @@ class ExamOrder(Base):
     items_json: Mapped[str] = mapped_column(Text, default="[]")   # [{name, item_id, notes}]
     notes:      Mapped[str] = mapped_column(Text, default="")
     status:     Mapped[str] = mapped_column(String(20), default="pending")  # pending/completed/voided
+    # 打包价（整单议价总额）：>0 时收费单按此价出（保留明细 + 加一行差额调整）；0=按明细合计
+    package_price: Mapped[float] = mapped_column(Float, default=0.0)
 
     # 手机上传 token（24小时有效）
     upload_token:     Mapped[str]           = mapped_column(String(80), unique=True, default="")

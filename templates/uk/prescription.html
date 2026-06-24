@@ -759,6 +759,37 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
         </div>
       </div>
 
+      {# 打包价（整单议价） #}
+      <div class="px-section">
+        <label style="display:block;font-size:9.5pt;letter-spacing:1px;color:var(--ink-3);margin-bottom:6px;">打&nbsp;包&nbsp;价（整单议价总额，留空 = 按上方明细合计收费）</label>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:13pt;color:var(--ink-2);">¥</span>
+          <input type="number" name="package_price" step="0.01" min="0" id="package-price"
+                 value="{{ '%.2f'|format(p.package_price) if p and p.package_price and p.package_price > 0 else '' }}"
+                 placeholder="已谈好总价填这里"
+                 style="width:170px;font-family:var(--font-numeric);font-size:15pt;padding:8px 11px;border:0.5px solid var(--hair);background:#fff;"/>
+          <span id="pkg-hint" style="font-size:9.5pt;font-style:italic;"></span>
+        </div>
+        <p style="font-size:8.5pt;color:var(--ink-3);font-style:italic;margin:6px 0 0;line-height:1.5;">设置后收银台按此价收费（保留明细，自动加一行「打包议价调整」差额），无需到前台再问价改价。</p>
+      </div>
+      <script>
+      (function(){
+        var inp=document.getElementById('package-price'), hint=document.getElementById('pkg-hint');
+        if(!inp) return;
+        function upd(){
+          var gt=parseFloat((document.getElementById('grand-total')||{}).textContent)||0;
+          var v=parseFloat(inp.value);
+          if(!inp.value || isNaN(v) || v<=0){ hint.textContent='留空：按明细合计 ¥'+gt.toFixed(2); hint.style.color='var(--ink-3)'; return; }
+          var d=v-gt;
+          hint.textContent='议价 ¥'+v.toFixed(2)+'（明细 ¥'+gt.toFixed(2)+'，'+(d<0?'优惠 ¥'+(-d).toFixed(2):(d>0?'加价 ¥'+d.toFixed(2):'持平'))+'）';
+          hint.style.color=d<0?'var(--accent-green)':(d>0?'var(--accent-amber)':'var(--ink-3)');
+        }
+        inp.addEventListener('input',upd);
+        document.addEventListener('input',function(e){ if(e.target&&(e.target.name||'').indexOf('subtotal')===0) upd(); });
+        setTimeout(upd,300);
+      })();
+      </script>
+
       {# 备注 #}
       <div class="px-section px-notes-wrap">
         <label>备&nbsp;注</label>

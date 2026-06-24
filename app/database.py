@@ -1066,6 +1066,14 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_xray_order ON xray_reports(exam_order_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_xray_store ON xray_reports(store)"))
 
+            # 处方 / 检查单：打包价（整单议价总额）列
+            pr_cols = conn.execute(text("PRAGMA table_info(prescriptions)")).fetchall()
+            if pr_cols and "package_price" not in {c[1] for c in pr_cols}:
+                conn.execute(text("ALTER TABLE prescriptions ADD COLUMN package_price FLOAT DEFAULT 0.0"))
+            eo_cols = conn.execute(text("PRAGMA table_info(exam_orders)")).fetchall()
+            if eo_cols and "package_price" not in {c[1] for c in eo_cols}:
+                conn.execute(text("ALTER TABLE exam_orders ADD COLUMN package_price FLOAT DEFAULT 0.0"))
+
             # vaccinations: 补 reminder_sent_at 列
             vacc_cols = conn.execute(text("PRAGMA table_info(vaccinations)")).fetchall()
             if vacc_cols:
