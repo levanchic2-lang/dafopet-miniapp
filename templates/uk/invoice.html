@@ -528,6 +528,31 @@
         <div style="margin-top:8px; font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:1px;">
           钱包 / 套餐 / 押金 / 优惠券暂只能结当前单；多单一起付请用 现金 / 微信 / 支付宝 / 收钱吧 / 美团 / 第三方
         </div>
+
+        {# 批量折扣：把同一折率一次性应用到 当前单 + 勾选的待收单 #}
+        {% if inv.payment_status in ('unpaid', 'partial') %}
+        <form method="post" action="/admin/invoices/batch-apply-discount" id="batch-disc-form"
+              onsubmit="return batchDiscPrep(this)"
+              style="margin-top:12px; padding-top:10px; border-top:0.5px solid var(--hair); display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="return_to" value="{{ inv.id }}"/>
+          <input type="hidden" name="mode" id="batch-disc-mode" value="pct"/>
+          <div style="flex:0 0 auto;">
+            <label style="display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;font-family:var(--font-serif);">整单统一折扣</label>
+            <input type="number" name="discount_pct" id="batch-disc-pct" placeholder="如 70 = 7折" min="1" max="100" step="1"
+                   style="width:110px;box-sizing:border-box;padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);"/>
+          </div>
+          <div style="flex:1;min-width:140px;">
+            <label style="display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px;font-family:var(--font-serif);">原因（可选）</label>
+            <input type="text" name="reason" placeholder="老顾客 / 节日活动"
+                   style="width:100%;box-sizing:border-box;padding:6px 10px;font-family:var(--font-serif);font-size:10pt;border:0.5px solid var(--ink-3);background:var(--paper);"/>
+          </div>
+          <button type="submit" class="uk-btn sm" style="height:32px;">按此折率打折 <span id="batch-disc-cnt"></span></button>
+        </form>
+        <div style="margin-top:6px; font-size:8.5pt; color:var(--ink-3); font-style:italic; line-height:1.7;">
+          折率只对各单<b style="color:var(--ink-2);font-style:normal;">未付部分</b>生效，逐单<b style="color:var(--ink-2);font-style:normal;">四舍五入取整</b>；作用于<b style="color:var(--ink-2);font-style:normal;">当前单 + 上方勾选的待收单</b>（不勾则只打当前单）。先勾选再打折。
+        </div>
+        {% endif %}
       </div>
       {% endif %}
 
@@ -880,7 +905,31 @@ function ovoToggle() {
   } else if (warnEl) {
     warnEl.remove();
   }
+  // 同步批量折扣按钮上的目标单数（当前单 + 勾选的待收单）
+  var cntEl = document.getElementById('batch-disc-cnt');
+  if (cntEl) cntEl.textContent = '· ' + (count + 1) + ' 张';
 }
+
+// 批量折扣提交前：把 当前单 + 勾选的待收单 id 注入隐藏字段
+function batchDiscPrep(form) {
+  var pct = (document.getElementById('batch-disc-pct').value || '').trim();
+  if (!pct) { alert('请先填折率（如 70 = 7 折）'); return false; }
+  // 清掉上次注入的 invoice_ids
+  form.querySelectorAll('input[name="invoice_ids"]').forEach(function(el){ el.remove(); });
+  var ids = ['{{ inv.id }}'];
+  document.querySelectorAll('.ovo-cb:checked').forEach(function(cb){ ids.push(cb.value); });
+  ids.forEach(function(id){
+    var h = document.createElement('input');
+    h.type = 'hidden'; h.name = 'invoice_ids'; h.value = id;
+    form.appendChild(h);
+  });
+  return confirm('确定按 ' + pct + ' 折应用到 ' + ids.length + ' 张单？（当前单 + 勾选的待收单）');
+}
+// 初始化批量折扣单数显示
+document.addEventListener('DOMContentLoaded', function(){
+  var cntEl = document.getElementById('batch-disc-cnt');
+  if (cntEl) cntEl.textContent = '· 1 张';
+});
 </script>
 
 {% endblock %}

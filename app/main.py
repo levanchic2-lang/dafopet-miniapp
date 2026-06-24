@@ -19559,6 +19559,121 @@ async def admin_invoice_apply_discount(
     return RedirectResponse(f"/admin/invoices/{inv_id}?msg={msg}", status_code=303)
 
 
+@app.post("/admin/invoices/batch-apply-discount")
+async def admin_invoices_batch_apply_discount(
+    request: Request, db: Session = Depends(get_db),
+):
+    """批量折扣：把同一折率（或清除折扣）一次性应用到多张待收单。
+    用于「同客户多张单，整单统一打 X 折」场景，免去逐单操作。
+    - 只支持 mode=pct（折率）/ clear（清除），target/amount 因跨单分摊歧义不在此提供
+    - 逐单复用单单折扣同款逻辑：折率只打在「未付部分」，折后整单四舍五入取整
+    - 已付清 / 已取消 / 小计为 0 的单自动跳过
+    - return_to 指定回跳的收费单 id
+    """
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    inv_ids = [int(x) for x in form.getlist("invoice_ids") if str(x).isdigit()]
+    return_to = next((i for i in inv_ids), 0)
+    try:
+        return_to = int(form.get("return_to") or return_to)
+    except Exception:
+        pass
+    if not inv_ids:
+        return RedirectResponse(
+            f"/admin/invoices/{return_to}?msg=未选择任何单据", status_code=303,
+        )
+    mode = (form.get("mode") or "pct").strip()
+    reason = (form.get("reason") or "").strip()[:200]
+
+    pct = 1.0
+    if mode == "pct":
+        raw = (form.get("discount_pct") or "").strip()
+        try:
+            pct = float(raw)
+        except Exception:
+            return RedirectResponse(
+                f"/admin/invoices/{return_to}?msg=折率格式错误", status_code=303,
+            )
+        if pct > 1.0:
+            pct = pct / 100.0
+        if pct <= 0 or pct > 1.0:
+            return RedirectResponse(
+                f"/admin/invoices/{return_to}?msg=折率应在 1-100 之间（如填 70 = 7 折）",
+                status_code=303,
+            )
+    elif mode != "clear":
+        return RedirectResponse(
+            f"/admin/invoices/{return_to}?msg=批量折扣仅支持「按折率」或「清除折扣」",
+            status_code=303,
+        )
+
+    done = 0
+    skipped = 0
+    total_subtotal = 0.0
+    total_discount = 0.0
+    now = datetime.now()
+    for iid in inv_ids:
+        inv = db.get(Invoice, iid)
+        if not inv:
+            skipped += 1
+            continue
+        if inv.payment_status in ("paid", "cancelled"):
+            skipped += 1
+            continue
+        subtotal = float(inv.subtotal or 0)
+        if subtotal <= 0:
+            skipped += 1
+            continue
+        paid_sum = sum(float(p.amount or 0) for p in db.query(Payment).filter(
+            Payment.invoice_id == iid, Payment.status == "success"
+        ).all())
+        if mode == "clear":
+            discount_amt = 0.0
+        else:
+            discount_base = max(0.0, subtotal - paid_sum)
+            discount_amt = round(discount_base * (1.0 - pct), 2)
+            _new_total_int = round(subtotal - discount_amt)
+            discount_amt = round(subtotal - _new_total_int, 2)
+            if discount_amt < 0:
+                discount_amt = 0.0
+        new_total = round(subtotal - discount_amt, 2)
+        # 折后总额不能低于已收（部分付的单），低于则跳过不动
+        if new_total < paid_sum - 0.005:
+            skipped += 1
+            continue
+        inv.discount_amount = discount_amt
+        inv.total_amount = new_total
+        if reason:
+            inv.notes = (inv.notes or "") + f"\n[折扣 {now.strftime('%Y-%m-%d %H:%M')}] {reason}"
+        if new_total <= 0.005:
+            inv.payment_status = "paid"
+            inv.paid_at = datetime.utcnow()
+            if not inv.payment_method:
+                inv.payment_method = "free"
+        elif abs(paid_sum - new_total) < 0.005:
+            inv.payment_status = "paid"
+            inv.paid_at = inv.paid_at or datetime.utcnow()
+        elif paid_sum > 0:
+            inv.payment_status = "partial"
+        else:
+            inv.payment_status = "unpaid"
+        inv.updated_at = datetime.utcnow()
+        done += 1
+        total_subtotal += subtotal
+        total_discount += discount_amt
+    db.commit()
+    if mode == "clear":
+        msg = f"已清除 {done} 张单的折扣" + (f"（跳过 {skipped} 张）" if skipped else "")
+    else:
+        zhe = pct * 10
+        zhe_s = f"{zhe:.1f}".rstrip("0").rstrip(".")
+        msg = (f"已按 {zhe_s} 折批量应用到 {done} 张单：合计原价 ¥{total_subtotal:.2f} "
+               f"− ¥{total_discount:.2f} = ¥{total_subtotal - total_discount:.2f}"
+               + (f"（跳过 {skipped} 张）" if skipped else ""))
+    return RedirectResponse(f"/admin/invoices/{return_to}?msg={msg}", status_code=303)
+
+
 @app.get("/admin/invoices/{inv_id}/print", response_class=HTMLResponse)
 async def admin_invoice_print(
     inv_id: int,
