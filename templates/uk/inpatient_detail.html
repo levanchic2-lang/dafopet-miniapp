@@ -769,8 +769,12 @@
     <div class="ipd-aside-card">
       <h3 style="color:var(--accent-amber);">出&nbsp;院&nbsp;结&nbsp;账</h3>
       <form method="post" action="/admin/inpatient/{{ h.id }}/discharge"
-            onsubmit="return confirm('确认出院？\n\n系统会自动算 {{ days }} 天笼费 + 同步处方/检查到收费单。');">
+            onsubmit="return confirm('确认出院？\n\n按所选出院时间计算笼费 + 同步处方/检查到收费单。');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <label>实际出院时间</label>
+        <input type="datetime-local" name="discharged_at" class="ipd-select" style="width:100%;margin-bottom:6px;"
+               value="{{ (now | bjtime).strftime('%Y-%m-%dT%H:%M') }}"/>
+        <p style="font-size:8.5pt;color:var(--ink-3);font-style:italic;margin:0 0 10px;line-height:1.5;">忘记及时出院时，改成动物<b>实际离院</b>的日期时间，笼费按真实天数算（过夜算 1 天）。</p>
         <label>出院小结（可选）</label>
         <textarea name="discharge_summary" rows="3" class="ipd-textarea" style="margin-bottom:10px;"
                   placeholder="主要诊断 / 治疗经过 / 回家注意事项"></textarea>
@@ -783,6 +787,20 @@
             onsubmit="return confirm('误开入院？取消本次住院档案。');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
         <button type="submit" class="uk-btn danger ghost sm">误开 · 取消入院</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if h.status == 'discharged' %}
+    <div class="ipd-aside-card">
+      <h3 style="color:var(--accent-amber);">更&nbsp;正&nbsp;出&nbsp;院&nbsp;时&nbsp;间</h3>
+      <p style="font-size:8.5pt;color:var(--ink-3);font-style:italic;margin:0 0 8px;line-height:1.5;">忘记及时出院、时间填错导致天数/笼费多算时，改成<b>实际离院</b>时间，笼费按真实天数重算（未收款的账单自动更新）。</p>
+      <form method="post" action="/admin/inpatient/{{ h.id }}/edit-discharge-time"
+            onsubmit="return confirm('更正出院时间并重算笼费？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="datetime-local" name="discharged_at" class="ipd-select" style="width:100%;margin-bottom:8px;"
+               value="{{ (h.discharged_at | bjtime).strftime('%Y-%m-%dT%H:%M') if h.discharged_at else '' }}"/>
+        <button type="submit" class="uk-btn primary sm">保存并重算笼费</button>
       </form>
     </div>
     {% endif %}
