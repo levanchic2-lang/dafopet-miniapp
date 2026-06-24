@@ -17027,10 +17027,26 @@ def _calc_hosp_days(admitted_at, discharged_at) -> int:
     """住院天数：过夜算 1 天。当天进当天出 = 0 天（笼费 0）。
        进 6/2 22:00 → 出 6/3 06:00 = 1 天（过 1 夜）
        进 6/2 06:00 → 出 6/4 22:00 = 2 天（过 2 夜）
+    时间戳存 UTC，按北京日期算「过夜」（+8h 后取 date），避免午夜跨时区误差。
     """
     if not admitted_at or not discharged_at:
         return 0
-    return max(0, (discharged_at.date() - admitted_at.date()).days)
+    a = (admitted_at + timedelta(hours=8)).date()
+    d = (discharged_at + timedelta(hours=8)).date()
+    return max(0, (d - a).days)
+
+
+def _parse_bj_dt_to_utc(s: str):
+    """把前端 datetime-local（北京时间）字符串解析为 UTC datetime；失败返回 None。"""
+    s = (s or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(s, fmt) - timedelta(hours=8)
+        except Exception:
+            continue
+    return None
 
 
 def _sync_sales_order_invoice(db: Session, order_id: int, admin_name: str = "") -> "Invoice | None":
@@ -24697,7 +24713,8 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
 async def admin_inpatient_discharge(hosp_id: int, request: Request,
                                       db: Session = Depends(get_db),
                                       csrf_token: str = Form(""),
-                                      discharge_summary: str = Form("")):
+                                      discharge_summary: str = Form(""),
+                                      discharged_at: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     h = db.get(Hospitalization, hosp_id)
@@ -24706,8 +24723,16 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
     if h.status != "admitted":
         return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=当前状态不可出院",
                                  status_code=303)
+    # 出院时间：优先用户选的「实际出院时间」（北京→UTC），否则取当前
+    dt = _parse_bj_dt_to_utc(discharged_at)
+    if dt is None:
+        dt = datetime.utcnow()
+    # 不能早于入院时间
+    if h.admitted_at and dt < h.admitted_at:
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=出院时间不能早于入院时间",
+                                 status_code=303)
     h.status = "discharged"
-    h.discharged_at = datetime.utcnow()
+    h.discharged_at = dt
     h.discharge_summary = (discharge_summary or "").strip()[:5000]
     h.closed_by = request.session.get("admin_username", "")
     db.flush()
@@ -24720,7 +24745,48 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
     _audit(db, request, "hospitalization_discharge",
            detail={"id": h.id, "days": _calc_hosp_days(h.admitted_at, h.discharged_at)})
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已出院 · 账单已同步",
+    days = _calc_hosp_days(h.admitted_at, h.discharged_at)
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已出院 · 共 {days} 天 · 账单已同步",
+                             status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/edit-discharge-time")
+async def admin_inpatient_edit_discharge_time(hosp_id: int, request: Request,
+                                               db: Session = Depends(get_db),
+                                               csrf_token: str = Form(""),
+                                               discharged_at: str = Form("")):
+    """更正已出院记录的「实际出院时间」→ 重算天数 + 同步笼费到收费单。
+    用于：忘记及时出院、出院时间填错，导致天数/笼费多算。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    h = db.get(Hospitalization, hosp_id)
+    if not h:
+        raise HTTPException(404)
+    if h.status != "discharged":
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=仅已出院记录可更正出院时间",
+                                 status_code=303)
+    dt = _parse_bj_dt_to_utc(discharged_at)
+    if dt is None:
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=出院时间格式不正确", status_code=303)
+    if h.admitted_at and dt < h.admitted_at:
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=出院时间不能早于入院时间", status_code=303)
+    old_days = _calc_hosp_days(h.admitted_at, h.discharged_at)
+    h.discharged_at = dt
+    db.flush()
+    new_days = _calc_hosp_days(h.admitted_at, h.discharged_at)
+    # 重新同步收费单（未付的会按新天数重建笼费；已付的不动）
+    operator = request.session.get("admin_username", "admin")
+    note = ""
+    if h.visit_id:
+        inv = _sync_visit_invoice(db, h.visit_id, operator)
+        if inv:
+            h.invoice_id = inv.id
+            if inv.payment_status == "paid":
+                note = "（注意：关联账单已收款，金额未自动改，如需退差额请在收费单处理）"
+    _audit(db, request, "hospitalization_edit_discharge_time",
+           detail={"id": h.id, "old_days": old_days, "new_days": new_days})
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=出院时间已更正 · {old_days}→{new_days} 天 · 笼费已重算{note}",
                              status_code=303)
 
 
