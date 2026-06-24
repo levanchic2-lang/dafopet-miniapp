@@ -508,7 +508,7 @@
       <table class="pets-tbl">
         <thead>
           <tr>
-            <th>姓名</th><th>种类</th><th>品种</th><th>性别</th><th>年龄</th><th>病历号</th><th>最近就诊</th><th class="right">操作</th>
+            <th>姓名</th><th>种类</th><th>品种</th><th>性别</th><th>年龄</th><th>体重</th><th>病历号</th><th>最近就诊</th><th class="right">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -534,6 +534,7 @@
             <td style="color:var(--ink-3);">{{ p.breed or '—' }}</td>
             <td style="font-style:italic;color:var(--ink-3);">{% if p.gender == 'male' %}公{% elif p.gender == 'female' %}母{% else %}—{% endif %}</td>
             <td class="num" style="font-size:9.5pt;" title="{{ p.birthday_estimate or '' }}">{{ p.birthday_estimate | pet_age }}</td>
+            <td class="num" style="font-size:9.5pt;">{% set wk = latest_weight_by_pet.get(p.id) %}{% if wk %}{{ '%g'|format(wk) }} kg{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
             <td class="num" style="color:var(--ink-3);font-size:9pt;">{{ p.medical_record_no or '—' }}</td>
             <td class="num" style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{% set lvd = last_visit_date_by_pet.get(p.id) %}{% if lvd %}{{ lvd }}{% else %}—{% endif %}</td>
             <td class="right action">

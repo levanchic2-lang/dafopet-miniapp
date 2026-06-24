@@ -7936,7 +7936,14 @@ async def page_admin_customer_detail(
     latest_vacc_by_pet: dict[int, "Vaccination"] = {}
     latest_deworm_by_pet: dict[int, "DewormingRecord"] = {}
     last_visit_date_by_pet: dict[int, str] = {}
+    latest_weight_by_pet: dict[int, float] = {}
     if all_pet_ids:
+        for w in db.query(WeightRecord).filter(
+            WeightRecord.pet_id.in_(all_pet_ids),
+            WeightRecord.weight_kg > 0,
+        ).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).all():
+            if w.pet_id not in latest_weight_by_pet:
+                latest_weight_by_pet[w.pet_id] = float(w.weight_kg or 0)
         for v in db.query(Vaccination).filter(Vaccination.pet_id.in_(all_pet_ids)).order_by(Vaccination.vaccinated_date.desc(), Vaccination.id.desc()).all():
             if v.pet_id not in latest_vacc_by_pet:
                 latest_vacc_by_pet[v.pet_id] = v
@@ -8112,6 +8119,7 @@ async def page_admin_customer_detail(
             "latest_vacc_by_pet": latest_vacc_by_pet,
             "latest_deworm_by_pet": latest_deworm_by_pet,
             "last_visit_date_by_pet": last_visit_date_by_pet,
+            "latest_weight_by_pet": latest_weight_by_pet,
             "weight_records": weight_records,
             "medical_docs": medical_docs,
             "pet_invoices": pet_invoices,
@@ -26918,6 +26926,16 @@ async def m_customer_profile(cust_id: int, request: Request, db: Session = Depen
     if not cust:
         raise HTTPException(404)
     pets = db.query(Pet).filter(Pet.customer_id == cust_id).order_by(Pet.id).all()
+    # 每只宠物最新一次体重（用于宠物行展示）
+    latest_weight_by_pet: dict[int, float] = {}
+    _pet_ids = [p.id for p in pets]
+    if _pet_ids:
+        for w in db.query(WeightRecord).filter(
+            WeightRecord.pet_id.in_(_pet_ids),
+            WeightRecord.weight_kg > 0,
+        ).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).all():
+            if w.pet_id not in latest_weight_by_pet:
+                latest_weight_by_pet[w.pet_id] = float(w.weight_kg or 0)
     wallet = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
     packages = db.query(CustomerPackage).filter(
         CustomerPackage.customer_id == cust_id,
@@ -26941,6 +26959,7 @@ async def m_customer_profile(cust_id: int, request: Request, db: Session = Depen
         "wallet": wallet, "packages": packages,
         "visits": enriched_visits,
         "admitted": admitted,
+        "latest_weight_by_pet": latest_weight_by_pet,
     })
     return templates.TemplateResponse(request, "m_uk/customer_profile.html", ctx)
 

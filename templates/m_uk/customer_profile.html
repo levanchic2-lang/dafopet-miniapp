@@ -48,6 +48,7 @@
         {% if p.gender == 'male' %}<span style="margin:0 5px;color:var(--ink-4);">·</span>公
         {% elif p.gender == 'female' %}<span style="margin:0 5px;color:var(--ink-4);">·</span>母{% endif %}
         {% if p.is_neutered %}<span style="margin:0 5px;color:var(--ink-4);">·</span>已绝育{% endif %}
+        {% set wk = latest_weight_by_pet.get(p.id) %}{% if wk %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ '%g'|format(wk) }} kg{% endif %}
       </div>
     </div>
     <span class="ukm-row-arrow">›</span>
