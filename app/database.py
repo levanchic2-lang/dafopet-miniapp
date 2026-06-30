@@ -1799,6 +1799,27 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_assignee ON follow_ups(assigned_to)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_token ON follow_ups(feedback_token)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_visit_round ON follow_ups(visit_id, round_no)"))
+            # ── 健康运营 / 复诊计划：FollowUp 扩展字段（旧库补列，幂等） ──
+            fu_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(follow_ups)")).fetchall()}
+            if "source_type" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN source_type VARCHAR(40) DEFAULT 'visit_default'"))
+            if "source_id" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN source_id INTEGER DEFAULT NULL"))
+            if "reason" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN reason TEXT DEFAULT ''"))
+            if "question_text" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN question_text TEXT DEFAULT ''"))
+            if "expected_reply_type" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN expected_reply_type VARCHAR(20) DEFAULT 'text'"))
+            if "risk_trigger" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN risk_trigger TEXT DEFAULT ''"))
+            if "priority" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN priority VARCHAR(20) DEFAULT 'normal'"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_source ON follow_ups(source_type, source_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_priority ON follow_ups(priority, planned_date)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_care_summary_visit ON client_care_summaries(visit_id, status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_care_plan_visit ON care_plans(visit_id, status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_care_plan_store_status ON care_plans(store, status)"))
 
             # ── 回访模板（按疾病系统分类） ─────────────────────
             conn.execute(text(

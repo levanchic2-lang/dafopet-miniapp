@@ -1474,6 +1474,15 @@ class FollowUp(Base):
     round_name:    Mapped[str] = mapped_column(String(80), default="")    # 如「术后 3 天复查」
     response_data: Mapped[str] = mapped_column(Text, default="")          # 结构化答案 JSON
 
+    # ── 来源与执行意图（健康运营 / 复诊计划） ─────────────────
+    source_type: Mapped[str] = mapped_column(String(40), default="visit_default")  # visit_default/care_plan/chronic/manual
+    source_id:   Mapped[int] = mapped_column(Integer, nullable=True, default=None, index=True)
+    reason:      Mapped[str] = mapped_column(Text, default="")           # 为什么回访
+    question_text: Mapped[str] = mapped_column(Text, default="")         # 回访时问什么
+    expected_reply_type: Mapped[str] = mapped_column(String(20), default="text")  # text/photo/phone/visit
+    risk_trigger: Mapped[str] = mapped_column(Text, default="")          # 什么情况升级给医生
+    priority:    Mapped[str] = mapped_column(String(20), default="normal")  # low/normal/high/urgent
+
     store:        Mapped[str] = mapped_column(String(40), default="")
     assigned_to:  Mapped[str] = mapped_column(String(80), default="")
     planned_date: Mapped[str] = mapped_column(String(20), default="")
@@ -1532,6 +1541,65 @@ class FollowUpTemplate(Base):
     notes:       Mapped[str] = mapped_column(Text, default="")
     created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ClientCareSummary(Base):
+    """客户版诊后说明：AI 起草、医生确认，给主人看的解释与护理说明。"""
+    __tablename__ = "client_care_summaries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="CASCADE"), nullable=False, index=True)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None, index=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    store:      Mapped[str] = mapped_column(String(40), default="")
+
+    # draft / confirmed / archived
+    status:     Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    source_snapshot_json: Mapped[str] = mapped_column(Text, default="")
+    ai_draft_text: Mapped[str] = mapped_column(Text, default="")
+    final_text:    Mapped[str] = mapped_column(Text, default="")
+    doctor_note:   Mapped[str] = mapped_column(Text, default="")
+
+    confirmed_by: Mapped[str] = mapped_column(String(80), default="")
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    created_by:   Mapped[str] = mapped_column(String(80), default="")
+    created_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    visit    = relationship("Visit",    foreign_keys=[visit_id])
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+
+
+class CarePlan(Base):
+    """复诊计划：医生确认后按 tasks_json 创建 FollowUp 执行任务。"""
+    __tablename__ = "care_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="CASCADE"), nullable=False, index=True)
+    pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None, index=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    summary_id  = mapped_column(ForeignKey("client_care_summaries.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    store:      Mapped[str] = mapped_column(String(40), default="")
+
+    title:      Mapped[str] = mapped_column(String(160), default="")
+    reason:     Mapped[str] = mapped_column(Text, default="")
+    risk_level: Mapped[str] = mapped_column(String(20), default="low")  # low/medium/high
+    # draft / confirmed / active / completed / cancelled
+    status:     Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    plan_text:  Mapped[str] = mapped_column(Text, default="")
+    tasks_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    confirmed_by: Mapped[str] = mapped_column(String(80), default="")
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    created_by:   Mapped[str] = mapped_column(String(80), default="")
+    created_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    visit    = relationship("Visit",    foreign_keys=[visit_id])
+    pet      = relationship("Pet",      foreign_keys=[pet_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    summary  = relationship("ClientCareSummary", foreign_keys=[summary_id])
 
 
 class Disease(Base):

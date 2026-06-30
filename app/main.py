@@ -109,6 +109,8 @@ from app.models import (
     AnesthesiaMonitorSheet,
     AnesthesiaMonitorEntry,
     FollowUpTemplate,
+    ClientCareSummary,
+    CarePlan,
     Disease,
     GroomingOrder,
     Cage,
@@ -10933,6 +10935,262 @@ def _sync_followup_for_visit(db: Session, v: Visit) -> None:
             db.delete(fu)
 
 
+# ---------------------------------------------------------------------------
+# 诊后说明与复诊计划（健康运营第一阶段）
+# ---------------------------------------------------------------------------
+
+_CARE_TASK_TYPES = {"phone", "message", "photo_check", "recheck_visit", "medication_check"}
+_CARE_REPLY_TYPE_BY_TASK = {
+    "phone": "phone",
+    "message": "text",
+    "photo_check": "photo",
+    "recheck_visit": "visit",
+    "medication_check": "text",
+}
+_CARE_PRIORITIES = {"low", "normal", "high", "urgent"}
+_CARE_RISK_LEVELS = {"low", "medium", "high"}
+
+
+def _care_tasks_from_json(raw: str) -> list[dict]:
+    try:
+        data = json.loads(raw or "[]")
+    except Exception:
+        data = []
+    if not isinstance(data, list):
+        return []
+    out: list[dict] = []
+    for item in data[:8]:
+        if not isinstance(item, dict):
+            continue
+        task_type = (str(item.get("task_type") or "message")).strip()
+        if task_type not in _CARE_TASK_TYPES:
+            task_type = "message"
+        priority = (str(item.get("priority") or "normal")).strip()
+        if priority not in _CARE_PRIORITIES:
+            priority = "normal"
+        out.append({
+            "days_after": str(item.get("days_after") or "").strip(),
+            "due_date": str(item.get("due_date") or "").strip(),
+            "task_type": task_type,
+            "title": str(item.get("title") or "复诊回访").strip()[:80],
+            "question_text": str(item.get("question_text") or "").strip(),
+            "risk_trigger": str(item.get("risk_trigger") or "").strip(),
+            "priority": priority,
+        })
+    return out
+
+
+def _care_store_for_visit(db: Session, v: Visit) -> str:
+    if (v.store or "").strip():
+        return (v.store or "").strip()[:40]
+    return _visit_store_short(db, v)
+
+
+def _care_summary_snapshot(db: Session, v: Visit, doctor_instruction: str = "") -> dict:
+    cust = db.get(Customer, v.customer_id) if v.customer_id else None
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    prescriptions = db.query(Prescription).filter(Prescription.visit_id == v.id).order_by(Prescription.id.asc()).all()
+    exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == v.id).order_by(ExamOrder.id.asc()).all()
+    invoices = db.query(Invoice).filter(Invoice.visit_id == v.id).order_by(Invoice.id.asc()).all()
+
+    presc_rows = []
+    for p in prescriptions:
+        presc_rows.append({
+            "id": p.id,
+            "status": p.status,
+            "date": p.prescribed_date,
+            "vet_name": p.vet_name,
+            "notes": p.notes,
+            "items": [{
+                "drug_name": it.drug_name,
+                "drug_type": it.drug_type,
+                "dosage": it.dosage,
+                "frequency": it.frequency,
+                "duration_days": it.duration_days,
+                "quantity": it.quantity,
+                "instructions": it.instructions,
+                "print_note": it.print_note,
+            } for it in (p.items or [])],
+        })
+
+    exam_rows = []
+    for eo in exam_orders:
+        try:
+            items = json.loads(eo.items_json or "[]")
+        except Exception:
+            items = []
+        exam_rows.append({
+            "id": eo.id,
+            "status": eo.status,
+            "notes": eo.notes,
+            "items": items,
+            "reports": [{
+                "item_label": r.item_label,
+                "file_type": r.file_type,
+                "original_name": r.original_name,
+                "uploaded_at": r.uploaded_at.isoformat() if r.uploaded_at else "",
+            } for r in (eo.reports or [])],
+        })
+
+    inv_rows = []
+    for inv in invoices:
+        inv_rows.append({
+            "id": inv.id,
+            "payment_status": inv.payment_status,
+            "total_amount": inv.total_amount,
+            "items": [{"name": it.name, "quantity": it.quantity, "subtotal": it.subtotal} for it in (inv.items or [])],
+        })
+
+    return {
+        "pet": {
+            "name": pet.name if pet else "",
+            "species": pet.species if pet else "",
+            "breed": pet.breed if pet else "",
+            "gender": pet.gender if pet else "",
+            "birthday_estimate": pet.birthday_estimate if pet else "",
+            "is_neutered": bool(pet.is_neutered) if pet else False,
+            "medical_record_no": pet.medical_record_no if pet else "",
+        },
+        "customer": {
+            "name": cust.name if cust else "",
+            "phone": cust.phone if cust else "",
+        },
+        "visit": {
+            "id": v.id,
+            "visit_date": v.visit_date,
+            "visit_type": v.visit_type,
+            "chief_complaint": v.chief_complaint,
+            "physical_exam": v.physical_exam,
+            "diagnosis": v.diagnosis,
+            "treatment_plan": v.treatment_plan,
+            "notes": v.notes,
+            "follow_up_note": v.follow_up_note,
+            "follow_up_at": v.follow_up_at,
+            "vet_name": v.vet_name,
+            "status": v.status,
+        },
+        "prescriptions": presc_rows,
+        "exam_orders": exam_rows,
+        "invoices": inv_rows,
+        "doctor_instruction": doctor_instruction,
+    }
+
+
+def _get_active_care_summary(db: Session, visit_id: int) -> ClientCareSummary | None:
+    return db.query(ClientCareSummary).filter(
+        ClientCareSummary.visit_id == visit_id,
+        ClientCareSummary.status != "archived",
+    ).order_by(ClientCareSummary.id.desc()).first()
+
+
+def _get_active_care_plan(db: Session, visit_id: int) -> CarePlan | None:
+    return db.query(CarePlan).filter(
+        CarePlan.visit_id == visit_id,
+        CarePlan.status != "cancelled",
+    ).order_by(CarePlan.id.desc()).first()
+
+
+def _care_plan_payload(db: Session, v: Visit, summary: ClientCareSummary | None, doctor_instruction: str = "") -> dict:
+    payload = _care_summary_snapshot(db, v, doctor_instruction)
+    payload["client_care_summary"] = (summary.final_text or summary.ai_draft_text) if summary else ""
+    return payload
+
+
+def _normalize_care_tasks_from_form(
+    visit: Visit,
+    due_dates: list[str],
+    task_types: list[str],
+    titles: list[str],
+    questions: list[str],
+    triggers: list[str],
+    priorities: list[str],
+) -> list[dict]:
+    tasks: list[dict] = []
+    max_len = max(len(due_dates), len(task_types), len(titles), len(questions), len(triggers), len(priorities), 0)
+    for i in range(max_len):
+        title = (titles[i] if i < len(titles) else "").strip() or "复诊回访"
+        question = (questions[i] if i < len(questions) else "").strip()
+        if not title and not question:
+            continue
+        task_type = (task_types[i] if i < len(task_types) else "message").strip()
+        if task_type not in _CARE_TASK_TYPES:
+            task_type = "message"
+        priority = (priorities[i] if i < len(priorities) else "normal").strip()
+        if priority not in _CARE_PRIORITIES:
+            priority = "normal"
+        due = (due_dates[i] if i < len(due_dates) else "").strip()[:10]
+        days_after = ""
+        if due and (visit.visit_date or "").strip():
+            try:
+                from datetime import date as _date
+                y1, m1, d1 = visit.visit_date[:10].split("-")
+                y2, m2, d2 = due.split("-")
+                days_after = str((_date(int(y2), int(m2), int(d2)) - _date(int(y1), int(m1), int(d1))).days)
+            except Exception:
+                days_after = ""
+        tasks.append({
+            "days_after": days_after,
+            "due_date": due,
+            "task_type": task_type,
+            "title": title[:80],
+            "question_text": question,
+            "risk_trigger": (triggers[i] if i < len(triggers) else "").strip(),
+            "priority": priority,
+        })
+    return tasks[:8]
+
+
+def _confirm_care_plan_to_followups(db: Session, plan: CarePlan, v: Visit, username: str) -> int:
+    tasks = _care_tasks_from_json(plan.tasks_json)
+    store = _care_store_for_visit(db, v)
+    assignee = _resolve_vet_username(db, v.vet_name or "")[:80]
+    created = 0
+    for idx, task in enumerate(tasks, start=1):
+        planned = (task.get("due_date") or "").strip()[:10]
+        if not planned:
+            try:
+                days = int(task.get("days_after") or 0)
+            except Exception:
+                days = 0
+            planned = _add_days_to_date(v.visit_date, days) if days >= 0 else ""
+        if not planned:
+            continue
+        exists = db.query(FollowUp).filter(
+            FollowUp.visit_id == v.id,
+            FollowUp.source_type == "care_plan",
+            FollowUp.source_id == plan.id,
+            FollowUp.round_no == idx,
+        ).first()
+        fu = exists or FollowUp(
+            visit_id=v.id,
+            customer_id=v.customer_id,
+            pet_id=v.pet_id,
+            round_no=idx,
+            feedback_token=_gen_followup_token(),
+        )
+        fu.source_type = "care_plan"
+        fu.source_id = plan.id
+        fu.template_name = "复诊计划"
+        fu.round_name = (task.get("title") or f"复诊计划 {idx}")[:80]
+        fu.reason = plan.reason or fu.round_name
+        fu.question_text = task.get("question_text") or ""
+        fu.risk_trigger = task.get("risk_trigger") or ""
+        fu.expected_reply_type = _CARE_REPLY_TYPE_BY_TASK.get(task.get("task_type") or "message", "text")
+        fu.priority = task.get("priority") or "normal"
+        fu.customer_id = v.customer_id
+        fu.pet_id = v.pet_id
+        fu.store = store
+        fu.assigned_to = assignee or username or fu.assigned_to
+        fu.planned_date = planned
+        fu.channel = "manual"
+        if fu.status not in ("sent", "responded", "closed"):
+            fu.status = "phone_pending"
+        if not exists:
+            db.add(fu)
+            created += 1
+    return created
+
+
 @app.get("/admin/visits/create", response_class=HTMLResponse)
 async def page_admin_visit_create(
     request: Request,
@@ -11166,6 +11424,9 @@ async def page_admin_visit_detail(
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
     invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
     exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.desc()).all()
+    care_summary = _get_active_care_summary(db, visit_id)
+    care_plan = _get_active_care_plan(db, visit_id)
+    care_plan_tasks = _care_tasks_from_json(care_plan.tasks_json) if care_plan else []
     # 本 visit 的所有回访轮次（按计划日 + round_no 排序）
     followups = db.query(FollowUp).filter(FollowUp.visit_id == visit_id)\
         .order_by(FollowUp.planned_date, FollowUp.round_no).all()
@@ -11198,6 +11459,9 @@ async def page_admin_visit_detail(
         "invoices": invoices,
         "exam_orders": exam_orders,
         "followups": followups,
+        "care_summary": care_summary,
+        "care_plan": care_plan,
+        "care_plan_tasks": care_plan_tasks,
         "presc_status_zh": _PRESC_STATUS_ZH,
         "so_status_zh": _SO_STATUS_ZH,
         "inv_status_zh": _INV_STATUS_ZH,
@@ -11212,6 +11476,248 @@ async def page_admin_visit_detail(
         "err": request.query_params.get("err"),
         "is_superadmin": _is_superadmin(request),
     })
+
+
+@app.post("/admin/visits/{visit_id}/care-summary/save")
+async def admin_visit_care_summary_save(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    final_text: str = Form(""),
+    doctor_note: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    username = request.session.get("admin_username") or request.session.get("admin") or ""
+    summary = _get_active_care_summary(db, visit_id)
+    if not summary:
+        summary = ClientCareSummary(
+            visit_id=v.id,
+            customer_id=v.customer_id,
+            pet_id=v.pet_id,
+            store=_care_store_for_visit(db, v),
+            status="draft",
+            created_by=username,
+            source_snapshot_json=json.dumps(_care_summary_snapshot(db, v), ensure_ascii=False),
+        )
+        db.add(summary)
+    if summary.status == "confirmed":
+        summary.status = "draft"
+    summary.final_text = (final_text or "").strip()
+    summary.doctor_note = (doctor_note or "").strip()
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=诊后说明已保存", status_code=303)
+
+
+@app.post("/admin/visits/{visit_id}/care-summary/ai")
+async def admin_visit_care_summary_ai(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    doctor_instruction: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    username = request.session.get("admin_username") or request.session.get("admin") or ""
+    payload = _care_summary_snapshot(db, v, doctor_instruction)
+    from app.services.care_ai import draft_client_care_summary
+    result = await draft_client_care_summary(payload, doctor_instruction)
+    if not result.get("ok"):
+        return RedirectResponse(f"/admin/visits/{visit_id}?err={quote(result.get('error') or 'AI生成失败')}", status_code=303)
+    summary = _get_active_care_summary(db, visit_id)
+    if not summary:
+        summary = ClientCareSummary(
+            visit_id=v.id,
+            customer_id=v.customer_id,
+            pet_id=v.pet_id,
+            store=_care_store_for_visit(db, v),
+            status="draft",
+            created_by=username,
+        )
+        db.add(summary)
+    summary.source_snapshot_json = json.dumps(payload, ensure_ascii=False)
+    summary.ai_draft_text = result.get("text") or ""
+    summary.final_text = result.get("text") or ""
+    summary.status = "draft"
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=AI诊后说明已生成", status_code=303)
+
+
+@app.post("/admin/visits/{visit_id}/care-summary/confirm")
+async def admin_visit_care_summary_confirm(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    summary = _get_active_care_summary(db, visit_id)
+    if not summary or not (summary.final_text or "").strip():
+        return RedirectResponse(f"/admin/visits/{visit_id}?err=请先保存诊后说明", status_code=303)
+    username = request.session.get("admin_username") or request.session.get("admin") or ""
+    summary.status = "confirmed"
+    summary.confirmed_by = username
+    summary.confirmed_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=诊后说明已确认", status_code=303)
+
+
+@app.post("/admin/visits/{visit_id}/care-plan/save")
+async def admin_visit_care_plan_save(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    title: str = Form(""),
+    reason: str = Form(""),
+    risk_level: str = Form("low"),
+    plan_text: str = Form(""),
+    task_due_date: list[str] = Form([]),
+    task_type: list[str] = Form([]),
+    task_title: list[str] = Form([]),
+    task_question: list[str] = Form([]),
+    task_risk_trigger: list[str] = Form([]),
+    task_priority: list[str] = Form([]),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    username = request.session.get("admin_username") or request.session.get("admin") or ""
+    plan = _get_active_care_plan(db, visit_id)
+    summary = _get_active_care_summary(db, visit_id)
+    if not plan:
+        plan = CarePlan(
+            visit_id=v.id,
+            customer_id=v.customer_id,
+            pet_id=v.pet_id,
+            summary_id=summary.id if summary else None,
+            store=_care_store_for_visit(db, v),
+            status="draft",
+            created_by=username,
+        )
+        db.add(plan)
+    if plan.status in ("confirmed", "active"):
+        return RedirectResponse(f"/admin/visits/{visit_id}?err=已确认的复诊计划不能直接覆盖", status_code=303)
+    risk_level = (risk_level or "low").strip()
+    if risk_level not in _CARE_RISK_LEVELS:
+        risk_level = "low"
+    plan.title = (title or "复诊计划").strip()[:160]
+    plan.reason = (reason or "").strip()
+    plan.risk_level = risk_level
+    plan.plan_text = (plan_text or "").strip()
+    plan.summary_id = summary.id if summary else plan.summary_id
+    tasks = _normalize_care_tasks_from_form(v, task_due_date, task_type, task_title, task_question, task_risk_trigger, task_priority)
+    plan.tasks_json = json.dumps(tasks, ensure_ascii=False)
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=复诊计划已保存", status_code=303)
+
+
+@app.post("/admin/visits/{visit_id}/care-plan/ai")
+async def admin_visit_care_plan_ai(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    doctor_instruction: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    username = request.session.get("admin_username") or request.session.get("admin") or ""
+    summary = _get_active_care_summary(db, visit_id)
+    payload = _care_plan_payload(db, v, summary, doctor_instruction)
+    from app.services.care_ai import draft_care_plan
+    result = await draft_care_plan(payload, doctor_instruction)
+    if not result.get("ok"):
+        return RedirectResponse(f"/admin/visits/{visit_id}?err={quote(result.get('error') or 'AI生成失败')}", status_code=303)
+    plan = _get_active_care_plan(db, visit_id)
+    if not plan:
+        plan = CarePlan(
+            visit_id=v.id,
+            customer_id=v.customer_id,
+            pet_id=v.pet_id,
+            summary_id=summary.id if summary else None,
+            store=_care_store_for_visit(db, v),
+            status="draft",
+            created_by=username,
+        )
+        db.add(plan)
+    if plan.status in ("confirmed", "active"):
+        return RedirectResponse(f"/admin/visits/{visit_id}?err=已确认的复诊计划不能重新生成覆盖", status_code=303)
+    base_tasks = []
+    for t in result.get("tasks") or []:
+        days = int(t.get("days_after") or 0)
+        t["due_date"] = _add_days_to_date(v.visit_date, days) if days >= 0 else ""
+        base_tasks.append(t)
+    plan.title = result.get("title") or "复诊计划"
+    plan.reason = result.get("reason") or ""
+    plan.risk_level = result.get("risk_level") or "low"
+    plan.plan_text = result.get("plan_text") or ""
+    plan.tasks_json = json.dumps(base_tasks, ensure_ascii=False)
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}?msg=AI复诊计划已生成", status_code=303)
+
+
+@app.post("/admin/care-plans/{plan_id}/confirm")
+async def admin_care_plan_confirm(
+    plan_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    plan = db.get(CarePlan, plan_id)
+    if not plan:
+        raise HTTPException(404, "复诊计划不存在")
+    v = db.get(Visit, plan.visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    pet = db.get(Pet, v.pet_id) if v.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    if plan.status in ("confirmed", "active"):
+        return RedirectResponse(f"/admin/visits/{v.id}?msg=复诊计划已确认", status_code=303)
+    if not _care_tasks_from_json(plan.tasks_json):
+        return RedirectResponse(f"/admin/visits/{v.id}?err=复诊计划至少需要一条任务", status_code=303)
+    username = request.session.get("admin_username") or request.session.get("admin") or ""
+    created = _confirm_care_plan_to_followups(db, plan, v, username)
+    plan.status = "active"
+    plan.confirmed_by = username
+    plan.confirmed_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{v.id}?msg=复诊计划已确认，创建 {created} 条回访任务", status_code=303)
 
 
 @app.get("/admin/visits/{visit_id}/edit-form", response_class=HTMLResponse)
@@ -11476,6 +11982,7 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
     cnt = {"prescription": 0, "exam_order": 0, "invoice": 0, "invoice_kept": 0,
            "sales_order": 0, "anesthesia": 0, "weight": 0, "medical_doc": 0,
            "monitor_sheet": 0, "consent_task": 0, "consent_doc": 0,
+           "care_summary": 0, "care_plan": 0,
            "followup": 0, "microscopy": 0}
 
     if db.query(Hospitalization.id).filter(Hospitalization.visit_id == vid).first():
@@ -11540,6 +12047,8 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
     cnt["monitor_sheet"] += db.query(AnesthesiaMonitorSheet).filter(AnesthesiaMonitorSheet.visit_id == vid).delete(synchronize_session=False)
     cnt["consent_task"]  += db.query(ConsentTask).filter(ConsentTask.visit_id == vid).delete(synchronize_session=False)
     cnt["consent_doc"]   += db.query(ConsentDocument).filter(ConsentDocument.visit_id == vid).delete(synchronize_session=False)
+    cnt["care_summary"]  += db.query(ClientCareSummary).filter(ClientCareSummary.visit_id == vid).delete(synchronize_session=False)
+    cnt["care_plan"]     += db.query(CarePlan).filter(CarePlan.visit_id == vid).delete(synchronize_session=False)
     cnt["followup"]      += db.query(FollowUp).filter(FollowUp.visit_id == vid).delete(synchronize_session=False)
 
     # 押金 / 套餐核销：保留单据，仅脱钩
@@ -11707,6 +12216,66 @@ def _followup_filtered_query(db: Session, request: Request):
     if admin_store:
         q = q.filter((FollowUp.store == admin_store) | (FollowUp.store == ""))
     return q
+
+
+@app.get("/admin/health-ops", response_class=HTMLResponse)
+async def page_admin_health_ops(
+    request: Request,
+    db: Session = Depends(get_db),
+    store: str = Query(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    from datetime import date
+    today = date.today().isoformat()
+    admin_store = _get_admin_store(request)
+    is_superadmin = _is_superadmin(request)
+    store = (store or "").strip()
+
+    fu_base = db.query(FollowUp)
+    plan_base = db.query(CarePlan)
+    if admin_store:
+        fu_base = fu_base.filter((FollowUp.store == admin_store) | (FollowUp.store == ""))
+        plan_base = plan_base.filter((CarePlan.store == admin_store) | (CarePlan.store == ""))
+    elif is_superadmin and store:
+        fu_base = fu_base.filter(FollowUp.store == store)
+        plan_base = plan_base.filter(CarePlan.store == store)
+
+    actionable = ("pending", "due", "phone_pending")
+    today_followups = fu_base.filter(
+        FollowUp.planned_date != "",
+        FollowUp.planned_date == today,
+        FollowUp.status.in_(actionable),
+    ).order_by(FollowUp.planned_date.asc(), FollowUp.priority.desc(), FollowUp.id.desc()).limit(80).all()
+    overdue_followups = fu_base.filter(
+        FollowUp.planned_date != "",
+        FollowUp.planned_date < today,
+        FollowUp.status.in_(actionable),
+    ).order_by(FollowUp.planned_date.asc(), FollowUp.priority.desc(), FollowUp.id.desc()).limit(80).all()
+    draft_plans = plan_base.filter(CarePlan.status == "draft").order_by(CarePlan.updated_at.desc(), CarePlan.id.desc()).limit(80).all()
+
+    rows = list(today_followups) + list(overdue_followups)
+    visit_ids = list({r.visit_id for r in rows if r.visit_id} | {p.visit_id for p in draft_plans if p.visit_id})
+    pet_ids = list({r.pet_id for r in rows if r.pet_id} | {p.pet_id for p in draft_plans if p.pet_id})
+    cust_ids = list({r.customer_id for r in rows if r.customer_id} | {p.customer_id for p in draft_plans if p.customer_id})
+    visits = {v.id: v for v in db.query(Visit).filter(Visit.id.in_(visit_ids)).all()} if visit_ids else {}
+    pets = {p.id: p for p in db.query(Pet).filter(Pet.id.in_(pet_ids)).all()} if pet_ids else {}
+    customers = {c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
+
+    return templates.TemplateResponse(request, "uk/health_ops.html", {
+        "title": "健康运营",
+        "today": today,
+        "today_followups": today_followups,
+        "overdue_followups": overdue_followups,
+        "draft_plans": draft_plans,
+        "visits": visits,
+        "pets": pets,
+        "customers": customers,
+        "store_options": _STORE_OPTIONS,
+        "f": {"store": store},
+        "is_superadmin": is_superadmin,
+        "csrf_token": _get_csrf_token(request),
+    })
 
 
 @app.get("/admin/follow-ups", response_class=HTMLResponse)

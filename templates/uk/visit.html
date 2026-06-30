@@ -507,6 +507,140 @@
 </div>
 {% endif %}
 
+{# 诊后说明与复诊计划 #}
+<div class="v-rel-section" id="care-ops">
+  <div class="v-rel-head">
+    <div>
+      <h2>诊&nbsp;后&nbsp;说&nbsp;明&nbsp;与&nbsp;复&nbsp;诊&nbsp;计&nbsp;划</h2>
+      <span class="count">
+        {% if care_summary and care_summary.status == 'confirmed' %}诊后说明已确认
+        {% elif care_summary %}诊后说明草稿
+        {% else %}未生成{% endif %}
+        {% if care_plan %} · 复诊计划 {{ care_plan.status }}{% endif %}
+      </span>
+    </div>
+    <a href="/admin/health-ops" class="uk-btn ghost sm">健康运营 →</a>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;">
+    <div style="border:0.5px solid var(--hair);background:var(--paper);padding:16px 18px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="margin:0;font-family:var(--font-serif);font-size:10pt;letter-spacing:3px;">客&nbsp;户&nbsp;版&nbsp;诊&nbsp;后&nbsp;说&nbsp;明</h3>
+        {% if care_summary and care_summary.status == 'confirmed' %}
+          <span class="uk-pill green">已确认</span>
+        {% elif care_summary %}
+          <span class="uk-pill amber">草稿</span>
+        {% else %}
+          <span class="uk-pill mute">未生成</span>
+        {% endif %}
+      </div>
+
+      <form method="post" action="/admin/visits/{{ visit.id }}/care-summary/ai" style="margin-bottom:10px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <textarea name="doctor_instruction" placeholder="医生补充要求（可选）：例如重点提醒戴伊丽莎白圈、3天后看伤口、不要提未确认诊断。" style="width:100%;min-height:54px;border:0.5px solid var(--hair);background:var(--bg);padding:8px;font-family:var(--font-serif);font-size:10pt;"></textarea>
+        <button type="submit" class="uk-btn ghost sm" style="margin-top:8px;">生成诊后说明</button>
+      </form>
+
+      <form method="post" action="/admin/visits/{{ visit.id }}/care-summary/save">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <textarea id="care-summary-text" name="final_text" style="width:100%;min-height:260px;border:0.5px solid var(--hair);background:var(--bg);padding:12px;font-family:var(--font-serif);font-size:10.5pt;line-height:1.7;white-space:pre-wrap;" placeholder="可手动输入，或先点击“生成诊后说明”。">{% if care_summary %}{{ care_summary.final_text or care_summary.ai_draft_text }}{% endif %}</textarea>
+        <textarea name="doctor_note" style="width:100%;min-height:46px;border:0.5px solid var(--hair);background:var(--bg);padding:8px;margin-top:8px;font-family:var(--font-serif);font-size:10pt;" placeholder="医生内部备注（不给客户看）">{% if care_summary %}{{ care_summary.doctor_note }}{% endif %}</textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          <button type="submit" class="uk-btn ghost sm">保存草稿</button>
+          <button type="button" class="uk-btn ghost sm" onclick="copyCareSummary()">复制给客户</button>
+        </div>
+      </form>
+      {% if care_summary and (care_summary.final_text or care_summary.ai_draft_text) %}
+      <form method="post" action="/admin/visits/{{ visit.id }}/care-summary/confirm" style="margin-top:8px;" onsubmit="return confirm('确认后将作为本次病历的客户版诊后说明归档。确认？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <button type="submit" class="uk-btn primary sm">确认诊后说明</button>
+      </form>
+      {% endif %}
+    </div>
+
+    <div style="border:0.5px solid var(--hair);background:var(--paper);padding:16px 18px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="margin:0;font-family:var(--font-serif);font-size:10pt;letter-spacing:3px;">复&nbsp;诊&nbsp;计&nbsp;划</h3>
+        {% if care_plan and care_plan.status in ['confirmed','active'] %}
+          <span class="uk-pill green">已确认</span>
+        {% elif care_plan %}
+          <span class="uk-pill amber">草稿</span>
+        {% else %}
+          <span class="uk-pill mute">未生成</span>
+        {% endif %}
+      </div>
+
+      {% if not care_plan or care_plan.status not in ['confirmed','active'] %}
+      <form method="post" action="/admin/visits/{{ visit.id }}/care-plan/ai" style="margin-bottom:10px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <textarea name="doctor_instruction" placeholder="医生补充要求（可选）：例如3天后看伤口、7天复查尿检、照片同角度拍摄。" style="width:100%;min-height:54px;border:0.5px solid var(--hair);background:var(--bg);padding:8px;font-family:var(--font-serif);font-size:10pt;"></textarea>
+        <button type="submit" class="uk-btn ghost sm" style="margin-top:8px;">生成复诊计划</button>
+      </form>
+      {% endif %}
+
+      <form method="post" action="/admin/visits/{{ visit.id }}/care-plan/save">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <label style="display:block;font-size:9pt;color:var(--ink-3);letter-spacing:2px;margin:8px 0 4px;">计划标题</label>
+        <input name="title" value="{{ care_plan.title if care_plan else '' }}" placeholder="例如：皮肤问题复诊计划" style="width:100%;border:0.5px solid var(--hair);background:var(--bg);padding:8px;font-family:var(--font-serif);"/>
+        <label style="display:block;font-size:9pt;color:var(--ink-3);letter-spacing:2px;margin:8px 0 4px;">计划原因</label>
+        <textarea name="reason" style="width:100%;min-height:52px;border:0.5px solid var(--hair);background:var(--bg);padding:8px;font-family:var(--font-serif);">{{ care_plan.reason if care_plan else '' }}</textarea>
+        <label style="display:block;font-size:9pt;color:var(--ink-3);letter-spacing:2px;margin:8px 0 4px;">风险等级</label>
+        <select name="risk_level" style="width:100%;border:0.5px solid var(--hair);background:var(--bg);padding:8px;font-family:var(--font-serif);">
+          {% set rl = care_plan.risk_level if care_plan else 'low' %}
+          <option value="low" {% if rl=='low' %}selected{% endif %}>低</option>
+          <option value="medium" {% if rl=='medium' %}selected{% endif %}>中</option>
+          <option value="high" {% if rl=='high' %}selected{% endif %}>高</option>
+        </select>
+        <label style="display:block;font-size:9pt;color:var(--ink-3);letter-spacing:2px;margin:8px 0 4px;">计划说明</label>
+        <textarea name="plan_text" style="width:100%;min-height:70px;border:0.5px solid var(--hair);background:var(--bg);padding:8px;font-family:var(--font-serif);">{{ care_plan.plan_text if care_plan else '' }}</textarea>
+
+        <div style="margin-top:12px;border-top:0.5px solid var(--hair);padding-top:10px;">
+          <div style="font-size:9pt;color:var(--ink-3);letter-spacing:2px;margin-bottom:8px;">任务列表</div>
+          <div id="care-task-list">
+            {% set _tasks = care_plan_tasks if care_plan_tasks else [{'due_date':'','task_type':'message','title':'','question_text':'','risk_trigger':'','priority':'normal'}] %}
+            {% for t in _tasks %}
+            <div class="care-task-row" style="border:0.5px solid var(--hair);background:var(--bg);padding:10px;margin-bottom:8px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <input type="date" name="task_due_date" value="{{ t.get('due_date','') }}" style="border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);"/>
+                <select name="task_type" style="border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);">
+                  {% set tt = t.get('task_type','message') %}
+                  <option value="message" {% if tt=='message' %}selected{% endif %}>消息</option>
+                  <option value="phone" {% if tt=='phone' %}selected{% endif %}>电话</option>
+                  <option value="photo_check" {% if tt=='photo_check' %}selected{% endif %}>照片复查</option>
+                  <option value="recheck_visit" {% if tt=='recheck_visit' %}selected{% endif %}>到店复查</option>
+                  <option value="medication_check" {% if tt=='medication_check' %}selected{% endif %}>用药确认</option>
+                </select>
+              </div>
+              <input name="task_title" value="{{ t.get('title','') }}" placeholder="任务标题" style="width:100%;margin-top:8px;border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);"/>
+              <textarea name="task_question" placeholder="回访问题" style="width:100%;margin-top:8px;min-height:48px;border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);">{{ t.get('question_text','') }}</textarea>
+              <textarea name="task_risk_trigger" placeholder="异常触发条件" style="width:100%;margin-top:8px;min-height:42px;border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);">{{ t.get('risk_trigger','') }}</textarea>
+              <select name="task_priority" style="width:100%;margin-top:8px;border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);">
+                {% set pr = t.get('priority','normal') %}
+                <option value="low" {% if pr=='low' %}selected{% endif %}>低优先级</option>
+                <option value="normal" {% if pr=='normal' %}selected{% endif %}>普通</option>
+                <option value="high" {% if pr=='high' %}selected{% endif %}>高优先级</option>
+                <option value="urgent" {% if pr=='urgent' %}selected{% endif %}>紧急</option>
+              </select>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="uk-btn ghost sm" onclick="addCareTask()">＋ 添加任务</button>
+        </div>
+
+        {% if not care_plan or care_plan.status not in ['confirmed','active'] %}
+        <button type="submit" class="uk-btn ghost sm" style="margin-top:10px;">保存复诊计划</button>
+        {% endif %}
+      </form>
+      {% if care_plan and care_plan.status not in ['confirmed','active'] %}
+      <form method="post" action="/admin/care-plans/{{ care_plan.id }}/confirm" style="margin-top:8px;" onsubmit="return confirm('确认后将按任务列表创建回访任务。确认？');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <button type="submit" class="uk-btn primary sm">确认并创建回访</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 {# 回访 #}
 <div class="v-rel-section">
   <div class="v-rel-head">
@@ -572,6 +706,49 @@
     setTimeout(function() { el.style.background = ''; }, 2500);
   }, 200);
 })();
+
+function copyCareSummary() {
+  const el = document.getElementById('care-summary-text');
+  if (!el) return;
+  el.select();
+  el.setSelectionRange(0, 999999);
+  try {
+    document.execCommand('copy');
+    alert('已复制诊后说明');
+  } catch (e) {
+    alert('复制失败，请手动选择复制');
+  }
+}
+
+function addCareTask() {
+  const list = document.getElementById('care-task-list');
+  if (!list) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'care-task-row';
+  wrap.style.cssText = 'border:0.5px solid var(--hair);background:var(--bg);padding:10px;margin-bottom:8px;';
+  wrap.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <input type="date" name="task_due_date" style="border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);"/>
+      <select name="task_type" style="border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);">
+        <option value="message">消息</option>
+        <option value="phone">电话</option>
+        <option value="photo_check">照片复查</option>
+        <option value="recheck_visit">到店复查</option>
+        <option value="medication_check">用药确认</option>
+      </select>
+    </div>
+    <input name="task_title" placeholder="任务标题" style="width:100%;margin-top:8px;border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);"/>
+    <textarea name="task_question" placeholder="回访问题" style="width:100%;margin-top:8px;min-height:48px;border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);"></textarea>
+    <textarea name="task_risk_trigger" placeholder="异常触发条件" style="width:100%;margin-top:8px;min-height:42px;border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);"></textarea>
+    <select name="task_priority" style="width:100%;margin-top:8px;border:0.5px solid var(--hair);padding:7px;background:var(--paper);font-family:var(--font-serif);">
+      <option value="low">低优先级</option>
+      <option value="normal" selected>普通</option>
+      <option value="high">高优先级</option>
+      <option value="urgent">紧急</option>
+    </select>
+  `;
+  list.appendChild(wrap);
+}
 
 function delVisitConfirm(form) {
   if (!confirm('确认彻底删除此病历？将连带删除其处方 / 检查 / 未付账单，且不可恢复。\n（挂住院或管制药的病历、已收款账单会自动保护）')) return false;
