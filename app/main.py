@@ -11038,7 +11038,11 @@ def _care_summary_snapshot(db: Session, v: Visit, doctor_instruction: str = "") 
             "id": inv.id,
             "payment_status": inv.payment_status,
             "total_amount": inv.total_amount,
-            "items": [{"name": it.name, "quantity": it.quantity, "subtotal": it.subtotal} for it in (inv.items or [])],
+            "items": [{
+                "name": it.description,
+                "quantity": it.quantity,
+                "subtotal": it.subtotal,
+            } for it in (inv.items or [])],
         })
 
     return {
