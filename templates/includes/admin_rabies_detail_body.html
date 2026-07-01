@@ -169,6 +169,28 @@
  <input name="staff_name" value="{{ rec.staff_name }}" list="vet-list"/>
  <datalist id="vet-list">{% for n in vet_names %}<option value="{{ n }}">{% endfor %}</datalist>
  </div>
+ <div style="grid-column:1 / -1;">
+ <label>扣库存品目</label>
+ <select name="inventory_item_id" style="width:100%;">
+   <option value="">自动匹配狂犬疫苗库存</option>
+   {% for item in rabies_inventory_items %}
+   <option value="{{ item.id }}" {% if linked_vacc and linked_vacc.inventory_item_id == item.id %}selected{% endif %}>
+     {{ item.name }} · 库存 {{ item.stock_qty }} {{ item.unit or '' }}{% if item.latest_batch_no %} · 批号 {{ item.latest_batch_no }}{% endif %}
+   </option>
+   {% endfor %}
+ </select>
+ <div style="font-size:0.76rem;color:var(--muted);margin-top:0.25rem;">
+   {% if linked_vacc_inventory_deducted %}
+     已有出库流水，保存医护信息不会重复扣库存。
+   {% elif linked_vacc and linked_vacc.inventory_item_id %}
+     已关联库存品目，但未找到出库流水；下次保存会补扣 1 支。
+   {% elif rabies_inventory_items %}
+     未手动选择时，系统会按当前门店第一条狂犬疫苗库存扣 1 支。
+   {% else %}
+     当前门店没有可用的狂犬疫苗库存品目，本次保存不会扣库存。
+   {% endif %}
+ </div>
+ </div>
  </div>
 
  <!-- 医护签名 -->

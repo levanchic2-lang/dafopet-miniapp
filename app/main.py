@@ -13104,6 +13104,28 @@ def _deduct_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_
     ))
 
 
+def _has_inventory_out(db: Session, ref_type: str, ref_id: int) -> bool:
+    """同一业务单据是否已经写过出库流水，用于避免重复扣库存。"""
+    if not ref_id:
+        return False
+    return db.query(InventoryTransaction.id).filter(
+        InventoryTransaction.ref_type == ref_type,
+        InventoryTransaction.ref_id == ref_id,
+        InventoryTransaction.tx_type == "out",
+    ).first() is not None
+
+
+def _rabies_inventory_items(db: Session, request: Request) -> list[InventoryItem]:
+    q = _apply_store_filter(db.query(InventoryItem), InventoryItem.store, _get_op_store(request))
+    return q.filter(
+        InventoryItem.category == "vaccine",
+        InventoryItem.is_service == False,  # noqa: E712
+        InventoryItem.is_active == True,  # noqa: E712
+        InventoryItem.stock_qty > 0,
+        or_(InventoryItem.subcategory == "rabies", InventoryItem.name.ilike("%狂犬%")),
+    ).order_by(InventoryItem.name.asc(), InventoryItem.id.asc()).all()
+
+
 def _restore_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_id: int, operator: str, note: str = "") -> None:
     """退回库存（删单时）：增加库存，写流水。"""
     inv = db.get(InventoryItem, item_id)
@@ -20761,15 +20783,23 @@ async def admin_rabies_detail(rec_id: int, request: Request, db: Session = Depen
     ).all()
     vet_names = [v[0] for v in vets]
     locked, lock_reason = _is_rabies_locked(db, rec)
+    rabies_items = _rabies_inventory_items(db, request)
+    _attach_latest_batch(db, rabies_items)
+    linked_vacc = db.query(Vaccination).filter(Vaccination.rabies_record_id == rec_id).first()
+    linked_vacc_inventory_deducted = _has_inventory_out(db, "vaccination", linked_vacc.id) if linked_vacc else False
     return templates.TemplateResponse(request, "uk/rabies_detail.html", {
         "rec": rec,
         "vet_names": vet_names,
+        "rabies_inventory_items": rabies_items,
+        "linked_vacc": linked_vacc,
+        "linked_vacc_inventory_deducted": linked_vacc_inventory_deducted,
         "status_zh": _RABIES_STATUS_ZH,
         "locked": locked, "lock_reason": lock_reason,
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
         "err": request.query_params.get("err"),
         "owner_name_invalid": _is_invalid_name(rec.owner_name or ""),
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
     })
 
 
@@ -20790,6 +20820,7 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
     rec.vaccine_batch_no     = str(form.get("vaccine_batch_no", "")).strip()[:80]
     rec.vaccine_date         = str(form.get("vaccine_date", "")).strip()[:20]
     rec.staff_name           = str(form.get("staff_name", "")).strip()[:80]
+    selected_item_id         = int(form.get("inventory_item_id") or 0) or None
 
     staff_sig_data = str(form.get("staff_signature", "")).strip()
     if staff_sig_data and len(staff_sig_data) > 100:
@@ -20802,16 +20833,33 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
     rec.updated_at = datetime.utcnow()
     db.flush()
 
-    # 自动同步到疫苗档案（如果尚未同步过）
+    selectable_rabies_items = _rabies_inventory_items(db, request)
+    selectable_by_id = {it.id: it for it in selectable_rabies_items}
+    rabies_item = selectable_by_id.get(selected_item_id) if selected_item_id else (
+        selectable_rabies_items[0] if selectable_rabies_items else None
+    )
+
+    next_due_date = (
+        (datetime.strptime(rec.vaccine_date, "%Y-%m-%d") + timedelta(days=365)).strftime("%Y-%m-%d")
+        if rec.vaccine_date else (datetime.utcnow() + timedelta(days=365)).strftime("%Y-%m-%d")
+    )
+
+    # 自动同步到疫苗档案；已有注射记录时也补齐库存关联与出库流水。
     existing_vacc = db.query(Vaccination).filter(Vaccination.rabies_record_id == rec_id).first()
-    if not existing_vacc:
-        # 查找狂犬疫苗库存品目（优先匹配名称含"狂犬"的）
-        rabies_item = _apply_store_filter(
-            db.query(InventoryItem), InventoryItem.store, _get_op_store(request)
-        ).filter(
-            InventoryItem.category == "vaccine",
-            InventoryItem.name.ilike("%狂犬%"),
-        ).first()
+    if existing_vacc:
+        existing_vacc.vaccine_type = "rabies"
+        existing_vacc.vaccine_name = rec.vaccine_manufacturer or "狂犬疫苗"
+        existing_vacc.batch_no = rec.vaccine_batch_no or ""
+        existing_vacc.vaccinated_date = rec.vaccine_date or datetime.utcnow().strftime("%Y-%m-%d")
+        existing_vacc.next_due_date = next_due_date
+        existing_vacc.vet_name = rec.staff_name or ""
+        if rabies_item and not existing_vacc.inventory_item_id:
+            existing_vacc.inventory_item_id = rabies_item.id
+        if rabies_item and not _has_inventory_out(db, "vaccination", existing_vacc.id):
+            existing_vacc.inventory_item_id = rabies_item.id
+            _deduct_inventory(db, rabies_item.id, 1.0, "vaccination", existing_vacc.id,
+                              request.session.get("admin_username", ""), note=f"狂犬疫苗登记#{rec_id} 出库")
+    else:
         vacc = Vaccination(
             pet_id            = rec.pet_id,
             customer_id       = rec.customer_id,
@@ -20820,7 +20868,7 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
             batch_no          = rec.vaccine_batch_no or "",
             dose_number       = 1,
             vaccinated_date   = rec.vaccine_date or datetime.utcnow().strftime("%Y-%m-%d"),
-            next_due_date     = (datetime.strptime(rec.vaccine_date, "%Y-%m-%d") + timedelta(days=365)).strftime("%Y-%m-%d") if rec.vaccine_date else (datetime.utcnow() + timedelta(days=365)).strftime("%Y-%m-%d"),
+            next_due_date     = next_due_date,
             inventory_item_id = rabies_item.id if rabies_item else None,
             is_free           = True,
             rabies_record_id  = rec_id,
@@ -20830,7 +20878,7 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
         db.add(vacc)
         db.flush()
         # 库存出库（有关联库存品目时）
-        if rabies_item:
+        if rabies_item and not _has_inventory_out(db, "vaccination", vacc.id):
             _deduct_inventory(db, rabies_item.id, 1.0, "vaccination", vacc.id,
                               request.session.get("admin_username", ""), note=f"狂犬疫苗登记#{rec_id} 出库")
 
@@ -20871,7 +20919,7 @@ async def admin_rabies_delete(rec_id: int, request: Request, db: Session = Depen
     for vacc in linked_vaccs:
         # 通过 vaccine_name 反查库存项（疫苗扣减是按 1.0 数量）
         # 直接走通用 restore：如果 vacc 没记 item_id 就跳过
-        item_id = getattr(vacc, "item_id", None)
+        item_id = getattr(vacc, "inventory_item_id", None)
         if item_id:
             try:
                 _restore_inventory(db, item_id, 1.0, "vaccination", vacc.id, operator,
