@@ -21466,7 +21466,7 @@ async def admin_exam_reports_pending(
         q = q.join(Visit, ExamOrder.visit_id == Visit.id, isouter=True)\
              .join(Pet, Visit.pet_id == Pet.id, isouter=True)\
              .filter(or_(Pet.store == store_short, Pet.store == None))
-    rows = q.order_by(ExamOrder.created_at.asc()).all()  # 老的在前（紧迫）
+    rows = q.order_by(ExamOrder.created_at.desc(), ExamOrder.id.desc()).all()  # 最近开的在前，优先处理今日报告
 
     # ── 已出报告视图 ──────────────────────────────────────────
     if view == "done":
