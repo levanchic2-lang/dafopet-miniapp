@@ -15,20 +15,20 @@ input[type=number] { -moz-appearance:textfield !important; appearance:textfield 
  *    5. tabular-nums 数字 + letter-spacing 标题
  * ============================================================ */
 
-/* 数字字体策略：保持衬线风格（UK 极简衬线美学）。
-   Cambria 是 Vista+ 自带的衬线字体，数字默认 tabular。
-   Win7 ClearType 下可能有 0.5-1px 视觉微距漂移（接受），
-   但风格统一漂亮，不偏代码感。中文继续 Noto Serif SC。*/
+/* 数字字体策略：保持衬线风格，但数字必须同高。
+   Win7/旧浏览器下 Georgia/Cambria 容易渲染出 old-style figures，
+   例如 4584 里的 8 视觉上更高。数字统一交给 Times New Roman，
+   它在 Win7/Win10 都是 lining figures；中文继续走宋体/思源宋。*/
 @font-face {
   font-family: 'UK Digits';
-  src: local('Cambria'), local('Constantia'), local('Georgia'), local('Times New Roman');
+  src: local('Times New Roman'), local('Georgia');
   unicode-range: U+0030-0039, U+002D, U+002E, U+003A, U+002F, U+0028, U+0029, U+00A5, U+FFE5;
 }
 
 :root {
   /* ── 字体 ── */
   --font-serif:   "UK Digits", "Noto Serif SC", Georgia, "Times New Roman", "Source Han Serif SC", "STSong", "宋体", serif;
-  --font-numeric: "Georgia", "Times New Roman", ui-serif, serif;
+  --font-numeric: "UK Digits", "Times New Roman", Georgia, ui-serif, serif;
 
   /* ── 颜色（单色阶）── */
   --ink:        #1a1a1a;   /* 主文字 */
@@ -101,7 +101,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* 数字字体专用 */
 .num,
-.num * { font-family: var(--font-numeric); font-variant-numeric: lining-nums tabular-nums; }
+.num * {
+  font-family: var(--font-numeric);
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
+}
 
 /* ============================================================
  * 排版
@@ -657,9 +661,9 @@ p { margin: 0 0 var(--gap-3); }
 .uk-bold { font-weight: 700; }
 .uk-right { text-align: right; }
 .uk-center { text-align: center; }
-.uk-mono { font-family: var(--font-numeric); }
-.uk-em-num { font-family: var(--font-numeric); font-size: var(--t-lg); }
-.uk-price { font-family: var(--font-numeric); }
+.uk-mono { font-family: var(--font-numeric); font-feature-settings: "lnum" 1, "tnum" 1; }
+.uk-em-num { font-family: var(--font-numeric); font-size: var(--t-lg); font-feature-settings: "lnum" 1, "tnum" 1; }
+.uk-price { font-family: var(--font-numeric); font-feature-settings: "lnum" 1, "tnum" 1; }
 .uk-price::before { content: "¥"; margin-right: 1px; font-style: italic; color: var(--ink-3); }
 
 .uk-empty {
