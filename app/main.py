@@ -7931,6 +7931,8 @@ async def page_admin_customer_detail(
     # ── 客户级数据 ──
     applications = db.query(Application).filter(Application.customer_id == customer_id).order_by(Application.id.desc()).limit(50).all()
     cust_sales_orders = db.query(SalesOrder).filter(SalesOrder.customer_id == customer_id).order_by(SalesOrder.id.desc()).limit(100).all()
+    if _cleanup_dangling_unpaid_exam_invoice_refs(db, customer_id):
+        db.commit()
     cust_invoices = db.query(Invoice).filter(Invoice.customer_id == customer_id).order_by(Invoice.id.desc()).limit(100).all()
 
     # ── 所有宠物的"最近一次"疫苗/驱虫/就诊（用于宠物列表行上展示）──
@@ -17792,6 +17794,108 @@ def _delete_grooming_invoice(db: Session, rec: "GroomingOrder") -> None:
         db.flush()
 
 
+def _recompute_or_delete_unpaid_invoice(db: Session, inv: "Invoice | None") -> None:
+    """未收款发票明细变动后重算；无明细且无收款流水时删除空单。"""
+    if inv is None or inv.payment_status != "unpaid":
+        return
+    if _invoice_paid_sum(db, inv.id) > 0:
+        _invoice_recompute_status(db, inv)
+        return
+    items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == inv.id).all()
+    if not items:
+        db.delete(inv)
+        db.flush()
+        return
+    subtotal = round(sum(float(it.subtotal or 0) for it in items), 2)
+    inv.subtotal = subtotal
+    inv.total_amount = round(subtotal - float(inv.discount_amount or 0), 2)
+    inv.updated_at = datetime.utcnow()
+    db.flush()
+
+
+def _delete_unpaid_invoice_refs(db: Session, ref_type: str, ref_id: int) -> int:
+    """删除某业务单据在所有未收款发票中的明细，并清理空发票。"""
+    if not ref_type or not ref_id:
+        return 0
+    rows = (
+        db.query(InvoiceItem)
+        .join(Invoice, InvoiceItem.invoice_id == Invoice.id)
+        .filter(
+            InvoiceItem.ref_type == ref_type,
+            InvoiceItem.ref_id == ref_id,
+            Invoice.payment_status == "unpaid",
+        )
+        .all()
+    )
+    invoices: list[Invoice] = []
+    for row in rows:
+        inv = db.get(Invoice, row.invoice_id)
+        if inv is not None:
+            invoices.append(inv)
+        db.delete(row)
+    if rows:
+        db.flush()
+        seen: set[int] = set()
+        for inv in invoices:
+            if inv.id in seen:
+                continue
+            seen.add(inv.id)
+            _recompute_or_delete_unpaid_invoice(db, inv)
+    return len(rows)
+
+
+def _cleanup_dangling_unpaid_exam_invoice_refs(db: Session, customer_id: int | None = None) -> int:
+    """清理未收款发票里指向已删除检查单的孤儿明细和空单。"""
+    q = (
+        db.query(InvoiceItem)
+        .join(Invoice, InvoiceItem.invoice_id == Invoice.id)
+        .outerjoin(
+            ExamOrder,
+            (InvoiceItem.ref_type == "exam_order") & (InvoiceItem.ref_id == ExamOrder.id),
+        )
+        .filter(
+            InvoiceItem.ref_type == "exam_order",
+            Invoice.payment_status == "unpaid",
+            ExamOrder.id.is_(None),
+        )
+    )
+    if customer_id:
+        q = q.filter(Invoice.customer_id == customer_id)
+    rows = q.all()
+    invoices: list[Invoice] = []
+    for row in rows:
+        inv = db.get(Invoice, row.invoice_id)
+        if inv is not None:
+            invoices.append(inv)
+        db.delete(row)
+    cleaned = len(rows)
+    if rows:
+        db.flush()
+        seen: set[int] = set()
+        for inv in invoices:
+            if inv.id in seen:
+                continue
+            seen.add(inv.id)
+            _recompute_or_delete_unpaid_invoice(db, inv)
+    empty_q = (
+        db.query(Invoice)
+        .outerjoin(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)
+        .filter(
+            Invoice.payment_status == "unpaid",
+            InvoiceItem.id.is_(None),
+        )
+    )
+    if customer_id:
+        empty_q = empty_q.filter(Invoice.customer_id == customer_id)
+    for inv in empty_q.all():
+        if _invoice_paid_sum(db, inv.id) <= 0:
+            db.delete(inv)
+            cleaned += 1
+    if cleaned:
+        db.flush()
+    return cleaned
+
+
 def _resync_grooming_invoice(db: Session, rec: "GroomingOrder", request: "Request") -> None:
     """美容单服务/金额变更后，重建关联「未付」收费单的明细与金额。
     - 已付的收费单不动（此时美容单本身已锁定，不会走到这里）
@@ -17933,7 +18037,10 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         subtotal_sum += doc_sum
 
     # ── 2) 检查单 ──
-    exams = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).all()
+    exams = db.query(ExamOrder).filter(
+        ExamOrder.visit_id == visit_id,
+        ExamOrder.status != "voided",
+    ).all()
     for eo in exams:
         if ("exam_order", eo.id) in settled_refs:
             continue  # 已结清，跳过
@@ -18030,13 +18137,13 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
     ).first()
 
     if not line_items:
-        # 没有明细：若已有 unpaid 发票就清空它，否则不创建
+        # 没有明细：若已有 unpaid 发票就清空并删除空单，避免客户档案残留未付款。
         if inv:
             for old in list(inv.items):
                 db.delete(old)
-            inv.subtotal = 0.0
-            inv.total_amount = 0.0
-        return inv
+            db.flush()
+            _recompute_or_delete_unpaid_invoice(db, inv)
+        return None
 
     _resolved_store = _resolve_invoice_store(db, visit_id=visit_id, pet_id=visit.pet_id, customer_id=visit.customer_id)
     if inv is None:
@@ -21350,6 +21457,7 @@ async def admin_exam_order_edit(order_id: int, request: Request, db: Session = D
     # 4) 同步收费单
     if order.visit_id:
         try:
+            _delete_unpaid_invoice_refs(db, "exam_order", order_id)
             _sync_visit_invoice(db, order.visit_id, operator)
             db.commit()
         except Exception:
@@ -21766,6 +21874,7 @@ async def admin_exam_order_delete(
                 Path(rpt.file_path).unlink(missing_ok=True)
         except Exception:
             pass
+    _delete_unpaid_invoice_refs(db, "exam_order", order_id)
     db.delete(order)  # cascade 会删 reports
     db.commit()
     # 同步收费单
@@ -21820,6 +21929,7 @@ async def admin_exam_order_void(
                 _audit_doc_action(db, "exam_order", order_id, "refund_to_wallet",
                                   operator, extra=f"amount={refund_amount}")
     _audit_doc_action(db, "exam_order", order_id, "void", operator, void_reason)
+    _delete_unpaid_invoice_refs(db, "exam_order", order_id)
     db.commit()
     if order.visit_id:
         try:
