@@ -68,7 +68,11 @@
    <option value="tnr">TNR</option>
  </select>
  <label>服务项目</label>
- <input type="text" id="es-service" maxlength="120" placeholder="如 犬造型 / 犬洗护 / 公猫绝育" style="margin-bottom:0.65rem;"/>
+ <div style="display:flex;gap:0.45rem;margin-bottom:0.65rem;">
+  <input type="text" id="es-service" maxlength="120" placeholder="如 犬造型 / 犬洗护 / 公猫绝育" list="es-service-presets" autocomplete="off" style="flex:1;margin-bottom:0;"/>
+  <button type="button" class="btn secondary" id="es-clear-service" style="white-space:nowrap;">清空</button>
+ </div>
+ <datalist id="es-service-presets"></datalist>
  <label>时长（分钟）</label>
  <input type="number" id="es-duration" min="10" max="480" step="5" style="margin-bottom:0.65rem;"/>
  <label>备注（可选）</label>
@@ -177,10 +181,26 @@ const STATUS_ZH = {
 };
 const CAT_ZH = {
  tnr:'TNR', surgery:'手术', outpatient:'门诊',
- beauty:'美容', grooming:'美容', washcare:'洗护'
+ beauty:'美容', grooming:'造型', washcare:'洗护'
 };
 const SPECIES_ZH = { cat:'猫', dog:'犬', exotic:'异宠', other:'其他' };
 const GENDER_ZH = { male:'公', female:'母', unknown:'未知' };
+const EDIT_SERVICE_PRESETS = {
+ outpatient: ['疫苗/驱虫', '体检', '皮肤', '胃肠道', '呼吸道', '泌尿道', '口腔', '心内科'],
+ surgery: ['绝育手术', '软组织手术', '骨科手术', '眼科手术', '神经外科手术'],
+ beauty: ['猫洗护', '猫造型', '犬洗护', '犬造型'],
+ grooming: ['猫造型', '犬造型'],
+ washcare: ['猫洗护', '犬洗护'],
+ tnr: ['TNR 绝育']
+};
+const EDIT_SERVICE_PLACEHOLDER = {
+ outpatient: '如 疫苗/驱虫 / 皮肤 / 胃肠道',
+ surgery: '如 绝育手术 / 软组织手术',
+ beauty: '如 猫洗护 / 犬造型',
+ grooming: '如 猫造型 / 犬造型',
+ washcare: '如 猫洗护 / 犬洗护',
+ tnr: '如 TNR 绝育'
+};
 
 // ═══════════════════════════════════════════════════════
 // 日期工具
@@ -722,19 +742,42 @@ document.getElementById('rs-confirm-btn').addEventListener('click', async () => 
 // 改项目（类别 / 服务 / 时长 / 备注）
 // ═══════════════════════════════════════════════════════
 let editSvcId = null;
+let editSvcOriginalCategory = '';
+function syncEditServicePresets(clearWhenCategoryChanged=false) {
+ const cat = document.getElementById('es-category').value || 'outpatient';
+ const input = document.getElementById('es-service');
+ const list = document.getElementById('es-service-presets');
+ const presets = EDIT_SERVICE_PRESETS[cat] || [];
+ list.innerHTML = presets.map(v => `<option value="${v}"></option>`).join('');
+ input.placeholder = EDIT_SERVICE_PLACEHOLDER[cat] || '请输入服务项目';
+ input.disabled = false;
+ input.readOnly = false;
+ if (clearWhenCategoryChanged && cat !== editSvcOriginalCategory) {
+  input.value = '';
+ }
+}
 function openEditService(id) {
  editSvcId = id;
  const appt = events.find(e=>e.id===id) || {};
- document.getElementById('es-category').value = appt.category || 'outpatient';
+ editSvcOriginalCategory = appt.category || 'outpatient';
+ document.getElementById('es-category').value = editSvcOriginalCategory;
  document.getElementById('es-service').value = appt.service_name || '';
  document.getElementById('es-duration').value = appt.duration || 30;
  document.getElementById('es-notes').value = appt.notes || '';
+ syncEditServicePresets(false);
  document.getElementById('editsvc-modal').classList.add('visible');
 }
 function closeEditService() {
  document.getElementById('editsvc-modal').classList.remove('visible');
  editSvcId = null;
+ editSvcOriginalCategory = '';
 }
+document.getElementById('es-category').addEventListener('change', () => syncEditServicePresets(true));
+document.getElementById('es-clear-service').addEventListener('click', () => {
+ const input = document.getElementById('es-service');
+ input.value = '';
+ input.focus();
+});
 document.getElementById('es-confirm-btn').addEventListener('click', async () => {
  if (!editSvcId) return;
  const category = document.getElementById('es-category').value;
