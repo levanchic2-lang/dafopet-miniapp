@@ -152,12 +152,13 @@ body[data-size="A5_LAND"] .inv-items { font-size: 9pt; }
 <div class="inv-pay-list">
   <div class="h">Payment Received · 收款明细</div>
   {% for p in payments if p.status == 'success' %}
+  {% set balance_hint = payment_balance_hints.get(p.id) if payment_balance_hints else '' %}
   <div class="pay-row">
     <span class="lbl">{{ {
       'cash':'Cash · 现金','wechat':'WeChat · 微信','alipay':'Alipay · 支付宝',
       'shouqianba':'Shouqianba · 收钱吧','meituan':'Meituan · 美团','third_party':'Third Party · 第三方',
       'wallet':'Wallet · 钱包','package':'Package · 套餐','deposit':'Deposit · 押金','coupon':'Coupon · 优惠券',
-    }.get(p.method, p.method) }}{% if p.ref_no %} <em style="color:#888;font-size:8.5pt;">#{{ p.ref_no }}</em>{% endif %}</span>
+    }.get(p.method, p.method) }}{% if p.ref_no %} <em style="color:#888;font-size:8.5pt;">#{{ p.ref_no }}</em>{% endif %}{% if balance_hint %} <em style="color:#888;font-size:8.5pt;">· {{ balance_hint }}</em>{% endif %}</span>
     <span class="amt">¥ {{ '%.2f'|format(p.amount) }}</span>
   </div>
   {% endfor %}

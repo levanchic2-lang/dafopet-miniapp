@@ -19371,6 +19371,31 @@ def _same_pet_day_invoices(db: Session, inv: Invoice) -> list:
     )
 
 
+def _payment_balance_hints(db: Session, payments: list[Payment]) -> dict[int, str]:
+    """打印票据用：展示钱包/押金抵扣后的可用余额。"""
+    hints: dict[int, str] = {}
+    for p in payments:
+        if p.status != "success":
+            continue
+        if p.method == "wallet":
+            tx = db.get(WalletTransaction, p.ref_id) if p.ref_id else None
+            if tx:
+                hints[p.id] = f"钱包余额 ¥{float(tx.balance_after or 0):.2f}"
+                continue
+            wallet = db.query(Wallet).filter(Wallet.customer_id == p.customer_id).first() if p.customer_id else None
+            if wallet:
+                hints[p.id] = f"钱包余额 ¥{float(wallet.balance or 0):.2f}"
+        elif p.method == "deposit" and p.ref_id:
+            dep = db.get(Deposit, p.ref_id)
+            if dep:
+                available = max(
+                    0.0,
+                    float(dep.amount or 0) - float(dep.applied_amount or 0) - float(dep.refunded_amount or 0),
+                )
+                hints[p.id] = f"押金可用余额 ¥{available:.2f}"
+    return hints
+
+
 @app.get("/admin/invoices/combined-print", response_class=HTMLResponse)
 async def admin_invoice_combined_print_view(
     request: Request,
@@ -19395,6 +19420,9 @@ async def admin_invoice_combined_print_view(
         Payment.invoice_id.in_(all_inv_ids), Payment.status == "success"
     ).order_by(Payment.id.asc()).all():
         payments_by_inv.setdefault(p.invoice_id, []).append(p)
+    payment_balance_hints = _payment_balance_hints(
+        db, [p for rows in payments_by_inv.values() for p in rows]
+    )
     # 按 ref_type 给每张单加类型标签
     _ref_type_zh = {
         "prescription": "处方", "sales_order": "销售",
@@ -19430,6 +19458,7 @@ async def admin_invoice_combined_print_view(
         "clinic_name_zh": clinic_name_zh,
         "clinic_name_en": clinic_name_en,
         "inv_status_zh": _INV_STATUS_ZH,
+        "payment_balance_hints": payment_balance_hints,
     })
 
 
@@ -20403,6 +20432,7 @@ async def admin_invoice_print(
         .order_by(Payment.id.asc())
         .all()
     )
+    payment_balance_hints = _payment_balance_hints(db, payments)
     # 门店全名 / 英文：优先「就诊操作门店」(冻结后永久固定) → 发票门店 → 宠物归属店
     _rcpt_store = (visit.store if visit and getattr(visit, "store", "") else "") or (inv.store or "") or (pet.store if pet else "")
     clinic_name_zh = "大风动物医院"
@@ -20416,6 +20446,7 @@ async def admin_invoice_print(
         "pet": pet,
         "visit": visit,
         "payments": payments,
+        "payment_balance_hints": payment_balance_hints,
         "inv_status_zh": _INV_STATUS_ZH,
         "inv_pay_zh": _INV_PAY_ZH,
         "clinic_name_zh": clinic_name_zh,
