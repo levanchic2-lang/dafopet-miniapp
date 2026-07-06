@@ -23117,6 +23117,61 @@ _XRAY_TEMPLATES = {
             ]},
         ],
     },
+    "head": {
+        "label": "头部片",
+        "measurements": [],
+        "structures": [
+            {"name": "头颅骨 / 颅盖", "multi": True, "labels": [
+                {"tag": "正常", "desc": "颅骨轮廓连续，未见明显骨质破坏或骨折线"},
+                {"tag": "骨折", "desc": "颅骨连续性中断，需注明部位、移位和是否粉碎"},
+                {"tag": "溶骨", "desc": "骨质破坏，需考虑感染、肿瘤或牙源性病变侵犯"},
+                {"tag": "骨质增生/硬化", "desc": "慢性炎症、退行性或反应性改变"},
+                {"tag": "异物/金属影", "desc": "外伤或既往手术相关高密度影"},
+            ]},
+            {"name": "鼻腔 / 鼻窦", "multi": True, "labels": [
+                {"tag": "正常", "desc": "鼻腔透亮度对称，鼻甲结构未见明显破坏"},
+                {"tag": "透亮度降低", "desc": "软组织/液体密度增加，见于鼻炎、出血、占位等"},
+                {"tag": "鼻甲破坏", "desc": "鼻甲结构减少或消失，提示侵袭性炎症或肿瘤可能"},
+                {"tag": "鼻中隔偏移", "desc": "占位或外伤导致偏移"},
+                {"tag": "鼻窦积液/软组织影", "desc": "鼻窦内软组织或液体密度影"},
+            ]},
+            {"name": "口腔 / 牙列 / 牙槽骨", "multi": True, "labels": [
+                {"tag": "正常", "desc": "牙槽骨及牙根周围未见明显异常"},
+                {"tag": "牙周骨吸收", "desc": "牙槽骨高度降低，常见于牙周病"},
+                {"tag": "根尖周透亮影", "desc": "根尖周骨质吸收，提示根尖病变/脓肿"},
+                {"tag": "牙齿缺失/断裂", "desc": "需注明牙位"},
+                {"tag": "滞留乳牙", "desc": "乳牙未脱落，可影响恒牙排列"},
+                {"tag": "牙源性占位/骨破坏", "desc": "牙源性囊肿、肿瘤或严重感染需进一步评估"},
+            ]},
+            {"name": "下颌骨 / 颞下颌关节", "multi": True, "labels": [
+                {"tag": "正常", "desc": "下颌骨连续，颞下颌关节对位良好"},
+                {"tag": "下颌骨骨折", "desc": "需注明左/右、体部/支部/联合部及移位"},
+                {"tag": "颞下颌关节脱位", "desc": "关节对位异常，常见外伤或张口受限相关"},
+                {"tag": "关节退行性变", "desc": "关节面不规则、骨赘或硬化"},
+                {"tag": "骨质破坏", "desc": "感染、肿瘤或牙源性病变侵犯下颌骨"},
+            ]},
+            {"name": "眼眶 / 眶周", "multi": True, "labels": [
+                {"tag": "正常", "desc": "眼眶骨性轮廓完整"},
+                {"tag": "眶壁骨折", "desc": "外伤相关，需结合临床眼部检查"},
+                {"tag": "眶周软组织肿胀", "desc": "炎症、外伤或占位"},
+                {"tag": "眶内矿化/异物", "desc": "高密度影，需注明位置"},
+            ]},
+            {"name": "鼓泡 / 耳道", "multi": True, "labels": [
+                {"tag": "正常", "desc": "鼓泡透亮，耳道未见明显狭窄或矿化"},
+                {"tag": "鼓泡透亮度降低", "desc": "中耳积液/炎症可能"},
+                {"tag": "鼓泡壁增厚/硬化", "desc": "慢性中耳炎常见"},
+                {"tag": "外耳道矿化/狭窄", "desc": "慢性外耳炎或增生性改变"},
+                {"tag": "骨质破坏", "desc": "侵袭性感染或肿瘤可能"},
+            ]},
+            {"name": "头颈部软组织", "multi": True, "labels": [
+                {"tag": "正常", "desc": ""},
+                {"tag": "软组织肿胀", "desc": "外伤、炎症或占位"},
+                {"tag": "皮下气肿", "desc": "外伤、咬伤或气道相关"},
+                {"tag": "矿化灶", "desc": "软组织内高密度矿化影"},
+                {"tag": "可疑占位", "desc": "需结合触诊、超声/CT或细胞学"},
+            ]},
+        ],
+    },
     "hip_screen": {
         "label": "髋关节早筛",
         "measurements": [
@@ -23152,12 +23207,21 @@ _XRAY_TEMPLATES = {
         ],
     },
 }
-_XRAY_REGION_ORDER = ["thorax", "abdomen", "msk", "joint", "spine", "hip_screen"]
+_XRAY_TEMPLATES["thoracoabdomen"] = {
+    "label": "胸腹部片",
+    "measurements": _XRAY_TEMPLATES["thorax"]["measurements"],
+    "structures": _XRAY_TEMPLATES["thorax"]["structures"] + _XRAY_TEMPLATES["abdomen"]["structures"],
+}
+_XRAY_REGION_ORDER = ["thorax", "thoracoabdomen", "abdomen", "head", "msk", "joint", "spine", "hip_screen"]
 
 
 def _infer_xray_region(item_label: str) -> str:
     """按检查项名字推断默认部位。"""
     s = (item_label or "")
+    if any(k in s for k in ("胸腹", "胸+腹", "胸部腹部", "全身", "整身")):
+        return "thoracoabdomen"
+    if any(k in s for k in ("头", "颅", "鼻", "口腔", "牙", "下颌", "上颌", "眼眶", "鼓泡", "耳道")):
+        return "head"
     # 髋关节早筛优先（PennHIP/撑开/分离指数/早筛）
     if any(k in s for k in ("早筛", "PennHIP", "撑开", "分离指数")) or ("髋" in s and "发育不良" in s):
         return "hip_screen"

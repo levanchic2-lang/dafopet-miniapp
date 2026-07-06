@@ -106,7 +106,8 @@ def _esc(s) -> str:
 
 
 _REGION_TITLE = {
-    "thorax": "胸部 X 光报告", "abdomen": "腹部 X 光报告",
+    "thorax": "胸部 X 光报告", "thoracoabdomen": "胸腹部 X 光报告",
+    "abdomen": "腹部 X 光报告", "head": "头部 X 光报告",
     "msk": "骨骼 X 光报告", "joint": "关节 X 光报告",
     "spine": "脊椎 X 光报告", "hip_screen": "髋关节发育不良早筛报告",
 }
