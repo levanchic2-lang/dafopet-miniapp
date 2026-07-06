@@ -18648,13 +18648,24 @@ async def admin_invoices_list(
         wb_store = (store or "").strip()
     is_super = (request.session.get("admin_role") == "superadmin")
 
-    # 客户名/电话搜索 → 客户 id 列表（待收 & 已收都用）
-    cids = None
+    # 搜索：单号 / 客户名 / 主手机号 / 备用手机号 / 宠物名 / 病历号（待收 & 已收都用）
+    q = (q or "").strip()
+    search_filters = []
     if q:
-        from sqlalchemy import or_ as _or_q
-        cids = [c.id for c in db.query(Customer.id).filter(
-            _or_q(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
+        like = f"%{q}%"
+        cids = [row[0] for row in db.query(Customer.id).filter(
+            or_(Customer.name.ilike(like), Customer.phone.ilike(like), Customer.phones_extra.ilike(like))
         ).all()]
+        pids = [row[0] for row in db.query(Pet.id).filter(
+            or_(Pet.name.ilike(like), Pet.medical_record_no.ilike(like), Pet.breed.ilike(like))
+        ).all()]
+        search_filters.append(Invoice.invoice_no.ilike(like))
+        if q.isdigit():
+            search_filters.append(Invoice.id == int(q))
+        if cids:
+            search_filters.append(Invoice.customer_id.in_(cids))
+        if pids:
+            search_filters.append(Invoice.pet_id.in_(pids))
 
     query = db.query(Invoice).order_by(Invoice.id.desc())
     if wb_store:
@@ -18665,8 +18676,8 @@ async def admin_invoices_list(
             query = query.filter(Invoice.payment_status.in_(("unpaid", "partial")))
         else:
             query = query.filter(Invoice.payment_status == status)
-    if cids is not None:
-        query = query.filter(Invoice.customer_id.in_(cids))
+    if search_filters:
+        query = query.filter(or_(*search_filters))
     invoices = query.limit(200).all()
     cust_map = {}
     for inv in invoices:
@@ -18701,6 +18712,8 @@ async def admin_invoices_list(
         )
         if wb_store:
             _unpaid_q = _unpaid_q.filter(Invoice.store == wb_store)
+        if search_filters:
+            _unpaid_q = _unpaid_q.filter(or_(*search_filters))
         # 按 (customer_id, pet_id) 分组：同客户同宠物才合并为一行
         _by_cust_pet: dict[tuple, list] = {}
         for u in _unpaid_q.all():
@@ -18734,8 +18747,8 @@ async def admin_invoices_list(
         pq = db.query(Invoice).filter(Invoice.payment_status == "paid")
         if wb_store:
             pq = pq.filter(Invoice.store == wb_store)
-        if cids is not None:
-            pq = pq.filter(Invoice.customer_id.in_(cids))
+        if search_filters:
+            pq = pq.filter(or_(*search_filters))
         # 日期按 paid_at（实收时间）落区间；老数据 paid_at 为空则回退 invoice_date
         pq = pq.filter(_or_p(
             _and_p(Invoice.paid_at.is_not(None), _func.date(Invoice.paid_at, '+8 hours') >= df, _func.date(Invoice.paid_at, '+8 hours') <= dt),
