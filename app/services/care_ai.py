@@ -71,6 +71,22 @@ low, normal, high, urgent
 }"""
 
 
+VISIT_TREATMENT_PLAN_SYSTEM = """你是宠物医院医生的病历文书助手。你的任务是读取本次就诊病历、SOAP、检查单、已生成的检查报告、处方用药和收费明细，给医生起草“计划/医嘱”字段内容。
+
+你必须遵守：
+1. 只能基于系统提供的资料整理，不新增诊断，不编造检查结果，不替医生下最终诊断。
+2. 不承诺疗效，不保证恢复时间。
+3. 不建议主人自行调整药量、停药或换药。
+4. 药品用法必须忠于处方资料；处方资料不清楚时，只写“按医生处方执行”。
+5. 语言面向医生记录和客户沟通之间的完成稿：专业、清楚、可直接放进病历“计划”栏。
+6. 控制在 200-500 字；如果资料很少，可以短于 200 字，但不要硬编。
+7. 输出必须是普通纯文本，不要使用 Markdown。禁止出现 **、__、###、项目符号、表格、代码块。
+8. 不要写“我是AI”“AI建议”“以下为草稿”。
+
+内容尽量覆盖：
+本次处理/检查安排、用药和护理要点、居家观察重点、需要尽快联系医院的异常情况、复查或复诊建议。"""
+
+
 _CARE_SUMMARY_FOOTER = (
     "\n\n以上内容为本次就诊后的护理与复查说明，具体诊断和治疗方案以医生确认的病历记录为准。"
     "如症状加重或出现异常，请及时联系医院或到店复查。"
@@ -204,3 +220,32 @@ async def draft_care_plan(payload: dict[str, Any], doctor_instruction: str = "")
         "plan_text": _plain_text(str(data.get("plan_text") or "")),
         "tasks": cleaned,
     }
+
+
+async def draft_visit_treatment_plan(payload: dict[str, Any], doctor_instruction: str = "") -> dict[str, Any]:
+    from app.services.report_llm import report_llm_configured, report_text_client_model
+
+    if not report_llm_configured():
+        return {"ok": False, "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}
+    try:
+        from openai import AsyncOpenAI  # noqa: F401
+    except ImportError:
+        return {"ok": False, "error": "缺少 openai 库"}
+
+    client, model, _, is_reasoner = report_text_client_model()
+    try:
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": VISIT_TREATMENT_PLAN_SYSTEM},
+                {"role": "user", "content": _format_payload(payload, doctor_instruction)},
+            ],
+            temperature=0.25,
+            max_tokens=8000 if is_reasoner else 1600,
+        )
+    except Exception as e:
+        logger.warning("[care_ai] treatment plan API failed: %s", e)
+        return {"ok": False, "error": f"调用模型失败：{e}"}
+
+    text = _plain_text(resp.choices[0].message.content or "")
+    return {"ok": True, "text": text}

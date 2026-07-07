@@ -309,8 +309,8 @@
   </div>
 </div>
 
-{# ─── 备注 + 复诊 ─── #}
-{% if visit.notes or visit.follow_up_note or visit.follow_up_at %}
+{# ─── 备注 + 复诊（旧健康运营字段，暂隐藏；历史数据保留）─── #}
+{% if false and (visit.notes or visit.follow_up_note or visit.follow_up_at) %}
 <div class="v-side-block">
   <div class="v-side-card">
     <h3>备 注</h3>
@@ -507,7 +507,8 @@
 </div>
 {% endif %}
 
-{# 诊后说明与复诊计划 #}
+{% if false %}
+{# 诊后说明与复诊计划（旧健康运营模块，暂隐藏；历史数据保留） #}
 <div class="v-rel-section" id="care-ops">
   <div class="v-rel-head">
     <div>
@@ -691,6 +692,7 @@
   </table>
 {% endif %}
 </div>
+{% endif %}
 
 <script>
 // 高亮 hl=xxx 命中的行并滚动到视图（押金/回访等"查看"按钮跳过来时）

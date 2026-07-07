@@ -10990,6 +10990,41 @@ def _care_store_for_visit(db: Session, v: Visit) -> str:
     return _visit_store_short(db, v)
 
 
+def _care_specialty_reports_snapshot(db: Session, visit_id: int) -> list[dict]:
+    reports: list[dict] = []
+    for r in db.query(MicroscopyReport).filter(MicroscopyReport.visit_id == visit_id).order_by(MicroscopyReport.id.asc()).all():
+        reports.append({
+            "type": "microscopy",
+            "item_label": r.item_label,
+            "sample_site": r.sample_site,
+            "narrative": r.narrative,
+            "conclusion": r.conclusion,
+            "advice": r.advice,
+        })
+    for r in db.query(UltrasoundReport).filter(UltrasoundReport.visit_id == visit_id).order_by(UltrasoundReport.id.asc()).all():
+        reports.append({
+            "type": "ultrasound",
+            "item_label": r.item_label,
+            "exam_type": r.exam_type,
+            "vet_findings": r.vet_findings,
+            "findings": r.findings,
+            "conclusion": r.conclusion,
+            "advice": r.advice,
+        })
+    for r in db.query(XrayReport).filter(XrayReport.visit_id == visit_id).order_by(XrayReport.id.asc()).all():
+        reports.append({
+            "type": "xray",
+            "item_label": r.item_label,
+            "region": r.region,
+            "projection": r.projection,
+            "vet_findings": r.vet_findings,
+            "findings": r.findings,
+            "conclusion": r.conclusion,
+            "advice": r.advice,
+        })
+    return reports
+
+
 def _care_summary_snapshot(db: Session, v: Visit, doctor_instruction: str = "") -> dict:
     cust = db.get(Customer, v.customer_id) if v.customer_id else None
     pet = db.get(Pet, v.pet_id) if v.pet_id else None
@@ -11079,6 +11114,7 @@ def _care_summary_snapshot(db: Session, v: Visit, doctor_instruction: str = "") 
         },
         "prescriptions": presc_rows,
         "exam_orders": exam_rows,
+        "specialty_reports": _care_specialty_reports_snapshot(db, v.id),
         "invoices": inv_rows,
         "doctor_instruction": doctor_instruction,
     }
@@ -11732,6 +11768,35 @@ async def admin_care_plan_confirm(
 async def page_admin_visit_edit_form(visit_id: int, request: Request, db: Session = Depends(get_db)):
     """B5.1 病历编辑（暂时复用老模板，B5.2 会 UK 重写）。"""
     return await page_admin_visit_detail(visit_id, request, db)
+
+
+@app.post("/admin/visits/{visit_id}/treatment-plan/ai")
+async def admin_visit_treatment_plan_ai(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    v = db.get(Visit, visit_id)
+    if not v:
+        return JSONResponse({"ok": False, "error": "就诊记录不存在"}, status_code=404)
+    _pet_for_store = db.get(Pet, v.pet_id) if v.pet_id else None
+    _assert_store_access(request, _pet_for_store.store if _pet_for_store else "")
+    if (v.status or "open") == "closed":
+        return JSONResponse({"ok": False, "error": "病历已结束，不可生成覆盖"}, status_code=403)
+
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    doctor_instruction = str(form.get("doctor_instruction", "") or "").strip()
+    payload = _care_summary_snapshot(db, v, doctor_instruction)
+    payload["visit"].update({
+        "chief_complaint": str(form.get("chief_complaint", "") or "").strip(),
+        "physical_exam": str(form.get("physical_exam", "") or "").strip(),
+        "diagnosis": str(form.get("diagnosis", "") or "").strip(),
+        "treatment_plan": str(form.get("treatment_plan", "") or "").strip(),
+        "notes": str(form.get("notes", "") or "").strip(),
+        "follow_up_note": str(form.get("follow_up_note", "") or "").strip(),
+        "follow_up_at": str(form.get("follow_up_at", "") or "").strip(),
+    })
+    from app.services.care_ai import draft_visit_treatment_plan
+    result = await draft_visit_treatment_plan(payload, doctor_instruction)
+    return JSONResponse(result, status_code=200 if result.get("ok") else 400)
 
 
 @app.post("/admin/visits/{visit_id}/edit")
