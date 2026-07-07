@@ -35,6 +35,9 @@
   .vs-tbl .name { color:var(--ink); font-weight:700; text-decoration:none; border-bottom:0.5px solid var(--hair-2); }
   .vs-tbl .dim { color:var(--ink-3); font-style:italic; font-size:9pt; }
   .vs-pill { display:inline-block; font-family:var(--font-serif); font-style:italic; font-size:9pt; padding:2px 10px; border:0.5px solid var(--ink-3); letter-spacing:1.5px; color:var(--ink); background:var(--bg); }
+  .vs-actions { display:flex; justify-content:flex-end; align-items:center; gap:8px; flex-wrap:wrap; }
+  .vs-follow { display:inline-flex; align-items:center; gap:6px; }
+  .vs-follow-time { color:var(--accent-green); font-family:var(--font-numeric); font-size:9pt; white-space:nowrap; }
   .vs-empty { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:11pt; padding:48px 20px; text-align:center; border:0.5px solid var(--hair-2); }
   .vs-pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:20px 0; font-family:var(--font-serif); font-size:10pt; }
   .vs-pager .info { color:var(--ink-3); font-style:italic; font-family:var(--font-numeric); }
@@ -88,7 +91,7 @@
       <th>宠物</th>
       <th>诊断</th>
       <th style="width:100px;">医生</th>
-      <th style="text-align:right; width:80px;">操作</th>
+      <th style="text-align:right; width:210px;">操作</th>
     </tr>
   </thead>
   <tbody>
@@ -107,7 +110,15 @@
       <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ v.diagnosis or '—' }}</td>
       <td class="dim">{{ v.vet_name or '—' }}</td>
       <td style="text-align:right;">
-        <a href="/admin/visits/{{ v.id }}?return_to=customer" class="vs-btn ghost sm">查&nbsp;看</a>
+        <div class="vs-actions">
+          <form method="post" action="/admin/visits/{{ v.id }}/followup-mark" class="vs-follow">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <input type="hidden" name="next_url" value="{{ current_url }}"/>
+            {% if v.follow_up_at %}<span class="vs-follow-time">已回访 {{ v.follow_up_at }}</span>{% endif %}
+            <button type="submit" class="vs-btn ghost sm">{{ '重&nbsp;记'|safe if v.follow_up_at else '回&nbsp;访'|safe }}</button>
+          </form>
+          <a href="/admin/visits/{{ v.id }}?return_to=customer" class="vs-btn ghost sm">查&nbsp;看</a>
+        </div>
       </td>
     </tr>
     {% endfor %}

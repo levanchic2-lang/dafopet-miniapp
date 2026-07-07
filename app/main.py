@@ -10746,6 +10746,8 @@ async def page_admin_visits(
         "total": total,
         "page": page,
         "page_size": page_size,
+        "current_url": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
+        "csrf_token": _get_csrf_token(request),
         "filters": {"q": q, "visit_type": visit_type, "vet": vet,
                     "date_from": date_from, "date_to": date_to},
     })
@@ -11835,6 +11837,35 @@ async def admin_visit_close(visit_id: int, request: Request,
            detail={"visit_id": v.id, "pet_id": v.pet_id, "customer_id": v.customer_id})
     db.commit()
     return _close_redirect("病历已结束")
+
+
+@app.post("/admin/visits/{visit_id}/followup-mark")
+async def admin_visit_followup_mark(visit_id: int, request: Request,
+                                    csrf_token: str = Form(""),
+                                    next_url: str = Form(""),
+                                    db: Session = Depends(get_db)):
+    """病例查询页轻量回访：员工微信回访后点一下，只记录回访时间。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    v = db.get(Visit, visit_id)
+    if not v:
+        raise HTTPException(404, "就诊记录不存在")
+    admin_store = _get_admin_store(request)
+    if admin_store and v.pet_id:
+        pet = db.get(Pet, v.pet_id)
+        if pet and pet.store and pet.store != admin_store:
+            raise HTTPException(403, "无权操作其他门店的就诊记录")
+    v.follow_up_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    db.commit()
+    _audit(db, request, "visit_followup_mark", detail={
+        "visit_id": v.id,
+        "pet_id": v.pet_id,
+        "customer_id": v.customer_id,
+        "follow_up_at": v.follow_up_at,
+    })
+    db.commit()
+    fb = f"/admin/visits/{visit_id}?msg=已记录回访时间"
+    return RedirectResponse(_safe_next(next_url, fb), status_code=303)
 
 
 @app.post("/admin/visits/{visit_id}/followup-toggle")
