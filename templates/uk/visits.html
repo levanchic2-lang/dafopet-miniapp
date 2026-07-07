@@ -28,6 +28,7 @@
   .vs-btn.sm { font-size:9pt; padding:4px 10px; letter-spacing:1.5px; }
 
   .vs-tbl { width:100%; border-collapse:collapse; font-family:var(--font-serif); border:0.5px solid var(--hair-2); }
+  .vs-tbl tr { scroll-margin-top: 180px; }
   .vs-tbl thead th { font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-weight:400; font-style:italic; border-bottom:0.5px solid var(--ink); padding:10px 12px; text-align:left; background:var(--paper); }
   .vs-tbl tbody td { font-size:10pt; color:var(--ink-2); border-bottom:0.5px solid var(--hair); padding:12px; vertical-align:middle; }
   .vs-tbl tbody td.num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums; color:var(--ink); }
@@ -96,7 +97,7 @@
   </thead>
   <tbody>
     {% for v in visits %}
-    <tr>
+    <tr id="visit-{{ v.id }}">
       <td class="num dim" style="white-space:nowrap;">{{ v.visit_date or '—' }}</td>
       <td><span class="vs-pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span></td>
       <td>
@@ -113,7 +114,7 @@
         <div class="vs-actions">
           <form method="post" action="/admin/visits/{{ v.id }}/followup-mark" class="vs-follow">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-            <input type="hidden" name="next_url" value="{{ current_url }}"/>
+            <input type="hidden" name="next_url" value="{{ current_url }}#visit-{{ v.id }}"/>
             {% if v.follow_up_at %}<span class="vs-follow-time">已回访 {{ v.follow_up_at }}</span>{% endif %}
             <button type="submit" class="vs-btn ghost sm">{{ '重&nbsp;记'|safe if v.follow_up_at else '回&nbsp;访'|safe }}</button>
           </form>
