@@ -1,0 +1,152 @@
+{% extends "uk/_base.html" %}
+{% block title %}个人业绩 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}
+.perf-kpis { display:grid; grid-template-columns:repeat(4, 1fr); border:0.5px solid var(--hair-2); margin-bottom:18px; background:var(--paper); }
+.perf-kpi { padding:16px 20px; border-right:0.5px solid var(--hair); }
+.perf-kpi:last-child { border-right:0; }
+.perf-kpi .lbl { color:var(--ink-3); font-size:9pt; font-style:italic; letter-spacing:2px; }
+.perf-kpi .val { margin-top:6px; color:var(--ink); font-family:var(--font-numeric); font-variant-numeric:tabular-nums; font-size:21pt; font-weight:700; line-height:1.15; }
+.perf-tabs { display:flex; gap:0; border-bottom:0.5px solid var(--hair); margin:16px 0 18px; }
+.perf-tab { padding:9px 20px; border-bottom:1px solid transparent; margin-bottom:-1px; color:var(--ink-3); text-decoration:none; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; }
+.perf-tab.active { color:var(--ink); border-bottom-color:var(--ink); font-weight:700; }
+.perf-filter { display:flex; gap:10px; align-items:end; border:0.5px solid var(--hair-2); background:var(--paper); padding:14px 18px; margin-bottom:18px; }
+.perf-filter label { display:block; color:var(--ink-3); font-size:8.5pt; font-style:italic; letter-spacing:1.5px; margin-bottom:5px; }
+.perf-filter input, .perf-filter select { border:0.5px solid var(--hair); background:var(--bg); color:var(--ink); padding:8px 10px; font-family:var(--font-serif); min-width:132px; }
+.perf-table { width:100%; border-collapse:collapse; background:var(--paper); border:0.5px solid var(--hair-2); }
+.perf-table th { padding:9px 10px; border-bottom:0.5px solid var(--ink); color:var(--ink-3); font-size:8.5pt; font-style:italic; font-weight:400; letter-spacing:1.5px; text-align:left; }
+.perf-table td { padding:11px 10px; border-bottom:0.5px solid var(--hair); color:var(--ink-2); font-size:10pt; vertical-align:top; }
+.perf-table td.amount, .perf-table th.amount { text-align:right; font-family:var(--font-numeric); font-variant-numeric:tabular-nums; }
+.perf-table td.amount { color:var(--ink); font-weight:700; }
+.perf-person { color:var(--ink); font-weight:700; letter-spacing:.5px; }
+.perf-detail { margin-top:8px; }
+.perf-detail summary { cursor:pointer; color:var(--ink-3); font-size:9pt; font-style:italic; }
+.perf-detail-table { width:100%; border-collapse:collapse; margin-top:8px; background:var(--bg); }
+.perf-detail-table td { padding:7px 8px; border-bottom:0.5px solid var(--hair); font-size:9pt; }
+.perf-detail-table a { color:var(--ink); text-decoration:none; border-bottom:0.5px solid var(--hair-2); }
+.perf-empty { border:0.5px solid var(--hair-2); background:var(--paper); color:var(--ink-3); padding:40px 20px; text-align:center; font-style:italic; }
+@media (max-width: 900px) {
+  .perf-kpis { grid-template-columns:repeat(2, 1fr); }
+  .perf-filter { flex-wrap:wrap; }
+  .perf-table { font-size:9pt; }
+}
+</style>
+
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin/reports/revenue">经营统计</a><span class="sep">/</span><span>个人业绩</span></div>
+
+<div class="ukc-head">
+  <div>
+    <h1 style="font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15;">
+      个&nbsp;人&nbsp;业&nbsp;绩
+      <span style="display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px;">{{ label }} · {{ store or '全部门店' }} · {{ tab_label }}</span>
+    </h1>
+  </div>
+  <div>
+    <a href="/admin/reports/revenue" class="uk-btn ghost sm">收款统计</a>
+  </div>
+</div>
+
+<hr class="ukc-rule-double"/>
+
+<form method="get" action="/admin/reports/performance" class="perf-filter">
+  <input type="hidden" name="tab" value="{{ tab }}"/>
+  <div>
+    <label>日期</label>
+    <select name="preset">
+      <option value="today" {% if preset == 'today' %}selected{% endif %}>今日</option>
+      <option value="yesterday" {% if preset == 'yesterday' %}selected{% endif %}>昨日</option>
+      <option value="week" {% if preset == 'week' %}selected{% endif %}>本周</option>
+      <option value="month" {% if preset == 'month' %}selected{% endif %}>本月</option>
+      <option value="last_month" {% if preset == 'last_month' %}selected{% endif %}>上月</option>
+      <option value="year" {% if preset == 'year' %}selected{% endif %}>本年</option>
+      <option value="custom" {% if preset == 'custom' %}selected{% endif %}>自定义</option>
+    </select>
+  </div>
+  <div>
+    <label>开始</label>
+    <input type="date" name="date_from" value="{{ df }}"/>
+  </div>
+  <div>
+    <label>结束</label>
+    <input type="date" name="date_to" value="{{ dt }}"/>
+  </div>
+  <div>
+    <label>门店</label>
+    <select name="store" {% if admin_store_short %}disabled{% endif %}>
+      {% if not admin_store_short %}<option value="" {% if not store %}selected{% endif %}>全部门店</option>{% endif %}
+      {% for s in store_options %}
+      <option value="{{ s }}" {% if store == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    {% if admin_store_short %}<input type="hidden" name="store" value="{{ admin_store_short }}"/>{% endif %}
+  </div>
+  <button class="uk-btn primary sm" type="submit">筛选</button>
+</form>
+
+<div class="perf-tabs">
+  {% for key, label in tab_labels.items() %}
+  <a class="perf-tab {% if tab == key %}active{% endif %}" href="{{ tab_urls[key] }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div class="perf-kpis">
+  <div class="perf-kpi"><div class="lbl">总业绩</div><div class="val">¥{{ '%.2f'|format(total_amount) }}</div></div>
+  <div class="perf-kpi"><div class="lbl">人数</div><div class="val">{{ total_people }}</div></div>
+  <div class="perf-kpi"><div class="lbl">单数</div><div class="val">{{ total_count }}</div></div>
+  <div class="perf-kpi"><div class="lbl">平均单价</div><div class="val">¥{{ '%.2f'|format(total_amount / total_count) if total_count else '0.00' }}</div></div>
+</div>
+
+{% if perf_rows %}
+<table class="perf-table">
+  <thead>
+    <tr>
+      <th>{{ tab_label }}</th>
+      <th class="amount">总业绩</th>
+      <th class="amount">单数</th>
+      <th class="amount">客单价</th>
+      {% for ck in category_keys %}
+      <th class="amount">{{ category_labels[ck] }}</th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in perf_rows %}
+    <tr>
+      <td>
+        <div class="perf-person">{{ row.name }}</div>
+        <details class="perf-detail">
+          <summary>明细 · {{ row.details|length }} 条</summary>
+          <table class="perf-detail-table">
+            <tbody>
+              {% for d in row.details %}
+              <tr>
+                <td style="white-space:nowrap;">{{ d.paid_at }}</td>
+                <td><a href="/admin/invoices/{{ d.invoice_id }}" target="_blank">{{ d.invoice_no }}</a></td>
+                <td>{{ d.customer }}{% if d.pet %} · {{ d.pet }}{% endif %}</td>
+                <td>{{ category_labels[d.category] }}</td>
+                <td>{{ d.source }}</td>
+                <td style="text-align:right;font-family:var(--font-numeric);font-weight:700;">¥{{ '%.2f'|format(d.amount) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </details>
+      </td>
+      <td class="amount">¥{{ '%.2f'|format(row.amount) }}</td>
+      <td class="amount">{{ row.count }}</td>
+      <td class="amount">¥{{ '%.2f'|format(row.avg) }}</td>
+      {% for ck in category_keys %}
+      <td class="amount">{% if row.categories[ck] %}¥{{ '%.2f'|format(row.categories[ck]) }}{% else %}—{% endif %}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="perf-empty">当前筛选下暂无个人业绩记录</div>
+{% endif %}
+
+<p style="margin:18px 0 0;color:var(--ink-3);font-size:9pt;font-style:italic;letter-spacing:1px;">
+  口径：收款员按成功收款流水归属；医生按病历/处方/检查/疫苗驱虫医生归属；美容师与助理按美容单人员归属。折扣按收费明细比例摊入各分类。
+</p>
+{% endblock %}

@@ -18659,6 +18659,307 @@ async def admin_reports_revenue(
     })
 
 
+@app.get("/admin/reports/performance", response_class=HTMLResponse)
+async def admin_reports_performance(
+    request: Request,
+    db: Session = Depends(get_db),
+    tab: str = Query("cashier"),
+    preset: str = Query("month"),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    store: str | None = Query(None),
+):
+    """个人业绩：把收款员、医生、美容师、助理分开看，避免把收钱和做业务混为一谈。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    if tab not in ("cashier", "doctor", "groomer", "assistant"):
+        tab = "cashier"
+
+    admin_store_short = _get_admin_store(request)
+    if admin_store_short:
+        store = admin_store_short
+    elif store is None:
+        # 超管默认看当前切换门店；没有切换时才看全部。
+        store = request.session.get("admin_store", "") or ""
+    else:
+        store = (store or "").strip()
+
+    df, dt, label = _revenue_date_range(preset, date_from, date_to)
+    _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
+    invoices = db.query(Invoice).filter(
+        Invoice.payment_status == "paid",
+        func.date(Invoice.paid_at, '+8 hours') >= df,
+        func.date(Invoice.paid_at, '+8 hours') <= dt,
+        ~Invoice.customer_id.in_(_internal_ids_sub),
+    ).order_by(Invoice.paid_at.desc(), Invoice.id.desc()).all()
+
+    inv_ids = [i.id for i in invoices]
+    pay_by_inv: dict[int, list[Payment]] = {}
+    if inv_ids:
+        for p in db.query(Payment).filter(
+            Payment.invoice_id.in_(inv_ids),
+            Payment.status == "success",
+        ).all():
+            pay_by_inv.setdefault(p.invoice_id, []).append(p)
+
+    cust_ids = {i.customer_id for i in invoices if i.customer_id}
+    pet_ids = {i.pet_id for i in invoices if i.pet_id}
+    visit_ids = {i.visit_id for i in invoices if i.visit_id}
+    cust_map = {c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
+    pet_map = {p.id: p for p in db.query(Pet).filter(Pet.id.in_(pet_ids)).all()} if pet_ids else {}
+    visit_map = {v.id: v for v in db.query(Visit).filter(Visit.id.in_(visit_ids)).all()} if visit_ids else {}
+
+    def _actual_store(inv: Invoice) -> str:
+        s = (inv.store or "").strip()
+        if s:
+            return s
+        pstores = {(p.store or "").strip() for p in pay_by_inv.get(inv.id, []) if (p.store or "").strip()}
+        if len(pstores) == 1:
+            return next(iter(pstores))
+        pet = pet_map.get(inv.pet_id)
+        return (pet.store if pet else "") or "未指定"
+
+    if store:
+        invoices = [i for i in invoices if _actual_store(i) == store]
+        inv_ids = [i.id for i in invoices]
+
+    invoice_items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id.in_(inv_ids)).all() if inv_ids else []
+    items_by_inv: dict[int, list[InvoiceItem]] = {}
+    for it in invoice_items:
+        items_by_inv.setdefault(it.invoice_id, []).append(it)
+
+    ref_ids: dict[str, set[int]] = {}
+    for it in invoice_items:
+        if it.ref_id:
+            ref_ids.setdefault((it.ref_type or "").strip(), set()).add(int(it.ref_id))
+
+    presc_map = {r.id: r for r in db.query(Prescription).filter(Prescription.id.in_(ref_ids.get("prescription", set()))).all()} if ref_ids.get("prescription") else {}
+    exam_map = {r.id: r for r in db.query(ExamOrder).filter(ExamOrder.id.in_(ref_ids.get("exam_order", set()))).all()} if ref_ids.get("exam_order") else {}
+    sales_map = {r.id: r for r in db.query(SalesOrder).filter(SalesOrder.id.in_(ref_ids.get("sales_order", set()))).all()} if ref_ids.get("sales_order") else {}
+    vacc_map = {r.id: r for r in db.query(Vaccination).filter(Vaccination.id.in_(ref_ids.get("vaccination", set()))).all()} if ref_ids.get("vaccination") else {}
+    deworm_map = {r.id: r for r in db.query(DewormingRecord).filter(DewormingRecord.id.in_(ref_ids.get("deworming", set()))).all()} if ref_ids.get("deworming") else {}
+    groom_map = {r.id: r for r in db.query(GroomingOrder).filter(GroomingOrder.id.in_(ref_ids.get("grooming", set()))).all()} if ref_ids.get("grooming") else {}
+
+    # 检查单没有单独医生字段，回到它关联的病历医生。
+    exam_visit_ids = {e.visit_id for e in exam_map.values() if e.visit_id and e.visit_id not in visit_map}
+    if exam_visit_ids:
+        for v in db.query(Visit).filter(Visit.id.in_(exam_visit_ids)).all():
+            visit_map[v.id] = v
+    sales_visit_ids = {s.visit_id for s in sales_map.values() if s.visit_id and s.visit_id not in visit_map}
+    if sales_visit_ids:
+        for v in db.query(Visit).filter(Visit.id.in_(sales_visit_ids)).all():
+            visit_map[v.id] = v
+
+    category_keys = ["prescription", "exam", "sales", "grooming", "vaccine_deworm", "other"]
+    category_labels = {
+        "prescription": "处方",
+        "exam": "检查",
+        "sales": "销售",
+        "grooming": "美容",
+        "vaccine_deworm": "疫苗驱虫",
+        "other": "其他",
+    }
+    tab_labels = {
+        "cashier": "收款员",
+        "doctor": "医生",
+        "groomer": "美容师",
+        "assistant": "助理",
+    }
+    method_labels = _REVENUE_PAY_ZH
+
+    def _cat(ref_type: str) -> str:
+        rt = (ref_type or "").strip()
+        if rt == "prescription":
+            return "prescription"
+        if rt == "exam_order":
+            return "exam"
+        if rt == "sales_order":
+            return "sales"
+        if rt == "grooming":
+            return "grooming"
+        if rt in ("vaccination", "deworming"):
+            return "vaccine_deworm"
+        return "other"
+
+    def _invoice_net_items(inv: Invoice) -> list[dict]:
+        its = items_by_inv.get(inv.id, [])
+        gross = sum(float(it.subtotal or 0) for it in its)
+        ratio = (float(inv.total_amount or 0) / gross) if gross > 0 else 1.0
+        out = []
+        for it in its:
+            amount = round(float(it.subtotal or 0) * ratio, 2)
+            if abs(amount) <= 0.005:
+                continue
+            out.append({
+                "item": it,
+                "category": _cat(it.ref_type),
+                "amount": amount,
+                "source": it.description or category_labels.get(_cat(it.ref_type), "收费明细"),
+            })
+        if not out and (inv.total_amount or 0) > 0:
+            out.append({
+                "item": None,
+                "category": "other",
+                "amount": float(inv.total_amount or 0),
+                "source": inv.notes or "收费单",
+            })
+        return out
+
+    def _blank_person(name: str) -> dict:
+        return {
+            "name": name,
+            "amount": 0.0,
+            "invoice_ids": set(),
+            "categories": {k: 0.0 for k in category_keys},
+            "details": {},
+        }
+
+    perf: dict[str, dict] = {}
+
+    def _add(name: str, inv: Invoice, category: str, amount: float, source: str) -> None:
+        name = (name or "").strip() or "未指定"
+        amount = round(float(amount or 0), 2)
+        if abs(amount) <= 0.005:
+            return
+        row = perf.setdefault(name, _blank_person(name))
+        row["amount"] += amount
+        row["categories"][category] = row["categories"].get(category, 0.0) + amount
+        row["invoice_ids"].add(inv.id)
+        dkey = (inv.id, category, source)
+        if dkey not in row["details"]:
+            cust = cust_map.get(inv.customer_id)
+            pet = pet_map.get(inv.pet_id)
+            row["details"][dkey] = {
+                "invoice_id": inv.id,
+                "invoice_no": inv.invoice_no or str(inv.id),
+                "paid_at": (inv.paid_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if inv.paid_at else (inv.invoice_date or ""),
+                "customer": cust.name if cust else "未指定",
+                "pet": pet.name if pet else "",
+                "store": _actual_store(inv),
+                "category": category,
+                "source": source,
+                "amount": 0.0,
+            }
+        row["details"][dkey]["amount"] += amount
+
+    def _visit_for_invoice(inv: Invoice):
+        return visit_map.get(inv.visit_id) if inv.visit_id else None
+
+    def _doctor_for_item(inv: Invoice, it: InvoiceItem | None) -> str:
+        visit = _visit_for_invoice(inv)
+        rt = (it.ref_type or "").strip() if it else ""
+        rid = int(it.ref_id or 0) if it and it.ref_id else 0
+        if rt == "prescription":
+            p = presc_map.get(rid)
+            return (p.vet_name if p else "") or (visit.vet_name if visit else "") or (p.created_by if p else "")
+        if rt == "exam_order":
+            eo = exam_map.get(rid)
+            ev = visit_map.get(eo.visit_id) if eo else None
+            return (ev.vet_name if ev else "") or (visit.vet_name if visit else "") or (eo.created_by if eo else "")
+        if rt == "vaccination":
+            v = vacc_map.get(rid)
+            return (v.vet_name if v else "") or (v.created_by if v else "")
+        if rt == "deworming":
+            d = deworm_map.get(rid)
+            return (d.vet_name if d else "") or (d.created_by if d else "")
+        if rt == "sales_order":
+            so = sales_map.get(rid)
+            sv = visit_map.get(so.visit_id) if so and so.visit_id else visit
+            return (sv.vet_name if sv else "")
+        return (visit.vet_name if visit else "") or (inv.created_by or "")
+
+    for inv in invoices:
+        net_items = _invoice_net_items(inv)
+        if tab == "cashier":
+            pays = pay_by_inv.get(inv.id, [])
+            paid_sum = sum(float(p.amount or 0) for p in pays)
+            if paid_sum <= 0:
+                continue
+            cat_amounts: dict[str, float] = {}
+            for ni in net_items:
+                cat_amounts[ni["category"]] = cat_amounts.get(ni["category"], 0.0) + float(ni["amount"] or 0)
+            for p in pays:
+                share = float(p.amount or 0) / paid_sum if paid_sum > 0 else 0
+                source = method_labels.get(p.method or "", p.method or "收款")
+                for ck, camt in cat_amounts.items():
+                    _add(p.operator or "未指定", inv, ck, camt * share, source)
+        elif tab == "doctor":
+            for ni in net_items:
+                it = ni["item"]
+                person = _doctor_for_item(inv, it)
+                if person:
+                    _add(person, inv, ni["category"], ni["amount"], ni["source"])
+        elif tab == "groomer":
+            for ni in net_items:
+                it = ni["item"]
+                if not it or (it.ref_type or "") != "grooming" or not it.ref_id:
+                    continue
+                g = groom_map.get(int(it.ref_id))
+                if g and (g.groomer_name or "").strip():
+                    _add(g.groomer_name, inv, "grooming", ni["amount"], ni["source"])
+        elif tab == "assistant":
+            for ni in net_items:
+                it = ni["item"]
+                if not it or not it.ref_id:
+                    continue
+                rt = (it.ref_type or "").strip()
+                if rt == "grooming":
+                    g = groom_map.get(int(it.ref_id))
+                    if g and (g.assistant_name or "").strip():
+                        _add(g.assistant_name, inv, "grooming", ni["amount"], ni["source"])
+                elif rt == "prescription":
+                    p = presc_map.get(int(it.ref_id))
+                    if p and (p.dispensed_by or "").strip():
+                        _add(p.dispensed_by, inv, "prescription", ni["amount"], ni["source"])
+
+    perf_rows = []
+    for row in perf.values():
+        amount = round(row["amount"], 2)
+        count = len(row["invoice_ids"])
+        details = list(row["details"].values())
+        details.sort(key=lambda d: (d["paid_at"], d["invoice_id"]), reverse=True)
+        perf_rows.append({
+            "name": row["name"],
+            "amount": amount,
+            "count": count,
+            "avg": round(amount / count, 2) if count else 0.0,
+            "categories": {k: round(row["categories"].get(k, 0.0), 2) for k in category_keys},
+            "details": details,
+        })
+    perf_rows.sort(key=lambda r: -r["amount"])
+
+    total_amount = round(sum(r["amount"] for r in perf_rows), 2)
+    total_count = sum(r["count"] for r in perf_rows)
+    from urllib.parse import urlencode
+    base_params = {"preset": preset, "date_from": date_from, "date_to": date_to, "store": store or ""}
+    tab_urls = {}
+    for t in ("cashier", "doctor", "groomer", "assistant"):
+        p = dict(base_params)
+        p["tab"] = t
+        tab_urls[t] = "/admin/reports/performance?" + urlencode(p)
+
+    return templates.TemplateResponse(request, "uk/reports_performance.html", {
+        "label": label,
+        "df": df,
+        "dt": dt,
+        "preset": preset,
+        "store": store or "",
+        "tab": tab,
+        "tab_label": tab_labels[tab],
+        "tab_labels": tab_labels,
+        "tab_urls": tab_urls,
+        "category_keys": category_keys,
+        "category_labels": category_labels,
+        "perf_rows": perf_rows,
+        "total_amount": total_amount,
+        "total_count": total_count,
+        "total_people": len(perf_rows),
+        "is_superadmin": (request.session.get("admin_role") == "superadmin"),
+        "store_options": _STORE_OPTIONS if not admin_store_short else [admin_store_short],
+        "admin_store_short": admin_store_short,
+    })
+
+
 @app.get("/admin/reports/revenue/export")
 async def admin_reports_revenue_export(
     request: Request,
