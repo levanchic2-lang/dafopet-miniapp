@@ -1632,14 +1632,27 @@ def _check_duplicate_application_appointment(
     related_application_id: int | None,
     exclude_id: int | None = None,
 ) -> str | None:
-    """检查同一 TNR 申请编号是否已有有效预约（非取消/爽约）。重复则返回错误字符串，否则返回 None。"""
+    """检查同一 TNR 申请编号是否已有有效预约。
+
+    有效预约仅指今天或未来仍未结束的预约。历史 pending 记录可能来自客户未到店、
+    员工漏取消/漏完成，不应长期阻止客户重新预约。
+    """
     if not related_application_id:
         return None
+    today_str = datetime.now().date().isoformat()
     q = (
         db.query(Appointment)
         .filter(
             Appointment.related_application_id == related_application_id,
-            Appointment.status.notin_([AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value]),
+            Appointment.status.notin_([
+                AppointmentStatus.cancelled.value,
+                AppointmentStatus.no_show.value,
+                AppointmentStatus.completed.value,
+            ]),
+            or_(
+                Appointment.appointment_date == "",
+                Appointment.appointment_date >= today_str,
+            ),
         )
     )
     if exclude_id is not None:
