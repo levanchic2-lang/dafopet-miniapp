@@ -3128,7 +3128,7 @@ async def page_admin_appointments(
     db: Session = Depends(get_db),
     df: str = Query(""),        # date_from  YYYY-MM-DD
     dt: str = Query(""),        # date_to    YYYY-MM-DD
-    preset: str = Query("today"),  # today / 3days / week / month / custom
+    preset: str = Query("today"),  # today / 3days / week / month / expired / custom
     appt_status: str = Query(""),
     appt_store: str = Query(""),
     appt_category: str = Query(""),
@@ -3156,6 +3156,9 @@ async def page_admin_appointments(
         df_d = today.replace(day=1)
         last_day = _calendar.monthrange(today.year, today.month)[1]
         dt_d = today.replace(day=last_day)
+    elif _preset == "expired":
+        df_d = datetime.strptime("2000-01-01", "%Y-%m-%d").date()
+        dt_d = today - timedelta(days=1)
     elif _preset == "custom":
         try:
             df_d = datetime.strptime(df, "%Y-%m-%d").date() if df else today
@@ -3183,7 +3186,12 @@ async def page_admin_appointments(
             Appointment.appointment_date <= dt_str,
         )
     )
-    if appt_status:
+    if _preset == "expired":
+        q = q.filter(Appointment.status.in_([
+            AppointmentStatus.pending.value,
+            AppointmentStatus.confirmed.value,
+        ]))
+    elif appt_status:
         q = q.filter(Appointment.status == appt_status)
     if appt_store:
         q = q.filter(Appointment.store == appt_store)
@@ -3200,9 +3208,14 @@ async def page_admin_appointments(
         if _appt_full_store:
             q = q.filter(Appointment.store == _appt_full_store)
 
-    appointments_raw = q.order_by(
-        Appointment.appointment_date, Appointment.appointment_time
-    ).all()
+    if _preset == "expired":
+        appointments_raw = q.order_by(
+            Appointment.appointment_date.desc(), Appointment.appointment_time.desc()
+        ).all()
+    else:
+        appointments_raw = q.order_by(
+            Appointment.appointment_date, Appointment.appointment_time
+        ).all()
 
     # ── 按日期→部门→时段分组 ──────────────────────────────────
     _SLOT_ORDER = ["morning", "afternoon", "evening", "other"]
@@ -3278,14 +3291,28 @@ async def page_admin_appointments(
         })
 
     # ── 顶部统计（始终基于今日全量，不受筛选影响） ────────────
-    _today_appts = (
-        db.query(Appointment)
-        .filter(
-            Appointment.appointment_date == today_str,
-            Appointment.status.notin_(list(_inactive)),
-        )
-        .all()
+    _today_q = db.query(Appointment).filter(
+        Appointment.appointment_date == today_str,
+        Appointment.status.notin_(list(_inactive)),
     )
+    _pending_q = db.query(Appointment).filter(
+        Appointment.status == AppointmentStatus.pending.value,
+        Appointment.appointment_date >= today_str,
+    )
+    _expired_q = db.query(Appointment).filter(
+        Appointment.appointment_date < today_str,
+        Appointment.status.in_([
+            AppointmentStatus.pending.value,
+            AppointmentStatus.confirmed.value,
+        ]),
+    )
+    if _appt_admin_store:
+        _appt_full_store = _STORE_SHORT_TO_FULL.get(_appt_admin_store, "")
+        if _appt_full_store:
+            _today_q = _today_q.filter(Appointment.store == _appt_full_store)
+            _pending_q = _pending_q.filter(Appointment.store == _appt_full_store)
+            _expired_q = _expired_q.filter(Appointment.store == _appt_full_store)
+    _today_appts = _today_q.all()
     # TNR 月度配额状态
     _this_month = today_str[:7]
     _tnr_quota_status = []
@@ -3302,11 +3329,8 @@ async def page_admin_appointments(
         })
     stats = {
         "today_active":  len(_today_appts),
-        "pending_total": db.query(Appointment)
-            .filter(
-                Appointment.status == AppointmentStatus.pending.value,
-                Appointment.appointment_date >= today_str,
-            ).count(),
+        "pending_total": _pending_q.count(),
+        "expired_unhandled": _expired_q.count(),
         "tnr_today":     sum(1 for a in _today_appts if a.category == AppointmentCategory.tnr.value),
         "tnr_daily_max": _TNR_DAILY_MAX,
         "tnr_quota_status": _tnr_quota_status,

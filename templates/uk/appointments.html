@@ -90,9 +90,9 @@
     margin-top: 12px; letter-spacing: 0.5px; line-height: 1.6;
   }
 
-  /* 统计 3 联 */
+  /* 统计 */
   .stats-bar {
-    display: grid; grid-template-columns: repeat(3, 1fr);
+    display: grid; grid-template-columns: repeat(4, 1fr);
     gap: 16px; margin-bottom: 24px;
   }
   .stat-cell {
@@ -550,6 +550,11 @@
     <div class="stat-value" style="{% if stats.pending_total > 0 %}color:var(--accent-amber);{% endif %}">{{ stats.pending_total | default(0) }}</div>
     <div class="stat-sub">{% if stats.pending_total > 0 %}点击查看 →{% else %}今日及未来全部{% endif %}</div>
   </a>
+  <a class="stat-cell" href="?preset=expired">
+    <div class="stat-label">过&nbsp;期&nbsp;未&nbsp;处&nbsp;理</div>
+    <div class="stat-value" style="{% if stats.expired_unhandled > 0 %}color:var(--accent-red);{% endif %}">{{ stats.expired_unhandled | default(0) }}</div>
+    <div class="stat-sub">{% if stats.expired_unhandled > 0 %}点击处理历史 pending / confirmed{% else %}暂无残留{% endif %}</div>
+  </a>
   <div class="stat-cell">
     <div class="stat-label">今&nbsp;日&nbsp;TNR&nbsp;手&nbsp;术</div>
     <div class="stat-value">{{ stats.tnr_today | default(0) }}<span> / {{ stats.tnr_daily_max | default(2) }}</span></div>
@@ -565,6 +570,7 @@
       <button type="button" class="preset-btn {% if filters.preset == '3days' %}active{% endif %}" data-preset="3days">未来三日</button>
       <button type="button" class="preset-btn {% if filters.preset == 'week' %}active{% endif %}" data-preset="week">本周</button>
       <button type="button" class="preset-btn {% if filters.preset == 'month' %}active{% endif %}" data-preset="month">本月</button>
+      <button type="button" class="preset-btn {% if filters.preset == 'expired' %}active{% endif %}" data-preset="expired">过期未处理</button>
       <button type="button" class="preset-btn {% if filters.preset == 'custom' %}active{% endif %}" data-preset="custom">自定义</button>
     </div>
     <input type="hidden" name="preset" id="input-preset" value="{{ filters.preset | default('today') }}"/>
@@ -645,8 +651,9 @@
 
     <strong>申请编号去重</strong>
     <ul>
-      <li>同一 TNR 申请编号只能存在一个有效预约（状态非取消/爽约）</li>
-      <li>需先取消原预约才能为同一申请重新预约</li>
+      <li>同一 TNR 申请编号只能存在一个有效预约（今天或未来，且状态非取消/爽约/完成）</li>
+      <li>历史过期的待确认/已确认预约会进入「过期未处理」，不再阻止客户重新预约</li>
+      <li>当前有效预约需先取消，才能为同一申请重新预约</li>
     </ul>
 
     <strong>改约规则</strong>
