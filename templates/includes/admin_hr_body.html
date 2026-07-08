@@ -39,6 +39,7 @@
  <th>手机</th>
  <th>入职日期</th>
  <th>状态</th>
+ <th>账号</th>
  <th style="text-align:right;">操作</th>
  </tr>
  </thead>
@@ -54,12 +55,19 @@
  {% if s.status == 'probation' %}<span class="pill pill-warn">试用中</span>
  {% else %}<span class="pill pill-ok"><i data-lucide="check"></i> 在职</span>{% endif %}
  </td>
+ <td data-label="账号">
+ {% if s.admin_user %}
+   <span class="pill {% if s.admin_user.is_active %}pill-info{% else %}pill-gray{% endif %}">{{ s.admin_user.username }}</span>
+ {% else %}
+   <span style="color:var(--muted);font-size:0.82rem;">未建账号</span>
+ {% endif %}
+ </td>
  <td class="actions" style="text-align:right;">
  <a href="/admin/staff/{{ s.id }}" class="btn secondary" style="font-size:0.78rem;padding:0.25rem 0.65rem;">查看 <i data-lucide="arrow-right"></i></a>
  </td>
  </tr>
  {% else %}
- <tr><td colspan="7" style="padding:1.5rem;color:var(--muted);text-align:center;">暂无在职员工</td></tr>
+ <tr><td colspan="8" style="padding:1.5rem;color:var(--muted);text-align:center;">暂无在职员工</td></tr>
  {% endfor %}
  </tbody>
  </table>
@@ -91,15 +99,15 @@
 </details>
 {% endif %}
 
-<!-- ── 账号管理 ── -->
+<!-- ── 独立账号 ── -->
 {% if request.session.get('admin_role') == 'superadmin' or not request.session.get('admin_role') %}
 <div class="card" style="max-width:none;width:100%;overflow-x:auto;">
  <div style="margin-bottom:1rem;">
- <h2 style="margin:0;font-size:1.05rem;">账号管理</h2>
- <p class="sub" style="margin:0.2rem 0 0;">管理后台登录账号，仅超级管理员可操作。</p>
+ <h2 style="margin:0;font-size:1.05rem;">独立账号</h2>
+ <p class="sub" style="margin:0.2rem 0 0;">员工账号请进入对应员工档案维护；这里仅保留未关联员工的临时账号、技术账号或历史账号。</p>
  </div>
 
- <h3 style="font-size:0.9rem;font-weight:700;margin:0 0 0.5rem;">启用中（{{ active_users|length }}）</h3>
+ <h3 style="font-size:0.9rem;font-weight:700;margin:0 0 0.5rem;">启用中（{{ orphan_active_users|length }}）</h3>
  <table class="acct-table" style="width:100%;border-collapse:collapse;font-size:0.9rem;min-width:1080px;table-layout:auto;">
  <thead>
  <tr style="border-bottom:2px solid var(--border);">
@@ -117,7 +125,7 @@
    .acct-table select { min-width: 96px; }
  </style>
  <tbody>
- {% for u in active_users %}
+ {% for u in orphan_active_users %}
  <tr style="border-bottom:1px solid var(--border);vertical-align:middle;">
  <td style="padding:0.55rem 0.75rem;white-space:nowrap;">
  {{ u.username }}
@@ -201,19 +209,19 @@
  </td>
  </tr>
  {% else %}
- <tr><td colspan="8" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">暂无启用账号</td></tr>
+ <tr><td colspan="7" style="padding:1rem 0.75rem;color:var(--muted);text-align:center;">暂无未关联员工的启用账号</td></tr>
  {% endfor %}
  </tbody>
  </table>
 
- {% if inactive_users %}
+ {% if orphan_inactive_users %}
  <details style="margin-top:1.2rem;">
  <summary style="cursor:pointer;font-size:0.9rem;font-weight:600;color:var(--muted);user-select:none;">
- 已停用账号（{{ inactive_users|length }}）▸ 点击展开
+ 已停用独立账号（{{ orphan_inactive_users|length }}）▸ 点击展开
  </summary>
  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;margin-top:0.6rem;opacity:0.65;">
  <tbody>
- {% for u in inactive_users %}
+ {% for u in orphan_inactive_users %}
  <tr style="border-bottom:1px solid var(--border);">
  <td style="padding:0.5rem 0.75rem;">{{ u.username }}</td>
  <td style="padding:0.5rem 0.75rem;">{% if u.role == 'superadmin' %}<span class="pill pill-purple">超级管理员</span>{% else %}<span class="pill pill-info">员工</span>{% endif %}</td>
@@ -232,9 +240,9 @@
  </details>
  {% endif %}
 
- <!-- 新建账号 -->
+ <!-- 新建独立账号 -->
  <details style="margin-top:1.25rem;">
- <summary style="cursor:pointer;font-size:0.9rem;font-weight:600;color:var(--text);user-select:none;"><i data-lucide="plus"></i> 新建账号</summary>
+ <summary style="cursor:pointer;font-size:0.9rem;font-weight:600;color:var(--text);user-select:none;"><i data-lucide="plus"></i> 新建独立账号</summary>
  <form method="post" action="/admin/users/create" style="margin-top:0.75rem;max-width:560px;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div class="row2" style="margin-top:0.6rem;">
@@ -265,7 +273,7 @@
  </div>
  </div>
  <p class="sub" style="margin:0.4rem 0 0;font-size:0.8rem;color:var(--muted);"><i data-lucide="alert-triangle"></i> 非超级管理员若设置了所属门店，登录后只能看到该门店的数据。</p>
- <button type="submit" style="margin-top:1rem;">创建账号</button>
+ <button type="submit" style="margin-top:1rem;">创建独立账号</button>
  </form>
  </details>
 </div>

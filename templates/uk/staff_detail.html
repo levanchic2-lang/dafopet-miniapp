@@ -180,7 +180,7 @@
     display: block; font-family: var(--font-serif); font-size: 9pt;
     letter-spacing: 2.5px; color: var(--ink-3); font-style: italic; margin-bottom: 6px;
   }
-  .sd-add-form input[type=text], .sd-add-form input[type=date],
+  .sd-add-form input[type=text], .sd-add-form input[type=password], .sd-add-form input[type=date],
   .sd-add-form input[type=file], .sd-add-form select {
     width: 100%; box-sizing: border-box;
     font-family: var(--font-serif); font-size: 10.5pt;
@@ -278,12 +278,6 @@
       <div class="sd-field-value">{{ staff.resign_reason or '—' }}</div>
     </div>
     {% endif %}
-    {% if staff.admin_user %}
-    <div>
-      <div class="sd-field-label">关&nbsp;联&nbsp;账&nbsp;号</div>
-      <div class="sd-field-value">{{ staff.admin_user.username }}</div>
-    </div>
-    {% endif %}
   </div>
 
   {% if staff.emergency_contact_name or staff.emergency_contact_phone %}
@@ -302,6 +296,178 @@
   </div>
   {% endif %}
 </div>
+
+{# ── 登录账号 ── #}
+{% if is_superadmin %}
+<div class="sd-section">
+  <div class="sd-section-head">
+    <h2>登&nbsp;录&nbsp;账&nbsp;号</h2>
+    {% if staff.admin_user %}
+      <span class="sd-pill {% if staff.admin_user.is_active %}ok{% else %}gray{% endif %}">
+        {{ '启用中' if staff.admin_user.is_active else '已停用' }}
+      </span>
+    {% endif %}
+  </div>
+
+  {% if staff.admin_user %}
+  {% set u = staff.admin_user %}
+  <div class="sd-add-form">
+    <form method="post" action="/admin/staff/{{ staff.id }}/account/save">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div class="row">
+        <div>
+          <label>登录用户名</label>
+          <input type="text" value="{{ u.username }}" disabled/>
+        </div>
+        <div>
+          <label>显示名</label>
+          <input type="text" name="display_name" value="{{ u.display_name or staff.name }}" maxlength="80"/>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>账号角色</label>
+          <select name="role" {% if u.username == current_username %}disabled{% endif %}>
+            <option value="staff" {% if u.role == 'staff' %}selected{% endif %}>员工</option>
+            <option value="superadmin" {% if u.role == 'superadmin' %}selected{% endif %}>超级管理员</option>
+          </select>
+          {% if u.username == current_username %}
+          <input type="hidden" name="role" value="{{ u.role }}"/>
+          {% endif %}
+        </div>
+        <div>
+          <label>账号门店</label>
+          <select name="store">
+            <option value="" {% if not u.store %}selected{% endif %}>不限门店</option>
+            {% for opt in store_options %}
+            <option value="{{ opt }}" {% if u.store == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>手机端身份</label>
+          <select name="mobile_role">
+            <option value="auto" {% if not u.mobile_role or u.mobile_role == 'auto' %}selected{% endif %}>自动</option>
+            <option value="doctor" {% if u.mobile_role == 'doctor' %}selected{% endif %}>医生</option>
+            <option value="nurse" {% if u.mobile_role == 'nurse' %}selected{% endif %}>助理</option>
+            <option value="groomer" {% if u.mobile_role == 'groomer' %}selected{% endif %}>美容师</option>
+          </select>
+        </div>
+        <div>
+          <label>企业微信 userid</label>
+          <input type="text" name="wecom_userid" value="{{ u.wecom_userid or '' }}" maxlength="80" placeholder="企业微信通讯录里的账号字段"/>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>账号状态</label>
+          <select name="is_active" {% if u.username == current_username %}disabled{% endif %}>
+            <option value="1" {% if u.is_active %}selected{% endif %}>启用</option>
+            <option value="0" {% if not u.is_active %}selected{% endif %}>停用</option>
+          </select>
+          {% if u.username == current_username %}
+          <input type="hidden" name="is_active" value="1"/>
+          {% endif %}
+        </div>
+        <div>
+          <label>重置密码（不填则不改）</label>
+          <input type="password" name="new_password" minlength="6" autocomplete="new-password" placeholder="至少 6 位"/>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="submit">保&nbsp;存&nbsp;账&nbsp;号</button>
+        <a href="/admin/users/{{ u.id }}/notify-prefs" class="sd-btn-back">通&nbsp;知&nbsp;偏&nbsp;好</a>
+      </div>
+    </form>
+
+    <form method="post" action="/admin/staff/{{ staff.id }}/account/unlink" style="margin-top:12px;"
+          onsubmit="return confirm('只解除员工档案与账号的关联，不会删除账号。确定继续？')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="sd-btn-del">解&nbsp;除&nbsp;关&nbsp;联</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="sd-add-form">
+    <form method="post" action="/admin/staff/{{ staff.id }}/account/create">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div class="row">
+        <div>
+          <label>登录用户名</label>
+          <input type="text" name="username" value="{{ staff.name }}" required autocomplete="off"/>
+        </div>
+        <div>
+          <label>初始密码</label>
+          <input type="password" name="password" required minlength="6" autocomplete="new-password"/>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>账号角色</label>
+          <select name="role">
+            <option value="staff" selected>员工</option>
+            <option value="superadmin">超级管理员</option>
+          </select>
+        </div>
+        <div>
+          <label>账号门店</label>
+          <select name="store">
+            <option value="" {% if not staff.store %}selected{% endif %}>不限门店</option>
+            {% for opt in store_options %}
+            <option value="{{ opt }}" {% if staff.store == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>显示名</label>
+          <input type="text" name="display_name" value="{{ staff.name }}" maxlength="80"/>
+        </div>
+        <div>
+          <label>手机端身份</label>
+          <select name="mobile_role">
+            <option value="auto" selected>自动</option>
+            <option value="doctor">医生</option>
+            <option value="nurse">助理</option>
+            <option value="groomer">美容师</option>
+          </select>
+        </div>
+      </div>
+      <div class="row full">
+        <div>
+          <label>企业微信 userid（可选）</label>
+          <input type="text" name="wecom_userid" maxlength="80" placeholder="企业微信通讯录里的账号字段"/>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="submit">创&nbsp;建&nbsp;并&nbsp;关&nbsp;联</button>
+      </div>
+    </form>
+
+    {% if unlinked_users %}
+    <form method="post" action="/admin/staff/{{ staff.id }}/account/link" style="margin-top:18px;padding-top:14px;border-top:0.5px solid var(--hair);">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div class="row">
+        <div>
+          <label>绑定已有独立账号</label>
+          <select name="user_id">
+            {% for u in unlinked_users %}
+            <option value="{{ u.id }}">{{ u.username }}{% if u.store %} · {{ u.store }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button type="submit">关&nbsp;联&nbsp;账&nbsp;号</button>
+        </div>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 
 {# ── 合同记录 ── #}
 <div class="sd-section">

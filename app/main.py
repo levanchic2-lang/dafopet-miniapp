@@ -3912,12 +3912,15 @@ async def admin_hr_page(
     resigned_staff = _staff_q.filter(Staff.status == StaffStatus.resigned.value).order_by(Staff.resign_date.desc()).all()
     expiring = _expiring_contracts(db)
     all_users = db.query(AdminUser).order_by(AdminUser.created_at).all()
+    orphan_users = [u for u in all_users if not getattr(u, "staff_profile", None)]
     return templates.TemplateResponse(request, "uk/admin_hr.html", {  # B10 UK 重写
         "request": request, "title": "人事管理",
         "active_staff": active_staff, "resigned_staff": resigned_staff,
         "expiring": expiring,
         "active_users": [u for u in all_users if u.is_active],
         "inactive_users": [u for u in all_users if not u.is_active],
+        "orphan_active_users": [u for u in orphan_users if u.is_active],
+        "orphan_inactive_users": [u for u in orphan_users if not u.is_active],
         "current_username": request.session.get("admin_username", ""),
         "csrf_token": _get_csrf_token(request),
         "msg": msg, "err": err,
@@ -4742,7 +4745,7 @@ async def admin_users_set_store(
 
 _STAFF_STATUS_ZH = {"probation": "试用中", "active": "在职", "resigned": "离职"}
 _CONTRACT_TYPE_ZH = {"formal": "正式合同", "probation": "试用期合同", "parttime": "兼职合同", "labor": "劳务合同"}
-_POSITION_OPTIONS = ["前台", "医生", "美容师", "助理", "收银", "其他"]
+_POSITION_OPTIONS = ["前台", "医生", "美容师", "助理", "收银", "合伙人", "其他"]
 _STORE_OPTIONS = ["东环店", "横岗店"]
 
 
@@ -4817,6 +4820,13 @@ async def admin_staff_detail(
     if not staff:
         raise HTTPException(404)
     contracts = db.query(Contract).filter(Contract.staff_id == staff_id).order_by(Contract.start_date.desc()).all()
+    unlinked_users = (
+        db.query(AdminUser)
+        .filter(AdminUser.is_active == True)
+        .order_by(AdminUser.username)
+        .all()
+    )
+    unlinked_users = [u for u in unlinked_users if not getattr(u, "staff_profile", None)]
     from datetime import date, timedelta
     today = date.today().isoformat()
     expiry_30 = (date.today() + timedelta(days=30)).isoformat()
@@ -4826,8 +4836,171 @@ async def admin_staff_detail(
         "status_zh": _STAFF_STATUS_ZH, "contract_type_zh": _CONTRACT_TYPE_ZH,
         "csrf_token": _get_csrf_token(request), "msg": msg, "err": err,
         "is_superadmin": _is_superadmin(request),
+        "unlinked_users": unlinked_users,
+        "store_options": _STORE_OPTIONS,
+        "current_username": request.session.get("admin_username", ""),
         "now_date": today, "expiry_30": expiry_30,
     })
+
+
+@app.post("/admin/staff/{staff_id}/account/create", name="admin_staff_account_create")
+async def admin_staff_account_create(
+    staff_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form("staff"),
+    store: str = Form(""),
+    display_name: str = Form(""),
+    mobile_role: str = Form("auto"),
+    wecom_userid: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not staff:
+        raise HTTPException(404)
+    if staff.admin_user_id:
+        return RedirectResponse(f"/admin/staff/{staff_id}?err=该员工已经有关联账号", status_code=303)
+    username = (username or "").strip()
+    password = (password or "").strip()
+    display_name = (display_name or "").strip() or staff.name
+    if not username or not password:
+        return RedirectResponse(f"/admin/staff/{staff_id}?err=用户名和密码不能为空", status_code=303)
+    if len(password) < 6:
+        return RedirectResponse(f"/admin/staff/{staff_id}?err=密码不能少于6位", status_code=303)
+    if role not in ("superadmin", "staff"):
+        role = "staff"
+    store = (store or "").strip()
+    if store not in ("", *_STORE_OPTIONS):
+        store = staff.store or ""
+    mr = (mobile_role or "auto").strip().lower()
+    if mr not in ("auto", "doctor", "nurse", "groomer"):
+        mr = "auto"
+    new_uid = (wecom_userid or "").strip()[:80]
+    if db.query(AdminUser).filter(AdminUser.username == username).first():
+        return RedirectResponse(f"/admin/staff/{staff_id}?err=用户名已存在：{username}", status_code=303)
+    if new_uid:
+        clash = db.query(AdminUser).filter(AdminUser.wecom_userid == new_uid).first()
+        if clash:
+            return RedirectResponse(f"/admin/staff/{staff_id}?err=该企微 userid 已绑定到账号「{clash.username}」", status_code=303)
+    user = AdminUser(
+        username=username,
+        password_hash=_pwd_ctx.hash(password),
+        role=role,
+        is_active=True,
+        store=store,
+        display_name=display_name,
+        mobile_role=mr,
+        wecom_userid=new_uid,
+    )
+    db.add(user)
+    db.flush()
+    staff.admin_user_id = user.id
+    _audit(db, request, "staff_account_create", application_id=None, detail={"staff_id": staff_id, "username": username})
+    db.commit()
+    return RedirectResponse(f"/admin/staff/{staff_id}?msg=已为员工创建并关联账号：{username}", status_code=303)
+
+
+@app.post("/admin/staff/{staff_id}/account/link", name="admin_staff_account_link")
+async def admin_staff_account_link(
+    staff_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Form(...),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    user = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+    if not staff or not user:
+        raise HTTPException(404)
+    if staff.admin_user_id:
+        return RedirectResponse(f"/admin/staff/{staff_id}?err=该员工已经有关联账号", status_code=303)
+    if getattr(user, "staff_profile", None):
+        return RedirectResponse(f"/admin/staff/{staff_id}?err=该账号已经关联其他员工", status_code=303)
+    staff.admin_user_id = user.id
+    if not user.display_name:
+        user.display_name = staff.name
+    _audit(db, request, "staff_account_link", application_id=None, detail={"staff_id": staff_id, "username": user.username})
+    db.commit()
+    return RedirectResponse(f"/admin/staff/{staff_id}?msg=已关联账号：{user.username}", status_code=303)
+
+
+@app.post("/admin/staff/{staff_id}/account/save", name="admin_staff_account_save")
+async def admin_staff_account_save(
+    staff_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    role: str = Form("staff"),
+    store: str = Form(""),
+    display_name: str = Form(""),
+    mobile_role: str = Form("auto"),
+    wecom_userid: str = Form(""),
+    is_active: str = Form("1"),
+    new_password: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not staff or not staff.admin_user:
+        raise HTTPException(404)
+    user = staff.admin_user
+    current_username = request.session.get("admin_username", "")
+    if role in ("superadmin", "staff") and user.username != current_username:
+        user.role = role
+    store = (store or "").strip()
+    if store in ("", *_STORE_OPTIONS):
+        user.store = store
+    mr = (mobile_role or "auto").strip().lower()
+    if mr not in ("auto", "doctor", "nurse", "groomer"):
+        mr = "auto"
+    user.mobile_role = mr
+    user.display_name = (display_name or "").strip()[:80] or staff.name
+    new_uid = (wecom_userid or "").strip()[:80]
+    if new_uid:
+        clash = db.query(AdminUser).filter(AdminUser.wecom_userid == new_uid, AdminUser.id != user.id).first()
+        if clash:
+            return RedirectResponse(f"/admin/staff/{staff_id}?err=该企微 userid 已绑定到账号「{clash.username}」", status_code=303)
+    user.wecom_userid = new_uid
+    if user.username != current_username:
+        user.is_active = is_active == "1"
+    pwd = (new_password or "").strip()
+    if pwd:
+        if len(pwd) < 6:
+            return RedirectResponse(f"/admin/staff/{staff_id}?err=新密码不能少于6位", status_code=303)
+        user.password_hash = _pwd_ctx.hash(pwd)
+        user.is_active = True
+    _audit(db, request, "staff_account_save", application_id=None, detail={"staff_id": staff_id, "username": user.username})
+    db.commit()
+    return RedirectResponse(f"/admin/staff/{staff_id}?msg=账号设置已保存", status_code=303)
+
+
+@app.post("/admin/staff/{staff_id}/account/unlink", name="admin_staff_account_unlink")
+async def admin_staff_account_unlink(
+    staff_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    if not staff:
+        raise HTTPException(404)
+    username = staff.admin_user.username if staff.admin_user else ""
+    staff.admin_user_id = None
+    _audit(db, request, "staff_account_unlink", application_id=None, detail={"staff_id": staff_id, "username": username})
+    db.commit()
+    return RedirectResponse(f"/admin/staff/{staff_id}?msg=已解除员工与账号的关联", status_code=303)
 
 
 @app.get("/admin/staff/{staff_id}/edit", response_class=HTMLResponse)
