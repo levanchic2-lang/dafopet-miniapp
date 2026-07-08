@@ -18426,7 +18426,7 @@ async def admin_reports_revenue(
     )
 
     # 按门店 × 支付方式 二维拆分（superadmin 一眼看两店对比）
-    # 用 Payment.store 字段；fallback 用 pet 推断 store
+    # 用 Payment.store 字段，反映实际收款门店。
     store_x_method: dict[str, dict[str, float]] = {}
     store_x_method_meta: dict[str, dict] = {}  # 每家店的合计 + 笔数
     for p in pay_rows:
@@ -18475,7 +18475,8 @@ async def admin_reports_revenue(
     except Exception:
         pass
 
-    # 按门店（仅 superadmin 看；用 pet.store 推断）
+    # 按门店（仅 superadmin 看）：优先收费单/收款流水门店，最后才回退宠物归属店。
+    # 跨店消费应归实际操作/收款门店，不能按宠物档案门店归属。
     by_store_list: list = []
     if not admin_store_short:
         from app.models import Pet as _Pet
@@ -18484,9 +18485,20 @@ async def admin_reports_revenue(
         if pet_ids2:
             for p in db.query(_Pet).filter(_Pet.id.in_(pet_ids2)).all():
                 psmap[p.id] = p.store or "未指定"
+        payment_store_by_inv: dict[int, set[str]] = {}
+        for p in pay_rows:
+            ps = (p.store or "").strip()
+            if ps:
+                payment_store_by_inv.setdefault(p.invoice_id, set()).add(ps)
         by_store: dict[str, dict] = {}
         for r in rows:
-            s = psmap.get(r.pet_id, "未指定") or "未指定"
+            s = (r.store or "").strip()
+            if not s:
+                pstores = payment_store_by_inv.get(r.id) or set()
+                if len(pstores) == 1:
+                    s = next(iter(pstores))
+            if not s:
+                s = psmap.get(r.pet_id, "未指定") or "未指定"
             if s not in by_store:
                 by_store[s] = {"amount": 0.0, "count": 0}
             by_store[s]["amount"] += float(r.total_amount or 0)
