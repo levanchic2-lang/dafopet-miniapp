@@ -78,14 +78,14 @@
   </div>
   <div class="ukm-row2">
     <div class="ukm-field">
-      <label class="lbl">美&nbsp;容&nbsp;师</label>
-      <input class="ukm-input" type="text" name="groomer_name" value="{{ rec.groomer_name or '' }}" list="groomer-list" placeholder="选或输入"/>
+      <label class="lbl">美&nbsp;容&nbsp;师<span class="req">*</span></label>
+      <input class="ukm-input" type="text" name="groomer_name" value="{{ rec.groomer_name or '' }}" list="groomer-list" placeholder="必须选择美容师或合伙人" required/>
       <datalist id="groomer-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
     </div>
     <div class="ukm-field">
       <label class="lbl">助&nbsp;理</label>
       <input class="ukm-input" type="text" name="assistant_name" value="{{ rec.assistant_name or '' }}" list="assistant-list" placeholder="可选"/>
-      <datalist id="assistant-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
+      <datalist id="assistant-list">{% for g in assistants %}<option value="{{ g }}">{% endfor %}</datalist>
     </div>
   </div>
 

@@ -25434,6 +25434,52 @@ def _query_grooming_items(db: Session, request: Request):
     return q.all()
 
 
+def _active_staff_names_by_positions(db: Session, positions: list[str]) -> list[str]:
+    rows = (
+        db.query(Staff.name)
+        .filter(
+            Staff.status.in_(["active", "probation"]),
+            Staff.position.in_(positions),
+        )
+        .order_by(Staff.name)
+        .all()
+    )
+    return [r[0] for r in rows if (r[0] or "").strip()]
+
+
+def _grooming_staff_candidates(db: Session) -> tuple[list[str], list[str]]:
+    groomers = _active_staff_names_by_positions(db, ["美容师", "合伙人"])
+    assistants = _active_staff_names_by_positions(db, ["助理", "美容师", "合伙人"])
+    return groomers, assistants
+
+
+def _grooming_staff_error(db: Session, groomer_name: str, assistant_name: str = "") -> str:
+    groomers, assistants = _grooming_staff_candidates(db)
+    groomer = (groomer_name or "").strip()
+    assistant = (assistant_name or "").strip()
+    if not groomer:
+        return "请选择美容师，不能默认按当前登录账号记录业绩"
+    if groomer not in set(groomers):
+        return "美容师必须从职位为「美容师」或「合伙人」的在职员工中选择"
+    if assistant and assistant not in set(assistants):
+        return "助理必须从职位为「助理 / 美容师 / 合伙人」的在职员工中选择"
+    return ""
+
+
+def _redirect_back_with_err(request: Request, fallback: str, msg: str):
+    from urllib.parse import urlparse as _urlparse, urlencode as _urlencode, parse_qsl as _parse_qsl
+    try:
+        u = _urlparse(request.headers.get("referer", "") or "")
+        ref_path = u.path or ""
+        qs = dict(_parse_qsl(u.query, keep_blank_values=True))
+    except Exception:
+        ref_path, qs = "", {}
+    qs["err"] = msg
+    target = ref_path + ("?" + _urlencode(qs) if qs else "")
+    fallback_target = fallback + ("?" + _urlencode({"err": msg}) if msg else "")
+    return RedirectResponse(_safe_next(target, fallback_target), status_code=303)
+
+
 @app.get("/admin/grooming-orders/create", response_class=HTMLResponse)
 async def page_admin_grooming_create(
     request: Request, db: Session = Depends(get_db),
@@ -25446,11 +25492,7 @@ async def page_admin_grooming_create(
     if appt and not cust:
         cust = db.get(Customer, appt.customer_id) if appt.customer_id else None
         pet = db.get(Pet, appt.pet_id) if appt.pet_id else pet
-    groomers = [s[0] for s in db.query(Staff.name).filter(
-        Staff.status.in_(["active", "probation"]),
-    ).all()]
-    # 助理候选 = 所有在职员工（医生 / 美容师 / 助理 都可担任助理）
-    assistants = groomers[:]
+    groomers, assistants = _grooming_staff_candidates(db)
     today = datetime.utcnow().strftime("%Y-%m-%d")
     history = []
     if pet:
@@ -25481,6 +25523,11 @@ async def admin_grooming_create(request: Request, db: Session = Depends(get_db))
     total = round(sum(s["subtotal"] for s in services), 2)
     charge_amount = float(form.get("charge_amount", 0) or 0)
     operator = request.session.get("admin_username", "admin")
+    groomer_name = str(form.get("groomer_name", "")).strip()[:80]
+    assistant_name = str(form.get("assistant_name", "")).strip()[:80]
+    staff_err = _grooming_staff_error(db, groomer_name, assistant_name)
+    if staff_err:
+        return _redirect_back_with_err(request, "/admin/grooming-orders/create", staff_err)
 
     pet = db.get(Pet, pet_id) if pet_id else None
     store = (pet.store if pet else "") or _get_admin_store(request) or ""
@@ -25490,8 +25537,8 @@ async def admin_grooming_create(request: Request, db: Session = Depends(get_db))
         pet_id=pet_id or None,
         appointment_id=appointment_id or None,
         groom_date=str(form.get("groom_date", "")).strip()[:20],
-        groomer_name=str(form.get("groomer_name", "")).strip()[:80],
-        assistant_name=str(form.get("assistant_name", "")).strip()[:80],
+        groomer_name=groomer_name,
+        assistant_name=assistant_name,
         services_json=json.dumps(services, ensure_ascii=False),
         total_amount=total,
         skin_condition=str(form.get("skin_condition", "")).strip()[:200],
@@ -25570,10 +25617,7 @@ async def page_admin_grooming_detail(rec_id: int, request: Request, db: Session 
     cust = db.get(Customer, rec.customer_id) if rec.customer_id else None
     pet = db.get(Pet, rec.pet_id) if rec.pet_id else None
     appt = db.get(Appointment, rec.appointment_id) if rec.appointment_id else None
-    groomers = [s[0] for s in db.query(Staff.name).filter(
-        Staff.status.in_(["active", "probation"]),
-    ).all()]
-    assistants = groomers[:]
+    groomers, assistants = _grooming_staff_candidates(db)
     locked, lock_reason = _is_grooming_locked(db, rec)
     paid_amount = _doc_paid_amount(db, "grooming", rec_id) if locked else 0.0
     try:
@@ -25611,9 +25655,14 @@ async def admin_grooming_edit(rec_id: int, request: Request, db: Session = Depen
     if locked:
         raise HTTPException(400, f"美容单已锁定（{reason}），不可修改。请「复制为新单」或「作废」。")
     services = _parse_grooming_services(form)
+    groomer_name = str(form.get("groomer_name", "")).strip()[:80]
+    assistant_name = str(form.get("assistant_name", "")).strip()[:80]
+    staff_err = _grooming_staff_error(db, groomer_name, assistant_name)
+    if staff_err:
+        return _redirect_back_with_err(request, f"/admin/grooming-orders/{rec_id}", staff_err)
     rec.groom_date = str(form.get("groom_date", "")).strip()[:20]
-    rec.groomer_name = str(form.get("groomer_name", "")).strip()[:80]
-    rec.assistant_name = str(form.get("assistant_name", "")).strip()[:80]
+    rec.groomer_name = groomer_name
+    rec.assistant_name = assistant_name
     rec.services_json = json.dumps(services, ensure_ascii=False)
     rec.total_amount = round(sum(s["subtotal"] for s in services), 2)
     rec.skin_condition = str(form.get("skin_condition", "")).strip()[:200]
@@ -28149,18 +28198,16 @@ async def m_grooming_new(
     pets = []
     if cust:
         pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id).all()
-    groomers = [s[0] for s in db.query(Staff.name).filter(
-        Staff.status.in_(["active", "probation"]),
-    ).all()]
+    groomers, assistants = _grooming_staff_candidates(db)
     groom_items = _query_grooming_items(db, request)
     ctx = _m_ctx(request, db, active_tab="grooming")
     ctx["mobile_role"] = "groomer"
     ctx.update({
         "cust": cust, "pet": pet, "appt": appt, "pets": pets,
-        "groomers": groomers, "groom_items": groom_items,
+        "groomers": groomers, "assistants": assistants, "groom_items": groom_items,
         "today": datetime.utcnow().strftime("%Y-%m-%d"),
         "now_time": datetime.utcnow().strftime("%H:%M"),
-        "default_groomer": request.session.get("admin_username", ""),
+        "default_groomer": "",
     })
     return templates.TemplateResponse(request, "m_uk/grooming_new.html", ctx)
 
@@ -28199,6 +28246,11 @@ async def m_grooming_create(request: Request, db: Session = Depends(get_db)):
         })
     total = round(sum(s["subtotal"] for s in services), 2)
     operator = request.session.get("admin_username", "admin")
+    groomer_name = str(form.get("groomer_name", "")).strip()[:80]
+    assistant_name = str(form.get("assistant_name", "")).strip()[:80]
+    staff_err = _grooming_staff_error(db, groomer_name, assistant_name)
+    if staff_err:
+        return _redirect_back_with_err(request, "/m/grooming/new", staff_err)
     pet = db.get(Pet, pet_id)
     store = (pet.store if pet else "") or _get_admin_store(request) or ""
     rec = GroomingOrder(
@@ -28206,8 +28258,8 @@ async def m_grooming_create(request: Request, db: Session = Depends(get_db)):
         pet_id=pet_id or None,
         appointment_id=appointment_id or None,
         groom_date=str(form.get("groom_date", "")).strip()[:20] or datetime.utcnow().strftime("%Y-%m-%d"),
-        groomer_name=str(form.get("groomer_name", "")).strip()[:80] or operator,
-        assistant_name=str(form.get("assistant_name", "")).strip()[:80],
+        groomer_name=groomer_name,
+        assistant_name=assistant_name,
         services_json=json.dumps(services, ensure_ascii=False),
         total_amount=total,
         skin_condition=str(form.get("skin_condition", "")).strip()[:200],
@@ -28284,16 +28336,14 @@ async def m_grooming_edit_page(rec_id: int, request: Request, db: Session = Depe
     # 已停用但本单已选的品目 → 补成额外 chip，避免编辑时丢失
     extra_chips = [s for s in services if s.get("item_id") and int(s["item_id"]) not in avail_ids]
     manual_count = len([s for s in services if not s.get("item_id")])
-    groomers = [s[0] for s in db.query(Staff.name).filter(
-        Staff.status.in_(["active", "probation"]),
-    ).all()]
+    groomers, assistants = _grooming_staff_candidates(db)
     ctx = _m_ctx(request, db, active_tab="grooming")
     ctx["mobile_role"] = "groomer"
     ctx.update({
         "rec": rec, "cust": cust, "pet": pet,
         "groom_items": groom_items, "selected_ids": selected_ids,
         "extra_chips": extra_chips, "manual_count": manual_count,
-        "groomers": groomers,
+        "groomers": groomers, "assistants": assistants,
     })
     return templates.TemplateResponse(request, "m_uk/grooming_edit.html", ctx)
 
@@ -28332,11 +28382,16 @@ async def m_grooming_edit(rec_id: int, request: Request, db: Session = Depends(g
             "price": price, "subtotal": round(price, 2), "notes": "",
         })
     services += manual_keep
+    groomer_name = str(form.get("groomer_name", "")).strip()[:80]
+    assistant_name = str(form.get("assistant_name", "")).strip()[:80]
+    staff_err = _grooming_staff_error(db, groomer_name, assistant_name)
+    if staff_err:
+        return _redirect_back_with_err(request, f"/m/grooming/{rec_id}/edit", staff_err)
     rec.services_json = json.dumps(services, ensure_ascii=False)
     rec.total_amount = round(sum(float(s.get("subtotal") or 0) for s in services), 2)
     rec.groom_date = str(form.get("groom_date", "")).strip()[:20] or rec.groom_date
-    rec.groomer_name = str(form.get("groomer_name", "")).strip()[:80] or rec.groomer_name
-    rec.assistant_name = str(form.get("assistant_name", "")).strip()[:80]
+    rec.groomer_name = groomer_name
+    rec.assistant_name = assistant_name
     rec.updated_at = datetime.utcnow()
     # 同步未付收费单（增删服务后让收银台金额跟着变）
     _resync_grooming_invoice(db, rec, request)
