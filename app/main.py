@@ -5448,6 +5448,111 @@ async def admin_appointment_status(
     return RedirectResponse(redirect_base + f"?appointment_ok=status#{anchor}", status_code=303)
 
 
+@app.post("/admin/appointments/bulk-expired", name="admin_appointments_bulk_expired")
+async def admin_appointments_bulk_expired(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    action: str = Form(""),
+    appt_store: str = Form(""),
+    appt_category: str = Form(""),
+):
+    """批量处理已过期但仍未闭环的预约。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+
+    action = (action or "").strip()
+    if action == "expired_cancel":
+        target_status = AppointmentStatus.cancelled.value
+        note = "[过期处理] 批量标记为过期取消"
+    elif action == "no_show":
+        target_status = AppointmentStatus.no_show.value
+        note = "[过期处理] 批量标记为爽约"
+    else:
+        return _admin_appointment_redirect(None, err="无效的批量处理动作")
+
+    today_str = datetime.now().date().isoformat()
+    q = db.query(Appointment).filter(
+        Appointment.appointment_date < today_str,
+        Appointment.status.in_([
+            AppointmentStatus.pending.value,
+            AppointmentStatus.confirmed.value,
+        ]),
+    )
+
+    admin_store = _get_admin_store(request)
+    redirect_parts = ["preset=expired"]
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        q = q.filter(Appointment.store == full_store)
+    else:
+        appt_store = (appt_store or "").strip()
+        if appt_store:
+            if appt_store not in _ALLOWED_CLINIC_STORES:
+                return _admin_appointment_redirect(None, err="无效的门店筛选")
+            q = q.filter(Appointment.store == appt_store)
+            redirect_parts.append("appt_store=" + quote(appt_store, safe=""))
+
+    appt_category = (appt_category or "").strip()
+    if appt_category:
+        if appt_category == "beauty":
+            q = q.filter(Appointment.category.in_(["beauty", "grooming", "washcare"]))
+        elif appt_category in {x.value for x in AppointmentCategory}:
+            q = q.filter(Appointment.category == appt_category)
+        else:
+            return _admin_appointment_redirect(None, err="无效的类型筛选")
+        redirect_parts.append("appt_category=" + quote(appt_category, safe=""))
+
+    rows = q.order_by(Appointment.appointment_date.desc(), Appointment.appointment_time.desc()).all()
+    if not rows:
+        return RedirectResponse(
+            "/admin/appointments?" + "&".join(redirect_parts) + "&appointment_err=" + quote("当前筛选范围没有可批量处理的过期预约", safe=""),
+            status_code=303,
+        )
+
+    now = datetime.utcnow()
+    changed_ids: list[int] = []
+    related_app_ids: list[int] = []
+    for row in rows:
+        old_status = row.status
+        row.status = target_status
+        row.updated_at = now
+        existing_notes = (row.notes or "").strip()
+        row.notes = (existing_notes + f"\n{note}，原状态：{old_status}").strip()
+        changed_ids.append(row.id)
+
+        if row.related_application_id:
+            related_app_ids.append(int(row.related_application_id))
+            app_row = db.get(Application, row.related_application_id)
+            if app_row:
+                if target_status == AppointmentStatus.cancelled.value and app_row.status == ApplicationStatus.scheduled.value:
+                    app_row.status = ApplicationStatus.approved.value
+                    app_row.updated_at = now
+                elif target_status == AppointmentStatus.no_show.value:
+                    app_row.status = ApplicationStatus.no_show.value
+                    app_row.updated_at = now
+
+    _audit(
+        db,
+        request,
+        "appointment_bulk_expired",
+        detail={
+            "action": action,
+            "target_status": target_status,
+            "count": len(changed_ids),
+            "appointment_ids": changed_ids[:300],
+            "related_application_ids": sorted(set(related_app_ids))[:300],
+            "store_filter": appt_store,
+            "category_filter": appt_category,
+        },
+    )
+    db.commit()
+    return RedirectResponse(
+        "/admin/appointments?" + "&".join(redirect_parts) + "&appointment_ok=status",
+        status_code=303,
+    )
+
+
 @app.post("/admin/appointments/{appointment_id}/reschedule", name="admin_appointment_reschedule")
 async def admin_appointment_reschedule(
     appointment_id: int,

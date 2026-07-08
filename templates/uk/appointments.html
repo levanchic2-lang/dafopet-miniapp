@@ -624,6 +624,36 @@
   </form>
 </div>
 
+{% if filters.preset == 'expired' %}
+{% set expired_visible_count = grouped_appointments | sum(attribute='total') %}
+<div style="border:0.5px solid var(--accent-amber);background:#fffaf0;margin-bottom:24px;padding:14px 16px;display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;">
+  <div>
+    <div style="font-family:var(--font-serif);font-weight:700;letter-spacing:2px;">已过期未处理预约</div>
+    <div style="font-size:9pt;color:var(--ink-3);font-style:italic;margin-top:4px;">
+      当前筛选范围共 {{ expired_visible_count }} 条。批量操作只处理本页筛选范围内的 pending / confirmed 历史预约。
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <form method="post" action="/admin/appointments/bulk-expired"
+          onsubmit="return confirm('确认将当前筛选范围内的过期预约批量标记为「过期取消」？这会释放预约占用，但不会推送客户。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="expired_cancel">
+      <input type="hidden" name="appt_store" value="{{ filters.store }}">
+      <input type="hidden" name="appt_category" value="{{ filters.category }}">
+      <button type="submit" class="filter-apply" style="background:transparent;color:var(--accent-amber);border-color:var(--accent-amber);" {% if expired_visible_count == 0 %}disabled{% endif %}>批量标记过期取消</button>
+    </form>
+    <form method="post" action="/admin/appointments/bulk-expired"
+          onsubmit="return confirm('确认将当前筛选范围内的过期预约批量标记为「爽约」？关联 TNR 申请也会进入爽约状态。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="no_show">
+      <input type="hidden" name="appt_store" value="{{ filters.store }}">
+      <input type="hidden" name="appt_category" value="{{ filters.category }}">
+      <button type="submit" class="filter-apply" style="background:var(--accent-red);border-color:var(--accent-red);" {% if expired_visible_count == 0 %}disabled{% endif %}>批量标记爽约</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 {# ── 预约规则（折叠） ── #}
 <div class="ap-collapse">
   <button type="button" onclick="var b=this.nextElementSibling;var opening=b.style.display==='none';b.style.display=opening?'block':'none';this.querySelector('.arrow').textContent=opening?'收 起':'展 开';">
