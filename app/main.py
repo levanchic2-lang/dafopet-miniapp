@@ -19725,9 +19725,22 @@ def _invoice_recompute_status(db: Session, inv: Invoice) -> None:
             inv.paid_at = datetime.utcnow()
         # payment_method = 笔数最多的那种
         from collections import Counter
-        methods = [p.method for p in db.query(Payment).filter(Payment.invoice_id == inv.id, Payment.status == "success").all()]
+        success_payments = db.query(Payment).filter(
+            Payment.invoice_id == inv.id,
+            Payment.status == "success",
+        ).all()
+        methods = [p.method for p in success_payments]
         if methods:
             inv.payment_method = Counter(methods).most_common(1)[0][0]
+        payment_stores = {
+            (p.store or "").strip()
+            for p in success_payments
+            if (p.store or "").strip()
+        }
+        if len(payment_stores) == 1:
+            pay_store = next(iter(payment_stores))
+            if pay_store and (inv.store or "") != pay_store:
+                inv.store = pay_store
     else:
         inv.payment_status = "unpaid"
         inv.paid_at = None
