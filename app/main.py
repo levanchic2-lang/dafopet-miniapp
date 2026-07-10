@@ -19207,6 +19207,8 @@ async def admin_reports_performance(
         elif tab == "doctor":
             for ni in net_items:
                 it = ni["item"]
+                if ni["category"] == "grooming" or (it and (it.ref_type or "").strip() == "grooming"):
+                    continue
                 person = _doctor_for_item(inv, it)
                 if person:
                     _add(person, inv, ni["category"], ni["amount"], ni["source"])
