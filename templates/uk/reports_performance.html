@@ -52,7 +52,7 @@
   <input type="hidden" name="tab" value="{{ tab }}"/>
   <div>
     <label>日期</label>
-    <select name="preset">
+    <select name="preset" id="perf-preset">
       <option value="today" {% if preset == 'today' %}selected{% endif %}>今日</option>
       <option value="yesterday" {% if preset == 'yesterday' %}selected{% endif %}>昨日</option>
       <option value="week" {% if preset == 'week' %}selected{% endif %}>本周</option>
@@ -64,11 +64,11 @@
   </div>
   <div>
     <label>开始</label>
-    <input type="date" name="date_from" value="{{ df }}"/>
+    <input type="date" name="date_from" value="{{ df }}" data-custom-date/>
   </div>
   <div>
     <label>结束</label>
-    <input type="date" name="date_to" value="{{ dt }}"/>
+    <input type="date" name="date_to" value="{{ dt }}" data-custom-date/>
   </div>
   <div>
     <label>门店</label>
@@ -82,6 +82,15 @@
   </div>
   <button class="uk-btn primary sm" type="submit">筛选</button>
 </form>
+
+<script>
+document.querySelectorAll('[data-custom-date]').forEach(function (el) {
+  el.addEventListener('change', function () {
+    var preset = document.getElementById('perf-preset');
+    if (preset) preset.value = 'custom';
+  });
+});
+</script>
 
 <div class="perf-tabs">
   {% for key, label in tab_labels.items() %}

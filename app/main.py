@@ -18999,6 +18999,12 @@ async def admin_reports_performance(
     else:
         store = (store or "").strip()
 
+    preset_df, preset_dt, _ = _revenue_date_range(preset, "", "")
+    submitted_df = (date_from or "").strip()
+    submitted_dt = (date_to or "").strip()
+    if preset != "custom" and (submitted_df or submitted_dt):
+        if submitted_df != preset_df or submitted_dt != preset_dt:
+            preset = "custom"
     df, dt, label = _revenue_date_range(preset, date_from, date_to)
     _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     invoices = db.query(Invoice).filter(
