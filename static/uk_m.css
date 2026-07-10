@@ -491,3 +491,13 @@ button { font: inherit; cursor: pointer; }
 
 /* 防止图片溢出卡片 */
 .ukm-card img, .ukm-row img { max-width: 100%; }
+
+/* 全系统取消斜体：手机端与桌面保持一致，所有说明、状态、单位和内联 em 均使用正常字形。 */
+body,
+body *,
+body *::before,
+body *::after,
+input::placeholder,
+textarea::placeholder {
+  font-style: normal !important;
+}

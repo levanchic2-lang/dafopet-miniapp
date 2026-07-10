@@ -681,3 +681,13 @@ p { margin: 0 0 var(--gap-3); }
   margin-bottom: var(--gap-3);
   letter-spacing: 8px;
 }
+
+/* 全系统取消斜体：后台页面以可读性优先，说明、标签、表头、状态与内联 em 均保持正常字形。 */
+body,
+body *,
+body *::before,
+body *::after,
+input::placeholder,
+textarea::placeholder {
+  font-style: normal !important;
+}

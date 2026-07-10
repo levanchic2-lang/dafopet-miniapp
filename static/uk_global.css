@@ -407,6 +407,16 @@ a.link:hover { border-bottom-color: var(--ink); }
 }
 
 /* === 20. 数字使用 numeric serif === */
+
+/* 全系统取消斜体：旧后台基础模板也统一使用正常字形。 */
+body,
+body *,
+body *::before,
+body *::after,
+input::placeholder,
+textarea::placeholder {
+  font-style: normal !important;
+}
 .num, .stat-num, .kpi-num, .amount {
   font-family: var(--font-numeric) !important;
   font-variant-numeric: lining-nums tabular-nums;
