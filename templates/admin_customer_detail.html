@@ -1039,7 +1039,7 @@
          {% if tx.bonus_amount and tx.bonus_amount > 0 %}<span style="font-size:.75rem;color:var(--muted);">（送 ¥{{ '%.0f'|format(tx.bonus_amount) }}）</span>{% endif %}
        </td>
        <td>¥{{ '%.2f'|format(tx.balance_after) }}</td>
-       <td style="color:var(--muted);font-size:.82rem;">{{ {'cash':'现金','wechat':'微信','alipay':'支付宝','card':'刷卡','groupbuy':'团购','other':'其他'}.get(tx.pay_method, tx.pay_method or '—') }}</td>
+       <td style="color:var(--muted);font-size:.82rem;">{{ {'cash':'现金','wechat':'微信','alipay':'支付宝','shouqianba':'收钱吧','meituan':'美团','third_party':'第三方','card':'刷卡','groupbuy':'团购','other':'其他'}.get(tx.pay_method, tx.pay_method or '—') }}</td>
        <td style="color:var(--muted);font-size:.82rem;">{{ tx.operator or '—' }}</td>
        <td style="color:var(--muted);font-size:.82rem;max-width:200px;">{{ tx.note or '—' }}</td>
      </tr>
@@ -1137,7 +1137,7 @@
        {% if d.visit_id %}<a href="/admin/visits/{{ d.visit_id }}">就诊#{{ d.visit_id }}</a>{% endif %}
        {% if d.applied_invoice_id %}<br/><a href="/admin/invoices/{{ d.applied_invoice_id }}">收费#{{ d.applied_invoice_id }}</a>{% endif %}
        </td>
-       <td style="color:var(--muted);font-size:.82rem;">{{ {'cash':'现金','wechat':'微信','alipay':'支付宝','card':'刷卡'}.get(d.pay_method, d.pay_method) }}</td>
+       <td style="color:var(--muted);font-size:.82rem;">{{ {'cash':'现金','wechat':'微信','alipay':'支付宝','shouqianba':'收钱吧','meituan':'美团','third_party':'第三方','card':'刷卡'}.get(d.pay_method, d.pay_method) }}</td>
        <td style="color:var(--muted);font-size:.78rem;">{{ (d.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if d.created_at else '—' }}</td>
        <td>
        {% if remaining > 0 and d.status in ('held', 'partial_refund') %}
@@ -1627,6 +1627,9 @@
    <option value="wechat">微信</option>
    <option value="alipay">支付宝</option>
    <option value="card">刷卡</option>
+   <option value="shouqianba">收钱吧</option>
+   <option value="meituan">美团</option>
+   <option value="third_party">第三方</option>
  </select>
  <label>关联宠物（可选）</label>
  <select name="pet_id">
@@ -1672,7 +1675,11 @@
    <option value="wechat">微信</option>
    <option value="alipay">支付宝</option>
    <option value="card">刷卡</option>
+   <option value="shouqianba">收钱吧</option>
+   <option value="meituan">美团</option>
+   <option value="third_party">第三方</option>
    <option value="wallet">钱包余额（自动扣款）</option>
+   <option value="external">旧系统/外部已付（补录老卡）</option>
  </select>
  <label>备注（可选）</label>
  <input name="note">
