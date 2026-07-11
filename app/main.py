@@ -1392,6 +1392,21 @@ def _time_to_minutes(t: str) -> int:
     return int(h) * 60 + int(m)
 
 
+def _appointment_time_range_label(appt: "Appointment") -> str:
+    start = (appt.appointment_time or "").strip()
+    if not start:
+        return ""
+    try:
+        start_minutes = _time_to_minutes(start)
+        duration = int(appt.duration_minutes or 0)
+    except Exception:
+        return start
+    if duration <= 0:
+        return start
+    end_minutes = start_minutes + duration
+    return f"{start}-{(end_minutes // 60) % 24:02d}:{end_minutes % 60:02d}"
+
+
 _BEAUTY_TRACK = {"beauty", "grooming", "washcare"}
 _MEDICAL_TRACK = {"tnr", "surgery", "outpatient"}
 
@@ -27445,6 +27460,8 @@ async def m_root(request: Request, db: Session = Depends(get_db)):
         appt_q = appt_q.filter(or_(Appointment.store == store_full,
                                     Appointment.store == store_short))
     today_appts = appt_q.order_by(Appointment.appointment_time.asc()).limit(8).all()
+    for a in today_appts:
+        a.time_range_label = _appointment_time_range_label(a)
     today_appts_total = appt_q.count()
 
     # 待审 TNR
@@ -29835,6 +29852,8 @@ async def m_appointments_list(
         ))
 
     appts = base.limit(80).all()
+    for a in appts:
+        a.time_range_label = _appointment_time_range_label(a)
 
     # 按日期分组
     grouped: dict[str, list] = {}

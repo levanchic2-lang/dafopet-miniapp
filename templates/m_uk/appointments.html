@@ -52,7 +52,7 @@
   <a class="ukm-row" href="/m/appointment/{{ a.id }}">
     <div class="ukm-row-body">
       <div class="ukm-row-title">
-        {{ a.appointment_time or '—' }}
+        {{ a.time_range_label or a.appointment_time or '—' }}
         <span style="margin:0 5px;color:var(--ink-4);">·</span>
         {{ a.customer_name or '—' }}
         {% if a.pet_name %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ a.pet_name }}</span>{% endif %}
