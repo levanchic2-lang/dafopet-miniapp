@@ -81,6 +81,22 @@
   }
 
   {% block extra_style %}{% endblock %}
+
+  /* Win7 打印兜底：Georgia/Times 在旧系统里常把数字渲染成 old-style figures，
+     造成 3/5 下沉、8 上浮。打印页统一让数字/金额/日期走等高数字字体。 */
+  @font-face {
+    font-family: 'Print Lining Digits';
+    src: local('Arial'), local('Tahoma'), local('Verdana'), local('Microsoft YaHei');
+    unicode-range: U+0030-0039, U+002C, U+002D, U+002E, U+003A, U+002F, U+0028, U+0029, U+00A5, U+FFE5;
+  }
+  .print-stage,
+  .print-stage *,
+  .print-toolbar,
+  .print-toolbar * {
+    font-family: 'Print Lining Digits', Georgia, "Times New Roman", "Source Han Serif SC", "Noto Serif CJK SC", "STSong", "宋体", serif !important;
+    font-variant-numeric: lining-nums tabular-nums !important;
+    font-feature-settings: "lnum" 1, "tnum" 1 !important;
+  }
 </style>
 </head>
 <body data-size="{% block default_size %}A4{% endblock %}">
