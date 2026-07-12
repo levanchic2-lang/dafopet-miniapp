@@ -32,9 +32,9 @@ input[type=number] { -moz-appearance:textfield !important; appearance:textfield 
 
   /* ── 颜色（单色阶）── */
   --ink:        #1a1a1a;   /* 主文字 */
-  --ink-2:      #555;      /* 次文字 */
-  --ink-3:      #888;      /* 辅助 */
-  --ink-4:      #b8b8b8;   /* 占位 */
+  --ink-2:      #444;      /* 次文字 */
+  --ink-3:      #666;      /* 辅助 */
+  --ink-4:      #888;      /* 占位 */
   --hair:       #e5e5e5;   /* 1px 分割线 */
   --hair-2:     #d8d8d8;   /* 稍重 hairline */
   --rule:       #1a1a1a;   /* 双横线主线 */

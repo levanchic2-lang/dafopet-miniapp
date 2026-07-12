@@ -116,21 +116,35 @@
 /* 宠物多时（>5）固定高度滚动框：只占约 5 行，快速够到下方诊疗/美容/销售等 tab */
 .pets-scroll.scrollable { max-height: 264px; overflow-y: auto; }
 .pets-scroll.scrollable .pets-tbl thead th { position: sticky; top: 0; background: var(--paper); z-index: 2; }
-.pets-tbl { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+.pets-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 10.5pt; }
+.pets-tbl th,
+.pets-tbl td {
+  word-break: normal;
+  overflow-wrap: normal;
+}
 .pets-tbl thead th {
   font-weight: 700; font-size: 8.5pt; letter-spacing: 2px;
   text-transform: uppercase; color: var(--ink-2);
-  padding: 10px 22px; text-align: left;
+  padding: 10px 14px; text-align: left;
   border-bottom: 0.5px solid var(--ink);
+  white-space: nowrap;
 }
 .pets-tbl thead th.right { text-align: right; }
 .pets-tbl tbody td {
-  padding: 12px 22px; border-bottom: 0.5px solid var(--hair);
+  padding: 12px 14px; border-bottom: 0.5px solid var(--hair);
   vertical-align: middle;
 }
-.pets-tbl tbody td:last-child { text-align: right; padding-right: 22px; }
+.pets-tbl tbody td:last-child { text-align: right; padding-right: 14px; }
 .pets-tbl tbody tr:last-child td { border-bottom: 0; }
 .pets-tbl tbody tr:hover { background: var(--bg-soft); cursor: pointer; }
+.pets-tbl .pet-nowrap { white-space: nowrap; }
+.pets-tbl .pet-breed {
+  color: var(--ink-2);
+  line-height: 1.55;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.pets-tbl .pet-actions { white-space: nowrap; }
 .pets-tbl .pet-name {
   font-weight: 700; font-size: 11pt; color: var(--ink);
 }
@@ -506,6 +520,17 @@
       </div>
       <div class="pets-scroll {% if pets|length > 5 %}scrollable{% endif %}">
       <table class="pets-tbl">
+        <colgroup>
+          <col style="width:15%;">
+          <col style="width:7%;">
+          <col style="width:14%;">
+          <col style="width:7%;">
+          <col style="width:10%;">
+          <col style="width:7%;">
+          <col style="width:15%;">
+          <col style="width:13%;">
+          <col style="width:12%;">
+        </colgroup>
         <thead>
           <tr>
             <th>姓名</th><th>种类</th><th>品种</th><th>性别</th><th>年龄</th><th>体重</th><th>病历号</th><th>最近就诊</th><th class="right">操作</th>
@@ -530,14 +555,14 @@
               <span class="pet-name {% if active_pet and p.id == active_pet.id %}active{% endif %}">{{ p.name or '未命名' }}</span>
               {% if p.is_neutered %}<span class="uk-pill mute">已绝育</span>{% endif %}
             </td>
-            <td style="font-style:italic;">{% if p.species == 'cat' %}猫{% elif p.species == 'dog' %}犬{% else %}{{ p.species }}{% endif %}</td>
-            <td style="color:var(--ink-3);">{{ p.breed or '—' }}</td>
-            <td style="font-style:italic;color:var(--ink-3);">{% if p.gender == 'male' %}公{% elif p.gender == 'female' %}母{% else %}—{% endif %}</td>
-            <td class="num" style="font-size:9.5pt;" title="{{ p.birthday_estimate or '' }}">{{ p.birthday_estimate | pet_age }}</td>
-            <td class="num" style="font-size:9.5pt;">{% set wk = latest_weight_by_pet.get(p.id) %}{% if wk %}{{ '%g'|format(wk) }} kg{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
-            <td class="num" style="color:var(--ink-3);font-size:9pt;">{{ p.medical_record_no or '—' }}</td>
-            <td class="num" style="color:var(--ink-3);font-style:italic;font-size:9.5pt;">{% set lvd = last_visit_date_by_pet.get(p.id) %}{% if lvd %}{{ lvd }}{% else %}—{% endif %}</td>
-            <td class="right action">
+            <td class="pet-nowrap" style="font-style:italic;">{% if p.species == 'cat' %}猫{% elif p.species == 'dog' %}犬{% else %}{{ p.species }}{% endif %}</td>
+            <td class="pet-breed">{{ p.breed or '—' }}</td>
+            <td class="pet-nowrap" style="font-style:italic;color:var(--ink-2);">{% if p.gender == 'male' %}公{% elif p.gender == 'female' %}母{% else %}—{% endif %}</td>
+            <td class="num pet-nowrap" style="font-size:9.5pt;" title="{{ p.birthday_estimate or '' }}">{{ p.birthday_estimate | pet_age }}</td>
+            <td class="num pet-nowrap" style="font-size:9.5pt;">{% set wk = latest_weight_by_pet.get(p.id) %}{% if wk %}{{ '%g'|format(wk) }} kg{% else %}<span style="color:var(--ink-3);">—</span>{% endif %}</td>
+            <td class="num pet-nowrap" style="color:var(--ink-2);font-size:9pt;">{{ p.medical_record_no or '—' }}</td>
+            <td class="num pet-nowrap" style="color:var(--ink-2);font-style:italic;font-size:9.5pt;">{% set lvd = last_visit_date_by_pet.get(p.id) %}{% if lvd %}{{ lvd }}{% else %}—{% endif %}</td>
+            <td class="right action pet-actions">
               <a href="#" onclick="event.stopPropagation();openEditPet(this.closest('tr'));return false;">编辑</a>
               <form method="post" action="/admin/customers/{{ cust.id }}/pets/{{ p.id }}/delete"
                     style="display:inline;margin-left:8px;"

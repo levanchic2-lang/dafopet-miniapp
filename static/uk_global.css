@@ -28,7 +28,7 @@ input[type=number] { -moz-appearance:textfield !important; appearance:textfield 
   --bg-elevated:  #f5f4f1;
   --card:         #ffffff;
   --text:         #1a1a1a;
-  --muted:        #555;
+  --muted:        #444;
   --border:       #e5e5e5;
   --border-strong:#d8d8d8;
   --input-border: #1a1a1a;
