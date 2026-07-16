@@ -16569,6 +16569,128 @@ async def admin_inventory_list(
     })
 
 
+@app.get("/admin/inventory/transactions", response_class=HTMLResponse)
+async def admin_inventory_transactions(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    tx_type: str = "",
+    source: str = "",
+    store: str = "",
+    start: str = "",
+    end: str = "",
+    page: int = 1,
+):
+    require_admin(request)
+    from urllib.parse import urlencode
+
+    page_size = 60
+    page = max(1, int(page or 1))
+
+    filters = []
+    _admin_store = _get_admin_store(request)
+    if request.session.get("admin_role") == "superadmin":
+        _wb_store = (store or "").strip()
+    else:
+        _wb_store = _admin_store
+    if _wb_store:
+        filters.append(or_(InventoryItem.store == _wb_store, InventoryItem.store == ""))
+
+    q = (q or "").strip()
+    if q:
+        like = f"%{q}%"
+        filters.append(or_(
+            InventoryItem.name.ilike(like),
+            InventoryItem.supplier.ilike(like),
+            InventoryTransaction.operator.ilike(like),
+            InventoryTransaction.note.ilike(like),
+            InventoryTransaction.ref_type.ilike(like),
+        ))
+    if tx_type in ("in", "out", "adjust", "return"):
+        filters.append(InventoryTransaction.tx_type == tx_type)
+    else:
+        tx_type = ""
+    if source:
+        filters.append(InventoryTransaction.ref_type == source)
+    if start:
+        filters.append(func.date(InventoryTransaction.created_at, "+8 hours") >= start)
+    if end:
+        filters.append(func.date(InventoryTransaction.created_at, "+8 hours") <= end)
+
+    base_q = db.query(InventoryTransaction).join(InventoryItem)
+    if filters:
+        base_q = base_q.filter(*filters)
+
+    total = base_q.count()
+    type_counts = {
+        k: v for k, v in (
+            db.query(InventoryTransaction.tx_type, func.count(InventoryTransaction.id))
+            .join(InventoryItem)
+            .filter(*filters)
+            .group_by(InventoryTransaction.tx_type)
+            .all()
+            if filters else
+            db.query(InventoryTransaction.tx_type, func.count(InventoryTransaction.id))
+            .join(InventoryItem)
+            .group_by(InventoryTransaction.tx_type)
+            .all()
+        )
+    }
+    txs = (
+        base_q.options(selectinload(InventoryTransaction.item))
+        .order_by(InventoryTransaction.created_at.desc(), InventoryTransaction.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    total_pages = max(1, (total + page_size - 1) // page_size)
+
+    source_rows = (
+        db.query(InventoryTransaction.ref_type)
+        .join(InventoryItem)
+        .filter(*filters) if filters else db.query(InventoryTransaction.ref_type).join(InventoryItem)
+    )
+    sources = [
+        r[0] for r in source_rows.filter(InventoryTransaction.ref_type != "")
+        .distinct()
+        .order_by(InventoryTransaction.ref_type)
+        .all()
+        if r[0]
+    ]
+
+    qs_params = {
+        "q": q,
+        "tx_type": tx_type,
+        "source": source,
+        "store": _wb_store,
+        "start": start,
+        "end": end,
+    }
+    qs_params = {k: v for k, v in qs_params.items() if v}
+    page_base = "/admin/inventory/transactions"
+
+    return templates.TemplateResponse(request, "uk/inventory_transactions.html", {
+        "request": request,
+        "txs": txs,
+        "total": total,
+        "page": page,
+        "total_pages": total_pages,
+        "q": q,
+        "tx_type": tx_type,
+        "source": source,
+        "sources": sources,
+        "start": start,
+        "end": end,
+        "wb_store": _wb_store,
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
+        "type_counts": type_counts,
+        "page_base": page_base,
+        "prev_url": f"{page_base}?{urlencode({**qs_params, 'page': page - 1})}" if page > 1 else "",
+        "next_url": f"{page_base}?{urlencode({**qs_params, 'page': page + 1})}" if page < total_pages else "",
+        "title": "出入库流水",
+    })
+
+
 @app.get("/admin/inventory/create", response_class=HTMLResponse)
 async def admin_inventory_create_form(request: Request, db: Session = Depends(get_db)):
     require_admin(request)

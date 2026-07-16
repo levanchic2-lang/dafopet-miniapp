@@ -1,0 +1,246 @@
+{% extends "uk/_base.html" %}
+{% block title %}出入库流水 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}</style>
+<style>
+  .tx-filter {
+    border: 0.5px solid var(--hair-2);
+    background: var(--paper);
+    padding: 14px 18px;
+    margin-bottom: 18px;
+  }
+  .tx-filter form {
+    display: grid;
+    grid-template-columns: 1.6fr 120px 140px 120px 140px 140px auto;
+    gap: 12px;
+    align-items: end;
+  }
+  .tx-filter label {
+    display: block;
+    margin-bottom: 5px;
+  }
+  .tx-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 0.5px solid var(--hair-2);
+    margin-bottom: 18px;
+  }
+  .tx-kpi {
+    padding: 16px 20px;
+    border-right: 0.5px solid var(--hair);
+    background: var(--paper);
+  }
+  .tx-kpi:last-child { border-right: 0; }
+  .tx-kpi .lbl {
+    font-size: 9pt;
+    color: var(--ink-3);
+    letter-spacing: 2px;
+    font-style: italic;
+  }
+  .tx-kpi .val {
+    margin-top: 6px;
+    font-family: var(--font-numeric);
+    font-size: 22pt;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .tx-type {
+    display: inline-block;
+    min-width: 48px;
+    padding: 2px 8px;
+    border: 0.5px solid var(--hair);
+    text-align: center;
+    font-style: italic;
+  }
+  .tx-type.in { color: var(--accent-green); border-color: var(--accent-green); }
+  .tx-type.out { color: var(--accent-red); border-color: var(--accent-red); }
+  .tx-type.adjust { color: var(--accent-amber); border-color: var(--accent-amber); }
+  .tx-type.return { color: var(--ink); border-color: var(--ink-3); }
+  .tx-num { font-family: var(--font-numeric); font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
+  .tx-note { max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-pager {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0 4px;
+  }
+  @media (max-width: 900px) {
+    .tx-filter form { grid-template-columns: 1fr 1fr; }
+    .tx-kpis { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+
+{% set type_label = {
+  'in': '入库',
+  'out': '出库',
+  'adjust': '盘点',
+  'return': '回退'
+} %}
+{% set source_label = {
+  'manual': '手动',
+  'initial': '初始库存',
+  'prescription': '处方',
+  'sales_order': '销售',
+  'exam_order': '检查',
+  'vaccination': '疫苗',
+  'vaccination_void': '疫苗作废',
+  'deworming': '驱虫',
+  'grooming': '美容',
+  'grooming_void': '美容作废',
+  'anesthesia': '麻醉',
+  'narcotics_manual': '管控手动',
+  'stocktake': '循环盘点',
+  'batch_adjust': '批次修正',
+  'batch_deplete': '批次耗尽'
+} %}
+
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin/inventory">库存管理</a><span class="sep">/</span><span>出入库流水</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>出&nbsp;入&nbsp;库&nbsp;流&nbsp;水
+      <span class="sub">全部品目统一追溯 · 入库 / 出库 / 盘点 / 回退</span>
+    </h1>
+  </div>
+  <a href="/admin/inventory" class="uk-btn ghost sm">库存管理</a>
+</div>
+<hr class="ukc-rule-double"/>
+
+<div class="tx-kpis">
+  <div class="tx-kpi"><div class="lbl">流水总数</div><div class="val">{{ total }}</div></div>
+  <div class="tx-kpi"><div class="lbl">入库</div><div class="val" style="color:var(--accent-green);">{{ type_counts.get('in', 0) }}</div></div>
+  <div class="tx-kpi"><div class="lbl">出库</div><div class="val" style="color:var(--accent-red);">{{ type_counts.get('out', 0) }}</div></div>
+  <div class="tx-kpi"><div class="lbl">盘点 / 回退</div><div class="val" style="color:var(--accent-amber);">{{ type_counts.get('adjust', 0) + type_counts.get('return', 0) }}</div></div>
+</div>
+
+<div class="tx-filter">
+  <form method="get" action="/admin/inventory/transactions">
+    <div>
+      <label>搜索品名 / 供应商 / 备注 / 操作人</label>
+      <input name="q" value="{{ q }}" placeholder="例如：妙宠爱 / 狂犬 / 梁天兵"/>
+    </div>
+    <div>
+      <label>类型</label>
+      <select name="tx_type">
+        <option value="">全部</option>
+        {% for k, v in type_label.items() %}
+        <option value="{{ k }}" {% if tx_type == k %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>来源</label>
+      <select name="source">
+        <option value="">全部来源</option>
+        {% for s in sources %}
+        <option value="{{ s }}" {% if source == s %}selected{% endif %}>{{ source_label.get(s, s) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if is_superadmin %}
+    <div>
+      <label>门店</label>
+      <select name="store">
+        <option value="" {% if not wb_store %}selected{% endif %}>全部</option>
+        <option value="东环店" {% if wb_store == '东环店' %}selected{% endif %}>东环店</option>
+        <option value="横岗店" {% if wb_store == '横岗店' %}selected{% endif %}>横岗店</option>
+      </select>
+    </div>
+    {% endif %}
+    <div>
+      <label>开始</label>
+      <input type="date" name="start" value="{{ start }}"/>
+    </div>
+    <div>
+      <label>结束</label>
+      <input type="date" name="end" value="{{ end }}"/>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="submit" class="btn">筛选</button>
+      <a href="/admin/inventory/transactions" class="btn secondary">清除</a>
+    </div>
+  </form>
+</div>
+
+{% if txs %}
+<div class="data-table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>时间</th>
+        <th>门店</th>
+        <th>品名</th>
+        <th>类型</th>
+        <th style="text-align:right;">数量</th>
+        <th style="text-align:right;">变动前</th>
+        <th style="text-align:right;">变动后</th>
+        <th>来源</th>
+        <th>操作人</th>
+        <th>备注</th>
+        <th style="text-align:right;">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tx in txs %}
+      {% set it = tx.item %}
+      {% set sign = '-' if tx.tx_type == 'out' else '+' %}
+      <tr>
+        <td class="tx-num">{{ (tx.created_at | bjtime).strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>{{ it.store if it and it.store else '通用' }}</td>
+        <td>
+          {% if it %}
+          <a href="/admin/inventory/{{ it.id }}" style="color:var(--ink);border-bottom:0.5px solid var(--ink-3);">{{ it.name }}</a>
+          {% else %}
+          —
+          {% endif %}
+        </td>
+        <td><span class="tx-type {{ tx.tx_type }}">{{ type_label.get(tx.tx_type, tx.tx_type) }}</span></td>
+        <td class="tx-num" style="text-align:right;font-weight:700;{% if tx.tx_type == 'out' %}color:var(--accent-red);{% elif tx.tx_type == 'in' %}color:var(--accent-green);{% endif %}">
+          {{ sign }}{{ '%.2f'|format(tx.qty) }} {{ it.unit if it else '' }}
+        </td>
+        <td class="tx-num" style="text-align:right;">{{ '%.2f'|format(tx.qty_before) }}</td>
+        <td class="tx-num" style="text-align:right;">{{ '%.2f'|format(tx.qty_after) }}</td>
+        <td>
+          {{ source_label.get(tx.ref_type, tx.ref_type or '—') }}
+          {% if tx.ref_id %}<span class="tx-num" style="color:var(--ink-3);">#{{ tx.ref_id }}</span>{% endif %}
+        </td>
+        <td>{{ tx.operator or '—' }}</td>
+        <td class="tx-note" title="{{ tx.note or '' }}">{{ tx.note or '—' }}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          {% if tx.ref_type == 'prescription' and tx.ref_id %}
+            <a href="/admin/prescriptions/{{ tx.ref_id }}">单据 →</a>
+          {% elif tx.ref_type == 'sales_order' and tx.ref_id %}
+            <a href="/admin/sales-orders/{{ tx.ref_id }}">单据 →</a>
+          {% elif tx.ref_type == 'exam_order' and tx.ref_id %}
+            <a href="/admin/exam-orders/{{ tx.ref_id }}">单据 →</a>
+          {% elif tx.ref_type == 'vaccination' and tx.ref_id %}
+            <a href="/admin/vaccinations/{{ tx.ref_id }}">单据 →</a>
+          {% elif tx.ref_type == 'deworming' and tx.ref_id %}
+            <a href="/admin/dewormings/{{ tx.ref_id }}">单据 →</a>
+          {% elif tx.ref_type == 'grooming' and tx.ref_id %}
+            <a href="/admin/grooming-orders/{{ tx.ref_id }}">单据 →</a>
+          {% elif tx.ref_type == 'anesthesia' and tx.ref_id %}
+            <a href="/admin/anesthesia/{{ tx.ref_id }}">单据 →</a>
+          {% elif it %}
+            <a href="/admin/inventory/{{ it.id }}">品目 →</a>
+          {% else %}
+            —
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="tx-pager">
+  {% if prev_url %}<a class="btn secondary" href="{{ prev_url }}">上一页</a>{% endif %}
+  <span class="uk-mute">第 {{ page }} / {{ total_pages }} 页</span>
+  {% if next_url %}<a class="btn secondary" href="{{ next_url }}">下一页</a>{% endif %}
+</div>
+{% endif %}
+{% else %}
+<div class="empty-card">暂无出入库流水</div>
+{% endif %}
+{% endblock %}
