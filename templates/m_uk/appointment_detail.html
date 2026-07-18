@@ -84,11 +84,23 @@
 {% endif %}
 
 {# 客户档案入口 #}
-{% if cust %}
+{% if cust and pet %}
 <div class="ukm-divider"></div>
 <div class="ukm-btn-row">
   <a href="/m/customer/{{ cust.id }}" class="ukm-btn ghost block">客&nbsp;户&nbsp;档&nbsp;案</a>
   {% if a.phone %}<a href="tel:{{ a.phone }}" class="ukm-btn block">拨&nbsp;打&nbsp;电&nbsp;话</a>{% endif %}
+</div>
+{% else %}
+<div class="ukm-divider"></div>
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-amber);">
+    <div class="ukm-card-title" style="color:var(--accent-amber);">未&nbsp;建&nbsp;档&nbsp;预&nbsp;约</div>
+    <div class="ukm-card-sub">当前还没有完整绑定客户/宠物档案。客户到店后先补建档案，再开病历或结算。</div>
+  </div>
+</div>
+<div class="ukm-btn-row">
+  <a href="/admin/appointments/{{ a.id }}/register?redirect_after=mobile_appt:{{ a.id }}" class="ukm-btn block">到&nbsp;店&nbsp;登&nbsp;记</a>
+  {% if a.phone %}<a href="tel:{{ a.phone }}" class="ukm-btn ghost block">拨&nbsp;打&nbsp;电&nbsp;话</a>{% endif %}
 </div>
 {% endif %}
 
@@ -150,7 +162,8 @@
 <div class="ukm-divider"></div>
 <div class="ukm-btn-row">
   {% if a.visit_id %}<a href="/m/visit/{{ a.visit_id }}" class="ukm-btn ghost block">关&nbsp;联&nbsp;病&nbsp;历</a>
-  {% elif a.status in ['confirmed', 'arrived'] %}<a href="/m/visit/new?appointment_id={{ a.id }}" class="ukm-btn block">+&nbsp;开&nbsp;病&nbsp;历</a>{% endif %}
+  {% elif cust and pet and a.status in ['confirmed', 'arrived'] %}<a href="/m/visit/new?appointment_id={{ a.id }}" class="ukm-btn block">+&nbsp;开&nbsp;病&nbsp;历</a>
+  {% elif a.status in ['confirmed', 'arrived'] %}<a href="/admin/appointments/{{ a.id }}/register?redirect_after=mobile_appt:{{ a.id }}" class="ukm-btn block">先&nbsp;补&nbsp;档&nbsp;案</a>{% endif %}
   <a href="/admin/appointments#appt-{{ a.id }}" class="ukm-btn hair block">桌&nbsp;面&nbsp;端</a>
 </div>
 

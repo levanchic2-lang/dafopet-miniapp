@@ -569,6 +569,7 @@ function openApptPopup(ev, id) {
  }[appt.status] || '#f3f4f6';
  let badges = `<span class="popup-badge" style="background:${c.bg};color:${c.tx};border-color:${c.bd};">${catZh}</span>`;
  badges += `<span class="popup-badge" style="background:${stBg};color:${stColor};border-color:${stColor}aa;">${stZh}</span>`;
+ if (appt.is_unfiled) badges += `<a href="/admin/appointments/${appt.id}/register?redirect_after=calendar" class="popup-badge" style="background:#fef3c7;color:#92400e;border-color:#92400e99;text-decoration:none;">未建档 →</a>`;
  if (appt.related_app_id) badges += `<a href="/admin#app-${appt.related_app_id}" class="popup-badge" style="background:#f0fdf4;color:#166534;border-color:#86efac;text-decoration:none;" title="跳转 TNR 申请详情">申请 #${appt.related_app_id} →</a>`;
  badgesEl.innerHTML = badges;
 
@@ -585,9 +586,7 @@ function openApptPopup(ev, id) {
    const petQs = appt.pet_id ? '?pet_id=' + appt.pet_id : '';
    contactCell = `<a href="/admin/customers/${appt.customer_id}${petQs}" style="color:var(--brand);text-decoration:none;font-weight:600;">${contactText || '客户档案'} →</a>`;
  } else if (contactText) {
-   // 老预约没绑 customer_id → 降级为按电话搜索
-   const q = encodeURIComponent(appt.phone || appt.customer_name || '');
-   contactCell = `<a href="/admin/customers?q=${q}" style="color:var(--brand);text-decoration:none;">${contactText} 🔍</a>`;
+   contactCell = `<a href="/admin/appointments/${appt.id}/register?redirect_after=calendar" style="color:#92400e;text-decoration:none;font-weight:600;">${contactText} · 到店登记 →</a>`;
  }
  rows += row('联系人', contactCell);
  if (petLabel) {
@@ -610,6 +609,8 @@ function openApptPopup(ev, id) {
  // 操作按钮
  const st = appt.status;
  let btns = '';
+ if (appt.is_unfiled && st !== 'completed' && st !== 'cancelled' && st !== 'no_show')
+ btns += `<button style="background:#92400e;color:#fdfcf8;border-color:#92400e;" onclick="window.location.href='/admin/appointments/${id}/register?redirect_after=calendar'">到店登记</button>`;
  if (st !== 'arrived' && st !== 'completed' && st !== 'cancelled' && st !== 'no_show')
  btns += `<button class="btn-arrived" onclick="doStatus(${id},'arrived')">已到店</button>`;
  if (st === 'arrived')

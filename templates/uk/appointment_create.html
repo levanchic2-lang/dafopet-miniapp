@@ -274,8 +274,15 @@
       <div id="ac-pet-chips" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
     </div>
     <div id="ac-newcust-hint" style="display:none; margin-bottom:14px; padding:10px 14px; background:#fef9f0; border-left:3px solid #6b4423; font-size:9.5pt; color:var(--ink-2); font-style:italic;">
-      该号码未匹配到客户档案 — 提交后将建立新客户和新宠物
+      该号码未匹配到客户档案 — 会先保存为无档案预约，到店后再补建正式档案
     </div>
+    <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;padding:12px 14px;border:0.5px solid var(--hair);background:#fafaf6;cursor:pointer;">
+      <input type="checkbox" name="no_archive" id="ac-no-archive" value="1" {% if not cust and not pet %}checked{% endif %} style="margin-top:3px;"/>
+      <span style="font-family:var(--font-serif);font-size:10pt;color:var(--ink-2);line-height:1.6;">
+        <b style="color:var(--ink);">无档案预约</b>
+        <span style="display:block;color:var(--ink-3);font-style:italic;font-size:9.5pt;">只保存客户/宠物文字和时间，不立即创建档案；客户到店后点“到店登记”补档。</span>
+      </span>
+    </label>
 
     <div class="ac-row r2">
       <div class="ac-field">
@@ -626,6 +633,8 @@ function acPickResult(c, p) {
   document.getElementById('ac-phone').value = c.phone || '';
   document.getElementById('ac-cust-name').value = c.name || '';
   document.querySelector('input[name="customer_id"]').value = c.id || 0;
+  var noArchive = document.getElementById('ac-no-archive');
+  if (noArchive) noArchive.checked = false;
   if (p && p.id) {
     document.querySelector('input[name="pet_id"]').value = p.id;
     document.getElementById('ac-pet-name').value = p.name || '';
@@ -651,6 +660,8 @@ function acPickResult(c, p) {
       chipsEl.querySelectorAll('button').forEach(function(b) { b.style.background = 'var(--paper)'; b.style.color = 'var(--ink)'; b.style.fontWeight = '400'; });
       chip.style.background = 'var(--ink)'; chip.style.color = 'var(--paper)'; chip.style.fontWeight = '700';
       document.querySelector('input[name="pet_id"]').value = pp.id;
+      var noArchive = document.getElementById('ac-no-archive');
+      if (noArchive) noArchive.checked = false;
       document.getElementById('ac-pet-name').value = pp.name || '';
       if (pp.gender) document.getElementById('ac-pet-gender').value = pp.gender;
     };
@@ -680,6 +691,8 @@ function acLookupCustomer() {
           const nameEl = document.getElementById('ac-cust-name');
           if (!nameEl.value && data.name) nameEl.value = data.name;
           document.querySelector('input[name="customer_id"]').value = data.customer_id;
+          var noArchive = document.getElementById('ac-no-archive');
+          if (noArchive) noArchive.checked = false;
           let info = '客户档案 #' + data.customer_id +
                      (data.name ? ' · ' + data.name : '') +
                      ' · 名下 ' + (data.pets || []).length + ' 只宠物';
@@ -708,6 +721,8 @@ function acLookupCustomer() {
                 chip.style.background = 'var(--ink)'; chip.style.color = 'var(--paper)'; chip.style.fontWeight = '700';
                 document.querySelector('input[name="pet_id"]').value = p.id;
                 if (p.customer_id) document.querySelector('input[name="customer_id"]').value = p.customer_id;
+                var noArchive = document.getElementById('ac-no-archive');
+                if (noArchive) noArchive.checked = false;
                 document.getElementById('ac-pet-name').value = p.name || '';
                 if (p.gender) document.getElementById('ac-pet-gender').value = p.gender;
               };
@@ -721,6 +736,8 @@ function acLookupCustomer() {
           newHint.style.display = '';
           document.querySelector('input[name="customer_id"]').value = '0';
           document.querySelector('input[name="pet_id"]').value = '0';
+          var noArchive = document.getElementById('ac-no-archive');
+          if (noArchive) noArchive.checked = true;
         }
       })
       .catch(() => {});

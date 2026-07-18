@@ -514,6 +514,7 @@
   var petIdEl    = document.getElementById('admin_appt_pet_id');
   var catEl      = document.getElementById('admin_appt_category');
   var storeEl    = document.getElementById('admin_appt_store');
+  var noArchiveEl= document.getElementById('admin_appt_no_archive');
 
   if (phoneEl  && pPhone)    phoneEl.value  = pPhone;
   if (custEl   && pName)     custEl.value   = pName;
@@ -521,6 +522,7 @@
   if (genderEl && pGender)   genderEl.value = pGender;
   if (custIdEl && pCustId)   custIdEl.value = pCustId;
   if (petIdEl  && pPetId)    petIdEl.value  = pPetId;
+  if (noArchiveEl && (pCustId || pPetId)) noArchiveEl.checked = false;
   if (catEl    && pCategory) { catEl.value  = pCategory; catEl.dispatchEvent(new Event('change')); }
   if (storeEl  && pStore)    storeEl.value  = pStore;
 

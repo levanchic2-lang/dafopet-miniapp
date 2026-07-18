@@ -1,0 +1,187 @@
+{% extends "uk/_base.html" %}
+{% block title %}到店登记 · 大风动物医院{% endblock %}
+
+{% block body %}
+<style>
+  .ar-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .ar-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .ar-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .ar-head { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; }
+  .ar-head h1 {
+    font-family: var(--font-serif); font-size: 28pt; font-weight: 700;
+    color: var(--ink); letter-spacing: 1px; margin: 0; line-height: 1.15;
+  }
+  .ar-sub { margin-top:10px; color:var(--ink-3); font-style:italic; letter-spacing:2px; font-size:10pt; }
+  .ar-rule { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .ar-card { border:0.5px solid var(--hair); background:var(--paper); padding:18px 20px; margin-bottom:18px; }
+  .ar-card h2 { font-family:var(--font-serif); font-size:13pt; letter-spacing:3px; margin:0 0 14px; padding-bottom:8px; border-bottom:0.5px solid var(--ink); }
+  .ar-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px 18px; }
+  .ar-grid.r3 { grid-template-columns:1fr 1fr 1fr; }
+  .ar-field { display:flex; flex-direction:column; gap:6px; }
+  .ar-field label { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); font-style:italic; }
+  .ar-input, .ar-select {
+    height:38px; box-sizing:border-box; width:100%; border:0.5px solid var(--hair);
+    background:var(--paper); color:var(--ink); padding:8px 12px;
+    font-family:var(--font-serif); font-size:10.5pt; outline:0;
+  }
+  .ar-input:focus, .ar-select:focus { border-color:var(--ink); }
+  .ar-choice { display:flex; flex-direction:column; gap:8px; }
+  .ar-choice label {
+    display:flex; gap:10px; align-items:flex-start; padding:10px 12px;
+    border:0.5px solid var(--hair); cursor:pointer; color:var(--ink-2);
+  }
+  .ar-choice input { margin-top:3px; }
+  .ar-choice b { color:var(--ink); }
+  .ar-hint { color:var(--ink-3); font-style:italic; font-size:9.5pt; letter-spacing:1px; line-height:1.6; }
+  .ar-actions { display:flex; gap:12px; align-items:center; justify-content:flex-end; margin-top:18px; }
+  .ar-submit {
+    background:var(--ink); color:var(--paper); border:0; padding:12px 30px;
+    font-family:var(--font-serif); letter-spacing:3px; font-weight:700; cursor:pointer;
+  }
+  @media (max-width:768px) { .ar-grid, .ar-grid.r3 { grid-template-columns:1fr; } }
+</style>
+
+<div class="ar-breadcrumb">
+  <a href="/admin">后台</a> / <a href="/admin/appointments">预约管理</a> / <span>到店登记</span>
+</div>
+
+{% if request.query_params.get('err') %}
+<div class="msg err">{{ request.query_params.get('err') }}</div>
+{% endif %}
+
+<div class="ar-head">
+  <div>
+    <h1>到&nbsp;店&nbsp;登&nbsp;记</h1>
+    <div class="ar-sub">
+      预约 #{{ a.id }} · {{ a.appointment_date or '—' }} {{ a.appointment_time or '' }} · {{ a.customer_name or '—' }} / {{ a.pet_name or '—' }}
+    </div>
+  </div>
+  <a href="javascript:history.back()" class="uk-btn ghost sm">← 返回</a>
+</div>
+<hr class="ar-rule"/>
+
+<form method="post" action="/admin/appointments/{{ a.id }}/register">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="redirect_after" value="{{ redirect_after }}"/>
+
+  {% if cust and pet %}
+  <div class="ar-card" style="border-left:3px solid var(--accent-green);">
+    <h2>已&nbsp;绑&nbsp;定&nbsp;档&nbsp;案</h2>
+    <div class="ar-hint">
+      当前预约已绑定：客户 #{{ cust.id }} {{ cust.name }} / 宠物 #{{ pet.id }} {{ pet.name }}。如需改绑，可在下方重新选择或填写。
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="ar-card">
+    <h2>匹&nbsp;配&nbsp;已&nbsp;有&nbsp;档&nbsp;案</h2>
+    {% if candidates %}
+    <div class="ar-choice">
+      <label>
+        <input type="radio" name="existing_customer_id" value="0" checked/>
+        <span><b>新建或按手机号合并客户</b><br><span class="ar-hint">用下面填写的信息建档；如果手机号已经存在，会自动合并到原客户。</span></span>
+      </label>
+      {% for c in candidates %}
+      <label>
+        <input type="radio" name="existing_customer_id" value="{{ c.id }}"/>
+        <span>
+          <b>#{{ c.id }} {{ c.name or '未命名客户' }}</b> · {{ c.phone or '无手机号' }}
+          {% if c.pets %}
+          <br><span class="ar-hint">名下宠物：{% for p in c.pets %}{{ p.name }}{% if not loop.last %}、{% endif %}{% endfor %}</span>
+          {% endif %}
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="ar-hint">没有找到同手机号客户。保存后会新建客户和宠物档案，并回写到这条预约。</div>
+    <input type="hidden" name="existing_customer_id" value="0"/>
+    {% endif %}
+  </div>
+
+  <div class="ar-card">
+    <h2>基&nbsp;础&nbsp;资&nbsp;料</h2>
+    <div class="ar-grid">
+      <div class="ar-field">
+        <label>客&nbsp;户&nbsp;姓&nbsp;名</label>
+        <input class="ar-input" name="customer_name" value="{{ cust.name if cust else a.customer_name }}" required/>
+      </div>
+      <div class="ar-field">
+        <label>手&nbsp;机&nbsp;号</label>
+        <input class="ar-input" name="phone" value="{{ cust.phone if cust else a.phone }}" required/>
+      </div>
+    </div>
+  </div>
+
+  <div class="ar-card">
+    <h2>宠&nbsp;物&nbsp;档&nbsp;案</h2>
+    {% if pet or candidate_pets %}
+    <div class="ar-field" style="margin-bottom:14px;">
+      <label>使&nbsp;用&nbsp;已&nbsp;有&nbsp;宠&nbsp;物（可&nbsp;选）</label>
+      <select class="ar-select" name="existing_pet_id">
+        <option value="0">新建宠物档案</option>
+        {% if pet %}
+        <option value="{{ pet.id }}" selected>#{{ pet.id }} {{ pet.name }}</option>
+        {% endif %}
+        {% for p in candidate_pets %}
+        <option value="{{ p.id }}">#{{ p.id }} {{ p.name }} · {{ p.breed or p.species }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <input type="hidden" name="existing_pet_id" value="0"/>
+    {% endif %}
+    <div class="ar-grid r3">
+      <div class="ar-field">
+        <label>宠&nbsp;物&nbsp;名</label>
+        <input class="ar-input" name="pet_name" value="{{ pet.name if pet else a.pet_name }}" required/>
+      </div>
+      <div class="ar-field">
+        <label>种&nbsp;类</label>
+        <select class="ar-select" name="species">
+          {% set default_species = pet.species if pet else ('cat' if a.category == 'tnr' else 'dog' if '犬' in (a.service_name or '') else 'cat') %}
+          {% for k, zh in species_options %}
+          <option value="{{ k }}" {% if default_species == k %}selected{% endif %}>{{ zh }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ar-field">
+        <label>性&nbsp;别</label>
+        <select class="ar-select" name="pet_gender">
+          {% for k, zh in gender_labels.items() %}
+          <option value="{{ k }}" {% if (pet and pet.gender == k) or ((not pet) and a.pet_gender == k) %}selected{% endif %}>{{ zh }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ar-field">
+        <label>品&nbsp;种（可&nbsp;选）</label>
+        <input class="ar-input" name="breed" value="{{ pet.breed if pet else '' }}"/>
+      </div>
+      <div class="ar-field">
+        <label>年&nbsp;龄（可&nbsp;选）</label>
+        <input class="ar-input" name="birthday_estimate" value="{{ pet.birthday_estimate if pet else '' }}" placeholder="如：2岁 / 3个月"/>
+      </div>
+      <div class="ar-field">
+        <label>门&nbsp;店</label>
+        <input class="ar-input" value="{{ a.store or '—' }}" readonly/>
+      </div>
+    </div>
+  </div>
+
+  <div class="ar-card">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <input type="checkbox" name="mark_arrived" value="1" checked/>
+      <span>保存后同时标记为已到店</span>
+    </label>
+    <div class="ar-hint" style="margin-top:8px;">到店登记完成后，日历、预约管理、手机端会自动显示正式客户/宠物档案入口。</div>
+  </div>
+
+  <div class="ar-actions">
+    <a href="javascript:history.back()" class="uk-btn ghost sm">取&nbsp;消</a>
+    <button type="submit" class="ar-submit">保&nbsp;存&nbsp;档&nbsp;案</button>
+  </div>
+</form>
+{% endblock %}

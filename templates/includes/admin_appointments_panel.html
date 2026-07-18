@@ -43,6 +43,15 @@
  <input type="hidden" name="redirect_after" value="{% if appt_redirect == 'appointments' %}appointments{% else %}admin{% endif %}"/>
  <input type="hidden" name="customer_id" id="admin_appt_customer_id" value="0"/>
  <input type="hidden" name="pet_id"      id="admin_appt_pet_id"      value="0"/>
+ <div class="wide" style="padding:0.7rem 0.85rem;background:#fafaf6;border:1px solid var(--border);">
+ <label style="display:flex;align-items:flex-start;gap:0.55rem;margin:0;cursor:pointer;">
+ <input type="checkbox" name="no_archive" id="admin_appt_no_archive" value="1" checked style="width:16px;height:16px;margin-top:2px;"/>
+ <span>
+ <strong>无档案预约</strong>
+ <span class="sub" style="display:block;margin-top:0.2rem;">只保存文本和时间；客户到店后再点“到店登记”补建客户/宠物档案。</span>
+ </span>
+ </label>
+ </div>
  <div class="appt-grid">
  <div>
  <label style="margin:0 0 0.35rem;">预约类型</label>
@@ -353,9 +362,9 @@
     style="color:var(--brand);text-decoration:none;font-weight:600;"
     title="进入客户档案">{{ appt.customer_name }} <i data-lucide="arrow-right" style="width:.85em;height:.85em;"></i></a>
  {% else %}
- <a href="/admin/customers?q={{ appt.phone or appt.customer_name }}"
-    style="color:var(--brand);text-decoration:none;font-weight:600;"
-    title="按电话搜索客户">{{ appt.customer_name }} <i data-lucide="search" style="width:.85em;height:.85em;"></i></a>
+ <a href="/admin/appointments/{{ appt.id }}/register?redirect_after=appointments"
+    style="color:var(--accent-amber);text-decoration:none;font-weight:600;"
+    title="到店登记并补建档案">{{ appt.customer_name }} <span style="font-size:0.78rem;">未建档</span> <i data-lucide="clipboard-edit" style="width:.85em;height:.85em;"></i></a>
  {% endif %}
  <div class="row-cust-sub">{{ appt.phone }}</div>
  </td>
@@ -407,6 +416,9 @@
  </form>
  {% endif %}
  {% if appt.status not in ['cancelled','completed'] %}
+ {% if not appt.customer_id or not appt.pet_id %}
+ <a class="row-btn" href="/admin/appointments/{{ appt.id }}/register?redirect_after=appointments" title="到店登记 / 补建档案">到店登记</a>
+ {% endif %}
  <button type="button" onclick="toggleApptPanel('cancel-{{ appt.id }}')">取消</button>
  <button type="button" onclick="toggleApptPanel('rs-{{ appt.id }}')">改约</button>
  {% endif %}

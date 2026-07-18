@@ -5376,6 +5376,7 @@ async def admin_appointment_create(
     proxy_relation: str = Form(""),
     customer_id: int = Form(0),
     pet_id: int = Form(0),
+    no_archive: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -5456,10 +5457,12 @@ async def admin_appointment_create(
             )
         _is_beauty = str(fields["category"]) in {"beauty", "grooming", "washcare"}
         _is_proxy_bool = bool(is_proxy and is_proxy.strip())
-        # ── 自动创建/合并客户档案 ──
+        _no_archive_bool = bool(no_archive and no_archive.strip())
+        # ── 绑定客户档案 ──
+        # 无档案预约：只保存预约文本，等客户到店后再补建客户/宠物档案。
         # 优先用表单传入的 customer_id（从客户档案页发起的新建预约会带）
         _admin_appt_cust_id = customer_id if customer_id else None
-        if not _admin_appt_cust_id:
+        if (not _no_archive_bool) and (not _admin_appt_cust_id):
             try:
                 _admin_appt_cust = _upsert_customer(
                     db,
@@ -5478,6 +5481,19 @@ async def admin_appointment_create(
             ).first()
             if _pet_ok:
                 _admin_appt_pet_id = pet_id
+        if (not _no_archive_bool) and _admin_appt_cust_id and not _admin_appt_pet_id:
+            _short_store = _STORE_FULL_TO_SHORT.get(str(fields["store"]), str(fields["store"]))
+            _pet = Pet(
+                customer_id=_admin_appt_cust_id,
+                name=str(fields["pet_name"])[:120],
+                species=("cat" if str(fields["category"]) == AppointmentCategory.tnr.value else "other"),
+                gender=str(fields["pet_gender"])[:10],
+                store=_short_store[:40],
+                medical_record_no=_gen_medical_record_no(db, _short_store) if _short_store else "",
+            )
+            db.add(_pet)
+            db.flush()
+            _admin_appt_pet_id = _pet.id
         row = Appointment(
             category=str(fields["category"]),
             # 后台/日历建的：员工录入即视为已确认，不再走"待确认"中间态
@@ -5518,6 +5534,7 @@ async def admin_appointment_create(
                 "store": row.store,
                 "appointment_date": row.appointment_date,
                 "appointment_time": row.appointment_time,
+                "no_archive": _no_archive_bool or not bool(row.customer_id and row.pet_id),
             },
         )
         db.commit()
@@ -5533,6 +5550,180 @@ async def admin_appointment_create(
             redirect_base + "?appointment_err=" + quote(str(e.detail)[:160], safe=""),
             status_code=303,
         )
+
+
+@app.get("/admin/appointments/{appointment_id}/register", response_class=HTMLResponse)
+async def admin_appointment_register_form(
+    appointment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    redirect_after: str = Query("appointments"),
+):
+    require_admin(request)
+    a = db.get(Appointment, appointment_id)
+    if not a:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if a.store and a.store not in (full_store, admin_store):
+            raise HTTPException(403)
+    cust = db.get(Customer, a.customer_id) if a.customer_id else None
+    pet = db.get(Pet, a.pet_id) if a.pet_id else None
+    candidates = []
+    phone = (a.phone or "").strip()
+    if phone:
+        candidates = (
+            db.query(Customer)
+            .filter(Customer.phone == phone)
+            .order_by(Customer.id.desc())
+            .limit(8)
+            .all()
+        )
+    candidate_pets = []
+    seen_pet_ids = set()
+    for c in candidates:
+        for cp in (c.pets or []):
+            if cp.id in seen_pet_ids:
+                continue
+            seen_pet_ids.add(cp.id)
+            candidate_pets.append(cp)
+    return templates.TemplateResponse(request, "uk/appointment_register.html", {
+        "a": a,
+        "cust": cust,
+        "pet": pet,
+        "candidates": candidates,
+        "candidate_pets": candidate_pets,
+        "gender_labels": _PET_GENDER_LABELS,
+        "species_options": [("cat", "猫"), ("dog", "犬"), ("other", "其他")],
+        "redirect_after": redirect_after or "appointments",
+        "csrf_token": _get_csrf_token(request),
+        "title": "到店登记",
+    })
+
+
+@app.post("/admin/appointments/{appointment_id}/register")
+async def admin_appointment_register_save(
+    appointment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    redirect_after: str = Form("appointments"),
+    existing_customer_id: int = Form(0),
+    existing_pet_id: int = Form(0),
+    customer_name: str = Form(""),
+    phone: str = Form(""),
+    pet_name: str = Form(""),
+    species: str = Form("cat"),
+    breed: str = Form(""),
+    pet_gender: str = Form("unknown"),
+    birthday_estimate: str = Form(""),
+    mark_arrived: str = Form("1"),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    a = db.get(Appointment, appointment_id)
+    if not a:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        full_store = _STORE_SHORT_TO_FULL.get(admin_store, admin_store)
+        if a.store and a.store not in (full_store, admin_store):
+            raise HTTPException(403)
+
+    redirect_base = _admin_appointment_redirect_base(redirect_after)
+
+    def _bad(msg: str) -> RedirectResponse:
+        return RedirectResponse(
+            f"/admin/appointments/{appointment_id}/register?redirect_after={quote(redirect_after, safe=':')}&err="
+            + quote(msg[:160], safe=""),
+            status_code=303,
+        )
+
+    cname = (customer_name or a.customer_name or "").strip()
+    ph = (phone or a.phone or "").strip()
+    pname = (pet_name or a.pet_name or "").strip()
+    sp = (species or "cat").strip()
+    if sp not in ("cat", "dog", "other"):
+        sp = "other"
+    gender = (pet_gender or a.pet_gender or "unknown").strip()
+    if gender not in _PET_GENDER_LABELS:
+        gender = "unknown"
+    if not cname:
+        return _bad("请填写客户姓名")
+    if not ph or len(re.sub(r"\D", "", ph)) < 7:
+        return _bad("请填写有效手机号")
+    if not pname:
+        return _bad("请填写宠物名称")
+
+    try:
+        pet = db.get(Pet, existing_pet_id) if existing_pet_id else None
+        if pet:
+            if existing_customer_id and pet.customer_id != existing_customer_id:
+                return _bad("选择的宠物不属于该客户")
+            cust = db.get(Customer, pet.customer_id)
+            if not cust:
+                return _bad("选择的宠物缺少客户档案")
+        else:
+            cust = db.get(Customer, existing_customer_id) if existing_customer_id else None
+            if not cust:
+                cust = _upsert_customer(db, name=cname, phone=ph, source=a.category or "appointment")
+            else:
+                if cname and not cust.name:
+                    cust.name = cname[:120]
+                if ph and not cust.phone:
+                    cust.phone = ph[:40]
+        if not pet:
+            store_short = _STORE_FULL_TO_SHORT.get(a.store or "", a.store or "")
+            pet = Pet(
+                customer_id=cust.id,
+                name=pname[:120],
+                species=sp[:40],
+                breed=(breed or "").strip()[:80],
+                gender=gender[:10],
+                birthday_estimate=(birthday_estimate or "").strip()[:40],
+                store=store_short[:40],
+                medical_record_no=_gen_medical_record_no(db, store_short) if store_short else "",
+            )
+            db.add(pet)
+            db.flush()
+        else:
+            if not pet.medical_record_no and (pet.store or a.store):
+                store_short = pet.store or _STORE_FULL_TO_SHORT.get(a.store or "", a.store or "")
+                pet.medical_record_no = _gen_medical_record_no(db, store_short)
+            if not pet.store and a.store:
+                pet.store = _STORE_FULL_TO_SHORT.get(a.store or "", a.store or "")
+
+        a.customer_id = cust.id
+        a.pet_id = pet.id
+        a.customer_name = cust.name or cname
+        a.phone = cust.phone or ph
+        a.pet_name = pet.name or pname
+        a.pet_gender = pet.gender or gender
+        if mark_arrived and a.status in (AppointmentStatus.pending.value, AppointmentStatus.confirmed.value):
+            a.status = AppointmentStatus.arrived.value
+
+        _audit(
+            db,
+            request,
+            "appointment_register_archive",
+            detail={
+                "appointment_id": a.id,
+                "customer_id": cust.id,
+                "pet_id": pet.id,
+                "mark_arrived": bool(mark_arrived),
+            },
+        )
+        db.commit()
+        if redirect_base.startswith("/m"):
+            return RedirectResponse(redirect_base + "?msg=" + quote("已补建档案并绑定预约", safe=""), status_code=303)
+        return RedirectResponse(redirect_base + f"?appointment_ok=status#appt-{a.id}", status_code=303)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        return _bad(f"补档失败：{e}")
 
 
 @app.post("/admin/appointments/{appointment_id}/status", name="admin_appointment_status")
@@ -24975,6 +25166,7 @@ async def api_calendar_events(
             "created_at":     (a.created_at + timedelta(hours=8)).strftime("%m-%d %H:%M") if a.created_at else "",
             "customer_id":    a.customer_id,
             "pet_id":         a.pet_id,
+            "is_unfiled":     not bool(a.customer_id and a.pet_id),
         })
 
     bq = db.query(CalendarBlock)
