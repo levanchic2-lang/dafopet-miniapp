@@ -11919,6 +11919,51 @@ async def admin_visit_print(visit_id: int, request: Request, db: Session = Depen
     })
 
 
+@app.get("/admin/visits/{visit_id}/physical-exam-print", response_class=HTMLResponse)
+async def admin_visit_physical_exam_print(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    """体格检查报告打印（从病历体格检查字段生成独立报告）。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+
+    pet_weight = 0.0
+    if pet:
+        last_w = db.query(WeightRecord).filter(WeightRecord.pet_id == pet.id).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
+        if last_w:
+            pet_weight = float(last_w.weight_kg or 0)
+    pet_age = ""
+    if pet and pet.birthday_estimate:
+        try:
+            from datetime import date as _date
+            parts = pet.birthday_estimate.split("-")
+            by = int(parts[0])
+            bm = int(parts[1]) if len(parts) > 1 else 1
+            today = _date.today()
+            years = today.year - by - (1 if (today.month, 1) < (bm, 1) else 0)
+            pet_age = (f"{years} 岁" if years > 0 else f"{max(0, (today.year - by) * 12 + (today.month - bm))} 个月")
+        except Exception:
+            pet_age = pet.birthday_estimate or ""
+
+    clinic_name_zh = "大风动物医院"
+    clinic_name_en = "DaFo Animal Hospital"
+    clinic_store = _print_clinic_store(visit, pet)
+    if clinic_store:
+        clinic_name_zh = f"大风动物医院（{clinic_store.replace('店', '分院')}）"
+        clinic_name_en = f"DaFo Animal Hospital · {clinic_store.replace('店', '')}"
+
+    return templates.TemplateResponse(request, "admin_physical_exam_print.html", {
+        "visit": visit, "cust": cust, "pet": pet,
+        "pet_weight": pet_weight, "pet_age": pet_age,
+        "clinic_store": clinic_store,
+        "clinic_name_zh": clinic_name_zh, "clinic_name_en": clinic_name_en,
+        "visit_type_zh": _VISIT_TYPE_ZH,
+    })
+
+
 @app.get("/admin/visits/{visit_id}/discharge-print", response_class=HTMLResponse)
 async def admin_visit_discharge_print(visit_id: int, request: Request, db: Session = Depends(get_db)):
     """医嘱单独立打印（突出医嘱内容 + 处方 + 复诊建议，无完整 SOAP）。"""

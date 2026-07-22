@@ -198,6 +198,7 @@
   </div>
   <div class="actions">
     <a href="/admin/visits/{{ visit.id }}/print" class="uk-btn ghost sm" target="_blank">打印病历</a>
+    <a href="/admin/visits/{{ visit.id }}/physical-exam-print" class="uk-btn ghost sm" target="_blank">体检报告</a>
     <a href="/admin/visits/{{ visit.id }}/discharge-print" class="uk-btn ghost sm" target="_blank">打印医嘱单</a>
     {% if visit.status != 'closed' %}
       <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">编辑病历</a>

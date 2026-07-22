@@ -1,0 +1,173 @@
+{% extends "_print_base.html" %}
+{% block title %}体格检查报告 · {{ pet.name if pet else '' }} · {{ visit.visit_date }}{% endblock %}
+{% block default_size %}A4{% endblock %}
+
+{% block extra_style %}
+body { color: #1a1a1a; }
+.pe-frame { padding: 2mm 0; }
+.pe-clinic-en {
+  text-align:center; font-size: 22pt; letter-spacing: 6px;
+  font-weight: 400; line-height: 1.2;
+}
+.pe-clinic-zh {
+  text-align:center; font-size: 11pt; letter-spacing: 8px;
+  color:#555; margin-top: 4px;
+}
+.pe-clinic-tagline {
+  text-align:center; font-size: 8.5pt; color:#888;
+  font-style: italic; letter-spacing: 1px; margin-top: 6px;
+}
+.pe-rule-double {
+  border: 0; border-top: 1px solid #1a1a1a;
+  border-bottom: 1px solid #1a1a1a; height: 4px; margin: 12px 0 4px;
+}
+.pe-rule-single { border: 0; border-top: 1px solid #888; margin: 6px 0; }
+.pe-title {
+  text-align: center; font-size: 13pt; font-weight: 700;
+  letter-spacing: 5px; text-transform: uppercase; padding: 7px 0;
+}
+.pe-meta-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 9.5pt; padding: 4px 0;
+}
+.pe-info {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 7px 18px; font-size: 10pt; padding: 10px 0 8px;
+}
+.pe-info .lbl {
+  display:block; color: #777; font-size: 8.5pt;
+  letter-spacing: .5px; margin-bottom: 2px;
+}
+.pe-info .val {
+  display:block; min-height: 18px; border-bottom: .5px solid #ccc;
+  padding: 0 4px 2px; font-weight: 600;
+}
+.pe-section-h {
+  margin-top: 14px; border-left: 3px solid #1a1a1a;
+  padding: 2px 8px; margin-bottom: 8px;
+}
+.pe-section-h .zh { font-size: 12pt; font-weight: 700; letter-spacing: 4px; }
+.pe-section-h .en {
+  font-size: 8.5pt; color: #888; letter-spacing: 2px;
+  text-transform: uppercase; margin-left: 4px;
+}
+.pe-box {
+  border: .5px solid #c8c8c8;
+  min-height: 118mm;
+  padding: 10mm 9mm;
+  page-break-inside: avoid;
+}
+.pe-body {
+  white-space: pre-wrap;
+  line-height: 1.75;
+  font-size: 10.8pt;
+}
+.pe-empty {
+  color: #888;
+  font-style: normal;
+}
+.pe-note {
+  margin-top: 12px;
+  padding: 7px 10px;
+  border-left: 3px solid #8a6a3b;
+  background: #fbfaf6;
+  color: #555;
+  font-size: 8.8pt;
+  line-height: 1.7;
+}
+.pe-sig {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 18px; margin-top: 28px;
+  font-size: 8.5pt; color: #555;
+}
+.pe-sig .box {
+  border-bottom: 1px solid #888;
+  padding: 28px 0 4px;
+  text-align: center;
+  letter-spacing: 2px;
+}
+.pe-foot {
+  margin-top: 18px; padding-top: 8px;
+  text-align: center; font-size: 8pt; color: #888;
+  border-top: .5px solid #ccc; letter-spacing: 1px;
+}
+.pe-foot .thanks { font-size: 9pt; color: #555; font-style: italic; margin-bottom: 4px; letter-spacing: .5px; }
+
+body[data-size="A5"] .pe-clinic-en,
+body[data-size="A5_LAND"] .pe-clinic-en { font-size: 16pt; letter-spacing: 3px; }
+body[data-size="A5"] .pe-title,
+body[data-size="A5_LAND"] .pe-title { font-size: 11pt; letter-spacing: 3px; }
+body[data-size="A5"] .pe-info,
+body[data-size="A5_LAND"] .pe-info { grid-template-columns: 1fr 1fr; }
+body[data-size="A5"] .pe-box,
+body[data-size="A5_LAND"] .pe-box { min-height: 70mm; padding: 7mm; }
+body[data-size="T80"] .pe-clinic-en { font-size: 12pt; letter-spacing: 1px; }
+body[data-size="T80"] .pe-clinic-zh { letter-spacing: 2px; }
+body[data-size="T80"] .pe-title { font-size: 10pt; letter-spacing: 1px; }
+body[data-size="T80"] .pe-meta-row { display: block; }
+body[data-size="T80"] .pe-info { grid-template-columns: 1fr; }
+body[data-size="T80"] .pe-box { min-height: 40mm; padding: 5mm 3mm; }
+body[data-size="T80"] .pe-sig { display: none; }
+{% endblock %}
+
+{% block toolbar_extra %}
+<span style="opacity:.8;font-size:12px;">报告：<b>临床体格检查</b></span>
+{% endblock %}
+
+{% block content %}
+<div class="pe-frame">
+  <div class="pe-clinic-en">{{ clinic_name_en or 'DaFo Animal Hospital' }}</div>
+  <div class="pe-clinic-zh">{{ clinic_name_zh or '大风动物医院' }}</div>
+  <div class="pe-clinic-tagline">Clinical Examination Report · Est. 2018</div>
+
+  <hr class="pe-rule-double" />
+  <div class="pe-title">Clinical Examination · 临 床 体 格 检 查 报 告</div>
+  <hr class="pe-rule-single" />
+
+  <div class="pe-meta-row">
+    <span>Report No. <strong>PE{{ '%06d'|format(visit.id) }}</strong></span>
+    <span>Date · 日期 <strong>{{ visit.visit_date or '—' }}</strong></span>
+    <span>Visit · 类型 <strong>{{ visit_type_zh.get(visit.visit_type, visit.visit_type) }}</strong></span>
+  </div>
+
+  <div class="pe-section-h"><span class="zh">基本信息</span><span class="en">Patient Info</span></div>
+  <div class="pe-info">
+    <div><span class="lbl">客户 Client</span><span class="val">{{ cust.name if cust else '—' }}</span></div>
+    <div><span class="lbl">电话 Tel</span><span class="val">{{ cust.phone if cust else '—' }}</span></div>
+    <div><span class="lbl">宠物 Pet</span><span class="val">{{ pet.name if pet else '—' }}</span></div>
+    <div><span class="lbl">病历号 Chart No.</span><span class="val">{{ pet.medical_record_no if pet else '—' }}</span></div>
+    <div><span class="lbl">种类 Species</span><span class="val">{{ {'cat':'猫','dog':'犬'}.get(pet.species, pet.species or '') if pet else '—' }}</span></div>
+    <div><span class="lbl">品种 Breed</span><span class="val">{{ pet.breed if pet and pet.breed else '—' }}</span></div>
+    <div><span class="lbl">性别 Sex</span><span class="val">{{ {'male':'公','female':'母','unknown':'未知'}.get(pet.gender, pet.gender or '') if pet else '—' }}{% if pet and pet.is_neutered %} · 已绝育{% endif %}</span></div>
+    <div><span class="lbl">年龄 Age</span><span class="val">{{ pet_age or '—' }}</span></div>
+    <div><span class="lbl">体重 Weight</span><span class="val">{{ ('%.2f kg'|format(pet_weight)) if pet_weight else '—' }}</span></div>
+    <div><span class="lbl">主诊 Doctor</span><span class="val">{{ visit.vet_name or '—' }}</span></div>
+    <div><span class="lbl">门店 Store</span><span class="val">{{ clinic_store or '—' }}</span></div>
+    <div><span class="lbl">就诊号 Visit No.</span><span class="val">#{{ visit.id }}</span></div>
+  </div>
+
+  <div class="pe-section-h"><span class="zh">体格检查记录</span><span class="en">Clinical Findings</span></div>
+  <div class="pe-box">
+    {% if visit.physical_exam %}
+      <div class="pe-body">{{ visit.physical_exam }}</div>
+    {% else %}
+      <div class="pe-body pe-empty">本次病历尚未填写体格检查内容。</div>
+    {% endif %}
+  </div>
+
+  <div class="pe-note">
+    本报告依据本次就诊体格检查记录生成。完整诊疗结论仍以病历 SOAP、检查报告、处方记录及主诊医生说明为准。
+  </div>
+
+  <div class="pe-sig">
+    <div class="box">检查医师 · Examined By</div>
+    <div class="box">复核 · Reviewed By</div>
+    <div class="box">日期 · Date</div>
+  </div>
+
+  <div class="pe-foot">
+    <div class="thanks">"Thank you for entrusting us with the care of your companion."</div>
+    {{ clinic_name_zh or '大风动物医院' }} · Please retain this report for your records.
+  </div>
+</div>
+{% endblock %}
