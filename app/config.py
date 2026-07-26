@@ -19,10 +19,11 @@ class Settings(BaseSettings):
 
     # DeepSeek（OpenAI 兼容）：仅用于「报告类文字生成」（B超起草 / 显微镜·粪检起草）。
     # 配了 deepseek_api_key 即启用；视觉类任务（TNR 审核 / 进货单识别）仍走豆包视觉。
-    # model 可选 deepseek-chat（V3，快/便宜）或 deepseek-reasoner（R1，推理更强/略慢）。
+    # 当前报告生成接口模型名：deepseek-v4-flash（快/便宜）或 deepseek-v4-pro（更强）。
+    # 旧配置 deepseek-chat / deepseek-reasoner 会在 app.services.report_llm 中自动兼容映射。
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_model: str = "deepseek-chat"
+    deepseek_model: str = "deepseek-v4-flash"
 
     # 自动通过：仅当 AI 判定为疑似流浪猫且置信度 >= 该值（0~1）
     stray_auto_approve_min_confidence: float = 0.78

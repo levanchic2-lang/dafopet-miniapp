@@ -13,6 +13,19 @@ from __future__ import annotations
 from app.config import settings
 
 
+_DEEPSEEK_MODEL_ALIASES = {
+    # 旧配置名。当前报告生成接口返回的可用模型名为 deepseek-v4-pro / deepseek-v4-flash。
+    "deepseek-reasoner": "deepseek-v4-pro",
+    "deepseek-r1": "deepseek-v4-pro",
+    "deepseek-chat": "deepseek-v4-flash",
+}
+
+
+def _normalize_deepseek_model(model: str) -> str:
+    key = (model or "").strip()
+    return _DEEPSEEK_MODEL_ALIASES.get(key.lower(), key or "deepseek-v4-flash")
+
+
 def report_llm_configured() -> bool:
     """是否有可用于报告文字生成的模型（DeepSeek 或 豆包文本）。"""
     return bool((settings.deepseek_api_key or "").strip()
@@ -29,8 +42,8 @@ def report_text_client_model():
     dk = (settings.deepseek_api_key or "").strip()
     if dk:
         base = (settings.deepseek_base_url or "").strip() or "https://api.deepseek.com"
-        model = (settings.deepseek_model or "").strip() or "deepseek-chat"
-        is_reasoner = ("reason" in model.lower()) or ("r1" in model.lower())
+        model = _normalize_deepseek_model((settings.deepseek_model or "").strip())
+        is_reasoner = ("reason" in model.lower()) or ("r1" in model.lower()) or model.lower().endswith("-pro")
         return AsyncOpenAI(api_key=dk, base_url=base), model, "deepseek", is_reasoner
 
     base = (settings.openai_base_url or "").strip() or None
