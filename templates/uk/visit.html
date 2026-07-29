@@ -454,14 +454,17 @@
 {% endif %}
 
 {# 销售单 #}
-{% if sales_orders %}
 <div class="v-rel-section">
   <div class="v-rel-head">
     <div>
       <h2>销&nbsp;售&nbsp;单</h2>
       <span class="count">共 {{ sales_orders|length }} 张</span>
     </div>
+    <div class="actions">
+      <a href="/admin/sales-orders/create?visit_id={{ visit.id }}{% if cust %}&customer_id={{ cust.id }}{% endif %}{% if pet %}&pet_id={{ pet.id }}{% endif %}" class="uk-btn ghost sm">＋ 新建销售单</a>
+    </div>
   </div>
+  {% if sales_orders %}
   <table class="v-rel-tbl">
     <thead><tr><th>日期</th><th>金额</th><th>状态</th><th class="right">操作</th></tr></thead>
     <tbody>
@@ -479,8 +482,10 @@
       {% endfor %}
     </tbody>
   </table>
+  {% else %}
+  <div class="v-rel-empty">本病历暂无销售单，可直接售卖罐头、处方粮、用品等商品</div>
+  {% endif %}
 </div>
-{% endif %}
 
 {# 收费单 #}
 {% if invoices %}
