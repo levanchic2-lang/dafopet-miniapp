@@ -76,6 +76,25 @@
   background: #f5f5f5; border: 1px dashed #bbb; padding: 12mm 4mm;
   text-align: center; font-size: 9pt; color: #666;
 }
+.rpt-pdf-page {
+  margin: 6px 0 10px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.rpt-pdf-page img {
+  display: block;
+  width: 100%;
+  max-height: 250mm;
+  object-fit: contain;
+  border: 0.5px solid #ddd;
+  background: #fff;
+}
+.rpt-pdf-page .cap {
+  font-size: 8pt;
+  color: #777;
+  text-align: center;
+  margin-top: 3px;
+}
 
 /* 印象/诊断 */
 .rpt-impression {
@@ -154,11 +173,23 @@ body[data-size="T80"] .rpt-sig { display: none; }
   {% if pdf_reports %}
   <div class="rpt-section-h">附 件 报 告（PDF）</div>
   {% for r in pdf_reports %}
-  <div class="rpt-pdf-card">
-    <i data-lucide="file-text"></i> <strong>{{ r.original_name }}</strong>
-    {% if r.item_label %} — {{ r.item_label }}{% endif %}
-    <div style="margin-top:4px;font-size:8pt;color:#888;">上传于 {{ (r.uploaded_at | bjtime).strftime('%Y-%m-%d %H:%M') if r.uploaded_at else '' }}</div>
-  </div>
+    {% if r.page_count and r.page_count > 0 %}
+      {% for pg in range(r.page_count) %}
+      <div class="rpt-pdf-page">
+        <img src="/admin/exam-reports/{{ r.id }}/page-image?page={{ pg }}" alt="{{ r.original_name }} 第 {{ pg + 1 }} 页"/>
+        <div class="cap">
+          {{ r.original_name }}{% if r.item_label %} — {{ r.item_label }}{% endif %}
+          {% if r.page_count > 1 %} · 第 {{ pg + 1 }} / {{ r.page_count }} 页{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="rpt-pdf-card">
+        <i data-lucide="file-text"></i> <strong>{{ r.original_name }}</strong>
+        {% if r.item_label %} — {{ r.item_label }}{% endif %}
+        <div style="margin-top:4px;font-size:8pt;color:#888;">上传于 {{ (r.uploaded_at | bjtime).strftime('%Y-%m-%d %H:%M') if r.uploaded_at else '' }}</div>
+      </div>
+    {% endif %}
   {% endfor %}
   {% endif %}
 

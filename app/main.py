@@ -12015,6 +12015,7 @@ async def admin_insurance_material_detail(
         "snapshots": snapshots,
         "latest": latest,
         "public_url": _insurance_material_public_url(request, share, latest.version if latest else None),
+        "is_superadmin": _is_superadmin(request),
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
         "err": request.query_params.get("err"),
@@ -12042,6 +12043,44 @@ async def admin_insurance_material_revoke(
     _audit(db, request, "insurance_material_share_revoke", detail={"share_id": share.id, "visit_id": share.visit_id})
     db.commit()
     return RedirectResponse(f"/admin/insurance-materials/{share.id}?msg=客户链接已撤销", status_code=303)
+
+
+@app.post("/admin/insurance-materials/{share_id}/delete")
+async def admin_insurance_material_delete(
+    share_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """超管删除测试/误生成的保险材料包，含历史快照与本地文件。"""
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    share = db.get(InsuranceMaterialShare, share_id)
+    if not share:
+        raise HTTPException(404, "材料包不存在")
+    pet = db.get(Pet, share.pet_id) if share.pet_id else None
+    _assert_store_access(request, share.store, pet.store if pet else "")
+    visit_id = share.visit_id
+    snapshot_count = len(share.snapshots or [])
+
+    root = (Path(settings.upload_dir) / "insurance_materials").resolve()
+    target = (root / str(share.id)).resolve()
+    if target.exists() and root in target.parents:
+        shutil.rmtree(target, ignore_errors=True)
+
+    _audit(db, request, "insurance_material_share_delete", detail={
+        "share_id": share.id,
+        "visit_id": visit_id,
+        "snapshot_count": snapshot_count,
+    })
+    db.delete(share)
+    db.commit()
+    if visit_id:
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}?msg={quote('保险材料包已删除', safe='')}",
+            status_code=303,
+        )
+    return RedirectResponse("/admin/visits?msg=保险材料包已删除", status_code=303)
 
 
 def _public_insurance_snapshot_or_404(
@@ -22915,6 +22954,13 @@ async def admin_exam_order_print(
     style = _detect_report_style(items)
     image_reports = [r for r in order.reports if (r.file_type or "image").lower() != "pdf"]
     pdf_reports   = [r for r in order.reports if (r.file_type or "").lower() == "pdf"]
+    from app.services.pdf_render import get_pdf_page_count
+    for rpt in pdf_reports:
+        try:
+            cnt = get_pdf_page_count(rpt.file_path)
+        except Exception:
+            cnt = 0
+        rpt.page_count = min(cnt, 5) if cnt else 0
     # clinic 名：按操作门店
     clinic_name_zh = "大风动物医院"
     _pcs = _print_clinic_store(visit, pet)

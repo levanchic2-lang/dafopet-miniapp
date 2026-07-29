@@ -67,6 +67,12 @@
       <button class="uk-btn ghost sm" type="submit" style="color:var(--accent-red);border-color:var(--accent-red);">撤销客户链接</button>
     </form>
     {% endif %}
+    {% if is_superadmin %}
+    <form method="post" action="/admin/insurance-materials/{{ share.id }}/delete" style="display:inline;" onsubmit="return confirm('删除后将移除这个材料包的客户链接、历史快照和已生成文件，不能恢复。确认删除？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button class="uk-btn ghost sm" type="submit" style="color:var(--accent-red);border-color:var(--accent-red);">删除材料包</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 <hr class="im-rule"/>
