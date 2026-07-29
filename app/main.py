@@ -82,6 +82,8 @@ from app.models import (
     TnrStoreConfig,
     ExamOrder,
     ExamReport,
+    InsuranceMaterialShare,
+    InsuranceMaterialSnapshot,
     MicroscopyReport,
     UltrasoundReport,
     XrayReport,
@@ -11919,6 +11921,214 @@ async def admin_visit_print(visit_id: int, request: Request, db: Session = Depen
     })
 
 
+def _insurance_material_public_url(request: Request, share: InsuranceMaterialShare, version: int | None = None) -> str:
+    base = (settings.public_base_url or str(request.base_url)).rstrip("/")
+    suffix = f"?v={version}" if version else ""
+    return f"{base}/insurance-materials/{share.token}{suffix}"
+
+
+def _latest_insurance_snapshot(db: Session, share_id: int) -> InsuranceMaterialSnapshot | None:
+    return (
+        db.query(InsuranceMaterialSnapshot)
+        .filter(InsuranceMaterialSnapshot.share_id == share_id)
+        .order_by(InsuranceMaterialSnapshot.version.desc(), InsuranceMaterialSnapshot.id.desc())
+        .first()
+    )
+
+
+@app.post("/admin/visits/{visit_id}/insurance-materials/create")
+async def admin_visit_insurance_materials_create(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    note: str = Form(""),
+):
+    """按当前病历/收费单/检查报告生成保险理赔材料包快照版本。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    _assert_store_access(request, pet.store if pet else "", visit.store if visit else "")
+    username = request.session.get("admin_username") or request.session.get("admin") or "admin"
+    try:
+        from app.services.insurance_materials import generate_insurance_material_snapshot
+
+        share, snap = generate_insurance_material_snapshot(
+            db=db,
+            templates=templates,
+            visit_id=visit_id,
+            generated_by=username,
+            visit_type_zh=_VISIT_TYPE_ZH,
+            inv_status_zh=_INV_STATUS_ZH,
+            inv_pay_zh=_INV_PAY_ZH,
+            detect_report_style=_detect_report_style,
+            print_clinic_store=_print_clinic_store,
+            payment_balance_hints=_payment_balance_hints,
+            note=note,
+        )
+    except Exception as e:
+        logger.exception("[insurance-materials] generate failed visit=%s", visit_id)
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}?err={quote('保险材料包生成失败：' + str(e), safe='')}",
+            status_code=303,
+        )
+    _audit(db, request, "insurance_material_snapshot_create", detail={
+        "visit_id": visit_id,
+        "share_id": share.id,
+        "snapshot_id": snap.id,
+        "version": snap.version,
+        "file_count": snap.file_count,
+    })
+    db.commit()
+    return RedirectResponse(
+        f"/admin/insurance-materials/{share.id}?msg={quote('已生成保险材料包第 ' + str(snap.version) + ' 版', safe='')}",
+        status_code=303,
+    )
+
+
+@app.get("/admin/insurance-materials/{share_id}", response_class=HTMLResponse)
+async def admin_insurance_material_detail(
+    share_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    share = db.get(InsuranceMaterialShare, share_id)
+    if not share:
+        raise HTTPException(404, "材料包不存在")
+    pet = db.get(Pet, share.pet_id) if share.pet_id else None
+    _assert_store_access(request, share.store, pet.store if pet else "")
+    snapshots = (
+        db.query(InsuranceMaterialSnapshot)
+        .filter(InsuranceMaterialSnapshot.share_id == share.id)
+        .order_by(InsuranceMaterialSnapshot.version.desc(), InsuranceMaterialSnapshot.id.desc())
+        .all()
+    )
+    for s in snapshots:
+        s._public_url = _insurance_material_public_url(request, share, s.version)
+    latest = snapshots[0] if snapshots else None
+    return templates.TemplateResponse(request, "uk/insurance_material.html", {
+        "share": share,
+        "snapshots": snapshots,
+        "latest": latest,
+        "public_url": _insurance_material_public_url(request, share, latest.version if latest else None),
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+        "err": request.query_params.get("err"),
+    })
+
+
+@app.post("/admin/insurance-materials/{share_id}/revoke")
+async def admin_insurance_material_revoke(
+    share_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    share = db.get(InsuranceMaterialShare, share_id)
+    if not share:
+        raise HTTPException(404, "材料包不存在")
+    pet = db.get(Pet, share.pet_id) if share.pet_id else None
+    _assert_store_access(request, share.store, pet.store if pet else "")
+    share.status = "revoked"
+    share.revoked_at = datetime.utcnow()
+    share.revoked_by = request.session.get("admin_username") or request.session.get("admin") or "admin"
+    db.commit()
+    _audit(db, request, "insurance_material_share_revoke", detail={"share_id": share.id, "visit_id": share.visit_id})
+    db.commit()
+    return RedirectResponse(f"/admin/insurance-materials/{share.id}?msg=客户链接已撤销", status_code=303)
+
+
+def _public_insurance_snapshot_or_404(
+    db: Session,
+    token: str,
+    version: int | None = None,
+) -> tuple[InsuranceMaterialShare, InsuranceMaterialSnapshot]:
+    share = db.query(InsuranceMaterialShare).filter(InsuranceMaterialShare.token == token).first()
+    if not share or share.status != "active":
+        raise HTTPException(404, "材料包不存在或已撤销")
+    if share.expires_at and share.expires_at < datetime.utcnow():
+        raise HTTPException(410, "材料包链接已过期，请联系医院重新生成")
+    q = db.query(InsuranceMaterialSnapshot).filter(InsuranceMaterialSnapshot.share_id == share.id)
+    if version:
+        snap = q.filter(InsuranceMaterialSnapshot.version == version).first()
+    else:
+        snap = q.order_by(InsuranceMaterialSnapshot.version.desc(), InsuranceMaterialSnapshot.id.desc()).first()
+    if not snap:
+        raise HTTPException(404, "材料包版本不存在")
+    return share, snap
+
+
+@app.get("/insurance-materials/{token}", response_class=HTMLResponse)
+async def public_insurance_materials(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    v: int | None = Query(None),
+):
+    share, snap = _public_insurance_snapshot_or_404(db, token, v)
+    from app.services.insurance_materials import load_snapshot_files
+
+    files = load_snapshot_files(snap)
+    return templates.TemplateResponse(request, "insurance_material_public.html", {
+        "share": share,
+        "snapshot": snap,
+        "files": files,
+    })
+
+
+@app.get("/insurance-materials/{token}/snapshots/{snapshot_id}/files/{idx}")
+async def public_insurance_material_file(
+    token: str,
+    snapshot_id: int,
+    idx: int,
+    db: Session = Depends(get_db),
+):
+    share, snap = _public_insurance_snapshot_or_404(db, token, None)
+    if snap.id != snapshot_id:
+        snap = db.get(InsuranceMaterialSnapshot, snapshot_id)
+        if not snap or snap.share_id != share.id:
+            raise HTTPException(404)
+    from app.services.insurance_materials import load_snapshot_files
+
+    files = load_snapshot_files(snap)
+    if idx < 0 or idx >= len(files):
+        raise HTTPException(404)
+    item = files[idx]
+    root = (Path(settings.upload_dir) / "insurance_materials" / str(share.id) / f"v{snap.version}").resolve()
+    target = (root / str(item.get("path") or "")).resolve()
+    if root not in target.parents and target != root:
+        raise HTTPException(403)
+    if not target.exists():
+        raise HTTPException(404)
+    return FileResponse(str(target), filename=item.get("filename") or target.name)
+
+
+@app.get("/insurance-materials/{token}/snapshots/{snapshot_id}/zip")
+async def public_insurance_material_zip(
+    token: str,
+    snapshot_id: int,
+    db: Session = Depends(get_db),
+):
+    share, snap = _public_insurance_snapshot_or_404(db, token, None)
+    if snap.id != snapshot_id:
+        snap = db.get(InsuranceMaterialSnapshot, snapshot_id)
+        if not snap or snap.share_id != share.id:
+            raise HTTPException(404)
+    target = (Path(settings.upload_dir) / (snap.zip_path or "")).resolve()
+    root = (Path(settings.upload_dir) / "insurance_materials" / str(share.id) / f"v{snap.version}").resolve()
+    if root not in target.parents and target != root:
+        raise HTTPException(403)
+    if not target.exists():
+        raise HTTPException(404)
+    return FileResponse(str(target), filename=Path(target).name, media_type="application/zip")
+
+
 @app.get("/admin/visits/{visit_id}/physical-exam-print", response_class=HTMLResponse)
 async def admin_visit_physical_exam_print(visit_id: int, request: Request, db: Session = Depends(get_db)):
     """体格检查报告打印（从病历体格检查字段生成独立报告）。"""
@@ -12034,6 +12244,14 @@ async def page_admin_visit_detail(
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
     invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
     exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.desc()).all()
+    insurance_shares = (
+        db.query(InsuranceMaterialShare)
+        .filter(InsuranceMaterialShare.visit_id == visit_id)
+        .order_by(InsuranceMaterialShare.id.desc())
+        .all()
+    )
+    for sh in insurance_shares:
+        sh._latest_snapshot = _latest_insurance_snapshot(db, sh.id)
     care_summary = _get_active_care_summary(db, visit_id)
     care_plan = _get_active_care_plan(db, visit_id)
     care_plan_tasks = _care_tasks_from_json(care_plan.tasks_json) if care_plan else []
@@ -12068,6 +12286,7 @@ async def page_admin_visit_detail(
         "sales_orders": sales_orders,
         "invoices": invoices,
         "exam_orders": exam_orders,
+        "insurance_shares": insurance_shares,
         "followups": followups,
         "care_summary": care_summary,
         "care_plan": care_plan,

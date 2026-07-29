@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>保险材料包 · 大风动物医院</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #f4f1ec; color: #1a1a1a;
+    font-family: Georgia, "Times New Roman", "Source Han Serif SC", "Noto Serif CJK SC", "STSong", "宋体", serif;
+    font-size: 15px; line-height: 1.75;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 34px 18px 60px; }
+  .brand { text-align:center; letter-spacing: 5px; font-size: 21px; font-weight: 700; }
+  .sub { text-align:center; color:#777; font-size: 13px; letter-spacing: 2px; margin-top: 4px; font-style: italic; }
+  .rule { border:0; height:4px; border-top:1px solid #1a1a1a; border-bottom:1px solid #1a1a1a; margin: 18px 0 24px; }
+  h1 { font-size: 28px; letter-spacing: 4px; margin: 0; line-height: 1.2; }
+  .meta { color:#777; letter-spacing:1px; font-style:italic; margin-top:8px; }
+  .card { background:#fdfcf8; border:1px solid #d8d4cc; padding:18px 20px; margin-top:20px; }
+  .download {
+    display:inline-block; background:#111; color:#fff; text-decoration:none;
+    padding:10px 18px; letter-spacing:3px; margin-top:14px;
+  }
+  table { width:100%; border-collapse:collapse; margin-top:12px; }
+  th, td { padding:10px 4px; border-bottom:1px solid #e2ddd4; text-align:left; vertical-align:top; }
+  th { color:#777; font-weight:400; font-style:italic; }
+  td a { color:#1a1a1a; text-decoration:none; border-bottom:1px solid #999; }
+  .foot { margin-top:24px; color:#888; font-size:13px; text-align:center; letter-spacing:1px; }
+  @media (max-width: 640px) {
+    h1 { font-size: 24px; }
+    table, thead, tbody, tr, th, td { display:block; }
+    thead { display:none; }
+    td { border-bottom:0; padding:4px 0; }
+    tr { border-bottom:1px solid #e2ddd4; padding:10px 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">大 风 动 物 医 院</div>
+  <div class="sub">DaFo Animal Hospital · Insurance Materials</div>
+  <hr class="rule"/>
+
+  <h1>保险材料包</h1>
+  <div class="meta">
+    {{ share.title }} · 第 {{ snapshot.version }} 版 ·
+    {{ (snapshot.generated_at | bjtime).strftime('%Y-%m-%d %H:%M') if snapshot.generated_at else '' }}
+  </div>
+
+  <div class="card">
+    <strong>材料快照说明</strong>
+    <div style="color:#555;margin-top:6px;">
+      本页面材料为医院生成时固定保存的版本，包含当时的病历、收费单、检查报告及相关原始附件。
+    </div>
+    <a class="download" href="/insurance-materials/{{ share.token }}/snapshots/{{ snapshot.id }}/zip">打包下载 ZIP</a>
+  </div>
+
+  <div class="card">
+    <strong>文件清单</strong>
+    {% if files %}
+    <table>
+      <thead><tr><th>文件</th><th>类型</th><th>大小</th><th>下载</th></tr></thead>
+      <tbody>
+        {% for f in files %}
+        <tr>
+          <td>{{ f.label or f.filename }}</td>
+          <td>{{ {
+            'medical_record':'病历',
+            'invoice':'收费单',
+            'exam_report':'检查报告',
+            'exam_attachment':'原始附件'
+          }.get(f.kind, f.kind) }}</td>
+          <td>{{ '%.1f'|format((f.size or 0) / 1024) }} KB</td>
+          <td><a href="/insurance-materials/{{ share.token }}/snapshots/{{ snapshot.id }}/files/{{ loop.index0 }}">下载</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="color:#888;margin-top:12px;">暂无文件</div>
+    {% endif %}
+  </div>
+
+  <div class="foot">如材料缺失或链接过期，请联系大风动物医院重新生成。</div>
+</div>
+</body>
+</html>

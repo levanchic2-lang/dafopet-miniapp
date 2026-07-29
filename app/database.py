@@ -975,6 +975,46 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_exam_reports_order ON exam_reports(exam_order_id)"))
 
+            # insurance_materials：保险理赔材料包（分享入口 + 历史快照）
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS insurance_material_shares ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "token VARCHAR(64) UNIQUE DEFAULT '', "
+                "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                "title VARCHAR(160) DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'active', "
+                "store VARCHAR(40) DEFAULT '', "
+                "expires_at DATETIME DEFAULT NULL, "
+                "revoked_at DATETIME DEFAULT NULL, "
+                "revoked_by VARCHAR(80) DEFAULT '', "
+                "created_by VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "notes TEXT DEFAULT ''"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ins_material_token ON insurance_material_shares(token)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ins_material_visit ON insurance_material_shares(visit_id, status)"))
+
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS insurance_material_snapshots ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "share_id INTEGER NOT NULL REFERENCES insurance_material_shares(id) ON DELETE CASCADE, "
+                "version INTEGER DEFAULT 1, "
+                "manifest_json TEXT DEFAULT '[]', "
+                "zip_path VARCHAR(500) DEFAULT '', "
+                "zip_size INTEGER DEFAULT 0, "
+                "zip_sha256 VARCHAR(64) DEFAULT '', "
+                "file_count INTEGER DEFAULT 0, "
+                "generated_by VARCHAR(80) DEFAULT '', "
+                "generated_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "note TEXT DEFAULT ''"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ins_snapshot_share ON insurance_material_snapshots(share_id, version)"))
+
             # microscopy_reports：显微镜检查报告（皮肤/耳道/粪检 等手工出报告）
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS microscopy_reports ("

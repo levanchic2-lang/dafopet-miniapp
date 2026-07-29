@@ -1,0 +1,118 @@
+{% extends "uk/_base.html" %}
+{% block title %}保险材料包 · 大风动物医院{% endblock %}
+
+{% block body %}
+<style>
+  .im-breadcrumb {
+    font-size: 9pt; letter-spacing: 2.5px; color: var(--ink-3);
+    margin: 24px 0 16px; font-style: italic;
+  }
+  .im-breadcrumb a { color: var(--ink-3); border-bottom: 0.5px solid transparent; }
+  .im-breadcrumb a:hover { color: var(--ink); border-bottom-color: var(--ink-3); }
+  .im-breadcrumb .sep { margin: 0 8px; color: var(--ink-4); }
+  .im-head { display:flex; justify-content:space-between; gap:32px; align-items:flex-start; }
+  .im-head h1 {
+    font-family: var(--font-serif); font-size: 25pt; margin:0;
+    letter-spacing: 3px; line-height: 1.15;
+  }
+  .im-head .sub {
+    display:block; margin-top:10px; font-size:10pt; color:var(--ink-3);
+    font-style:italic; letter-spacing:2px; font-weight:400;
+  }
+  .im-rule {
+    border:0; height:4px; border-top:0.5px solid var(--ink);
+    border-bottom:0.5px solid var(--ink); margin:18px 0 26px;
+  }
+  .im-msg { border-left:3px solid var(--accent-green); background:#f0faf4; padding:10px 16px; margin-bottom:14px; font-size:10pt; color:var(--accent-green); }
+  .im-card { border:0.5px solid var(--hair); background:var(--paper); padding:18px 20px; margin-bottom:22px; }
+  .im-card h2 {
+    margin:0 0 12px; font-size:12pt; letter-spacing:3px;
+    font-family:var(--font-serif);
+  }
+  .im-link {
+    display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center;
+    border:0.5px solid var(--hair); padding:10px 12px; background:#fff;
+    font-family:var(--font-numeric); font-size:9.5pt; word-break:break-all;
+  }
+  .im-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  .im-tbl { width:100%; border-collapse:collapse; font-size:10pt; }
+  .im-tbl th, .im-tbl td { padding:10px 8px; border-bottom:0.5px solid var(--hair); text-align:left; }
+  .im-tbl thead th { border-bottom:1px solid var(--ink); color:var(--ink-3); font-weight:400; font-style:italic; }
+  .im-tbl .right { text-align:right; }
+</style>
+
+<div class="im-breadcrumb">
+  <a href="/admin">后台</a><span class="sep">/</span>
+  {% if share.visit_id %}<a href="/admin/visits/{{ share.visit_id }}">病历 #{{ share.visit_id }}</a><span class="sep">/</span>{% endif %}
+  <span>保险材料包</span>
+</div>
+
+{% if msg %}<div class="im-msg">{{ msg }}</div>{% endif %}
+{% if err %}<div class="im-msg" style="border-left-color:var(--accent-red);background:#fef0f0;color:var(--accent-red);">{{ err }}</div>{% endif %}
+
+<div class="im-head">
+  <div>
+    <h1>保险材料包 <span class="sub">{{ share.title }}</span></h1>
+  </div>
+  <div class="im-actions" style="margin-top:0;">
+    {% if share.visit_id %}
+    <form method="post" action="/admin/visits/{{ share.visit_id }}/insurance-materials/create" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button class="uk-btn primary sm" type="submit">重新生成新版</button>
+    </form>
+    {% endif %}
+    {% if share.status == 'active' %}
+    <form method="post" action="/admin/insurance-materials/{{ share.id }}/revoke" style="display:inline;" onsubmit="return confirm('撤销后客户链接将无法访问，历史文件仍保留在后台。确认撤销？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button class="uk-btn ghost sm" type="submit" style="color:var(--accent-red);border-color:var(--accent-red);">撤销客户链接</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+<hr class="im-rule"/>
+
+<div class="im-card">
+  <h2>当前客户链接</h2>
+  {% if latest %}
+  <div class="im-link">
+    <span id="public-url">{{ public_url }}</span>
+    <button type="button" class="uk-btn ghost sm" onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('public-url').textContent)">复制</button>
+  </div>
+  <div class="im-actions">
+    <a class="uk-btn ghost sm" href="{{ public_url }}" target="_blank">打开客户页</a>
+    <a class="uk-btn ghost sm" href="/insurance-materials/{{ share.token }}/snapshots/{{ latest.id }}/zip">下载 ZIP</a>
+  </div>
+  {% else %}
+  <div class="uk-empty">暂无快照版本，请先生成材料包。</div>
+  {% endif %}
+</div>
+
+<div class="im-card">
+  <h2>历史版本</h2>
+  {% if snapshots %}
+  <table class="im-tbl">
+    <thead>
+      <tr><th>版本</th><th>生成时间</th><th>生成者</th><th>文件数</th><th>ZIP大小</th><th class="right">操作</th></tr>
+    </thead>
+    <tbody>
+      {% for s in snapshots %}
+      <tr>
+        <td class="num">v{{ s.version }}</td>
+        <td class="num">{{ (s.generated_at | bjtime).strftime('%Y-%m-%d %H:%M') if s.generated_at else '—' }}</td>
+        <td>{{ s.generated_by or '—' }}</td>
+        <td>{{ s.file_count }} 个</td>
+        <td>{{ '%.1f'|format((s.zip_size or 0) / 1024) }} KB</td>
+        <td class="right">
+          <a href="{{ s._public_url }}" target="_blank">客户页 →</a>
+          <span style="color:var(--ink-4);margin:0 8px;">/</span>
+          <a href="/insurance-materials/{{ share.token }}/snapshots/{{ s.id }}/zip">ZIP</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="uk-empty">暂无历史版本</div>
+  {% endif %}
+</div>
+{% endblock %}

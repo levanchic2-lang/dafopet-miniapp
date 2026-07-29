@@ -200,6 +200,10 @@
     <a href="/admin/visits/{{ visit.id }}/print" class="uk-btn ghost sm" target="_blank">打印病历</a>
     <a href="/admin/visits/{{ visit.id }}/physical-exam-print" class="uk-btn ghost sm" target="_blank">体检报告</a>
     <a href="/admin/visits/{{ visit.id }}/discharge-print" class="uk-btn ghost sm" target="_blank">打印医嘱单</a>
+    <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="uk-btn ghost sm">生成保险材料包</button>
+    </form>
     {% if visit.status != 'closed' %}
       <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">编辑病历</a>
       <a href="/admin/inpatient/new?visit_id={{ visit.id }}" class="uk-btn ghost sm">转住院</a>
@@ -507,6 +511,42 @@
   </table>
 </div>
 {% endif %}
+
+{# 保险材料包 #}
+<div class="v-rel-section">
+  <div class="v-rel-head">
+    <div>
+      <h2>保&nbsp;险&nbsp;材&nbsp;料&nbsp;包</h2>
+      <span class="count">固定病历 / 收费单 / 检查报告快照，客户可自行下载</span>
+    </div>
+    <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="uk-btn primary sm">生成新版</button>
+    </form>
+  </div>
+  {% if insurance_shares %}
+  <table class="v-rel-tbl">
+    <thead><tr><th>状态</th><th>最新版本</th><th>生成时间</th><th>文件</th><th class="right">操作</th></tr></thead>
+    <tbody>
+      {% for sh in insurance_shares %}
+      {% set snap = sh._latest_snapshot %}
+      <tr>
+        <td>
+          {% if sh.status == 'active' %}<span class="uk-pill green">可访问</span>
+          {% else %}<span class="uk-pill mute">已撤销</span>{% endif %}
+        </td>
+        <td class="num">{% if snap %}v{{ snap.version }}{% else %}—{% endif %}</td>
+        <td class="num">{% if snap and snap.generated_at %}{{ (snap.generated_at | bjtime).strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}</td>
+        <td>{% if snap %}{{ snap.file_count }} 个文件{% else %}—{% endif %}</td>
+        <td class="right"><a href="/admin/insurance-materials/{{ sh.id }}">查看 →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="uk-empty" style="padding:18px 0;">还没有生成材料包</div>
+  {% endif %}
+</div>
 
 {% if false %}
 {# 诊后说明与复诊计划（旧健康运营模块，暂隐藏；历史数据保留） #}

@@ -777,6 +777,51 @@ class ExamReport(Base):
     uploaded_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class InsuranceMaterialShare(Base):
+    """保险理赔材料包分享入口。一个入口可有多个历史快照版本。"""
+    __tablename__ = "insurance_material_shares"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, default="", index=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    visit_id = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    title: Mapped[str] = mapped_column(String(160), default="")
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active / revoked
+    store: Mapped[str] = mapped_column(String(40), default="")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    revoked_by: Mapped[str] = mapped_column(String(80), default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet = relationship("Pet", foreign_keys=[pet_id])
+    visit = relationship("Visit", foreign_keys=[visit_id])
+    snapshots = relationship("InsuranceMaterialSnapshot", back_populates="share", cascade="all, delete-orphan")
+
+
+class InsuranceMaterialSnapshot(Base):
+    """保险理赔材料包快照版本。manifest 固定当时生成的文件清单。"""
+    __tablename__ = "insurance_material_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    share_id = mapped_column(ForeignKey("insurance_material_shares.id", ondelete="CASCADE"), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    manifest_json: Mapped[str] = mapped_column(Text, default="[]")
+    zip_path: Mapped[str] = mapped_column(String(500), default="")
+    zip_size: Mapped[int] = mapped_column(Integer, default=0)
+    zip_sha256: Mapped[str] = mapped_column(String(64), default="")
+    file_count: Mapped[int] = mapped_column(Integer, default=0)
+    generated_by: Mapped[str] = mapped_column(String(80), default="")
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    note: Mapped[str] = mapped_column(Text, default="")
+
+    share = relationship("InsuranceMaterialShare", back_populates="snapshots")
+
+
 class CalendarBlock(Base):
     """全天封锁日程（如：美容师休息）"""
     __tablename__ = "calendar_blocks"
