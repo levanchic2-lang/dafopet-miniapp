@@ -117,6 +117,18 @@
     font-family: var(--font-numeric); font-style: normal;
     margin-left: 4px; font-size: 9pt;
   }
+  .inv-cost-edit,
+  .inv-cost-save {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; margin: 0 0 14px;
+    padding: 12px 14px; border-left: 3px solid var(--accent-amber);
+    background: #fbfaf6; color: var(--ink-2);
+    font-size: 9.5pt; letter-spacing: 1px;
+  }
+  .inv-cost-save {
+    justify-content: flex-end; border-left: 0; background: transparent;
+    padding-right: 0; margin-top: -8px;
+  }
 
   /* 表格 */
   .inv-tbl { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
@@ -144,6 +156,15 @@
   .inv-tbl .name .uk-pill { margin-left: 6px; }
   .inv-tbl .ink3 { color: var(--ink-3); }
   .inv-tbl .ink3-it { color: var(--ink-3); font-style: italic; }
+  .inv-tbl .missing-cost {
+    color: var(--accent-red); font-weight: 700; letter-spacing: 1px;
+  }
+  .inv-tbl .cost-input {
+    width: 86px; border: 0.5px solid var(--hair); background: var(--paper);
+    padding: 5px 7px; color: var(--ink); font-family: var(--font-numeric);
+    font-size: 10pt; text-align: right;
+  }
+  .inv-tbl .cost-input:focus { outline: 0; border-color: var(--ink); }
 
   /* 分页 */
   .inv-pager {
@@ -336,7 +357,7 @@
       {% endif %}
     </select>
     <button type="submit" class="uk-btn sm">筛选</button>
-    {% if q or category or subcategory or low_stock or zero_stock or controlled or service_only or expiry_alert %}
+    {% if q or category or subcategory or low_stock or zero_stock or controlled or service_only or expiry_alert or cost_missing %}
     <a href="/admin/inventory{% if wb_store %}?store={{ wb_store }}{% endif %}" class="uk-btn ghost sm">清除</a>
     {% endif %}
   </div>
@@ -348,12 +369,21 @@
   <a href="/admin/inventory?zero_stock=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if zero_stock == '1' %}active{% endif %}">零库存{% if zero_count > 0 %}<span class="num">{{ zero_count }}</span>{% endif %}</a>
   <a href="/admin/inventory?controlled=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if controlled == '1' %}active{% endif %}">管控药品</a>
   <a href="/admin/inventory?service_only=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if service_only == '1' %}active{% endif %}">服务项目</a>
+  <a href="/admin/inventory?cost_missing=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if cost_missing == '1' %}active{% endif %}">缺成本价{% if cost_missing_count > 0 %}<span class="num">{{ cost_missing_count }}</span>{% endif %}</a>
   <a href="/admin/inventory?expiry_alert=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if expiry_alert == '1' %}active{% endif %}">有效期预警{% if expiry_count > 0 %}<span class="num">{{ expiry_count }}</span>{% endif %}</a>
 </div>
 
 {# ─── 表格 ─── #}
 {% if items %}
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" id="bulk-csrf"/>
+{% if cost_missing == '1' %}
+<form method="post" action="/admin/inventory/bulk-costs">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <div class="inv-cost-edit">
+    当前筛出 <b>{{ total }}</b> 个缺成本价品目。可在本页逐项填写成本价后统一保存；留空的行会跳过。
+    <button type="submit" class="uk-btn primary sm">保存本页成本价</button>
+  </div>
+{% endif %}
 <table class="inv-tbl">
   <thead>
     <tr>
@@ -363,6 +393,7 @@
       <th>小类</th>
       <th class="right">库存</th>
       <th class="right">售价</th>
+      <th class="right">成本</th>
       <th>单位</th>
       <th>供应商</th>
       <th class="right">操作</th>
@@ -398,6 +429,16 @@
         {% set _summary = it | overrides_summary %}
         {% if not _cs and _summary %}<div style="font-size:8.5pt;color:var(--ink-3);margin-top:1px;font-style:italic;">{{ _summary }}</div>{% endif %}
       </td>
+      <td class="right num">
+        {% if cost_missing == '1' %}
+          <input type="hidden" name="item_ids" value="{{ it.id }}"/>
+          <input type="number" name="cost_prices" step="0.01" min="0" class="cost-input" placeholder="成本价"/>
+        {% elif it.cost_price and it.cost_price > 0 %}
+          ¥{{ '%.2f'|format(it.cost_price) }}
+        {% else %}
+          <span class="missing-cost">未填</span>
+        {% endif %}
+      </td>
       <td class="ink3-it">{{ it.unit }}{% if it.unit2 %} / {{ it.unit2 }}{% endif %}</td>
       <td class="ink3">{{ it.supplier or '—' }}</td>
       <td class="right">
@@ -407,12 +448,18 @@
     {% endfor %}
   </tbody>
 </table>
+{% if cost_missing == '1' %}
+  <div class="inv-cost-save">
+    <button type="submit" class="uk-btn primary sm">保存本页成本价</button>
+  </div>
+</form>
+{% endif %}
 
 {# ─── 分页 ─── #}
 <div class="inv-pager">
   <div>共 <span class="num">{{ total }}</span> 项 · 本页 <span class="num">{{ items|length }}</span></div>
   {% if total_pages > 1 %}
-  {% set qs = '&q=' ~ q ~ '&category=' ~ category ~ '&subcategory=' ~ subcategory ~ '&low_stock=' ~ low_stock ~ '&zero_stock=' ~ zero_stock ~ '&controlled=' ~ controlled ~ '&service_only=' ~ service_only ~ '&expiry_alert=' ~ expiry_alert ~ '&store=' ~ (wb_store or '') %}
+  {% set qs = '&q=' ~ q ~ '&category=' ~ category ~ '&subcategory=' ~ subcategory ~ '&low_stock=' ~ low_stock ~ '&zero_stock=' ~ zero_stock ~ '&controlled=' ~ controlled ~ '&service_only=' ~ service_only ~ '&expiry_alert=' ~ expiry_alert ~ '&cost_missing=' ~ cost_missing ~ '&store=' ~ (wb_store or '') %}
   <div class="pages">
     {% if page > 1 %}
       <a href="?page=1{{ qs }}">« 首页</a>
@@ -463,6 +510,8 @@
       <span class="lbl" style="margin-left:4px;">换算</span>
       <input type="number" step="0.01" min="1" name="unit2_ratio" id="bulk-unit2-ratio" placeholder="N" style="width:55px;" title="1 副单位 = N 主单位"/>
     </span>
+    <span class="lbl">成本价</span>
+    <input type="number" step="0.01" min="0" name="cost_price" id="bulk-cost-price" placeholder="留空=不改" style="width:92px;"/>
     {% if is_superadmin %}
     <span class="lbl">门店</span>
     <select name="store" id="bulk-store">
@@ -587,6 +636,7 @@
     var unit = document.getElementById('bulk-unit').value.trim();
     var unit2 = document.getElementById('bulk-unit2').value.trim();
     var unit2Ratio = document.getElementById('bulk-unit2-ratio').value.trim();
+    var costPrice = document.getElementById('bulk-cost-price').value.trim();
     var storeEl = document.getElementById('bulk-store');
     var storeVal = storeEl ? storeEl.value : '__keep__';
     var changeStore = storeEl && storeVal !== '__keep__';
@@ -602,12 +652,17 @@
     var supEl = document.getElementById('bulk-single-use-pack');
     var sup_ = supEl ? supEl.value : '__keep__';
     var changeSup = sup_ !== '__keep__';
-    if (!cat && !sup && !supClear && !notes && !notesClear && !unit && !unit2 && !unit2Ratio
+    if (costPrice && (isNaN(Number(costPrice)) || Number(costPrice) < 0)) {
+      alert('成本价格式不正确');
+      return;
+    }
+    if (!cat && !sup && !supClear && !notes && !notesClear && !unit && !unit2 && !unit2Ratio && !costPrice
         && !changeStore && !changeIsSvc && !changeIsCtrl && !changeReqRep && !changeSup) {
       alert('请至少选择一个要修改的字段');
       return;
     }
     var msg = '确认批量修改这 ' + ids.length + ' 个品目？';
+    if (costPrice) msg += '\n成本价：¥' + Number(costPrice).toFixed(2);
     if (changeStore) msg += '\n门店：改为 ' + storeVal;
     if (changeIsSvc) msg += '\n服务类目：' + (isSvc === '1' ? '是（不占库存）' : '否');
     if (changeIsCtrl) msg += '\n麻醉/管控：' + (isCtrl === '1' ? '是' : '否');
@@ -626,6 +681,7 @@
     if (unit) fd.append('unit', unit);
     if (unit2) fd.append('unit2', unit2);
     if (unit2Ratio) fd.append('unit2_ratio', unit2Ratio);
+    if (costPrice) fd.append('cost_price', costPrice);
     if (changeStore) fd.append('store', storeVal);
     if (changeIsSvc) fd.append('is_service', isSvc);
     if (changeIsCtrl) fd.append('is_controlled', isCtrl);

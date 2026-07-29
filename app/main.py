@@ -16326,6 +16326,7 @@ async def admin_inventory_bulk_edit(
     unit: str = Form(""),
     unit2: str = Form(""),
     unit2_ratio: str = Form(""),
+    cost_price: str = Form(""),
     notes: str = Form(""),
     supplier_clear: str = Form(""),
     notes_clear: str = Form(""),
@@ -16365,12 +16366,20 @@ async def admin_inventory_bulk_edit(
                 ratio_val = 1.0
         except (ValueError, TypeError):
             ratio_val = None
+    cost_val = None
+    if (cost_price or "").strip():
+        try:
+            cost_val = float(cost_price.strip())
+        except (ValueError, TypeError):
+            return _redirect_back_with_msg(request, "/admin/inventory", err="成本价格式无效")
+        if cost_val < 0:
+            return _redirect_back_with_msg(request, "/admin/inventory", err="成本价不能小于 0")
     do_supplier_clear = supplier_clear == "1"
     do_notes_clear = notes_clear == "1"
     if not (category or supplier or do_supplier_clear or notes or do_notes_clear
             or change_store or change_is_service or change_is_controlled
             or change_requires_report or change_single_use_pack
-            or unit or unit2 or ratio_val is not None):
+            or unit or unit2 or ratio_val is not None or cost_val is not None):
         return RedirectResponse("/admin/inventory?msg=请至少选一个要修改的字段", status_code=303)
 
     rows = db.query(InventoryItem).filter(InventoryItem.id.in_(item_ids)).all()
@@ -16406,11 +16415,14 @@ async def admin_inventory_bulk_edit(
             it.unit2 = unit2
         if ratio_val is not None:
             it.unit2_ratio = ratio_val
+        if cost_val is not None:
+            it.cost_price = cost_val
         it.updated_at = datetime.utcnow()
         updated += 1
     db.commit()
     _audit(db, request, "inventory_bulk_edit", application_id=None,
-           detail={"count": updated, "category": category, "subcategory": subcategory, "supplier": supplier})
+           detail={"count": updated, "category": category, "subcategory": subcategory, "supplier": supplier,
+                   "cost_price": cost_val})
     db.commit()
     parts = []
     if category: parts.append(f"大类={INVENTORY_CATEGORIES[category]['label']}")
@@ -16420,9 +16432,63 @@ async def admin_inventory_bulk_edit(
     if do_notes_clear: parts.append("备注=清空")
     if unit: parts.append(f"主单位={unit}")
     if unit2: parts.append(f"副单位={unit2}")
+    if cost_val is not None: parts.append(f"成本价=¥{cost_val:.2f}")
     msg = f"已批量更新 {updated} 个品目"
     if parts:
         msg += f"（{' · '.join(parts)}）"
+    return _redirect_back_with_msg(request, "/admin/inventory", msg=msg)
+
+
+@app.post("/admin/inventory/bulk-costs")
+async def admin_inventory_bulk_costs(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    item_ids: list[int] = Form(...),
+    cost_prices: list[str] = Form(...),
+):
+    """缺成本价检测页：同页给多项分别录入成本价。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    if not item_ids:
+        return _redirect_back_with_msg(request, "/admin/inventory", msg="没有可保存的品目")
+
+    _admin_store = _get_admin_store(request)
+    rows_q = db.query(InventoryItem).filter(InventoryItem.id.in_(item_ids))
+    if request.session.get("admin_role") != "superadmin":
+        rows_q = _apply_store_filter(rows_q, InventoryItem.store, _admin_store)
+    row_map = {it.id: it for it in rows_q.all()}
+
+    updated = 0
+    errors = []
+    for item_id, raw_price in zip(item_ids, cost_prices):
+        raw = (raw_price or "").strip()
+        if raw == "":
+            continue
+        try:
+            val = float(raw)
+        except (ValueError, TypeError):
+            errors.append(str(item_id))
+            continue
+        if val < 0:
+            errors.append(str(item_id))
+            continue
+        item = row_map.get(item_id)
+        if not item:
+            continue
+        item.cost_price = val
+        item.updated_at = datetime.utcnow()
+        updated += 1
+
+    if updated:
+        db.commit()
+        _audit(db, request, "inventory_bulk_costs", application_id=None,
+               detail={"count": updated, "errors": errors})
+        db.commit()
+    msg = f"已保存 {updated} 个品目的成本价"
+    if errors:
+        msg += f"，{len(errors)} 个格式无效已跳过"
     return _redirect_back_with_msg(request, "/admin/inventory", msg=msg)
 
 
@@ -16981,6 +17047,7 @@ async def admin_inventory_list(
     controlled: str = "",
     service_only: str = "",
     expiry_alert: str = "",
+    cost_missing: str = "",
     store: str = "",
     page: int = 1,
 ):
@@ -17016,6 +17083,11 @@ async def admin_inventory_list(
         query = query.filter(InventoryItem.is_controlled == True)
     if service_only == "1":
         query = query.filter(InventoryItem.is_service == True)
+    if cost_missing == "1":
+        query = query.filter(
+            InventoryItem.is_service == False,
+            or_(InventoryItem.cost_price.is_(None), InventoryItem.cost_price <= 0),
+        )
     if expiry_alert == "1":
         alert_date = (_date.today() + _timedelta(days=90)).isoformat()
         expiry_ids = (db.query(InventoryBatch.item_id)
@@ -17042,6 +17114,13 @@ async def admin_inventory_list(
         InventoryItem.is_service == False,
         InventoryItem.stock_qty <= 0,
     ).count()
+    cost_missing_count = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _wb_store
+    ).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.is_service == False,
+        or_(InventoryItem.cost_price.is_(None), InventoryItem.cost_price <= 0),
+    ).count()
     _alert_date = (_date.today() + _timedelta(days=90)).isoformat()
     expiry_count = (db.query(InventoryBatch.item_id)
                     .filter(InventoryBatch.is_depleted == False,
@@ -17053,9 +17132,9 @@ async def admin_inventory_list(
         "page": page, "total_pages": total_pages,
         "q": q, "category": category, "subcategory": subcategory, "low_stock": low_stock,
         "zero_stock": zero_stock, "controlled": controlled, "service_only": service_only,
-        "expiry_alert": expiry_alert,
+        "expiry_alert": expiry_alert, "cost_missing": cost_missing,
         "categories": INVENTORY_CATEGORIES, "low_count": low_count, "zero_count": zero_count,
-        "expiry_count": expiry_count,
+        "expiry_count": expiry_count, "cost_missing_count": cost_missing_count,
         "csrf_token": _get_csrf_token(request),
         "title": "库存管理",
         "wb_store": _wb_store,
