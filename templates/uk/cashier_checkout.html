@@ -317,6 +317,12 @@
         {% if sub is not none %}<span class="m-sub">{{ sub }}</span>{% endif %}
       </button>
       {% endfor %}
+      {% if cust and cust.is_internal %}
+      <button type="button" class="co-method"
+              data-val="salary_deduction" onclick="coSelectMethod(this)">
+        工资抵扣
+      </button>
+      {% endif %}
       {# 套餐 / 押金 / 优惠券：单单核销到主单 #}
       {% set complex_methods = [
         ('package','套餐', active_packages|length),

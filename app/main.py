@@ -18694,6 +18694,7 @@ _INV_STATUS_ZH = {"unpaid": "待收款", "paid": "已收款", "cancelled": "已�
 _INV_PAY_ZH    = {
     "cash": "现金", "wechat": "微信", "alipay": "支付宝",
     "shouqianba": "收钱吧", "meituan": "美团", "third_party": "第三方",
+    "salary_deduction": "工资抵扣",
     "wallet": "钱包", "package": "套餐", "deposit": "押金", "coupon": "优惠券",
     "mixed": "混合支付",
     "card": "刷卡", "groupbuy": "团购", "prepaid": "预付款",
@@ -19315,6 +19316,7 @@ _REVENUE_PAY_ZH = {
     "shouqianba":  "收钱吧",
     "meituan":     "美团",
     "third_party": "第三方",
+    "salary_deduction": "工资抵扣",
     "card":        "刷卡",
     "groupbuy":    "团购",
     "prepaid":     "预付款",
@@ -20202,7 +20204,7 @@ async def admin_invoices_list(
     df = dt = ""
     method_options = [(k, _REVENUE_PAY_ZH.get(k, k)) for k in
                       ("cash", "wechat", "alipay", "shouqianba", "meituan", "third_party",
-                       "wallet", "package", "deposit", "coupon")]
+                       "salary_deduction", "wallet", "package", "deposit", "coupon")]
     if status == "paid":
         from sqlalchemy import func as _func, or_ as _or_p, and_ as _and_p
         df, dt, date_label = _revenue_date_range(cur_preset, date_from, date_to)
@@ -20514,13 +20516,19 @@ async def admin_cashier_multi_pay_submit(
     checkout_back = (form.get("checkout_back") or "").strip()
     # embed=1 表示在收银台弹窗 iframe 内结算，全部付清后通知父窗口关闭弹窗
     is_embed = (form.get("embed") == "1")
-    # 合并结算支持：现金/微信/支付宝/收钱吧/美团/第三方/钱包
+    # 合并结算支持：现金/微信/支付宝/收钱吧/美团/第三方/工资抵扣/钱包
     # 套餐/押金/优惠券因需绑特定记录，由 checkout 页直接 POST 到 add-payment
-    allowed_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party", "wallet"}
+    allowed_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party", "salary_deduction", "wallet"}
     if method not in allowed_methods:
         _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
         return RedirectResponse(
             f"{_back}&msg=不支持的支付方式",
+            status_code=303,
+        )
+    if method == "salary_deduction" and not _customer_is_internal(db, customer_id):
+        _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+        return RedirectResponse(
+            f"{_back}&msg=工资抵扣仅用于员工内购账户",
             status_code=303,
         )
     # 钱包：预先拿对象（后面还需要校验余额）
@@ -21217,7 +21225,7 @@ async def admin_invoice_add_payment(
     # ── 合并结算：解析勾选的其他待收单 id ──
     extra_ids = [int(x) for x in form.getlist("extra_invoice_ids") if str(x).isdigit()]
     # 跨单收款方式白名单（钱包/套餐/押金/优惠券因为带特殊 ref，多单暂不支持）
-    cross_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party"}
+    cross_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party", "salary_deduction"}
     multi_target = bool(extra_ids) and method in cross_methods
     if extra_ids and not multi_target:
         # 选了多张但方式不支持 → 提示后只对当前单生效
@@ -21257,10 +21265,13 @@ async def admin_invoice_add_payment(
     note   = (form.get("note") or "").strip()[:500]
     valid_methods = {
         "cash","wechat","alipay","shouqianba","meituan","third_party",
+        "salary_deduction",
         "wallet","package","deposit","coupon",
     }
     if method not in valid_methods:
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=未知支付方式 {method}", status_code=303)
+    if method == "salary_deduction" and not _customer_is_internal(db, inv.customer_id or 0):
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=工资抵扣仅用于员工内购账户", status_code=303)
 
     # ── 钱包扣款 ──
     if method == "wallet":
@@ -21362,7 +21373,7 @@ async def admin_invoice_add_payment(
         c.used_at = datetime.utcnow()
         ref_id = c.id
 
-    # cash / wechat / alipay / shouqianba / meituan / third_party — 无 side effect
+    # cash / wechat / alipay / shouqianba / meituan / third_party / salary_deduction — 无 side effect
     # 单张：直接给当前发票写一笔
     # 多张（multi_target=True）：按 target_invs 顺序分摊 want，每张独立 Payment
     if multi_target:

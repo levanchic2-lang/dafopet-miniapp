@@ -215,6 +215,9 @@
        <button type="button" class="pay-btn" data-val="shouqianba" onclick="selectPay(this)"><span class="icon" style="color:#3b82f6;"><i data-lucide="smartphone"></i></span><span class="label">收钱吧</span></button>
        <button type="button" class="pay-btn" data-val="meituan" onclick="selectPay(this)"><span class="icon" style="color:#ffc300;"><i data-lucide="utensils"></i></span><span class="label">美团</span></button>
        <button type="button" class="pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="icon"><i data-lucide="link"></i></span><span class="label">第三方</span></button>
+       {% if cust and cust.is_internal %}
+       <button type="button" class="pay-btn" data-val="salary_deduction" onclick="selectPay(this)"><span class="icon"><i data-lucide="badge-dollar-sign"></i></span><span class="label">工资抵扣</span></button>
+       {% endif %}
        {# 钱包 / 套餐 / 押金 / 优惠券 始终显示，没有可用项时显示灰色提示 #}
        <button type="button" class="pay-btn{% if wallet_balance <= 0 %} unavailable{% endif %}" data-val="wallet" onclick="selectPay(this)"
                title="{% if wallet_balance > 0 %}客户钱包余额 ¥{{ '%.2f'|format(wallet_balance) }}{% else %}客户暂无钱包余额，点击仍可去客户档案充值{% endif %}">
@@ -370,6 +373,7 @@
      {% elif p.method == 'shouqianba' %}<i data-lucide="smartphone" style="color:#3b82f6;"></i> 收钱吧
      {% elif p.method == 'meituan' %}<i data-lucide="utensils" style="color:#ffc300;"></i> 美团
      {% elif p.method == 'third_party' %}<i data-lucide="link"></i> 第三方
+     {% elif p.method == 'salary_deduction' %}<i data-lucide="badge-dollar-sign"></i> 工资抵扣
      {% elif p.method == 'wallet' %}<i data-lucide="wallet"></i> 钱包
      {% elif p.method == 'package' %}<i data-lucide="ticket"></i> 套餐核销
      {% elif p.method == 'deposit' %}<i data-lucide="landmark" style="color:#f59e0b;"></i> 押金抵扣
