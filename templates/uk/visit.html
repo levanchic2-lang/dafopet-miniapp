@@ -39,7 +39,15 @@
     color: var(--ink-2); vertical-align: 12px;
   }
   .v-head .status.closed { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  .v-head .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .v-head .actions {
+    display: flex; flex-direction: column; align-items: flex-end;
+    gap: 12px; flex: 1;
+  }
+  .v-head .action-row {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;
+    width: 100%;
+  }
+  .v-head .action-row form { display: inline-flex; margin: 0; }
 
   hr.v-rule-double {
     border: 0; height: 4px;
@@ -197,34 +205,40 @@
     </h1>
   </div>
   <div class="actions">
-    <a href="/admin/visits/{{ visit.id }}/print" class="uk-btn ghost sm" target="_blank">打印病历</a>
-    <a href="/admin/visits/{{ visit.id }}/physical-exam-print" class="uk-btn ghost sm" target="_blank">体检报告</a>
-    <a href="/admin/visits/{{ visit.id }}/discharge-print" class="uk-btn ghost sm" target="_blank">打印医嘱单</a>
-    <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create" style="display:inline;">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-      <button type="submit" class="uk-btn ghost sm">生成保险材料包</button>
-    </form>
+    <div class="action-row">
+      <a href="/admin/visits/{{ visit.id }}/print" class="uk-btn ghost sm" target="_blank">打印病历</a>
+      <a href="/admin/visits/{{ visit.id }}/physical-exam-print" class="uk-btn ghost sm" target="_blank">体检报告</a>
+      <a href="/admin/visits/{{ visit.id }}/discharge-print" class="uk-btn ghost sm" target="_blank">打印医嘱单</a>
     {% if visit.status != 'closed' %}
-      <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">编辑病历</a>
-      <a href="/admin/inpatient/new?visit_id={{ visit.id }}" class="uk-btn ghost sm">转住院</a>
-      <a href="/admin/visits/{{ visit.id }}/anesthesia/new" class="uk-btn ghost sm">＋ 新建麻醉单</a>
-      <a href="/admin/exam-orders/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建检查单</a>
-      <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn primary sm">＋ 新建处方</a>
-      {% if is_superadmin %}
-      <form method="post" action="/admin/visits/{{ visit.id }}/close" style="display:inline;" onsubmit="return confirm('结束病历后，处方、检查、本病历将不可改不可重开（合规要求）。确认结束？');">
+        <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">编辑病历</a>
+        <a href="/admin/inpatient/new?visit_id={{ visit.id }}" class="uk-btn ghost sm">转住院</a>
+        <a href="/admin/visits/{{ visit.id }}/anesthesia/new" class="uk-btn ghost sm">＋ 新建麻醉单</a>
+        <a href="/admin/exam-orders/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建检查单</a>
+        <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn primary sm">＋ 新建处方</a>
+    {% endif %}
+    </div>
+    <div class="action-row">
+      <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-        <button type="submit" class="uk-btn ghost sm" style="color:var(--accent-red);border-color:var(--accent-red);">结束病历</button>
+        <button type="submit" class="uk-btn danger sm">生成保险材料包</button>
       </form>
+    {% if visit.status != 'closed' %}
+      {% if is_superadmin %}
+        <form method="post" action="/admin/visits/{{ visit.id }}/close" onsubmit="return confirm('结束病历后，处方、检查、本病历将不可改不可重开（合规要求）。确认结束？');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="uk-btn danger sm">结束病历</button>
+        </form>
       {% endif %}
     {% endif %}
     {% if is_superadmin %}
-    <form method="post" action="/admin/visits/{{ visit.id }}/delete" style="display:inline;" onsubmit="return delVisitConfirm(this)">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-      <input type="hidden" name="purge_password" class="del-visit-pwd"/>
-      <input type="hidden" name="next_url" value="{% if cust %}/admin/customers/{{ cust.id }}{% if pet %}?pet_id={{ pet.id }}{% endif %}{% else %}/admin/visits{% endif %}"/>
-      <button type="submit" class="uk-btn sm" style="color:var(--accent-red);border-color:var(--accent-red);">删除病历</button>
-    </form>
+      <form method="post" action="/admin/visits/{{ visit.id }}/delete" onsubmit="return delVisitConfirm(this)">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="purge_password" class="del-visit-pwd"/>
+        <input type="hidden" name="next_url" value="{% if cust %}/admin/customers/{{ cust.id }}{% if pet %}?pet_id={{ pet.id }}{% endif %}{% else %}/admin/visits{% endif %}"/>
+        <button type="submit" class="uk-btn danger sm">删除病历</button>
+      </form>
     {% endif %}
+    </div>
   </div>
 </div>
 
