@@ -114,8 +114,10 @@
 </div>
 
 <div class="iv-tabs">
-  {% for val, label in [('','全部'),('unpaid','待收款'),('paid','已收款'),('cancelled','已取消')] %}
-  <a href="/admin/invoices?status={{ val }}&store={{ wb_store }}{% if q %}&q={{ q }}{% endif %}" class="iv-tab {% if status == val %}active{% endif %}">{{ label }}</a>
+  {% for val, label in [('','全部'),('unpaid','待收款'),('internal_unpaid','员工内购待付款'),('paid','已收款'),('cancelled','已取消')] %}
+  <a href="/admin/invoices?status={{ val }}&store={{ wb_store }}{% if q %}&q={{ q }}{% endif %}" class="iv-tab {% if status == val %}active{% endif %}">
+    {{ label }}{% if val == 'internal_unpaid' and inv_stats.internal_unpaid_count %}<span style="font-family:var(--font-numeric);font-size:9pt;margin-left:5px;color:var(--accent-red);">{{ inv_stats.internal_unpaid_count }}</span>{% endif %}
+  </a>
   {% endfor %}
 </div>
 
@@ -293,6 +295,7 @@ function toggleSettle(idx) {
         {% if inv.payment_status == 'paid' %}<span class="iv-pill ok">已收款</span>
         {% elif inv.payment_status == 'cancelled' %}<span class="iv-pill gray">已取消</span>
         {% elif inv.payment_status == 'refunded' %}<span class="iv-pill err">已退款</span>
+        {% elif cust and cust.is_internal and inv.payment_status in ('unpaid', 'partial') %}<span class="iv-pill err">内购待付</span>
         {% elif inv.payment_status == 'partial' %}<span class="iv-pill warn">部分收款</span>
         {% else %}<span class="iv-pill warn">待收款</span>{% endif %}
       </td>
@@ -311,6 +314,7 @@ function toggleSettle(idx) {
 {% else %}
 <div class="iv-empty">
   {% if status == 'unpaid' %}暂无待收款账单
+  {% elif status == 'internal_unpaid' %}暂无员工内购待付款账单
   {% elif status == 'paid' %}暂无已收款账单
   {% elif status == 'cancelled' %}暂无已取消账单
   {% else %}暂无收费单 · 从就诊记录生成{% endif %}

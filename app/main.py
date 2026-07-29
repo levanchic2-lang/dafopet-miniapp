@@ -20109,13 +20109,25 @@ async def admin_invoices_list(
         if pids:
             search_filters.append(Invoice.pet_id.in_(pids))
 
+    _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
+    _internal_invoice_filter = Invoice.customer_id.in_(_internal_ids_sub)
+    _regular_invoice_filter = or_(Invoice.customer_id.is_(None), ~Invoice.customer_id.in_(_internal_ids_sub))
+
     query = db.query(Invoice).order_by(Invoice.id.desc())
     if wb_store:
         query = query.filter(Invoice.store == wb_store)
     if status:
         # 「待收款」tab 同时显示 unpaid + partial（部分收过的也需要继续收）
         if status == "unpaid":
-            query = query.filter(Invoice.payment_status.in_(("unpaid", "partial")))
+            query = query.filter(
+                Invoice.payment_status.in_(("unpaid", "partial")),
+                _regular_invoice_filter,
+            )
+        elif status == "internal_unpaid":
+            query = query.filter(
+                Invoice.payment_status.in_(("unpaid", "partial")),
+                _internal_invoice_filter,
+            )
         else:
             query = query.filter(Invoice.payment_status == status)
     if search_filters:
@@ -20128,9 +20140,13 @@ async def admin_invoices_list(
     # 统计数据（同样按 wb_store 过滤；员工内购档案排除）
     from datetime import date as _date
     today_str = _date.today().isoformat()
-    _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     def _stat_q():
-        q2 = db.query(Invoice).filter(~Invoice.customer_id.in_(_internal_ids_sub))
+        q2 = db.query(Invoice).filter(_regular_invoice_filter)
+        if wb_store:
+            q2 = q2.filter(Invoice.store == wb_store)
+        return q2
+    def _internal_stat_q():
+        q2 = db.query(Invoice).filter(_internal_invoice_filter)
         if wb_store:
             q2 = q2.filter(Invoice.store == wb_store)
         return q2
@@ -20139,11 +20155,14 @@ async def admin_invoices_list(
         func.date(Invoice.paid_at, '+8 hours') == today_str,
     ).all()
     unpaid_all = _stat_q().filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
+    internal_unpaid_all = _internal_stat_q().filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
     inv_stats = {
         "today_paid_total": round(sum((i.total_amount or 0) for i in today_paid_sum), 2),
         "today_paid_count": len(today_paid_sum),
         "unpaid_count": len(unpaid_all),
         "unpaid_total": round(sum((i.total_amount or 0) for i in unpaid_all), 2),
+        "internal_unpaid_count": len(internal_unpaid_all),
+        "internal_unpaid_total": round(sum((i.total_amount or 0) for i in internal_unpaid_all), 2),
     }
     # 同客户同宠物多张未付发票聚合（用于顶部合并结算入口）
     multi_pay_groups = []
@@ -20151,6 +20170,7 @@ async def admin_invoices_list(
         _unpaid_q = db.query(Invoice).filter(
             Invoice.payment_status.in_(("unpaid", "partial")),
             Invoice.customer_id.is_not(None),
+            _regular_invoice_filter,
         )
         if wb_store:
             _unpaid_q = _unpaid_q.filter(Invoice.store == wb_store)
