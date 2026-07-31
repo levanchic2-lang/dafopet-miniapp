@@ -396,6 +396,7 @@
       <th class="right">成本</th>
       <th>单位</th>
       <th>供应商</th>
+      <th>生产企业</th>
       <th class="right">操作</th>
     </tr>
   </thead>
@@ -417,7 +418,8 @@
       <td class="ink3-it">{{ sub_label or '—' }}</td>
       <td class="right num">
         {% if it.is_service %}<span class="ink3">—</span>
-        {% elif is_zero %}<span style="color:var(--accent-red);font-weight:700;">{{ '%.1f'|format(it.stock_qty) }}</span>
+        {% elif is_zero %}
+          <span style="color:var(--accent-red);font-weight:700;">{% if it.is_controlled %}{{ '%.1f'|format([0, it.stock_qty or 0]|max) }}{% else %}{{ '%.1f'|format(it.stock_qty) }}{% endif %}</span>
         {% elif is_low %}<span style="color:var(--accent-amber);font-weight:700;">{{ '%.1f'|format(it.stock_qty) }}</span>
         {% else %}{{ '%.1f'|format(it.stock_qty) }}{% endif %}
       </td>
@@ -441,6 +443,7 @@
       </td>
       <td class="ink3-it">{{ it.unit }}{% if it.unit2 %} / {{ it.unit2 }}{% endif %}</td>
       <td class="ink3">{{ it.supplier or '—' }}</td>
+      <td class="ink3">{% if it.manufacturer %}{{ it.manufacturer }}{% elif it.is_controlled %}<span class="missing-cost">未填</span>{% else %}—{% endif %}</td>
       <td class="right">
         <a href="/admin/inventory/{{ it.id }}?from_qs={{ request.url.query|urlencode }}" style="color:var(--ink);border-bottom:0.5px solid var(--ink-3);font-size:9.5pt;padding-bottom:1px;">详情 →</a>
       </td>

@@ -14124,7 +14124,12 @@ def _deduct_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_
     # 对已是整瓶量的旧数据幂等（ceil(100/100)*100=100），不会重复放大。
     if getattr(inv, "single_use_pack", False):
         qty = _billable_qty(inv, qty)
-    before = inv.stock_qty
+    before = float(inv.stock_qty or 0)
+    if (inv.is_controlled or inv.subcategory == "controlled") and (before <= 0 or before + 1e-9 < qty):
+        raise HTTPException(
+            400,
+            f"管控药品「{inv.name}」库存不足：当前 {before:g}{inv.unit or ''}，不能出库 {qty:g}{inv.unit or ''}",
+        )
     inv.stock_qty = round(before - qty, 4)
     db.add(InventoryTransaction(
         item_id=item_id, tx_type="out", qty=qty,
@@ -14863,17 +14868,37 @@ def _ledger_balance_for(db: Session, item_id: int) -> float:
     return float(inv.stock_qty or 0) if inv else 0.0
 
 
+def _inventory_batch_no_for(db: Session, item_id: int) -> str:
+    """取当前可用批次号；旧数据没有批次时返回空。"""
+    if not item_id:
+        return ""
+    batch = (db.query(InventoryBatch)
+             .filter(InventoryBatch.item_id == item_id)
+             .filter(InventoryBatch.is_depleted == False)  # noqa: E712
+             .filter(InventoryBatch.quantity > 0)
+             .order_by(InventoryBatch.expiry_date.asc(), InventoryBatch.id.desc())
+             .first())
+    return (batch.batch_no or "")[:80] if batch else ""
+
+
 def _write_narcotics_ledger(db: Session, *, item_id: int, item_name: str,
                             direction: str, source: str, qty: float, unit: str,
                             operator: str, cosigner: str = "",
                             visit_id: int | None = None,
                             anesth_order_id: int | None = None,
                             store: str = "", notes: str = "",
+                            batch_no: str = "", manufacturer: str = "",
                             event_date: str = "") -> "NarcoticsLedger":
     """写一条台账，自动算 balance_after。direction: in=入/out=出/loss=损耗"""
+    inv = db.get(InventoryItem, item_id) if item_id else None
     prev = _ledger_balance_for(db, item_id) if item_id else 0.0
     delta = qty if direction == "in" else -qty
     new_balance = round(prev + delta, 4)
+    if inv:
+        batch_no = batch_no or _inventory_batch_no_for(db, inv.id)
+        manufacturer = manufacturer or getattr(inv, "manufacturer", "") or getattr(inv, "supplier", "")
+        if inv.is_controlled or inv.subcategory == "controlled":
+            new_balance = max(0.0, round(float(inv.stock_qty or 0), 4))
     row = NarcoticsLedger(
         event_date=event_date or datetime.utcnow().strftime("%Y-%m-%d"),
         item_id=item_id or None,
@@ -14881,6 +14906,8 @@ def _write_narcotics_ledger(db: Session, *, item_id: int, item_name: str,
         direction=direction, source=source,
         qty=float(qty), unit=unit or "",
         balance_after=new_balance,
+        batch_no=(batch_no or "")[:80],
+        manufacturer=(manufacturer or "")[:200],
         operator=operator, cosigner=cosigner,
         visit_id=visit_id, anesth_order_id=anesth_order_id,
         store=store, notes=notes,
@@ -15615,6 +15642,7 @@ async def admin_narcotics_manual_submit(request: Request, db: Session = Depends(
     source = str(form.get("source", "manual_consume")).strip()  # manual_refill / manual_consume / stocktake / loss
     qty = float(form.get("qty", 0) or 0)
     unit = str(form.get("unit", "")).strip()[:20]
+    batch_no = str(form.get("batch_no", "")).strip()[:80]
     operator = str(form.get("operator", "")).strip() or request.session.get("admin_username", "admin")
     cosigner = str(form.get("cosigner", "")).strip()[:80]
     notes = str(form.get("notes", "")).strip()
@@ -15644,6 +15672,7 @@ async def admin_narcotics_manual_submit(request: Request, db: Session = Depends(
         qty=qty, unit=unit or (inv.unit if inv else ""),
         operator=operator, cosigner=cosigner,
         store=store, notes=notes, event_date=event_date,
+        batch_no=batch_no,
     )
     db.commit()
     return RedirectResponse("/admin/inventory/narcotics-ledger?msg=已记录", status_code=303)
@@ -15678,7 +15707,7 @@ async def admin_narcotics_export(
     wb = Workbook()
     ws = wb.active
     ws.title = "麻醉管控药台账"
-    headers = ["日期", "药品", "方向", "来源", "数量", "单位", "余额", "经办人", "复核人", "门店", "关联病例", "关联麻醉单", "备注"]
+    headers = ["日期", "药品", "批号", "生产企业", "方向", "来源", "数量", "单位", "余额", "经办人", "复核人", "门店", "关联病例", "关联麻醉单", "备注"]
     ws.append(headers)
     for c in ws[1]:
         c.font = Font(bold=True)
@@ -15688,12 +15717,14 @@ async def admin_narcotics_export(
             "manual_consume": "手动消耗", "stocktake": "盘点", "loss": "损耗"}
     for r in rows:
         ws.append([
-            r.event_date, r.item_name, _DIR.get(r.direction, r.direction),
-            _SRC.get(r.source, r.source), r.qty, r.unit, r.balance_after,
+            r.event_date, r.item_name, r.batch_no or "",
+            r.manufacturer or (r.inventory_item.manufacturer if r.inventory_item else "") or (r.inventory_item.supplier if r.inventory_item else ""),
+            _DIR.get(r.direction, r.direction),
+            _SRC.get(r.source, r.source), r.qty, r.unit, max(0, r.balance_after or 0),
             r.operator, r.cosigner, r.store,
             r.visit_id or "", r.anesth_order_id or "", r.notes or "",
         ])
-    for col in "ABCDEFGHIJKLM":
+    for col in "ABCDEFGHIJKLMNO":
         ws.column_dimensions[col].width = 14
     import io
     buf = io.BytesIO()
@@ -17399,12 +17430,18 @@ async def admin_inventory_create(
     sell_price: float = Form(0.0), cost_price: float = Form(0.0),
     stock_qty: float = Form(0.0), low_stock_min: float = Form(0.0),
     supplier: str = Form(""), notes: str = Form(""),
+    manufacturer: str = Form(""),
     store: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
     if not name.strip():
         raise HTTPException(400, "品名不能为空")
+    controlled_flag = (is_controlled == "1") or (subcategory == "controlled")
+    if controlled_flag and not manufacturer.strip():
+        raise HTTPException(400, "麻醉/精神类管控品目必须填写生产企业")
+    if controlled_flag and stock_qty < 0:
+        raise HTTPException(400, "管控药品初始库存不能为负数")
     operator = request.session.get("admin_username", "")
     item = InventoryItem(
         name=name.strip(), category=category, subcategory=subcategory,
@@ -17414,7 +17451,7 @@ async def admin_inventory_create(
         unit=unit, unit2=unit2, unit2_ratio=unit2_ratio,
         sell_price=sell_price, cost_price=cost_price,
         stock_qty=stock_qty, low_stock_min=low_stock_min,
-        supplier=supplier, notes=notes, created_by=operator,
+        supplier=supplier, manufacturer=manufacturer.strip()[:200], notes=notes, created_by=operator,
         store=_resolve_store_for_create(request, store),
     )
     db.add(item)
@@ -17502,6 +17539,7 @@ async def admin_inventory_edit(
     sell_price: float = Form(0.0), cost_price: float = Form(0.0),
     low_stock_min: float = Form(0.0),
     supplier: str = Form(""), notes: str = Form(""),
+    manufacturer: str = Form(""),
     store: str = Form(""),
     # 门店覆盖价（方案 H）
     override_sell_donghuan: str = Form(""), override_cost_donghuan: str = Form(""),
@@ -17533,12 +17571,14 @@ async def admin_inventory_edit(
         item.aliases = json.dumps(deduped[:8], ensure_ascii=False) if deduped else ""
     item.category = category; item.subcategory = subcategory
     item.is_service = (is_service == "1"); item.is_controlled = (is_controlled == "1")
+    if (item.is_controlled or item.subcategory == "controlled") and not manufacturer.strip():
+        raise HTTPException(400, "麻醉/精神类管控品目必须填写生产企业")
     item.requires_report = (report_exempt != "1")
     item.single_use_pack = (single_use_pack == "1")
     item.unit = unit; item.unit2 = unit2; item.unit2_ratio = unit2_ratio
     item.sell_price = sell_price; item.cost_price = cost_price
     item.low_stock_min = low_stock_min
-    item.supplier = supplier; item.notes = notes
+    item.supplier = supplier; item.manufacturer = manufacturer.strip()[:200]; item.notes = notes
     # 门店价格覆盖已废弃（每个品目独立归属一家店）。任何编辑都强制清空 store_overrides，
     # 避免老数据继续影响 eff_price 计算。
     item.store_overrides = ""
@@ -17924,6 +17964,8 @@ async def admin_inventory_adjust(
     item = db.get(InventoryItem, item_id)
     if not item or item.is_service:
         raise HTTPException(404)
+    if (item.is_controlled or item.subcategory == "controlled") and new_qty < 0:
+        raise HTTPException(400, "管控药品库存不能调整为负数")
     before = item.stock_qty
     diff = new_qty - before
     item.stock_qty = new_qty
@@ -17953,6 +17995,8 @@ async def admin_batch_adjust(
     if not batch:
         raise HTTPException(404)
     item = db.get(InventoryItem, item_id)
+    if (item.is_controlled or item.subcategory == "controlled") and new_qty < 0:
+        raise HTTPException(400, "管控药品批次数量不能调整为负数")
     diff = new_qty - batch.quantity
     before = item.stock_qty
     batch.quantity = new_qty

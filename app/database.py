@@ -664,6 +664,7 @@ def _try_sqlite_migrations() -> None:
                     "stock_qty REAL DEFAULT 0.0, "
                     "low_stock_min REAL DEFAULT 0.0, "
                     "supplier VARCHAR(200) DEFAULT '', "
+                    "manufacturer VARCHAR(200) DEFAULT '', "
                     "notes TEXT DEFAULT '', "
                     "is_active BOOLEAN DEFAULT 1, "
                     "created_by VARCHAR(80) DEFAULT '', "
@@ -733,6 +734,9 @@ def _try_sqlite_migrations() -> None:
             # inventory_items: 整支/整瓶计费（玻璃瓶针剂等，开 0.1ml 与开 1ml 同价、同扣 1 整支）
             if inv_item_cols and "single_use_pack" not in inv_item_names:
                 conn.execute(text("ALTER TABLE inventory_items ADD COLUMN single_use_pack BOOLEAN DEFAULT 0"))
+            # inventory_items: 生产企业（麻醉/精神类管控药必填）
+            if inv_item_cols and "manufacturer" not in inv_item_names:
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN manufacturer VARCHAR(200) DEFAULT ''"))
 
             # stocktake_sessions 盘点会话表
             st_sess_cols = conn.execute(text("PRAGMA table_info(stocktake_sessions)")).fetchall()
@@ -1956,6 +1960,8 @@ def _try_sqlite_migrations() -> None:
                 "qty REAL DEFAULT 0.0, "
                 "unit VARCHAR(20) DEFAULT '', "
                 "balance_after REAL DEFAULT 0.0, "
+                "batch_no VARCHAR(80) DEFAULT '', "
+                "manufacturer VARCHAR(200) DEFAULT '', "
                 "operator VARCHAR(80) DEFAULT '', "
                 "cosigner VARCHAR(80) DEFAULT '', "
                 "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
@@ -1968,6 +1974,12 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_item_date ON narcotics_ledger(item_id, event_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_store_date ON narcotics_ledger(store, event_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_narc_source ON narcotics_ledger(source)"))
+            narc_cols = conn.execute(text("PRAGMA table_info(narcotics_ledger)")).fetchall()
+            narc_names = {c[1] for c in narc_cols}
+            if narc_cols and "batch_no" not in narc_names:
+                conn.execute(text("ALTER TABLE narcotics_ledger ADD COLUMN batch_no VARCHAR(80) DEFAULT ''"))
+            if narc_cols and "manufacturer" not in narc_names:
+                conn.execute(text("ALTER TABLE narcotics_ledger ADD COLUMN manufacturer VARCHAR(200) DEFAULT ''"))
 
             # ── 麻醉监护表（手术中逐时段生命体征 · 手机录入 + PDF 导出）─────
             conn.execute(text(

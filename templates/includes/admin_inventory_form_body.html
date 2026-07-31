@@ -123,6 +123,12 @@
  </div>
 
  <div style="grid-column:1/-1;">
+ <label style="display:block;font-weight:600;margin-bottom:0.35rem;">生产企业 <span id="manufacturer-required" style="color:#d97706;display:none;">*</span></label>
+ <input name="manufacturer" id="manufacturer-in" value="{{ item.manufacturer if item else '' }}" style="width:100%;"/>
+ <div style="font-size:.78rem;color:var(--muted);margin-top:.25rem;">麻醉/精神类管控品目必填；台账会同步显示。</div>
+ </div>
+
+ <div style="grid-column:1/-1;">
  <label style="display:block;font-weight:600;margin-bottom:0.35rem;">备注</label>
  <textarea name="notes" rows="2" style="width:100%;">{{ item.notes if item else '' }}</textarea>
  </div>
@@ -171,5 +177,19 @@
   function sync() { hint.style.display = cb.checked ? 'block' : 'none'; }
   cb.addEventListener('change', sync);
   sync();
+})();
+(function () {
+  var ctrl = document.querySelector('input[name="is_controlled"]');
+  var sub = document.getElementById('sub-select');
+  var req = document.getElementById('manufacturer-required');
+  var input = document.getElementById('manufacturer-in');
+  function syncManufacturerRequired() {
+    var need = (ctrl && ctrl.checked) || (sub && sub.value === 'controlled');
+    if (req) req.style.display = need ? 'inline' : 'none';
+    if (input) input.required = !!need;
+  }
+  if (ctrl) ctrl.addEventListener('change', syncManufacturerRequired);
+  if (sub) sub.addEventListener('change', syncManufacturerRequired);
+  syncManufacturerRequired();
 })();
 </script>

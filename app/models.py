@@ -464,6 +464,7 @@ class InventoryItem(Base):
     stock_qty: Mapped[float] = mapped_column(Float, default=0.0)                # 当前库存（服务项目忽略）
     low_stock_min: Mapped[float] = mapped_column(Float, default=0.0)            # 低库存预警线
     supplier: Mapped[str] = mapped_column(String(200), default="")              # 供应商
+    manufacturer: Mapped[str] = mapped_column(String(200), default="")          # 生产企业（管控药必填）
     notes: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)              # 下架/停用
     # 多门店分离：空 = 通用两店共享，"东环店" / "横岗店" = 仅该店
@@ -1795,6 +1796,8 @@ class NarcoticsLedger(Base):
     qty:        Mapped[float] = mapped_column(Float, default=0.0)
     unit:       Mapped[str] = mapped_column(String(20), default="")
     balance_after: Mapped[float] = mapped_column(Float, default=0.0)
+    batch_no:   Mapped[str] = mapped_column(String(80), default="")
+    manufacturer: Mapped[str] = mapped_column(String(200), default="")
     operator:   Mapped[str] = mapped_column(String(80), default="")
     cosigner:   Mapped[str] = mapped_column(String(80), default="")
     visit_id        = mapped_column(ForeignKey("visits.id",            ondelete="SET NULL"), nullable=True, default=None)

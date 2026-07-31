@@ -43,7 +43,11 @@
  <div style="background:{% if is_low %}#fffbeb{% else %}var(--bg-elevated){% endif %};border-radius:8px;padding:0.75rem 1rem;">
  <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.2rem;">当前库存</div>
  <div style="font-size:1.3rem;font-weight:700;color:{% if is_low %}#d97706{% else %}var(--text){% endif %};">
+ {% if item.is_controlled %}
+ {{ '%.1f'|format([0, item.stock_qty or 0]|max) }} {{ item.unit }}
+ {% else %}
  {{ '%.1f'|format(item.stock_qty) }} {{ item.unit }}
+ {% endif %}
  {% if is_low %} <i data-lucide="alert-triangle"></i>{% endif %}
  </div>
  {% if item.low_stock_min> 0 %}
@@ -61,6 +65,11 @@
 
  {% if item.supplier %}
  <div style="margin-top:0.75rem;font-size:0.88rem;color:var(--muted);">供应商：{{ item.supplier }}</div>
+ {% endif %}
+ {% if item.manufacturer %}
+ <div style="margin-top:0.4rem;font-size:0.88rem;color:var(--muted);">生产企业：{{ item.manufacturer }}</div>
+ {% elif item.is_controlled %}
+ <div style="margin-top:0.4rem;font-size:0.88rem;color:#b91c1c;">生产企业：未填写（管控药必填，请编辑补全）</div>
  {% endif %}
  {% if item.notes %}
  <div style="margin-top:0.4rem;font-size:0.88rem;color:var(--muted);">备注：{{ item.notes }}</div>
@@ -161,7 +170,9 @@
  <td data-label="数量" style="padding:0.5rem 0.75rem;text-align:right;font-weight:600;">
  {% if tx.tx_type == 'out' %}-{% else %}+{% endif %}{{ '%.1f'|format(tx.qty) }}
  </td>
- <td data-label="变动后" style="padding:0.5rem 0.75rem;text-align:right;color:var(--muted);">{{ '%.1f'|format(tx.qty_after) }}</td>
+ <td data-label="变动后" style="padding:0.5rem 0.75rem;text-align:right;color:var(--muted);">
+ {% if item.is_controlled %}{{ '%.1f'|format([0, tx.qty_after or 0]|max) }}{% else %}{{ '%.1f'|format(tx.qty_after) }}{% endif %}
+ </td>
  <td data-label="操作人" style="padding:0.5rem 0.75rem;color:var(--muted);">{{ tx.operator or '—' }}</td>
  <td data-label="备注" style="padding:0.5rem 0.75rem;color:var(--muted);font-size:0.8rem;">{{ tx.note or '—' }}</td>
  </tr>

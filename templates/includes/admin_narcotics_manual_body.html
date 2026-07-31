@@ -54,12 +54,16 @@
        <label style="font-weight:600;display:block;margin-bottom:.25rem;">数量 *</label>
        <input type="number" step="0.01" min="0.01" name="qty" required style="width:100%;"/>
      </div>
-     <div>
-       <label style="font-weight:600;display:block;margin-bottom:.25rem;">单位</label>
-       <input name="unit" id="unit-in" placeholder="如 ml / 支 / 瓶" style="width:100%;"/>
-     </div>
+      <div>
+        <label style="font-weight:600;display:block;margin-bottom:.25rem;">单位</label>
+        <input name="unit" id="unit-in" placeholder="如 ml / 支 / 瓶" style="width:100%;"/>
+      </div>
+      <div style="grid-column:1/-1;">
+        <label style="font-weight:600;display:block;margin-bottom:.25rem;">批号（可选）</label>
+        <input name="batch_no" placeholder="留空时自动取该药品当前可用批次" style="width:100%;"/>
+      </div>
 
-     <div>
+      <div>
        <label style="font-weight:600;display:block;margin-bottom:.25rem;">经办人 *</label>
        <input name="operator" list="staff-list" required style="width:100%;"/>
      </div>
