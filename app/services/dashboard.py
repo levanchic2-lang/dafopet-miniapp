@@ -221,7 +221,7 @@ def build_consent_pending(db: Session, store_short: str) -> dict:
     return {
         "key": "consent_pending", "title": "待签协议", "icon": "pen-tool",
         "count": len(rows), "previews": items,
-        "all_url": "/admin/customers",
+        "all_url": "/admin/consent-tasks?status=pending",
         "tone": "danger",
     }
 

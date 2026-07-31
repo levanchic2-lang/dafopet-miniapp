@@ -1,0 +1,179 @@
+{% extends "uk/_base.html" %}
+{% block title %}签署文书 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .ct-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .ct-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; }
+  .ct-bc a:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
+  .ct-bc .sep { margin:0 8px; color:var(--ink-4); }
+  hr.ct-rule-double { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .ct-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:8px; }
+  .ct-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15; }
+  .ct-head h1 .sub { display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px; }
+  .ct-btn { background:var(--ink); color:var(--paper); border:0; padding:8px 18px; cursor:pointer; font-family:var(--font-serif); font-size:10pt; letter-spacing:2px; font-weight:700; text-decoration:none; display:inline-block; }
+  .ct-btn.ghost { background:var(--paper); color:var(--ink-2); border:0.5px solid var(--hair); font-style:italic; font-weight:400; }
+  .ct-btn.ghost:hover { color:var(--ink); border-color:var(--ink-3); background:var(--bg); }
+  .ct-btn.sm { font-size:9pt; padding:4px 10px; letter-spacing:1.5px; }
+
+  .ct-tabs { display:flex; gap:18px; align-items:center; border-bottom:0.5px solid var(--hair); margin:18px 0 18px; }
+  .ct-tab { padding:10px 0 9px; color:var(--ink-3); border-bottom:2px solid transparent; margin-bottom:-1px; letter-spacing:2px; font-size:10pt; }
+  .ct-tab:hover { color:var(--ink); }
+  .ct-tab.current { color:var(--ink); border-bottom-color:var(--ink); font-weight:700; }
+  .ct-tab .num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums lining-nums; margin-left:4px; letter-spacing:0; }
+
+  .ct-filter { border:0.5px solid var(--hair-2); background:var(--paper); padding:16px 18px; display:grid; grid-template-columns:1fr 120px 96px; gap:12px; align-items:end; margin-bottom:20px; }
+  .ct-filter label { display:block; font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-style:italic; margin-bottom:6px; }
+  .ct-filter input, .ct-filter select { width:100%; border:0.5px solid var(--hair); background:var(--paper); padding:9px 10px; font-family:var(--font-serif); font-size:10pt; color:var(--ink); border-radius:0; box-sizing:border-box; }
+  .ct-filter input::placeholder { color:var(--ink-3); }
+
+  .ct-tbl { width:100%; border-collapse:collapse; font-family:var(--font-serif); border:0.5px solid var(--hair-2); }
+  .ct-tbl thead th { font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-weight:400; font-style:italic; border-bottom:0.5px solid var(--ink); padding:10px 12px; text-align:left; background:var(--paper); }
+  .ct-tbl tbody td { font-size:10pt; color:var(--ink-2); border-bottom:0.5px solid var(--hair); padding:12px; vertical-align:top; }
+  .ct-tbl tbody tr:hover td { background:var(--bg); }
+  .ct-tbl .name { color:var(--ink); font-weight:700; }
+  .ct-tbl .dim { color:var(--ink-3); font-style:italic; font-size:9pt; margin-top:4px; line-height:1.55; }
+  .ct-tbl .num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums lining-nums; letter-spacing:0; }
+  .ct-tbl .right { text-align:right; }
+
+  .ct-pill { display:inline-block; font-family:var(--font-serif); font-style:italic; font-size:9pt; padding:2px 10px; border:0.5px solid var(--hair); letter-spacing:1.5px; color:var(--ink-2); white-space:nowrap; }
+  .ct-pill.pending { color:var(--accent-amber); border-color:var(--accent-amber); }
+  .ct-pill.signed { color:var(--accent-green); border-color:var(--accent-green); }
+  .ct-pill.cancelled, .ct-pill.expired { color:var(--ink-3); border-color:var(--hair); }
+  .ct-empty { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:11pt; padding:58px 20px; text-align:center; border:0.5px solid var(--hair-2); }
+  .ct-pager { display:flex; justify-content:flex-end; gap:10px; align-items:center; margin-top:16px; font-size:9.5pt; color:var(--ink-3); font-style:italic; }
+  .ct-store-note { color:var(--ink-3); font-style:italic; font-size:9.5pt; margin:8px 0 0; letter-spacing:1.5px; }
+</style>
+
+<div class="ct-bc"><a href="/admin">后台</a><span class="sep">/</span><span>签署文书</span></div>
+
+<div class="ct-head">
+  <div>
+    <h1>签&nbsp;署&nbsp;文&nbsp;书
+      <span class="sub">待签 / 已签 / 已取消 / 已过期 · 协议快照与签字归档</span>
+    </h1>
+  </div>
+  <div>
+    <a href="/admin/consent-templates" class="ct-btn ghost">协&nbsp;议&nbsp;模&nbsp;板</a>
+  </div>
+</div>
+
+<hr class="ct-rule-double"/>
+
+{% set base_q = '&q=' ~ (q|urlencode) if q else '' %}
+{% set store_q = '&store=' ~ (wb_store|urlencode) if wb_store else '' %}
+<div class="ct-tabs">
+  {% for key, label in [('pending','待签署'), ('signed','已签署'), ('cancelled','已取消'), ('expired','已过期'), ('all','全部')] %}
+    <a class="ct-tab {% if status == key %}current{% endif %}" href="/admin/consent-tasks?status={{ key }}{{ base_q }}{{ store_q }}">{{ label }}<span class="num">{{ status_counts.get(key, 0) }}</span></a>
+  {% endfor %}
+</div>
+
+<form class="ct-filter" method="get" action="/admin/consent-tasks">
+  <input type="hidden" name="status" value="{{ status }}">
+  <div>
+    <label>关键词</label>
+    <input name="q" value="{{ q }}" placeholder="客户 / 手机 / 宠物 / 病历号 / 协议标题">
+  </div>
+  <div>
+    <label>门店</label>
+    {% if is_superadmin %}
+      <select name="store">
+        <option value="" {% if not wb_store %}selected{% endif %}>全部门店</option>
+        <option value="横岗店" {% if wb_store == '横岗店' %}selected{% endif %}>横岗店</option>
+        <option value="东环店" {% if wb_store == '东环店' %}selected{% endif %}>东环店</option>
+      </select>
+    {% else %}
+      <input value="{{ wb_store or '本店' }}" disabled>
+    {% endif %}
+  </div>
+  <button class="ct-btn" type="submit">查&nbsp;询</button>
+</form>
+<div class="ct-store-note">共 {{ total }} 条记录 · 当前视图：{{ status_zh.get(status, '全部') }}{% if wb_store %} · {{ wb_store }}{% endif %}</div>
+
+{% if rows %}
+<table class="ct-tbl" style="margin-top:14px;">
+  <thead>
+    <tr>
+      <th style="width:130px;">编号 / 状态</th>
+      <th style="width:180px;">客户</th>
+      <th style="width:160px;">宠物</th>
+      <th>协议</th>
+      <th style="width:170px;">发起</th>
+      <th style="width:160px;">签署 / 归档</th>
+      <th class="right" style="width:86px;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    {% set t = r['t'] %}
+    {% set cust = r['cust'] %}
+    {% set pet = r['pet'] %}
+    {% set doc = r['doc'] %}
+    <tr>
+      <td>
+        <div class="num name">#CT{{ '%06d'|format(t.id) }}</div>
+        <div style="margin-top:8px;"><span class="ct-pill {{ t.status }}">{{ status_zh.get(t.status, t.status) }}</span></div>
+      </td>
+      <td>
+        {% if cust %}
+          <a class="name" href="/admin/customers/{{ cust.id }}?tab=docs">{{ cust.name or '未命名客户' }}</a>
+          <div class="dim num">{{ cust.phone or '—' }}</div>
+        {% else %}
+          <span class="dim">客户已删除或未关联</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if pet %}
+          <span class="name">{{ pet.name }}</span>
+          <div class="dim">{{ pet.species or '—' }}{% if pet.breed %} · {{ pet.breed }}{% endif %}</div>
+          {% if pet.medical_record_no %}<div class="dim num">{{ pet.medical_record_no }}</div>{% endif %}
+        {% else %}
+          <span class="dim">未关联宠物</span>
+        {% endif %}
+      </td>
+      <td>
+        <div class="name">{{ t.title or (t.template.name if t.template else '未命名协议') }}</div>
+        <div class="dim">
+          {{ category_zh.get(t.template.category, t.template.category) if t.template else '自定义协议' }}
+          {% if t.visit_id %} · 病历 #{{ t.visit_id }}{% endif %}
+          {% if t.expires_at %} · 截止 {{ t.expires_at }}{% endif %}
+        </div>
+        {% if t.notes %}<div class="dim">{{ t.notes[:80] }}</div>{% endif %}
+      </td>
+      <td>
+        <div>{{ t.initiated_by or '—' }}</div>
+        <div class="dim">{{ t.store or '未指定门店' }}</div>
+        <div class="dim num">{{ (t.initiated_at | bjtime).strftime('%Y-%m-%d %H:%M') if t.initiated_at else '—' }}</div>
+      </td>
+      <td>
+        {% if t.signed_at %}
+          <div class="num">{{ (t.signed_at | bjtime).strftime('%Y-%m-%d %H:%M') }}</div>
+          {% if doc %}
+            <div class="dim"><a href="/uploads/{{ doc.pdf_path }}" target="_blank">归档 PDF ↓</a></div>
+          {% else %}
+            <div class="dim">未生成 PDF</div>
+          {% endif %}
+        {% else %}
+          <span class="dim">尚未签署</span>
+        {% endif %}
+      </td>
+      <td class="right"><a href="/admin/consent-tasks/{{ t.id }}">查看 →</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="ct-empty">没有找到符合条件的签署文书</div>
+{% endif %}
+
+{% if total_pages > 1 %}
+<div class="ct-pager">
+  <span>第 {{ page }} / {{ total_pages }} 页</span>
+  {% if page > 1 %}
+    <a class="ct-btn ghost sm" href="/admin/consent-tasks?status={{ status }}{{ base_q }}{{ store_q }}&page={{ page - 1 }}">上一页</a>
+  {% endif %}
+  {% if page < total_pages %}
+    <a class="ct-btn ghost sm" href="/admin/consent-tasks?status={{ status }}{{ base_q }}{{ store_q }}&page={{ page + 1 }}">下一页</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

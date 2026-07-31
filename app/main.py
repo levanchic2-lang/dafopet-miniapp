@@ -9418,6 +9418,115 @@ def _gen_consent_token() -> str:
     return secrets.token_urlsafe(18)[:32]
 
 
+@app.get("/admin/consent-tasks", response_class=HTMLResponse)
+async def admin_consent_tasks_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    status: str = Query("pending"),
+    store: str = Query(""),
+    page: int = Query(1, ge=1),
+):
+    """统一查看签署文书：待签 / 已签 / 已取消 / 已过期。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login?next=/admin/consent-tasks", status_code=303)
+
+    q_clean = (q or "").strip()
+    status_clean = (status or "pending").strip()
+    if status_clean not in ("pending", "signed", "cancelled", "expired", "all"):
+        status_clean = "pending"
+
+    admin_store = _get_admin_store(request)
+    is_superadmin = request.session.get("admin_role") == "superadmin"
+    if is_superadmin:
+        wb_store = (store or "").strip()
+        if wb_store not in ("东环店", "横岗店"):
+            wb_store = ""
+    else:
+        wb_store = admin_store
+
+    def _base_query():
+        query = db.query(ConsentTask)
+        if wb_store:
+            query = query.filter(or_(ConsentTask.store == wb_store, ConsentTask.store == ""))
+        return query
+
+    query = _base_query()
+    if status_clean != "all":
+        query = query.filter(ConsentTask.status == status_clean)
+    if q_clean:
+        like = f"%{q_clean}%"
+        customer_ids = db.query(Customer.id).filter(
+            or_(Customer.name.ilike(like), Customer.phone.ilike(like))
+        )
+        pet_ids = db.query(Pet.id).filter(
+            or_(Pet.name.ilike(like), Pet.medical_record_no.ilike(like))
+        )
+        filters = [
+            ConsentTask.title.ilike(like),
+            ConsentTask.notes.ilike(like),
+            ConsentTask.initiated_by.ilike(like),
+            ConsentTask.customer_id.in_(customer_ids),
+            ConsentTask.pet_id.in_(pet_ids),
+        ]
+        if q_clean.isdigit():
+            n = int(q_clean)
+            filters.append(ConsentTask.id == n)
+            filters.append(ConsentTask.visit_id == n)
+        query = query.filter(or_(*filters))
+
+    PAGE_SIZE = 50
+    total = query.count()
+    rows_raw = (
+        query.order_by(
+            ConsentTask.signed_at.desc().nullslast(),
+            ConsentTask.initiated_at.desc(),
+            ConsentTask.id.desc(),
+        )
+        .offset((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .all()
+    )
+
+    rows = []
+    doc_map = {}
+    task_ids = [t.id for t in rows_raw]
+    if task_ids:
+        doc_map = {
+            d.task_id: d
+            for d in db.query(ConsentDocument).filter(ConsentDocument.task_id.in_(task_ids)).all()
+        }
+    for t in rows_raw:
+        rows.append({
+            "t": t,
+            "cust": db.get(Customer, t.customer_id) if t.customer_id else None,
+            "pet": db.get(Pet, t.pet_id) if t.pet_id else None,
+            "doc": doc_map.get(t.id),
+        })
+
+    status_counts = {
+        key: _base_query().filter(ConsentTask.status == key).count()
+        for key in ("pending", "signed", "cancelled", "expired")
+    }
+    status_counts["all"] = sum(status_counts.values())
+
+    return templates.TemplateResponse(request, "uk/consent_tasks.html", {
+        "rows": rows,
+        "q": q_clean,
+        "status": status_clean,
+        "wb_store": wb_store,
+        "is_superadmin": is_superadmin,
+        "status_zh": _CONSENT_STATUS_ZH,
+        "category_zh": _CONSENT_CATEGORY_ZH,
+        "status_counts": status_counts,
+        "page": page,
+        "total": total,
+        "page_size": PAGE_SIZE,
+        "total_pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
 @app.get("/admin/consent-templates", response_class=HTMLResponse)
 async def admin_consent_templates_list(request: Request, db: Session = Depends(get_db)):
     """协议模板管理（列表 / 启停）。"""
