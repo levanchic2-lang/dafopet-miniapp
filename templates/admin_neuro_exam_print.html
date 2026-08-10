@@ -1,0 +1,21 @@
+{% extends "_print_base.html" %}
+{% block title %}神经学检查报告 · {{ pet.name if pet else '' }}{% endblock %}
+{% block default_size %}A4{% endblock %}
+{% block extra_style %}
+.nr-head{text-align:center}.nr-en{font-size:21pt;letter-spacing:5px}.nr-zh{font-size:11pt;letter-spacing:7px;color:#555;margin-top:4px}.nr-rule{border:0;border-top:1px solid #222;border-bottom:1px solid #222;height:4px;margin:12px 0}.nr-title{text-align:center;font-size:14pt;font-weight:700;letter-spacing:5px;padding:7px}.nr-info{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 18px;font-size:9.5pt;padding:10px 0}.nr-info span{display:block;color:#777;font-size:8pt;margin-bottom:2px}.nr-sec{margin-top:13px;border-left:3px solid #222;padding:2px 8px;font-size:11pt;font-weight:700;letter-spacing:3px}.nr-box{border:.5px solid #bbb;padding:9px 11px;margin-top:7px;white-space:pre-wrap;line-height:1.7;font-size:10pt;page-break-inside:avoid}.nr-loc{font-size:13pt;font-weight:700}.nr-note{font-size:8.5pt;color:#666;margin-top:12px;line-height:1.6}.nr-sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:28px}.nr-sig div{border-bottom:1px solid #888;padding:25px 0 4px;text-align:center;font-size:8.5pt;color:#555}
+{% endblock %}
+{% block toolbar_extra %}<span style="opacity:.8;font-size:12px;">报告：<b>神经学检查</b></span>{% endblock %}
+{% block content %}
+<div class="nr-head"><div class="nr-en">{{ clinic_name_en }}</div><div class="nr-zh">{{ clinic_name_zh }}</div></div>
+<hr class="nr-rule"><div class="nr-title">NEUROLOGIC EXAMINATION · 神 经 学 检 查 报 告</div><hr class="nr-rule">
+<div class="nr-info">
+  <div><span>客户 Client</span>{{ cust.name if cust else '—' }}</div><div><span>宠物 Pet</span>{{ pet.name if pet else '—' }}</div><div><span>种类 Species</span>{{ {'cat':'猫','dog':'犬'}.get(pet.species,pet.species) if pet else '—' }}</div><div><span>病历号 Chart No.</span>{{ pet.medical_record_no if pet else '—' }}</div>
+  <div><span>检查日期 Date</span>{{ exam.exam_date or visit.visit_date or '—' }}</div><div><span>检查医师 Examiner</span>{{ exam.examiner or visit.vet_name or '—' }}</div><div><span>就诊号 Visit</span>#{{ visit.id }}</div><div><span>运动分级 Motor Grade</span>{{ exam.motor_grade ~ '/5' if exam.motor_grade is not none else '—' }}</div>
+</div>
+<div class="nr-sec">检查所见 · Findings</div><div class="nr-box">{{ exam.generated_description or '—' }}</div>
+<div class="nr-sec">定位提示 · Localization Hint</div><div class="nr-box">{{ exam.localization_hint or '—' }}</div>
+<div class="nr-sec">医生最终定位 · Final Localization</div><div class="nr-box nr-loc">{{ exam.final_localization or '—' }}</div>
+<div class="nr-sec">结论 · Conclusion</div><div class="nr-box">{{ exam.conclusion or '—' }}</div>
+<div class="nr-note">本报告中的系统定位提示依据结构化检查结果生成，仅用于辅助整理；最终神经解剖定位及诊断以主诊医生结合病史、影像和实验室检查后的判断为准。</div>
+<div class="nr-sig"><div>检查医师 · Examined By</div><div>复核医师 · Reviewed By</div><div>日期 · Date</div></div>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "uk/_base.html" %}
+{% block extra_head %}
+<style>
+.ne-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px double var(--ink);padding-bottom:14px;margin-bottom:22px}.ne-head h1{margin:0;font-size:28pt;letter-spacing:4px}.ne-sub{color:var(--ink-3);font-size:10pt;margin-top:6px}.ne-section{border-top:1px solid var(--ink);padding:16px 0 22px}.ne-section h2{font-size:13pt;letter-spacing:3px;margin:0 0 14px}.ne-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 14px}.ne-field label{display:block;color:var(--ink-3);font-size:9pt;margin-bottom:5px}.ne-field select,.ne-field input,.ne-field textarea{width:100%;border:.5px solid var(--hair);background:var(--paper);padding:9px 10px;font:inherit;border-radius:0}.ne-table{width:100%;border-collapse:collapse;font-size:9.5pt}.ne-table th,.ne-table td{border-bottom:.5px solid var(--hair);padding:8px 7px;text-align:left;vertical-align:middle}.ne-table th{color:var(--ink-3);font-weight:400}.ne-table select{width:100%;min-width:84px;border:.5px solid var(--hair);background:var(--paper);padding:7px}.ne-checks{display:flex;flex-wrap:wrap;gap:8px}.ne-check{border:.5px solid var(--hair);padding:8px 11px;cursor:pointer}.ne-check input{margin-right:6px}.ne-result{display:grid;grid-template-columns:1fr 1fr;gap:16px}.ne-result textarea{min-height:150px;line-height:1.7}.ne-hint{white-space:pre-wrap;background:#f7f5ef;border-left:3px solid var(--accent-amber);padding:12px;min-height:80px;font-size:9.5pt;line-height:1.7}.ne-actions{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--ink);padding-top:16px}.ne-actions>div{display:flex;gap:8px}.ne-note{font-size:9pt;color:var(--ink-3);line-height:1.6;margin-top:8px}@media(max-width:900px){.ne-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ne-result{grid-template-columns:1fr}.ne-head{align-items:flex-start;flex-direction:column;gap:12px}}
+</style>
+{% endblock %}
+{% block body %}
+<div class="uk-breadcrumb"><a href="/admin/visits/{{ visit.id }}">病历 #{{ visit.id }}</a><span class="sep">/</span><span>神经学检查</span></div>
+<div class="ne-head">
+  <div><h1>神 经 学 检 查</h1><div class="ne-sub">{{ cust.name if cust else '—' }} · {{ pet.name if pet else '—' }} · 结构化检查与定位提示</div></div>
+  {% if exam %}<a class="uk-btn ghost sm" target="_blank" href="/admin/visits/{{ visit.id }}/neuro-exam/print">打印报告</a>{% endif %}
+</div>
+
+<form id="neuro-form" method="post" action="/admin/visits/{{ visit.id }}/neuro-exam/save">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="findings_json" id="findings-json">
+
+  <section class="ne-section">
+    <h2>基本信息与病程</h2>
+    <div class="ne-grid">
+      <div class="ne-field"><label>检查日期</label><input type="date" name="exam_date" value="{{ exam.exam_date if exam else visit.visit_date or '' }}"></div>
+      <div class="ne-field"><label>检查医师</label><input name="examiner" value="{{ exam.examiner if exam else visit.vet_name or '' }}"></div>
+      <div class="ne-field"><label>起病方式</label><select data-key="history.onset"><option value="">未选择</option>{% for x in ['突发','急性','亚急性','慢性'] %}<option>{{ x }}</option>{% endfor %}</select></div>
+      <div class="ne-field"><label>病程变化</label><select data-key="history.course"><option value="">未选择</option>{% for x in ['进展性','非进展性','间歇性','改善中'] %}<option>{{ x }}</option>{% endfor %}</select></div>
+      <div class="ne-field"><label>疼痛评分</label><select data-key="history.pain"><option value="">未选择</option>{% for x in range(0,11) %}<option value="{{ x }}">{{ x }}/10</option>{% endfor %}</select></div>
+      {% for key,label in [('trauma','外伤史'),('seizures','癫痫/发作史'),('exposure','毒物/药物暴露史')] %}<div class="ne-field"><label>{{ label }}</label><select data-key="history.{{ key }}"><option value="">未选择</option><option>无</option><option>有</option><option>不确定</option></select></div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="ne-section">
+    <h2>意识、步态与姿势</h2>
+    <div class="ne-grid">
+      <div class="ne-field"><label>意识状态</label><select data-key="mentation"><option value="">未检查</option>{% for x in config['mentation'] %}<option>{{ x }}</option>{% endfor %}</select></div>
+      <div class="ne-field"><label>前肢步态</label><select data-key="gait.thoracic"><option value="">未检查</option>{% for x in config['gait_options'] %}<option>{{ x }}</option>{% endfor %}</select></div>
+      <div class="ne-field"><label>后肢步态</label><select data-key="gait.pelvic"><option value="">未检查</option>{% for x in config['gait_options'] %}<option>{{ x }}</option>{% endfor %}</select></div>
+      <div class="ne-field"><label>眼震类型</label><select data-key="nystagmus_type"><option>未见</option>{% for x in ['水平固定方向','旋转固定方向','垂直','变向','体位性变向'] %}<option>{{ x }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="ne-field" style="margin-top:14px"><label>异常姿势（可多选）</label><div class="ne-checks">{% for x in config['posture_options'] %}<label class="ne-check"><input type="checkbox" data-list="posture" value="{{ x }}">{{ x }}</label>{% endfor %}</div></div>
+  </section>
+
+  <section class="ne-section">
+    <h2>体位反应</h2>
+    <table class="ne-table"><thead><tr><th>项目</th><th>检查部位</th><th>结果</th></tr></thead><tbody>
+    {% for key,label,limbs in config['postural_items'] %}{% for limb in limbs %}<tr><td>{{ label }}</td><td>{{ limb }}</td><td><select data-score="postural_reactions.{{ key }}.{{ limb }}"><option value="x">未检查</option><option value="0">正常</option><option value="1">减弱</option><option value="2">缺失</option></select></td></tr>{% endfor %}{% endfor %}
+    </tbody></table>
+  </section>
+
+  <section class="ne-section">
+    <h2>脑神经检查</h2>
+    <table class="ne-table"><thead><tr><th>分组</th><th>项目</th><th>通路</th><th>左</th><th>右</th></tr></thead><tbody>
+    {% for key,category,label,pathway in config['cn_items'] %}<tr><td>{{ category }}</td><td>{{ label }}</td><td>{{ pathway }}</td>{% for side in ['左','右'] %}<td><select data-score="cranial_nerves.{{ key }}.{{ side }}"><option value="x">未检查</option><option value="0">正常</option><option value="1">减弱</option><option value="2">缺失</option></select></td>{% endfor %}</tr>{% endfor %}
+    </tbody></table>
+  </section>
+
+  <section class="ne-section">
+    <h2>脊髓反射与运动功能</h2>
+    <table class="ne-table"><thead><tr><th>反射</th><th>节段</th><th>左</th><th>右</th></tr></thead><tbody>
+    {% for key,label,segment,sides in config['spinal_items'] %}<tr><td>{{ label }}</td><td>{{ segment }}</td>{% for side in ['左','右'] %}<td><select data-score="spinal_reflexes.{{ key }}.{{ side }}"><option value="x">未检查</option><option value="0">正常</option><option value="1">减弱</option><option value="2">亢进</option><option value="3">缺失</option></select></td>{% endfor %}</tr>{% endfor %}
+    </tbody></table>
+    <div class="ne-grid" style="margin-top:14px">
+      <div class="ne-field"><label>会阴反射</label><select data-key="perineal"><option value="x">未检查</option><option value="0">正常</option><option value="1">减弱</option><option value="2">亢进</option><option value="3">缺失</option></select></div>
+      <div class="ne-field"><label>肛门张力</label><select data-key="anal_tone"><option value="">未检查</option><option>正常</option><option>减弱</option><option>缺失</option></select></div>
+      <div class="ne-field"><label>皮肌反射截止节段</label><select data-key="cutaneous_trunci_level"><option value="">未检查</option>{% for x in range(2,5) %}<option>T{{ x }}</option>{% endfor %}{% for x in range(1,5) %}<option>L{{ x }}</option>{% endfor %}<option>全程正常</option><option>未引出</option></select></div>
+      <div class="ne-field"><label>运动/步行分级</label><select data-key="motor_grade"><option value="">未检查</option>{% for x in range(0,6) %}<option value="{{ x }}">{{ x }}/5</option>{% endfor %}</select></div>
+    </div>
+  </section>
+
+  <section class="ne-section">
+    <h2>疼痛、深痛与自主功能</h2>
+    <div class="ne-grid">
+      <div class="ne-field"><label>脊柱触诊疼痛</label><select data-key="pain_severity"><option value="">未检查</option><option>无</option><option>轻度</option><option>中度</option><option>重度</option></select></div>
+      <div class="ne-field"><label>深痛</label><select data-key="deep_pain"><option value="">未检查</option><option>有</option><option>减弱</option><option>无</option></select></div>
+      <div class="ne-field"><label>尾张力</label><select data-key="tail_tone"><option value="">未检查</option><option>正常</option><option>减弱</option><option>缺失</option></select></div>
+      <div class="ne-field"><label>膀胱张力</label><select data-key="bladder_tone"><option value="">未检查</option><option>正常</option><option>松弛</option><option>紧张</option></select></div>
+    </div>
+    <div class="ne-field" style="margin-top:14px"><label>疼痛部位（可多选）</label><div class="ne-checks">{% for x in ['颈椎','胸椎','胸腰椎','腰椎','腰骶部','尾部'] %}<label class="ne-check"><input type="checkbox" data-list="pain_locations" value="{{ x }}">{{ x }}</label>{% endfor %}</div></div>
+  </section>
+
+  <section class="ne-section">
+    <h2>描述、定位与结论</h2>
+    <div class="ne-actions" style="border:0;padding:0 0 14px"><div><button type="button" class="uk-btn ghost sm" id="all-normal">一键设为正常</button><button type="button" class="uk-btn primary sm" id="generate-result">生成描述与定位提示</button></div><span id="generate-status" class="ne-note"></span></div>
+    <div class="ne-result">
+      <div class="ne-field"><label>结构化检查描述</label><textarea name="generated_description" id="generated-description" readonly>{{ exam.generated_description if exam else '' }}</textarea></div>
+      <div><div class="ne-field"><label>系统定位提示（不替代医生判断）</label><div class="ne-hint" id="localization-hint">{{ exam.localization_hint if exam else '完成勾选后点击“生成描述与定位提示”。' }}</div><input type="hidden" name="localization_hint" id="localization-hint-input" value="{{ exam.localization_hint if exam else '' }}"></div></div>
+      <div class="ne-field"><label>医生最终定位</label><select name="final_localization" id="final-localization"><option value="">请选择</option>{% for x in config['localization_options'] %}<option value="{{ x }}" {% if exam and exam.final_localization == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
+      <div class="ne-field"><label>医生结论（可修改）</label><textarea name="conclusion" id="conclusion">{{ exam.conclusion if exam else '' }}</textarea></div>
+    </div>
+    <div class="ne-note">定位提示由固定临床规则根据本次勾选结果生成，必须由主诊医生结合病史、影像和实验室检查确认。</div>
+  </section>
+
+  <div class="ne-actions"><a class="uk-btn ghost sm" href="/admin/visits/{{ visit.id }}">返回病历</a><div>{% if exam %}<a class="uk-btn ghost sm" target="_blank" href="/admin/visits/{{ visit.id }}/neuro-exam/print">打印报告</a>{% endif %}{% if visit.status != 'closed' %}<button class="uk-btn primary sm" type="submit">保存神经学检查</button>{% endif %}</div></div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const current={{ findings|tojson }};
+  const form=document.getElementById('neuro-form');
+  function setPath(obj,path,value){const parts=path.split('.');let cur=obj;parts.forEach((p,i)=>{if(i===parts.length-1)cur[p]=value;else cur=cur[p]||(cur[p]={});});}
+  function getPath(obj,path){return path.split('.').reduce((v,p)=>v&&v[p],obj);}
+  document.querySelectorAll('[data-key]').forEach(el=>{const v=getPath(current,el.dataset.key);if(v!==undefined&&v!==null)el.value=String(v);});
+  document.querySelectorAll('[data-score]').forEach(el=>{const v=getPath(current,el.dataset.score);if(v!==undefined&&v!==null)el.value=String(v);});
+  document.querySelectorAll('[data-list]').forEach(el=>{const a=current[el.dataset.list]||[];el.checked=a.includes(el.value);});
+  function collect(){const out={};document.querySelectorAll('[data-key]').forEach(el=>setPath(out,el.dataset.key,el.value));document.querySelectorAll('[data-score]').forEach(el=>setPath(out,el.dataset.score,el.value));document.querySelectorAll('[data-list]').forEach(el=>{if(!out[el.dataset.list])out[el.dataset.list]=[];if(el.checked)out[el.dataset.list].push(el.value);});return out;}
+  document.getElementById('all-normal').addEventListener('click',()=>{document.querySelectorAll('[data-score]').forEach(el=>el.value='0');document.querySelector('[data-key="mentation"]').value='清醒';document.querySelector('[data-key="gait.thoracic"]').value='正常';document.querySelector('[data-key="gait.pelvic"]').value='正常';document.querySelector('[data-key="nystagmus_type"]').value='未见';document.querySelectorAll('[data-list]').forEach(el=>el.checked=false);document.querySelector('[data-key="pain_severity"]').value='无';document.querySelector('[data-key="deep_pain"]').value='有';document.querySelector('[data-key="tail_tone"]').value='正常';document.querySelector('[data-key="bladder_tone"]').value='正常';document.querySelector('[data-key="anal_tone"]').value='正常';});
+  document.getElementById('generate-result').addEventListener('click',async()=>{const btn=document.getElementById('generate-result'),status=document.getElementById('generate-status');btn.disabled=true;status.textContent='正在整理检查结果';try{const res=await fetch('/admin/neuro-exams/generate',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({csrf_token:'{{ csrf_token }}',findings:collect()})});const data=await res.json();if(!res.ok||!data.ok)throw new Error(data.detail||'生成失败');document.getElementById('generated-description').value=data.description||'';document.getElementById('localization-hint').textContent=data.localization_hint||'';document.getElementById('localization-hint-input').value=data.localization_hint||'';const loc=document.getElementById('final-localization');if(!loc.value)loc.value=data.suggested_localization||'';document.getElementById('conclusion').value=data.conclusion||'';status.textContent='已生成，请由医生确认最终定位和结论';}catch(e){status.textContent=e.message||'生成失败';}finally{btn.disabled=false;}});
+  form.addEventListener('submit',()=>{document.getElementById('findings-json').value=JSON.stringify(collect());});
+})();
+</script>
+{% endblock %}

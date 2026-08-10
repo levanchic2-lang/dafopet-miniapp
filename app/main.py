@@ -87,6 +87,7 @@ from app.models import (
     MicroscopyReport,
     UltrasoundReport,
     XrayReport,
+    NeurologicExam,
     CalendarBlock,
     DewormingRecord,
     WeightRecord,
@@ -12483,6 +12484,142 @@ async def admin_visit_physical_exam_print(visit_id: int, request: Request, db: S
     })
 
 
+def _neuro_exam_context(db: Session, visit: Visit) -> tuple[Customer | None, Pet | None, NeurologicExam | None, dict]:
+    cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    exam = db.query(NeurologicExam).filter(NeurologicExam.visit_id == visit.id).first()
+    findings: dict = {}
+    if exam and exam.findings_json:
+        try:
+            parsed = json.loads(exam.findings_json)
+            findings = parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            findings = {}
+    return cust, pet, exam, findings
+
+
+@app.get("/admin/visits/{visit_id}/neuro-exam", response_class=HTMLResponse)
+async def admin_visit_neuro_exam(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    cust, pet, exam, findings = _neuro_exam_context(db, visit)
+    _assert_store_access(request, pet.store if pet else "")
+    from app.services.neuro_exam import form_config
+
+    return templates.TemplateResponse(request, "uk/neuro_exam_form.html", {
+        "visit": visit,
+        "cust": cust,
+        "pet": pet,
+        "exam": exam,
+        "findings": findings,
+        "config": form_config(),
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+        "err": request.query_params.get("err"),
+    })
+
+
+@app.post("/admin/visits/{visit_id}/neuro-exam/save")
+async def admin_visit_neuro_exam_save(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    findings_json: str = Form("{}"),
+    exam_date: str = Form(""),
+    examiner: str = Form(""),
+    final_localization: str = Form(""),
+    conclusion: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    cust, pet, exam, _ = _neuro_exam_context(db, visit)
+    _assert_store_access(request, pet.store if pet else "")
+    if visit.status == "closed":
+        return RedirectResponse(f"/admin/visits/{visit_id}/neuro-exam?err=病历已结束，神经学检查不可修改", status_code=303)
+    try:
+        findings = json.loads(findings_json or "{}")
+        if not isinstance(findings, dict):
+            raise ValueError
+    except Exception:
+        return RedirectResponse(f"/admin/visits/{visit_id}/neuro-exam?err=检查数据格式无效", status_code=303)
+
+    from app.services.neuro_exam import generate_neuro_result
+    generated = generate_neuro_result(findings)
+    username = request.session.get("admin_username") or request.session.get("admin") or ""
+    if not exam:
+        exam = NeurologicExam(
+            visit_id=visit.id,
+            customer_id=cust.id if cust else None,
+            pet_id=pet.id if pet else None,
+            operator=username,
+        )
+        db.add(exam)
+    exam.exam_date = (exam_date or visit.visit_date or "").strip()
+    exam.examiner = (examiner or visit.vet_name or username).strip()
+    exam.findings_json = json.dumps(findings, ensure_ascii=False)
+    # 描述与提示始终由本次原始勾选重新计算，避免修改勾选后保存了旧结果。
+    exam.generated_description = generated["description"].strip()
+    exam.localization_hint = generated["localization_hint"].strip()
+    exam.final_localization = (final_localization or generated["suggested_localization"]).strip()
+    exam.conclusion = (conclusion or generated["conclusion"]).strip()
+    grade = findings.get("motor_grade")
+    exam.motor_grade = int(grade) if str(grade).isdigit() else None
+    exam.store = (pet.store if pet else "") or getattr(visit, "store", "") or ""
+    exam.operator = username
+    db.commit()
+    return RedirectResponse(f"/admin/visits/{visit_id}/neuro-exam?msg=神经学检查已保存", status_code=303)
+
+
+@app.post("/admin/neuro-exams/generate")
+async def admin_neuro_exam_generate(request: Request):
+    if not request.session.get("admin"):
+        raise HTTPException(401, "请先登录")
+    payload = await request.json()
+    _require_csrf(request, str(payload.get("csrf_token") or ""))
+    findings = payload.get("findings") or {}
+    if not isinstance(findings, dict):
+        raise HTTPException(400, "检查数据格式无效")
+    from app.services.neuro_exam import generate_neuro_result
+
+    return {"ok": True, **generate_neuro_result(findings)}
+
+
+@app.get("/admin/visits/{visit_id}/neuro-exam/print", response_class=HTMLResponse)
+async def admin_visit_neuro_exam_print(visit_id: int, request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    cust, pet, exam, findings = _neuro_exam_context(db, visit)
+    _assert_store_access(request, pet.store if pet else "")
+    if not exam:
+        raise HTTPException(404, "尚未建立神经学检查")
+    clinic_store = _print_clinic_store(visit, pet)
+    clinic_name_zh = "大风动物医院"
+    clinic_name_en = "DaFo Animal Hospital"
+    if clinic_store:
+        clinic_name_zh = f"大风动物医院（{clinic_store.replace('店', '分院')}）"
+        clinic_name_en = f"DaFo Animal Hospital · {clinic_store.replace('店', '')}"
+    return templates.TemplateResponse(request, "admin_neuro_exam_print.html", {
+        "visit": visit,
+        "cust": cust,
+        "pet": pet,
+        "exam": exam,
+        "findings": findings,
+        "clinic_name_zh": clinic_name_zh,
+        "clinic_name_en": clinic_name_en,
+    })
+
+
 @app.get("/admin/visits/{visit_id}/discharge-print", response_class=HTMLResponse)
 async def admin_visit_discharge_print(visit_id: int, request: Request, db: Session = Depends(get_db)):
     """医嘱单独立打印（突出医嘱内容 + 处方 + 复诊建议，无完整 SOAP）。"""
@@ -12564,6 +12701,7 @@ async def page_admin_visit_detail(
     care_summary = _get_active_care_summary(db, visit_id)
     care_plan = _get_active_care_plan(db, visit_id)
     care_plan_tasks = _care_tasks_from_json(care_plan.tasks_json) if care_plan else []
+    neuro_exam = db.query(NeurologicExam).filter(NeurologicExam.visit_id == visit_id).first()
     # 本 visit 的所有回访轮次（按计划日 + round_no 排序）
     followups = db.query(FollowUp).filter(FollowUp.visit_id == visit_id)\
         .order_by(FollowUp.planned_date, FollowUp.round_no).all()
@@ -12600,6 +12738,7 @@ async def page_admin_visit_detail(
         "care_summary": care_summary,
         "care_plan": care_plan,
         "care_plan_tasks": care_plan_tasks,
+        "neuro_exam": neuro_exam,
         "presc_status_zh": _PRESC_STATUS_ZH,
         "so_status_zh": _SO_STATUS_ZH,
         "inv_status_zh": _INV_STATUS_ZH,
@@ -13179,7 +13318,7 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
            "sales_order": 0, "anesthesia": 0, "weight": 0, "medical_doc": 0,
            "monitor_sheet": 0, "consent_task": 0, "consent_doc": 0,
            "care_summary": 0, "care_plan": 0,
-           "followup": 0, "microscopy": 0}
+           "followup": 0, "microscopy": 0, "neurologic_exam": 0}
 
     if db.query(Hospitalization.id).filter(Hospitalization.visit_id == vid).first():
         return {"visit_id": vid, "skipped": True, "reason": "挂有住院档案", "cnt": cnt}
@@ -13210,6 +13349,8 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
         UltrasoundReport.visit_id == vid).delete(synchronize_session=False)
     db.query(XrayReport).filter(
         XrayReport.visit_id == vid).delete(synchronize_session=False)
+    cnt["neurologic_exam"] += db.query(NeurologicExam).filter(
+        NeurologicExam.visit_id == vid).delete(synchronize_session=False)
 
     # 发票（+ 明细/收款 手动删；已收款则保留脱钩）
     for inv in db.query(Invoice).filter(Invoice.visit_id == vid).all():

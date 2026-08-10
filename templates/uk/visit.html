@@ -208,6 +208,7 @@
     <div class="action-row">
       <a href="/admin/visits/{{ visit.id }}/print" class="uk-btn ghost sm" target="_blank">打印病历</a>
       <a href="/admin/visits/{{ visit.id }}/physical-exam-print" class="uk-btn ghost sm" target="_blank">体检报告</a>
+      {% if neuro_exam %}<a href="/admin/visits/{{ visit.id }}/neuro-exam/print" class="uk-btn ghost sm" target="_blank">神经学报告</a>{% endif %}
       <a href="/admin/visits/{{ visit.id }}/discharge-print" class="uk-btn ghost sm" target="_blank">打印医嘱单</a>
     {% if visit.status != 'closed' %}
         <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">编辑病历</a>
@@ -300,6 +301,18 @@
       {% else %}
       <div class="empty">未填写</div>
       {% endif %}
+      <div style="margin-top:14px;padding-top:12px;border-top:.5px solid var(--hair);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+        <div>
+          <div style="font-weight:700;letter-spacing:2px;">神经学检查表</div>
+          {% if neuro_exam %}
+          <div class="content" style="margin-top:6px;"><b>最终定位：</b>{{ neuro_exam.final_localization or '待医生确认' }}{% if neuro_exam.conclusion %}<br>{{ neuro_exam.conclusion }}{% endif %}</div>
+          {% else %}<div class="empty" style="margin-top:6px;">尚未建立神经学检查</div>{% endif %}
+        </div>
+        <div style="display:flex;gap:8px;flex:none;">
+          <a href="/admin/visits/{{ visit.id }}/neuro-exam" class="uk-btn ghost sm">{% if neuro_exam %}查看 / 编辑{% else %}＋ 新建检查表{% endif %}</a>
+          {% if neuro_exam %}<a href="/admin/visits/{{ visit.id }}/neuro-exam/print" target="_blank" class="uk-btn ghost sm">打印</a>{% endif %}
+        </div>
+      </div>
     </div>
   </div>
 

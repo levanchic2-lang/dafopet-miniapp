@@ -1917,6 +1917,33 @@ class XrayReport(Base):
     updated_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class NeurologicExam(Base):
+    """一次病历对应一份结构化神经学检查记录。"""
+    __tablename__ = "neurologic_exams"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id = mapped_column(ForeignKey("visits.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+
+    exam_date: Mapped[str] = mapped_column(String(20), default="")
+    examiner: Mapped[str] = mapped_column(String(80), default="")
+    findings_json: Mapped[str] = mapped_column(Text, default="{}")
+    generated_description: Mapped[str] = mapped_column(Text, default="")
+    localization_hint: Mapped[str] = mapped_column(Text, default="")
+    final_localization: Mapped[str] = mapped_column(String(120), default="")
+    conclusion: Mapped[str] = mapped_column(Text, default="")
+    motor_grade: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    store: Mapped[str] = mapped_column(String(40), default="", index=True)
+    operator: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    visit = relationship("Visit", foreign_keys=[visit_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet = relationship("Pet", foreign_keys=[pet_id])
+
+
 # ════════════════════════════════════════════════════════════════
 # 麻醉监护表（手术中逐时段生命体征监护）
 # 与 AnesthesiaOrder（麻醉单）刻意分开：麻醉单 = 用了哪些麻醉药 + 剂量 +
