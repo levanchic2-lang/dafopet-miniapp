@@ -10725,7 +10725,7 @@ async def admin_package_sales(
         ))
 
     today_iso = date.today().isoformat()
-    valid_statuses = {"active", "exhausted", "expired", "refunded"}
+    valid_statuses = {"active", "exhausted", "expired", "refunded", "cancelled"}
     selected_status = status if status in valid_statuses else ""
     if selected_status == "active":
         rows_query = rows_query.filter(
@@ -10786,6 +10786,7 @@ async def admin_package_sales(
         "stores": _STORE_OPTIONS,
         "admin_role": admin_role,
         "today_iso": today_iso,
+        "csrf_token": _get_csrf_token(request),
     })
 
 
@@ -11038,6 +11039,57 @@ async def admin_customer_package_refund(
     db.commit()
     return RedirectResponse(
         f"/admin/customers/{cp.customer_id}?tab=packages&msg=已退款 ¥{refund_amt:.2f} 到钱包",
+        status_code=303,
+    )
+
+
+@app.post("/admin/customer-packages/{cp_id}/cancel")
+async def admin_customer_package_cancel(
+    cp_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    reason: str = Form(""),
+    return_to: str = Form(""),
+):
+    """撤销录错的未核销套餐；保留原记录用于追溯。仅 superadmin。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    cp = db.get(CustomerPackage, cp_id)
+    if not cp:
+        raise HTTPException(404)
+
+    fallback = f"/admin/customers/{cp.customer_id}?tab=packages"
+    redirect_to = _safe_next(return_to, fallback)
+    if cp.status != "active":
+        return RedirectResponse(f"{redirect_to}{'&' if '?' in redirect_to else '?'}msg=该套餐已非使用中状态，不能撤销", status_code=303)
+
+    redemption_count = db.query(PackageRedemption).filter(
+        PackageRedemption.customer_package_id == cp.id,
+    ).count()
+    if int(cp.used_count or 0) > 0 or redemption_count > 0:
+        return RedirectResponse(f"{redirect_to}{'&' if '?' in redirect_to else '?'}msg=该套餐已有核销记录，不能直接撤销，请走退款或人工冲正", status_code=303)
+
+    cancel_reason = (reason or "价格或录入错误").strip()[:200]
+    operator = request.session.get("admin_username", "admin")
+    cancelled_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    cp.status = "cancelled"
+    cp.note = ((cp.note or "") + f"\n[撤销售卖：{cancel_reason}；操作人：{operator}；时间：{cancelled_at}]").strip()
+    db.commit()
+    _audit(db, request, "package_sale_cancel", application_id=None, detail={
+        "customer_package_id": cp.id,
+        "customer_id": cp.customer_id,
+        "pet_id": cp.pet_id,
+        "product_id": cp.product_id,
+        "package_name": cp.name,
+        "sell_price": cp.sell_price,
+        "reason": cancel_reason,
+    })
+    db.commit()
+    return RedirectResponse(
+        f"{redirect_to}{'&' if '?' in redirect_to else '?'}msg=已撤销套餐售卖，原记录已保留",
         status_code=303,
     )
 

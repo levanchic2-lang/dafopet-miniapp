@@ -33,7 +33,9 @@
 .sales-status { display:inline-block; padding:3px 7px; border:0.5px solid var(--hair); white-space:nowrap; }
 .sales-status.active { color:#1d4d3a; border-color:#1d4d3a; }
 .sales-status.expired, .sales-status.refunded { color:#7a2828; border-color:#7a2828; }
+.sales-status.cancelled { color:#7a2828; border-color:#7a2828; }
 .sales-status.exhausted { color:#6b4423; border-color:#6b4423; }
+.sales-cancel-btn { padding:0; border:0; background:none; color:#7a2828; font-family:var(--font-serif); font-size:9pt; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 .sales-redemption-row td { padding:0 9px 14px; background:#faf9f6; }
 .sales-redemption-row details { padding:9px 12px; border-left:2px solid var(--hair); }
 .sales-redemption-row summary { cursor:pointer; color:var(--ink-2); }
@@ -78,6 +80,7 @@
       <option value="exhausted" {% if status_filter == 'exhausted' %}selected{% endif %}>已用完</option>
       <option value="expired" {% if status_filter == 'expired' %}selected{% endif %}>已过期</option>
       <option value="refunded" {% if status_filter == 'refunded' %}selected{% endif %}>已退款</option>
+      <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>已撤销</option>
     </select>
   </label>
   {% if admin_role == 'superadmin' %}
@@ -102,7 +105,7 @@
     <thead>
       <tr>
         <th>客户</th><th>关联宠物</th><th>购买日期</th><th>使用进度</th><th>状态</th>
-        <th>有效期至</th><th>实售金额</th><th>门店 / 经办人</th><th>关联收费单</th>
+        <th>有效期至</th><th>实售金额</th><th>门店 / 经办人</th><th>关联收费单 / 操作</th>
       </tr>
     </thead>
     <tbody>
@@ -122,12 +125,23 @@
           {% elif row.status == 'exhausted' %}<span class="sales-status exhausted">已用完</span>
           {% elif row.status == 'expired' %}<span class="sales-status expired">已过期</span>
           {% elif row.status == 'refunded' %}<span class="sales-status refunded">已退款</span>
+          {% elif row.status == 'cancelled' %}<span class="sales-status cancelled">已撤销</span>
           {% else %}<span class="sales-status">{{ row.status }}</span>{% endif %}
         </td>
         <td>{{ row.expires_at or '长期有效' }}</td>
         <td>¥{{ '%.2f'|format(row.sell_price or 0) }}</td>
         <td>{{ row.store or '未指定' }}<br><span class="sales-muted">{{ row.operator or '—' }}</span></td>
-        <td>{% if row.invoice_id %}<a href="/admin/invoices/{{ row.invoice_id }}">查看 #{{ row.invoice_id }}</a>{% else %}<span class="sales-muted">未关联</span>{% endif %}</td>
+        <td>
+          {% if row.invoice_id %}<a href="/admin/invoices/{{ row.invoice_id }}">查看 #{{ row.invoice_id }}</a>{% else %}<span class="sales-muted">未关联</span>{% endif %}
+          {% if admin_role == 'superadmin' and row.status == 'active' and (row.used_count or 0) == 0 and not redemption_map.get(row.id, []) %}
+          <form method="post" action="/admin/customer-packages/{{ row.id }}/cancel" style="margin-top:7px;" onsubmit="return confirm('确认撤销这份套餐？撤销后客户不能再核销，记录仍会保留。')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="reason" value="价格或录入错误">
+            <input type="hidden" name="return_to" value="/admin/packages/{{ product.id }}/sales">
+            <button class="sales-cancel-btn" type="submit">撤销售卖</button>
+          </form>
+          {% endif %}
+        </td>
       </tr>
       {% set logs = redemption_map.get(row.id, []) %}
       {% if logs %}

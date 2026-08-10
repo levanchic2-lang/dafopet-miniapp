@@ -1033,7 +1033,7 @@
       </div>
       {% if customer_packages %}
       <table class="uk-tbl-tab">
-        <thead><tr><th>套餐名</th><th>类别</th><th>剩余</th><th>购买日期</th><th>到期</th><th>状态</th></tr></thead>
+        <thead><tr><th>套餐名</th><th>类别</th><th>剩余</th><th>购买日期</th><th>到期</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           {% for cp in customer_packages %}
           <tr>
@@ -1047,7 +1047,18 @@
               {% elif cp.status == 'exhausted' %}<span class="uk-pill mute">已用完</span>
               {% elif cp.status == 'expired' %}<span class="uk-pill mute">已过期</span>
               {% elif cp.status == 'refunded' %}<span class="uk-pill mute">已退款</span>
+              {% elif cp.status == 'cancelled' %}<span class="uk-pill mute" style="color:#7a2828;border-color:#7a2828;">已撤销</span>
               {% else %}<span class="uk-pill mute">{{ cp.status }}</span>{% endif %}
+            </td>
+            <td>
+              {% if request.session.get('admin_role') == 'superadmin' and cp.status == 'active' and (cp.used_count or 0) == 0 %}
+              <form method="post" action="/admin/customer-packages/{{ cp.id }}/cancel" style="display:inline;" onsubmit="return confirm('确认撤销这份套餐？撤销后客户不能再核销，记录仍会保留。')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="reason" value="价格或录入错误">
+                <input type="hidden" name="return_to" value="/admin/customers/{{ cust.id }}?tab=packages">
+                <button type="submit" class="uk-btn danger sm">撤销</button>
+              </form>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
