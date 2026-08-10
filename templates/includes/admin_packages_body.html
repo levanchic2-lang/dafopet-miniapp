@@ -58,7 +58,11 @@
    <td data-label="售价">¥{{ '%.2f'|format(p.sell_price) }}</td>
    <td data-label="单次参考价">¥{{ '%.2f'|format(p.unit_price) }}</td>
    <td data-label="有效期">{{ p.validity_days }} 天{% if p.validity_days == 0 %}（不限期）{% endif %}</td>
-   <td data-label="已售">{{ sold_map.get(p.id, 0) }} 份</td>
+   <td data-label="已售">
+     <a class="pkg-sales-link" href="/admin/packages/{{ p.id }}/sales{% if wb_store %}?store={{ wb_store }}{% endif %}">
+       {{ sold_map.get(p.id, 0) }} 份 →
+     </a>
+   </td>
    <td data-label="状态">{% if p.is_active %}<span class="pill pill-info">上架</span>{% else %}<span class="pill pill-gray">下架</span>{% endif %}</td>
    {% if is_superadmin %}
    <td class="actions">
@@ -158,4 +162,3 @@ document.getElementById('new-pkg-modal').addEventListener('click', function(e){
 });
 </script>
 {% endif %}
-

@@ -1,0 +1,159 @@
+{% extends "uk/_base.html" %}
+{% block title %}套餐销售记录 · 大风动物医院{% endblock %}
+{% block body %}
+<style>{% include "uk/_chrome.css" %}
+.sales-head-actions { display:flex; align-items:center; gap:8px; }
+.sales-btn {
+  display:inline-flex; align-items:center; justify-content:center; min-height:36px; box-sizing:border-box;
+  padding:7px 14px; border:0.5px solid var(--hair); border-radius:0; background:var(--paper);
+  color:var(--ink); font-family:var(--font-serif); font-size:10pt; text-decoration:none; cursor:pointer;
+}
+.sales-btn.primary { border-color:var(--ink); background:var(--ink); color:var(--paper); font-weight:700; }
+.sales-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin:26px 0; border:0.5px solid var(--hair); }
+.sales-kpi { min-width:0; padding:17px 18px; border-right:0.5px solid var(--hair); }
+.sales-kpi:last-child { border-right:0; }
+.sales-kpi span { display:block; color:var(--ink-3); font-size:9pt; }
+.sales-kpi strong { display:block; margin-top:7px; color:var(--ink); font-size:20pt; font-variant-numeric:tabular-nums lining-nums; }
+.sales-filter { display:grid; grid-template-columns:minmax(260px,1fr) 160px 160px auto; gap:10px; align-items:end; padding:16px; border:0.5px solid var(--hair); }
+.sales-filter label { display:grid; gap:6px; color:var(--ink-2); font-size:9pt; }
+.sales-filter input, .sales-filter select {
+  width:100%; height:38px; box-sizing:border-box; padding:0 10px; border:0.5px solid var(--hair);
+  border-radius:0; background:var(--paper); color:var(--ink); font-family:var(--font-serif); font-size:10pt;
+}
+.sales-filter-actions { display:flex; gap:8px; }
+.sales-table-wrap { margin-top:20px; overflow-x:auto; }
+.sales-table { width:100%; min-width:1120px; border-collapse:collapse; }
+.sales-table th { padding:11px 9px; border-bottom:0.5px solid var(--ink); color:var(--ink-3); font-size:8.5pt; font-weight:400; text-align:left; }
+.sales-table td { padding:13px 9px; border-bottom:0.5px solid var(--hair); vertical-align:top; font-size:9.5pt; }
+.sales-table a { color:var(--ink); text-decoration:underline; text-underline-offset:3px; }
+.sales-person strong { display:block; margin-bottom:3px; }
+.sales-muted { color:var(--ink-3); font-size:8.5pt; }
+.sales-progress { min-width:105px; font-variant-numeric:tabular-nums lining-nums; }
+.sales-progress strong { font-size:12pt; }
+.sales-status { display:inline-block; padding:3px 7px; border:0.5px solid var(--hair); white-space:nowrap; }
+.sales-status.active { color:#1d4d3a; border-color:#1d4d3a; }
+.sales-status.expired, .sales-status.refunded { color:#7a2828; border-color:#7a2828; }
+.sales-status.exhausted { color:#6b4423; border-color:#6b4423; }
+.sales-redemption-row td { padding:0 9px 14px; background:#faf9f6; }
+.sales-redemption-row details { padding:9px 12px; border-left:2px solid var(--hair); }
+.sales-redemption-row summary { cursor:pointer; color:var(--ink-2); }
+.sales-redemption-list { margin:10px 0 0; padding:0; list-style:none; }
+.sales-redemption-list li { display:grid; grid-template-columns:150px 70px 1fr 90px; gap:12px; padding:7px 0; border-top:0.5px solid var(--hair); font-size:9pt; }
+.sales-empty { margin-top:20px; padding:54px 20px; border:0.5px solid var(--hair); text-align:center; color:var(--ink-3); }
+.pkg-sales-link { color:var(--ink); text-decoration:underline; text-underline-offset:3px; white-space:nowrap; }
+@media (max-width:900px) {
+  .sales-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .sales-kpi { border-bottom:0.5px solid var(--hair); }
+  .sales-filter { grid-template-columns:1fr 1fr; }
+}
+</style>
+
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><a href="/admin/packages">套餐目录</a><span class="sep">/</span><span>销售记录</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>套&nbsp;餐&nbsp;销&nbsp;售&nbsp;记&nbsp;录
+      <span class="sub">{{ product.name }} · 购买与使用追踪</span>
+    </h1>
+  </div>
+  <div class="sales-head-actions"><a class="sales-btn" href="/admin/packages">返回套餐目录</a></div>
+</div>
+<hr class="ukc-rule-double"/>
+
+<section class="sales-kpis" aria-label="套餐销售概览">
+  <div class="sales-kpi"><span>已售套餐</span><strong>{{ metrics.sold_count }} 份</strong></div>
+  <div class="sales-kpi"><span>购买客户</span><strong>{{ metrics.customer_count }} 人</strong></div>
+  <div class="sales-kpi"><span>当前有效</span><strong>{{ metrics.active_count }} 份</strong></div>
+  <div class="sales-kpi"><span>累计已核销</span><strong>{{ metrics.used_count }} 次</strong></div>
+  <div class="sales-kpi"><span>有效剩余</span><strong>{{ metrics.remaining_count }} 次</strong></div>
+</section>
+
+<form class="sales-filter" method="get">
+  <label>客户 / 手机 / 宠物
+    <input type="search" name="q" value="{{ q }}" placeholder="输入客户姓名、手机号或宠物名">
+  </label>
+  <label>套餐状态
+    <select name="status">
+      <option value="">全部状态</option>
+      <option value="active" {% if status_filter == 'active' %}selected{% endif %}>使用中</option>
+      <option value="exhausted" {% if status_filter == 'exhausted' %}selected{% endif %}>已用完</option>
+      <option value="expired" {% if status_filter == 'expired' %}selected{% endif %}>已过期</option>
+      <option value="refunded" {% if status_filter == 'refunded' %}selected{% endif %}>已退款</option>
+    </select>
+  </label>
+  {% if admin_role == 'superadmin' %}
+  <label>售卖门店
+    <select name="store">
+      <option value="">全部门店</option>
+      {% for s in stores %}<option value="{{ s }}" {% if store_filter == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  {% else %}
+  <input type="hidden" name="store" value="{{ store_filter }}">
+  {% endif %}
+  <div class="sales-filter-actions">
+    <button class="sales-btn primary" type="submit">筛选</button>
+    {% if q or status_filter or (admin_role == 'superadmin' and store_filter) %}<a class="sales-btn" href="/admin/packages/{{ product.id }}/sales">清除</a>{% endif %}
+  </div>
+</form>
+
+{% if package_rows %}
+<div class="sales-table-wrap">
+  <table class="sales-table">
+    <thead>
+      <tr>
+        <th>客户</th><th>关联宠物</th><th>购买日期</th><th>使用进度</th><th>状态</th>
+        <th>有效期至</th><th>实售金额</th><th>门店 / 经办人</th><th>关联收费单</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in package_rows %}
+      {% set is_expired = row.status == 'active' and row.expires_at and row.expires_at[:10] < today_iso %}
+      <tr>
+        <td class="sales-person">
+          <strong><a href="/admin/customers/{{ row.customer_id }}?tab=packages">{{ row.customer.name }}</a></strong>
+          <span class="sales-muted">{{ row.customer.phone or '—' }}</span>
+        </td>
+        <td>{{ row.pet.name if row.pet else '未绑定' }}</td>
+        <td>{{ row.purchase_date or '—' }}</td>
+        <td class="sales-progress"><strong>{{ row.used_count or 0 }} / {{ row.total_uses or 0 }}</strong><br><span class="sales-muted">剩余 {{ [0, (row.total_uses or 0) - (row.used_count or 0)]|max }} 次</span></td>
+        <td>
+          {% if is_expired %}<span class="sales-status expired">已过期</span>
+          {% elif row.status == 'active' %}<span class="sales-status active">使用中</span>
+          {% elif row.status == 'exhausted' %}<span class="sales-status exhausted">已用完</span>
+          {% elif row.status == 'expired' %}<span class="sales-status expired">已过期</span>
+          {% elif row.status == 'refunded' %}<span class="sales-status refunded">已退款</span>
+          {% else %}<span class="sales-status">{{ row.status }}</span>{% endif %}
+        </td>
+        <td>{{ row.expires_at or '长期有效' }}</td>
+        <td>¥{{ '%.2f'|format(row.sell_price or 0) }}</td>
+        <td>{{ row.store or '未指定' }}<br><span class="sales-muted">{{ row.operator or '—' }}</span></td>
+        <td>{% if row.invoice_id %}<a href="/admin/invoices/{{ row.invoice_id }}">查看 #{{ row.invoice_id }}</a>{% else %}<span class="sales-muted">未关联</span>{% endif %}</td>
+      </tr>
+      {% set logs = redemption_map.get(row.id, []) %}
+      {% if logs %}
+      <tr class="sales-redemption-row">
+        <td colspan="9">
+          <details>
+            <summary>核销明细 · {{ logs|length }} 笔</summary>
+            <ul class="sales-redemption-list">
+              {% for log in logs %}
+              <li>
+                <span>{{ log.created_at|bjtime if log.created_at else '—' }}</span>
+                <strong>{{ log.used_count or 0 }} 次</strong>
+                <span>{{ log.note or '套餐核销' }}{% if log.operator %} · {{ log.operator }}{% endif %}</span>
+                <span>{% if log.invoice_id %}<a href="/admin/invoices/{{ log.invoice_id }}">收费单 →</a>{% else %}—{% endif %}</span>
+              </li>
+              {% endfor %}
+            </ul>
+          </details>
+        </td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="sales-empty">当前筛选条件下没有套餐销售记录</div>
+{% endif %}
+{% endblock %}

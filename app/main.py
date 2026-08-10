@@ -19,7 +19,7 @@ import re
 import secrets
 import shutil
 import subprocess
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Optional
 from urllib.parse import quote
@@ -10664,11 +10664,10 @@ async def admin_packages_list(request: Request, db: Session = Depends(get_db), s
     items = q.order_by(PackageProduct.is_active.desc(), PackageProduct.id.desc()).all()
     # 统计：每个产品已售套餐数
     from sqlalchemy import func as _f
-    sold_rows = (
-        db.query(CustomerPackage.product_id, _f.count(CustomerPackage.id))
-        .group_by(CustomerPackage.product_id)
-        .all()
-    )
+    sold_query = db.query(CustomerPackage.product_id, _f.count(CustomerPackage.id))
+    if _wb_store:
+        sold_query = sold_query.filter(CustomerPackage.store == _wb_store)
+    sold_rows = sold_query.group_by(CustomerPackage.product_id).all()
     sold_map = {pid: cnt for pid, cnt in sold_rows if pid}
     return templates.TemplateResponse(request, "uk/packages.html", {
         "items": items,
@@ -10677,6 +10676,116 @@ async def admin_packages_list(request: Request, db: Session = Depends(get_db), s
         "csrf_token": _get_csrf_token(request),
         "wb_store": _wb_store,
         "is_superadmin": request.session.get("admin_role") == "superadmin",
+    })
+
+
+@app.get("/admin/packages/{product_id}/sales", response_class=HTMLResponse)
+async def admin_package_sales(
+    product_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    status: str = "",
+    store: str = "",
+):
+    """查看某个套餐卖给了谁，以及每份套餐的使用和核销情况。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+
+    product = db.get(PackageProduct, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="套餐不存在")
+
+    admin_role = request.session.get("admin_role", "staff")
+    admin_store = _get_admin_store(request)
+    if admin_role != "superadmin" and product.store and product.store != admin_store:
+        raise HTTPException(status_code=403, detail="无权查看其他门店套餐")
+
+    selected_store = (store or "").strip() if admin_role == "superadmin" else admin_store
+    base_query = db.query(CustomerPackage).filter(CustomerPackage.product_id == product_id)
+    if selected_store:
+        base_query = base_query.filter(CustomerPackage.store == selected_store)
+
+    all_packages = base_query.order_by(
+        CustomerPackage.purchase_date.desc(), CustomerPackage.id.desc()
+    ).all()
+
+    rows_query = (
+        base_query.join(Customer, Customer.id == CustomerPackage.customer_id)
+        .outerjoin(Pet, Pet.id == CustomerPackage.pet_id)
+    )
+    keyword = (q or "").strip()
+    if keyword:
+        like = f"%{keyword}%"
+        rows_query = rows_query.filter(or_(
+            Customer.name.ilike(like),
+            Customer.phone.ilike(like),
+            Customer.phones_extra.ilike(like),
+            Pet.name.ilike(like),
+        ))
+
+    today_iso = date.today().isoformat()
+    valid_statuses = {"active", "exhausted", "expired", "refunded"}
+    selected_status = status if status in valid_statuses else ""
+    if selected_status == "active":
+        rows_query = rows_query.filter(
+            CustomerPackage.status == "active",
+            or_(CustomerPackage.expires_at == "", CustomerPackage.expires_at >= today_iso),
+        )
+    elif selected_status == "expired":
+        rows_query = rows_query.filter(or_(
+            CustomerPackage.status == "expired",
+            (
+                (CustomerPackage.status == "active")
+                & (CustomerPackage.expires_at != "")
+                & (CustomerPackage.expires_at < today_iso)
+            ),
+        ))
+    elif selected_status:
+        rows_query = rows_query.filter(CustomerPackage.status == selected_status)
+
+    package_rows = rows_query.order_by(
+        CustomerPackage.purchase_date.desc(), CustomerPackage.id.desc()
+    ).limit(1000).all()
+
+    redemption_map: dict[int, list[PackageRedemption]] = {}
+    package_ids = [row.id for row in package_rows]
+    if package_ids:
+        redemptions = (
+            db.query(PackageRedemption)
+            .filter(PackageRedemption.customer_package_id.in_(package_ids))
+            .order_by(PackageRedemption.created_at.desc(), PackageRedemption.id.desc())
+            .all()
+        )
+        for redemption in redemptions:
+            redemption_map.setdefault(redemption.customer_package_id, []).append(redemption)
+
+    effective_packages = [
+        row for row in all_packages
+        if row.status == "active" and (not row.expires_at or row.expires_at[:10] >= today_iso)
+    ]
+    metrics = {
+        "sold_count": len(all_packages),
+        "customer_count": len({row.customer_id for row in all_packages}),
+        "active_count": len(effective_packages),
+        "used_count": sum(int(row.used_count or 0) for row in all_packages),
+        "remaining_count": sum(
+            max(0, int(row.total_uses or 0) - int(row.used_count or 0))
+            for row in effective_packages
+        ),
+    }
+
+    return templates.TemplateResponse(request, "uk/package_sales.html", {
+        "product": product,
+        "package_rows": package_rows,
+        "redemption_map": redemption_map,
+        "metrics": metrics,
+        "q": keyword,
+        "status_filter": selected_status,
+        "store_filter": selected_store,
+        "stores": _STORE_OPTIONS,
+        "admin_role": admin_role,
+        "today_iso": today_iso,
     })
 
 
