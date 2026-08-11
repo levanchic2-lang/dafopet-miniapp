@@ -86,7 +86,8 @@
   </div>
   <div class="im-actions">
     <a class="uk-btn ghost sm" href="{{ public_url }}" target="_blank">打开客户页</a>
-    <a class="uk-btn ghost sm" href="/insurance-materials/{{ share.token }}/snapshots/{{ latest.id }}/zip">下载 ZIP</a>
+    {% if latest._image_count %}<a class="uk-btn primary sm" href="/insurance-materials/{{ share.token }}/snapshots/{{ latest.id }}/image-zip">图片版 ZIP（{{ latest._image_count }} 张）</a>{% endif %}
+    <a class="uk-btn ghost sm" href="/insurance-materials/{{ share.token }}/snapshots/{{ latest.id }}/zip">完整材料 ZIP</a>
   </div>
   {% else %}
   <div class="uk-empty">暂无快照版本，请先生成材料包。</div>
@@ -98,7 +99,7 @@
   {% if snapshots %}
   <table class="im-tbl">
     <thead>
-      <tr><th>版本</th><th>生成时间</th><th>生成者</th><th>文件数</th><th>ZIP大小</th><th class="right">操作</th></tr>
+      <tr><th>版本</th><th>生成时间</th><th>生成者</th><th>原件/图片</th><th>ZIP大小</th><th class="right">操作</th></tr>
     </thead>
     <tbody>
       {% for s in snapshots %}
@@ -106,12 +107,16 @@
         <td class="num">v{{ s.version }}</td>
         <td class="num">{{ (s.generated_at | bjtime).strftime('%Y-%m-%d %H:%M') if s.generated_at else '—' }}</td>
         <td>{{ s.generated_by or '—' }}</td>
-        <td>{{ s.file_count }} 个</td>
+        <td>{{ s.file_count - s._image_count }} / {{ s._image_count }} 张</td>
         <td>{{ '%.1f'|format((s.zip_size or 0) / 1024) }} KB</td>
         <td class="right">
           <a href="{{ s._public_url }}" target="_blank">客户页 →</a>
+          {% if s._image_count %}
           <span style="color:var(--ink-4);margin:0 8px;">/</span>
-          <a href="/insurance-materials/{{ share.token }}/snapshots/{{ s.id }}/zip">ZIP</a>
+          <a href="/insurance-materials/{{ share.token }}/snapshots/{{ s.id }}/image-zip">图片版</a>
+          {% endif %}
+          <span style="color:var(--ink-4);margin:0 8px;">/</span>
+          <a href="/insurance-materials/{{ share.token }}/snapshots/{{ s.id }}/zip">完整 ZIP</a>
         </td>
       </tr>
       {% endfor %}

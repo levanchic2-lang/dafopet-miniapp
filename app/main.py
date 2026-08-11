@@ -12278,8 +12278,11 @@ async def admin_insurance_material_detail(
         .order_by(InsuranceMaterialSnapshot.version.desc(), InsuranceMaterialSnapshot.id.desc())
         .all()
     )
+    from app.services.insurance_materials import snapshot_image_files
+
     for s in snapshots:
         s._public_url = _insurance_material_public_url(request, share, s.version)
+        s._image_count = len(snapshot_image_files(s))
     latest = snapshots[0] if snapshots else None
     return templates.TemplateResponse(request, "uk/insurance_material.html", {
         "share": share,
@@ -12385,10 +12388,15 @@ async def public_insurance_materials(
     from app.services.insurance_materials import load_snapshot_files
 
     files = load_snapshot_files(snap)
+    for idx, item in enumerate(files):
+        item["_idx"] = idx
+    source_files = [item for item in files if not str(item.get("kind") or "").endswith("_image")]
+    image_files = [item for item in files if str(item.get("kind") or "").endswith("_image")]
     return templates.TemplateResponse(request, "insurance_material_public.html", {
         "share": share,
         "snapshot": snap,
-        "files": files,
+        "files": source_files,
+        "image_files": image_files,
     })
 
 
@@ -12437,6 +12445,30 @@ async def public_insurance_material_zip(
     if not target.exists():
         raise HTTPException(404)
     return FileResponse(str(target), filename=Path(target).name, media_type="application/zip")
+
+
+@app.get("/insurance-materials/{token}/snapshots/{snapshot_id}/image-zip")
+async def public_insurance_material_image_zip(
+    token: str,
+    snapshot_id: int,
+    db: Session = Depends(get_db),
+):
+    share, snap = _public_insurance_snapshot_or_404(db, token, None)
+    if snap.id != snapshot_id:
+        snap = db.get(InsuranceMaterialSnapshot, snapshot_id)
+        if not snap or snap.share_id != share.id:
+            raise HTTPException(404)
+    root = (Path(settings.upload_dir) / "insurance_materials" / str(share.id) / f"v{snap.version}").resolve()
+    target = (root / "保险材料_图片版.zip").resolve()
+    if root not in target.parents:
+        raise HTTPException(403)
+    if not target.exists():
+        raise HTTPException(404, "该历史版本尚未生成图片版，请在后台重新生成新版")
+    return FileResponse(
+        str(target),
+        filename=f"保险材料_图片版_v{snap.version}.zip",
+        media_type="application/zip",
+    )
 
 
 @app.get("/admin/visits/{visit_id}/physical-exam-print", response_class=HTMLResponse)

@@ -28,7 +28,6 @@ from app.models import (
     WeightRecord,
 )
 
-
 def _safe_name(text: str, fallback: str = "file") -> str:
     name = re.sub(r'[\\/:*?"<>|\r\n]+', "_", (text or "").strip())
     name = re.sub(r"\s+", " ", name).strip(" .")
@@ -151,7 +150,78 @@ def _add_manifest_file(files: list[dict], kind: str, label: str, path: Path, bas
     )
 
 
-def _copy_original_exam_files(db: Session, order: ExamOrder, out_dir: Path, files: list[dict]) -> None:
+def _pdf_to_jpegs(
+    pdf_path: Path,
+    image_dir: Path,
+    stem: str,
+    files: list[dict],
+    base_dir: Path,
+    source_kind: str,
+    source_label: str,
+    dpi: int = 150,
+) -> None:
+    """把一份固定 PDF 快照逐页转成保险平台通用的 JPG 文件。"""
+    try:
+        import fitz
+        from PIL import Image
+    except Exception as e:
+        raise RuntimeError(f"生成保险图片版需要 PyMuPDF 和 Pillow：{e}") from e
+
+    image_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        with fitz.open(str(pdf_path)) as doc:
+            if doc.page_count < 1:
+                raise RuntimeError("PDF 没有可转换页面")
+            zoom = dpi / 72.0
+            matrix = fitz.Matrix(zoom, zoom)
+            for page_index in range(doc.page_count):
+                page = doc.load_page(page_index)
+                pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csRGB, alpha=False)
+                dst = image_dir / f"{_safe_name(stem)}_第{page_index + 1:02d}页.jpg"
+                image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                image.save(dst, "JPEG", quality=88, optimize=True, progressive=True)
+                _add_manifest_file(
+                    files,
+                    f"{source_kind}_image",
+                    f"{source_label} · 第 {page_index + 1} 页（图片版）",
+                    dst,
+                    base_dir,
+                )
+    except Exception as e:
+        raise RuntimeError(f"PDF 转图片失败：{pdf_path.name}：{e}") from e
+
+
+def _image_to_jpeg(
+    src: Path,
+    image_dir: Path,
+    stem: str,
+    files: list[dict],
+    base_dir: Path,
+    source_kind: str,
+    source_label: str,
+) -> None:
+    """把原始图片附件归一为 RGB JPG，便于保险平台上传。"""
+    try:
+        from PIL import Image, ImageOps
+
+        image_dir.mkdir(parents=True, exist_ok=True)
+        dst = image_dir / f"{_safe_name(stem)}.jpg"
+        with Image.open(src) as image:
+            image = ImageOps.exif_transpose(image).convert("RGB")
+            image.thumbnail((2400, 2400))
+            image.save(dst, "JPEG", quality=88, optimize=True, progressive=True)
+        _add_manifest_file(files, f"{source_kind}_image", f"{source_label}（图片版）", dst, base_dir)
+    except Exception as e:
+        raise RuntimeError(f"检查附件转图片失败：{src.name}：{e}") from e
+
+
+def _copy_original_exam_files(
+    db: Session,
+    order: ExamOrder,
+    out_dir: Path,
+    image_dir: Path,
+    files: list[dict],
+) -> None:
     for idx, rpt in enumerate(order.reports or [], start=1):
         src = Path(rpt.file_path or "")
         if not src.exists():
@@ -160,7 +230,13 @@ def _copy_original_exam_files(db: Session, order: ExamOrder, out_dir: Path, file
         label = rpt.item_label or rpt.original_name or f"附件{idx}"
         dst = out_dir / f"原始检查附件_EX{order.id:06d}_{idx}_{_safe_name(label)}{ext}"
         shutil.copy2(src, dst)
-        _add_manifest_file(files, "exam_attachment", f"检查原始附件 EX{order.id:06d} · {label}", dst, out_dir)
+        source_label = f"检查原始附件 EX{order.id:06d} · {label}"
+        _add_manifest_file(files, "exam_attachment", source_label, dst, out_dir)
+        image_stem = f"原始检查附件_EX{order.id:06d}_{idx}_{_safe_name(label)}"
+        if (rpt.file_type or "").lower() == "pdf" or src.suffix.lower() == ".pdf":
+            _pdf_to_jpegs(dst, image_dir, image_stem, files, out_dir, "exam_attachment", source_label)
+        else:
+            _image_to_jpeg(dst, image_dir, image_stem, files, out_dir, "exam_attachment", source_label)
 
 
 def _make_zip(out_dir: Path, files: list[dict], title: str) -> Path:
@@ -169,8 +245,24 @@ def _make_zip(out_dir: Path, files: list[dict], title: str) -> Path:
         for item in files:
             p = out_dir / item["path"]
             if p.exists():
-                zf.write(p, arcname=item["filename"])
+                zf.write(p, arcname=item["path"])
     return zip_path
+
+
+def _make_image_zip(out_dir: Path, files: list[dict]) -> Path:
+    zip_path = out_dir / "保险材料_图片版.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for item in files:
+            if not str(item.get("kind") or "").endswith("_image"):
+                continue
+            p = out_dir / str(item.get("path") or "")
+            if p.exists():
+                zf.write(p, arcname=p.name)
+    return zip_path
+
+
+def snapshot_image_files(snapshot: InsuranceMaterialSnapshot) -> list[dict]:
+    return [row for row in load_snapshot_files(snapshot) if str(row.get("kind") or "").endswith("_image")]
 
 
 def generate_insurance_material_snapshot(
@@ -224,6 +316,7 @@ def generate_insurance_material_snapshot(
     title = share.title or f"保险材料包 · 病历#{visit.id}"
     out_dir = Path(settings.upload_dir) / "insurance_materials" / str(share.id) / f"v{version}"
     out_dir.mkdir(parents=True, exist_ok=True)
+    image_dir = out_dir / "图片版"
     files: list[dict] = []
 
     prescriptions = (
@@ -279,6 +372,10 @@ def generate_insurance_material_snapshot(
         db,
     )
     _add_manifest_file(files, "medical_record", "病历（含 SOAP、处方、检查概要）", visit_pdf, out_dir)
+    _pdf_to_jpegs(
+        visit_pdf, image_dir, visit_pdf.stem, files, out_dir,
+        "medical_record", "病历（含 SOAP、处方、检查概要）",
+    )
 
     invoices = (
         db.query(Invoice)
@@ -319,6 +416,10 @@ def generate_insurance_material_snapshot(
             db,
         )
         _add_manifest_file(files, "invoice", f"收费单 {inv.invoice_no or inv.id}", inv_pdf, out_dir)
+        _pdf_to_jpegs(
+            inv_pdf, image_dir, inv_pdf.stem, files, out_dir,
+            "invoice", f"收费单 {inv.invoice_no or inv.id}",
+        )
 
     for order in exam_orders:
         items = getattr(order, "_items_parsed", [])
@@ -344,9 +445,18 @@ def generate_insurance_material_snapshot(
             db,
         )
         _add_manifest_file(files, "exam_report", f"检查报告 EX{order.id:06d}", exam_pdf, out_dir)
-        _copy_original_exam_files(db, order, out_dir, files)
+        _pdf_to_jpegs(
+            exam_pdf, image_dir, exam_pdf.stem, files, out_dir,
+            "exam_report", f"检查报告 EX{order.id:06d}",
+        )
+        _copy_original_exam_files(db, order, out_dir, image_dir, files)
 
     zip_path = _make_zip(out_dir, files, f"{title}_v{version}")
+    image_zip_path = _make_image_zip(out_dir, files)
+    if not snapshot_image_files_from_rows(files):
+        raise RuntimeError("保险材料图片版未生成任何图片")
+    if not image_zip_path.exists() or image_zip_path.stat().st_size <= 0:
+        raise RuntimeError("保险材料图片版 ZIP 生成失败")
     rel_zip = zip_path.relative_to(Path(settings.upload_dir)).as_posix()
 
     snap = InsuranceMaterialSnapshot(
@@ -374,3 +484,7 @@ def load_snapshot_files(snapshot: InsuranceMaterialSnapshot) -> list[dict]:
         return rows if isinstance(rows, list) else []
     except Exception:
         return []
+
+
+def snapshot_image_files_from_rows(rows: list[dict]) -> list[dict]:
+    return [row for row in rows if str(row.get("kind") or "").endswith("_image")]

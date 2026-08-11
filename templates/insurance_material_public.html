@@ -22,6 +22,10 @@
     display:inline-block; background:#111; color:#fff; text-decoration:none;
     padding:10px 18px; letter-spacing:3px; margin-top:14px;
   }
+  .download.secondary { background:#fff; color:#1a1a1a; border:1px solid #1a1a1a; }
+  .hint { color:#666; font-size:13px; margin-top:8px; }
+  details { margin-top:14px; }
+  summary { cursor:pointer; font-weight:700; letter-spacing:1px; }
   table { width:100%; border-collapse:collapse; margin-top:12px; }
   th, td { padding:10px 4px; border-bottom:1px solid #e2ddd4; text-align:left; vertical-align:top; }
   th { color:#777; font-weight:400; font-style:italic; }
@@ -53,7 +57,11 @@
     <div style="color:#555;margin-top:6px;">
       本页面材料为医院生成时固定保存的版本，包含当时的病历、收费单、检查报告及相关原始附件。
     </div>
-    <a class="download" href="/insurance-materials/{{ share.token }}/snapshots/{{ snapshot.id }}/zip">打包下载 ZIP</a>
+    {% if image_files %}
+    <a class="download" href="/insurance-materials/{{ share.token }}/snapshots/{{ snapshot.id }}/image-zip">下载图片版 ZIP</a>
+    <div class="hint">用于上传保险平台，共 {{ image_files|length }} 张 JPG，已按材料名称和页码排列。</div>
+    {% endif %}
+    <a class="download secondary" href="/insurance-materials/{{ share.token }}/snapshots/{{ snapshot.id }}/zip">下载完整材料 ZIP</a>
   </div>
 
   <div class="card">
@@ -64,21 +72,38 @@
       <tbody>
         {% for f in files %}
         <tr>
-          <td>{{ f.label or f.filename }}</td>
+          <td>{{ f['label'] or f['filename'] }}</td>
           <td>{{ {
             'medical_record':'病历',
             'invoice':'收费单',
             'exam_report':'检查报告',
             'exam_attachment':'原始附件'
-          }.get(f.kind, f.kind) }}</td>
-          <td>{{ '%.1f'|format((f.size or 0) / 1024) }} KB</td>
-          <td><a href="/insurance-materials/{{ share.token }}/snapshots/{{ snapshot.id }}/files/{{ loop.index0 }}">下载</a></td>
+          }.get(f['kind'], f['kind']) }}</td>
+          <td>{{ '%.1f'|format((f['size'] or 0) / 1024) }} KB</td>
+          <td><a href="/insurance-materials/{{ share.token }}/snapshots/{{ snapshot.id }}/files/{{ f['_idx'] }}">下载</a></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
     <div style="color:#888;margin-top:12px;">暂无文件</div>
+    {% endif %}
+
+    {% if image_files %}
+    <details>
+      <summary>逐张下载图片（{{ image_files|length }} 张）</summary>
+      <table>
+        <tbody>
+          {% for f in image_files %}
+          <tr>
+            <td>{{ f['label'] or f['filename'] }}</td>
+            <td>{{ '%.1f'|format((f['size'] or 0) / 1024) }} KB</td>
+            <td><a href="/insurance-materials/{{ share.token }}/snapshots/{{ snapshot.id }}/files/{{ f['_idx'] }}">下载 JPG</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </details>
     {% endif %}
   </div>
 
