@@ -64,7 +64,7 @@
         <select class="ukm-select" name="item_id" id="vialItem" required>
           <option value="">选择麻醉/管控药品</option>
           {% for it in inventory_candidates %}
-          <option value="{{ it.id }}" data-ratio="{{ it.unit2_ratio or 1 }}">{{ it.name }} · 库存 {{ '%g'|format(it.stock_qty or 0) }}{{ it.unit }}</option>
+          <option value="{{ it.id }}" data-ratio="{{ it.unit2_ratio or 1 }}" data-unit="{{ it.unit or '' }}">{{ it.name }} · 库存 {{ '%g'|format(it.stock_qty or 0) }}{{ it.unit }}</option>
           {% endfor %}
         </select>
       </div>
@@ -77,8 +77,8 @@
             {% endfor %}
           </select>
         </div>
-        <div class="ukm-field"><label class="lbl">开&nbsp;瓶&nbsp;量</label>
-          <input class="ukm-input ukm-num" id="vialQty" type="number" step="0.01" min="0.01" name="opened_qty" placeholder="如 20" required/>
+        <div class="ukm-field"><label class="lbl" id="vialQtyLabel">使&nbsp;用&nbsp;剂&nbsp;量</label>
+          <input class="ukm-input ukm-num" id="vialQty" type="number" step="0.01" min="0.01" name="opened_qty" placeholder="选择药品后填写" required/>
         </div>
       </div>
       <div class="ukm-field"><label class="lbl">备&nbsp;注</label><input class="ukm-input" name="notes" placeholder="可选，如新开一瓶丙泊酚"/></div>
@@ -326,6 +326,7 @@
   var item = document.getElementById('vialItem');
   var batch = document.getElementById('vialBatch');
   var qty = document.getElementById('vialQty');
+  var qtyLabel = document.getElementById('vialQtyLabel');
   if (item && batch) {
     var syncBatches = function () {
       var selected = item.value;
@@ -335,7 +336,15 @@
         o.disabled = !!selected && o.dataset.item !== selected;
       });
       if (batch.selectedOptions.length && batch.selectedOptions[0].disabled) batch.value = '';
-      if (qty && !qty.value && item.selectedOptions.length) qty.value = item.selectedOptions[0].dataset.ratio || '';
+      if (item.selectedOptions.length) {
+        var selectedOption = item.selectedOptions[0];
+        var unit = selectedOption.dataset.unit || '';
+        if (qtyLabel) qtyLabel.textContent = unit ? '使用剂量（' + unit + '）' : '使用剂量';
+        if (qty) {
+          qty.placeholder = unit ? '按 ' + unit + ' 填写' : '填写使用剂量';
+          if (!qty.value && item.value) qty.value = selectedOption.dataset.ratio || '';
+        }
+      }
     };
     item.addEventListener('change', syncBatches);
     syncBatches();
