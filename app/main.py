@@ -21935,6 +21935,45 @@ def _invoice_paid_sum(db: Session, inv_id: int) -> float:
     return sum(float(r.amount or 0) for r in rows)
 
 
+def _sync_sales_order_statuses_for_invoice(db: Session, inv_id: int) -> None:
+    """Keep linked sales orders aligned with their authoritative invoice state.
+
+    A sales order may be split across multiple invoices. It is paid only after
+    every invoice that still contains one of its items has been fully paid.
+    """
+    db.flush()
+    order_ids = {
+        int(ref_id)
+        for (ref_id,) in db.query(InvoiceItem.ref_id).filter(
+            InvoiceItem.invoice_id == inv_id,
+            InvoiceItem.ref_type == "sales_order",
+            InvoiceItem.ref_id.isnot(None),
+        ).all()
+    }
+    for order_id in order_ids:
+        order = db.get(SalesOrder, order_id)
+        if not order or order.status in ("cancelled", "voided"):
+            continue
+        linked_statuses = [
+            status
+            for (status,) in (
+                db.query(Invoice.payment_status)
+                .join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)
+                .filter(
+                    InvoiceItem.ref_type == "sales_order",
+                    InvoiceItem.ref_id == order_id,
+                )
+                .distinct()
+                .all()
+            )
+        ]
+        order.status = (
+            "paid"
+            if linked_statuses and all(status == "paid" for status in linked_statuses)
+            else "pending"
+        )
+
+
 def _invoice_recompute_status(db: Session, inv: Invoice) -> None:
     """根据 Payments 合计自动调整 invoice 状态。"""
     paid = _invoice_paid_sum(db, inv.id)
@@ -21964,6 +22003,7 @@ def _invoice_recompute_status(db: Session, inv: Invoice) -> None:
     else:
         inv.payment_status = "unpaid"
         inv.paid_at = None
+    _sync_sales_order_statuses_for_invoice(db, inv.id)
 
 
 @app.post("/admin/invoices/{inv_id}/split")

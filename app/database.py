@@ -84,9 +84,38 @@ def init_db():
     with _init_db_lock():
         Base.metadata.create_all(bind=engine)
         _try_sqlite_migrations()
+        _heal_sales_order_payment_statuses()
         _seed_data()
         _heal_rabies_pet_links()
         _backfill_followups()
+
+
+def _heal_sales_order_payment_statuses() -> None:
+    """Repair historical sales orders whose linked invoices are fully paid."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                UPDATE sales_orders
+                SET status = 'paid', updated_at = CURRENT_TIMESTAMP
+                WHERE status = 'pending'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM invoice_items ii
+                    JOIN invoices i ON i.id = ii.invoice_id
+                    WHERE ii.ref_type = 'sales_order'
+                      AND ii.ref_id = sales_orders.id
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM invoice_items ii
+                    JOIN invoices i ON i.id = ii.invoice_id
+                    WHERE ii.ref_type = 'sales_order'
+                      AND ii.ref_id = sales_orders.id
+                      AND i.payment_status <> 'paid'
+                  )
+            """))
+    except Exception as exc:
+        print(f"[sales_order_status_heal] failed: {exc}")
 
 
 def _backfill_followups() -> None:
