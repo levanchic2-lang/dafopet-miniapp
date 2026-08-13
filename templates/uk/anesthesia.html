@@ -149,6 +149,17 @@
     display: flex; justify-content: space-between; align-items: baseline;
     margin: 12px 0 24px;
   }
+  .an-template-bar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    margin: -4px 0 14px; padding: 10px 12px;
+    border: 0.5px solid var(--hair); background: var(--bg);
+  }
+  .an-template-bar select {
+    min-width: 240px; height: 34px; padding: 5px 9px;
+    border: 0.5px solid var(--hair); background: var(--paper);
+    color: var(--ink); font-family: var(--font-serif); font-size: 9.5pt;
+  }
+  .an-template-hint { color: var(--ink-3); font-size: 9pt; margin-left: auto; }
   .an-grand-total {
     font-family: var(--font-serif); font-size: 13pt;
     letter-spacing: 1px; color: var(--ink);
@@ -428,6 +439,20 @@ function confirmAnesthVoid(form, paidAmount) {
   {# 药品 / 项目 #}
   <div class="an-section">
     <div class="an-section-head"><h2>麻&nbsp;醉&nbsp;药&nbsp;品&nbsp;/&nbsp;项&nbsp;目</h2></div>
+    {% if not order %}
+    <div class="an-template-bar">
+      <select id="anesthTemplateSelect" aria-label="麻醉模板">
+        <option value="">选择麻醉模板</option>
+        {% for tpl in anesth_templates %}
+        <option value="{{ tpl.id }}">{{ tpl.name }} · {{ tpl.use_count or 0 }} 次</option>
+        {% endfor %}
+      </select>
+      <button type="button" class="uk-btn primary sm" onclick="applyAnesthTemplate()">套用模板</button>
+      <button type="button" class="uk-btn ghost sm" onclick="saveAnesthTemplate()">保存当前为模板</button>
+      <button type="button" class="uk-btn danger sm" onclick="deleteAnesthTemplate()">删除模板</button>
+      <span class="an-template-hint">模板只填充麻醉项目，不保存患者与签字人</span>
+    </div>
+    {% endif %}
     <table id="itemsTable" class="an-items">
       <thead>
         <tr>
@@ -595,7 +620,7 @@ document.querySelectorAll('#drug-list option').forEach(o => {
   };
 });
 
-function addRow() {
+function addRow(data = null) {
   const tb = document.getElementById('itemsBody');
   const i = tb.querySelectorAll('tr.anesth-row').length;
   const routes = {{ routes|tojson }};
@@ -616,6 +641,18 @@ function addRow() {
       <button type="button" class="icon-btn" onclick="rmRow(this)" title="删除">✕</button>
     </td>`;
   tb.appendChild(main);
+  if (data) {
+    const nameInput = main.querySelector('input[name="drug_name[]"]');
+    nameInput.value = data.drug_name || '';
+    onDrugPick(nameInput, i);
+    main.querySelector('select[name="route[]"]').value = data.route || 'IV';
+    main.querySelector('input[name="total_qty[]"]').value = data.total_qty || '';
+    if (!CANDIDATES[data.drug_name || '']) {
+      main.querySelector('input[name="total_unit[]"]').value = data.total_unit || '';
+      main.querySelector('input[name="unit_price[]"]').value = Number(data.unit_price || 0).toFixed(2);
+    }
+    recalc();
+  }
 }
 
 function onDrugPick(input, i) {
@@ -658,6 +695,66 @@ function recalc() {
 function rmRow(btn) {
   btn.closest('tr').remove();
   recalc();
+}
+
+function collectAnesthTemplateItems() {
+  return Array.from(document.querySelectorAll('#itemsBody tr.anesth-row')).map(row => ({
+    drug_name: row.querySelector('input[name="drug_name[]"]').value.trim(),
+    route: row.querySelector('select[name="route[]"]').value,
+    total_qty: parseFloat(row.querySelector('input[name="total_qty[]"]').value || 0),
+    total_unit: row.querySelector('input[name="total_unit[]"]').value.trim(),
+    unit_price: parseFloat(row.querySelector('input[name="unit_price[]"]').value || 0),
+  })).filter(item => item.drug_name);
+}
+
+async function applyAnesthTemplate() {
+  const sel = document.getElementById('anesthTemplateSelect');
+  if (!sel || !sel.value) return alert('请先选择麻醉模板');
+  if (collectAnesthTemplateItems().length && !confirm('套用模板会替换当前麻醉项目，是否继续？')) return;
+  const resp = await fetch('/api/anesthesia-templates/' + sel.value);
+  const data = await resp.json();
+  if (!data.ok) return alert(data.error || '模板读取失败');
+  document.getElementById('itemsBody').innerHTML = '';
+  (data.items || []).forEach(item => addRow(item));
+  if (!(data.items || []).length) addRow();
+  const notes = document.querySelector('textarea[name="notes"]');
+  if (notes && data.notes && !notes.value.trim()) notes.value = data.notes;
+  recalc();
+}
+
+async function saveAnesthTemplate() {
+  const items = collectAnesthTemplateItems();
+  if (!items.length) return alert('请先填写至少一个麻醉项目');
+  const name = prompt('请输入模板名称，例如：猫绝育常规麻醉');
+  if (!name || !name.trim()) return;
+  const resp = await fetch('/api/anesthesia-templates/create', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      csrf_token: '{{ csrf_token }}', name: name.trim(), items,
+      notes: document.querySelector('textarea[name="notes"]')?.value || '',
+    }),
+  });
+  const data = await resp.json();
+  if (!data.ok) return alert(data.error || '模板保存失败');
+  const sel = document.getElementById('anesthTemplateSelect');
+  const opt = document.createElement('option');
+  opt.value = data.id; opt.textContent = name.trim() + ' · 0 次'; opt.selected = true;
+  sel.appendChild(opt);
+  alert('麻醉模板已保存');
+}
+
+async function deleteAnesthTemplate() {
+  const sel = document.getElementById('anesthTemplateSelect');
+  if (!sel || !sel.value) return alert('请先选择要删除的模板');
+  if (!confirm('确认删除模板“' + sel.options[sel.selectedIndex].text.split(' · ')[0] + '”？')) return;
+  const resp = await fetch('/api/anesthesia-templates/' + sel.value + '/delete', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({csrf_token: '{{ csrf_token }}'}),
+  });
+  const data = await resp.json();
+  if (!data.ok) return alert(data.error || '模板删除失败');
+  sel.remove(sel.selectedIndex);
+  sel.value = '';
 }
 
 if (!document.querySelectorAll('#itemsBody tr.anesth-row').length) addRow();

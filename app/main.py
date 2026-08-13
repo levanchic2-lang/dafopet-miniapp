@@ -93,6 +93,7 @@ from app.models import (
     WeightRecord,
     MedicalDocument,
     PrescriptionTemplate,
+    AnesthesiaTemplate,
     ExamTemplate,
     FollowUp,
     Wallet,
@@ -15330,15 +15331,108 @@ def _anesth_form_context(request, db, *, order=None, visit=None, cust=None,
     if store:
         cand_q = cand_q.filter(InventoryItem.store == store)
     candidates = cand_q.order_by(InventoryItem.name).limit(200).all()
+    anesth_templates = db.query(AnesthesiaTemplate).order_by(
+        AnesthesiaTemplate.use_count.desc(), AnesthesiaTemplate.id.desc()
+    ).limit(200).all()
     today = datetime.utcnow().strftime("%Y-%m-%d")
     return {
         "order": order, "visit": visit, "cust": cust, "pet": pet, "pets": pets or [],
         "vet_names": vet_names, "cosigner_names": cosigner_names,
         "candidates": candidates,
+        "anesth_templates": anesth_templates,
         "routes": _ANESTH_ROUTES, "asa_grades": _ASA_GRADES,
         "today": today, "mode": mode,
         "csrf_token": _get_csrf_token(request),
     }
+
+
+@app.get("/api/anesthesia-templates")
+async def api_anesth_templates_list(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    rows = db.query(AnesthesiaTemplate).order_by(
+        AnesthesiaTemplate.use_count.desc(), AnesthesiaTemplate.id.desc()
+    ).limit(200).all()
+    out = []
+    for row in rows:
+        try:
+            item_count = len(json.loads(row.items_json or "[]"))
+        except Exception:
+            item_count = 0
+        out.append({
+            "id": row.id, "name": row.name, "category": row.category,
+            "use_count": row.use_count, "item_count": item_count,
+        })
+    return out
+
+
+@app.get("/api/anesthesia-templates/{tpl_id}")
+async def api_anesth_template_get(tpl_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    tpl = db.get(AnesthesiaTemplate, tpl_id)
+    if not tpl:
+        return {"ok": False, "error": "模板不存在"}
+    try:
+        items = json.loads(tpl.items_json or "[]")
+    except Exception:
+        items = []
+    tpl.use_count = (tpl.use_count or 0) + 1
+    db.commit()
+    return {"ok": True, "id": tpl.id, "name": tpl.name, "notes": tpl.notes, "items": items}
+
+
+@app.post("/api/anesthesia-templates/create")
+async def api_anesth_template_create(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    name = str(body.get("name") or "").strip()[:120]
+    items = body.get("items") or []
+    if not name:
+        return {"ok": False, "error": "请填写模板名称"}
+    if not isinstance(items, list) or not items:
+        return {"ok": False, "error": "模板至少包含 1 个麻醉项目"}
+    safe_items = []
+    try:
+        for raw in items[:50]:
+            if not isinstance(raw, dict):
+                continue
+            drug_name = str(raw.get("drug_name") or "").strip()[:120]
+            if not drug_name:
+                continue
+            safe_items.append({
+                "drug_name": drug_name,
+                "route": str(raw.get("route") or "IV")[:20],
+                "total_qty": max(0.0, float(raw.get("total_qty") or 0)),
+                "total_unit": str(raw.get("total_unit") or "")[:20],
+                "unit_price": max(0.0, float(raw.get("unit_price") or 0)),
+            })
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "模板中的数量或单价格式不正确"}
+    if not safe_items:
+        return {"ok": False, "error": "模板至少包含 1 个有效麻醉项目"}
+    tpl = AnesthesiaTemplate(
+        name=name,
+        category=str(body.get("category") or "").strip()[:40],
+        items_json=json.dumps(safe_items, ensure_ascii=False),
+        notes=str(body.get("notes") or "").strip()[:500],
+        created_by=request.session.get("admin_username", ""),
+    )
+    db.add(tpl)
+    db.commit()
+    db.refresh(tpl)
+    return {"ok": True, "id": tpl.id}
+
+
+@app.post("/api/anesthesia-templates/{tpl_id}/delete")
+async def api_anesth_template_delete(tpl_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, body.get("csrf_token", ""))
+    tpl = db.get(AnesthesiaTemplate, tpl_id)
+    if tpl:
+        db.delete(tpl)
+        db.commit()
+    return {"ok": True}
 
 
 @app.get("/admin/visits/{visit_id}/anesthesia/new", response_class=HTMLResponse)
@@ -18042,6 +18136,8 @@ async def admin_inventory_transactions(
             .all()
         )
     }
+
+
     txs = (
         base_q.options(selectinload(InventoryTransaction.item))
         .order_by(InventoryTransaction.created_at.desc(), InventoryTransaction.id.desc())

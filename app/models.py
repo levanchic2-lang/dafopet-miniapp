@@ -1159,6 +1159,20 @@ class PrescriptionTemplate(Base):
     use_count: Mapped[int] = mapped_column(Integer, default=0)            # 使用次数
 
 
+class AnesthesiaTemplate(Base):
+    """麻醉方案模板（麻醉单常用项目一键套用）"""
+    __tablename__ = "anesthesia_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    category: Mapped[str] = mapped_column(String(40), default="")
+    items_json: Mapped[str] = mapped_column(Text, default="[]")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    use_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class MedicalDocument(Base):
     """医疗文书（同意书、协议、报告等）"""
     __tablename__ = "medical_documents"
