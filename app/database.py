@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+import os
 from pathlib import Path
 
 from sqlalchemy import create_engine, event, text
@@ -49,12 +51,42 @@ def get_db():
         db.close()
 
 
+@contextmanager
+def _init_db_lock():
+    """Serialize startup migrations across uvicorn workers."""
+    lock_path = Path("data/.init_db.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as lock_file:
+        if os.name == "posix":
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        elif os.name == "nt":
+            import msvcrt
+
+            lock_file.seek(0, 2)
+            if lock_file.tell() == 0:
+                lock_file.write(b"0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        try:
+            yield
+        finally:
+            if os.name == "posix":
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            elif os.name == "nt":
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+
+
 def init_db():
-    Base.metadata.create_all(bind=engine)
-    _try_sqlite_migrations()
-    _seed_data()
-    _heal_rabies_pet_links()
-    _backfill_followups()
+    with _init_db_lock():
+        Base.metadata.create_all(bind=engine)
+        _try_sqlite_migrations()
+        _seed_data()
+        _heal_rabies_pet_links()
+        _backfill_followups()
 
 
 def _backfill_followups() -> None:
