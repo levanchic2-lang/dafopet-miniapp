@@ -1,0 +1,51 @@
+{% extends "uk/_base.html" %}
+{% block title %}麻醉复核 · 大风动物医院{% endblock %}
+{% block body %}
+<div class="uk-breadcrumb"><a href="/admin/customers">今日工作台</a><span class="sep">/</span><span>麻醉复核</span></div>
+<div class="uk-page-head">
+  <h1>麻醉复核</h1><div class="meta">{{ selected_date }} · {{ selected_store or '全部门店' }} · 实际给药与当日开瓶余量</div>
+</div>
+
+<form method="get" class="uk-filter">
+  <label>日期<input class="uk-input" type="date" name="date" value="{{ selected_date }}"/></label>
+  {% if is_superadmin %}<label>门店<select class="uk-select" name="store"><option value="all" {% if not selected_store %}selected{% endif %}>全部门店</option><option {% if selected_store == '横岗店' %}selected{% endif %}>横岗店</option><option {% if selected_store == '东环店' %}selected{% endif %}>东环店</option></select></label>{% endif %}
+  <button class="uk-btn primary" type="submit">筛选</button>
+</form>
+
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:28px;">
+  <div class="uk-kpi"><div class="label">待复核实际给药</div><div class="value">{{ pending_events|length }}</div></div>
+  <div class="uk-kpi"><div class="label">未结清开瓶记录</div><div class="value">{{ open_vials|length }}</div></div>
+</div>
+
+<section class="uk-section">
+  <h2>实际给药待复核</h2><div class="uk-msg warn">复核人必须与实际记录人不同；复核不会重复扣库存。</div>
+  {% if pending_events %}
+  <form method="post" action="/admin/anesthesia-review/events">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="date" value="{{ selected_date }}"/><input type="hidden" name="store" value="{{ selected_store or 'all' }}"/>
+    <div style="overflow-x:auto;"><table class="uk-tbl"><thead><tr><th><input id="checkAll" type="checkbox"/></th><th>时间</th><th>宠物 / 监护表</th><th>药品</th><th>批号</th><th>实际量</th><th>途径</th><th>记录人</th></tr></thead><tbody>
+    {% for e in pending_events %}
+    <tr><td><input class="event-check" type="checkbox" name="event_ids" value="{{ e.id }}"/></td><td>{{ e.administered_at.strftime('%H:%M') }}</td><td><a href="/m/anesthesia-monitor/{{ e.sheet_id }}">{{ e.sheet.pet.name if e.sheet and e.sheet.pet else '—' }} · AM{{ '%06d'|format(e.sheet_id) }}</a></td><td>{{ e.drug_name }}</td><td>{{ e.batch_no or '—' }}</td><td class="uk-num">{{ '%g'|format(e.qty) }} {{ e.unit }}</td><td>{{ e.route or '—' }}</td><td>{{ e.operator }}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+    <button class="uk-btn primary" type="submit" style="margin-top:12px;">批量确认复核</button>
+  </form>
+  {% else %}<div class="uk-empty">当天没有待复核的实际给药记录</div>{% endif %}
+</section>
+
+<section class="uk-section">
+  <h2>当天开瓶余量</h2><div class="uk-msg warn">同一瓶可供当天多只动物使用；下班前把实际剩余量登记为销毁。</div>
+  {% if open_vials %}
+  <div style="overflow-x:auto;"><table class="uk-tbl"><thead><tr><th>药品</th><th>批号</th><th>开瓶人</th><th>开瓶量</th><th>已使用</th><th>剩余</th><th>销毁登记</th></tr></thead><tbody>
+  {% for v in open_vials %}<tr><td>{{ v.drug_name }}</td><td>{{ v.batch_no or '—' }}</td><td>{{ v.opened_by }}</td><td>{{ '%g'|format(v.opened_qty) }}{{ v.unit }}</td><td>{{ '%g'|format(v.used_qty or 0) }}{{ v.unit }}</td><td class="uk-num">{{ '%g'|format(vial_remaining(v)) }}{{ v.unit }}</td><td>
+    <form method="post" action="/admin/anesthesia/open-vials/{{ v.id }}/destroy" style="display:flex;gap:6px;align-items:center;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="store" value="{{ selected_store }}"/><input style="width:82px;" type="number" step="0.01" min="0.01" max="{{ vial_remaining(v) }}" name="qty" value="{{ vial_remaining(v) }}" required/>
+      <select name="cosigner" required><option value="">复核人</option>{% for n in staff_names %}{% if n != v.opened_by %}<option value="{{ n }}">{{ n }}</option>{% endif %}{% endfor %}</select>
+      <input style="width:150px;" name="reason" value="当日开瓶残余销毁"/><button class="uk-btn danger sm" type="submit" onclick="return confirm('确认登记剩余药液销毁？');">登记销毁</button>
+    </form>
+  </td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="uk-empty">当天没有未结清的开瓶余量</div>{% endif %}
+</section>
+
+<script>document.getElementById('checkAll')?.addEventListener('change',function(){document.querySelectorAll('.event-check').forEach(x=>x.checked=this.checked);});</script>
+{% endblock %}

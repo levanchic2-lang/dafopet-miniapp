@@ -1745,6 +1745,8 @@ class AnesthesiaOrder(Base):
     end_time:    Mapped[str] = mapped_column(String(10), default="")
     recovery:    Mapped[str] = mapped_column(String(40), default="")
     status:      Mapped[str] = mapped_column(String(20), default="issued")
+    # legacy_order: 历史麻醉单曾直接扣库存；monitor: 新流程仅收费，库存由监护表实际给药扣减。
+    inventory_mode: Mapped[str] = mapped_column(String(20), default="monitor")
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     store:       Mapped[str] = mapped_column(String(40), default="")
     notes:       Mapped[str] = mapped_column(Text, default="")
@@ -1802,6 +1804,8 @@ class NarcoticsLedger(Base):
     cosigner:   Mapped[str] = mapped_column(String(80), default="")
     visit_id        = mapped_column(ForeignKey("visits.id",            ondelete="SET NULL"), nullable=True, default=None)
     anesth_order_id = mapped_column(ForeignKey("anesthesia_orders.id", ondelete="SET NULL"), nullable=True, default=None)
+    monitor_sheet_id = mapped_column(ForeignKey("anesthesia_monitor_sheets.id", ondelete="SET NULL"), nullable=True, default=None)
+    medication_event_id = mapped_column(ForeignKey("anesthesia_medication_events.id", ondelete="SET NULL"), nullable=True, default=None)
     store:      Mapped[str] = mapped_column(String(40), default="", index=True)
     notes:      Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -1946,8 +1950,8 @@ class NeurologicExam(Base):
 
 # ════════════════════════════════════════════════════════════════
 # 麻醉监护表（手术中逐时段生命体征监护）
-# 与 AnesthesiaOrder（麻醉单）刻意分开：麻醉单 = 用了哪些麻醉药 + 剂量 +
-# 双人复核（计费/管控药台账）；监护表 = 手术过程中每隔几分钟记一次
+# 与 AnesthesiaOrder（麻醉单）刻意分开：麻醉单只记录计划项目并参与收费；
+# 监护表记录术中实际给药和生命体征，实际给药才影响库存及管控药台账。
 # HR/RR/SpO₂/EtCO₂/体温/血压/麻醉浓度…，导出 PDF 给主人或麻醉师看。
 # ════════════════════════════════════════════════════════════════
 class AnesthesiaMonitorSheet(Base):
@@ -1980,6 +1984,11 @@ class AnesthesiaMonitorSheet(Base):
     entries  = relationship("AnesthesiaMonitorEntry", back_populates="sheet",
                             cascade="all, delete-orphan",
                             order_by="AnesthesiaMonitorEntry.recorded_at")
+    medication_events = relationship("AnesthesiaMedicationEvent", back_populates="sheet",
+                                     cascade="all, delete-orphan",
+                                     order_by="AnesthesiaMedicationEvent.administered_at")
+    opened_vials = relationship("AnesthesiaOpenVial", back_populates="opened_sheet",
+                                foreign_keys="AnesthesiaOpenVial.opened_sheet_id")
     customer = relationship("Customer", foreign_keys=[customer_id])
     pet      = relationship("Pet",      foreign_keys=[pet_id])
     visit    = relationship("Visit",    foreign_keys=[visit_id])
@@ -2010,3 +2019,63 @@ class AnesthesiaMonitorEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     sheet = relationship("AnesthesiaMonitorSheet", back_populates="entries")
+
+
+class AnesthesiaOpenVial(Base):
+    """按门店、日期和批号追踪的一次开瓶；当天可跨多只动物共同使用。"""
+    __tablename__ = "anesthesia_open_vials"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    batch_id = mapped_column(ForeignKey("inventory_batches.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    opened_sheet_id = mapped_column(ForeignKey("anesthesia_monitor_sheets.id", ondelete="SET NULL"), nullable=True, default=None)
+    drug_name: Mapped[str] = mapped_column(String(120), default="")
+    batch_no: Mapped[str] = mapped_column(String(80), default="")
+    manufacturer: Mapped[str] = mapped_column(String(200), default="")
+    opened_date: Mapped[str] = mapped_column(String(20), default="", index=True)
+    opened_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    used_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    destroyed_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    store: Mapped[str] = mapped_column(String(40), default="", index=True)
+    opened_by: Mapped[str] = mapped_column(String(80), default="")
+    opened_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+    inventory_item = relationship("InventoryItem", foreign_keys=[item_id])
+    inventory_batch = relationship("InventoryBatch", foreign_keys=[batch_id])
+    opened_sheet = relationship("AnesthesiaMonitorSheet", back_populates="opened_vials", foreign_keys=[opened_sheet_id])
+    events = relationship("AnesthesiaMedicationEvent", back_populates="open_vial",
+                          foreign_keys="AnesthesiaMedicationEvent.open_vial_id")
+
+
+class AnesthesiaMedicationEvent(Base):
+    """监护表实际给药、残余销毁和更正记录；只影响库存，不参与收费。"""
+    __tablename__ = "anesthesia_medication_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sheet_id = mapped_column(ForeignKey("anesthesia_monitor_sheets.id", ondelete="CASCADE"), nullable=False, index=True)
+    open_vial_id = mapped_column(ForeignKey("anesthesia_open_vials.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
+    ledger_id = mapped_column(Integer, nullable=True, default=None)
+    event_type: Mapped[str] = mapped_column(String(20), default="administer")  # administer/destroy/reversal
+    drug_name: Mapped[str] = mapped_column(String(120), default="")
+    batch_no: Mapped[str] = mapped_column(String(80), default="")
+    manufacturer: Mapped[str] = mapped_column(String(200), default="")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    route: Mapped[str] = mapped_column(String(30), default="")
+    administered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    operator: Mapped[str] = mapped_column(String(80), default="")
+    review_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    reviewed_by: Mapped[str] = mapped_column(String(80), default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    note: Mapped[str] = mapped_column(Text, default="")
+    store: Mapped[str] = mapped_column(String(40), default="", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    sheet = relationship("AnesthesiaMonitorSheet", back_populates="medication_events")
+    open_vial = relationship("AnesthesiaOpenVial", back_populates="events", foreign_keys=[open_vial_id])
+    inventory_item = relationship("InventoryItem", foreign_keys=[item_id])

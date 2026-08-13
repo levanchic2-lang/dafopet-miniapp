@@ -69,6 +69,11 @@ td.warn { color: #6b4423; font-weight: 700; }
 }
 .sign { margin-top: 12pt; font-size: 9pt; color: #555; }
 .sign span { display: inline-block; min-width: 200pt; border-bottom: 0.5px solid #999; margin-left: 6pt; }
+.med-title { margin: 10pt 0 4pt; font-size: 10pt; font-weight: 700; letter-spacing: 2px; }
+table.med { width: 100%; border-collapse: collapse; }
+table.med th, table.med td { border: 0.5px solid #c8c4bc; padding: 3pt 4pt; }
+table.med th { background: #f4f1ec; font-size: 8pt; }
+table.med td { font-size: 8.5pt; }
 """
 
 
@@ -213,6 +218,33 @@ def _build_html(sheet, cust, pet, clinic_name: str) -> str:
     if not rows:
         rows.append('<tr><td colspan="11" style="color:#aaa;padding:10pt;">（暂无监护记录）</td></tr>')
 
+    event_type_zh = {"administer": "实际给药", "destroy": "残余销毁", "reversal": "更正回库"}
+    review_zh = {"pending": "待复核", "reviewed": "已复核", "voided": "已更正"}
+    medication_rows = []
+    for e in sheet.medication_events:
+        medication_rows.append(
+            "<tr>"
+            f"<td>{_fmt_t(e.administered_at)}</td>"
+            f"<td>{_esc(event_type_zh.get(e.event_type, e.event_type))}</td>"
+            f"<td>{_esc(e.drug_name)}</td>"
+            f"<td>{_esc(e.batch_no) or '—'}</td>"
+            f"<td>{float(e.qty or 0):g} {_esc(e.unit)}</td>"
+            f"<td>{_esc(e.route) or '—'}</td>"
+            f"<td>{_esc(e.operator) or '—'}</td>"
+            f"<td>{_esc(review_zh.get(e.review_status, e.review_status))}"
+            f"{(' · ' + _esc(e.reviewed_by)) if e.reviewed_by else ''}</td>"
+            f"<td>{_esc(e.note)}</td>"
+            "</tr>"
+        )
+    medication_block = ""
+    if medication_rows:
+        medication_block = f"""
+<div class="med-title">实际用药记录</div>
+<table class="med">
+  <thead><tr><th>时刻</th><th>类型</th><th>药品</th><th>批号</th><th>实际量</th><th>途径</th><th>记录人</th><th>复核</th><th>备注</th></tr></thead>
+  <tbody>{''.join(medication_rows)}</tbody>
+</table>"""
+
     svg = _svg_trend(list(sheet.entries))
     chart_block = (
         f'<div class="chart-wrap"><div class="chart-cap">趋势曲线 · HR / RR / SpO₂</div>{svg}</div>'
@@ -249,6 +281,8 @@ def _build_html(sheet, cust, pet, clinic_name: str) -> str:
   </tr></thead>
   <tbody>{"".join(rows)}</tbody>
 </table>
+
+{medication_block}
 
 {('<div style="margin-top:8pt;font-size:9pt;color:#555;"><b>备注：</b>' + _esc(sheet.notes) + "</div>") if sheet.notes else ""}
 

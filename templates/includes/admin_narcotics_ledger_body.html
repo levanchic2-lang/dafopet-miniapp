@@ -25,6 +25,9 @@
      <select name="source">
        <option value="">全部</option>
        <option value="anesth_order" {% if source == 'anesth_order' %}selected{% endif %}>麻醉单</option>
+       <option value="monitor_admin" {% if source == 'monitor_admin' %}selected{% endif %}>监护实际给药</option>
+       <option value="residual_destroy" {% if source == 'residual_destroy' %}selected{% endif %}>开瓶余量销毁</option>
+       <option value="monitor_reversal" {% if source == 'monitor_reversal' %}selected{% endif %}>实际给药更正</option>
        <option value="manual_refill" {% if source == 'manual_refill' %}selected{% endif %}>手动补充</option>
        <option value="manual_consume" {% if source == 'manual_consume' %}selected{% endif %}>手动消耗</option>
        <option value="stocktake" {% if source == 'stocktake' %}selected{% endif %}>盘点</option>
@@ -66,7 +69,7 @@
     </thead>
     <tbody>
       {% set _DIR = {'in':'入','out':'出','loss':'损耗'} %}
-      {% set _SRC = {'anesth_order':'麻醉单','manual_refill':'手动补充','manual_consume':'手动消耗','stocktake':'盘点','loss':'损耗'} %}
+      {% set _SRC = {'anesth_order':'麻醉单','monitor_admin':'监护实际给药','residual_destroy':'开瓶余量销毁','monitor_reversal':'实际给药更正','manual_refill':'手动补充','manual_consume':'手动消耗','stocktake':'盘点','loss':'损耗'} %}
       {% for r in rows %}
       <tr style="border-bottom:1px solid #f1f5f9;">
          <td style="padding:.4rem;">{{ r.event_date }}</td>
@@ -87,6 +90,7 @@
         <td style="padding:.4rem;font-size:.78rem;">
           {% if r.anesth_order_id %}<a href="/admin/anesthesia/{{ r.anesth_order_id }}">麻#{{ r.anesth_order_id }}</a>{% endif %}
           {% if r.visit_id %}{% if r.anesth_order_id %} · {% endif %}<a href="/admin/visits/{{ r.visit_id }}">病#{{ r.visit_id }}</a>{% endif %}
+          {% if r.monitor_sheet_id %}{% if r.anesth_order_id or r.visit_id %} · {% endif %}<a href="/m/anesthesia-monitor/{{ r.monitor_sheet_id }}">监护#{{ r.monitor_sheet_id }}</a>{% endif %}
         </td>
         <td style="padding:.4rem;color:#64748b;font-size:.8rem;">{{ r.notes or '' }}</td>
       </tr>

@@ -49,6 +49,98 @@
   </div>
 </div>
 
+{# ── 实际用药：只扣库存，不产生收费 ── #}
+<div class="ukm-section-head" id="medication"><h2>实&nbsp;际&nbsp;用&nbsp;药</h2></div>
+<div class="ukm-fineprint" style="margin:-6px 0 10px;">监护表记录实际给药并实时扣库存，不计入收费；收费仍以麻醉单为准。</div>
+
+{% if sheet.status != 'closed' %}
+<details class="ukm-drawer">
+  <summary>登&nbsp;记&nbsp;开&nbsp;瓶</summary>
+  <div class="body">
+    <form method="post" action="/admin/anesthesia-monitor/{{ sheet.id }}/open-vial">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#medication"/>
+      <div class="ukm-field"><label class="lbl">药&nbsp;品</label>
+        <select class="ukm-select" name="item_id" id="vialItem" required>
+          <option value="">选择麻醉/管控药品</option>
+          {% for it in inventory_candidates %}
+          <option value="{{ it.id }}" data-ratio="{{ it.unit2_ratio or 1 }}">{{ it.name }} · 库存 {{ '%g'|format(it.stock_qty or 0) }}{{ it.unit }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">批&nbsp;号</label>
+          <select class="ukm-select" name="batch_id" id="vialBatch">
+            <option value="">选择批号（有批次时必选）</option>
+            {% for b in inventory_batches %}
+            <option value="{{ b.id }}" data-item="{{ b.item_id }}">{{ b.batch_no or '无批号' }}{% if b.expiry_date %} · {{ b.expiry_date }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ukm-field"><label class="lbl">开&nbsp;瓶&nbsp;量</label>
+          <input class="ukm-input ukm-num" id="vialQty" type="number" step="0.01" min="0.01" name="opened_qty" placeholder="如 20" required/>
+        </div>
+      </div>
+      <div class="ukm-field"><label class="lbl">备&nbsp;注</label><input class="ukm-input" name="notes" placeholder="可选，如新开一瓶丙泊酚"/></div>
+      <button class="ukm-btn ghost block" type="submit">确&nbsp;认&nbsp;开&nbsp;瓶</button>
+    </form>
+  </div>
+</details>
+
+{% if open_vials %}
+<div class="ukm-card-group" style="margin-top:10px;">
+  <div class="ukm-card">
+    <form method="post" action="/admin/anesthesia-monitor/{{ sheet.id }}/medication">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="next_url" value="{{ next_url }}#medication"/>
+      <div class="ukm-field"><label class="lbl">使用哪一瓶</label>
+        <select class="ukm-select" name="open_vial_id" required>
+          <option value="">选择当天开瓶记录</option>
+          {% for v in open_vials %}
+          <option value="{{ v.id }}">{{ v.drug_name }}{% if v.batch_no %} · 批 {{ v.batch_no }}{% endif %} · 余 {{ '%g'|format(vial_remaining(v)) }}{{ v.unit }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">本次实际用量</label><input class="ukm-input ukm-num" type="number" step="0.01" min="0.01" name="qty" required/></div>
+        <div class="ukm-field"><label class="lbl">给药时间</label><input class="ukm-input ukm-num" type="time" name="time_hhmm" value="{{ now_hhmm }}"/></div>
+      </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">给药途径</label><input class="ukm-input" name="route" placeholder="如 IV / IM / 吸入"/></div>
+        <div class="ukm-field"><label class="lbl">备注</label><input class="ukm-input" name="note" placeholder="如首次诱导 / 追加"/></div>
+      </div>
+      <button class="ukm-btn block" type="submit">记&nbsp;录&nbsp;实&nbsp;际&nbsp;给&nbsp;药</button>
+    </form>
+  </div>
+</div>
+{% else %}
+<div class="ukm-empty" style="padding:18px 12px;">先登记当天开瓶，再记录实际给药</div>
+{% endif %}
+{% endif %}
+
+{% if medication_events %}
+<div class="ukm-row-group" style="margin-top:10px;">
+  {% for e in medication_events|reverse %}
+  <div class="ukm-row" style="align-items:flex-start;">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title"><span class="ukm-num">{{ e.administered_at.strftime('%H:%M') }}</span>&nbsp; {{ e.drug_name }} · {{ '%g'|format(e.qty) }}{{ e.unit }}</div>
+      <div class="ukm-row-sub">{{ e.route or ('残余销毁' if e.event_type == 'destroy' else '—') }} · {{ e.operator or '—' }}{% if e.batch_no %} · 批 {{ e.batch_no }}{% endif %}</div>
+      {% if e.note %}<div class="ukm-row-sub" style="color:var(--ink-2);">{{ e.note }}</div>{% endif %}
+    </div>
+    {% if e.review_status == 'pending' %}<span class="ukm-pill amber">待复核</span>
+    {% elif e.review_status == 'voided' %}<span class="ukm-pill red">已更正</span>
+    {% else %}<span class="ukm-pill green">已复核</span>{% endif %}
+    {% if sheet.status != 'closed' and e.event_type == 'administer' and e.review_status == 'pending' %}
+    <form method="post" action="/admin/anesthesia-medication-events/{{ e.id }}/void" style="margin-left:6px;" onsubmit="return confirm('确认更正这条实际给药记录并回库？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="reason" value="录入错误"/>
+      <button class="ukm-btn hair" type="submit" style="padding:4px 8px;color:var(--accent-red);">更正</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {# ── 记录当前（仅监护中） ── #}
 {% if sheet.status != 'closed' %}
 <div class="ukm-section-head"><h2>记&nbsp;录&nbsp;当&nbsp;前</h2></div>
@@ -121,7 +213,7 @@
   <div class="ukm-row" style="cursor:default;align-items:flex-start;">
     <div class="ukm-row-body">
       <div class="ukm-row-title">
-        <span class="ukm-num">{{ (e.recorded_at | bjtime).strftime('%H:%M') }}</span>
+        <span class="ukm-num">{{ e.recorded_at.strftime('%H:%M') }}</span>
         {% if e.recorded_by %}<span class="ukm-italic" style="font-size:11px;margin-left:8px;">{{ e.recorded_by }}</span>{% endif %}
       </div>
       <div class="ukm-row-sub" style="line-height:1.9;">
@@ -139,7 +231,7 @@
     </div>
     {% if sheet.status != 'closed' %}
     <form method="post" action="/admin/anesthesia-monitor/{{ sheet.id }}/entry/{{ e.id }}/delete" style="margin:0;"
-          onsubmit="return confirm('删除这条 {{ (e.recorded_at | bjtime).strftime('%H:%M') }} 记录？');">
+          onsubmit="return confirm('删除这条 {{ e.recorded_at.strftime('%H:%M') }} 记录？');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
       <input type="hidden" name="next_url" value="{{ next_url }}#log"/>
       <button type="submit" class="ukm-btn hair" style="padding:4px 10px;font-size:12px;color:var(--accent-red);border-color:var(--hair);">删</button>
@@ -230,6 +322,24 @@
       else { hidden.value = ''; }
     });
   });
+
+  var item = document.getElementById('vialItem');
+  var batch = document.getElementById('vialBatch');
+  var qty = document.getElementById('vialQty');
+  if (item && batch) {
+    var syncBatches = function () {
+      var selected = item.value;
+      Array.prototype.forEach.call(batch.options, function (o, idx) {
+        if (idx === 0) return;
+        o.hidden = !!selected && o.dataset.item !== selected;
+        o.disabled = !!selected && o.dataset.item !== selected;
+      });
+      if (batch.selectedOptions.length && batch.selectedOptions[0].disabled) batch.value = '';
+      if (qty && !qty.value && item.selectedOptions.length) qty.value = item.selectedOptions[0].dataset.ratio || '';
+    };
+    item.addEventListener('change', syncBatches);
+    syncBatches();
+  }
 })();
 </script>
 {% endblock %}

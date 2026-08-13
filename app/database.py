@@ -1917,6 +1917,7 @@ def _try_sqlite_migrations() -> None:
                 "end_time VARCHAR(10) DEFAULT '', "
                 "recovery VARCHAR(40) DEFAULT '', "
                 "status VARCHAR(20) DEFAULT 'issued', "
+                "inventory_mode VARCHAR(20) DEFAULT 'monitor', "
                 "total_amount REAL DEFAULT 0.0, "
                 "store VARCHAR(40) DEFAULT '', "
                 "notes TEXT DEFAULT '', "
@@ -1928,6 +1929,11 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anesth_visit ON anesthesia_orders(visit_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anesth_date ON anesthesia_orders(anesth_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anesth_store ON anesthesia_orders(store)"))
+            anesth_cols = conn.execute(text("PRAGMA table_info(anesthesia_orders)")).fetchall()
+            anesth_names = {c[1] for c in anesth_cols} if anesth_cols else set()
+            if anesth_cols and "inventory_mode" not in anesth_names:
+                # 已存在的麻醉单沿用旧扣库逻辑；升级后的新单由创建路由显式写 monitor。
+                conn.execute(text("ALTER TABLE anesthesia_orders ADD COLUMN inventory_mode VARCHAR(20) DEFAULT 'legacy_order'"))
 
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS anesthesia_order_items ("
@@ -1966,6 +1972,8 @@ def _try_sqlite_migrations() -> None:
                 "cosigner VARCHAR(80) DEFAULT '', "
                 "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
                 "anesth_order_id INTEGER DEFAULT NULL REFERENCES anesthesia_orders(id) ON DELETE SET NULL, "
+                "monitor_sheet_id INTEGER DEFAULT NULL REFERENCES anesthesia_monitor_sheets(id) ON DELETE SET NULL, "
+                "medication_event_id INTEGER DEFAULT NULL REFERENCES anesthesia_medication_events(id) ON DELETE SET NULL, "
                 "store VARCHAR(40) DEFAULT '', "
                 "notes TEXT DEFAULT '', "
                 "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
@@ -1980,6 +1988,10 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE narcotics_ledger ADD COLUMN batch_no VARCHAR(80) DEFAULT ''"))
             if narc_cols and "manufacturer" not in narc_names:
                 conn.execute(text("ALTER TABLE narcotics_ledger ADD COLUMN manufacturer VARCHAR(200) DEFAULT ''"))
+            if narc_cols and "monitor_sheet_id" not in narc_names:
+                conn.execute(text("ALTER TABLE narcotics_ledger ADD COLUMN monitor_sheet_id INTEGER DEFAULT NULL"))
+            if narc_cols and "medication_event_id" not in narc_names:
+                conn.execute(text("ALTER TABLE narcotics_ledger ADD COLUMN medication_event_id INTEGER DEFAULT NULL"))
 
             # ── 麻醉监护表（手术中逐时段生命体征 · 手机录入 + PDF 导出）─────
             conn.execute(text(
@@ -2031,6 +2043,65 @@ def _try_sqlite_migrations() -> None:
                 ")"
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmon_entry_sheet ON anesthesia_monitor_entries(sheet_id, recorded_at)"))
+
+            # 麻醉实际用药：开瓶可在当天跨动物共用；实际给药与残余销毁只影响库存，不参与收费。
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS anesthesia_open_vials ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL, "
+                "batch_id INTEGER DEFAULT NULL REFERENCES inventory_batches(id) ON DELETE SET NULL, "
+                "opened_sheet_id INTEGER DEFAULT NULL REFERENCES anesthesia_monitor_sheets(id) ON DELETE SET NULL, "
+                "drug_name VARCHAR(120) DEFAULT '', "
+                "batch_no VARCHAR(80) DEFAULT '', "
+                "manufacturer VARCHAR(200) DEFAULT '', "
+                "opened_date VARCHAR(20) DEFAULT '', "
+                "opened_qty REAL DEFAULT 0.0, "
+                "used_qty REAL DEFAULT 0.0, "
+                "destroyed_qty REAL DEFAULT 0.0, "
+                "unit VARCHAR(20) DEFAULT '', "
+                "status VARCHAR(20) DEFAULT 'open', "
+                "store VARCHAR(40) DEFAULT '', "
+                "opened_by VARCHAR(80) DEFAULT '', "
+                "opened_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "closed_at DATETIME DEFAULT NULL, "
+                "notes TEXT DEFAULT ''"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anvial_store_date ON anesthesia_open_vials(store, opened_date, status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anvial_item ON anesthesia_open_vials(item_id)"))
+            anvial_cols = conn.execute(text("PRAGMA table_info(anesthesia_open_vials)")).fetchall()
+            anvial_names = {c[1] for c in anvial_cols} if anvial_cols else set()
+            if anvial_cols and "batch_id" not in anvial_names:
+                conn.execute(text("ALTER TABLE anesthesia_open_vials ADD COLUMN batch_id INTEGER DEFAULT NULL"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anvial_batch ON anesthesia_open_vials(batch_id)"))
+
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS anesthesia_medication_events ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "sheet_id INTEGER NOT NULL REFERENCES anesthesia_monitor_sheets(id) ON DELETE CASCADE, "
+                "open_vial_id INTEGER DEFAULT NULL REFERENCES anesthesia_open_vials(id) ON DELETE SET NULL, "
+                "item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL, "
+                "ledger_id INTEGER DEFAULT NULL, "
+                "event_type VARCHAR(20) DEFAULT 'administer', "
+                "drug_name VARCHAR(120) DEFAULT '', "
+                "batch_no VARCHAR(80) DEFAULT '', "
+                "manufacturer VARCHAR(200) DEFAULT '', "
+                "qty REAL DEFAULT 0.0, "
+                "unit VARCHAR(20) DEFAULT '', "
+                "route VARCHAR(30) DEFAULT '', "
+                "administered_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "operator VARCHAR(80) DEFAULT '', "
+                "review_status VARCHAR(20) DEFAULT 'pending', "
+                "reviewed_by VARCHAR(80) DEFAULT '', "
+                "reviewed_at DATETIME DEFAULT NULL, "
+                "note TEXT DEFAULT '', "
+                "store VARCHAR(40) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmed_sheet_time ON anesthesia_medication_events(sheet_id, administered_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmed_review ON anesthesia_medication_events(store, review_status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmed_vial ON anesthesia_medication_events(open_vial_id)"))
 
             # 美容单
             conn.execute(text(

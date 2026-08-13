@@ -111,6 +111,8 @@ from app.models import (
     NarcoticsLedger,
     AnesthesiaMonitorSheet,
     AnesthesiaMonitorEntry,
+    AnesthesiaOpenVial,
+    AnesthesiaMedicationEvent,
     FollowUpTemplate,
     ClientCareSummary,
     CarePlan,
@@ -13413,6 +13415,13 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
     # 其余纯 visit_id 关联：直接删
     cnt["weight"]        += db.query(WeightRecord).filter(WeightRecord.visit_id == vid).delete(synchronize_session=False)
     cnt["medical_doc"]   += db.query(MedicalDocument).filter(MedicalDocument.visit_id == vid).delete(synchronize_session=False)
+    monitor_ids = [r[0] for r in db.query(AnesthesiaMonitorSheet.id).filter(
+        AnesthesiaMonitorSheet.visit_id == vid).all()]
+    if monitor_ids:
+        db.query(AnesthesiaMedicationEvent).filter(
+            AnesthesiaMedicationEvent.sheet_id.in_(monitor_ids)).delete(synchronize_session=False)
+        db.query(AnesthesiaOpenVial).filter(
+            AnesthesiaOpenVial.opened_sheet_id.in_(monitor_ids)).delete(synchronize_session=False)
     cnt["monitor_sheet"] += db.query(AnesthesiaMonitorSheet).filter(AnesthesiaMonitorSheet.visit_id == vid).delete(synchronize_session=False)
     cnt["consent_task"]  += db.query(ConsentTask).filter(ConsentTask.visit_id == vid).delete(synchronize_session=False)
     cnt["consent_doc"]   += db.query(ConsentDocument).filter(ConsentDocument.visit_id == vid).delete(synchronize_session=False)
@@ -14449,14 +14458,15 @@ def _parse_presc_items(form_data) -> list[dict]:
     return items
 
 
-def _deduct_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_id: int, operator: str, note: str = "") -> None:
+def _deduct_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_id: int,
+                      operator: str, note: str = "", respect_single_use_pack: bool = True) -> None:
     """出库：减少库存，写流水。"""
     inv = db.get(InventoryItem, item_id)
     if not inv or inv.is_service:
         return
     # 整支/整瓶计费：库存按整支/整瓶扣（开 5ml = 用掉 1 整瓶 100ml）。
     # 对已是整瓶量的旧数据幂等（ceil(100/100)*100=100），不会重复放大。
-    if getattr(inv, "single_use_pack", False):
+    if respect_single_use_pack and getattr(inv, "single_use_pack", False):
         qty = _billable_qty(inv, qty)
     before = float(inv.stock_qty or 0)
     if (inv.is_controlled or inv.subcategory == "controlled") and (before <= 0 or before + 1e-9 < qty):
@@ -14496,13 +14506,14 @@ def _rabies_inventory_items(db: Session, request: Request) -> list[InventoryItem
     ).order_by(InventoryItem.name.asc(), InventoryItem.id.asc()).all()
 
 
-def _restore_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_id: int, operator: str, note: str = "") -> None:
+def _restore_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_id: int,
+                       operator: str, note: str = "", respect_single_use_pack: bool = True) -> None:
     """退回库存（删单时）：增加库存，写流水。"""
     inv = db.get(InventoryItem, item_id)
     if not inv or inv.is_service:
         return
     # 与 _deduct_inventory 对称：整支/整瓶计费按整瓶退，保证扣/退一致。
-    if getattr(inv, "single_use_pack", False):
+    if respect_single_use_pack and getattr(inv, "single_use_pack", False):
         qty = _billable_qty(inv, qty)
     before = inv.stock_qty
     inv.stock_qty = round(before + qty, 4)
@@ -15220,6 +15231,8 @@ def _write_narcotics_ledger(db: Session, *, item_id: int, item_name: str,
                             operator: str, cosigner: str = "",
                             visit_id: int | None = None,
                             anesth_order_id: int | None = None,
+                            monitor_sheet_id: int | None = None,
+                            medication_event_id: int | None = None,
                             store: str = "", notes: str = "",
                             batch_no: str = "", manufacturer: str = "",
                             event_date: str = "") -> "NarcoticsLedger":
@@ -15244,6 +15257,8 @@ def _write_narcotics_ledger(db: Session, *, item_id: int, item_name: str,
         manufacturer=(manufacturer or "")[:200],
         operator=operator, cosigner=cosigner,
         visit_id=visit_id, anesth_order_id=anesth_order_id,
+        monitor_sheet_id=monitor_sheet_id,
+        medication_event_id=medication_event_id,
         store=store, notes=notes,
     )
     db.add(row)
@@ -15386,6 +15401,7 @@ async def admin_anesth_create(request: Request, db: Session = Depends(get_db)):
         end_time=str(form.get("end_time", "")).strip()[:10],
         recovery=str(form.get("recovery", "")).strip()[:40],
         status="issued",
+        inventory_mode="monitor",
         total_amount=total,
         store=store,
         notes=str(form.get("notes", "")).strip(),
@@ -15393,26 +15409,9 @@ async def admin_anesth_create(request: Request, db: Session = Depends(get_db)):
     )
     db.add(order)
     db.flush()
-    # 写明细 + 出库（有库存的管控药）+ 台账留痕（所有项）
+    # 新流程：麻醉单只负责收费和计划用药；库存/管控台账由监护表的实际给药触发。
     for it in items:
         db.add(AnesthesiaOrderItem(order_id=order.id, **it))
-        inv = db.get(InventoryItem, it["item_id"]) if it["item_id"] else None
-        # 1) 实物扣库存：非服务类 + 有库存品目
-        if inv and not inv.is_service and not it["is_service"] and it["total_qty"] > 0:
-            _deduct_inventory(db, inv.id, it["total_qty"], "anesthesia",
-                              order.id, operator, f"麻醉单#{order.id}")
-        # 2) 写台账（包括服务类，国标要求所有麻醉/管控药都有痕迹）
-        if inv and (inv.is_controlled or (inv.subcategory == "controlled")) or (not inv and it["is_service"]):
-            _write_narcotics_ledger(
-                db, item_id=inv.id if inv else 0, item_name=it["drug_name"],
-                direction="out", source="anesth_order",
-                qty=it["total_qty"] if it["total_qty"] > 0 else 1,
-                unit=it["total_unit"] or it["dose_unit"],
-                operator=vet_name, cosigner=cosigner,
-                visit_id=visit_id or None, anesth_order_id=order.id,
-                store=store, event_date=order.anesth_date,
-                notes=f"{it['route']} {it['dose_amount']}{it['dose_unit']} · 麻醉单#{order.id}",
-            )
     db.commit()
     # 同步收费单
     if visit_id:
@@ -15452,7 +15451,7 @@ async def page_admin_anesth_detail(order_id: int, request: Request, db: Session 
 @app.post("/admin/anesthesia/{order_id}/copy-as-new")
 async def admin_anesth_copy_as_new(order_id: int, request: Request, db: Session = Depends(get_db),
                                      csrf_token: str = Form("")):
-    """以本麻醉单为模板新建一张（同 visit/pet/医师 + 全部明细 + 扣库存）。"""
+    """以本麻醉单为模板新建一张（同 visit/pet/医师 + 全部明细，仅收费不扣库存）。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
@@ -15472,6 +15471,7 @@ async def admin_anesth_copy_as_new(order_id: int, request: Request, db: Session 
         end_time="",
         recovery="",
         status="issued",
+        inventory_mode="monitor",
         total_amount=src.total_amount,
         store=src.store,
         notes=src.notes,
@@ -15496,22 +15496,6 @@ async def admin_anesth_copy_as_new(order_id: int, request: Request, db: Session 
             note=old.note,
         )
         db.add(new_it)
-        inv = db.get(InventoryItem, old.item_id) if old.item_id else None
-        if inv and not inv.is_service and not old.is_service and old.total_qty > 0:
-            _deduct_inventory(db, inv.id, old.total_qty, "anesthesia",
-                              new_order.id, operator, f"麻醉单#{new_order.id}（复制自 #{order_id}）")
-        # 写台账
-        if inv and (inv.is_controlled or inv.subcategory == "controlled"):
-            _write_narcotics_ledger(
-                db, item_id=inv.id, item_name=old.drug_name,
-                direction="out", source="anesth_order",
-                qty=old.total_qty if old.total_qty > 0 else 1,
-                unit=old.total_unit or old.dose_unit,
-                operator=src.vet_name, cosigner=src.cosigner,
-                visit_id=src.visit_id, anesth_order_id=new_order.id,
-                store=src.store, event_date=new_order.anesth_date,
-                notes=f"复制自麻醉单#{order_id}",
-            )
     _audit_doc_action(db, "anesthesia", new_order.id, "copy_from", operator, extra=f"src={order_id}")
     db.commit()
     if new_order.visit_id:
@@ -15590,16 +15574,16 @@ async def admin_anesth_delete(order_id: int, request: Request, db: Session = Dep
             raise HTTPException(403, "所属病历已结束，麻醉单不可删除。如确需作废请使用「作废」。")
     operator = request.session.get("admin_username", "admin")
     visit_id = order.visit_id
-    # 1) 回库（非服务类）
-    for it in order.items:
-        inv = db.get(InventoryItem, it.item_id) if it.item_id else None
-        if inv and not inv.is_service and not it.is_service and (it.total_qty or 0) > 0:
-            _restore_inventory(db, inv.id, it.total_qty, "anesthesia",
-                               order_id, operator, f"删除麻醉单#{order_id}回库")
-    # 2) 物理删该单关联的台账条目（真删 = 视为从未发生）
-    db.query(NarcoticsLedger).filter(
-        NarcoticsLedger.anesth_order_id == order_id
-    ).delete(synchronize_session=False)
+    # 仅历史麻醉单曾在开单时扣库；新流程麻醉单只收费，不做回库。
+    if (getattr(order, "inventory_mode", "legacy_order") or "legacy_order") != "monitor":
+        for it in order.items:
+            inv = db.get(InventoryItem, it.item_id) if it.item_id else None
+            if inv and not inv.is_service and not it.is_service and (it.total_qty or 0) > 0:
+                _restore_inventory(db, inv.id, it.total_qty, "anesthesia",
+                                   order_id, operator, f"删除麻醉单#{order_id}回库")
+        db.query(NarcoticsLedger).filter(
+            NarcoticsLedger.anesth_order_id == order_id
+        ).delete(synchronize_session=False)
     # 3) 删 order（cascade 删 items）
     db.delete(order)
     db.commit()
@@ -15627,22 +15611,23 @@ async def admin_anesth_void(order_id: int, request: Request, db: Session = Depen
         return RedirectResponse(f"/admin/anesthesia/{order_id}?msg=该单已作废", status_code=303)
     operator = request.session.get("admin_username", "admin")
     visit_id = order.visit_id
-    # 回库 + 反向台账
-    for it in order.items:
-        inv = db.get(InventoryItem, it.item_id) if it.item_id else None
-        if inv and not inv.is_service and not it.is_service and it.total_qty > 0:
-            _restore_inventory(db, inv.id, it.total_qty, "anesthesia",
-                               order_id, operator, f"作废麻醉单#{order_id}回库")
-        if inv and (inv.is_controlled or inv.subcategory == "controlled"):
-            _write_narcotics_ledger(
-                db, item_id=inv.id, item_name=it.drug_name,
-                direction="in", source="anesth_order",
-                qty=it.total_qty if it.total_qty > 0 else 1,
-                unit=it.total_unit or it.dose_unit,
-                operator=operator, cosigner=order.cosigner,
-                visit_id=order.visit_id, anesth_order_id=order.id,
-                store=order.store, notes=f"作废麻醉单#{order.id}回退",
-            )
+    # 仅兼容历史开单扣库记录；新流程实际给药记录独立存在，不随收费单作废回滚。
+    if (getattr(order, "inventory_mode", "legacy_order") or "legacy_order") != "monitor":
+        for it in order.items:
+            inv = db.get(InventoryItem, it.item_id) if it.item_id else None
+            if inv and not inv.is_service and not it.is_service and it.total_qty > 0:
+                _restore_inventory(db, inv.id, it.total_qty, "anesthesia",
+                                   order_id, operator, f"作废麻醉单#{order_id}回库")
+            if inv and (inv.is_controlled or inv.subcategory == "controlled"):
+                _write_narcotics_ledger(
+                    db, item_id=inv.id, item_name=it.drug_name,
+                    direction="in", source="anesth_order",
+                    qty=it.total_qty if it.total_qty > 0 else 1,
+                    unit=it.total_unit or it.dose_unit,
+                    operator=operator, cosigner=order.cosigner,
+                    visit_id=order.visit_id, anesth_order_id=order.id,
+                    store=order.store, notes=f"作废麻醉单#{order.id}回退",
+                )
     order.status = "voided"
     order.voided_by = operator
     order.voided_at = datetime.utcnow()
@@ -15687,6 +15672,40 @@ def _anmon_guard(request: Request, sheet: "AnesthesiaMonitorSheet") -> None:
         store_full = _STORE_SHORT_TO_FULL.get(store_short, "")
         if sheet.store not in (store_short, store_full):
             raise HTTPException(403, "无权查看其他门店的麻醉监护表")
+
+
+def _anmon_vial_remaining(vial: "AnesthesiaOpenVial") -> float:
+    return max(0.0, round(float(vial.opened_qty or 0) - float(vial.used_qty or 0)
+                          - float(vial.destroyed_qty or 0), 4))
+
+
+def _anmon_adjust_batch(batch: InventoryBatch | None, delta: float) -> None:
+    """同步具体批次余额；受管控药批次不允许形成负库存。"""
+    if not batch:
+        return
+    after = round(float(batch.quantity or 0) + float(delta or 0), 4)
+    if after < -1e-9:
+        raise HTTPException(400, f"批号 {batch.batch_no or batch.id} 库存不足，不能形成负库存")
+    batch.quantity = max(0.0, after)
+    batch.is_depleted = batch.quantity <= 1e-9
+
+
+def _anmon_inventory_candidates(db: Session, store: str) -> list[InventoryItem]:
+    """监护表只列实物麻醉/管控药，服务项目不进入实际给药。"""
+    q = db.query(InventoryItem).filter(
+        InventoryItem.is_active.is_(True),
+        InventoryItem.is_service.is_(False),
+        or_(
+            InventoryItem.is_controlled.is_(True),
+            InventoryItem.subcategory == "controlled",
+            InventoryItem.name.ilike("%麻醉%"),
+            InventoryItem.name.ilike("%丙泊酚%"),
+            InventoryItem.name.ilike("%异氟烷%"),
+        ),
+    )
+    if store:
+        q = q.filter(or_(InventoryItem.store == store, InventoryItem.store == ""))
+    return q.order_by(InventoryItem.name.asc()).all()
 
 
 def _anmon_entry_flag(species: str, e: "AnesthesiaMonitorEntry") -> dict:
@@ -15754,16 +15773,160 @@ async def m_anmon_detail(sheet_id: int, request: Request, db: Session = Depends(
     species = pet.species if pet else ""
     entries = list(sheet.entries)
     flags = {e.id: _anmon_entry_flag(species, e) for e in entries}
+    medication_events = db.query(AnesthesiaMedicationEvent).filter(
+        AnesthesiaMedicationEvent.sheet_id == sheet_id,
+    ).order_by(AnesthesiaMedicationEvent.administered_at.asc(), AnesthesiaMedicationEvent.id.asc()).all()
+    open_vials = db.query(AnesthesiaOpenVial).filter(
+        AnesthesiaOpenVial.store == sheet.store,
+        AnesthesiaOpenVial.opened_date == sheet.monitor_date,
+        AnesthesiaOpenVial.status == "open",
+    ).order_by(AnesthesiaOpenVial.opened_at.asc()).all()
+    open_vials = [v for v in open_vials if _anmon_vial_remaining(v) > 1e-9]
+    inventory_candidates = _anmon_inventory_candidates(db, sheet.store)
+    candidate_ids = [it.id for it in inventory_candidates]
+    batches = db.query(InventoryBatch).filter(
+        InventoryBatch.item_id.in_(candidate_ids),
+        InventoryBatch.is_depleted.is_(False),
+        InventoryBatch.quantity > 0,
+    ).order_by(InventoryBatch.expiry_date.asc(), InventoryBatch.id.asc()).all() if candidate_ids else []
 
     ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
         "sheet": sheet, "pet": pet, "cust": cust,
         "entries": entries, "flags": flags,
+        "medication_events": medication_events,
+        "open_vials": open_vials,
+        "vial_remaining": _anmon_vial_remaining,
+        "inventory_candidates": inventory_candidates,
+        "inventory_batches": batches,
         "depth_zh": _ANMON_DEPTH_ZH,
         "now_hhmm": _anmon_now().strftime("%H:%M"),
         "next_url": f"/m/anesthesia-monitor/{sheet_id}",
     })
     return templates.TemplateResponse(request, "m_uk/anesthesia_monitor.html", ctx)
+
+
+@app.post("/admin/anesthesia-monitor/{sheet_id}/open-vial")
+async def admin_anmon_open_vial(sheet_id: int, request: Request, db: Session = Depends(get_db),
+                                csrf_token: str = Form(""), next_url: str = Form(""),
+                                item_id: int = Form(0), batch_id: int = Form(0),
+                                opened_qty: float = Form(0.0), notes: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
+    if not sheet:
+        raise HTTPException(404)
+    _anmon_guard(request, sheet)
+    fb = f"/m/anesthesia-monitor/{sheet_id}#medication"
+    if sheet.status == "closed":
+        return RedirectResponse(_safe_next(next_url, fb + "?err=监护已结束，不可开瓶"), status_code=303)
+    inv = db.get(InventoryItem, item_id)
+    allowed = {it.id for it in _anmon_inventory_candidates(db, sheet.store)}
+    if not inv or inv.id not in allowed:
+        raise HTTPException(400, "请选择当前门店的麻醉/管控药品")
+    batch = db.get(InventoryBatch, batch_id) if batch_id else None
+    if batch and batch.item_id != inv.id:
+        raise HTTPException(400, "批号与药品不匹配")
+    active_batches = db.query(InventoryBatch).filter(
+        InventoryBatch.item_id == inv.id,
+        InventoryBatch.is_depleted.is_(False),
+        InventoryBatch.quantity > 0,
+    ).count()
+    if active_batches and not batch:
+        raise HTTPException(400, "该药品已有库存批次，开瓶时必须选择具体批号")
+    qty = float(opened_qty or 0)
+    if qty <= 0:
+        qty = float(inv.unit2_ratio or 1) if float(inv.unit2_ratio or 0) > 0 else 1.0
+    existing_remaining = sum(_anmon_vial_remaining(v) for v in db.query(AnesthesiaOpenVial).filter(
+        AnesthesiaOpenVial.store == sheet.store,
+        AnesthesiaOpenVial.item_id == inv.id,
+        AnesthesiaOpenVial.status == "open",
+    ).all())
+    if float(inv.stock_qty or 0) + 1e-9 < existing_remaining + qty:
+        raise HTTPException(400, f"{inv.name} 可开瓶库存不足：库存 {float(inv.stock_qty or 0):g}{inv.unit}，已开未用 {existing_remaining:g}{inv.unit}")
+    if batch:
+        batch_reserved = sum(_anmon_vial_remaining(v) for v in db.query(AnesthesiaOpenVial).filter(
+            AnesthesiaOpenVial.batch_id == batch.id,
+            AnesthesiaOpenVial.status == "open",
+        ).all())
+        if float(batch.quantity or 0) + 1e-9 < batch_reserved + qty:
+            raise HTTPException(400, f"批号 {batch.batch_no or batch.id} 可开瓶库存不足：批次余额 {float(batch.quantity or 0):g}{inv.unit}")
+    operator = request.session.get("admin_username", "admin")
+    db.add(AnesthesiaOpenVial(
+        item_id=inv.id, batch_id=(batch.id if batch else None), opened_sheet_id=sheet.id,
+        drug_name=inv.name, batch_no=(batch.batch_no if batch else _inventory_batch_no_for(db, inv.id)) or "",
+        manufacturer=(inv.manufacturer or inv.supplier or "")[:200],
+        opened_date=sheet.monitor_date or _anmon_now().strftime("%Y-%m-%d"),
+        opened_qty=round(qty, 4), unit=inv.unit or "",
+        status="open", store=sheet.store, opened_by=operator,
+        opened_at=_anmon_now(), notes=(notes or "").strip(),
+    ))
+    db.commit()
+    return RedirectResponse(_safe_next(next_url, f"/m/anesthesia-monitor/{sheet_id}?msg=已登记开瓶#medication"), status_code=303)
+
+
+@app.post("/admin/anesthesia-monitor/{sheet_id}/medication")
+async def admin_anmon_medication(sheet_id: int, request: Request, db: Session = Depends(get_db),
+                                 csrf_token: str = Form(""), next_url: str = Form(""),
+                                 open_vial_id: int = Form(0), qty: float = Form(0.0),
+                                 route: str = Form(""), time_hhmm: str = Form(""),
+                                 note: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
+    if not sheet:
+        raise HTTPException(404)
+    _anmon_guard(request, sheet)
+    if sheet.status == "closed":
+        raise HTTPException(400, "监护已结束，不可继续记录实际给药")
+    vial = db.get(AnesthesiaOpenVial, open_vial_id)
+    if not vial or vial.status != "open" or vial.store != sheet.store or vial.opened_date != sheet.monitor_date:
+        raise HTTPException(400, "请选择当天仍有余额的开瓶记录")
+    amount = round(float(qty or 0), 4)
+    if amount <= 0 or amount > _anmon_vial_remaining(vial) + 1e-9:
+        raise HTTPException(400, f"实际用量无效；当前开瓶余额 {_anmon_vial_remaining(vial):g}{vial.unit}")
+    inv = db.get(InventoryItem, vial.item_id) if vial.item_id else None
+    if not inv:
+        raise HTTPException(400, "对应库存品目已不存在")
+    rec = _anmon_now()
+    if (time_hhmm or "").strip():
+        try:
+            hh, mm = time_hhmm.strip().split(":")
+            rec = rec.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
+        except Exception:
+            pass
+    operator = request.session.get("admin_username", "admin")
+    event = AnesthesiaMedicationEvent(
+        sheet_id=sheet.id, open_vial_id=vial.id, item_id=inv.id,
+        event_type="administer", drug_name=vial.drug_name,
+        batch_no=vial.batch_no, manufacturer=vial.manufacturer,
+        qty=amount, unit=vial.unit, route=(route or "").strip()[:30],
+        administered_at=rec, operator=operator, review_status="pending",
+        note=(note or "").strip(), store=sheet.store,
+    )
+    db.add(event)
+    db.flush()
+    _deduct_inventory(db, inv.id, amount, "anesthesia_monitor", event.id, operator,
+                      f"监护表#{sheet.id}实际给药 · 开瓶#{vial.id}", respect_single_use_pack=False)
+    _anmon_adjust_batch(vial.inventory_batch, -amount)
+    vial.used_qty = round(float(vial.used_qty or 0) + amount, 4)
+    if _anmon_vial_remaining(vial) <= 1e-9:
+        vial.status = "closed"
+        vial.closed_at = _anmon_now()
+    ledger = _write_narcotics_ledger(
+        db, item_id=inv.id, item_name=vial.drug_name,
+        direction="out", source="monitor_admin", qty=amount, unit=vial.unit,
+        operator=operator, visit_id=sheet.visit_id, monitor_sheet_id=sheet.id,
+        medication_event_id=event.id, store=sheet.store,
+        event_date=sheet.monitor_date, batch_no=vial.batch_no,
+        manufacturer=vial.manufacturer,
+        notes=f"{route or '给药'} · 监护表#{sheet.id} · 开瓶#{vial.id} · 待复核",
+    )
+    db.flush()
+    event.ledger_id = ledger.id
+    sheet.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(_safe_next(next_url, f"/m/anesthesia-monitor/{sheet_id}?msg=实际给药已记录，待复核#medication"), status_code=303)
 
 
 @app.post("/admin/anesthesia-monitor/{sheet_id}/entry")
@@ -15901,6 +16064,200 @@ async def admin_anmon_pdf(sheet_id: int, request: Request, db: Session = Depends
     disp = "attachment" if download else "inline"
     return FileResponse(str(abs_path), media_type="application/pdf",
                         headers={"Content-Disposition": f"{disp}; filename*=UTF-8''{safe_name}"})
+
+
+@app.get("/admin/anesthesia-review", response_class=HTMLResponse)
+async def page_admin_anesthesia_review(request: Request, db: Session = Depends(get_db),
+                                       date: str = Query(""), store: str = Query("")):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    selected_date = date or _anmon_now().strftime("%Y-%m-%d")
+    is_superadmin = request.session.get("admin_role") == "superadmin"
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        scoped_store = admin_store
+    elif store == "all":
+        scoped_store = ""
+    else:
+        scoped_store = store or _get_op_store(request) or ""
+    event_q = db.query(AnesthesiaMedicationEvent).filter(
+        AnesthesiaMedicationEvent.review_status == "pending",
+        func.date(AnesthesiaMedicationEvent.administered_at) == selected_date,
+    )
+    vial_q = db.query(AnesthesiaOpenVial).filter(
+        AnesthesiaOpenVial.opened_date == selected_date,
+        AnesthesiaOpenVial.status == "open",
+    )
+    if scoped_store:
+        event_q = event_q.filter(AnesthesiaMedicationEvent.store == scoped_store)
+        vial_q = vial_q.filter(AnesthesiaOpenVial.store == scoped_store)
+    pending_events = event_q.order_by(AnesthesiaMedicationEvent.administered_at.asc()).all()
+    open_vials = [v for v in vial_q.order_by(AnesthesiaOpenVial.opened_at.asc()).all()
+                  if _anmon_vial_remaining(v) > 1e-9]
+    staff_names = [r[0] for r in db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"])
+    ).order_by(Staff.name.asc()).all()]
+    return templates.TemplateResponse(request, "uk/anesthesia_review.html", {
+        "pending_events": pending_events, "open_vials": open_vials,
+        "vial_remaining": _anmon_vial_remaining,
+        "selected_date": selected_date, "selected_store": scoped_store,
+        "is_superadmin": is_superadmin,
+        "staff_names": staff_names, "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"), "err": request.query_params.get("err"),
+    })
+
+
+@app.post("/admin/anesthesia-review/events")
+async def admin_anesthesia_review_events(request: Request, db: Session = Depends(get_db),
+                                         csrf_token: str = Form(""), date: str = Form(""),
+                                         store: str = Form(""),
+                                         event_ids: list[int] = Form([])):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    reviewer = request.session.get("admin_username", "admin")
+    if not event_ids:
+        raise HTTPException(400, "请至少选择一条实际给药记录")
+    rows = db.query(AnesthesiaMedicationEvent).filter(
+        AnesthesiaMedicationEvent.id.in_(event_ids),
+        AnesthesiaMedicationEvent.review_status == "pending",
+    ).all()
+    admin_store = _get_admin_store(request)
+    if admin_store and any(r.store != admin_store for r in rows):
+        raise HTTPException(403, "不能复核其他门店的记录")
+    own = [r for r in rows if r.operator == reviewer]
+    if own:
+        raise HTTPException(400, "复核人与实际给药记录人不能相同，请由另一名员工复核")
+    now = _anmon_now()
+    for row in rows:
+        row.review_status = "reviewed"
+        row.reviewed_by = reviewer
+        row.reviewed_at = now
+        if row.ledger_id:
+            ledger = db.get(NarcoticsLedger, row.ledger_id)
+            if ledger:
+                ledger.cosigner = reviewer
+                ledger.notes = (ledger.notes or "").replace(" · 待复核", "")
+    db.commit()
+    store_param = store if request.session.get("admin_role") == "superadmin" else ""
+    return RedirectResponse(f"/admin/anesthesia-review?date={quote(date or now.strftime('%Y-%m-%d'))}&store={quote(store_param)}&msg=已复核{len(rows)}条实际给药记录", status_code=303)
+
+
+@app.post("/admin/anesthesia/open-vials/{vial_id}/destroy")
+async def admin_anesthesia_destroy_residual(vial_id: int, request: Request, db: Session = Depends(get_db),
+                                            csrf_token: str = Form(""), qty: float = Form(0.0),
+                                            cosigner: str = Form(""), reason: str = Form(""),
+                                            store: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    vial = db.get(AnesthesiaOpenVial, vial_id)
+    if not vial or vial.status != "open":
+        raise HTTPException(404, "开瓶记录不存在或已结清")
+    admin_store = _get_admin_store(request)
+    if admin_store and vial.store != admin_store:
+        raise HTTPException(403, "不能处理其他门店的开瓶记录")
+    operator = request.session.get("admin_username", "admin")
+    cosigner = (cosigner or "").strip()[:80]
+    if not cosigner or cosigner == operator:
+        raise HTTPException(400, "残余销毁必须由另一名员工复核")
+    amount = round(float(qty or 0), 4)
+    remaining = _anmon_vial_remaining(vial)
+    if amount <= 0 or amount > remaining + 1e-9:
+        raise HTTPException(400, f"销毁量无效；当前剩余 {remaining:g}{vial.unit}")
+    sheet = db.get(AnesthesiaMonitorSheet, vial.opened_sheet_id) if vial.opened_sheet_id else None
+    if not sheet:
+        raise HTTPException(400, "开瓶记录缺少关联监护表")
+    inv = db.get(InventoryItem, vial.item_id) if vial.item_id else None
+    if not inv:
+        raise HTTPException(400, "对应库存品目已不存在")
+    now = _anmon_now()
+    event = AnesthesiaMedicationEvent(
+        sheet_id=sheet.id, open_vial_id=vial.id, item_id=inv.id,
+        event_type="destroy", drug_name=vial.drug_name, batch_no=vial.batch_no,
+        manufacturer=vial.manufacturer, qty=amount, unit=vial.unit,
+        route="残余销毁", administered_at=now, operator=operator,
+        review_status="reviewed", reviewed_by=cosigner, reviewed_at=now,
+        note=(reason or "当日开瓶残余销毁").strip(), store=vial.store,
+    )
+    db.add(event)
+    db.flush()
+    _deduct_inventory(db, inv.id, amount, "anesthesia_destroy", event.id, operator,
+                      f"开瓶#{vial.id}当日残余销毁", respect_single_use_pack=False)
+    _anmon_adjust_batch(vial.inventory_batch, -amount)
+    vial.destroyed_qty = round(float(vial.destroyed_qty or 0) + amount, 4)
+    if _anmon_vial_remaining(vial) <= 1e-9:
+        vial.status = "closed"
+        vial.closed_at = now
+    ledger = _write_narcotics_ledger(
+        db, item_id=inv.id, item_name=vial.drug_name,
+        direction="loss", source="residual_destroy", qty=amount, unit=vial.unit,
+        operator=operator, cosigner=cosigner, visit_id=sheet.visit_id,
+        monitor_sheet_id=sheet.id, medication_event_id=event.id,
+        store=vial.store, event_date=vial.opened_date, batch_no=vial.batch_no,
+        manufacturer=vial.manufacturer,
+        notes=f"开瓶#{vial.id} · {(reason or '当日开瓶残余销毁').strip()}",
+    )
+    db.flush()
+    event.ledger_id = ledger.id
+    db.commit()
+    store_param = store if request.session.get("admin_role") == "superadmin" else ""
+    return RedirectResponse(
+        f"/admin/anesthesia-review?date={quote(vial.opened_date)}&store={quote(store_param)}&msg=残余销毁已登记",
+        status_code=303,
+    )
+
+
+@app.post("/admin/anesthesia-medication-events/{event_id}/void")
+async def admin_anesthesia_medication_event_void(event_id: int, request: Request,
+                                                  db: Session = Depends(get_db),
+                                                  csrf_token: str = Form(""), reason: str = Form("")):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    event = db.get(AnesthesiaMedicationEvent, event_id)
+    if not event or event.event_type != "administer" or event.review_status == "voided":
+        raise HTTPException(404, "实际给药记录不存在或已更正")
+    operator = request.session.get("admin_username", "admin")
+    if event.review_status == "reviewed" and request.session.get("admin_role") != "superadmin":
+        raise HTTPException(403, "已复核记录仅超级管理员可更正")
+    admin_store = _get_admin_store(request)
+    if admin_store and event.store != admin_store:
+        raise HTTPException(403)
+    inv = db.get(InventoryItem, event.item_id) if event.item_id else None
+    vial = db.get(AnesthesiaOpenVial, event.open_vial_id) if event.open_vial_id else None
+    if not inv or not vial:
+        raise HTTPException(400, "原库存或开瓶记录不存在，不能自动更正")
+    _restore_inventory(db, inv.id, event.qty, "anesthesia_monitor_reversal", event.id, operator,
+                       f"更正实际给药#{event.id} · {(reason or '').strip()}", respect_single_use_pack=False)
+    _anmon_adjust_batch(vial.inventory_batch, float(event.qty or 0))
+    vial.used_qty = max(0.0, round(float(vial.used_qty or 0) - float(event.qty or 0), 4))
+    vial.status = "open"
+    vial.closed_at = None
+    event.review_status = "voided"
+    event.reviewed_by = operator
+    event.reviewed_at = _anmon_now()
+    event.note = ((event.note or "") + f"\n更正：{(reason or '录入错误').strip()}").strip()
+    reversal = AnesthesiaMedicationEvent(
+        sheet_id=event.sheet_id, open_vial_id=vial.id, item_id=inv.id,
+        event_type="reversal", drug_name=event.drug_name, batch_no=event.batch_no,
+        manufacturer=event.manufacturer, qty=event.qty, unit=event.unit,
+        route="更正回库", administered_at=_anmon_now(), operator=operator,
+        review_status="reviewed", reviewed_by=operator, reviewed_at=_anmon_now(),
+        note=f"冲销实际给药#{event.id} · {(reason or '录入错误').strip()}", store=event.store,
+    )
+    db.add(reversal)
+    db.flush()
+    ledger = _write_narcotics_ledger(
+        db, item_id=inv.id, item_name=event.drug_name,
+        direction="in", source="monitor_reversal", qty=event.qty, unit=event.unit,
+        operator=operator, cosigner=operator, visit_id=event.sheet.visit_id,
+        monitor_sheet_id=event.sheet_id, medication_event_id=reversal.id,
+        store=event.store, event_date=event.sheet.monitor_date,
+        batch_no=event.batch_no, manufacturer=event.manufacturer,
+        notes=f"冲销实际给药#{event.id}",
+    )
+    db.flush()
+    reversal.ledger_id = ledger.id
+    db.commit()
+    return RedirectResponse(f"/m/anesthesia-monitor/{event.sheet_id}?msg=实际给药记录已更正#medication", status_code=303)
 
 
 # ─── 麻醉/管控药台账 ─────────────────────────────────────────────
@@ -16041,14 +16398,16 @@ async def admin_narcotics_export(
     wb = Workbook()
     ws = wb.active
     ws.title = "麻醉管控药台账"
-    headers = ["日期", "药品", "批号", "生产企业", "方向", "来源", "数量", "单位", "余额", "经办人", "复核人", "门店", "关联病例", "关联麻醉单", "备注"]
+    headers = ["日期", "药品", "批号", "生产企业", "方向", "来源", "数量", "单位", "余额", "经办人", "复核人", "门店", "关联病例", "关联麻醉单", "关联监护表", "备注"]
     ws.append(headers)
     for c in ws[1]:
         c.font = Font(bold=True)
         c.alignment = Alignment(horizontal="center")
     _DIR = {"in": "入", "out": "出", "loss": "损耗"}
-    _SRC = {"anesth_order": "麻醉单", "manual_refill": "手动补充",
-            "manual_consume": "手动消耗", "stocktake": "盘点", "loss": "损耗"}
+    _SRC = {"anesth_order": "麻醉单", "monitor_admin": "监护实际给药",
+            "residual_destroy": "开瓶余量销毁", "monitor_reversal": "实际给药更正",
+            "manual_refill": "手动补充", "manual_consume": "手动消耗",
+            "stocktake": "盘点", "loss": "损耗"}
     for r in rows:
         ws.append([
             r.event_date, r.item_name, r.batch_no or "",
@@ -16056,9 +16415,9 @@ async def admin_narcotics_export(
             _DIR.get(r.direction, r.direction),
             _SRC.get(r.source, r.source), r.qty, r.unit, max(0, r.balance_after or 0),
             r.operator, r.cosigner, r.store,
-            r.visit_id or "", r.anesth_order_id or "", r.notes or "",
+            r.visit_id or "", r.anesth_order_id or "", r.monitor_sheet_id or "", r.notes or "",
         ])
-    for col in "ABCDEFGHIJKLMNO":
+    for col in "ABCDEFGHIJKLMNOP":
         ws.column_dimensions[col].width = 14
     import io
     buf = io.BytesIO()

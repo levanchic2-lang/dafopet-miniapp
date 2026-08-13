@@ -36,6 +36,7 @@ from app.models import (
     Customer, Pet,
     RabiesVaccineRecord,
     ExamOrder, ExamReport,
+    AnesthesiaMedicationEvent, AnesthesiaOpenVial,
 )
 
 _STORE_SHORT_TO_FULL = {
@@ -223,6 +224,49 @@ def build_consent_pending(db: Session, store_short: str) -> dict:
         "count": len(rows), "previews": items,
         "all_url": "/admin/consent-tasks?status=pending",
         "tone": "danger",
+    }
+
+
+def build_anesthesia_review(db: Session, store_short: str) -> dict:
+    """麻醉复核：今天及以前仍未完成的给药复核和开瓶结清。"""
+    today = _today_str()
+    event_q = db.query(AnesthesiaMedicationEvent).filter(
+        AnesthesiaMedicationEvent.review_status == "pending",
+        func.date(AnesthesiaMedicationEvent.administered_at) <= today,
+    )
+    vial_q = db.query(AnesthesiaOpenVial).filter(
+        AnesthesiaOpenVial.opened_date <= today,
+        AnesthesiaOpenVial.status == "open",
+        AnesthesiaOpenVial.opened_qty > (
+            func.coalesce(AnesthesiaOpenVial.used_qty, 0)
+            + func.coalesce(AnesthesiaOpenVial.destroyed_qty, 0)
+        ),
+    )
+    if store_short:
+        event_q = event_q.filter(AnesthesiaMedicationEvent.store == store_short)
+        vial_q = vial_q.filter(AnesthesiaOpenVial.store == store_short)
+    events = event_q.order_by(AnesthesiaMedicationEvent.administered_at.asc()).all()
+    vials = vial_q.order_by(AnesthesiaOpenVial.opened_at.asc()).all()
+    previews = []
+    for e in events[:2]:
+        pet_name = e.sheet.pet.name if e.sheet and e.sheet.pet else "宠物"
+        previews.append({
+            "label": f"{pet_name} · {e.drug_name}",
+            "sub": f"{e.administered_at.strftime('%m-%d %H:%M')} · {e.qty:g}{e.unit} · {e.operator or '—'}",
+            "url": f"/m/anesthesia-monitor/{e.sheet_id}",
+        })
+    if len(previews) < 3:
+        for v in vials[:3 - len(previews)]:
+            remain = max(0.0, float(v.opened_qty or 0) - float(v.used_qty or 0) - float(v.destroyed_qty or 0))
+            previews.append({
+                "label": f"开瓶余量 · {v.drug_name}",
+                "sub": f"{v.opened_date} · 剩余 {remain:g}{v.unit} · {v.opened_by or '—'}",
+                "url": f"/admin/anesthesia-review?date={v.opened_date}",
+            })
+    return {
+        "key": "anesthesia_review", "title": "麻醉复核", "icon": "clipboard-check",
+        "count": len(events) + len(vials), "previews": previews,
+        "all_url": f"/admin/anesthesia-review?date={today}", "tone": "danger",
     }
 
 
@@ -652,6 +696,7 @@ def build_workbench(db: Session, store_short: str = "") -> dict:
         build_followup_today(db, store_short),
         build_exam_report_pending(db, store_short),
         build_consent_pending(db, store_short),
+        build_anesthesia_review(db, store_short),
         build_rabies_pending(db, store_short),
         build_invoice_unpaid(db, store_short),
         build_tnr_pending(db, store_short),
