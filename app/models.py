@@ -1891,6 +1891,13 @@ class UltrasoundReport(Base):
     advice:         Mapped[str] = mapped_column(Text, default="")          # 建议
     photos_json:    Mapped[str] = mapped_column(Text, default="[]")        # ["ultrasound_photos/<id>/xxx.jpg", ...]
 
+    # AI/PDF recognition runs after the upload request has returned.  Keeping
+    # the state on the report makes failures visible and allows safe retries.
+    ai_status:      Mapped[str] = mapped_column(String(20), default="idle")
+    ai_error:       Mapped[str] = mapped_column(Text, default="")
+    ai_started_at   = mapped_column(DateTime, nullable=True, default=None)
+    ai_completed_at = mapped_column(DateTime, nullable=True, default=None)
+
     store:          Mapped[str] = mapped_column(String(40), default="", index=True)
     operator:       Mapped[str] = mapped_column(String(80), default="")
     created_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

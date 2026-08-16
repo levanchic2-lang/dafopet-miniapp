@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 from urllib.parse import quote
 
-from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from passlib.context import CryptContext
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -24980,8 +24980,91 @@ async def page_admin_ultrasound_new(order_id: int, request: Request, db: Session
     })
 
 
+async def _process_ultrasound_report_ai(report_id: int) -> None:
+    """Extract and draft a report outside the upload request/NGINX timeout."""
+    from app.database import SessionLocal
+    from app.services.ultrasound_report import (
+        draft_ultrasound_text,
+        extract_pdf_text,
+        structure_measurements,
+    )
+
+    db = SessionLocal()
+    try:
+        report = db.get(UltrasoundReport, report_id)
+        if not report:
+            return
+        report.ai_status = "processing"
+        report.ai_error = ""
+        report.ai_started_at = datetime.utcnow()
+        report.ai_completed_at = None
+        db.commit()
+
+        pet = db.get(Pet, report.pet_id) if report.pet_id else None
+        groups: list = []
+        parse_error = ""
+        if report.raw_pdf_path:
+            pdf_path = Path("uploads") / report.raw_pdf_path
+            raw_text = extract_pdf_text(pdf_path)
+            sres = await structure_measurements(raw_text, report.exam_type or "cardiac")
+            if sres.get("ok"):
+                groups = sres.get("groups") or []
+                report.measurements_json = json.dumps(groups, ensure_ascii=False)
+                if not report.device and sres.get("device"):
+                    report.device = str(sres.get("device") or "").strip()[:120]
+                db.commit()  # Make recovered measurements visible before drafting.
+            else:
+                parse_error = str(sres.get("error") or "PDF测量数据未能识别")
+        elif not (report.vet_findings or "").strip():
+            parse_error = "没有可识别的测量PDF或医生主观描述"
+
+        if parse_error and not (report.vet_findings or "").strip():
+            report.ai_status = "failed"
+            report.ai_error = parse_error
+            report.ai_completed_at = datetime.utcnow()
+            db.commit()
+            return
+
+        payload = {
+            "exam_type": report.exam_type,
+            "item_label": report.item_label,
+            "device": report.device,
+            "groups": groups,
+            "vet_findings": report.vet_findings,
+            **_us_pet_payload(pet),
+        }
+        dres = await draft_ultrasound_text(payload)
+        if dres.get("ok"):
+            report.findings = dres.get("findings", "")
+            report.conclusion = dres.get("conclusion", "")
+            report.advice = dres.get("advice", "")
+            report.ai_status = "completed" if not parse_error else "partial"
+            report.ai_error = parse_error
+        else:
+            report.ai_status = "partial" if groups else "failed"
+            report.ai_error = str(dres.get("error") or "AI文字稿生成失败")
+        report.ai_completed_at = datetime.utcnow()
+        db.commit()
+    except Exception as exc:
+        logger.exception("[ultrasound] background processing failed for report %s", report_id)
+        db.rollback()
+        report = db.get(UltrasoundReport, report_id)
+        if report:
+            report.ai_status = "failed"
+            report.ai_error = str(exc)[:1000]
+            report.ai_completed_at = datetime.utcnow()
+            db.commit()
+    finally:
+        db.close()
+
+
 @app.post("/admin/exam-orders/{order_id}/ultrasound/create")
-async def admin_ultrasound_create(order_id: int, request: Request, db: Session = Depends(get_db)):
+async def admin_ultrasound_create(
+    order_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     require_admin(request)
     order = db.get(ExamOrder, order_id)
     if not order:
@@ -25050,43 +25133,64 @@ async def admin_ultrasound_create(order_id: int, request: Request, db: Session =
 
     report.raw_pdf_path = raw_pdf_path
     report.photos_json = json.dumps(saved_photos, ensure_ascii=False)
-
-    # 解析 PDF 测量值 → 结构化
-    warn = ""
-    from app.services.ultrasound_report import (
-        extract_pdf_text, structure_measurements, draft_ultrasound_text,
-    )
-    groups: list = []
-    if raw_pdf_path:
-        raw_text = extract_pdf_text(upload_dir / Path(raw_pdf_path).name)
-        sres = await structure_measurements(raw_text, exam_type)
-        if sres.get("ok"):
-            groups = sres.get("groups") or []
-            # 医生没手填设备时，用 PDF 里识别出的设备/探头自动填充
-            if not device and sres.get("device"):
-                device = str(sres.get("device") or "").strip()[:120]
-                report.device = device
-        else:
-            warn += f" 测量解析未成功（{sres.get('error', '')}），可在编辑页手动补录。"
-    report.measurements_json = json.dumps(groups, ensure_ascii=False)
-
-    # AI 生成所见/结论/建议
-    payload = {
-        "exam_type": exam_type, "item_label": item_label, "device": device,
-        "groups": groups, "vet_findings": vet_findings,
-        **_us_pet_payload(pet),
-    }
-    dres = await draft_ultrasound_text(payload)
-    if dres.get("ok"):
-        report.findings = dres.get("findings", "")
-        report.conclusion = dres.get("conclusion", "")
-        report.advice = dres.get("advice", "")
-    else:
-        warn += f" AI 文字稿生成未成功（{dres.get('error', '')}），可在编辑页手动填写或重试。"
-
+    report.ai_status = "processing"
+    report.ai_error = ""
+    report.ai_started_at = datetime.utcnow()
     db.commit()
-    msg = "B超报告草稿已生成，请核对后保存出 PDF。" + warn
+    background_tasks.add_task(_process_ultrasound_report_ai, report.id)
+    msg = "原始资料已保存，系统正在后台识别测量数据并生成文字稿。"
     return RedirectResponse(f"/admin/ultrasound-reports/{report.id}/edit?msg={msg}", status_code=303)
+
+
+@app.post("/admin/ultrasound-reports/{report_id}/retry-ai")
+async def admin_ultrasound_retry_ai(
+    report_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    report = db.get(UltrasoundReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    if report.ai_status == "processing":
+        return JSONResponse({"ok": True, "status": "processing"})
+    if not report.raw_pdf_path and not (report.vet_findings or "").strip():
+        return JSONResponse({"ok": False, "error": "没有可重新识别的原始PDF或医生描述"}, status_code=400)
+    report.ai_status = "processing"
+    report.ai_error = ""
+    report.ai_started_at = datetime.utcnow()
+    report.ai_completed_at = None
+    db.commit()
+    background_tasks.add_task(_process_ultrasound_report_ai, report.id)
+    return JSONResponse({"ok": True, "status": "processing"})
+
+
+@app.get("/admin/ultrasound-reports/{report_id}/ai-status")
+async def admin_ultrasound_ai_status(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    report = db.get(UltrasoundReport, report_id)
+    if not report:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    try:
+        groups = json.loads(report.measurements_json or "[]") or []
+    except Exception:
+        groups = []
+    return JSONResponse({
+        "ok": True,
+        "status": report.ai_status or "idle",
+        "error": report.ai_error or "",
+        "group_count": len(groups),
+        "updated_at": report.updated_at.isoformat() if report.updated_at else "",
+    })
 
 
 @app.get("/admin/ultrasound-reports/{report_id}/edit", response_class=HTMLResponse)

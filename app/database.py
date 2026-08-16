@@ -1132,6 +1132,10 @@ def _try_sqlite_migrations() -> None:
                 "conclusion TEXT DEFAULT '', "
                 "advice TEXT DEFAULT '', "
                 "photos_json TEXT DEFAULT '[]', "
+                "ai_status VARCHAR(20) DEFAULT 'idle', "
+                "ai_error TEXT DEFAULT '', "
+                "ai_started_at DATETIME, "
+                "ai_completed_at DATETIME, "
                 "store VARCHAR(40) DEFAULT '', "
                 "operator VARCHAR(80) DEFAULT '', "
                 "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
@@ -1140,6 +1144,15 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_us_order ON ultrasound_reports(exam_order_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_us_store ON ultrasound_reports(store)"))
+            us_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(ultrasound_reports)")).fetchall()}
+            if "ai_status" not in us_cols:
+                conn.execute(text("ALTER TABLE ultrasound_reports ADD COLUMN ai_status VARCHAR(20) DEFAULT 'idle'"))
+            if "ai_error" not in us_cols:
+                conn.execute(text("ALTER TABLE ultrasound_reports ADD COLUMN ai_error TEXT DEFAULT ''"))
+            if "ai_started_at" not in us_cols:
+                conn.execute(text("ALTER TABLE ultrasound_reports ADD COLUMN ai_started_at DATETIME"))
+            if "ai_completed_at" not in us_cols:
+                conn.execute(text("ALTER TABLE ultrasound_reports ADD COLUMN ai_completed_at DATETIME"))
 
             # xray_reports：X光/放射报告（胸/腹/肌骨/关节，医生读片 + AI 帮写）
             conn.execute(text(

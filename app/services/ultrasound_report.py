@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,82 @@ def _strip_md(raw: str) -> str:
     return raw
 
 
+_LOCAL_SECTION_RE = re.compile(r"(?:2D|M|Doppler|PW|CW|组织多普勒|频谱|血流|测量).{0,16}(?:测量|参数)?", re.I)
+_LOCAL_VALUE_RE = re.compile(
+    r"(?P<name>[A-Za-z][A-Za-z0-9_()'./+\- ]{0,38}|[\u4e00-\u9fff][^:\n]{0,28}?)"
+    r"\s*[:：]\s*"
+    r"(?P<value>-?\d+(?:\.\d+)?(?:\s*/\s*-?\d+(?:\.\d+)?)?)"
+    r"\s*(?P<unit>cm/s|m/s|mmHg|mm/s|cm|mm|mL|ml|uL|μL|kg|g|bpm|ms|s|Hz|%)?",
+    re.I,
+)
+_LOCAL_METADATA_NAMES = (
+    "日期", "时间", "姓名", "病历", "动物", "年龄", "性别", "电话", "医院",
+    "检查号", "报告号", "page", "patient", "owner", "doctor", "operator",
+)
+
+
+def parse_measurements_locally(raw_text: str) -> dict[str, Any]:
+    """Parse common machine-exported ``name:value unit`` measurements.
+
+    This is intentionally schema-free: different cardiac/abdominal machines
+    can expose different fields.  It is a deterministic fallback for the
+    frequent case where the text model returns an empty or invalid response.
+    """
+    text = (raw_text or "").replace("\r", "\n")
+    lines = [re.sub(r"\s+", " ", line).strip() for line in text.split("\n")]
+    device = ""
+    for line in lines:
+        match = re.search(r"(?:产品型号|设备型号|机型|Model|Device)\s*[:：]\s*([^\s,，;；]{2,80})", line, re.I)
+        if match:
+            device = match.group(1).strip()[:120]
+            break
+
+    groups: list[dict[str, Any]] = []
+    by_name: dict[str, dict[str, Any]] = {}
+    section = "测量数据"
+    def target(name: str) -> dict[str, Any]:
+        if name not in by_name:
+            entry = {"group": name[:120], "rows": []}
+            by_name[name] = entry
+            groups.append(entry)
+        return by_name[name]
+
+    for line in lines:
+        if not line:
+            continue
+        if _LOCAL_SECTION_RE.fullmatch(line) or (
+            _LOCAL_SECTION_RE.search(line) and ":" not in line and "：" not in line and not re.search(r"\d", line)
+        ):
+            section = line[:120]
+            continue
+        matches = list(_LOCAL_VALUE_RE.finditer(line))
+        if not matches:
+            continue
+        accepted = []
+        for match in matches:
+            name = re.sub(r"\s+", " ", match.group("name")).strip(" -·")
+            if not name or any(word.lower() in name.lower() for word in _LOCAL_METADATA_NAMES):
+                continue
+            value = re.sub(r"\s+", "", match.group("value"))
+            unit = (match.group("unit") or "").strip()
+            accepted.append({"name": name[:80], "value": value[:40], "unit": unit[:20]})
+        if accepted:
+            target(section)["rows"].extend(accepted)
+
+    # De-duplicate repeated page headers/measurement blocks while preserving order.
+    for group in groups:
+        seen = set()
+        rows = []
+        for row in group["rows"]:
+            key = (row["name"].lower(), row["value"], row["unit"].lower())
+            if key not in seen:
+                seen.add(key)
+                rows.append(row)
+        group["rows"] = rows
+    groups = [g for g in groups if g["rows"]]
+    return {"ok": bool(groups), "groups": groups, "device": device, "source": "local"}
+
+
 _STRUCT_SYSTEM = """你是宠物医院超声测量数据整理助手。
 任务：把超声机导出的测量数据文本，整理成「分组」结构的 JSON，并顺带识别设备/探头信息。测量项目不固定，原文有多少就整理多少，不要增删、不要编造数值。
 
@@ -86,6 +163,10 @@ _STRUCT_SYSTEM = """你是宠物医院超声测量数据整理助手。
 
 async def structure_measurements(raw_text: str, exam_type: str = "cardiac") -> dict[str, Any]:
     """杂乱 PDF 文字 → 动态分组测量 JSON。返回 {ok, groups, error?}"""
+    local = parse_measurements_locally(raw_text)
+    if local.get("ok"):
+        return local
+
     from app.services.report_llm import report_llm_configured, report_text_client_model
     if not report_llm_configured():
         return {"ok": False, "groups": [], "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}
@@ -96,7 +177,7 @@ async def structure_measurements(raw_text: str, exam_type: str = "cardiac") -> d
     except ImportError:
         return {"ok": False, "groups": [], "error": "缺少 openai 库"}
 
-    user = f"【检查类型】{_EXAM_TYPE_LABEL.get(exam_type, '通用超声')}\n\n【机器导出测量文本】\n{raw_text[:8000]}"
+    user = f"【检查类型】{_EXAM_TYPE_LABEL.get(exam_type, '通用超声')}\n\n【机器导出测量文本】\n{raw_text[:24000]}"
     client, model, _, is_reasoner = report_text_client_model()
     try:
         resp = await client.chat.completions.create(
@@ -208,6 +289,11 @@ def _format_draft_payload(payload: dict) -> str:
 
 async def draft_ultrasound_text(payload: dict) -> dict[str, Any]:
     """生成超声所见/结论/建议三段。返回 {ok, findings, conclusion, advice, error?}"""
+    if not (payload.get("groups") or []) and not (payload.get("vet_findings") or "").strip():
+        return {
+            "ok": False,
+            "error": "缺少可用测量数据和医生主观描述，已停止生成，避免产生误导性正文",
+        }
     from app.services.report_llm import report_llm_configured, report_text_client_model
     if not report_llm_configured():
         return {"ok": False, "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}

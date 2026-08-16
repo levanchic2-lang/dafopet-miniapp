@@ -15,6 +15,12 @@
   .us-meta .sep { margin:0 8px; color:var(--ink-4); }
 
   .us-msg { background:#f3f6f3; border-left:3px solid #1d4d3a; padding:10px 14px; font-size:10pt; color:var(--ink-2); margin-bottom:18px; line-height:1.6; }
+  .us-job { border:0.5px solid var(--hair); border-left:3px solid var(--ink-3); padding:11px 14px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; gap:16px; font-size:10pt; line-height:1.6; }
+  .us-job.processing { background:#fffaf0; border-left-color:var(--accent-amber); }
+  .us-job.completed { background:#f3f6f3; border-left-color:var(--accent-green); }
+  .us-job.partial, .us-job.failed { background:#fff4f1; border-left-color:var(--accent-red); }
+  .us-job strong { display:block; color:var(--ink); margin-bottom:2px; }
+  .us-job-error { color:var(--accent-red); word-break:break-word; }
 
   .us-card { background:var(--paper); border:0.5px solid var(--hair); padding:22px 24px; margin-bottom:18px; }
   .us-card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:6px; border-bottom:0.5px solid var(--hair); }
@@ -69,6 +75,25 @@
 </div>
 
 {% if msg %}<div class="us-msg">{{ msg }}</div>{% endif %}
+
+<div id="us-job" class="us-job {{ report.ai_status or 'idle' }}">
+  <div>
+    <strong id="us-job-title">
+      {% if report.ai_status == 'processing' %}正在后台识别原始PDF并生成文字稿
+      {% elif report.ai_status == 'completed' %}识别与文字稿已完成
+      {% elif report.ai_status == 'partial' %}测量数据已保留，文字稿需要重试
+      {% elif report.ai_status == 'failed' %}识别未完成
+      {% else %}原始资料识别状态{% endif %}
+    </strong>
+    <span id="us-job-detail">
+      {% if report.ai_status == 'processing' %}可以停留本页等待，也可以先离开；原始资料已经保存，不会丢失。
+      {% elif report.ai_error %}<span class="us-job-error">{{ report.ai_error }}</span>
+      {% elif groups %}已识别 {{ groups|length }} 组测量数据，请医生核对后保存。
+      {% else %}尚未识别到测量数据，可重新识别原始PDF。{% endif %}
+    </span>
+  </div>
+  <button type="button" class="us-btn-sm" id="retry-ai-btn" onclick="retryOriginalPdf()" {% if report.ai_status == 'processing' %}disabled{% endif %}>重新识别原PDF</button>
+</div>
 
 <form method="post" action="/admin/ultrasound-reports/{{ report.id }}/save" id="us-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -155,6 +180,8 @@
 <script>
 const INIT_GROUPS = {{ groups | tojson }};
 const REPORT_ID = {{ report.id }};
+const CSRF_TOKEN = {{ csrf_token | tojson }};
+let formDirty = false;
 
 function rowHtml(r) {
   r = r || {name:'', value:'', unit:''};
@@ -267,7 +294,65 @@ async function reDraft() {
   }
 }
 
+function setJobState(status, error, groupCount) {
+  const box = document.getElementById('us-job');
+  const title = document.getElementById('us-job-title');
+  const detail = document.getElementById('us-job-detail');
+  const retry = document.getElementById('retry-ai-btn');
+  box.className = 'us-job ' + status;
+  retry.disabled = status === 'processing';
+  if (status === 'processing') {
+    title.textContent = '正在后台识别原始PDF并生成文字稿';
+    detail.textContent = '原始资料已经保存，不会丢失；完成后本页会自动更新。';
+  } else if (status === 'completed') {
+    title.textContent = '识别与文字稿已完成';
+    detail.textContent = formDirty ? '已完成。当前页面有未保存修改，请手动刷新后核对。' : `已识别 ${groupCount || 0} 组测量数据，正在刷新页面。`;
+  } else if (status === 'partial') {
+    title.textContent = '测量数据已保留，文字稿需要重试';
+    detail.textContent = error || '测量数据已经保留，可重试文字稿。';
+  } else if (status === 'failed') {
+    title.textContent = '识别未完成';
+    detail.textContent = error || '识别失败，可点击重新识别。';
+  }
+}
+
+async function retryOriginalPdf() {
+  const btn = document.getElementById('retry-ai-btn');
+  btn.disabled = true;
+  const body = new FormData();
+  body.append('csrf_token', CSRF_TOKEN);
+  try {
+    const resp = await fetch(`/admin/ultrasound-reports/${REPORT_ID}/retry-ai`, {method:'POST', body});
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) throw new Error(data.error || '启动失败');
+    setJobState('processing', '', 0);
+    pollAiStatus();
+  } catch (e) {
+    setJobState('failed', String(e), 0);
+  }
+}
+
+let pollTimer = null;
+async function pollAiStatus() {
+  clearTimeout(pollTimer);
+  try {
+    const resp = await fetch(`/admin/ultrasound-reports/${REPORT_ID}/ai-status`, {cache:'no-store'});
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) throw new Error(data.error || '读取状态失败');
+    setJobState(data.status, data.error, data.group_count);
+    if (data.status === 'processing') {
+      pollTimer = setTimeout(pollAiStatus, 2500);
+    } else if ((data.status === 'completed' || data.status === 'partial') && !formDirty) {
+      window.location.reload();
+    }
+  } catch (e) {
+    pollTimer = setTimeout(pollAiStatus, 5000);
+  }
+}
+
 renderGroups(INIT_GROUPS);
+document.getElementById('us-form').addEventListener('input', () => { formDirty = true; });
+{% if report.ai_status == 'processing' %}pollAiStatus();{% endif %}
 </script>
 
 {% endblock %}
