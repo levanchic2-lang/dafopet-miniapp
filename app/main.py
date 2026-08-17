@@ -6598,10 +6598,12 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
                 _appt_pet_id = _maybe_pet_id
         except (TypeError, ValueError):
             pass
+    # 小程序已经完成门店开关、时段容量和冲突校验，提交成功即代表门店可接诊。
+    # 因此客户预约直接确认，不再要求后台重复点击“确认”。
     row = Appointment(
         wechat_openid=openid,
         category=str(fields["category"]),
-        status=AppointmentStatus.pending.value,
+        status=AppointmentStatus.confirmed.value,
         service_name=str(fields["service_name"]),
         customer_name=str(fields["customer_name"]),
         phone=str(fields["phone"]),
@@ -6625,8 +6627,36 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
         pet_id=_appt_pet_id,
     )
     db.add(row)
+    # TNR 预约原先在后台点击“确认”时才推进申请状态；自动确认后需在这里同步。
+    if related_id:
+        app_row = db.get(Application, related_id)
+        if app_row and app_row.status in (
+            ApplicationStatus.approved.value,
+            ApplicationStatus.pre_approved.value,
+        ):
+            app_row.status = ApplicationStatus.scheduled.value
+            app_row.appointment_at = str(fields["appointment_date"])
+            app_row.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(row)
+    # 保留原来后台确认后发送给客户的订阅通知。
+    try:
+        if openid:
+            push_appointment_status(
+                db,
+                appointment_id=row.id,
+                openid=openid,
+                status_text="已确认，请按约定时间到院",
+                service_name=row.service_name or "",
+                store=row.store or "",
+                appointment_date=row.appointment_date or "",
+                appointment_time=row.appointment_time or "",
+                phone=row.phone or "",
+                customer_name=row.customer_name or "",
+                note="预约已自动确认，请按约定时间到院",
+            )
+    except Exception as _e:
+        logger.warning("[wechat] auto-confirm appointment push failed: %s", _e)
     # 推送给对应门店员工
     try:
         from app.services import wecom_notify as _wn
