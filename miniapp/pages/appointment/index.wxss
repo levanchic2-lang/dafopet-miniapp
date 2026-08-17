@@ -139,6 +139,10 @@
   border-color: #e0e0e0;
 }
 
+.picker-placeholder {
+  color: #8a8a8a;
+}
+
 /* ── 美容附加服务 ── */
 .addon-list {
   display: flex;

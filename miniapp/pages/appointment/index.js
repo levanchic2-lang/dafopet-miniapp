@@ -40,7 +40,7 @@ Page({
     timeRangeEnd: "",
     categoryIndex: 0,
     serviceIndex: 0,
-    storeIndex: 0,
+    storeIndex: -1,
     petGenderIndex: 0,
     // 代预约
     proxyRelations: [
@@ -226,7 +226,8 @@ Page({
       const firstCategory = categories[0] || { value: "", services: [], time_slots: [] };
       const serviceOptions = Array.isArray(firstCategory.services) ? firstCategory.services : [];
       const firstService  = serviceOptions[0] || { name: "", duration_minutes: 30 };
-      const firstStore    = stores[0] || "";
+      let initialStoreIndex = -1;
+      let initialStore = "";
       const firstGender   = petGenders[0] || { value: "unknown" };
       const startDate     = bookingWindow.start_date || todayString();
       const timeRange     = firstCategory.time_range || {};
@@ -235,6 +236,13 @@ Page({
         timeRange.start || firstService.default_time || "13:00";
 
       const isBeauty = firstCategory.value === "beauty";
+      if (isBeauty) {
+        const gangIdx = stores.findIndex(s => s.indexOf("横岗") >= 0);
+        if (gangIdx >= 0) {
+          initialStoreIndex = gangIdx;
+          initialStore = stores[gangIdx];
+        }
+      }
       const initSizeOpts = isBeauty ? this._beautySizeFor(firstService.name) : [];
       // 如果第一个板块是 TNR 且有已通过申请，自动填入第一个
       const initTnrApps = this._approvedApps;
@@ -258,10 +266,11 @@ Page({
         beautyCoatIndex: 0,
         tnrApps: initTnrApps,
         tnrAppIndex: 0,
+        storeIndex: initialStoreIndex,
         "form.category":          firstCategory.value || "",
         "form.service_name":      firstService.name   || "",
         "form.duration_minutes":  firstService.duration_minutes || 30,
-        "form.store":             firstStore,
+        "form.store":             initialStore,
         "form.pet_gender":        firstGender.value || "unknown",
         "form.appointment_date":  startDate,
         "form.appointment_time":  firstTime,
@@ -459,6 +468,13 @@ Page({
           "form.duration_minutes": firstSvc.duration_minutes || 30,
           "form.appointment_time": slots[0] || this.data.form.appointment_time
         });
+        if (isBeauty && !p.store) {
+          const gangIdx = stores.findIndex(s => s.indexOf("横岗") >= 0);
+          if (gangIdx >= 0) {
+            patch.storeIndex = gangIdx;
+            patch["form.store"] = stores[gangIdx];
+          }
+        }
       }
     }
     if (p.store) {
@@ -485,6 +501,7 @@ Page({
     const timeSlots     = Array.isArray(category.time_slots) ? category.time_slots : [];
     const timeRange     = category.time_range || {};
     const nextTime = timeSlots[0] || timeRange.start || firstService.default_time || this.data.form.appointment_time || "10:00";
+    const wasBeauty = this.data.isBeauty;
     const isBeauty = category.value === "beauty";
     const stores = this.data.stores;
     // 美容只能横岗店
@@ -493,6 +510,9 @@ Page({
     if (isBeauty) {
       const gangIdx = stores.findIndex(s => s.indexOf("横岗") >= 0);
       if (gangIdx >= 0) { storeIndex = gangIdx; storeVal = stores[gangIdx]; }
+    } else if (wasBeauty) {
+      storeIndex = -1;
+      storeVal = "";
     }
     this.setData({
       categoryIndex: idx,
@@ -640,6 +660,15 @@ Page({
     if (this.data.submitting) return;
     this.setData({ submitting: true });
     try {
+      if (!String(this.data.form.store || "").trim()) {
+        wx.showModal({
+          title: "请选择预约门店",
+          content: "请先选择本次预约的门店后再提交。",
+          showCancel: false
+        });
+        this.setData({ submitting: false });
+        return;
+      }
       // TNR 门店配额 & 爽约封禁前置校验（仅新建模式）
       if (!this.data.editMode && this.data.form.category === "tnr") {
         const storeStatus = this._tnrStoreStatus || {};

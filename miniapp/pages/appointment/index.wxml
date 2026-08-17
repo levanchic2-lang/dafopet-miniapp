@@ -79,8 +79,8 @@
 
     <!-- 预约门店 -->
     <view class="label">预约门店</view>
-    <picker wx:if="{{!editMode && !isBeauty}}" class="picker" mode="selector" range="{{stores}}" value="{{storeIndex}}" bindchange="onStoreChange">
-      <view>{{stores[storeIndex]}}</view>
+    <picker wx:if="{{!editMode && !isBeauty}}" class="picker" mode="selector" range="{{stores}}" value="{{storeIndex < 0 ? 0 : storeIndex}}" bindchange="onStoreChange">
+      <view class="{{form.store ? '' : 'picker-placeholder'}}">{{form.store || '请选择预约门店'}}</view>
     </picker>
     <view wx:if="{{editMode || isBeauty}}" class="picker picker-locked">{{form.store || stores[storeIndex]}}</view>
     <view wx:if="{{isBeauty && !editMode}}" class="tip light" style="margin-top:4rpx;">美容服务仅限横岗店</view>
