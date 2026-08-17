@@ -133,6 +133,7 @@ from app.services.breeds import all_breeds as _all_breeds
 _BREEDS_ALL = _all_breeds()
 from app.services.notify import notify_application_result
 from app.services.backup_local import create_backup_zip, is_safe_backup_filename, list_backup_zips
+from app.services.tnr_appointment_sync import sync_active_tnr_appointment
 from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_pending_manual_notice, push_rejection_notice, push_surgery_done, push_surgery_reminder, push_vaccine_reminder, wechat_code2session
 
 logger = logging.getLogger(__name__)
@@ -6192,12 +6193,30 @@ async def manual_reject(
             ApplicationStatus.pre_approved.value,
             ApplicationStatus.approved.value,
             ApplicationStatus.scheduled.value,
+            ApplicationStatus.arrived_verified.value,
         },
         "拒绝",
     )
+    was_on_site = bool(row.staff_cat_verified) or row.status == ApplicationStatus.arrived_verified.value
     row.status = ApplicationStatus.rejected.value
     row.reject_reason = reason.strip()
-    _audit(db, request, "manual_reject", application_id=app_id, detail={"reason": row.reject_reason})
+    appointment_sync = sync_active_tnr_appointment(
+        db,
+        app_id,
+        AppointmentStatus.completed.value if was_on_site else AppointmentStatus.cancelled.value,
+        (
+            "已到店核验，但未实施手术，预约流程已结束"
+            if was_on_site
+            else "申请已拒绝，预约自动取消"
+        ),
+    )
+    _audit(
+        db,
+        request,
+        "manual_reject",
+        application_id=app_id,
+        detail={"reason": row.reject_reason, "appointment_sync": appointment_sync},
+    )
     db.commit()
     notify_application_result(db, app_id, row.phone, row.applicant_name, approved=False, extra=reason)
     push_rejection_notice(
@@ -6235,7 +6254,19 @@ async def verify_cat(app_id: int, request: Request, db: Session = Depends(get_db
     )
     # 只设核实标记 — 「到店」和「核实是同一只猫」是两个独立动作
     row.staff_cat_verified = True
-    _audit(db, request, "verify_cat", application_id=app_id)
+    appointment_sync = sync_active_tnr_appointment(
+        db,
+        app_id,
+        AppointmentStatus.arrived.value,
+        "已现场核验猫咪，预约自动标记到店",
+    )
+    _audit(
+        db,
+        request,
+        "verify_cat",
+        application_id=app_id,
+        detail={"appointment_sync": appointment_sync},
+    )
     # 现场确认即"到的就是这只猫"，申请素材照片本身就是这只猫的术前面貌 →
     # 自动复制为术前照片，前台只需再补传「有异常」的术前照即可，免去重复上传。
     # 物理复制（不共用文件路径），让申请素材与术前照片各自独立，删一个不影响另一个。
@@ -6308,7 +6339,19 @@ async def surgery_done(app_id: int, request: Request, db: Session = Depends(get_
     # 默认公开公布：标记手术完成时自动开启公益展示
     # 如果客户/医院不想公开，员工可在卡片上点「拒绝公开」手动关掉
     row.showcase_consent = True
-    _audit(db, request, "surgery_done", application_id=app_id)
+    appointment_sync = sync_active_tnr_appointment(
+        db,
+        app_id,
+        AppointmentStatus.completed.value,
+        "手术已完成，预约自动完成",
+    )
+    _audit(
+        db,
+        request,
+        "surgery_done",
+        application_id=app_id,
+        detail={"appointment_sync": appointment_sync},
+    )
     db.commit()
     notify_application_result(
         db,
@@ -7354,7 +7397,19 @@ async def mark_cancelled(
     row.status = ApplicationStatus.cancelled.value
     if reason.strip():
         row.reject_reason = reason.strip()
-    _audit(db, request, "mark_cancelled", application_id=app_id, detail={"reason": row.reject_reason})
+    appointment_sync = sync_active_tnr_appointment(
+        db,
+        app_id,
+        AppointmentStatus.cancelled.value,
+        "申请已取消，预约自动取消",
+    )
+    _audit(
+        db,
+        request,
+        "mark_cancelled",
+        application_id=app_id,
+        detail={"reason": row.reject_reason, "appointment_sync": appointment_sync},
+    )
     db.commit()
     push_application_result(
         db,
@@ -7390,7 +7445,19 @@ async def mark_no_show(
         "标记爽约",
     )
     row.status = ApplicationStatus.no_show.value
-    _audit(db, request, "mark_no_show", application_id=app_id)
+    appointment_sync = sync_active_tnr_appointment(
+        db,
+        app_id,
+        AppointmentStatus.no_show.value,
+        "申请已标记爽约，预约同步爽约",
+    )
+    _audit(
+        db,
+        request,
+        "mark_no_show",
+        application_id=app_id,
+        detail={"appointment_sync": appointment_sync},
+    )
     db.commit()
     push_application_result(
         db,
