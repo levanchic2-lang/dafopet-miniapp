@@ -57,8 +57,13 @@
   .us-submit:hover { background:var(--ink-2); }
   .us-cancel { font-family:var(--font-serif); font-size:10pt; color:var(--ink-3); border-bottom:0.5px solid transparent; }
   .us-cancel:hover { color:var(--ink); border-bottom-color:var(--ink-3); }
-  .us-photos { display:flex; flex-wrap:wrap; gap:8px; }
-  .us-photos img { width:110px; height:110px; object-fit:cover; border:0.5px solid var(--hair); }
+  .us-photo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; margin-top:12px; }
+  .us-photo-item { border:0.5px solid var(--hair); background:#fff; padding:6px; }
+  .us-photo-item img { display:block; width:100%; aspect-ratio:4/3; object-fit:cover; background:var(--bg); }
+  .us-photo-remove { display:flex; align-items:center; gap:6px; margin-top:7px; color:var(--accent-red); font-size:9pt; }
+  .us-photo-upload { margin-top:14px; padding:14px; border:0.5px dashed var(--hair); background:#f7f6f1; }
+  .us-photo-upload input { display:block; width:100%; margin-top:8px; }
+  .us-photo-hint { margin:7px 0 0; color:var(--ink-3); font-size:9pt; line-height:1.6; }
 </style>
 
 <div class="us-bc">
@@ -95,7 +100,7 @@
   <button type="button" class="us-btn-sm" id="retry-ai-btn" onclick="retryOriginalPdf()" {% if report.ai_status == 'processing' %}disabled{% endif %}>重新识别原PDF</button>
 </div>
 
-<form method="post" action="/admin/ultrasound-reports/{{ report.id }}/save" id="us-form">
+<form method="post" action="/admin/ultrasound-reports/{{ report.id }}/save" id="us-form" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
   <input type="hidden" name="exam_type" id="exam_type" value="{{ report.exam_type }}"/>
   <input type="hidden" name="measurements_json" id="measurements_json"/>
@@ -125,14 +130,26 @@
     </div>
   </div>
 
-  {% if photos %}
   <div class="us-card">
-    <div class="us-card-head"><h2>超&nbsp;声&nbsp;影&nbsp;像（{{ photos|length }}）</h2></div>
-    <div class="us-photos">
-      {% for p in photos %}<a href="/uploads/{{ p }}" target="_blank"><img src="/uploads/{{ p }}"/></a>{% endfor %}
+    <div class="us-card-head"><h2>超&nbsp;声&nbsp;原&nbsp;图（{{ photos|length }}）</h2></div>
+    {% if photos %}
+    <div class="us-photo-grid">
+      {% for p in photos %}
+      <div class="us-photo-item">
+        <a href="/uploads/{{ p }}" target="_blank"><img src="/uploads/{{ p }}" alt="B超原图 {{ loop.index }}"/></a>
+        <label class="us-photo-remove"><input type="checkbox" name="remove_photos" value="{{ p }}"/> 删除这张</label>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="us-photo-hint">当前报告还没有上传 B 超原图。</p>
+    {% endif %}
+    <div class="us-photo-upload">
+      <strong>补传 B 超原图</strong>
+      <input type="file" name="photos" accept="image/*" multiple/>
+      <p class="us-photo-hint">支持一次选择多张，单张不超过 12MB。保存后，原图会自动加入正式报告 PDF。</p>
     </div>
   </div>
-  {% endif %}
 
   <div class="us-card">
     <div class="us-card-head">

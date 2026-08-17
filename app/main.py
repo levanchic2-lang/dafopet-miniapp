@@ -25368,18 +25368,80 @@ async def admin_ultrasound_save(report_id: int, request: Request, db: Session = 
     report.conclusion = str(form.get("conclusion", "")).strip()
     report.advice = str(form.get("advice", "")).strip()
     report.measurements_json = json.dumps(_us_parse_measurements_form(form), ensure_ascii=False)
+
+    try:
+        current_photos = json.loads(report.photos_json or "[]") or []
+    except (TypeError, json.JSONDecodeError):
+        current_photos = []
+    current_photos = [p for p in current_photos if isinstance(p, str)]
+    requested_remove = {
+        str(p) for p in form.getlist("remove_photos") if str(p) in current_photos
+    }
+    expected_prefix = f"ultrasound_photos/{report.id}/"
+    upload_root = Path("uploads").resolve()
+    kept_photos: list[str] = []
+    files_to_remove: list[Path] = []
+    for rel_path in current_photos:
+        if rel_path in requested_remove and rel_path.startswith(expected_prefix):
+            target = (Path("uploads") / rel_path).resolve()
+            try:
+                target.relative_to(upload_root)
+                files_to_remove.append(target)
+            except ValueError:
+                kept_photos.append(rel_path)
+        else:
+            kept_photos.append(rel_path)
+
+    upload_dir = Path("uploads") / "ultrasound_photos" / str(report.id)
+    added_photos = 0
+    skipped_photos = 0
+    for upload in form.getlist("photos"):
+        if not hasattr(upload, "filename") or not upload.filename:
+            continue
+        ext = Path(upload.filename).suffix.lower()
+        if ext not in _US_PHOTO_EXT_OK:
+            skipped_photos += 1
+            continue
+        data = await upload.read()
+        if not data or len(data) > _US_PHOTO_MAX:
+            skipped_photos += 1
+            continue
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"p_{secrets.token_hex(6)}{ext}"
+        (upload_dir / filename).write_bytes(data)
+        kept_photos.append(f"ultrasound_photos/{report.id}/{filename}")
+        added_photos += 1
+    report.photos_json = json.dumps(kept_photos, ensure_ascii=False)
     report.updated_at = datetime.utcnow()
     db.commit()
+
+    removed_photos = 0
+    for target in files_to_remove:
+        try:
+            if target.is_file():
+                target.unlink()
+            removed_photos += 1
+        except OSError:
+            pass
+
+    photo_result = []
+    if added_photos:
+        photo_result.append(f"新增原图{added_photos}张")
+    if removed_photos:
+        photo_result.append(f"删除原图{removed_photos}张")
+    if skipped_photos:
+        photo_result.append(f"跳过不支持或过大的文件{skipped_photos}个")
+    photo_note = f"（{'，'.join(photo_result)}）" if photo_result else ""
 
     from app.services.ultrasound_pdf import generate_ultrasound_pdf
     _, err = generate_ultrasound_pdf(db, report.id)
     if err:
         return RedirectResponse(
-            f"/admin/exam-orders/{report.exam_order_id}?msg=报告已保存，PDF 生成失败：{err}",
+            f"/admin/exam-orders/{report.exam_order_id}?msg=报告已保存{photo_note}，PDF 生成失败：{err}",
             status_code=303,
         )
     return RedirectResponse(
-        f"/admin/exam-orders/{report.exam_order_id}?msg=B超报告已生成并上传",
+        f"/admin/exam-orders/{report.exam_order_id}?msg=B超报告已生成并上传{photo_note}",
         status_code=303,
     )
 
