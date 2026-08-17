@@ -36,6 +36,8 @@ def main() -> None:
             appointment = get_latest_active_tnr_appointment(db, application.id)
             if appointment is None:
                 continue
+            if appointment.status == target_status:
+                continue
             repairs.append(
                 (
                     application.id,
