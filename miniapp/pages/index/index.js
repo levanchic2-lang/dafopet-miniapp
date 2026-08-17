@@ -896,5 +896,9 @@ Page({
 
   goBindPage() {
     wx.navigateTo({ url: "/pages/bind/bind" });
+  },
+
+  goImmunizationPage() {
+    wx.navigateTo({ url: "/pages/immunization/index" });
   }
 });

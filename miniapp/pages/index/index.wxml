@@ -12,6 +12,8 @@
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAppointmentListPage">我的预约</button>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goBindPage">📇 绑定我的档案</button>
   <view class="sub" style="font-size:24rpx;color:#888;margin:6rpx 0 4rpx;text-align:center;">老客户绑定后可收到回访 / 协议 / 疫苗到期等通知</view>
+  <button class="btn secondary" style="margin-top:12rpx;" bindtap="goImmunizationPage">电子免疫证</button>
+  <view class="sub" style="font-size:24rpx;color:#888;margin:6rpx 0 4rpx;text-align:center;">查看历史接种记录并下载电子免疫证 PDF</view>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goAdoptionPage">🐾 待领养动物</button>
   <button class="btn secondary" style="margin-top:12rpx;" bindtap="goRabiesPage">💉 狂犬疫苗免疫登记</button>
   <view class="sub" style="font-size:24rpx;color:#888;margin:6rpx 0 4rpx;text-align:center;">仅限横岗店使用</view>

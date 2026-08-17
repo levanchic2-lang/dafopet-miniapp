@@ -19312,6 +19312,88 @@ async def api_wechat_my_profile(openid: str = Query(""), db: Session = Depends(g
     }
 
 
+@app.post("/api/wechat/immunization-certificates")
+async def api_wechat_immunization_certificates(
+    payload: dict = Body(...), db: Session = Depends(get_db)
+):
+    """主人端电子免疫证列表。必须用当次 wx.login code 重新校验微信身份。"""
+    openid = await _resolve_wechat_openid({"code": (payload or {}).get("code", "")})
+    customer = db.query(Customer).filter(Customer.wechat_openid == openid).first()
+    if not customer:
+        return {"bound": False, "pets": []}
+
+    from app.services.immunization_certificate import (
+        build_certificate_data,
+        build_download_token,
+    )
+
+    pets = db.query(Pet).filter(Pet.customer_id == customer.id).order_by(Pet.id.asc()).all()
+    pet_rows = []
+    for pet in pets:
+        certificate = build_certificate_data(db, pet)
+        vaccinations = certificate["vaccinations"]
+        token = build_download_token(_SESSION_SECRET, customer.id, pet.id)
+        pet_rows.append(
+            {
+                "id": pet.id,
+                "name": pet.name or "未命名宠物",
+                "species": certificate["species"],
+                "breed": certificate["breed"],
+                "medical_record_no": certificate["medical_record_no"],
+                "record_count": len(vaccinations),
+                "vaccinations": list(reversed(vaccinations)),
+                "download_url": (
+                    f"/api/wechat/immunization-certificates/{pet.id}/pdf"
+                    f"?token={quote(token, safe='')}"
+                ) if vaccinations else "",
+            }
+        )
+    return {
+        "bound": True,
+        "owner_name": customer.name or "",
+        "pets": pet_rows,
+    }
+
+
+@app.get("/api/wechat/immunization-certificates/{pet_id}/pdf")
+async def api_wechat_immunization_certificate_pdf(
+    pet_id: int, token: str = Query(""), db: Session = Depends(get_db)
+):
+    from app.services.immunization_certificate import (
+        build_certificate_data,
+        parse_download_token,
+        render_immunization_certificate_pdf,
+    )
+
+    try:
+        claims = parse_download_token(_SESSION_SECRET, token)
+    except ValueError:
+        raise HTTPException(403, "下载链接已失效，请返回小程序重新获取")
+    if claims["pet_id"] != pet_id:
+        raise HTTPException(403, "无权查看该电子免疫证")
+
+    pet = (
+        db.query(Pet)
+        .filter(Pet.id == pet_id, Pet.customer_id == claims["customer_id"])
+        .first()
+    )
+    if not pet:
+        raise HTTPException(404, "未找到宠物档案")
+    data = build_certificate_data(db, pet)
+    if not data["vaccinations"]:
+        raise HTTPException(404, "暂无有效疫苗接种记录")
+    pdf_bytes = render_immunization_certificate_pdf(data)
+    filename = quote(f"电子免疫证_{pet.name or pet.id}.pdf")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
 @app.get("/api/customer/lookup")
 async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_db)):
     if not phone or len(phone) < 6:

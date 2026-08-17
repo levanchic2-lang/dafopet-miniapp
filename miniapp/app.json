@@ -9,6 +9,7 @@
     "pages/feedback/index",
     "pages/rabies/index",
     "pages/rabies/done",
+    "pages/immunization/index",
     "pages/adoption/list",
     "pages/adoption/detail",
     "pages/bind/bind"

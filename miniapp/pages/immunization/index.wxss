@@ -1,0 +1,31 @@
+page { background: #f4f1ec; color: #1a1a1a; min-height: 100%; }
+.page { padding: 30rpx 28rpx 64rpx; box-sizing: border-box; }
+.head { padding: 30rpx 4rpx 28rpx; border-bottom: 2rpx solid #1a1a1a; }
+.eyebrow { color: #7a6b5a; font-size: 20rpx; letter-spacing: 4rpx; }
+.title { margin-top: 12rpx; font-size: 48rpx; font-weight: 700; letter-spacing: 4rpx; }
+.subtitle { margin-top: 10rpx; color: #5d5a55; font-size: 25rpx; line-height: 1.6; }
+.owner { padding: 30rpx 4rpx 8rpx; font-size: 27rpx; font-weight: 700; }
+.state { margin-top: 28rpx; padding: 40rpx 30rpx; background: #fff; border: 1rpx solid #d8d4cc; text-align: center; color: #5d5a55; font-size: 27rpx; line-height: 1.7; }
+.state.error { color: #7a2828; }
+.state-title { color: #1a1a1a; font-size: 32rpx; font-weight: 700; }
+.state-text { margin-top: 12rpx; }
+.primary-btn, .secondary-btn, .download-btn { border-radius: 0; font-size: 28rpx; }
+.primary-btn { margin-top: 28rpx; background: #1a1a1a; color: #fff; }
+.secondary-btn { margin-top: 24rpx; background: #fff; color: #1a1a1a; border: 1rpx solid #1a1a1a; }
+.pet-card { margin-top: 22rpx; padding: 26rpx; background: #fff; border: 1rpx solid #d8d4cc; }
+.pet-head { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 20rpx; border-bottom: 1rpx solid #d8d4cc; }
+.pet-name { font-size: 34rpx; font-weight: 700; }
+.pet-meta, .record-no { margin-top: 8rpx; color: #66625c; font-size: 24rpx; }
+.count { min-width: 78rpx; padding: 8rpx 12rpx; border: 1rpx solid #8b5a2b; color: #6b4423; text-align: center; font-size: 24rpx; }
+.records { margin-top: 6rpx; }
+.record { display: flex; gap: 22rpx; padding: 21rpx 0; border-bottom: 1rpx solid #e5e1da; }
+.record:last-child { border-bottom: 0; }
+.record-date { width: 156rpx; flex: 0 0 156rpx; font-size: 25rpx; font-weight: 700; }
+.record-main { min-width: 0; flex: 1; }
+.record-name { font-size: 27rpx; font-weight: 700; overflow-wrap: anywhere; }
+.record-meta, .next-date { margin-top: 7rpx; color: #6a665f; font-size: 23rpx; line-height: 1.5; }
+.next-date { color: #1d4d3a; }
+.empty-record { padding: 30rpx 0 10rpx; color: #77736d; text-align: center; font-size: 25rpx; }
+.download-btn { margin-top: 22rpx; background: #1a1a1a; color: #fff; }
+.download-btn[disabled] { background: #77736d; color: #eee; }
+.notice { margin-top: 28rpx; padding-left: 18rpx; border-left: 4rpx solid #8b5a2b; color: #68645e; font-size: 23rpx; line-height: 1.7; }

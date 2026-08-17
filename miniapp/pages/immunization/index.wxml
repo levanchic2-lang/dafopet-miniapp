@@ -1,0 +1,63 @@
+<view class="page">
+  <view class="head">
+    <view class="eyebrow">DAFO ANIMAL HOSPITAL</view>
+    <view class="title">电子免疫证</view>
+    <view class="subtitle">自动汇总医院登记的有效疫苗接种记录</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="state">正在核验档案并加载接种记录…</view>
+  <view wx:if="{{error}}" class="state error">
+    <view>{{error}}</view>
+    <button class="secondary-btn" bindtap="loadCertificates">重新加载</button>
+  </view>
+
+  <view wx:if="{{!loading && !error && !bound}}" class="state">
+    <view class="state-title">尚未绑定客户档案</view>
+    <view class="state-text">请先使用医院登记的手机号绑定档案，绑定后即可查看名下宠物的电子免疫证。</view>
+    <button class="primary-btn" bindtap="goBind">绑定我的档案</button>
+  </view>
+
+  <view wx:if="{{!loading && !error && bound}}">
+    <view class="owner">{{ownerName}} · 名下宠物</view>
+    <view wx:if="{{!pets.length}}" class="state">当前档案下暂无宠物</view>
+
+    <block wx:for="{{pets}}" wx:key="id">
+      <view class="pet-card">
+        <view class="pet-head">
+          <view>
+            <view class="pet-name">{{item.name}}</view>
+            <view class="pet-meta">{{item.species}} · {{item.breed || '品种未登记'}}</view>
+            <view wx:if="{{item.medical_record_no}}" class="record-no">病历号 {{item.medical_record_no}}</view>
+          </view>
+          <view class="count">{{item.record_count}} 次</view>
+        </view>
+
+        <view wx:if="{{!item.record_count}}" class="empty-record">暂无有效疫苗接种记录</view>
+        <view wx:if="{{item.record_count}}" class="records">
+          <block wx:for="{{item.vaccinations}}" wx:key="id" wx:for-item="record">
+            <view class="record">
+              <view class="record-date">{{record.vaccinated_date || '日期未登记'}}</view>
+              <view class="record-main">
+                <view class="record-name">{{record.vaccine_name}}</view>
+                <view class="record-meta">{{record.dose_label || record.vaccine_type}}<text wx:if="{{record.batch_no}}"> · 批号 {{record.batch_no}}</text></view>
+                <view wx:if="{{record.next_due_date}}" class="next-date">下次接种：{{record.next_due_date}}</view>
+              </view>
+            </view>
+          </block>
+        </view>
+
+        <button
+          wx:if="{{item.record_count}}"
+          class="download-btn"
+          data-pet-id="{{item.id}}"
+          data-url="{{item.download_url}}"
+          loading="{{downloadingId == item.id}}"
+          disabled="{{downloadingId > 0}}"
+          bindtap="downloadCertificate"
+        >下载电子免疫证</button>
+      </view>
+    </block>
+  </view>
+
+  <view class="notice">电子免疫证仅展示医院系统内有效接种记录。资料有误时，请联系接种门店核对。</view>
+</view>
