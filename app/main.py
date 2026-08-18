@@ -19814,7 +19814,7 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
 _INV_STATUS_ZH = {"unpaid": "待收款", "paid": "已收款", "cancelled": "已取消"}
 _INV_PAY_ZH    = {
     "cash": "现金", "wechat": "微信", "alipay": "支付宝",
-    "shouqianba": "收钱吧", "meituan": "美团", "third_party": "第三方",
+    "shouqianba": "收钱吧", "meituan": "美团", "third_party": "抖音团购",
     "salary_deduction": "工资抵扣",
     "wallet": "钱包", "package": "套餐", "deposit": "押金", "coupon": "优惠券",
     "mixed": "混合支付",
@@ -20215,7 +20215,7 @@ def _parse_money(v) -> float:
 
 
 def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "Invoice | None":
-    """把就诊产生的处方 / 检查单 / 销售单自动同步到一张「待收款」收费单。
+    """把就诊产生的处方 / 检查单 / 销售单 / 麻醉单自动同步到一张「待收款」收费单。
 
     规则：
     - 已 paid / cancelled / refunded 的发票不动（已结清不能改）
@@ -20340,7 +20340,32 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
             })
             subtotal_sum += float(it.subtotal or 0)
 
-    # ── 4) 住院笼费（仅 discharged 计） ──
+    # ── 4) 麻醉单（只负责收费；实际用药库存由麻醉监护记录扣减） ──
+    anesthesia_orders = db.query(AnesthesiaOrder).filter(
+        AnesthesiaOrder.visit_id == visit_id,
+        AnesthesiaOrder.status != "voided",
+    ).all()
+    for order in anesthesia_orders:
+        if ("anesthesia", order.id) in settled_refs:
+            continue
+        for item in (order.items or []):
+            subtotal = round(float(item.subtotal or 0), 2)
+            if not item.drug_name or subtotal <= 0:
+                continue
+            quantity = float(item.total_qty or 0)
+            if quantity <= 0:
+                quantity = 1.0
+            line_items.append({
+                "ref_type": "anesthesia",
+                "ref_id": order.id,
+                "description": f"[麻醉#{order.id}] {item.drug_name}",
+                "quantity": quantity,
+                "unit_price": float(item.unit_price or 0),
+                "subtotal": subtotal,
+            })
+            subtotal_sum += subtotal
+
+    # ── 5) 住院笼费（仅 discharged 计） ──
     hosps = db.query(Hospitalization).filter(
         Hospitalization.visit_id == visit_id,
         Hospitalization.status == "discharged",
@@ -20436,7 +20461,7 @@ _REVENUE_PAY_ZH = {
     "alipay":      "支付宝",
     "shouqianba":  "收钱吧",
     "meituan":     "美团",
-    "third_party": "第三方",
+    "third_party": "抖音团购",
     "salary_deduction": "工资抵扣",
     "card":        "刷卡",
     "groupbuy":    "团购",
@@ -20781,7 +20806,7 @@ async def admin_reports_revenue(
         "by_category_list": by_category_list,
         "daily_series": daily_series,
         # 财务 vs 业务 拆分
-        "finance_methods_list": finance_methods_list,        # 现金类（含微信/支付宝/收钱吧/美团/第三方/现金）
+        "finance_methods_list": finance_methods_list,        # 现金类（含微信/支付宝/收钱吧/美团/抖音团购/现金）
         "finance_cash_total": finance_cash_total,             # 现金类总额
         "business_noncash_list": business_noncash_list,       # 钱包/套餐/押金/券
         "business_noncash_total": business_noncash_total,
@@ -21637,7 +21662,7 @@ async def admin_cashier_multi_pay_submit(
     checkout_back = (form.get("checkout_back") or "").strip()
     # embed=1 表示在收银台弹窗 iframe 内结算，全部付清后通知父窗口关闭弹窗
     is_embed = (form.get("embed") == "1")
-    # 合并结算支持：现金/微信/支付宝/收钱吧/美团/第三方/工资抵扣/钱包
+    # 合并结算支持：现金/微信/支付宝/收钱吧/美团/抖音团购/工资抵扣/钱包
     # 套餐/押金/优惠券因需绑特定记录，由 checkout 页直接 POST 到 add-payment
     allowed_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party", "salary_deduction", "wallet"}
     if method not in allowed_methods:

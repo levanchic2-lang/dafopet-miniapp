@@ -288,7 +288,7 @@
        <button type="button" class="pay-btn" data-val="alipay" onclick="selectPay(this)"><span class="icon" style="color:#1677ff;"><i data-lucide="circle-dollar-sign"></i></span><span class="label">支付宝</span></button>
        <button type="button" class="pay-btn" data-val="shouqianba" onclick="selectPay(this)"><span class="icon" style="color:#3b82f6;"><i data-lucide="smartphone"></i></span><span class="label">收钱吧</span></button>
        <button type="button" class="pay-btn" data-val="meituan" onclick="selectPay(this)"><span class="icon" style="color:#ffc300;"><i data-lucide="utensils"></i></span><span class="label">美团</span></button>
-       <button type="button" class="pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="icon"><i data-lucide="link"></i></span><span class="label">第三方</span></button>
+       <button type="button" class="pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="icon"><i data-lucide="link"></i></span><span class="label">抖音团购</span></button>
        {% if cust and cust.is_internal %}
        <button type="button" class="pay-btn" data-val="salary_deduction" onclick="selectPay(this)"><span class="icon"><i data-lucide="badge-dollar-sign"></i></span><span class="label">工资抵扣</span></button>
        {% endif %}
@@ -446,7 +446,7 @@
      {% elif p.method == 'alipay' %}<i data-lucide="circle-dollar-sign" style="color:#1677ff;"></i> 支付宝
      {% elif p.method == 'shouqianba' %}<i data-lucide="smartphone" style="color:#3b82f6;"></i> 收钱吧
      {% elif p.method == 'meituan' %}<i data-lucide="utensils" style="color:#ffc300;"></i> 美团
-     {% elif p.method == 'third_party' %}<i data-lucide="link"></i> 第三方
+     {% elif p.method == 'third_party' %}<i data-lucide="link"></i> 抖音团购
      {% elif p.method == 'salary_deduction' %}<i data-lucide="badge-dollar-sign"></i> 工资抵扣
      {% elif p.method == 'wallet' %}<i data-lucide="wallet"></i> 钱包
      {% elif p.method == 'package' %}<i data-lucide="ticket"></i> 套餐核销

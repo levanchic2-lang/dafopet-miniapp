@@ -526,7 +526,7 @@
           {% endfor %}
         </div>
         <div style="margin-top:8px; font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:1px;">
-          钱包 / 套餐 / 押金 / 优惠券暂只能结当前单；多单一起付请用 现金 / 微信 / 支付宝 / 收钱吧 / 美团 / 第三方{% if cust and cust.is_internal %} / 工资抵扣{% endif %}
+          钱包 / 套餐 / 押金 / 优惠券暂只能结当前单；多单一起付请用 现金 / 微信 / 支付宝 / 收钱吧 / 美团 / 抖音团购{% if cust and cust.is_internal %} / 工资抵扣{% endif %}
         </div>
 
         {# 批量折扣：把同一折率一次性应用到 当前单 + 勾选的待收单 #}
@@ -583,7 +583,7 @@
           <button type="button" class="iv-pay-btn" data-val="alipay" onclick="selectPay(this)"><span class="label">支付宝</span></button>
           <button type="button" class="iv-pay-btn" data-val="shouqianba" onclick="selectPay(this)"><span class="label">收钱吧</span></button>
           <button type="button" class="iv-pay-btn" data-val="meituan" onclick="selectPay(this)"><span class="label">美团</span></button>
-          <button type="button" class="iv-pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="label">第三方</span></button>
+          <button type="button" class="iv-pay-btn" data-val="third_party" onclick="selectPay(this)"><span class="label">抖音团购</span></button>
           {% if cust and cust.is_internal %}
           <button type="button" class="iv-pay-btn" data-val="salary_deduction" onclick="selectPay(this)"><span class="label">工资抵扣</span></button>
           {% endif %}
