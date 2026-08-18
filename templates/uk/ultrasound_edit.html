@@ -199,6 +199,8 @@ const INIT_GROUPS = {{ groups | tojson }};
 const REPORT_ID = {{ report.id }};
 const CSRF_TOKEN = {{ csrf_token | tojson }};
 let formDirty = false;
+let redraftPending = false;
+let redraftStartedAt = 0;
 
 function rowHtml(r) {
   r = r || {name:'', value:'', unit:''};
@@ -268,17 +270,29 @@ function flashField(el) {
   setTimeout(() => { el.style.backgroundColor = ''; }, 900);
 }
 
+async function readJsonResponse(resp) {
+  const text = await resp.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    if (resp.status === 504) throw new Error('AI处理时间较长，服务器连接已超时，请稍后重试');
+    throw new Error(`服务器暂时未返回有效结果（${resp.status}）`);
+  }
+}
+
 async function reDraft() {
   const btn = document.getElementById('ai-btn');
   const status = document.getElementById('ai-status');
-  btn.disabled = true; const old = btn.textContent; btn.textContent = '正在生成…';
+  btn.disabled = true; btn.textContent = '后台生成中…';
   status.style.color = 'var(--ink-3)';
-  status.textContent = 'DeepSeek 推理中，请稍候（约十几秒）…';
-  const t0 = performance.now();
+  status.textContent = '已提交后台生成，当前填写内容不会丢失…';
+  redraftStartedAt = performance.now();
   try {
     const resp = await fetch('/admin/ultrasound/ai-draft', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
+        csrf_token: CSRF_TOKEN,
         report_id: REPORT_ID,
         exam_type: document.getElementById('exam_type').value,
         item_label: document.querySelector('[name=item_label]').value,
@@ -287,27 +301,16 @@ async function reDraft() {
         groups: collectGroups(),
       })
     });
-    const data = await resp.json();
-    const secs = ((performance.now() - t0) / 1000).toFixed(1);
-    if (data.ok) {
-      const f = document.getElementById('findings');
-      const c = document.getElementById('conclusion');
-      const a = document.getElementById('advice');
-      f.value = data.findings || '';
-      c.value = data.conclusion || '';
-      a.value = data.advice || '';
-      flashField(f); flashField(c); flashField(a);
-      status.style.color = 'var(--accent-green)';
-      status.textContent = `✓ 已重新生成（DeepSeek · 用时 ${secs}s）`;
-    } else {
-      status.style.color = 'var(--accent-red)';
-      status.textContent = '✗ 生成失败：' + (data.error || '未知错误');
-    }
+    const data = await readJsonResponse(resp);
+    if (!resp.ok || !data.ok) throw new Error(data.error || '启动生成失败');
+    redraftPending = true;
+    setJobState('processing', '', 0);
+    pollAiStatus();
   } catch (e) {
     status.style.color = 'var(--accent-red)';
-    status.textContent = '✗ 请求失败：' + e;
-  } finally {
-    btn.disabled = false; btn.textContent = old;
+    status.textContent = '生成任务未启动：' + (e.message || e);
+    btn.disabled = false;
+    btn.textContent = '⚙ 用当前数据重新生成文字稿';
   }
 }
 
@@ -319,8 +322,8 @@ function setJobState(status, error, groupCount) {
   box.className = 'us-job ' + status;
   retry.disabled = status === 'processing';
   if (status === 'processing') {
-    title.textContent = '正在后台识别原始PDF并生成文字稿';
-    detail.textContent = '原始资料已经保存，不会丢失；完成后本页会自动更新。';
+    title.textContent = redraftPending ? '正在后台生成B超文字稿' : '正在后台识别原始PDF并生成文字稿';
+    detail.textContent = redraftPending ? '当前填写内容已保留，可以继续停留本页等待。' : '原始资料已经保存，不会丢失；完成后本页会自动更新。';
   } else if (status === 'completed') {
     title.textContent = '识别与文字稿已完成';
     detail.textContent = formDirty ? '已完成。当前页面有未保存修改，请手动刷新后核对。' : `已识别 ${groupCount || 0} 组测量数据，正在刷新页面。`;
@@ -340,7 +343,7 @@ async function retryOriginalPdf() {
   body.append('csrf_token', CSRF_TOKEN);
   try {
     const resp = await fetch(`/admin/ultrasound-reports/${REPORT_ID}/retry-ai`, {method:'POST', body});
-    const data = await resp.json();
+    const data = await readJsonResponse(resp);
     if (!resp.ok || !data.ok) throw new Error(data.error || '启动失败');
     setJobState('processing', '', 0);
     pollAiStatus();
@@ -354,11 +357,33 @@ async function pollAiStatus() {
   clearTimeout(pollTimer);
   try {
     const resp = await fetch(`/admin/ultrasound-reports/${REPORT_ID}/ai-status`, {cache:'no-store'});
-    const data = await resp.json();
+    const data = await readJsonResponse(resp);
     if (!resp.ok || !data.ok) throw new Error(data.error || '读取状态失败');
     setJobState(data.status, data.error, data.group_count);
     if (data.status === 'processing') {
       pollTimer = setTimeout(pollAiStatus, 2500);
+    } else if (redraftPending) {
+      const btn = document.getElementById('ai-btn');
+      const status = document.getElementById('ai-status');
+      btn.disabled = false;
+      btn.textContent = '⚙ 用当前数据重新生成文字稿';
+      if (data.status === 'completed') {
+        const f = document.getElementById('findings');
+        const c = document.getElementById('conclusion');
+        const a = document.getElementById('advice');
+        f.value = data.findings || '';
+        c.value = data.conclusion || '';
+        a.value = data.advice || '';
+        flashField(f); flashField(c); flashField(a);
+        formDirty = true;
+        const secs = ((performance.now() - redraftStartedAt) / 1000).toFixed(1);
+        status.style.color = 'var(--accent-green)';
+        status.textContent = `✓ 已重新生成（用时 ${secs}s），请核对后保存`;
+      } else {
+        status.style.color = 'var(--accent-red)';
+        status.textContent = '生成失败：' + (data.error || '请稍后重试；原有内容未被覆盖');
+      }
+      redraftPending = false;
     } else if ((data.status === 'completed' || data.status === 'partial') && !formDirty) {
       window.location.reload();
     }

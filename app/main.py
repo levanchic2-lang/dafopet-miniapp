@@ -25237,6 +25237,42 @@ async def _process_ultrasound_report_ai(report_id: int) -> None:
         db.close()
 
 
+async def _process_ultrasound_redraft(report_id: int, payload: dict) -> None:
+    """Generate edited ultrasound text without holding the browser request open."""
+    from app.database import SessionLocal
+    from app.services.ultrasound_report import draft_ultrasound_text
+
+    db = SessionLocal()
+    try:
+        result = await draft_ultrasound_text(payload)
+        report = db.get(UltrasoundReport, report_id)
+        if not report:
+            return
+        if result.get("ok"):
+            report.findings = str(result.get("findings") or "")
+            report.conclusion = str(result.get("conclusion") or "")
+            report.advice = str(result.get("advice") or "")
+            report.ai_status = "completed"
+            report.ai_error = ""
+        else:
+            # Keep the doctor's existing report body intact when generation fails.
+            report.ai_status = "failed"
+            report.ai_error = str(result.get("error") or "AI文字稿生成失败")[:1000]
+        report.ai_completed_at = datetime.utcnow()
+        db.commit()
+    except Exception as exc:
+        logger.exception("[ultrasound] background redraft failed for report %s", report_id)
+        db.rollback()
+        report = db.get(UltrasoundReport, report_id)
+        if report:
+            report.ai_status = "failed"
+            report.ai_error = f"后台生成失败：{exc}"[:1000]
+            report.ai_completed_at = datetime.utcnow()
+            db.commit()
+    finally:
+        db.close()
+
+
 @app.post("/admin/exam-orders/{order_id}/ultrasound/create")
 async def admin_ultrasound_create(
     order_id: int,
@@ -25368,6 +25404,9 @@ async def admin_ultrasound_ai_status(report_id: int, request: Request, db: Sessi
         "status": report.ai_status or "idle",
         "error": report.ai_error or "",
         "group_count": len(groups),
+        "findings": report.findings or "",
+        "conclusion": report.conclusion or "",
+        "advice": report.advice or "",
         "updated_at": report.updated_at.isoformat() if report.updated_at else "",
     })
 
@@ -25544,10 +25583,12 @@ async def admin_ultrasound_save(report_id: int, request: Request, db: Session = 
 
 
 @app.post("/admin/ultrasound/ai-draft")
-async def admin_ultrasound_ai_draft(request: Request, db: Session = Depends(get_db)):
-    """编辑页「重新生成文字稿」：用当前测量值 + 主观描述重跑 AI。
-    入参 JSON：{report_id, exam_type, item_label, device, vet_findings, groups:[...]}
-    出参：{ok, findings, conclusion, advice, error?}"""
+async def admin_ultrasound_ai_draft(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Queue an edited ultrasound draft and return before the proxy timeout."""
     require_admin(request)
     try:
         payload = await request.json()
@@ -25555,16 +25596,38 @@ async def admin_ultrasound_ai_draft(request: Request, db: Session = Depends(get_
         return JSONResponse({"ok": False, "error": "请求体不是 JSON"}, status_code=400)
     if not isinstance(payload, dict):
         return JSONResponse({"ok": False, "error": "请求体格式错误"}, status_code=400)
-    pet = None
-    rid = payload.get("report_id")
-    if rid:
-        rep = db.get(UltrasoundReport, int(rid))
-        if rep and rep.pet_id:
-            pet = db.get(Pet, rep.pet_id)
+    _require_csrf(request, str(payload.get("csrf_token", "")))
+    try:
+        report_id = int(payload.get("report_id") or 0)
+    except (TypeError, ValueError):
+        report_id = 0
+    report = db.get(UltrasoundReport, report_id) if report_id else None
+    if not report:
+        return JSONResponse({"ok": False, "error": "B超报告不存在"}, status_code=404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    if report.ai_status == "processing":
+        return JSONResponse(
+            {"ok": False, "error": "已有生成任务正在进行，请稍候"},
+            status_code=409,
+        )
+    if not (payload.get("groups") or []) and not str(payload.get("vet_findings") or "").strip():
+        return JSONResponse(
+            {"ok": False, "error": "缺少测量数据和医生主观描述，无法生成"},
+            status_code=400,
+        )
+
+    pet = db.get(Pet, report.pet_id) if report.pet_id else None
     full = {**payload, **_us_pet_payload(pet)}
-    from app.services.ultrasound_report import draft_ultrasound_text
-    result = await draft_ultrasound_text(full)
-    return JSONResponse(result)
+    full.pop("csrf_token", None)
+    report.ai_status = "processing"
+    report.ai_error = ""
+    report.ai_started_at = datetime.utcnow()
+    report.ai_completed_at = None
+    db.commit()
+    background_tasks.add_task(_process_ultrasound_redraft, report.id, full)
+    return JSONResponse({"ok": True, "status": "processing", "queued": True}, status_code=202)
 
 
 @app.post("/admin/ultrasound-reports/{report_id}/regen-pdf")

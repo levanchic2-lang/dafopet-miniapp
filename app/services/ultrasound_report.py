@@ -12,6 +12,7 @@ B超 / 超声报告 — PDF 测量值解析 + AI 文字稿生成。
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -304,29 +305,67 @@ async def draft_ultrasound_text(payload: dict) -> dict[str, Any]:
 
     user_text = _format_draft_payload(payload)
     client, model, _, is_reasoner = report_text_client_model()
-    try:
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": _DRAFT_SYSTEM},
-                      {"role": "user", "content": user_text}],
-            temperature=0.4,
-            max_tokens=8000 if is_reasoner else 1400,
-        )
-    except Exception as e:
-        logger.warning("[ultrasound] draft API failed: %s", e)
-        return {"ok": False, "error": f"调用模型失败：{e}"}
+    last_error = ""
+    for attempt in range(2):
+        retry_instruction = ""
+        if attempt:
+            retry_instruction = (
+                "\n\n上一次输出可能被截断或不是有效 JSON。请重新完整输出，且只输出 JSON；"
+                "findings 控制在 700 个汉字以内，conclusion 在 220 个汉字以内，"
+                "advice 在 300 个汉字以内。"
+            )
+        try:
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _DRAFT_SYSTEM + retry_instruction},
+                    {"role": "user", "content": user_text},
+                ],
+                temperature=0.3,
+                max_tokens=10000 if is_reasoner else 2200,
+            )
+        except Exception as exc:
+            last_error = f"调用模型失败：{exc}"
+            logger.warning(
+                "[ultrasound] draft API failed (attempt %s/2): %s",
+                attempt + 1,
+                exc,
+            )
+            if attempt == 0:
+                await asyncio.sleep(1.0)
+                continue
+            break
 
-    raw = _strip_md(resp.choices[0].message.content or "")
-    try:
-        data = json.loads(raw)
-    except Exception as e:
-        logger.warning("[ultrasound] draft JSON parse failed: %s; raw=%s", e, raw[:300])
-        return {"ok": False, "error": f"模型输出不是有效 JSON：{e}", "raw": raw}
-    if not isinstance(data, dict):
-        return {"ok": False, "error": "模型输出不是 JSON 对象"}
-    return {
-        "ok": True,
-        "findings": str(data.get("findings", "")).strip(),
-        "conclusion": str(data.get("conclusion", "")).strip(),
-        "advice": str(data.get("advice", "")).strip(),
-    }
+        raw = _strip_md(resp.choices[0].message.content or "")
+        try:
+            data = json.loads(raw)
+        except Exception as exc:
+            last_error = "模型返回内容不完整，系统已自动重试但仍未成功"
+            logger.warning(
+                "[ultrasound] draft JSON parse failed (attempt %s/2): %s; raw=%s",
+                attempt + 1,
+                exc,
+                raw[:500],
+            )
+            if attempt == 0:
+                await asyncio.sleep(0.5)
+                continue
+            break
+
+        if not isinstance(data, dict):
+            last_error = "模型输出不是 JSON 对象"
+        else:
+            result = {
+                "ok": True,
+                "findings": str(data.get("findings", "")).strip(),
+                "conclusion": str(data.get("conclusion", "")).strip(),
+                "advice": str(data.get("advice", "")).strip(),
+            }
+            if result["findings"] and result["conclusion"]:
+                return result
+            last_error = "模型返回的超声所见或结论为空"
+
+        if attempt == 0:
+            await asyncio.sleep(0.5)
+
+    return {"ok": False, "error": last_error or "AI文字稿生成失败，请稍后重试"}
