@@ -305,7 +305,7 @@
   <div class="ve-soap-item">
     <div class="ve-soap-roman">II.</div>
     <div class="ve-soap-body">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><label>体&nbsp;格&nbsp;检&nbsp;查</label><a href="/admin/visits/{{ visit.id }}/neuro-exam" class="uk-btn ghost sm">{% if neuro_exam %}神经学检查表{% else %}＋ 神经学检查表{% endif %}</a></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;"><label>体&nbsp;格&nbsp;检&nbsp;查</label><div style="display:flex;gap:8px;flex-wrap:wrap;"><a href="/admin/visits/{{ visit.id }}/neuro-exam" class="uk-btn ghost sm">{% if neuro_exam %}神经学检查表{% else %}＋ 神经学检查表{% endif %}</a><a href="/admin/visits/{{ visit.id }}/pain-score" class="uk-btn ghost sm">{% if pain_score %}疼痛评分表{% else %}＋ 疼痛评分表{% endif %}</a><a href="/admin/visits/{{ visit.id }}/pruritus-score" class="uk-btn ghost sm">{% if pruritus_score %}瘙痒评分表{% else %}＋ 瘙痒评分表{% endif %}</a></div></div>
       <textarea name="physical_exam" class="ve-textarea" data-voice="1" data-exam-helper="1"
                 {% if visit.status == 'closed' %}readonly{% endif %}
                 style="font-family: 'SF Mono', Menlo, Consolas, monospace;"

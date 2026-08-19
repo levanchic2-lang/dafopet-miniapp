@@ -88,6 +88,7 @@ from app.models import (
     UltrasoundReport,
     XrayReport,
     NeurologicExam,
+    ClinicalScoreAssessment,
     CalendarBlock,
     DewormingRecord,
     WeightRecord,
@@ -12752,6 +12753,232 @@ async def admin_visit_neuro_exam_print(visit_id: int, request: Request, db: Sess
     })
 
 
+def _clinical_score_context(db: Session, visit: Visit, assessment_type: str):
+    if assessment_type not in ("pain", "pruritus"):
+        raise HTTPException(404, "不支持的评分类型")
+    cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    records = (
+        db.query(ClinicalScoreAssessment)
+        .filter(
+            ClinicalScoreAssessment.visit_id == visit.id,
+            ClinicalScoreAssessment.assessment_type == assessment_type,
+        )
+        .order_by(ClinicalScoreAssessment.assessed_at.desc(), ClinicalScoreAssessment.id.desc())
+        .all()
+    )
+    return cust, pet, records
+
+
+@app.get("/admin/visits/{visit_id}/{assessment_type}-score", response_class=HTMLResponse)
+async def admin_visit_clinical_score(
+    visit_id: int,
+    assessment_type: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    cust, pet, records = _clinical_score_context(db, visit, assessment_type)
+    _assert_store_access(request, pet.store if pet else "")
+    from app.services.clinical_scores import SCALES, scale_for
+
+    scale_code = scale_for(assessment_type, pet.species if pet else "")
+    history = []
+    for record in records:
+        try:
+            record._answers = json.loads(record.answers_json or "{}")
+        except Exception:
+            record._answers = {}
+        history.append(record)
+    return templates.TemplateResponse(request, "uk/clinical_score_form.html", {
+        "visit": visit,
+        "cust": cust,
+        "pet": pet,
+        "records": history,
+        "assessment_type": assessment_type,
+        "scale_code": scale_code,
+        "scale": SCALES[scale_code],
+        "now_local": datetime.now().strftime("%Y-%m-%dT%H:%M"),
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+        "err": request.query_params.get("err"),
+    })
+
+
+@app.post("/admin/visits/{visit_id}/clinical-score/save")
+async def admin_visit_clinical_score_save(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    assessment_type: str = Form(""),
+    scale_code: str = Form(""),
+    assessed_at: str = Form(""),
+    assessor: str = Form(""),
+    assessor_role: str = Form("vet"),
+    answers_json: str = Form("{}"),
+    ai_analysis: str = Form(""),
+    doctor_note: str = Form(""),
+    csrf_token: str = Form(""),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    _require_csrf(request, csrf_token)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    cust, pet, previous_records = _clinical_score_context(db, visit, assessment_type)
+    _assert_store_access(request, pet.store if pet else "")
+    if visit.status == "closed":
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}/{assessment_type}-score?err={quote('病历已结束，不能新增评分')}",
+            status_code=303,
+        )
+    from app.services.clinical_scores import SCALES, calculate, deterministic_analysis, scale_for
+
+    expected_scale = scale_for(assessment_type, pet.species if pet else "")
+    if scale_code != expected_scale or scale_code not in SCALES:
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}/{assessment_type}-score?err={quote('量表与宠物种类不匹配')}",
+            status_code=303,
+        )
+    try:
+        answers = json.loads(answers_json or "{}")
+        result = calculate(scale_code, answers)
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}/{assessment_type}-score?err={quote(str(exc))}",
+            status_code=303,
+        )
+    username = request.session.get("admin_username") or request.session.get("admin") or ""
+    previous = [
+        {
+            "assessed_at": item.assessed_at,
+            "score": item.score,
+            "score_max": item.score_max,
+            "normalized_score": item.normalized_score,
+        }
+        for item in previous_records[:5]
+    ]
+    saved_analysis = (ai_analysis or "").strip() or deterministic_analysis(
+        scale_code, result, previous
+    )
+    record = ClinicalScoreAssessment(
+        visit_id=visit.id,
+        customer_id=cust.id if cust else None,
+        pet_id=pet.id if pet else None,
+        assessment_type=assessment_type,
+        scale_code=scale_code,
+        assessed_at=(assessed_at or datetime.now().strftime("%Y-%m-%dT%H:%M")).strip(),
+        assessor=(assessor or visit.vet_name or username).strip(),
+        assessor_role=assessor_role if assessor_role in ("owner", "vet", "nurse") else "vet",
+        answers_json=json.dumps(answers, ensure_ascii=False),
+        score=result["score"],
+        score_max=result["score_max"],
+        normalized_score=result["normalized_score"],
+        interpretation=result["interpretation"],
+        ai_analysis=saved_analysis,
+        doctor_note=(doctor_note or "").strip(),
+        store=(pet.store if pet else "") or "",
+        operator=username,
+    )
+    db.add(record)
+    db.commit()
+    label = "疼痛" if assessment_type == "pain" else "瘙痒"
+    return RedirectResponse(
+        f"/admin/visits/{visit_id}/{assessment_type}-score?msg={quote(label + '评分已保存')}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/clinical-scores/analyze")
+async def admin_clinical_score_analyze(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("admin"):
+        raise HTTPException(401, "请先登录")
+    payload = await request.json()
+    _require_csrf(request, str(payload.get("csrf_token") or ""))
+    visit = db.get(Visit, int(payload.get("visit_id") or 0))
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    assessment_type = str(payload.get("assessment_type") or "")
+    cust, pet, records = _clinical_score_context(db, visit, assessment_type)
+    _assert_store_access(request, pet.store if pet else "")
+    from app.services.clinical_scores import ai_analysis, calculate, scale_for
+
+    scale_code = str(payload.get("scale_code") or "")
+    if scale_code != scale_for(assessment_type, pet.species if pet else ""):
+        raise HTTPException(400, "量表与宠物种类不匹配")
+    answers = payload.get("answers") or {}
+    try:
+        result = calculate(scale_code, answers)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    previous = [
+        {
+            "assessed_at": row.assessed_at,
+            "score": row.score,
+            "score_max": row.score_max,
+            "normalized_score": row.normalized_score,
+        }
+        for row in records[:5]
+    ]
+    analysis = await ai_analysis(
+        scale_code,
+        answers,
+        result,
+        previous,
+        {
+            "name": pet.name if pet else "",
+            "species": pet.species if pet else "",
+            "breed": pet.breed if pet else "",
+            "visit_diagnosis": visit.diagnosis or "",
+        },
+    )
+    return {"ok": True, **result, "analysis": analysis}
+
+
+@app.get("/admin/clinical-scores/{assessment_id}/print", response_class=HTMLResponse)
+async def admin_clinical_score_print(
+    assessment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    record = db.get(ClinicalScoreAssessment, assessment_id)
+    if not record:
+        raise HTTPException(404, "评分记录不存在")
+    visit = db.get(Visit, record.visit_id)
+    cust = db.get(Customer, record.customer_id) if record.customer_id else None
+    pet = db.get(Pet, record.pet_id) if record.pet_id else None
+    _assert_store_access(request, pet.store if pet else record.store)
+    from app.services.clinical_scores import SCALES
+
+    try:
+        answers = json.loads(record.answers_json or "{}")
+    except Exception:
+        answers = {}
+    clinic_store = _print_clinic_store(visit, pet)
+    clinic_name_zh = "大风动物医院"
+    clinic_name_en = "DaFo Animal Hospital"
+    if clinic_store:
+        clinic_name_zh = f"大风动物医院（{clinic_store.replace('店', '分院')}）"
+        clinic_name_en = f"DaFo Animal Hospital · {clinic_store.replace('店', '')}"
+    return templates.TemplateResponse(request, "admin_clinical_score_print.html", {
+        "record": record,
+        "visit": visit,
+        "cust": cust,
+        "pet": pet,
+        "answers": answers,
+        "scale": SCALES.get(record.scale_code, {}),
+        "clinic_name_zh": clinic_name_zh,
+        "clinic_name_en": clinic_name_en,
+    })
+
+
 @app.get("/admin/visits/{visit_id}/discharge-print", response_class=HTMLResponse)
 async def admin_visit_discharge_print(visit_id: int, request: Request, db: Session = Depends(get_db)):
     """医嘱单独立打印（突出医嘱内容 + 处方 + 复诊建议，无完整 SOAP）。"""
@@ -12834,6 +13061,14 @@ async def page_admin_visit_detail(
     care_plan = _get_active_care_plan(db, visit_id)
     care_plan_tasks = _care_tasks_from_json(care_plan.tasks_json) if care_plan else []
     neuro_exam = db.query(NeurologicExam).filter(NeurologicExam.visit_id == visit_id).first()
+    pain_scores = db.query(ClinicalScoreAssessment).filter(
+        ClinicalScoreAssessment.visit_id == visit_id,
+        ClinicalScoreAssessment.assessment_type == "pain",
+    ).order_by(ClinicalScoreAssessment.assessed_at.desc(), ClinicalScoreAssessment.id.desc()).all()
+    pruritus_scores = db.query(ClinicalScoreAssessment).filter(
+        ClinicalScoreAssessment.visit_id == visit_id,
+        ClinicalScoreAssessment.assessment_type == "pruritus",
+    ).order_by(ClinicalScoreAssessment.assessed_at.desc(), ClinicalScoreAssessment.id.desc()).all()
     # 本 visit 的所有回访轮次（按计划日 + round_no 排序）
     followups = db.query(FollowUp).filter(FollowUp.visit_id == visit_id)\
         .order_by(FollowUp.planned_date, FollowUp.round_no).all()
@@ -12871,6 +13106,10 @@ async def page_admin_visit_detail(
         "care_plan": care_plan,
         "care_plan_tasks": care_plan_tasks,
         "neuro_exam": neuro_exam,
+        "pain_score": pain_scores[0] if pain_scores else None,
+        "pain_score_count": len(pain_scores),
+        "pruritus_score": pruritus_scores[0] if pruritus_scores else None,
+        "pruritus_score_count": len(pruritus_scores),
         "presc_status_zh": _PRESC_STATUS_ZH,
         "so_status_zh": _SO_STATUS_ZH,
         "inv_status_zh": _INV_STATUS_ZH,
@@ -13450,7 +13689,8 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
            "sales_order": 0, "anesthesia": 0, "weight": 0, "medical_doc": 0,
            "monitor_sheet": 0, "consent_task": 0, "consent_doc": 0,
            "care_summary": 0, "care_plan": 0,
-           "followup": 0, "microscopy": 0, "neurologic_exam": 0}
+           "followup": 0, "microscopy": 0, "neurologic_exam": 0,
+           "clinical_score": 0}
 
     if db.query(Hospitalization.id).filter(Hospitalization.visit_id == vid).first():
         return {"visit_id": vid, "skipped": True, "reason": "挂有住院档案", "cnt": cnt}
@@ -13483,6 +13723,8 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
         XrayReport.visit_id == vid).delete(synchronize_session=False)
     cnt["neurologic_exam"] += db.query(NeurologicExam).filter(
         NeurologicExam.visit_id == vid).delete(synchronize_session=False)
+    cnt["clinical_score"] += db.query(ClinicalScoreAssessment).filter(
+        ClinicalScoreAssessment.visit_id == vid).delete(synchronize_session=False)
 
     # 发票（+ 明细/收款 手动删；已收款则保留脱钩）
     for inv in db.query(Invoice).filter(Invoice.visit_id == vid).all():

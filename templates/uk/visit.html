@@ -209,6 +209,8 @@
       <a href="/admin/visits/{{ visit.id }}/print" class="uk-btn ghost sm" target="_blank">打印病历</a>
       <a href="/admin/visits/{{ visit.id }}/physical-exam-print" class="uk-btn ghost sm" target="_blank">体检报告</a>
       {% if neuro_exam %}<a href="/admin/visits/{{ visit.id }}/neuro-exam/print" class="uk-btn ghost sm" target="_blank">神经学报告</a>{% endif %}
+      {% if pain_score %}<a href="/admin/clinical-scores/{{ pain_score.id }}/print" class="uk-btn ghost sm" target="_blank">疼痛评分报告</a>{% endif %}
+      {% if pruritus_score %}<a href="/admin/clinical-scores/{{ pruritus_score.id }}/print" class="uk-btn ghost sm" target="_blank">瘙痒评分报告</a>{% endif %}
       <a href="/admin/visits/{{ visit.id }}/discharge-print" class="uk-btn ghost sm" target="_blank">打印医嘱单</a>
     {% if visit.status != 'closed' %}
         <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">编辑病历</a>
@@ -312,6 +314,14 @@
           <a href="/admin/visits/{{ visit.id }}/neuro-exam" class="uk-btn ghost sm">{% if neuro_exam %}查看 / 编辑{% else %}＋ 新建检查表{% endif %}</a>
           {% if neuro_exam %}<a href="/admin/visits/{{ visit.id }}/neuro-exam/print" target="_blank" class="uk-btn ghost sm">打印</a>{% endif %}
         </div>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:.5px solid var(--hair);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+        <div><div style="font-weight:700;letter-spacing:2px;">疼痛评分表</div>{% if pain_score %}<div class="content" style="margin-top:6px;"><b>{{ pain_score.scale_code|upper }}：</b>{{ pain_score.score|round(1) }}/{{ pain_score.score_max|round(1) }} · {{ pain_score.assessed_at }}<br>{{ pain_score.interpretation }}{% if pain_score_count > 1 %}<br><span class="empty">共 {{ pain_score_count }} 次评估，可查看趋势</span>{% endif %}</div>{% else %}<div class="empty" style="margin-top:6px;">尚未建立疼痛评分</div>{% endif %}</div>
+        <div style="display:flex;gap:8px;flex:none;"><a href="/admin/visits/{{ visit.id }}/pain-score" class="uk-btn ghost sm">{% if pain_score %}查看 / 新增{% else %}＋ 新建评分{% endif %}</a>{% if pain_score %}<a href="/admin/clinical-scores/{{ pain_score.id }}/print" target="_blank" class="uk-btn ghost sm">打印</a>{% endif %}</div>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:.5px solid var(--hair);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+        <div><div style="font-weight:700;letter-spacing:2px;">瘙痒评分表</div>{% if pruritus_score %}<div class="content" style="margin-top:6px;"><b>{{ pruritus_score.scale_code|upper }}：</b>{{ pruritus_score.score|round(1) }}/{{ pruritus_score.score_max|round(1) }} · {{ pruritus_score.assessed_at }}<br>{{ pruritus_score.interpretation }}{% if pruritus_score_count > 1 %}<br><span class="empty">共 {{ pruritus_score_count }} 次评估，可查看趋势</span>{% endif %}</div>{% else %}<div class="empty" style="margin-top:6px;">尚未建立瘙痒评分</div>{% endif %}</div>
+        <div style="display:flex;gap:8px;flex:none;"><a href="/admin/visits/{{ visit.id }}/pruritus-score" class="uk-btn ghost sm">{% if pruritus_score %}查看 / 新增{% else %}＋ 新建评分{% endif %}</a>{% if pruritus_score %}<a href="/admin/clinical-scores/{{ pruritus_score.id }}/print" target="_blank" class="uk-btn ghost sm">打印</a>{% endif %}</div>
       </div>
     </div>
   </div>

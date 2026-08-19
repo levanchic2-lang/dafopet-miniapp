@@ -1969,6 +1969,37 @@ class NeurologicExam(Base):
     pet = relationship("Pet", foreign_keys=[pet_id])
 
 
+class ClinicalScoreAssessment(Base):
+    """疼痛/瘙痒量表的一次评估；同一病历可重复记录以观察趋势。"""
+    __tablename__ = "clinical_score_assessments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id = mapped_column(ForeignKey("visits.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+
+    assessment_type: Mapped[str] = mapped_column(String(20), default="", index=True)  # pain / pruritus
+    scale_code: Mapped[str] = mapped_column(String(30), default="")  # cmps_sf / fgs / pvas10 / vascat
+    assessed_at: Mapped[str] = mapped_column(String(30), default="")
+    assessor: Mapped[str] = mapped_column(String(80), default="")
+    assessor_role: Mapped[str] = mapped_column(String(20), default="vet")
+    answers_json: Mapped[str] = mapped_column(Text, default="{}")
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    score_max: Mapped[float] = mapped_column(Float, default=10.0)
+    normalized_score: Mapped[float] = mapped_column(Float, default=0.0)
+    interpretation: Mapped[str] = mapped_column(Text, default="")
+    ai_analysis: Mapped[str] = mapped_column(Text, default="")
+    doctor_note: Mapped[str] = mapped_column(Text, default="")
+    store: Mapped[str] = mapped_column(String(40), default="", index=True)
+    operator: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    visit = relationship("Visit", foreign_keys=[visit_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet = relationship("Pet", foreign_keys=[pet_id])
+
+
 # ════════════════════════════════════════════════════════════════
 # 麻醉监护表（手术中逐时段生命体征监护）
 # 与 AnesthesiaOrder（麻醉单）刻意分开：麻醉单只记录计划项目并参与收费；

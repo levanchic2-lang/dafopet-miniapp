@@ -1,0 +1,23 @@
+{% extends "_print_base.html" %}
+{% block title %}{{ '疼痛评分报告' if record.assessment_type == 'pain' else '瘙痒评分报告' }} · {{ pet.name if pet else '' }}{% endblock %}
+{% block default_size %}A4{% endblock %}
+{% block extra_style %}
+.csr-head{text-align:center}.csr-en{font-size:21pt;letter-spacing:5px}.csr-zh{font-size:11pt;letter-spacing:7px;color:#555;margin-top:4px}.csr-rule{border:0;border-top:1px solid #222;border-bottom:1px solid #222;height:4px;margin:12px 0}.csr-title{text-align:center;font-size:14pt;font-weight:700;letter-spacing:5px;padding:7px}.csr-info{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 18px;font-size:9.5pt;padding:10px 0}.csr-info span{display:block;color:#777;font-size:8pt;margin-bottom:2px}.csr-score{display:grid;grid-template-columns:170px 1fr;border:1px solid #222;margin:14px 0;page-break-inside:avoid}.csr-score-main{text-align:center;padding:18px;border-right:1px solid #222}.csr-score-main strong{display:block;font-size:28pt}.csr-score-main span{font-size:8.5pt;color:#666}.csr-score-text{padding:16px;line-height:1.7}.csr-sec{margin-top:13px;border-left:3px solid #222;padding:2px 8px;font-size:11pt;font-weight:700;letter-spacing:3px}.csr-table{width:100%;border-collapse:collapse;margin-top:7px;font-size:9.5pt}.csr-table th,.csr-table td{border-bottom:.5px solid #bbb;padding:8px;text-align:left}.csr-table th{font-weight:400;color:#666}.csr-box{border:.5px solid #bbb;padding:9px 11px;margin-top:7px;white-space:pre-wrap;line-height:1.7;font-size:10pt;page-break-inside:avoid}.csr-note{font-size:8.5pt;color:#666;margin-top:12px;line-height:1.6}.csr-sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:28px}.csr-sig div{border-bottom:1px solid #888;padding:25px 0 4px;text-align:center;font-size:8.5pt;color:#555}
+{% endblock %}
+{% block toolbar_extra %}<span style="opacity:.8;font-size:12px;">报告：<b>{{ '疼痛评分' if record.assessment_type == 'pain' else '瘙痒评分' }}</b></span>{% endblock %}
+{% block content %}
+<div class="csr-head"><div class="csr-en">{{ clinic_name_en }}</div><div class="csr-zh">{{ clinic_name_zh }}</div></div>
+<hr class="csr-rule"><div class="csr-title">{{ 'PAIN ASSESSMENT · 疼 痛 评 分 报 告' if record.assessment_type == 'pain' else 'PRURITUS ASSESSMENT · 瘙 痒 评 分 报 告' }}</div><hr class="csr-rule">
+<div class="csr-info"><div><span>客户 Client</span>{{ cust.name if cust else '—' }}</div><div><span>宠物 Pet</span>{{ pet.name if pet else '—' }}</div><div><span>种类 Species</span>{% if not pet %}—{% elif pet.species == 'cat' %}猫{% elif pet.species == 'dog' %}犬{% else %}{{ pet.species }}{% endif %}</div><div><span>病历号 Chart No.</span>{{ pet.medical_record_no if pet else '—' }}</div><div><span>评估时间 Date</span>{{ record.assessed_at or '—' }}</div><div><span>评估人 Assessor</span>{{ record.assessor or '—' }}</div><div><span>评估角色 Role</span>{% if record.assessor_role == 'owner' %}宠物主人{% elif record.assessor_role == 'nurse' %}助理{% elif record.assessor_role == 'vet' %}兽医{% else %}{{ record.assessor_role }}{% endif %}</div><div><span>就诊号 Visit</span>#{{ visit.id if visit else '—' }}</div></div>
+<div class="csr-score"><div class="csr-score-main"><span>{{ scale['short_name'] }}</span><strong>{{ record.score|round(1) }}</strong><span>满分 {{ record.score_max|round(1) }}</span></div><div class="csr-score-text">{{ record.interpretation or '—' }}</div></div>
+<div class="csr-sec">评分明细 · Score Items</div>
+<table class="csr-table"><thead><tr><th>项目</th><th>记录</th></tr></thead><tbody>
+{% if record.scale_code in ['cmps_sf','fgs'] %}{% for group in scale['groups'] %}{% set raw = answers[group[0]] if group[0] in answers else none %}<tr><td>{{ group[1] }}</td><td>{% if raw == 'x' %}无法评估{% elif raw is not none and raw|string != '' %}{{ raw }} 分 · {{ group[2][raw|int] }}{% else %}未记录{% endif %}</td></tr>{% endfor %}
+{% elif record.scale_code == 'pvas10' %}<tr><td>犬瘙痒程度</td><td>{{ answers['score'] if 'score' in answers else '—' }}/10</td></tr>
+{% else %}<tr><td>舔舐 / 过度理毛</td><td>{{ answers['licking'] if 'licking' in answers else '—' }}/10</td></tr><tr><td>抓挠</td><td>{{ answers['scratching'] if 'scratching' in answers else '—' }}/10</td></tr>{% endif %}
+</tbody></table>
+<div class="csr-sec">AI 辅助分析 · Assisted Analysis</div><div class="csr-box">{{ record.ai_analysis or '未生成' }}</div>
+<div class="csr-sec">医生备注 · Clinical Note</div><div class="csr-box">{{ record.doctor_note or '—' }}</div>
+<div class="csr-note">本报告记录标准化量表结果，用于同一动物的连续评估和趋势观察。AI 仅辅助解释固定评分，不修改分值、不作诊断、不替代兽医临床判断。</div>
+<div class="csr-sig"><div>评估人 · Assessed By</div><div>复核医师 · Reviewed By</div><div>日期 · Date</div></div>
+{% endblock %}

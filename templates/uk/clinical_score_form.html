@@ -1,0 +1,75 @@
+{% extends "uk/_base.html" %}
+{% block extra_head %}
+<style>
+.cs-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px double var(--ink);padding-bottom:14px;margin-bottom:22px}.cs-head h1{margin:0;font-size:28pt;letter-spacing:4px}.cs-sub,.cs-note{color:var(--ink-3);font-size:9pt;line-height:1.65}.cs-section{border-top:1px solid var(--ink);padding:17px 0 22px}.cs-section h2{font-size:13pt;letter-spacing:3px;margin:0 0 14px}.cs-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px}.cs-field label{display:block;color:var(--ink-3);font-size:9pt;margin-bottom:5px}.cs-field input,.cs-field select,.cs-field textarea{box-sizing:border-box;width:100%;border:.5px solid var(--hair);border-radius:0;background:var(--paper);padding:9px 10px;font:inherit}.cs-field textarea{min-height:120px;line-height:1.7}.cs-items{border:.5px solid var(--hair)}.cs-item{display:grid;grid-template-columns:minmax(160px,.8fr) minmax(260px,1.7fr);align-items:center;gap:18px;padding:11px 13px;border-bottom:.5px solid var(--hair)}.cs-item:last-child{border-bottom:0}.cs-item-title{font-weight:700}.cs-range{display:grid;grid-template-columns:1fr 56px;gap:12px;align-items:center}.cs-range output{text-align:center;font-size:15pt;font-weight:700;font-variant-numeric:tabular-nums lining-nums}.cs-result{display:grid;grid-template-columns:220px 1fr;gap:18px}.cs-score{border:1px solid var(--ink);padding:20px;text-align:center}.cs-score strong{display:block;font-size:31pt;font-variant-numeric:tabular-nums lining-nums}.cs-score span{color:var(--ink-3);font-size:9pt}.cs-analysis{white-space:pre-wrap;background:#f7f5ef;border-left:3px solid var(--accent-amber);padding:13px;line-height:1.75;min-height:84px}.cs-actions{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--ink);padding-top:16px}.cs-actions>div{display:flex;gap:8px}.cs-history{width:100%;border-collapse:collapse;font-size:9.5pt}.cs-history th,.cs-history td{border-bottom:.5px solid var(--hair);padding:9px 7px;text-align:left;vertical-align:top}.cs-history th{font-weight:400;color:var(--ink-3)}.cs-msg{padding:10px 12px;margin-bottom:14px;border-left:3px solid var(--accent-green);background:#f4f8f5}.cs-msg.err{border-color:var(--accent-red);background:#fbf3f3;color:var(--accent-red)}
+@media(max-width:900px){.cs-head{align-items:flex-start;flex-direction:column;gap:12px}.cs-grid{grid-template-columns:1fr}.cs-item{grid-template-columns:1fr}.cs-result{grid-template-columns:1fr}.cs-history{display:block;overflow-x:auto}}
+</style>
+{% endblock %}
+{% block body %}
+{% set is_pain = assessment_type == 'pain' %}
+<div class="uk-breadcrumb"><a href="/admin/visits/{{ visit.id }}">病历 #{{ visit.id }}</a><span class="sep">/</span><span>{{ '疼痛评分' if is_pain else '瘙痒评分' }}</span></div>
+<div class="cs-head">
+  <div><h1>{{ '疼 痛 评 分' if is_pain else '瘙 痒 评 分' }}</h1><div class="cs-sub">{{ cust.name if cust else '—' }} · {{ pet.name if pet else '—' }} · {{ scale['name'] }}</div></div>
+  <a class="uk-btn ghost sm" href="/admin/visits/{{ visit.id }}">返回病历</a>
+</div>
+{% if msg %}<div class="cs-msg">{{ msg }}</div>{% endif %}{% if err %}<div class="cs-msg err">{{ err }}</div>{% endif %}
+
+{% if visit.status != 'closed' %}
+<form id="score-form" method="post" action="/admin/visits/{{ visit.id }}/clinical-score/save">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="assessment_type" value="{{ assessment_type }}">
+  <input type="hidden" name="scale_code" value="{{ scale_code }}">
+  <input type="hidden" name="answers_json" id="answers-json">
+  <section class="cs-section">
+    <h2>本次评估</h2>
+    <div class="cs-grid">
+      <div class="cs-field"><label>评估时间</label><input type="datetime-local" name="assessed_at" value="{{ now_local }}" required></div>
+      <div class="cs-field"><label>评估人</label><input name="assessor" value="{{ visit.vet_name or '' }}" placeholder="姓名"></div>
+      <div class="cs-field"><label>评估角色</label><select name="assessor_role"><option value="vet" {% if is_pain %}selected{% endif %}>兽医</option><option value="nurse">助理</option><option value="owner" {% if not is_pain %}selected{% endif %}>宠物主人</option></select></div>
+    </div>
+  </section>
+
+  <section class="cs-section">
+    <h2>{{ scale['short_name'] }} 评分项目</h2>
+    {% if scale_code in ['cmps_sf','fgs'] %}
+    <div class="cs-items">
+      {% for group in scale['groups'] %}
+      <div class="cs-item"><div><div class="cs-item-title">{{ group[1] }}</div><div class="cs-note">请选择最符合当前状态的一项</div></div><select data-answer="{{ group[0] }}" required><option value="">未选择</option>{% if scale_code == 'fgs' or group[0] == 'mobility' %}<option value="x">无法评估</option>{% endif %}{% for option in group[2] %}<option value="{{ loop.index0 }}">{{ loop.index0 }} 分 · {{ option }}</option>{% endfor %}</select></div>
+      {% endfor %}
+    </div>
+    {% elif scale_code == 'pvas10' %}
+    <div class="cs-items"><div class="cs-item"><div><div class="cs-item-title">犬瘙痒程度</div><div class="cs-note">0 表示无瘙痒，10 表示极重度瘙痒；以主人观察到的舔、抓、咬、摩擦等行为综合判断。</div></div><div class="cs-range"><input type="range" min="0" max="10" step="0.1" value="0" data-answer="score"><output>0.0</output></div></div></div>
+    {% else %}
+    <div class="cs-items">
+      <div class="cs-item"><div><div class="cs-item-title">舔舐 / 过度理毛</div><div class="cs-note">0 表示没有，10 表示极重度。</div></div><div class="cs-range"><input type="range" min="0" max="10" step="0.1" value="0" data-answer="licking"><output>0.0</output></div></div>
+      <div class="cs-item"><div><div class="cs-item-title">抓挠</div><div class="cs-note">0 表示没有，10 表示极重度。</div></div><div class="cs-range"><input type="range" min="0" max="10" step="0.1" value="0" data-answer="scratching"><output>0.0</output></div></div>
+    </div>
+    {% endif %}
+    <div class="cs-note" style="margin-top:10px;">评分由系统按量表固定规则计算。AI 不修改分值，也不代替兽医诊断和治疗决策。</div>
+  </section>
+
+  <section class="cs-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;"><h2 style="margin:0;">结果与分析</h2><button type="button" id="analyze-btn" class="uk-btn primary sm">计算并生成 AI 分析</button></div>
+    <div class="cs-result"><div class="cs-score"><span>本次固定评分</span><strong id="score-value">—</strong><div id="score-scale" class="cs-note">尚未计算</div></div><div><div class="cs-field"><label>规则解释</label><div class="cs-analysis" id="interpretation">完成评分后点击“计算并生成 AI 分析”。</div></div><div class="cs-field" style="margin-top:12px;"><label>AI 辅助分析（保存前可修改）</label><textarea name="ai_analysis" id="ai-analysis"></textarea></div></div></div>
+    <div class="cs-field" style="margin-top:14px;"><label>医生备注</label><textarea name="doctor_note" placeholder="补充疼痛部位、诱因、治疗后变化、下次复评时间等"></textarea></div>
+  </section>
+  <div class="cs-actions"><a class="uk-btn ghost sm" href="/admin/visits/{{ visit.id }}">取消</a><div><button type="submit" class="uk-btn primary sm">保存本次评分</button></div></div>
+</form>
+{% else %}<div class="cs-msg err">病历已结束，仅可查看和打印历史评分。</div>{% endif %}
+
+<section class="cs-section" style="margin-top:28px;">
+  <h2>历史记录（{{ records|length }}）</h2>
+  {% if records %}<table class="cs-history"><thead><tr><th>评估时间</th><th>评估人</th><th>量表</th><th>得分</th><th>结果</th><th>操作</th></tr></thead><tbody>{% for row in records %}<tr><td>{{ row.assessed_at }}</td><td>{{ row.assessor or '—' }} · {% if row.assessor_role == 'owner' %}主人{% elif row.assessor_role == 'nurse' %}助理{% elif row.assessor_role == 'vet' %}兽医{% else %}{{ row.assessor_role }}{% endif %}</td><td>{{ row.scale_code|upper }}</td><td><b>{{ row.score|round(1) }}/{{ row.score_max|round(1) }}</b></td><td>{{ row.interpretation }}</td><td><a class="uk-btn ghost sm" target="_blank" href="/admin/clinical-scores/{{ row.id }}/print">打印 PDF</a></td></tr>{% endfor %}</tbody></table>{% else %}<div class="cs-note">还没有历史评分。</div>{% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const form=document.getElementById('score-form'); if(!form)return;
+  document.querySelectorAll('.cs-range input').forEach(el=>{const out=el.parentElement.querySelector('output');const sync=()=>out.textContent=Number(el.value).toFixed(1);el.addEventListener('input',sync);sync();});
+  function collect(){const out={};document.querySelectorAll('[data-answer]').forEach(el=>out[el.dataset.answer]=el.value);return out;}
+  document.getElementById('analyze-btn').addEventListener('click',async function(){this.disabled=true;this.textContent='正在分析';try{const res=await fetch('/admin/clinical-scores/analyze',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({csrf_token:'{{ csrf_token }}',visit_id:{{ visit.id }},assessment_type:'{{ assessment_type }}',scale_code:'{{ scale_code }}',answers:collect()})});let data={};try{data=await res.json();}catch(_){throw new Error('服务暂时没有返回有效数据，请稍后重试');}if(!res.ok||!data.ok)throw new Error(data.detail||'分析失败');document.getElementById('score-value').textContent=Number(data.score).toFixed(Number(data.score)%1?1:0);document.getElementById('score-scale').textContent='满分 '+data.score_max;document.getElementById('interpretation').textContent=data.interpretation||'';document.getElementById('ai-analysis').value=data.analysis||'';}catch(e){document.getElementById('interpretation').textContent=e.message||'分析失败，请稍后重试';}finally{this.disabled=false;this.textContent='计算并生成 AI 分析';}});
+  form.addEventListener('submit',()=>{document.getElementById('answers-json').value=JSON.stringify(collect());});
+})();
+</script>
+{% endblock %}
