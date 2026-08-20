@@ -199,16 +199,94 @@
       <td class="amount" style="color:var(--muted);">¥{{ '%.2f'|format(wallet_recharge_bonus_total) }}</td>
       <td style="text-align:right;color:var(--muted);font-size:.78rem;">钱包合计到账 ¥{{ '%.2f'|format(wallet_recharge_credit_total) }} · 赠送仅增加可用余额</td>
     </tr>
+    {% if wallet_recharge_details %}
+    <tr class="rev-detail-row">
+      <td colspan="3">
+        <details class="rev-drill">
+          <summary>查看钱包充值明细（{{ wallet_recharge_details|length }} 笔）</summary>
+          <div class="rev-drill-scroll">
+            <table class="rev-drill-table">
+              <thead><tr><th>时间</th><th>客户</th><th>实收</th><th>赠送</th><th>到账</th><th>支付方式</th><th>经办人</th><th>门店</th></tr></thead>
+              <tbody>
+              {% for d in wallet_recharge_details %}
+              <tr>
+                <td>{{ d['created_at']|bjtime if d['created_at'] else '—' }}</td>
+                <td><a href="/admin/customers/{{ d['customer_id'] }}">{{ d['customer_name'] }}</a></td>
+                <td class="amount">¥{{ '%.2f'|format(d['principal']) }}</td>
+                <td class="amount muted">¥{{ '%.2f'|format(d['bonus']) }}</td>
+                <td class="amount">¥{{ '%.2f'|format(d['credit']) }}</td>
+                <td>{{ d['pay_method'] }}</td><td>{{ d['operator'] }}</td><td>{{ d['store'] }}</td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </td>
+    </tr>
+    {% endif %}
     <tr>
       <td><b style="color:#1d4d3a;">＋ 套餐售卖</b></td>
       <td class="amount">¥{{ '%.2f'|format(pkg_sold_total) }}</td>
       <td style="text-align:right;color:var(--muted);font-size:.78rem;">{{ pkg_sold_count }} 份 · 预收款（核销时不算流入）</td>
     </tr>
+    {% if pkg_sold_details %}
+    <tr class="rev-detail-row">
+      <td colspan="3">
+        <details class="rev-drill">
+          <summary>查看套餐售卖明细（{{ pkg_sold_details|length }} 份）</summary>
+          <div class="rev-drill-scroll">
+            <table class="rev-drill-table">
+              <thead><tr><th>日期</th><th>客户 / 宠物</th><th>套餐</th><th>金额</th><th>经办人</th><th>门店</th><th>单据</th></tr></thead>
+              <tbody>
+              {% for d in pkg_sold_details %}
+              <tr>
+                <td>{{ d['purchase_date'] or '—' }}</td>
+                <td><a href="/admin/customers/{{ d['customer_id'] }}">{{ d['customer_name'] }} · {{ d['pet_name'] }}</a></td>
+                <td>{{ d['name'] }}</td><td class="amount">¥{{ '%.2f'|format(d['amount']) }}</td>
+                <td>{{ d['operator'] }}</td><td>{{ d['store'] }}</td>
+                <td>{% if d['invoice_id'] %}<a href="/admin/invoices/{{ d['invoice_id'] }}">收费单 →</a>{% else %}<span class="muted">未关联</span>{% endif %}</td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </td>
+    </tr>
+    {% endif %}
     <tr>
       <td><b style="color:#1d4d3a;">＋ 收押金</b></td>
       <td class="amount">¥{{ '%.2f'|format(deposit_in) }}</td>
       <td style="text-align:right;color:var(--muted);font-size:.78rem;">代客户暂存</td>
     </tr>
+    {% if deposit_details %}
+    <tr class="rev-detail-row">
+      <td colspan="3">
+        <details class="rev-drill">
+          <summary>查看收押金明细（{{ deposit_details|length }} 笔）</summary>
+          <div class="rev-drill-scroll">
+            <table class="rev-drill-table">
+              <thead><tr><th>时间</th><th>客户 / 宠物</th><th>押金用途</th><th>金额</th><th>收款方式</th><th>经办人</th><th>门店</th><th>查看</th></tr></thead>
+              <tbody>
+              {% for d in deposit_details %}
+              <tr>
+                <td>{{ d['created_at']|bjtime if d['created_at'] else '—' }}</td>
+                <td>
+                  {% if d['customer_id'] %}<a href="/admin/customers/{{ d['customer_id'] }}">{{ d['customer_name'] }} · {{ d['pet_name'] }}</a>{% else %}{{ d['customer_name'] }} · {{ d['pet_name'] }}{% endif %}
+                </td>
+                <td>{{ d['category'] }}</td><td class="amount">¥{{ '%.2f'|format(d['amount']) }}</td>
+                <td>{{ d['pay_method'] }}</td><td>{{ d['operator'] }}</td><td>{{ d['store'] }}</td>
+                <td><a href="/admin/deposits/{{ d['id'] }}">押金记录 →</a></td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </td>
+    </tr>
+    {% endif %}
     <tr>
       <td><b style="color:#7a2828;">－ 退押金</b></td>
       <td class="amount" style="color:#7a2828;">－¥{{ '%.2f'|format(deposit_refund) }}</td>

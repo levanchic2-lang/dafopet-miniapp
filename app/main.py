@@ -21025,7 +21025,9 @@ async def admin_reports_revenue(
     )
     if store:
         wallet_recharge_q = wallet_recharge_q.filter(WalletTransaction.store == store)
-    wallet_recharges = wallet_recharge_q.all()
+    wallet_recharges = wallet_recharge_q.order_by(
+        WalletTransaction.created_at.desc(), WalletTransaction.id.desc()
+    ).all()
     # WalletTransaction.amount is the wallet balance increase (cash + bonus).
     # Only the paid principal is a cash inflow; promotional credit is disclosed
     # separately and must not inflate the finance total.
@@ -21039,6 +21041,28 @@ async def admin_reports_revenue(
     wallet_recharge_credit_total = round(
         wallet_recharge_total + wallet_recharge_bonus_total, 2
     )
+    wallet_recharge_details = []
+    for txn in wallet_recharges:
+        bonus = max(0.0, float(txn.bonus_amount or 0))
+        credit = max(0.0, float(txn.amount or 0))
+        wallet_recharge_details.append({
+            "id": txn.id,
+            "customer_id": txn.customer_id,
+            "customer_name": (
+                (txn.customer.name if txn.customer else "")
+                or f"客户 #{txn.customer_id or '-'}"
+            ),
+            "principal": round(max(0.0, credit - bonus), 2),
+            "bonus": round(bonus, 2),
+            "credit": round(credit, 2),
+            "pay_method": _REVENUE_PAY_ZH.get(
+                txn.pay_method or "", txn.pay_method or "未指定"
+            ),
+            "operator": (txn.operator or "").strip() or "未指定",
+            "store": (txn.store or "").strip() or "未指定",
+            "created_at": txn.created_at,
+            "note": txn.note or "",
+        })
 
     # 套餐售卖（区间内）
     pkg_sold_q = db.query(CustomerPackage).filter(
@@ -21047,8 +21071,28 @@ async def admin_reports_revenue(
     )
     if store:
         pkg_sold_q = pkg_sold_q.filter(CustomerPackage.store == store)
-    pkg_sold = pkg_sold_q.all()
+    pkg_sold = pkg_sold_q.order_by(
+        CustomerPackage.purchase_date.desc(), CustomerPackage.id.desc()
+    ).all()
     pkg_sold_total = sum(float(p.sell_price or 0) for p in pkg_sold)
+    pkg_sold_details = [{
+        "id": pkg.id,
+        "customer_id": pkg.customer_id,
+        "customer_name": (
+            (pkg.customer.name if pkg.customer else "")
+            or f"客户 #{pkg.customer_id or '-'}"
+        ),
+        "pet_name": (pkg.pet.name if pkg.pet else "") or "—",
+        "name": (pkg.name or "").strip() or (
+            (pkg.product.name if pkg.product else "") or "套餐"
+        ),
+        "amount": round(float(pkg.sell_price or 0), 2),
+        "operator": (pkg.operator or "").strip() or "未指定",
+        "store": (pkg.store or "").strip() or "未指定",
+        "purchase_date": pkg.purchase_date,
+        "status": pkg.status or "",
+        "invoice_id": pkg.invoice_id,
+    } for pkg in pkg_sold]
 
     # 押金净流入（收 - 退）。按北京日期分桶（func.date +8h）。
     dep_q = db.query(Deposit).filter(
@@ -21057,7 +21101,28 @@ async def admin_reports_revenue(
     )
     if store:
         dep_q = dep_q.filter(Deposit.store == store)
-    deposit_in = sum(float(d.amount or 0) for d in dep_q.all())
+    deposits = dep_q.order_by(Deposit.created_at.desc(), Deposit.id.desc()).all()
+    deposit_in = sum(float(d.amount or 0) for d in deposits)
+    deposit_details = [{
+        "id": dep.id,
+        "customer_id": dep.customer_id,
+        "customer_name": (
+            (dep.customer.name if dep.customer else "")
+            or f"客户 #{dep.customer_id or '-'}"
+        ),
+        "pet_name": (dep.pet.name if dep.pet else "") or "—",
+        "category": _DEPOSIT_CATEGORY_ZH.get(
+            dep.category or "", dep.category or "其他押金"
+        ),
+        "amount": round(float(dep.amount or 0), 2),
+        "pay_method": _REVENUE_PAY_ZH.get(
+            dep.pay_method or "", dep.pay_method or "未指定"
+        ),
+        "operator": (dep.operator or "").strip() or "未指定",
+        "store": (dep.store or "").strip() or "未指定",
+        "created_at": dep.created_at,
+        "status": dep.status or "",
+    } for dep in deposits]
     # 退押金：从审计日志逐笔取（每笔退款一条 deposit_refund，含 amount + 时间）。
     # 这样「早先收、今天退」的押金也能算到今天，且按实退金额而非累计 refunded_amount。
     _refund_audits = db.query(AuditLog).filter(
@@ -21112,9 +21177,12 @@ async def admin_reports_revenue(
         "wallet_recharge_bonus_total": wallet_recharge_bonus_total,
         "wallet_recharge_credit_total": wallet_recharge_credit_total,
         "wallet_recharges_count": len(wallet_recharges),
+        "wallet_recharge_details": wallet_recharge_details,
         "pkg_sold_total": pkg_sold_total,
         "pkg_sold_count": len(pkg_sold),
+        "pkg_sold_details": pkg_sold_details,
         "deposit_in": deposit_in,
+        "deposit_details": deposit_details,
         "deposit_refund": deposit_refund,
         # 财务收入合计 / 业务收入合计
         "finance_total": finance_cash_total + wallet_recharge_total,
