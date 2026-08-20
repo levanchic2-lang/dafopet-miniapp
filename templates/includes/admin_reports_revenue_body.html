@@ -57,7 +57,7 @@
   <div class="rev-card blue">
     <div class="lbl">钱包充值实收</div>
     <div class="val">¥{{ '%.2f'|format(wallet_recharge_total) }}</div>
-    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">{{ wallet_recharges_count }} 笔（不含赠送）</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">{{ wallet_recharges_count }} 笔 · 赠送 ¥{{ '%.2f'|format(wallet_recharge_bonus_total) }} · 到账 ¥{{ '%.2f'|format(wallet_recharge_credit_total) }}</div>
   </div>
   <div class="rev-card">
     <div class="lbl">收款笔数 / 单均</div>
@@ -190,9 +190,14 @@
       <td style="text-align:right;color:var(--muted);font-size:.78rem;">现金 / 微信 / 支付宝 / 收钱吧 / 美团 / 三方</td>
     </tr>
     <tr>
-      <td><b style="color:#1d4d3a;">＋ 钱包充值</b></td>
+      <td><b style="color:#1d4d3a;">＋ 钱包充值实收</b></td>
       <td class="amount">¥{{ '%.2f'|format(wallet_recharge_total) }}</td>
-      <td style="text-align:right;color:var(--muted);font-size:.78rem;">{{ wallet_recharges_count }} 笔 · 客户充进卡</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">{{ wallet_recharges_count }} 笔 · 实际收到的充值款</td>
+    </tr>
+    <tr>
+      <td>其中：充值赠送（非现金流入）</td>
+      <td class="amount" style="color:var(--muted);">¥{{ '%.2f'|format(wallet_recharge_bonus_total) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">钱包合计到账 ¥{{ '%.2f'|format(wallet_recharge_credit_total) }} · 赠送仅增加可用余额</td>
     </tr>
     <tr>
       <td><b style="color:#1d4d3a;">＋ 套餐售卖</b></td>
@@ -217,7 +222,7 @@
     </tbody>
   </table>
   <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem;font-style:italic;line-height:1.6;">
-    说明：钱包扣款 / 套餐核销 / 押金抵扣 / 优惠券抵扣属于<b>已收过的钱被使用</b>，不算新的现金流入；钱包充值 / 收押金 / 套餐售卖则属于<b>预收款</b>（新进账）。
+    说明：钱包扣款 / 套餐核销 / 押金抵扣 / 优惠券抵扣属于<b>已收过的钱被使用</b>，不算新的现金流入；钱包充值实收 / 收押金 / 套餐售卖属于<b>预收款</b>（新进账）。充值赠送只增加客户钱包余额，不计入现金流入。
   </div>
 </div>
 

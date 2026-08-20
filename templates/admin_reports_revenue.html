@@ -132,7 +132,7 @@
   <div class="rev-card blue">
     <div class="lbl">钱包充值实收</div>
     <div class="val">¥{{ '%.2f'|format(wallet_recharge_total) }}</div>
-    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">{{ wallet_recharges_count }} 笔（不含赠送）</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">{{ wallet_recharges_count }} 笔 · 赠送 ¥{{ '%.2f'|format(wallet_recharge_bonus_total) }} · 到账 ¥{{ '%.2f'|format(wallet_recharge_credit_total) }}</div>
   </div>
   <div class="rev-card">
     <div class="lbl">收款笔数 / 单均</div>
@@ -232,7 +232,7 @@
   </div>
   <div class="rev-card">
     <div class="lbl">净财务流入（粗算）</div>
-    <div class="val" style="font-size:1.35rem;">¥{{ '%.2f'|format(total_amount + wallet_recharge_total + pkg_sold_total + deposit_in - deposit_refund) }}</div>
+    <div class="val" style="font-size:1.35rem;">¥{{ '%.2f'|format(finance_cash_total + wallet_recharge_total + pkg_sold_total + deposit_in - deposit_refund) }}</div>
     <div style="font-size:.7rem;color:var(--muted);margin-top:.2rem;">实收 + 充值 + 套餐 + 押金 - 退押</div>
   </div>
 </div>

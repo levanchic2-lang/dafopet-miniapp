@@ -21026,7 +21026,19 @@ async def admin_reports_revenue(
     if store:
         wallet_recharge_q = wallet_recharge_q.filter(WalletTransaction.store == store)
     wallet_recharges = wallet_recharge_q.all()
-    wallet_recharge_total = sum(float(t.amount or 0) for t in wallet_recharges)
+    # WalletTransaction.amount is the wallet balance increase (cash + bonus).
+    # Only the paid principal is a cash inflow; promotional credit is disclosed
+    # separately and must not inflate the finance total.
+    wallet_recharge_bonus_total = round(sum(
+        max(0.0, float(t.bonus_amount or 0)) for t in wallet_recharges
+    ), 2)
+    wallet_recharge_total = round(sum(
+        max(0.0, float(t.amount or 0) - float(t.bonus_amount or 0))
+        for t in wallet_recharges
+    ), 2)
+    wallet_recharge_credit_total = round(
+        wallet_recharge_total + wallet_recharge_bonus_total, 2
+    )
 
     # 套餐售卖（区间内）
     pkg_sold_q = db.query(CustomerPackage).filter(
@@ -21097,6 +21109,8 @@ async def admin_reports_revenue(
         "by_store_method_list": by_store_method_list,
         # 其他财务流入
         "wallet_recharge_total": wallet_recharge_total,
+        "wallet_recharge_bonus_total": wallet_recharge_bonus_total,
+        "wallet_recharge_credit_total": wallet_recharge_credit_total,
         "wallet_recharges_count": len(wallet_recharges),
         "pkg_sold_total": pkg_sold_total,
         "pkg_sold_count": len(pkg_sold),
