@@ -836,8 +836,8 @@
     <div class="uk-tab-content {% if active_tab=='invoices' %}active{% endif %}" data-tab-content="invoices">
       <div class="tab-action-bar">
         <span class="tab-count">
-          共 <b>{{ pet_invoices|length }}</b> 条{% if unpaid_total > 0 %}
-          <span style="margin-left:14px;color:var(--accent-red);">未付款 ¥{{ '%.2f'|format(unpaid_total) }}</span>
+          共 <b>{{ pet_invoices|length }}</b> 条{% if pet_unpaid_total > 0 %}
+          <span style="margin-left:14px;color:var(--accent-red);">未付款 ¥{{ '%.2f'|format(pet_unpaid_total) }}</span>
           {% endif %}
         </span>
       </div>
@@ -1180,9 +1180,9 @@
     <div class="aside-card">
       <h3>财务清单</h3>
       <div class="aside-list">
-        <a class="aside-row" onclick="switchTab('invoices')">
+        <a class="aside-row" data-aside-tab="invoices" onclick="cycleInvoicePet();return false;">
           <span>收费记录</span>
-          <span class="num">{{ pet_invoices|length }}{% if unpaid_total > 0 %} · <em class="danger">¥{{ '%.0f'|format(unpaid_total) }} 未付</em>{% endif %}</span>
+          <span class="num">{{ customer_invoice_count }}{% if unpaid_total > 0 %} · <em class="danger">¥{{ '%.0f'|format(unpaid_total) }} 未付</em>{% endif %}</span>
         </a>
         <a class="aside-row" onclick="switchTab('sales')">
           <span>销售订单</span><span class="num">{{ pet_sales_orders|length }}</span>
@@ -1748,10 +1748,37 @@ function toggleCouponFields(kind) {
 function switchTab(tab) {
   document.querySelectorAll('.uk-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.uk-tab-content').forEach(d => d.classList.toggle('active', d.dataset.tabContent === tab));
-  document.querySelectorAll('.aside-row').forEach(r => r.classList.toggle('active', r.getAttribute('onclick') && r.getAttribute('onclick').includes("'"+tab+"'")));
+  document.querySelectorAll('.aside-row').forEach(r => r.classList.toggle(
+    'active',
+    r.dataset.asideTab === tab ||
+      (r.getAttribute('onclick') && r.getAttribute('onclick').includes("'"+tab+"'"))
+  ));
   const url = new URL(window.location.href);
   url.searchParams.set('tab', tab);
   history.replaceState(null, '', url.toString());
+}
+
+// 收费记录按账单所属宠物循环：优先有待付账单的宠物，没有待付时循环历史收费宠物。
+const invoicePetCycle = {{ invoice_cycle_pet_ids | tojson }};
+function cycleInvoicePet() {
+  if (!invoicePetCycle.length) {
+    switchTab('invoices');
+    return;
+  }
+  const currentPetId = {{ active_pet_id or 0 }};
+  const currentIndex = invoicePetCycle.indexOf(currentPetId);
+  const nextPetId = currentIndex < 0
+    ? invoicePetCycle[0]
+    : invoicePetCycle[(currentIndex + 1) % invoicePetCycle.length];
+  if (nextPetId === currentPetId) {
+    switchTab('invoices');
+    return;
+  }
+  try { sessionStorage.setItem('custScroll', JSON.stringify({c: {{ cust.id }}, y: window.scrollY})); } catch(e) {}
+  const url = new URL(window.location.href);
+  url.searchParams.set('pet_id', nextPetId);
+  url.searchParams.set('tab', 'invoices');
+  window.location.href = url.toString();
 }
 
 // 切换宠物：保持滚动位置（避免每次跳回顶部，反复滚动找诊疗/处方等 tab）

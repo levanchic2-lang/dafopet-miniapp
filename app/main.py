@@ -8560,6 +8560,35 @@ async def page_admin_customer_detail(
         db.commit()
     cust_invoices = db.query(Invoice).filter(Invoice.customer_id == customer_id).order_by(Invoice.id.desc()).limit(100).all()
 
+    # 旧收费单有时只关联病历、没有直接写 pet_id；统一解析实际所属宠物，
+    # 供宠物收费列表和右侧“收费记录”循环切换共同使用。
+    invoice_visit_ids = {inv.visit_id for inv in cust_invoices if inv.visit_id}
+    invoice_visit_pet = dict(
+        db.query(Visit.id, Visit.pet_id).filter(Visit.id.in_(invoice_visit_ids)).all()
+    ) if invoice_visit_ids else {}
+
+    def _invoice_pet_id(inv: Invoice) -> int:
+        return int(inv.pet_id or invoice_visit_pet.get(inv.visit_id) or 0)
+
+    invoices_by_pet: dict[int, list[Invoice]] = {pid: [] for pid in pet_map}
+    for inv in cust_invoices:
+        resolved_pet_id = _invoice_pet_id(inv)
+        if resolved_pet_id in invoices_by_pet:
+            invoices_by_pet[resolved_pet_id].append(inv)
+
+    # 收费记录入口优先循环“有待付账单”的宠物；没有待付时再循环有历史账单的宠物。
+    unpaid_invoice_pet_ids: list[int] = []
+    invoice_pet_ids: list[int] = []
+    for inv in cust_invoices:  # 已按 id 倒序，较新的账单对应宠物排在前面
+        resolved_pet_id = _invoice_pet_id(inv)
+        if resolved_pet_id not in pet_map:
+            continue
+        if resolved_pet_id not in invoice_pet_ids:
+            invoice_pet_ids.append(resolved_pet_id)
+        if inv.payment_status in ("unpaid", "partial") and resolved_pet_id not in unpaid_invoice_pet_ids:
+            unpaid_invoice_pet_ids.append(resolved_pet_id)
+    invoice_cycle_pet_ids = unpaid_invoice_pet_ids or invoice_pet_ids
+
     # ── 所有宠物的"最近一次"疫苗/驱虫/就诊（用于宠物列表行上展示）──
     all_pet_ids = [p.id for p in pets]
     latest_vacc_by_pet: dict[int, "Vaccination"] = {}
@@ -8610,12 +8639,8 @@ async def page_admin_customer_detail(
             _g._lock_reason = _r
         weight_records = db.query(WeightRecord).filter(WeightRecord.pet_id == active_pet_id).order_by(WeightRecord.record_date.asc()).all()
         medical_docs = db.query(MedicalDocument).filter(MedicalDocument.pet_id == active_pet_id).order_by(MedicalDocument.id.desc()).all()
-        # 该宠物名下发票 = 直接关联该宠物 OR 通过 visit_id 关联
-        visit_ids = {v.id for v in visits}
-        pet_invoices = [
-            inv for inv in cust_invoices
-            if inv.pet_id == active_pet_id or (inv.visit_id and inv.visit_id in visit_ids)
-        ]
+        # 该宠物名下收费单（兼容只关联病历的旧收费单）
+        pet_invoices = invoices_by_pet.get(active_pet_id, [])
         # 该宠物的销售单（按 pet_id；无 pet_id 的旧单子归入活跃宠物，避免数据消失）
         pet_sales_orders = [
             so for so in cust_sales_orders
@@ -8692,6 +8717,9 @@ async def page_admin_customer_detail(
 
     # ── 头部信号 chip 数据 ──
     unpaid_total = round(sum((i.total_amount or 0) for i in cust_invoices if i.payment_status == "unpaid"), 2)
+    pet_unpaid_total = round(sum(
+        (i.total_amount or 0) for i in pet_invoices if i.payment_status == "unpaid"
+    ), 2)
     held_deposits_total = round(sum((d.amount or 0) for d in deposits if d.status in ("held", "partial_refund")), 2)
     # 押金剩余可用（=收-已抵扣-已退）+ 押金累计已抵扣（用于客户档案顶部押金卡显示）
     deposits_remaining_total = round(sum(
@@ -8737,6 +8765,8 @@ async def page_admin_customer_detail(
             "applications": applications,
             "sales_orders": cust_sales_orders,
             "cust_invoices": cust_invoices,
+            "customer_invoice_count": len(cust_invoices),
+            "invoice_cycle_pet_ids": invoice_cycle_pet_ids,
             # 宠物级
             "appointments": appointments,
             "visits": visits,
@@ -8752,6 +8782,7 @@ async def page_admin_customer_detail(
             "weight_records": weight_records,
             "medical_docs": medical_docs,
             "pet_invoices": pet_invoices,
+            "pet_unpaid_total": pet_unpaid_total,
             "pet_sales_orders": pet_sales_orders,
             # 钱包
             "wallet_balance": wallet_balance,
