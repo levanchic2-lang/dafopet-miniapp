@@ -125,9 +125,9 @@
     <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">现金类 + 充值实收</div>
   </div>
   <div class="rev-card">
-    <div class="lbl">现金类合计</div>
+    <div class="lbl">业务收费实收</div>
     <div class="val">¥{{ '%.2f'|format(finance_cash_total) }}</div>
-    <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">收费单收到的真实金</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">已收业务收费，不含钱包充值</div>
   </div>
   <div class="rev-card blue">
     <div class="lbl">钱包充值实收</div>
@@ -173,7 +173,7 @@
   <div class="rev-card blue">
     <div class="lbl">业务收入合计</div>
     <div class="val">¥{{ '%.2f'|format(business_total) }}</div>
-    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">现金类 + 钱包扣款 + 套餐 + 押金抵扣 + 优惠券抵扣</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">业务收费单合计（含抵扣，不含钱包充值）</div>
   </div>
   <div class="rev-card">
     <div class="lbl">现金类</div>

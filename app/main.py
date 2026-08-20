@@ -29,7 +29,7 @@ from passlib.context import CryptContext
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 import httpx
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.staticfiles import StaticFiles
@@ -20798,11 +20798,15 @@ async def admin_reports_revenue(
     # 已收款的收费单（paid_at 在区间内）
     # 员工内购档案不计入业绩报表（is_internal=True 的 customer 全部排除）
     _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
+    _wallet_recharge_invoice_ids = select(InvoiceItem.invoice_id).where(
+        InvoiceItem.ref_type == "wallet_recharge"
+    )
     base_q = db.query(Invoice).filter(
         Invoice.payment_status == "paid",
         func.date(Invoice.paid_at, '+8 hours') >= df,
         func.date(Invoice.paid_at, '+8 hours') <= dt,
         ~Invoice.customer_id.in_(_internal_ids_sub),
+        ~Invoice.id.in_(_wallet_recharge_invoice_ids),
     )
     rows = base_q.order_by(Invoice.paid_at.desc()).all()
 
@@ -21432,11 +21436,15 @@ async def admin_reports_revenue_export(
     df, dt, label = _revenue_date_range(preset, date_from, date_to)
     # 员工内购档案不计入业绩报表
     _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
+    _wallet_recharge_invoice_ids = select(InvoiceItem.invoice_id).where(
+        InvoiceItem.ref_type == "wallet_recharge"
+    )
     rows = db.query(Invoice).filter(
         Invoice.payment_status == "paid",
         func.date(Invoice.paid_at, '+8 hours') >= df,
         func.date(Invoice.paid_at, '+8 hours') <= dt,
         ~Invoice.customer_id.in_(_internal_ids_sub),
+        ~Invoice.id.in_(_wallet_recharge_invoice_ids),
     ).order_by(Invoice.paid_at.asc()).all()
 
     if store:
@@ -31500,11 +31508,15 @@ async def m_reports_revenue(
         d_from = today.replace(day=1).isoformat(); d_to = today.isoformat(); label = "本月"
     # 按 Payment 表聚合（员工内购档案排除）
     _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
+    _wallet_recharge_invoice_ids = select(InvoiceItem.invoice_id).where(
+        InvoiceItem.ref_type == "wallet_recharge"
+    )
     q = db.query(Payment).filter(
         Payment.status == "success",
         Payment.created_at >= datetime.strptime(d_from, "%Y-%m-%d"),
         Payment.created_at < datetime.strptime(d_to, "%Y-%m-%d") + timedelta(days=1),
         ~Payment.customer_id.in_(_internal_ids_sub),
+        ~Payment.invoice_id.in_(_wallet_recharge_invoice_ids),
     )
     if store_short:
         q = q.filter(Payment.store == store_short)
