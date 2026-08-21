@@ -68,6 +68,7 @@ Page({
     result: null,
     error: "",
     notifyStatusText: "",
+    notifyReady: false,
     openid: "",
     idConsent: false,
     isProxy: false,
@@ -99,11 +100,7 @@ Page({
 
   onLoad() {
     this._loadShenzhenRegions();
-    // 若之前已绑定 openid，直接复用，确保每单都能出现在"我的订单"
-    try {
-      const saved = wx.getStorageSync("WECHAT_OPENID") || "";
-      if (saved && !this.data.openid) this.setData({ openid: String(saved) });
-    } catch (e) {}
+    this._syncNotifyState();
     // 默认自动尝试获取定位（不强制；失败不阻断）
     const { form } = this.data;
     if (form.location_lat && form.location_lng) return;
@@ -113,6 +110,17 @@ Page({
   onShow() {
     // 兜底：onLoad 时如果数据没就绪（require 失败 + 网络慢），重入页面再试
     if (!this.data.addrReady) this._loadShenzhenRegions();
+    this._syncNotifyState();
+  },
+
+  _syncNotifyState() {
+    // 首页和申请页共用同一绑定状态；已绑定时不再重复要求授权。
+    try {
+      const saved = String(wx.getStorageSync("WECHAT_OPENID") || "");
+      this.setData({ openid: saved, notifyReady: !!saved });
+    } catch (e) {
+      this.setData({ notifyReady: !!this.data.openid });
+    }
   },
 
   _loadShenzhenRegions() {
@@ -414,6 +422,7 @@ Page({
       const openid = data.openid || "";
       this.setData({
         openid,
+        notifyReady: !!openid,
         notifyStatusText:
           "openid已获取，可提交申请。手机号将用于医院联系，订阅消息将推送到本微信。"
       });

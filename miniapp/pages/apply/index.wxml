@@ -1,11 +1,12 @@
 <view class="card">
   <view class="title">流浪猫绝育（TNR）申请</view>
-  <view class="sub">
-    请先点击“开启通知提醒”完成订阅授权。提交后若进入预通过/通过/拒绝/手术完成，系统将通过小程序订阅消息通知你。
+  <view wx:if="{{!notifyReady}}">
+    <view class="sub">
+      提交申请前，请先开启通知提醒，用于接收审核、预约和手术进度。
+    </view>
+    <button class="btn secondary" bindtap="onEnableNotify">开启通知提醒</button>
+    <view wx:if="{{notifyStatusText}}" class="sub">{{notifyStatusText}}</view>
   </view>
-
-  <button class="btn secondary" bindtap="onEnableNotify">开启通知提醒</button>
-  <view wx:if="{{notifyStatusText}}" class="sub">{{notifyStatusText}}</view>
 
   <view class="preflight-card">
     <view class="preflight-title">申请前请准备</view>
