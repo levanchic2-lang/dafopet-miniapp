@@ -97,6 +97,7 @@ Page({
     }
   },
 
+  goTnrGuidePage() { wx.navigateTo({ url: "/pages/tnr-guide/index" }); },
   goApplyPage() { wx.navigateTo({ url: "/pages/apply/index" }); },
   goStatusPage() { wx.navigateTo({ url: "/pages/status/status" }); },
   goBindPage() { wx.navigateTo({ url: "/pages/bind/bind" }); },

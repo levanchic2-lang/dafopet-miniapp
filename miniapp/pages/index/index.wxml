@@ -19,16 +19,24 @@
 
   <view class="section core-section">
     <view class="section-label">流浪猫 TNR</view>
-    <button class="primary-entry" bindtap="goApplyPage">
+    <button class="primary-entry" bindtap="goTnrGuidePage">
       <view class="entry-order">01</view>
       <view class="entry-copy">
-        <view class="entry-title">申请流浪猫绝育（TNR）</view>
-        <view class="entry-desc">填写资料并提交医院审核</view>
+        <view class="entry-title">TNR 申请流程</view>
+        <view class="entry-desc">第一次申请请先查看，准备齐全更顺利</view>
       </view>
       <view class="entry-arrow">›</view>
     </button>
-    <button class="secondary-entry" bindtap="goStatusPage">
+    <button class="secondary-entry" bindtap="goApplyPage">
       <view class="entry-order dark">02</view>
+      <view class="entry-copy">
+        <view class="entry-title dark">申请流浪猫绝育（TNR）</view>
+        <view class="entry-desc dark-muted">填写资料并提交医院审核</view>
+      </view>
+      <view class="entry-arrow dark">›</view>
+    </button>
+    <button class="secondary-entry" bindtap="goStatusPage">
+      <view class="entry-order dark">03</view>
       <view class="entry-copy">
         <view class="entry-title dark">我的TNR申请 / 查看进度</view>
         <view class="entry-desc dark-muted">查看审核、预约及手术状态</view>
@@ -41,22 +49,22 @@
     <view class="section-label">医院服务</view>
     <view class="service-grid">
       <button class="service-entry" bindtap="goBindPage">
-        <view class="service-index">03</view>
+        <view class="service-index">04</view>
         <view class="service-title">绑定我的档案</view>
         <view class="service-desc">关联既有客户和宠物</view>
       </button>
       <button class="service-entry" bindtap="goAppointmentPage">
-        <view class="service-index">04</view>
+        <view class="service-index">05</view>
         <view class="service-title">预约服务</view>
         <view class="service-desc">门诊、手术与美容</view>
       </button>
       <button class="service-entry" bindtap="goAppointmentListPage">
-        <view class="service-index">05</view>
+        <view class="service-index">06</view>
         <view class="service-title">我的预约</view>
         <view class="service-desc">查看预约安排</view>
       </button>
       <button class="service-entry" bindtap="goImmunizationPage">
-        <view class="service-index">06</view>
+        <view class="service-index">07</view>
         <view class="service-title">电子免疫证</view>
         <view class="service-desc">接种记录与证书下载</view>
       </button>
@@ -67,16 +75,16 @@
     <view class="section-label">公益服务</view>
     <view class="list-group">
       <button class="list-entry" bindtap="goAdoptionPage">
-        <view><text class="list-index">07</text><text class="list-title">待领养动物</text></view>
+        <view><text class="list-index">08</text><text class="list-title">待领养动物</text></view>
         <view class="list-arrow">›</view>
       </button>
       <button class="list-entry" bindtap="goShowcase">
-        <view><text class="list-index">08</text><text class="list-title">TNR爱心展示</text></view>
+        <view><text class="list-index">09</text><text class="list-title">TNR爱心展示</text></view>
         <view class="list-arrow">›</view>
       </button>
       <button class="list-entry" bindtap="goRabiesPage">
         <view>
-          <view><text class="list-index">09</text><text class="list-title">狂犬疫苗免疫登记</text></view>
+          <view><text class="list-index">10</text><text class="list-title">狂犬疫苗免疫登记</text></view>
           <view class="list-note">仅限横岗店使用</view>
         </view>
         <view class="list-arrow">›</view>

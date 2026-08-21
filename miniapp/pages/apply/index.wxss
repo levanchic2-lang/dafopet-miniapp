@@ -1,5 +1,41 @@
 .label { margin-top: 22rpx; font-size: 28rpx; font-weight: 700; }
 
+.preflight-card {
+  margin-top: 24rpx;
+  padding: 24rpx;
+  border-left: 6rpx solid #1d4d3a;
+  background: #f0f7f3;
+}
+.preflight-title {
+  margin-bottom: 12rpx;
+  color: #173f31;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+.preflight-item {
+  color: #333333;
+  font-size: 25rpx;
+  line-height: 1.75;
+}
+.preflight-item.strong {
+  color: #7a2828;
+  font-weight: 700;
+}
+.preflight-link {
+  width: 100%;
+  min-height: 76rpx;
+  margin: 18rpx 0 0;
+  padding: 0 18rpx;
+  border: 1rpx solid #1d4d3a;
+  border-radius: 4rpx;
+  background: #ffffff;
+  color: #173f31;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 76rpx;
+}
+.preflight-link::after { border: 0; }
+
 /* 上传区 */
 .upload-row { display: flex; align-items: center; gap: 20rpx; margin-top: 12rpx; }
 .upload-count { font-size: 24rpx; font-weight: 600; }

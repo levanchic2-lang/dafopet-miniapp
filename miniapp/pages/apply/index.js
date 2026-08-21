@@ -870,6 +870,10 @@ Page({
     wx.navigateTo({ url: "/pages/status/status" });
   },
 
+  goTnrGuide() {
+    wx.navigateTo({ url: "/pages/tnr-guide/index" });
+  },
+
   goAppointmentPage() {
     wx.navigateTo({ url: "/pages/appointment/index" });
   },

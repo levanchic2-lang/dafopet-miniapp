@@ -2,6 +2,7 @@
   "__usePrivacyCheck__": true,
   "pages": [
     "pages/index/index",
+    "pages/tnr-guide/index",
     "pages/apply/index",
     "pages/appointment/index",
     "pages/appointment/list",

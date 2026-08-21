@@ -7,6 +7,15 @@
   <button class="btn secondary" bindtap="onEnableNotify">开启通知提醒</button>
   <view wx:if="{{notifyStatusText}}" class="sub">{{notifyStatusText}}</view>
 
+  <view class="preflight-card">
+    <view class="preflight-title">申请前请准备</view>
+    <view class="preflight-item">1. 申请人姓名、手机号和身份证号</view>
+    <view class="preflight-item">2. 猫咪发现地点及详细地址</view>
+    <view class="preflight-item strong">3. 至少 2 张清晰照片（正脸、全身），或 1 段清晰视频</view>
+    <view class="preflight-item">4. 猫咪性别、毛色和健康情况</view>
+    <button class="preflight-link" bindtap="goTnrGuide">查看完整申请流程 ›</button>
+  </view>
+
   <view class="label">申请人姓名</view>
   <input class="input input-lg" value="{{form.applicant_name}}" data-k="applicant_name" bindinput="onInput" />
 
