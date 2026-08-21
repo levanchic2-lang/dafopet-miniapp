@@ -64,7 +64,7 @@
 
   <view class="label">预约门店</view>
   <picker class="picker picker-lg" mode="selector" range="{{storeOptions}}" range-key="label" value="{{storeIndex}}" bindchange="onStoreChange">
-    <view style="{{storeOptions[storeIndex].value === '' ? 'color:#aaa;' : ''}}">{{storeOptions[storeIndex].label}}</view>
+    <view style="{{storeOptions[storeIndex].value === '' ? 'color:#777;' : ''}}">{{storeOptions[storeIndex].label}}</view>
   </picker>
 
   <view class="label">术后打算</view>
@@ -93,11 +93,11 @@
 
   <view class="row2">
     <view class="col">
-      <view class="label">品种 <text style="color:#9ca3af;font-weight:normal;">（可选）</text></view>
+      <view class="label">品种 <text style="color:#777;font-weight:normal;">（可选）</text></view>
       <input class="input input-lg" value="{{form.cat_breed}}" data-k="cat_breed" placeholder="如：田园猫 / 橘猫" placeholder-class="placeholder-sm" bindinput="onInput" />
     </view>
     <view class="col">
-      <view class="label">颜色 / 毛色 <text style="color:#9ca3af;font-weight:normal;">（可选）</text></view>
+      <view class="label">颜色 / 毛色 <text style="color:#777;font-weight:normal;">（可选）</text></view>
       <input class="input input-lg" value="{{form.cat_color}}" data-k="cat_color" placeholder="如：黑白 / 三花 / 奶牛" placeholder-class="placeholder-sm" bindinput="onInput" />
     </view>
   </view>
@@ -120,9 +120,9 @@
   <!-- 要求说明 -->
   <view class="tip" style="margin-bottom:12rpx;">
     <view style="font-weight:600;margin-bottom:6rpx;">📸 上传要求（二选一）</view>
-    <view>① 至少 <text style="font-weight:700;color:#c04000;">2 张</text>照片（单张不可提交）</view>
-    <view>② 或上传 <text style="font-weight:700;color:#c04000;">1 个视频</text>代替照片</view>
-    <view style="margin-top:8rpx;color:#9e7a30;">⚠️ 照片须同时包含 <text style="font-weight:700;">清晰面部</text> 与 <text style="font-weight:700;">身体全貌</text>，模糊或仅有单侧将被拒绝。</view>
+    <view>① 至少 <text style="font-weight:700;color:#7a2828;">2 张</text>照片（单张不可提交）</view>
+    <view>② 或上传 <text style="font-weight:700;color:#7a2828;">1 个视频</text>代替照片</view>
+    <view style="margin-top:8rpx;color:#6b4423;">⚠️ 照片须同时包含 <text style="font-weight:700;">清晰面部</text> 与 <text style="font-weight:700;">身体全貌</text>，模糊或仅有单侧将被拒绝。</view>
   </view>
 
   <!-- 照片 -->
@@ -163,7 +163,7 @@
   </view>
   <view wx:if="{{isProxy}}" class="proxy-info-card">
     <view class="proxy-info-title">代申请人信息</view>
-    <view class="tip" style="margin-top:8rpx;margin-bottom:16rpx;font-size:22rpx;color:#9e7a30;">
+    <view class="tip" style="margin-top:8rpx;margin-bottom:16rpx;font-size:22rpx;color:#6b4423;">
       请填写实际申请人（猫主管/喂养人）的联系方式，用于责任追溯与紧急联络。
     </view>
     <view class="label" style="margin-top:0;">实际申请人姓名</view>

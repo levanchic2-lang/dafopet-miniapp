@@ -4,11 +4,11 @@
   margin-top: 24rpx;
   padding: 24rpx;
   border-left: 6rpx solid #1d4d3a;
-  background: #f0f7f3;
+  background: #edf5f0;
 }
 .preflight-title {
   margin-bottom: 12rpx;
-  color: #173f31;
+  color: #1d4d3a;
   font-size: 30rpx;
   font-weight: 700;
 }
@@ -29,7 +29,7 @@
   border: 1rpx solid #1d4d3a;
   border-radius: 4rpx;
   background: #ffffff;
-  color: #173f31;
+  color: #1d4d3a;
   font-size: 26rpx;
   font-weight: 700;
   line-height: 76rpx;
@@ -39,24 +39,24 @@
 /* 上传区 */
 .upload-row { display: flex; align-items: center; gap: 20rpx; margin-top: 12rpx; }
 .upload-count { font-size: 24rpx; font-weight: 600; }
-.count-ok    { color: #166534; }
-.count-warn  { color: #c04000; }
+.count-ok    { color: #1d4d3a; }
+.count-warn  { color: #7a2828; }
 .count-empty { color: #737373; }
 .tip {
-  background: #fffbeb; border: 1rpx solid #fcd34d; border-radius: 12rpx;
-  padding: 18rpx 22rpx; font-size: 24rpx; color: #78350f; line-height: 1.7;
+  background: #faf4e8; border: 1rpx solid #c8a46b; border-radius: 4rpx;
+  padding: 18rpx 22rpx; font-size: 24rpx; color: #6b4423; line-height: 1.7;
 }
 .tip-warn {
-  background: #fff1f2; border-color: #fca5a5; color: #991b1b;
+  background: #f8eded; border-color: #c69797; color: #7a2828;
 }
 .placeholder-sm { font-size: 24rpx; color: #737373; }
 .sub label { display: block; margin-top: 10rpx; }
 .info-note {
   margin-top: 12rpx;
   padding: 16rpx 18rpx;
-  border-radius: 16rpx;
-  border: 1rpx solid #e5e5e5;
-  background: #f4f4f5;
+  border-radius: 4rpx;
+  border: 1rpx solid #cbc9c3;
+  background: #ffffff;
 }
 .info-note-title {
   font-size: 24rpx;
@@ -80,9 +80,9 @@
   align-items: center;
   gap: 10rpx;
   padding: 16rpx 24rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid #d9d9d9;
-  background: #fafafa;
+  border-radius: 2rpx;
+  border: 1rpx solid #cbc9c3;
+  background: #ffffff;
   font-size: 26rpx;
   color: #333333;
 }
@@ -101,14 +101,14 @@
 .proxy-info-card {
   margin-top: 16rpx;
   padding: 24rpx;
-  background: #fffbeb;
-  border: 1rpx solid #fcd34d;
-  border-radius: 18rpx;
+  background: #faf4e8;
+  border: 1rpx solid #c8a46b;
+  border-radius: 4rpx;
 }
 .proxy-info-title {
   font-size: 26rpx;
   font-weight: 700;
-  color: #92400e;
+  color: #6b4423;
 }
 /* 爱心展示内嵌入口 */
 .showcase-inline-btn {
@@ -117,9 +117,9 @@
   align-items: center;
   gap: 16rpx;
   padding: 20rpx 22rpx;
-  background: #f4f4f5;
-  border: 1px solid #e5e5e5;
-  border-radius: 16rpx;
+  background: #ffffff;
+  border: 1rpx solid #cbc9c3;
+  border-radius: 4rpx;
 }
 .showcase-inline-icon {
   font-size: 44rpx;
@@ -138,7 +138,7 @@
 .showcase-inline-sub {
   margin-top: 4rpx;
   font-size: 22rpx;
-  color: #737373;
+  color: #5f5f5b;
   line-height: 1.5;
 }
 .showcase-inline-arrow {

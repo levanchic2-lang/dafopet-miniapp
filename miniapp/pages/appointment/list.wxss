@@ -1,9 +1,9 @@
 .card {
   background: #ffffff;
-  margin: 24rpx;
+  margin: 20rpx;
   padding: 28rpx;
-  border-radius: 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
+  border: 1rpx solid #cbc9c3;
+  border-radius: 4rpx;
 }
 
 .title {
@@ -28,15 +28,15 @@
 }
 
 .error {
-  color: #b42318;
+  color: #7a2828;
 }
 
 .item {
   margin-top: 20rpx;
   padding: 24rpx;
-  border-radius: 18rpx;
-  background: #fafafa;
-  border: 1rpx solid #ececec;
+  border-radius: 4rpx;
+  background: #ffffff;
+  border: 1rpx solid #d8d8d4;
 }
 
 .item-highlight {
@@ -58,7 +58,7 @@
 
 .item-status {
   font-size: 24rpx;
-  color: #0f766e;
+  color: #1d4d3a;
 }
 
 .line {
@@ -73,25 +73,25 @@
 }
 
 .status-cancelled {
-  color: #9ca3af;
+  color: #777777;
 }
 
 .btn-cancel {
   font-size: 26rpx;
   padding: 12rpx 28rpx;
-  border-radius: 12rpx;
-  background: #fff1f2;
-  color: #dc2626;
-  border: 1rpx solid #fca5a5;
+  border-radius: 4rpx;
+  background: #f8eded;
+  color: #7a2828;
+  border: 1rpx solid #d8bcbc;
   line-height: 1.5;
 }
 
 .btn-edit {
   font-size: 26rpx;
   padding: 12rpx 28rpx;
-  border-radius: 12rpx;
-  background: #f0f9ff;
-  color: #0369a1;
-  border: 1rpx solid #7dd3fc;
+  border-radius: 4rpx;
+  background: #ffffff;
+  color: #171717;
+  border: 1rpx solid #cbc9c3;
   line-height: 1.5;
 }

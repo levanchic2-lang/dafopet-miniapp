@@ -1,9 +1,9 @@
 .card {
   background: #ffffff;
-  margin: 24rpx;
+  margin: 20rpx;
   padding: 28rpx;
-  border-radius: 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
+  border: 1rpx solid #cbc9c3;
+  border-radius: 4rpx;
 }
 
 .title {
@@ -55,9 +55,9 @@
   min-height: 88rpx;
   box-sizing: border-box;
   padding: 22rpx 24rpx;
-  border: 1rpx solid #d9d9d9;
-  border-radius: 18rpx;
-  background: #fafafa;
+  border: 1rpx solid #cbc9c3;
+  border-radius: 4rpx;
+  background: #ffffff;
   font-size: 28rpx;
   color: #171717;
 }
@@ -84,9 +84,9 @@
 
 .slot-item {
   padding: 14rpx 20rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid #d9d9d9;
-  background: #fafafa;
+  border-radius: 2rpx;
+  border: 1rpx solid #cbc9c3;
+  background: #ffffff;
   font-size: 26rpx;
   color: #333333;
 }
@@ -101,9 +101,9 @@
 .beauty-duration-card {
   margin-top: 8rpx;
   padding: 20rpx 24rpx;
-  border-radius: 16rpx;
-  background: #fffbeb;
-  border: 1rpx solid #fcd34d;
+  border-radius: 4rpx;
+  background: #faf4e8;
+  border: 1rpx solid #d8d4cc;
 }
 
 .beauty-duration-row {
@@ -114,33 +114,33 @@
 
 .beauty-duration-label {
   font-size: 26rpx;
-  color: #92400e;
+  color: #6b4423;
   font-weight: 600;
 }
 
 .beauty-duration-value {
   font-size: 30rpx;
   font-weight: 800;
-  color: #78350f;
+  color: #6b4423;
 }
 
 .beauty-disclaimer {
   margin-top: 16rpx;
   font-size: 22rpx;
   line-height: 1.7;
-  color: #9e7a30;
+  color: #6b4423;
   padding: 0 4rpx;
 }
 
 /* ── 锁定字段 ── */
 .picker-locked {
-  background: #f0f0f0;
-  color: #999999;
-  border-color: #e0e0e0;
+  background: #f7f7f5;
+  color: #777777;
+  border-color: #d8d8d4;
 }
 
 .picker-placeholder {
-  color: #8a8a8a;
+  color: #777777;
 }
 
 /* ── 美容附加服务 ── */
@@ -156,9 +156,9 @@
   align-items: center;
   gap: 10rpx;
   padding: 16rpx 24rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid #d9d9d9;
-  background: #fafafa;
+  border-radius: 2rpx;
+  border: 1rpx solid #cbc9c3;
+  background: #ffffff;
   font-size: 26rpx;
   color: #333333;
 }
@@ -181,18 +181,18 @@
 .proxy-info-card {
   margin-top: 16rpx;
   padding: 24rpx;
-  background: #fffbeb;
-  border: 1rpx solid #fcd34d;
-  border-radius: 18rpx;
+  background: #faf4e8;
+  border: 1rpx solid #d8d4cc;
+  border-radius: 4rpx;
 }
 .proxy-info-title {
   font-size: 26rpx;
   font-weight: 700;
-  color: #92400e;
+  color: #6b4423;
 }
 .placeholder-sm {
   font-size: 24rpx;
-  color: #999999;
+  color: #777777;
 }
 
 .btn {
@@ -200,7 +200,7 @@
   width: 100%;
   height: 88rpx;
   line-height: 88rpx;
-  border-radius: 18rpx;
+  border-radius: 4rpx;
   background: #171717;
   color: #ffffff;
   font-size: 30rpx;
@@ -210,25 +210,25 @@
 .profile-banner {
   margin: 18rpx 0 24rpx;
   padding: 24rpx 28rpx;
-  border-radius: 16rpx;
+  border-radius: 4rpx;
 }
 .profile-banner-ok {
-  background: #f0fdf4;
-  border-left: 6rpx solid #16a34a;
+  background: #edf5f0;
+  border-left: 6rpx solid #1d4d3a;
 }
 .profile-banner-tip {
-  background: #fef9f0;
-  border-left: 6rpx solid #c2410c;
+  background: #faf4e8;
+  border-left: 6rpx solid #6b4423;
 }
 .profile-banner-title {
   font-size: 28rpx;
   font-weight: 700;
-  color: #0f172a;
+  color: #171717;
   margin-bottom: 6rpx;
 }
 .profile-banner-sub {
   font-size: 24rpx;
-  color: #64748b;
+  color: #5f5f5b;
   margin-bottom: 14rpx;
 }
 .profile-pet-chips {
@@ -240,17 +240,17 @@
 .profile-pet-chip {
   padding: 14rpx 22rpx;
   background: #ffffff;
-  border: 1rpx solid #cbd5e1;
-  border-radius: 12rpx;
+  border: 1rpx solid #cbc9c3;
+  border-radius: 2rpx;
   font-size: 26rpx;
 }
 .profile-pet-chip .chip-name {
   font-weight: 700;
-  color: #0f172a;
+  color: #171717;
   margin-right: 8rpx;
 }
 .profile-pet-chip .chip-meta {
-  color: #94a3b8;
+  color: #666666;
   font-size: 22rpx;
 }
 .profile-pet-chip.selected {
@@ -263,7 +263,7 @@
 }
 .profile-pet-empty {
   font-size: 24rpx;
-  color: #94a3b8;
+  color: #777777;
   font-style: italic;
   margin-top: 4rpx;
 }
@@ -271,9 +271,9 @@
   display: inline-block;
   margin-top: 12rpx;
   padding: 14rpx 30rpx;
-  background: #c2410c;
+  background: #171717;
   color: #ffffff;
-  border-radius: 12rpx;
+  border-radius: 4rpx;
   font-size: 26rpx;
   font-weight: 700;
 }

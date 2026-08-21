@@ -49,7 +49,7 @@
     <!-- 展开详情 -->
     <view wx:if="{{order.expanded}}" class="order-detail">
       <view wx:if="{{order.detailLoading}}" class="sub" style="padding:16rpx 0;">正在加载详情…</view>
-      <view wx:if="{{order.detailError && !order.detailLoading}}" class="sub" style="padding:16rpx 0;color:#ef4444;">{{order.detailError}}</view>
+      <view wx:if="{{order.detailError && !order.detailLoading}}" class="sub" style="padding:16rpx 0;color:#7a2828;">{{order.detailError}}</view>
 
       <view wx:if="{{order.detail && !order.detailLoading}}">
         <!-- 进度时间线 -->

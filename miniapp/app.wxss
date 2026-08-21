@@ -1,31 +1,34 @@
 /* 黑白灰主题，与网页端设计令牌对齐 */
 page {
-  background: #fafafa;
+  background: #f7f7f5;
   color: #171717;
   font-family: system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
   /* 与手机号输入框统一的描边（input / picker / textarea 共用） */
-  --input-border: #d4d4d4;
+  --input-border: #cbc9c3;
 }
 
 .card {
-  background: #ffffff;
-  margin: 20rpx;
-  padding: 28rpx 24rpx;
-  border-radius: 16rpx;
-  border: 1px solid #e5e5e5;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04), 0 12rpx 40rpx rgba(0, 0, 0, 0.04);
+  min-height: 100vh;
+  box-sizing: border-box;
+  background: #f7f7f5;
+  margin: 0;
+  padding: 36rpx 28rpx 64rpx;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
 }
 
 .title {
-  font-size: 38rpx;
+  font-size: 42rpx;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  line-height: 1.25;
+  letter-spacing: 0;
   color: #171717;
 }
 
 .sub {
   margin-top: 10rpx;
-  color: #737373;
+  color: #5f5f5b;
   font-size: 26rpx;
   line-height: 1.6;
 }
@@ -69,9 +72,9 @@ page {
 .addr-scope {
   margin-top: 10rpx;
   padding: 18rpx 22rpx;
-  background: #f4f4f5;
-  border: 1px solid #e5e5e5;
-  border-radius: 16rpx;
+  background: #ffffff;
+  border: 1px solid #cbc9c3;
+  border-radius: 4rpx;
   font-size: 30rpx;
   font-weight: 700;
   color: #171717;
@@ -90,7 +93,7 @@ page {
   background: #ffffff;
   border: 1px solid var(--input-border);
   /* 与卡片圆角一致，视觉上与预约门店等选择框统一 */
-  border-radius: 16rpx;
+  border-radius: 4rpx;
   padding: 18rpx 18rpx;
   font-size: 28rpx;
   color: #171717;
@@ -102,7 +105,7 @@ page {
   font-size: 32rpx;
   min-height: 96rpx;
   box-sizing: border-box;
-  border-radius: 16rpx;
+  border-radius: 4rpx;
 }
 .picker-lg {
   display: flex;
@@ -126,7 +129,7 @@ input.input {
   background: #262626;
   color: #fafafa;
   font-weight: 700;
-  border-radius: 12rpx;
+  border-radius: 4rpx;
   border: 1px solid #262626;
 }
 .btn.secondary {
@@ -138,9 +141,9 @@ input.input {
 .declare-panel {
   margin-top: 28rpx;
   padding: 22rpx 24rpx;
-  background: #f4f4f5;
-  border-radius: 16rpx;
-  border: 1px solid #e5e5e5;
+  background: #ffffff;
+  border-radius: 4rpx;
+  border: 1px solid #cbc9c3;
 }
 .declare-title {
   margin-top: 0;
@@ -172,7 +175,7 @@ input.input {
 .tag {
   display: inline-block;
   padding: 6rpx 14rpx;
-  border-radius: 8rpx;
+  border-radius: 2rpx;
   background: #f4f4f5;
   color: #525252;
   font-size: 22rpx;
@@ -182,17 +185,17 @@ input.input {
 }
 
 .warn {
-  background: #f5f5f5;
-  color: #404040;
-  border-color: #d4d4d4;
+  background: #faf4e8;
+  color: #6b4423;
+  border-color: #c8a46b;
 }
 .ok {
-  background: #f5f5f5;
-  color: #171717;
-  border-color: #a3a3a3;
+  background: #edf5f0;
+  color: #1d4d3a;
+  border-color: #8eb5a3;
 }
 .err {
-  background: #e5e5e5;
-  color: #171717;
-  border-color: #a3a3a3;
+  background: #f8eded;
+  color: #7a2828;
+  border-color: #c69797;
 }

@@ -76,7 +76,7 @@ Page({
       title: "取消预约",
       content: "确定要取消这条预约吗？取消后不可撤回。",
       confirmText: "确认取消",
-      confirmColor: "#ef4444",
+      confirmColor: "#7a2828",
       success: (res) => {
         if (!res.confirm) return;
         this._doCancel(id, idx);

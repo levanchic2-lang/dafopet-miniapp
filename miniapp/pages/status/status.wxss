@@ -10,9 +10,9 @@
 .status-title { font-size: 26rpx; font-weight: 800; color: #171717; }
 .status-badge {
   padding: 6rpx 12rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid #d4d4d4;
-  background: #f4f4f5;
+  border-radius: 2rpx;
+  border: 1rpx solid #cbc9c3;
+  background: #ffffff;
   color: #171717;
   font-size: 24rpx;
   font-weight: 800;
@@ -21,19 +21,19 @@
 .step-card {
   margin-top: 16rpx;
   padding: 18rpx 18rpx;
-  border-radius: 16rpx;
-  border: 1rpx solid #e5e5e5;
-  background: #f4f4f5;
+  border-radius: 4rpx;
+  border: 1rpx solid #cbc9c3;
+  background: #ffffff;
 }
 .step-title { font-size: 30rpx; font-weight: 800; color: #171717; }
-.step-desc { margin-top: 6rpx; font-size: 26rpx; color: #737373; line-height: 1.5; }
+.step-desc { margin-top: 6rpx; font-size: 26rpx; color: #5f5f5b; line-height: 1.5; }
 
 .timeline-panel {
   margin-top: 16rpx;
   padding: 14rpx 16rpx;
-  border-radius: 14rpx;
+  border-radius: 4rpx;
   background: #ffffff;
-  border: 1rpx solid #e5e5e5;
+  border: 1rpx solid #cbc9c3;
 }
 .timeline-item {
   display: flex;
@@ -107,10 +107,10 @@
 }
 .timeline-chip {
   padding: 4rpx 12rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid #d4d4d4;
-  background: #f5f5f5;
-  color: #737373;
+  border-radius: 2rpx;
+  border: 1rpx solid #cbc9c3;
+  background: #ffffff;
+  color: #5f5f5b;
   font-size: 20rpx;
   font-weight: 800;
   line-height: 1.2;
@@ -122,25 +122,25 @@
   color: #ffffff;
 }
 .timeline-chip.halted {
-  border-color: #737373;
-  background: #f5f5f5;
-  color: #525252;
+  border-color: #c69797;
+  background: #f8eded;
+  color: #7a2828;
 }
 .timeline-meta {
   margin-top: 6rpx;
   font-size: 22rpx;
-  color: #737373;
+  color: #5f5f5b;
   line-height: 1.4;
 }
 
 .next-card, .reason-card {
   margin-top: 14rpx;
   padding: 14rpx 14rpx;
-  border-radius: 14rpx;
+  border-radius: 4rpx;
   background: #ffffff;
-  border: 1rpx solid #e5e5e5;
+  border: 1rpx solid #cbc9c3;
 }
-.next-k { font-size: 22rpx; font-weight: 800; color: #737373; }
+.next-k { font-size: 22rpx; font-weight: 800; color: #5f5f5b; }
 .next-v { margin-top: 6rpx; font-size: 26rpx; color: #171717; line-height: 1.6; }
 
 .info-card { margin-top: 18rpx; }
@@ -154,13 +154,13 @@
   gap: 10rpx 14rpx;
   align-items: start;
 }
-.kv .k { font-size: 24rpx; color: #737373; font-weight: 800; }
+.kv .k { font-size: 24rpx; color: #5f5f5b; font-weight: 800; }
 .kv .v { font-size: 26rpx; color: #171717; line-height: 1.5; word-break: break-all; }
 
 .order-item {
   margin-top: 14rpx;
-  border-radius: 16rpx;
-  border: 1rpx solid #e5e5e5;
+  border-radius: 4rpx;
+  border: 1rpx solid #cbc9c3;
   background: #ffffff;
   overflow: hidden;
 }
@@ -186,23 +186,23 @@
 }
 .order-detail {
   padding: 0 16rpx 16rpx;
-  border-top: 1rpx solid #e5e5e5;
+  border-top: 1rpx solid #cbc9c3;
 }
 
 .claim-card{
   margin-top: 16rpx;
   padding: 16rpx 16rpx;
-  border-radius: 16rpx;
-  border: 1rpx solid #e5e5e5;
-  background: #fdfdfd;
+  border-radius: 4rpx;
+  border: 1rpx solid #cbc9c3;
+  background: #ffffff;
 }
 .claim-title{ font-size: 28rpx; font-weight: 800; color: #171717; }
-.claim-sub{ margin-top: 6rpx; font-size: 24rpx; color: #737373; line-height: 1.5; }
+.claim-sub{ margin-top: 6rpx; font-size: 24rpx; color: #5f5f5b; line-height: 1.5; }
 .claim-input{
   margin-top: 12rpx;
   padding: 16rpx 14rpx;
-  border-radius: 14rpx;
-  border: 1rpx solid #e5e5e5;
+  border-radius: 4rpx;
+  border: 1rpx solid #cbc9c3;
   background: #ffffff;
   font-size: 26rpx;
 }

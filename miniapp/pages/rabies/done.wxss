@@ -6,15 +6,15 @@
 .title { font-size: 40rpx; font-weight: 700; color: #171717; margin-bottom: 16rpx; }
 .sub { font-size: 26rpx; color: #666; line-height: 1.7; margin-bottom: 32rpx; }
 .info-box {
-  background: #f0fdf4;
-  border: 1rpx solid #bbf7d0;
-  border-radius: 20rpx;
+  background: #edf5f0;
+  border: 1rpx solid #b9cec2;
+  border-radius: 4rpx;
   padding: 28rpx 32rpx;
   text-align: left;
   margin-bottom: 40rpx;
 }
 .info-row { font-size: 26rpx; color: #333; line-height: 2.2; }
-.info-label { color: #6b7280; }
+.info-label { color: #5f5f5b; }
 .steps { text-align: left; margin-bottom: 40rpx; }
 .step {
   display: flex;
@@ -27,7 +27,7 @@
   width: 44rpx;
   height: 44rpx;
   border-radius: 50%;
-  background: #1a56db;
+  background: #171717;
   color: #fff;
   font-size: 22rpx;
   font-weight: 700;
@@ -35,6 +35,6 @@
   align-items: center;
   justify-content: center;
 }
-.step-num.done { background: #16a34a; }
-.step-text { font-size: 26rpx; color: #374151; line-height: 1.6; padding-top: 6rpx; }
-.hint { font-size: 22rpx; color: #9ca3af; }
+.step-num.done { background: #1d4d3a; }
+.step-text { font-size: 26rpx; color: #333333; line-height: 1.6; padding-top: 6rpx; }
+.hint { font-size: 22rpx; color: #777777; }
