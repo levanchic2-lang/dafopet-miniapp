@@ -10,7 +10,7 @@
     <view class="panel-eyebrow">申请前准备</view>
     <view class="prepare-row"><text class="prepare-no">01</text><text>申请人姓名、手机号、身份证号</text></view>
     <view class="prepare-row"><text class="prepare-no">02</text><text>猫咪发现地点和详细地址</text></view>
-    <view class="prepare-row highlight"><text class="prepare-no">03</text><text>至少 2 张清晰照片（正脸、全身），或 1 段清晰视频</text></view>
+    <view class="prepare-row highlight"><text class="prepare-no">03</text><text>至少 2 张清晰照片（建议正脸、全身）；视频仅可补充</text></view>
     <view class="prepare-row"><text class="prepare-no">04</text><text>猫咪性别、毛色和健康情况</text></view>
   </view>
 
@@ -26,7 +26,7 @@
     </view>
     <view class="flow-step important">
       <view class="step-no">3</view>
-      <view class="step-copy"><view class="step-title">上传照片或视频</view><view class="step-desc">上传至少 2 张清晰照片，建议包含正脸和全身；也可以上传 1 段清晰视频。</view></view>
+      <view class="step-copy"><view class="step-title">上传照片和补充视频</view><view class="step-desc">必须上传至少 2 张清晰照片，建议包含正脸和全身；视频可以补充，但不能代替照片。</view></view>
     </view>
     <view class="flow-step">
       <view class="step-no">4</view>

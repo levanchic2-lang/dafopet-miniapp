@@ -1880,6 +1880,12 @@ def _count_valid_apply_images(images: list[UploadFile]) -> int:
     return n
 
 
+_MIN_TNR_APPLICATION_IMAGES = 2
+_TNR_IMAGE_REQUIREMENT_MESSAGE = (
+    "请至少上传 2 张清晰的申请照片；视频只能作为补充，不能替代照片。"
+)
+
+
 def _assert_application_row_complete(row: Application) -> None:
     _assert_application_form_fields(
         applicant_name=row.applicant_name,
@@ -1928,8 +1934,8 @@ async def api_apply(
     ok_fraud = agree_no_pet_fraud.lower() in ("true", "1", "on", "yes")
     if not ok_ear or not ok_fraud:
         raise HTTPException(400, "请勾选同意剪耳标记与承诺非家养猫冒充。")
-    if _count_valid_apply_images(images) < 1:
-        raise HTTPException(400, "请至少上传 1 张申请照片。")
+    if _count_valid_apply_images(images) < _MIN_TNR_APPLICATION_IMAGES:
+        raise HTTPException(400, _TNR_IMAGE_REQUIREMENT_MESSAGE)
 
     f = _assert_application_form_fields(
         applicant_name=applicant_name,
@@ -2360,10 +2366,16 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
 
     _assert_application_row_complete(row)
 
-    image_paths = [Path(m.stored_path) for m in (row.media or []) if m.kind == MediaKind.application_image.value]
+    image_paths = [
+        Path(m.stored_path)
+        for m in (row.media or [])
+        if m.kind == MediaKind.application_image.value
+        and m.stored_path
+        and Path(m.stored_path).is_file()
+    ]
     video_paths = [Path(m.stored_path) for m in (row.media or []) if m.kind == MediaKind.application_video.value]
-    if not image_paths:
-        raise HTTPException(400, "请至少上传 1 张申请照片。")
+    if len(image_paths) < _MIN_TNR_APPLICATION_IMAGES:
+        raise HTTPException(400, _TNR_IMAGE_REQUIREMENT_MESSAGE)
 
     row.status = ApplicationStatus.pending_ai.value
     db.commit()

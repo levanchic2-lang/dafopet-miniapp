@@ -63,7 +63,7 @@ Page({
     checks: { ear: true, fraud: true },
     images: [],
     videos: [],
-    mediaReady: false,  // 2张图 或 1个视频
+    mediaReady: false,  // 必须至少 2 张图片；视频仅作补充
     submitting: false,
     result: null,
     error: "",
@@ -471,7 +471,7 @@ Page({
                 });
               });
               const imgs = await Promise.all(files.map(compress));
-              this.setData({ images: imgs, mediaReady: imgs.length >= 2 || this.data.videos.length >= 1 });
+              this.setData({ images: imgs, mediaReady: imgs.length >= 2 });
               resolve(res);
             },
             fail: reject
@@ -500,7 +500,7 @@ Page({
             success: (res) => {
               const files = (res.tempFiles || []).map((f) => f.tempFilePath);
               const vids = files.slice(0, 2);
-              this.setData({ videos: vids, mediaReady: this.data.images.length >= 2 || vids.length >= 1 });
+              this.setData({ videos: vids, mediaReady: this.data.images.length >= 2 });
               resolve(res);
             },
             fail: reject
@@ -649,12 +649,8 @@ Page({
       this.setData({ error: "请填写流浪状况说明。" });
       return;
     }
-    if (images.length === 0 && !videos.length) {
-      this.setData({ error: "请上传至少 2 张照片或 1 个视频。" });
-      return;
-    }
-    if (images.length === 1 && !videos.length) {
-      this.setData({ error: "照片仅 1 张，请再添加 1 张（共 2 张）或改为上传视频。" });
+    if (images.length < 2) {
+      this.setData({ error: "请至少上传 2 张清晰照片；视频只能作为补充，不能替代照片。" });
       return;
     }
     // 代预约校验
@@ -777,7 +773,7 @@ Page({
         this.setData({
           images: validImages,
           videos: validVideos,
-          mediaReady: validImages.length >= 2 || validVideos.length >= 1,
+          mediaReady: validImages.length >= 2,
           submitting: false,
           error: `${parts.join("、")}因停留过久已失效，请重新选择后再次提交。`,
         });
