@@ -840,14 +840,32 @@
           <span style="margin-left:14px;color:var(--accent-red);">未付款 ¥{{ '%.2f'|format(pet_unpaid_total) }}</span>
           {% endif %}
         </span>
+        <span style="display:flex;gap:8px;flex-wrap:wrap;">
+          {% if active_pet %}
+          <a class="uk-btn {% if invoice_scope == 'pet' %}primary{% else %}ghost{% endif %} sm"
+             href="/admin/customers/{{ cust.id }}?pet_id={{ active_pet.id }}&tab=invoices&invoice_scope=pet">
+            当前宠物 · {{ active_pet.name }}
+          </a>
+          {% endif %}
+          <a class="uk-btn {% if invoice_scope == 'all' %}primary{% else %}ghost{% endif %} sm"
+             href="/admin/customers/{{ cust.id }}?pet_id={{ active_pet_id }}&tab=invoices&invoice_scope=all">
+            全部宠物 · {{ customer_invoice_count }}
+          </a>
+        </span>
       </div>
       {% if pet_invoices %}
       <table class="uk-tbl-tab">
-        <thead><tr><th>单号</th><th>日期</th><th>金额</th><th>状态</th><th>支付方式</th><th class="right">操作</th></tr></thead>
+        <thead><tr><th>单号</th><th>宠物</th><th>日期</th><th>金额</th><th>状态</th><th>支付方式</th><th class="right">操作</th></tr></thead>
         <tbody>
           {% for inv in pet_invoices %}
+          {% set invoice_pet = invoice_pet_lookup[inv.id] %}
           <tr>
             <td class="num" style="font-size:9.5pt;">{{ inv.invoice_no or ('#' ~ inv.id) }}</td>
+            <td>
+              {% if invoice_pet %}
+              <a href="/admin/customers/{{ cust.id }}?pet_id={{ invoice_pet.id }}&tab=invoices&invoice_scope=pet">{{ invoice_pet.name }}</a>
+              {% else %}<span class="uk-mute">未关联</span>{% endif %}
+            </td>
             <td class="num">{{ inv.invoice_date or ((inv.created_at | bjtime).strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
             <td class="num">¥{{ '%.2f'|format(inv.total_amount or 0) }}</td>
             <td>
@@ -1180,7 +1198,9 @@
     <div class="aside-card">
       <h3>财务清单</h3>
       <div class="aside-list">
-        <a class="aside-row" data-aside-tab="invoices" onclick="cycleInvoicePet();return false;">
+        <a class="aside-row {% if active_tab == 'invoices' and invoice_scope == 'all' %}active{% endif %}"
+           data-aside-tab="invoices"
+           href="/admin/customers/{{ cust.id }}?pet_id={{ active_pet_id }}&tab=invoices&invoice_scope=all">
           <span>收费记录</span>
           <span class="num">{{ customer_invoice_count }}{% if unpaid_total > 0 %} · <em class="danger">¥{{ '%.0f'|format(unpaid_total) }} 未付</em>{% endif %}</span>
         </a>
@@ -1756,29 +1776,6 @@ function switchTab(tab) {
   const url = new URL(window.location.href);
   url.searchParams.set('tab', tab);
   history.replaceState(null, '', url.toString());
-}
-
-// 收费记录按账单所属宠物循环：优先有待付账单的宠物，没有待付时循环历史收费宠物。
-const invoicePetCycle = {{ invoice_cycle_pet_ids | tojson }};
-function cycleInvoicePet() {
-  if (!invoicePetCycle.length) {
-    switchTab('invoices');
-    return;
-  }
-  const currentPetId = {{ active_pet_id or 0 }};
-  const currentIndex = invoicePetCycle.indexOf(currentPetId);
-  const nextPetId = currentIndex < 0
-    ? invoicePetCycle[0]
-    : invoicePetCycle[(currentIndex + 1) % invoicePetCycle.length];
-  if (nextPetId === currentPetId) {
-    switchTab('invoices');
-    return;
-  }
-  try { sessionStorage.setItem('custScroll', JSON.stringify({c: {{ cust.id }}, y: window.scrollY})); } catch(e) {}
-  const url = new URL(window.location.href);
-  url.searchParams.set('pet_id', nextPetId);
-  url.searchParams.set('tab', 'invoices');
-  window.location.href = url.toString();
 }
 
 // 切换宠物：保持滚动位置（避免每次跳回顶部，反复滚动找诊疗/处方等 tab）
