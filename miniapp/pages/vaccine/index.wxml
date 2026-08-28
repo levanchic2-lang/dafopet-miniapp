@@ -4,6 +4,7 @@
     <view class="recent-label">最近一次联苗登记</view>
     <view class="recent-title">{{recent.pet_name}} · {{recent.status_text}}</view>
     <view class="recent-date">计划接种日 {{recent.requested_date}}</view>
+    <button wx:if="{{recent.consent_url}}" class="resume" bindtap="continueConsent">继续签署同意书</button>
     <view wx:if="{{recent.post_care_notice}}" class="care"><view class="care-title">接种后告知</view>{{recent.post_care_notice}}</view>
   </view>
   <button class="entry primary" bindtap="goCombo"><view><view class="entry-title">联苗登记</view><view class="entry-desc">猫联苗、犬联苗 · 健康问卷与接种同意书</view></view><text>›</text></button>

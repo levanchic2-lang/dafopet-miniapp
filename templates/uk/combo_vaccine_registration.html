@@ -62,6 +62,11 @@
       {% if reg.status == 'approved' and not reg.vaccination_id %}
       <section class="cv-section"><h2>确认实际接种</h2><form class="cv-form" method="post" action="/admin/vaccine-registrations/{{ reg.id }}/vaccinate" onsubmit="return confirm('确认后将立即扣库存并生成待收款单，是否继续？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><label>实际疫苗 / 库存</label><select name="inventory_item_id" id="cv-item" required><option value="">请选择</option>{% for i in vacc_items %}<option value="{{ i.id }}" data-batch="{{ i.latest_batch_no or '' }}" data-price="{{ i.sell_price or 0 }}">{{ i.name }} · 库存{{ i.stock_qty }}{{ i.unit }}</option>{% endfor %}</select><label>批号</label><input name="batch_no" id="cv-batch"/><label>接种日期</label><input type="date" name="vaccinated_date" value="{{ reg.requested_date }}" required/><label>接种医护</label><select name="vet_name" required><option value="">请选择</option>{% for v in vets %}<option>{{ v }}</option>{% endfor %}</select><label>收费金额（留空按库存售价）</label><input type="number" name="charge_amount" id="cv-price" step="0.01" min="0" placeholder="按库存售价"/><button class="cv-btn primary" type="submit">确认已接种</button></form></section>
       {% endif %}
+
+      {% if reg.status not in ('vaccinated','cancelled') %}
+      <section class="cv-section"><h2>取消登记</h2><p class="cv-note">主人放弃本次接种时使用。取消后不会扣库存或生成收费单；已签署的同意书仍保留归档。</p><form class="cv-form" method="post" action="/admin/vaccine-registrations/{{ reg.id }}/cancel" onsubmit="return confirm('确认取消本次联苗登记？此操作不会删除已签署文书。')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><label>取消原因</label><input name="cancel_reason" placeholder="主人取消接种"/><button class="cv-btn danger" type="submit">取消本次登记</button></form></section>
+      {% endif %}
+      {% if reg.status == 'cancelled' and reg.rejection_reason %}<p class="cv-note">{{ reg.rejection_reason }}</p>{% endif %}
     </aside>
   </div>
 </div>

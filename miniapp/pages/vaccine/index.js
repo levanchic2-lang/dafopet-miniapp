@@ -11,6 +11,11 @@ Page({
       this.setData({ recent });
     } catch (e) {}
   },
+  continueConsent() {
+    const url = this.data.recent && this.data.recent.consent_url;
+    if (!url) return;
+    wx.navigateTo({ url: "/pages/vaccine/consent?url=" + encodeURIComponent(url) });
+  },
   goCombo() { wx.navigateTo({ url: "/pages/vaccine/combo" }); },
   goRabies() { wx.navigateTo({ url: "/pages/rabies/index" }); },
   onShareAppMessage() { return { title: "大风动物医院 · 疫苗接种登记", path: "/pages/vaccine/index" }; }

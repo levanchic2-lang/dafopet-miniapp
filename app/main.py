@@ -19931,7 +19931,7 @@ async def api_combo_vaccine_registration_create(
 
 @app.get("/api/vaccine-registration/{reg_id}")
 async def api_combo_vaccine_registration_status(
-    reg_id: int, phone: str = Query(""), db: Session = Depends(get_db),
+    reg_id: int, request: Request, phone: str = Query(""), db: Session = Depends(get_db),
 ):
     reg = db.get(ComboVaccineRegistration, reg_id)
     if not reg:
@@ -19952,11 +19952,21 @@ async def api_combo_vaccine_registration_status(
         reg.status = "pending_review"
         db.commit()
     pet = db.get(Pet, reg.pet_id) if reg.pet_id else None
+    consent_url = ""
+    if (
+        consent
+        and consent.status == "pending"
+        and reg.status in ("pending_signature", "needs_resign")
+    ):
+        consent_url = _build_consent_sign_url(consent.token)
+        if consent_url.startswith("/"):
+            consent_url = str(request.base_url).rstrip("/") + consent_url
     return {
         "ok": True, "id": reg.id, "status": reg.status,
         "status_text": _COMBO_REG_STATUS_ZH.get(reg.status, reg.status),
         "pet_name": pet.name if pet else "",
         "requested_date": reg.requested_date,
+        "consent_url": consent_url,
         "post_care_notice": reg.post_care_notice_snapshot if reg.status == "vaccinated" else "",
     }
 
@@ -24388,6 +24398,47 @@ async def admin_combo_vaccine_review(
         raise HTTPException(400, "无效审核动作")
     db.commit()
     return RedirectResponse(f"/admin/vaccine-registrations/{reg_id}?msg={quote(msg)}", status_code=303)
+
+
+@app.post("/admin/vaccine-registrations/{reg_id}/cancel")
+async def admin_combo_vaccine_cancel(
+    reg_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), cancel_reason: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    reg = db.get(ComboVaccineRegistration, reg_id)
+    if not reg:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and reg.clinic_store != admin_store:
+        raise HTTPException(403, "无权操作其他门店的接种登记")
+    if reg.status == "vaccinated" or reg.vaccination_id:
+        raise HTTPException(400, "已完成接种，不能直接取消；请按疫苗单和库存作废流程处理")
+    if reg.status == "cancelled":
+        return RedirectResponse(
+            f"/admin/vaccine-registrations/{reg_id}?msg={quote('该登记已经取消')}",
+            status_code=303,
+        )
+    reason = (cancel_reason or "主人取消接种").strip()[:1000]
+    consent = db.get(ConsentTask, reg.consent_task_id) if reg.consent_task_id else None
+    if consent:
+        if consent.status == "pending":
+            consent.status = "cancelled"
+        consent.notes = (
+            (consent.notes or "")
+            + f"\n[vaccine_registration_cancelled] reason={reason}"
+        )[:2000]
+    reg.status = "cancelled"
+    reg.rejection_reason = f"取消原因：{reason}"
+    reg.reviewer = request.session.get("admin_username", "admin")
+    reg.reviewed_at = datetime.utcnow()
+    reg.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(
+        f"/admin/vaccine-registrations/{reg_id}?msg={quote('登记已取消；未发生库存和收费变动')}",
+        status_code=303,
+    )
 
 
 @app.post("/admin/vaccine-registrations/{reg_id}/vaccinate")
