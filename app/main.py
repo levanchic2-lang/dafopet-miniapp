@@ -79,6 +79,7 @@ from app.models import (
     Invoice,
     InvoiceItem,
     Vaccination,
+    ComboVaccineRegistration,
     TnrStoreConfig,
     ExamOrder,
     ExamReport,
@@ -10234,6 +10235,11 @@ def _consent_sms_enabled() -> bool:
     )
 
 
+def _consent_skips_identity_check(task: ConsentTask) -> bool:
+    """到院疫苗预登记允许代办人直接签署，不要求短信或手机号验证。"""
+    return "[vaccine_no_verify]" in (task.notes or "")
+
+
 @app.get("/consent/{token}", response_class=HTMLResponse)
 async def consent_sign_page(token: str, request: Request, db: Session = Depends(get_db)):
     task = db.query(ConsentTask).filter(ConsentTask.token == token).first()
@@ -10251,7 +10257,11 @@ async def consent_sign_page(token: str, request: Request, db: Session = Depends(
             pass
     cust = db.get(Customer, task.customer_id) if task.customer_id else None
     pet = db.get(Pet, task.pet_id) if task.pet_id else None
-    verified = _is_consent_verified(request, token) or task.status != "pending"
+    verified = (
+        _is_consent_verified(request, token)
+        or _consent_skips_identity_check(task)
+        or task.status != "pending"
+    )
     has_phone = bool(cust and cust.phone and cust.phone.strip())
     phone_hint = _phone_mask(cust.phone) if cust else ""
     # 审计日志：仅 pending 状态记 link_opened，避免每次刷新都记
@@ -10384,7 +10394,7 @@ async def consent_sign_submit(
     if task.status != "pending":
         return {"ok": False, "error": f"该协议已 {_CONSENT_STATUS_ZH.get(task.status, task.status)}，不可再次签字"}
     # 强制要求先通过手机号验证（防别人拿链接代签）
-    if not _is_consent_verified(request, token):
+    if not (_is_consent_verified(request, token) or _consent_skips_identity_check(task)):
         _log_consent_audit(db, request, task.id, "sign_fail", note="not_verified")
         return {"ok": False, "error": "请先完成身份验证"}
     body = await request.json()
@@ -10417,6 +10427,12 @@ async def consent_sign_submit(
     task.signed_at = datetime.utcnow()
     task.signed_ip = (request.client.host if request.client else "")[:60]
     task.status = "signed"
+    combo_reg = db.query(ComboVaccineRegistration).filter(
+        ComboVaccineRegistration.consent_task_id == task.id
+    ).first()
+    if combo_reg and combo_reg.status in ("pending_signature", "needs_resign"):
+        combo_reg.status = "pending_review"
+        combo_reg.updated_at = datetime.utcnow()
     db.commit()
     # 记签字成功 + 文档/签字哈希
     _log_consent_audit(
@@ -19822,6 +19838,129 @@ async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_
     }
 
 
+@app.post("/api/vaccine-registration/create")
+async def api_combo_vaccine_registration_create(
+    request: Request, db: Session = Depends(get_db), payload: dict = Body(...),
+):
+    """小程序联苗预登记。只凭主人手机号查档，允许代办人操作，不做验证码验证。"""
+    phone = re.sub(r"\D", "", str(payload.get("phone") or ""))
+    if len(phone) != 11:
+        raise HTTPException(400, "请输入11位主人手机号")
+    requested_date = str(payload.get("requested_date") or date.today().isoformat())[:20]
+    stage = str(payload.get("immunization_stage") or "")
+    if stage not in _COMBO_STAGE_ZH:
+        raise HTTPException(400, "请选择免疫阶段")
+    clinic_store = str(payload.get("clinic_store") or "").strip()
+    if clinic_store not in ("东环店", "横岗店"):
+        raise HTTPException(400, "请选择接种门店")
+
+    pet_id = int(payload.get("pet_id") or 0)
+    pet = db.get(Pet, pet_id) if pet_id else None
+    cust = db.get(Customer, pet.customer_id) if pet else None
+    if pet and cust:
+        phones = {re.sub(r"\D", "", cust.phone or "")}
+        phones.update(re.sub(r"\D", "", x) for x in (cust.phones_extra or "").split(","))
+        if phone not in phones:
+            raise HTTPException(400, "所选宠物不属于该手机号对应的客户档案")
+    else:
+        cust = db.query(Customer).filter(Customer.phone == phone).order_by(Customer.id.asc()).first()
+        if not cust:
+            for candidate in db.query(Customer).filter(Customer.phones_extra.like(f"%{phone}%")).all():
+                extras = {re.sub(r"\D", "", x) for x in (candidate.phones_extra or "").split(",")}
+                if phone in extras:
+                    cust = candidate
+                    break
+        if not cust:
+            owner_name = str(payload.get("owner_name") or "").strip()
+            if not owner_name:
+                raise HTTPException(400, "新建档案时请填写主人姓名")
+            cust = Customer(name=owner_name[:120], phone=phone, source="vaccination")
+            db.add(cust); db.flush()
+        pet_name = str(payload.get("pet_name") or "").strip()
+        species = str(payload.get("pet_species") or "")
+        if not pet_name or species not in ("cat", "dog"):
+            raise HTTPException(400, "请填写宠物姓名并选择猫或犬")
+        pet = Pet(
+            customer_id=cust.id, name=pet_name[:120], species=species,
+            breed=str(payload.get("pet_breed") or "")[:80],
+            gender=str(payload.get("pet_gender") or "unknown")[:10],
+            birthday_estimate=str(payload.get("pet_birthday") or "")[:40],
+            store=clinic_store,
+        )
+        db.add(pet); db.flush()
+
+    raw_q = payload.get("questionnaire") or {}
+    if not isinstance(raw_q, dict):
+        raise HTTPException(400, "接种前问卷格式不正确")
+    questionnaire = {}
+    missing = []
+    risk_flags = []
+    for key, label in _COMBO_QUESTION_LABELS.items():
+        source = raw_q.get(key) or {}
+        value = str(source.get("value") if isinstance(source, dict) else source or "")
+        if value not in ("yes", "no"):
+            missing.append(label)
+            continue
+        detail = str(source.get("detail") or "")[:500] if isinstance(source, dict) else ""
+        questionnaire[key] = {"value": value, "detail": detail}
+        if value == "yes":
+            risk_flags.append(key)
+    if missing:
+        raise HTTPException(400, "请完成全部接种前问卷")
+
+    reg = ComboVaccineRegistration(
+        customer_id=cust.id, pet_id=pet.id, original_pet_id=pet.id,
+        clinic_store=clinic_store, vaccine_type="combo",
+        immunization_stage=stage, requested_date=requested_date,
+        questionnaire_json=json.dumps(questionnaire, ensure_ascii=False),
+        risk_flags_json=json.dumps(risk_flags, ensure_ascii=False),
+        status="pending_signature", created_by="miniapp",
+    )
+    db.add(reg); db.flush()
+    task = _create_combo_consent_task(db, reg)
+    db.commit(); db.refresh(reg)
+    sign_url = _build_consent_sign_url(task.token)
+    if sign_url.startswith("/"):
+        sign_url = str(request.base_url).rstrip("/") + sign_url
+    return {
+        "ok": True, "registration_id": reg.id,
+        "status": reg.status, "consent_url": sign_url,
+        "pet_name": pet.name,
+    }
+
+
+@app.get("/api/vaccine-registration/{reg_id}")
+async def api_combo_vaccine_registration_status(
+    reg_id: int, phone: str = Query(""), db: Session = Depends(get_db),
+):
+    reg = db.get(ComboVaccineRegistration, reg_id)
+    if not reg:
+        raise HTTPException(404, "登记不存在")
+    cust = db.get(Customer, reg.customer_id) if reg.customer_id else None
+    submitted_phone = re.sub(r"\D", "", phone)
+    customer_phones = {re.sub(r"\D", "", cust.phone or "")} if cust else set()
+    if cust:
+        customer_phones.update(
+            re.sub(r"\D", "", value)
+            for value in (cust.phones_extra or "").split(",")
+            if value.strip()
+        )
+    if not cust or submitted_phone not in customer_phones:
+        raise HTTPException(403, "手机号与登记档案不符")
+    consent = db.get(ConsentTask, reg.consent_task_id) if reg.consent_task_id else None
+    if consent and consent.status == "signed" and reg.status in ("pending_signature", "needs_resign"):
+        reg.status = "pending_review"
+        db.commit()
+    pet = db.get(Pet, reg.pet_id) if reg.pet_id else None
+    return {
+        "ok": True, "id": reg.id, "status": reg.status,
+        "status_text": _COMBO_REG_STATUS_ZH.get(reg.status, reg.status),
+        "pet_name": pet.name if pet else "",
+        "requested_date": reg.requested_date,
+        "post_care_notice": reg.post_care_notice_snapshot if reg.status == "vaccinated" else "",
+    }
+
+
 # ── 公开表单：主人填写 ────────────────────────────────────────────────────────
 
 @app.get("/rabies", response_class=HTMLResponse)
@@ -23564,6 +23703,117 @@ def _attach_latest_batch(db: Session, items: list) -> None:
         it.latest_expiry_date = (b.expiry_date if b else "") or ""
 _DOSE_ZH = {1: "第1针", 2: "第2针", 3: "第3针", 99: "加强针"}
 
+_COMBO_REG_STATUS_ZH = {
+    "pending_signature": "待签同意书",
+    "needs_resign": "宠物已更正·待重签",
+    "pending_review": "待医护审核",
+    "approved": "允许接种",
+    "vaccinated": "已接种",
+    "rejected": "暂缓接种",
+    "cancelled": "已取消",
+}
+_COMBO_STAGE_ZH = {
+    "primary_1": "首免第1针",
+    "primary_2": "首免第2针",
+    "primary_3": "首免第3针",
+    "booster": "加强免疫",
+    "annual": "年度加强",
+}
+_COMBO_QUESTION_LABELS = {
+    "mental_7d": "近7天精神面貌是否异常",
+    "appetite_7d": "近7天食欲是否异常",
+    "vomit_diarrhea_7d": "近7天是否有呕吐或腹泻",
+    "cough_nasal_7d": "近7天是否有咳嗽或流鼻涕",
+    "medication_15d": "近15天是否有用药或治疗",
+    "other_vaccine_15d": "近15天是否接种过其他疫苗",
+    "prior_reaction": "既往接种疫苗是否有不良反应",
+    "pregnancy_lactation_15d": "近15天是否处于怀孕或哺乳期",
+    "surgery_anesthesia_15d": "近15天是否接受过手术或麻醉",
+}
+_COMBO_POST_CARE_NOTICE = (
+    "接种后请在院观察至少30分钟；24至48小时内可能出现轻度精神或食欲下降。"
+    "接种后7天内避免洗澡、剧烈运动、长途运输和突然更换食物。"
+    "若出现面部肿胀、持续呕吐腹泻、呼吸困难、虚脱或其他明显异常，请立即联系医院。"
+)
+
+
+def _combo_questionnaire(reg: "ComboVaccineRegistration") -> dict:
+    try:
+        value = json.loads(reg.questionnaire_json or "{}")
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def _combo_inventory_items(db: Session, request: Request) -> list[InventoryItem]:
+    q = _apply_store_filter(db.query(InventoryItem), InventoryItem.store, _get_op_store(request))
+    items = q.filter(
+        InventoryItem.category == "vaccine",
+        InventoryItem.is_active == True,  # noqa: E712
+        InventoryItem.is_service == False,  # noqa: E712
+        InventoryItem.stock_qty > 0,
+        ~InventoryItem.name.ilike("%狂犬%"),
+        or_(InventoryItem.subcategory != "rabies", InventoryItem.subcategory.is_(None)),
+    ).order_by(InventoryItem.name.asc()).all()
+    _attach_latest_batch(db, items)
+    return items
+
+
+def _find_vaccine_consent_template(db: Session) -> ConsentTemplate | None:
+    return db.query(ConsentTemplate).filter(
+        ConsentTemplate.is_active == True,  # noqa: E712
+        or_(
+            ConsentTemplate.category == "vaccination",
+            ConsentTemplate.name.ilike("%疫苗接种同意书%"),
+        ),
+    ).order_by(
+        ConsentTemplate.name.ilike("%横岗店%" ).desc(),
+        ConsentTemplate.id.desc(),
+    ).first()
+
+
+def _create_combo_consent_task(
+    db: Session,
+    reg: ComboVaccineRegistration,
+    *,
+    initiated_by: str = "miniapp",
+) -> ConsentTask:
+    tpl = _find_vaccine_consent_template(db)
+    if not tpl:
+        raise HTTPException(400, "未找到已上架的疫苗接种同意书模板，请先在协议模板中上架")
+    cust = db.get(Customer, reg.customer_id) if reg.customer_id else None
+    pet = db.get(Pet, reg.pet_id) if reg.pet_id else None
+    if not cust or not pet:
+        raise HTTPException(400, "客户或宠物档案不存在")
+    clinic_name = f"大风动物医院（{reg.clinic_store or pet.store or '横岗店'}）"
+    snapshot = _consent_render_snapshot(
+        tpl.body_html,
+        cust=cust,
+        pet=pet,
+        visit=None,
+        vet_name="",
+        clinic_name=clinic_name,
+        pet_weight=0,
+        pet_age=pet.birthday_estimate or "",
+    )
+    task = ConsentTask(
+        template_id=tpl.id,
+        customer_id=cust.id,
+        pet_id=pet.id,
+        title=tpl.name,
+        snapshot_html=snapshot,
+        token=_gen_consent_token(),
+        status="pending",
+        store=reg.clinic_store or pet.store or "",
+        initiated_by=initiated_by,
+        notes=f"[vaccine_no_verify] combo_registration_id={reg.id}",
+    )
+    db.add(task)
+    db.flush()
+    reg.consent_task_id = task.id
+    reg.status = "pending_signature"
+    return task
+
 
 @app.get("/admin/vaccinations", response_class=HTMLResponse)
 async def admin_vaccinations_list(
@@ -23936,9 +24186,45 @@ async def admin_rabies_list(
     q: str = Query(""), status: str = Query(""),
     date_from: str = Query(""), date_to: str = Query(""),
     page: int = Query(1),
+    tab: str = Query("combo"),
 ):
     require_admin(request)
+    tab = "rabies" if tab == "rabies" else "combo"
+    admin_store = _get_admin_store(request)
+    if tab == "combo":
+        query = db.query(ComboVaccineRegistration)
+        if admin_store:
+            query = query.filter(ComboVaccineRegistration.clinic_store == admin_store)
+        if q:
+            pet_ids = [r[0] for r in db.query(Pet.id).filter(Pet.name.ilike(f"%{q}%")).all()]
+            customer_ids = [r[0] for r in db.query(Customer.id).filter(or_(
+                Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%")
+            )).all()]
+            query = query.filter(or_(
+                ComboVaccineRegistration.pet_id.in_(pet_ids),
+                ComboVaccineRegistration.customer_id.in_(customer_ids),
+            ))
+        if status:
+            query = query.filter(ComboVaccineRegistration.status == status)
+        if date_from:
+            query = query.filter(ComboVaccineRegistration.created_at >= date_from)
+        if date_to:
+            query = query.filter(ComboVaccineRegistration.created_at <= date_to + " 23:59:59")
+        total = query.count()
+        page_size = 30
+        records = query.order_by(ComboVaccineRegistration.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        return templates.TemplateResponse(request, "uk/rabies_list.html", {
+            "tab": tab, "combo_records": records, "records": [],
+            "total": total, "page": page, "total_pages": total_pages, "page_size": page_size,
+            "q": q, "status": status, "date_from": date_from, "date_to": date_to,
+            "combo_status_zh": _COMBO_REG_STATUS_ZH, "combo_stage_zh": _COMBO_STAGE_ZH,
+            "status_zh": _RABIES_STATUS_ZH,
+        })
+
     query = db.query(RabiesVaccineRecord)
+    if admin_store:
+        query = query.filter(RabiesVaccineRecord.clinic_store == admin_store)
     if q:
         query = query.filter(or_(
             RabiesVaccineRecord.owner_name.ilike(f"%{q}%"),
@@ -23956,6 +24242,7 @@ async def admin_rabies_list(
     records = query.order_by(RabiesVaccineRecord.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
     total_pages = max(1, (total + page_size - 1) // page_size)
     return templates.TemplateResponse(request, "uk/rabies_list.html", {
+        "tab": tab, "combo_records": [],
         "records": records, "total": total, "page": page,
         "total_pages": total_pages, "page_size": page_size,
         "q": q, "status": status, "date_from": date_from, "date_to": date_to,
@@ -23993,6 +24280,180 @@ async def admin_rabies_detail(rec_id: int, request: Request, db: Session = Depen
         "owner_name_invalid": _is_invalid_name(rec.owner_name or ""),
         "today": datetime.utcnow().strftime("%Y-%m-%d"),
     })
+
+
+@app.get("/admin/vaccine-registrations/{reg_id}", response_class=HTMLResponse)
+async def admin_combo_vaccine_registration_detail(
+    reg_id: int, request: Request, db: Session = Depends(get_db),
+):
+    require_admin(request)
+    reg = db.get(ComboVaccineRegistration, reg_id)
+    if not reg:
+        raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and reg.clinic_store != admin_store:
+        raise HTTPException(403, "无权查看其他门店的接种登记")
+    cust = db.get(Customer, reg.customer_id) if reg.customer_id else None
+    pet = db.get(Pet, reg.pet_id) if reg.pet_id else None
+    pets = db.query(Pet).filter(Pet.customer_id == reg.customer_id).order_by(Pet.id).all() if reg.customer_id else []
+    consent = db.get(ConsentTask, reg.consent_task_id) if reg.consent_task_id else None
+    if consent and consent.status == "signed" and reg.status in ("pending_signature", "needs_resign"):
+        reg.status = "pending_review"
+        db.commit()
+    vacc = db.get(Vaccination, reg.vaccination_id) if reg.vaccination_id else None
+    vets = [r[0] for r in db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")
+    ).order_by(Staff.name).all()]
+    return templates.TemplateResponse(request, "uk/combo_vaccine_registration.html", {
+        "reg": reg, "cust": cust, "pet": pet, "pets": pets,
+        "consent": consent, "vacc": vacc, "vets": vets,
+        "vacc_items": _combo_inventory_items(db, request),
+        "questionnaire": _combo_questionnaire(reg),
+        "question_labels": _COMBO_QUESTION_LABELS,
+        "status_zh": _COMBO_REG_STATUS_ZH,
+        "stage_zh": _COMBO_STAGE_ZH,
+        "post_care_notice": _COMBO_POST_CARE_NOTICE,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/vaccine-registrations/{reg_id}/correct-pet")
+async def admin_combo_vaccine_correct_pet(
+    reg_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), pet_id: int = Form(...), correction_note: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    reg = db.get(ComboVaccineRegistration, reg_id)
+    pet = db.get(Pet, pet_id)
+    if not reg or not pet or pet.customer_id != reg.customer_id:
+        raise HTTPException(400, "只能更正为同一客户名下的宠物")
+    if reg.status == "vaccinated":
+        raise HTTPException(400, "已接种记录不能更换宠物，请按单据作废流程处理")
+    if reg.pet_id == pet.id:
+        return RedirectResponse(f"/admin/vaccine-registrations/{reg_id}?msg=宠物未变化", status_code=303)
+    old_task = db.get(ConsentTask, reg.consent_task_id) if reg.consent_task_id else None
+    if old_task:
+        if old_task.status == "pending":
+            old_task.status = "cancelled"
+        old_task.notes = ((old_task.notes or "") + f"\n[invalidated_pet_correction] new_pet_id={pet.id}")[:2000]
+    if not reg.original_pet_id:
+        reg.original_pet_id = reg.pet_id
+    reg.pet_id = pet.id
+    reg.pet_correction_note = (correction_note or "工作人员更正误选宠物")[:1000]
+    reg.status = "needs_resign"
+    reg.consent_task_id = None
+    db.flush()
+    task = _create_combo_consent_task(db, reg, initiated_by=request.session.get("admin_username", "admin"))
+    reg.status = "needs_resign"
+    db.commit()
+    url = _build_consent_sign_url(task.token)
+    return RedirectResponse(
+        f"/admin/vaccine-registrations/{reg_id}?msg=" + quote(f"宠物已更正，旧签署保留为历史；请重新签署：{url}"),
+        status_code=303,
+    )
+
+
+@app.post("/admin/vaccine-registrations/{reg_id}/review")
+async def admin_combo_vaccine_review(
+    reg_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), decision: str = Form(""),
+    physical_exam_note: str = Form(""), rejection_reason: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    reg = db.get(ComboVaccineRegistration, reg_id)
+    if not reg:
+        raise HTTPException(404)
+    consent = db.get(ConsentTask, reg.consent_task_id) if reg.consent_task_id else None
+    if not consent or consent.status != "signed":
+        raise HTTPException(400, "接种同意书尚未签署，不能审核")
+    if reg.status == "vaccinated":
+        raise HTTPException(400, "该登记已完成接种")
+    reg.physical_exam_note = (physical_exam_note or "")[:3000]
+    reg.reviewer = request.session.get("admin_username", "admin")
+    reg.reviewed_at = datetime.utcnow()
+    if decision == "approve":
+        reg.status = "approved"
+        reg.rejection_reason = ""
+        msg = "已允许接种，请选择实际疫苗并确认接种"
+    elif decision == "reject":
+        if not (rejection_reason or "").strip():
+            raise HTTPException(400, "暂缓接种必须填写原因")
+        reg.status = "rejected"
+        reg.rejection_reason = rejection_reason.strip()[:3000]
+        msg = "已标记暂缓接种"
+    else:
+        raise HTTPException(400, "无效审核动作")
+    db.commit()
+    return RedirectResponse(f"/admin/vaccine-registrations/{reg_id}?msg={quote(msg)}", status_code=303)
+
+
+@app.post("/admin/vaccine-registrations/{reg_id}/vaccinate")
+async def admin_combo_vaccine_confirm(
+    reg_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), inventory_item_id: int = Form(...),
+    vet_name: str = Form(""), batch_no: str = Form(""), vaccinated_date: str = Form(""),
+    charge_amount: float = Form(0.0),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    reg = db.get(ComboVaccineRegistration, reg_id)
+    if not reg:
+        raise HTTPException(404)
+    if reg.vaccination_id:
+        return RedirectResponse(f"/admin/vaccine-registrations/{reg_id}?msg=该登记已经完成接种，未重复出库", status_code=303)
+    if reg.status != "approved":
+        raise HTTPException(400, "请先完成医护审核并允许接种")
+    item = db.get(InventoryItem, inventory_item_id)
+    if not item or item.category != "vaccine" or "狂犬" in (item.name or ""):
+        raise HTTPException(400, "请选择有效的联苗库存品目")
+    op_store = _get_op_store(request)
+    if op_store and item.store and item.store != op_store:
+        raise HTTPException(400, "不能扣减其他门店的疫苗库存")
+    if float(item.stock_qty or 0) < 1:
+        raise HTTPException(400, f"库存不足：{item.name} 当前 {item.stock_qty:g}{item.unit or ''}")
+    actual_date = (vaccinated_date or reg.requested_date or date.today().isoformat())[:20]
+    dose_map = {"primary_1": 1, "primary_2": 2, "primary_3": 3, "booster": 99, "annual": 99}
+    vacc = Vaccination(
+        pet_id=reg.pet_id, customer_id=reg.customer_id, vaccine_type="combo",
+        vaccine_name=item.name, batch_no=(batch_no or getattr(item, "latest_batch_no", ""))[:80],
+        dose_number=dose_map.get(reg.immunization_stage, 1), vaccinated_date=actual_date,
+        inventory_item_id=item.id, is_free=False, vet_name=(vet_name or "")[:80],
+        notes=f"来源：联苗预登记 #{reg.id}", created_by=request.session.get("admin_username", "admin"),
+    )
+    db.add(vacc)
+    db.flush()
+    _deduct_inventory(db, item.id, 1.0, "vaccination", vacc.id,
+                      request.session.get("admin_username", "admin"), note=f"联苗登记#{reg.id} 接种出库")
+    amount = float(charge_amount or 0)
+    if amount <= 0:
+        from app.services.pricing import effective_sell_price as _eff
+        amount = float(_eff(item, _get_admin_store(request)) or 0)
+    if amount > 0:
+        inv = Invoice(
+            invoice_no=_gen_invoice_no(db), customer_id=reg.customer_id, pet_id=reg.pet_id,
+            invoice_date=actual_date, subtotal=amount, discount_amount=0, total_amount=amount,
+            payment_status="unpaid", notes=f"联苗接种 #{vacc.id}",
+            store=reg.clinic_store or _get_op_store(request),
+            created_by=request.session.get("admin_username", "admin"),
+        )
+        db.add(inv); db.flush()
+        db.add(InvoiceItem(
+            invoice_id=inv.id, ref_type="vaccination", ref_id=vacc.id,
+            description=item.name, quantity=1, unit_price=amount, subtotal=amount,
+        ))
+        vacc.invoice_id = inv.id
+    reg.vaccination_id = vacc.id
+    reg.status = "vaccinated"
+    reg.vaccinated_at = datetime.utcnow()
+    reg.post_care_notice_snapshot = _COMBO_POST_CARE_NOTICE
+    db.commit()
+    return RedirectResponse(
+        f"/admin/vaccine-registrations/{reg_id}?msg=" + quote("接种已完成，库存已扣减，待收款单已生成" if vacc.invoice_id else "接种已完成，库存已扣减；当前售价为0，未生成收费单"),
+        status_code=303,
+    )
 
 
 @app.post("/admin/rabies/{rec_id}/fill")

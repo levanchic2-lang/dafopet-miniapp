@@ -82,10 +82,10 @@
         <view><text class="list-index">09</text><text class="list-title">TNR爱心展示</text></view>
         <view class="list-arrow">›</view>
       </button>
-      <button class="list-entry" bindtap="goRabiesPage">
+      <button class="list-entry" bindtap="goVaccinePage">
         <view>
-          <view><text class="list-index">10</text><text class="list-title">狂犬疫苗免疫登记</text></view>
-          <view class="list-note">仅限横岗店使用</view>
+          <view><text class="list-index">10</text><text class="list-title">疫苗接种登记</text></view>
+          <view class="list-note">联苗 / 狂犬疫苗接种前登记</view>
         </view>
         <view class="list-arrow">›</view>
       </button>

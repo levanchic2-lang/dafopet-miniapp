@@ -701,6 +701,45 @@ class Vaccination(Base):
     rabies_record = relationship("RabiesVaccineRecord", foreign_keys=[rabies_record_id])
 
 
+class ComboVaccineRegistration(Base):
+    """联苗接种登记：主人预登记、知情同意、医护审核、接种出库与收费闭环。"""
+    __tablename__ = "combo_vaccine_registrations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    original_pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    consent_task_id = mapped_column(ForeignKey("consent_tasks.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    vaccination_id = mapped_column(ForeignKey("vaccinations.id", ondelete="SET NULL"), nullable=True, default=None, unique=True)
+
+    clinic_store: Mapped[str] = mapped_column(String(40), default="")
+    vaccine_type: Mapped[str] = mapped_column(String(20), default="combo")
+    # primary_1 / primary_2 / primary_3 / booster / annual
+    immunization_stage: Mapped[str] = mapped_column(String(30), default="primary_1")
+    requested_date: Mapped[str] = mapped_column(String(20), default="")
+    questionnaire_json: Mapped[str] = mapped_column(Text, default="{}")
+    risk_flags_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    # pending_signature / pending_review / approved / vaccinated / rejected / cancelled / needs_resign
+    status: Mapped[str] = mapped_column(String(30), default="pending_signature", index=True)
+    physical_exam_note: Mapped[str] = mapped_column(Text, default="")
+    rejection_reason: Mapped[str] = mapped_column(Text, default="")
+    pet_correction_note: Mapped[str] = mapped_column(Text, default="")
+    post_care_notice_snapshot: Mapped[str] = mapped_column(Text, default="")
+    reviewer: Mapped[str] = mapped_column(String(80), default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    vaccinated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    created_by: Mapped[str] = mapped_column(String(80), default="miniapp")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet = relationship("Pet", foreign_keys=[pet_id])
+    original_pet = relationship("Pet", foreign_keys=[original_pet_id])
+    consent_task = relationship("ConsentTask", foreign_keys=[consent_task_id])
+    vaccination = relationship("Vaccination", foreign_keys=[vaccination_id])
+
+
 class AdoptionPet(Base):
     __tablename__ = "adoption_pets"
 

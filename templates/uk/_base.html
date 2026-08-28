@@ -174,7 +174,7 @@
     其余：接待
   #}
   {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing')
-       or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies')
+       or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/vaccine-registrations')
        or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam')
        or _path.startswith('/admin/follow-up') or _path.startswith('/admin/inpatient')
        or _path.startswith('/admin/health-ops')
@@ -247,7 +247,7 @@
   <div class="uk-ribbon-icons {% if _active_tab=='medical' %}active{% endif %}" data-tab-content="medical">
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/dispensing') %}current{% endif %}" href="/admin/dispensing"><i data-lucide="pill"></i>发药台</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><i data-lucide="syringe"></i>疫苗管理</a>
-    <a class="uk-ribbon-icon {% if _path.startswith('/admin/rabies') %}current{% endif %}" href="/admin/rabies"><i data-lucide="dog"></i>狂犬疫苗</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/rabies') or _path.startswith('/admin/vaccine-registrations') %}current{% endif %}" href="/admin/rabies"><i data-lucide="syringe"></i>疫苗接种登记</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><i data-lucide="search"></i>病历查询</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/inpatient') or _path.startswith('/admin/cages') %}current{% endif %}" href="/admin/inpatient"><i data-lucide="bed-double"></i>住院管理</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/consent-tasks') %}current{% endif %}" href="/admin/consent-tasks?status=pending"><i data-lucide="file-text"></i>签署文书</a>

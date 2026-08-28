@@ -1,0 +1,72 @@
+{% extends "uk/_base.html" %}
+{% block title %}联苗登记 #{{ reg.id }} · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .cv-wrap{max-width:1120px;margin:26px auto 70px}.cv-bc{font-size:9pt;color:var(--ink-3);letter-spacing:2px;margin-bottom:18px}.cv-bc a{color:inherit;border-bottom:.5px solid var(--hair)}
+  .cv-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px}.cv-head h1{font-family:var(--font-serif);font-size:28pt;margin:0;letter-spacing:1px}.cv-sub{font-size:10pt;color:var(--ink-3);margin-top:8px;font-style:italic}.cv-rule{height:4px;border:0;border-top:.5px solid var(--ink);border-bottom:.5px solid var(--ink);margin:18px 0 26px}
+  .cv-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:30px}.cv-section{border-top:.5px solid var(--ink);padding:16px 0 24px}.cv-section h2{font-family:var(--font-serif);font-size:15pt;margin:0 0 14px;letter-spacing:2px}.cv-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.cv-field label{display:block;font-size:9pt;color:var(--ink-3);margin-bottom:5px}.cv-field strong{font-family:var(--font-serif);font-size:11pt}.cv-q{width:100%;border-collapse:collapse}.cv-q td{padding:9px 8px;border-bottom:.5px solid var(--hair);font-size:10pt}.cv-q td:last-child{text-align:right;font-weight:700}.cv-risk{color:var(--accent-red)}.cv-ok{color:var(--accent-green)}
+  .cv-side{border-left:.5px solid var(--hair);padding-left:24px}.cv-status{border:.5px solid var(--ink);padding:16px;margin-bottom:18px}.cv-status .label{font-size:9pt;color:var(--ink-3);letter-spacing:2px}.cv-status .value{font-size:16pt;font-family:var(--font-serif);font-weight:700;margin-top:6px}.cv-form{display:grid;gap:10px}.cv-form label{font-size:9pt;color:var(--ink-3)}.cv-form input,.cv-form select,.cv-form textarea{width:100%;border:.5px solid var(--hair);background:var(--paper);padding:8px 10px;font:10pt var(--font-serif);border-radius:0}.cv-form textarea{min-height:80px}.cv-actions{display:flex;gap:8px;flex-wrap:wrap}.cv-btn{border:.5px solid var(--ink);background:var(--paper);color:var(--ink);padding:8px 14px;font:700 10pt var(--font-serif);letter-spacing:1px;cursor:pointer}.cv-btn.primary{background:var(--ink);color:var(--paper)}.cv-btn.danger{border-color:var(--accent-red);color:var(--accent-red)}.cv-msg{border-left:3px solid var(--accent-green);padding:10px 14px;background:#f5f9f6;margin-bottom:18px}.cv-note{font-size:9pt;color:var(--ink-3);line-height:1.7}.cv-link{word-break:break-all;font-size:9pt;color:var(--ink-2)}
+  @media(max-width:850px){.cv-grid{grid-template-columns:1fr}.cv-side{border-left:0;padding-left:0}.cv-meta{grid-template-columns:1fr 1fr}}
+</style>
+<div class="cv-wrap">
+  <div class="cv-bc"><a href="/admin/rabies?tab=combo">疫苗接种登记</a> / 联苗登记 #{{ reg.id }}</div>
+  {% if msg %}<div class="cv-msg">{{ msg }}</div>{% endif %}
+  <div class="cv-head"><div><h1>联苗接种登记 #{{ reg.id }}</h1><div class="cv-sub">主人预登记 · 医护审核 · 实际接种、库存与收费一次完成</div></div><a class="cv-btn" href="/admin/rabies?tab=combo">返回列表</a></div>
+  <hr class="cv-rule"/>
+  <div class="cv-grid">
+    <main>
+      <section class="cv-section">
+        <h2>登记信息</h2>
+        <div class="cv-meta">
+          <div class="cv-field"><label>主人</label><strong>{% if cust %}<a href="/admin/customers/{{ cust.id }}">{{ cust.name }}</a>{% else %}—{% endif %}</strong><div>{{ cust.phone if cust else '' }}</div></div>
+          <div class="cv-field"><label>宠物</label><strong>{{ pet.name if pet else '—' }}</strong><div>{{ '猫' if pet and pet.species=='cat' else '犬' if pet and pet.species=='dog' else pet.species if pet else '' }} · {{ pet.breed if pet else '' }}</div></div>
+          <div class="cv-field"><label>接种计划</label><strong>{{ stage_zh.get(reg.immunization_stage, reg.immunization_stage) }}</strong><div>{{ reg.requested_date }} · {{ reg.clinic_store }}</div></div>
+        </div>
+      </section>
+      <section class="cv-section">
+        <h2>接种前问卷</h2>
+        <table class="cv-q">
+          {% for key,label in question_labels.items() %}
+          {% set answer = questionnaire.get(key, {}) %}
+          <tr><td>{{ label }}{% if answer.get('detail') %}<div class="cv-note">补充：{{ answer.get('detail') }}</div>{% endif %}</td><td class="{% if answer.get('value') == 'yes' %}cv-risk{% else %}cv-ok{% endif %}">{{ '是 · 需医护判断' if answer.get('value') == 'yes' else '否' }}</td></tr>
+          {% endfor %}
+        </table>
+        <p class="cv-note">问卷中的醒目项只用于提示医护复核，系统不会自动判定是否可以接种。</p>
+      </section>
+      <section class="cv-section">
+        <h2>接种同意书</h2>
+        {% if consent %}
+          <div>状态：<strong>{{ '已签署' if consent.status == 'signed' else '待签署' if consent.status == 'pending' else consent.status }}</strong></div>
+          <div class="cv-actions" style="margin-top:10px"><a class="cv-btn" target="_blank" href="/consent/{{ consent.token }}">打开签署页</a>{% if consent.status == 'signed' %}<a class="cv-btn" target="_blank" href="/admin/consent-tasks/{{ consent.id }}">查看归档</a>{% endif %}</div>
+        {% else %}<div class="cv-note">尚未生成同意书。</div>{% endif %}
+      </section>
+      {% if reg.status == 'vaccinated' and vacc %}
+      <section class="cv-section">
+        <h2>已完成接种</h2>
+        <div class="cv-meta"><div class="cv-field"><label>疫苗</label><strong>{{ vacc.vaccine_name }}</strong></div><div class="cv-field"><label>批号 / 日期</label><strong>{{ vacc.batch_no or '—' }}</strong><div>{{ vacc.vaccinated_date }}</div></div><div class="cv-field"><label>接种医护</label><strong>{{ vacc.vet_name or '—' }}</strong><div>{% if vacc.invoice_id %}<a href="/admin/invoices/{{ vacc.invoice_id }}">收费单 #{{ vacc.invoice_id }}</a>{% endif %}</div></div></div>
+        <p class="cv-note">接种后告知：{{ reg.post_care_notice_snapshot or post_care_notice }}</p>
+      </section>
+      {% endif %}
+    </main>
+    <aside class="cv-side">
+      <div class="cv-status"><div class="label">当前状态</div><div class="value">{{ status_zh.get(reg.status, reg.status) }}</div></div>
+
+      {% if pets|length > 1 and reg.status != 'vaccinated' %}
+      <section class="cv-section"><h2>更正宠物</h2><form class="cv-form" method="post" action="/admin/vaccine-registrations/{{ reg.id }}/correct-pet" onsubmit="return confirm('更正宠物后，当前同意书将保留为历史，但必须针对正确宠物重新签署。继续？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><label>正确宠物</label><select name="pet_id">{% for p in pets %}<option value="{{ p.id }}" {% if p.id==reg.pet_id %}selected{% endif %}>{{ p.name }} · {{ p.breed or p.species }}</option>{% endfor %}</select><label>更正说明</label><input name="correction_note" placeholder="例如：主人误选宠物"/><button class="cv-btn" type="submit">保存并重新签署</button></form></section>
+      {% endif %}
+
+      {% if consent and consent.status == 'signed' and reg.status not in ('vaccinated','cancelled') %}
+      <section class="cv-section"><h2>医护审核</h2><form class="cv-form" method="post" action="/admin/vaccine-registrations/{{ reg.id }}/review"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><label>现场基础检查 / 听诊</label><textarea name="physical_exam_note" placeholder="精神、体温、听诊及其他需要记录的情况">{{ reg.physical_exam_note }}</textarea><label>暂缓原因（选择暂缓时必填）</label><textarea name="rejection_reason">{{ reg.rejection_reason }}</textarea><div class="cv-actions"><button class="cv-btn primary" name="decision" value="approve" type="submit">允许接种</button><button class="cv-btn danger" name="decision" value="reject" type="submit">暂缓接种</button></div></form></section>
+      {% endif %}
+
+      {% if reg.status == 'approved' and not reg.vaccination_id %}
+      <section class="cv-section"><h2>确认实际接种</h2><form class="cv-form" method="post" action="/admin/vaccine-registrations/{{ reg.id }}/vaccinate" onsubmit="return confirm('确认后将立即扣库存并生成待收款单，是否继续？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><label>实际疫苗 / 库存</label><select name="inventory_item_id" id="cv-item" required><option value="">请选择</option>{% for i in vacc_items %}<option value="{{ i.id }}" data-batch="{{ i.latest_batch_no or '' }}" data-price="{{ i.sell_price or 0 }}">{{ i.name }} · 库存{{ i.stock_qty }}{{ i.unit }}</option>{% endfor %}</select><label>批号</label><input name="batch_no" id="cv-batch"/><label>接种日期</label><input type="date" name="vaccinated_date" value="{{ reg.requested_date }}" required/><label>接种医护</label><select name="vet_name" required><option value="">请选择</option>{% for v in vets %}<option>{{ v }}</option>{% endfor %}</select><label>收费金额（留空按库存售价）</label><input type="number" name="charge_amount" id="cv-price" step="0.01" min="0" placeholder="按库存售价"/><button class="cv-btn primary" type="submit">确认已接种</button></form></section>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+<script>
+const itemSelect=document.getElementById('cv-item');
+if(itemSelect)itemSelect.addEventListener('change',function(){const o=this.options[this.selectedIndex];document.getElementById('cv-batch').value=o.dataset.batch||'';document.getElementById('cv-price').placeholder=o.dataset.price?('库存售价 '+o.dataset.price):'按库存售价';});
+</script>
+{% endblock %}

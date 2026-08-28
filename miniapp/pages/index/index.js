@@ -107,5 +107,6 @@ Page({
   goAdoptionPage() { wx.navigateTo({ url: "/pages/adoption/list" }); },
   goShowcase() { wx.navigateTo({ url: "/pages/showcase/showcase" }); },
   goRabiesPage() { wx.navigateTo({ url: "/pages/rabies/index" }); },
+  goVaccinePage() { wx.navigateTo({ url: "/pages/vaccine/index" }); },
   goFeedbackPage() { wx.navigateTo({ url: "/pages/feedback/index" }); }
 });

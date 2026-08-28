@@ -1,5 +1,5 @@
 {% extends "uk/_base.html" %}
-{% block title %}狂犬疫苗登记 · 大风动物医院{% endblock %}
+{% block title %}疫苗接种登记 · 大风动物医院{% endblock %}
 {% block body %}
 <style>
   .rb-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
@@ -44,11 +44,22 @@
   .rb-empty { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:11pt; padding:48px 20px; text-align:center; border:0.5px solid var(--hair-2); }
   .rb-pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:20px 0; font-family:var(--font-serif); font-size:10pt; }
   .rb-pager .info { color:var(--ink-3); font-style:italic; font-family:var(--font-numeric); }
+  .vr-tabs { display:flex; border-bottom:0.5px solid var(--ink); margin:0 0 24px; }
+  .vr-tab { padding:10px 24px; color:var(--ink-3); font-family:var(--font-serif); font-size:11pt; text-decoration:none; }
+  .vr-tab.active { color:var(--paper); background:var(--ink); font-weight:700; }
+  .risk-dot { color:var(--accent-red); font-weight:700; }
 </style>
 
-<div class="rb-bc"><a href="/admin">后台</a><span class="sep">/</span><span>狂犬疫苗登记</span></div>
+<div class="rb-bc"><a href="/admin">后台</a><span class="sep">/</span><span>疫苗接种登记</span></div>
 
 {% if request.query_params.get('msg') %}<div class="rb-msg-ok">{{ request.query_params.get('msg') }}</div>{% endif %}
+
+<div class="vr-tabs">
+  <a class="vr-tab {% if tab == 'combo' %}active{% endif %}" href="/admin/rabies?tab=combo">联苗登记</a>
+  <a class="vr-tab {% if tab == 'rabies' %}active{% endif %}" href="/admin/rabies?tab=rabies">狂犬免疫登记</a>
+</div>
+
+{% if tab == 'rabies' %}
 
 <div class="rb-head">
   <div>
@@ -74,7 +85,8 @@
     <span style="font-family:var(--font-serif);font-style:italic;color:var(--ink-3);font-size:9.5pt;">至</span>
     <input type="date" name="date_to" value="{{ date_to }}" style="width:150px;"/>
     <button type="submit" class="rb-btn ghost">筛&nbsp;选</button>
-    {% if q or status or date_from or date_to %}<a href="/admin/rabies" class="rb-btn ghost">清&nbsp;除</a>{% endif %}
+    <input type="hidden" name="tab" value="rabies"/>
+    {% if q or status or date_from or date_to %}<a href="/admin/rabies?tab=rabies" class="rb-btn ghost">清&nbsp;除</a>{% endif %}
   </form>
 </div>
 
@@ -128,7 +140,7 @@
 </table>
 
 {% if total_pages > 1 %}
-{% set qs = '&q='~q~'&status='~status~'&date_from='~date_from~'&date_to='~date_to %}
+{% set qs = '&tab=rabies&q='~q~'&status='~status~'&date_from='~date_from~'&date_to='~date_to %}
 <div class="rb-pager">
   {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" class="rb-btn ghost sm">‹ 上&nbsp;一&nbsp;页</a>{% endif %}
   <span class="info">第 {{ page }} / {{ total_pages }} 页</span>
@@ -138,5 +150,56 @@
 
 {% else %}
 <div class="rb-empty">暂无狂犬疫苗登记记录</div>
+{% endif %}
+
+{% else %}
+<div class="rb-head">
+  <div><h1>联&nbsp;苗&nbsp;登&nbsp;记<span class="sub">共 <b>{{ total }}</b> 条 · 主人预登记后由医护审核与接种</span></h1></div>
+</div>
+<hr class="rb-rule-double"/>
+
+<div class="rb-filter">
+  <form method="get">
+    <input type="hidden" name="tab" value="combo"/>
+    <input name="q" value="{{ q }}" placeholder="搜主人 / 手机 / 宠物" style="flex:1;min-width:220px;"/>
+    <select name="status" style="min-width:170px;">
+      <option value="">全部状态</option>
+      {% for k, zh in combo_status_zh.items() %}<option value="{{ k }}" {% if status == k %}selected{% endif %}>{{ zh }}</option>{% endfor %}
+    </select>
+    <input type="date" name="date_from" value="{{ date_from }}"/>
+    <span style="color:var(--ink-3);">至</span>
+    <input type="date" name="date_to" value="{{ date_to }}"/>
+    <button type="submit" class="rb-btn ghost">筛&nbsp;选</button>
+    {% if q or status or date_from or date_to %}<a href="/admin/rabies?tab=combo" class="rb-btn ghost">清&nbsp;除</a>{% endif %}
+  </form>
+</div>
+
+{% if combo_records %}
+<table class="rb-tbl">
+  <thead><tr><th>#</th><th>主人 / 宠物</th><th>免疫阶段</th><th>预约日期</th><th>门店</th><th>风险问卷</th><th>状态</th><th style="text-align:right;">操作</th></tr></thead>
+  <tbody>
+  {% for reg in combo_records %}
+    <tr class="{% if reg.status == 'pending_review' %}warn{% endif %}">
+      <td class="dim num">#{{ reg.id }}</td>
+      <td><span class="name">{{ reg.customer.name if reg.customer else '—' }}</span><span class="dim"> · {{ reg.pet.name if reg.pet else '—' }}</span><br/><span class="dim num">{{ reg.customer.phone if reg.customer else '' }}</span></td>
+      <td>{{ combo_stage_zh.get(reg.immunization_stage, reg.immunization_stage) }}</td>
+      <td class="num">{{ reg.requested_date or '—' }}</td>
+      <td>{{ reg.clinic_store or '—' }}</td>
+      <td>{% if reg.risk_flags_json and reg.risk_flags_json != '[]' %}<span class="risk-dot">● 有风险项</span>{% else %}<span class="dim">无异常勾选</span>{% endif %}</td>
+      <td><span class="rb-pill {% if reg.status == 'vaccinated' %}ok{% elif reg.status in ('pending_review','needs_resign') %}warn{% else %}ink{% endif %}">{{ combo_status_zh.get(reg.status, reg.status) }}</span></td>
+      <td style="text-align:right;"><a class="rb-btn ghost sm" href="/admin/vaccine-registrations/{{ reg.id }}">详&nbsp;情</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if total_pages > 1 %}
+{% set qs = '&tab=combo&q='~q~'&status='~status~'&date_from='~date_from~'&date_to='~date_to %}
+<div class="rb-pager">
+  {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" class="rb-btn ghost sm">‹ 上一页</a>{% endif %}
+  <span class="info">第 {{ page }} / {{ total_pages }} 页</span>
+  {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}" class="rb-btn ghost sm">下一页 ›</a>{% endif %}
+</div>
+{% endif %}
+{% else %}<div class="rb-empty">暂无联苗预登记记录</div>{% endif %}
 {% endif %}
 {% endblock %}

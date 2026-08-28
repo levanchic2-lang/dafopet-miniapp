@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="head"><view class="kicker">VACCINATION</view><view class="title">疫苗接种登记</view><view class="desc">请按本次实际接种类型进入对应流程</view></view>
+  <view wx:if="{{recent}}" class="recent">
+    <view class="recent-label">最近一次联苗登记</view>
+    <view class="recent-title">{{recent.pet_name}} · {{recent.status_text}}</view>
+    <view class="recent-date">计划接种日 {{recent.requested_date}}</view>
+    <view wx:if="{{recent.post_care_notice}}" class="care"><view class="care-title">接种后告知</view>{{recent.post_care_notice}}</view>
+  </view>
+  <button class="entry primary" bindtap="goCombo"><view><view class="entry-title">联苗登记</view><view class="entry-desc">猫联苗、犬联苗 · 健康问卷与接种同意书</view></view><text>›</text></button>
+  <button class="entry" bindtap="goRabies"><view><view class="entry-title">狂犬免疫登记</view><view class="entry-desc">保留政府要求的社区、街道及免疫证信息</view></view><text>›</text></button>
+  <view class="notice">两种疫苗使用不同登记内容。狂犬疫苗仍进入原有专属登记表，联苗由医护在后台审核后确认实际品牌、批号、库存和收费。</view>
+</view>

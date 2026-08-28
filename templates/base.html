@@ -674,7 +674,7 @@
   {% set _path = request.url.path %}
   {% if request.session.get('admin') %}
   {# 按 path 推断当前 ribbon tab 默认激活哪一组 #}
-  {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing') or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam') or _path.startswith('/admin/follow-ups') or _path.startswith('/admin/inpatient') or _path.startswith('/admin/cages') %}
+  {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing') or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/vaccine-registrations') or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam') or _path.startswith('/admin/follow-ups') or _path.startswith('/admin/inpatient') or _path.startswith('/admin/cages') %}
     {% set _active_tab = 'medical' %}
   {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory') or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales') or _path.startswith('/admin/feedback') or _path.startswith('/admin/packages') or _path.startswith('/admin/coupons') or _path.startswith('/admin/reports') %}
     {% set _active_tab = 'business' %}
@@ -731,7 +731,7 @@
     <div class="ribbon-icons {% if _active_tab=='medical' %}active{% endif %}" data-tab-content="medical">
       <a class="ribbon-icon {% if _path.startswith('/admin/dispensing') %}current{% endif %}" href="/admin/dispensing"><span class="ri-emoji"><i data-lucide="pill"></i></span>发药台</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><span class="ri-emoji"><i data-lucide="syringe"></i></span>疫苗管理</a>
-      <a class="ribbon-icon {% if _path.startswith('/admin/rabies') %}current{% endif %}" href="/admin/rabies"><span class="ri-emoji"><i data-lucide="dog"></i></span>狂犬疫苗</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/rabies') or _path.startswith('/admin/vaccine-registrations') %}current{% endif %}" href="/admin/rabies"><span class="ri-emoji"><i data-lucide="syringe"></i></span>疫苗接种登记</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><span class="ri-emoji"><i data-lucide="search"></i></span>病历查询</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/inpatient') or _path.startswith('/admin/cages') %}current{% endif %}" href="/admin/inpatient"><span class="ri-emoji"><i data-lucide="bed-double"></i></span>住院管理</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/consent') %}current{% endif %}" href="/admin/consent-templates"><span class="ri-emoji"><i data-lucide="pencil-line"></i></span>协议模板</a>
@@ -799,7 +799,7 @@
       // 医疗
       '/admin/dispensing':   { label: '发药台',     kind: 'page', icon: 'pill' },
       '/admin/vaccinations': { label: '疫苗管理',   kind: 'page', icon: 'syringe' },
-      '/admin/rabies':       { label: '狂犬疫苗',   kind: 'page', icon: 'dog' },
+      '/admin/rabies':       { label: '疫苗接种登记', kind: 'page', icon: 'syringe' },
       '/admin/visits':       { label: '病历查询',   kind: 'page', icon: 'search' },
       '/admin/inpatient':    { label: '住院管理',   kind: 'page', icon: 'bed-double' },
       '/admin/cages':        { label: '笼位管理',   kind: 'page', icon: 'layout-grid' },
