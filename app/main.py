@@ -29708,6 +29708,7 @@ async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_d
         "request": request, "visit": v, "cust": cust, "pet": pet,
         "store_short": store_short, "species": species, "weight_kg": weight_kg,
         "matched_rule": matched_rule, "existing": existing,
+        "now": datetime.utcnow(),
         "csrf_token": _get_csrf_token(request),
         "title": "新建住院单",
     })
@@ -29717,7 +29718,8 @@ async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_d
 async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
                                   csrf_token: str = Form(""),
                                   visit_id: int = Form(0), pet_id: int = Form(0),
-                                  species: str = Form(""), weight_kg: float = Form(0.0)):
+                                  species: str = Form(""), weight_kg: float = Form(0.0),
+                                  admitted_at: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     v = db.get(Visit, visit_id) if visit_id else None
@@ -29749,6 +29751,11 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
     rule = _match_hosp_rate(db, store_short, normalized_species, resolved_weight)
     if not rule:
         return RedirectResponse(f"{new_url}&err={store_short or '当前门店'}没有匹配该宠物体重的住院价格", status_code=303)
+    actual_admitted_at = _parse_bj_dt_to_utc(admitted_at) if admitted_at else datetime.utcnow()
+    if actual_admitted_at is None:
+        return RedirectResponse(f"{new_url}&err=实际入住时间格式不正确", status_code=303)
+    if actual_admitted_at > datetime.utcnow() + timedelta(minutes=5):
+        return RedirectResponse(f"{new_url}&err=实际入住时间不能晚于当前时间", status_code=303)
 
     if _hosp_species(pet.species) != normalized_species:
         pet.species = normalized_species
@@ -29771,6 +29778,7 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
             normalized_species, float(rule.min_weight_kg or 0),
             float(rule.max_weight_kg) if rule.max_weight_kg is not None else None,
         ),
+        admitted_at=actual_admitted_at,
         status="admitted",
         staff_token=_gen_hosp_token(db, "staff_token"),
         owner_token=_gen_hosp_token(db, "owner_token"),
@@ -29782,6 +29790,7 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
         "id": h.id, "pet_id": h.pet_id, "visit_id": visit_id,
         "store": store_short, "weight_kg": resolved_weight,
         "daily_rate": h.daily_rate_override, "rate_rule_id": rule.id,
+        "admitted_at": actual_admitted_at.isoformat(),
     })
     db.commit()
     return RedirectResponse(f"/admin/inpatient/{h.id}?msg=已入院",
