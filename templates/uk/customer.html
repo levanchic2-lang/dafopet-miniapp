@@ -589,6 +589,7 @@
       <button class="uk-tab-btn {% if active_tab=='prescriptions' %}active{% endif %}" data-tab="prescriptions" onclick="switchTab('prescriptions')">处方</button>
       <button class="uk-tab-btn {% if active_tab=='exams' %}active{% endif %}" data-tab="exams" onclick="switchTab('exams')">检查单</button>
       <button class="uk-tab-btn {% if active_tab=='appointments' %}active{% endif %}" data-tab="appointments" onclick="switchTab('appointments')">预约</button>
+      <button class="uk-tab-btn {% if active_tab=='inpatient' %}active{% endif %}" data-tab="inpatient" onclick="switchTab('inpatient')">住院</button>
       <button class="uk-tab-btn {% if active_tab=='vaccines' %}active{% endif %}" data-tab="vaccines" onclick="switchTab('vaccines')">疫苗驱虫</button>
       <button class="uk-tab-btn {% if active_tab=='grooming' %}active{% endif %}" data-tab="grooming" onclick="switchTab('grooming')">美容</button>
       <button class="uk-tab-btn {% if active_tab=='sales' %}active{% endif %}" data-tab="sales" onclick="switchTab('sales')">销售单</button>
@@ -725,6 +726,50 @@
       </table>
       {% else %}
       <div class="tab-empty">暂无预约记录</div>
+      {% endif %}
+    </div>
+
+    {# ─── 住院记录 ─── #}
+    <div class="uk-tab-content {% if active_tab=='inpatient' %}active{% endif %}" data-tab-content="inpatient">
+      <div class="tab-action-bar">
+        <a class="uk-btn primary sm" href="/admin/inpatient/new?pet_id={{ active_pet.id }}">＋ 新建住院单</a>
+        <span class="tab-count">共 <b>{{ inpatient_rows|length }}</b> 条</span>
+      </div>
+      {% if inpatient_rows %}
+      <table class="uk-tbl-tab">
+        <thead><tr><th>住院单</th><th>状态</th><th>入住时间</th><th>出院时间</th><th>天数</th><th>入住体重</th><th>日费率</th><th class="right">预计 / 结算</th><th>收费</th><th class="right">操作</th></tr></thead>
+        <tbody>
+          {% for row in inpatient_rows %}
+          {% set h = row['h'] %}
+          <tr>
+            <td class="num">#{{ h.id }}</td>
+            <td>
+              {% if h.status == 'admitted' %}<span class="uk-pill green">住院中</span>
+              {% elif h.status == 'discharged' %}<span class="uk-pill mute">已离院</span>
+              {% elif h.status == 'cancelled' %}<span class="uk-pill red">已取消</span>
+              {% else %}<span class="uk-pill amber">{{ hosp_status_zh.get(h.status, h.status) }}</span>{% endif %}
+            </td>
+            <td class="num">{{ (h.admitted_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</td>
+            <td class="num">{{ (h.discharged_at | bjtime).strftime('%Y-%m-%d %H:%M') if h.discharged_at else '—' }}</td>
+            <td class="num">{{ '%g'|format(row['days']) }} 天</td>
+            <td class="num">{{ ('%g kg'|format(h.admission_weight_kg)) if h.admission_weight_kg else '—' }}</td>
+            <td class="num">¥{{ '%.2f'|format(row['rate']) }}</td>
+            <td class="right num">¥{{ '%.2f'|format(row['amount']) }}</td>
+            <td>
+              {% if row['invoice_status'] == 'paid' %}<span class="uk-pill green">已支付</span>
+              {% elif row['invoice_status'] == 'partial' %}<span class="uk-pill amber">部分收款</span>
+              {% elif row['invoice_status'] == 'unpaid' %}<span class="uk-pill red">未支付</span>
+              {% elif row['invoice_status'] == 'cancelled' %}<span class="uk-pill mute">已取消</span>
+              {% elif row['invoice_status'] == 'refunded' %}<span class="uk-pill mute">已退款</span>
+              {% else %}<span class="uk-mute">未生成</span>{% endif %}
+            </td>
+            <td class="action right"><a href="/admin/inpatient/{{ h.id }}">查看 →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="tab-empty">暂无住院记录。<a href="/admin/inpatient/new?pet_id={{ active_pet.id }}">新建住院单 →</a></div>
       {% endif %}
     </div>
 

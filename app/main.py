@@ -8643,6 +8643,29 @@ async def page_admin_customer_detail(
             _g._lock_reason = _r
         weight_records = db.query(WeightRecord).filter(WeightRecord.pet_id == active_pet_id).order_by(WeightRecord.record_date.asc()).all()
         medical_docs = db.query(MedicalDocument).filter(MedicalDocument.pet_id == active_pet_id).order_by(MedicalDocument.id.desc()).all()
+        hospitalizations = db.query(Hospitalization).filter(
+            Hospitalization.pet_id == active_pet_id
+        ).order_by(Hospitalization.admitted_at.desc(), Hospitalization.id.desc()).all()
+        hosp_invoice_ids = [h.invoice_id for h in hospitalizations if h.invoice_id]
+        hosp_invoices = {
+            inv.id: inv for inv in db.query(Invoice).filter(Invoice.id.in_(hosp_invoice_ids)).all()
+        } if hosp_invoice_ids else {}
+        inpatient_rows = []
+        for h in hospitalizations:
+            inv = hosp_invoices.get(h.invoice_id)
+            days = float(h.billing_days or 0)
+            if days <= 0 and h.discharged_at:
+                days = _calc_hosp_billable_days(
+                    h.admitted_at, h.discharged_at, bool(h.same_day_waived)
+                )
+            rate = float(h.daily_rate_override or (h.cage.daily_rate if h.cage else 0) or 0)
+            inpatient_rows.append({
+                "h": h,
+                "days": days,
+                "rate": rate,
+                "amount": float(inv.total_amount or 0) if inv else round(days * rate, 2),
+                "invoice_status": inv.payment_status if inv else "none",
+            })
         # 该宠物名下收费单（兼容只关联病历的旧收费单）
         active_pet_invoices = invoices_by_pet.get(active_pet_id, [])
         # 该宠物的销售单（按 pet_id；无 pet_id 的旧单子归入活跃宠物，避免数据消失）
@@ -8654,13 +8677,14 @@ async def page_admin_customer_detail(
         appointments, visits, prescriptions, exam_orders = [], [], [], []
         vaccinations, dewormings, weight_records, medical_docs = [], [], [], []
         groomings = []
+        inpatient_rows = []
         active_pet_invoices = []
         pet_sales_orders = []
 
     displayed_invoices = cust_invoices if invoice_scope == "all" else active_pet_invoices
 
     _SO_STATUS_ZH_LOCAL = {"pending": "待付款", "paid": "已收款", "cancelled": "已取消"}
-    _INV_STATUS_ZH_LOCAL = {"unpaid": "未支付", "paid": "已支付", "cancelled": "已取消", "refunded": "已退款"}
+    _INV_STATUS_ZH_LOCAL = {"unpaid": "未支付", "partial": "部分收款", "paid": "已支付", "cancelled": "已取消", "refunded": "已退款"}
     from datetime import date, timedelta
     today_str = date.today().isoformat()
     soon_str  = (date.today() + timedelta(days=7)).isoformat()
@@ -8788,6 +8812,8 @@ async def page_admin_customer_detail(
             "latest_weight_by_pet": latest_weight_by_pet,
             "weight_records": weight_records,
             "medical_docs": medical_docs,
+            "inpatient_rows": inpatient_rows,
+            "hosp_status_zh": _HOSP_STATUS_ZH,
             "pet_invoices": displayed_invoices,
             "pet_unpaid_total": pet_unpaid_total,
             "pet_sales_orders": pet_sales_orders,
