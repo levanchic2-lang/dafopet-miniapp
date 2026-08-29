@@ -51,6 +51,12 @@
   .xr-btn-sm:hover { border-color:var(--ink-3); color:var(--ink); }
   .xr-photos { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
   .xr-photos img { width:120px; height:120px; object-fit:cover; background:#000; border:0.5px solid var(--hair); }
+  .xr-dropzone { display:flex; min-height:112px; align-items:center; justify-content:center; border:1px dashed var(--ink-3); background:#fcfbf7; cursor:pointer; text-align:center; padding:18px; box-sizing:border-box; transition:background .15s,border-color .15s; }
+  .xr-dropzone:hover,.xr-dropzone.dragover { background:#f3f6f3; border-color:var(--accent-green); }
+  .xr-dropzone-main { font-size:12pt; font-weight:700; letter-spacing:1px; color:var(--ink); }
+  .xr-dropzone-sub { margin-top:7px; font-size:9pt; color:var(--ink-3); font-style:italic; }
+  .xr-file-input { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+  .xr-upload-status { min-height:20px; margin-top:8px; font-size:9pt; color:var(--ink-3); }
 
   .xr-actions { display:flex; gap:12px; align-items:center; margin:8px 0 50px; }
   .xr-submit { font-family:var(--font-serif); font-size:12pt; font-weight:700; letter-spacing:2px; color:var(--paper); background:var(--ink); border:none; padding:13px 30px; cursor:pointer; }
@@ -183,9 +189,13 @@
       {% for p in cur_photos %}<a href="/uploads/{{ p }}" target="_blank"><img src="/uploads/{{ p }}"/></a>{% endfor %}
     </div>
     {% endif %}
-    <input type="file" id="xray-photo-input" name="photos" accept="image/*" multiple onchange="addXrayFiles(this)"/>
+    <label class="xr-dropzone" id="xray-dropzone" for="xray-photo-input" tabindex="0">
+      <span><span class="xr-dropzone-main">拖拽 X 光影像到这里</span><span class="xr-dropzone-sub">支持逐张拖入或一次拖入多张，也可以点击选择文件</span></span>
+    </label>
+    <input class="xr-file-input" type="file" id="xray-photo-input" name="photos" accept="image/*" multiple onchange="addXrayFiles(this.files)"/>
+    <div id="xray-upload-status" class="xr-upload-status">尚未添加新影像</div>
     <div id="xray-new-previews" class="xr-photos" style="margin-top:10px;"></div>
-    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin-top:6px;">可多次点击「选择文件」逐张追加（不会覆盖之前选的）；将排版进报告 PDF（自动压缩，单张 ≤ 15MB）。</p>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin-top:6px;">新影像会持续追加，不会覆盖之前选好的文件；将排版进报告 PDF（自动压缩，单张 ≤ 15MB）。</p>
   </div>
 
   <div class="xr-actions">
@@ -364,6 +374,7 @@ async function aiDraft() {
 let xrayDT = new DataTransfer();
 function renderXrayPreviews() {
   const wrap = document.getElementById('xray-new-previews');
+  const status = document.getElementById('xray-upload-status');
   wrap.innerHTML = '';
   Array.from(xrayDT.files).forEach((f, i) => {
     const div = document.createElement('div');
@@ -377,14 +388,24 @@ function renderXrayPreviews() {
     div.appendChild(img); div.appendChild(btn);
     wrap.appendChild(div);
   });
+  status.style.color = 'var(--ink-3)';
+  status.textContent = xrayDT.files.length ? `已添加 ${xrayDT.files.length} 张新影像` : '尚未添加新影像';
 }
-function addXrayFiles(input) {
-  Array.from(input.files).forEach(f => {
-    const dup = Array.from(xrayDT.files).some(x => x.name === f.name && x.size === f.size);
+function addXrayFiles(files) {
+  const rejected = [];
+  Array.from(files || []).forEach(f => {
+    if (!f.type || !f.type.startsWith('image/')) { rejected.push(`${f.name} 不是图片`); return; }
+    if (f.size > 15 * 1024 * 1024) { rejected.push(`${f.name} 超过 15MB`); return; }
+    const dup = Array.from(xrayDT.files).some(x => x.name === f.name && x.size === f.size && x.lastModified === f.lastModified);
     if (!dup) xrayDT.items.add(f);
   });
-  input.files = xrayDT.files;
+  document.getElementById('xray-photo-input').files = xrayDT.files;
   renderXrayPreviews();
+  if (rejected.length) {
+    const status = document.getElementById('xray-upload-status');
+    status.style.color = 'var(--accent-red)';
+    status.textContent = rejected.join('；');
+  }
 }
 function removeXrayFile(idx) {
   const dt = new DataTransfer();
@@ -393,6 +414,18 @@ function removeXrayFile(idx) {
   document.getElementById('xray-photo-input').files = xrayDT.files;
   renderXrayPreviews();
 }
+
+const xrayDropzone = document.getElementById('xray-dropzone');
+['dragenter', 'dragover'].forEach(type => xrayDropzone.addEventListener(type, e => {
+  e.preventDefault(); e.stopPropagation(); xrayDropzone.classList.add('dragover');
+}));
+['dragleave', 'drop'].forEach(type => xrayDropzone.addEventListener(type, e => {
+  e.preventDefault(); e.stopPropagation(); xrayDropzone.classList.remove('dragover');
+}));
+xrayDropzone.addEventListener('drop', e => addXrayFiles(e.dataTransfer.files));
+xrayDropzone.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('xray-photo-input').click(); }
+});
 
 document.getElementById('xrayForm').addEventListener('submit', function () {
   document.getElementById('findings_json').value = JSON.stringify(collectFindings());
