@@ -19,6 +19,12 @@
 <div class="ukm-card"><div class="ukm-card-title">可用押金&nbsp;¥{{ '%.2f'|format(deposit_available) }}</div>{% if deposits %}<div class="ukm-fineprint">共 {{ deposits|length }} 笔关联记录，离院结算时可在收银台抵扣。</div>{% else %}<div class="ukm-fineprint">暂无关联押金。</div>{% endif %}</div>
 
 {% if h.status == 'admitted' %}
+<div class="ukm-section-head"><h2>更&nbsp;正&nbsp;入&nbsp;住&nbsp;时&nbsp;间</h2></div>
+<form method="post" action="/admin/inpatient/{{ h.id }}/edit-admission-time" onsubmit="return confirm('确认更正实际入住时间？')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <div class="ukm-field"><input class="ukm-input" type="datetime-local" name="admitted_at" value="{{ (h.admitted_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.admitted_at else '' }}" max="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}" required/></div>
+  <button class="ukm-btn hair block" type="submit">保&nbsp;存&nbsp;并&nbsp;重&nbsp;算</button>
+</form>
 <div class="ukm-section-head"><h2>办&nbsp;理&nbsp;离&nbsp;院</h2></div>
 <form method="post" action="/admin/inpatient/{{ h.id }}/discharge" onsubmit="return confirm('确认办理离院并生成住院收费单？')">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

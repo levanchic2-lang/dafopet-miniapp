@@ -29847,6 +29847,41 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
                              status_code=303)
 
 
+@app.post("/admin/inpatient/{hosp_id}/edit-admission-time")
+async def admin_inpatient_edit_admission_time(
+    hosp_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), admitted_at: str = Form(""),
+):
+    """补录或更正住院中的实际入住时间。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    h = db.get(Hospitalization, hosp_id)
+    if not h:
+        raise HTTPException(404)
+    if h.status != "admitted":
+        return RedirectResponse(
+            f"/admin/inpatient/{hosp_id}?msg=只有住院中的单据可以更正入住时间",
+            status_code=303,
+        )
+    dt = _parse_bj_dt_to_utc(admitted_at)
+    if dt is None:
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=入住时间格式不正确", status_code=303)
+    if dt > datetime.utcnow() + timedelta(minutes=5):
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=入住时间不能晚于当前时间", status_code=303)
+    old_dt = h.admitted_at
+    h.admitted_at = dt
+    _audit(db, request, "hospitalization_edit_admission_time", detail={
+        "id": h.id,
+        "old_admitted_at": old_dt.isoformat() if old_dt else "",
+        "new_admitted_at": dt.isoformat(),
+    })
+    db.commit()
+    return RedirectResponse(
+        f"/admin/inpatient/{hosp_id}?msg=实际入住时间已更正，住院天数和预估费用已重算",
+        status_code=303,
+    )
+
+
 @app.post("/admin/inpatient/{hosp_id}/edit-discharge-time")
 async def admin_inpatient_edit_discharge_time(hosp_id: int, request: Request,
                                                db: Session = Depends(get_db),
