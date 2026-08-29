@@ -16925,7 +16925,6 @@ async def admin_narcotics_export(
 async def admin_dispensing(
     request: Request, db: Session = Depends(get_db),
     q: str = Query(""),
-    status: str = Query("issued"),
     vet: str = Query(""),
     date_from: str = Query(""),
     date_to: str = Query(""),
@@ -16945,9 +16944,8 @@ async def admin_dispensing(
         date_from = today.replace(day=1).isoformat()
         date_to = today.isoformat()
 
-    qry = db.query(Prescription)
-    if status and status != "all":
-        qry = qry.filter(Prescription.status == status)
+    formal_statuses = ("issued", "dispensed")
+    qry = db.query(Prescription).filter(Prescription.status.in_(formal_statuses))
     if vet:
         qry = qry.filter(Prescription.vet_name == vet)
     if date_from:
@@ -16969,11 +16967,11 @@ async def admin_dispensing(
             Prescription.customer_id.in_(cust_ids),
         ))
 
-    # 待发药队列：最早开单排前；其余倒序
-    if status == "issued":
-        prescs = qry.order_by(Prescription.prescribed_date.asc(), Prescription.id.asc()).limit(200).all()
-    else:
-        prescs = qry.order_by(Prescription.id.desc()).limit(200).all()
+    result_count = qry.count()
+    prescs = qry.order_by(
+        Prescription.prescribed_date.desc(),
+        Prescription.id.desc(),
+    ).limit(200).all()
 
     # 预载关联数据
     cust_map = {}
@@ -16989,14 +16987,14 @@ async def admin_dispensing(
                 pet_map[p.pet_id] = pt
 
     # 统计数字
-    pending_count = db.query(Prescription).filter(Prescription.status == "issued").count()
     today_str = today.isoformat()
-    today_dispensed = db.query(Prescription).filter(
-        Prescription.status == "dispensed",
+    today_total = db.query(Prescription).filter(
+        Prescription.status.in_(formal_statuses),
         Prescription.prescribed_date == today_str,
     ).count()
     month_start = today.replace(day=1).isoformat()
     month_total = db.query(Prescription).filter(
+        Prescription.status.in_(formal_statuses),
         Prescription.prescribed_date >= month_start,
     ).count()
 
@@ -17008,15 +17006,13 @@ async def admin_dispensing(
     return templates.TemplateResponse(request, "uk/dispensing.html", {
         "request": request,
         "prescs": prescs, "cust_map": cust_map, "pet_map": pet_map,
-        "q": q, "status": status, "vet": vet,
+        "q": q, "vet": vet,
         "date_from": date_from, "date_to": date_to, "quick": quick,
-        "pending_count": pending_count,
-        "today_dispensed": today_dispensed,
+        "result_count": result_count,
+        "today_total": today_total,
         "month_total": month_total,
         "vets": vets,
-        "presc_status_zh": _PRESC_STATUS_ZH,
-        "csrf_token": request.session.get("csrf_token", ""),
-        "title": "发药工作台",
+        "title": "发药台",
     })
 
 
