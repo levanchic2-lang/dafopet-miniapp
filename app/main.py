@@ -29719,7 +29719,7 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
                                   csrf_token: str = Form(""),
                                   visit_id: int = Form(0), pet_id: int = Form(0),
                                   species: str = Form(""), weight_kg: float = Form(0.0),
-                                  admitted_at: str = Form("")):
+                                  admitted_at: str = Form(""), discharged_at: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     v = db.get(Visit, visit_id) if visit_id else None
@@ -29754,8 +29754,11 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
     actual_admitted_at = _parse_bj_dt_to_utc(admitted_at) if admitted_at else datetime.utcnow()
     if actual_admitted_at is None:
         return RedirectResponse(f"{new_url}&err=实际入住时间格式不正确", status_code=303)
-    if actual_admitted_at > datetime.utcnow() + timedelta(minutes=5):
-        return RedirectResponse(f"{new_url}&err=实际入住时间不能晚于当前时间", status_code=303)
+    selected_discharge_at = _parse_bj_dt_to_utc(discharged_at) if discharged_at else None
+    if discharged_at and selected_discharge_at is None:
+        return RedirectResponse(f"{new_url}&err=出院时间格式不正确", status_code=303)
+    if selected_discharge_at and selected_discharge_at < actual_admitted_at:
+        return RedirectResponse(f"{new_url}&err=出院时间不能早于入住时间", status_code=303)
 
     if _hosp_species(pet.species) != normalized_species:
         pet.species = normalized_species
@@ -29779,6 +29782,11 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
             float(rule.max_weight_kg) if rule.max_weight_kg is not None else None,
         ),
         admitted_at=actual_admitted_at,
+        discharged_at=selected_discharge_at,
+        billing_days=(
+            _calc_hosp_billable_days(actual_admitted_at, selected_discharge_at, False)
+            if selected_discharge_at else 0.0
+        ),
         status="admitted",
         staff_token=_gen_hosp_token(db, "staff_token"),
         owner_token=_gen_hosp_token(db, "owner_token"),
@@ -29786,11 +29794,18 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
     )
     db.add(h)
     db.flush()
+    if selected_discharge_at:
+        inv = _sync_hospitalization_invoice(
+            db, h, request.session.get("admin_username", "admin"),
+        )
+        if inv:
+            h.invoice_id = inv.id
     _audit(db, request, "hospitalization_admit", detail={
         "id": h.id, "pet_id": h.pet_id, "visit_id": visit_id,
         "store": store_short, "weight_kg": resolved_weight,
         "daily_rate": h.daily_rate_override, "rate_rule_id": rule.id,
         "admitted_at": actual_admitted_at.isoformat(),
+        "discharged_at": selected_discharge_at.isoformat() if selected_discharge_at else "",
     })
     db.commit()
     return RedirectResponse(f"/admin/inpatient/{h.id}?msg=已入院",
@@ -29866,10 +29881,18 @@ async def admin_inpatient_edit_admission_time(
     dt = _parse_bj_dt_to_utc(admitted_at)
     if dt is None:
         return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=入住时间格式不正确", status_code=303)
-    if dt > datetime.utcnow() + timedelta(minutes=5):
-        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=入住时间不能晚于当前时间", status_code=303)
+    if h.discharged_at and dt > h.discharged_at:
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=入住时间不能晚于出院时间", status_code=303)
     old_dt = h.admitted_at
     h.admitted_at = dt
+    if h.discharged_at and (h.billing_mode or "legacy") == "weight":
+        h.billing_days = _calc_hosp_billable_days(h.admitted_at, h.discharged_at, bool(h.same_day_waived))
+        db.flush()
+        inv = _sync_hospitalization_invoice(
+            db, h, request.session.get("admin_username", "admin"),
+        )
+        if inv:
+            h.invoice_id = inv.id
     _audit(db, request, "hospitalization_edit_admission_time", detail={
         "id": h.id,
         "old_admitted_at": old_dt.isoformat() if old_dt else "",
@@ -29887,15 +29910,14 @@ async def admin_inpatient_edit_discharge_time(hosp_id: int, request: Request,
                                                db: Session = Depends(get_db),
                                                csrf_token: str = Form(""),
                                                discharged_at: str = Form("")):
-    """更正已出院记录的「实际出院时间」→ 重算天数 + 同步笼费到收费单。
-    用于：忘记及时出院、出院时间填错，导致天数/笼费多算。"""
+    """更正住院单的出院时间，重算天数并同步未收款的收费单。"""
     require_admin(request)
     _require_csrf(request, csrf_token)
     h = db.get(Hospitalization, hosp_id)
     if not h:
         raise HTTPException(404)
-    if h.status != "discharged":
-        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=仅已出院记录可更正出院时间",
+    if h.status not in ("admitted", "discharged"):
+        return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=当前状态不可更正出院时间",
                                  status_code=303)
     linked_invoice = db.get(Invoice, h.invoice_id) if h.invoice_id else None
     if linked_invoice and linked_invoice.payment_status not in ("unpaid",):
@@ -30094,7 +30116,9 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
         for d in deposits if d.status in ("held", "partial_refund")
     ), 2)
     if h.status == "admitted":
-        display_days = _calc_hosp_billable_days(h.admitted_at, datetime.utcnow(), False)
+        display_days = _calc_hosp_billable_days(
+            h.admitted_at, h.discharged_at or datetime.utcnow(), False,
+        )
     elif (h.billing_mode or "legacy") == "weight":
         display_days = float(h.billing_days or 0)
     else:
@@ -31153,7 +31177,7 @@ async def m_inpatient_list(request: Request, db: Session = Depends(get_db)):
     for h in hosps:
         pet = db.get(Pet, h.pet_id) if h.pet_id else None
         cust = db.get(Customer, h.customer_id) if h.customer_id else None
-        days = _calc_hosp_billable_days(h.admitted_at, now, False)
+        days = _calc_hosp_billable_days(h.admitted_at, h.discharged_at or now, False)
         cards.append({
             "h": h, "pet": pet, "cust": cust, "days": days,
             "amount": round(days * float(h.daily_rate_override or 0), 2),
@@ -31189,7 +31213,7 @@ async def m_inpatient_detail(hosp_id: int, request: Request, db: Session = Depen
         for d in deposits if d.status in ("held", "partial_refund")
     ), 2)
     if h.status == "admitted":
-        days = _calc_hosp_billable_days(h.admitted_at, now, False)
+        days = _calc_hosp_billable_days(h.admitted_at, h.discharged_at or now, False)
     elif (h.billing_mode or "legacy") == "weight":
         days = float(h.billing_days or 0)
     else:

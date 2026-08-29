@@ -22,17 +22,24 @@
 <div class="ukm-section-head"><h2>更&nbsp;正&nbsp;入&nbsp;住&nbsp;时&nbsp;间</h2></div>
 <form method="post" action="/admin/inpatient/{{ h.id }}/edit-admission-time" onsubmit="return confirm('确认更正实际入住时间？')">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-  <div class="ukm-field"><input class="ukm-input" type="datetime-local" name="admitted_at" value="{{ (h.admitted_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.admitted_at else '' }}" max="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}" required/></div>
+  <div class="ukm-field"><input class="ukm-input" type="datetime-local" name="admitted_at" value="{{ (h.admitted_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.admitted_at else '' }}" required/></div>
+  <button class="ukm-btn hair block" type="submit">保&nbsp;存&nbsp;并&nbsp;重&nbsp;算</button>
+</form>
+<div class="ukm-section-head"><h2>更&nbsp;正&nbsp;出&nbsp;院&nbsp;时&nbsp;间</h2></div>
+<form method="post" action="/admin/inpatient/{{ h.id }}/edit-discharge-time" onsubmit="return confirm('确认更正出院时间并重算收费单？')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <div class="ukm-field"><input class="ukm-input" type="datetime-local" name="discharged_at" value="{{ (h.discharged_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.discharged_at else '' }}" required/></div>
   <button class="ukm-btn hair block" type="submit">保&nbsp;存&nbsp;并&nbsp;重&nbsp;算</button>
 </form>
 <div class="ukm-section-head"><h2>办&nbsp;理&nbsp;离&nbsp;院</h2></div>
 <form method="post" action="/admin/inpatient/{{ h.id }}/discharge" onsubmit="return confirm('确认办理离院并生成住院收费单？')">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-  <div class="ukm-field"><label class="lbl">实际离院时间</label><input class="ukm-input" type="datetime-local" name="discharged_at" value="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}"/></div>
+  <div class="ukm-field"><label class="lbl">出院时间</label><input class="ukm-input" type="datetime-local" name="discharged_at" value="{{ (h.discharged_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.discharged_at else (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}"/></div>
   <label style="display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.6;margin:12px 0"><input type="checkbox" name="waive_same_day" value="1"/>当天入住当天离院，免收默认半天费用</label>
   <div class="ukm-field"><label class="lbl">离院备注</label><textarea class="ukm-textarea" name="discharge_summary"></textarea></div>
   <button class="ukm-btn block" type="submit">办&nbsp;理&nbsp;离&nbsp;院</button>
 </form>
+{% if h.invoice_id %}<a class="ukm-btn block" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">进&nbsp;入&nbsp;收&nbsp;银&nbsp;台</a>{% endif %}
 {% elif h.status == 'discharged' and h.invoice_id %}
 <a class="ukm-btn block" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">前&nbsp;往&nbsp;收&nbsp;银&nbsp;台</a>
 {% endif %}

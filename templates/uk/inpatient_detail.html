@@ -37,17 +37,21 @@
     {% if h.status == 'admitted' %}
     <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/discharge" onsubmit="return confirm('确认办理离院并生成住院收费单？')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>办理离院</h2>
-      <label>实际离院时间</label><input type="datetime-local" name="discharged_at" value="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}"/>
+      <label>出院时间</label><input type="datetime-local" name="discharged_at" value="{{ (h.discharged_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.discharged_at else (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}"/>
       <label class="id-check"><input type="checkbox" name="waive_same_day" value="1"/>如果今天入住、今天离院，免收默认的半天住院费</label>
       <label>离院备注</label><textarea name="discharge_summary" rows="3"></textarea>
       <button class="id-btn" type="submit">办理离院并生成收费单</button>
     </form>
+    {% if h.invoice_id %}<a class="id-btn" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">进入收银台 · 收费单 #{{ h.invoice_id }}</a>{% endif %}
     <form class="id-form" method="post" action="/admin/deposits/create">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="customer_id" value="{{ h.customer_id }}"/><input type="hidden" name="pet_id" value="{{ h.pet_id }}"/><input type="hidden" name="visit_id" value="{{ h.visit_id or 0 }}"/><input type="hidden" name="hospitalization_id" value="{{ h.id }}"/><input type="hidden" name="category" value="hospital"/><input type="hidden" name="next_url" value="/admin/inpatient/{{ h.id }}"/>
       <h2>收住院押金</h2><label>金额</label><input type="number" name="amount" min="0.01" step="0.01" required/><label>收款方式</label><select name="pay_method"><option value="cash">现金</option><option value="wechat">微信</option><option value="alipay">支付宝</option><option value="shouqianba">收钱吧</option></select><label>备注</label><input name="note" placeholder="可选"/><button class="id-btn ghost" type="submit">确认收押金</button>
     </form>
     <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/edit-admission-time" onsubmit="return confirm('确认更正实际入住时间？住院天数和预估费用会立即重算。')">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>更正入住时间</h2><label>实际入住时间</label><input type="datetime-local" name="admitted_at" value="{{ (h.admitted_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.admitted_at else '' }}" max="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}" required/><button class="id-btn ghost" type="submit">保存并重算</button>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>更正入住时间</h2><label>入住时间</label><input type="datetime-local" name="admitted_at" value="{{ (h.admitted_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.admitted_at else '' }}" required/><button class="id-btn ghost" type="submit">保存并重算</button>
+    </form>
+    <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/edit-discharge-time" onsubmit="return confirm('确认更正出院时间并重算收费单？')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>更正出院时间</h2><label>出院时间</label><input type="datetime-local" name="discharged_at" value="{{ (h.discharged_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.discharged_at else '' }}" required/><button class="id-btn ghost" type="submit">保存并重算</button>
     </form>
     <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/cancel" onsubmit="return confirm('确认取消这张住院单？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><button class="id-btn ghost danger" type="submit">取消住院单</button></form>
     {% elif h.status == 'discharged' %}

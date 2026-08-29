@@ -36,8 +36,9 @@
     {% if matched_rule %}<div class="in-rate">¥{{ '%.2f'|format(matched_rule.daily_rate) }}<small style="font-size:9pt;color:var(--ink-3);font-weight:400"> / 天</small></div>{% endif %}
     <form method="post" action="/admin/inpatient/admit">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="pet_id" value="{{ pet.id }}"/><input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/>
-      <div class="in-fix" style="grid-template-columns:1fr">
-        <label>实际入住时间<input type="datetime-local" name="admitted_at" value="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}" max="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}" required/></label>
+      <div class="in-fix">
+        <label>入住时间<input type="datetime-local" name="admitted_at" value="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}" required/></label>
+        <label>出院时间（可选）<input type="datetime-local" name="discharged_at"/></label>
       </div>
       {% if species not in ['cat','dog'] or weight_kg <= 0 %}
       <div class="in-fix">
@@ -47,7 +48,7 @@
       {% else %}<input type="hidden" name="species" value="{{ species }}"/><input type="hidden" name="weight_kg" value="{{ weight_kg }}"/>{% endif %}
       <button class="in-btn" type="submit" style="width:100%" {% if existing %}disabled{% endif %}>办理入住</button>
     </form>
-    <div class="in-note">正常办理无需修改入住时间；如果之前漏开，可以选择真实的历史入住时间。系统会从该时间开始计算过夜天数，并锁定本次体重和日费率。</div>
+    <div class="in-note">填写出院时间后，系统会立即按入住至出院的过夜天数生成收费单，住院状态仍保持“住院中”，可以提前向主人收款。</div>
   </aside>
   {% endif %}
 </div>
