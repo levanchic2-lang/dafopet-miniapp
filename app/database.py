@@ -1384,6 +1384,7 @@ def _try_sqlite_migrations() -> None:
             legacy_rates = (
                 ("猫住院", "cat", 0.0, None),
                 ("犬住院<5kg", "dog", 0.0, 5.0),
+                ("犬住院＜5kg", "dog", 0.0, 5.0),
                 ("犬住院5kg-10kg", "dog", 5.0, 10.0),
                 ("犬住院10kg-20kg", "dog", 10.0, 20.0),
                 ("犬住院20kg-25kg", "dog", 20.0, 25.0),
