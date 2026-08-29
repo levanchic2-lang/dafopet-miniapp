@@ -11412,11 +11412,13 @@ async def admin_deposit_create(
     pet_id: int = Form(0),
     appointment_id: int = Form(0),
     visit_id: int = Form(0),
+    hospitalization_id: int = Form(0),
     category: str = Form("surgery"),
     amount: str = Form(...),
     pay_method: str = Form("cash"),
     note: str = Form(""),
     settle_at: str = Form(""),
+    next_url: str = Form(""),
 ):
     """收押金。amount > 0。"""
     if not request.session.get("admin"):
@@ -11444,6 +11446,7 @@ async def admin_deposit_create(
         pet_id=pet_id or None,
         appointment_id=appointment_id or None,
         visit_id=visit_id or None,
+        hospitalization_id=hospitalization_id or None,
         category=category,
         amount=amt,
         pay_method=pay_method,
@@ -11460,10 +11463,9 @@ async def admin_deposit_create(
     _audit(db, request, "deposit_create", application_id=None,
            detail={"customer_id": customer_id, "amount": amt, "category": category})
     db.commit()
-    return RedirectResponse(
-        f"/admin/customers/{customer_id}?tab=deposits&msg=已收押金 ¥{amt:.2f}",
-        status_code=303,
-    )
+    target = _safe_next(next_url, f"/admin/customers/{customer_id}?tab=deposits")
+    sep = "&" if "?" in target else "?"
+    return RedirectResponse(f"{target}{sep}msg=已收押金 ¥{amt:.2f}", status_code=303)
 
 
 @app.post("/admin/deposits/{dep_id}/apply")
@@ -20310,6 +20312,16 @@ def _calc_hosp_days(admitted_at, discharged_at) -> int:
     return max(0, (d - a).days)
 
 
+def _calc_hosp_billable_days(admitted_at, discharged_at, same_day_waived: bool = False) -> float:
+    """轻量住院单计费：每过一晚算 1 天；同日默认半天，可人工免除。"""
+    nights = _calc_hosp_days(admitted_at, discharged_at)
+    if nights > 0:
+        return float(nights)
+    if admitted_at and discharged_at:
+        return 0.0 if same_day_waived else 0.5
+    return 0.0
+
+
 def _parse_bj_dt_to_utc(s: str):
     """把前端 datetime-local（北京时间）字符串解析为 UTC datetime；失败返回 None。"""
     s = (s or "").strip()
@@ -20638,6 +20650,67 @@ def _parse_money(v) -> float:
         return 0.0
 
 
+def _sync_hospitalization_invoice(db: Session, h: Hospitalization, admin_name: str = "") -> "Invoice | None":
+    """为轻量住院单建立独立收费单；不要求关联病例，也不混入病例收费单。"""
+    from datetime import date as _date
+
+    days = float(h.billing_days or 0)
+    rate = float(h.daily_rate_override or 0)
+    amount = round(days * rate, 2)
+    inv = db.get(Invoice, h.invoice_id) if h.invoice_id else None
+    if inv and inv.payment_status not in ("unpaid",):
+        return inv
+
+    if amount <= 0:
+        if inv:
+            for old in list(inv.items):
+                db.delete(old)
+            db.flush()
+            _recompute_or_delete_unpaid_invoice(db, inv)
+            h.invoice_id = None
+        return None
+
+    if inv is None:
+        inv = Invoice(
+            invoice_no=_gen_invoice_no(db),
+            customer_id=h.customer_id,
+            pet_id=h.pet_id,
+            visit_id=None,
+            invoice_date=_date.today().isoformat(),
+            subtotal=amount,
+            total_amount=amount,
+            payment_status="unpaid",
+            store=h.store or "",
+            notes=f"住院单 #{h.id}",
+            created_by=admin_name or "auto",
+        )
+        db.add(inv)
+        db.flush()
+        h.invoice_id = inv.id
+    else:
+        for old in list(inv.items):
+            db.delete(old)
+        db.flush()
+        inv.customer_id = h.customer_id
+        inv.pet_id = h.pet_id
+        inv.store = h.store or inv.store
+        inv.subtotal = amount
+        inv.total_amount = max(0.0, round(amount - float(inv.discount_amount or 0), 2))
+        inv.updated_at = datetime.utcnow()
+
+    days_text = f"{days:g}"
+    db.add(InvoiceItem(
+        invoice_id=inv.id,
+        ref_type="hospitalization",
+        ref_id=h.id,
+        description=f"[住院#{h.id}] {h.rate_label or '住院费'} × {days_text} 天",
+        quantity=days,
+        unit_price=rate,
+        subtotal=amount,
+    ))
+    return inv
+
+
 def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "Invoice | None":
     """把就诊产生的处方 / 检查单 / 销售单 / 麻醉单自动同步到一张「待收款」收费单。
 
@@ -20795,6 +20868,9 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         Hospitalization.status == "discharged",
     ).all()
     for h in hosps:
+        # 新版按体重计价的住院单拥有独立收费单，避免再次混入病例收费单。
+        if (getattr(h, "billing_mode", "legacy") or "legacy") == "weight":
+            continue
         if ("hospitalization", h.id) in settled_refs:
             continue
         days = _calc_hosp_days(h.admitted_at, h.discharged_at)
@@ -29275,7 +29351,7 @@ _CAGE_KIND_ZH = {
     "general": "普通笼", "small": "小号笼", "medium": "中号笼", "large": "大号笼",
     "single": "单间", "iso": "隔离笼", "icu": "ICU", "other": "其他",
 }
-_HOSP_STATUS_ZH = {"admitted": "住院中", "discharged": "已出院", "cancelled": "已取消"}
+_HOSP_STATUS_ZH = {"admitted": "住院中", "discharged": "已离院", "cancelled": "已取消"}
 
 
 def _gen_hosp_token(db: Session, field: str) -> str:
@@ -29286,6 +29362,63 @@ def _gen_hosp_token(db: Session, field: str) -> str:
         exists = db.query(Hospitalization.id).filter(col == tk).first()
         if not exists:
             return tk
+
+
+def _hosp_species(value: str) -> str:
+    raw = (value or "").strip().lower()
+    if raw in ("cat", "猫", "猫咪", "feline"):
+        return "cat"
+    if raw in ("dog", "犬", "狗", "狗狗", "canine"):
+        return "dog"
+    return ""
+
+
+def _latest_pet_weight(db: Session, pet_id: int) -> float:
+    row = db.query(WeightRecord).filter(
+        WeightRecord.pet_id == pet_id,
+        WeightRecord.weight_kg > 0,
+    ).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
+    return float(row.weight_kg or 0) if row else 0.0
+
+
+def _hosp_rate_label(species: str, min_kg: float, max_kg: float | None) -> str:
+    animal = "猫" if species == "cat" else "犬"
+    if species == "cat" and min_kg <= 0 and max_kg is None:
+        return "猫住院"
+    if min_kg <= 0 and max_kg is not None:
+        return f"{animal}住院＜{max_kg:g}kg"
+    if max_kg is None:
+        return f"{animal}住院≥{min_kg:g}kg"
+    return f"{animal}住院{min_kg:g}kg至＜{max_kg:g}kg"
+
+
+def _match_hosp_rate(db: Session, store: str, species: str, weight_kg: float) -> CageRateRule | None:
+    if not store or species not in ("cat", "dog") or weight_kg <= 0:
+        return None
+    return db.query(CageRateRule).filter(
+        CageRateRule.is_active == True,
+        CageRateRule.store == store,
+        CageRateRule.species == species,
+        CageRateRule.min_weight_kg <= weight_kg,
+        or_(CageRateRule.max_weight_kg.is_(None), CageRateRule.max_weight_kg > weight_kg),
+    ).order_by(CageRateRule.min_weight_kg.desc(), CageRateRule.id.desc()).first()
+
+
+def _rate_rule_overlaps(db: Session, store: str, species: str, min_kg: float,
+                        max_kg: float | None, exclude_id: int = 0) -> bool:
+    q = db.query(CageRateRule).filter(
+        CageRateRule.is_active == True,
+        CageRateRule.store == store,
+        CageRateRule.species == species,
+    )
+    if exclude_id:
+        q = q.filter(CageRateRule.id != exclude_id)
+    for rule in q.all():
+        old_min = float(rule.min_weight_kg or 0)
+        old_max = float(rule.max_weight_kg) if rule.max_weight_kg is not None else None
+        if (old_max is None or min_kg < old_max) and (max_kg is None or old_min < max_kg):
+            return True
+    return False
 
 
 # ─── 笼位管理 ───
@@ -29449,87 +29582,195 @@ async def admin_cage_rates_delete(rule_id: int, request: Request, db: Session = 
     return RedirectResponse("/admin/cages?msg=已删除费率规则", status_code=303)
 
 
+# ─── 轻量住院收费设置（仅超级管理员） ───
+@app.get("/admin/inpatient/rates", response_class=HTMLResponse)
+async def admin_inpatient_rates(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    require_superadmin(request)
+    rules = db.query(CageRateRule).filter(
+        CageRateRule.is_active == True,
+        CageRateRule.species.in_(("cat", "dog")),
+        CageRateRule.store.in_(("东环店", "横岗店")),
+    ).order_by(CageRateRule.store, CageRateRule.species, CageRateRule.min_weight_kg, CageRateRule.id).all()
+    return templates.TemplateResponse(request, "uk/inpatient_rates.html", {
+        "request": request, "rules": rules,
+        "csrf_token": _get_csrf_token(request), "title": "住院收费设置",
+    })
+
+
+@app.post("/admin/inpatient/rates/create")
+async def admin_inpatient_rates_create(
+    request: Request, db: Session = Depends(get_db), csrf_token: str = Form(""),
+    store: str = Form(""), species: str = Form(""),
+    min_weight_kg: float = Form(0), max_weight_kg: str = Form(""),
+    daily_rate: float = Form(0),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    store = (store or "").strip()
+    species = _hosp_species(species)
+    min_kg = max(0.0, float(min_weight_kg or 0))
+    try:
+        max_kg = float(max_weight_kg) if str(max_weight_kg).strip() else None
+    except ValueError:
+        max_kg = None
+    rate = max(0.0, float(daily_rate or 0))
+    if store not in ("东环店", "横岗店") or species not in ("cat", "dog"):
+        return RedirectResponse("/admin/inpatient/rates?err=门店或物种无效", status_code=303)
+    if max_kg is not None and max_kg <= min_kg:
+        return RedirectResponse("/admin/inpatient/rates?err=最高体重必须大于最低体重", status_code=303)
+    if rate <= 0:
+        return RedirectResponse("/admin/inpatient/rates?err=日费率必须大于0", status_code=303)
+    if _rate_rule_overlaps(db, store, species, min_kg, max_kg):
+        return RedirectResponse("/admin/inpatient/rates?err=该门店同物种的体重区间发生重叠", status_code=303)
+    label = _hosp_rate_label(species, min_kg, max_kg)
+    db.add(CageRateRule(
+        store=store, label=label, species=species,
+        min_weight_kg=min_kg, max_weight_kg=max_kg,
+        daily_rate=rate, is_active=True,
+        created_by=request.session.get("admin_username", ""),
+    ))
+    db.commit()
+    return RedirectResponse(f"/admin/inpatient/rates?msg=已添加{store}{label}", status_code=303)
+
+
+@app.post("/admin/inpatient/rates/{rule_id}/edit")
+async def admin_inpatient_rates_edit(
+    rule_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), min_weight_kg: float = Form(0),
+    max_weight_kg: str = Form(""), daily_rate: float = Form(0),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    rule = db.get(CageRateRule, rule_id)
+    if not rule or not rule.is_active:
+        raise HTTPException(404, "收费规则不存在")
+    min_kg = max(0.0, float(min_weight_kg or 0))
+    try:
+        max_kg = float(max_weight_kg) if str(max_weight_kg).strip() else None
+    except ValueError:
+        max_kg = None
+    rate = max(0.0, float(daily_rate or 0))
+    if max_kg is not None and max_kg <= min_kg:
+        return RedirectResponse("/admin/inpatient/rates?err=最高体重必须大于最低体重", status_code=303)
+    if rate <= 0:
+        return RedirectResponse("/admin/inpatient/rates?err=日费率必须大于0", status_code=303)
+    if _rate_rule_overlaps(db, rule.store, rule.species, min_kg, max_kg, rule.id):
+        return RedirectResponse("/admin/inpatient/rates?err=该门店同物种的体重区间发生重叠", status_code=303)
+    rule.min_weight_kg = min_kg
+    rule.max_weight_kg = max_kg
+    rule.daily_rate = rate
+    rule.label = _hosp_rate_label(rule.species, min_kg, max_kg)
+    db.commit()
+    return RedirectResponse("/admin/inpatient/rates?msg=收费规则已保存", status_code=303)
+
+
+@app.post("/admin/inpatient/rates/{rule_id}/delete")
+async def admin_inpatient_rates_delete(
+    rule_id: int, request: Request, db: Session = Depends(get_db), csrf_token: str = Form(""),
+):
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    rule = db.get(CageRateRule, rule_id)
+    if rule:
+        rule.is_active = False
+        db.commit()
+    return RedirectResponse("/admin/inpatient/rates?msg=收费规则已删除", status_code=303)
+
+
 # ─── 住院档案 ───
 @app.get("/admin/inpatient/new", response_class=HTMLResponse)
 async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_db),
-                                     visit_id: int = 0):
+                                     visit_id: int = 0, pet_id: int = 0):
     require_admin(request)
     v = db.get(Visit, visit_id) if visit_id else None
-    if not v:
-        raise HTTPException(404, "请从某次就诊记录发起入院")
-    if (v.status or "open") == "closed":
+    if visit_id and not v:
+        raise HTTPException(404, "病历不存在")
+    if v and (v.status or "open") == "closed":
         raise HTTPException(400, "病历已结束，不能再开住院")
-    cust = db.get(Customer, v.customer_id) if v.customer_id else None
-    pet = db.get(Pet, v.pet_id) if v.pet_id else None
-    admin_store = _get_admin_store(request)
-    store_short = admin_store or (pet.store if pet else "") or ""
-    cages_q = db.query(Cage).filter(Cage.is_active == True)
-    if store_short:
-        cages_q = cages_q.filter(Cage.store == store_short)
-    cages = cages_q.order_by(Cage.sort_order, Cage.code).all()
-    occupied_ids = {h.cage_id for h in db.query(Hospitalization)
-                    .filter(Hospitalization.status == "admitted",
-                            Hospitalization.cage_id != None).all()}
-    # 日费率规则（参考用）：本店 + 通用
-    rr_q = db.query(CageRateRule).filter(CageRateRule.is_active == True)
-    if store_short:
-        rr_q = rr_q.filter(or_(CageRateRule.store == store_short, CageRateRule.store == ""))
-    rate_rules = rr_q.order_by(CageRateRule.sort_order, CageRateRule.id).all()
+    resolved_pet_id = int(v.pet_id or 0) if v else int(pet_id or 0)
+    pet = db.get(Pet, resolved_pet_id) if resolved_pet_id else None
+    cust = db.get(Customer, pet.customer_id) if pet else None
+    if pet:
+        _assert_store_access(request, pet.store or "")
+    store_short = _get_op_store(request) or (pet.store if pet else "") or ""
+    species = _hosp_species(pet.species if pet else "")
+    weight_kg = _latest_pet_weight(db, pet.id) if pet else 0.0
+    matched_rule = _match_hosp_rate(db, store_short, species, weight_kg)
+    existing = db.query(Hospitalization).filter(
+        Hospitalization.pet_id == resolved_pet_id,
+        Hospitalization.status == "admitted",
+    ).first() if resolved_pet_id else None
     return templates.TemplateResponse(request, "uk/inpatient_new.html", {
         "request": request, "visit": v, "cust": cust, "pet": pet,
-        "cages": cages, "occupied_ids": occupied_ids, "rate_rules": rate_rules,
-        "kind_zh": _CAGE_KIND_ZH, "store_short": store_short,
+        "store_short": store_short, "species": species, "weight_kg": weight_kg,
+        "matched_rule": matched_rule, "existing": existing,
         "csrf_token": _get_csrf_token(request),
-        "title": "新建住院",
+        "title": "新建住院单",
     })
 
 
 @app.post("/admin/inpatient/admit")
 async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
                                   csrf_token: str = Form(""),
-                                  visit_id: int = Form(...),
-                                  cage_id: int = Form(0),
-                                  reason: str = Form(""),
-                                  expected_discharge_date: str = Form(""),
-                                  daily_rate_override: float = Form(0.0)):
+                                  visit_id: int = Form(0), pet_id: int = Form(0),
+                                  species: str = Form(""), weight_kg: float = Form(0.0)):
     require_admin(request)
     _require_csrf(request, csrf_token)
-    v = db.get(Visit, visit_id)
-    if not v:
-        raise HTTPException(404, "就诊记录不存在")
+    v = db.get(Visit, visit_id) if visit_id else None
+    if visit_id and not v:
+        raise HTTPException(404, "病历不存在")
+    resolved_pet_id = int(v.pet_id or 0) if v else int(pet_id or 0)
+    pet = db.get(Pet, resolved_pet_id) if resolved_pet_id else None
+    if not pet:
+        return RedirectResponse("/admin/inpatient/new?err=请先选择宠物", status_code=303)
+    _assert_store_access(request, pet.store or "")
     # 已有"住院中"档案 → 跳到那张
     existing = db.query(Hospitalization).filter(
-        Hospitalization.pet_id == v.pet_id,
+        Hospitalization.pet_id == pet.id,
         Hospitalization.status == "admitted",
     ).first()
     if existing:
         return RedirectResponse(f"/admin/inpatient/{existing.id}?msg=该宠物已有住院中档案",
                                  status_code=303)
-    # 校验笼位空闲
-    if cage_id:
-        cage = db.get(Cage, cage_id)
-        if not cage or not cage.is_active:
-            raise HTTPException(400, "笼位无效")
-        occ = db.query(Hospitalization).filter(
-            Hospitalization.cage_id == cage_id,
-            Hospitalization.status == "admitted",
-        ).first()
-        if occ:
-            raise HTTPException(400, f"笼位 {cage.code} 已被占用")
-    # 门店：取员工绑定店；超管取 visit 关联 pet.store
-    admin_store = _get_admin_store(request)
-    if admin_store:
-        store_short = admin_store
-    else:
-        pet = db.get(Pet, v.pet_id) if v.pet_id else None
-        store_short = (pet.store if pet else "") or ""
+    store_short = _get_op_store(request) or (pet.store or "")
+    normalized_species = _hosp_species(species or pet.species)
+    resolved_weight = float(weight_kg or 0) or _latest_pet_weight(db, pet.id)
+    new_url = f"/admin/inpatient/new?pet_id={pet.id}"
+    if visit_id:
+        new_url += f"&visit_id={visit_id}"
+    if normalized_species not in ("cat", "dog"):
+        return RedirectResponse(f"{new_url}&err=请确认宠物是猫还是犬", status_code=303)
+    if resolved_weight <= 0:
+        return RedirectResponse(f"{new_url}&err=请填写本次入住体重", status_code=303)
+    rule = _match_hosp_rate(db, store_short, normalized_species, resolved_weight)
+    if not rule:
+        return RedirectResponse(f"{new_url}&err={store_short or '当前门店'}没有匹配该宠物体重的住院价格", status_code=303)
+
+    if _hosp_species(pet.species) != normalized_species:
+        pet.species = normalized_species
+    last_weight = _latest_pet_weight(db, pet.id)
+    if abs(last_weight - resolved_weight) > 0.0001:
+        db.add(WeightRecord(
+            pet_id=pet.id, visit_id=visit_id or None,
+            record_date=date.today().isoformat(), weight_kg=resolved_weight,
+            notes="住院入住体重", created_by=request.session.get("admin_username", ""),
+        ))
     h = Hospitalization(
-        pet_id=v.pet_id, customer_id=v.customer_id, visit_id=visit_id,
-        cage_id=cage_id or None,
+        pet_id=pet.id, customer_id=pet.customer_id, visit_id=visit_id or None,
+        cage_id=None,
         store=store_short,
-        reason=(reason or v.chief_complaint or "")[:2000],
-        expected_discharge_date=(expected_discharge_date or "").strip()[:20],
-        daily_rate_override=max(0.0, float(daily_rate_override or 0)),
+        reason=((v.chief_complaint or v.diagnosis or "") if v else "")[:2000],
+        daily_rate_override=float(rule.daily_rate or 0),
+        billing_mode="weight", species_snapshot=normalized_species,
+        admission_weight_kg=resolved_weight, rate_rule_id=rule.id,
+        rate_label=rule.label or _hosp_rate_label(
+            normalized_species, float(rule.min_weight_kg or 0),
+            float(rule.max_weight_kg) if rule.max_weight_kg is not None else None,
+        ),
         status="admitted",
         staff_token=_gen_hosp_token(db, "staff_token"),
         owner_token=_gen_hosp_token(db, "owner_token"),
@@ -29539,7 +29780,8 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
     db.flush()
     _audit(db, request, "hospitalization_admit", detail={
         "id": h.id, "pet_id": h.pet_id, "visit_id": visit_id,
-        "cage_id": cage_id, "store": store_short,
+        "store": store_short, "weight_kg": resolved_weight,
+        "daily_rate": h.daily_rate_override, "rate_rule_id": rule.id,
     })
     db.commit()
     return RedirectResponse(f"/admin/inpatient/{h.id}?msg=已入院",
@@ -29551,7 +29793,8 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
                                       db: Session = Depends(get_db),
                                       csrf_token: str = Form(""),
                                       discharge_summary: str = Form(""),
-                                      discharged_at: str = Form("")):
+                                      discharged_at: str = Form(""),
+                                      waive_same_day: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     h = db.get(Hospitalization, hosp_id)
@@ -29572,17 +29815,25 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
     h.discharged_at = dt
     h.discharge_summary = (discharge_summary or "").strip()[:5000]
     h.closed_by = request.session.get("admin_username", "")
+    if (h.billing_mode or "legacy") == "weight":
+        h.same_day_waived = waive_same_day == "1"
+        h.billing_days = _calc_hosp_billable_days(h.admitted_at, dt, h.same_day_waived)
     db.flush()
-    # 出院后同步收费单：加笼费明细
+    # 轻量住院单生成独立收费单；旧住院档案继续走病例笼费兼容逻辑。
     operator = request.session.get("admin_username", "admin")
-    if h.visit_id:
+    if (h.billing_mode or "legacy") == "weight":
+        inv = _sync_hospitalization_invoice(db, h, operator)
+        if inv:
+            h.invoice_id = inv.id
+    elif h.visit_id:
         inv = _sync_visit_invoice(db, h.visit_id, operator)
         if inv:
             h.invoice_id = inv.id
-    _audit(db, request, "hospitalization_discharge",
-           detail={"id": h.id, "days": _calc_hosp_days(h.admitted_at, h.discharged_at)})
+    days = h.billing_days if (h.billing_mode or "legacy") == "weight" else _calc_hosp_days(h.admitted_at, h.discharged_at)
+    _audit(db, request, "hospitalization_discharge", detail={
+        "id": h.id, "days": days, "same_day_waived": bool(h.same_day_waived),
+    })
     db.commit()
-    days = _calc_hosp_days(h.admitted_at, h.discharged_at)
     return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已出院 · 共 {days} 天 · 账单已同步",
                              status_code=303)
 
@@ -29602,28 +29853,38 @@ async def admin_inpatient_edit_discharge_time(hosp_id: int, request: Request,
     if h.status != "discharged":
         return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=仅已出院记录可更正出院时间",
                                  status_code=303)
+    linked_invoice = db.get(Invoice, h.invoice_id) if h.invoice_id else None
+    if linked_invoice and linked_invoice.payment_status not in ("unpaid",):
+        return RedirectResponse(
+            f"/admin/inpatient/{hosp_id}?msg=关联收费单已有收款，不能直接更改出院时间；请先在收费单撤销收款",
+            status_code=303,
+        )
     dt = _parse_bj_dt_to_utc(discharged_at)
     if dt is None:
         return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=出院时间格式不正确", status_code=303)
     if h.admitted_at and dt < h.admitted_at:
         return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=出院时间不能早于入院时间", status_code=303)
-    old_days = _calc_hosp_days(h.admitted_at, h.discharged_at)
+    is_weight_mode = (h.billing_mode or "legacy") == "weight"
+    old_days = float(h.billing_days or 0) if is_weight_mode else _calc_hosp_days(h.admitted_at, h.discharged_at)
     h.discharged_at = dt
+    if is_weight_mode:
+        h.billing_days = _calc_hosp_billable_days(h.admitted_at, dt, bool(h.same_day_waived))
     db.flush()
-    new_days = _calc_hosp_days(h.admitted_at, h.discharged_at)
-    # 重新同步收费单（未付的会按新天数重建笼费；已付的不动）
+    new_days = float(h.billing_days or 0) if is_weight_mode else _calc_hosp_days(h.admitted_at, h.discharged_at)
+    # 重新同步收费单；已有收款的情况已在上方拦截。
     operator = request.session.get("admin_username", "admin")
-    note = ""
-    if h.visit_id:
+    if is_weight_mode:
+        inv = _sync_hospitalization_invoice(db, h, operator)
+        if inv:
+            h.invoice_id = inv.id
+    elif h.visit_id:
         inv = _sync_visit_invoice(db, h.visit_id, operator)
         if inv:
             h.invoice_id = inv.id
-            if inv.payment_status == "paid":
-                note = "（注意：关联账单已收款，金额未自动改，如需退差额请在收费单处理）"
     _audit(db, request, "hospitalization_edit_discharge_time",
            detail={"id": h.id, "old_days": old_days, "new_days": new_days})
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=出院时间已更正 · {old_days}→{new_days} 天 · 笼费已重算{note}",
+    return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=出院时间已更正 · {old_days}→{new_days} 天 · 住院费已重算",
                              status_code=303)
 
 
@@ -29676,58 +29937,41 @@ async def admin_inpatient_cancel(hosp_id: int, request: Request,
 @app.get("/admin/inpatient", response_class=HTMLResponse)
 async def admin_inpatient_board(request: Request, db: Session = Depends(get_db),
                                    status: str = "admitted", store: str = "",
-                                   view: str = "cards"):
-    """住院看板：卡片视图（默认）/ 笼位图视图。"""
+                                   q: str = ""):
+    """轻量住院单列表。旧笼位/护理数据仍保留，但不再作为默认工作流展示。"""
     require_admin(request)
     admin_store = _get_admin_store(request)
     if request.session.get("admin_role") == "superadmin":
         wb_store = (store or "").strip()
     else:
         wb_store = admin_store
-    q = db.query(Hospitalization)
+    query = db.query(Hospitalization)
     if status in ("admitted", "discharged", "cancelled"):
-        q = q.filter(Hospitalization.status == status)
+        query = query.filter(Hospitalization.status == status)
     if wb_store:
-        q = q.filter(Hospitalization.store == wb_store)
-    rows = q.order_by(Hospitalization.admitted_at.desc()).limit(200).all()
-
-    # 给每张卡片附加：处方数、活跃药品数
-    presc_map: dict[int, dict] = {}
-    visit_ids = [h.visit_id for h in rows if h.visit_id]
-    if visit_ids:
-        from sqlalchemy import func
-        rows_p = (db.query(Prescription.visit_id,
-                            func.count(Prescription.id).label("cnt"))
-                  .filter(Prescription.visit_id.in_(visit_ids),
-                          Prescription.status.in_(["issued", "dispensed", "draft"]))
-                  .group_by(Prescription.visit_id).all())
-        for vid, cnt in rows_p:
-            presc_map[vid] = {"count": cnt}
-
-    # 笼位图：所有笼（按当前 wb_store 过滤），叠加占用映射
-    cages_q = db.query(Cage).filter(Cage.is_active == True)
+        query = query.filter(Hospitalization.store == wb_store)
+    q_text = (q or "").strip()
+    if q_text:
+        pet_ids = db.query(Pet.id).filter(Pet.name.ilike(f"%{q_text}%"))
+        cust_ids = db.query(Customer.id).filter(or_(
+            Customer.name.ilike(f"%{q_text}%"), Customer.phone.ilike(f"%{q_text}%"),
+        ))
+        query = query.filter(or_(
+            Hospitalization.pet_id.in_(pet_ids), Hospitalization.customer_id.in_(cust_ids),
+        ))
+    rows = query.order_by(Hospitalization.admitted_at.desc(), Hospitalization.id.desc()).limit(300).all()
+    count_q = db.query(Hospitalization.status, func.count(Hospitalization.id))
     if wb_store:
-        cages_q = cages_q.filter(Cage.store == wb_store)
-    all_cages = cages_q.order_by(Cage.store, Cage.sort_order, Cage.code).all()
-    occ_map: dict[int, Hospitalization] = {}
-    if view == "cages" or status == "admitted":
-        # 用全量 admitted 的占用映射（不受 status 筛选影响）
-        adm_q = db.query(Hospitalization).filter(Hospitalization.status == "admitted")
-        if wb_store:
-            adm_q = adm_q.filter(Hospitalization.store == wb_store)
-        for h in adm_q.all():
-            if h.cage_id:
-                occ_map[h.cage_id] = h
-
-    return templates.TemplateResponse(request, "uk/inpatient.html", {  # B6 UK 重写
-        "request": request, "rows": rows, "status": status, "view": view,
-        "status_zh": _HOSP_STATUS_ZH, "kind_zh": _CAGE_KIND_ZH,
+        count_q = count_q.filter(Hospitalization.store == wb_store)
+    counts = dict(count_q.group_by(Hospitalization.status).all())
+    return templates.TemplateResponse(request, "uk/inpatient.html", {
+        "request": request, "rows": rows, "status": status, "q": q_text,
+        "status_zh": _HOSP_STATUS_ZH,
         "wb_store": wb_store, "csrf_token": _get_csrf_token(request),
         "calc_days": _calc_hosp_days,
-        "now": datetime.utcnow(),
-        "presc_map": presc_map,
-        "all_cages": all_cages, "occ_map": occ_map,
-        "title": "住院管理",
+        "calc_billable_days": _calc_hosp_billable_days,
+        "now": datetime.utcnow(), "counts": counts,
+        "title": "住院单",
     })
 
 
@@ -29798,6 +30042,20 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
         HandoverNote.hospitalization_id == h.id,
     ).order_by(HandoverNote.recorded_at.desc()).limit(10).all()
     latest_handover = handovers[0] if handovers else None
+    deposits = db.query(Deposit).filter(
+        Deposit.hospitalization_id == h.id,
+    ).order_by(Deposit.created_at.desc(), Deposit.id.desc()).all()
+    deposit_available = round(sum(
+        max(0.0, float(d.amount or 0) - float(d.applied_amount or 0) - float(d.refunded_amount or 0))
+        for d in deposits if d.status in ("held", "partial_refund")
+    ), 2)
+    if h.status == "admitted":
+        display_days = _calc_hosp_billable_days(h.admitted_at, datetime.utcnow(), False)
+    elif (h.billing_mode or "legacy") == "weight":
+        display_days = float(h.billing_days or 0)
+    else:
+        display_days = float(_calc_hosp_days(h.admitted_at, h.discharged_at))
+    estimated_amount = round(display_days * float(h.daily_rate_override or 0), 2)
     return templates.TemplateResponse(request, "uk/inpatient_detail.html", {  # B7 UK 重写
         "request": request, "h": h, "cust": cust, "pet": pet, "cage": cage,
         "visit": visit, "avail_cages": avail_cages, "occupied_ids": occupied_ids,
@@ -29813,6 +30071,8 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
         "appetite_zh": _APPETITE_ZH,
         "handovers": handovers, "latest_handover": latest_handover,
         "shift_zh": _SHIFT_ZH, "current_shift": _guess_current_shift(),
+        "deposits": deposits, "deposit_available": deposit_available,
+        "display_days": display_days, "estimated_amount": estimated_amount,
         "csrf_token": _get_csrf_token(request),
         "title": f"住院 #{h.id}",
     })
@@ -30849,17 +31109,10 @@ async def m_inpatient_list(request: Request, db: Session = Depends(get_db)):
     for h in hosps:
         pet = db.get(Pet, h.pet_id) if h.pet_id else None
         cust = db.get(Customer, h.customer_id) if h.customer_id else None
-        cage = db.get(Cage, h.cage_id) if h.cage_id else None
-        # overdue 数
-        overdue_n = db.query(MedicationAdminLog).filter(
-            MedicationAdminLog.hospitalization_id == h.id,
-            MedicationAdminLog.status == "pending",
-            MedicationAdminLog.scheduled_at <= now,
-        ).count()
-        days = _calc_hosp_days(h.admitted_at, h.discharged_at or now)
+        days = _calc_hosp_billable_days(h.admitted_at, now, False)
         cards.append({
-            "h": h, "pet": pet, "cust": cust, "cage": cage,
-            "overdue_n": overdue_n, "days": days,
+            "h": h, "pet": pet, "cust": cust, "days": days,
+            "amount": round(days * float(h.daily_rate_override or 0), 2),
         })
     ctx = _m_ctx(request, db, active_tab="inpatient")
     ctx["cards"] = cards
@@ -30883,46 +31136,26 @@ async def m_inpatient_detail(hosp_id: int, request: Request, db: Session = Depen
 
     pet = db.get(Pet, h.pet_id) if h.pet_id else None
     cust = db.get(Customer, h.customer_id) if h.customer_id else None
-    cage = db.get(Cage, h.cage_id) if h.cage_id else None
-
     now = datetime.utcnow()
-    # 今日发药任务
-    today_start = datetime(now.year, now.month, now.day)
-    today_end = today_start + timedelta(days=1)
-    today_logs = db.query(MedicationAdminLog).filter(
-        MedicationAdminLog.hospitalization_id == hosp_id,
-        MedicationAdminLog.scheduled_at >= today_start,
-        MedicationAdminLog.scheduled_at < today_end,
-    ).order_by(MedicationAdminLog.scheduled_at).all()
-    # 漏药（昨天/更早的 pending）
-    overdue_logs = db.query(MedicationAdminLog).filter(
-        MedicationAdminLog.hospitalization_id == hosp_id,
-        MedicationAdminLog.status == "pending",
-        MedicationAdminLog.scheduled_at < today_start,
-    ).order_by(MedicationAdminLog.scheduled_at).all()
-
-    # 最新交班
-    latest_handover = db.query(HandoverNote).filter(
-        HandoverNote.hospitalization_id == hosp_id
-    ).order_by(HandoverNote.recorded_at.desc()).first()
-
-    # 最近 3 条体征
-    recent_vitals = db.query(VitalSignsLog).filter(
-        VitalSignsLog.hospitalization_id == hosp_id
-    ).order_by(VitalSignsLog.recorded_at.desc()).limit(3).all()
-
-    days = _calc_hosp_days(h.admitted_at, h.discharged_at or now)
+    deposits = db.query(Deposit).filter(Deposit.hospitalization_id == h.id).order_by(
+        Deposit.created_at.desc(), Deposit.id.desc(),
+    ).all()
+    deposit_available = round(sum(
+        max(0.0, float(d.amount or 0) - float(d.applied_amount or 0) - float(d.refunded_amount or 0))
+        for d in deposits if d.status in ("held", "partial_refund")
+    ), 2)
+    if h.status == "admitted":
+        days = _calc_hosp_billable_days(h.admitted_at, now, False)
+    elif (h.billing_mode or "legacy") == "weight":
+        days = float(h.billing_days or 0)
+    else:
+        days = float(_calc_hosp_days(h.admitted_at, h.discharged_at))
     ctx = _m_ctx(request, db, active_tab="inpatient")
     ctx.update({
-        "h": h, "pet": pet, "cust": cust, "cage": cage,
-        "today_logs": [l for l in today_logs if l.prescription_item],
-        "overdue_logs": [l for l in overdue_logs if l.prescription_item],
-        "latest_handover": latest_handover,
-        "recent_vitals": recent_vitals,
-        "days": days,
-        "now": now,
-        "shift_zh": _SHIFT_ZH,
-        "current_shift": _guess_current_shift(),
+        "h": h, "pet": pet, "cust": cust, "days": days, "now": now,
+        "deposits": deposits, "deposit_available": deposit_available,
+        "estimated_amount": round(days * float(h.daily_rate_override or 0), 2),
+        "status_zh": _HOSP_STATUS_ZH,
         "next_url": f"/m/inpatient/{hosp_id}",
     })
     return templates.TemplateResponse(request, "m_uk/inpatient_detail.html", ctx)

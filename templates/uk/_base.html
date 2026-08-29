@@ -249,7 +249,7 @@
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><i data-lucide="syringe"></i>疫苗管理</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/rabies') or _path.startswith('/admin/vaccine-registrations') %}current{% endif %}" href="/admin/rabies"><i data-lucide="syringe"></i>疫苗接种登记</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><i data-lucide="search"></i>病历查询</a>
-    <a class="uk-ribbon-icon {% if _path.startswith('/admin/inpatient') or _path.startswith('/admin/cages') %}current{% endif %}" href="/admin/inpatient"><i data-lucide="bed-double"></i>住院管理</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/inpatient') %}current{% endif %}" href="/admin/inpatient"><i data-lucide="bed-double"></i>住院单</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/consent-tasks') %}current{% endif %}" href="/admin/consent-tasks?status=pending"><i data-lucide="file-text"></i>签署文书</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/consent-templates') %}current{% endif %}" href="/admin/consent-templates"><i data-lucide="pencil-line"></i>协议模板</a>
   </div>

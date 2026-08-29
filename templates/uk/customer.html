@@ -1188,6 +1188,13 @@
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('walletAdjustModal').classList.add('visible');return false;" style="color:#7a4a14;border-color:#7a4a14;">⚙ 钱包调账</a>
         {% endif %}
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('sellPkgModal').classList.add('visible');return false;">售卖套餐</a>
+        {% if active_pet %}
+        <form method="post" action="/admin/inpatient/admit" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="pet_id" value="{{ active_pet.id }}"/>
+          <button type="submit" class="uk-btn ghost sm" style="width:100%;">新建住院单</button>
+        </form>
+        {% endif %}
         <a class="uk-btn ghost sm" href="/admin/sales-orders/create?customer_id={{ cust.id }}{% if active_pet %}&pet_id={{ active_pet.id }}{% endif %}">售卖商品</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('depositModal').classList.add('visible');return false;">收押金</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('couponModal').classList.add('visible');return false;">发优惠券</a>

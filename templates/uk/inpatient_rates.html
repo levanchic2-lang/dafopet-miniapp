@@ -1,0 +1,53 @@
+{% extends "uk/_base.html" %}
+{% block title %}住院收费设置 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .ir-bc{font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin:24px 0 16px}.ir-bc a{color:inherit}.ir-bc span{margin:0 8px}
+  .ir-head{display:flex;justify-content:space-between;align-items:end;gap:20px}.ir-head h1{font-size:27pt;margin:0;letter-spacing:2px}.ir-head p{margin:8px 0 0;color:var(--ink-3);font-size:10pt}
+  .ir-rule{border:0;height:4px;border-top:.5px solid var(--ink);border-bottom:.5px solid var(--ink);margin:18px 0 26px}
+  .ir-msg{padding:10px 14px;border-left:3px solid var(--accent-green);background:#f5f9f6;margin-bottom:18px}.ir-msg.err{border-color:var(--accent-red);background:#fcf5f4;color:var(--accent-red)}
+  .ir-add{display:grid;grid-template-columns:140px 120px 1fr 1fr 1fr auto;gap:10px;align-items:end;padding:16px;border:.5px solid var(--hair-2);margin-bottom:28px}
+  .ir-add label,.ir-field label{display:block;color:var(--ink-3);font-size:9pt;margin-bottom:5px}.ir-add input,.ir-add select,.ir-row input{width:100%;height:36px;border:.5px solid var(--hair);background:var(--paper);padding:6px 9px;font:10pt var(--font-serif);box-sizing:border-box;border-radius:0}
+  .ir-btn{height:36px;border:0;background:var(--ink);color:var(--paper);padding:0 18px;font:700 10pt var(--font-serif);letter-spacing:2px;cursor:pointer}.ir-btn.ghost{background:var(--paper);color:var(--ink-2);border:.5px solid var(--hair)}.ir-btn.danger{color:var(--accent-red)}
+  .ir-store{margin-bottom:30px}.ir-store h2{font-size:14pt;letter-spacing:2px;margin:0 0 12px;padding-bottom:8px;border-bottom:.5px solid var(--ink)}
+  .ir-headrow,.ir-row{display:grid;grid-template-columns:120px 1fr 120px 120px 100px 160px;gap:10px;align-items:center;padding:9px 12px;border-bottom:.5px solid var(--hair)}
+  .ir-headrow{color:var(--ink-3);font-size:9pt;font-style:italic}.ir-row{font-size:10pt}.ir-row .species{font-weight:700}.ir-actions{display:flex;gap:7px;justify-content:flex-end}.ir-empty{padding:20px;color:var(--ink-3);font-style:italic;border:.5px solid var(--hair)}
+  @media(max-width:900px){.ir-add{grid-template-columns:1fr 1fr}.ir-headrow{display:none}.ir-row{grid-template-columns:1fr 1fr}.ir-actions{justify-content:flex-start}}
+</style>
+<div class="ir-bc"><a href="/admin/inpatient">住院单</a><span>/</span>住院收费设置</div>
+<div class="ir-head"><div><h1>住院收费设置</h1><p>每家门店分别维护；系统按门店、猫犬和入住体重自动匹配。</p></div><a href="/admin/inpatient" class="ir-btn ghost" style="display:flex;align-items:center;text-decoration:none">返回住院单</a></div>
+<hr class="ir-rule"/>
+{% if request.query_params.get('msg') %}<div class="ir-msg">{{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('err') %}<div class="ir-msg err">{{ request.query_params.get('err') }}</div>{% endif %}
+
+<form class="ir-add" method="post" action="/admin/inpatient/rates/create">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <div><label>门店</label><select name="store" required><option value="横岗店">横岗店</option><option value="东环店">东环店</option></select></div>
+  <div><label>种类</label><select name="species" required><option value="cat">猫</option><option value="dog">犬</option></select></div>
+  <div><label>最低体重 kg</label><input type="number" name="min_weight_kg" min="0" step="0.01" value="0" required/></div>
+  <div><label>最高体重 kg</label><input type="number" name="max_weight_kg" min="0" step="0.01" placeholder="留空表示不限"/></div>
+  <div><label>日费率 ¥</label><input type="number" name="daily_rate" min="0.01" step="0.01" required/></div>
+  <button class="ir-btn" type="submit">添加规则</button>
+</form>
+
+{% for store_name in ['横岗店','东环店'] %}
+{% set store_rules = rules | selectattr('store','equalto',store_name) | list %}
+<section class="ir-store">
+  <h2>{{ store_name }}</h2>
+  {% if store_rules %}
+  <div class="ir-headrow"><span>种类</span><span>规则</span><span>最低 kg</span><span>最高 kg</span><span>日费率</span><span>操作</span></div>
+  {% for r in store_rules %}
+  <form class="ir-row" method="post" action="/admin/inpatient/rates/{{ r.id }}/edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <span class="species">{{ '猫' if r.species == 'cat' else '犬' }}</span>
+    <span>{{ r.label }}</span>
+    <input type="number" name="min_weight_kg" min="0" step="0.01" value="{{ r.min_weight_kg or 0 }}" required/>
+    <input type="number" name="max_weight_kg" min="0" step="0.01" value="{{ r.max_weight_kg if r.max_weight_kg is not none else '' }}" placeholder="不限"/>
+    <input type="number" name="daily_rate" min="0.01" step="0.01" value="{{ r.daily_rate }}" required/>
+    <div class="ir-actions"><button class="ir-btn ghost" type="submit">保存</button><button class="ir-btn ghost danger" type="submit" formaction="/admin/inpatient/rates/{{ r.id }}/delete" onclick="return confirm('删除这条收费规则？')">删除</button></div>
+  </form>
+  {% endfor %}
+  {% else %}<div class="ir-empty">该门店尚未配置住院价格。</div>{% endif %}
+</section>
+{% endfor %}
+{% endblock %}

@@ -1,19 +1,65 @@
 {% extends "uk/_base.html" %}
-{% block title %}转住院 · 大风动物医院{% endblock %}
+{% block title %}新建住院单 · 大风动物医院{% endblock %}
 {% block body %}
-<style>{% include "uk/_chrome.css" %}</style>
-<div class="ukc-bc">
-  <a href="/admin">后台</a><span class="sep">/</span>
-  <a href="/admin/inpatient">住院管理</a><span class="sep">/</span>
-  <span>转住院</span>
+<style>
+  .in-bc{font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin:24px 0 16px}.in-bc a{color:inherit}.in-bc span{margin:0 8px}
+  .in-head h1{font-size:28pt;letter-spacing:2px;margin:0}.in-head p{color:var(--ink-3);font-size:10pt;margin:8px 0 0}.in-rule{border:0;height:4px;border-top:.5px solid var(--ink);border-bottom:.5px solid var(--ink);margin:18px 0 28px}
+  .in-msg{padding:11px 15px;border-left:3px solid var(--accent-red);background:#fcf5f4;color:var(--accent-red);margin-bottom:18px}
+  .in-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:28px}.in-panel{border-top:.5px solid var(--ink);padding-top:14px}.in-panel h2{font-size:12pt;letter-spacing:2px;margin:0 0 14px}
+  .in-search{display:flex;gap:8px}.in-search input{flex:1;height:40px;border:.5px solid var(--hair);padding:7px 11px;font:11pt var(--font-serif);border-radius:0}.in-btn{border:0;background:var(--ink);color:var(--paper);min-height:40px;padding:0 18px;font:700 10pt var(--font-serif);letter-spacing:2px;cursor:pointer}.in-btn.ghost{background:var(--paper);color:var(--ink-2);border:.5px solid var(--hair)}
+  .in-results{margin-top:12px}.in-customer{border-bottom:.5px solid var(--hair);padding:12px 0}.in-owner{font-weight:700}.in-owner small{font-weight:400;color:var(--ink-3);margin-left:8px}.in-pets{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.in-pet{display:inline-block;border:.5px solid var(--hair);padding:7px 11px;color:var(--ink);text-decoration:none}.in-pet:hover{border-color:var(--ink)}
+  .in-summary{border:.5px solid var(--hair-2);padding:18px}.in-name{font-size:17pt;font-weight:700}.in-meta{color:var(--ink-3);margin-top:5px}.in-lines{margin:18px 0;border-top:.5px solid var(--hair)}.in-line{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:.5px solid var(--hair)}.in-line span:first-child{color:var(--ink-3)}.in-rate{font-size:22pt;font-weight:700;font-family:var(--font-numeric);color:var(--accent-green)}
+  .in-fix{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.in-fix label{font-size:9pt;color:var(--ink-3)}.in-fix input,.in-fix select{width:100%;height:38px;margin-top:5px;border:.5px solid var(--hair);background:var(--paper);padding:7px;font:10pt var(--font-serif);box-sizing:border-box;border-radius:0}.in-note{font-size:9pt;color:var(--ink-3);line-height:1.6;margin-top:12px}.in-existing{border-left:3px solid var(--accent-amber);padding:12px;background:#fbf6f0;margin-bottom:16px}
+  @media(max-width:850px){.in-layout{grid-template-columns:1fr}.in-summary{order:-1}}
+</style>
+<div class="in-bc"><a href="/admin/inpatient">住院单</a><span>/</span>新建住院单</div>
+<div class="in-head"><h1>新建住院单</h1><p>无需病例和笼位；系统自动按门店、猫犬和体重匹配价格。</p></div>
+<hr class="in-rule"/>
+{% if request.query_params.get('err') %}<div class="in-msg">{{ request.query_params.get('err') }}</div>{% endif %}
+<div class="in-layout">
+  <section class="in-panel">
+    <h2>选择客户 / 宠物</h2>
+    <div class="in-search"><input id="customerSearch" placeholder="输入客户姓名、手机号或宠物名" autocomplete="off"/><button type="button" class="in-btn ghost" onclick="searchCustomer()">搜索</button></div>
+    <div id="searchResults" class="in-results">{% if not pet %}<div class="in-note">搜索并选择需要办理入住的宠物。</div>{% endif %}</div>
+  </section>
+  {% if pet %}
+  <aside class="in-summary">
+    {% if existing %}<div class="in-existing">该宠物已有住院中的单据。<a href="/admin/inpatient/{{ existing.id }}">查看住院单 #{{ existing.id }}</a></div>{% endif %}
+    <div class="in-name">{{ pet.name or '未命名宠物' }}</div>
+    <div class="in-meta">{{ cust.name if cust else '—' }}{% if cust and cust.phone %} · {{ cust.phone }}{% endif %}</div>
+    <div class="in-lines">
+      <div class="in-line"><span>当前门店</span><b>{{ store_short or '未选择' }}</b></div>
+      <div class="in-line"><span>宠物种类</span><b>{{ '猫' if species == 'cat' else ('犬' if species == 'dog' else '待确认') }}</b></div>
+      <div class="in-line"><span>最近体重</span><b>{{ ('%.2f'|format(weight_kg)) ~ ' kg' if weight_kg > 0 else '待补录' }}</b></div>
+      <div class="in-line"><span>匹配规则</span><b>{{ matched_rule.label if matched_rule else '暂未匹配' }}</b></div>
+    </div>
+    {% if matched_rule %}<div class="in-rate">¥{{ '%.2f'|format(matched_rule.daily_rate) }}<small style="font-size:9pt;color:var(--ink-3);font-weight:400"> / 天</small></div>{% endif %}
+    <form method="post" action="/admin/inpatient/admit">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="pet_id" value="{{ pet.id }}"/><input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/>
+      {% if species not in ['cat','dog'] or weight_kg <= 0 %}
+      <div class="in-fix">
+        <label>种类<select name="species"><option value="">请选择</option><option value="cat">猫</option><option value="dog">犬</option></select></label>
+        <label>入住体重 kg<input type="number" name="weight_kg" min="0.01" step="0.01" value="{{ weight_kg if weight_kg > 0 else '' }}" required/></label>
+      </div>
+      {% else %}<input type="hidden" name="species" value="{{ species }}"/><input type="hidden" name="weight_kg" value="{{ weight_kg }}"/>{% endif %}
+      <button class="in-btn" type="submit" style="width:100%" {% if existing %}disabled{% endif %}>办理入住</button>
+    </form>
+    <div class="in-note">办理后自动记录当前入住时间，并锁定本次体重和日费率。药品、检查等仍按原业务单据收费。</div>
+  </aside>
+  {% endif %}
 </div>
-<div class="ukc-head">
-  <div>
-    <h1>转&nbsp;住&nbsp;院
-      <span class="sub">{% if visit %}病例 #{{ visit.id }}{% endif %}{% if pet %} · {{ pet.name }}{% endif %}{% if cust %} · {{ cust.name }}{% endif %} · 选笼位 + 入院原因</span>
-    </h1>
-  </div>
-</div>
-<hr class="ukc-rule-double"/>
-{% include "includes/admin_inpatient_new_body.html" %}
+<script>
+async function searchCustomer(){
+  const q=document.getElementById('customerSearch').value.trim(), box=document.getElementById('searchResults');
+  if(q.length<2){box.innerHTML='<div class="in-note">请至少输入两个字符。</div>';return}
+  box.innerHTML='<div class="in-note">正在搜索…</div>';
+  try{
+    const data=await fetch('/m/api/search-customer?q='+encodeURIComponent(q)).then(r=>r.json());
+    if(!data.results||!data.results.length){box.innerHTML='<div class="in-note">没有找到客户或宠物。</div>';return}
+    box.innerHTML=data.results.map(c=>`<div class="in-customer"><div class="in-owner">${esc(c.name||'未命名客户')}<small>${esc(c.phone||'')}</small></div><div class="in-pets">${(c.pets||[]).map(p=>`<a class="in-pet" href="/admin/inpatient/new?pet_id=${p.id}">${esc(p.name||'未命名')} · ${p.species==='cat'?'猫':(p.species==='dog'?'犬':'待确认')}</a>`).join('')||'<span class="in-note">该客户没有宠物档案</span>'}</div></div>`).join('');
+  }catch(e){box.innerHTML='<div class="in-note">搜索失败，请稍后重试。</div>'}
+}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+document.getElementById('customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchCustomer()}});
+</script>
 {% endblock %}

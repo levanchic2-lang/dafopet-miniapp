@@ -1349,6 +1349,53 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_hosp_staff_token ON hospitalizations(staff_token) WHERE staff_token != ''"))
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_hosp_owner_token ON hospitalizations(owner_token) WHERE owner_token != ''"))
 
+            # 轻量住院单：分店/物种/体重自动定价 + 入住价格快照
+            rate_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(cage_rate_rules)")).fetchall()}
+            for col_name, col_sql in (
+                ("species", "VARCHAR(20) DEFAULT ''"),
+                ("min_weight_kg", "REAL DEFAULT 0.0"),
+                ("max_weight_kg", "REAL DEFAULT NULL"),
+            ):
+                if col_name not in rate_cols:
+                    conn.execute(text(f"ALTER TABLE cage_rate_rules ADD COLUMN {col_name} {col_sql}"))
+
+            hosp_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(hospitalizations)")).fetchall()}
+            for col_name, col_sql in (
+                ("billing_mode", "VARCHAR(20) DEFAULT 'legacy'"),
+                ("species_snapshot", "VARCHAR(20) DEFAULT ''"),
+                ("admission_weight_kg", "REAL DEFAULT 0.0"),
+                ("rate_rule_id", "INTEGER DEFAULT NULL REFERENCES cage_rate_rules(id) ON DELETE SET NULL"),
+                ("rate_label", "VARCHAR(120) DEFAULT ''"),
+                ("billing_days", "REAL DEFAULT 0.0"),
+                ("same_day_waived", "INTEGER DEFAULT 0"),
+            ):
+                if col_name not in hosp_cols:
+                    conn.execute(text(f"ALTER TABLE hospitalizations ADD COLUMN {col_name} {col_sql}"))
+
+            dep_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(deposits)")).fetchall()}
+            if "hospitalization_id" not in dep_cols:
+                conn.execute(text(
+                    "ALTER TABLE deposits ADD COLUMN hospitalization_id INTEGER DEFAULT NULL "
+                    "REFERENCES hospitalizations(id) ON DELETE SET NULL"
+                ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_deposit_hosp ON deposits(hospitalization_id)"))
+
+            # 现有横岗店费率来自旧的“参考规则”。只迁移明确匹配的六条，不碰其他自定义记录。
+            legacy_rates = (
+                ("猫住院", "cat", 0.0, None),
+                ("犬住院<5kg", "dog", 0.0, 5.0),
+                ("犬住院5kg-10kg", "dog", 5.0, 10.0),
+                ("犬住院10kg-20kg", "dog", 10.0, 20.0),
+                ("犬住院20kg-25kg", "dog", 20.0, 25.0),
+                ("犬住院25kg-30kg", "dog", 25.0, 30.0),
+            )
+            for label, species, min_kg, max_kg in legacy_rates:
+                conn.execute(text(
+                    "UPDATE cage_rate_rules SET store='横岗店', species=:species, "
+                    "min_weight_kg=:min_kg, max_weight_kg=:max_kg "
+                    "WHERE label=:label AND (species IS NULL OR species='')"
+                ), {"label": label, "species": species, "min_kg": min_kg, "max_kg": max_kg})
+
             # medication_admin_logs 住院发药打勾
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS medication_admin_logs ("

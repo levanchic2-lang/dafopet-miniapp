@@ -977,15 +977,15 @@ class Cage(Base):
 
 
 class CageRateRule(Base):
-    """住院日费率「规则表」（参考用，不强制套用）。
-    例：大型犬 80 / 中型犬 60 / 小型犬·猫 50 / ICU 200。
-    新建住院时展示给员工看「这只大概多少钱一天」，员工据此手填日费率。
-    """
+    """按门店、物种和体重区间自动匹配的住院日费率。"""
     __tablename__ = "cage_rate_rules"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    store: Mapped[str] = mapped_column(String(40), default="")    # 短名；空=通用
-    label: Mapped[str] = mapped_column(String(80), default="")    # 如 大型犬 / 中型犬 / 猫 / ICU
+    store: Mapped[str] = mapped_column(String(40), default="")    # 短名；规则必须归属具体门店
+    label: Mapped[str] = mapped_column(String(80), default="")
+    species: Mapped[str] = mapped_column(String(20), default="")  # cat / dog
+    min_weight_kg: Mapped[float] = mapped_column(Float, default=0.0)
+    max_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
     daily_rate: Mapped[float] = mapped_column(Float, default=0.0)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     notes: Mapped[str] = mapped_column(Text, default="")
@@ -1020,6 +1020,14 @@ class Hospitalization(Base):
 
     # 收费：留空走 Cage.daily_rate
     daily_rate_override: Mapped[float] = mapped_column(Float, default=0.0)
+    # 轻量住院单：入住时锁定物种、体重、匹配规则和价格，后续调价不追溯。
+    billing_mode: Mapped[str] = mapped_column(String(20), default="legacy")  # legacy / weight
+    species_snapshot: Mapped[str] = mapped_column(String(20), default="")
+    admission_weight_kg: Mapped[float] = mapped_column(Float, default=0.0)
+    rate_rule_id = mapped_column(ForeignKey("cage_rate_rules.id", ondelete="SET NULL"), nullable=True, default=None)
+    rate_label: Mapped[str] = mapped_column(String(120), default="")
+    billing_days: Mapped[float] = mapped_column(Float, default=0.0)
+    same_day_waived: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # admitted / discharged / cancelled
     status: Mapped[str] = mapped_column(String(20), default="admitted")
@@ -1037,6 +1045,7 @@ class Hospitalization(Base):
     customer = relationship("Customer", foreign_keys=[customer_id])
     visit    = relationship("Visit",    foreign_keys=[visit_id])
     cage     = relationship("Cage",     foreign_keys=[cage_id])
+    rate_rule = relationship("CageRateRule", foreign_keys=[rate_rule_id])
 
 
 class MedicationAdminLog(Base):
@@ -1358,6 +1367,7 @@ class Deposit(Base):
     # 关联到具体业务（二选一）
     appointment_id = mapped_column(ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True, default=None)
     visit_id       = mapped_column(ForeignKey("visits.id",       ondelete="SET NULL"), nullable=True, default=None)
+    hospitalization_id = mapped_column(ForeignKey("hospitalizations.id", ondelete="SET NULL"), nullable=True, default=None)
     # category: surgery / boarding / beauty / other
     category:   Mapped[str]   = mapped_column(String(40), default="surgery")
     amount:     Mapped[float] = mapped_column(Float, default=0.0)
@@ -1379,6 +1389,7 @@ class Deposit(Base):
     pet         = relationship("Pet",         foreign_keys=[pet_id])
     appointment = relationship("Appointment", foreign_keys=[appointment_id])
     visit       = relationship("Visit",       foreign_keys=[visit_id])
+    hospitalization = relationship("Hospitalization", foreign_keys=[hospitalization_id])
 
 
 class Payment(Base):
