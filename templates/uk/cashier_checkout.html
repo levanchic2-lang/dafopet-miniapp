@@ -264,7 +264,7 @@
   <input type="hidden" name="discount_value" id="co-disc-val-hidden" value=""/>
   <input type="hidden" name="embed" value="{{ '1' if embed else '' }}"/>
   <input type="hidden" name="checkout_back" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
-  {# 套餐/押金/优惠券走单单 add-payment（主单），用 next_url 回跳本结账台 #}
+  {# 套餐/优惠券走单单 add-payment；押金可在 multi-pay 中跨单分摊 #}
   <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
 
   <div class="co-pay-bar">
@@ -361,6 +361,7 @@ var CO_OUTSTANDING = {{ outstanding }};
 var CO_MULTIPAY_URL = '/admin/cashier/multi-pay';
 var CO_ADDPAY_URL = '/admin/invoices/{{ primary_invoice_id }}/add-payment';
 var CO_COMPLEX = {package:'套餐', deposit:'押金', coupon:'优惠券'};
+var CO_SINGLE_ONLY = {package:true, coupon:true};
 var CO_PICK_ID = {package:'pick-package', deposit:'pick-deposit', coupon:'pick-coupon'};
 
 function coDone(msg) {
@@ -381,8 +382,8 @@ function coSelectMethod(btn) {
 
   var form = document.getElementById('coForm');
   var isComplex = !!CO_COMPLEX[v];
-  // 套餐/押金/优惠券 → 单单核销到主单 add-payment；其余 → 合并 multi-pay
-  form.action = isComplex ? CO_ADDPAY_URL : CO_MULTIPAY_URL;
+  // 套餐/优惠券仍只核销主单；押金与普通收款一样按所选账单顺序分摊。
+  form.action = CO_SINGLE_ONLY[v] ? CO_ADDPAY_URL : CO_MULTIPAY_URL;
   // 套餐/押金/优惠券按券面额核销，不走「本笔实收」拆分 → 隐藏金额框
   var rw = document.getElementById('co-round-wrap');
   if (rw) rw.style.display = isComplex ? 'none' : '';
@@ -395,7 +396,11 @@ function coSelectMethod(btn) {
     pickers.style.display = '';
     var sel = document.getElementById(CO_PICK_ID[v]);
     if (sel) sel.style.display = '';
-    hint.textContent = '{{ "本组多张时，仅核销到第一张单 #" ~ primary_invoice_id if inv_ids|length > 1 else "" }}';
+    if (v === 'deposit') {
+      hint.textContent = '将按账单顺序逐张抵扣，直到押金用完或全部结清';
+    } else {
+      hint.textContent = '{{ "本组多张时，仅核销到第一张单 #" ~ primary_invoice_id if inv_ids|length > 1 else "" }}';
+    }
   } else {
     pickers.style.display = 'none';
   }

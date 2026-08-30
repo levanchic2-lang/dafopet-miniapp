@@ -22324,9 +22324,12 @@ async def admin_cashier_multi_pay_submit(
     checkout_back = (form.get("checkout_back") or "").strip()
     # embed=1 表示在收银台弹窗 iframe 内结算，全部付清后通知父窗口关闭弹窗
     is_embed = (form.get("embed") == "1")
-    # 合并结算支持：现金/微信/支付宝/收钱吧/美团/抖音团购/工资抵扣/钱包
-    # 套餐/押金/优惠券因需绑特定记录，由 checkout 页直接 POST 到 add-payment
-    allowed_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party", "salary_deduction", "wallet"}
+    # 合并结算支持普通收款、钱包和押金。套餐/优惠券需要绑定具体项目或单据，
+    # 仍由 checkout 页直接 POST 到单张收费单的 add-payment。
+    allowed_methods = {
+        "cash", "wechat", "alipay", "shouqianba", "meituan", "third_party",
+        "salary_deduction", "wallet", "deposit",
+    }
     if method not in allowed_methods:
         _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
         return RedirectResponse(
@@ -22348,6 +22351,26 @@ async def admin_cashier_multi_pay_submit(
                 status_code=303,
             )
         _wallet_obj = _get_or_create_wallet(db, customer_id)
+    _deposit_obj = None
+    _deposit_remaining = 0.0
+    if method == "deposit":
+        _deposit_id_raw = (form.get("deposit_id") or "").strip()
+        if not _deposit_id_raw.isdigit():
+            _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+            return RedirectResponse(f"{_back}&msg=请选择要使用的押金", status_code=303)
+        _deposit_obj = db.get(Deposit, int(_deposit_id_raw))
+        if not _deposit_obj or _deposit_obj.customer_id != customer_id:
+            _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+            return RedirectResponse(f"{_back}&msg=押金与客户不匹配", status_code=303)
+        _deposit_remaining = round(
+            float(_deposit_obj.amount or 0)
+            - float(_deposit_obj.applied_amount or 0)
+            - float(_deposit_obj.refunded_amount or 0),
+            2,
+        )
+        if _deposit_remaining <= 0 or _deposit_obj.status in ("refunded", "cancelled"):
+            _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+            return RedirectResponse(f"{_back}&msg=押金已无余额", status_code=303)
     inv_ids = [int(x) for x in form.getlist("invoice_ids") if str(x).isdigit()]
     if not inv_ids:
         return RedirectResponse(
@@ -22431,6 +22454,8 @@ async def admin_cashier_multi_pay_submit(
     except ValueError:
         round_amount = actuals_total
     round_amount = max(0.0, min(round_amount, actuals_total))
+    if method == "deposit":
+        round_amount = min(round_amount, _deposit_remaining)
     if round_amount <= 0:
         _back0 = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
         return RedirectResponse(f"{_back0}&msg=本笔金额为 0", status_code=303)
@@ -22448,6 +22473,11 @@ async def admin_cashier_multi_pay_submit(
     paid_count = 0
     paid_total = 0.0
     note_tag = f"合并结算（{len(inv_rows)} 单 · {method}）"
+    if method == "deposit" and _deposit_obj is not None:
+        note_tag = (
+            f"押金抵扣 #{_deposit_obj.id}（"
+            f"{_DEPOSIT_CATEGORY_ZH.get(_deposit_obj.category, _deposit_obj.category)}）"
+        )
     batch_no = _new_settlement_batch_no() if len(inv_rows) >= 2 else None
     remaining = round_amount
     for idx, r in enumerate(inv_rows):
@@ -22462,7 +22492,7 @@ async def admin_cashier_multi_pay_submit(
         take = min(remaining, cur_out)
         # store 优先用发票本身的（保证收款统计「按门店」准确）
         _pay_store = store or (inv.store or "")
-        _ref_id = None
+        _ref_id = _deposit_obj.id if method == "deposit" and _deposit_obj is not None else None
         if method == "wallet" and _wallet_obj is not None:
             _wtx = _wallet_apply_tx(
                 db, _wallet_obj, tx_type="consume", amount=take,
@@ -22482,6 +22512,18 @@ async def admin_cashier_multi_pay_submit(
         paid_count += 1
         paid_total += take
         remaining = round(remaining - take, 2)
+    if method == "deposit" and _deposit_obj is not None and paid_total > 0:
+        _deposit_obj.applied_amount = round(
+            float(_deposit_obj.applied_amount or 0) + paid_total, 2
+        )
+        _deposit_obj.applied_invoice_id = inv_rows[0]["inv"].id
+        _dep_left = round(
+            float(_deposit_obj.amount or 0)
+            - float(_deposit_obj.applied_amount or 0)
+            - float(_deposit_obj.refunded_amount or 0),
+            2,
+        )
+        _deposit_obj.status = "applied" if _dep_left <= 0.005 else "partial_refund"
     db.commit()
 
     # 剩余未付（含其他单的）
@@ -23041,7 +23083,7 @@ async def admin_invoice_add_payment(
     支持「同客户多张待收单一起付」— 前端勾选其他单 id 通过 invoice_ids[] 传入：
       - 金额按勾选顺序 (current invoice 第一，其余按 id 升序) 分摊
       - 现金/微信/支付宝/钱包等 simple 方式可跨多单
-      - 套餐/押金/优惠券 只支持单张 (current invoice)，因为绑特定明细行
+      - 押金支持跨多张单分摊；套餐/优惠券仍只支持当前单
     """
     require_admin(request)
     form = await request.form()
@@ -23072,13 +23114,16 @@ async def admin_invoice_add_payment(
 
     # ── 合并结算：解析勾选的其他待收单 id ──
     extra_ids = [int(x) for x in form.getlist("extra_invoice_ids") if str(x).isdigit()]
-    # 跨单收款方式白名单（钱包/套餐/押金/优惠券因为带特殊 ref，多单暂不支持）
-    cross_methods = {"cash", "wechat", "alipay", "shouqianba", "meituan", "third_party", "salary_deduction"}
+    # 押金可按所选账单顺序跨单分摊；套餐/优惠券仍绑定当前单。
+    cross_methods = {
+        "cash", "wechat", "alipay", "shouqianba", "meituan", "third_party",
+        "salary_deduction", "deposit",
+    }
     multi_target = bool(extra_ids) and method in cross_methods
     if extra_ids and not multi_target:
         # 选了多张但方式不支持 → 提示后只对当前单生效
         from urllib.parse import quote as _q
-        _warn = _q("钱包/套餐/押金/优惠券暂只支持单张发票结算；已只结当前单。", safe="")
+        _warn = _q("钱包/套餐/优惠券暂只支持单张发票结算；已只结当前单。", safe="")
         # 继续走 single-invoice 流程
     target_invs = [inv]
     if multi_target:
@@ -23194,6 +23239,8 @@ async def admin_invoice_add_payment(
         d_remaining = d.amount - d.applied_amount - (d.refunded_amount or 0)
         d.status = "applied" if d_remaining <= 1e-6 else "partial_refund"
         ref_id = d.id
+        if not note:
+            note = f"押金抵扣 #{d.id}（{_DEPOSIT_CATEGORY_ZH.get(d.category, d.category)}）"
 
     # ── 优惠券核销 ──
     elif method == "coupon":
@@ -23242,7 +23289,7 @@ async def admin_invoice_add_payment(
             db.add(Payment(
                 invoice_id=t.id, customer_id=t.customer_id,
                 method=method, amount=pay_amt,
-                ref_id=None, ref_no=ref_no, status="success",
+                ref_id=(ref_id if method == "deposit" else None), ref_no=ref_no, status="success",
                 store=(store or t.store or ""), operator=operator, note=_t_note, batch_no=batch_no,
             ))
             db.flush()
@@ -23344,6 +23391,16 @@ async def admin_invoice_payment_void(
             d.status = "held" if d.applied_amount <= 0 else "partial_refund"
             if d.applied_amount <= 0:
                 d.applied_invoice_id = None
+            elif d.applied_invoice_id == inv_id:
+                # 一笔押金可分摊到多张账单。撤销其中一笔后，让旧的单值字段
+                # 继续指向另一张仍有效的押金收款；真实关联以 Payment 为准。
+                other_pay = db.query(Payment).filter(
+                    Payment.method == "deposit",
+                    Payment.ref_id == d.id,
+                    Payment.status == "success",
+                    Payment.id != p.id,
+                ).order_by(Payment.id.asc()).first()
+                d.applied_invoice_id = other_pay.invoice_id if other_pay else None
     elif p.method == "coupon" and p.ref_id:
         c = db.get(Coupon, p.ref_id)
         if c and c.status == "used" and c.used_invoice_id == inv_id:

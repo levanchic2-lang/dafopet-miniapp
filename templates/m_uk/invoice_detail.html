@@ -248,11 +248,11 @@
     {% endif %}
   </div>
 
-  {# 跨单合并（仅 simple methods） #}
+  {# 跨单合并（普通方式 + 押金） #}
   {% if other_unpaid %}
   <div class="pay-sub active" id="sub-multi" style="margin-top:14px;">
     <div class="lbl">同&nbsp;客&nbsp;户&nbsp;其&nbsp;他&nbsp;待&nbsp;收&nbsp;单（勾&nbsp;选&nbsp;合&nbsp;并）</div>
-    <div class="hint">仅现金/微信/支付宝/收钱吧/美团/三方支持跨单</div>
+    <div class="hint">现金/微信/支付宝/收钱吧/美团/抖音团购及押金支持跨单</div>
     {% for o in other_unpaid %}
     <label class="selector-row" style="cursor:pointer;">
       <input type="checkbox" name="extra_invoice_ids" value="{{ o.inv.id }}" class="extra-checkbox"/>
@@ -310,6 +310,7 @@
 
 <script>
 const SIMPLE_METHODS = ['cash','wechat','alipay','shouqianba','meituan','third_party'];
+const MULTI_METHODS = [...SIMPLE_METHODS, 'deposit'];
 
 function pickMethod(m) {
   document.getElementById('pay-method').value = m;
@@ -325,11 +326,11 @@ function pickMethod(m) {
     const sub = document.getElementById('sub-' + m);
     if (sub) sub.classList.add('active');
   }
-  // 跨单合并仅 simple 支持
+  // 跨单合并支持普通方式和押金
   const multi = document.getElementById('sub-multi');
   if (multi) {
-    multi.classList.toggle('active', SIMPLE_METHODS.includes(m));
-    if (!SIMPLE_METHODS.includes(m)) {
+    multi.classList.toggle('active', MULTI_METHODS.includes(m));
+    if (!MULTI_METHODS.includes(m)) {
       // 清掉跨单勾选
       multi.querySelectorAll('.extra-checkbox').forEach(c => c.checked = false);
     }

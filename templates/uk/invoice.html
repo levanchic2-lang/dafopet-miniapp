@@ -526,7 +526,7 @@
           {% endfor %}
         </div>
         <div style="margin-top:8px; font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:1px;">
-          钱包 / 套餐 / 押金 / 优惠券暂只能结当前单；多单一起付请用 现金 / 微信 / 支付宝 / 收钱吧 / 美团 / 抖音团购{% if cust and cust.is_internal %} / 工资抵扣{% endif %}
+          押金可按勾选顺序跨单抵扣；钱包 / 套餐 / 优惠券暂只能结当前单。普通多单收款支持现金 / 微信 / 支付宝 / 收钱吧 / 美团 / 抖音团购{% if cust and cust.is_internal %} / 工资抵扣{% endif %}
         </div>
 
         {# 批量折扣：把同一折率一次性应用到 当前单 + 勾选的待收单 #}
@@ -893,9 +893,9 @@ function ovoToggle() {
     amtEl.value = newOut.toFixed(2);
     amtEl.max = newOut.toFixed(2);
   }
-  // 选了多张 + 当前选了 钱包/套餐/押金/优惠券 → 警示
+  // 选了多张 + 当前选了仍不支持跨单的方式 → 警示
   var method = document.getElementById('pay-method-input').value;
-  var crossOK = ['cash','wechat','alipay','shouqianba','meituan','third_party','salary_deduction'].indexOf(method) !== -1;
+  var crossOK = ['cash','wechat','alipay','shouqianba','meituan','third_party','salary_deduction','deposit'].indexOf(method) !== -1;
   var warnEl = document.getElementById('ovo-warn');
   if (count > 0 && !crossOK) {
     if (!warnEl) {
