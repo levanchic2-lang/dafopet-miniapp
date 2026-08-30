@@ -86,8 +86,10 @@ async def recognize_purchase_photo(image_paths: list[Path]) -> dict[str, Any]:
         })
 
     try:
+        model = (getattr(settings, "purchase_vision_model", "") or "").strip() \
+            or settings.openai_model or "gpt-4o-mini"
         resp = await client.chat.completions.create(
-            model=settings.openai_model or "gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": content}],
             temperature=0.0,
             max_tokens=4096,

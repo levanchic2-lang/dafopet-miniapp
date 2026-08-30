@@ -154,7 +154,11 @@ async def draft_client_care_summary(payload: dict[str, Any], doctor_instruction:
 
 
 async def draft_care_plan(payload: dict[str, Any], doctor_instruction: str = "") -> dict[str, Any]:
-    from app.services.report_llm import report_llm_configured, report_text_client_model
+    from app.services.report_llm import (
+        generate_json_object,
+        report_llm_configured,
+        report_text_client_model,
+    )
 
     if not report_llm_configured():
         return {"ok": False, "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}
@@ -164,28 +168,19 @@ async def draft_care_plan(payload: dict[str, Any], doctor_instruction: str = "")
         return {"ok": False, "error": "缺少 openai 库"}
 
     client, model, _, is_reasoner = report_text_client_model()
-    try:
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": CARE_PLAN_SYSTEM},
-                {"role": "user", "content": _format_payload(payload, doctor_instruction)},
-            ],
-            temperature=0.25,
-            max_tokens=8000 if is_reasoner else 1800,
-        )
-    except Exception as e:
-        logger.warning("[care_ai] plan API failed: %s", e)
-        return {"ok": False, "error": f"调用模型失败：{e}"}
-
-    raw = _strip_md(resp.choices[0].message.content or "")
-    try:
-        data = json.loads(raw)
-    except Exception as e:
-        logger.warning("[care_ai] plan JSON parse failed: %s; raw=%s", e, raw[:300])
-        return {"ok": False, "error": f"模型输出不是有效 JSON：{e}", "raw": raw}
-    if not isinstance(data, dict):
-        return {"ok": False, "error": "模型输出不是 JSON 对象", "raw": raw}
+    data, raw, error = await generate_json_object(
+        client=client,
+        model=model,
+        messages=[
+            {"role": "system", "content": CARE_PLAN_SYSTEM},
+            {"role": "user", "content": _format_payload(payload, doctor_instruction)},
+        ],
+        temperature=0.25,
+        max_tokens=8000 if is_reasoner else 1800,
+        task="care_plan",
+    )
+    if data is None:
+        return {"ok": False, "error": error, "raw": raw}
     tasks = data.get("tasks") if isinstance(data.get("tasks"), list) else []
     cleaned = []
     for t in tasks[:4]:

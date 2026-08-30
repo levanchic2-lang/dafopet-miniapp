@@ -16,13 +16,19 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str = ""
     openai_model: str = "gpt-4o-mini"
+    # 视觉任务分别配置，留空时兼容回退 OPENAI_MODEL。
+    # 火山方舟使用账号内已开通的 Endpoint/模型 ID，不要在代码里猜测新模型 ID。
+    tnr_vision_model: str = ""
+    purchase_vision_model: str = ""
 
-    # DeepSeek（OpenAI 兼容）：仅用于「报告类文字生成」（B超起草 / 显微镜·粪检起草）。
+    # DeepSeek（OpenAI 兼容）：用于医疗报告、量表分析和诊后说明。
     # 配了 deepseek_api_key 即启用；视觉类任务（TNR 审核 / 进货单识别）仍走豆包视觉。
     # 当前报告生成接口模型名：deepseek-v4-flash（快/便宜）或 deepseek-v4-pro（更强）。
     # 旧配置 deepseek-chat / deepseek-reasoner 会在 app.services.report_llm 中自动兼容映射。
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
+    # 医疗类任务按医院要求统一使用 V4 Pro。DEEPSEEK_MODEL 仅保留为旧配置兼容项。
+    deepseek_report_model: str = "deepseek-v4-pro"
     deepseek_model: str = "deepseek-v4-flash"
 
     # 自动通过：仅当 AI 判定为疑似流浪猫且置信度 >= 该值（0~1）

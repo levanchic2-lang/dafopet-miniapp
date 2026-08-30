@@ -168,7 +168,11 @@ async def structure_measurements(raw_text: str, exam_type: str = "cardiac") -> d
     if local.get("ok"):
         return local
 
-    from app.services.report_llm import report_llm_configured, report_text_client_model
+    from app.services.report_llm import (
+        generate_json_object,
+        report_llm_configured,
+        report_text_client_model,
+    )
     if not report_llm_configured():
         return {"ok": False, "groups": [], "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}
     if not (raw_text or "").strip():
@@ -180,24 +184,17 @@ async def structure_measurements(raw_text: str, exam_type: str = "cardiac") -> d
 
     user = f"【检查类型】{_EXAM_TYPE_LABEL.get(exam_type, '通用超声')}\n\n【机器导出测量文本】\n{raw_text[:24000]}"
     client, model, _, is_reasoner = report_text_client_model()
-    try:
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": _STRUCT_SYSTEM},
-                      {"role": "user", "content": user}],
-            temperature=0.0,
-            max_tokens=8000 if is_reasoner else 3000,
-        )
-    except Exception as e:
-        logger.warning("[ultrasound] structure API failed: %s", e)
-        return {"ok": False, "groups": [], "error": f"调用模型失败：{e}"}
-
-    raw = _strip_md(resp.choices[0].message.content or "")
-    try:
-        data = json.loads(raw)
-    except Exception as e:
-        logger.warning("[ultrasound] structure JSON parse failed: %s; raw=%s", e, raw[:300])
-        return {"ok": False, "groups": [], "error": f"模型输出不是有效 JSON：{e}", "raw": raw}
+    data, raw, error = await generate_json_object(
+        client=client,
+        model=model,
+        messages=[{"role": "system", "content": _STRUCT_SYSTEM},
+                  {"role": "user", "content": user}],
+        temperature=0.0,
+        max_tokens=8000 if is_reasoner else 3000,
+        task="ultrasound_measurement_structure",
+    )
+    if data is None:
+        return {"ok": False, "groups": [], "error": error, "raw": raw}
 
     groups_in = data.get("groups") if isinstance(data, dict) else None
     if not isinstance(groups_in, list):

@@ -121,14 +121,16 @@ async def _call_chat_vision(
             }
         )
 
+    model = (getattr(settings, "tnr_vision_model", "") or "").strip() \
+        or settings.openai_model
     resp = await client.chat.completions.create(
-        model=settings.openai_model,
+        model=model,
         messages=[{"role": "user", "content": content}],
         max_tokens=1100,
         temperature=0.2,
     )
     text = (resp.choices[0].message.content or "").strip()
-    return text, settings.openai_model
+    return text, model
 
 
 async def review_application_media(
@@ -140,7 +142,7 @@ async def review_application_media(
     if len(application_photos) < 2:
         return _manual_review_result(
             ["申请照片不足 2 张，视频不能替代申请照片，需补充后再审核。"],
-            model=settings.openai_model,
+            model=(getattr(settings, "tnr_vision_model", "") or "").strip() or settings.openai_model,
             quality_flags=["too_few_application_photos"],
         )
 
@@ -177,7 +179,7 @@ async def review_application_media(
         except Exception as exc:
             return _manual_review_result(
                 caveats + [f"视觉模型调用失败，已转人工审核：{str(exc)[:240]}"],
-                model=settings.openai_model,
+                model=(getattr(settings, "tnr_vision_model", "") or "").strip() or settings.openai_model,
                 quality_flags=["model_call_failed"],
             )
 

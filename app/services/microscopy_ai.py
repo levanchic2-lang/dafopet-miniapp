@@ -11,11 +11,8 @@
 输出：{ok, narrative, conclusion, advice, error?}
 """
 from __future__ import annotations
-import json
 import logging
 from typing import Any
-
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +101,11 @@ def _format_payload(payload: dict) -> str:
 
 
 async def draft_microscopy_text(payload: dict) -> dict[str, Any]:
-    from app.services.report_llm import report_llm_configured, report_text_client_model
+    from app.services.report_llm import (
+        generate_json_object,
+        report_llm_configured,
+        report_text_client_model,
+    )
     if not report_llm_configured():
         return {"ok": False, "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}
 
@@ -118,38 +119,19 @@ async def draft_microscopy_text(payload: dict) -> dict[str, Any]:
     # 报告文字统一走 DeepSeek（已配置）否则回退豆包文本
     client, model, _, is_reasoner = report_text_client_model()
 
-    try:
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_text},
-            ],
-            temperature=0.4,
-            max_tokens=6000 if is_reasoner else 900,
-        )
-    except Exception as e:
-        logger.warning("[microscopy_ai] API failed: %s", e)
-        return {"ok": False, "error": f"调用模型失败：{e}"}
-
-    raw = (resp.choices[0].message.content or "").strip()
-    # 剥 markdown
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        raw = "\n".join(lines).strip()
-
-    try:
-        data = json.loads(raw)
-    except Exception as e:
-        logger.warning("[microscopy_ai] JSON parse failed: %s; raw=%s", e, raw[:300])
-        return {"ok": False, "error": f"模型输出不是有效 JSON：{e}", "raw": raw}
-
-    if not isinstance(data, dict):
-        return {"ok": False, "error": "模型输出不是 JSON 对象"}
+    data, raw, error = await generate_json_object(
+        client=client,
+        model=model,
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_text},
+        ],
+        temperature=0.4,
+        max_tokens=6000 if is_reasoner else 900,
+        task="microscopy_report",
+    )
+    if data is None:
+        return {"ok": False, "error": error, "raw": raw}
 
     return {
         "ok": True,
