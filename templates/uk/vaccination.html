@@ -347,9 +347,17 @@ function confirmVaccVoid(form, paidAmount) {
           {% set _cur_store = request.session.get('admin_store', '') %}
           {% for item in vacc_items %}
           {% set _ep = item | eff_price(_cur_store) %}
-          <option value="{{ item.id }}" data-price="{{ _ep }}" data-name="{{ item.name }}" data-batch="{{ item.latest_batch_no or '' }}" data-expiry="{{ item.latest_expiry_date or '' }}" {% if vacc and vacc.inventory_item_id == item.id %}selected{% endif %}>
-            {{ item.name }}（库存 {{ item.stock_qty }}{{ item.unit }} · ¥{{ '%.0f'|format(_ep) }}{% if item.latest_batch_no %} · 批 {{ item.latest_batch_no }}{% endif %}）
-          </option>
+            {% if item.available_batches %}
+              {% for b in item.available_batches %}
+              <option value="{{ item.id }}" data-price="{{ _ep }}" data-name="{{ item.name }}" data-batch="{{ b.batch_no or '' }}" data-expiry="{{ b.expiry_date or '' }}" {% if vacc and vacc.inventory_item_id == item.id and vacc.batch_no == b.batch_no %}selected{% endif %}>
+                {{ item.name }}（批 {{ b.batch_no or '未编号' }} · 余 {{ '%g'|format(b.quantity) }}{{ item.unit }} · ¥{{ '%.0f'|format(_ep) }}）
+              </option>
+              {% endfor %}
+            {% else %}
+              <option value="{{ item.id }}" data-price="{{ _ep }}" data-name="{{ item.name }}" data-batch="" data-expiry="" {% if vacc and vacc.inventory_item_id == item.id %}selected{% endif %}>
+                {{ item.name }}（总库存 {{ item.stock_qty }}{{ item.unit }} · 暂无批次）
+              </option>
+            {% endif %}
           {% endfor %}
         </select>
       </div>
@@ -555,7 +563,7 @@ function onItemChange() {
   }
   if (batch) {
     const batchInput = document.querySelector('input[name="batch_no"]');
-    if (batchInput && !batchInput.value) batchInput.value = batch;
+    if (batchInput) batchInput.value = batch;
   }
   if (price && parseFloat(price) > 0) {
     const amtInput = document.getElementById('charge-amount');

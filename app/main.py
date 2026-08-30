@@ -14880,7 +14880,8 @@ def _parse_presc_items(form_data) -> list[dict]:
 
 
 def _deduct_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_id: int,
-                      operator: str, note: str = "", respect_single_use_pack: bool = True) -> None:
+                      operator: str, note: str = "", respect_single_use_pack: bool = True,
+                      batch_no: str = "") -> None:
     """出库：减少库存，写流水。"""
     inv = db.get(InventoryItem, item_id)
     if not inv or inv.is_service:
@@ -14895,7 +14896,23 @@ def _deduct_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_
             400,
             f"管控药品「{inv.name}」库存不足：当前 {before:g}{inv.unit or ''}，不能出库 {qty:g}{inv.unit or ''}",
         )
+    selected_batch = None
+    clean_batch_no = (batch_no or "").strip()
+    if clean_batch_no:
+        selected_batch = (db.query(InventoryBatch).filter(
+            InventoryBatch.item_id == item_id,
+            InventoryBatch.batch_no == clean_batch_no,
+            InventoryBatch.is_depleted == False,  # noqa: E712
+        ).order_by(InventoryBatch.id.desc()).first())
+        if selected_batch and float(selected_batch.quantity or 0) + 1e-9 < qty:
+            raise HTTPException(
+                400,
+                f"批号「{clean_batch_no}」库存不足：当前 {float(selected_batch.quantity or 0):g}{inv.unit or ''}",
+            )
     inv.stock_qty = round(before - qty, 4)
+    if selected_batch:
+        selected_batch.quantity = round(float(selected_batch.quantity or 0) - qty, 4)
+        selected_batch.is_depleted = selected_batch.quantity <= 1e-9
     db.add(InventoryTransaction(
         item_id=item_id, tx_type="out", qty=qty,
         qty_before=before, qty_after=inv.stock_qty,
@@ -14928,7 +14945,8 @@ def _rabies_inventory_items(db: Session, request: Request) -> list[InventoryItem
 
 
 def _restore_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref_id: int,
-                       operator: str, note: str = "", respect_single_use_pack: bool = True) -> None:
+                       operator: str, note: str = "", respect_single_use_pack: bool = True,
+                       batch_no: str = "") -> None:
     """退回库存（删单时）：增加库存，写流水。"""
     inv = db.get(InventoryItem, item_id)
     if not inv or inv.is_service:
@@ -14938,6 +14956,15 @@ def _restore_inventory(db: Session, item_id: int, qty: float, ref_type: str, ref
         qty = _billable_qty(inv, qty)
     before = inv.stock_qty
     inv.stock_qty = round(before + qty, 4)
+    clean_batch_no = (batch_no or "").strip()
+    if clean_batch_no:
+        selected_batch = (db.query(InventoryBatch).filter(
+            InventoryBatch.item_id == item_id,
+            InventoryBatch.batch_no == clean_batch_no,
+        ).order_by(InventoryBatch.id.desc()).first())
+        if selected_batch:
+            selected_batch.quantity = round(float(selected_batch.quantity or 0) + qty, 4)
+            selected_batch.is_depleted = False
     db.add(InventoryTransaction(
         item_id=item_id, tx_type="return", qty=qty,
         qty_before=before, qty_after=inv.stock_qty,
@@ -19145,15 +19172,34 @@ async def admin_inventory_stock_in(
         ref_type="manual", operator=request.session.get("admin_username", ""),
         note=tx_note,
     ))
-    if expiry_date:
-        db.add(InventoryBatch(
-            item_id=item_id,
-            batch_no=batch_no,
-            quantity=qty,
-            expiry_date=expiry_date,
-            received_date=_date.today().isoformat(),
-            notes=note,
-        ))
+    clean_batch_no = (batch_no or "").strip()[:80]
+    clean_expiry = (expiry_date or "").strip()[:20]
+    # 批号和有效期任填一个都属于批次入库。过去仅填批号时不会建批次，
+    # 导致流水有批号但疫苗/库存页面只能看到旧批次。
+    if clean_batch_no or clean_expiry:
+        existing_batch = None
+        if clean_batch_no:
+            existing_batch = (db.query(InventoryBatch).filter(
+                InventoryBatch.item_id == item_id,
+                InventoryBatch.batch_no == clean_batch_no,
+            ).order_by(InventoryBatch.id.desc()).first())
+        if existing_batch:
+            existing_batch.quantity = round(float(existing_batch.quantity or 0) + qty, 4)
+            existing_batch.is_depleted = False
+            if clean_expiry:
+                existing_batch.expiry_date = clean_expiry
+            existing_batch.received_date = _date.today().isoformat()
+            if note:
+                existing_batch.notes = note[:500]
+        else:
+            db.add(InventoryBatch(
+                item_id=item_id,
+                batch_no=clean_batch_no,
+                quantity=qty,
+                expiry_date=clean_expiry,
+                received_date=_date.today().isoformat(),
+                notes=note,
+            ))
     db.commit()
     return RedirectResponse(f"/admin/inventory/{item_id}?msg=入库成功+{qty}{item.unit}", status_code=303)
 
@@ -23801,14 +23847,18 @@ def _attach_latest_batch(db: Session, items: list) -> None:
     rows = db.query(InventoryBatch).filter(
         InventoryBatch.item_id.in_(ids),
         InventoryBatch.is_depleted == False,  # noqa: E712
+        InventoryBatch.quantity > 0,
     ).order_by(InventoryBatch.expiry_date.asc(), InventoryBatch.id.desc()).all()
     by_item: dict[int, "InventoryBatch"] = {}
+    all_by_item: dict[int, list["InventoryBatch"]] = {}
     for b in rows:
         by_item.setdefault(b.item_id, b)
+        all_by_item.setdefault(b.item_id, []).append(b)
     for it in items:
         b = by_item.get(it.id)
         it.latest_batch_no = (b.batch_no if b else "") or ""
         it.latest_expiry_date = (b.expiry_date if b else "") or ""
+        it.available_batches = all_by_item.get(it.id, [])
 _DOSE_ZH = {1: "第1针", 2: "第2针", 3: "第3针", 99: "加强针"}
 
 _COMBO_REG_STATUS_ZH = {
@@ -24055,7 +24105,7 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
     # 库存出库
     if item_id:
         _deduct_inventory(db, item_id, 1.0, "vaccination", vacc.id, admin_name,
-                          note=f"{vacc.vaccine_name or ''} 接种出库")
+                          note=f"{vacc.vaccine_name or ''} 接种出库", batch_no=vacc.batch_no)
 
     # 需要收费 → 自动生成收费单
     # 优先用表单填的 charge_amount；为空才退回到 inventory item 的 sell_price
@@ -24191,7 +24241,8 @@ async def admin_vaccination_delete(vacc_id: int, request: Request, db: Session =
     item_id = getattr(vacc, "inventory_item_id", None)
     if item_id:
         try:
-            _restore_inventory(db, item_id, 1.0, "vaccination", vacc.id, operator, f"删除疫苗#{vacc.id}退回")
+            _restore_inventory(db, item_id, 1.0, "vaccination", vacc.id, operator,
+                               f"删除疫苗#{vacc.id}退回", batch_no=vacc.batch_no)
         except Exception:
             pass
     _audit(db, request, "vaccination_delete", detail={"vaccination_id": vacc_id})
@@ -24217,7 +24268,8 @@ async def admin_vaccination_void(vacc_id: int, request: Request, db: Session = D
     item_id = getattr(vacc, "inventory_item_id", None)
     if item_id:
         try:
-            _restore_inventory(db, item_id, 1.0, "vaccination_void", vacc.id, operator, f"作废疫苗#{vacc.id}回退")
+            _restore_inventory(db, item_id, 1.0, "vaccination_void", vacc.id, operator,
+                               f"作废疫苗#{vacc.id}回退", batch_no=vacc.batch_no)
         except Exception:
             pass
     vacc.status = "voided"
@@ -24266,7 +24318,7 @@ async def admin_vaccination_copy_as_new(vacc_id: int, request: Request, db: Sess
     if src.inventory_item_id:
         try:
             _deduct_inventory(db, src.inventory_item_id, 1.0, "vaccination",
-                              0, operator, f"疫苗（复制自 #{vacc_id}）")
+                              0, operator, f"疫苗（复制自 #{vacc_id}）", batch_no=src.batch_no)
         except Exception:
             pass
     _audit_doc_action(db, "vaccination", 0, "copy_from", operator, extra=f"src={vacc_id}")
@@ -24575,7 +24627,8 @@ async def admin_combo_vaccine_confirm(
     db.add(vacc)
     db.flush()
     _deduct_inventory(db, item.id, 1.0, "vaccination", vacc.id,
-                      request.session.get("admin_username", "admin"), note=f"联苗登记#{reg.id} 接种出库")
+                      request.session.get("admin_username", "admin"),
+                      note=f"联苗登记#{reg.id} 接种出库", batch_no=vacc.batch_no)
     amount = float(charge_amount or 0)
     if amount <= 0:
         from app.services.pricing import effective_sell_price as _eff
@@ -24660,7 +24713,8 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
         if rabies_item and not _has_inventory_out(db, "vaccination", existing_vacc.id):
             existing_vacc.inventory_item_id = rabies_item.id
             _deduct_inventory(db, rabies_item.id, 1.0, "vaccination", existing_vacc.id,
-                              request.session.get("admin_username", ""), note=f"狂犬疫苗登记#{rec_id} 出库")
+                              request.session.get("admin_username", ""),
+                              note=f"狂犬疫苗登记#{rec_id} 出库", batch_no=existing_vacc.batch_no)
     else:
         vacc = Vaccination(
             pet_id            = rec.pet_id,
@@ -24682,7 +24736,8 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
         # 库存出库（有关联库存品目时）
         if rabies_item and not _has_inventory_out(db, "vaccination", vacc.id):
             _deduct_inventory(db, rabies_item.id, 1.0, "vaccination", vacc.id,
-                              request.session.get("admin_username", ""), note=f"狂犬疫苗登记#{rec_id} 出库")
+                              request.session.get("admin_username", ""),
+                              note=f"狂犬疫苗登记#{rec_id} 出库", batch_no=vacc.batch_no)
 
     db.commit()
     return RedirectResponse(f"/admin/rabies/{rec_id}?msg=已保存", status_code=303)
@@ -24725,7 +24780,7 @@ async def admin_rabies_delete(rec_id: int, request: Request, db: Session = Depen
         if item_id:
             try:
                 _restore_inventory(db, item_id, 1.0, "vaccination", vacc.id, operator,
-                                   f"删除狂犬记录#{rec_id}退回")
+                                   f"删除狂犬记录#{rec_id}退回", batch_no=vacc.batch_no)
             except Exception:
                 pass
         db.delete(vacc)
