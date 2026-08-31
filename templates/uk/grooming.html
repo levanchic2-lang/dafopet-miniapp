@@ -436,6 +436,12 @@ function confirmGroomVoid(form, paidAmount) {
         <input type="number" name="charge_amount" step="0.01" min="0" id="charge-input" value="0.00" placeholder="留空 = 用合计"/>
         <span class="hint">留空或 0 = 不收费 · &gt; 0 自动生成收费单</span>
       </div>
+      {% if not is_edit %}
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;">
+        <input type="checkbox" name="is_insurance_service" value="1"/>
+        保险增值服务（收费单进入“保险待结算”）
+      </label>
+      {% endif %}
     </div>
 
     {# 状况记录 #}

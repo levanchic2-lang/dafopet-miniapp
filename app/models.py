@@ -1029,6 +1029,8 @@ class Hospitalization(Base):
     rate_label: Mapped[str] = mapped_column(String(120), default="")
     billing_days: Mapped[float] = mapped_column(Float, default=0.0)
     same_day_waived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 住院收费单可能延后生成，因此保险标记需要先随住院单保存。
+    is_insurance_service: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # admitted / discharged / cancelled
     status: Mapped[str] = mapped_column(String(20), default="admitted")

@@ -791,6 +791,15 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
       })();
       </script>
 
+      {% if not is_edit %}
+      <div class="px-section">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" name="is_insurance_service" value="1"/>
+          保险增值服务（本次病历收费单进入“保险待结算”）
+        </label>
+      </div>
+      {% endif %}
+
       {# 备注 #}
       <div class="px-section px-notes-wrap">
         <label>备&nbsp;注</label>

@@ -1372,6 +1372,7 @@ def _try_sqlite_migrations() -> None:
                 ("rate_label", "VARCHAR(120) DEFAULT ''"),
                 ("billing_days", "REAL DEFAULT 0.0"),
                 ("same_day_waived", "INTEGER DEFAULT 0"),
+                ("is_insurance_service", "INTEGER DEFAULT 0"),
             ):
                 if col_name not in hosp_cols:
                     conn.execute(text(f"ALTER TABLE hospitalizations ADD COLUMN {col_name} {col_sql}"))

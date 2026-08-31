@@ -128,6 +128,12 @@
     <div class="co-cust-wallet">
       钱包余额 <b>¥{{ '%.2f'|format(wallet_balance) }}</b>
     </div>
+    <form method="post" action="/admin/invoices/{{ trigger_invoice_id }}/insurance-service" style="margin-left:16px;" onsubmit="return confirm('{% if trigger_inv.is_insurance_service %}确认取消当前收费单的保险标记？{% else %}确认将当前收费单移入保险待结算？{% endif %}')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="enabled" value="{{ 0 if trigger_inv.is_insurance_service else 1 }}"/>
+      <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{{ _es }}"/>
+      <button type="submit" class="co-merge-btn ghost">{% if trigger_inv.is_insurance_service %}已标记保险 · 取消{% else %}补标保险服务{% endif %}</button>
+    </form>
   </div>
 
   {# ── 合并 / 分开 banner ── #}

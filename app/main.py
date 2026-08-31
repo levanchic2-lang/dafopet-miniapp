@@ -15234,6 +15234,7 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse("/admin/login")
     form = await request.form()
     _require_csrf(request, str(form.get("csrf_token", "")))
+    is_insurance_service = form.get("is_insurance_service") == "1"
     visit_id = int(form.get("visit_id", 0) or 0)
     customer_id = int(form.get("customer_id", 0) or 0)
     pet_id = int(form.get("pet_id", 0) or 0)
@@ -15271,7 +15272,9 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
     db.commit()
     # 自动同步到收费单（草稿）
     if visit_id and presc.status != "draft":
-        _sync_visit_invoice(db, visit_id, operator)
+        inv = _sync_visit_invoice(db, visit_id, operator)
+        if inv and is_insurance_service:
+            inv.is_insurance_service = True
         db.commit()
     # 关联住院 → 自动生成发药任务
     try:
@@ -20752,6 +20755,7 @@ def _sync_hospitalization_invoice(db: Session, h: Hospitalization, admin_name: s
             subtotal=amount,
             total_amount=amount,
             payment_status="unpaid",
+            is_insurance_service=bool(h.is_insurance_service),
             store=h.store or "",
             notes=f"住院单 #{h.id}",
             created_by=admin_name or "auto",
@@ -22267,6 +22271,7 @@ async def admin_cashier_checkout_page(
 
     return templates.TemplateResponse(request, "uk/cashier_checkout.html", {
         "cust": cust,
+        "trigger_inv": trigger_inv,
         "trigger_invoice_id": invoice_id,
         "scope": scope,
         "embed": embed,
@@ -23066,6 +23071,7 @@ async def admin_invoice_set_insurance_service(
     db: Session = Depends(get_db),
     csrf_token: str = Form(""),
     enabled: str = Form("0"),
+    next_url: str = Form(""),
 ):
     """给未结清收费单加/取消保险增值服务标记。"""
     require_admin(request)
@@ -23076,8 +23082,9 @@ async def admin_invoice_set_insurance_service(
     pet = db.get(Pet, inv.pet_id) if inv.pet_id else None
     _assert_store_access(request, inv.store, pet.store if pet else "")
     if inv.payment_status not in ("unpaid", "partial"):
+        fallback = f"/admin/invoices/{inv_id}?msg=只有未结清账单可以调整保险标记"
         return RedirectResponse(
-            f"/admin/invoices/{inv_id}?msg=只有未结清账单可以调整保险标记",
+            _safe_next(next_url, fallback),
             status_code=303,
         )
     inv.is_insurance_service = enabled == "1"
@@ -23089,7 +23096,11 @@ async def admin_invoice_set_insurance_service(
     )
     db.commit()
     msg = "已标记为保险增值服务，账单已移入保险待结算" if inv.is_insurance_service else "已取消保险标记，账单已回到普通待收款"
-    return RedirectResponse(f"/admin/invoices/{inv_id}?msg={_q(msg, safe='')}", status_code=303)
+    fallback = f"/admin/invoices/{inv_id}?msg={_q(msg, safe='')}"
+    target = _safe_next(next_url, fallback)
+    if next_url:
+        target += ("&" if "?" in target else "?") + f"msg={_q(msg, safe='')}"
+    return RedirectResponse(target, status_code=303)
 
 
 @app.post("/admin/invoices/{inv_id}/split")
@@ -28877,6 +28888,7 @@ async def admin_grooming_create(request: Request, db: Session = Depends(get_db))
     services = _parse_grooming_services(form)
     total = round(sum(s["subtotal"] for s in services), 2)
     charge_amount = float(form.get("charge_amount", 0) or 0)
+    is_insurance_service = form.get("is_insurance_service") == "1"
     operator = request.session.get("admin_username", "admin")
     groomer_name = str(form.get("groomer_name", "")).strip()[:80]
     assistant_name = str(form.get("assistant_name", "")).strip()[:80]
@@ -28926,6 +28938,7 @@ async def admin_grooming_create(request: Request, db: Session = Depends(get_db))
             invoice_date=rec.groom_date or datetime.now().strftime("%Y-%m-%d"),
             subtotal=actual_charge, discount_amount=0.0, total_amount=actual_charge,
             payment_status="unpaid",
+            is_insurance_service=is_insurance_service,
             notes=f"美容 #{rec.id}",
             store=_resolve_invoice_store(db, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
             created_by=operator,
@@ -29949,7 +29962,8 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
                                   csrf_token: str = Form(""),
                                   visit_id: int = Form(0), pet_id: int = Form(0),
                                   species: str = Form(""), weight_kg: float = Form(0.0),
-                                  admitted_at: str = Form(""), discharged_at: str = Form("")):
+                                  admitted_at: str = Form(""), discharged_at: str = Form(""),
+                                  is_insurance_service: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     v = db.get(Visit, visit_id) if visit_id else None
@@ -30017,6 +30031,7 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
             _calc_hosp_billable_days(actual_admitted_at, selected_discharge_at, False)
             if selected_discharge_at else 0.0
         ),
+        is_insurance_service=is_insurance_service == "1",
         status="admitted",
         staff_token=_gen_hosp_token(db, "staff_token"),
         owner_token=_gen_hosp_token(db, "owner_token"),
@@ -30036,6 +30051,7 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
         "daily_rate": h.daily_rate_override, "rate_rule_id": rule.id,
         "admitted_at": actual_admitted_at.isoformat(),
         "discharged_at": selected_discharge_at.isoformat() if selected_discharge_at else "",
+        "is_insurance_service": bool(h.is_insurance_service),
     })
     db.commit()
     return RedirectResponse(f"/admin/inpatient/{h.id}?msg=已入院",
@@ -31796,11 +31812,12 @@ async def m_grooming_new(
 
 @app.post("/m/grooming/create")
 async def m_grooming_create(request: Request, db: Session = Depends(get_db)):
-    """手机精简新建：不出收费单，留到桌面端收费。"""
+    """手机精简新建：保存美容单并同步生成待收款收费单。"""
     if not _admin_ok(request):
         raise HTTPException(401)
     form = await request.form()
     _require_csrf(request, str(form.get("csrf_token", "")))
+    is_insurance_service = form.get("is_insurance_service") == "1"
     customer_id = int(form.get("customer_id", 0) or 0)
     pet_id = int(form.get("pet_id", 0) or 0)
     appointment_id = int(form.get("appointment_id", 0) or 0)
@@ -31872,6 +31889,7 @@ async def m_grooming_create(request: Request, db: Session = Depends(get_db)):
             invoice_date=rec.groom_date or datetime.now().strftime("%Y-%m-%d"),
             subtotal=total, discount_amount=0.0, total_amount=total,
             payment_status="unpaid",
+            is_insurance_service=is_insurance_service,
             notes=f"美容 #{rec.id}",
             store=_resolve_invoice_store(db, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
             created_by=operator,

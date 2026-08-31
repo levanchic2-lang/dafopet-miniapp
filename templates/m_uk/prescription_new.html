@@ -218,6 +218,13 @@
     <textarea class="ukm-textarea" name="notes" placeholder="给客户的整体用药提示，可选" style="min-height:64px;">{{ presc.notes if is_edit else '' }}</textarea>
   </div>
 
+  {% if not is_edit %}
+  <div class="ukm-field">
+    <label class="ukm-chip" style="cursor:pointer;"><input type="checkbox" name="is_insurance_service" value="1"/>保&nbsp;险&nbsp;增&nbsp;值&nbsp;服&nbsp;务</label>
+    <div class="hint">本次病历收费单进入保险待结算</div>
+  </div>
+  {% endif %}
+
   <div style="height:80px;"></div>
 
   <div class="rx-bottom-bar">

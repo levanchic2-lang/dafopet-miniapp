@@ -46,6 +46,10 @@
         <label>入住体重 kg<input type="number" name="weight_kg" min="0.01" step="0.01" value="{{ weight_kg if weight_kg > 0 else '' }}" required/></label>
       </div>
       {% else %}<input type="hidden" name="species" value="{{ species }}"/><input type="hidden" name="weight_kg" value="{{ weight_kg }}"/>{% endif %}
+      <label style="display:flex;align-items:center;gap:8px;margin:4px 0 14px;cursor:pointer;font-size:10pt;">
+        <input type="checkbox" name="is_insurance_service" value="1"/>
+        保险增值服务（收费单生成后进入“保险待结算”）
+      </label>
       <button class="in-btn" type="submit" style="width:100%" {% if existing %}disabled{% endif %}>办理入住</button>
     </form>
     <div class="in-note">填写出院时间后，系统会立即按入住至出院的过夜天数生成收费单，住院状态仍保持“住院中”，可以提前向主人收款。</div>
