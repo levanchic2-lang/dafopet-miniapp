@@ -310,6 +310,7 @@
       {% if inv.payment_status == 'paid' %}<span class="status paid">已收款</span>
       {% elif inv.payment_status == 'cancelled' %}<span class="status cancelled">已取消</span>
       {% elif inv.payment_status == 'refunded' %}<span class="status refunded">已退款</span>
+      {% elif inv.is_insurance_service %}<span class="status unpaid">保险待结算</span>
       {% else %}<span class="status unpaid">待收款</span>{% endif %}
       <span class="sub">
         {{ inv.invoice_date or ((inv.created_at | bjtime).strftime('%Y-%m-%d') if inv.created_at else '—') }}
@@ -319,6 +320,13 @@
     </h1>
   </div>
   <div class="actions">
+    {% if inv.payment_status in ('unpaid', 'partial') %}
+    <form method="post" action="/admin/invoices/{{ inv.id }}/insurance-service" onsubmit="return confirm('{% if inv.is_insurance_service %}取消保险标记后，此单会回到普通待收款，确认继续？{% else %}确认将此单移入保险待结算？{% endif %}')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="enabled" value="{{ 0 if inv.is_insurance_service else 1 }}"/>
+      <button type="submit" class="uk-btn ghost sm">{% if inv.is_insurance_service %}取消保险标记{% else %}标记为保险服务{% endif %}</button>
+    </form>
+    {% endif %}
     <a href="/admin/invoices/{{ inv.id }}/print" target="_blank" class="uk-btn ghost sm">打印票据</a>
     {% if same_pet_day_invs %}
     <a href="/admin/invoices/combined-print?ids={{ inv.id }}{% for r in same_pet_day_invs %},{{ r.id }}{% endfor %}" target="_blank" class="uk-btn ghost sm">合并打印 ({{ same_pet_day_invs|length + 1 }}张)</a>
@@ -331,6 +339,12 @@
 <div class="iv-grid">
   {# ─── 主区 ─── #}
   <div>
+
+    {% if inv.is_insurance_service and inv.payment_status in ('unpaid', 'partial') %}
+    <div style="margin-bottom:16px;padding:12px 16px;border-left:3px solid var(--accent-amber);background:#fef9f0;font-family:var(--font-serif);color:var(--ink-2);line-height:1.8;">
+      <b style="color:var(--ink);letter-spacing:1px;">保险增值服务</b> · 已单独列入“保险待结算”。保险平台款项到账后，按实际到账金额使用下方现有方式收款即可。
+    </div>
+    {% endif %}
 
     {# 明细 #}
     <div class="iv-section">

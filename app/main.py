@@ -21922,6 +21922,11 @@ async def admin_invoices_list(
     _internal_ids_sub = db.query(Customer.id).filter(Customer.is_internal == True).subquery()
     _internal_invoice_filter = Invoice.customer_id.in_(_internal_ids_sub)
     _regular_invoice_filter = or_(Invoice.customer_id.is_(None), ~Invoice.customer_id.in_(_internal_ids_sub))
+    _insurance_invoice_filter = Invoice.is_insurance_service == True
+    _non_insurance_invoice_filter = or_(
+        Invoice.is_insurance_service == False,
+        Invoice.is_insurance_service.is_(None),
+    )
 
     query = db.query(Invoice).order_by(Invoice.id.desc())
     if wb_store:
@@ -21932,11 +21937,18 @@ async def admin_invoices_list(
             query = query.filter(
                 Invoice.payment_status.in_(("unpaid", "partial")),
                 _regular_invoice_filter,
+                _non_insurance_invoice_filter,
+            )
+        elif status == "insurance_unpaid":
+            query = query.filter(
+                Invoice.payment_status.in_(("unpaid", "partial")),
+                _insurance_invoice_filter,
             )
         elif status == "internal_unpaid":
             query = query.filter(
                 Invoice.payment_status.in_(("unpaid", "partial")),
                 _internal_invoice_filter,
+                _non_insurance_invoice_filter,
             )
         else:
             query = query.filter(Invoice.payment_status == status)
@@ -21964,8 +21976,21 @@ async def admin_invoices_list(
         Invoice.payment_status == "paid",
         func.date(Invoice.paid_at, '+8 hours') == today_str,
     ).all()
-    unpaid_all = _stat_q().filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
-    internal_unpaid_all = _internal_stat_q().filter(Invoice.payment_status.in_(("unpaid", "partial"))).all()
+    unpaid_all = _stat_q().filter(
+        Invoice.payment_status.in_(("unpaid", "partial")),
+        _non_insurance_invoice_filter,
+    ).all()
+    internal_unpaid_all = _internal_stat_q().filter(
+        Invoice.payment_status.in_(("unpaid", "partial")),
+        _non_insurance_invoice_filter,
+    ).all()
+    insurance_q = db.query(Invoice).filter(
+        Invoice.payment_status.in_(("unpaid", "partial")),
+        _insurance_invoice_filter,
+    )
+    if wb_store:
+        insurance_q = insurance_q.filter(Invoice.store == wb_store)
+    insurance_unpaid_all = insurance_q.all()
     inv_stats = {
         "today_paid_total": round(sum((i.total_amount or 0) for i in today_paid_sum), 2),
         "today_paid_count": len(today_paid_sum),
@@ -21973,6 +21998,8 @@ async def admin_invoices_list(
         "unpaid_total": round(sum((i.total_amount or 0) for i in unpaid_all), 2),
         "internal_unpaid_count": len(internal_unpaid_all),
         "internal_unpaid_total": round(sum((i.total_amount or 0) for i in internal_unpaid_all), 2),
+        "insurance_unpaid_count": len(insurance_unpaid_all),
+        "insurance_unpaid_total": round(sum((i.total_amount or 0) for i in insurance_unpaid_all), 2),
     }
     # 同客户同宠物多张未付发票聚合（用于顶部合并结算入口）
     multi_pay_groups = []
@@ -21981,6 +22008,7 @@ async def admin_invoices_list(
             Invoice.payment_status.in_(("unpaid", "partial")),
             Invoice.customer_id.is_not(None),
             _regular_invoice_filter,
+            _non_insurance_invoice_filter,
         )
         if wb_store:
             _unpaid_q = _unpaid_q.filter(Invoice.store == wb_store)
@@ -22137,6 +22165,13 @@ async def admin_cashier_checkout_page(
         Invoice.customer_id == cust.id,
         Invoice.payment_status.in_(("unpaid", "partial")),
     )
+    if trigger_inv.is_insurance_service:
+        base_q = base_q.filter(Invoice.is_insurance_service == True)
+    else:
+        base_q = base_q.filter(or_(
+            Invoice.is_insurance_service == False,
+            Invoice.is_insurance_service.is_(None),
+        ))
     if admin_store:
         base_q = base_q.filter(Invoice.store == admin_store)
     all_pending = base_q.order_by(Invoice.id.asc()).all()
@@ -22409,6 +22444,12 @@ async def admin_cashier_multi_pay_submit(
             f"/admin/cashier/multi-pay?{_mp_qs}&msg=勾选的单都无未收金额",
             status_code=303,
         )
+    if len({bool(r["inv"].is_insurance_service) for r in inv_rows}) > 1:
+        _back = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+        return RedirectResponse(
+            f"{_back}&msg=保险待结算与普通待收款不能合并，请分别结算",
+            status_code=303,
+        )
     grand_out = sum(r["out"] for r in inv_rows)
     if disc_mode == "pct":
         total_discount = round(grand_out * (1.0 - disc_value), 2)
@@ -22636,6 +22677,7 @@ async def admin_invoice_create(
     invoice_date = str(form.get("invoice_date") or date.today().isoformat())
     discount     = float(form.get("discount_amount") or 0)
     notes        = str(form.get("notes") or "")
+    is_insurance_service = form.get("is_insurance_service") == "1"
     admin_name   = request.session.get("admin_username", "")
 
     # 明细行
@@ -22676,6 +22718,7 @@ async def admin_invoice_create(
         total_amount    = total,
         payment_status  = "unpaid",
         notes           = notes,
+        is_insurance_service = is_insurance_service,
         store           = _resolve_invoice_store(db, visit_id=visit_id, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
         created_by      = admin_name,
     )
@@ -22903,10 +22946,16 @@ async def admin_invoice_detail(
 
 def _other_unpaid_for_invoice(db: Session, current_inv: Invoice) -> list:
     """同客户其他未结清的发票（unpaid + partial），按 id 升序。返回 [{inv, outstanding, items_preview}]"""
+    insurance_filter = (
+        Invoice.is_insurance_service == True
+        if current_inv.is_insurance_service
+        else or_(Invoice.is_insurance_service == False, Invoice.is_insurance_service.is_(None))
+    )
     rows = db.query(Invoice).filter(
         Invoice.customer_id == current_inv.customer_id,
         Invoice.id != current_inv.id,
         Invoice.payment_status.in_(("unpaid", "partial")),
+        insurance_filter,
     ).order_by(Invoice.id.asc()).all()
     out = []
     for r in rows:
@@ -23010,6 +23059,39 @@ def _invoice_recompute_status(db: Session, inv: Invoice) -> None:
     _sync_sales_order_statuses_for_invoice(db, inv.id)
 
 
+@app.post("/admin/invoices/{inv_id}/insurance-service")
+async def admin_invoice_set_insurance_service(
+    inv_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    enabled: str = Form("0"),
+):
+    """给未结清收费单加/取消保险增值服务标记。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    inv = db.get(Invoice, inv_id)
+    if not inv:
+        raise HTTPException(404, "收费单不存在")
+    pet = db.get(Pet, inv.pet_id) if inv.pet_id else None
+    _assert_store_access(request, inv.store, pet.store if pet else "")
+    if inv.payment_status not in ("unpaid", "partial"):
+        return RedirectResponse(
+            f"/admin/invoices/{inv_id}?msg=只有未结清账单可以调整保险标记",
+            status_code=303,
+        )
+    inv.is_insurance_service = enabled == "1"
+    _audit(
+        db,
+        request,
+        "invoice_insurance_service_toggle",
+        detail={"invoice_id": inv.id, "enabled": bool(inv.is_insurance_service)},
+    )
+    db.commit()
+    msg = "已标记为保险增值服务，账单已移入保险待结算" if inv.is_insurance_service else "已取消保险标记，账单已回到普通待收款"
+    return RedirectResponse(f"/admin/invoices/{inv_id}?msg={_q(msg, safe='')}", status_code=303)
+
+
 @app.post("/admin/invoices/{inv_id}/split")
 async def admin_invoice_split(
     inv_id: int,
@@ -23046,6 +23128,7 @@ async def admin_invoice_split(
         invoice_no=_gen_invoice_no(db),
         customer_id=inv.customer_id, pet_id=inv.pet_id, visit_id=inv.visit_id,
         invoice_date=inv.invoice_date, store=inv.store,
+        is_insurance_service=bool(inv.is_insurance_service),
         created_by=request.session.get("admin_username", "admin"),
         payment_status="unpaid",
     )
@@ -23132,6 +23215,8 @@ async def admin_invoice_add_payment(
             if not e or e.customer_id != inv.customer_id:
                 continue
             if e.payment_status == "paid":
+                continue
+            if bool(e.is_insurance_service) != bool(inv.is_insurance_service):
                 continue
             target_invs.append(e)
 
@@ -24139,6 +24224,7 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
     customer_id = int(form.get("customer_id") or 0) or None
     item_id     = int(form.get("inventory_item_id") or 0) or None
     is_free     = form.get("is_free") == "1"
+    is_insurance_service = form.get("is_insurance_service") == "1"
     admin_name  = request.session.get("admin_username", "")
 
     vacc = Vaccination(
@@ -24188,6 +24274,7 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
             discount_amount = 0.0,
             total_amount    = charge_amount,
             payment_status  = "unpaid",
+            is_insurance_service = is_insurance_service,
             notes           = f"疫苗接种 #{vacc.id}",
             store           = _resolve_invoice_store(db, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
             created_by      = admin_name,
@@ -24653,7 +24740,7 @@ async def admin_combo_vaccine_confirm(
     reg_id: int, request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""), inventory_item_id: int = Form(...),
     vet_name: str = Form(""), batch_no: str = Form(""), vaccinated_date: str = Form(""),
-    charge_amount: float = Form(0.0),
+    charge_amount: float = Form(0.0), is_insurance_service: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -24694,7 +24781,8 @@ async def admin_combo_vaccine_confirm(
         inv = Invoice(
             invoice_no=_gen_invoice_no(db), customer_id=reg.customer_id, pet_id=reg.pet_id,
             invoice_date=actual_date, subtotal=amount, discount_amount=0, total_amount=amount,
-            payment_status="unpaid", notes=f"联苗接种 #{vacc.id}",
+            payment_status="unpaid", is_insurance_service=is_insurance_service == "1",
+            notes=f"联苗接种 #{vacc.id}",
             store=reg.clinic_store or _get_op_store(request),
             created_by=request.session.get("admin_username", "admin"),
         )
@@ -25141,7 +25229,9 @@ async def admin_exam_order_create(request: Request, db: Session = Depends(get_db
     db.refresh(order)
     # 同步收费单
     if order.visit_id:
-        _sync_visit_invoice(db, order.visit_id, request.session.get("admin_username", ""))
+        inv = _sync_visit_invoice(db, order.visit_id, request.session.get("admin_username", ""))
+        if inv and form.get("is_insurance_service") == "1":
+            inv.is_insurance_service = True
         db.commit()
     # M6 移动端 next_url（{id} 占位 = 新建检查单 id）
     next_url_raw = str(form.get("next_url") or "")
@@ -28499,6 +28589,7 @@ async def admin_deworming_create(
     inventory_item_id: int = Form(0),
     batch_no: str = Form(""),
     charge_amount: float = Form(0.0),
+    is_insurance_service: str = Form(""),
     qty: float = Form(1.0),
     next_url: str = Form(""),
 ):
@@ -28547,6 +28638,7 @@ async def admin_deworming_create(
             discount_amount = 0.0,
             total_amount    = charge_amount,
             payment_status  = "unpaid",
+            is_insurance_service = is_insurance_service == "1",
             notes           = f"驱虫 #{rec.id}",
             store           = _resolve_invoice_store(db, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)),
             created_by      = admin_name,

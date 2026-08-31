@@ -12,7 +12,7 @@
   .iv-head h1 .sub { display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px; }
   .iv-msg-ok { border:0; border-left:3px solid var(--accent-green); background:#f5f9f6; padding:10px 16px; margin-bottom:18px; font-family:var(--font-serif); font-size:10pt; color:var(--ink-2); }
 
-  .iv-stats { display:grid; grid-template-columns:repeat(2,1fr); gap:0; border:0.5px solid var(--hair-2); margin-bottom:20px; }
+  .iv-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:0; border:0.5px solid var(--hair-2); margin-bottom:20px; }
   .iv-stat { padding:18px 22px; border-right:0.5px solid var(--hair); }
   .iv-stat:last-child { border-right:0; }
   .iv-stat .lab { font-family:var(--font-serif); font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); font-style:italic; margin-bottom:6px; }
@@ -79,6 +79,11 @@
     <div class="num">¥ {{ '%.2f'|format(inv_stats.unpaid_total) }}</div>
     <div class="sub">{{ inv_stats.unpaid_count }} 单</div>
   </div>
+  <div class="iv-stat">
+    <div class="lab">保&nbsp;险&nbsp;待&nbsp;结&nbsp;算</div>
+    <div class="num">¥ {{ '%.2f'|format(inv_stats.insurance_unpaid_total) }}</div>
+    <div class="sub">{{ inv_stats.insurance_unpaid_count }} 单 · 到账后正常收款</div>
+  </div>
 </div>
 {% endif %}
 
@@ -114,9 +119,9 @@
 </div>
 
 <div class="iv-tabs">
-  {% for val, label in [('','全部'),('unpaid','待收款'),('internal_unpaid','员工内购待付款'),('paid','已收款'),('cancelled','已取消')] %}
+  {% for val, label in [('','全部'),('unpaid','待收款'),('insurance_unpaid','保险待结算'),('internal_unpaid','员工内购待付款'),('paid','已收款'),('cancelled','已取消')] %}
   <a href="/admin/invoices?status={{ val }}&store={{ wb_store }}{% if q %}&q={{ q }}{% endif %}" class="iv-tab {% if status == val %}active{% endif %}">
-    {{ label }}{% if val == 'internal_unpaid' and inv_stats.internal_unpaid_count %}<span style="font-family:var(--font-numeric);font-size:9pt;margin-left:5px;color:var(--accent-red);">{{ inv_stats.internal_unpaid_count }}</span>{% endif %}
+    {{ label }}{% if val == 'insurance_unpaid' and inv_stats.insurance_unpaid_count %}<span style="font-family:var(--font-numeric);font-size:9pt;margin-left:5px;color:var(--accent-amber);">{{ inv_stats.insurance_unpaid_count }}</span>{% elif val == 'internal_unpaid' and inv_stats.internal_unpaid_count %}<span style="font-family:var(--font-numeric);font-size:9pt;margin-left:5px;color:var(--accent-red);">{{ inv_stats.internal_unpaid_count }}</span>{% endif %}
   </a>
   {% endfor %}
 </div>
@@ -295,6 +300,7 @@ function toggleSettle(idx) {
         {% if inv.payment_status == 'paid' %}<span class="iv-pill ok">已收款</span>
         {% elif inv.payment_status == 'cancelled' %}<span class="iv-pill gray">已取消</span>
         {% elif inv.payment_status == 'refunded' %}<span class="iv-pill err">已退款</span>
+        {% elif inv.is_insurance_service and inv.payment_status in ('unpaid', 'partial') %}<span class="iv-pill warn">保险待结算</span>
         {% elif cust and cust.is_internal and inv.payment_status in ('unpaid', 'partial') %}<span class="iv-pill err">内购待付</span>
         {% elif inv.payment_status == 'partial' %}<span class="iv-pill warn">部分收款</span>
         {% else %}<span class="iv-pill warn">待收款</span>{% endif %}
@@ -314,6 +320,7 @@ function toggleSettle(idx) {
 {% else %}
 <div class="iv-empty">
   {% if status == 'unpaid' %}暂无待收款账单
+  {% elif status == 'insurance_unpaid' %}暂无保险待结算账单
   {% elif status == 'internal_unpaid' %}暂无员工内购待付款账单
   {% elif status == 'paid' %}暂无已收款账单
   {% elif status == 'cancelled' %}暂无已取消账单

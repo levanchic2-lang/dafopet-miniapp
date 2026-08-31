@@ -935,6 +935,7 @@ def _try_sqlite_migrations() -> None:
                 "payment_method VARCHAR(40) DEFAULT '', "
                 "paid_at DATETIME, "
                 "notes TEXT DEFAULT '', "
+                "is_insurance_service BOOLEAN DEFAULT 0, "
                 "created_by VARCHAR(80) DEFAULT '', "
                 "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
                 "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
@@ -953,14 +954,17 @@ def _try_sqlite_migrations() -> None:
                 ")"
             ))
 
-            # invoices: 补 store 列 + 索引；历史数据通过 visit.clinic_store / pet.store 回填
+            # invoices: 补门店和保险增值服务标记；历史数据通过 pet.store 回填门店
             # 独立 try：即使外层早期迁移有冷不丁的失败也要把这步跑掉
             try:
                 inv_cols = conn.execute(text("PRAGMA table_info(invoices)")).fetchall()
                 inv_col_names = {c[1] for c in inv_cols} if inv_cols else set()
                 if inv_cols and "store" not in inv_col_names:
                     conn.execute(text("ALTER TABLE invoices ADD COLUMN store VARCHAR(40) DEFAULT ''"))
-                    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_invoices_store ON invoices(store)"))
+                if inv_cols and "is_insurance_service" not in inv_col_names:
+                    conn.execute(text("ALTER TABLE invoices ADD COLUMN is_insurance_service BOOLEAN DEFAULT 0"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_invoices_store ON invoices(store)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_invoices_insurance_service ON invoices(is_insurance_service)"))
                 # 不管列是新加的还是早就存在的，凡是空 store 都按 pet.store 回填
                 # （visits 表没有 clinic_store 列，store 信息只有 Pet 有）
                 conn.execute(text(
@@ -978,7 +982,7 @@ def _try_sqlite_migrations() -> None:
                 ))
                 conn.commit()
             except Exception as _e:
-                print(f"[migrations] invoices.store skipped: {_e}")
+                print(f"[migrations] invoices columns skipped: {_e}")
 
             # vaccinations 疫苗接种记录
             conn.execute(text(

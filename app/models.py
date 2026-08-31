@@ -631,6 +631,7 @@ class Invoice(Base):
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
     notes: Mapped[str] = mapped_column(Text, default="")
     store: Mapped[str] = mapped_column(String(40), default="", index=True)  # 门店短名（东环店/横岗店）
+    is_insurance_service: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

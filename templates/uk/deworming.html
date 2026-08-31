@@ -351,6 +351,7 @@ function confirmDewVoid(form, paidAmount) {
         <label>收&nbsp;费&nbsp;金&nbsp;额 ¥</label>
         <input type="number" name="charge_amount" step="0.01" min="0" id="charge-input" value="{{ '%.2f'|format(rec_charge_amount) if rec_charge_amount else '0.00' }}" placeholder="0 = 不收费" class="dw-input" style="max-width:200px;"/>
         <div class="dw-input-hint">&gt; 0 自动生成收费单进收银台 · 体重在体重 tab 单独录入</div>
+        {% if not is_edit %}<label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;"><input type="checkbox" name="is_insurance_service" value="1"/>保险增值服务（收费单进入“保险待结算”）</label>{% endif %}
       </div>
     </div>
 

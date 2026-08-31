@@ -421,6 +421,10 @@ function confirmVaccVoid(form, paidAmount) {
         <input name="charge_amount" id="charge-amount" type="number" step="0.01" min="0" placeholder="0.00" value=""/>
         <span class="meta">关联库存时自动带出售价 · 可手动改</span>
       </div>
+      <label class="free-check" style="margin-top:10px;">
+        <input type="checkbox" name="is_insurance_service" value="1"/>
+        <span>保险增值服务（收费单进入“保险待结算”）</span>
+      </label>
       <div class="vac-charge-hint">
         不勾「免费」+ 金额 &gt; 0 时，保存会自动生成收费单进入收银台待收款<br/>
         关联库存时还会自动出库 1 单位 · 不关联只产生收费单
