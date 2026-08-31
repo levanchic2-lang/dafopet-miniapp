@@ -29616,6 +29616,37 @@ def _hosp_species(value: str) -> str:
     return ""
 
 
+def _auto_close_due_hospitalizations(db: Session, store_values: list[str] | None = None) -> int:
+    """Close admissions whose chosen discharge time has already passed."""
+    now = datetime.utcnow()
+    query = db.query(Hospitalization).filter(
+        Hospitalization.status == "admitted",
+        Hospitalization.discharged_at != None,
+        Hospitalization.discharged_at <= now,
+    )
+    stores = [s for s in (store_values or []) if s]
+    if stores:
+        query = query.filter(Hospitalization.store.in_(stores))
+    rows = query.all()
+    for h in rows:
+        h.status = "discharged"
+        h.closed_by = h.closed_by or "system"
+        if (h.billing_mode or "legacy") == "weight":
+            h.billing_days = _calc_hosp_billable_days(
+                h.admitted_at, h.discharged_at, bool(h.same_day_waived)
+            )
+            inv = _sync_hospitalization_invoice(db, h, "system")
+            if inv:
+                h.invoice_id = inv.id
+        elif h.visit_id:
+            inv = _sync_visit_invoice(db, h.visit_id, "system")
+            if inv:
+                h.invoice_id = inv.id
+    if rows:
+        db.flush()
+    return len(rows)
+
+
 def _latest_pet_weight(db: Session, pet_id: int) -> float:
     row = db.query(WeightRecord).filter(
         WeightRecord.pet_id == pet_id,
@@ -29940,6 +29971,8 @@ async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_d
     if pet:
         _assert_store_access(request, pet.store or "")
     store_short = _get_op_store(request) or (pet.store if pet else "") or ""
+    if resolved_pet_id and _auto_close_due_hospitalizations(db, [store_short]):
+        db.commit()
     species = _hosp_species(pet.species if pet else "")
     weight_kg = _latest_pet_weight(db, pet.id) if pet else 0.0
     matched_rule = _match_hosp_rate(db, store_short, species, weight_kg)
@@ -29974,6 +30007,9 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
     if not pet:
         return RedirectResponse("/admin/inpatient/new?err=请先选择宠物", status_code=303)
     _assert_store_access(request, pet.store or "")
+    store_short = _get_op_store(request) or (pet.store or "")
+    if _auto_close_due_hospitalizations(db, [store_short]):
+        db.commit()
     # 已有"住院中"档案 → 跳到那张
     existing = db.query(Hospitalization).filter(
         Hospitalization.pet_id == pet.id,
@@ -29982,7 +30018,6 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
     if existing:
         return RedirectResponse(f"/admin/inpatient/{existing.id}?msg=该宠物已有住院中档案",
                                  status_code=303)
-    store_short = _get_op_store(request) or (pet.store or "")
     normalized_species = _hosp_species(species or pet.species)
     resolved_weight = float(weight_kg or 0) or _latest_pet_weight(db, pet.id)
     new_url = f"/admin/inpatient/new?pet_id={pet.id}"
@@ -30257,6 +30292,13 @@ async def admin_inpatient_board(request: Request, db: Session = Depends(get_db),
         wb_store = (store or "").strip()
     else:
         wb_store = admin_store
+    store_values = [wb_store]
+    if wb_store in _STORE_SHORT_TO_FULL:
+        store_values.append(_STORE_SHORT_TO_FULL[wb_store])
+    if wb_store in _STORE_FULL_TO_SHORT:
+        store_values.append(_STORE_FULL_TO_SHORT[wb_store])
+    if _auto_close_due_hospitalizations(db, store_values):
+        db.commit()
     query = db.query(Hospitalization)
     if status in ("admitted", "discharged", "cancelled"):
         query = query.filter(Hospitalization.status == status)
@@ -30294,6 +30336,9 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
     h = db.get(Hospitalization, hosp_id)
     if not h:
         raise HTTPException(404)
+    if _auto_close_due_hospitalizations(db, [h.store or ""]):
+        db.commit()
+        h = db.get(Hospitalization, hosp_id)
     cust = db.get(Customer, h.customer_id) if h.customer_id else None
     pet = db.get(Pet, h.pet_id) if h.pet_id else None
     _assert_store_access(request, h.store, pet.store if pet else "")
@@ -31414,6 +31459,9 @@ async def m_inpatient_list(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse("/admin/login?next=/m/inpatient", status_code=303)
     store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
+    store_values = [store_short, store_full] if store_short else []
+    if _auto_close_due_hospitalizations(db, store_values):
+        db.commit()
     q = db.query(Hospitalization).filter(Hospitalization.status == "admitted")
     q = _m_store_filters_hosp(q, store_short, store_full)
     hosps = q.order_by(Hospitalization.admitted_at.desc()).all()
@@ -31441,6 +31489,9 @@ async def m_inpatient_detail(hosp_id: int, request: Request, db: Session = Depen
     h = db.get(Hospitalization, hosp_id)
     if not h:
         raise HTTPException(404)
+    if _auto_close_due_hospitalizations(db, [h.store or ""]):
+        db.commit()
+        h = db.get(Hospitalization, hosp_id)
     # 门店校验
     store_short = _get_admin_store(request)
     if store_short:
