@@ -36,6 +36,44 @@
 }
 .preflight-link::after { border: 0; }
 
+.fee-notice-card {
+  margin-top: 20rpx;
+  padding: 24rpx;
+  border: 2rpx solid #7a2828;
+  border-left-width: 8rpx;
+  border-radius: 4rpx;
+  background: #fff7ed;
+}
+.fee-notice-title {
+  color: #7a2828;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+.fee-notice-sub {
+  margin-top: 8rpx;
+  color: #6b4423;
+  font-size: 24rpx;
+  line-height: 1.65;
+}
+.fee-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-top: 14rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid #e4c9aa;
+  color: #171717;
+  font-size: 27rpx;
+  font-weight: 700;
+}
+.fee-amount {
+  flex-shrink: 0;
+  color: #7a2828;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
 /* 上传区 */
 .upload-row { display: flex; align-items: center; gap: 20rpx; margin-top: 12rpx; }
 .upload-count { font-size: 24rpx; font-weight: 600; }

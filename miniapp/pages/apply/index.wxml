@@ -17,6 +17,23 @@
     <button class="preflight-link" bindtap="goTnrGuide">查看完整申请流程 ›</button>
   </view>
 
+  <view class="fee-notice-card">
+    <view class="fee-notice-title">费用说明</view>
+    <view class="fee-notice-sub">本院流浪猫 TNR 绝育基础手术免费。如术中或术后出现以下特殊情况，将按实际处理项目另行收费，请申请人提前知悉。</view>
+    <view class="fee-row">
+      <text>流浪猫引产</text>
+      <text class="fee-amount">+ ¥200</text>
+    </view>
+    <view class="fee-row">
+      <text>隐睾手术</text>
+      <text class="fee-amount">+ ¥200</text>
+    </view>
+    <view class="fee-row">
+      <text>流浪猫住院</text>
+      <text class="fee-amount">¥30 / 天</text>
+    </view>
+  </view>
+
   <view class="label">申请人姓名</view>
   <input class="input input-lg" value="{{form.applicant_name}}" data-k="applicant_name" bindinput="onInput" />
 
