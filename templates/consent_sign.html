@@ -102,7 +102,10 @@
          发送验证码
        </button>
      </div>
-     <div id="verify-alert" style="color:#dc2626;font-size:.9rem;margin-top:.6rem;min-height:1.2em;"></div>
+    <div id="verify-alert" style="color:#dc2626;font-size:.9rem;margin-top:.6rem;min-height:1.2em;"></div>
+    <div id="verify-help" style="display:none;color:#6b7280;font-size:.82rem;margin:.35rem auto 0;max-width:340px;line-height:1.55;">
+      若多次获取失败，请联系医院工作人员重新发起签署或现场协助处理。
+    </div>
      <button type="button" onclick="verifyCode()"
              style="margin-top:.8rem;width:100%;max-width:340px;background:#111;color:#fff;
                     border:none;padding:.85rem 1rem;font-size:1rem;border-radius:10px;
@@ -196,7 +199,9 @@ var _smsCountdown = 0;
 window.sendCode = async function () {
   if (_smsCountdown > 0) return;
   var alertBox = document.getElementById('verify-alert');
+  var helpBox = document.getElementById('verify-help');
   alertBox.textContent = '';
+  if (helpBox) helpBox.style.display = 'none';
   var btn = document.getElementById('send-code-btn');
   btn.disabled = true;
   try {
@@ -212,10 +217,12 @@ window.sendCode = async function () {
       btn.textContent = _smsCountdown + ' 秒';
     } else {
       alertBox.textContent = d.error || '发送失败';
+      if (helpBox) helpBox.style.display = '';
       btn.disabled = false;
     }
   } catch (e) {
     alertBox.textContent = '网络错误，请重试';
+    if (helpBox) helpBox.style.display = '';
     btn.disabled = false;
   }
 };

@@ -10251,6 +10251,8 @@ _CONSENT_CODES: dict[str, tuple[str, float]] = {}  # {token: (code, expires_ts)}
 _CONSENT_CODE_TTL = 300       # 5 分钟
 _CONSENT_SEND_THROTTLE = 60   # 同 token 60 秒内不可重发
 _CONSENT_LAST_SENT: dict[str, float] = {}
+_CONSENT_PHONE_DAILY_SENT: dict[str, tuple[str, int]] = {}  # {phone_digits: (yyyy-mm-dd, sent_count)}
+_CONSENT_PHONE_DAILY_LIMIT = 5
 
 
 def _consent_sms_enabled() -> bool:
@@ -10264,6 +10266,43 @@ def _consent_sms_enabled() -> bool:
 def _consent_skips_identity_check(task: ConsentTask) -> bool:
     """到院疫苗预登记允许代办人直接签署，不要求短信或手机号验证。"""
     return "[vaccine_no_verify]" in (task.notes or "")
+
+
+def _consent_sms_public_error(err: str | None) -> str:
+    raw = (err or "").strip()
+    if not raw:
+        return "短信发送失败，请稍后再试；如仍失败，请联系医院工作人员处理。"
+    lowered = raw.lower()
+    if "phonenumberdailylimit" in lowered or "daily limit" in lowered:
+        return "该手机号今天接收验证码次数已达上限，请明天再试，或联系医院工作人员重新发起/现场协助签署。"
+    if "limitexceeded" in lowered or "frequency" in lowered or "频率" in raw:
+        return "验证码发送过于频繁，请稍后再试。"
+    if "isv" in lowered or "sdk" in lowered or "未配置" in raw:
+        return "短信服务暂时不可用，请联系医院工作人员处理。"
+    return "短信发送失败，请稍后再试；如仍失败，请联系医院工作人员处理。"
+
+
+def _consent_phone_daily_key(phone: str) -> str:
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    if digits.startswith("86") and len(digits) > 11:
+        digits = digits[2:]
+    return digits[-11:] if len(digits) >= 11 else digits
+
+
+def _consent_phone_daily_sent_count(phone: str) -> int:
+    key = _consent_phone_daily_key(phone)
+    today = date.today().isoformat()
+    day, count = _CONSENT_PHONE_DAILY_SENT.get(key, ("", 0))
+    return count if day == today else 0
+
+
+def _consent_remember_phone_sent(phone: str) -> None:
+    key = _consent_phone_daily_key(phone)
+    if not key:
+        return
+    today = date.today().isoformat()
+    day, count = _CONSENT_PHONE_DAILY_SENT.get(key, ("", 0))
+    _CONSENT_PHONE_DAILY_SENT[key] = (today, count + 1 if day == today else 1)
 
 
 @app.get("/consent/{token}", response_class=HTMLResponse)
@@ -10325,8 +10364,12 @@ async def consent_send_code(
     if now - last < _CONSENT_SEND_THROTTLE:
         wait = int(_CONSENT_SEND_THROTTLE - (now - last))
         return {"ok": False, "error": f"请 {wait} 秒后再获取"}
+    if _consent_phone_daily_sent_count(cust.phone) >= _CONSENT_PHONE_DAILY_LIMIT:
+        return {
+            "ok": False,
+            "error": "该手机号今天获取验证码次数较多，请明天再试，或联系医院工作人员重新发起/现场协助签署。",
+        }
     code = "".join(_s.choice("0123456789") for _ in range(6))
-    _CONSENT_CODES[token] = (code, now + _CONSENT_CODE_TTL)
     _CONSENT_LAST_SENT[token] = now
     # 发短信
     sent = False
@@ -10344,7 +10387,9 @@ async def consent_send_code(
                        phone=cust.phone,
                        note=f"sent={sent} err={err or ''}")
     if not sent:
-        return {"ok": False, "error": f"短信发送失败：{err or '未知错误'}"}
+        return {"ok": False, "error": _consent_sms_public_error(err)}
+    _CONSENT_CODES[token] = (code, now + _CONSENT_CODE_TTL)
+    _consent_remember_phone_sent(cust.phone)
     return {"ok": True, "phone_masked": _phone_mask(cust.phone)}
 
 
