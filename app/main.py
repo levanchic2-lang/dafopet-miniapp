@@ -14779,8 +14779,21 @@ def _apply_internal_pricing(db: Session, items: list[dict], customer_id: int) ->
         cost = float(inv.cost_price or 0)
         # 数量字段在 prescription_items=quantity_num，sales_items=quantity，exam_items=qty
         qty = float(it.get("quantity_num") or it.get("quantity") or it.get("qty") or 1)
-        it["unit_price"] = cost
-        it["subtotal"] = round(qty * cost, 2)
+        if getattr(inv, "single_use_pack", False):
+            import math as _math
+            try:
+                ratio = float(inv.unit2_ratio or 1.0)
+            except (TypeError, ValueError):
+                ratio = 1.0
+            if ratio <= 0:
+                ratio = 1.0
+            packs = _math.ceil((qty - 1e-9) / ratio) if qty > 0 else 0
+            subtotal = round(packs * cost, 2)
+            it["unit_price"] = round(subtotal / qty, 6) if qty > 0 else cost
+            it["subtotal"] = subtotal
+        else:
+            it["unit_price"] = cost
+            it["subtotal"] = round(qty * cost, 2)
     return True
 
 
@@ -14821,6 +14834,11 @@ def _apply_single_use_pack_billing(db: Session, items: list[dict]) -> None:
             ratio = 1.0
         bottles = _math.ceil((real_qty - 1e-9) / ratio)
         per_pack = float(it.get("unit_price") or 0)   # 整瓶计费：单价 = 每瓶/每支价
+        catalog_pack_price = float(inv.sell_price or 0)
+        # 旧数据/旧入口可能把「有效 ml 单价」回填成每瓶价（如 10 元/瓶变 0.33）。
+        # 遇到明显低于库存整瓶售价的数值时，用库存售价兜底，避免越保存越低。
+        if catalog_pack_price > 0 and 0 < per_pack < (catalog_pack_price * 0.5):
+            per_pack = catalog_pack_price
         subtotal = round(bottles * per_pack, 2)
         it["subtotal"] = subtotal
         # 数量保留真实剂量（不改 it[qty_key]）；单价回写为有效每主单位价，保证 单价 × 数量 = 金额
@@ -14867,8 +14885,84 @@ def _presc_pack_meta(db: Session, presc: "Prescription") -> dict:
         qn = float(it.quantity_num or 0)
         bottles = _math.ceil((qn - 1e-9) / ratio) if qn > 0 else 0
         pack_price = round(float(it.subtotal or 0) / bottles, 2) if bottles > 0 else float(it.unit_price or 0)
+        catalog_pack_price = float(inv.sell_price or 0)
+        if catalog_pack_price > 0 and 0 < pack_price < (catalog_pack_price * 0.5):
+            pack_price = catalog_pack_price
         meta[it.id] = {"pack_price": pack_price, "ratio": ratio, "unit2": inv.unit2 or "瓶", "bottles": bottles}
     return meta
+
+
+def _presc_item_form_payload(db: Session, it: "PrescriptionItem") -> dict:
+    """处方明细回填表单/模板/复制时使用：整瓶计费行必须返回「每瓶价」而不是库内有效单价。"""
+    base = {
+        "drug_name": it.drug_name, "item_id": it.item_id,
+        "drug_type": it.drug_type, "dosage": it.dosage,
+        "frequency": it.frequency, "duration_days": it.duration_days,
+        "quantity_num": it.quantity_num, "quantity": it.quantity,
+        "unit_price": it.unit_price, "subtotal": it.subtotal,
+        "instructions": it.instructions,
+        "dose_amount": it.dose_amount or 0,
+        "dose_unit": it.dose_unit or "",
+        "times_per_day": it.times_per_day or 0,
+        "item_unit": it.item_unit or "",
+        "print_note": it.print_note or "",
+        "schedule_times": it.schedule_times or "",
+    }
+    if not it.item_id:
+        return base
+    inv = db.get(InventoryItem, it.item_id)
+    if not inv or not getattr(inv, "single_use_pack", False):
+        return base
+    import math as _math
+    try:
+        ratio = float(inv.unit2_ratio or 1.0)
+    except (TypeError, ValueError):
+        ratio = 1.0
+    if ratio <= 0:
+        ratio = 1.0
+    qn = float(it.quantity_num or 0)
+    bottles = _math.ceil((qn - 1e-9) / ratio) if qn > 0 else 0
+    pack_price = round(float(it.subtotal or 0) / bottles, 2) if bottles > 0 else float(it.unit_price or 0)
+    catalog_pack_price = float(inv.sell_price or 0)
+    if catalog_pack_price > 0 and 0 < pack_price < (catalog_pack_price * 0.5):
+        pack_price = catalog_pack_price
+    base.update({
+        "unit_price": pack_price,
+        "subtotal": round((bottles or 0) * pack_price, 2),
+        "single_use_pack": True,
+        "unit2": inv.unit2 or "瓶",
+        "unit2_ratio": ratio,
+    })
+    return base
+
+
+def _presc_template_item_payload(db: Session, raw: dict) -> dict:
+    """处方模板套用时补全整瓶计费元数据，旧模板里的折算价自动纠正为库存整瓶售价。"""
+    it = dict(raw or {})
+    iid = it.get("item_id") or 0
+    inv = db.get(InventoryItem, int(iid)) if str(iid).isdigit() else None
+    if not inv:
+        return it
+    it.setdefault("item_unit", inv.unit or "")
+    if not getattr(inv, "single_use_pack", False):
+        return it
+    try:
+        ratio = float(inv.unit2_ratio or 1.0)
+    except (TypeError, ValueError):
+        ratio = 1.0
+    if ratio <= 0:
+        ratio = 1.0
+    unit_price = float(it.get("unit_price") or 0)
+    catalog_pack_price = float(inv.sell_price or 0)
+    if catalog_pack_price > 0 and (unit_price <= 0 or unit_price < (catalog_pack_price * 0.5)):
+        unit_price = catalog_pack_price
+    it.update({
+        "unit_price": unit_price,
+        "single_use_pack": True,
+        "unit2": inv.unit2 or "瓶",
+        "unit2_ratio": ratio,
+    })
+    return it
 
 
 def _parse_presc_items(form_data) -> list[dict]:
@@ -15642,6 +15736,9 @@ async def admin_presc_copy_as_new(presc_id: int, request: Request, db: Session =
     if not src:
         raise HTTPException(404)
     operator = request.session.get("admin_username", "admin")
+    item_rows = [_presc_item_form_payload(db, old) for old in (src.items or [])]
+    _apply_single_use_pack_billing(db, item_rows)
+    new_total = round(sum(float(it.get("subtotal") or 0) for it in item_rows), 2)
     new_presc = Prescription(
         visit_id=src.visit_id,
         customer_id=src.customer_id,
@@ -15649,35 +15746,36 @@ async def admin_presc_copy_as_new(presc_id: int, request: Request, db: Session =
         prescribed_date=datetime.utcnow().strftime("%Y-%m-%d"),
         vet_name=src.vet_name,
         status="issued",
-        total_amount=src.total_amount,
+        total_amount=new_total,
         notes=src.notes,
         created_by=operator,
     )
     db.add(new_presc)
     db.flush()
-    for old in src.items:
+    for row in item_rows:
         new_it = PrescriptionItem(
             prescription_id=new_presc.id,
-            item_id=old.item_id,
-            drug_name=old.drug_name,
-            drug_type=old.drug_type,
-            dosage=old.dosage,
-            frequency=old.frequency,
-            duration_days=old.duration_days,
-            quantity_num=old.quantity_num,
-            quantity=old.quantity,
-            unit_price=old.unit_price,
-            subtotal=old.subtotal,
-            instructions=old.instructions,
-            dose_amount=old.dose_amount,
-            dose_unit=old.dose_unit,
-            times_per_day=old.times_per_day,
-            item_unit=old.item_unit,
-            print_note=old.print_note,
+            item_id=row.get("item_id"),
+            drug_name=row.get("drug_name"),
+            drug_type=row.get("drug_type"),
+            dosage=row.get("dosage"),
+            frequency=row.get("frequency"),
+            duration_days=row.get("duration_days"),
+            quantity_num=row.get("quantity_num"),
+            quantity=row.get("quantity"),
+            unit_price=row.get("unit_price"),
+            subtotal=row.get("subtotal"),
+            instructions=row.get("instructions"),
+            dose_amount=row.get("dose_amount"),
+            dose_unit=row.get("dose_unit"),
+            times_per_day=row.get("times_per_day"),
+            item_unit=row.get("item_unit"),
+            print_note=row.get("print_note"),
+            schedule_times=row.get("schedule_times"),
         )
         db.add(new_it)
-        if old.item_id and old.quantity_num > 0:
-            _deduct_inventory(db, old.item_id, old.quantity_num,
+        if row.get("item_id") and float(row.get("quantity_num") or 0) > 0:
+            _deduct_inventory(db, int(row.get("item_id")), float(row.get("quantity_num") or 0),
                               "prescription", new_presc.id, operator,
                               f"处方#{new_presc.id}（复制自 #{presc_id}）")
     _audit_doc_action(db, "prescription", new_presc.id, "copy_from", operator,
@@ -29443,10 +29541,12 @@ async def api_presc_template_get(tpl_id: int, request: Request, db: Session = De
     # 使用计数 +1
     tpl.use_count = (tpl.use_count or 0) + 1
     db.commit()
+    raw_items = json.loads(tpl.items_json or "[]")
+    refreshed = [_presc_template_item_payload(db, it) for it in raw_items]
     return {
         "ok": True,
         "id": tpl.id, "name": tpl.name, "notes": tpl.notes,
-        "items": json.loads(tpl.items_json or "[]"),
+        "items": refreshed,
     }
 
 
@@ -29609,20 +29709,7 @@ async def api_prescription_recent(
     if not p:
         return {"ok": False, "error": "无历史处方"}
     _src_pet = db.get(Pet, p.pet_id) if p.pet_id else None
-    items = [{
-        "drug_name": it.drug_name, "item_id": it.item_id,
-        "drug_type": it.drug_type, "dosage": it.dosage,
-        "frequency": it.frequency, "duration_days": it.duration_days,
-        "quantity_num": it.quantity_num, "quantity": it.quantity,
-        "unit_price": it.unit_price, "subtotal": it.subtotal,
-        "instructions": it.instructions,
-        # 新细化字段
-        "dose_amount": it.dose_amount or 0,
-        "dose_unit": it.dose_unit or "",
-        "times_per_day": it.times_per_day or 0,
-        "item_unit": it.item_unit or "",
-        "print_note": it.print_note or "",
-    } for it in p.items]
+    items = [_presc_item_form_payload(db, it) for it in p.items]
     return {
         "ok": True, "id": p.id, "prescribed_date": p.prescribed_date,
         "vet_name": p.vet_name, "notes": p.notes, "items": items,
@@ -33745,21 +33832,20 @@ async def m_prescribe_edit(presc_id: int, request: Request, db: Session = Depend
             Hospitalization.pet_id == presc.pet_id,
             Hospitalization.status == "admitted",
         ).first() is not None
-    # 整瓶计费行：预填单价用「每瓶价」(否则再保存会把有效单价误当每瓶价算错)
-    pack_meta = _presc_pack_meta(db, presc)
     items = []
     for it in (presc.items or []):
-        pm = pack_meta.get(it.id)
+        row = _presc_item_form_payload(db, it)
         items.append({
-            "drug_name": it.drug_name or "", "item_id": it.item_id or "",
-            "dose_amount": it.dose_amount or "", "dose_unit": it.dose_unit or "",
-            "duration_days": it.duration_days or "",
-            "unit_price": (pm["pack_price"] if pm else (it.unit_price or "")),
-            "item_unit": it.item_unit or "", "schedule_times": it.schedule_times or "",
-            "instructions": it.instructions or "", "drug_type": it.drug_type or "",
-            "frequency": it.frequency or "", "times_per_day": it.times_per_day or "",
-            "quantity_num": it.quantity_num or "",
-            "single_use_pack": bool(pm), "unit2_ratio": (pm["ratio"] if pm else 1),
+            "drug_name": row.get("drug_name") or "", "item_id": row.get("item_id") or "",
+            "dose_amount": row.get("dose_amount") or "", "dose_unit": row.get("dose_unit") or "",
+            "duration_days": row.get("duration_days") or "",
+            "unit_price": row.get("unit_price") or "",
+            "item_unit": row.get("item_unit") or "", "schedule_times": row.get("schedule_times") or "",
+            "instructions": row.get("instructions") or "", "drug_type": row.get("drug_type") or "",
+            "frequency": row.get("frequency") or "", "times_per_day": row.get("times_per_day") or "",
+            "quantity_num": row.get("quantity_num") or "",
+            "single_use_pack": bool(row.get("single_use_pack")),
+            "unit2_ratio": row.get("unit2_ratio") or 1,
         })
     ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({
@@ -33921,11 +34007,13 @@ async def m_api_recent_drugs(
             stock_level = "yellow"
         results.append({
             "id": inv.id, "name": inv.name,
-            "unit": inv.unit or "",
+            "unit": inv.unit or "", "unit2": inv.unit2 or "",
             "sell_price": float(inv.sell_price or 0),
             "stock_qty": float(inv.stock_qty or 0),
             "stock_level": stock_level,
             "is_controlled": bool(inv.is_controlled),
+            "single_use_pack": bool(getattr(inv, "single_use_pack", False)),
+            "unit2_ratio": float(inv.unit2_ratio or 1.0),
             "n": int(r.n),
         })
     return {"results": results}
@@ -33946,11 +34034,15 @@ async def m_api_presc_template(
         items = json.loads(tpl.items_json or "[]")
     except Exception:
         items = []
-    # 富化：补 item info
+    # 富化：补 item info，整瓶计费行回填每瓶价
     out = []
-    for it in items:
+    for raw in items:
+        it = _presc_template_item_payload(db, raw)
         iid = it.get("item_id")
         inv = db.get(InventoryItem, iid) if iid else None
+        unit_price = float(it.get("unit_price") or 0)
+        if inv and not it.get("single_use_pack"):
+            unit_price = float(inv.sell_price or unit_price)
         out.append({
             "item_id": iid,
             "drug_name": it.get("drug_name", ""),
@@ -33963,8 +34055,11 @@ async def m_api_presc_template(
             "quantity_num": it.get("quantity_num", 1),
             "instructions": it.get("instructions", ""),
             "schedule_times": it.get("schedule_times", ""),
-            "unit_price": float(inv.sell_price) if inv else float(it.get("unit_price", 0)),
+            "unit_price": unit_price,
             "item_unit": (inv.unit if inv else "") or it.get("item_unit", ""),
+            "single_use_pack": bool(it.get("single_use_pack")),
+            "unit2_ratio": it.get("unit2_ratio", 1),
+            "unit2": it.get("unit2", ""),
         })
     return {"name": tpl.name, "notes": tpl.notes or "", "items": out}
 

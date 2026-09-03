@@ -1264,6 +1264,8 @@ function _appendRow(it) {
   }
   const esc = s => (s||'').toString().replace(/"/g,'&quot;');
   const _supAttr = it.single_use_pack ? ` data-sup="1" data-ratio="${(it.unit2_ratio && it.unit2_ratio > 0) ? it.unit2_ratio : 1}" data-unit2="${esc(it.unit2||'瓶')}"` : '';
+  const _unitPrice = Number(it.pack_price ?? it.unit_price ?? 0);
+  const _subtotal = Number(it.subtotal ?? 0);
   const row = `<tr${_supAttr}>
     <td><div class="inv-search-wrap">
       <input name="drug_name_${idx}" value="${esc(it.drug_name)}" required autocomplete="off" oninput="onDrugInput(this, ${idx})" onblur="closeDropdown(${idx})"/>
@@ -1288,15 +1290,16 @@ function _appendRow(it) {
       </div>
     </td>
     <td class="total-times" id="total_times_${idx}">—</td>
-    <td class="col-num"><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="${(it.unit_price||0).toFixed(2)}" oninput="recalcRow(${idx})"/></td>
+    <td class="col-num"><input name="unit_price_${idx}" type="number" step="0.01" min="0" value="${_unitPrice.toFixed(2)}" oninput="recalcRow(${idx})"/></td>
     <td class="col-num"><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="${it.quantity_num||1}" oninput="onQtyEdit(${idx})" id="quantity_num_${idx}"/></td>
     <td class="col-unit"><input name="item_unit_${idx}" id="item_unit_${idx}" value="${esc(it.item_unit||it.quantity)}" oninput="recalcDosage(${idx})"/></td>
-    <td class="col-num"><input name="subtotal_${idx}" type="number" step="0.01" readonly value="${(it.subtotal||0).toFixed(2)}" id="subtotal_${idx}"/></td>
+    <td class="col-num"><input name="subtotal_${idx}" type="number" step="0.01" readonly value="${_subtotal.toFixed(2)}" id="subtotal_${idx}"/></td>
     <td><input name="instructions_${idx}" value="${esc(it.instructions)}"/></td>
     <td class="no-print" style="text-align:center;"><button type="button" onclick="removeDrugRow(this, ${idx})" class="del-btn">✕</button></td>
   </tr>`;
   document.getElementById('drug-tbody').insertAdjacentHTML('beforeend', row);
   recalcTotalTimes(idx);
+  if (it.single_use_pack) recalcRow(idx);
 }
 
 async function openTemplatePicker() {
