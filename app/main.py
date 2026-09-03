@@ -10275,6 +10275,8 @@ def _consent_sms_public_error(err: str | None) -> str:
     lowered = raw.lower()
     if "phonenumberdailylimit" in lowered or "daily limit" in lowered:
         return "该手机号今天接收验证码次数已达上限，请明天再试，或联系医院工作人员重新发起/现场协助签署。"
+    if "insufficientbalance" in lowered or "insufficient balance" in lowered or "余额不足" in raw:
+        return "医院短信服务余额不足，暂时无法发送验证码，请联系医院工作人员现场协助签署。"
     if "limitexceeded" in lowered or "frequency" in lowered or "频率" in raw:
         return "验证码发送过于频繁，请稍后再试。"
     if "isv" in lowered or "sdk" in lowered or "未配置" in raw:
