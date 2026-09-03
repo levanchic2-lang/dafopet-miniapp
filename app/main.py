@@ -14808,12 +14808,10 @@ def _apply_single_use_pack_billing(db: Session, items: list[dict]) -> None:
     """
     import math as _math
     for it in items:
-        iid = it.get("item_id")
-        if not iid:
+        inv = _resolve_single_use_pack_item(db, it.get("item_id"), it.get("drug_name") or it.get("item_name") or it.get("name"))
+        if not inv:
             continue
-        inv = db.get(InventoryItem, int(iid))
-        if not inv or not getattr(inv, "single_use_pack", False):
-            continue
+        it["item_id"] = inv.id
         # 取数字 qty 字段
         qty_keys = ("quantity_num", "quantity", "qty")
         qty_key = None
@@ -14874,10 +14872,8 @@ def _presc_pack_meta(db: Session, presc: "Prescription") -> dict:
     if not presc:
         return meta
     for it in (presc.items or []):
-        if not it.item_id:
-            continue
-        inv = db.get(InventoryItem, it.item_id)
-        if not inv or not getattr(inv, "single_use_pack", False):
+        inv = _resolve_single_use_pack_item(db, it.item_id, it.drug_name)
+        if not inv:
             continue
         ratio = float(inv.unit2_ratio or 1.0)
         if ratio <= 0:
@@ -14890,6 +14886,32 @@ def _presc_pack_meta(db: Session, presc: "Prescription") -> dict:
             pack_price = catalog_pack_price
         meta[it.id] = {"pack_price": pack_price, "ratio": ratio, "unit2": inv.unit2 or "瓶", "bottles": bottles}
     return meta
+
+
+def _resolve_single_use_pack_item(db: Session, item_id: int | str | None, name: str | None = "") -> "InventoryItem | None":
+    """查找整瓶/整支计费品目。旧处方有时没有 item_id，允许按完整药名兜底匹配。"""
+    inv = None
+    try:
+        iid = int(item_id or 0)
+    except (TypeError, ValueError):
+        iid = 0
+    if iid:
+        inv = db.get(InventoryItem, iid)
+        if inv and getattr(inv, "single_use_pack", False):
+            return inv
+    nm = (name or "").strip()
+    if not nm:
+        return None
+    return (
+        db.query(InventoryItem)
+        .filter(
+            InventoryItem.name == nm,
+            InventoryItem.single_use_pack == True,
+            InventoryItem.is_active == True,
+        )
+        .order_by(InventoryItem.stock_qty.desc(), InventoryItem.id.desc())
+        .first()
+    )
 
 
 def _presc_item_form_payload(db: Session, it: "PrescriptionItem") -> dict:
@@ -14908,11 +14930,10 @@ def _presc_item_form_payload(db: Session, it: "PrescriptionItem") -> dict:
         "print_note": it.print_note or "",
         "schedule_times": it.schedule_times or "",
     }
-    if not it.item_id:
+    inv = _resolve_single_use_pack_item(db, it.item_id, it.drug_name)
+    if not inv:
         return base
-    inv = db.get(InventoryItem, it.item_id)
-    if not inv or not getattr(inv, "single_use_pack", False):
-        return base
+    base["item_id"] = inv.id
     import math as _math
     try:
         ratio = float(inv.unit2_ratio or 1.0)
@@ -14932,6 +14953,7 @@ def _presc_item_form_payload(db: Session, it: "PrescriptionItem") -> dict:
         "single_use_pack": True,
         "unit2": inv.unit2 or "瓶",
         "unit2_ratio": ratio,
+        "item_unit": inv.unit2 or base.get("item_unit") or "瓶",
     })
     return base
 
@@ -14941,8 +14963,11 @@ def _presc_template_item_payload(db: Session, raw: dict) -> dict:
     it = dict(raw or {})
     iid = it.get("item_id") or 0
     inv = db.get(InventoryItem, int(iid)) if str(iid).isdigit() else None
+    if not (inv and getattr(inv, "single_use_pack", False)):
+        inv = _resolve_single_use_pack_item(db, iid, it.get("drug_name") or it.get("item_name") or it.get("name"))
     if not inv:
         return it
+    it["item_id"] = inv.id
     it.setdefault("item_unit", inv.unit or "")
     if not getattr(inv, "single_use_pack", False):
         return it
@@ -14961,6 +14986,7 @@ def _presc_template_item_payload(db: Session, raw: dict) -> dict:
         "single_use_pack": True,
         "unit2": inv.unit2 or "瓶",
         "unit2_ratio": ratio,
+        "item_unit": inv.unit2 or it.get("item_unit") or "瓶",
     })
     return it
 
