@@ -37,7 +37,8 @@ Page({
       cat_breed: "",
       cat_color: "",
       age_estimate: "",
-      health_note: ""
+      health_note: "",
+      suture_preference: "external"
     },
     storeOptions: [
       { value: "", label: "请选择门店" },
@@ -60,6 +61,11 @@ Page({
       { value: "unknown", label: "未知" }
     ],
     genderIndex: 0,
+    sutureOptions: [
+      { value: "external", label: "皮外缝合（需返院复查拆线）" },
+      { value: "intradermal", label: "皮内可吸收缝合（通常无需拆线）" }
+    ],
+    sutureIndex: 0,
     checks: { ear: true, fraud: true },
     images: [],
     videos: [],
@@ -111,6 +117,15 @@ Page({
     // 兜底：onLoad 时如果数据没就绪（require 失败 + 网络慢），重入页面再试
     if (!this.data.addrReady) this._loadShenzhenRegions();
     this._syncNotifyState();
+  },
+
+  onSutureChange(e) {
+    const idx = Number(e.detail.value || 0);
+    const row = this.data.sutureOptions[idx] || this.data.sutureOptions[0];
+    this.setData({
+      sutureIndex: idx,
+      "form.suture_preference": row.value
+    });
   },
 
   _syncNotifyState() {
@@ -877,10 +892,6 @@ Page({
 
   goTnrGuide() {
     wx.navigateTo({ url: "/pages/tnr-guide/index" });
-  },
-
-  goAppointmentPage() {
-    wx.navigateTo({ url: "/pages/appointment/index" });
   },
 
   goAppointmentListPage() {

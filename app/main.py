@@ -1923,6 +1923,7 @@ async def api_apply(
     cat_color: str = Form(""),
     age_estimate: str = Form(""),
     health_note: str = Form(""),
+    suture_preference: str = Form("external"),
     wechat_openid: str = Form(""),
     agree_ear_tip: str = Form("false"),
     agree_no_pet_fraud: str = Form("false"),
@@ -1974,6 +1975,7 @@ async def api_apply(
         age_estimate=f["age_estimate"],
         weight_estimate="",
         health_note=f["health_note"],
+        suture_preference=suture_preference if suture_preference in ("external", "intradermal") else "external",
         agree_ear_tip=ok_ear,
         agree_no_pet_fraud=ok_fraud,
         status=ApplicationStatus.pending_ai.value,
@@ -2110,6 +2112,7 @@ async def api_apply_create(
     cat_color: str = Form(""),
     age_estimate: str = Form(""),
     health_note: str = Form(""),
+    suture_preference: str = Form("external"),
     wechat_openid: str = Form(""),
     agree_ear_tip: str = Form("false"),
     agree_no_pet_fraud: str = Form("false"),
@@ -2236,6 +2239,7 @@ async def api_apply_create(
         age_estimate=f["age_estimate"],
         weight_estimate="",
         health_note=f["health_note"],
+        suture_preference=suture_preference if suture_preference in ("external", "intradermal") else "external",
         agree_ear_tip=ok_ear,
         agree_no_pet_fraud=ok_fraud,
         is_proxy=is_proxy.lower() in ("true", "1", "on", "yes"),
@@ -6426,7 +6430,12 @@ async def api_my_tnr_status(openid: str = Query(""), db: Session = Depends(get_d
 
 @app.get("/api/appointments/config")
 async def api_appointments_config():
-    return _appointment_catalog()
+    catalog = _appointment_catalog()
+    catalog["categories"] = [
+        row for row in catalog.get("categories", [])
+        if row.get("value") == AppointmentCategory.tnr.value
+    ]
+    return catalog
 
 
 @app.get("/api/tnr-store-status")
@@ -6548,6 +6557,9 @@ async def api_beauty_slots(
 @app.post("/api/appointments/create")
 async def api_appointments_create(payload: dict = Body(...), db: Session = Depends(get_db)):
     openid = await _resolve_wechat_openid(payload)
+    requested_category = str((payload or {}).get("category", "") or "").strip()
+    if requested_category != AppointmentCategory.tnr.value:
+        raise HTTPException(400, "小程序仅支持TNR手术预约；其他服务请通过微信联系医院安排。")
     fields = _assert_appointment_fields(
         category=(payload or {}).get("category", ""),
         service_name=(payload or {}).get("service_name", ""),
@@ -6568,9 +6580,19 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
             related_id = int(raw_related)
         except (TypeError, ValueError):
             raise HTTPException(400, "关联申请编号格式不正确。")
-        exists = db.query(Application.id).filter(Application.id == related_id).scalar()
-        if not exists:
+        app_row = db.query(Application).filter(Application.id == related_id).first()
+        if not app_row:
             raise HTTPException(404, "关联的 TNR 申请不存在。")
+        if (app_row.wechat_openid or "") != openid:
+            raise HTTPException(403, "该TNR申请不属于当前微信账号。")
+        if app_row.status not in (
+            ApplicationStatus.approved.value,
+            ApplicationStatus.pre_approved.value,
+            ApplicationStatus.scheduled.value,
+        ):
+            raise HTTPException(400, "该TNR申请尚未通过审核，暂不能预约。")
+    else:
+        raise HTTPException(400, "请选择已经通过审核的TNR申请。")
     # TNR 规则校验（含爽约封禁检查）
     tnr_err = _check_tnr_constraints(
         db,

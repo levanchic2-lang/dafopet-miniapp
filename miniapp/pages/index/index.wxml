@@ -53,15 +53,15 @@
         <view class="service-title">绑定我的档案</view>
         <view class="service-desc">关联既有客户和宠物</view>
       </button>
-      <button class="service-entry" bindtap="goAppointmentPage">
+      <button class="service-entry" bindtap="goTnrInfoPage">
         <view class="service-index">05</view>
-        <view class="service-title">预约服务</view>
-        <view class="service-desc">门诊、手术与美容</view>
+        <view class="service-title">TNR服务指南</view>
+        <view class="service-desc">费用、风险、住院及放归说明</view>
       </button>
       <button class="service-entry" bindtap="goAppointmentListPage">
         <view class="service-index">06</view>
         <view class="service-title">我的预约</view>
-        <view class="service-desc">查看预约安排</view>
+        <view class="service-desc">TNR及既有预约记录</view>
       </button>
       <button class="service-entry" bindtap="goImmunizationPage">
         <view class="service-index">07</view>

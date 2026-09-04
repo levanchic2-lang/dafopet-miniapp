@@ -3,13 +3,13 @@
     <view style="font-size:28rpx;font-weight:700;color:#6b4423;">修改预约 #{{editApptId}}</view>
     <view style="font-size:24rpx;color:#6b4423;margin-top:6rpx;line-height:1.6;">预约板块与项目不可更改。如需更换项目，请取消后重新预约。手机号需重新填写。</view>
   </view>
-  <view wx:if="{{!editMode}}" class="title">预约服务</view>
-  <view wx:if="{{!editMode}}" class="sub">可预约门诊、手术、美容等服务。</view>
+  <view wx:if="{{!editMode}}" class="title">TNR手术预约</view>
+  <view wx:if="{{!editMode}}" class="sub">仅用于已经通过审核的流浪猫TNR申请。</view>
   <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#edf5f0;border-radius:4rpx;border:1rpx solid #b9cec2;font-size:26rpx;color:#1d4d3a;line-height:1.6;">
-    📅 <text style="font-weight:700;">已预约的客人将优先接待。</text>如与临时到店客人时间冲突，医院将优先为有预约记录的客人安排服务，请放心前来。
+    <text style="font-weight:700;">预约前提：</text>请先在首页提交TNR申请。审核通过后，可从“我的TNR申请 / 查看进度”进入本页面预约手术。
   </view>
   <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#faf4e8;border-radius:4rpx;border:1rpx solid #d8d4cc;font-size:26rpx;color:#6b4423;line-height:1.6;">
-    <text style="font-weight:700;">流浪猫 TNR 手术预约说明：</text>需先在首页提交 TNR 申请并审核通过后，「流浪动物 TNR」板块才会出现在此页面。未提交申请的主人，此处仅可预约门诊、手术、美容等常规服务。
+    普通门诊、疫苗、驱虫、手术、美容及洗护暂不提供小程序自主预约，请通过微信联系医院，由工作人员安排并录入系统。
   </view>
   <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#f8eded;border-radius:4rpx;border:1rpx solid #d8bcbc;font-size:26rpx;color:#7a2828;line-height:1.6;">
     <text style="font-weight:700;">⚠️ TNR 爽约规则：</text>同一自然月内爽约 <text style="font-weight:700;">3 次及以上</text>，账户将被限制 <text style="font-weight:700;">90 天</text>内无法提交新的 TNR 预约。如规则有变动或有特殊情况，请及时与客服沟通确认。
@@ -17,13 +17,15 @@
 
   <view wx:if="{{loading}}" class="sub">加载中…</view>
 
+  <view wx:elif="{{!editMode && !canBookTnr}}" class="tip" style="margin-top:24rpx;padding:28rpx;line-height:1.7;">
+    当前微信账号下暂无可预约的TNR申请。请先提交申请并等待审核通过。
+    <button class="btn secondary" style="margin-top:20rpx;" bindtap="goStatus">查看我的TNR申请</button>
+  </view>
+
   <block wx:else>
     <!-- 预约板块 -->
     <view class="label">预约板块</view>
-    <picker wx:if="{{!editMode}}" class="picker" mode="selector" range="{{categories}}" range-key="label" value="{{categoryIndex}}" bindchange="onCategoryChange">
-      <view>{{categories[categoryIndex].label}}</view>
-    </picker>
-    <view wx:if="{{editMode}}" class="picker picker-locked">{{categories[categoryIndex].label || form.category}}</view>
+    <view class="picker picker-locked">流浪动物 TNR</view>
     <view wx:if="{{selectedCategoryMeta && selectedCategoryMeta.description && !editMode}}" class="tip">
       {{selectedCategoryMeta.description}}
     </view>

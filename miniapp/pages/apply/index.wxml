@@ -133,6 +133,16 @@
     bindblur="onHealthNoteBlur"
   ></textarea>
 
+  <block wx:if="{{form.cat_gender === 'female'}}">
+    <view class="label">母猫伤口缝合方式</view>
+    <picker class="picker picker-lg" mode="selector" range="{{sutureOptions}}" range-key="label" value="{{sutureIndex}}" bindchange="onSutureChange">
+      <view>{{sutureOptions[sutureIndex].label}}</view>
+    </picker>
+    <view class="tip" style="margin-top:10rpx;line-height:1.65;">
+      皮外缝合为本院TNR默认方式，通常术后5至7天返院复查，由医生判断是否拆线。皮内可吸收缝合通常无需拆线，但少数猫咪可能出现局部瘙痒、红肿或线结反应。最终方式以手术医生评估为准。
+    </view>
+  </block>
+
   <view class="label">申请照片 / 视频</view>
   <!-- 要求说明 -->
   <view class="tip" style="margin-bottom:12rpx;">

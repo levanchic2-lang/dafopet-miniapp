@@ -76,6 +76,8 @@ class Application(Base):
     age_estimate: Mapped[str] = mapped_column(String(80), default="")
     weight_estimate: Mapped[str] = mapped_column(String(80), default="")
     health_note: Mapped[str] = mapped_column(Text, default="")
+    # 母猫伤口缝合偏好：external=皮外缝合（默认），intradermal=皮内可吸收缝合
+    suture_preference: Mapped[str] = mapped_column(String(20), default="external")
     agree_ear_tip: Mapped[bool] = mapped_column(Boolean, default=True)
     agree_no_pet_fraud: Mapped[bool] = mapped_column(Boolean, default=True)
 

@@ -1,0 +1,37 @@
+<view class="info-page">
+  <view class="info-head">
+    <view class="info-kicker">DAFO ANIMAL HOSPITAL</view>
+    <view class="info-title">流浪猫 TNR<text>服务指南</text></view>
+    <view class="info-sub">申请、费用、风险与术后照护说明</view>
+  </view>
+
+  <view class="fee-panel">
+    <view class="fee-title">特别费用说明</view>
+    <view class="fee-lead">TNR基础绝育服务免费，以下特殊情况或额外服务可能产生费用。</view>
+    <view class="fee-row"><text>流浪猫引产</text><text class="fee-value">加收 ¥200</text></view>
+    <view class="fee-row"><text>流浪猫隐睾手术</text><text class="fee-value">加收 ¥200</text></view>
+    <view class="fee-row"><text>流浪猫住院</text><text class="fee-value">¥30 / 天</text></view>
+    <view class="fee-note">驱虫、疫苗、检查、治疗及其他用药，按实际发生项目收费。新增医疗项目原则上会在处理前向救助人说明。</view>
+  </view>
+
+  <view class="section-label">服务须知</view>
+  <view class="info-list">
+    <view wx:for="{{sections}}" wx:key="key" class="info-section">
+      <view class="section-head" data-key="{{item.key}}" bindtap="toggleSection">
+        <text class="section-no">{{item.no}}</text>
+        <text class="section-title">{{item.title}}</text>
+        <text class="section-toggle">{{item.open ? '−' : '+'}}</text>
+      </view>
+      <view wx:if="{{item.open}}" class="section-body">
+        <view wx:for="{{item.paragraphs}}" wx:key="*this" class="section-text">{{item}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="guide-note">本页面为TNR服务说明，不替代正式医疗知情同意书。</view>
+
+  <view class="info-actions">
+    <button class="action secondary" bindtap="goFlow">查看申请流程</button>
+    <button class="action primary" bindtap="goApply">开始申请</button>
+  </view>
+</view>

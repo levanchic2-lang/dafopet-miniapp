@@ -446,6 +446,7 @@
  </details>
  </p>
  {% if a.health_note %}<p>流浪状况：{{ a.health_note }}</p>{% endif %}
+ {% if a.cat_gender == 'female' %}<p>缝合偏好：{{ '皮内可吸收缝合（通常无需拆线）' if a.suture_preference == 'intradermal' else '皮外缝合（需返院复查拆线）' }}</p>{% endif %}
  {% if a.post_surgery_plan %}<p>术后打算：{{ a.post_surgery_plan }}</p>{% endif %}
  {% if a.id_number %}<p>身份证号（脱敏）：{{ a.id_number[:2] }}********{{ a.id_number[-4:] }}</p>{% endif %}
  {% if a.status == 'rejected' %}
@@ -782,4 +783,3 @@
 {% endblock %}
 {% block scripts %}
 {% endblock %}
-

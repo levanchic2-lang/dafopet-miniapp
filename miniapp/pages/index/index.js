@@ -101,7 +101,7 @@ Page({
   goApplyPage() { wx.navigateTo({ url: "/pages/apply/index" }); },
   goStatusPage() { wx.navigateTo({ url: "/pages/status/status" }); },
   goBindPage() { wx.navigateTo({ url: "/pages/bind/bind" }); },
-  goAppointmentPage() { wx.navigateTo({ url: "/pages/appointment/index" }); },
+  goTnrInfoPage() { wx.navigateTo({ url: "/pages/tnr-info/index" }); },
   goAppointmentListPage() { wx.navigateTo({ url: "/pages/appointment/list" }); },
   goImmunizationPage() { wx.navigateTo({ url: "/pages/immunization/index" }); },
   goAdoptionPage() { wx.navigateTo({ url: "/pages/adoption/list" }); },

@@ -292,6 +292,8 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN cat_breed VARCHAR(80) DEFAULT ''"))
             if "cat_color" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN cat_color VARCHAR(80) DEFAULT ''"))
+            if "suture_preference" not in names:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN suture_preference VARCHAR(20) DEFAULT 'external'"))
 
             # ── 单据锁定支持：Vaccination / DewormingRecord 加 status + 作废元数据 ──
             try:

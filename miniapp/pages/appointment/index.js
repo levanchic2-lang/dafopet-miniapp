@@ -15,10 +15,10 @@ function todayString() {
 
 Page({
   onShareAppMessage() {
-    return { title: "在大风动物医院预约门诊 / 美容 / 手术", path: "/pages/appointment/index" };
+    return { title: "大风动物医院 · TNR手术预约", path: "/pages/appointment/index" };
   },
   onShareTimeline() {
-    return { title: "在大风动物医院预约门诊 / 美容 / 手术" };
+    return { title: "大风动物医院 · TNR手术预约" };
   },
   data: {
     loading: true,
@@ -72,6 +72,7 @@ Page({
     // TNR 已通过申请列表（用于自动/手动关联）
     tnrApps: [],
     tnrAppIndex: 0,
+    canBookTnr: false,
     form: {
       category: "",
       service_name: "",
@@ -184,6 +185,10 @@ Page({
     wx.navigateTo({ url: "/pages/bind/bind?phone=" + encodeURIComponent(this.data.form.phone || "") });
   },
 
+  goStatus() {
+    wx.navigateTo({ url: "/pages/status/status" });
+  },
+
   async ensureOpenid() {
     try {
       const saved = wx.getStorageSync("WECHAT_OPENID") || "";
@@ -215,11 +220,9 @@ Page({
       this._approvedApps = (tnrStatus && Array.isArray(tnrStatus.approved_apps)) ? tnrStatus.approved_apps : [];
       this._tnrStoreStatus = tnrStoreStatus || { stores: [], is_banned: false };
 
-      let categories  = Array.isArray(cfg.categories)  ? cfg.categories  : [];
-      // TNR 类别只有已通过申请的用户才能选择
-      if (!hasApprovedTnr) {
-        categories = categories.filter(c => c.value !== "tnr");
-      }
+      // 小程序只开放审核通过后的 TNR 手术预约；普通业务由员工在桌面端代约。
+      const categories = (Array.isArray(cfg.categories) ? cfg.categories : [])
+        .filter(c => c.value === "tnr");
       const stores      = Array.isArray(cfg.stores)       ? cfg.stores      : [];
       const petGenders  = Array.isArray(cfg.pet_genders)  ? cfg.pet_genders : [];
       const bookingWindow = cfg.booking_window || {};
@@ -266,6 +269,7 @@ Page({
         beautyCoatIndex: 0,
         tnrApps: initTnrApps,
         tnrAppIndex: 0,
+        canBookTnr: hasApprovedTnr,
         storeIndex: initialStoreIndex,
         "form.category":          firstCategory.value || "",
         "form.service_name":      firstService.name   || "",
@@ -660,6 +664,15 @@ Page({
     if (this.data.submitting) return;
     this.setData({ submitting: true });
     try {
+      if (!this.data.editMode && (!this.data.canBookTnr || this.data.form.category !== "tnr" || !this.data.form.related_application_id)) {
+        wx.showModal({
+          title: "暂不能预约",
+          content: "请先提交TNR申请并等待医院审核通过，再从申请进度页进入预约。",
+          showCancel: false
+        });
+        this.setData({ submitting: false });
+        return;
+      }
       if (!String(this.data.form.store || "").trim()) {
         wx.showModal({
           title: "请选择预约门店",
