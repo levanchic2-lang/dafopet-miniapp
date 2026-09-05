@@ -97,6 +97,27 @@
     font-variant-numeric: lining-nums tabular-nums !important;
     font-feature-settings: "lnum" 1, "tnum" 1 !important;
   }
+
+  /* 打印预览、纸质打印和系统生成 PDF 统一使用高对比文字。
+     保险平台通常按图片 OCR，浅灰辅助文字在二次转码后容易丢失。 */
+  .print-stage,
+  .print-stage *,
+  .print-stage p,
+  .print-stage div,
+  .print-stage span,
+  .print-stage td,
+  .print-stage th,
+  .print-stage label,
+  .print-stage em,
+  .print-stage small,
+  .print-stage h1,
+  .print-stage h2,
+  .print-stage h3,
+  .print-stage h4,
+  .print-stage a {
+    color: #111 !important;
+    text-shadow: none !important;
+  }
 </style>
 </head>
 <body data-size="{% block default_size %}A4{% endblock %}">

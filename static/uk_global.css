@@ -17,7 +17,7 @@ input[type=number] { -moz-appearance:textfield !important; appearance:textfield 
  * ============================================================ */
 
 /* === 0. 引入 UK 变量定义（基础层） === */
-@import url("/static/uk_minimal.css");
+@import url("/static/uk_minimal.css?v=12");
 
 /* === 1. 覆盖 base.html 的 CSS 变量 ===
    这一段是最高杠杆点：base.html 里所有 var(--brand) / var(--radius)
@@ -27,20 +27,20 @@ input[type=number] { -moz-appearance:textfield !important; appearance:textfield 
   --bg:           #fafaf9;
   --bg-elevated:  #f5f4f1;
   --card:         #ffffff;
-  --text:         #1a1a1a;
-  --muted:        #444;
+  --text:         #101010;
+  --muted:        #3f3f3f;
   --border:       #e5e5e5;
   --border-strong:#d8d8d8;
   --input-border: #1a1a1a;
 
   /* 品牌：蓝 → 黑 */
   --brand-light:  #d8d8d8;
-  --brand:        #1a1a1a;
+  --brand:        #101010;
   --brand-dark:   #000000;
   --brand-fg:     #ffffff;
   --brand-bg-soft:#f5f4f1;
   --accent-warm:  #6b4423;
-  --accent:       #1a1a1a;
+  --accent:       #101010;
   --accent-hover: #000000;
 
   /* 状态色：去饱和成英伦克制 */

@@ -74,6 +74,7 @@ table.med { width: 100%; border-collapse: collapse; }
 table.med th, table.med td { border: 0.5px solid #c8c4bc; padding: 3pt 4pt; }
 table.med th { background: #f4f1ec; font-size: 8pt; }
 table.med td { font-size: 8.5pt; }
+body, body * { color: #111 !important; text-shadow: none !important; }
 """
 
 

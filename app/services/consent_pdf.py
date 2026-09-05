@@ -54,6 +54,7 @@ body {
   text-align: center; font-size: 7.5pt; color: #999; border-top: 0.3px solid #eee;
   padding-top: 3pt;
 }
+body, body * { color: #111 !important; text-shadow: none !important; }
 """
 
 

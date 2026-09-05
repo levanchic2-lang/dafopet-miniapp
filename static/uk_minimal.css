@@ -31,13 +31,13 @@ input[type=number] { -moz-appearance:textfield !important; appearance:textfield 
   --font-numeric: "UK Lining Digits", Arial, Tahoma, Verdana, "Microsoft YaHei", sans-serif;
 
   /* ── 颜色（单色阶）── */
-  --ink:        #1a1a1a;   /* 主文字 */
-  --ink-2:      #444;      /* 次文字 */
-  --ink-3:      #666;      /* 辅助 */
-  --ink-4:      #888;      /* 占位 */
+  --ink:        #101010;   /* 主文字 */
+  --ink-2:      #292929;   /* 次文字 */
+  --ink-3:      #4d4d4d;   /* 辅助 */
+  --ink-4:      #707070;   /* 占位 */
   --hair:       #e5e5e5;   /* 1px 分割线 */
   --hair-2:     #d8d8d8;   /* 稍重 hairline */
-  --rule:       #1a1a1a;   /* 双横线主线 */
+  --rule:       #101010;   /* 双横线主线 */
   --paper:      #ffffff;
   --bg:         #fafaf9;   /* 浅米底（不是纯白，避免刺眼） */
   --bg-soft:    #f5f4f1;   /* section 错色 */

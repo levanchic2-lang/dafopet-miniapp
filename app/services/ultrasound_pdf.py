@@ -24,7 +24,7 @@ PDF_CSS = """
   @bottom-center {
     content: "__FOOTER_TEXT__";
     font-family: "Noto Serif CJK SC", "Noto Sans CJK SC", serif;
-    font-size: 7.5pt; color: #999;
+    font-size: 7.5pt; color: #444;
     border-top: 0.3px solid #eee; padding-top: 3pt;
     vertical-align: top; white-space: nowrap;
   }
@@ -62,6 +62,7 @@ h2.sec { font-size: 11pt; margin: 12pt 0 6pt; padding-bottom: 2pt; border-bottom
 
 .sig-row { margin-top: 18pt; padding-top: 8pt; border-top: 0.5px solid #ccc; display: flex; justify-content: space-between; font-size: 9.5pt; }
 .sig-row .lbl { color: #666; }
+body, body * { color: #111 !important; text-shadow: none !important; }
 """
 
 

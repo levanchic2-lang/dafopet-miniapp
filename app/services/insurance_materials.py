@@ -158,7 +158,7 @@ def _pdf_to_jpegs(
     base_dir: Path,
     source_kind: str,
     source_label: str,
-    dpi: int = 150,
+    dpi: int = 200,
 ) -> None:
     """把一份固定 PDF 快照逐页转成保险平台通用的 JPG 文件。"""
     try:
@@ -179,7 +179,7 @@ def _pdf_to_jpegs(
                 pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csRGB, alpha=False)
                 dst = image_dir / f"{_safe_name(stem)}_第{page_index + 1:02d}页.jpg"
                 image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-                image.save(dst, "JPEG", quality=88, optimize=True, progressive=True)
+                image.save(dst, "JPEG", quality=92, optimize=True, progressive=True)
                 _add_manifest_file(
                     files,
                     f"{source_kind}_image",

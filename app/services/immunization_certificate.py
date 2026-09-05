@@ -196,7 +196,7 @@ def render_immunization_certificate_pdf(data: dict[str, Any]) -> bytes:
 <head>
 <meta charset="utf-8">
 <style>
-@page {{ size: A4 portrait; margin: 16mm 14mm 18mm; @bottom-center {{ content: "大风动物医院电子免疫证 · 第 " counter(page) " 页"; font-size: 8pt; color: #777; }} }}
+@page {{ size: A4 portrait; margin: 16mm 14mm 18mm; @bottom-center {{ content: "大风动物医院电子免疫证 · 第 " counter(page) " 页"; font-size: 8pt; color: #444; }} }}
 * {{ box-sizing: border-box; }}
 body {{ margin: 0; color: #171717; font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-style: normal; font-size: 10pt; line-height: 1.55; }}
 .header {{ border-top: 3px solid #171717; border-bottom: 1px solid #171717; padding: 14px 0 12px; text-align: center; }}
@@ -222,6 +222,7 @@ h1 {{ margin: 8px 0 2px; font-size: 24pt; letter-spacing: 5px; font-weight: 700;
 .secondary {{ color: #777; font-size: 7.5pt; margin-top: 2px; }}
 .notice {{ margin-top: 14px; padding: 10px 12px; border-left: 3px solid #8b5a2b; background: #faf7f1; color: #555; font-size: 8.5pt; }}
 .sign {{ margin-top: 22px; display: flex; justify-content: space-between; color: #555; }}
+body, body * {{ color: #111 !important; text-shadow: none !important; }}
 </style>
 </head>
 <body>
