@@ -19545,6 +19545,10 @@ async def admin_batch_adjust(
     item_id: int, batch_id: int, request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""),
     new_qty: float = Form(...),
+    batch_no: str = Form(""),
+    expiry_date: str = Form(""),
+    received_date: str = Form(""),
+    notes: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -19554,24 +19558,82 @@ async def admin_batch_adjust(
     if not batch:
         raise HTTPException(404)
     item = db.get(InventoryItem, item_id)
-    if (item.is_controlled or item.subcategory == "controlled") and new_qty < 0:
-        raise HTTPException(400, "管控药品批次数量不能调整为负数")
-    diff = new_qty - batch.quantity
+    if not item or item.is_service:
+        raise HTTPException(404)
+    if new_qty < 0:
+        return RedirectResponse(
+            f"/admin/inventory/{item_id}?err=" + quote("批次剩余量不能小于 0", safe=""),
+            status_code=303,
+        )
+
+    clean_batch_no = (batch_no or "").strip()[:80]
+    clean_expiry = (expiry_date or "").strip()[:20]
+    clean_received = (received_date or "").strip()[:20]
+    clean_notes = (notes or "").strip()[:500]
+    for label, value in (("有效期", clean_expiry), ("入库日期", clean_received)):
+        if value:
+            try:
+                date.fromisoformat(value)
+            except ValueError:
+                return RedirectResponse(
+                    f"/admin/inventory/{item_id}?err=" + quote(f"{label}格式不正确", safe=""),
+                    status_code=303,
+                )
+    if clean_batch_no:
+        duplicate = (db.query(InventoryBatch).filter(
+            InventoryBatch.item_id == item_id,
+            InventoryBatch.batch_no == clean_batch_no,
+            InventoryBatch.id != batch_id,
+        ).first())
+        if duplicate:
+            return RedirectResponse(
+                f"/admin/inventory/{item_id}?err="
+                + quote(f"批次号 {clean_batch_no} 已存在，请勿重复登记", safe=""),
+                status_code=303,
+            )
+
+    old_qty = float(batch.quantity or 0)
+    old_batch_no = (batch.batch_no or "").strip()
+    old_expiry = (batch.expiry_date or "").strip()
+    old_received = (batch.received_date or "").strip()
+    old_notes = (batch.notes or "").strip()
+    diff = new_qty - old_qty
     before = item.stock_qty
     batch.quantity = new_qty
-    if new_qty <= 0:
-        batch.is_depleted = True
+    batch.batch_no = clean_batch_no
+    batch.expiry_date = clean_expiry
+    batch.received_date = clean_received
+    batch.notes = clean_notes
+    # 已耗尽批次允许补录历史资料，但不能借此恢复库存。
+    if not batch.is_depleted:
+        batch.is_depleted = new_qty <= 0
     item.stock_qty = max(0.0, item.stock_qty + diff)
     item.updated_at = datetime.utcnow()
+
+    changes = []
+    if old_batch_no != clean_batch_no:
+        changes.append(f"批次号 {old_batch_no or '未填写'}→{clean_batch_no or '未填写'}")
+    if old_expiry != clean_expiry:
+        changes.append(f"有效期 {old_expiry or '未填写'}→{clean_expiry or '未填写'}")
+    if old_received != clean_received:
+        changes.append(f"入库日 {old_received or '未填写'}→{clean_received or '未填写'}")
+    if old_notes != clean_notes:
+        changes.append("备注已修改")
+    if abs(diff) > 0.000001:
+        changes.append(f"剩余量 {old_qty:g}→{new_qty:g}")
+    change_note = "；".join(changes) if changes else "资料无变化"
     db.add(InventoryTransaction(
         item_id=item_id, tx_type="adjust", qty=abs(diff),
         qty_before=before, qty_after=item.stock_qty,
         unit_price=0, ref_type="batch",
         operator=request.session.get("admin_username", ""),
-        note=f"批次{batch.batch_no or batch_id}数量修正（{'+' if diff >= 0 else ''}{diff:.1f}）",
+        note=f"批次资料保存（{change_note}）",
     ))
     db.commit()
-    return RedirectResponse(f"/admin/inventory/{item_id}?msg=批次已更新", status_code=303)
+    return RedirectResponse(
+        f"/admin/inventory/{item_id}?msg=" + quote("批次资料已保存", safe=""),
+        status_code=303,
+    )
 
 
 @app.post("/admin/inventory/{item_id}/batch/{batch_id}/deplete")

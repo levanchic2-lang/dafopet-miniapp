@@ -5,6 +5,7 @@
 {% set is_low = (not item.is_service) and item.low_stock_min> 0 and item.stock_qty <= item.low_stock_min %}
 
 {% if request.query_params.get('msg') %}<div class="msg ok"><i data-lucide="check-circle-2"></i> {{ request.query_params.get('msg') }}</div>{% endif %}
+{% if request.query_params.get('err') %}<div class="msg err"><i data-lucide="alert-circle"></i> {{ request.query_params.get('err') }}</div>{% endif %}
 
 <div class="page-head">
  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
@@ -105,26 +106,49 @@
  {% else %}<span class="badge b-ok">正常</span>{% endif %}
  </td>
  <td class="actions" style="padding:0.5rem 0.75rem;text-align:right;">
- {% if not b.is_depleted %}
  <div style="display:flex;gap:0.4rem;justify-content:flex-end;flex-wrap:wrap;">
- <button type="button" class="secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;" onclick="toggleBatchEdit({{ b.id }})">修正</button>
+ <button type="button" class="secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;" onclick="toggleBatchEdit({{ b.id }})">{% if b.batch_no %}编辑{% else %}后补批次{% endif %}</button>
+ {% if not b.is_depleted %}
  <form method="post" action="/admin/inventory/{{ item.id }}/batch/{{ b.id }}/deplete"
  onsubmit="return confirm('确认将此批次标记为耗尽？将从总库存中扣除剩余 {{ '%.1f'|format(b.quantity) }} {{ item.unit }}。')" style="margin:0;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <button type="submit" class="secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;color:#dc2626;">耗尽</button>
  </form>
- </div>
- <div id="batch-edit-{{ b.id }}" style="display:none;margin-top:0.4rem;">
- <form method="post" action="/admin/inventory/{{ item.id }}/batch/{{ b.id }}/adjust"
- style="display:flex;gap:0.4rem;align-items:center;">
- <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <input type="number" name="new_qty" step="0.01" min="0" value="{{ '%.2f'|format(b.quantity) }}"
- style="width:80px;font-size:0.82rem;padding:0.25rem 0.4rem;" required/>
- <button type="submit" style="font-size:0.78rem;padding:0.25rem 0.6rem;">确认</button>
- <button type="button" class="secondary" style="font-size:0.78rem;padding:0.25rem 0.6rem;" onclick="toggleBatchEdit({{ b.id }})">取消</button>
- </form>
- </div>
  {% endif %}
+ </div>
+ </td>
+ </tr>
+ <tr id="batch-edit-{{ b.id }}" style="display:none;background:var(--bg-elevated);border-bottom:1px solid var(--border);">
+ <td colspan="6" style="padding:0.85rem 1rem;">
+ <form method="post" action="/admin/inventory/{{ item.id }}/batch/{{ b.id }}/adjust"
+ style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:0.7rem;align-items:end;">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <label style="font-size:0.78rem;color:var(--muted);">批次号
+ <input type="text" name="batch_no" maxlength="80" value="{{ b.batch_no or '' }}" placeholder="可后补批次号" style="width:100%;margin-top:0.25rem;"/>
+ </label>
+ <label style="font-size:0.78rem;color:var(--muted);">剩余量（{{ item.unit }}）
+ {% if b.is_depleted %}
+ <input type="number" value="{{ '%.2f'|format(b.quantity) }}" style="width:100%;margin-top:0.25rem;" disabled/>
+ <input type="hidden" name="new_qty" value="{{ '%.2f'|format(b.quantity) }}"/>
+ {% else %}
+ <input type="number" name="new_qty" step="0.01" min="0" value="{{ '%.2f'|format(b.quantity) }}"
+ style="width:100%;margin-top:0.25rem;" required/>
+ {% endif %}
+ </label>
+ <label style="font-size:0.78rem;color:var(--muted);">有效期至
+ <input type="date" name="expiry_date" value="{{ b.expiry_date or '' }}" style="width:100%;margin-top:0.25rem;"/>
+ </label>
+ <label style="font-size:0.78rem;color:var(--muted);">入库日期
+ <input type="date" name="received_date" value="{{ b.received_date or '' }}" style="width:100%;margin-top:0.25rem;"/>
+ </label>
+ <label style="font-size:0.78rem;color:var(--muted);">备注
+ <input type="text" name="notes" maxlength="500" value="{{ b.notes or '' }}" placeholder="选填" style="width:100%;margin-top:0.25rem;"/>
+ </label>
+ <div style="display:flex;gap:0.4rem;align-items:center;">
+ <button type="submit" style="font-size:0.78rem;padding:0.45rem 0.7rem;">保存</button>
+ <button type="button" class="secondary" style="font-size:0.78rem;padding:0.45rem 0.7rem;" onclick="toggleBatchEdit({{ b.id }})">取消</button>
+ </div>
+ </form>
  </td>
  </tr>
  {% endfor %}
@@ -249,7 +273,7 @@
 <script>
 function toggleBatchEdit(id) {
  var el = document.getElementById('batch-edit-' + id);
- el.style.display = el.style.display === 'none' ? 'block' : 'none';
+ el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
 }
 </script>
 {% endblock %}
