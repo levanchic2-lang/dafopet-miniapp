@@ -831,6 +831,10 @@ class InsuranceMaterialShare(Base):
     visit_id = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
     title: Mapped[str] = mapped_column(String(160), default="")
     status: Mapped[str] = mapped_column(String(20), default="active")  # active / revoked
+    generation_status: Mapped[str] = mapped_column(String(20), default="idle")  # idle / processing / completed / failed
+    generation_error: Mapped[str] = mapped_column(Text, default="")
+    generation_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    generation_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     store: Mapped[str] = mapped_column(String(40), default="")
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)

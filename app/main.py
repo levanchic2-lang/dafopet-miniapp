@@ -12458,10 +12458,63 @@ def _latest_insurance_snapshot(db: Session, share_id: int) -> InsuranceMaterialS
     )
 
 
+def _process_insurance_material_snapshot(
+    share_id: int,
+    visit_id: int,
+    generated_by: str,
+    note: str,
+) -> None:
+    """Build PDFs/images after the browser response has returned."""
+    from app.database import SessionLocal
+    from app.services.insurance_materials import generate_insurance_material_snapshot
+
+    db = SessionLocal()
+    try:
+        share = db.get(InsuranceMaterialShare, share_id)
+        if not share or share.status != "active":
+            return
+        _, snap = generate_insurance_material_snapshot(
+            db=db,
+            templates=templates,
+            visit_id=visit_id,
+            generated_by=generated_by,
+            visit_type_zh=_VISIT_TYPE_ZH,
+            inv_status_zh=_INV_STATUS_ZH,
+            inv_pay_zh=_INV_PAY_ZH,
+            detect_report_style=_detect_report_style,
+            print_clinic_store=_print_clinic_store,
+            payment_balance_hints=_payment_balance_hints,
+            note=note,
+            share_id=share_id,
+        )
+        share = db.get(InsuranceMaterialShare, share_id)
+        if share:
+            share.generation_status = "completed"
+            share.generation_error = ""
+            share.generation_completed_at = datetime.utcnow()
+        db.commit()
+        logger.info(
+            "[insurance-materials] background generate completed visit=%s share=%s snapshot=%s version=%s files=%s",
+            visit_id, share_id, snap.id, snap.version, snap.file_count,
+        )
+    except Exception as exc:
+        logger.exception("[insurance-materials] background generate failed visit=%s share=%s", visit_id, share_id)
+        db.rollback()
+        share = db.get(InsuranceMaterialShare, share_id)
+        if share:
+            share.generation_status = "failed"
+            share.generation_error = str(exc)[:1000]
+            share.generation_completed_at = datetime.utcnow()
+            db.commit()
+    finally:
+        db.close()
+
+
 @app.post("/admin/visits/{visit_id}/insurance-materials/create")
 async def admin_visit_insurance_materials_create(
     visit_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     csrf_token: str = Form(""),
     note: str = Form(""),
@@ -12475,38 +12528,58 @@ async def admin_visit_insurance_materials_create(
     pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
     _assert_store_access(request, pet.store if pet else "", visit.store if visit else "")
     username = request.session.get("admin_username") or request.session.get("admin") or "admin"
-    try:
-        from app.services.insurance_materials import generate_insurance_material_snapshot
-
-        share, snap = generate_insurance_material_snapshot(
-            db=db,
-            templates=templates,
-            visit_id=visit_id,
-            generated_by=username,
-            visit_type_zh=_VISIT_TYPE_ZH,
-            inv_status_zh=_INV_STATUS_ZH,
-            inv_pay_zh=_INV_PAY_ZH,
-            detect_report_style=_detect_report_style,
-            print_clinic_store=_print_clinic_store,
-            payment_balance_hints=_payment_balance_hints,
-            note=note,
+    share = (
+        db.query(InsuranceMaterialShare)
+        .filter(InsuranceMaterialShare.visit_id == visit.id, InsuranceMaterialShare.status == "active")
+        .order_by(InsuranceMaterialShare.id.desc())
+        .first()
+    )
+    if not share:
+        share = InsuranceMaterialShare(
+            token=secrets.token_urlsafe(24),
+            customer_id=visit.customer_id,
+            pet_id=visit.pet_id,
+            visit_id=visit.id,
+            title=f"保险材料包 · {pet.name if pet else '宠物'} · 病历#{visit.id}",
+            store=(visit.store or (pet.store if pet else "") or ""),
+            expires_at=datetime.utcnow() + timedelta(days=30),
+            created_by=username,
         )
-    except Exception as e:
-        logger.exception("[insurance-materials] generate failed visit=%s", visit_id)
+        db.add(share)
+        db.flush()
+
+    started_at = share.generation_started_at
+    processing_recently = (
+        share.generation_status == "processing"
+        and started_at is not None
+        and started_at > datetime.utcnow() - timedelta(minutes=30)
+    )
+    if processing_recently:
+        db.commit()
         return RedirectResponse(
-            f"/admin/visits/{visit_id}?err={quote('保险材料包生成失败：' + str(e), safe='')}",
+            f"/admin/insurance-materials/{share.id}?msg={quote('材料包正在生成，请勿重复提交', safe='')}",
             status_code=303,
         )
-    _audit(db, request, "insurance_material_snapshot_create", detail={
+
+    share.generation_status = "processing"
+    share.generation_error = ""
+    share.generation_started_at = datetime.utcnow()
+    share.generation_completed_at = None
+    db.commit()
+    _audit(db, request, "insurance_material_snapshot_queued", detail={
         "visit_id": visit_id,
         "share_id": share.id,
-        "snapshot_id": snap.id,
-        "version": snap.version,
-        "file_count": snap.file_count,
     })
     db.commit()
+    background_tasks.add_task(
+        _process_insurance_material_snapshot,
+        share.id,
+        visit_id,
+        username,
+        note,
+    )
     return RedirectResponse(
-        f"/admin/insurance-materials/{share.id}?msg={quote('已生成保险材料包第 ' + str(snap.version) + ' 版', safe='')}",
+        f"/admin/insurance-materials/{share.id}?msg={quote('材料包正在后台生成，完成后本页会自动更新', safe='')}",
         status_code=303,
     )
 
@@ -12523,6 +12596,15 @@ async def admin_insurance_material_detail(
         raise HTTPException(404, "材料包不存在")
     pet = db.get(Pet, share.pet_id) if share.pet_id else None
     _assert_store_access(request, share.store, pet.store if pet else "")
+    if (
+        share.generation_status == "processing"
+        and share.generation_started_at
+        and share.generation_started_at <= datetime.utcnow() - timedelta(minutes=30)
+    ):
+        share.generation_status = "failed"
+        share.generation_error = "后台生成任务已中断，请重新生成"
+        share.generation_completed_at = datetime.utcnow()
+        db.commit()
     snapshots = (
         db.query(InsuranceMaterialSnapshot)
         .filter(InsuranceMaterialSnapshot.share_id == share.id)
@@ -12547,6 +12629,26 @@ async def admin_insurance_material_detail(
     })
 
 
+@app.get("/admin/insurance-materials/{share_id}/generation-status")
+async def admin_insurance_material_generation_status(
+    share_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    share = db.get(InsuranceMaterialShare, share_id)
+    if not share:
+        raise HTTPException(404, "材料包不存在")
+    pet = db.get(Pet, share.pet_id) if share.pet_id else None
+    _assert_store_access(request, share.store, pet.store if pet else "")
+    latest = _latest_insurance_snapshot(db, share.id)
+    return JSONResponse({
+        "status": share.generation_status or "idle",
+        "error": share.generation_error or "",
+        "latest_version": latest.version if latest else None,
+    })
+
+
 @app.post("/admin/insurance-materials/{share_id}/revoke")
 async def admin_insurance_material_revoke(
     share_id: int,
@@ -12559,6 +12661,11 @@ async def admin_insurance_material_revoke(
     share = db.get(InsuranceMaterialShare, share_id)
     if not share:
         raise HTTPException(404, "材料包不存在")
+    if share.generation_status == "processing":
+        return RedirectResponse(
+            f"/admin/insurance-materials/{share.id}?err={quote('材料包仍在生成，完成后再撤销链接', safe='')}",
+            status_code=303,
+        )
     pet = db.get(Pet, share.pet_id) if share.pet_id else None
     _assert_store_access(request, share.store, pet.store if pet else "")
     share.status = "revoked"
@@ -12583,6 +12690,11 @@ async def admin_insurance_material_delete(
     share = db.get(InsuranceMaterialShare, share_id)
     if not share:
         raise HTTPException(404, "材料包不存在")
+    if share.generation_status == "processing":
+        return RedirectResponse(
+            f"/admin/insurance-materials/{share.id}?err={quote('材料包仍在生成，完成后再删除', safe='')}",
+            status_code=303,
+        )
     pet = db.get(Pet, share.pet_id) if share.pet_id else None
     _assert_store_access(request, share.store, pet.store if pet else "")
     visit_id = share.visit_id

@@ -2290,6 +2290,20 @@ def _try_sqlite_migrations() -> None:
             except Exception as _e:
                 print(f"[migrations] grooming_orders.assistant_name skipped: {_e}")
 
+            # 保险材料包改为后台生成，记录进度以避免长请求触发 Nginx 504。
+            try:
+                _im_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(insurance_material_shares)")).fetchall()}
+                if _im_cols and "generation_status" not in _im_cols:
+                    conn.execute(text("ALTER TABLE insurance_material_shares ADD COLUMN generation_status VARCHAR(20) DEFAULT 'idle'"))
+                if _im_cols and "generation_error" not in _im_cols:
+                    conn.execute(text("ALTER TABLE insurance_material_shares ADD COLUMN generation_error TEXT DEFAULT ''"))
+                if _im_cols and "generation_started_at" not in _im_cols:
+                    conn.execute(text("ALTER TABLE insurance_material_shares ADD COLUMN generation_started_at DATETIME DEFAULT NULL"))
+                if _im_cols and "generation_completed_at" not in _im_cols:
+                    conn.execute(text("ALTER TABLE insurance_material_shares ADD COLUMN generation_completed_at DATETIME DEFAULT NULL"))
+            except Exception as _e:
+                print(f"[migrations] insurance material generation status skipped: {_e}")
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

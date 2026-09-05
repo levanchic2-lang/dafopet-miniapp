@@ -278,6 +278,7 @@ def generate_insurance_material_snapshot(
     print_clinic_store: Callable[[Visit | None, Pet | None], str],
     payment_balance_hints: Callable[[Session, list[Payment]], dict[int, str]],
     note: str = "",
+    share_id: int | None = None,
 ) -> tuple[InsuranceMaterialShare, InsuranceMaterialSnapshot]:
     visit = db.get(Visit, visit_id)
     if not visit:
@@ -285,12 +286,16 @@ def generate_insurance_material_snapshot(
     cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
     pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
 
-    share = (
-        db.query(InsuranceMaterialShare)
-        .filter(InsuranceMaterialShare.visit_id == visit.id, InsuranceMaterialShare.status == "active")
-        .order_by(InsuranceMaterialShare.id.desc())
-        .first()
-    )
+    share = db.get(InsuranceMaterialShare, share_id) if share_id else None
+    if share and (share.visit_id != visit.id or share.status != "active"):
+        raise ValueError("保险材料包入口与当前病历不匹配")
+    if not share:
+        share = (
+            db.query(InsuranceMaterialShare)
+            .filter(InsuranceMaterialShare.visit_id == visit.id, InsuranceMaterialShare.status == "active")
+            .order_by(InsuranceMaterialShare.id.desc())
+            .first()
+        )
     if not share:
         share = InsuranceMaterialShare(
             token=secrets.token_urlsafe(24),

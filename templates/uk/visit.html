@@ -226,7 +226,7 @@
     {% endif %}
     </div>
     <div class="action-row">
-      <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create">
+      <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='已提交';">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
         <button type="submit" class="uk-btn danger sm">生成保险材料包</button>
       </form>
@@ -566,7 +566,7 @@
       <h2>保&nbsp;险&nbsp;材&nbsp;料&nbsp;包</h2>
       <span class="count">固定病历 / 收费单 / 检查报告快照，客户可自行下载</span>
     </div>
-    <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create" style="display:inline;">
+    <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create" style="display:inline;" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='已提交';">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
       <button type="submit" class="uk-btn primary sm">生成新版</button>
     </form>
@@ -579,7 +579,9 @@
       {% set snap = sh._latest_snapshot %}
       <tr>
         <td>
-          {% if sh.status == 'active' %}<span class="uk-pill green">可访问</span>
+          {% if sh.generation_status == 'processing' %}<span class="uk-pill amber">生成中</span>
+          {% elif sh.generation_status == 'failed' %}<span class="uk-pill red">生成失败</span>
+          {% elif sh.status == 'active' %}<span class="uk-pill green">可访问</span>
           {% else %}<span class="uk-pill mute">已撤销</span>{% endif %}
         </td>
         <td class="num">{% if snap %}v{{ snap.version }}{% else %}—{% endif %}</td>
