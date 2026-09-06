@@ -391,6 +391,7 @@
       <th>品名</th>
       <th>大类</th>
       <th>小类</th>
+      <th>开单归属</th>
       <th class="right">库存</th>
       <th class="right">售价</th>
       <th class="right">成本</th>
@@ -416,6 +417,7 @@
       </td>
       <td class="ink3">{{ cat_label }}</td>
       <td class="ink3-it">{{ sub_label or '—' }}</td>
+      <td class="ink3">{{ order_types.get(it.order_type or 'manual', '开单时选择') }}</td>
       <td class="right num">
         {% if it.is_service %}<span class="ink3">—</span>
         {% elif is_zero %}
@@ -495,6 +497,11 @@
     <span class="lbl">小类</span>
     <select name="subcategory" id="bulk-subcategory" disabled>
       <option value="">先选大类</option>
+    </select>
+    <span class="lbl">开单归属</span>
+    <select name="order_type" id="bulk-order-type">
+      <option value="__keep__">不修改</option>
+      {% for k, label in order_types.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}
     </select>
     <span class="lbl">供应商</span>
     <input type="text" name="supplier" id="bulk-supplier" placeholder="留空=不改" style="width:110px;"/>
@@ -643,6 +650,9 @@
     var storeEl = document.getElementById('bulk-store');
     var storeVal = storeEl ? storeEl.value : '__keep__';
     var changeStore = storeEl && storeVal !== '__keep__';
+    var orderTypeEl = document.getElementById('bulk-order-type');
+    var orderType = orderTypeEl ? orderTypeEl.value : '__keep__';
+    var changeOrderType = orderType !== '__keep__';
     var isSvcEl = document.getElementById('bulk-is-service');
     var isSvc = isSvcEl ? isSvcEl.value : '__keep__';
     var changeIsSvc = isSvc !== '__keep__';
@@ -660,13 +670,14 @@
       return;
     }
     if (!cat && !sup && !supClear && !notes && !notesClear && !unit && !unit2 && !unit2Ratio && !costPrice
-        && !changeStore && !changeIsSvc && !changeIsCtrl && !changeReqRep && !changeSup) {
+        && !changeStore && !changeOrderType && !changeIsSvc && !changeIsCtrl && !changeReqRep && !changeSup) {
       alert('请至少选择一个要修改的字段');
       return;
     }
     var msg = '确认批量修改这 ' + ids.length + ' 个品目？';
     if (costPrice) msg += '\n成本价：¥' + Number(costPrice).toFixed(2);
     if (changeStore) msg += '\n门店：改为 ' + storeVal;
+    if (changeOrderType) msg += '\n开单归属：' + orderTypeEl.options[orderTypeEl.selectedIndex].text;
     if (changeIsSvc) msg += '\n服务类目：' + (isSvc === '1' ? '是（不占库存）' : '否');
     if (changeIsCtrl) msg += '\n麻醉/管控：' + (isCtrl === '1' ? '是' : '否');
     if (changeReqRep) msg += '\n出报告：' + (reqRep === '1' ? '需' : '免（检查类纯收费项）');
@@ -686,6 +697,7 @@
     if (unit2Ratio) fd.append('unit2_ratio', unit2Ratio);
     if (costPrice) fd.append('cost_price', costPrice);
     if (changeStore) fd.append('store', storeVal);
+    if (changeOrderType) fd.append('order_type', orderType);
     if (changeIsSvc) fd.append('is_service', isSvc);
     if (changeIsCtrl) fd.append('is_controlled', isCtrl);
     if (changeReqRep) fd.append('requires_report', reqRep);

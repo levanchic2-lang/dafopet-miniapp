@@ -62,6 +62,16 @@
  <div style="font-size:0.75rem;color:#94a3b8;margin-top:0.25rem;" id="sub-warn"></div>
  </div>
 
+ <div style="grid-column:1/-1;">
+ <label style="display:block;font-weight:600;margin-bottom:0.35rem;">开单归属</label>
+ <select name="order_type" id="order-type-select" style="width:100%;">
+ {% for type_key, type_label in order_types.items() %}
+ <option value="{{ type_key }}" {% if item and (item.order_type or 'manual') == type_key %}selected{% elif not item and type_key == 'prescription' %}selected{% endif %}>{{ type_label }}</option>
+ {% endfor %}
+ </select>
+ <div style="font-size:.78rem;color:var(--muted);margin-top:.3rem;">决定统一开单后生成哪一种业务单；用途不固定的品目请选择“开单时选择”。</div>
+ </div>
+
  <div style="grid-column:1/-1;display:flex;gap:1.5rem;flex-wrap:wrap;">
  <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
  <input type="checkbox" name="is_service" value="1" {% if item and item.is_service %}checked{% endif %} id="is-service-cb" onchange="toggleStock()"/>
@@ -177,6 +187,25 @@
   function sync() { hint.style.display = cb.checked ? 'block' : 'none'; }
   cb.addEventListener('change', sync);
   sync();
+})();
+(function () {
+  var cat = document.getElementById('cat-select');
+  var sub = document.getElementById('sub-select');
+  var target = document.getElementById('order-type-select');
+  if (!cat || !sub || !target) return;
+  var defaults = {
+    medication: 'prescription', lab: 'exam', imaging: 'exam', microscopy: 'exam',
+    product: 'product', vaccine: 'vaccine', antiparasitic: 'deworming', grooming: 'grooming'
+  };
+  function suggested() {
+    if (cat.value === 'treatment' && sub.value === 'anesthesia') return 'anesthesia';
+    return defaults[cat.value] || 'manual';
+  }
+  function syncSuggestion() { target.value = suggested(); }
+  cat.addEventListener('change', syncSuggestion);
+  sub.addEventListener('change', function () {
+    if (cat.value === 'treatment') syncSuggestion();
+  });
 })();
 (function () {
   var ctrl = document.querySelector('input[name="is_controlled"]');

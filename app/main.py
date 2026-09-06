@@ -17880,6 +17880,46 @@ INVENTORY_CATEGORIES = {
     }},
 }
 
+INVENTORY_ORDER_TYPES = {
+    "prescription": "处方",
+    "exam": "检查",
+    "anesthesia": "麻醉",
+    "product": "商品",
+    "vaccine": "疫苗",
+    "deworming": "驱虫",
+    "grooming": "美容",
+    "inpatient": "住院",
+    "manual": "开单时选择",
+}
+
+
+def _default_inventory_order_type(category: str, subcategory: str = "") -> str:
+    """Return a conservative document target for an inventory classification."""
+    if category == "medication":
+        return "prescription"
+    if category in ("lab", "imaging", "microscopy"):
+        return "exam"
+    if category == "product":
+        return "product"
+    if category == "vaccine":
+        return "vaccine"
+    if category == "antiparasitic":
+        return "deworming"
+    if category == "grooming":
+        return "grooming"
+    if category == "treatment" and subcategory == "anesthesia":
+        return "anesthesia"
+    return "manual"
+
+
+def _valid_inventory_order_type(value: str, category: str, subcategory: str = "") -> str:
+    value = (value or "").strip()
+    if not value:
+        return _default_inventory_order_type(category, subcategory)
+    if value not in INVENTORY_ORDER_TYPES:
+        raise HTTPException(400, "开单归属无效")
+    return value
+
 
 @app.get("/api/diseases/search")
 async def api_diseases_search(
@@ -17938,6 +17978,10 @@ async def api_inventory_search(
             "id": it.id,
             "name": it.name,
             "category": it.category,
+            "order_type": getattr(it, "order_type", "manual") or "manual",
+            "order_type_label": INVENTORY_ORDER_TYPES.get(
+                getattr(it, "order_type", "manual") or "manual", "开单时选择"
+            ),
             "unit": it.unit,
             "unit2": it.unit2 or "",
             "unit2_ratio": float(it.unit2_ratio or 1.0),
@@ -17997,6 +18041,7 @@ async def admin_inventory_bulk_edit(
     subcategory: str = Form(""),
     supplier: str = Form(""),
     store: str = Form("__keep__"),
+    order_type: str = Form("__keep__"),
     is_service: str = Form("__keep__"),
     is_controlled: str = Form("__keep__"),
     requires_report: str = Form("__keep__"),
@@ -18030,6 +18075,9 @@ async def admin_inventory_bulk_edit(
     change_store = (store != "__keep__") and (request.session.get("admin_role") == "superadmin")
     if change_store and store not in ("", "东环店", "横岗店"):
         return RedirectResponse("/admin/inventory?msg=门店值无效", status_code=303)
+    change_order_type = order_type != "__keep__"
+    if change_order_type and order_type not in INVENTORY_ORDER_TYPES:
+        return RedirectResponse("/admin/inventory?msg=开单归属无效", status_code=303)
     change_is_service = is_service in ("0", "1")
     change_is_controlled = is_controlled in ("0", "1")
     change_requires_report = requires_report in ("0", "1")
@@ -18056,6 +18104,7 @@ async def admin_inventory_bulk_edit(
     do_notes_clear = notes_clear == "1"
     if not (category or supplier or do_supplier_clear or notes or do_notes_clear
             or change_store or change_is_service or change_is_controlled
+            or change_order_type
             or change_requires_report or change_single_use_pack
             or unit or unit2 or ratio_val is not None or cost_val is not None):
         return RedirectResponse("/admin/inventory?msg=请至少选一个要修改的字段", status_code=303)
@@ -18079,6 +18128,8 @@ async def admin_inventory_bulk_edit(
             it.notes = notes[:1000]
         if change_store:
             it.store = store
+        if change_order_type:
+            it.order_type = order_type
         if change_is_service:
             it.is_service = (is_service == "1")
         if change_is_controlled:
@@ -18100,11 +18151,12 @@ async def admin_inventory_bulk_edit(
     db.commit()
     _audit(db, request, "inventory_bulk_edit", application_id=None,
            detail={"count": updated, "category": category, "subcategory": subcategory, "supplier": supplier,
-                   "cost_price": cost_val})
+                   "cost_price": cost_val, "order_type": order_type if change_order_type else ""})
     db.commit()
     parts = []
     if category: parts.append(f"大类={INVENTORY_CATEGORIES[category]['label']}")
     if subcategory: parts.append(f"小类={INVENTORY_CATEGORIES[category]['subs'].get(subcategory, subcategory)}")
+    if change_order_type: parts.append(f"开单归属={INVENTORY_ORDER_TYPES[order_type]}")
     if supplier: parts.append(f"供应商={supplier}")
     if do_supplier_clear: parts.append("供应商=清空")
     if do_notes_clear: parts.append("备注=清空")
@@ -18192,6 +18244,11 @@ async def api_inventory_search(
     return {"items": [
         {
             "id": r.id, "name": r.name, "unit": r.unit,
+            "category": r.category,
+            "order_type": getattr(r, "order_type", "manual") or "manual",
+            "order_type_label": INVENTORY_ORDER_TYPES.get(
+                getattr(r, "order_type", "manual") or "manual", "开单时选择"
+            ),
             "unit2": r.unit2 or "",
             "unit2_ratio": float(r.unit2_ratio or 1.0),
             "stock_qty": float(r.stock_qty or 0),
@@ -18811,7 +18868,8 @@ async def admin_inventory_list(
         "q": q, "category": category, "subcategory": subcategory, "low_stock": low_stock,
         "zero_stock": zero_stock, "controlled": controlled, "service_only": service_only,
         "expiry_alert": expiry_alert, "cost_missing": cost_missing,
-        "categories": INVENTORY_CATEGORIES, "low_count": low_count, "zero_count": zero_count,
+        "categories": INVENTORY_CATEGORIES, "order_types": INVENTORY_ORDER_TYPES,
+        "low_count": low_count, "zero_count": zero_count,
         "expiry_count": expiry_count, "cost_missing_count": cost_missing_count,
         "csrf_token": _get_csrf_token(request),
         "title": "库存管理",
@@ -18950,6 +19008,7 @@ async def admin_inventory_create_form(request: Request, db: Session = Depends(ge
     return templates.TemplateResponse(request, "uk/inventory_form.html", {
         "request": request, "item": None,
         "categories": INVENTORY_CATEGORIES,
+        "order_types": INVENTORY_ORDER_TYPES,
         "csrf_token": request.session.get("csrf_token", ""),
         "title": "新增品目",
         "default_store": _get_admin_store(request),
@@ -18963,6 +19022,7 @@ async def admin_inventory_create(
     csrf_token: str = Form(""),
     name: str = Form(""), category: str = Form("medication"),
     subcategory: str = Form(""), is_service: str = Form("0"),
+    order_type: str = Form(""),
     is_controlled: str = Form("0"),
     report_exempt: str = Form("0"),
     single_use_pack: str = Form("0"),
@@ -18985,6 +19045,7 @@ async def admin_inventory_create(
     operator = request.session.get("admin_username", "")
     item = InventoryItem(
         name=name.strip(), category=category, subcategory=subcategory,
+        order_type=_valid_inventory_order_type(order_type, category, subcategory),
         is_service=(is_service == "1"), is_controlled=(is_controlled == "1"),
         requires_report=(report_exempt != "1"),  # 反向：勾免报告 → requires_report=False
         single_use_pack=(single_use_pack == "1"),
@@ -19027,6 +19088,7 @@ async def admin_inventory_edit_form(item_id: int, request: Request, db: Session 
     return templates.TemplateResponse(request, "uk/inventory_form.html", {
         "request": request, "item": item,
         "categories": INVENTORY_CATEGORIES,
+        "order_types": INVENTORY_ORDER_TYPES,
         "csrf_token": request.session.get("csrf_token", ""),
         "title": f"编辑品目：{item.name}",
         "default_store": item.store or _get_admin_store(request),
@@ -19061,6 +19123,7 @@ async def admin_inventory_detail(item_id: int, request: Request, db: Session = D
         "tx_pages": max(1, (tx_total + page_size - 1) // page_size),
         "batches": batches, "today_str": today_str, "alert_date_str": alert_date_str,
         "categories": INVENTORY_CATEGORIES,
+        "order_types": INVENTORY_ORDER_TYPES,
         "csrf_token": request.session.get("csrf_token", ""),
         "title": f"品目详情：{item.name}",
     })
@@ -19072,6 +19135,7 @@ async def admin_inventory_edit(
     csrf_token: str = Form(""),
     name: str = Form(""), category: str = Form("medication"),
     subcategory: str = Form(""), is_service: str = Form("0"),
+    order_type: str = Form(""),
     is_controlled: str = Form("0"),
     report_exempt: str = Form("0"),
     single_use_pack: str = Form("0"),
@@ -19110,6 +19174,7 @@ async def admin_inventory_edit(
             deduped.append(ln[:200])
         item.aliases = json.dumps(deduped[:8], ensure_ascii=False) if deduped else ""
     item.category = category; item.subcategory = subcategory
+    item.order_type = _valid_inventory_order_type(order_type, category, subcategory)
     item.is_service = (is_service == "1"); item.is_controlled = (is_controlled == "1")
     if (item.is_controlled or item.subcategory == "controlled") and not manufacturer.strip():
         raise HTTPException(400, "麻醉/精神类管控品目必须填写生产企业")

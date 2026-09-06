@@ -13,6 +13,7 @@
       <span class="sub">
         {{ categories.get(item.category, {}).get('label', item.category) }}
         {% if item.subcategory %} · {{ item.subcategory }}{% endif %}
+        · 开单归属：{{ order_types.get(item.order_type or 'manual', '开单时选择') }}
         {% if item.is_controlled %} · 受管控{% endif %}
         {% if item.is_service %} · 服务项目{% endif %}
         {% if item.single_use_pack %} · 整支计费{% endif %}

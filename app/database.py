@@ -800,6 +800,20 @@ def _try_sqlite_migrations() -> None:
             # inventory_items: 生产企业（麻醉/精神类管控药必填）
             if inv_item_cols and "manufacturer" not in inv_item_names:
                 conn.execute(text("ALTER TABLE inventory_items ADD COLUMN manufacturer VARCHAR(200) DEFAULT ''"))
+            # inventory_items: 统一开单归属。只对没有歧义的大类自动补齐，其余保留“开单时选择”。
+            if inv_item_cols and "order_type" not in inv_item_names:
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN order_type VARCHAR(30) DEFAULT 'manual'"))
+                conn.execute(text(
+                    "UPDATE inventory_items SET order_type = CASE "
+                    "WHEN category = 'medication' THEN 'prescription' "
+                    "WHEN category IN ('lab','imaging','microscopy') THEN 'exam' "
+                    "WHEN category = 'product' THEN 'product' "
+                    "WHEN category = 'vaccine' THEN 'vaccine' "
+                    "WHEN category = 'antiparasitic' THEN 'deworming' "
+                    "WHEN category = 'grooming' THEN 'grooming' "
+                    "WHEN category = 'treatment' AND subcategory = 'anesthesia' THEN 'anesthesia' "
+                    "ELSE 'manual' END"
+                ))
 
             # stocktake_sessions 盘点会话表
             st_sess_cols = conn.execute(text("PRAGMA table_info(stocktake_sessions)")).fetchall()

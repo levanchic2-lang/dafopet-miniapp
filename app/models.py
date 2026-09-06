@@ -452,6 +452,9 @@ class InventoryItem(Base):
     category: Mapped[str] = mapped_column(String(60), default="medication")
     # 小类：controlled/general/washcare/styling/addon/routine_lab/external_lab/dr/ct/mri/ultrasound/optical/electron
     subcategory: Mapped[str] = mapped_column(String(60), default="")
+    # 统一开单归属：prescription/exam/anesthesia/product/vaccine/deworming/grooming/inpatient/manual
+    # manual = 开单时选择；这里只描述应生成哪类业务单，不替代 category/subcategory 的专业分类。
+    order_type: Mapped[str] = mapped_column(String(30), default="manual")
     is_service: Mapped[bool] = mapped_column(Boolean, default=False)            # 服务项目不占库存
     is_controlled: Mapped[bool] = mapped_column(Boolean, default=False)         # 精神类/麻药管控标记
     # 检查类品目专用：是否需要出报告（保定费 / 拍片操作费 等纯收费项 → False，工作台不再提醒）
