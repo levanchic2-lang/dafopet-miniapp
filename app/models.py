@@ -1219,6 +1219,20 @@ class PrescriptionTemplate(Base):
     use_count: Mapped[int] = mapped_column(Integer, default=0)            # 使用次数
 
 
+class UnifiedOrderTemplate(Base):
+    """统一开单模板：可同时保存处方、检查、商品、疫苗和驱虫项目。"""
+    __tablename__ = "unified_order_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    items_json: Mapped[str] = mapped_column(Text, default="[]")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    store: Mapped[str] = mapped_column(String(40), default="", index=True)
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    use_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class AnesthesiaTemplate(Base):
     """麻醉方案模板（麻醉单常用项目一键套用）"""
     __tablename__ = "anesthesia_templates"

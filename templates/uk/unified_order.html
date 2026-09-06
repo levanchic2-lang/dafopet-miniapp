@@ -26,7 +26,7 @@
   .uo-row-name { font-size:12pt; font-weight:700; }
   .uo-type { display:inline-block; margin-left:8px; padding:2px 7px; border:.5px solid var(--ink-3); font-size:8.5pt; font-weight:400; }
   .uo-remove { border:0; background:none; color:var(--accent-red); cursor:pointer; padding:6px; }
-  .uo-common { display:grid; grid-template-columns:110px 120px minmax(150px,1fr); gap:10px; }
+  .uo-common { display:grid; grid-template-columns:100px 130px 120px minmax(150px,1fr); gap:10px; }
   .uo-extra { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:10px; padding:12px; background:var(--bg-soft); }
   .uo-extra .wide { grid-column:span 2; }
   .uo-extra label,.uo-common label { display:block; font-size:8.5pt; color:var(--ink-3); margin-bottom:3px; }
@@ -40,6 +40,15 @@
   .uo-error { margin-top:16px; padding:12px 14px; color:var(--accent-red); border-left:3px solid var(--accent-red); background:#fff8f7; }
   .uo-check { display:flex; gap:8px; align-items:flex-start; margin-top:14px; }
   .uo-check input { margin-top:4px; }
+  .uo-row-subtotal { display:flex; align-items:center; height:34px; padding:5px 8px; border:.5px solid var(--hair-2); background:var(--bg); font-weight:700; }
+  .uo-tools { display:flex; gap:8px; margin-top:10px; }
+  .uo-modal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.35); align-items:center; justify-content:center; padding:24px; }
+  .uo-modal.open { display:flex; }
+  .uo-modal-box { width:min(620px,100%); max-height:80vh; overflow:auto; background:#fff; border:1px solid var(--ink); padding:22px; }
+  .uo-modal-head { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--ink); padding-bottom:10px; margin-bottom:14px; }
+  .uo-modal-head h2 { margin:0; font-size:15pt; }
+  .uo-template-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center; padding:10px 0; border-bottom:.5px solid var(--hair); }
+  .uo-template-row small { color:var(--ink-3); }
   @media(max-width:900px){.uo-grid{grid-template-columns:1fr}.uo-side{position:static}.uo-extra{grid-template-columns:1fr 1fr}}
 </style>
 
@@ -71,6 +80,10 @@
           <input id="itemSearch" autocomplete="off" placeholder="输入药品、检查、疫苗、驱虫或商品名称…"/>
           <div id="searchResults" class="uo-results"></div>
         </div>
+        <div class="uo-tools">
+          <button type="button" class="uk-btn ghost sm" id="openTemplates">套用模板</button>
+          <button type="button" class="uk-btn ghost sm" id="saveTemplate">保存当前项目为模板</button>
+        </div>
         <div id="itemList" class="uo-list"><div class="uo-empty">搜索并加入项目，系统会自动识别应生成的单据</div></div>
       </section>
     </main>
@@ -94,8 +107,16 @@
   </div>
 </form>
 
+<div id="templateModal" class="uo-modal" role="dialog" aria-modal="true">
+  <div class="uo-modal-box">
+    <div class="uo-modal-head"><h2>统一开单模板</h2><button type="button" class="uk-btn ghost sm" data-close-modal>关闭</button></div>
+    <div id="templateList"><div class="uo-empty">正在读取模板…</div></div>
+  </div>
+</div>
+
 <script>
 (() => {
+  const csrfToken = {{ csrf_token | tojson }};
   const labels = {{ order_type_labels | tojson }};
   const supported = new Set(Object.keys(labels));
   const rows = [];
@@ -131,7 +152,7 @@
       <div><label>剂量单位</label><input data-field="dose_unit" value="${esc(row.dose_unit||row.item.unit||'')}"/></div>
       <div><label>每日次数</label><input type="number" step="0.5" min="0" data-field="times_per_day" value="${esc(row.times_per_day||'')}"/></div>
       <div><label>使用天数</label><input type="number" step="1" min="0" data-field="duration_days" value="${esc(row.duration_days||'')}"/></div>
-      <div class="wide"><label>打印说明</label><input data-field="print_note" value="${esc(row.print_note||'')}" placeholder="客户可见"/></div>
+      <div class="wide"><label>给客户的用药说明（会打印）</label><input data-field="print_note" value="${esc(row.print_note||'')}" placeholder="例如：饭后服用、用前摇匀"/></div>
     </div>`;
     if (row.order_type === 'vaccine') return `<div class="uo-extra">
       <div><label>疫苗类型</label><select data-field="vaccine_type"><option value="">自动识别</option><option value="rabies">狂犬疫苗</option><option value="combo_3">猫三联</option><option value="combo_6">六联</option><option value="canine_8">犬八联</option><option value="other">其他</option></select></div>
@@ -151,10 +172,17 @@
   };
 
   function bindRow(el, row) {
-    el.querySelectorAll('[data-field]').forEach(input => input.addEventListener('change', () => {
-      row[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value;
-      if (input.dataset.field === 'order_type') render(); else updateSummary();
-    }));
+    el.querySelectorAll('[data-field]').forEach(input => {
+      const field = input.dataset.field;
+      if (Object.prototype.hasOwnProperty.call(row, field)) {
+        if (input.type === 'checkbox') input.checked = Boolean(row[field]);
+        else input.value = row[field] ?? '';
+      }
+      input.addEventListener('change', () => {
+        row[field] = input.type === 'checkbox' ? input.checked : input.value;
+        if (field === 'order_type') render(); else updateSummary();
+      });
+    });
     el.querySelectorAll('[data-live]').forEach(input => input.addEventListener('input', () => {
       row[input.dataset.live] = input.value; updateSummary();
     }));
@@ -169,13 +197,14 @@
     list.innerHTML = '';
     rows.forEach(row => {
       const el = document.createElement('div'); el.className='uo-row';
-      const unitLabel = row.item.single_use_pack ? `${row.item.unit2 || '瓶'}价；数量填实际${row.item.unit || '用量'}` : `元 / ${row.item.unit || '单位'}`;
+      const unitLabel = row.item.single_use_pack ? `单价（每${row.item.unit2 || '瓶'}，可修改）` : `单价（元/${row.item.unit || '单位'}，可修改）`;
       el.innerHTML = `<div class="uo-row-head"><div><span class="uo-row-name">${esc(row.item.name)}</span><span class="uo-type">${esc(labels[row.order_type] || '待选择')}</span></div><button type="button" class="uo-remove" title="删除">删除</button></div>
         ${typeSelect(row)}
         <div class="uo-common">
           <div><label>数量 ${esc(row.item.unit||'')}</label><input type="number" step="0.01" min="0.01" data-live="quantity" value="${esc(row.quantity)}"/></div>
           <div><label>${esc(unitLabel)}</label><input type="number" step="0.01" min="0" data-live="unit_price" value="${esc(row.unit_price)}"/></div>
-          <div><label>项目备注</label><input data-live="notes" value="${esc(row.notes||'')}"/></div>
+          <div><label>本项小计</label><span class="uo-row-subtotal">¥${subtotal(row).toFixed(2)}</span></div>
+          <div><label>${row.order_type==='prescription'?'项目备注（院内记录，不打印）':'备注（可选）'}</label><input data-live="notes" value="${esc(row.notes||'')}"/></div>
         </div>${extraFields(row)}`;
       list.appendChild(el); bindRow(el,row);
     });
@@ -187,6 +216,9 @@
     rows.forEach(row => { if (!row.order_type) valid=false; else counts[row.order_type]=(counts[row.order_type]||0)+1; total += subtotal(row); });
     document.getElementById('summary').innerHTML = Object.keys(counts).length ? Object.entries(counts).map(([k,v])=>`<div class="uo-summary-row"><span>${esc(labels[k])}单</span><b>${v} 项</b></div>`).join('') : '<div class="uo-empty" style="padding:16px 0">尚未添加项目</div>';
     document.getElementById('grandTotal').textContent = `¥${total.toFixed(2)}`;
+    document.querySelectorAll('.uo-row').forEach((el,index)=>{
+      const target=el.querySelector('.uo-row-subtotal'); if(target&&rows[index]) target.textContent=`¥${subtotal(rows[index]).toFixed(2)}`;
+    });
     document.getElementById('submitBtn').disabled = !valid;
   }
 
@@ -212,6 +244,42 @@
     },180);
   });
   document.addEventListener('click', e => { if(!e.target.closest('.uo-search')) results.style.display='none'; });
+  const modal=document.getElementById('templateModal');
+  const closeModal=()=>modal.classList.remove('open');
+  document.querySelectorAll('[data-close-modal]').forEach(btn=>btn.addEventListener('click',closeModal));
+  modal.addEventListener('click',e=>{if(e.target===modal)closeModal();});
+
+  async function loadTemplates(){
+    const box=document.getElementById('templateList'); box.innerHTML='<div class="uo-empty">正在读取模板…</div>'; modal.classList.add('open');
+    try{
+      const response=await fetch('/api/unified-order-templates'); const data=await response.json();
+      box.innerHTML=data.length?data.map(t=>`<div class="uo-template-row"><div><b>${esc(t.name)}</b><br/><small>${t.item_count} 个项目 · 已用 ${t.use_count} 次</small></div><button type="button" class="uk-btn primary sm" data-apply-template="${t.id}">套用</button><button type="button" class="uk-btn ghost sm" data-delete-template="${t.id}">删除</button></div>`).join(''):'<div class="uo-empty">暂无模板，可先添加项目后保存</div>';
+      box.querySelectorAll('[data-apply-template]').forEach(btn=>btn.addEventListener('click',()=>applyTemplate(Number(btn.dataset.applyTemplate))));
+      box.querySelectorAll('[data-delete-template]').forEach(btn=>btn.addEventListener('click',()=>deleteTemplate(Number(btn.dataset.deleteTemplate))));
+    }catch(e){box.innerHTML='<div class="uo-error">模板读取失败，请稍后重试</div>';}
+  }
+  async function applyTemplate(id){
+    if(rows.length&&!confirm('套用模板会替换当前已经添加的项目，确定继续吗？'))return;
+    const response=await fetch(`/api/unified-order-templates/${id}`); const data=await response.json();
+    if(!data.ok){alert(data.error||'模板读取失败');return;}
+    rows.splice(0,rows.length,...(data.items||[]).map(entry=>({...entry,item:entry.item})));
+    const notes=document.querySelector('[name="notes"]'); if(notes&&!notes.value&&data.notes)notes.value=data.notes;
+    render(); closeModal();
+  }
+  async function deleteTemplate(id){
+    if(!confirm('确认删除这个模板？'))return;
+    await fetch(`/api/unified-order-templates/${id}/delete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf_token:csrfToken})});
+    loadTemplates();
+  }
+  document.getElementById('openTemplates').addEventListener('click',loadTemplates);
+  document.getElementById('saveTemplate').addEventListener('click',async()=>{
+    if(!rows.length){alert('请先添加项目');return;}
+    if(rows.some(r=>!r.order_type)){alert('请先完成所有品目的开单归属');return;}
+    const name=prompt('请输入模板名称，例如：猫上呼吸道基础套餐'); if(!name||!name.trim())return;
+    const payload={csrf_token:csrfToken,name:name.trim(),items:rows.map(({item,...row})=>row),notes:(document.querySelector('[name="notes"]')||{}).value||''};
+    const response=await fetch('/api/unified-order-templates/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); const data=await response.json();
+    alert(data.ok?'模板已保存':(data.error||'模板保存失败'));
+  });
   document.getElementById('uoForm').addEventListener('submit', e => {
     if(!rows.length || rows.some(r=>!r.order_type)){e.preventDefault();alert('请完成所有品目的开单归属');return;}
     document.getElementById('itemsJson').value=JSON.stringify(rows.map(({item,...row})=>row));

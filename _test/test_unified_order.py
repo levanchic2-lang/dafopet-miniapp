@@ -30,6 +30,7 @@ from app.models import (
     Pet,
     Prescription,
     SalesOrder,
+    UnifiedOrderTemplate,
     Vaccination,
     Visit,
 )
@@ -90,6 +91,14 @@ rows = [
     {"item_id": ids["deworm"], "order_type": "deworming", "quantity": 2, "unit_price": 15,
      "deworm_type": "both"},
 ]
+template_create = client.post("/api/unified-order-templates/create", json={
+    "csrf_token": csrf, "name": "测试混合模板", "items": rows,
+})
+assert template_create.status_code == 200 and template_create.json()["ok"] is True
+template_id = template_create.json()["id"]
+template_get = client.get(f"/api/unified-order-templates/{template_id}")
+assert template_get.status_code == 200 and len(template_get.json()["items"]) == 5
+assert template_get.json()["items"][0]["unit_price"] == 2
 response = client.post(f"/admin/visits/{visit_id}/unified-order", data={
     "csrf_token": csrf, "items_json": json.dumps(rows), "order_date": "2026-09-06", "vet_name": "测试医生",
 })
@@ -102,6 +111,7 @@ assert db.query(ExamOrder).filter_by(visit_id=visit_id).count() == 1
 assert db.query(SalesOrder).filter_by(visit_id=visit_id).count() == 1
 assert db.query(Vaccination).filter_by(pet_id=pet_id).count() == 1
 assert db.query(DewormingRecord).filter_by(pet_id=pet_id).count() == 1
+assert db.query(UnifiedOrderTemplate).count() == 1
 assert sorted(round(x.total_amount, 2) for x in db.query(Invoice).all()) == [30.0, 74.0, 80.0]
 assert db.get(InventoryItem, ids["rx"]).stock_qty == 98
 assert db.get(InventoryItem, ids["product"]).stock_qty == 9

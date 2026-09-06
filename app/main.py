@@ -95,6 +95,7 @@ from app.models import (
     WeightRecord,
     MedicalDocument,
     PrescriptionTemplate,
+    UnifiedOrderTemplate,
     AnesthesiaTemplate,
     ExamTemplate,
     FollowUp,
@@ -15562,6 +15563,143 @@ async def page_admin_unified_order(
         "csrf_token": _get_csrf_token(request),
         "err": request.query_params.get("err", ""),
     })
+
+
+def _unified_template_item_payload(db: Session, item: InventoryItem, op_store: str) -> dict:
+    from app.services.pricing import effective_sell_price as _eff
+    batches = db.query(InventoryBatch).filter(
+        InventoryBatch.item_id == item.id,
+        InventoryBatch.is_depleted == False,  # noqa: E712
+        InventoryBatch.quantity > 0,
+    ).order_by(InventoryBatch.expiry_date.asc(), InventoryBatch.id.asc()).all()
+    return {
+        "id": item.id, "name": item.name, "category": item.category,
+        "order_type": item.order_type or "manual",
+        "order_type_label": INVENTORY_ORDER_TYPES.get(item.order_type or "manual", "开单时选择"),
+        "unit": item.unit or "", "unit2": item.unit2 or "",
+        "unit2_ratio": float(item.unit2_ratio or 1),
+        "sell_price": _eff(item, op_store), "stock_qty": float(item.stock_qty or 0),
+        "is_service": bool(item.is_service), "single_use_pack": bool(item.single_use_pack),
+        "batches": [{
+            "batch_no": b.batch_no or "", "quantity": float(b.quantity or 0),
+            "expiry_date": b.expiry_date or "",
+        } for b in batches],
+    }
+
+
+@app.get("/api/unified-order-templates")
+async def api_unified_order_templates(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    query = _apply_store_filter(
+        db.query(UnifiedOrderTemplate), UnifiedOrderTemplate.store, _get_op_store(request)
+    )
+    rows = query.order_by(
+        UnifiedOrderTemplate.use_count.desc(), UnifiedOrderTemplate.id.desc()
+    ).limit(200).all()
+    result = []
+    for tpl in rows:
+        try:
+            item_count = len(json.loads(tpl.items_json or "[]"))
+        except Exception:
+            item_count = 0
+        result.append({
+            "id": tpl.id, "name": tpl.name, "item_count": item_count,
+            "use_count": tpl.use_count or 0,
+        })
+    return result
+
+
+@app.post("/api/unified-order-templates/create")
+async def api_unified_order_template_create(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, str(body.get("csrf_token") or ""))
+    name = str(body.get("name") or "").strip()[:120]
+    rows = body.get("items") or []
+    if not name:
+        return {"ok": False, "error": "请填写模板名称"}
+    if not isinstance(rows, list) or not rows:
+        return {"ok": False, "error": "请先添加项目"}
+    if len(rows) > 100:
+        return {"ok": False, "error": "一个模板最多保存 100 个项目"}
+    allowed_fields = {
+        "item_id", "order_type", "quantity", "unit_price", "notes", "drug_type",
+        "dose_amount", "dose_unit", "times_per_day", "duration_days", "print_note",
+        "vaccine_type", "dose_number", "next_due_date", "is_free", "batch_no",
+        "deworm_type", "dose", "weight_kg",
+    }
+    cleaned = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            item_id = int(row.get("item_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not item_id:
+            continue
+        entry = {key: row.get(key) for key in allowed_fields if key in row}
+        entry["item_id"] = item_id
+        cleaned.append(entry)
+    if not cleaned:
+        return {"ok": False, "error": "模板中没有有效项目"}
+    tpl = UnifiedOrderTemplate(
+        name=name, items_json=json.dumps(cleaned, ensure_ascii=False),
+        notes=str(body.get("notes") or "").strip(), store=_get_op_store(request),
+        created_by=request.session.get("admin_username", ""),
+    )
+    db.add(tpl)
+    db.commit()
+    db.refresh(tpl)
+    return {"ok": True, "id": tpl.id}
+
+
+@app.get("/api/unified-order-templates/{tpl_id}")
+async def api_unified_order_template_get(
+    tpl_id: int, request: Request, db: Session = Depends(get_db),
+):
+    require_admin(request)
+    tpl = db.get(UnifiedOrderTemplate, tpl_id)
+    if not tpl:
+        return {"ok": False, "error": "模板不存在"}
+    _assert_store_access(request, tpl.store)
+    try:
+        saved_rows = json.loads(tpl.items_json or "[]")
+    except Exception:
+        saved_rows = []
+    ids = [int(row.get("item_id") or 0) for row in saved_rows if isinstance(row, dict)]
+    query = db.query(InventoryItem).filter(
+        InventoryItem.id.in_(ids), InventoryItem.is_active == True,  # noqa: E712
+    )
+    query = _apply_store_filter(query, InventoryItem.store, _get_op_store(request))
+    items = {item.id: item for item in query.all()}
+    output = []
+    for row in saved_rows:
+        item = items.get(int(row.get("item_id") or 0)) if isinstance(row, dict) else None
+        if not item:
+            continue
+        output.append({
+            **row,
+            "item": _unified_template_item_payload(db, item, _get_op_store(request)),
+        })
+    tpl.use_count = (tpl.use_count or 0) + 1
+    db.commit()
+    return {"ok": True, "name": tpl.name, "notes": tpl.notes, "items": output}
+
+
+@app.post("/api/unified-order-templates/{tpl_id}/delete")
+async def api_unified_order_template_delete(
+    tpl_id: int, request: Request, db: Session = Depends(get_db),
+):
+    require_admin(request)
+    body = await request.json()
+    _require_csrf(request, str(body.get("csrf_token") or ""))
+    tpl = db.get(UnifiedOrderTemplate, tpl_id)
+    if tpl:
+        _assert_store_access(request, tpl.store)
+        db.delete(tpl)
+        db.commit()
+    return {"ok": True}
 
 
 @app.post("/admin/visits/{visit_id}/unified-order")
