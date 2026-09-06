@@ -9,10 +9,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-DB_PATH = ROOT / "_test" / "unified_order.db"
+DB_PATH = Path(os.environ.get("UNIFIED_TEST_DB", str(ROOT / "_test" / "unified_order.db")))
 if DB_PATH.exists():
     DB_PATH.unlink()
-os.environ["DATABASE_URL"] = "sqlite:///./_test/unified_order.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{DB_PATH.as_posix()}"
 os.environ["ADMIN_PASSWORD"] = "unified-test-password"
 os.environ["SESSION_SECRET"] = "unified-test-session-secret"
 
