@@ -108,5 +108,30 @@ assert db.get(InventoryItem, ids["product"]).stock_qty == 9
 assert db.get(InventoryItem, ids["vaccine"]).stock_qty == 4
 assert db.get(InventoryItem, ids["deworm"]).stock_qty == 8
 assert db.query(InventoryBatch).filter_by(item_id=ids["vaccine"]).one().quantity == 4
+blocked = InventoryItem(
+    name="零库存管控药", order_type="prescription", sell_price=10,
+    stock_qty=0, category="medication", unit="支", store="横岗店",
+    is_controlled=True,
+)
+db.add(blocked)
+db.commit()
+blocked_id = blocked.id
+db.close()
+
+# 第二次开单先扣普通药，再遇到管控药库存不足；整个请求必须回滚。
+page = client.get(f"/admin/visits/{visit_id}/unified-order")
+csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
+failed_rows = [
+    {"item_id": ids["rx"], "order_type": "prescription", "quantity": 1, "unit_price": 2},
+    {"item_id": blocked_id, "order_type": "prescription", "quantity": 1, "unit_price": 10},
+]
+failed = client.post(f"/admin/visits/{visit_id}/unified-order", data={
+    "csrf_token": csrf, "items_json": json.dumps(failed_rows), "order_date": "2026-09-06",
+})
+assert failed.status_code == 303
+assert "err=" in failed.headers["location"]
+db = SessionLocal()
+assert db.query(Prescription).filter_by(visit_id=visit_id).count() == 1
+assert db.get(InventoryItem, ids["rx"]).stock_qty == 98
 db.close()
 print("PASS: unified ordering")
