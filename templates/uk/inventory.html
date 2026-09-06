@@ -356,8 +356,14 @@
         {% endfor %}
       {% endif %}
     </select>
+    <select name="order_type">
+      <option value="">全部开单归属</option>
+      {% for type_key, type_label in order_types.items() %}
+      <option value="{{ type_key }}" {% if order_type == type_key %}selected{% endif %}>{{ type_label }}</option>
+      {% endfor %}
+    </select>
     <button type="submit" class="uk-btn sm">筛选</button>
-    {% if q or category or subcategory or low_stock or zero_stock or controlled or service_only or expiry_alert or cost_missing %}
+    {% if q or category or subcategory or order_type or low_stock or zero_stock or controlled or service_only or expiry_alert or cost_missing %}
     <a href="/admin/inventory{% if wb_store %}?store={{ wb_store }}{% endif %}" class="uk-btn ghost sm">清除</a>
     {% endif %}
   </div>
@@ -365,6 +371,7 @@
 
 {# ─── 快速筛 chip ─── #}
 <div class="inv-chips">
+  <a href="/admin/inventory?order_type=manual{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if order_type == 'manual' %}active{% endif %}">开单归属待确认{% if manual_order_type_count > 0 %}<span class="num">{{ manual_order_type_count }}</span>{% endif %}</a>
   <a href="/admin/inventory?low_stock=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if low_stock == '1' %}active{% endif %}">库存预警{% if low_count > 0 %}<span class="num">{{ low_count }}</span>{% endif %}</a>
   <a href="/admin/inventory?zero_stock=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if zero_stock == '1' %}active{% endif %}">零库存{% if zero_count > 0 %}<span class="num">{{ zero_count }}</span>{% endif %}</a>
   <a href="/admin/inventory?controlled=1{% if wb_store %}&store={{ wb_store }}{% endif %}" class="inv-chip {% if controlled == '1' %}active{% endif %}">管控药品</a>
@@ -417,7 +424,10 @@
       </td>
       <td class="ink3">{{ cat_label }}</td>
       <td class="ink3-it">{{ sub_label or '—' }}</td>
-      <td class="ink3">{{ order_types.get(it.order_type or 'manual', '开单时选择') }}</td>
+      <td class="ink3">
+        {% if (it.order_type or 'manual') == 'manual' %}<span class="uk-pill amber">待确认</span>
+        {% else %}{{ order_types.get(it.order_type, '开单时选择') }}{% endif %}
+      </td>
       <td class="right num">
         {% if it.is_service %}<span class="ink3">—</span>
         {% elif is_zero %}
@@ -464,7 +474,7 @@
 <div class="inv-pager">
   <div>共 <span class="num">{{ total }}</span> 项 · 本页 <span class="num">{{ items|length }}</span></div>
   {% if total_pages > 1 %}
-  {% set qs = '&q=' ~ q ~ '&category=' ~ category ~ '&subcategory=' ~ subcategory ~ '&low_stock=' ~ low_stock ~ '&zero_stock=' ~ zero_stock ~ '&controlled=' ~ controlled ~ '&service_only=' ~ service_only ~ '&expiry_alert=' ~ expiry_alert ~ '&cost_missing=' ~ cost_missing ~ '&store=' ~ (wb_store or '') %}
+  {% set qs = '&q=' ~ q ~ '&category=' ~ category ~ '&subcategory=' ~ subcategory ~ '&order_type=' ~ order_type ~ '&low_stock=' ~ low_stock ~ '&zero_stock=' ~ zero_stock ~ '&controlled=' ~ controlled ~ '&service_only=' ~ service_only ~ '&expiry_alert=' ~ expiry_alert ~ '&cost_missing=' ~ cost_missing ~ '&store=' ~ (wb_store or '') %}
   <div class="pages">
     {% if page > 1 %}
       <a href="?page=1{{ qs }}">« 首页</a>

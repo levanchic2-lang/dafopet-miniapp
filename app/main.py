@@ -18777,6 +18777,7 @@ async def admin_inventory_list(
     q: str = "",
     category: str = "",
     subcategory: str = "",
+    order_type: str = "",
     low_stock: str = "",
     zero_stock: str = "",
     controlled: str = "",
@@ -18806,6 +18807,8 @@ async def admin_inventory_list(
         query = query.filter(InventoryItem.category == category)
     if subcategory:
         query = query.filter(InventoryItem.subcategory == subcategory)
+    if order_type in INVENTORY_ORDER_TYPES:
+        query = query.filter(InventoryItem.order_type == order_type)
     if low_stock == "1":
         query = query.filter(
             InventoryItem.is_service == False,
@@ -18856,6 +18859,12 @@ async def admin_inventory_list(
         InventoryItem.is_service == False,
         or_(InventoryItem.cost_price.is_(None), InventoryItem.cost_price <= 0),
     ).count()
+    manual_order_type_count = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, _wb_store
+    ).filter(
+        InventoryItem.is_active == True,
+        InventoryItem.order_type == "manual",
+    ).count()
     _alert_date = (_date.today() + _timedelta(days=90)).isoformat()
     expiry_count = (db.query(InventoryBatch.item_id)
                     .filter(InventoryBatch.is_depleted == False,
@@ -18865,12 +18874,14 @@ async def admin_inventory_list(
     return templates.TemplateResponse(request, "uk/inventory.html", {  # B4 UK 重写；旧模板暂留
         "request": request, "items": items, "total": total,
         "page": page, "total_pages": total_pages,
-        "q": q, "category": category, "subcategory": subcategory, "low_stock": low_stock,
+        "q": q, "category": category, "subcategory": subcategory,
+        "order_type": order_type, "low_stock": low_stock,
         "zero_stock": zero_stock, "controlled": controlled, "service_only": service_only,
         "expiry_alert": expiry_alert, "cost_missing": cost_missing,
         "categories": INVENTORY_CATEGORIES, "order_types": INVENTORY_ORDER_TYPES,
         "low_count": low_count, "zero_count": zero_count,
         "expiry_count": expiry_count, "cost_missing_count": cost_missing_count,
+        "manual_order_type_count": manual_order_type_count,
         "csrf_token": _get_csrf_token(request),
         "title": "库存管理",
         "wb_store": _wb_store,
