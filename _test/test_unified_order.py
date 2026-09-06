@@ -69,7 +69,7 @@ pet_id = pet.id
 ids = {"rx": rx.id, "exam": exam.id, "product": product.id, "vaccine": vaccine.id, "deworm": deworm.id}
 db.close()
 
-client = TestClient(app, follow_redirects=False)
+client = TestClient(app, base_url="https://testserver", follow_redirects=False)
 login_page = client.get("/admin/login")
 csrf = re.search(r'name="csrf_token" value="([^"]+)"', login_page.text).group(1)
 login = client.post("/admin/login", data={
