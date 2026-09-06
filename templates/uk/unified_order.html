@@ -1,0 +1,222 @@
+{% extends "uk/_base.html" %}
+{% block title %}统一开单 · 病历 #{{ visit.id }}{% endblock %}
+{% block body %}
+<style>
+  .uo-bc { margin:24px 0 16px; font-size:9pt; color:var(--ink-3); letter-spacing:2px; }
+  .uo-bc a { border-bottom:.5px solid var(--hair-2); }
+  .uo-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; }
+  .uo-head h1 { margin:0; font-size:28pt; line-height:1.2; letter-spacing:2px; }
+  .uo-head p { margin:8px 0 0; color:var(--ink-3); }
+  .uo-grid { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:28px; align-items:start; margin-top:26px; }
+  .uo-panel { border:.5px solid var(--hair-2); background:var(--paper); padding:20px; }
+  .uo-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .uo-field label { display:block; font-size:9pt; color:var(--ink-3); margin-bottom:5px; }
+  .uo-field input,.uo-field select,.uo-field textarea { width:100%; border:.5px solid var(--hair-2); background:#fff; padding:8px 10px; min-height:38px; }
+  .uo-search { position:relative; margin-top:20px; }
+  .uo-search input { width:100%; border:1px solid var(--ink); padding:12px 14px; font-size:12pt; }
+  .uo-results { display:none; position:absolute; top:100%; left:0; right:0; z-index:20; max-height:340px; overflow:auto; background:#fff; border:1px solid var(--ink); border-top:0; }
+  .uo-result { padding:10px 14px; border-bottom:.5px solid var(--hair); cursor:pointer; display:flex; justify-content:space-between; gap:16px; }
+  .uo-result:hover { background:var(--bg-soft); }
+  .uo-result small { color:var(--ink-3); white-space:nowrap; }
+  .uo-result.blocked { color:var(--ink-3); cursor:not-allowed; }
+  .uo-empty { padding:34px 12px; text-align:center; color:var(--ink-3); border-bottom:.5px solid var(--hair); }
+  .uo-list { margin-top:18px; border-top:1px solid var(--ink); }
+  .uo-row { padding:16px 0; border-bottom:.5px solid var(--hair-2); }
+  .uo-row-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+  .uo-row-name { font-size:12pt; font-weight:700; }
+  .uo-type { display:inline-block; margin-left:8px; padding:2px 7px; border:.5px solid var(--ink-3); font-size:8.5pt; font-weight:400; }
+  .uo-remove { border:0; background:none; color:var(--accent-red); cursor:pointer; padding:6px; }
+  .uo-common { display:grid; grid-template-columns:110px 120px minmax(150px,1fr); gap:10px; }
+  .uo-extra { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:10px; padding:12px; background:var(--bg-soft); }
+  .uo-extra .wide { grid-column:span 2; }
+  .uo-extra label,.uo-common label { display:block; font-size:8.5pt; color:var(--ink-3); margin-bottom:3px; }
+  .uo-extra input,.uo-extra select,.uo-common input,.uo-common select { width:100%; min-width:0; height:34px; border:.5px solid var(--hair-2); background:#fff; padding:5px 7px; }
+  .uo-side { position:sticky; top:82px; }
+  .uo-summary-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:.5px solid var(--hair); }
+  .uo-total { display:flex; justify-content:space-between; align-items:baseline; margin-top:16px; padding-top:12px; border-top:3px double var(--ink); }
+  .uo-total strong { font-size:20pt; }
+  .uo-submit { width:100%; margin-top:18px; }
+  .uo-shortcuts a { display:block; padding:9px 0; border-bottom:.5px solid var(--hair); }
+  .uo-error { margin-top:16px; padding:12px 14px; color:var(--accent-red); border-left:3px solid var(--accent-red); background:#fff8f7; }
+  .uo-check { display:flex; gap:8px; align-items:flex-start; margin-top:14px; }
+  .uo-check input { margin-top:4px; }
+  @media(max-width:900px){.uo-grid{grid-template-columns:1fr}.uo-side{position:static}.uo-extra{grid-template-columns:1fr 1fr}}
+</style>
+
+<div class="uo-bc"><a href="/admin">后台</a> / <a href="/admin/visits/{{ visit.id }}">病历 #{{ visit.id }}</a> / 统一开单</div>
+<div class="uo-head">
+  <div>
+    <h1>统一开单</h1>
+    <p>{{ cust.name if cust else '未关联客户' }} · {{ pet.name if pet else '未关联宠物' }} · 同一次可混合加入处方、检查、商品、疫苗和驱虫</p>
+  </div>
+  <a class="uk-btn ghost" href="/admin/visits/{{ visit.id }}">返回病历</a>
+</div>
+<hr class="rule-double"/>
+{% if err %}<div class="uo-error">{{ err }}</div>{% endif %}
+
+<form id="uoForm" method="post" action="/admin/visits/{{ visit.id }}/unified-order">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" id="itemsJson" name="items_json" value="[]"/>
+  <div class="uo-grid">
+    <main>
+      <section class="uo-panel">
+        <div class="uo-form-grid">
+          <div class="uo-field"><label>开单日期</label><input type="date" name="order_date" value="{{ today }}" required/></div>
+          <div class="uo-field"><label>开单医生</label>
+            <input name="vet_name" list="vetList" value="{{ visit.vet_name or '' }}" placeholder="选择或输入医生"/>
+            <datalist id="vetList">{% for name in vets %}<option value="{{ name }}"></option>{% endfor %}</datalist>
+          </div>
+        </div>
+        <div class="uo-search">
+          <input id="itemSearch" autocomplete="off" placeholder="输入药品、检查、疫苗、驱虫或商品名称…"/>
+          <div id="searchResults" class="uo-results"></div>
+        </div>
+        <div id="itemList" class="uo-list"><div class="uo-empty">搜索并加入项目，系统会自动识别应生成的单据</div></div>
+      </section>
+    </main>
+
+    <aside class="uo-side">
+      <section class="uo-panel">
+        <h2 class="uk-h2">本次将生成</h2>
+        <div id="summary"><div class="uo-empty" style="padding:16px 0">尚未添加项目</div></div>
+        <div class="uo-total"><span>预计合计</span><strong id="grandTotal">¥0.00</strong></div>
+        <label class="uo-check"><input type="checkbox" name="is_insurance_service" value="1"/><span>保险增值服务<br/><small style="color:var(--ink-3)">生成的待收款单统一标记为保险代收款</small></span></label>
+        <div class="uo-field" style="margin-top:14px"><label>整单备注</label><textarea name="notes" rows="3"></textarea></div>
+        <button id="submitBtn" type="submit" class="uk-btn primary uo-submit" disabled>确认并生成单据</button>
+      </section>
+      <section class="uo-panel uo-shortcuts" style="margin-top:16px">
+        <h3 class="uk-h3">专用流程</h3>
+        <a href="/admin/visits/{{ visit.id }}/anesthesia/new">麻醉单 →</a>
+        <a href="/admin/inpatient">住院单 →</a>
+        {% if pet %}<a href="/admin/grooming-orders/create?customer_id={{ visit.customer_id or 0 }}&pet_id={{ visit.pet_id or 0 }}">美容单 →</a>{% endif %}
+      </section>
+    </aside>
+  </div>
+</form>
+
+<script>
+(() => {
+  const labels = {{ order_type_labels | tojson }};
+  const supported = new Set(Object.keys(labels));
+  const rows = [];
+  const search = document.getElementById('itemSearch');
+  const results = document.getElementById('searchResults');
+  const list = document.getElementById('itemList');
+  let timer = 0;
+
+  const esc = value => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const num = (value, fallback=0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+  const defaultType = item => item.order_type === 'manual' ? '' : item.order_type;
+  const subtotal = row => {
+    const q = Math.max(0, num(row.quantity, 1));
+    const p = Math.max(0, num(row.unit_price, 0));
+    return row.item.single_use_pack ? Math.ceil(q / Math.max(1, num(row.item.unit2_ratio, 1))) * p : q * p;
+  };
+  const batchOptions = row => {
+    const batches = row.item.batches || [];
+    return `<option value="">自动选择 / 暂不填</option>` + batches.map(b =>
+      `<option value="${esc(b.batch_no)}" ${row.batch_no===b.batch_no?'selected':''}>${esc(b.batch_no || '无批号')} · 余 ${num(b.quantity).toFixed(1)}${esc(row.item.unit || '')}${b.expiry_date?' · '+esc(b.expiry_date):''}</option>`
+    ).join('');
+  };
+  const typeSelect = row => row.item.order_type !== 'manual' ? '' : `
+    <select class="uo-type-select" data-field="order_type" required>
+      <option value="">选择开单归属</option>
+      ${Object.entries(labels).map(([k,v])=>`<option value="${k}" ${row.order_type===k?'selected':''}>${v}</option>`).join('')}
+    </select>`;
+  const extraFields = row => {
+    if (!row.order_type) return `<div class="uo-extra"><div class="wide">该品目尚未确认归属，请先选择要生成哪类单据。</div></div>`;
+    if (row.order_type === 'prescription') return `<div class="uo-extra">
+      <div><label>给药途径</label><select data-field="drug_type"><option value="">请选择</option><option value="oral">口服</option><option value="subcutaneous">皮下注射</option><option value="intramuscular">肌肉注射</option><option value="intravenous">静脉注射</option><option value="topical">外用</option><option value="nebulize">雾化</option></select></div>
+      <div><label>单次用量</label><input type="number" step="0.01" min="0" data-field="dose_amount" value="${esc(row.dose_amount||'')}"/></div>
+      <div><label>剂量单位</label><input data-field="dose_unit" value="${esc(row.dose_unit||row.item.unit||'')}"/></div>
+      <div><label>每日次数</label><input type="number" step="0.5" min="0" data-field="times_per_day" value="${esc(row.times_per_day||'')}"/></div>
+      <div><label>使用天数</label><input type="number" step="1" min="0" data-field="duration_days" value="${esc(row.duration_days||'')}"/></div>
+      <div class="wide"><label>打印说明</label><input data-field="print_note" value="${esc(row.print_note||'')}" placeholder="客户可见"/></div>
+    </div>`;
+    if (row.order_type === 'vaccine') return `<div class="uo-extra">
+      <div><label>疫苗类型</label><select data-field="vaccine_type"><option value="">自动识别</option><option value="rabies">狂犬疫苗</option><option value="combo_3">猫三联</option><option value="combo_6">六联</option><option value="canine_8">犬八联</option><option value="other">其他</option></select></div>
+      <div><label>第几针</label><select data-field="dose_number"><option value="1">第1针</option><option value="2">第2针</option><option value="3">第3针</option><option value="99">加强针</option></select></div>
+      <div><label>批次</label><select data-field="batch_no">${batchOptions(row)}</select></div>
+      <div><label>下次接种</label><input type="date" data-field="next_due_date" value="${esc(row.next_due_date||'')}"/></div>
+      <label class="uo-check wide"><input type="checkbox" data-field="is_free" ${row.is_free?'checked':''}/><span>此次免费</span></label>
+    </div>`;
+    if (row.order_type === 'deworming') return `<div class="uo-extra">
+      <div><label>驱虫类型</label><select data-field="deworm_type"><option value="external">体外</option><option value="internal">体内</option><option value="both">体内外同驱</option></select></div>
+      <div><label>使用剂量</label><input data-field="dose" value="${esc(row.dose||'')}"/></div>
+      <div><label>批次</label><select data-field="batch_no">${batchOptions(row)}</select></div>
+      <div><label>下次使用</label><input type="date" data-field="next_due_date" value="${esc(row.next_due_date||'')}"/></div>
+      <div><label>本次体重 kg</label><input type="number" step="0.01" min="0" data-field="weight_kg" value="${esc(row.weight_kg||'')}"/></div>
+    </div>`;
+    return '';
+  };
+
+  function bindRow(el, row) {
+    el.querySelectorAll('[data-field]').forEach(input => input.addEventListener('change', () => {
+      row[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value;
+      if (input.dataset.field === 'order_type') render(); else updateSummary();
+    }));
+    el.querySelectorAll('[data-live]').forEach(input => input.addEventListener('input', () => {
+      row[input.dataset.live] = input.value; updateSummary();
+    }));
+    el.querySelector('.uo-remove').addEventListener('click', () => { rows.splice(rows.indexOf(row),1); render(); });
+  }
+
+  function render() {
+    if (!rows.length) {
+      list.innerHTML = '<div class="uo-empty">搜索并加入项目，系统会自动识别应生成的单据</div>';
+      updateSummary(); return;
+    }
+    list.innerHTML = '';
+    rows.forEach(row => {
+      const el = document.createElement('div'); el.className='uo-row';
+      const unitLabel = row.item.single_use_pack ? `${row.item.unit2 || '瓶'}价；数量填实际${row.item.unit || '用量'}` : `元 / ${row.item.unit || '单位'}`;
+      el.innerHTML = `<div class="uo-row-head"><div><span class="uo-row-name">${esc(row.item.name)}</span><span class="uo-type">${esc(labels[row.order_type] || '待选择')}</span></div><button type="button" class="uo-remove" title="删除">删除</button></div>
+        ${typeSelect(row)}
+        <div class="uo-common">
+          <div><label>数量 ${esc(row.item.unit||'')}</label><input type="number" step="0.01" min="0.01" data-live="quantity" value="${esc(row.quantity)}"/></div>
+          <div><label>${esc(unitLabel)}</label><input type="number" step="0.01" min="0" data-live="unit_price" value="${esc(row.unit_price)}"/></div>
+          <div><label>项目备注</label><input data-live="notes" value="${esc(row.notes||'')}"/></div>
+        </div>${extraFields(row)}`;
+      list.appendChild(el); bindRow(el,row);
+    });
+    updateSummary();
+  }
+
+  function updateSummary() {
+    const counts = {}; let total = 0; let valid = rows.length > 0;
+    rows.forEach(row => { if (!row.order_type) valid=false; else counts[row.order_type]=(counts[row.order_type]||0)+1; total += subtotal(row); });
+    document.getElementById('summary').innerHTML = Object.keys(counts).length ? Object.entries(counts).map(([k,v])=>`<div class="uo-summary-row"><span>${esc(labels[k])}单</span><b>${v} 项</b></div>`).join('') : '<div class="uo-empty" style="padding:16px 0">尚未添加项目</div>';
+    document.getElementById('grandTotal').textContent = `¥${total.toFixed(2)}`;
+    document.getElementById('submitBtn').disabled = !valid;
+  }
+
+  search.addEventListener('input', () => {
+    clearTimeout(timer); const q=search.value.trim();
+    if (!q) { results.style.display='none'; return; }
+    timer=setTimeout(async()=>{
+      try {
+        const response=await fetch(`/api/inventory/search?q=${encodeURIComponent(q)}`);
+        const data=await response.json(); const items=Array.isArray(data)?data:(data.items||[]);
+        results.innerHTML = items.length ? items.map((item,i)=>{
+          const blocked=item.order_type!=='manual'&&!supported.has(item.order_type);
+          return `<div class="uo-result ${blocked?'blocked':''}" data-index="${i}"><span>${esc(item.name)}<br/><small>库存 ${num(item.stock_qty).toFixed(1)} ${esc(item.unit||'')}</small></span><small>${esc(item.order_type_label||'待选择')}${blocked?' · 使用专用入口':''}</small></div>`;
+        }).join('') : '<div class="uo-empty">没有找到匹配品目</div>';
+        results.style.display='block';
+        results.querySelectorAll('.uo-result').forEach(el=>el.addEventListener('click',()=>{
+          const item=items[Number(el.dataset.index)];
+          if(item.order_type!=='manual'&&!supported.has(item.order_type)) return;
+          rows.push({item, item_id:item.id, order_type:defaultType(item), quantity:1, unit_price:num(item.sell_price), notes:''});
+          search.value=''; results.style.display='none'; render();
+        }));
+      } catch(e) { results.innerHTML='<div class="uo-empty">搜索失败，请重试</div>'; results.style.display='block'; }
+    },180);
+  });
+  document.addEventListener('click', e => { if(!e.target.closest('.uo-search')) results.style.display='none'; });
+  document.getElementById('uoForm').addEventListener('submit', e => {
+    if(!rows.length || rows.some(r=>!r.order_type)){e.preventDefault();alert('请完成所有品目的开单归属');return;}
+    document.getElementById('itemsJson').value=JSON.stringify(rows.map(({item,...row})=>row));
+    const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='正在生成…';
+  });
+})();
+</script>
+{% endblock %}

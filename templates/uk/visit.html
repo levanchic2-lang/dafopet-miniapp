@@ -220,9 +220,10 @@
           <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
           <button type="submit" class="uk-btn ghost sm">新建住院单</button>
         </form>
+        <a href="/admin/visits/{{ visit.id }}/unified-order" class="uk-btn primary sm">＋ 统一开单</a>
         <a href="/admin/visits/{{ visit.id }}/anesthesia/new" class="uk-btn ghost sm">＋ 新建麻醉单</a>
         <a href="/admin/exam-orders/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建检查单</a>
-        <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn primary sm">＋ 新建处方</a>
+        <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建处方</a>
     {% endif %}
     </div>
     <div class="action-row">

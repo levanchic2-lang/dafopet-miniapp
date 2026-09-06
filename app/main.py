@@ -15492,6 +15492,336 @@ def _audit_doc_action(db: Session, doc_type: str, doc_id: int, action: str,
         pass
 
 
+_UNIFIED_ORDER_TYPES = {
+    "prescription": "处方",
+    "exam": "检查",
+    "product": "商品",
+    "vaccine": "疫苗",
+    "deworming": "驱虫",
+}
+
+
+def _unified_vaccine_type(item: InventoryItem, row: dict) -> str:
+    selected = str(row.get("vaccine_type") or "").strip()
+    if selected:
+        return selected[:40]
+    text = f"{item.name} {item.subcategory or ''}".lower()
+    if "狂犬" in text or "rabies" in text:
+        return "rabies"
+    if "八联" in text or "8联" in text:
+        return "canine_8"
+    if "六联" in text or "6联" in text:
+        return "combo_6"
+    if "三联" in text or "3联" in text:
+        return "combo_3"
+    return "other"
+
+
+def _unified_positive_number(value, default: float = 1.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = default
+    if number <= 0:
+        raise ValueError("数量必须大于 0")
+    return number
+
+
+def _unified_price(value) -> float:
+    try:
+        number = float(value or 0)
+    except (TypeError, ValueError):
+        raise ValueError("单价格式不正确")
+    if number < 0:
+        raise ValueError("单价不能小于 0")
+    return number
+
+
+@app.get("/admin/visits/{visit_id}/unified-order", response_class=HTMLResponse)
+async def page_admin_unified_order(
+    visit_id: int, request: Request, db: Session = Depends(get_db),
+):
+    require_admin(request)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "病历不存在")
+    if (visit.status or "open") == "closed":
+        return RedirectResponse(f"/admin/visits/{visit_id}?err=病历已结束，不能继续开单", status_code=303)
+    cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    vets = [row[0] for row in db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")
+    ).order_by(Staff.name).all()]
+    return templates.TemplateResponse(request, "uk/unified_order.html", {
+        "visit": visit,
+        "cust": cust,
+        "pet": pet,
+        "vets": vets,
+        "order_type_labels": _UNIFIED_ORDER_TYPES,
+        "today": date.today().isoformat(),
+        "csrf_token": _get_csrf_token(request),
+        "err": request.query_params.get("err", ""),
+    })
+
+
+@app.post("/admin/visits/{visit_id}/unified-order")
+async def admin_unified_order_create(
+    visit_id: int, request: Request, db: Session = Depends(get_db),
+):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "病历不存在")
+    if (visit.status or "open") == "closed":
+        raise HTTPException(403, "病历已结束，不能继续开单")
+    try:
+        rows = json.loads(str(form.get("items_json") or "[]"))
+    except json.JSONDecodeError:
+        rows = []
+    if not isinstance(rows, list) or not rows:
+        return RedirectResponse(f"/admin/visits/{visit_id}/unified-order?err=请至少添加一个项目", status_code=303)
+    if len(rows) > 100:
+        return RedirectResponse(f"/admin/visits/{visit_id}/unified-order?err=一次最多添加100个项目", status_code=303)
+
+    raw_ids: list[int] = []
+    try:
+        raw_ids = [int(row.get("item_id") or 0) for row in rows if isinstance(row, dict)]
+    except (TypeError, ValueError):
+        raw_ids = []
+    item_query = db.query(InventoryItem).filter(
+        InventoryItem.id.in_(raw_ids), InventoryItem.is_active == True,  # noqa: E712
+    )
+    item_query = _apply_store_filter(item_query, InventoryItem.store, _get_op_store(request))
+    inventory = {item.id: item for item in item_query.all()}
+
+    grouped: dict[str, list[tuple[InventoryItem, dict]]] = {
+        key: [] for key in _UNIFIED_ORDER_TYPES
+    }
+    try:
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError("开单项目格式不正确")
+            item_id = int(row.get("item_id") or 0)
+            item = inventory.get(item_id)
+            if not item:
+                raise ValueError("有品目不存在、已停用或不属于当前门店，请重新选择")
+            catalog_type = (item.order_type or "manual").strip()
+            order_type = str(row.get("order_type") or "").strip() if catalog_type == "manual" else catalog_type
+            if order_type not in grouped:
+                if order_type in ("anesthesia", "grooming", "inpatient"):
+                    raise ValueError(f"「{item.name}」目前请使用对应专用入口开单")
+                raise ValueError(f"「{item.name}」需要先选择开单归属")
+            grouped[order_type].append((item, row))
+    except (TypeError, ValueError) as exc:
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}/unified-order?err={quote(str(exc), safe='')}", status_code=303
+        )
+
+    operator = request.session.get("admin_username", "admin")
+    order_date = str(form.get("order_date") or date.today().isoformat()).strip()[:20]
+    vet_name = str(form.get("vet_name") or visit.vet_name or "").strip()[:80]
+    is_insurance = form.get("is_insurance_service") == "1"
+    created: list[str] = []
+    generated_prescription = None
+    try:
+        # 处方：同次统一开单中的所有处方品目合成一张处方。
+        if grouped["prescription"]:
+            p_items: list[dict] = []
+            for item, row in grouped["prescription"]:
+                qty = _unified_positive_number(row.get("quantity"))
+                price = _unified_price(row.get("unit_price"))
+                dose_amount = float(row.get("dose_amount") or 0)
+                times_per_day = float(row.get("times_per_day") or 0)
+                duration = str(row.get("duration_days") or "").strip()[:40]
+                dose_unit = str(row.get("dose_unit") or item.unit or "").strip()[:20]
+                drug_type = str(row.get("drug_type") or "").strip()[:40]
+                p_items.append({
+                    "item_id": item.id, "drug_name": item.name, "drug_type": drug_type,
+                    "dosage": f"{dose_amount:g}{dose_unit}" if dose_amount else "",
+                    "frequency": f"每日{times_per_day:g}次" if times_per_day else "",
+                    "duration_days": duration, "quantity_num": qty,
+                    "quantity": f"{qty:g}{item.unit or ''}", "unit_price": price,
+                    "subtotal": round(qty * price, 2),
+                    "instructions": str(row.get("notes") or "").strip(),
+                    "dose_amount": dose_amount, "dose_unit": dose_unit,
+                    "times_per_day": times_per_day, "item_unit": item.unit or "",
+                    "print_note": str(row.get("print_note") or "").strip(),
+                    "schedule_times": "",
+                })
+            _apply_single_use_pack_billing(db, p_items)
+            _apply_internal_pricing(db, p_items, visit.customer_id or 0)
+            generated_prescription = Prescription(
+                visit_id=visit.id, customer_id=visit.customer_id, pet_id=visit.pet_id,
+                prescribed_date=order_date, vet_name=vet_name, status="issued",
+                total_amount=round(sum(x["subtotal"] for x in p_items), 2),
+                notes=str(form.get("notes") or "").strip(), created_by=operator,
+            )
+            db.add(generated_prescription)
+            db.flush()
+            for entry in p_items:
+                db.add(PrescriptionItem(prescription_id=generated_prescription.id, **entry))
+                _deduct_inventory(db, entry["item_id"], entry["quantity_num"],
+                                  "prescription", generated_prescription.id, operator,
+                                  f"统一开单·处方#{generated_prescription.id}")
+            created.append(f"处方#{generated_prescription.id}")
+
+        # 检查：合成一张检查单。
+        if grouped["exam"]:
+            exam_items: list[dict] = []
+            for item, row in grouped["exam"]:
+                qty = _unified_positive_number(row.get("quantity"))
+                price = _unified_price(row.get("unit_price"))
+                exam_items.append({
+                    "name": item.name, "item_id": item.id, "qty": qty,
+                    "unit": item.unit or "", "unit_price": price,
+                    "subtotal": round(qty * price, 2),
+                    "notes": str(row.get("notes") or "").strip(),
+                })
+            _apply_single_use_pack_billing(db, exam_items)
+            _apply_internal_pricing(db, exam_items, visit.customer_id or 0)
+            token, exp = _exam_order_token(db)
+            exam = ExamOrder(
+                visit_id=visit.id, items_json=json.dumps(exam_items, ensure_ascii=False),
+                notes=str(form.get("notes") or "").strip(), upload_token=token,
+                token_expires_at=exp, created_by=operator,
+            )
+            db.add(exam)
+            db.flush()
+            for entry in exam_items:
+                _deduct_inventory(db, entry["item_id"], entry["qty"],
+                                  "exam_order", exam.id, operator,
+                                  f"统一开单·检查#{exam.id} {entry['name']}")
+            created.append(f"检查#{exam.id}")
+
+        # 商品：合成一张销售单并关联当前病历。
+        if grouped["product"]:
+            sale_items: list[dict] = []
+            for item, row in grouped["product"]:
+                qty = _unified_positive_number(row.get("quantity"))
+                price = _unified_price(row.get("unit_price"))
+                sale_items.append({
+                    "item_id": item.id, "item_name": item.name, "item_type": "product",
+                    "unit_price": price, "quantity": qty,
+                    "subtotal": round(qty * price, 2),
+                    "notes": str(row.get("notes") or "").strip()[:200],
+                })
+            _apply_single_use_pack_billing(db, sale_items)
+            _apply_internal_pricing(db, sale_items, visit.customer_id or 0)
+            sale = SalesOrder(
+                customer_id=visit.customer_id, visit_id=visit.id, pet_id=visit.pet_id,
+                order_date=order_date, status="pending",
+                total_amount=round(sum(x["subtotal"] for x in sale_items), 2),
+                notes=str(form.get("notes") or "").strip(), created_by=operator,
+            )
+            db.add(sale)
+            db.flush()
+            for entry in sale_items:
+                db.add(SalesOrderItem(order_id=sale.id, **entry))
+                _deduct_inventory(db, entry["item_id"], entry["quantity"],
+                                  "sales_order", sale.id, operator,
+                                  f"统一开单·销售#{sale.id}")
+            created.append(f"销售#{sale.id}")
+
+        # 疫苗和驱虫保留各自独立业务记录与收费单。
+        for item, row in grouped["vaccine"]:
+            price = _unified_price(row.get("unit_price"))
+            batch_no = str(row.get("batch_no") or "").strip()[:80]
+            vacc = Vaccination(
+                pet_id=visit.pet_id, customer_id=visit.customer_id,
+                vaccine_type=_unified_vaccine_type(item, row), vaccine_name=item.name,
+                batch_no=batch_no, dose_number=int(row.get("dose_number") or 1),
+                vaccinated_date=order_date,
+                next_due_date=str(row.get("next_due_date") or "").strip()[:20],
+                inventory_item_id=item.id, is_free=bool(row.get("is_free")),
+                vet_name=vet_name, notes=str(row.get("notes") or "").strip(),
+                created_by=operator,
+            )
+            db.add(vacc)
+            db.flush()
+            _deduct_inventory(db, item.id, 1.0, "vaccination", vacc.id, operator,
+                              f"统一开单·{item.name} 接种出库", batch_no=batch_no)
+            if not vacc.is_free and price > 0:
+                invoice = Invoice(
+                    invoice_no=_gen_invoice_no(db), customer_id=visit.customer_id,
+                    pet_id=visit.pet_id, invoice_date=order_date, subtotal=price,
+                    total_amount=price, payment_status="unpaid",
+                    is_insurance_service=is_insurance,
+                    notes=f"疫苗接种 #{vacc.id}",
+                    store=_resolve_invoice_store(db, visit_id=visit.id, pet_id=visit.pet_id,
+                                                 customer_id=visit.customer_id, fallback=_get_op_store(request)),
+                    created_by=operator,
+                )
+                db.add(invoice)
+                db.flush()
+                db.add(InvoiceItem(invoice_id=invoice.id, ref_type="vaccination", ref_id=vacc.id,
+                                   description=item.name, quantity=1, unit_price=price, subtotal=price))
+                vacc.invoice_id = invoice.id
+            created.append(f"疫苗#{vacc.id}")
+
+        for item, row in grouped["deworming"]:
+            qty = _unified_positive_number(row.get("quantity"))
+            price = _unified_price(row.get("unit_price"))
+            batch_no = str(row.get("batch_no") or "").strip()
+            notes = str(row.get("notes") or "").strip()
+            if batch_no:
+                notes = (notes + f"\n批号：{batch_no}").strip()
+            rec = DewormingRecord(
+                customer_id=visit.customer_id, pet_id=visit.pet_id,
+                deworm_date=order_date,
+                deworm_type=str(row.get("deworm_type") or "external")[:40],
+                product_name=item.name, weight_kg=float(row.get("weight_kg") or 0),
+                dose=str(row.get("dose") or "").strip()[:80],
+                next_due_date=str(row.get("next_due_date") or "").strip()[:20],
+                vet_name=vet_name, notes=notes, created_by=operator,
+            )
+            db.add(rec)
+            db.flush()
+            _deduct_inventory(db, item.id, qty, "deworming", rec.id, operator,
+                              f"统一开单·{item.name} 使用出库 ×{qty:g}", batch_no=batch_no)
+            amount = round(qty * price, 2)
+            if amount > 0:
+                invoice = Invoice(
+                    invoice_no=_gen_invoice_no(db), customer_id=visit.customer_id,
+                    pet_id=visit.pet_id, invoice_date=order_date, subtotal=amount,
+                    total_amount=amount, payment_status="unpaid",
+                    is_insurance_service=is_insurance,
+                    notes=f"驱虫 #{rec.id}",
+                    store=_resolve_invoice_store(db, visit_id=visit.id, pet_id=visit.pet_id,
+                                                 customer_id=visit.customer_id, fallback=_get_op_store(request)),
+                    created_by=operator,
+                )
+                db.add(invoice)
+                db.flush()
+                db.add(InvoiceItem(invoice_id=invoice.id, ref_type="deworming", ref_id=rec.id,
+                                   description=item.name, quantity=qty, unit_price=price, subtotal=amount))
+                rec.invoice_id = invoice.id
+            created.append(f"驱虫#{rec.id}")
+
+        # Session 关闭了 autoflush；先显式 flush，收费单同步才能读取刚生成的明细。
+        db.flush()
+        visit_invoice = _sync_visit_invoice(db, visit.id, operator)
+        if visit_invoice and is_insurance:
+            visit_invoice.is_insurance_service = True
+        if generated_prescription:
+            _generate_med_logs_for_prescription(db, generated_prescription)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.exception("[unified-order] create failed visit=%s", visit_id)
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        detail = detail or "开单失败，请检查填写内容"
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}/unified-order?err={quote(str(detail), safe='')}", status_code=303
+        )
+
+    summary = "、".join(created)
+    return RedirectResponse(
+        f"/admin/visits/{visit.id}?msg={quote('统一开单完成：' + summary, safe='')}", status_code=303
+    )
+
+
 @app.get("/admin/prescriptions/create", response_class=HTMLResponse)
 async def page_admin_presc_create(
     request: Request,
@@ -17973,6 +18303,20 @@ async def api_inventory_search(
     # 按当前员工的门店取「有效售价」（默认价 + 该店覆盖）
     from app.services.pricing import effective_sell_price as _eff
     _cur_store = _get_op_store(request)
+    item_ids = [it.id for it in items]
+    batch_map: dict[int, list[dict]] = {}
+    if item_ids:
+        batches = db.query(InventoryBatch).filter(
+            InventoryBatch.item_id.in_(item_ids),
+            InventoryBatch.is_depleted == False,  # noqa: E712
+            InventoryBatch.quantity > 0,
+        ).order_by(InventoryBatch.expiry_date.asc(), InventoryBatch.id.asc()).all()
+        for batch in batches:
+            batch_map.setdefault(batch.item_id, []).append({
+                "batch_no": batch.batch_no or "",
+                "quantity": float(batch.quantity or 0),
+                "expiry_date": batch.expiry_date or "",
+            })
     return [
         {
             "id": it.id,
@@ -17993,6 +18337,7 @@ async def api_inventory_search(
             "is_controlled": it.is_controlled,
             "single_use_pack": bool(it.single_use_pack),  # 整支/整瓶计费 → 前端按整瓶算小计
             "store": it.store or "",
+            "batches": batch_map.get(it.id, []),
         }
         for it in items
     ]
