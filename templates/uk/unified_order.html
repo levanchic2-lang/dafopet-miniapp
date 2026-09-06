@@ -231,7 +231,8 @@
         const data=await response.json(); const items=Array.isArray(data)?data:(data.items||[]);
         results.innerHTML = items.length ? items.map((item,i)=>{
           const blocked=item.order_type!=='manual'&&!supported.has(item.order_type);
-          return `<div class="uo-result ${blocked?'blocked':''}" data-index="${i}"><span>${esc(item.name)}<br/><small>库存 ${num(item.stock_qty).toFixed(1)} ${esc(item.unit||'')}</small></span><small>${esc(item.order_type_label||'待选择')}${blocked?' · 使用专用入口':''}</small></div>`;
+          const stockText=item.is_service?'服务项目 · 不计库存':`库存 ${num(item.stock_qty).toFixed(1)} ${esc(item.unit||'')}`;
+          return `<div class="uo-result ${blocked?'blocked':''}" data-index="${i}"><span>${esc(item.name)}<br/><small>${stockText}</small></span><small>${esc(item.order_type_label||'待选择')}${blocked?' · 使用专用入口':''}</small></div>`;
         }).join('') : '<div class="uo-empty">没有找到匹配品目</div>';
         results.style.display='block';
         results.querySelectorAll('.uo-result').forEach(el=>el.addEventListener('click',()=>{

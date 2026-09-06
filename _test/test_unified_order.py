@@ -80,6 +80,7 @@ assert login.status_code == 303, f"login failed: {login.status_code} {login.text
 
 page = client.get(f"/admin/visits/{visit_id}/unified-order")
 assert page.status_code == 200
+assert "服务项目 · 不计库存" in page.text
 csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
 rows = [
     {"item_id": ids["rx"], "order_type": "prescription", "quantity": 2, "unit_price": 2,
