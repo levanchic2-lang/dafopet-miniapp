@@ -30,6 +30,7 @@ from app.models import (
     Pet,
     Prescription,
     SalesOrder,
+    UnifiedOrderBatch,
     UnifiedOrderTemplate,
     Vaccination,
     Visit,
@@ -104,7 +105,18 @@ response = client.post(f"/admin/visits/{visit_id}/unified-order", data={
     "csrf_token": csrf, "items_json": json.dumps(rows), "order_date": "2026-09-06", "vet_name": "测试医生",
 })
 assert response.status_code == 303, response.text
-assert response.headers["location"].startswith(f"/admin/visits/{visit_id}?msg=")
+assert response.headers["location"].startswith("/admin/unified-orders/")
+batch_page = client.get(response.headers["location"])
+assert batch_page.status_code == 200
+assert "统一改单" in batch_page.text
+assert "测试处方药" in batch_page.text
+assert "测试检查" in batch_page.text
+assert "测试商品" in batch_page.text
+assert "测试猫三联" in batch_page.text
+assert "测试驱虫" in batch_page.text
+visit_page = client.get(f"/admin/visits/{visit_id}")
+assert visit_page.status_code == 200
+assert "统一改单" in visit_page.text
 
 db = SessionLocal()
 assert db.query(Prescription).filter_by(visit_id=visit_id).count() == 1
@@ -113,6 +125,7 @@ assert db.query(SalesOrder).filter_by(visit_id=visit_id).count() == 1
 assert db.query(Vaccination).filter_by(pet_id=pet_id).count() == 1
 assert db.query(DewormingRecord).filter_by(pet_id=pet_id).count() == 1
 assert db.query(UnifiedOrderTemplate).count() == 1
+assert db.query(UnifiedOrderBatch).filter_by(visit_id=visit_id).count() == 1
 assert sorted(round(x.total_amount, 2) for x in db.query(Invoice).all()) == [30.0, 74.0, 80.0]
 assert db.get(InventoryItem, ids["rx"]).stock_qty == 98
 assert db.get(InventoryItem, ids["product"]).stock_qty == 9
@@ -144,5 +157,6 @@ assert "err=" in failed.headers["location"]
 db = SessionLocal()
 assert db.query(Prescription).filter_by(visit_id=visit_id).count() == 1
 assert db.get(InventoryItem, ids["rx"]).stock_qty == 98
+assert db.query(UnifiedOrderBatch).filter_by(visit_id=visit_id).count() == 1
 db.close()
 print("PASS: unified ordering")

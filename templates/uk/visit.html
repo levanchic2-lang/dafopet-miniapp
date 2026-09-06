@@ -221,6 +221,7 @@
           <button type="submit" class="uk-btn ghost sm">新建住院单</button>
         </form>
         <a href="/admin/visits/{{ visit.id }}/unified-order" class="uk-btn primary sm">＋ 统一开单</a>
+        {% if unified_batches %}<a href="/admin/unified-orders/{{ unified_batches[0].id }}" class="uk-btn ghost sm">统一改单</a>{% endif %}
         <a href="/admin/visits/{{ visit.id }}/anesthesia/new" class="uk-btn ghost sm">＋ 新建麻醉单</a>
         <a href="/admin/exam-orders/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建检查单</a>
         <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建处方</a>
@@ -383,6 +384,31 @@
 {% endif %}
 
 {# ─── 关联记录 ─── #}
+
+{% if unified_batches %}
+<div class="v-rel-section">
+  <div class="v-rel-head">
+    <div>
+      <h2>统&nbsp;一&nbsp;开&nbsp;单&nbsp;记&nbsp;录</h2>
+      <span class="count">共 {{ unified_batches|length }} 次</span>
+    </div>
+  </div>
+  <table class="v-rel-tbl">
+    <thead><tr><th>开单时间</th><th>开单日期</th><th>医生</th><th>操作人</th><th class="right">操作</th></tr></thead>
+    <tbody>
+      {% for b in unified_batches %}
+      <tr>
+        <td class="num">{{ (b.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if b.created_at else '—' }}</td>
+        <td class="num">{{ b.order_date or '—' }}</td>
+        <td>{{ b.vet_name or '—' }}</td>
+        <td>{{ b.created_by or '—' }}</td>
+        <td class="right"><a href="/admin/unified-orders/{{ b.id }}">统一改单 →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 
 {# 处方 #}
 <div class="v-rel-section">

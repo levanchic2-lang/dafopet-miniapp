@@ -1,0 +1,90 @@
+{% extends "uk/_base.html" %}
+{% block title %}统一改单 · 第 {{ batch.id }} 次开单{% endblock %}
+{% block body %}
+<style>
+  .ub-bc { margin:24px 0 16px; font-size:9pt; color:var(--ink-3); }
+  .ub-bc a { border-bottom:.5px solid var(--hair-2); }
+  .ub-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; }
+  .ub-head h1 { margin:0; font-size:28pt; line-height:1.2; }
+  .ub-head p { margin:8px 0 0; color:var(--ink-3); }
+  .ub-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .ub-meta { display:grid; grid-template-columns:repeat(4,1fr); border:.5px solid var(--hair-2); margin:24px 0; }
+  .ub-meta div { padding:13px 16px; border-right:.5px solid var(--hair-2); }
+  .ub-meta div:last-child { border-right:0; }
+  .ub-meta small { display:block; color:var(--ink-3); margin-bottom:4px; }
+  .ub-doc { border:.5px solid var(--hair-2); margin:0 0 18px; background:var(--paper); }
+  .ub-doc-head { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:14px 16px; border-bottom:1px solid var(--ink); }
+  .ub-doc-title { display:flex; align-items:center; gap:10px; }
+  .ub-doc-title h2 { margin:0; font-size:14pt; }
+  .ub-pill { display:inline-block; padding:2px 7px; border:.5px solid var(--hair-2); font-size:8.5pt; }
+  .ub-pill.locked { color:var(--accent-amber); border-color:var(--accent-amber); }
+  .ub-pill.deleted { color:var(--accent-red); border-color:var(--accent-red); }
+  .ub-table { width:100%; border-collapse:collapse; }
+  .ub-table th,.ub-table td { padding:10px 16px; border-bottom:.5px solid var(--hair); text-align:left; }
+  .ub-table th { color:var(--ink-3); font-size:8.5pt; font-weight:400; }
+  .ub-table .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .ub-total { display:flex; justify-content:flex-end; align-items:baseline; gap:18px; padding:12px 16px; font-weight:700; }
+  .ub-total strong { font-size:15pt; }
+  .ub-lock-note { padding:0 16px 14px; color:var(--accent-amber); font-size:9pt; text-align:right; }
+  .ub-grand { display:flex; justify-content:flex-end; align-items:baseline; gap:24px; border-top:3px double var(--ink); padding:18px 0 40px; }
+  .ub-grand strong { font-size:22pt; }
+  .ub-empty { padding:30px; color:var(--ink-3); text-align:center; }
+  @media(max-width:760px){.ub-head{align-items:flex-start;flex-direction:column}.ub-meta{grid-template-columns:1fr 1fr}.ub-meta div:nth-child(2){border-right:0}.ub-meta div:nth-child(-n+2){border-bottom:.5px solid var(--hair-2)}.ub-table th:nth-child(3),.ub-table td:nth-child(3){display:none}}
+</style>
+
+<div class="ub-bc"><a href="/admin">后台</a> / <a href="/admin/visits/{{ visit.id }}">病历 #{{ visit.id }}</a> / 统一改单</div>
+<header class="ub-head">
+  <div>
+    <h1>统一改单</h1>
+    <p>第 {{ batch.id }} 次统一开单 · {{ cust.name if cust else '未关联客户' }} · {{ pet.name if pet else '未关联宠物' }}</p>
+  </div>
+  <div class="ub-actions">
+    {% if visit.status != 'closed' %}<a class="uk-btn primary" href="/admin/visits/{{ visit.id }}/unified-order">继续补开</a>{% endif %}
+    <a class="uk-btn ghost" href="/admin/visits/{{ visit.id }}">返回病历</a>
+  </div>
+</header>
+<hr class="rule-double"/>
+
+<section class="ub-meta">
+  <div><small>开单日期</small>{{ batch.order_date or '—' }}</div>
+  <div><small>开单医生</small>{{ batch.vet_name or '—' }}</div>
+  <div><small>操作人</small>{{ batch.created_by or '—' }}</div>
+  <div><small>开单时间</small>{{ (batch.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if batch.created_at else '—' }}</div>
+</section>
+
+{% if docs %}
+  {% for doc in docs %}
+  <section class="ub-doc">
+    <div class="ub-doc-head">
+      <div class="ub-doc-title">
+        <h2>{{ doc['type_label'] }} #{{ doc['id'] }}</h2>
+        <span class="ub-pill{% if not doc['exists'] %} deleted{% elif doc['locked'] %} locked{% endif %}">{{ doc['status'] }}</span>
+      </div>
+      {% if doc['exists'] %}<a class="uk-btn ghost sm" href="{{ doc['url'] }}">{% if doc['locked'] %}查看 / 作废{% else %}查看 / 修改{% endif %} →</a>{% endif %}
+    </div>
+    {% if doc['exists'] %}
+    <table class="ub-table">
+      <thead><tr><th>项目</th><th class="num">数量</th><th class="num">单价</th><th class="num">小计</th></tr></thead>
+      <tbody>
+        {% for item in doc['items'] %}
+        <tr>
+          <td>{{ item['name'] }}{% if item['detail'] %}<small style="display:block;color:var(--ink-3)">{{ item['detail'] }}</small>{% endif %}</td>
+          <td class="num">{{ '%g'|format(item['qty']|float) }} {{ item['unit'] }}</td>
+          <td class="num">¥{{ '%.2f'|format(item['unit_price']|float) }}</td>
+          <td class="num">¥{{ '%.2f'|format(item['subtotal']|float) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="ub-total"><span>本单合计</span><strong>¥{{ '%.2f'|format(doc['total']) }}</strong></div>
+    {% if doc['locked'] %}<div class="ub-lock-note">该单已锁定：{{ doc['lock_reason'] or '已产生后续业务记录' }}。如需调整，请按单据作废后重开。</div>{% endif %}
+    {% else %}
+    <div class="ub-empty">这张单据已经删除，不再计入本次合计。</div>
+    {% endif %}
+  </section>
+  {% endfor %}
+  <div class="ub-grand"><span>当前合计</span><strong>¥{{ '%.2f'|format(grand_total) }}</strong></div>
+{% else %}
+  <div class="ub-empty">本次统一开单没有找到已生成的单据。</div>
+{% endif %}
+{% endblock %}

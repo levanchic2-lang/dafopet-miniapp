@@ -1233,6 +1233,23 @@ class UnifiedOrderTemplate(Base):
     use_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class UnifiedOrderBatch(Base):
+    """一次统一开单生成的正式单据集合，用作统一改单入口。"""
+    __tablename__ = "unified_order_batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    order_date: Mapped[str] = mapped_column(String(20), default="")
+    vet_name: Mapped[str] = mapped_column(String(80), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_insurance_service: Mapped[bool] = mapped_column(Boolean, default=False)
+    submitted_items_json: Mapped[str] = mapped_column(Text, default="[]")
+    documents_json: Mapped[str] = mapped_column(Text, default="[]")
+    store: Mapped[str] = mapped_column(String(40), default="", index=True)
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class AnesthesiaTemplate(Base):
     """麻醉方案模板（麻醉单常用项目一键套用）"""
     __tablename__ = "anesthesia_templates"

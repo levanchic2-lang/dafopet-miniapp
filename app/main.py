@@ -96,6 +96,7 @@ from app.models import (
     MedicalDocument,
     PrescriptionTemplate,
     UnifiedOrderTemplate,
+    UnifiedOrderBatch,
     AnesthesiaTemplate,
     ExamTemplate,
     FollowUp,
@@ -13312,6 +13313,9 @@ async def page_admin_visit_detail(
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
     invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
     exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.desc()).all()
+    unified_batches = db.query(UnifiedOrderBatch).filter(
+        UnifiedOrderBatch.visit_id == visit_id
+    ).order_by(UnifiedOrderBatch.id.desc()).all()
     insurance_shares = (
         db.query(InsuranceMaterialShare)
         .filter(InsuranceMaterialShare.visit_id == visit_id)
@@ -13363,6 +13367,7 @@ async def page_admin_visit_detail(
         "sales_orders": sales_orders,
         "invoices": invoices,
         "exam_orders": exam_orders,
+        "unified_batches": unified_batches,
         "insurance_shares": insurance_shares,
         "followups": followups,
         "care_summary": care_summary,
@@ -13953,7 +13958,7 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
            "monitor_sheet": 0, "consent_task": 0, "consent_doc": 0,
            "care_summary": 0, "care_plan": 0,
            "followup": 0, "microscopy": 0, "neurologic_exam": 0,
-           "clinical_score": 0}
+           "clinical_score": 0, "unified_batch": 0}
 
     if db.query(Hospitalization.id).filter(Hospitalization.visit_id == vid).first():
         return {"visit_id": vid, "skipped": True, "reason": "挂有住院档案", "cnt": cnt}
@@ -14031,6 +14036,8 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
     cnt["care_summary"]  += db.query(ClientCareSummary).filter(ClientCareSummary.visit_id == vid).delete(synchronize_session=False)
     cnt["care_plan"]     += db.query(CarePlan).filter(CarePlan.visit_id == vid).delete(synchronize_session=False)
     cnt["followup"]      += db.query(FollowUp).filter(FollowUp.visit_id == vid).delete(synchronize_session=False)
+    cnt["unified_batch"] += db.query(UnifiedOrderBatch).filter(
+        UnifiedOrderBatch.visit_id == vid).delete(synchronize_session=False)
 
     # 押金 / 套餐核销：保留单据，仅脱钩
     db.query(Deposit).filter(Deposit.visit_id == vid).update({"visit_id": None}, synchronize_session=False)
@@ -15702,6 +15709,111 @@ async def api_unified_order_template_delete(
     return {"ok": True}
 
 
+def _unified_batch_doc_view(db: Session, ref: dict) -> dict:
+    doc_type = str(ref.get("type") or "")
+    try:
+        doc_id = int(ref.get("id") or 0)
+    except (TypeError, ValueError):
+        doc_id = 0
+    labels = {
+        "prescription": "处方单", "exam": "检查单", "product": "销售单",
+        "vaccine": "疫苗单", "deworming": "驱虫单",
+    }
+    result = {
+        "type": doc_type, "type_label": labels.get(doc_type, "业务单据"),
+        "id": doc_id, "exists": False, "status": "已删除", "locked": True,
+        "lock_reason": "单据已删除", "url": "", "items": [], "total": 0.0,
+    }
+    if doc_type == "prescription":
+        doc = db.get(Prescription, doc_id)
+        if not doc:
+            return result
+        locked, reason = _is_prescription_locked(db, doc)
+        result.update(exists=True, status={"draft": "草稿", "issued": "已开具", "dispensed": "已发药", "voided": "已作废"}.get(doc.status, doc.status or "—"),
+                      locked=locked, lock_reason=reason, url=f"/admin/prescriptions/{doc.id}",
+                      total=float(doc.package_price or doc.total_amount or 0),
+                      items=[{"name": x.drug_name, "qty": x.quantity_num, "unit": x.item_unit or "",
+                              "unit_price": x.unit_price, "subtotal": x.subtotal} for x in doc.items])
+    elif doc_type == "exam":
+        doc = db.get(ExamOrder, doc_id)
+        if not doc:
+            return result
+        locked, reason = _is_exam_order_locked(db, doc)
+        try:
+            items = json.loads(doc.items_json or "[]")
+        except Exception:
+            items = []
+        total = float(doc.package_price or sum(float(x.get("subtotal") or 0) for x in items))
+        result.update(exists=True, status={"pending": "待出报告", "completed": "已出报告", "voided": "已作废"}.get(doc.status, doc.status or "—"),
+                      locked=locked, lock_reason=reason, url=f"/admin/exam-orders/{doc.id}/edit",
+                      total=total,
+                      items=[{"name": x.get("name") or "检查项目", "qty": x.get("qty") or 1,
+                              "unit": x.get("unit") or "次", "unit_price": x.get("unit_price") or 0,
+                              "subtotal": x.get("subtotal") or 0} for x in items])
+    elif doc_type == "product":
+        doc = db.get(SalesOrder, doc_id)
+        if not doc:
+            return result
+        locked, reason = _is_sales_order_locked(db, doc)
+        result.update(exists=True, status=_SO_STATUS_ZH.get(doc.status, doc.status or "—"),
+                      locked=locked, lock_reason=reason, url=f"/admin/sales-orders/{doc.id}",
+                      total=float(doc.total_amount or 0),
+                      items=[{"name": x.item_name, "qty": x.quantity, "unit": "",
+                              "unit_price": x.unit_price, "subtotal": x.subtotal} for x in doc.items])
+    elif doc_type == "vaccine":
+        doc = db.get(Vaccination, doc_id)
+        if not doc:
+            return result
+        locked, reason = _is_vaccination_locked(db, doc)
+        inv = db.get(Invoice, doc.invoice_id) if doc.invoice_id else None
+        total = float(inv.total_amount or 0) if inv else 0.0
+        result.update(exists=True, status="已作废" if doc.status == "voided" else "已接种",
+                      locked=locked, lock_reason=reason, url=f"/admin/vaccinations/{doc.id}", total=total,
+                      items=[{"name": doc.vaccine_name, "qty": 1, "unit": "次",
+                              "unit_price": total, "subtotal": total,
+                              "detail": f"批号 {doc.batch_no}" if doc.batch_no else ""}])
+    elif doc_type == "deworming":
+        doc = db.get(DewormingRecord, doc_id)
+        if not doc:
+            return result
+        locked, reason = _is_deworming_locked(db, doc)
+        inv = db.get(Invoice, doc.invoice_id) if doc.invoice_id else None
+        total = float(inv.total_amount or 0) if inv else 0.0
+        inv_item = next((x for x in (inv.items if inv else []) if x.ref_type == "deworming" and x.ref_id == doc.id), None)
+        qty = float(inv_item.quantity or 1) if inv_item else 1.0
+        result.update(exists=True, status="已作废" if doc.status == "voided" else "已使用",
+                      locked=locked, lock_reason=reason, url=f"/admin/dewormings/{doc.id}", total=total,
+                      items=[{"name": doc.product_name, "qty": qty, "unit": "次",
+                              "unit_price": float(inv_item.unit_price or 0) if inv_item else total,
+                              "subtotal": total}])
+    return result
+
+
+@app.get("/admin/unified-orders/{batch_id}", response_class=HTMLResponse)
+async def page_admin_unified_order_batch(
+    batch_id: int, request: Request, db: Session = Depends(get_db),
+):
+    require_admin(request)
+    batch = db.get(UnifiedOrderBatch, batch_id)
+    if not batch:
+        raise HTTPException(404, "统一开单记录不存在")
+    visit = db.get(Visit, batch.visit_id) if batch.visit_id else None
+    if not visit:
+        raise HTTPException(404, "关联病历不存在")
+    cust = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    _assert_store_access(request, pet.store if pet else batch.store)
+    try:
+        refs = json.loads(batch.documents_json or "[]")
+    except Exception:
+        refs = []
+    docs = [_unified_batch_doc_view(db, ref) for ref in refs if isinstance(ref, dict)]
+    return templates.TemplateResponse(request, "uk/unified_order_batch.html", {
+        "batch": batch, "visit": visit, "cust": cust, "pet": pet, "docs": docs,
+        "grand_total": sum(float(doc["total"] or 0) for doc in docs if doc["exists"]),
+    })
+
+
 @app.post("/admin/visits/{visit_id}/unified-order")
 async def admin_unified_order_create(
     visit_id: int, request: Request, db: Session = Depends(get_db),
@@ -15762,8 +15874,17 @@ async def admin_unified_order_create(
     vet_name = str(form.get("vet_name") or visit.vet_name or "").strip()[:80]
     is_insurance = form.get("is_insurance_service") == "1"
     created: list[str] = []
+    created_refs: list[dict] = []
     generated_prescription = None
     try:
+        batch = UnifiedOrderBatch(
+            visit_id=visit.id, order_date=order_date, vet_name=vet_name,
+            notes=str(form.get("notes") or "").strip(), is_insurance_service=is_insurance,
+            submitted_items_json=json.dumps(rows, ensure_ascii=False),
+            documents_json="[]", store=_get_op_store(request), created_by=operator,
+        )
+        db.add(batch)
+        db.flush()
         # 处方：同次统一开单中的所有处方品目合成一张处方。
         if grouped["prescription"]:
             p_items: list[dict] = []
@@ -15804,6 +15925,7 @@ async def admin_unified_order_create(
                                   "prescription", generated_prescription.id, operator,
                                   f"统一开单·处方#{generated_prescription.id}")
             created.append(f"处方#{generated_prescription.id}")
+            created_refs.append({"type": "prescription", "id": generated_prescription.id})
 
         # 检查：合成一张检查单。
         if grouped["exam"]:
@@ -15832,6 +15954,7 @@ async def admin_unified_order_create(
                                   "exam_order", exam.id, operator,
                                   f"统一开单·检查#{exam.id} {entry['name']}")
             created.append(f"检查#{exam.id}")
+            created_refs.append({"type": "exam", "id": exam.id})
 
         # 商品：合成一张销售单并关联当前病历。
         if grouped["product"]:
@@ -15861,6 +15984,7 @@ async def admin_unified_order_create(
                                   "sales_order", sale.id, operator,
                                   f"统一开单·销售#{sale.id}")
             created.append(f"销售#{sale.id}")
+            created_refs.append({"type": "product", "id": sale.id})
 
         # 疫苗和驱虫保留各自独立业务记录与收费单。
         for item, row in grouped["vaccine"]:
@@ -15897,6 +16021,7 @@ async def admin_unified_order_create(
                                    description=item.name, quantity=1, unit_price=price, subtotal=price))
                 vacc.invoice_id = invoice.id
             created.append(f"疫苗#{vacc.id}")
+            created_refs.append({"type": "vaccine", "id": vacc.id})
 
         for item, row in grouped["deworming"]:
             qty = _unified_positive_number(row.get("quantity"))
@@ -15936,6 +16061,7 @@ async def admin_unified_order_create(
                                    description=item.name, quantity=qty, unit_price=price, subtotal=amount))
                 rec.invoice_id = invoice.id
             created.append(f"驱虫#{rec.id}")
+            created_refs.append({"type": "deworming", "id": rec.id})
 
         # Session 关闭了 autoflush；先显式 flush，收费单同步才能读取刚生成的明细。
         db.flush()
@@ -15944,6 +16070,7 @@ async def admin_unified_order_create(
             visit_invoice.is_insurance_service = True
         if generated_prescription:
             _generate_med_logs_for_prescription(db, generated_prescription)
+        batch.documents_json = json.dumps(created_refs, ensure_ascii=False)
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -15954,10 +16081,7 @@ async def admin_unified_order_create(
             f"/admin/visits/{visit_id}/unified-order?err={quote(str(detail), safe='')}", status_code=303
         )
 
-    summary = "、".join(created)
-    return RedirectResponse(
-        f"/admin/visits/{visit.id}?msg={quote('统一开单完成：' + summary, safe='')}", status_code=303
-    )
+    return RedirectResponse(f"/admin/unified-orders/{batch.id}?msg=统一开单完成", status_code=303)
 
 
 @app.get("/admin/prescriptions/create", response_class=HTMLResponse)
