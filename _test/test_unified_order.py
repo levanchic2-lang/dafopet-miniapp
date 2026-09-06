@@ -75,7 +75,7 @@ csrf = re.search(r'name="csrf_token" value="([^"]+)"', login_page.text).group(1)
 login = client.post("/admin/login", data={
     "username": "admin", "password": "unified-test-password", "csrf_token": csrf,
 })
-assert login.status_code == 303
+assert login.status_code == 303, f"login failed: {login.status_code} {login.text[:500]}"
 
 page = client.get(f"/admin/visits/{visit_id}/unified-order")
 assert page.status_code == 200
