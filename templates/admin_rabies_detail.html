@@ -305,7 +305,7 @@
  </a>
  {% endif %}
  {% if rec.pet_id %}
- <a href="/admin/pets/{{ rec.pet_id }}" class="btn secondary" style="width:100%;display:block;text-align:center;font-size:0.85rem;">
+ <a href="/admin/customers/{{ rec.customer_id }}?pet_id={{ rec.pet_id }}" class="btn secondary" style="width:100%;display:block;text-align:center;font-size:0.85rem;">
  <i data-lucide="paw-print"></i> 查看宠物档案
  </a>
  {% endif %}

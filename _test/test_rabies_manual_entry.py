@@ -110,6 +110,12 @@ with SessionLocal() as db:
     assert db.query(AuditLog).filter_by(action="rabies_manual_create").count() == 1
     record_id, vaccination_id = record.id, vaccination.id
 
+detail_page = client.get(f"/admin/rabies/{record_id}")
+assert detail_page.status_code == 200
+pet_profile_url = f"/admin/customers/{customer_id}?pet_id={pet_id}"
+assert f'href="{pet_profile_url}"' in detail_page.text
+assert client.get(pet_profile_url).status_code == 200
+
 deleted = client.post(f"/admin/rabies/{record_id}/delete", data={"csrf_token": csrf})
 assert deleted.status_code == 303
 
