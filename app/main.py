@@ -19,6 +19,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import unicodedata
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Optional
@@ -47,7 +48,7 @@ except ImportError:
         pass
 
 from app.config import settings
-from app.database import get_db, init_db
+from app.database import Base, get_db, init_db
 from app.models import (
     AdminUser,
     Application,
@@ -9074,6 +9075,47 @@ async def admin_customer_edit_pet(
     return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&msg=宠物已更新", status_code=303)
 
 
+def _merge_pet_records(db: Session, src: Pet, tgt: Pet) -> dict[str, int]:
+    """将源宠物全部业务引用迁至目标宠物；由调用方负责审计与提交。"""
+    # 根据数据库外键自动迁移所有指向 pets.id 的字段。这样新增业务表后也不会漏迁，
+    # 且任一表失败时整次事务回滚，不会出现“删了宠物但部分记录没搬走”。
+    from sqlalchemy import update as _upd
+    moved = {}
+    for table in Base.metadata.sorted_tables:
+        if table.name == Pet.__tablename__:
+            continue
+        pet_fk_columns = [
+            col for col in table.c
+            if any(fk.target_fullname == "pets.id" for fk in col.foreign_keys)
+        ]
+        for col in pet_fk_columns:
+            result = db.execute(
+                _upd(table).where(col == src.id).values({col.name: tgt.id})
+            )
+            count = int(result.rowcount or 0)
+            if count > 0:
+                key = table.name if col.name == "pet_id" else f"{table.name}.{col.name}"
+                moved[key] = moved.get(key, 0) + count
+
+    # 补全目标宠物字段（源有目标没有）
+    for fld in ("breed", "color_pattern", "birthday_estimate", "microchip_id"):
+        if not getattr(tgt, fld, None) and getattr(src, fld, None):
+            setattr(tgt, fld, getattr(src, fld))
+    # 出生日期精度更高时优先保留 YYYY-MM-DD，而不是旧档案的 YYYY-MM。
+    if len(src.birthday_estimate or "") > len(tgt.birthday_estimate or ""):
+        tgt.birthday_estimate = src.birthday_estimate
+    if src.notes and src.notes.strip() and src.notes.strip() not in (tgt.notes or ""):
+        prefix = f"[合并自 {src.name} #{src.id}]"
+        tgt.notes = "\n".join(x for x in (tgt.notes, f"{prefix} {src.notes.strip()}") if x)
+    if not tgt.gender or tgt.gender == "unknown":
+        if src.gender and src.gender != "unknown":
+            tgt.gender = src.gender
+    tgt.is_neutered = bool(tgt.is_neutered or src.is_neutered)
+    tgt.is_stray = bool(tgt.is_stray or src.is_stray)
+    db.delete(src)
+    return moved
+
+
 @app.post("/admin/customers/{customer_id}/pets/{pet_id}/merge-into")
 async def admin_customer_merge_pet(
     customer_id: int,
@@ -9083,10 +9125,7 @@ async def admin_customer_merge_pet(
     csrf_token: str = Form(""),
     target_id: int = Form(...),
 ):
-    """合并宠物：把 pet_id 的所有业务关联指向 target_id，然后删除 pet_id。
-
-    适用场景：客户取消 TNR 又重新申请，导致出现多条同名宠物档案。
-    """
+    """合并宠物：迁移全部业务关联后删除重复档案。"""
     require_admin(request)
     require_superadmin(request)
     _require_csrf(request, csrf_token)
@@ -9105,76 +9144,17 @@ async def admin_customer_merge_pet(
             status_code=303,
         )
 
-    # 已知所有挂 pet_id 的表，全部更新到目标
-    from sqlalchemy import update as _upd
-    moved = {}
-    table_classes = [
-        ("申请", Application),
-        ("预约", Appointment),
-        ("就诊", Visit),
-        ("收费单", Invoice),
-        ("疫苗", Vaccination),
-        ("狂犬", RabiesVaccineRecord),
-        ("协议", ConsentTask),
-    ]
-    # 试图扩展更多模型（按需懒导入）
-    try:
-        from app.models import Deworming
-        table_classes.append(("驱虫", Deworming))
-    except ImportError:
-        pass
-    try:
-        from app.models import Prescription
-        table_classes.append(("处方", Prescription))
-    except ImportError:
-        pass
-    try:
-        from app.models import ExamOrder
-        table_classes.append(("检查单", ExamOrder))
-    except ImportError:
-        pass
-    try:
-        from app.models import Deposit
-        table_classes.append(("押金", Deposit))
-    except ImportError:
-        pass
-    try:
-        from app.models import MediaFile
-        table_classes.append(("素材", MediaFile))
-    except ImportError:
-        pass
-    try:
-        from app.models import WeightRecord
-        table_classes.append(("体重", WeightRecord))
-    except ImportError:
-        pass
-
-    for label, cls in table_classes:
-        if not hasattr(cls, "pet_id"):
-            continue
-        try:
-            cnt = db.query(cls).filter(cls.pet_id == pet_id).update(
-                {cls.pet_id: target_id}, synchronize_session=False
-            )
-            if cnt:
-                moved[label] = cnt
-        except Exception as e:
-            logger.warning("[merge pet] move %s failed: %s", label, e)
-
-    # 补全目标宠物字段（源有目标没有）
-    for fld in ("breed", "color_pattern", "birthday_estimate", "microchip_id", "notes"):
-        if not getattr(tgt, fld, None) and getattr(src, fld, None):
-            setattr(tgt, fld, getattr(src, fld))
-    if not tgt.gender or tgt.gender == "unknown":
-        if src.gender and src.gender != "unknown":
-            tgt.gender = src.gender
-
     src_label = f"{src.name}(#{src.id})"
     tgt_label = f"{tgt.name}(#{tgt.id})"
-    db.delete(src)
-    _audit(db, request, "pet_merge",
-           detail={"src": src_label, "target": tgt_label, "moved": moved})
-    db.commit()
+    try:
+        moved = _merge_pet_records(db, src, tgt)
+        _audit(db, request, "pet_merge",
+               detail={"src": src_label, "target": tgt_label, "moved": moved})
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("[merge pet] failed src=%s target=%s", pet_id, target_id)
+        raise HTTPException(500, "宠物合并失败，所有数据均未改动")
     summary = "，".join([f"{k} {v}" for k, v in moved.items()]) or "无关联"
     return RedirectResponse(
         f"/admin/customers/{customer_id}?msg=已合并 {src_label} → {tgt_label}（迁移：{summary}）",
@@ -21096,6 +21076,21 @@ async def api_combo_vaccine_registration_status(
 
 # ── 公开表单：主人填写 ────────────────────────────────────────────────────────
 
+def _pet_name_key(value: str) -> str:
+    """宠物名去首尾/重复空格、统一全半角并忽略英文大小写。"""
+    normalized = unicodedata.normalize("NFKC", str(value or ""))
+    return " ".join(normalized.split()).casefold()
+
+
+def _find_customer_pet_by_name(db: Session, customer_id: int, name: str) -> Pet | None:
+    key = _pet_name_key(name)
+    if not key:
+        return None
+    return next((
+        pet for pet in db.query(Pet).filter(Pet.customer_id == customer_id).order_by(Pet.id).all()
+        if _pet_name_key(pet.name) == key
+    ), None)
+
 @app.get("/rabies", response_class=HTMLResponse)
 async def page_rabies_form(request: Request):
     return templates.TemplateResponse(request, "rabies_form.html", {
@@ -21163,17 +21158,13 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
     pet = None
     if pet_id:
         pet = db.get(Pet, pet_id)
-        if pet and animal_name and pet.name and pet.name.strip() != animal_name.strip():
+        if pet and animal_name and pet.name and _pet_name_key(pet.name) != _pet_name_key(animal_name):
             # 名字不一致 → 视为不同动物
             pet = None
             pet_id = None
     if not pet_id and animal_name:
         # 先按 (customer_id, name) 找已有，避免重复
-        existing = (
-            db.query(Pet)
-            .filter(Pet.customer_id == customer_id, Pet.name == animal_name)
-            .first()
-        )
+        existing = _find_customer_pet_by_name(db, customer_id, animal_name)
         if existing:
             pet = existing
             pet_id = existing.id
@@ -21297,15 +21288,11 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
     pet = None
     if pet_id:
         pet = db.get(Pet, pet_id)
-        if pet and animal_name and pet.name and pet.name.strip() != animal_name.strip():
+        if pet and animal_name and pet.name and _pet_name_key(pet.name) != _pet_name_key(animal_name):
             pet = None
             pet_id = None
     if not pet_id and animal_name:
-        existing = (
-            db.query(Pet)
-            .filter(Pet.customer_id == customer_id, Pet.name == animal_name)
-            .first()
-        )
+        existing = _find_customer_pet_by_name(db, customer_id, animal_name)
         if existing:
             pet = existing
             pet_id = existing.id
