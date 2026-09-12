@@ -1,0 +1,102 @@
+{% extends "uk/_base.html" %}
+{% block title %}保险材料待办 · 大风动物医院{% endblock %}
+
+{% block extra_head %}
+<style>
+  .im-head { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; border-bottom:3px double var(--ink); padding-bottom:14px; margin-bottom:24px; }
+  .im-head h1 { margin:0; font-size:25pt; }
+  .im-head p { margin:7px 0 0; color:var(--ink-2); }
+  .im-kpis { display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--hair); margin-bottom:20px; }
+  .im-kpi { padding:16px 20px; border-right:1px solid var(--hair); }
+  .im-kpi:last-child { border-right:0; }
+  .im-kpi .n { display:block; font-size:23pt; font-weight:700; font-family:var(--font-numeric); }
+  .im-kpi .label { color:var(--ink-3); }
+  .im-tools { display:flex; gap:10px; align-items:center; margin-bottom:14px; }
+  .im-tools input { flex:1; border:1px solid var(--hair-2); padding:9px 11px; }
+  .im-tabs { display:flex; gap:0; margin-bottom:14px; }
+  .im-tabs a { border:1px solid var(--hair-2); border-right:0; padding:8px 14px; text-decoration:none; color:var(--ink); }
+  .im-tabs a:last-child { border-right:1px solid var(--hair-2); }
+  .im-tabs a.current { background:var(--ink); color:var(--paper); }
+  .im-table { width:100%; border-collapse:collapse; }
+  .im-table th { text-align:left; color:var(--ink-3); font-weight:400; padding:9px 8px; border-bottom:1px solid var(--ink); }
+  .im-table td { padding:12px 8px; border-bottom:1px solid var(--hair); vertical-align:middle; }
+  .im-table .right { text-align:right; }
+  .im-name { font-weight:700; }
+  .im-sub { color:var(--ink-3); font-size:9.5pt; margin-top:3px; }
+  @media (max-width:760px) {
+    .im-kpis { grid-template-columns:1fr; }
+    .im-kpi { border-right:0; border-bottom:1px solid var(--hair); }
+    .im-table { min-width:780px; }
+    .im-scroll { overflow-x:auto; }
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="im-head">
+  <div>
+    <div class="uk-breadcrumb"><a href="/admin/visits">病历查询</a><span class="sep">/</span><span>保险材料待办</span></div>
+    <h1>保险材料待办</h1>
+    <p>病例标记后进入这里；成功生成材料包即自动完成。</p>
+  </div>
+</div>
+
+<div class="im-kpis">
+  <div class="im-kpi"><span class="n" style="color:var(--accent-red);">{{ counts['pending'] }}</span><span class="label">待准备</span></div>
+  <div class="im-kpi"><span class="n" style="color:var(--accent-green);">{{ counts['completed'] }}</span><span class="label">已生成材料包</span></div>
+  <div class="im-kpi"><span class="n">{{ counts['all'] }}</span><span class="label">全部保险病例</span></div>
+</div>
+
+<div class="im-tabs">
+  <a href="/admin/insurance-materials?status=pending" class="{% if status == 'pending' %}current{% endif %}">待准备 {{ counts['pending'] }}</a>
+  <a href="/admin/insurance-materials?status=completed" class="{% if status == 'completed' %}current{% endif %}">已完成 {{ counts['completed'] }}</a>
+  <a href="/admin/insurance-materials?status=all" class="{% if status == 'all' %}current{% endif %}">全部 {{ counts['all'] }}</a>
+</div>
+
+<form class="im-tools" method="get">
+  <input type="hidden" name="status" value="{{ status }}"/>
+  <input name="q" value="{{ q }}" placeholder="客户姓名、手机号、宠物名或病历号"/>
+  <button class="uk-btn ghost sm" type="submit">搜索</button>
+  {% if q %}<a class="uk-btn ghost sm" href="/admin/insurance-materials?status={{ status }}">清除</a>{% endif %}
+</form>
+
+{% if rows %}
+<div class="im-scroll">
+  <table class="im-table">
+    <thead><tr><th>病例</th><th>客户 / 宠物</th><th>就诊日期</th><th>主诊</th><th>材料状态</th><th class="right">操作</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      {% set v = r['visit'] %}{% set c = r['customer'] %}{% set p = r['pet'] %}{% set sh = r['share'] %}
+      <tr>
+        <td><a class="im-name" href="/admin/visits/{{ v.id }}">#{{ v.id }}</a><div class="im-sub">{{ v.store or '未标门店' }}</div></td>
+        <td><span class="im-name">{{ c.name if c else '未知客户' }}</span><div class="im-sub">{{ p.name if p else '未知宠物' }}{% if c and c.phone %} · {{ c.phone }}{% endif %}</div></td>
+        <td class="num">{{ v.visit_date or '—' }}</td>
+        <td>{{ v.vet_name or '—' }}</td>
+        <td>
+          {% if r['material_status'] == 'completed' %}<span class="uk-pill green">已生成材料包</span>
+          {% elif r['material_status'] == 'processing' %}<span class="uk-pill amber">生成中</span>
+          {% elif r['material_status'] == 'failed' %}<span class="uk-pill red">生成失败</span>
+          {% else %}<span class="uk-pill red">待准备</span>{% endif %}
+        </td>
+        <td class="right">
+          {% if r['material_status'] == 'completed' and sh %}
+            <a class="uk-btn ghost sm" href="/admin/insurance-materials/{{ sh.id }}">查看材料包</a>
+          {% elif r['material_status'] == 'processing' and sh %}
+            <a class="uk-btn ghost sm" href="/admin/insurance-materials/{{ sh.id }}">查看进度</a>
+          {% else %}
+            <form method="post" action="/admin/visits/{{ v.id }}/insurance-materials/create" style="display:inline;" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='已提交';">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+              <button class="uk-btn primary sm" type="submit">生成材料包</button>
+            </form>
+          {% endif %}
+          <a class="uk-btn ghost sm" href="/admin/visits/{{ v.id }}">查看病例</a>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="uk-empty" style="padding:42px 0;">{% if status == 'pending' %}目前没有待准备的保险材料{% elif status == 'completed' %}还没有已完成的保险材料{% else %}还没有标记保险病例{% endif %}</div>
+{% endif %}
+{% endblock %}

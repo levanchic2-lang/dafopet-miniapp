@@ -228,6 +228,13 @@
     {% endif %}
     </div>
     <div class="action-row">
+      <form method="post" action="/admin/visits/{{ visit.id }}/insurance-claim-needed">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <input type="hidden" name="enabled" value="{{ 0 if visit.insurance_claim_needed else 1 }}"/>
+        <button type="submit" class="uk-btn {% if visit.insurance_claim_needed %}ghost{% else %}danger{% endif %} sm">
+          {% if visit.insurance_claim_needed %}已标记需报保险 · 取消{% else %}标记需报保险{% endif %}
+        </button>
+      </form>
       <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='已提交';">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
         <button type="submit" class="uk-btn danger sm">生成保险材料包</button>
@@ -591,7 +598,12 @@
   <div class="v-rel-head">
     <div>
       <h2>保&nbsp;险&nbsp;材&nbsp;料&nbsp;包</h2>
-      <span class="count">固定病历 / 收费单 / 检查报告快照，客户可自行下载</span>
+      <span class="count">
+        {% if insurance_material_ready %}已生成保险材料包，材料准备已完成
+        {% elif insurance_material_generating %}材料包正在生成
+        {% elif visit.insurance_claim_needed %}已加入保险材料待办，尚未生成材料包
+        {% else %}未标记为需要准备保险材料{% endif %}
+      </span>
     </div>
     <form method="post" action="/admin/visits/{{ visit.id }}/insurance-materials/create" style="display:inline;" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='已提交';">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

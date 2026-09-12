@@ -434,6 +434,10 @@ class Visit(Base):
     closed_by: Mapped[str] = mapped_column(String(80), default="")
     # 主人带回家自治、不需要医院回访 → 勾选关闭，所有 pending 自动取消，未来 sync 不再衍生
     followup_disabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 保险理赔材料待办：材料包生成成功后自动视为已完成，不再增加人工完成步骤。
+    insurance_claim_needed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    insurance_claim_marked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    insurance_claim_marked_by: Mapped[str] = mapped_column(String(80), default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

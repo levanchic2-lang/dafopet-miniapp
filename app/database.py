@@ -1297,6 +1297,20 @@ def _try_sqlite_migrations() -> None:
                 # 操作门店（这次就诊在哪做的，短名）→ 账单/收据/营收按它走，跨店就诊不再跟宠物归属店
                 if "store" not in vst_names_v2:
                     conn.execute(text("ALTER TABLE visits ADD COLUMN store VARCHAR(40) DEFAULT ''"))
+                if "insurance_claim_needed" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN insurance_claim_needed BOOLEAN DEFAULT 0"))
+                    # 已经生成过材料包的历史病例天然属于保险材料记录，仅在首次迁移时纳入已完成列表。
+                    conn.execute(text(
+                        "UPDATE visits SET insurance_claim_needed = 1 "
+                        "WHERE id IN ("
+                        "SELECT DISTINCT visit_id FROM insurance_material_shares WHERE visit_id IS NOT NULL"
+                        ")"
+                    ))
+                if "insurance_claim_marked_at" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN insurance_claim_marked_at DATETIME DEFAULT NULL"))
+                if "insurance_claim_marked_by" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN insurance_claim_marked_by VARCHAR(80) DEFAULT ''"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_visits_insurance_claim_needed ON visits(insurance_claim_needed)"))
 
             # deworming_records 驱虫记录
             conn.execute(text(

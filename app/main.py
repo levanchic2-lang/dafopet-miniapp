@@ -2994,6 +2994,30 @@ async def api_admin_feedback_count(request: Request, db: Session = Depends(get_d
     return {"count": count}
 
 
+@app.get("/api/admin/insurance-materials/pending-count")
+async def api_admin_insurance_material_pending_count(request: Request, db: Session = Depends(get_db)):
+    """医疗导航角标：已标记但尚无成功材料包的病例数。"""
+    if not request.session.get("admin"):
+        return {"count": 0}
+    completed_visit_ids = (
+        db.query(InsuranceMaterialShare.visit_id)
+        .join(InsuranceMaterialSnapshot, InsuranceMaterialSnapshot.share_id == InsuranceMaterialShare.id)
+        .filter(
+            InsuranceMaterialShare.status == "active",
+            InsuranceMaterialShare.visit_id.isnot(None),
+        )
+        .distinct()
+    )
+    query = db.query(func.count(Visit.id)).filter(
+        Visit.insurance_claim_needed == True,
+        ~Visit.id.in_(completed_visit_ids),
+    )
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        query = query.filter(Visit.store == admin_store)
+    return {"count": query.scalar() or 0}
+
+
 _HEALTH_WARNING_KEYWORDS = [
     ("过敏", "🚫", "过敏"),
     ("青霉素", "🚫", "青霉素过敏"),
@@ -12440,6 +12464,125 @@ def _latest_insurance_snapshot(db: Session, share_id: int) -> InsuranceMaterialS
     )
 
 
+def _insurance_material_worklist_rows(db: Session, request: Request) -> list[dict]:
+    query = (
+        db.query(Visit)
+        .filter(Visit.insurance_claim_needed == True)
+        .order_by(Visit.visit_date.desc(), Visit.id.desc())
+    )
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        query = query.filter(Visit.store == admin_store)
+    visits = query.limit(1000).all()
+    visit_ids = [v.id for v in visits]
+    shares_by_visit: dict[int, InsuranceMaterialShare] = {}
+    if visit_ids:
+        shares = (
+            db.query(InsuranceMaterialShare)
+            .filter(
+                InsuranceMaterialShare.visit_id.in_(visit_ids),
+                InsuranceMaterialShare.status == "active",
+            )
+            .order_by(InsuranceMaterialShare.id.desc())
+            .all()
+        )
+        for share in shares:
+            if share.visit_id not in shares_by_visit:
+                shares_by_visit[share.visit_id] = share
+
+    rows = []
+    for visit in visits:
+        customer = db.get(Customer, visit.customer_id) if visit.customer_id else None
+        pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+        share = shares_by_visit.get(visit.id)
+        latest = _latest_insurance_snapshot(db, share.id) if share else None
+        if latest:
+            material_status = "completed"
+        elif share and share.generation_status == "processing":
+            material_status = "processing"
+        elif share and share.generation_status == "failed":
+            material_status = "failed"
+        else:
+            material_status = "pending"
+        rows.append({
+            "visit": visit,
+            "customer": customer,
+            "pet": pet,
+            "share": share,
+            "latest": latest,
+            "material_status": material_status,
+        })
+    return rows
+
+
+@app.get("/admin/insurance-materials", response_class=HTMLResponse)
+async def admin_insurance_material_worklist(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    status = (request.query_params.get("status") or "pending").strip()
+    if status not in {"pending", "completed", "all"}:
+        status = "pending"
+    keyword = (request.query_params.get("q") or "").strip().lower()
+    all_rows = _insurance_material_worklist_rows(db, request)
+    counts = {
+        "pending": sum(1 for r in all_rows if r["material_status"] != "completed"),
+        "completed": sum(1 for r in all_rows if r["material_status"] == "completed"),
+        "all": len(all_rows),
+    }
+    rows = all_rows
+    if status == "pending":
+        rows = [r for r in rows if r["material_status"] != "completed"]
+    elif status == "completed":
+        rows = [r for r in rows if r["material_status"] == "completed"]
+    if keyword:
+        rows = [r for r in rows if keyword in " ".join([
+            r["customer"].name if r["customer"] else "",
+            r["customer"].phone if r["customer"] else "",
+            r["pet"].name if r["pet"] else "",
+            str(r["visit"].id),
+        ]).lower()]
+    return templates.TemplateResponse(request, "uk/insurance_material_worklist.html", {
+        "rows": rows,
+        "counts": counts,
+        "status": status,
+        "q": request.query_params.get("q") or "",
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/visits/{visit_id}/insurance-claim-needed")
+async def admin_visit_set_insurance_claim_needed(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    enabled: str = Form("1"),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    _assert_store_access(request, visit.store, pet.store if pet else "")
+    is_enabled = enabled == "1"
+    visit.insurance_claim_needed = is_enabled
+    visit.insurance_claim_marked_at = datetime.utcnow() if is_enabled else None
+    visit.insurance_claim_marked_by = (
+        request.session.get("admin_username") or request.session.get("admin") or "admin"
+    ) if is_enabled else ""
+    _audit(db, request, "visit_insurance_claim_toggle", detail={
+        "visit_id": visit.id,
+        "enabled": is_enabled,
+    })
+    db.commit()
+    msg = "已加入保险材料待办" if is_enabled else "已取消保险材料标记"
+    next_url = request.query_params.get("next") or f"/admin/visits/{visit.id}"
+    return RedirectResponse(f"{_safe_next(next_url, f'/admin/visits/{visit.id}')}?msg={quote(msg, safe='')}", status_code=303)
+
+
 def _process_insurance_material_snapshot(
     share_id: int,
     visit_id: int,
@@ -12510,6 +12653,10 @@ async def admin_visit_insurance_materials_create(
     pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
     _assert_store_access(request, pet.store if pet else "", visit.store if visit else "")
     username = request.session.get("admin_username") or request.session.get("admin") or "admin"
+    if not visit.insurance_claim_needed:
+        visit.insurance_claim_needed = True
+        visit.insurance_claim_marked_at = datetime.utcnow()
+        visit.insurance_claim_marked_by = username
     share = (
         db.query(InsuranceMaterialShare)
         .filter(InsuranceMaterialShare.visit_id == visit.id, InsuranceMaterialShare.status == "active")
@@ -13304,6 +13451,14 @@ async def page_admin_visit_detail(
     )
     for sh in insurance_shares:
         sh._latest_snapshot = _latest_insurance_snapshot(db, sh.id)
+    insurance_material_ready = any(
+        sh.status == "active" and sh._latest_snapshot is not None
+        for sh in insurance_shares
+    )
+    insurance_material_generating = any(
+        sh.status == "active" and sh.generation_status == "processing"
+        for sh in insurance_shares
+    )
     care_summary = _get_active_care_summary(db, visit_id)
     care_plan = _get_active_care_plan(db, visit_id)
     care_plan_tasks = _care_tasks_from_json(care_plan.tasks_json) if care_plan else []
@@ -13349,6 +13504,8 @@ async def page_admin_visit_detail(
         "exam_orders": exam_orders,
         "unified_batches": unified_batches,
         "insurance_shares": insurance_shares,
+        "insurance_material_ready": insurance_material_ready,
+        "insurance_material_generating": insurance_material_generating,
         "followups": followups,
         "care_summary": care_summary,
         "care_plan": care_plan,
