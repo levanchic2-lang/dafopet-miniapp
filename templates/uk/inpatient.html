@@ -10,25 +10,26 @@
 </style>
 <div class="il-bc">后台<span>/</span>住院单</div>
 <div class="il-head">
-  <div><h1>住院单</h1><p>一键入住 · 按门店、猫犬和体重自动定价 · 离院统一结算</p></div>
-  <div class="il-actions">{% if request.session.get('admin_role') == 'superadmin' %}<a class="il-btn ghost" href="/admin/inpatient/rates">收费设置</a>{% endif %}<a class="il-btn" href="/admin/inpatient/new">新建住院单</a></div>
+  <div><h1>住院单</h1><p>按项目和住院天数直接开单</p></div>
+  <div class="il-actions"><a class="il-btn" href="/admin/inpatient/new">新建住院单</a></div>
 </div>
 <hr class="il-rule"/>
+{% if request.query_params.get('msg') %}<div style="border-left:3px solid var(--accent-green);padding:10px 14px;background:#f5f9f6;margin-bottom:16px">{{ request.query_params.get('msg') }}</div>{% endif %}
 {% if request.session.get('admin_role') == 'superadmin' %}<div class="il-store">门店：<a href="?status={{ status }}&store=" class="{% if not wb_store %}active{% endif %}">全部</a><a href="?status={{ status }}&store=横岗店" class="{% if wb_store == '横岗店' %}active{% endif %}">横岗店</a><a href="?status={{ status }}&store=东环店" class="{% if wb_store == '东环店' %}active{% endif %}">东环店</a></div>{% elif wb_store %}<div class="il-store">当前门店：<b>{{ wb_store }}</b></div>{% endif %}
 <div class="il-tools">
-  <div class="il-tabs"><a href="?status=admitted{% if wb_store %}&store={{ wb_store }}{% endif %}" class="{% if status == 'admitted' %}active{% endif %}">住院中 <b>{{ counts.get('admitted',0) }}</b></a><a href="?status=discharged{% if wb_store %}&store={{ wb_store }}{% endif %}" class="{% if status == 'discharged' %}active{% endif %}">已离院 <b>{{ counts.get('discharged',0) }}</b></a><a href="?status=cancelled{% if wb_store %}&store={{ wb_store }}{% endif %}" class="{% if status == 'cancelled' %}active{% endif %}">已取消</a></div>
-  <form class="il-search" method="get"><input type="hidden" name="status" value="{{ status }}"/>{% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}<input name="q" value="{{ q }}" placeholder="客户、手机或宠物"/><button class="il-btn ghost" type="submit">搜索</button></form>
+  <div class="il-tabs"><span>共 <b>{{ rows|length }}</b> 张</span>{% if counts.get('admitted',0) %}<a href="?status=admitted{% if wb_store %}&store={{ wb_store }}{% endif %}">旧流程待处理 <b>{{ counts.get('admitted',0) }}</b></a>{% endif %}</div>
+  <form class="il-search" method="get">{% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}<input name="q" value="{{ q }}" placeholder="客户、手机或宠物"/><button class="il-btn ghost" type="submit">搜索</button></form>
 </div>
 {% if rows %}
-<table class="il-table"><thead><tr><th>住院单</th><th>客户 / 宠物</th><th>门店</th><th>入住时间</th><th>计费天数</th><th>入住体重</th><th>日费率</th><th>预估 / 结算</th><th style="text-align:right">操作</th></tr></thead><tbody>
+<table class="il-table"><thead><tr><th>住院单</th><th>客户 / 宠物</th><th>门店</th><th>开单日期</th><th>住院项目</th><th>天数</th><th>单价</th><th>合计</th><th style="text-align:right">操作</th></tr></thead><tbody>
 {% for h in rows %}
-{% set days = h.billing_days if h.status == 'discharged' and h.billing_mode == 'weight' else calc_billable_days(h.admitted_at, h.discharged_at or now, false) %}
+{% set days = h.billing_days if h.status == 'discharged' and h.billing_mode in ['weight','simple'] else calc_billable_days(h.admitted_at, h.discharged_at or now, false) %}
 {% set rate = h.daily_rate_override or (h.cage.daily_rate if h.cage else 0) %}
 <tr>
-  <td class="il-num">#{{ h.id }}<div class="il-sub">{{ status_zh.get(h.status,h.status) }}</div></td>
+  <td class="il-num">#{{ h.id }}{% if h.status == 'admitted' %}<div class="il-sub il-pending">旧流程住院中</div>{% endif %}</td>
   <td><div class="il-name">{% if h.pet and h.customer %}<a href="/admin/customers/{{ h.customer.id }}?pet_id={{ h.pet.id }}">{{ h.pet.name }}</a>{% else %}{{ h.pet.name if h.pet else '—' }}{% endif %}</div><div class="il-sub">{{ h.customer.name if h.customer else '—' }}{% if h.customer and h.customer.phone %} · {{ h.customer.phone }}{% endif %}</div></td>
-  <td>{{ h.store or '—' }}</td><td class="il-num">{{ (h.admitted_at|bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</td>
-  <td class="il-num">{{ '%g'|format(days) }} 天</td><td class="il-num">{{ ('%.2f'|format(h.admission_weight_kg)) ~ ' kg' if h.admission_weight_kg else '历史记录' }}</td>
+  <td>{{ h.store or '—' }}</td><td class="il-num">{{ (h.admitted_at|bjtime).strftime('%Y-%m-%d') if h.admitted_at else '—' }}</td><td>{{ h.rate_label or '住院费' }}</td>
+  <td class="il-num">{{ '%g'|format(days) }} 天</td>
   <td class="il-num il-rate {% if rate <= 0 %}il-pending{% endif %}">{{ ('¥%.2f'|format(rate)) if rate > 0 else '待确认' }}</td><td class="il-num">¥{{ '%.2f'|format(days * rate) }}</td>
   <td style="text-align:right"><a class="il-btn ghost" href="/admin/inpatient/{{ h.id }}">查看</a></td>
 </tr>{% endfor %}

@@ -9,32 +9,55 @@
   @media(max-width:900px){.id-grid{grid-template-columns:1fr}.id-info{grid-template-columns:1fr 1fr}.id-cell:nth-child(3n){border-right:.5px solid var(--hair)}.id-cell:nth-child(2n){border-right:0}}
 </style>
 <div class="id-bc"><a href="/admin/inpatient">住院单</a><span>/</span>#{{ h.id }}</div>
-<div class="id-head"><div><h1>住院单 #{{ h.id }}</h1><p>{{ pet.name if pet else '—' }} · {{ cust.name if cust else '—' }} · {{ h.store or '—' }}</p></div><div class="id-status {% if h.status == 'discharged' %}done{% elif h.status == 'cancelled' %}cancel{% endif %}">{{ status_zh.get(h.status,h.status) }}</div></div>
+<div class="id-head"><div><h1>住院单 #{{ h.id }}</h1><p>{{ pet.name if pet else '—' }} · {{ cust.name if cust else '—' }} · {{ h.store or '—' }}</p></div><div class="id-status {% if h.status == 'cancelled' %}cancel{% else %}done{% endif %}">{% if is_simple_charge %}{{ '已取消' if h.status == 'cancelled' else ('已结算' if invoice and invoice.payment_status == 'paid' else '待结算') }}{% else %}{{ status_zh.get(h.status,h.status) }}{% endif %}</div></div>
 <hr class="id-rule"/>
 {% if request.query_params.get('msg') %}<div class="id-msg">{{ request.query_params.get('msg') }}</div>{% endif %}
 <div class="id-grid">
   <main>
     <section class="id-section"><h2>住院信息</h2><div class="id-info">
+      {% if is_simple_charge %}
+      <div class="id-cell"><div class="lab">开单日期</div><div class="val num">{{ (h.admitted_at|bjtime).strftime('%Y-%m-%d') if h.admitted_at else '—' }}</div></div>
+      <div class="id-cell"><div class="lab">住院项目</div><div class="val">{{ h.rate_label or '住院费' }}</div></div>
+      <div class="id-cell"><div class="lab">住院天数</div><div class="val num">{{ '%g'|format(display_days) }} 天</div></div>
+      <div class="id-cell"><div class="lab">每日单价</div><div class="val num">¥{{ '%.2f'|format(h.daily_rate_override or 0) }}</div></div>
+      <div class="id-cell"><div class="lab">收费单</div><div class="val num">{{ ('#' ~ h.invoice_id) if h.invoice_id else '未生成' }}</div></div>
+      <div class="id-cell"><div class="lab">合计</div><div class="val num id-amount">¥{{ '%.2f'|format(estimated_amount) }}</div></div>
+      {% else %}
       <div class="id-cell"><div class="lab">入住时间</div><div class="val num">{{ (h.admitted_at|bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</div></div>
       <div class="id-cell"><div class="lab">离院时间</div><div class="val num">{{ (h.discharged_at|bjtime).strftime('%Y-%m-%d %H:%M') if h.discharged_at else '住院中' }}</div></div>
       <div class="id-cell"><div class="lab">计费天数</div><div class="val num">{{ '%g'|format(display_days) }} 天{% if h.same_day_waived %} · 已免半天{% endif %}</div></div>
       <div class="id-cell"><div class="lab">物种 / 入住体重</div><div class="val">{{ '猫' if (h.species_snapshot or (pet.species if pet else '')) == 'cat' else ('犬' if (h.species_snapshot or (pet.species if pet else '')) == 'dog' else '未确认') }} · <span class="num">{{ ('%.2f kg'|format(h.admission_weight_kg)) if h.admission_weight_kg else '历史记录' }}</span></div></div>
       <div class="id-cell"><div class="lab">锁定日费率</div><div class="val num">{{ ('¥%.2f'|format(h.daily_rate_override)) if h.daily_rate_override else '待确认' }}</div><div class="id-note">{{ h.rate_label or ('旧笼位费率' if cage else '未匹配规则') }}</div></div>
       <div class="id-cell"><div class="lab">{{ '结算金额' if h.status == 'discharged' else '当前预估' }}</div><div class="val num id-amount">¥{{ '%.2f'|format(estimated_amount) }}</div></div>
+      {% endif %}
     </div></section>
     <section class="id-section"><h2>关联信息</h2><div class="id-list">
       <div class="id-row"><span>客户</span><span>{% if cust %}<a href="/admin/customers/{{ cust.id }}?pet_id={{ pet.id if pet else 0 }}">{{ cust.name }}</a> · {{ cust.phone or '—' }}{% else %}—{% endif %}</span></div>
       <div class="id-row"><span>宠物</span><span>{{ pet.name if pet else '—' }}{% if pet and pet.medical_record_no %} · {{ pet.medical_record_no }}{% endif %}</span></div>
       <div class="id-row"><span>关联病例</span><span>{% if visit %}<a href="/admin/visits/{{ visit.id }}">病例 #{{ visit.id }}</a>{% else %}未关联病例{% endif %}</span></div>
-      <div class="id-row"><span>住院原因</span><span>{{ h.reason or '未填写' }}</span></div>
+      <div class="id-row"><span>{{ '备注' if is_simple_charge else '住院原因' }}</span><span>{{ h.reason or '未填写' }}</span></div>
     </div></section>
+    {% if not is_simple_charge %}
     <section class="id-section"><h2>住院押金</h2>
       {% if deposits %}<div class="id-list">{% for d in deposits %}<div class="id-row"><span>¥{{ '%.2f'|format(d.amount) }} · {{ d.pay_method }}</span><span><small>{{ (d.created_at|bjtime).strftime('%Y-%m-%d %H:%M') }} · {{ d.status }}</small></span></div>{% endfor %}</div>{% else %}<div class="id-note">本住院单暂无押金记录。</div>{% endif %}
       <p class="id-note">当前可用押金：¥{{ '%.2f'|format(deposit_available) }}。离院后可在收银台抵扣。</p>
     </section>
+    {% endif %}
   </main>
   <aside class="id-side">
-    {% if h.status == 'admitted' %}
+    {% if is_simple_charge %}
+      {% if h.invoice_id %}<a class="id-btn" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">前往收银台结算</a><p class="id-note">收费单 #{{ h.invoice_id }} 已生成。</p>{% endif %}
+      {% if h.status != 'cancelled' and (not invoice or invoice.payment_status == 'unpaid') %}
+      <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/edit-simple">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>修改住院费用</h2>
+        <label>住院天数</label><input type="number" name="billing_days" min="0.5" step="0.5" value="{{ '%g'|format(h.billing_days or 0) }}" required/>
+        <label>每日单价</label><input type="number" name="daily_rate" min="0.01" step="0.01" value="{{ '%.2f'|format(h.daily_rate_override or 0) }}" required/>
+        <label>备注</label><textarea name="notes" rows="3">{{ h.reason or '' }}</textarea>
+        <button class="id-btn ghost" type="submit">保存修改</button>
+      </form>
+      <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/cancel-simple" onsubmit="return confirm('确认取消这张住院收费单？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><button class="id-btn ghost danger" type="submit">取消住院收费单</button></form>
+      {% endif %}
+    {% elif h.status == 'admitted' %}
     <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/discharge" onsubmit="return confirm('确认办理离院并生成住院收费单？')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>办理离院</h2>
       <label>出院时间</label><input type="datetime-local" name="discharged_at" value="{{ (h.discharged_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.discharged_at else (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}"/>

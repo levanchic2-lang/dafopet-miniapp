@@ -56,7 +56,7 @@
 <div class="uo-head">
   <div>
     <h1>统一开单</h1>
-    <p>{{ cust.name if cust else '未关联客户' }} · {{ pet.name if pet else '未关联宠物' }} · 同一次可混合加入处方、检查、商品、疫苗和驱虫</p>
+    <p>{{ cust.name if cust else '未关联客户' }} · {{ pet.name if pet else '未关联宠物' }} · 同一次可混合加入处方、检查、商品、疫苗、驱虫和住院</p>
   </div>
   <a class="uk-btn ghost" href="/admin/visits/{{ visit.id }}">返回病历</a>
 </div>
@@ -77,7 +77,7 @@
           </div>
         </div>
         <div class="uo-search">
-          <input id="itemSearch" autocomplete="off" placeholder="输入药品、检查、疫苗、驱虫或商品名称…"/>
+          <input id="itemSearch" autocomplete="off" placeholder="输入药品、检查、疫苗、驱虫、住院或商品名称…"/>
           <div id="searchResults" class="uo-results"></div>
         </div>
         <div class="uo-tools">
@@ -100,7 +100,6 @@
       <section class="uo-panel uo-shortcuts" style="margin-top:16px">
         <h3 class="uk-h3">专用流程</h3>
         <a href="/admin/visits/{{ visit.id }}/anesthesia/new">麻醉单 →</a>
-        <a href="/admin/inpatient">住院单 →</a>
         {% if pet %}<a href="/admin/grooming-orders/create?customer_id={{ visit.customer_id or 0 }}&pet_id={{ visit.pet_id or 0 }}">美容单 →</a>{% endif %}
       </section>
     </aside>
@@ -131,7 +130,7 @@
   const subtotal = row => {
     const q = Math.max(0, num(row.quantity, 1));
     const p = Math.max(0, num(row.unit_price, 0));
-    return row.item.single_use_pack ? Math.ceil(q / Math.max(1, num(row.item.unit2_ratio, 1))) * p : q * p;
+    return row.order_type !== 'inpatient' && row.item.single_use_pack ? Math.ceil(q / Math.max(1, num(row.item.unit2_ratio, 1))) * p : q * p;
   };
   const batchOptions = row => {
     const batches = row.item.batches || [];
@@ -197,11 +196,12 @@
     list.innerHTML = '';
     rows.forEach(row => {
       const el = document.createElement('div'); el.className='uo-row';
-      const unitLabel = row.item.single_use_pack ? `单价（每${row.item.unit2 || '瓶'}，可修改）` : `单价（元/${row.item.unit || '单位'}，可修改）`;
+      const displayUnit = row.order_type === 'inpatient' ? '天' : (row.item.unit || '');
+      const unitLabel = row.order_type === 'inpatient' ? '单价（元/天，可修改）' : (row.item.single_use_pack ? `单价（每${row.item.unit2 || '瓶'}，可修改）` : `单价（元/${row.item.unit || '单位'}，可修改）`);
       el.innerHTML = `<div class="uo-row-head"><div><span class="uo-row-name">${esc(row.item.name)}</span><span class="uo-type">${esc(labels[row.order_type] || '待选择')}</span></div><button type="button" class="uo-remove" title="删除">删除</button></div>
         ${typeSelect(row)}
         <div class="uo-common">
-          <div><label>数量 ${esc(row.item.unit||'')}</label><input type="number" step="0.01" min="0.01" data-live="quantity" value="${esc(row.quantity)}"/></div>
+          <div><label>${row.order_type==='inpatient'?'住院天数':'数量'} ${esc(displayUnit)}</label><input type="number" step="${row.order_type==='inpatient'?'0.5':'0.01'}" min="${row.order_type==='inpatient'?'0.5':'0.01'}" data-live="quantity" value="${esc(row.quantity)}"/></div>
           <div><label>${esc(unitLabel)}</label><input type="number" step="0.01" min="0" data-live="unit_price" value="${esc(row.unit_price)}"/></div>
           <div><label>本项小计</label><span class="uo-row-subtotal">¥${subtotal(row).toFixed(2)}</span></div>
           <div><label>${row.order_type==='prescription'?'项目备注（院内记录，不打印）':'备注（可选）'}</label><input data-live="notes" value="${esc(row.notes||'')}"/></div>

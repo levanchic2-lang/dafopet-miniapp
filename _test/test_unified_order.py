@@ -24,6 +24,7 @@ from app.models import (
     Customer,
     DewormingRecord,
     ExamOrder,
+    Hospitalization,
     InventoryBatch,
     InventoryItem,
     Invoice,
@@ -64,11 +65,12 @@ exam = add_item("测试检查", "exam", 50, 0, "lab", True)
 product = add_item("测试商品", "product", 20, 10, "product")
 vaccine = add_item("测试猫三联", "vaccine", 80, 5, "vaccine")
 deworm = add_item("测试驱虫", "deworming", 15, 10, "antiparasitic")
+inpatient = add_item("普通住院费", "inpatient", 30, 0, "nursing", True)
 db.add(InventoryBatch(item_id=vaccine.id, batch_no="V202609", quantity=5, is_depleted=False))
 db.commit()
 visit_id = visit.id
 pet_id = pet.id
-ids = {"rx": rx.id, "exam": exam.id, "product": product.id, "vaccine": vaccine.id, "deworm": deworm.id}
+ids = {"rx": rx.id, "exam": exam.id, "product": product.id, "vaccine": vaccine.id, "deworm": deworm.id, "inpatient": inpatient.id}
 db.close()
 
 client = TestClient(app, base_url="https://testserver", follow_redirects=False)
@@ -92,6 +94,7 @@ rows = [
      "batch_no": "V202609", "dose_number": 1},
     {"item_id": ids["deworm"], "order_type": "deworming", "quantity": 2, "unit_price": 15,
      "deworm_type": "both"},
+    {"item_id": ids["inpatient"], "order_type": "inpatient", "quantity": 3, "unit_price": 30},
 ]
 template_create = client.post("/api/unified-order-templates/create", json={
     "csrf_token": csrf, "name": "测试混合模板", "items": rows,
@@ -99,7 +102,7 @@ template_create = client.post("/api/unified-order-templates/create", json={
 assert template_create.status_code == 200 and template_create.json()["ok"] is True
 template_id = template_create.json()["id"]
 template_get = client.get(f"/api/unified-order-templates/{template_id}")
-assert template_get.status_code == 200 and len(template_get.json()["items"]) == 5
+assert template_get.status_code == 200 and len(template_get.json()["items"]) == 6
 assert template_get.json()["items"][0]["unit_price"] == 2
 response = client.post(f"/admin/visits/{visit_id}/unified-order", data={
     "csrf_token": csrf, "items_json": json.dumps(rows), "order_date": "2026-09-06", "vet_name": "测试医生",
@@ -114,6 +117,7 @@ assert "测试检查" in batch_page.text
 assert "测试商品" in batch_page.text
 assert "测试猫三联" in batch_page.text
 assert "测试驱虫" in batch_page.text
+assert "普通住院费" in batch_page.text
 visit_page = client.get(f"/admin/visits/{visit_id}")
 assert visit_page.status_code == 200
 assert "统一改单" in visit_page.text
@@ -124,9 +128,14 @@ assert db.query(ExamOrder).filter_by(visit_id=visit_id).count() == 1
 assert db.query(SalesOrder).filter_by(visit_id=visit_id).count() == 1
 assert db.query(Vaccination).filter_by(pet_id=pet_id).count() == 1
 assert db.query(DewormingRecord).filter_by(pet_id=pet_id).count() == 1
+hospitalization = db.query(Hospitalization).filter_by(pet_id=pet_id, billing_mode="simple").one()
+assert hospitalization.status == "discharged"
+assert hospitalization.billing_days == 3
+assert hospitalization.daily_rate_override == 30
+assert hospitalization.invoice_id is not None
 assert db.query(UnifiedOrderTemplate).count() == 1
 assert db.query(UnifiedOrderBatch).filter_by(visit_id=visit_id).count() == 1
-assert sorted(round(x.total_amount, 2) for x in db.query(Invoice).all()) == [30.0, 74.0, 80.0]
+assert sorted(round(x.total_amount, 2) for x in db.query(Invoice).all()) == [30.0, 74.0, 80.0, 90.0]
 assert db.get(InventoryItem, ids["rx"]).stock_qty == 98
 assert db.get(InventoryItem, ids["product"]).stock_qty == 9
 assert db.get(InventoryItem, ids["vaccine"]).stock_qty == 4
@@ -140,6 +149,45 @@ blocked = InventoryItem(
 db.add(blocked)
 db.commit()
 blocked_id = blocked.id
+db.close()
+
+# 单独住院入口同样只按项目、天数和单价开收费单，不创建“住院中”状态。
+inpatient_page = client.get(f"/admin/inpatient/new?pet_id={pet_id}&visit_id={visit_id}")
+assert inpatient_page.status_code == 200
+assert "住院天数" in inpatient_page.text
+assert "入住时间" not in inpatient_page.text
+csrf_inpatient = re.search(r'name="csrf_token" value="([^"]+)"', inpatient_page.text).group(1)
+created = client.post("/admin/inpatient/admit", data={
+    "csrf_token": csrf_inpatient, "visit_id": visit_id, "pet_id": pet_id,
+    "item_id": ids["inpatient"], "billing_days": 5, "daily_rate": 22,
+    "order_date": "2026-09-07", "notes": "术后住院观察",
+})
+assert created.status_code == 303 and created.headers["location"].startswith("/admin/inpatient/")
+simple_hosp_id = int(created.headers["location"].split("/admin/inpatient/")[1].split("?")[0])
+db = SessionLocal()
+simple_hosp = db.get(Hospitalization, simple_hosp_id)
+simple_invoice_id = simple_hosp.invoice_id
+assert simple_hosp.status == "discharged" and simple_hosp.billing_days == 5
+assert db.get(Invoice, simple_invoice_id).total_amount == 110
+db.close()
+
+edited = client.post(f"/admin/inpatient/{simple_hosp_id}/edit-simple", data={
+    "csrf_token": csrf_inpatient, "billing_days": 4, "daily_rate": 25,
+    "notes": "更正住院天数",
+})
+assert edited.status_code == 303
+db = SessionLocal()
+assert db.get(Hospitalization, simple_hosp_id).billing_days == 4
+assert db.get(Invoice, simple_invoice_id).total_amount == 100
+db.close()
+
+cancelled = client.post(f"/admin/inpatient/{simple_hosp_id}/cancel-simple", data={
+    "csrf_token": csrf_inpatient,
+})
+assert cancelled.status_code == 303
+db = SessionLocal()
+assert db.get(Hospitalization, simple_hosp_id).status == "cancelled"
+assert db.get(Invoice, simple_invoice_id) is None
 db.close()
 
 # 第二次开单先扣普通药，再遇到管控药库存不足；整个请求必须回滚。

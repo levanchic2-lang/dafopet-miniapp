@@ -13,46 +13,47 @@
   @media(max-width:850px){.in-layout{grid-template-columns:1fr}.in-summary{order:-1}}
 </style>
 <div class="in-bc"><a href="/admin/inpatient">住院单</a><span>/</span>新建住院单</div>
-<div class="in-head"><h1>新建住院单</h1><p>无需病例和笼位；系统自动按门店、猫犬和体重匹配价格。</p></div>
+<div class="in-head"><h1>新建住院单</h1><p>出院结算时直接填写住院项目、天数和单价。</p></div>
 <hr class="in-rule"/>
 {% if request.query_params.get('err') %}<div class="in-msg">{{ request.query_params.get('err') }}</div>{% endif %}
 <div class="in-layout">
   <section class="in-panel">
     <h2>选择客户 / 宠物</h2>
     <div class="in-search"><input id="customerSearch" placeholder="输入客户姓名、手机号或宠物名" autocomplete="off"/><button type="button" class="in-btn ghost" onclick="searchCustomer()">搜索</button></div>
-    <div id="searchResults" class="in-results">{% if not pet %}<div class="in-note">搜索并选择需要办理入住的宠物。</div>{% endif %}</div>
+    <div id="searchResults" class="in-results">{% if not pet %}<div class="in-note">搜索并选择需要结算住院费的宠物。</div>{% endif %}</div>
   </section>
   {% if pet %}
   <aside class="in-summary">
-    {% if existing %}<div class="in-existing">该宠物已有住院中的单据。<a href="/admin/inpatient/{{ existing.id }}">查看住院单 #{{ existing.id }}</a></div>{% endif %}
     <div class="in-name">{{ pet.name or '未命名宠物' }}</div>
     <div class="in-meta">{{ cust.name if cust else '—' }}{% if cust and cust.phone %} · {{ cust.phone }}{% endif %}</div>
     <div class="in-lines">
       <div class="in-line"><span>当前门店</span><b>{{ store_short or '未选择' }}</b></div>
-      <div class="in-line"><span>宠物种类</span><b>{{ '猫' if species == 'cat' else ('犬' if species == 'dog' else '待确认') }}</b></div>
-      <div class="in-line"><span>最近体重</span><b>{{ ('%.2f'|format(weight_kg)) ~ ' kg' if weight_kg > 0 else '待补录' }}</b></div>
-      <div class="in-line"><span>匹配规则</span><b>{{ matched_rule.label if matched_rule else '暂未匹配' }}</b></div>
+      <div class="in-line"><span>计费单位</span><b>天</b></div>
     </div>
-    {% if matched_rule %}<div class="in-rate">¥{{ '%.2f'|format(matched_rule.daily_rate) }}<small style="font-size:9pt;color:var(--ink-3);font-weight:400"> / 天</small></div>{% endif %}
     <form method="post" action="/admin/inpatient/admit">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="pet_id" value="{{ pet.id }}"/><input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/>
       <div class="in-fix">
-        <label>入住时间<input type="datetime-local" name="admitted_at" value="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}" required/></label>
-        <label>出院时间（可选）<input type="datetime-local" name="discharged_at"/></label>
+        <label>开单日期<input type="date" name="order_date" value="{{ today }}" required/></label>
+        <label>住院项目
+          <select name="item_id" id="inpatientItem">
+            {% for item in inpatient_items %}<option value="{{ item.id }}" data-price="{{ item.price }}">{{ item.name }}</option>{% endfor %}
+            {% if not inpatient_items %}<option value="0" data-price="{{ matched_rule.daily_rate if matched_rule else 0 }}">住院费</option>{% endif %}
+          </select>
+        </label>
       </div>
-      {% if species not in ['cat','dog'] or weight_kg <= 0 %}
       <div class="in-fix">
-        <label>种类<select name="species"><option value="">请选择</option><option value="cat">猫</option><option value="dog">犬</option></select></label>
-        <label>入住体重 kg<input type="number" name="weight_kg" min="0.01" step="0.01" value="{{ weight_kg if weight_kg > 0 else '' }}" required/></label>
+        <label>住院天数<input id="billingDays" type="number" name="billing_days" min="0.5" step="0.5" value="1" required/></label>
+        <label>每日单价<input id="dailyRate" type="number" name="daily_rate" min="0.01" step="0.01" value="{{ inpatient_items[0].price if inpatient_items else (matched_rule.daily_rate if matched_rule else '') }}" required/></label>
       </div>
-      {% else %}<input type="hidden" name="species" value="{{ species }}"/><input type="hidden" name="weight_kg" value="{{ weight_kg }}"/>{% endif %}
+      <div class="in-lines"><div class="in-line"><span>费用合计</span><b class="in-rate" id="chargeTotal">¥0.00</b></div></div>
+      <label style="display:block;font-size:9pt;color:var(--ink-3);margin:0 0 14px">备注（可选）<input name="notes" style="width:100%;height:38px;margin-top:5px;border:.5px solid var(--hair);padding:7px;box-sizing:border-box"/></label>
       <label style="display:flex;align-items:center;gap:8px;margin:4px 0 14px;cursor:pointer;font-size:10pt;">
         <input type="checkbox" name="is_insurance_service" value="1"/>
         保险增值服务（收费单生成后进入“保险待结算”）
       </label>
-      <button class="in-btn" type="submit" style="width:100%" {% if existing %}disabled{% endif %}>办理入住</button>
+      <button class="in-btn" type="submit" style="width:100%">生成住院收费单</button>
     </form>
-    <div class="in-note">填写出院时间后，系统会立即按入住至出院的过夜天数生成收费单；出院时间未到前仍显示住院中，到点后会自动归入已离院。</div>
+    <div class="in-note">无需办理入住或离院。保存后直接生成待结算收费单，并进入收银台。</div>
   </aside>
   {% endif %}
 </div>
@@ -69,5 +70,11 @@ async function searchCustomer(){
 }
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 document.getElementById('customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchCustomer()}});
+const itemSelect=document.getElementById('inpatientItem'), daysInput=document.getElementById('billingDays'), rateInput=document.getElementById('dailyRate'), total=document.getElementById('chargeTotal');
+function updateChargeTotal(){if(!total)return;total.textContent='¥'+((Number(daysInput.value)||0)*(Number(rateInput.value)||0)).toFixed(2)}
+if(itemSelect)itemSelect.addEventListener('change',()=>{const option=itemSelect.options[itemSelect.selectedIndex];rateInput.value=option.dataset.price||'';updateChargeTotal()});
+if(daysInput)daysInput.addEventListener('input',updateChargeTotal);
+if(rateInput)rateInput.addEventListener('input',updateChargeTotal);
+updateChargeTotal();
 </script>
 {% endblock %}
