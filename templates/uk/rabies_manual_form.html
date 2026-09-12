@@ -1,0 +1,114 @@
+{% extends "uk/_base.html" %}
+{% block title %}人工补录狂犬免疫登记 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .rm-bc{font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin:24px 0 16px}.rm-bc a{color:inherit}.rm-bc span{margin:0 8px}
+  .rm-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px}.rm-head h1{font-size:28pt;letter-spacing:1px;margin:0}.rm-head p{font-size:10pt;color:var(--ink-3);margin:8px 0 0}.rm-rule{border:0;height:4px;border-top:.5px solid var(--ink);border-bottom:.5px solid var(--ink);margin:18px 0 28px}
+  .rm-error{border-left:3px solid var(--accent-red);background:#fcf5f4;color:var(--accent-red);padding:11px 15px;margin-bottom:18px}
+  .rm-note{border-left:3px solid var(--accent-amber);background:#fbf7f1;color:var(--ink-2);padding:12px 16px;margin-bottom:22px;line-height:1.7;font-size:10pt}
+  .rm-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:28px;align-items:start}.rm-main,.rm-side{min-width:0}
+  .rm-section{border-top:.5px solid var(--ink);padding-top:14px;margin-bottom:28px}.rm-section h2{font-size:12pt;letter-spacing:2px;margin:0 0 14px}.rm-search{display:flex;gap:8px}.rm-search input{flex:1}.rm-results{margin-top:10px;border:.5px solid var(--hair-2);display:none}.rm-result{padding:12px 14px;border-bottom:.5px solid var(--hair)}.rm-result:last-child{border-bottom:0}.rm-owner{font-weight:700}.rm-owner small{font-weight:400;color:var(--ink-3);margin-left:8px}.rm-pets{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}.rm-pet{border:.5px solid var(--hair);background:var(--paper);color:var(--ink);padding:6px 10px;cursor:pointer;font:10pt var(--font-serif)}.rm-pet:hover{border-color:var(--ink)}
+  .rm-selected{border:.5px solid var(--accent-green);padding:13px 15px;margin:12px 0 0;color:var(--accent-green);display:none}.rm-selected b{color:var(--ink)}
+  .rm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}.rm-grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.rm-field{min-width:0}.rm-field.wide{grid-column:1/-1}.rm-field label{display:block;font-size:9pt;color:var(--ink-3);margin-bottom:5px}.rm-field input,.rm-field select{width:100%;min-width:0;height:39px;box-sizing:border-box;border:.5px solid var(--hair);background:var(--paper);padding:7px 10px;color:var(--ink);font:10pt var(--font-serif);border-radius:0}.rm-field input:focus,.rm-field select:focus{outline:0;border-color:var(--ink)}
+  .rm-card{border:.5px solid var(--hair-2);padding:18px}.rm-card h3{font-size:11pt;letter-spacing:2px;margin:0 0 14px}.rm-summary{border-top:.5px solid var(--hair)}.rm-line{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:.5px solid var(--hair);font-size:9.5pt}.rm-line span{color:var(--ink-3)}.rm-submit{width:100%;height:44px;margin-top:16px;border:0;background:var(--ink);color:var(--paper);font:700 11pt var(--font-serif);letter-spacing:2px;cursor:pointer}.rm-submit:disabled{background:var(--hair);color:var(--ink-3);cursor:not-allowed}.rm-fine{font-size:9pt;color:var(--ink-3);line-height:1.65;margin-top:12px}
+  .rm-btn{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 16px;border:.5px solid var(--hair);background:var(--paper);color:var(--ink);font:10pt var(--font-serif);text-decoration:none;cursor:pointer}.rm-btn.dark{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  @media(max-width:900px){.rm-layout{grid-template-columns:1fr}.rm-side{order:-1}.rm-grid.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+
+<div class="rm-bc"><a href="/admin/rabies?tab=rabies">狂犬免疫登记</a><span>/</span>人工补录</div>
+<div class="rm-head"><div><h1>人工补录狂犬免疫登记</h1><p>用于删除错误登记后，按正确的客户与宠物档案重新建立记录。</p></div><a class="rm-btn" href="/admin/rabies?tab=rabies">返回列表</a></div>
+<hr class="rm-rule"/>
+{% if err %}<div class="rm-error">{{ err }}</div>{% endif %}
+<div class="rm-note"><b>纠错流程：</b>先进入原登记详情，核对后删除错误记录；系统会同步删除错误疫苗记录并退回库存。然后在本页选择正确宠物并重新补录。</div>
+
+<form method="post" action="/admin/rabies/new" id="manualRabiesForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="customer_id" id="customerId"/>
+  <input type="hidden" name="pet_id" id="petId"/>
+  <div class="rm-layout">
+    <main class="rm-main">
+      <section class="rm-section">
+        <h2>一、选择正确的客户与宠物</h2>
+        <div class="rm-search"><input id="customerSearch" placeholder="输入主人姓名、手机号或宠物名" autocomplete="off"/><button class="rm-btn dark" type="button" onclick="searchCustomer()">搜索</button></div>
+        <div id="searchResults" class="rm-results"></div>
+        <div id="selectedPet" class="rm-selected"></div>
+      </section>
+
+      <section class="rm-section">
+        <h2>二、核对主人与动物信息</h2>
+        <div class="rm-grid">
+          <div class="rm-field"><label>主人姓名 *</label><input name="owner_name" id="ownerName" required maxlength="120"/></div>
+          <div class="rm-field"><label>手机号 *</label><input name="owner_phone" id="ownerPhone" required maxlength="40"/></div>
+          <div class="rm-field wide"><label>联系地址</label><input name="owner_address" id="ownerAddress" maxlength="500"/></div>
+          <div class="rm-field"><label>动物名称 *</label><input name="animal_name" id="animalName" required maxlength="80"/></div>
+          <div class="rm-field"><label>品种</label><input name="animal_breed" id="animalBreed" maxlength="80"/></div>
+          <div class="rm-field"><label>出生年月 / 年龄</label><input name="animal_dob" id="animalDob" maxlength="40"/></div>
+          <div class="rm-field"><label>性别</label><select name="animal_gender" id="animalGender"><option value="">不详</option><option value="male">公（雄）</option><option value="female">母（雌）</option></select></div>
+          <div class="rm-field"><label>毛色</label><input name="animal_color" id="animalColor" maxlength="80"/></div>
+        </div>
+      </section>
+
+      <section class="rm-section">
+        <h2>三、补录免疫信息</h2>
+        <div class="rm-grid four">
+          <div class="rm-field"><label>免疫证号 *</label><input name="cert_no" id="certNo" required maxlength="60"/></div>
+          <div class="rm-field"><label>免疫日期 *</label><input type="date" name="vaccine_date" value="{{ today }}" required/></div>
+          <div class="rm-field"><label>疫苗厂家 / 名称 *</label><input name="vaccine_manufacturer" id="manufacturer" required maxlength="120"/></div>
+          <div class="rm-field"><label>疫苗批号</label><input name="vaccine_batch_no" id="batchNo" maxlength="80"/></div>
+          <div class="rm-field"><label>免疫人员</label><input name="staff_name" list="vetList" maxlength="80"/><datalist id="vetList">{% for n in vet_names %}<option value="{{ n }}">{% endfor %}</datalist></div>
+          <div class="rm-field wide"><label>扣库存品目（可选）</label><select name="inventory_item_id" id="inventoryItem" onchange="inventoryChanged()"><option value="">不关联库存</option>{% for item in rabies_inventory_items %}{% if item.available_batches %}{% for b in item.available_batches %}<option value="{{ item.id }}" data-batch="{{ b.batch_no or '' }}" data-name="{{ item.name }}">{{ item.name }} · 批号 {{ b.batch_no or '未编号' }} · 剩余 {{ '%g'|format(b.quantity) }} {{ item.unit or '' }}</option>{% endfor %}{% else %}<option value="{{ item.id }}" data-batch="" data-name="{{ item.name }}">{{ item.name }} · 总库存 {{ '%g'|format(item.stock_qty) }} {{ item.unit or '' }}</option>{% endif %}{% endfor %}</select></div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="rm-side">
+      <div class="rm-card">
+        <h3>本次将建立</h3>
+        <div class="rm-summary">
+          <div class="rm-line"><span>登记来源</span><b>后台人工补录</b></div>
+          <div class="rm-line"><span>当前门店</span><b>{{ clinic_store or '当前操作门店' }}</b></div>
+          <div class="rm-line"><span>客户 / 宠物</span><b id="summaryPet">尚未选择</b></div>
+          <div class="rm-line"><span>关联疫苗档案</span><b>自动生成</b></div>
+          <div class="rm-line"><span>库存</span><b>选择品目后扣减</b></div>
+        </div>
+        <button class="rm-submit" id="submitBtn" type="submit" disabled>确认人工补录</button>
+        <div class="rm-fine">提交后免疫证号将锁定。若再次发现客户或宠物选择错误，请删除该登记后重新补录。</div>
+      </div>
+    </aside>
+  </div>
+</form>
+
+<script>
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+async function searchCustomer(){
+  const q=document.getElementById('customerSearch').value.trim(),box=document.getElementById('searchResults');
+  box.style.display='block';
+  if(q.length<2){box.innerHTML='<div class="rm-result">请至少输入两个字符。</div>';return}
+  box.innerHTML='<div class="rm-result">正在搜索...</div>';
+  try{
+    const data=await fetch('/m/api/search-customer?q='+encodeURIComponent(q)).then(r=>r.json());
+    if(!data.results||!data.results.length){box.innerHTML='<div class="rm-result">没有找到客户或宠物档案。</div>';return}
+    box.innerHTML='';
+    data.results.forEach(c=>{
+      const row=document.createElement('div');row.className='rm-result';
+      row.innerHTML='<div class="rm-owner">'+esc(c.name||'未命名客户')+'<small>'+esc(c.phone||'')+'</small></div><div class="rm-pets"></div>';
+      const pets=row.querySelector('.rm-pets');
+      (c.pets||[]).forEach(p=>{const b=document.createElement('button');b.type='button';b.className='rm-pet';b.textContent=(p.name||'未命名')+' · '+(p.species==='dog'?'犬':p.species==='cat'?'猫':'其他');b.onclick=()=>choosePet(c,p);pets.appendChild(b)});
+      if(!(c.pets||[]).length)pets.innerHTML='<span style="color:var(--ink-3);font-size:9pt">该客户没有宠物档案</span>';
+      box.appendChild(row);
+    });
+  }catch(e){box.innerHTML='<div class="rm-result">搜索失败，请稍后重试。</div>'}
+}
+function choosePet(c,p){
+  document.getElementById('customerId').value=c.id;document.getElementById('petId').value=p.id;
+  document.getElementById('ownerName').value=c.name||'';document.getElementById('ownerPhone').value=c.phone||'';document.getElementById('ownerAddress').value=c.address||'';
+  document.getElementById('animalName').value=p.name||'';document.getElementById('animalBreed').value=p.breed||'';document.getElementById('animalDob').value=p.birthday||'';document.getElementById('animalGender').value=p.gender||'';document.getElementById('animalColor').value=p.color||'';
+  const selected=document.getElementById('selectedPet');selected.style.display='block';selected.innerHTML='已选择：<b>'+esc(c.name)+' / '+esc(p.name)+'</b>　病历号 '+esc(p.medical_record_no||'未编号');
+  document.getElementById('summaryPet').textContent=(c.name||'')+' / '+(p.name||'');document.getElementById('submitBtn').disabled=false;
+  document.getElementById('searchResults').style.display='none';
+}
+function inventoryChanged(){const opt=document.getElementById('inventoryItem').selectedOptions[0];if(!opt||!opt.value)return;document.getElementById('batchNo').value=opt.dataset.batch||'';if(!document.getElementById('manufacturer').value)document.getElementById('manufacturer').value=opt.dataset.name||''}
+document.getElementById('customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchCustomer()}});
+document.getElementById('manualRabiesForm').addEventListener('submit',e=>{if(!document.getElementById('petId').value){e.preventDefault();alert('请先选择正确的客户和宠物')}});
+</script>
+{% endblock %}

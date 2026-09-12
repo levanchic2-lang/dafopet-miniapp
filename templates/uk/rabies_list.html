@@ -68,11 +68,16 @@
     </h1>
   </div>
   <div>
+    <a href="/admin/rabies/new" class="rb-btn">人&nbsp;工&nbsp;补&nbsp;录</a>
     <a href="/admin/rabies/export/excel?status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}" class="rb-btn ghost">导&nbsp;出&nbsp;Excel</a>
   </div>
 </div>
 
 <hr class="rb-rule-double"/>
+
+<div style="border-left:3px solid var(--accent-amber);background:#fbf7f1;padding:10px 15px;margin-bottom:18px;color:var(--ink-2);font-size:9.5pt;line-height:1.65;">
+  登记信息有误时，请进入该记录的“详情”，在页面底部删除错误登记；系统会同步删除错误疫苗记录并退回库存。随后点击“人工补录”重新登记。
+</div>
 
 <div class="rb-filter">
   <form method="get">

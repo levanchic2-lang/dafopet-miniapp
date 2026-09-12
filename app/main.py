@@ -25581,6 +25581,7 @@ async def admin_rabies_list(
         query = query.filter(or_(
             RabiesVaccineRecord.owner_name.ilike(f"%{q}%"),
             RabiesVaccineRecord.owner_phone.ilike(f"%{q}%"),
+            RabiesVaccineRecord.animal_name.ilike(f"%{q}%"),
             RabiesVaccineRecord.cert_no.ilike(f"%{q}%"),
         ))
     if status:
@@ -25600,6 +25601,152 @@ async def admin_rabies_list(
         "q": q, "status": status, "date_from": date_from, "date_to": date_to,
         "status_zh": _RABIES_STATUS_ZH,
     })
+
+
+@app.get("/admin/rabies/new", response_class=HTMLResponse)
+async def admin_rabies_manual_new(request: Request, db: Session = Depends(get_db)):
+    """后台人工补录狂犬免疫登记，用于删除错误登记后重建正确记录。"""
+    require_admin(request)
+    rabies_items = _rabies_inventory_items(db, request)
+    _attach_latest_batch(db, rabies_items)
+    vets = db.query(Staff.name).filter(
+        Staff.status.in_(["active", "probation"]),
+        Staff.position.ilike("%医%"),
+    ).order_by(Staff.name).all()
+    return templates.TemplateResponse(request, "uk/rabies_manual_form.html", {
+        "csrf_token": _get_csrf_token(request),
+        "rabies_inventory_items": rabies_items,
+        "vet_names": [row[0] for row in vets],
+        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "clinic_store": _get_op_store(request),
+        "err": request.query_params.get("err", ""),
+    })
+
+
+@app.post("/admin/rabies/new")
+async def admin_rabies_manual_create(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+
+    customer_id_raw = str(form.get("customer_id", "")).strip()
+    pet_id_raw = str(form.get("pet_id", "")).strip()
+    if not customer_id_raw.isdigit() or not pet_id_raw.isdigit():
+        return RedirectResponse(
+            "/admin/rabies/new?err=" + quote("请先搜索并选择正确的客户和宠物", safe=""),
+            status_code=303,
+        )
+    customer = db.get(Customer, int(customer_id_raw))
+    pet = db.get(Pet, int(pet_id_raw))
+    if not customer or not pet or pet.customer_id != customer.id:
+        return RedirectResponse(
+            "/admin/rabies/new?err=" + quote("所选客户或宠物档案无效，请重新选择", safe=""),
+            status_code=303,
+        )
+    _assert_store_access(request, pet.store)
+
+    owner_name = str(form.get("owner_name", "")).strip()
+    owner_phone = str(form.get("owner_phone", "")).strip()
+    animal_name = str(form.get("animal_name", "")).strip()
+    cert_no = str(form.get("cert_no", "")).strip()[:60]
+    vaccine_manufacturer = str(form.get("vaccine_manufacturer", "")).strip()[:120]
+    vaccine_batch_no = str(form.get("vaccine_batch_no", "")).strip()[:80]
+    vaccine_date = str(form.get("vaccine_date", "")).strip()[:20]
+    if not owner_name or _is_invalid_name(owner_name):
+        err = "请填写动物主人的真实姓名"
+    elif not owner_phone:
+        err = "请填写动物主人手机号"
+    elif not animal_name:
+        err = "请填写动物名称"
+    elif not cert_no:
+        err = "请填写免疫证号"
+    elif not vaccine_manufacturer:
+        err = "请填写疫苗厂家或疫苗名称"
+    elif not vaccine_date:
+        err = "请选择免疫日期"
+    else:
+        err = ""
+    if err:
+        return RedirectResponse("/admin/rabies/new?err=" + quote(err, safe=""), status_code=303)
+    if db.query(RabiesVaccineRecord.id).filter(RabiesVaccineRecord.cert_no == cert_no).first():
+        return RedirectResponse(
+            "/admin/rabies/new?err=" + quote(f"免疫证号 {cert_no} 已存在，不能重复登记", safe=""),
+            status_code=303,
+        )
+
+    selectable_items = {item.id: item for item in _rabies_inventory_items(db, request)}
+    item_id_raw = str(form.get("inventory_item_id", "")).strip()
+    selected_item = selectable_items.get(int(item_id_raw)) if item_id_raw.isdigit() else None
+    clinic_store = _get_op_store(request) or _store_short(pet.store) or "横岗店"
+    operator = request.session.get("admin_username", "")
+
+    record = RabiesVaccineRecord(
+        customer_id=customer.id,
+        pet_id=pet.id,
+        owner_name=owner_name[:120],
+        owner_phone=owner_phone[:40],
+        owner_address=str(form.get("owner_address", "")).strip()[:500],
+        animal_name=animal_name[:80],
+        animal_breed=str(form.get("animal_breed", "")).strip()[:80],
+        animal_dob=str(form.get("animal_dob", "")).strip()[:40],
+        animal_gender=str(form.get("animal_gender", "")).strip()[:10],
+        animal_color=str(form.get("animal_color", "")).strip()[:80],
+        cert_no=cert_no,
+        vaccine_manufacturer=vaccine_manufacturer,
+        vaccine_batch_no=vaccine_batch_no,
+        vaccine_date=vaccine_date,
+        staff_name=str(form.get("staff_name", "")).strip()[:80],
+        clinic_store=clinic_store,
+        status="completed",
+    )
+    db.add(record)
+    db.flush()
+
+    try:
+        next_due_date = (
+            datetime.strptime(vaccine_date, "%Y-%m-%d") + timedelta(days=365)
+        ).strftime("%Y-%m-%d")
+    except ValueError:
+        db.rollback()
+        return RedirectResponse(
+            "/admin/rabies/new?err=" + quote("免疫日期格式不正确", safe=""),
+            status_code=303,
+        )
+    vaccination = Vaccination(
+        pet_id=pet.id,
+        customer_id=customer.id,
+        vaccine_type="rabies",
+        vaccine_name=vaccine_manufacturer or "狂犬疫苗",
+        batch_no=vaccine_batch_no,
+        dose_number=1,
+        vaccinated_date=vaccine_date,
+        next_due_date=next_due_date,
+        inventory_item_id=selected_item.id if selected_item else None,
+        is_free=True,
+        rabies_record_id=record.id,
+        vet_name=record.staff_name,
+        created_by=operator,
+    )
+    db.add(vaccination)
+    db.flush()
+    if selected_item:
+        _deduct_inventory(
+            db, selected_item.id, 1.0, "vaccination", vaccination.id, operator,
+            note=f"人工补录狂犬疫苗登记#{record.id} 出库",
+            batch_no=vaccine_batch_no,
+        )
+    _audit(db, request, "rabies_manual_create", detail={
+        "rabies_id": record.id,
+        "customer_id": customer.id,
+        "pet_id": pet.id,
+        "cert_no": cert_no,
+        "vaccination_id": vaccination.id,
+    })
+    db.commit()
+    return RedirectResponse(
+        f"/admin/rabies/{record.id}?msg=" + quote("人工补录完成，疫苗记录与库存已同步", safe=""),
+        status_code=303,
+    )
 
 
 @app.get("/admin/rabies/{rec_id}", response_class=HTMLResponse)
@@ -33164,10 +33311,15 @@ async def m_api_search_customer(
             "id": c.id,
             "name": c.name or "",
             "phone": c.phone or "",
+            "address": c.address or "",
             "pets": [{
                 "id": p.id, "name": p.name or "",
                 "species": p.species or "", "breed": p.breed or "",
                 "gender": p.gender or "unknown",
+                "birthday": p.birthday_estimate or "",
+                "color": p.color_pattern or "",
+                "store": p.store or "",
+                "medical_record_no": p.medical_record_no or "",
             } for p in pets],
         })
     return {"results": results, "truncated": truncated}

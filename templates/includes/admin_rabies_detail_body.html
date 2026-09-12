@@ -295,11 +295,11 @@
  <div class="card">
  <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:var(--muted);">危险操作</h3>
  <form method="post" action="/admin/rabies/{{ rec.id }}/delete"
- onsubmit="return confirm('确认删除登记 #{{ rec.id }}（{{ rec.owner_name }}）？此操作不可恢复。')">
+ onsubmit="return confirm('确认删除登记 #{{ rec.id }}（{{ rec.owner_name }} / {{ rec.animal_name }}）？关联的错误疫苗记录会同时删除，已扣库存会退回。删除后请在列表页人工补录正确记录。')">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <button type="submit" class="btn"
  style="width:100%;background:#dc2626;border-color:#dc2626;font-size:0.85rem;">
- 删除此记录
+ 删除错误登记
  </button>
  </form>
  </div>
