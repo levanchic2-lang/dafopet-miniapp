@@ -583,6 +583,7 @@ class RabiesVaccineRecord(Base):
     # 关联客户/宠物档案
     customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
     pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
+    consent_task_id = mapped_column(ForeignKey("consent_tasks.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
 
     # 第一部分：主人填写
     owner_name:    Mapped[str] = mapped_column(String(120), default="")   # 姓名
@@ -620,6 +621,7 @@ class RabiesVaccineRecord(Base):
 
     customer = relationship("Customer", foreign_keys=[customer_id])
     pet      = relationship("Pet",      foreign_keys=[pet_id])
+    consent_task = relationship("ConsentTask", foreign_keys=[consent_task_id])
 
 
 class Invoice(Base):

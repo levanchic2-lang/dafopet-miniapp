@@ -21316,11 +21316,129 @@ def _find_customer_pet_by_name(db: Session, customer_id: int, name: str) -> Pet 
         if _pet_name_key(pet.name) == key
     ), None)
 
+
+def _rabies_consent_preview_html(template: ConsentTemplate | None) -> str:
+    """Render the active vaccine consent with neutral labels for pre-submit reading."""
+    if not template:
+        return ""
+    from datetime import date as _date
+    values = {
+        "{{cust_name}}": "本次登记人",
+        "{{cust_phone}}": "本次登记手机号",
+        "{{pet_name}}": "本次登记动物",
+        "{{pet_species}}": "犬",
+        "{{pet_breed}}": "以本次登记信息为准",
+        "{{pet_gender}}": "以本次登记信息为准",
+        "{{pet_age}}": "以本次登记信息为准",
+        "{{pet_weight}}": "以现场测量为准",
+        "{{visit_date}}": _date.today().isoformat(),
+        "{{vet_name}}": "接种医师",
+        "{{date}}": _date.today().isoformat(),
+        "{{clinic_name}}": "大风动物医院（横岗店）",
+    }
+    html = template.body_html or ""
+    for key, value in values.items():
+        html = html.replace(key, value)
+    return html
+
+
+def _create_signed_rabies_consent(
+    db: Session,
+    request: Request,
+    record: RabiesVaccineRecord,
+    cust: Customer,
+    pet: Pet,
+    template: ConsentTemplate,
+    signature_data_url: str,
+) -> tuple[ConsentTask, bytes]:
+    """Archive the rabies registration signature as a signed vaccine consent."""
+    import base64
+
+    try:
+        payload = signature_data_url.split(",", 1)[1]
+        raw = base64.b64decode(payload, validate=True)
+    except Exception as exc:
+        raise ValueError("签字数据无效，请重新签名") from exc
+    if len(raw) < 100:
+        raise ValueError("签字过于简单，请重新签名")
+
+    clinic_store = record.clinic_store or pet.store or "横岗店"
+    snapshot = _consent_render_snapshot(
+        template.body_html,
+        cust=cust,
+        pet=pet,
+        visit=None,
+        vet_name="",
+        clinic_name=f"大风动物医院（{clinic_store}）",
+        pet_weight=0,
+        pet_age=pet.birthday_estimate or record.animal_dob or "",
+    )
+    signed_at = record.owner_signed_at or datetime.utcnow()
+    forwarded_for = (request.headers.get("x-forwarded-for") or "").split(",", 1)[0].strip()
+    signed_ip = forwarded_for or (request.client.host if request.client else "")
+    task = ConsentTask(
+        template_id=template.id,
+        customer_id=cust.id,
+        pet_id=pet.id,
+        title=template.name,
+        snapshot_html=snapshot,
+        token=_gen_consent_token(),
+        status="signed",
+        signed_at=signed_at,
+        signed_ip=signed_ip[:60],
+        store=clinic_store,
+        initiated_by="rabies_registration",
+        notes=f"[vaccine_no_verify] [vaccine_consent] source=rabies_registration rabies_record_id={record.id}",
+    )
+    db.add(task)
+    db.flush()
+
+    sig_dir = Path("uploads/consent_signatures")
+    sig_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"task_{task.id}_{secrets.token_hex(6)}.png"
+    (sig_dir / filename).write_bytes(raw)
+    task.signature_path = f"consent_signatures/{filename}"
+    record.consent_task_id = task.id
+    return task, raw
+
+
+def _finish_rabies_consent_archive(
+    db: Session, request: Request, task: ConsentTask, owner_phone: str, raw_signature: bytes,
+) -> None:
+    _log_consent_audit(
+        db,
+        request,
+        task.id,
+        "sign_success",
+        phone=owner_phone,
+        doc_sha256=_sha256(task.snapshot_html or ""),
+        sig_sha256=_sha256(raw_signature),
+        note="single_signature source=rabies_registration",
+    )
+    try:
+        from app.services.consent_pdf import generate_consent_pdf
+        _, error = generate_consent_pdf(db, task.id)
+        if error:
+            logger.info("[rabies-consent] PDF archive skipped task=%s: %s", task.id, error)
+    except Exception as exc:
+        logger.warning("[rabies-consent] PDF archive failed task=%s: %s", task.id, exc)
+
 @app.get("/rabies", response_class=HTMLResponse)
-async def page_rabies_form(request: Request):
+async def page_rabies_form(request: Request, db: Session = Depends(get_db)):
+    consent_template = _find_vaccine_consent_template(db)
     return templates.TemplateResponse(request, "rabies_form.html", {
         "msg": request.query_params.get("msg"),
+        "consent_title": consent_template.name if consent_template else "疫苗接种同意书",
+        "consent_html": _rabies_consent_preview_html(consent_template),
     })
+
+
+@app.get("/api/rabies/vaccine-consent-template")
+async def api_rabies_vaccine_consent_template(db: Session = Depends(get_db)):
+    template = _find_vaccine_consent_template(db)
+    if not template:
+        raise HTTPException(503, detail="疫苗接种同意书暂不可用，请联系医院工作人员")
+    return {"title": template.name, "body_html": _rabies_consent_preview_html(template)}
 
 
 @app.post("/rabies")
@@ -21336,6 +21454,7 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
     animal_gender = str(form.get("animal_gender", "")).strip()
     animal_color  = str(form.get("animal_color", "")).strip()
     owner_sig_data = str(form.get("owner_signature", "")).strip()
+    consent_accepted = str(form.get("vaccine_consent_accepted", "")).strip() == "1"
     customer_id_raw = str(form.get("customer_id", "")).strip()
     pet_id_raw      = str(form.get("pet_id", "")).strip()
 
@@ -21346,6 +21465,11 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse("/rabies?msg=请填写手机号", status_code=303)
     if not owner_sig_data or len(owner_sig_data) < 100:
         return RedirectResponse("/rabies?msg=请完成签名", status_code=303)
+    if not consent_accepted:
+        return RedirectResponse("/rabies?msg=请先阅读并同意《疫苗接种同意书》", status_code=303)
+    consent_template = _find_vaccine_consent_template(db)
+    if not consent_template:
+        return RedirectResponse("/rabies?msg=疫苗接种同意书暂不可用，请联系医院工作人员", status_code=303)
 
     # 保存签名
     sig_path = _save_signature(owner_sig_data, f"owner_{owner_phone}")
@@ -21418,6 +21542,10 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
             pet.store = pet.store or clinic_store
             pet.medical_record_no = _gen_medical_record_no(db, pet.store)
 
+    if not cust or not pet:
+        db.rollback()
+        return RedirectResponse("/rabies?msg=客户或宠物档案建立失败，请重新填写", status_code=303)
+
     record = RabiesVaccineRecord(
         customer_id=customer_id,
         pet_id=pet_id,
@@ -21435,7 +21563,16 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
         clinic_store=clinic_store,
     )
     db.add(record)
+    db.flush()
+    try:
+        consent_task, consent_signature = _create_signed_rabies_consent(
+            db, request, record, cust, pet, consent_template, owner_sig_data,
+        )
+    except ValueError as exc:
+        db.rollback()
+        return RedirectResponse(f"/rabies?msg={quote(str(exc), safe='')}", status_code=303)
     db.commit()
+    _finish_rabies_consent_archive(db, request, consent_task, owner_phone, consent_signature)
     try:
         from app.services import wecom_notify as _wn
         _wn.notify_rabies_submitted(db, record)
@@ -21462,6 +21599,7 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
     animal_gender = str(body.get("animal_gender", "")).strip()
     animal_color  = str(body.get("animal_color", "")).strip()
     owner_sig_data  = str(body.get("owner_signature", "")).strip()
+    consent_accepted = body.get("vaccine_consent_accepted") is True
     customer_id_raw = body.get("customer_id")
     pet_id_raw      = body.get("pet_id")
 
@@ -21481,6 +21619,11 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(400, detail="请填写动物毛色")
     if not owner_sig_data or len(owner_sig_data) < 100:
         raise HTTPException(400, detail="请完成签名")
+    if not consent_accepted:
+        raise HTTPException(400, detail="请先阅读并同意《疫苗接种同意书》")
+    consent_template = _find_vaccine_consent_template(db)
+    if not consent_template:
+        raise HTTPException(503, detail="疫苗接种同意书暂不可用，请联系医院工作人员")
 
     sig_path = _save_signature(owner_sig_data, f"owner_{owner_phone}")
 
@@ -21546,6 +21689,10 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
             pet.store = pet.store or clinic_store
             pet.medical_record_no = _gen_medical_record_no(db, pet.store)
 
+    if not cust or not pet:
+        db.rollback()
+        raise HTTPException(400, detail="客户或宠物档案建立失败，请重新填写")
+
     record = RabiesVaccineRecord(
         customer_id=customer_id,
         pet_id=pet_id,
@@ -21563,7 +21710,16 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
         clinic_store=clinic_store,
     )
     db.add(record)
+    db.flush()
+    try:
+        consent_task, consent_signature = _create_signed_rabies_consent(
+            db, request, record, cust, pet, consent_template, owner_sig_data,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(400, detail=str(exc))
     db.commit()
+    _finish_rabies_consent_archive(db, request, consent_task, owner_phone, consent_signature)
     try:
         from app.services import wecom_notify as _wn
         _wn.notify_rabies_submitted(db, record)
@@ -26474,6 +26630,13 @@ async def admin_rabies_delete(rec_id: int, request: Request, db: Session = Depen
                 Path(sig_path).unlink(missing_ok=True)
             except Exception:
                 pass
+    consent_task = db.get(ConsentTask, rec.consent_task_id) if rec.consent_task_id else None
+    if consent_task:
+        consent_task.status = "cancelled"
+        consent_task.notes = (
+            (consent_task.notes or "")
+            + f"\n[rabies_registration_deleted] rabies_record_id={rec_id} operator={operator}"
+        )[:2000]
     _audit(db, request, "rabies_delete", detail={"rabies_id": rec_id, "linked_vacc_count": len(linked_vaccs)})
     db.delete(rec)
     db.commit()

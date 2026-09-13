@@ -142,6 +142,12 @@
  <span style="color:var(--muted);font-size:0.88rem;">暂无签名</span>
  {% endif %}
  </div>
+ {% if rec.consent_task %}
+ <div style="margin-top:.85rem;padding:.7rem .85rem;border:1px solid var(--border);background:#f7faf8;font-size:.82rem;display:flex;justify-content:space-between;gap:.75rem;align-items:center;">
+   <span><b>疫苗接种同意书</b> · {{ '已签署' if rec.consent_task.status == 'signed' else '已取消' if rec.consent_task.status == 'cancelled' else rec.consent_task.status }}</span>
+   <a href="/admin/consent-tasks/{{ rec.consent_task.id }}">查看归档 →</a>
+ </div>
+ {% endif %}
  </div>
 
  <!-- 医护填写表单 -->

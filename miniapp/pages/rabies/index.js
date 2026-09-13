@@ -65,12 +65,41 @@ Page({
     communityNames: ["请先选街道"],
     communityIndex: 0,
     hasSig: false,
+    consentAccepted: false,
+    consentTitle: "疫苗接种同意书",
+    consentHtml: "",
+    consentLoading: true,
+    showConsentBody: false,
     submitting: false,
     error: "",
   },
 
   onLoad() {
     this._loadShenzhenRegions();
+    this._loadVaccineConsent();
+  },
+
+  _loadVaccineConsent() {
+    getJson("/api/rabies/vaccine-consent-template").then(data => {
+      this.setData({
+        consentTitle: data.title || "疫苗接种同意书",
+        consentHtml: data.body_html || "",
+        consentLoading: false,
+      });
+    }).catch(err => {
+      this.setData({
+        consentLoading: false,
+        error: (err && err.detail) || "疫苗接种同意书加载失败，请稍后重试",
+      });
+    });
+  },
+
+  onConsentChange(e) {
+    this.setData({ consentAccepted: (e.detail.value || []).includes("accepted"), error: "" });
+  },
+
+  toggleConsentBody() {
+    this.setData({ showConsentBody: !this.data.showConsentBody });
   },
 
   onShow() {
@@ -317,7 +346,7 @@ Page({
 
   // ── 提交 ──
   onSubmit() {
-    const { form, hasSig, customerId, selectedPetId, districtNames, districtIndex } = this.data;
+    const { form, hasSig, customerId, selectedPetId, districtNames, districtIndex, consentAccepted, consentHtml } = this.data;
     if (!form.owner_phone || form.owner_phone.length < 11) {
       return this.setData({ error: "请填写11位手机号" });
     }
@@ -342,6 +371,12 @@ Page({
     if (!hasSig) {
       return this.setData({ error: "请完成手写签名" });
     }
+    if (!consentHtml) {
+      return this.setData({ error: "疫苗接种同意书尚未加载，请稍后重试" });
+    }
+    if (!consentAccepted) {
+      return this.setData({ error: "请先阅读并同意《疫苗接种同意书》" });
+    }
 
     if (!this._canvas) {
       return this.setData({ error: "签名画板未就绪，请稍候重试" });
@@ -353,6 +388,7 @@ Page({
     postJson("/api/rabies/submit", {
       ...form,
       owner_signature: sigDataURL,
+      vaccine_consent_accepted: true,
       customer_id: customerId,
       pet_id: selectedPetId,
     }).then(res => {

@@ -1,6 +1,7 @@
 <view class="wrap">
   <view class="icon">✅</view>
   <view class="title">登记信息已提交</view>
+  <view class="signed-note">狂犬免疫登记及疫苗接种同意书均已签署</view>
   <view class="sub">请等待医护人员叫号，核对信息后将为您的宠物进行免疫接种。</view>
 
   <view wx:if="{{rec}}" class="info-box">
@@ -18,4 +19,17 @@
   </view>
 
   <view class="hint">如有疑问请咨询前台工作人员</view>
+
+  <view class="aftercare">
+    <view class="aftercare-title">疫苗注射后的注意事项</view>
+    <view class="capture-tip">请截图保留以下内容</view>
+    <view class="notice-row"><text>1.</text><text>注射疫苗前一周需确保动物处于健康状态。</text></view>
+    <view class="notice-row"><text>2.</text><text>注射疫苗后一周内不能洗澡，初次免疫期间需在全部免疫结束一周后再洗澡；一周内尽量不外出及接触其他动物，并避免频繁更换食物和水源。</text></view>
+    <view class="notice-row"><text>3.</text><text>注射后可能出现低烧、嗜睡或暂时性食欲减退，一般可在24至48小时内恢复；超过48小时仍未恢复请及时就医。</text></view>
+    <view class="notice-row"><text>4.</text><text>个别动物可能出现面部或皮肤红肿、红斑、瘙痒、注射部位肿块、休克等过敏表现，如有异常请及时回院就诊。</text></view>
+    <view class="notice-row"><text>5.</text><text>驱虫药与疫苗联合使用时请遵从医嘱，不同药物及动物体况可能需要不同处置方案。</text></view>
+    <view class="notice-row"><text>6.</text><text>建议每月进行一次驱虫；成年犬猫每年加强传染病疫苗和狂犬疫苗，或按医嘱检测抗体。</text></view>
+    <view class="notice-row"><text>7.</text><text>三针首免完成后建议检测抗体，确认已产生足够的免疫应答。</text></view>
+    <view class="brand">大风动物医院<text>Dafo Animal Hospital</text></view>
+  </view>
 </view>

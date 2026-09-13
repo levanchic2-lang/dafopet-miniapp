@@ -44,6 +44,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#1a56db;box-sh
 .msg-info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:0.6rem 0.85rem;color:#1e40af;font-size:0.82rem;margin-bottom:0.85rem;}
 .submit-btn{width:100%;padding:0.85rem;background:#1a56db;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:600;cursor:pointer;}
 .submit-btn:disabled{opacity:.5;}
+.consent-check{display:flex;align-items:flex-start;gap:0.65rem;font-size:0.9rem;line-height:1.55;cursor:pointer;}
+.consent-check input{width:18px;height:18px;margin-top:0.12rem;flex:0 0 auto;accent-color:#111;}
+.consent-link{border:0;background:transparent;padding:0;color:#1d4d3a;text-decoration:underline;font:inherit;cursor:pointer;}
+.consent-body{margin-top:0.85rem;padding:0.9rem;border:1px solid #d8d4cc;background:#fafafa;max-height:280px;overflow:auto;font-size:0.82rem;line-height:1.75;color:#333;}
+.consent-body summary{cursor:pointer;font-weight:600;color:#1d4d3a;}
+.consent-content{margin-top:0.75rem;}
 .hidden{display:none!important;}
 </style>
 </head>
@@ -123,6 +129,23 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#1a56db;box-sh
  <input type="text" name="animal_color" id="animal_color" maxlength="60"/>
  </div>
  </div>
+ </div>
+
+ <!-- ── 疫苗接种同意书 ── -->
+ <div class="card">
+ <div class="section-title">疫苗接种同意书 <span class="req">*</span></div>
+ {% if consent_html %}
+ <label class="consent-check">
+ <input type="checkbox" name="vaccine_consent_accepted" id="vaccine_consent_accepted" value="1"/>
+ <span>我已阅读并同意《{{ consent_title }}》，并确认本次手写签名同时用于狂犬免疫登记和该同意书。</span>
+ </label>
+ <details class="consent-body">
+ <summary>查看《{{ consent_title }}》完整内容</summary>
+ <div class="consent-content">{{ consent_html | safe }}</div>
+ </details>
+ {% else %}
+ <div class="msg-error">疫苗接种同意书暂不可用，请联系医院工作人员。</div>
+ {% endif %}
  </div>
 
  <!-- ── 主人签名 ── -->
@@ -309,6 +332,10 @@ document.getElementById('rabies-form').addEventListener('submit', function(e) {
  // 签名校验
  if (!hasSig) {
  alert('请完成动物主人签名后再提交。');
+ return;
+ }
+ if (!document.getElementById('vaccine_consent_accepted')?.checked) {
+ alert('请先阅读并同意《疫苗接种同意书》。');
  return;
  }
  // 写入签名 data URL

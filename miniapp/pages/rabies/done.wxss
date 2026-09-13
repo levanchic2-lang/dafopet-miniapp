@@ -38,3 +38,24 @@
 .step-num.done { background: #1d4d3a; }
 .step-text { font-size: 26rpx; color: #333333; line-height: 1.6; padding-top: 6rpx; }
 .hint { font-size: 22rpx; color: #777777; }
+.signed-note {
+  background: #edf5f0;
+  border: 1rpx solid #b9cec2;
+  color: #1d4d3a;
+  padding: 18rpx 20rpx;
+  margin: 20rpx 0 28rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+.aftercare {
+  text-align: left;
+  border-top: 1rpx solid #d8d4cc;
+  margin-top: 34rpx;
+  padding-top: 30rpx;
+}
+.aftercare-title { text-align: center; font-size: 32rpx; font-weight: 700; color: #171717; }
+.capture-tip { text-align: center; font-size: 25rpx; font-weight: 600; color: #7a2828; margin: 12rpx 0 24rpx; }
+.notice-row { display: flex; gap: 12rpx; font-size: 25rpx; color: #333; line-height: 1.7; margin-bottom: 16rpx; }
+.notice-row text:first-child { flex: 0 0 28rpx; font-weight: 700; }
+.brand { text-align: center; font-size: 28rpx; font-weight: 700; margin-top: 28rpx; line-height: 1.6; }
+.brand text { display: block; font-size: 24rpx; font-weight: 400; }

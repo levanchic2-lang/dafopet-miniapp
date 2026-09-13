@@ -109,6 +109,23 @@
     </view>
   </view>
 
+  <!-- 疫苗接种同意书 -->
+  <view class="divider" />
+  <view class="label">疫苗接种同意书 <text style="color:#7a2828;">*</text></view>
+  <view class="consent-box">
+    <checkbox-group bindchange="onConsentChange">
+      <label class="consent-check">
+        <checkbox value="accepted" checked="{{consentAccepted}}" color="#171717" />
+        <text>我已阅读并同意《{{consentTitle}}》，并确认本次手写签名同时用于狂犬免疫登记和该同意书。</text>
+      </label>
+    </checkbox-group>
+    <view class="consent-toggle" bindtap="toggleConsentBody">
+      {{showConsentBody ? '收起' : '查看'}}《{{consentTitle}}》完整内容
+    </view>
+    <view wx:if="{{consentLoading}}" class="consent-loading">同意书加载中…</view>
+    <rich-text wx:if="{{showConsentBody && consentHtml}}" class="consent-content" nodes="{{consentHtml}}" />
+  </view>
+
   <!-- 签名 -->
   <view class="divider" />
   <view class="label">动物主人签名 <text style="color:#7a2828;">*</text></view>

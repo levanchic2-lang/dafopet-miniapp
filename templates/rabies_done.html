@@ -6,8 +6,8 @@
 <title>登记成功</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f5f5;color:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1rem;}
-.card{background:#fff;border-radius:16px;padding:2rem 1.5rem;max-width:420px;width:100%;text-align:center;box-shadow:0 2px 16px rgba(0,0,0,.1);}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f5f5;color:#1a1a1a;display:flex;align-items:flex-start;justify-content:center;min-height:100vh;padding:1rem;}
+.card{background:#fff;border-radius:16px;padding:2rem 1.5rem;max-width:620px;width:100%;text-align:center;box-shadow:0 2px 16px rgba(0,0,0,.1);}
 .icon{font-size:3rem;margin-bottom:1rem;}
 h1{font-size:1.3rem;font-weight:700;margin-bottom:0.5rem;}
 p{font-size:0.9rem;color:#555;line-height:1.7;margin-bottom:0.4rem;}
@@ -17,12 +17,20 @@ p{font-size:0.9rem;color:#555;line-height:1.7;margin-bottom:0.4rem;}
 .step{display:flex;gap:0.6rem;margin-bottom:0.6rem;align-items:flex-start;}
 .step-num{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:#1a56db;color:#fff;font-size:0.75rem;font-weight:700;display:flex;align-items:center;justify-content:center;}
 .step-text{color:#374151;line-height:1.5;}
+.signed-note{background:#edf5f0;border:1px solid #b9cec2;color:#1d4d3a;padding:0.8rem;margin:1rem 0;font-size:0.88rem;font-weight:600;}
+.aftercare{text-align:left;border-top:1px solid #d8d4cc;margin-top:1.4rem;padding-top:1.2rem;}
+.aftercare h2{text-align:center;font-size:1.1rem;margin-bottom:0.45rem;}
+.aftercare .capture{text-align:center;color:#7a2828;font-weight:600;margin-bottom:0.8rem;}
+.aftercare ol{padding-left:1.3rem;font-size:0.84rem;color:#333;line-height:1.7;}
+.aftercare li{margin-bottom:0.55rem;}
+.brand{text-align:center;margin-top:1.1rem;font-weight:700;line-height:1.5;}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="icon"><i data-lucide="check-circle-2"></i></div>
   <h1>登记信息已提交</h1>
+  <div class="signed-note">狂犬免疫登记及疫苗接种同意书均已签署</div>
   <p>请等待医护人员叫号，核对信息后将为您的宠物进行免疫接种。</p>
 
   {% if rec %}
@@ -42,6 +50,21 @@ p{font-size:0.9rem;color:#555;line-height:1.7;margin-bottom:0.4rem;}
   </div>
 
   <p style="font-size:0.78rem;color:#9ca3af;margin-top:0.5rem;">如有疑问请咨询前台工作人员</p>
+
+  <div class="aftercare">
+    <h2>疫苗注射后的注意事项</h2>
+    <p class="capture">请截图保留以下内容</p>
+    <ol>
+      <li>注射疫苗前一周需确保动物处于健康状态。</li>
+      <li>注射疫苗后一周内不能洗澡，初次免疫期间需在全部免疫结束一周后再洗澡；一周内尽量不外出及接触其他动物，并避免频繁更换食物和水源。</li>
+      <li>注射后可能出现低烧、嗜睡或暂时性食欲减退，一般可在24至48小时内恢复；超过48小时仍未恢复请及时就医。</li>
+      <li>个别动物可能出现面部或皮肤红肿、红斑、瘙痒、注射部位肿块、休克等过敏表现，如有异常请及时回院就诊。</li>
+      <li>驱虫药与疫苗联合使用时请遵从医嘱，不同药物及动物体况可能需要不同处置方案。</li>
+      <li>建议每月进行一次驱虫；成年犬猫每年加强传染病疫苗和狂犬疫苗，或按医嘱检测抗体。</li>
+      <li>三针首免完成后建议检测抗体，确认已产生足够的免疫应答。</li>
+    </ol>
+    <div class="brand">大风动物医院<br><span style="font-weight:400;">Dafo Animal Hospital</span></div>
+  </div>
 </div>
 </body>
 </html>
