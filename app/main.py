@@ -10366,6 +10366,11 @@ async def consent_sign_page(token: str, request: Request, db: Session = Depends(
     return templates.TemplateResponse(request, "consent_sign.html", {
         "task": task, "cust": cust, "pet": pet,
         "title": task.title or "协议签署",
+        "is_vaccine_consent": bool(
+            (task.template and task.template.category == "vaccination")
+            or "疫苗接种同意书" in (task.title or "")
+            or "[vaccine_consent]" in (task.notes or "")
+        ),
         "verified": verified,
         "has_phone": has_phone,
         "phone_hint": phone_hint,

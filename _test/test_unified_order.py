@@ -179,7 +179,15 @@ vaccinations = db.query(Vaccination).filter_by(pet_id=pet_id).order_by(Vaccinati
 assert len(vaccinations) == 2
 assert vaccinations[0].consent_task_id == vaccinations[1].consent_task_id
 assert db.query(ConsentTask).filter_by(pet_id=pet_id).count() == 1
+consent = db.get(ConsentTask, vaccinations[0].consent_task_id)
+consent.status = "signed"
+consent_token = consent.token
+db.commit()
 db.close()
+signed_page = client.get(f"/consent/{consent_token}")
+assert signed_page.status_code == 200
+assert "疫苗注射后的注意事项" in signed_page.text
+assert "请截图保存" in signed_page.text
 
 # 单独住院入口同样只按项目、天数和单价开收费单，不创建“住院中”状态。
 inpatient_page = client.get(f"/admin/inpatient/new?pet_id={pet_id}&visit_id={visit_id}")

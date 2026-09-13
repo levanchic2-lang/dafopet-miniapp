@@ -60,6 +60,16 @@
   .status-box .icon { font-size: 3.5rem; margin-bottom: .8rem; }
   .status-box h2 { margin: 0 0 .4rem; font-size: 1.2rem; }
   .status-box p { color: #6b7280; margin: .3rem 0; font-size: .92rem; line-height: 1.7; }
+  .aftercare-card { margin-top:1rem; background:#fff; border-radius:12px; padding:1.2rem 1.3rem;
+    box-shadow:0 1px 4px rgba(0,0,0,.04); }
+  .aftercare-save { margin:0 0 1rem; padding:.75rem .85rem; background:#fff7ed; color:#9a3412;
+    border-left:3px solid #ea580c; border-radius:6px; font-size:.9rem; font-weight:700; line-height:1.65; }
+  .aftercare-card h2 { margin:.1rem 0 1rem; text-align:center; font-size:1.18rem; }
+  .aftercare-card ol { margin:0; padding-left:1.4rem; }
+  .aftercare-card li { margin:0 0 .8rem; padding-left:.15rem; font-size:.94rem; line-height:1.8; color:#1f2937; }
+  .aftercare-sign { margin-top:1.15rem; padding-top:1rem; border-top:1px solid #e5e7eb;
+    text-align:center; font-weight:700; line-height:1.65; }
+  .aftercare-sign small { display:block; margin-top:.15rem; color:#6b7280; font-weight:500; letter-spacing:.04em; }
 </style>
 </head>
 <body>
@@ -75,7 +85,7 @@
      {% if pet %}<div>宠物：{{ pet.name }}</div>{% endif %}
    </div>
    {% if not has_phone %}
-   <div class="status-box">
+  <div class="status-box">
      <div class="icon"><i data-lucide="alert-triangle"></i></div>
      <h2>无法验证身份</h2>
      <p>客户档案缺手机号，请联系医院确认。</p>
@@ -169,8 +179,25 @@
    <div class="icon"><i data-lucide="check-circle-2"></i></div>
    <h2>已签署</h2>
    <p>签署时间：{{ task.signed_at.strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}</p>
-   <p>本协议已自动归档到您的医院档案。</p>
- </div>
+    <p>本协议已自动归档到您的医院档案。</p>
+  </div>
+  {% if is_vaccine_consent %}
+  <section class="aftercare-card">
+    <div class="aftercare-save">请截图保存以下注意事项，以便接种后随时查看。</div>
+    <h2>疫苗注射后的注意事项</h2>
+    <ol>
+      <li>注射疫苗前一周需确保动物处于健康状态，方可接种疫苗。</li>
+      <li>注射疫苗后一周内不能洗澡，以免注射部位发炎。初次免疫期间不能洗澡，需全部免疫结束一周后方可洗澡。接种后一周内尽量不外出，并避免接触其他动物。疫苗反应期间，不建议频繁更换食物或水源。</li>
+      <li>注射疫苗后可能出现低烧、嗜睡、暂时性食欲减退等症状，通常在24至48小时后恢复正常。如48小时后仍出现上述症状，应及时就医。</li>
+      <li>因宠物个体差异以及紧张、激动、天气等因素，个别宠物可能出现过敏反应，包括面部或皮肤红肿、红斑、瘙痒、注射部位肿块、休克等。如出现上述情况，请及时返回医院就诊。</li>
+      <li>驱虫药与疫苗的联合使用应遵从医嘱。不同驱虫药及不同体况的动物，可能需要采用不同的处置方案。</li>
+      <li>为保障宠物健康，请每月为宠物驱虫一次。成年犬、猫建议每年加强接种一次传染病疫苗和狂犬疫苗，或进行抗体检测。</li>
+      <li>三针首次免疫全部完成后，建议进行抗体检测，以确认已产生足以保护动物的免疫应答。</li>
+    </ol>
+    <div class="aftercare-save" style="margin:1rem 0 0;">请截图保留本页。如宠物出现异常情况，请及时联系医院或返院就诊。</div>
+    <div class="aftercare-sign">大风动物医院<small>Dafo Animal Hospital</small></div>
+  </section>
+  {% endif %}
 
  {% elif task.status == 'cancelled' %}
  <div class="status-box">
