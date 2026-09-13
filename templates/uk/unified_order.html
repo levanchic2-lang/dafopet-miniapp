@@ -94,6 +94,7 @@
         <div id="summary"><div class="uo-empty" style="padding:16px 0">尚未添加项目</div></div>
         <div class="uo-total"><span>预计合计</span><strong id="grandTotal">¥0.00</strong></div>
         <label class="uo-check"><input type="checkbox" name="is_insurance_service" value="1"/><span>保险增值服务<br/><small style="color:var(--ink-3)">生成的待收款单统一标记为保险代收款</small></span></label>
+        <label class="uo-check" id="uoConsentOption" style="display:none;"><input type="checkbox" name="request_vaccine_consent" value="1" checked/><span>同时发起疫苗接种同意书<br/><small style="color:var(--ink-3)">只作用于联苗；已有同日同意书时自动沿用</small></span></label>
         <div class="uo-field" style="margin-top:14px"><label>整单备注</label><textarea name="notes" rows="3"></textarea></div>
         <button id="submitBtn" type="submit" class="uk-btn primary uo-submit" disabled>确认并生成单据</button>
       </section>
@@ -220,6 +221,12 @@
       const target=el.querySelector('.uo-row-subtotal'); if(target&&rows[index]) target.textContent=`¥${subtotal(rows[index]).toFixed(2)}`;
     });
     document.getElementById('submitBtn').disabled = !valid;
+    const hasComboVaccine = rows.some(row => {
+      if (row.order_type !== 'vaccine') return false;
+      if (['combo', 'combo_3', 'combo_6', 'canine_8'].includes(row.vaccine_type || '')) return true;
+      return /联苗|三联|六联|八联|3联|6联|8联/.test(row.item.name || '') && !/狂犬/.test(row.item.name || '');
+    });
+    document.getElementById('uoConsentOption').style.display = hasComboVaccine ? '' : 'none';
   }
 
   search.addEventListener('input', () => {

@@ -21,6 +21,8 @@ from fastapi.testclient import TestClient
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.models import (
+    ConsentTask,
+    ConsentTemplate,
     Customer,
     DewormingRecord,
     ExamOrder,
@@ -48,6 +50,10 @@ db.add(pet)
 db.flush()
 visit = Visit(customer_id=customer.id, pet_id=pet.id, visit_date="2026-09-06", store="横岗店", status="open")
 db.add(visit)
+db.add(ConsentTemplate(
+    name="横岗店疫苗接种同意书", category="vaccination",
+    body_html="<p>{{cust_name}}同意为{{pet_name}}接种疫苗。</p>", is_active=True,
+))
 
 
 def add_item(name, order_type, price, stock=0, category="medication", is_service=False):
@@ -70,6 +76,7 @@ db.add(InventoryBatch(item_id=vaccine.id, batch_no="V202609", quantity=5, is_dep
 db.commit()
 visit_id = visit.id
 pet_id = pet.id
+customer_id = customer.id
 ids = {"rx": rx.id, "exam": exam.id, "product": product.id, "vaccine": vaccine.id, "deworm": deworm.id, "inpatient": inpatient.id}
 db.close()
 
@@ -106,6 +113,7 @@ assert template_get.status_code == 200 and len(template_get.json()["items"]) == 
 assert template_get.json()["items"][0]["unit_price"] == 2
 response = client.post(f"/admin/visits/{visit_id}/unified-order", data={
     "csrf_token": csrf, "items_json": json.dumps(rows), "order_date": "2026-09-06", "vet_name": "测试医生",
+    "request_vaccine_consent": "1",
 })
 assert response.status_code == 303, response.text
 assert response.headers["location"].startswith("/admin/unified-orders/")
@@ -126,7 +134,9 @@ db = SessionLocal()
 assert db.query(Prescription).filter_by(visit_id=visit_id).count() == 1
 assert db.query(ExamOrder).filter_by(visit_id=visit_id).count() == 1
 assert db.query(SalesOrder).filter_by(visit_id=visit_id).count() == 1
-assert db.query(Vaccination).filter_by(pet_id=pet_id).count() == 1
+first_vaccination = db.query(Vaccination).filter_by(pet_id=pet_id).one()
+assert first_vaccination.consent_task_id is not None
+assert db.query(ConsentTask).filter_by(pet_id=pet_id).count() == 1
 assert db.query(DewormingRecord).filter_by(pet_id=pet_id).count() == 1
 hospitalization = db.query(Hospitalization).filter_by(pet_id=pet_id, billing_mode="simple").one()
 assert hospitalization.status == "discharged"
@@ -149,6 +159,26 @@ blocked = InventoryItem(
 db.add(blocked)
 db.commit()
 blocked_id = blocked.id
+db.close()
+
+# 改单后同日重开沿用原同意书，不新增任务，也不阻断疫苗记录保存。
+direct_page = client.get(f"/admin/vaccinations/create?pet_id={pet_id}&customer_id={customer_id}")
+assert direct_page.status_code == 200
+assert "同时发起疫苗接种同意书" in direct_page.text
+csrf_direct = re.search(r'name="csrf_token" value="([^"]+)"', direct_page.text).group(1)
+reopened = client.post("/admin/vaccinations/create", data={
+    "csrf_token": csrf_direct, "pet_id": pet_id, "customer_id": customer_id,
+    "vaccine_type": "combo_3", "vaccine_name": "测试猫三联",
+    "vaccinated_date": "2026-09-06", "dose_number": "1",
+    "request_vaccine_consent": "1", "is_free": "1",
+})
+assert reopened.status_code == 303
+assert reopened.headers["location"].startswith("/admin/vaccinations/")
+db = SessionLocal()
+vaccinations = db.query(Vaccination).filter_by(pet_id=pet_id).order_by(Vaccination.id).all()
+assert len(vaccinations) == 2
+assert vaccinations[0].consent_task_id == vaccinations[1].consent_task_id
+assert db.query(ConsentTask).filter_by(pet_id=pet_id).count() == 1
 db.close()
 
 # 单独住院入口同样只按项目、天数和单价开收费单，不创建“住院中”状态。

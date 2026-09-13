@@ -306,6 +306,9 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE vaccinations ADD COLUMN voided_at DATETIME DEFAULT NULL"))
                 if "void_reason" not in vacc_cols:
                     conn.execute(text("ALTER TABLE vaccinations ADD COLUMN void_reason VARCHAR(200) DEFAULT ''"))
+                if "consent_task_id" not in vacc_cols:
+                    conn.execute(text("ALTER TABLE vaccinations ADD COLUMN consent_task_id INTEGER REFERENCES consent_tasks(id) ON DELETE SET NULL"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_consent_task ON vaccinations(consent_task_id)"))
             except Exception:
                 pass
             try:
@@ -1016,6 +1019,7 @@ def _try_sqlite_migrations() -> None:
                 "is_free INTEGER DEFAULT 0, "
                 "rabies_record_id INTEGER REFERENCES rabies_vaccine_records(id) ON DELETE SET NULL, "
                 "invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL, "
+                "consent_task_id INTEGER REFERENCES consent_tasks(id) ON DELETE SET NULL, "
                 "vet_name VARCHAR(80) DEFAULT '', "
                 "notes TEXT DEFAULT '', "
                 "created_by VARCHAR(80) DEFAULT '', "
@@ -1026,6 +1030,7 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_pet ON vaccinations(pet_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_due ON vaccinations(next_due_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_rabies ON vaccinations(rabies_record_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_vacc_consent_task ON vaccinations(consent_task_id)"))
 
             # exam_orders 检查单
             conn.execute(text(

@@ -15861,6 +15861,7 @@ def _unified_batch_doc_view(db: Session, ref: dict) -> dict:
         "type": doc_type, "type_label": labels.get(doc_type, "业务单据"),
         "id": doc_id, "exists": False, "status": "已删除", "locked": True,
         "lock_reason": "单据已删除", "url": "", "items": [], "total": 0.0,
+        "consent_task_id": None, "consent_status": "",
     }
     if doc_type == "prescription":
         doc = db.get(Prescription, doc_id)
@@ -15905,8 +15906,11 @@ def _unified_batch_doc_view(db: Session, ref: dict) -> dict:
         locked, reason = _is_vaccination_locked(db, doc)
         inv = db.get(Invoice, doc.invoice_id) if doc.invoice_id else None
         total = float(inv.total_amount or 0) if inv else 0.0
+        consent = db.get(ConsentTask, doc.consent_task_id) if doc.consent_task_id else None
         result.update(exists=True, status="已作废" if doc.status == "voided" else "已接种",
                       locked=locked, lock_reason=reason, url=f"/admin/vaccinations/{doc.id}", total=total,
+                      consent_task_id=consent.id if consent else None,
+                      consent_status=consent.status if consent else "",
                       items=[{"name": doc.vaccine_name, "qty": 1, "unit": "次",
                               "unit_price": total, "subtotal": total,
                               "detail": f"批号 {doc.batch_no}" if doc.batch_no else ""}])
@@ -16178,6 +16182,17 @@ async def admin_unified_order_create(
                 db.add(InvoiceItem(invoice_id=invoice.id, ref_type="vaccination", ref_id=vacc.id,
                                    description=item.name, quantity=1, unit_price=price, subtotal=price))
                 vacc.invoice_id = invoice.id
+            if form.get("request_vaccine_consent") == "1":
+                _ensure_vaccine_consent_task(
+                    db,
+                    vacc,
+                    store=_resolve_invoice_store(
+                        db, visit_id=visit.id, pet_id=visit.pet_id,
+                        customer_id=visit.customer_id, fallback=_get_op_store(request),
+                    ),
+                    initiated_by=operator or "admin",
+                    visit_id=visit.id,
+                )
             created.append(f"疫苗#{vacc.id}")
             created_refs.append({"type": "vaccine", "id": vacc.id})
 
@@ -25368,6 +25383,89 @@ def _create_combo_consent_task(
     return task
 
 
+_VACCINE_CONSENT_TYPES = {"combo", "combo_3", "combo_6", "canine_8"}
+
+
+def _ensure_vaccine_consent_task(
+    db: Session,
+    vacc: Vaccination,
+    *,
+    store: str = "",
+    initiated_by: str = "admin",
+    visit_id: int | None = None,
+) -> tuple[ConsentTask | None, bool, str]:
+    """Create or reuse one consent for the same pet and vaccination date."""
+    vaccine_text = f"{vacc.vaccine_type or ''} {vacc.vaccine_name or ''}".lower()
+    needs_consent = vacc.vaccine_type in _VACCINE_CONSENT_TYPES or (
+        "狂犬" not in vaccine_text
+        and any(keyword in vaccine_text for keyword in ("联苗", "三联", "六联", "八联", "3联", "6联", "8联"))
+    )
+    if not needs_consent:
+        return None, False, "not_required"
+    tpl = _find_vaccine_consent_template(db)
+    if not tpl:
+        return None, False, "template_missing"
+    cust = db.get(Customer, vacc.customer_id) if vacc.customer_id else None
+    pet = db.get(Pet, vacc.pet_id) if vacc.pet_id else None
+    if not cust or not pet:
+        return None, False, "archive_missing"
+
+    date_marker = f"vaccination_date={vacc.vaccinated_date or ''}"
+    existing = db.query(ConsentTask).filter(
+        ConsentTask.customer_id == cust.id,
+        ConsentTask.pet_id == pet.id,
+        ConsentTask.template_id == tpl.id,
+        ConsentTask.status.in_(["pending", "signed"]),
+        ConsentTask.notes.contains(date_marker),
+    ).order_by(ConsentTask.id.desc()).first()
+
+    # The owner's miniapp registration may already have created the consent.
+    if not existing:
+        reg = db.query(ComboVaccineRegistration).filter(
+            ComboVaccineRegistration.customer_id == cust.id,
+            ComboVaccineRegistration.pet_id == pet.id,
+            ComboVaccineRegistration.requested_date == (vacc.vaccinated_date or ""),
+            ComboVaccineRegistration.consent_task_id.isnot(None),
+        ).order_by(ComboVaccineRegistration.id.desc()).first()
+        candidate = db.get(ConsentTask, reg.consent_task_id) if reg and reg.consent_task_id else None
+        if candidate and candidate.template_id == tpl.id and candidate.status in ("pending", "signed"):
+            existing = candidate
+
+    if existing:
+        vacc.consent_task_id = existing.id
+        return existing, False, "reused"
+
+    clinic_store = store or pet.store or "横岗店"
+    clinic_name = f"大风动物医院（{clinic_store}）"
+    snapshot = _consent_render_snapshot(
+        tpl.body_html,
+        cust=cust,
+        pet=pet,
+        visit=db.get(Visit, visit_id) if visit_id else None,
+        vet_name=vacc.vet_name or "",
+        clinic_name=clinic_name,
+        pet_weight=0,
+        pet_age=pet.birthday_estimate or "",
+    )
+    task = ConsentTask(
+        template_id=tpl.id,
+        customer_id=cust.id,
+        pet_id=pet.id,
+        visit_id=visit_id,
+        title=tpl.name,
+        snapshot_html=snapshot,
+        token=_gen_consent_token(),
+        status="pending",
+        store=clinic_store,
+        initiated_by=initiated_by,
+        notes=f"[vaccine_no_verify] [vaccine_consent] {date_marker} source=direct",
+    )
+    db.add(task)
+    db.flush()
+    vacc.consent_task_id = task.id
+    return task, True, "created"
+
+
 @app.get("/admin/vaccinations", response_class=HTMLResponse)
 async def admin_vaccinations_list(
     request: Request, db: Session = Depends(get_db),
@@ -25478,6 +25576,7 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
     item_id     = int(form.get("inventory_item_id") or 0) or None
     is_free     = form.get("is_free") == "1"
     is_insurance_service = form.get("is_insurance_service") == "1"
+    request_vaccine_consent = form.get("request_vaccine_consent") == "1"
     admin_name  = request.session.get("admin_username", "")
 
     vacc = Vaccination(
@@ -25545,6 +25644,19 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
         ))
         vacc.invoice_id = inv.id
 
+    consent_task = None
+    consent_created = False
+    consent_reason = ""
+    if request_vaccine_consent:
+        consent_task, consent_created, consent_reason = _ensure_vaccine_consent_task(
+            db,
+            vacc,
+            store=_resolve_invoice_store(
+                db, pet_id=pet_id, customer_id=customer_id, fallback=_get_op_store(request)
+            ),
+            initiated_by=admin_name or "admin",
+        )
+
     db.commit()
     redirect = f"/admin/customers/{db.get(Pet, pet_id).customer_id}" if pet_id and db.get(Pet, pet_id) else "/admin/vaccinations"
     msg_part = "疫苗记录已添加"
@@ -25552,7 +25664,18 @@ async def admin_vaccination_create(request: Request, db: Session = Depends(get_d
         msg_part += f"，收费单 ¥{charge_amount:.2f} 已生成待收款"
     elif not is_free:
         msg_part += "（未生成收费单：金额=0 且未关联有售价的库存品目）"
+    if consent_task:
+        msg_part += "，已沿用现有疫苗接种同意书" if not consent_created else "，疫苗接种同意书待微信发送"
+    elif request_vaccine_consent and consent_reason == "template_missing":
+        msg_part += "；未找到已上架的疫苗接种同意书模板，请稍后手动发起"
     next_url_raw = str(form.get("next_url") or "")
+    if consent_task:
+        target = (
+            f"/m/consent-task/{consent_task.id}"
+            if next_url_raw.startswith("/m/")
+            else f"/admin/vaccinations/{vacc.id}"
+        )
+        return RedirectResponse(f"{target}?msg={quote(msg_part, safe='')}", status_code=303)
     return RedirectResponse(
         _safe_next(next_url_raw, f"{redirect}?msg={msg_part}"),
         status_code=303,
@@ -25578,6 +25701,11 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
     _attach_latest_batch(db, vacc_items)
     locked, lock_reason = _is_vaccination_locked(db, vacc)
     paid_amount = _doc_paid_amount(db, "vaccination", vacc_id) if locked else 0.0
+    consent_task = db.get(ConsentTask, vacc.consent_task_id) if vacc.consent_task_id else None
+    consent_sign_url = ""
+    if consent_task:
+        base = (settings.public_base_url or str(request.base_url)).strip().rstrip("/")
+        consent_sign_url = f"{base}/consent/{consent_task.token}"
     history = []
     if vacc.pet_id:
         history = db.query(Vaccination).filter(
@@ -25592,6 +25720,8 @@ async def admin_vaccination_detail(vacc_id: int, request: Request, db: Session =
         "vacc_type_options": _VACC_TYPE_OPTIONS,
         "dose_zh": _DOSE_ZH,
         "vacc_history": history,
+        "consent_task": consent_task,
+        "consent_sign_url": consent_sign_url,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
         "today": vacc.vaccinated_date,
         "csrf_token": _get_csrf_token(request),
@@ -25697,16 +25827,18 @@ async def admin_vaccination_copy_as_new(vacc_id: int, request: Request, db: Sess
     if not src:
         raise HTTPException(404)
     operator = request.session.get("admin_username", "admin")
+    today = datetime.utcnow().strftime("%Y-%m-%d")
     new_v = Vaccination(
         pet_id=src.pet_id, customer_id=src.customer_id,
         vaccine_type=src.vaccine_type, vaccine_name=src.vaccine_name,
         batch_no="", dose_number=src.dose_number + 1 if src.dose_number < 99 else 99,
-        vaccinated_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        vaccinated_date=today,
         next_due_date="",
         inventory_item_id=src.inventory_item_id,
         is_free=src.is_free,
         rabies_record_id=None,
         invoice_id=None,
+        consent_task_id=src.consent_task_id if src.vaccinated_date == today else None,
         vet_name=src.vet_name, notes=src.notes,
         status="active",
         created_by=operator,
@@ -26166,6 +26298,7 @@ async def admin_combo_vaccine_confirm(
         vaccine_name=item.name, batch_no=(batch_no or getattr(item, "latest_batch_no", ""))[:80],
         dose_number=dose_map.get(reg.immunization_stage, 1), vaccinated_date=actual_date,
         inventory_item_id=item.id, is_free=False, vet_name=(vet_name or "")[:80],
+        consent_task_id=reg.consent_task_id,
         notes=f"来源：联苗预登记 #{reg.id}", created_by=request.session.get("admin_username", "admin"),
     )
     db.add(vacc)

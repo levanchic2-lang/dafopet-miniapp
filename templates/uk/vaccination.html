@@ -425,6 +425,13 @@ function confirmVaccVoid(form, paidAmount) {
         <input type="checkbox" name="is_insurance_service" value="1"/>
         <span>保险增值服务（收费单进入“保险待结算”）</span>
       </label>
+      <label class="free-check" id="vaccine-consent-row" style="margin-top:10px;display:none;">
+        <input type="checkbox" name="request_vaccine_consent" value="1" id="request-vaccine-consent"/>
+        <span>同时发起疫苗接种同意书</span>
+      </label>
+      <div id="vaccine-consent-hint" class="vac-input-hint" style="display:none;margin:4px 0 0 26px;">
+        首次接种默认发起；同一宠物同一天已有待签或已签同意书时自动沿用，不会重复生成
+      </div>
       <div class="vac-charge-hint">
         不勾「免费」+ 金额 &gt; 0 时，保存会自动生成收费单进入收银台待收款<br/>
         关联库存时还会自动出库 1 单位 · 不关联只产生收费单
@@ -472,6 +479,19 @@ function confirmVaccVoid(form, paidAmount) {
     <h3>主&nbsp;人</h3>
     <div class="name">{{ cust.name or '—' }}</div>
     <div class="meta">{{ cust.phone or '—' }}</div>
+  </div>
+  {% endif %}
+
+  {% if is_edit and consent_task %}
+  <div class="vac-aside-card">
+    <h3>疫&nbsp;苗&nbsp;接&nbsp;种&nbsp;同&nbsp;意&nbsp;书</h3>
+    <div class="name" style="font-size:13pt;">
+      {% if consent_task.status == 'signed' %}已签署{% elif consent_task.status == 'pending' %}待签署{% elif consent_task.status == 'cancelled' %}已取消{% else %}{{ consent_task.status }}{% endif %}
+    </div>
+    {% if consent_task.status == 'pending' %}
+    <button type="button" class="uk-btn primary sm" style="width:100%;margin-top:10px;" onclick="copyConsentMessage()">复制微信消息</button>
+    {% endif %}
+    <a href="/admin/consent-tasks/{{ consent_task.id }}" class="uk-btn ghost sm" style="width:100%;margin-top:8px;text-align:center;">查看同意书 →</a>
   </div>
   {% endif %}
 
@@ -549,6 +569,13 @@ function onTypeChange() {
     // 狂犬 → 自动勾上；非狂犬 → 自动取消（防止 sticky 状态忘改）
     chk.checked = (type === 'rabies');
   }
+  const needsConsent = ['combo', 'combo_3', 'combo_6', 'canine_8'].includes(type);
+  const consentRow = document.getElementById('vaccine-consent-row');
+  const consentHint = document.getElementById('vaccine-consent-hint');
+  const consentCheck = document.getElementById('request-vaccine-consent');
+  if (consentRow) consentRow.style.display = needsConsent ? '' : 'none';
+  if (consentHint) consentHint.style.display = needsConsent ? '' : 'none';
+  if (consentCheck) consentCheck.checked = needsConsent;
   _updateFreeWarn();
   calcNextDue();
 }
@@ -564,6 +591,12 @@ function onItemChange() {
   if (name) {
     const nameInput = document.querySelector('input[name="vaccine_name"]');
     if (nameInput && !nameInput.value) nameInput.value = name;
+    const typeSelect = document.getElementById('vaccine-type-sel');
+    if (/狂犬/.test(name)) typeSelect.value = 'rabies';
+    else if (/八联|8联/.test(name)) typeSelect.value = 'canine_8';
+    else if (/六联|6联/.test(name)) typeSelect.value = 'combo_6';
+    else if (/三联|3联|联苗/.test(name)) typeSelect.value = 'combo_3';
+    onTypeChange();
   }
   if (batch) {
     const batchInput = document.querySelector('input[name="batch_no"]');
@@ -574,6 +607,20 @@ function onItemChange() {
     if (amtInput && !amtInput.value) amtInput.value = parseFloat(price).toFixed(2);
   }
 }
+
+{% if is_edit and consent_task and consent_task.status == 'pending' %}
+function copyConsentMessage() {
+  const message = {{ ('您好，这是' ~ (pet.name if pet else '宠物') ~ '本次疫苗接种同意书，请点击链接阅读并签署：' ~ consent_sign_url) | tojson }};
+  const done = () => alert('疫苗接种同意书微信消息已复制');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(message).then(done);
+  } else {
+    const input = document.createElement('textarea');
+    input.value = message; document.body.appendChild(input); input.select();
+    document.execCommand('copy'); input.remove(); done();
+  }
+}
+{% endif %}
 
 document.addEventListener('DOMContentLoaded', () => {
   const chk = document.getElementById('is-free-chk');

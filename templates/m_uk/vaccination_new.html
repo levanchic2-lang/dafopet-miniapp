@@ -39,7 +39,7 @@
 
   <div class="ukm-field">
     <label class="lbl">疫&nbsp;苗&nbsp;类&nbsp;型</label>
-    <select class="ukm-select" name="vaccine_type">
+    <select class="ukm-select" name="vaccine_type" id="mobile-vaccine-type" onchange="syncConsentOption()">
       <option value="rabies">狂&nbsp;犬&nbsp;疫&nbsp;苗</option>
       <option value="combo" selected>联&nbsp;苗</option>
       <option value="other">其&nbsp;他</option>
@@ -92,6 +92,11 @@
 
   <div class="ukm-field"><label class="ukm-chip" style="cursor:pointer;"><input type="checkbox" name="is_insurance_service" value="1"/>保&nbsp;险&nbsp;增&nbsp;值&nbsp;服&nbsp;务</label><div class="hint">生成后进入保险待结算</div></div>
 
+  <div class="ukm-field" id="mobile-consent-option">
+    <label class="ukm-chip checked" style="cursor:pointer;"><input type="checkbox" name="request_vaccine_consent" value="1" checked/>同&nbsp;时&nbsp;发&nbsp;起&nbsp;疫&nbsp;苗&nbsp;接&nbsp;种&nbsp;同&nbsp;意&nbsp;书</label>
+    <div class="hint">已有同日同意书时自动沿用；待签不阻断开单</div>
+  </div>
+
   <div class="ukm-field"><label class="lbl">备&nbsp;注</label><textarea class="ukm-textarea" name="notes" style="min-height:64px;"></textarea></div>
 
   <div class="ukm-btn-row">
@@ -105,6 +110,10 @@ function pickPet(btn) {
   document.querySelectorAll('.pet-chip').forEach(c => c.classList.remove('checked'));
   btn.classList.add('checked');
   document.getElementById('pet_id').value = btn.dataset.petId;
+}
+function syncConsentOption() {
+  const type = document.getElementById('mobile-vaccine-type').value;
+  document.getElementById('mobile-consent-option').style.display = ['combo', 'combo_3', 'combo_6', 'canine_8'].includes(type) ? '' : 'none';
 }
 // 输入关键字过滤库存品名 chip
 function filterInvChips(prefix) {

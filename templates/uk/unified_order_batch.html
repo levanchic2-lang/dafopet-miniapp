@@ -77,6 +77,11 @@
       </tbody>
     </table>
     <div class="ub-total"><span>本单合计</span><strong>¥{{ '%.2f'|format(doc['total']) }}</strong></div>
+    {% if doc['consent_task_id'] %}
+    <div class="ub-lock-note" style="color:{% if doc['consent_status'] == 'signed' %}var(--accent-green){% else %}var(--accent-amber){% endif %};">
+      疫苗接种同意书：{{ '已签署' if doc['consent_status'] == 'signed' else '待签署' }} · <a href="/admin/consent-tasks/{{ doc['consent_task_id'] }}">查看 / 发送 →</a>
+    </div>
+    {% endif %}
     {% if doc['locked'] %}<div class="ub-lock-note">该单已锁定：{{ doc['lock_reason'] or '已产生后续业务记录' }}。如需调整，请按单据作废后重开。</div>{% endif %}
     {% else %}
     <div class="ub-empty">这张单据已经删除，不再计入本次合计。</div>

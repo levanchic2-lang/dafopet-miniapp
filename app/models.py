@@ -692,6 +692,7 @@ class Vaccination(Base):
     # 关联来源
     rabies_record_id = mapped_column(ForeignKey("rabies_vaccine_records.id", ondelete="SET NULL"), nullable=True, default=None)
     invoice_id       = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    consent_task_id  = mapped_column(ForeignKey("consent_tasks.id", ondelete="SET NULL"), nullable=True, default=None)
 
     vet_name:   Mapped[str] = mapped_column(String(80), default="")
     notes:      Mapped[str] = mapped_column(Text, default="")
@@ -709,6 +710,7 @@ class Vaccination(Base):
     customer      = relationship("Customer",            foreign_keys=[customer_id])
     inventory_item = relationship("InventoryItem",      foreign_keys=[inventory_item_id])
     rabies_record = relationship("RabiesVaccineRecord", foreign_keys=[rabies_record_id])
+    consent_task = relationship("ConsentTask", foreign_keys=[consent_task_id])
 
 
 class ComboVaccineRegistration(Base):
