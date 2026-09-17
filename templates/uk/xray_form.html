@@ -339,9 +339,12 @@ async function aiDraft() {
   btn.disabled = true; const old = btn.textContent; btn.textContent = '正在生成…';
   status.style.color = 'var(--ink-3)'; status.textContent = 'AI 整理中，请稍候（推理模型约十几秒）…';
   const t0 = performance.now();
+  const controller = new AbortController();
+  const requestTimer = setTimeout(() => controller.abort(), 55000);
   try {
     const resp = await fetch('/admin/xray/ai-draft', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         report_id: REPORT_ID,
         region: document.getElementById('region').value,
@@ -353,6 +356,17 @@ async function aiDraft() {
         measurements: collectMeasure(),
       })
     });
+    const contentType = resp.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      let message = '服务器暂时无法完成 AI 生成，请稍后重试；当前填写内容不会丢失';
+      if (resp.status === 401 || resp.status === 403 || resp.redirected) {
+        message = '登录状态可能已失效，请刷新页面后重试；当前填写内容不会丢失';
+      } else if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
+        message = 'AI 服务响应超时，请稍后重试；当前填写内容不会丢失';
+      }
+      status.style.color = 'var(--accent-red)'; status.textContent = '✗ ' + message;
+      return;
+    }
     const data = await resp.json();
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     if (data.ok) {
@@ -364,8 +378,12 @@ async function aiDraft() {
       status.style.color = 'var(--accent-red)'; status.textContent = '✗ 失败：' + (data.error || '未知错误');
     }
   } catch (e) {
-    status.style.color = 'var(--accent-red)'; status.textContent = '✗ 请求失败：' + e;
+    const message = e && e.name === 'AbortError'
+      ? 'AI 服务响应超时，请稍后重试；当前填写内容不会丢失'
+      : '网络连接异常，请稍后重试；当前填写内容不会丢失';
+    status.style.color = 'var(--accent-red)'; status.textContent = '✗ ' + message;
   } finally {
+    clearTimeout(requestTimer);
     btn.disabled = false; btn.textContent = old;
   }
 }

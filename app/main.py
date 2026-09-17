@@ -29315,7 +29315,22 @@ async def admin_xray_ai_draft(request: Request, db: Session = Depends(get_db)):
         **_us_pet_payload(pet),
     }
     from app.services.xray_ai import draft_xray_text
-    result = await draft_xray_text(full)
+    try:
+        # Nginx waits 60 seconds for this endpoint. Return a controlled JSON
+        # error before the proxy replaces the response with an HTML 504 page.
+        result = await asyncio.wait_for(draft_xray_text(full), timeout=50)
+    except asyncio.TimeoutError:
+        logger.warning("X-ray AI draft timed out after 50 seconds")
+        return JSONResponse(
+            {"ok": False, "error": "AI 服务响应超时，请稍后重试；当前填写内容不会丢失"},
+            status_code=504,
+        )
+    except Exception:
+        logger.exception("X-ray AI draft failed")
+        return JSONResponse(
+            {"ok": False, "error": "AI 服务暂时不可用，请稍后重试；当前填写内容不会丢失"},
+            status_code=502,
+        )
     return JSONResponse(result)
 
 
