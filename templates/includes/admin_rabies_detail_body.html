@@ -128,6 +128,30 @@
  </div>
  </form>
 
+ <!-- 动物登记照片 -->
+ <div style="margin-top:0.85rem;">
+ <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem;">动物登记照片</div>
+ <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;max-width:620px;">
+   <div>
+     <div style="font-size:.76rem;color:var(--muted);margin-bottom:.3rem;">正身照</div>
+     {% if rec.front_photo_path %}
+     <a href="/uploads/{{ rec.front_photo_path }}" target="_blank" rel="noopener" style="display:block;border:1px solid var(--border);background:#fafafa;padding:.35rem;">
+       <img src="/uploads/{{ rec.front_photo_path }}" alt="动物正身照" style="width:100%;height:190px;object-fit:contain;display:block;"/>
+     </a>
+     {% else %}<div style="height:120px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem;">未上传</div>{% endif %}
+   </div>
+   <div>
+     <div style="font-size:.76rem;color:var(--muted);margin-bottom:.3rem;">侧身照</div>
+     {% if rec.side_photo_path %}
+     <a href="/uploads/{{ rec.side_photo_path }}" target="_blank" rel="noopener" style="display:block;border:1px solid var(--border);background:#fafafa;padding:.35rem;">
+       <img src="/uploads/{{ rec.side_photo_path }}" alt="动物侧身照" style="width:100%;height:190px;object-fit:contain;display:block;"/>
+     </a>
+     {% else %}<div style="height:120px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem;">未上传</div>{% endif %}
+   </div>
+ </div>
+ <div style="font-size:.74rem;color:var(--muted);margin-top:.35rem;">点击照片可查看原图</div>
+ </div>
+
  <!-- 主人签名 -->
  <div style="margin-top:0.85rem;">
  <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:0.4rem;">动物主人签名</div>

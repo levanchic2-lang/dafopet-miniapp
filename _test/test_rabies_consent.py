@@ -57,6 +57,7 @@ with SessionLocal() as db:
 client = TestClient(app, base_url="https://testserver", follow_redirects=False)
 fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 900
 signature = "data:image/png;base64," + base64.b64encode(fake_png).decode("ascii")
+photo_png = (ROOT / "miniapp" / "images" / "rabies-front-guide.png").read_bytes()
 payload = {
     "owner_name": "测试主人",
     "owner_phone": "13900008888",
@@ -71,6 +72,21 @@ payload = {
     "customer_id": customer_id,
     "pet_id": pet_id,
 }
+
+front_upload = client.post(
+    "/api/rabies/upload-photo",
+    data={"kind": "front"},
+    files={"file": ("front.png", photo_png, "image/png")},
+)
+side_upload = client.post(
+    "/api/rabies/upload-photo",
+    data={"kind": "side"},
+    files={"file": ("side.png", photo_png, "image/png")},
+)
+assert front_upload.status_code == 200, front_upload.text
+assert side_upload.status_code == 200, side_upload.text
+payload["front_photo_token"] = front_upload.json()["token"]
+payload["side_photo_token"] = side_upload.json()["token"]
 
 missing_consent = client.post("/api/rabies/submit", json=payload)
 assert missing_consent.status_code == 400
@@ -92,6 +108,9 @@ with SessionLocal() as db:
     assert db.query(ConsentAuditLog).filter_by(task_id=task.id, event="sign_success").count() == 1
     signature_path = ROOT / "uploads" / task.signature_path
     rabies_signature_path = ROOT / record.owner_signature_path
+    front_photo_path = ROOT / "uploads" / record.front_photo_path
+    side_photo_path = ROOT / "uploads" / record.side_photo_path
+    assert front_photo_path.is_file() and side_photo_path.is_file()
 
 done = client.get(f"/rabies/done?id={created.json()['id']}")
 assert done.status_code == 200
@@ -99,7 +118,7 @@ assert "疫苗接种同意书均已签署" in done.text
 assert "请截图保留以下内容" in done.text
 
 client.close()
-for path in (signature_path, rabies_signature_path):
+for path in (signature_path, rabies_signature_path, front_photo_path, side_photo_path):
     if path.exists():
         path.unlink()
 TEMP_DIR.cleanup()

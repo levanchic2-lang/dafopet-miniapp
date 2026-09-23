@@ -70,6 +70,8 @@ Page({
     consentHtml: "",
     consentLoading: true,
     showConsentBody: false,
+    frontPhotoPath: "",
+    sidePhotoPath: "",
     submitting: false,
     error: "",
   },
@@ -321,6 +323,62 @@ Page({
     this.setData({ genderIndex: idx, "form.animal_gender": GENDER_OPTIONS[idx].value });
   },
 
+  // ── 动物登记照片 ──
+  chooseRabiesPhoto(e) {
+    const kind = e.currentTarget.dataset.kind;
+    wx.chooseMedia({
+      count: 1,
+      mediaType: ["image"],
+      sourceType: ["camera", "album"],
+      sizeType: ["compressed"],
+      success: (res) => {
+        const path = res.tempFiles && res.tempFiles[0] && res.tempFiles[0].tempFilePath;
+        if (!path) return;
+        this.setData({
+          [kind === "front" ? "frontPhotoPath" : "sidePhotoPath"]: path,
+          error: "",
+        });
+      },
+    });
+  },
+
+  previewPhotoGuide(e) {
+    const kind = e.currentTarget.dataset.kind;
+    const current = kind === "front" ? "/images/rabies-front-guide.png" : "/images/rabies-side-guide.png";
+    wx.previewImage({
+      current,
+      urls: ["/images/rabies-front-guide.png", "/images/rabies-side-guide.png"],
+    });
+  },
+
+  previewSelectedPhoto(e) {
+    const kind = e.currentTarget.dataset.kind;
+    const current = kind === "front" ? this.data.frontPhotoPath : this.data.sidePhotoPath;
+    const urls = [this.data.frontPhotoPath, this.data.sidePhotoPath].filter(Boolean);
+    if (current) wx.previewImage({ current, urls });
+  },
+
+  _uploadRabiesPhoto(kind, filePath) {
+    return new Promise((resolve, reject) => {
+      wx.uploadFile({
+        url: app.globalData.apiBase + "/api/rabies/upload-photo",
+        filePath,
+        name: "file",
+        formData: { kind },
+        timeout: 30000,
+        success: (res) => {
+          let data = {};
+          try { data = JSON.parse(res.data || "{}"); } catch (err) {
+            return reject({ detail: "照片上传响应异常，请重试" });
+          }
+          if (res.statusCode >= 200 && res.statusCode < 300 && data.token) resolve(data);
+          else reject(data || { detail: "照片上传失败，请重试" });
+        },
+        fail: () => reject({ detail: "照片上传失败，请检查网络后重试" }),
+      });
+    });
+  },
+
   // ── 签名 ──
   onSigStart(e) {
     if (!this._ctx) return;
@@ -345,8 +403,11 @@ Page({
   },
 
   // ── 提交 ──
-  onSubmit() {
-    const { form, hasSig, customerId, selectedPetId, districtNames, districtIndex, consentAccepted, consentHtml } = this.data;
+  async onSubmit() {
+    const {
+      form, hasSig, customerId, selectedPetId, districtIndex,
+      consentAccepted, consentHtml, frontPhotoPath, sidePhotoPath,
+    } = this.data;
     if (!form.owner_phone || form.owner_phone.length < 11) {
       return this.setData({ error: "请填写11位手机号" });
     }
@@ -368,6 +429,12 @@ Page({
     if (!form.animal_color || !form.animal_color.trim()) {
       return this.setData({ error: "请填写动物毛色" });
     }
+    if (!frontPhotoPath) {
+      return this.setData({ error: "请拍摄或选择动物正身照" });
+    }
+    if (!sidePhotoPath) {
+      return this.setData({ error: "请拍摄或选择动物侧身照" });
+    }
     if (!hasSig) {
       return this.setData({ error: "请完成手写签名" });
     }
@@ -385,23 +452,30 @@ Page({
     const sigDataURL = this._canvas.toDataURL("image/png");
     this.setData({ submitting: true, error: "" });
 
-    postJson("/api/rabies/submit", {
-      ...form,
-      owner_signature: sigDataURL,
-      vaccine_consent_accepted: true,
-      customer_id: customerId,
-      pet_id: selectedPetId,
-    }).then(res => {
+    try {
+      const [frontUpload, sideUpload] = await Promise.all([
+        this._uploadRabiesPhoto("front", frontPhotoPath),
+        this._uploadRabiesPhoto("side", sidePhotoPath),
+      ]);
+      const res = await postJson("/api/rabies/submit", {
+        ...form,
+        owner_signature: sigDataURL,
+        vaccine_consent_accepted: true,
+        front_photo_token: frontUpload.token,
+        side_photo_token: sideUpload.token,
+        customer_id: customerId,
+        pet_id: selectedPetId,
+      });
       this.setData({ submitting: false });
       const name = encodeURIComponent(form.owner_name);
       const phone = encodeURIComponent(form.owner_phone);
       const animal = encodeURIComponent(form.animal_name);
       wx.redirectTo({ url: `/pages/rabies/done?id=${res.id}&name=${name}&phone=${phone}&animal=${animal}` });
-    }).catch(err => {
+    } catch (err) {
       this.setData({
         submitting: false,
         error: (err && err.detail) || "提交失败，请重试",
       });
-    });
+    }
   },
 });

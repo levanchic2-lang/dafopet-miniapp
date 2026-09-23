@@ -895,6 +895,8 @@ def _try_sqlite_migrations() -> None:
                     "animal_dob VARCHAR(40) DEFAULT '', "
                     "animal_gender VARCHAR(10) DEFAULT '', "
                     "animal_color VARCHAR(80) DEFAULT '', "
+                    "front_photo_path VARCHAR(512) DEFAULT '', "
+                    "side_photo_path VARCHAR(512) DEFAULT '', "
                     "owner_signature_path VARCHAR(512) DEFAULT '', "
                     "owner_signed_at DATETIME DEFAULT NULL, "
                     "vaccine_manufacturer VARCHAR(120) DEFAULT '', "
@@ -917,6 +919,10 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE rabies_vaccine_records ADD COLUMN consent_task_id INTEGER REFERENCES consent_tasks(id) ON DELETE SET NULL"))
                 if "clinic_store" not in rvr_names:
                     conn.execute(text("ALTER TABLE rabies_vaccine_records ADD COLUMN clinic_store VARCHAR(60) DEFAULT '横岗店'"))
+                if "front_photo_path" not in rvr_names:
+                    conn.execute(text("ALTER TABLE rabies_vaccine_records ADD COLUMN front_photo_path VARCHAR(512) DEFAULT ''"))
+                if "side_photo_path" not in rvr_names:
+                    conn.execute(text("ALTER TABLE rabies_vaccine_records ADD COLUMN side_photo_path VARCHAR(512) DEFAULT ''"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rvr_consent_task ON rabies_vaccine_records(consent_task_id)"))
 
             # adoption_pets 待领养动物表

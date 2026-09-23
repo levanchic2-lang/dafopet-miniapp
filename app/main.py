@@ -20957,6 +20957,10 @@ _INVALID_NAMES = {"先生", "女士", "小姐", "太太", "夫人", "mr", "mrs",
 _GENERIC_SUFFIXES = ("小姐", "先生", "女士", "太太", "夫人")
 _SIG_DIR = Path("data/signatures")
 _SIG_DIR.mkdir(parents=True, exist_ok=True)
+_RABIES_PHOTO_PENDING_DIR = Path(settings.upload_dir) / "rabies_photos" / "pending"
+_RABIES_PHOTO_PENDING_DIR.mkdir(parents=True, exist_ok=True)
+_RABIES_PHOTO_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{20,80}\.(?:jpg|jpeg|png|webp)$")
+_RABIES_PHOTO_MAX_BYTES = 12 * 1024 * 1024
 
 _RABIES_STATUS_ZH = {
     "owner_pending": "待医护填写",
@@ -21000,6 +21004,30 @@ def _save_signature(data_url: str, prefix: str) -> str:
         return str(fpath)
     except Exception:
         return ""
+
+
+def _rabies_pending_photo(token: str) -> Path | None:
+    token = (token or "").strip()
+    if not _RABIES_PHOTO_TOKEN_RE.fullmatch(token):
+        return None
+    path = (_RABIES_PHOTO_PENDING_DIR / token).resolve()
+    try:
+        path.relative_to(_RABIES_PHOTO_PENDING_DIR.resolve())
+    except ValueError:
+        return None
+    return path if path.is_file() else None
+
+
+def _copy_rabies_photo(token: str, record_id: int, kind: str) -> tuple[str, Path]:
+    src = _rabies_pending_photo(token)
+    if not src:
+        raise ValueError("照片上传凭证已失效，请重新选择照片")
+    dest_dir = Path(settings.upload_dir) / "rabies_photos" / str(record_id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{kind}{src.suffix.lower()}"
+    shutil.copy2(src, dest)
+    rel = dest.resolve().relative_to(Path(settings.upload_dir).resolve())
+    return rel.as_posix(), src
 
 
 # ── 公开 API：手机号查询客户 ──────────────────────────────────────────────────
@@ -21441,6 +21469,46 @@ async def api_rabies_vaccine_consent_template(db: Session = Depends(get_db)):
     return {"title": template.name, "body_html": _rabies_consent_preview_html(template)}
 
 
+@app.post("/api/rabies/upload-photo")
+async def api_rabies_upload_photo(
+    kind: str = Form(""),
+    file: UploadFile = File(...),
+):
+    """Temporarily store one owner-supplied rabies registration photo."""
+    if kind not in {"front", "side"}:
+        raise HTTPException(400, detail="照片类型不正确")
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+        raise HTTPException(400, detail="仅支持 JPG、PNG 或 WebP 图片")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, detail="照片内容为空")
+    if len(data) > _RABIES_PHOTO_MAX_BYTES:
+        raise HTTPException(413, detail="单张照片不能超过 12MB")
+    try:
+        from io import BytesIO
+        from PIL import Image
+        with Image.open(BytesIO(data)) as image:
+            image.verify()
+    except Exception:
+        raise HTTPException(400, detail="照片文件无法识别，请重新拍摄")
+
+    # Remove abandoned temporary uploads opportunistically to avoid disk growth.
+    cutoff = _time.time() - 24 * 60 * 60
+    for old_file in _RABIES_PHOTO_PENDING_DIR.iterdir():
+        try:
+            if old_file.is_file() and old_file.stat().st_mtime < cutoff:
+                old_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    token = f"{secrets.token_urlsafe(24)}{ext}"
+    dest = _RABIES_PHOTO_PENDING_DIR / token
+    dest.write_bytes(data)
+    compressed = _compress_image(dest, max_px=1920, quality=85)
+    return {"ok": True, "token": compressed.name, "kind": kind}
+
+
 @app.post("/rabies")
 async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
@@ -21600,6 +21668,8 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
     animal_color  = str(body.get("animal_color", "")).strip()
     owner_sig_data  = str(body.get("owner_signature", "")).strip()
     consent_accepted = body.get("vaccine_consent_accepted") is True
+    front_photo_token = str(body.get("front_photo_token", "")).strip()
+    side_photo_token = str(body.get("side_photo_token", "")).strip()
     customer_id_raw = body.get("customer_id")
     pet_id_raw      = body.get("pet_id")
 
@@ -21617,6 +21687,10 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(400, detail="请选择动物出生年月")
     if not animal_color:
         raise HTTPException(400, detail="请填写动物毛色")
+    if not _rabies_pending_photo(front_photo_token):
+        raise HTTPException(400, detail="请上传清晰的动物正身照")
+    if not _rabies_pending_photo(side_photo_token):
+        raise HTTPException(400, detail="请上传清晰的动物侧身照")
     if not owner_sig_data or len(owner_sig_data) < 100:
         raise HTTPException(400, detail="请完成签名")
     if not consent_accepted:
@@ -21711,14 +21785,37 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
     )
     db.add(record)
     db.flush()
+    copied_photos: list[Path] = []
+    pending_photos: list[Path] = []
     try:
         consent_task, consent_signature = _create_signed_rabies_consent(
             db, request, record, cust, pet, consent_template, owner_sig_data,
         )
+        record.front_photo_path, front_pending = _copy_rabies_photo(
+            front_photo_token, record.id, "front",
+        )
+        record.side_photo_path, side_pending = _copy_rabies_photo(
+            side_photo_token, record.id, "side",
+        )
+        pending_photos = [front_pending, side_pending]
+        copied_photos = [
+            Path(settings.upload_dir) / record.front_photo_path,
+            Path(settings.upload_dir) / record.side_photo_path,
+        ]
     except ValueError as exc:
         db.rollback()
+        for path in copied_photos:
+            path.unlink(missing_ok=True)
         raise HTTPException(400, detail=str(exc))
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        for path in copied_photos:
+            path.unlink(missing_ok=True)
+        raise
+    for path in pending_photos:
+        path.unlink(missing_ok=True)
     _finish_rabies_consent_archive(db, request, consent_task, owner_phone, consent_signature)
     try:
         from app.services import wecom_notify as _wn
@@ -26628,6 +26725,14 @@ async def admin_rabies_delete(rec_id: int, request: Request, db: Session = Depen
         if sig_path:
             try:
                 Path(sig_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+    for photo_path in (rec.front_photo_path, rec.side_photo_path):
+        if photo_path:
+            try:
+                full_path = (Path(settings.upload_dir) / photo_path).resolve()
+                full_path.relative_to(Path(settings.upload_dir).resolve())
+                full_path.unlink(missing_ok=True)
             except Exception:
                 pass
     consent_task = db.get(ConsentTask, rec.consent_task_id) if rec.consent_task_id else None

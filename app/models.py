@@ -597,6 +597,10 @@ class RabiesVaccineRecord(Base):
     animal_gender: Mapped[str] = mapped_column(String(10),  default="")   # 性别
     animal_color:  Mapped[str] = mapped_column(String(80),  default="")   # 毛色
 
+    # 主人上传的动物登记照片（相对 uploads/ 路径）
+    front_photo_path: Mapped[str] = mapped_column(String(512), default="")
+    side_photo_path:  Mapped[str] = mapped_column(String(512), default="")
+
     # 主人签名
     owner_signature_path: Mapped[str] = mapped_column(String(512), default="")
     owner_signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)

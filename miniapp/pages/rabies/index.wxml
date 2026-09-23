@@ -109,6 +109,41 @@
     </view>
   </view>
 
+  <!-- 动物登记照片 -->
+  <view class="divider" />
+  <view class="label" style="font-size:28rpx;font-weight:700;">动物照片 <text style="color:#7a2828;">*</text></view>
+  <view class="sub">请参考示意图，分别拍摄动物完整的正身照和侧身照。照片应光线充足，身体无遮挡。</view>
+  <view class="photo-guide-row">
+    <view class="photo-guide" bindtap="previewPhotoGuide" data-kind="front">
+      <image src="/images/rabies-front-guide.png" mode="aspectFit" />
+      <view>正身照示意 · 点击放大</view>
+    </view>
+    <view class="photo-guide" bindtap="previewPhotoGuide" data-kind="side">
+      <image src="/images/rabies-side-guide.png" mode="aspectFit" />
+      <view>侧身照示意 · 点击放大</view>
+    </view>
+  </view>
+  <view class="photo-upload-row">
+    <view class="photo-upload">
+      <view class="photo-upload-title">正身照</view>
+      <image wx:if="{{frontPhotoPath}}" class="photo-selected" src="{{frontPhotoPath}}" mode="aspectFill"
+        bindtap="previewSelectedPhoto" data-kind="front" />
+      <view wx:else class="photo-placeholder">尚未拍摄</view>
+      <button class="btn secondary photo-btn" bindtap="chooseRabiesPhoto" data-kind="front">
+        {{frontPhotoPath ? '重新拍摄' : '拍摄 / 选择'}}
+      </button>
+    </view>
+    <view class="photo-upload">
+      <view class="photo-upload-title">侧身照</view>
+      <image wx:if="{{sidePhotoPath}}" class="photo-selected" src="{{sidePhotoPath}}" mode="aspectFill"
+        bindtap="previewSelectedPhoto" data-kind="side" />
+      <view wx:else class="photo-placeholder">尚未拍摄</view>
+      <button class="btn secondary photo-btn" bindtap="chooseRabiesPhoto" data-kind="side">
+        {{sidePhotoPath ? '重新拍摄' : '拍摄 / 选择'}}
+      </button>
+    </view>
+  </view>
+
   <!-- 疫苗接种同意书 -->
   <view class="divider" />
   <view class="label">疫苗接种同意书 <text style="color:#7a2828;">*</text></view>
