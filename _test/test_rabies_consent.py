@@ -69,6 +69,7 @@ payload = {
     "animal_color": "黄白",
     "clinic_store": "横岗店",
     "owner_signature": signature,
+    "photo_upload_required": True,
     "customer_id": customer_id,
     "pet_id": pet_id,
 }

@@ -461,6 +461,7 @@ Page({
         ...form,
         owner_signature: sigDataURL,
         vaccine_consent_accepted: true,
+        photo_upload_required: true,
         front_photo_token: frontUpload.token,
         side_photo_token: sideUpload.token,
         customer_id: customerId,

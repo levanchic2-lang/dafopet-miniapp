@@ -21668,6 +21668,7 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
     animal_color  = str(body.get("animal_color", "")).strip()
     owner_sig_data  = str(body.get("owner_signature", "")).strip()
     consent_accepted = body.get("vaccine_consent_accepted") is True
+    photo_upload_required = body.get("photo_upload_required") is True
     front_photo_token = str(body.get("front_photo_token", "")).strip()
     side_photo_token = str(body.get("side_photo_token", "")).strip()
     customer_id_raw = body.get("customer_id")
@@ -21687,9 +21688,9 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(400, detail="请选择动物出生年月")
     if not animal_color:
         raise HTTPException(400, detail="请填写动物毛色")
-    if not _rabies_pending_photo(front_photo_token):
+    if photo_upload_required and not _rabies_pending_photo(front_photo_token):
         raise HTTPException(400, detail="请上传清晰的动物正身照")
-    if not _rabies_pending_photo(side_photo_token):
+    if photo_upload_required and not _rabies_pending_photo(side_photo_token):
         raise HTTPException(400, detail="请上传清晰的动物侧身照")
     if not owner_sig_data or len(owner_sig_data) < 100:
         raise HTTPException(400, detail="请完成签名")
@@ -21791,17 +21792,18 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
         consent_task, consent_signature = _create_signed_rabies_consent(
             db, request, record, cust, pet, consent_template, owner_sig_data,
         )
-        record.front_photo_path, front_pending = _copy_rabies_photo(
-            front_photo_token, record.id, "front",
-        )
-        record.side_photo_path, side_pending = _copy_rabies_photo(
-            side_photo_token, record.id, "side",
-        )
-        pending_photos = [front_pending, side_pending]
-        copied_photos = [
-            Path(settings.upload_dir) / record.front_photo_path,
-            Path(settings.upload_dir) / record.side_photo_path,
-        ]
+        if front_photo_token and side_photo_token:
+            record.front_photo_path, front_pending = _copy_rabies_photo(
+                front_photo_token, record.id, "front",
+            )
+            record.side_photo_path, side_pending = _copy_rabies_photo(
+                side_photo_token, record.id, "side",
+            )
+            pending_photos = [front_pending, side_pending]
+            copied_photos = [
+                Path(settings.upload_dir) / record.front_photo_path,
+                Path(settings.upload_dir) / record.side_photo_path,
+            ]
     except ValueError as exc:
         db.rollback()
         for path in copied_photos:
