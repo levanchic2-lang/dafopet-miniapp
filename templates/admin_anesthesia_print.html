@@ -198,7 +198,7 @@
 
   <div class="an-foot">
     <div class="fld" style="flex:2;"><span class="lbl">麻醉医师</span><span class="val">{{ order.vet_name or '' }}</span></div>
-    <div class="fld" style="flex:2;"><span class="lbl">复核人（双签）</span><span class="val">{{ order.cosigner or '' }}</span></div>
+    {% if order.cosigner %}<div class="fld" style="flex:2;"><span class="lbl">历史复核人</span><span class="val">{{ order.cosigner }}</span></div>{% endif %}
     <div class="fld"><span class="lbl">单号</span><span class="val" style="font-family:monospace;">An{{ '%06d'|format(an_no) }}-{{ lian_no }}</span></div>
   </div>
 </div>

@@ -77,9 +77,9 @@
     color: var(--ink); letter-spacing: 3px; margin: 0;
   }
 
-  /* 4 字段网格 */
+  /* 基础信息网格 */
   .an-meta-grid {
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 20px; margin-bottom: 4px;
   }
   .an-field { display: flex; flex-direction: column; gap: 6px; }
@@ -409,11 +409,12 @@ function confirmAnesthVoid(form, paidAmount) {
         <input name="vet_name" list="vet-list" required value="{{ order.vet_name if order else '' }}" class="an-input" {% if readonly %}readonly{% endif %}/>
         <datalist id="vet-list">{% for n in vet_names %}<option value="{{ n }}">{% endfor %}</datalist>
       </div>
+      {% if order and order.cosigner %}
       <div class="an-field">
-        <label>复&nbsp;核&nbsp;人<span class="req">*</span></label>
-        <input name="cosigner" list="cos-list" required value="{{ order.cosigner if order else '' }}" class="an-input" {% if readonly %}readonly{% endif %}/>
-        <datalist id="cos-list">{% for n in cosigner_names %}<option value="{{ n }}">{% endfor %}</datalist>
+        <label>历&nbsp;史&nbsp;复&nbsp;核&nbsp;人</label>
+        <input value="{{ order.cosigner }}" class="an-input" readonly/>
       </div>
+      {% endif %}
     </div>
   </div>
 
@@ -519,16 +520,16 @@ function confirmAnesthVoid(form, paidAmount) {
     <textarea name="notes" rows="2" class="an-notes" {% if readonly %}readonly{% endif %}>{{ order.notes if order else '' }}</textarea>
   </div>
 
-  {# 国标提示 #}
+  {# 特殊药品记录提示 #}
   <div class="an-gb">
-    <b>国标要求</b> · 麻醉医师 + 复核人双签字。所有管控药领用自动写入《麻醉管控药台账》。
+    <b>特殊药品管理</b> · 管控药的实际给药、复核、余量及销毁在麻醉监护和管控药台账中单独记录。
   </div>
 
   {# 提交 #}
   {% if not order %}
   <div class="an-submit-bar">
     <a href="{% if visit %}/admin/visits/{{ visit.id }}{% else %}/admin/visits{% endif %}" class="uk-btn ghost sm">取消</a>
-    <button type="submit" class="uk-btn primary sm">开 具 麻 醉 单（双 签 确 认）</button>
+    <button type="submit" class="uk-btn primary sm">开 具 麻 醉 单</button>
   </div>
   {% elif order and order.status == 'issued' and not readonly %}
   <div class="an-submit-bar">

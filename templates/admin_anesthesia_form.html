@@ -76,7 +76,7 @@
   <input type="hidden" name="pet_id" value="{{ pet.id if pet else 0 }}"/>
 
   {# ── 必填核心字段（一行搞定） ── #}
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;margin-bottom:.8rem;">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.7rem;margin-bottom:.8rem;">
     <div>
       <label class="mini">麻醉日期</label>
       <input type="date" name="anesth_date" value="{{ order.anesth_date if order else today }}" {% if readonly %}readonly{% endif %} style="width:100%;"/>
@@ -93,11 +93,12 @@
       <input name="vet_name" list="vet-list" required value="{{ order.vet_name if order else '' }}" {% if readonly %}readonly{% endif %} style="width:100%;"/>
       <datalist id="vet-list">{% for n in vet_names %}<option value="{{ n }}">{% endfor %}</datalist>
     </div>
+    {% if order and order.cosigner %}
     <div>
-      <label class="mini">复核人 *</label>
-      <input name="cosigner" list="cos-list" required value="{{ order.cosigner if order else '' }}" {% if readonly %}readonly{% endif %} style="width:100%;"/>
-      <datalist id="cos-list">{% for n in cosigner_names %}<option value="{{ n }}">{% endfor %}</datalist>
+      <label class="mini">历史复核人</label>
+      <input value="{{ order.cosigner }}" readonly style="width:100%;"/>
     </div>
+    {% endif %}
   </div>
 
   {# ── 选填：时间/苏醒情况，默认折叠 ── #}
@@ -163,12 +164,12 @@
   </div>
 
   <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:.45rem .8rem;font-size:.78rem;color:#92400e;margin:.8rem 0;">
-    ⚠ 国标要求：麻醉医师 + 复核人双签字，所有管控药领用自动写入《麻醉管控药台账》。
+    管控药的实际给药、复核、余量及销毁在麻醉监护和管控药台账中单独记录。
   </div>
 
   {% if not order %}
   <div style="display:flex;gap:.6rem;">
-    <button type="submit" class="btn">✓ 开具麻醉单（双签确认）</button>
+    <button type="submit" class="btn">✓ 开具麻醉单</button>
     <a href="{% if visit %}/admin/visits/{{ visit.id }}{% else %}/admin/visits{% endif %}" class="btn secondary">取消</a>
   </div>
   {% elif order and order.status == 'issued' %}

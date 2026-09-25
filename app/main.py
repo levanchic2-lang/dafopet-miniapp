@@ -16748,7 +16748,7 @@ async def admin_presc_copy_as_new(presc_id: int, request: Request, db: Session =
 
 
 # ═════════════════════════════════════════════════════════════════════
-# 麻醉单（独立于处方单，国标要求）+ 麻醉/管控药台账
+# 麻醉单 + 特殊药品独立处方及麻醉/管控药台账
 # ═════════════════════════════════════════════════════════════════════
 _ANESTH_ROUTES = ["IV", "IM", "SC", "吸入", "硬膜外", "局部浸润", "口服"]
 _ASA_GRADES = ["I", "II", "III", "IV", "V", "E"]
@@ -16863,16 +16863,12 @@ def _parse_anesth_items(form) -> list[dict]:
 
 def _anesth_form_context(request, db, *, order=None, visit=None, cust=None,
                          pet=None, pets=None, mode="create"):
-    # 麻醉医师/复核人候选
+    # 麻醉单由负责麻醉的执业兽医签署；特殊药品复核在管控药台账中完成。
     vets = db.query(Staff.name).filter(
         Staff.status.in_(["active", "probation"]),
         Staff.position.ilike("%医%")
     ).all()
     vet_names = [v[0] for v in vets]
-    nurses = db.query(Staff.name).filter(
-        Staff.status.in_(["active", "probation"]),
-    ).all()
-    cosigner_names = [n[0] for n in nurses if n[0] not in vet_names] + vet_names
     # 候选药：麻醉/管控药 + 服务类（吸入麻醉等）
     store = _get_op_store(request)
     cand_q = db.query(InventoryItem).filter(InventoryItem.is_active == True)
@@ -16890,7 +16886,7 @@ def _anesth_form_context(request, db, *, order=None, visit=None, cust=None,
     today = datetime.utcnow().strftime("%Y-%m-%d")
     return {
         "order": order, "visit": visit, "cust": cust, "pet": pet, "pets": pets or [],
-        "vet_names": vet_names, "cosigner_names": cosigner_names,
+        "vet_names": vet_names,
         "candidates": candidates,
         "anesth_templates": anesth_templates,
         "routes": _ANESTH_ROUTES, "asa_grades": _ASA_GRADES,
@@ -17016,13 +17012,8 @@ async def admin_anesth_create(request: Request, db: Session = Depends(get_db)):
     customer_id = int(form.get("customer_id", 0) or 0)
     pet_id = int(form.get("pet_id", 0) or 0)
     vet_name = str(form.get("vet_name", "")).strip()[:80]
-    cosigner = str(form.get("cosigner", "")).strip()[:80]
     if not vet_name:
         raise HTTPException(400, "麻醉医师为必填")
-    if not cosigner:
-        raise HTTPException(400, "国标要求双人复核：请选择第二签字人")
-    if cosigner == vet_name:
-        raise HTTPException(400, "第二签字人不能与麻醉医师相同")
     items = _parse_anesth_items(form)
     if not items:
         raise HTTPException(400, "请至少填写一项麻醉药品")
@@ -17043,7 +17034,7 @@ async def admin_anesth_create(request: Request, db: Session = Depends(get_db)):
         pet_id=pet_id or None,
         anesth_date=str(form.get("anesth_date", "")).strip()[:20] or datetime.utcnow().strftime("%Y-%m-%d"),
         asa_grade=str(form.get("asa_grade", "")).strip()[:10],
-        vet_name=vet_name, cosigner=cosigner,
+        vet_name=vet_name, cosigner="",
         start_time=str(form.get("start_time", "")).strip()[:10],
         end_time=str(form.get("end_time", "")).strip()[:10],
         recovery=str(form.get("recovery", "")).strip()[:40],
@@ -17113,7 +17104,8 @@ async def admin_anesth_copy_as_new(order_id: int, request: Request, db: Session 
         anesth_date=datetime.utcnow().strftime("%Y-%m-%d"),
         asa_grade=src.asa_grade,
         vet_name=src.vet_name,
-        cosigner=src.cosigner,
+        # 复制后属于一张新麻醉单，不沿用历史单据可能存在的旧版复核人字段。
+        cosigner="",
         start_time="",
         end_time="",
         recovery="",
