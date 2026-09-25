@@ -31380,6 +31380,141 @@ async def api_prescription_recent(
     }
 
 
+def _prescription_copy_item_payload(db: Session, item: PrescriptionItem,
+                                    target_store: str) -> tuple[dict, str]:
+    """复制其他宠物处方时，把库存品目约束到当前操作门店。"""
+    payload = _presc_item_form_payload(db, item)
+    target_store = _store_short(target_store)
+    if not target_store:
+        return payload, ""
+
+    inv = db.get(InventoryItem, item.item_id) if item.item_id else None
+    if inv and _store_short(inv.store) == target_store:
+        return payload, ""
+
+    matched = (db.query(InventoryItem)
+               .filter(
+                   InventoryItem.name == item.drug_name,
+                   InventoryItem.store == target_store,
+                   InventoryItem.is_active == True,  # noqa: E712
+               )
+               .order_by(InventoryItem.id.desc())
+               .first())
+    if not matched:
+        payload["item_id"] = None
+        return payload, f"{item.drug_name}：未匹配到{target_store}库存品目，请重新选择"
+
+    payload["item_id"] = matched.id
+    payload = _presc_template_item_payload(db, payload)
+    return payload, ""
+
+
+@app.get("/api/prescriptions/copy-sources")
+async def api_prescription_copy_sources(
+    request: Request,
+    q: str = Query(""),
+    target_pet_id: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    """按宠物、主人、电话或处方号搜索可复制的其他宠物历史处方。"""
+    require_admin(request)
+    keyword = (q or "").strip()
+    if len(keyword) < 2 and not keyword.lstrip("#").isdigit():
+        return {"ok": True, "rows": []}
+
+    query = (db.query(Prescription, Pet, Customer)
+             .join(Pet, Prescription.pet_id == Pet.id)
+             .join(Customer, Prescription.customer_id == Customer.id)
+             .filter(or_(Prescription.status == None, Prescription.status != "voided")))  # noqa: E711
+    if target_pet_id:
+        query = query.filter(Prescription.pet_id != target_pet_id)
+
+    operation_store = _store_short(_get_op_store(request))
+    if operation_store:
+        query = query.filter(or_(Pet.store == operation_store, Pet.store == "", Pet.store == None))  # noqa: E711
+    else:
+        admin_store = _get_admin_store(request)
+        if admin_store:
+            query = query.filter(or_(Pet.store == admin_store, Pet.store == "", Pet.store == None))  # noqa: E711
+
+    like = f"%{keyword}%"
+    conditions = [
+        Pet.name.ilike(like), Customer.name.ilike(like),
+        Customer.phone.ilike(like), Customer.phones_extra.ilike(like),
+    ]
+    id_text = keyword.lstrip("#")
+    if id_text.isdigit():
+        conditions.append(Prescription.id == int(id_text))
+    rows = (query.filter(or_(*conditions))
+            .order_by(Prescription.id.desc())
+            .limit(30).all())
+
+    result = []
+    for presc, pet, customer in rows:
+        item_names = [it.drug_name for it in (presc.items or []) if it.drug_name]
+        if not item_names:
+            continue
+        summary = "、".join(item_names[:3])
+        if len(item_names) > 3:
+            summary += f" 等{len(item_names)}项"
+        result.append({
+            "id": presc.id,
+            "date": presc.prescribed_date or (presc.created_at.strftime("%Y-%m-%d") if presc.created_at else ""),
+            "pet_id": pet.id,
+            "pet_name": pet.name or "未命名",
+            "species": pet.species or "",
+            "customer_name": customer.name or "",
+            "phone": customer.phone or "",
+            "vet_name": presc.vet_name or "",
+            "item_count": len(item_names),
+            "item_summary": summary,
+        })
+    return {"ok": True, "rows": result}
+
+
+@app.get("/api/prescriptions/{presc_id}/copy-payload")
+async def api_prescription_copy_payload(
+    presc_id: int,
+    request: Request,
+    target_pet_id: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    """读取一张其他宠物处方的可复制明细，不复制归属、收费或出库记录。"""
+    require_admin(request)
+    presc = db.get(Prescription, presc_id)
+    if not presc or presc.status == "voided":
+        raise HTTPException(404, "处方不存在或已作废")
+    source_pet = db.get(Pet, presc.pet_id) if presc.pet_id else None
+    source_customer = db.get(Customer, presc.customer_id) if presc.customer_id else None
+    if not source_pet:
+        raise HTTPException(404, "来源处方未关联宠物")
+    if target_pet_id and source_pet.id == target_pet_id:
+        raise HTTPException(400, "请选择其他宠物的处方")
+
+    operation_store = _store_short(_get_op_store(request))
+    if operation_store and source_pet.store and _store_short(source_pet.store) != operation_store:
+        raise HTTPException(403, "只能复制当前操作门店的处方")
+    _assert_store_access(request, source_pet.store)
+
+    items, warnings = [], []
+    for item in (presc.items or []):
+        payload, warning = _prescription_copy_item_payload(db, item, operation_store)
+        items.append(payload)
+        if warning:
+            warnings.append(warning)
+    if not items:
+        return {"ok": False, "error": "该处方没有可复制的药品明细"}
+    return {
+        "ok": True,
+        "id": presc.id,
+        "date": presc.prescribed_date,
+        "pet_name": source_pet.name or "未命名",
+        "customer_name": source_customer.name if source_customer else "",
+        "items": items,
+        "warnings": warnings,
+    }
+
+
 # ════════════════════════════════════════════════════════════════════════
 # 住院管理（D1）：笼位 + 入院 + 出院（自动结账）
 # ════════════════════════════════════════════════════════════════════════

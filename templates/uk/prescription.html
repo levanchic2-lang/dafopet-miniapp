@@ -399,6 +399,7 @@
   .presc-modal .tpl-row .info { flex: 1; }
   .presc-modal .tpl-row .name { font-weight: 700; color: var(--ink); }
   .presc-modal .tpl-row .stat { font-size: 8.5pt; color: var(--ink-3); font-style: italic; margin-top: 2px; }
+  .presc-modal .copy-summary { font-size: 9pt; color: var(--ink-2); margin-top: 5px; line-height: 1.45; }
   .presc-modal .empty-tip { color: var(--ink-3); text-align: center; padding: 32px 0; font-style: italic; letter-spacing: 1px; }
   .presc-modal .actions {
     display: flex; gap: 10px; justify-content: flex-end;
@@ -565,7 +566,8 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
     <div class="px-toolbar no-print">
       <button type="button" class="uk-btn ghost sm" onclick="openTemplatePicker()">套用模板</button>
       {% if pet or (p and p.pet_id) %}
-      <button type="button" class="uk-btn ghost sm" onclick="copyLastPresc()">复制上次处方</button>
+      <button type="button" class="uk-btn ghost sm" onclick="copyLastPresc()">复制本宠上次处方</button>
+      <button type="button" class="uk-btn ghost sm" onclick="openOtherPrescriptionPicker()">从其他宠物复制</button>
       {% endif %}
       <button type="button" class="uk-btn ghost sm" onclick="openSaveTemplate()">保存为模板</button>
       <div class="grow"></div>
@@ -1247,6 +1249,11 @@ const PRESC_ID = {{ (presc.id if presc else 0) or 0 }};
 
 function _showModal(id) { document.getElementById(id).classList.add('show'); }
 function _hideModal(id) { document.getElementById(id).classList.remove('show'); }
+function _escapeHtml(value) {
+  return (value || '').toString().replace(/[&<>"']/g, ch => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  })[ch]);
+}
 
 function _clearRows() {
   document.getElementById('drug-tbody').innerHTML = '';
@@ -1262,7 +1269,7 @@ function _appendRow(it) {
   for (const [k, zh] of _typeOptions) {
     typeOpts += `<option value="${k}" ${_selKey===k?'selected':''}>${zh}</option>`;
   }
-  const esc = s => (s||'').toString().replace(/"/g,'&quot;');
+  const esc = _escapeHtml;
   const _supAttr = it.single_use_pack ? ` data-sup="1" data-ratio="${(it.unit2_ratio && it.unit2_ratio > 0) ? it.unit2_ratio : 1}" data-unit2="${esc(it.unit2||'瓶')}"` : '';
   const _unitPrice = Number(it.pack_price ?? it.unit_price ?? 0);
   const _subtotal = Number(it.subtotal ?? 0);
@@ -1294,7 +1301,10 @@ function _appendRow(it) {
     <td class="col-num"><input name="quantity_num_${idx}" type="number" step="0.01" min="0" value="${it.quantity_num||1}" oninput="onQtyEdit(${idx})" id="quantity_num_${idx}"/></td>
     <td class="col-unit"><input name="item_unit_${idx}" id="item_unit_${idx}" value="${esc(it.item_unit||it.quantity)}" oninput="recalcDosage(${idx})"/></td>
     <td class="col-num"><input name="subtotal_${idx}" type="number" step="0.01" readonly value="${_subtotal.toFixed(2)}" id="subtotal_${idx}"/></td>
-    <td><input name="instructions_${idx}" value="${esc(it.instructions)}"/></td>
+    <td>
+      <input name="instructions_${idx}" value="${esc(it.instructions)}"/>
+      <input type="hidden" name="print_note_${idx}" value="${esc(it.print_note||'')}"/>
+    </td>
     <td class="no-print" style="text-align:center;"><button type="button" onclick="removeDrugRow(this, ${idx})" class="del-btn">✕</button></td>
   </tr>`;
   document.getElementById('drug-tbody').insertAdjacentHTML('beforeend', row);
@@ -1361,6 +1371,77 @@ async function copyLastPresc() {
   _clearRows();
   (data.items || []).forEach(_appendRow);
   recalcTotal();
+}
+
+let _otherPrescSearchTimer = null;
+
+function openOtherPrescriptionPicker() {
+  const input = document.getElementById('other-presc-search');
+  const list = document.getElementById('other-presc-list');
+  input.value = '';
+  list.innerHTML = '<p class="empty-tip">输入宠物名、主人姓名、电话或处方号进行搜索</p>';
+  _showModal('other-presc-modal');
+  setTimeout(() => input.focus(), 50);
+}
+
+function scheduleOtherPrescriptionSearch() {
+  clearTimeout(_otherPrescSearchTimer);
+  _otherPrescSearchTimer = setTimeout(searchOtherPrescriptions, 260);
+}
+
+async function searchOtherPrescriptions() {
+  const input = document.getElementById('other-presc-search');
+  const list = document.getElementById('other-presc-list');
+  const q = input.value.trim();
+  if (q.length < 2 && !/^#?\d+$/.test(q)) {
+    list.innerHTML = '<p class="empty-tip">请至少输入 2 个字符</p>';
+    return;
+  }
+  list.innerHTML = '<p class="empty-tip">正在搜索...</p>';
+  const params = new URLSearchParams({q, target_pet_id: PRESC_PET_ID || 0});
+  try {
+    const response = await fetch('/api/prescriptions/copy-sources?' + params);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.detail || data.error || '搜索失败');
+    if (!data.rows.length) {
+      list.innerHTML = '<p class="empty-tip">没有找到其他宠物的历史处方</p>';
+      return;
+    }
+    list.innerHTML = data.rows.map(row => `
+      <div class="tpl-row">
+        <div class="info">
+          <div class="name">${_escapeHtml(row.pet_name)} · ${_escapeHtml(row.customer_name)}</div>
+          <div class="stat">${_escapeHtml(row.date)} · 处方 #${row.id} · ${_escapeHtml(row.vet_name || '未填医生')} · ${_escapeHtml(row.phone)}</div>
+          <div class="copy-summary">${_escapeHtml(row.item_summary)}</div>
+        </div>
+        <button type="button" class="uk-btn primary sm" onclick="copyOtherPrescription(${row.id})">复制</button>
+      </div>
+    `).join('');
+  } catch (error) {
+    list.innerHTML = `<p class="empty-tip">${_escapeHtml(error.message || '搜索失败')}</p>`;
+  }
+}
+
+async function copyOtherPrescription(id) {
+  try {
+    const params = new URLSearchParams({target_pet_id: PRESC_PET_ID || 0});
+    const response = await fetch(`/api/prescriptions/${id}/copy-payload?` + params);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.detail || data.error || '读取处方失败');
+    const warningText = (data.warnings || []).length
+      ? `\n\n注意：\n${data.warnings.join('\n')}` : '';
+    const message = `确认将「${data.pet_name}」${data.date || ''} 的处方（${data.items.length} 项）复制到当前宠物？\n\n当前已填写的药品将被替换，当前宠物、病例、收费和出库记录不会改变。${warningText}`;
+    if (!confirm(message)) return;
+    _clearRows();
+    (data.items || []).forEach(_appendRow);
+    recalcTotal();
+    _hideModal('other-presc-modal');
+    if ((data.warnings || []).length) {
+      alert('处方已复制，但以下项目需要重新选择库存品目：\n' + data.warnings.join('\n'));
+    }
+  } catch (error) {
+    alert(error.message || '复制处方失败');
+  }
 }
 
 function openSaveTemplate() {
@@ -1476,6 +1557,20 @@ function printFromPreview() { window.print(); }
     <div id="tpl-list" style="max-height:400px;overflow-y:auto;"></div>
     <div class="actions">
       <button type="button" class="uk-btn ghost sm" onclick="_hideModal('tpl-picker-modal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="presc-modal-overlay" id="other-presc-modal" onclick="if(event.target===this) _hideModal('other-presc-modal')">
+  <div class="presc-modal" style="width:720px;max-width:95vw;">
+    <h3>从&nbsp;其&nbsp;他&nbsp;宠&nbsp;物&nbsp;复&nbsp;制&nbsp;处&nbsp;方</h3>
+    <label for="other-presc-search">宠物名 / 主人姓名 / 电话 / 处方号</label>
+    <input id="other-presc-search" autocomplete="off" placeholder="例如：球球、张女士、手机号、#1234"
+           oninput="scheduleOtherPrescriptionSearch()"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();searchOtherPrescriptions();}"/>
+    <div id="other-presc-list" style="max-height:430px;overflow-y:auto;margin-top:14px;"></div>
+    <div class="actions">
+      <button type="button" class="uk-btn ghost sm" onclick="_hideModal('other-presc-modal')">关闭</button>
     </div>
   </div>
 </div>
