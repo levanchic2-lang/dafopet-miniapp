@@ -36,6 +36,12 @@
     font-family:var(--font-numeric); font-size:9.5pt; word-break:break-all;
   }
   .im-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  .im-share-copy {
+    width:100%; min-height:168px; resize:vertical; box-sizing:border-box;
+    border:0.5px solid var(--hair); background:#fff; padding:13px 14px;
+    color:var(--ink); font:10pt/1.8 var(--font-serif); letter-spacing:0;
+  }
+  .im-copy-note { margin:8px 0 0; color:var(--ink-3); font-size:9pt; }
   .im-tbl { width:100%; border-collapse:collapse; font-size:10pt; }
   .im-tbl th, .im-tbl td { padding:10px 8px; border-bottom:0.5px solid var(--hair); text-align:left; }
   .im-tbl thead th { border-bottom:1px solid var(--ink); color:var(--ink-3); font-weight:400; font-style:italic; }
@@ -84,14 +90,27 @@
 <hr class="im-rule"/>
 
 <div class="im-card">
-  <h2>当前客户链接</h2>
+  <h2>发送给客户</h2>
   {% if latest %}
+  <textarea class="im-share-copy" id="customer-share-message" aria-label="发送给客户的话术">您好，{{ pet.name if pet else '您的宠物' }}本次就诊的保险理赔材料已整理完成，请点击以下链接查看和下载：
+{{ public_url }}
+
+材料包内提供 PDF 版和图片版：
+1. PDF 版适合下载保存、打印或后续查阅；
+2. 图片版适合上传至保险公司的理赔平台。
+
+如保险公司提示材料缺失，或您在查看、下载过程中遇到问题，请联系医院，我们会协助处理。</textarea>
+  <div class="im-actions">
+    <button type="button" class="uk-btn primary sm" onclick="copyInsuranceText(this, 'customer-share-message', true)">复制发送话术</button>
+    <button type="button" class="uk-btn ghost sm" onclick="copyInsuranceText(this, 'public-url', false)">仅复制链接</button>
+    <a class="uk-btn ghost sm" href="{{ public_url }}" target="_blank">打开客户页</a>
+  </div>
+  <p class="im-copy-note">可在上方直接修改文字，再复制发送给客户。</p>
+  <div style="margin-top:16px;font-size:9pt;color:var(--ink-3);font-style:italic;">客户链接</div>
   <div class="im-link">
     <span id="public-url">{{ public_url }}</span>
-    <button type="button" class="uk-btn ghost sm" onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('public-url').textContent)">复制</button>
   </div>
   <div class="im-actions">
-    <a class="uk-btn ghost sm" href="{{ public_url }}" target="_blank">打开客户页</a>
     {% if latest._image_count %}<a class="uk-btn primary sm" href="/insurance-materials/{{ share.token }}/snapshots/{{ latest.id }}/image-zip">图片版 ZIP（{{ latest._image_count }} 张）</a>{% endif %}
     <a class="uk-btn ghost sm" href="/insurance-materials/{{ share.token }}/snapshots/{{ latest.id }}/zip">完整材料 ZIP</a>
   </div>
@@ -132,6 +151,27 @@
   <div class="uk-empty">暂无历史版本</div>
   {% endif %}
 </div>
+<script>
+  async function copyInsuranceText(button, elementId, useValue) {
+    const element = document.getElementById(elementId);
+    const text = useValue ? element.value : element.textContent.trim();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      const helper = document.createElement('textarea');
+      helper.value = text;
+      helper.style.position = 'fixed';
+      helper.style.opacity = '0';
+      document.body.appendChild(helper);
+      helper.select();
+      document.execCommand('copy');
+      helper.remove();
+    }
+    const original = button.textContent;
+    button.textContent = '已复制';
+    window.setTimeout(() => { button.textContent = original; }, 1600);
+  }
+</script>
 {% if share.generation_status == 'processing' %}
 <script>
   (function pollGeneration() {

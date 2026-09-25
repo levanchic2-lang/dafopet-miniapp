@@ -12753,6 +12753,7 @@ async def admin_insurance_material_detail(
     latest = snapshots[0] if snapshots else None
     return templates.TemplateResponse(request, "uk/insurance_material.html", {
         "share": share,
+        "pet": pet,
         "snapshots": snapshots,
         "latest": latest,
         "public_url": _insurance_material_public_url(request, share, latest.version if latest else None),

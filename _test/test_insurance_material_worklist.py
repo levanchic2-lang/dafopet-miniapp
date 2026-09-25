@@ -92,6 +92,7 @@ db.add(InsuranceMaterialSnapshot(
     file_count=1,
 ))
 db.commit()
+share_id = share.id
 db.close()
 
 completed_page = client.get("/admin/insurance-materials?status=completed")
@@ -99,6 +100,12 @@ assert completed_page.status_code == 200
 assert "保险待办测试" in completed_page.text
 assert "已生成材料包" in completed_page.text
 assert client.get("/api/admin/insurance-materials/pending-count").json()["count"] == 0
+
+detail_page = client.get(f"/admin/insurance-materials/{share_id}")
+assert detail_page.status_code == 200
+assert "复制发送话术" in detail_page.text
+assert "待理赔猫本次就诊的保险理赔材料已整理完成" in detail_page.text
+assert "图片版适合上传至保险公司的理赔平台" in detail_page.text
 
 visit_page = client.get(f"/admin/visits/{visit_id}")
 assert "已生成保险材料包，材料准备已完成" in visit_page.text
