@@ -1334,15 +1334,19 @@ async function openTemplatePicker() {
 }
 
 async function applyTemplate(id) {
-  if (!confirm('套用模板将替换当前已填写的药品，确定吗？')) return;
   const r = await fetch('/api/prescription-templates/' + id);
   const data = await r.json();
   if (!data.ok) { alert('错误：' + (data.error||'')); return; }
-  _clearRows();
+  const itemCount = (data.items || []).length;
+  if (!confirm(`套用模板后会保留当前已填写的药品，并追加 ${itemCount} 个模板药品，确定吗？`)) return;
+  document.querySelectorAll('#drug-tbody tr').forEach(function(tr) {
+    const nameInput = tr.querySelector('input[name^="drug_name_"]');
+    if (nameInput && !nameInput.value.trim()) tr.remove();
+  });
   (data.items || []).forEach(_appendRow);
   if (data.notes) {
     const ta = document.querySelector('textarea[name="notes"]');
-    if (ta && !ta.value) ta.value = data.notes;
+    if (ta) ta.value = ta.value ? (ta.value + '\n' + data.notes) : data.notes;
   }
   recalcTotal();
   _hideModal('tpl-picker-modal');
