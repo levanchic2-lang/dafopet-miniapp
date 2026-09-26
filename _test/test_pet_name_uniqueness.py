@@ -15,9 +15,9 @@ os.environ["SESSION_SECRET"] = "pet-name-uniqueness-test"
 
 from fastapi.testclient import TestClient
 
-from app.database import Base, SessionLocal, engine
+from app.database import Base, SessionLocal, engine, _heal_rabies_pet_links
 from app.main import app, _find_customer_pet_by_name, _pet_name_key
-from app.models import Customer, Pet
+from app.models import Customer, Pet, RabiesVaccineRecord
 
 
 Base.metadata.create_all(bind=engine)
@@ -34,11 +34,26 @@ with SessionLocal() as db:
         medical_record_no="HC-TEST-BISCUIT",
     )
     db.add(pet)
+    db.flush()
+    db.add(RabiesVaccineRecord(
+        customer_id=customer.id,
+        pet_id=pet.id,
+        owner_name=customer.name,
+        owner_phone=customer.phone,
+        animal_name="biscuit",
+        animal_breed="柴犬",
+        status="staff_pending",
+    ))
     db.commit()
     customer_id, pet_id = customer.id, pet.id
 
     assert _pet_name_key("  ＢＩＳＣＵＩＴ  ") == _pet_name_key("biscuit")
     assert _find_customer_pet_by_name(db, customer_id, "bIsCuIt").id == pet_id
+
+_heal_rabies_pet_links()
+with SessionLocal() as db:
+    assert db.query(Pet).filter(Pet.customer_id == customer_id).count() == 1
+    assert db.query(RabiesVaccineRecord).one().pet_id == pet_id
 
 client = TestClient(app, base_url="https://testserver", follow_redirects=False)
 duplicate = client.post("/api/vaccine-registration/create", json={

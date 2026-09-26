@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 import os
 from pathlib import Path
+import unicodedata
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
@@ -189,6 +190,7 @@ def _heal_rabies_pet_links() -> None:
     同一主人多只动物的狂犬记录会全部错挂到第一只宠物身上。
     本函数扫描所有 RabiesVaccineRecord：若 animal_name 与当前 pet.name 不一致，
     重新挂到正确的 Pet（按 customer_id + name 查已有，否则按 record 字段新建）。
+    名称比较会统一全半角、空格并忽略英文大小写，避免 Biscuit/biscuit 被补成两只。
     幂等：修复后不再产生不一致即为 no-op。
     """
     try:
@@ -206,15 +208,23 @@ def _heal_rabies_pet_links() -> None:
             if not animal_name or not rec.customer_id:
                 continue
             cur_pet = sess.get(Pet, rec.pet_id) if rec.pet_id else None
-            cur_name = (cur_pet.name or "").strip() if cur_pet else ""
-            if cur_pet and cur_name == animal_name:
-                continue  # 已对得上
-            key = (rec.customer_id, animal_name)
-            target = cache.get(key) or (
-                sess.query(Pet)
-                .filter(Pet.customer_id == rec.customer_id, Pet.name == animal_name)
-                .first()
+            name_key = " ".join(unicodedata.normalize("NFKC", animal_name).split()).casefold()
+            cur_name_key = (
+                " ".join(unicodedata.normalize("NFKC", cur_pet.name or "").split()).casefold()
+                if cur_pet else ""
             )
+            if cur_pet and cur_pet.customer_id == rec.customer_id and cur_name_key == name_key:
+                continue  # 已对得上
+            key = (rec.customer_id, name_key)
+            target = cache.get(key)
+            if not target:
+                target = next((
+                    candidate
+                    for candidate in sess.query(Pet).filter(Pet.customer_id == rec.customer_id).all()
+                    if " ".join(
+                        unicodedata.normalize("NFKC", candidate.name or "").split()
+                    ).casefold() == name_key
+                ), None)
             if not target:
                 target = Pet(
                     customer_id=rec.customer_id,
