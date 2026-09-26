@@ -12,17 +12,20 @@
 
 ### 接入豆包（火山方舟）视觉模型做自动图片审核
 
-本项目调用方式为 **OpenAI 兼容接口**（`chat.completions` + `image_url`），因此只需在项目根目录创建 `.env` 并配置 3 个变量：
+本项目调用方式为 **OpenAI 兼容接口**（`chat.completions` + `image_url`）。在项目根目录创建 `.env`，配置接口及 TNR 主、备用视觉模型：
 
 ```env
 OPENAI_API_KEY=你的火山方舟 API Key
 OPENAI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-OPENAI_MODEL=doubao-vision-pro-32k-2410128
+OPENAI_MODEL=doubao-seed-2-0-lite-260428
+TNR_VISION_MODEL=doubao-seed-2-0-lite-260428
+TNR_VISION_FALLBACK_MODEL=doubao-seed-2-0-mini-260428
 ```
 
 说明：
 
 - `OPENAI_MODEL` 请以火山方舟控制台里你的可用模型 ID 为准（上面是示例）。
+- `TNR_VISION_MODEL` 调用失败时会自动改用 `TNR_VISION_FALLBACK_MODEL`，避免单个模型停用后所有申请都转人工。
 - 申请提交后，系统会对上传的图片（及视频抽帧）进行辅助判断：是否疑似流浪猫、置信度、理由与建议下一步。
 - 只有当模型输出 `is_likely_stray=true` 且 `confidence >= STRAY_AUTO_APPROVE_MIN_CONFIDENCE` 时，才会自动预审通过；否则进入人工审核。
 

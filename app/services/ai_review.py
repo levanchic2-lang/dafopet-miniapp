@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import secrets
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from app.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 STRAY_REVIEW_PROMPT = """你是动物医院 TNR 预审助手。先审核申请照片质量，再辅助判断猫咪更像「流浪/无主」还是「家养/有主」。只输出 JSON（无 markdown），结构必须如下：
 {
@@ -121,16 +125,33 @@ async def _call_chat_vision(
             }
         )
 
-    model = (getattr(settings, "tnr_vision_model", "") or "").strip() \
+    primary_model = (getattr(settings, "tnr_vision_model", "") or "").strip() \
         or settings.openai_model
-    resp = await client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": content}],
-        max_tokens=1100,
-        temperature=0.2,
-    )
-    text = (resp.choices[0].message.content or "").strip()
-    return text, model
+    fallback_model = (getattr(settings, "tnr_vision_fallback_model", "") or "").strip()
+    models = list(dict.fromkeys(m for m in (primary_model, fallback_model) if m))
+    last_error: Exception | None = None
+    for index, model in enumerate(models):
+        try:
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": content}],
+                max_tokens=1100,
+                temperature=0.2,
+            )
+            text = (resp.choices[0].message.content or "").strip()
+            return text, model
+        except Exception as exc:
+            last_error = exc
+            if index + 1 < len(models):
+                logger.warning(
+                    "TNR 视觉模型 %s 调用失败，改用备用模型 %s：%s",
+                    model,
+                    models[index + 1],
+                    str(exc)[:300],
+                )
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("未配置可用的 TNR 视觉模型")
 
 
 async def review_application_media(

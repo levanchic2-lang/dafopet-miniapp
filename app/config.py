@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # 视觉任务分别配置，留空时兼容回退 OPENAI_MODEL。
     # 火山方舟使用账号内已开通的 Endpoint/模型 ID，不要在代码里猜测新模型 ID。
     tnr_vision_model: str = ""
+    tnr_vision_fallback_model: str = ""
     purchase_vision_model: str = ""
 
     # DeepSeek（OpenAI 兼容）：用于医疗报告、量表分析和诊后说明。
