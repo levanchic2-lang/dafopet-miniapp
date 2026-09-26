@@ -841,6 +841,73 @@ def _application_has_surgery_before_and_after(db: Session, application_id: int) 
     return MediaKind.surgery_before.value in kinds and MediaKind.surgery_after.value in kinds
 
 
+def _resolve_stored_media_path(stored_path: str) -> Path | None:
+    """Resolve both current absolute paths and legacy upload-relative paths."""
+    raw = Path(stored_path)
+    upload_root = Path(settings.upload_dir)
+    candidates = [raw]
+    if not raw.is_absolute():
+        candidates.extend((upload_root / raw, upload_root.parent / raw))
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved.is_file():
+            return resolved
+    return None
+
+
+def _ensure_application_images_as_surgery_before(db: Session, application_id: int) -> int:
+    """Idempotently copy application photos into the pre-operation media set."""
+    existing_before = (
+        db.query(MediaFile.id)
+        .filter(
+            MediaFile.application_id == application_id,
+            MediaFile.kind == MediaKind.surgery_before.value,
+        )
+        .first()
+    )
+    if existing_before:
+        return 0
+
+    app_images = (
+        db.query(MediaFile)
+        .filter(
+            MediaFile.application_id == application_id,
+            MediaFile.kind == MediaKind.application_image.value,
+        )
+        .all()
+    )
+    base = Path(settings.upload_dir) / str(application_id)
+    base.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for media in app_images:
+        src = _resolve_stored_media_path(media.stored_path)
+        if src is None:
+            logger.warning(
+                "[tnr surgery] 申请素材文件不存在，无法自动转术前照片 app_id=%s media_id=%s path=%s",
+                application_id,
+                media.id,
+                media.stored_path,
+            )
+            continue
+        dest = base / f"surg_bi_{secrets.token_hex(6)}{src.suffix.lower()}"
+        shutil.copy2(src, dest)
+        db.add(
+            MediaFile(
+                application_id=application_id,
+                kind=MediaKind.surgery_before.value,
+                stored_path=str(dest),
+                original_name=media.original_name or src.name,
+            )
+        )
+        copied += 1
+    if copied:
+        db.flush()
+    return copied
+
+
 @app.get("/api/regions/china")
 async def api_regions_china():
     """省 / 市 / 区 / 街道四级行政区划（全量）。数据：modood/Administrative-divisions-of-China dist/pcas.json"""
@@ -6310,39 +6377,12 @@ async def verify_cat(app_id: int, request: Request, db: Session = Depends(get_db
         application_id=app_id,
         detail={"appointment_sync": appointment_sync},
     )
-    # 现场确认即"到的就是这只猫"，申请素材照片本身就是这只猫的术前面貌 →
-    # 自动复制为术前照片，前台只需再补传「有异常」的术前照即可，免去重复上传。
-    # 物理复制（不共用文件路径），让申请素材与术前照片各自独立，删一个不影响另一个。
-    # 幂等：仅当当前没有任何术前文件时才复制（重复点确认 / 已手动传过术前都不再复制）。
+    # 申请素材照片自动作为术前照片；物理复制，避免两类记录共用文件路径。
     try:
-        existing_before = db.query(MediaFile).filter(
-            MediaFile.application_id == app_id,
-            MediaFile.kind == MediaKind.surgery_before.value,
-        ).count()
-        if existing_before == 0:
-            app_images = db.query(MediaFile).filter(
-                MediaFile.application_id == app_id,
-                MediaFile.kind == MediaKind.application_image.value,
-            ).all()
-            base = Path(settings.upload_dir) / str(app_id)
-            base.mkdir(parents=True, exist_ok=True)
-            copied = 0
-            for m in app_images:
-                src = Path(m.stored_path)
-                if not src.exists():
-                    continue
-                dest = base / f"surg_bi_{secrets.token_hex(6)}{src.suffix}"
-                shutil.copy2(src, dest)
-                db.add(MediaFile(
-                    application_id=app_id,
-                    kind=MediaKind.surgery_before.value,
-                    stored_path=str(dest),
-                    original_name=m.original_name or src.name,
-                ))
-                copied += 1
-            if copied:
-                _audit(db, request, "auto_copy_application_to_before",
-                       application_id=app_id, detail={"copied": copied})
+        copied = _ensure_application_images_as_surgery_before(db, app_id)
+        if copied:
+            _audit(db, request, "auto_copy_application_to_before",
+                   application_id=app_id, detail={"copied": copied, "trigger": "verify_cat"})
     except Exception:
         logger.exception("[verify_cat] 申请素材自动转术前照片失败 app_id=%s", app_id)
     db.commit()
@@ -6365,6 +6405,11 @@ async def surgery_done(app_id: int, request: Request, db: Session = Depends(get_
         },
         "标记手术完成",
     )
+    # 兼容旧记录：历史上若员工跳过“确认到院”直接上传术后照片，这里再次自动补齐术前。
+    try:
+        _ensure_application_images_as_surgery_before(db, app_id)
+    except Exception:
+        logger.exception("[surgery_done] 申请素材自动转术前照片失败 app_id=%s", app_id)
     if not _application_has_surgery_before_and_after(db, app_id):
         return RedirectResponse(
             "/admin?surgery_media_err="
@@ -7219,6 +7264,14 @@ async def upload_surgery(
     await save_batch(after_images, "surg_ai", MediaKind.surgery_after.value)
     await save_batch(before_videos, "surg_bv", MediaKind.surgery_before.value, is_video=True)
     await save_batch(after_videos, "surg_av", MediaKind.surgery_after.value, is_video=True)
+    # 员工实际常直接上传术后资料；此时也应自动采用申请照片作为术前照片，
+    # 不再依赖是否先点过“确认到院是同一只猫”。
+    auto_before_n = 0
+    if after_images_n or after_videos_n:
+        try:
+            auto_before_n = _ensure_application_images_as_surgery_before(db, app_id)
+        except Exception:
+            logger.exception("[upload_surgery] 申请素材自动转术前照片失败 app_id=%s", app_id)
     _audit(
         db,
         request,
@@ -7229,6 +7282,7 @@ async def upload_surgery(
             "after_images": after_images_n,
             "before_videos": before_videos_n,
             "after_videos": after_videos_n,
+            "auto_before": auto_before_n,
         },
     )
     db.commit()

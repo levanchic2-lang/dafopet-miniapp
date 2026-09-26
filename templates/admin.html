@@ -555,9 +555,11 @@
 
  {% set surg_before_files = a.media | selectattr('kind', 'equalto', 'surgery_before') | list %}
  {% set surg_after_files = a.media | selectattr('kind', 'equalto', 'surgery_after') | list %}
+ {% set application_image_files = a.media | selectattr('kind', 'equalto', 'application_image') | list %}
  {% set surg_before_n = surg_before_files | length %}
  {% set surg_after_n = surg_after_files | length %}
- {% set surgery_media_ok = surg_before_n> 0 and surg_after_n> 0 %}
+ {% set effective_before_n = surg_before_n if surg_before_n > 0 else (application_image_files | length) %}
+ {% set surgery_media_ok = effective_before_n > 0 and surg_after_n > 0 %}
 
  {% if a.status == 'surgery_completed' %}
  {# ── 手术完成：显示已上传缩略图 + 折叠式「补充材料」 ── #}
@@ -642,7 +644,10 @@
  {% if a.status in ['approved', 'arrived_verified', 'scheduled'] and not surgery_media_ok %}
  <p class="sub" style="margin:0 0 0.65rem;">当前：术前 {{ surg_before_n }} 个文件，术后 {{ surg_after_n }} 个文件。请补全后再点「标记手术已完成」。</p>
  {% elif surgery_media_ok %}
- <p class="sub" style="margin:0 0 0.65rem;color:var(--ok, green);"><i data-lucide="check"></i> 术前 {{ surg_before_n }} 个、术后 {{ surg_after_n }} 个，已满足要求，可标记手术完成。</p>
+ {% if surg_before_n == 0 and effective_before_n > 0 %}
+ <p class="sub" style="margin:0 0 0.65rem;">申请素材中的 {{ effective_before_n }} 张照片将自动作为术前照片，当前已上传术后 {{ surg_after_n }} 个文件。</p>
+ {% endif %}
+ <p class="sub" style="margin:0 0 0.65rem;color:var(--ok, green);"><i data-lucide="check"></i> 术前 {{ effective_before_n }} 个、术后 {{ surg_after_n }} 个，已满足要求，可标记手术完成。</p>
  {% endif %}
  {# 已上传文件预览（如有）#}
  {% if surg_before_files or surg_after_files %}
