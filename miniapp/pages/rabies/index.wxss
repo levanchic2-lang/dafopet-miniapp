@@ -150,6 +150,15 @@
   background: #d8d8d4;
   margin: 24rpx 0;
 }
+.duplicate-warning {
+  margin-top: 10rpx;
+  padding: 16rpx 18rpx;
+  border-left: 5rpx solid #7a2828;
+  background: #fbf1f1;
+  color: #7a2828;
+  font-size: 24rpx;
+  line-height: 1.55;
+}
 .addr-scope {
   font-size: 26rpx;
   color: #5f5f5b;

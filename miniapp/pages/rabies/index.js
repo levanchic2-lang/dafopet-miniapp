@@ -30,6 +30,13 @@ function isInvalidName(name) {
   return false;
 }
 
+function petNameKey(name) {
+  const raw = String(name || "");
+  let normalized = raw;
+  try { normalized = raw.normalize("NFKC"); } catch (e) {}
+  return normalized.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
 Page({
   onShareAppMessage() {
     return { title: "狂犬疫苗免疫登记 · 大风动物医院", path: "/pages/rabies/index" };
@@ -53,6 +60,7 @@ Page({
     genderIndex: 0,
     pets: [],
     selectedPetId: null,
+    duplicatePet: null,
     customerId: null,
     lookupDone: false,
     customerFound: false,
@@ -269,6 +277,7 @@ Page({
         customerId: res.customer_id || null,
         pets: res.pets || [],
         selectedPetId: null,
+        duplicatePet: null,
         needsFullName,
       });
       if (res.found) {
@@ -282,15 +291,20 @@ Page({
         if (Object.keys(updates).length) this.setData(updates);
       }
     }).catch(() => {
-      this.setData({ lookupDone: true, customerFound: false, pets: [] });
+      this.setData({ lookupDone: true, customerFound: false, pets: [], duplicatePet: null });
     });
   },
 
   onSelectPet(e) {
     const pet = e.currentTarget.dataset.pet;
+    this._fillExistingPet(pet);
+  },
+
+  _fillExistingPet(pet) {
     const genderMap = { male: 1, female: 2, unknown: 0 };
     this.setData({
       selectedPetId: pet.id,
+      duplicatePet: null,
       "form.animal_name": pet.name || "",
       "form.animal_breed": pet.breed || "",
       "form.animal_dob": pet.birthday_estimate || "",
@@ -303,6 +317,7 @@ Page({
   onSelectNewPet() {
     this.setData({
       selectedPetId: 0,
+      duplicatePet: null,
       "form.animal_name": "",
       "form.animal_breed": "",
       "form.animal_dob": "",
@@ -313,7 +328,14 @@ Page({
   },
 
   onNameInput(e) { this.setData({ "form.owner_name": e.detail.value }); },
-  onAnimalNameInput(e) { this.setData({ "form.animal_name": e.detail.value }); },
+  onAnimalNameInput(e) {
+    const value = e.detail.value || "";
+    const key = petNameKey(value);
+    const duplicatePet = key
+      ? (this.data.pets || []).find(p => p.id !== this.data.selectedPetId && petNameKey(p.name) === key) || null
+      : null;
+    this.setData({ "form.animal_name": value, duplicatePet });
+  },
   onAnimalBreedInput(e) { this.setData({ "form.animal_breed": e.detail.value }); },
   onAnimalDobChange(e) { this.setData({ "form.animal_dob": e.detail.value }); },
   onAnimalColorInput(e) { this.setData({ "form.animal_color": e.detail.value }); },
@@ -419,6 +441,16 @@ Page({
     }
     if (!form.animal_name || !form.animal_name.trim()) {
       return this.setData({ error: "请填写动物名称" });
+    }
+    if (this.data.duplicatePet) {
+      const duplicate = this.data.duplicatePet;
+      wx.showModal({
+        title: "已有同名宠物档案",
+        content: `该主人名下已有宠物“${duplicate.name}”（名字不区分大小写），请直接使用已有档案。`,
+        showCancel: false,
+        success: () => this._fillExistingPet(duplicate),
+      });
+      return;
     }
     if (!form.animal_breed || !form.animal_breed.trim()) {
       return this.setData({ error: "请填写动物品种" });

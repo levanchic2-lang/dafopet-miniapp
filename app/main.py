@@ -2268,15 +2268,7 @@ async def api_apply_create(
             # 门店：从 clinic_store 全名取短名，给病历号生成用
             _short_store = _STORE_FULL_TO_SHORT.get(f.get("clinic_store", ""), "")
 
-            _existing_pet = (
-                db.query(Pet)
-                .filter(
-                    Pet.customer_id == _cust_id,
-                    Pet.species == "cat",
-                    Pet.name == _cat_name,
-                )
-                .first()
-            )
+            _existing_pet = _find_customer_pet_by_name(db, _cust_id, _cat_name)
             if _existing_pet:
                 # 复用已有宠物：补全可能新增的信息（不覆盖已有字段）
                 if not _existing_pet.gender or _existing_pet.gender == "unknown":
@@ -5535,16 +5527,20 @@ async def admin_appointment_create(
                 _admin_appt_pet_id = pet_id
         if (not _no_archive_bool) and _admin_appt_cust_id and not _admin_appt_pet_id:
             _short_store = _STORE_FULL_TO_SHORT.get(str(fields["store"]), str(fields["store"]))
-            _pet = Pet(
-                customer_id=_admin_appt_cust_id,
-                name=str(fields["pet_name"])[:120],
-                species=("cat" if str(fields["category"]) == AppointmentCategory.tnr.value else "other"),
-                gender=str(fields["pet_gender"])[:10],
-                store=_short_store[:40],
-                medical_record_no=_gen_medical_record_no(db, _short_store) if _short_store else "",
+            _pet = _find_customer_pet_by_name(
+                db, _admin_appt_cust_id, str(fields["pet_name"])
             )
-            db.add(_pet)
-            db.flush()
+            if not _pet:
+                _pet = Pet(
+                    customer_id=_admin_appt_cust_id,
+                    name=str(fields["pet_name"])[:120],
+                    species=("cat" if str(fields["category"]) == AppointmentCategory.tnr.value else "other"),
+                    gender=str(fields["pet_gender"])[:10],
+                    store=_short_store[:40],
+                    medical_record_no=_gen_medical_record_no(db, _short_store) if _short_store else "",
+                )
+                db.add(_pet)
+                db.flush()
             _admin_appt_pet_id = _pet.id
         row = Appointment(
             category=str(fields["category"]),
@@ -5727,18 +5723,20 @@ async def admin_appointment_register_save(
                     cust.phone = ph[:40]
         if not pet:
             store_short = _STORE_FULL_TO_SHORT.get(a.store or "", a.store or "")
-            pet = Pet(
-                customer_id=cust.id,
-                name=pname[:120],
-                species=sp[:40],
-                breed=(breed or "").strip()[:80],
-                gender=gender[:10],
-                birthday_estimate=(birthday_estimate or "").strip()[:40],
-                store=store_short[:40],
-                medical_record_no=_gen_medical_record_no(db, store_short) if store_short else "",
-            )
-            db.add(pet)
-            db.flush()
+            pet = _find_customer_pet_by_name(db, cust.id, pname)
+            if not pet:
+                pet = Pet(
+                    customer_id=cust.id,
+                    name=pname[:120],
+                    species=sp[:40],
+                    breed=(breed or "").strip()[:80],
+                    gender=gender[:10],
+                    birthday_estimate=(birthday_estimate or "").strip()[:40],
+                    store=store_short[:40],
+                    medical_record_no=_gen_medical_record_no(db, store_short) if store_short else "",
+                )
+                db.add(pet)
+                db.flush()
         else:
             if not pet.medical_record_no and (pet.store or a.store):
                 store_short = pet.store or _STORE_FULL_TO_SHORT.get(a.store or "", a.store or "")
@@ -9003,6 +9001,17 @@ async def admin_customer_add_pet(
     cust = db.get(Customer, customer_id)
     if not cust:
         raise HTTPException(404, "客户不存在")
+    clean_name = name.strip()[:120]
+    duplicate = _find_customer_pet_by_name(db, customer_id, clean_name)
+    if duplicate:
+        message = quote(
+            f"该客户名下已有宠物“{duplicate.name}”，请直接使用已有档案，不能重复新建",
+            safe="",
+        )
+        return RedirectResponse(
+            f"/admin/customers/{customer_id}?pet_id={duplicate.id}&err={message}",
+            status_code=303,
+        )
     # 限店员工：强制使用自己门店
     admin_store = _get_admin_store(request)
     if admin_store:
@@ -9011,7 +9020,7 @@ async def admin_customer_add_pet(
     mrn = _gen_medical_record_no(db, store) if store else ""
     pet = Pet(
         customer_id=customer_id,
-        name=name.strip()[:120],
+        name=clean_name,
         species=species.strip()[:40] or "cat",
         breed=breed.strip()[:80],
         gender=gender.strip()[:10] or "unknown",
@@ -9063,7 +9072,18 @@ async def admin_customer_edit_pet(
     pet = db.get(Pet, pet_id)
     if not pet or pet.customer_id != customer_id:
         raise HTTPException(404, "宠物不存在")
-    pet.name = name.strip()[:120]
+    clean_name = name.strip()[:120]
+    duplicate = _find_customer_pet_by_name(db, customer_id, clean_name)
+    if duplicate and duplicate.id != pet.id:
+        message = quote(
+            f"该客户名下已有宠物“{duplicate.name}”，如为同一只宠物请使用合并功能",
+            safe="",
+        )
+        return RedirectResponse(
+            f"/admin/customers/{customer_id}?pet_id={pet_id}&err={message}",
+            status_code=303,
+        )
+    pet.name = clean_name
     pet.species = species.strip()[:40] or "cat"
     pet.breed = breed.strip()[:80]
     pet.gender = gender.strip()[:10] or "unknown"
@@ -21153,13 +21173,13 @@ async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_
         return {"found": False}
     # 主客户：选名下宠物最多的那条作为代表（用于填客户名/地址）
     cust_with_pets: list[tuple] = []
-    all_pets_seen: set[tuple] = set()  # (name_lower, species) 去重
+    all_pets_seen: set[str] = set()
     aggregated_pets: list[dict] = []
     for c in matched:
         pets = db.query(Pet).filter(Pet.customer_id == c.id).all()
         cust_with_pets.append((c, len(pets), pets))
         for pet in pets:
-            key = ((pet.name or "").strip().lower(), pet.species or "")
+            key = _pet_name_key(pet.name)
             if key in all_pets_seen:
                 continue
             all_pets_seen.add(key)
@@ -21229,6 +21249,12 @@ async def api_combo_vaccine_registration_create(
         species = str(payload.get("pet_species") or "")
         if not pet_name or species not in ("cat", "dog"):
             raise HTTPException(400, "请填写宠物姓名并选择猫或犬")
+        duplicate = _find_customer_pet_by_name(db, cust.id, pet_name)
+        if duplicate:
+            raise HTTPException(
+                409,
+                f"该主人名下已有宠物“{duplicate.name}”，请返回选择已有宠物档案",
+            )
         pet = Pet(
             customer_id=cust.id, name=pet_name[:120], species=species,
             breed=str(payload.get("pet_breed") or "")[:80],
@@ -21568,7 +21594,10 @@ async def submit_rabies_form(request: Request, db: Session = Depends(get_db)):
     pet = None
     if pet_id:
         pet = db.get(Pet, pet_id)
-        if pet and animal_name and pet.name and _pet_name_key(pet.name) != _pet_name_key(animal_name):
+        if pet and pet.customer_id != customer_id:
+            pet = None
+            pet_id = None
+        elif pet and animal_name and pet.name and _pet_name_key(pet.name) != _pet_name_key(animal_name):
             # 名字不一致 → 视为不同动物
             pet = None
             pet_id = None
@@ -21724,7 +21753,10 @@ async def api_rabies_submit(request: Request, db: Session = Depends(get_db)):
     pet = None
     if pet_id:
         pet = db.get(Pet, pet_id)
-        if pet and animal_name and pet.name and _pet_name_key(pet.name) != _pet_name_key(animal_name):
+        if pet and pet.customer_id != customer_id:
+            pet = None
+            pet_id = None
+        elif pet and animal_name and pet.name and _pet_name_key(pet.name) != _pet_name_key(animal_name):
             pet = None
             pet_id = None
     if not pet_id and animal_name:

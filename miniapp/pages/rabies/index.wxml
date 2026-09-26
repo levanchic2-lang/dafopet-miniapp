@@ -81,6 +81,9 @@
 
   <view class="label">动物名称 <text style="color:#7a2828;">*</text></view>
   <input class="input" value="{{form.animal_name}}" placeholder="宠物名字" bindinput="onAnimalNameInput" />
+  <view wx:if="{{duplicatePet}}" class="duplicate-warning">
+    该主人名下已有宠物“{{duplicatePet.name}}”，名字不区分大小写。请直接选择上方已有档案。
+  </view>
 
   <view class="row2">
     <view class="col">

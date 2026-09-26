@@ -12,10 +12,17 @@ const QUESTIONS = [
   { key: "surgery_anesthesia_15d", label: "近15天是否接受过手术或麻醉" }
 ];
 
+function petNameKey(name) {
+  const raw = String(name || "");
+  let normalized = raw;
+  try { normalized = raw.normalize("NFKC"); } catch (e) {}
+  return normalized.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
 Page({
   data: {
     phone: "", lookupLoading: false, lookupDone: false, customer: null, pets: [],
-    selectedPetId: 0, useNewPet: false, ownerName: "",
+    selectedPetId: 0, useNewPet: false, ownerName: "", duplicatePet: null,
     petName: "", petSpecies: "cat", petBreed: "", petGender: "unknown", petBirthday: "",
     storeOptions: ["请选择接种门店", "东环店", "横岗店"], storeIndex: 0,
     stageOptions: ["请选择免疫阶段", "首免第1针", "首免第2针", "首免第3针", "加强免疫", "年度加强"],
@@ -51,14 +58,25 @@ Page({
         lookupDone: true,
         customer: r.found ? { id: r.customer_id, name: r.name || "" } : null,
         pets: r.pets || [], ownerName: r.name || "", selectedPetId: 0,
-        useNewPet: !r.found || !(r.pets || []).length
+        useNewPet: !r.found || !(r.pets || []).length, duplicatePet: null
       });
-    } catch (e) { this.setData({ lookupDone: true, customer: null, pets: [], useNewPet: true, error: "查询失败，请重试" }); }
+    } catch (e) { this.setData({ lookupDone: true, customer: null, pets: [], useNewPet: true, duplicatePet: null, error: "查询失败，请重试" }); }
     finally { this.setData({ lookupLoading: false }); }
   },
-  selectPet(e) { this.setData({ selectedPetId: Number(e.detail.value || 0), useNewPet: false, error: "" }); },
-  chooseNewPet() { this.setData({ selectedPetId: 0, useNewPet: true, error: "" }); },
-  fieldInput(e) { this.setData({ [e.currentTarget.dataset.field]: e.detail.value || "", error: "" }); },
+  selectPet(e) { this.setData({ selectedPetId: Number(e.detail.value || 0), useNewPet: false, duplicatePet: null, error: "" }); },
+  chooseNewPet() { this.setData({ selectedPetId: 0, useNewPet: true, duplicatePet: null, error: "" }); },
+  fieldInput(e) {
+    const field = e.currentTarget.dataset.field;
+    const value = e.detail.value || "";
+    const patch = { [field]: value, error: "" };
+    if (field === "petName") {
+      const key = petNameKey(value);
+      patch.duplicatePet = key
+        ? (this.data.pets || []).find(p => petNameKey(p.name) === key) || null
+        : null;
+    }
+    this.setData(patch);
+  },
   chooseSpecies(e) { this.setData({ petSpecies: e.detail.value }); },
   chooseGender(e) { this.setData({ petGender: e.detail.value }); },
   chooseStore(e) { this.setData({ storeIndex: Number(e.detail.value) }); },
@@ -77,6 +95,16 @@ Page({
     if (this.data.submitting) return;
     if (!/^\d{11}$/.test(this.data.phone) || !this.data.lookupDone) return this.setData({ error: "请先查询主人手机号" });
     if (!this.data.selectedPetId && (!this.data.useNewPet || !this.data.petName || !this.data.ownerName)) return this.setData({ error: "请选择宠物，或完整填写新档案" });
+    if (this.data.duplicatePet) {
+      const duplicate = this.data.duplicatePet;
+      wx.showModal({
+        title: "已有同名宠物档案",
+        content: `该主人名下已有宠物“${duplicate.name}”（名字不区分大小写），请直接选择已有档案。`,
+        showCancel: false,
+        success: () => this.setData({ selectedPetId: duplicate.id, useNewPet: false, duplicatePet: null, error: "" }),
+      });
+      return;
+    }
     if (!this.data.storeIndex) return this.setData({ error: "请选择接种门店" });
     if (!this.data.stageIndex) return this.setData({ error: "请选择免疫阶段" });
     const unanswered = this.data.questions.find(q => !q.value);

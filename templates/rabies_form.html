@@ -319,6 +319,18 @@ function selectNewPet(el) {
  document.getElementById('animal-fields').style.display = '';
 }
 
+function petNameKey(value) {
+ let normalized = String(value || '');
+ try { normalized = normalized.normalize('NFKC'); } catch (e) {}
+ return normalized.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+function findDuplicatePetName() {
+ const key = petNameKey(document.getElementById('animal_name').value);
+ if (!key) return null;
+ return _existingPets.find(p => p.id !== _selectedPetId && petNameKey(p.name) === key) || null;
+}
+
 // ── 表单提交 ──────────────────────────────────────────────────────────────
 document.getElementById('rabies-form').addEventListener('submit', function(e) {
  e.preventDefault();
@@ -328,6 +340,13 @@ document.getElementById('rabies-form').addEventListener('submit', function(e) {
  document.getElementById('name-error').style.display = '';
  document.getElementById('owner_name').focus();
  return;
+ }
+ const duplicatePet = findDuplicatePetName();
+ if (duplicatePet) {
+   alert(`该主人名下已有宠物“${duplicatePet.name}”（名字不区分大小写），请直接选择已有档案。`);
+   const card = document.querySelector(`.pet-card[data-pet-id="${duplicatePet.id}"]`);
+   if (card) selectPet(duplicatePet, card);
+   return;
  }
  // 签名校验
  if (!hasSig) {
