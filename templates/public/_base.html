@@ -8,7 +8,7 @@
   {% if preview or not brand.allow_indexing %}<meta name="robots" content="noindex,nofollow,noarchive">{% endif %}
   {% if not preview and brand.public_domain %}<link rel="canonical" href="{{ brand.public_domain.rstrip('/') }}{{ request.url.path }}">{% endif %}
   {% if schema_data %}<script type="application/ld+json">{{ schema_data|tojson }}</script>{% endif %}
-  <link rel="stylesheet" href="/static/public_site.css?v=2">
+  <link rel="stylesheet" href="/static/public_site.css?v=3">
 </head>
 <body>
   {% if preview %}<div class="pub-preview">内部预览站 · 已禁止搜索引擎和 AI 收录 · <a href="/admin/content">返回内容中心</a></div>{% endif %}
