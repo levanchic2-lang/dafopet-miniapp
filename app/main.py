@@ -36262,17 +36262,17 @@ def _public_case_candidate_score(
     reasons: list[str] = []
     fields = [
         (visit.chief_complaint, 10, "主诉完整"),
-        (visit.physical_exam, 15, "有体格检查"),
-        (visit.diagnosis, 25, "有临床判断"),
+        (visit.physical_exam, 10, "有体格检查"),
+        (visit.diagnosis, 20, "有临床判断"),
         (visit.treatment_plan, 20, "有处理方案"),
-        (visit.follow_up_note, 20, "有恢复或随访结果"),
+        (visit.follow_up_note, 25, "有恢复或随访结果"),
     ]
     for value, points, label in fields:
         if (value or "").strip():
             score += points
             reasons.append(label)
     if visit.status == "closed":
-        score += 5
+        score += 10
         reasons.append("病历已结束")
     if exam_count:
         score += 5
@@ -36382,7 +36382,7 @@ async def admin_public_case_candidates(
     db: Session = Depends(get_db),
     q: str = Query(""),
     species: str = Query(""),
-    priority: str = Query(""),
+    priority: str = Query("high"),
     include_drafted: bool = Query(False),
 ):
     """Internal shortlist of sufficiently complete records for a doctor's selection."""
@@ -36444,7 +36444,14 @@ async def admin_public_case_candidates(
         )
         if score < 45:
             continue
-        level = "high" if score >= 75 else "medium" if score >= 55 else "low"
+        has_outcome = bool((visit.follow_up_note or "").strip())
+        is_closed = visit.status == "closed"
+        if (has_outcome and score >= 70) or (is_closed and score >= 80):
+            level = "high"
+        elif score >= 60:
+            level = "medium"
+        else:
+            level = "low"
         if priority in ("high", "medium", "low") and level != priority:
             continue
         candidates.append({
@@ -36459,10 +36466,13 @@ async def admin_public_case_candidates(
             "prescription_count": prescription_counts.get(visit.id, 0),
         })
     candidates.sort(key=lambda row: (row["score"], row["visit"].visit_date or "", row["visit"].id), reverse=True)
+    candidate_total = len(candidates)
+    candidates = candidates[:120]
     return templates.TemplateResponse(request, "uk/public_case_candidates.html", {
         "request": request,
         "title": "真实病例候选池",
         "candidates": candidates,
+        "candidate_total": candidate_total,
         "q": clean_q,
         "species_filter": species,
         "priority_filter": priority,

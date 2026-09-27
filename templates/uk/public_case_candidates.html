@@ -8,7 +8,7 @@
   @media(max-width:760px){.candidate-head{align-items:flex-start;flex-direction:column}.candidate-filters{grid-template-columns:1fr 1fr}.candidate-filters input{grid-column:1/-1}.candidate-row{grid-template-columns:62px 1fr}.candidate-actions{grid-column:1/-1;display:flex;gap:8px}.candidate-actions .uk-btn{margin:0}.candidate-signals{display:none}}
 </style>
 <div class="candidate-head">
-  <div><div class="uk-eyebrow">公开内容 / 人工筛选</div><h1>真实病例候选池</h1><p>按病历完整度、随访结果和检查资料排序。评分只帮助查找，是否公开始终由医生决定。</p></div>
+  <div><div class="uk-eyebrow">公开内容 / 人工筛选</div><h1>真实病例候选池</h1><p>优先展示已结束、有随访或资料较完整的病历。评分只帮助查找，是否公开始终由医生决定。</p></div>
   <div><a class="uk-btn ghost" href="/admin/content?status=draft&content_type=case">病例审核队列</a> <a class="uk-btn ghost" href="/admin/content">返回内容中心</a></div>
 </div>
 <form method="get" class="candidate-filters">
@@ -18,9 +18,10 @@
   <button class="uk-btn ghost" type="submit">筛选</button>
 </form>
 {% if candidates %}
+  <div class="candidate-meta">当前条件共 {{ candidate_total }} 条{% if candidate_total > 120 %}，先显示最适合审核的 120 条{% endif %}</div>
   {% for row in candidates %}
   <section class="candidate-row">
-    <div class="candidate-score {% if row.level=='high' %}level-high{% elif row.level=='medium' %}level-medium{% endif %}">{{ row.score }}<small>完整度 / 100</small></div>
+    <div class="candidate-score {% if row.level=='high' %}level-high{% elif row.level=='medium' %}level-medium{% endif %}">{{ row.score }}<small>公开适合度 / 100</small></div>
     <div>
       <div class="candidate-title">{{ row.pet.name if row.pet else '未命名动物' }} · {{ '猫' if row.pet and row.pet.species=='cat' else '犬' if row.pet and row.pet.species=='dog' else '其他动物' }} · 病历 #{{ row.visit.id }}</div>
       <div class="candidate-meta">{{ row.visit.visit_date or '日期未填' }} · {{ row.visit.store or (row.pet.store if row.pet else '') or '门店未填' }} · {{ row.visit.vet_name or '医生未填' }} · {{ '已结束' if row.visit.status=='closed' else '进行中' }}</div>
