@@ -121,12 +121,16 @@ body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; co
 <hr class="inv-rule-single" style="margin-top:16px;" />
 
 <div class="inv-grand">
+  {% if customer_scope %}
+  <div class="row grand"><span>Outstanding · 未收合计</span><span>¥ {{ '%.2f'|format(grand_outstanding) }}</span></div>
+  {% else %}
   <div class="row"><span>Invoice Total · 票面合计</span><span>¥ {{ '%.2f'|format(grand_total) }}</span></div>
   <div class="row"><span>Paid · 已收合计</span><span>¥ {{ '%.2f'|format(grand_paid) }}</span></div>
   <div class="row grand"><span>Outstanding · 未收合计</span><span>¥ {{ '%.2f'|format(grand_outstanding) }}</span></div>
+  {% endif %}
 </div>
 
-{% if sections | selectattr('payments') | list %}
+{% if not customer_scope and sections | selectattr('payments') | list %}
 <div class="pay-group">
   <div class="h">Payment Received · 收款明细</div>
   {% for sec in sections %}
