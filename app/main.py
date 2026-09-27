@@ -24360,10 +24360,10 @@ def _same_pet_day_invoices(db: Session, inv: Invoice) -> list:
 
 
 def _customer_printable_invoices(db: Session, request: Request, customer_id: int) -> list[Invoice]:
-    """当前账号可见的客户有效收费单，供客户级全合并打印使用。"""
+    """当前账号可见的客户未结清收费单，供客户级合并催款打印使用。"""
     query = db.query(Invoice).filter(
         Invoice.customer_id == customer_id,
-        Invoice.payment_status != "cancelled",
+        Invoice.payment_status.in_(("unpaid", "partial")),
     )
     admin_store = _get_admin_store(request)
     if admin_store:
@@ -24630,7 +24630,7 @@ async def admin_invoice_detail(
         "other_unpaid": _other_unpaid_for_invoice(db, inv) if inv.customer_id else [],
         # 同宠物同天其他收费单（用于合并打印）
         "same_pet_day_invs": _same_pet_day_invoices(db, inv),
-        # 同客户全部有效收费单（跨宠物、跨日期）
+        # 同客户全部未结清收费单（跨宠物、跨日期）
         "customer_printable_invoice_count": len(
             _customer_printable_invoices(db, request, inv.customer_id)
         ) if inv.customer_id else 0,

@@ -1,5 +1,5 @@
 {% extends "_print_base.html" %}
-{% block title %}{{ '客户全量收费清单' if customer_scope else '合并收费单' }}{% endblock %}
+{% block title %}{{ '客户待付款收费清单' if customer_scope else '合并收费单' }}{% endblock %}
 {% block default_size %}A4{% endblock %}
 
 {% block extra_style %}
@@ -60,11 +60,11 @@ body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; co
 <div class="inv-clinic-tag">Veterinary Care &amp; Surgical Services · Est. 2018</div>
 
 <hr class="inv-rule-double" />
-<div class="inv-title">{% if customer_scope %}客 户 全 量 收 费 清 单{% else %}合 并 收 费 单{% endif %}</div>
+<div class="inv-title">{% if customer_scope %}客 户 待 付 款 收 费 清 单{% else %}合 并 收 费 单{% endif %}</div>
 <hr class="inv-rule-single" />
 
 <div class="inv-meta-row">
-  <span>共 <strong>{{ sections|length }}</strong> 张有效单据{% if customer_scope %} · {{ pets|length }} 只宠物{% endif %}</span>
+  <span>共 <strong>{{ sections|length }}</strong> 张{% if customer_scope %}待付款{% else %}有效{% endif %}单据{% if customer_scope %} · {{ pets|length }} 只宠物{% endif %}</span>
   <span>Date: <strong>{{ date_range }}</strong></span>
 </div>
 

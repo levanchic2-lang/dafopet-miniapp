@@ -332,7 +332,7 @@
     <a href="/admin/invoices/combined-print?ids={{ inv.id }}{% for r in same_pet_day_invs %},{{ r.id }}{% endfor %}" target="_blank" class="uk-btn ghost sm">合并打印 ({{ same_pet_day_invs|length + 1 }}张)</a>
     {% endif %}
     {% if cust and customer_printable_invoice_count > 1 %}
-    <a href="/admin/customers/{{ cust.id }}/invoices/combined-print" target="_blank" class="uk-btn ghost sm">全合并打印（{{ customer_printable_invoice_count }}张）</a>
+    <a href="/admin/customers/{{ cust.id }}/invoices/combined-print" target="_blank" class="uk-btn ghost sm">待付款合并打印（{{ customer_printable_invoice_count }}张）</a>
     {% endif %}
   </div>
 </div>
