@@ -1,5 +1,5 @@
 {% extends "_print_base.html" %}
-{% block title %}合并收费单{% endblock %}
+{% block title %}{{ '客户全量收费清单' if customer_scope else '合并收费单' }}{% endblock %}
 {% block default_size %}A4{% endblock %}
 
 {% block extra_style %}
@@ -17,7 +17,7 @@ body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; co
 .inv-info .val  { font-weight: 600; }
 
 /* ── 每张单的分节 ── */
-.sec { margin-top: 20px; }
+.sec { margin-top: 20px; break-inside: avoid; page-break-inside: avoid; }
 .sec-head {
   font-size: 10pt; font-weight: 700; letter-spacing: 2px;
   padding: 4px 0 4px 8px;
@@ -60,12 +60,12 @@ body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; co
 <div class="inv-clinic-tag">Veterinary Care &amp; Surgical Services · Est. 2018</div>
 
 <hr class="inv-rule-double" />
-<div class="inv-title">合 并 收 费 单</div>
+<div class="inv-title">{% if customer_scope %}客 户 全 量 收 费 清 单{% else %}合 并 收 费 单{% endif %}</div>
 <hr class="inv-rule-single" />
 
 <div class="inv-meta-row">
-  <span>共 <strong>{{ sections|length }}</strong> 张单据</span>
-  <span>Date: <strong>{{ sections[0]['inv'].invoice_date or '—' }}</strong></span>
+  <span>共 <strong>{{ sections|length }}</strong> 张有效单据{% if customer_scope %} · {{ pets|length }} 只宠物{% endif %}</span>
+  <span>Date: <strong>{{ date_range }}</strong></span>
 </div>
 
 <hr class="inv-rule-thin" />
@@ -73,10 +73,10 @@ body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; co
 <div class="inv-info">
   <div><span class="lbl">Client · 客户</span><span class="val">{{ cust.name if cust else '—' }}</span></div>
   <div><span class="lbl">Pet · 宠物</span><span class="val">
-    {{ pet.name if pet else '—' }}{% if pet %} ({{ {'cat':'猫','dog':'犬'}.get(pet.species, pet.species or '') }}){% endif %}
+    {% if customer_scope %}全部宠物（{{ pets|length }}只）{% else %}{{ pet.name if pet else '—' }}{% if pet %} ({{ {'cat':'猫','dog':'犬'}.get(pet.species, pet.species or '') }}){% endif %}{% endif %}
   </span></div>
   <div><span class="lbl">Tel · 电话</span><span class="val">{{ cust.phone if cust else '—' }}</span></div>
-  <div><span class="lbl">Visit · 就诊</span><span class="val">{% if visit %}#{{ visit.id }} · {{ visit.visit_date or '' }}{% else %}—{% endif %}</span></div>
+  <div><span class="lbl">Range · 范围</span><span class="val">{% if customer_scope %}跨宠物 · 跨日期{% elif visit %}病历 #{{ visit.id }} · {{ visit.visit_date or '' }}{% else %}—{% endif %}</span></div>
 </div>
 
 <hr class="inv-rule-single" />
@@ -85,8 +85,8 @@ body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; co
 {% set inv = sec['inv'] %}
 <div class="sec">
   <div class="sec-head">
-    <span>{{ sec['label'] }}</span>
-    <span class="sec-no">{{ inv.invoice_no or ('#%d' % inv.id) }}</span>
+    <span>{% if sec['pet'] %}{{ sec['pet'].name }} · {% endif %}{{ sec['label'] }}</span>
+    <span class="sec-no">{{ inv.invoice_date or '—' }} · {{ inv.invoice_no or ('#%d' % inv.id) }} · {{ sec['status_label'] }}</span>
   </div>
   <table class="inv-items">
     <thead>
@@ -112,6 +112,8 @@ body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; co
     小计 ¥ {{ '%.2f'|format(inv.subtotal) }}
     {% if inv.discount_amount > 0 %} · 优惠 – ¥ {{ '%.2f'|format(inv.discount_amount) }}{% endif %}
     · <strong>应收 ¥ {{ '%.2f'|format(inv.total_amount) }}</strong>
+    {% if sec['paid_amount'] > 0 %} · 已收 ¥ {{ '%.2f'|format(sec['paid_amount']) }}{% endif %}
+    {% if sec['outstanding'] > 0 %} · 未收 ¥ {{ '%.2f'|format(sec['outstanding']) }}{% endif %}
   </div>
 </div>
 {% endfor %}
@@ -119,7 +121,9 @@ body { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; co
 <hr class="inv-rule-single" style="margin-top:16px;" />
 
 <div class="inv-grand">
-  <div class="row grand"><span>Grand Total · 合计应收</span><span>¥ {{ '%.2f'|format(grand_total) }}</span></div>
+  <div class="row"><span>Invoice Total · 票面合计</span><span>¥ {{ '%.2f'|format(grand_total) }}</span></div>
+  <div class="row"><span>Paid · 已收合计</span><span>¥ {{ '%.2f'|format(grand_paid) }}</span></div>
+  <div class="row grand"><span>Outstanding · 未收合计</span><span>¥ {{ '%.2f'|format(grand_outstanding) }}</span></div>
 </div>
 
 {% if sections | selectattr('payments') | list %}

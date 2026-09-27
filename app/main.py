@@ -8849,6 +8849,9 @@ async def page_admin_customer_detail(
     active_coupons_count = sum(1 for c in coupons if c.status == "issued" and not _coupon_is_expired(c))
 
     # ── 头部信号 chip 数据 ──
+    customer_printable_invoice_count = len(
+        _customer_printable_invoices(db, request, customer_id)
+    )
     unpaid_total = round(sum((i.total_amount or 0) for i in cust_invoices if i.payment_status == "unpaid"), 2)
     pet_unpaid_total = round(sum(
         (i.total_amount or 0) for i in displayed_invoices if i.payment_status == "unpaid"
@@ -8899,6 +8902,7 @@ async def page_admin_customer_detail(
             "sales_orders": cust_sales_orders,
             "cust_invoices": cust_invoices,
             "customer_invoice_count": len(cust_invoices),
+            "customer_printable_invoice_count": customer_printable_invoice_count,
             "invoice_scope": invoice_scope,
             "invoice_pet_lookup": invoice_pet_lookup,
             # 宠物级
@@ -24355,6 +24359,18 @@ def _same_pet_day_invoices(db: Session, inv: Invoice) -> list:
     )
 
 
+def _customer_printable_invoices(db: Session, request: Request, customer_id: int) -> list[Invoice]:
+    """当前账号可见的客户有效收费单，供客户级全合并打印使用。"""
+    query = db.query(Invoice).filter(
+        Invoice.customer_id == customer_id,
+        Invoice.payment_status != "cancelled",
+    )
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        query = query.filter(or_(Invoice.store == admin_store, Invoice.store == ""))
+    return query.order_by(Invoice.invoice_date.asc(), Invoice.id.asc()).all()
+
+
 def _payment_balance_hints(db: Session, payments: list[Payment]) -> dict[int, str]:
     """打印票据用：展示钱包/押金抵扣后的可用余额。"""
     hints: dict[int, str] = {}
@@ -24380,6 +24396,107 @@ def _payment_balance_hints(db: Session, payments: list[Payment]) -> dict[int, st
     return hints
 
 
+def _render_combined_invoice_print(
+    request: Request,
+    db: Session,
+    invoices: list[Invoice],
+    *,
+    customer_scope: bool = False,
+):
+    if not invoices:
+        raise HTTPException(404, "没有可打印的收费单")
+
+    customer_ids = {inv.customer_id for inv in invoices if inv.customer_id}
+    if len(customer_ids) > 1:
+        raise HTTPException(400, "只能合并打印同一客户的收费单")
+    for inv in invoices:
+        _assert_store_access(request, inv.store, inv.pet.store if inv.pet else "")
+
+    first = invoices[0]
+    cust = db.get(Customer, first.customer_id) if first.customer_id else None
+    pet = db.get(Pet, first.pet_id) if first.pet_id else None
+    visit = db.get(Visit, first.visit_id) if first.visit_id else None
+
+    all_inv_ids = [inv.id for inv in invoices]
+    payments_by_inv: dict[int, list[Payment]] = {}
+    all_payments = db.query(Payment).filter(
+        Payment.invoice_id.in_(all_inv_ids),
+        Payment.status == "success",
+    ).order_by(Payment.id.asc()).all()
+    for payment in all_payments:
+        payments_by_inv.setdefault(payment.invoice_id, []).append(payment)
+    payment_balance_hints = _payment_balance_hints(db, all_payments)
+
+    ref_type_zh = {
+        "prescription": "处方", "sales_order": "销售",
+        "grooming": "美容", "manual": "收费",
+        "hospitalization": "住院", "exam_order": "检查",
+    }
+    status_zh = {
+        "unpaid": "待收款", "partial": "部分收款", "paid": "已收款",
+        "refunded": "已退款", "cancelled": "已取消",
+    }
+    sections = []
+    pets_by_id: dict[int, Pet] = {}
+    for inv in invoices:
+        inv_pet = inv.pet or (db.get(Pet, inv.pet_id) if inv.pet_id else None)
+        if inv_pet:
+            pets_by_id[inv_pet.id] = inv_pet
+        dominant = "收费"
+        for item in inv.items:
+            label = ref_type_zh.get(item.ref_type or "", "")
+            if label:
+                dominant = label
+                break
+        inv_payments = payments_by_inv.get(inv.id, [])
+        paid_amount = round(sum(float(p.amount or 0) for p in inv_payments), 2)
+        sections.append({
+            "inv": inv,
+            "pet": inv_pet,
+            "label": f"{dominant}单",
+            "payments": inv_payments,
+            "paid_amount": paid_amount,
+            "outstanding": round(max(0.0, float(inv.total_amount or 0) - paid_amount), 2),
+            "status_label": status_zh.get(inv.payment_status, inv.payment_status or "—"),
+        })
+
+    clinic_name_zh = "大风动物医院"
+    clinic_name_en = "DaFo Animal Hospital"
+    stores = {_store_short(inv.store) for inv in invoices if inv.store}
+    stores.discard("")
+    print_store = next(iter(stores)) if len(stores) == 1 else ""
+    if not print_store:
+        print_store = _print_clinic_store(visit, pet)
+    if print_store:
+        clinic_name_zh = f"大风动物医院（{print_store.replace('店', '分院')}）"
+        clinic_name_en = f"DaFo Animal Hospital · {print_store.replace('店', '')}"
+
+    grand_total = round(sum(float(inv.total_amount or 0) for inv in invoices), 2)
+    grand_paid = round(sum(sec["paid_amount"] for sec in sections), 2)
+    grand_outstanding = round(sum(sec["outstanding"] for sec in sections), 2)
+    dates = [inv.invoice_date for inv in invoices if inv.invoice_date]
+    date_range = "—"
+    if dates:
+        date_range = dates[0] if dates[0] == dates[-1] else f"{dates[0]} 至 {dates[-1]}"
+
+    return templates.TemplateResponse(request, "admin_invoice_combined_print.html", {
+        "sections": sections,
+        "cust": cust,
+        "pet": pet,
+        "pets": list(pets_by_id.values()),
+        "visit": visit,
+        "customer_scope": customer_scope,
+        "date_range": date_range,
+        "grand_total": grand_total,
+        "grand_paid": grand_paid,
+        "grand_outstanding": grand_outstanding,
+        "clinic_name_zh": clinic_name_zh,
+        "clinic_name_en": clinic_name_en,
+        "inv_status_zh": _INV_STATUS_ZH,
+        "payment_balance_hints": payment_balance_hints,
+    })
+
+
 @app.get("/admin/invoices/combined-print", response_class=HTMLResponse)
 async def admin_invoice_combined_print_view(
     request: Request,
@@ -24393,57 +24510,21 @@ async def admin_invoice_combined_print_view(
     invoices = db.query(Invoice).filter(Invoice.id.in_(id_list)).order_by(Invoice.id.asc()).all()
     if not invoices:
         raise HTTPException(404, "收费单不存在")
-    first = invoices[0]
-    cust  = db.get(Customer, first.customer_id) if first.customer_id else None
-    pet   = db.get(Pet, first.pet_id) if first.pet_id else None
-    visit = db.get(Visit, first.visit_id) if first.visit_id else None
-    # 收集所有支付记录
-    all_inv_ids = [i.id for i in invoices]
-    payments_by_inv: dict[int, list] = {}
-    for p in db.query(Payment).filter(
-        Payment.invoice_id.in_(all_inv_ids), Payment.status == "success"
-    ).order_by(Payment.id.asc()).all():
-        payments_by_inv.setdefault(p.invoice_id, []).append(p)
-    payment_balance_hints = _payment_balance_hints(
-        db, [p for rows in payments_by_inv.values() for p in rows]
-    )
-    # 按 ref_type 给每张单加类型标签
-    _ref_type_zh = {
-        "prescription": "处方", "sales_order": "销售",
-        "grooming": "美容", "manual": "收费",
-        "hospitalization": "住院", "exam_order": "检查",
-    }
-    sections = []
-    for inv in invoices:
-        dominant = "收费"
-        for item in inv.items:
-            zh = _ref_type_zh.get(item.ref_type or "", "")
-            if zh:
-                dominant = zh
-                break
-        sections.append({
-            "inv": inv,
-            "label": f"{dominant}单 · {inv.invoice_no or ('#%d' % inv.id)}",
-            "payments": payments_by_inv.get(inv.id, []),
-        })
-    clinic_name_zh = "大风动物医院"
-    clinic_name_en = "DaFo Animal Hospital"
-    _pcs = _print_clinic_store(visit, pet)
-    if _pcs:
-        clinic_name_zh = f"大风动物医院（{_pcs.replace('店', '分院')}）"
-        clinic_name_en = f"DaFo Animal Hospital · {_pcs.replace('店', '')}"
-    grand_total = round(sum(float(i.total_amount or 0) for i in invoices), 2)
-    return templates.TemplateResponse(request, "admin_invoice_combined_print.html", {
-        "sections": sections,
-        "cust": cust,
-        "pet": pet,
-        "visit": visit,
-        "grand_total": grand_total,
-        "clinic_name_zh": clinic_name_zh,
-        "clinic_name_en": clinic_name_en,
-        "inv_status_zh": _INV_STATUS_ZH,
-        "payment_balance_hints": payment_balance_hints,
-    })
+    return _render_combined_invoice_print(request, db, invoices)
+
+
+@app.get("/admin/customers/{customer_id}/invoices/combined-print", response_class=HTMLResponse)
+async def admin_customer_invoice_combined_print_view(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404, "客户不存在")
+    invoices = _customer_printable_invoices(db, request, customer_id)
+    return _render_combined_invoice_print(request, db, invoices, customer_scope=True)
 
 
 @app.get("/admin/invoices/{inv_id}", response_class=HTMLResponse)
@@ -24549,6 +24630,10 @@ async def admin_invoice_detail(
         "other_unpaid": _other_unpaid_for_invoice(db, inv) if inv.customer_id else [],
         # 同宠物同天其他收费单（用于合并打印）
         "same_pet_day_invs": _same_pet_day_invoices(db, inv),
+        # 同客户全部有效收费单（跨宠物、跨日期）
+        "customer_printable_invoice_count": len(
+            _customer_printable_invoices(db, request, inv.customer_id)
+        ) if inv.customer_id else 0,
     })
 
 

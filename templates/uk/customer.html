@@ -896,6 +896,11 @@
              href="/admin/customers/{{ cust.id }}?pet_id={{ active_pet_id }}&tab=invoices&invoice_scope=all">
             全部宠物 · {{ customer_invoice_count }}
           </a>
+          {% if customer_printable_invoice_count > 0 %}
+          <a class="uk-btn ghost sm" href="/admin/customers/{{ cust.id }}/invoices/combined-print" target="_blank">
+            全合并打印 · {{ customer_printable_invoice_count }}张
+          </a>
+          {% endif %}
         </span>
       </div>
       {% if pet_invoices %}
