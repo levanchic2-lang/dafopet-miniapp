@@ -1,0 +1,37 @@
+{% extends "uk/_base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<style>
+  .editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:28px;align-items:start}.editor-main{border-top:3px double var(--ink);padding-top:18px}.editor-main label,.editor-side label{display:block;font-size:9pt;color:var(--ink-3);margin:0 0 6px}.editor-main input,.editor-main textarea,.editor-main select,.editor-side input{width:100%;box-sizing:border-box;border:.5px solid var(--hair);background:var(--paper);padding:10px;font:10.5pt Georgia,"Source Han Serif SC",serif}.field{margin-bottom:16px}.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.editor-side{border:.5px solid var(--hair);padding:18px;position:sticky;top:20px}.status-actions form{margin-top:8px}.status-actions button{width:100%}@media(max-width:800px){.editor-grid{grid-template-columns:1fr}.editor-side{position:static}.two{grid-template-columns:1fr}}
+</style>
+<div class="uk-container">
+  <div class="uk-page-head"><div><div class="uk-eyebrow">公开内容中心</div><h1>{{ title }}</h1><p>请只填写允许对外公开的脱敏信息。</p></div><div><a class="uk-btn ghost" href="/admin/content">返回列表</a>{% if row %} <a class="uk-btn ghost" href="/site-preview/content/{{ row.id }}" target="_blank">预览</a>{% endif %}</div></div>
+  {% if request.query_params.get('msg') %}<div class="uk-alert success">{{ request.query_params.get('msg') }}</div>{% endif %}
+  <div class="editor-grid">
+    <form method="post" action="{% if row %}/admin/content/{{ row.id }}/save{% else %}/admin/content/save{% endif %}" class="editor-main" id="content-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="two"><div class="field"><label>内容类型</label><select name="content_type">{% for key,label in type_labels.items() %}<option value="{{ key }}" {% if row and row.content_type==key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div><div class="field"><label>英文网址名</label><input name="slug" value="{{ row.slug if row else '' }}" placeholder="vaccination-service" pattern="[a-z0-9-]+" required></div></div>
+      <div class="field"><label>标题</label><input name="title" value="{{ row.title if row else '' }}" required></div>
+      <div class="field"><label>摘要</label><textarea name="summary" rows="3">{{ row.summary if row else '' }}</textarea></div>
+      <div class="field"><label>正文（纯文字，空行自动分段）</label><textarea name="body" rows="18">{{ row.body if row else '' }}</textarea></div>
+      <div class="field"><label>封面图网址（可选）</label><input name="cover_image_url" value="{{ row.cover_image_url if row else '' }}" placeholder="/static/... 或 https://..."></div>
+      <div class="two"><div class="field"><label>SEO 标题</label><input name="seo_title" value="{{ row.seo_title if row else '' }}"></div><div class="field"><label>SEO 摘要</label><input name="seo_description" value="{{ row.seo_description if row else '' }}"></div></div>
+      <div class="two"><div class="field"><label>素材来源</label><input name="source_type" value="{{ row.source_type if row else 'manual' }}" placeholder="manual / visit / report"></div><div class="field"><label>来源病历 ID（可选，仅内部追溯）</label><input name="source_visit_id" type="number" value="{{ row.source_visit_id if row and row.source_visit_id else '' }}"></div></div>
+      <div class="two"><div class="field"><label>医疗审核人</label><input name="medical_reviewer" value="{{ row.medical_reviewer if row else '' }}"></div><div class="field"><label style="margin-top:26px"><input style="width:auto" type="checkbox" name="is_featured" value="1" {% if row and row.is_featured %}checked{% endif %}> 首页重点展示</label></div></div>
+      <button class="uk-btn" type="submit">保存草稿</button>
+    </form>
+    <aside class="editor-side">
+      <div style="font-size:9pt;color:var(--ink-3)">当前状态</div><div style="font-size:17pt;font-weight:700;margin:4px 0 16px">{{ status_labels.get(row.status,row.status) if row else '尚未保存' }}</div>
+      {% if row %}<div style="font-size:9pt;line-height:1.8;color:var(--ink-2)">创建：{{ row.created_by or '—' }}<br>审核：{{ row.reviewed_by or '—' }}<br>医疗审核人：{{ row.medical_reviewer or '—' }}</div>
+      <hr style="border:0;border-top:.5px solid var(--hair);margin:18px 0">
+      <div class="status-actions">
+        {% if row.status=='draft' %}<form method="post" action="/admin/content/{{ row.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="review"><button class="uk-btn" type="submit">通过医疗审核</button></form>{% endif %}
+        {% if row.status=='reviewed' and request.session.get('admin_role') != 'staff' %}<form method="post" action="/admin/content/{{ row.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="publish"><button class="uk-btn" type="submit">标记为已发布</button></form>{% endif %}
+        {% if row.status in ['reviewed','published','archived'] %}<form method="post" action="/admin/content/{{ row.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="draft"><button class="uk-btn ghost" type="submit">退回草稿</button></form>{% endif %}
+        {% if row.status!='archived' %}<form method="post" action="/admin/content/{{ row.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="archive"><button class="uk-btn ghost" type="submit">下线归档</button></form>{% endif %}
+      </div>{% endif %}
+      <p style="font-size:8.5pt;color:var(--ink-3);line-height:1.7;margin-top:18px">保存不会对外发布。已审核或已发布的内容一旦修改，会自动退回草稿，必须重新完成医疗审核和发布。</p>
+    </aside>
+  </div>
+</div>
+{% endblock %}

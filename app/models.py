@@ -2236,3 +2236,61 @@ class AnesthesiaMedicationEvent(Base):
     sheet = relationship("AnesthesiaMonitorSheet", back_populates="medication_events")
     open_vial = relationship("AnesthesiaOpenVial", back_populates="events", foreign_keys=[open_vial_id])
     inventory_item = relationship("InventoryItem", foreign_keys=[item_id])
+
+
+class BrandSettings(Base):
+    """公开网站与品牌的单一配置源。
+
+    公开页面不直接写死医院名称和 Logo，为未来更名保留一次切换能力。
+    """
+    __tablename__ = "brand_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    display_name: Mapped[str] = mapped_column(String(160), default="大风动物医院")
+    legal_name: Mapped[str] = mapped_column(String(200), default="")
+    english_name: Mapped[str] = mapped_column(String(200), default="Dafo Animal Hospital")
+    tagline: Mapped[str] = mapped_column(String(240), default="独立、审慎、有记录的动物医疗")
+    logo_url: Mapped[str] = mapped_column(String(500), default="/static/logo.png")
+    public_domain: Mapped[str] = mapped_column(String(300), default="https://dafopet.com")
+    phone: Mapped[str] = mapped_column(String(80), default="")
+    address: Mapped[str] = mapped_column(String(500), default="")
+    business_hours: Mapped[str] = mapped_column(String(300), default="")
+    footer_text: Mapped[str] = mapped_column(String(500), default="")
+    social_links_json: Mapped[str] = mapped_column(Text, default="{}")
+    public_site_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    allow_indexing: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_by: Mapped[str] = mapped_column(String(80), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PublicContent(Base):
+    """经脱敏和人工审核后的公开内容副本。
+
+    公开网站只读本表，不会直接查询客户病历、报告或签名文书。
+    """
+    __tablename__ = "public_contents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    content_type: Mapped[str] = mapped_column(String(24), default="article", index=True)  # service/faq/case/article
+    title: Mapped[str] = mapped_column(String(240), default="")
+    slug: Mapped[str] = mapped_column(String(240), unique=True, nullable=False, index=True)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    cover_image_url: Mapped[str] = mapped_column(String(500), default="")
+    seo_title: Mapped[str] = mapped_column(String(240), default="")
+    seo_description: Mapped[str] = mapped_column(String(500), default="")
+    source_type: Mapped[str] = mapped_column(String(30), default="manual")
+    source_visit_id: Mapped[int | None] = mapped_column(
+        ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None
+    )
+    medical_reviewer: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)  # draft/reviewed/published/archived
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    reviewed_by: Mapped[str] = mapped_column(String(80), default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    source_visit = relationship("Visit", foreign_keys=[source_visit_id])

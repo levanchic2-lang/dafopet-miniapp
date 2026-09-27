@@ -1,0 +1,40 @@
+{% extends "uk/_base.html" %}
+{% block title %}公开内容中心{% endblock %}
+{% block content %}
+<style>
+  .content-kpis{display:grid;grid-template-columns:repeat(4,1fr);border-top:3px double var(--ink);border-bottom:.5px solid var(--hair);margin:18px 0 22px}
+  .content-kpi{padding:16px;border-right:.5px solid var(--hair)}.content-kpi:last-child{border-right:0}.content-kpi b{display:block;font-size:22pt}.content-kpi span{font-size:9pt;color:var(--ink-3)}
+  .content-toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap}.content-filters{display:flex;gap:8px;flex-wrap:wrap}
+  .content-table{width:100%;border-collapse:collapse}.content-table th,.content-table td{padding:11px 8px;border-bottom:.5px solid var(--hair);text-align:left;vertical-align:top}.content-table th{font-size:8.5pt;color:var(--ink-3);font-weight:400}.content-table .title{font-weight:700}.content-table .summary{font-size:9pt;color:var(--ink-3);margin-top:4px;max-width:620px}
+  @media(max-width:760px){.content-kpis{grid-template-columns:1fr 1fr}.content-table th:nth-child(2),.content-table td:nth-child(2){display:none}}
+</style>
+<div class="uk-container">
+  <div class="uk-page-head">
+    <div><div class="uk-eyebrow">系统 / 公开站点</div><h1>公开内容中心</h1><p>这里只保存经脱敏和审核的公开副本，不会直接将客户病历暴露给网站。</p></div>
+    <div>{% if request.session.get('admin_role') != 'staff' %}<a class="uk-btn ghost" href="/admin/brand">品牌设置</a> {% endif %}<a class="uk-btn ghost" href="/site-preview" target="_blank">预览网站</a> <a class="uk-btn" href="/admin/content/new">新建内容</a></div>
+  </div>
+  {% if request.query_params.get('msg') %}<div class="uk-alert success">{{ request.query_params.get('msg') }}</div>{% endif %}
+  <div class="content-kpis">
+    {% for key,label in status_labels.items() %}<div class="content-kpi"><b>{{ counts[key] }}</b><span>{{ label }}</span></div>{% endfor %}
+  </div>
+  <div class="content-toolbar">
+    <form method="get" class="content-filters">
+      <select name="status"><option value="">全部状态</option>{% for key,label in status_labels.items() %}<option value="{{ key }}" {% if status_filter==key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <select name="content_type"><option value="">全部类型</option>{% for key,label in type_labels.items() %}<option value="{{ key }}" {% if type_filter==key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <button class="uk-btn ghost sm" type="submit">筛选</button>
+    </form>
+    {% if total_count == 0 and request.session.get('admin_role') != 'staff' %}<form method="post" action="/admin/content/seed"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="uk-btn ghost sm" type="submit">建立首批服务与 FAQ 草稿</button></form>{% endif %}
+  </div>
+  {% if rows %}
+  <table class="content-table"><thead><tr><th>内容</th><th>网址 / 来源</th><th>状态</th><th>更新</th><th></th></tr></thead><tbody>
+  {% for row in rows %}<tr>
+    <td><div class="title">{{ row.title }}</div><div class="summary">{{ row.summary or '暂无摘要' }}</div></td>
+    <td><code>/site/{{ row.slug }}</code><br><small>{{ type_labels.get(row.content_type,row.content_type) }} · {{ row.source_type }}</small></td>
+    <td><span class="uk-pill {% if row.status=='published' %}green{% elif row.status=='reviewed' %}amber{% endif %}">{{ status_labels.get(row.status,row.status) }}</span></td>
+    <td>{{ row.updated_at|bjtime if row.updated_at else '—' }}</td>
+    <td style="white-space:nowrap"><a href="/site-preview/content/{{ row.id }}" target="_blank">预览</a> · <a href="/admin/content/{{ row.id }}/edit">编辑</a></td>
+  </tr>{% endfor %}
+  </tbody></table>
+  {% else %}<div class="uk-empty">还没有公开内容。可以先建立首批内容骨架，再逐条完善。</div>{% endif %}
+</div>
+{% endblock %}

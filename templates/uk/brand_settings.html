@@ -1,0 +1,55 @@
+{% extends "uk/_base.html" %}
+{% block title %}品牌与公开网站设置{% endblock %}
+{% block content %}
+<style>
+  .brand-grid { display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:28px;align-items:start; }
+  .brand-form { border-top:3px double var(--ink);padding-top:18px; }
+  .brand-fields { display:grid;grid-template-columns:1fr 1fr;gap:16px 20px; }
+  .brand-fields .wide { grid-column:1/-1; }
+  .brand-fields label { display:block;font-size:9pt;color:var(--ink-3);margin-bottom:6px; }
+  .brand-fields input,.brand-fields textarea { width:100%;box-sizing:border-box;border:0.5px solid var(--hair);background:var(--paper);padding:10px 11px;font:10.5pt Georgia,"Source Han Serif SC",serif; }
+  .brand-preview { border:0.5px solid var(--hair);padding:20px;position:sticky;top:20px; }
+  .brand-preview img { width:72px;height:72px;object-fit:contain;display:block;margin-bottom:16px; }
+  .switch-row { display:flex;align-items:flex-start;gap:10px;border-top:0.5px solid var(--hair);padding:14px 0; }
+  .switch-row input { width:18px;height:18px;margin:1px 0 0; }
+  @media(max-width:800px){.brand-grid{grid-template-columns:1fr}.brand-fields{grid-template-columns:1fr}.brand-preview{position:static}}
+</style>
+<div class="uk-container">
+  <div class="uk-page-head">
+    <div><div class="uk-eyebrow">系统 / GEO 内容中心</div><h1>品牌与公开网站设置</h1><p>所有新的公开页面只从这里读取品牌信息，以后更名时只修改一次。</p></div>
+    <div><a class="uk-btn ghost" href="/admin/content">内容中心</a> <a class="uk-btn ghost" href="/site-preview" target="_blank">预览网站</a></div>
+  </div>
+  {% if request.query_params.get('msg') %}<div class="uk-alert success">{{ request.query_params.get('msg') }}</div>{% endif %}
+  <div class="brand-grid">
+    <form method="post" action="/admin/brand" class="brand-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="brand-fields">
+        <div><label>对外显示名称</label><input name="display_name" value="{{ brand.display_name }}" required></div>
+        <div><label>英文名称</label><input name="english_name" value="{{ brand.english_name }}"></div>
+        <div class="wide"><label>工商 / 执业主体名称（可与品牌名不同）</label><input name="legal_name" value="{{ brand.legal_name }}"></div>
+        <div class="wide"><label>一句话定位</label><input name="tagline" value="{{ brand.tagline }}"></div>
+        <div><label>Logo 网址</label><input name="logo_url" value="{{ brand.logo_url }}" placeholder="/static/logo.png"></div>
+        <div><label>未来公开域名</label><input name="public_domain" value="{{ brand.public_domain }}" placeholder="https://example.com"></div>
+        <div><label>联系电话</label><input name="phone" value="{{ brand.phone }}"></div>
+        <div><label>营业时间</label><input name="business_hours" value="{{ brand.business_hours }}"></div>
+        <div class="wide"><label>门店地址</label><input name="address" value="{{ brand.address }}"></div>
+        <div class="wide"><label>页脚文字</label><input name="footer_text" value="{{ brand.footer_text }}"></div>
+        <div class="wide"><label>社交平台链接 JSON（暂可留空）</label><textarea name="social_links_json" rows="3">{{ brand.social_links_json }}</textarea></div>
+      </div>
+      <div style="margin-top:20px">
+        <label class="switch-row"><input type="checkbox" name="public_site_enabled" value="1" {% if brand.public_site_enabled %}checked{% endif %}><span><b>开启正式公开网站</b><br><small>当前阶段请保持关闭，关闭时 /site 对外返回 404。</small></span></label>
+        <label class="switch-row"><input type="checkbox" name="allow_indexing" value="1" {% if brand.allow_indexing %}checked{% endif %}><span><b>允许搜索引擎和 AI 收录</b><br><small>只有正式网站开启后才会生效。品牌未确定前不要勾选。</small></span></label>
+      </div>
+      <button class="uk-btn" type="submit">保存设置</button>
+    </form>
+    <aside class="brand-preview">
+      {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="Logo 预览">{% endif %}
+      <div style="font-size:18pt;font-weight:700">{{ brand.display_name }}</div>
+      <div style="font-size:9pt;color:var(--ink-3);margin-top:4px">{{ brand.english_name }}</div>
+      <p style="line-height:1.7">{{ brand.tagline }}</p>
+      <hr style="border:0;border-top:.5px solid var(--hair);margin:18px 0">
+      <div style="font-size:9pt;line-height:1.8;color:var(--ink-2)">{{ brand.phone or '电话待补充' }}<br>{{ brand.address or '地址待补充' }}<br>{{ brand.business_hours or '营业时间待补充' }}</div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

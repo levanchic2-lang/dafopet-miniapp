@@ -194,7 +194,8 @@
   {% elif _path.startswith('/admin/hr') or _path.startswith('/admin/staff')
         or _path.startswith('/admin/adoption') or _path.startswith('/admin/changelog')
         or _path.startswith('/admin/audit-logs') or _path.startswith('/admin/users')
-        or _path.startswith('/admin/data-cleanup') or _path.startswith('/showcase') %}
+        or _path.startswith('/admin/data-cleanup') or _path.startswith('/admin/content')
+        or _path.startswith('/admin/brand') or _path.startswith('/showcase') %}
     {% set _active_tab = 'system' %}
   {% else %}
     {% set _active_tab = 'reception' %}
@@ -273,6 +274,10 @@
   <div class="uk-ribbon-icons {% if _active_tab=='system' %}active{% endif %}" data-tab-content="system">
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/hr') %}current{% endif %}" href="/admin/hr"><i data-lucide="briefcase"></i>人事管理</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/adoption') %}current{% endif %}" href="/admin/adoption"><i data-lucide="cat"></i>待领养</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/content') %}current{% endif %}" href="/admin/content"><i data-lucide="newspaper"></i>公开内容</a>
+    {% if request.session.get('admin_role') != 'staff' %}
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/brand') %}current{% endif %}" href="/admin/brand"><i data-lucide="settings-2"></i>品牌设置</a>
+    {% endif %}
     <a class="uk-ribbon-icon {% if _path.startswith('/showcase') %}current{% endif %}" href="/showcase"><i data-lucide="sparkles"></i>公布展示</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/changelog') %}current{% endif %}" href="/admin/changelog"><i data-lucide="pencil-line"></i>开发日志</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/audit-logs') %}current{% endif %}" href="/admin/audit-logs"><i data-lucide="shield-check"></i>审计日志</a>

@@ -132,6 +132,8 @@ from app.models import (
     IOLog,
     FeedingLog,
     HandoverNote,
+    BrandSettings,
+    PublicContent,
 )
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
@@ -36085,3 +36087,459 @@ async def m_dispensing_undo(
         p.status = "issued"
     db.commit()
     return RedirectResponse(f"/m/dispensing/{presc_id}?msg=已撤销配齐", status_code=303)
+
+
+# ─── 公开网站 / GEO 内容中心 ───
+
+_PUBLIC_CONTENT_TYPES = {
+    "service": "服务说明",
+    "faq": "常见问题",
+    "case": "匿名病例",
+    "article": "科普文章",
+}
+_PUBLIC_CONTENT_STATUSES = {
+    "draft": "草稿",
+    "reviewed": "已医疗审核",
+    "published": "已发布",
+    "archived": "已下线",
+}
+
+
+def _brand_settings(db: Session) -> BrandSettings:
+    row = db.get(BrandSettings, 1)
+    if row:
+        return row
+    row = BrandSettings(id=1)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def _public_noindex_headers() -> dict[str, str]:
+    return {"X-Robots-Tag": "noindex, nofollow, noarchive"}
+
+
+def _content_slug(raw: str) -> str:
+    slug = re.sub(r"[^a-z0-9-]+", "-", (raw or "").strip().lower()).strip("-")
+    return re.sub(r"-{2,}", "-", slug)[:220]
+
+
+def _audit_public_content(db: Session, request: Request, action: str, row: PublicContent | None, detail: str = "") -> None:
+    db.add(AuditLog(
+        action=action,
+        actor=request.session.get("admin_username", "admin"),
+        application_id=None,
+        ip=request.client.host if request.client else "",
+        user_agent=(request.headers.get("user-agent") or "")[:300],
+        detail=f"public_content_id={row.id if row else ''}; {detail}"[:2000],
+    ))
+
+
+@app.get("/admin/content", response_class=HTMLResponse)
+async def admin_public_content_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    status: str = Query(""),
+    content_type: str = Query(""),
+):
+    require_admin(request)
+    q = db.query(PublicContent)
+    if status in _PUBLIC_CONTENT_STATUSES:
+        q = q.filter(PublicContent.status == status)
+    if content_type in _PUBLIC_CONTENT_TYPES:
+        q = q.filter(PublicContent.content_type == content_type)
+    rows = q.order_by(PublicContent.updated_at.desc(), PublicContent.id.desc()).all()
+    total_count = db.query(func.count(PublicContent.id)).scalar() or 0
+    counts = {
+        key: db.query(func.count(PublicContent.id)).filter(PublicContent.status == key).scalar() or 0
+        for key in _PUBLIC_CONTENT_STATUSES
+    }
+    return templates.TemplateResponse(request, "uk/content_list.html", {
+        "request": request,
+        "title": "公开内容中心",
+        "rows": rows,
+        "total_count": total_count,
+        "counts": counts,
+        "status_filter": status,
+        "type_filter": content_type,
+        "type_labels": _PUBLIC_CONTENT_TYPES,
+        "status_labels": _PUBLIC_CONTENT_STATUSES,
+        "brand": _brand_settings(db),
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.get("/admin/content/new", response_class=HTMLResponse)
+@app.get("/admin/content/{content_id}/edit", response_class=HTMLResponse)
+async def admin_public_content_form(
+    request: Request,
+    content_id: int = 0,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    row = db.get(PublicContent, content_id) if content_id else None
+    if content_id and not row:
+        raise HTTPException(404)
+    return templates.TemplateResponse(request, "uk/content_form.html", {
+        "request": request,
+        "title": "编辑公开内容" if row else "新建公开内容",
+        "row": row,
+        "type_labels": _PUBLIC_CONTENT_TYPES,
+        "status_labels": _PUBLIC_CONTENT_STATUSES,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/content/save")
+@app.post("/admin/content/{content_id}/save")
+async def admin_public_content_save(
+    request: Request,
+    content_id: int = 0,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    content_type: str = Form("article"),
+    title: str = Form(""),
+    slug: str = Form(""),
+    summary: str = Form(""),
+    body: str = Form(""),
+    cover_image_url: str = Form(""),
+    seo_title: str = Form(""),
+    seo_description: str = Form(""),
+    source_type: str = Form("manual"),
+    source_visit_id: str = Form(""),
+    medical_reviewer: str = Form(""),
+    is_featured: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    if content_type not in _PUBLIC_CONTENT_TYPES:
+        raise HTTPException(400, "内容类型无效")
+    clean_title = (title or "").strip()
+    clean_slug = _content_slug(slug)
+    if not clean_title or not clean_slug:
+        raise HTTPException(400, "标题和英文网址名不能为空")
+    duplicate = db.query(PublicContent).filter(PublicContent.slug == clean_slug)
+    if content_id:
+        duplicate = duplicate.filter(PublicContent.id != content_id)
+    if duplicate.first():
+        raise HTTPException(400, "英文网址名已存在")
+    row = db.get(PublicContent, content_id) if content_id else PublicContent(
+        created_by=request.session.get("admin_username", "admin")
+    )
+    if content_id and not row:
+        raise HTTPException(404)
+    if not content_id:
+        db.add(row)
+    was_approved = bool(content_id and row.status in ("reviewed", "published"))
+    row.content_type = content_type
+    row.title = clean_title[:240]
+    row.slug = clean_slug
+    row.summary = (summary or "").strip()
+    row.body = (body or "").strip()
+    row.cover_image_url = (cover_image_url or "").strip()[:500]
+    row.seo_title = (seo_title or "").strip()[:240]
+    row.seo_description = (seo_description or "").strip()[:500]
+    row.source_type = (source_type or "manual").strip()[:30]
+    parsed_visit_id = int(source_visit_id) if source_visit_id.strip().isdigit() else None
+    if parsed_visit_id and not db.get(Visit, parsed_visit_id):
+        raise HTTPException(400, "来源病历不存在")
+    row.source_visit_id = parsed_visit_id
+    row.medical_reviewer = (medical_reviewer or "").strip()[:120]
+    row.is_featured = bool(is_featured)
+    if was_approved:
+        row.status = "draft"
+        row.reviewed_by = ""
+        row.reviewed_at = None
+        row.published_at = None
+    db.flush()
+    _audit_public_content(db, request, "public_content_save", row, f"status={row.status}; slug={row.slug}")
+    db.commit()
+    return RedirectResponse(f"/admin/content/{row.id}/edit?msg=已保存", status_code=303)
+
+
+@app.post("/admin/content/{content_id}/status")
+async def admin_public_content_status(
+    content_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    action: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    row = db.get(PublicContent, content_id)
+    if not row:
+        raise HTTPException(404)
+    now = datetime.utcnow()
+    actor = request.session.get("admin_username", "admin")
+    if action == "review":
+        if not row.title.strip() or not row.body.strip():
+            raise HTTPException(400, "标题和正文完整后才能通过医疗审核")
+        if not row.medical_reviewer.strip():
+            raise HTTPException(400, "请先填写医疗审核人")
+        row.status = "reviewed"
+        row.reviewed_by = actor
+        row.reviewed_at = now
+    elif action == "publish":
+        require_superadmin(request)
+        if row.status != "reviewed":
+            raise HTTPException(400, "内容必须先通过医疗审核")
+        row.status = "published"
+        row.published_at = now
+    elif action == "draft":
+        row.status = "draft"
+        row.published_at = None
+    elif action == "archive":
+        row.status = "archived"
+    else:
+        raise HTTPException(400, "操作无效")
+    _audit_public_content(db, request, f"public_content_{action}", row, f"status={row.status}")
+    db.commit()
+    return RedirectResponse(f"/admin/content/{row.id}/edit?msg=状态已更新", status_code=303)
+
+
+@app.post("/admin/content/seed")
+async def admin_public_content_seed(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    starters = [
+        ("service", "TNR 申请与手术服务", "tnr-service", "用于流浪猫绝育、返放与相关风险告知的服务说明。"),
+        ("service", "犬猫绝育服务", "spay-neuter-service", "说明术前评估、麻醉、缝合、术后恢复与复查流程。"),
+        ("service", "疫苗接种服务", "vaccination-service", "说明接种前评估、接种记录与接种后注意事项。"),
+        ("service", "住院护理服务", "inpatient-care-service", "说明住院期间的用药、观察、沟通和出院资料。"),
+        ("service", "X 光与超声检查", "diagnostic-imaging-service", "说明影像检查的适用场景、报告交付与复诊建议。"),
+        ("service", "宠物保险材料服务", "insurance-material-service", "说明保险材料包、发票和提交流程。"),
+        ("faq", "就诊前需要准备什么？", "prepare-for-visit", "请根据就诊项目补充携带资料、禁食禁水和既往病史要求。"),
+        ("faq", "检查报告如何查看和保存？", "view-medical-reports", "说明报告查看、PDF 保存、复查使用和隐私保护。"),
+    ]
+    created = 0
+    for content_type, title, slug, summary in starters:
+        if db.query(PublicContent).filter(PublicContent.slug == slug).first():
+            continue
+        db.add(PublicContent(
+            content_type=content_type,
+            title=title,
+            slug=slug,
+            summary=summary,
+            body=summary + "\n\n待医生根据医院当前实际流程补充并审核。",
+            status="draft",
+            created_by=request.session.get("admin_username", "admin"),
+        ))
+        created += 1
+    _audit_public_content(db, request, "public_content_seed", None, f"created={created}")
+    db.commit()
+    return RedirectResponse(f"/admin/content?msg=已建立{created}条初始草稿", status_code=303)
+
+
+@app.get("/admin/brand", response_class=HTMLResponse)
+async def admin_brand_settings(request: Request, db: Session = Depends(get_db)):
+    require_superadmin(request)
+    return templates.TemplateResponse(request, "uk/brand_settings.html", {
+        "request": request,
+        "title": "品牌与公开网站设置",
+        "brand": _brand_settings(db),
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/brand")
+async def admin_brand_settings_save(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    display_name: str = Form(""),
+    legal_name: str = Form(""),
+    english_name: str = Form(""),
+    tagline: str = Form(""),
+    logo_url: str = Form(""),
+    public_domain: str = Form(""),
+    phone: str = Form(""),
+    address: str = Form(""),
+    business_hours: str = Form(""),
+    footer_text: str = Form(""),
+    social_links_json: str = Form("{}"),
+    public_site_enabled: str = Form(""),
+    allow_indexing: str = Form(""),
+):
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    row = _brand_settings(db)
+    try:
+        parsed_social = json.loads(social_links_json or "{}")
+        if not isinstance(parsed_social, dict):
+            raise ValueError
+    except Exception:
+        raise HTTPException(400, "社交平台链接必须是 JSON 对象")
+    row.display_name = (display_name or "").strip()[:160] or "未命名动物医院"
+    row.legal_name = (legal_name or "").strip()[:200]
+    row.english_name = (english_name or "").strip()[:200]
+    row.tagline = (tagline or "").strip()[:240]
+    row.logo_url = (logo_url or "").strip()[:500]
+    row.public_domain = (public_domain or "").strip().rstrip("/")[:300]
+    row.phone = (phone or "").strip()[:80]
+    row.address = (address or "").strip()[:500]
+    row.business_hours = (business_hours or "").strip()[:300]
+    row.footer_text = (footer_text or "").strip()[:500]
+    row.social_links_json = json.dumps(parsed_social, ensure_ascii=False)
+    row.public_site_enabled = bool(public_site_enabled)
+    row.allow_indexing = bool(allow_indexing) and row.public_site_enabled
+    row.updated_by = request.session.get("admin_username", "admin")
+    _audit_public_content(db, request, "brand_settings_save", None, f"public={row.public_site_enabled}; indexing={row.allow_indexing}")
+    db.commit()
+    return RedirectResponse("/admin/brand?msg=设置已保存", status_code=303)
+
+
+def _site_schema(brand: BrandSettings) -> dict:
+    schema = {
+        "@context": "https://schema.org",
+        "@type": "VeterinaryCare",
+        "name": brand.display_name,
+        "description": brand.tagline,
+        "url": brand.public_domain or "",
+    }
+    if brand.logo_url:
+        schema["logo"] = brand.logo_url
+    if brand.phone:
+        schema["telephone"] = brand.phone
+    if brand.address:
+        schema["address"] = {"@type": "PostalAddress", "streetAddress": brand.address}
+    return schema
+
+
+def _content_schema(brand: BrandSettings, row: PublicContent) -> dict:
+    page_url = f"{(brand.public_domain or '').rstrip('/')}/site/{quote(row.slug)}"
+    if row.content_type == "service":
+        return {
+            "@context": "https://schema.org",
+            "@type": "Service",
+            "name": row.title,
+            "description": row.seo_description or row.summary,
+            "url": page_url,
+            "provider": _site_schema(brand),
+        }
+    if row.content_type == "faq":
+        return {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [{
+                "@type": "Question",
+                "name": row.title,
+                "acceptedAnswer": {"@type": "Answer", "text": row.body},
+            }],
+        }
+    return {
+        "@context": "https://schema.org",
+        "@type": "MedicalWebPage" if row.content_type == "case" else "Article",
+        "headline": row.title,
+        "description": row.seo_description or row.summary,
+        "url": page_url,
+        "publisher": _site_schema(brand),
+    }
+
+
+def _site_home_context(db: Session, brand: BrandSettings, preview: bool) -> dict:
+    allowed = ("reviewed", "published") if preview else ("published",)
+    rows = db.query(PublicContent).filter(PublicContent.status.in_(allowed)).order_by(
+        PublicContent.is_featured.desc(), PublicContent.published_at.desc(), PublicContent.updated_at.desc()
+    ).all()
+    grouped = {key: [] for key in _PUBLIC_CONTENT_TYPES}
+    for row in rows:
+        grouped.setdefault(row.content_type, []).append(row)
+    return {
+        "brand": brand,
+        "grouped": grouped,
+        "type_labels": _PUBLIC_CONTENT_TYPES,
+        "preview": preview,
+        "schema_data": _site_schema(brand),
+    }
+
+
+@app.get("/site-preview", response_class=HTMLResponse)
+async def site_preview(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    ctx = {"request": request, **_site_home_context(db, _brand_settings(db), True)}
+    return templates.TemplateResponse(request, "public/site_home.html", ctx, headers=_public_noindex_headers())
+
+
+@app.get("/site-preview/content/{content_id}", response_class=HTMLResponse)
+async def site_preview_content(content_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    row = db.get(PublicContent, content_id)
+    if not row:
+        raise HTTPException(404)
+    brand = _brand_settings(db)
+    ctx = {
+        "request": request,
+        "brand": brand,
+        "row": row,
+        "preview": True,
+        "type_labels": _PUBLIC_CONTENT_TYPES,
+        "schema_data": _content_schema(brand, row),
+    }
+    return templates.TemplateResponse(request, "public/site_content.html", ctx, headers=_public_noindex_headers())
+
+
+@app.get("/site", response_class=HTMLResponse)
+async def public_site_home(request: Request, db: Session = Depends(get_db)):
+    brand = _brand_settings(db)
+    if not brand.public_site_enabled:
+        raise HTTPException(404)
+    headers = {} if brand.allow_indexing else _public_noindex_headers()
+    ctx = {"request": request, **_site_home_context(db, brand, False)}
+    return templates.TemplateResponse(request, "public/site_home.html", ctx, headers=headers)
+
+
+@app.get("/site/{slug}", response_class=HTMLResponse)
+async def public_site_content(slug: str, request: Request, db: Session = Depends(get_db)):
+    brand = _brand_settings(db)
+    if not brand.public_site_enabled:
+        raise HTTPException(404)
+    row = db.query(PublicContent).filter(PublicContent.slug == slug, PublicContent.status == "published").first()
+    if not row:
+        raise HTTPException(404)
+    headers = {} if brand.allow_indexing else _public_noindex_headers()
+    ctx = {
+        "request": request,
+        "brand": brand,
+        "row": row,
+        "preview": False,
+        "type_labels": _PUBLIC_CONTENT_TYPES,
+        "schema_data": _content_schema(brand, row),
+    }
+    return templates.TemplateResponse(request, "public/site_content.html", ctx, headers=headers)
+
+
+@app.get("/robots.txt", response_class=Response)
+async def public_robots(db: Session = Depends(get_db)):
+    brand = _brand_settings(db)
+    lines = [
+        "User-agent: *",
+        "Disallow: /admin/",
+        "Disallow: /m/",
+        "Disallow: /api/",
+        "Disallow: /site-preview",
+    ]
+    if not (brand.public_site_enabled and brand.allow_indexing):
+        lines.append("Disallow: /site")
+    else:
+        lines.extend(["Allow: /site", f"Sitemap: {brand.public_domain}/sitemap.xml"])
+    return Response("\n".join(lines) + "\n", media_type="text/plain")
+
+
+@app.get("/sitemap.xml", response_class=Response)
+async def public_sitemap(db: Session = Depends(get_db)):
+    from html import escape as _xml_escape
+    brand = _brand_settings(db)
+    if not (brand.public_site_enabled and brand.allow_indexing):
+        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>', media_type="application/xml")
+    base = (brand.public_domain or "https://dafopet.com").rstrip("/")
+    urls = [f"{base}/site"]
+    rows = db.query(PublicContent).filter(PublicContent.status == "published").order_by(PublicContent.id.asc()).all()
+    urls.extend(f"{base}/site/{quote(row.slug)}" for row in rows)
+    body = "".join(f"<url><loc>{_xml_escape(url)}</loc></url>" for url in urls)
+    return Response(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>', media_type="application/xml")

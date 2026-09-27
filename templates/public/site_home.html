@@ -1,0 +1,7 @@
+{% extends "public/_base.html" %}
+{% block content %}
+<main><section class="pub-intro"><div class="pub-shell"><h1>{{ brand.display_name }}</h1><p>{{ brand.tagline }}</p><div class="pub-meta">{% if brand.phone %}<span>电话 {{ brand.phone }}</span>{% endif %}{% if brand.business_hours %}<span>{{ brand.business_hours }}</span>{% endif %}{% if brand.address %}<span>{{ brand.address }}</span>{% endif %}</div></div></section>
+{% set sections=[('services','service','医院服务','把服务范围、流程和注意事项说清楚。'),('knowledge','article','健康知识','来自临床工作的可执行建议。'),('cases','case','匿名病例','仅展示经脱敏和人工审核的公开副本。'),('faq','faq','常见问题','回答就诊前后最常被问到的问题。')] %}
+{% for anchor,key,title,desc in sections %}<section class="pub-band" id="{{ anchor }}"><div class="pub-shell"><div class="pub-band-head"><h2>{{ title }}</h2><p>{{ desc }}</p></div>{% if grouped.get(key) %}<div class="pub-list">{% for row in grouped.get(key) %}<a class="pub-row" href="{% if preview %}/site-preview/content/{{ row.id }}{% else %}/site/{{ row.slug }}{% endif %}"><span class="kind">{{ type_labels.get(row.content_type,row.content_type) }}</span><span><h3>{{ row.title }}</h3><p>{{ row.summary }}</p></span><span>→</span></a>{% endfor %}</div>{% else %}<div class="pub-empty">该栏目正在准备内容。</div>{% endif %}</div></section>{% endfor %}
+</main>
+{% endblock %}

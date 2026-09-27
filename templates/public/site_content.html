@@ -1,0 +1,4 @@
+{% extends "public/_base.html" %}
+{% block title %}{{ row.seo_title or row.title }} · {{ brand.display_name }}{% endblock %}
+{% block description %}{{ row.seo_description or row.summary }}{% endblock %}
+{% block content %}<main><article class="pub-shell"><header class="article-head"><div class="kind">{{ type_labels.get(row.content_type,row.content_type) }}{% if preview %} · {{ row.status }}{% endif %}</div><h1>{{ row.title }}</h1>{% if row.summary %}<p>{{ row.summary }}</p>{% endif %}{% if row.cover_image_url %}<img class="article-cover" src="{{ row.cover_image_url }}" alt="{{ row.title }}">{% endif %}</header><div class="article-body">{% for paragraph in row.body.split('\n\n') %}{% if paragraph.strip() %}<p>{{ paragraph }}</p>{% endif %}{% endfor %}<div class="article-note">{% if row.medical_reviewer %}医疗审核：{{ row.medical_reviewer }}。{% endif %}内容为一般健康教育信息，具体处置需结合动物的现场检查和个体情况。</div></div></article></main>{% endblock %}

@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}{{ brand.display_name }}{% endblock %}</title>
+<meta name="description" content="{% block description %}{{ brand.tagline }}{% endblock %}">
+{% if preview or not brand.allow_indexing %}<meta name="robots" content="noindex,nofollow,noarchive">{% endif %}
+{% if not preview and brand.public_domain %}<link rel="canonical" href="{{ brand.public_domain.rstrip('/') }}{{ request.url.path }}">{% endif %}
+{% if schema_data %}<script type="application/ld+json">{{ schema_data|tojson }}</script>{% endif %}
+<link rel="stylesheet" href="/static/public_site.css"></head><body>
+{% if preview %}<div class="pub-preview">内部预览站 · 已禁止搜索引擎和 AI 收录 · <a href="/admin/content">返回内容中心</a></div>{% endif %}
+<header class="pub-head"><div class="pub-shell pub-head-inner"><a class="pub-brand" href="{% if preview %}/site-preview{% else %}/site{% endif %}">{% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="{{ brand.display_name }} Logo">{% endif %}<span><strong>{{ brand.display_name }}</strong><small>{{ brand.english_name }}</small></span></a><nav class="pub-nav"><a href="{% if preview %}/site-preview{% else %}/site{% endif %}#services">医院服务</a><a href="{% if preview %}/site-preview{% else %}/site{% endif %}#knowledge">健康知识</a><a href="{% if preview %}/site-preview{% else %}/site{% endif %}#cases">匿名病例</a><a href="{% if preview %}/site-preview{% else %}/site{% endif %}#faq">常见问题</a><a href="/">进入 TNR</a></nav></div></header>
+{% block content %}{% endblock %}
+<footer class="pub-foot"><div class="pub-shell"><b>{{ brand.display_name }}</b>{% if brand.address %} · {{ brand.address }}{% endif %}{% if brand.phone %} · {{ brand.phone }}{% endif %}<br>{{ brand.footer_text or '本站内容仅用于健康教育，不替代执业兽医师的现场检查与诊疗。' }}</div></footer>
+</body></html>
