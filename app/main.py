@@ -36443,7 +36443,7 @@ def _content_schema(brand: BrandSettings, row: PublicContent) -> dict:
 
 
 def _site_home_context(db: Session, brand: BrandSettings, preview: bool) -> dict:
-    allowed = ("reviewed", "published") if preview else ("published",)
+    allowed = ("draft", "reviewed", "published") if preview else ("published",)
     rows = db.query(PublicContent).filter(PublicContent.status.in_(allowed)).order_by(
         PublicContent.is_featured.desc(), PublicContent.published_at.desc(), PublicContent.updated_at.desc()
     ).all()
