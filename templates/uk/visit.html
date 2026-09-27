@@ -239,6 +239,14 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
         <button type="submit" class="uk-btn danger sm">生成保险材料包</button>
       </form>
+      {% if public_case_draft %}
+        <a href="/admin/content/{{ public_case_draft.id }}/edit" class="uk-btn ghost sm">查看匿名病例草稿</a>
+      {% else %}
+        <form method="post" action="/admin/visits/{{ visit.id }}/public-case-draft" onsubmit="return confirm('系统会生成脱敏草稿，但仍需人工检查隐私与医疗内容。继续吗？');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="uk-btn ghost sm">生成匿名病例草稿</button>
+        </form>
+      {% endif %}
     {% if visit.status != 'closed' %}
       {% if is_superadmin %}
         <form method="post" action="/admin/visits/{{ visit.id }}/close" onsubmit="return confirm('结束病历后，处方、检查、本病历将不可改不可重开（合规要求）。确认结束？');">

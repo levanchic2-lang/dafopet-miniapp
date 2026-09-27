@@ -13541,6 +13541,10 @@ async def page_admin_visit_detail(
         sh.status == "active" and sh.generation_status == "processing"
         for sh in insurance_shares
     )
+    public_case_draft = db.query(PublicContent).filter(
+        PublicContent.source_visit_id == visit_id,
+        PublicContent.content_type == "case",
+    ).order_by(PublicContent.id.desc()).first()
     care_summary = _get_active_care_summary(db, visit_id)
     care_plan = _get_active_care_plan(db, visit_id)
     care_plan_tasks = _care_tasks_from_json(care_plan.tasks_json) if care_plan else []
@@ -13588,6 +13592,7 @@ async def page_admin_visit_detail(
         "insurance_shares": insurance_shares,
         "insurance_material_ready": insurance_material_ready,
         "insurance_material_generating": insurance_material_generating,
+        "public_case_draft": public_case_draft,
         "followups": followups,
         "care_summary": care_summary,
         "care_plan": care_plan,
@@ -36123,6 +36128,86 @@ def _public_noindex_headers() -> dict[str, str]:
 def _content_slug(raw: str) -> str:
     slug = re.sub(r"[^a-z0-9-]+", "-", (raw or "").strip().lower()).strip("-")
     return re.sub(r"-{2,}", "-", slug)[:220]
+
+
+def _deidentify_public_case_text(raw: str, customer: Customer | None, pet: Pet | None) -> str:
+    text = (raw or "").strip()
+    tokens: set[str] = set()
+    if customer:
+        tokens.update({customer.name, customer.phone, customer.id_number, customer.address})
+        tokens.update(part.strip() for part in (customer.phones_extra or "").split(","))
+    if pet:
+        tokens.update({pet.name, pet.medical_record_no, pet.microchip_id})
+    for token in sorted((value for value in tokens if value), key=len, reverse=True):
+        text = text.replace(token, "[已脱敏]")
+    text = re.sub(r"(?<!\d)1[3-9]\d{9}(?!\d)", "[手机号已脱敏]", text)
+    text = re.sub(r"(?<![0-9A-Za-z])\d{17}[0-9Xx](?![0-9A-Za-z])", "[证件号已脱敏]", text)
+    text = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "[邮箱已脱敏]", text)
+    return text
+
+
+def _public_case_body(visit: Visit, customer: Customer | None, pet: Pet | None) -> str:
+    species = "猫" if pet and pet.species == "cat" else "犬" if pet and pet.species == "dog" else "动物"
+    month = (visit.visit_date or "")[:7]
+    sections = [
+        ("病例概况", f"这是一例{species}诊疗记录" + (f"，就诊时间为 {month}" if month else "") + "。公开稿已移除主人、动物姓名和联系方式。"),
+        ("就诊原因", visit.chief_complaint),
+        ("检查情况", visit.physical_exam),
+        ("临床判断", visit.diagnosis),
+        ("处理方案", visit.treatment_plan),
+        ("恢复与随访", visit.follow_up_note),
+    ]
+    blocks: list[str] = []
+    for heading, value in sections:
+        clean = _deidentify_public_case_text(value, customer, pet)
+        if clean:
+            blocks.append(f"{heading}\n{clean}")
+    blocks.append("说明\n本病例仅用于动物健康教育，已进行隐私脱敏。个体情况不同，不能替代现场检查和诊疗建议。")
+    return "\n\n".join(blocks)
+
+
+@app.post("/admin/visits/{visit_id}/public-case-draft")
+async def create_public_case_draft_from_visit(
+    visit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "病历不存在")
+    customer = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    existing = db.query(PublicContent).filter(
+        PublicContent.source_visit_id == visit_id,
+        PublicContent.content_type == "case",
+    ).order_by(PublicContent.id.desc()).first()
+    if existing:
+        return RedirectResponse(f"/admin/content/{existing.id}/edit?msg=该病历已有匿名病例草稿", status_code=303)
+
+    species = "猫" if pet and pet.species == "cat" else "犬" if pet and pet.species == "dog" else "动物"
+    topic = _deidentify_public_case_text(visit.diagnosis or visit.chief_complaint, customer, pet)
+    topic = re.sub(r"\s+", " ", topic).strip(" ，。；;、")[:32]
+    title = f"{species}{'：' + topic if topic else ''}（匿名病例）"
+    row = PublicContent(
+        content_type="case",
+        title=title,
+        slug=f"case-{visit_id}",
+        summary=f"一例{species}诊疗记录的脱敏公开草稿，需医生复核后方可发布。",
+        body=_public_case_body(visit, customer, pet),
+        source_type="visit",
+        source_visit_id=visit_id,
+        status="draft",
+        created_by=request.session.get("admin_username", "admin"),
+    )
+    db.add(row)
+    db.flush()
+    _audit_public_content(db, request, "public_case_draft_create", row, f"source_visit_id={visit_id}")
+    db.commit()
+    return RedirectResponse(f"/admin/content/{row.id}/edit?msg=匿名病例草稿已生成，请复核脱敏结果和医疗内容", status_code=303)
 
 
 def _audit_public_content(db: Session, request: Request, action: str, row: PublicContent | None, detail: str = "") -> None:
