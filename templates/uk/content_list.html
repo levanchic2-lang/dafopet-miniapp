@@ -1,6 +1,6 @@
 {% extends "uk/_base.html" %}
 {% block title %}公开内容中心{% endblock %}
-{% block content %}
+{% block body %}
 <style>
   .content-kpis{display:grid;grid-template-columns:repeat(4,1fr);border-top:3px double var(--ink);border-bottom:.5px solid var(--hair);margin:18px 0 22px}
   .content-kpi{padding:16px;border-right:.5px solid var(--hair)}.content-kpi:last-child{border-right:0}.content-kpi b{display:block;font-size:22pt}.content-kpi span{font-size:9pt;color:var(--ink-3)}
@@ -11,7 +11,7 @@
 <div class="uk-container">
   <div class="uk-page-head">
     <div><div class="uk-eyebrow">系统 / 公开站点</div><h1>公开内容中心</h1><p>这里只保存经脱敏和审核的公开副本，不会直接将客户病历暴露给网站。</p></div>
-    <div>{% if request.session.get('admin_role') != 'staff' %}<a class="uk-btn ghost" href="/admin/brand">品牌设置</a> {% endif %}<a class="uk-btn ghost" href="/site-preview" target="_blank">预览网站</a> <a class="uk-btn" href="/admin/content/new">新建内容</a></div>
+    <div><a class="uk-btn ghost" href="/admin/content/case-candidates">挑选真实病例</a> {% if request.session.get('admin_role') != 'staff' %}<a class="uk-btn ghost" href="/admin/brand">品牌设置</a> {% endif %}<a class="uk-btn ghost" href="/site-preview" target="_blank">预览网站</a> <a class="uk-btn" href="/admin/content/new">新建内容</a></div>
   </div>
   {% if request.query_params.get('msg') %}<div class="uk-alert success">{{ request.query_params.get('msg') }}</div>{% endif %}
   <div class="content-kpis">

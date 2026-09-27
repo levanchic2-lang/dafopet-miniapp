@@ -1,8 +1,8 @@
 {% extends "uk/_base.html" %}
 {% block title %}{{ title }}{% endblock %}
-{% block content %}
+{% block body %}
 <style>
-  .editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:28px;align-items:start}.editor-main{border-top:3px double var(--ink);padding-top:18px}.editor-main label,.editor-side label{display:block;font-size:9pt;color:var(--ink-3);margin:0 0 6px}.editor-main input,.editor-main textarea,.editor-main select,.editor-side input{width:100%;box-sizing:border-box;border:.5px solid var(--hair);background:var(--paper);padding:10px;font:10.5pt Georgia,"Source Han Serif SC",serif}.field{margin-bottom:16px}.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.editor-side{border:.5px solid var(--hair);padding:18px;position:sticky;top:20px}.status-actions form{margin-top:8px}.status-actions button{width:100%}@media(max-width:800px){.editor-grid{grid-template-columns:1fr}.editor-side{position:static}.two{grid-template-columns:1fr}}
+  .editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:28px;align-items:start}.editor-main{border-top:3px double var(--ink);padding-top:18px}.editor-main label,.editor-side label{display:block;font-size:9pt;color:var(--ink-3);margin:0 0 6px}.editor-main input,.editor-main textarea,.editor-main select,.editor-side input{width:100%;box-sizing:border-box;border:.5px solid var(--hair);background:var(--paper);padding:10px;font:10.5pt Georgia,"Source Han Serif SC",serif}.field{margin-bottom:16px}.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.editor-side{border:.5px solid var(--hair);padding:18px;position:sticky;top:20px}.status-actions form{margin-top:8px}.status-actions button{width:100%}.review-checks{border-top:.5px solid var(--hair);margin-top:16px;padding-top:14px}.review-checks label{display:flex;gap:8px;align-items:flex-start;color:var(--ink-2);line-height:1.45;margin:0 0 10px}.review-checks input{width:auto;margin-top:3px}.source-compare{margin-top:26px;border-top:3px double var(--ink);padding-top:16px}.source-compare h2{font-size:15pt;margin:0 0 5px}.source-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}.source-field{padding:12px 0;border-bottom:.5px solid var(--hair)}.source-field b{display:block;font-size:8.5pt;color:var(--ink-3);font-weight:400;margin-bottom:5px}.source-field div{white-space:pre-wrap;line-height:1.65}.source-meta{font-size:9pt;color:var(--ink-3);line-height:1.7}@media(max-width:800px){.editor-grid{grid-template-columns:1fr}.editor-side{position:static}.two,.source-grid{grid-template-columns:1fr}}
 </style>
 <div class="uk-container">
   <div class="uk-page-head"><div><div class="uk-eyebrow">公开内容中心</div><h1>{{ title }}</h1><p>请只填写允许对外公开的脱敏信息。</p></div><div><a class="uk-btn ghost" href="/admin/content">返回列表</a>{% if row %} <a class="uk-btn ghost" href="/site-preview/content/{{ row.id }}" target="_blank">预览</a>{% endif %}</div></div>
@@ -19,13 +19,33 @@
       <div class="two"><div class="field"><label>素材来源</label><input name="source_type" value="{{ row.source_type if row else 'manual' }}" placeholder="manual / visit / report"></div><div class="field"><label>来源病历 ID（可选，仅内部追溯）</label><input name="source_visit_id" type="number" value="{{ row.source_visit_id if row and row.source_visit_id else '' }}"></div></div>
       <div class="two"><div class="field"><label>医疗审核人</label><input name="medical_reviewer" value="{{ row.medical_reviewer if row else '' }}"></div><div class="field"><label style="margin-top:26px"><input style="width:auto" type="checkbox" name="is_featured" value="1" {% if row and row.is_featured %}checked{% endif %}> 首页重点展示</label></div></div>
       <button class="uk-btn" type="submit">保存草稿</button>
+      {% if source_visit %}
+      <section class="source-compare">
+        <h2>原始病历对照</h2>
+        <div class="source-meta">仅供内部医疗审核，不会出现在公开页面。病历 #{{ source_visit.id }} · {{ source_visit.visit_date or '日期未填' }} · {{ source_visit.vet_name or '医生未填' }} · 检查单 {{ source_stats.exam_count }} · 报告 {{ source_stats.report_count }} · 处方 {{ source_stats.prescription_count }}　<a href="/admin/visits/{{ source_visit.id }}" target="_blank">打开完整病历 →</a></div>
+        <div class="source-grid">
+          <div class="source-field"><b>主诉</b><div>{{ source_visit.chief_complaint or '—' }}</div></div>
+          <div class="source-field"><b>体格检查</b><div>{{ source_visit.physical_exam or '—' }}</div></div>
+          <div class="source-field"><b>临床判断</b><div>{{ source_visit.diagnosis or '—' }}</div></div>
+          <div class="source-field"><b>处理方案</b><div>{{ source_visit.treatment_plan or '—' }}</div></div>
+          <div class="source-field"><b>恢复与随访</b><div>{{ source_visit.follow_up_note or '—' }}</div></div>
+          <div class="source-field"><b>内部备注</b><div>{{ source_visit.notes or '—' }}</div></div>
+        </div>
+      </section>
+      {% endif %}
     </form>
     <aside class="editor-side">
       <div style="font-size:9pt;color:var(--ink-3)">当前状态</div><div style="font-size:17pt;font-weight:700;margin:4px 0 16px">{{ status_labels.get(row.status,row.status) if row else '尚未保存' }}</div>
       {% if row %}<div style="font-size:9pt;line-height:1.8;color:var(--ink-2)">创建：{{ row.created_by or '—' }}<br>审核：{{ row.reviewed_by or '—' }}<br>医疗审核人：{{ row.medical_reviewer or '—' }}</div>
       <hr style="border:0;border-top:.5px solid var(--hair);margin:18px 0">
       <div class="status-actions">
-        {% if row.status=='draft' %}<form method="post" action="/admin/content/{{ row.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="review"><button class="uk-btn" type="submit">通过医疗审核</button></form>{% endif %}
+        {% if row.status=='draft' %}<form method="post" action="/admin/content/{{ row.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="review"><input type="hidden" name="review_next" value="1">
+          {% if row.content_type=='case' %}<div class="review-checks">
+            <label><input type="checkbox" name="privacy_confirmed" value="1" required><span>已核对隐私脱敏：无主人姓名、电话、地址、证件号、宠物姓名及病历号</span></label>
+            <label><input type="checkbox" name="facts_confirmed" value="1" required><span>已对照原始病历：医疗事实、时间顺序和处置描述准确</span></label>
+            <label><input type="checkbox" name="education_confirmed" value="1" required><span>确认适合公开：有明确教育价值，且不会造成夸大疗效或误导</span></label>
+          </div>{% endif %}
+          <button class="uk-btn" type="submit">确认并审核下一篇</button></form>{% endif %}
         {% if row.status=='reviewed' and request.session.get('admin_role') != 'staff' %}<form method="post" action="/admin/content/{{ row.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="publish"><button class="uk-btn" type="submit">标记为已发布</button></form>{% endif %}
         {% if row.status in ['reviewed','published','archived'] %}<form method="post" action="/admin/content/{{ row.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="draft"><button class="uk-btn ghost" type="submit">退回草稿</button></form>{% endif %}
         {% if row.status!='archived' %}<form method="post" action="/admin/content/{{ row.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="archive"><button class="uk-btn ghost" type="submit">下线归档</button></form>{% endif %}

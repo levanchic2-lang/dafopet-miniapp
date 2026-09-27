@@ -36251,6 +36251,41 @@ def _public_case_body(visit: Visit, customer: Customer | None, pet: Pet | None) 
     return "\n\n".join(blocks)
 
 
+def _public_case_candidate_score(
+    visit: Visit,
+    exam_count: int = 0,
+    report_count: int = 0,
+    prescription_count: int = 0,
+) -> tuple[int, list[str]]:
+    """Rank records for human selection; the score never publishes content automatically."""
+    score = 0
+    reasons: list[str] = []
+    fields = [
+        (visit.chief_complaint, 10, "主诉完整"),
+        (visit.physical_exam, 15, "有体格检查"),
+        (visit.diagnosis, 25, "有临床判断"),
+        (visit.treatment_plan, 20, "有处理方案"),
+        (visit.follow_up_note, 20, "有恢复或随访结果"),
+    ]
+    for value, points, label in fields:
+        if (value or "").strip():
+            score += points
+            reasons.append(label)
+    if visit.status == "closed":
+        score += 5
+        reasons.append("病历已结束")
+    if exam_count:
+        score += 5
+        reasons.append(f"{exam_count}张检查单")
+    if report_count:
+        score += 10
+        reasons.append(f"{report_count}份检查报告")
+    if prescription_count:
+        score += 5
+        reasons.append(f"{prescription_count}张处方")
+    return min(score, 100), reasons
+
+
 @app.post("/admin/visits/{visit_id}/public-case-draft")
 async def create_public_case_draft_from_visit(
     visit_id: int,
@@ -36285,6 +36320,7 @@ async def create_public_case_draft_from_visit(
         body=_public_case_body(visit, customer, pet),
         source_type="visit",
         source_visit_id=visit_id,
+        medical_reviewer=(visit.vet_name or "").strip(),
         status="draft",
         created_by=request.session.get("admin_username", "admin"),
     )
@@ -36340,6 +36376,101 @@ async def admin_public_content_list(
     })
 
 
+@app.get("/admin/content/case-candidates", response_class=HTMLResponse)
+async def admin_public_case_candidates(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = Query(""),
+    species: str = Query(""),
+    priority: str = Query(""),
+    include_drafted: bool = Query(False),
+):
+    """Internal shortlist of sufficiently complete records for a doctor's selection."""
+    require_admin(request)
+    query = db.query(Visit).options(selectinload(Visit.pet), selectinload(Visit.customer)).filter(
+        Visit.pet_id.isnot(None)
+    )
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        query = query.filter(or_(Visit.store == admin_store, Visit.store == ""))
+    clean_q = (q or "").strip()
+    if clean_q:
+        like = f"%{clean_q}%"
+        query = query.join(Pet, Pet.id == Visit.pet_id).filter(or_(
+            Pet.name.ilike(like),
+            Visit.chief_complaint.ilike(like),
+            Visit.diagnosis.ilike(like),
+            Visit.treatment_plan.ilike(like),
+        ))
+    if species in ("cat", "dog", "other"):
+        if not clean_q:
+            query = query.join(Pet, Pet.id == Visit.pet_id)
+        query = query.filter(Pet.species == species)
+
+    visits = query.order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(800).all()
+    visit_ids = [row.id for row in visits]
+    existing_by_visit: dict[int, PublicContent] = {}
+    exam_counts: dict[int, int] = {}
+    report_counts: dict[int, int] = {}
+    prescription_counts: dict[int, int] = {}
+    if visit_ids:
+        existing_rows = db.query(PublicContent).filter(
+            PublicContent.content_type == "case",
+            PublicContent.source_visit_id.in_(visit_ids),
+        ).order_by(PublicContent.id.desc()).all()
+        for content in existing_rows:
+            if content.source_visit_id and content.source_visit_id not in existing_by_visit:
+                existing_by_visit[content.source_visit_id] = content
+        exam_counts = dict(db.query(ExamOrder.visit_id, func.count(ExamOrder.id)).filter(
+            ExamOrder.visit_id.in_(visit_ids), ExamOrder.status != "voided"
+        ).group_by(ExamOrder.visit_id).all())
+        report_counts = dict(db.query(ExamOrder.visit_id, func.count(ExamReport.id)).join(
+            ExamReport, ExamReport.exam_order_id == ExamOrder.id
+        ).filter(ExamOrder.visit_id.in_(visit_ids)).group_by(ExamOrder.visit_id).all())
+        prescription_counts = dict(db.query(Prescription.visit_id, func.count(Prescription.id)).filter(
+            Prescription.visit_id.in_(visit_ids), Prescription.status != "voided"
+        ).group_by(Prescription.visit_id).all())
+
+    candidates: list[dict] = []
+    for visit in visits:
+        existing = existing_by_visit.get(visit.id)
+        if existing and not include_drafted:
+            continue
+        score, reasons = _public_case_candidate_score(
+            visit,
+            exam_counts.get(visit.id, 0),
+            report_counts.get(visit.id, 0),
+            prescription_counts.get(visit.id, 0),
+        )
+        if score < 45:
+            continue
+        level = "high" if score >= 75 else "medium" if score >= 55 else "low"
+        if priority in ("high", "medium", "low") and level != priority:
+            continue
+        candidates.append({
+            "visit": visit,
+            "pet": visit.pet,
+            "score": score,
+            "level": level,
+            "reasons": reasons,
+            "existing": existing,
+            "exam_count": exam_counts.get(visit.id, 0),
+            "report_count": report_counts.get(visit.id, 0),
+            "prescription_count": prescription_counts.get(visit.id, 0),
+        })
+    candidates.sort(key=lambda row: (row["score"], row["visit"].visit_date or "", row["visit"].id), reverse=True)
+    return templates.TemplateResponse(request, "uk/public_case_candidates.html", {
+        "request": request,
+        "title": "真实病例候选池",
+        "candidates": candidates,
+        "q": clean_q,
+        "species_filter": species,
+        "priority_filter": priority,
+        "include_drafted": include_drafted,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
 @app.get("/admin/content/new", response_class=HTMLResponse)
 @app.get("/admin/content/{content_id}/edit", response_class=HTMLResponse)
 async def admin_public_content_form(
@@ -36351,12 +36482,26 @@ async def admin_public_content_form(
     row = db.get(PublicContent, content_id) if content_id else None
     if content_id and not row:
         raise HTTPException(404)
+    source_visit = db.get(Visit, row.source_visit_id) if row and row.source_visit_id else None
+    source_stats = {"exam_count": 0, "report_count": 0, "prescription_count": 0}
+    if source_visit:
+        source_stats["exam_count"] = db.query(func.count(ExamOrder.id)).filter(
+            ExamOrder.visit_id == source_visit.id, ExamOrder.status != "voided"
+        ).scalar() or 0
+        source_stats["report_count"] = db.query(func.count(ExamReport.id)).join(
+            ExamOrder, ExamOrder.id == ExamReport.exam_order_id
+        ).filter(ExamOrder.visit_id == source_visit.id).scalar() or 0
+        source_stats["prescription_count"] = db.query(func.count(Prescription.id)).filter(
+            Prescription.visit_id == source_visit.id, Prescription.status != "voided"
+        ).scalar() or 0
     return templates.TemplateResponse(request, "uk/content_form.html", {
         "request": request,
         "title": "编辑公开内容" if row else "新建公开内容",
         "row": row,
         "type_labels": _PUBLIC_CONTENT_TYPES,
         "status_labels": _PUBLIC_CONTENT_STATUSES,
+        "source_visit": source_visit,
+        "source_stats": source_stats,
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -36435,6 +36580,10 @@ async def admin_public_content_status(
     db: Session = Depends(get_db),
     csrf_token: str = Form(""),
     action: str = Form(""),
+    privacy_confirmed: str = Form(""),
+    facts_confirmed: str = Form(""),
+    education_confirmed: str = Form(""),
+    review_next: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -36448,6 +36597,8 @@ async def admin_public_content_status(
             raise HTTPException(400, "标题和正文完整后才能通过医疗审核")
         if not row.medical_reviewer.strip():
             raise HTTPException(400, "请先填写医疗审核人")
+        if row.content_type == "case" and not all((privacy_confirmed, facts_confirmed, education_confirmed)):
+            raise HTTPException(400, "匿名病例必须完成隐私、医疗事实和公开价值三项确认")
         row.status = "reviewed"
         row.reviewed_by = actor
         row.reviewed_at = now
@@ -36464,8 +36615,26 @@ async def admin_public_content_status(
         row.status = "archived"
     else:
         raise HTTPException(400, "操作无效")
-    _audit_public_content(db, request, f"public_content_{action}", row, f"status={row.status}")
+    detail = f"status={row.status}"
+    if action == "review" and row.content_type == "case":
+        detail += "; checklist=privacy,facts,education"
+    _audit_public_content(db, request, f"public_content_{action}", row, detail)
     db.commit()
+    if action == "review" and review_next:
+        next_row = db.query(PublicContent).filter(
+            PublicContent.status == "draft",
+            PublicContent.id != row.id,
+        ).order_by(
+            (PublicContent.content_type == row.content_type).desc(),
+            PublicContent.updated_at.asc(),
+            PublicContent.id.asc(),
+        ).first()
+        if next_row:
+            return RedirectResponse(
+                f"/admin/content/{next_row.id}/edit?msg=上一篇已通过医疗审核，继续审核下一篇",
+                status_code=303,
+            )
+        return RedirectResponse("/admin/content?status=draft&msg=本轮待审核草稿已全部处理", status_code=303)
     return RedirectResponse(f"/admin/content/{row.id}/edit?msg=状态已更新", status_code=303)
 
 
