@@ -1,7 +1,67 @@
 {% extends "public/_base.html" %}
 {% block content %}
-<main><section class="pub-intro"><div class="pub-shell"><h1>{{ brand.display_name }}</h1><p>{{ brand.tagline }}</p><div class="pub-meta">{% if brand.phone %}<span>电话 {{ brand.phone }}</span>{% endif %}{% if brand.business_hours %}<span>{{ brand.business_hours }}</span>{% endif %}{% if brand.address %}<span>{{ brand.address }}</span>{% endif %}</div></div></section>
-{% set sections=[('services','service','医院服务','把服务范围、流程和注意事项说清楚。'),('knowledge','article','健康知识','来自临床工作的可执行建议。'),('cases','case','匿名病例','仅展示经脱敏和人工审核的公开副本。'),('faq','faq','常见问题','回答就诊前后最常被问到的问题。')] %}
-{% for anchor,key,title,desc in sections %}<section class="pub-band" id="{{ anchor }}"><div class="pub-shell"><div class="pub-band-head"><h2>{{ title }}</h2><p>{{ desc }}</p></div>{% if grouped.get(key) %}<div class="pub-list">{% for row in grouped.get(key) %}<a class="pub-row" href="{% if preview %}/site-preview/content/{{ row.id }}{% else %}/site/{{ row.slug }}{% endif %}"><span class="kind">{{ type_labels.get(row.content_type,row.content_type) }}{% if preview %} · {{ row.status }}{% endif %}</span><span><h3>{{ row.title }}</h3><p>{{ row.summary }}</p></span><span>→</span></a>{% endfor %}</div>{% else %}<div class="pub-empty">该栏目正在准备内容。</div>{% endif %}</div></section>{% endfor %}
+<main>
+  <section class="pub-hero">
+    <div class="pub-hero-shade"></div>
+    <div class="pub-shell pub-hero-content">
+      <p class="pub-eyebrow">Independent veterinary care · Shenzhen</p>
+      <h1>{{ brand.display_name }}</h1>
+      <p class="pub-hero-tagline">{{ brand.tagline }}</p>
+      <div class="pub-hero-actions">
+        <a class="pub-action pub-action-primary" href="#services">了解医院服务</a>
+        <a class="pub-action pub-action-quiet" href="/">流浪猫 TNR 申请</a>
+      </div>
+    </div>
+    <div class="pub-hero-details"><div class="pub-shell">
+      {% if brand.business_hours %}<span><small>服务时间</small>{{ brand.business_hours }}</span>{% endif %}
+      {% if brand.phone %}<span><small>联系电话</small>{{ brand.phone }}</span>{% endif %}
+      {% if brand.address %}<span><small>医院地址</small>{{ brand.address }}</span>{% endif %}
+    </div></div>
+  </section>
+
+  <section class="pub-principles"><div class="pub-shell pub-principles-grid">
+    <p>从就诊、检查到后续护理，我们希望每一步都能被理解、被记录、被再次查阅。</p>
+    <div><b>01</b><span>解释清楚</span></div>
+    <div><b>02</b><span>记录完整</span></div>
+    <div><b>03</b><span>持续跟进</span></div>
+  </div></section>
+
+  <section class="pub-services" id="services"><div class="pub-shell">
+    <div class="pub-section-head"><div><span class="pub-section-no">01</span><h2>医院服务</h2></div><p>把服务范围、流程和注意事项说清楚，让每一次决定都有依据。</p></div>
+    {% if grouped.get('service') %}<div class="pub-service-grid">
+      {% for row in grouped.get('service') %}
+      <a class="pub-service-item{% if loop.first %} pub-service-featured{% endif %}" href="{% if preview %}/site-preview/content/{{ row.id }}{% else %}/site/{{ row.slug }}{% endif %}">
+        <span class="pub-service-index">{{ '%02d'|format(loop.index) }}</span>
+        <div><span class="pub-kicker">{{ type_labels.get(row.content_type,row.content_type) }}{% if preview %} · {{ row.status }}{% endif %}</span><h3>{{ row.title }}</h3><p>{{ row.summary }}</p></div>
+        <span class="pub-arrow" aria-hidden="true">↗</span>
+      </a>
+      {% endfor %}
+    </div>{% else %}<div class="pub-empty">医院服务内容正在准备中。</div>{% endif %}
+  </div></section>
+
+  <section class="pub-reading" id="knowledge"><div class="pub-shell pub-reading-grid">
+    <div class="pub-reading-intro"><span class="pub-section-no">02</span><h2>健康知识</h2><p>来自临床工作的可执行建议，不用模糊答案替代现场诊疗。</p></div>
+    <div class="pub-reading-list">
+      {% if grouped.get('article') %}{% for row in grouped.get('article') %}
+      <a href="{% if preview %}/site-preview/content/{{ row.id }}{% else %}/site/{{ row.slug }}{% endif %}"><span>{{ '%02d'|format(loop.index) }}</span><div><h3>{{ row.title }}</h3><p>{{ row.summary }}</p></div><b>→</b></a>
+      {% endfor %}{% else %}<div class="pub-empty">健康知识内容正在准备中。</div>{% endif %}
+    </div>
+  </div></section>
+
+  <section class="pub-cases" id="cases"><div class="pub-shell">
+    <div class="pub-section-head"><div><span class="pub-section-no">03</span><h2>匿名病例</h2></div><p>只展示经脱敏和人工审核的公开副本，保留诊疗思路，不公开客户隐私。</p></div>
+    {% if grouped.get('case') %}<div class="pub-case-grid">{% for row in grouped.get('case') %}
+      <a href="{% if preview %}/site-preview/content/{{ row.id }}{% else %}/site/{{ row.slug }}{% endif %}"><span class="pub-kicker">Case {{ '%02d'|format(loop.index) }}{% if preview %} · {{ row.status }}{% endif %}</span><h3>{{ row.title }}</h3><p>{{ row.summary }}</p><b>查看病例 →</b></a>
+    {% endfor %}</div>{% else %}<div class="pub-empty">匿名病例正在整理和审核中。</div>{% endif %}
+  </div></section>
+
+  <section class="pub-faq" id="faq"><div class="pub-shell pub-faq-grid">
+    <div class="pub-reading-intro"><span class="pub-section-no">04</span><h2>常见问题</h2><p>就诊前后最常被问到的问题，先在这里得到明确说明。</p></div>
+    <div class="pub-faq-list">
+      {% if grouped.get('faq') %}{% for row in grouped.get('faq') %}
+      <details{% if loop.first %} open{% endif %}><summary><span>{{ '%02d'|format(loop.index) }}</span>{{ row.title }}<b>+</b></summary><div><p>{{ row.summary }}</p><a href="{% if preview %}/site-preview/content/{{ row.id }}{% else %}/site/{{ row.slug }}{% endif %}">阅读完整说明 →</a></div></details>
+      {% endfor %}{% else %}<div class="pub-empty">常见问题正在准备中。</div>{% endif %}
+    </div>
+  </div></section>
 </main>
 {% endblock %}
