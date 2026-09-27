@@ -65,6 +65,7 @@ img { max-width: 100%; }
 .pub-service-featured .pub-kicker,.pub-service-featured p { color: rgba(255,255,255,.7); }
 .pub-service-item h3 { margin: 11px 0 9px; font-size: clamp(23px,2.4vw,34px); line-height: 1.2; }
 .pub-service-item p { max-width: 620px; margin: 0; color: var(--ink-soft); font-size: 15px; }
+.pub-service-item.pub-service-featured p { color: rgba(255,255,255,.76); }
 .pub-arrow { justify-self: end; font-size: 23px; }
 
 .pub-reading { padding: 86px 0; background: var(--green); color: #fff; }
