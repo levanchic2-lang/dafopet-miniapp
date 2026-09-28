@@ -4,7 +4,7 @@ Page({
   data: { username: "", password: "", loading: false, error: "" },
   onLoad() {
     try {
-      if (wx.getStorageSync("STAFF_TOKEN")) wx.redirectTo({ url: "/pages/staff/today/today" });
+      if (wx.getStorageSync("STAFF_TOKEN")) wx.reLaunch({ url: "/pages/staff/today/today" });
     } catch (e) {}
   },
   onUsername(e) { this.setData({ username: (e.detail.value || "").trim(), error: "" }); },
@@ -22,7 +22,7 @@ Page({
       });
       wx.setStorageSync("STAFF_TOKEN", result.token || "");
       wx.setStorageSync("STAFF_PROFILE", result.profile || {});
-      wx.redirectTo({ url: "/pages/staff/today/today" });
+      wx.reLaunch({ url: "/pages/staff/today/today" });
     } catch (e) {
       const message = e && (e.detail || (e.data && e.data.detail) || e.errMsg);
       this.setData({ error: message || "登录失败，请重试" });

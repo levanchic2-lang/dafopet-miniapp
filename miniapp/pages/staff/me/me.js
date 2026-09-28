@@ -24,7 +24,7 @@ Page({
     try { wx.removeStorageSync("STAFF_TOKEN"); wx.removeStorageSync("STAFF_PROFILE"); } catch (e) {}
     wx.reLaunch({ url: "/pages/index/index" });
   },
-  goCustomerService() { wx.reLaunch({ url: "/pages/index/index" }); },
+  goCustomerService() { wx.reLaunch({ url: "/pages/index/index?staff_bypass=1" }); },
   goToday() { wx.redirectTo({ url: "/pages/staff/today/today" }); },
   goCustomers() { wx.redirectTo({ url: "/pages/staff/customers/customers" }); },
   goMe() {}

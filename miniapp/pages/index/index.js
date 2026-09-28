@@ -7,8 +7,14 @@ Page({
     notifyStatusText: ""
   },
 
-  onLoad() {
+  onLoad(options) {
     try {
+      const staffToken = wx.getStorageSync("STAFF_TOKEN") || "";
+      const bypassStaffHome = options && options.staff_bypass === "1";
+      if (staffToken && !bypassStaffHome) {
+        wx.redirectTo({ url: "/pages/staff/today/today" });
+        return;
+      }
       const openid = wx.getStorageSync("WECHAT_OPENID") || "";
       this.setData({ notifyReady: !!openid });
     } catch (e) {}
@@ -112,6 +118,6 @@ Page({
   goStaffPage() {
     let token = "";
     try { token = wx.getStorageSync("STAFF_TOKEN") || ""; } catch (e) {}
-    wx.navigateTo({ url: token ? "/pages/staff/today/today" : "/pages/staff/login/login" });
+    wx.reLaunch({ url: token ? "/pages/staff/today/today" : "/pages/staff/login/login" });
   }
 });
