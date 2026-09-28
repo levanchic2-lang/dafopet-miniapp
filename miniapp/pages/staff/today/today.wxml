@@ -8,7 +8,7 @@
     <view wx:if="{{error}}" class="staff-error">{{error}}</view>
     <view class="staff-section-head"><text>优先处理</text><text class="staff-section-meta">按工作类型汇总</text></view>
     <view wx:if="{{!tasks.length}}" class="staff-empty">当前没有需要立即处理的事项。</view>
-    <block wx:for="{{tasks}}" wx:key="key"><view class="staff-row"><view class="staff-row-index">0{{index + 1}}</view><view class="staff-row-main"><view class="staff-row-title">{{item.title}}</view><view class="staff-row-sub">{{item.summary || '点击电脑后台查看明细'}}</view></view><view class="staff-row-count">{{item.count}}</view></view></block>
+    <block wx:for="{{tasks}}" wx:key="key"><view class="staff-row {{index === 0 ? 'primary' : ''}}"><view class="staff-row-index">0{{index + 1}}</view><view class="staff-row-main"><view class="staff-row-title">{{item.title}}</view><view class="staff-row-sub">{{item.summary || '点击电脑后台查看明细'}}</view></view><view class="staff-row-count">{{item.count}}</view></view></block>
     <view wx:if="{{next}}" class="staff-next"><view class="staff-next-label">NEXT APPOINTMENT</view><view class="staff-next-title">{{next.pet_name}} · {{next.service_name}}</view><view class="staff-next-sub">{{next.time}} · {{next.customer_name}}</view></view>
     <view wx:else class="staff-empty">今天暂时没有后续预约。</view>
   </block>

@@ -8,7 +8,7 @@
     <view class="staff-section-head"><text>账号信息</text><text class="staff-section-meta">微信已绑定</text></view>
     <view class="staff-info-row"><text>后台账号</text><text>{{profile.username}}</text></view>
     <view class="staff-info-row"><text>当前门店</text><text>{{profile.store_label}}</text></view>
-    <view class="staff-info-row"><text>员工端角色</text><text>{{profile.mobile_role_label}}</text></view>
+    <view class="staff-info-row last"><text>员工端角色</text><text>{{profile.mobile_role_label}}</text></view>
     <button class="staff-button secondary" bindtap="goCustomerService">进入客户服务首页</button>
     <button class="staff-button" bindtap="logout">退出员工端</button>
   </block>
