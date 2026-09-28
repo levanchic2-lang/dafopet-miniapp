@@ -18,7 +18,11 @@
     "pages/immunization/index",
     "pages/adoption/list",
     "pages/adoption/detail",
-    "pages/bind/bind"
+    "pages/bind/bind",
+    "pages/staff/login/login",
+    "pages/staff/today/today",
+    "pages/staff/customers/customers",
+    "pages/staff/me/me"
   ],
   "window": {
     "navigationBarTitleText": "大风动物医院 TNR",

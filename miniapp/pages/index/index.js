@@ -108,5 +108,10 @@ Page({
   goShowcase() { wx.navigateTo({ url: "/pages/showcase/showcase" }); },
   goRabiesPage() { wx.navigateTo({ url: "/pages/rabies/index" }); },
   goVaccinePage() { wx.navigateTo({ url: "/pages/vaccine/index" }); },
-  goFeedbackPage() { wx.navigateTo({ url: "/pages/feedback/index" }); }
+  goFeedbackPage() { wx.navigateTo({ url: "/pages/feedback/index" }); },
+  goStaffPage() {
+    let token = "";
+    try { token = wx.getStorageSync("STAFF_TOKEN") || ""; } catch (e) {}
+    wx.navigateTo({ url: token ? "/pages/staff/today/today" : "/pages/staff/login/login" });
+  }
 });

@@ -1,0 +1,16 @@
+<view class="staff-page">
+  <view class="staff-status"><text>{{profile.store_label || '员工端'}}</text><text>在线</text></view>
+  <view class="staff-brand"><view><view class="staff-brand-name">员工中心</view><view class="staff-brand-en">STAFF ACCOUNT</view></view><view class="staff-brand-side">我的</view></view>
+  <view wx:if="{{loading}}" class="staff-loading">正在载入员工身份…</view>
+  <block wx:else>
+    <view class="staff-profile"><view class="staff-eyebrow">{{profile.mobile_role_label || 'STAFF'}}</view><view class="staff-profile-name">{{profile.display_name || profile.username}}</view><view class="staff-profile-role">{{profile.store_label}} · {{profile.role_label}}</view></view>
+    <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+    <view class="staff-section-head"><text>账号信息</text><text class="staff-section-meta">微信已绑定</text></view>
+    <view class="staff-info-row"><text>后台账号</text><text>{{profile.username}}</text></view>
+    <view class="staff-info-row"><text>当前门店</text><text>{{profile.store_label}}</text></view>
+    <view class="staff-info-row"><text>员工端角色</text><text>{{profile.mobile_role_label}}</text></view>
+    <button class="staff-button secondary" bindtap="goCustomerService">进入客户服务首页</button>
+    <button class="staff-button" bindtap="logout">退出员工端</button>
+  </block>
+  <view class="staff-tabbar"><view class="staff-tab" bindtap="goToday"><text class="staff-tab-mark">·</text><text>今日</text></view><view class="staff-tab" bindtap="goCustomers"><text class="staff-tab-mark">○</text><text>客户</text></view><view class="staff-tab active" bindtap="goMe"><text class="staff-tab-mark">□</text><text>我的</text></view></view>
+</view>

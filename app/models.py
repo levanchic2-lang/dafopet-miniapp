@@ -1810,6 +1810,11 @@ class AdminUser(Base):
     # auto = 按 role 自动判（superadmin → doctor，其他 → nurse）
     # doctor / nurse / groomer = 强制指定
     mobile_role: Mapped[str] = mapped_column(String(20), default="auto")
+    # 微信小程序员工端：一个后台账号只绑定一个员工微信。
+    # 访问令牌仅保存 SHA-256 摘要，数据库泄露时不能直接冒用。
+    miniapp_openid: Mapped[str] = mapped_column(String(64), default="", index=True)
+    miniapp_token_hash: Mapped[str] = mapped_column(String(64), default="", index=True)
+    miniapp_token_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

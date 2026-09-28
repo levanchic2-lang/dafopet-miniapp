@@ -382,6 +382,22 @@
       </div>
     </form>
 
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--hair);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <strong>员工小程序</strong>
+        <span style="margin-left:8px;color:var(--ink-3);font-size:.85rem;">
+          {{ '已绑定微信' if u.miniapp_openid else '尚未绑定' }}
+        </span>
+      </div>
+      {% if u.miniapp_openid %}
+      <form method="post" action="/admin/users/{{ u.id }}/unbind-miniapp" style="margin:0;"
+            onsubmit="return confirm('解除后该员工需要重新登录并绑定微信，已有登录会立即失效。确定继续？')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <button type="submit" class="sd-btn-del">解除小程序绑定</button>
+      </form>
+      {% endif %}
+    </div>
+
     <form method="post" action="/admin/staff/{{ staff.id }}/account/unlink" style="margin-top:12px;"
           onsubmit="return confirm('只解除员工档案与账号的关联，不会删除账号。确定继续？')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

@@ -35,6 +35,46 @@ function getJson(path, data) {
   });
 }
 
+function staffToken() {
+  try { return wx.getStorageSync("STAFF_TOKEN") || ""; } catch (e) { return ""; }
+}
+
+function staffRequest(path, method = "GET", data = {}) {
+  return new Promise((resolve, reject) => {
+    const token = staffToken();
+    if (!token) {
+      reject({ statusCode: 401, detail: "请先登录员工端" });
+      return;
+    }
+    wx.request({
+      url: base() + path,
+      method,
+      data,
+      header: {
+        "content-type": "application/json",
+        "Authorization": "Bearer " + token
+      },
+      success: (res) => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(res.data || {});
+          return;
+        }
+        if (res.statusCode === 401) {
+          try {
+            wx.removeStorageSync("STAFF_TOKEN");
+            wx.removeStorageSync("STAFF_PROFILE");
+          } catch (e) {}
+        }
+        reject(Object.assign({ statusCode: res.statusCode }, res.data || { detail: "请求失败" }));
+      },
+      fail: reject
+    });
+  });
+}
+
+function staffGet(path, data = {}) { return staffRequest(path, "GET", data); }
+function staffPost(path, data = {}) { return staffRequest(path, "POST", data); }
+
 function uploadApply(form, images, videos) {
   return new Promise((resolve, reject) => {
     const url = base() + "/api/apply";
@@ -65,5 +105,5 @@ function uploadMore(appId, fieldName, filePath) {
   return Promise.resolve({ appId, fieldName, filePath });
 }
 
-module.exports = { getJson, postJson, uploadApply, uploadMore };
+module.exports = { getJson, postJson, staffGet, staffPost, staffRequest, uploadApply, uploadMore };
 

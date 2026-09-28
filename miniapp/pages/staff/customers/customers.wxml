@@ -1,0 +1,17 @@
+<view class="staff-page">
+  <view class="staff-status"><text>{{profile.store_label || '员工端'}}</text><text>客户档案</text></view>
+  <view class="staff-brand"><view><view class="staff-brand-name">客户与宠物</view><view class="staff-brand-en">CLIENT &amp; PET RECORDS</view></view><view class="staff-brand-side">只读查询</view></view>
+  <view class="staff-search"><input placeholder="姓名、手机号、宠物名或病历号" value="{{query}}" bindinput="onQuery" confirm-type="search" bindconfirm="onSearch" /><button wx:if="{{query}}" class="staff-search-btn" bindtap="onClear">×</button><button class="staff-search-btn" bindtap="onSearch">⌕</button></view>
+  <view class="staff-section-head"><text>{{query ? '搜索结果' : '最近查看'}}</text><text class="staff-section-meta">{{items.length}} 位客户</text></view>
+  <view wx:if="{{loading}}" class="staff-loading">正在查找客户…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <view wx:if="{{!loading && !items.length}}" class="staff-empty">没有找到匹配的客户。请输入至少两个字或手机号片段。</view>
+  <block wx:for="{{items}}" wx:key="id">
+    <view class="staff-customer" data-id="{{item.id}}" bindtap="toggleCustomer">
+      <view class="staff-customer-head"><view><view class="staff-customer-name">{{item.name}}</view><view class="staff-customer-phone">{{item.phone_masked || '未登记手机号'}}</view></view><view class="staff-arrow">{{expandedId === item.id ? '↓' : '→'}}</view></view>
+      <view class="staff-pets"><text wx:for="{{item.pets}}" wx:for-item="pet" wx:key="id" class="staff-pet">{{pet.name}}</text><text wx:if="{{!item.pets.length}}" class="staff-pet">暂无宠物</text></view>
+      <view wx:if="{{expandedId === item.id}}" class="staff-pet-detail"><block wx:for="{{item.pets}}" wx:for-item="pet" wx:key="id"><view>{{pet.name}} · {{pet.species || '种类未填'}} · {{pet.breed || '品种未填'}}{{pet.medical_record_no ? ' · ' + pet.medical_record_no : ''}}</view></block><view wx:if="{{!item.pets.length}}">该客户名下暂无宠物档案。</view></view>
+    </view>
+  </block>
+  <view class="staff-tabbar"><view class="staff-tab" bindtap="goToday"><text class="staff-tab-mark">·</text><text>今日</text></view><view class="staff-tab active" bindtap="goCustomers"><text class="staff-tab-mark">○</text><text>客户</text></view><view class="staff-tab" bindtap="goMe"><text class="staff-tab-mark">□</text><text>我的</text></view></view>
+</view>

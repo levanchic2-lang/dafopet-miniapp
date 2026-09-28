@@ -12,6 +12,7 @@ if hasattr(_time, "tzset"):          # Unix（Linux 服务器 / macOS）生效�
 # ────────────────────────────────────────────────────────────────────────────
 
 import asyncio
+import hashlib
 import json
 import logging
 import mimetypes
@@ -4154,6 +4155,33 @@ async def admin_users_reset_password(
     )
 
 
+@app.post("/admin/users/{user_id}/unbind-miniapp", name="admin_users_unbind_miniapp")
+async def admin_users_unbind_miniapp(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """解除员工账号与微信小程序的绑定，并立即作废已有访问令牌。"""
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    user = db.get(AdminUser, user_id)
+    if not user:
+        raise HTTPException(404)
+    user.miniapp_openid = ""
+    user.miniapp_token_hash = ""
+    user.miniapp_token_created_at = None
+    _audit(db, request, "admin_user_unbind_miniapp", application_id=None,
+           detail={"username": user.username})
+    db.commit()
+    referer = request.headers.get("referer") or "/admin/hr"
+    target = f"/admin/staff/{user.staff_profile[0].id}" if getattr(user, "staff_profile", None) else "/admin/hr"
+    if "/admin/staff/" not in referer:
+        target = "/admin/hr"
+    return RedirectResponse(f"{target}?msg=已解除「{quote(user.username or '')}」的小程序绑定", status_code=303)
+
+
 @app.post("/admin/users/{user_id}/set-role", name="admin_users_set_role")
 async def admin_users_set_role(
     user_id: int,
@@ -6474,6 +6502,226 @@ async def api_wechat_login(payload: dict = Body(...)):
         raise HTTPException(400, str(e))
     # 生产环境不建议把 session_key 返回给前端；这里只返回 openid 供演示
     return {"openid": data.get("openid", "")}
+
+
+# ─── 微信小程序员工端（第一阶段：只读工作台）────────────────────────────
+_STAFF_MINIAPP_TOKEN_DAYS = 30
+
+
+def _staff_token_hash(token: str) -> str:
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
+
+def _staff_miniapp_user(request: Request, db: Session) -> AdminUser:
+    auth = (request.headers.get("authorization") or "").strip()
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(401, "员工登录已失效")
+    raw = auth[7:].strip()
+    if not raw:
+        raise HTTPException(401, "员工登录已失效")
+    user = db.query(AdminUser).filter(
+        AdminUser.miniapp_token_hash == _staff_token_hash(raw),
+        AdminUser.is_active == True,
+    ).first()
+    if not user or not user.miniapp_token_created_at:
+        raise HTTPException(401, "员工登录已失效")
+    if user.miniapp_token_created_at < datetime.utcnow() - timedelta(days=_STAFF_MINIAPP_TOKEN_DAYS):
+        raise HTTPException(401, "员工登录已过期，请重新登录")
+    return user
+
+
+def _staff_profile_payload(user: AdminUser) -> dict:
+    role_zh = "超级管理员" if user.role == "superadmin" else "员工"
+    mobile_role = (user.mobile_role or "auto").strip()
+    mobile_role_zh = {
+        "doctor": "医生端", "nurse": "助理端", "groomer": "美容师端", "auto": role_zh,
+    }.get(mobile_role, role_zh)
+    return {
+        "id": user.id,
+        "username": (user.username or "").strip(),
+        "display_name": (user.display_name or user.username or "员工").strip(),
+        "role": user.role or "staff",
+        "role_label": role_zh,
+        "mobile_role": mobile_role,
+        "mobile_role_label": mobile_role_zh,
+        "store": (user.store or "").strip(),
+        "store_label": (user.store or "全部门店").strip(),
+    }
+
+
+@app.post("/api/staff-miniapp/login")
+async def api_staff_miniapp_login(payload: dict = Body(...), db: Session = Depends(get_db)):
+    """员工用现有后台账号登录，并把该账号绑定到当前微信。"""
+    username = str((payload or {}).get("username") or "").strip()
+    password = str((payload or {}).get("password") or "")
+    code = str((payload or {}).get("code") or "").strip()
+    if not username or not password or not code:
+        raise HTTPException(400, "请输入员工账号和密码")
+    user = db.query(AdminUser).filter(
+        func.trim(AdminUser.username) == username,
+        AdminUser.is_active == True,
+    ).first()
+    if not user or not _pwd_ctx.verify(password, user.password_hash):
+        raise HTTPException(401, "员工账号或密码不正确")
+    try:
+        session_data = wechat_code2session(code)
+    except Exception as exc:
+        raise HTTPException(400, f"微信登录失败：{exc}")
+    openid = str(session_data.get("openid") or "").strip()
+    if not openid:
+        raise HTTPException(400, "未取得微信身份，请重试")
+    if user.miniapp_openid and user.miniapp_openid != openid:
+        raise HTTPException(403, "该员工账号已绑定其他微信，请由超级管理员解除绑定")
+    other = db.query(AdminUser).filter(
+        AdminUser.miniapp_openid == openid,
+        AdminUser.id != user.id,
+    ).first()
+    if other:
+        raise HTTPException(403, "当前微信已绑定其他员工账号")
+    token = secrets.token_urlsafe(32)
+    user.miniapp_openid = openid
+    user.miniapp_token_hash = _staff_token_hash(token)
+    user.miniapp_token_created_at = datetime.utcnow()
+    db.add(AuditLog(
+        action="staff_miniapp_login",
+        actor=(user.username or "")[:80],
+        detail=json.dumps({"admin_user_id": user.id, "store": user.store or ""}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "token": token, "expires_in_days": _STAFF_MINIAPP_TOKEN_DAYS,
+            "profile": _staff_profile_payload(user)}
+
+
+@app.get("/api/staff-miniapp/me")
+async def api_staff_miniapp_me(request: Request, db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db)
+    return {"ok": True, "profile": _staff_profile_payload(user)}
+
+
+@app.post("/api/staff-miniapp/logout")
+async def api_staff_miniapp_logout(request: Request, db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db)
+    user.miniapp_token_hash = ""
+    user.miniapp_token_created_at = None
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/staff-miniapp/dashboard")
+async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db)
+    store = (user.store or "").strip()
+    today = date.today().isoformat()
+    full_store = _STORE_SHORT_TO_FULL.get(store, store)
+
+    aq = db.query(Appointment).filter(
+        Appointment.appointment_date == today,
+        Appointment.status.in_(["pending", "confirmed", "arrived"]),
+    )
+    if full_store:
+        aq = aq.filter(Appointment.store == full_store)
+    appointments = aq.order_by(Appointment.appointment_time.asc()).all()
+
+    vq = db.query(Visit).filter(Visit.visit_date == today)
+    if store:
+        vq = vq.filter(Visit.store == store)
+    visit_count = vq.count()
+
+    from app.services.dashboard import (
+        build_consent_pending,
+        build_exam_report_pending,
+        build_followup_today,
+        build_rabies_pending,
+    )
+    raw_tasks = [
+        build_exam_report_pending(db, store),
+        build_followup_today(db, store),
+        build_consent_pending(db, store),
+        build_rabies_pending(db, store),
+    ]
+    tasks = []
+    for card in raw_tasks:
+        count = int(card.get("count") or 0)
+        if count <= 0:
+            continue
+        previews = card.get("previews") or []
+        first = previews[0] if previews else {}
+        tasks.append({
+            "key": card.get("key") or "",
+            "title": card.get("title") or "待处理事项",
+            "count": count,
+            "summary": first.get("label") or (first.get("sub") if first else ""),
+        })
+    pending_count = sum(t["count"] for t in tasks)
+    next_appt = None
+    current_hm = datetime.now().strftime("%H:%M")
+    next_row = next((row for row in appointments if row.status == "arrived"), None)
+    if not next_row:
+        next_row = next((row for row in appointments if not row.appointment_time or row.appointment_time >= current_hm), None)
+    if next_row:
+        row = next_row
+        next_appt = {
+            "id": row.id, "time": row.appointment_time or "待定",
+            "customer_name": row.customer_name or "—", "pet_name": row.pet_name or "—",
+            "service_name": row.service_name or row.category or "预约",
+        }
+    return {
+        "ok": True,
+        "date": today,
+        "profile": _staff_profile_payload(user),
+        "stats": {"appointments": len(appointments), "visits": visit_count, "pending": pending_count},
+        "tasks": tasks[:4],
+        "next_appointment": next_appt,
+    }
+
+
+@app.get("/api/staff-miniapp/customers")
+async def api_staff_miniapp_customers(
+    request: Request, q: str = Query(""), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    store = (user.store or "").strip()
+    q = (q or "").strip()
+    cq = db.query(Customer)
+    if store:
+        cq = cq.filter(Customer.id.in_(
+            db.query(Pet.customer_id).filter(or_(Pet.store == store, Pet.store == "", Pet.store == None))
+        ))
+    if len(q) >= 2:
+        for token in [x for x in q.split() if x][:4]:
+            owner_ids = db.query(Pet.customer_id).filter(or_(
+                Pet.name.ilike(f"%{token}%"),
+                Pet.medical_record_no.ilike(f"%{token}%"),
+            ))
+            cq = cq.filter(or_(
+                Customer.name.ilike(f"%{token}%"), Customer.phone.ilike(f"%{token}%"),
+                Customer.phones_extra.ilike(f"%{token}%"), Customer.id.in_(owner_ids),
+            ))
+        customers = cq.order_by(Customer.updated_at.desc(), Customer.id.desc()).limit(40).all()
+    elif q:
+        customers = []
+    else:
+        recent_ids_q = db.query(Visit.customer_id).filter(Visit.customer_id != None)
+        if store:
+            recent_ids_q = recent_ids_q.filter(Visit.store == store)
+        recent_ids = [r[0] for r in recent_ids_q.order_by(Visit.id.desc()).limit(80).all()]
+        order = {cid: i for i, cid in enumerate(dict.fromkeys(recent_ids))}
+        customers = cq.filter(Customer.id.in_(list(order) or [-1])).all()
+        customers.sort(key=lambda c: order.get(c.id, 9999))
+        customers = customers[:20]
+    items = []
+    for customer in customers:
+        pq = db.query(Pet).filter(Pet.customer_id == customer.id)
+        if store:
+            pq = pq.filter(or_(Pet.store == store, Pet.store == "", Pet.store == None))
+        pets = pq.order_by(Pet.id).all()
+        items.append({
+            "id": customer.id, "name": customer.name or "未命名客户",
+            "phone_masked": _mask_phone(customer.phone or ""),
+            "pets": [{"id": p.id, "name": p.name or "未命名", "species": p.species or "",
+                      "breed": p.breed or "", "medical_record_no": p.medical_record_no or ""} for p in pets],
+        })
+    return {"ok": True, "query": q, "items": items}
 
 
 @app.get("/api/wechat/my-tnr-status")

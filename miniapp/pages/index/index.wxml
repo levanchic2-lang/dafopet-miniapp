@@ -101,4 +101,5 @@
   </view>
 
   <view class="home-foot">大风动物医院 · 始于 2018</view>
+  <button class="staff-foot-entry" bindtap="goStaffPage">医院员工入口</button>
 </view>

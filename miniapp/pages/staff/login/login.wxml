@@ -1,0 +1,14 @@
+<view class="login-wrap">
+  <view class="login-en">DAFO ANIMAL HOSPITAL</view>
+  <view class="login-title">员工工作台</view>
+  <view class="login-sub">使用现有医院后台账号登录。首次登录会将员工账号与当前微信绑定。</view>
+  <view class="login-rule"></view>
+  <view class="login-label">员工账号</view>
+  <input class="login-input" placeholder="请输入后台账号" value="{{username}}" bindinput="onUsername" />
+  <view class="login-label">密码</view>
+  <input class="login-input" password placeholder="请输入密码" value="{{password}}" bindinput="onPassword" confirm-type="done" bindconfirm="onLogin" />
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <button class="staff-button" loading="{{loading}}" disabled="{{loading}}" bindtap="onLogin">{{loading ? '正在登录' : '进入员工端'}}</button>
+  <button class="staff-button secondary" bindtap="backToCustomer">返回客户服务</button>
+  <view class="login-note">员工端仅向在职账号开放。账号已绑定其他微信时，请联系超级管理员处理。</view>
+</view>

@@ -1262,6 +1262,15 @@ def _try_sqlite_migrations() -> None:
                 # M1 手机端身份：auto / doctor / nurse / groomer
                 if "mobile_role" not in au_names:
                     conn.execute(text("ALTER TABLE admin_users ADD COLUMN mobile_role VARCHAR(20) DEFAULT 'auto'"))
+                # 微信小程序员工端登录绑定与令牌（令牌只存摘要）
+                if "miniapp_openid" not in au_names:
+                    conn.execute(text("ALTER TABLE admin_users ADD COLUMN miniapp_openid VARCHAR(64) DEFAULT ''"))
+                if "miniapp_token_hash" not in au_names:
+                    conn.execute(text("ALTER TABLE admin_users ADD COLUMN miniapp_token_hash VARCHAR(64) DEFAULT ''"))
+                if "miniapp_token_created_at" not in au_names:
+                    conn.execute(text("ALTER TABLE admin_users ADD COLUMN miniapp_token_created_at DATETIME DEFAULT NULL"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_users_miniapp_openid ON admin_users(miniapp_openid)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_users_miniapp_token_hash ON admin_users(miniapp_token_hash)"))
 
             # wecom_customer_links: 企微外部联系人 ↔ Customer 映射表（Phase 3）
             wcl_cols = conn.execute(text("PRAGMA table_info(wecom_customer_links)")).fetchall()
