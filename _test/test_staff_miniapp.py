@@ -3,6 +3,7 @@
 import os
 import sys
 import tempfile
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -23,6 +24,13 @@ from app.main import app
 from app.models import AdminUser, Appointment, Customer, Pet, Visit
 
 
+@asynccontextmanager
+async def _test_lifespan(_app):
+    """接口回归不启动调度器，也不创建正式数据目录中的启动锁。"""
+    yield
+
+
+app.router.lifespan_context = _test_lifespan
 Base.metadata.create_all(bind=engine)
 db = SessionLocal()
 try:
