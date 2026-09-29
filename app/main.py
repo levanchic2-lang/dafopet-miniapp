@@ -34003,6 +34003,7 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
                                   admitted_at: str = Form(""),
                                   expected_discharge_date: str = Form(""),
                                   reason: str = Form(""),
+                                  confirm_admission: str = Form(""),
                                   is_insurance_service: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -34022,6 +34023,9 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
     store_short = _get_op_store(request) or (pet.store or "")
     new_url = (f"/admin/inpatient/new?visit_id={v.id}&mode=visit" if v else
                f"/admin/inpatient/new?pet_id={pet.id}&mode=boarding")
+    if confirm_admission != "1":
+        msg = quote("请先勾选确认新建住院单", safe="")
+        return RedirectResponse(f"{new_url}&err={msg}", status_code=303)
     existing = db.query(Hospitalization).filter(
         Hospitalization.pet_id == pet.id,
         Hospitalization.status == "admitted",

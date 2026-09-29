@@ -228,9 +228,16 @@ db.close()
 ready_page = client.get(f"/admin/inpatient/new?visit_id={visit_id}")
 assert ready_page.status_code == 200
 assert "确认办理住院" in ready_page.text and "¥35.00" in ready_page.text
+unchecked = client.post("/admin/inpatient/admit", data={
+    "csrf_token": csrf_inpatient, "visit_id": visit_id,
+})
+assert unchecked.status_code == 303 and "err=" in unchecked.headers["location"]
+db = SessionLocal()
+assert db.query(Hospitalization).filter_by(visit_id=visit_id, status="admitted").count() == 0
+db.close()
 created = client.post("/admin/inpatient/admit", data={
     "csrf_token": csrf_inpatient, "visit_id": visit_id,
-    "reason": "术后住院观察",
+    "reason": "术后住院观察", "confirm_admission": "1",
 })
 assert created.status_code == 303 and created.headers["location"].startswith("/admin/inpatient/")
 hosp_id = int(created.headers["location"].split("/admin/inpatient/")[1].split("?")[0])
@@ -256,6 +263,7 @@ assert "寄养 / 单纯住院" in boarding_page.text and "确认办理住院" in
 boarding_created = client.post("/admin/inpatient/admit", data={
     "csrf_token": csrf_inpatient, "pet_id": boarding_pet_id,
     "admission_mode": "boarding", "reason": "单纯寄养，不用药",
+    "confirm_admission": "1",
 })
 assert boarding_created.status_code == 303
 boarding_hosp_id = int(boarding_created.headers["location"].split("/admin/inpatient/")[1].split("?")[0])

@@ -73,6 +73,7 @@
         <label class="in-field full">{{ '住院原因 / 初步诊断' if visit else '寄养 / 住院备注' }}<textarea name="reason" placeholder="{{ '可补充住院观察重点' if visit else '例如：寄养，不用药；饮食或照护要求' }}">{% if visit %}{{ visit.diagnosis or visit.chief_complaint or '' }}{% else %}寄养 / 单纯住院{% endif %}</textarea></label>
       </div>
       <label style="display:flex;align-items:center;gap:8px;margin:4px 0 14px;cursor:pointer;font-size:10pt"><input type="checkbox" name="is_insurance_service" value="1"/>保险增值服务</label>
+      <label style="display:flex;align-items:flex-start;gap:9px;margin:12px 0 16px;padding:12px;border:.5px solid var(--hair);cursor:pointer;font-size:10pt;line-height:1.5"><input type="checkbox" name="confirm_admission" value="1" required style="margin-top:3px"/><span>我已核对宠物、入住类型、今日体重和日费率，确认新建住院单。</span></label>
       <button class="in-btn" type="submit" style="width:100%">确认办理住院</button>
     </form>
     <div class="in-note">正式入住后会显示在住院管理和手机端“住院用药”中；离院时再按实际住院天数生成收费。</div>
