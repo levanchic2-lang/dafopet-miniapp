@@ -1,0 +1,53 @@
+<view class="staff-page detail-page">
+  <view wx:if="{{loading}}" class="staff-loading">正在读取客户档案…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <block wx:if="{{!loading && customer.id}}">
+    <view class="detail-hero">
+      <view class="detail-eyebrow">CLIENT RECORD</view>
+      <view class="detail-title">{{customer.name}}</view>
+      <view class="detail-sub">{{customer.phone_masked || '未登记手机号'}} · {{customer.pets.length}} 只宠物</view>
+      <button wx:if="{{customer.phone}}" class="detail-call" bindtap="callCustomer">联系客户</button>
+    </view>
+    <view class="detail-kpis">
+      <view><strong>¥{{summary.wallet_balance}}</strong><text>钱包余额</text></view>
+      <view><strong>¥{{summary.deposit_available}}</strong><text>可用押金</text></view>
+      <view class="warn"><strong>¥{{summary.unpaid_total}}</strong><text>待付款</text></view>
+    </view>
+    <view class="detail-tabs">
+      <view class="{{activeTab === 'pets' ? 'active' : ''}}" data-tab="pets" bindtap="setTab">宠物</view>
+      <view class="{{activeTab === 'billing' ? 'active' : ''}}" data-tab="billing" bindtap="setTab">账务</view>
+      <view class="{{activeTab === 'benefits' ? 'active' : ''}}" data-tab="benefits" bindtap="setTab">权益</view>
+    </view>
+
+    <view wx:if="{{activeTab === 'pets'}}" class="detail-list">
+      <view wx:for="{{customer.pets}}" wx:key="id" class="detail-row tappable" data-id="{{item.id}}" bindtap="openPet">
+        <view><view class="detail-row-title">{{item.name}}</view><view class="detail-row-sub">{{item.species_label}} · {{item.breed || '品种未填'}} · {{item.gender_label}}</view><view class="detail-row-meta">{{item.medical_record_no || '暂无病历号'}}</view></view><text class="detail-arrow">→</text>
+      </view>
+      <view wx:if="{{!customer.pets.length}}" class="staff-empty">该客户名下暂无宠物档案。</view>
+      <view wx:if="{{customer.address || customer.notes}}" class="detail-note"><view wx:if="{{customer.address}}">地址：{{customer.address}}</view><view wx:if="{{customer.notes}}">备注：{{customer.notes}}</view></view>
+    </view>
+
+    <view wx:if="{{activeTab === 'billing'}}" class="detail-list">
+      <view class="detail-section-label">收费记录</view>
+      <view wx:for="{{invoices}}" wx:key="id" class="detail-row">
+        <view><view class="detail-row-title">{{item.pet_name || '客户账单'}} · {{item.invoice_no}}</view><view class="detail-row-sub">{{item.date}} · 合计 ¥{{item.total}} · 已收 ¥{{item.paid}}</view></view><view class="money {{item.remaining > 0 ? 'due' : ''}}">{{item.remaining > 0 ? '未收 ¥' + item.remaining : '已结清'}}</view>
+      </view>
+      <view wx:if="{{!invoices.length}}" class="staff-empty">暂无收费记录。</view>
+      <view class="detail-section-label">钱包流水</view>
+      <view wx:for="{{walletTransactions}}" wx:key="id" class="detail-row compact"><view><view class="detail-row-title">{{item.type_label}}</view><view class="detail-row-sub">{{item.created_at}} {{item.note}}</view></view><view class="money">{{item.amount_label}}</view></view>
+      <view wx:if="{{!walletTransactions.length}}" class="staff-empty">暂无钱包流水。</view>
+    </view>
+
+    <view wx:if="{{activeTab === 'benefits'}}" class="detail-list">
+      <view class="detail-section-label">套餐 · {{summary.active_packages}} 个可用</view>
+      <view wx:for="{{packages}}" wx:key="id" class="detail-row"><view><view class="detail-row-title">{{item.name}}</view><view class="detail-row-sub">{{item.pet_name}} · 已用 {{item.used}} / {{item.total}} 次 · {{item.expires_at}}</view></view><view class="detail-badge">剩 {{item.remaining}}</view></view>
+      <view wx:if="{{!packages.length}}" class="staff-empty">暂无套餐。</view>
+      <view class="detail-section-label">押金</view>
+      <view wx:for="{{deposits}}" wx:key="id" class="detail-row"><view><view class="detail-row-title">{{item.category_label}} · {{item.pet_name}}</view><view class="detail-row-sub">{{item.status_label}} {{item.note}}</view></view><view class="money">可用 ¥{{item.available}}</view></view>
+      <view wx:if="{{!deposits.length}}" class="staff-empty">暂无押金。</view>
+      <view class="detail-section-label">优惠券 · {{summary.available_coupons}} 张可用</view>
+      <view wx:for="{{coupons}}" wx:key="id" class="detail-row"><view><view class="detail-row-title">{{item.title}}</view><view class="detail-row-sub">{{item.status_label}} · {{item.expires_at}}</view></view><view class="detail-badge">{{item.value_label}}</view></view>
+      <view wx:if="{{!coupons.length}}" class="staff-empty">暂无优惠券。</view>
+    </view>
+  </block>
+</view>

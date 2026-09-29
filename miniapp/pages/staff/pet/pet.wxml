@@ -1,0 +1,45 @@
+<view class="staff-page detail-page">
+  <view wx:if="{{loading}}" class="staff-loading">正在读取宠物档案…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <block wx:if="{{!loading && pet.id}}">
+    <view class="detail-hero">
+      <view class="detail-eyebrow">PET MEDICAL RECORD</view>
+      <view class="detail-title">{{pet.name}}</view>
+      <view class="detail-sub">{{pet.species_label}} · {{pet.breed || '品种未填'}} · {{pet.gender_label}} · {{pet.is_neutered ? '已绝育' : '未绝育'}}</view>
+      <view class="detail-sub">主人 {{customer.name}} · {{customer.phone_masked}}</view>
+    </view>
+    <view class="detail-kpis">
+      <view><strong>{{summary.visits}}</strong><text>病历</text></view><view><strong>{{summary.reports}}</strong><text>报告</text></view><view><strong>{{summary.vaccinations + summary.dewormings}}</strong><text>预防记录</text></view>
+    </view>
+    <view class="detail-note"><view>病历号：{{pet.medical_record_no || '未登记'}}</view><view wx:if="{{pet.birthday}}">生日/年龄：{{pet.birthday}}</view><view wx:if="{{pet.microchip_id}}">芯片号：{{pet.microchip_id}}</view><view wx:if="{{pet.notes}}">备注：{{pet.notes}}</view></view>
+    <view class="detail-tabs four">
+      <view class="{{activeTab === 'visits' ? 'active' : ''}}" data-tab="visits" bindtap="setTab">病历</view><view class="{{activeTab === 'reports' ? 'active' : ''}}" data-tab="reports" bindtap="setTab">报告</view><view class="{{activeTab === 'prevention' ? 'active' : ''}}" data-tab="prevention" bindtap="setTab">预防</view><view class="{{activeTab === 'billing' ? 'active' : ''}}" data-tab="billing" bindtap="setTab">缴费</view>
+    </view>
+
+    <view wx:if="{{activeTab === 'visits'}}">
+      <view wx:for="{{visits}}" wx:key="id" class="record-block"><view class="record-date">{{item.date}} · {{item.type_label}} · {{item.status === 'closed' ? '已结束' : '进行中'}}</view><view class="record-title">{{item.diagnosis || item.chief_complaint || '未填写诊断'}}</view><view wx:if="{{item.chief_complaint}}" class="record-text">主诉：{{item.chief_complaint}}</view><view wx:if="{{item.physical_exam}}" class="record-text">检查：{{item.physical_exam}}</view><view wx:if="{{item.treatment_plan}}" class="record-text">方案：{{item.treatment_plan}}</view><view wx:if="{{item.vet_name}}" class="detail-row-meta">医生 {{item.vet_name}}</view></view>
+      <view wx:if="{{!visits.length}}" class="staff-empty">暂无病历记录。</view>
+      <view wx:if="{{prescriptions.length}}" class="detail-section-label">处方记录</view>
+      <view wx:for="{{prescriptions}}" wx:key="id" class="record-block"><view class="record-date">{{item.date}} · {{item.vet_name || '医生未填'}}</view><view class="record-tags"><text wx:for="{{item.items}}" wx:for-item="drug" wx:key="*this" class="record-tag">{{drug}}</text></view></view>
+    </view>
+
+    <view wx:if="{{activeTab === 'reports'}}">
+      <view wx:for="{{reports}}" wx:key="id" class="detail-row tappable" data-id="{{item.id}}" data-type="{{item.file_type}}" bindtap="openReport"><view><view class="detail-row-title">{{item.label}}</view><view class="detail-row-sub">{{item.date}} · {{item.name}}</view></view><text class="detail-arrow">{{opening === item.id ? '…' : '打开'}}</text></view>
+      <view wx:if="{{!reports.length}}" class="staff-empty">暂无检查报告。</view>
+    </view>
+
+    <view wx:if="{{activeTab === 'prevention'}}">
+      <view class="detail-section-label">疫苗记录</view>
+      <view wx:for="{{vaccinations}}" wx:key="id" class="record-block"><view class="record-date">{{item.date}} · {{item.status === 'voided' ? '已作废' : '有效'}}</view><view class="record-title">{{item.name}}</view><view class="record-text">批号：{{item.batch_no || '未登记'}}{{item.next_due_date ? ' · 下次 ' + item.next_due_date : ''}}</view></view>
+      <view wx:if="{{!vaccinations.length}}" class="staff-empty">暂无疫苗记录。</view>
+      <view class="detail-section-label">驱虫记录</view>
+      <view wx:for="{{dewormings}}" wx:key="id" class="record-block"><view class="record-date">{{item.date}} · {{item.type_label}}</view><view class="record-title">{{item.name}}</view><view class="record-text">{{item.dose ? '剂量 ' + item.dose : ''}}{{item.next_due_date ? ' · 下次 ' + item.next_due_date : ''}}</view></view>
+      <view wx:if="{{!dewormings.length}}" class="staff-empty">暂无驱虫记录。</view>
+    </view>
+
+    <view wx:if="{{activeTab === 'billing'}}">
+      <view wx:for="{{invoices}}" wx:key="id" class="detail-row"><view><view class="detail-row-title">收费单 {{item.invoice_no}}</view><view class="detail-row-sub">{{item.date}} · 合计 ¥{{item.total}} · 已收 ¥{{item.paid}}</view></view><view class="money {{item.remaining > 0 ? 'due' : ''}}">{{item.remaining > 0 ? '未收 ¥' + item.remaining : '已结清'}}</view></view>
+      <view wx:if="{{!invoices.length}}" class="staff-empty">暂无缴费记录。</view>
+    </view>
+  </block>
+</view>

@@ -1,0 +1,2 @@
+@import "../../../staff.wxss";
+@import "../record-detail.wxss";

@@ -6726,6 +6726,234 @@ async def api_staff_miniapp_customers(
     return {"ok": True, "query": q, "items": items}
 
 
+def _staff_customer_record(db: Session, user: AdminUser, customer_id: int) -> tuple[Customer, list[Pet]]:
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(404, "客户不存在")
+    store = (user.store or "").strip()
+    pq = db.query(Pet).filter(Pet.customer_id == customer.id)
+    if store:
+        pq = pq.filter(or_(Pet.store == store, Pet.store == "", Pet.store == None))
+    pets = pq.order_by(Pet.id.asc()).all()
+    if store and not pets:
+        raise HTTPException(403, "无权查看其他门店的客户档案")
+    return customer, pets
+
+
+def _staff_pet_record(db: Session, user: AdminUser, pet_id: int) -> Pet:
+    pet = db.get(Pet, pet_id)
+    if not pet:
+        raise HTTPException(404, "宠物不存在")
+    store = (user.store or "").strip()
+    if store and pet.store and pet.store != store:
+        raise HTTPException(403, "无权查看其他门店的宠物档案")
+    return pet
+
+
+def _staff_store_query(query, model, store: str):
+    if store:
+        return query.filter(or_(model.store == store, model.store == "", model.store == None))
+    return query
+
+
+def _staff_pet_payload(pet: Pet) -> dict:
+    species_zh = {"cat": "猫", "dog": "犬", "other": "其他"}
+    gender_zh = {"male": "公", "female": "母", "unknown": "未知"}
+    return {
+        "id": pet.id, "name": pet.name or "未命名", "species": pet.species or "",
+        "species_label": species_zh.get(pet.species or "", pet.species or "未填写"),
+        "breed": pet.breed or "", "gender": pet.gender or "unknown",
+        "gender_label": gender_zh.get(pet.gender or "unknown", pet.gender or "未知"),
+        "birthday": pet.birthday_estimate or "", "is_neutered": bool(pet.is_neutered),
+        "color_pattern": pet.color_pattern or "", "microchip_id": pet.microchip_id or "",
+        "medical_record_no": pet.medical_record_no or "", "life_status": pet.life_status or "alive",
+        "notes": pet.notes or "", "store": pet.store or "",
+    }
+
+
+def _staff_invoice_payload(db: Session, row: Invoice, pet_names: dict[int, str]) -> dict:
+    paid = float(db.query(func.coalesce(func.sum(Payment.amount), 0.0)).filter(
+        Payment.invoice_id == row.id, Payment.status == "success",
+    ).scalar() or 0.0)
+    total = float(row.total_amount or 0.0)
+    return {
+        "id": row.id, "invoice_no": row.invoice_no or str(row.id),
+        "date": row.invoice_date or "", "pet_name": pet_names.get(row.pet_id or 0, ""),
+        "total": round(total, 2), "paid": round(paid, 2),
+        "remaining": round(max(0.0, total - paid), 2),
+        "status": row.payment_status or "unpaid",
+    }
+
+
+@app.get("/api/staff-miniapp/customers/{customer_id}")
+async def api_staff_miniapp_customer_detail(
+    customer_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    customer, pets = _staff_customer_record(db, user, customer_id)
+    store = (user.store or "").strip()
+    pet_names = {p.id: p.name or "未命名" for p in pets}
+
+    iq = db.query(Invoice).filter(Invoice.customer_id == customer.id)
+    iq = _staff_store_query(iq, Invoice, store)
+    invoices = iq.order_by(Invoice.invoice_date.desc(), Invoice.id.desc()).limit(40).all()
+    invoice_rows = [_staff_invoice_payload(db, row, pet_names) for row in invoices]
+
+    wallet = db.query(Wallet).filter(Wallet.customer_id == customer.id).first()
+    tx_rows = []
+    if wallet:
+        tq = db.query(WalletTransaction).filter(WalletTransaction.wallet_id == wallet.id)
+        tq = _staff_store_query(tq, WalletTransaction, store)
+        tx_rows = tq.order_by(WalletTransaction.id.desc()).limit(20).all()
+
+    pq = db.query(CustomerPackage).filter(CustomerPackage.customer_id == customer.id)
+    pq = _staff_store_query(pq, CustomerPackage, store)
+    packages = pq.order_by(CustomerPackage.id.desc()).limit(30).all()
+    dq = db.query(Deposit).filter(Deposit.customer_id == customer.id)
+    dq = _staff_store_query(dq, Deposit, store)
+    deposits = dq.order_by(Deposit.id.desc()).limit(30).all()
+    cq = db.query(Coupon).filter(Coupon.customer_id == customer.id)
+    cq = _staff_store_query(cq, Coupon, store)
+    coupons = cq.order_by(Coupon.id.desc()).limit(30).all()
+
+    deposit_available = sum(max(0.0, float(d.amount or 0) - float(d.applied_amount or 0) - float(d.refunded_amount or 0))
+                            for d in deposits if d.status in ("held", "partial_refund"))
+    unpaid_total = sum(row["remaining"] for row in invoice_rows)
+    return {
+        "ok": True,
+        "customer": {
+            "id": customer.id, "name": customer.name or "未命名客户",
+            "phone": customer.phone or "", "phone_masked": _mask_phone(customer.phone or ""),
+            "phones_extra": customer.phones_extra or "", "address": customer.address or "",
+            "notes": customer.notes or "", "pets": [_staff_pet_payload(p) for p in pets],
+        },
+        "summary": {
+            "wallet_balance": round(float(wallet.balance or 0), 2) if wallet else 0,
+            "deposit_available": round(deposit_available, 2), "unpaid_total": round(unpaid_total, 2),
+            "active_packages": sum(1 for p in packages if p.status == "active" and p.used_count < p.total_uses),
+            "available_coupons": sum(1 for c in coupons if c.status == "issued"),
+        },
+        "invoices": invoice_rows,
+        "wallet_transactions": [{
+            "id": t.id, "type": t.type or "", "amount": round(float(t.amount or 0), 2),
+            "balance_after": round(float(t.balance_after or 0), 2), "note": t.note or "",
+            "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "",
+        } for t in tx_rows],
+        "packages": [{
+            "id": p.id, "name": p.name or "套餐", "pet_name": pet_names.get(p.pet_id or 0, "通用"),
+            "used": int(p.used_count or 0), "total": int(p.total_uses or 0),
+            "remaining": max(0, int(p.total_uses or 0) - int(p.used_count or 0)),
+            "expires_at": p.expires_at or "长期有效", "status": p.status or "",
+        } for p in packages],
+        "deposits": [{
+            "id": d.id, "category": d.category or "other", "pet_name": pet_names.get(d.pet_id or 0, ""),
+            "amount": round(float(d.amount or 0), 2),
+            "available": round(max(0.0, float(d.amount or 0) - float(d.applied_amount or 0) - float(d.refunded_amount or 0)), 2),
+            "status": d.status or "", "note": d.note or "",
+        } for d in deposits],
+        "coupons": [{
+            "id": c.id, "title": c.title or "优惠券", "kind": c.kind or "cash",
+            "face_value": round(float(c.face_value or 0), 2),
+            "discount_pct": round(float(c.discount_pct or 0), 2),
+            "expires_at": c.expires_at or "长期有效", "status": c.status or "",
+        } for c in coupons],
+    }
+
+
+@app.get("/api/staff-miniapp/pets/{pet_id}")
+async def api_staff_miniapp_pet_detail(
+    pet_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    pet = _staff_pet_record(db, user, pet_id)
+    customer = db.get(Customer, pet.customer_id)
+    store = (user.store or "").strip()
+
+    vq = db.query(Visit).filter(Visit.pet_id == pet.id)
+    if store:
+        vq = vq.filter(or_(Visit.store == store, Visit.store == "", Visit.store == None))
+    visits = vq.order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(50).all()
+    visit_ids = [v.id for v in visits]
+
+    prescriptions = db.query(Prescription).filter(Prescription.pet_id == pet.id).order_by(
+        Prescription.prescribed_date.desc(), Prescription.id.desc(),
+    ).limit(40).all()
+    prescription_rows = []
+    for row in prescriptions:
+        items = db.query(PrescriptionItem).filter(PrescriptionItem.prescription_id == row.id).order_by(PrescriptionItem.id).all()
+        prescription_rows.append({
+            "id": row.id, "date": row.prescribed_date or "", "vet_name": row.vet_name or "",
+            "status": row.status or "", "items": [i.drug_name or "未命名药品" for i in items],
+        })
+
+    reports = []
+    if visit_ids:
+        report_rows = db.query(ExamReport, ExamOrder, Visit).join(
+            ExamOrder, ExamReport.exam_order_id == ExamOrder.id,
+        ).join(Visit, ExamOrder.visit_id == Visit.id).filter(
+            Visit.id.in_(visit_ids),
+        ).order_by(ExamReport.id.desc()).limit(50).all()
+        reports = [{
+            "id": report.id, "date": visit.visit_date or "", "label": report.item_label or "检查报告",
+            "name": report.original_name or f"报告 {report.id}", "file_type": report.file_type or "image",
+        } for report, _order, visit in report_rows]
+
+    vaccines = db.query(Vaccination).filter(
+        Vaccination.pet_id == pet.id,
+    ).order_by(Vaccination.vaccinated_date.desc(), Vaccination.id.desc()).limit(40).all()
+    dewormings = db.query(DewormingRecord).filter(
+        DewormingRecord.pet_id == pet.id,
+    ).order_by(DewormingRecord.deworm_date.desc(), DewormingRecord.id.desc()).limit(40).all()
+    iq = db.query(Invoice).filter(Invoice.pet_id == pet.id)
+    iq = _staff_store_query(iq, Invoice, store)
+    invoices = iq.order_by(Invoice.invoice_date.desc(), Invoice.id.desc()).limit(40).all()
+
+    return {
+        "ok": True, "pet": _staff_pet_payload(pet),
+        "customer": {"id": customer.id, "name": customer.name or "未命名客户", "phone_masked": _mask_phone(customer.phone or "")} if customer else {},
+        "summary": {"visits": len(visits), "reports": len(reports), "vaccinations": len(vaccines), "dewormings": len(dewormings)},
+        "visits": [{
+            "id": v.id, "date": v.visit_date or "", "type": v.visit_type or "outpatient",
+            "chief_complaint": v.chief_complaint or "", "physical_exam": v.physical_exam or "",
+            "diagnosis": v.diagnosis or "", "treatment_plan": v.treatment_plan or "",
+            "notes": v.notes or "", "vet_name": v.vet_name or "", "status": v.status or "open",
+        } for v in visits],
+        "prescriptions": prescription_rows, "reports": reports,
+        "vaccinations": [{
+            "id": v.id, "date": v.vaccinated_date or "", "type": v.vaccine_type or "other",
+            "name": v.vaccine_name or "疫苗接种", "batch_no": v.batch_no or "",
+            "dose_number": int(v.dose_number or 0), "next_due_date": v.next_due_date or "",
+            "vet_name": v.vet_name or "", "status": v.status or "active",
+        } for v in vaccines],
+        "dewormings": [{
+            "id": d.id, "date": d.deworm_date or "", "type": d.deworm_type or "",
+            "name": d.product_name or "驱虫", "dose": d.dose or "", "weight_kg": float(d.weight_kg or 0),
+            "next_due_date": d.next_due_date or "", "vet_name": d.vet_name or "", "status": d.status or "active",
+        } for d in dewormings],
+        "invoices": [_staff_invoice_payload(db, row, {pet.id: pet.name or "未命名"}) for row in invoices],
+    }
+
+
+@app.get("/api/staff-miniapp/reports/{report_id}/file")
+async def api_staff_miniapp_report_file(
+    report_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    report = db.get(ExamReport, report_id)
+    if not report:
+        raise HTTPException(404, "检查报告不存在")
+    order = db.get(ExamOrder, report.exam_order_id)
+    visit = db.get(Visit, order.visit_id) if order else None
+    if not visit or not visit.pet_id:
+        raise HTTPException(404, "检查报告未关联宠物档案")
+    _staff_pet_record(db, user, visit.pet_id)
+    path = _resolve_stored_media_path(report.file_path)
+    if not path:
+        raise HTTPException(404, "检查报告文件不存在")
+    ctype = mimetypes.guess_type(report.original_name or path.name)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=ctype, filename=report.original_name or path.name)
+
+
 def _staff_appointment_row(db: Session, user: AdminUser, appointment_id: int) -> Appointment:
     row = db.get(Appointment, appointment_id)
     if not row:

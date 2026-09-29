@@ -24,6 +24,8 @@
     "pages/staff/tnr/tnr",
     "pages/staff/calendar/calendar",
     "pages/staff/customers/customers",
+    "pages/staff/customer/customer",
+    "pages/staff/pet/pet",
     "pages/staff/me/me"
   ],
   "window": {

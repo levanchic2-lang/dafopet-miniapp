@@ -24,7 +24,11 @@ from app import models  # noqa: F401
 from app.database import Base, SessionLocal, engine
 import app.main as main_module
 from app.main import app
-from app.models import AdminUser, Application, Appointment, Customer, MediaFile, Pet, Visit
+from app.models import (
+    AdminUser, Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
+    DewormingRecord, ExamOrder, ExamReport, Invoice, MediaFile, Payment, Pet,
+    Vaccination, Visit, Wallet,
+)
 
 
 @asynccontextmanager
@@ -55,15 +59,44 @@ try:
     db.add_all([hg_pet, dh_pet])
     db.flush()
     today = datetime.now().date().isoformat()
+    hg_visit = Visit(customer_id=hg_customer.id, pet_id=hg_pet.id, visit_date=today, store="横岗店",
+                     chief_complaint="咳嗽", diagnosis="上呼吸道感染", vet_name="横岗医生")
+    dh_visit = Visit(customer_id=dh_customer.id, pet_id=dh_pet.id, visit_date=today, store="东环店")
     db.add_all([
-        Visit(customer_id=hg_customer.id, pet_id=hg_pet.id, visit_date=today, store="横岗店"),
-        Visit(customer_id=dh_customer.id, pet_id=dh_pet.id, visit_date=today, store="东环店"),
+        hg_visit, dh_visit,
         Appointment(customer_id=hg_customer.id, pet_id=hg_pet.id, customer_name="横岗客户",
                     pet_name="横岗犬", appointment_date=today, appointment_time="23:59",
                     store="大风动物医院（横岗店）", status="confirmed"),
         Appointment(customer_id=dh_customer.id, pet_id=dh_pet.id, customer_name="东环客户",
                     pet_name="东环猫", appointment_date=today, appointment_time="11:00",
                     store="大风动物医院（东环店）", status="confirmed"),
+    ])
+    db.flush()
+    report_dir = UPLOAD_DIR / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / "hg-report.pdf"
+    report_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    exam = ExamOrder(visit_id=hg_visit.id, items_json='[{"name":"血常规"}]', status="completed")
+    invoice = Invoice(invoice_no="TEST-HG-1", customer_id=hg_customer.id, pet_id=hg_pet.id,
+                      visit_id=hg_visit.id, invoice_date=today, total_amount=300, payment_status="partial",
+                      store="横岗店")
+    wallet = Wallet(customer_id=hg_customer.id, balance=500, lifetime_recharge=500)
+    db.add_all([exam, invoice, wallet])
+    db.flush()
+    db.add_all([
+        ExamReport(exam_order_id=exam.id, file_path=str(report_path), original_name="血常规.pdf",
+                   file_type="pdf", item_label="血常规"),
+        Payment(invoice_id=invoice.id, customer_id=hg_customer.id, amount=100, status="success", store="横岗店"),
+        Vaccination(customer_id=hg_customer.id, pet_id=hg_pet.id, vaccine_name="狂犬疫苗",
+                    vaccine_type="rabies", vaccinated_date=today, status="active"),
+        DewormingRecord(customer_id=hg_customer.id, pet_id=hg_pet.id, product_name="驱虫药",
+                        deworm_type="combo", deworm_date=today, status="active"),
+        CustomerPackage(customer_id=hg_customer.id, pet_id=hg_pet.id, name="洗护卡",
+                        total_uses=10, used_count=2, status="active", store="横岗店"),
+        Deposit(customer_id=hg_customer.id, pet_id=hg_pet.id, amount=200, applied_amount=50,
+                status="held", store="横岗店"),
+        Coupon(code="TEST-HG-COUPON", customer_id=hg_customer.id, title="测试券",
+               kind="cash", face_value=30, status="issued", store="横岗店"),
     ])
     db.commit()
 finally:
@@ -209,6 +242,32 @@ try:
             db.close()
 
         own_customer = client.get("/api/staff-miniapp/customers", params={"q": "横岗"}, headers=headers).json()["items"][0]
+        customer_detail = client.get(
+            f"/api/staff-miniapp/customers/{own_customer['id']}", headers=headers,
+        )
+        assert customer_detail.status_code == 200, customer_detail.text
+        assert customer_detail.json()["summary"]["wallet_balance"] == 500
+        assert customer_detail.json()["summary"]["deposit_available"] == 150
+        assert customer_detail.json()["summary"]["unpaid_total"] == 200
+        assert customer_detail.json()["packages"][0]["remaining"] == 8
+        own_pet_id = own_customer["pets"][0]["id"]
+        pet_detail = client.get(f"/api/staff-miniapp/pets/{own_pet_id}", headers=headers)
+        assert pet_detail.status_code == 200, pet_detail.text
+        assert pet_detail.json()["visits"][0]["diagnosis"] == "上呼吸道感染"
+        assert pet_detail.json()["reports"][0]["label"] == "血常规"
+        assert pet_detail.json()["vaccinations"][0]["name"] == "狂犬疫苗"
+        assert pet_detail.json()["dewormings"][0]["name"] == "驱虫药"
+        report_id = pet_detail.json()["reports"][0]["id"]
+        report_file = client.get(f"/api/staff-miniapp/reports/{report_id}/file", headers=headers)
+        assert report_file.status_code == 200
+        db = SessionLocal()
+        try:
+            other_customer_id = db.query(Customer.id).filter(Customer.name == "东环客户").scalar()
+            other_pet_id = db.query(Pet.id).filter(Pet.name == "东环猫").scalar()
+        finally:
+            db.close()
+        assert client.get(f"/api/staff-miniapp/customers/{other_customer_id}", headers=headers).status_code == 403
+        assert client.get(f"/api/staff-miniapp/pets/{other_pet_id}", headers=headers).status_code == 403
         created = client.post("/api/staff-miniapp/appointments", json={
             "category": "outpatient", "service_name": "手机端复诊",
             "customer_id": own_customer["id"], "pet_id": own_customer["pets"][0]["id"],
