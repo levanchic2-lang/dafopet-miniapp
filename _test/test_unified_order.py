@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 
@@ -23,6 +24,7 @@ from app.main import app
 from app.models import (
     ConsentTask,
     ConsentTemplate,
+    CageRateRule,
     Customer,
     DewormingRecord,
     ExamOrder,
@@ -37,6 +39,7 @@ from app.models import (
     UnifiedOrderTemplate,
     Vaccination,
     Visit,
+    WeightRecord,
 )
 
 
@@ -197,43 +200,42 @@ assert signed_page.status_code == 200
 assert "疫苗注射后的注意事项" in signed_page.text
 assert "请截图保存" in signed_page.text
 
-# 单独住院入口同样只按项目、天数和单价开收费单，不创建“住院中”状态。
+# 正式住院必须有关联到本病例的今日体重，且按体重规则锁定日费率。
 inpatient_page = client.get(f"/admin/inpatient/new?pet_id={pet_id}&visit_id={visit_id}")
 assert inpatient_page.status_code == 200
-assert "住院天数" in inpatient_page.text
-assert "入住时间" not in inpatient_page.text
+assert "暂不能办理住院" in inpatient_page.text
 csrf_inpatient = re.search(r'name="csrf_token" value="([^"]+)"', inpatient_page.text).group(1)
+blocked_admit = client.post("/admin/inpatient/admit", data={
+    "csrf_token": csrf_inpatient, "visit_id": visit_id,
+})
+assert blocked_admit.status_code == 303 and "err=" in blocked_admit.headers["location"]
+db = SessionLocal()
+assert db.query(Hospitalization).filter_by(visit_id=visit_id).count() == 0
+db.add(WeightRecord(
+    pet_id=pet_id, visit_id=visit_id, record_date=date.today().isoformat(),
+    weight_kg=4.25, created_by="test",
+))
+db.add(CageRateRule(
+    store="横岗店", label="猫住院", species="cat", min_weight_kg=0,
+    max_weight_kg=None, daily_rate=35, is_active=True,
+))
+db.commit()
+db.close()
+
+ready_page = client.get(f"/admin/inpatient/new?visit_id={visit_id}")
+assert ready_page.status_code == 200
+assert "确认办理住院" in ready_page.text and "¥35.00" in ready_page.text
 created = client.post("/admin/inpatient/admit", data={
-    "csrf_token": csrf_inpatient, "visit_id": visit_id, "pet_id": pet_id,
-    "item_id": ids["inpatient"], "billing_days": 5, "daily_rate": 22,
-    "order_date": "2026-09-07", "notes": "术后住院观察",
+    "csrf_token": csrf_inpatient, "visit_id": visit_id,
+    "reason": "术后住院观察",
 })
 assert created.status_code == 303 and created.headers["location"].startswith("/admin/inpatient/")
-simple_hosp_id = int(created.headers["location"].split("/admin/inpatient/")[1].split("?")[0])
+hosp_id = int(created.headers["location"].split("/admin/inpatient/")[1].split("?")[0])
 db = SessionLocal()
-simple_hosp = db.get(Hospitalization, simple_hosp_id)
-simple_invoice_id = simple_hosp.invoice_id
-assert simple_hosp.status == "discharged" and simple_hosp.billing_days == 5
-assert db.get(Invoice, simple_invoice_id).total_amount == 110
-db.close()
-
-edited = client.post(f"/admin/inpatient/{simple_hosp_id}/edit-simple", data={
-    "csrf_token": csrf_inpatient, "billing_days": 4, "daily_rate": 25,
-    "notes": "更正住院天数",
-})
-assert edited.status_code == 303
-db = SessionLocal()
-assert db.get(Hospitalization, simple_hosp_id).billing_days == 4
-assert db.get(Invoice, simple_invoice_id).total_amount == 100
-db.close()
-
-cancelled = client.post(f"/admin/inpatient/{simple_hosp_id}/cancel-simple", data={
-    "csrf_token": csrf_inpatient,
-})
-assert cancelled.status_code == 303
-db = SessionLocal()
-assert db.get(Hospitalization, simple_hosp_id).status == "cancelled"
-assert db.get(Invoice, simple_invoice_id) is None
+hosp = db.get(Hospitalization, hosp_id)
+assert hosp.status == "admitted" and hosp.billing_mode == "weight"
+assert hosp.admission_weight_kg == 4.25 and hosp.daily_rate_override == 35
+assert hosp.invoice_id is None
 db.close()
 
 # 第二次开单先扣普通药，再遇到管控药库存不足；整个请求必须回滚。

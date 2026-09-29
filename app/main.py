@@ -33061,9 +33061,11 @@ async def admin_weight_create(
     csrf_token: str = Form(""),
     customer_id: int = Form(0),
     pet_id: int = Form(0),
+    visit_id: int = Form(0),
     record_date: str = Form(""),
     weight_kg: float = Form(0.0),
     notes: str = Form(""),
+    next_url: str = Form(""),
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -33072,6 +33074,7 @@ async def admin_weight_create(
         return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=weight&msg=体重需在 0~200kg 之间", status_code=303)
     rec = WeightRecord(
         pet_id=pet_id,
+        visit_id=visit_id or None,
         record_date=record_date.strip()[:20],
         weight_kg=weight_kg,
         notes=notes.strip(),
@@ -33079,7 +33082,8 @@ async def admin_weight_create(
     )
     db.add(rec)
     db.commit()
-    return RedirectResponse(f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=weight&msg=体重已记录", status_code=303)
+    fallback = f"/admin/customers/{customer_id}?pet_id={pet_id}&tab=weight&msg=体重已记录"
+    return RedirectResponse(_safe_next(next_url, fallback), status_code=303)
 
 
 @app.post("/admin/weight-records/{rec_id}/delete")
@@ -33579,6 +33583,18 @@ def _latest_pet_weight(db: Session, pet_id: int) -> float:
     return float(row.weight_kg or 0) if row else 0.0
 
 
+def _today_visit_weight(db: Session, visit: Visit | None) -> WeightRecord | None:
+    """Return only a weight measured today and explicitly linked to this visit."""
+    if not visit or not visit.pet_id:
+        return None
+    return db.query(WeightRecord).filter(
+        WeightRecord.pet_id == visit.pet_id,
+        WeightRecord.visit_id == visit.id,
+        WeightRecord.record_date == date.today().isoformat(),
+        WeightRecord.weight_kg > 0,
+    ).order_by(WeightRecord.id.desc()).first()
+
+
 def _hosp_rate_label(species: str, min_kg: float, max_kg: float | None) -> str:
     animal = "猫" if species == "cat" else "犬"
     if species == "cat" and min_kg <= 0 and max_kg is None:
@@ -33882,35 +33898,70 @@ async def admin_inpatient_rates_delete(
 # ─── 住院档案 ───
 @app.get("/admin/inpatient/new", response_class=HTMLResponse)
 async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_db),
-                                     visit_id: int = 0, pet_id: int = 0):
+                                     visit_id: int = 0, pet_id: int = 0,
+                                     q: str = ""):
     require_admin(request)
     v = db.get(Visit, visit_id) if visit_id else None
     if visit_id and not v:
         raise HTTPException(404, "病历不存在")
-    resolved_pet_id = int(v.pet_id or 0) if v else int(pet_id or 0)
+    today = date.today().isoformat()
+    if not v and pet_id:
+        v = db.query(Visit).filter(
+            Visit.pet_id == pet_id,
+            Visit.status == "open",
+        ).order_by(
+            (Visit.visit_date == today).desc(), Visit.visit_date.desc(), Visit.id.desc()
+        ).first()
+    resolved_pet_id = int(v.pet_id or 0) if v else 0
     pet = db.get(Pet, resolved_pet_id) if resolved_pet_id else None
     cust = db.get(Customer, pet.customer_id) if pet else None
     if pet:
         _assert_store_access(request, pet.store or "")
     store_short = _get_op_store(request) or (pet.store if pet else "") or ""
     species = _hosp_species(pet.species if pet else "")
-    weight_kg = _latest_pet_weight(db, pet.id) if pet else 0.0
+    weight_record = _today_visit_weight(db, v)
+    weight_kg = float(weight_record.weight_kg or 0) if weight_record else 0.0
     matched_rule = _match_hosp_rate(db, store_short, species, weight_kg)
-    item_query = db.query(InventoryItem).filter(
-        InventoryItem.is_active == True,  # noqa: E712
-        InventoryItem.order_type == "inpatient",
-    )
-    item_query = _apply_store_filter(item_query, InventoryItem.store, store_short)
-    from app.services.pricing import effective_sell_price as _eff
-    inpatient_items = [{
-        "id": item.id, "name": item.name,
-        "price": float(_eff(item, store_short) or 0),
-    } for item in item_query.order_by(InventoryItem.name, InventoryItem.id).all()]
+    existing = db.query(Hospitalization).filter(
+        Hospitalization.pet_id == resolved_pet_id,
+        Hospitalization.status == "admitted",
+    ).order_by(Hospitalization.id.desc()).first() if resolved_pet_id else None
+    occupied_cage_ids = [row[0] for row in db.query(Hospitalization.cage_id).filter(
+        Hospitalization.status == "admitted",
+        Hospitalization.cage_id.is_not(None),
+    ).all()]
+    cage_query = db.query(Cage).filter(Cage.is_active == True)  # noqa: E712
+    if store_short:
+        cage_query = cage_query.filter(Cage.store == store_short)
+    if occupied_cage_ids:
+        cage_query = cage_query.filter(Cage.id.notin_(occupied_cage_ids))
+    available_cages = cage_query.order_by(Cage.sort_order, Cage.code).all()
+
+    candidates = []
+    if not v:
+        candidate_query = db.query(Visit, Pet, Customer).join(
+            Pet, Visit.pet_id == Pet.id
+        ).join(Customer, Pet.customer_id == Customer.id).filter(
+            Visit.status == "open",
+            Visit.visit_date == today,
+        )
+        if store_short:
+            candidate_query = candidate_query.filter(Pet.store == store_short)
+        keyword = (q or "").strip()
+        if keyword:
+            like = f"%{keyword}%"
+            candidate_query = candidate_query.filter(or_(
+                Pet.name.ilike(like), Customer.name.ilike(like),
+                Customer.phone.ilike(like), Pet.medical_record_no.ilike(like),
+            ))
+        candidates = candidate_query.order_by(Visit.id.desc()).limit(30).all()
     return templates.TemplateResponse(request, "uk/inpatient_new.html", {
         "request": request, "visit": v, "cust": cust, "pet": pet,
         "store_short": store_short, "species": species, "weight_kg": weight_kg,
-        "matched_rule": matched_rule, "inpatient_items": inpatient_items,
-        "today": date.today().isoformat(),
+        "weight_record": weight_record, "matched_rule": matched_rule,
+        "existing": existing, "available_cages": available_cages,
+        "candidates": candidates, "q": (q or "").strip(), "today": today,
+        "now": datetime.utcnow(),
         "csrf_token": _get_csrf_token(request),
         "title": "新建住院单",
     })
@@ -33919,68 +33970,88 @@ async def admin_inpatient_new_page(request: Request, db: Session = Depends(get_d
 @app.post("/admin/inpatient/admit")
 async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
                                   csrf_token: str = Form(""),
-                                  visit_id: int = Form(0), pet_id: int = Form(0),
-                                  item_id: int = Form(0), billing_days: float = Form(1.0),
-                                  daily_rate: float = Form(0.0), order_date: str = Form(""),
-                                  notes: str = Form(""),
+                                  visit_id: int = Form(0), cage_id: int = Form(0),
+                                  admitted_at: str = Form(""),
+                                  expected_discharge_date: str = Form(""),
+                                  reason: str = Form(""),
                                   is_insurance_service: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     v = db.get(Visit, visit_id) if visit_id else None
-    resolved_pet_id = int(v.pet_id or 0) if v else int(pet_id or 0)
-    pet = db.get(Pet, resolved_pet_id) if resolved_pet_id else None
-    if not pet:
-        return RedirectResponse("/admin/inpatient/new?err=请先选择宠物", status_code=303)
+    pet = db.get(Pet, v.pet_id) if v and v.pet_id else None
+    if not v or not pet:
+        return RedirectResponse("/admin/inpatient/new?err=请先选择今天的病例", status_code=303)
+    if v.status != "open":
+        return RedirectResponse(
+            f"/admin/inpatient/new?visit_id={v.id}&err={quote('已结束病例不能办理住院', safe='')}",
+            status_code=303,
+        )
     _assert_store_access(request, pet.store or "")
     store_short = _get_op_store(request) or (pet.store or "")
-    new_url = f"/admin/inpatient/new?pet_id={pet.id}"
-    if visit_id:
-        new_url += f"&visit_id={visit_id}"
-    try:
-        days = _unified_positive_number(billing_days)
-        rate = _unified_price(daily_rate)
-    except ValueError as exc:
-        return RedirectResponse(f"{new_url}&err={quote(str(exc), safe='')}", status_code=303)
-    item = db.get(InventoryItem, item_id) if item_id else None
-    if item:
-        if not item.is_active or item.order_type != "inpatient":
-            return RedirectResponse(f"{new_url}&err=住院项目无效", status_code=303)
-        _assert_store_access(request, item.store or "")
-    label = item.name if item else "住院费"
-    if rate <= 0:
-        return RedirectResponse(f"{new_url}&err=请填写每日单价", status_code=303)
-    bill_date = (order_date or date.today().isoformat()).strip()[:10]
-    service_at = _parse_bj_dt_to_utc(f"{bill_date}T12:00")
+    new_url = f"/admin/inpatient/new?visit_id={v.id}"
+    existing = db.query(Hospitalization).filter(
+        Hospitalization.pet_id == pet.id,
+        Hospitalization.status == "admitted",
+    ).order_by(Hospitalization.id.desc()).first()
+    if existing:
+        return RedirectResponse(f"/admin/inpatient/{existing.id}?msg=该动物已经在住院中", status_code=303)
+    weight_record = _today_visit_weight(db, v)
+    if not weight_record:
+        msg = quote("办理住院前，必须先记录本病例今天的体重", safe="")
+        return RedirectResponse(f"{new_url}&err={msg}", status_code=303)
+    species = _hosp_species(pet.species or "")
+    weight_kg = float(weight_record.weight_kg or 0)
+    matched_rule = _match_hosp_rate(db, store_short, species, weight_kg)
+    if not matched_rule or float(matched_rule.daily_rate or 0) <= 0:
+        msg = quote("当前门店没有匹配该物种和体重的住院费率，请先完善收费规则", safe="")
+        return RedirectResponse(f"{new_url}&err={msg}", status_code=303)
+    cage = db.get(Cage, cage_id) if cage_id else None
+    if cage:
+        if not cage.is_active or cage.store != store_short:
+            return RedirectResponse(f"{new_url}&err=所选笼位不可用", status_code=303)
+        occupied = db.query(Hospitalization).filter(
+            Hospitalization.cage_id == cage.id,
+            Hospitalization.status == "admitted",
+        ).first()
+        if occupied:
+            return RedirectResponse(f"{new_url}&err=所选笼位已被占用", status_code=303)
+    service_at = _parse_bj_dt_to_utc(admitted_at) if admitted_at else datetime.utcnow()
     if service_at is None:
-        return RedirectResponse(f"{new_url}&err=开单日期格式不正确", status_code=303)
+        return RedirectResponse(f"{new_url}&err=入住时间格式不正确", status_code=303)
     operator = request.session.get("admin_username", "admin")
     h = Hospitalization(
-        pet_id=pet.id, customer_id=pet.customer_id, visit_id=visit_id or None,
-        cage_id=None, store=store_short, reason=(notes or "").strip()[:2000],
-        daily_rate_override=rate, billing_mode="simple",
-        species_snapshot=_hosp_species(pet.species), admission_weight_kg=0,
-        rate_rule_id=None, rate_label=label,
-        admitted_at=service_at, discharged_at=service_at, billing_days=days,
+        pet_id=pet.id, customer_id=pet.customer_id, visit_id=v.id,
+        cage_id=cage.id if cage else None, store=store_short,
+        reason=(reason or v.diagnosis or v.chief_complaint or "住院观察").strip()[:2000],
+        admitted_at=service_at,
+        expected_discharge_date=(expected_discharge_date or "").strip()[:10],
+        discharged_at=None,
+        daily_rate_override=float(matched_rule.daily_rate or 0), billing_mode="weight",
+        species_snapshot=species, admission_weight_kg=weight_kg,
+        rate_rule_id=matched_rule.id, rate_label=matched_rule.label,
+        billing_days=0,
         is_insurance_service=is_insurance_service == "1",
-        status="discharged",
+        status="admitted",
         staff_token=_gen_hosp_token(db, "staff_token"),
         owner_token=_gen_hosp_token(db, "owner_token"),
-        created_by=operator, closed_by=operator,
+        created_by=operator,
     )
     db.add(h)
     db.flush()
-    inv = _sync_hospitalization_invoice(db, h, operator)
-    if inv:
-        inv.invoice_date = bill_date
-        h.invoice_id = inv.id
-    _audit(db, request, "hospitalization_charge_create", detail={
-        "id": h.id, "pet_id": h.pet_id, "visit_id": visit_id,
-        "store": store_short, "item_id": item.id if item else None,
-        "billing_days": days, "daily_rate": rate,
-        "is_insurance_service": bool(h.is_insurance_service),
+    prescriptions = db.query(Prescription).filter(
+        Prescription.visit_id == v.id,
+        Prescription.status.notin_(["draft", "voided"]),
+    ).all()
+    generated = sum(_generate_med_logs_for_prescription(db, presc) for presc in prescriptions)
+    _audit(db, request, "hospitalization_admit", detail={
+        "id": h.id, "pet_id": h.pet_id, "visit_id": v.id,
+        "store": store_short, "weight_record_id": weight_record.id,
+        "weight_kg": weight_kg, "rate_rule_id": matched_rule.id,
+        "daily_rate": float(matched_rule.daily_rate or 0),
+        "medication_tasks": generated,
     })
     db.commit()
-    return RedirectResponse(f"/admin/inpatient/{h.id}?msg=住院收费单已生成",
+    return RedirectResponse(f"/admin/inpatient/{h.id}?msg=已办理住院，可开始记录住院用药",
                              status_code=303)
 
 
@@ -33989,63 +34060,13 @@ async def admin_inpatient_admit_live(
     request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""), visit_id: int = Form(0),
 ):
-    """从病例一键办理实际入住；收费信息按现有规则自动带入，后续离院时结算。"""
+    """Compatibility endpoint: admission now always goes through the validated form."""
     require_admin(request)
     _require_csrf(request, csrf_token)
     visit = db.get(Visit, visit_id) if visit_id else None
-    pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
-    if not visit or not pet:
-        raise HTTPException(404, "病例或宠物档案不存在")
-    _assert_store_access(request, pet.store or "")
-    existing = db.query(Hospitalization).filter(
-        Hospitalization.pet_id == pet.id,
-        Hospitalization.status == "admitted",
-    ).order_by(Hospitalization.id.desc()).first()
-    if existing:
-        return RedirectResponse(
-            f"/admin/inpatient/{existing.id}?msg=该动物已经在住院中", status_code=303,
-        )
-    store_short = _get_op_store(request) or (pet.store or "")
-    species = _hosp_species(pet.species or "")
-    weight_kg = _latest_pet_weight(db, pet.id)
-    matched_rule = _match_hosp_rate(db, store_short, species, weight_kg)
-    operator = request.session.get("admin_username", "admin")
-    hosp = Hospitalization(
-        pet_id=pet.id,
-        customer_id=pet.customer_id,
-        visit_id=visit.id,
-        cage_id=None,
-        store=store_short,
-        reason=(visit.diagnosis or visit.chief_complaint or "住院观察")[:2000],
-        admitted_at=datetime.utcnow(),
-        discharged_at=None,
-        daily_rate_override=float(matched_rule.daily_rate or 0) if matched_rule else 0.0,
-        billing_mode="weight",
-        species_snapshot=species,
-        admission_weight_kg=weight_kg,
-        rate_rule_id=matched_rule.id if matched_rule else None,
-        rate_label=matched_rule.label if matched_rule else "住院费待确认",
-        status="admitted",
-        staff_token=_gen_hosp_token(db, "staff_token"),
-        owner_token=_gen_hosp_token(db, "owner_token"),
-        created_by=operator,
-    )
-    db.add(hosp)
-    db.flush()
-    # 医生可能先开处方、后点办理住院；入住时补生成这些处方的发药任务。
-    prescriptions = db.query(Prescription).filter(
-        Prescription.visit_id == visit.id,
-        Prescription.status.notin_(["draft", "voided"]),
-    ).all()
-    generated = sum(_generate_med_logs_for_prescription(db, presc) for presc in prescriptions)
-    _audit(db, request, "hospitalization_admit", detail={
-        "id": hosp.id, "visit_id": visit.id, "pet_id": pet.id,
-        "store": store_short, "medication_tasks": generated,
-    })
-    db.commit()
-    return RedirectResponse(
-        f"/admin/inpatient/{hosp.id}?msg=已办理住院，可开始记录住院用药", status_code=303,
-    )
+    if not visit:
+        raise HTTPException(404, "病例不存在")
+    return RedirectResponse(f"/admin/inpatient/new?visit_id={visit.id}", status_code=303)
 
 
 @app.post("/admin/inpatient/{hosp_id}/edit-simple")

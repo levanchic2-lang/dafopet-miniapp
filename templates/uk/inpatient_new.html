@@ -1,80 +1,85 @@
 {% extends "uk/_base.html" %}
-{% block title %}新建住院收费单 · 大风动物医院{% endblock %}
+{% block title %}办理住院 · 大风动物医院{% endblock %}
 {% block body %}
 <style>
   .in-bc{font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin:24px 0 16px}.in-bc a{color:inherit}.in-bc span{margin:0 8px}
   .in-head h1{font-size:28pt;letter-spacing:2px;margin:0}.in-head p{color:var(--ink-3);font-size:10pt;margin:8px 0 0}.in-rule{border:0;height:4px;border-top:.5px solid var(--ink);border-bottom:.5px solid var(--ink);margin:18px 0 28px}
-  .in-msg{padding:11px 15px;border-left:3px solid var(--accent-red);background:#fcf5f4;color:var(--accent-red);margin-bottom:18px}
-  .in-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(400px,440px);gap:28px}.in-panel{border-top:.5px solid var(--ink);padding-top:14px}.in-panel h2{font-size:12pt;letter-spacing:2px;margin:0 0 14px}
-  .in-search{display:flex;gap:8px}.in-search input{flex:1;height:40px;border:.5px solid var(--hair);padding:7px 11px;font:11pt var(--font-serif);border-radius:0}.in-btn{border:0;background:var(--ink);color:var(--paper);min-height:40px;padding:0 18px;font:700 10pt var(--font-serif);letter-spacing:2px;cursor:pointer}.in-btn.ghost{background:var(--paper);color:var(--ink-2);border:.5px solid var(--hair)}
-  .in-results{margin-top:12px}.in-customer{border-bottom:.5px solid var(--hair);padding:12px 0}.in-owner{font-weight:700}.in-owner small{font-weight:400;color:var(--ink-3);margin-left:8px}.in-pets{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.in-pet{display:inline-block;border:.5px solid var(--hair);padding:7px 11px;color:var(--ink);text-decoration:none}.in-pet:hover{border-color:var(--ink)}
-  .in-summary{border:.5px solid var(--hair-2);padding:18px;box-sizing:border-box;min-width:0}.in-name{font-size:17pt;font-weight:700}.in-meta{color:var(--ink-3);margin-top:5px}.in-lines{margin:18px 0;border-top:.5px solid var(--hair)}.in-line{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:.5px solid var(--hair)}.in-line span:first-child{color:var(--ink-3)}.in-rate{font-size:22pt;font-weight:700;font-family:var(--font-numeric);color:var(--accent-green)}
-  .in-fix{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin:14px 0}.in-fix label{font-size:9pt;color:var(--ink-3);min-width:0}.in-fix input,.in-fix select{width:100%;min-width:0;height:38px;margin-top:5px;border:.5px solid var(--hair);background:var(--paper);padding:7px;font:10pt var(--font-serif);box-sizing:border-box;border-radius:0}.in-note{font-size:9pt;color:var(--ink-3);line-height:1.6;margin-top:12px}.in-existing{border-left:3px solid var(--accent-amber);padding:12px;background:#fbf6f0;margin-bottom:16px}
-  @media(max-width:850px){.in-layout{grid-template-columns:1fr}.in-summary{order:-1}}
+  .in-msg{padding:12px 15px;border-left:3px solid var(--accent-red);background:#fcf5f4;color:var(--accent-red);margin-bottom:18px}.in-msg.ok{border-color:var(--accent-green);background:#f2f8f4;color:var(--accent-green)}
+  .in-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(390px,450px);gap:28px}.in-panel{border-top:.5px solid var(--ink);padding-top:14px}.in-panel h2{font-size:12pt;letter-spacing:2px;margin:0 0 14px}
+  .in-search{display:flex;gap:8px}.in-search input{flex:1;height:40px;border:.5px solid var(--hair);padding:7px 11px;font:11pt var(--font-serif);border-radius:0}.in-btn{display:inline-flex;align-items:center;justify-content:center;border:0;background:var(--ink);color:var(--paper);min-height:40px;padding:0 18px;font:700 10pt var(--font-serif);letter-spacing:2px;cursor:pointer;text-decoration:none}.in-btn.ghost{background:var(--paper);color:var(--ink-2);border:.5px solid var(--hair)}
+  .in-candidates{border:.5px solid var(--hair-2)}.in-candidate{display:grid;grid-template-columns:80px 1fr auto;align-items:center;gap:14px;padding:13px 15px;border-bottom:.5px solid var(--hair);color:var(--ink);text-decoration:none}.in-candidate:last-child{border-bottom:0}.in-candidate:hover{background:var(--bg)}.in-candidate .date{font-family:var(--font-numeric);color:var(--ink-3)}.in-candidate b{display:block}.in-candidate small{display:block;color:var(--ink-3);margin-top:3px}.in-empty{padding:34px 18px;text-align:center;color:var(--ink-3);font-style:italic;border:.5px solid var(--hair)}
+  .in-summary{border:.5px solid var(--hair-2);padding:18px;box-sizing:border-box;min-width:0}.in-name{font-size:17pt;font-weight:700}.in-meta{color:var(--ink-3);margin-top:5px}.in-lines{margin:18px 0;border-top:.5px solid var(--hair)}.in-line{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:.5px solid var(--hair)}.in-line span:first-child{color:var(--ink-3)}.in-rate{font-size:22pt;font-weight:700;font-family:var(--font-numeric);color:var(--accent-green);margin-bottom:18px}
+  .in-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin:14px 0}.in-field{font-size:9pt;color:var(--ink-3);min-width:0}.in-field.full{grid-column:1/-1}.in-field input,.in-field select,.in-field textarea{width:100%;min-width:0;margin-top:5px;border:.5px solid var(--hair);background:var(--paper);padding:8px;font:10pt var(--font-serif);box-sizing:border-box;border-radius:0}.in-field input,.in-field select{height:40px}.in-field textarea{min-height:72px;resize:vertical}.in-note{font-size:9pt;color:var(--ink-3);line-height:1.6;margin-top:12px}.in-existing{border-left:3px solid var(--accent-amber);padding:12px;background:#fbf6f0;margin-bottom:16px}.in-weight-form{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px}.in-weight-form input{height:40px;border:.5px solid var(--hair);padding:8px;font:11pt var(--font-serif);box-sizing:border-box}
+  @media(max-width:850px){.in-layout{grid-template-columns:1fr}.in-summary{order:-1}.in-candidate{grid-template-columns:64px 1fr}.in-candidate .go{display:none}}
 </style>
-<div class="in-bc"><a href="/admin/inpatient">住院管理</a><span>/</span>新建住院收费单</div>
-<div class="in-head"><h1>新建住院收费单</h1><p>用于补录或直接结算住院费用，不会把动物标记为住院中。</p></div>
+<div class="in-bc"><a href="/admin/inpatient">住院管理</a><span>/</span>办理住院</div>
+<div class="in-head"><h1>办理住院</h1><p>从当天病例办理正式入住；体重与日费率在入住时锁定。</p></div>
 <hr class="in-rule"/>
 {% if request.query_params.get('err') %}<div class="in-msg">{{ request.query_params.get('err') }}</div>{% endif %}
+{% if request.query_params.get('msg') %}<div class="in-msg ok">{{ request.query_params.get('msg') }}</div>{% endif %}
+
+{% if not visit %}
+<section class="in-panel" style="max-width:900px">
+  <h2>选择今天的病例</h2>
+  <form class="in-search" method="get"><input name="q" value="{{ q }}" placeholder="输入客户姓名、手机号、宠物名或病历号" autocomplete="off"/><button class="in-btn ghost" type="submit">搜索</button></form>
+  <div class="in-note" style="margin-bottom:14px">住院必须关联病例。下方仅显示当前门店今天仍在进行中的病例。</div>
+  {% if candidates %}<div class="in-candidates">
+    {% for row in candidates %}{% set cv = row[0] %}{% set cp = row[1] %}{% set cc = row[2] %}
+    <a class="in-candidate" href="/admin/inpatient/new?visit_id={{ cv.id }}"><span class="date">#{{ cv.id }}</span><span><b>{{ cp.name or '未命名宠物' }} · {{ cc.name or '未命名客户' }}</b><small>{{ cc.phone or '无电话' }} · {{ cv.diagnosis or cv.chief_complaint or '未填写诊断' }}</small></span><span class="go">办理 →</span></a>
+    {% endfor %}
+  </div>{% else %}<div class="in-empty">今天没有符合条件的进行中病例。</div>{% endif %}
+</section>
+{% else %}
 <div class="in-layout">
   <section class="in-panel">
-    <h2>选择客户 / 宠物</h2>
-    <div class="in-search"><input id="customerSearch" placeholder="输入客户姓名、手机号或宠物名" autocomplete="off"/><button type="button" class="in-btn ghost" onclick="searchCustomer()">搜索</button></div>
-    <div id="searchResults" class="in-results">{% if not pet %}<div class="in-note">搜索并选择需要补录或结算住院费的宠物。</div>{% endif %}</div>
-  </section>
-  {% if pet %}
-  <aside class="in-summary">
+    <h2>入住资料</h2>
     <div class="in-name">{{ pet.name or '未命名宠物' }}</div>
-    <div class="in-meta">{{ cust.name if cust else '—' }}{% if cust and cust.phone %} · {{ cust.phone }}{% endif %}</div>
+    <div class="in-meta">病历 #{{ visit.id }} · {{ cust.name if cust else '—' }}{% if cust and cust.phone %} · {{ cust.phone }}{% endif %}</div>
     <div class="in-lines">
-      <div class="in-line"><span>当前门店</span><b>{{ store_short or '未选择' }}</b></div>
-      <div class="in-line"><span>计费单位</span><b>天</b></div>
+      <div class="in-line"><span>门店</span><b>{{ store_short or '未选择' }}</b></div>
+      <div class="in-line"><span>宠物种类</span><b>{{ '猫' if species == 'cat' else ('犬' if species == 'dog' else '未填写') }}</b></div>
+      <div class="in-line"><span>本病例今日体重</span><b>{{ ('%.2f kg'|format(weight_kg)) if weight_record else '尚未记录' }}</b></div>
+      <div class="in-line"><span>匹配收费规则</span><b>{{ matched_rule.label if matched_rule else '尚未匹配' }}</b></div>
     </div>
-    <form method="post" action="/admin/inpatient/admit">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="pet_id" value="{{ pet.id }}"/><input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/>
-      <div class="in-fix">
-        <label>开单日期<input type="date" name="order_date" value="{{ today }}" required/></label>
-        <label>住院项目
-          <select name="item_id" id="inpatientItem">
-            {% for item in inpatient_items %}<option value="{{ item.id }}" data-price="{{ item.price }}">{{ item.name }}</option>{% endfor %}
-            {% if not inpatient_items %}<option value="0" data-price="{{ matched_rule.daily_rate if matched_rule else 0 }}">住院费</option>{% endif %}
-          </select>
-        </label>
-      </div>
-      <div class="in-fix">
-        <label>住院天数<input id="billingDays" type="number" name="billing_days" min="0.5" step="0.5" value="1" required/></label>
-        <label>每日单价<input id="dailyRate" type="number" name="daily_rate" min="0.01" step="0.01" value="{{ inpatient_items[0].price if inpatient_items else (matched_rule.daily_rate if matched_rule else '') }}" required/></label>
-      </div>
-      <div class="in-lines"><div class="in-line"><span>费用合计</span><b class="in-rate" id="chargeTotal">¥0.00</b></div></div>
-      <label style="display:block;font-size:9pt;color:var(--ink-3);margin:0 0 14px">备注（可选）<input name="notes" style="width:100%;height:38px;margin-top:5px;border:.5px solid var(--hair);padding:7px;box-sizing:border-box"/></label>
-      <label style="display:flex;align-items:center;gap:8px;margin:4px 0 14px;cursor:pointer;font-size:10pt;">
-        <input type="checkbox" name="is_insurance_service" value="1"/>
-        保险增值服务（收费单生成后进入“保险待结算”）
-      </label>
-      <button class="in-btn" type="submit" style="width:100%">生成住院收费单</button>
+
+    {% if not weight_record %}
+    <div class="in-msg"><b>暂不能办理住院</b><br/>请先记录本病例今天的体重。保存后页面会重新加载并自动匹配住院价格。</div>
+    <form method="post" action="/admin/weight-records/create">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/><input type="hidden" name="pet_id" value="{{ pet.id }}"/><input type="hidden" name="visit_id" value="{{ visit.id }}"/><input type="hidden" name="record_date" value="{{ today }}"/><input type="hidden" name="next_url" value="/admin/inpatient/new?visit_id={{ visit.id }}&msg=本病例今日体重已记录"/>
+      <label class="in-field">记录本病例今日体重（kg）</label>
+      <div class="in-weight-form"><input type="number" name="weight_kg" min="0.01" max="200" step="0.01" required placeholder="例如 4.25"/><button class="in-btn" type="submit">保存体重</button></div>
     </form>
-    <div class="in-note">无需办理入住或离院。保存后直接生成待结算收费单，并进入收银台。</div>
+    {% elif not matched_rule or matched_rule.daily_rate <= 0 %}
+    <div class="in-msg"><b>暂不能办理住院</b><br/>当前门店没有匹配 {{ '猫' if species == 'cat' else ('犬' if species == 'dog' else '该物种') }} {{ '%.2f'|format(weight_kg) }} kg 的住院收费规则。</div>
+    {% if request.session.get('admin_role') == 'superadmin' %}<a class="in-btn ghost" href="/admin/inpatient/rates">前往完善收费规则</a>{% endif %}
+    {% elif existing %}
+    <div class="in-existing">该宠物已经住院中。<a href="/admin/inpatient/{{ existing.id }}">查看住院单 #{{ existing.id }}</a></div>
+    {% else %}
+    <div class="in-rate">¥{{ '%.2f'|format(matched_rule.daily_rate) }}<small style="font-size:9pt;color:var(--ink-3);font-weight:400"> / 天</small></div>
+    <form method="post" action="/admin/inpatient/admit" onsubmit="return confirm('确认办理住院？入住体重和日费率将按当前数据锁定。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="visit_id" value="{{ visit.id }}"/>
+      <div class="in-fields">
+        <label class="in-field">入住时间<input type="datetime-local" name="admitted_at" value="{{ (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}" required/></label>
+        <label class="in-field">预计出院日期<input type="date" name="expected_discharge_date" min="{{ today }}"/></label>
+        <label class="in-field">笼位（可选）<select name="cage_id"><option value="0">暂不分配</option>{% for cage in available_cages %}<option value="{{ cage.id }}">{{ cage.code }} · {% if cage.kind == 'general' %}普通{% elif cage.kind == 'iso' %}隔离{% elif cage.kind == 'icu' %}ICU{% else %}其他{% endif %}</option>{% endfor %}</select></label>
+        <label class="in-field full">住院原因 / 初步诊断<textarea name="reason" placeholder="可补充住院观察重点">{{ visit.diagnosis or visit.chief_complaint or '' }}</textarea></label>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin:4px 0 14px;cursor:pointer;font-size:10pt"><input type="checkbox" name="is_insurance_service" value="1"/>保险增值服务</label>
+      <button class="in-btn" type="submit" style="width:100%">确认办理住院</button>
+    </form>
+    <div class="in-note">正式入住后会显示在住院管理和手机端“住院用药”中；离院时再按实际住院天数生成收费。</div>
+    {% endif %}
+  </section>
+  <aside class="in-panel">
+    <h2>本次计费依据</h2>
+    <div class="in-lines">
+      <div class="in-line"><span>体重记录日期</span><b>{{ weight_record.record_date if weight_record else '—' }}</b></div>
+      <div class="in-line"><span>关联病例</span><b>{{ ('#' ~ weight_record.visit_id) if weight_record else '—' }}</b></div>
+      <div class="in-line"><span>入住体重</span><b>{{ ('%.2f kg'|format(weight_kg)) if weight_record else '—' }}</b></div>
+      <div class="in-line"><span>锁定日费率</span><b>{{ ('¥%.2f'|format(matched_rule.daily_rate)) if matched_rule else '—' }}</b></div>
+    </div>
+    <div class="in-note">仅接受“今天 + 当前病例”关联的体重记录，不会自动采用宠物档案里的历史体重。</div>
   </aside>
-  {% endif %}
 </div>
-<script>
-async function searchCustomer(){
-  const q=document.getElementById('customerSearch').value.trim(), box=document.getElementById('searchResults');
-  if(q.length<2){box.innerHTML='<div class="in-note">请至少输入两个字符。</div>';return}
-  box.innerHTML='<div class="in-note">正在搜索…</div>';
-  try{
-    const data=await fetch('/m/api/search-customer?q='+encodeURIComponent(q)).then(r=>r.json());
-    if(!data.results||!data.results.length){box.innerHTML='<div class="in-note">没有找到客户或宠物。</div>';return}
-    box.innerHTML=data.results.map(c=>`<div class="in-customer"><div class="in-owner">${esc(c.name||'未命名客户')}<small>${esc(c.phone||'')}</small></div><div class="in-pets">${(c.pets||[]).map(p=>`<a class="in-pet" href="/admin/inpatient/new?pet_id=${p.id}">${esc(p.name||'未命名')} · ${p.species==='cat'?'猫':(p.species==='dog'?'犬':'待确认')}</a>`).join('')||'<span class="in-note">该客户没有宠物档案</span>'}</div></div>`).join('');
-  }catch(e){box.innerHTML='<div class="in-note">搜索失败，请稍后重试。</div>'}
-}
-function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
-document.getElementById('customerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchCustomer()}});
-const itemSelect=document.getElementById('inpatientItem'), daysInput=document.getElementById('billingDays'), rateInput=document.getElementById('dailyRate'), total=document.getElementById('chargeTotal');
-function updateChargeTotal(){if(!total)return;total.textContent='¥'+((Number(daysInput.value)||0)*(Number(rateInput.value)||0)).toFixed(2)}
-if(itemSelect)itemSelect.addEventListener('change',()=>{const option=itemSelect.options[itemSelect.selectedIndex];rateInput.value=option.dataset.price||'';updateChargeTotal()});
-if(daysInput)daysInput.addEventListener('input',updateChargeTotal);
-if(rateInput)rateInput.addEventListener('input',updateChargeTotal);
-updateChargeTotal();
-</script>
+{% endif %}
 {% endblock %}

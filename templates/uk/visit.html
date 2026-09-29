@@ -217,11 +217,7 @@
         {% if active_hospitalization %}
           <a href="/admin/inpatient/{{ active_hospitalization.id }}" class="uk-btn primary sm">住院中 · 查看</a>
         {% else %}
-          <form method="post" action="/admin/inpatient/admit-live" style="display:inline;margin:0;" onsubmit="return confirm('确认现在办理住院？');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-            <input type="hidden" name="visit_id" value="{{ visit.id }}"/>
-            <button type="submit" class="uk-btn primary sm">办理住院</button>
-          </form>
+          <a href="/admin/inpatient/new?visit_id={{ visit.id }}" class="uk-btn primary sm">办理住院</a>
         {% endif %}
         <a href="/admin/visits/{{ visit.id }}/unified-order" class="uk-btn primary sm">＋ 统一开单</a>
         {% if unified_batches %}<a href="/admin/unified-orders/{{ unified_batches[0].id }}" class="uk-btn ghost sm">统一改单</a>{% endif %}
