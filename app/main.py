@@ -6654,7 +6654,10 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
         })
     pending_count = sum(t["count"] for t in tasks)
     tnr_today_count = sum(1 for row in appointments if row.category == AppointmentCategory.tnr.value)
-    anmon_q = db.query(AnesthesiaMonitorSheet).filter(AnesthesiaMonitorSheet.status == "open")
+    anmon_q = db.query(AnesthesiaMonitorSheet).filter(
+        AnesthesiaMonitorSheet.status == "open",
+        AnesthesiaMonitorSheet.monitor_date == today,
+    )
     if store:
         anmon_q = anmon_q.filter(AnesthesiaMonitorSheet.store.in_([store, full_store]))
     anesthesia_open_count = anmon_q.count()
@@ -7264,7 +7267,11 @@ async def api_staff_miniapp_anesthesia_monitors(
     user = _staff_miniapp_user(request, db)
     store = (user.store or "").strip()
     clean_q = (q or "").strip()
-    sheet_q = db.query(AnesthesiaMonitorSheet).filter(AnesthesiaMonitorSheet.status == "open")
+    today = date.today().isoformat()
+    sheet_q = db.query(AnesthesiaMonitorSheet).filter(
+        AnesthesiaMonitorSheet.status == "open",
+        AnesthesiaMonitorSheet.monitor_date == today,
+    )
     if store:
         sheet_q = sheet_q.filter(AnesthesiaMonitorSheet.store.in_([store, _STORE_SHORT_TO_FULL.get(store, store)]))
     active = sheet_q.order_by(AnesthesiaMonitorSheet.id.desc()).all()

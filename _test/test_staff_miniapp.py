@@ -98,6 +98,11 @@ try:
                 status="held", store="横岗店"),
         Coupon(code="TEST-HG-COUPON", customer_id=hg_customer.id, title="测试券",
                kind="cash", face_value=30, status="issued", store="横岗店"),
+        AnesthesiaMonitorSheet(
+            customer_id=hg_customer.id, pet_id=hg_pet.id,
+            monitor_date="2026-01-01", start_time="10:00",
+            status="open", store="横岗店", created_by="历史测试",
+        ),
     ])
     db.commit()
 finally:
@@ -129,7 +134,12 @@ try:
         assert dashboard.status_code == 200, dashboard.text
         assert dashboard.json()["stats"]["appointments"] == 1
         assert dashboard.json()["stats"]["visits"] == 1
+        assert dashboard.json()["stats"]["anesthesia_open"] == 0
         assert dashboard.json()["next_appointment"]["pet_name"] == "横岗犬"
+
+        anesthesia_list = client.get("/api/staff-miniapp/anesthesia-monitors", headers=headers)
+        assert anesthesia_list.status_code == 200, anesthesia_list.text
+        assert anesthesia_list.json()["active"] == []
 
         calendar = client.get("/api/staff-miniapp/calendar", params={"start": today, "days": 3}, headers=headers)
         assert calendar.status_code == 200, calendar.text
@@ -303,6 +313,8 @@ try:
         )
         assert started_monitor.status_code == 200, started_monitor.text
         monitor_id = started_monitor.json()["id"]
+        active_after_start = client.get("/api/staff-miniapp/anesthesia-monitors", headers=headers)
+        assert [row["id"] for row in active_after_start.json()["active"]] == [monitor_id]
         db = SessionLocal()
         try:
             drug = InventoryItem(
