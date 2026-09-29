@@ -239,6 +239,30 @@ hosp = db.get(Hospitalization, hosp_id)
 assert hosp.status == "admitted" and hosp.billing_mode == "weight"
 assert hosp.admission_weight_kg == 4.25 and hosp.daily_rate_override == 35
 assert hosp.invoice_id is None
+boarding_pet = Pet(customer_id=customer_id, name="寄养测试猫", species="cat", store="横岗店")
+db.add(boarding_pet)
+db.flush()
+db.add(WeightRecord(
+    pet_id=boarding_pet.id, visit_id=None, record_date=date.today().isoformat(),
+    weight_kg=3.8, created_by="test",
+))
+db.commit()
+boarding_pet_id = boarding_pet.id
+db.close()
+
+boarding_page = client.get(f"/admin/inpatient/new?mode=boarding&pet_id={boarding_pet_id}")
+assert boarding_page.status_code == 200
+assert "寄养 / 单纯住院" in boarding_page.text and "确认办理住院" in boarding_page.text
+boarding_created = client.post("/admin/inpatient/admit", data={
+    "csrf_token": csrf_inpatient, "pet_id": boarding_pet_id,
+    "admission_mode": "boarding", "reason": "单纯寄养，不用药",
+})
+assert boarding_created.status_code == 303
+boarding_hosp_id = int(boarding_created.headers["location"].split("/admin/inpatient/")[1].split("?")[0])
+db = SessionLocal()
+boarding_hosp = db.get(Hospitalization, boarding_hosp_id)
+assert boarding_hosp.status == "admitted" and boarding_hosp.visit_id is None
+assert boarding_hosp.admission_weight_kg == 3.8 and boarding_hosp.daily_rate_override == 35
 db.close()
 
 # 第二次开单先扣普通药，再遇到管控药库存不足；整个请求必须回滚。

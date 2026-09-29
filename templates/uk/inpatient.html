@@ -20,8 +20,8 @@
 {% if request.query_params.get('msg') %}<div style="border-left:3px solid var(--accent-green);padding:10px 14px;background:#f5f9f6;margin-bottom:16px">{{ request.query_params.get('msg') }}</div>{% endif %}
 {% if request.session.get('admin_role') == 'superadmin' %}<div class="il-store">门店：<a href="?status={{ status }}&store=" class="{% if not wb_store %}active{% endif %}">全部</a><a href="?status={{ status }}&store=横岗店" class="{% if wb_store == '横岗店' %}active{% endif %}">横岗店</a><a href="?status={{ status }}&store=东环店" class="{% if wb_store == '东环店' %}active{% endif %}">东环店</a></div>{% elif wb_store %}<div class="il-store">当前门店：<b>{{ wb_store }}</b></div>{% endif %}
 <div class="il-tools">
-  <div class="il-tabs"><span>共 <b>{{ rows|length }}</b> 条</span>{% if counts.get('admitted',0) %}<a href="?status=admitted{% if wb_store %}&store={{ wb_store }}{% endif %}">住院中 <b>{{ counts.get('admitted',0) }}</b></a>{% endif %}</div>
-  <form class="il-search" method="get">{% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}<input name="q" value="{{ q }}" placeholder="客户、手机或宠物"/><button class="il-btn ghost" type="submit">搜索</button></form>
+  <div class="il-tabs"><a class="{% if status == 'admitted' %}active{% endif %}" href="?status=admitted{% if wb_store %}&store={{ wb_store }}{% endif %}">住院中 <b>{{ counts.get('admitted',0) }}</b></a><a class="{% if status == 'discharged' %}active{% endif %}" href="?status=discharged{% if wb_store %}&store={{ wb_store }}{% endif %}">住院结束 <b>{{ counts.get('discharged',0) }}</b></a></div>
+  <form class="il-search" method="get"><input type="hidden" name="status" value="{{ status }}"/>{% if wb_store %}<input type="hidden" name="store" value="{{ wb_store }}"/>{% endif %}<input name="q" value="{{ q }}" placeholder="客户、手机或宠物"/><button class="il-btn ghost" type="submit">搜索</button></form>
 </div>
 {% if rows %}
 <table class="il-table"><thead><tr><th>住院记录</th><th>客户 / 宠物</th><th>门店</th><th>入住 / 开单日期</th><th>住院项目</th><th>天数</th><th>单价</th><th>合计</th><th style="text-align:right">操作</th></tr></thead><tbody>
