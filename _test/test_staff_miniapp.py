@@ -128,6 +128,27 @@ try:
         )
         assert forbidden.status_code == 403
 
+        own_customer = client.get("/api/staff-miniapp/customers", params={"q": "横岗"}, headers=headers).json()["items"][0]
+        created = client.post("/api/staff-miniapp/appointments", json={
+            "category": "outpatient", "service_name": "手机端复诊",
+            "customer_id": own_customer["id"], "pet_id": own_customer["pets"][0]["id"],
+            "appointment_date": today, "appointment_time": "16:00", "duration_minutes": 30,
+        }, headers=headers)
+        assert created.status_code == 200, created.text
+        assert created.json()["appointment"]["store"] == "横岗店"
+
+        day_off = client.post("/api/staff-miniapp/calendar/beauty-day-off", json={
+            "date": today,
+        }, headers=headers)
+        assert day_off.status_code == 200, day_off.text
+        beauty_blocked = client.post("/api/staff-miniapp/appointments", json={
+            "category": "beauty", "service_name": "美容洗护",
+            "customer_id": own_customer["id"], "pet_id": own_customer["pets"][0]["id"],
+            "appointment_date": today, "appointment_time": "18:00", "duration_minutes": 60,
+        }, headers=headers)
+        assert beauty_blocked.status_code == 400
+        assert "美容师休息" in beauty_blocked.text
+
         own = client.get("/api/staff-miniapp/customers", params={"q": "横岗"}, headers=headers)
         assert [row["name"] for row in own.json()["items"]] == ["横岗客户"]
         by_record = client.get("/api/staff-miniapp/customers", params={"q": "HC26090001"}, headers=headers)

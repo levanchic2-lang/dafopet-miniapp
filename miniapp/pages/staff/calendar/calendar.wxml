@@ -4,24 +4,51 @@
     <view><view class="staff-eyebrow">APPOINTMENTS</view><view class="calendar-title">预约日历</view></view>
     <view class="calendar-nav"><button data-days="-3" bindtap="shiftDays">‹</button><button bindtap="goTodayDate">今</button><button data-days="3" bindtap="shiftDays">›</button></view>
   </view>
+  <view class="track-switch"><view class="{{track === 'medical' ? 'active' : ''}}" data-track="medical" bindtap="setTrack">医疗预约</view><view class="{{track === 'beauty' ? 'active' : ''}}" data-track="beauty" bindtap="setTrack">美容预约</view></view>
   <view wx:if="{{error}}" class="staff-error">{{error}}</view>
   <view wx:if="{{loading}}" class="staff-loading">正在载入预约…</view>
   <view wx:else class="timeline-shell">
     <view class="timeline-days">
       <view class="time-spacer"></view>
-      <view wx:for="{{columns}}" wx:key="date" class="day-head {{item.is_today ? 'today' : ''}}"><text>{{item.weekday}}</text><strong>{{item.month}}/{{item.day}}</strong></view>
+      <view wx:for="{{columns}}" wx:key="date" class="day-head {{item.is_today ? 'today' : ''}}"><text>{{item.weekday}}</text><strong>{{item.month}}/{{item.day}}</strong><small wx:if="{{item.blocks.length}}">美容休</small></view>
     </view>
     <scroll-view scroll-y class="timeline-scroll" scroll-top="390">
       <view class="timeline-body">
         <view class="time-axis"><view wx:for="{{hours}}" wx:key="*this" class="hour-label">{{item}}:00</view></view>
-        <view wx:for="{{columns}}" wx:key="date" class="day-column">
-          <view wx:for="{{hours}}" wx:key="*this" class="hour-line"></view>
-          <view wx:for="{{item.events}}" wx:for-item="event" wx:key="id" class="calendar-event {{event.color}}" style="top:{{event.top}}rpx;height:{{event.height}}rpx" data-id="{{event.id}}" bindtap="openEvent">
+        <view wx:for="{{columns}}" wx:for-item="day" wx:key="date" class="day-column">
+          <view wx:for="{{hours}}" wx:for-item="slot" wx:key="*this" class="hour-line" data-date="{{day.date}}" data-hour="{{slot}}" bindtap="openBlank"></view>
+          <view wx:for="{{day.events}}" wx:for-item="event" wx:key="id" class="calendar-event {{event.color}}" style="top:{{event.top}}rpx;height:{{event.height}}rpx" data-id="{{event.id}}" catchtap="openEvent">
             <view class="event-time">{{event.time}}</view><view class="event-title">{{event.pet_name}}</view><view class="event-service">{{event.service_name}}</view>
           </view>
         </view>
       </view>
     </scroll-view>
+  </view>
+
+  <view wx:if="{{createOpen}}" class="sheet-mask" bindtap="closeCreate">
+    <view class="detail-sheet create-sheet" catchtap="stopBubble">
+      <view class="sheet-grip"></view>
+      <block wx:if="{{createStep === 'choice'}}">
+        <view class="detail-eyebrow">{{createDate}} · {{createTime}}</view><view class="detail-title">新增日程</view>
+        <button class="choice-card primary" bindtap="startCreateAppointment"><strong>新增{{track === 'beauty' ? '美容' : '医疗'}}预约</strong><text>选择客户、宠物、项目和时长</text></button>
+        <button wx:if="{{track === 'beauty'}}" class="choice-card" bindtap="createBeautyDayOff"><strong>美容师休息（全天）</strong><text>当天美容、洗护和造型无法预约</text></button>
+      </block>
+      <block wx:else>
+        <view class="detail-eyebrow">NEW APPOINTMENT</view><view class="detail-title">新增预约</view>
+        <view class="category-chips"><view wx:for="{{categories}}" wx:key="value" class="category-chip {{createCategory === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="chooseCategory">{{item.label}}</view></view>
+        <view class="form-field"><text>服务项目</text><input placeholder="例如：复诊、绝育手术、洗澡" value="{{createService}}" bindinput="onCreateService" /></view>
+        <view class="customer-search"><input placeholder="搜索客户姓名、电话、宠物名" value="{{customerQuery}}" bindinput="onCustomerQuery" confirm-type="search" bindconfirm="searchCustomers"/><button bindtap="searchCustomers">搜索</button></view>
+        <view wx:for="{{customerResults}}" wx:key="id" class="search-result" data-id="{{item.id}}" bindtap="selectCustomer"><strong>{{item.name}}</strong><text>{{item.phone_masked}} · {{item.pets.length}}只宠物</text></view>
+        <view wx:if="{{selectedCustomer}}" class="selected-client"><view><strong>{{selectedCustomer.name}}</strong><text>{{selectedCustomer.phone_masked}}</text></view><view class="pet-options"><view wx:for="{{selectedCustomer.pets}}" wx:for-item="pet" wx:key="id" class="pet-option {{selectedPet && selectedPet.id === pet.id ? 'active' : ''}}" data-id="{{pet.id}}" bindtap="selectPet">{{pet.name}}</view></view></view>
+        <view wx:if="{{!fixedStore}}" class="form-line"><text>门店</text><picker range="{{stores}}" range-key="label" value="{{storeIndex}}" bindchange="onStoreChange"><view>{{stores[storeIndex].label || '请选择'}}</view></picker></view>
+        <view wx:else class="form-line"><text>门店</text><text>{{profile.store_label}}</text></view>
+        <view class="form-line"><text>日期</text><picker mode="date" value="{{createDate}}" bindchange="onCreateDate"><view>{{createDate}}</view></picker></view>
+        <view class="form-line"><text>时间</text><picker mode="time" value="{{createTime}}" bindchange="onCreateTime"><view>{{createTime}}</view></picker></view>
+        <view class="form-field"><text>时长（分钟）</text><input type="number" value="{{createDuration}}" bindinput="onCreateDuration" /></view>
+        <view class="form-field form-last"><text>备注</text><textarea value="{{createNotes}}" bindinput="onCreateNotes" auto-height /></view>
+        <button class="detail-primary" loading="{{saving}}" bindtap="submitAppointment">创建预约</button>
+      </block>
+    </view>
   </view>
 
   <view wx:if="{{selected}}" class="sheet-mask" bindtap="closeEvent">

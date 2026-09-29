@@ -56,3 +56,8 @@ page { background:#f7f7f5; color:#171717; font-family:-apple-system,BlinkMacSyst
 .staff-button::after { border:0; }
 .staff-loading { padding:70rpx 0; text-align:center; color:#777; font-size:24rpx; }
 .staff-error { margin:20rpx 0; padding:18rpx 20rpx; border-left:6rpx solid #7c302c; background:#f7eeee; color:#7c302c; font-size:23rpx; }
+.track-switch { height:70rpx; margin-bottom:14rpx; padding:5rpx; display:grid; grid-template-columns:1fr 1fr; background:#e9e9e5; box-sizing:border-box; }
+.track-switch view { display:flex; align-items:center; justify-content:center; color:#777; font-size:23rpx; }
+.track-switch view.active { background:#171717; color:#fff; font-weight:700; }
+.calendar-page .calendar-head { padding-bottom:18rpx; }
+.calendar-page .timeline-scroll { height:calc(100vh - 430rpx); }

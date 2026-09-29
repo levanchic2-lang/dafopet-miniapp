@@ -6796,10 +6796,21 @@ async def api_staff_miniapp_calendar(
             "month": current.strftime("%m"), "weekday": "周" + weekday_zh[current.weekday()],
             "is_today": current == date.today(),
         })
+    bq = db.query(CalendarBlock).filter(
+        CalendarBlock.block_date >= start_day.isoformat(),
+        CalendarBlock.block_date <= end_day.isoformat(),
+        CalendarBlock.track == "beauty",
+    )
+    if store:
+        bq = bq.filter(or_(CalendarBlock.store == store, CalendarBlock.store == full_store))
+    blocks = bq.order_by(CalendarBlock.block_date, CalendarBlock.id).all()
     return {
         "ok": True, "start": start_day.isoformat(), "end": end_day.isoformat(),
         "dates": dates,
         "appointments": [_staff_appointment_payload(r, pet_map.get(r.pet_id)) for r in rows],
+        "blocks": [{"id": b.id, "date": b.block_date, "title": b.title or "美容师休息"} for b in blocks],
+        "stores": [{"value": full, "label": _STORE_FULL_TO_SHORT.get(full, full)} for full in _CLINIC_STORES],
+        "fixed_store": full_store or "",
     }
 
 
@@ -6907,6 +6918,130 @@ async def api_staff_miniapp_appointment_service(
     ))
     db.commit()
     return {"ok": True, "appointment": _staff_appointment_payload(row)}
+
+
+def _staff_selected_store(user: AdminUser, requested: str) -> str:
+    own_short = (user.store or "").strip()
+    if own_short:
+        return _STORE_SHORT_TO_FULL.get(own_short, own_short)
+    selected = (requested or "").strip()
+    if selected not in _ALLOWED_CLINIC_STORES:
+        raise HTTPException(400, "请选择预约门店")
+    return selected
+
+
+@app.post("/api/staff-miniapp/appointments")
+async def api_staff_miniapp_appointment_create(
+    request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    customer_id = int((payload or {}).get("customer_id") or 0)
+    pet_id = int((payload or {}).get("pet_id") or 0)
+    customer = db.get(Customer, customer_id) if customer_id else None
+    pet = db.get(Pet, pet_id) if pet_id else None
+    if not customer or not pet or pet.customer_id != customer.id:
+        raise HTTPException(400, "请选择正确的客户与宠物")
+    own_store = (user.store or "").strip()
+    if own_store and pet.store not in (None, "", own_store):
+        raise HTTPException(403, "该宠物不属于当前门店")
+    full_store = _staff_selected_store(user, str((payload or {}).get("store") or ""))
+    fields = _assert_appointment_fields(
+        category=str((payload or {}).get("category") or ""),
+        service_name=str((payload or {}).get("service_name") or ""),
+        customer_name=customer.name or "未命名客户", phone=customer.phone or "",
+        pet_name=pet.name or "未命名宠物", pet_gender=pet.gender or "unknown",
+        store=full_store,
+        appointment_date=str((payload or {}).get("appointment_date") or ""),
+        appointment_time=str((payload or {}).get("appointment_time") or ""),
+        notes=str((payload or {}).get("notes") or ""),
+        duration_minutes=str((payload or {}).get("duration_minutes") or "30"),
+    )
+    related_id = None
+    if fields["category"] == AppointmentCategory.tnr.value:
+        candidates = db.query(Application).filter(
+            Application.phone == (customer.phone or ""),
+            Application.status.in_([
+                ApplicationStatus.approved.value, ApplicationStatus.pre_approved.value,
+                ApplicationStatus.scheduled.value,
+            ]),
+        ).order_by(Application.id.desc()).all()
+        matched = next((a for a in candidates if (a.cat_nickname or "").strip().lower() == (pet.name or "").strip().lower()), None)
+        matched = matched or (candidates[0] if len(candidates) == 1 else None)
+        if not matched:
+            raise HTTPException(400, "未找到该宠物已通过审核的TNR申请，请先从今日TNR进入")
+        related_id = matched.id
+    checks = [
+        _check_tnr_constraints(db, category=fields["category"], store=fields["store"],
+                               appointment_date=fields["appointment_date"],
+                               appointment_time=fields["appointment_time"], phone=""),
+        _check_duplicate_application_appointment(db, related_id),
+        _check_outpatient_time(fields["category"], fields["appointment_time"]),
+        _check_calendar_block(db, fields["store"], fields["appointment_date"], fields["category"]),
+        _check_slot_capacity(db, store=fields["store"], appointment_date=fields["appointment_date"],
+                             appointment_time=fields["appointment_time"], category=fields["category"],
+                             service_name=fields["service_name"]),
+    ]
+    error = next((message for message in checks if message), None)
+    if error:
+        raise HTTPException(400, error)
+    conflict = _check_appointment_conflict(
+        db, store=fields["store"], appointment_date=fields["appointment_date"],
+        appointment_time=fields["appointment_time"], duration_minutes=fields["duration_minutes"],
+        category=fields["category"], service_name=fields["service_name"],
+    )
+    if conflict:
+        raise HTTPException(400, f"时间冲突：{conflict.appointment_time} 已有预约（{conflict.pet_name or conflict.customer_name}）")
+    row = Appointment(
+        category=fields["category"], status=AppointmentStatus.confirmed.value,
+        service_name=fields["service_name"], customer_name=fields["customer_name"],
+        phone=fields["phone"], pet_name=fields["pet_name"], pet_gender=fields["pet_gender"],
+        store=fields["store"], appointment_date=fields["appointment_date"],
+        appointment_time=fields["appointment_time"], duration_minutes=fields["duration_minutes"],
+        notes=fields["notes"], source="staff_miniapp", related_application_id=related_id,
+        customer_id=customer.id, pet_id=pet.id,
+    )
+    db.add(row)
+    db.flush()
+    db.add(AuditLog(
+        action="staff_miniapp_appointment_create", actor=(user.username or "")[:80],
+        application_id=related_id,
+        detail=json.dumps({"appointment_id": row.id, "category": row.category, "store": row.store}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "appointment": _staff_appointment_payload(row, pet)}
+
+
+@app.post("/api/staff-miniapp/calendar/beauty-day-off")
+async def api_staff_miniapp_beauty_day_off(
+    request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    block_date = str((payload or {}).get("date") or "").strip()[:20]
+    try:
+        datetime.strptime(block_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "日期格式不正确")
+    full_store = _staff_selected_store(user, str((payload or {}).get("store") or ""))
+    short_store = _STORE_FULL_TO_SHORT.get(full_store, full_store)
+    existing = db.query(CalendarBlock).filter(
+        CalendarBlock.block_date == block_date,
+        CalendarBlock.store.in_([short_store, full_store]),
+        CalendarBlock.track == "beauty",
+    ).first()
+    if existing:
+        return {"ok": True, "id": existing.id, "already_exists": True}
+    block = CalendarBlock(
+        title="美容师休息", block_date=block_date, store=short_store,
+        track="beauty", notes="员工小程序设置", created_by=(user.username or "")[:80],
+    )
+    db.add(block)
+    db.flush()
+    db.add(AuditLog(
+        action="staff_miniapp_beauty_day_off", actor=(user.username or "")[:80],
+        detail=json.dumps({"block_id": block.id, "date": block_date, "store": short_store}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "id": block.id}
 
 
 @app.get("/api/wechat/my-tnr-status")
