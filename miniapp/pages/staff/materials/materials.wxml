@@ -1,0 +1,14 @@
+<view class="staff-page materials-page">
+  <view class="staff-status"><text>员工端</text><text>病例素材</text></view>
+  <view class="materials-head"><view class="staff-eyebrow">CLINICAL MEDIA</view><view class="materials-title">选择病例</view><view class="materials-desc">默认显示近14天病例。素材上传后仅供院内使用，不会自动公开。</view></view>
+  <view class="staff-search"><input placeholder="宠物名、主人、手机号、病历号或诊断" value="{{query}}" bindinput="onQuery" confirm-type="search" bindconfirm="onSearch"/><button wx:if="{{query}}" class="staff-search-btn" bindtap="onClear">×</button><button class="staff-search-btn" bindtap="onSearch">⌕</button></view>
+  <view class="staff-section-head"><text>{{query ? '搜索结果' : '近期病例'}}</text><text class="staff-section-meta">{{items.length}} 条</text></view>
+  <view wx:if="{{loading}}" class="staff-loading">正在读取病例…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <view wx:if="{{!loading && !items.length}}" class="staff-empty">没有找到可上传素材的病例。</view>
+  <view wx:for="{{items}}" wx:key="id" class="material-visit {{item.is_today ? 'today' : ''}}" data-id="{{item.id}}" bindtap="openVisit">
+    <view class="material-date">{{item.is_today ? '今天' : item.date}}</view>
+    <view class="material-main"><view class="material-name">{{item.pet_name}}</view><view class="material-diagnosis">{{item.diagnosis}}</view><view class="material-meta">{{item.customer_name}}{{item.medical_record_no ? ' · ' + item.medical_record_no : ''}}{{item.vet_name ? ' · ' + item.vet_name : ''}}</view></view>
+    <view class="material-count"><strong>{{item.material_count}}</strong><text>份素材</text><text>→</text></view>
+  </view>
+</view>

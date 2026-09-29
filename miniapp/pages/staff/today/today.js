@@ -24,6 +24,7 @@ Page({
   },
   onPullDownRefresh() { this.loadData(); },
   goTnr() { wx.navigateTo({ url: "/pages/staff/tnr/tnr" }); },
+  goMaterials() { wx.navigateTo({ url: "/pages/staff/materials/materials" }); },
   goToday() {},
   goCalendar() { wx.redirectTo({ url: "/pages/staff/calendar/calendar" }); },
   goCustomers() { wx.redirectTo({ url: "/pages/staff/customers/customers" }); },

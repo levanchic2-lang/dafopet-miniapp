@@ -31,7 +31,7 @@
     <div class="candidate-actions">
       {% if row.existing %}<a class="uk-btn" href="/admin/content/{{ row.existing.id }}/edit">继续处理公开稿</a>{% else %}<form method="post" action="/admin/visits/{{ row.visit.id }}/public-case-draft" onsubmit="return confirm('将生成独立的脱敏公开草稿，原始病历不会直接公开。继续吗？');"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="uk-btn" type="submit">选为公开病例</button></form>{% endif %}
       <a class="uk-btn ghost" href="/admin/visits/{{ row.visit.id }}" target="_blank">查看完整病历</a>
-      <div class="candidate-meta">检查 {{ row.exam_count }} · 报告 {{ row.report_count }} · 处方 {{ row.prescription_count }}</div>
+      <div class="candidate-meta">检查 {{ row.exam_count }} · 报告 {{ row.report_count }} · 处方 {{ row.prescription_count }} · 影像 {{ row.material_count }}</div>
     </div>
   </section>
   {% endfor %}

@@ -22,6 +22,7 @@ Page({
     } finally { this.setData({ loading: false }); wx.stopPullDownRefresh(); }
   },
   setTab(e) { this.setData({ activeTab: e.currentTarget.dataset.tab }); },
+  openMaterials(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/material/material?id=" + id }); },
   openReport(e) {
     const id = Number(e.currentTarget.dataset.id || 0);
     const type = e.currentTarget.dataset.type || "pdf";

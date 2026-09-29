@@ -268,6 +268,34 @@ try:
             db.close()
         assert client.get(f"/api/staff-miniapp/customers/{other_customer_id}", headers=headers).status_code == 403
         assert client.get(f"/api/staff-miniapp/pets/{other_pet_id}", headers=headers).status_code == 403
+        material_visits = client.get("/api/staff-miniapp/visit-materials", headers=headers)
+        assert material_visits.status_code == 200, material_visits.text
+        assert [row["pet_name"] for row in material_visits.json()["items"]] == ["横岗犬"]
+        own_visit_id = material_visits.json()["items"][0]["id"]
+        db = SessionLocal()
+        try:
+            other_visit_id = db.query(Visit.id).filter(Visit.store == "东环店").scalar()
+        finally:
+            db.close()
+        assert client.get(f"/api/staff-miniapp/visits/{other_visit_id}/materials", headers=headers).status_code == 403
+        uploaded_material = client.post(
+            f"/api/staff-miniapp/visits/{own_visit_id}/materials/upload",
+            data={"stage": "before", "media_type": "image", "notes": "治疗前状态"},
+            files={"file": ("before.png", png_bytes, "image/png")}, headers=headers,
+        )
+        assert uploaded_material.status_code == 200, uploaded_material.text
+        material_id = uploaded_material.json()["media"]["id"]
+        material_detail = client.get(f"/api/staff-miniapp/visits/{own_visit_id}/materials", headers=headers)
+        assert material_detail.status_code == 200
+        assert material_detail.json()["media"][0]["stage_label"] == "治疗前"
+        assert material_detail.json()["media"][0]["notes"] == "治疗前状态"
+        material_file = client.get(f"/api/staff-miniapp/visit-materials/{material_id}/file", headers=headers)
+        assert material_file.status_code == 200
+        deleted_material = client.post(
+            f"/api/staff-miniapp/visits/{own_visit_id}/materials/{material_id}/delete", headers=headers,
+        )
+        assert deleted_material.status_code == 200
+        assert client.get(f"/api/staff-miniapp/visit-materials/{material_id}/file", headers=headers).status_code == 404
         created = client.post("/api/staff-miniapp/appointments", json={
             "category": "outpatient", "service_name": "手机端复诊",
             "customer_id": own_customer["id"], "pet_id": own_customer["pets"][0]["id"],

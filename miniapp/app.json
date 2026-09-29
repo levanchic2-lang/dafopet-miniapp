@@ -22,6 +22,8 @@
     "pages/staff/login/login",
     "pages/staff/today/today",
     "pages/staff/tnr/tnr",
+    "pages/staff/materials/materials",
+    "pages/staff/material/material",
     "pages/staff/calendar/calendar",
     "pages/staff/customers/customers",
     "pages/staff/customer/customer",

@@ -1,0 +1,22 @@
+<view class="staff-page material-page">
+  <view wx:if="{{loading}}" class="staff-loading">正在读取病例…</view><view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <block wx:if="{{!loading && visit.id}}">
+    <view class="material-hero"><view class="staff-eyebrow">CASE · #{{visit.id}}</view><view class="material-pet">{{pet.name}}</view><view class="material-sub">{{customer.name}} · {{visit.date}}{{visit.vet_name ? ' · ' + visit.vet_name : ''}}</view><view class="material-diagnosis">{{visit.diagnosis}}</view></view>
+    <view class="material-label">素材阶段</view><scroll-view scroll-x class="stage-scroll"><view class="stage-row"><view wx:for="{{stages}}" wx:key="key" class="stage-chip {{stage === item.key ? 'active' : ''}}" data-stage="{{item.key}}" bindtap="setStage">{{item.label}}</view></view></scroll-view>
+    <view class="material-label">备注（可选）</view><textarea class="material-notes" maxlength="1000" placeholder="例如：治疗前皮肤状态、术后第7天恢复情况" value="{{notes}}" bindinput="onNotes"/>
+    <view class="upload-actions"><button bindtap="chooseImage" loading="{{busy}}">拍照 / 选择照片</button><button bindtap="chooseVideo" loading="{{busy}}">拍摄 / 选择视频</button></view>
+    <view class="material-privacy">所有素材仅保存在内部病例中。后续公开病例仍需医生单独审核与脱敏。</view>
+    <view class="staff-section-head material-list-head"><text>已上传素材</text><text class="staff-section-meta">{{media.length}} 份</text></view>
+    <view wx:if="{{!media.length}}" class="staff-empty">尚未上传病例素材。</view>
+    <view class="media-grid">
+      <view wx:for="{{media}}" wx:key="id" class="media-item">
+        <image wx:if="{{item.media_type === 'image' && item.localPath}}" src="{{item.localPath}}" mode="aspectFill" data-src="{{item.localPath}}" bindtap="previewImage"/>
+        <view wx:elif="{{item.media_type === 'image'}}" class="media-placeholder">图片载入失败</view>
+        <view wx:else class="media-video" data-id="{{item.id}}" bindtap="playVideo"><text>▶</text><strong>播放视频</strong></view>
+        <view class="media-info"><view><strong>{{item.stage_label}}</strong><text>{{item.uploaded_at}}</text></view><button data-id="{{item.id}}" catchtap="deleteMedia">删除</button></view>
+        <view wx:if="{{item.notes}}" class="media-note">{{item.notes}}</view>
+      </view>
+    </view>
+  </block>
+  <view wx:if="{{playingVideoPath}}" class="video-overlay" bindtap="closeVideo"><view class="video-panel" catchtap="noop"><video src="{{playingVideoPath}}" controls autoplay object-fit="contain"/><button bindtap="closeVideo">关闭</button></view></view>
+</view>

@@ -6954,6 +6954,207 @@ async def api_staff_miniapp_report_file(
     return FileResponse(path, media_type=ctype, filename=report.original_name or path.name)
 
 
+_CASE_MEDIA_STAGES = {
+    "before": "治疗前", "during": "就诊过程", "after": "治疗后",
+    "exam": "检查资料", "other": "其他",
+}
+_CASE_MEDIA_EXTENSIONS = {
+    "image": {".jpg", ".jpeg", ".png", ".webp", ".heic"},
+    "video": {".mp4", ".mov", ".m4v"},
+}
+_CASE_MEDIA_CONTENT_EXTENSIONS = {
+    "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+    "image/heic": ".heic", "image/heif": ".heic",
+    "video/mp4": ".mp4", "video/quicktime": ".mov", "video/x-m4v": ".m4v",
+}
+
+
+def _staff_visit_record(db: Session, user: AdminUser, visit_id: int) -> tuple[Visit, Pet, Customer | None]:
+    visit = db.get(Visit, visit_id)
+    if not visit or not visit.pet_id:
+        raise HTTPException(404, "病例不存在或未关联宠物")
+    pet = _staff_pet_record(db, user, visit.pet_id)
+    store = (user.store or "").strip()
+    if store and visit.store and visit.store != store:
+        raise HTTPException(403, "无权查看其他门店的病例")
+    return visit, pet, db.get(Customer, visit.customer_id) if visit.customer_id else None
+
+
+def _case_media_payload(row: MedicalDocument) -> dict:
+    stage = (row.title or "other").split("|", 1)[0]
+    if stage not in _CASE_MEDIA_STAGES:
+        stage = "other"
+    return {
+        "id": row.id, "stage": stage, "stage_label": _CASE_MEDIA_STAGES[stage],
+        "media_type": row.file_type or "image", "name": row.original_name or "病例素材",
+        "notes": row.notes or "", "uploaded_by": row.uploaded_by or "",
+        "uploaded_at": row.uploaded_at.strftime("%Y-%m-%d %H:%M") if row.uploaded_at else "",
+    }
+
+
+@app.get("/api/staff-miniapp/visit-materials")
+async def api_staff_miniapp_visit_materials(
+    request: Request, q: str = Query(""), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    store = (user.store or "").strip()
+    clean_q = (q or "").strip()
+    query = db.query(Visit).filter(Visit.pet_id != None)
+    if store:
+        query = query.filter(or_(Visit.store == store, Visit.store == "", Visit.store == None))
+    if clean_q:
+        if len(clean_q) < 2:
+            return {"ok": True, "query": clean_q, "items": []}
+        like = f"%{clean_q}%"
+        query = query.join(Pet, Pet.id == Visit.pet_id).outerjoin(Customer, Customer.id == Visit.customer_id).filter(or_(
+            Pet.name.ilike(like), Pet.medical_record_no.ilike(like),
+            Customer.name.ilike(like), Customer.phone.ilike(like),
+            Visit.diagnosis.ilike(like), Visit.chief_complaint.ilike(like),
+        ))
+    else:
+        since = (date.today() - timedelta(days=14)).isoformat()
+        query = query.filter(Visit.visit_date >= since)
+    visits = query.order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(60).all()
+    visit_ids = [v.id for v in visits]
+    counts = {}
+    if visit_ids:
+        counts = dict(db.query(MedicalDocument.visit_id, func.count(MedicalDocument.id)).filter(
+            MedicalDocument.visit_id.in_(visit_ids), MedicalDocument.doc_type == "case_media",
+        ).group_by(MedicalDocument.visit_id).all())
+    items = []
+    for visit in visits:
+        pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+        customer = db.get(Customer, visit.customer_id) if visit.customer_id else None
+        if not pet or (store and pet.store not in (None, "", store)):
+            continue
+        items.append({
+            "id": visit.id, "date": visit.visit_date or "", "status": visit.status or "open",
+            "pet_name": pet.name or "未命名", "medical_record_no": pet.medical_record_no or "",
+            "species": pet.species or "", "customer_name": customer.name if customer else "",
+            "diagnosis": visit.diagnosis or visit.chief_complaint or "诊断尚未填写",
+            "vet_name": visit.vet_name or "", "material_count": int(counts.get(visit.id, 0)),
+            "is_today": visit.visit_date == date.today().isoformat(),
+        })
+    return {"ok": True, "query": clean_q, "items": items}
+
+
+@app.get("/api/staff-miniapp/visits/{visit_id}/materials")
+async def api_staff_miniapp_visit_material_detail(
+    visit_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    visit, pet, customer = _staff_visit_record(db, user, visit_id)
+    rows = db.query(MedicalDocument).filter(
+        MedicalDocument.visit_id == visit.id, MedicalDocument.doc_type == "case_media",
+    ).order_by(MedicalDocument.id.desc()).all()
+    return {
+        "ok": True,
+        "visit": {
+            "id": visit.id, "date": visit.visit_date or "", "status": visit.status or "open",
+            "diagnosis": visit.diagnosis or visit.chief_complaint or "诊断尚未填写",
+            "vet_name": visit.vet_name or "",
+        },
+        "pet": _staff_pet_payload(pet),
+        "customer": {"id": customer.id, "name": customer.name or "未命名客户"} if customer else {},
+        "stages": [{"key": key, "label": label} for key, label in _CASE_MEDIA_STAGES.items()],
+        "media": [_case_media_payload(row) for row in rows],
+    }
+
+
+@app.post("/api/staff-miniapp/visits/{visit_id}/materials/upload")
+async def api_staff_miniapp_visit_material_upload(
+    visit_id: int, request: Request, stage: str = Form("during"),
+    media_type: str = Form("image"), notes: str = Form(""),
+    file: UploadFile = File(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    visit, pet, customer = _staff_visit_record(db, user, visit_id)
+    stage = (stage or "during").strip()
+    media_type = (media_type or "image").strip()
+    if stage not in _CASE_MEDIA_STAGES:
+        raise HTTPException(400, "请选择正确的素材阶段")
+    if media_type not in _CASE_MEDIA_EXTENSIONS:
+        raise HTTPException(400, "仅支持照片或视频")
+    ext = Path(file.filename or "").suffix.lower()
+    if not ext:
+        ext = _CASE_MEDIA_CONTENT_EXTENSIONS.get((file.content_type or "").lower(), "")
+    if ext not in _CASE_MEDIA_EXTENSIONS[media_type]:
+        raise HTTPException(400, "文件格式不支持，请上传常见照片或 MP4/MOV 视频")
+    limit = 200 * 1024 * 1024 if media_type == "video" else 25 * 1024 * 1024
+    dest_dir = Path(settings.upload_dir) / "case_media" / str(visit.id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{stage}_{int(datetime.utcnow().timestamp() * 1000)}_{secrets.token_hex(4)}{ext}"
+    total = 0
+    try:
+        with dest.open("wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise HTTPException(413, "照片不能超过25MB，视频不能超过200MB")
+                out.write(chunk)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    if total <= 0:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(400, "上传文件为空")
+    row = MedicalDocument(
+        customer_id=customer.id if customer else None, pet_id=pet.id, visit_id=visit.id,
+        doc_type="case_media", title=f"{stage}|{_CASE_MEDIA_STAGES[stage]}",
+        file_path=str(dest), original_name=(file.filename or dest.name)[:200],
+        file_type=media_type, file_size=total, notes=(notes or "").strip()[:1000],
+        uploaded_by=(user.display_name or user.username or "")[:80],
+    )
+    db.add(row)
+    db.add(AuditLog(
+        action="staff_miniapp_case_media_upload", actor=(user.username or "")[:80],
+        detail=json.dumps({"visit_id": visit.id, "pet_id": pet.id, "stage": stage, "media_type": media_type}, ensure_ascii=False),
+    ))
+    db.commit()
+    db.refresh(row)
+    return {"ok": True, "media": _case_media_payload(row)}
+
+
+@app.get("/api/staff-miniapp/visit-materials/{doc_id}/file")
+async def api_staff_miniapp_visit_material_file(
+    doc_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = db.get(MedicalDocument, doc_id)
+    if not row or row.doc_type != "case_media" or not row.visit_id:
+        raise HTTPException(404, "病例素材不存在")
+    _staff_visit_record(db, user, row.visit_id)
+    path = _resolve_stored_media_path(row.file_path)
+    if not path:
+        raise HTTPException(404, "病例素材文件不存在")
+    ctype = mimetypes.guess_type(row.original_name or path.name)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=ctype, headers={"Cache-Control": "private, max-age=300"})
+
+
+@app.post("/api/staff-miniapp/visits/{visit_id}/materials/{doc_id}/delete")
+async def api_staff_miniapp_visit_material_delete(
+    visit_id: int, doc_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    _staff_visit_record(db, user, visit_id)
+    row = db.get(MedicalDocument, doc_id)
+    if not row or row.doc_type != "case_media" or row.visit_id != visit_id:
+        raise HTTPException(404, "病例素材不存在")
+    path = _resolve_stored_media_path(row.file_path)
+    if path:
+        path.unlink(missing_ok=True)
+    db.delete(row)
+    db.add(AuditLog(
+        action="staff_miniapp_case_media_delete", actor=(user.username or "")[:80],
+        detail=json.dumps({"visit_id": visit_id, "doc_id": doc_id}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True}
+
+
 def _staff_appointment_row(db: Session, user: AdminUser, appointment_id: int) -> Appointment:
     row = db.get(Appointment, appointment_id)
     if not row:
@@ -37287,6 +37488,7 @@ def _public_case_candidate_score(
     exam_count: int = 0,
     report_count: int = 0,
     prescription_count: int = 0,
+    material_count: int = 0,
 ) -> tuple[int, list[str]]:
     """Rank records for human selection; the score never publishes content automatically."""
     score = 0
@@ -37314,6 +37516,9 @@ def _public_case_candidate_score(
     if prescription_count:
         score += 5
         reasons.append(f"{prescription_count}张处方")
+    if material_count:
+        score += min(15, 5 + material_count * 2)
+        reasons.append(f"{material_count}份病例影像")
     return min(score, 100), reasons
 
 
@@ -37444,6 +37649,7 @@ async def admin_public_case_candidates(
     exam_counts: dict[int, int] = {}
     report_counts: dict[int, int] = {}
     prescription_counts: dict[int, int] = {}
+    material_counts: dict[int, int] = {}
     if visit_ids:
         existing_rows = db.query(PublicContent).filter(
             PublicContent.content_type == "case",
@@ -37461,6 +37667,9 @@ async def admin_public_case_candidates(
         prescription_counts = dict(db.query(Prescription.visit_id, func.count(Prescription.id)).filter(
             Prescription.visit_id.in_(visit_ids), Prescription.status != "voided"
         ).group_by(Prescription.visit_id).all())
+        material_counts = dict(db.query(MedicalDocument.visit_id, func.count(MedicalDocument.id)).filter(
+            MedicalDocument.visit_id.in_(visit_ids), MedicalDocument.doc_type == "case_media"
+        ).group_by(MedicalDocument.visit_id).all())
 
     candidates: list[dict] = []
     for visit in visits:
@@ -37472,6 +37681,7 @@ async def admin_public_case_candidates(
             exam_counts.get(visit.id, 0),
             report_counts.get(visit.id, 0),
             prescription_counts.get(visit.id, 0),
+            material_counts.get(visit.id, 0),
         )
         if score < 45:
             continue
@@ -37495,6 +37705,7 @@ async def admin_public_case_candidates(
             "exam_count": exam_counts.get(visit.id, 0),
             "report_count": report_counts.get(visit.id, 0),
             "prescription_count": prescription_counts.get(visit.id, 0),
+            "material_count": material_counts.get(visit.id, 0),
         })
     candidates.sort(key=lambda row: (row["score"], row["visit"].visit_date or "", row["visit"].id), reverse=True)
     candidate_total = len(candidates)

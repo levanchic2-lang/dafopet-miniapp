@@ -6,6 +6,7 @@
     <view class="staff-section"><view class="staff-eyebrow">TODAY · {{dateLabel}}</view><view class="staff-title">今日工作</view><view class="staff-desc">{{profile.display_name || '员工'}}，欢迎回来</view></view>
     <view class="staff-kpis"><view class="staff-kpi"><view class="staff-kpi-num">{{stats.appointments || 0}}</view><view class="staff-kpi-label">预约</view></view><view class="staff-kpi"><view class="staff-kpi-num">{{stats.visits || 0}}</view><view class="staff-kpi-label">就诊</view></view><view class="staff-kpi"><view class="staff-kpi-num">{{stats.pending || 0}}</view><view class="staff-kpi-label">待处理</view></view></view>
     <view class="staff-row primary" bindtap="goTnr"><view class="staff-row-index">TNR</view><view class="staff-row-main"><view class="staff-row-title">今日 TNR</view><view class="staff-row-sub">确认猫只、拍摄术后资料、完成手术登记</view></view><view class="staff-row-count">{{stats.tnr_today || 0}}</view></view>
+    <view class="staff-row" bindtap="goMaterials"><view class="staff-row-index">IMG</view><view class="staff-row-main"><view class="staff-row-title">病例素材</view><view class="staff-row-sub">选择病例，现场拍摄照片或视频</view></view><view class="staff-row-count">{{stats.visits || 0}}</view></view>
     <view wx:if="{{error}}" class="staff-error">{{error}}</view>
     <view class="staff-section-head"><text>优先处理</text><text class="staff-section-meta">按工作类型汇总</text></view>
     <view wx:if="{{!tasks.length}}" class="staff-empty">当前没有需要立即处理的事项。</view>
