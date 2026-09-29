@@ -17143,6 +17143,11 @@ async def admin_unified_order_create(
     operator = request.session.get("admin_username", "admin")
     order_date = str(form.get("order_date") or date.today().isoformat()).strip()[:20]
     vet_name = str(form.get("vet_name") or visit.vet_name or "").strip()[:80]
+    if grouped["prescription"] and not vet_name:
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}/unified-order?err={quote('开具处方前必须选择医生', safe='')}",
+            status_code=303,
+        )
     is_insurance = form.get("is_insurance_service") == "1"
     created: list[str] = []
     created_refs: list[dict] = []
@@ -17440,6 +17445,9 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
     visit_id = int(form.get("visit_id", 0) or 0)
     customer_id = int(form.get("customer_id", 0) or 0)
     pet_id = int(form.get("pet_id", 0) or 0)
+    vet_name = str(form.get("vet_name", "")).strip()[:80]
+    if not vet_name:
+        raise HTTPException(400, "开具处方前必须选择医生")
     # 病历已结束 → 不能再开处方
     if visit_id:
         _v = db.get(Visit, visit_id)
@@ -17457,7 +17465,7 @@ async def admin_presc_create(request: Request, db: Session = Depends(get_db)):
         customer_id=customer_id or None,
         pet_id=pet_id or None,
         prescribed_date=str(form.get("prescribed_date", "")).strip()[:20],
-        vet_name=str(form.get("vet_name", "")).strip()[:80],
+        vet_name=vet_name,
         status=str(form.get("status", "issued")).strip(),
         total_amount=total,
         package_price=_parse_money(form.get("package_price")),
@@ -17584,6 +17592,9 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
     presc = db.get(Prescription, presc_id)
     if not presc:
         raise HTTPException(404)
+    vet_name = str(form.get("vet_name", "")).strip()[:80]
+    if not vet_name:
+        raise HTTPException(400, "保存处方前必须选择医生")
     locked, reason = _is_prescription_locked(db, presc)
     if locked:
         raise HTTPException(400, f"处方单已锁定（{reason}），不可修改。如需调整请「复制为新单」或「作废」后重开。")
@@ -17611,7 +17622,7 @@ async def admin_presc_edit(presc_id: int, request: Request, db: Session = Depend
     _apply_internal_pricing(db, parsed_items, presc.customer_id or 0)
     total = round(sum(it["subtotal"] for it in parsed_items), 2)
     presc.prescribed_date = str(form.get("prescribed_date", "")).strip()[:20]
-    presc.vet_name = str(form.get("vet_name", "")).strip()[:80]
+    presc.vet_name = vet_name
     presc.pet_id = int(form.get("pet_id", 0) or 0) or presc.pet_id
     presc.status = str(form.get("status", "issued")).strip()
     presc.total_amount = total
@@ -17798,6 +17809,8 @@ async def admin_presc_copy_as_new(presc_id: int, request: Request, db: Session =
     src = db.get(Prescription, presc_id)
     if not src:
         raise HTTPException(404)
+    if not (src.vet_name or "").strip():
+        raise HTTPException(400, "原处方未填写医生，请先编辑补充医生后再复制")
     operator = request.session.get("admin_username", "admin")
     item_rows = [_presc_item_form_payload(db, old) for old in (src.items or [])]
     _apply_single_use_pack_billing(db, item_rows)

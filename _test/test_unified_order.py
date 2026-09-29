@@ -111,6 +111,14 @@ template_id = template_create.json()["id"]
 template_get = client.get(f"/api/unified-order-templates/{template_id}")
 assert template_get.status_code == 200 and len(template_get.json()["items"]) == 6
 assert template_get.json()["items"][0]["unit_price"] == 2
+missing_vet = client.post(f"/admin/visits/{visit_id}/unified-order", data={
+    "csrf_token": csrf, "items_json": json.dumps(rows[:1]), "order_date": "2026-09-06",
+})
+assert missing_vet.status_code == 303
+assert "%E5%BC%80%E5%85%B7%E5%A4%84%E6%96%B9%E5%89%8D%E5%BF%85%E9%A1%BB%E9%80%89%E6%8B%A9%E5%8C%BB%E7%94%9F" in missing_vet.headers["location"]
+db = SessionLocal()
+assert db.query(Prescription).filter_by(visit_id=visit_id).count() == 0
+db.close()
 response = client.post(f"/admin/visits/{visit_id}/unified-order", data={
     "csrf_token": csrf, "items_json": json.dumps(rows), "order_date": "2026-09-06", "vet_name": "测试医生",
     "request_vaccine_consent": "1",
@@ -237,6 +245,7 @@ failed_rows = [
 ]
 failed = client.post(f"/admin/visits/{visit_id}/unified-order", data={
     "csrf_token": csrf, "items_json": json.dumps(failed_rows), "order_date": "2026-09-06",
+    "vet_name": "测试医生",
 })
 assert failed.status_code == 303
 assert "err=" in failed.headers["location"]

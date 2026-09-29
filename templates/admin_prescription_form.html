@@ -288,7 +288,7 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
  </div>
  <div>
  <label>开具医生</label>
- <input name="vet_name" value="{{ p.vet_name if p else '' }}" list="vet-list"/>
+ <input name="vet_name" value="{{ p.vet_name if p else '' }}" list="vet-list" required placeholder="请选择或输入医生"/>
  <datalist id="vet-list">{% for n in vet_names %}<option value="{{ n }}">{% endfor %}</datalist>
  </div>
  <div>
