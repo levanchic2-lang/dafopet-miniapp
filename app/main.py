@@ -6654,6 +6654,10 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
         })
     pending_count = sum(t["count"] for t in tasks)
     tnr_today_count = sum(1 for row in appointments if row.category == AppointmentCategory.tnr.value)
+    anmon_q = db.query(AnesthesiaMonitorSheet).filter(AnesthesiaMonitorSheet.status == "open")
+    if store:
+        anmon_q = anmon_q.filter(AnesthesiaMonitorSheet.store.in_([store, full_store]))
+    anesthesia_open_count = anmon_q.count()
     next_appt = None
     current_hm = datetime.now().strftime("%H:%M")
     next_row = next((row for row in appointments if row.status == "arrived"), None)
@@ -6671,7 +6675,7 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
         "date": today,
         "profile": _staff_profile_payload(user),
         "stats": {"appointments": len(appointments), "visits": visit_count, "pending": pending_count,
-                  "tnr_today": tnr_today_count},
+                  "tnr_today": tnr_today_count, "anesthesia_open": anesthesia_open_count},
         "tasks": tasks[:4],
         "next_appointment": next_appt,
     }
@@ -7153,6 +7157,289 @@ async def api_staff_miniapp_visit_material_delete(
     ))
     db.commit()
     return {"ok": True}
+
+
+_ANMON_PHASE_ZH = {
+    "premedication": "术前用药", "induction": "麻醉诱导",
+    "intraoperative": "术中追加", "recovery": "复苏期",
+}
+_ANMON_RECOVERY_OPTIONS = ["苏醒良好", "苏醒延迟", "躁动", "呕吐", "需持续观察"]
+
+
+def _staff_anmon_record(db: Session, user: AdminUser, sheet_id: int) -> AnesthesiaMonitorSheet:
+    sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
+    if not sheet:
+        raise HTTPException(404, "麻醉监护记录不存在")
+    store = (user.store or "").strip()
+    allowed = {store, _STORE_SHORT_TO_FULL.get(store, store)} if store else set()
+    if allowed and sheet.store and sheet.store not in allowed:
+        raise HTTPException(403, "无权查看其他门店的麻醉监护记录")
+    if sheet.pet_id:
+        _staff_pet_record(db, user, sheet.pet_id)
+    return sheet
+
+
+def _anmon_payload(db: Session, sheet: AnesthesiaMonitorSheet) -> dict:
+    pet = db.get(Pet, sheet.pet_id) if sheet.pet_id else None
+    customer = db.get(Customer, sheet.customer_id) if sheet.customer_id else None
+    entries = db.query(AnesthesiaMonitorEntry).filter(
+        AnesthesiaMonitorEntry.sheet_id == sheet.id,
+    ).order_by(AnesthesiaMonitorEntry.recorded_at.desc(), AnesthesiaMonitorEntry.id.desc()).all()
+    events = db.query(AnesthesiaMedicationEvent).filter(
+        AnesthesiaMedicationEvent.sheet_id == sheet.id,
+    ).order_by(AnesthesiaMedicationEvent.administered_at.desc(), AnesthesiaMedicationEvent.id.desc()).all()
+    open_vials = db.query(AnesthesiaOpenVial).filter(
+        AnesthesiaOpenVial.store == sheet.store,
+        AnesthesiaOpenVial.opened_date == sheet.monitor_date,
+        AnesthesiaOpenVial.status == "open",
+    ).order_by(AnesthesiaOpenVial.opened_at.asc()).all()
+    open_vials = [v for v in open_vials if _anmon_vial_remaining(v) > 1e-9]
+    inventory = _anmon_inventory_candidates(db, sheet.store)
+    item_ids = [row.id for row in inventory]
+    batches = db.query(InventoryBatch).filter(
+        InventoryBatch.item_id.in_(item_ids), InventoryBatch.is_depleted.is_(False),
+        InventoryBatch.quantity > 0,
+    ).order_by(InventoryBatch.expiry_date.asc(), InventoryBatch.id.asc()).all() if item_ids else []
+    batch_map: dict[int, list[dict]] = {}
+    for batch in batches:
+        batch_map.setdefault(batch.item_id, []).append({
+            "id": batch.id, "batch_no": batch.batch_no or "无批号",
+            "expiry_date": batch.expiry_date or "", "quantity": float(batch.quantity or 0),
+        })
+    last_entry = entries[0] if entries else None
+    next_due = None
+    if sheet.status == "open":
+        base_time = last_entry.recorded_at if last_entry else sheet.created_at
+        next_due = base_time + timedelta(minutes=5) if base_time else _anmon_now()
+    species = pet.species if pet else ""
+    return {
+        "id": sheet.id, "visit_id": sheet.visit_id, "status": sheet.status or "open",
+        "monitor_date": sheet.monitor_date or "", "procedure": sheet.procedure or "",
+        "anesthetist": sheet.anesthetist or "", "surgeon": sheet.surgeon or "",
+        "asa_grade": sheet.asa_grade or "", "agent": sheet.agent or "",
+        "weight_kg": float(sheet.weight_kg or 0), "start_time": sheet.start_time or "",
+        "end_time": sheet.end_time or "", "extubation_time": sheet.extubation_time or "",
+        "recovery_status": sheet.recovery_status or "", "recovery_notes": sheet.recovery_notes or "",
+        "notes": sheet.notes or "", "server_time": _anmon_now().strftime("%H:%M"),
+        "next_due_time": next_due.strftime("%H:%M") if next_due else "",
+        "next_due_overdue": bool(next_due and _anmon_now() > next_due),
+        "pet": _staff_pet_payload(pet) if pet else {},
+        "customer": {"id": customer.id, "name": customer.name or "未命名客户"} if customer else {},
+        "entries": [{
+            "id": row.id, "time": row.recorded_at.strftime("%H:%M"), "recorded_by": row.recorded_by or "",
+            "hr": row.hr or 0, "rr": row.rr or 0, "spo2": row.spo2 or 0,
+            "etco2": row.etco2 or 0, "temperature_c": float(row.temperature_c or 0),
+            "bp_sys": row.bp_sys or 0, "bp_dia": row.bp_dia or 0, "bp_map": row.bp_map or 0,
+            "agent_pct": float(row.agent_pct or 0), "o2_flow": float(row.o2_flow or 0),
+            "depth": row.depth or "", "depth_label": _ANMON_DEPTH_ZH.get(row.depth or "", ""),
+            "event": row.event or "", "flags": _anmon_entry_flag(species, row),
+        } for row in entries],
+        "medications": [{
+            "id": row.id, "time": row.administered_at.strftime("%H:%M"),
+            "phase": row.phase or "intraoperative",
+            "phase_label": _ANMON_PHASE_ZH.get(row.phase or "intraoperative", "术中追加"),
+            "drug_name": row.drug_name or "", "dose_text": row.dose_text or "",
+            "qty": float(row.qty or 0), "unit": row.unit or "", "route": row.route or "",
+            "operator": row.operator or "", "review_status": row.review_status or "pending",
+            "note": row.note or "",
+        } for row in events if row.event_type == "administer"],
+        "open_vials": [{
+            "id": row.id, "drug_name": row.drug_name or "", "batch_no": row.batch_no or "",
+            "remaining": _anmon_vial_remaining(row), "unit": row.unit or "",
+        } for row in open_vials],
+        "inventory": [{
+            "id": row.id, "name": row.name or "", "unit": row.unit or "",
+            "unit2": row.unit2 or "", "unit2_ratio": float(row.unit2_ratio or 1),
+            "stock_qty": float(row.stock_qty or 0), "batches": batch_map.get(row.id, []),
+        } for row in inventory],
+        "phases": [{"key": key, "label": label} for key, label in _ANMON_PHASE_ZH.items()],
+        "recovery_options": _ANMON_RECOVERY_OPTIONS,
+    }
+
+
+@app.get("/api/staff-miniapp/anesthesia-monitors")
+async def api_staff_miniapp_anesthesia_monitors(
+    request: Request, q: str = Query(""), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    store = (user.store or "").strip()
+    clean_q = (q or "").strip()
+    sheet_q = db.query(AnesthesiaMonitorSheet).filter(AnesthesiaMonitorSheet.status == "open")
+    if store:
+        sheet_q = sheet_q.filter(AnesthesiaMonitorSheet.store.in_([store, _STORE_SHORT_TO_FULL.get(store, store)]))
+    active = sheet_q.order_by(AnesthesiaMonitorSheet.id.desc()).all()
+    visit_q = db.query(Visit).join(Pet, Pet.id == Visit.pet_id).outerjoin(Customer, Customer.id == Visit.customer_id)
+    if store:
+        visit_q = visit_q.filter(or_(Visit.store == store, Visit.store == "", Visit.store == None), or_(Pet.store == store, Pet.store == "", Pet.store == None))
+    if clean_q:
+        like = f"%{clean_q}%"
+        visit_q = visit_q.filter(or_(Pet.name.ilike(like), Pet.medical_record_no.ilike(like), Customer.name.ilike(like), Customer.phone.ilike(like), Visit.diagnosis.ilike(like)))
+    else:
+        visit_q = visit_q.filter(Visit.visit_date >= (date.today() - timedelta(days=14)).isoformat())
+    visits = visit_q.order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(60).all()
+    sheet_by_visit = {}
+    if visits:
+        for row in db.query(AnesthesiaMonitorSheet).filter(
+            AnesthesiaMonitorSheet.visit_id.in_([v.id for v in visits]),
+            AnesthesiaMonitorSheet.status == "open",
+        ).order_by(AnesthesiaMonitorSheet.id.desc()).all():
+            sheet_by_visit.setdefault(row.visit_id, row)
+    def visit_row(v: Visit) -> dict:
+        pet = db.get(Pet, v.pet_id)
+        customer = db.get(Customer, v.customer_id) if v.customer_id else None
+        sheet = sheet_by_visit.get(v.id)
+        return {"id": v.id, "date": v.visit_date or "", "pet_name": pet.name if pet else "未命名",
+                "medical_record_no": pet.medical_record_no if pet else "", "customer_name": customer.name if customer else "",
+                "diagnosis": v.diagnosis or v.chief_complaint or "诊断尚未填写", "vet_name": v.vet_name or "",
+                "sheet_id": sheet.id if sheet else 0, "sheet_status": sheet.status if sheet else "", "is_today": v.visit_date == date.today().isoformat()}
+    return {"ok": True, "active": [{"id": row.id, "pet_name": row.pet.name if row.pet else "未命名", "procedure": row.procedure or "未填写术式", "start_time": row.start_time or "", "entry_count": len(row.entries)} for row in active], "visits": [visit_row(v) for v in visits]}
+
+
+@app.post("/api/staff-miniapp/visits/{visit_id}/anesthesia-monitor")
+async def api_staff_miniapp_anesthesia_start(
+    visit_id: int, request: Request, payload: dict | None = Body(default=None), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    payload = payload or {}
+    visit, pet, _customer = _staff_visit_record(db, user, visit_id)
+    existing = db.query(AnesthesiaMonitorSheet).filter(
+        AnesthesiaMonitorSheet.visit_id == visit.id, AnesthesiaMonitorSheet.status == "open",
+    ).order_by(AnesthesiaMonitorSheet.id.desc()).first()
+    if existing:
+        return {"ok": True, "id": existing.id, "reused": True}
+    latest_weight = db.query(WeightRecord).filter(WeightRecord.pet_id == pet.id).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
+    now = _anmon_now()
+    operator = user.display_name or user.username or ""
+    sheet = AnesthesiaMonitorSheet(
+        visit_id=visit.id, customer_id=visit.customer_id, pet_id=pet.id,
+        monitor_date=now.strftime("%Y-%m-%d"), start_time=now.strftime("%H:%M"),
+        procedure=str(payload.get("procedure") or visit.diagnosis or "")[:200],
+        anesthetist=str(payload.get("anesthetist") or operator)[:80], surgeon=str(payload.get("surgeon") or visit.vet_name or "")[:80],
+        asa_grade=str(payload.get("asa_grade") or "")[:10], agent=str(payload.get("agent") or "")[:80],
+        weight_kg=float(payload.get("weight_kg") or (latest_weight.weight_kg if latest_weight else 0) or 0),
+        store=(pet.store or visit.store or user.store or ""), created_by=operator,
+    )
+    db.add(sheet); db.commit(); db.refresh(sheet)
+    return {"ok": True, "id": sheet.id, "reused": False}
+
+
+@app.get("/api/staff-miniapp/anesthesia-monitors/{sheet_id}")
+async def api_staff_miniapp_anesthesia_detail(sheet_id: int, request: Request, db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db)
+    return {"ok": True, "sheet": _anmon_payload(db, _staff_anmon_record(db, user, sheet_id))}
+
+
+@app.post("/api/staff-miniapp/anesthesia-monitors/{sheet_id}/header")
+async def api_staff_miniapp_anesthesia_header(sheet_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db); sheet = _staff_anmon_record(db, user, sheet_id)
+    for field, limit in (("procedure", 200), ("anesthetist", 80), ("surgeon", 80), ("asa_grade", 10), ("agent", 80), ("start_time", 10), ("notes", 2000)):
+        if field in payload: setattr(sheet, field, str(payload.get(field) or "").strip()[:limit])
+    if "weight_kg" in payload: sheet.weight_kg = max(0.0, float(payload.get("weight_kg") or 0))
+    sheet.updated_at = datetime.utcnow(); db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/staff-miniapp/anesthesia-monitors/{sheet_id}/open-vial")
+async def api_staff_miniapp_anesthesia_open_vial(sheet_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db); sheet = _staff_anmon_record(db, user, sheet_id)
+    if sheet.status == "closed": raise HTTPException(400, "监护已结束，不可开瓶")
+    item_id = int(payload.get("item_id") or 0); batch_id = int(payload.get("batch_id") or 0)
+    inv = db.get(InventoryItem, item_id); allowed = {it.id for it in _anmon_inventory_candidates(db, sheet.store)}
+    if not inv or inv.id not in allowed: raise HTTPException(400, "请选择当前门店的麻醉/管控药品")
+    batch = db.get(InventoryBatch, batch_id) if batch_id else None
+    if batch and batch.item_id != inv.id: raise HTTPException(400, "批号与药品不匹配")
+    if db.query(InventoryBatch).filter(InventoryBatch.item_id == inv.id, InventoryBatch.is_depleted.is_(False), InventoryBatch.quantity > 0).count() and not batch:
+        raise HTTPException(400, "该药品有库存批次，请选择批号")
+    qty = float(payload.get("opened_qty") or 0) or (float(inv.unit2_ratio or 1) if float(inv.unit2_ratio or 0) > 0 else 1.0)
+    reserved = sum(_anmon_vial_remaining(v) for v in db.query(AnesthesiaOpenVial).filter(AnesthesiaOpenVial.store == sheet.store, AnesthesiaOpenVial.item_id == inv.id, AnesthesiaOpenVial.status == "open").all())
+    if qty <= 0 or float(inv.stock_qty or 0) + 1e-9 < reserved + qty: raise HTTPException(400, f"{inv.name} 可开瓶库存不足")
+    if batch:
+        batch_reserved = sum(_anmon_vial_remaining(v) for v in db.query(AnesthesiaOpenVial).filter(AnesthesiaOpenVial.batch_id == batch.id, AnesthesiaOpenVial.status == "open").all())
+        if float(batch.quantity or 0) + 1e-9 < batch_reserved + qty: raise HTTPException(400, f"批号 {batch.batch_no or batch.id} 可开瓶库存不足")
+    row = AnesthesiaOpenVial(item_id=inv.id, batch_id=batch.id if batch else None, opened_sheet_id=sheet.id, drug_name=inv.name, batch_no=batch.batch_no if batch else "", manufacturer=inv.manufacturer or "", opened_date=sheet.monitor_date, opened_qty=qty, unit=inv.unit or "", store=sheet.store, opened_by=user.display_name or user.username or "", notes=str(payload.get("notes") or "")[:1000])
+    db.add(row); db.commit(); db.refresh(row)
+    return {"ok": True, "id": row.id}
+
+
+@app.post("/api/staff-miniapp/anesthesia-monitors/{sheet_id}/medications")
+async def api_staff_miniapp_anesthesia_medication(sheet_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db); sheet = _staff_anmon_record(db, user, sheet_id)
+    if sheet.status == "closed": raise HTTPException(400, "监护已结束，不可继续给药")
+    vial = db.get(AnesthesiaOpenVial, int(payload.get("open_vial_id") or 0))
+    if not vial or vial.status != "open" or vial.store != sheet.store or vial.opened_date != sheet.monitor_date: raise HTTPException(400, "请选择当天仍有余额的开瓶记录")
+    qty = round(float(payload.get("qty") or 0), 4)
+    if qty <= 0 or qty > _anmon_vial_remaining(vial) + 1e-9: raise HTTPException(400, f"实际出库量无效，当前余额 {_anmon_vial_remaining(vial):g}{vial.unit}")
+    inv = db.get(InventoryItem, vial.item_id) if vial.item_id else None
+    if not inv: raise HTTPException(400, "对应库存品目已不存在")
+    phase = str(payload.get("phase") or "intraoperative")
+    if phase not in _ANMON_PHASE_ZH: phase = "intraoperative"
+    rec = _anmon_now(); time_hhmm = str(payload.get("time_hhmm") or "").strip()
+    if time_hhmm:
+        try:
+            hh, mm = time_hhmm.split(":"); rec = rec.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
+        except (TypeError, ValueError): pass
+    operator = user.display_name or user.username or ""
+    event = AnesthesiaMedicationEvent(sheet_id=sheet.id, open_vial_id=vial.id, item_id=inv.id, event_type="administer", drug_name=vial.drug_name, batch_no=vial.batch_no, manufacturer=vial.manufacturer, qty=qty, unit=vial.unit, phase=phase, dose_text=str(payload.get("dose_text") or "").strip()[:80], route=str(payload.get("route") or "").strip()[:30], administered_at=rec, operator=operator, review_status="pending", note=str(payload.get("note") or "").strip()[:1000], store=sheet.store)
+    db.add(event); db.flush()
+    _deduct_inventory(db, inv.id, qty, "anesthesia_monitor", event.id, operator, f"监护表#{sheet.id}实际给药 · 开瓶#{vial.id}", respect_single_use_pack=False)
+    _anmon_adjust_batch(vial.inventory_batch, -qty); vial.used_qty = round(float(vial.used_qty or 0) + qty, 4)
+    if _anmon_vial_remaining(vial) <= 1e-9: vial.status = "closed"; vial.closed_at = _anmon_now()
+    ledger = _write_narcotics_ledger(db, item_id=inv.id, item_name=vial.drug_name, direction="out", source="monitor_admin", qty=qty, unit=vial.unit, operator=operator, visit_id=sheet.visit_id, monitor_sheet_id=sheet.id, medication_event_id=event.id, store=sheet.store, event_date=sheet.monitor_date, batch_no=vial.batch_no, manufacturer=vial.manufacturer, notes=f"{_ANMON_PHASE_ZH[phase]} · {event.route or '给药'} · {event.dose_text or '未填临床剂量'} · 待复核")
+    db.flush(); event.ledger_id = ledger.id; sheet.updated_at = datetime.utcnow(); db.commit()
+    return {"ok": True, "id": event.id}
+
+
+@app.post("/api/staff-miniapp/anesthesia-monitors/{sheet_id}/entries")
+async def api_staff_miniapp_anesthesia_entry(sheet_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db); sheet = _staff_anmon_record(db, user, sheet_id)
+    if sheet.status == "closed": raise HTTPException(400, "监护已结束，不可继续记录")
+    def as_int(key):
+        try: return max(0, int(float(payload.get(key) or 0)))
+        except (TypeError, ValueError): return 0
+    def as_float(key):
+        try: return max(0.0, float(payload.get(key) or 0))
+        except (TypeError, ValueError): return 0.0
+    depth = str(payload.get("depth") or ""); depth = depth if depth in _ANMON_DEPTH_ZH else ""
+    event_text = str(payload.get("event") or "").strip()[:200]
+    values = {"hr": as_int("hr"), "rr": as_int("rr"), "spo2": as_int("spo2"), "etco2": as_int("etco2"), "temperature_c": as_float("temperature_c"), "bp_sys": as_int("bp_sys"), "bp_dia": as_int("bp_dia"), "bp_map": as_int("bp_map"), "agent_pct": as_float("agent_pct"), "o2_flow": as_float("o2_flow")}
+    if not any(values.values()) and not depth and not event_text: raise HTTPException(400, "至少填写一项监护数据")
+    rec = _anmon_now(); time_hhmm = str(payload.get("time_hhmm") or "").strip()
+    if time_hhmm:
+        try:
+            hh, mm = time_hhmm.split(":"); rec = rec.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
+        except (TypeError, ValueError): pass
+    db.add(AnesthesiaMonitorEntry(sheet_id=sheet.id, recorded_at=rec, recorded_by=user.display_name or user.username or "", depth=depth, event=event_text, **values))
+    sheet.updated_at = datetime.utcnow(); db.commit()
+    return {"ok": True, "next_due_time": (rec + timedelta(minutes=5)).strftime("%H:%M")}
+
+
+@app.post("/api/staff-miniapp/anesthesia-monitors/{sheet_id}/finish")
+async def api_staff_miniapp_anesthesia_finish(sheet_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db); sheet = _staff_anmon_record(db, user, sheet_id)
+    now = _anmon_now().strftime("%H:%M")
+    sheet.end_time = str(payload.get("end_time") or now).strip()[:10]
+    sheet.extubation_time = str(payload.get("extubation_time") or "").strip()[:10]
+    sheet.recovery_status = str(payload.get("recovery_status") or "").strip()[:40]
+    sheet.recovery_notes = str(payload.get("recovery_notes") or "").strip()[:2000]
+    sheet.status = "closed"; sheet.closed_at = datetime.utcnow(); sheet.updated_at = datetime.utcnow(); db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/staff-miniapp/anesthesia-monitors/{sheet_id}/reopen")
+async def api_staff_miniapp_anesthesia_reopen(sheet_id: int, request: Request, db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db); sheet = _staff_anmon_record(db, user, sheet_id)
+    sheet.status = "open"; sheet.closed_at = None; sheet.updated_at = datetime.utcnow(); db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/staff-miniapp/anesthesia-monitors/{sheet_id}/pdf")
+async def api_staff_miniapp_anesthesia_pdf(sheet_id: int, request: Request, db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db); sheet = _staff_anmon_record(db, user, sheet_id)
+    from app.services.anesthesia_monitor_pdf import generate_monitor_pdf
+    rel, err = generate_monitor_pdf(db, sheet.id)
+    if not rel: raise HTTPException(500, f"PDF生成失败：{err}")
+    path = Path(settings.upload_dir) / rel
+    return FileResponse(path, media_type="application/pdf", filename=f"anesthesia-monitor-{sheet.id}.pdf")
 
 
 def _staff_appointment_row(db: Session, user: AdminUser, appointment_id: int) -> Appointment:
@@ -14742,6 +15029,9 @@ async def page_admin_visit_detail(
     vet_names = [v2[0] for v2 in vets]
     prescriptions = db.query(Prescription).filter(Prescription.visit_id == visit_id).order_by(Prescription.id.desc()).all()
     anesth_orders = db.query(AnesthesiaOrder).filter(AnesthesiaOrder.visit_id == visit_id).order_by(AnesthesiaOrder.id.desc()).all()
+    anmon_sheets = db.query(AnesthesiaMonitorSheet).filter(
+        AnesthesiaMonitorSheet.visit_id == visit_id,
+    ).order_by(AnesthesiaMonitorSheet.id.desc()).all()
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
     invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
     exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.desc()).all()
@@ -14808,6 +15098,7 @@ async def page_admin_visit_detail(
         "visit_type_zh": _VISIT_TYPE_ZH,
         "prescriptions": prescriptions,
         "anesth_orders": anesth_orders,
+        "anmon_sheets": anmon_sheets,
         "sales_orders": sales_orders,
         "invoices": invoices,
         "exam_orders": exam_orders,
@@ -18654,9 +18945,13 @@ def _anmon_inventory_candidates(db: Session, store: str) -> list[InventoryItem]:
         or_(
             InventoryItem.is_controlled.is_(True),
             InventoryItem.subcategory == "controlled",
+            InventoryItem.order_type == "anesthesia",
             InventoryItem.name.ilike("%麻醉%"),
             InventoryItem.name.ilike("%丙泊酚%"),
             InventoryItem.name.ilike("%异氟烷%"),
+            InventoryItem.name.ilike("%右美托咪定%"),
+            InventoryItem.name.ilike("%咪达唑仑%"),
+            InventoryItem.name.ilike("%布托啡诺%"),
         ),
     )
     if store:
@@ -18825,6 +19120,7 @@ async def admin_anmon_open_vial(sheet_id: int, request: Request, db: Session = D
 async def admin_anmon_medication(sheet_id: int, request: Request, db: Session = Depends(get_db),
                                  csrf_token: str = Form(""), next_url: str = Form(""),
                                  open_vial_id: int = Form(0), qty: float = Form(0.0),
+                                 phase: str = Form("intraoperative"), dose_text: str = Form(""),
                                  route: str = Form(""), time_hhmm: str = Form(""),
                                  note: str = Form("")):
     require_admin(request)
@@ -18852,11 +19148,14 @@ async def admin_anmon_medication(sheet_id: int, request: Request, db: Session = 
         except Exception:
             pass
     operator = request.session.get("admin_username", "admin")
+    if phase not in {"premedication", "induction", "intraoperative", "recovery"}:
+        phase = "intraoperative"
     event = AnesthesiaMedicationEvent(
         sheet_id=sheet.id, open_vial_id=vial.id, item_id=inv.id,
         event_type="administer", drug_name=vial.drug_name,
         batch_no=vial.batch_no, manufacturer=vial.manufacturer,
-        qty=amount, unit=vial.unit, route=(route or "").strip()[:30],
+        qty=amount, unit=vial.unit, phase=phase, dose_text=(dose_text or "").strip()[:80],
+        route=(route or "").strip()[:30],
         administered_at=rec, operator=operator, review_status="pending",
         note=(note or "").strip(), store=sheet.store,
     )
@@ -18954,7 +19253,9 @@ async def admin_anmon_update_header(sheet_id: int, request: Request, db: Session
                                     surgeon: str = Form(""), asa_grade: str = Form(""),
                                     agent: str = Form(""), weight_kg: float = Form(0.0),
                                     monitor_date: str = Form(""), start_time: str = Form(""),
-                                    end_time: str = Form(""), notes: str = Form("")):
+                                    end_time: str = Form(""), extubation_time: str = Form(""),
+                                    recovery_status: str = Form(""), recovery_notes: str = Form(""),
+                                    notes: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
     sheet = db.get(AnesthesiaMonitorSheet, sheet_id)
@@ -18970,6 +19271,9 @@ async def admin_anmon_update_header(sheet_id: int, request: Request, db: Session
     sheet.monitor_date = (monitor_date or "").strip()[:20]
     sheet.start_time = (start_time or "").strip()[:10]
     sheet.end_time = (end_time or "").strip()[:10]
+    sheet.extubation_time = (extubation_time or "").strip()[:10]
+    sheet.recovery_status = (recovery_status or "").strip()[:40]
+    sheet.recovery_notes = (recovery_notes or "").strip()
     sheet.notes = (notes or "").strip()
     sheet.updated_at = datetime.utcnow()
     db.commit()

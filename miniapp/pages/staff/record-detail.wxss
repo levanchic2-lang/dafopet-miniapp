@@ -36,3 +36,4 @@
 .record-tags { margin-top:12rpx; display:flex; flex-wrap:wrap; gap:8rpx; }
 .record-tag { padding:7rpx 10rpx; border:1rpx solid #b9c7c0; color:#1d4d3a; font-size:20rpx; }
 .record-foot{margin-top:14rpx;display:flex;align-items:center;justify-content:space-between}.record-foot .detail-row-meta{margin-top:0}.record-foot button{height:54rpx;margin:0;padding:0 18rpx;border-radius:0;border:1rpx solid #1d4d3a;background:#fff;color:#1d4d3a;font-size:19rpx;line-height:54rpx}.record-foot button::after{border:0}
+.record-actions{display:flex;gap:8rpx}

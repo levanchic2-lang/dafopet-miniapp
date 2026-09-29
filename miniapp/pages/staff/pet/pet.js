@@ -1,4 +1,4 @@
-const { staffGet } = require("../../../utils/api");
+const { staffGet, staffPost } = require("../../../utils/api");
 const app = getApp();
 
 const visitLabels = { outpatient: "门诊", followup: "复诊", postop: "术后", vaccine: "疫苗", surgery_consult: "手术", other: "其他" };
@@ -23,6 +23,10 @@ Page({
   },
   setTab(e) { this.setData({ activeTab: e.currentTarget.dataset.tab }); },
   openMaterials(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/material/material?id=" + id }); },
+  openAnesthesia(e) {
+    const id = Number(e.currentTarget.dataset.id || 0); if (!id || this.data.opening) return;
+    wx.showModal({ title: "开启麻醉监护", content: "已有未结束监护时会直接继续。确认进入手术室流程？", confirmText: "进入监护", success: async res => { if (!res.confirm) return; this.setData({ opening: id }); try { const result = await staffPost(`/api/staff-miniapp/visits/${id}/anesthesia-monitor`, {}); wx.navigateTo({ url: "/pages/staff/anesthesia-monitor/anesthesia-monitor?id=" + result.id }); } catch (err) { wx.showToast({ title: (err && err.detail) || "无法开启", icon: "none" }); } finally { this.setData({ opening: 0 }); } } });
+  },
   openReport(e) {
     const id = Number(e.currentTarget.dataset.id || 0);
     const type = e.currentTarget.dataset.type || "pdf";

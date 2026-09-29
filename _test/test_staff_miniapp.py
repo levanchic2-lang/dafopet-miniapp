@@ -25,9 +25,10 @@ from app.database import Base, SessionLocal, engine
 import app.main as main_module
 from app.main import app
 from app.models import (
-    AdminUser, Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
-    DewormingRecord, ExamOrder, ExamReport, Invoice, MediaFile, Payment, Pet,
-    Vaccination, Visit, Wallet,
+    AdminUser, AnesthesiaMedicationEvent, AnesthesiaMonitorEntry, AnesthesiaMonitorSheet,
+    Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
+    DewormingRecord, ExamOrder, ExamReport, InventoryBatch, InventoryItem, Invoice,
+    MediaFile, Payment, Pet, Vaccination, Visit, Wallet,
 )
 
 
@@ -296,6 +297,63 @@ try:
         )
         assert deleted_material.status_code == 200
         assert client.get(f"/api/staff-miniapp/visit-materials/{material_id}/file", headers=headers).status_code == 404
+        assert client.post(f"/api/staff-miniapp/visits/{other_visit_id}/anesthesia-monitor", json={}, headers=headers).status_code == 403
+        started_monitor = client.post(
+            f"/api/staff-miniapp/visits/{own_visit_id}/anesthesia-monitor", json={"procedure": "测试手术"}, headers=headers,
+        )
+        assert started_monitor.status_code == 200, started_monitor.text
+        monitor_id = started_monitor.json()["id"]
+        db = SessionLocal()
+        try:
+            drug = InventoryItem(
+                name="测试右美托咪定", category="medication", subcategory="controlled",
+                is_controlled=True, is_service=False, unit="ml", unit2="瓶", unit2_ratio=10,
+                stock_qty=10, manufacturer="测试厂家", store="横岗店", created_by="test",
+            )
+            db.add(drug); db.flush()
+            batch = InventoryBatch(item_id=drug.id, batch_no="DEX-01", quantity=10, expiry_date="2028-01-01")
+            db.add(batch); db.commit(); drug_id, batch_id = drug.id, batch.id
+        finally:
+            db.close()
+        monitor_detail = client.get(f"/api/staff-miniapp/anesthesia-monitors/{monitor_id}", headers=headers)
+        assert monitor_detail.status_code == 200, monitor_detail.text
+        assert monitor_detail.json()["sheet"]["pet"]["name"] == "横岗犬"
+        assert monitor_detail.json()["sheet"]["inventory"][0]["name"] == "测试右美托咪定"
+        assert client.post(f"/api/staff-miniapp/anesthesia-monitors/{monitor_id}/header", json={
+            "procedure": "犬绝育术", "asa_grade": "I", "agent": "异氟烷", "weight_kg": 8.5,
+        }, headers=headers).status_code == 200
+        opened = client.post(f"/api/staff-miniapp/anesthesia-monitors/{monitor_id}/open-vial", json={
+            "item_id": drug_id, "batch_id": batch_id, "opened_qty": 10,
+        }, headers=headers)
+        assert opened.status_code == 200, opened.text
+        vial_id = opened.json()["id"]
+        medication = client.post(f"/api/staff-miniapp/anesthesia-monitors/{monitor_id}/medications", json={
+            "open_vial_id": vial_id, "qty": 0.1, "dose_text": "5μg",
+            "phase": "premedication", "route": "IV", "note": "术前镇静",
+        }, headers=headers)
+        assert medication.status_code == 200, medication.text
+        vital = client.post(f"/api/staff-miniapp/anesthesia-monitors/{monitor_id}/entries", json={
+            "hr": 100, "rr": 15, "spo2": 98, "etco2": 38, "temperature_c": 37.8,
+            "bp_sys": 110, "bp_dia": 70, "bp_map": 83, "agent_pct": 1.8,
+            "o2_flow": 1.0, "depth": "adequate",
+        }, headers=headers)
+        assert vital.status_code == 200, vital.text
+        finished = client.post(f"/api/staff-miniapp/anesthesia-monitors/{monitor_id}/finish", json={
+            "end_time": "12:00", "extubation_time": "12:08",
+            "recovery_status": "苏醒良好", "recovery_notes": "自主呼吸平稳",
+        }, headers=headers)
+        assert finished.status_code == 200, finished.text
+        db = SessionLocal()
+        try:
+            sheet = db.get(AnesthesiaMonitorSheet, monitor_id)
+            assert sheet.status == "closed" and sheet.extubation_time == "12:08"
+            assert sheet.recovery_status == "苏醒良好"
+            assert db.get(InventoryItem, drug_id).stock_qty == 9.9
+            med = db.query(AnesthesiaMedicationEvent).filter_by(sheet_id=monitor_id).one()
+            assert med.phase == "premedication" and med.dose_text == "5μg"
+            assert db.query(AnesthesiaMonitorEntry).filter_by(sheet_id=monitor_id).count() == 1
+        finally:
+            db.close()
         created = client.post("/api/staff-miniapp/appointments", json={
             "category": "outpatient", "service_name": "手机端复诊",
             "customer_id": own_customer["id"], "pet_id": own_customer["pets"][0]["id"],

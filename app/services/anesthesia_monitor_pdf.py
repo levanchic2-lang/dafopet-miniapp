@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 _DEPTH_ZH = {"light": "偏浅", "adequate": "适宜", "deep": "偏深"}
 _SPECIES_ZH = {"cat": "猫", "dog": "犬"}
+_PHASE_ZH = {"premedication": "术前", "induction": "诱导", "intraoperative": "术中", "recovery": "复苏"}
 
 
 def _esc(s) -> str:
@@ -227,8 +228,10 @@ def _build_html(sheet, cust, pet, clinic_name: str) -> str:
             "<tr>"
             f"<td>{_fmt_t(e.administered_at)}</td>"
             f"<td>{_esc(event_type_zh.get(e.event_type, e.event_type))}</td>"
+            f"<td>{_esc(_PHASE_ZH.get(getattr(e, 'phase', ''), getattr(e, 'phase', ''))) or '—'}</td>"
             f"<td>{_esc(e.drug_name)}</td>"
             f"<td>{_esc(e.batch_no) or '—'}</td>"
+            f"<td>{_esc(getattr(e, 'dose_text', '')) or '—'}</td>"
             f"<td>{float(e.qty or 0):g} {_esc(e.unit)}</td>"
             f"<td>{_esc(e.route) or '—'}</td>"
             f"<td>{_esc(e.operator) or '—'}</td>"
@@ -242,7 +245,7 @@ def _build_html(sheet, cust, pet, clinic_name: str) -> str:
         medication_block = f"""
 <div class="med-title">实际用药记录</div>
 <table class="med">
-  <thead><tr><th>时刻</th><th>类型</th><th>药品</th><th>批号</th><th>实际量</th><th>途径</th><th>记录人</th><th>复核</th><th>备注</th></tr></thead>
+  <thead><tr><th>时刻</th><th>类型</th><th>阶段</th><th>药品</th><th>批号</th><th>临床剂量</th><th>实际出库</th><th>途径</th><th>记录人</th><th>复核</th><th>备注</th></tr></thead>
   <tbody>{''.join(medication_rows)}</tbody>
 </table>"""
 
@@ -286,6 +289,7 @@ def _build_html(sheet, cust, pet, clinic_name: str) -> str:
 {medication_block}
 
 {('<div style="margin-top:8pt;font-size:9pt;color:#555;"><b>备注：</b>' + _esc(sheet.notes) + "</div>") if sheet.notes else ""}
+{('<div style="margin-top:6pt;font-size:9pt;color:#555;"><b>复苏：</b>拔管 ' + _esc(sheet.extubation_time or '—') + ' · ' + _esc(sheet.recovery_status or '—') + (' · ' + _esc(sheet.recovery_notes) if sheet.recovery_notes else '') + "</div>") if (sheet.extubation_time or sheet.recovery_status or sheet.recovery_notes) else ""}
 
 <div class="sign">麻醉/监护人签字：<span></span></div>
 

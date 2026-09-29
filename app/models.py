@@ -2134,6 +2134,9 @@ class AnesthesiaMonitorSheet(Base):
     weight_kg:    Mapped[float] = mapped_column(Float, default=0.0)      # 麻醉时体重快照
     start_time:   Mapped[str] = mapped_column(String(10), default="")    # HH:MM 麻醉开始
     end_time:     Mapped[str] = mapped_column(String(10), default="")    # HH:MM 麻醉结束
+    extubation_time: Mapped[str] = mapped_column(String(10), default="") # HH:MM 拔管
+    recovery_status: Mapped[str] = mapped_column(String(40), default="") # 苏醒良好/延迟等
+    recovery_notes: Mapped[str] = mapped_column(Text, default="")        # 拔管后及复苏区记录
     notes:        Mapped[str] = mapped_column(Text, default="")          # 总体备注
 
     status:       Mapped[str] = mapped_column(String(20), default="open")  # open / closed
@@ -2228,6 +2231,8 @@ class AnesthesiaMedicationEvent(Base):
     manufacturer: Mapped[str] = mapped_column(String(200), default="")
     qty: Mapped[float] = mapped_column(Float, default=0.0)
     unit: Mapped[str] = mapped_column(String(20), default="")
+    phase: Mapped[str] = mapped_column(String(20), default="intraoperative")
+    dose_text: Mapped[str] = mapped_column(String(80), default="")
     route: Mapped[str] = mapped_column(String(30), default="")
     administered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     operator: Mapped[str] = mapped_column(String(80), default="")

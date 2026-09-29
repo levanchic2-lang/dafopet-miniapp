@@ -2215,6 +2215,9 @@ def _try_sqlite_migrations() -> None:
                 "weight_kg REAL DEFAULT 0.0, "
                 "start_time VARCHAR(10) DEFAULT '', "
                 "end_time VARCHAR(10) DEFAULT '', "
+                "extubation_time VARCHAR(10) DEFAULT '', "
+                "recovery_status VARCHAR(40) DEFAULT '', "
+                "recovery_notes TEXT DEFAULT '', "
                 "notes TEXT DEFAULT '', "
                 "status VARCHAR(20) DEFAULT 'open', "
                 "store VARCHAR(40) DEFAULT '', "
@@ -2226,6 +2229,14 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmon_visit ON anesthesia_monitor_sheets(visit_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmon_store_date ON anesthesia_monitor_sheets(store, monitor_date)"))
+            anmon_cols = conn.execute(text("PRAGMA table_info(anesthesia_monitor_sheets)")).fetchall()
+            anmon_names = {c[1] for c in anmon_cols} if anmon_cols else set()
+            if anmon_cols and "extubation_time" not in anmon_names:
+                conn.execute(text("ALTER TABLE anesthesia_monitor_sheets ADD COLUMN extubation_time VARCHAR(10) DEFAULT ''"))
+            if anmon_cols and "recovery_status" not in anmon_names:
+                conn.execute(text("ALTER TABLE anesthesia_monitor_sheets ADD COLUMN recovery_status VARCHAR(40) DEFAULT ''"))
+            if anmon_cols and "recovery_notes" not in anmon_names:
+                conn.execute(text("ALTER TABLE anesthesia_monitor_sheets ADD COLUMN recovery_notes TEXT DEFAULT ''"))
 
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS anesthesia_monitor_entries ("
@@ -2294,6 +2305,8 @@ def _try_sqlite_migrations() -> None:
                 "manufacturer VARCHAR(200) DEFAULT '', "
                 "qty REAL DEFAULT 0.0, "
                 "unit VARCHAR(20) DEFAULT '', "
+                "phase VARCHAR(20) DEFAULT 'intraoperative', "
+                "dose_text VARCHAR(80) DEFAULT '', "
                 "route VARCHAR(30) DEFAULT '', "
                 "administered_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
                 "operator VARCHAR(80) DEFAULT '', "
@@ -2308,6 +2321,12 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmed_sheet_time ON anesthesia_medication_events(sheet_id, administered_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmed_review ON anesthesia_medication_events(store, review_status)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anmed_vial ON anesthesia_medication_events(open_vial_id)"))
+            anmed_cols = conn.execute(text("PRAGMA table_info(anesthesia_medication_events)")).fetchall()
+            anmed_names = {c[1] for c in anmed_cols} if anmed_cols else set()
+            if anmed_cols and "phase" not in anmed_names:
+                conn.execute(text("ALTER TABLE anesthesia_medication_events ADD COLUMN phase VARCHAR(20) DEFAULT 'intraoperative'"))
+            if anmed_cols and "dose_text" not in anmed_names:
+                conn.execute(text("ALTER TABLE anesthesia_medication_events ADD COLUMN dose_text VARCHAR(80) DEFAULT ''"))
 
             # 美容单
             conn.execute(text(

@@ -106,6 +106,10 @@
         <div class="ukm-field"><label class="lbl">给药时间</label><input class="ukm-input ukm-num" type="time" name="time_hhmm" value="{{ now_hhmm }}"/></div>
       </div>
       <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">给药阶段</label><select class="ukm-select" name="phase"><option value="premedication">术前用药</option><option value="induction">麻醉诱导</option><option value="intraoperative" selected>术中追加</option><option value="recovery">复苏期</option></select></div>
+        <div class="ukm-field"><label class="lbl">临床剂量</label><input class="ukm-input" name="dose_text" placeholder="如 5μg / 0.2mg/kg"/></div>
+      </div>
+      <div class="ukm-row2">
         <div class="ukm-field"><label class="lbl">给药途径</label><input class="ukm-input" name="route" placeholder="如 IV / IM / 吸入"/></div>
         <div class="ukm-field"><label class="lbl">备注</label><input class="ukm-input" name="note" placeholder="如首次诱导 / 追加"/></div>
       </div>
@@ -125,6 +129,7 @@
     <div class="ukm-row-body">
       <div class="ukm-row-title"><span class="ukm-num">{{ e.administered_at.strftime('%H:%M') }}</span>&nbsp; {{ e.drug_name }} · {{ '%g'|format(e.qty) }}{{ e.unit }}</div>
       <div class="ukm-row-sub">{{ e.route or ('残余销毁' if e.event_type == 'destroy' else '—') }} · {{ e.operator or '—' }}{% if e.batch_no %} · 批 {{ e.batch_no }}{% endif %}</div>
+      {% if e.dose_text %}<div class="ukm-row-sub">临床剂量 {{ e.dose_text }}</div>{% endif %}
       {% if e.note %}<div class="ukm-row-sub" style="color:var(--ink-2);">{{ e.note }}</div>{% endif %}
     </div>
     {% if e.review_status == 'pending' %}<span class="ukm-pill amber">待复核</span>
@@ -280,6 +285,11 @@
         <div class="ukm-field"><label class="lbl">麻醉结束</label>
           <input class="ukm-input ukm-num" type="text" name="end_time" value="{{ sheet.end_time }}" placeholder="HH:MM"/></div>
       </div>
+      <div class="ukm-row2">
+        <div class="ukm-field"><label class="lbl">拔管时间</label><input class="ukm-input ukm-num" type="text" name="extubation_time" value="{{ sheet.extubation_time }}" placeholder="HH:MM"/></div>
+        <div class="ukm-field"><label class="lbl">复苏状态</label><input class="ukm-input" name="recovery_status" value="{{ sheet.recovery_status }}" placeholder="苏醒良好 / 延迟"/></div>
+      </div>
+      <div class="ukm-field"><label class="lbl">复苏记录</label><textarea class="ukm-textarea" name="recovery_notes" style="min-height:54px;">{{ sheet.recovery_notes }}</textarea></div>
       <div class="ukm-field"><label class="lbl">总&nbsp;体&nbsp;备&nbsp;注</label>
         <textarea class="ukm-textarea" name="notes" style="min-height:54px;">{{ sheet.notes }}</textarea></div>
       <button type="submit" class="ukm-btn ghost block">保&nbsp;存&nbsp;表&nbsp;头</button>

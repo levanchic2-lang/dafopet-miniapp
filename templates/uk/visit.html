@@ -223,6 +223,10 @@
         <a href="/admin/visits/{{ visit.id }}/unified-order" class="uk-btn primary sm">＋ 统一开单</a>
         {% if unified_batches %}<a href="/admin/unified-orders/{{ unified_batches[0].id }}" class="uk-btn ghost sm">统一改单</a>{% endif %}
         <a href="/admin/visits/{{ visit.id }}/anesthesia/new" class="uk-btn ghost sm">＋ 新建麻醉单</a>
+        <form method="post" action="/admin/visits/{{ visit.id }}/anesthesia-monitor/create" style="display:inline;margin:0;" target="_blank">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="uk-btn ghost sm">▶ 开启麻醉监护</button>
+        </form>
         <a href="/admin/exam-orders/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建检查单</a>
         <a href="/admin/prescriptions/create?visit_id={{ visit.id }}" class="uk-btn ghost sm">＋ 新建处方</a>
     {% endif %}
@@ -536,6 +540,24 @@
   </table>
 </div>
 {% endif %}
+
+{# 麻醉监护 #}
+<div class="v-rel-section">
+  <div class="v-rel-head">
+    <div><h2>麻&nbsp;醉&nbsp;监&nbsp;护</h2><span class="count">共 {{ anmon_sheets|length }} 张</span></div>
+    <div class="actions">
+      <form method="post" action="/admin/visits/{{ visit.id }}/anesthesia-monitor/create" style="display:inline;margin:0;" target="_blank">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+        <button type="submit" class="uk-btn primary sm">▶ 开启 / 继续监护</button>
+      </form>
+    </div>
+  </div>
+  {% if anmon_sheets %}
+  <table class="v-rel-tbl"><thead><tr><th>日期</th><th>术式</th><th>麻醉时段</th><th>状态</th><th class="right">操作</th></tr></thead><tbody>
+    {% for s in anmon_sheets %}<tr><td class="num">{{ s.monitor_date or '—' }}</td><td>{{ s.procedure or '—' }}</td><td class="num">{{ s.start_time or '—' }}{% if s.end_time %} - {{ s.end_time }}{% endif %}</td><td>{% if s.status == 'open' %}<span class="uk-pill amber">监护中</span>{% else %}<span class="uk-pill green">已结束</span>{% endif %}</td><td class="right"><a href="/m/anesthesia-monitor/{{ s.id }}" target="_blank">{{ '继续监护' if s.status == 'open' else '查看记录' }} →</a></td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<div class="v-rel-empty">本病历尚未建立麻醉监护记录</div>{% endif %}
+</div>
 
 {# 销售单 #}
 <div class="v-rel-section">

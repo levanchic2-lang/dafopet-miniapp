@@ -1,0 +1,11 @@
+<view class="staff-page anesthesia-list-page">
+  <view class="staff-status"><text>员工端</text><text>手术室</text></view>
+  <view class="anesthesia-head"><view class="staff-eyebrow">ANESTHESIA</view><view class="anesthesia-title">麻醉监护</view><view class="anesthesia-desc">选择病例开启监护。已开启的监护优先显示，记录每 5 分钟体征与实际给药。</view></view>
+  <view wx:if="{{active.length}}" class="staff-section-head"><text>正在监护</text><text class="staff-section-meta">{{active.length}} 台</text></view>
+  <view wx:for="{{active}}" wx:key="id" class="active-monitor" data-id="{{item.id}}" bindtap="openMonitor"><view><view class="active-name">{{item.pet_name}}</view><view class="active-meta">{{item.start_time}} 开始 · {{item.procedure}} · 已记 {{item.entry_count}} 次</view></view><view class="active-live">监护中 →</view></view>
+  <view class="staff-search"><input placeholder="宠物名、主人、手机号、病历号或诊断" value="{{query}}" bindinput="onQuery" confirm-type="search" bindconfirm="onSearch"/><button wx:if="{{query}}" class="staff-search-btn" bindtap="onClear">×</button><button class="staff-search-btn" bindtap="onSearch">⌕</button></view>
+  <view class="staff-section-head"><text>{{query ? '搜索结果' : '近期病例'}}</text><text class="staff-section-meta">{{visits.length}} 条</text></view>
+  <view wx:if="{{loading}}" class="staff-loading">正在读取病例…</view><view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <view wx:if="{{!loading && !visits.length}}" class="staff-empty">没有找到可开启监护的病例。</view>
+  <view wx:for="{{visits}}" wx:key="id" class="anesthesia-visit {{item.is_today ? 'today' : ''}}"><view class="visit-date">{{item.is_today ? '今天' : item.date}}</view><view class="visit-main"><view class="visit-name">{{item.pet_name}}</view><view class="visit-diagnosis">{{item.diagnosis}}</view><view class="visit-meta">{{item.customer_name}}{{item.vet_name ? ' · ' + item.vet_name : ''}}</view></view><button data-id="{{item.id}}" data-sheet="{{item.sheet_id}}" bindtap="startMonitor">{{item.sheet_id ? (item.sheet_status === 'open' ? '继续' : '查看') : '开启'}}</button></view>
+</view>
