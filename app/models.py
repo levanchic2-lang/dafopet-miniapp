@@ -1107,6 +1107,36 @@ class MedicationAdminLog(Base):
     prescription_item = relationship("PrescriptionItem", foreign_keys=[prescription_item_id])
 
 
+class InpatientTemporaryMedication(Base):
+    """先执行、后补处方的住院临时用药记录。
+
+    该表只保存临床执行证据，不直接扣库存；医生补开正式处方时由处方统一扣库和计费，
+    避免同一剂量被临时记录与正式处方重复扣减。
+    """
+    __tablename__ = "inpatient_temporary_medications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hospitalization_id = mapped_column(ForeignKey("hospitalizations.id", ondelete="CASCADE"), nullable=False)
+    inventory_item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
+    linked_prescription_item_id = mapped_column(ForeignKey("prescription_items.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    drug_name: Mapped[str] = mapped_column(String(200), default="")
+    dose_actual: Mapped[str] = mapped_column(String(80), default="")
+    route: Mapped[str] = mapped_column(String(40), default="")
+    ordered_by: Mapped[str] = mapped_column(String(80), default="")
+    administered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    administered_by: Mapped[str] = mapped_column(String(80), default="")
+    notes: Mapped[str] = mapped_column(String(300), default="")
+    # pending_prescription / linked / voided
+    status: Mapped[str] = mapped_column(String(30), default="pending_prescription")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    hospitalization = relationship("Hospitalization", foreign_keys=[hospitalization_id])
+    inventory_item = relationship("InventoryItem", foreign_keys=[inventory_item_id])
+    linked_prescription_item = relationship("PrescriptionItem", foreign_keys=[linked_prescription_item_id])
+
+
 class VitalSignsLog(Base):
     """生命体征记录：T/HR/RR/黏膜/CRT/体重。
 

@@ -26,6 +26,7 @@
     "pages/staff/material/material",
     "pages/staff/anesthesia/anesthesia",
     "pages/staff/anesthesia-monitor/anesthesia-monitor",
+    "pages/staff/inpatient-meds/inpatient-meds",
     "pages/staff/calendar/calendar",
     "pages/staff/customers/customers",
     "pages/staff/customer/customer",

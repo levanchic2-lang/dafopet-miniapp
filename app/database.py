@@ -1503,6 +1503,28 @@ def _try_sqlite_migrations() -> None:
             except Exception:
                 pass
 
+            # 住院临时用药：先执行、后补正式处方。只记临床执行证据，不在此处重复扣库存。
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS inpatient_temporary_medications ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "hospitalization_id INTEGER NOT NULL REFERENCES hospitalizations(id) ON DELETE CASCADE, "
+                "inventory_item_id INTEGER DEFAULT NULL REFERENCES inventory_items(id) ON DELETE SET NULL, "
+                "linked_prescription_item_id INTEGER DEFAULT NULL REFERENCES prescription_items(id) ON DELETE SET NULL, "
+                "drug_name VARCHAR(200) DEFAULT '', "
+                "dose_actual VARCHAR(80) DEFAULT '', "
+                "route VARCHAR(40) DEFAULT '', "
+                "ordered_by VARCHAR(80) DEFAULT '', "
+                "administered_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "administered_by VARCHAR(80) DEFAULT '', "
+                "notes VARCHAR(300) DEFAULT '', "
+                "status VARCHAR(30) DEFAULT 'pending_prescription', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_temp_med_hosp ON inpatient_temporary_medications(hospitalization_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_temp_med_status ON inpatient_temporary_medications(status)"))
+
             # vital_signs_logs 生命体征
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS vital_signs_logs ("

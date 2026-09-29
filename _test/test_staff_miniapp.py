@@ -29,7 +29,8 @@ from app.models import (
     AdminUser, AnesthesiaMedicationEvent, AnesthesiaMonitorEntry, AnesthesiaMonitorSheet,
     Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
     DewormingRecord, ExamOrder, ExamReport, InventoryBatch, InventoryItem, Invoice,
-    MediaFile, Payment, Pet, Vaccination, Visit, Wallet,
+    Hospitalization, InpatientTemporaryMedication, MediaFile, MedicationAdminLog,
+    Payment, Pet, Prescription, PrescriptionItem, Staff, Vaccination, Visit, Wallet,
 )
 
 
@@ -74,6 +75,56 @@ try:
                     store="大风动物医院（东环店）", status="confirmed"),
     ])
     db.flush()
+    db.add(Staff(name="横岗医生", store="横岗店", position="医生", status="active"))
+    hg_hosp = Hospitalization(
+        customer_id=hg_customer.id, pet_id=hg_pet.id, visit_id=hg_visit.id,
+        store="横岗店", status="admitted", reason="测试住院",
+        staff_token="test-hg-staff", owner_token="test-hg-owner",
+    )
+    dh_hosp = Hospitalization(
+        customer_id=dh_customer.id, pet_id=dh_pet.id, visit_id=dh_visit.id,
+        store="东环店", status="admitted", reason="测试住院",
+        staff_token="test-dh-staff", owner_token="test-dh-owner",
+    )
+    hg_drug = InventoryItem(
+        name="横岗住院测试药", category="medication", is_service=False,
+        unit="ml", stock_qty=20, store="横岗店", is_active=True,
+    )
+    dh_drug = InventoryItem(
+        name="东环住院测试药", category="medication", is_service=False,
+        unit="ml", stock_qty=20, store="东环店", is_active=True,
+    )
+    db.add_all([hg_hosp, dh_hosp, hg_drug, dh_drug])
+    db.flush()
+    hg_presc = Prescription(
+        visit_id=hg_visit.id, customer_id=hg_customer.id, pet_id=hg_pet.id,
+        prescribed_date=today, vet_name="横岗医生", status="issued",
+    )
+    dh_presc = Prescription(
+        visit_id=dh_visit.id, customer_id=dh_customer.id, pet_id=dh_pet.id,
+        prescribed_date=today, vet_name="东环医生", status="issued",
+    )
+    db.add_all([hg_presc, dh_presc]); db.flush()
+    hg_pi = PrescriptionItem(
+        prescription_id=hg_presc.id, item_id=hg_drug.id, drug_name=hg_drug.name,
+        drug_type="静脉注射", dosage="0.5ml", dose_amount=0.5, dose_unit="ml",
+        frequency="BID", duration_days="3", schedule_times="09:00,21:00",
+    )
+    dh_pi = PrescriptionItem(
+        prescription_id=dh_presc.id, item_id=dh_drug.id, drug_name=dh_drug.name,
+        dosage="1ml", frequency="QD", duration_days="1", schedule_times="10:00",
+    )
+    db.add_all([hg_pi, dh_pi]); db.flush()
+    db.add_all([
+        MedicationAdminLog(
+            hospitalization_id=hg_hosp.id, prescription_id=hg_presc.id,
+            prescription_item_id=hg_pi.id, scheduled_at=datetime.combine(datetime.now().date(), datetime.min.time()).replace(hour=9),
+        ),
+        MedicationAdminLog(
+            hospitalization_id=dh_hosp.id, prescription_id=dh_presc.id,
+            prescription_item_id=dh_pi.id, scheduled_at=datetime.combine(datetime.now().date(), datetime.min.time()).replace(hour=10),
+        ),
+    ])
     report_dir = UPLOAD_DIR / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / "hg-report.pdf"
@@ -140,7 +191,56 @@ try:
         assert "pending" not in dashboard.json()["stats"]
         assert dashboard.json()["tasks"] == []
         assert dashboard.json()["stats"]["anesthesia_open"] == 0
+        assert dashboard.json()["stats"]["inpatient_med_due"] == 1
         assert dashboard.json()["next_appointment"]["pet_name"] == "横岗犬"
+
+        meds = client.get("/api/staff-miniapp/inpatient-medications", headers=headers)
+        assert meds.status_code == 200, meds.text
+        assert [row["pet_name"] for row in meds.json()["items"]] == ["横岗犬"]
+        assert meds.json()["items"][0]["drug_name"] == "横岗住院测试药"
+        assert [row["name"] for row in meds.json()["inventory"]] == ["横岗住院测试药"]
+        med_id = meds.json()["items"][0]["id"]
+        completed_med = client.post(
+            f"/api/staff-miniapp/inpatient-medications/{med_id}/check",
+            json={"dose_actual": "0.5ml"}, headers=headers,
+        )
+        assert completed_med.status_code == 200, completed_med.text
+        assert completed_med.json()["item"]["status"] == "done"
+        completed_view = client.get(
+            "/api/staff-miniapp/inpatient-medications", params={"view": "completed"}, headers=headers,
+        )
+        assert [row["id"] for row in completed_view.json()["items"]] == [med_id]
+        assert client.post(
+            f"/api/staff-miniapp/inpatient-medications/{med_id}/uncheck", headers=headers,
+        ).status_code == 200
+        temp_created = client.post(
+            "/api/staff-miniapp/inpatient-medications/temporary",
+            json={
+                "hospitalization_id": meds.json()["hospitalizations"][0]["id"],
+                "inventory_item_id": meds.json()["inventory"][0]["id"],
+                "dose_actual": "0.2ml", "route": "静脉注射",
+                "ordered_by": "横岗医生", "notes": "先用后补",
+            }, headers=headers,
+        )
+        assert temp_created.status_code == 200, temp_created.text
+        temporary_view = client.get(
+            "/api/staff-miniapp/inpatient-medications", params={"view": "temporary"}, headers=headers,
+        )
+        assert len(temporary_view.json()["temporary"]) == 1
+        db = SessionLocal()
+        try:
+            # 临时用药只留证据，不提前扣库存；正式补处方时再统一扣减。
+            assert db.query(InventoryItem).filter_by(name="横岗住院测试药").one().stock_qty == 20
+            assert db.query(InpatientTemporaryMedication).count() == 1
+            other_med_id = db.query(MedicationAdminLog.id).join(Hospitalization).filter(
+                Hospitalization.store == "东环店",
+            ).scalar()
+        finally:
+            db.close()
+        assert client.post(
+            f"/api/staff-miniapp/inpatient-medications/{other_med_id}/check",
+            json={}, headers=headers,
+        ).status_code == 403
 
         anesthesia_list = client.get("/api/staff-miniapp/anesthesia-monitors", headers=headers)
         assert anesthesia_list.status_code == 200, anesthesia_list.text

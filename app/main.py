@@ -129,6 +129,7 @@ from app.models import (
     CageRateRule,
     Hospitalization,
     MedicationAdminLog,
+    InpatientTemporaryMedication,
     VitalSignsLog,
     IOLog,
     FeedingLog,
@@ -6646,6 +6647,16 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
     if store:
         anmon_q = anmon_q.filter(AnesthesiaMonitorSheet.store.in_([store, full_store]))
     anesthesia_open_count = anmon_q.count()
+    med_q = db.query(MedicationAdminLog).join(
+        Hospitalization, MedicationAdminLog.hospitalization_id == Hospitalization.id,
+    ).filter(
+        Hospitalization.status == "admitted",
+        MedicationAdminLog.status == "pending",
+        MedicationAdminLog.scheduled_at < datetime.combine(date.today() + timedelta(days=1), datetime.min.time()),
+    )
+    if store:
+        med_q = med_q.filter(Hospitalization.store == store)
+    inpatient_med_due_count = med_q.count()
     next_appt = None
     current_hm = datetime.now().strftime("%H:%M")
     next_row = next((row for row in appointments if row.status == "arrived"), None)
@@ -6663,10 +6674,267 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
         "date": today,
         "profile": _staff_profile_payload(user),
         "stats": {"appointments": len(appointments), "visits": visit_count,
-                  "tnr_today": tnr_today_count, "anesthesia_open": anesthesia_open_count},
+                  "tnr_today": tnr_today_count, "anesthesia_open": anesthesia_open_count,
+                  "inpatient_med_due": inpatient_med_due_count},
         "tasks": [],
         "next_appointment": next_appt,
     }
+
+
+def _staff_med_hospitalization(db: Session, user: AdminUser, hospitalization_id: int) -> Hospitalization:
+    hosp = db.get(Hospitalization, hospitalization_id)
+    if not hosp or hosp.status != "admitted":
+        raise HTTPException(404, "未找到在院中的住院档案")
+    store = (user.store or "").strip()
+    if store and (hosp.store or "").strip() != store:
+        raise HTTPException(403, "不能操作其他门店的住院档案")
+    return hosp
+
+
+def _staff_med_log(db: Session, user: AdminUser, log_id: int) -> MedicationAdminLog:
+    row = db.get(MedicationAdminLog, log_id)
+    if not row:
+        raise HTTPException(404, "用药任务不存在")
+    _staff_med_hospitalization(db, user, row.hospitalization_id)
+    return row
+
+
+def _staff_med_log_payload(row: MedicationAdminLog, now_local: datetime | None = None) -> dict:
+    now_local = now_local or datetime.now()
+    hosp = row.hospitalization
+    item = row.prescription_item
+    presc = row.prescription
+    pet = hosp.pet if hosp else None
+    cage = hosp.cage if hosp else None
+    dose = ""
+    if item:
+        if float(item.dose_amount or 0) > 0:
+            dose = f"{float(item.dose_amount):g}{item.dose_unit or ''}"
+        else:
+            dose = item.dosage or ""
+    administered_local = row.administered_at + timedelta(hours=8) if row.administered_at else None
+    return {
+        "id": row.id,
+        "hospitalization_id": row.hospitalization_id,
+        "pet_name": pet.name if pet else "未命名宠物",
+        "cage_code": cage.code if cage else "",
+        "drug_name": item.drug_name if item else "处方明细已删除",
+        "dose": dose,
+        "route": item.drug_type if item else "",
+        "frequency": item.frequency if item else "",
+        "instructions": item.instructions if item else "",
+        "scheduled_date": row.scheduled_at.strftime("%Y-%m-%d"),
+        "scheduled_time": row.scheduled_at.strftime("%H:%M"),
+        "scheduled_at": row.scheduled_at.strftime("%Y-%m-%d %H:%M"),
+        "day_index": row.day_index,
+        "dose_index": row.dose_index,
+        "status": row.status,
+        "is_overdue": row.status == "pending" and row.scheduled_at < now_local,
+        "administered_at": administered_local.strftime("%Y-%m-%d %H:%M") if administered_local else "",
+        "administered_by": row.administered_by or "",
+        "dose_actual": row.dose_actual or "",
+        "notes": row.notes or "",
+        "vet_name": presc.vet_name if presc else "",
+    }
+
+
+@app.get("/api/staff-miniapp/inpatient-medications")
+async def api_staff_miniapp_inpatient_medications(
+    request: Request, view: str = Query("pending"), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    store = (user.store or "").strip()
+    view = (view or "pending").strip().lower()
+    if view not in ("pending", "completed", "temporary"):
+        raise HTTPException(400, "未知的查看类型")
+    now_local = datetime.now()
+    q = db.query(MedicationAdminLog).join(
+        Hospitalization, MedicationAdminLog.hospitalization_id == Hospitalization.id,
+    ).filter(Hospitalization.status == "admitted")
+    if store:
+        q = q.filter(Hospitalization.store == store)
+    if view == "pending":
+        # 日常页面只放“逾期 + 今天”的任务，连续多日处方不会把未来几天一次性堆满手机。
+        q = q.filter(
+            MedicationAdminLog.status == "pending",
+            MedicationAdminLog.scheduled_at < datetime.combine(date.today() + timedelta(days=1), datetime.min.time()),
+        ).order_by(MedicationAdminLog.scheduled_at.asc())
+    else:
+        q = q.filter(MedicationAdminLog.status.in_(["done", "skipped", "refused"]))\
+            .order_by(MedicationAdminLog.administered_at.desc(), MedicationAdminLog.scheduled_at.desc()).limit(150)
+    logs = [] if view == "temporary" else q.all()
+
+    hq = db.query(Hospitalization).filter(Hospitalization.status == "admitted")
+    if store:
+        hq = hq.filter(Hospitalization.store == store)
+    hospitalizations = hq.order_by(Hospitalization.admitted_at.desc()).all()
+
+    tq = db.query(InpatientTemporaryMedication).join(
+        Hospitalization, InpatientTemporaryMedication.hospitalization_id == Hospitalization.id,
+    ).filter(InpatientTemporaryMedication.status == "pending_prescription")
+    if store:
+        tq = tq.filter(Hospitalization.store == store)
+    temporary = tq.order_by(InpatientTemporaryMedication.administered_at.desc()).all()
+
+    iq = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,  # noqa: E712
+        InventoryItem.is_service == False,  # noqa: E712
+        InventoryItem.category.in_(["medication", "vaccine", "antiparasitic"]),
+    )
+    if store:
+        iq = iq.filter(or_(InventoryItem.store == store, InventoryItem.store == ""))
+    inventory = iq.order_by(InventoryItem.name.asc()).limit(500).all()
+
+    sq = db.query(Staff).filter(Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%"))
+    if store:
+        sq = sq.filter(Staff.store == store)
+    doctors = [name for (name,) in sq.with_entities(Staff.name).order_by(Staff.name.asc()).all() if name]
+    return {
+        "ok": True,
+        "view": view,
+        "now": now_local.strftime("%Y-%m-%d %H:%M"),
+        "items": [_staff_med_log_payload(row, now_local) for row in logs],
+        "temporary": [{
+            "id": row.id,
+            "hospitalization_id": row.hospitalization_id,
+            "pet_name": row.hospitalization.pet.name if row.hospitalization and row.hospitalization.pet else "未命名宠物",
+            "drug_name": row.drug_name,
+            "dose_actual": row.dose_actual,
+            "route": row.route,
+            "ordered_by": row.ordered_by,
+            "administered_at": (row.administered_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M"),
+            "administered_by": row.administered_by,
+            "notes": row.notes,
+        } for row in temporary],
+        "hospitalizations": [{
+            "id": hosp.id,
+            "pet_name": hosp.pet.name if hosp.pet else "未命名宠物",
+            "cage_code": hosp.cage.code if hosp.cage else "",
+            "label": (hosp.pet.name if hosp.pet else "未命名宠物") + (f" · {hosp.cage.code}" if hosp.cage else ""),
+        } for hosp in hospitalizations],
+        "inventory": [{
+            "id": inv.id, "name": inv.name, "unit": inv.unit or "",
+            "stock_qty": float(inv.stock_qty or 0),
+        } for inv in inventory],
+        "doctors": doctors,
+    }
+
+
+@app.post("/api/staff-miniapp/inpatient-medications/temporary")
+async def api_staff_miniapp_temporary_medication_create(
+    request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    try:
+        hospitalization_id = int((payload or {}).get("hospitalization_id") or 0)
+        inventory_item_id = int((payload or {}).get("inventory_item_id") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "住院动物或药品无效")
+    hosp = _staff_med_hospitalization(db, user, hospitalization_id)
+    inv = db.get(InventoryItem, inventory_item_id)
+    store = (user.store or "").strip()
+    if not inv or not inv.is_active or inv.is_service:
+        raise HTTPException(400, "请选择有效药品")
+    if store and (inv.store or "").strip() not in ("", store):
+        raise HTTPException(403, "不能使用其他门店的药品")
+    dose_actual = str((payload or {}).get("dose_actual") or "").strip()[:80]
+    route = str((payload or {}).get("route") or "").strip()[:40]
+    ordered_by = str((payload or {}).get("ordered_by") or "").strip()[:80]
+    if not dose_actual or not route or not ordered_by:
+        raise HTTPException(400, "请填写实际剂量、给药途径和医嘱医生")
+    row = InpatientTemporaryMedication(
+        hospitalization_id=hosp.id,
+        inventory_item_id=inv.id,
+        drug_name=inv.name,
+        dose_actual=dose_actual,
+        route=route,
+        ordered_by=ordered_by,
+        administered_at=datetime.utcnow(),
+        administered_by=(user.display_name or user.username or "员工")[:80],
+        notes=str((payload or {}).get("notes") or "").strip()[:300],
+        status="pending_prescription",
+    )
+    db.add(row)
+    db.flush()
+    db.add(AuditLog(
+        action="staff_inpatient_temporary_medication",
+        actor=(user.username or "")[:80],
+        detail=json.dumps({"id": row.id, "hospitalization_id": hosp.id, "drug": inv.name,
+                           "dose": dose_actual, "ordered_by": ordered_by}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "id": row.id, "message": "已记录，等待医生补开正式处方；库存将在补处方时统一扣减"}
+
+
+@app.post("/api/staff-miniapp/inpatient-medications/temporary/{record_id}/void")
+async def api_staff_miniapp_temporary_medication_void(
+    record_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = db.get(InpatientTemporaryMedication, record_id)
+    if not row:
+        raise HTTPException(404, "临时用药记录不存在")
+    _staff_med_hospitalization(db, user, row.hospitalization_id)
+    if row.status != "pending_prescription":
+        raise HTTPException(409, "该记录已处理，不能作废")
+    row.status = "voided"
+    row.notes = (row.notes + "；" if row.notes else "") + f"由{user.display_name or user.username}作废"
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/staff-miniapp/inpatient-medications/{log_id}/check")
+async def api_staff_miniapp_medication_check(
+    log_id: int, request: Request, payload: dict = Body(default={}), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_med_log(db, user, log_id)
+    if row.status != "pending":
+        raise HTTPException(409, "该用药任务已经处理")
+    row.status = "done"
+    row.administered_at = datetime.utcnow()
+    row.administered_by = (user.display_name or user.username or "员工")[:80]
+    row.dose_actual = str((payload or {}).get("dose_actual") or "").strip()[:80]
+    row.notes = str((payload or {}).get("notes") or "").strip()[:300]
+    db.commit()
+    return {"ok": True, "item": _staff_med_log_payload(row)}
+
+
+@app.post("/api/staff-miniapp/inpatient-medications/{log_id}/skip")
+async def api_staff_miniapp_medication_skip(
+    log_id: int, request: Request, payload: dict = Body(default={}), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_med_log(db, user, log_id)
+    if row.status != "pending":
+        raise HTTPException(409, "该用药任务已经处理")
+    notes = str((payload or {}).get("notes") or "").strip()[:300]
+    if not notes:
+        raise HTTPException(400, "跳过用药必须填写原因")
+    row.status = "skipped"
+    row.administered_at = datetime.utcnow()
+    row.administered_by = (user.display_name or user.username or "员工")[:80]
+    row.notes = notes
+    db.commit()
+    return {"ok": True, "item": _staff_med_log_payload(row)}
+
+
+@app.post("/api/staff-miniapp/inpatient-medications/{log_id}/uncheck")
+async def api_staff_miniapp_medication_uncheck(
+    log_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_med_log(db, user, log_id)
+    if row.status == "pending":
+        return {"ok": True, "item": _staff_med_log_payload(row)}
+    row.status = "pending"
+    row.administered_at = None
+    row.administered_by = ""
+    row.dose_actual = ""
+    row.notes = ""
+    row.reminder_sent_at = None
+    db.commit()
+    return {"ok": True, "item": _staff_med_log_payload(row)}
 
 
 @app.get("/api/staff-miniapp/customers")
@@ -34213,8 +34481,10 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
 
     # 开方时间（北京整点），SID 默认用它
     try:
-        opened_hour = (presc.created_at + _td(hours=8)).hour
+        opened_local = presc.created_at + _td(hours=8)
+        opened_hour = opened_local.hour
     except Exception:
+        opened_local = None
         opened_hour = 10
 
     created = 0
@@ -34238,10 +34508,22 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
             MedicationAdminLog.prescription_item_id == it.id,
             MedicationAdminLog.status == "pending",
         ).delete(synchronize_session=False)
+        completed_slots = {
+            row[0] for row in db.query(MedicationAdminLog.scheduled_at).filter(
+                MedicationAdminLog.prescription_item_id == it.id,
+                MedicationAdminLog.status.in_(["done", "skipped", "refused"]),
+            ).all()
+        }
         for day_n in range(n_days):
             d = start_date + _td(days=day_n)
             for dose_idx, (h, m) in enumerate(times, 1):
                 sched_at = datetime.combine(d, datetime.min.time()).replace(hour=h, minute=m)
+                # 当天临时开出的住院处方，不倒生成开方之前的早班任务；后续日期照常完整生成。
+                if opened_local and d == opened_local.date() and sched_at < opened_local.replace(second=0, microsecond=0):
+                    continue
+                # 编辑处方后重建任务时，已执行/已跳过的同一时点不能再生成一份 pending。
+                if sched_at in completed_slots:
+                    continue
                 db.add(MedicationAdminLog(
                     hospitalization_id=hosp.id,
                     prescription_id=presc.id,

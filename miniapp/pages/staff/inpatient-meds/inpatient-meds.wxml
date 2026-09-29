@@ -1,0 +1,40 @@
+<view class="staff-page med-page">
+  <view class="staff-status"><text>员工端</text><text>住院护理</text></view>
+  <view class="med-head"><view class="staff-eyebrow">INPATIENT MEDICATION</view><view class="med-title">住院用药</view><view class="med-desc">按处方时点执行并留下记录。打勾不会再次扣库存，库存已在医生开出处方时统一扣减。</view></view>
+  <view class="med-tabs"><view class="med-tab {{view === 'pending' ? 'active' : ''}}" data-view="pending" bindtap="setView">待执行</view><view class="med-tab {{view === 'completed' ? 'active' : ''}}" data-view="completed" bindtap="setView">已完成</view><view class="med-tab {{view === 'temporary' ? 'active' : ''}}" data-view="temporary" bindtap="setView">待补处方</view></view>
+
+  <view wx:if="{{loading}}" class="staff-loading">正在读取用药任务…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+
+  <block wx:if="{{view !== 'temporary' && !loading}}">
+    <view class="staff-section-head"><text>{{view === 'pending' ? '按计划时间排序' : '最近执行记录'}}</text><text class="staff-section-meta">{{items.length}} 条</text></view>
+    <view wx:if="{{!items.length}}" class="staff-empty">{{view === 'pending' ? '当前没有待执行的住院用药。' : '暂无已完成记录。'}}</view>
+    <view wx:for="{{items}}" wx:key="id" class="med-task {{item.is_overdue ? 'overdue' : ''}}">
+      <view class="med-time"><view>{{item.scheduled_time}}</view><text>{{item.scheduled_date}}</text></view>
+      <view class="med-body"><view class="med-pet">{{item.pet_name}}{{item.cage_code ? ' · ' + item.cage_code : ''}}</view><view class="med-drug">{{item.drug_name}}</view><view class="med-meta">{{item.dose || '剂量未填'}}{{item.route ? ' · ' + item.route : ''}} · 第{{item.day_index}}天第{{item.dose_index}}次</view><view wx:if="{{item.instructions}}" class="med-note">{{item.instructions}}</view><view wx:if="{{view === 'completed'}}" class="med-note">{{item.status === 'done' ? '已执行' : '已跳过'}} · {{item.administered_by}} · {{item.administered_at}}{{item.notes ? ' · ' + item.notes : ''}}</view></view>
+      <view wx:if="{{view === 'pending'}}" class="med-actions"><button class="med-done" data-id="{{item.id}}" data-dose="{{item.dose}}" bindtap="completeTask">完成</button><button class="med-skip" data-id="{{item.id}}" bindtap="skipTask">跳过</button></view>
+      <button wx:else class="med-undo" data-id="{{item.id}}" bindtap="undoTask">撤销</button>
+    </view>
+  </block>
+
+  <block wx:if="{{view === 'temporary' && !loading}}">
+    <view class="temporary-guide"><view class="guide-title">药已使用，但医生还没来得及开处方</view><view>先记录执行事实，列入待补处方。此处不扣库存，医生补开正式处方时统一扣减，避免重复。</view></view>
+    <button class="add-temporary" bindtap="openTemporaryForm">记录一次临时用药</button>
+    <view class="staff-section-head"><text>待医生补处方</text><text class="staff-section-meta">{{temporary.length}} 条</text></view>
+    <view wx:if="{{!temporary.length}}" class="staff-empty">当前没有待补处方的临时用药。</view>
+    <view wx:for="{{temporary}}" wx:key="id" class="temp-row"><view class="temp-main"><view class="med-pet">{{item.pet_name}}</view><view class="med-drug">{{item.drug_name}} · {{item.dose_actual}}</view><view class="med-meta">{{item.route}} · 医嘱 {{item.ordered_by}} · 执行 {{item.administered_by}}</view><view class="med-note">{{item.administered_at}}{{item.notes ? ' · ' + item.notes : ''}}</view></view><button data-id="{{item.id}}" bindtap="voidTemporary">作废</button></view>
+  </block>
+</view>
+
+<view wx:if="{{showTemporaryForm}}" class="sheet-mask" bindtap="closeTemporaryForm"></view>
+<view wx:if="{{showTemporaryForm}}" class="temporary-sheet">
+  <view class="sheet-grip"></view><view class="sheet-title">记录临时用药</view><view class="sheet-warning">仅用于已经实际给药、但处方尚未开出的情况。</view>
+  <view class="form-label">住院动物</view><picker range="{{hospitalizations}}" range-key="label" value="{{form.hospitalizationIndex}}" bindchange="onHospChange"><view class="form-picker">{{selectedHospLabel || '请选择'}}</view></picker>
+  <view class="form-label">药品</view><input class="form-input" placeholder="输入药名搜索" value="{{drugQuery}}" bindinput="onDrugQuery"/><view wx:if="{{filteredInventory.length && !selectedDrug}}" class="drug-results"><view wx:for="{{filteredInventory}}" wx:key="id" data-id="{{item.id}}" bindtap="selectDrug"><text>{{item.name}}</text><text>{{item.stock_qty}}{{item.unit}}</text></view></view>
+  <view wx:if="{{selectedDrug}}" class="selected-drug">{{selectedDrug.name}} · 当前 {{selectedDrug.stock_qty}}{{selectedDrug.unit}}</view>
+  <view class="form-label">实际剂量</view><input class="form-input" placeholder="例如 5μg、0.2ml、1片" value="{{form.dose_actual}}" bindinput="onDoseInput"/>
+  <view class="form-label">给药途径</view><picker range="{{routes}}" value="{{form.routeIndex}}" bindchange="onRouteChange"><view class="form-picker">{{selectedRoute}}</view></picker>
+  <view class="form-label">口头医嘱医生</view><picker range="{{doctors}}" value="{{form.doctorIndex}}" bindchange="onDoctorChange"><view class="form-picker">{{selectedDoctor || '请选择医生'}}</view></picker>
+  <view class="form-label">备注</view><textarea class="form-textarea" placeholder="可选：临时用药原因、动物反应" value="{{form.notes}}" bindinput="onNotesInput"/>
+  <button class="submit-temporary" bindtap="submitTemporary" loading="{{busy}}">确认已经给药并记录</button><button class="cancel-temporary" bindtap="closeTemporaryForm">取消</button>
+</view>
