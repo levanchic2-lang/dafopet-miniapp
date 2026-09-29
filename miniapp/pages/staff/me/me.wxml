@@ -12,5 +12,5 @@
     <button class="staff-button secondary" bindtap="goCustomerService">进入客户服务首页</button>
     <button class="staff-button" bindtap="logout">退出员工端</button>
   </block>
-  <view class="staff-tabbar"><view class="staff-tab" bindtap="goToday"><text class="staff-tab-mark">·</text><text>今日</text></view><view class="staff-tab" bindtap="goCustomers"><text class="staff-tab-mark">○</text><text>客户</text></view><view class="staff-tab active" bindtap="goMe"><text class="staff-tab-mark">□</text><text>我的</text></view></view>
+  <view class="staff-tabbar"><view class="staff-tab" bindtap="goToday">今日</view><view class="staff-tab" bindtap="goCustomers">客户</view><view class="staff-tab active" bindtap="goMe">我的</view></view>
 </view>
