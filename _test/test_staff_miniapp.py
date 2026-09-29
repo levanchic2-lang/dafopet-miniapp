@@ -115,7 +115,11 @@ try:
 
         db = SessionLocal()
         try:
-            other_appointment_id = db.query(Appointment).filter(Appointment.pet_id == dh_pet.id).one().id
+            other_appointment_id = (
+                db.query(Appointment.id)
+                .filter(Appointment.store == "大风动物医院（东环店）")
+                .scalar()
+            )
         finally:
             db.close()
         forbidden = client.post(
