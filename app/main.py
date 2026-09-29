@@ -15345,6 +15345,10 @@ async def page_admin_visit_detail(
         ClinicalScoreAssessment.visit_id == visit_id,
         ClinicalScoreAssessment.assessment_type == "pruritus",
     ).order_by(ClinicalScoreAssessment.assessed_at.desc(), ClinicalScoreAssessment.id.desc()).all()
+    active_hospitalization = db.query(Hospitalization).filter(
+        Hospitalization.pet_id == v.pet_id,
+        Hospitalization.status == "admitted",
+    ).order_by(Hospitalization.admitted_at.desc(), Hospitalization.id.desc()).first() if v.pet_id else None
     # 本 visit 的所有回访轮次（按计划日 + round_no 排序）
     followups = db.query(FollowUp).filter(FollowUp.visit_id == visit_id)\
         .order_by(FollowUp.planned_date, FollowUp.round_no).all()
@@ -15391,6 +15395,7 @@ async def page_admin_visit_detail(
         "pain_score_count": len(pain_scores),
         "pruritus_score": pruritus_scores[0] if pruritus_scores else None,
         "pruritus_score_count": len(pruritus_scores),
+        "active_hospitalization": active_hospitalization,
         "presc_status_zh": _PRESC_STATUS_ZH,
         "so_status_zh": _SO_STATUS_ZH,
         "inv_status_zh": _INV_STATUS_ZH,
@@ -33979,6 +33984,70 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
                              status_code=303)
 
 
+@app.post("/admin/inpatient/admit-live")
+async def admin_inpatient_admit_live(
+    request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), visit_id: int = Form(0),
+):
+    """从病例一键办理实际入住；收费信息按现有规则自动带入，后续离院时结算。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    visit = db.get(Visit, visit_id) if visit_id else None
+    pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    if not visit or not pet:
+        raise HTTPException(404, "病例或宠物档案不存在")
+    _assert_store_access(request, pet.store or "")
+    existing = db.query(Hospitalization).filter(
+        Hospitalization.pet_id == pet.id,
+        Hospitalization.status == "admitted",
+    ).order_by(Hospitalization.id.desc()).first()
+    if existing:
+        return RedirectResponse(
+            f"/admin/inpatient/{existing.id}?msg=该动物已经在住院中", status_code=303,
+        )
+    store_short = _get_op_store(request) or (pet.store or "")
+    species = _hosp_species(pet.species or "")
+    weight_kg = _latest_pet_weight(db, pet.id)
+    matched_rule = _match_hosp_rate(db, store_short, species, weight_kg)
+    operator = request.session.get("admin_username", "admin")
+    hosp = Hospitalization(
+        pet_id=pet.id,
+        customer_id=pet.customer_id,
+        visit_id=visit.id,
+        cage_id=None,
+        store=store_short,
+        reason=(visit.diagnosis or visit.chief_complaint or "住院观察")[:2000],
+        admitted_at=datetime.utcnow(),
+        discharged_at=None,
+        daily_rate_override=float(matched_rule.daily_rate or 0) if matched_rule else 0.0,
+        billing_mode="weight",
+        species_snapshot=species,
+        admission_weight_kg=weight_kg,
+        rate_rule_id=matched_rule.id if matched_rule else None,
+        rate_label=matched_rule.label if matched_rule else "住院费待确认",
+        status="admitted",
+        staff_token=_gen_hosp_token(db, "staff_token"),
+        owner_token=_gen_hosp_token(db, "owner_token"),
+        created_by=operator,
+    )
+    db.add(hosp)
+    db.flush()
+    # 医生可能先开处方、后点办理住院；入住时补生成这些处方的发药任务。
+    prescriptions = db.query(Prescription).filter(
+        Prescription.visit_id == visit.id,
+        Prescription.status.notin_(["draft", "voided"]),
+    ).all()
+    generated = sum(_generate_med_logs_for_prescription(db, presc) for presc in prescriptions)
+    _audit(db, request, "hospitalization_admit", detail={
+        "id": hosp.id, "visit_id": visit.id, "pet_id": pet.id,
+        "store": store_short, "medication_tasks": generated,
+    })
+    db.commit()
+    return RedirectResponse(
+        f"/admin/inpatient/{hosp.id}?msg=已办理住院，可开始记录住院用药", status_code=303,
+    )
+
+
 @app.post("/admin/inpatient/{hosp_id}/edit-simple")
 async def admin_inpatient_edit_simple(
     hosp_id: int, request: Request, db: Session = Depends(get_db),
@@ -34486,6 +34555,11 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
     except Exception:
         opened_local = None
         opened_hour = 10
+    admitted_local = (hosp.admitted_at + _td(hours=8)) if hosp.admitted_at else None
+    first_task_local = max(
+        [dt for dt in (opened_local, admitted_local) if dt is not None],
+        default=None,
+    )
 
     created = 0
     for it in (presc.items or []):
@@ -34518,8 +34592,8 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
             d = start_date + _td(days=day_n)
             for dose_idx, (h, m) in enumerate(times, 1):
                 sched_at = datetime.combine(d, datetime.min.time()).replace(hour=h, minute=m)
-                # 当天临时开出的住院处方，不倒生成开方之前的早班任务；后续日期照常完整生成。
-                if opened_local and d == opened_local.date() and sched_at < opened_local.replace(second=0, microsecond=0):
+                # 当天开方或办理入住后，不倒生成此前的早班任务；后续日期照常完整生成。
+                if first_task_local and d == first_task_local.date() and sched_at < first_task_local.replace(second=0, microsecond=0):
                     continue
                 # 编辑处方后重建任务时，已执行/已跳过的同一时点不能再生成一份 pending。
                 if sched_at in completed_slots:
