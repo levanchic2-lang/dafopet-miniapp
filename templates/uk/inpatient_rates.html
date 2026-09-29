@@ -1,5 +1,5 @@
 {% extends "uk/_base.html" %}
-{% block title %}住院收费设置 · 大风动物医院{% endblock %}
+{% block title %}住院体重费率管理 · 大风动物医院{% endblock %}
 {% block body %}
 <style>
   .ir-bc{font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin:24px 0 16px}.ir-bc a{color:inherit}.ir-bc span{margin:0 8px}
@@ -14,8 +14,8 @@
   .ir-headrow{color:var(--ink-3);font-size:9pt;font-style:italic}.ir-row{font-size:10pt}.ir-row .species{font-weight:700}.ir-actions{display:flex;gap:7px;justify-content:flex-end}.ir-empty{padding:20px;color:var(--ink-3);font-style:italic;border:.5px solid var(--hair)}
   @media(max-width:900px){.ir-add{grid-template-columns:1fr 1fr}.ir-headrow{display:none}.ir-row{grid-template-columns:1fr 1fr}.ir-actions{justify-content:flex-start}}
 </style>
-<div class="ir-bc"><a href="/admin/inpatient">住院单</a><span>/</span>住院收费设置</div>
-<div class="ir-head"><div><h1>住院收费设置</h1><p>每家门店分别维护；系统按门店、猫犬和入住体重自动匹配。</p></div><a href="/admin/inpatient" class="ir-btn ghost" style="display:flex;align-items:center;text-decoration:none">返回住院单</a></div>
+<div class="ir-bc"><a href="/admin/inpatient">住院管理</a><span>/</span>体重费率管理</div>
+<div class="ir-head"><div><h1>住院体重费率管理</h1><p>分别维护两家门店的猫犬体重区间与每日住院价格；办理住院时自动匹配并锁定。</p></div><a href="/admin/inpatient" class="ir-btn ghost" style="display:flex;align-items:center;text-decoration:none">返回住院管理</a></div>
 <hr class="ir-rule"/>
 {% if request.query_params.get('msg') %}<div class="ir-msg">{{ request.query_params.get('msg') }}</div>{% endif %}
 {% if request.query_params.get('err') %}<div class="ir-msg err">{{ request.query_params.get('err') }}</div>{% endif %}
