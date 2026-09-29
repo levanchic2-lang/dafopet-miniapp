@@ -1,5 +1,5 @@
 {% extends "uk/_base.html" %}
-{% block title %}新建住院单 · 大风动物医院{% endblock %}
+{% block title %}新建住院收费单 · 大风动物医院{% endblock %}
 {% block body %}
 <style>
   .in-bc{font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin:24px 0 16px}.in-bc a{color:inherit}.in-bc span{margin:0 8px}
@@ -12,15 +12,15 @@
   .in-fix{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin:14px 0}.in-fix label{font-size:9pt;color:var(--ink-3);min-width:0}.in-fix input,.in-fix select{width:100%;min-width:0;height:38px;margin-top:5px;border:.5px solid var(--hair);background:var(--paper);padding:7px;font:10pt var(--font-serif);box-sizing:border-box;border-radius:0}.in-note{font-size:9pt;color:var(--ink-3);line-height:1.6;margin-top:12px}.in-existing{border-left:3px solid var(--accent-amber);padding:12px;background:#fbf6f0;margin-bottom:16px}
   @media(max-width:850px){.in-layout{grid-template-columns:1fr}.in-summary{order:-1}}
 </style>
-<div class="in-bc"><a href="/admin/inpatient">住院单</a><span>/</span>新建住院单</div>
-<div class="in-head"><h1>新建住院单</h1><p>出院结算时直接填写住院项目、天数和单价。</p></div>
+<div class="in-bc"><a href="/admin/inpatient">住院管理</a><span>/</span>新建住院收费单</div>
+<div class="in-head"><h1>新建住院收费单</h1><p>用于补录或直接结算住院费用，不会把动物标记为住院中。</p></div>
 <hr class="in-rule"/>
 {% if request.query_params.get('err') %}<div class="in-msg">{{ request.query_params.get('err') }}</div>{% endif %}
 <div class="in-layout">
   <section class="in-panel">
     <h2>选择客户 / 宠物</h2>
     <div class="in-search"><input id="customerSearch" placeholder="输入客户姓名、手机号或宠物名" autocomplete="off"/><button type="button" class="in-btn ghost" onclick="searchCustomer()">搜索</button></div>
-    <div id="searchResults" class="in-results">{% if not pet %}<div class="in-note">搜索并选择需要结算住院费的宠物。</div>{% endif %}</div>
+    <div id="searchResults" class="in-results">{% if not pet %}<div class="in-note">搜索并选择需要补录或结算住院费的宠物。</div>{% endif %}</div>
   </section>
   {% if pet %}
   <aside class="in-summary">

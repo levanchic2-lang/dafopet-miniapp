@@ -34312,7 +34312,7 @@ async def admin_inpatient_cancel(hosp_id: int, request: Request,
 async def admin_inpatient_board(request: Request, db: Session = Depends(get_db),
                                    status: str = "", store: str = "",
                                    q: str = ""):
-    """轻量住院单列表。旧笼位/护理数据仍保留，但不再作为默认工作流展示。"""
+    """统一展示正在进行的住院护理与历史住院收费记录。"""
     require_admin(request)
     admin_store = _get_admin_store(request)
     if request.session.get("admin_role") == "superadmin":
@@ -34354,7 +34354,7 @@ async def admin_inpatient_board(request: Request, db: Session = Depends(get_db),
         "calc_days": _calc_hosp_days,
         "calc_billable_days": _calc_hosp_billable_days,
         "now": datetime.utcnow(), "counts": counts,
-        "title": "住院单",
+        "title": "住院管理",
     })
 
 
