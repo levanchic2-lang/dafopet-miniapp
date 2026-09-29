@@ -205,12 +205,15 @@ inpatient_page = client.get(f"/admin/inpatient/new?pet_id={pet_id}&visit_id={vis
 assert inpatient_page.status_code == 200
 assert "暂不能办理住院" in inpatient_page.text
 csrf_inpatient = re.search(r'name="csrf_token" value="([^"]+)"', inpatient_page.text).group(1)
+db = SessionLocal()
+hospitalization_count_before = db.query(Hospitalization).filter_by(visit_id=visit_id).count()
+db.close()
 blocked_admit = client.post("/admin/inpatient/admit", data={
     "csrf_token": csrf_inpatient, "visit_id": visit_id,
 })
 assert blocked_admit.status_code == 303 and "err=" in blocked_admit.headers["location"]
 db = SessionLocal()
-assert db.query(Hospitalization).filter_by(visit_id=visit_id).count() == 0
+assert db.query(Hospitalization).filter_by(visit_id=visit_id).count() == hospitalization_count_before
 db.add(WeightRecord(
     pet_id=pet_id, visit_id=visit_id, record_date=date.today().isoformat(),
     weight_kg=4.25, created_by="test",
