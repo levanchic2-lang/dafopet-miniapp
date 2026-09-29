@@ -42,6 +42,10 @@ async def _test_lifespan(_app):
 
 app.router.lifespan_context = _test_lifespan
 Base.metadata.create_all(bind=engine)
+assert main_module._default_schedule_for_freq("每日1次", 22, 1.0) == "22"
+assert main_module._default_schedule_for_freq("每日2次", 22, 2.0) == "10,20"
+assert main_module._default_schedule_for_freq("1.0", 9) == "9"
+assert main_module._default_schedule_for_freq("2", 9) == "10,20"
 db = SessionLocal()
 try:
     henggang = AdminUser(
@@ -115,6 +119,20 @@ try:
         dosage="1ml", frequency="QD", duration_days="1", schedule_times="10:00",
     )
     db.add_all([hg_pi, dh_pi]); db.flush()
+    numeric_frequency_item = PrescriptionItem(
+        prescription_id=hg_presc.id, item_id=hg_drug.id, drug_name="数字频次测试药",
+        dosage="0.2ml", dose_amount=0.2, dose_unit="ml",
+        frequency="每日1次", times_per_day=1.0, duration_days="1", schedule_times="",
+    )
+    db.add(numeric_frequency_item); db.flush()
+    assert main_module._generate_med_logs_for_prescription(db, hg_presc) >= 1
+    assert db.query(MedicationAdminLog).filter_by(
+        prescription_item_id=numeric_frequency_item.id, status="pending",
+    ).count() == 1
+    db.query(MedicationAdminLog).filter_by(prescription_id=hg_presc.id).delete(
+        synchronize_session=False,
+    )
+    db.delete(numeric_frequency_item); db.flush()
     db.add_all([
         MedicationAdminLog(
             hospitalization_id=hg_hosp.id, prescription_id=hg_presc.id,

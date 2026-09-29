@@ -34561,16 +34561,33 @@ def _parse_schedule_times(s: str) -> list[tuple[int, int]]:
 #   TID/q8h（一天三次）    → 10,15,20   （上午10点 / 下午3点 / 晚8点）
 #   QID/q6h（一天四次）    → 10,13,17,21（上午10点 / 下午1点 / 下午5点 / 晚9点）
 #   q48h / prn / 一天四次以上 / 未知   → 空串（需人工排时间）
-def _default_schedule_for_freq(freq: str, opened_hour: int) -> str:
-    f = (freq or "").strip().lower()
-    if f in ("qd", "q24h", "sid"):
+def _default_schedule_for_freq(freq: str, opened_hour: int, times_per_day: float = 0) -> str:
+    f = (freq or "").strip().lower().replace(" ", "")
+    count = 0
+    try:
+        numeric_count = float(times_per_day or 0)
+        if numeric_count.is_integer():
+            count = int(numeric_count)
+    except (TypeError, ValueError):
+        pass
+    if not count:
+        # 新处方表单会把次数保存成“每日1次”，历史数据还可能是纯数字 1.0。
+        match = re.search(r"(?:每日|每天|一天)?(\d+(?:\.\d+)?)次(?:/天)?", f)
+        raw_count = match.group(1) if match else (f if re.fullmatch(r"\d+(?:\.\d+)?", f) else "")
+        try:
+            numeric_count = float(raw_count)
+            if numeric_count.is_integer():
+                count = int(numeric_count)
+        except (TypeError, ValueError):
+            pass
+    if f in ("qd", "q24h", "sid") or count == 1:
         h = opened_hour if 0 <= opened_hour <= 23 else 10
         return str(h)
-    if f in ("bid", "q12h"):
+    if f in ("bid", "q12h") or count == 2:
         return "10,20"
-    if f in ("tid", "q8h"):
+    if f in ("tid", "q8h") or count == 3:
         return "10,15,20"
-    if f in ("qid", "q6h"):
+    if f in ("qid", "q6h") or count == 4:
         return "10,13,17,21"
     return ""
 
@@ -34618,6 +34635,9 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
         opened_local = None
         opened_hour = 10
     admitted_local = (hosp.admitted_at + _td(hours=8)) if hosp.admitted_at else None
+    if admitted_local and start_date < admitted_local.date():
+        # 住院前已经开好的连续处方，从实际入住日开始排任务，不能补出住院前的漏药。
+        start_date = admitted_local.date()
     first_task_local = max(
         [dt for dt in (opened_local, admitted_local) if dt is not None],
         default=None,
@@ -34630,7 +34650,9 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
             # 住院处方但医生没填时刻表 → 按给药频次套默认（SID 用开方时间 / BID 10,20 /
             # TID 10,15,20 / QID 10,13,17,21；q48h·prn·>4次/天 → 空，需人工排）。
             # 注：本函数只在存在 admitted 住院时才会执行到这里，故默认仅作用于住院处方。
-            times = _parse_schedule_times(_default_schedule_for_freq(it.frequency, opened_hour))
+            times = _parse_schedule_times(_default_schedule_for_freq(
+                it.frequency, opened_hour, it.times_per_day or 0,
+            ))
         if not times:
             continue
         # 解析天数：duration_days 字段可能是 "7" 或 "症状缓解为止" 等
@@ -34652,11 +34674,18 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
         }
         for day_n in range(n_days):
             d = start_date + _td(days=day_n)
+            day_slots = []
             for dose_idx, (h, m) in enumerate(times, 1):
                 sched_at = datetime.combine(d, datetime.min.time()).replace(hour=h, minute=m)
                 # 当天开方或办理入住后，不倒生成此前的早班任务；后续日期照常完整生成。
                 if first_task_local and d == first_task_local.date() and sched_at < first_task_local.replace(second=0, microsecond=0):
                     continue
+                day_slots.append((dose_idx, sched_at))
+            if first_task_local and d == first_task_local.date() and not day_slots:
+                # 晚间开出的一日处方，其默认整点可能已经过去。至少生成一条可立即执行的任务，
+                # 避免“已住院、有处方，但手机端完全为空”。
+                day_slots.append((1, first_task_local.replace(second=0, microsecond=0)))
+            for dose_idx, sched_at in day_slots:
                 # 编辑处方后重建任务时，已执行/已跳过的同一时点不能再生成一份 pending。
                 if sched_at in completed_slots:
                     continue
