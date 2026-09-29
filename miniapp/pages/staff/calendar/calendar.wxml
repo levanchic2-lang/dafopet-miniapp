@@ -35,8 +35,13 @@
       </block>
       <block wx:else>
         <view class="detail-eyebrow">NEW APPOINTMENT</view><view class="detail-title">新增预约</view>
-        <view class="category-chips"><view wx:for="{{categories}}" wx:key="value" class="category-chip {{createCategory === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="chooseCategory">{{item.label}}</view></view>
-        <view class="form-field"><text>服务项目</text><input placeholder="例如：复诊、绝育手术、洗澡" value="{{createService}}" bindinput="onCreateService" /></view>
+        <view class="category-chips {{track === 'beauty' ? 'two-columns' : ''}}"><view wx:for="{{categories}}" wx:key="value" class="category-chip {{createCategory === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="chooseCategory">{{item.label}}</view></view>
+        <block wx:if="{{track === 'beauty'}}">
+          <view class="form-label">宠物类别</view>
+          <view class="category-chips two-columns beauty-species"><view class="category-chip {{createBeautySpecies === 'dog' ? 'active' : ''}}" data-value="dog" bindtap="chooseBeautySpecies">犬</view><view class="category-chip {{createBeautySpecies === 'cat' ? 'active' : ''}}" data-value="cat" bindtap="chooseBeautySpecies">猫</view></view>
+          <view class="form-line"><text>服务项目</text><strong>{{createService || '请先选择犬或猫'}}</strong></view>
+        </block>
+        <view wx:else class="form-field"><text>服务项目</text><input placeholder="例如：复诊、绝育手术" value="{{createService}}" bindinput="onCreateService" /></view>
         <view class="customer-search"><input placeholder="搜索客户姓名、电话、宠物名" value="{{customerQuery}}" bindinput="onCustomerQuery" confirm-type="search" bindconfirm="searchCustomers"/><button bindtap="searchCustomers">搜索</button></view>
         <view wx:for="{{customerResults}}" wx:key="id" class="search-result" data-id="{{item.id}}" bindtap="selectCustomer"><strong>{{item.name}}</strong><text>{{item.phone_masked}} · {{item.pets.length}}只宠物</text></view>
         <view wx:if="{{selectedCustomer}}" class="selected-client"><view><strong>{{selectedCustomer.name}}</strong><text>{{selectedCustomer.phone_masked}}</text></view><view class="pet-options"><view wx:for="{{selectedCustomer.pets}}" wx:for-item="pet" wx:key="id" class="pet-option {{selectedPet && selectedPet.id === pet.id ? 'active' : ''}}" data-id="{{pet.id}}" bindtap="selectPet">{{pet.name}}</view></view></view>
@@ -71,7 +76,8 @@
         <view class="detail-eyebrow">EDIT APPOINTMENT</view><view class="detail-title">修改预约</view>
         <view class="form-line"><text>日期</text><picker mode="date" value="{{editDate}}" bindchange="onEditDate"><view>{{editDate}}</view></picker></view>
         <view class="form-line"><text>时间</text><picker mode="time" value="{{editTime}}" bindchange="onEditTime"><view>{{editTime}}</view></picker></view>
-        <view class="form-field"><text>预约项目</text><input value="{{editService}}" bindinput="onEditService" /></view>
+        <view wx:if="{{selected.is_beauty}}" class="beauty-edit-grid"><view wx:for="{{['犬造型','犬洗护','猫造型','猫洗护']}}" wx:key="*this" class="category-chip {{editService === item ? 'active' : ''}}" data-value="{{item}}" bindtap="chooseEditBeautyService">{{item}}</view></view>
+        <view wx:else class="form-field"><text>预约项目</text><input value="{{editService}}" bindinput="onEditService" /></view>
         <view class="form-field"><text>时长（分钟）</text><input type="number" value="{{editDuration}}" bindinput="onEditDuration" /></view>
         <view class="form-field"><text>备注</text><textarea value="{{editNotes}}" bindinput="onEditNotes" auto-height /></view>
         <button class="detail-primary" loading="{{saving}}" bindtap="saveEdit">保存修改</button>

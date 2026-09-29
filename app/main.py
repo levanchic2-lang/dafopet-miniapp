@@ -6747,6 +6747,7 @@ def _staff_appointment_payload(row: Appointment, pet: Pet | None = None) -> dict
         "time": row.appointment_time or "",
         "duration": max(10, int(row.duration_minutes or 30)),
         "category": row.category or "other",
+        "is_beauty": (row.category or "") in _BEAUTY_TRACK,
         "category_label": _APPOINTMENT_CATEGORY_LABELS.get(row.category, row.category or "其他"),
         "color": category_colors.get(row.category or "", "gray"),
         "status": row.status or "",
@@ -6909,6 +6910,11 @@ async def api_staff_miniapp_appointment_service(
         duration = int(row.duration_minutes or 30)
     if not service_name:
         raise HTTPException(400, "请填写预约项目")
+    if (row.category or "") in _BEAUTY_TRACK:
+        pet = db.get(Pet, row.pet_id) if row.pet_id else None
+        row.category, service_name = _normalize_staff_beauty_service(
+            pet, row.category or "", service_name,
+        )
     row.service_name, row.duration_minutes, row.notes = service_name, duration, notes
     row.updated_at = datetime.utcnow()
     db.add(AuditLog(
@@ -6928,6 +6934,25 @@ def _staff_selected_store(user: AdminUser, requested: str) -> str:
     if selected not in _ALLOWED_CLINIC_STORES:
         raise HTTPException(400, "请选择预约门店")
     return selected
+
+
+def _normalize_staff_beauty_service(
+    pet: Pet | None, category: str, service_name: str,
+) -> tuple[str, str]:
+    """Keep employee-miniapp beauty appointments aligned with desktop service values."""
+    service_name = (service_name or "").strip()
+    expected_species = {"cat": "猫", "dog": "犬"}.get(
+        ((pet.species if pet else "") or "").strip().lower()
+    )
+    if expected_species and not service_name.startswith(expected_species):
+        raise HTTPException(400, f"该宠物档案为{expected_species}，请选择{expected_species}洗护或{expected_species}造型")
+    if service_name not in {"猫洗护", "猫造型", "犬洗护", "犬造型"}:
+        raise HTTPException(400, "美容预约请选择猫洗护、猫造型、犬洗护或犬造型")
+    normalized_category = (
+        AppointmentCategory.grooming.value if service_name.endswith("造型")
+        else AppointmentCategory.washcare.value
+    )
+    return normalized_category, service_name
 
 
 @app.post("/api/staff-miniapp/appointments")
@@ -6956,6 +6981,10 @@ async def api_staff_miniapp_appointment_create(
         notes=str((payload or {}).get("notes") or ""),
         duration_minutes=str((payload or {}).get("duration_minutes") or "30"),
     )
+    if fields["category"] in _BEAUTY_TRACK:
+        fields["category"], fields["service_name"] = _normalize_staff_beauty_service(
+            pet, str(fields["category"]), str(fields["service_name"]),
+        )
     related_id = None
     if fields["category"] == AppointmentCategory.tnr.value:
         candidates = db.query(Application).filter(

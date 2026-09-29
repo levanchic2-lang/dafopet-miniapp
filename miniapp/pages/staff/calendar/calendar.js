@@ -7,6 +7,10 @@ const parseDay = (s) => {
   return p.length === 3 ? new Date(p[0], p[1] - 1, p[2], 12, 0, 0) : new Date();
 };
 const isBeauty = (item) => ["beauty", "grooming", "washcare"].includes(item.category);
+const beautySpeciesLabel = (species) => species === "cat" ? "猫" : species === "dog" ? "犬" : "";
+const beautyServiceLabel = (category) => category === "grooming" ? "造型" : category === "washcare" ? "洗护" : "";
+const beautyServiceName = (species, category) => `${beautySpeciesLabel(species)}${beautyServiceLabel(category)}`;
+const beautyDuration = (species) => species === "cat" ? 60 : 90;
 const buildColumns = (dates, appointments, blocks, track) => (dates || []).map((day) => ({
   ...day,
   blocks: track === "beauty" ? (blocks || []).filter((block) => block.date === day.date) : [],
@@ -27,7 +31,7 @@ Page({
     createOpen: false, createStep: "choice", createDate: "", createTime: "", createStore: "",
     stores: [], storeIndex: 0, fixedStore: "", createCategory: "outpatient",
     categories: [{value:"outpatient",label:"门诊"},{value:"surgery",label:"手术"},{value:"tnr",label:"TNR"}],
-    createService: "", createDuration: 30, createNotes: "", customerQuery: "",
+    createService: "", createBeautySpecies: "", createDuration: 30, createNotes: "", customerQuery: "",
     customerResults: [], selectedCustomer: null, selectedPet: null
   },
   onLoad() {
@@ -63,7 +67,7 @@ Page({
   setTrack(e) {
     const track = e.currentTarget.dataset.track === "beauty" ? "beauty" : "medical";
     const categories = track === "beauty"
-      ? [{value:"beauty",label:"美容"},{value:"grooming",label:"造型"},{value:"washcare",label:"洗护"}]
+      ? [{value:"grooming",label:"造型"},{value:"washcare",label:"洗护"}]
       : [{value:"outpatient",label:"门诊"},{value:"surgery",label:"手术"},{value:"tnr",label:"TNR"}];
     this.setData({ track, categories, createCategory: categories[0].value,
       columns: buildColumns(this.data.dates, this.data.rawAppointments, this.data.rawBlocks, track),
@@ -86,6 +90,10 @@ Page({
   onEditDate(e) { this.setData({ editDate: e.detail.value }); },
   onEditTime(e) { this.setData({ editTime: e.detail.value }); },
   onEditService(e) { this.setData({ editService: e.detail.value }); },
+  chooseEditBeautyService(e) {
+    const editService = e.currentTarget.dataset.value;
+    this.setData({ editService, editDuration: beautyDuration(editService.startsWith("猫") ? "cat" : "dog") });
+  },
   onEditDuration(e) { this.setData({ editDuration: e.detail.value }); },
   onEditNotes(e) { this.setData({ editNotes: e.detail.value }); },
   async saveEdit() {
@@ -128,7 +136,8 @@ Page({
     const hour = Number(e.currentTarget.dataset.hour || 8);
     this.setData({ createOpen: true, createStep: "choice", createDate: e.currentTarget.dataset.date,
       createTime: `${pad(hour)}:00`, createService: "", createDuration: 30, createNotes: "",
-      createCategory: this.data.track === "beauty" ? "beauty" : "outpatient",
+      createCategory: this.data.track === "beauty" ? "grooming" : "outpatient",
+      createBeautySpecies: "",
       customerQuery: "", customerResults: [], selectedCustomer: null, selectedPet: null });
   },
   closeCreate() { if (!this.data.saving) this.setData({ createOpen: false, createStep: "choice" }); },
@@ -145,7 +154,22 @@ Page({
     } catch (e) { wx.showModal({ title: "设置失败", content: (e && (e.detail || e.errMsg)) || "请稍后重试", showCancel: false }); }
     finally { this.setData({ saving: false }); }
   },
-  chooseCategory(e) { this.setData({ createCategory: e.currentTarget.dataset.value }); },
+  chooseCategory(e) {
+    const createCategory = e.currentTarget.dataset.value;
+    const patch = { createCategory };
+    if (this.data.track === "beauty") {
+      patch.createService = beautyServiceName(this.data.createBeautySpecies, createCategory);
+    }
+    this.setData(patch);
+  },
+  chooseBeautySpecies(e) {
+    const createBeautySpecies = e.currentTarget.dataset.value;
+    this.setData({
+      createBeautySpecies,
+      createService: beautyServiceName(createBeautySpecies, this.data.createCategory),
+      createDuration: beautyDuration(createBeautySpecies)
+    });
+  },
   onCreateDate(e) { this.setData({ createDate: e.detail.value }); },
   onCreateTime(e) { this.setData({ createTime: e.detail.value }); },
   onCreateService(e) { this.setData({ createService: e.detail.value }); },
@@ -172,11 +196,19 @@ Page({
   selectPet(e) {
     const id = Number(e.currentTarget.dataset.id || 0);
     const selectedPet = ((this.data.selectedCustomer || {}).pets || []).find((p) => p.id === id) || null;
-    this.setData({ selectedPet });
+    const patch = { selectedPet };
+    if (this.data.track === "beauty" && selectedPet) {
+      const species = selectedPet.species === "cat" || selectedPet.species === "dog" ? selectedPet.species : "";
+      patch.createBeautySpecies = species;
+      patch.createService = beautyServiceName(species, this.data.createCategory);
+      if (species) patch.createDuration = beautyDuration(species);
+    }
+    this.setData(patch);
   },
   async submitAppointment() {
     if (this.data.saving) return;
     if (!this.data.selectedCustomer || !this.data.selectedPet) { wx.showToast({ title: "请选择客户和宠物", icon: "none" }); return; }
+    if (this.data.track === "beauty" && !this.data.createBeautySpecies) { wx.showToast({ title: "请选择犬或猫", icon: "none" }); return; }
     if (!(this.data.createService || "").trim()) { wx.showToast({ title: "请填写服务项目", icon: "none" }); return; }
     this.setData({ saving: true });
     try {

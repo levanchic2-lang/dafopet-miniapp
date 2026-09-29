@@ -137,12 +137,42 @@ try:
         assert created.status_code == 200, created.text
         assert created.json()["appointment"]["store"] == "横岗店"
 
+        tomorrow = (datetime.now().date() + timedelta(days=1)).isoformat()
+        beauty_created = client.post("/api/staff-miniapp/appointments", json={
+            "category": "grooming", "service_name": "犬造型",
+            "customer_id": own_customer["id"], "pet_id": own_customer["pets"][0]["id"],
+            "appointment_date": tomorrow, "appointment_time": "18:00", "duration_minutes": 90,
+        }, headers=headers)
+        assert beauty_created.status_code == 200, beauty_created.text
+        assert beauty_created.json()["appointment"]["category"] == "grooming"
+        assert beauty_created.json()["appointment"]["service_name"] == "犬造型"
+        beauty_id = beauty_created.json()["appointment"]["id"]
+        beauty_edited = client.post(
+            f"/api/staff-miniapp/appointments/{beauty_id}/service",
+            json={"service_name": "犬洗护", "duration": 90}, headers=headers,
+        )
+        assert beauty_edited.status_code == 200, beauty_edited.text
+        assert beauty_edited.json()["appointment"]["category"] == "washcare"
+        cat_mismatch = client.post(
+            f"/api/staff-miniapp/appointments/{beauty_id}/service",
+            json={"service_name": "猫洗护", "duration": 60}, headers=headers,
+        )
+        assert cat_mismatch.status_code == 400
+        assert "该宠物档案为犬" in cat_mismatch.text
+
         day_off = client.post("/api/staff-miniapp/calendar/beauty-day-off", json={
             "date": today,
         }, headers=headers)
         assert day_off.status_code == 200, day_off.text
-        beauty_blocked = client.post("/api/staff-miniapp/appointments", json={
+        invalid_beauty = client.post("/api/staff-miniapp/appointments", json={
             "category": "beauty", "service_name": "美容洗护",
+            "customer_id": own_customer["id"], "pet_id": own_customer["pets"][0]["id"],
+            "appointment_date": today, "appointment_time": "18:00", "duration_minutes": 60,
+        }, headers=headers)
+        assert invalid_beauty.status_code == 400
+        assert "犬洗护" in invalid_beauty.text
+        beauty_blocked = client.post("/api/staff-miniapp/appointments", json={
+            "category": "washcare", "service_name": "犬洗护",
             "customer_id": own_customer["id"], "pet_id": own_customer["pets"][0]["id"],
             "appointment_date": today, "appointment_time": "18:00", "duration_minutes": 60,
         }, headers=headers)
