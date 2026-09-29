@@ -495,6 +495,12 @@ def _startup():
         _start_appt()
     except Exception as _e:
         logger.warning("预约提醒调度器启动失败：%s", _e)
+    # 麻醉监护超过 72 小时无活动后自动结束，防止历史记录长期占用监护中列表。
+    try:
+        from app.services.anesthesia_dispatch import start_scheduler as _start_anmon
+        _start_anmon()
+    except Exception as _e:
+        logger.warning("麻醉监护自动结束调度器启动失败：%s", _e)
 
 
 @app.on_event("shutdown")
@@ -507,6 +513,11 @@ def _shutdown():
     try:
         from app.services.inpatient_dispatch import stop_scheduler as _stop_ip
         _stop_ip()
+    except Exception:
+        pass
+    try:
+        from app.services.anesthesia_dispatch import stop_scheduler as _stop_anmon
+        _stop_anmon()
     except Exception:
         pass
 
@@ -7262,19 +7273,23 @@ def _anmon_payload(db: Session, sheet: AnesthesiaMonitorSheet) -> dict:
 
 @app.get("/api/staff-miniapp/anesthesia-monitors")
 async def api_staff_miniapp_anesthesia_monitors(
-    request: Request, q: str = Query(""), db: Session = Depends(get_db),
+    request: Request, q: str = Query(""), view: str = Query("open"), db: Session = Depends(get_db),
 ):
     user = _staff_miniapp_user(request, db)
     store = (user.store or "").strip()
     clean_q = (q or "").strip()
-    today = date.today().isoformat()
-    sheet_q = db.query(AnesthesiaMonitorSheet).filter(
-        AnesthesiaMonitorSheet.status == "open",
-        AnesthesiaMonitorSheet.monitor_date == today,
-    )
+    view = "closed" if view == "closed" else "open"
+    sheet_q = db.query(AnesthesiaMonitorSheet).filter(AnesthesiaMonitorSheet.status == view)
+    if view == "open":
+        sheet_q = sheet_q.filter(
+            AnesthesiaMonitorSheet.updated_at > datetime.utcnow() - timedelta(hours=72),
+        )
     if store:
         sheet_q = sheet_q.filter(AnesthesiaMonitorSheet.store.in_([store, _STORE_SHORT_TO_FULL.get(store, store)]))
-    active = sheet_q.order_by(AnesthesiaMonitorSheet.id.desc()).all()
+    monitors = sheet_q.order_by(
+        AnesthesiaMonitorSheet.closed_at.desc() if view == "closed" else AnesthesiaMonitorSheet.updated_at.desc(),
+        AnesthesiaMonitorSheet.id.desc(),
+    ).limit(100).all()
     visit_q = db.query(Visit).join(Pet, Pet.id == Visit.pet_id).outerjoin(Customer, Customer.id == Visit.customer_id)
     if store:
         visit_q = visit_q.filter(or_(Visit.store == store, Visit.store == "", Visit.store == None), or_(Pet.store == store, Pet.store == "", Pet.store == None))
@@ -7283,7 +7298,7 @@ async def api_staff_miniapp_anesthesia_monitors(
         visit_q = visit_q.filter(or_(Pet.name.ilike(like), Pet.medical_record_no.ilike(like), Customer.name.ilike(like), Customer.phone.ilike(like), Visit.diagnosis.ilike(like)))
     else:
         visit_q = visit_q.filter(Visit.visit_date >= (date.today() - timedelta(days=14)).isoformat())
-    visits = visit_q.order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(60).all()
+    visits = visit_q.order_by(Visit.visit_date.desc(), Visit.id.desc()).limit(60).all() if view == "open" else []
     sheet_by_visit = {}
     if visits:
         for row in db.query(AnesthesiaMonitorSheet).filter(
@@ -7299,7 +7314,18 @@ async def api_staff_miniapp_anesthesia_monitors(
                 "medical_record_no": pet.medical_record_no if pet else "", "customer_name": customer.name if customer else "",
                 "diagnosis": v.diagnosis or v.chief_complaint or "诊断尚未填写", "vet_name": v.vet_name or "",
                 "sheet_id": sheet.id if sheet else 0, "sheet_status": sheet.status if sheet else "", "is_today": v.visit_date == date.today().isoformat()}
-    return {"ok": True, "active": [{"id": row.id, "pet_name": row.pet.name if row.pet else "未命名", "procedure": row.procedure or "未填写术式", "start_time": row.start_time or "", "entry_count": len(row.entries)} for row in active], "visits": [visit_row(v) for v in visits]}
+    monitor_rows = [{
+        "id": row.id, "pet_name": row.pet.name if row.pet else "未命名",
+        "monitor_date": row.monitor_date or "", "procedure": row.procedure or "未填写术式",
+        "start_time": row.start_time or "", "end_time": row.end_time or "",
+        "entry_count": len(row.entries), "recovery_status": row.recovery_status or "",
+        "auto_closed": "超过72小时未更新" in (row.recovery_notes or ""),
+    } for row in monitors]
+    return {
+        "ok": True, "view": view, "monitors": monitor_rows,
+        "active": monitor_rows if view == "open" else [],
+        "visits": [visit_row(v) for v in visits],
+    }
 
 
 @app.post("/api/staff-miniapp/visits/{visit_id}/anesthesia-monitor")
@@ -7364,7 +7390,7 @@ async def api_staff_miniapp_anesthesia_open_vial(sheet_id: int, request: Request
         batch_reserved = sum(_anmon_vial_remaining(v) for v in db.query(AnesthesiaOpenVial).filter(AnesthesiaOpenVial.batch_id == batch.id, AnesthesiaOpenVial.status == "open").all())
         if float(batch.quantity or 0) + 1e-9 < batch_reserved + qty: raise HTTPException(400, f"批号 {batch.batch_no or batch.id} 可开瓶库存不足")
     row = AnesthesiaOpenVial(item_id=inv.id, batch_id=batch.id if batch else None, opened_sheet_id=sheet.id, drug_name=inv.name, batch_no=batch.batch_no if batch else "", manufacturer=inv.manufacturer or "", opened_date=sheet.monitor_date, opened_qty=qty, unit=inv.unit or "", store=sheet.store, opened_by=user.display_name or user.username or "", notes=str(payload.get("notes") or "")[:1000])
-    db.add(row); db.commit(); db.refresh(row)
+    db.add(row); sheet.updated_at = datetime.utcnow(); db.commit(); db.refresh(row)
     return {"ok": True, "id": row.id}
 
 
@@ -19119,6 +19145,7 @@ async def admin_anmon_open_vial(sheet_id: int, request: Request, db: Session = D
         status="open", store=sheet.store, opened_by=operator,
         opened_at=_anmon_now(), notes=(notes or "").strip(),
     ))
+    sheet.updated_at = datetime.utcnow()
     db.commit()
     return RedirectResponse(_safe_next(next_url, f"/m/anesthesia-monitor/{sheet_id}?msg=已登记开瓶#medication"), status_code=303)
 

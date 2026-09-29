@@ -24,6 +24,7 @@ from app import models  # noqa: F401
 from app.database import Base, SessionLocal, engine
 import app.main as main_module
 from app.main import app
+from app.services.anesthesia_dispatch import AUTO_CLOSE_NOTE, auto_close_stale_monitors
 from app.models import (
     AdminUser, AnesthesiaMedicationEvent, AnesthesiaMonitorEntry, AnesthesiaMonitorSheet,
     Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
@@ -102,6 +103,8 @@ try:
             customer_id=hg_customer.id, pet_id=hg_pet.id,
             monitor_date="2026-01-01", start_time="10:00",
             status="open", store="横岗店", created_by="历史测试",
+            created_at=datetime(2026, 1, 1, 2, 0),
+            updated_at=datetime(2026, 1, 1, 2, 0),
         ),
     ])
     db.commit()
@@ -140,6 +143,22 @@ try:
         anesthesia_list = client.get("/api/staff-miniapp/anesthesia-monitors", headers=headers)
         assert anesthesia_list.status_code == 200, anesthesia_list.text
         assert anesthesia_list.json()["active"] == []
+        assert auto_close_stale_monitors(datetime(2026, 1, 4, 2, 1)) == 1
+        db = SessionLocal()
+        try:
+            stale = db.query(AnesthesiaMonitorSheet).filter_by(created_by="历史测试").one()
+            assert stale.status == "closed"
+            assert stale.recovery_status == "苏醒良好"
+            assert stale.end_time == "10:00"
+            assert AUTO_CLOSE_NOTE in stale.recovery_notes
+        finally:
+            db.close()
+        closed_monitors = client.get(
+            "/api/staff-miniapp/anesthesia-monitors", params={"view": "closed"}, headers=headers,
+        )
+        assert closed_monitors.status_code == 200, closed_monitors.text
+        assert closed_monitors.json()["monitors"][0]["auto_closed"] is True
+        assert closed_monitors.json()["monitors"][0]["recovery_status"] == "苏醒良好"
 
         calendar = client.get("/api/staff-miniapp/calendar", params={"start": today, "days": 3}, headers=headers)
         assert calendar.status_code == 200, calendar.text
@@ -355,6 +374,10 @@ try:
             "recovery_status": "苏醒良好", "recovery_notes": "自主呼吸平稳",
         }, headers=headers)
         assert finished.status_code == 200, finished.text
+        closed_after_finish = client.get(
+            "/api/staff-miniapp/anesthesia-monitors", params={"view": "closed"}, headers=headers,
+        )
+        assert monitor_id in [row["id"] for row in closed_after_finish.json()["monitors"]]
         db = SessionLocal()
         try:
             sheet = db.get(AnesthesiaMonitorSheet, monitor_id)

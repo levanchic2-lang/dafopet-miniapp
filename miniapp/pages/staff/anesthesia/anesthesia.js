@@ -1,17 +1,22 @@
 const { staffGet, staffPost } = require("../../../utils/api");
 
 Page({
-  data: { loading: true, busy: false, error: "", query: "", active: [], visits: [] },
+  data: { loading: true, busy: false, error: "", query: "", view: "open", monitors: [], visits: [] },
   onShow() { this.load(); },
   onPullDownRefresh() { this.load((this.data.query || "").trim()); },
   onQuery(e) { this.setData({ query: e.detail.value || "" }); },
   onSearch() { this.load((this.data.query || "").trim()); },
   onClear() { this.setData({ query: "" }); this.load(""); },
+  setView(e) {
+    const view = e.currentTarget.dataset.view === "closed" ? "closed" : "open";
+    if (view === this.data.view) return;
+    this.setData({ view, query: "" }); this.load("");
+  },
   async load(q = "") {
     this.setData({ loading: true, error: "" });
     try {
-      const result = await staffGet("/api/staff-miniapp/anesthesia-monitors", { q });
-      this.setData({ active: result.active || [], visits: result.visits || [] });
+      const result = await staffGet("/api/staff-miniapp/anesthesia-monitors", { q, view: this.data.view });
+      this.setData({ monitors: result.monitors || result.active || [], visits: result.visits || [] });
     } catch (e) {
       if (e && e.statusCode === 401) { wx.redirectTo({ url: "/pages/staff/login/login" }); return; }
       this.setData({ error: (e && (e.detail || e.errMsg)) || "麻醉病例加载失败" });
