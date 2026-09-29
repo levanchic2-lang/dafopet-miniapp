@@ -1,1 +1,2 @@
 @import "../../../staff.wxss";
+.today-scroll{height:calc(100vh - 106rpx - env(safe-area-inset-bottom));box-sizing:border-box}.today-page{min-height:100%;padding-bottom:42rpx}.today-kpis{grid-template-columns:repeat(2,1fr)}

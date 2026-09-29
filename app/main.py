@@ -6638,32 +6638,6 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
         vq = vq.filter(Visit.store == store)
     visit_count = vq.count()
 
-    from app.services.dashboard import (
-        build_consent_pending,
-        build_exam_report_pending,
-        build_followup_today,
-        build_rabies_pending,
-    )
-    raw_tasks = [
-        build_exam_report_pending(db, store),
-        build_followup_today(db, store),
-        build_consent_pending(db, store),
-        build_rabies_pending(db, store),
-    ]
-    tasks = []
-    for card in raw_tasks:
-        count = int(card.get("count") or 0)
-        if count <= 0:
-            continue
-        previews = card.get("previews") or []
-        first = previews[0] if previews else {}
-        tasks.append({
-            "key": card.get("key") or "",
-            "title": card.get("title") or "待处理事项",
-            "count": count,
-            "summary": first.get("label") or (first.get("sub") if first else ""),
-        })
-    pending_count = sum(t["count"] for t in tasks)
     tnr_today_count = sum(1 for row in appointments if row.category == AppointmentCategory.tnr.value)
     anmon_q = db.query(AnesthesiaMonitorSheet).filter(
         AnesthesiaMonitorSheet.status == "open",
@@ -6688,9 +6662,9 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
         "ok": True,
         "date": today,
         "profile": _staff_profile_payload(user),
-        "stats": {"appointments": len(appointments), "visits": visit_count, "pending": pending_count,
+        "stats": {"appointments": len(appointments), "visits": visit_count,
                   "tnr_today": tnr_today_count, "anesthesia_open": anesthesia_open_count},
-        "tasks": tasks[:4],
+        "tasks": [],
         "next_appointment": next_appt,
     }
 

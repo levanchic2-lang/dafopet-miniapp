@@ -137,6 +137,8 @@ try:
         assert dashboard.status_code == 200, dashboard.text
         assert dashboard.json()["stats"]["appointments"] == 1
         assert dashboard.json()["stats"]["visits"] == 1
+        assert "pending" not in dashboard.json()["stats"]
+        assert dashboard.json()["tasks"] == []
         assert dashboard.json()["stats"]["anesthesia_open"] == 0
         assert dashboard.json()["next_appointment"]["pet_name"] == "横岗犬"
 

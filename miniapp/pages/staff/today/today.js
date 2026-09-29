@@ -1,7 +1,7 @@
 const { staffGet } = require("../../../utils/api");
 
 Page({
-  data: { loading: true, error: "", profile: {}, dateLabel: "", stats: {}, tasks: [], next: null },
+  data: { loading: true, refreshing: false, error: "", profile: {}, dateLabel: "", stats: {}, next: null },
   onShow() { this.loadData(); },
   async loadData() {
     let token = "";
@@ -12,7 +12,7 @@ Page({
       const result = await staffGet("/api/staff-miniapp/dashboard");
       const parts = (result.date || "").split("-");
       this.setData({
-        profile: result.profile || {}, stats: result.stats || {}, tasks: result.tasks || [],
+        profile: result.profile || {}, stats: result.stats || {},
         next: result.next_appointment || null,
         dateLabel: parts.length === 3 ? parts[1] + " / " + parts[2] : result.date || ""
       });
@@ -20,9 +20,9 @@ Page({
     } catch (e) {
       if (e && e.statusCode === 401) { wx.redirectTo({ url: "/pages/staff/login/login" }); return; }
       this.setData({ error: (e && (e.detail || e.errMsg)) || "工作台加载失败" });
-    } finally { this.setData({ loading: false }); wx.stopPullDownRefresh(); }
+    } finally { this.setData({ loading: false, refreshing: false }); wx.stopPullDownRefresh(); }
   },
-  onPullDownRefresh() { this.loadData(); },
+  onRefresh() { this.setData({ refreshing: true }); this.loadData(); },
   goTnr() { wx.navigateTo({ url: "/pages/staff/tnr/tnr" }); },
   goMaterials() { wx.navigateTo({ url: "/pages/staff/materials/materials" }); },
   goAnesthesia() { wx.navigateTo({ url: "/pages/staff/anesthesia/anesthesia" }); },

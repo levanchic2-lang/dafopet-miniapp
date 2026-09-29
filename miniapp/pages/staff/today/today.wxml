@@ -1,19 +1,18 @@
-<view class="staff-page">
+<scroll-view class="today-scroll" scroll-y="true" enhanced="true" show-scrollbar="false" refresher-enabled="true" refresher-triggered="{{refreshing}}" bindrefresherrefresh="onRefresh">
+<view class="staff-page today-page">
   <view class="staff-status"><text>{{profile.store_label || '员工端'}}</text><text>{{profile.mobile_role_label || ''}}</text></view>
   <view class="staff-brand"><view><view class="staff-brand-name">大风动物医院</view><view class="staff-brand-en">DAFO ANIMAL HOSPITAL</view></view><view class="staff-brand-side">员工端</view></view>
   <view wx:if="{{loading}}" class="staff-loading">正在载入今日工作…</view>
   <block wx:else>
     <view class="staff-section"><view class="staff-eyebrow">TODAY · {{dateLabel}}</view><view class="staff-title">今日工作</view><view class="staff-desc">{{profile.display_name || '员工'}}，欢迎回来</view></view>
-    <view class="staff-kpis"><view class="staff-kpi"><view class="staff-kpi-num">{{stats.appointments || 0}}</view><view class="staff-kpi-label">预约</view></view><view class="staff-kpi"><view class="staff-kpi-num">{{stats.visits || 0}}</view><view class="staff-kpi-label">就诊</view></view><view class="staff-kpi"><view class="staff-kpi-num">{{stats.pending || 0}}</view><view class="staff-kpi-label">待处理</view></view></view>
+    <view class="staff-kpis today-kpis"><view class="staff-kpi"><view class="staff-kpi-num">{{stats.appointments || 0}}</view><view class="staff-kpi-label">预约</view></view><view class="staff-kpi"><view class="staff-kpi-num">{{stats.visits || 0}}</view><view class="staff-kpi-label">就诊</view></view></view>
     <view class="staff-row primary" bindtap="goTnr"><view class="staff-row-index">TNR</view><view class="staff-row-main"><view class="staff-row-title">今日 TNR</view><view class="staff-row-sub">确认猫只、拍摄术后资料、完成手术登记</view></view><view class="staff-row-count">{{stats.tnr_today || 0}}</view></view>
     <view class="staff-row" bindtap="goMaterials"><view class="staff-row-index">IMG</view><view class="staff-row-main"><view class="staff-row-title">病例素材</view><view class="staff-row-sub">选择病例，现场拍摄照片或视频</view></view><view class="staff-row-count">{{stats.visits || 0}}</view></view>
     <view class="staff-row" bindtap="goAnesthesia"><view class="staff-row-index">AN</view><view class="staff-row-main"><view class="staff-row-title">麻醉监护</view><view class="staff-row-sub">术前用药、五分钟体征、复苏记录</view></view><view class="staff-row-count">{{stats.anesthesia_open || 0}}</view></view>
     <view wx:if="{{error}}" class="staff-error">{{error}}</view>
-    <view class="staff-section-head"><text>优先处理</text><text class="staff-section-meta">按工作类型汇总</text></view>
-    <view wx:if="{{!tasks.length}}" class="staff-empty">当前没有需要立即处理的事项。</view>
-    <block wx:for="{{tasks}}" wx:key="key"><view class="staff-row {{index === 0 ? 'primary' : ''}}"><view class="staff-row-index">0{{index + 1}}</view><view class="staff-row-main"><view class="staff-row-title">{{item.title}}</view><view class="staff-row-sub">{{item.summary || '点击电脑后台查看明细'}}</view></view><view class="staff-row-count">{{item.count}}</view></view></block>
     <view wx:if="{{next}}" class="staff-next"><view class="staff-next-label">NEXT APPOINTMENT</view><view class="staff-next-title">{{next.pet_name}} · {{next.service_name}}</view><view class="staff-next-sub">{{next.time}} · {{next.customer_name}}</view></view>
     <view wx:else class="staff-empty">今天暂时没有后续预约。</view>
   </block>
-  <view class="staff-tabbar"><view class="staff-tab active" bindtap="goToday">今日</view><view class="staff-tab" bindtap="goCalendar">日历</view><view class="staff-tab" bindtap="goCustomers">客户</view><view class="staff-tab" bindtap="goMe">我的</view></view>
 </view>
+</scroll-view>
+<view class="staff-tabbar"><view class="staff-tab active" bindtap="goToday">今日</view><view class="staff-tab" bindtap="goCalendar">日历</view><view class="staff-tab" bindtap="goCustomers">客户</view><view class="staff-tab" bindtap="goMe">我的</view></view>
