@@ -23,6 +23,7 @@ Page({
     } finally { this.setData({ loading: false }); wx.stopPullDownRefresh(); }
   },
   onPullDownRefresh() { this.loadData(); },
+  goTnr() { wx.navigateTo({ url: "/pages/staff/tnr/tnr" }); },
   goToday() {},
   goCalendar() { wx.redirectTo({ url: "/pages/staff/calendar/calendar" }); },
   goCustomers() { wx.redirectTo({ url: "/pages/staff/customers/customers" }); },

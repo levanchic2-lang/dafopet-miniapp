@@ -3,6 +3,7 @@
 import os
 import sys
 import tempfile
+import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -13,6 +14,8 @@ sys.path.insert(0, str(ROOT))
 TEMP_DIR = tempfile.TemporaryDirectory(prefix="tnr-staff-miniapp-")
 DB_PATH = Path(TEMP_DIR.name) / "test.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{DB_PATH.as_posix()}"
+UPLOAD_DIR = Path(TEMP_DIR.name) / "uploads"
+os.environ["UPLOAD_DIR"] = str(UPLOAD_DIR)
 
 from fastapi.testclient import TestClient
 from passlib.hash import bcrypt
@@ -21,7 +24,7 @@ from app import models  # noqa: F401
 from app.database import Base, SessionLocal, engine
 import app.main as main_module
 from app.main import app
-from app.models import AdminUser, Appointment, Customer, Pet, Visit
+from app.models import AdminUser, Application, Appointment, Customer, MediaFile, Pet, Visit
 
 
 @asynccontextmanager
@@ -127,6 +130,83 @@ try:
             json={"status": "arrived"}, headers=headers,
         )
         assert forbidden.status_code == 403
+
+        db = SessionLocal()
+        try:
+            hg_tnr = Application(
+                applicant_name="横岗申请人", phone="13900001111", clinic_store="横岗店",
+                address="深圳", cat_nickname="横岗TNR猫", cat_gender="female",
+                status="scheduled",
+            )
+            dh_tnr = Application(
+                applicant_name="东环申请人", phone="13900002222", clinic_store="东环店",
+                address="深圳", cat_nickname="东环TNR猫", cat_gender="male",
+                status="scheduled",
+            )
+            db.add_all([hg_tnr, dh_tnr])
+            db.flush()
+            image_dir = UPLOAD_DIR / str(hg_tnr.id)
+            image_dir.mkdir(parents=True, exist_ok=True)
+            image_path = image_dir / "application.png"
+            png_bytes = base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            )
+            image_path.write_bytes(png_bytes)
+            media = MediaFile(
+                application_id=hg_tnr.id, kind="application_image",
+                stored_path=str(image_path), original_name="application.png",
+            )
+            db.add_all([
+                media,
+                Appointment(
+                    related_application_id=hg_tnr.id, category="tnr", status="confirmed",
+                    service_name="TNR 手术安排", customer_name="横岗申请人", phone="13900001111",
+                    pet_name="横岗TNR猫", appointment_date=today, appointment_time="12:00",
+                    store="大风动物医院（横岗店）", duration_minutes=60,
+                ),
+                Appointment(
+                    related_application_id=dh_tnr.id, category="tnr", status="confirmed",
+                    service_name="TNR 手术安排", customer_name="东环申请人", phone="13900002222",
+                    pet_name="东环TNR猫", appointment_date=today, appointment_time="13:00",
+                    store="大风动物医院（东环店）", duration_minutes=60,
+                ),
+            ])
+            db.commit()
+            hg_tnr_id, dh_tnr_id, media_id = hg_tnr.id, dh_tnr.id, media.id
+        finally:
+            db.close()
+
+        tnr_today = client.get("/api/staff-miniapp/tnr/today", headers=headers)
+        assert tnr_today.status_code == 200, tnr_today.text
+        assert [item["cat_name"] for item in tnr_today.json()["items"]] == ["横岗TNR猫"]
+        assert tnr_today.json()["items"][0]["application_media_ids"] == [media_id]
+        media_response = client.get(f"/api/staff-miniapp/tnr/media/{media_id}", headers=headers)
+        assert media_response.status_code == 200
+        cross_store_tnr = client.post(f"/api/staff-miniapp/tnr/{dh_tnr_id}/verify", headers=headers)
+        assert cross_store_tnr.status_code == 403
+        verified_tnr = client.post(f"/api/staff-miniapp/tnr/{hg_tnr_id}/verify", headers=headers)
+        assert verified_tnr.status_code == 200, verified_tnr.text
+        assert verified_tnr.json()["item"]["verified"] is True
+        assert verified_tnr.json()["item"]["before_count"] == 1
+        uploaded_tnr = client.post(
+            f"/api/staff-miniapp/tnr/{hg_tnr_id}/upload",
+            data={"kind": "after", "media_type": "image"},
+            files={"file": ("after.png", png_bytes, "image/png")}, headers=headers,
+        )
+        assert uploaded_tnr.status_code == 200, uploaded_tnr.text
+        assert uploaded_tnr.json()["item"]["after_count"] == 1
+        assert uploaded_tnr.json()["item"]["can_complete"] is True
+        completed_tnr = client.post(f"/api/staff-miniapp/tnr/{hg_tnr_id}/complete", headers=headers)
+        assert completed_tnr.status_code == 200, completed_tnr.text
+        assert completed_tnr.json()["item"]["completed"] is True
+        db = SessionLocal()
+        try:
+            tnr_appointment = db.query(Appointment).filter(
+                Appointment.related_application_id == hg_tnr_id,
+            ).one()
+            assert tnr_appointment.status == "completed"
+        finally:
+            db.close()
 
         own_customer = client.get("/api/staff-miniapp/customers", params={"q": "横岗"}, headers=headers).json()["items"][0]
         created = client.post("/api/staff-miniapp/appointments", json={

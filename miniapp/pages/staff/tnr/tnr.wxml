@@ -1,0 +1,21 @@
+<view class="staff-page tnr-page">
+  <view class="staff-status"><text>{{profile.store_label || '员工端'}}</text><text>今日 TNR</text></view>
+  <view class="tnr-head"><view class="staff-eyebrow">TODAY · TNR</view><view class="tnr-title">今日 TNR</view><view class="tnr-desc">核对猫只，现场拍摄并完成手术登记</view></view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <view wx:if="{{loading}}" class="staff-loading">正在载入今日 TNR…</view>
+  <view wx:elif="{{!items.length}}" class="staff-empty">当前门店今天没有 TNR 手术预约。</view>
+  <view wx:for="{{items}}" wx:key="id" class="tnr-card">
+    <view class="tnr-card-head"><view><text class="tnr-time">{{item.time}}</text><text class="tnr-name">{{item.cat_name}}</text></view><text class="tnr-state {{item.completed ? 'done' : item.verified ? 'verified' : ''}}">{{item.status_label}}</text></view>
+    <view class="tnr-meta">{{item.gender}}{{item.color ? ' · ' + item.color : ''}} · {{item.applicant_name}} {{item.phone}}</view>
+    <view class="tnr-subhead"><text>申请照片</text><text>点击可放大核对</text></view>
+    <scroll-view wx:if="{{item.previewPaths.length}}" scroll-x class="tnr-images"><image wx:for="{{item.previewPaths}}" wx:for-item="src" wx:key="*this" src="{{src}}" mode="aspectFill" data-id="{{item.id}}" data-src="{{src}}" bindtap="previewImage" /></scroll-view>
+    <view wx:else class="tnr-no-image">申请照片载入中或暂无照片</view>
+    <view class="tnr-progress"><view class="{{item.verified ? 'active' : ''}}"><strong>01</strong><text>猫只确认</text></view><view class="{{item.before_count ? 'active' : ''}}"><strong>02</strong><text>术前 {{item.before_count}}</text></view><view class="{{item.after_count ? 'active' : ''}}"><strong>03</strong><text>术后 {{item.after_count}}</text></view></view>
+    <button wx:if="{{!item.verified && !item.completed}}" class="tnr-primary" loading="{{busyId === item.id}}" data-id="{{item.id}}" bindtap="verifyCat">确认到院是此申请猫</button>
+    <view wx:if="{{!item.completed}}" class="tnr-upload-row"><button data-id="{{item.id}}" data-kind="after" bindtap="chooseMedia">拍摄 / 上传术后资料</button><button data-id="{{item.id}}" data-kind="before" bindtap="chooseMedia">补拍术前资料</button></view>
+    <button wx:if="{{!item.completed}}" class="tnr-complete {{item.can_complete ? '' : 'disabled'}}" disabled="{{!item.can_complete}}" loading="{{busyId === item.id}}" data-id="{{item.id}}" bindtap="completeSurgery">{{item.can_complete ? '标记手术已完成' : '术前、术后资料齐全后可完成'}}</button>
+    <view wx:else class="tnr-finished">手术登记已完成</view>
+    <view wx:if="{{!item.before_count && item.application_media_ids.length}}" class="tnr-tip">确认猫只或上传术后资料后，申请照片会自动转为术前资料，无需重复上传。</view>
+  </view>
+  <view class="staff-tabbar"><view class="staff-tab active" bindtap="goToday">今日</view><view class="staff-tab" bindtap="goCalendar">日历</view><view class="staff-tab" bindtap="goCustomers">客户</view><view class="staff-tab" bindtap="goMe">我的</view></view>
+</view>

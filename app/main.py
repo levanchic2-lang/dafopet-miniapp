@@ -6653,6 +6653,7 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
             "summary": first.get("label") or (first.get("sub") if first else ""),
         })
     pending_count = sum(t["count"] for t in tasks)
+    tnr_today_count = sum(1 for row in appointments if row.category == AppointmentCategory.tnr.value)
     next_appt = None
     current_hm = datetime.now().strftime("%H:%M")
     next_row = next((row for row in appointments if row.status == "arrived"), None)
@@ -6669,7 +6670,8 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
         "ok": True,
         "date": today,
         "profile": _staff_profile_payload(user),
-        "stats": {"appointments": len(appointments), "visits": visit_count, "pending": pending_count},
+        "stats": {"appointments": len(appointments), "visits": visit_count, "pending": pending_count,
+                  "tnr_today": tnr_today_count},
         "tasks": tasks[:4],
         "next_appointment": next_appt,
     }
@@ -7071,6 +7073,197 @@ async def api_staff_miniapp_beauty_day_off(
     ))
     db.commit()
     return {"ok": True, "id": block.id}
+
+
+def _staff_tnr_application(db: Session, user: AdminUser, app_id: int) -> Application:
+    row = db.get(Application, app_id)
+    if not row:
+        raise HTTPException(404, "TNR申请不存在")
+    user_store = (user.store or "").strip()
+    app_store = _STORE_FULL_TO_SHORT.get((row.clinic_store or "").strip(), (row.clinic_store or "").strip())
+    if user_store and app_store and user_store != app_store:
+        raise HTTPException(403, "无权操作其他门店的TNR申请")
+    return row
+
+
+def _staff_tnr_media_counts(db: Session, app_id: int) -> tuple[int, int]:
+    rows = db.query(MediaFile.kind).filter(
+        MediaFile.application_id == app_id,
+        MediaFile.kind.in_((MediaKind.surgery_before.value, MediaKind.surgery_after.value)),
+    ).all()
+    kinds = [r[0] for r in rows]
+    return kinds.count(MediaKind.surgery_before.value), kinds.count(MediaKind.surgery_after.value)
+
+
+def _staff_tnr_payload(db: Session, row: Application, appointment: Appointment | None = None) -> dict:
+    before_count, after_count = _staff_tnr_media_counts(db, row.id)
+    application_images = db.query(MediaFile).filter(
+        MediaFile.application_id == row.id,
+        MediaFile.kind == MediaKind.application_image.value,
+    ).order_by(MediaFile.id).limit(6).all()
+    completed = row.status == ApplicationStatus.surgery_completed.value
+    return {
+        "id": row.id,
+        "appointment_id": appointment.id if appointment else None,
+        "time": (appointment.appointment_time if appointment else "") or "待定",
+        "cat_name": row.cat_nickname or (appointment.pet_name if appointment else "") or "无名猫咪",
+        "gender": {"male": "公", "female": "母", "unknown": "未知"}.get(row.cat_gender, "未知"),
+        "color": row.cat_color or "",
+        "applicant_name": row.applicant_name or "",
+        "phone": row.phone or "",
+        "status": row.status or "",
+        "status_label": "手术已完成" if completed else "已确认到院" if row.staff_cat_verified else "待现场确认",
+        "verified": bool(row.staff_cat_verified),
+        "completed": completed,
+        "before_count": before_count,
+        "after_count": after_count,
+        "can_complete": before_count > 0 and after_count > 0 and not completed,
+        "application_media_ids": [m.id for m in application_images],
+    }
+
+
+@app.get("/api/staff-miniapp/tnr/today")
+async def api_staff_miniapp_tnr_today(request: Request, db: Session = Depends(get_db)):
+    user = _staff_miniapp_user(request, db)
+    store = (user.store or "").strip()
+    full_store = _STORE_SHORT_TO_FULL.get(store, store)
+    q = db.query(Appointment).filter(
+        Appointment.category == AppointmentCategory.tnr.value,
+        Appointment.appointment_date == date.today().isoformat(),
+        Appointment.status.notin_((AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value)),
+        Appointment.related_application_id != None,
+    )
+    if full_store:
+        q = q.filter(Appointment.store == full_store)
+    appointments = q.order_by(Appointment.appointment_time, Appointment.id).all()
+    items = []
+    seen = set()
+    for appointment in appointments:
+        if not appointment.related_application_id or appointment.related_application_id in seen:
+            continue
+        row = db.get(Application, appointment.related_application_id)
+        if not row:
+            continue
+        seen.add(row.id)
+        items.append(_staff_tnr_payload(db, row, appointment))
+    return {"ok": True, "date": date.today().isoformat(), "profile": _staff_profile_payload(user), "items": items}
+
+
+@app.get("/api/staff-miniapp/tnr/media/{media_id}")
+async def api_staff_miniapp_tnr_media(
+    media_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    media = db.get(MediaFile, media_id)
+    if not media:
+        raise HTTPException(404, "影像不存在")
+    _staff_tnr_application(db, user, media.application_id)
+    path = _resolve_stored_media_path(media.stored_path)
+    if path is None:
+        raise HTTPException(404, "影像文件不存在")
+    root = Path(settings.upload_dir).resolve()
+    if path != root and root not in path.parents:
+        raise HTTPException(403, "影像路径无效")
+    ctype, _ = mimetypes.guess_type(str(path))
+    return FileResponse(path, media_type=ctype or "application/octet-stream")
+
+
+@app.post("/api/staff-miniapp/tnr/{app_id}/verify")
+async def api_staff_miniapp_tnr_verify(
+    app_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_tnr_application(db, user, app_id)
+    _require_status_in(row, {
+        ApplicationStatus.approved.value, ApplicationStatus.scheduled.value,
+        ApplicationStatus.arrived_verified.value,
+    }, "现场确认")
+    row.staff_cat_verified = True
+    appointment_sync = sync_active_tnr_appointment(
+        db, app_id, AppointmentStatus.arrived.value, "员工小程序已现场核验猫咪",
+    )
+    copied = _ensure_application_images_as_surgery_before(db, app_id)
+    db.add(AuditLog(
+        action="staff_miniapp_tnr_verify", actor=(user.username or "")[:80], application_id=app_id,
+        detail=json.dumps({"appointment_sync": appointment_sync, "auto_before": copied}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "item": _staff_tnr_payload(db, row)}
+
+
+@app.post("/api/staff-miniapp/tnr/{app_id}/upload")
+async def api_staff_miniapp_tnr_upload(
+    app_id: int, request: Request, kind: str = Form(...), media_type: str = Form("image"),
+    file: UploadFile = File(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_tnr_application(db, user, app_id)
+    if row.status == ApplicationStatus.surgery_completed.value:
+        raise HTTPException(409, "手术已完成，不能继续上传")
+    if kind not in ("before", "after"):
+        raise HTTPException(400, "请选择术前或术后资料")
+    is_video = media_type == "video"
+    raw = await file.read()
+    max_bytes = 100 * 1024 * 1024 if is_video else 15 * 1024 * 1024
+    if not raw:
+        raise HTTPException(400, "上传文件为空")
+    if len(raw) > max_bytes:
+        raise HTTPException(413, "视频不能超过100MB，照片不能超过15MB")
+    base = Path(settings.upload_dir) / str(app_id)
+    base.mkdir(parents=True, exist_ok=True)
+    ext = _video_ext(file.filename or "") if is_video else _image_ext(file.filename or "")
+    prefix = "surg_b" if kind == "before" else "surg_a"
+    dest = base / f"{prefix}_{secrets.token_hex(6)}{ext}"
+    dest.write_bytes(raw)
+    dest = _transcode_to_h264(dest) if is_video else _compress_image(dest)
+    db.add(MediaFile(
+        application_id=app_id,
+        kind=MediaKind.surgery_before.value if kind == "before" else MediaKind.surgery_after.value,
+        stored_path=str(dest), original_name=file.filename or dest.name,
+    ))
+    auto_before = _ensure_application_images_as_surgery_before(db, app_id) if kind == "after" else 0
+    db.add(AuditLog(
+        action="staff_miniapp_tnr_upload", actor=(user.username or "")[:80], application_id=app_id,
+        detail=json.dumps({"kind": kind, "media_type": media_type, "auto_before": auto_before}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "item": _staff_tnr_payload(db, row)}
+
+
+@app.post("/api/staff-miniapp/tnr/{app_id}/complete")
+async def api_staff_miniapp_tnr_complete(
+    app_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_tnr_application(db, user, app_id)
+    _require_status_in(row, {
+        ApplicationStatus.approved.value, ApplicationStatus.scheduled.value,
+        ApplicationStatus.arrived_verified.value,
+    }, "标记手术完成")
+    _ensure_application_images_as_surgery_before(db, app_id)
+    if not _application_has_surgery_before_and_after(db, app_id):
+        raise HTTPException(400, "请先上传术后资料；术前资料会从申请照片自动带入，也可手动补拍")
+    row.status = ApplicationStatus.surgery_completed.value
+    row.staff_cat_verified = True
+    row.showcase_consent = True
+    appointment_sync = sync_active_tnr_appointment(
+        db, app_id, AppointmentStatus.completed.value, "员工小程序标记手术完成",
+    )
+    db.add(AuditLog(
+        action="staff_miniapp_tnr_complete", actor=(user.username or "")[:80], application_id=app_id,
+        detail=json.dumps({"appointment_sync": appointment_sync}, ensure_ascii=False),
+    ))
+    db.commit()
+    notify_application_result(
+        db, app_id, row.phone, row.applicant_name, approved=True,
+        extra="手术已完成。请遵医嘱护理；公猫放归时间请听从医嘱。",
+    )
+    push_surgery_done(
+        db, application_id=app_id, openid=row.wechat_openid,
+        cat_name=row.cat_nickname or "猫咪", note="手术已完成，请按医嘱护理",
+        action_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+    )
+    return {"ok": True, "item": _staff_tnr_payload(db, row)}
 
 
 @app.get("/api/wechat/my-tnr-status")

@@ -74,6 +74,23 @@ function staffRequest(path, method = "GET", data = {}) {
 
 function staffGet(path, data = {}) { return staffRequest(path, "GET", data); }
 function staffPost(path, data = {}) { return staffRequest(path, "POST", data); }
+function staffUpload(path, filePath, formData = {}, name = "file") {
+  return new Promise((resolve, reject) => {
+    const token = staffToken();
+    if (!token) { reject({ statusCode: 401, detail: "请先登录员工端" }); return; }
+    wx.uploadFile({
+      url: base() + path, filePath, name, formData,
+      header: { "Authorization": "Bearer " + token },
+      success: (res) => {
+        let data = {};
+        try { data = JSON.parse(res.data || "{}"); } catch (e) { data = { detail: "上传响应解析失败" }; }
+        if (res.statusCode >= 200 && res.statusCode < 300) resolve(data);
+        else reject(Object.assign({ statusCode: res.statusCode }, data));
+      },
+      fail: reject
+    });
+  });
+}
 
 function uploadApply(form, images, videos) {
   return new Promise((resolve, reject) => {
@@ -105,5 +122,5 @@ function uploadMore(appId, fieldName, filePath) {
   return Promise.resolve({ appId, fieldName, filePath });
 }
 
-module.exports = { getJson, postJson, staffGet, staffPost, staffRequest, uploadApply, uploadMore };
+module.exports = { getJson, postJson, staffGet, staffPost, staffRequest, staffUpload, uploadApply, uploadMore };
 
