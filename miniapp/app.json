@@ -21,6 +21,7 @@
     "pages/bind/bind",
     "pages/staff/login/login",
     "pages/staff/today/today",
+    "pages/staff/calendar/calendar",
     "pages/staff/customers/customers",
     "pages/staff/me/me"
   ],

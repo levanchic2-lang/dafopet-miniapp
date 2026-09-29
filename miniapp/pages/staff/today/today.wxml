@@ -12,5 +12,5 @@
     <view wx:if="{{next}}" class="staff-next"><view class="staff-next-label">NEXT APPOINTMENT</view><view class="staff-next-title">{{next.pet_name}} · {{next.service_name}}</view><view class="staff-next-sub">{{next.time}} · {{next.customer_name}}</view></view>
     <view wx:else class="staff-empty">今天暂时没有后续预约。</view>
   </block>
-  <view class="staff-tabbar"><view class="staff-tab active" bindtap="goToday">今日</view><view class="staff-tab" bindtap="goCustomers">客户</view><view class="staff-tab" bindtap="goMe">我的</view></view>
+  <view class="staff-tabbar"><view class="staff-tab active" bindtap="goToday">今日</view><view class="staff-tab" bindtap="goCalendar">日历</view><view class="staff-tab" bindtap="goCustomers">客户</view><view class="staff-tab" bindtap="goMe">我的</view></view>
 </view>

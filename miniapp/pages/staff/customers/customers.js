@@ -25,6 +25,7 @@ Page({
   },
   onPullDownRefresh() { this.loadCustomers((this.data.query || "").trim()); },
   goToday() { wx.redirectTo({ url: "/pages/staff/today/today" }); },
+  goCalendar() { wx.redirectTo({ url: "/pages/staff/calendar/calendar" }); },
   goCustomers() {},
   goMe() { wx.redirectTo({ url: "/pages/staff/me/me" }); }
 });

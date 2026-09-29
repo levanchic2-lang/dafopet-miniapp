@@ -6724,6 +6724,191 @@ async def api_staff_miniapp_customers(
     return {"ok": True, "query": q, "items": items}
 
 
+def _staff_appointment_row(db: Session, user: AdminUser, appointment_id: int) -> Appointment:
+    row = db.get(Appointment, appointment_id)
+    if not row:
+        raise HTTPException(404, "预约不存在")
+    store = (user.store or "").strip()
+    full_store = _STORE_SHORT_TO_FULL.get(store, store)
+    if full_store and row.store and row.store != full_store:
+        raise HTTPException(403, "无权操作其他门店的预约")
+    return row
+
+
+def _staff_appointment_payload(row: Appointment, pet: Pet | None = None) -> dict:
+    category_colors = {
+        "tnr": "green", "outpatient": "blue", "surgery": "red",
+        "beauty": "pink", "grooming": "pink", "washcare": "blue",
+        "vaccine": "amber", "other": "gray",
+    }
+    return {
+        "id": row.id,
+        "date": row.appointment_date or "",
+        "time": row.appointment_time or "",
+        "duration": max(10, int(row.duration_minutes or 30)),
+        "category": row.category or "other",
+        "category_label": _APPOINTMENT_CATEGORY_LABELS.get(row.category, row.category or "其他"),
+        "color": category_colors.get(row.category or "", "gray"),
+        "status": row.status or "",
+        "status_label": _APPOINTMENT_STATUS_LABELS.get(row.status, row.status or ""),
+        "service_name": row.service_name or "未填写项目",
+        "customer_name": row.customer_name or "未填写客户",
+        "phone": row.phone or "",
+        "pet_name": (pet.name if pet else "") or row.pet_name or "未填写宠物",
+        "pet_id": row.pet_id,
+        "customer_id": row.customer_id,
+        "notes": row.notes or "",
+        "store": _STORE_FULL_TO_SHORT.get(row.store or "", row.store or ""),
+        "related_application_id": row.related_application_id,
+    }
+
+
+@app.get("/api/staff-miniapp/calendar")
+async def api_staff_miniapp_calendar(
+    request: Request, start: str = Query(""), days: int = Query(3),
+    db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    try:
+        start_day = datetime.strptime(start, "%Y-%m-%d").date() if start else date.today()
+    except ValueError:
+        raise HTTPException(400, "日期格式不正确")
+    days = min(7, max(1, int(days or 3)))
+    end_day = start_day + timedelta(days=days - 1)
+    store = (user.store or "").strip()
+    full_store = _STORE_SHORT_TO_FULL.get(store, store)
+    q = db.query(Appointment).filter(
+        Appointment.appointment_date >= start_day.isoformat(),
+        Appointment.appointment_date <= end_day.isoformat(),
+        Appointment.status != AppointmentStatus.cancelled.value,
+    )
+    if full_store:
+        q = q.filter(Appointment.store == full_store)
+    rows = q.order_by(Appointment.appointment_date, Appointment.appointment_time, Appointment.id).all()
+    pet_ids = [r.pet_id for r in rows if r.pet_id]
+    pet_map = {p.id: p for p in db.query(Pet).filter(Pet.id.in_(pet_ids)).all()} if pet_ids else {}
+    dates = []
+    weekday_zh = "一二三四五六日"
+    for offset in range(days):
+        current = start_day + timedelta(days=offset)
+        dates.append({
+            "date": current.isoformat(), "day": current.strftime("%d"),
+            "month": current.strftime("%m"), "weekday": "周" + weekday_zh[current.weekday()],
+            "is_today": current == date.today(),
+        })
+    return {
+        "ok": True, "start": start_day.isoformat(), "end": end_day.isoformat(),
+        "dates": dates,
+        "appointments": [_staff_appointment_payload(r, pet_map.get(r.pet_id)) for r in rows],
+    }
+
+
+@app.post("/api/staff-miniapp/appointments/{appointment_id}/status")
+async def api_staff_miniapp_appointment_status(
+    appointment_id: int, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_appointment_row(db, user, appointment_id)
+    status = str((payload or {}).get("status") or "").strip()
+    reason = str((payload or {}).get("reason") or "").strip()[:300]
+    if status not in _ALLOWED_APPOINTMENT_STATUSES:
+        raise HTTPException(400, "无效状态")
+    old_status = row.status
+    row.status = status
+    row.updated_at = datetime.utcnow()
+    if reason:
+        row.notes = ((row.notes or "").strip() + f"\n[状态备注] {reason}").strip()
+    if row.related_application_id:
+        app_row = db.get(Application, row.related_application_id)
+        if app_row:
+            if status == AppointmentStatus.confirmed.value and app_row.status in (
+                ApplicationStatus.approved.value, ApplicationStatus.pre_approved.value,
+            ):
+                app_row.status = ApplicationStatus.scheduled.value
+                app_row.appointment_at = row.appointment_date
+            elif status == AppointmentStatus.arrived.value and app_row.status in (
+                ApplicationStatus.scheduled.value, ApplicationStatus.approved.value,
+            ):
+                app_row.status = ApplicationStatus.arrived_verified.value
+            elif status == AppointmentStatus.cancelled.value and app_row.status == ApplicationStatus.scheduled.value:
+                app_row.status = ApplicationStatus.approved.value
+            elif status == AppointmentStatus.no_show.value:
+                app_row.status = ApplicationStatus.no_show.value
+            app_row.updated_at = datetime.utcnow()
+    db.add(AuditLog(
+        action="staff_miniapp_appointment_status",
+        actor=(user.username or "")[:80], application_id=row.related_application_id,
+        detail=json.dumps({"appointment_id": row.id, "old": old_status, "new": status}, ensure_ascii=False),
+    ))
+    db.commit()
+    if row.wechat_openid and status in (AppointmentStatus.confirmed.value, AppointmentStatus.cancelled.value):
+        status_text = "已确认，请按约定时间到院" if status == AppointmentStatus.confirmed.value else "已取消"
+        push_appointment_status(
+            db, appointment_id=row.id, openid=row.wechat_openid,
+            status_text=status_text, service_name=row.service_name or "", store=row.store or "",
+            appointment_date=row.appointment_date or "", appointment_time=row.appointment_time or "",
+            phone=row.phone or "", customer_name=row.customer_name or "", note=reason or status_text,
+        )
+    return {"ok": True, "appointment": _staff_appointment_payload(row)}
+
+
+@app.post("/api/staff-miniapp/appointments/{appointment_id}/reschedule")
+async def api_staff_miniapp_appointment_reschedule(
+    appointment_id: int, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_appointment_row(db, user, appointment_id)
+    if row.status in (AppointmentStatus.completed.value, AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value):
+        raise HTTPException(400, "当前状态不允许改约")
+    new_date = str((payload or {}).get("date") or "").strip()[:20]
+    new_time = str((payload or {}).get("time") or "").strip()[:10]
+    try:
+        datetime.strptime(new_date, "%Y-%m-%d")
+        datetime.strptime(new_time, "%H:%M")
+    except ValueError:
+        raise HTTPException(400, "请选择正确的日期和时间")
+    old = {"date": row.appointment_date, "time": row.appointment_time}
+    row.appointment_date, row.appointment_time = new_date, new_time
+    row.updated_at = datetime.utcnow()
+    db.add(AuditLog(
+        action="staff_miniapp_appointment_reschedule", actor=(user.username or "")[:80],
+        application_id=row.related_application_id,
+        detail=json.dumps({"appointment_id": row.id, "old": old, "new": {"date": new_date, "time": new_time}}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "appointment": _staff_appointment_payload(row)}
+
+
+@app.post("/api/staff-miniapp/appointments/{appointment_id}/service")
+async def api_staff_miniapp_appointment_service(
+    appointment_id: int, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_appointment_row(db, user, appointment_id)
+    if row.status in (AppointmentStatus.completed.value, AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value):
+        raise HTTPException(400, "当前状态不允许修改项目")
+    service_name = str((payload or {}).get("service_name") or "").strip()[:120]
+    notes = str((payload or {}).get("notes") or "").strip()[:1000]
+    try:
+        duration = min(480, max(10, int((payload or {}).get("duration") or row.duration_minutes or 30)))
+    except (TypeError, ValueError):
+        duration = int(row.duration_minutes or 30)
+    if not service_name:
+        raise HTTPException(400, "请填写预约项目")
+    row.service_name, row.duration_minutes, row.notes = service_name, duration, notes
+    row.updated_at = datetime.utcnow()
+    db.add(AuditLog(
+        action="staff_miniapp_appointment_service", actor=(user.username or "")[:80],
+        application_id=row.related_application_id,
+        detail=json.dumps({"appointment_id": row.id, "service_name": service_name, "duration": duration}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "appointment": _staff_appointment_payload(row)}
+
+
 @app.get("/api/wechat/my-tnr-status")
 async def api_my_tnr_status(openid: str = Query(""), db: Session = Depends(get_db)):
     """小程序端：传 openid，返回该用户是否有可预约的已通过 TNR 申请。"""

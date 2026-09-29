@@ -26,6 +26,7 @@ Page({
   },
   goCustomerService() { wx.reLaunch({ url: "/pages/index/index?staff_bypass=1" }); },
   goToday() { wx.redirectTo({ url: "/pages/staff/today/today" }); },
+  goCalendar() { wx.redirectTo({ url: "/pages/staff/calendar/calendar" }); },
   goCustomers() { wx.redirectTo({ url: "/pages/staff/customers/customers" }); },
   goMe() {}
 });

@@ -1,0 +1,55 @@
+<view class="staff-page calendar-page">
+  <view class="staff-status"><text>{{profile.store_label || '员工端'}}</text><text>预约工作台</text></view>
+  <view class="calendar-head">
+    <view><view class="staff-eyebrow">APPOINTMENTS</view><view class="calendar-title">预约日历</view></view>
+    <view class="calendar-nav"><button data-days="-3" bindtap="shiftDays">‹</button><button bindtap="goTodayDate">今</button><button data-days="3" bindtap="shiftDays">›</button></view>
+  </view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <view wx:if="{{loading}}" class="staff-loading">正在载入预约…</view>
+  <view wx:else class="timeline-shell">
+    <view class="timeline-days">
+      <view class="time-spacer"></view>
+      <view wx:for="{{columns}}" wx:key="date" class="day-head {{item.is_today ? 'today' : ''}}"><text>{{item.weekday}}</text><strong>{{item.month}}/{{item.day}}</strong></view>
+    </view>
+    <scroll-view scroll-y class="timeline-scroll" scroll-top="390">
+      <view class="timeline-body">
+        <view class="time-axis"><view wx:for="{{hours}}" wx:key="*this" class="hour-label">{{item}}:00</view></view>
+        <view wx:for="{{columns}}" wx:key="date" class="day-column">
+          <view wx:for="{{hours}}" wx:key="*this" class="hour-line"></view>
+          <view wx:for="{{item.events}}" wx:for-item="event" wx:key="id" class="calendar-event {{event.color}}" style="top:{{event.top}}rpx;height:{{event.height}}rpx" data-id="{{event.id}}" bindtap="openEvent">
+            <view class="event-time">{{event.time}}</view><view class="event-title">{{event.pet_name}}</view><view class="event-service">{{event.service_name}}</view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <view wx:if="{{selected}}" class="sheet-mask" bindtap="closeEvent">
+    <view class="detail-sheet" catchtap="stopBubble">
+      <view class="sheet-grip"></view>
+      <block wx:if="{{!editing}}">
+        <view class="detail-eyebrow">{{selected.category_label}} · {{selected.status_label}}</view>
+        <view class="detail-title">{{selected.pet_name}} · {{selected.service_name}}</view>
+        <view class="detail-row"><text>时间</text><text>{{selected.date}} {{selected.time}} · {{selected.duration}}分钟</text></view>
+        <view class="detail-row"><text>客户</text><text>{{selected.customer_name}} {{selected.phone}}</text></view>
+        <view class="detail-row"><text>备注</text><text>{{selected.notes || '无'}}</text></view>
+        <button class="detail-primary" bindtap="startEdit">修改时间或项目</button>
+        <view class="detail-actions">
+          <button data-status="arrived" data-label="到院" bindtap="updateStatus">确认到院</button>
+          <button data-status="no_show" data-label="标记爽约" bindtap="updateStatus">爽约</button>
+          <button class="danger" data-status="cancelled" data-label="取消" bindtap="updateStatus">取消预约</button>
+        </view>
+      </block>
+      <block wx:else>
+        <view class="detail-eyebrow">EDIT APPOINTMENT</view><view class="detail-title">修改预约</view>
+        <view class="form-line"><text>日期</text><picker mode="date" value="{{editDate}}" bindchange="onEditDate"><view>{{editDate}}</view></picker></view>
+        <view class="form-line"><text>时间</text><picker mode="time" value="{{editTime}}" bindchange="onEditTime"><view>{{editTime}}</view></picker></view>
+        <view class="form-field"><text>预约项目</text><input value="{{editService}}" bindinput="onEditService" /></view>
+        <view class="form-field"><text>时长（分钟）</text><input type="number" value="{{editDuration}}" bindinput="onEditDuration" /></view>
+        <view class="form-field"><text>备注</text><textarea value="{{editNotes}}" bindinput="onEditNotes" auto-height /></view>
+        <button class="detail-primary" loading="{{saving}}" bindtap="saveEdit">保存修改</button>
+      </block>
+    </view>
+  </view>
+  <view class="staff-tabbar"><view class="staff-tab" bindtap="goToday">今日</view><view class="staff-tab active" bindtap="goCalendar">日历</view><view class="staff-tab" bindtap="goCustomers">客户</view><view class="staff-tab" bindtap="goMe">我的</view></view>
+</view>

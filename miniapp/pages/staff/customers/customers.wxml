@@ -13,5 +13,5 @@
       <view wx:if="{{expandedId === item.id}}" class="staff-pet-detail"><block wx:for="{{item.pets}}" wx:for-item="pet" wx:key="id"><view>{{pet.name}} · {{pet.species || '种类未填'}} · {{pet.breed || '品种未填'}}{{pet.medical_record_no ? ' · ' + pet.medical_record_no : ''}}</view></block><view wx:if="{{!item.pets.length}}">该客户名下暂无宠物档案。</view></view>
     </view>
   </block>
-  <view class="staff-tabbar"><view class="staff-tab" bindtap="goToday">今日</view><view class="staff-tab active" bindtap="goCustomers">客户</view><view class="staff-tab" bindtap="goMe">我的</view></view>
+  <view class="staff-tabbar"><view class="staff-tab" bindtap="goToday">今日</view><view class="staff-tab" bindtap="goCalendar">日历</view><view class="staff-tab active" bindtap="goCustomers">客户</view><view class="staff-tab" bindtap="goMe">我的</view></view>
 </view>

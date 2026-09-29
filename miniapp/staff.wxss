@@ -30,7 +30,7 @@ page { background:#f7f7f5; color:#171717; font-family:-apple-system,BlinkMacSyst
 .staff-next-label { color:#1d4d3a; font-size:18rpx; letter-spacing:3rpx; }
 .staff-next-title { margin-top:10rpx; font-size:28rpx; font-weight:700; }
 .staff-next-sub { margin-top:8rpx; color:#737373; font-size:22rpx; }
-.staff-tabbar { position:fixed; z-index:20; left:0; right:0; bottom:0; height:106rpx; padding-bottom:env(safe-area-inset-bottom); display:grid; grid-template-columns:repeat(3,1fr); background:#fff; border-top:1rpx solid #cfcfca; }
+.staff-tabbar { position:fixed; z-index:20; left:0; right:0; bottom:0; height:106rpx; padding-bottom:env(safe-area-inset-bottom); display:grid; grid-template-columns:repeat(4,1fr); background:#fff; border-top:1rpx solid #cfcfca; }
 .staff-tab { display:flex; align-items:center; justify-content:center; color:#777; font-size:23rpx; }
 .staff-tab.active { color:#171717; font-weight:700; border-top:5rpx solid #171717; margin-top:-1rpx; }
 .staff-search { margin:2rpx 0 32rpx; padding:0 20rpx; height:88rpx; display:flex; align-items:center; background:#fff; border:1rpx solid #cfcfca; }

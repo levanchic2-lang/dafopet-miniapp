@@ -94,6 +94,36 @@ try:
         assert dashboard.json()["stats"]["visits"] == 1
         assert dashboard.json()["next_appointment"]["pet_name"] == "横岗犬"
 
+        calendar = client.get("/api/staff-miniapp/calendar", params={"start": today, "days": 3}, headers=headers)
+        assert calendar.status_code == 200, calendar.text
+        assert [row["pet_name"] for row in calendar.json()["appointments"]] == ["横岗犬"]
+        own_appointment_id = calendar.json()["appointments"][0]["id"]
+
+        moved = client.post(
+            f"/api/staff-miniapp/appointments/{own_appointment_id}/reschedule",
+            json={"date": today, "time": "20:15"}, headers=headers,
+        )
+        assert moved.status_code == 200, moved.text
+        assert moved.json()["appointment"]["time"] == "20:15"
+
+        arrived = client.post(
+            f"/api/staff-miniapp/appointments/{own_appointment_id}/status",
+            json={"status": "arrived"}, headers=headers,
+        )
+        assert arrived.status_code == 200, arrived.text
+        assert arrived.json()["appointment"]["status"] == "arrived"
+
+        db = SessionLocal()
+        try:
+            other_appointment_id = db.query(Appointment).filter(Appointment.pet_id == dh_pet.id).one().id
+        finally:
+            db.close()
+        forbidden = client.post(
+            f"/api/staff-miniapp/appointments/{other_appointment_id}/status",
+            json={"status": "arrived"}, headers=headers,
+        )
+        assert forbidden.status_code == 403
+
         own = client.get("/api/staff-miniapp/customers", params={"q": "横岗"}, headers=headers)
         assert [row["name"] for row in own.json()["items"]] == ["横岗客户"]
         by_record = client.get("/api/staff-miniapp/customers", params={"q": "HC26090001"}, headers=headers)
