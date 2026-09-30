@@ -128,9 +128,13 @@ try:
     )
     db.add(numeric_frequency_item); db.flush()
     assert main_module._generate_med_logs_for_prescription(db, hg_presc) >= 1
-    assert db.query(MedicationAdminLog).filter_by(
+    hg_pi_pending = db.query(MedicationAdminLog).filter_by(
         prescription_item_id=hg_pi.id, status="pending",
-    ).count() == 2
+    ).count()
+    assert hg_pi_pending == 2, (
+        f"BID first-day tasks={hg_pi_pending}, created_at={hg_presc.created_at}, "
+        f"admitted_at={hg_hosp.admitted_at}"
+    )
     assert db.query(MedicationAdminLog).filter_by(
         prescription_item_id=numeric_frequency_item.id, status="pending",
     ).count() == 1
