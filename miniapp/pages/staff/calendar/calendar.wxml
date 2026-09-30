@@ -28,6 +28,11 @@
   <view wx:if="{{createOpen}}" class="sheet-mask" bindtap="closeCreate">
     <view class="detail-sheet create-sheet" catchtap="stopBubble">
       <view class="sheet-grip"></view>
+      <view class="create-sheet-nav">
+        <button wx:if="{{createStep === 'appointment'}}" bindtap="backCreateChoice">返回</button>
+        <view wx:else></view>
+        <button bindtap="closeCreate">取消</button>
+      </view>
       <block wx:if="{{createStep === 'choice'}}">
         <view class="detail-eyebrow">{{createDate}} · {{createTime}}</view><view class="detail-title">新增日程</view>
         <button class="choice-card primary" bindtap="startCreateAppointment"><strong>新增{{track === 'beauty' ? '美容' : '医疗'}}预约</strong><text>选择客户、宠物、项目和时长</text></button>
@@ -52,6 +57,7 @@
         <view class="form-field"><text>时长（分钟）</text><input type="number" value="{{createDuration}}" bindinput="onCreateDuration" /></view>
         <view class="form-field form-last"><text>备注</text><textarea value="{{createNotes}}" bindinput="onCreateNotes" auto-height /></view>
         <button class="detail-primary" loading="{{saving}}" bindtap="submitAppointment">创建预约</button>
+        <button class="detail-cancel" bindtap="closeCreate">取消并返回日历</button>
       </block>
     </view>
   </view>

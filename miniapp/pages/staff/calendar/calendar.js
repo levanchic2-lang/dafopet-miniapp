@@ -141,6 +141,7 @@ Page({
       customerQuery: "", customerResults: [], selectedCustomer: null, selectedPet: null });
   },
   closeCreate() { if (!this.data.saving) this.setData({ createOpen: false, createStep: "choice" }); },
+  backCreateChoice() { if (!this.data.saving) this.setData({ createStep: "choice" }); },
   startCreateAppointment() { this.setData({ createStep: "appointment" }); },
   async createBeautyDayOff() {
     if (this.data.saving) return;
