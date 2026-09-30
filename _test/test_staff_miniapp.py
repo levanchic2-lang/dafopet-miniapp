@@ -167,6 +167,17 @@ try:
             prescription_item_id=dh_pi.id, scheduled_at=datetime.combine(datetime.now().date(), datetime.min.time()).replace(hour=10),
         ),
     ])
+    db.flush()
+    assert main_module._cancel_pending_medications_on_discharge(db, dh_hosp, "测试员工") == 1
+    cancelled_log = db.query(MedicationAdminLog).filter_by(
+        hospitalization_id=dh_hosp.id,
+    ).one()
+    assert cancelled_log.status == "cancelled"
+    assert "办理出院自动取消" in cancelled_log.notes
+    assert db.get(Prescription, dh_presc.id).status == "issued"
+    assert db.query(MedicationAdminLog).filter_by(
+        hospitalization_id=hg_hosp.id, status="pending",
+    ).count() == 1
     report_dir = UPLOAD_DIR / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / "hg-report.pdf"

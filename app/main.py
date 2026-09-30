@@ -6960,6 +6960,8 @@ async def api_staff_miniapp_medication_uncheck(
 ):
     user = _staff_miniapp_user(request, db)
     row = _staff_med_log(db, user, log_id)
+    if row.status == "cancelled":
+        raise HTTPException(409, "该用药任务已因办理出院自动取消")
     if row.status == "pending":
         return {"ok": True, "item": _staff_med_log_payload(row)}
     row.status = "pending"
@@ -33579,6 +33581,25 @@ def _hosp_species(value: str) -> str:
     return ""
 
 
+def _cancel_pending_medications_on_discharge(
+    db: Session, hospitalization: Hospitalization, operator: str = "system",
+) -> int:
+    """Cancel unperformed inpatient tasks without changing prescriptions or billing."""
+    rows = db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.hospitalization_id == hospitalization.id,
+        MedicationAdminLog.status == "pending",
+    ).all()
+    if not rows:
+        return 0
+    note = f"办理出院自动取消（{(operator or 'system')[:80]}）"
+    for row in rows:
+        row.status = "cancelled"
+        row.notes = note
+        row.reminder_sent_at = None
+    db.flush()
+    return len(rows)
+
+
 def _auto_close_due_hospitalizations(db: Session, store_values: list[str] | None = None) -> int:
     """Close admissions whose chosen discharge time has already passed."""
     now = datetime.utcnow()
@@ -33594,6 +33615,7 @@ def _auto_close_due_hospitalizations(db: Session, store_values: list[str] | None
     for h in rows:
         h.status = "discharged"
         h.closed_by = h.closed_by or "system"
+        _cancel_pending_medications_on_discharge(db, h, "system")
         if (h.billing_mode or "legacy") == "weight":
             h.billing_days = _calc_hosp_billable_days(
                 h.admitted_at, h.discharged_at, bool(h.same_day_waived)
@@ -34243,6 +34265,9 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
     h.discharged_at = dt
     h.discharge_summary = (discharge_summary or "").strip()[:5000]
     h.closed_by = request.session.get("admin_username", "")
+    cancelled_medications = _cancel_pending_medications_on_discharge(
+        db, h, h.closed_by or "admin",
+    )
     if (h.billing_mode or "legacy") == "weight":
         h.same_day_waived = waive_same_day == "1"
         h.billing_days = _calc_hosp_billable_days(h.admitted_at, dt, h.same_day_waived)
@@ -34260,6 +34285,7 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
     days = h.billing_days if (h.billing_mode or "legacy") == "weight" else _calc_hosp_days(h.admitted_at, h.discharged_at)
     _audit(db, request, "hospitalization_discharge", detail={
         "id": h.id, "days": days, "same_day_waived": bool(h.same_day_waived),
+        "cancelled_medications": cancelled_medications,
     })
     db.commit()
     return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已出院 · 共 {days} 天 · 账单已同步",

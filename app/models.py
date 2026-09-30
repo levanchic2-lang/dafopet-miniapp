@@ -1076,7 +1076,8 @@ class MedicationAdminLog(Base):
     """住院发药打勾日志：每条 PrescriptionItem × 每个发药时刻 = 一行任务。
 
     生成时机：处方 status=issued 且关联了 admitted 的住院时自动批量生成。
-    单条流程：pending → done/skipped/refused。
+    单条流程：pending → done/skipped/refused/cancelled。
+    cancelled 仅用于办理出院时自动关闭尚未执行的住院用药任务。
     """
     __tablename__ = "medication_admin_logs"
 
@@ -1089,7 +1090,7 @@ class MedicationAdminLog(Base):
     day_index:    Mapped[int] = mapped_column(Integer, default=1)  # 用药第几天
     dose_index:   Mapped[int] = mapped_column(Integer, default=1)  # 当天第几次
 
-    # pending / done / skipped / refused
+    # pending / done / skipped / refused / cancelled
     status: Mapped[str] = mapped_column(String(20), default="pending")
 
     administered_at:   Mapped[datetime|None] = mapped_column(DateTime, nullable=True, default=None)
