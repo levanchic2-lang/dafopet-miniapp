@@ -34676,6 +34676,13 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
         default=None,
     )
 
+    # 处方改单会删除旧明细再创建新明细。必须按整张处方清掉所有未执行任务，
+    # 否则旧明细对应的 pending 会成为孤儿记录，与新任务一起重复显示。
+    db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.prescription_id == presc.id,
+        MedicationAdminLog.status == "pending",
+    ).delete(synchronize_session=False)
+
     created = 0
     for it in (presc.items or []):
         times = _parse_schedule_times(it.schedule_times or "")
@@ -34694,11 +34701,6 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
         except Exception:
             n_days = 7  # 默认 7 天，医生可以手动撤销/延长
         n_days = max(1, min(n_days, 14))  # 上限 14 天
-        # 删本 item 的 pending（保留 done/skipped/refused）
-        db.query(MedicationAdminLog).filter(
-            MedicationAdminLog.prescription_item_id == it.id,
-            MedicationAdminLog.status == "pending",
-        ).delete(synchronize_session=False)
         completed_slots = {
             row[0] for row in db.query(MedicationAdminLog.scheduled_at).filter(
                 MedicationAdminLog.prescription_item_id == it.id,

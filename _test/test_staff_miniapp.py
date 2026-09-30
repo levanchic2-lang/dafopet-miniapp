@@ -129,6 +129,18 @@ try:
     assert db.query(MedicationAdminLog).filter_by(
         prescription_item_id=numeric_frequency_item.id, status="pending",
     ).count() == 1
+    expected_pending = db.query(MedicationAdminLog).filter_by(
+        prescription_id=hg_presc.id, status="pending",
+    ).count()
+    db.add(MedicationAdminLog(
+        hospitalization_id=hg_hosp.id, prescription_id=hg_presc.id,
+        prescription_item_id=999999, scheduled_at=datetime.now(), status="pending",
+    ))
+    db.flush()
+    assert main_module._generate_med_logs_for_prescription(db, hg_presc) == expected_pending
+    assert db.query(MedicationAdminLog).filter_by(
+        prescription_id=hg_presc.id, status="pending",
+    ).count() == expected_pending
     db.query(MedicationAdminLog).filter_by(prescription_id=hg_presc.id).delete(
         synchronize_session=False,
     )
