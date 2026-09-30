@@ -746,3 +746,75 @@ def push_consent_signature(
         ))
         db.commit()
         return False
+
+
+def push_inpatient_medication_reminder(
+    db: Session,
+    openid: str,
+    pet_name: str,
+    drug_summary: str,
+    scheduled_at: str,
+    *,
+    cage_code: str = "",
+    hospitalization_id: int | None = None,
+) -> bool:
+    """Send the staff miniapp service notification for an overdue medication group."""
+    tmpl_id = (settings.wechat_tmpl_inpatient_medication or "").strip()
+    if not tmpl_id or not _enabled() or not openid:
+        return False
+
+    def v(value: str, fallback: str = "—", max_len: int = 20) -> str:
+        text = (value or "").strip() or fallback
+        return text[:max_len]
+
+    keys = [
+        key.strip() for key in (settings.wechat_fields_inpatient_medication or "").split(",")
+        if key.strip()
+    ] or ["thing1", "thing2", "time3", "thing4"]
+    pet_label = pet_name + (f" · {cage_code}" if cage_code else "")
+    data: dict[str, Any] = {}
+    for key in keys:
+        if key.startswith("time"):
+            data[key] = {"value": v(scheduled_at, time.strftime("%Y-%m-%d %H:%M"))}
+        elif key.startswith("date"):
+            data[key] = {"value": v(scheduled_at.split(" ")[0] if scheduled_at else "")}
+        elif key.startswith("phrase"):
+            data[key] = {"value": "待处理"}
+        elif key == "thing1":
+            data[key] = {"value": v(pet_label, "住院动物")}
+        elif key == "thing2":
+            data[key] = {"value": v(drug_summary, "住院用药")}
+        elif key == "thing4":
+            data[key] = {"value": "已超时15分钟，请尽快确认"[:20]}
+        else:
+            data[key] = {"value": v(drug_summary, "住院用药")}
+
+    payload = {
+        "touser": openid,
+        "template_id": tmpl_id,
+        "page": "pages/staff/inpatient-meds/inpatient-meds",
+        "data": data,
+        "miniprogram_state": "formal",
+        "lang": "zh_CN",
+    }
+    try:
+        response = _post_subscribe_send(payload)
+        db.add(NotificationLog(
+            application_id=None,
+            channel="wechat_miniapp",
+            payload=json.dumps({
+                "type": "inpatient_medication",
+                "hospitalization_id": hospitalization_id,
+                "resp": response,
+            }, ensure_ascii=False),
+            success=True,
+        ))
+        return True
+    except Exception as exc:
+        db.add(NotificationLog(
+            application_id=None,
+            channel="wechat_miniapp",
+            payload=f"inpatient medication push failed: {exc}",
+            success=False,
+        ))
+        return False

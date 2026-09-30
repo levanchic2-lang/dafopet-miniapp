@@ -25,6 +25,7 @@ from app.database import Base, SessionLocal, engine
 import app.main as main_module
 from app.main import app
 from app.services.anesthesia_dispatch import AUTO_CLOSE_NOTE, auto_close_stale_monitors
+from app.services.inpatient_dispatch import OVERDUE_GRACE_MIN
 from app.models import (
     AdminUser, AnesthesiaMedicationEvent, AnesthesiaMonitorEntry, AnesthesiaMonitorSheet,
     Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
@@ -46,6 +47,7 @@ assert main_module._default_schedule_for_freq("每日1次", 22, 1.0) == "22"
 assert main_module._default_schedule_for_freq("每日2次", 22, 2.0) == "10,20"
 assert main_module._default_schedule_for_freq("1.0", 9) == "9"
 assert main_module._default_schedule_for_freq("2", 9) == "10,20"
+assert OVERDUE_GRACE_MIN == 15
 db = SessionLocal()
 try:
     henggang = AdminUser(
@@ -160,7 +162,7 @@ try:
     db.add_all([
         MedicationAdminLog(
             hospitalization_id=hg_hosp.id, prescription_id=hg_presc.id,
-            prescription_item_id=hg_pi.id, scheduled_at=datetime.combine(datetime.now().date(), datetime.min.time()).replace(hour=9),
+            prescription_item_id=hg_pi.id, scheduled_at=datetime.now() - timedelta(minutes=1),
         ),
         MedicationAdminLog(
             hospitalization_id=dh_hosp.id, prescription_id=dh_presc.id,
@@ -236,6 +238,7 @@ try:
         me = client.get("/api/staff-miniapp/me", headers=headers)
         assert me.status_code == 200
         assert me.json()["profile"]["display_name"] == "横岗医生"
+        assert me.json()["profile"]["medication_reminder_configured"] is False
 
         dashboard = client.get("/api/staff-miniapp/dashboard", headers=headers)
         assert dashboard.status_code == 200, dashboard.text
@@ -246,6 +249,12 @@ try:
         assert dashboard.json()["stats"]["anesthesia_open"] == 0
         assert dashboard.json()["stats"]["inpatient_med_due"] == 1
         assert dashboard.json()["next_appointment"]["pet_name"] == "横岗犬"
+
+        reminders = client.get("/api/staff-miniapp/medication-reminders", headers=headers)
+        assert reminders.status_code == 200, reminders.text
+        assert reminders.json()["count"] == 1
+        assert reminders.json()["animal_count"] == 1
+        assert reminders.json()["groups"][0]["pet_name"] == "横岗犬"
 
         meds = client.get("/api/staff-miniapp/inpatient-medications", headers=headers)
         assert meds.status_code == 200, meds.text

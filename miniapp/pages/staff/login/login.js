@@ -22,6 +22,8 @@ Page({
       });
       wx.setStorageSync("STAFF_TOKEN", result.token || "");
       wx.setStorageSync("STAFF_PROFILE", result.profile || {});
+      const app = getApp();
+      if (app && typeof app.startStaffReminderPolling === "function") app.startStaffReminderPolling(true);
       wx.reLaunch({ url: "/pages/staff/today/today" });
     } catch (e) {
       const message = e && (e.detail || (e.data && e.data.detail) || e.errMsg);

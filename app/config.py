@@ -95,6 +95,8 @@ class Settings(BaseSettings):
     wechat_tmpl_followup: str = ""
     # 协议签署通知模板 ID（电子合同签约通知，字段：thing5=甲方,thing6=乙方,thing1=合同名称,time12=发起时间,thing4=备注）
     wechat_tmpl_consent: str = ""
+    # 员工住院漏药提醒模板 ID（建议字段：thing1=宠物,thing2=待用药,time3=计划时间,thing4=提醒）
+    wechat_tmpl_inpatient_medication: str = ""
     # 点击消息打开的小程序页面（可选）
     wechat_message_page: str = "pages/index/index"
 
@@ -117,6 +119,8 @@ class Settings(BaseSettings):
     wechat_fields_followup: str = "thing1,thing2,time3,thing4"
     # 协议签署模板字段：thing5=甲方(客户),thing6=乙方(医院),thing1=合同名称(协议标题),time12=发起时间,thing4=备注
     wechat_fields_consent: str = "thing5,thing6,thing1,time12,thing4"
+    # 住院漏药提醒字段：必须与微信公众平台中选定模板的关键词一致
+    wechat_fields_inpatient_medication: str = "thing1,thing2,time3,thing4"
 
     # 公开访问 URL 前缀（用于生成回访反馈短链等）。例：https://api.dafopet.com
     public_base_url: str = ""

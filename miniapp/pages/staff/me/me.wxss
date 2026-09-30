@@ -1,1 +1,3 @@
 @import "../../../staff.wxss";
+.reminder-head { margin-top:34rpx; }
+.reminder-row { margin-top:12rpx; }

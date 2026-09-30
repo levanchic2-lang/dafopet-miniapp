@@ -1,6 +1,6 @@
 """住院模块的定时推送：
 1. scan_overdue_medications  每 5 分钟扫一次。
-   scheduled_at 已过 grace 分钟仍 pending → 推企微给该店绑了 wecom_userid 的助理。
+   scheduled_at 已过 15 分钟仍 pending → 推小程序服务通知；过渡期同时保留企微。
    每条 log 只推一次（reminder_sent_at 标记）。
 2. send_shift_handover_reminder  班次切换前 10 分钟推今日剩余任务清单。
    早 7点（6:50）/ 中 15点（14:50）/ 夜 22点（21:50）触发。
@@ -17,10 +17,11 @@ from app.models import (
     Hospitalization, MedicationAdminLog, AdminUser, Pet, Customer,
     PrescriptionItem,
 )
+from app.services.wechat_miniapp import push_inpatient_medication_reminder
 
 logger = logging.getLogger(__name__)
 
-OVERDUE_GRACE_MIN = 30   # 超过 30 分钟未打勾算漏药
+OVERDUE_GRACE_MIN = 15   # 超过 15 分钟未打勾发送微信服务通知
 
 
 def _build_inpatient_url(hosp_id: int) -> str:
@@ -28,7 +29,7 @@ def _build_inpatient_url(hosp_id: int) -> str:
     return f"{base}/admin/inpatient/{hosp_id}#meds" if base else f"/admin/inpatient/{hosp_id}#meds"
 
 
-def _push_wecom(userid: str, content: str) -> None:
+def _push_wecom(userid: str, content: str) -> bool:
     try:
         from app.services.wecom_client import send_app_message
         send_app_message({
@@ -36,15 +37,17 @@ def _push_wecom(userid: str, content: str) -> None:
             "msgtype": "text",
             "text": {"content": content},
         })
+        return True
     except Exception as e:
         logger.warning("[inpatient push] %s failed: %s", userid, e)
+        return False
 
 
 def _store_admins(db, store: str) -> list:
-    """该门店有 wecom_userid 的活跃员工 + 所有超管。"""
+    """Active staff who can receive WeCom or miniapp service notifications."""
     q = db.query(AdminUser).filter(
         AdminUser.is_active == True,
-        AdminUser.wecom_userid != "",
+        or_(AdminUser.wecom_userid != "", AdminUser.miniapp_openid != ""),
     )
     if store:
         q = q.filter(or_(AdminUser.store == store, AdminUser.role == "superadmin"))
@@ -55,7 +58,8 @@ def scan_overdue_medications() -> None:
     """每 5 分钟跑一次。"""
     db = SessionLocal()
     try:
-        now = datetime.utcnow()
+        # 发药任务的 scheduled_at 是北京时间的 naive datetime。
+        now = datetime.utcnow() + timedelta(hours=8)
         threshold = now - timedelta(minutes=OVERDUE_GRACE_MIN)
         rows = db.query(MedicationAdminLog).filter(
             MedicationAdminLog.status == "pending",
@@ -101,10 +105,29 @@ def scan_overdue_medications() -> None:
             lines.append("")
             lines.append(f"打勾：{_build_inpatient_url(hosp_id)}")
             content = "\n".join(lines)
-            # 推
+            delivery_attempted = False
             for u in admins:
-                _push_wecom(u.wecom_userid, content)
-            # 标记
+                if (u.wecom_userid or "").strip():
+                    delivery_attempted = True
+                    _push_wecom(u.wecom_userid, content)
+                if ((u.miniapp_openid or "").strip()
+                        and (settings.wechat_tmpl_inpatient_medication or "").strip()):
+                    delivery_attempted = True
+                    drug_names = [
+                        r.prescription_item.drug_name if r.prescription_item else "药物"
+                        for r in sorted_logs[:3]
+                    ]
+                    push_inpatient_medication_reminder(
+                        db,
+                        u.miniapp_openid,
+                        pet.name if pet else "宠物",
+                        "、".join(drug_names),
+                        sorted_logs[0].scheduled_at.strftime("%Y-%m-%d %H:%M"),
+                        cage_code=h.cage.code if h.cage else "",
+                        hospitalization_id=h.id,
+                    )
+            if not delivery_attempted:
+                continue
             for r in logs:
                 r.reminder_sent_at = now
             pushed_total += 1
@@ -126,7 +149,7 @@ def send_shift_handover_reminder(shift_label: str) -> None:
         hosps = db.query(Hospitalization).filter(Hospitalization.status == "admitted").all()
         if not hosps:
             return
-        now = datetime.utcnow()
+        now = datetime.utcnow() + timedelta(hours=8)
         # 今天剩余 + 明天前几小时的任务（避免接班瞬间漏掉接班后立即到的药）
         cutoff_end = now + timedelta(hours=9)
         # 按 store 聚合

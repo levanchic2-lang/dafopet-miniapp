@@ -987,11 +987,13 @@ async def api_wechat_config():
         "wechat_tmpl_rejection": settings.wechat_tmpl_rejection,
         "wechat_tmpl_pending_manual": settings.wechat_tmpl_pending_manual,
         "wechat_tmpl_surgery_reminder": settings.wechat_tmpl_surgery_reminder,
+        "wechat_tmpl_inpatient_medication": settings.wechat_tmpl_inpatient_medication,
         "wechat_message_page": settings.wechat_message_page,
         "wechat_fields_application_result": settings.wechat_fields_application_result,
         "wechat_fields_surgery_done": settings.wechat_fields_surgery_done,
         "wechat_fields_appointment": settings.wechat_fields_appointment,
         "wechat_fields_rejection": settings.wechat_fields_rejection,
+        "wechat_fields_inpatient_medication": settings.wechat_fields_inpatient_medication,
     }
 
 
@@ -6558,6 +6560,8 @@ def _staff_profile_payload(user: AdminUser) -> dict:
         "mobile_role_label": mobile_role_zh,
         "store": (user.store or "").strip(),
         "store_label": (user.store or "全部门店").strip(),
+        "medication_reminder_template_id": (settings.wechat_tmpl_inpatient_medication or "").strip(),
+        "medication_reminder_configured": bool((settings.wechat_tmpl_inpatient_medication or "").strip()),
     }
 
 
@@ -6681,6 +6685,47 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
     }
 
 
+@app.get("/api/staff-miniapp/medication-reminders")
+async def api_staff_miniapp_medication_reminders(
+    request: Request, db: Session = Depends(get_db),
+):
+    """Lightweight foreground reminder feed for due inpatient medications."""
+    user = _staff_miniapp_user(request, db)
+    store = (user.store or "").strip()
+    now_local = datetime.utcnow() + timedelta(hours=8)
+    q = db.query(MedicationAdminLog).join(
+        Hospitalization, MedicationAdminLog.hospitalization_id == Hospitalization.id,
+    ).filter(
+        Hospitalization.status == "admitted",
+        MedicationAdminLog.status == "pending",
+        MedicationAdminLog.scheduled_at <= now_local,
+    )
+    if store:
+        q = q.filter(Hospitalization.store == store)
+    rows = q.order_by(MedicationAdminLog.scheduled_at.asc(), MedicationAdminLog.id.asc()).limit(100).all()
+    by_hospitalization: dict[int, dict] = {}
+    for row in rows:
+        hosp = row.hospitalization
+        pet = hosp.pet if hosp else None
+        group = by_hospitalization.setdefault(row.hospitalization_id, {
+            "hospitalization_id": row.hospitalization_id,
+            "pet_name": pet.name if pet else "未命名宠物",
+            "cage_code": hosp.cage.code if hosp and hosp.cage else "",
+            "count": 0,
+            "first_time": row.scheduled_at.strftime("%H:%M"),
+        })
+        group["count"] += 1
+    groups = list(by_hospitalization.values())
+    return {
+        "ok": True,
+        "count": len(rows),
+        "animal_count": len(groups),
+        "groups": groups,
+        "ids": [row.id for row in rows],
+        "subscription_template_id": (settings.wechat_tmpl_inpatient_medication or "").strip(),
+    }
+
+
 def _staff_med_hospitalization(db: Session, user: AdminUser, hospitalization_id: int) -> Hospitalization:
     hosp = db.get(Hospitalization, hospitalization_id)
     if not hosp or hosp.status != "admitted":
@@ -6700,7 +6745,7 @@ def _staff_med_log(db: Session, user: AdminUser, log_id: int) -> MedicationAdmin
 
 
 def _staff_med_log_payload(row: MedicationAdminLog, now_local: datetime | None = None) -> dict:
-    now_local = now_local or datetime.now()
+    now_local = now_local or (datetime.utcnow() + timedelta(hours=8))
     hosp = row.hospitalization
     item = row.prescription_item
     presc = row.prescription
@@ -6749,7 +6794,7 @@ async def api_staff_miniapp_inpatient_medications(
     view = (view or "pending").strip().lower()
     if view not in ("pending", "completed", "temporary"):
         raise HTTPException(400, "未知的查看类型")
-    now_local = datetime.now()
+    now_local = datetime.utcnow() + timedelta(hours=8)
     q = db.query(MedicationAdminLog).join(
         Hospitalization, MedicationAdminLog.hospitalization_id == Hospitalization.id,
     ).filter(Hospitalization.status == "admitted")

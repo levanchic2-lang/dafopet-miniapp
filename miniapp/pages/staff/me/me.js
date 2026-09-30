@@ -1,7 +1,7 @@
 const { staffGet, staffPost } = require("../../../utils/api");
 
 Page({
-  data: { loading: true, error: "", profile: {} },
+  data: { loading: true, error: "", profile: {}, reminderBusy: false, reminderAuthorized: false },
   onShow() { this.loadProfile(); },
   async loadProfile() {
     this.setData({ loading: true, error: "" });
@@ -23,6 +23,27 @@ Page({
     try { await staffPost("/api/staff-miniapp/logout"); } catch (e) {}
     try { wx.removeStorageSync("STAFF_TOKEN"); wx.removeStorageSync("STAFF_PROFILE"); } catch (e) {}
     wx.reLaunch({ url: "/pages/index/index" });
+  },
+  async enableMedicationReminder() {
+    const templateId = (this.data.profile.medication_reminder_template_id || "").trim();
+    if (!templateId || this.data.reminderBusy) {
+      wx.showToast({ title: "提醒模板尚未配置", icon: "none" });
+      return;
+    }
+    this.setData({ reminderBusy: true });
+    try {
+      const result = await new Promise((resolve, reject) => wx.requestSubscribeMessage({
+        tmplIds: [templateId], success: resolve, fail: reject
+      }));
+      const status = result && result[templateId];
+      if (status !== "accept" && status !== "acceptWithAudio") throw new Error("未允许接收服务通知");
+      this.setData({ reminderAuthorized: true });
+      wx.showToast({ title: "微信提醒已授权", icon: "success" });
+    } catch (e) {
+      wx.showToast({ title: (e && (e.errMsg || e.message)) || "授权未完成", icon: "none" });
+    } finally {
+      this.setData({ reminderBusy: false });
+    }
   },
   goCustomerService() { wx.reLaunch({ url: "/pages/index/index?staff_bypass=1" }); },
   goToday() { wx.redirectTo({ url: "/pages/staff/today/today" }); },
