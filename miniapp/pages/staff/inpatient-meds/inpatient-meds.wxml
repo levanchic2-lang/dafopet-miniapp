@@ -7,13 +7,38 @@
   <view wx:if="{{error}}" class="staff-error">{{error}}</view>
 
   <block wx:if="{{view !== 'temporary' && !loading}}">
-    <view class="staff-section-head"><text>{{view === 'pending' ? '按计划时间排序' : '最近执行记录'}}</text><text class="staff-section-meta">{{items.length}} 条</text></view>
+    <view class="staff-section-head"><text>{{view === 'pending' ? '按住院动物归组' : '按住院动物归组'}}</text><text class="staff-section-meta">{{groups.length}} 只 · {{items.length}} 项</text></view>
     <view wx:if="{{!items.length}}" class="staff-empty">{{view === 'pending' ? '当前没有待执行的住院用药。' : '暂无已完成记录。'}}</view>
-    <view wx:for="{{items}}" wx:key="id" class="med-task {{item.is_overdue ? 'overdue' : ''}}">
-      <view class="med-time"><view>{{item.scheduled_time}}</view><text>{{item.scheduled_date}}</text></view>
-      <view class="med-body"><view class="med-pet">{{item.pet_name}}{{item.cage_code ? ' · ' + item.cage_code : ''}}</view><view class="med-drug">{{item.drug_name}}</view><view class="med-meta">{{item.dose || '剂量未填'}}{{item.route ? ' · ' + item.route : ''}} · 第{{item.day_index}}天第{{item.dose_index}}次</view><view wx:if="{{item.instructions}}" class="med-note">{{item.instructions}}</view><view wx:if="{{view === 'completed'}}" class="med-note">{{item.status === 'done' ? '已执行' : '已跳过'}} · {{item.administered_by}} · {{item.administered_at}}{{item.notes ? ' · ' + item.notes : ''}}</view></view>
-      <view wx:if="{{view === 'pending'}}" class="med-actions"><button class="med-done" data-id="{{item.id}}" data-dose="{{item.dose}}" bindtap="completeTask">完成</button><button class="med-skip" data-id="{{item.id}}" bindtap="skipTask">跳过</button></view>
-      <button wx:else class="med-undo" data-id="{{item.id}}" bindtap="undoTask">撤销</button>
+    <view wx:for="{{groups}}" wx:key="hospitalization_id" wx:for-item="group" class="pet-med-group {{group.overdue_count ? 'overdue' : ''}}">
+      <view class="pet-group-head" data-hospitalization-id="{{group.hospitalization_id}}" bindtap="toggleGroup">
+        <view class="pet-group-main">
+          <view class="pet-group-name">{{group.pet_name}}{{group.cage_code ? ' · ' + group.cage_code : ''}}</view>
+          <view class="pet-group-meta" wx:if="{{view === 'pending'}}">{{group.overdue_count ? '逾期 ' + group.overdue_count + ' 项' : '下一次 ' + group.next_time}} · 待执行 {{group.total_count}} 项</view>
+          <view class="pet-group-meta" wx:else>最近记录 {{group.total_count}} 项</view>
+        </view>
+        <view class="pet-group-side"><text class="pet-group-count">{{group.total_count}}</text><text>{{group.expanded ? '收起' : '展开'}}</text></view>
+      </view>
+
+      <view wx:if="{{group.expanded}}" class="pet-group-detail">
+        <view wx:for="{{group.time_groups}}" wx:key="key" wx:for-item="slot" class="med-slot">
+          <view class="med-slot-head">
+            <view><text class="med-slot-time">{{slot.time}}</text><text class="med-slot-date">{{slot.date}}</text></view>
+            <view wx:if="{{view === 'pending'}}" class="slot-select" data-hospitalization-id="{{group.hospitalization_id}}" data-time-key="{{slot.key}}" catchtap="toggleTimeGroup">{{slot.all_selected ? '取消全选' : '全选本轮'}}</view>
+          </view>
+          <view wx:for="{{slot.items}}" wx:key="id" wx:for-item="med" class="med-compact-row {{med.is_overdue ? 'overdue-row' : ''}}">
+            <view wx:if="{{view === 'pending'}}" class="med-check {{med.selected ? 'checked' : ''}}" data-id="{{med.id}}" catchtap="toggleMedication">{{med.selected ? '✓' : ''}}</view>
+            <view class="med-compact-body" data-id="{{med.id}}" catchtap="toggleMedication">
+              <view class="med-compact-title">{{med.drug_name}}</view>
+              <view class="med-compact-meta">{{med.dose || '剂量未填'}}{{med.route ? ' · ' + med.route : ''}} · 第{{med.day_index}}天第{{med.dose_index}}次</view>
+              <view wx:if="{{med.instructions}}" class="med-note">{{med.instructions}}</view>
+              <view wx:if="{{view === 'completed'}}" class="med-note">{{med.status === 'done' ? '已执行' : '已跳过'}} · {{med.administered_by}} · {{med.administered_at}}{{med.notes ? ' · ' + med.notes : ''}}</view>
+            </view>
+            <button wx:if="{{view === 'pending'}}" class="med-row-action" data-id="{{med.id}}" catchtap="skipTask">跳过</button>
+            <button wx:else class="med-row-action" data-id="{{med.id}}" catchtap="undoTask">撤销</button>
+          </view>
+        </view>
+        <button wx:if="{{view === 'pending'}}" class="batch-complete {{group.selected_count ? '' : 'disabled'}}" data-hospitalization-id="{{group.hospitalization_id}}" catchtap="batchComplete" disabled="{{!group.selected_count}}">确认完成 {{group.selected_count}} 项</button>
+      </view>
     </view>
   </block>
 

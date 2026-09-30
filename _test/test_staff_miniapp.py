@@ -218,6 +218,16 @@ try:
         assert meds.json()["items"][0]["drug_name"] == "横岗住院测试药"
         assert [row["name"] for row in meds.json()["inventory"]] == ["横岗住院测试药"]
         med_id = meds.json()["items"][0]["id"]
+        batch_completed = client.post(
+            "/api/staff-miniapp/inpatient-medications/batch-check",
+            json={"ids": [med_id]}, headers=headers,
+        )
+        assert batch_completed.status_code == 200, batch_completed.text
+        assert batch_completed.json()["count"] == 1
+        assert batch_completed.json()["items"][0]["dose_actual"] == "0.5ml"
+        assert client.post(
+            f"/api/staff-miniapp/inpatient-medications/{med_id}/uncheck", headers=headers,
+        ).status_code == 200
         completed_med = client.post(
             f"/api/staff-miniapp/inpatient-medications/{med_id}/check",
             json={"dose_actual": "0.5ml"}, headers=headers,

@@ -6883,6 +6883,39 @@ async def api_staff_miniapp_temporary_medication_void(
     return {"ok": True}
 
 
+@app.post("/api/staff-miniapp/inpatient-medications/batch-check")
+async def api_staff_miniapp_medication_batch_check(
+    request: Request, payload: dict = Body(default={}), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    raw_ids = (payload or {}).get("ids") or []
+    if not isinstance(raw_ids, list):
+        raise HTTPException(400, "用药任务格式无效")
+    try:
+        log_ids = list(dict.fromkeys(int(value) for value in raw_ids if int(value) > 0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "用药任务格式无效")
+    if not log_ids:
+        raise HTTPException(400, "请至少选择一项用药")
+    if len(log_ids) > 100:
+        raise HTTPException(400, "单次最多确认 100 项用药")
+
+    rows = [_staff_med_log(db, user, log_id) for log_id in log_ids]
+    if any(row.status != "pending" for row in rows):
+        raise HTTPException(409, "部分用药任务已经处理，请刷新后重试")
+    operator = (user.display_name or user.username or "员工")[:80]
+    now_utc = datetime.utcnow()
+    result = []
+    for row in rows:
+        row.status = "done"
+        row.administered_at = now_utc
+        row.administered_by = operator
+        row.dose_actual = _staff_med_log_payload(row).get("dose") or ""
+        result.append(row)
+    db.commit()
+    return {"ok": True, "count": len(result), "items": [_staff_med_log_payload(row) for row in result]}
+
+
 @app.post("/api/staff-miniapp/inpatient-medications/{log_id}/check")
 async def api_staff_miniapp_medication_check(
     log_id: int, request: Request, payload: dict = Body(default={}), db: Session = Depends(get_db),

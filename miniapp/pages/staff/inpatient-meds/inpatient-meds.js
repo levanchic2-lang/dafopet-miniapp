@@ -1,9 +1,74 @@
 const { staffGet, staffPost } = require("../../../utils/api");
 
+function buildMedicationGroups(items, previousGroups) {
+  const expanded = {};
+  (previousGroups || []).forEach(group => { expanded[group.hospitalization_id] = !!group.expanded; });
+  const byHosp = {};
+  (items || []).forEach(row => {
+    const hospKey = String(row.hospitalization_id || 0);
+    if (!byHosp[hospKey]) {
+      byHosp[hospKey] = {
+        hospitalization_id: row.hospitalization_id,
+        pet_name: row.pet_name,
+        cage_code: row.cage_code || "",
+        total_count: 0,
+        overdue_count: 0,
+        selected_count: 0,
+        first_at: row.scheduled_at,
+        next_time: row.scheduled_time,
+        timeMap: {}
+      };
+    }
+    const group = byHosp[hospKey];
+    group.total_count += 1;
+    if (row.is_overdue) group.overdue_count += 1;
+    if (row.scheduled_at < group.first_at) {
+      group.first_at = row.scheduled_at;
+      group.next_time = row.scheduled_time;
+    }
+    const timeKey = `${row.scheduled_date}|${row.scheduled_time}`;
+    if (!group.timeMap[timeKey]) {
+      group.timeMap[timeKey] = {
+        key: timeKey,
+        date: row.scheduled_date,
+        time: row.scheduled_time,
+        first_at: row.scheduled_at,
+        all_selected: false,
+        items: []
+      };
+    }
+    group.timeMap[timeKey].items.push(Object.assign({}, row, { selected: false }));
+  });
+  const groups = Object.keys(byHosp).map(key => {
+    const group = byHosp[key];
+    group.time_groups = Object.keys(group.timeMap).map(timeKey => group.timeMap[timeKey])
+      .sort((a, b) => a.first_at.localeCompare(b.first_at));
+    delete group.timeMap;
+    return group;
+  }).sort((a, b) => {
+    if (!!a.overdue_count !== !!b.overdue_count) return a.overdue_count ? -1 : 1;
+    return a.first_at.localeCompare(b.first_at);
+  });
+  groups.forEach((group, index) => {
+    group.expanded = Object.prototype.hasOwnProperty.call(expanded, group.hospitalization_id)
+      ? expanded[group.hospitalization_id] : index === 0;
+  });
+  return groups;
+}
+
+function refreshGroupSelection(group) {
+  let selectedCount = 0;
+  group.time_groups.forEach(slot => {
+    slot.all_selected = !!slot.items.length && slot.items.every(item => item.selected);
+    selectedCount += slot.items.filter(item => item.selected).length;
+  });
+  group.selected_count = selectedCount;
+}
+
 Page({
   data: {
     loading: true, busy: false, error: "", view: "pending",
-    items: [], temporary: [], hospitalizations: [], inventory: [], filteredInventory: [], doctors: [],
+    items: [], groups: [], temporary: [], hospitalizations: [], inventory: [], filteredInventory: [], doctors: [],
     showTemporaryForm: false, drugQuery: "", selectedDrug: null,
     routes: ["静脉注射", "肌肉注射", "皮下注射", "口服", "外用", "滴眼", "其他"],
     selectedHospLabel: "", selectedDoctor: "", selectedRoute: "静脉注射",
@@ -16,8 +81,9 @@ Page({
     try {
       const result = await staffGet("/api/staff-miniapp/inpatient-medications", { view: this.data.view });
       const inventory = result.inventory || [];
+      const items = result.items || [];
       this.setData({
-        items: result.items || [], temporary: result.temporary || [],
+        items, groups: buildMedicationGroups(items, this.data.groups), temporary: result.temporary || [],
         hospitalizations: result.hospitalizations || [], inventory,
         filteredInventory: inventory.slice(0, 20), doctors: result.doctors || [],
         selectedHospLabel: (result.hospitalizations || [])[0] ? result.hospitalizations[0].label : "",
@@ -32,7 +98,68 @@ Page({
   setView(e) {
     const view = e.currentTarget.dataset.view;
     if (!view || view === this.data.view) return;
-    this.setData({ view, showTemporaryForm: false, selectedDrug: null, drugQuery: "" }, () => this.loadData());
+    this.setData({ view, groups: [], showTemporaryForm: false, selectedDrug: null, drugQuery: "" }, () => this.loadData());
+  },
+  toggleGroup(e) {
+    const hospitalizationId = Number(e.currentTarget.dataset.hospitalizationId || 0);
+    const groups = this.data.groups.map(group => Object.assign({}, group, {
+      expanded: group.hospitalization_id === hospitalizationId ? !group.expanded : group.expanded
+    }));
+    this.setData({ groups });
+  },
+  toggleMedication(e) {
+    if (this.data.view !== "pending" || this.data.busy) return;
+    const id = Number(e.currentTarget.dataset.id || 0);
+    if (!id) return;
+    const groups = this.data.groups.map(group => {
+      group.time_groups.forEach(slot => slot.items.forEach(item => {
+        if (item.id === id) item.selected = !item.selected;
+      }));
+      refreshGroupSelection(group);
+      return group;
+    });
+    this.setData({ groups });
+  },
+  toggleTimeGroup(e) {
+    if (this.data.busy) return;
+    const hospitalizationId = Number(e.currentTarget.dataset.hospitalizationId || 0);
+    const timeKey = e.currentTarget.dataset.timeKey || "";
+    const groups = this.data.groups.map(group => {
+      if (group.hospitalization_id !== hospitalizationId) return group;
+      group.time_groups.forEach(slot => {
+        if (slot.key !== timeKey) return;
+        const shouldSelect = !slot.items.every(item => item.selected);
+        slot.items.forEach(item => { item.selected = shouldSelect; });
+      });
+      refreshGroupSelection(group);
+      return group;
+    });
+    this.setData({ groups });
+  },
+  batchComplete(e) {
+    const hospitalizationId = Number(e.currentTarget.dataset.hospitalizationId || 0);
+    const group = this.data.groups.find(row => row.hospitalization_id === hospitalizationId);
+    if (!group || !group.selected_count || this.data.busy) return;
+    const selected = [];
+    group.time_groups.forEach(slot => slot.items.forEach(item => {
+      if (item.selected) selected.push(item);
+    }));
+    wx.showModal({
+      title: `确认完成 ${selected.length} 项用药`,
+      content: `${group.pet_name}：请确认以上药物均已实际给药。`,
+      confirmText: "确认完成", confirmColor: "#1d4d3a",
+      success: async res => {
+        if (!res.confirm) return;
+        this.setData({ busy: true });
+        try {
+          await staffPost("/api/staff-miniapp/inpatient-medications/batch-check", { ids: selected.map(item => item.id) });
+          wx.showToast({ title: `已完成${selected.length}项`, icon: "success" });
+          this.loadData();
+        } catch (err) {
+          wx.showModal({ title: "操作失败", content: (err && err.detail) || "请刷新后重试", showCancel: false });
+        } finally { this.setData({ busy: false }); }
+      }
+    });
   },
   completeTask(e) {
     const id = Number(e.currentTarget.dataset.id || 0);
