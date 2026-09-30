@@ -83,6 +83,7 @@ try:
     hg_hosp = Hospitalization(
         customer_id=hg_customer.id, pet_id=hg_pet.id, visit_id=hg_visit.id,
         store="横岗店", status="admitted", reason="测试住院",
+        admitted_at=datetime.combine(datetime.now().date(), datetime.min.time()).replace(hour=3),
         staff_token="test-hg-staff", owner_token="test-hg-owner",
     )
     dh_hosp = Hospitalization(
@@ -103,6 +104,7 @@ try:
     hg_presc = Prescription(
         visit_id=hg_visit.id, customer_id=hg_customer.id, pet_id=hg_pet.id,
         prescribed_date=today, vet_name="横岗医生", status="issued",
+        created_at=datetime.combine(datetime.now().date(), datetime.min.time()).replace(hour=4, minute=29),
     )
     dh_presc = Prescription(
         visit_id=dh_visit.id, customer_id=dh_customer.id, pet_id=dh_pet.id,
@@ -126,6 +128,9 @@ try:
     )
     db.add(numeric_frequency_item); db.flush()
     assert main_module._generate_med_logs_for_prescription(db, hg_presc) >= 1
+    assert db.query(MedicationAdminLog).filter_by(
+        prescription_item_id=hg_pi.id, status="pending",
+    ).count() == 2
     assert db.query(MedicationAdminLog).filter_by(
         prescription_item_id=numeric_frequency_item.id, status="pending",
     ).count() == 1

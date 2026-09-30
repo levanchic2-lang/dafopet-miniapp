@@ -6712,6 +6712,8 @@ def _staff_med_log_payload(row: MedicationAdminLog, now_local: datetime | None =
             dose = f"{float(item.dose_amount):g}{item.dose_unit or ''}"
         else:
             dose = item.dosage or ""
+    route_raw = (item.drug_type or "").strip() if item else ""
+    route_display = _DRUG_TYPE_ZH.get(route_raw.lower(), route_raw) if route_raw else ""
     administered_local = row.administered_at + timedelta(hours=8) if row.administered_at else None
     return {
         "id": row.id,
@@ -6720,7 +6722,7 @@ def _staff_med_log_payload(row: MedicationAdminLog, now_local: datetime | None =
         "cage_code": cage.code if cage else "",
         "drug_name": item.drug_name if item else "处方明细已删除",
         "dose": dose,
-        "route": item.drug_type if item else "",
+        "route": route_display,
         "frequency": item.frequency if item else "",
         "instructions": item.instructions if item else "",
         "scheduled_date": row.scheduled_at.strftime("%Y-%m-%d"),
@@ -34710,16 +34712,22 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
         for day_n in range(n_days):
             d = start_date + _td(days=day_n)
             day_slots = []
+            skipped_past_slot = False
             for dose_idx, (h, m) in enumerate(times, 1):
                 sched_at = datetime.combine(d, datetime.min.time()).replace(hour=h, minute=m)
                 # 当天开方或办理入住后，不倒生成此前的早班任务；后续日期照常完整生成。
                 if first_task_local and d == first_task_local.date() and sched_at < first_task_local.replace(second=0, microsecond=0):
+                    skipped_past_slot = True
                     continue
                 day_slots.append((dose_idx, sched_at))
-            if first_task_local and d == first_task_local.date() and not day_slots:
-                # 晚间开出的一日处方，其默认整点可能已经过去。至少生成一条可立即执行的任务，
-                # 避免“已住院、有处方，但手机端完全为空”。
-                day_slots.append((1, first_task_local.replace(second=0, microsecond=0)))
+            if first_task_local and d == first_task_local.date() and skipped_past_slot:
+                # 当天开方时若已经错过首个默认时点，第一次改为立即执行，同时保留后续时点。
+                # 例如 BID 在 12:29 开出：生成 12:29 + 20:00，而不是只剩 20:00。
+                immediate_at = first_task_local.replace(second=0, microsecond=0)
+                if all(sched_at != immediate_at for _, sched_at in day_slots):
+                    day_slots.append((0, immediate_at))
+            day_slots.sort(key=lambda value: value[1])
+            day_slots = [(index, value[1]) for index, value in enumerate(day_slots, 1)]
             for dose_idx, sched_at in day_slots:
                 # 编辑处方后重建任务时，已执行/已跳过的同一时点不能再生成一份 pending。
                 if sched_at in completed_slots:

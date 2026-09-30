@@ -29,8 +29,8 @@
             <view wx:if="{{view === 'pending'}}" class="med-check {{med.selected ? 'checked' : ''}}" data-id="{{med.id}}" catchtap="toggleMedication">{{med.selected ? '✓' : ''}}</view>
             <view class="med-compact-body" data-id="{{med.id}}" catchtap="toggleMedication">
               <view class="med-compact-title">{{med.drug_name}}</view>
-              <view class="med-compact-meta">{{med.dose || '剂量未填'}}{{med.route ? ' · ' + med.route : ''}} · 第{{med.day_index}}天第{{med.dose_index}}次</view>
-              <view wx:if="{{med.instructions}}" class="med-note">{{med.instructions}}</view>
+              <view class="med-compact-meta">{{med.dose || '剂量未填'}}{{med.route ? ' · ' + med.route : ''}}{{med.frequency ? ' · ' + med.frequency : ''}} · 第{{med.day_index}}天第{{med.dose_index}}次</view>
+              <view wx:if="{{med.instructions}}" class="med-note">备注：{{med.instructions}}</view>
               <view wx:if="{{view === 'completed'}}" class="med-note">{{med.status === 'done' ? '已执行' : '已跳过'}} · {{med.administered_by}} · {{med.administered_at}}{{med.notes ? ' · ' + med.notes : ''}}</view>
             </view>
             <button wx:if="{{view === 'pending'}}" class="med-row-action" data-id="{{med.id}}" catchtap="skipTask">跳过</button>
