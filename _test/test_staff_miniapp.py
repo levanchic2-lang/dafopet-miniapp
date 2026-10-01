@@ -343,6 +343,7 @@ try:
         calendar = client.get("/api/staff-miniapp/calendar", params={"start": today, "days": 3}, headers=headers)
         assert calendar.status_code == 200, calendar.text
         assert [row["pet_name"] for row in calendar.json()["appointments"]] == ["横岗犬"]
+        assert calendar.json()["appointments"][0]["customer_id"]
         own_appointment_id = calendar.json()["appointments"][0]["id"]
 
         moved = client.post(

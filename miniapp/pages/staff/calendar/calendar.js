@@ -86,6 +86,15 @@ Page({
   },
   closeEvent() { if (!this.data.saving) this.setData({ selected: null, editing: false }); },
   stopBubble() {},
+  openCustomer() {
+    const customerId = Number((this.data.selected || {}).customer_id || 0);
+    if (!customerId) {
+      wx.showToast({ title: "该预约尚未关联客户档案", icon: "none" });
+      return;
+    }
+    this.setData({ selected: null, editing: false });
+    wx.navigateTo({ url: `/pages/staff/customer/customer?id=${customerId}` });
+  },
   startEdit() { this.setData({ editing: true }); },
   onEditDate(e) { this.setData({ editDate: e.detail.value }); },
   onEditTime(e) { this.setData({ editTime: e.detail.value }); },
