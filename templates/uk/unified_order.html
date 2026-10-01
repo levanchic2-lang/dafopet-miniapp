@@ -20,13 +20,24 @@
   .uo-result small { color:var(--ink-3); white-space:nowrap; }
   .uo-result.blocked { color:var(--ink-3); cursor:not-allowed; }
   .uo-empty { padding:34px 12px; text-align:center; color:var(--ink-3); border-bottom:.5px solid var(--hair); }
-  .uo-list { margin-top:18px; border-top:1px solid var(--ink); }
+  .uo-list { margin-top:18px; }
+  .uo-doc-section { margin-top:18px; border-top:1px solid var(--ink); }
+  .uo-doc-head { display:flex; justify-content:space-between; align-items:baseline; padding:10px 0 2px; }
+  .uo-doc-head h3 { margin:0; font-size:12pt; letter-spacing:1px; }
+  .uo-doc-head span { color:var(--ink-3); font-size:8.5pt; }
   .uo-row { padding:16px 0; border-bottom:.5px solid var(--hair-2); }
   .uo-row-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
   .uo-row-name { font-size:12pt; font-weight:700; }
   .uo-type { display:inline-block; margin-left:8px; padding:2px 7px; border:.5px solid var(--ink-3); font-size:8.5pt; font-weight:400; }
   .uo-remove { border:0; background:none; color:var(--accent-red); cursor:pointer; padding:6px; }
   .uo-common { display:grid; grid-template-columns:100px 130px 120px minmax(150px,1fr); gap:10px; }
+  .uo-prescription { display:grid; grid-template-columns:1.15fr .8fr .7fr .7fr .7fr .65fr; gap:10px; padding:12px; background:var(--bg-soft); }
+  .uo-prescription .wide { grid-column:span 2; }
+  .uo-prescription .full { grid-column:1/-1; }
+  .uo-prescription label { display:block; font-size:8.5pt; color:var(--ink-3); margin-bottom:3px; }
+  .uo-prescription input,.uo-prescription select { width:100%; min-width:0; height:34px; border:.5px solid var(--hair-2); background:#fff; padding:5px 7px; }
+  .uo-computed { display:flex; align-items:center; min-height:34px; padding:5px 8px; border:.5px solid var(--hair-2); background:var(--paper); font-variant-numeric:tabular-nums; }
+  .uo-help { color:var(--ink-3); font-size:8.5pt; margin-top:5px; }
   .uo-extra { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:10px; padding:12px; background:var(--bg-soft); }
   .uo-extra .wide { grid-column:span 2; }
   .uo-extra label,.uo-common label { display:block; font-size:8.5pt; color:var(--ink-3); margin-bottom:3px; }
@@ -49,7 +60,8 @@
   .uo-modal-head h2 { margin:0; font-size:15pt; }
   .uo-template-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center; padding:10px 0; border-bottom:.5px solid var(--hair); }
   .uo-template-row small { color:var(--ink-3); }
-  @media(max-width:900px){.uo-grid{grid-template-columns:1fr}.uo-side{position:static}.uo-extra{grid-template-columns:1fr 1fr}}
+  @media(max-width:1100px){.uo-prescription{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media(max-width:900px){.uo-grid{grid-template-columns:1fr}.uo-side{position:static}.uo-extra,.uo-prescription{grid-template-columns:1fr 1fr}}
 </style>
 
 <div class="uo-bc"><a href="/admin">后台</a> / <a href="/admin/visits/{{ visit.id }}">病历 #{{ visit.id }}</a> / 统一开单</div>
@@ -133,6 +145,17 @@
     const p = Math.max(0, num(row.unit_price, 0));
     return row.order_type !== 'inpatient' && row.item.single_use_pack ? Math.ceil(q / Math.max(1, num(row.item.unit2_ratio, 1))) * p : q * p;
   };
+  const prescriptionTimes = row => Math.max(0, num(row.times_per_day)) * Math.max(0, num(row.duration_days));
+  const syncPrescriptionQuantity = row => {
+    if (row.order_type !== 'prescription' || row.item.is_service || row.quantityEdited) return;
+    const doseUnit = String(row.dose_unit || row.item.unit || '').trim();
+    const itemUnit = String(row.item.unit || '').trim();
+    const dose = Math.max(0, num(row.dose_amount));
+    const totalTimes = prescriptionTimes(row);
+    if (dose > 0 && totalTimes > 0 && doseUnit && doseUnit === itemUnit) {
+      row.quantity = Math.round(dose * totalTimes * 10000) / 10000;
+    }
+  };
   const batchOptions = row => {
     const batches = row.item.batches || [];
     return `<option value="">自动选择 / 暂不填</option>` + batches.map(b =>
@@ -146,14 +169,6 @@
     </select>`;
   const extraFields = row => {
     if (!row.order_type) return `<div class="uo-extra"><div class="wide">该品目尚未确认归属，请先选择要生成哪类单据。</div></div>`;
-    if (row.order_type === 'prescription') return `<div class="uo-extra">
-      <div><label>给药途径</label><select data-field="drug_type"><option value="">请选择</option><option value="oral">口服</option><option value="subcutaneous">皮下注射</option><option value="intramuscular">肌肉注射</option><option value="intravenous">静脉注射</option><option value="topical">外用</option><option value="nebulize">雾化</option></select></div>
-      <div><label>单次用量</label><input type="number" step="0.01" min="0" data-field="dose_amount" value="${esc(row.dose_amount||'')}"/></div>
-      <div><label>剂量单位</label><input data-field="dose_unit" value="${esc(row.dose_unit||row.item.unit||'')}"/></div>
-      <div><label>每日次数</label><input type="number" step="0.5" min="0" data-field="times_per_day" value="${esc(row.times_per_day||'')}"/></div>
-      <div><label>使用天数</label><input type="number" step="1" min="0" data-field="duration_days" value="${esc(row.duration_days||'')}"/></div>
-      <div class="wide"><label>给客户的用药说明（会打印）</label><input data-field="print_note" value="${esc(row.print_note||'')}" placeholder="例如：饭后服用、用前摇匀"/></div>
-    </div>`;
     if (row.order_type === 'vaccine') return `<div class="uo-extra">
       <div><label>疫苗类型</label><select data-field="vaccine_type"><option value="">自动识别</option><option value="rabies">狂犬疫苗</option><option value="combo_3">猫三联</option><option value="combo_6">六联</option><option value="canine_8">犬八联</option><option value="other">其他</option></select></div>
       <div><label>第几针</label><select data-field="dose_number"><option value="1">第1针</option><option value="2">第2针</option><option value="3">第3针</option><option value="99">加强针</option></select></div>
@@ -171,6 +186,38 @@
     return '';
   };
 
+  const commonFields = row => {
+    const displayUnit = row.order_type === 'inpatient' ? '天' : (row.item.unit || '');
+    const unitLabel = row.order_type === 'inpatient' ? '单价（元/天，可修改）' : (row.item.single_use_pack ? `单价（每${row.item.unit2 || '瓶'}，可修改）` : `单价（元/${row.item.unit || '单位'}，可修改）`);
+    return `<div class="uo-common">
+      <div><label>${row.order_type==='inpatient'?'住院天数':'数量'} ${esc(displayUnit)}</label><input type="number" step="${row.order_type==='inpatient'?'0.5':'0.01'}" min="${row.order_type==='inpatient'?'0.5':'0.01'}" data-live="quantity" value="${esc(row.quantity)}"/></div>
+      <div><label>${esc(unitLabel)}</label><input type="number" step="0.01" min="0" data-live="unit_price" value="${esc(row.unit_price)}"/></div>
+      <div><label>本项小计</label><span class="uo-row-subtotal">¥${subtotal(row).toFixed(2)}</span></div>
+      <div><label>备注（可选）</label><input data-live="notes" value="${esc(row.notes||'')}"/></div>
+    </div>`;
+  };
+
+  const prescriptionFields = row => {
+    const totalTimes = prescriptionTimes(row);
+    const unit = row.item.unit || '';
+    const priceLabel = row.item.single_use_pack ? `单价（每${row.item.unit2 || '瓶'}）` : `单价（元/${unit || '单位'}）`;
+    const packHint = row.item.single_use_pack ? `<div class="uo-help full">实际用量为 ${num(row.quantity).toFixed(2)}${esc(unit)}；系统按整${esc(row.item.unit2 || '瓶')}计费并扣减库存。</div>` : '';
+    return `<div class="uo-prescription">
+      <div><label>给药途径</label><select data-field="drug_type"><option value="">请选择</option><option value="oral">口服</option><option value="subcutaneous">皮下注射</option><option value="intramuscular">肌肉注射</option><option value="intravenous">静脉注射</option><option value="topical">外用</option><option value="nebulize">雾化</option><option value="service">处置 / 服务</option><option value="other">其他</option></select></div>
+      <div><label>单次用量</label><input type="number" step="0.01" min="0" data-field="dose_amount" value="${esc(row.dose_amount||'')}"/></div>
+      <div><label>剂量单位</label><input data-field="dose_unit" value="${esc(row.dose_unit||unit)}"/></div>
+      <div><label>每日次数</label><input type="number" step="0.5" min="0" data-field="times_per_day" value="${esc(row.times_per_day||'')}"/></div>
+      <div><label>使用天数</label><input type="number" step="1" min="0" data-field="duration_days" value="${esc(row.duration_days||'')}"/></div>
+      <div><label>总次数</label><span class="uo-computed uo-total-times">${totalTimes>0?esc(totalTimes):'—'}</span></div>
+      <div><label>出库量 ${esc(unit)}</label><input type="number" step="0.01" min="0.01" data-live="quantity" value="${esc(row.quantity)}"/></div>
+      <div><label>${esc(priceLabel)}</label><input type="number" step="0.01" min="0" data-live="unit_price" value="${esc(row.unit_price)}"/></div>
+      <div><label>本项小计</label><span class="uo-row-subtotal">¥${subtotal(row).toFixed(2)}</span></div>
+      <div class="wide"><label>院内备注（不打印）</label><input data-live="notes" value="${esc(row.notes||'')}"/></div>
+      <div class="wide"><label>给客户的用药说明（会打印）</label><input data-field="print_note" value="${esc(row.print_note||'')}" placeholder="例如：饭后服用、用前摇匀"/></div>
+      ${packHint}
+    </div>`;
+  };
+
   function bindRow(el, row) {
     el.querySelectorAll('[data-field]').forEach(input => {
       const field = input.dataset.field;
@@ -180,13 +227,28 @@
       }
       input.addEventListener('change', () => {
         row[field] = input.type === 'checkbox' ? input.checked : input.value;
-        if (field === 'order_type') render(); else updateSummary();
+        if (field === 'order_type') render(); else { syncPrescriptionQuantity(row); renderRowTotals(el,row); updateSummary(); }
       });
+      if (row.order_type === 'prescription' && ['dose_amount','dose_unit','times_per_day','duration_days'].includes(field)) {
+        input.addEventListener('input', () => {
+          row[field] = input.value; syncPrescriptionQuantity(row); renderRowTotals(el,row); updateSummary();
+        });
+      }
     });
     el.querySelectorAll('[data-live]').forEach(input => input.addEventListener('input', () => {
-      row[input.dataset.live] = input.value; updateSummary();
+      row[input.dataset.live] = input.value;
+      if (row.order_type === 'prescription' && input.dataset.live === 'quantity') row.quantityEdited = true;
+      renderRowTotals(el,row); updateSummary();
     }));
     el.querySelector('.uo-remove').addEventListener('click', () => { rows.splice(rows.indexOf(row),1); render(); });
+  }
+
+  function renderRowTotals(el,row) {
+    const target=el.querySelector('.uo-row-subtotal'); if(target) target.textContent=`¥${subtotal(row).toFixed(2)}`;
+    const qty=el.querySelector('[data-live="quantity"]'); if(qty && document.activeElement!==qty) qty.value=row.quantity;
+    const times=el.querySelector('.uo-total-times'); if(times) times.textContent=prescriptionTimes(row)>0?prescriptionTimes(row):'—';
+    const hint=el.querySelector('.uo-help');
+    if(hint && row.item.single_use_pack) hint.textContent=`实际用量为 ${num(row.quantity).toFixed(2)}${row.item.unit||''}；系统按整${row.item.unit2||'瓶'}计费并扣减库存。`;
   }
 
   function render() {
@@ -195,19 +257,21 @@
       updateSummary(); return;
     }
     list.innerHTML = '';
-    rows.forEach(row => {
+    const order = [...Object.keys(labels), ''];
+    order.forEach(type => {
+      const sectionRows=rows.filter(row=>row.order_type===type);
+      if(!sectionRows.length)return;
+      const section=document.createElement('section'); section.className='uo-doc-section';
+      section.innerHTML=`<div class="uo-doc-head"><h3>${esc(type?`${labels[type]}单`:'待确认归属')}</h3><span>${sectionRows.length} 项</span></div>`;
+      sectionRows.forEach(row => {
+      syncPrescriptionQuantity(row);
       const el = document.createElement('div'); el.className='uo-row';
-      const displayUnit = row.order_type === 'inpatient' ? '天' : (row.item.unit || '');
-      const unitLabel = row.order_type === 'inpatient' ? '单价（元/天，可修改）' : (row.item.single_use_pack ? `单价（每${row.item.unit2 || '瓶'}，可修改）` : `单价（元/${row.item.unit || '单位'}，可修改）`);
       el.innerHTML = `<div class="uo-row-head"><div><span class="uo-row-name">${esc(row.item.name)}</span><span class="uo-type">${esc(labels[row.order_type] || '待选择')}</span></div><button type="button" class="uo-remove" title="删除">删除</button></div>
         ${typeSelect(row)}
-        <div class="uo-common">
-          <div><label>${row.order_type==='inpatient'?'住院天数':'数量'} ${esc(displayUnit)}</label><input type="number" step="${row.order_type==='inpatient'?'0.5':'0.01'}" min="${row.order_type==='inpatient'?'0.5':'0.01'}" data-live="quantity" value="${esc(row.quantity)}"/></div>
-          <div><label>${esc(unitLabel)}</label><input type="number" step="0.01" min="0" data-live="unit_price" value="${esc(row.unit_price)}"/></div>
-          <div><label>本项小计</label><span class="uo-row-subtotal">¥${subtotal(row).toFixed(2)}</span></div>
-          <div><label>${row.order_type==='prescription'?'项目备注（院内记录，不打印）':'备注（可选）'}</label><input data-live="notes" value="${esc(row.notes||'')}"/></div>
-        </div>${extraFields(row)}`;
-      list.appendChild(el); bindRow(el,row);
+        ${row.order_type==='prescription'?prescriptionFields(row):commonFields(row)}${extraFields(row)}`;
+      section.appendChild(el); bindRow(el,row);
+      });
+      list.appendChild(section);
     });
     updateSummary();
   }
@@ -217,9 +281,6 @@
     rows.forEach(row => { if (!row.order_type) valid=false; else counts[row.order_type]=(counts[row.order_type]||0)+1; total += subtotal(row); });
     document.getElementById('summary').innerHTML = Object.keys(counts).length ? Object.entries(counts).map(([k,v])=>`<div class="uo-summary-row"><span>${esc(labels[k])}单</span><b>${v} 项</b></div>`).join('') : '<div class="uo-empty" style="padding:16px 0">尚未添加项目</div>';
     document.getElementById('grandTotal').textContent = `¥${total.toFixed(2)}`;
-    document.querySelectorAll('.uo-row').forEach((el,index)=>{
-      const target=el.querySelector('.uo-row-subtotal'); if(target&&rows[index]) target.textContent=`¥${subtotal(rows[index]).toFixed(2)}`;
-    });
     document.getElementById('submitBtn').disabled = !valid;
     const hasComboVaccine = rows.some(row => {
       if (row.order_type !== 'vaccine') return false;
@@ -245,7 +306,7 @@
         results.querySelectorAll('.uo-result').forEach(el=>el.addEventListener('click',()=>{
           const item=items[Number(el.dataset.index)];
           if(item.order_type!=='manual'&&!supported.has(item.order_type)) return;
-          rows.push({item, item_id:item.id, order_type:defaultType(item), quantity:1, unit_price:num(item.sell_price), notes:''});
+          rows.push({item, item_id:item.id, order_type:defaultType(item), quantity:1, unit_price:num(item.sell_price), notes:'', dose_unit:item.unit||'', quantityEdited:false});
           search.value=''; results.style.display='none'; render();
         }));
       } catch(e) { results.innerHTML='<div class="uo-empty">搜索失败，请重试</div>'; results.style.display='block'; }
@@ -270,7 +331,7 @@
     if(rows.length&&!confirm('套用模板会替换当前已经添加的项目，确定继续吗？'))return;
     const response=await fetch(`/api/unified-order-templates/${id}`); const data=await response.json();
     if(!data.ok){alert(data.error||'模板读取失败');return;}
-    rows.splice(0,rows.length,...(data.items||[]).map(entry=>({...entry,item:entry.item})));
+    rows.splice(0,rows.length,...(data.items||[]).map(entry=>({...entry,item:entry.item,quantityEdited:true})));
     const notes=document.querySelector('[name="notes"]'); if(notes&&!notes.value&&data.notes)notes.value=data.notes;
     render(); closeModal();
   }
@@ -290,7 +351,8 @@
   });
   document.getElementById('uoForm').addEventListener('submit', e => {
     if(!rows.length || rows.some(r=>!r.order_type)){e.preventDefault();alert('请完成所有品目的开单归属');return;}
-    document.getElementById('itemsJson').value=JSON.stringify(rows.map(({item,...row})=>row));
+    rows.forEach(syncPrescriptionQuantity);
+    document.getElementById('itemsJson').value=JSON.stringify(rows.map(({item,quantityEdited,...row})=>row));
     const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='正在生成…';
   });
 })();
