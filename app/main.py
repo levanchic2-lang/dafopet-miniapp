@@ -18252,6 +18252,103 @@ async def admin_unified_order_create(
     return RedirectResponse(f"/admin/unified-orders/{batch.id}?msg=统一开单完成", status_code=303)
 
 
+@app.get("/api/staff-miniapp/visits/{visit_id}/unified-order")
+async def api_staff_miniapp_unified_order_context(
+    visit_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    visit = db.get(Visit, visit_id)
+    if not visit or not visit.pet_id:
+        raise HTTPException(404, "病例不存在")
+    pet = _staff_pet_record(db, user, visit.pet_id)
+    if (visit.status or "open") == "closed":
+        raise HTTPException(403, "病历已结束，不能继续开单")
+    customer = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    return {
+        "ok": True,
+        "visit": {"id": visit.id, "date": visit.visit_date or "", "status": visit.status or "open"},
+        "pet": {"id": pet.id, "name": pet.name or "未命名宠物"},
+        "customer": {"id": customer.id, "name": customer.name or "未命名客户"} if customer else {},
+        "order_date": date.today().isoformat(),
+        "vet_name": (user.display_name or user.username or visit.vet_name or "").strip(),
+        "order_type_labels": _UNIFIED_ORDER_TYPES,
+    }
+
+
+@app.get("/api/staff-miniapp/unified-order/items")
+async def api_staff_miniapp_unified_order_items(
+    request: Request, q: str = Query(""), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    term = (q or "").strip()
+    if not term:
+        return {"ok": True, "items": []}
+    query = db.query(InventoryItem).filter(
+        InventoryItem.is_active == True,  # noqa: E712
+        InventoryItem.name.ilike(f"%{term}%"),
+    )
+    query = _apply_store_filter(query, InventoryItem.store, (user.store or "").strip())
+    items = query.order_by(InventoryItem.name.asc()).limit(40).all()
+    return {
+        "ok": True,
+        "items": [_unified_template_item_payload(db, item, (user.store or "").strip()) for item in items],
+    }
+
+
+@app.post("/api/staff-miniapp/visits/{visit_id}/unified-order")
+async def api_staff_miniapp_unified_order_create(
+    visit_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    """Reuse the desktop unified-order transaction without duplicating billing or inventory rules."""
+    user = _staff_miniapp_user(request, db)
+    visit = db.get(Visit, visit_id)
+    if not visit or not visit.pet_id:
+        raise HTTPException(404, "病例不存在")
+    _staff_pet_record(db, user, visit.pet_id)
+    items = (payload or {}).get("items") or []
+    if not isinstance(items, list) or not items:
+        raise HTTPException(400, "请至少添加一个项目")
+
+    csrf_token = secrets.token_urlsafe(24)
+    form_data = {
+        "csrf_token": csrf_token,
+        "items_json": json.dumps(items, ensure_ascii=False),
+        "order_date": str((payload or {}).get("order_date") or date.today().isoformat()),
+        "vet_name": str((payload or {}).get("vet_name") or user.display_name or user.username or ""),
+        "notes": str((payload or {}).get("notes") or ""),
+    }
+    if (payload or {}).get("is_insurance_service"):
+        form_data["is_insurance_service"] = "1"
+    if (payload or {}).get("request_vaccine_consent"):
+        form_data["request_vaccine_consent"] = "1"
+
+    class _InternalUnifiedOrderRequest:
+        def __init__(self):
+            self.session = {
+                "admin": True,
+                "admin_username": (user.username or "staff")[:80],
+                "admin_role": user.role or "staff",
+                "admin_store": (user.store or "").strip(),
+                "csrf_token": csrf_token,
+            }
+            self.headers = {"accept": "application/json"}
+            self.url = type("InternalURL", (), {"path": f"/admin/visits/{visit_id}/unified-order"})()
+
+        async def form(self):
+            return form_data
+
+    response = await admin_unified_order_create(visit_id, _InternalUnifiedOrderRequest(), db)
+    location = response.headers.get("location", "")
+    if "?err=" in location:
+        from urllib.parse import parse_qs, urlparse
+        detail = parse_qs(urlparse(location).query).get("err", ["开单失败，请检查填写内容"])[0]
+        raise HTTPException(400, detail)
+    match = re.search(r"/admin/unified-orders/(\d+)", location)
+    if not match:
+        raise HTTPException(500, "单据已处理，但未取得统一开单编号")
+    return {"ok": True, "batch_id": int(match.group(1)), "message": "统一开单完成"}
+
+
 @app.get("/admin/prescriptions/create", response_class=HTMLResponse)
 async def page_admin_presc_create(
     request: Request,

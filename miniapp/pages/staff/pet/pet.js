@@ -22,6 +22,7 @@ Page({
     } finally { this.setData({ loading: false }); wx.stopPullDownRefresh(); }
   },
   setTab(e) { this.setData({ activeTab: e.currentTarget.dataset.tab }); },
+  openUnifiedOrder(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/unified-order/unified-order?id=" + id }); },
   openMaterials(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/material/material?id=" + id }); },
   openAnesthesia(e) {
     const id = Number(e.currentTarget.dataset.id || 0); if (!id || this.data.opening) return;

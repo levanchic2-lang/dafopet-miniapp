@@ -1,0 +1,67 @@
+<view class="staff-page order-page">
+  <view wx:if="{{loading}}" class="staff-loading">正在读取病例…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <block wx:if="{{!loading && visit.id}}">
+    <view class="order-hero">
+      <view class="order-eyebrow">UNIFIED ORDER</view>
+      <view class="order-title">统一开单</view>
+      <view class="order-sub">{{customer.name}} · {{pet.name}} · 病例 #{{visit.id}}</view>
+    </view>
+
+    <view class="order-meta">
+      <picker mode="date" value="{{orderDate}}" bindchange="changeDate"><view><text>开单日期</text><strong>{{orderDate}}</strong></view></picker>
+      <view><text>开单医生</text><input value="{{vetName}}" data-field="vetName" bindinput="setTopField" placeholder="必填"/></view>
+    </view>
+
+    <view class="order-search">
+      <input value="{{query}}" bindinput="searchInput" placeholder="搜索药品、检查、商品、疫苗、驱虫…"/>
+      <view wx:if="{{searching}}" class="search-state">正在搜索…</view>
+      <view wx:for="{{results}}" wx:key="id" class="search-result" data-index="{{index}}" bindtap="addItem">
+        <view><strong>{{item.name}}</strong><text>{{item.is_service ? '服务项目' : '库存 ' + item.stock_qty + ' ' + item.unit}}</text></view>
+        <text>{{item.order_type_label}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{!rows.length}}" class="staff-empty">搜索并加入项目。不同品目会显示各自需要填写的内容。</view>
+
+    <view wx:for="{{rows}}" wx:key="key" class="order-card">
+      <view class="order-card-head"><view><text class="type-label">{{item.typeLabel || '待选择'}}</text><strong>{{item.item.name}}</strong></view><button data-index="{{index}}" bindtap="removeItem">删除</button></view>
+
+      <picker wx:if="{{!item.order_type}}" range="{{typeOptions}}" range-key="label" data-index="{{index}}" bindchange="changeType"><view class="picker-line">请选择开单类型</view></picker>
+
+      <block wx:if="{{item.order_type === 'prescription'}}">
+        <view class="field-label">给药途径</view>
+        <view class="route-grid"><view wx:for="{{routeOptions}}" wx:for-item="route" wx:key="key" class="route-chip {{item.drug_type === route.key ? 'active' : ''}}" data-index="{{index}}" data-route="{{route.key}}" bindtap="selectRoute">{{route.label}}</view></view>
+        <view class="field-grid three">
+          <label><text>单次用量</text><input type="digit" value="{{item.dose_amount}}" data-index="{{index}}" data-field="dose_amount" bindinput="setRowField"/></label>
+          <label><text>剂量单位</text><input value="{{item.dose_unit}}" data-index="{{index}}" data-field="dose_unit" bindinput="setRowField"/></label>
+          <label><text>每日次数</text><input type="digit" value="{{item.times_per_day}}" data-index="{{index}}" data-field="times_per_day" bindinput="setRowField"/></label>
+          <label><text>使用天数</text><input type="number" value="{{item.duration_days}}" data-index="{{index}}" data-field="duration_days" bindinput="setRowField"/></label>
+          <label><text>总次数</text><view class="computed">{{item.totalTimes || '—'}}</view></label>
+          <label><text>出库量 {{item.item.unit}}</text><input type="digit" value="{{item.quantity}}" data-index="{{index}}" data-field="quantity" bindinput="setRowField"/></label>
+        </view>
+        <view wx:if="{{item.item.single_use_pack}}" class="pack-note">实际用量 {{item.quantity}}{{item.item.unit}}，系统按整{{item.item.unit2 || '瓶'}}收费并扣库存。</view>
+        <label class="wide-field"><text>给客户的用药说明</text><input value="{{item.print_note}}" data-index="{{index}}" data-field="print_note" bindinput="setRowField" placeholder="例如：饭后服用、用前摇匀"/></label>
+      </block>
+
+      <block wx:if="{{item.order_type === 'vaccine'}}">
+        <view class="field-grid two"><label><text>第几针</text><input type="number" value="{{item.dose_number}}" data-index="{{index}}" data-field="dose_number" bindinput="setRowField"/></label><label><text>疫苗批号</text><input value="{{item.batch_no}}" data-index="{{index}}" data-field="batch_no" bindinput="setRowField"/></label></view>
+      </block>
+      <block wx:if="{{item.order_type === 'deworming'}}">
+        <view class="route-grid"><view class="route-chip {{item.deworm_type === 'external' ? 'active' : ''}}" data-index="{{index}}" data-value="external" bindtap="selectDewormType">体外</view><view class="route-chip {{item.deworm_type === 'internal' ? 'active' : ''}}" data-index="{{index}}" data-value="internal" bindtap="selectDewormType">体内</view><view class="route-chip {{item.deworm_type === 'both' ? 'active' : ''}}" data-index="{{index}}" data-value="both" bindtap="selectDewormType">体内外同驱</view></view>
+        <view class="field-grid two"><label><text>使用剂量</text><input value="{{item.dose}}" data-index="{{index}}" data-field="dose" bindinput="setRowField"/></label><label><text>本次体重 kg</text><input type="digit" value="{{item.weight_kg}}" data-index="{{index}}" data-field="weight_kg" bindinput="setRowField"/></label></view>
+      </block>
+
+      <view wx:if="{{item.order_type !== 'prescription'}}" class="field-grid two">
+        <label><text>{{item.order_type === 'inpatient' ? '住院天数' : '数量'}} {{item.order_type === 'inpatient' ? '天' : item.item.unit}}</text><input type="digit" value="{{item.quantity}}" data-index="{{index}}" data-field="quantity" bindinput="setRowField"/></label>
+        <label><text>单价</text><input type="digit" value="{{item.unit_price}}" data-index="{{index}}" data-field="unit_price" bindinput="setRowField"/></label>
+      </view>
+      <view wx:else class="field-grid one"><label><text>单价{{item.item.single_use_pack ? ' / ' + (item.item.unit2 || '瓶') : ''}}</text><input type="digit" value="{{item.unit_price}}" data-index="{{index}}" data-field="unit_price" bindinput="setRowField"/></label></view>
+      <label class="wide-field"><text>院内备注</text><input value="{{item.notes}}" data-index="{{index}}" data-field="notes" bindinput="setRowField"/></label>
+      <view class="order-subtotal"><text>本项小计</text><strong>¥{{item.subtotal}}</strong></view>
+    </view>
+
+    <view class="order-footer-space"></view>
+    <view class="order-submit"><view><text>预计合计</text><strong>¥{{grandTotal}}</strong></view><button loading="{{submitting}}" disabled="{{submitting || !rows.length}}" bindtap="submitOrder">确认开单</button></view>
+  </block>
+</view>

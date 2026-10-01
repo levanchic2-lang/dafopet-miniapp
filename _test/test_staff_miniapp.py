@@ -95,13 +95,19 @@ try:
     )
     hg_drug = InventoryItem(
         name="横岗住院测试药", category="medication", is_service=False,
-        unit="ml", stock_qty=20, store="横岗店", is_active=True,
+        unit="ml", stock_qty=20, sell_price=10, order_type="prescription",
+        store="横岗店", is_active=True,
     )
     dh_drug = InventoryItem(
         name="东环住院测试药", category="medication", is_service=False,
         unit="ml", stock_qty=20, store="东环店", is_active=True,
     )
-    db.add_all([hg_hosp, dh_hosp, hg_drug, dh_drug])
+    hg_unified_exam = InventoryItem(
+        name="横岗统一检查", category="lab", is_service=True,
+        unit="次", stock_qty=0, sell_price=50, order_type="exam",
+        store="横岗店", is_active=True,
+    )
+    db.add_all([hg_hosp, dh_hosp, hg_drug, dh_drug, hg_unified_exam])
     db.flush()
     hg_presc = Prescription(
         visit_id=hg_visit.id, customer_id=hg_customer.id, pet_id=hg_pet.id,
@@ -476,6 +482,49 @@ try:
         assert material_visits.status_code == 200, material_visits.text
         assert [row["pet_name"] for row in material_visits.json()["items"]] == ["横岗犬"]
         own_visit_id = material_visits.json()["items"][0]["id"]
+        unified_context = client.get(
+            f"/api/staff-miniapp/visits/{own_visit_id}/unified-order", headers=headers,
+        )
+        assert unified_context.status_code == 200, unified_context.text
+        assert unified_context.json()["pet"]["name"] == "横岗犬"
+        drug_search = client.get(
+            "/api/staff-miniapp/unified-order/items", params={"q": "横岗住院测试药"}, headers=headers,
+        )
+        exam_search = client.get(
+            "/api/staff-miniapp/unified-order/items", params={"q": "横岗统一检查"}, headers=headers,
+        )
+        assert drug_search.status_code == 200 and len(drug_search.json()["items"]) == 1
+        assert exam_search.status_code == 200 and len(exam_search.json()["items"]) == 1
+        drug_item = drug_search.json()["items"][0]
+        exam_item = exam_search.json()["items"][0]
+        db = SessionLocal()
+        try:
+            prescription_count_before = db.query(Prescription).filter_by(visit_id=own_visit_id).count()
+            stock_before = float(db.get(InventoryItem, drug_item["id"]).stock_qty or 0)
+        finally:
+            db.close()
+        mobile_order = client.post(
+            f"/api/staff-miniapp/visits/{own_visit_id}/unified-order",
+            json={
+                "order_date": today, "vet_name": "横岗医生",
+                "items": [
+                    {"item_id": drug_item["id"], "order_type": "prescription", "quantity": 2,
+                     "unit_price": 10, "drug_type": "intravenous", "dose_amount": 1,
+                     "dose_unit": "ml", "times_per_day": 2, "duration_days": 1},
+                    {"item_id": exam_item["id"], "order_type": "exam", "quantity": 1,
+                     "unit_price": 50},
+                ],
+            }, headers=headers,
+        )
+        assert mobile_order.status_code == 200, mobile_order.text
+        assert mobile_order.json()["batch_id"] > 0
+        db = SessionLocal()
+        try:
+            assert db.query(Prescription).filter_by(visit_id=own_visit_id).count() == prescription_count_before + 1
+            assert db.query(ExamOrder).filter_by(visit_id=own_visit_id).count() == 2
+            assert db.get(InventoryItem, drug_item["id"]).stock_qty == stock_before - 2
+        finally:
+            db.close()
         db = SessionLocal()
         try:
             other_visit_id = db.query(Visit.id).filter(Visit.store == "东环店").scalar()
