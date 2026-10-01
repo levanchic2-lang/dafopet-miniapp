@@ -12,8 +12,8 @@
       <view><strong>{{summary.visits}}</strong><text>病历</text></view><view><strong>{{summary.reports}}</strong><text>报告</text></view><view><strong>{{summary.vaccinations + summary.dewormings}}</strong><text>预防记录</text></view>
     </view>
     <view class="detail-note"><view>病历号：{{pet.medical_record_no || '未登记'}}</view><view wx:if="{{pet.birthday}}">生日/年龄：{{pet.birthday}}</view><view wx:if="{{pet.microchip_id}}">芯片号：{{pet.microchip_id}}</view><view wx:if="{{pet.notes}}">备注：{{pet.notes}}</view></view>
-    <view class="detail-tabs four">
-      <view class="{{activeTab === 'visits' ? 'active' : ''}}" data-tab="visits" bindtap="setTab">病历</view><view class="{{activeTab === 'reports' ? 'active' : ''}}" data-tab="reports" bindtap="setTab">报告</view><view class="{{activeTab === 'prevention' ? 'active' : ''}}" data-tab="prevention" bindtap="setTab">预防</view><view class="{{activeTab === 'billing' ? 'active' : ''}}" data-tab="billing" bindtap="setTab">缴费</view>
+    <view class="detail-tabs five">
+      <view class="{{activeTab === 'visits' ? 'active' : ''}}" data-tab="visits" bindtap="setTab">病历</view><view class="{{activeTab === 'reports' ? 'active' : ''}}" data-tab="reports" bindtap="setTab">报告</view><view class="{{activeTab === 'prevention' ? 'active' : ''}}" data-tab="prevention" bindtap="setTab">预防</view><view class="{{activeTab === 'grooming' ? 'active' : ''}}" data-tab="grooming" bindtap="setTab">美容</view><view class="{{activeTab === 'billing' ? 'active' : ''}}" data-tab="billing" bindtap="setTab">缴费</view>
     </view>
 
     <view wx:if="{{activeTab === 'visits'}}">
@@ -35,6 +35,18 @@
       <view class="detail-section-label">驱虫记录</view>
       <view wx:for="{{dewormings}}" wx:key="id" class="record-block"><view class="record-date">{{item.date}} · {{item.type_label}}</view><view class="record-title">{{item.name}}</view><view class="record-text">{{item.dose ? '剂量 ' + item.dose : ''}}{{item.next_due_date ? ' · 下次 ' + item.next_due_date : ''}}</view></view>
       <view wx:if="{{!dewormings.length}}" class="staff-empty">暂无驱虫记录。</view>
+    </view>
+
+    <view wx:if="{{activeTab === 'grooming'}}">
+      <button class="grooming-create" bindtap="openGroomingOrder">美容开单</button>
+      <view wx:for="{{groomings}}" wx:key="id" class="record-block">
+        <view class="record-date">{{item.date}} · {{item.status_label}}</view>
+        <view class="record-title">{{item.services_label}}</view>
+        <view class="record-text">美容师：{{item.groomer_name || '未填写'}}<text wx:if="{{item.assistant_name}}"> · 助理：{{item.assistant_name}}</text></view>
+        <view class="record-text">合计 ¥{{item.total}} · {{item.payment_label}}</view>
+        <view wx:if="{{item.notes}}" class="record-text">备注：{{item.notes}}</view>
+      </view>
+      <view wx:if="{{!groomings.length}}" class="staff-empty">暂无美容记录。</view>
     </view>
 
     <view wx:if="{{activeTab === 'billing'}}">

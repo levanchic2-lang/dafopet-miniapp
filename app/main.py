@@ -7246,6 +7246,30 @@ async def api_staff_miniapp_pet_detail(
     dewormings = db.query(DewormingRecord).filter(
         DewormingRecord.pet_id == pet.id,
     ).order_by(DewormingRecord.deworm_date.desc(), DewormingRecord.id.desc()).limit(40).all()
+    gq = db.query(GroomingOrder).filter(GroomingOrder.pet_id == pet.id)
+    if store:
+        full_store = _STORE_SHORT_TO_FULL.get(store, store)
+        gq = gq.filter(or_(GroomingOrder.store == store, GroomingOrder.store == full_store,
+                           GroomingOrder.store == "", GroomingOrder.store == None))
+    groomings = gq.order_by(GroomingOrder.groom_date.desc(), GroomingOrder.id.desc()).limit(40).all()
+    grooming_rows = []
+    for row in groomings:
+        try:
+            services = json.loads(row.services_json or "[]")
+        except (TypeError, json.JSONDecodeError):
+            services = []
+        invoice = db.get(Invoice, row.invoice_id) if row.invoice_id else None
+        service_names = [str(item.get("name") or "美容服务") for item in services if isinstance(item, dict)]
+        payment_labels = {"paid": "已结清", "partial": "部分收款", "unpaid": "待收款", "cancelled": "已取消"}
+        grooming_rows.append({
+            "id": row.id, "date": row.groom_date or "", "groomer_name": row.groomer_name or "",
+            "assistant_name": row.assistant_name or "", "status": row.status or "active",
+            "status_label": "已作废" if row.status == "voided" else f"美容单 #{row.id}",
+            "services": service_names, "services_label": "、".join(service_names) or "美容服务",
+            "total": round(float(row.total_amount or 0), 2), "notes": row.notes or "",
+            "payment_status": invoice.payment_status if invoice else "",
+            "payment_label": payment_labels.get(invoice.payment_status if invoice else "", "未生成收费单"),
+        })
     iq = db.query(Invoice).filter(Invoice.pet_id == pet.id)
     iq = _staff_store_query(iq, Invoice, store)
     invoices = iq.order_by(Invoice.invoice_date.desc(), Invoice.id.desc()).limit(40).all()
@@ -7253,7 +7277,7 @@ async def api_staff_miniapp_pet_detail(
     return {
         "ok": True, "pet": _staff_pet_payload(pet),
         "customer": {"id": customer.id, "name": customer.name or "未命名客户", "phone_masked": _mask_phone(customer.phone or "")} if customer else {},
-        "summary": {"visits": len(visits), "reports": len(reports), "vaccinations": len(vaccines), "dewormings": len(dewormings)},
+        "summary": {"visits": len(visits), "reports": len(reports), "vaccinations": len(vaccines), "dewormings": len(dewormings), "groomings": len(groomings)},
         "visits": [{
             "id": v.id, "date": v.visit_date or "", "type": v.visit_type or "outpatient",
             "chief_complaint": v.chief_complaint or "", "physical_exam": v.physical_exam or "",
@@ -7272,8 +7296,141 @@ async def api_staff_miniapp_pet_detail(
             "name": d.product_name or "驱虫", "dose": d.dose or "", "weight_kg": float(d.weight_kg or 0),
             "next_due_date": d.next_due_date or "", "vet_name": d.vet_name or "", "status": d.status or "active",
         } for d in dewormings],
+        "groomings": grooming_rows,
         "invoices": [_staff_invoice_payload(db, row, {pet.id: pet.name or "未命名"}) for row in invoices],
     }
+
+
+def _staff_grooming_candidates(db: Session, store: str) -> tuple[list[str], list[str]]:
+    query = db.query(Staff).filter(Staff.status.in_(["active", "probation"]))
+    if store:
+        query = query.filter(or_(Staff.store == store, Staff.store == "", Staff.store == None))
+    rows = query.order_by(Staff.name).all()
+    groomers = [row.name for row in rows if row.position in ("美容师", "合伙人") and (row.name or "").strip()]
+    assistants = [row.name for row in rows if row.position in ("助理", "美容师", "合伙人") and (row.name or "").strip()]
+    return groomers, assistants
+
+
+@app.get("/api/staff-miniapp/pets/{pet_id}/grooming-order")
+async def api_staff_miniapp_grooming_order_context(
+    pet_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    pet = _staff_pet_record(db, user, pet_id)
+    customer = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    items = _apply_store_filter(
+        db.query(InventoryItem), InventoryItem.store, (user.store or "").strip(),
+    ).filter(
+        InventoryItem.category == "grooming",
+        InventoryItem.is_active == True,  # noqa: E712
+    ).order_by(InventoryItem.subcategory, InventoryItem.name).all()
+    groomers, assistants = _staff_grooming_candidates(db, (user.store or "").strip())
+    display_name = (user.display_name or "").strip()
+    return {
+        "ok": True,
+        "pet": {"id": pet.id, "name": pet.name or "未命名宠物"},
+        "customer": {"id": customer.id, "name": customer.name or "未命名客户"} if customer else {},
+        "order_date": date.today().isoformat(),
+        "groomers": groomers, "assistants": assistants,
+        "default_groomer": display_name if display_name in groomers else "",
+        "items": [_unified_template_item_payload(db, item, (user.store or "").strip()) for item in items],
+    }
+
+
+@app.post("/api/staff-miniapp/pets/{pet_id}/grooming-order")
+async def api_staff_miniapp_grooming_order_create(
+    pet_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    pet = _staff_pet_record(db, user, pet_id)
+    customer = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    if not customer:
+        raise HTTPException(400, "宠物尚未关联客户档案")
+    groomer_name = str((payload or {}).get("groomer_name") or "").strip()[:80]
+    assistant_name = str((payload or {}).get("assistant_name") or "").strip()[:80]
+    groomers, assistants = _staff_grooming_candidates(db, (user.store or "").strip())
+    if groomer_name not in set(groomers):
+        raise HTTPException(400, "请选择当前门店在职的美容师或合伙人")
+    if assistant_name and assistant_name not in set(assistants):
+        raise HTTPException(400, "助理必须选择当前门店在职员工")
+    raw_rows = (payload or {}).get("items") or []
+    if not isinstance(raw_rows, list) or not raw_rows:
+        raise HTTPException(400, "请至少选择一个美容项目")
+    if len(raw_rows) > 30:
+        raise HTTPException(400, "一次最多添加30个美容项目")
+    try:
+        item_ids = [int(row.get("item_id") or 0) for row in raw_rows if isinstance(row, dict)]
+    except (TypeError, ValueError):
+        item_ids = []
+    item_query = db.query(InventoryItem).filter(
+        InventoryItem.id.in_(item_ids), InventoryItem.category == "grooming",
+        InventoryItem.is_active == True,  # noqa: E712
+    )
+    item_query = _apply_store_filter(item_query, InventoryItem.store, (user.store or "").strip())
+    inventory = {item.id: item for item in item_query.all()}
+    services = []
+    try:
+        for row in raw_rows:
+            item = inventory.get(int(row.get("item_id") or 0))
+            if not item:
+                raise ValueError("有美容项目不存在、已停用或不属于当前门店")
+            qty = _unified_positive_number(row.get("quantity"))
+            price = _unified_price(row.get("unit_price"))
+            services.append({
+                "name": item.name, "item_id": item.id, "qty": qty, "price": price,
+                "subtotal": round(qty * price, 2),
+                "notes": str(row.get("notes") or "").strip()[:200],
+            })
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+    total = round(sum(float(item["subtotal"]) for item in services), 2)
+    operator = (user.username or "staff")[:80]
+    rec = GroomingOrder(
+        customer_id=customer.id, pet_id=pet.id,
+        groom_date=str((payload or {}).get("order_date") or date.today().isoformat())[:20],
+        groomer_name=groomer_name, assistant_name=assistant_name,
+        services_json=json.dumps(services, ensure_ascii=False), total_amount=total,
+        skin_condition=str((payload or {}).get("skin_condition") or "").strip()[:200],
+        behavior_note=str((payload or {}).get("behavior_note") or "").strip()[:200],
+        notes=str((payload or {}).get("notes") or "").strip(),
+        store=(pet.store or (user.store or "").strip()), created_by=operator,
+    )
+    try:
+        db.add(rec)
+        db.flush()
+        for service in services:
+            item = inventory[service["item_id"]]
+            if not item.is_service:
+                _deduct_inventory(db, item.id, service["qty"], "grooming", rec.id, operator,
+                                  note=f"美容#{rec.id} {service['name']}")
+        if total > 0:
+            invoice = Invoice(
+                invoice_no=_gen_invoice_no(db), customer_id=customer.id, pet_id=pet.id,
+                invoice_date=rec.groom_date, subtotal=total, discount_amount=0.0,
+                total_amount=total, payment_status="unpaid", notes=f"美容 #{rec.id}",
+                store=_resolve_invoice_store(db, pet_id=pet.id, customer_id=customer.id,
+                                             fallback=(user.store or "").strip()),
+                created_by=operator,
+            )
+            db.add(invoice)
+            db.flush()
+            for service in services:
+                db.add(InvoiceItem(
+                    invoice_id=invoice.id, ref_type="grooming", ref_id=rec.id,
+                    description=f"[美容#{rec.id}] {service['name']}" +
+                                (f" · {service['notes']}" if service["notes"] else ""),
+                    quantity=service["qty"], unit_price=service["price"],
+                    subtotal=service["subtotal"],
+                ))
+            rec.invoice_id = invoice.id
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.exception("[staff-miniapp] grooming order create failed pet=%s", pet_id)
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        raise HTTPException(400, detail or "美容开单失败")
+    return {"ok": True, "grooming_id": rec.id, "invoice_id": rec.invoice_id or 0,
+            "total": total, "message": "美容开单完成"}
 
 
 @app.get("/api/staff-miniapp/reports/{report_id}/file")

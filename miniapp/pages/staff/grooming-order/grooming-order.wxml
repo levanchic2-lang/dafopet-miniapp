@@ -1,0 +1,40 @@
+<view class="staff-page grooming-page">
+  <view wx:if="{{loading}}" class="staff-loading">正在读取美容项目…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <block wx:if="{{!loading && pet.id}}">
+    <view class="grooming-hero">
+      <view class="grooming-eyebrow">GROOMING ORDER</view>
+      <view class="grooming-title">美容开单</view>
+      <view class="grooming-sub">{{customer.name}} · {{pet.name}}</view>
+    </view>
+
+    <view class="grooming-meta">
+      <picker mode="date" value="{{orderDate}}" bindchange="changeDate"><view><text>开单日期</text><strong>{{orderDate}}</strong></view></picker>
+      <picker range="{{groomers}}" value="{{groomerIndex}}" bindchange="chooseGroomer"><view><text>美容师</text><strong>{{groomerIndex >= 0 ? groomers[groomerIndex] : '请选择'}}</strong></view></picker>
+      <picker range="{{assistants}}" value="{{assistantIndex}}" bindchange="chooseAssistant"><view><text>助理（选填）</text><strong>{{assistantIndex >= 0 ? assistants[assistantIndex] : '无'}}</strong></view></picker>
+    </view>
+
+    <view class="grooming-search"><input value="{{query}}" bindinput="searchInput" placeholder="搜索美容项目"/></view>
+    <view class="service-list">
+      <view wx:for="{{results}}" wx:key="id" class="service-row" data-index="{{index}}" bindtap="addItem"><view><strong>{{item.name}}</strong><text>{{item.subcategory_label || '美容服务'}}</text></view><text>¥{{item.sell_price}}　加入</text></view>
+      <view wx:if="{{!results.length}}" class="staff-empty">当前门店没有匹配的美容项目。</view>
+    </view>
+
+    <view class="section-label">本次项目</view>
+    <view wx:if="{{!rows.length}}" class="staff-empty">点击上方项目加入本次美容单。</view>
+    <view wx:for="{{rows}}" wx:key="key" class="service-card">
+      <view class="service-head"><strong>{{item.name}}</strong><button data-index="{{index}}" bindtap="removeItem">删除</button></view>
+      <view class="field-grid"><label><text>数量 {{item.unit}}</text><input type="digit" value="{{item.quantity}}" data-index="{{index}}" data-field="quantity" bindinput="setRowField"/></label><label><text>单价</text><input type="digit" value="{{item.unit_price}}" data-index="{{index}}" data-field="unit_price" bindinput="setRowField"/></label></view>
+      <label class="wide-field"><text>项目备注</text><input value="{{item.notes}}" data-index="{{index}}" data-field="notes" bindinput="setRowField" placeholder="选填"/></label>
+      <view class="subtotal"><text>本项小计</text><strong>¥{{item.subtotal}}</strong></view>
+    </view>
+
+    <view class="section-label">美容记录</view>
+    <label class="note-field"><text>皮肤情况</text><input value="{{skinCondition}}" data-field="skinCondition" bindinput="setField" placeholder="选填"/></label>
+    <label class="note-field"><text>行为反应</text><input value="{{behaviorNote}}" data-field="behaviorNote" bindinput="setField" placeholder="例如：合作、紧张、会咬人"/></label>
+    <label class="note-field"><text>整单备注</text><textarea value="{{notes}}" data-field="notes" bindinput="setField" placeholder="选填"/></label>
+
+    <view class="footer-space"></view>
+    <view class="submit-bar"><view><text>预计合计</text><strong>¥{{grandTotal}}</strong></view><button loading="{{submitting}}" disabled="{{submitting || !rows.length}}" bindtap="submitOrder">确认开单</button></view>
+  </block>
+</view>

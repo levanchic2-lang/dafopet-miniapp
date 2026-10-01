@@ -29,7 +29,7 @@ from app.services.inpatient_dispatch import OVERDUE_GRACE_MIN
 from app.models import (
     AdminUser, AnesthesiaMedicationEvent, AnesthesiaMonitorEntry, AnesthesiaMonitorSheet,
     Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
-    DewormingRecord, ExamOrder, ExamReport, InventoryBatch, InventoryItem, Invoice,
+    DewormingRecord, ExamOrder, ExamReport, GroomingOrder, InventoryBatch, InventoryItem, Invoice,
     Hospitalization, InpatientTemporaryMedication, MediaFile, MedicationAdminLog,
     Payment, Pet, Prescription, PrescriptionItem, Staff, Vaccination, Visit, Wallet,
 )
@@ -81,7 +81,10 @@ try:
                     store="大风动物医院（东环店）", status="confirmed"),
     ])
     db.flush()
-    db.add(Staff(name="横岗医生", store="横岗店", position="医生", status="active"))
+    db.add_all([
+        Staff(name="横岗医生", store="横岗店", position="医生", status="active"),
+        Staff(name="横岗美容师", store="横岗店", position="美容师", status="active"),
+    ])
     hg_hosp = Hospitalization(
         customer_id=hg_customer.id, pet_id=hg_pet.id, visit_id=hg_visit.id,
         store="横岗店", status="admitted", reason="测试住院",
@@ -107,7 +110,12 @@ try:
         unit="次", stock_qty=0, sell_price=50, order_type="exam",
         store="横岗店", is_active=True,
     )
-    db.add_all([hg_hosp, dh_hosp, hg_drug, dh_drug, hg_unified_exam])
+    hg_grooming = InventoryItem(
+        name="横岗犬洗护", category="grooming", subcategory="washcare", is_service=True,
+        unit="次", stock_qty=0, sell_price=88, order_type="grooming",
+        store="横岗店", is_active=True,
+    )
+    db.add_all([hg_hosp, dh_hosp, hg_drug, dh_drug, hg_unified_exam, hg_grooming])
     db.flush()
     hg_presc = Prescription(
         visit_id=hg_visit.id, customer_id=hg_customer.id, pet_id=hg_pet.id,
@@ -468,6 +476,33 @@ try:
         assert pet_detail.json()["reports"][0]["label"] == "血常规"
         assert pet_detail.json()["vaccinations"][0]["name"] == "狂犬疫苗"
         assert pet_detail.json()["dewormings"][0]["name"] == "驱虫药"
+        assert pet_detail.json()["groomings"] == []
+        grooming_context = client.get(
+            f"/api/staff-miniapp/pets/{own_pet_id}/grooming-order", headers=headers,
+        )
+        assert grooming_context.status_code == 200, grooming_context.text
+        assert grooming_context.json()["pet"]["name"] == "横岗犬"
+        assert [row["name"] for row in grooming_context.json()["items"]] == ["横岗犬洗护"]
+        grooming_created = client.post(
+            f"/api/staff-miniapp/pets/{own_pet_id}/grooming-order",
+            json={
+                "order_date": today, "groomer_name": "横岗美容师",
+                "items": [{"item_id": grooming_context.json()["items"][0]["id"],
+                           "quantity": 1, "unit_price": 88}],
+            }, headers=headers,
+        )
+        assert grooming_created.status_code == 200, grooming_created.text
+        assert grooming_created.json()["total"] == 88
+        db = SessionLocal()
+        try:
+            grooming = db.get(GroomingOrder, grooming_created.json()["grooming_id"])
+            assert grooming and grooming.pet_id == own_pet_id and grooming.invoice_id
+            assert db.get(Invoice, grooming.invoice_id).payment_status == "unpaid"
+        finally:
+            db.close()
+        pet_detail = client.get(f"/api/staff-miniapp/pets/{own_pet_id}", headers=headers)
+        assert pet_detail.json()["summary"]["groomings"] == 1
+        assert pet_detail.json()["groomings"][0]["services"] == ["横岗犬洗护"]
         report_id = pet_detail.json()["reports"][0]["id"]
         report_file = client.get(f"/api/staff-miniapp/reports/{report_id}/file", headers=headers)
         assert report_file.status_code == 200
