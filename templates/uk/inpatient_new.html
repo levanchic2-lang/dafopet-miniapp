@@ -18,7 +18,7 @@
 <hr class="in-rule"/>
 {% if request.query_params.get('err') %}<div class="in-msg">{{ request.query_params.get('err') }}</div>{% endif %}
 {% if request.query_params.get('msg') %}<div class="in-msg ok">{{ request.query_params.get('msg') }}</div>{% endif %}
-<div class="in-modes"><a class="in-mode {% if mode == 'visit' %}active{% endif %}" href="/admin/inpatient/new?mode=visit">医疗住院 · 关联病例</a><a class="in-mode {% if mode == 'boarding' %}active{% endif %}" href="/admin/inpatient/new?mode=boarding">寄养 / 单纯住院</a></div>
+<div class="in-modes"><a class="in-mode {% if mode == 'visit' %}active{% endif %}" href="/admin/inpatient/new?mode=visit{% if visit %}&visit_id={{ visit.id }}{% elif pet %}&pet_id={{ pet.id }}{% endif %}">医疗住院 · 关联病例</a><a class="in-mode {% if mode == 'boarding' %}active{% endif %}" href="/admin/inpatient/new?mode=boarding{% if pet %}&pet_id={{ pet.id }}{% endif %}">寄养 / 单纯住院</a></div>
 
 {% if not pet %}
 <section class="in-panel" style="max-width:900px">
@@ -50,7 +50,10 @@
       <div class="in-line"><span>匹配收费规则</span><b>{{ matched_rule.label if matched_rule else '尚未匹配' }}</b></div>
     </div>
 
-    {% if not weight_record %}
+    {% if mode == 'visit' and not visit %}
+    <div class="in-msg"><b>当前已选择 {{ pet.name or '该宠物' }}</b><br/>医疗住院需要关联一条进行中的病例；如果只是寄养或不需要诊疗用药，请直接切换到上方“寄养 / 单纯住院”。</div>
+    <a class="in-btn ghost" href="/admin/visits/create?customer_id={{ cust.id if cust else 0 }}&pet_id={{ pet.id }}">为该宠物新建病例</a>
+    {% elif not weight_record %}
     <div class="in-msg"><b>暂不能办理住院</b><br/>请先记录{{ '本病例' if visit else '该宠物' }}今天的体重。保存后页面会重新加载并自动匹配住院价格。</div>
     <form method="post" action="/admin/weight-records/create">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="customer_id" value="{{ cust.id if cust else 0 }}"/><input type="hidden" name="pet_id" value="{{ pet.id }}"/><input type="hidden" name="visit_id" value="{{ visit.id if visit else 0 }}"/><input type="hidden" name="record_date" value="{{ today }}"/><input type="hidden" name="next_url" value="/admin/inpatient/new?mode={{ mode }}&{% if visit %}visit_id={{ visit.id }}{% else %}pet_id={{ pet.id }}{% endif %}&msg=今日体重已记录"/>

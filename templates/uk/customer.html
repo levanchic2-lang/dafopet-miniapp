@@ -1239,11 +1239,7 @@
         {% endif %}
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('sellPkgModal').classList.add('visible');return false;">售卖套餐</a>
         {% if active_pet %}
-        <form method="post" action="/admin/inpatient/admit" style="margin:0;">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-          <input type="hidden" name="pet_id" value="{{ active_pet.id }}"/>
-          <button type="submit" class="uk-btn ghost sm" style="width:100%;">新建住院单</button>
-        </form>
+        <a class="uk-btn ghost sm" href="/admin/inpatient/new?mode=visit&pet_id={{ active_pet.id }}">新建住院单</a>
         {% endif %}
         <a class="uk-btn ghost sm" href="/admin/sales-orders/create?customer_id={{ cust.id }}{% if active_pet %}&pet_id={{ active_pet.id }}{% endif %}">售卖商品</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('depositModal').classList.add('visible');return false;">收押金</a>

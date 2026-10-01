@@ -34210,7 +34210,8 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
     v = db.get(Visit, visit_id) if visit_id else None
     pet = db.get(Pet, v.pet_id) if v and v.pet_id else db.get(Pet, pet_id)
     if admission_mode == "visit" and (not v or not pet):
-        return RedirectResponse("/admin/inpatient/new?mode=visit&err=请先选择今天的病例", status_code=303)
+        suffix = f"&pet_id={pet.id}" if pet else ""
+        return RedirectResponse(f"/admin/inpatient/new?mode=visit{suffix}&err=请先选择今天的病例", status_code=303)
     if admission_mode == "boarding" and not pet:
         return RedirectResponse("/admin/inpatient/new?mode=boarding&err=请先选择客户和宠物", status_code=303)
     if v and v.status != "open":
