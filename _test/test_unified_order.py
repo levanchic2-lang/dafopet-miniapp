@@ -263,10 +263,10 @@ assert "寄养 / 单纯住院" in boarding_page.text and "确认办理住院" in
 medical_from_pet = client.get(f"/admin/inpatient/new?mode=visit&pet_id={boarding_pet_id}")
 assert medical_from_pet.status_code == 200
 assert "当前已选择 寄养测试猫" in medical_from_pet.text
-assert f"mode=boarding&amp;pet_id={boarding_pet_id}" in medical_from_pet.text
+assert f"mode=boarding&pet_id={boarding_pet_id}" in medical_from_pet.text
 customer_page = client.get(f"/admin/customers/{customer_id}?pet_id={boarding_pet_id}")
 assert customer_page.status_code == 200
-assert f"/admin/inpatient/new?mode=visit&amp;pet_id={boarding_pet_id}" in customer_page.text
+assert f"/admin/inpatient/new?mode=visit&pet_id={boarding_pet_id}" in customer_page.text
 boarding_created = client.post("/admin/inpatient/admit", data={
     "csrf_token": csrf_inpatient, "pet_id": boarding_pet_id,
     "admission_mode": "boarding", "reason": "单纯寄养，不用药",
