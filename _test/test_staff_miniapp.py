@@ -115,8 +115,20 @@ try:
         unit="次", stock_qty=0, sell_price=88, order_type="grooming",
         store="横岗店", is_active=True,
     )
-    db.add_all([hg_hosp, dh_hosp, hg_drug, dh_drug, hg_unified_exam, hg_grooming])
+    hg_vaccine = InventoryItem(
+        name="横岗测试犬八联", category="vaccine", is_service=False,
+        unit="支", stock_qty=6, sell_price=120, order_type="vaccine",
+        store="横岗店", is_active=True,
+    )
+    hg_deworming = InventoryItem(
+        name="横岗测试驱虫药", category="antiparasitic", is_service=False,
+        unit="粒", stock_qty=12, sell_price=25, order_type="deworming",
+        store="横岗店", is_active=True,
+    )
+    db.add_all([hg_hosp, dh_hosp, hg_drug, dh_drug, hg_unified_exam, hg_grooming,
+                hg_vaccine, hg_deworming])
     db.flush()
+    db.add(InventoryBatch(item_id=hg_vaccine.id, batch_no="VAC-TEST-01", quantity=6, is_depleted=False))
     hg_presc = Prescription(
         visit_id=hg_visit.id, customer_id=hg_customer.id, pet_id=hg_pet.id,
         prescribed_date=today, vet_name="横岗医生", status="issued",
@@ -503,6 +515,45 @@ try:
         pet_detail = client.get(f"/api/staff-miniapp/pets/{own_pet_id}", headers=headers)
         assert pet_detail.json()["summary"]["groomings"] == 1
         assert pet_detail.json()["groomings"][0]["services"] == ["横岗犬洗护"]
+        prevention_context = client.get(
+            f"/api/staff-miniapp/pets/{own_pet_id}/prevention-order", headers=headers,
+        )
+        assert prevention_context.status_code == 200, prevention_context.text
+        prevention_data = prevention_context.json()
+        assert [row["name"] for row in prevention_data["vaccine_items"]] == ["横岗测试犬八联"]
+        assert [row["name"] for row in prevention_data["deworming_items"]] == ["横岗测试驱虫药"]
+        vaccine_item = prevention_data["vaccine_items"][0]
+        deworming_item = prevention_data["deworming_items"][0]
+        vaccine_created = client.post(
+            f"/api/staff-miniapp/pets/{own_pet_id}/prevention-order",
+            json={
+                "mode": "vaccine", "item_id": vaccine_item["id"], "order_date": today,
+                "vet_name": "横岗医生", "batch_no": "VAC-TEST-01", "vaccine_type": "canine_8",
+                "dose_number": 1, "next_due_date": today, "unit_price": 120,
+            }, headers=headers,
+        )
+        assert vaccine_created.status_code == 200, vaccine_created.text
+        deworming_created = client.post(
+            f"/api/staff-miniapp/pets/{own_pet_id}/prevention-order",
+            json={
+                "mode": "deworming", "item_id": deworming_item["id"], "order_date": today,
+                "vet_name": "横岗医生", "deworm_type": "combo", "weight_kg": 8.5,
+                "dose": "2粒", "quantity": 2, "unit_price": 25,
+            }, headers=headers,
+        )
+        assert deworming_created.status_code == 200, deworming_created.text
+        assert vaccine_created.json()["total"] == 120
+        assert deworming_created.json()["total"] == 50
+        db = SessionLocal()
+        try:
+            vaccine_rec = db.get(Vaccination, vaccine_created.json()["record_id"])
+            deworming_rec = db.get(DewormingRecord, deworming_created.json()["record_id"])
+            assert vaccine_rec and vaccine_rec.invoice_id and vaccine_rec.vaccine_type == "canine_8"
+            assert deworming_rec and deworming_rec.invoice_id and deworming_rec.deworm_type == "combo"
+            assert db.get(InventoryItem, vaccine_item["id"]).stock_qty == 5
+            assert db.get(InventoryItem, deworming_item["id"]).stock_qty == 10
+        finally:
+            db.close()
         report_id = pet_detail.json()["reports"][0]["id"]
         report_file = client.get(f"/api/staff-miniapp/reports/{report_id}/file", headers=headers)
         assert report_file.status_code == 200

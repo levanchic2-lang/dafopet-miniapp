@@ -33,6 +33,7 @@
     "pages/staff/pet/pet",
     "pages/staff/unified-order/unified-order",
     "pages/staff/grooming-order/grooming-order",
+    "pages/staff/prevention-order/prevention-order",
     "pages/staff/me/me"
   ],
   "window": {

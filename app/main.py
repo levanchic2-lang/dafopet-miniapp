@@ -7433,6 +7433,181 @@ async def api_staff_miniapp_grooming_order_create(
             "total": total, "message": "美容开单完成"}
 
 
+def _staff_prevention_item(
+    db: Session, user: AdminUser, item_id: int, category: str,
+) -> InventoryItem:
+    query = db.query(InventoryItem).filter(
+        InventoryItem.id == item_id,
+        InventoryItem.category == category,
+        InventoryItem.is_active == True,  # noqa: E712
+    )
+    query = _apply_store_filter(query, InventoryItem.store, (user.store or "").strip())
+    item = query.first()
+    if not item:
+        label = "疫苗" if category == "vaccine" else "驱虫药"
+        raise HTTPException(400, f"所选{label}不存在、已停用或不属于当前门店")
+    return item
+
+
+def _staff_prevention_vets(db: Session, store: str) -> list[str]:
+    query = db.query(Staff).filter(Staff.status.in_(["active", "probation"]))
+    if store:
+        query = query.filter(or_(Staff.store == store, Staff.store == "", Staff.store == None))
+    return [row.name for row in query.order_by(Staff.name).all()
+            if (row.name or "").strip() and ("医" in (row.position or "") or row.position == "合伙人")]
+
+
+@app.get("/api/staff-miniapp/pets/{pet_id}/prevention-order")
+async def api_staff_miniapp_prevention_order_context(
+    pet_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    pet = _staff_pet_record(db, user, pet_id)
+    customer = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    if not customer:
+        raise HTTPException(400, "宠物尚未关联客户档案")
+    store = (user.store or "").strip()
+    item_query = _apply_store_filter(db.query(InventoryItem), InventoryItem.store, store).filter(
+        InventoryItem.category.in_(["vaccine", "antiparasitic"]),
+        InventoryItem.is_active == True,  # noqa: E712
+    ).order_by(InventoryItem.category, InventoryItem.name)
+    items = item_query.all()
+    vets = _staff_prevention_vets(db, store)
+    latest_weight = db.query(WeightRecord).filter(
+        WeightRecord.pet_id == pet.id, WeightRecord.weight_kg > 0,
+    ).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
+    default_vet = (user.display_name or "").strip()
+    return {
+        "ok": True,
+        "pet": {"id": pet.id, "name": pet.name or "未命名宠物"},
+        "customer": {"id": customer.id, "name": customer.name or "未命名客户"},
+        "order_date": date.today().isoformat(),
+        "default_next_due": (date.today() + timedelta(days=30)).isoformat(),
+        "latest_weight": float(latest_weight.weight_kg or 0) if latest_weight else 0,
+        "vets": vets,
+        "default_vet": default_vet if default_vet in vets else "",
+        "vaccine_items": [_unified_template_item_payload(db, item, store) for item in items if item.category == "vaccine"],
+        "deworming_items": [_unified_template_item_payload(db, item, store) for item in items if item.category == "antiparasitic"],
+    }
+
+
+@app.post("/api/staff-miniapp/pets/{pet_id}/prevention-order")
+async def api_staff_miniapp_prevention_order_create(
+    pet_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    pet = _staff_pet_record(db, user, pet_id)
+    customer = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    if not customer:
+        raise HTTPException(400, "宠物尚未关联客户档案")
+    data = payload or {}
+    mode = str(data.get("mode") or "").strip()
+    if mode not in ("vaccine", "deworming"):
+        raise HTTPException(400, "请选择疫苗开单或驱虫开单")
+    try:
+        item_id = int(data.get("item_id") or 0)
+        qty = _unified_positive_number(data.get("quantity") or 1)
+        unit_price = _unified_price(data.get("unit_price") or 0)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+    category = "vaccine" if mode == "vaccine" else "antiparasitic"
+    item = _staff_prevention_item(db, user, item_id, category)
+    operator = (user.username or "staff")[:80]
+    order_date = str(data.get("order_date") or date.today().isoformat())[:20]
+    vet_name = str(data.get("vet_name") or "").strip()[:80]
+    if vet_name not in set(_staff_prevention_vets(db, (user.store or "").strip())):
+        raise HTTPException(400, "请选择当前门店在职的医生")
+    batch_no = str(data.get("batch_no") or "").strip()[:80]
+    notes = str(data.get("notes") or "").strip()
+    invoice = None
+    consent_task = None
+    try:
+        if mode == "vaccine":
+            vaccine_type = str(data.get("vaccine_type") or "other")[:40]
+            if vaccine_type not in {"rabies", "combo_3", "combo_6", "canine_8", "other"}:
+                raise HTTPException(400, "疫苗类型不正确")
+            is_free = bool(data.get("is_free"))
+            rec = Vaccination(
+                pet_id=pet.id, customer_id=customer.id,
+                vaccine_type=vaccine_type,
+                vaccine_name=item.name or "疫苗接种", batch_no=batch_no,
+                dose_number=max(1, int(data.get("dose_number") or 1)),
+                vaccinated_date=order_date,
+                next_due_date=str(data.get("next_due_date") or "")[:20],
+                inventory_item_id=item.id, is_free=is_free,
+                vet_name=vet_name, notes=notes, created_by=operator,
+            )
+            db.add(rec)
+            db.flush()
+            _deduct_inventory(db, item.id, 1.0, "vaccination", rec.id, operator,
+                              note=f"{item.name} 接种出库", batch_no=batch_no)
+            total = 0.0 if is_free else round(unit_price, 2)
+            ref_type = "vaccination"
+            invoice_note = f"疫苗接种 #{rec.id}"
+            if bool(data.get("request_vaccine_consent")):
+                consent_task, _created, _reason = _ensure_vaccine_consent_task(
+                    db, rec,
+                    store=_resolve_invoice_store(db, pet_id=pet.id, customer_id=customer.id,
+                                                 fallback=(user.store or "").strip()),
+                    initiated_by=operator,
+                )
+        else:
+            deworm_type = str(data.get("deworm_type") or "external")[:40]
+            if deworm_type not in {"external", "internal", "combo"}:
+                raise HTTPException(400, "驱虫类型不正确")
+            notes_full = notes
+            if batch_no:
+                notes_full = (notes_full + "\n批号：" + batch_no).strip()
+            rec = DewormingRecord(
+                customer_id=customer.id, pet_id=pet.id, deworm_date=order_date,
+                deworm_type=deworm_type,
+                product_name=item.name or "驱虫", weight_kg=max(0.0, float(data.get("weight_kg") or 0)),
+                dose=str(data.get("dose") or "").strip()[:80],
+                next_due_date=str(data.get("next_due_date") or "")[:20],
+                vet_name=vet_name, notes=notes_full, created_by=operator,
+            )
+            db.add(rec)
+            db.flush()
+            _deduct_inventory(db, item.id, qty, "deworming", rec.id, operator,
+                              note=f"{item.name} 使用出库 ×{qty:g}", batch_no=batch_no)
+            total = round(qty * unit_price, 2)
+            ref_type = "deworming"
+            invoice_note = f"驱虫 #{rec.id}"
+
+        if total > 0:
+            invoice = Invoice(
+                invoice_no=_gen_invoice_no(db), customer_id=customer.id, pet_id=pet.id,
+                invoice_date=order_date, subtotal=total, discount_amount=0.0,
+                total_amount=total, payment_status="unpaid", notes=invoice_note,
+                store=_resolve_invoice_store(db, pet_id=pet.id, customer_id=customer.id,
+                                             fallback=(user.store or "").strip()),
+                created_by=operator,
+            )
+            db.add(invoice)
+            db.flush()
+            billed_qty = 1.0 if mode == "vaccine" else qty
+            db.add(InvoiceItem(
+                invoice_id=invoice.id, ref_type=ref_type, ref_id=rec.id,
+                description=item.name, quantity=billed_qty, unit_price=unit_price,
+                subtotal=total,
+            ))
+            rec.invoice_id = invoice.id
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.exception("[staff-miniapp] prevention order create failed pet=%s mode=%s", pet_id, mode)
+        raise HTTPException(400, str(exc) or "预防开单失败")
+    label = "疫苗" if mode == "vaccine" else "驱虫"
+    return {
+        "ok": True, "record_id": rec.id, "invoice_id": invoice.id if invoice else 0,
+        "consent_task_id": consent_task.id if consent_task else 0,
+        "total": total, "message": f"{label}开单完成",
+    }
+
+
 @app.get("/api/staff-miniapp/reports/{report_id}/file")
 async def api_staff_miniapp_report_file(
     report_id: int, request: Request, db: Session = Depends(get_db),

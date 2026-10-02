@@ -1,0 +1,38 @@
+<view class="staff-page prevention-page">
+  <view wx:if="{{loading}}" class="staff-loading">正在读取预防项目…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <block wx:if="{{!loading && pet.id}}">
+    <view class="prevention-hero"><view class="prevention-eyebrow">PREVENTIVE CARE ORDER</view><view class="prevention-title">预防开单</view><view class="prevention-sub">{{customer.name}} · {{pet.name}}</view></view>
+    <view class="mode-switch"><view class="{{mode === 'vaccine' ? 'active' : ''}}" data-mode="vaccine" bindtap="switchMode">疫苗开单</view><view class="{{mode === 'deworming' ? 'active' : ''}}" data-mode="deworming" bindtap="switchMode">驱虫开单</view></view>
+
+    <view class="meta-list">
+      <picker mode="date" value="{{orderDate}}" bindchange="changeDate"><view><text>{{mode === 'vaccine' ? '接种日期' : '驱虫日期'}}</text><strong>{{orderDate}}</strong></view></picker>
+      <picker range="{{vets}}" value="{{vetIndex}}" bindchange="chooseVet"><view><text>操作医生</text><strong>{{vetIndex >= 0 ? vets[vetIndex] : '请选择'}}</strong></view></picker>
+      <picker mode="date" value="{{nextDueDate}}" bindchange="changeNextDue"><view><text>下次日期</text><strong>{{nextDueDate || '不设置'}}</strong></view></picker>
+    </view>
+
+    <block wx:if="{{mode === 'vaccine'}}">
+      <view class="field-grid"><picker range="{{vaccineTypes}}" value="{{vaccineTypeIndex}}" bindchange="chooseVaccineType"><view class="picker-field"><text>疫苗类型</text><strong>{{vaccineTypes[vaccineTypeIndex]}}</strong></view></picker><picker range="{{doseLabels}}" value="{{doseIndex}}" bindchange="chooseDose"><view class="picker-field"><text>针次</text><strong>{{doseLabels[doseIndex]}}</strong></view></picker></view>
+    </block>
+    <block wx:else>
+      <view class="deworm-types"><view class="{{dewormType === 'external' ? 'active' : ''}}" data-value="external" bindtap="setDewormType">体外</view><view class="{{dewormType === 'internal' ? 'active' : ''}}" data-value="internal" bindtap="setDewormType">体内</view><view class="{{dewormType === 'combo' ? 'active' : ''}}" data-value="combo" bindtap="setDewormType">体内外同驱</view></view>
+      <view class="field-grid"><label><text>本次体重 kg</text><input type="digit" value="{{weightKg}}" data-field="weightKg" bindinput="setField"/></label><label><text>使用剂量</text><input value="{{dose}}" data-field="dose" bindinput="setField" placeholder="例如 1 支"/></label></view>
+    </block>
+
+    <view class="item-search"><input value="{{query}}" bindinput="searchInput" placeholder="搜索{{mode === 'vaccine' ? '疫苗' : '驱虫药'}}"/></view>
+    <view wx:if="{{!selected}}" class="item-list">
+      <view wx:for="{{results}}" wx:key="id" class="item-row" data-index="{{index}}" bindtap="chooseItem"><view><strong>{{item.name}}</strong><text>库存 {{item.stock_qty}} {{item.unit || ''}}</text></view><text>¥{{item.sell_price}}　选择</text></view>
+      <view wx:if="{{!results.length}}" class="staff-empty">当前门店没有匹配项目。</view>
+    </view>
+    <view wx:if="{{selected}}" class="selected-card">
+      <view class="selected-head"><view><strong>{{selected.name}}</strong><text>库存 {{selected.stock_qty}} {{selected.unit || ''}}</text></view><button bindtap="clearItem">更换</button></view>
+      <view class="field-grid"><label wx:if="{{mode === 'deworming'}}"><text>出库数量 {{selected.unit || ''}}</text><input type="digit" value="{{quantity}}" data-field="quantity" bindinput="setField"/></label><label><text>单价</text><input type="digit" value="{{unitPrice}}" data-field="unitPrice" bindinput="setField"/></label><label><text>批号</text><input value="{{batchNo}}" data-field="batchNo" bindinput="setField" placeholder="选填"/></label></view>
+    </view>
+
+    <view wx:if="{{mode === 'vaccine'}}" class="checks"><checkbox-group bindchange="toggleFree"><label><checkbox value="1" checked="{{isFree}}"/>此次免费</label></checkbox-group><checkbox-group bindchange="toggleConsent"><label><checkbox value="1" checked="{{requestConsent}}"/>发起疫苗接种同意书</label></checkbox-group></view>
+    <label class="note-field"><text>备注</text><textarea value="{{notes}}" data-field="notes" bindinput="setField" placeholder="选填"/></label>
+
+    <view class="footer-space"></view>
+    <view class="submit-bar"><view><text>预计合计</text><strong>¥{{total}}</strong></view><button loading="{{submitting}}" disabled="{{submitting || !selected}}" bindtap="submitOrder">确认开单</button></view>
+  </block>
+</view>

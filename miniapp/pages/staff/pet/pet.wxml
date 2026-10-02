@@ -29,6 +29,7 @@
     </view>
 
     <view wx:if="{{activeTab === 'prevention'}}">
+      <view class="prevention-actions"><button data-mode="vaccine" bindtap="openPreventionOrder">疫苗开单</button><button data-mode="deworming" bindtap="openPreventionOrder">驱虫开单</button></view>
       <view class="detail-section-label">疫苗记录</view>
       <view wx:for="{{vaccinations}}" wx:key="id" class="record-block"><view class="record-date">{{item.date}} · {{item.status === 'voided' ? '已作废' : '有效'}}</view><view class="record-title">{{item.name}}</view><view class="record-text">批号：{{item.batch_no || '未登记'}}{{item.next_due_date ? ' · 下次 ' + item.next_due_date : ''}}</view></view>
       <view wx:if="{{!vaccinations.length}}" class="staff-empty">暂无疫苗记录。</view>

@@ -24,6 +24,11 @@ Page({
   },
   setTab(e) { this.setData({ activeTab: e.currentTarget.dataset.tab }); },
   openGroomingOrder() { if (this.data.id) wx.navigateTo({ url: "/pages/staff/grooming-order/grooming-order?pet_id=" + this.data.id }); },
+  openPreventionOrder(e) {
+    if (!this.data.id) return;
+    const mode = e.currentTarget.dataset.mode === "deworming" ? "deworming" : "vaccine";
+    wx.navigateTo({ url: `/pages/staff/prevention-order/prevention-order?pet_id=${this.data.id}&mode=${mode}` });
+  },
   openUnifiedOrder(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/unified-order/unified-order?id=" + id }); },
   openMaterials(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/material/material?id=" + id }); },
   openAnesthesia(e) {

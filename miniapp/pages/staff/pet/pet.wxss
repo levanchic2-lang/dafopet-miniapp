@@ -1,3 +1,4 @@
 @import "../../../staff.wxss";
 @import "../record-detail.wxss";
 .grooming-create{height:78rpx;margin:0 0 18rpx;border:0;border-radius:0;background:#171717;color:#fff;font-size:23rpx;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1.2}.grooming-create::after{border:0}
+.prevention-actions{display:grid;grid-template-columns:1fr 1fr;gap:12rpx;margin-bottom:18rpx}.prevention-actions button{height:78rpx;margin:0;border:0;border-radius:0;background:#171717;color:#fff;font-size:23rpx;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1.2}.prevention-actions button:last-child{background:#fff;color:#171717;border:1rpx solid #171717}.prevention-actions button::after{border:0}
