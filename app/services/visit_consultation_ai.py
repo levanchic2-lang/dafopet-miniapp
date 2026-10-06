@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -39,7 +40,9 @@ JSON 结构：
 }"""
 
 
-_VOLCENGINE_ENDPOINT = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+_VOLCENGINE_STANDARD_SUBMIT = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit"
+_VOLCENGINE_STANDARD_QUERY = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/query"
+_VOLCENGINE_FLASH_ENDPOINT = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
 _VETERINARY_HOTWORDS = [
     "呋塞米", "匹莫苯丹", "螺内酯", "贝那普利", "马罗匹坦", "奥美拉唑",
     "头孢噻呋", "多西环素", "美洛昔康", "非罗考昔", "加巴喷丁", "泼尼松龙",
@@ -57,14 +60,20 @@ def _speech_config() -> dict[str, str] | None:
     if provider in {"volcengine", "doubao", "volc"}:
         if not key:
             return None
+        resource_id = (
+            getattr(settings, "clinical_speech_resource_id", "")
+            or "volc.seedasr.auc"
+        ).strip()
+        default_endpoint = (
+            _VOLCENGINE_FLASH_ENDPOINT
+            if resource_id == "volc.bigasr.auc_turbo"
+            else _VOLCENGINE_STANDARD_SUBMIT
+        )
         return {
             "provider": "volcengine",
             "key": key,
-            "base_url": base or _VOLCENGINE_ENDPOINT,
-            "resource_id": (
-                getattr(settings, "clinical_speech_resource_id", "")
-                or "volc.bigasr.auc_turbo"
-            ).strip(),
+            "base_url": base or default_endpoint,
+            "resource_id": resource_id,
         }
     if not key:
         fallback_base = (settings.openai_base_url or "").strip()
@@ -149,31 +158,107 @@ async def _transcribe_with_volcengine(path: Path, config: dict[str, str]) -> dic
         "X-Api-Request-Id": str(uuid.uuid4()),
         "X-Api-Sequence": "-1",
     }
+    if config["resource_id"] == "volc.bigasr.auc_turbo":
+        return await _volcengine_flash(config["base_url"], headers, body)
+    return await _volcengine_standard(config["base_url"], headers, body)
+
+
+def _volcengine_error(response: httpx.Response) -> str:
+    message = response.headers.get("X-Api-Message", "").strip()
+    code = response.headers.get("X-Api-Status-Code", "").strip()
+    if not message:
+        try:
+            payload = response.json()
+            message = str(
+                payload.get("message")
+                or (payload.get("header") or {}).get("message")
+                or ""
+            ).strip()
+        except Exception:
+            message = ""
+    return message or code or f"HTTP {response.status_code}"
+
+
+def _volcengine_text(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except Exception:
+        return ""
+    result = payload.get("result") or (payload.get("body") or {}).get("result") or {}
+    return str(result.get("text") or "").strip()
+
+
+async def _volcengine_flash(
+    endpoint: str,
+    headers: dict[str, str],
+    body: dict[str, Any],
+) -> dict[str, Any]:
     try:
         timeout = httpx.Timeout(180.0, connect=15.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(config["base_url"], headers=headers, json=body)
-        response.raise_for_status()
-        payload = response.json()
+            response = await client.post(endpoint, headers=headers, json=body)
     except Exception as exc:
-        logger.warning("[visit_consultation] volcengine transcription failed: %s", exc)
+        logger.warning("[visit_consultation] volcengine flash request failed: %s", exc)
         return {"ok": False, "error": f"录音转写失败：{exc}"}
-
     status_code = response.headers.get("X-Api-Status-Code", "")
-    status_message = response.headers.get("X-Api-Message", "")
-    if status_code and status_code != "20000000":
-        logger.warning(
-            "[visit_consultation] volcengine rejected request: %s %s",
-            status_code,
-            status_message,
-        )
-        return {"ok": False, "error": f"录音转写失败：{status_message or status_code}"}
-    result = payload.get("result") or (payload.get("body") or {}).get("result") or {}
-    text = str(result.get("text") or "").strip()
-    if not text:
-        logger.warning("[visit_consultation] volcengine returned no text: %s", payload)
-        return {"ok": False, "error": "录音未识别出有效文字"}
-    return {"ok": True, "text": text}
+    if response.is_error or status_code != "20000000":
+        error = _volcengine_error(response)
+        logger.warning("[visit_consultation] volcengine flash rejected: %s", error)
+        return {"ok": False, "error": f"录音转写失败：{error}"}
+    text = _volcengine_text(response)
+    return {"ok": True, "text": text} if text else {
+        "ok": False,
+        "error": "录音未识别出有效文字",
+    }
+
+
+async def _volcengine_standard(
+    endpoint: str,
+    headers: dict[str, str],
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        timeout = httpx.Timeout(180.0, connect=15.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            submitted = await client.post(endpoint, headers=headers, json=body)
+            submit_code = submitted.headers.get("X-Api-Status-Code", "")
+            if submitted.is_error or submit_code != "20000000":
+                error = _volcengine_error(submitted)
+                logger.warning("[visit_consultation] volcengine submit rejected: %s", error)
+                return {"ok": False, "error": f"录音提交失败：{error}"}
+
+            query_headers = {
+                "Content-Type": "application/json",
+                "X-Api-Key": headers["X-Api-Key"],
+                "X-Api-Resource-Id": headers["X-Api-Resource-Id"],
+                "X-Api-Request-Id": headers["X-Api-Request-Id"],
+            }
+            log_id = submitted.headers.get("X-Tt-Logid", "")
+            if log_id:
+                query_headers["X-Tt-Logid"] = log_id
+            for _ in range(180):
+                await asyncio.sleep(2)
+                response = await client.post(
+                    _VOLCENGINE_STANDARD_QUERY,
+                    headers=query_headers,
+                    json={},
+                )
+                status_code = response.headers.get("X-Api-Status-Code", "")
+                if status_code in {"20000001", "20000002"}:
+                    continue
+                if response.is_error or status_code != "20000000":
+                    error = _volcengine_error(response)
+                    logger.warning("[visit_consultation] volcengine query failed: %s", error)
+                    return {"ok": False, "error": f"录音转写失败：{error}"}
+                text = _volcengine_text(response)
+                return {"ok": True, "text": text} if text else {
+                    "ok": False,
+                    "error": "录音未识别出有效文字",
+                }
+    except Exception as exc:
+        logger.warning("[visit_consultation] volcengine standard request failed: %s", exc)
+        return {"ok": False, "error": f"录音转写失败：{exc}"}
+    return {"ok": False, "error": "录音转写等待超时，请稍后重新整理"}
 
 
 def _plain(value: Any) -> str:
