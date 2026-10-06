@@ -120,7 +120,7 @@ Page({
     wx.showModal({
       title: "开始接诊录音",
       content: "请先确认已告知主人：本次录音仅用于整理院内病历，医生确认后录音文件会删除。",
-      confirmText: "已告知，开始",
+      confirmText: "开始录音",
       success: (res) => {
         if (!res.confirm) return;
         runWithPrivacyGuard("接诊录音", () => new Promise((resolve, reject) => {
@@ -135,7 +135,10 @@ Page({
             success: setting => { if (setting.confirm) wx.openSetting(); }
           });
         });
-      }
+      },
+      fail: (err) => this.setData({
+        error: (err && err.errMsg) || "无法打开录音确认窗口，请重新编译后再试"
+      })
     });
   },
 
