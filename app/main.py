@@ -7223,9 +7223,55 @@ async def api_staff_miniapp_pet_detail(
     prescription_rows = []
     for row in prescriptions:
         items = db.query(PrescriptionItem).filter(PrescriptionItem.prescription_id == row.id).order_by(PrescriptionItem.id).all()
+        item_rows = []
+        for item in items:
+            dose = ""
+            if float(item.dose_amount or 0) > 0:
+                dose = f"{float(item.dose_amount):g}{item.dose_unit or ''}"
+            else:
+                dose = (item.dosage or "").strip()
+            route_raw = (item.drug_type or "").strip()
+            route_label = _DRUG_TYPE_ZH.get(route_raw.lower(), route_raw) if route_raw else ""
+            quantity = (item.quantity or "").strip()
+            if not quantity and item.item_unit and float(item.quantity_num or 0) > 0:
+                quantity = f"{float(item.quantity_num):g}{item.item_unit or ''}"
+            frequency_raw = (item.frequency or "").strip()
+            frequency_label = {
+                "sid": "每日1次", "qd": "每日1次", "od": "每日1次",
+                "bid": "每日2次", "tid": "每日3次", "qid": "每日4次",
+                "q24h": "每24小时1次", "q12h": "每12小时1次",
+                "q8h": "每8小时1次", "q6h": "每6小时1次",
+            }.get(frequency_raw.lower(), frequency_raw)
+            duration = (item.duration_days or "").strip()
+            if duration and not any(unit in duration for unit in ("天", "日", "周", "月")):
+                duration = f"{duration}天"
+            usage_parts = []
+            if dose:
+                usage_parts.append(f"单次 {dose}")
+            if route_label:
+                usage_parts.append(route_label)
+            if frequency_label:
+                usage_parts.append(frequency_label)
+            if duration:
+                usage_parts.append(duration)
+            item_rows.append({
+                "id": item.id,
+                "drug_name": item.drug_name or "未命名药品",
+                "dose": dose,
+                "route": route_label,
+                "frequency": frequency_label,
+                "duration": duration,
+                "quantity": quantity,
+                "instructions": (item.instructions or "").strip(),
+                "print_note": (item.print_note or "").strip(),
+                "usage_label": " · ".join(usage_parts),
+            })
         prescription_rows.append({
             "id": row.id, "date": row.prescribed_date or "", "vet_name": row.vet_name or "",
-            "status": row.status or "", "items": [i.drug_name or "未命名药品" for i in items],
+            "status": row.status or "",
+            "status_label": {"draft": "草稿", "issued": "已开具", "dispensed": "已配齐", "voided": "已作废"}.get(row.status or "", row.status or ""),
+            "notes": (row.notes or "").strip(),
+            "items": item_rows,
         })
 
     reports = []

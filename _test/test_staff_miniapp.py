@@ -488,6 +488,14 @@ try:
         assert pet_detail.json()["reports"][0]["label"] == "血常规"
         assert pet_detail.json()["vaccinations"][0]["name"] == "狂犬疫苗"
         assert pet_detail.json()["dewormings"][0]["name"] == "驱虫药"
+        prescription = pet_detail.json()["prescriptions"][0]
+        assert prescription["status_label"] == "已开具"
+        assert prescription["items"][0]["drug_name"] == "横岗测试药"
+        assert prescription["items"][0]["dose"] == "0.5ml"
+        assert prescription["items"][0]["route"] == "静脉注射"
+        assert prescription["items"][0]["frequency"] == "每日2次"
+        assert prescription["items"][0]["duration"] == "3天"
+        assert prescription["items"][0]["usage_label"] == "单次 0.5ml · 静脉注射 · 每日2次 · 3天"
         assert pet_detail.json()["groomings"] == []
         grooming_context = client.get(
             f"/api/staff-miniapp/pets/{own_pet_id}/grooming-order", headers=headers,
