@@ -16,11 +16,13 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str = ""
     openai_model: str = "gpt-4o-mini"
-    # 接诊录音转写。独立配置是因为现有文字模型供应商未必提供 audio/transcriptions。
-    # 留空时仅在 OPENAI_BASE_URL 为空或指向 api.openai.com 时复用 OPENAI_API_KEY。
+    # 接诊录音转写。provider=volcengine 走豆包录音文件极速版；openai 走 audio/transcriptions。
+    # OpenAI 模式留空时，仅在 OPENAI_BASE_URL 为空或指向 api.openai.com 时复用 OPENAI_API_KEY。
+    clinical_speech_provider: str = "openai"
     clinical_speech_api_key: str = ""
     clinical_speech_base_url: str = ""
     clinical_speech_model: str = "gpt-4o-mini-transcribe"
+    clinical_speech_resource_id: str = "volc.bigasr.auc_turbo"
     # 视觉任务分别配置，留空时兼容回退 OPENAI_MODEL。
     # 火山方舟使用账号内已开通的 Endpoint/模型 ID，不要在代码里猜测新模型 ID。
     tnr_vision_model: str = ""
