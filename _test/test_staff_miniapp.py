@@ -32,6 +32,7 @@ from app.models import (
     DewormingRecord, ExamOrder, ExamReport, GroomingOrder, InventoryBatch, InventoryItem, Invoice,
     Hospitalization, InpatientTemporaryMedication, MediaFile, MedicationAdminLog,
     Payment, Pet, Prescription, PrescriptionItem, Staff, Vaccination, Visit, Wallet,
+    VisitConsultationDraft,
 )
 
 
@@ -577,6 +578,45 @@ try:
         assert material_visits.status_code == 200, material_visits.text
         assert [row["pet_name"] for row in material_visits.json()["items"]] == ["横岗犬"]
         own_visit_id = material_visits.json()["items"][0]["id"]
+        db = SessionLocal()
+        try:
+            consultation_draft = VisitConsultationDraft(
+                visit_id=own_visit_id, pet_id=own_pet_id, status="ready",
+                transcript="医生：体温正常。主人：咳嗽两天。",
+                chief_complaint="咳嗽两天", physical_exam="体温正常",
+                diagnosis="考虑上呼吸道感染", treatment_plan="建议检查并按医嘱治疗",
+                notes="主人已了解观察事项", created_by="横岗医生",
+            )
+            db.add(consultation_draft)
+            db.commit()
+            consultation_draft_id = consultation_draft.id
+            assert db.get(Visit, own_visit_id).chief_complaint == "咳嗽"
+        finally:
+            db.close()
+        consultation = client.get(
+            f"/api/staff-miniapp/visits/{own_visit_id}/consultation", headers=headers,
+        )
+        assert consultation.status_code == 200, consultation.text
+        assert consultation.json()["draft"]["id"] == consultation_draft_id
+        assert consultation.json()["draft"]["status"] == "ready"
+        confirmed = client.post(
+            f"/api/staff-miniapp/visits/{own_visit_id}/consultation/{consultation_draft_id}/confirm",
+            json={
+                "chief_complaint": "咳嗽两天，夜间明显", "physical_exam": "体温正常",
+                "diagnosis": "考虑上呼吸道感染", "treatment_plan": "建议检查并按医嘱治疗",
+                "notes": "主人已了解观察事项",
+            }, headers=headers,
+        )
+        assert confirmed.status_code == 200, confirmed.text
+        db = SessionLocal()
+        try:
+            saved_visit = db.get(Visit, own_visit_id)
+            saved_draft = db.get(VisitConsultationDraft, consultation_draft_id)
+            assert saved_visit.chief_complaint == "咳嗽两天，夜间明显"
+            assert saved_draft.status == "confirmed"
+            assert saved_draft.confirmed_by == "横岗医生"
+        finally:
+            db.close()
         unified_context = client.get(
             f"/api/staff-miniapp/visits/{own_visit_id}/unified-order", headers=headers,
         )

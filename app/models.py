@@ -1330,6 +1330,36 @@ class MedicalDocument(Base):
     customer = relationship("Customer", backref="medical_documents", foreign_keys=[customer_id])
 
 
+class VisitConsultationDraft(Base):
+    """手机接诊录音生成的可审核病历草稿。确认前不写入正式 Visit。"""
+    __tablename__ = "visit_consultation_drafts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    visit_id: Mapped[int] = mapped_column(ForeignKey("visits.id", ondelete="CASCADE"), nullable=False, index=True)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    base_draft_id = mapped_column(ForeignKey("visit_consultation_drafts.id", ondelete="SET NULL"), nullable=True, default=None)
+    status: Mapped[str] = mapped_column(String(20), default="processing")  # processing/ready/failed/confirmed/superseded
+    audio_path: Mapped[str] = mapped_column(String(500), default="")
+    original_name: Mapped[str] = mapped_column(String(200), default="")
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    transcript: Mapped[str] = mapped_column(Text, default="")
+    chief_complaint: Mapped[str] = mapped_column(Text, default="")
+    physical_exam: Mapped[str] = mapped_column(Text, default="")
+    diagnosis: Mapped[str] = mapped_column(Text, default="")
+    treatment_plan: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    ai_error: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    confirmed_by: Mapped[str] = mapped_column(String(80), default="")
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    visit = relationship("Visit", foreign_keys=[visit_id])
+    pet = relationship("Pet", foreign_keys=[pet_id])
+
+
 class Wallet(Base):
     """客户钱包：现金预存款。一个客户一个钱包行。"""
     __tablename__ = "wallets"

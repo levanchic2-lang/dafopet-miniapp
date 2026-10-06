@@ -96,6 +96,7 @@ from app.models import (
     DewormingRecord,
     WeightRecord,
     MedicalDocument,
+    VisitConsultationDraft,
     PrescriptionTemplate,
     UnifiedOrderTemplate,
     UnifiedOrderBatch,
@@ -7322,6 +7323,9 @@ async def api_staff_miniapp_pet_detail(
 
     return {
         "ok": True, "pet": _staff_pet_payload(pet),
+        "permissions": {
+            "consultation": (user.role or "") == "superadmin" or (user.mobile_role or "auto").strip() == "doctor",
+        },
         "customer": {"id": customer.id, "name": customer.name or "未命名客户", "phone_masked": _mask_phone(customer.phone or "")} if customer else {},
         "summary": {"visits": len(visits), "reports": len(reports), "vaccinations": len(vaccines), "dewormings": len(dewormings), "groomings": len(groomings)},
         "visits": [{
@@ -7700,6 +7704,112 @@ def _staff_visit_record(db: Session, user: AdminUser, visit_id: int) -> tuple[Vi
     return visit, pet, db.get(Customer, visit.customer_id) if visit.customer_id else None
 
 
+def _require_staff_visit_editor(user: AdminUser) -> None:
+    """接诊病历录入属于医生动作；超管默认视为医生。"""
+    if (user.role or "") == "superadmin":
+        return
+    if (user.mobile_role or "auto").strip() != "doctor":
+        raise HTTPException(403, "仅医生账号可以整理和写入接诊病历")
+
+
+def _consultation_draft_payload(row: VisitConsultationDraft | None) -> dict:
+    if not row:
+        return {}
+    return {
+        "id": row.id,
+        "status": row.status or "processing",
+        "status_label": {
+            "processing": "正在整理", "ready": "待医生确认", "failed": "处理失败",
+            "confirmed": "已写入病历", "superseded": "已被新草稿替代",
+        }.get(row.status or "", row.status or ""),
+        "duration_ms": int(row.duration_ms or 0),
+        "transcript": row.transcript or "",
+        "chief_complaint": row.chief_complaint or "",
+        "physical_exam": row.physical_exam or "",
+        "diagnosis": row.diagnosis or "",
+        "treatment_plan": row.treatment_plan or "",
+        "notes": row.notes or "",
+        "error": row.ai_error or "",
+        "created_by": row.created_by or "",
+        "confirmed_by": row.confirmed_by or "",
+        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
+        "confirmed_at": row.confirmed_at.strftime("%Y-%m-%d %H:%M") if row.confirmed_at else "",
+    }
+
+
+async def _process_visit_consultation_draft(draft_id: int) -> None:
+    from app.database import SessionLocal
+    from app.services.visit_consultation_ai import organize_visit_transcript, transcribe_visit_audio
+
+    db = SessionLocal()
+    try:
+        row = db.get(VisitConsultationDraft, draft_id)
+        if not row or row.status != "processing":
+            return
+        visit = db.get(Visit, row.visit_id)
+        pet = db.get(Pet, row.pet_id) if row.pet_id else None
+        if not visit or not pet:
+            row.status = "failed"
+            row.ai_error = "病例或宠物档案不存在"
+            db.commit()
+            return
+        transcribed = await transcribe_visit_audio(row.audio_path)
+        if not transcribed.get("ok"):
+            row.status = "failed"
+            row.ai_error = str(transcribed.get("error") or "录音转写失败")[:2000]
+            db.commit()
+            return
+        segment_text = str(transcribed.get("text") or "").strip()
+        transcript = segment_text
+        if row.base_draft_id:
+            base = db.get(VisitConsultationDraft, row.base_draft_id)
+            if base and (base.transcript or "").strip():
+                transcript = f"{base.transcript.strip()}\n\n【补充录音】\n{segment_text}"
+        row.transcript = transcript
+        db.commit()
+
+        organized = await organize_visit_transcript(
+            transcript,
+            pet_context={
+                "name": pet.name or "", "species": pet.species or "", "breed": pet.breed or "",
+                "gender": pet.gender or "", "birthday": pet.birthday_estimate or "",
+            },
+            existing_visit={
+                "chief_complaint": visit.chief_complaint or "", "physical_exam": visit.physical_exam or "",
+                "diagnosis": visit.diagnosis or "", "treatment_plan": visit.treatment_plan or "",
+                "notes": visit.notes or "",
+            },
+        )
+        row = db.get(VisitConsultationDraft, draft_id)
+        if not row or row.status != "processing":
+            return
+        if not organized.get("ok"):
+            row.status = "failed"
+            row.ai_error = str(organized.get("error") or "病历整理失败")[:2000]
+            db.commit()
+            return
+        for field in ("chief_complaint", "physical_exam", "diagnosis", "treatment_plan", "notes"):
+            generated = str(organized.get(field) or "").strip()
+            setattr(row, field, generated or str(getattr(visit, field) or ""))
+        row.status = "ready"
+        row.ai_error = ""
+        if row.base_draft_id:
+            base = db.get(VisitConsultationDraft, row.base_draft_id)
+            if base and base.status == "ready":
+                base.status = "superseded"
+        db.commit()
+    except Exception as exc:
+        logger.exception("[visit_consultation] processing failed draft=%s", draft_id)
+        db.rollback()
+        row = db.get(VisitConsultationDraft, draft_id)
+        if row:
+            row.status = "failed"
+            row.ai_error = f"处理失败：{exc}"[:2000]
+            db.commit()
+    finally:
+        db.close()
+
+
 def _case_media_payload(row: MedicalDocument) -> dict:
     stage = (row.title or "other").split("|", 1)[0]
     if stage not in _CASE_MEDIA_STAGES:
@@ -7710,6 +7820,167 @@ def _case_media_payload(row: MedicalDocument) -> dict:
         "notes": row.notes or "", "uploaded_by": row.uploaded_by or "",
         "uploaded_at": row.uploaded_at.strftime("%Y-%m-%d %H:%M") if row.uploaded_at else "",
     }
+
+
+@app.get("/api/staff-miniapp/visits/{visit_id}/consultation")
+async def api_staff_miniapp_visit_consultation(
+    visit_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    _require_staff_visit_editor(user)
+    visit, pet, customer = _staff_visit_record(db, user, visit_id)
+    latest = db.query(VisitConsultationDraft).filter(
+        VisitConsultationDraft.visit_id == visit.id,
+    ).order_by(VisitConsultationDraft.id.desc()).first()
+    from app.services.visit_consultation_ai import speech_transcription_configured
+    return {
+        "ok": True,
+        "speech_configured": speech_transcription_configured(),
+        "visit": {
+            "id": visit.id, "date": visit.visit_date or "", "status": visit.status or "open",
+            "vet_name": visit.vet_name or "", "chief_complaint": visit.chief_complaint or "",
+            "physical_exam": visit.physical_exam or "", "diagnosis": visit.diagnosis or "",
+            "treatment_plan": visit.treatment_plan or "", "notes": visit.notes or "",
+        },
+        "pet": _staff_pet_payload(pet),
+        "customer": {"id": customer.id, "name": customer.name or "未命名客户"} if customer else {},
+        "draft": _consultation_draft_payload(latest),
+    }
+
+
+@app.post("/api/staff-miniapp/visits/{visit_id}/consultation/upload")
+async def api_staff_miniapp_visit_consultation_upload(
+    visit_id: int, request: Request, background_tasks: BackgroundTasks,
+    duration_ms: int = Form(0), base_draft_id: int = Form(0),
+    file: UploadFile = File(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    _require_staff_visit_editor(user)
+    visit, pet, _customer = _staff_visit_record(db, user, visit_id)
+    if (visit.status or "open") == "closed":
+        raise HTTPException(403, "病历已结束，不能继续录入")
+    base = None
+    if base_draft_id:
+        base = db.get(VisitConsultationDraft, base_draft_id)
+        if not base or base.visit_id != visit.id or base.status != "ready":
+            raise HTTPException(400, "补充录音所关联的草稿已失效，请刷新后重试")
+    allowed = {".mp3", ".m4a", ".aac", ".wav", ".mp4"}
+    ext = Path(file.filename or "").suffix.lower() or ".mp3"
+    if ext not in allowed:
+        raise HTTPException(400, "录音格式不支持，请使用 MP3、M4A、AAC 或 WAV")
+    dest_dir = Path(settings.upload_dir) / "visit_consultations" / str(visit.id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"consult_{int(datetime.utcnow().timestamp() * 1000)}_{secrets.token_hex(4)}{ext}"
+    total = 0
+    try:
+        with dest.open("wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > 40 * 1024 * 1024:
+                    raise HTTPException(413, "单段录音不能超过40MB")
+                out.write(chunk)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    if total <= 0:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(400, "录音文件为空")
+    actor = (user.display_name or user.username or "")[:80]
+    row = VisitConsultationDraft(
+        visit_id=visit.id, pet_id=pet.id, base_draft_id=base.id if base else None,
+        status="processing", audio_path=str(dest), original_name=(file.filename or dest.name)[:200],
+        file_size=total, duration_ms=max(0, min(int(duration_ms or 0), 600000)), created_by=actor,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    background_tasks.add_task(_process_visit_consultation_draft, row.id)
+    return {"ok": True, "draft": _consultation_draft_payload(row)}
+
+
+@app.post("/api/staff-miniapp/visits/{visit_id}/consultation/{draft_id}/retry")
+async def api_staff_miniapp_visit_consultation_retry(
+    visit_id: int, draft_id: int, request: Request, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    _require_staff_visit_editor(user)
+    visit, _pet, _customer = _staff_visit_record(db, user, visit_id)
+    if (visit.status or "open") == "closed":
+        raise HTTPException(403, "病历已结束，不能重新整理")
+    row = db.get(VisitConsultationDraft, draft_id)
+    if not row or row.visit_id != visit.id:
+        raise HTTPException(404, "接诊草稿不存在")
+    if not row.audio_path or not Path(row.audio_path).is_file():
+        raise HTTPException(400, "原始录音已清理，请重新录音")
+    if row.status == "processing":
+        return {"ok": True, "draft": _consultation_draft_payload(row)}
+    row.status = "processing"
+    row.ai_error = ""
+    db.commit()
+    background_tasks.add_task(_process_visit_consultation_draft, row.id)
+    return {"ok": True, "draft": _consultation_draft_payload(row)}
+
+
+@app.post("/api/staff-miniapp/visits/{visit_id}/consultation/{draft_id}/confirm")
+async def api_staff_miniapp_visit_consultation_confirm(
+    visit_id: int, draft_id: int, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    _require_staff_visit_editor(user)
+    visit, _pet, _customer = _staff_visit_record(db, user, visit_id)
+    if (visit.status or "open") == "closed":
+        raise HTTPException(403, "病历已结束，不能写入")
+    row = db.get(VisitConsultationDraft, draft_id)
+    if not row or row.visit_id != visit.id:
+        raise HTTPException(404, "接诊草稿不存在")
+    if row.status == "confirmed":
+        return {"ok": True, "message": "该草稿已经写入病历"}
+    if row.status != "ready":
+        raise HTTPException(400, "接诊草稿尚未整理完成")
+    fields = ("chief_complaint", "physical_exam", "diagnosis", "treatment_plan", "notes")
+    changed = []
+    for field in fields:
+        value = str((payload or {}).get(field) or "").strip()[:12000]
+        if str(getattr(visit, field) or "") != value:
+            changed.append(field)
+        setattr(visit, field, value)
+        setattr(row, field, value)
+    actor = (user.display_name or user.username or "")[:80]
+    if not (visit.vet_name or "").strip():
+        visit.vet_name = actor
+    row.status = "confirmed"
+    row.confirmed_by = actor
+    row.confirmed_at = datetime.utcnow()
+    all_rows = db.query(VisitConsultationDraft).filter(
+        VisitConsultationDraft.visit_id == visit.id,
+    ).all()
+    upload_root = Path(settings.upload_dir).resolve()
+    for other in all_rows:
+        if other.id != row.id and other.status in ("processing", "ready", "failed"):
+            other.status = "superseded"
+        if other.audio_path:
+            try:
+                audio = Path(other.audio_path).resolve()
+                if upload_root == audio.parent or upload_root in audio.parents:
+                    audio.unlink(missing_ok=True)
+            except Exception:
+                logger.warning("[visit_consultation] audio cleanup failed draft=%s", other.id)
+            other.audio_path = ""
+    db.add(AuditLog(
+        action="staff_miniapp_visit_consultation_confirm",
+        actor=(user.username or actor)[:80],
+        detail=json.dumps({
+            "visit_id": visit.id, "draft_id": row.id, "staff_name": actor,
+            "changed_fields": changed,
+        }, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "message": "病历已更新", "visit_id": visit.id}
 
 
 @app.get("/api/staff-miniapp/visit-materials")
@@ -16436,7 +16707,7 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
            "monitor_sheet": 0, "consent_task": 0, "consent_doc": 0,
            "care_summary": 0, "care_plan": 0,
            "followup": 0, "microscopy": 0, "neurologic_exam": 0,
-           "clinical_score": 0, "unified_batch": 0}
+           "clinical_score": 0, "unified_batch": 0, "consultation_draft": 0}
 
     if db.query(Hospitalization.id).filter(Hospitalization.visit_id == vid).first():
         return {"visit_id": vid, "skipped": True, "reason": "挂有住院档案", "cnt": cnt}
@@ -16501,6 +16772,19 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
     # 其余纯 visit_id 关联：直接删
     cnt["weight"]        += db.query(WeightRecord).filter(WeightRecord.visit_id == vid).delete(synchronize_session=False)
     cnt["medical_doc"]   += db.query(MedicalDocument).filter(MedicalDocument.visit_id == vid).delete(synchronize_session=False)
+    consultation_rows = db.query(VisitConsultationDraft).filter(
+        VisitConsultationDraft.visit_id == vid).all()
+    upload_root = Path(settings.upload_dir).resolve()
+    for consultation in consultation_rows:
+        if consultation.audio_path:
+            try:
+                audio = Path(consultation.audio_path).resolve()
+                if upload_root == audio.parent or upload_root in audio.parents:
+                    audio.unlink(missing_ok=True)
+            except Exception:
+                pass
+        db.delete(consultation)
+        cnt["consultation_draft"] += 1
     monitor_ids = [r[0] for r in db.query(AnesthesiaMonitorSheet.id).filter(
         AnesthesiaMonitorSheet.visit_id == vid).all()]
     if monitor_ids:

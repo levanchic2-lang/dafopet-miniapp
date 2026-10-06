@@ -1,0 +1,56 @@
+<view class="staff-page consultation-page">
+  <view wx:if="{{loading}}" class="staff-loading">正在读取病例…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <block wx:if="{{!loading && visit.id}}">
+    <view class="consultation-hero">
+      <view class="staff-eyebrow">CONSULTATION · #{{visit.id}}</view>
+      <view class="consultation-pet">{{pet.name}}</view>
+      <view class="consultation-sub">{{customer.name}} · {{visit.date}}{{visit.vet_name ? ' · ' + visit.vet_name : ''}}</view>
+    </view>
+
+    <view wx:if="{{visit.status === 'closed'}}" class="consultation-warning">该病例已经结束，只能查看，不能继续录入。</view>
+    <view wx:if="{{!speechConfigured}}" class="consultation-warning">服务器尚未配置语音转写服务，暂时不能开始录音。</view>
+
+    <view wx:if="{{recording}}" class="recording-panel">
+      <view class="recording-dot"></view>
+      <view class="recording-label">正在记录接诊对话</view>
+      <view class="recording-time">{{elapsedLabel}}</view>
+      <view class="recording-tip">最长 10 分钟，可结束后继续补充录音</view>
+      <button class="stop-button" bindtap="stopRecording">结束并整理</button>
+    </view>
+
+    <view wx:elif="{{draft.status === 'processing'}}" class="processing-panel">
+      <view class="processing-title">正在识别并整理病历</view>
+      <view class="processing-sub">可以暂时离开，稍后重新进入仍会保留处理进度。</view>
+    </view>
+
+    <view wx:elif="{{draft.status === 'failed'}}" class="failed-panel">
+      <view class="failed-title">本次整理没有完成</view>
+      <view class="failed-message">{{draft.error}}</view>
+      <view class="failed-actions"><button bindtap="retryDraft" loading="{{busy}}">重新整理</button><button bindtap="startRecording">重新录音</button></view>
+    </view>
+
+    <view wx:else class="start-panel">
+      <view class="start-title">{{draft.status === 'ready' ? '继续补充接诊内容' : draft.status === 'confirmed' ? '开始新的补充记录' : '接诊录音整理'}}</view>
+      <view class="start-sub">正常与主人沟通即可，结束后系统会生成病历草稿，由医生确认后写入。</view>
+      <button class="start-button" bindtap="startRecording" disabled="{{visit.status === 'closed' || !speechConfigured || busy}}">{{draft.status === 'ready' ? '补充录音' : '开始接诊记录'}}</button>
+    </view>
+
+    <block wx:if="{{draft.status === 'ready' || draft.status === 'confirmed'}}">
+      <view class="consultation-section"><text>病历草稿</text><text>{{draft.status_label}}</text></view>
+      <view class="draft-form">
+        <view class="draft-field"><view class="draft-label">主诉与现病史</view><textarea value="{{form.chief_complaint}}" data-field="chief_complaint" bindinput="bindField" disabled="{{draft.status === 'confirmed'}}" maxlength="12000" auto-height/></view>
+        <view class="draft-field"><view class="draft-label">体格检查</view><textarea value="{{form.physical_exam}}" data-field="physical_exam" bindinput="bindField" disabled="{{draft.status === 'confirmed'}}" maxlength="12000" auto-height/></view>
+        <view class="draft-field"><view class="draft-label">评估 / 诊断</view><textarea value="{{form.diagnosis}}" data-field="diagnosis" bindinput="bindField" disabled="{{draft.status === 'confirmed'}}" maxlength="12000" auto-height/></view>
+        <view class="draft-field"><view class="draft-label">计划与医嘱</view><textarea value="{{form.treatment_plan}}" data-field="treatment_plan" bindinput="bindField" disabled="{{draft.status === 'confirmed'}}" maxlength="12000" auto-height/></view>
+        <view class="draft-field"><view class="draft-label">其他病史与备注</view><textarea value="{{form.notes}}" data-field="notes" bindinput="bindField" disabled="{{draft.status === 'confirmed'}}" maxlength="12000" auto-height/></view>
+      </view>
+
+      <view class="transcript-toggle" bindtap="toggleTranscript"><text>原始识别文字</text><text>{{showTranscript ? '收起' : '查看'}}</text></view>
+      <view wx:if="{{showTranscript}}" class="transcript-text">{{draft.transcript || '暂无识别文字'}}</view>
+
+      <button wx:if="{{draft.status === 'ready'}}" class="confirm-button" bindtap="confirmDraft" loading="{{busy}}">确认写入病历</button>
+      <view wx:if="{{draft.status === 'confirmed'}}" class="confirmed-note">已由 {{draft.confirmed_by}} 于 {{draft.confirmed_at}} 写入正式病历，原始录音已删除。</view>
+    </block>
+  </block>
+</view>

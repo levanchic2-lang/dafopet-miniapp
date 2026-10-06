@@ -5,7 +5,7 @@ const visitLabels = { outpatient: "门诊", followup: "复诊", postop: "术后"
 const wormLabels = { external: "体外驱虫", internal: "体内驱虫", combo: "内外同驱" };
 
 Page({
-  data: { id: 0, loading: true, opening: 0, error: "", activeTab: "visits", pet: {}, customer: {}, summary: {}, visits: [], prescriptions: [], reports: [], vaccinations: [], dewormings: [], groomings: [], invoices: [] },
+  data: { id: 0, loading: true, opening: 0, error: "", activeTab: "visits", canConsultation: false, pet: {}, customer: {}, summary: {}, visits: [], prescriptions: [], reports: [], vaccinations: [], dewormings: [], groomings: [], invoices: [] },
   onLoad(options) { this.setData({ id: Number(options.id || 0) }); this.load(); },
   onShow() { if (this.data.id && !this.data.loading) this.load(); },
   async load() {
@@ -15,7 +15,7 @@ Page({
       const result = await staffGet("/api/staff-miniapp/pets/" + this.data.id);
       const visits = (result.visits || []).map(x => Object.assign({}, x, { type_label: visitLabels[x.type] || x.type }));
       const dewormings = (result.dewormings || []).map(x => Object.assign({}, x, { type_label: wormLabels[x.type] || "驱虫" }));
-      this.setData({ pet: result.pet || {}, customer: result.customer || {}, summary: result.summary || {}, visits, prescriptions: result.prescriptions || [], reports: result.reports || [], vaccinations: result.vaccinations || [], dewormings, groomings: result.groomings || [], invoices: result.invoices || [] });
+      this.setData({ canConsultation: !!(result.permissions && result.permissions.consultation), pet: result.pet || {}, customer: result.customer || {}, summary: result.summary || {}, visits, prescriptions: result.prescriptions || [], reports: result.reports || [], vaccinations: result.vaccinations || [], dewormings, groomings: result.groomings || [], invoices: result.invoices || [] });
       wx.setNavigationBarTitle({ title: (result.pet && result.pet.name) || "宠物档案" });
     } catch (e) {
       if (e && e.statusCode === 401) { wx.redirectTo({ url: "/pages/staff/login/login" }); return; }
@@ -30,6 +30,7 @@ Page({
     wx.navigateTo({ url: `/pages/staff/prevention-order/prevention-order?pet_id=${this.data.id}&mode=${mode}` });
   },
   openUnifiedOrder(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/unified-order/unified-order?id=" + id }); },
+  openConsultation(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/consultation/consultation?id=" + id }); },
   openMaterials(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/material/material?id=" + id }); },
   openAnesthesia(e) {
     const id = Number(e.currentTarget.dataset.id || 0); if (!id || this.data.opening) return;

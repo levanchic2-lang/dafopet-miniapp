@@ -31,6 +31,7 @@
     "pages/staff/customers/customers",
     "pages/staff/customer/customer",
     "pages/staff/pet/pet",
+    "pages/staff/consultation/consultation",
     "pages/staff/unified-order/unified-order",
     "pages/staff/grooming-order/grooming-order",
     "pages/staff/prevention-order/prevention-order",
@@ -44,6 +45,9 @@
     "backgroundTextStyle": "dark"
   },
   "permission": {
+    "scope.record": {
+      "desc": "用于医生接诊时录音并整理病历，录音经医生确认后删除"
+    },
     "scope.userLocation": {
       "desc": "用于填写发现地点（可选）"
     }
