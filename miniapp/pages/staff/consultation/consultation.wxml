@@ -33,7 +33,8 @@
     <view wx:else class="start-panel">
       <view class="start-title">{{draft.status === 'ready' ? '继续补充接诊内容' : draft.status === 'confirmed' ? '开始新的补充记录' : '接诊录音整理'}}</view>
       <view class="start-sub">正常与主人沟通即可，结束后系统会生成病历草稿，由医生确认后写入。</view>
-      <button class="start-button" bindtap="startRecording" disabled="{{visit.status === 'closed' || !speechConfigured || busy}}">{{draft.status === 'ready' ? '补充录音' : '开始接诊记录'}}</button>
+      <view wx:if="{{startingRecording}}" class="record-starting">正在连接麦克风…</view>
+      <button class="start-button" bindtap="startRecording" loading="{{startingRecording}}" disabled="{{visit.status === 'closed' || !speechConfigured || busy || startingRecording}}">{{draft.status === 'ready' ? '补充录音' : '开始接诊记录'}}</button>
     </view>
 
     <block wx:if="{{draft.status === 'ready' || draft.status === 'confirmed'}}">

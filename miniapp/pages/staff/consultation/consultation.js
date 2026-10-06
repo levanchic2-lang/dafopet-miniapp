@@ -24,6 +24,7 @@ Page({
     draft: {},
     form: Object.assign({}, EMPTY_FORM),
     recording: false,
+    startingRecording: false,
     elapsedMs: 0,
     elapsedLabel: "00:00",
     showTranscript: false
@@ -45,29 +46,37 @@ Page({
   setupRecorder() {
     this.recorder = wx.getRecorderManager();
     this.recorder.onStart(() => {
+      if (this.recordStartTimer) clearTimeout(this.recordStartTimer);
+      this.recordStartTimer = null;
       this.recordStartedAt = Date.now();
-      this.setData({ recording: true, elapsedMs: 0, elapsedLabel: "00:00", error: "" });
+      this.setData({ recording: true, startingRecording: false, elapsedMs: 0, elapsedLabel: "00:00", error: "" });
       this.recordTimer = setInterval(() => this.updateElapsed(Date.now() - this.recordStartedAt), 500);
     });
     this.recorder.onStop((res) => {
       if (this.recordTimer) clearInterval(this.recordTimer);
       this.recordTimer = null;
       const duration = Number(res.duration || this.data.elapsedMs || 0);
-      this.setData({ recording: false, elapsedMs: duration });
+      this.setData({ recording: false, startingRecording: false, elapsedMs: duration });
       if (res.tempFilePath) this.uploadRecording(res.tempFilePath, duration);
       else this.setData({ error: "没有取得录音文件，请重新录音" });
     });
     this.recorder.onError((err) => {
+      if (this.recordStartTimer) clearTimeout(this.recordStartTimer);
+      this.recordStartTimer = null;
       if (this.recordTimer) clearInterval(this.recordTimer);
       this.recordTimer = null;
-      this.setData({ recording: false, error: (err && err.errMsg) || "录音失败，请检查麦克风权限" });
+      const message = (err && err.errMsg) || "录音失败，请检查麦克风权限";
+      this.setData({ recording: false, startingRecording: false, error: message });
+      wx.showModal({ title: "录音没有启动", content: message, showCancel: false });
     });
   },
 
   clearTimers() {
     if (this.recordTimer) clearInterval(this.recordTimer);
+    if (this.recordStartTimer) clearTimeout(this.recordStartTimer);
     if (this.pollTimer) clearTimeout(this.pollTimer);
     this.recordTimer = null;
+    this.recordStartTimer = null;
     this.pollTimer = null;
   },
 
@@ -110,36 +119,67 @@ Page({
     this.pollTimer = setTimeout(() => this.load(true), 2500);
   },
 
-  startRecording() {
-    if (this.data.busy || this.data.recording) return;
+  ensureRecordPermission() {
+    return new Promise((resolve, reject) => {
+      wx.getSetting({
+        success: (setting) => {
+          if (setting.authSetting && setting.authSetting["scope.record"] === true) {
+            resolve();
+            return;
+          }
+          wx.authorize({ scope: "scope.record", success: resolve, fail: reject });
+        },
+        fail: reject
+      });
+    });
+  },
+
+  async startRecording() {
+    if (this.data.busy || this.data.recording || this.data.startingRecording) return;
     if (this.data.visit.status === "closed") { wx.showToast({ title: "病历已结束", icon: "none" }); return; }
     if (!this.data.speechConfigured) {
       wx.showModal({ title: "语音服务未配置", content: "服务器尚未配置接诊录音转写服务，请联系管理员。", showCancel: false });
       return;
     }
-    wx.showModal({
+    const confirmed = await new Promise((resolve) => wx.showModal({
       title: "开始接诊录音",
       content: "请先确认已告知主人：本次录音仅用于整理院内病历，医生确认后录音文件会删除。",
       confirmText: "开始录音",
-      success: (res) => {
-        if (!res.confirm) return;
-        runWithPrivacyGuard("接诊录音", () => new Promise((resolve, reject) => {
-          wx.authorize({ scope: "scope.record", success: resolve, fail: reject });
-        })).then(() => this.recorder.start({
-          duration: 600000, sampleRate: 16000, numberOfChannels: 1,
-          encodeBitRate: 48000, format: "mp3", frameSize: 50
-        })).catch(err => {
-          if (err && String(err.errMsg || "").includes("privacy")) return;
-          wx.showModal({
-            title: "需要麦克风权限", content: "请在设置中允许录音后再试。", confirmText: "去设置",
-            success: setting => { if (setting.confirm) wx.openSetting(); }
+      success: (res) => resolve(Boolean(res.confirm)),
+      fail: (err) => {
+        this.setData({ error: (err && err.errMsg) || "无法打开录音确认窗口，请重新编译后再试" });
+        resolve(false);
+      }
+    }));
+    if (!confirmed) return;
+
+    this.setData({ startingRecording: true, error: "" });
+    try {
+      await runWithPrivacyGuard("接诊录音", () => this.ensureRecordPermission());
+      this.recordStartTimer = setTimeout(() => {
+        if (!this.data.recording) {
+          const message = "录音设备没有响应。请检查微信开发者工具和 Windows 的麦克风权限，也可以使用真机预览测试。";
+          this.setData({
+            startingRecording: false,
+            error: message
           });
-        });
-      },
-      fail: (err) => this.setData({
-        error: (err && err.errMsg) || "无法打开录音确认窗口，请重新编译后再试"
-      })
-    });
+          wx.showModal({ title: "麦克风没有响应", content: message, showCancel: false });
+        }
+      }, 5000);
+      this.recorder.start({
+        duration: 600000, sampleRate: 16000, numberOfChannels: 1,
+        encodeBitRate: 48000, format: "mp3", frameSize: 50
+      });
+    } catch (err) {
+      const message = (err && err.errMsg) || "麦克风授权未完成，请检查隐私授权和录音权限";
+      this.setData({ startingRecording: false, error: message });
+      wx.showModal({
+        title: "需要麦克风权限",
+        content: `${message}\n\n请在设置中允许录音后再试。`,
+        confirmText: "去设置",
+        success: (setting) => { if (setting.confirm) wx.openSetting(); }
+      });
+    }
   },
 
   stopRecording() {
