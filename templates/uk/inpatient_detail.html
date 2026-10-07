@@ -61,6 +61,8 @@
     <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/discharge" onsubmit="return confirm('确认办理离院并生成住院收费单？')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>办理离院</h2>
       <label>出院时间</label><input type="datetime-local" name="discharged_at" value="{{ (h.discharged_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.discharged_at else (now|bjtime).strftime('%Y-%m-%dT%H:%M') }}"/>
+      <label>本次结算单日价格</label><input type="number" name="daily_rate" min="0.01" step="0.01" value="{{ '%.2f'|format(h.daily_rate_override or 0) }}" required/>
+      <p class="id-note">特殊住院可在这里改价，只影响本次住院单。</p>
       <label class="id-check"><input type="checkbox" name="waive_same_day" value="1"/>如果今天入住、今天离院，免收默认的半天住院费</label>
       <label>离院备注</label><textarea name="discharge_summary" rows="3"></textarea>
       <button class="id-btn" type="submit">办理离院并生成收费单</button>
@@ -79,6 +81,7 @@
     <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/cancel" onsubmit="return confirm('确认取消这张住院单？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><button class="id-btn ghost danger" type="submit">取消住院单</button></form>
     {% elif h.status == 'discharged' %}
       {% if h.invoice_id %}<a class="id-btn" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">前往收银台结算</a><p class="id-note">收费单 #{{ h.invoice_id }} 已生成。</p>{% elif estimated_amount <= 0 %}<p class="id-note">本次住院费用为0元，没有生成收费单。</p>{% endif %}
+      {% if not invoice or invoice.payment_status == 'unpaid' %}<form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/edit-rate" onsubmit="return confirm('确认修改本次住院的单日价格并重算收费单？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>更正结算单价</h2><label>本次住院日费率</label><input type="number" name="daily_rate" min="0.01" step="0.01" value="{{ '%.2f'|format(h.daily_rate_override or 0) }}" required/><p class="id-note">只修改本次住院；收费单已有收款后将锁定。</p><button class="id-btn ghost" type="submit">保存并重算</button></form>{% endif %}
       <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/edit-discharge-time"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><label>更正离院时间</label><input type="datetime-local" name="discharged_at" value="{{ (h.discharged_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.discharged_at else '' }}"/><button class="id-btn ghost" type="submit">保存并重算</button></form>
     {% endif %}
     <a class="id-btn ghost" href="/admin/inpatient" style="margin-top:10px">返回住院单列表</a>

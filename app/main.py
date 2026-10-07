@@ -34863,6 +34863,7 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
                                   cage_id: int = Form(0),
                                   admitted_at: str = Form(""),
                                   expected_discharge_date: str = Form(""),
+                                  daily_rate_override: str = Form(""),
                                   reason: str = Form(""),
                                   confirm_admission: str = Form(""),
                                   is_insurance_service: str = Form("")):
@@ -34904,6 +34905,19 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
     if not matched_rule or float(matched_rule.daily_rate or 0) <= 0:
         msg = quote("当前门店没有匹配该物种和体重的住院费率，请先完善收费规则", safe="")
         return RedirectResponse(f"{new_url}&err={msg}", status_code=303)
+    system_daily_rate = float(matched_rule.daily_rate or 0)
+    try:
+        locked_daily_rate = (
+            _unified_price(daily_rate_override)
+            if str(daily_rate_override or "").strip()
+            else system_daily_rate
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"{new_url}&err={quote(str(exc), safe='')}", status_code=303,
+        )
+    if locked_daily_rate <= 0:
+        return RedirectResponse(f"{new_url}&err=本次住院日费率必须大于0", status_code=303)
     cage = db.get(Cage, cage_id) if cage_id else None
     if cage:
         if not cage.is_active or cage.store != store_short:
@@ -34927,7 +34941,7 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
         admitted_at=service_at,
         expected_discharge_date=(expected_discharge_date or "").strip()[:10],
         discharged_at=None,
-        daily_rate_override=float(matched_rule.daily_rate or 0), billing_mode="weight",
+        daily_rate_override=locked_daily_rate, billing_mode="weight",
         species_snapshot=species, admission_weight_kg=weight_kg,
         rate_rule_id=matched_rule.id, rate_label=matched_rule.label,
         billing_days=0,
@@ -34949,7 +34963,9 @@ async def admin_inpatient_admit(request: Request, db: Session = Depends(get_db),
         "admission_mode": admission_mode,
         "store": store_short, "weight_record_id": weight_record.id,
         "weight_kg": weight_kg, "rate_rule_id": matched_rule.id,
-        "daily_rate": float(matched_rule.daily_rate or 0),
+        "system_daily_rate": system_daily_rate,
+        "daily_rate": locked_daily_rate,
+        "manual_rate": abs(locked_daily_rate - system_daily_rate) >= 0.005,
         "medication_tasks": generated,
     })
     db.commit()
@@ -35049,6 +35065,7 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
                                       csrf_token: str = Form(""),
                                       discharge_summary: str = Form(""),
                                       discharged_at: str = Form(""),
+                                      daily_rate: str = Form(""),
                                       waive_same_day: str = Form("")):
     require_admin(request)
     _require_csrf(request, csrf_token)
@@ -35058,6 +35075,19 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
     if h.status != "admitted":
         return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=当前状态不可出院",
                                  status_code=303)
+    old_daily_rate = float(h.daily_rate_override or 0)
+    if str(daily_rate or "").strip():
+        try:
+            new_daily_rate = _unified_price(daily_rate)
+        except ValueError as exc:
+            return RedirectResponse(
+                f"/admin/inpatient/{hosp_id}?msg={quote(str(exc), safe='')}", status_code=303,
+            )
+        if new_daily_rate <= 0:
+            return RedirectResponse(
+                f"/admin/inpatient/{hosp_id}?msg=本次结算单日价格必须大于0", status_code=303,
+            )
+        h.daily_rate_override = new_daily_rate
     # 出院时间：优先用户选的「实际出院时间」（北京→UTC），否则取当前
     dt = _parse_bj_dt_to_utc(discharged_at)
     if dt is None:
@@ -35090,11 +35120,65 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
     days = h.billing_days if (h.billing_mode or "legacy") == "weight" else _calc_hosp_days(h.admitted_at, h.discharged_at)
     _audit(db, request, "hospitalization_discharge", detail={
         "id": h.id, "days": days, "same_day_waived": bool(h.same_day_waived),
+        "old_daily_rate": old_daily_rate,
+        "daily_rate": float(h.daily_rate_override or 0),
         "cancelled_medications": cancelled_medications,
     })
     db.commit()
     return RedirectResponse(f"/admin/inpatient/{hosp_id}?msg=已出院 · 共 {days} 天 · 账单已同步",
                              status_code=303)
+
+
+@app.post("/admin/inpatient/{hosp_id}/edit-rate")
+async def admin_inpatient_edit_rate(
+    hosp_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), daily_rate: str = Form(""),
+):
+    """Adjust one admission's locked daily rate without changing the shared rate table."""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    h = db.get(Hospitalization, hosp_id)
+    if not h or (h.billing_mode or "legacy") != "weight":
+        raise HTTPException(404, "住院单不存在")
+    if h.status not in ("admitted", "discharged"):
+        return RedirectResponse(
+            f"/admin/inpatient/{hosp_id}?msg=当前状态不能修改住院日费率", status_code=303,
+        )
+    pet = db.get(Pet, h.pet_id) if h.pet_id else None
+    _assert_store_access(request, h.store or "", pet.store if pet else "")
+    linked_invoice = db.get(Invoice, h.invoice_id) if h.invoice_id else None
+    if linked_invoice and linked_invoice.payment_status not in ("unpaid",):
+        return RedirectResponse(
+            f"/admin/inpatient/{hosp_id}?msg=关联收费单已有收款，不能直接改价；请先撤销收款",
+            status_code=303,
+        )
+    try:
+        new_daily_rate = _unified_price(daily_rate)
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/admin/inpatient/{hosp_id}?msg={quote(str(exc), safe='')}", status_code=303,
+        )
+    if new_daily_rate <= 0:
+        return RedirectResponse(
+            f"/admin/inpatient/{hosp_id}?msg=住院日费率必须大于0", status_code=303,
+        )
+    old_daily_rate = float(h.daily_rate_override or 0)
+    h.daily_rate_override = new_daily_rate
+    if h.status == "discharged":
+        db.flush()
+        inv = _sync_hospitalization_invoice(
+            db, h, request.session.get("admin_username", "admin"),
+        )
+        h.invoice_id = inv.id if inv else None
+    _audit(db, request, "hospitalization_edit_rate", detail={
+        "id": h.id, "old_daily_rate": old_daily_rate,
+        "daily_rate": new_daily_rate,
+    })
+    db.commit()
+    return RedirectResponse(
+        f"/admin/inpatient/{hosp_id}?msg=本次住院日费率已更新，费用已重算",
+        status_code=303,
+    )
 
 
 @app.post("/admin/inpatient/{hosp_id}/edit-admission-time")
@@ -36516,6 +36600,7 @@ async def m_inpatient_detail(hosp_id: int, request: Request, db: Session = Depen
 
     pet = db.get(Pet, h.pet_id) if h.pet_id else None
     cust = db.get(Customer, h.customer_id) if h.customer_id else None
+    invoice = db.get(Invoice, h.invoice_id) if h.invoice_id else None
     now = datetime.utcnow()
     deposits = db.query(Deposit).filter(Deposit.hospitalization_id == h.id).order_by(
         Deposit.created_at.desc(), Deposit.id.desc(),
@@ -36535,7 +36620,7 @@ async def m_inpatient_detail(hosp_id: int, request: Request, db: Session = Depen
         "h": h, "pet": pet, "cust": cust, "days": days, "now": now,
         "deposits": deposits, "deposit_available": deposit_available,
         "estimated_amount": round(days * float(h.daily_rate_override or 0), 2),
-        "status_zh": _HOSP_STATUS_ZH,
+        "status_zh": _HOSP_STATUS_ZH, "invoice": invoice,
         "next_url": f"/m/inpatient/{hosp_id}",
     })
     return templates.TemplateResponse(request, "m_uk/inpatient_detail.html", ctx)

@@ -238,14 +238,22 @@ db.close()
 created = client.post("/admin/inpatient/admit", data={
     "csrf_token": csrf_inpatient, "visit_id": visit_id,
     "reason": "术后住院观察", "confirm_admission": "1",
+    "daily_rate_override": "48.50",
 })
 assert created.status_code == 303 and created.headers["location"].startswith("/admin/inpatient/")
 hosp_id = int(created.headers["location"].split("/admin/inpatient/")[1].split("?")[0])
 db = SessionLocal()
 hosp = db.get(Hospitalization, hosp_id)
 assert hosp.status == "admitted" and hosp.billing_mode == "weight"
-assert hosp.admission_weight_kg == 4.25 and hosp.daily_rate_override == 35
+assert hosp.admission_weight_kg == 4.25 and hosp.daily_rate_override == 48.5
 assert hosp.invoice_id is None
+db.close()
+rate_edited = client.post(f"/admin/inpatient/{hosp_id}/edit-rate", data={
+    "csrf_token": csrf_inpatient, "daily_rate": "52.50",
+})
+assert rate_edited.status_code == 303
+db = SessionLocal()
+assert db.get(Hospitalization, hosp_id).daily_rate_override == 52.5
 boarding_pet = Pet(customer_id=customer_id, name="寄养测试猫", species="cat", store="横岗店")
 db.add(boarding_pet)
 db.flush()
