@@ -46,7 +46,7 @@
   </main>
   <aside class="id-side">
     {% if is_simple_charge %}
-      {% if h.invoice_id %}<a class="id-btn" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">前往收银台结算</a><p class="id-note">收费单 #{{ h.invoice_id }} 已生成。</p>{% endif %}
+      {% if h.invoice_id %}<a class="id-btn" href="/admin/invoices/{{ h.invoice_id }}#pay">前往收费单结算</a><p class="id-note">收费单 #{{ h.invoice_id }} 已生成。</p>{% endif %}
       {% if h.status != 'cancelled' and (not invoice or invoice.payment_status == 'unpaid') %}
       <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/edit-simple">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>修改住院费用</h2>
@@ -67,7 +67,7 @@
       <label>离院备注</label><textarea name="discharge_summary" rows="3"></textarea>
       <button class="id-btn" type="submit">办理离院并生成收费单</button>
     </form>
-    {% if h.invoice_id %}<a class="id-btn" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">进入收银台 · 收费单 #{{ h.invoice_id }}</a>{% endif %}
+    {% if h.invoice_id %}<a class="id-btn" href="/admin/invoices/{{ h.invoice_id }}#pay">进入收费单 · #{{ h.invoice_id }}</a>{% endif %}
     <form class="id-form" method="post" action="/admin/deposits/create">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><input type="hidden" name="customer_id" value="{{ h.customer_id }}"/><input type="hidden" name="pet_id" value="{{ h.pet_id }}"/><input type="hidden" name="visit_id" value="{{ h.visit_id or 0 }}"/><input type="hidden" name="hospitalization_id" value="{{ h.id }}"/><input type="hidden" name="category" value="hospital"/><input type="hidden" name="next_url" value="/admin/inpatient/{{ h.id }}"/>
       <h2>收住院押金</h2><label>金额</label><input type="number" name="amount" min="0.01" step="0.01" required/><label>收款方式</label><select name="pay_method"><option value="cash">现金</option><option value="wechat">微信</option><option value="alipay">支付宝</option><option value="shouqianba">收钱吧</option></select><label>备注</label><input name="note" placeholder="可选"/><button class="id-btn ghost" type="submit">确认收押金</button>
@@ -80,7 +80,7 @@
     </form>
     <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/cancel" onsubmit="return confirm('确认取消这张住院单？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><button class="id-btn ghost danger" type="submit">取消住院单</button></form>
     {% elif h.status == 'discharged' %}
-      {% if h.invoice_id %}<a class="id-btn" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">前往收银台结算</a><p class="id-note">收费单 #{{ h.invoice_id }} 已生成。</p>{% elif estimated_amount <= 0 %}<p class="id-note">本次住院费用为0元，没有生成收费单。</p>{% endif %}
+      {% if h.invoice_id %}<a class="id-btn" href="/admin/invoices/{{ h.invoice_id }}#pay">前往收费单结算</a><p class="id-note">收费单 #{{ h.invoice_id }} 已生成。</p>{% elif estimated_amount <= 0 %}<p class="id-note">本次住院费用为0元，没有生成收费单。</p>{% endif %}
       {% if not invoice or invoice.payment_status == 'unpaid' %}<form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/edit-rate" onsubmit="return confirm('确认修改本次住院的单日价格并重算收费单？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><h2>更正结算单价</h2><label>本次住院日费率</label><input type="number" name="daily_rate" min="0.01" step="0.01" value="{{ '%.2f'|format(h.daily_rate_override or 0) }}" required/><p class="id-note">只修改本次住院；收费单已有收款后将锁定。</p><button class="id-btn ghost" type="submit">保存并重算</button></form>{% endif %}
       <form class="id-form" method="post" action="/admin/inpatient/{{ h.id }}/edit-discharge-time"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><label>更正离院时间</label><input type="datetime-local" name="discharged_at" value="{{ (h.discharged_at|bjtime).strftime('%Y-%m-%dT%H:%M') if h.discharged_at else '' }}"/><button class="id-btn ghost" type="submit">保存并重算</button></form>
     {% endif %}

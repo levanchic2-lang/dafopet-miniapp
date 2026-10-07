@@ -40,9 +40,9 @@
   <div class="ukm-field"><label class="lbl">离院备注</label><textarea class="ukm-textarea" name="discharge_summary"></textarea></div>
   <button class="ukm-btn block" type="submit">办&nbsp;理&nbsp;离&nbsp;院</button>
 </form>
-{% if h.invoice_id %}<a class="ukm-btn block" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">进&nbsp;入&nbsp;收&nbsp;银&nbsp;台</a>{% endif %}
+{% if h.invoice_id %}<a class="ukm-btn block" href="/m/invoices/{{ h.invoice_id }}">进&nbsp;入&nbsp;收&nbsp;费&nbsp;单</a>{% endif %}
 {% elif h.status == 'discharged' and h.invoice_id %}
-<a class="ukm-btn block" href="/admin/cashier/checkout?invoice_id={{ h.invoice_id }}">前&nbsp;往&nbsp;收&nbsp;银&nbsp;台</a>
+<a class="ukm-btn block" href="/m/invoices/{{ h.invoice_id }}">前&nbsp;往&nbsp;收&nbsp;费&nbsp;单</a>
 {% if not invoice or invoice.payment_status == 'unpaid' %}<div class="ukm-section-head"><h2>更&nbsp;正&nbsp;结&nbsp;算&nbsp;单&nbsp;价</h2></div><form method="post" action="/admin/inpatient/{{ h.id }}/edit-rate" onsubmit="return confirm('确认修改本次住院的单日价格并重算收费单？')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"/><div class="ukm-field"><label class="lbl">本次住院日费率</label><input class="ukm-input" type="number" name="daily_rate" min="0.01" step="0.01" value="{{ '%.2f'|format(h.daily_rate_override or 0) }}" required/></div><button class="ukm-btn hair block" type="submit">保&nbsp;存&nbsp;并&nbsp;重&nbsp;算</button></form>{% endif %}
 {% endif %}
 <div class="ukm-divider"></div><a class="ukm-btn hair block" href="/admin/inpatient/{{ h.id }}">查&nbsp;看&nbsp;完&nbsp;整&nbsp;住&nbsp;院&nbsp;单</a>
