@@ -1,0 +1,28 @@
+<view class="staff-page follow-detail-page">
+  <view wx:if="{{loading}}" class="staff-loading">正在读取随访任务…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <block wx:if="{{!loading && item.id}}">
+    <view class="follow-hero"><view class="staff-eyebrow">{{item.kind_label}} · #{{item.id}}</view><view class="follow-pet">{{item.pet.name}}</view><view class="follow-sub">{{item.customer.name}} · {{item.planned_date}} · {{item.status_label}}</view><view class="follow-title">{{item.title}}</view></view>
+    <view class="follow-info"><view><text>关联病例</text><text>#{{item.visit.id}} · {{item.visit.status === 'closed' ? '已结束' : '进行中'}}</text></view><view><text>诊断</text><text>{{item.visit.diagnosis || '未填写'}}</text></view><view wx:if="{{item.question}}"><text>本次询问</text><text>{{item.question}}</text></view><view wx:if="{{item.risk_trigger}}" class="risk"><text>升级条件</text><text>{{item.risk_trigger}}</text></view></view>
+    <button wx:if="{{item.customer.phone}}" class="call-button" bindtap="callCustomer">拨打 {{item.customer.phone_masked}}</button>
+    <view wx:if="{{item.customer_response_note}}" class="customer-response"><view>客户已有反馈</view><text>{{item.customer_response_note}}</text></view>
+
+    <view wx:if="{{item.status !== 'closed' && item.status !== 'skipped'}}">
+      <view class="form-label">本次随访结果</view>
+      <view class="choice-grid outcome-grid"><view wx:for="{{outcomes}}" wx:key="value" class="choice {{outcome === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="chooseOutcome">{{item.label}}</view></view>
+      <view class="form-label">下一步</view>
+      <view class="choice-grid action-grid"><view wx:for="{{actions}}" wx:key="value" class="choice {{nextAction === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="chooseAction">{{item.label}}</view></view>
+
+      <view wx:if="{{nextAction === 'reschedule'}}" class="conditional"><text>再次联系日期</text><picker mode="date" value="{{nextDate}}" bindchange="onNextDate"><view class="picker-value">{{nextDate || '请选择日期'}}</view></picker></view>
+      <view wx:if="{{nextAction === 'appointment'}}" class="conditional"><text>复诊预约</text><view class="date-time"><picker mode="date" value="{{appointmentDate}}" bindchange="onAppointmentDate"><view class="picker-value">{{appointmentDate}}</view></picker><picker mode="time" value="{{appointmentTime}}" bindchange="onAppointmentTime"><view class="picker-value">{{appointmentTime}}</view></picker></view></view>
+      <view class="form-label">处理备注</view><textarea class="follow-textarea" value="{{note}}" bindinput="onNote" placeholder="补充客户描述、沟通情况或医生需要关注的内容" maxlength="1000" />
+
+      <view wx:if="{{outcome === 'recovered' && item.visit.status !== 'closed'}}" class="close-box">
+        <view class="close-switch"><view><strong>同时结束病历</strong><text>恢复良好时，系统建议检查是否可以结束病历</text></view><switch checked="{{closeVisit}}" color="#1d4d3a" bindchange="onCloseVisit" /></view>
+        <block wx:if="{{closeVisit}}"><view class="close-warning">病历结束后不可修改，操作人将记录为当前小程序账号。</view><view class="form-label">结束后是否继续随访</view><view class="choice-grid two"><view class="choice {{closeDecision === 'keep' ? 'active' : ''}}" data-value="keep" bindtap="chooseCloseDecision">保留后续随访</view><view class="choice {{closeDecision === 'none' ? 'active' : ''}}" data-value="none" bindtap="chooseCloseDecision">无需后续随访</view></view><view wx:if="{{closeDecision === 'keep' && !(item.future_count > 0)}}" class="conditional"><text>下一次随访日期</text><picker mode="date" value="{{closeFollowupDate}}" bindchange="onCloseFollowupDate"><view class="picker-value">{{closeFollowupDate}}</view></picker></view><view wx:if="{{closeDecision === 'keep' && item.future_count > 0}}" class="future-note">已有 {{item.future_count}} 项后续任务，将继续保留。</view></block>
+      </view>
+      <button class="submit-button" loading="{{busy}}" disabled="{{busy}}" bindtap="submit">确认记录本次随访</button>
+    </view>
+    <view wx:else class="done-box"><view>{{item.staff_outcome_label || '随访已完成'}}</view><text>{{item.next_action_label}}</text><text wx:if="{{item.handle_note}}">{{item.handle_note}}</text><text wx:if="{{item.handled_by}}">{{item.handled_by}} · {{item.handled_at}}</text></view>
+  </block>
+</view>

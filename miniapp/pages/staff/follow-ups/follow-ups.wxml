@@ -1,0 +1,22 @@
+<view class="staff-page follow-list-page">
+  <view class="staff-status"><text>员工端</text><text>复诊随访</text></view>
+  <view class="staff-brand"><view><view class="staff-brand-name">复诊随访</view><view class="staff-brand-en">FOLLOW-UP CENTER</view></view><view class="staff-brand-side">{{counts.today || 0}} 项待办</view></view>
+  <view class="follow-tabs">
+    <view class="{{tab === 'today' ? 'active' : ''}}" data-tab="today" bindtap="setTab">待处理</view>
+    <view class="{{tab === 'upcoming' ? 'active' : ''}}" data-tab="upcoming" bindtap="setTab">待到期</view>
+    <view class="{{tab === 'done' ? 'active' : ''}}" data-tab="done" bindtap="setTab">已完成</view>
+  </view>
+  <view wx:if="{{counts.overdue > 0 && tab === 'today'}}" class="follow-warning">其中 {{counts.overdue}} 项已经逾期，请优先处理。</view>
+  <view wx:if="{{loading}}" class="staff-loading">正在载入随访任务…</view>
+  <view wx:if="{{error}}" class="staff-error">{{error}}</view>
+  <view wx:if="{{!loading && !items.length}}" class="staff-empty">当前没有这一类随访任务。</view>
+  <view wx:for="{{items}}" wx:key="id" class="follow-card" data-id="{{item.id}}" bindtap="openItem">
+    <view class="follow-card-head"><view><text class="follow-kind">{{item.kind_label}}</text><text class="follow-date {{item.planned_date < today && item.status !== 'closed' ? 'late' : ''}}">{{item.planned_date}}</text></view><text class="follow-status">{{item.status_label}}</text></view>
+    <view class="follow-name">{{item.pet.name || '宠物'}} · {{item.customer.name || '客户'}}</view>
+    <view class="follow-title">{{item.title}}</view>
+    <view wx:if="{{item.visit.diagnosis}}" class="follow-diagnosis">{{item.visit.diagnosis}}</view>
+    <view wx:if="{{item.question}}" class="follow-question">问：{{item.question}}</view>
+    <view wx:if="{{item.staff_outcome_label}}" class="follow-result">{{item.staff_outcome_label}} · {{item.next_action_label}}</view>
+    <view class="follow-card-foot"><text>{{item.visit.vet_name ? '医生 ' + item.visit.vet_name : '病例 #' + item.visit.id}}</text><button wx:if="{{item.customer.phone}}" catchtap="callCustomer" data-phone="{{item.customer.phone}}">拨打电话</button></view>
+  </view>
+</view>

@@ -10,6 +10,7 @@
     <view class="staff-row" bindtap="goMaterials"><view class="staff-row-index">IMG</view><view class="staff-row-main"><view class="staff-row-title">病例素材</view><view class="staff-row-sub">选择病例，现场拍摄照片或视频</view></view><view class="staff-row-count">{{stats.visits || 0}}</view></view>
     <view class="staff-row" bindtap="goAnesthesia"><view class="staff-row-index">AN</view><view class="staff-row-main"><view class="staff-row-title">麻醉监护</view><view class="staff-row-sub">术前用药、五分钟体征、复苏记录</view></view><view class="staff-row-count">{{stats.anesthesia_open || 0}}</view></view>
     <view class="staff-row" bindtap="goInpatientMeds"><view class="staff-row-index">MED</view><view class="staff-row-main"><view class="staff-row-title">住院用药</view><view class="staff-row-sub">按时执行处方、打勾、记录临时用药</view></view><view class="staff-row-count">{{stats.inpatient_med_due || 0}}</view></view>
+    <view class="staff-row" bindtap="goFollowups"><view class="staff-row-index">FU</view><view class="staff-row-main"><view class="staff-row-title">复诊随访</view><view class="staff-row-sub">病例、手术和出院后的随访工作</view></view><view class="staff-row-count">{{stats.followup_due || 0}}</view></view>
     <view wx:if="{{error}}" class="staff-error">{{error}}</view>
     <view wx:if="{{next}}" class="staff-next"><view class="staff-next-label">NEXT APPOINTMENT</view><view class="staff-next-title">{{next.pet_name}} · {{next.service_name}}</view><view class="staff-next-sub">{{next.time}} · {{next.customer_name}}</view></view>
     <view wx:else class="staff-empty">今天暂时没有后续预约。</view>

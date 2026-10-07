@@ -1726,6 +1726,11 @@ class FollowUp(Base):
     handled_by:   Mapped[str] = mapped_column(String(80), default="")
     handled_at:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     handle_note:  Mapped[str] = mapped_column(Text, default="")
+    # 员工端结构化处理结果。与 response（客户自行反馈）分开保存，避免覆盖客户原话。
+    staff_outcome: Mapped[str] = mapped_column(String(30), default="")
+    next_action: Mapped[str] = mapped_column(String(30), default="")
+    next_action_ref_id: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    next_contact_date: Mapped[str] = mapped_column(String(20), default="")
 
     created_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

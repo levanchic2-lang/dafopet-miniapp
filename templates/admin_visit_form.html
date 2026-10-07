@@ -297,6 +297,12 @@
  <form method="post" action="/admin/visits/{{ v.id }}/close" style="display:inline;"
        onsubmit="return confirm('⚠ 确定结束本次病历？\n\n结束后病历及关联处方/检查单将不可修改，且按合规要求不能重开。\n如有遗漏只能新建一份病历做补充。');">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <select name="followup_decision" required style="height:34px;font-size:.82rem;">
+  <option value="">选择后续随访</option>
+  <option value="arrange">安排 / 保留随访</option>
+  <option value="none">无需随访</option>
+ </select>
+ <input type="date" name="followup_date" title="没有自动任务时填写随访日期" style="height:34px;font-size:.82rem;"/>
  <button type="submit" class="btn" style="background:#ea580c;color:#fff;font-size:.82rem;">
  <i data-lucide="lock"></i> 结束病历
  </button>

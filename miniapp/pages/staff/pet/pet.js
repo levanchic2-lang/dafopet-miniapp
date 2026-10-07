@@ -30,6 +30,7 @@ Page({
     wx.navigateTo({ url: `/pages/staff/prevention-order/prevention-order?pet_id=${this.data.id}&mode=${mode}` });
   },
   openUnifiedOrder(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/unified-order/unified-order?id=" + id }); },
+  openFollowupNew(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/follow-up-new/follow-up-new?id=" + id }); },
   openConsultation(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/consultation/consultation?id=" + id }); },
   openMaterials(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/material/material?id=" + id }); },
   openAnesthesia(e) {

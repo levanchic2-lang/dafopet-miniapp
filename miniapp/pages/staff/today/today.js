@@ -27,6 +27,7 @@ Page({
   goMaterials() { wx.navigateTo({ url: "/pages/staff/materials/materials" }); },
   goAnesthesia() { wx.navigateTo({ url: "/pages/staff/anesthesia/anesthesia" }); },
   goInpatientMeds() { wx.navigateTo({ url: "/pages/staff/inpatient-meds/inpatient-meds" }); },
+  goFollowups() { wx.navigateTo({ url: "/pages/staff/follow-ups/follow-ups" }); },
   goToday() {},
   goCalendar() { wx.redirectTo({ url: "/pages/staff/calendar/calendar" }); },
   goCustomers() { wx.redirectTo({ url: "/pages/staff/customers/customers" }); },

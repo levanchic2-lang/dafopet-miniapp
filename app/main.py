@@ -6662,6 +6662,14 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
     if store:
         med_q = med_q.filter(Hospitalization.store == store)
     inpatient_med_due_count = med_q.count()
+    followup_q = db.query(FollowUp).filter(
+        FollowUp.status.in_(["pending", "due", "sent", "phone_pending", "responded"]),
+        FollowUp.planned_date != "",
+        FollowUp.planned_date <= today,
+    )
+    if store:
+        followup_q = followup_q.filter(or_(FollowUp.store == store, FollowUp.store == ""))
+    followup_due_count = followup_q.count()
     next_appt = None
     current_hm = datetime.now().strftime("%H:%M")
     next_row = next((row for row in appointments if row.status == "arrived"), None)
@@ -6680,10 +6688,343 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
         "profile": _staff_profile_payload(user),
         "stats": {"appointments": len(appointments), "visits": visit_count,
                   "tnr_today": tnr_today_count, "anesthesia_open": anesthesia_open_count,
-                  "inpatient_med_due": inpatient_med_due_count},
+                  "inpatient_med_due": inpatient_med_due_count,
+                  "followup_due": followup_due_count},
         "tasks": [],
         "next_appointment": next_appt,
     }
+
+
+_STAFF_FOLLOWUP_OUTCOME_ZH = {
+    "recovered": "恢复良好",
+    "improved": "有所改善",
+    "unchanged": "无明显改善",
+    "worse": "情况加重",
+    "no_reply": "未联系上",
+    "no_need": "拒绝或无需继续",
+}
+_STAFF_FOLLOWUP_ACTION_ZH = {
+    "finish": "结束随访",
+    "reschedule": "延期再次联系",
+    "doctor": "转医生处理",
+    "revisit": "建议复诊",
+    "appointment": "已创建复诊预约",
+    "revisited": "已经复诊",
+}
+
+
+def _staff_followup_kind(fu: FollowUp, visit: Visit | None) -> tuple[str, str]:
+    source = (fu.source_type or "").lower()
+    label = f"{fu.template_name or ''} {fu.round_name or ''}".lower()
+    visit_type = (visit.visit_type if visit else "") or ""
+    if source == "hospitalization" or source.endswith("_discharge"):
+        return "discharge", "出院随访"
+    if source == "chronic" or source.endswith("_chronic"):
+        return "chronic", "慢病复查"
+    if source in ("screening", "health_screening") or source.endswith("_screening"):
+        return "screening", "健康筛查"
+    if source == "recall" or source.endswith("_recall"):
+        return "recall", "客户唤回"
+    if source.endswith("_surgery") or "术后" in label or "手术" in label or visit_type in ("postop", "surgery_consult"):
+        return "surgery", "手术随访"
+    return "case", "病例回访"
+
+
+def _staff_followup_payload(db: Session, fu: FollowUp) -> dict:
+    pet = db.get(Pet, fu.pet_id) if fu.pet_id else None
+    customer = db.get(Customer, fu.customer_id) if fu.customer_id else None
+    visit = db.get(Visit, fu.visit_id) if fu.visit_id else None
+    kind, kind_label = _staff_followup_kind(fu, visit)
+    status_zh = {
+        "pending": "待处理", "due": "今日到期", "sent": "已发送",
+        "responded": "待跟进", "phone_pending": "待联系",
+        "closed": "已完成", "skipped": "已取消",
+    }
+    active_statuses = ["pending", "due", "sent", "phone_pending", "responded"]
+    future_count = db.query(FollowUp).filter(
+        FollowUp.visit_id == fu.visit_id,
+        FollowUp.id != fu.id,
+        FollowUp.status.in_(active_statuses),
+        FollowUp.planned_date > (fu.planned_date or ""),
+    ).count() if fu.visit_id else 0
+    return {
+        "id": fu.id,
+        "planned_date": fu.planned_date or "",
+        "status": fu.status or "pending",
+        "status_label": status_zh.get(fu.status or "pending", fu.status or "待处理"),
+        "kind": kind,
+        "kind_label": kind_label,
+        "title": fu.round_name or fu.template_name or kind_label,
+        "template_name": fu.template_name or "",
+        "reason": fu.reason or "",
+        "question": fu.question_text or "",
+        "risk_trigger": fu.risk_trigger or "",
+        "priority": fu.priority or "normal",
+        "customer": {
+            "id": customer.id, "name": customer.name or "未命名客户",
+            "phone": customer.phone or "", "phone_masked": _mask_phone(customer.phone or ""),
+        } if customer else {},
+        "pet": {"id": pet.id, "name": pet.name or "未命名宠物"} if pet else {},
+        "visit": {
+            "id": visit.id, "date": visit.visit_date or "", "status": visit.status or "open",
+            "diagnosis": visit.diagnosis or "", "vet_name": visit.vet_name or "",
+        } if visit else {},
+        "customer_response": fu.response or "",
+        "customer_response_note": fu.response_note or "",
+        "staff_outcome": fu.staff_outcome or "",
+        "staff_outcome_label": _STAFF_FOLLOWUP_OUTCOME_ZH.get(fu.staff_outcome or "", ""),
+        "next_action": fu.next_action or "",
+        "next_action_label": _STAFF_FOLLOWUP_ACTION_ZH.get(fu.next_action or "", ""),
+        "next_action_ref_id": fu.next_action_ref_id,
+        "next_contact_date": fu.next_contact_date or "",
+        "handled_by": fu.handled_by or "",
+        "handled_at": fu.handled_at.strftime("%Y-%m-%d %H:%M") if fu.handled_at else "",
+        "handle_note": fu.handle_note or "",
+        "future_count": future_count,
+    }
+
+
+def _staff_followup_record(db: Session, user: AdminUser, followup_id: int) -> FollowUp:
+    fu = db.get(FollowUp, followup_id)
+    if not fu:
+        raise HTTPException(404, "随访任务不存在")
+    store = (user.store or "").strip()
+    if store and fu.store and fu.store != store:
+        raise HTTPException(403, "无权操作其他门店的随访任务")
+    return fu
+
+
+@app.get("/api/staff-miniapp/follow-ups")
+async def api_staff_miniapp_followups(
+    request: Request, tab: str = "today", db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    store = (user.store or "").strip()
+    today = date.today().isoformat()
+    q = db.query(FollowUp)
+    if store:
+        q = q.filter(or_(FollowUp.store == store, FollowUp.store == ""))
+    active = ["pending", "due", "sent", "phone_pending", "responded"]
+    if tab == "upcoming":
+        q = q.filter(FollowUp.status.in_(active), FollowUp.planned_date > today)
+        q = q.order_by(FollowUp.planned_date.asc(), FollowUp.id.asc())
+    elif tab == "done":
+        q = q.filter(FollowUp.status.in_(["closed", "skipped"]))
+        q = q.order_by(FollowUp.handled_at.desc().nullslast(), FollowUp.id.desc())
+    else:
+        tab = "today"
+        q = q.filter(
+            FollowUp.status.in_(active),
+            or_(FollowUp.planned_date <= today, FollowUp.status == "responded"),
+        )
+        q = q.order_by(FollowUp.planned_date.asc(), FollowUp.priority.desc(), FollowUp.id.asc())
+    rows = q.limit(100).all()
+    count_q = db.query(FollowUp)
+    if store:
+        count_q = count_q.filter(or_(FollowUp.store == store, FollowUp.store == ""))
+    due_count = count_q.filter(
+        FollowUp.status.in_(active), FollowUp.planned_date != "", FollowUp.planned_date <= today,
+    ).count()
+    overdue_count = count_q.filter(
+        FollowUp.status.in_(active), FollowUp.planned_date != "", FollowUp.planned_date < today,
+    ).count()
+    return {
+        "ok": True, "tab": tab, "today": today,
+        "counts": {"today": due_count, "overdue": overdue_count},
+        "items": [_staff_followup_payload(db, fu) for fu in rows],
+    }
+
+
+@app.get("/api/staff-miniapp/follow-ups/{followup_id}")
+async def api_staff_miniapp_followup_detail(
+    followup_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    fu = _staff_followup_record(db, user, followup_id)
+    return {"ok": True, "item": _staff_followup_payload(db, fu)}
+
+
+@app.get("/api/staff-miniapp/visits/{visit_id}/follow-up-context")
+async def api_staff_miniapp_followup_context(
+    visit_id: int, request: Request, db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "病例不存在")
+    pet = _staff_pet_record(db, user, visit.pet_id) if visit.pet_id else None
+    customer = db.get(Customer, visit.customer_id) if visit.customer_id else None
+    return {
+        "ok": True,
+        "visit": {"id": visit.id, "date": visit.visit_date or "", "status": visit.status or "open",
+                  "diagnosis": visit.diagnosis or "", "vet_name": visit.vet_name or ""},
+        "pet": {"id": pet.id, "name": pet.name or "未命名宠物"} if pet else {},
+        "customer": {"id": customer.id, "name": customer.name or "未命名客户"} if customer else {},
+    }
+
+
+@app.post("/api/staff-miniapp/visits/{visit_id}/follow-ups")
+async def api_staff_miniapp_followup_create(
+    visit_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "病例不存在")
+    pet = _staff_pet_record(db, user, visit.pet_id) if visit.pet_id else None
+    planned_date = str((payload or {}).get("planned_date") or "").strip()[:10]
+    try:
+        datetime.strptime(planned_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "请选择正确的随访日期")
+    kind = str((payload or {}).get("kind") or "case").strip()
+    kind_labels = {
+        "case": "病例回访", "surgery": "手术随访", "discharge": "出院随访",
+        "chronic": "慢病复查", "screening": "健康筛查", "recall": "客户唤回",
+    }
+    if kind not in kind_labels:
+        kind = "case"
+    max_round = db.query(func.max(FollowUp.round_no)).filter(FollowUp.visit_id == visit.id).scalar() or 0
+    fu = FollowUp(
+        visit_id=visit.id, customer_id=visit.customer_id, pet_id=visit.pet_id,
+        template_name=kind_labels[kind], round_no=int(max_round) + 1,
+        round_name=(str((payload or {}).get("title") or "").strip() or kind_labels[kind])[:80],
+        source_type=f"manual_{kind}", reason=str((payload or {}).get("reason") or "").strip()[:1000],
+        question_text=str((payload or {}).get("question") or "").strip()[:1000],
+        expected_reply_type="phone", priority=str((payload or {}).get("priority") or "normal")[:20],
+        store=(visit.store or (pet.store if pet else "") or user.store or "")[:40],
+        assigned_to=(user.username or "")[:80], planned_date=planned_date,
+        status="due" if planned_date <= date.today().isoformat() else "pending",
+        channel="manual", feedback_token=_gen_followup_token(),
+    )
+    db.add(fu)
+    db.flush()
+    db.add(AuditLog(
+        action="staff_miniapp_followup_create", actor=(user.username or "")[:80],
+        detail=json.dumps({"followup_id": fu.id, "visit_id": visit.id, "planned_date": planned_date,
+                           "kind": kind}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "item": _staff_followup_payload(db, fu)}
+
+
+@app.post("/api/staff-miniapp/follow-ups/{followup_id}/handle")
+async def api_staff_miniapp_followup_handle(
+    followup_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    fu = _staff_followup_record(db, user, followup_id)
+    if fu.status in ("closed", "skipped"):
+        raise HTTPException(400, "该随访任务已经结束")
+    outcome = str((payload or {}).get("outcome") or "").strip()
+    next_action = str((payload or {}).get("next_action") or "").strip()
+    if outcome not in _STAFF_FOLLOWUP_OUTCOME_ZH:
+        raise HTTPException(400, "请选择本次随访结果")
+    if next_action not in _STAFF_FOLLOWUP_ACTION_ZH:
+        raise HTTPException(400, "请选择下一步")
+    if outcome in ("unchanged", "worse") and next_action == "finish":
+        raise HTTPException(400, "无改善或加重时不能直接结束，请转医生或建议复诊")
+    now = datetime.utcnow()
+    note = str((payload or {}).get("note") or "").strip()[:1000]
+    next_date = str((payload or {}).get("next_date") or "").strip()[:10]
+    appointment_id = int((payload or {}).get("appointment_id") or 0)
+
+    fu.staff_outcome = outcome
+    fu.next_action = next_action
+    fu.handled_by = (user.username or "")[:80]
+    fu.handled_at = now
+    fu.handle_note = note
+    fu.next_action_ref_id = None
+    fu.next_contact_date = ""
+    if next_action == "reschedule":
+        try:
+            datetime.strptime(next_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(400, "请选择再次联系日期")
+        if next_date < date.today().isoformat():
+            raise HTTPException(400, "再次联系日期不能早于今天")
+        fu.planned_date = next_date
+        fu.next_contact_date = next_date
+        fu.status = "due" if next_date == date.today().isoformat() else "pending"
+    elif next_action == "appointment":
+        appointment = db.get(Appointment, appointment_id) if appointment_id else None
+        if not appointment or appointment.customer_id != fu.customer_id or appointment.pet_id != fu.pet_id:
+            raise HTTPException(400, "请先为该客户创建复诊预约")
+        fu.next_action_ref_id = appointment.id
+        fu.status = "closed"
+    elif next_action == "revisited":
+        revisited = db.query(Visit).filter(
+            Visit.pet_id == fu.pet_id, Visit.id != fu.visit_id,
+            Visit.created_at >= fu.created_at,
+        ).order_by(Visit.created_at.desc(), Visit.id.desc()).first()
+        if not revisited:
+            raise HTTPException(400, "尚未找到该宠物的新复诊病历")
+        fu.next_action_ref_id = revisited.id
+        fu.status = "closed"
+    elif next_action in ("doctor", "revisit"):
+        fu.status = "responded"
+    else:
+        fu.status = "closed"
+
+    visit = db.get(Visit, fu.visit_id) if fu.visit_id else None
+    close_visit = bool((payload or {}).get("close_visit"))
+    close_decision = str((payload or {}).get("close_followup_decision") or "").strip()
+    close_followup_date = str((payload or {}).get("close_followup_date") or "").strip()[:10]
+    if close_visit:
+        if outcome != "recovered":
+            raise HTTPException(400, "只有恢复良好时才可同时结束病历")
+        if not visit or (visit.status or "open") == "closed":
+            raise HTTPException(400, "关联病历已经结束或不存在")
+        if close_decision not in ("keep", "none"):
+            raise HTTPException(400, "结束病历前请选择是否继续随访")
+        active_statuses = ["pending", "due", "sent", "phone_pending", "responded"]
+        other_tasks = db.query(FollowUp).filter(
+            FollowUp.visit_id == visit.id, FollowUp.id != fu.id,
+            FollowUp.status.in_(active_statuses),
+        ).all()
+        if close_decision == "none":
+            visit.followup_disabled = True
+            for task in other_tasks:
+                task.status = "skipped"
+                task.handled_by = (user.username or "")[:80]
+                task.handled_at = now
+                task.handle_note = "病历结束时选择无需后续随访"
+        else:
+            visit.followup_disabled = False
+            if not other_tasks:
+                try:
+                    datetime.strptime(close_followup_date, "%Y-%m-%d")
+                except ValueError:
+                    raise HTTPException(400, "当前没有后续任务，请选择下一次随访日期")
+                continuation = FollowUp(
+                    visit_id=visit.id, customer_id=visit.customer_id, pet_id=visit.pet_id,
+                    template_name="病例随访", round_no=(fu.round_no or 1) + 1,
+                    round_name="病历结束后随访", source_type="manual_case",
+                    reason="病历结束后继续观察恢复情况", question_text="恢复情况及是否需要复诊",
+                    expected_reply_type="phone", priority="normal", store=fu.store or "",
+                    assigned_to=(user.username or "")[:80], planned_date=close_followup_date,
+                    status="due" if close_followup_date <= date.today().isoformat() else "pending",
+                    channel="manual", feedback_token=_gen_followup_token(),
+                )
+                db.add(continuation)
+        visit.status = "closed"
+        visit.closed_at = now
+        visit.closed_by = (user.username or "")[:80]
+        db.add(AuditLog(
+            action="staff_miniapp_visit_close_from_followup", actor=(user.username or "")[:80],
+            detail=json.dumps({"visit_id": visit.id, "followup_id": fu.id,
+                               "followup_decision": close_decision}, ensure_ascii=False),
+        ))
+
+    fu.updated_at = now
+    db.add(AuditLog(
+        action="staff_miniapp_followup_handle", actor=(user.username or "")[:80],
+        detail=json.dumps({"followup_id": fu.id, "visit_id": fu.visit_id,
+                           "outcome": outcome, "next_action": next_action,
+                           "close_visit": close_visit}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "item": _staff_followup_payload(db, fu)}
 
 
 @app.get("/api/staff-miniapp/medication-reminders")
@@ -16491,6 +16832,8 @@ async def admin_visit_edit(
 async def admin_visit_close(visit_id: int, request: Request,
                             csrf_token: str = Form(""),
                             next_url: str = Form(""),
+                            followup_decision: str = Form(""),
+                            followup_date: str = Form(""),
                             db: Session = Depends(get_db)):
     """结束病历。结束后病历及关联处方/检查不可改；按合规要求不可重开。"""
     require_admin(request)
@@ -16514,13 +16857,56 @@ async def admin_visit_close(visit_id: int, request: Request,
 
     if (v.status or "open") == "closed":
         return _close_redirect("该病历已是结束状态")
+    followup_decision = (followup_decision or "").strip()
+    followup_date = (followup_date or "").strip()[:10]
+    if followup_decision not in ("arrange", "none"):
+        return _close_redirect("结束病历前必须选择安排随访或无需随访")
+    active_statuses = ["pending", "due", "sent", "phone_pending", "responded"]
+    username = request.session.get("admin_username", "") or ""
+    now = datetime.utcnow()
+    if followup_decision == "none":
+        v.followup_disabled = True
+        active_followups = db.query(FollowUp).filter(
+            FollowUp.visit_id == v.id, FollowUp.status.in_(active_statuses),
+        ).all()
+        for fu in active_followups:
+            fu.status = "skipped"
+            fu.handled_by = username
+            fu.handled_at = now
+            fu.handle_note = "病历结束时选择无需随访"
+            fu.staff_outcome = fu.staff_outcome or "no_need"
+            fu.next_action = fu.next_action or "finish"
+    else:
+        v.followup_disabled = False
+        _sync_followup_for_visit(db, v)
+        db.flush()
+        active_count = db.query(FollowUp).filter(
+            FollowUp.visit_id == v.id, FollowUp.status.in_(active_statuses),
+        ).count()
+        if not active_count:
+            try:
+                datetime.strptime(followup_date, "%Y-%m-%d")
+            except ValueError:
+                return _close_redirect("当前没有自动随访任务，请选择随访日期")
+            max_round = db.query(func.max(FollowUp.round_no)).filter(FollowUp.visit_id == v.id).scalar() or 0
+            db.add(FollowUp(
+                visit_id=v.id, customer_id=v.customer_id, pet_id=v.pet_id,
+                template_name="病例随访", round_no=int(max_round) + 1,
+                round_name="病历结束后随访", source_type="manual_case",
+                reason="病历结束后继续观察恢复情况", question_text="恢复情况及是否需要复诊",
+                expected_reply_type="phone", priority="normal", store=_visit_store_short(db, v),
+                assigned_to=username[:80], planned_date=followup_date,
+                status="due" if followup_date <= date.today().isoformat() else "pending",
+                channel="manual", feedback_token=_gen_followup_token(),
+            ))
     v.status = "closed"
-    v.closed_at = datetime.utcnow()
-    v.closed_by = request.session.get("admin_username", "") or ""
+    v.closed_at = now
+    v.closed_by = username
     _freeze_visit_store(db, visit_id, _get_op_store(request))  # 结束病历=锁定 → 冻结门店
     db.commit()
     _audit(db, request, "visit_close",
-           detail={"visit_id": v.id, "pet_id": v.pet_id, "customer_id": v.customer_id})
+           detail={"visit_id": v.id, "pet_id": v.pet_id, "customer_id": v.customer_id,
+                   "followup_decision": followup_decision, "followup_date": followup_date})
     db.commit()
     return _close_redirect("病历已结束")
 
@@ -16947,9 +17333,13 @@ _FOLLOWUP_STATUS_ZH = {
 }
 
 _FOLLOWUP_RESPONSE_ZH = {
-    "recovered":    "已好转",
+    "recovered":    "恢复良好",
+    "improved":     "有所改善",
+    "unchanged":    "无明显改善",
+    "worse":        "情况加重",
     "needs_visit":  "需复诊",
-    "no_reply":     "无回应",
+    "no_reply":     "未联系上",
+    "no_need":      "拒绝或无需继续",
 }
 
 _FOLLOWUP_CHANNEL_ZH = {
@@ -17184,30 +17574,44 @@ async def admin_followup_handle(
     if action == "contacted":
         fu.status = "closed"
         fu.response = fu.response or "recovered"
+        fu.staff_outcome = "recovered"
+        fu.next_action = "finish"
         fu.handled_by = username
         fu.handled_at = now
         fu.handle_note = note.strip()[:500]
     elif action == "refer_visit":
         fu.status = "responded"
         fu.response = "needs_visit"
+        fu.staff_outcome = "unchanged"
+        fu.next_action = "revisit"
         fu.response_at = now
         fu.handled_by = username
         fu.handled_at = now
         fu.handle_note = note.strip()[:500]
     elif action == "skip":
         fu.status = "skipped"
+        fu.staff_outcome = "no_need"
+        fu.next_action = "finish"
         fu.handled_by = username
         fu.handled_at = now
         fu.handle_note = note.strip()[:500]
     elif action == "reopen":
         fu.status = "pending"
         fu.response = ""
+        fu.staff_outcome = ""
+        fu.next_action = ""
+        fu.next_action_ref_id = None
+        fu.next_contact_date = ""
         fu.response_at = None
         fu.handle_note = ""
         fu.handled_at = None
     else:
         raise HTTPException(400, f"未知操作 {action}")
     fu.updated_at = now
+    _audit(db, request, "followup_handle", detail={
+        "followup_id": fu.id, "visit_id": fu.visit_id, "action": action,
+        "staff_outcome": fu.staff_outcome, "next_action": fu.next_action,
+    })
     db.commit()
     return RedirectResponse(
         _safe_next(next_url, f"/admin/follow-ups?tab={tab_redirect}&msg=已更新"),
@@ -35117,6 +35521,28 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
         inv = _sync_visit_invoice(db, h.visit_id, operator)
         if inv:
             h.invoice_id = inv.id
+    # 医疗住院出院后自动进入同一随访中心；寄养/单纯住院不强制生成医疗随访。
+    if h.visit_id:
+        existing_discharge_followup = db.query(FollowUp).filter(
+            FollowUp.visit_id == h.visit_id,
+            FollowUp.source_type == "hospitalization",
+            FollowUp.source_id == h.id,
+        ).first()
+        if not existing_discharge_followup:
+            visit = db.get(Visit, h.visit_id)
+            discharge_day = (dt + timedelta(hours=8)).date()
+            db.add(FollowUp(
+                visit_id=h.visit_id, customer_id=h.customer_id, pet_id=h.pet_id,
+                template_name="出院随访", round_no=1, round_name="出院后 2 天随访",
+                source_type="hospitalization", source_id=h.id,
+                reason="住院动物出院后确认恢复情况",
+                question_text="精神、食欲、排便、用药及是否出现新的异常",
+                expected_reply_type="phone", risk_trigger="无改善、情况加重或出现新的异常",
+                priority="high", store=h.store or "",
+                assigned_to=_resolve_vet_username(db, visit.vet_name or "")[:80] if visit else "",
+                planned_date=(discharge_day + timedelta(days=2)).isoformat(),
+                status="pending", channel="manual", feedback_token=_gen_followup_token(),
+            ))
     days = h.billing_days if (h.billing_mode or "legacy") == "weight" else _calc_hosp_days(h.admitted_at, h.discharged_at)
     _audit(db, request, "hospitalization_discharge", detail={
         "id": h.id, "days": days, "same_day_waived": bool(h.same_day_waived),

@@ -2087,6 +2087,14 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE follow_ups ADD COLUMN risk_trigger TEXT DEFAULT ''"))
             if "priority" not in fu_cols:
                 conn.execute(text("ALTER TABLE follow_ups ADD COLUMN priority VARCHAR(20) DEFAULT 'normal'"))
+            if "staff_outcome" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN staff_outcome VARCHAR(30) DEFAULT ''"))
+            if "next_action" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN next_action VARCHAR(30) DEFAULT ''"))
+            if "next_action_ref_id" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN next_action_ref_id INTEGER DEFAULT NULL"))
+            if "next_contact_date" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN next_contact_date VARCHAR(20) DEFAULT ''"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_source ON follow_ups(source_type, source_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_priority ON follow_ups(priority, planned_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_care_summary_visit ON client_care_summaries(visit_id, status)"))
