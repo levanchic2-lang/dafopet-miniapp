@@ -15,7 +15,6 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import (
     Hospitalization, MedicationAdminLog, AdminUser, Pet, Customer,
-    PrescriptionItem,
 )
 from app.services.wechat_miniapp import push_inpatient_medication_reminder
 
@@ -54,6 +53,17 @@ def _store_admins(db, store: str) -> list:
     return q.all()
 
 
+def _dose_label(item) -> str:
+    if not item:
+        return "按医嘱"
+    if (item.dosage or "").strip():
+        return item.dosage.strip()
+    if item.dose_amount:
+        amount = f"{float(item.dose_amount):g}"
+        return f"{amount}{(item.dose_unit or '').strip()}"
+    return (item.quantity or "").strip() or "按医嘱"
+
+
 def scan_overdue_medications() -> None:
     """每 5 分钟跑一次。"""
     db = SessionLocal()
@@ -88,7 +98,7 @@ def scan_overdue_medications() -> None:
             if not admins:
                 # 没人收，先别标记，等 admin 绑了再推
                 continue
-            # 构造内容
+            # 构造企微兼容内容（未配企微用户时不会发送）
             lines = [
                 f"⚠ 漏药提醒",
                 f"宠物：{pet.name if pet else '宠物'}（{cust.name if cust else '客户'}）"
@@ -117,12 +127,14 @@ def scan_overdue_medications() -> None:
                         r.prescription_item.drug_name if r.prescription_item else "药物"
                         for r in sorted_logs[:3]
                     ]
+                    dose_names = [_dose_label(r.prescription_item) for r in sorted_logs[:3]]
                     push_inpatient_medication_reminder(
                         db,
                         u.miniapp_openid,
                         pet.name if pet else "宠物",
                         "、".join(drug_names),
                         sorted_logs[0].scheduled_at.strftime("%Y-%m-%d %H:%M"),
+                        dose_summary="、".join(dose_names),
                         cage_code=h.cage.code if h.cage else "",
                         hospitalization_id=h.id,
                     )
@@ -196,7 +208,8 @@ def send_shift_handover_reminder(shift_label: str) -> None:
             lines.append(f"看板：{_build_inpatient_url(0).replace('/0', '')}")
             content = "\n".join(lines)
             for u in admins:
-                _push_wecom(u.wecom_userid, content)
+                if (u.wecom_userid or "").strip():
+                    _push_wecom(u.wecom_userid, content)
         logger.info("[inpatient] shift handover pushed: %s", shift_label)
     except Exception:
         logger.exception("[inpatient] shift handover failed")

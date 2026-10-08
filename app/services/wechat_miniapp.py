@@ -755,6 +755,7 @@ def push_inpatient_medication_reminder(
     drug_summary: str,
     scheduled_at: str,
     *,
+    dose_summary: str = "",
     cage_code: str = "",
     hospitalization_id: int | None = None,
 ) -> bool:
@@ -770,10 +771,19 @@ def push_inpatient_medication_reminder(
     keys = [
         key.strip() for key in (settings.wechat_fields_inpatient_medication or "").split(",")
         if key.strip()
-    ] or ["thing1", "thing2", "time3", "thing4"]
+    ] or ["short_thing4", "thing5", "time6", "short_thing7"]
     pet_label = pet_name + (f" · {cage_code}" if cage_code else "")
+    field_values = {
+        "short_thing4": v(drug_summary, "住院用药"),
+        "thing5": v(pet_label, "住院动物"),
+        "time6": v(scheduled_at, time.strftime("%Y-%m-%d %H:%M")),
+        "short_thing7": v(dose_summary, "按医嘱"),
+    }
     data: dict[str, Any] = {}
     for key in keys:
+        if key in field_values:
+            data[key] = {"value": field_values[key]}
+            continue
         if key.startswith("time"):
             data[key] = {"value": v(scheduled_at, time.strftime("%Y-%m-%d %H:%M"))}
         elif key.startswith("date"):

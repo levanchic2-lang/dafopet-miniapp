@@ -11,8 +11,8 @@
     <view class="staff-info-row last"><text>员工端角色</text><text>{{profile.mobile_role_label}}</text></view>
     <view class="staff-section-head reminder-head"><text>提醒设置</text><text class="staff-section-meta">住院用药</text></view>
     <view class="staff-info-row last"><text>小程序内提醒</text><text>已开启</text></view>
-    <view class="staff-info-row last reminder-row"><text>微信服务通知</text><text>{{reminderAuthorized ? '本次已授权' : (profile.medication_reminder_configured ? '待授权' : '待配置')}}</text></view>
-    <button wx:if="{{profile.medication_reminder_configured}}" class="staff-button secondary" loading="{{reminderBusy}}" disabled="{{reminderBusy}}" bindtap="enableMedicationReminder">{{reminderAuthorized ? '再次授权用药提醒' : '开启微信用药提醒'}}</button>
+    <view class="staff-info-row last reminder-row"><text>微信订阅提醒</text><text>{{reminderAuthorized ? '本次已授权' : (profile.medication_reminder_configured ? '待授权' : '待配置')}}</text></view>
+    <button wx:if="{{profile.medication_reminder_configured}}" class="staff-button secondary" loading="{{reminderBusy}}" disabled="{{reminderBusy}}" bindtap="enableMedicationReminder">{{reminderAuthorized ? '再授权一次用药提醒' : '开启微信用药提醒'}}</button>
     <button class="staff-button secondary" bindtap="goCustomerService">进入客户服务首页</button>
     <button class="staff-button" bindtap="logout">退出员工端</button>
   </block>
