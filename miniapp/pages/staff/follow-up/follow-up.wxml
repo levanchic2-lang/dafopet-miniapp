@@ -19,7 +19,7 @@
 
       <view wx:if="{{outcome === 'recovered' && item.visit.status !== 'closed'}}" class="close-box">
         <view class="close-switch"><view><strong>同时结束病历</strong><text>恢复良好时，系统建议检查是否可以结束病历</text></view><switch checked="{{closeVisit}}" color="#1d4d3a" bindchange="onCloseVisit" /></view>
-        <block wx:if="{{closeVisit}}"><view class="close-warning">病历结束后不可修改，操作人将记录为当前小程序账号。</view><view class="form-label">结束后是否继续随访</view><view class="choice-grid two"><view class="choice {{closeDecision === 'keep' ? 'active' : ''}}" data-value="keep" bindtap="chooseCloseDecision">保留后续随访</view><view class="choice {{closeDecision === 'none' ? 'active' : ''}}" data-value="none" bindtap="chooseCloseDecision">无需后续随访</view></view><view wx:if="{{closeDecision === 'keep' && !(item.future_count > 0)}}" class="conditional"><text>下一次随访日期</text><picker mode="date" value="{{closeFollowupDate}}" bindchange="onCloseFollowupDate"><view class="picker-value">{{closeFollowupDate}}</view></picker></view><view wx:if="{{closeDecision === 'keep' && item.future_count > 0}}" class="future-note">已有 {{item.future_count}} 项后续任务，将继续保留。</view></block>
+        <view wx:if="{{closeVisit}}" class="close-warning">病历结束后不可修改，操作人将记录为当前小程序账号。已安排的后续随访不会受到影响。</view>
       </view>
       <button class="submit-button" loading="{{busy}}" disabled="{{busy}}" bindtap="submit">确认记录本次随访</button>
     </view>

@@ -27,10 +27,10 @@ Page({
   data: {
     id: 0, loading: true, busy: false, error: "", item: {}, outcomes, actions,
     outcome: "", nextAction: "", note: "", nextDate: "", appointmentDate: "",
-    appointmentTime: "09:00", closeVisit: false, closeDecision: "", closeFollowupDate: ""
+    appointmentTime: "09:00", closeVisit: false
   },
   onLoad(options) {
-    this.setData({ id: Number(options.id || 0), nextDate: isoAfter(2), appointmentDate: isoAfter(1), closeFollowupDate: isoAfter(3) });
+    this.setData({ id: Number(options.id || 0), nextDate: isoAfter(2), appointmentDate: isoAfter(1) });
     this.load();
   },
   async load() {
@@ -48,16 +48,14 @@ Page({
   },
   chooseOutcome(e) {
     const outcome = e.currentTarget.dataset.value || "";
-    this.setData({ outcome, closeVisit: outcome === "recovered" ? this.data.closeVisit : false, closeDecision: outcome === "recovered" ? this.data.closeDecision : "" });
+    this.setData({ outcome, closeVisit: outcome === "recovered" ? this.data.closeVisit : false });
   },
   chooseAction(e) { this.setData({ nextAction: e.currentTarget.dataset.value || "" }); },
   onNote(e) { this.setData({ note: e.detail.value || "" }); },
   onNextDate(e) { this.setData({ nextDate: e.detail.value || "" }); },
   onAppointmentDate(e) { this.setData({ appointmentDate: e.detail.value || "" }); },
   onAppointmentTime(e) { this.setData({ appointmentTime: e.detail.value || "" }); },
-  onCloseVisit(e) { this.setData({ closeVisit: !!e.detail.value, closeDecision: e.detail.value ? this.data.closeDecision : "" }); },
-  chooseCloseDecision(e) { this.setData({ closeDecision: e.currentTarget.dataset.value || "" }); },
-  onCloseFollowupDate(e) { this.setData({ closeFollowupDate: e.detail.value || "" }); },
+  onCloseVisit(e) { this.setData({ closeVisit: !!e.detail.value }); },
   callCustomer() {
     const phone = (this.data.item.customer || {}).phone || "";
     if (phone) wx.makePhoneCall({ phoneNumber: phone });
@@ -67,10 +65,6 @@ Page({
     if (!this.data.outcome) { wx.showToast({ title: "请选择随访结果", icon: "none" }); return; }
     if (!this.data.nextAction) { wx.showToast({ title: "请选择下一步", icon: "none" }); return; }
     if (this.data.nextAction === "reschedule" && !this.data.nextDate) { wx.showToast({ title: "请选择再次联系日期", icon: "none" }); return; }
-    if (this.data.closeVisit && !this.data.closeDecision) { wx.showToast({ title: "请选择后续是否随访", icon: "none" }); return; }
-    if (this.data.closeVisit && this.data.closeDecision === "keep" && !(this.data.item.future_count > 0) && !this.data.closeFollowupDate) {
-      wx.showToast({ title: "请选择下一次随访日期", icon: "none" }); return;
-    }
     const confirmed = await new Promise(resolve => wx.showModal({
       title: this.data.closeVisit ? "完成随访并结束病历" : "确认处理结果",
       content: this.data.closeVisit ? "本次操作会同时结束关联病历，并记录当前员工账号。病历结束后不可修改。" : "确认提交本次随访结果？",
@@ -94,9 +88,7 @@ Page({
       await staffPost(`/api/staff-miniapp/follow-ups/${this.data.id}/handle`, {
         outcome: this.data.outcome, next_action: this.data.nextAction, note: this.data.note,
         next_date: this.data.nextDate, appointment_id: appointmentId,
-        close_visit: this.data.closeVisit,
-        close_followup_decision: this.data.closeDecision,
-        close_followup_date: this.data.closeFollowupDate
+        close_visit: this.data.closeVisit
       });
       wx.showToast({ title: "随访已记录", icon: "success" });
       setTimeout(() => wx.navigateBack(), 600);

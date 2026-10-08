@@ -6974,52 +6974,17 @@ async def api_staff_miniapp_followup_handle(
 
     visit = db.get(Visit, fu.visit_id) if fu.visit_id else None
     close_visit = bool((payload or {}).get("close_visit"))
-    close_decision = str((payload or {}).get("close_followup_decision") or "").strip()
-    close_followup_date = str((payload or {}).get("close_followup_date") or "").strip()[:10]
     if close_visit:
         if outcome != "recovered":
             raise HTTPException(400, "只有恢复良好时才可同时结束病历")
         if not visit or (visit.status or "open") == "closed":
             raise HTTPException(400, "关联病历已经结束或不存在")
-        if close_decision not in ("keep", "none"):
-            raise HTTPException(400, "结束病历前请选择是否继续随访")
-        active_statuses = ["pending", "due", "sent", "phone_pending", "responded"]
-        other_tasks = db.query(FollowUp).filter(
-            FollowUp.visit_id == visit.id, FollowUp.id != fu.id,
-            FollowUp.status.in_(active_statuses),
-        ).all()
-        if close_decision == "none":
-            visit.followup_disabled = True
-            for task in other_tasks:
-                task.status = "skipped"
-                task.handled_by = (user.username or "")[:80]
-                task.handled_at = now
-                task.handle_note = "病历结束时选择无需后续随访"
-        else:
-            visit.followup_disabled = False
-            if not other_tasks:
-                try:
-                    datetime.strptime(close_followup_date, "%Y-%m-%d")
-                except ValueError:
-                    raise HTTPException(400, "当前没有后续任务，请选择下一次随访日期")
-                continuation = FollowUp(
-                    visit_id=visit.id, customer_id=visit.customer_id, pet_id=visit.pet_id,
-                    template_name="病例随访", round_no=(fu.round_no or 1) + 1,
-                    round_name="病历结束后随访", source_type="manual_case",
-                    reason="病历结束后继续观察恢复情况", question_text="恢复情况及是否需要复诊",
-                    expected_reply_type="phone", priority="normal", store=fu.store or "",
-                    assigned_to=(user.username or "")[:80], planned_date=close_followup_date,
-                    status="due" if close_followup_date <= date.today().isoformat() else "pending",
-                    channel="manual", feedback_token=_gen_followup_token(),
-                )
-                db.add(continuation)
         visit.status = "closed"
         visit.closed_at = now
         visit.closed_by = (user.username or "")[:80]
         db.add(AuditLog(
             action="staff_miniapp_visit_close_from_followup", actor=(user.username or "")[:80],
-            detail=json.dumps({"visit_id": visit.id, "followup_id": fu.id,
-                               "followup_decision": close_decision}, ensure_ascii=False),
+            detail=json.dumps({"visit_id": visit.id, "followup_id": fu.id}, ensure_ascii=False),
         ))
 
     fu.updated_at = now
@@ -16952,8 +16917,6 @@ async def admin_visit_followup_create(
 async def admin_visit_close(visit_id: int, request: Request,
                             csrf_token: str = Form(""),
                             next_url: str = Form(""),
-                            followup_decision: str = Form(""),
-                            followup_date: str = Form(""),
                             db: Session = Depends(get_db)):
     """结束病历。结束后病历及关联处方/检查不可改；按合规要求不可重开。"""
     require_admin(request)
@@ -16977,42 +16940,15 @@ async def admin_visit_close(visit_id: int, request: Request,
 
     if (v.status or "open") == "closed":
         return _close_redirect("该病历已是结束状态")
-    followup_decision = (followup_decision or "").strip()
-    followup_date = (followup_date or "").strip()[:10]
-    if followup_decision not in ("arrange", "none"):
-        return _close_redirect("结束病历前必须选择安排随访或无需随访")
-    active_statuses = ["pending", "due", "sent", "phone_pending", "responded"]
     username = request.session.get("admin_username", "") or ""
     now = datetime.utcnow()
-    if followup_decision == "none":
-        v.followup_disabled = True
-        active_followups = db.query(FollowUp).filter(
-            FollowUp.visit_id == v.id, FollowUp.status.in_(active_statuses),
-        ).all()
-        for fu in active_followups:
-            fu.status = "skipped"
-            fu.handled_by = username
-            fu.handled_at = now
-            fu.handle_note = "病历结束时选择无需随访"
-            fu.staff_outcome = fu.staff_outcome or "no_need"
-            fu.next_action = fu.next_action or "finish"
-    else:
-        v.followup_disabled = False
-        active_count = db.query(FollowUp).filter(
-            FollowUp.visit_id == v.id,
-            FollowUp.source_type != "visit_default",
-            FollowUp.status.in_(active_statuses),
-        ).count()
-        if not active_count:
-            return _close_redirect("请先在病历顶部安排随访，再结束病历")
     v.status = "closed"
     v.closed_at = now
     v.closed_by = username
     _freeze_visit_store(db, visit_id, _get_op_store(request))  # 结束病历=锁定 → 冻结门店
     db.commit()
     _audit(db, request, "visit_close",
-           detail={"visit_id": v.id, "pet_id": v.pet_id, "customer_id": v.customer_id,
-                   "followup_decision": followup_decision, "followup_date": followup_date})
+           detail={"visit_id": v.id, "pet_id": v.pet_id, "customer_id": v.customer_id})
     db.commit()
     return _close_redirect("病历已结束")
 

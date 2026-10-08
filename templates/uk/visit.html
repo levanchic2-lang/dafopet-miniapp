@@ -288,11 +288,6 @@
       {% if is_superadmin %}
         <form method="post" action="/admin/visits/{{ visit.id }}/close" onsubmit="return confirm('结束病历后，处方、检查、本病历将不可改不可重开（合规要求）。确认结束？');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-          <select name="followup_decision" required class="uk-input" style="width:auto;min-width:170px;height:32px;padding:3px 8px;">
-            <option value="">结束前确认随访</option>
-            <option value="arrange">{% if active_followups %}保留已安排随访{% else %}需要随访（请先安排）{% endif %}</option>
-            <option value="none">无需随访</option>
-          </select>
           <button type="submit" class="uk-btn danger sm">结束病历</button>
         </form>
       {% endif %}
