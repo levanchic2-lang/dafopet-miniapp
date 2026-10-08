@@ -82,6 +82,7 @@ try:
                     store="大风动物医院（东环店）", status="confirmed"),
     ])
     db.flush()
+    hg_visit_id = hg_visit.id
     db.add_all([
         Staff(name="横岗医生", store="横岗店", position="医生", status="active"),
         Staff(name="横岗美容师", store="横岗店", position="美容师", status="active"),
@@ -284,7 +285,7 @@ try:
         assert followups_before.json()["counts"]["today"] == 0
         followup_date = (datetime.now() + timedelta(days=2)).date().isoformat()
         followup_created = client.post(
-            f"/api/staff-miniapp/visits/{hg_visit.id}/follow-ups",
+            f"/api/staff-miniapp/visits/{hg_visit_id}/follow-ups",
             json={
                 "planned_date": followup_date,
                 "kind": "case",
