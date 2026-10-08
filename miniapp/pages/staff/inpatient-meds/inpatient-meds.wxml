@@ -33,7 +33,7 @@
             </view>
             <view class="med-row-actions">
               <button class="med-row-action" data-id="{{med.id}}" catchtap="skipTask">跳过</button>
-              <button class="med-row-action stop" data-id="{{med.id}}" data-drug="{{med.drug_name}}" catchtap="discontinueTask">停药</button>
+              <button wx:if="{{canDiscontinue}}" class="med-row-action stop" data-id="{{med.id}}" data-drug="{{med.drug_name}}" catchtap="discontinueTask">停药</button>
             </view>
           </view>
         </view>

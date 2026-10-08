@@ -179,6 +179,7 @@
       <button type="submit" class="btn secondary" style="width:100%;font-size:.78rem;">确认跳过</button>
      </form>
     </details>
+    {% if request.session.get('admin_role') == 'superadmin' or request.session.get('mobile_role') == 'doctor' %}
     <details style="margin:0;">
      <summary class="btn secondary" style="font-size:.78rem;padding:.35rem .65rem;cursor:pointer;list-style:none;color:#991b1b;">停药</summary>
      <form method="post" action="/admin/medication-log/{{ l.id }}/discontinue" style="position:absolute;right:1rem;background:#fff;border:1px solid #fca5a5;padding:.6rem;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:10;margin-top:.3rem;min-width:250px;"
@@ -188,6 +189,7 @@
       <button type="submit" class="btn" style="width:100%;font-size:.78rem;background:#991b1b;border-color:#991b1b;color:#fff;">停止后续全部剂量</button>
      </form>
     </details>
+    {% endif %}
     {% elif l.status == 'done' or l.status == 'skipped' %}
     {% if h.status == 'admitted' %}
     <form method="post" action="/admin/medication-log/{{ l.id }}/uncheck" style="margin:0;"

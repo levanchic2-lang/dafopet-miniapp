@@ -6598,6 +6598,27 @@ def _staff_miniapp_user(request: Request, db: Session) -> AdminUser:
     return user
 
 
+def _can_discontinue_inpatient_medication(user: AdminUser | None) -> bool:
+    """停药属于医嘱变更，仅医生角色或超级管理员可操作。"""
+    if not user:
+        return False
+    return (user.role or "") == "superadmin" or (user.mobile_role or "auto").strip() == "doctor"
+
+
+def _require_inpatient_medication_prescriber(user: AdminUser | None) -> None:
+    if not _can_discontinue_inpatient_medication(user):
+        raise HTTPException(403, "停药属于医嘱变更，仅医生或超级管理员可以操作")
+
+
+def _require_admin_inpatient_medication_prescriber(request: Request, db: Session) -> AdminUser | None:
+    if _is_superadmin(request):
+        return None
+    username = (request.session.get("admin_username") or "").strip()
+    user = db.query(AdminUser).filter(AdminUser.username == username, AdminUser.is_active == True).first()  # noqa: E712
+    _require_inpatient_medication_prescriber(user)
+    return user
+
+
 def _staff_profile_payload(user: AdminUser) -> dict:
     role_zh = "超级管理员" if user.role == "superadmin" else "员工"
     mobile_role = (user.mobile_role or "auto").strip()
@@ -7571,6 +7592,9 @@ async def api_staff_miniapp_inpatient_medications(
         "ok": True,
         "view": view,
         "now": now_local.strftime("%Y-%m-%d %H:%M"),
+        "permissions": {
+            "can_discontinue": _can_discontinue_inpatient_medication(user),
+        },
         "items": [_staff_med_log_payload(row, now_local) for row in logs],
         "temporary": [{
             "id": row.id,
@@ -7735,6 +7759,7 @@ async def api_staff_miniapp_medication_discontinue(
     log_id: int, request: Request, payload: dict = Body(default={}), db: Session = Depends(get_db),
 ):
     user = _staff_miniapp_user(request, db)
+    _require_inpatient_medication_prescriber(user)
     row = _staff_med_log(db, user, log_id)
     if row.status != "pending":
         raise HTTPException(409, "该用药任务已经处理")
@@ -36824,6 +36849,7 @@ async def admin_medication_log_discontinue(
     next_url: str = Form(""),
 ):
     require_admin(request)
+    _require_admin_inpatient_medication_prescriber(request, db)
     _require_csrf(request, csrf_token)
     log = db.get(MedicationAdminLog, log_id)
     if not log:

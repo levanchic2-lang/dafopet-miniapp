@@ -152,6 +152,7 @@ Page({
   data: {
     loading: true, busy: false, error: "", view: "pending",
     completedGroupMode: "pet_date", completedGroupLabel: "动物+日期",
+    canDiscontinue: false,
     items: [], groups: [], temporary: [], hospitalizations: [], inventory: [], filteredInventory: [], doctors: [],
     showTemporaryForm: false, drugQuery: "", selectedDrug: null,
     routes: ["静脉注射", "肌肉注射", "皮下注射", "口服", "外用", "滴眼", "其他"],
@@ -176,6 +177,7 @@ Page({
         : buildMedicationGroups(items, this.data.groups);
       this.setData({
         items, groups, temporary: result.temporary || [],
+        canDiscontinue: !!((result.permissions || {}).can_discontinue),
         hospitalizations: result.hospitalizations || [], inventory,
         filteredInventory: inventory.slice(0, 20), doctors: result.doctors || [],
         selectedHospLabel: (result.hospitalizations || [])[0] ? result.hospitalizations[0].label : "",

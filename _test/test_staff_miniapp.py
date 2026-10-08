@@ -393,10 +393,31 @@ try:
         assert meds.status_code == 200, meds.text
         assert [row["pet_name"] for row in meds.json()["items"]] == ["横岗犬"]
         assert meds.json()["items"][0]["drug_name"] == "横岗住院测试药"
+        assert meds.json()["permissions"]["can_discontinue"] is True
         inventory_names = [row["name"] for row in meds.json()["inventory"]]
         assert "横岗住院测试药" in inventory_names
         assert "东环住院测试药" not in inventory_names
         med_id = meds.json()["items"][0]["id"]
+        db = SessionLocal()
+        try:
+            db.query(AdminUser).filter_by(username="staff_hg").update({"mobile_role": "nurse"})
+            db.commit()
+        finally:
+            db.close()
+        nurse_meds = client.get("/api/staff-miniapp/inpatient-medications", headers=headers)
+        assert nurse_meds.status_code == 200, nurse_meds.text
+        assert nurse_meds.json()["permissions"]["can_discontinue"] is False
+        denied_stop = client.post(
+            f"/api/staff-miniapp/inpatient-medications/{med_id}/discontinue",
+            json={"reason": "权限测试"}, headers=headers,
+        )
+        assert denied_stop.status_code == 403, denied_stop.text
+        db = SessionLocal()
+        try:
+            db.query(AdminUser).filter_by(username="staff_hg").update({"mobile_role": "doctor"})
+            db.commit()
+        finally:
+            db.close()
         batch_completed = client.post(
             "/api/staff-miniapp/inpatient-medications/batch-check",
             json={"ids": [med_id]}, headers=headers,
