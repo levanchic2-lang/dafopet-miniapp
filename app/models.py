@@ -1699,6 +1699,8 @@ class FollowUp(Base):
     round_no:      Mapped[int] = mapped_column(Integer, default=1)        # 第几轮
     round_name:    Mapped[str] = mapped_column(String(80), default="")    # 如「术后 3 天复查」
     response_data: Mapped[str] = mapped_column(Text, default="")          # 结构化答案 JSON
+    question_schema_json: Mapped[str] = mapped_column(Text, default="[]") # 安排时的问题快照
+    staff_response_data: Mapped[str] = mapped_column(Text, default="")    # 员工结构化答案 + 建议 JSON
 
     # ── 来源与执行意图（健康运营 / 复诊计划） ─────────────────
     source_type: Mapped[str] = mapped_column(String(40), default="visit_default")  # visit_default/care_plan/chronic/manual
@@ -1710,6 +1712,7 @@ class FollowUp(Base):
     priority:    Mapped[str] = mapped_column(String(20), default="normal")  # low/normal/high/urgent
 
     store:        Mapped[str] = mapped_column(String(40), default="")
+    created_by:   Mapped[str] = mapped_column(String(80), default="")
     assigned_to:  Mapped[str] = mapped_column(String(80), default="")
     planned_date: Mapped[str] = mapped_column(String(20), default="")
 

@@ -2035,7 +2035,10 @@ def _try_sqlite_migrations() -> None:
                     "round_no INTEGER DEFAULT 1, "
                     "round_name VARCHAR(80) DEFAULT '', "
                     "response_data TEXT DEFAULT '', "
+                    "question_schema_json TEXT DEFAULT '[]', "
+                    "staff_response_data TEXT DEFAULT '', "
                     "store VARCHAR(40) DEFAULT '', "
+                    "created_by VARCHAR(80) DEFAULT '', "
                     "assigned_to VARCHAR(80) DEFAULT '', "
                     "planned_date VARCHAR(20) DEFAULT '', "
                     "status VARCHAR(20) DEFAULT 'pending', "
@@ -2094,6 +2097,12 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE follow_ups ADD COLUMN next_action_ref_id INTEGER DEFAULT NULL"))
             if "next_contact_date" not in fu_cols:
                 conn.execute(text("ALTER TABLE follow_ups ADD COLUMN next_contact_date VARCHAR(20) DEFAULT ''"))
+            if "question_schema_json" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN question_schema_json TEXT DEFAULT '[]'"))
+            if "staff_response_data" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN staff_response_data TEXT DEFAULT ''"))
+            if "created_by" not in fu_cols:
+                conn.execute(text("ALTER TABLE follow_ups ADD COLUMN created_by VARCHAR(80) DEFAULT ''"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_source ON follow_ups(source_type, source_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_priority ON follow_ups(priority, planned_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_care_summary_visit ON client_care_summaries(visit_id, status)"))

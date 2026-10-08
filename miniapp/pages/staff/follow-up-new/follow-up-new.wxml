@@ -2,10 +2,11 @@
   <view wx:if="{{loading}}" class="staff-loading">正在读取病例…</view><view wx:if="{{error}}" class="staff-error">{{error}}</view>
   <block wx:if="{{!loading && visit.id}}">
     <view class="new-hero"><view class="staff-eyebrow">CASE · #{{visit.id}}</view><view class="new-pet">{{pet.name}}</view><view class="new-sub">{{customer.name}} · {{visit.date}} · {{visit.status === 'closed' ? '病历已结束' : '病历进行中'}}</view><view class="new-diagnosis">{{visit.diagnosis || '未填写诊断'}}</view></view>
-    <view class="form-label">随访类型</view><view class="kind-grid"><view wx:for="{{kinds}}" wx:key="value" class="kind {{kind === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="chooseKind">{{item.label}}</view></view>
+    <view class="form-label">随访模板与轮次</view>
+    <picker mode="selector" range="{{templates}}" range-key="label" value="{{templateIndex < 0 ? 0 : templateIndex}}" bindchange="onTemplate"><view class="input-like">{{templateIndex >= 0 ? selectedTemplate.label : '请选择本次要问的模板'}}</view></picker>
+    <view wx:if="{{templateIndex >= 0}}" class="template-summary">{{selectedTemplate.question_count}} 项结构化内容 · 建议 D+{{selectedTemplate.day_offset}} 天 · {{selectedTemplate.kind === 'surgery' ? '手术随访' : selectedTemplate.kind === 'discharge' ? '出院随访' : selectedTemplate.kind === 'chronic' ? '慢病复查' : '病例回访'}}</view>
     <view class="form-label">随访日期</view><picker mode="date" value="{{plannedDate}}" bindchange="onDate"><view class="input-like">{{plannedDate}}</view></picker>
-    <view class="form-label">本次名称</view><input class="text-input" value="{{title}}" bindinput="onTitle" placeholder="选填，例如：用药后第 3 天" />
-    <view class="form-label">需要问什么</view><textarea class="text-area" value="{{question}}" bindinput="onQuestion" placeholder="例如：食欲、呕吐、排便和精神情况" maxlength="1000" />
+    <view class="form-label">特别关注</view><textarea class="text-area short" value="{{question}}" bindinput="onQuestion" placeholder="选填，例如：重点确认昨晚是否再次呕吐" maxlength="1000" />
     <view class="form-label">安排原因 / 特别说明</view><textarea class="text-area short" value="{{reason}}" bindinput="onReason" placeholder="选填" maxlength="1000" />
     <view class="form-label">优先级</view><view class="priority-row"><view class="{{priority === 'normal' ? 'active' : ''}}" data-value="normal" bindtap="choosePriority">普通</view><view class="{{priority === 'high' ? 'active' : ''}}" data-value="high" bindtap="choosePriority">重点</view><view class="{{priority === 'urgent' ? 'active' : ''}}" data-value="urgent" bindtap="choosePriority">紧急</view></view>
     <button class="submit-button" loading="{{busy}}" disabled="{{busy}}" bindtap="submit">确认安排随访</button>

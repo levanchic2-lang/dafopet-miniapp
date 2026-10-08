@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import base64
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -31,7 +32,7 @@ from app.models import (
     Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
     DewormingRecord, ExamOrder, ExamReport, GroomingOrder, InventoryBatch, InventoryItem, Invoice,
     Hospitalization, InpatientTemporaryMedication, MediaFile, MedicationAdminLog,
-    FollowUp, Payment, Pet, Prescription, PrescriptionItem, Staff, Vaccination, Visit, Wallet,
+    FollowUp, FollowUpTemplate, Payment, Pet, Prescription, PrescriptionItem, Staff, Vaccination, Visit, Wallet,
     VisitConsultationDraft,
 )
 
@@ -218,6 +219,21 @@ try:
                       store="横岗店")
     wallet = Wallet(customer_id=hg_customer.id, balance=500, lifetime_recharge=500)
     db.add_all([exam, invoice, wallet])
+    db.add(FollowUpTemplate(
+        name="一般门诊（默认）",
+        system="general",
+        priority=5,
+        is_active=True,
+        is_builtin=True,
+        rounds_json=json.dumps([{
+            "day_offset": 7,
+            "round_name": "1 周 · 是否好转",
+            "questions": [
+                {"key": "spirit", "type": "scale1to5", "label": "精神状态"},
+                {"key": "appetite", "type": "scale1to5", "label": "食欲"},
+            ],
+        }], ensure_ascii=False),
+    ))
     db.flush()
     db.add_all([
         ExamReport(exam_order_id=exam.id, file_path=str(report_path), original_name="血常规.pdf",
@@ -283,6 +299,15 @@ try:
         )
         assert followups_before.status_code == 200, followups_before.text
         assert followups_before.json()["counts"]["today"] == 0
+        followup_context = client.get(
+            f"/api/staff-miniapp/visits/{hg_visit_id}/follow-up-context", headers=headers,
+        )
+        assert followup_context.status_code == 200, followup_context.text
+        template_options = followup_context.json()["templates"]
+        assert template_options
+        selected_template = next(
+            row for row in template_options if row["template_name"] == "一般门诊（默认）"
+        )
         followup_date = (datetime.now() + timedelta(days=2)).date().isoformat()
         followup_created = client.post(
             f"/api/staff-miniapp/visits/{hg_visit_id}/follow-ups",
@@ -291,11 +316,16 @@ try:
                 "kind": "case",
                 "question": "食欲、排便和用药情况",
                 "priority": "normal",
+                "template_id": selected_template["template_id"],
+                "template_round": selected_template["round_no"],
             },
             headers=headers,
         )
         assert followup_created.status_code == 200, followup_created.text
-        followup_id = followup_created.json()["item"]["id"]
+        created_item = followup_created.json()["item"]
+        followup_id = created_item["id"]
+        assert created_item["template_name"] == "一般门诊（默认）"
+        assert any(row["key"] == "spirit" for row in created_item["questions"])
         upcoming_followups = client.get(
             "/api/staff-miniapp/follow-ups", params={"tab": "upcoming"}, headers=headers,
         )
@@ -307,8 +337,25 @@ try:
             assert followup.source_type == "manual_case"
             assert followup.planned_date == followup_date
             assert followup.question_text == "食欲、排便和用药情况"
+            assert followup.template_id == selected_template["template_id"]
+            assert "spirit" in followup.question_schema_json
         finally:
             db.close()
+        handled_followup = client.post(
+            f"/api/staff-miniapp/follow-ups/{followup_id}/handle",
+            json={
+                "outcome": "worse", "next_action": "doctor",
+                "note": "精神明显变差，转医生判断",
+                "structured_answers": {"spirit": 1, "appetite": 2},
+            },
+            headers=headers,
+        )
+        assert handled_followup.status_code == 200, handled_followup.text
+        handled_item = handled_followup.json()["item"]
+        assert handled_item["staff_answers"]["spirit"] == 1
+        assert handled_item["recommendation"]["level"] == "urgent"
+        assert handled_item["recommendation"]["action"] == "doctor"
+        assert handled_item["handled_by"] == "staff_hg"
 
         reminders = client.get("/api/staff-miniapp/medication-reminders", headers=headers)
         assert reminders.status_code == 200, reminders.text

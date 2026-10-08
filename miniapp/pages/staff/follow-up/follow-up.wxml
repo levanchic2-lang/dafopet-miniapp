@@ -8,6 +8,30 @@
     <view wx:if="{{item.customer_response_note}}" class="customer-response"><view>客户已有反馈</view><text>{{item.customer_response_note}}</text></view>
 
     <view wx:if="{{item.status !== 'closed' && item.status !== 'skipped'}}">
+      <view wx:if="{{questionRows.length}}" class="structured-block">
+        <view class="structured-head"><view>模板随访内容</view><text>{{item.template_name}} · {{questionRows.length}} 项</text></view>
+        <view wx:for="{{questionRows}}" wx:key="key" wx:for-item="q" wx:for-index="qIndex" class="question-card">
+          <view class="question-label"><text>{{qIndex + 1}}</text><view>{{q.label}}<text wx:if="{{q.help}}" class="question-help">{{q.help}}</text></view></view>
+          <view wx:if="{{q.type === 'scale1to5'}}" class="scale-row">
+            <view wx:for="{{q.scale_choices}}" wx:key="value" wx:for-item="choice" class="scale-choice {{choice.selected ? 'active' : ''}}" data-index="{{qIndex}}" data-value="{{choice.value}}" bindtap="chooseScale">{{choice.value}}</view>
+          </view>
+          <view wx:elif="{{q.type === 'select' || q.type === 'upload'}}" class="question-options">
+            <view wx:for="{{q.choice_options}}" wx:key="label" wx:for-item="choice" class="option-choice {{choice.selected ? 'active' : ''}}" data-index="{{qIndex}}" data-value="{{choice.label}}" bindtap="chooseQuestionOption">{{choice.label}}</view>
+          </view>
+          <view wx:elif="{{q.type === 'multi'}}" class="question-options">
+            <view wx:for="{{q.choice_options}}" wx:key="label" wx:for-item="choice" class="option-choice {{choice.selected ? 'active' : ''}}" data-index="{{qIndex}}" data-value="{{choice.label}}" bindtap="toggleMulti">{{choice.label}}</view>
+          </view>
+          <input wx:elif="{{q.type === 'number'}}" class="question-input" type="digit" value="{{q.value}}" data-index="{{qIndex}}" bindinput="onQuestionInput" placeholder="请输入数值" />
+          <textarea wx:else class="question-input question-text" value="{{q.value}}" data-index="{{qIndex}}" bindinput="onQuestionInput" placeholder="请输入记录" maxlength="500" />
+        </view>
+      </view>
+
+      <view wx:if="{{recommendation.message}}" class="recommendation {{recommendation.level}}">
+        <view>{{recommendation.level === 'urgent' ? '需要立即关注' : recommendation.level === 'warning' ? '建议进一步处理' : recommendation.level === 'good' ? '目前情况稳定' : '继续观察'}}</view>
+        <text>{{recommendation.message}}</text>
+        <text wx:if="{{recommendation.signals_text}}" class="signals">依据：{{recommendation.signals_text}}</text>
+      </view>
+
       <view class="form-label">本次随访结果</view>
       <view class="choice-grid outcome-grid"><view wx:for="{{outcomes}}" wx:key="value" class="choice {{outcome === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="chooseOutcome">{{item.label}}</view></view>
       <view class="form-label">下一步</view>
@@ -23,6 +47,6 @@
       </view>
       <button class="submit-button" loading="{{busy}}" disabled="{{busy}}" bindtap="submit">确认记录本次随访</button>
     </view>
-    <view wx:else class="done-box"><view>{{item.staff_outcome_label || '随访已完成'}}</view><text>{{item.next_action_label}}</text><text wx:if="{{item.handle_note}}">{{item.handle_note}}</text><text wx:if="{{item.handled_by}}">{{item.handled_by}} · {{item.handled_at}}</text></view>
+    <view wx:else class="done-box"><view>{{item.staff_outcome_label || '随访已完成'}}</view><text>{{item.next_action_label}}</text><view wx:if="{{item.staff_answer_items.length}}" class="done-answers"><text wx:for="{{item.staff_answer_items}}" wx:key="key">{{item.label}}：{{item.value}}</text></view><text wx:if="{{item.handle_note}}">{{item.handle_note}}</text><text wx:if="{{item.handled_by}}">{{item.handled_by}} · {{item.handled_at}}</text></view>
   </block>
 </view>

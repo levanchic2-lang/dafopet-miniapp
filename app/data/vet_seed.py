@@ -638,6 +638,18 @@ TEMPLATES = [
              "questions": [Q["energy"], Q["wound"], Q["needs_visit"]]},
         ],
     },
+    # ── 医疗住院出院 ──────────────────────────────
+    {
+        "name": "医疗住院出院随访",
+        "system": "inpatient",
+        "priority": 75,
+        "keywords": "",
+        "rounds": [
+            {"day_offset": 2, "round_name": "出院后 2 天 · 恢复与用药",
+             "questions": [Q["spirit"], Q["appetite"], Q["vomit"], Q["stool"],
+                           Q["urine"], Q["med_taken"], Q["med_side"], Q["needs_visit"], Q["note"]]},
+        ],
+    },
     # ── 一般门诊（兜底） ────────────────────────
     {
         "name": "一般门诊（默认）",

@@ -150,6 +150,36 @@
       {% endif %}
     </div>
 
+    {# 员工结构化记录 #}
+    <div class="fd-sec">
+      <h2>员 工 随 访 记 录
+        {% if fu.handled_by %}<span class="count">{{ fu.handled_by }}{% if fu.handled_at %} · {{ (fu.handled_at | bjtime).strftime('%Y-%m-%d %H:%M') }}{% endif %}</span>{% endif %}
+      </h2>
+      {% if staff_response_items %}
+      <div class="fd-resp-grid">
+        {% for item in staff_response_items %}
+        <div class="row">
+          <span class="k">{{ item['label'] }}</span>
+          <span class="v">{{ item['value'] }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if fu.staff_outcome or fu.next_action %}
+      <div style="margin-top:14px;padding:11px 13px;border-left:3px solid var(--accent-green);background:var(--bg);font-size:10pt;line-height:1.7;">
+        处理结果：{{ staff_outcome_zh[fu.staff_outcome] if fu.staff_outcome in staff_outcome_zh else fu.staff_outcome or '—' }}
+        · 下一步：{{ staff_action_zh[fu.next_action] if fu.next_action in staff_action_zh else fu.next_action or '—' }}
+        {% if fu.handle_note %}<br/>补充：{{ fu.handle_note }}{% endif %}
+      </div>
+      {% endif %}
+      {% if recommendation and recommendation['message'] %}
+      <div style="margin-top:10px;color:var(--ink-3);font-size:9pt;line-height:1.6;">系统当时建议：{{ recommendation['message'] }}</div>
+      {% endif %}
+      {% if not staff_response_items and not fu.staff_outcome and not fu.handle_note %}
+      <div class="fd-empty">员工尚未执行结构化随访</div>
+      {% endif %}
+    </div>
+
     {# 时间线 #}
     <div class="fd-sec">
       <h2>时 间 线 <span class="count">{{ timeline|length }} 条</span></h2>

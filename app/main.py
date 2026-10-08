@@ -6713,6 +6713,225 @@ _STAFF_FOLLOWUP_ACTION_ZH = {
     "revisited": "已经复诊",
 }
 
+_GENERIC_FOLLOWUP_QUESTIONS = [
+    {"key": "spirit", "type": "scale1to5", "label": "精神状态", "help": "1=萎靡 · 5=活泼"},
+    {"key": "appetite", "type": "scale1to5", "label": "食欲", "help": "1=不吃 · 5=正常"},
+    {"key": "symptom_change", "type": "select", "label": "主要症状变化",
+     "options": ["明显改善", "有所改善", "无明显变化", "加重"]},
+    {"key": "med_taken", "type": "select", "label": "是否按时用药",
+     "options": ["完全按时", "偶尔漏一两次", "经常漏", "完全没喂", "无需用药"]},
+    {"key": "note", "type": "text", "label": "补充说明"},
+]
+
+
+def _followup_kind_for_system(system: str) -> str:
+    system = (system or "").strip().lower()
+    if system in ("surgical", "ortho", "dental", "reproduction"):
+        return "surgery"
+    if system in ("renal", "endocrine", "cardio", "oncology", "neuro"):
+        return "chronic"
+    if system == "inpatient":
+        return "discharge"
+    return "case"
+
+
+def _followup_template_options(db: Session) -> list[dict]:
+    """Flatten active templates into selectable rounds for desktop and mini-program."""
+    preferred = {
+        "一般门诊（默认）": 0,
+        "消化系统疾病": 1,
+        "呼吸系统疾病": 2,
+        "皮肤系统疾病": 3,
+        "绝育术后": 4,
+        "医疗住院出院随访": 5,
+        "肾病慢病管理": 6,
+        "心血管慢病管理": 7,
+    }
+    rows: list[dict] = []
+    templates_q = db.query(FollowUpTemplate).filter(
+        FollowUpTemplate.is_active == True,
+    ).all()
+    templates_q.sort(key=lambda t: (preferred.get(t.name, 100), -int(t.priority or 0), t.name or ""))
+    for tpl in templates_q:
+        try:
+            rounds = json.loads(tpl.rounds_json or "[]")
+        except Exception:
+            rounds = []
+        for idx, rnd in enumerate(rounds, start=1):
+            questions = rnd.get("questions", []) if isinstance(rnd, dict) else []
+            round_name = str((rnd or {}).get("round_name") or f"第 {idx} 轮")[:80]
+            day_offset = int((rnd or {}).get("day_offset") or 0)
+            rows.append({
+                "key": f"{tpl.id}:{idx}",
+                "template_id": tpl.id,
+                "round_no": idx,
+                "template_name": tpl.name or "",
+                "round_name": round_name,
+                "label": f"{tpl.name} · {round_name}",
+                "system": tpl.system or "",
+                "kind": _followup_kind_for_system(tpl.system or ""),
+                "day_offset": day_offset,
+                "question_count": len(questions or []),
+            })
+    return rows
+
+
+def _followup_questions_for_task(db: Session, fu: FollowUp) -> list[dict]:
+    try:
+        snapshot = json.loads(fu.question_schema_json or "[]")
+        if isinstance(snapshot, list) and snapshot:
+            return [q for q in snapshot if isinstance(q, dict) and q.get("key")]
+    except Exception:
+        pass
+    if fu.template_id:
+        tpl = db.get(FollowUpTemplate, fu.template_id)
+        if tpl:
+            try:
+                rounds = json.loads(tpl.rounds_json or "[]")
+            except Exception:
+                rounds = []
+            idx = max(0, int(fu.round_no or 1) - 1)
+            if idx < len(rounds):
+                questions = (rounds[idx] or {}).get("questions", []) or []
+                if questions:
+                    return [q for q in questions if isinstance(q, dict) and q.get("key")]
+    if (fu.source_type or "") != "visit_default":
+        return [dict(q) for q in _GENERIC_FOLLOWUP_QUESTIONS]
+    return []
+
+
+def _normalize_staff_followup_answers(questions: list[dict], raw: object) -> dict:
+    raw = raw if isinstance(raw, dict) else {}
+    answers: dict = {}
+    for q in questions:
+        key = str(q.get("key") or "").strip()
+        qtype = str(q.get("type") or "text").strip()
+        if not key or key not in raw:
+            continue
+        value = raw.get(key)
+        if value in (None, "", []):
+            continue
+        if qtype == "scale1to5":
+            try:
+                value = max(1, min(5, int(value)))
+            except Exception:
+                continue
+        elif qtype == "number":
+            try:
+                value = round(float(value), 3)
+            except Exception:
+                continue
+        elif qtype == "multi":
+            allowed = {str(v) for v in (q.get("options") or [])}
+            values = value if isinstance(value, list) else [value]
+            value = [str(v)[:100] for v in values if str(v) in allowed]
+            if not value:
+                continue
+        elif qtype == "select":
+            value = str(value)[:100]
+            allowed = {str(v) for v in (q.get("options") or [])}
+            if allowed and value not in allowed:
+                continue
+        elif qtype == "upload":
+            value = str(value)[:40]
+            if value not in ("已收到", "未收到", "不适用"):
+                continue
+        else:
+            value = str(value).strip()[:500]
+            if not value:
+                continue
+        answers[key] = value
+    return answers
+
+
+def _followup_recommendation(questions: list[dict], answers: dict) -> dict:
+    """Give a conservative workflow suggestion; staff still makes the final choice."""
+    if not answers:
+        return {}
+    labels = {str(q.get("key") or ""): str(q.get("label") or q.get("key") or "") for q in questions}
+    red_terms = (
+        "加重", "频繁", "喷射", "便血", "排尿困难", "嚎叫", "裂开", "化脓",
+        "张口呼吸", "发紫", "紧急", "立即就诊", "完全没喂", "完全没拉",
+        "严重", "新皮损", "带血鼻涕",
+    )
+    amber_terms = (
+        "无变化", "无明显变化", "明显急促", "红肿热痛", "血尿", "量少",
+        "脓性鼻涕", "经常漏", "宠物拒食", "2-3次", "希望线上咨询", "需要复诊",
+        "未排便", "少量渗液",
+    )
+    positive_terms = ("正常", "明显改善", "有所改善", "干燥愈合", "完全按时", "不需要，已好转", "无")
+    red: list[str] = []
+    amber: list[str] = []
+    positives = 0
+    explicit_revisit = False
+    for key, raw in answers.items():
+        label = labels.get(key, key)
+        values = raw if isinstance(raw, list) else [raw]
+        for value in values:
+            if isinstance(value, (int, float)) and key in ("spirit", "appetite", "water", "energy"):
+                if value <= 2:
+                    red.append(f"{label} {value}/5")
+                elif value == 3:
+                    amber.append(f"{label} {value}/5")
+                else:
+                    positives += 1
+                continue
+            if isinstance(value, (int, float)) and key == "itch":
+                if value >= 4:
+                    red.append(f"{label} {value}/5")
+                elif value == 3:
+                    amber.append(f"{label} {value}/5")
+                else:
+                    positives += 1
+                continue
+            text_value = str(value)
+            if key == "med_side" and text_value.strip() not in ("无", "没有", "无明显不良反应"):
+                amber.append(label)
+            if "需要复诊" in text_value and "不需要" not in text_value:
+                explicit_revisit = True
+            if any(term in text_value for term in red_terms):
+                red.append(f"{label}：{text_value}")
+            elif any(term in text_value for term in amber_terms):
+                amber.append(f"{label}：{text_value}")
+            elif any(term == text_value or (term in text_value and term != "无") for term in positive_terms):
+                positives += 1
+    if red:
+        return {
+            "level": "urgent", "outcome": "worse", "action": "doctor",
+            "message": "发现警示项，建议立即转医生判断，必要时通知客户尽快复诊。",
+            "signals": red[:4],
+        }
+    if explicit_revisit:
+        return {
+            "level": "warning", "outcome": "unchanged", "action": "revisit",
+            "message": "客户表达复诊需求，建议直接转为复诊安排。", "signals": amber[:4],
+        }
+    if amber:
+        return {
+            "level": "warning", "outcome": "unchanged", "action": "doctor",
+            "message": "存在需要关注的项目，建议转医生判断是否复诊或调整方案。",
+            "signals": amber[:4],
+        }
+    if positives:
+        return {
+            "level": "good", "outcome": "recovered", "action": "finish",
+            "message": "目前未发现明显警示项，可结合沟通情况结束本次随访。", "signals": [],
+        }
+    return {
+        "level": "neutral", "outcome": "improved", "action": "reschedule",
+        "message": "信息不足以判断完全恢复，建议结合沟通情况决定是否延期观察。", "signals": [],
+    }
+
+
+def _followup_answer_items(questions: list[dict], answers: dict) -> list[dict]:
+    question_map = {str(q.get("key") or ""): q for q in questions}
+    rows: list[dict] = []
+    for key, value in (answers or {}).items():
+        q = question_map.get(key, {})
+        shown = "、".join(str(v) for v in value) if isinstance(value, list) else str(value)
+        rows.append({"key": key, "label": q.get("label") or key, "value": shown})
+    return rows
+
 
 def _staff_followup_kind(fu: FollowUp, visit: Visit | None) -> tuple[str, str]:
     source = (fu.source_type or "").lower()
@@ -6748,6 +6967,14 @@ def _staff_followup_payload(db: Session, fu: FollowUp) -> dict:
         FollowUp.status.in_(active_statuses),
         FollowUp.planned_date > (fu.planned_date or ""),
     ).count() if fu.visit_id else 0
+    questions = _followup_questions_for_task(db, fu)
+    try:
+        staff_data = json.loads(fu.staff_response_data or "{}")
+        staff_data = staff_data if isinstance(staff_data, dict) else {}
+    except Exception:
+        staff_data = {}
+    staff_answers = staff_data.get("answers") if isinstance(staff_data.get("answers"), dict) else {}
+    recommendation = staff_data.get("recommendation") if isinstance(staff_data.get("recommendation"), dict) else {}
     return {
         "id": fu.id,
         "planned_date": fu.planned_date or "",
@@ -6759,8 +6986,10 @@ def _staff_followup_payload(db: Session, fu: FollowUp) -> dict:
         "template_name": fu.template_name or "",
         "reason": fu.reason or "",
         "question": fu.question_text or "",
+        "questions": questions,
         "risk_trigger": fu.risk_trigger or "",
         "priority": fu.priority or "normal",
+        "created_by": fu.created_by or fu.assigned_to or "",
         "customer": {
             "id": customer.id, "name": customer.name or "未命名客户",
             "phone": customer.phone or "", "phone_masked": _mask_phone(customer.phone or ""),
@@ -6781,6 +7010,9 @@ def _staff_followup_payload(db: Session, fu: FollowUp) -> dict:
         "handled_by": fu.handled_by or "",
         "handled_at": fu.handled_at.strftime("%Y-%m-%d %H:%M") if fu.handled_at else "",
         "handle_note": fu.handle_note or "",
+        "staff_answers": staff_answers,
+        "staff_answer_items": _followup_answer_items(questions, staff_answers),
+        "recommendation": recommendation,
         "future_count": future_count,
     }
 
@@ -6867,6 +7099,7 @@ async def api_staff_miniapp_followup_context(
                   "diagnosis": visit.diagnosis or "", "vet_name": visit.vet_name or ""},
         "pet": {"id": pet.id, "name": pet.name or "未命名宠物"} if pet else {},
         "customer": {"id": customer.id, "name": customer.name or "未命名客户"} if customer else {},
+        "templates": _followup_template_options(db),
     }
 
 
@@ -6893,6 +7126,13 @@ async def api_staff_miniapp_followup_create(
         kind = "case"
     if planned_date < date.today().isoformat():
         raise HTTPException(400, "随访日期不能早于今天")
+    try:
+        template_id = int((payload or {}).get("template_id") or 0)
+        template_round = int((payload or {}).get("template_round") or 1)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "请选择正确的随访模板")
+    if template_id <= 0:
+        raise HTTPException(400, "请选择随访模板")
     fu = _create_manual_followup(
         db, visit,
         actor=user.username or "",
@@ -6903,6 +7143,8 @@ async def api_staff_miniapp_followup_create(
         reason=str((payload or {}).get("reason") or ""),
         priority=str((payload or {}).get("priority") or "normal"),
         store_fallback=(pet.store if pet else "") or user.store or "",
+        template_id=template_id,
+        template_round=template_round,
     )
     db.flush()
     db.add(AuditLog(
@@ -6934,12 +7176,23 @@ async def api_staff_miniapp_followup_handle(
     note = str((payload or {}).get("note") or "").strip()[:1000]
     next_date = str((payload or {}).get("next_date") or "").strip()[:10]
     appointment_id = int((payload or {}).get("appointment_id") or 0)
+    questions = _followup_questions_for_task(db, fu)
+    structured_answers = _normalize_staff_followup_answers(
+        questions, (payload or {}).get("structured_answers") or {},
+    )
+    if questions and not structured_answers:
+        raise HTTPException(400, "请至少记录一项模板随访内容")
+    recommendation = _followup_recommendation(questions, structured_answers)
 
     fu.staff_outcome = outcome
     fu.next_action = next_action
     fu.handled_by = (user.username or "")[:80]
     fu.handled_at = now
     fu.handle_note = note
+    fu.staff_response_data = json.dumps({
+        "answers": structured_answers,
+        "recommendation": recommendation,
+    }, ensure_ascii=False)
     fu.next_action_ref_id = None
     fu.next_contact_date = ""
     if next_action == "reschedule":
@@ -14365,13 +14618,23 @@ async def admin_follow_up_detail(fu_id: int, request: Request, db: Session = Dep
     visit = db.get(Visit, fu.visit_id) if fu.visit_id else None
     # 反馈结构化数据
     response_items: list[dict] = []
+    questions = _followup_questions_for_task(db, fu)
+    question_labels = {str(q.get("key") or ""): str(q.get("label") or q.get("key") or "") for q in questions}
     try:
         rd = json.loads(fu.response_data or "{}")
         if isinstance(rd, dict):
             for k, v in rd.items():
-                response_items.append({"k": k, "v": v if not isinstance(v, (list, dict)) else json.dumps(v, ensure_ascii=False)})
+                response_items.append({"k": question_labels.get(k, k), "v": v if not isinstance(v, (list, dict)) else json.dumps(v, ensure_ascii=False)})
     except Exception:
         pass
+    try:
+        staff_data = json.loads(fu.staff_response_data or "{}")
+        staff_data = staff_data if isinstance(staff_data, dict) else {}
+    except Exception:
+        staff_data = {}
+    staff_answers = staff_data.get("answers") if isinstance(staff_data.get("answers"), dict) else {}
+    staff_response_items = _followup_answer_items(questions, staff_answers)
+    recommendation = staff_data.get("recommendation") if isinstance(staff_data.get("recommendation"), dict) else {}
     # 推送 / 反馈日志（从 NotificationLog 反查 — 关键词匹配）
     from app.models import NotificationLog as _NL
     notif_rows = db.query(_NL).filter(
@@ -14392,7 +14655,10 @@ async def admin_follow_up_detail(fu_id: int, request: Request, db: Session = Dep
                          "text": f"客户反馈 · {fu.response or ''} · {fu.response_note or ''}"})
     if fu.handled_at:
         timeline.append({"kind": "handled", "at": fu.handled_at,
-                         "text": f"医院处理（{fu.handled_by or '—'}）· {fu.handle_note or ''}"})
+                         "text": f"医院处理（{fu.handled_by or '—'}）· "
+                                 f"{_STAFF_FOLLOWUP_OUTCOME_ZH.get(fu.staff_outcome or '', fu.staff_outcome or '已处理')} · "
+                                 f"{_STAFF_FOLLOWUP_ACTION_ZH.get(fu.next_action or '', fu.next_action or '')}"
+                                 f"{' · ' + fu.handle_note if fu.handle_note else ''}"})
     timeline.sort(key=lambda x: x["at"] or datetime.min)
     fu_status_zh = {
         "pending": "未到期",
@@ -14406,6 +14672,10 @@ async def admin_follow_up_detail(fu_id: int, request: Request, db: Session = Dep
     return templates.TemplateResponse(request, "uk/follow_up_detail.html", {
         "fu": fu, "cust": cust, "pet": pet, "visit": visit,
         "response_items": response_items,
+        "staff_response_items": staff_response_items,
+        "recommendation": recommendation,
+        "staff_outcome_zh": _STAFF_FOLLOWUP_OUTCOME_ZH,
+        "staff_action_zh": _STAFF_FOLLOWUP_ACTION_ZH,
         "timeline": timeline,
         "fu_status_zh": fu_status_zh,
         "msg": request.query_params.get("msg"),
@@ -14751,21 +15021,53 @@ def _create_manual_followup(
     reason: str = "",
     priority: str = "normal",
     store_fallback: str = "",
+    template_id: int = 0,
+    template_round: int = 1,
 ) -> FollowUp:
     """Create the same explicit follow-up task for desktop and mini-program flows."""
     kind = kind if kind in _MANUAL_FOLLOWUP_KIND_LABELS else "case"
     label = _MANUAL_FOLLOWUP_KIND_LABELS[kind]
     priority = priority if priority in _CARE_PRIORITIES else "normal"
-    max_round = db.query(func.max(FollowUp.round_no)).filter(
-        FollowUp.visit_id == visit.id,
-    ).scalar() or 0
+    selected_template = None
+    selected_questions = [dict(q) for q in _GENERIC_FOLLOWUP_QUESTIONS]
+    selected_round_name = title.strip() or label
+    selected_round_no = 1
+    if template_id:
+        selected_template = db.get(FollowUpTemplate, int(template_id))
+        if not selected_template or not selected_template.is_active:
+            raise HTTPException(400, "所选随访模板不存在或已停用")
+        try:
+            rounds = json.loads(selected_template.rounds_json or "[]")
+        except Exception:
+            rounds = []
+        selected_round_no = max(1, int(template_round or 1))
+        idx = selected_round_no - 1
+        if idx >= len(rounds):
+            raise HTTPException(400, "所选模板轮次不存在")
+        selected_round = rounds[idx] if isinstance(rounds[idx], dict) else {}
+        selected_questions = [
+            dict(q) for q in (selected_round.get("questions") or [])
+            if isinstance(q, dict) and q.get("key")
+        ]
+        selected_round_name = title.strip() or str(
+            selected_round.get("round_name") or selected_template.name or label
+        )
+        kind = _followup_kind_for_system(selected_template.system or "")
+        label = _MANUAL_FOLLOWUP_KIND_LABELS[kind]
+    else:
+        max_round = db.query(func.max(FollowUp.round_no)).filter(
+            FollowUp.visit_id == visit.id,
+        ).scalar() or 0
+        selected_round_no = int(max_round) + 1
     fu = FollowUp(
         visit_id=visit.id,
         customer_id=visit.customer_id,
         pet_id=visit.pet_id,
-        template_name=label,
-        round_no=int(max_round) + 1,
-        round_name=(title.strip() or label)[:80],
+        template_id=selected_template.id if selected_template else None,
+        template_name=((selected_template.name if selected_template else label) or label)[:120],
+        round_no=selected_round_no,
+        round_name=selected_round_name[:80],
+        question_schema_json=json.dumps(selected_questions, ensure_ascii=False),
         source_type=f"manual_{kind}",
         reason=reason.strip()[:1000],
         question_text=question.strip()[:1000],
@@ -14773,6 +15075,7 @@ def _create_manual_followup(
         priority=priority,
         store=(visit.store or store_fallback or "")[:40],
         assigned_to=(actor or "")[:80],
+        created_by=(actor or "")[:80],
         planned_date=planned_date,
         status="due" if planned_date <= date.today().isoformat() else "pending",
         channel="manual",
@@ -15237,6 +15540,8 @@ def _confirm_care_plan_to_followups(db: Session, plan: CarePlan, v: Visit, usern
         fu.pet_id = v.pet_id
         fu.store = store
         fu.assigned_to = assignee or username or fu.assigned_to
+        if not exists:
+            fu.created_by = (username or assignee or "")[:80]
         fu.planned_date = planned
         fu.channel = "manual"
         if fu.status not in ("sent", "responded", "closed"):
@@ -16456,6 +16761,15 @@ async def page_admin_visit_detail(
             fu._answers = json.loads(fu.response_data or "") if fu.response_data else None
         except Exception:
             fu._answers = None
+        fu._questions = _followup_questions_for_task(db, fu)
+        try:
+            staff_data = json.loads(fu.staff_response_data or "{}")
+            staff_data = staff_data if isinstance(staff_data, dict) else {}
+        except Exception:
+            staff_data = {}
+        fu._staff_answers = staff_data.get("answers") if isinstance(staff_data.get("answers"), dict) else {}
+        fu._staff_answer_items = _followup_answer_items(fu._questions, fu._staff_answers)
+        fu._recommendation = staff_data.get("recommendation") if isinstance(staff_data.get("recommendation"), dict) else {}
     # 解析检查项目，让列表能展示开了哪些项
     for eo in exam_orders:
         try:
@@ -16487,6 +16801,7 @@ async def page_admin_visit_detail(
         "public_case_draft": public_case_draft,
         "followups": followups,
         "active_followups": active_followups,
+        "followup_template_options": _followup_template_options(db),
         "today": date.today().isoformat(),
         "care_summary": care_summary,
         "care_plan": care_plan,
@@ -16505,6 +16820,8 @@ async def page_admin_visit_detail(
             "responded": "客户已反馈", "phone_pending": "待联系",
             "closed": "已完成", "skipped": "已忽略",
         },
+        "staff_outcome_zh": _STAFF_FOLLOWUP_OUTCOME_ZH,
+        "staff_action_zh": _STAFF_FOLLOWUP_ACTION_ZH,
         "csrf_token": _get_csrf_token(request),
         "mode": "edit",
         "msg": request.query_params.get("msg"),
@@ -16865,6 +17182,7 @@ async def admin_visit_followup_create(
     question: str = Form(""),
     reason: str = Form(""),
     priority: str = Form("normal"),
+    template_key: str = Form(""),
     next_url: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -16890,6 +17208,20 @@ async def admin_visit_followup_create(
             status_code=303,
         )
     username = request.session.get("admin_username", "") or ""
+    template_id = 0
+    template_round = 1
+    if not template_key:
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}?err=请选择随访模板",
+            status_code=303,
+        )
+    try:
+        template_id, template_round = [int(v) for v in template_key.split(":", 1)]
+    except Exception:
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}?err=请选择正确的随访模板",
+            status_code=303,
+        )
     fu = _create_manual_followup(
         db, visit,
         actor=username,
@@ -16900,6 +17232,8 @@ async def admin_visit_followup_create(
         reason=reason,
         priority=priority,
         store_fallback=(pet.store if pet else "") or _get_op_store(request),
+        template_id=template_id,
+        template_round=template_round,
     )
     db.flush()
     _audit(db, request, "visit_followup_create", detail={
@@ -16907,6 +17241,8 @@ async def admin_visit_followup_create(
         "visit_id": visit.id,
         "planned_date": planned_date,
         "kind": kind,
+        "template_id": template_id or None,
+        "template_round": template_round,
     })
     db.commit()
     fallback = f"/admin/visits/{visit_id}?msg=随访已安排：{planned_date}#followup-schedule"
@@ -17808,24 +18144,8 @@ async def admin_futpl_delete(tpl_id: int, request: Request, db: Session = Depend
 
 # ─── 客户反馈短链（无登录，token 校验） ───────────────────────
 def _load_followup_questions(db: Session, fu: FollowUp) -> list:
-    """根据 FollowUp 的 template_id + round_no 拿到本轮要问的问题列表。
-
-    模板被删/找不到时返回空列表，前端会用兜底的「2 选 1」表单。
-    """
-    if not fu.template_id:
-        return []
-    tpl = db.get(FollowUpTemplate, fu.template_id)
-    if not tpl:
-        return []
-    import json as _json
-    try:
-        rounds = _json.loads(tpl.rounds_json or "[]")
-    except Exception:
-        return []
-    idx = max(0, (fu.round_no or 1) - 1)
-    if idx >= len(rounds):
-        return []
-    return rounds[idx].get("questions", []) or []
+    """Load the immutable task snapshot, falling back to the current template."""
+    return _followup_questions_for_task(db, fu)
 
 
 @app.get("/follow-up/{token}", response_class=HTMLResponse)
@@ -35553,14 +35873,32 @@ async def admin_inpatient_discharge(hosp_id: int, request: Request,
         if not existing_discharge_followup:
             visit = db.get(Visit, h.visit_id)
             discharge_day = (dt + timedelta(hours=8)).date()
+            discharge_tpl = db.query(FollowUpTemplate).filter(
+                FollowUpTemplate.name == "医疗住院出院随访",
+                FollowUpTemplate.is_active == True,
+            ).first()
+            discharge_questions = [dict(q) for q in _GENERIC_FOLLOWUP_QUESTIONS]
+            if discharge_tpl:
+                try:
+                    discharge_rounds = json.loads(discharge_tpl.rounds_json or "[]")
+                    discharge_questions = [
+                        dict(q) for q in ((discharge_rounds[0] or {}).get("questions") or [])
+                        if isinstance(q, dict) and q.get("key")
+                    ] or discharge_questions
+                except Exception:
+                    pass
             db.add(FollowUp(
                 visit_id=h.visit_id, customer_id=h.customer_id, pet_id=h.pet_id,
-                template_name="出院随访", round_no=1, round_name="出院后 2 天随访",
+                template_id=discharge_tpl.id if discharge_tpl else None,
+                template_name=discharge_tpl.name if discharge_tpl else "出院随访",
+                round_no=1, round_name="出院后 2 天 · 恢复与用药",
+                question_schema_json=json.dumps(discharge_questions, ensure_ascii=False),
                 source_type="hospitalization", source_id=h.id,
                 reason="住院动物出院后确认恢复情况",
                 question_text="精神、食欲、排便、用药及是否出现新的异常",
                 expected_reply_type="phone", risk_trigger="无改善、情况加重或出现新的异常",
                 priority="high", store=h.store or "",
+                created_by=(operator or "")[:80],
                 assigned_to=_resolve_vet_username(db, visit.vet_name or "")[:80] if visit else "",
                 planned_date=(discharge_day + timedelta(days=2)).isoformat(),
                 status="pending", channel="manual", feedback_token=_gen_followup_token(),
