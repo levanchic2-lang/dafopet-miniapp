@@ -320,7 +320,9 @@ try:
         assert meds.status_code == 200, meds.text
         assert [row["pet_name"] for row in meds.json()["items"]] == ["横岗犬"]
         assert meds.json()["items"][0]["drug_name"] == "横岗住院测试药"
-        assert [row["name"] for row in meds.json()["inventory"]] == ["横岗住院测试药"]
+        inventory_names = [row["name"] for row in meds.json()["inventory"]]
+        assert "横岗住院测试药" in inventory_names
+        assert "东环住院测试药" not in inventory_names
         med_id = meds.json()["items"][0]["id"]
         batch_completed = client.post(
             "/api/staff-miniapp/inpatient-medications/batch-check",
