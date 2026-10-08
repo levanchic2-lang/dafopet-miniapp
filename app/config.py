@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     wechat_tmpl_rejection: str = ""
     # 手术前提醒模板 ID（字段：thing1=用户名称,thing2=预约项目,time3=预约时间,thing4=温馨提示）
     wechat_tmpl_surgery_reminder: str = ""
-    # 疫苗到期提醒模板 ID（字段：thing1=宠物名,thing2=疫苗类型,time3=到期日,thing4=温馨提示）
+    # 疫苗/驱虫到期提醒模板 ID（两类提醒共用一个「服务到期」订阅模板）
     wechat_tmpl_vaccine_reminder: str = ""
     # 回访通知模板 ID（字段：thing1=宠物名,thing2=就诊类型,time3=就诊日,thing4=温馨提示）
     wechat_tmpl_followup: str = ""
@@ -120,7 +120,7 @@ class Settings(BaseSettings):
     wechat_fields_rejection: str = "thing1,phrase2,thing3,time4"
     # 手术前提醒模板字段：thing1=用户名称,thing2=预约项目,time3=预约时间,thing4=温馨提示
     wechat_fields_surgery_reminder: str = "thing1,thing2,time3,thing4"
-    # 疫苗到期提醒模板字段：thing5=温馨提示,thing8=服务对象(宠物名),thing11=服务项目(疫苗类型),time7=服务时间(到期日)
+    # 疫苗/驱虫到期提醒模板字段：thing5=温馨提示,thing8=服务对象,thing11=服务项目,time7=到期日
     wechat_fields_vaccine_reminder: str = "thing5,thing8,thing11,time7"
     # 回访通知模板字段：thing1=宠物名,thing2=就诊类型,time3=就诊日,thing4=温馨提示
     wechat_fields_followup: str = "thing1,thing2,time3,thing4"

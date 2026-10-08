@@ -469,21 +469,21 @@ def push_rejection_notice(
         )
         db.commit()
 
-def push_vaccine_reminder(
+def push_preventive_reminder(
     db: Session,
-    vaccination_id: int,
     openid: str,
     pet_name: str,
-    vaccine_type_zh: str,
+    service_name: str,
     *,
     next_due_date: str = "",
-) -> None:
-    """推送：疫苗即将到期提醒。模板字段：thing1=宠物名,thing2=疫苗类型,time3=到期日,thing4=温馨提示。"""
+    source_refs: list[dict[str, Any]] | None = None,
+) -> bool:
+    """发送疫苗/驱虫到期订阅消息；只有微信确认发送成功才返回 True。"""
     tmpl_id = (settings.wechat_tmpl_vaccine_reminder or "").strip()
     if not tmpl_id:
-        return
+        return False
     if not _enabled() or not openid:
-        return
+        return False
 
     def v(x: str, fallback: str = "—", max_len: int = 20) -> str:
         s = (x or "").strip()
@@ -498,14 +498,14 @@ def push_vaccine_reminder(
             # time7 → 服务时间（到期日）
             data[k] = {"value": next_due_date or time.strftime("%Y-%m-%d", time.localtime())}
         elif k in ("thing11",):
-            # thing11 → 服务项目（疫苗类型）
-            data[k] = {"value": v(vaccine_type_zh, fallback="疫苗", max_len=20)}
+            # thing11 → 服务项目（疫苗 / 驱虫）
+            data[k] = {"value": v(service_name, fallback="疫苗或驱虫", max_len=20)}
         elif k in ("thing8",):
             # thing8 → 服务对象（宠物名）
             data[k] = {"value": v(pet_name, fallback="宠物", max_len=20)}
         elif k in ("thing5",):
             # thing5 → 温馨提示
-            data[k] = {"value": "疫苗即将到期，请携带宠物来院"}
+            data[k] = {"value": "项目即将到期，可按需要预约到院"}
         else:
             # 其余 thing* 字段兜底：填宠物名
             data[k] = {"value": v(pet_name, fallback="宠物", max_len=20)}
@@ -513,8 +513,10 @@ def push_vaccine_reminder(
     payload = {
         "touser": openid,
         "template_id": tmpl_id,
-        "page": settings.wechat_message_page,
+        "page": "pages/immunization/index",
         "data": data,
+        "miniprogram_state": "formal",
+        "lang": "zh_CN",
     }
     try:
         resp = _post_subscribe_send(payload)
@@ -522,21 +524,51 @@ def push_vaccine_reminder(
             NotificationLog(
                 application_id=None,
                 channel="wechat_miniapp",
-                payload=json.dumps({"type": "vaccine_reminder", "vaccination_id": vaccination_id, "resp": resp}, ensure_ascii=False),
+                payload=json.dumps({
+                    "type": "preventive_reminder",
+                    "sources": source_refs or [],
+                    "resp": resp,
+                }, ensure_ascii=False),
                 success=True,
             )
         )
         db.commit()
+        return True
     except Exception as e:
         db.add(
             NotificationLog(
                 application_id=None,
                 channel="wechat_miniapp",
-                payload=str(e),
+                payload=json.dumps({
+                    "type": "preventive_reminder",
+                    "sources": source_refs or [],
+                    "error": str(e),
+                }, ensure_ascii=False),
                 success=False,
             )
         )
         db.commit()
+        return False
+
+
+def push_vaccine_reminder(
+    db: Session,
+    vaccination_id: int,
+    openid: str,
+    pet_name: str,
+    vaccine_type_zh: str,
+    *,
+    next_due_date: str = "",
+) -> bool:
+    """兼容旧调用；新流程统一走疫苗/驱虫到期提醒。"""
+    return push_preventive_reminder(
+        db,
+        openid=openid,
+        pet_name=pet_name,
+        service_name=vaccine_type_zh,
+        next_due_date=next_due_date,
+        source_refs=[{"type": "vaccination", "id": vaccination_id}],
+    )
 
 
 def push_pending_manual_notice(

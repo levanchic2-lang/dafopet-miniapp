@@ -924,6 +924,7 @@ class DewormingRecord(Base):
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
     pet      = relationship("Pet",      backref="deworming_records", foreign_keys=[pet_id])
     customer = relationship("Customer", backref="deworming_records", foreign_keys=[customer_id])

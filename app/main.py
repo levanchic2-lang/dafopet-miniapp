@@ -144,7 +144,11 @@ _BREEDS_ALL = _all_breeds()
 from app.services.notify import notify_application_result
 from app.services.backup_local import create_backup_zip, is_safe_backup_filename, list_backup_zips
 from app.services.tnr_appointment_sync import sync_active_tnr_appointment
-from app.services.wechat_miniapp import push_application_result, push_appointment_status, push_pending_manual_notice, push_rejection_notice, push_surgery_done, push_surgery_reminder, push_vaccine_reminder, wechat_code2session
+from app.services.wechat_miniapp import (
+    push_application_result, push_appointment_status, push_pending_manual_notice,
+    push_preventive_reminder, push_rejection_notice, push_surgery_done,
+    push_surgery_reminder, wechat_code2session,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -603,7 +607,7 @@ _VACC_REMINDER_DAYS = 7  # 提前 N 天推送
 
 
 def _run_vaccine_reminders(db: Session | None = None) -> dict:
-    """查询 N 天内到期的疫苗并推送提醒，返回 {"sent": int, "skipped": int, "errors": int}。"""
+    """自动发送未来 N 天到期的疫苗/驱虫提醒，不产生人工随访任务。"""
     from app.database import SessionLocal
     close_db = db is None
     if db is None:
@@ -614,12 +618,23 @@ def _run_vaccine_reminders(db: Session | None = None) -> dict:
         today_str = today.strftime("%Y-%m-%d")
         deadline_str = deadline.strftime("%Y-%m-%d")
 
-        rows = (
+        vaccinations = (
             db.query(Vaccination)
             .filter(
+                Vaccination.status == "active",
                 Vaccination.next_due_date >= today_str,
                 Vaccination.next_due_date <= deadline_str,
                 Vaccination.reminder_sent_at.is_(None),
+            )
+            .all()
+        )
+        dewormings = (
+            db.query(DewormingRecord)
+            .filter(
+                DewormingRecord.status == "active",
+                DewormingRecord.next_due_date >= today_str,
+                DewormingRecord.next_due_date <= deadline_str,
+                DewormingRecord.reminder_sent_at.is_(None),
             )
             .all()
         )
@@ -628,9 +643,11 @@ def _run_vaccine_reminders(db: Session | None = None) -> dict:
             "rabies": "狂犬疫苗", "combo_3": "猫三联", "combo_6": "猫六联",
             "canine_8": "犬八联", "deworming": "驱虫", "other": "其他疫苗",
         }
-        sent = skipped = errors = 0
-        for row in rows:
-            # 找 openid：通过 customer → wechat_openid
+        groups: dict[tuple[int, str], dict] = {}
+        skipped = 0
+        candidates = [("vaccination", row) for row in vaccinations]
+        candidates.extend(("deworming", row) for row in dewormings)
+        for kind, row in candidates:
             cust = row.customer
             if not cust:
                 skipped += 1
@@ -639,30 +656,63 @@ def _run_vaccine_reminders(db: Session | None = None) -> dict:
             if not openid:
                 skipped += 1
                 continue
-            pet_name = row.pet.name if row.pet else "宠物"
-            vtype_zh = vacc_type_zh_map.get(row.vaccine_type or "", "疫苗")
+            pet_name = (row.pet.name if row.pet else "宠物") or "宠物"
+            if kind == "vaccination":
+                service_name = vacc_type_zh_map.get(row.vaccine_type or "", "疫苗")
+            else:
+                service_name = _DEW_TYPE_ZH.get(row.deworm_type or "", "驱虫")
+            key = (cust.id, openid)
+            group = groups.setdefault(key, {
+                "openid": openid, "pets": [], "services": [], "dates": [], "rows": [],
+            })
+            group["pets"].append(pet_name)
+            group["services"].append(service_name)
+            group["dates"].append(row.next_due_date or today_str)
+            group["rows"].append((kind, row))
+
+        sent = sent_records = errors = 0
+        for group in groups.values():
+            pet_names = list(dict.fromkeys(group["pets"]))
+            service_names = list(dict.fromkeys(group["services"]))
+            pet_summary = "、".join(pet_names[:2])
+            if len(pet_names) > 2:
+                pet_summary += f"等{len(pet_names)}只"
+            service_summary = "、".join(service_names[:2])
+            if len(service_names) > 2:
+                service_summary = f"疫苗/驱虫等{len(group['rows'])}项"
+            refs = [{"type": kind, "id": row.id} for kind, row in group["rows"]]
             try:
-                push_vaccine_reminder(
+                delivered = push_preventive_reminder(
                     db,
-                    vaccination_id=row.id,
-                    openid=openid,
-                    pet_name=pet_name,
-                    vaccine_type_zh=vtype_zh,
-                    next_due_date=row.next_due_date or "",
+                    openid=group["openid"],
+                    pet_name=pet_summary,
+                    service_name=service_summary,
+                    next_due_date=min(group["dates"]),
+                    source_refs=refs,
                 )
-                row.reminder_sent_at = datetime.utcnow()
+                if not delivered:
+                    errors += 1
+                    continue
+                now = datetime.utcnow()
+                for _, row in group["rows"]:
+                    row.reminder_sent_at = now
                 db.commit()
                 sent += 1
+                sent_records += len(group["rows"])
             except Exception:
+                db.rollback()
                 errors += 1
-        return {"sent": sent, "skipped": skipped, "errors": errors}
+        return {
+            "sent": sent, "sent_records": sent_records,
+            "skipped": skipped, "errors": errors,
+        }
     finally:
         if close_db:
             db.close()
 
 
 async def _vaccine_reminder_loop():
-    """每天 09:00 执行疫苗到期提醒推送。"""
+    """每天 09:00 执行疫苗/驱虫到期订阅消息推送。"""
     while True:
         now = datetime.now()
         next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
@@ -973,6 +1023,7 @@ async def api_diag():
         "wechat_appsecret_set": bool(ws.strip()),
         "wechat_tmpl_application_result_set": bool((settings.wechat_tmpl_application_result or "").strip()),
         "wechat_tmpl_surgery_done_set": bool((settings.wechat_tmpl_surgery_done or "").strip()),
+        "wechat_tmpl_vaccine_reminder_set": bool((settings.wechat_tmpl_vaccine_reminder or "").strip()),
         "wechat_message_page": settings.wechat_message_page,
     }
 
@@ -988,12 +1039,14 @@ async def api_wechat_config():
         "wechat_tmpl_rejection": settings.wechat_tmpl_rejection,
         "wechat_tmpl_pending_manual": settings.wechat_tmpl_pending_manual,
         "wechat_tmpl_surgery_reminder": settings.wechat_tmpl_surgery_reminder,
+        "wechat_tmpl_vaccine_reminder": settings.wechat_tmpl_vaccine_reminder,
         "wechat_tmpl_inpatient_medication": settings.wechat_tmpl_inpatient_medication,
         "wechat_message_page": settings.wechat_message_page,
         "wechat_fields_application_result": settings.wechat_fields_application_result,
         "wechat_fields_surgery_done": settings.wechat_fields_surgery_done,
         "wechat_fields_appointment": settings.wechat_fields_appointment,
         "wechat_fields_rejection": settings.wechat_fields_rejection,
+        "wechat_fields_vaccine_reminder": settings.wechat_fields_vaccine_reminder,
         "wechat_fields_inpatient_medication": settings.wechat_fields_inpatient_medication,
     }
 
@@ -34133,12 +34186,15 @@ async def admin_deworming_edit(
     notes_full = notes.strip()
     if batch_no.strip():
         notes_full = (notes_full + "\n批号：" + batch_no.strip()).strip()
+    previous_due_date = rec.next_due_date or ""
     rec.deworm_date = deworm_date.strip()[:20]
     rec.deworm_type = (deworm_type or "external")[:40]
     rec.product_name = product_name.strip()[:120]
     rec.weight_kg = weight_kg or 0.0
     rec.dose = dose.strip()[:80]
     rec.next_due_date = next_due_date.strip()[:20]
+    if rec.next_due_date != previous_due_date:
+        rec.reminder_sent_at = None
     rec.vet_name = vet_name.strip()[:80]
     rec.notes = notes_full
     rec.updated_at = datetime.utcnow()

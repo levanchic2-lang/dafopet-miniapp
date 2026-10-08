@@ -19,6 +19,19 @@
 
   <view wx:if="{{!loading && !error && bound}}">
     <view class="owner">{{ownerName}} · 名下宠物</view>
+    <view class="reminder-card {{reminderAuthorized ? 'authorized' : ''}}">
+      <view class="reminder-copy">
+        <view class="reminder-title">疫苗与驱虫到期提醒</view>
+        <view class="reminder-text">到期前 7 天通过微信服务通知提醒</view>
+        <view class="reminder-status">{{reminderConfigured ? (reminderAuthorized ? '本次提醒已授权' : '等待您的授权') : '医院暂未完成配置'}}</view>
+      </view>
+      <button
+        class="reminder-btn"
+        loading="{{reminderBusy}}"
+        disabled="{{reminderBusy || !reminderConfigured}}"
+        bindtap="enablePreventiveReminder"
+      >{{reminderAuthorized ? '再授权一次' : '授权提醒'}}</button>
+    </view>
     <view wx:if="{{!pets.length}}" class="state">当前档案下暂无宠物</view>
 
     <block wx:for="{{pets}}" wx:key="id">
@@ -59,5 +72,5 @@
     </block>
   </view>
 
-  <view class="notice">电子免疫证仅展示医院系统内有效接种记录。资料有误时，请联系接种门店核对。</view>
+  <view class="notice">电子免疫证仅展示医院系统内有效接种记录。订阅提醒由微信按授权次数发送，资料有误时请联系接种门店核对。</view>
 </view>

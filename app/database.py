@@ -1361,9 +1361,13 @@ def _try_sqlite_migrations() -> None:
                 "notes TEXT DEFAULT '', "
                 "created_by VARCHAR(80) DEFAULT '', "
                 "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
-                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "reminder_sent_at DATETIME DEFAULT NULL"
                 ")"
             ))
+            dew_cols = conn.execute(text("PRAGMA table_info(deworming_records)")).fetchall()
+            if dew_cols and "reminder_sent_at" not in {c[1] for c in dew_cols}:
+                conn.execute(text("ALTER TABLE deworming_records ADD COLUMN reminder_sent_at DATETIME DEFAULT NULL"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dewor_pet ON deworming_records(pet_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dewor_date ON deworming_records(deworm_date)"))
 

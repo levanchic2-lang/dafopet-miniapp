@@ -15,8 +15,6 @@
 from __future__ import annotations
 
 import logging
-import json
-import secrets
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -24,10 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings  # noqa
 from app.database import SessionLocal
-from app.models import (
-    AdminUser, Customer, DewormingRecord, FollowUp, FollowUpTemplate,
-    Pet, Vaccination, Visit,
-)
+from app.models import Customer, FollowUp, Pet, Visit
 
 logger = logging.getLogger(__name__)
 
@@ -125,36 +120,8 @@ def _try_send(fu: FollowUp, cust, pet, visit, db: Session) -> str:
     return ""
 
 
-def _preventive_assignee(db: Session, store: str, *candidates: str) -> str:
-    users = db.query(AdminUser).filter(AdminUser.is_active == True).all()
-    if store:
-        users = [user for user in users if not user.store or user.store == store]
-    for candidate in candidates:
-        key = (candidate or "").strip().lower()
-        if not key:
-            continue
-        for user in users:
-            if key in ((user.username or "").lower(), (user.display_name or "").lower()):
-                return user.username
-    return ""
-
-
-def _template_snapshot(db: Session, name: str) -> tuple[Optional[FollowUpTemplate], str, list]:
-    tpl = db.query(FollowUpTemplate).filter(
-        FollowUpTemplate.name == name, FollowUpTemplate.is_active == True,
-    ).first()
-    if not tpl:
-        return None, name, []
-    try:
-        rounds = json.loads(tpl.rounds_json or "[]")
-    except Exception:
-        rounds = []
-    first = rounds[0] if rounds and isinstance(rounds[0], dict) else {}
-    return tpl, str(first.get("round_name") or name), list(first.get("questions") or [])
-
-
 def sync_preventive_followups(db: Optional[Session] = None, days_ahead: int = 7) -> dict:
-    """Create pet-level vaccine/deworming tasks only when they enter the next 7 days."""
+    """停用旧的疫苗/驱虫人工任务；到期提醒改由小程序订阅消息自动发送。"""
     own_session = db is None
     if own_session:
         db = SessionLocal()
@@ -162,60 +129,24 @@ def sync_preventive_followups(db: Optional[Session] = None, days_ahead: int = 7)
         today = date.today()
         start = today.isoformat()
         end = (today + timedelta(days=max(0, days_ahead))).isoformat()
-        created = 0
-        specs = [
-            (
-                "preventive_vaccine", "疫苗到期提醒", Vaccination,
-                db.query(Vaccination).filter(
-                    Vaccination.status == "active", Vaccination.next_due_date >= start,
-                    Vaccination.next_due_date <= end,
-                ).all(),
-            ),
-            (
-                "preventive_deworming", "驱虫到期提醒", DewormingRecord,
-                db.query(DewormingRecord).filter(
-                    DewormingRecord.status == "active", DewormingRecord.next_due_date >= start,
-                    DewormingRecord.next_due_date <= end,
-                ).all(),
-            ),
-        ]
-        for source_type, template_name, _model, records in specs:
-            tpl, round_name, questions = _template_snapshot(db, template_name)
-            for record in records:
-                exists = db.query(FollowUp.id).filter(
-                    FollowUp.source_type == source_type, FollowUp.source_id == record.id,
-                ).first()
-                if exists:
-                    continue
-                pet = db.get(Pet, record.pet_id) if record.pet_id else None
-                store = (pet.store if pet else "") or ""
-                due_date = (record.next_due_date or "")[:10]
-                item_name = (
-                    (record.vaccine_name or "疫苗") if source_type == "preventive_vaccine"
-                    else (record.product_name or "驱虫")
-                )
-                assignee = _preventive_assignee(
-                    db, store, getattr(record, "created_by", ""), getattr(record, "vet_name", ""),
-                )
-                fu = FollowUp(
-                    visit_id=None, customer_id=record.customer_id, pet_id=record.pet_id,
-                    template_id=tpl.id if tpl else None, template_name=template_name,
-                    round_no=1, round_name=f"{item_name} · {due_date}到期"[:80],
-                    question_schema_json=json.dumps(questions, ensure_ascii=False),
-                    source_type=source_type, source_id=record.id,
-                    reason=f"{item_name}将于 {due_date} 到期，请联系主人确认安排。",
-                    question_text="确认当前健康情况及是否需要预约到院。",
-                    expected_reply_type="phone", priority="normal", store=store[:40],
-                    created_by="system", assigned_to=assignee[:80], planned_date=start,
-                    status="due", channel="manual",
-                    feedback_token=secrets.token_urlsafe(12)[:16],
-                )
-                db.add(fu)
-                created += 1
-        if created:
+        rows = db.query(FollowUp).filter(
+            FollowUp.source_type.in_(["preventive_vaccine", "preventive_deworming"]),
+            ~FollowUp.status.in_(["closed", "cancelled"]),
+        ).all()
+        now = datetime.utcnow()
+        for row in rows:
+            row.status = "closed"
+            row.channel = "miniapp_auto"
+            row.handled_by = "system"
+            row.handled_at = now
+            row.handle_note = "已改为客户小程序订阅消息自动提醒，无需人工回访。"
+            row.staff_outcome = "not_needed"
+            row.next_action = "auto_message"
+            row.updated_at = now
+        if rows:
             db.commit()
-            logger.info("[followup preventive] created=%d window=%s..%s", created, start, end)
-        return {"created": created, "from": start, "to": end}
+            logger.info("[followup preventive] closed_manual_tasks=%d", len(rows))
+        return {"created": 0, "closed": len(rows), "from": start, "to": end}
     finally:
         if own_session:
             db.close()
@@ -356,7 +287,8 @@ def start_scheduler() -> None:
         logger.warning("[followup] APScheduler 未安装，跳过定时任务：%s", e)
         return
     sch = BackgroundScheduler(timezone="Asia/Shanghai")
-    # 每小时整点同步未来 7 天内的疫苗/驱虫到期提醒（幂等）。
+    # 启动时先关闭历史疫苗/驱虫人工任务，之后每小时兜底清理一次。
+    sync_preventive_followups()
     sch.add_job(sync_preventive_followups, "cron", minute=0, id="followup_preventive_sync", replace_existing=True)
     # 每小时第 5 分钟跑一次派发
     sch.add_job(run_due_dispatch, "cron", minute=5, id="followup_dispatch", replace_existing=True)

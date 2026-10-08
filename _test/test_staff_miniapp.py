@@ -371,8 +371,8 @@ try:
             db.query(DewormingRecord).filter(DewormingRecord.pet_id == hg_pet_id).update({"next_due_date": today})
             db.commit()
             synced = sync_preventive_followups(db)
-            assert synced["created"] == 2
-            assert db.query(FollowUp).filter(FollowUp.visit_id.is_(None)).count() == 2
+            assert synced["created"] == 0
+            assert db.query(FollowUp).filter(FollowUp.visit_id.is_(None)).count() == 0
         finally:
             db.close()
         preventive = client.get(
@@ -380,8 +380,8 @@ try:
             params={"tab": "today", "scope": "all", "category": "preventive"}, headers=headers,
         )
         assert preventive.status_code == 200, preventive.text
-        assert {row["kind"] for row in preventive.json()["items"]} == {"prevention"}
-        assert preventive.json()["counts"]["unassigned"] == 2
+        assert preventive.json()["items"] == []
+        assert preventive.json()["counts"]["unassigned"] == 0
 
         reminders = client.get("/api/staff-miniapp/medication-reminders", headers=headers)
         assert reminders.status_code == 200, reminders.text
