@@ -733,6 +733,7 @@
       <a class="ribbon-icon {% if _path.startswith('/admin/vaccinations') %}current{% endif %}" href="/admin/vaccinations"><span class="ri-emoji"><i data-lucide="syringe"></i></span>疫苗管理</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/rabies') or _path.startswith('/admin/vaccine-registrations') %}current{% endif %}" href="/admin/rabies"><span class="ri-emoji"><i data-lucide="syringe"></i></span>疫苗接种登记</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/visits') %}current{% endif %}" href="/admin/visits"><span class="ri-emoji"><i data-lucide="search"></i></span>病历查询</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/follow-up') %}current{% endif %}" href="/admin/follow-ups"><span class="ri-emoji"><i data-lucide="phone-call"></i></span>随访中心</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/inpatient') or _path.startswith('/admin/cages') %}current{% endif %}" href="/admin/inpatient"><span class="ri-emoji"><i data-lucide="bed-double"></i></span>住院管理</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/consent') %}current{% endif %}" href="/admin/consent-templates"><span class="ri-emoji"><i data-lucide="pencil-line"></i></span>协议模板</a>
     </div>
@@ -807,7 +808,7 @@
       '/admin/visits':       { label: '病历查询',   kind: 'page', icon: 'search' },
       '/admin/inpatient':    { label: '住院管理',   kind: 'page', icon: 'bed-double' },
       '/admin/cages':        { label: '笼位管理',   kind: 'page', icon: 'layout-grid' },
-      '/admin/follow-ups':   { label: '回访管理',   kind: 'page', icon: 'phone' },
+      '/admin/follow-ups':   { label: '随访中心',   kind: 'page', icon: 'phone-call' },
       '/admin/consent-templates': { label: '协议模板', kind: 'page', icon: 'pen-tool' },
       // 经营
       '/admin/invoices':     { label: '收银台',     kind: 'page', icon: 'receipt' },
