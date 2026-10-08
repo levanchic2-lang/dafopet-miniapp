@@ -64,6 +64,14 @@ def _dose_label(item) -> str:
     return (item.quantity or "").strip() or "按医嘱"
 
 
+def _short_drug_label(names: list[str]) -> str:
+    """订阅模板的药品名称是 5 字短文本；多药时用首项+「等」表示。"""
+    first = ((names or ["药物"])[0] or "药物").strip()
+    if len(names) > 1:
+        return (first[:4] + "等") if len(first) >= 4 else (first + "等")
+    return first[:5]
+
+
 def scan_overdue_medications() -> None:
     """每 5 分钟跑一次。"""
     db = SessionLocal()
@@ -132,9 +140,9 @@ def scan_overdue_medications() -> None:
                         db,
                         u.miniapp_openid,
                         pet.name if pet else "宠物",
-                        "、".join(drug_names),
+                        _short_drug_label(drug_names),
                         sorted_logs[0].scheduled_at.strftime("%Y-%m-%d %H:%M"),
-                        dose_summary="、".join(dose_names),
+                        dose_summary=dose_names[0] if dose_names else "按医嘱",
                         cage_code=h.cage.code if h.cage else "",
                         hospitalization_id=h.id,
                     )

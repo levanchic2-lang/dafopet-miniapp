@@ -774,10 +774,11 @@ def push_inpatient_medication_reminder(
     ] or ["short_thing4", "thing5", "time6", "short_thing7"]
     pet_label = pet_name + (f" · {cage_code}" if cage_code else "")
     field_values = {
-        "short_thing4": v(drug_summary, "住院用药"),
+        # 微信 short_thing 最多 5 个字符，超长会返回 47003。
+        "short_thing4": v(drug_summary, "用药", 5),
         "thing5": v(pet_label, "住院动物"),
         "time6": v(scheduled_at, time.strftime("%Y-%m-%d %H:%M")),
-        "short_thing7": v(dose_summary, "按医嘱"),
+        "short_thing7": v(dose_summary, "按医嘱", 5),
     }
     data: dict[str, Any] = {}
     for key in keys:
@@ -810,7 +811,7 @@ def push_inpatient_medication_reminder(
     try:
         response = _post_subscribe_send(payload)
         db.add(NotificationLog(
-            application_id=None,
+            application_id=0,
             channel="wechat_miniapp",
             payload=json.dumps({
                 "type": "inpatient_medication",
@@ -822,7 +823,7 @@ def push_inpatient_medication_reminder(
         return True
     except Exception as exc:
         db.add(NotificationLog(
-            application_id=None,
+            application_id=0,
             channel="wechat_miniapp",
             payload=f"inpatient medication push failed: {exc}",
             success=False,
