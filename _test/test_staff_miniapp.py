@@ -31,7 +31,7 @@ from app.models import (
     Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
     DewormingRecord, ExamOrder, ExamReport, GroomingOrder, InventoryBatch, InventoryItem, Invoice,
     Hospitalization, InpatientTemporaryMedication, MediaFile, MedicationAdminLog,
-    Payment, Pet, Prescription, PrescriptionItem, Staff, Vaccination, Visit, Wallet,
+    FollowUp, Payment, Pet, Prescription, PrescriptionItem, Staff, Vaccination, Visit, Wallet,
     VisitConsultationDraft,
 )
 
@@ -276,6 +276,38 @@ try:
         assert dashboard.json()["stats"]["anesthesia_open"] == 0
         assert dashboard.json()["stats"]["inpatient_med_due"] == 1
         assert dashboard.json()["next_appointment"]["pet_name"] == "横岗犬"
+
+        followups_before = client.get(
+            "/api/staff-miniapp/follow-ups", params={"tab": "today"}, headers=headers,
+        )
+        assert followups_before.status_code == 200, followups_before.text
+        assert followups_before.json()["counts"]["today"] == 0
+        followup_date = (datetime.now() + timedelta(days=2)).date().isoformat()
+        followup_created = client.post(
+            f"/api/staff-miniapp/visits/{hg_visit.id}/follow-ups",
+            json={
+                "planned_date": followup_date,
+                "kind": "case",
+                "question": "食欲、排便和用药情况",
+                "priority": "normal",
+            },
+            headers=headers,
+        )
+        assert followup_created.status_code == 200, followup_created.text
+        followup_id = followup_created.json()["item"]["id"]
+        upcoming_followups = client.get(
+            "/api/staff-miniapp/follow-ups", params={"tab": "upcoming"}, headers=headers,
+        )
+        assert upcoming_followups.status_code == 200, upcoming_followups.text
+        assert [row["id"] for row in upcoming_followups.json()["items"]] == [followup_id]
+        db = SessionLocal()
+        try:
+            followup = db.get(FollowUp, followup_id)
+            assert followup.source_type == "manual_case"
+            assert followup.planned_date == followup_date
+            assert followup.question_text == "食欲、排便和用药情况"
+        finally:
+            db.close()
 
         reminders = client.get("/api/staff-miniapp/medication-reminders", headers=headers)
         assert reminders.status_code == 200, reminders.text

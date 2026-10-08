@@ -6664,6 +6664,7 @@ async def api_staff_miniapp_dashboard(request: Request, db: Session = Depends(ge
     inpatient_med_due_count = med_q.count()
     followup_q = db.query(FollowUp).filter(
         FollowUp.status.in_(["pending", "due", "sent", "phone_pending", "responded"]),
+        FollowUp.source_type != "visit_default",
         FollowUp.planned_date != "",
         FollowUp.planned_date <= today,
     )
@@ -6806,7 +6807,10 @@ async def api_staff_miniapp_followups(
         q = q.filter(or_(FollowUp.store == store, FollowUp.store == ""))
     active = ["pending", "due", "sent", "phone_pending", "responded"]
     if tab == "upcoming":
-        q = q.filter(FollowUp.status.in_(active), FollowUp.planned_date > today)
+        q = q.filter(
+            FollowUp.source_type != "visit_default",
+            FollowUp.status.in_(active), FollowUp.planned_date > today,
+        )
         q = q.order_by(FollowUp.planned_date.asc(), FollowUp.id.asc())
     elif tab == "done":
         q = q.filter(FollowUp.status.in_(["closed", "skipped"]))
@@ -6814,6 +6818,7 @@ async def api_staff_miniapp_followups(
     else:
         tab = "today"
         q = q.filter(
+            FollowUp.source_type != "visit_default",
             FollowUp.status.in_(active),
             or_(FollowUp.planned_date <= today, FollowUp.status == "responded"),
         )
@@ -6823,9 +6828,11 @@ async def api_staff_miniapp_followups(
     if store:
         count_q = count_q.filter(or_(FollowUp.store == store, FollowUp.store == ""))
     due_count = count_q.filter(
+        FollowUp.source_type != "visit_default",
         FollowUp.status.in_(active), FollowUp.planned_date != "", FollowUp.planned_date <= today,
     ).count()
     overdue_count = count_q.filter(
+        FollowUp.source_type != "visit_default",
         FollowUp.status.in_(active), FollowUp.planned_date != "", FollowUp.planned_date < today,
     ).count()
     return {
@@ -6884,20 +6891,19 @@ async def api_staff_miniapp_followup_create(
     }
     if kind not in kind_labels:
         kind = "case"
-    max_round = db.query(func.max(FollowUp.round_no)).filter(FollowUp.visit_id == visit.id).scalar() or 0
-    fu = FollowUp(
-        visit_id=visit.id, customer_id=visit.customer_id, pet_id=visit.pet_id,
-        template_name=kind_labels[kind], round_no=int(max_round) + 1,
-        round_name=(str((payload or {}).get("title") or "").strip() or kind_labels[kind])[:80],
-        source_type=f"manual_{kind}", reason=str((payload or {}).get("reason") or "").strip()[:1000],
-        question_text=str((payload or {}).get("question") or "").strip()[:1000],
-        expected_reply_type="phone", priority=str((payload or {}).get("priority") or "normal")[:20],
-        store=(visit.store or (pet.store if pet else "") or user.store or "")[:40],
-        assigned_to=(user.username or "")[:80], planned_date=planned_date,
-        status="due" if planned_date <= date.today().isoformat() else "pending",
-        channel="manual", feedback_token=_gen_followup_token(),
+    if planned_date < date.today().isoformat():
+        raise HTTPException(400, "随访日期不能早于今天")
+    fu = _create_manual_followup(
+        db, visit,
+        actor=user.username or "",
+        planned_date=planned_date,
+        kind=kind,
+        title=str((payload or {}).get("title") or ""),
+        question=str((payload or {}).get("question") or ""),
+        reason=str((payload or {}).get("reason") or ""),
+        priority=str((payload or {}).get("priority") or "normal"),
+        store_fallback=(pet.store if pet else "") or user.store or "",
     )
-    db.add(fu)
     db.flush()
     db.add(AuditLog(
         action="staff_miniapp_followup_create", actor=(user.username or "")[:80],
@@ -14758,6 +14764,58 @@ _FOLLOWUP_RULES: dict[str, int] = {
     "other":           7,
 }
 
+_MANUAL_FOLLOWUP_KIND_LABELS = {
+    "case": "病例回访",
+    "surgery": "手术随访",
+    "discharge": "出院随访",
+    "chronic": "慢病复查",
+    "screening": "健康筛查",
+    "recall": "客户唤回",
+}
+
+
+def _create_manual_followup(
+    db: Session,
+    visit: Visit,
+    *,
+    actor: str,
+    planned_date: str,
+    kind: str = "case",
+    title: str = "",
+    question: str = "",
+    reason: str = "",
+    priority: str = "normal",
+    store_fallback: str = "",
+) -> FollowUp:
+    """Create the same explicit follow-up task for desktop and mini-program flows."""
+    kind = kind if kind in _MANUAL_FOLLOWUP_KIND_LABELS else "case"
+    label = _MANUAL_FOLLOWUP_KIND_LABELS[kind]
+    priority = priority if priority in _CARE_PRIORITIES else "normal"
+    max_round = db.query(func.max(FollowUp.round_no)).filter(
+        FollowUp.visit_id == visit.id,
+    ).scalar() or 0
+    fu = FollowUp(
+        visit_id=visit.id,
+        customer_id=visit.customer_id,
+        pet_id=visit.pet_id,
+        template_name=label,
+        round_no=int(max_round) + 1,
+        round_name=(title.strip() or label)[:80],
+        source_type=f"manual_{kind}",
+        reason=reason.strip()[:1000],
+        question_text=question.strip()[:1000],
+        expected_reply_type="phone",
+        priority=priority,
+        store=(visit.store or store_fallback or "")[:40],
+        assigned_to=(actor or "")[:80],
+        planned_date=planned_date,
+        status="due" if planned_date <= date.today().isoformat() else "pending",
+        channel="manual",
+        feedback_token=_gen_followup_token(),
+    )
+    db.add(fu)
+    return fu
+
 
 def _gen_followup_token() -> str:
     import secrets
@@ -15308,9 +15366,6 @@ async def admin_visit_create(
     db.add(v)
     db.commit()
     db.refresh(v)
-    # 创建回访任务（按 visit_type 规则）
-    _sync_followup_for_visit(db, v)
-    db.commit()
     # 如果是从预约完成时创建，更新预约状态
     if appointment_id:
         appt = db.get(Appointment, appointment_id)
@@ -16422,8 +16477,15 @@ async def page_admin_visit_detail(
         Hospitalization.status == "admitted",
     ).order_by(Hospitalization.admitted_at.desc(), Hospitalization.id.desc()).first() if v.pet_id else None
     # 本 visit 的所有回访轮次（按计划日 + round_no 排序）
-    followups = db.query(FollowUp).filter(FollowUp.visit_id == visit_id)\
+    followups = db.query(FollowUp).filter(
+        FollowUp.visit_id == visit_id,
+        FollowUp.source_type != "visit_default",
+    )\
         .order_by(FollowUp.planned_date, FollowUp.round_no).all()
+    active_followups = [
+        fu for fu in followups
+        if fu.status in ("pending", "due", "sent", "phone_pending", "responded")
+    ]
     for fu in followups:
         try:
             fu._answers = json.loads(fu.response_data or "") if fu.response_data else None
@@ -16459,6 +16521,8 @@ async def page_admin_visit_detail(
         "insurance_material_generating": insurance_material_generating,
         "public_case_draft": public_case_draft,
         "followups": followups,
+        "active_followups": active_followups,
+        "today": date.today().isoformat(),
         "care_summary": care_summary,
         "care_plan": care_plan,
         "care_plan_tasks": care_plan_tasks,
@@ -16816,9 +16880,6 @@ async def admin_visit_edit(
     v.follow_up_note = follow_up_note.strip()
     v.follow_up_at = follow_up_at.strip()[:20]
     db.commit()
-    # 同步回访任务（visit_type / follow_up_at / vet_name 可能都变了）
-    _sync_followup_for_visit(db, v)
-    db.commit()
     # 若来自客户档案，保存后回去
     if return_to == "customer" and v.customer_id:
         return RedirectResponse(f"/admin/customers/{v.customer_id}?pet_id={v.pet_id or 0}&tab=visits&msg=就诊已保存", status_code=303)
@@ -16826,6 +16887,65 @@ async def admin_visit_edit(
         _safe_next(next_url, f"/admin/visits/{visit_id}?msg=已保存"),
         status_code=303,
     )
+
+
+@app.post("/admin/visits/{visit_id}/follow-ups/create")
+async def admin_visit_followup_create(
+    visit_id: int,
+    request: Request,
+    csrf_token: str = Form(""),
+    planned_date: str = Form(""),
+    kind: str = Form("case"),
+    title: str = Form(""),
+    question: str = Form(""),
+    reason: str = Form(""),
+    priority: str = Form("normal"),
+    next_url: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Create an explicit follow-up without closing the medical record."""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(404, "就诊记录不存在")
+    pet = db.get(Pet, visit.pet_id) if visit.pet_id else None
+    _assert_store_access(request, pet.store if pet else "")
+    planned_date = (planned_date or "").strip()[:10]
+    try:
+        datetime.strptime(planned_date, "%Y-%m-%d")
+    except ValueError:
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}?err=请选择正确的随访日期",
+            status_code=303,
+        )
+    if planned_date < date.today().isoformat():
+        return RedirectResponse(
+            f"/admin/visits/{visit_id}?err=随访日期不能早于今天",
+            status_code=303,
+        )
+    username = request.session.get("admin_username", "") or ""
+    fu = _create_manual_followup(
+        db, visit,
+        actor=username,
+        planned_date=planned_date,
+        kind=kind,
+        title=title,
+        question=question,
+        reason=reason,
+        priority=priority,
+        store_fallback=(pet.store if pet else "") or _get_op_store(request),
+    )
+    db.flush()
+    _audit(db, request, "visit_followup_create", detail={
+        "followup_id": fu.id,
+        "visit_id": visit.id,
+        "planned_date": planned_date,
+        "kind": kind,
+    })
+    db.commit()
+    fallback = f"/admin/visits/{visit_id}?msg=随访已安排：{planned_date}#followup-schedule"
+    return RedirectResponse(_safe_next(next_url, fallback), status_code=303)
 
 
 @app.post("/admin/visits/{visit_id}/close")
@@ -16878,27 +16998,13 @@ async def admin_visit_close(visit_id: int, request: Request,
             fu.next_action = fu.next_action or "finish"
     else:
         v.followup_disabled = False
-        _sync_followup_for_visit(db, v)
-        db.flush()
         active_count = db.query(FollowUp).filter(
-            FollowUp.visit_id == v.id, FollowUp.status.in_(active_statuses),
+            FollowUp.visit_id == v.id,
+            FollowUp.source_type != "visit_default",
+            FollowUp.status.in_(active_statuses),
         ).count()
         if not active_count:
-            try:
-                datetime.strptime(followup_date, "%Y-%m-%d")
-            except ValueError:
-                return _close_redirect("当前没有自动随访任务，请选择随访日期")
-            max_round = db.query(func.max(FollowUp.round_no)).filter(FollowUp.visit_id == v.id).scalar() or 0
-            db.add(FollowUp(
-                visit_id=v.id, customer_id=v.customer_id, pet_id=v.pet_id,
-                template_name="病例随访", round_no=int(max_round) + 1,
-                round_name="病历结束后随访", source_type="manual_case",
-                reason="病历结束后继续观察恢复情况", question_text="恢复情况及是否需要复诊",
-                expected_reply_type="phone", priority="normal", store=_visit_store_short(db, v),
-                assigned_to=username[:80], planned_date=followup_date,
-                status="due" if followup_date <= date.today().isoformat() else "pending",
-                channel="manual", feedback_token=_gen_followup_token(),
-            ))
+            return _close_redirect("请先在病历顶部安排随访，再结束病历")
     v.status = "closed"
     v.closed_at = now
     v.closed_by = username
@@ -16911,41 +17017,12 @@ async def admin_visit_close(visit_id: int, request: Request,
     return _close_redirect("病历已结束")
 
 
-@app.post("/admin/visits/{visit_id}/followup-mark")
-async def admin_visit_followup_mark(visit_id: int, request: Request,
-                                    csrf_token: str = Form(""),
-                                    next_url: str = Form(""),
-                                    db: Session = Depends(get_db)):
-    """病例查询页轻量回访：员工微信回访后点一下，只记录回访时间。"""
-    require_admin(request)
-    _require_csrf(request, csrf_token)
-    v = db.get(Visit, visit_id)
-    if not v:
-        raise HTTPException(404, "就诊记录不存在")
-    admin_store = _get_admin_store(request)
-    if admin_store and v.pet_id:
-        pet = db.get(Pet, v.pet_id)
-        if pet and pet.store and pet.store != admin_store:
-            raise HTTPException(403, "无权操作其他门店的就诊记录")
-    v.follow_up_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    db.commit()
-    _audit(db, request, "visit_followup_mark", detail={
-        "visit_id": v.id,
-        "pet_id": v.pet_id,
-        "customer_id": v.customer_id,
-        "follow_up_at": v.follow_up_at,
-    })
-    db.commit()
-    fb = f"/admin/visits/{visit_id}?msg=已记录回访时间"
-    return RedirectResponse(_safe_next(next_url, fb), status_code=303)
-
-
 @app.post("/admin/visits/{visit_id}/followup-toggle")
 async def admin_visit_followup_toggle(visit_id: int, request: Request,
                                        csrf_token: str = Form(""),
                                        next_url: str = Form(""),
                                        db: Session = Depends(get_db)):
-    """切换病历级别「自动回访」开关。关闭 → 已 pending 全取消、未来不衍生；重新开启 → 重新衍生。"""
+    """Legacy switch retained for old mobile pages; it no longer generates tasks."""
     require_admin(request)
     _require_csrf(request, csrf_token)
     v = db.get(Visit, visit_id)
@@ -16957,11 +17034,19 @@ async def admin_visit_followup_toggle(visit_id: int, request: Request,
         if pet and pet.store and pet.store != admin_store:
             raise HTTPException(403, "无权操作其他门店的就诊记录")
     v.followup_disabled = not bool(getattr(v, "followup_disabled", False))
+    if v.followup_disabled:
+        rows = db.query(FollowUp).filter(
+            FollowUp.visit_id == v.id,
+            FollowUp.source_type == "visit_default",
+            FollowUp.status.in_(["pending", "due"]),
+        ).all()
+        for fu in rows:
+            fu.status = "skipped"
+            fu.handled_by = request.session.get("admin_username", "") or ""
+            fu.handled_at = datetime.utcnow()
+            fu.handle_note = "病历关闭自动回访"
     db.commit()
-    # sync：关闭 → 删 pending；开启 → 重新衍生
-    _sync_followup_for_visit(db, v)
-    db.commit()
-    msg = "已关闭后续回访" if v.followup_disabled else "已重新开启回访"
+    msg = "已关闭自动回访" if v.followup_disabled else "已允许人工安排随访"
     fb = f"/admin/visits/{visit_id}?msg={msg}"
     return RedirectResponse(_safe_next(next_url, fb), status_code=303)
 
@@ -16995,10 +17080,6 @@ async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depe
     if changed:
         v.updated_at = datetime.utcnow()
         db.commit()
-        # 诊断 / 复诊日期 任一变化都要重新匹配模板 + 衍生多轮回访
-        if any(k in changed for k in ("follow_up_at", "diagnosis")):
-            _sync_followup_for_visit(db, v)
-            db.commit()
     # 本地时间显示
     from datetime import timezone, timedelta
     cn_tz = timezone(timedelta(hours=8))
@@ -17383,11 +17464,13 @@ async def page_admin_health_ops(
 
     actionable = ("pending", "due", "phone_pending")
     today_followups = fu_base.filter(
+        FollowUp.source_type != "visit_default",
         FollowUp.planned_date != "",
         FollowUp.planned_date == today,
         FollowUp.status.in_(actionable),
     ).order_by(FollowUp.planned_date.asc(), FollowUp.priority.desc(), FollowUp.id.desc()).limit(80).all()
     overdue_followups = fu_base.filter(
+        FollowUp.source_type != "visit_default",
         FollowUp.planned_date != "",
         FollowUp.planned_date < today,
         FollowUp.status.in_(actionable),
@@ -17468,21 +17551,22 @@ async def page_admin_follow_ups(
         return qq
 
     base = _apply_filters(_followup_filtered_query(db, request))
+    operational_base = base.filter(FollowUp.source_type != "visit_default")
 
     # 4 个 tab 的过滤条件
     if tab == "today":
         # 今日 = 计划日期 ≤ 今天 (含逾期) 且仍可操作（与工作台「待回访任务」口径一致）
-        q = base.filter(FollowUp.planned_date != "",
+        q = operational_base.filter(FollowUp.planned_date != "",
                         FollowUp.planned_date <= today,
                         FollowUp.status.in_(["pending", "due", "phone_pending"]))
         order = (FollowUp.planned_date.asc(), FollowUp.id.desc())
     elif tab == "overdue":
-        q = base.filter(FollowUp.planned_date < today,
+        q = operational_base.filter(FollowUp.planned_date < today,
                         FollowUp.status.in_(["pending", "due", "phone_pending"]))
         order = (FollowUp.planned_date.asc(), FollowUp.id.desc())
     elif tab == "sent":
         # 已发送 + 已反馈待处理（needs_visit 的客户反馈需要医生跟进）
-        q = base.filter(FollowUp.status.in_(["sent", "responded"]))
+        q = operational_base.filter(FollowUp.status.in_(["sent", "responded"]))
         # 把 responded 排前面，让医生先看到需复诊的
         order = (FollowUp.response.desc(), FollowUp.sent_at.desc(), FollowUp.id.desc())
     else:  # done
@@ -17502,7 +17586,9 @@ async def page_admin_follow_ups(
 
     # 4 个 tab 各自总数（用于 tab 上的数字徽章）
     def _count(filter_):
-        qq = _apply_filters(_followup_filtered_query(db, request))
+        qq = _apply_filters(_followup_filtered_query(db, request)).filter(
+            FollowUp.source_type != "visit_default",
+        )
         return filter_(qq).count()
     counts = {
         "today":   _count(lambda x: x.filter(FollowUp.planned_date != "", FollowUp.planned_date <= today, FollowUp.status.in_(["pending", "due", "phone_pending"]))),
@@ -36781,7 +36867,10 @@ def _m_badges(request: Request, db: Session) -> dict:
 
     # 3. 回访：due / sent / phone_pending
     fu_q = db.query(FollowUp).filter(
-        FollowUp.status.in_(["due", "sent", "phone_pending"])
+        FollowUp.source_type != "visit_default",
+        FollowUp.status.in_(["pending", "due", "phone_pending"]),
+        FollowUp.planned_date != "",
+        FollowUp.planned_date <= date.today().isoformat(),
     )
     if store_short:
         fu_q = fu_q.filter(or_(FollowUp.store == store_short, FollowUp.store == ""))

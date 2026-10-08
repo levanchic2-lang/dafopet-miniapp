@@ -132,6 +132,7 @@ def run_due_dispatch(db: Optional[Session] = None) -> dict:
         rows = (
             db.query(FollowUp)
             .filter(
+                FollowUp.source_type != "visit_default",
                 FollowUp.status.in_(["pending", "due"]),
                 FollowUp.planned_date <= today_str,
             )
@@ -176,6 +177,7 @@ def run_no_reply_promote(db: Optional[Session] = None) -> dict:
         rows = (
             db.query(FollowUp)
             .filter(
+                FollowUp.source_type != "visit_default",
                 FollowUp.status == "sent",
                 FollowUp.sent_at.isnot(None),
                 FollowUp.sent_at < cutoff,

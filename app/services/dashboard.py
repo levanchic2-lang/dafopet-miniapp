@@ -104,6 +104,7 @@ def build_followup_today(db: Session, store_short: str) -> dict:
     """通用今日待回访（FollowUp status due/pending 且日期 <= 今天）。"""
     today = _today_str()
     q = db.query(FollowUp).filter(
+        FollowUp.source_type != "visit_default",
         FollowUp.status.in_(["pending", "due", "phone_pending"]),
         FollowUp.planned_date != "",
         FollowUp.planned_date <= today,
@@ -505,6 +506,7 @@ def build_surgery_followup_today(db: Session, store_short: str) -> dict:
     q = (db.query(FollowUp)
          .join(Visit, Visit.id == FollowUp.visit_id)
          .filter(
+             FollowUp.source_type != "visit_default",
              FollowUp.status.in_(["pending", "due", "sent", "phone_pending"]),
              FollowUp.planned_date != "",
              FollowUp.planned_date <= today,
@@ -534,6 +536,7 @@ def build_outpatient_followup_today(db: Session, store_short: str) -> dict:
     q = (db.query(FollowUp)
          .join(Visit, Visit.id == FollowUp.visit_id)
          .filter(
+             FollowUp.source_type != "visit_default",
              FollowUp.status.in_(["pending", "due", "sent", "phone_pending"]),
              FollowUp.planned_date != "",
              FollowUp.planned_date <= today,

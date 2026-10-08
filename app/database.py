@@ -88,7 +88,6 @@ def init_db():
         _heal_sales_order_payment_statuses()
         _seed_data()
         _heal_rabies_pet_links()
-        _backfill_followups()
 
 
 def _heal_sales_order_payment_statuses() -> None:
