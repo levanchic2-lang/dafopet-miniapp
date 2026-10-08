@@ -56,6 +56,89 @@ function buildMedicationGroups(items, previousGroups) {
   return groups;
 }
 
+function completedAtParts(row) {
+  const value = row.administered_at || row.scheduled_at || "";
+  return {
+    at: value,
+    date: value.slice(0, 10) || row.scheduled_date || "日期未知",
+    time: value.slice(11, 16) || row.scheduled_time || "--:--"
+  };
+}
+
+function buildCompletedGroups(items, mode, previousGroups) {
+  const expanded = {};
+  (previousGroups || []).forEach(group => { expanded[group.key] = !!group.expanded; });
+  const groupMap = {};
+
+  (items || []).forEach(source => {
+    const row = Object.assign({}, source, { selected: false });
+    const completed = completedAtParts(row);
+    const byTime = mode === "time";
+    const groupKey = byTime ? `date:${completed.date}` : `pet:${row.hospitalization_id || 0}`;
+    if (!groupMap[groupKey]) {
+      groupMap[groupKey] = {
+        key: groupKey,
+        hospitalization_id: row.hospitalization_id,
+        title: byTime ? completed.date : `${row.pet_name}${row.cage_code ? " · " + row.cage_code : ""}`,
+        total_count: 0,
+        latest_at: completed.at,
+        petMap: {},
+        dateMap: {}
+      };
+    }
+    const group = groupMap[groupKey];
+    group.total_count += 1;
+    group.petMap[String(row.hospitalization_id || row.pet_name)] = true;
+    if (completed.at > group.latest_at) group.latest_at = completed.at;
+
+    const splitDate = mode === "pet_date";
+    const dateKey = splitDate ? completed.date : "all";
+    if (!group.dateMap[dateKey]) {
+      group.dateMap[dateKey] = {
+        key: `${groupKey}|${dateKey}`,
+        label: splitDate ? completed.date : "",
+        latest_at: completed.at,
+        timeMap: {}
+      };
+    }
+    const dateGroup = group.dateMap[dateKey];
+    if (completed.at > dateGroup.latest_at) dateGroup.latest_at = completed.at;
+    const timeKey = mode === "pet" ? `${completed.date}|${completed.time}` : completed.time;
+    if (!dateGroup.timeMap[timeKey]) {
+      dateGroup.timeMap[timeKey] = {
+        key: `${dateGroup.key}|${timeKey}`,
+        date: mode === "pet" ? completed.date : "",
+        time: completed.time,
+        first_at: completed.at,
+        items: []
+      };
+    }
+    dateGroup.timeMap[timeKey].items.push(row);
+  });
+
+  const groups = Object.keys(groupMap).map(key => {
+    const group = groupMap[key];
+    group.pet_count = Object.keys(group.petMap).length;
+    group.subtitle = mode === "time" ? `${group.pet_count} 只住院动物` : "已完成用药记录";
+    group.date_groups = Object.keys(group.dateMap).map(dateKey => {
+      const dateGroup = group.dateMap[dateKey];
+      dateGroup.time_groups = Object.keys(dateGroup.timeMap).map(timeKey => dateGroup.timeMap[timeKey])
+        .sort((a, b) => b.first_at.localeCompare(a.first_at));
+      delete dateGroup.timeMap;
+      return dateGroup;
+    }).sort((a, b) => b.latest_at.localeCompare(a.latest_at));
+    delete group.petMap;
+    delete group.dateMap;
+    return group;
+  }).sort((a, b) => b.latest_at.localeCompare(a.latest_at));
+
+  groups.forEach((group, index) => {
+    group.expanded = Object.prototype.hasOwnProperty.call(expanded, group.key)
+      ? expanded[group.key] : index === 0;
+  });
+  return groups;
+}
+
 function refreshGroupSelection(group) {
   let selectedCount = 0;
   group.time_groups.forEach(slot => {
@@ -68,11 +151,17 @@ function refreshGroupSelection(group) {
 Page({
   data: {
     loading: true, busy: false, error: "", view: "pending",
+    completedGroupMode: "pet_date", completedGroupLabel: "动物+日期",
     items: [], groups: [], temporary: [], hospitalizations: [], inventory: [], filteredInventory: [], doctors: [],
     showTemporaryForm: false, drugQuery: "", selectedDrug: null,
     routes: ["静脉注射", "肌肉注射", "皮下注射", "口服", "外用", "滴眼", "其他"],
     selectedHospLabel: "", selectedDoctor: "", selectedRoute: "静脉注射",
     form: { hospitalizationIndex: 0, doctorIndex: 0, routeIndex: 0, dose_actual: "", notes: "" }
+  },
+  onLoad() {
+    const saved = wx.getStorageSync("inpatientMedsCompletedGroupMode");
+    const labels = { time: "时间", pet: "动物", pet_date: "动物+日期" };
+    if (labels[saved]) this.setData({ completedGroupMode: saved, completedGroupLabel: labels[saved] });
   },
   onShow() { this.loadData(); },
   onPullDownRefresh() { this.loadData(); },
@@ -82,8 +171,11 @@ Page({
       const result = await staffGet("/api/staff-miniapp/inpatient-medications", { view: this.data.view });
       const inventory = result.inventory || [];
       const items = result.items || [];
+      const groups = this.data.view === "completed"
+        ? buildCompletedGroups(items, this.data.completedGroupMode, this.data.groups)
+        : buildMedicationGroups(items, this.data.groups);
       this.setData({
-        items, groups: buildMedicationGroups(items, this.data.groups), temporary: result.temporary || [],
+        items, groups, temporary: result.temporary || [],
         hospitalizations: result.hospitalizations || [], inventory,
         filteredInventory: inventory.slice(0, 20), doctors: result.doctors || [],
         selectedHospLabel: (result.hospitalizations || [])[0] ? result.hospitalizations[0].label : "",
@@ -99,6 +191,23 @@ Page({
     const view = e.currentTarget.dataset.view;
     if (!view || view === this.data.view) return;
     this.setData({ view, groups: [], showTemporaryForm: false, selectedDrug: null, drugQuery: "" }, () => this.loadData());
+  },
+  setCompletedGroupMode(e) {
+    const mode = e.currentTarget.dataset.mode;
+    const labels = { time: "时间", pet: "动物", pet_date: "动物+日期" };
+    if (!labels[mode] || mode === this.data.completedGroupMode) return;
+    wx.setStorageSync("inpatientMedsCompletedGroupMode", mode);
+    this.setData({
+      completedGroupMode: mode,
+      completedGroupLabel: labels[mode],
+      groups: buildCompletedGroups(this.data.items, mode, [])
+    });
+  },
+  toggleCompletedGroup(e) {
+    const key = e.currentTarget.dataset.groupKey || "";
+    this.setData({ groups: this.data.groups.map(group => Object.assign({}, group, {
+      expanded: group.key === key ? !group.expanded : group.expanded
+    })) });
   },
   toggleGroup(e) {
     const hospitalizationId = Number(e.currentTarget.dataset.hospitalizationId || 0);
