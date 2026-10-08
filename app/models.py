@@ -1078,7 +1078,7 @@ class MedicationAdminLog(Base):
 
     生成时机：处方 status=issued 且关联了 admitted 的住院时自动批量生成。
     单条流程：pending → done/skipped/refused/cancelled。
-    cancelled 仅用于办理出院时自动关闭尚未执行的住院用药任务。
+    cancelled 用于办理出院或医生停药时关闭尚未执行的住院用药任务。
     """
     __tablename__ = "medication_admin_logs"
 

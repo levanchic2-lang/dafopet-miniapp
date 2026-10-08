@@ -31,10 +31,13 @@
               <view class="med-compact-title">{{med.drug_name}}</view>
               <view class="med-compact-meta">{{med.dose || '剂量未填'}}{{med.route ? ' · ' + med.route : ''}}{{med.frequency ? ' · ' + med.frequency : ''}} · 第{{med.day_index}}天第{{med.dose_index}}次</view>
               <view wx:if="{{med.instructions}}" class="med-note">备注：{{med.instructions}}</view>
-              <view wx:if="{{view === 'completed'}}" class="med-note">{{med.status === 'done' ? '已执行' : '已跳过'}} · {{med.administered_by}} · {{med.administered_at}}{{med.notes ? ' · ' + med.notes : ''}}</view>
+              <view wx:if="{{view === 'completed'}}" class="med-note">{{med.status === 'done' ? '已执行' : (med.status === 'cancelled' ? '已停药' : '已跳过')}} · {{med.administered_by}} · {{med.administered_at}}{{med.notes ? ' · ' + med.notes : ''}}</view>
             </view>
-            <button wx:if="{{view === 'pending'}}" class="med-row-action" data-id="{{med.id}}" catchtap="skipTask">跳过</button>
-            <button wx:else class="med-row-action" data-id="{{med.id}}" catchtap="undoTask">撤销</button>
+            <view wx:if="{{view === 'pending'}}" class="med-row-actions">
+              <button class="med-row-action" data-id="{{med.id}}" catchtap="skipTask">跳过</button>
+              <button class="med-row-action stop" data-id="{{med.id}}" data-drug="{{med.drug_name}}" catchtap="discontinueTask">停药</button>
+            </view>
+            <button wx:elif="{{med.status !== 'cancelled'}}" class="med-row-action" data-id="{{med.id}}" catchtap="undoTask">撤销</button>
           </view>
         </view>
         <button wx:if="{{view === 'pending'}}" class="batch-complete {{group.selected_count ? '' : 'disabled'}}" data-hospitalization-id="{{group.hospitalization_id}}" catchtap="batchComplete" disabled="{{!group.selected_count}}">确认完成 {{group.selected_count}} 项</button>

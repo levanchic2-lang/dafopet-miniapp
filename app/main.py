@@ -7489,6 +7489,33 @@ def _staff_med_log_payload(row: MedicationAdminLog, now_local: datetime | None =
     }
 
 
+def _discontinue_pending_medication(
+    db: Session,
+    source_log: MedicationAdminLog,
+    operator: str,
+    reason: str,
+) -> list[MedicationAdminLog]:
+    """Cancel every pending dose for one prescription item while preserving its history."""
+    clean_reason = (reason or "").strip()[:260]
+    if not clean_reason:
+        raise ValueError("停药必须填写原因")
+    rows = db.query(MedicationAdminLog).filter(
+        MedicationAdminLog.hospitalization_id == source_log.hospitalization_id,
+        MedicationAdminLog.prescription_item_id == source_log.prescription_item_id,
+        MedicationAdminLog.status == "pending",
+    ).all()
+    now_utc = datetime.utcnow()
+    note = f"停止后续用药：{clean_reason}"[:300]
+    for row in rows:
+        row.status = "cancelled"
+        row.administered_at = now_utc
+        row.administered_by = (operator or "员工")[:80]
+        row.notes = note
+        row.reminder_sent_at = None
+    db.flush()
+    return rows
+
+
 @app.get("/api/staff-miniapp/inpatient-medications")
 async def api_staff_miniapp_inpatient_medications(
     request: Request, view: str = Query("pending"), db: Session = Depends(get_db),
@@ -7511,7 +7538,7 @@ async def api_staff_miniapp_inpatient_medications(
             MedicationAdminLog.scheduled_at < datetime.combine(date.today() + timedelta(days=1), datetime.min.time()),
         ).order_by(MedicationAdminLog.scheduled_at.asc())
     else:
-        q = q.filter(MedicationAdminLog.status.in_(["done", "skipped", "refused"]))\
+        q = q.filter(MedicationAdminLog.status.in_(["done", "skipped", "refused", "cancelled"]))\
             .order_by(MedicationAdminLog.administered_at.desc(), MedicationAdminLog.scheduled_at.desc()).limit(150)
     logs = [] if view == "temporary" else q.all()
 
@@ -7703,6 +7730,36 @@ async def api_staff_miniapp_medication_skip(
     return {"ok": True, "item": _staff_med_log_payload(row)}
 
 
+@app.post("/api/staff-miniapp/inpatient-medications/{log_id}/discontinue")
+async def api_staff_miniapp_medication_discontinue(
+    log_id: int, request: Request, payload: dict = Body(default={}), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    row = _staff_med_log(db, user, log_id)
+    if row.status != "pending":
+        raise HTTPException(409, "该用药任务已经处理")
+    reason = str((payload or {}).get("reason") or "").strip()
+    if not reason:
+        raise HTTPException(400, "停药必须填写原因")
+    drug_name = row.prescription_item.drug_name if row.prescription_item else "处方药品"
+    operator = (user.display_name or user.username or "员工")[:80]
+    cancelled = _discontinue_pending_medication(db, row, operator, reason)
+    db.add(AuditLog(
+        action="staff_inpatient_medication_discontinue",
+        actor=(user.username or "")[:80],
+        detail=json.dumps({
+            "hospitalization_id": row.hospitalization_id,
+            "prescription_id": row.prescription_id,
+            "prescription_item_id": row.prescription_item_id,
+            "drug_name": drug_name,
+            "cancelled_count": len(cancelled),
+            "reason": reason[:260],
+        }, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "drug_name": drug_name, "cancelled_count": len(cancelled)}
+
+
 @app.post("/api/staff-miniapp/inpatient-medications/{log_id}/uncheck")
 async def api_staff_miniapp_medication_uncheck(
     log_id: int, request: Request, db: Session = Depends(get_db),
@@ -7710,7 +7767,7 @@ async def api_staff_miniapp_medication_uncheck(
     user = _staff_miniapp_user(request, db)
     row = _staff_med_log(db, user, log_id)
     if row.status == "cancelled":
-        raise HTTPException(409, "该用药任务已因办理出院自动取消")
+        raise HTTPException(409, "已取消的用药任务不能撤销，请由医生重新开具或调整处方")
     if row.status == "pending":
         return {"ok": True, "item": _staff_med_log_payload(row)}
     row.status = "pending"
@@ -36581,8 +36638,8 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
       * schedule_times 空 → 按给药频次推默认（见 _default_schedule_for_freq）；
         频次也推不出（prn/q48h/未知）→ 跳过
       * 否则按 (duration_days × schedule_times) 生成日志
-      * 起始日：prescribed_date 或今天
-      * 先删本 item 的现有 pending 日志（重生），保留 done/skipped
+      * 疗程起始日：prescribed_date 或今天；住院前旧处方保留原疗程日序，只生成入住后的剩余剂次
+      * 先删本 item 的现有 pending 日志（重生），保留 done/skipped/refused/cancelled
     返回新生成日志数。
     """
     if not presc or presc.status in ("draft", "voided"):
@@ -36614,9 +36671,14 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
         opened_local = None
         opened_hour = 10
     admitted_local = (hosp.admitted_at + _td(hours=8)) if hosp.admitted_at else None
-    if admitted_local and start_date < admitted_local.date():
-        # 住院前已经开好的连续处方，从实际入住日开始排任务，不能补出住院前的漏药。
-        start_date = admitted_local.date()
+    # 旧处方不能因办理住院而重新从第 1 天开始。入住前已经过去的疗程日直接略过，
+    # day_index 仍按原开方日计算；若原疗程已结束则不会生成任务。
+    preexisting_course = bool(
+        admitted_local and (
+            start_date < admitted_local.date()
+            or (opened_local is not None and opened_local < admitted_local)
+        )
+    )
     first_task_local = max(
         [dt for dt in (opened_local, admitted_local) if dt is not None],
         default=None,
@@ -36650,11 +36712,13 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
         completed_slots = {
             row[0] for row in db.query(MedicationAdminLog.scheduled_at).filter(
                 MedicationAdminLog.prescription_item_id == it.id,
-                MedicationAdminLog.status.in_(["done", "skipped", "refused"]),
+                MedicationAdminLog.status.in_(["done", "skipped", "refused", "cancelled"]),
             ).all()
         }
         for day_n in range(n_days):
             d = start_date + _td(days=day_n)
+            if admitted_local and d < admitted_local.date():
+                continue
             day_slots = []
             skipped_past_slot = False
             for dose_idx, (h, m) in enumerate(times, 1):
@@ -36664,14 +36728,17 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
                     skipped_past_slot = True
                     continue
                 day_slots.append((dose_idx, sched_at))
-            if first_task_local and d == first_task_local.date() and skipped_past_slot:
+            inserted_immediate = False
+            if first_task_local and d == first_task_local.date() and skipped_past_slot and not preexisting_course:
                 # 当天开方时若已经错过首个默认时点，第一次改为立即执行，同时保留后续时点。
                 # 例如 BID 在 12:29 开出：生成 12:29 + 20:00，而不是只剩 20:00。
                 immediate_at = first_task_local.replace(second=0, microsecond=0)
                 if all(sched_at != immediate_at for _, sched_at in day_slots):
                     day_slots.append((0, immediate_at))
+                    inserted_immediate = True
             day_slots.sort(key=lambda value: value[1])
-            day_slots = [(index, value[1]) for index, value in enumerate(day_slots, 1)]
+            if inserted_immediate:
+                day_slots = [(index, value[1]) for index, value in enumerate(day_slots, 1)]
             for dose_idx, sched_at in day_slots:
                 # 编辑处方后重建任务时，已执行/已跳过的同一时点不能再生成一份 pending。
                 if sched_at in completed_slots:
@@ -36740,6 +36807,46 @@ async def admin_medication_log_skip(log_id: int, request: Request,
     log.administered_at = datetime.utcnow()
     log.administered_by = request.session.get("admin_username", "")
     log.notes = (notes or "").strip()[:300]
+    db.commit()
+    return RedirectResponse(
+        _safe_next(next_url, f"/admin/inpatient/{log.hospitalization_id}#meds"),
+        status_code=303,
+    )
+
+
+@app.post("/admin/medication-log/{log_id}/discontinue")
+async def admin_medication_log_discontinue(
+    log_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    reason: str = Form(""),
+    next_url: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    log = db.get(MedicationAdminLog, log_id)
+    if not log:
+        raise HTTPException(404)
+    hosp = db.get(Hospitalization, log.hospitalization_id)
+    if not hosp or hosp.status != "admitted":
+        raise HTTPException(400, "住院已结束，不可停药")
+    if log.status != "pending":
+        raise HTTPException(409, "该用药任务已经处理")
+    clean_reason = (reason or "").strip()
+    if not clean_reason:
+        raise HTTPException(400, "停药必须填写原因")
+    operator = request.session.get("admin_username", "admin")
+    drug_name = log.prescription_item.drug_name if log.prescription_item else "处方药品"
+    cancelled = _discontinue_pending_medication(db, log, operator, clean_reason)
+    _audit(db, request, "inpatient_medication_discontinue", detail={
+        "hospitalization_id": log.hospitalization_id,
+        "prescription_id": log.prescription_id,
+        "prescription_item_id": log.prescription_item_id,
+        "drug_name": drug_name,
+        "cancelled_count": len(cancelled),
+        "reason": clean_reason[:260],
+    })
     db.commit()
     return RedirectResponse(
         _safe_next(next_url, f"/admin/inpatient/{log.hospitalization_id}#meds"),

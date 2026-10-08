@@ -196,6 +196,32 @@ Page({
       }
     });
   },
+  discontinueTask(e) {
+    const id = Number(e.currentTarget.dataset.id || 0);
+    const drugName = e.currentTarget.dataset.drug || "该药品";
+    if (!id || this.data.busy) return;
+    wx.showModal({
+      title: `停止 ${drugName}`,
+      content: "将取消本次住院中该药全部未执行剂次，已执行记录和原处方不会删除。",
+      editable: true,
+      placeholderText: "必须填写医生停药原因",
+      confirmText: "确认停药",
+      confirmColor: "#7a2828",
+      success: async res => {
+        if (!res.confirm) return;
+        const reason = (res.content || "").trim();
+        if (!reason) { wx.showToast({ title: "请填写停药原因", icon: "none" }); return; }
+        this.setData({ busy: true });
+        try {
+          const result = await staffPost(`/api/staff-miniapp/inpatient-medications/${id}/discontinue`, { reason });
+          wx.showToast({ title: `已停止${result.cancelled_count || 0}次`, icon: "success" });
+          this.loadData();
+        } catch (err) {
+          wx.showModal({ title: "操作失败", content: (err && err.detail) || "请稍后重试", showCancel: false });
+        } finally { this.setData({ busy: false }); }
+      }
+    });
+  },
   undoTask(e) {
     const id = Number(e.currentTarget.dataset.id || 0);
     if (!id || this.data.busy) return;

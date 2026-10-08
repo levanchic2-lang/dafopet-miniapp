@@ -133,8 +133,8 @@
    {% for l in today_logs if l.prescription_item %}
    {% set overdue = (l.status == 'pending' and l.scheduled_at < now) %}
    <div style="display:flex;align-items:center;gap:.65rem;padding:.55rem .75rem;
-    background:{% if l.status == 'done' %}#ecfdf5{% elif l.status == 'skipped' %}#f3f4f6{% elif overdue %}#fef2f2{% else %}#fff{% endif %};
-    border:1px solid {% if l.status == 'done' %}#86efac{% elif overdue %}#fca5a5{% else %}var(--border){% endif %};
+    background:{% if l.status == 'done' %}#ecfdf5{% elif l.status == 'cancelled' %}#fef2f2{% elif l.status == 'skipped' %}#f3f4f6{% elif overdue %}#fef2f2{% else %}#fff{% endif %};
+    border:1px solid {% if l.status == 'done' %}#86efac{% elif l.status == 'cancelled' or overdue %}#fca5a5{% else %}var(--border){% endif %};
     border-radius:6px;">
     <div style="font-weight:700;font-size:1.05rem;color:{% if overdue %}#dc2626{% elif l.status == 'done' %}#047857{% else %}#1e40af{% endif %};min-width:55px;">
      {{ (l.scheduled_at | bjtime).strftime('%H:%M') }}
@@ -158,6 +158,10 @@
      <div style="font-size:.74rem;color:#6b7280;margin-top:.15rem;">
       ⊘ 跳过 by {{ l.administered_by or '—' }}{% if l.notes %} · {{ l.notes }}{% endif %}
      </div>
+     {% elif l.status == 'cancelled' %}
+     <div style="font-size:.74rem;color:#991b1b;margin-top:.15rem;">
+      已停药 · {{ l.administered_by or '—' }}{% if l.notes %} · {{ l.notes }}{% endif %}
+     </div>
      {% endif %}
     </div>
     {% if l.status == 'pending' and h.status == 'admitted' %}
@@ -173,6 +177,15 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
       <input name="notes" placeholder="跳过原因（可选）" style="width:100%;font-size:.82rem;margin-bottom:.3rem;"/>
       <button type="submit" class="btn secondary" style="width:100%;font-size:.78rem;">确认跳过</button>
+     </form>
+    </details>
+    <details style="margin:0;">
+     <summary class="btn secondary" style="font-size:.78rem;padding:.35rem .65rem;cursor:pointer;list-style:none;color:#991b1b;">停药</summary>
+     <form method="post" action="/admin/medication-log/{{ l.id }}/discontinue" style="position:absolute;right:1rem;background:#fff;border:1px solid #fca5a5;padding:.6rem;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:10;margin-top:.3rem;min-width:250px;"
+           onsubmit="return confirm('确定停止该药物全部尚未执行的剂量？已执行记录不会改变。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input name="reason" required placeholder="停药原因（必填）" style="width:100%;font-size:.82rem;margin-bottom:.4rem;"/>
+      <button type="submit" class="btn" style="width:100%;font-size:.78rem;background:#991b1b;border-color:#991b1b;color:#fff;">停止后续全部剂量</button>
      </form>
     </details>
     {% elif l.status == 'done' or l.status == 'skipped' %}
