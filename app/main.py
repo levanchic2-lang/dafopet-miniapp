@@ -15303,6 +15303,16 @@ def _match_followup_templates(db: Session, diagnosis: str, visit_type: str = "")
                 matched.append(tpl)
                 seen_ids.add(tpl.id)
                 break
+    if matched:
+        from app.data.vet_seed import TEMPLATE_SUPERSEDES
+        matched_names = {tpl.name for tpl in matched}
+        suppressed_names = {
+            broad_name
+            for specific_name in matched_names
+            for broad_name in TEMPLATE_SUPERSEDES.get(specific_name, ())
+        }
+        if suppressed_names:
+            matched = [tpl for tpl in matched if tpl.name not in suppressed_names]
     if not matched and visit_type in ("outpatient", "other", "followup", ""):
         default = db.query(FollowUpTemplate).filter(FollowUpTemplate.name == "一般门诊（默认）").first()
         if default:

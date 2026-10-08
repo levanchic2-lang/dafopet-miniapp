@@ -22,6 +22,7 @@ SYSTEMS = {
     "gi":          "消化系统",
     "respiratory": "呼吸系统",
     "skin":        "皮肤系统",
+    "otic":        "耳道疾病",
     "dental":      "口腔牙科",
     "ophthalmic":  "眼科",
     "urinary":     "泌尿系统",
@@ -230,8 +231,10 @@ DISEASES = [
     ("再生障碍性贫血",   "hemato", "再障,Aplastic Anemia",         "severe",  "both"),
     ("猫白血病病毒感染", "hemato", "FeLV,猫白血病",                 "chronic", "cat"),
     ("猫免疫缺陷病毒",   "hemato", "FIV,猫艾滋",                    "chronic", "cat"),
+    ("猫血液支原体感染", "hemato", "血巴尔通体,猫血液支原体,血液支原体,Hemoplasma,Mycoplasma haemofelis", "severe", "cat"),
     ("巴贝斯虫感染",     "hemato", "巴贝斯虫,Babesia",              "severe",  "dog"),
     ("埃立克体感染",     "hemato", "埃立克体,Ehrlichia",            "moderate","dog"),
+    ("无形体感染",       "hemato", "无形体,Anaplasma",              "moderate","both"),
     ("立克次体感染",     "hemato", "立克次体,Rickettsia",           "moderate","both"),
     ("利什曼原虫病",     "hemato", "利什曼,Leishmania",             "chronic", "dog"),
 
@@ -314,6 +317,40 @@ Q = {
                   "options": ["明显改善", "略改善", "无变化", "加重", "出现新皮损"]},
     "eye":       {"key": "eye",       "type": "select",    "label": "眼部分泌物/红肿",
                   "options": ["明显改善", "略改善", "无变化", "加重"]},
+    "ear_shake": {"key": "ear_shake", "type": "select",    "label": "甩头/抓耳",
+                  "options": ["没有", "明显减少", "仍然频繁", "比治疗前加重"]},
+    "ear_discharge":{"key":"ear_discharge","type":"select","label":"耳道分泌物/异味",
+                  "options": ["无或已明显减少", "仍有少量", "仍然很多或有明显异味", "出现脓液或血液"]},
+    "ear_pain":  {"key": "ear_pain",  "type": "select",    "label": "耳部疼痛",
+                  "options": ["无", "轻微抗拒触碰", "明显疼痛", "无法触碰"]},
+    "ear_care":  {"key": "ear_care",  "type": "select",    "label": "清耳/滴药执行",
+                  "options": ["完全按医嘱", "偶尔遗漏", "操作困难", "宠物完全不配合"]},
+    "ear_neuro": {"key": "ear_neuro", "type": "select",    "label": "头歪/走路不稳/眼球震颤",
+                  "options": ["均无", "偶尔头歪", "持续头歪或走路不稳", "出现眼球震颤或跌倒"]},
+    "mucosa":    {"key": "mucosa",    "type": "select",    "label": "牙龈/眼结膜颜色",
+                  "options": ["正常粉红", "比平时苍白", "明显苍白近白色", "发黄", "发紫"]},
+    "urine_color":{"key":"urine_color","type":"select",  "label": "尿液颜色",
+                  "options": ["正常淡黄", "深黄色", "茶色/酱油色", "红色或带血", "暂未观察"]},
+    "bleeding":  {"key": "bleeding",  "type": "select",    "label": "异常出血",
+                  "options": ["无", "皮肤有少量出血点", "鼻出血/牙龈出血", "黑便或明显出血"]},
+    "clot_sign": {"key": "clot_sign", "type": "select",    "label": "突发呼吸急促或肢体疼痛无力",
+                  "options": ["无", "呼吸比平时稍快", "突发明显呼吸急促", "突发肢体疼痛/无力/发凉"]},
+    "urine_flow": {"key":"urine_flow", "type":"select",   "label": "排尿量与顺畅程度",
+                  "options": ["正常顺畅", "尿量偏少", "频繁蹲尿但每次很少", "排尿疼痛/嚎叫", "完全无尿"]},
+    "abd_pain":  {"key": "abd_pain",  "type": "select",    "label": "腹部疼痛/祈祷姿势",
+                  "options": ["无", "偶尔不愿被抱", "明显弓背或祈祷姿势", "持续疼痛/无法安卧"]},
+    "jaundice":  {"key": "jaundice",  "type": "select",    "label": "眼白/牙龈/耳廓黄染",
+                  "options": ["无", "疑似轻微发黄", "明显发黄", "较治疗前加重"]},
+    "feeding":   {"key": "feeding",   "type": "select",    "label": "进食或辅助喂食",
+                  "options": ["能够自主正常进食", "自主进食量不足", "需要辅助喂食", "完全无法进食"]},
+    "eye_open":  {"key": "eye_open",  "type": "select",    "label": "睁眼及疼痛表现",
+                  "options": ["正常睁眼", "偶尔眯眼", "持续眯眼/流泪", "完全睁不开或明显疼痛"]},
+    "eye_surface":{"key":"eye_surface","type":"select",  "label": "角膜外观",
+                  "options": ["清澈或明显改善", "仍有轻微混浊/白点", "混浊或白点扩大", "表面凹陷/鼓起或出现血色"]},
+    "eye_vision": {"key":"eye_vision", "type":"select",   "label": "视物与行走",
+                  "options": ["正常", "疑似看不清", "频繁碰撞物体", "突然失明"]},
+    "eye_meds":  {"key": "eye_meds",  "type": "select",    "label": "滴眼药执行",
+                  "options": ["完全按医嘱", "偶尔漏药", "操作困难", "完全无法滴药"]},
     "weight":    {"key": "weight",    "type": "number",    "label": "最新体重(kg)", "step": 0.01},
     "med_taken": {"key": "med_taken", "type": "select",    "label": "按时给药",
                   "options": ["完全按时", "偶尔漏一两次", "经常漏", "完全没喂", "宠物拒食"]},
@@ -401,6 +438,25 @@ TEMPLATES = [
              "questions": [Q["appetite"], Q["energy"], Q["needs_visit"]]},
         ],
     },
+    # ── 胰腺/肝胆系统 ──────────────────────────────
+    {
+        "name": "胰腺及肝胆疾病",
+        "system": "gi",
+        "priority": 75,
+        "keywords": _KW(
+            "急性胰腺炎", "慢性胰腺炎", "胰腺炎", "Pancreatitis",
+            "肝炎", "Hepatitis", "胆管炎", "Cholangitis", "胆囊炎", "胆泥", "胆囊黏液囊肿",
+            "胆道梗阻", "脂肪肝", "肝脂沉积", "三联炎",
+        ),
+        "rounds": [
+            {"day_offset": 2, "round_name": "治疗后 2 天 · 进食/疼痛",
+             "questions": [Q["spirit"], Q["feeding"], Q["vomit"], Q["abd_pain"], Q["jaundice"], Q["med_taken"], Q["needs_visit"]]},
+            {"day_offset": 7, "round_name": "1 周 · 症状与复查",
+             "questions": [Q["appetite"], Q["vomit"], Q["abd_pain"], Q["jaundice"], Q["weight"], Q["med_side"], Q["needs_visit"]]},
+            {"day_offset": 14, "round_name": "2 周 · 转归确认",
+             "questions": [Q["appetite"], Q["weight"], Q["jaundice"], Q["needs_visit"], Q["note"]]},
+        ],
+    },
     # ── 消化系统（急性） ──────────────────────────
     {
         "name": "消化系统疾病",
@@ -408,9 +464,8 @@ TEMPLATES = [
         "priority": 60,
         "keywords": _KW(
             "肠炎", "胃肠炎", "AGE", "胃炎", "急性胃炎", "慢性胃炎",
-            "IBD", "炎症性肠病", "胰腺炎", "巨结肠", "便秘",
+            "IBD", "炎症性肠病", "巨结肠", "便秘",
             "腹泻", "呕吐", "HGE", "出血性肠炎", "嗜酸性肠炎", "PLE",
-            "肝炎", "胆管炎", "胆囊", "脂肪肝", "三联炎",
             "食物过敏", "食物不耐受",
             "蛔虫", "绦虫", "钩虫", "球虫", "贾第虫", "弓形虫",
             "猫冠状", "FCoV", "FECV", "FIP", "传染性腹膜炎", "细小", "Parvo",
@@ -431,7 +486,7 @@ TEMPLATES = [
         "system": "respiratory",
         "priority": 60,
         "keywords": _KW(
-            "鼻支", "FHV", "杯状", "FCV", "支原体", "衣原体", "副流感", "犬流感", "URI",
+            "鼻支", "FHV", "杯状", "FCV", "猫支原体感染", "呼吸道支原体", "Mycoplasma felis", "衣原体", "副流感", "犬流感", "URI",
             "上呼吸道感染", "犬窝咳", "CIRDC", "气管支气管炎",
             "肺炎", "细菌性肺炎", "病毒性肺炎", "真菌性肺炎", "吸入性肺炎",
             "哮喘", "猫哮喘", "慢性支气管炎", "肺水肿", "胸腔积液", "气胸", "乳糜胸",
@@ -446,6 +501,22 @@ TEMPLATES = [
              "questions": [Q["energy"], Q["cough"], Q["needs_visit"]]},
         ],
     },
+    # ── 耳道疾病 ──────────────────────────────────
+    {
+        "name": "耳道疾病",
+        "system": "otic",
+        "priority": 75,
+        "keywords": _KW(
+            "耳螨", "Otodectes", "外耳炎", "Otitis Externa", "中耳炎", "Otitis Media",
+            "内耳炎", "Otitis Interna", "耳道感染", "耳道马拉色菌", "耳道细菌感染",
+        ),
+        "rounds": [
+            {"day_offset": 4, "round_name": "用药 4 天 · 耳道症状",
+             "questions": [Q["ear_shake"], Q["ear_discharge"], Q["ear_pain"], Q["ear_care"], Q["ear_neuro"], Q["photo"], Q["note"]]},
+            {"day_offset": 14, "round_name": "2 周 · 耳镜/细胞学复查",
+             "questions": [Q["ear_shake"], Q["ear_discharge"], Q["ear_pain"], Q["ear_care"], Q["ear_neuro"], Q["needs_visit"]]},
+        ],
+    },
     # ── 皮肤系统 ──────────────────────────────────
     {
         "name": "皮肤系统疾病",
@@ -456,7 +527,6 @@ TEMPLATES = [
             "跳蚤过敏", "FAD", "接触性皮炎", "脂溢性皮炎",
             "癣", "真菌性皮炎", "皮肤癣菌", "Dermatophytosis", "马拉色菌", "Malassezia",
             "螨虫", "蠕形螨", "Demodex", "疥螨", "Sarcoptes", "Scabies",
-            "耳螨", "外耳炎", "中耳炎", "Otitis",
             "脓皮病", "Pyoderma", "毛囊炎", "趾间脓皮病",
             "嗜酸性肉芽肿", "EGC", "天疱疮", "红斑狼疮",
             "脱毛", "内分泌脱毛", "肛周瘘",
@@ -471,15 +541,33 @@ TEMPLATES = [
              "questions": [Q["itch"], Q["skin"], Q["photo"], Q["needs_visit"]]},
         ],
     },
+    # ── 危急眼科 ──────────────────────────────────
+    {
+        "name": "危急眼科疾病",
+        "system": "ophthalmic",
+        "priority": 92,
+        "keywords": _KW(
+            "角膜溃疡", "Corneal Ulcer", "角膜穿孔", "角膜深溃疡", "角膜融解",
+            "青光眼", "Glaucoma", "葡萄膜炎", "Uveitis", "视网膜脱离", "突然失明",
+        ),
+        "rounds": [
+            {"day_offset": 1, "round_name": "24 小时 · 疼痛与视力",
+             "questions": [Q["eye_open"], Q["eye_surface"], Q["eye_vision"], Q["eye_meds"], Q["photo"], Q["needs_visit"]]},
+            {"day_offset": 3, "round_name": "3 天 · 角膜/眼压复查",
+             "questions": [Q["eye_open"], Q["eye_surface"], Q["eye_vision"], Q["eye_meds"], Q["photo"], Q["needs_visit"]]},
+            {"day_offset": 7, "round_name": "1 周 · 转归确认",
+             "questions": [Q["eye_open"], Q["eye_surface"], Q["eye_vision"], Q["needs_visit"], Q["note"]]},
+        ],
+    },
     # ── 眼科 ─────────────────────────────────────
     {
         "name": "眼科疾病",
         "system": "ophthalmic",
         "priority": 55,
         "keywords": _KW(
-            "角膜炎", "角膜溃疡", "角膜穿孔", "嗜酸性角膜炎", "EK",
-            "结膜炎", "干眼症", "KCS", "葡萄膜炎", "白内障", "青光眼",
-            "视网膜变性", "PRA", "视网膜脱离",
+            "角膜炎", "嗜酸性角膜炎", "EK",
+            "结膜炎", "干眼症", "KCS", "白内障",
+            "视网膜变性", "PRA",
             "睑内翻", "Entropion", "睑外翻", "Ectropion", "樱桃眼",
         ),
         "rounds": [
@@ -489,6 +577,24 @@ TEMPLATES = [
              "questions": [Q["eye"], Q["photo"], Q["needs_visit"]]},
         ],
     },
+    # ── 急性肾损伤/尿闭 ───────────────────────────
+    {
+        "name": "急性肾损伤/尿闭出院",
+        "system": "renal",
+        "priority": 90,
+        "keywords": _KW(
+            "AKI", "急性肾损伤", "急性肾衰", "急性肾功能衰竭",
+            "尿道堵塞", "尿闭", "Urethral Obstruction", "导尿后", "拔尿管",
+        ),
+        "rounds": [
+            {"day_offset": 1, "round_name": "出院 24 小时 · 排尿确认",
+             "questions": [Q["urine_flow"], Q["spirit"], Q["appetite"], Q["vomit"], Q["water"], Q["med_taken"], Q["needs_visit"]]},
+            {"day_offset": 3, "round_name": "出院 3 天 · 复发风险",
+             "questions": [Q["urine_flow"], Q["appetite"], Q["vomit"], Q["water"], Q["med_side"], Q["needs_visit"]]},
+            {"day_offset": 7, "round_name": "1 周 · 肾值/尿检复查",
+             "questions": [Q["urine_flow"], Q["appetite"], Q["weight"], Q["water"], Q["needs_visit"], Q["note"]]},
+        ],
+    },
     # ── 泌尿系统 ─────────────────────────────────
     {
         "name": "泌尿系统疾病",
@@ -496,7 +602,6 @@ TEMPLATES = [
         "priority": 60,
         "keywords": _KW(
             "膀胱炎", "Cystitis", "FIC", "特发性膀胱炎", "FLUTD", "FUS",
-            "尿道堵塞", "尿闭", "Obstruction",
             "膀胱结石", "草酸钙结石", "鸟粪石", "尿酸盐结石", "胱氨酸结石", "尿道结石",
             "尿失禁", "UTI", "尿路感染",
         ),
@@ -513,7 +618,7 @@ TEMPLATES = [
         "system": "renal",
         "priority": 40,
         "keywords": _KW(
-            "CKD", "慢性肾病", "慢性肾衰", "AKI", "急性肾损伤", "急性肾衰",
+            "CKD", "慢性肾病", "慢性肾衰",
             "肾盂肾炎", "肾积水", "肾结石", "多囊肾", "PKD",
             "蛋白尿", "肾小球肾炎", "氮质血症",
         ),
@@ -603,6 +708,44 @@ TEMPLATES = [
              "questions": [Q["appetite"], Q["spirit"], Q["med_taken"], Q["photo"], Q["note"]]},
             {"day_offset": 30, "round_name": "1 月 · 复诊",
              "questions": [Q["appetite"], Q["weight"], Q["needs_visit"]]},
+        ],
+    },
+    # ── 血液寄生虫/蜱媒病 ─────────────────────────
+    {
+        "name": "血液寄生虫及蜱媒病",
+        "system": "hemato",
+        "priority": 85,
+        "keywords": _KW(
+            "巴贝斯虫", "Babesia", "焦虫", "埃立克体", "Ehrlichia", "无形体", "Anaplasma",
+            "立克次体", "Rickettsia", "血巴尔通体", "猫血液支原体", "血液支原体",
+            "Hemoplasma", "Mycoplasma haemofelis", "利什曼原虫", "Leishmania",
+        ),
+        "rounds": [
+            {"day_offset": 3, "round_name": "治疗后 3 天 · 贫血/发热观察",
+             "questions": [Q["spirit"], Q["appetite"], Q["mucosa"], Q["urine_color"], Q["bleeding"], Q["med_taken"], Q["med_side"]]},
+            {"day_offset": 7, "round_name": "1 周 · 血常规复查",
+             "questions": [Q["spirit"], Q["mucosa"], Q["urine_color"], Q["bleeding"], Q["weight"], Q["needs_visit"]]},
+            {"day_offset": 28, "round_name": "4 周 · 疗程确认",
+             "questions": [Q["energy"], Q["appetite"], Q["mucosa"], Q["med_taken"], Q["needs_visit"], Q["note"]]},
+        ],
+    },
+    # ── 免疫介导性血液病 ─────────────────────────
+    {
+        "name": "免疫介导性血液病",
+        "system": "hemato",
+        "priority": 90,
+        "keywords": _KW(
+            "IMHA", "免疫介导性溶血性贫血", "自身免疫性溶血性贫血",
+            "IMTP", "ITP", "免疫介导性血小板减少", "免疫性血小板减少",
+            "再生障碍性贫血", "再障", "Aplastic Anemia",
+        ),
+        "rounds": [
+            {"day_offset": 1, "round_name": "出院 24 小时 · 危险信号",
+             "questions": [Q["spirit"], Q["mucosa"], Q["breath"], Q["urine_color"], Q["bleeding"], Q["clot_sign"], Q["needs_visit"]]},
+            {"day_offset": 4, "round_name": "治疗第 4 天 · 血象/用药",
+             "questions": [Q["spirit"], Q["appetite"], Q["mucosa"], Q["bleeding"], Q["clot_sign"], Q["med_taken"], Q["med_side"], Q["needs_visit"]]},
+            {"day_offset": 14, "round_name": "2 周 · 复查与减药评估",
+             "questions": [Q["energy"], Q["appetite"], Q["mucosa"], Q["bleeding"], Q["med_side"], Q["needs_visit"], Q["note"]]},
         ],
     },
     # ── 肿瘤 ─────────────────────────────────────
@@ -695,3 +838,52 @@ TEMPLATES = [
         ],
     },
 ]
+
+
+# 新增专科模板后，把已经由专科模板接管的关键词从旧内置模板中移走。
+# 数据库启动同步只按完整 CSV 项移除，用户额外添加的其他关键词会保留。
+TEMPLATE_KEYWORD_PATCHES = {
+    "消化系统疾病": {
+        "remove": ("胰腺炎", "肝炎", "胆管炎", "胆囊", "脂肪肝", "三联炎"),
+    },
+    "呼吸系统疾病": {
+        "remove": ("支原体",),
+        "add": ("猫支原体感染", "呼吸道支原体", "Mycoplasma felis"),
+    },
+    "皮肤系统疾病": {
+        "remove": ("耳螨", "外耳炎", "中耳炎", "Otitis"),
+    },
+    "眼科疾病": {
+        "remove": ("角膜溃疡", "角膜穿孔", "葡萄膜炎", "青光眼", "视网膜脱离"),
+    },
+    "泌尿系统疾病": {
+        "remove": ("尿道堵塞", "尿闭", "Obstruction"),
+    },
+    "肾病慢病管理": {
+        "remove": ("AKI", "急性肾损伤", "急性肾衰"),
+    },
+}
+
+
+# 同一诊断同时命中专科与泛科模板时，仅保留更具体的模板。
+TEMPLATE_SUPERSEDES = {
+    "胰腺及肝胆疾病": ("消化系统疾病",),
+    "耳道疾病": ("皮肤系统疾病",),
+    "危急眼科疾病": ("眼科疾病",),
+    "急性肾损伤/尿闭出院": ("泌尿系统疾病", "肾病慢病管理"),
+    "血液寄生虫及蜱媒病": ("呼吸系统疾病",),
+}
+
+
+def apply_template_keyword_patch(keywords, patch):
+    """Apply one exact CSV keyword patch while preserving unrelated custom entries."""
+    parts = [part.strip() for part in (keywords or "").split(",") if part.strip()]
+    remove_keys = {str(part).strip().lower() for part in patch.get("remove", ())}
+    updated = [part for part in parts if part.lower() not in remove_keys]
+    existing_lower = {part.lower() for part in updated}
+    for part in patch.get("add", ()):
+        clean = str(part).strip()
+        if clean and clean.lower() not in existing_lower:
+            updated.append(clean)
+            existing_lower.add(clean.lower())
+    return ",".join(updated)

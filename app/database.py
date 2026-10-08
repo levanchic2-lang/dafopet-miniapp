@@ -2549,7 +2549,12 @@ def _seed_vet_diseases_and_templates() -> None:
     """
     try:
         import json as _json
-        from app.data.vet_seed import DISEASES, TEMPLATES
+        from app.data.vet_seed import (
+            DISEASES,
+            TEMPLATES,
+            TEMPLATE_KEYWORD_PATCHES,
+            apply_template_keyword_patch,
+        )
     except Exception as e:
         print(f"[seed_vet] import failed: {e}")
         return
@@ -2591,5 +2596,21 @@ def _seed_vet_diseases_and_templates() -> None:
                     "kw": tpl["keywords"], "pr": int(tpl["priority"]),
                     "rj": rounds_json,
                 })
+
+            # 专科模板接管关键词后，清理旧内置模板中的精确重叠项，避免同一诊断
+            # 同时生成专科与泛科两套任务。仅改内置项，并保留用户添加的其他关键词。
+            for template_name, patch in TEMPLATE_KEYWORD_PATCHES.items():
+                row = conn.execute(text(
+                    "SELECT keywords FROM follow_up_templates "
+                    "WHERE name=:n AND is_builtin=1"
+                ), {"n": template_name}).fetchone()
+                if not row:
+                    continue
+                new_keywords = apply_template_keyword_patch(row[0] or "", patch)
+                if new_keywords != (row[0] or ""):
+                    conn.execute(text(
+                        "UPDATE follow_up_templates SET keywords=:kw, updated_at=CURRENT_TIMESTAMP "
+                        "WHERE name=:n AND is_builtin=1"
+                    ), {"n": template_name, "kw": new_keywords})
     except Exception as e:
         print(f"[seed_vet] insert failed: {e}")
