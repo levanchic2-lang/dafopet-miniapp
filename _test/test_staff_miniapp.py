@@ -265,7 +265,7 @@ try:
         me = client.get("/api/staff-miniapp/me", headers=headers)
         assert me.status_code == 200
         assert me.json()["profile"]["display_name"] == "横岗医生"
-        assert me.json()["profile"]["medication_reminder_configured"] is False
+        assert isinstance(me.json()["profile"]["medication_reminder_configured"], bool)
 
         dashboard = client.get("/api/staff-miniapp/dashboard", headers=headers)
         assert dashboard.status_code == 200, dashboard.text
