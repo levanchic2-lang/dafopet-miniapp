@@ -6,6 +6,11 @@
     <view class="{{tab === 'upcoming' ? 'active' : ''}}" data-tab="upcoming" bindtap="setTab">待到期</view>
     <view class="{{tab === 'done' ? 'active' : ''}}" data-tab="done" bindtap="setTab">已完成</view>
   </view>
+  <view class="follow-filters">
+    <view class="filter-group"><view class="{{scope === 'mine' ? 'active' : ''}}" data-scope="mine" bindtap="setScope">我的任务</view><view class="{{scope === 'all' ? 'active' : ''}}" data-scope="all" bindtap="setScope">全店任务</view></view>
+    <view class="filter-group"><view class="{{category === '' ? 'active' : ''}}" data-category="" bindtap="setCategory">全部</view><view class="{{category === 'clinical' ? 'active' : ''}}" data-category="clinical" bindtap="setCategory">诊疗</view><view class="{{category === 'preventive' ? 'active' : ''}}" data-category="preventive" bindtap="setCategory">预防</view></view>
+  </view>
+  <view wx:if="{{counts.unassigned > 0 && scope === 'mine'}}" class="follow-unassigned" data-scope="all" bindtap="setScope">另有 {{counts.unassigned}} 项待认领，查看全店任务</view>
   <view wx:if="{{counts.overdue > 0 && tab === 'today'}}" class="follow-warning">其中 {{counts.overdue}} 项已经逾期，请优先处理。</view>
   <view wx:if="{{loading}}" class="staff-loading">正在载入随访任务…</view>
   <view wx:if="{{error}}" class="staff-error">{{error}}</view>
@@ -17,6 +22,7 @@
     <view wx:if="{{item.visit.diagnosis}}" class="follow-diagnosis">{{item.visit.diagnosis}}</view>
     <view wx:if="{{item.question}}" class="follow-question">问：{{item.question}}</view>
     <view wx:if="{{item.staff_outcome_label}}" class="follow-result">{{item.staff_outcome_label}} · {{item.next_action_label}}</view>
-    <view class="follow-card-foot"><text>{{item.visit.vet_name ? '医生 ' + item.visit.vet_name : '病例 #' + item.visit.id}}</text><button wx:if="{{item.customer.phone}}" catchtap="callCustomer" data-phone="{{item.customer.phone}}">拨打电话</button></view>
+    <view class="follow-owner">负责人：{{item.assigned_to || '待认领'}}</view>
+    <view class="follow-card-foot"><text>{{item.visit.id ? (item.visit.vet_name ? '医生 ' + item.visit.vet_name : '病例 #' + item.visit.id) : item.category_label}}</text><button wx:if="{{item.customer.phone}}" catchtap="callCustomer" data-phone="{{item.customer.phone}}">拨打电话</button></view>
   </view>
 </view>

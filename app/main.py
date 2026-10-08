@@ -6732,7 +6732,47 @@ def _followup_kind_for_system(system: str) -> str:
         return "chronic"
     if system == "inpatient":
         return "discharge"
+    if system in ("prevention", "screening"):
+        return "screening"
     return "case"
+
+
+def _followup_assignee_options(db: Session, store: str = "") -> list[dict]:
+    """Return active login accounts that can own a task in the selected store."""
+    q = db.query(AdminUser).filter(AdminUser.is_active == True)
+    store = (store or "").strip()
+    if store:
+        q = q.filter(or_(AdminUser.store == store, AdminUser.store == ""))
+    users = q.order_by(AdminUser.display_name, AdminUser.username).all()
+    return [
+        {
+            "value": u.username,
+            "label": (u.display_name or u.username),
+            "role": "医生" if (u.mobile_role == "doctor" or u.role == "superadmin") else "助理",
+        }
+        for u in users
+    ]
+
+
+def _validate_followup_assignee(db: Session, assigned_to: str, store: str, fallback: str = "") -> str:
+    value = (assigned_to or fallback or "").strip()
+    if not value:
+        return ""
+    user = db.query(AdminUser).filter(
+        AdminUser.username == value, AdminUser.is_active == True,
+    ).first()
+    if not user:
+        raise HTTPException(400, "所选负责人不存在或已停用")
+    if store and user.store and user.store != store:
+        raise HTTPException(400, "负责人必须属于当前门店")
+    return user.username
+
+
+def _followup_business_category(fu: FollowUp) -> str:
+    source = (fu.source_type or "").lower()
+    if source.startswith("preventive_") or source in ("health_screening", "manual_screening"):
+        return "preventive"
+    return "clinical"
 
 
 def _followup_template_options(db: Session) -> list[dict]:
@@ -6941,6 +6981,8 @@ def _staff_followup_kind(fu: FollowUp, visit: Visit | None) -> tuple[str, str]:
         return "discharge", "出院随访"
     if source == "chronic" or source.endswith("_chronic"):
         return "chronic", "慢病复查"
+    if source.startswith("preventive_"):
+        return "prevention", "预防提醒"
     if source in ("screening", "health_screening") or source.endswith("_screening"):
         return "screening", "健康筛查"
     if source == "recall" or source.endswith("_recall"):
@@ -6990,6 +7032,9 @@ def _staff_followup_payload(db: Session, fu: FollowUp) -> dict:
         "risk_trigger": fu.risk_trigger or "",
         "priority": fu.priority or "normal",
         "created_by": fu.created_by or fu.assigned_to or "",
+        "assigned_to": fu.assigned_to or "",
+        "category": _followup_business_category(fu),
+        "category_label": "预防提醒" if _followup_business_category(fu) == "preventive" else "诊疗随访",
         "customer": {
             "id": customer.id, "name": customer.name or "未命名客户",
             "phone": customer.phone or "", "phone_masked": _mask_phone(customer.phone or ""),
@@ -7029,7 +7074,7 @@ def _staff_followup_record(db: Session, user: AdminUser, followup_id: int) -> Fo
 
 @app.get("/api/staff-miniapp/follow-ups")
 async def api_staff_miniapp_followups(
-    request: Request, tab: str = "today", db: Session = Depends(get_db),
+    request: Request, tab: str = "today", scope: str = "mine", category: str = "", db: Session = Depends(get_db),
 ):
     user = _staff_miniapp_user(request, db)
     store = (user.store or "").strip()
@@ -7037,6 +7082,14 @@ async def api_staff_miniapp_followups(
     q = db.query(FollowUp)
     if store:
         q = q.filter(or_(FollowUp.store == store, FollowUp.store == ""))
+    scope = "all" if scope == "all" else "mine"
+    if scope == "mine":
+        q = q.filter(FollowUp.assigned_to == user.username)
+    preventive_sources = ["preventive_vaccine", "preventive_deworming", "health_screening", "manual_screening"]
+    if category == "preventive":
+        q = q.filter(FollowUp.source_type.in_(preventive_sources))
+    elif category == "clinical":
+        q = q.filter(~FollowUp.source_type.in_(preventive_sources))
     active = ["pending", "due", "sent", "phone_pending", "responded"]
     if tab == "upcoming":
         q = q.filter(
@@ -7059,6 +7112,14 @@ async def api_staff_miniapp_followups(
     count_q = db.query(FollowUp)
     if store:
         count_q = count_q.filter(or_(FollowUp.store == store, FollowUp.store == ""))
+    if scope == "mine":
+        count_q = count_q.filter(FollowUp.assigned_to == user.username)
+    unassigned_q = db.query(FollowUp).filter(
+        FollowUp.source_type != "visit_default", FollowUp.assigned_to == "",
+        FollowUp.status.in_(active), FollowUp.planned_date != "", FollowUp.planned_date <= today,
+    )
+    if store:
+        unassigned_q = unassigned_q.filter(or_(FollowUp.store == store, FollowUp.store == ""))
     due_count = count_q.filter(
         FollowUp.source_type != "visit_default",
         FollowUp.status.in_(active), FollowUp.planned_date != "", FollowUp.planned_date <= today,
@@ -7068,8 +7129,8 @@ async def api_staff_miniapp_followups(
         FollowUp.status.in_(active), FollowUp.planned_date != "", FollowUp.planned_date < today,
     ).count()
     return {
-        "ok": True, "tab": tab, "today": today,
-        "counts": {"today": due_count, "overdue": overdue_count},
+        "ok": True, "tab": tab, "scope": scope, "category": category, "today": today,
+        "counts": {"today": due_count, "overdue": overdue_count, "unassigned": unassigned_q.count()},
         "items": [_staff_followup_payload(db, fu) for fu in rows],
     }
 
@@ -7080,7 +7141,8 @@ async def api_staff_miniapp_followup_detail(
 ):
     user = _staff_miniapp_user(request, db)
     fu = _staff_followup_record(db, user, followup_id)
-    return {"ok": True, "item": _staff_followup_payload(db, fu)}
+    return {"ok": True, "item": _staff_followup_payload(db, fu),
+            "assignees": _followup_assignee_options(db, fu.store or user.store or "")}
 
 
 @app.get("/api/staff-miniapp/visits/{visit_id}/follow-up-context")
@@ -7100,6 +7162,8 @@ async def api_staff_miniapp_followup_context(
         "pet": {"id": pet.id, "name": pet.name or "未命名宠物"} if pet else {},
         "customer": {"id": customer.id, "name": customer.name or "未命名客户"} if customer else {},
         "templates": _followup_template_options(db),
+        "assignees": _followup_assignee_options(db, (pet.store if pet else "") or user.store or ""),
+        "current_username": user.username or "",
     }
 
 
@@ -7145,12 +7209,33 @@ async def api_staff_miniapp_followup_create(
         store_fallback=(pet.store if pet else "") or user.store or "",
         template_id=template_id,
         template_round=template_round,
+        assigned_to=str((payload or {}).get("assigned_to") or ""),
     )
     db.flush()
     db.add(AuditLog(
         action="staff_miniapp_followup_create", actor=(user.username or "")[:80],
         detail=json.dumps({"followup_id": fu.id, "visit_id": visit.id, "planned_date": planned_date,
                            "kind": kind}, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "item": _staff_followup_payload(db, fu)}
+
+
+@app.post("/api/staff-miniapp/follow-ups/{followup_id}/assign")
+async def api_staff_miniapp_followup_assign(
+    followup_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    user = _staff_miniapp_user(request, db)
+    fu = _staff_followup_record(db, user, followup_id)
+    previous = fu.assigned_to or ""
+    fu.assigned_to = _validate_followup_assignee(
+        db, str((payload or {}).get("assigned_to") or ""), fu.store or user.store or "",
+        fallback=user.username or "",
+    )
+    fu.updated_at = datetime.utcnow()
+    db.add(AuditLog(
+        action="staff_miniapp_followup_assign", actor=(user.username or "")[:80],
+        detail=json.dumps({"followup_id": fu.id, "from": previous, "to": fu.assigned_to}, ensure_ascii=False),
     ))
     db.commit()
     return {"ok": True, "item": _staff_followup_payload(db, fu)}
@@ -14677,6 +14762,7 @@ async def admin_follow_up_detail(fu_id: int, request: Request, db: Session = Dep
         "staff_outcome_zh": _STAFF_FOLLOWUP_OUTCOME_ZH,
         "staff_action_zh": _STAFF_FOLLOWUP_ACTION_ZH,
         "timeline": timeline,
+        "assignees": _followup_assignee_options(db, fu.store or admin_store),
         "fu_status_zh": fu_status_zh,
         "msg": request.query_params.get("msg"),
         "csrf_token": _get_csrf_token(request),
@@ -15023,6 +15109,7 @@ def _create_manual_followup(
     store_fallback: str = "",
     template_id: int = 0,
     template_round: int = 1,
+    assigned_to: str = "",
 ) -> FollowUp:
     """Create the same explicit follow-up task for desktop and mini-program flows."""
     kind = kind if kind in _MANUAL_FOLLOWUP_KIND_LABELS else "case"
@@ -15059,6 +15146,8 @@ def _create_manual_followup(
             FollowUp.visit_id == visit.id,
         ).scalar() or 0
         selected_round_no = int(max_round) + 1
+    task_store = (visit.store or store_fallback or "")[:40]
+    task_assignee = _validate_followup_assignee(db, assigned_to, task_store, fallback=actor)
     fu = FollowUp(
         visit_id=visit.id,
         customer_id=visit.customer_id,
@@ -15073,8 +15162,8 @@ def _create_manual_followup(
         question_text=question.strip()[:1000],
         expected_reply_type="phone",
         priority=priority,
-        store=(visit.store or store_fallback or "")[:40],
-        assigned_to=(actor or "")[:80],
+        store=task_store,
+        assigned_to=task_assignee[:80],
         created_by=(actor or "")[:80],
         planned_date=planned_date,
         status="due" if planned_date <= date.today().isoformat() else "pending",
@@ -16802,6 +16891,7 @@ async def page_admin_visit_detail(
         "followups": followups,
         "active_followups": active_followups,
         "followup_template_options": _followup_template_options(db),
+        "followup_assignees": _followup_assignee_options(db, (pet.store if pet else "") or _get_op_store(request)),
         "today": date.today().isoformat(),
         "care_summary": care_summary,
         "care_plan": care_plan,
@@ -17183,6 +17273,7 @@ async def admin_visit_followup_create(
     reason: str = Form(""),
     priority: str = Form("normal"),
     template_key: str = Form(""),
+    assigned_to: str = Form(""),
     next_url: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -17234,6 +17325,7 @@ async def admin_visit_followup_create(
         store_fallback=(pet.store if pet else "") or _get_op_store(request),
         template_id=template_id,
         template_round=template_round,
+        assigned_to=assigned_to,
     )
     db.flush()
     _audit(db, request, "visit_followup_create", detail={
@@ -17783,6 +17875,7 @@ async def page_admin_follow_ups(
     vtype: str = Query(""),        # 就诊类型（关联 Visit.visit_type）
     store: str = Query(""),        # 门店（超管可筛）
     q: str = Query(""),            # 关键词：客户名/手机/宠物名
+    category: str = Query(""),     # clinical / preventive
     page: int = Query(1),
 ):
     if not request.session.get("admin"):
@@ -17797,6 +17890,7 @@ async def page_admin_follow_ups(
     handler = (handler or "").strip()
     vtype = (vtype or "").strip()
     store = (store or "").strip()
+    category = (category or "").strip()
 
     def _apply_filters(qq):
         """把筛选条件套到任意 FollowUp 查询上（列表与各 tab 计数共用，口径一致）。"""
@@ -17809,6 +17903,11 @@ async def page_admin_follow_ups(
         if vtype:
             _vt_visit_ids = db.query(Visit.id).filter(Visit.visit_type == vtype)
             qq = qq.filter(FollowUp.visit_id.in_(_vt_visit_ids))
+        preventive_sources = ["preventive_vaccine", "preventive_deworming", "health_screening", "manual_screening"]
+        if category == "preventive":
+            qq = qq.filter(FollowUp.source_type.in_(preventive_sources))
+        elif category == "clinical":
+            qq = qq.filter(~FollowUp.source_type.in_(preventive_sources))
         if kw:
             _pet_ids = db.query(Pet.id).filter(Pet.name.ilike(f"%{kw}%"))
             _cust_ids = db.query(Customer.id).filter(or_(
@@ -17871,16 +17970,15 @@ async def page_admin_follow_ups(
     }
 
     # 预取 visit / pet / customer 信息（避免模板里 N+1）
-    visit_ids = [r.visit_id for r in rows]
+    visit_ids = [r.visit_id for r in rows if r.visit_id]
     visits = {v.id: v for v in db.query(Visit).filter(Visit.id.in_(visit_ids)).all()} if visit_ids else {}
     pet_ids = list({r.pet_id for r in rows if r.pet_id})
     pets = {p.id: p for p in db.query(Pet).filter(Pet.id.in_(pet_ids)).all()} if pet_ids else {}
     cust_ids = list({r.customer_id for r in rows if r.customer_id})
     custs = {c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
 
-    # 处理人下拉（本店范围内 FollowUp 出现过的 assigned_to）
-    _handler_rows = _followup_filtered_query(db, request).with_entities(FollowUp.assigned_to).distinct().all()
-    handlers = sorted({(h[0] or "").strip() for h in _handler_rows if (h[0] or "").strip()})
+    assignees = _followup_assignee_options(db, store if is_superadmin and store else _get_admin_store(request))
+    handlers = [row["value"] for row in assignees]
 
     return templates.TemplateResponse(request, "uk/follow_ups.html", {
         "title": "回访管理",
@@ -17894,8 +17992,9 @@ async def page_admin_follow_ups(
         "page": page,
         "total_pages": total_pages,
         "total": total,
-        "f": {"handler": handler, "vtype": vtype, "store": store, "q": kw},
+        "f": {"handler": handler, "vtype": vtype, "store": store, "q": kw, "category": category},
         "handlers": handlers,
+        "assignees": assignees,
         "is_superadmin": is_superadmin,
         "status_zh":   _FOLLOWUP_STATUS_ZH,
         "response_zh": _FOLLOWUP_RESPONSE_ZH,
@@ -17903,6 +18002,84 @@ async def page_admin_follow_ups(
         "visit_type_zh": _VISIT_TYPE_ZH,
         "today_str": today,
         "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/follow-ups/{fu_id}/assign")
+async def admin_followup_assign(
+    fu_id: int, request: Request, db: Session = Depends(get_db),
+    csrf_token: str = Form(""), assigned_to: str = Form(""), next_url: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    fu = db.get(FollowUp, fu_id)
+    if not fu:
+        raise HTTPException(404, "回访任务不存在")
+    admin_store = _get_admin_store(request)
+    if admin_store and fu.store and fu.store != admin_store:
+        raise HTTPException(403, "无权操作其他门店")
+    previous = fu.assigned_to or ""
+    fu.assigned_to = _validate_followup_assignee(db, assigned_to, fu.store or admin_store)
+    fu.updated_at = datetime.utcnow()
+    _audit(db, request, "followup_assign", detail={"followup_id": fu.id, "from": previous, "to": fu.assigned_to})
+    db.commit()
+    return RedirectResponse(_safe_next(next_url, "/admin/follow-ups?msg=负责人已更新"), status_code=303)
+
+
+@app.get("/admin/follow-up-dashboard", response_class=HTMLResponse)
+async def admin_followup_dashboard(
+    request: Request, db: Session = Depends(get_db),
+    date_from: str = Query(""), date_to: str = Query(""), store: str = Query(""),
+):
+    require_admin(request)
+    today = date.today()
+    try:
+        start = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else today - timedelta(days=29)
+        end = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else today
+    except ValueError:
+        start, end = today - timedelta(days=29), today
+    if start > end:
+        start, end = end, start
+    is_superadmin = _is_superadmin(request)
+    selected_store = (store or "").strip() if is_superadmin else _get_admin_store(request)
+    q = db.query(FollowUp).filter(
+        FollowUp.source_type != "visit_default",
+        FollowUp.planned_date >= start.isoformat(), FollowUp.planned_date <= end.isoformat(),
+    )
+    if selected_store:
+        q = q.filter(FollowUp.store == selected_store)
+    rows = q.all()
+    active_statuses = {"pending", "due", "sent", "responded", "phone_pending"}
+    total = len(rows)
+    completed = sum(1 for row in rows if row.status == "closed")
+    cancelled = sum(1 for row in rows if row.status == "skipped")
+    overdue = sum(1 for row in rows if row.status in active_statuses and (row.planned_date or "") < today.isoformat())
+    revisit = sum(1 for row in rows if row.next_action in ("revisit", "appointment", "revisited"))
+    appointments = sum(1 for row in rows if row.next_action == "appointment" and row.next_action_ref_id)
+    clinical = [row for row in rows if _followup_business_category(row) == "clinical"]
+    preventive = [row for row in rows if _followup_business_category(row) == "preventive"]
+    owner_stats: dict[str, dict] = {}
+    for row in rows:
+        key = row.assigned_to or "待认领"
+        item = owner_stats.setdefault(key, {"name": key, "total": 0, "completed": 0, "overdue": 0, "revisit": 0})
+        item["total"] += 1
+        item["completed"] += int(row.status == "closed")
+        item["overdue"] += int(row.status in active_statuses and (row.planned_date or "") < today.isoformat())
+        item["revisit"] += int(row.next_action in ("revisit", "appointment", "revisited"))
+    owner_rows = sorted(owner_stats.values(), key=lambda item: (-item["total"], item["name"]))
+    metrics = {
+        "total": total, "completed": completed, "cancelled": cancelled, "overdue": overdue,
+        "revisit": revisit, "appointments": appointments,
+        "completion_rate": round(completed * 100 / total, 1) if total else 0,
+        "revisit_rate": round(revisit * 100 / completed, 1) if completed else 0,
+        "appointment_rate": round(appointments * 100 / revisit, 1) if revisit else 0,
+        "clinical_total": len(clinical), "clinical_completed": sum(1 for row in clinical if row.status == "closed"),
+        "preventive_total": len(preventive), "preventive_completed": sum(1 for row in preventive if row.status == "closed"),
+    }
+    return templates.TemplateResponse(request, "uk/follow_up_dashboard.html", {
+        "metrics": metrics, "owner_rows": owner_rows, "date_from": start.isoformat(),
+        "date_to": end.isoformat(), "selected_store": selected_store,
+        "is_superadmin": is_superadmin, "store_options": _STORE_OPTIONS,
     })
 
 

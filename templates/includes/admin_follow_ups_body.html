@@ -27,7 +27,7 @@
 
 {# 当前筛选条件拼成 query 片段，保证切 tab / 翻页 / 勾「只看我的」时筛选不丢 #}
 {% set f = f if f is defined else {} %}
-{% set fqs %}{% if f.handler %}&handler={{ f.handler|urlencode }}{% endif %}{% if f.vtype %}&vtype={{ f.vtype|urlencode }}{% endif %}{% if f.store %}&store={{ f.store|urlencode }}{% endif %}{% if f.q %}&q={{ f.q|urlencode }}{% endif %}{% endset %}
+{% set fqs %}{% if f.handler %}&handler={{ f.handler|urlencode }}{% endif %}{% if f.vtype %}&vtype={{ f.vtype|urlencode }}{% endif %}{% if f.store %}&store={{ f.store|urlencode }}{% endif %}{% if f.q %}&q={{ f.q|urlencode }}{% endif %}{% if f.category %}&category={{ f.category|urlencode }}{% endif %}{% endset %}
 
 <div class="fu-tabs">
  {% for key, label in [('today','今日待回访'), ('overdue','逾期未处理'), ('sent','已发送等反馈'), ('done','已完成')] %}
@@ -67,6 +67,14 @@
    {% for k, zh in visit_type_zh.items() %}<option value="{{ k }}" {% if f.vtype == k %}selected{% endif %}>{{ zh }}</option>{% endfor %}
   </select>
  </div>
+ <div>
+  <label style="{{ _lbl }}">业务分类</label>
+  <select name="category" style="{{ _fld }}">
+   <option value="">全部</option>
+   <option value="clinical" {% if f.category == 'clinical' %}selected{% endif %}>诊疗随访</option>
+   <option value="preventive" {% if f.category == 'preventive' %}selected{% endif %}>预防提醒</option>
+  </select>
+ </div>
  {% if is_superadmin %}
  <div>
   <label style="{{ _lbl }}">门店</label>
@@ -78,7 +86,7 @@
  </div>
  {% endif %}
  <button type="submit" class="fu-btn">筛&nbsp;选</button>
- {% if f.q or f.handler or f.vtype or f.store %}
+ {% if f.q or f.handler or f.vtype or f.store or f.category %}
  <a href="?tab={{ tab }}{% if mine %}&mine=1{% endif %}" class="fu-btn ghost">重&nbsp;置</a>
  {% endif %}
 </form>
@@ -93,7 +101,7 @@
  <th style="width:140px;">宠物</th>
  <th style="width:72px;">类型</th>
  <th>诊断 / 主诉</th>
- <th style="width:64px;">处理人</th>
+  <th style="width:128px;">负责人</th>
  <th style="width:150px;">状态</th>
  <th style="text-align:right;width:380px;">操作</th>
  </tr>
@@ -121,7 +129,7 @@
    <div style="color:var(--muted);font-size:.78rem;">{{ p.species or '' }} {{ p.breed or '' }}</div>
    {% else %}—{% endif %}
   </td>
-  <td data-label="类型">{% if v %}<span class="pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>{% else %}—{% endif %}</td>
+  <td data-label="类型">{% if v %}<span class="pill">{{ visit_type_zh.get(v.visit_type, v.visit_type) }}</span>{% elif fu.source_type.startswith('preventive_') %}<span class="pill">预防</span>{% else %}<span class="pill">健康</span>{% endif %}</td>
   <td data-label="诊断 / 主诉" style="max-width:360px;">
    {% if v %}
     <div style="font-size:.85rem;">{{ (v.diagnosis or v.chief_complaint or '—')[:80] }}</div>
@@ -152,7 +160,16 @@
     {% endif %}
    {% endif %}
   </td>
-  <td data-label="处理人">{{ fu.assigned_to or '—' }}</td>
+  <td data-label="负责人">
+   <form method="post" action="/admin/follow-ups/{{ fu.id }}/assign">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="next_url" value="/admin/follow-ups?tab={{ tab }}{{ fqs }}{% if mine %}&mine=1{% endif %}"/>
+    <select name="assigned_to" onchange="this.form.submit()" style="max-width:118px;padding:4px;border:0.5px solid var(--hair);background:var(--paper);font-family:var(--font-serif);font-size:9pt;">
+     <option value="">待认领</option>
+     {% for person in assignees %}<option value="{{ person['value'] }}" {% if fu.assigned_to == person['value'] %}selected{% endif %}>{{ person['label'] }}</option>{% endfor %}
+    </select>
+   </form>
+  </td>
   <td data-label="状态">
    <div style="display:flex;align-items:center;gap:6px;white-space:nowrap;">
     <span class="fu-status-pill {{ fu.status }}">{{ status_zh.get(fu.status, fu.status) }}</span>

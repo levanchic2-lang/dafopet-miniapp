@@ -35,6 +35,8 @@ SYSTEMS = {
     "reproduction": "生殖/产科",
     "infectious":  "传染病",
     "surgical":    "手术后",
+    "prevention":  "预防保健",
+    "screening":   "健康筛查",
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -648,6 +650,37 @@ TEMPLATES = [
             {"day_offset": 2, "round_name": "出院后 2 天 · 恢复与用药",
              "questions": [Q["spirit"], Q["appetite"], Q["vomit"], Q["stool"],
                            Q["urine"], Q["med_taken"], Q["med_side"], Q["needs_visit"], Q["note"]]},
+        ],
+    },
+    # ── 预防保健（宠物级任务，不要求关联病历） ───────────────
+    {
+        "name": "疫苗到期提醒",
+        "system": "prevention",
+        "priority": 70,
+        "keywords": "",
+        "rounds": [
+            {"day_offset": 0, "round_name": "疫苗到期前联系",
+             "questions": [Q["spirit"], Q["appetite"], Q["needs_visit"], Q["note"]]},
+        ],
+    },
+    {
+        "name": "驱虫到期提醒",
+        "system": "prevention",
+        "priority": 65,
+        "keywords": "",
+        "rounds": [
+            {"day_offset": 0, "round_name": "驱虫到期前联系",
+             "questions": [Q["weight"], Q["appetite"], Q["needs_visit"], Q["note"]]},
+        ],
+    },
+    {
+        "name": "年度健康体检提醒",
+        "system": "screening",
+        "priority": 55,
+        "keywords": "",
+        "rounds": [
+            {"day_offset": 0, "round_name": "年度健康筛查",
+             "questions": [Q["spirit"], Q["appetite"], Q["weight"], Q["needs_visit"], Q["note"]]},
         ],
     },
     # ── 一般门诊（兜底） ────────────────────────

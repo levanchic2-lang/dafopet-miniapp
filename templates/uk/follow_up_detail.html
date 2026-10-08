@@ -204,6 +204,16 @@
       <h3>状 态 切 换 / 处 理</h3>
       <div class="btn-row">
 
+        <form method="post" action="/admin/follow-ups/{{ fu.id }}/assign" style="border:0.5px solid var(--hair);padding:10px 12px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <input type="hidden" name="next_url" value="/admin/follow-ups/{{ fu.id }}/detail"/>
+          <label style="font-size:9pt;color:var(--ink-3);letter-spacing:1px;display:block;margin-bottom:5px;">负责人</label>
+          <select name="assigned_to" onchange="this.form.submit()" style="width:100%;padding:7px;border:0.5px solid var(--hair);background:var(--paper);font-family:var(--font-serif);">
+            <option value="">待认领</option>
+            {% for person in assignees %}<option value="{{ person['value'] }}" {% if fu.assigned_to == person['value'] %}selected{% endif %}>{{ person['label'] }} · {{ person['role'] }}</option>{% endfor %}
+          </select>
+        </form>
+
         {% if fu.status in ('pending', 'due', 'sent', 'phone_pending', 'responded') %}
         <details style="border:0.5px solid var(--hair); padding:10px 12px;">
           <summary style="cursor:pointer; font-family:var(--font-serif); font-size:10.5pt; letter-spacing:1.5px; color:var(--ink);">

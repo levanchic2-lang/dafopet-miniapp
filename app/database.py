@@ -1995,7 +1995,7 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS follow_ups ("
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                "visit_id INTEGER NOT NULL UNIQUE REFERENCES visits(id) ON DELETE CASCADE, "
+                "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
                 "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
                 "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
                 "store VARCHAR(40) DEFAULT '', "
@@ -2027,7 +2027,7 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text(
                     "CREATE TABLE follow_ups_new ("
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    "visit_id INTEGER NOT NULL REFERENCES visits(id) ON DELETE CASCADE, "
+                    "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
                     "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
                     "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
                     "template_id INTEGER DEFAULT NULL REFERENCES follow_up_templates(id) ON DELETE SET NULL, "
@@ -2103,6 +2103,54 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text("ALTER TABLE follow_ups ADD COLUMN staff_response_data TEXT DEFAULT ''"))
             if "created_by" not in fu_cols:
                 conn.execute(text("ALTER TABLE follow_ups ADD COLUMN created_by VARCHAR(80) DEFAULT ''"))
+            # V2：预防提醒属于宠物级任务，不强行制造一张病历。SQLite 不能直接
+            # 修改列的 NULL 约束，故仅在旧表 visit_id 仍为 NOT NULL 时做一次无损重建。
+            fu_info = conn.execute(text("PRAGMA table_info(follow_ups)")).fetchall()
+            visit_col = next((c for c in fu_info if c[1] == "visit_id"), None)
+            if visit_col and int(visit_col[3] or 0) == 1:
+                conn.execute(text(
+                    "CREATE TABLE follow_ups_nullable ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "visit_id INTEGER DEFAULT NULL REFERENCES visits(id) ON DELETE SET NULL, "
+                    "customer_id INTEGER DEFAULT NULL REFERENCES customers(id) ON DELETE SET NULL, "
+                    "pet_id INTEGER DEFAULT NULL REFERENCES pets(id) ON DELETE SET NULL, "
+                    "template_id INTEGER DEFAULT NULL REFERENCES follow_up_templates(id) ON DELETE SET NULL, "
+                    "template_name VARCHAR(120) DEFAULT '', round_no INTEGER DEFAULT 1, "
+                    "round_name VARCHAR(80) DEFAULT '', response_data TEXT DEFAULT '', "
+                    "question_schema_json TEXT DEFAULT '[]', staff_response_data TEXT DEFAULT '', "
+                    "source_type VARCHAR(40) DEFAULT 'visit_default', source_id INTEGER DEFAULT NULL, "
+                    "reason TEXT DEFAULT '', question_text TEXT DEFAULT '', "
+                    "expected_reply_type VARCHAR(20) DEFAULT 'text', risk_trigger TEXT DEFAULT '', "
+                    "priority VARCHAR(20) DEFAULT 'normal', store VARCHAR(40) DEFAULT '', "
+                    "created_by VARCHAR(80) DEFAULT '', assigned_to VARCHAR(80) DEFAULT '', "
+                    "planned_date VARCHAR(20) DEFAULT '', status VARCHAR(20) DEFAULT 'pending', "
+                    "channel VARCHAR(20) DEFAULT '', sent_at DATETIME DEFAULT NULL, "
+                    "response VARCHAR(20) DEFAULT '', response_at DATETIME DEFAULT NULL, "
+                    "response_note TEXT DEFAULT '', feedback_token VARCHAR(32) DEFAULT '', "
+                    "handled_by VARCHAR(80) DEFAULT '', handled_at DATETIME DEFAULT NULL, "
+                    "handle_note TEXT DEFAULT '', staff_outcome VARCHAR(30) DEFAULT '', "
+                    "next_action VARCHAR(30) DEFAULT '', next_action_ref_id INTEGER DEFAULT NULL, "
+                    "next_contact_date VARCHAR(20) DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+                ))
+                fu_copy_cols = (
+                    "id, visit_id, customer_id, pet_id, template_id, template_name, round_no, round_name, "
+                    "response_data, question_schema_json, staff_response_data, source_type, source_id, reason, "
+                    "question_text, expected_reply_type, risk_trigger, priority, store, created_by, assigned_to, "
+                    "planned_date, status, channel, sent_at, response, response_at, response_note, feedback_token, "
+                    "handled_by, handled_at, handle_note, staff_outcome, next_action, next_action_ref_id, "
+                    "next_contact_date, created_at, updated_at"
+                )
+                conn.execute(text(
+                    f"INSERT INTO follow_ups_nullable ({fu_copy_cols}) "
+                    f"SELECT {fu_copy_cols} FROM follow_ups"
+                ))
+                conn.execute(text("DROP TABLE follow_ups"))
+                conn.execute(text("ALTER TABLE follow_ups_nullable RENAME TO follow_ups"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_status_date ON follow_ups(status, planned_date)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_assignee ON follow_ups(assigned_to)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_token ON follow_ups(feedback_token)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_visit_round ON follow_ups(visit_id, round_no)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_source ON follow_ups(source_type, source_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_followup_priority ON follow_ups(priority, planned_date)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_care_summary_visit ON client_care_summaries(visit_id, status)"))

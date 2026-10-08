@@ -27,6 +27,7 @@ import app.main as main_module
 from app.main import app
 from app.services.anesthesia_dispatch import AUTO_CLOSE_NOTE, auto_close_stale_monitors
 from app.services.inpatient_dispatch import OVERDUE_GRACE_MIN
+from app.services.followup_dispatch import sync_preventive_followups
 from app.models import (
     AdminUser, AnesthesiaMedicationEvent, AnesthesiaMonitorEntry, AnesthesiaMonitorSheet,
     Application, Appointment, Coupon, Customer, CustomerPackage, Deposit,
@@ -84,6 +85,7 @@ try:
     ])
     db.flush()
     hg_visit_id = hg_visit.id
+    hg_pet_id = hg_pet.id
     db.add_all([
         Staff(name="横岗医生", store="横岗店", position="医生", status="active"),
         Staff(name="横岗美容师", store="横岗店", position="美容师", status="active"),
@@ -305,6 +307,7 @@ try:
         assert followup_context.status_code == 200, followup_context.text
         template_options = followup_context.json()["templates"]
         assert template_options
+        assert [row["value"] for row in followup_context.json()["assignees"]] == ["staff_hg"]
         selected_template = next(
             row for row in template_options if row["template_name"] == "一般门诊（默认）"
         )
@@ -318,6 +321,7 @@ try:
                 "priority": "normal",
                 "template_id": selected_template["template_id"],
                 "template_round": selected_template["round_no"],
+                "assigned_to": "staff_hg",
             },
             headers=headers,
         )
@@ -356,6 +360,28 @@ try:
         assert handled_item["recommendation"]["level"] == "urgent"
         assert handled_item["recommendation"]["action"] == "doctor"
         assert handled_item["handled_by"] == "staff_hg"
+        assert client.post(
+            f"/api/staff-miniapp/follow-ups/{followup_id}/assign",
+            json={"assigned_to": "staff_dh"}, headers=headers,
+        ).status_code == 400
+
+        db = SessionLocal()
+        try:
+            db.query(Vaccination).filter(Vaccination.pet_id == hg_pet_id).update({"next_due_date": today})
+            db.query(DewormingRecord).filter(DewormingRecord.pet_id == hg_pet_id).update({"next_due_date": today})
+            db.commit()
+            synced = sync_preventive_followups(db)
+            assert synced["created"] == 2
+            assert db.query(FollowUp).filter(FollowUp.visit_id.is_(None)).count() == 2
+        finally:
+            db.close()
+        preventive = client.get(
+            "/api/staff-miniapp/follow-ups",
+            params={"tab": "today", "scope": "all", "category": "preventive"}, headers=headers,
+        )
+        assert preventive.status_code == 200, preventive.text
+        assert {row["kind"] for row in preventive.json()["items"]} == {"prevention"}
+        assert preventive.json()["counts"]["unassigned"] == 2
 
         reminders = client.get("/api/staff-miniapp/medication-reminders", headers=headers)
         assert reminders.status_code == 200, reminders.text

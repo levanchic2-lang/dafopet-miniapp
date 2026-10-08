@@ -1689,7 +1689,8 @@ class FollowUp(Base):
     __tablename__ = "follow_ups"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="CASCADE"), nullable=False, index=True)
+    # 病例随访关联 Visit；疫苗/驱虫/健康筛查是宠物级任务，可以没有 Visit。
+    visit_id    = mapped_column(ForeignKey("visits.id",    ondelete="SET NULL"), nullable=True, default=None, index=True)
     customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
     pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
 

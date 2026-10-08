@@ -82,7 +82,8 @@ Page({
     id: 0, loading: true, busy: false, error: "", item: {}, outcomes, actions,
     outcome: "", nextAction: "", note: "", nextDate: "", appointmentDate: "",
     appointmentTime: "09:00", closeVisit: false, scaleOptions, uploadOptions,
-    questionRows: [], structuredAnswers: {}, recommendation: {}, manualOutcome: false, manualAction: false
+    questionRows: [], structuredAnswers: {}, recommendation: {}, manualOutcome: false, manualAction: false,
+    assignees: [], assigneeIndex: -1
   },
   onLoad(options) {
     this.setData({ id: Number(options.id || 0), nextDate: isoAfter(2), appointmentDate: isoAfter(1) });
@@ -96,7 +97,9 @@ Page({
       const item = result.item || {};
       const savedAnswers = item.staff_answers || {};
       const questionRows = (item.questions || []).map(q => hydrateQuestion(q, savedAnswers[q.key] !== undefined ? savedAnswers[q.key] : (q.type === "multi" ? [] : "")));
-      this.setData({ item, questionRows, structuredAnswers: savedAnswers, recommendation: hydrateRecommendation(item.recommendation), outcome: item.staff_outcome || "", nextAction: item.next_action || "", note: item.handle_note || "" });
+      const assignees = result.assignees || [];
+      const assigneeIndex = assignees.findIndex(row => row.value === item.assigned_to);
+      this.setData({ item, assignees, assigneeIndex, questionRows, structuredAnswers: savedAnswers, recommendation: hydrateRecommendation(item.recommendation), outcome: item.staff_outcome || "", nextAction: item.next_action || "", note: item.handle_note || "" });
       wx.setNavigationBarTitle({ title: `${(item.pet && item.pet.name) || "宠物"} · 随访` });
     } catch (e) {
       if (e && e.statusCode === 401) { wx.redirectTo({ url: "/pages/staff/login/login" }); return; }
@@ -141,6 +144,15 @@ Page({
   callCustomer() {
     const phone = (this.data.item.customer || {}).phone || "";
     if (phone) wx.makePhoneCall({ phoneNumber: phone });
+  },
+  async onAssignee(e) {
+    const index = Number(e.detail.value), row = this.data.assignees[index] || {};
+    if (!row.value || row.value === this.data.item.assigned_to) return;
+    try {
+      const result = await staffPost(`/api/staff-miniapp/follow-ups/${this.data.id}/assign`, { assigned_to: row.value });
+      this.setData({ item: result.item || this.data.item, assigneeIndex: index });
+      wx.showToast({ title: "负责人已更新", icon: "success" });
+    } catch (err) { wx.showToast({ title: (err && (err.detail || err.errMsg)) || "更新失败", icon: "none" }); }
   },
   async submit() {
     if (this.data.busy) return;

@@ -1,0 +1,36 @@
+{% extends "uk/_base.html" %}
+{% block title %}随访数据看板 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .fdash-bc{margin:24px 0 16px;font-size:9pt;letter-spacing:2px;color:var(--ink-3);font-style:italic}.fdash-bc a{color:inherit}
+  .fdash-head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px}.fdash-head h1{margin:0;font-size:27pt;letter-spacing:1px}.fdash-head p{margin:8px 0 0;color:var(--ink-3);font-style:italic}
+  .fdash-rule{border:0;height:4px;border-top:.5px solid var(--ink);border-bottom:.5px solid var(--ink);margin:18px 0 24px}
+  .fdash-filter{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:22px}.fdash-filter label{display:block;font-size:8.5pt;letter-spacing:1.5px;color:var(--ink-3);margin-bottom:4px}.fdash-filter input,.fdash-filter select{padding:7px 10px;border:.5px solid var(--hair);background:var(--paper);font-family:var(--font-serif)}
+  .fdash-kpis{display:grid;grid-template-columns:repeat(4,1fr);border-top:.5px solid var(--hair);border-left:.5px solid var(--hair)}.fdash-kpi{padding:18px 20px;border-right:.5px solid var(--hair);border-bottom:.5px solid var(--hair);background:var(--paper)}.fdash-kpi .label{font-size:9pt;color:var(--ink-3);letter-spacing:1.5px}.fdash-kpi strong{display:block;margin-top:8px;font:700 23pt var(--font-numeric)}.fdash-kpi small{color:var(--ink-3);font-style:italic}.fdash-kpi.warn strong{color:var(--accent-red)}
+  .fdash-split{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:24px}.fdash-panel{border-top:.5px solid var(--ink);padding-top:14px}.fdash-panel h2{font-size:13pt;letter-spacing:2px;margin:0 0 12px}.fdash-row{display:grid;grid-template-columns:1fr repeat(4,86px);gap:8px;padding:9px 0;border-bottom:.5px solid var(--hair);font-size:10pt}.fdash-row.head{font-size:8.5pt;color:var(--ink-3);font-style:italic}.fdash-category{display:grid;grid-template-columns:1fr 1fr;border:.5px solid var(--hair)}.fdash-category>div{padding:20px}.fdash-category>div+div{border-left:.5px solid var(--hair)}.fdash-category strong{display:block;font:700 22pt var(--font-numeric);margin:8px 0}.fdash-category span{color:var(--ink-3);font-size:9pt}
+  @media(max-width:900px){.fdash-kpis{grid-template-columns:repeat(2,1fr)}.fdash-split{grid-template-columns:1fr}.fdash-row{grid-template-columns:1fr repeat(4,62px)}}
+</style>
+<div class="fdash-bc"><a href="/admin/follow-ups">回访管理</a> / 数据看板</div>
+<div class="fdash-head"><div><h1>随 访 数 据 看 板</h1><p>诊疗随访与预防提醒分开统计，观察执行和转化结果</p></div><a href="/admin/follow-ups" class="uk-btn ghost">返回任务中心</a></div>
+<div class="fdash-rule"></div>
+<form method="get" class="fdash-filter">
+  <div><label>开始日期</label><input type="date" name="date_from" value="{{ date_from }}"/></div>
+  <div><label>结束日期</label><input type="date" name="date_to" value="{{ date_to }}"/></div>
+  {% if is_superadmin %}<div><label>门店</label><select name="store"><option value="">全部门店</option>{% for row in store_options %}<option value="{{ row }}" {% if selected_store==row %}selected{% endif %}>{{ row }}</option>{% endfor %}</select></div>{% endif %}
+  <button class="uk-btn primary">查询</button>
+</form>
+<div class="fdash-kpis">
+  <div class="fdash-kpi"><div class="label">计划任务</div><strong>{{ metrics.total }}</strong><small>所选日期范围</small></div>
+  <div class="fdash-kpi"><div class="label">已完成</div><strong>{{ metrics.completed }}</strong><small>完成率 {{ metrics.completion_rate }}%</small></div>
+  <div class="fdash-kpi warn"><div class="label">当前逾期</div><strong>{{ metrics.overdue }}</strong><small>仍需处理</small></div>
+  <div class="fdash-kpi"><div class="label">建议复诊</div><strong>{{ metrics.revisit }}</strong><small>完成任务中 {{ metrics.revisit_rate }}%</small></div>
+  <div class="fdash-kpi"><div class="label">创建预约</div><strong>{{ metrics.appointments }}</strong><small>复诊建议转化 {{ metrics.appointment_rate }}%</small></div>
+  <div class="fdash-kpi"><div class="label">已取消</div><strong>{{ metrics.cancelled }}</strong><small>不计完成</small></div>
+  <div class="fdash-kpi"><div class="label">诊疗随访</div><strong>{{ metrics.clinical_total }}</strong><small>完成 {{ metrics.clinical_completed }}</small></div>
+  <div class="fdash-kpi"><div class="label">预防提醒</div><strong>{{ metrics.preventive_total }}</strong><small>完成 {{ metrics.preventive_completed }}</small></div>
+</div>
+<div class="fdash-split">
+  <div class="fdash-panel"><h2>分类执行</h2><div class="fdash-category"><div><span>诊疗随访</span><strong>{{ metrics.clinical_total }}</strong><span>已完成 {{ metrics.clinical_completed }}</span></div><div><span>预防提醒</span><strong>{{ metrics.preventive_total }}</strong><span>已完成 {{ metrics.preventive_completed }}</span></div></div></div>
+  <div class="fdash-panel"><h2>负责人执行</h2><div class="fdash-row head"><span>负责人</span><span>任务</span><span>完成</span><span>逾期</span><span>复诊</span></div>{% for row in owner_rows %}<div class="fdash-row"><strong>{{ row['name'] }}</strong><span>{{ row['total'] }}</span><span>{{ row['completed'] }}</span><span>{{ row['overdue'] }}</span><span>{{ row['revisit'] }}</span></div>{% else %}<div style="padding:24px 0;color:var(--ink-3);font-style:italic;">所选日期暂无任务</div>{% endfor %}</div>
+</div>
+{% endblock %}

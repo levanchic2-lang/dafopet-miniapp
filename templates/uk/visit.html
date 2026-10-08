@@ -346,6 +346,14 @@
         {% endfor %}
       </select>
     </label>
+    <label>负责人
+      <select name="assigned_to" required>
+        <option value="">请选择负责人</option>
+        {% for person in followup_assignees %}
+        <option value="{{ person['value'] }}">{{ person['label'] }} · {{ person['role'] }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>特别关注（选填）
       <input type="text" name="question" maxlength="1000" placeholder="例如：重点确认昨晚是否再次呕吐"/>
     </label>
