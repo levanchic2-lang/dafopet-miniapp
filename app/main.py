@@ -6558,6 +6558,49 @@ async def surgery_done(app_id: int, request: Request, db: Session = Depends(get_
     return _admin_back(request, app_id)
 
 
+@app.post("/admin/app/{app_id}/correct-surgery-completed")
+async def correct_surgery_completed(
+    app_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """Correct a legacy cancelled application after surgery is verified by a human."""
+    require_admin(request)
+    require_superadmin(request)
+    _require_csrf(request, csrf_token)
+    row = db.get(Application, app_id)
+    if not row:
+        raise HTTPException(404)
+    _require_status_in(row, {ApplicationStatus.cancelled.value}, "纠正为手术完成")
+    if not _application_has_surgery_before_and_after(db, app_id):
+        raise HTTPException(409, "术前、术后资料不齐全，不能纠正为手术完成")
+
+    row.status = ApplicationStatus.surgery_completed.value
+    row.staff_cat_verified = True
+    if row.showcase_consent is None:
+        row.showcase_consent = True
+    appointment_sync = sync_active_tnr_appointment(
+        db,
+        app_id,
+        AppointmentStatus.completed.value,
+        "超级管理员核对历史影像后纠正为手术完成",
+    )
+    _audit(
+        db,
+        request,
+        "correct_surgery_completed",
+        application_id=app_id,
+        detail={
+            "old_status": ApplicationStatus.cancelled.value,
+            "new_status": ApplicationStatus.surgery_completed.value,
+            "appointment_sync": appointment_sync,
+        },
+    )
+    db.commit()
+    return _admin_back(request, app_id, "已纠正为手术完成")
+
+
 @app.post("/api/wechat/login")
 async def api_wechat_login(payload: dict = Body(...)):
     """小程序端：传 {code: js_code}，换取 openid。"""
@@ -9705,8 +9748,10 @@ async def api_staff_miniapp_tnr_upload(
 ):
     user = _staff_miniapp_user(request, db)
     row = _staff_tnr_application(db, user, app_id)
-    if row.status == ApplicationStatus.surgery_completed.value:
-        raise HTTPException(409, "手术已完成，不能继续上传")
+    _require_status_in(row, {
+        ApplicationStatus.approved.value, ApplicationStatus.scheduled.value,
+        ApplicationStatus.arrived_verified.value,
+    }, "上传手术资料")
     if kind not in ("before", "after"):
         raise HTTPException(400, "请选择术前或术后资料")
     is_video = media_type == "video"
@@ -10529,6 +10574,16 @@ async def upload_surgery(
     row = db.get(Application, app_id)
     if not row:
         raise HTTPException(404)
+    _require_status_in(
+        row,
+        {
+            ApplicationStatus.approved.value,
+            ApplicationStatus.scheduled.value,
+            ApplicationStatus.arrived_verified.value,
+            ApplicationStatus.surgery_completed.value,
+        },
+        "上传手术资料",
+    )
     base = Path(settings.upload_dir) / str(app_id)
     base.mkdir(parents=True, exist_ok=True)
 

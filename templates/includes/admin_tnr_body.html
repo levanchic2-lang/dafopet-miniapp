@@ -422,55 +422,29 @@
  </form>
  </div>
  </div>
- {% else %}
- {# ── 未完成：显示常规上传表单 ── #}
+ {% elif a.status in ['approved', 'arrived_verified', 'scheduled'] %}
+ {# ── 进行中：上传资料并确认手术完成 ── #}
  <div class="admin-upload">
  <p style="margin:0 0 0.5rem;font-weight:800;">上传术前 / 术后影像（标记「手术完成」前须各至少 1 个文件）</p>
- {% if a.status in ['approved', 'arrived_verified', 'scheduled'] and not surgery_media_ok %}
+ {% if not surgery_media_ok %}
  <p class="sub" style="margin:0 0 0.65rem;">当前：术前 {{ surg_before_n }} 个文件，术后 {{ surg_after_n }} 个文件。请补全后再点「标记手术已完成」。</p>
- {% elif surgery_media_ok %}
- {% if surg_before_n == 0 and effective_before_n > 0 %}
- <p class="sub" style="margin:0 0 0.65rem;">申请素材中的 {{ effective_before_n }} 张照片将自动作为术前照片，当前已上传术后 {{ surg_after_n }} 个文件。</p>
- {% endif %}
+ {% else %}
+ {% if surg_before_n == 0 and effective_before_n > 0 %}<p class="sub" style="margin:0 0 0.65rem;">申请素材中的 {{ effective_before_n }} 张照片将自动作为术前照片。</p>{% endif %}
  <p class="sub" style="margin:0 0 0.65rem;color:var(--ok, green);"><i data-lucide="check"></i> 术前 {{ effective_before_n }} 个、术后 {{ surg_after_n }} 个，已满足要求，可标记手术完成。</p>
  {% endif %}
- {# 已上传文件预览（如有）#}
- {% if surg_before_files or surg_after_files %}
- <div style="margin-bottom:0.65rem;">
- {% if surg_before_files %}
- <span class="sub" style="font-size:0.82rem;">已上传术前：</span>
+ {% for media_group in [('术前', surg_before_files), ('术后', surg_after_files)] %}
+ {% if media_group[1] %}
+ <span class="sub" style="font-size:0.82rem;">已上传{{ media_group[0] }}：</span>
  <div class="admin-app-thumb-wrap" style="margin:0.3rem 0 0.45rem;">
- {% for m in surg_before_files %}
+ {% for m in media_group[1] %}
  {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
- {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
- <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
- title="术前视频 {{ loop.index }}" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;"><i data-lucide="film"></i></a>
- {% else %}
- <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术前 {{ loop.index }}">
- <img src="/file/{{ m.id }}" alt="术前{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async"/>
+ <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="{{ media_group[0] }} {{ loop.index }}">
+ {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}<i data-lucide="film"></i>{% else %}<img src="/file/{{ m.id }}" alt="{{ media_group[0] }}{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async"/>{% endif %}
  </a>
- {% endif %}
  {% endfor %}
  </div>
  {% endif %}
- {% if surg_after_files %}
- <span class="sub" style="font-size:0.82rem;">已上传术后：</span>
- <div class="admin-app-thumb-wrap" style="margin:0.3rem 0 0;">
- {% for m in surg_after_files %}
- {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
- {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}
- <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb"
- title="术后视频 {{ loop.index }}" style="display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:1.6rem;"><i data-lucide="film"></i></a>
- {% else %}
- <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="术后 {{ loop.index }}">
- <img src="/file/{{ m.id }}" alt="术后{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async"/>
- </a>
- {% endif %}
  {% endfor %}
- </div>
- {% endif %}
- </div>
- {% endif %}
  <form method="post" action="/admin/app/{{ a.id }}/upload-surgery" enctype="multipart/form-data">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div class="admin-upload-grid">
@@ -481,14 +455,43 @@
  </div>
  <button type="submit" class="admin-upload-submit">上传手术资料</button>
  </form>
- {# 上传完毕后在此处显示"标记手术已完成"按钮 #}
- {% if a.status in ['approved', 'arrived_verified', 'scheduled'] and surgery_media_ok %}
+ {% if surgery_media_ok %}
  <form method="post" action="/admin/app/{{ a.id }}/surgery-done" style="margin-top:0.65rem;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <button type="submit">标记手术已完成</button>
  </form>
- {% elif a.status in ['approved', 'arrived_verified', 'scheduled'] %}
+ {% else %}
  <p class="sub" style="margin:0.5rem 0 0;">请先完成术前、术后资料上传（各至少 1 个），再标记手术完成。</p>
+ {% endif %}
+ </div>
+ {% else %}
+ {# ── 终止状态：只读，避免继续制造矛盾记录 ── #}
+ <div class="admin-upload">
+ <p style="margin:0 0 0.5rem;font-weight:800;">手术影像记录（只读）</p>
+ {% for media_group in [('术前', surg_before_files), ('术后', surg_after_files)] %}
+ {% if media_group[1] %}
+ <span class="sub" style="font-size:0.82rem;">已上传{{ media_group[0] }}：</span>
+ <div class="admin-app-thumb-wrap" style="margin:0.3rem 0 0.45rem;">
+ {% for m in media_group[1] %}
+ {% set ext = m.original_name.rsplit('.',1)[-1].lower() if '.' in m.original_name else '' %}
+ <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="{{ media_group[0] }} {{ loop.index }}">
+ {% if ext in ['mp4','mov','avi','mkv','webm','m4v'] %}<i data-lucide="film"></i>{% else %}<img src="/file/{{ m.id }}" alt="{{ media_group[0] }}{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async"/>{% endif %}
+ </a>
+ {% endfor %}
+ </div>
+ {% endif %}
+ {% endfor %}
+ {% if not surg_before_files and not surg_after_files %}<p class="sub" style="margin:0;">当前申请状态为“{{ STATUS_ZH.get(a.status, a.status) }}”，没有手术影像记录。</p>{% endif %}
+ {% if a.status == 'cancelled' and surgery_media_ok %}
+ <div style="margin-top:.65rem;padding:.65rem .75rem;border-left:3px solid var(--accent-amber);background:#fbf7f0;color:var(--accent-amber);font-size:.85rem;">该申请已取消，但术前、术后资料齐全。请先核对猫咪确实已经完成手术，再纠正状态。</div>
+ {% if request.session.get('admin_role') == 'superadmin' %}
+ <form method="post" action="/admin/app/{{ a.id }}/correct-surgery-completed" style="margin-top:.65rem;" onsubmit="return confirm('请确认：该猫实际已经完成手术，且当前“已取消”状态属于历史记录错误。确认后将纠正为“手术完成”。');">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <button type="submit" class="secondary">核对无误，纠正为手术完成</button>
+ </form>
+ {% endif %}
+ {% else %}
+ <p class="sub" style="margin:.5rem 0 0;">终止状态下不能继续上传或修改手术影像。</p>
  {% endif %}
  </div>
  {% endif %}
