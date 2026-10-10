@@ -36684,6 +36684,7 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
     - presc.status 必须 != 'draft' 且 != 'voided'
     - 找到该 visit_id 对应的 admitted Hospitalization
     - 每个 PrescriptionItem：
+      * 库存品目为服务，或 drug_type=service → 仅计费，不生成住院用药任务
       * schedule_times 空 → 按给药频次生成宽时段任务（上午/下午/晚上）；
         频次也推不出（prn/q48h/未知）→ 跳过
       * 否则按 (duration_days × schedule_times) 生成日志
@@ -36742,6 +36743,9 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
 
     created = 0
     for it in (presc.items or []):
+        inv = db.get(InventoryItem, it.item_id) if it.item_id else None
+        if (inv and inv.is_service) or (it.drug_type or "").strip().lower() == "service":
+            continue
         explicit_times = _parse_schedule_times(it.schedule_times or "")
         times = explicit_times or flexible_schedule_for_frequency(
             it.frequency, opened_hour, it.times_per_day or 0,

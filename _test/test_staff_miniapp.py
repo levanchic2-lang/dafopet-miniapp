@@ -115,6 +115,11 @@ try:
         unit="次", stock_qty=0, sell_price=50, order_type="exam",
         store="横岗店", is_active=True,
     )
+    hg_med_service = InventoryItem(
+        name="横岗输液泵服务", category="medication", is_service=True,
+        unit="次", stock_qty=0, sell_price=30, order_type="prescription",
+        store="横岗店", is_active=True,
+    )
     hg_grooming = InventoryItem(
         name="横岗犬洗护", category="grooming", subcategory="washcare", is_service=True,
         unit="次", stock_qty=0, sell_price=88, order_type="grooming",
@@ -130,7 +135,7 @@ try:
         unit="粒", stock_qty=12, sell_price=25, order_type="deworming",
         store="横岗店", is_active=True,
     )
-    db.add_all([hg_hosp, dh_hosp, hg_drug, dh_drug, hg_unified_exam, hg_grooming,
+    db.add_all([hg_hosp, dh_hosp, hg_drug, dh_drug, hg_unified_exam, hg_med_service, hg_grooming,
                 hg_vaccine, hg_deworming])
     db.flush()
     db.add(InventoryBatch(item_id=hg_vaccine.id, batch_no="VAC-TEST-01", quantity=6, is_depleted=False))
@@ -159,7 +164,12 @@ try:
         dosage="0.2ml", dose_amount=0.2, dose_unit="ml",
         frequency="每日1次", times_per_day=1.0, duration_days="1", schedule_times="",
     )
-    db.add(numeric_frequency_item); db.flush()
+    service_item = PrescriptionItem(
+        prescription_id=hg_presc.id, item_id=hg_med_service.id, drug_name=hg_med_service.name,
+        drug_type="service", frequency="BID", times_per_day=2.0,
+        duration_days="3", schedule_times="09:00,21:00",
+    )
+    db.add_all([numeric_frequency_item, service_item]); db.flush()
     assert main_module._generate_med_logs_for_prescription(db, hg_presc) >= 1
     tomorrow = datetime.combine(datetime.now().date() + timedelta(days=1), datetime.min.time())
     hg_pi_pending = db.query(MedicationAdminLog).filter(
@@ -174,6 +184,9 @@ try:
     assert db.query(MedicationAdminLog).filter_by(
         prescription_item_id=numeric_frequency_item.id, status="pending",
     ).count() == 1
+    assert db.query(MedicationAdminLog).filter_by(
+        prescription_item_id=service_item.id,
+    ).count() == 0
     expected_pending = db.query(MedicationAdminLog).filter_by(
         prescription_id=hg_presc.id, status="pending",
     ).count()
@@ -189,7 +202,9 @@ try:
     db.query(MedicationAdminLog).filter_by(prescription_id=hg_presc.id).delete(
         synchronize_session=False,
     )
-    db.delete(numeric_frequency_item); db.flush()
+    db.delete(numeric_frequency_item)
+    db.delete(service_item)
+    db.flush()
     db.add_all([
         MedicationAdminLog(
             hospitalization_id=hg_hosp.id, prescription_id=hg_presc.id,
