@@ -262,7 +262,7 @@
   <div class="rx-chip-row">
     <span class="lbl">频&nbsp;次</span>
     <div class="rx-chips">
-      {% for f, tpd in [('qd',1),('bid',2),('tid',3),('qid',4),('q8h',3),('q12h',2),('q24h',1),('q48h',0.5),('prn',0)] %}
+      {% for f, tpd in [('sid',1),('bid',2),('tid',3),('qid',4),('q8h',3),('q12h',2),('q24h',1),('q48h',0.5),('prn',0)] %}
       <button type="button" class="rx-mini-chip" data-freq="{{ f }}" data-tpd="{{ tpd }}" onclick="pickFreq(this)">{{ f }}</button>
       {% endfor %}
       <input type="hidden" name="frequency___IDX__" class="rx-freq"/>
