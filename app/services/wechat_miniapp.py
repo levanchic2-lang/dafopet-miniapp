@@ -790,6 +790,7 @@ def push_inpatient_medication_reminder(
     dose_summary: str = "",
     cage_code: str = "",
     hospitalization_id: int | None = None,
+    overdue_summary: str = "",
 ) -> bool:
     """Send the staff miniapp service notification for an overdue medication group."""
     tmpl_id = (settings.wechat_tmpl_inpatient_medication or "").strip()
@@ -828,7 +829,7 @@ def push_inpatient_medication_reminder(
         elif key == "thing2":
             data[key] = {"value": v(drug_summary, "住院用药")}
         elif key == "thing4":
-            data[key] = {"value": "已超时15分钟，请尽快确认"[:20]}
+            data[key] = {"value": v(overdue_summary, "用药任务尚未确认")}
         else:
             data[key] = {"value": v(drug_summary, "住院用药")}
 

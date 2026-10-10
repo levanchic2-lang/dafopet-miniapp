@@ -1,6 +1,6 @@
 """住院模块的定时推送：
 1. scan_overdue_medications  每 5 分钟扫一次。
-   scheduled_at 已过 15 分钟仍 pending → 推小程序服务通知；过渡期同时保留企微。
+   定点医嘱超过 15 分钟，或普通频次超过所在宽时段仍 pending → 推送提醒。
    每条 log 只推一次（reminder_sent_at 标记）。
 2. send_shift_handover_reminder  班次切换前 10 分钟推今日剩余任务清单。
    早 7点（6:50）/ 中 15点（14:50）/ 夜 22点（21:50）触发。
@@ -17,6 +17,11 @@ from app.models import (
     Hospitalization, MedicationAdminLog, AdminUser, Pet, Customer,
 )
 from app.services.wechat_miniapp import push_inpatient_medication_reminder
+from app.services.inpatient_medication_schedule import (
+    has_explicit_schedule,
+    medication_is_overdue,
+    medication_schedule_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +83,15 @@ def scan_overdue_medications() -> None:
     try:
         # 发药任务的 scheduled_at 是北京时间的 naive datetime。
         now = datetime.utcnow() + timedelta(hours=8)
-        threshold = now - timedelta(minutes=OVERDUE_GRACE_MIN)
-        rows = db.query(MedicationAdminLog).filter(
+        candidates = db.query(MedicationAdminLog).filter(
             MedicationAdminLog.status == "pending",
-            MedicationAdminLog.scheduled_at <= threshold,
+            MedicationAdminLog.scheduled_at <= now,
             MedicationAdminLog.reminder_sent_at == None,  # noqa: E711
         ).all()
+        rows = [
+            row for row in candidates
+            if medication_is_overdue(row, now, OVERDUE_GRACE_MIN)
+        ]
         if not rows:
             return
 
@@ -117,7 +125,7 @@ def scan_overdue_medications() -> None:
             sorted_logs = sorted(logs, key=lambda x: x.scheduled_at)
             for r in sorted_logs[:5]:
                 drug = r.prescription_item.drug_name if r.prescription_item else "药物"
-                lines.append(f"  · {r.scheduled_at.strftime('%H:%M')} {drug}")
+                lines.append(f"  · {medication_schedule_label(r)} {drug}")
             if len(sorted_logs) > 5:
                 lines.append(f"  …还有 {len(sorted_logs) - 5} 条")
             lines.append("")
@@ -136,15 +144,24 @@ def scan_overdue_medications() -> None:
                         for r in sorted_logs[:3]
                     ]
                     dose_names = [_dose_label(r.prescription_item) for r in sorted_logs[:3]]
+                    first_log = sorted_logs[0]
+                    exact_schedule = has_explicit_schedule(first_log.prescription_item)
+                    notification_time = first_log.scheduled_at if exact_schedule else now
+                    reminder_summary = (
+                        "定点用药已超时，请尽快确认"
+                        if exact_schedule
+                        else f"{medication_schedule_label(first_log)}用药尚未确认"
+                    )
                     push_inpatient_medication_reminder(
                         db,
                         u.miniapp_openid,
                         pet.name if pet else "宠物",
                         _short_drug_label(drug_names),
-                        sorted_logs[0].scheduled_at.strftime("%Y-%m-%d %H:%M"),
+                        notification_time.strftime("%Y-%m-%d %H:%M"),
                         dose_summary=dose_names[0] if dose_names else "按医嘱",
                         cage_code=h.cage.code if h.cage else "",
                         hospitalization_id=h.id,
+                        overdue_summary=reminder_summary,
                     )
             if not delivery_attempted:
                 continue
@@ -207,7 +224,7 @@ def send_shift_handover_reminder(shift_label: str) -> None:
                 lines.append(f"🐾 {pet_name}（{cage_code}）· {len(items)} 条")
                 for r in items[:3]:
                     drug = r.prescription_item.drug_name if r.prescription_item else "药"
-                    lines.append(f"  {r.scheduled_at.strftime('%H:%M')} {drug}")
+                    lines.append(f"  {medication_schedule_label(r)} {drug}")
                 if len(items) > 3:
                     lines.append(f"  …还有 {len(items) - 3}")
                 lines.append("")

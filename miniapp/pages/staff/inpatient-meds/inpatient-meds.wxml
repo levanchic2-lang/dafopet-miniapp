@@ -1,6 +1,6 @@
 <view class="staff-page med-page">
   <view class="staff-status"><text>员工端</text><text>住院护理</text></view>
-  <view class="med-head"><view class="staff-eyebrow">INPATIENT MEDICATION</view><view class="med-title">住院用药</view><view class="med-desc">按处方时点执行并留下记录。打勾不会再次扣库存，库存已在医生开出处方时统一扣减。</view></view>
+  <view class="med-head"><view class="staff-eyebrow">INPATIENT MEDICATION</view><view class="med-title">住院用药</view><view class="med-desc">普通处方按上午、下午、晚上执行；医生指定具体时刻时按定点执行。打勾不会再次扣库存。</view></view>
   <view class="med-tabs"><view class="med-tab {{view === 'pending' ? 'active' : ''}}" data-view="pending" bindtap="setView">待执行</view><view class="med-tab {{view === 'completed' ? 'active' : ''}}" data-view="completed" bindtap="setView">已完成</view><view class="med-tab {{view === 'temporary' ? 'active' : ''}}" data-view="temporary" bindtap="setView">待补处方</view></view>
 
   <view wx:if="{{loading}}" class="staff-loading">正在读取用药任务…</view>
@@ -21,7 +21,7 @@
       <view wx:if="{{group.expanded}}" class="pet-group-detail">
         <view wx:for="{{group.time_groups}}" wx:key="key" wx:for-item="slot" class="med-slot">
           <view class="med-slot-head">
-            <view><text class="med-slot-time">{{slot.time}}</text><text class="med-slot-date">{{slot.date}}</text></view>
+            <view><text class="med-slot-time">{{slot.time}}</text><text class="med-slot-date">{{slot.date}}{{slot.schedule_mode === 'exact' ? ' · 定点' : ' · 时段'}}</text></view>
             <view class="slot-select" data-hospitalization-id="{{group.hospitalization_id}}" data-time-key="{{slot.key}}" catchtap="toggleTimeGroup">{{slot.all_selected ? '取消全选' : '全选本轮'}}</view>
           </view>
           <view wx:for="{{slot.items}}" wx:key="id" wx:for-item="med" class="med-compact-row {{med.is_overdue ? 'overdue-row' : ''}}">

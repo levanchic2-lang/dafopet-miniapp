@@ -144,6 +144,14 @@ _BREEDS_ALL = _all_breeds()
 from app.services.notify import notify_application_result
 from app.services.backup_local import create_backup_zip, is_safe_backup_filename, list_backup_zips
 from app.services.tnr_appointment_sync import sync_active_tnr_appointment
+from app.services.inpatient_medication_schedule import (
+    flexible_schedule_for_frequency,
+    has_explicit_schedule,
+    medication_due_at,
+    medication_is_overdue,
+    medication_schedule_label,
+    parse_schedule_times,
+)
 from app.services.wechat_miniapp import (
     push_application_result, push_appointment_status, push_pending_manual_notice,
     push_preventive_reminder, push_rejection_notice, push_surgery_done,
@@ -7466,11 +7474,16 @@ async def api_staff_miniapp_medication_reminders(
     ).filter(
         Hospitalization.status == "admitted",
         MedicationAdminLog.status == "pending",
-        MedicationAdminLog.scheduled_at <= now_local,
+        MedicationAdminLog.scheduled_at < datetime.combine(
+            now_local.date() + timedelta(days=1), datetime.min.time(),
+        ),
     )
     if store:
         q = q.filter(Hospitalization.store == store)
-    rows = q.order_by(MedicationAdminLog.scheduled_at.asc(), MedicationAdminLog.id.asc()).limit(100).all()
+    candidates = q.order_by(
+        MedicationAdminLog.scheduled_at.asc(), MedicationAdminLog.id.asc(),
+    ).limit(500).all()
+    rows = [row for row in candidates if medication_is_overdue(row, now_local)][:100]
     by_hospitalization: dict[int, dict] = {}
     for row in rows:
         hosp = row.hospitalization
@@ -7480,7 +7493,7 @@ async def api_staff_miniapp_medication_reminders(
             "pet_name": pet.name if pet else "未命名宠物",
             "cage_code": hosp.cage.code if hosp and hosp.cage else "",
             "count": 0,
-            "first_time": row.scheduled_at.strftime("%H:%M"),
+            "first_time": medication_schedule_label(row),
         })
         group["count"] += 1
     groups = list(by_hospitalization.values())
@@ -7528,6 +7541,8 @@ def _staff_med_log_payload(row: MedicationAdminLog, now_local: datetime | None =
     route_raw = (item.drug_type or "").strip() if item else ""
     route_display = _DRUG_TYPE_ZH.get(route_raw.lower(), route_raw) if route_raw else ""
     administered_local = row.administered_at + timedelta(hours=8) if row.administered_at else None
+    schedule_exact = has_explicit_schedule(item)
+    due_at = medication_due_at(row)
     return {
         "id": row.id,
         "hospitalization_id": row.hospitalization_id,
@@ -7541,10 +7556,13 @@ def _staff_med_log_payload(row: MedicationAdminLog, now_local: datetime | None =
         "scheduled_date": row.scheduled_at.strftime("%Y-%m-%d"),
         "scheduled_time": row.scheduled_at.strftime("%H:%M"),
         "scheduled_at": row.scheduled_at.strftime("%Y-%m-%d %H:%M"),
+        "schedule_mode": "exact" if schedule_exact else "period",
+        "schedule_label": medication_schedule_label(row),
+        "due_at": due_at.strftime("%Y-%m-%d %H:%M") if due_at else "",
         "day_index": row.day_index,
         "dose_index": row.dose_index,
         "status": row.status,
-        "is_overdue": row.status == "pending" and row.scheduled_at < now_local,
+        "is_overdue": medication_is_overdue(row, now_local),
         "administered_at": administered_local.strftime("%Y-%m-%d %H:%M") if administered_local else "",
         "administered_by": row.administered_by or "",
         "dose_actual": row.dose_actual or "",
@@ -36648,64 +36666,15 @@ async def admin_inpatient_detail(hosp_id: int, request: Request,
 
 # ─── 发药日志生成 + 操作 ───
 def _parse_schedule_times(s: str) -> list[tuple[int, int]]:
-    """解析 "08:00,14:00,20:00" → [(8,0),(14,0),(20,0)]。容错：跳过非法项。"""
-    out = []
-    for chunk in (s or "").replace("，", ",").replace("、", ",").split(","):
-        c = chunk.strip()
-        if not c:
-            continue
-        # 支持 "8", "8:30", "08:00"
-        if ":" in c:
-            try:
-                hh, mm = c.split(":", 1)
-                h = int(hh); m = int(mm)
-            except Exception:
-                continue
-        else:
-            try:
-                h = int(c); m = 0
-            except Exception:
-                continue
-        if 0 <= h < 24 and 0 <= m < 60:
-            out.append((h, m))
-    return out
+    return parse_schedule_times(s)
 
 
-# 住院处方医生没填时刻表时，按给药频次推默认发药时刻（覆盖绝大多数病例）：
-#   SID/qd/q24h（一天一次）→ 以开方时间（北京整点）为默认
-#   BID/q12h（一天两次）   → 10,20      （上午10点 / 晚8点）
-#   TID/q8h（一天三次）    → 10,15,20   （上午10点 / 下午3点 / 晚8点）
-#   QID/q6h（一天四次）    → 10,13,17,21（上午10点 / 下午1点 / 下午5点 / 晚9点）
-#   q48h / prn / 一天四次以上 / 未知   → 空串（需人工排时间）
+# 兼容旧测试/调用：返回宽时段的内部排序锚点，不代表医生指定了精确时间。
 def _default_schedule_for_freq(freq: str, opened_hour: int, times_per_day: float = 0) -> str:
-    f = (freq or "").strip().lower().replace(" ", "")
-    count = 0
-    try:
-        numeric_count = float(times_per_day or 0)
-        if numeric_count.is_integer():
-            count = int(numeric_count)
-    except (TypeError, ValueError):
-        pass
-    if not count:
-        # 新处方表单会把次数保存成“每日1次”，历史数据还可能是纯数字 1.0。
-        match = re.search(r"(?:每日|每天|一天)?(\d+(?:\.\d+)?)次(?:/天)?", f)
-        raw_count = match.group(1) if match else (f if re.fullmatch(r"\d+(?:\.\d+)?", f) else "")
-        try:
-            numeric_count = float(raw_count)
-            if numeric_count.is_integer():
-                count = int(numeric_count)
-        except (TypeError, ValueError):
-            pass
-    if f in ("qd", "q24h", "sid") or count == 1:
-        h = opened_hour if 0 <= opened_hour <= 23 else 10
-        return str(h)
-    if f in ("bid", "q12h") or count == 2:
-        return "10,20"
-    if f in ("tid", "q8h") or count == 3:
-        return "10,15,20"
-    if f in ("qid", "q6h") or count == 4:
-        return "10,13,17,21"
-    return ""
+    return ",".join(
+        str(hour) if minute == 0 else f"{hour:02d}:{minute:02d}"
+        for hour, minute in flexible_schedule_for_frequency(freq, opened_hour, times_per_day)
+    )
 
 
 def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> int:
@@ -36715,7 +36684,7 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
     - presc.status 必须 != 'draft' 且 != 'voided'
     - 找到该 visit_id 对应的 admitted Hospitalization
     - 每个 PrescriptionItem：
-      * schedule_times 空 → 按给药频次推默认（见 _default_schedule_for_freq）；
+      * schedule_times 空 → 按给药频次生成宽时段任务（上午/下午/晚上）；
         频次也推不出（prn/q48h/未知）→ 跳过
       * 否则按 (duration_days × schedule_times) 生成日志
       * 疗程起始日：prescribed_date 或今天；住院前旧处方保留原疗程日序，只生成入住后的剩余剂次
@@ -36773,14 +36742,10 @@ def _generate_med_logs_for_prescription(db: Session, presc: "Prescription") -> i
 
     created = 0
     for it in (presc.items or []):
-        times = _parse_schedule_times(it.schedule_times or "")
-        if not times:
-            # 住院处方但医生没填时刻表 → 按给药频次套默认（SID 用开方时间 / BID 10,20 /
-            # TID 10,15,20 / QID 10,13,17,21；q48h·prn·>4次/天 → 空，需人工排）。
-            # 注：本函数只在存在 admitted 住院时才会执行到这里，故默认仅作用于住院处方。
-            times = _parse_schedule_times(_default_schedule_for_freq(
-                it.frequency, opened_hour, it.times_per_day or 0,
-            ))
+        explicit_times = _parse_schedule_times(it.schedule_times or "")
+        times = explicit_times or flexible_schedule_for_frequency(
+            it.frequency, opened_hour, it.times_per_day or 0,
+        )
         if not times:
             continue
         # 解析天数：duration_days 字段可能是 "7" 或 "症状缓解为止" 等
@@ -37542,20 +37507,23 @@ def _m_badges(request: Request, db: Session) -> dict:
     """
     store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
-    now = datetime.utcnow()
+    now_local = datetime.utcnow() + timedelta(hours=8)
 
-    # 1. 漏药：scheduled_at <= now+5min，status=pending，关联 hosp 仍在 admitted
+    # 1. 漏药：定点医嘱按时刻；普通频次到整个上午/下午/晚上结束后才算漏药。
     med_q = db.query(MedicationAdminLog).join(
         Hospitalization, Hospitalization.id == MedicationAdminLog.hospitalization_id
     ).filter(
         MedicationAdminLog.status == "pending",
-        MedicationAdminLog.scheduled_at <= now,
+        MedicationAdminLog.scheduled_at <= now_local,
         Hospitalization.status == "admitted",
     )
     if store_short:
         med_q = med_q.filter(or_(Hospitalization.store == store_short,
                                   Hospitalization.store == store_full))
-    overdue_meds = med_q.count()
+    overdue_meds = sum(
+        1 for row in med_q.limit(1000).all()
+        if medication_is_overdue(row, now_local)
+    )
 
     # 2. 待配药：status=issued 且 dispensed_at 空 且 未作废
     presc_q = db.query(Prescription).filter(

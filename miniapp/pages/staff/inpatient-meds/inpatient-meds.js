@@ -15,7 +15,7 @@ function buildMedicationGroups(items, previousGroups) {
         overdue_count: 0,
         selected_count: 0,
         first_at: row.scheduled_at,
-        next_time: row.scheduled_time,
+        next_time: row.schedule_label || row.scheduled_time,
         timeMap: {}
       };
     }
@@ -24,14 +24,16 @@ function buildMedicationGroups(items, previousGroups) {
     if (row.is_overdue) group.overdue_count += 1;
     if (row.scheduled_at < group.first_at) {
       group.first_at = row.scheduled_at;
-      group.next_time = row.scheduled_time;
+      group.next_time = row.schedule_label || row.scheduled_time;
     }
-    const timeKey = `${row.scheduled_date}|${row.scheduled_time}`;
+    const scheduleLabel = row.schedule_label || row.scheduled_time;
+    const timeKey = `${row.scheduled_date}|${row.schedule_mode || "exact"}|${scheduleLabel}`;
     if (!group.timeMap[timeKey]) {
       group.timeMap[timeKey] = {
         key: timeKey,
         date: row.scheduled_date,
-        time: row.scheduled_time,
+        time: scheduleLabel,
+        schedule_mode: row.schedule_mode || "exact",
         first_at: row.scheduled_at,
         all_selected: false,
         items: []

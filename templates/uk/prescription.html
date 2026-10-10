@@ -688,11 +688,11 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
                   <td class="col-num"><input name="times_per_day_{{ idx }}" type="number" step="0.5" min="0" value="{{ _tpd }}" oninput="recalcDosage({{ idx }})"/></td>
                   <td class="col-num sch-cell">
                     <input name="duration_days_{{ idx }}" type="number" step="1" min="0" value="{{ item.duration_days }}" oninput="recalcDosage({{ idx }})"/>
-                    <button type="button" class="sch-toggle {% if item.schedule_times %}has-val{% endif %}" onclick="toggleSchedule(this)" title="住院发药时刻">时</button>
+                    <button type="button" class="sch-toggle {% if item.schedule_times %}has-val{% endif %}" onclick="toggleSchedule(this)" title="定点给药（可选）">时</button>
                     <div class="sch-pop">
-                      <label>住 院 发 药 时 刻</label>
-                      <input name="schedule_times_{{ idx }}" placeholder="如 8,14,20" value="{{ item.schedule_times or '' }}"/>
-                      <div class="hint">仅住院动物需填 · 24h CSV</div>
+                      <label>定 点 给 药（可 选）</label>
+                      <input name="schedule_times_{{ idx }}" placeholder="如 08:30,20:00" value="{{ item.schedule_times or '' }}"/>
+                      <div class="hint">留空按上午/下午/晚上执行；仅明确医嘱时填写</div>
                       <div class="actions">
                         <button type="button" class="clear" onclick="clearSchedule(this)">清空</button>
                         <button type="button" onclick="closeSchedule(this)">完&nbsp;成</button>
@@ -730,11 +730,11 @@ function confirmVoid(form) { return confirmVoidWithRefund(form, 0); }
                   <td class="col-num"><input name="times_per_day_0" type="number" step="0.5" min="0" oninput="recalcDosage(0)"/></td>
                   <td class="col-num sch-cell">
                     <input name="duration_days_0" type="number" step="1" min="0" oninput="recalcDosage(0)"/>
-                    <button type="button" class="sch-toggle" onclick="toggleSchedule(this)" title="住院发药时刻">时</button>
+                    <button type="button" class="sch-toggle" onclick="toggleSchedule(this)" title="定点给药（可选）">时</button>
                     <div class="sch-pop">
-                      <label>住 院 发 药 时 刻</label>
-                      <input name="schedule_times_0" placeholder="如 8,14,20"/>
-                      <div class="hint">仅住院动物需填 · 24h CSV</div>
+                      <label>定 点 给 药（可 选）</label>
+                      <input name="schedule_times_0" placeholder="如 08:30,20:00"/>
+                      <div class="hint">留空按上午/下午/晚上执行；仅明确医嘱时填写</div>
                       <div class="actions">
                         <button type="button" class="clear" onclick="clearSchedule(this)">清空</button>
                         <button type="button" onclick="closeSchedule(this)">完&nbsp;成</button>
@@ -1110,11 +1110,11 @@ function addDrugRow() {
     <td class="col-num"><input name="times_per_day_${idx}" type="number" step="0.5" min="0" oninput="recalcDosage(${idx})"/></td>
     <td class="col-num sch-cell">
       <input name="duration_days_${idx}" type="number" step="1" min="0" oninput="recalcDosage(${idx})"/>
-      <button type="button" class="sch-toggle" onclick="toggleSchedule(this)" title="住院发药时刻">时</button>
+      <button type="button" class="sch-toggle" onclick="toggleSchedule(this)" title="定点给药（可选）">时</button>
       <div class="sch-pop">
-        <label>住 院 发 药 时 刻</label>
-        <input name="schedule_times_${idx}" placeholder="如 8,14,20"/>
-        <div class="hint">仅住院动物需填 · 24h CSV</div>
+        <label>定 点 给 药（可 选）</label>
+        <input name="schedule_times_${idx}" placeholder="如 08:30,20:00"/>
+        <div class="hint">留空按上午/下午/晚上执行；仅明确医嘱时填写</div>
         <div class="actions">
           <button type="button" class="clear" onclick="clearSchedule(this)">清空</button>
           <button type="button" onclick="closeSchedule(this)">完&nbsp;成</button>
@@ -1285,11 +1285,11 @@ function _appendRow(it) {
     <td class="col-num"><input name="times_per_day_${idx}" type="number" step="0.5" min="0" value="${it.times_per_day||''}" oninput="recalcDosage(${idx})"/></td>
     <td class="col-num sch-cell">
       <input name="duration_days_${idx}" type="number" step="1" min="0" value="${esc(it.duration_days)}" oninput="recalcDosage(${idx})"/>
-      <button type="button" class="sch-toggle ${it.schedule_times?'has-val':''}" onclick="toggleSchedule(this)" title="住院发药时刻">时</button>
+      <button type="button" class="sch-toggle ${it.schedule_times?'has-val':''}" onclick="toggleSchedule(this)" title="定点给药（可选）">时</button>
       <div class="sch-pop">
-        <label>住 院 发 药 时 刻</label>
-        <input name="schedule_times_${idx}" placeholder="如 8,14,20" value="${esc(it.schedule_times||'')}"/>
-        <div class="hint">仅住院动物需填 · 24h CSV</div>
+        <label>定 点 给 药（可 选）</label>
+        <input name="schedule_times_${idx}" placeholder="如 08:30,20:00" value="${esc(it.schedule_times||'')}"/>
+        <div class="hint">留空按上午/下午/晚上执行；仅明确医嘱时填写</div>
         <div class="actions">
           <button type="button" class="clear" onclick="clearSchedule(this)">清空</button>
           <button type="button" onclick="closeSchedule(this)">完&nbsp;成</button>

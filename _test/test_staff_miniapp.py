@@ -46,10 +46,10 @@ async def _test_lifespan(_app):
 
 app.router.lifespan_context = _test_lifespan
 Base.metadata.create_all(bind=engine)
-assert main_module._default_schedule_for_freq("每日1次", 22, 1.0) == "22"
-assert main_module._default_schedule_for_freq("每日2次", 22, 2.0) == "10,20"
-assert main_module._default_schedule_for_freq("1.0", 9) == "9"
-assert main_module._default_schedule_for_freq("2", 9) == "10,20"
+assert main_module._default_schedule_for_freq("每日1次", 22, 1.0) == "20"
+assert main_module._default_schedule_for_freq("每日2次", 22, 2.0) == "8,20"
+assert main_module._default_schedule_for_freq("1.0", 9) == "8"
+assert main_module._default_schedule_for_freq("2", 9) == "8,20"
 assert OVERDUE_GRACE_MIN == 15
 db = SessionLocal()
 try:
