@@ -114,12 +114,12 @@ function confirmGroomVoid(form, paidAmount) {
        <input type="date" name="groom_date" value="{{ rec.groom_date if rec else today }}" required/>
      </div>
      <div>
-       <label>美容师 <span style="color:#d97706;">*</span></label>
-       <input name="groomer_name" required value="{{ rec.groomer_name if rec else '' }}" list="groomer-list" placeholder="选择或输入"/>
+       <label>主操作人 <span style="color:#d97706;">*</span></label>
+       <input name="groomer_name" required value="{{ rec.groomer_name if rec else '' }}" list="groomer-list" placeholder="助理 / 美容师 / 合伙人"/>
        <datalist id="groomer-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
      </div>
      <div>
-       <label>助理</label>
+       <label>陪同助理</label>
        <input name="assistant_name" value="{{ rec.assistant_name if rec else '' }}" list="assistant-list" placeholder="选择或输入（可选）"/>
        <datalist id="assistant-list">{% for g in assistants or groomers %}<option value="{{ g }}">{% endfor %}</datalist>
      </div>

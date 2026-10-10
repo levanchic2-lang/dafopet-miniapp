@@ -81,15 +81,15 @@
              style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
     </label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
-      <label style="font-size:12px;color:#64748b;">美容师
+      <label style="font-size:12px;color:#64748b;">主操作人
         <input name="groomer_name" value="{{ default_groomer }}" list="groomer-list" placeholder="选或输入"
                style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
         <datalist id="groomer-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
       </label>
-      <label style="font-size:12px;color:#64748b;">助理
+      <label style="font-size:12px;color:#64748b;">陪同助理
         <input name="assistant_name" list="assistant-list" placeholder="可选"
                style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;box-sizing:border-box;"/>
-        <datalist id="assistant-list">{% for g in groomers %}<option value="{{ g }}">{% endfor %}</datalist>
+        <datalist id="assistant-list">{% for g in assistants %}<option value="{{ g }}">{% endfor %}</datalist>
       </label>
     </div>
   </div>

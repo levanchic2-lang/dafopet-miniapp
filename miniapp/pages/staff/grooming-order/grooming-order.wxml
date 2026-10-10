@@ -10,8 +10,8 @@
 
     <view class="grooming-meta">
       <picker mode="date" value="{{orderDate}}" bindchange="changeDate"><view><text>开单日期</text><strong>{{orderDate}}</strong></view></picker>
-      <picker range="{{groomers}}" value="{{groomerIndex}}" bindchange="chooseGroomer"><view><text>美容师</text><strong>{{groomerIndex >= 0 ? groomers[groomerIndex] : '请选择'}}</strong></view></picker>
-      <picker range="{{assistants}}" value="{{assistantIndex}}" bindchange="chooseAssistant"><view><text>助理（选填）</text><strong>{{assistantIndex >= 0 ? assistants[assistantIndex] : '无'}}</strong></view></picker>
+      <picker range="{{groomers}}" value="{{groomerIndex}}" bindchange="chooseGroomer"><view><text>主操作人</text><strong>{{groomerIndex >= 0 ? groomers[groomerIndex] : '请选择'}}</strong></view></picker>
+      <picker range="{{assistants}}" value="{{assistantIndex}}" bindchange="chooseAssistant"><view><text>陪同助理（选填）</text><strong>{{assistantIndex >= 0 ? assistants[assistantIndex] : '无'}}</strong></view></picker>
     </view>
 
     <view class="grooming-search"><input value="{{query}}" bindinput="searchInput" placeholder="搜索美容项目"/></view>

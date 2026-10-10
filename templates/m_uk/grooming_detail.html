@@ -13,8 +13,8 @@
   <div class="meta">
     {{ rec.groom_date or '—' }}
     <span class="sep">·</span>
-    美容师&nbsp;<span style="color:var(--ink);font-style:normal;">{{ rec.groomer_name or '—' }}</span>
-    {% if rec.assistant_name %}<span class="sep">·</span>助理&nbsp;<span style="color:var(--ink);font-style:normal;">{{ rec.assistant_name }}</span>{% endif %}
+    主操作人&nbsp;<span style="color:var(--ink);font-style:normal;">{{ rec.groomer_name or '—' }}</span>
+    {% if rec.assistant_name %}<span class="sep">·</span>陪同助理&nbsp;<span style="color:var(--ink);font-style:normal;">{{ rec.assistant_name }}</span>{% endif %}
   </div>
 </div>
 

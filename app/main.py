@@ -8202,7 +8202,7 @@ def _staff_grooming_candidates(db: Session, store: str) -> tuple[list[str], list
     if store:
         query = query.filter(or_(Staff.store == store, Staff.store == "", Staff.store == None))
     rows = query.order_by(Staff.name).all()
-    groomers = [row.name for row in rows if row.position in ("美容师", "合伙人") and (row.name or "").strip()]
+    groomers = [row.name for row in rows if row.position in ("助理", "美容师", "合伙人") and (row.name or "").strip()]
     assistants = [row.name for row in rows if row.position in ("助理", "美容师", "合伙人") and (row.name or "").strip()]
     return groomers, assistants
 
@@ -8246,7 +8246,7 @@ async def api_staff_miniapp_grooming_order_create(
     assistant_name = str((payload or {}).get("assistant_name") or "").strip()[:80]
     groomers, assistants = _staff_grooming_candidates(db, (user.store or "").strip())
     if groomer_name not in set(groomers):
-        raise HTTPException(400, "请选择当前门店在职的美容师或合伙人")
+        raise HTTPException(400, "主操作人必须选择当前门店在职的助理、美容师或合伙人")
     if assistant_name and assistant_name not in set(assistants):
         raise HTTPException(400, "助理必须选择当前门店在职员工")
     raw_rows = (payload or {}).get("items") or []
@@ -27009,7 +27009,7 @@ async def admin_reports_performance(
     tab_labels = {
         "cashier": "收款员",
         "doctor": "医生",
-        "groomer": "美容师",
+        "groomer": "美容主操作",
         "assistant": "助理",
     }
     method_labels = _REVENUE_PAY_ZH
@@ -34599,7 +34599,7 @@ def _active_staff_names_by_positions(db: Session, positions: list[str]) -> list[
 
 
 def _grooming_staff_candidates(db: Session) -> tuple[list[str], list[str]]:
-    groomers = _active_staff_names_by_positions(db, ["美容师", "合伙人"])
+    groomers = _active_staff_names_by_positions(db, ["助理", "美容师", "合伙人"])
     assistants = _active_staff_names_by_positions(db, ["助理", "美容师", "合伙人"])
     return groomers, assistants
 
@@ -34609,9 +34609,9 @@ def _grooming_staff_error(db: Session, groomer_name: str, assistant_name: str = 
     groomer = (groomer_name or "").strip()
     assistant = (assistant_name or "").strip()
     if not groomer:
-        return "请选择美容师，不能默认按当前登录账号记录业绩"
+        return "请选择主操作人，不能默认按当前登录账号记录业绩"
     if groomer not in set(groomers):
-        return "美容师必须从职位为「美容师」或「合伙人」的在职员工中选择"
+        return "主操作人必须从职位为「助理 / 美容师 / 合伙人」的在职员工中选择"
     if assistant and assistant not in set(assistants):
         return "助理必须从职位为「助理 / 美容师 / 合伙人」的在职员工中选择"
     return ""

@@ -62,7 +62,7 @@
       <view wx:for="{{groomings}}" wx:key="id" class="record-block">
         <view class="record-date">{{item.date}} · {{item.status_label}}</view>
         <view class="record-title">{{item.services_label}}</view>
-        <view class="record-text">美容师：{{item.groomer_name || '未填写'}}<text wx:if="{{item.assistant_name}}"> · 助理：{{item.assistant_name}}</text></view>
+        <view class="record-text">主操作人：{{item.groomer_name || '未填写'}}<text wx:if="{{item.assistant_name}}"> · 陪同助理：{{item.assistant_name}}</text></view>
         <view class="record-text">合计 ¥{{item.total}} · {{item.payment_label}}</view>
         <view wx:if="{{item.notes}}" class="record-text">备注：{{item.notes}}</view>
       </view>

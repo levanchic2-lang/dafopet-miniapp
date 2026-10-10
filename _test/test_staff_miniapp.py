@@ -89,6 +89,7 @@ try:
     db.add_all([
         Staff(name="横岗医生", store="横岗店", position="医生", status="active"),
         Staff(name="横岗美容师", store="横岗店", position="美容师", status="active"),
+        Staff(name="横岗助理", store="横岗店", position="助理", status="active"),
     ])
     hg_hosp = Hospitalization(
         customer_id=hg_customer.id, pet_id=hg_pet.id, visit_id=hg_visit.id,
@@ -635,12 +636,14 @@ try:
         assert pet_detail.json()["dewormings"][0]["name"] == "驱虫药"
         prescription = pet_detail.json()["prescriptions"][0]
         assert prescription["status_label"] == "已开具"
-        assert prescription["items"][0]["drug_name"] == "横岗测试药"
-        assert prescription["items"][0]["dose"] == "0.5ml"
-        assert prescription["items"][0]["route"] == "静脉注射"
-        assert prescription["items"][0]["frequency"] == "每日2次"
-        assert prescription["items"][0]["duration"] == "3天"
-        assert prescription["items"][0]["usage_label"] == "单次 0.5ml · 静脉注射 · 每日2次 · 3天"
+        prescribed_drug = next(
+            row for row in prescription["items"] if row["drug_name"] == "横岗测试药"
+        )
+        assert prescribed_drug["dose"] == "0.5ml"
+        assert prescribed_drug["route"] == "静脉注射"
+        assert prescribed_drug["frequency"] == "每日2次"
+        assert prescribed_drug["duration"] == "3天"
+        assert prescribed_drug["usage_label"] == "单次 0.5ml · 静脉注射 · 每日2次 · 3天"
         assert pet_detail.json()["groomings"] == []
         grooming_context = client.get(
             f"/api/staff-miniapp/pets/{own_pet_id}/grooming-order", headers=headers,
@@ -648,10 +651,11 @@ try:
         assert grooming_context.status_code == 200, grooming_context.text
         assert grooming_context.json()["pet"]["name"] == "横岗犬"
         assert [row["name"] for row in grooming_context.json()["items"]] == ["横岗犬洗护"]
+        assert "横岗助理" in grooming_context.json()["groomers"]
         grooming_created = client.post(
             f"/api/staff-miniapp/pets/{own_pet_id}/grooming-order",
             json={
-                "order_date": today, "groomer_name": "横岗美容师",
+                "order_date": today, "groomer_name": "横岗助理",
                 "items": [{"item_id": grooming_context.json()["items"][0]["id"],
                            "quantity": 1, "unit_price": 88}],
             }, headers=headers,
@@ -662,6 +666,7 @@ try:
         try:
             grooming = db.get(GroomingOrder, grooming_created.json()["grooming_id"])
             assert grooming and grooming.pet_id == own_pet_id and grooming.invoice_id
+            assert grooming.groomer_name == "横岗助理"
             assert db.get(Invoice, grooming.invoice_id).payment_status == "unpaid"
         finally:
             db.close()

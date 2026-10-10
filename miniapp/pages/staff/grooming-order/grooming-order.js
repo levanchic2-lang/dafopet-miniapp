@@ -53,7 +53,7 @@ Page({
     this.setData({ rows, grandTotal: rows.reduce((sum, row) => sum + number(row.subtotal), 0).toFixed(2) });
   },
   async submitOrder() {
-    if (this.data.groomerIndex < 0) { wx.showToast({ title: "请选择美容师", icon: "none" }); return; }
+    if (this.data.groomerIndex < 0) { wx.showToast({ title: "请选择主操作人", icon: "none" }); return; }
     if (!this.data.rows.length) { wx.showToast({ title: "请至少选择一个美容项目", icon: "none" }); return; }
     this.setData({ submitting: true });
     try {

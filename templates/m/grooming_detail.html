@@ -40,9 +40,9 @@
     {% endif %}
   </div>
   <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:14px;">
-    <div>美容师：<b>{{ rec.groomer_name or '—' }}</b></div>
+    <div>主操作人：<b>{{ rec.groomer_name or '—' }}</b></div>
     {% if rec.assistant_name %}
-    <div style="color:#475569;">助理：<b>{{ rec.assistant_name }}</b></div>
+    <div style="color:#475569;">陪同助理：<b>{{ rec.assistant_name }}</b></div>
     {% endif %}
   </div>
 </div>
