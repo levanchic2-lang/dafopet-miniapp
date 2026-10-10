@@ -637,7 +637,7 @@ try:
         prescription = pet_detail.json()["prescriptions"][0]
         assert prescription["status_label"] == "已开具"
         prescribed_drug = next(
-            row for row in prescription["items"] if row["drug_name"] == "横岗测试药"
+            row for row in prescription["items"] if row["drug_name"] == "横岗住院测试药"
         )
         assert prescribed_drug["dose"] == "0.5ml"
         assert prescribed_drug["route"] == "静脉注射"
