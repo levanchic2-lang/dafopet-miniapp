@@ -32,7 +32,8 @@ def main() -> None:
         from app.main import app
         from app.models import Customer, InvoiceItem, Wallet, WalletTransaction
 
-        with TestClient(app) as client:
+        # 生产会话 Cookie 强制 Secure；测试也必须使用 HTTPS 基址才能保留会话。
+        with TestClient(app, base_url="https://testserver") as client:
             login_page = client.get("/admin")
             token = _csrf(login_page.text)
             login = client.post("/admin/login", data={
