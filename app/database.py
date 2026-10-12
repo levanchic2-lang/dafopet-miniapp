@@ -359,6 +359,16 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE wallet_transactions ADD COLUMN consumed_principal REAL DEFAULT 0"))
                 if "consumed_bonus" not in wt_cols:
                     conn.execute(text("ALTER TABLE wallet_transactions ADD COLUMN consumed_bonus REAL DEFAULT 0"))
+                if "status" not in wt_cols:
+                    conn.execute(text("ALTER TABLE wallet_transactions ADD COLUMN status VARCHAR(20) DEFAULT 'active'"))
+                if "reversal_of_id" not in wt_cols:
+                    conn.execute(text("ALTER TABLE wallet_transactions ADD COLUMN reversal_of_id INTEGER DEFAULT NULL"))
+                if "reversed_at" not in wt_cols:
+                    conn.execute(text("ALTER TABLE wallet_transactions ADD COLUMN reversed_at DATETIME DEFAULT NULL"))
+                if "reversed_by" not in wt_cols:
+                    conn.execute(text("ALTER TABLE wallet_transactions ADD COLUMN reversed_by VARCHAR(80) DEFAULT ''"))
+                if "ref_no" not in wt_cols:
+                    conn.execute(text("ALTER TABLE wallet_transactions ADD COLUMN ref_no VARCHAR(120) DEFAULT ''"))
                 # 一次性回填：还没拆过的钱包（principal=0 且 bonus=0 但 balance > 0）
                 # 按该钱包历史 recharge 的本金 : 赠送 比例拆当前 balance
                 rows = conn.execute(text(
@@ -1742,6 +1752,13 @@ def _try_sqlite_migrations() -> None:
                 "pay_method VARCHAR(40) DEFAULT '', "
                 "invoice_id INTEGER DEFAULT NULL REFERENCES invoices(id) ON DELETE SET NULL, "
                 "bonus_amount REAL DEFAULT 0.0, "
+                "consumed_principal REAL DEFAULT 0.0, "
+                "consumed_bonus REAL DEFAULT 0.0, "
+                "status VARCHAR(20) DEFAULT 'active', "
+                "reversal_of_id INTEGER DEFAULT NULL, "
+                "reversed_at DATETIME DEFAULT NULL, "
+                "reversed_by VARCHAR(80) DEFAULT '', "
+                "ref_no VARCHAR(120) DEFAULT '', "
                 "store VARCHAR(40) DEFAULT '', "
                 "note TEXT DEFAULT '', "
                 "operator VARCHAR(80) DEFAULT '', "

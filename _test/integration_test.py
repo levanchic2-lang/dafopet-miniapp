@@ -817,6 +817,8 @@ def t_wallet_recharge():
     assert abs(w.lifetime_recharge - 100.0) < 1e-6
     txs = db.query(WalletTransaction).filter(WalletTransaction.wallet_id == w.id).all()
     assert len(txs) == 1 and txs[0].type == "recharge" and txs[0].amount == 100.0
+    assert txs[0].invoice_id is None, "直接充值不应生成收费单"
+    assert txs[0].pay_method == "cash"
     db.close()
 
 t_wallet_recharge()
@@ -833,14 +835,65 @@ def t_wallet_recharge_bonus():
     import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
     from app import models  # noqa
     from app.database import SessionLocal
-    from app.models import Wallet
+    from app.models import Wallet, WalletTransaction
     db = SessionLocal()
     w = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
     assert abs(w.balance - 650.0) < 1e-6, f"应 650（100 + 500 + 50），得 {w.balance}"
     assert abs(w.lifetime_recharge - 600.0) < 1e-6, f"应 600，得 {w.lifetime_recharge}"
+    tx = db.query(WalletTransaction).filter(
+        WalletTransaction.wallet_id == w.id,
+        WalletTransaction.type == "recharge",
+    ).order_by(WalletTransaction.id.desc()).first()
+    assert tx and tx.pay_method == "wechat" and tx.bonus_amount == 50.0
     db.close()
 
 t_wallet_recharge_bonus()
+
+
+@step("钱包：误充值可一键撤销，本金和赠送同时扣回")
+def t_wallet_recharge_reverse():
+    r = client.get(f"/admin/customers/{cust_id}?tab=wallet")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/wallets/{cust_id}/recharge", data={
+        "csrf_token": token, "amount": "80", "pay_method": "alipay",
+        "bonus": "8", "note": "待撤销充值",
+    })
+    assert r.status_code == 303
+    import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app import models  # noqa
+    from app.database import SessionLocal
+    from app.models import Wallet, WalletTransaction
+    db = SessionLocal()
+    w = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    tx = db.query(WalletTransaction).filter(
+        WalletTransaction.wallet_id == w.id,
+        WalletTransaction.type == "recharge",
+        WalletTransaction.note == "待撤销充值",
+    ).first()
+    assert tx and abs(w.balance - 738.0) < 1e-6
+    tx_id = tx.id
+    db.close()
+
+    r = client.get(f"/admin/customers/{cust_id}?tab=wallet")
+    token = extract_csrf(r.text)
+    r = client.post(f"/admin/wallet-transactions/{tx_id}/reverse", data={
+        "csrf_token": token, "note": "集成测试撤销",
+    })
+    assert r.status_code == 303
+    db = SessionLocal()
+    w = db.query(Wallet).filter(Wallet.customer_id == cust_id).first()
+    tx = db.get(WalletTransaction, tx_id)
+    rev = db.query(WalletTransaction).filter(
+        WalletTransaction.reversal_of_id == tx_id,
+        WalletTransaction.type == "reversal",
+    ).first()
+    assert tx.status == "reversed"
+    assert rev and rev.amount == -88.0 and rev.bonus_amount == -8.0
+    assert abs(w.balance - 650.0) < 1e-6
+    assert abs(w.lifetime_recharge - 600.0) < 1e-6
+    db.close()
+
+t_wallet_recharge_reverse()
 
 
 @step("钱包：调账 -50 → 余额 600")

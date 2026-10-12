@@ -1069,22 +1069,33 @@
       <h3 class="uk-h3" style="margin:24px 0 10px;">流水记录</h3>
       {% if wallet_txs %}
       <table class="uk-tbl-tab">
-        <thead><tr><th>时间</th><th>类型</th><th>金额</th><th>余额</th><th>方式 / 备注</th><th>经办</th></tr></thead>
+        <thead><tr><th>时间</th><th>类型</th><th>金额</th><th>余额</th><th>方式 / 备注</th><th>经办</th><th class="right">操作</th></tr></thead>
         <tbody>
           {% for tx in wallet_txs %}
           <tr>
             <td class="num uk-mute" style="font-size:9pt;">{{ (tx.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if tx.created_at else '—' }}</td>
             <td>
-              {% if tx.type == 'recharge' %}<span class="uk-pill green">充值</span>
+              {% if tx.type == 'recharge' and (tx.status or 'active') == 'reversed' %}<span class="uk-pill mute">充值 · 已撤销</span>
+              {% elif tx.type == 'recharge' %}<span class="uk-pill green">充值</span>
               {% elif tx.type == 'consume' %}<span class="uk-pill">消费</span>
               {% elif tx.type == 'refund' %}<span class="uk-pill amber">退款</span>
               {% elif tx.type == 'adjust' %}<span class="uk-pill mute">调账</span>
+              {% elif tx.type == 'reversal' %}<span class="uk-pill amber">充值撤销</span>
               {% else %}<span class="uk-pill mute">{{ tx.type }}</span>{% endif %}
             </td>
-            <td class="num"><b>{% if tx.amount >= 0 %}+{% endif %}{{ '%.2f'|format(tx.amount or 0) }}</b></td>
+            <td class="num"><b{% if tx.type == 'recharge' and (tx.status or 'active') == 'reversed' %} style="text-decoration:line-through;color:var(--ink-3);"{% endif %}>{% if tx.amount >= 0 %}+{% endif %}{{ '%.2f'|format(tx.amount or 0) }}</b></td>
             <td class="num">¥{{ '%.2f'|format(tx.balance_after or 0) }}</td>
-            <td class="uk-mute" style="font-size:9pt;">{{ pay_method_zh.get(tx.pay_method, tx.pay_method) or '' }}{% if tx.note %} · {{ tx.note }}{% endif %}</td>
+            <td class="uk-mute" style="font-size:9pt;">{{ pay_method_zh.get(tx.pay_method, tx.pay_method) or '' }}{% if tx.ref_no %} · 流水号 {{ tx.ref_no }}{% endif %}{% if tx.note %} · {{ tx.note }}{% endif %}</td>
             <td class="uk-mute" style="font-size:9pt;">{{ tx.operator or '—' }}</td>
+            <td class="right">
+              {% if request.session.get('admin_role') == 'superadmin' and tx.type == 'recharge' and (tx.status or 'active') != 'reversed' %}
+              <form method="post" action="/admin/wallet-transactions/{{ tx.id }}/reverse" style="display:inline;" onsubmit="return confirm('确认撤销这笔充值？系统会同时扣回本金和赠送金额；如果充值后已有消费，将拒绝撤销。');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                <input type="hidden" name="note" value="客户钱包页面撤销误充值"/>
+                <button type="submit" class="uk-btn danger sm">撤销</button>
+              </form>
+              {% else %}—{% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -1235,6 +1246,7 @@
         <a class="uk-btn sm" href="#" onclick="document.getElementById('consentModal').classList.add('visible');return false;">发起协议签署</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('rechargeModal').classList.add('visible');return false;">钱包充值</a>
         {% if request.session.get('admin_role') == 'superadmin' %}
+        <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('walletRefundModal').classList.add('visible');return false;" style="color:var(--accent-red);border-color:var(--accent-red);">钱包退款</a>
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('walletAdjustModal').classList.add('visible');return false;" style="color:#7a4a14;border-color:#7a4a14;">⚙ 钱包调账</a>
         {% endif %}
         <a class="uk-btn ghost sm" href="#" onclick="document.getElementById('sellPkgModal').classList.add('visible');return false;">售卖套餐</a>
@@ -1538,7 +1550,7 @@
   <div class="uk-modal">
     <h3>钱 包 充 值</h3>
     <p class="uk-mute" style="font-size:9pt;margin:-8px 0 14px;font-style:italic;letter-spacing:1px;">
-      生成未付款充值单，跳收银台选择收款方式后到账
+      作为预收款直接到账，不生成业务收费单
     </p>
     <form method="post" action="/admin/wallets/{{ cust.id }}/recharge">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -1550,12 +1562,27 @@
           <input name="bonus" type="number" step="0.01" min="0" value="0" placeholder="如：50"/>
         </label>
       </div>
+      <div class="row2">
+        <label class="field">收款方式
+          <select name="pay_method" required>
+            <option value="cash">现金</option>
+            <option value="wechat">微信</option>
+            <option value="alipay">支付宝</option>
+            <option value="shouqianba">收钱吧</option>
+            <option value="meituan">美团</option>
+            <option value="third_party">抖音团购</option>
+          </select>
+        </label>
+        <label class="field">外部流水号（可选）
+          <input name="ref_no" maxlength="120" placeholder="微信 / 支付宝交易号"/>
+        </label>
+      </div>
       <label class="field">备注
         <textarea name="note" rows="2" placeholder="可选"></textarea>
       </label>
       <div class="actions">
         <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('rechargeModal').classList.remove('visible');">取消</button>
-        <button type="submit" class="uk-btn primary sm">生 成 充 值 单</button>
+        <button type="submit" class="uk-btn primary sm" onclick="return confirm('确认已收到款并立即充入客户钱包？');">确 认 充 值</button>
       </div>
     </form>
   </div>
@@ -1563,6 +1590,40 @@
 
 {# ─── 钱包调账 modal（仅超管）─── #}
 {% if request.session.get('admin_role') == 'superadmin' %}
+<div class="uk-modal-overlay" id="walletRefundModal" onclick="if(event.target===this) this.classList.remove('visible');">
+  <div class="uk-modal">
+    <h3>钱 包 退 款</h3>
+    <p class="uk-mute" style="font-size:9pt;margin:-8px 0 14px;font-style:italic;letter-spacing:1px;">
+      仅可退实付本金 ¥{{ '%.2f'|format(wallet_refundable_balance) }}；赠送余额不能现金退款。
+    </p>
+    <form method="post" action="/admin/wallets/{{ cust.id }}/refund" onsubmit="return confirm('确认已向客户退款并扣减钱包本金？');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <div class="row2">
+        <label class="field">退款金额（¥）
+          <input name="amount" type="number" step="0.01" min="0.01" max="{{ '%.2f'|format(wallet_refundable_balance) }}" required/>
+        </label>
+        <label class="field">退款方式
+          <select name="pay_method" required>
+            <option value="cash">现金</option><option value="wechat">微信</option>
+            <option value="alipay">支付宝</option><option value="shouqianba">收钱吧</option>
+            <option value="meituan">美团</option><option value="third_party">抖音团购</option>
+          </select>
+        </label>
+      </div>
+      <label class="field">外部流水号（可选）
+        <input name="ref_no" maxlength="120" placeholder="微信 / 支付宝退款单号"/>
+      </label>
+      <label class="field">退款原因（必填）
+        <textarea name="note" rows="2" required placeholder="如：客户申请退回钱包余额"></textarea>
+      </label>
+      <div class="actions">
+        <button type="button" class="uk-btn ghost sm" onclick="document.getElementById('walletRefundModal').classList.remove('visible');">取消</button>
+        <button type="submit" class="uk-btn danger sm">确 认 退 款</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="uk-modal-overlay" id="walletAdjustModal" onclick="if(event.target===this) this.classList.remove('visible');">
   <div class="uk-modal">
     <h3>钱 包 调 账</h3>

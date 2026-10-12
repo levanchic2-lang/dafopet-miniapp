@@ -47,7 +47,7 @@
   <div class="rev-card green">
     <div class="lbl">财务收入合计</div>
     <div class="val">¥{{ '%.2f'|format(finance_total) }}</div>
-    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">现金类 + 充值实收</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">现金类 + 钱包充值净额</div>
   </div>
   <div class="rev-card">
     <div class="lbl">业务收费实收</div>
@@ -55,9 +55,9 @@
     <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">已收业务收费，不含钱包充值</div>
   </div>
   <div class="rev-card blue">
-    <div class="lbl">钱包充值实收</div>
-    <div class="val">¥{{ '%.2f'|format(wallet_recharge_total) }}</div>
-    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">{{ wallet_recharges_count }} 笔 · 赠送 ¥{{ '%.2f'|format(wallet_recharge_bonus_total) }} · 到账 ¥{{ '%.2f'|format(wallet_recharge_credit_total) }}</div>
+    <div class="lbl">钱包充值净额</div>
+    <div class="val">¥{{ '%.2f'|format(wallet_recharge_net_total) }}</div>
+    <div style="font-size:.72rem;opacity:.85;margin-top:.2rem;">充值 ¥{{ '%.2f'|format(wallet_recharge_total) }} · 退款/撤销 ¥{{ '%.2f'|format(wallet_refund_total) }}</div>
   </div>
   <div class="rev-card">
     <div class="lbl">收款笔数 / 单均</div>
@@ -226,6 +226,38 @@
     </tr>
     {% endif %}
     <tr>
+      <td><b style="color:#7a2828;">－ 钱包退款 / 充值撤销</b></td>
+      <td class="amount" style="color:#7a2828;">－¥{{ '%.2f'|format(wallet_refund_total) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;">{{ wallet_refunds_count }} 笔 · 按实际退款/撤销日期冲减</td>
+    </tr>
+    {% if wallet_refund_details %}
+    <tr class="rev-detail-row">
+      <td colspan="3">
+        <details class="rev-drill">
+          <summary>查看钱包退款与撤销明细（{{ wallet_refund_details|length }} 笔）</summary>
+          <div class="rev-drill-scroll">
+            <table class="rev-drill-table">
+              <thead><tr><th>时间</th><th>客户</th><th>类型</th><th>现金退回</th><th>收回赠送</th><th>钱包扣回</th><th>经办人</th><th>门店</th></tr></thead>
+              <tbody>
+              {% for d in wallet_refund_details %}
+              <tr>
+                <td>{{ d['created_at']|bjtime if d['created_at'] else '—' }}</td>
+                <td><a href="/admin/customers/{{ d['customer_id'] }}">{{ d['customer_name'] }}</a></td>
+                <td>{{ d['kind'] }}</td>
+                <td class="amount">¥{{ '%.2f'|format(d['cash']) }}</td>
+                <td class="amount muted">¥{{ '%.2f'|format(d['bonus']) }}</td>
+                <td class="amount">¥{{ '%.2f'|format(d['removed']) }}</td>
+                <td>{{ d['operator'] }}</td><td>{{ d['store'] }}</td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </td>
+    </tr>
+    {% endif %}
+    <tr>
       <td><b style="color:#1d4d3a;">＋ 套餐售卖</b></td>
       <td class="amount">¥{{ '%.2f'|format(pkg_sold_total) }}</td>
       <td style="text-align:right;color:var(--muted);font-size:.78rem;">{{ pkg_sold_count }} 份 · 预收款（核销时不算流入）</td>
@@ -294,13 +326,13 @@
     </tr>
     <tr style="border-top:2px solid var(--ink);font-weight:800;background:var(--bg);">
       <td>净&nbsp;财&nbsp;务&nbsp;流&nbsp;入</td>
-      <td class="amount" style="font-size:1.05rem;">¥{{ '%.2f'|format(finance_cash_total + wallet_recharge_total + pkg_sold_total + deposit_in - deposit_refund) }}</td>
-      <td style="text-align:right;color:var(--muted);font-size:.78rem;font-style:italic;">实收 + 充值 + 套餐 + 押金 − 退押</td>
+      <td class="amount" style="font-size:1.05rem;">¥{{ '%.2f'|format(finance_cash_total + wallet_recharge_total - wallet_refund_total + pkg_sold_total + deposit_in - deposit_refund) }}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.78rem;font-style:italic;">实收 + 充值 − 钱包退款/撤销 + 套餐 + 押金 − 退押</td>
     </tr>
     </tbody>
   </table>
   <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem;font-style:italic;line-height:1.6;">
-    说明：钱包扣款 / 套餐核销 / 押金抵扣 / 优惠券抵扣属于<b>已收过的钱被使用</b>，不算新的现金流入；钱包充值实收 / 收押金 / 套餐售卖属于<b>预收款</b>（新进账）。充值赠送只增加客户钱包余额，不计入现金流入。
+    说明：钱包扣款 / 套餐核销 / 押金抵扣 / 优惠券抵扣属于<b>已收过的钱被使用</b>，不算新的现金流入；钱包充值实收 / 收押金 / 套餐售卖属于<b>预收款</b>（新进账）。充值赠送只增加客户钱包余额，不计入现金流入；钱包退款和充值撤销按操作当天冲减现金流入。
   </div>
 </div>
 

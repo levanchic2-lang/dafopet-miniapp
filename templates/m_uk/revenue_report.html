@@ -29,6 +29,19 @@
 </div>
 <div class="ukm-fineprint" style="margin-top:8px;">已收业务收费，不含钱包充值等预收款。</div>
 
+<div class="ukm-section-head"><h2>钱&nbsp;包&nbsp;预&nbsp;收</h2></div>
+<div class="ukm-kpi-grid">
+  <div class="ukm-kpi">
+    <div class="lbl">充&nbsp;值&nbsp;实&nbsp;收</div>
+    <div class="val">¥&nbsp;{{ '%.0f'|format(wallet_cash_in) }}</div>
+  </div>
+  <div class="ukm-kpi">
+    <div class="lbl">退&nbsp;款&nbsp;/&nbsp;撤&nbsp;销</div>
+    <div class="val">¥&nbsp;{{ '%.0f'|format(wallet_cash_out) }}</div>
+  </div>
+</div>
+<div class="ukm-fineprint" style="margin-top:8px;">钱包净流入 ¥{{ '%.2f'|format(wallet_net) }} · {{ wallet_tx_count }} 笔；赠送金额不计现金收入。</div>
+
 {% if method_list %}
 <div class="ukm-section-head"><h2>按&nbsp;支&nbsp;付&nbsp;方&nbsp;式</h2></div>
 <div class="ukm-row-group">

@@ -8026,6 +8026,7 @@ async def api_staff_miniapp_customer_detail(
         "wallet_transactions": [{
             "id": t.id, "type": t.type or "", "amount": round(float(t.amount or 0), 2),
             "balance_after": round(float(t.balance_after or 0), 2), "note": t.note or "",
+            "status": t.status or "active", "ref_no": t.ref_no or "",
             "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "",
         } for t in tx_rows],
         "packages": [{
@@ -12174,6 +12175,7 @@ async def page_admin_customer_detail(
     # ── 钱包 + 流水 ──
     wallet = db.query(Wallet).filter(Wallet.customer_id == customer_id).first()
     wallet_balance = float(wallet.balance) if wallet else 0.0
+    wallet_refundable_balance = float(wallet.balance_principal or 0) if wallet else 0.0
     wallet_lifetime_recharge = float(wallet.lifetime_recharge) if wallet else 0.0
     wallet_lifetime_consume = float(wallet.lifetime_consume) if wallet else 0.0
     wallet_txs = []
@@ -12296,6 +12298,7 @@ async def page_admin_customer_detail(
             "pet_sales_orders": pet_sales_orders,
             # 钱包
             "wallet_balance": wallet_balance,
+            "wallet_refundable_balance": wallet_refundable_balance,
             "wallet_lifetime_recharge": wallet_lifetime_recharge,
             "wallet_lifetime_consume": wallet_lifetime_consume,
             "wallet_txs": wallet_txs,
@@ -12700,6 +12703,11 @@ _WALLET_TX_TYPE_ZH = {
     "consume":  "消费",
     "refund":   "退款",
     "adjust":   "调账",
+    "reversal": "充值撤销",
+}
+
+_WALLET_RECHARGE_METHODS = {
+    "cash", "wechat", "alipay", "shouqianba", "meituan", "third_party",
 }
 
 
@@ -12726,6 +12734,7 @@ def _wallet_apply_tx(
     operator: str = "",
     store: str = "",
     note: str = "",
+    ref_no: str = "",
 ) -> WalletTransaction:
     """对钱包施加一笔流水。amount 正/负由 tx_type 决定：
       recharge → balance + (amount + bonus)，lifetime_recharge += amount
@@ -12778,17 +12787,13 @@ def _wallet_apply_tx(
     elif tx_type == "refund":
         if amt > wallet.balance + 1e-6:
             raise HTTPException(400, f"退款金额超过当前余额（¥{wallet.balance:.2f}）")
-        # 退款优先扣本金（实付的钱），不退赠送
+        # 赠送余额不是客户实付款，不能按现金退回。
         bp = float(wallet.balance_principal or 0)
-        if amt <= bp:
-            consumed_p = amt
-        else:
-            consumed_p = bp
-            # 超出本金部分按比例从赠送扣（极少见）
-            consumed_b = amt - bp
+        if amt > bp + 1e-6:
+            raise HTTPException(400, f"可退本金余额仅 ¥{bp:.2f}，赠送余额不能现金退款")
+        consumed_p = amt
         wallet.balance -= amt
         wallet.balance_principal = max(0, bp - consumed_p)
-        wallet.balance_bonus = max(0, (wallet.balance_bonus or 0) - consumed_b)
         signed = -amt
     elif tx_type == "adjust":
         # amount 可正可负 — 调账走本金
@@ -12826,6 +12831,8 @@ def _wallet_apply_tx(
         bonus_amount=bns if tx_type == "recharge" else 0.0,
         consumed_principal=consumed_p,
         consumed_bonus=consumed_b,
+        status="active",
+        ref_no=(ref_no or "").strip()[:120],
         store=store or "",
         operator=operator or "",
         note=(note or "")[:500],
@@ -12833,6 +12840,92 @@ def _wallet_apply_tx(
     db.add(tx)
     db.flush()
     return tx
+
+
+def _reverse_wallet_recharge(
+    db: Session,
+    tx: WalletTransaction,
+    *,
+    operator: str,
+    note: str = "",
+) -> WalletTransaction:
+    """安全撤销一笔误充值，并写一条负向流水。
+
+    充值后只要发生过消费、现金退款或调减，就拒绝整笔撤销，避免把已经
+    使用过的本金/赠送错误扣到其他充值上。此时应改走钱包退款或人工调账。
+    """
+    if tx.type != "recharge":
+        raise HTTPException(400, "只有充值流水可以撤销")
+    if (tx.status or "active") == "reversed":
+        raise HTTPException(400, "该笔充值已经撤销")
+
+    later_outgoing = db.query(WalletTransaction.id).filter(
+        WalletTransaction.wallet_id == tx.wallet_id,
+        WalletTransaction.id > tx.id,
+        WalletTransaction.amount < -0.000001,
+        WalletTransaction.type.in_(("consume", "refund", "adjust", "reversal")),
+    ).first()
+    if later_outgoing:
+        raise HTTPException(400, "该充值之后已有消费、退款或调减，不能整笔撤销；请改用钱包退款或调账")
+
+    wallet = db.get(Wallet, tx.wallet_id)
+    if not wallet:
+        raise HTTPException(404, "钱包不存在")
+    credit = round(max(0.0, float(tx.amount or 0)), 2)
+    bonus = round(max(0.0, float(tx.bonus_amount or 0)), 2)
+    principal = round(max(0.0, credit - bonus), 2)
+    bp = round(float(wallet.balance_principal or 0), 2)
+    bb = round(float(wallet.balance_bonus or 0), 2)
+    if credit <= 0:
+        raise HTTPException(400, "该充值流水金额异常，不能自动撤销")
+    if bp + 0.000001 < principal or bb + 0.000001 < bonus:
+        raise HTTPException(400, "该笔充值对应的本金或赠送余额已不足，不能整笔撤销")
+
+    wallet.balance_principal = round(bp - principal, 2)
+    wallet.balance_bonus = round(bb - bonus, 2)
+    wallet.balance = round(max(0.0, float(wallet.balance or 0) - credit), 2)
+    wallet.lifetime_recharge = round(max(0.0, float(wallet.lifetime_recharge or 0) - principal), 2)
+    wallet.updated_at = datetime.utcnow()
+
+    now = datetime.utcnow()
+    tx.status = "reversed"
+    tx.reversed_at = now
+    tx.reversed_by = operator
+    reversal = WalletTransaction(
+        wallet_id=wallet.id,
+        customer_id=tx.customer_id,
+        type="reversal",
+        amount=-credit,
+        balance_after=wallet.balance,
+        pay_method=tx.pay_method or "",
+        invoice_id=tx.invoice_id,
+        bonus_amount=-bonus,
+        consumed_principal=principal,
+        consumed_bonus=bonus,
+        status="active",
+        reversal_of_id=tx.id,
+        ref_no=tx.ref_no or "",
+        store=tx.store or "",
+        note=((note or "").strip() or f"撤销充值流水 #{tx.id}")[:500],
+        operator=operator,
+        created_at=now,
+    )
+    db.add(reversal)
+
+    # 兼容旧版“先生成充值收费单”的历史数据：撤销钱包时同步作废收款。
+    if tx.invoice_id:
+        inv = db.get(Invoice, tx.invoice_id)
+        if inv:
+            for payment in db.query(Payment).filter(
+                Payment.invoice_id == inv.id,
+                Payment.status == "success",
+            ).all():
+                payment.status = "cancelled"
+            inv.payment_status = "refunded"
+            inv.paid_at = None
+            inv.notes = ((inv.notes or "") + f"\n[钱包充值已撤销 by {operator}]").strip()
+    db.flush()
+    return reversal
 
 
 @app.post("/admin/wallets/{customer_id}/recharge")
@@ -12843,11 +12936,12 @@ async def admin_wallet_recharge(
     csrf_token: str = Form(""),
     amount: str = Form(...),
     bonus: str = Form("0"),
+    pay_method: str = Form("cash"),
+    ref_no: str = Form(""),
     note: str = Form(""),
+    next_url: str = Form(""),
 ):
-    """客户钱包充值 → 生成一张未付收费单进收银台。
-    收银台收款完成后，对应的钱包余额才会真正到账（add-payment 钩子里触发）。
-    这样收款方式、对账、报表都走统一的 Invoice/Payment 链路。"""
+    """客户钱包充值：作为预收款直接到账，不生成业务收费单。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
@@ -12863,45 +12957,25 @@ async def admin_wallet_recharge(
         return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=充值金额需大于 0", status_code=303)
     if bns < 0:
         bns = 0.0
-
+    pay_method = (pay_method or "cash").strip()
+    if pay_method not in _WALLET_RECHARGE_METHODS:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=不支持的收款方式", status_code=303)
     admin_name = request.session.get("admin_username", "admin")
-    # 生成"钱包充值"收费单（未付）
-    desc = f"钱包充值 ¥{amt:.2f}"
-    if bns > 0:
-        desc += f"（赠送 ¥{bns:.2f}）"
-    notes_payload = (note.strip() + " " if note.strip() else "") + f"[wallet_recharge_bonus={bns:.2f}]"
-    inv = Invoice(
-        invoice_no      = _gen_invoice_no(db),
-        customer_id     = customer_id,
-        pet_id          = None,
-        invoice_date    = datetime.now().strftime("%Y-%m-%d"),
-        subtotal        = amt,
-        discount_amount = 0.0,
-        total_amount    = amt,
-        payment_status  = "unpaid",
-        notes           = notes_payload,
-        store           = _get_op_store(request) or "",
-        created_by      = admin_name,
+    wallet = _get_or_create_wallet(db, customer_id)
+    tx = _wallet_apply_tx(
+        db, wallet, tx_type="recharge", amount=amt, bonus=bns,
+        pay_method=pay_method, ref_no=ref_no,
+        operator=admin_name, store=_get_op_store(request) or "", note=note,
     )
-    db.add(inv)
-    db.flush()
-    db.add(InvoiceItem(
-        invoice_id  = inv.id,
-        ref_type    = "wallet_recharge",
-        ref_id      = customer_id,
-        description = desc,
-        quantity    = 1.0,
-        unit_price  = amt,
-        subtotal    = amt,
-    ))
-    _audit(db, request, "wallet_recharge_invoice_create", application_id=None,
-           detail={"customer_id": customer_id, "amount": amt, "bonus": bns, "invoice_id": inv.id})
+    _audit(db, request, "wallet_recharge", application_id=None,
+           detail={"customer_id": customer_id, "amount": amt, "bonus": bns,
+                   "pay_method": pay_method, "transaction_id": tx.id})
     db.commit()
-    # 跳到收费单收款页，立即可以收款
-    return RedirectResponse(
-        f"/admin/invoices/{inv.id}?msg=已生成充值单 ¥{amt:.2f}" + (f"（送 ¥{bns:.2f}）" if bns > 0 else "") + "，请选择收款方式",
-        status_code=303,
-    )
+    fallback = f"/admin/customers/{customer_id}?tab=wallet"
+    target = _safe_next(next_url, fallback) if next_url else fallback
+    sep = "&" if "?" in target else "?"
+    msg = f"充值成功：实收 ¥{amt:.2f}，钱包到账 ¥{amt + bns:.2f}"
+    return RedirectResponse(f"{target}{sep}msg={msg}", status_code=303)
 
 
 def _maybe_credit_wallet_from_invoice(db: Session, inv: "Invoice", request: Request) -> None:
@@ -12920,6 +12994,7 @@ def _maybe_credit_wallet_from_invoice(db: Session, inv: "Invoice", request: Requ
     existed = db.query(WalletTransaction.id).filter(
         WalletTransaction.invoice_id == inv.id,
         WalletTransaction.type == "recharge",
+        WalletTransaction.status != "reversed",
     ).first()
     if existed:
         return
@@ -12931,15 +13006,58 @@ def _maybe_credit_wallet_from_invoice(db: Session, inv: "Invoice", request: Requ
         try: bonus = float(m.group(1))
         except: bonus = 0.0
     wallet = _get_or_create_wallet(db, inv.customer_id)
+    legacy_payment = db.query(Payment).filter(
+        Payment.invoice_id == inv.id,
+        Payment.status == "success",
+    ).order_by(Payment.id.asc()).first()
     _wallet_apply_tx(
         db, wallet, tx_type="recharge",
         amount=float(inv.total_amount or 0),
         bonus=bonus,
+        pay_method=(legacy_payment.method if legacy_payment else (inv.payment_method or "")),
         invoice_id=inv.id,
         operator=request.session.get("admin_username", "admin"),
         store=_get_admin_store(request),
         note=f"充值单 {inv.invoice_no or inv.id}",
     )
+
+
+@app.post("/admin/wallet-transactions/{tx_id}/reverse")
+async def admin_wallet_recharge_reverse(
+    tx_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    note: str = Form(""),
+    next_url: str = Form(""),
+):
+    """一键撤销误充值。仅超管；有后续支出时拒绝自动撤销。"""
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    tx = db.get(WalletTransaction, tx_id)
+    if not tx:
+        raise HTTPException(404, "钱包流水不存在")
+    customer_id = tx.customer_id
+    fallback = f"/admin/customers/{customer_id}?tab=wallet"
+    try:
+        reversal = _reverse_wallet_recharge(
+            db, tx,
+            operator=request.session.get("admin_username", "admin"),
+            note=note,
+        )
+    except HTTPException as exc:
+        db.rollback()
+        target = _safe_next(next_url, fallback) if next_url else fallback
+        sep = "&" if "?" in target else "?"
+        return RedirectResponse(f"{target}{sep}msg={exc.detail}", status_code=303)
+    _audit(db, request, "wallet_recharge_reverse", application_id=None,
+           detail={"customer_id": customer_id, "transaction_id": tx.id,
+                   "reversal_id": reversal.id, "amount": float(tx.amount or 0)})
+    db.commit()
+    target = _safe_next(next_url, fallback) if next_url else fallback
+    sep = "&" if "?" in target else "?"
+    return RedirectResponse(f"{target}{sep}msg=充值已撤销，钱包余额和财务流水已同步冲减", status_code=303)
 
 
 @app.post("/admin/wallets/{customer_id}/refund")
@@ -12949,6 +13067,8 @@ async def admin_wallet_refund(
     db: Session = Depends(get_db),
     csrf_token: str = Form(""),
     amount: str = Form(...),
+    pay_method: str = Form("cash"),
+    ref_no: str = Form(""),
     note: str = Form(""),
 ):
     """钱包退款（把余额退给客户）。amount > 0。"""
@@ -12962,19 +13082,23 @@ async def admin_wallet_refund(
         return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=金额无效", status_code=303)
     if amt <= 0:
         return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=退款金额需大于 0", status_code=303)
+    pay_method = (pay_method or "cash").strip()
+    if pay_method not in _WALLET_RECHARGE_METHODS:
+        return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=不支持的退款方式", status_code=303)
     wallet = _get_or_create_wallet(db, customer_id)
     try:
         _wallet_apply_tx(
             db, wallet, tx_type="refund", amount=amt,
+            pay_method=pay_method, ref_no=ref_no,
             operator=request.session.get("admin_username", "admin"),
-            store=_get_admin_store(request),
+            store=_get_op_store(request),
             note=note,
         )
     except HTTPException as he:
         return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg={he.detail}", status_code=303)
     db.commit()
     _audit(db, request, "wallet_refund", application_id=None,
-           detail={"customer_id": customer_id, "amount": amt})
+           detail={"customer_id": customer_id, "amount": amt, "pay_method": pay_method})
     db.commit()
     return RedirectResponse(f"/admin/customers/{customer_id}?tab=wallet&msg=已退款 ¥{amt:.2f}", status_code=303)
 
@@ -26729,8 +26853,8 @@ async def admin_reports_revenue(
     # 钱包充值（区间内）
     wallet_recharge_q = db.query(WalletTransaction).filter(
         WalletTransaction.type == "recharge",
-        WalletTransaction.created_at >= df + " 00:00:00",
-        WalletTransaction.created_at <= dt + " 23:59:59",
+        func.date(WalletTransaction.created_at, '+8 hours') >= df,
+        func.date(WalletTransaction.created_at, '+8 hours') <= dt,
     )
     if store:
         wallet_recharge_q = wallet_recharge_q.filter(WalletTransaction.store == store)
@@ -26771,7 +26895,50 @@ async def admin_reports_revenue(
             "store": (txn.store or "").strip() or "未指定",
             "created_at": txn.created_at,
             "note": txn.note or "",
+            "status": txn.status or "active",
         })
+
+    # 钱包现金退款 / 充值撤销（区间内负向现金流）。业务退款“退回钱包”
+    # 的流水 amount 为正，不属于现金流出，因此只统计 amount < 0。
+    wallet_refund_q = db.query(WalletTransaction).filter(
+        WalletTransaction.type.in_(("refund", "reversal")),
+        WalletTransaction.amount < 0,
+        func.date(WalletTransaction.created_at, '+8 hours') >= df,
+        func.date(WalletTransaction.created_at, '+8 hours') <= dt,
+    )
+    if store:
+        wallet_refund_q = wallet_refund_q.filter(WalletTransaction.store == store)
+    wallet_refunds = wallet_refund_q.order_by(
+        WalletTransaction.created_at.desc(), WalletTransaction.id.desc()
+    ).all()
+    wallet_refund_total = round(sum(
+        max(0.0, -(float(t.amount or 0) - float(t.bonus_amount or 0)))
+        for t in wallet_refunds
+    ), 2)
+    wallet_refund_details = []
+    for txn in wallet_refunds:
+        removed = max(0.0, -float(txn.amount or 0))
+        bonus_removed = max(0.0, -float(txn.bonus_amount or 0))
+        wallet_refund_details.append({
+            "id": txn.id,
+            "customer_id": txn.customer_id,
+            "customer_name": (
+                (txn.customer.name if txn.customer else "")
+                or f"客户 #{txn.customer_id or '-'}"
+            ),
+            "kind": "充值撤销" if txn.type == "reversal" else "钱包退款",
+            "cash": round(max(0.0, removed - bonus_removed), 2),
+            "bonus": round(bonus_removed, 2),
+            "removed": round(removed, 2),
+            "pay_method": _REVENUE_PAY_ZH.get(
+                txn.pay_method or "", txn.pay_method or "未指定"
+            ),
+            "operator": (txn.operator or "").strip() or "未指定",
+            "store": (txn.store or "").strip() or "未指定",
+            "created_at": txn.created_at,
+            "note": txn.note or "",
+        })
+    wallet_recharge_net_total = round(wallet_recharge_total - wallet_refund_total, 2)
 
     # 套餐售卖（区间内）
     pkg_sold_q = db.query(CustomerPackage).filter(
@@ -26887,6 +27054,10 @@ async def admin_reports_revenue(
         "wallet_recharge_credit_total": wallet_recharge_credit_total,
         "wallet_recharges_count": len(wallet_recharges),
         "wallet_recharge_details": wallet_recharge_details,
+        "wallet_refund_total": wallet_refund_total,
+        "wallet_refunds_count": len(wallet_refunds),
+        "wallet_refund_details": wallet_refund_details,
+        "wallet_recharge_net_total": wallet_recharge_net_total,
         "pkg_sold_total": pkg_sold_total,
         "pkg_sold_count": len(pkg_sold),
         "pkg_sold_details": pkg_sold_details,
@@ -26894,7 +27065,7 @@ async def admin_reports_revenue(
         "deposit_details": deposit_details,
         "deposit_refund": deposit_refund,
         # 财务收入合计 / 业务收入合计
-        "finance_total": finance_cash_total + wallet_recharge_total,
+        "finance_total": finance_cash_total + wallet_recharge_net_total,
         "business_total": total_amount,  # = 已收款收费单总额 = 现金类+钱包+套餐+押金+券
         "csrf_token": _get_csrf_token(request),
     })
@@ -27277,6 +27448,40 @@ async def admin_reports_revenue_export(
         d["amount"] += float(r.total_amount or 0)
     for m, d in sorted(by_m.items(), key=lambda x: -x[1]["amount"]):
         ws2.append([_REVENUE_PAY_ZH.get(m, m), d["count"], round(d["amount"], 2)])
+
+    # 钱包属于预收款，不混入业务收费单；单独导出正向充值和负向退款/撤销。
+    wallet_q = db.query(WalletTransaction).filter(
+        func.date(WalletTransaction.created_at, '+8 hours') >= df,
+        func.date(WalletTransaction.created_at, '+8 hours') <= dt,
+        or_(
+            WalletTransaction.type == "recharge",
+            and_(
+                WalletTransaction.type.in_(("refund", "reversal")),
+                WalletTransaction.amount < 0,
+            ),
+        ),
+    )
+    if store:
+        wallet_q = wallet_q.filter(WalletTransaction.store == store)
+    wallet_rows = wallet_q.order_by(WalletTransaction.created_at.asc(), WalletTransaction.id.asc()).all()
+    ws3 = wb.create_sheet("钱包预收款")
+    wallet_headers = ["时间", "客户", "类型", "现金流入/流出", "赠送变动", "钱包变动", "支付方式", "经办人", "门店", "外部流水号", "备注"]
+    ws3.append(wallet_headers)
+    for c in range(1, len(wallet_headers) + 1):
+        ws3.cell(row=1, column=c).font = Font(bold=True)
+    for tx in wallet_rows:
+        bonus = float(tx.bonus_amount or 0)
+        amount = float(tx.amount or 0)
+        cash_delta = amount - bonus
+        cust = db.get(Customer, tx.customer_id) if tx.customer_id else None
+        ws3.append([
+            (tx.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if tx.created_at else "",
+            cust.name if cust else f"客户 #{tx.customer_id or '-'}",
+            "充值" if tx.type == "recharge" else ("充值撤销" if tx.type == "reversal" else "钱包退款"),
+            round(cash_delta, 2), round(bonus, 2), round(amount, 2),
+            _REVENUE_PAY_ZH.get(tx.pay_method or "", tx.pay_method or ""),
+            tx.operator or "", tx.store or "", tx.ref_no or "", tx.note or "",
+        ])
 
     buf = BytesIO()
     wb.save(buf); buf.seek(0)
@@ -28943,6 +29148,32 @@ async def admin_invoice_payment_void(
         raise HTTPException(404)
     _pet_for_store = db.get(Pet, inv.pet_id) if inv.pet_id else None
     _assert_store_access(request, inv.store, _pet_for_store.store if _pet_for_store else "")
+    # 旧版充值收费单：撤销收款必须同时扣回钱包，不能只撤 Payment。
+    legacy_recharge_tx = db.query(WalletTransaction).filter(
+        WalletTransaction.invoice_id == inv_id,
+        WalletTransaction.type == "recharge",
+        WalletTransaction.status != "reversed",
+    ).order_by(WalletTransaction.id.desc()).first()
+    if legacy_recharge_tx:
+        try:
+            reversal = _reverse_wallet_recharge(
+                db, legacy_recharge_tx,
+                operator=request.session.get("admin_username", "admin"),
+                note=f"撤销历史充值单 {inv.invoice_no or inv.id}",
+            )
+        except HTTPException as exc:
+            db.rollback()
+            return RedirectResponse(
+                f"/admin/invoices/{inv_id}?msg={exc.detail}", status_code=303,
+            )
+        _audit(db, request, "wallet_recharge_reverse", application_id=None,
+               detail={"customer_id": legacy_recharge_tx.customer_id,
+                       "transaction_id": legacy_recharge_tx.id,
+                       "reversal_id": reversal.id, "invoice_id": inv_id})
+        db.commit()
+        target = _safe_next(next_url, f"/admin/invoices/{inv_id}") if next_url else f"/admin/invoices/{inv_id}"
+        sep = "&" if "?" in target else "?"
+        return RedirectResponse(f"{target}{sep}msg=充值收款和钱包余额已同步撤销", status_code=303)
     # 回滚副作用
     if p.method == "wallet" and p.ref_id:
         wallet = _get_or_create_wallet(db, p.customer_id)
@@ -29090,6 +29321,29 @@ async def admin_invoice_refund(
     if inv.payment_status != "paid":
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=只有已支付的单可整单退", status_code=303)
     operator = request.session.get("admin_username", "admin")
+    # 兼容旧版充值收费单：整单退款与钱包撤销必须是同一个原子动作。
+    legacy_recharge_tx = db.query(WalletTransaction).filter(
+        WalletTransaction.invoice_id == inv_id,
+        WalletTransaction.type == "recharge",
+        WalletTransaction.status != "reversed",
+    ).order_by(WalletTransaction.id.desc()).first()
+    if legacy_recharge_tx:
+        try:
+            reversal = _reverse_wallet_recharge(
+                db, legacy_recharge_tx, operator=operator,
+                note=f"退回历史充值单 {inv.invoice_no or inv.id}",
+            )
+        except HTTPException as exc:
+            db.rollback()
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg={exc.detail}", status_code=303)
+        _audit(db, request, "wallet_recharge_reverse", application_id=None,
+               detail={"customer_id": legacy_recharge_tx.customer_id,
+                       "transaction_id": legacy_recharge_tx.id,
+                       "reversal_id": reversal.id, "invoice_id": inv_id})
+        db.commit()
+        return RedirectResponse(
+            f"/admin/invoices/{inv_id}?msg=充值单已退款，钱包余额已同步扣回", status_code=303,
+        )
     pays = db.query(Payment).filter(
         Payment.invoice_id == inv_id, Payment.status == "success"
     ).all()
@@ -39022,6 +39276,26 @@ async def m_reports_revenue(
         by_method.setdefault(m, {"count": 0, "total": 0.0})
         by_method[m]["count"] += 1
         by_method[m]["total"] = round(by_method[m]["total"] + float(p.amount or 0), 2)
+    # 钱包预收款独立于业务收费单：充值本金为流入，现金退款/撤销为流出。
+    wtx_q = db.query(WalletTransaction).filter(
+        func.date(WalletTransaction.created_at, '+8 hours') >= d_from,
+        func.date(WalletTransaction.created_at, '+8 hours') <= d_to,
+    )
+    if store_short:
+        wtx_q = wtx_q.filter(WalletTransaction.store == store_short)
+    wallet_cash_in = 0.0
+    wallet_cash_out = 0.0
+    wallet_tx_count = 0
+    for tx in wtx_q.all():
+        if tx.type == "recharge":
+            wallet_cash_in += max(0.0, float(tx.amount or 0) - float(tx.bonus_amount or 0))
+            wallet_tx_count += 1
+        elif tx.type in ("refund", "reversal") and float(tx.amount or 0) < 0:
+            wallet_cash_out += max(0.0, -(float(tx.amount or 0) - float(tx.bonus_amount or 0)))
+            wallet_tx_count += 1
+    wallet_cash_in = round(wallet_cash_in, 2)
+    wallet_cash_out = round(wallet_cash_out, 2)
+    wallet_net = round(wallet_cash_in - wallet_cash_out, 2)
     # 按金额排序
     method_list = sorted(by_method.items(), key=lambda x: -x[1]["total"])
     ctx = _m_ctx(request, db, active_tab="finance")
@@ -39030,6 +39304,10 @@ async def m_reports_revenue(
         "total": total, "count": count,
         "method_list": method_list,
         "method_zh": _REVENUE_PAY_ZH,
+        "wallet_cash_in": wallet_cash_in,
+        "wallet_cash_out": wallet_cash_out,
+        "wallet_net": wallet_net,
+        "wallet_tx_count": wallet_tx_count,
     })
     return templates.TemplateResponse(request, "m_uk/revenue_report.html", ctx)
 

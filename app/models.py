@@ -1385,7 +1385,7 @@ class WalletTransaction(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     wallet_id   = mapped_column(ForeignKey("wallets.id",   ondelete="CASCADE"), nullable=False)
     customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
-    # type: recharge / consume / refund / adjust
+    # type: recharge / consume / refund / adjust / reversal
     type:          Mapped[str]   = mapped_column(String(20), default="consume")
     amount:        Mapped[float] = mapped_column(Float, default=0.0)        # 本次变动，正=进，负=出
     balance_after: Mapped[float] = mapped_column(Float, default=0.0)        # 操作后余额
@@ -1395,6 +1395,11 @@ class WalletTransaction(Base):
     bonus_amount: Mapped[float] = mapped_column(Float, default=0.0)         # 赠送金额（充 500 送 50 时）
     consumed_principal: Mapped[float] = mapped_column(Float, default=0.0)   # 本笔消费扣的本金部分
     consumed_bonus:     Mapped[float] = mapped_column(Float, default=0.0)   # 本笔消费扣的赠送部分
+    status:      Mapped[str] = mapped_column(String(20), default="active")  # active / reversed
+    reversal_of_id: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    reversed_by: Mapped[str] = mapped_column(String(80), default="")
+    ref_no:      Mapped[str] = mapped_column(String(120), default="")       # 外部支付流水号
     store:      Mapped[str] = mapped_column(String(40), default="")         # 当时门店短名
     note:       Mapped[str] = mapped_column(Text, default="")
     operator:   Mapped[str] = mapped_column(String(80), default="")         # 经办人 username

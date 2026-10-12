@@ -16,6 +16,7 @@
 
 <form method="post" action="/admin/wallets/{{ cust.id }}/recharge" class="ukm-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/customer/{{ cust.id }}"/>
 
   <div class="ukm-field">
     <label class="lbl">充&nbsp;值&nbsp;金&nbsp;额<span class="req">*</span></label>
@@ -26,6 +27,23 @@
       <label class="ukm-chip" onclick="document.querySelector('[name=amount]').value={{ v }};">{{ v }}</label>
       {% endfor %}
     </div>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">收&nbsp;款&nbsp;方&nbsp;式<span class="req">*</span></label>
+    <select class="ukm-select" name="pay_method" required>
+      <option value="cash">现金</option>
+      <option value="wechat">微信</option>
+      <option value="alipay">支付宝</option>
+      <option value="shouqianba">收钱吧</option>
+      <option value="meituan">美团</option>
+      <option value="third_party">抖音团购</option>
+    </select>
+  </div>
+
+  <div class="ukm-field">
+    <label class="lbl">外&nbsp;部&nbsp;流&nbsp;水&nbsp;号&nbsp;（可选）</label>
+    <input class="ukm-input" type="text" name="ref_no" maxlength="120" placeholder="微信 / 支付宝交易号"/>
   </div>
 
   <div class="ukm-field">
@@ -43,14 +61,14 @@
     <div class="ukm-card" style="border-left:2px solid var(--accent-amber);">
       <div class="ukm-card-title" style="color:var(--accent-amber);">提&nbsp;交&nbsp;后</div>
       <div class="ukm-card-sub">
-        会生成一张未付收费单 → 跳到收款页选择支付方式（现金/微信/支付宝/...）→ 收款完成钱包才入账
+        确认已收款后，充值本金和赠送金额立即进入钱包；不生成业务收费单
       </div>
     </div>
   </div>
 
   <div class="ukm-btn-row">
     <a href="/m/customer/{{ cust.id }}" class="ukm-btn ghost block">取&nbsp;消</a>
-    <button type="submit" class="ukm-btn block">生&nbsp;成&nbsp;充&nbsp;值&nbsp;单</button>
+    <button type="submit" class="ukm-btn block" onclick="return confirm('确认已收到款并立即充入客户钱包？');">确&nbsp;认&nbsp;充&nbsp;值</button>
   </div>
 </form>
 
