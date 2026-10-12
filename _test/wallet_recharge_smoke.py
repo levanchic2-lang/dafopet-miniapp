@@ -38,7 +38,10 @@ def main() -> None:
             login = client.post("/admin/login", data={
                 "username": "admin", "password": "test123456", "csrf_token": token,
             }, follow_redirects=False)
-            assert login.status_code == 303
+            assert login.status_code == 303, (
+                f"login={login.status_code} location={login.headers.get('location', '')} "
+                f"body={login.text[:160]!r}"
+            )
 
             db = SessionLocal()
             customer = Customer(name="钱包测试客户", phone="13900009999")
