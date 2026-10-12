@@ -17,7 +17,10 @@ def _csrf(html: str) -> str:
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="wallet-smoke-", dir=Path(__file__).parent) as tmp:
+    # Windows 沙箱的系统临时目录不可写；Linux 服务器发布目录只读。
+    # 两边分别使用可写位置。
+    temp_parent = Path(__file__).parent if os.name == "nt" else None
+    with tempfile.TemporaryDirectory(prefix="wallet-smoke-", dir=temp_parent) as tmp:
         db_path = Path(tmp) / "wallet.db"
         os.environ["DATABASE_URL"] = f"sqlite:///{db_path.as_posix()}"
         os.environ["UPLOAD_DIR"] = str(Path(tmp) / "uploads")
