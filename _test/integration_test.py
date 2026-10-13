@@ -1659,6 +1659,11 @@ def t_consent_sign_flow():
     r = pub.get(f"/consent/{tok}")
     assert r.status_code == 200
     assert "签字" in r.text and "测试客户A" in r.text  # 变量已替换
+    assert "/static/vendor/signature_pad.umd.min.js?v=4.1.7" in r.text
+    assert "cdn.jsdelivr.net" not in r.text
+    asset = pub.get("/static/vendor/signature_pad.umd.min.js")
+    assert asset.status_code == 200
+    assert "Signature Pad v4.1.7" in asset.text
 
     # 提交签字（模拟一张 signature_pad 输出的 PNG，base64 长度 > 800）
     import base64

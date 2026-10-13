@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <title>{{ title }} · 大风动物医院</title>
-<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script src="/static/vendor/signature_pad.umd.min.js?v=4.1.7"></script>
 <style>
   * { box-sizing: border-box; }
   body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
@@ -323,6 +323,12 @@ document.addEventListener('DOMContentLoaded', function () {
   var watermark = document.getElementById('watermark');
   var submitBtn = document.getElementById('submit-btn');
   var alertBox = document.getElementById('alert');
+
+  if (typeof window.SignaturePad !== 'function') {
+    alertBox.innerHTML = '<div class="alert err">签字组件加载失败，请刷新页面后重试；如仍失败，请联系医院工作人员。</div>';
+    submitBtn.disabled = true;
+    return;
+  }
 
   function resize() {
     var ratio = Math.max(window.devicePixelRatio || 1, 1);
