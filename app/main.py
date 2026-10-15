@@ -90,6 +90,7 @@ from app.models import (
     MicroscopyReport,
     UltrasoundReport,
     XrayReport,
+    CbcReport,
     NeurologicExam,
     ClinicalScoreAssessment,
     CalendarBlock,
@@ -17879,7 +17880,7 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
            "sales_order": 0, "anesthesia": 0, "weight": 0, "medical_doc": 0,
            "monitor_sheet": 0, "consent_task": 0, "consent_doc": 0,
            "care_summary": 0, "care_plan": 0,
-           "followup": 0, "microscopy": 0, "neurologic_exam": 0,
+           "followup": 0, "microscopy": 0, "cbc": 0, "neurologic_exam": 0,
            "clinical_score": 0, "unified_batch": 0, "consultation_draft": 0}
 
     if db.query(Hospitalization.id).filter(Hospitalization.visit_id == vid).first():
@@ -17902,6 +17903,8 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
             UltrasoundReport.exam_order_id == eo.id).delete(synchronize_session=False)
         db.query(XrayReport).filter(
             XrayReport.exam_order_id == eo.id).delete(synchronize_session=False)
+        cnt["cbc"] += db.query(CbcReport).filter(
+            CbcReport.exam_order_id == eo.id).delete(synchronize_session=False)
         db.delete(eo)
         cnt["exam_order"] += 1
     # 残留：仅挂 visit_id 的显微镜/B超/X光报告
@@ -17911,6 +17914,8 @@ def _purge_visit_deep(db: Session, visit: Visit, *, keep_paid_invoices: bool = T
         UltrasoundReport.visit_id == vid).delete(synchronize_session=False)
     db.query(XrayReport).filter(
         XrayReport.visit_id == vid).delete(synchronize_session=False)
+    cnt["cbc"] += db.query(CbcReport).filter(
+        CbcReport.visit_id == vid).delete(synchronize_session=False)
     cnt["neurologic_exam"] += db.query(NeurologicExam).filter(
         NeurologicExam.visit_id == vid).delete(synchronize_session=False)
     cnt["clinical_score"] += db.query(ClinicalScoreAssessment).filter(
@@ -31661,6 +31666,12 @@ async def admin_exam_order_detail(
     xray_reports = db.query(XrayReport).filter(
         XrayReport.exam_order_id == order_id
     ).order_by(XrayReport.id.desc()).all()
+    # BC-60R 血常规项目 + 已生成报告（首版一张检查单一份）
+    cbc_items = _cbc_detect_items(db, items)
+    cbc_reports = db.query(CbcReport).filter(
+        CbcReport.exam_order_id == order_id
+    ).order_by(CbcReport.id.desc()).all()
+    has_cbc = len(cbc_items) > 0 or bool(cbc_reports)
     # 已被某份报告认领的项目名 set（用于上传下拉灰显「已上传」+ 项目卡片状态）
     assigned_labels = set()
     for rpt in (order.reports or []):
@@ -31669,6 +31680,10 @@ async def admin_exam_order_detail(
             assigned_labels.add(lbl)
     for mr in micro_reports:
         lbl = (mr.item_label or "").strip()
+        if lbl:
+            assigned_labels.add(lbl)
+    for cr in cbc_reports:
+        lbl = (cr.item_label or "").strip()
         if lbl:
             assigned_labels.add(lbl)
     return templates.TemplateResponse(request, "uk/exam_detail.html", {  # B8.7 UK 重写
@@ -31683,6 +31698,8 @@ async def admin_exam_order_detail(
         "ultrasound_reports": ultrasound_reports,
         "has_xray": has_xray, "xray_items": xray_items,
         "xray_reports": xray_reports,
+        "has_cbc": has_cbc, "cbc_items": cbc_items,
+        "cbc_reports": cbc_reports,
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -32335,6 +32352,258 @@ _US_EXAM_TYPES = [
     {"key": "general", "label": "通用超声"},
 ]
 _US_EXAM_TYPE_KEYS = {t["key"] for t in _US_EXAM_TYPES}
+
+
+def _cbc_detect_items(db: Session, items: list) -> list:
+    """检查单中可生成 BC-60R 报告的血常规/血球项目。"""
+    out = []
+    for it in items:
+        iid = it.get("item_id") if isinstance(it, dict) else None
+        name = (it.get("name") if isinstance(it, dict) else "") or ""
+        matched = False
+        if iid:
+            inv = db.get(InventoryItem, int(iid))
+            if inv:
+                matched = (inv.subcategory or "").lower() in ("cbc", "hematology")
+                name = it.get("name") or inv.name
+        if not matched:
+            upper = name.upper()
+            matched = any(k in name for k in ("血常规", "血球", "血细胞计数")) or "CBC" in upper
+        if matched:
+            out.append({"name": name, "item_id": iid})
+    return out
+
+
+def _cbc_species(value: str) -> str:
+    value = (value or "").strip().lower()
+    if value in ("cat", "feline", "猫"):
+        return "cat"
+    if value in ("dog", "canine", "犬", "狗"):
+        return "dog"
+    return ""
+
+
+@app.get("/admin/exam-orders/{order_id}/cbc/new", response_class=HTMLResponse)
+async def page_admin_cbc_new(order_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    existing = db.query(CbcReport).filter(CbcReport.exam_order_id == order_id).first()
+    if existing:
+        return RedirectResponse(f"/admin/cbc-reports/{existing.id}/edit", status_code=303)
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
+    pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    items = json.loads(order.items_json or "[]")
+    vets = db.query(Staff.name).filter(Staff.status.in_(["active", "probation"]), Staff.position.ilike("%医%")).all()
+    return templates.TemplateResponse(request, "uk/cbc_new.html", {
+        "order": order, "visit": visit, "cust": cust, "pet": pet,
+        "cbc_items": _cbc_detect_items(db, items), "vet_names": [v[0] for v in vets],
+        "default_vet": (visit.vet_name if visit and visit.vet_name else request.session.get("admin_username", "")),
+        "unsupported": not pet or _cbc_species(pet.species) not in ("cat", "dog"),
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+async def _process_cbc_report_ai(report_id: int) -> None:
+    from app.database import SessionLocal
+    from app.services.cbc_report import draft_cbc_analysis, normalize_results, recognize_cbc_photo, validate_results
+    db = SessionLocal()
+    try:
+        report = db.get(CbcReport, report_id)
+        if not report:
+            return
+        report.ai_status = "processing"; report.ai_error = ""; report.ai_started_at = datetime.utcnow()
+        report.ai_completed_at = None; db.commit()
+        pet = db.get(Pet, report.pet_id) if report.pet_id else None
+        visit = db.get(Visit, report.visit_id) if report.visit_id else None
+        species = _cbc_species(pet.species if pet else "")
+        image_path = Path("uploads") / report.raw_image_path
+        recognized = await recognize_cbc_photo(image_path, species)
+        if not recognized.get("ok"):
+            raise RuntimeError(recognized.get("error") or "照片识别失败")
+        data = recognized.get("data") or {}
+        results = normalize_results(data.get("results") or [], species)
+        screen_species = _cbc_species(str(data.get("screen_species") or ""))
+        validation = validate_results(
+            results, expected_species=species, screen_species=screen_species,
+            quality_ok=bool(data.get("quality_ok", True)), quality_issues=data.get("quality_issues") or [],
+        )
+        report.sample_no = str(data.get("sample_no") or "")[:40]
+        report.tested_at = str(data.get("tested_at") or "")[:30]
+        report.species = species
+        report.results_json = json.dumps(results, ensure_ascii=False)
+        report.validation_json = json.dumps(validation, ensure_ascii=False)
+        previous = db.query(CbcReport).filter(
+            CbcReport.pet_id == report.pet_id, CbcReport.id != report.id,
+            CbcReport.exam_report_id.is_not(None), CbcReport.ai_status == "completed",
+        ).order_by(CbcReport.id.desc()).first()
+        report.previous_report_id = previous.id if previous else None
+        db.commit()
+        previous_results = json.loads(previous.results_json or "[]") if previous else []
+        payload = {
+            "pet": {"name": pet.name if pet else "", "species": species, "breed": pet.breed if pet else ""},
+            "visit": {
+                "chief_complaint": visit.chief_complaint if visit else "",
+                "physical_exam": visit.physical_exam if visit else "",
+                "diagnosis": visit.diagnosis if visit else "",
+                "treatment_plan": visit.treatment_plan if visit else "",
+                "notes": visit.notes if visit else "",
+            },
+            "current_results": results, "validation": validation,
+            "previous_results": previous_results, "previous_tested_at": previous.tested_at if previous else "",
+        }
+        drafted = await draft_cbc_analysis(payload)
+        if drafted.get("ok"):
+            report.ai_analysis = drafted.get("analysis", "")
+            report.doctor_conclusion = drafted.get("doctor_conclusion", "")
+            report.ai_status = "completed"
+        else:
+            report.ai_status = "partial"
+            report.ai_error = str(drafted.get("error") or "AI 分析生成失败")[:1000]
+        report.ai_completed_at = datetime.utcnow(); db.commit()
+    except Exception as exc:
+        logger.exception("[cbc] processing failed report=%s", report_id)
+        db.rollback()
+        report = db.get(CbcReport, report_id)
+        if report:
+            report.ai_status = "failed"; report.ai_error = str(exc)[:1000]
+            report.ai_completed_at = datetime.utcnow(); db.commit()
+    finally:
+        db.close()
+
+
+@app.post("/admin/exam-orders/{order_id}/cbc/create")
+async def admin_cbc_create(order_id: int, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    require_admin(request)
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        raise HTTPException(404)
+    if db.query(CbcReport.id).filter(CbcReport.exam_order_id == order_id).first():
+        raise HTTPException(409, "本检查单已存在血常规报告")
+    form = await request.form(); _require_csrf(request, str(form.get("csrf_token", "")))
+    photo = form.get("photo")
+    if not photo or not getattr(photo, "filename", ""):
+        raise HTTPException(400, "请选择血常规屏幕照片")
+    ext = Path(photo.filename).suffix.lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp"):
+        raise HTTPException(400, "仅支持 JPG、PNG 或 WEBP 图片")
+    data = await photo.read()
+    if not data or len(data) > 15 * 1024 * 1024:
+        raise HTTPException(413, "图片为空或超过 15MB")
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
+    species = _cbc_species(pet.species if pet else "")
+    if species not in ("cat", "dog"):
+        raise HTTPException(400, "首版仅支持犬、猫，请先完善宠物物种")
+    report = CbcReport(
+        exam_order_id=order_id, customer_id=visit.customer_id if visit else None,
+        pet_id=visit.pet_id if visit else None, visit_id=order.visit_id,
+        item_label=str(form.get("item_label") or "血常规")[:120], species=species,
+        vet_name=str(form.get("vet_name") or "")[:80], results_json="[]", validation_json="{}",
+        ai_status="processing", store=_get_op_store(request) or (pet.store if pet else "") or "",
+        operator=request.session.get("admin_username", "admin"),
+    )
+    db.add(report); db.flush()
+    folder = Path("uploads") / "cbc_photos" / str(report.id); folder.mkdir(parents=True, exist_ok=True)
+    filename = f"source_{secrets.token_hex(6)}{ext}"
+    (folder / filename).write_bytes(data)
+    report.raw_image_path = f"cbc_photos/{report.id}/{filename}"
+    db.commit(); background_tasks.add_task(_process_cbc_report_ai, report.id)
+    return RedirectResponse(f"/admin/cbc-reports/{report.id}/edit?msg=原图已保存，正在自动识别。", status_code=303)
+
+
+def _cbc_edit_context(report: CbcReport, request: Request, db: Session, msg: str = "") -> dict:
+    order = db.get(ExamOrder, report.exam_order_id)
+    visit = db.get(Visit, report.visit_id) if report.visit_id else None
+    pet = db.get(Pet, report.pet_id) if report.pet_id else None
+    cust = db.get(Customer, report.customer_id) if report.customer_id else None
+    try: results = json.loads(report.results_json or "[]") or []
+    except Exception: results = []
+    try: validation = json.loads(report.validation_json or "{}") or {}
+    except Exception: validation = {}
+    previous_values = {}
+    if report.previous_report_id:
+        previous = db.get(CbcReport, report.previous_report_id)
+        if previous:
+            try: previous_values = {r.get("code"): r.get("value") for r in json.loads(previous.results_json or "[]")}
+            except Exception: previous_values = {}
+    return {"report": report, "order": order, "visit": visit, "pet": pet, "cust": cust,
+            "results": results, "validation": validation, "previous_values": previous_values,
+            "msg": msg, "csrf_token": _get_csrf_token(request)}
+
+
+@app.get("/admin/cbc-reports/{report_id}/edit", response_class=HTMLResponse)
+async def admin_cbc_edit(report_id: int, request: Request, db: Session = Depends(get_db), msg: str = Query("")):
+    require_admin(request)
+    report = db.get(CbcReport, report_id)
+    if not report: raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store: raise HTTPException(403)
+    return templates.TemplateResponse(request, "uk/cbc_edit.html", _cbc_edit_context(report, request, db, msg))
+
+
+@app.get("/admin/cbc-reports/{report_id}/ai-status")
+async def admin_cbc_status(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    report = db.get(CbcReport, report_id)
+    if not report: raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store: raise HTTPException(403)
+    return JSONResponse({"ok": True, "status": report.ai_status, "error": report.ai_error or ""})
+
+
+@app.post("/admin/cbc-reports/{report_id}/save")
+async def admin_cbc_save(report_id: int, request: Request, db: Session = Depends(get_db)):
+    from app.services.cbc_report import normalize_results, validate_results
+    require_admin(request)
+    report = db.get(CbcReport, report_id)
+    if not report: raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store: raise HTTPException(403)
+    form = await request.form(); _require_csrf(request, str(form.get("csrf_token", "")))
+    raw = []
+    for i in range(40):
+        code = str(form.get(f"code_{i}") or "").strip()
+        if not code: continue
+        raw.append({"code": code, "value": form.get(f"value_{i}"), "instrument_flag": form.get(f"flag_{i}"), "confidence": 1.0, "raw_text": str(form.get(f"value_{i}") or "")})
+    results = normalize_results(raw, report.species)
+    validation = validate_results(results, expected_species=report.species, screen_species=report.species)
+    report.results_json = json.dumps(results, ensure_ascii=False)
+    report.validation_json = json.dumps(validation, ensure_ascii=False)
+    report.sample_no = str(form.get("sample_no") or "")[:40]
+    report.tested_at = str(form.get("tested_at") or "")[:30]
+    report.vet_name = str(form.get("vet_name") or "")[:80]
+    report.ai_analysis = str(form.get("ai_analysis") or "").strip()
+    report.doctor_conclusion = str(form.get("doctor_conclusion") or "").strip()
+    report.ai_status = "completed"; report.updated_at = datetime.utcnow(); db.commit()
+    from app.services.cbc_pdf import generate_cbc_pdf
+    _, error = generate_cbc_pdf(db, report.id)
+    msg = f"血常规数据已保存，但 PDF 生成失败：{error}" if error else "血常规报告已生成并归档"
+    return RedirectResponse(f"/admin/exam-orders/{report.exam_order_id}?msg={quote(msg)}", status_code=303)
+
+
+@app.post("/admin/cbc-reports/{report_id}/delete")
+async def admin_cbc_delete(report_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form(); _require_csrf(request, str(form.get("csrf_token", "")))
+    report = db.get(CbcReport, report_id)
+    if not report: raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store: raise HTTPException(403)
+    order_id = report.exam_order_id
+    if report.exam_report_id:
+        er = db.get(ExamReport, report.exam_report_id)
+        if er:
+            if er.file_path: Path(er.file_path).unlink(missing_ok=True)
+            db.delete(er)
+    folder = Path("uploads") / "cbc_photos" / str(report.id)
+    if folder.exists(): shutil.rmtree(folder, ignore_errors=True)
+    db.query(CbcReport).filter(CbcReport.previous_report_id == report.id).update(
+        {"previous_report_id": None}, synchronize_session=False)
+    db.delete(report); db.commit()
+    return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=血常规报告已删除", status_code=303)
 
 
 def _us_detect_items(db: Session, items: list) -> list:

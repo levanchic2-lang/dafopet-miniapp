@@ -1238,6 +1238,41 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_xray_order ON xray_reports(exam_order_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_xray_store ON xray_reports(store)"))
 
+            # cbc_reports：BC-60R 血常规照片识别 + AI 辅助报告（首版犬猫）
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS cbc_reports ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "exam_order_id INTEGER NOT NULL UNIQUE REFERENCES exam_orders(id) ON DELETE CASCADE, "
+                "exam_report_id INTEGER REFERENCES exam_reports(id) ON DELETE SET NULL, "
+                "customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, "
+                "pet_id INTEGER REFERENCES pets(id) ON DELETE SET NULL, "
+                "visit_id INTEGER REFERENCES visits(id) ON DELETE SET NULL, "
+                "item_label VARCHAR(120) DEFAULT '', "
+                "device_model VARCHAR(40) DEFAULT 'BC-60R', "
+                "sample_no VARCHAR(40) DEFAULT '', "
+                "tested_at VARCHAR(30) DEFAULT '', "
+                "species VARCHAR(20) DEFAULT '', "
+                "raw_image_path VARCHAR(500) DEFAULT '', "
+                "results_json TEXT DEFAULT '[]', "
+                "validation_json TEXT DEFAULT '{}', "
+                "previous_report_id INTEGER REFERENCES cbc_reports(id) ON DELETE SET NULL, "
+                "ai_analysis TEXT DEFAULT '', "
+                "doctor_conclusion TEXT DEFAULT '', "
+                "vet_name VARCHAR(80) DEFAULT '', "
+                "ai_status VARCHAR(20) DEFAULT 'idle', "
+                "ai_error TEXT DEFAULT '', "
+                "ai_started_at DATETIME, "
+                "ai_completed_at DATETIME, "
+                "store VARCHAR(40) DEFAULT '', "
+                "operator VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cbc_order ON cbc_reports(exam_order_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cbc_pet ON cbc_reports(pet_id, id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cbc_store ON cbc_reports(store)"))
+
             # 处方 / 检查单：打包价（整单议价总额）列
             pr_cols = conn.execute(text("PRAGMA table_info(prescriptions)")).fetchall()
             if pr_cols and "package_price" not in {c[1] for c in pr_cols}:

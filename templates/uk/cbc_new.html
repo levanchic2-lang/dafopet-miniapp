@@ -1,0 +1,31 @@
+{% extends "uk/_base.html" %}
+{% block title %}生成血常规报告 · 检查单 #{{ order.id }}{% endblock %}
+{% block body %}
+<style>
+.cbc-bc{font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin:24px 0 16px}.cbc-bc a{color:inherit}.cbc-head{font-family:var(--font-serif);font-size:26pt;margin:0 0 5px}.cbc-meta{color:var(--ink-2);font-style:italic;margin-bottom:18px}.cbc-card{background:var(--paper);border:.5px solid var(--hair);padding:22px 24px;margin-bottom:18px}.cbc-card h2{font-size:12pt;letter-spacing:2px;border-bottom:.5px solid var(--hair);padding-bottom:7px}.cbc-field{margin:14px 0}.cbc-field label{display:block;color:var(--ink-3);font-size:9.5pt;margin-bottom:5px}.cbc-input{width:100%;padding:10px;border:.5px solid var(--hair);background:white;font-family:var(--font-serif)}
+.drop{border:1px dashed var(--ink-3);background:#faf9f4;padding:34px;text-align:center;cursor:pointer}.drop.drag{background:#f0f5f1;border-color:var(--accent-green)}.drop strong{display:block;font-size:14pt;margin-bottom:8px}.preview{display:none;max-width:100%;max-height:420px;margin:14px auto 0;border:.5px solid var(--hair)}.tips{line-height:1.8;color:var(--ink-2);font-size:9.5pt}.actions{display:flex;gap:12px;margin:8px 0 40px}.submit{background:var(--ink);color:var(--paper);border:0;padding:13px 30px;font:700 12pt var(--font-serif);letter-spacing:2px;cursor:pointer}
+</style>
+<div class="cbc-bc"><a href="/admin/exam-orders/{{ order.id }}">检查单 #{{ order.id }}</a> / 生成血常规报告</div>
+<h1 class="cbc-head">生 成 血 常 规 报 告</h1>
+<div class="cbc-meta">{{ pet.name if pet else '—' }} · {% if pet and pet.species == 'cat' %}猫{% elif pet and pet.species == 'dog' %}犬{% else %}{{ pet.species if pet else '—' }}{% endif %} · {{ cust.name if cust else '—' }} · 迈瑞 BC-60R</div>
+{% if unsupported %}<div class="cbc-card" style="border-left:3px solid var(--accent-red);">首版仅支持犬、猫；当前宠物档案物种无法确定，请先修正宠物资料。</div>{% endif %}
+<form method="post" action="/admin/exam-orders/{{ order.id }}/cbc/create" enctype="multipart/form-data" id="form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="cbc-card"><h2>屏 幕 照 片</h2>
+  <div class="drop" id="drop"><strong>把企业微信里的照片拖到这里</strong><span>或点击选择一张 BC-60R 完整结果屏幕照片</span><input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required hidden><img id="preview" class="preview"></div>
+  <div class="tips" style="margin-top:12px;">拍摄要求：屏幕完整、数字清晰、无强反光、尽量正对。系统会自动识别并做数值一致性校验；有疑点时只标出需要复核的项目。</div>
+</div>
+<div class="cbc-card"><h2>报 告 信 息</h2>
+  <div class="cbc-field"><label>归属检查项</label><select class="cbc-input" name="item_label">{% for it in cbc_items %}<option value="{{ it.name }}">{{ it.name }}</option>{% endfor %}<option value="血常规">血常规</option></select></div>
+  <div class="cbc-field"><label>报告医师</label><input class="cbc-input" name="vet_name" value="{{ default_vet }}" list="vet-list" required><datalist id="vet-list">{% for v in vet_names %}<option value="{{ v }}">{% endfor %}</datalist></div>
+</div>
+<div class="actions"><button class="submit" id="submit" {% if unsupported %}disabled{% endif %}>识 别 并 生 成 草 稿</button><a href="/admin/exam-orders/{{ order.id }}">返回检查单</a></div>
+</form>
+<script>
+const d=document.getElementById('drop'),f=document.getElementById('photo'),p=document.getElementById('preview');
+d.onclick=()=>f.click(); ['dragenter','dragover'].forEach(x=>d.addEventListener(x,e=>{e.preventDefault();d.classList.add('drag')})); ['dragleave','drop'].forEach(x=>d.addEventListener(x,e=>{e.preventDefault();d.classList.remove('drag')}));
+d.addEventListener('drop',e=>{if(e.dataTransfer.files.length){f.files=e.dataTransfer.files;show()}}); f.onchange=show;
+function show(){if(f.files[0]){p.src=URL.createObjectURL(f.files[0]);p.style.display='block';d.querySelector('strong').textContent=f.files[0].name}}
+document.getElementById('form').onsubmit=()=>{let b=document.getElementById('submit');b.disabled=true;b.textContent='正在识别，请稍候…'};
+</script>
+{% endblock %}

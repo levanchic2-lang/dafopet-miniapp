@@ -2128,6 +2128,40 @@ class XrayReport(Base):
     updated_at:     Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class CbcReport(Base):
+    """BC-60R 血常规照片识别报告（首版仅犬猫）。"""
+    __tablename__ = "cbc_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exam_order_id = mapped_column(ForeignKey("exam_orders.id", ondelete="CASCADE"), nullable=False, unique=True)
+    exam_report_id = mapped_column(ForeignKey("exam_reports.id", ondelete="SET NULL"), nullable=True, default=None)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None, index=True)
+    visit_id = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
+
+    item_label: Mapped[str] = mapped_column(String(120), default="")
+    device_model: Mapped[str] = mapped_column(String(40), default="BC-60R")
+    sample_no: Mapped[str] = mapped_column(String(40), default="")
+    tested_at: Mapped[str] = mapped_column(String(30), default="")
+    species: Mapped[str] = mapped_column(String(20), default="")
+    raw_image_path: Mapped[str] = mapped_column(String(500), default="")
+    results_json: Mapped[str] = mapped_column(Text, default="[]")
+    validation_json: Mapped[str] = mapped_column(Text, default="{}")
+    previous_report_id = mapped_column(ForeignKey("cbc_reports.id", ondelete="SET NULL"), nullable=True, default=None)
+    ai_analysis: Mapped[str] = mapped_column(Text, default="")
+    doctor_conclusion: Mapped[str] = mapped_column(Text, default="")
+    vet_name: Mapped[str] = mapped_column(String(80), default="")
+
+    ai_status: Mapped[str] = mapped_column(String(20), default="idle")
+    ai_error: Mapped[str] = mapped_column(Text, default="")
+    ai_started_at = mapped_column(DateTime, nullable=True, default=None)
+    ai_completed_at = mapped_column(DateTime, nullable=True, default=None)
+    store: Mapped[str] = mapped_column(String(40), default="", index=True)
+    operator: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class NeurologicExam(Base):
     """一次病历对应一份结构化神经学检查记录。"""
     __tablename__ = "neurologic_exams"

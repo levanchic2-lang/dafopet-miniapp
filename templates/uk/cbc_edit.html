@@ -1,0 +1,27 @@
+{% extends "uk/_base.html" %}
+{% block title %}审核血常规报告 #{{ report.id }}{% endblock %}
+{% block body %}
+<style>
+.cbc-bc{font-size:9pt;letter-spacing:2px;color:var(--ink-3);margin:24px 0 16px}.cbc-bc a{color:inherit}.cbc-head{font:700 25pt var(--font-serif);margin:0 0 5px}.cbc-meta{color:var(--ink-2);font-style:italic;margin-bottom:18px}.card{background:var(--paper);border:.5px solid var(--hair);padding:20px 22px;margin-bottom:18px}.card h2{font-size:12pt;letter-spacing:2px;border-bottom:.5px solid var(--hair);padding-bottom:7px}.job{border-left:3px solid var(--accent-amber);background:#fffaf0}.job.completed{border-left-color:var(--accent-green);background:#f3f6f3}.job.failed{border-left-color:var(--accent-red);background:#fff4f1}.warn{color:var(--accent-red);font-weight:700}.ok{color:var(--accent-green)}
+.tbl{width:100%;border-collapse:collapse;font-size:9.5pt}.tbl th,.tbl td{border:.5px solid var(--hair);padding:5px}.tbl th{background:#f4f2ed}.tbl input,.tbl select{width:100%;border:0;background:transparent;padding:4px;font:10pt var(--font-serif)}.tbl tr.review{background:#fff0e8}.num{text-align:right;font-variant-numeric:tabular-nums}.text{width:100%;min-height:130px;border:.5px solid var(--hair);padding:10px;font:10.5pt/1.7 var(--font-serif)}.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}.input{width:100%;border:.5px solid var(--hair);padding:9px}.submit{background:var(--ink);color:var(--paper);border:0;padding:13px 28px;font:700 12pt var(--font-serif);letter-spacing:2px;cursor:pointer}.actions{display:flex;gap:12px;align-items:center;margin-bottom:45px}.fine{font-size:9pt;color:var(--ink-3);line-height:1.6}
+</style>
+<div class="cbc-bc"><a href="/admin/exam-orders/{{ order.id }}">检查单 #{{ order.id }}</a> / 血常规报告审核</div>
+<h1 class="cbc-head">血 常 规 报 告 审 核</h1><div class="cbc-meta">{{ pet.name if pet else '—' }} · {{ '猫' if report.species == 'cat' else '犬' }} · BC-60R</div>
+{% if msg %}<div class="card">{{ msg }}</div>{% endif %}
+<div id="job" class="card job {{ report.ai_status }}"><b id="job-title">{% if report.ai_status=='processing' %}正在识别图片并生成分析…{% elif report.ai_status=='completed' %}自动识别完成{% else %}识别未完成{% endif %}</b><div id="job-detail" class="fine">{% if report.ai_error %}{{ report.ai_error }}{% elif report.ai_status=='processing' %}原图已安全保存，可以停留等待或稍后回来。{% else %}{% if validation.get('auto_pass') %}全部自动校验通过。{% else %}橙色项目需要医生重点核对。{% endif %}{% endif %}</div></div>
+{% if report.ai_status != 'processing' %}
+<form method="post" action="/admin/cbc-reports/{{ report.id }}/save">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="card"><h2>识 别 信 息</h2><div class="row"><input class="input" name="sample_no" value="{{ report.sample_no }}" placeholder="样本号"><input class="input" name="tested_at" value="{{ report.tested_at }}" placeholder="检测时间"><input class="input" name="vet_name" value="{{ report.vet_name }}" placeholder="报告医师"></div>
+<p class="fine">原图仅后台留存：<a href="/uploads/{{ report.raw_image_path }}" target="_blank">查看原始屏幕照片</a>。不会进入宠物主人 PDF。</p></div>
+<div class="card"><h2>检 测 结 果</h2>
+<details {% if not validation.get('auto_pass') %}open{% endif %}><summary style="cursor:pointer;margin-bottom:10px;font-weight:700;">{% if validation.get('auto_pass') %}<span class="ok">自动校验全部通过</span> · 点此展开数值（通常无需逐项操作）{% else %}<span class="warn">发现需要复核的项目</span> · 已自动展开{% endif %}</summary>
+<table class="tbl"><thead><tr><th>项目</th><th>结果</th><th>仪器标记</th><th>单位</th><th>参考范围</th><th>上次</th><th>置信度</th></tr></thead><tbody>
+{% for r in results %}{% set needs = r['code'] in validation['review_codes'] or r['code'] in validation['missing_codes'] %}<tr class="{% if needs %}review{% endif %}"><td><input type="hidden" name="code_{{ loop.index0 }}" value="{{ r['code'] }}"><b>{{ r['code'] }}</b>{% if needs %} <span class="warn">核</span>{% endif %}</td><td><input class="num" name="value_{{ loop.index0 }}" value="{{ r['value'] if r['value'] is not none else '' }}"></td><td><select name="flag_{{ loop.index0 }}"><option value="" {% if not r['instrument_flag'] %}selected{% endif %}>—</option><option {% if r['instrument_flag']=='H' %}selected{% endif %}>H</option><option {% if r['instrument_flag']=='L' %}selected{% endif %}>L</option></select></td><td>{{ r['unit'] }}</td><td class="num">{% if r['range_low'] is not none %}{{ r['range_low'] }}–{{ r['range_high'] }}{% else %}—{% endif %}</td><td class="num">{{ previous_values.get(r['code'], '—') }}</td><td class="num">{{ '%.0f%%'|format((r['confidence'] or 0)*100) }}</td></tr>{% endfor %}
+</tbody></table><p class="fine">橙色行表示低置信度、缺失值、仪器标记冲突或内部计算关系异常。保存时系统会按修改后的数值重新校验。</p></details></div>
+<div class="card"><h2>AI 辅 助 分 析</h2><textarea class="text" name="ai_analysis">{{ report.ai_analysis }}</textarea><p class="fine">分析已结合本次病历的主诉、体格检查、诊断及医生记录；若有本功能启用后的最近一次血常规，也会比较趋势。</p></div>
+<div class="card"><h2>医 生 结 论 与 建 议</h2><textarea class="text" name="doctor_conclusion">{{ report.doctor_conclusion }}</textarea></div>
+<div class="actions"><button class="submit">保 存 并 生 成 PDF</button><a href="/admin/exam-orders/{{ order.id }}">返回检查单</a></div></form>
+{% endif %}
+<script>{% if report.ai_status == 'processing' %}setInterval(async()=>{let r=await fetch('/admin/cbc-reports/{{ report.id }}/ai-status');let d=await r.json();if(d.status!=='processing')location.reload()},2500);{% endif %}</script>
+{% endblock %}

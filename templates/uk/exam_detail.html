@@ -372,6 +372,30 @@ function confirmExamVoid(form, paidAmount) {
     {% endif %}
   </div>
 
+  {# BC-60R 血常规照片识别报告 #}
+  {% if has_cbc %}
+  <div class="ex-section" style="background:#f7faf8;border-left:3px solid #1d4d3a;">
+    <div class="ex-section-head" style="display:flex;align-items:center;justify-content:space-between;">
+      <h2>血&nbsp;常&nbsp;规&nbsp;报&nbsp;告（BC-60R 照片识别）</h2>
+      {% if not cbc_reports %}<a href="/admin/exam-orders/{{ order.id }}/cbc/new" class="uk-btn primary sm" style="text-decoration:none;">生成血常规报告</a>{% endif %}
+    </div>
+    <p style="font-size:9.5pt;color:var(--ink-2);line-height:1.7;margin:6px 0 10px;font-style:italic;">
+      将企业微信里的完整屏幕照片拖入后台，系统自动读取数值、套用犬猫参考范围并做内部一致性校验；医生审核后生成含 AI 专业分析的 PDF。原始照片仅后台留存。
+    </p>
+    {% for cr in cbc_reports %}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:0.5px dashed var(--hair);">
+      <div><b>{{ cr.item_label or '血常规报告' }}</b>
+        {% if not cr.exam_report_id %}<span style="color:var(--accent-amber);font-size:8.5pt;margin-left:8px;">{{ '识别中' if cr.ai_status == 'processing' else '草稿·未出PDF' }}</span>{% endif %}
+        <span style="color:var(--ink-3);margin-left:10px;font-size:9pt;">{{ cr.vet_name or '—' }} · {{ cr.tested_at or ((cr.created_at | bjtime).strftime('%Y-%m-%d %H:%M') if cr.created_at else '') }}</span>
+      </div>
+      <div style="display:flex;gap:8px;"><a href="/admin/cbc-reports/{{ cr.id }}/edit" class="uk-btn ghost sm" style="text-decoration:none;font-size:9pt;">审核 / 编辑</a>
+        <form method="post" action="/admin/cbc-reports/{{ cr.id }}/delete" style="margin:0" onsubmit="return confirm('确认删除此血常规报告、PDF及后台原图？');"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="uk-btn ghost sm" style="color:var(--accent-red);font-size:9pt;">删除</button></form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {# 显微镜报告入口（仅当本单含显微镜项目）#}
   {% if has_microscopy %}
   <div class="ex-section" style="background:#fafaf6;border-left:3px solid #6b4423;">
