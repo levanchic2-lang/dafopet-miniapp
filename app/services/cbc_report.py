@@ -269,24 +269,13 @@ async def draft_cbc_analysis(payload: dict[str, Any]) -> dict[str, Any]:
     from app.services.report_llm import generate_json_object, report_llm_configured, report_text_client_model
     if not report_llm_configured():
         return {"ok": False, "error": "未配置报告文字模型"}
-    # 血常规是短篇即时分析，不使用耗时较长的 Pro/Reasoner 默认模型。
-    # 若配置了 DeepSeek，固定优先 Flash；也可用 CBC_ANALYSIS_MODEL 单独覆盖。
-    if (getattr(settings, "deepseek_api_key", "") or "").strip():
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(
-            api_key=settings.deepseek_api_key,
-            base_url=(settings.deepseek_base_url or "").strip() or "https://api.deepseek.com",
-            timeout=28.0, max_retries=0,
-        )
-        model = (getattr(settings, "cbc_analysis_model", "") or "").strip() or "deepseek-v4-flash"
-        is_reasoner = False
-    else:
-        client, model, _, is_reasoner = report_text_client_model()
+    # 医疗分析按医院决策继续使用统一的 Pro/Reasoner 报告模型。
+    client, model, _, is_reasoner = report_text_client_model()
     user = "请根据以下结构化资料生成血常规辅助分析。\n" + json.dumps(payload, ensure_ascii=False, indent=2)[:30000]
     data, raw, error = await generate_json_object(
         client=client, model=model,
         messages=[{"role": "system", "content": _ANALYSIS_SYSTEM}, {"role": "user", "content": user}],
-        temperature=0.2, max_tokens=3000 if is_reasoner else 1800, task="cbc_report", attempts=1,
+        temperature=0.2, max_tokens=5000 if is_reasoner else 2200, task="cbc_report", attempts=1,
     )
     if not data:
         return {"ok": False, "error": error, "raw": raw}

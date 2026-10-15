@@ -32442,9 +32442,9 @@ async def _finish_cbc_analysis(db: Session, report: CbcReport) -> None:
     report.ai_status = "analyzing"; report.ai_error = ""; report.ai_started_at = datetime.utcnow()
     report.ai_completed_at = None; db.commit()
     try:
-        drafted = await asyncio.wait_for(draft_cbc_analysis(_cbc_analysis_payload(db, report)), timeout=35)
+        drafted = await asyncio.wait_for(draft_cbc_analysis(_cbc_analysis_payload(db, report)), timeout=180)
     except asyncio.TimeoutError:
-        drafted = {"ok": False, "error": "数值识别已完成；AI 临床分析超过 35 秒，可单独重试或由医生直接填写"}
+        drafted = {"ok": False, "error": "数值识别已完成；Pro 医疗分析超过 180 秒，可单独重试或由医生直接填写"}
     if drafted.get("ok"):
         report.ai_analysis = drafted.get("analysis", "")
         report.doctor_conclusion = drafted.get("doctor_conclusion", "")
@@ -32608,9 +32608,9 @@ async def admin_cbc_status(
         else:
             report.ai_status = "failed"; report.ai_error = "图片识别超过 110 秒，请重新识别原图"
             report.ai_completed_at = datetime.utcnow(); db.commit()
-    elif report.ai_status == "analyzing" and age > 50:
+    elif report.ai_status == "analyzing" and age > 210:
         report.ai_status = "partial"
-        report.ai_error = "数值识别已完成；AI 临床分析超时，可单独重试或由医生直接填写"
+        report.ai_error = "数值识别已完成；Pro 医疗分析超时，可单独重试或由医生直接填写"
         report.ai_completed_at = datetime.utcnow(); db.commit()
     return JSONResponse({"ok": True, "status": report.ai_status, "error": report.ai_error or ""})
 

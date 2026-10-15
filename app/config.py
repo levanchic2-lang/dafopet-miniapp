@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     tnr_vision_fallback_model: str = ""
     purchase_vision_model: str = ""
     cbc_vision_model: str = ""
-    cbc_analysis_model: str = ""
 
     # DeepSeek（OpenAI 兼容）：用于医疗报告、量表分析和诊后说明。
     # 配了 deepseek_api_key 即启用；视觉类任务（TNR 审核 / 进货单识别）仍走豆包视觉。
