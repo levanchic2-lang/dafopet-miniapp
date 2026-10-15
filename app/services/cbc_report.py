@@ -141,7 +141,7 @@ async def recognize_cbc_photo(path: Path, expected_species: str = "") -> dict[st
         try:
             response = await client.chat.completions.create(
                 model=model, messages=[{"role": "user", "content": content}],
-                temperature=0.0, max_tokens=5000,
+                temperature=0.0, max_tokens=3000,
             )
             used_model = model
             break

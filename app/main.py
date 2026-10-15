@@ -32406,9 +32406,75 @@ async def page_admin_cbc_new(order_id: int, request: Request, db: Session = Depe
     })
 
 
+def _cbc_report_has_results(report: CbcReport) -> bool:
+    try:
+        return any(r.get("value") is not None for r in json.loads(report.results_json or "[]"))
+    except Exception:
+        return False
+
+
+def _cbc_analysis_payload(db: Session, report: CbcReport) -> dict:
+    pet = db.get(Pet, report.pet_id) if report.pet_id else None
+    visit = db.get(Visit, report.visit_id) if report.visit_id else None
+    previous = db.get(CbcReport, report.previous_report_id) if report.previous_report_id else None
+    try: results = json.loads(report.results_json or "[]") or []
+    except Exception: results = []
+    try: validation = json.loads(report.validation_json or "{}") or {}
+    except Exception: validation = {}
+    try: previous_results = json.loads(previous.results_json or "[]") if previous else []
+    except Exception: previous_results = []
+    return {
+        "pet": {"name": pet.name if pet else "", "species": report.species, "breed": pet.breed if pet else ""},
+        "visit": {
+            "chief_complaint": visit.chief_complaint if visit else "",
+            "physical_exam": visit.physical_exam if visit else "",
+            "diagnosis": visit.diagnosis if visit else "",
+            "treatment_plan": visit.treatment_plan if visit else "",
+            "notes": visit.notes if visit else "",
+        },
+        "current_results": results, "validation": validation,
+        "previous_results": previous_results, "previous_tested_at": previous.tested_at if previous else "",
+    }
+
+
+async def _finish_cbc_analysis(db: Session, report: CbcReport) -> None:
+    from app.services.cbc_report import draft_cbc_analysis
+    report.ai_status = "analyzing"; report.ai_error = ""; report.ai_started_at = datetime.utcnow()
+    report.ai_completed_at = None; db.commit()
+    try:
+        drafted = await asyncio.wait_for(draft_cbc_analysis(_cbc_analysis_payload(db, report)), timeout=35)
+    except asyncio.TimeoutError:
+        drafted = {"ok": False, "error": "数值识别已完成；AI 临床分析超过 35 秒，可单独重试或由医生直接填写"}
+    if drafted.get("ok"):
+        report.ai_analysis = drafted.get("analysis", "")
+        report.doctor_conclusion = drafted.get("doctor_conclusion", "")
+        report.ai_status = "completed"; report.ai_error = ""
+    else:
+        report.ai_status = "partial"
+        report.ai_error = str(drafted.get("error") or "AI 分析生成失败")[:1000]
+    report.ai_completed_at = datetime.utcnow(); db.commit()
+
+
+async def _process_cbc_analysis_only(report_id: int) -> None:
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        report = db.get(CbcReport, report_id)
+        if report and _cbc_report_has_results(report):
+            await _finish_cbc_analysis(db, report)
+    except Exception as exc:
+        logger.exception("[cbc] analysis failed report=%s", report_id)
+        db.rollback(); report = db.get(CbcReport, report_id)
+        if report:
+            report.ai_status = "partial"; report.ai_error = f"AI 分析失败：{exc}"[:1000]
+            report.ai_completed_at = datetime.utcnow(); db.commit()
+    finally:
+        db.close()
+
+
 async def _process_cbc_report_ai(report_id: int) -> None:
     from app.database import SessionLocal
-    from app.services.cbc_report import draft_cbc_analysis, normalize_results, recognize_cbc_photo, validate_results
+    from app.services.cbc_report import normalize_results, recognize_cbc_photo, validate_results
     db = SessionLocal()
     try:
         report = db.get(CbcReport, report_id)
@@ -32441,28 +32507,7 @@ async def _process_cbc_report_ai(report_id: int) -> None:
         ).order_by(CbcReport.id.desc()).first()
         report.previous_report_id = previous.id if previous else None
         db.commit()
-        previous_results = json.loads(previous.results_json or "[]") if previous else []
-        payload = {
-            "pet": {"name": pet.name if pet else "", "species": species, "breed": pet.breed if pet else ""},
-            "visit": {
-                "chief_complaint": visit.chief_complaint if visit else "",
-                "physical_exam": visit.physical_exam if visit else "",
-                "diagnosis": visit.diagnosis if visit else "",
-                "treatment_plan": visit.treatment_plan if visit else "",
-                "notes": visit.notes if visit else "",
-            },
-            "current_results": results, "validation": validation,
-            "previous_results": previous_results, "previous_tested_at": previous.tested_at if previous else "",
-        }
-        drafted = await draft_cbc_analysis(payload)
-        if drafted.get("ok"):
-            report.ai_analysis = drafted.get("analysis", "")
-            report.doctor_conclusion = drafted.get("doctor_conclusion", "")
-            report.ai_status = "completed"
-        else:
-            report.ai_status = "partial"
-            report.ai_error = str(drafted.get("error") or "AI 分析生成失败")[:1000]
-        report.ai_completed_at = datetime.utcnow(); db.commit()
+        await _finish_cbc_analysis(db, report)
     except Exception as exc:
         logger.exception("[cbc] processing failed report=%s", report_id)
         db.rollback()
@@ -32545,13 +32590,49 @@ async def admin_cbc_edit(report_id: int, request: Request, db: Session = Depends
 
 
 @app.get("/admin/cbc-reports/{report_id}/ai-status")
-async def admin_cbc_status(report_id: int, request: Request, db: Session = Depends(get_db)):
+async def admin_cbc_status(
+    report_id: int, request: Request, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     require_admin(request)
     report = db.get(CbcReport, report_id)
     if not report: raise HTTPException(404)
     admin_store = _get_admin_store(request)
     if admin_store and report.store and report.store != admin_store: raise HTTPException(403)
+    age = (datetime.utcnow() - report.ai_started_at).total_seconds() if report.ai_started_at else 0
+    # worker 重启或第三方请求失联时自动恢复，不能让页面永久停在“识别中”。
+    if report.ai_status == "processing" and age > 110:
+        if _cbc_report_has_results(report):
+            report.ai_status = "analyzing"; report.ai_error = ""; report.ai_started_at = datetime.utcnow()
+            db.commit(); background_tasks.add_task(_process_cbc_analysis_only, report.id)
+        else:
+            report.ai_status = "failed"; report.ai_error = "图片识别超过 110 秒，请重新识别原图"
+            report.ai_completed_at = datetime.utcnow(); db.commit()
+    elif report.ai_status == "analyzing" and age > 50:
+        report.ai_status = "partial"
+        report.ai_error = "数值识别已完成；AI 临床分析超时，可单独重试或由医生直接填写"
+        report.ai_completed_at = datetime.utcnow(); db.commit()
     return JSONResponse({"ok": True, "status": report.ai_status, "error": report.ai_error or ""})
+
+
+@app.post("/admin/cbc-reports/{report_id}/retry-analysis")
+async def admin_cbc_retry_analysis(
+    report_id: int, request: Request, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    report = db.get(CbcReport, report_id)
+    if not report: raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store: raise HTTPException(403)
+    form = await request.form(); _require_csrf(request, str(form.get("csrf_token", "")))
+    if not _cbc_report_has_results(report):
+        return RedirectResponse(f"/admin/cbc-reports/{report.id}/edit?msg={quote('尚无识别数值，请重新识别原图')}", status_code=303)
+    if report.ai_status not in ("processing", "analyzing"):
+        report.ai_status = "analyzing"; report.ai_error = ""; report.ai_started_at = datetime.utcnow()
+        report.ai_completed_at = None; db.commit()
+        background_tasks.add_task(_process_cbc_analysis_only, report.id)
+    return RedirectResponse(f"/admin/cbc-reports/{report.id}/edit?msg={quote('已单独重新生成AI分析')}", status_code=303)
 
 
 @app.post("/admin/cbc-reports/{report_id}/retry-ai")
