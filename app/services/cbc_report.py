@@ -120,25 +120,41 @@ async def recognize_cbc_photo(path: Path, expected_species: str = "") -> dict[st
     base = (settings.openai_base_url or "").strip() or None
     # 明确设置超时，避免供应商或网络异常时报告永久停在“识别中”。
     client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=base, timeout=90.0, max_retries=0)
-    model = (getattr(settings, "cbc_vision_model", "") or "").strip() \
-        or (getattr(settings, "purchase_vision_model", "") or "").strip() \
-        or settings.openai_model or "gpt-4o-mini"
+    # CBC 可单独指定模型；未指定时优先复用当前仍在使用的 TNR 视觉模型，
+    # 最后才退回通用 OPENAI_MODEL（旧端点可能已停用）。
+    models = list(dict.fromkeys(m for m in (
+        (getattr(settings, "cbc_vision_model", "") or "").strip(),
+        (getattr(settings, "purchase_vision_model", "") or "").strip(),
+        (getattr(settings, "tnr_vision_model", "") or "").strip(),
+        (getattr(settings, "tnr_vision_fallback_model", "") or "").strip(),
+        (getattr(settings, "openai_model", "") or "").strip(),
+        "gpt-4o-mini",
+    ) if m))
     content = [
         {"type": "text", "text": _OCR_PROMPT + f"\n宠物档案预期物种：{expected_species or '未知'}。仍需如实读取屏幕物种。"},
-        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"}},
+        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
     ]
-    try:
-        response = await client.chat.completions.create(
-            model=model, messages=[{"role": "user", "content": content}],
-            temperature=0.0, max_tokens=5000,
-        )
-    except Exception as exc:
-        return {"ok": False, "error": f"视觉识别失败：{exc}"}
+    response = None
+    used_model = ""
+    errors: list[str] = []
+    for model in models:
+        try:
+            response = await client.chat.completions.create(
+                model=model, messages=[{"role": "user", "content": content}],
+                temperature=0.0, max_tokens=5000,
+            )
+            used_model = model
+            break
+        except Exception as exc:
+            errors.append(f"{model}: {str(exc)[:300]}")
+            logger.warning("[cbc] vision model %s failed; trying fallback: %s", model, str(exc)[:300])
+    if response is None:
+        return {"ok": False, "error": "视觉识别失败：" + " | ".join(errors)}
     raw = (response.choices[0].message.content or "").strip()
     data = _json_from_text(raw)
     if not data:
         return {"ok": False, "error": "视觉模型未返回有效 JSON", "raw": raw[:1000]}
-    return {"ok": True, "data": data, "model": model, "raw": raw}
+    return {"ok": True, "data": data, "model": used_model, "raw": raw}
 
 
 def normalize_results(raw_results: list[dict[str, Any]], species: str) -> list[dict[str, Any]]:

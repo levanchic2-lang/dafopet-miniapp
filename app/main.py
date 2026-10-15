@@ -32554,6 +32554,26 @@ async def admin_cbc_status(report_id: int, request: Request, db: Session = Depen
     return JSONResponse({"ok": True, "status": report.ai_status, "error": report.ai_error or ""})
 
 
+@app.post("/admin/cbc-reports/{report_id}/retry-ai")
+async def admin_cbc_retry_ai(
+    report_id: int, request: Request, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+    report = db.get(CbcReport, report_id)
+    if not report: raise HTTPException(404)
+    admin_store = _get_admin_store(request)
+    if admin_store and report.store and report.store != admin_store: raise HTTPException(403)
+    form = await request.form(); _require_csrf(request, str(form.get("csrf_token", "")))
+    if not report.raw_image_path or not (Path("uploads") / report.raw_image_path).exists():
+        return RedirectResponse(f"/admin/cbc-reports/{report.id}/edit?msg={quote('后台原图不存在，请删除后重新上传')}", status_code=303)
+    if report.ai_status != "processing":
+        report.ai_status = "processing"; report.ai_error = ""; report.ai_started_at = datetime.utcnow()
+        report.ai_completed_at = None; db.commit()
+        background_tasks.add_task(_process_cbc_report_ai, report.id)
+    return RedirectResponse(f"/admin/cbc-reports/{report.id}/edit?msg={quote('已重新提交识别')}", status_code=303)
+
+
 @app.post("/admin/cbc-reports/{report_id}/save")
 async def admin_cbc_save(report_id: int, request: Request, db: Session = Depends(get_db)):
     from app.services.cbc_report import normalize_results, validate_results
