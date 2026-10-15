@@ -96,6 +96,7 @@ async def generate_json_object(
     max_tokens: int,
     temperature: float | None = None,
     extra_body: dict[str, Any] | None = None,
+    response_format: dict[str, Any] | None = None,
     task: str = "medical_report",
     attempts: int = 2,
 ) -> tuple[dict[str, Any] | None, str, str]:
@@ -122,10 +123,13 @@ async def generate_json_object(
             kwargs["temperature"] = temperature
         if extra_body:
             kwargs["extra_body"] = extra_body
+        if response_format:
+            kwargs["response_format"] = response_format
         started = time.monotonic()
         try:
             response = await client.chat.completions.create(**kwargs)
-            last_raw = (response.choices[0].message.content or "").strip()
+            choice = response.choices[0]
+            last_raw = (choice.message.content or "").strip()
             data = _parse_json_object(last_raw)
             elapsed_ms = int((time.monotonic() - started) * 1000)
             if data is not None:
@@ -135,9 +139,12 @@ async def generate_json_object(
                 )
                 return data, last_raw, ""
             last_error = "模型输出不是完整有效的 JSON 对象"
+            reasoning = getattr(choice.message, "reasoning_content", "") or ""
             logger.warning(
-                "[llm] task=%s model=%s attempt=%s elapsed_ms=%s ok=0 parse_error raw=%s",
-                task, model, attempt + 1, elapsed_ms, last_raw[:300],
+                "[llm] task=%s model=%s attempt=%s elapsed_ms=%s ok=0 "
+                "parse_error finish=%s content_len=%s reasoning_len=%s",
+                task, model, attempt + 1, elapsed_ms,
+                getattr(choice, "finish_reason", ""), len(last_raw), len(reasoning),
             )
         except Exception as exc:
             elapsed_ms = int((time.monotonic() - started) * 1000)

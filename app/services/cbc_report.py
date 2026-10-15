@@ -276,11 +276,13 @@ async def draft_cbc_analysis(payload: dict[str, Any]) -> dict[str, Any]:
         client=client, model=model,
         messages=[{"role": "system", "content": _ANALYSIS_SYSTEM}, {"role": "user", "content": user}],
         temperature=0.2,
-        max_tokens=2400 if is_reasoner else 2200,
+        # 推理内容与正式回答共用额度；过低会出现 reasoning 有内容但 content 为空。
+        max_tokens=8000 if is_reasoner else 2200,
         # V4 Pro 默认的高强度思考在短报告上也可能持续数分钟。
         # 保留 Pro 模型，只限制为低强度推理，使临床报告能稳定及时返回。
         extra_body={"thinking": {"type": "enabled", "reasoning_effort": "low"}}
         if model.lower() == "deepseek-v4-pro" else None,
+        response_format={"type": "json_object"},
         task="cbc_report",
         attempts=1,
     )
