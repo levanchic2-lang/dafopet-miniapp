@@ -95,6 +95,7 @@ async def generate_json_object(
     messages: list[dict[str, str]],
     max_tokens: int,
     temperature: float | None = None,
+    extra_body: dict[str, Any] | None = None,
     task: str = "medical_report",
     attempts: int = 2,
 ) -> tuple[dict[str, Any] | None, str, str]:
@@ -119,6 +120,8 @@ async def generate_json_object(
         }
         if temperature is not None:
             kwargs["temperature"] = temperature
+        if extra_body:
+            kwargs["extra_body"] = extra_body
         started = time.monotonic()
         try:
             response = await client.chat.completions.create(**kwargs)
