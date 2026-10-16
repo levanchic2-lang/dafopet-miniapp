@@ -39,6 +39,11 @@ def _cleanup_stale_tmp(max_age_seconds: int = 24 * 60 * 60) -> None:
                 continue
 
 
+def _uploads_relative(path: Path) -> str:
+    """Return a public upload path even when uploads/ is a shared symlink."""
+    return str(path.resolve().relative_to(_PREVIEW_ROOT.parent)).replace("\\", "/")
+
+
 def _safe_name(name: str) -> str:
     suffix = Path(name or "image").suffix.lower()
     stem = "".join(c for c in Path(name or "image").stem if c.isalnum() or c in "-_")[:60] or "image"
@@ -150,7 +155,7 @@ def prepare_study(filename: str, data: bytes) -> dict[str, Any]:
         "filename": filename[:180],
         "source_type": source_type,
         "original_path": str(original.relative_to(_ROOT)).replace("\\", "/"),
-        "preview_path": str(preview.relative_to(_ROOT / "uploads")).replace("\\", "/"),
+        "preview_path": _uploads_relative(preview),
         "annotated_path": "",
         "width": int(meta["width"]),
         "height": int(meta["height"]),
@@ -275,8 +280,8 @@ def finalize_studies(report_id: int, raw_json: str) -> list[dict[str, Any]]:
             "filename": str(raw.get("filename", ""))[:180],
             "source_type": "dicom" if raw.get("source_type") == "dicom" else "image",
             "original_path": str(original_dest.relative_to(_ROOT)).replace("\\", "/"),
-            "preview_path": str(preview_dest.relative_to(_ROOT / "uploads")).replace("\\", "/"),
-            "annotated_path": str(annotated_dest.relative_to(_ROOT / "uploads")).replace("\\", "/"),
+            "preview_path": _uploads_relative(preview_dest),
+            "annotated_path": _uploads_relative(annotated_dest),
             "width": int(raw.get("width") or 0), "height": int(raw.get("height") or 0),
             "spacing_x_mm": raw.get("spacing_x_mm"), "spacing_y_mm": raw.get("spacing_y_mm"),
             "calibrated_mm_per_px": calibration,
