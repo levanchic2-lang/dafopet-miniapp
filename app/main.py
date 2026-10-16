@@ -32655,13 +32655,42 @@ async def admin_cbc_save(report_id: int, request: Request, db: Session = Depends
     admin_store = _get_admin_store(request)
     if admin_store and report.store and report.store != admin_store: raise HTTPException(403)
     form = await request.form(); _require_csrf(request, str(form.get("csrf_token", "")))
+    try:
+        prior_validation = json.loads(report.validation_json or "{}") or {}
+    except Exception:
+        prior_validation = {}
+    had_species_conflict = bool(prior_validation.get("species_conflict"))
+    screen_species = _cbc_species(str(prior_validation.get("screen_species") or ""))
+    species_resolution = str(form.get("species_resolution") or "").strip()
+    species_confirmed = str(form.get("species_confirmed") or "") == "1"
+    if had_species_conflict:
+        if species_resolution == "instrument_wrong":
+            raise HTTPException(409, "已确认机器物种选择错误：本次结果不能生成正式报告，请按正确物种重新检测并上传")
+        if species_resolution not in ("screen_ocr_wrong", "pet_profile_corrected") or not species_confirmed:
+            raise HTTPException(409, "机器物种与宠物档案不一致，必须完成人工核对后才能生成正式报告")
+        if species_resolution == "pet_profile_corrected":
+            pet = db.get(Pet, report.pet_id) if report.pet_id else None
+            current_species = _cbc_species(pet.species if pet else "")
+            if not screen_species or current_species != screen_species:
+                raise HTTPException(409, "宠物档案尚未修正为机器识别的物种，请先修改宠物档案后再生成报告")
+            report.species = current_species
     raw = []
     for i in range(40):
         code = str(form.get(f"code_{i}") or "").strip()
         if not code: continue
         raw.append({"code": code, "value": form.get(f"value_{i}"), "instrument_flag": form.get(f"flag_{i}"), "confidence": 1.0, "raw_text": str(form.get(f"value_{i}") or "")})
     results = normalize_results(raw, report.species)
-    validation = validate_results(results, expected_species=report.species, screen_species=report.species)
+    validation = validate_results(
+        results,
+        expected_species=report.species,
+        screen_species=(screen_species if had_species_conflict else report.species),
+    )
+    if had_species_conflict:
+        validation["species_resolution"] = species_resolution
+        validation["species_confirmed"] = True
+        validation["species_confirmed_by"] = request.session.get("admin_username", "admin")
+        validation["species_confirmed_at"] = datetime.utcnow().isoformat(timespec="seconds")
+        validation["species_conflict_resolved"] = True
     report.results_json = json.dumps(results, ensure_ascii=False)
     report.validation_json = json.dumps(validation, ensure_ascii=False)
     report.sample_no = str(form.get("sample_no") or "")[:40]

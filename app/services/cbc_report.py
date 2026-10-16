@@ -252,7 +252,10 @@ def validate_results(results: list[dict[str, Any]], *, expected_species: str = "
     return {
         "auto_pass": bool(quality_ok and not species_conflict and not review_codes and not missing),
         "quality_ok": bool(quality_ok), "quality_issues": issues,
-        "species_conflict": species_conflict, "missing_codes": missing,
+        "species_conflict": species_conflict,
+        "expected_species": expected_species if expected_species in ("cat", "dog") else "",
+        "screen_species": screen_species if screen_species in ("cat", "dog") else "",
+        "missing_codes": missing,
         "review_codes": sorted(review_codes), "checks": checks,
     }
 
@@ -260,6 +263,7 @@ def validate_results(results: list[dict[str, Any]], *, expected_species: str = "
 _ANALYSIS_SYSTEM = """你是宠物医院血常规报告的医生辅助分析助手。输出给兽医审核，也会进入宠主最终 PDF。
 必须区分检测事实、病历信息和可能解释。不得把初步诊断改写成确诊，不得虚构病史或体征。
 优先解读绝对计数及相关指标组合，必要时提示采样、脱水、应激、凝集等影响；给出需要结合或复查的方向。
+如果 validation.species_conflict=true，禁止解读任何数值或推测疾病；analysis 和 doctor_conclusion 都只能说明机器物种与宠物档案不一致，须人工核对并在正确物种模式下重新检测。
 语言专业、克制、简洁。避免“就是、一定、确诊”等确定措辞。
 只输出 JSON：{"analysis":"2至5段专业辅助分析","doctor_conclusion":"供医生修改的简短结论与建议草稿"}
 """
