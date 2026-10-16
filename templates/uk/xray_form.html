@@ -58,6 +58,25 @@
   .xr-file-input { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
   .xr-upload-status { min-height:20px; margin-top:8px; font-size:9pt; color:var(--ink-3); }
 
+  .xrw-shell { border:0.5px solid var(--hair); background:#101010; }
+  .xrw-toolbar { display:flex; flex-wrap:wrap; gap:5px; padding:9px; background:#f4f1ec; border-bottom:0.5px solid var(--hair); }
+  .xrw-tool { min-height:34px; padding:5px 10px; border:0.5px solid var(--hair); background:#fff; color:var(--ink-2); font-family:var(--font-serif); cursor:pointer; }
+  .xrw-tool.active { color:#fff; background:var(--ink); border-color:var(--ink); }
+  .xrw-color { width:28px; height:28px; border:3px solid #fff; outline:0.5px solid var(--hair); cursor:pointer; }
+  .xrw-color.active { outline:2px solid var(--ink); }
+  .xrw-stage { overflow:auto; width:100%; max-height:720px; min-height:420px; background:#111; text-align:center; }
+  .xrw-stage canvas { display:block; max-width:none; height:auto; margin:0 auto; touch-action:none; }
+  .xrw-status { padding:8px 10px; min-height:20px; background:#f4f1ec; color:var(--ink-2); font-size:9pt; border-top:0.5px solid var(--hair); }
+  .xrw-status.error { color:var(--accent-red); }
+  .xrw-thumbs { display:flex; gap:7px; overflow-x:auto; margin:10px 0; padding-bottom:4px; }
+  .xrw-thumb { width:112px; flex:0 0 112px; padding:4px; border:0.5px solid var(--hair); background:#fff; cursor:pointer; color:var(--ink-2); font-family:var(--font-serif); }
+  .xrw-thumb.active { border:2px solid var(--ink); padding:2.5px; }
+  .xrw-thumb img { width:102px; height:76px; object-fit:contain; background:#000; display:block; }
+  .xrw-thumb span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; margin-top:3px; font-size:8pt; }
+  .xrw-upload { display:inline-flex; align-items:center; min-height:36px; padding:6px 14px; border:0.5px solid var(--ink); background:#fff; cursor:pointer; font-size:9.5pt; }
+  .xrw-special { width:100%; border-top:0.5px solid var(--hair); margin-top:4px; padding-top:7px; display:flex; flex-wrap:wrap; gap:5px; }
+  .xrw-zoom { display:flex; align-items:center; gap:7px; margin-left:auto; font-size:8.5pt; color:var(--ink-3); }
+
   .xr-actions { display:flex; gap:12px; align-items:center; margin:8px 0 50px; }
   .xr-submit { font-family:var(--font-serif); font-size:12pt; font-weight:700; letter-spacing:2px; color:var(--paper); background:var(--ink); border:none; padding:13px 30px; cursor:pointer; }
   .xr-submit:hover { background:var(--ink-2); }
@@ -87,6 +106,7 @@
   <input type="hidden" name="region" id="region" value="{{ active_region }}"/>
   <input type="hidden" name="findings_json" id="findings_json"/>
   <input type="hidden" name="measurements_json" id="measurements_json"/>
+  <input type="hidden" name="viewer_json" id="viewer_json"/>
 
   {# 基本信息 #}
   <div class="xr-card">
@@ -127,6 +147,43 @@
     <div class="xr-field">
       <label>投照体位</label>
       <input class="xr-input" name="projection" value="{{ report.projection if report else '' }}" placeholder="如：右侧位 + 腹背位"/>
+    </div>
+  </div>
+
+  {# 阅片工作台 #}
+  <div class="xr-card">
+    <div class="xr-card-head">
+      <h2>影&nbsp;像&nbsp;阅&nbsp;片&nbsp;工&nbsp;作&nbsp;台</h2>
+      <label class="xrw-upload">＋ 上传 DICOM / 图片<input type="file" id="xrw-file" accept=".dcm,.dicom,image/jpeg,image/png,image/webp,image/bmp,image/tiff" multiple hidden></label>
+    </div>
+    <p style="font-size:9pt;color:var(--ink-3);font-style:italic;margin:-4px 0 12px;line-height:1.6;">原始 DICOM 单独留档，报告使用去标识预览图。尺寸标定来自 DICOM Pixel Spacing；普通图片可用“标尺校准”。专用测量值必须由报告医师复核。</p>
+    <div id="xrw-thumbs" class="xrw-thumbs"></div>
+    <div class="xrw-shell">
+      <div class="xrw-toolbar">
+        <button type="button" class="xrw-tool" data-xr-tool="arrow">箭头</button>
+        <button type="button" class="xrw-tool" data-xr-tool="text">文字</button>
+        <button type="button" class="xrw-tool" data-xr-tool="rect">矩形</button>
+        <button type="button" class="xrw-tool" data-xr-tool="ellipse">椭圆</button>
+        <button type="button" class="xrw-tool" data-xr-tool="freehand">自由轮廓</button>
+        <button type="button" class="xrw-tool" data-xr-tool="length">长度</button>
+        <button type="button" class="xrw-tool" data-xr-tool="angle">角度</button>
+        <button type="button" class="xrw-tool" data-xr-tool="calibrate">标尺校准</button>
+        <button type="button" class="xrw-tool" id="xrw-undo">撤销一步</button>
+        <button type="button" class="xrw-tool" id="xrw-remove">移除影像</button>
+        <button type="button" class="xrw-color active" data-xr-color="#d53a32" style="background:#d53a32" title="红色异常"></button>
+        <button type="button" class="xrw-color" data-xr-color="#e7b63a" style="background:#e7b63a" title="黄色可疑"></button>
+        <button type="button" class="xrw-color" data-xr-color="#2d8a61" style="background:#2d8a61" title="绿色参考"></button>
+        <span class="xrw-zoom">缩放 <input type="range" id="xrw-zoom" min="50" max="200" step="10" value="100"></span>
+        <div class="xrw-special">
+          <button type="button" class="xrw-tool" data-xr-tool="vhs">VHS</button>
+          <button type="button" class="xrw-tool" data-xr-tool="vlas">VLAS</button>
+          <button type="button" class="xrw-tool" data-xr-tool="norberg">Norberg角</button>
+          <button type="button" class="xrw-tool" data-xr-tool="coverage">股骨头覆盖率</button>
+          <button type="button" class="xrw-tool" data-xr-tool="tpa">TPA</button>
+        </div>
+      </div>
+      <div class="xrw-stage" id="xrw-stage"><canvas id="xrw-canvas"></canvas></div>
+      <div class="xrw-status" id="xrw-status"></div>
     </div>
   </div>
 
@@ -183,7 +240,7 @@
 
   {# 影像 #}
   <div class="xr-card">
-    <h2 class="solo">X&nbsp;光&nbsp;影&nbsp;像</h2>
+    <h2 class="solo">补&nbsp;充&nbsp;影&nbsp;像（不参与测量）</h2>
     {% if cur_photos %}
     <div class="xr-photos">
       {% for p in cur_photos %}<a href="/uploads/{{ p }}" target="_blank"><img src="/uploads/{{ p }}"/></a>{% endfor %}
@@ -204,12 +261,15 @@
   </div>
 </form>
 
+<script src="/static/xray_workbench.js?v=2"></script>
 <script>
 const TEMPLATES = {{ templates | tojson }};
 const INIT_REGION = {{ active_region | tojson }};
 const INIT_FINDINGS = {{ cur_findings | tojson }};
 const INIT_MEASURE = {{ cur_measure | tojson }};
 const REPORT_ID = {{ report.id if report else 'null' }};
+const INIT_VIEWER = {{ cur_viewer | tojson }};
+const XRAY_CSRF = {{ csrf_token | tojson }};
 const NORMAL_TAGS = ['正常', '无', '正常不可见', '无侵袭征象', '无移位'];
 
 function pickRegion(el) {
@@ -331,6 +391,18 @@ function collectMeasure() {
   });
   return out;
 }
+function syncWorkbenchMeasurement(name, value, unit) {
+  const rows = Array.from(document.querySelectorAll('#measure-rows tr'));
+  let row = rows.find(tr => (tr.querySelector('.m-name').value || '').trim() === name);
+  if (!row) {
+    document.getElementById('measure-rows').insertAdjacentHTML('beforeend', measureRowHtml({name, value, unit}));
+    wireDiHint();
+    return;
+  }
+  row.querySelector('.m-value').value = value;
+  row.querySelector('.m-unit').value = unit;
+  wireDiHint();
+}
 
 // ── AI 起草 ──
 async function aiDraft() {
@@ -445,9 +517,16 @@ xrayDropzone.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('xray-photo-input').click(); }
 });
 
+const xrayWorkbench = new XrayWorkbench({
+  studies: INIT_VIEWER, canvasId: 'xrw-canvas', stageId: 'xrw-stage', thumbId: 'xrw-thumbs',
+  statusId: 'xrw-status', fileId: 'xrw-file', undoId: 'xrw-undo', removeId: 'xrw-remove',
+  zoomId: 'xrw-zoom', csrf: XRAY_CSRF, orderId: {{ order.id }}, onMeasurement: syncWorkbenchMeasurement
+});
+
 document.getElementById('xrayForm').addEventListener('submit', function () {
   document.getElementById('findings_json').value = JSON.stringify(collectFindings());
   document.getElementById('measurements_json').value = JSON.stringify(collectMeasure());
+  document.getElementById('viewer_json').value = JSON.stringify(xrayWorkbench.serialize());
 });
 
 prefillFindings();

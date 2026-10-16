@@ -2121,6 +2121,8 @@ class XrayReport(Base):
     conclusion:     Mapped[str] = mapped_column(Text, default="")          # 提示 / 结论
     advice:         Mapped[str] = mapped_column(Text, default="")          # 建议
     photos_json:    Mapped[str] = mapped_column(Text, default="[]")        # ["xray_photos/<id>/xxx.jpg", ...]
+    # 阅片工作台数据：原始影像/预览/像素间距/矢量标注/带标注导出图。
+    viewer_json:    Mapped[str] = mapped_column(Text, default="[]")
 
     store:          Mapped[str] = mapped_column(String(40), default="", index=True)
     operator:       Mapped[str] = mapped_column(String(80), default="")

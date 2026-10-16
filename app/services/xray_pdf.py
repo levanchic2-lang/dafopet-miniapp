@@ -127,6 +127,10 @@ def _build_html(report, cust, pet, clinic_name: str) -> str:
         photos = json.loads(report.photos_json or "[]") or []
     except Exception:
         photos = []
+    try:
+        viewer_studies = json.loads(report.viewer_json or "[]") or []
+    except Exception:
+        viewer_studies = []
 
     species_zh = {"cat": "猫", "dog": "犬"}.get((pet.species if pet else "") or "", (pet.species if pet else "") or "")
     pet_line = f"{_esc(pet.name) if pet else ''} · {species_zh}" if pet else "—"
@@ -162,9 +166,17 @@ def _build_html(report, cust, pet, clinic_name: str) -> str:
 
     # 影像
     photo_html = ""
-    if photos:
+    report_images = []
+    for study in viewer_studies:
+        if not isinstance(study, dict):
+            continue
+        rel = study.get("annotated_path") or study.get("preview_path")
+        if rel:
+            report_images.append(str(rel))
+    report_images.extend(str(p) for p in photos if p)
+    if report_images:
         cells = []
-        for rel in photos:
+        for rel in report_images:
             uri = _img_data_uri(Path("uploads") / rel)
             if uri:
                 cells.append(f'<div class="photo-cell"><img src="{uri}"/></div>')

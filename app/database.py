@@ -1152,6 +1152,7 @@ def _try_sqlite_migrations() -> None:
                 "conclusion TEXT DEFAULT '', "
                 "advice TEXT DEFAULT '', "
                 "photos_json TEXT DEFAULT '[]', "
+                "viewer_json TEXT DEFAULT '[]', "
                 "store VARCHAR(40) DEFAULT '', "
                 "operator VARCHAR(80) DEFAULT '', "
                 "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
@@ -1237,6 +1238,9 @@ def _try_sqlite_migrations() -> None:
             ))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_xray_order ON xray_reports(exam_order_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_xray_store ON xray_reports(store)"))
+            xray_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(xray_reports)")).fetchall()}
+            if "viewer_json" not in xray_cols:
+                conn.execute(text("ALTER TABLE xray_reports ADD COLUMN viewer_json TEXT DEFAULT '[]'"))
 
             # cbc_reports：BC-60R 血常规照片识别 + AI 辅助报告（首版犬猫）
             conn.execute(text(

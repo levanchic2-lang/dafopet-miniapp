@@ -33505,7 +33505,11 @@ _XRAY_TEMPLATES = {
     },
     "joint": {
         "label": "关节",
-        "measurements": [{"name": "Norberg角", "unit": "°"}],
+        "measurements": [
+            {"name": "Norberg角", "unit": "°"},
+            {"name": "股骨头覆盖率", "unit": "%"},
+            {"name": "TPA", "unit": "°"},
+        ],
         "structures": [
             {"name": "关节间隙", "multi": True, "labels": [
                 {"tag": "正常", "desc": ""},
@@ -33674,6 +33678,8 @@ _XRAY_TEMPLATES = {
             {"name": "DI(右)", "unit": ""},
             {"name": "Norberg角(左)", "unit": "°"},
             {"name": "Norberg角(右)", "unit": "°"},
+            {"name": "股骨头覆盖率(左)", "unit": "%"},
+            {"name": "股骨头覆盖率(右)", "unit": "%"},
         ],
         "structures": [
             {"name": "摄片体位（已拍）", "multi": True, "labels": [
@@ -33796,6 +33802,29 @@ def _xray_parse_findings(form) -> list:
     return out
 
 
+def _xray_parse_measurements(form) -> list:
+    """Parse the flat measurement rows used by the X-ray report form."""
+    raw = str(form.get("measurements_json", "") or "").strip()
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+    out = []
+    for row in data[:100]:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name", "")).strip()[:80]
+        value = str(row.get("value", "")).strip()[:40]
+        unit = str(row.get("unit", "")).strip()[:20]
+        if name:
+            out.append({"name": name, "value": value, "unit": unit})
+    return out
+
+
 def _xray_form_ctx(request: "Request", db: Session, order: "ExamOrder",
                    report: "XrayReport | None" = None):
     visit = db.get(Visit, order.visit_id) if order.visit_id else None
@@ -33810,6 +33839,7 @@ def _xray_form_ctx(request: "Request", db: Session, order: "ExamOrder",
     cur_findings = []
     cur_measure = []
     cur_photos = []
+    cur_viewer = []
     if report:
         try:
             cur_findings = json.loads(report.findings_json or "[]") or []
@@ -33823,6 +33853,10 @@ def _xray_form_ctx(request: "Request", db: Session, order: "ExamOrder",
             cur_photos = json.loads(report.photos_json or "[]") or []
         except Exception:
             cur_photos = []
+        try:
+            cur_viewer = json.loads(report.viewer_json or "[]") or []
+        except Exception:
+            cur_viewer = []
     if report and report.region in _XRAY_TEMPLATES:
         active_region = report.region
     else:
@@ -33834,7 +33868,7 @@ def _xray_form_ctx(request: "Request", db: Session, order: "ExamOrder",
         "templates": _XRAY_TEMPLATES, "region_list": region_list,
         "active_region": active_region, "image_quality_opts": _XRAY_IMAGE_QUALITY,
         "report": report, "cur_findings": cur_findings,
-        "cur_measure": cur_measure, "cur_photos": cur_photos,
+        "cur_measure": cur_measure, "cur_photos": cur_photos, "cur_viewer": cur_viewer,
         "csrf_token": _get_csrf_token(request),
     }
 
@@ -33880,7 +33914,39 @@ def _xray_apply_form(report: "XrayReport", form, request: "Request"):
     report.conclusion = str(form.get("conclusion", "")).strip()
     report.advice = str(form.get("advice", "")).strip()
     report.findings_json = json.dumps(_xray_parse_findings(form), ensure_ascii=False)
-    report.measurements_json = json.dumps(_us_parse_measurements_form(form), ensure_ascii=False)
+    report.measurements_json = json.dumps(_xray_parse_measurements(form), ensure_ascii=False)
+
+
+@app.post("/admin/xray/workbench/prepare")
+async def admin_xray_workbench_prepare(request: Request, db: Session = Depends(get_db)):
+    """Prepare one DICOM or ordinary image for the browser workbench."""
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    try:
+        order_id = int(form.get("order_id") or 0)
+    except (TypeError, ValueError):
+        order_id = 0
+    order = db.get(ExamOrder, order_id)
+    if not order:
+        return JSONResponse({"ok": False, "error": "检查单不存在"}, status_code=404)
+    admin_store = _get_admin_store(request)
+    visit = db.get(Visit, order.visit_id) if order.visit_id else None
+    if admin_store and visit and visit.store and visit.store != admin_store:
+        return JSONResponse({"ok": False, "error": "无权操作其他门店的检查单"}, status_code=403)
+    upload = form.get("study")
+    if not upload or not getattr(upload, "filename", ""):
+        return JSONResponse({"ok": False, "error": "请选择影像文件"}, status_code=400)
+    data = await upload.read()
+    from app.services.xray_workbench import prepare_study
+    try:
+        study = prepare_study(upload.filename, data)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception:
+        logger.exception("X-ray workbench preparation failed")
+        return JSONResponse({"ok": False, "error": "影像处理失败，请检查文件格式"}, status_code=500)
+    return JSONResponse({"ok": True, "study": study})
 
 
 @app.post("/admin/exam-orders/{order_id}/xray/create")
@@ -33906,6 +33972,9 @@ async def admin_xray_create(order_id: int, request: Request, db: Session = Depen
     _xray_apply_form(report, form, request)
     db.add(report)
     db.flush()
+    from app.services.xray_workbench import finalize_studies
+    studies = finalize_studies(report.id, str(form.get("viewer_json", "[]") or "[]"))
+    report.viewer_json = json.dumps(studies, ensure_ascii=False)
     # 照片
     upload_dir = Path("uploads") / "xray_photos" / str(report.id)
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -33944,6 +34013,9 @@ async def admin_xray_save(report_id: int, request: Request, db: Session = Depend
     _require_csrf(request, str(form.get("csrf_token", "")))
     _xray_apply_form(report, form, request)
     report.updated_at = datetime.utcnow()
+    from app.services.xray_workbench import finalize_studies
+    studies = finalize_studies(report.id, str(form.get("viewer_json", report.viewer_json or "[]") or "[]"))
+    report.viewer_json = json.dumps(studies, ensure_ascii=False)
     # 追加新上传照片
     new_saved = []
     upload_dir = Path("uploads") / "xray_photos" / str(report.id)
@@ -34072,6 +34144,8 @@ async def admin_xray_delete(report_id: int, request: Request, db: Session = Depe
             shutil.rmtree(ph_dir, ignore_errors=True)
     except Exception:
         pass
+    from app.services.xray_workbench import remove_report_files
+    remove_report_files(report.id)
     db.delete(report)
     db.commit()
     return RedirectResponse(f"/admin/exam-orders/{order_id}?msg=X光报告已删除", status_code=303)
