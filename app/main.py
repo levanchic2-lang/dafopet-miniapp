@@ -28071,7 +28071,7 @@ async def admin_cashier_multi_pay_submit(
             f"{_back}&msg=保险待结算与普通待收款不能合并，请分别结算",
             status_code=303,
         )
-    grand_out = sum(r["out"] for r in inv_rows)
+    grand_out = round(sum(r["out"] for r in inv_rows), 2)
     if disc_mode == "pct":
         total_discount = round(grand_out * (1.0 - disc_value), 2)
     elif disc_mode == "amount":
@@ -28115,7 +28115,7 @@ async def admin_cashier_multi_pay_submit(
         round_amount = float((form.get("round_amount") or "").strip() or actuals_total)
     except ValueError:
         round_amount = actuals_total
-    round_amount = max(0.0, min(round_amount, actuals_total))
+    round_amount = round(max(0.0, min(round_amount, actuals_total)), 2)
     if method == "deposit":
         round_amount = min(round_amount, _deposit_remaining)
     if round_amount <= 0:
@@ -28151,7 +28151,7 @@ async def admin_cashier_multi_pay_submit(
         cur_out = max(0.0, actual_due)
         if cur_out <= 0:
             continue
-        take = min(remaining, cur_out)
+        take = round(min(remaining, cur_out), 2)
         # store 优先用发票本身的（保证收款统计「按门店」准确）
         _pay_store = store or (inv.store or "")
         _ref_id = _deposit_obj.id if method == "deposit" and _deposit_obj is not None else None
@@ -28172,7 +28172,7 @@ async def admin_cashier_multi_pay_submit(
         db.flush()
         _invoice_recompute_status(db, inv)
         paid_count += 1
-        paid_total += take
+        paid_total = round(paid_total + take, 2)
         remaining = round(remaining - take, 2)
     if method == "deposit" and _deposit_obj is not None and paid_total > 0:
         _deposit_obj.applied_amount = round(
@@ -28189,7 +28189,7 @@ async def admin_cashier_multi_pay_submit(
     db.commit()
 
     # 剩余未付（含其他单的）
-    still_outstanding = round(actuals_total - round_amount, 2)
+    still_outstanding = round(actuals_total - paid_total, 2)
     from urllib.parse import quote as _q
     if still_outstanding > 0.005:
         msg_text = f"本笔 {method} 收 ¥{paid_total:.2f}（{paid_count} 单部分/已收）· 剩余 ¥{still_outstanding:.2f} 请继续选支付方式"
@@ -28940,7 +28940,7 @@ async def admin_invoice_add_payment(
         want = float(form.get("amount") or outstanding_total)
     except (TypeError, ValueError):
         want = outstanding_total
-    want = max(0.0, min(want, outstanding_total))
+    want = round(max(0.0, min(want, outstanding_total)), 2)
     if want <= 0:
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=金额需大于 0", status_code=303)
     if not multi_target and want > outstanding_current:
@@ -29469,20 +29469,15 @@ async def admin_invoice_apply_discount(
             pct = pct / 100.0
         if pct <= 0 or pct > 1.0:
             raise HTTPException(400, "折率应在 1-100 之间（如填 70 = 7 折）")
-        # 折扣只打在未付的部分上（套餐等已结算金额按原价算）
+        # 折扣只打在未付的部分上（套餐等已结算金额按原价算），保留到分。
         discount_amt = round(discount_base * (1.0 - pct), 2)
-        # 折后整单总额四舍五入取整，避免出现小数（方便收款/对账）
-        _new_total_int = round(subtotal - discount_amt)
-        discount_amt = round(subtotal - _new_total_int, 2)
-        if discount_amt < 0:
-            discount_amt = 0.0
     elif mode == "target":
-        # 目标金额：直接填想收的钱，减免额 = 小计 − 目标，自动算出（取整）
+        # 目标金额：直接填想收的钱，减免额 = 小计 − 目标，保留到分。
         try:
             target = float((form.get("discount_target") or "").strip())
         except Exception:
             raise HTTPException(400, "目标金额格式错误")
-        target = round(target)
+        target = round(target, 2)
         if target < 0:
             raise HTTPException(400, "目标金额不能为负")
         if target > subtotal:
@@ -29551,7 +29546,7 @@ async def admin_invoices_batch_apply_discount(
     """批量折扣：把同一折率（或清除折扣）一次性应用到多张待收单。
     用于「同客户多张单，整单统一打 X 折」场景，免去逐单操作。
     - 只支持 mode=pct（折率）/ clear（清除），target/amount 因跨单分摊歧义不在此提供
-    - 逐单复用单单折扣同款逻辑：折率只打在「未付部分」，折后整单四舍五入取整
+    - 逐单复用单单折扣同款逻辑：折率只打在「未付部分」，折后保留到分
     - 已付清 / 已取消 / 小计为 0 的单自动跳过
     - return_to 指定回跳的收费单 id
     """
@@ -29618,10 +29613,6 @@ async def admin_invoices_batch_apply_discount(
         else:
             discount_base = max(0.0, subtotal - paid_sum)
             discount_amt = round(discount_base * (1.0 - pct), 2)
-            _new_total_int = round(subtotal - discount_amt)
-            discount_amt = round(subtotal - _new_total_int, 2)
-            if discount_amt < 0:
-                discount_amt = 0.0
         new_total = round(subtotal - discount_amt, 2)
         # 折后总额不能低于已收（部分付的单），低于则跳过不动
         if new_total < paid_sum - 0.005:

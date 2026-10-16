@@ -244,8 +244,8 @@
       <span style="color:var(--ink-3); margin-left:10px; font-style:italic;">（减免 ¥<span id="co-disc-amt">0.00</span>）</span>
     </div>
     <div class="co-hint">
-      按折率：填 88 = 8.8 折（结果四舍五入取整）·
-      目标金额：直接填想收的钱（如 50），减免额自动算出
+      按折率：填 88 = 8.8 折（结果保留到分）·
+      目标金额：直接填想收的钱（如 79.90），减免额自动算出
     </div>
   </div>
 
@@ -346,7 +346,7 @@
 
     <div class="co-pay-amount-wrap" id="co-round-wrap" style="min-width:128px;">
       <label>本笔实收（混合支付改小）</label>
-      <input type="number" step="0.01" min="0" name="round_amount" id="co-round-amount"
+      <input type="number" step="0.01" min="0" name="round_amount" id="co-round-amount" inputmode="decimal"
              class="co-ref-input" style="font-family:var(--font-numeric); font-size:15pt; font-weight:700; color:var(--accent-red); padding:6px 8px;"
              value="{{ '%.2f'|format(outstanding) }}"/>
     </div>
@@ -446,13 +446,13 @@ function coSelectDisc(btn) {
   var inp  = document.getElementById('co-disc-value');
   if (coUiMode === 'pct') {
     wrap.style.display = '';
-    lbl.textContent = '折率（填 70 = 7 折；100 = 不折，自动取整）';
+    lbl.textContent = '折率（填 70 = 7 折；100 = 不折，保留两位小数）';
     inp.placeholder = '70';
     inp.max = '100';
   } else if (coUiMode === 'target') {
     wrap.style.display = '';
     lbl.textContent = '目标金额（想收多少就填多少，¥）';
-    inp.placeholder = '50';
+    inp.placeholder = '79.90';
     inp.removeAttribute('max');
   } else {
     wrap.style.display = 'none';
@@ -479,11 +479,11 @@ function coRecalc() {
   if (coUiMode === 'pct') {
     var pct = raw > 1 ? raw / 100 : raw;
     if (pct > 0 && pct <= 1) {
-      after = Math.round(CO_OUTSTANDING * pct);   // 折后四舍五入取整
+      after = Math.round(CO_OUTSTANDING * pct * 100) / 100;
       discount = CO_OUTSTANDING - after;
     }
   } else if (coUiMode === 'target') {
-    var target = Math.round(raw);                  // 目标金额取整
+    var target = Math.round(raw * 100) / 100;
     if (target >= 0 && target < CO_OUTSTANDING) {
       after = target;
       discount = CO_OUTSTANDING - target;
@@ -491,7 +491,7 @@ function coRecalc() {
   }
   discount = Math.max(0, Math.min(discount, CO_OUTSTANDING));
   after = CO_OUTSTANDING - discount;
-  // 统一以「减免金额」提交（值=算好的减免额，含取整）
+  // 统一以「减免金额」提交，金额精确到分。
   document.getElementById('co-disc-mode').value = discount > 0.005 ? 'amount' : 'none';
   document.getElementById('co-disc-val-hidden').value = discount > 0.005 ? discount.toFixed(2) : '';
   var preview = document.getElementById('co-disc-preview');
