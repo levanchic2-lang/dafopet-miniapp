@@ -1,0 +1,90 @@
+{% extends "_print_base.html" %}
+{% block title %}住院记录 · {{ pet.name if pet else '' }} · #{{ h.id }}{% endblock %}
+{% block default_size %}A4{% endblock %}
+
+{% block extra_style %}
+.ip-head{text-align:center}.ip-en{font-size:20pt;letter-spacing:5px}.ip-zh{font-size:10.5pt;letter-spacing:7px;margin-top:3px}.ip-title{font-size:14pt;font-weight:700;letter-spacing:6px;padding:8px 0;text-align:center;border-top:3px double #111;border-bottom:1px solid #111;margin-top:12px}.ip-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:7px 18px;padding:10px 0;font-size:9.5pt}.ip-meta .lab{font-size:8.5pt;color:#666;margin-right:5px}.ip-meta .val{font-weight:600}.ip-sec{margin-top:15px;border-left:3px solid #111;padding:2px 8px;font-size:11pt;font-weight:700;letter-spacing:3px}.ip-text{white-space:pre-wrap;line-height:1.65;border-bottom:.5px solid #ccc;padding:7px 2px;font-size:9.5pt}.ip-table{width:100%;border-collapse:collapse;font-size:8.8pt;margin-top:6px}.ip-table th{padding:4px;border-bottom:1px solid #111;text-align:left;white-space:nowrap}.ip-table td{padding:4px;border-bottom:.5px solid #ddd;vertical-align:top}.ip-table .num{white-space:nowrap}.ip-empty{padding:7px 2px;color:#666;font-size:9pt}.ip-foot{margin-top:22px;padding-top:8px;border-top:.5px solid #aaa;display:flex;justify-content:space-between;font-size:8.5pt}.ip-keep{page-break-inside:avoid}
+{% endblock %}
+
+{% block content %}
+<div class="ip-head">
+  <div class="ip-en">{{ clinic_name_en or 'DaFo Animal Hospital' }}</div>
+  <div class="ip-zh">{{ clinic_name_zh or '大风动物医院' }}</div>
+</div>
+<div class="ip-title">INPATIENT RECORD · 住 院 记 录</div>
+
+<div class="ip-meta">
+  <div><span class="lab">住院单号</span><span class="val">IP{{ '%06d'|format(h.id) }}</span></div>
+  <div><span class="lab">关联病例</span><span class="val">MR{{ '%06d'|format(visit.id) if visit else '—' }}</span></div>
+  <div><span class="lab">状态</span><span class="val">{{ status_zh.get(h.status, h.status) }}</span></div>
+  <div><span class="lab">客户</span><span class="val">{{ cust.name if cust else '—' }}</span></div>
+  <div><span class="lab">宠物</span><span class="val">{{ pet.name if pet else '—' }}</span></div>
+  <div><span class="lab">病历号</span><span class="val">{{ pet.medical_record_no if pet else '—' }}</span></div>
+  {% set species_code = h.species_snapshot or (pet.species if pet else '') %}
+  <div><span class="lab">物种 / 品种</span><span class="val">{{ {'cat':'猫','dog':'犬'}.get(species_code, species_code or '—') }}{% if pet and pet.breed %} · {{ pet.breed }}{% endif %}</span></div>
+  <div><span class="lab">入住体重</span><span class="val">{{ ('%.2f kg'|format(h.admission_weight_kg)) if h.admission_weight_kg else '—' }}</span></div>
+  <div><span class="lab">笼位</span><span class="val">{{ cage.code if cage else '—' }}</span></div>
+  <div><span class="lab">入住时间</span><span class="val">{{ (h.admitted_at|bjtime).strftime('%Y-%m-%d %H:%M') if h.admitted_at else '—' }}</span></div>
+  <div><span class="lab">离院时间</span><span class="val">{{ (h.discharged_at|bjtime).strftime('%Y-%m-%d %H:%M') if h.discharged_at else '住院中' }}</span></div>
+  <div><span class="lab">计费天数</span><span class="val">{{ '%g'|format(display_days) }} 天</span></div>
+  <div><span class="lab">住院项目</span><span class="val">{{ h.rate_label or '住院费' }}</span></div>
+  <div><span class="lab">住院费原价</span><span class="val">¥{{ '%.2f'|format((h.daily_rate_override or 0) * display_days) }}</span></div>
+  <div><span class="lab">收费单应付</span><span class="val">{{ ('¥%.2f'|format(invoice.total_amount or 0)) if invoice else '—' }}</span></div>
+  <div><span class="lab">收费单</span><span class="val">{{ invoice.invoice_no if invoice and invoice.invoice_no else (('#' ~ invoice.id) if invoice else '未生成') }}</span></div>
+</div>
+
+<div class="ip-sec">入院原因 / 初步诊断</div>
+<div class="ip-text">{{ h.reason or '—' }}</div>
+
+<div class="ip-sec">住院用药执行</div>
+{% if medication_logs or temporary_medications %}
+<table class="ip-table">
+  <thead><tr><th>计划 / 执行时间</th><th>药品 / 处置</th><th>实际用量</th><th>状态</th><th>执行人 / 备注</th></tr></thead>
+  <tbody>
+  {% for log in medication_logs %}
+  <tr>
+    <td class="num">{{ (log.scheduled_at|bjtime).strftime('%Y-%m-%d %H:%M') if log.scheduled_at else '—' }}{% if log.administered_at %}<br/>实 {{ (log.administered_at|bjtime).strftime('%m-%d %H:%M') }}{% endif %}</td>
+    <td>{{ log.prescription_item.drug_name if log.prescription_item else '—' }}</td>
+    <td>{{ log.dose_actual or (log.prescription_item.dosage if log.prescription_item else '') or '—' }}</td>
+    <td>{{ med_status_zh.get(log.status, log.status) }}</td>
+    <td>{{ log.administered_by or '—' }}{% if log.notes %}<br/>{{ log.notes }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+  {% for log in temporary_medications %}
+  <tr>
+    <td class="num">{{ (log.administered_at|bjtime).strftime('%Y-%m-%d %H:%M') if log.administered_at else '—' }}</td>
+    <td>{{ log.drug_name or '临时用药' }}{% if log.route %} · {{ log.route }}{% endif %}</td>
+    <td>{{ log.dose_actual or '—' }}</td><td>临时执行</td>
+    <td>{{ log.administered_by or '—' }}{% if log.notes %}<br/>{{ log.notes }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<div class="ip-empty">本次住院无用药执行记录。</div>{% endif %}
+
+{% if vitals %}
+<div class="ip-sec">生命体征</div>
+<table class="ip-table"><thead><tr><th>记录时间</th><th>体温</th><th>心率</th><th>呼吸</th><th>黏膜</th><th>CRT</th><th>体重</th><th>备注</th></tr></thead><tbody>
+{% for row in vitals %}<tr><td class="num">{{ (row.recorded_at|bjtime).strftime('%Y-%m-%d %H:%M') }}</td><td>{{ ('%.1f℃'|format(row.temperature_c)) if row.temperature_c else '—' }}</td><td>{{ row.hr or '—' }}</td><td>{{ row.rr or '—' }}</td><td>{{ mm_color_zh.get(row.mm_color, row.mm_color or '—') }}</td><td>{{ ('%gs'|format(row.crt_sec)) if row.crt_sec else '—' }}</td><td>{{ ('%.2fkg'|format(row.weight_kg)) if row.weight_kg else '—' }}</td><td>{{ row.notes or '—' }}</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
+
+{% if io_logs %}
+<div class="ip-sec">液体输入 / 输出</div>
+<table class="ip-table"><thead><tr><th>记录时间</th><th>方向</th><th>类别</th><th>数量</th><th>记录人 / 备注</th></tr></thead><tbody>
+{% for row in io_logs %}<tr><td class="num">{{ (row.recorded_at|bjtime).strftime('%Y-%m-%d %H:%M') }}</td><td>{{ '输入' if row.direction == 'in' else '输出' }}</td><td>{{ io_cat_zh.get(row.category, row.category) }}</td><td>{{ '%g ml'|format(row.amount_ml or 0) }}</td><td>{{ row.recorded_by or '—' }}{% if row.notes %} · {{ row.notes }}{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
+
+{% if feeding_logs %}
+<div class="ip-sec">进食记录</div>
+<table class="ip-table"><thead><tr><th>记录时间</th><th>食物</th><th>提供 / 实食</th><th>食欲</th><th>记录人 / 备注</th></tr></thead><tbody>
+{% for row in feeding_logs %}<tr><td class="num">{{ (row.recorded_at|bjtime).strftime('%Y-%m-%d %H:%M') }}</td><td>{{ row.food_type or '—' }}</td><td>{{ '%g / %g g'|format(row.offered_g or 0, row.eaten_g or 0) }}</td><td>{{ appetite_zh.get(row.appetite_score, row.appetite_score) }}</td><td>{{ row.recorded_by or '—' }}{% if row.notes %} · {{ row.notes }}{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
+
+<div class="ip-sec">离院小结</div>
+<div class="ip-text">{{ h.discharge_summary or ('当前仍在住院治疗中。' if h.status == 'admitted' else '—') }}</div>
+
+<div class="ip-foot"><span>经治医生 / 签名：________________</span><span>打印日期：{{ (h.updated_at|bjtime).strftime('%Y-%m-%d') if h.updated_at else '' }}</span></div>
+{% endblock %}

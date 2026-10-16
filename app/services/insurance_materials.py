@@ -15,15 +15,22 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import (
+    Cage,
     Customer,
     ExamOrder,
     ExamReport,
+    FeedingLog,
+    Hospitalization,
+    InpatientTemporaryMedication,
     InsuranceMaterialShare,
     InsuranceMaterialSnapshot,
     Invoice,
+    IOLog,
+    MedicationAdminLog,
     Payment,
     Pet,
     Prescription,
+    VitalSignsLog,
     Visit,
     WeightRecord,
 )
@@ -132,6 +139,20 @@ def _pet_weight(db: Session, pet: Pet | None) -> float:
         .first()
     )
     return float(last_w.weight_kg or 0) if last_w else 0.0
+
+
+def _hospitalization_days(hospitalization: Hospitalization) -> float:
+    if (hospitalization.billing_mode or "legacy") in ("weight", "simple") and hospitalization.status == "discharged":
+        return float(hospitalization.billing_days or 0)
+    end_at = hospitalization.discharged_at or datetime.utcnow()
+    if not hospitalization.admitted_at or not end_at:
+        return 0.0
+    admitted_date = (hospitalization.admitted_at + timedelta(hours=8)).date()
+    discharged_date = (end_at + timedelta(hours=8)).date()
+    nights = max(0, (discharged_date - admitted_date).days)
+    if nights:
+        return float(nights)
+    return 0.0 if hospitalization.same_day_waived else 0.5
 
 
 def _add_manifest_file(files: list[dict], kind: str, label: str, path: Path, base_dir: Path) -> None:
@@ -330,6 +351,15 @@ def generate_insurance_material_snapshot(
         .order_by(Prescription.id.asc())
         .all()
     )
+    hospitalizations = (
+        db.query(Hospitalization)
+        .filter(
+            Hospitalization.visit_id == visit.id,
+            Hospitalization.status != "cancelled",
+        )
+        .order_by(Hospitalization.admitted_at.asc(), Hospitalization.id.asc())
+        .all()
+    )
     exam_orders = (
         db.query(ExamOrder)
         .filter(ExamOrder.visit_id == visit.id, ExamOrder.status != "voided")
@@ -382,11 +412,103 @@ def generate_insurance_material_snapshot(
         "medical_record", "病历（含 SOAP、处方、检查概要）",
     )
 
-    invoices = (
+    hospitalization_invoice_ids: list[int] = []
+    for hospitalization in hospitalizations:
+        if hospitalization.invoice_id:
+            hospitalization_invoice_ids.append(int(hospitalization.invoice_id))
+        medication_logs = (
+            db.query(MedicationAdminLog)
+            .filter(MedicationAdminLog.hospitalization_id == hospitalization.id)
+            .order_by(MedicationAdminLog.scheduled_at.asc(), MedicationAdminLog.id.asc())
+            .all()
+        )
+        temporary_medications = (
+            db.query(InpatientTemporaryMedication)
+            .filter(InpatientTemporaryMedication.hospitalization_id == hospitalization.id)
+            .order_by(InpatientTemporaryMedication.administered_at.asc(), InpatientTemporaryMedication.id.asc())
+            .all()
+        )
+        vitals = (
+            db.query(VitalSignsLog)
+            .filter(VitalSignsLog.hospitalization_id == hospitalization.id)
+            .order_by(VitalSignsLog.recorded_at.asc(), VitalSignsLog.id.asc())
+            .all()
+        )
+        io_logs = (
+            db.query(IOLog)
+            .filter(IOLog.hospitalization_id == hospitalization.id)
+            .order_by(IOLog.recorded_at.asc(), IOLog.id.asc())
+            .all()
+        )
+        feeding_logs = (
+            db.query(FeedingLog)
+            .filter(FeedingLog.hospitalization_id == hospitalization.id)
+            .order_by(FeedingLog.recorded_at.asc(), FeedingLog.id.asc())
+            .all()
+        )
+        hospitalization_pdf = out_dir / (
+            f"住院记录_IP{hospitalization.id:06d}_{_safe_name(pet.name if pet else '宠物')}.pdf"
+        )
+        _render_pdf(
+            templates,
+            "admin_inpatient_print.html",
+            {
+                "h": hospitalization,
+                "visit": visit,
+                "cust": cust,
+                "pet": pet,
+                "cage": db.get(Cage, hospitalization.cage_id) if hospitalization.cage_id else None,
+                "invoice": db.get(Invoice, hospitalization.invoice_id) if hospitalization.invoice_id else None,
+                "medication_logs": medication_logs,
+                "temporary_medications": temporary_medications,
+                "vitals": vitals,
+                "io_logs": io_logs,
+                "feeding_logs": feeding_logs,
+                "display_days": _hospitalization_days(hospitalization),
+                "clinic_name_zh": clinic_name_zh,
+                "clinic_name_en": clinic_name_en,
+                "status_zh": {"admitted": "住院中", "discharged": "已离院", "cancelled": "已取消"},
+                "med_status_zh": {
+                    "pending": "待执行", "done": "已执行", "skipped": "已跳过",
+                    "refused": "拒绝", "cancelled": "已停用",
+                },
+                "mm_color_zh": {
+                    "pink": "粉红", "pale": "苍白", "cyanotic": "发绀",
+                    "jaundice": "黄染", "brick_red": "砖红",
+                },
+                "io_cat_zh": {
+                    "iv_fluid": "静脉输液", "oral": "经口", "injection": "注射",
+                    "urine": "尿液", "stool": "粪便", "vomit": "呕吐",
+                    "drainage": "引流", "other": "其他",
+                },
+                "appetite_zh": {0: "拒食", 1: "强饲", 2: "少量", 3: "正常", 4: "旺盛"},
+            },
+            hospitalization_pdf,
+            db,
+        )
+        label = f"住院记录 IP{hospitalization.id:06d}"
+        _add_manifest_file(files, "hospitalization", label, hospitalization_pdf, out_dir)
+        _pdf_to_jpegs(
+            hospitalization_pdf, image_dir, hospitalization_pdf.stem, files, out_dir,
+            "hospitalization", label,
+        )
+
+    direct_invoices = (
         db.query(Invoice)
         .filter(Invoice.visit_id == visit.id)
         .order_by(Invoice.id.asc())
         .all()
+    )
+    hospitalization_invoices = (
+        db.query(Invoice)
+        .filter(Invoice.id.in_(hospitalization_invoice_ids))
+        .order_by(Invoice.id.asc())
+        .all()
+        if hospitalization_invoice_ids else []
+    )
+    invoices = sorted(
+        {invoice.id: invoice for invoice in [*direct_invoices, *hospitalization_invoices]}.values(),
+        key=lambda invoice: invoice.id,
     )
     for inv in invoices:
         payments = (

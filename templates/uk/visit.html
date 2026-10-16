@@ -695,7 +695,13 @@
     <tbody>
       {% for inv in invoices %}
       <tr>
-        <td class="num" style="font-size:9.5pt;">{{ inv.invoice_no or ('#' ~ inv.id) }}</td>
+        <td class="num" style="font-size:9.5pt;">
+          {{ inv.invoice_no or ('#' ~ inv.id) }}
+          {% if hospitalization_by_invoice.get(inv.id) %}
+          {% set linked_hosp = hospitalization_by_invoice.get(inv.id) %}
+          <div style="margin-top:3px;font-size:8.5pt;"><a href="/admin/inpatient/{{ linked_hosp.id }}">住院单 #{{ linked_hosp.id }} →</a></div>
+          {% endif %}
+        </td>
         <td class="num">{{ inv.invoice_date or ((inv.created_at | bjtime).strftime('%Y-%m-%d') if inv.created_at else '—') }}</td>
         <td class="num">¥{{ '%.2f'|format(inv.total_amount or 0) }}</td>
         <td>

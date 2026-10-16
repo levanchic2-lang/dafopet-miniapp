@@ -17137,7 +17137,23 @@ async def page_admin_visit_detail(
         AnesthesiaMonitorSheet.visit_id == visit_id,
     ).order_by(AnesthesiaMonitorSheet.id.desc()).all()
     sales_orders = db.query(SalesOrder).filter(SalesOrder.visit_id == visit_id).order_by(SalesOrder.id.desc()).all()
-    invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).order_by(Invoice.id.desc()).all()
+    direct_invoices = db.query(Invoice).filter(Invoice.visit_id == visit_id).all()
+    linked_hospitalizations = db.query(Hospitalization).filter(
+        Hospitalization.visit_id == visit_id,
+        Hospitalization.status != "cancelled",
+    ).order_by(Hospitalization.admitted_at.desc(), Hospitalization.id.desc()).all()
+    hospitalization_by_invoice = {
+        int(h.invoice_id): h for h in linked_hospitalizations if h.invoice_id
+    }
+    hospitalization_invoices = (
+        db.query(Invoice).filter(Invoice.id.in_(hospitalization_by_invoice)).all()
+        if hospitalization_by_invoice else []
+    )
+    invoices = sorted(
+        {invoice.id: invoice for invoice in [*direct_invoices, *hospitalization_invoices]}.values(),
+        key=lambda invoice: invoice.id,
+        reverse=True,
+    )
     exam_orders = db.query(ExamOrder).filter(ExamOrder.visit_id == visit_id).order_by(ExamOrder.id.desc()).all()
     unified_batches = db.query(UnifiedOrderBatch).filter(
         UnifiedOrderBatch.visit_id == visit_id
@@ -17225,6 +17241,7 @@ async def page_admin_visit_detail(
         "anmon_sheets": anmon_sheets,
         "sales_orders": sales_orders,
         "invoices": invoices,
+        "hospitalization_by_invoice": hospitalization_by_invoice,
         "exam_orders": exam_orders,
         "unified_batches": unified_batches,
         "insurance_shares": insurance_shares,
