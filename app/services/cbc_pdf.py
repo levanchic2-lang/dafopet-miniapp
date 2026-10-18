@@ -10,6 +10,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.services.cbc_report import CBC_NAMES_ZH
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,7 +46,8 @@ def _build_html(report, customer, pet, previous) -> str:
         if value is not None and prior is not None:
             trend = "↑" if value > prior else ("↓" if value < prior else "→")
         body.append(
-            f'<tr class="{cls}"><td>{_e(code)}</td><td class="num">{_e(_fmt(value))} {mark}</td>'
+            f'<tr class="{cls}"><td class="item"><b>{_e(code)}</b><span>{_e(CBC_NAMES_ZH.get(code, r.get("name_zh", "")))}</span></td>'
+            f'<td class="num">{_e(_fmt(value))} {mark}</td>'
             f'<td>{_e(r.get("unit"))}</td><td class="num">{_e(ref)}</td>'
             f'<td class="num">{_e(_fmt(prior)) if previous else "—"} {trend}</td></tr>'
         )
@@ -57,7 +60,8 @@ def _build_html(report, customer, pet, previous) -> str:
     .rule{{border:0;border-top:1.5px solid #111;border-bottom:.5px solid #111;height:3px;margin:7pt 0 9pt}}
     .meta,.result{{width:100%;border-collapse:collapse}} .meta td{{border:.5px solid #bbb;padding:3pt 5pt}} .meta .k{{background:#f4f4f1;color:#555;width:14%}}
     h2{{font-size:10.5pt;letter-spacing:1px;border-bottom:1px solid #333;padding-bottom:2pt;margin:9pt 0 4pt}}
-    .result th,.result td{{border:.5px solid #c7c7c7;padding:2.6pt 5pt}} .result th{{background:#f1f1ee}} .num{{text-align:right;font-variant-numeric:tabular-nums}}
+    .result th,.result td{{border:.5px solid #c7c7c7;padding:2.6pt 4pt}} .result th{{background:#f1f1ee}} .num{{text-align:right;font-variant-numeric:tabular-nums}}
+    .result th:first-child{{width:31%}} .result .item b{{display:inline-block;min-width:35pt}} .result .item span{{margin-left:3pt;color:#555;font-size:8.3pt}}
     .result tr.abn td{{font-weight:700;color:#7a2828;background:#fff8f6}} .text{{white-space:pre-wrap;line-height:1.7}}
     .note{{font-size:8pt;color:#666;margin-top:3pt}} .sig{{display:flex;justify-content:space-between;border-top:.5px solid #ccc;margin-top:12pt;padding-top:6pt}}
     """

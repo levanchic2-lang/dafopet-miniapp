@@ -32568,6 +32568,7 @@ async def admin_cbc_create(order_id: int, request: Request, background_tasks: Ba
 
 
 def _cbc_edit_context(report: CbcReport, request: Request, db: Session, msg: str = "") -> dict:
+    from app.services.cbc_report import CBC_NAMES_ZH
     order = db.get(ExamOrder, report.exam_order_id)
     visit = db.get(Visit, report.visit_id) if report.visit_id else None
     pet = db.get(Pet, report.pet_id) if report.pet_id else None
@@ -32584,6 +32585,7 @@ def _cbc_edit_context(report: CbcReport, request: Request, db: Session, msg: str
             except Exception: previous_values = {}
     return {"report": report, "order": order, "visit": visit, "pet": pet, "cust": cust,
             "results": results, "validation": validation, "previous_values": previous_values,
+            "cbc_names_zh": CBC_NAMES_ZH,
             "msg": msg, "csrf_token": _get_csrf_token(request)}
 
 

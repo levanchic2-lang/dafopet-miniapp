@@ -1,4 +1,5 @@
 const { staffGet, staffPost, staffUpload } = require("../../../utils/api");
+const { runWithPrivacyGuard } = require("../../../utils/privacy");
 const app = getApp();
 
 function token() { try { return wx.getStorageSync("STAFF_TOKEN") || ""; } catch (e) { return ""; } }
@@ -32,9 +33,60 @@ Page({
   onNotes(e) { this.setData({ notes: e.detail.value || "" }); },
   chooseImage() { this.choose("image"); },
   chooseVideo() { this.choose("video"); },
-  choose(mediaType) {
+  async choose(mediaType) {
     if (this.data.busy) return;
-    wx.chooseMedia({ count: mediaType === "image" ? 9 : 1, mediaType: [mediaType], sourceType: ["camera", "album"], maxDuration: 90, camera: "back", success: res => this.uploadFiles(res.tempFiles || [], mediaType) });
+    const label = mediaType === "image" ? "拍照或选择照片" : "拍摄或选择视频";
+    try {
+      const files = await runWithPrivacyGuard(label, () => this.openMediaPicker(mediaType));
+      await this.uploadFiles(files, mediaType);
+    } catch (e) {
+      const message = (e && (e.errMsg || e.detail || e.message)) || "";
+      if (message.toLowerCase().includes("cancel")) return;
+      // 隐私工具已经展示了查看指引入口，避免紧接着再弹一次错误框。
+      if (message.toLowerCase().includes("privacy")) return;
+      wx.showModal({
+        title: `${label}失败`,
+        content: message || "微信没有打开相机或相册，请检查小程序权限后重试。",
+        showCancel: false
+      });
+    }
+  },
+  openMediaPicker(mediaType) {
+    return new Promise((resolve, reject) => {
+      if (wx.chooseMedia && typeof wx.chooseMedia === "function") {
+        wx.chooseMedia({
+          count: mediaType === "image" ? 9 : 1,
+          mediaType: [mediaType],
+          sourceType: ["camera", "album"],
+          maxDuration: 90,
+          camera: "back",
+          success: (res) => resolve(res.tempFiles || []),
+          fail: reject
+        });
+        return;
+      }
+      // 兼容不支持 chooseMedia 的旧微信基础库。
+      if (mediaType === "image" && wx.chooseImage) {
+        wx.chooseImage({
+          count: 9,
+          sourceType: ["camera", "album"],
+          success: (res) => resolve((res.tempFilePaths || []).map((path) => ({ tempFilePath: path, fileType: "image" }))),
+          fail: reject
+        });
+        return;
+      }
+      if (mediaType === "video" && wx.chooseVideo) {
+        wx.chooseVideo({
+          sourceType: ["camera", "album"],
+          maxDuration: 90,
+          camera: "back",
+          success: (res) => resolve(res.tempFilePath ? [{ tempFilePath: res.tempFilePath, fileType: "video" }] : []),
+          fail: reject
+        });
+        return;
+      }
+      reject({ errMsg: "当前微信版本不支持相机或相册接口，请升级微信后重试。" });
+    });
   },
   async uploadFiles(files, mediaType) {
     if (!files.length) return;

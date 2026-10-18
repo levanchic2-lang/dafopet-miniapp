@@ -53,6 +53,42 @@ CBC_UNITS = {
     "IRF": "%", "LFR": "%", "MFR": "%", "HFR": "%", "RHE": "pg",
 }
 
+CBC_NAMES_ZH = {
+    "WBC": "白细胞总数",
+    "Neu#": "中性粒细胞绝对值",
+    "Lym#": "淋巴细胞绝对值",
+    "Mon#": "单核细胞绝对值",
+    "Eos#": "嗜酸性粒细胞绝对值",
+    "Bas#": "嗜碱性粒细胞绝对值",
+    "Neu%": "中性粒细胞百分比",
+    "Lym%": "淋巴细胞百分比",
+    "Mon%": "单核细胞百分比",
+    "Eos%": "嗜酸性粒细胞百分比",
+    "Bas%": "嗜碱性粒细胞百分比",
+    "RBC": "红细胞计数",
+    "HGB": "血红蛋白",
+    "HCT": "红细胞压积",
+    "MCV": "平均红细胞体积",
+    "MCH": "平均红细胞血红蛋白量",
+    "MCHC": "平均红细胞血红蛋白浓度",
+    "RDW-CV": "红细胞分布宽度变异系数",
+    "RDW-SD": "红细胞分布宽度标准差",
+    "PLT": "血小板计数",
+    "MPV": "平均血小板体积",
+    "PDW": "血小板分布宽度",
+    "PCT": "血小板压积",
+    "P-LCC": "大血小板计数",
+    "P-LCR": "大血小板比率",
+    "IPF": "未成熟血小板比率",
+    "RET#": "网织红细胞绝对值",
+    "RET%": "网织红细胞百分比",
+    "IRF": "未成熟网织红细胞比率",
+    "LFR": "低荧光网织红细胞比率",
+    "MFR": "中荧光网织红细胞比率",
+    "HFR": "高荧光网织红细胞比率",
+    "RHE": "网织红细胞血红蛋白含量",
+}
+
 CBC_CODES = list(CBC_REFERENCE["cat"].keys())
 
 
@@ -191,6 +227,7 @@ def normalize_results(raw_results: list[dict[str, Any]], species: str) -> list[d
         row = by_code.get(code, {"code": code, "value": None, "instrument_flag": "", "confidence": 0.0, "raw_text": ""})
         ref = CBC_REFERENCE[species].get(code)
         row["unit"] = CBC_UNITS[code]
+        row["name_zh"] = CBC_NAMES_ZH[code]
         row["range_low"] = ref[0] if ref else None
         row["range_high"] = ref[1] if ref else None
         if row["value"] is None or ref is None:
