@@ -79,7 +79,7 @@ def main():
                 skipped += 1
                 continue
 
-            app_row = Application(**rec)
+            app_row = Application(data_origin="history_excel", **rec)
             db.add(app_row)
             inserted += 1
             print(f"新增：{rec['applicant_name']} / {rec['phone']} / {rec['status']}")

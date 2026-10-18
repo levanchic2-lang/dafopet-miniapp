@@ -275,6 +275,16 @@ def _try_sqlite_migrations() -> None:
             names = {c[1] for c in cols}  # (cid, name, type, notnull, dflt_value, pk)
             if "wechat_openid" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN wechat_openid VARCHAR(64) DEFAULT ''"))
+            if "data_origin" not in names:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN data_origin VARCHAR(30) DEFAULT 'miniapp'"))
+                # 2026-04-26 前、没有小程序 openid 的 101 条记录来自首批 Excel 导入。
+                conn.execute(text("""
+                    UPDATE applications
+                    SET data_origin = 'history_excel'
+                    WHERE (wechat_openid IS NULL OR TRIM(wechat_openid) = '')
+                      AND created_at < '2026-04-26 00:00:00'
+                """))
+                conn.commit()
             if "clinic_store" not in names:
                 conn.execute(text("ALTER TABLE applications ADD COLUMN clinic_store VARCHAR(80) DEFAULT ''"))
             if "appointment_at" not in names:

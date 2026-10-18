@@ -57,6 +57,8 @@ class Application(Base):
     phone: Mapped[str] = mapped_column(String(40))
     # 小程序订阅消息：申请人 openid（用于推送审核/手术结果）
     wechat_openid: Mapped[str] = mapped_column(String(64), default="")
+    # 数据来源：miniapp=小程序申请，history_excel=早期表格人工导入
+    data_origin: Mapped[str] = mapped_column(String(30), default="miniapp")
     # 预约信息
     clinic_store: Mapped[str] = mapped_column(String(80), default="")  # 东环店/横岗店
     appointment_at: Mapped[str] = mapped_column(String(40), default="")  # YYYY-MM-DD（仅日期；历史数据可能含时间）

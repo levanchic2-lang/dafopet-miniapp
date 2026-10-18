@@ -209,6 +209,7 @@ def main():
                 applicant_name=_str(row.get("姓名", "")),
                 phone=phone,
                 wechat_openid="",
+                data_origin="history_excel",
                 clinic_store=_map_clinic(_str(row.get("目标门店", ""))),
                 appointment_at=appointment_at,
                 location_address=address_auto,

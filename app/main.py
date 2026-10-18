@@ -31,7 +31,7 @@ from passlib.context import CryptContext
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 import httpx
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.staticfiles import StaticFiles
@@ -2110,6 +2110,7 @@ async def api_apply(
         applicant_name=f["applicant_name"],
         phone=f["phone"],
         wechat_openid=wechat_openid.strip(),
+        data_origin="miniapp",
         clinic_store=f["clinic_store"],
         appointment_at=f["appointment_at"],
         location_lat=location_lat.strip(),
@@ -2374,6 +2375,7 @@ async def api_apply_create(
         applicant_name=f["applicant_name"],
         phone=f["phone"],
         wechat_openid=wechat_openid.strip(),
+        data_origin="miniapp",
         clinic_store=f["clinic_store"],
         appointment_at=f["appointment_at"],
         location_lat=location_lat.strip(),
@@ -2658,6 +2660,8 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
     consent = (qp.get("consent") or "").strip()  # any/true/false
     verified = (qp.get("verified") or "").strip()  # any/true/false
     has_media = (qp.get("has_media") or "").strip()  # any/true
+    origin = (qp.get("origin") or "").strip()
+    media_status = (qp.get("media_status") or "").strip()
     date_from = (qp.get("from") or "").strip()  # YYYY-MM-DD
     date_to = (qp.get("to") or "").strip()  # YYYY-MM-DD
     page = int((qp.get("page") or "1").strip() or 1)
@@ -2693,6 +2697,44 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
         base_q = base_q.filter(Application.staff_cat_verified.is_(True))
     elif verified == "false":
         base_q = base_q.filter(Application.staff_cat_verified.is_(False))
+    if origin in ("history_excel", "miniapp"):
+        base_q = base_q.filter(Application.data_origin == origin)
+
+    has_before_media = exists().where(
+        MediaFile.application_id == Application.id,
+        MediaFile.kind.in_([MediaKind.surgery_before.value, MediaKind.application_image.value]),
+    )
+    has_after_media = exists().where(
+        MediaFile.application_id == Application.id,
+        MediaFile.kind == MediaKind.surgery_after.value,
+    )
+    media_review_statuses = [
+        ApplicationStatus.approved.value,
+        ApplicationStatus.scheduled.value,
+        ApplicationStatus.arrived_verified.value,
+        ApplicationStatus.surgery_completed.value,
+    ]
+    if media_status == "needs_review":
+        base_q = base_q.filter(
+            Application.status.in_(media_review_statuses),
+            or_(~has_before_media, ~has_after_media),
+        )
+    elif media_status == "missing_any":
+        base_q = base_q.filter(or_(~has_before_media, ~has_after_media))
+    elif media_status == "missing_both":
+        base_q = base_q.filter(~has_before_media, ~has_after_media)
+    elif media_status == "missing_before":
+        base_q = base_q.filter(~has_before_media)
+    elif media_status == "missing_after":
+        base_q = base_q.filter(~has_after_media)
+    elif media_status == "complete":
+        base_q = base_q.filter(has_before_media, has_after_media)
+    if has_media == "true":
+        has_application_media = exists().where(
+            MediaFile.application_id == Application.id,
+            MediaFile.kind.in_([MediaKind.application_image.value, MediaKind.application_video.value]),
+        )
+        base_q = base_q.filter(has_application_media)
     if date_from:
         try:
             dt = datetime.strptime(date_from, "%Y-%m-%d")
@@ -2747,6 +2789,28 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
         or 0
     )
 
+    # 首批 Excel 导入资料审计。术前口径与手术完成规则一致：申请现场照也可作为术前照。
+    _history_q = _stat_q.filter(Application.data_origin == "history_excel")
+    history_audit = {
+        "total": _history_q.with_entities(func.count(Application.id)).scalar() or 0,
+        "complete": _history_q.filter(has_before_media, has_after_media).with_entities(func.count(Application.id)).scalar() or 0,
+        "missing_both": _history_q.filter(~has_before_media, ~has_after_media).with_entities(func.count(Application.id)).scalar() or 0,
+        "missing_before": _history_q.filter(~has_before_media).with_entities(func.count(Application.id)).scalar() or 0,
+        "missing_after": _history_q.filter(~has_after_media).with_entities(func.count(Application.id)).scalar() or 0,
+        "needs_review": _history_q.filter(
+            Application.status.in_(media_review_statuses),
+            or_(~has_before_media, ~has_after_media),
+        ).with_entities(func.count(Application.id)).scalar() or 0,
+        "terminal_without_media": _history_q.filter(
+            Application.status.in_([
+                ApplicationStatus.cancelled.value,
+                ApplicationStatus.rejected.value,
+                ApplicationStatus.no_show.value,
+            ]),
+            or_(~has_before_media, ~has_after_media),
+        ).with_entities(func.count(Application.id)).scalar() or 0,
+    }
+
     total = base_q.count()
 
     rows = (
@@ -2757,9 +2821,6 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
         .all()
     )
 
-    if has_media == "true":
-        rows = [a for a in rows if any(m.kind in (MediaKind.application_image.value, MediaKind.application_video.value) for m in (a.media or []))]
-        total = len(rows) if page == 1 else total
     try:
         backup_files = list_backup_zips()
     except Exception:
@@ -2786,12 +2847,20 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
                 "consent": consent,
                 "verified": verified,
                 "has_media": has_media,
+                "origin": origin,
+                "media_status": media_status,
                 "from": date_from,
                 "to": date_to,
                 "page": page,
                 "page_size": page_size,
             },
-            "stats": {"overall_by_status": overall_by_status, "today_new": today_new, "pending_todo": pending_todo, "total": total},
+            "stats": {
+                "overall_by_status": overall_by_status,
+                "today_new": today_new,
+                "pending_todo": pending_todo,
+                "total": total,
+                "history_audit": history_audit,
+            },
         },
     )
 
@@ -3863,7 +3932,7 @@ async def admin_run_seed_2604(request: Request, db: Session = Depends(get_db)):
             if exists:
                 lines.append(f"跳过（已存在）：{r['applicant_name']} id={exists.id}")
                 continue
-            app_row = Application(wechat_openid="", agree_ear_tip=True,
+            app_row = Application(wechat_openid="", data_origin="history_excel", agree_ear_tip=True,
                                   agree_no_pet_fraud=True, is_proxy=False, **r)
             db.add(app_row)
             db.flush()
