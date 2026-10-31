@@ -150,7 +150,7 @@
      <b>{{ task.title }}</b>
      {% if cust %}<div>客户：{{ cust.name }} <i data-lucide="check"></i> 已验证</div>{% endif %}
      {% if pet %}<div>宠物：{{ pet.name }}{% if pet.species %} · {{ '猫' if pet.species == 'cat' else '犬' if pet.species == 'dog' else pet.species }}{% endif %}</div>{% endif %}
-     <div>发起时间：{{ task.initiated_at.strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }}</div>
+     <div>发起时间：{{ (task.initiated_at | bjtime).strftime('%Y-%m-%d %H:%M') if task.initiated_at else '' }}（北京时间）</div>
    </div>
    <div class="scroll-hint"><i data-lucide="arrow-down"></i> 请滚动阅读以下全文，下方签字。</div>
    <div class="doc-body">{{ task.snapshot_html|safe }}</div>
@@ -178,7 +178,7 @@
  <div class="status-box">
    <div class="icon"><i data-lucide="check-circle-2"></i></div>
    <h2>已签署</h2>
-   <p>签署时间：{{ task.signed_at.strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}</p>
+   <p>签署时间：{{ (task.signed_at | bjtime).strftime('%Y-%m-%d %H:%M:%S') if task.signed_at else '—' }}（北京时间）</p>
     <p>本协议已自动归档到您的医院档案。</p>
   </div>
   {% if is_vaccine_consent %}

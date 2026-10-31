@@ -26,6 +26,8 @@ from pathlib import Path
 from typing import Annotated, Optional
 from urllib.parse import quote
 
+from app.time_utils import beijing_now, format_beijing, to_beijing
+
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from passlib.context import CryptContext
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
@@ -393,7 +395,7 @@ def _filter_bjtime(dt):
     if not dt:
         return None
     try:
-        return dt + timedelta(hours=8)
+        return to_beijing(dt)
     except Exception:
         return dt
 
@@ -7248,7 +7250,7 @@ def _staff_followup_payload(db: Session, fu: FollowUp) -> dict:
         "next_action_ref_id": fu.next_action_ref_id,
         "next_contact_date": fu.next_contact_date or "",
         "handled_by": fu.handled_by or "",
-        "handled_at": fu.handled_at.strftime("%Y-%m-%d %H:%M") if fu.handled_at else "",
+        "handled_at": format_beijing(fu.handled_at) if fu.handled_at else "",
         "handle_note": fu.handle_note or "",
         "staff_answers": staff_answers,
         "staff_answer_items": _followup_answer_items(questions, staff_answers),
@@ -8097,7 +8099,7 @@ async def api_staff_miniapp_customer_detail(
             "id": t.id, "type": t.type or "", "amount": round(float(t.amount or 0), 2),
             "balance_after": round(float(t.balance_after or 0), 2), "note": t.note or "",
             "status": t.status or "active", "ref_no": t.ref_no or "",
-            "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "",
+            "created_at": format_beijing(t.created_at) if t.created_at else "",
         } for t in tx_rows],
         "packages": [{
             "id": p.id, "name": p.name or "套餐", "pet_name": pet_names.get(p.pet_id or 0, "通用"),
@@ -8649,8 +8651,8 @@ def _consultation_draft_payload(row: VisitConsultationDraft | None) -> dict:
         "error": row.ai_error or "",
         "created_by": row.created_by or "",
         "confirmed_by": row.confirmed_by or "",
-        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "",
-        "confirmed_at": row.confirmed_at.strftime("%Y-%m-%d %H:%M") if row.confirmed_at else "",
+        "created_at": format_beijing(row.created_at) if row.created_at else "",
+        "confirmed_at": format_beijing(row.confirmed_at) if row.confirmed_at else "",
     }
 
 
@@ -8735,7 +8737,7 @@ def _case_media_payload(row: MedicalDocument) -> dict:
         "id": row.id, "stage": stage, "stage_label": _CASE_MEDIA_STAGES[stage],
         "media_type": row.file_type or "image", "name": row.original_name or "病例素材",
         "notes": row.notes or "", "uploaded_by": row.uploaded_by or "",
-        "uploaded_at": row.uploaded_at.strftime("%Y-%m-%d %H:%M") if row.uploaded_at else "",
+        "uploaded_at": format_beijing(row.uploaded_at) if row.uploaded_at else "",
     }
 
 
@@ -13648,7 +13650,7 @@ def _try_push_consent_notice(db: Session, task: "ConsentTask", cust: "Customer |
         clinic_name = f"大风动物医院（{pet.store.replace('店', '分院')}）"
     base_url = (settings.public_base_url or "").strip().rstrip("/")
     sign_url = f"{base_url}/consent/{task.token}" if base_url else f"/consent/{task.token}"
-    initiated_at = task.initiated_at.strftime("%Y-%m-%d %H:%M") if task.initiated_at else ""
+    initiated_at = format_beijing(task.initiated_at)
     try:
         from app.services.wechat_miniapp import push_consent_signature
         return push_consent_signature(
@@ -15883,7 +15885,7 @@ def _care_summary_snapshot(db: Session, v: Visit, doctor_instruction: str = "") 
                 "item_label": r.item_label,
                 "file_type": r.file_type,
                 "original_name": r.original_name,
-                "uploaded_at": r.uploaded_at.isoformat() if r.uploaded_at else "",
+                "uploaded_at": format_beijing(r.uploaded_at, "%Y-%m-%dT%H:%M:%S") if r.uploaded_at else "",
             } for r in (eo.reports or [])],
         })
 
@@ -16073,7 +16075,7 @@ async def page_admin_visit_create(
         Staff.position.ilike("%医%")
     ).all()
     vet_names = [v[0] for v in vets]
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = beijing_now().strftime("%Y-%m-%d")
     # 客户搜索结果
     search_results = []
     if search_q and not customer_id:
@@ -20389,7 +20391,7 @@ async def page_admin_presc_create(
         Staff.position.ilike("%医%")
     ).all()
     vet_names = [v[0] for v in vets]
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = beijing_now().strftime("%Y-%m-%d")
     history = []
     if pet_id:
         history = db.query(Prescription).filter(Prescription.pet_id == pet_id)\
@@ -20788,7 +20790,7 @@ async def admin_presc_copy_as_new(presc_id: int, request: Request, db: Session =
         visit_id=src.visit_id,
         customer_id=src.customer_id,
         pet_id=src.pet_id,
-        prescribed_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        prescribed_date=beijing_now().strftime("%Y-%m-%d"),
         vet_name=src.vet_name,
         status="issued",
         total_amount=new_total,
@@ -20886,7 +20888,7 @@ def _write_narcotics_ledger(db: Session, *, item_id: int, item_name: str,
         if inv.is_controlled or inv.subcategory == "controlled":
             new_balance = max(0.0, round(float(inv.stock_qty or 0), 4))
     row = NarcoticsLedger(
-        event_date=event_date or datetime.utcnow().strftime("%Y-%m-%d"),
+        event_date=event_date or beijing_now().strftime("%Y-%m-%d"),
         item_id=item_id or None,
         item_name=(item_name or "")[:120],
         direction=direction, source=source,
@@ -20968,7 +20970,7 @@ def _anesth_form_context(request, db, *, order=None, visit=None, cust=None,
     anesth_templates = db.query(AnesthesiaTemplate).order_by(
         AnesthesiaTemplate.use_count.desc(), AnesthesiaTemplate.id.desc()
     ).limit(200).all()
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = beijing_now().strftime("%Y-%m-%d")
     return {
         "order": order, "visit": visit, "cust": cust, "pet": pet, "pets": pets or [],
         "vet_names": vet_names,
@@ -21117,7 +21119,7 @@ async def admin_anesth_create(request: Request, db: Session = Depends(get_db)):
         visit_id=visit_id or None,
         customer_id=customer_id or None,
         pet_id=pet_id or None,
-        anesth_date=str(form.get("anesth_date", "")).strip()[:20] or datetime.utcnow().strftime("%Y-%m-%d"),
+        anesth_date=str(form.get("anesth_date", "")).strip()[:20] or beijing_now().strftime("%Y-%m-%d"),
         asa_grade=str(form.get("asa_grade", "")).strip()[:10],
         vet_name=vet_name, cosigner="",
         start_time=str(form.get("start_time", "")).strip()[:10],
@@ -21186,7 +21188,7 @@ async def admin_anesth_copy_as_new(order_id: int, request: Request, db: Session 
         visit_id=src.visit_id,
         customer_id=src.customer_id,
         pet_id=src.pet_id,
-        anesth_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        anesth_date=beijing_now().strftime("%Y-%m-%d"),
         asa_grade=src.asa_grade,
         vet_name=src.vet_name,
         # 复制后属于一张新麻醉单，不沿用历史单据可能存在的旧版复核人字段。
@@ -22055,7 +22057,7 @@ async def page_admin_narcotics_manual(request: Request, db: Session = Depends(ge
     staff_names = [s[0] for s in staff_list]
     return templates.TemplateResponse(request, "uk/narcotics_manual.html", {
         "items_list": items_list, "staff_names": staff_names,
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -22075,7 +22077,7 @@ async def admin_narcotics_manual_submit(request: Request, db: Session = Depends(
     operator = str(form.get("operator", "")).strip() or request.session.get("admin_username", "admin")
     cosigner = str(form.get("cosigner", "")).strip()[:80]
     notes = str(form.get("notes", "")).strip()
-    event_date = str(form.get("event_date", "")).strip() or datetime.utcnow().strftime("%Y-%m-%d")
+    event_date = str(form.get("event_date", "")).strip() or beijing_now().strftime("%Y-%m-%d")
     if direction not in ("in", "out", "loss"):
         raise HTTPException(400, "方向无效")
     if qty <= 0:
@@ -22161,7 +22163,7 @@ async def admin_narcotics_export(
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = f"narcotics_ledger_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    fname = f"narcotics_ledger_{beijing_now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return Response(
         content=buf.read(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -22379,7 +22381,7 @@ async def page_admin_so_create(
         search_results = db.query(Customer).filter(
             or_(Customer.name.ilike(f"%{search_q}%"), Customer.phone.ilike(f"%{search_q}%"))
         ).limit(10).all()
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = beijing_now().strftime("%Y-%m-%d")
     history = []
     if customer_id:
         history = db.query(SalesOrder).filter(SalesOrder.customer_id == customer_id)\
@@ -22667,7 +22669,7 @@ async def admin_so_copy_as_new(order_id: int, request: Request, db: Session = De
         customer_id=src.customer_id,
         visit_id=src.visit_id,
         pet_id=src.pet_id,
-        order_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        order_date=beijing_now().strftime("%Y-%m-%d"),
         status="pending",
         total_amount=src.total_amount,
         payment_method="",
@@ -24911,7 +24913,7 @@ async def admin_stocktake_export(
     wb.save(buf)
     buf.seek(0)
     safe_name = "".join(c for c in (sess.name or f"session_{session_id}") if c.isalnum() or c in "._- ")[:40].strip() or f"session_{session_id}"
-    fname = f"盘点单_{safe_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    fname = f"盘点单_{safe_name}_{beijing_now().strftime('%Y%m%d')}.xlsx"
     from urllib.parse import quote as _q
     return Response(
         content=buf.read(),
@@ -25090,7 +25092,7 @@ def _save_signature(data_url: str, prefix: str) -> str:
     try:
         header, b64 = data_url.split(",", 1)
         img_bytes = base64.b64decode(b64)
-        fname = f"{prefix}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}.png"
+        fname = f"{prefix}_{beijing_now().strftime('%Y%m%d%H%M%S%f')}.png"
         fpath = _SIG_DIR / fname
         fpath.write_bytes(img_bytes)
         return str(fpath)
@@ -30393,7 +30395,7 @@ async def admin_vaccination_copy_as_new(vacc_id: int, request: Request, db: Sess
     if not src:
         raise HTTPException(404)
     operator = request.session.get("admin_username", "admin")
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = beijing_now().strftime("%Y-%m-%d")
     new_v = Vaccination(
         pet_id=src.pet_id, customer_id=src.customer_id,
         vaccine_type=src.vaccine_type, vaccine_name=src.vaccine_name,
@@ -30520,7 +30522,7 @@ async def admin_rabies_manual_new(request: Request, db: Session = Depends(get_db
         "csrf_token": _get_csrf_token(request),
         "rabies_inventory_items": rabies_items,
         "vet_names": [row[0] for row in vets],
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
         "clinic_store": _get_op_store(request),
         "err": request.query_params.get("err", ""),
     })
@@ -30680,7 +30682,7 @@ async def admin_rabies_detail(rec_id: int, request: Request, db: Session = Depen
         "msg": request.query_params.get("msg"),
         "err": request.query_params.get("err"),
         "owner_name_invalid": _is_invalid_name(rec.owner_name or ""),
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
     })
 
 
@@ -30949,7 +30951,7 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
         existing_vacc.vaccine_type = "rabies"
         existing_vacc.vaccine_name = rec.vaccine_manufacturer or "狂犬疫苗"
         existing_vacc.batch_no = rec.vaccine_batch_no or ""
-        existing_vacc.vaccinated_date = rec.vaccine_date or datetime.utcnow().strftime("%Y-%m-%d")
+        existing_vacc.vaccinated_date = rec.vaccine_date or beijing_now().strftime("%Y-%m-%d")
         existing_vacc.next_due_date = next_due_date
         existing_vacc.vet_name = rec.staff_name or ""
         if rabies_item and not existing_vacc.inventory_item_id:
@@ -30967,7 +30969,7 @@ async def admin_rabies_fill(rec_id: int, request: Request, db: Session = Depends
             vaccine_name      = rec.vaccine_manufacturer or "狂犬疫苗",
             batch_no          = rec.vaccine_batch_no or "",
             dose_number       = 1,
-            vaccinated_date   = rec.vaccine_date or datetime.utcnow().strftime("%Y-%m-%d"),
+            vaccinated_date   = rec.vaccine_date or beijing_now().strftime("%Y-%m-%d"),
             next_due_date     = next_due_date,
             inventory_item_id = rabies_item.id if rabies_item else None,
             is_free           = True,
@@ -31227,7 +31229,7 @@ async def admin_rabies_export(
     wb.save(out)
     out.seek(0)
 
-    fname = f"狂犬疫苗登记_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    fname = f"狂犬疫苗登记_{beijing_now().strftime('%Y%m%d')}.xlsx"
     return FastResponse(
         content=out.read(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -33123,7 +33125,7 @@ async def admin_ultrasound_ai_status(report_id: int, request: Request, db: Sessi
         "findings": report.findings or "",
         "conclusion": report.conclusion or "",
         "advice": report.advice or "",
-        "updated_at": report.updated_at.isoformat() if report.updated_at else "",
+        "updated_at": format_beijing(report.updated_at, "%Y-%m-%dT%H:%M:%S") if report.updated_at else "",
     })
 
 
@@ -35322,7 +35324,7 @@ async def admin_deworming_copy_as_new(rec_id: int, request: Request, db: Session
     operator = request.session.get("admin_username", "admin")
     new_rec = DewormingRecord(
         customer_id=src.customer_id, pet_id=src.pet_id,
-        deworm_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        deworm_date=beijing_now().strftime("%Y-%m-%d"),
         deworm_type=src.deworm_type,
         product_name=src.product_name,
         weight_kg=src.weight_kg,
@@ -35450,7 +35452,7 @@ async def page_admin_grooming_create(
         cust = db.get(Customer, appt.customer_id) if appt.customer_id else None
         pet = db.get(Pet, appt.pet_id) if appt.pet_id else pet
     groomers, assistants = _grooming_staff_candidates(db)
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = beijing_now().strftime("%Y-%m-%d")
     history = []
     if pet:
         history = db.query(GroomingOrder).filter(GroomingOrder.pet_id == pet.id)\
@@ -35717,7 +35719,7 @@ async def admin_grooming_copy_as_new(rec_id: int, request: Request, db: Session 
     new_rec = GroomingOrder(
         customer_id=src.customer_id, pet_id=src.pet_id,
         appointment_id=None,
-        groom_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        groom_date=beijing_now().strftime("%Y-%m-%d"),
         start_time="", end_time="",
         groomer_name=src.groomer_name,
         services_json=src.services_json,
@@ -36249,7 +36251,7 @@ async def api_prescription_copy_sources(
             summary += f" 等{len(item_names)}项"
         result.append({
             "id": presc.id,
-            "date": presc.prescribed_date or (presc.created_at.strftime("%Y-%m-%d") if presc.created_at else ""),
+            "date": presc.prescribed_date or format_beijing(presc.created_at, "%Y-%m-%d"),
             "pet_id": pet.id,
             "pet_name": pet.name or "未命名",
             "species": pet.species or "",
@@ -38185,7 +38187,7 @@ async def m_root(request: Request, db: Session = Depends(get_db)):
 
     store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
-    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    today_str = beijing_now().strftime("%Y-%m-%d")
 
     # 今日预约（前 8 条）
     appt_q = db.query(Appointment).filter(
@@ -38447,7 +38449,7 @@ async def m_doctor_home_OBSOLETE(request: Request, db: Session = Depends(get_db)
 
     store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
-    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    today_str = beijing_now().strftime("%Y-%m-%d")
 
     # 今日预约（所有类别，按时间排）
     appt_q = db.query(Appointment).filter(
@@ -38633,7 +38635,7 @@ async def m_follow_ups(request: Request, tab: str = "today", db: Session = Depen
     base = db.query(FollowUp)
     if store_short:
         base = base.filter(or_(FollowUp.store == store_short, FollowUp.store == ""))
-    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    today_str = beijing_now().strftime("%Y-%m-%d")
     if tab == "today":
         rows = base.filter(
             FollowUp.status.in_(["due", "sent", "phone_pending"]),
@@ -38853,7 +38855,7 @@ _M_BEAUTY_CATS = ("beauty", "grooming", "washcare")
 
 def _m_today_beauty_appts(db: Session, store_short: str, store_full: str):
     """今日的美容预约（按时间排序）。"""
-    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    today_str = beijing_now().strftime("%Y-%m-%d")
     q = db.query(Appointment).filter(
         Appointment.category.in_(_M_BEAUTY_CATS),
         Appointment.appointment_date == today_str,
@@ -38888,7 +38890,7 @@ async def m_groomer_home_OBSOLETE(request: Request, db: Session = Depends(get_db
     recent = q.order_by(GroomingOrder.id.desc()).limit(5).all()
     # 未拍照单（today + 没 after_photos）
     no_photo = 0
-    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    today_str = beijing_now().strftime("%Y-%m-%d")
     for r in recent:
         if r.groom_date == today_str and not (r.after_photos or "").strip():
             no_photo += 1
@@ -38952,8 +38954,8 @@ async def m_grooming_new(
     ctx.update({
         "cust": cust, "pet": pet, "appt": appt, "pets": pets,
         "groomers": groomers, "assistants": assistants, "groom_items": groom_items,
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
-        "now_time": datetime.utcnow().strftime("%H:%M"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
+        "now_time": beijing_now().strftime("%H:%M"),
         "default_groomer": "",
     })
     return templates.TemplateResponse(request, "m_uk/grooming_new.html", ctx)
@@ -39005,7 +39007,7 @@ async def m_grooming_create(request: Request, db: Session = Depends(get_db)):
         customer_id=customer_id or None,
         pet_id=pet_id or None,
         appointment_id=appointment_id or None,
-        groom_date=str(form.get("groom_date", "")).strip()[:20] or datetime.utcnow().strftime("%Y-%m-%d"),
+        groom_date=str(form.get("groom_date", "")).strip()[:20] or beijing_now().strftime("%Y-%m-%d"),
         groomer_name=groomer_name,
         assistant_name=assistant_name,
         services_json=json.dumps(services, ensure_ascii=False),
@@ -39189,7 +39191,7 @@ async def m_grooming_mark_done(rec_id: int, request: Request,
         raise HTTPException(404)
     if rec.status == "voided":
         return RedirectResponse(f"/m/grooming/{rec_id}?err=已作废", status_code=303)
-    rec.end_time = datetime.utcnow().strftime("%H:%M")
+    rec.end_time = beijing_now().strftime("%H:%M")
     rec.updated_at = datetime.utcnow()
     db.commit()
     return RedirectResponse(f"/m/grooming/{rec_id}?msg=已标记完成", status_code=303)
@@ -39410,7 +39412,7 @@ async def m_visits_list(
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/visits", status_code=303)
     store_short = _get_op_store(request)
-    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    today_str = beijing_now().strftime("%Y-%m-%d")
     uname = request.session.get("admin_username") or ""
 
     base = db.query(Visit)
@@ -39477,7 +39479,7 @@ async def m_visit_new(
         "mode": "new", "v": None,
         "cust": cust, "pet": pet, "pets": pets, "appt": appt,
         "default_vet": default_vet,
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
         "visit_types": _VISIT_TYPE_ZH,
     })
     return templates.TemplateResponse(request, "m_uk/visit_edit.html", ctx)
@@ -39531,7 +39533,7 @@ async def m_vaccination_new(
     ctx.update({
         "cust": cust, "pet": pet, "pets": pets,
         "vacc_items": vacc_items,
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
         "default_vet": default_vet,
     })
     return templates.TemplateResponse(request, "m_uk/vaccination_new.html", ctx)
@@ -39563,7 +39565,7 @@ async def m_deworming_new(
     ctx.update({
         "cust": cust, "pet": pet, "pets": pets,
         "deworm_items": deworm_items,
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
         "default_vet": default_vet,
     })
     return templates.TemplateResponse(request, "m_uk/deworming_new.html", ctx)
@@ -39588,7 +39590,7 @@ async def m_sales_new(
     ctx = _m_ctx(request, db, active_tab="finance")
     ctx.update({
         "cust": cust, "pet": pet, "pets": pets,
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
     })
     return templates.TemplateResponse(request, "m_uk/sales_new.html", ctx)
 
@@ -40567,7 +40569,7 @@ async def m_appointments_list(
         return RedirectResponse("/admin/login?next=/m/appointments", status_code=303)
     store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
-    today_str = d.strip() or datetime.utcnow().strftime("%Y-%m-%d")
+    today_str = d.strip() or beijing_now().strftime("%Y-%m-%d")
     from datetime import datetime as _dt, timedelta as _td
     today_dt = _dt.strptime(today_str, "%Y-%m-%d")
     week_end_str = (today_dt + _td(days=6)).strftime("%Y-%m-%d")
@@ -40655,7 +40657,7 @@ async def m_appointment_new_form(
     tnr_info = None
     if store_short:
         cfg = _get_tnr_store_config(db, store_short)
-        year_month = datetime.utcnow().strftime("%Y-%m")
+        year_month = beijing_now().strftime("%Y-%m")
         used = _get_tnr_monthly_confirmed_count(db, store_short, year_month)
         tnr_info = {
             "accepting": bool(cfg.tnr_accepting),
@@ -40671,7 +40673,7 @@ async def m_appointment_new_form(
         "is_superadmin": is_super,
         "category_default": category,
         "tnr_info": tnr_info,
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
     })
     return templates.TemplateResponse(request, "m_uk/appointment_new.html", ctx)
 
@@ -40796,7 +40798,7 @@ async def m_prescribe_new(visit_id: int, request: Request, db: Session = Depends
         "v": v, "pet": pet, "cust": cust,
         "templates_list": templates_list,
         "default_vet": default_vet,
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": beijing_now().strftime("%Y-%m-%d"),
         "hosp_admitted": hosp_admitted,
     })
     return templates.TemplateResponse(request, "m_uk/prescription_new.html", ctx)
@@ -40847,7 +40849,7 @@ async def m_prescribe_edit(presc_id: int, request: Request, db: Session = Depend
         "is_edit": True, "presc": presc, "v": v, "pet": pet, "cust": cust,
         "templates_list": templates_list,
         "default_vet": presc.vet_name or "",
-        "today": presc.prescribed_date or datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": presc.prescribed_date or beijing_now().strftime("%Y-%m-%d"),
         "hosp_admitted": hosp_admitted, "presc_items": items,
     })
     return templates.TemplateResponse(request, "m_uk/prescription_new.html", ctx)

@@ -118,7 +118,7 @@ select, input[type=text] {
   </form>
 </div>
 
-<div class="footer">链接有效期：{{ order.token_expires_at.strftime('%Y-%m-%d %H:%M') if order.token_expires_at else '—' }} UTC<br>如链接失效请联系前台刷新</div>
+<div class="footer">链接有效期：{{ (order.token_expires_at | bjtime).strftime('%Y-%m-%d %H:%M') if order.token_expires_at else '—' }}（北京时间）<br>如链接失效请联系前台刷新</div>
 
 <script>
 function previewFile(input) {

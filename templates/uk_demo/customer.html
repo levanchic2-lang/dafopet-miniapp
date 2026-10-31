@@ -13,7 +13,7 @@
 
 <div class="uk-page-head">
   <h1 class="uk-h1">{{ cust.name }}<span class="sub">客户档案 · 编号 {{ cust.id }}</span></h1>
-  <div class="meta">建档 {{ cust.created_at.strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source or '手工录入' }}</em></div>
+  <div class="meta">建档 {{ (cust.created_at | bjtime).strftime('%Y 年 %m 月 %d 日') }} · 来源 <em>{{ cust.source or '手工录入' }}</em></div>
 
   <div class="actions">
     <a class="uk-btn sm">＋ 新建病历</a>

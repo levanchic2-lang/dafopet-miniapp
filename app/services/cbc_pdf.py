@@ -6,6 +6,8 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+
+from app.time_utils import format_beijing
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -51,7 +53,8 @@ def _build_html(report, customer, pet, previous) -> str:
             f'<td>{_e(r.get("unit"))}</td><td class="num">{_e(ref)}</td>'
             f'<td class="num">{_e(_fmt(prior)) if previous else "—"} {trend}</td></tr>'
         )
-    tested = report.tested_at or (report.created_at.strftime("%Y-%m-%d %H:%M") if report.created_at else "")
+    # 仪器屏幕时间已经是本地业务时间；只有系统创建时间需要 UTC→北京转换。
+    tested = report.tested_at or format_beijing(report.created_at)
     footer = f"{clinic} · CBC{report.id:06d} · AI 辅助分析须结合临床，由兽医解释"
     css = f"""
     @page {{ size:A4; margin:13mm 13mm 17mm; @bottom-center {{ content:'{footer}'; font-size:7pt; color:#555; }} }}

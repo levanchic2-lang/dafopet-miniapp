@@ -10,6 +10,8 @@ import logging
 import math
 from datetime import datetime
 from pathlib import Path
+
+from app.time_utils import beijing_now
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -295,7 +297,7 @@ def _build_html(sheet, cust, pet, clinic_name: str) -> str:
 
 <div class="foot">
   <div>本记录单由 {clinic_name} 出具 · 麻醉监护数据按时间点逐条记录</div>
-  <div>导出时间：{datetime.utcnow().strftime("%Y-%m-%d") }</div>
+  <div>导出时间：{beijing_now().strftime("%Y-%m-%d")}</div>
 </div>
 </body></html>
 """

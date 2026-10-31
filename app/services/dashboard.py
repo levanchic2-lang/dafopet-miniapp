@@ -38,6 +38,7 @@ from app.models import (
     ExamOrder, ExamReport,
     AnesthesiaMedicationEvent, AnesthesiaOpenVial,
 )
+from app.time_utils import beijing_now, format_beijing
 
 _STORE_SHORT_TO_FULL = {
     "东环店": "大风动物医院（东环店）",
@@ -46,7 +47,7 @@ _STORE_SHORT_TO_FULL = {
 
 
 def _today_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
+    return beijing_now().strftime("%Y-%m-%d")
 
 
 def _today_start() -> datetime:
@@ -186,7 +187,7 @@ def build_exam_report_pending(db: Session, store_short: str) -> dict:
         visit = db.get(Visit, eo.visit_id) if eo.visit_id else None
         cust = db.get(Customer, visit.customer_id) if visit and visit.customer_id else None
         pet = db.get(Pet, visit.pet_id) if visit and visit.pet_id else None
-        date_str = eo.created_at.strftime("%m-%d") if eo.created_at else "—"
+        date_str = format_beijing(eo.created_at, "%m-%d") or "—"
         miss = " / ".join(p["missing"][:2])
         if len(p["missing"]) > 2:
             miss += f" 等 {len(p['missing'])} 项"
@@ -217,7 +218,7 @@ def build_consent_pending(db: Session, store_short: str) -> dict:
     for t in rows[:3]:
         items.append({
             "label": _cust_label(t.customer, t.pet),
-            "sub": f"{t.title or '协议'} · {t.initiated_at.strftime('%m-%d %H:%M') if t.initiated_at else ''}",
+            "sub": f"{t.title or '协议'} · {format_beijing(t.initiated_at, '%m-%d %H:%M')}",
             "url": f"/admin/consent-tasks/{t.id}",
         })
     return {
@@ -314,7 +315,7 @@ def build_rabies_pending(db: Session, store_short: str) -> dict:
         animal = r.animal_name or "—"
         items.append({
             "label": f"{owner} · {animal}",
-            "sub": f"{badge} · {r.created_at.strftime('%m-%d %H:%M') if r.created_at else ''}",
+            "sub": f"{badge} · {format_beijing(r.created_at, '%m-%d %H:%M')}",
             "url": f"/admin/rabies/{r.id}",
         })
     return {
@@ -338,7 +339,7 @@ def build_tnr_pending(db: Session, store_short: str) -> dict:
     for a in rows[:3]:
         items.append({
             "label": a.applicant_name or "未命名",
-            "sub": f"#{a.id} · {a.created_at.strftime('%m-%d') if a.created_at else ''}",
+            "sub": f"#{a.id} · {format_beijing(a.created_at, '%m-%d')}",
             "url": f"/admin?status=pending_manual",
         })
     return {
@@ -456,7 +457,7 @@ def build_deposit_held(db: Session, store_short: str) -> dict:
     for d in rows[:3]:
         items.append({
             "label": _cust_label(d.customer, d.pet),
-            "sub": f"{d.category} · ¥{d.amount:.0f} · {d.created_at.strftime('%m-%d') if d.created_at else ''}",
+            "sub": f"{d.category} · ¥{d.amount:.0f} · {format_beijing(d.created_at, '%m-%d')}",
             "url": f"/admin/customers/{d.customer_id}?tab=deposits" if d.customer_id else "/admin/customers",
         })
     return {
@@ -489,7 +490,7 @@ def build_surgery_after_missing(db: Session, store_short: str) -> dict:
     for a in pending[:3]:
         items.append({
             "label": a.applicant_name or f"#{a.id}",
-            "sub": f"已到院待手术完成 · {a.updated_at.strftime('%m-%d') if a.updated_at else ''}",
+            "sub": f"已到院待手术完成 · {format_beijing(a.updated_at, '%m-%d')}",
             "url": f"/admin?status=arrived_verified",
         })
     return {

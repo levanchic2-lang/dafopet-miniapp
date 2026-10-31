@@ -8,6 +8,8 @@ import base64
 import logging
 from datetime import datetime
 from pathlib import Path
+
+from app.time_utils import format_beijing
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -68,7 +70,7 @@ def _build_html(task, cust, pet, doc_url_suffix: str, clinic_name: str) -> str:
             # 内联 base64 避免 weasyprint 的 file:// 安全限制
             b64 = base64.b64encode(sig_abs.read_bytes()).decode("ascii")
             sig_img_html = f'<img class="sig" src="data:image/png;base64,{b64}"/>'
-    signed_at = task.signed_at.strftime("%Y-%m-%d %H:%M:%S") if task.signed_at else "—"
+    signed_at = format_beijing(task.signed_at, "%Y-%m-%d %H:%M:%S") or "—"
 
     cust_line = ""
     if cust:
@@ -77,7 +79,7 @@ def _build_html(task, cust, pet, doc_url_suffix: str, clinic_name: str) -> str:
     if pet:
         species_zh = {"cat": "猫", "dog": "犬"}.get(pet.species or "", pet.species or "")
         pet_line = f"宠物：<b>{pet.name or ''}</b>{(' · ' + species_zh) if species_zh else ''}"
-    initiated_at = task.initiated_at.strftime("%Y-%m-%d %H:%M") if task.initiated_at else ""
+    initiated_at = format_beijing(task.initiated_at)
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><style>{PDF_CSS}</style></head>

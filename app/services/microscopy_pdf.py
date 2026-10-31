@@ -8,6 +8,8 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+
+from app.time_utils import format_beijing
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -180,7 +182,7 @@ def _build_html(report, cust, pet, clinic_name: str) -> str:
     conclusion_html = f'<h2 class="sec">结论</h2><div class="body-text">{conclusion}</div>' if conclusion else ""
     advice_html = f'<h2 class="sec">建议</h2><div class="body-text">{advice}</div>' if advice else ""
 
-    created_at = report.created_at.strftime("%Y-%m-%d %H:%M") if report.created_at else ""
+    created_at = format_beijing(report.created_at)
 
     footer_text = f"本报告由 {clinic_name} 出具 · 单号 MR{report.id:06d}"
     # 转义引号防 CSS 注入
