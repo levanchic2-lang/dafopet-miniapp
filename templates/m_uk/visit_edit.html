@@ -8,6 +8,12 @@
 
 {% block content %}
 
+{% if is_edit and v.status == 'closed' %}
+<div class="ukm-card" style="margin-bottom:16px;">
+  <div style="font-size:12px;color:var(--ink-3);font-style:italic;line-height:1.6;">历史导入病历。保存后仍是已结束。处方、检查和麻醉单保持锁定。</div>
+</div>
+{% endif %}
+
 <form method="post"
       action="{% if is_edit %}/admin/visits/{{ v.id }}/edit{% else %}/admin/visits/create{% endif %}"
       class="ukm-form" id="vform">

@@ -20,12 +20,20 @@ ROOT = Path(__file__).resolve().parent.parent
 PORT = 18001
 DB_PATH = ROOT / "_test" / "test.db"
 DB_URL = "sqlite:///./_test/test.db"
-ENV = {**os.environ, "DATABASE_URL": DB_URL, "PYTHONIOENCODING": "utf-8"}
+ENV = {
+    **os.environ,
+    "DATABASE_URL": DB_URL,
+    "PYTHONIOENCODING": "utf-8",
+    # 测试用 HTTP。不关 Secure 时会话 cookie 不会随请求返回。
+    "SESSION_HTTPS_ONLY": "0",
+}
 
 
 def port_in_use(port: int) -> bool:
     with socket.socket() as s:
         try:
+            # TIME_WAIT 不应挡住下一轮测试。真正的监听进程仍会让 bind 失败。
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind(("127.0.0.1", port))
             return False
         except OSError:

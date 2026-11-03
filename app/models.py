@@ -434,6 +434,9 @@ class Visit(Base):
     status: Mapped[str] = mapped_column(String(20), default="open")         # open / closed
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     closed_by: Mapped[str] = mapped_column(String(80), default="")
+    # 空 = 本系统接诊。warmsoft / import = 历史批量导入。
+    # 仅超级管理员可修正已结束的导入病历；正常结束的病历不写这个值。
+    data_origin: Mapped[str] = mapped_column(String(30), default="")
     # 主人带回家自治、不需要医院回访 → 勾选关闭，所有 pending 自动取消，未来 sync 不再衍生
     followup_disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     # 保险理赔材料待办：材料包生成成功后自动视为已完成，不再增加人工完成步骤。

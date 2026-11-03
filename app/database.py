@@ -265,6 +265,58 @@ def _heal_rabies_pet_links() -> None:
         sess.close()
 
 
+# 批量导入病历没有单独的来源列。正常「结束病历」一定会写 closed_by，
+# 本系统新建也一定会写 created_by。两者都空、或任一栏是导入占位名，
+# 才把已结束病历标成 warmsoft。带真实操作者的结束记录保持锁定。
+_VISIT_IMPORT_ACTORS = (
+    "",
+    "import",
+    "warmsoft",
+    "warmsoft_import",
+    "warmsoft_import_dh",
+    "系统导入",
+    "历史导入",
+    "小暖",
+    "小暖导入",
+    "批量导入",
+)
+
+
+def _sql_in_params(prefix: str, values: tuple[str, ...]) -> tuple[str, dict[str, str]]:
+    keys = []
+    params: dict[str, str] = {}
+    for i, value in enumerate(values):
+        key = f"{prefix}_{i}"
+        keys.append(f":{key}")
+        params[key] = value
+    return ", ".join(keys), params
+
+
+def mark_bulk_imported_visits(conn) -> int:
+    """把疑似批量导入、且已经结束的病历标上 data_origin=warmsoft。可重复执行。"""
+    cols = {c[1] for c in conn.execute(text("PRAGMA table_info(visits)")).fetchall()}
+    if "data_origin" not in cols or "status" not in cols:
+        return 0
+    actor_sql, actor_params = _sql_in_params("actor", _VISIT_IMPORT_ACTORS)
+    explicit = tuple(item for item in _VISIT_IMPORT_ACTORS if item)
+    explicit_sql, explicit_params = _sql_in_params("explicit", explicit)
+    result = conn.execute(
+        text(
+            "UPDATE visits SET data_origin = 'warmsoft' "
+            "WHERE (data_origin IS NULL OR TRIM(data_origin) = '') "
+            "AND status = 'closed' "
+            "AND ("
+            f"(TRIM(COALESCE(closed_by, '')) IN ({actor_sql}) "
+            f"AND TRIM(COALESCE(created_by, '')) IN ({actor_sql})) "
+            f"OR TRIM(COALESCE(created_by, '')) IN ({explicit_sql}) "
+            f"OR TRIM(COALESCE(closed_by, '')) IN ({explicit_sql})"
+            ")"
+        ),
+        {**actor_params, **explicit_params},
+    )
+    return int(result.rowcount or 0)
+
+
 def _try_sqlite_migrations() -> None:
     if not settings.database_url.startswith("sqlite"):
         return
@@ -1383,6 +1435,8 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE visits ADD COLUMN closed_at DATETIME DEFAULT NULL"))
                 if "closed_by" not in vst_names_v2:
                     conn.execute(text("ALTER TABLE visits ADD COLUMN closed_by VARCHAR(80) DEFAULT ''"))
+                if "data_origin" not in vst_names_v2:
+                    conn.execute(text("ALTER TABLE visits ADD COLUMN data_origin VARCHAR(30) DEFAULT ''"))
                 # 关闭回访（主人带回家自治不需要医院回访）
                 if "followup_disabled" not in vst_names_v2:
                     conn.execute(text("ALTER TABLE visits ADD COLUMN followup_disabled BOOLEAN DEFAULT 0"))
@@ -2540,6 +2594,13 @@ def _try_sqlite_migrations() -> None:
                     conn.execute(text("ALTER TABLE insurance_material_shares ADD COLUMN generation_completed_at DATETIME DEFAULT NULL"))
             except Exception as _e:
                 print(f"[migrations] insurance material generation status skipped: {_e}")
+
+            try:
+                marked = mark_bulk_imported_visits(conn)
+                if marked:
+                    print(f"[migrations] 标记历史导入病历 {marked} 条")
+            except Exception as _e:
+                print(f"[migrations] visits.data_origin backfill skipped: {_e}")
 
             conn.commit()
     except Exception:

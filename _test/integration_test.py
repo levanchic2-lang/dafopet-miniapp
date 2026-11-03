@@ -1957,6 +1957,183 @@ t_consent_task_delete()
 
 
 # ═══════════════════════════════════════════════
+print("\n[历史导入病历] 超管可改，正常结束病历和其他角色不可改")
+
+imported_visit_id = None
+native_closed_visit_id = None
+
+@step("回填：创建人与结束人都空的已结束病历标为历史导入，正常结束的不标")
+def t_mark_imported_visits():
+    global imported_visit_id, native_closed_visit_id
+    import os
+    os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
+    from app.database import SessionLocal, engine, mark_bulk_imported_visits
+    from app.models import Visit
+    db = SessionLocal()
+    blank = Visit(
+        customer_id=cust_id, pet_id=pet_id, visit_date="2020-01-02",
+        visit_type="outpatient", store="东环店", chief_complaint="导入主诉",
+        diagnosis="导入诊断", treatment_plan="导入方案", status="closed",
+        created_by="", closed_by="",
+    )
+    explicit = Visit(
+        customer_id=cust_id, pet_id=pet_id, visit_date="2020-01-03",
+        visit_type="outpatient", store="东环店", diagnosis="小暖诊断",
+        status="closed", created_by="小暖导入", closed_by="张医生",
+    )
+    native = Visit(
+        customer_id=cust_id, pet_id=pet_id, visit_date="2020-01-04",
+        visit_type="outpatient", store="东环店", diagnosis="正规结束",
+        status="closed", created_by="admin", closed_by="admin",
+    )
+    created_only = Visit(
+        customer_id=cust_id, pet_id=pet_id, visit_date="2020-01-05",
+        visit_type="outpatient", store="东环店", diagnosis="有创建人",
+        status="closed", created_by="admin", closed_by="",
+    )
+    still_open = Visit(
+        customer_id=cust_id, pet_id=pet_id, visit_date="2020-01-06",
+        visit_type="outpatient", store="东环店", diagnosis="未结束",
+        status="open", created_by="", closed_by="",
+    )
+    db.add_all([blank, explicit, native, created_only, still_open])
+    db.commit()
+    blank_id, explicit_id = blank.id, explicit.id
+    native_id, created_only_id, open_id = native.id, created_only.id, still_open.id
+    db.close()
+    with engine.begin() as conn:
+        mark_bulk_imported_visits(conn)
+    db = SessionLocal()
+    assert (db.get(Visit, blank_id).data_origin or "") == "warmsoft"
+    assert (db.get(Visit, explicit_id).data_origin or "") == "warmsoft"
+    assert (db.get(Visit, native_id).data_origin or "") == ""
+    assert (db.get(Visit, created_only_id).data_origin or "") == ""
+    assert (db.get(Visit, open_id).data_origin or "") == ""
+    db.close()
+    imported_visit_id = blank_id
+    native_closed_visit_id = native_id
+
+t_mark_imported_visits()
+
+
+def _visit_edit_payload(token, diagnosis):
+    return {
+        "csrf_token": token,
+        "pet_id": str(pet_id),
+        "visit_date": "2020-01-02",
+        "visit_type": "outpatient",
+        "chief_complaint": "导入主诉",
+        "physical_exam": "",
+        "diagnosis": diagnosis,
+        "treatment_plan": "导入方案",
+        "notes": "",
+        "vet_name": "",
+        "follow_up_note": "",
+        "follow_up_at": "",
+    }
+
+
+@step("超管编辑页可改历史导入病历，改正文后仍为已结束并留下修改前后")
+def t_superadmin_edits_imported_visit():
+    page = client.get(f"/admin/visits/{imported_visit_id}")
+    assert page.status_code == 200
+    assert "修正导入病历" in page.text
+    form = client.get(f"/admin/visits/{imported_visit_id}/edit-form")
+    assert form.status_code == 200
+    assert "历史导入病历" in form.text
+    assert "保&nbsp;存&nbsp;SOAP" in form.text
+    token = extract_csrf(form.text)
+    r = client.post(
+        f"/admin/visits/{imported_visit_id}/edit",
+        data=_visit_edit_payload(token, "修正后的诊断"),
+    )
+    assert r.status_code == 303, f"got {r.status_code} {r.text[:200]}"
+    from app.database import SessionLocal
+    from app.models import Visit, AuditLog
+    db = SessionLocal()
+    row = db.get(Visit, imported_visit_id)
+    assert row.diagnosis == "修正后的诊断"
+    assert row.status == "closed"
+    log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "visit_imported_edit")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert log is not None
+    assert log.actor == "admin"
+    detail = json.loads(log.detail)
+    assert detail["visit_id"] == imported_visit_id
+    assert detail["changes"]["diagnosis"]["before"] == "导入诊断"
+    assert detail["changes"]["diagnosis"]["after"] == "修正后的诊断"
+    db.close()
+
+t_superadmin_edits_imported_visit()
+
+
+@step("超管不能修改正常结束的病历")
+def t_native_closed_stays_locked():
+    form = client.get(f"/admin/visits/{native_closed_visit_id}/edit-form")
+    assert "修正导入病历" not in client.get(f"/admin/visits/{native_closed_visit_id}").text
+    assert "保&nbsp;存&nbsp;SOAP" not in form.text
+    token = extract_csrf(form.text)
+    payload = _visit_edit_payload(token, "不该写上")
+    payload["visit_date"] = "2020-01-04"
+    r = client.post(f"/admin/visits/{native_closed_visit_id}/edit", data=payload)
+    assert r.status_code == 403, f"got {r.status_code}"
+    from app.database import SessionLocal
+    from app.models import Visit
+    db = SessionLocal()
+    assert db.get(Visit, native_closed_visit_id).diagnosis == "正规结束"
+    db.close()
+
+t_native_closed_stays_locked()
+
+
+@step("普通员工不能修改历史导入的已结束病历")
+def t_staff_cannot_edit_imported_visit():
+    staff = httpx.Client(base_url=BASE, follow_redirects=False, timeout=20.0)
+    login = staff.get("/admin/login")
+    token = extract_csrf(login.text)
+    r = staff.post("/admin/login", data={
+        "username": "staff_dh", "password": "staff123456", "csrf_token": token,
+    })
+    assert r.status_code == 303, f"员工登录失败 {r.status_code}"
+    page = staff.get(f"/admin/visits/{imported_visit_id}/edit-form")
+    token = extract_csrf(page.text)
+    r = staff.post(
+        f"/admin/visits/{imported_visit_id}/edit",
+        data=_visit_edit_payload(token, "员工不该改成这样"),
+    )
+    assert r.status_code == 403, f"got {r.status_code}"
+    staff.close()
+    from app.database import SessionLocal
+    from app.models import Visit
+    db = SessionLocal()
+    assert db.get(Visit, imported_visit_id).diagnosis == "修正后的诊断"
+    db.close()
+
+t_staff_cannot_edit_imported_visit()
+
+
+@step("历史导入的已结束病历仍不能新开处方")
+def t_imported_closed_cannot_prescribe():
+    token = extract_csrf(client.get(f"/admin/visits/{imported_visit_id}").text)
+    r = client.post("/admin/prescriptions/create", data={
+        "csrf_token": token,
+        "visit_id": str(imported_visit_id),
+        "customer_id": str(cust_id),
+        "pet_id": str(pet_id),
+        "vet_name": "测试医生",
+        "prescribed_date": "2020-01-02",
+        "status": "issued",
+    })
+    assert r.status_code == 403, f"got {r.status_code} {r.text[:180]}"
+
+t_imported_closed_cannot_prescribe()
+
+
+# ═══════════════════════════════════════════════
 # 报告
 # ═══════════════════════════════════════════════
 print("\n" + "="*60)
