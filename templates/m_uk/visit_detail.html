@@ -3,7 +3,7 @@
 {% block topbar_title %}病&nbsp;历&nbsp;#{{ v.id }}{% endblock %}
 {% block topbar_back %}<a href="{% if cust %}/m/customer/{{ cust.id }}{% else %}/m/visits{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
 {% block topbar_actions %}
-  {% if v.status != 'closed' %}
+  {% if v.status != 'closed' or can_edit_imported_closed %}
   <a class="ukm-topbar-action" href="/m/visit/{{ v.id }}/edit">编&nbsp;辑</a>
   {% endif %}
 {% endblock %}
@@ -119,7 +119,7 @@
 {% else %}
 <div class="ukm-empty">
   <div class="big">空&nbsp;病&nbsp;历</div>
-  S/O/A/P 都还没填{% if v.status != 'closed' %} · <a href="/m/visit/{{ v.id }}/edit" style="color:var(--ink);border-bottom:0.5px solid var(--ink);">编辑</a>{% endif %}
+  S/O/A/P 都还没填{% if v.status != 'closed' or can_edit_imported_closed %} · <a href="/m/visit/{{ v.id }}/edit" style="color:var(--ink);border-bottom:0.5px solid var(--ink);">编辑</a>{% endif %}
 </div>
 {% endif %}
 
@@ -277,7 +277,7 @@
 {% else %}
 <div class="ukm-card-group">
   <div class="ukm-card">
-    <div style="font-size:12px;color:var(--ink-3);font-style:italic;">病历已于 {{ (v.closed_at | bjtime).strftime('%Y-%m-%d %H:%M') if v.closed_at else '—' }} 结束{% if v.closed_by %} · {{ v.closed_by }}{% endif %} · 不可重开</div>
+    <div style="font-size:12px;color:var(--ink-3);font-style:italic;">病历已于 {{ (v.closed_at | bjtime).strftime('%Y-%m-%d %H:%M') if v.closed_at else '—' }} 结束{% if v.closed_by %} · {{ v.closed_by }}{% endif %} · 不可重开{% if can_edit_imported_closed %} · 历史导入，超级管理员可修正正文{% endif %}</div>
   </div>
 </div>
 {% endif %}

@@ -202,8 +202,11 @@ _SESSION_SECRET = _resolve_session_secret()
 if settings.admin_password == "123456":
     logger.warning("⚠ admin_password 仍为默认值 123456，存在弱口令登录风险，请在服务器 .env 配置 ADMIN_PASSWORD。")
 
+# 生产默认 Secure cookie。集成测试走 http://127.0.0.1，需 SESSION_HTTPS_ONLY=0，
+# 否则浏览器/httpx 不会把会话 cookie 送回，登录 CSRF 必然失败。
+_session_https_only = _os.environ.get("SESSION_HTTPS_ONLY", "1") != "0"
 app.add_middleware(SessionMiddleware, secret_key=_SESSION_SECRET, session_cookie="tnr_session",
-                   https_only=True, same_site="lax", max_age=60 * 60 * 12)
+                   https_only=_session_https_only, same_site="lax", max_age=60 * 60 * 12)
 
 _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -17348,6 +17351,7 @@ async def page_admin_visit_detail(
         "msg": request.query_params.get("msg"),
         "err": request.query_params.get("err"),
         "is_superadmin": _is_superadmin(request),
+        "can_edit_imported_closed": _superadmin_may_edit_closed_import(request, v),
     })
 
 
@@ -17607,7 +17611,7 @@ async def admin_visit_treatment_plan_ai(visit_id: int, request: Request, db: Ses
         return JSONResponse({"ok": False, "error": "就诊记录不存在"}, status_code=404)
     _pet_for_store = db.get(Pet, v.pet_id) if v.pet_id else None
     _assert_store_access(request, _pet_for_store.store if _pet_for_store else "")
-    if (v.status or "open") == "closed":
+    if _visit_closed_locked(request, v):
         return JSONResponse({"ok": False, "error": "病历已结束，不可生成覆盖"}, status_code=403)
 
     form = await request.form()
@@ -17626,6 +17630,65 @@ async def admin_visit_treatment_plan_ai(visit_id: int, request: Request, db: Ses
     from app.services.care_ai import draft_visit_treatment_plan
     result = await draft_visit_treatment_plan(payload, doctor_instruction)
     return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+
+
+_VISIT_IMPORT_ORIGINS = frozenset({
+    "warmsoft", "warmsoft_import", "warmsoft_import_dh", "import",
+})
+
+
+def _visit_is_bulk_imported(visit: Visit) -> bool:
+    return (getattr(visit, "data_origin", None) or "").strip() in _VISIT_IMPORT_ORIGINS
+
+
+def _superadmin_may_edit_closed_import(request: Request, visit: Visit) -> bool:
+    """已结束的批量导入病历，只允许超级管理员改正文。状态保持 closed。"""
+    if (visit.status or "open") != "closed" or not _visit_is_bulk_imported(visit):
+        return False
+    return _is_superadmin(request)
+
+
+def _visit_closed_locked(request: Request, visit: Visit) -> bool:
+    return (visit.status or "open") == "closed" and not _superadmin_may_edit_closed_import(request, visit)
+
+
+def _visit_edit_snapshot(visit: Visit) -> dict:
+    return {
+        "pet_id": visit.pet_id or 0,
+        "visit_date": visit.visit_date or "",
+        "visit_type": visit.visit_type or "",
+        "chief_complaint": visit.chief_complaint or "",
+        "physical_exam": visit.physical_exam or "",
+        "diagnosis": visit.diagnosis or "",
+        "treatment_plan": visit.treatment_plan or "",
+        "notes": visit.notes or "",
+        "vet_name": visit.vet_name or "",
+        "follow_up_note": visit.follow_up_note or "",
+        "follow_up_at": visit.follow_up_at or "",
+    }
+
+
+def _audit_clip(value, limit: int = 4000):
+    if isinstance(value, str) and len(value) > limit:
+        return value[:limit] + "…(已截断)"
+    return value
+
+
+def _audit_imported_closed_edit(db: Session, request: Request, visit: Visit, before: dict, after: dict) -> None:
+    if not _visit_is_bulk_imported(visit) or (visit.status or "open") != "closed":
+        return
+    changes = {}
+    for key, old in before.items():
+        new = after.get(key)
+        if old != new:
+            changes[key] = {"before": _audit_clip(old), "after": _audit_clip(new)}
+    if not changes:
+        return
+    _audit(db, request, "visit_imported_edit", detail={
+        "visit_id": visit.id,
+        "data_origin": (visit.data_origin or "").strip(),
+        "changes": changes,
+    })
 
 
 @app.post("/admin/visits/{visit_id}/edit")
@@ -17669,8 +17732,9 @@ async def admin_visit_edit(
     )
     if _meta_changed and not _is_superadmin(request):
         raise HTTPException(status_code=403, detail="病历基础信息（日期/类型/医生/宠物）仅超级管理员可修改")
-    if (v.status or "open") == "closed":
+    if _visit_closed_locked(request, v):
         raise HTTPException(status_code=403, detail="病历已结束，不可修改（合规要求）。如需追加请新建病历。")
+    _before_edit = _visit_edit_snapshot(v)
     v.pet_id = _new_pet_id
     v.visit_date = _new_date
     v.visit_type = _new_type
@@ -17682,6 +17746,7 @@ async def admin_visit_edit(
     v.vet_name = _new_vet
     v.follow_up_note = follow_up_note.strip()
     v.follow_up_at = follow_up_at.strip()[:20]
+    _audit_imported_closed_edit(db, request, v, _before_edit, _visit_edit_snapshot(v))
     db.commit()
     # 若来自客户档案，保存后回去
     if return_to == "customer" and v.customer_id:
@@ -17855,7 +17920,7 @@ async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depe
     v = db.get(Visit, visit_id)
     if not v:
         return {"ok": False, "error": "记录不存在"}
-    if (v.status or "open") == "closed":
+    if _visit_closed_locked(request, v):
         return {"ok": False, "error": "病历已结束，不可修改"}
     # 限店员工：只能改本店宠物的诊疗记录
     admin_store = _get_admin_store(request)
@@ -17865,6 +17930,7 @@ async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depe
             return {"ok": False, "error": "无权操作其他门店的就诊记录"}
     # 只允许这几个字段，避免 JS 注入修改 customer/pet
     allowed = {"chief_complaint", "physical_exam", "diagnosis", "treatment_plan", "follow_up_note", "follow_up_at", "notes"}
+    _before_autosave = _visit_edit_snapshot(v)
     changed = []
     for k, val in body.items():
         if k in allowed and isinstance(val, str):
@@ -17874,6 +17940,7 @@ async def api_visit_autosave(visit_id: int, request: Request, db: Session = Depe
                 changed.append(k)
     if changed:
         v.updated_at = datetime.utcnow()
+        _audit_imported_closed_edit(db, request, v, _before_autosave, _visit_edit_snapshot(v))
         db.commit()
     # 本地时间显示
     from datetime import timezone, timedelta
@@ -39492,7 +39559,7 @@ async def m_visit_edit_form(visit_id: int, request: Request, db: Session = Depen
     v = db.get(Visit, visit_id)
     if not v:
         raise HTTPException(404)
-    if (v.status or "open") == "closed":
+    if _visit_closed_locked(request, v):
         return RedirectResponse(f"/m/visit/{visit_id}?err=病历已结束，不可编辑", status_code=303)
     pet = db.get(Pet, v.pet_id) if v.pet_id else None
     cust = db.get(Customer, v.customer_id) if v.customer_id else None
@@ -41127,6 +41194,7 @@ async def m_visit_detail(visit_id: int, request: Request, db: Session = Depends(
         "dewormings": dewormings,
         "hospitalization": hospitalization,
         "anmon_sheets": anmon_sheets,
+        "can_edit_imported_closed": _superadmin_may_edit_closed_import(request, v),
     })
     return templates.TemplateResponse(request, "m_uk/visit_detail.html", ctx)
 

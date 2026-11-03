@@ -239,6 +239,7 @@
       病历 <span class="hash">#{{ visit.id }}</span>
       {% if visit.status == 'closed' %}
         <span class="status closed">已结束</span>
+        {% if can_edit_imported_closed %}<span class="status">历史导入</span>{% endif %}
       {% else %}
         <span class="status">进行中</span>
       {% endif %}
@@ -259,6 +260,9 @@
       {% if pain_score %}<a href="/admin/clinical-scores/{{ pain_score.id }}/print" class="uk-btn ghost sm" target="_blank">疼痛评分报告</a>{% endif %}
       {% if pruritus_score %}<a href="/admin/clinical-scores/{{ pruritus_score.id }}/print" class="uk-btn ghost sm" target="_blank">瘙痒评分报告</a>{% endif %}
       <a href="/admin/visits/{{ visit.id }}/discharge-print" class="uk-btn ghost sm" target="_blank">打印医嘱单</a>
+    {% if can_edit_imported_closed %}
+        <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">修正导入病历</a>
+    {% endif %}
     {% if visit.status != 'closed' %}
         <a href="/admin/visits/{{ visit.id }}/edit-form" class="uk-btn ghost sm">编辑病历</a>
         {% if active_hospitalization %}

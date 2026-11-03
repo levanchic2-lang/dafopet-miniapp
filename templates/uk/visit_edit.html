@@ -2,6 +2,7 @@
 {% block title %}编辑病历 #{{ visit.id }} · 大风动物医院{% endblock %}
 
 {% block body %}
+{% set record_locked = visit.status == 'closed' and not can_edit_imported_closed %}
 
 <style>
   .ve-breadcrumb {
@@ -209,14 +210,18 @@
 
 <hr class="ve-rule-double"/>
 
-{% if visit.status == 'closed' %}
+{% if can_edit_imported_closed %}
+<div class="ve-locked-notice">
+  <b>历史导入病历</b> · 超级管理员可修正正文。保存后仍是已结束，处方、检查和麻醉单保持锁定。
+</div>
+{% elif visit.status == 'closed' %}
 <div class="ve-locked-notice">
   <b>病历已结束</b> · 合规要求下不可修改、不可重开。如需追加记录请新建病历。
 </div>
 {% endif %}
 
 {# ─── 1. 基础信息（超管可改）─── #}
-<form method="post" action="/admin/visits/{{ visit.id }}/edit" class="ve-section" id="meta-form" {% if visit.status == 'closed' %}onsubmit="return false;"{% endif %}>
+<form method="post" action="/admin/visits/{{ visit.id }}/edit" class="ve-section" id="meta-form" {% if record_locked %}onsubmit="return false;"{% endif %}>
   <div class="ve-section-head">
     <h2>基&nbsp;础&nbsp;信&nbsp;息</h2>
     {% if not is_superadmin %}
@@ -236,12 +241,12 @@
     <div class="ve-field">
       <label>就诊日期</label>
       <input type="date" name="visit_date" value="{{ visit.visit_date or '' }}" class="ve-input"
-             {% if not is_superadmin or visit.status == 'closed' %}readonly{% endif %} required/>
+             {% if not is_superadmin or record_locked %}readonly{% endif %} required/>
     </div>
     <div class="ve-field">
       <label>就诊类型</label>
       <select name="visit_type" class="ve-select"
-              {% if not is_superadmin or visit.status == 'closed' %}disabled{% endif %}>
+              {% if not is_superadmin or record_locked %}disabled{% endif %}>
         {% for k, v in visit_type_zh.items() %}
         <option value="{{ k }}" {% if visit.visit_type == k %}selected{% endif %}>{{ v }}</option>
         {% endfor %}
@@ -251,7 +256,7 @@
     <div class="ve-field">
       <label>主诊医师</label>
       <input name="vet_name" value="{{ visit.vet_name or '' }}" list="vet-list" class="ve-input"
-             {% if not is_superadmin or visit.status == 'closed' %}readonly{% endif %}/>
+             {% if not is_superadmin or record_locked %}readonly{% endif %}/>
       <datalist id="vet-list">
         {% for v in vet_names %}<option value="{{ v }}">{% endfor %}
       </datalist>
@@ -259,7 +264,7 @@
     <div class="ve-field">
       <label>关联宠物</label>
       <select name="pet_id" class="ve-select"
-              {% if not is_superadmin or visit.status == 'closed' %}disabled{% endif %}>
+              {% if not is_superadmin or record_locked %}disabled{% endif %}>
         {% for p in pets %}
         <option value="{{ p.id }}" {% if visit.pet_id == p.id %}selected{% endif %}>{{ p.name or '未命名' }}{% if p.species == 'cat' %}（猫）{% elif p.species == 'dog' %}（犬）{% endif %}</option>
         {% endfor %}
@@ -268,7 +273,7 @@
     </div>
   </div>
 
-  {% if is_superadmin and visit.status != 'closed' %}
+  {% if is_superadmin and not record_locked %}
   <div class="ve-form-actions">
     <button type="submit" class="uk-btn primary sm">保&nbsp;存&nbsp;基&nbsp;础&nbsp;信&nbsp;息</button>
   </div>
@@ -277,7 +282,7 @@
 
 {# ─── 2. SOAP 4 段 ─── #}
 <form method="post" action="/admin/visits/{{ visit.id }}/edit" class="ve-section" id="soap-form"
-      {% if visit.status == 'closed' %}onsubmit="return false;"{% endif %}>
+      {% if record_locked %}onsubmit="return false;"{% endif %}>
   <div class="ve-section-head">
     <h2>SOAP &nbsp;病&nbsp;历</h2>
     <span class="hint">语音输入 · 体检模板 · AI 医嘱 · 诊断联想已启用</span>
@@ -297,7 +302,7 @@
     <div class="ve-soap-body">
       <label>主&nbsp;诉</label>
       <textarea name="chief_complaint" class="ve-textarea" data-voice="1"
-                {% if visit.status == 'closed' %}readonly{% endif %}
+                {% if record_locked %}readonly{% endif %}
                 placeholder="客户主诉症状、起病时间、用药史…">{{ visit.chief_complaint or '' }}</textarea>
     </div>
   </div>
@@ -307,7 +312,7 @@
     <div class="ve-soap-body">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;"><label>体&nbsp;格&nbsp;检&nbsp;查</label><div style="display:flex;gap:8px;flex-wrap:wrap;"><a href="/admin/visits/{{ visit.id }}/neuro-exam" class="uk-btn ghost sm">{% if neuro_exam %}神经学检查表{% else %}＋ 神经学检查表{% endif %}</a><a href="/admin/visits/{{ visit.id }}/pain-score" class="uk-btn ghost sm">{% if pain_score %}疼痛评分表{% else %}＋ 疼痛评分表{% endif %}</a><a href="/admin/visits/{{ visit.id }}/pruritus-score" class="uk-btn ghost sm">{% if pruritus_score %}瘙痒评分表{% else %}＋ 瘙痒评分表{% endif %}</a></div></div>
       <textarea name="physical_exam" class="ve-textarea" data-voice="1" data-exam-helper="1"
-                {% if visit.status == 'closed' %}readonly{% endif %}
+                {% if record_locked %}readonly{% endif %}
                 style="font-family: 'SF Mono', Menlo, Consolas, monospace;"
                 placeholder="T： HR： RR： BCS： CRT： MM： …">{{ visit.physical_exam or '' }}</textarea>
     </div>
@@ -318,7 +323,7 @@
     <div class="ve-soap-body">
       <label>评&nbsp;估</label>
       <textarea name="diagnosis" class="ve-textarea" data-voice="1" data-diagnosis-autocomplete="1"
-                {% if visit.status == 'closed' %}readonly{% endif %}
+                {% if record_locked %}readonly{% endif %}
                 placeholder="主诊断 / 鉴别诊断 / 待排除…">{{ visit.diagnosis or '' }}</textarea>
     </div>
   </div>
@@ -328,7 +333,7 @@
     <div class="ve-soap-body">
       <div class="ve-plan-label">
         <label>计&nbsp;划</label>
-        {% if visit.status != 'closed' %}
+        {% if not record_locked %}
         <div class="ve-ai-actions">
           <span id="ai-plan-status" class="ve-ai-note"></span>
           <button type="button" id="ai-plan-btn" class="uk-btn ghost sm">AI&nbsp;生&nbsp;成&nbsp;医&nbsp;嘱</button>
@@ -336,12 +341,12 @@
         {% endif %}
       </div>
       <textarea name="treatment_plan" class="ve-textarea" data-voice="1"
-                {% if visit.status == 'closed' %}readonly{% endif %}
+                {% if record_locked %}readonly{% endif %}
                 placeholder="处方 / 检查 / 处置 / 客户教育 / 用药注意…">{{ visit.treatment_plan or '' }}</textarea>
     </div>
   </div>
 
-  {% if visit.status != 'closed' %}
+  {% if not record_locked %}
   <div class="ve-form-actions">
     <a href="/admin/visits/{{ visit.id }}" class="uk-btn ghost sm">取&nbsp;消</a>
     <button type="submit" class="uk-btn primary sm">保&nbsp;存&nbsp;SOAP</button>
