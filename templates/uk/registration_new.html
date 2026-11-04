@@ -1,0 +1,105 @@
+{% extends "uk/_base.html" %}
+{% block title %}挂号 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .rn-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .rn-bc a { color:var(--ink-3); text-decoration:none; }
+  .rn-bc .sep { margin:0 8px; color:var(--ink-4); }
+  .rn-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; margin:0; letter-spacing:1px; }
+  .rn-head .sub { display:block; margin-top:10px; font-size:11pt; font-weight:400; color:var(--ink-2); letter-spacing:1px; }
+  hr.rn-rule { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .rn-card { max-width:640px; border:0.5px solid var(--hair-2); padding:22px 24px 28px; }
+  .rn-hint { font-family:var(--font-serif); font-size:10.5pt; line-height:1.7; color:var(--ink-2); margin-bottom:22px; }
+  .rn-hint b { color:var(--ink); font-weight:700; }
+  .rn-field { margin-bottom:18px; }
+  .rn-field label { display:block; font-family:var(--font-serif); font-size:9pt; letter-spacing:2px; color:var(--ink-3); margin-bottom:8px; }
+  .rn-field input[type=number], .rn-field input[type=text], .rn-field select, .rn-field textarea {
+    width:100%; box-sizing:border-box; font-family:var(--font-serif); font-size:12pt; color:var(--ink);
+    background:var(--paper); border:0; border-bottom:0.5px solid var(--hair); padding:8px 0; border-radius:0; outline:0;
+  }
+  .rn-field input:focus, .rn-field select:focus, .rn-field textarea:focus { border-bottom-color:var(--ink); }
+  .rn-kinds { display:flex; gap:8px; }
+  .rn-kind { font-family:var(--font-serif); font-size:11pt; letter-spacing:1px; padding:8px 16px; border:0.5px solid var(--hair); background:var(--paper); cursor:pointer; color:var(--ink-2); }
+  .rn-kind.on { border-color:var(--ink); color:var(--ink); font-weight:700; }
+  .rn-btn { background:var(--ink); color:var(--paper); border:0; padding:10px 22px; cursor:pointer; font-family:var(--font-serif); font-size:11pt; letter-spacing:2px; font-weight:700; text-decoration:none; display:inline-block; }
+  .rn-links a { color:var(--ink); margin-right:16px; }
+</style>
+
+<div class="rn-bc"><a href="/admin/registrations">挂号列表</a><span class="sep">/</span><span>新挂号</span></div>
+<div class="rn-head">
+  <h1>挂&nbsp;号
+    {% if pet %}<span class="sub">{{ pet.name or '未命名' }}{% if cust %} · {{ cust.name or '—' }}{% if cust.phone %} · {{ cust.phone }}{% endif %}{% endif %}</span>{% endif %}
+  </h1>
+</div>
+<hr class="rn-rule"/>
+
+{% if not pet %}
+<div class="rn-card">
+  {% if cust and pets %}
+  <p class="rn-hint">请选择要挂号的宠物。</p>
+  <div class="rn-links">
+    {% for p in pets %}
+    <a href="/admin/registrations/new?customer_id={{ cust.id }}&pet_id={{ p.id }}">{{ p.name or '未命名' }}</a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="rn-hint">请先在客户档案里找到主人，打开宠物，再点挂号。</p>
+  <a class="rn-btn" href="/admin/customers">去客户档案</a>
+  {% endif %}
+</div>
+{% else %}
+<div class="rn-card">
+  <p class="rn-hint">
+    北京时间 <b>{{ quote['clock'] }}</b>。
+    {{ quote['day_start'] }} 至 {{ quote['day_end'] }} 为普通挂号，默认 <b>¥{{ '%.0f'|format(quote['normal_fee']) }}</b>；
+    其余时间（含凌晨）为急诊挂号，默认 <b>¥{{ '%.0f'|format(quote['emergency_fee']) }}</b>。
+    当前建议 <b>{{ quote['kind_label'] }} ¥{{ '%.2f'|format(quote['fee']) }}</b>。
+    可以改类型和金额，改动会记入审计日志。挂号本身不需要先开病历。
+  </p>
+  <form method="post" action="/admin/registrations/create" id="reg-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="pet_id" value="{{ pet.id }}"/>
+    <input type="hidden" name="kind" id="kind-input" value="{{ quote['kind'] }}"/>
+    <div class="rn-field">
+      <label>类型</label>
+      <div class="rn-kinds">
+        <button type="button" class="rn-kind {% if quote['kind']=='normal' %}on{% endif %}" data-kind="normal" data-fee="{{ '%.2f'|format(quote['normal_fee']) }}">普通挂号</button>
+        <button type="button" class="rn-kind {% if quote['kind']=='emergency' %}on{% endif %}" data-kind="emergency" data-fee="{{ '%.2f'|format(quote['emergency_fee']) }}">急诊挂号</button>
+      </div>
+    </div>
+    <div class="rn-field">
+      <label>挂号费（元）</label>
+      <input type="number" name="fee" id="fee-input" min="0" step="0.01" required value="{{ '%.2f'|format(quote['fee']) }}"/>
+    </div>
+    {% if is_superadmin %}
+    <div class="rn-field">
+      <label>门店</label>
+      <select name="store" required>
+        <option value="" {% if not default_store %}selected{% endif %} disabled>请选择门店</option>
+        <option value="东环店" {% if default_store=='东环店' %}selected{% endif %}>东环店</option>
+        <option value="横岗店" {% if default_store=='横岗店' %}selected{% endif %}>横岗店</option>
+      </select>
+    </div>
+    {% else %}
+    <input type="hidden" name="store" value="{{ default_store }}"/>
+    <p class="rn-hint">门店：{{ default_store or request.session.get('admin_store') or '本店' }}</p>
+    {% endif %}
+    <div class="rn-field">
+      <label>备注（选填）</label>
+      <input type="text" name="note" maxlength="300" placeholder="例如：主人只是来问诊，先挂号"/>
+    </div>
+    <button class="rn-btn" type="submit">确认挂号</button>
+  </form>
+</div>
+<script>
+document.querySelectorAll(".rn-kind").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    document.querySelectorAll(".rn-kind").forEach(function (el) { el.classList.remove("on"); });
+    btn.classList.add("on");
+    document.getElementById("kind-input").value = btn.getAttribute("data-kind");
+    document.getElementById("fee-input").value = btn.getAttribute("data-fee");
+  });
+});
+</script>
+{% endif %}
+{% endblock %}

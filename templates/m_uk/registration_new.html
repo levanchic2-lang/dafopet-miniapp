@@ -1,0 +1,80 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}挂号 · 大风动物医院{% endblock %}
+{% block topbar_title %}挂&nbsp;号{% endblock %}
+{% block topbar_back %}<a href="{% if pet %}/m/pet/{{ pet.id }}{% elif cust %}/m/customer/{{ cust.id }}{% else %}/m/registrations{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+
+{% if not pet %}
+<div class="ukm-empty">
+  <div class="big">先&nbsp;选&nbsp;宠&nbsp;物</div>
+  {% if cust and pets %}
+    {% for p in pets %}
+    <div style="margin-top:10px;"><a href="/m/registrations/new?pet_id={{ p.id }}" style="color:var(--ink); border-bottom:0.5px solid var(--ink);">{{ p.name or '未命名' }}</a></div>
+    {% endfor %}
+  {% else %}
+  <a href="/m/customers" style="color:var(--ink); border-bottom:0.5px solid var(--ink);">去搜客户</a>
+  {% endif %}
+</div>
+{% else %}
+
+<div class="ukm-page-head">
+  <h1>{{ pet.name or '未命名' }}</h1>
+  <div class="meta">{% if cust %}{{ cust.name or '—' }}{% if cust.phone %} · {{ cust.phone }}{% endif %}{% endif %}</div>
+</div>
+
+<div class="ukm-card" style="margin-bottom:16px;">
+  <div class="ukm-row-sub" style="line-height:1.7;">
+    北京时间 {{ quote['clock'] }}。{{ quote['day_start'] }} 至 {{ quote['day_end'] }} 为普通挂号 ¥{{ '%.0f'|format(quote['normal_fee']) }}，其余时间为急诊 ¥{{ '%.0f'|format(quote['emergency_fee']) }}。
+    当前建议 {{ quote['kind_label'] }} ¥{{ '%.2f'|format(quote['fee']) }}。改类型或金额会记入审计。不必先开病历。
+  </div>
+</div>
+
+<form method="post" action="/admin/registrations/create">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="pet_id" value="{{ pet.id }}"/>
+  <input type="hidden" name="surface" value="mobile"/>
+  <input type="hidden" name="kind" id="kind-input" value="{{ quote['kind'] }}"/>
+  <input type="hidden" name="next_url" value="/m/registrations?date={{ quote['biz_date'] }}"/>
+
+  <div class="ukm-field">
+    <label class="lbl">类&nbsp;型</label>
+    <div class="ukm-chips">
+      <button type="button" class="ukm-chip {% if quote['kind']=='normal' %}checked{% endif %}" data-kind="normal" data-fee="{{ '%.2f'|format(quote['normal_fee']) }}">普通挂号</button>
+      <button type="button" class="ukm-chip {% if quote['kind']=='emergency' %}checked{% endif %}" data-kind="emergency" data-fee="{{ '%.2f'|format(quote['emergency_fee']) }}">急诊挂号</button>
+    </div>
+  </div>
+  <div class="ukm-field">
+    <label class="lbl">挂&nbsp;号&nbsp;费（元）</label>
+    <input class="ukm-input" type="number" name="fee" id="fee-input" min="0" step="0.01" required value="{{ '%.2f'|format(quote['fee']) }}"/>
+  </div>
+  {% if is_superadmin %}
+  <div class="ukm-field">
+    <label class="lbl">门&nbsp;店</label>
+    <select class="ukm-select" name="store" required>
+      <option value="" {% if not default_store %}selected{% endif %} disabled>请选择门店</option>
+      <option value="东环店" {% if default_store=='东环店' %}selected{% endif %}>东环店</option>
+      <option value="横岗店" {% if default_store=='横岗店' %}selected{% endif %}>横岗店</option>
+    </select>
+  </div>
+  {% else %}
+  <input type="hidden" name="store" value="{{ default_store }}"/>
+  {% endif %}
+  <div class="ukm-field">
+    <label class="lbl">备&nbsp;注</label>
+    <input class="ukm-input" type="text" name="note" maxlength="300" placeholder="选填"/>
+  </div>
+  <button class="ukm-btn block" type="submit">确认挂号</button>
+</form>
+<script>
+document.querySelectorAll("[data-kind]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    document.querySelectorAll("[data-kind]").forEach(function (el) { el.classList.remove("checked"); });
+    btn.classList.add("checked");
+    document.getElementById("kind-input").value = btn.getAttribute("data-kind");
+    document.getElementById("fee-input").value = btn.getAttribute("data-fee");
+  });
+});
+</script>
+{% endif %}
+{% endblock %}

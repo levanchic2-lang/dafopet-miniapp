@@ -678,7 +678,7 @@
     {% set _active_tab = 'medical' %}
   {% elif _path.startswith('/admin/invoices') or _path.startswith('/admin/inventory') or _path.startswith('/admin/stocktake') or _path.startswith('/admin/sales') or _path.startswith('/admin/feedback') or _path.startswith('/admin/packages') or _path.startswith('/admin/coupons') or _path.startswith('/admin/reports') %}
     {% set _active_tab = 'business' %}
-  {% elif _path.startswith('/admin/hr') or _path.startswith('/admin/adoption') or _path.startswith('/admin/changelog') or _path.startswith('/admin/content') or _path.startswith('/admin/brand') or _path.startswith('/showcase') %}
+  {% elif _path.startswith('/admin/hr') or _path.startswith('/admin/adoption') or _path.startswith('/admin/changelog') or _path.startswith('/admin/content') or _path.startswith('/admin/brand') or _path.startswith('/admin/registration-settings') or _path.startswith('/showcase') %}
     {% set _active_tab = 'system' %}
   {% else %}
     {% set _active_tab = 'reception' %}
@@ -722,6 +722,9 @@
         <span class="ri-emoji"><i data-lucide="clipboard-list"></i></span>预约管理<span id="nav-pending-badge" class="ri-badge" style="display:none;"></span>
       </a>
       {% if request.session.get('admin') %}
+      <a class="ribbon-icon {% if _path.startswith('/admin/registrations') %}current{% endif %}" href="/admin/registrations"><span class="ri-emoji"><i data-lucide="clipboard-plus"></i></span>挂号</a>
+      {% endif %}
+      {% if request.session.get('admin') %}
       <a class="ribbon-icon {% if _path.startswith('/admin/customers') %}current{% endif %}" href="/admin/customers"><span class="ri-emoji"><i data-lucide="home"></i></span>今日工作台</a>
       {% endif %}
     </div>
@@ -758,6 +761,7 @@
       <a class="ribbon-icon {% if _path.startswith('/admin/content') %}current{% endif %}" href="/admin/content"><span class="ri-emoji"><i data-lucide="newspaper"></i></span>公开内容</a>
       {% if request.session.get('admin_role') != 'staff' %}
       <a class="ribbon-icon {% if _path.startswith('/admin/brand') %}current{% endif %}" href="/admin/brand"><span class="ri-emoji"><i data-lucide="settings-2"></i></span>品牌设置</a>
+      <a class="ribbon-icon {% if _path.startswith('/admin/registration-settings') %}current{% endif %}" href="/admin/registration-settings"><span class="ri-emoji"><i data-lucide="clock"></i></span>挂号设置</a>
       {% endif %}
       <a class="ribbon-icon {% if _path.startswith('/showcase') %}current{% endif %}" href="/showcase"><span class="ri-emoji"><i data-lucide="sparkles"></i></span>公布展示</a>
       <a class="ribbon-icon {% if _path.startswith('/admin/changelog') %}current{% endif %}" href="/admin/changelog"><span class="ri-emoji"><i data-lucide="pencil-line"></i></span>开发日志</a>

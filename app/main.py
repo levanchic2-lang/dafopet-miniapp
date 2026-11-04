@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 from urllib.parse import quote
 
-from app.time_utils import beijing_now, format_beijing, to_beijing
+from app.time_utils import beijing_now, beijing_today, format_beijing, to_beijing
 
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from passlib.context import CryptContext
@@ -140,7 +140,9 @@ from app.models import (
     HandoverNote,
     BrandSettings,
     PublicContent,
+    WalkInRegistration,
 )
+from app.services import registration as registration_svc
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
 _BREEDS_ALL = _all_breeds()
@@ -11211,6 +11213,8 @@ def _customer_blockers(db: Session, customer_id: int) -> list[str]:
     blockers: list[str] = []
     n_visits = db.query(Visit).filter(Visit.customer_id == customer_id).count()
     if n_visits: blockers.append(f"{n_visits} 条病历")
+    n_regs = db.query(WalkInRegistration).filter(WalkInRegistration.customer_id == customer_id).count()
+    if n_regs: blockers.append(f"{n_regs} 条挂号")
     n_appts = db.query(Appointment).filter(Appointment.customer_id == customer_id).count()
     if n_appts: blockers.append(f"{n_appts} 条预约")
     n_invoices = db.query(Invoice).filter(Invoice.customer_id == customer_id).count()
@@ -11265,6 +11269,7 @@ def _merge_customers(db: Session, primary_id: int, secondary_ids: list[int]) -> 
     redirect_tables = [
         ("pet", Pet),
         ("visit", Visit),
+        ("walk_in_registration", WalkInRegistration),
         ("appointment", Appointment),
         ("invoice", Invoice),
         ("prescription", Prescription),
@@ -12738,6 +12743,8 @@ async def admin_customer_delete_pet(
     blockers = []
     n_visits = db.query(Visit).filter(Visit.pet_id == pet_id).count()
     if n_visits: blockers.append(f"{n_visits} 条病历")
+    n_regs = db.query(WalkInRegistration).filter(WalkInRegistration.pet_id == pet_id).count()
+    if n_regs: blockers.append(f"{n_regs} 条挂号")
     n_appts = db.query(Appointment).filter(Appointment.pet_id == pet_id).count()
     if n_appts: blockers.append(f"{n_appts} 条预约")
     n_invoices = db.query(Invoice).filter(Invoice.pet_id == pet_id).count()
@@ -16154,6 +16161,493 @@ async def admin_visit_create(
         return RedirectResponse(_safe_next(nu, f"/admin/visits/{v.id}?msg=就诊记录已创建"), status_code=303)
     # 桌面端：创建后直接进新病历的 SOAP 页（不再跳回客户档案落到第一只宠物，省两步）
     return RedirectResponse(f"/admin/visits/{v.id}?msg=就诊记录已创建", status_code=303)
+
+
+_REG_STATUSES = ("open", "converted", "no_visit", "cancelled")
+
+
+def _registration_scope_store(request: Request, store_param: str) -> str:
+    """员工锁本店。超管可用 ?store= 切换；不传时跟 session 里挂的店，都没有则看全部。"""
+    locked = _get_admin_store(request)
+    if locked:
+        return locked
+    explicit = (store_param or "").strip()
+    if explicit == "all":
+        return ""
+    if explicit in ("东环店", "横岗店"):
+        return explicit
+    session_store = (request.session.get("admin_store") or "").strip()
+    if session_store in ("东环店", "横岗店"):
+        return session_store
+    return ""
+
+
+def _registration_day(raw: str) -> str:
+    text = (raw or "").strip()
+    if len(text) == 10:
+        try:
+            datetime.strptime(text, "%Y-%m-%d")
+            return text
+        except ValueError:
+            pass
+    return beijing_today().isoformat()
+
+
+def _registration_list_url(*, mobile: bool, day: str = "", store: str = "", status: str = "", q: str = "") -> str:
+    base = "/m/registrations" if mobile else "/admin/registrations"
+    params = []
+    if day:
+        params.append("date=" + quote(day))
+    if store:
+        params.append("store=" + quote(store))
+    if status:
+        params.append("status=" + quote(status))
+    if q:
+        params.append("q=" + quote(q))
+    return base + ("?" + "&".join(params) if params else "")
+
+
+def _registration_redirect(url: str, *, msg: str = "", err: str = "") -> RedirectResponse:
+    extra = []
+    if msg:
+        extra.append("msg=" + quote(msg))
+    if err:
+        extra.append("err=" + quote(err))
+    if extra:
+        url = url + ("&" if "?" in url else "?") + "&".join(extra)
+    return RedirectResponse(url, status_code=303)
+
+
+def _strict_fee(raw: str) -> float | None:
+    try:
+        value = round(float((raw or "").strip()), 2)
+    except (TypeError, ValueError):
+        return None
+    if value < 0 or value > 100000:
+        return None
+    return value
+
+
+def _strict_hhmm(raw: str) -> str | None:
+    text = (raw or "").strip()
+    parts = text.split(":")
+    if len(parts) != 2 or len(parts[0]) != 2 or len(parts[1]) != 2:
+        return None
+    if not (parts[0].isdigit() and parts[1].isdigit()):
+        return None
+    hour, minute = int(parts[0]), int(parts[1])
+    if hour > 23 or minute > 59:
+        return None
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _load_registration(db: Session, request: Request, reg_id: int) -> WalkInRegistration:
+    reg = db.get(WalkInRegistration, reg_id)
+    if not reg:
+        raise HTTPException(404, "挂号不存在")
+    _assert_store_access(request, reg.store)
+    return reg
+
+
+def _registration_rows(db: Session, *, day: str, store: str, status: str, q: str) -> list:
+    query = db.query(WalkInRegistration)
+    if store:
+        query = query.filter(WalkInRegistration.store == store)
+    if day:
+        query = query.filter(WalkInRegistration.biz_date == day)
+    if status in _REG_STATUSES:
+        query = query.filter(WalkInRegistration.status == status)
+    text = (q or "").strip()
+    if text:
+        like = f"%{text}%"
+        pet_ids = db.query(Pet.id).filter(Pet.name.ilike(like))
+        cust_ids = db.query(Customer.id).filter(or_(
+            Customer.name.ilike(like),
+            Customer.phone.ilike(like),
+            Customer.phones_extra.ilike(like),
+        ))
+        query = query.filter(or_(
+            WalkInRegistration.pet_id.in_(pet_ids),
+            WalkInRegistration.customer_id.in_(cust_ids),
+        ))
+    rows = query.order_by(
+        WalkInRegistration.registered_at.desc(),
+        WalkInRegistration.id.desc(),
+    ).limit(500).all()
+    pet_ids = {r.pet_id for r in rows if r.pet_id}
+    cust_ids = {r.customer_id for r in rows if r.customer_id}
+    pets = {p.id: p for p in db.query(Pet).filter(Pet.id.in_(pet_ids)).all()} if pet_ids else {}
+    custs = {c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
+    for reg in rows:
+        pet = pets.get(reg.pet_id)
+        cust = custs.get(reg.customer_id)
+        reg.pet_name = (pet.name if pet else "") or "未命名"
+        reg.owner_name = (cust.name if cust else "") or "—"
+        reg.owner_phone = (cust.phone if cust else "") or ""
+        registration_svc.decorate_registration(db, reg)
+    return rows
+
+
+def _registration_new_bundle(request: Request, db: Session, customer_id: int, pet_id: int) -> dict:
+    pet = db.get(Pet, pet_id) if pet_id else None
+    cust = None
+    pets: list = []
+    if pet:
+        cust = db.get(Customer, pet.customer_id) if pet.customer_id else None
+    elif customer_id:
+        cust = db.get(Customer, customer_id)
+        if cust:
+            pets_q = db.query(Pet).filter(Pet.customer_id == cust.id)
+            admin_store = _get_admin_store(request)
+            if admin_store:
+                pets_q = pets_q.filter(or_(Pet.store == admin_store, Pet.store == ""))
+            pets = pets_q.order_by(Pet.id.desc()).all()
+            if len(pets) == 1:
+                pet = pets[0]
+    quote = registration_svc.quote_registration(db)
+    op_store = _get_op_store(request)
+    return {
+        "cust": cust,
+        "pet": pet,
+        "pets": pets,
+        "quote": quote,
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
+        "default_store": op_store if op_store in ("东环店", "横岗店") else "",
+        "csrf_token": _get_csrf_token(request),
+    }
+
+
+@app.get("/admin/registrations", response_class=HTMLResponse)
+async def admin_registrations_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    day: str = Query("", alias="date"),
+    store: str = Query(""),
+    status: str = Query(""),
+    q: str = Query(""),
+):
+    require_admin(request)
+    biz_day = _registration_day(day)
+    scope = _registration_scope_store(request, store)
+    rows = _registration_rows(db, day=biz_day, store=scope, status=status, q=q)
+    day_obj = datetime.strptime(biz_day, "%Y-%m-%d").date()
+    unpaid_total = round(sum(
+        float(r.fee_amount or 0) for r in rows
+        if r.pay_state == "unpaid" and r.status != "cancelled"
+    ), 2)
+    return templates.TemplateResponse(request, "uk/registrations.html", {
+        "rows": rows,
+        "day": biz_day,
+        "prev_day": (day_obj - timedelta(days=1)).isoformat(),
+        "next_day": (day_obj + timedelta(days=1)).isoformat(),
+        "store": scope,
+        "store_param": "all" if request.session.get("admin_role") == "superadmin" and not scope else scope,
+        "status": status if status in _REG_STATUSES else "",
+        "q": (q or "").strip(),
+        "total": len(rows),
+        "open_count": sum(1 for r in rows if r.status == "open"),
+        "unpaid_total": unpaid_total,
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
+        "status_zh": registration_svc.STATUS_ZH,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.get("/admin/registrations/new", response_class=HTMLResponse)
+async def admin_registration_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = Query(0),
+    pet_id: int = Query(0),
+):
+    require_admin(request)
+    ctx = _registration_new_bundle(request, db, customer_id, pet_id)
+    return templates.TemplateResponse(request, "uk/registration_new.html", ctx)
+
+
+@app.post("/admin/registrations/create")
+async def admin_registration_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    pet_id: int = Form(0),
+    kind: str = Form(""),
+    fee: str = Form(""),
+    note: str = Form(""),
+    store: str = Form(""),
+    next_url: str = Form(""),
+    surface: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    mobile = (surface or "").strip() == "mobile"
+    pet = db.get(Pet, pet_id) if pet_id else None
+    fallback = "/m/registrations" if mobile else "/admin/registrations"
+    if not pet:
+        return _registration_redirect(_safe_next(next_url, fallback), err="请先选择宠物再挂号")
+    try:
+        op_store = _resolve_store_for_create(request, store)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, str) else "请选择门店"
+        reopen = f"/m/registrations/new?pet_id={pet.id}" if mobile else f"/admin/registrations/new?pet_id={pet.id}"
+        return _registration_redirect(reopen, err=detail)
+    chosen = kind if kind in (registration_svc.KIND_NORMAL, registration_svc.KIND_EMERGENCY) else ""
+    suggestion = registration_svc.quote_registration(db)
+    chosen = chosen or suggestion["kind"]
+    if (fee or "").strip() == "":
+        amount = registration_svc.fee_for_kind(suggestion, chosen)
+    else:
+        amount = _strict_fee(fee)
+        if amount is None:
+            reopen = f"/m/registrations/new?pet_id={pet.id}" if mobile else f"/admin/registrations/new?pet_id={pet.id}"
+            return _registration_redirect(reopen, err="挂号费需要是不小于 0 的金额")
+    actor = request.session.get("admin_username", "admin")
+    reg, adjusted = registration_svc.create_walk_in_registration(
+        db,
+        customer_id=pet.customer_id,
+        pet_id=pet.id,
+        store=op_store,
+        kind=chosen,
+        fee=amount,
+        note=note,
+        actor=actor,
+    )
+    if adjusted:
+        _audit(db, request, "registration_fee_adjust", detail={
+            "registration_id": reg.id,
+            "auto_kind": reg.auto_kind,
+            "auto_fee": reg.auto_fee,
+            "kind": reg.kind,
+            "fee": reg.fee_amount,
+            "store": reg.store,
+        })
+    db.commit()
+    target = _safe_next(
+        next_url,
+        _registration_list_url(mobile=mobile, day=reg.biz_date, store="" if not mobile else ""),
+    )
+    msg = "已挂号，费用已记入收银台" if amount > 0 else "已挂号，本次未产生费用"
+    return _registration_redirect(target, msg=msg)
+
+
+@app.post("/admin/registrations/{reg_id}/convert")
+async def admin_registration_convert(
+    reg_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    next_url: str = Form(""),
+    surface: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    reg = _load_registration(db, request, reg_id)
+    mobile = (surface or "").strip() == "mobile"
+    back = _safe_next(next_url, _registration_list_url(mobile=mobile, day=reg.biz_date))
+    if reg.status != registration_svc.STATUS_OPEN:
+        return _registration_redirect(back, err="这份挂号已经处理过，不能再转病历")
+    actor = request.session.get("admin_username", "admin")
+    note_bits = [f"由挂号 #{reg.id} 转入"]
+    if reg.kind == registration_svc.KIND_EMERGENCY:
+        note_bits.append("急诊")
+    if (reg.note or "").strip():
+        note_bits.append(reg.note.strip())
+    visit = Visit(
+        customer_id=reg.customer_id,
+        pet_id=reg.pet_id,
+        visit_date=reg.biz_date or beijing_today().isoformat(),
+        visit_type="outpatient",
+        store=reg.store or _get_op_store(request),
+        notes=" · ".join(note_bits),
+        created_by=actor,
+    )
+    db.add(visit)
+    db.flush()
+    reg.visit_id = visit.id
+    registration_svc.mark_registration_resolved(reg, registration_svc.STATUS_CONVERTED, actor)
+    _audit(db, request, "registration_convert", detail={
+        "registration_id": reg.id,
+        "visit_id": visit.id,
+        "store": reg.store,
+    })
+    db.commit()
+    if next_url and "{id}" in next_url:
+        target = _safe_next(next_url.replace("{id}", str(visit.id)), f"/admin/visits/{visit.id}")
+    elif mobile:
+        target = f"/m/visit/{visit.id}"
+    else:
+        target = f"/admin/visits/{visit.id}"
+    return _registration_redirect(target, msg="已从挂号转入病历")
+
+
+@app.post("/admin/registrations/{reg_id}/no-visit")
+async def admin_registration_no_visit(
+    reg_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    next_url: str = Form(""),
+    surface: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    reg = _load_registration(db, request, reg_id)
+    mobile = (surface or "").strip() == "mobile"
+    back = _safe_next(next_url, _registration_list_url(mobile=mobile, day=reg.biz_date))
+    if reg.status != registration_svc.STATUS_OPEN:
+        return _registration_redirect(back, err="这份挂号已经处理过")
+    actor = request.session.get("admin_username", "admin")
+    registration_svc.mark_registration_resolved(reg, registration_svc.STATUS_NO_VISIT, actor)
+    _audit(db, request, "registration_no_visit", detail={
+        "registration_id": reg.id,
+        "invoice_id": reg.invoice_id,
+        "fee": reg.fee_amount,
+        "store": reg.store,
+    })
+    db.commit()
+    return _registration_redirect(back, msg="已标记无需就诊，挂号费仍保留")
+
+
+@app.post("/admin/registrations/{reg_id}/cancel")
+async def admin_registration_cancel(
+    reg_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    next_url: str = Form(""),
+    surface: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    reg = _load_registration(db, request, reg_id)
+    mobile = (surface or "").strip() == "mobile"
+    back = _safe_next(next_url, _registration_list_url(mobile=mobile, day=reg.biz_date))
+    if reg.status != registration_svc.STATUS_OPEN:
+        return _registration_redirect(back, err="这份挂号已经处理过，不能取消")
+    invoice_id = reg.invoice_id
+    outcome = registration_svc.remove_unpaid_registration_fee(db, reg)
+    if outcome == "blocked":
+        db.rollback()
+        if invoice_id:
+            pay_url = f"/m/invoices/{invoice_id}" if mobile else f"/admin/invoices/{invoice_id}"
+        else:
+            pay_url = back
+        return _registration_redirect(pay_url, err="这笔挂号费已经收过，请在收费单上退款")
+    actor = request.session.get("admin_username", "admin")
+    registration_svc.mark_registration_resolved(reg, registration_svc.STATUS_CANCELLED, actor)
+    _audit(db, request, "registration_cancel", detail={
+        "registration_id": reg.id,
+        "fee_outcome": outcome,
+        "store": reg.store,
+    })
+    db.commit()
+    return _registration_redirect(back, msg="已取消，未收的挂号费已撤销")
+
+
+@app.get("/admin/registration-settings", response_class=HTMLResponse)
+async def admin_registration_settings_page(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    require_superadmin(request)
+    row = registration_svc.get_registration_settings(db)
+    db.commit()
+    return templates.TemplateResponse(request, "uk/registration_settings.html", {
+        "row": row,
+        "csrf_token": _get_csrf_token(request),
+    })
+
+
+@app.post("/admin/registration-settings")
+async def admin_registration_settings_save(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    normal_fee: str = Form(""),
+    emergency_fee: str = Form(""),
+    day_start: str = Form(""),
+    day_end: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    require_superadmin(request)
+    normal = _strict_fee(normal_fee)
+    emergency = _strict_fee(emergency_fee)
+    start = _strict_hhmm(day_start)
+    end = _strict_hhmm(day_end)
+    if normal is None or emergency is None:
+        return _registration_redirect("/admin/registration-settings", err="费用需要是不小于 0 的金额")
+    if not start or not end:
+        return _registration_redirect("/admin/registration-settings", err="时间请按 09:00 这样的格式填写")
+    if start == end:
+        return _registration_redirect("/admin/registration-settings", err="日间开始和结束不能是同一个时间")
+    row = registration_svc.get_registration_settings(db)
+    before = {
+        "normal_fee": round(float(row.normal_fee or 0), 2),
+        "emergency_fee": round(float(row.emergency_fee or 0), 2),
+        "day_start": row.day_start,
+        "day_end": row.day_end,
+    }
+    after = {
+        "normal_fee": normal,
+        "emergency_fee": emergency,
+        "day_start": start,
+        "day_end": end,
+    }
+    row.normal_fee = normal
+    row.emergency_fee = emergency
+    row.day_start = start
+    row.day_end = end
+    row.updated_by = request.session.get("admin_username", "admin")
+    row.updated_at = datetime.utcnow()
+    if before != after:
+        _audit(db, request, "registration_settings", detail={"before": before, "after": after})
+    db.commit()
+    return _registration_redirect("/admin/registration-settings", msg="挂号设置已保存，两家门店同时生效")
+
+
+@app.get("/m/registrations", response_class=HTMLResponse)
+async def m_registrations_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    day: str = Query("", alias="date"),
+    store: str = Query(""),
+    status: str = Query(""),
+    q: str = Query(""),
+):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/registrations", status_code=303)
+    biz_day = _registration_day(day)
+    scope = _registration_scope_store(request, store)
+    rows = _registration_rows(db, day=biz_day, store=scope, status=status, q=q)
+    day_obj = datetime.strptime(biz_day, "%Y-%m-%d").date()
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update({
+        "rows": rows,
+        "day": biz_day,
+        "prev_day": (day_obj - timedelta(days=1)).isoformat(),
+        "next_day": (day_obj + timedelta(days=1)).isoformat(),
+        "store": scope,
+        "status": status if status in _REG_STATUSES else "",
+        "q": (q or "").strip(),
+        "total": len(rows),
+        "open_count": sum(1 for r in rows if r.status == "open"),
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
+        "csrf_token": _get_csrf_token(request),
+    })
+    return templates.TemplateResponse(request, "m_uk/registrations.html", ctx)
+
+
+@app.get("/m/registrations/new", response_class=HTMLResponse)
+async def m_registration_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = Query(0),
+    pet_id: int = Query(0),
+):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/registrations/new?pet_id={pet_id}", status_code=303)
+    ctx = _m_ctx(request, db, active_tab="medical")
+    ctx.update(_registration_new_bundle(request, db, customer_id, pet_id))
+    return templates.TemplateResponse(request, "m_uk/registration_new.html", ctx)
 
 
 @app.get("/admin/visits/{visit_id}/print", response_class=HTMLResponse)
@@ -26984,6 +27478,7 @@ async def admin_reports_revenue(
         "grooming":       "美容",
         "hospitalization":"住院笼费",
         "anesthesia":     "麻醉",
+        "registration":   "挂号",
         "manual":         "手工录入",
         "wallet_recharge":"钱包充值",
         "":               "其他",
@@ -27328,8 +27823,9 @@ async def admin_reports_performance(
         for v in db.query(Visit).filter(Visit.id.in_(sales_visit_ids)).all():
             visit_map[v.id] = v
 
-    category_keys = ["prescription", "exam", "sales", "grooming", "vaccine_deworm", "other"]
+    category_keys = ["registration", "prescription", "exam", "sales", "grooming", "vaccine_deworm", "other"]
     category_labels = {
+        "registration": "挂号",
         "prescription": "处方",
         "exam": "检查",
         "sales": "销售",
@@ -27357,6 +27853,8 @@ async def admin_reports_performance(
             return "grooming"
         if rt in ("vaccination", "deworming"):
             return "vaccine_deworm"
+        if rt == "registration":
+            return "registration"
         return "other"
 
     def _invoice_net_items(inv: Invoice) -> list[dict]:
@@ -38269,6 +38767,14 @@ async def m_root(request: Request, db: Session = Depends(get_db)):
         a.time_range_label = _appointment_time_range_label(a)
     today_appts_total = appt_q.count()
 
+    reg_q = db.query(func.count(WalkInRegistration.id)).filter(
+        WalkInRegistration.biz_date == today_str,
+        WalkInRegistration.status != "cancelled",
+    )
+    if store_short:
+        reg_q = reg_q.filter(WalkInRegistration.store == store_short)
+    today_reg_n = reg_q.scalar() or 0
+
     # 待审 TNR
     pending_tnr = db.query(Application).filter(
         Application.status == ApplicationStatus.pending_manual.value,
@@ -38294,6 +38800,7 @@ async def m_root(request: Request, db: Session = Depends(get_db)):
     ctx.update({
         "today_appts": today_appts,
         "today_appts_total": today_appts_total,
+        "today_reg_n": today_reg_n,
         "pending_tnr_n": pending_tnr_n,
         "my_visits": enriched_visits,
         "today_str": today_str,

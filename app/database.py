@@ -2602,6 +2602,55 @@ def _try_sqlite_migrations() -> None:
             except Exception as _e:
                 print(f"[migrations] visits.data_origin backfill skipped: {_e}")
 
+            # 挂号是新表。create_all 已建表时这里是空操作；旧库只有迁移时也能补上。
+            # 只加表和索引，不改已有表。
+            try:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS registration_settings ("
+                    "id INTEGER PRIMARY KEY, "
+                    "normal_fee REAL DEFAULT 10.0, "
+                    "emergency_fee REAL DEFAULT 200.0, "
+                    "day_start VARCHAR(5) DEFAULT '09:00', "
+                    "day_end VARCHAR(5) DEFAULT '22:00', "
+                    "updated_by VARCHAR(80) DEFAULT '', "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS walk_in_registrations ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, "
+                    "pet_id INTEGER REFERENCES pets(id) ON DELETE SET NULL, "
+                    "store VARCHAR(40) DEFAULT '', "
+                    "registered_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "biz_date VARCHAR(20) DEFAULT '', "
+                    "kind VARCHAR(20) DEFAULT 'normal', "
+                    "fee_amount REAL DEFAULT 0.0, "
+                    "auto_kind VARCHAR(20) DEFAULT '', "
+                    "auto_fee REAL DEFAULT 0.0, "
+                    "status VARCHAR(20) DEFAULT 'open', "
+                    "visit_id INTEGER REFERENCES visits(id) ON DELETE SET NULL, "
+                    "invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL, "
+                    "note VARCHAR(300) DEFAULT '', "
+                    "created_by VARCHAR(80) DEFAULT '', "
+                    "resolved_by VARCHAR(80) DEFAULT '', "
+                    "resolved_at DATETIME, "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                for index_sql in (
+                    "CREATE INDEX IF NOT EXISTS ix_walk_in_registrations_customer_id ON walk_in_registrations(customer_id)",
+                    "CREATE INDEX IF NOT EXISTS ix_walk_in_registrations_pet_id ON walk_in_registrations(pet_id)",
+                    "CREATE INDEX IF NOT EXISTS ix_walk_in_registrations_store ON walk_in_registrations(store)",
+                    "CREATE INDEX IF NOT EXISTS ix_walk_in_registrations_registered_at ON walk_in_registrations(registered_at)",
+                    "CREATE INDEX IF NOT EXISTS ix_walk_in_registrations_biz_date ON walk_in_registrations(biz_date)",
+                    "CREATE INDEX IF NOT EXISTS ix_walk_in_registrations_status ON walk_in_registrations(status)",
+                ):
+                    conn.execute(text(index_sql))
+            except Exception as _e:
+                print(f"[migrations] walk-in registration tables skipped: {_e}")
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

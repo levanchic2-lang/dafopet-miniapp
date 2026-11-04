@@ -82,7 +82,10 @@
 {# 最近病历 #}
 <div class="ukm-section-head">
   <h2>最&nbsp;近&nbsp;病&nbsp;历</h2>
-  <a class="more" href="/m/visit/new?customer_id={{ cust.id }}">+&nbsp;新&nbsp;建</a>
+  <span>
+    <a class="more" href="/m/registrations/new?customer_id={{ cust.id }}{% if pets|length == 1 %}&pet_id={{ pets[0].id }}{% endif %}">挂&nbsp;号</a>
+    <a class="more" href="/m/visit/new?customer_id={{ cust.id }}" style="margin-left:12px;">+&nbsp;新&nbsp;建</a>
+  </span>
 </div>
 
 {% if visits %}
