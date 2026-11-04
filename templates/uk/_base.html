@@ -217,6 +217,8 @@
         {% if request.session.get('admin_store') %}<span class="sep">·</span><span>{{ request.session.get('admin_store') }}</span>{% endif %}
         {% if request.session.get('admin_role') == 'superadmin' %}<span class="sep">·</span><span style="font-style:italic;">超级管理员</span>{% endif %}
         <span class="sep">·</span>
+        {% include "includes/filming_toggle.html" %}
+        <span class="sep">·</span>
         <a href="/admin/logout">退出</a>
       {% else %}
         <a href="/admin/login">登录</a>

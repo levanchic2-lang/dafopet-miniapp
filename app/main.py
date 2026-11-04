@@ -207,6 +207,9 @@ if settings.admin_password == "123456":
 # 生产默认 Secure cookie。集成测试走 http://127.0.0.1，需 SESSION_HTTPS_ONLY=0，
 # 否则浏览器/httpx 不会把会话 cookie 送回，登录 CSRF 必然失败。
 _session_https_only = _os.environ.get("SESSION_HTTPS_ONLY", "1") != "0"
+# 先注册拍摄模式（更靠内），再注册 Session（更靠外），过滤时才能读到 session。
+from app.services.filming_mode import FilmingModeMiddleware
+app.add_middleware(FilmingModeMiddleware)
 app.add_middleware(SessionMiddleware, secret_key=_SESSION_SECRET, session_cookie="tnr_session",
                    https_only=_session_https_only, same_site="lax", max_age=60 * 60 * 12)
 
@@ -747,6 +750,13 @@ def _upsert_customer(db: Session, name: str, phone: str, openid: str = "", id_nu
     匹配优先级：phone → openid。
     姓名覆盖规则：当老档案名为空 / 占位（"高女士" 等），且新名是合法全名时，覆盖。
     """
+    from app.services.filming_mode import filming_active
+    if filming_active():
+        # 打码值只允许出现在画面上，不能写入档案。
+        if phone and "*" in phone:
+            raise HTTPException(400, "拍摄模式下不能用打码手机号写入客户档案")
+        if name and "*" in name:
+            name = ""
     phone = (phone or "").strip()
     cust = db.query(Customer).filter(Customer.phone == phone).first() if phone else None
     if not cust:
@@ -834,6 +844,16 @@ def _get_csrf_token(request: Request) -> str:
         tok = secrets.token_urlsafe(32)
         request.session["csrf_token"] = tok
     return tok
+
+
+def _jinja_filming_csrf(request: Request) -> str:
+    try:
+        return _get_csrf_token(request)
+    except Exception:
+        return ""
+
+
+templates.env.globals["filming_csrf"] = _jinja_filming_csrf
 
 
 def _admin_back(request: Request, app_id: int, msg: str = "") -> RedirectResponse:
@@ -3900,6 +3920,21 @@ async def webhook_deploy(request: Request):
     return {"status": "deploying"}
 
 
+@app.post("/admin/filming-mode")
+async def admin_filming_mode(
+    request: Request,
+    csrf_token: str = Form(""),
+    next_url: str = Form("", alias="next"),
+):
+    """当前浏览器会话的拍摄模式开关。不影响其他账号、其他浏览器。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login", status_code=303)
+    _require_csrf(request, csrf_token)
+    request.session["filming_mode"] = not bool(request.session.get("filming_mode"))
+    dest = _safe_next(next_url, "/admin/customers")
+    return RedirectResponse(dest, status_code=303)
+
+
 @app.get("/admin/logout")
 async def admin_logout(request: Request):
     request.session.clear()
@@ -5674,6 +5709,26 @@ async def admin_appointment_create(
 ):
     require_admin(request)
     _require_csrf(request, csrf_token)
+    if request.session.get("filming_mode"):
+        from app.services.filming_mode import restore_masked_field
+        linked = db.get(Customer, customer_id) if customer_id else None
+        if linked is None and phone and "*" not in phone:
+            linked = db.query(Customer).filter(Customer.phone == phone.strip()).first()
+        if linked:
+            customer_name = restore_masked_field(customer_name, linked.name or "", filming=True)
+            phone = restore_masked_field(phone, linked.phone or "", filming=True)
+            if not customer_id:
+                customer_id = linked.id
+        elif "*" in (customer_name or "") or "*" in (phone or ""):
+            raise HTTPException(400, "拍摄模式下不能把打码后的姓名或电话存进预约")
+        if pet_id and "*" in (pet_name or ""):
+            pet_row = db.get(Pet, pet_id)
+            if pet_row and pet_row.name:
+                pet_name = pet_row.name
+        if "*" in (proxy_name or ""):
+            proxy_name = ""
+        if "*" in (proxy_phone or ""):
+            proxy_phone = ""
     redirect_base = _admin_appointment_redirect_base(redirect_after)
     try:
         fields = _assert_appointment_fields(
@@ -11164,6 +11219,11 @@ async def admin_customer_create(
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
+    if request.session.get("filming_mode") and ("*" in (name or "") or "*" in (phone or "")):
+        return RedirectResponse(
+            "/admin/customers?err=" + quote("拍摄模式下不能把打码后的姓名或电话存进客户档案，请先关闭拍摄模式"),
+            status_code=303,
+        )
     phone_clean = phone.strip()[:40]
     # 同手机号已有档案 → 不建新档，直接跳已有档案（提示一下）
     if phone_clean:
@@ -12457,6 +12517,11 @@ async def admin_customer_edit(
         # 完全没本店宠物 且 客户有别店宠物 → 拒绝
         if total_pets > 0 and pets_in_store == 0:
             raise HTTPException(403, "无权编辑其他门店的客户")
+    from app.services.filming_mode import restore_masked_field
+    filming = bool(request.session.get("filming_mode"))
+    name = restore_masked_field(name, cust.name or "", filming=filming)
+    phone = restore_masked_field(phone, cust.phone or "", filming=filming)
+    phones_extra = restore_masked_field(phones_extra, cust.phones_extra or "", filming=filming)
     cust.name = name.strip()[:120]
     cust.phone = phone.strip()[:40]
     # 备用手机号：用户可用换行 / 逗号 / 中文逗号 / 空格 / 分号分隔，统一存为 CSV
@@ -31647,14 +31712,25 @@ async def admin_rabies_edit_owner(rec_id: int, request: Request, db: Session = D
         raise HTTPException(400, f"狂犬登记已锁定（{reason}），不可修改。")
     form = await request.form()
     _require_csrf(request, str(form.get("csrf_token", "")))
-    new_owner_name = str(form.get("owner_name", rec.owner_name)).strip()
+    from app.services.filming_mode import restore_masked_field
+    filming = bool(request.session.get("filming_mode"))
+    new_owner_name = restore_masked_field(
+        str(form.get("owner_name", rec.owner_name)).strip(),
+        rec.owner_name or "",
+        filming=filming,
+    ).strip()
+    owner_phone_in = restore_masked_field(
+        str(form.get("owner_phone", rec.owner_phone)).strip(),
+        rec.owner_phone or "",
+        filming=filming,
+    ).strip()
     if new_owner_name and _is_invalid_name(new_owner_name):
         return RedirectResponse(
             f"/admin/rabies/{rec_id}?err=请填写真实姓名（不可仅填先生/女士/小姐）",
             status_code=303,
         )
     rec.owner_name    = new_owner_name or rec.owner_name
-    rec.owner_phone   = str(form.get("owner_phone", rec.owner_phone)).strip() or rec.owner_phone
+    rec.owner_phone   = owner_phone_in or rec.owner_phone
     rec.owner_address = str(form.get("owner_address", rec.owner_address or "")).strip()
     rec.animal_name   = str(form.get("animal_name", rec.animal_name or "")).strip()
     rec.animal_breed  = str(form.get("animal_breed", rec.animal_breed or "")).strip()

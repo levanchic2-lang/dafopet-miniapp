@@ -1,0 +1,44 @@
+{% if request.session.get('admin') %}
+<span class="film-toggle-wrap" style="display:inline-flex;align-items:center;">
+<style>
+.film-toggle-form { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.film-badge {
+  font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif;
+  font-style: normal;
+  font-size: 9pt;
+  letter-spacing: 2px;
+  color: #6b4423;
+  border: 0.5px solid #6b4423;
+  padding: 1px 6px;
+  line-height: 1.5;
+  border-radius: 0;
+}
+.film-toggle {
+  background: transparent;
+  border: 0;
+  border-bottom: 0.5px solid #8a8a8a;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 0 1px;
+  margin: 0;
+  font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif;
+  font-style: italic;
+  font-size: 9.5pt;
+  letter-spacing: 1px;
+  color: inherit;
+  cursor: pointer;
+}
+.film-toggle:hover { border-bottom-color: #1a1a1a; }
+</style>
+<form method="post" action="/admin/filming-mode" class="film-toggle-form">
+  <input type="hidden" name="csrf_token" value="{{ filming_csrf(request) }}">
+  <input type="hidden" name="next" value="{{ (request.url.path ~ ('?' ~ request.url.query if request.url.query else '')) | e }}">
+  {% if request.session.get('filming_mode') %}
+    <span class="film-badge">拍摄模式</span>
+    <button type="submit" class="film-toggle">关闭</button>
+  {% else %}
+    <button type="submit" class="film-toggle">拍摄模式</button>
+  {% endif %}
+</form>
+</span>
+{% endif %}

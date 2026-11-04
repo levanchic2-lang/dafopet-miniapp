@@ -507,7 +507,9 @@ document.addEventListener('click', function(e) {
     try {
       const resp = await fetch('/m/api/search-customer?q=' + encodeURIComponent(phone));
       const data = await resp.json();
-      const hit = (data.results || []).find(c => (c.phone || '').replace(/\s/g,'') === phone);
+      const _acList = data.results || [];
+      let hit = _acList.find(c => (c.phone || '').replace(/\s/g,'') === phone);
+      if (!hit && _acList.length === 1 && /\*/.test(_acList[0].phone || '')) hit = _acList[0];
       if (!hit) {
         $('ac_customer_id').value = 0; $('ac_pet_id').value = 0;
         $('ac_pet_picker').style.display = 'none';
