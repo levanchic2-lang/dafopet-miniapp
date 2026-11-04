@@ -48,6 +48,15 @@ def sample_html() -> str:
 <script>var store = '大风动物医院（横岗店）';</script>
 <header>大风动物医院 <small>始于 2018</small></header>
 <p>主人 李小姐 · 15712346365 · 宠物 小白</p>
+<a href="/admin/customers?store=东环店">东环店</a>
+<a href="/admin/customers?store=横岗店&q=1">横岗店</a>
+<button name="store" value="东环店">东&nbsp;环&nbsp;店</button>
+<span>当前店 东环</span>
+<span>宠物 东环猫 在横岗街道</span>
+<p>始于2018</p>
+<p>since 2018</p>
+<p>est. 始 于 2018</p>
+<p>Veterinary Care · Est. 2018</p>
 <p>Dafo Animal Hospital · 搜索小程序 dafopet</p>
 <select>
   <option value="大风动物医院（东环店）">大风动物医院（东环店）</option>
@@ -86,7 +95,21 @@ def t_html_brand():
     assert "xxpet" in out
     assert "var store = '大风动物医院（横岗店）'" in out
     assert 'value="大风动物医院（东环店）"' in out
-    assert ">XX动物医院（东环店）</option>" in out
+    assert ">XX动物医院（一店）</option>" in out
+    assert 'href="/admin/customers?store=东环店"' in out
+    assert 'href="/admin/customers?store=横岗店&q=1"' in out
+    assert ">一店</a>" in out
+    assert ">二店</a>" in out
+    assert 'value="东环店"' in out
+    assert "东&nbsp;环&nbsp;店" not in out
+    assert ">一店</button>" in out
+    assert "当前店 一店" in out
+    assert "东环猫" in out
+    assert "横岗街道" in out
+    assert "始于" not in out
+    assert "since 2018" not in out.lower()
+    assert "Est. 2018" not in out
+    assert "2018" not in out
 
 
 @step("客户姓名电话打码，宠物名和隐藏域保留")
@@ -121,7 +144,8 @@ def t_json():
     assert "李**" in out
     assert "157****6365" in out
     assert "小白" in out
-    assert "XX动物医院（东环店）" in out
+    assert "XX动物医院（一店）" in out
+    assert "东环" not in out
     assert "dafopet.com" in out
 
 
@@ -132,6 +156,12 @@ def t_restore():
     assert restore_masked_field("", "李小姐", filming=True) == "李小姐"
     assert restore_masked_field("王先生", "李小姐", filming=True) == "王先生"
     assert restore_masked_field("李**", "李小姐", filming=False) == "李**"
+    from app.services.filming_mode import unmask_store
+    assert unmask_store("一店") == "东环店"
+    assert unmask_store("二店") == "横岗店"
+    assert unmask_store("XX动物医院（一店）") == "大风动物医院（东环店）"
+    assert unmask_store("东环店") == "东环店"
+    assert unmask_store("大风动物医院（横岗店）") == "大风动物医院（横岗店）"
 
 
 t_name()
@@ -223,6 +253,14 @@ def run_http():
             assert "大风动物医院" not in body, "打码页仍出现医院全名"
             assert "李小姐" not in body, "打码页仍出现客户姓名"
             assert "15712346365" not in body, "打码页仍出现完整手机号"
+            assert "始于" not in body
+            bench = filming.get("/admin/customers")
+            assert bench.status_code == 200
+            assert ">一店</a>" in bench.text
+            assert ">二店</a>" in bench.text
+            assert "store=东环店" in bench.text
+            assert "store=横岗店" in bench.text
+            assert "始于" not in bench.text
             plain = other.get(f"/admin/customers/{cust_id}")
             assert "大风动物医院" in plain.text
             assert "李小姐" in plain.text

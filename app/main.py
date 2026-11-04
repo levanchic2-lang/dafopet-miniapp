@@ -1375,7 +1375,8 @@ def _resolve_store_for_create(request: "Request", explicit: str = "") -> str:
       2. staff 自动归本店
     校验：必须是「东环店」或「横岗店」之一，不再允许空字符串（通用）。
     """
-    explicit = (explicit or "").strip()
+    from app.services.filming_mode import unmask_store
+    explicit = unmask_store((explicit or "").strip())
     if request.session.get("admin_role") == "superadmin":
         # superadmin 必须显式选一家店
         if explicit in ("东环店", "横岗店"):
@@ -1527,7 +1528,8 @@ def _assert_appointment_fields(
     if g not in ("male", "female", "unknown"):
         raise HTTPException(400, "请选择性别。")
     out["pet_gender"] = g
-    store_v = need("门店", store, 120)
+    from app.services.filming_mode import unmask_store as _unmask_store
+    store_v = need("门店", _unmask_store(store), 120)
     if store_v not in _ALLOWED_CLINIC_STORES:
         raise HTTPException(400, "请选择有效的预约门店。")
     out["store"] = store_v
@@ -38936,7 +38938,8 @@ async def m_switch_store(
     if request.session.get("admin_role") != "superadmin":
         # 店员无权切店，原样回去
         return RedirectResponse(_safe_next(next_url, "/m/me"), status_code=303)
-    s = (store or "").strip()
+    from app.services.filming_mode import unmask_store
+    s = unmask_store((store or "").strip())
     if s not in ("东环店", "横岗店", ""):
         s = ""
     request.session["admin_store"] = s

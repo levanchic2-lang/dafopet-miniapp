@@ -2,6 +2,8 @@
 
 开启后，这一次浏览器会话的 HTML / JSON 响应会：
 - 把医院品牌名换成「XX动物医院」
+- 把门店显示名换成「一店 / 二店」，链接和表单提交值仍是真实店名
+- 去掉「始于 2018」这类开业年份标语
 - 把客户（主人）姓名、手机号打码
 
 表单里看得见的姓名/电话输入框改成打码且不可编辑，避免星号被存回去。
@@ -31,6 +33,37 @@ _BRAND_PAIRS: tuple[tuple[str, str], ...] = (
 # 前后不是汉字/字母/数字时，单独的品牌简称「大风」（如 PWA short_name）。
 _STANDALONE_BRAND = re.compile(r"(?<![\u4e00-\u9fffA-Za-z0-9])大风(?![\u4e00-\u9fffA-Za-z0-9])")
 _DAFOPET = re.compile(r"dafopet", re.IGNORECASE)
+# 字与字之间允许空格或 &nbsp;，以盖住「东&nbsp;环&nbsp;店」这种排版。
+_STORE_GAP = r"(?:[\s\u00a0]|&nbsp;|&#160;|&#x0*a0;)*"
+_STORE_DISPLAY: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(rf"东{_STORE_GAP}环{_STORE_GAP}分院"), "一分院"),
+    (re.compile(rf"横{_STORE_GAP}岗{_STORE_GAP}分院"), "二分院"),
+    (re.compile(rf"东{_STORE_GAP}环{_STORE_GAP}店"), "一店"),
+    (re.compile(rf"横{_STORE_GAP}岗{_STORE_GAP}店"), "二店"),
+    # 单独作为店名出现的简称。后面紧挨汉字（东环路、东环客户、横岗街道）则不动。
+    (re.compile(rf"(?<![\u4e00-\u9fff])东{_STORE_GAP}环(?!{_STORE_GAP}[\u4e00-\u9fff])"), "一店"),
+    (re.compile(rf"(?<![\u4e00-\u9fff])横{_STORE_GAP}岗(?!{_STORE_GAP}[\u4e00-\u9fff])"), "二店"),
+)
+_STORE_QUERY = re.compile(r"(?:[?&]|&amp;)store=[^&\"'<>\s]*", re.IGNORECASE)
+_TAGLINES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?:\s*[·•|]\s*)?(?:est\.?\s*)?始\s*于\s*2018", re.IGNORECASE),
+    re.compile(r"(?:\s*[·•|]\s*)?since\s+2018", re.IGNORECASE),
+    re.compile(r"(?:\s*[·•|]\s*)?est\.?\s*2018", re.IGNORECASE),
+    re.compile(r"(?:\s*[·•|]\s*)?创建于\s*2018"),
+)
+# 万一画面上的店名被提交回来，写库前改回真实值。
+_STORE_UNMASK = (
+    ("XX动物医院（一店）", "大风动物医院（东环店）"),
+    ("XX动物医院（二店）", "大风动物医院（横岗店）"),
+    ("XX动物医院（东环店）", "大风动物医院（东环店）"),
+    ("XX动物医院（横岗店）", "大风动物医院（横岗店）"),
+    ("大风动物医院（一店）", "大风动物医院（东环店）"),
+    ("大风动物医院（二店）", "大风动物医院（横岗店）"),
+    ("一分院", "东环店"),
+    ("二分院", "横岗店"),
+    ("一店", "东环店"),
+    ("二店", "横岗店"),
+)
 # 大陆手机：允许中间有空格或短横。已打码的 **** 不会再命中。
 _MOBILE = re.compile(r"(?<!\d)(1[3-9]\d)[-\s]?(\d{4})[-\s]?(\d{4})(?!\d)")
 
@@ -107,6 +140,36 @@ _cache: dict = {"sig": None, "names": (), "name_set": frozenset(), "phones": ()}
 
 def filming_active() -> bool:
     return bool(_filming_ctx.get())
+
+
+def unmask_store(value: str) -> str:
+    """拍摄模式的显示店名改回库里用的店名。真实店名原样返回。"""
+    text = (value or "").strip()
+    for masked, real in _STORE_UNMASK:
+        if text == masked:
+            return real
+    return value
+
+
+def _mask_stores(text: str) -> str:
+    saved: list[str] = []
+
+    def hold(match: re.Match) -> str:
+        saved.append(match.group(0))
+        return f"\ue010{len(saved) - 1}\ue011"
+
+    text = _STORE_QUERY.sub(hold, text)
+    for pattern, repl in _STORE_DISPLAY:
+        text = pattern.sub(repl, text)
+    for index, original in enumerate(saved):
+        text = text.replace(f"\ue010{index}\ue011", original)
+    return text
+
+
+def _mask_tagline(text: str) -> str:
+    for pattern in _TAGLINES:
+        text = pattern.sub("", text)
+    return text
 
 
 def restore_masked_field(submitted: str, stored: str | None, *, filming: bool) -> str:
@@ -238,6 +301,8 @@ def mask_display_text(
     text = _STANDALONE_BRAND.sub("XX", text)
     if domains and "dafopet" in text.lower():
         text = _DAFOPET.sub("xxpet", text)
+    text = _mask_stores(text)
+    text = _mask_tagline(text)
     for phone in phones:
         if phone and phone in text:
             text = text.replace(phone, mask_phone_value(phone))
