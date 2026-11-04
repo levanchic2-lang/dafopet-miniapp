@@ -1,0 +1,58 @@
+{% extends "uk/_base.html" %}
+{% block title %}挂号设置 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .rs-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .rs-bc a { color:var(--ink-3); text-decoration:none; }
+  .rs-bc .sep { margin:0 8px; color:var(--ink-4); }
+  .rs-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; margin:0; letter-spacing:1px; }
+  .rs-head .sub { display:block; margin-top:10px; font-size:11pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:1px; }
+  hr.rs-rule { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .rs-card { max-width:560px; }
+  .rs-field { margin-bottom:18px; }
+  .rs-field label { display:block; font-family:var(--font-serif); font-size:9pt; letter-spacing:2px; color:var(--ink-3); margin-bottom:8px; }
+  .rs-field input {
+    width:100%; box-sizing:border-box; font-family:var(--font-serif); font-size:14pt; color:var(--ink);
+    background:var(--paper); border:0; border-bottom:0.5px solid var(--hair); padding:8px 0; border-radius:0; outline:0;
+    font-variant-numeric:tabular-nums lining-nums;
+  }
+  .rs-field input:focus { border-bottom-color:var(--ink); }
+  .rs-btn { background:var(--ink); color:var(--paper); border:0; padding:10px 22px; cursor:pointer; font-family:var(--font-serif); font-size:11pt; letter-spacing:2px; font-weight:700; }
+  .rs-note { font-family:var(--font-serif); font-size:10.5pt; line-height:1.7; color:var(--ink-2); margin-bottom:22px; }
+</style>
+
+<div class="rs-bc"><a href="/admin/registrations">挂号列表</a><span class="sep">/</span><span>挂号设置</span></div>
+<div class="rs-head">
+  <h1>挂&nbsp;号&nbsp;设&nbsp;置
+    <span class="sub">两家门店共用这一套。只有超级管理员可以改。</span>
+  </h1>
+</div>
+<hr class="rs-rule"/>
+
+<div class="rs-card">
+  <p class="rs-note">
+    日间从开始时间算起，到结束时间之前，都是普通挂号。结束时间以及夜里、凌晨都是急诊挂号。
+    例如 09:00 是普通，22:00 是急诊。已经挂好的号不会因这里改价而回写。
+  </p>
+  <form method="post" action="/admin/registration-settings">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <div class="rs-field">
+      <label>普通挂号费（元）</label>
+      <input type="number" name="normal_fee" min="0" step="0.01" required value="{{ '%.2f'|format(row.normal_fee or 0) }}"/>
+    </div>
+    <div class="rs-field">
+      <label>急诊挂号费（元）</label>
+      <input type="number" name="emergency_fee" min="0" step="0.01" required value="{{ '%.2f'|format(row.emergency_fee or 0) }}"/>
+    </div>
+    <div class="rs-field">
+      <label>日间开始（含）</label>
+      <input type="text" name="day_start" required pattern="[0-2][0-9]:[0-5][0-9]" value="{{ row.day_start or '09:00' }}" placeholder="09:00"/>
+    </div>
+    <div class="rs-field">
+      <label>日间结束（不含）</label>
+      <input type="text" name="day_end" required pattern="[0-2][0-9]:[0-5][0-9]" value="{{ row.day_end or '22:00' }}" placeholder="22:00"/>
+    </div>
+    <button class="rs-btn" type="submit">保存</button>
+  </form>
+</div>
+{% endblock %}

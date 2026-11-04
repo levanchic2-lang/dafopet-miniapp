@@ -1,0 +1,98 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}挂号 · 大风动物医院{% endblock %}
+{% block topbar_title %}挂&nbsp;号{% endblock %}
+{% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
+{% block topbar_sub %}{{ day }} · {{ admin_store_label or '全部门店' }}{% endblock %}
+
+{% block content %}
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+<div class="ukm-page-head">
+  <h1>今&nbsp;日&nbsp;挂&nbsp;号</h1>
+  <div class="meta">{{ day }} · {{ total }} 条{% if open_count %} · 待处理 {{ open_count }}{% endif %}</div>
+</div>
+
+<div class="ukm-chips" style="margin-bottom:12px;">
+  <a class="ukm-chip {% if not status %}checked{% endif %}" href="/m/registrations?date={{ day }}{% if store %}&store={{ store }}{% elif is_superadmin %}&store=all{% endif %}">全部</a>
+  <a class="ukm-chip {% if status == 'open' %}checked{% endif %}" href="/m/registrations?date={{ day }}&status=open{% if store %}&store={{ store }}{% elif is_superadmin %}&store=all{% endif %}">待处理</a>
+  <a class="ukm-chip {% if status == 'converted' %}checked{% endif %}" href="/m/registrations?date={{ day }}&status=converted{% if store %}&store={{ store }}{% elif is_superadmin %}&store=all{% endif %}">已转病历</a>
+  <a class="ukm-chip {% if status == 'no_visit' %}checked{% endif %}" href="/m/registrations?date={{ day }}&status=no_visit{% if store %}&store={{ store }}{% elif is_superadmin %}&store=all{% endif %}">无需就诊</a>
+</div>
+
+{% if is_superadmin %}
+<div class="ukm-chips" style="margin-bottom:12px;">
+  <a class="ukm-chip {% if not store %}checked{% endif %}" href="/m/registrations?date={{ day }}&store=all{% if status %}&status={{ status }}{% endif %}">全部门店</a>
+  <a class="ukm-chip {% if store == '东环店' %}checked{% endif %}" href="/m/registrations?date={{ day }}&store=东环店{% if status %}&status={{ status }}{% endif %}">东环店</a>
+  <a class="ukm-chip {% if store == '横岗店' %}checked{% endif %}" href="/m/registrations?date={{ day }}&store=横岗店{% if status %}&status={{ status }}{% endif %}">横岗店</a>
+</div>
+{% endif %}
+
+<form method="get" action="/m/registrations" class="ukm-search" style="margin-bottom:14px;">
+  <input type="hidden" name="date" value="{{ day }}"/>
+  {% if status %}<input type="hidden" name="status" value="{{ status }}"/>{% endif %}
+  {% if is_superadmin %}<input type="hidden" name="store" value="{{ store or 'all' }}"/>{% endif %}
+  <input type="search" name="q" value="{{ q }}" placeholder="主人 / 电话 / 宠物"/>
+</form>
+
+<div class="ukm-chips" style="margin-bottom:14px;">
+  <a class="ukm-chip" href="/m/registrations?date={{ prev_day }}{% if store %}&store={{ store }}{% elif is_superadmin %}&store=all{% endif %}">前一天</a>
+  <a class="ukm-chip" href="/m/registrations?date={{ next_day }}{% if store %}&store={{ store }}{% elif is_superadmin %}&store=all{% endif %}">后一天</a>
+</div>
+
+{% if rows %}
+{% for r in rows %}
+<div class="ukm-card" style="margin-bottom:12px;">
+  <div style="display:flex; justify-content:space-between; gap:8px; align-items:baseline;">
+    <div class="ukm-row-title">{{ r.time_label }} · {{ r.pet_name }}</div>
+    <span class="ukm-pill {% if r.kind == 'emergency' %}red{% elif r.status == 'open' %}amber{% elif r.status == 'converted' %}green{% endif %}">{{ r.status_label }}</span>
+  </div>
+  <div class="ukm-row-sub" style="margin-top:6px;">
+    {{ r.owner_name }}{% if r.owner_phone %} · {{ r.owner_phone }}{% endif %}
+    {% if is_superadmin and r.store %} · {{ r.store }}{% endif %}
+  </div>
+  <div class="ukm-row-sub" style="margin-top:4px;">
+    {{ r.kind_label }} · ¥{{ '%.2f'|format(r.fee_amount or 0) }} · {{ r.pay_label }}
+    {% if r.fee_adjusted %} · 已调整{% endif %}
+  </div>
+  {% if r.status == 'converted' and r.visit_id %}
+  <div style="margin-top:8px;"><a href="/m/visit/{{ r.visit_id }}" style="color:var(--ink); border-bottom:0.5px solid var(--ink);">病历 #{{ r.visit_id }}</a></div>
+  {% endif %}
+  <div class="ukm-btn-row" style="margin-top:12px;">
+    {% if r.pet_id %}
+    <a class="ukm-btn ghost" href="/m/pet/{{ r.pet_id }}">打开宠物</a>
+    {% endif %}
+    {% if r.pay_state == 'unpaid' and r.invoice_id and r.status != 'cancelled' %}
+    <a class="ukm-btn ghost" href="/m/invoices/{{ r.invoice_id }}">收款</a>
+    {% endif %}
+  </div>
+  {% if r.status == 'open' %}
+  <form method="post" action="/admin/registrations/{{ r.id }}/convert" style="margin-top:8px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+    <input type="hidden" name="surface" value="mobile"/>
+    <input type="hidden" name="next_url" value="/m/visit/{id}"/>
+    <button class="ukm-btn block" type="submit">转病历</button>
+  </form>
+  <div class="ukm-btn-row">
+    <form method="post" action="/admin/registrations/{{ r.id }}/no-visit" style="flex:1;" onsubmit="return confirm('确认标记为无需就诊？挂号费仍然保留。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="surface" value="mobile"/>
+      <input type="hidden" name="next_url" value="/m/registrations?date={{ day }}{% if store %}&store={{ store }}{% endif %}"/>
+      <button class="ukm-btn ghost block" type="submit">无需就诊</button>
+    </form>
+    <form method="post" action="/admin/registrations/{{ r.id }}/cancel" style="flex:1;" onsubmit="return confirm('确认取消？未收的挂号费会撤销。');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <input type="hidden" name="surface" value="mobile"/>
+      <input type="hidden" name="next_url" value="/m/registrations?date={{ day }}{% if store %}&store={{ store }}{% endif %}"/>
+      <button class="ukm-btn danger block" type="submit">取消</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<div class="ukm-empty">
+  <div class="big">这&nbsp;一&nbsp;天&nbsp;还&nbsp;没&nbsp;有&nbsp;挂&nbsp;号</div>
+  打开宠物档案后点挂号
+</div>
+{% endif %}
+{% endblock %}

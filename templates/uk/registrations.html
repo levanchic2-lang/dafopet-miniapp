@@ -1,0 +1,167 @@
+{% extends "uk/_base.html" %}
+{% block title %}挂号列表 · 大风动物医院{% endblock %}
+{% block body %}
+<style>
+  .rg-bc { font-size:9pt; letter-spacing:2.5px; color:var(--ink-3); margin:24px 0 16px; font-style:italic; }
+  .rg-bc a { color:var(--ink-3); border-bottom:0.5px solid transparent; text-decoration:none; }
+  .rg-bc a:hover { color:var(--ink); }
+  .rg-bc .sep { margin:0 8px; color:var(--ink-4); }
+  hr.rg-rule { border:0; height:4px; border-top:0.5px solid var(--ink); border-bottom:0.5px solid var(--ink); margin:18px 0 28px; }
+  .rg-head { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:8px; }
+  .rg-head h1 { font-family:var(--font-serif); font-size:28pt; font-weight:700; color:var(--ink); letter-spacing:1px; margin:0; line-height:1.15; }
+  .rg-head h1 .sub { display:block; font-size:10pt; font-weight:400; font-style:italic; color:var(--ink-3); letter-spacing:2px; margin-top:10px; }
+  .rg-head h1 .sub b { color:var(--ink); font-style:normal; font-weight:700; font-family:var(--font-numeric); }
+  .rg-filter { border:0.5px solid var(--hair-2); padding:14px 18px; margin-bottom:14px; background:var(--paper); }
+  .rg-filter form, .rg-pills { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .rg-filter input[type=text], .rg-filter input[type=date], .rg-filter select {
+    font-family:var(--font-serif); font-size:10pt; color:var(--ink); background:var(--paper);
+    border:0.5px solid var(--hair); padding:6px 10px; outline:0; height:34px; border-radius:0; box-sizing:border-box;
+  }
+  .rg-btn { background:var(--ink); color:var(--paper); border:0; padding:8px 18px; cursor:pointer; font-family:var(--font-serif); font-size:10pt; letter-spacing:2px; font-weight:700; text-decoration:none; display:inline-block; }
+  .rg-btn.ghost { background:var(--paper); color:var(--ink-2); border:0.5px solid var(--hair); font-weight:400; }
+  .rg-btn.ghost:hover { color:var(--ink); border-color:var(--ink-3); }
+  .rg-btn.sm { font-size:9pt; padding:4px 10px; letter-spacing:1px; }
+  .rg-btn.danger { color:var(--accent-red); border-color:var(--accent-red); }
+  .rg-pill { display:inline-block; font-family:var(--font-serif); font-size:9pt; padding:4px 12px; border:0.5px solid var(--hair); letter-spacing:1.5px; color:var(--ink-2); text-decoration:none; background:var(--paper); }
+  .rg-pill.on { color:var(--ink); border-color:var(--ink); font-weight:700; }
+  .rg-tbl { width:100%; border-collapse:collapse; font-family:var(--font-serif); border:0.5px solid var(--hair-2); }
+  .rg-tbl thead th { font-size:9pt; letter-spacing:2px; color:var(--ink-3); font-weight:400; font-style:italic; border-bottom:0.5px solid var(--ink); padding:10px 12px; text-align:left; background:var(--paper); }
+  .rg-tbl tbody td { font-size:10pt; color:var(--ink-2); border-bottom:0.5px solid var(--hair); padding:12px; vertical-align:middle; }
+  .rg-tbl tbody td.num { font-family:var(--font-numeric); font-variant-numeric:tabular-nums lining-nums; color:var(--ink); }
+  .rg-tbl tbody tr:hover td { background:var(--bg); }
+  .rg-name { color:var(--ink); font-weight:700; text-decoration:none; border-bottom:0.5px solid var(--hair-2); }
+  .rg-dim { color:var(--ink-3); font-style:italic; font-size:9pt; }
+  .rg-tag { display:inline-block; font-family:var(--font-serif); font-size:9pt; padding:2px 10px; border:0.5px solid var(--ink-3); letter-spacing:1.5px; color:var(--ink); }
+  .rg-tag.emergency { color:var(--accent-red); border-color:var(--accent-red); }
+  .rg-tag.unpaid { color:var(--accent-amber); border-color:var(--accent-amber); }
+  .rg-tag.paid { color:var(--accent-green); border-color:var(--accent-green); }
+  .rg-actions { display:flex; justify-content:flex-end; align-items:center; gap:6px; flex-wrap:wrap; }
+  .rg-actions form { margin:0; }
+  .rg-empty { font-family:var(--font-serif); font-style:italic; color:var(--ink-3); font-size:11pt; padding:48px 20px; text-align:center; border:0.5px solid var(--hair-2); }
+  .rg-foot { padding:16px 0 8px; color:var(--ink-3); font-family:var(--font-serif); font-size:10pt; font-style:italic; }
+</style>
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+<div class="rg-bc"><a href="/admin">后台</a><span class="sep">/</span><span>挂号列表</span></div>
+
+<div class="rg-head">
+  <div>
+    <h1>挂&nbsp;号&nbsp;列&nbsp;表
+      <span class="sub">{{ day }} · 共 <b>{{ total }}</b> 条{% if open_count %} · 待处理 <b>{{ open_count }}</b>{% endif %}{% if unpaid_total %} · 未付 <b>¥{{ '%.2f'|format(unpaid_total) }}</b>{% endif %}</span>
+    </h1>
+  </div>
+  <div style="display:flex; gap:8px; align-items:center;">
+    {% if is_superadmin %}
+    <a href="/admin/registration-settings" class="rg-btn ghost">挂&nbsp;号&nbsp;设&nbsp;置</a>
+    {% endif %}
+    <a href="/admin/customers" class="rg-btn">去&nbsp;客&nbsp;户&nbsp;档&nbsp;案&nbsp;挂&nbsp;号</a>
+  </div>
+</div>
+
+<hr class="rg-rule"/>
+
+<div class="rg-pills" style="margin-bottom:12px;">
+  {% set keep_store = ('&store=' ~ (store or 'all')) if is_superadmin else '' %}
+  <a class="rg-pill {% if not status %}on{% endif %}" href="/admin/registrations?date={{ day }}{{ keep_store }}{% if q %}&q={{ q|urlencode }}{% endif %}">全部</a>
+  {% for key, label in status_zh.items() %}
+  <a class="rg-pill {% if status == key %}on{% endif %}" href="/admin/registrations?date={{ day }}&status={{ key }}{{ keep_store }}{% if q %}&q={{ q|urlencode }}{% endif %}">{{ label }}</a>
+  {% endfor %}
+  {% if is_superadmin %}
+  <span class="rg-dim" style="margin-left:8px;">门店</span>
+  <a class="rg-pill {% if not store %}on{% endif %}" href="/admin/registrations?date={{ day }}&store=all{% if status %}&status={{ status }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">全部</a>
+  <a class="rg-pill {% if store == '东环店' %}on{% endif %}" href="/admin/registrations?date={{ day }}&store=东环店{% if status %}&status={{ status }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">东环店</a>
+  <a class="rg-pill {% if store == '横岗店' %}on{% endif %}" href="/admin/registrations?date={{ day }}&store=横岗店{% if status %}&status={{ status }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">横岗店</a>
+  {% else %}
+  <span class="rg-dim">本店 {{ request.session.get('admin_store') or '—' }}</span>
+  {% endif %}
+</div>
+
+<div class="rg-filter">
+  <form method="get" action="/admin/registrations">
+    <a class="rg-btn ghost sm" href="/admin/registrations?date={{ prev_day }}{{ keep_store }}{% if status %}&status={{ status }}{% endif %}">前一天</a>
+    <input type="date" name="date" value="{{ day }}"/>
+    <a class="rg-btn ghost sm" href="/admin/registrations?date={{ next_day }}{{ keep_store }}{% if status %}&status={{ status }}{% endif %}">后一天</a>
+    <input name="q" value="{{ q }}" placeholder="主人 / 电话 / 宠物" style="min-width:180px;"/>
+    {% if status %}<input type="hidden" name="status" value="{{ status }}"/>{% endif %}
+    {% if is_superadmin %}<input type="hidden" name="store" value="{{ store or 'all' }}"/>{% endif %}
+    <button type="submit" class="rg-btn ghost">查询</button>
+    {% if q or status %}
+    <a href="/admin/registrations?date={{ day }}{{ keep_store }}" class="rg-btn ghost">清除</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if rows %}
+<table class="rg-tbl">
+  <thead>
+    <tr>
+      <th style="width:80px;">时间</th>
+      <th>宠物</th>
+      <th>主人</th>
+      {% if is_superadmin %}<th style="width:80px;">门店</th>{% endif %}
+      <th style="width:110px;">类型</th>
+      <th style="width:110px;">费用</th>
+      <th style="width:90px;">收款</th>
+      <th style="width:100px;">状态</th>
+      <th style="text-align:right;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td class="num">{{ r.time_label }}</td>
+      <td>
+        {% if r.customer_id and r.pet_id %}
+        <a class="rg-name" href="/admin/customers/{{ r.customer_id }}?pet_id={{ r.pet_id }}">{{ r.pet_name }}</a>
+        {% else %}{{ r.pet_name }}{% endif %}
+      </td>
+      <td>{{ r.owner_name }}{% if r.owner_phone %}<div class="rg-dim">{{ r.owner_phone }}</div>{% endif %}</td>
+      {% if is_superadmin %}<td>{{ r.store or '—' }}</td>{% endif %}
+      <td><span class="rg-tag {% if r.kind == 'emergency' %}emergency{% endif %}">{{ r.kind_label }}</span></td>
+      <td class="num">¥{{ '%.2f'|format(r.fee_amount or 0) }}{% if r.fee_adjusted %}<div class="rg-dim">已调整</div>{% endif %}</td>
+      <td>
+        <span class="rg-tag {% if r.pay_state == 'unpaid' or r.pay_state == 'partial' %}unpaid{% elif r.pay_state == 'paid' %}paid{% endif %}">{{ r.pay_label }}</span>
+      </td>
+      <td>
+        {{ r.status_label }}
+        {% if r.status == 'converted' and r.visit_id %}
+        <div><a class="rg-name" href="/admin/visits/{{ r.visit_id }}">病历 #{{ r.visit_id }}</a></div>
+        {% endif %}
+      </td>
+      <td>
+        <div class="rg-actions">
+          {% if r.customer_id and r.pet_id %}
+          <a class="rg-btn ghost sm" href="/admin/customers/{{ r.customer_id }}?pet_id={{ r.pet_id }}">打开宠物</a>
+          {% endif %}
+          {% if r.pay_state == 'unpaid' and r.invoice_id and r.status != 'cancelled' %}
+          <a class="rg-btn ghost sm" href="/admin/cashier/checkout?invoice_id={{ r.invoice_id }}">收款</a>
+          {% elif r.pay_state == 'paid' and r.invoice_id %}
+          <a class="rg-btn ghost sm" href="/admin/invoices/{{ r.invoice_id }}">收费单</a>
+          {% endif %}
+          {% if r.status == 'open' %}
+          <form method="post" action="/admin/registrations/{{ r.id }}/convert">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <button class="rg-btn sm" type="submit">转病历</button>
+          </form>
+          <form method="post" action="/admin/registrations/{{ r.id }}/no-visit" onsubmit="return confirm('确认标记为无需就诊？挂号费仍然保留。');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <input type="hidden" name="next_url" value="/admin/registrations?date={{ day }}{% if is_superadmin %}&store={{ store or 'all' }}{% endif %}"/>
+            <button class="rg-btn ghost sm" type="submit">无需就诊</button>
+          </form>
+          <form method="post" action="/admin/registrations/{{ r.id }}/cancel" onsubmit="return confirm('确认取消这份挂号？未收的费用会一并撤销。已经收过的费用请到收费单退款。');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+            <input type="hidden" name="next_url" value="/admin/registrations?date={{ day }}{% if is_superadmin %}&store={{ store or 'all' }}{% endif %}"/>
+            <button class="rg-btn ghost sm danger" type="submit">取消</button>
+          </form>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<div class="rg-foot">共 {{ total }} 条 · 默认显示当天（北京时间）</div>
+{% else %}
+<div class="rg-empty">这一天还没有挂号 · 从客户档案打开宠物后点「挂号」</div>
+{% endif %}
+{% endblock %}

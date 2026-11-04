@@ -173,7 +173,9 @@
     系统：HR + 员工档案 + 待领养 + 日志 + 审计 + 公开展示
     其余：接待
   #}
-  {% if _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing')
+  {% if _path.startswith('/admin/registration-settings') %}
+    {% set _active_tab = 'system' %}
+  {% elif _path.startswith('/admin/visits') or _path.startswith('/admin/dispensing')
        or _path.startswith('/admin/vaccinations') or _path.startswith('/admin/rabies') or _path.startswith('/admin/vaccine-registrations')
        or _path.startswith('/admin/prescriptions') or _path.startswith('/admin/exam')
        or _path.startswith('/admin/follow-up') or _path.startswith('/admin/inpatient')
@@ -242,6 +244,9 @@
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/appointments') %}current{% endif %}" href="/admin/appointments" id="nav-appt-link">
       <i data-lucide="clipboard-list"></i>预约管理<span id="nav-pending-badge" class="uk-ribbon-badge" style="display:none;"></span>
     </a>
+    {% if request.session.get('admin') %}
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/registrations') %}current{% endif %}" href="/admin/registrations"><i data-lucide="clipboard-plus"></i>挂号</a>
+    {% endif %}
   </div>
 
   {% if request.session.get('admin') %}
@@ -278,6 +283,7 @@
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/content') %}current{% endif %}" href="/admin/content"><i data-lucide="newspaper"></i>公开内容</a>
     {% if request.session.get('admin_role') != 'staff' %}
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/brand') %}current{% endif %}" href="/admin/brand"><i data-lucide="settings-2"></i>品牌设置</a>
+    <a class="uk-ribbon-icon {% if _path.startswith('/admin/registration-settings') %}current{% endif %}" href="/admin/registration-settings"><i data-lucide="clock"></i>挂号设置</a>
     {% endif %}
     <a class="uk-ribbon-icon {% if _path.startswith('/showcase') %}current{% endif %}" href="/showcase"><i data-lucide="sparkles"></i>公布展示</a>
     <a class="uk-ribbon-icon {% if _path.startswith('/admin/changelog') %}current{% endif %}" href="/admin/changelog"><i data-lucide="pencil-line"></i>开发日志</a>

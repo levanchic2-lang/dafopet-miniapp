@@ -2421,3 +2421,48 @@ class PublicContent(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     source_visit = relationship("Visit", foreign_keys=[source_visit_id])
+
+
+class RegistrationSettings(Base):
+    """全院共用的挂号费与日间时段。两家门店同一套，只允许超级管理员修改。"""
+    __tablename__ = "registration_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    normal_fee: Mapped[float] = mapped_column(Float, default=10.0)
+    emergency_fee: Mapped[float] = mapped_column(Float, default=200.0)
+    # 日间为 [day_start, day_end)，北京时间。之外是急诊。
+    day_start: Mapped[str] = mapped_column(String(5), default="09:00")
+    day_end: Mapped[str] = mapped_column(String(5), default="22:00")
+    updated_by: Mapped[str] = mapped_column(String(80), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class WalkInRegistration(Base):
+    """到店挂号。不依赖病历；挂号费单独成一张收费单，避免被病历账单重算冲掉。"""
+    __tablename__ = "walk_in_registrations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, index=True)
+    store: Mapped[str] = mapped_column(String(40), default="", index=True)  # 短名：东环店 / 横岗店
+    registered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)  # UTC
+    biz_date: Mapped[str] = mapped_column(String(20), default="", index=True)  # 北京日期 YYYY-MM-DD
+    kind: Mapped[str] = mapped_column(String(20), default="normal")  # normal / emergency
+    fee_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    auto_kind: Mapped[str] = mapped_column(String(20), default="")
+    auto_fee: Mapped[float] = mapped_column(Float, default=0.0)
+    # open 待处理 / converted 已转病历 / no_visit 无需就诊 / cancelled 已取消
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    visit_id = mapped_column(ForeignKey("visits.id", ondelete="SET NULL"), nullable=True, default=None)
+    invoice_id = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    resolved_by: Mapped[str] = mapped_column(String(80), default="")
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    pet = relationship("Pet", foreign_keys=[pet_id])
+    visit = relationship("Visit", foreign_keys=[visit_id])
+    invoice = relationship("Invoice", foreign_keys=[invoice_id])
