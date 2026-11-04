@@ -98,12 +98,18 @@ def main():
             print((ROOT / "_test" / "server.log").read_text(encoding="utf-8", errors="replace"))
             sys.exit(4)
 
-        print(f"[3/3] 跑集成测试")
+        print(f"[3/4] 跑集成测试")
         result = subprocess.run(
             [sys.executable, str(ROOT / "_test" / "integration_test.py")],
             env=ENV, cwd=ROOT,
         )
-        sys.exit(result.returncode)
+        print(f"[4/4] 跑拍摄模式测试")
+        filming = subprocess.run(
+            [sys.executable, str(ROOT / "_test" / "test_filming_mode.py")],
+            env={**ENV, "FILMING_HTTP": "1"},
+            cwd=ROOT,
+        )
+        sys.exit(result.returncode or filming.returncode)
     finally:
         if proc.poll() is None:
             if os.name == "nt":
