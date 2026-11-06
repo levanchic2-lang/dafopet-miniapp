@@ -939,7 +939,7 @@ def t_package_sell():
     r = client.post("/admin/packages/create", data={
         "csrf_token": token, "name": "美容套餐10次", "category": "beauty",
         "total_uses": "10", "sell_price": "300", "unit_price": "35",
-        "validity_days": "365",
+        "validity_days": "365", "store": "东环店",
     })
     assert r.status_code == 303, f"create got {r.status_code}"
 
@@ -1037,18 +1037,40 @@ def t_invoice_pay_package():
         customer_id=cust_id, pet_id=pet_id,
         invoice_no="TEST_PKG_INV", invoice_date="2026-05-15",
         subtotal=50.0, discount_amount=0.0, total_amount=50.0,
-        payment_status="unpaid",
+        payment_status="unpaid", store="东环店",
     )
-    db.add(inv); db.commit(); db.refresh(inv)
+    db.add(inv); db.flush()
+    from app.models import InvoiceItem
+    line = InvoiceItem(
+        invoice_id=inv.id, description="美容服务", ref_type="manual",
+        quantity=1, unit_price=50, subtotal=50,
+    )
+    db.add(line)
+    db.commit(); db.refresh(inv); db.refresh(line)
     inv_id = inv.id
     cp_id = cp.id
+    line_id = line.id
     db.close()
 
     r = client.get(f"/admin/invoices/{inv_id}")
     token = extract_csrf(r.text)
+    # 目录套餐现在必须归属门店。超管测试账号默认不挂店，先挂到东环店再核销，结束后挂回。
+    client.post("/m/switch-store", data={
+        "csrf_token": token, "store": "东环店", "next_url": f"/admin/invoices/{inv_id}",
+    })
     r = client.post(f"/admin/invoices/{inv_id}/pay", data={
         "csrf_token": token, "payment_method": "package",
         "customer_package_id": str(cp_id),
+        "pkg_cover": f"{line_id}:1",
+        "confirm_unmapped": "1",
+        "confirm_unassigned_pet": "1",
+        "idempotency_key": f"integration-pkg-{inv_id}",
+    })
+    from urllib.parse import unquote
+    loc = unquote(r.headers.get("location", ""))
+    assert "已加" in loc, loc
+    client.post("/m/switch-store", data={
+        "csrf_token": token, "store": "", "next_url": "/admin",
     })
     assert r.status_code == 303
 

@@ -433,6 +433,150 @@ def test_duplicate_service_call_and_similar_name_not_matched():
     db.close()
 
 
+def _fresh_customer(db):
+    customer = Customer(name=f"隔离客户{uuid.uuid4().hex[:6]}", phone=f"137{uuid.uuid4().int % 10**8:08d}")
+    db.add(customer)
+    db.flush()
+    pet = Pet(customer_id=customer.id, name="隔离豆", species="dog", store="东环店")
+    db.add(pet)
+    db.flush()
+    return customer, pet
+
+
+def test_mapping_applies_to_existing_sold_card_without_rewriting_snapshot():
+    """先卖出的卡不抄可抵项目。事后在目录绑定品目，这张旧卡立刻按绑定核销，次数和价格不动。"""
+    db = SessionLocal()
+    customer, pet = _fresh_customer(db)
+    product = PackageProduct(
+        name="后来才绑定的疫苗卡", category="medical", total_uses=3,
+        sell_price=240, unit_price=80, validity_days=365, store="", is_active=True,
+    )
+    db.add(product)
+    db.flush()
+    card = _card(
+        db, product.id, name="后来才绑定的疫苗卡", total_uses=3,
+        pet_id=pet.id, store="东环店",
+    )
+    card.customer_id = customer.id
+    vacc = Vaccination(
+        pet_id=pet.id, customer_id=customer.id, vaccine_name="犬四联疫苗",
+        inventory_item_id=IDS["vaccine_item"], vaccinated_date=beijing_today().isoformat(),
+    )
+    db.add(vacc)
+    db.flush()
+    invoice = _invoice(db, [
+        ("犬四联疫苗", "vaccination", vacc.id, 1, 90, 90),
+        ("血常规", "manual", None, 1, 40, 40),
+    ])
+    invoice.customer_id = customer.id
+    invoice.pet_id = pet.id
+    probe = _invoice(db, [("血常规", "manual", None, 1, 40, 40)])
+    probe.customer_id = customer.id
+    probe.pet_id = pet.id
+    db.commit()
+    card_id, invoice_id, product_id = card.id, invoice.id, product.id
+    probe_id = probe.id
+    sell_price, pet_id, store_name = card.sell_price, card.pet_id, card.store
+    vaccine_line_id = next(line.id for line in invoice.items if line.ref_type == "vaccination")
+    db.close()
+
+    token = _csrf(f"/admin/invoices/{probe_id}")
+    before = client.post(f"/admin/invoices/{probe_id}/add-payment", data={
+        "csrf_token": token, "method": "cash", "amount": "40",
+        "idempotency_key": uuid.uuid4().hex,
+    }, follow_redirects=False)
+    assert before.status_code == 303 and "不使用套餐" not in _loc(before), _loc(before)
+
+    db = SessionLocal()
+    db.add(PackageApplicableItem(product_id=product_id, inventory_item_id=IDS["vaccine_item"]))
+    db.commit()
+    db.close()
+
+    token = _csrf(f"/admin/invoices/{invoice_id}")
+    blocked = client.post(f"/admin/invoices/{invoice_id}/add-payment", data={
+        "csrf_token": token, "method": "cash", "amount": "130",
+        "idempotency_key": uuid.uuid4().hex,
+    }, follow_redirects=False)
+    assert "不使用套餐" in _loc(blocked), _loc(blocked)
+
+    token = _csrf(f"/admin/invoices/{invoice_id}")
+    redeemed = client.post(f"/admin/invoices/{invoice_id}/add-payment", data={
+        "csrf_token": token, "method": "package", "customer_package_id": str(card_id),
+        "pkg_cover": f"{vaccine_line_id}:1", "idempotency_key": uuid.uuid4().hex,
+    }, follow_redirects=False)
+    assert redeemed.status_code == 303 and "不使用" not in _loc(redeemed), _loc(redeemed)
+
+    db = SessionLocal()
+    saved = db.get(CustomerPackage, card_id)
+    assert saved.used_count == 1
+    assert saved.sell_price == sell_price and saved.pet_id == pet_id and saved.store == store_name
+    assert saved.total_uses == 3 and saved.name == "后来才绑定的疫苗卡"
+    pay = db.query(Payment).filter(Payment.invoice_id == invoice_id, Payment.method == "package").one()
+    assert abs(pay.amount - 90) < 0.01
+    invoice = db.get(Invoice, invoice_id)
+    paid = db.query(Payment).filter(Payment.invoice_id == invoice_id, Payment.status == "success").all()
+    # 现有账单状态只在收齐时变成 paid，没收齐仍记 unpaid。这里确认只收了疫苗那 90。
+    assert invoice.payment_status == "unpaid"
+    assert abs(sum(p.amount for p in paid) - 90) < 0.01
+    assert abs(float(invoice.total_amount) - 130) < 0.01
+    db.close()
+
+
+def test_legacy_unmapped_card_can_be_redeemed_after_staff_confirmation():
+    """没绑定项目、也没指定宠物的旧卡不能靠提醒自动用，但员工点名明细并确认后可以核销。"""
+    db = SessionLocal()
+    customer, pet = _fresh_customer(db)
+    card = _card(
+        db, IDS["bath"], name="未绑定旧卡", total_uses=4, used_count=0,
+        pet_id=None, store="",
+    )
+    card.customer_id = customer.id
+    vacc = Vaccination(
+        pet_id=pet.id, customer_id=customer.id, vaccine_name="犬四联疫苗",
+        inventory_item_id=IDS["vaccine_item"], vaccinated_date=beijing_today().isoformat(),
+    )
+    db.add(vacc)
+    db.flush()
+    invoice = _invoice(db, [
+        ("犬四联疫苗", "vaccination", vacc.id, 1, 90, 90),
+        ("血常规", "manual", None, 1, 40, 40),
+    ])
+    invoice.customer_id = customer.id
+    invoice.pet_id = pet.id
+    db.commit()
+    card_id, invoice_id = card.id, invoice.id
+    vaccine_line_id = next(line.id for line in invoice.items if line.ref_type == "vaccination")
+    db.close()
+
+    token = _csrf(f"/admin/invoices/{invoice_id}")
+    refused = client.post(f"/admin/invoices/{invoice_id}/add-payment", data={
+        "csrf_token": token, "method": "package", "customer_package_id": str(card_id),
+        "pkg_cover": f"{vaccine_line_id}:1", "idempotency_key": uuid.uuid4().hex,
+    }, follow_redirects=False)
+    assert refused.status_code == 303 and ("确认" in _loc(refused) or "未绑定" in _loc(refused) or "不能" in _loc(refused)), _loc(refused)
+
+    token = _csrf(f"/admin/invoices/{invoice_id}")
+    done = client.post(f"/admin/invoices/{invoice_id}/add-payment", data={
+        "csrf_token": token, "method": "package", "customer_package_id": str(card_id),
+        "pkg_cover": f"{vaccine_line_id}:1",
+        "confirm_unmapped": "1", "confirm_unassigned_pet": "1",
+        "idempotency_key": uuid.uuid4().hex,
+    }, follow_redirects=False)
+    assert done.status_code == 303 and "确认本次" not in _loc(done) and "不能" not in _loc(done), _loc(done)
+
+    db = SessionLocal()
+    saved = db.get(CustomerPackage, card_id)
+    assert saved.used_count == 1 and saved.pet_id is None and saved.status == "active"
+    pay = db.query(Payment).filter(Payment.invoice_id == invoice_id, Payment.method == "package").one()
+    assert abs(pay.amount - 90) < 0.01
+    invoice = db.get(Invoice, invoice_id)
+    paid = db.query(Payment).filter(Payment.invoice_id == invoice_id, Payment.status == "success").all()
+    assert invoice.payment_status == "unpaid"
+    assert abs(sum(p.amount for p in paid) - 90) < 0.01
+    assert abs(float(invoice.total_amount) - 130) < 0.01
+    db.close()
+
+
 if __name__ == "__main__":
     test_mapped_partial_and_ordinary_gate()
     test_ambiguous_cards_do_not_block_unrelated_payment()
@@ -441,4 +585,6 @@ if __name__ == "__main__":
     test_reversal_keeps_the_other_use_and_rollback()
     test_concurrent_last_use()
     test_duplicate_service_call_and_similar_name_not_matched()
+    test_mapping_applies_to_existing_sold_card_without_rewriting_snapshot()
+    test_legacy_unmapped_card_can_be_redeemed_after_staff_confirmation()
     print("package guard tests passed")
