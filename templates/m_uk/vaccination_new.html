@@ -18,6 +18,7 @@
     <span class="ukm-italic" style="font-size:14px;margin-left:6px;">{{ cust.name }}</span>
   </h1>
 </div>
+{% include "includes/package_notice.html" %}
 
 <form method="post" action="/admin/vaccinations/create" class="ukm-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

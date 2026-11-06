@@ -19,7 +19,7 @@
   {% for r in rows %}
   <a class="ukm-row" href="{% if r.cust %}/m/customer/{{ r.cust.id }}{% else %}#{% endif %}">
     <div class="ukm-row-body">
-      <div class="ukm-row-title">{{ r.cp.package_name or '套餐' }}
+      <div class="ukm-row-title">{{ r.cp.name or '套餐' }}
         {% if r.cust %}<span class="ukm-italic" style="font-size:12px;margin-left:6px;">{{ r.cust.name }}</span>{% endif %}
       </div>
       <div class="ukm-row-sub">

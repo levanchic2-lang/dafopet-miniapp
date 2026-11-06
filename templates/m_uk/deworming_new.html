@@ -4,6 +4,7 @@
 {% block topbar_back %}<a href="{% if cust %}/m/customer/{{ cust.id }}{% else %}/m/dewormings{% endif %}" class="ukm-topbar-back">‹</a>{% endblock %}
 
 {% block content %}
+{% include "includes/package_notice.html" %}
 
 {% if not cust %}
 <div class="ukm-empty">

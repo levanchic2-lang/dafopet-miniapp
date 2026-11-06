@@ -29,7 +29,8 @@ Page({
       this.setData({
         pet: data.pet || {}, customer: data.customer || {}, orderDate: data.order_date || "",
         nextDueDate: data.default_next_due || "", vets, vetIndex, vaccineItems, dewormingItems, results,
-        weightKg: data.latest_weight ? String(data.latest_weight) : ""
+        weightKg: data.latest_weight ? String(data.latest_weight) : "",
+        packageNotices: data.package_notices || []
       });
       this.updateTitle();
     } catch (e) { this.setData({ error: (e && e.detail) || "预防开单信息读取失败" }); }

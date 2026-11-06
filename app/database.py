@@ -2651,6 +2651,68 @@ def _try_sqlite_migrations() -> None:
             except Exception as _e:
                 print(f"[migrations] walk-in registration tables skipped: {_e}")
 
+            # 套餐核销安全：只加表和列，不改旧卡的次数、宠物、门店和价格。
+            try:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS package_applicable_items ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "product_id INTEGER NOT NULL REFERENCES package_products(id) ON DELETE CASCADE, "
+                    "inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE, "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_pkg_applicable_item "
+                    "ON package_applicable_items(product_id, inventory_item_id)"
+                ))
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS package_bypass_logs ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL, "
+                    "payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL, "
+                    "customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, "
+                    "pet_id INTEGER REFERENCES pets(id) ON DELETE SET NULL, "
+                    "reason TEXT DEFAULT '', "
+                    "protected_amount REAL DEFAULT 0.0, "
+                    "paid_amount REAL DEFAULT 0.0, "
+                    "store VARCHAR(40) DEFAULT '', "
+                    "operator VARCHAR(80) DEFAULT '', "
+                    "detail_json TEXT DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS payment_idempotency ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "idempotency_key VARCHAR(80) NOT NULL UNIQUE, "
+                    "invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL, "
+                    "payment_id INTEGER, "
+                    "batch_no VARCHAR(40) DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                _redeem_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(package_redemptions)")).fetchall()}
+                _redeem_adds = {
+                    "status": "ALTER TABLE package_redemptions ADD COLUMN status VARCHAR(20) DEFAULT 'active'",
+                    "payment_id": "ALTER TABLE package_redemptions ADD COLUMN payment_id INTEGER DEFAULT NULL",
+                    "covered_json": "ALTER TABLE package_redemptions ADD COLUMN covered_json TEXT DEFAULT ''",
+                    "idempotency_key": "ALTER TABLE package_redemptions ADD COLUMN idempotency_key VARCHAR(80) DEFAULT ''",
+                    "pet_confirmed": "ALTER TABLE package_redemptions ADD COLUMN pet_confirmed BOOLEAN DEFAULT 0",
+                    "confirm_note": "ALTER TABLE package_redemptions ADD COLUMN confirm_note VARCHAR(300) DEFAULT ''",
+                    "reversed_at": "ALTER TABLE package_redemptions ADD COLUMN reversed_at DATETIME DEFAULT NULL",
+                    "reversed_by": "ALTER TABLE package_redemptions ADD COLUMN reversed_by VARCHAR(80) DEFAULT ''",
+                }
+                for column, sql in _redeem_adds.items():
+                    if _redeem_cols and column not in _redeem_cols:
+                        conn.execute(text(sql))
+                _dew_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(deworming_records)")).fetchall()}
+                if _dew_cols and "inventory_item_id" not in _dew_cols:
+                    conn.execute(text(
+                        "ALTER TABLE deworming_records ADD COLUMN inventory_item_id INTEGER DEFAULT NULL"
+                    ))
+            except Exception as _e:
+                print(f"[migrations] package redemption guard skipped: {_e}")
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

@@ -8298,6 +8298,7 @@ async def api_staff_miniapp_pet_detail(
             "payment_status": invoice.payment_status if invoice else "",
             "payment_label": payment_labels.get(invoice.payment_status if invoice else "", "未生成收费单"),
         })
+    from app.services.package_guard import list_package_notices
     iq = db.query(Invoice).filter(Invoice.pet_id == pet.id)
     iq = _staff_store_query(iq, Invoice, store)
     invoices = iq.order_by(Invoice.invoice_date.desc(), Invoice.id.desc()).limit(40).all()
@@ -8329,6 +8330,7 @@ async def api_staff_miniapp_pet_detail(
         } for d in dewormings],
         "groomings": grooming_rows,
         "invoices": [_staff_invoice_payload(db, row, {pet.id: pet.name or "未命名"}) for row in invoices],
+        "package_notices": list_package_notices(db, pet.customer_id, pet.id, store),
     }
 
 
@@ -8508,6 +8510,7 @@ async def api_staff_miniapp_prevention_order_context(
         WeightRecord.pet_id == pet.id, WeightRecord.weight_kg > 0,
     ).order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc()).first()
     default_vet = (user.display_name or "").strip()
+    from app.services.package_guard import list_package_notices
     return {
         "ok": True,
         "pet": {"id": pet.id, "name": pet.name or "未命名宠物"},
@@ -8519,6 +8522,7 @@ async def api_staff_miniapp_prevention_order_context(
         "default_vet": default_vet if default_vet in vets else "",
         "vaccine_items": [_unified_template_item_payload(db, item, store) for item in items if item.category == "vaccine"],
         "deworming_items": [_unified_template_item_payload(db, item, store) for item in items if item.category == "antiparasitic"],
+        "package_notices": list_package_notices(db, customer.id, pet.id, store),
     }
 
 
@@ -8596,6 +8600,7 @@ async def api_staff_miniapp_prevention_order_create(
                 dose=str(data.get("dose") or "").strip()[:80],
                 next_due_date=str(data.get("next_due_date") or "")[:20],
                 vet_name=vet_name, notes=notes_full, created_by=operator,
+                inventory_item_id=item.id,
             )
             db.add(rec)
             db.flush()
@@ -12447,6 +12452,7 @@ async def page_admin_customer_detail(
             # 套餐
             "customer_packages": customer_packages,
             "active_packages_count": active_packages_count,
+            "package_notices": _package_notices(db, request, customer_id, active_pet_id or None),
             "package_products": package_products,
             "package_category_zh": _PACKAGE_CATEGORY_ZH,
             # 押金
@@ -14875,6 +14881,98 @@ async def admin_packages_toggle(
         f"/admin/packages?msg={'已上架' if p.is_active else '已下架'}：{p.name}",
         status_code=303,
     )
+
+
+@app.get("/admin/packages/item-search")
+async def admin_package_item_search(request: Request, db: Session = Depends(get_db), q: str = ""):
+    """按编号或全名精确辅助查找。返回品目编号，绑定仍由人工确认，不按相似度自动勾上。"""
+    require_admin(request)
+    keyword = (q or "").strip()
+    if len(keyword) < 1:
+        return {"items": []}
+    query = _apply_store_filter(db.query(InventoryItem), InventoryItem.store, _get_op_store(request))
+    if keyword.isdigit():
+        query = query.filter(InventoryItem.id == int(keyword))
+    else:
+        query = query.filter(InventoryItem.name == keyword)
+    rows = query.order_by(InventoryItem.id.desc()).limit(20).all()
+    return {"items": [{
+        "id": row.id,
+        "name": row.name,
+        "store": row.store or "通用",
+        "category": row.category or "",
+    } for row in rows]}
+
+
+@app.get("/admin/packages/{pid}/items", response_class=HTMLResponse)
+async def admin_package_items_page(pid: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    require_superadmin(request)
+    from app.models import PackageApplicableItem
+    product = db.get(PackageProduct, pid)
+    if not product:
+        raise HTTPException(404)
+    links = db.query(PackageApplicableItem).filter(PackageApplicableItem.product_id == pid).order_by(PackageApplicableItem.id).all()
+    bound = []
+    for link in links:
+        item = db.get(InventoryItem, link.inventory_item_id)
+        bound.append({
+            "id": link.inventory_item_id,
+            "name": item.name if item else f"已删除品目 #{link.inventory_item_id}",
+            "store": (item.store if item else "") or "通用",
+        })
+    return templates.TemplateResponse(request, "uk/package_items.html", {
+        "product": product,
+        "bound": bound,
+        "csrf_token": _get_csrf_token(request),
+        "msg": request.query_params.get("msg"),
+    })
+
+
+@app.post("/admin/packages/{pid}/items")
+async def admin_package_items_save(pid: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token", "")))
+    require_superadmin(request)
+    product = db.get(PackageProduct, pid)
+    if not product:
+        raise HTTPException(404)
+    action = str(form.get("action") or "add")
+    item_id = str(form.get("inventory_item_id") or "").strip()
+    from app.models import PackageApplicableItem
+    if action == "remove" and item_id.isdigit():
+        db.query(PackageApplicableItem).filter(
+            PackageApplicableItem.product_id == pid,
+            PackageApplicableItem.inventory_item_id == int(item_id),
+        ).delete(synchronize_session=False)
+        db.commit()
+        return RedirectResponse(f"/admin/packages/{pid}/items?msg=已移除绑定", status_code=303)
+    if not item_id.isdigit() or not db.get(InventoryItem, int(item_id)):
+        return RedirectResponse(f"/admin/packages/{pid}/items?msg=请填写存在的品目编号", status_code=303)
+    exists = db.query(PackageApplicableItem).filter(
+        PackageApplicableItem.product_id == pid,
+        PackageApplicableItem.inventory_item_id == int(item_id),
+    ).first()
+    if not exists:
+        db.add(PackageApplicableItem(product_id=pid, inventory_item_id=int(item_id)))
+        db.commit()
+    return RedirectResponse(f"/admin/packages/{pid}/items?msg=已绑定品目 #{item_id}", status_code=303)
+
+
+def _package_notices(db: Session, request: Request, customer_id: int | None, pet_id: int | None) -> list[dict]:
+    if not customer_id:
+        return []
+    from app.services.package_guard import list_package_notices
+    return list_package_notices(db, int(customer_id), int(pet_id) if pet_id else None, _get_op_store(request) or "")
+
+
+def _invoice_package_state(db: Session, request: Request, invoice: Invoice) -> dict:
+    import uuid
+    from app.services.package_guard import invoice_redeem_context
+    state = invoice_redeem_context(db, invoice, _get_op_store(request) or (invoice.store or ""))
+    state["idempotency_key"] = uuid.uuid4().hex
+    return state
 
 
 # ── 客户买套餐 ────────────────────────────────────────────────────
@@ -17913,6 +18011,7 @@ async def page_admin_visit_detail(
         "err": request.query_params.get("err"),
         "is_superadmin": _is_superadmin(request),
         "can_edit_imported_closed": _superadmin_may_edit_closed_import(request, v),
+        "package_notices": _package_notices(db, request, v.customer_id, v.pet_id),
     })
 
 
@@ -20827,6 +20926,7 @@ async def admin_unified_order_create(
                 dose=str(row.get("dose") or "").strip()[:80],
                 next_due_date=str(row.get("next_due_date") or "").strip()[:20],
                 vet_name=vet_name, notes=notes, created_by=operator,
+                inventory_item_id=item.id,
             )
             db.add(rec)
             db.flush()
@@ -28625,6 +28725,7 @@ async def admin_cashier_checkout_page(
         "outstanding": outstanding,
         "wallet_balance": wallet_balance,
         "active_packages": active_packages,
+        "package_states": [_invoice_package_state(db, request, row) for row in selected_invs],
         "available_deposits": available_deposits,
         "available_coupons": available_coupons,
         "deposit_category_zh": _DEPOSIT_CATEGORY_ZH,
@@ -28851,6 +28952,45 @@ async def admin_cashier_multi_pay_submit(
                 status_code=303,
             )
 
+    # 合并收款同样不能把已匹配套餐的项目用现金收掉。套餐本身仍走单张账单的核销。
+    from app.services.package_guard import (
+        DuplicateSubmission, PackageGuardError, assert_ordinary_amount,
+        attach_idempotent_payment, claim_idempotency, find_idempotent, log_bypass,
+    )
+    _mp_idem = str(form.get("idempotency_key") or "").strip()[:80]
+    _mp_reason = str(form.get("package_bypass_reason") or "").strip()[:500]
+    if _mp_idem and find_idempotent(db, _mp_idem):
+        _back_dup = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+        return RedirectResponse(f"{_back_dup}&msg=这笔合并收款已经入账，请勿重复点击", status_code=303)
+    _mp_plan = []
+    _mp_plan_protected = []
+    _mp_remaining = round_amount
+    for _idx, _row in enumerate(inv_rows):
+        if _mp_remaining <= 0:
+            break
+        _take = round(min(_mp_remaining, inv_actuals[_idx]), 2)
+        if _take <= 0:
+            continue
+        _mp_plan.append((_row["inv"], _take))
+        _mp_remaining = round(_mp_remaining - _take, 2)
+    try:
+        if _mp_idem:
+            claim_idempotency(db, _mp_idem, inv_rows[0]["inv"].id, batch_no="multi")
+        for _planned_inv, _planned_amt in _mp_plan:
+            _planned_protected = assert_ordinary_amount(
+                db, _planned_inv, store or (_planned_inv.store or ""), _planned_amt, _mp_reason,
+            )
+            _mp_plan_protected.append((_planned_inv, _planned_amt, _planned_protected))
+    except DuplicateSubmission:
+        db.rollback()
+        _back_dup = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+        return RedirectResponse(f"{_back_dup}&msg=这笔合并收款已经入账，请勿重复点击", status_code=303)
+    except PackageGuardError as exc:
+        db.rollback()
+        from urllib.parse import quote as _q
+        _back_guard = checkout_back or f"/admin/cashier/multi-pay?{_mp_qs}"
+        return RedirectResponse(f"{_back_guard}&msg={_q(str(exc), safe='')}", status_code=303)
+
     # 按顺序消化：每张单先满足，剩余转下一张
     paid_count = 0
     paid_total = 0.0
@@ -28862,6 +29002,7 @@ async def admin_cashier_multi_pay_submit(
         )
     batch_no = _new_settlement_batch_no() if len(inv_rows) >= 2 else None
     remaining = round_amount
+    _mp_created = []
     for idx, r in enumerate(inv_rows):
         if remaining <= 0:
             break
@@ -28882,14 +29023,16 @@ async def admin_cashier_multi_pay_submit(
                 note=f"合并结算 {inv.invoice_no or inv.id}",
             )
             _ref_id = _wtx.id
-        db.add(Payment(
+        _mp_pay = Payment(
             invoice_id=inv.id, customer_id=customer_id,
             method=method, amount=round(take, 2),
             ref_id=_ref_id, ref_no=ref_no, status="success",
             store=_pay_store, operator=operator,
             note=note_tag, batch_no=batch_no,
-        ))
+        )
+        db.add(_mp_pay)
         db.flush()
+        _mp_created.append(_mp_pay)
         _invoice_recompute_status(db, inv)
         paid_count += 1
         paid_total = round(paid_total + take, 2)
@@ -28906,6 +29049,15 @@ async def admin_cashier_multi_pay_submit(
             2,
         )
         _deposit_obj.status = "applied" if _dep_left <= 0.005 else "partial_refund"
+    if _mp_created:
+        attach_idempotent_payment(db, _mp_idem, _mp_created[0].id)
+        for _planned_inv, _planned_amt, _planned_protected in _mp_plan_protected:
+            _matched = next((p for p in _mp_created if p.invoice_id == _planned_inv.id), None)
+            log_bypass(
+                db, _planned_inv, _matched, operator=operator,
+                op_store=store or (_planned_inv.store or ""), reason=_mp_reason,
+                protected=_planned_protected, paid_amount=_planned_amt,
+            )
     db.commit()
 
     # 剩余未付（含其他单的）
@@ -29363,6 +29515,7 @@ async def admin_invoice_detail(
         "customer_printable_invoice_count": len(
             _customer_printable_invoices(db, request, inv.customer_id)
         ) if inv.customer_id else 0,
+        "package_state": _invoice_package_state(db, request, inv),
     })
 
 
@@ -29678,6 +29831,16 @@ async def admin_invoice_add_payment(
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=未知支付方式 {method}", status_code=303)
     if method == "salary_deduction" and not _customer_is_internal(db, inv.customer_id or 0):
         return RedirectResponse(f"/admin/invoices/{inv_id}?msg=工资抵扣仅用于员工内购账户", status_code=303)
+    from app.services.package_guard import (
+        DuplicateSubmission, PackageGuardError, assert_ordinary_amount,
+        attach_idempotent_payment, claim_idempotency, find_idempotent,
+        log_bypass, parse_cover_requests, redeem_package,
+    )
+    idem_key = str(form.get("idempotency_key") or "").strip()[:80]
+    if idem_key and find_idempotent(db, idem_key):
+        return RedirectResponse(f"/admin/invoices/{inv_id}?msg=这笔收款已经入账，请勿重复点击", status_code=303)
+    bypass_reason = str(form.get("package_bypass_reason") or "").strip()[:500]
+    package_payment = None
 
     # ── 钱包扣款 ──
     if method == "wallet":
@@ -29694,46 +29857,38 @@ async def admin_invoice_add_payment(
         except HTTPException as he:
             return RedirectResponse(f"/admin/invoices/{inv_id}?msg={he.detail}", status_code=303)
 
-    # ── 套餐核销 ──（套餐按"次"扣，金额 want 仅用于记账）
+    # ── 套餐核销：员工选定卡和明细次数。不按整单金额扣，也不扣库存。
     elif method == "package":
         cp_id_raw = (form.get("customer_package_id") or "").strip()
+        if extra_ids:
+            return RedirectResponse(
+                f"/admin/invoices/{inv_id}?msg=套餐要选定一张账单和具体明细，不能和多张单合并在同一次提交里",
+                status_code=303,
+            )
         if not cp_id_raw.isdigit():
             return RedirectResponse(f"/admin/invoices/{inv_id}?msg=请选择要核销的套餐", status_code=303)
-        cp = db.get(CustomerPackage, int(cp_id_raw))
-        if not cp or cp.customer_id != inv.customer_id:
-            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐与客户不匹配", status_code=303)
-        if cp.status != "active" or cp.used_count >= cp.total_uses:
-            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=套餐已失效或用完", status_code=303)
-        # 解析勾选的明细项 ids → 拼明细描述写到流水里
-        covered_ids = [int(x) for x in form.getlist("pkg_covered_item_ids") if str(x).isdigit()]
-        covered_desc = ""
-        if covered_ids:
-            covered_items = db.query(InvoiceItem).filter(
-                InvoiceItem.invoice_id == inv.id,
-                InvoiceItem.id.in_(covered_ids),
-            ).all()
-            if covered_items:
-                covered_desc = " · ".join(
-                    f"{i.description.split('] ')[-1] if '] ' in i.description else i.description}（¥{i.subtotal:.2f}）"
-                    for i in covered_items
-                )
-        cp.used_count += 1
-        if cp.used_count >= cp.total_uses:
-            cp.status = "exhausted"
-        _redemption_note = f"收费单 {inv.invoice_no or inv.id}"
-        if covered_desc:
-            _redemption_note += f" · 抵扣：{covered_desc}"
-        db.add(PackageRedemption(
-            customer_package_id=cp.id, customer_id=cp.customer_id,
-            pet_id=inv.pet_id or cp.pet_id, visit_id=inv.visit_id, invoice_id=inv.id,
-            used_count=1, remaining_after=cp.total_uses - cp.used_count,
-            store=store, operator=operator,
-            note=_redemption_note,
-        ))
-        ref_id = cp.id
-        # 加到 Payment.note 让收款流水也看到
-        if covered_desc:
-            note = (note + " · " if note else "") + f"套餐抵扣：{covered_desc}"
+        covers = parse_cover_requests(list(form.getlist("pkg_cover")))
+        if not covers:
+            covers = [
+                (int(x), 1) for x in form.getlist("pkg_covered_item_ids") if str(x).isdigit()
+            ]
+        try:
+            package_payment = redeem_package(
+                db, inv, int(cp_id_raw), covers,
+                operator=operator, op_store=store, idempotency_key=idem_key,
+                confirm_unassigned_pet=str(form.get("confirm_unassigned_pet") or "") in ("1", "on", "true"),
+                confirm_unmapped=str(form.get("confirm_unmapped") or "") in ("1", "on", "true"),
+            )
+        except DuplicateSubmission:
+            db.rollback()
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=这笔收款已经入账，请勿重复点击", status_code=303)
+        except PackageGuardError as exc:
+            db.rollback()
+            from urllib.parse import quote as _q
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg={_q(str(exc), safe='')}", status_code=303)
+        want = round(float(package_payment.amount or 0), 2)
+        ref_id = int(cp_id_raw)
+        note = package_payment.note or note
 
     # ── 押金抵扣 ──
     elif method == "deposit":
@@ -29781,10 +29936,45 @@ async def admin_invoice_add_payment(
         c.used_at = datetime.utcnow()
         ref_id = c.id
 
+    # 普通收款先过套餐闸门：已精确匹配的未收金额不能被现金等方式一起收掉。
+    protected_plan: list[tuple] = []
+    if package_payment is None:
+        planned_takes: list[tuple] = []
+        if multi_target:
+            remaining_plan = want
+            for t in target_invs:
+                t_out = max(0.0, float(t.total_amount or 0) - _invoice_paid_sum(db, t.id))
+                pay_amt = round(min(remaining_plan, t_out), 2) if remaining_plan > 0 else 0.0
+                if pay_amt > 0:
+                    planned_takes.append((t, pay_amt))
+                    remaining_plan = round(remaining_plan - pay_amt, 2)
+        else:
+            planned_takes.append((inv, want))
+        try:
+            if idem_key:
+                claim_idempotency(db, idem_key, inv.id)
+            for planned_inv, planned_amt in planned_takes:
+                protected_value = assert_ordinary_amount(
+                    db, planned_inv, store, planned_amt, bypass_reason,
+                )
+                protected_plan.append((planned_inv, planned_amt, protected_value))
+        except DuplicateSubmission:
+            db.rollback()
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg=这笔收款已经入账，请勿重复点击", status_code=303)
+        except PackageGuardError as exc:
+            db.rollback()
+            from urllib.parse import quote as _q
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg={_q(str(exc), safe='')}", status_code=303)
+
     # cash / wechat / alipay / shouqianba / meituan / third_party / salary_deduction — 无 side effect
     # 单张：直接给当前发票写一笔
     # 多张（multi_target=True）：按 target_invs 顺序分摊 want，每张独立 Payment
-    if multi_target:
+    # 套餐核销已在上面写成唯一的一笔，这里不再按整单金额重写。
+    if package_payment is not None:
+        _invoice_recompute_status(db, inv)
+        created_payments = [package_payment]
+    elif multi_target:
+        created_payments = []
         remaining = want
         batch_no = _new_settlement_batch_no()
         for t in target_invs:
@@ -29799,17 +29989,19 @@ async def admin_invoice_add_payment(
             _t_note = note
             if t.id != inv.id and not _t_note:
                 _t_note = f"合并结算 (源单 #{inv.id})"
-            db.add(Payment(
+            _created = Payment(
                 invoice_id=t.id, customer_id=t.customer_id,
                 method=method, amount=pay_amt,
                 ref_id=(ref_id if method == "deposit" else None), ref_no=ref_no, status="success",
                 store=(store or t.store or ""), operator=operator, note=_t_note, batch_no=batch_no,
-            ))
+            )
+            db.add(_created)
             db.flush()
+            created_payments.append(_created)
             _invoice_recompute_status(db, t)
             remaining = round(remaining - pay_amt, 2)
     else:
-        db.add(Payment(
+        _created = Payment(
             invoice_id=inv.id,
             customer_id=inv.customer_id,
             method=method,
@@ -29820,9 +30012,20 @@ async def admin_invoice_add_payment(
             store=(store or inv.store or ""),  # 超管收款 store 为空 → 回退发票门店，避免「按门店」统计漏单
             operator=operator,
             note=note,
-        ))
+        )
+        db.add(_created)
         db.flush()
+        created_payments = [_created]
         _invoice_recompute_status(db, inv)
+    if created_payments:
+        attach_idempotent_payment(db, idem_key, created_payments[0].id)
+        for planned_inv, planned_amt, protected_value in protected_plan:
+            matched_pay = next((p for p in created_payments if p.invoice_id == planned_inv.id), None)
+            log_bypass(
+                db, planned_inv, matched_pay,
+                operator=operator, op_store=store, reason=bypass_reason,
+                protected=protected_value, paid_amount=planned_amt,
+            )
     # 锁定即冻结：收款是锁定事件 → 把操作门店冻结到相关病历（visit.store 为空才写）
     for _t in target_invs:
         if getattr(_t, "visit_id", None):
@@ -29912,17 +30115,12 @@ async def admin_invoice_payment_void(
         except HTTPException:
             pass
     elif p.method == "package" and p.ref_id:
-        cp = db.get(CustomerPackage, p.ref_id)
-        if cp and cp.used_count > 0:
-            cp.used_count -= 1
-            if cp.status == "exhausted" and cp.used_count < cp.total_uses:
-                cp.status = "active"
-        # 标 redeem 行
-        for r in db.query(PackageRedemption).filter(
-            PackageRedemption.invoice_id == inv_id,
-            PackageRedemption.customer_package_id == p.ref_id,
-        ).all():
-            db.delete(r)
+        from app.services.package_guard import PackageGuardError, reverse_package_payment
+        try:
+            reverse_package_payment(db, p, request.session.get("admin_username", "admin"))
+        except PackageGuardError as exc:
+            db.rollback()
+            return RedirectResponse(f"/admin/invoices/{inv_id}?msg={exc}", status_code=303)
     elif p.method == "deposit" and p.ref_id:
         d = db.get(Deposit, p.ref_id)
         if d:
@@ -30009,18 +30207,26 @@ async def admin_invoice_pay_legacy(
     # 兼容旧 prepaid → wallet
     if method == "prepaid":
         method = "wallet"
-    # 重写表单参数
-    forwarded = {
-        "csrf_token": str(form.get("csrf_token", "")),
-        "method": method,
-        "amount": "",  # 留空 → 用 outstanding
-        "customer_package_id": str(form.get("customer_package_id", "")),
-        "deposit_id": str(form.get("deposit_id", "")),
-        "coupon_id": str(form.get("coupon_id", "")),
-        "ref_no": str(form.get("ref_no", "")),
-        "note": str(form.get("note", "")),
-    }
-    # 用 starlette 的 _Form 模拟（直接调函数会更省事）
+    # 重写表单参数。旧入口同样要带上套餐明细、不使用原因和提交号。
+    forwarded = [
+        ("csrf_token", str(form.get("csrf_token", ""))),
+        ("method", method),
+        ("amount", str(form.get("amount") or "")),
+        ("customer_package_id", str(form.get("customer_package_id", ""))),
+        ("deposit_id", str(form.get("deposit_id", ""))),
+        ("coupon_id", str(form.get("coupon_id", ""))),
+        ("ref_no", str(form.get("ref_no", ""))),
+        ("note", str(form.get("note", ""))),
+        ("idempotency_key", str(form.get("idempotency_key") or "")),
+        ("package_bypass_reason", str(form.get("package_bypass_reason") or "")),
+        ("confirm_unassigned_pet", str(form.get("confirm_unassigned_pet") or "")),
+        ("confirm_unmapped", str(form.get("confirm_unmapped") or "")),
+        ("next_url", str(form.get("next_url") or "")),
+    ]
+    for cover in form.getlist("pkg_cover"):
+        forwarded.append(("pkg_cover", str(cover)))
+    for old_id in form.getlist("pkg_covered_item_ids"):
+        forwarded.append(("pkg_covered_item_ids", str(old_id)))
     from starlette.datastructures import FormData
     request._form = FormData(forwarded)
     # 委托给新接口
@@ -30086,16 +30292,12 @@ async def admin_invoice_refund(
             except HTTPException:
                 pass
         elif p.method == "package" and p.ref_id:
-            cp = db.get(CustomerPackage, p.ref_id)
-            if cp and cp.used_count > 0:
-                cp.used_count -= 1
-                if cp.status == "exhausted" and cp.used_count < cp.total_uses:
-                    cp.status = "active"
-            for r in db.query(PackageRedemption).filter(
-                PackageRedemption.invoice_id == inv_id,
-                PackageRedemption.customer_package_id == p.ref_id,
-            ).all():
-                db.delete(r)
+            from app.services.package_guard import PackageGuardError, reverse_package_payment
+            try:
+                reverse_package_payment(db, p, operator)
+            except PackageGuardError as exc:
+                db.rollback()
+                return RedirectResponse(f"/admin/invoices/{inv_id}?msg={exc}", status_code=303)
         elif p.method == "deposit" and p.ref_id:
             d = db.get(Deposit, p.ref_id)
             if d:
@@ -30761,6 +30963,7 @@ async def admin_vaccination_create_page(
         "today": date.today().isoformat(),
         "csrf_token": _get_csrf_token(request),
         "msg": None,
+        "package_notices": _package_notices(db, request, cust.id if cust else 0, pet.id if pet else 0),
     })
 
 
@@ -35728,6 +35931,7 @@ async def page_admin_deworming_create(
         "rec_batch_no": "", "rec_clean_notes": "", "rec_charge_amount": 0.0,
         "deworm_history": history,
         "locked": False, "lock_reason": "", "paid_amount": 0.0,
+        "package_notices": _package_notices(db, request, cust.id if cust else 0, pet.id if pet else 0),
         "csrf_token": _get_csrf_token(request),
     })
 
@@ -35772,6 +35976,7 @@ async def page_admin_deworming_detail(rec_id: int, request: Request, db: Session
         "rec_batch_no": batch_no, "rec_clean_notes": clean_notes, "rec_charge_amount": charge,
         "deworm_history": history,
         "locked": locked, "lock_reason": lock_reason, "paid_amount": paid_amount,
+        "package_notices": _package_notices(db, request, rec.customer_id, rec.pet_id),
         "csrf_token": _get_csrf_token(request),
         "msg": request.query_params.get("msg"),
     })
@@ -35858,6 +36063,7 @@ async def admin_deworming_create(
         next_due_date=next_due_date.strip()[:20],
         vet_name=vet_name.strip()[:80],
         notes=notes_full,
+        inventory_item_id=inventory_item_id or None,
         created_by=request.session.get("admin_username", ""),
     )
     db.add(rec)
@@ -35975,6 +36181,7 @@ async def admin_deworming_copy_as_new(rec_id: int, request: Request, db: Session
         next_due_date="",
         vet_name=src.vet_name,
         notes=src.notes,
+        inventory_item_id=src.inventory_item_id,
         status="active",
         created_by=operator,
     )
@@ -39997,6 +40204,7 @@ async def m_customer_profile(cust_id: int, request: Request, db: Session = Depen
     ctx.update({
         "cust": cust, "pets": pets,
         "wallet": wallet, "packages": packages,
+        "package_notices": _package_notices(db, request, cust.id, None),
         "visits": enriched_visits,
         "admitted": admitted,
         "latest_weight_by_pet": latest_weight_by_pet,
@@ -40050,6 +40258,7 @@ async def m_pet_profile(pet_id: int, request: Request, db: Session = Depends(get
         "visits": visits, "vaccinations": vaccinations,
         "dewormings": dewormings, "weights": weights,
         "admitted": admitted,
+        "package_notices": _package_notices(db, request, pet.customer_id, pet.id),
     })
     return templates.TemplateResponse(request, "m_uk/pet_profile.html", ctx)
 
@@ -40188,6 +40397,7 @@ async def m_vaccination_new(
         "vacc_items": vacc_items,
         "today": beijing_now().strftime("%Y-%m-%d"),
         "default_vet": default_vet,
+        "package_notices": _package_notices(db, request, cust.id if cust else 0, pet.id if pet else 0),
     })
     return templates.TemplateResponse(request, "m_uk/vaccination_new.html", ctx)
 
@@ -40220,6 +40430,7 @@ async def m_deworming_new(
         "deworm_items": deworm_items,
         "today": beijing_now().strftime("%Y-%m-%d"),
         "default_vet": default_vet,
+        "package_notices": _package_notices(db, request, cust.id if cust else 0, pet.id if pet else 0),
     })
     return templates.TemplateResponse(request, "m_uk/deworming_new.html", ctx)
 
@@ -40419,6 +40630,7 @@ async def m_invoice_detail(inv_id: int, request: Request, db: Session = Depends(
         "is_super": is_super,
         "deposit_category_zh": _DEPOSIT_CATEGORY_ZH,
         "coupon_kind_zh": _COUPON_KIND_ZH,
+        "package_state": _invoice_package_state(db, request, inv),
     })
     return templates.TemplateResponse(request, "m_uk/invoice_detail.html", ctx)
 
@@ -41781,6 +41993,7 @@ async def m_visit_detail(visit_id: int, request: Request, db: Session = Depends(
         "hospitalization": hospitalization,
         "anmon_sheets": anmon_sheets,
         "can_edit_imported_closed": _superadmin_may_edit_closed_import(request, v),
+        "package_notices": _package_notices(db, request, v.customer_id, v.pet_id),
     })
     return templates.TemplateResponse(request, "m_uk/visit_detail.html", ctx)
 

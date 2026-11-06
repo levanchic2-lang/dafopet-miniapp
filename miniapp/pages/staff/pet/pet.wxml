@@ -12,6 +12,10 @@
       <view><strong>{{summary.visits}}</strong><text>病历</text></view><view><strong>{{summary.reports}}</strong><text>报告</text></view><view><strong>{{summary.vaccinations + summary.dewormings}}</strong><text>预防记录</text></view>
     </view>
     <view class="detail-note"><view>病历号：{{pet.medical_record_no || '未登记'}}</view><view wx:if="{{pet.birthday}}">生日/年龄：{{pet.birthday}}</view><view wx:if="{{pet.microchip_id}}">芯片号：{{pet.microchip_id}}</view><view wx:if="{{pet.notes}}">备注：{{pet.notes}}</view></view>
+    <view wx:if="{{packageNotices.length}}" class="detail-note">
+      <view>未用完的预付套餐（只提醒，不自动扣次，不按名字判断能否使用）</view>
+      <view wx:for="{{packageNotices}}" wx:key="id">{{item.name}} · 剩 {{item.remaining}}/{{item.total}} · {{item.expires_at}} · {{item.pet_label}} · {{item.store_label}} · {{item.mapping_label}} {{item.reason}}</view>
+    </view>
     <view class="detail-tabs five">
       <view class="{{activeTab === 'visits' ? 'active' : ''}}" data-tab="visits" bindtap="setTab">病历</view><view class="{{activeTab === 'reports' ? 'active' : ''}}" data-tab="reports" bindtap="setTab">报告</view><view class="{{activeTab === 'prevention' ? 'active' : ''}}" data-tab="prevention" bindtap="setTab">预防</view><view class="{{activeTab === 'grooming' ? 'active' : ''}}" data-tab="grooming" bindtap="setTab">美容</view><view class="{{activeTab === 'billing' ? 'active' : ''}}" data-tab="billing" bindtap="setTab">缴费</view>
     </view>

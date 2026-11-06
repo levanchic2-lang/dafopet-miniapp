@@ -435,6 +435,7 @@
 </div>
 
 <hr class="rule-double"/>
+{% include "includes/package_notice.html" %}
 
 {% if request.query_params.get('msg') %}
 <div style="padding:10px 14px;margin-bottom:14px;border-left:3px solid var(--ink);background:var(--bg);font-family:var(--font-serif);font-size:10pt;letter-spacing:1px;">{{ request.query_params.get('msg') }}</div>
@@ -1117,7 +1118,7 @@
         <tbody>
           {% for cp in customer_packages %}
           <tr>
-            <td><b>{{ cp.name }}</b></td>
+            <td><b>{{ cp.name }}</b><div class="uk-mute" style="font-size:9pt;">{{ cp.pet.name if cp.pet else '购卡时未指定宠物' }} · {{ (cp.product.store if cp.product and cp.product.store else '') or (cp.store or '目录未限定门店') }}</div></td>
             <td class="uk-mute">{{ package_category_zh.get(cp.category, cp.category) }}</td>
             <td class="num"><b>{{ (cp.total_uses or 0) - (cp.used_count or 0) }}</b> / {{ cp.total_uses or 0 }}</td>
             <td class="num uk-mute" style="font-size:9pt;">{{ cp.purchase_date or '—' }}</td>

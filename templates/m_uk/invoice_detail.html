@@ -141,6 +141,7 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
   <input type="hidden" name="next_url" value="/m/invoices/{{ inv.id }}"/>
   <input type="hidden" name="method" id="pay-method" value="cash"/>
+  <input type="hidden" name="idempotency_key" value="{{ package_state.idempotency_key if package_state else '' }}"/>
 
   {# 支付方式 grid #}
   <div class="pay-method-grid">
@@ -180,33 +181,39 @@
     {% endif %}
   </div>
 
-  {# 套餐 #}
+  {% set package_notices = package_state.notices if package_state else [] %}
+  {% include "includes/package_notice.html" %}
+  {# 套餐：不预选，不按整单抵扣 #}
   <div class="pay-sub" id="sub-package">
-    {% if active_packages %}
+    {% if package_state and package_state.cards %}
     <div class="lbl">选&nbsp;择&nbsp;套&nbsp;餐</div>
-    {% for cp in active_packages %}
+    <p class="hint">不会自动选中最新的卡。只抵勾选的明细和次数。</p>
+    {% for cp in package_state.cards %}
     <div class="selector-row">
-      <input type="radio" name="customer_package_id" value="{{ cp.id }}" id="pkg-{{ cp.id }}" {% if loop.first %}checked{% endif %}/>
+      <input type="radio" name="customer_package_id" value="{{ cp.id }}" id="pkg-{{ cp.id }}"/>
       <label for="pkg-{{ cp.id }}" class="info" style="cursor:pointer;">
-        <div class="name">{{ cp.package_name or '套餐' }}</div>
-        <div class="meta">剩 {{ cp.total_uses - cp.used_count }} 次 / 共 {{ cp.total_uses }} 次</div>
+        <div class="name">{{ cp.name }}</div>
+        <div class="meta">剩 {{ cp.remaining }} / {{ cp.total }} 次 · {{ cp.pet_label }} · {{ cp.store_label }}{% if not cp.mapped %} · 未绑定项目{% endif %}</div>
       </label>
     </div>
     {% endfor %}
-    <div style="margin-top:10px;">
-      <div class="lbl">仅&nbsp;抵&nbsp;扣&nbsp;以&nbsp;下&nbsp;明&nbsp;细&nbsp;（不选&nbsp;=&nbsp;全部）</div>
-      {% for it in inv.items %}
+    <label class="hint"><input type="checkbox" name="confirm_unassigned_pet" value="1"> 确认未指定宠物的卡用于这只宠物</label>
+    <label class="hint"><input type="checkbox" name="confirm_unmapped" value="1"> 人工确认未绑定项目的卡可抵下列明细</label>
+    {% for line in package_state.lines %}
+      {% if line.open_units > 0 %}
       <label class="selector-row" style="cursor:pointer;">
-        <input type="checkbox" name="pkg_covered_item_ids" value="{{ it.id }}"/>
+        <input type="checkbox" onchange="var h=this.parentElement.querySelector('[name=pkg_cover]'); var q=this.parentElement.querySelector('[name=qty]'); h.disabled=!this.checked; h.value=this.checked?('{{ line.id }}:'+(q.value||1)):'';">
         <div class="info">
-          <div class="name">{{ it.description }}</div>
-          <div class="meta">¥{{ '%.2f'|format(it.amount or 0) }}</div>
+          <div class="name">{{ line.description }}</div>
+          <div class="meta">¥{{ '%.2f'|format(line.subtotal) }} · 可抵 {{ line.open_units }} 次</div>
         </div>
+        <input name="qty" type="number" min="1" max="{{ line.open_units }}" value="1" style="width:52px;">
+        <input type="hidden" name="pkg_cover" value="" disabled>
       </label>
-      {% endfor %}
-    </div>
+      {% endif %}
+    {% endfor %}
     {% else %}
-    <div class="hint">客户没有有效套餐</div>
+    <div class="hint">当前没有可核销的套餐</div>
     {% endif %}
   </div>
 
@@ -266,6 +273,10 @@
   </div>
   {% endif %}
 
+  <div class="ukm-field">
+    <label class="lbl">不使用已匹配套餐的原因</label>
+    <input class="ukm-input" type="text" name="package_bypass_reason" maxlength="200" placeholder="普通收款收进已绑定项目时必填">
+  </div>
   {# 备注 #}
   <div class="ukm-field" style="margin-top:14px;">
     <label class="lbl">备&nbsp;注&nbsp;（可选）</label>

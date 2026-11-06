@@ -1,0 +1,26 @@
+{% if package_notices %}
+<style>
+  .pkg-notice { margin: 18px 0 22px; padding: 14px 16px; border: 0.5px solid var(--hair, #d8d4cc); border-left: 3px solid var(--accent-amber, #6b4423); background: var(--paper, #fdfcf8); }
+  .pkg-notice h2 { margin: 0 0 6px; font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; font-size: 14pt; letter-spacing: 1px; }
+  .pkg-notice p, .pkg-notice li { font-size: 10pt; line-height: 1.6; color: #4a4a4a; }
+  .pkg-notice ul { margin: 8px 0 0; padding-left: 1.1em; }
+  .pkg-notice .no { color: #7a2828; }
+</style>
+<div class="pkg-notice">
+  <h2>未用完的预付套餐</h2>
+  <p>这里只提醒卡还在，不会自动扣次，也不会因为名字相近就认定这次能用。未配置可抵项目的卡，不拦截其他收费。</p>
+  <ul>
+    {% for n in package_notices %}
+    <li>
+      <b>{{ n.name }}</b>
+      · 剩 {{ n.remaining }}/{{ n.total }} 次
+      · {{ n.expires_at }}
+      · {{ n.pet_label }}
+      · {{ n.store_label }}
+      · {{ n.mapping_label }}
+      {% if not n.usable_here %}<span class="no">{{ n.reason }}</span>{% elif n.reason %} {{ n.reason }}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
