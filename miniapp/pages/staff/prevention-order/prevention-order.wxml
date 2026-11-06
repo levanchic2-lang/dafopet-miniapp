@@ -3,6 +3,7 @@
   <view wx:if="{{error}}" class="staff-error">{{error}}</view>
   <block wx:if="{{!loading && pet.id}}">
     <view class="prevention-hero"><view class="prevention-eyebrow">PREVENTIVE CARE ORDER</view><view class="prevention-title">预防开单</view><view class="prevention-sub">{{customer.name}} · {{pet.name}}</view></view>
+    <view wx:if="{{packageNotices.length}}" class="staff-empty">未用完套餐：<text wx:for="{{packageNotices}}" wx:key="id">{{item.name}} 剩{{item.remaining}}次 {{item.pet_label}} {{item.store_label}}。{{item.mapping_label}}</text></view>
     <view class="mode-switch"><view class="{{mode === 'vaccine' ? 'active' : ''}}" data-mode="vaccine" bindtap="switchMode">疫苗开单</view><view class="{{mode === 'deworming' ? 'active' : ''}}" data-mode="deworming" bindtap="switchMode">驱虫开单</view></view>
 
     <view class="meta-list">

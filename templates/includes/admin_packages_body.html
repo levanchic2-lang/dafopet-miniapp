@@ -62,6 +62,7 @@
      <a class="pkg-sales-link" href="/admin/packages/{{ p.id }}/sales{% if wb_store %}?store={{ wb_store }}{% endif %}">
        {{ sold_map.get(p.id, 0) }} 份 →
      </a>
+     {% if is_superadmin %}<div><a href="/admin/packages/{{ p.id }}/items">绑定可抵项目</a></div>{% endif %}
    </td>
    <td data-label="状态">{% if p.is_active %}<span class="pill pill-info">上架</span>{% else %}<span class="pill pill-gray">下架</span>{% endif %}</td>
    {% if is_superadmin %}

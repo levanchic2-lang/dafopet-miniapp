@@ -39,7 +39,7 @@
     </view>
 
     <view wx:if="{{activeTab === 'benefits'}}" class="detail-list">
-      <view class="detail-section-label">套餐 · {{summary.active_packages}} 个可用</view>
+      <view class="detail-section-label">套餐 · {{summary.active_packages}} 个可用。未指定宠物不等于都能用；未绑定项目的卡不会按名字自动抵扣。</view>
       <view wx:for="{{packages}}" wx:key="id" class="detail-row"><view><view class="detail-row-title">{{item.name}}</view><view class="detail-row-sub">{{item.pet_name}} · 已用 {{item.used}} / {{item.total}} 次 · {{item.expires_at}}</view></view><view class="detail-badge">剩 {{item.remaining}}</view></view>
       <view wx:if="{{!packages.length}}" class="staff-empty">暂无套餐。</view>
       <view class="detail-section-label">押金</view>

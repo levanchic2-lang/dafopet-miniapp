@@ -21,6 +21,7 @@
     {% if cust %}<span class="sep">·</span><a href="/m/customer/{{ cust.id }}" style="color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ cust.name }}</a>{% endif %}
   </div>
 </div>
+{% include "includes/package_notice.html" %}
 
 {# 基础资料 卡片 #}
 <div class="ukm-card-group">

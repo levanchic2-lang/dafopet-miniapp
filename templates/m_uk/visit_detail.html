@@ -29,6 +29,7 @@
     类型&nbsp;<span style="color:var(--ink);font-style:normal;">{{ _vt_zh.get(v.visit_type, v.visit_type or '—') }}</span>
   </div>
 </div>
+{% include "includes/package_notice.html" %}
 
 {# 操作按钮 (病历未结束 + 不显示给只读角色) #}
 {% if v.status != 'closed' %}
