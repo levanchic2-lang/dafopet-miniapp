@@ -5442,7 +5442,7 @@ async def admin_staff_edit_get(staff_id: int, request: Request, db: Session = De
 @app.post("/admin/staff/{staff_id}/edit", name="admin_staff_edit")
 async def admin_staff_edit_post(
     staff_id: int, request: Request, db: Session = Depends(get_db),
-    name: str = Form(...), gender: str = Form(""), birthday: str = Form(""),
+    name: str = Form(""), gender: str = Form(""), birthday: str = Form(""),
     phone: str = Form(""), id_number: str = Form(""), store: str = Form(""),
     position: str = Form(""), hire_date: str = Form(""), probation_end_date: str = Form(""),
     status: str = Form("active"), resign_date: str = Form(""), resign_reason: str = Form(""),
@@ -5456,6 +5456,19 @@ async def admin_staff_edit_post(
     staff = db.query(Staff).filter(Staff.id == staff_id).first()
     if not staff:
         raise HTTPException(404)
+    from app.services.filming_mode import restore_masked_field
+    filming = bool(request.session.get("filming_mode"))
+    # 拍摄时姓名电话框是打码或禁用的。空值和带 * 的值保持档案里的原值，避免打码写回去。
+    name = restore_masked_field(name, staff.name, filming=filming)
+    phone = restore_masked_field(phone, staff.phone, filming=filming)
+    emergency_contact_name = restore_masked_field(
+        emergency_contact_name, staff.emergency_contact_name, filming=filming,
+    )
+    emergency_contact_phone = restore_masked_field(
+        emergency_contact_phone, staff.emergency_contact_phone, filming=filming,
+    )
+    if not (name or "").strip():
+        return RedirectResponse(f"/admin/staff/{staff_id}?err=姓名不能为空", status_code=303)
     staff.name = name.strip()
     staff.gender = gender; staff.birthday = birthday; staff.phone = phone.strip()
     staff.id_number = id_number.strip(); staff.store = store; staff.position = position

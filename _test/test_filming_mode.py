@@ -10,11 +10,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.services.filming_mode import (  # noqa: E402
+    allow_person_token,
+    build_unique_masks,
     mask_html,
     mask_json_text,
     mask_person_name,
     mask_phone_value,
     restore_masked_field,
+    unmask_request_body,
 )
 
 PASS, FAIL = [], []
@@ -164,6 +167,130 @@ def t_restore():
     assert unmask_store("大风动物医院（横岗店）") == "大风动物医院（横岗店）"
 
 
+def doctor_page() -> str:
+    return """<!doctype html>
+<html><body>
+<header class="uk-ribbon-user"><span>梁天兵</span> · 横岗店 · <span style="font-style:italic;">超级管理员</span></header>
+<div class="ukm-topbar-sub">横岗店 · 梁天兵</div>
+<h1>梁天兵</h1>
+<p>主诊 梁天兵</p>
+<td>开单人 梁天兵</td>
+<td>操作人 李明</td>
+<select name="assigned_to">
+  <option value="">请选择负责人</option>
+  <option value="梁天兵">梁天兵 · 医生</option>
+  <option value="李明">李明 · 助理</option>
+</select>
+<select name="vet_name">
+  <option value="梁天兵" selected>梁天兵</option>
+  <option value="李明">李明</option>
+</select>
+<input name="vet_name" value="梁天兵" list="vet-list">
+<datalist id="vet-list">
+  <option value="梁天兵">
+  <option value="李明">
+</datalist>
+<input type="hidden" name="vet_name" value="梁天兵">
+<input name="name" value="李小姐">
+<textarea name="notes">今天梁天兵看诊，李小姐陪同</textarea>
+<script>var doctor = "梁天兵";</script>
+</body></html>"""
+
+
+DOCTORS = ("梁天兵", "李明", "李华", "李小姐")
+DOCTOR_MASKS = build_unique_masks(DOCTORS)
+DOCTOR_SET = frozenset(DOCTORS)
+
+
+def visible_text(page: str) -> str:
+    page = re.sub(r"(?is)<script\b[^>]*>.*?</script>", "", page)
+    page = re.sub(r"(?is)<style\b[^>]*>.*?</style>", "", page)
+    return re.sub(r"<[^>]+>", "", page)
+
+
+@step("系统账号和职位词不拿来打码")
+def t_skip_accounts():
+    assert allow_person_token("梁天兵")
+    assert allow_person_token("liangtb")
+    assert not allow_person_token("admin")
+    assert not allow_person_token("医生")
+    assert not allow_person_token("二店")
+    assert not allow_person_token("超级管理员")
+
+
+@step("同姓医生打码互不重复")
+def t_unique_masks():
+    masks = build_unique_masks(["李明", "李华", "梁天兵"])
+    assert masks["梁天兵"] == "梁**"
+    assert len(set(masks.values())) == 3
+    assert masks["李明"] != masks["李华"]
+
+
+@step("导航和主诊显示打码，下拉提交值仍是真名")
+def t_doctor_display():
+    out = mask_html(doctor_page(), DOCTORS, PHONES, DOCTOR_SET, DOCTOR_MASKS)
+    text = visible_text(out)
+    assert "今天梁天兵看诊，李小姐陪同" in text
+    shown = text.replace("今天梁天兵看诊，李小姐陪同", "")
+    assert "梁天兵" not in shown
+    assert "李明" not in shown
+    assert "李小姐" not in shown
+    assert "梁**" in text
+    assert "超级管理员" in text
+    assert 'value="梁天兵"' in out
+    assert 'value="李明"' in out
+    assert ">梁** · 医生</option>" in out
+    assert ">李*2 · 助理</option>" in out or ">李* · 助理</option>" in out
+    assert '<input type="hidden" name="vet_name" value="梁天兵">' in out
+    assert 'name="vet_name" value="梁**"' in out
+    assert 'value="梁天兵"' not in out.split("<datalist", 1)[1].split("</datalist>", 1)[0]
+    assert 'var doctor = "梁天兵"' in out
+    assert "今天梁天兵看诊，李小姐陪同" in out
+    assert re.search(r'<input name="name" value="李\*\*" disabled readonly', out)
+    assert 'value="李小姐"' not in out
+
+
+@step("医生姓名打码提交后还原，客户姓名字段不动")
+def t_unmask_submit():
+    unmasks = {mask: real for real, mask in DOCTOR_MASKS.items()}
+    form = unmask_request_body(
+        "vet_name=梁**&name=李**&notes=今天梁天兵看诊&csrf_token=abc".encode("utf-8"),
+        "application/x-www-form-urlencoded",
+        unmasks,
+    ).decode("utf-8")
+    assert "vet_name=梁天兵" in form or "vet_name=%E6%A2%81%E5%A4%A9%E5%85%B5" in form
+    from urllib.parse import parse_qs
+    parsed = parse_qs(form)
+    assert parsed["vet_name"] == ["梁天兵"]
+    assert parsed["name"] == ["李**"]
+    assert parsed["notes"] == ["今天梁天兵看诊"]
+    import json
+    raw = json.dumps({"vet_name": "梁**", "name": "李**", "note": "梁**"}, ensure_ascii=False).encode("utf-8")
+    restored = json.loads(unmask_request_body(raw, "application/json", unmasks))
+    assert restored["vet_name"] == "梁天兵"
+    assert restored["name"] == "李**"
+    assert restored["note"] == "梁**"
+    boundary = "----film"
+    multipart = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="vet_name"\r\n\r\n'
+        "梁**\r\n"
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="file"; filename="a.png"\r\n'
+        "Content-Type: image/png\r\n\r\n"
+        "梁**\r\n"
+        f"--{boundary}--\r\n"
+    ).encode("utf-8")
+    restored_mp = unmask_request_body(
+        multipart, f"multipart/form-data; boundary={boundary}", unmasks,
+    )
+    assert b'name="vet_name"' in restored_mp
+    assert "梁天兵".encode("utf-8") in restored_mp
+    file_part = restored_mp.split(b'filename="a.png"', 1)[1]
+    assert "梁**".encode("utf-8") in file_part
+    assert "梁天兵".encode("utf-8") not in file_part
+
+
 t_name()
 t_phone()
 t_html_brand()
@@ -171,6 +298,10 @@ t_html_people()
 t_title()
 t_json()
 t_restore()
+t_skip_accounts()
+t_unique_masks()
+t_doctor_display()
+t_unmask_submit()
 
 
 def extract_csrf(page: str) -> str:
@@ -310,6 +441,102 @@ def run_http():
             assert "拍摄路 1 号" in plain.text
 
     t_save_keeps_real()
+
+    @step("拍摄模式遮住登录医生姓名，提交病历时还原")
+    def t_doctor_navbar_and_save():
+        from passlib.hash import bcrypt
+
+        from app.database import SessionLocal
+        from app.models import AdminUser, Staff, Visit
+
+        db = SessionLocal()
+        try:
+            if not db.query(AdminUser).filter(AdminUser.username == "梁天兵").first():
+                db.add(AdminUser(
+                    username="梁天兵",
+                    password_hash=bcrypt.hash("test123456"),
+                    role="superadmin",
+                    store="横岗店",
+                    display_name="梁天兵",
+                ))
+            if not db.query(Staff).filter(Staff.name == "梁天兵").first():
+                db.add(Staff(name="梁天兵", store="横岗店", position="医生", status="active"))
+            db.commit()
+        finally:
+            db.close()
+
+        def visible(page: str) -> str:
+            page = re.sub(r"(?is)<script\b[^>]*>.*?</script>", "", page)
+            page = re.sub(r"(?is)<style\b[^>]*>.*?</style>", "", page)
+            return re.sub(r"<[^>]+>", "", page)
+
+        with httpx.Client(base_url=base, follow_redirects=False, timeout=30.0) as doctor, \
+             httpx.Client(base_url=base, follow_redirects=False, timeout=30.0) as other:
+            page = doctor.get("/admin/login")
+            token = extract_csrf(page.text)
+            logged = doctor.post(
+                "/admin/login",
+                data={"username": "梁天兵", "password": "test123456", "csrf_token": token},
+            )
+            assert logged.status_code == 303, logged.status_code
+            home = doctor.get("/admin/customers")
+            assert home.status_code == 200, home.status_code
+            assert "梁天兵" in visible(home.text), visible(home.text)[:400]
+            # 手机「我」页用 m_uk 顶栏和标题展示登录人。今日页副标题是日期，本来就不放姓名。
+            me = doctor.get("/m/me")
+            assert me.status_code == 200, me.status_code
+            assert "梁天兵" in visible(me.text), visible(me.text)[:400]
+
+            token = extract_csrf(home.text)
+            turned = doctor.post(
+                "/admin/filming-mode",
+                data={"csrf_token": token, "next": "/admin/customers"},
+            )
+            assert turned.status_code == 303, turned.status_code
+            masked = doctor.get("/admin/customers")
+            assert masked.status_code == 200, masked.status_code
+            assert '<span class="film-badge">拍摄模式</span>' in masked.text
+            assert "梁天兵" not in visible(masked.text), visible(masked.text)[:500]
+            assert "梁**" in visible(masked.text), visible(masked.text)[:500]
+            masked_me = doctor.get("/m/me")
+            assert "梁天兵" not in visible(masked_me.text), visible(masked_me.text)[:500]
+            assert "梁**" in visible(masked_me.text), visible(masked_me.text)[:500]
+            assert "横岗店" not in visible(masked_me.text)
+            assert "二店" in visible(masked_me.text)
+
+            login(other)
+            token = extract_csrf(masked.text)
+            created = doctor.post(
+                "/admin/visits/create",
+                data={
+                    "csrf_token": token,
+                    "customer_id": "0",
+                    "pet_id": "0",
+                    "visit_date": "2026-11-09",
+                    "visit_type": "outpatient",
+                    "vet_name": "梁**",
+                    "chief_complaint": "拍摄测试",
+                },
+            )
+            assert created.status_code == 303, created.text[:300]
+            db = SessionLocal()
+            try:
+                visit = db.query(Visit).order_by(Visit.id.desc()).first()
+                assert visit is not None
+                assert visit.vet_name == "梁天兵", visit.vet_name
+                assert visit.created_by == "梁天兵"
+                visit_id = visit.id
+            finally:
+                db.close()
+            filmed_visit = doctor.get(f"/admin/visits/{visit_id}")
+            assert filmed_visit.status_code == 200, filmed_visit.status_code
+            assert "梁天兵" not in visible(filmed_visit.text), visible(filmed_visit.text)[:800]
+            assert "梁**" in visible(filmed_visit.text)
+            plain_visit = other.get(f"/admin/visits/{visit_id}")
+            assert plain_visit.status_code == 200, plain_visit.status_code
+            assert "梁天兵" in visible(plain_visit.text), visible(plain_visit.text)[:800]
+
+    t_doctor_navbar_and_save()
 
 
 if os.environ.get("FILMING_HTTP", "0") == "1":
