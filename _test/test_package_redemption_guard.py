@@ -26,7 +26,7 @@ from app.database import Base, SessionLocal, engine
 import app.main as main_module
 from app.main import app
 from app.models import (
-    AdminUser, Customer, CustomerPackage, InventoryItem, Invoice, InvoiceItem,
+    AdminUser, Coupon, Customer, CustomerPackage, InventoryItem, Invoice, InvoiceItem,
     PackageApplicableItem, PackageBypassLog, PackageProduct, PackageRedemption,
     Payment, Pet, Vaccination,
 )
@@ -577,6 +577,119 @@ def test_legacy_unmapped_card_can_be_redeemed_after_staff_confirmation():
     db.close()
 
 
+def test_critical_cashier_paths_money_stock_and_print():
+    """套餐加现金尾款、多张账单、按数量只抵一部分、优惠券、打印。核销不重复扣库存。"""
+    db = SessionLocal()
+    customer, pet = _fresh_customer(db)
+    product = PackageProduct(
+        name="两支疫苗卡", category="medical", total_uses=3,
+        sell_price=180, unit_price=60, validity_days=365, store="", is_active=True,
+    )
+    db.add(product)
+    db.flush()
+    db.add(PackageApplicableItem(product_id=product.id, inventory_item_id=IDS["vaccine_item"]))
+    card = _card(db, product.id, name="两支疫苗卡", total_uses=3, pet_id=pet.id, store="东环店")
+    card.customer_id = customer.id
+    vacc = Vaccination(
+        pet_id=pet.id, customer_id=customer.id, vaccine_name="犬四联疫苗",
+        inventory_item_id=IDS["vaccine_item"], vaccinated_date=beijing_today().isoformat(),
+    )
+    db.add(vacc)
+    db.flush()
+    stock_before = float(db.get(InventoryItem, IDS["vaccine_item"]).stock_qty or 0)
+    from app.main import _deduct_inventory
+    _deduct_inventory(db, IDS["vaccine_item"], 1.0, "vaccination", vacc.id, "pkg_admin", note="接种出库")
+    mixed = _invoice(db, [
+        ("犬四联疫苗", "vaccination", vacc.id, 1, 60, 60),
+        ("血常规", "manual", None, 1, 40, 40),
+    ])
+    mixed.customer_id = customer.id
+    mixed.pet_id = pet.id
+    partial = _invoice(db, [("犬四联疫苗", "vaccination", vacc.id, 2, 60, 120)])
+    partial.customer_id = customer.id
+    partial.pet_id = pet.id
+    other = _invoice(db, [("血常规", "manual", None, 1, 30, 30)])
+    other.customer_id = customer.id
+    other.pet_id = pet.id
+    coupon_inv = _invoice(db, [("血常规", "manual", None, 1, 40, 40)])
+    coupon_inv.customer_id = customer.id
+    coupon_inv.pet_id = pet.id
+    coupon = Coupon(
+        code=f"T{uuid.uuid4().hex[:8]}", customer_id=customer.id, title="尾款券",
+        kind="cash", face_value=40, min_amount=0, status="issued", store="东环店",
+    )
+    db.add(coupon)
+    db.commit()
+    customer_id, card_id = customer.id, card.id
+    mixed_id, partial_id, other_id = mixed.id, partial.id, other.id
+    coupon_inv_id, coupon_id = coupon_inv.id, coupon.id
+    vaccine_line = next(line.id for line in mixed.items if line.ref_type == "vaccination")
+    partial_line = partial.items[0].id
+    db.close()
+
+    token = _csrf(f"/admin/invoices/{mixed_id}")
+    key = uuid.uuid4().hex
+    first = client.post(f"/admin/invoices/{mixed_id}/add-payment", data={
+        "csrf_token": token, "method": "package", "customer_package_id": str(card_id),
+        "pkg_cover": f"{vaccine_line}:1", "idempotency_key": key,
+    }, follow_redirects=False)
+    assert "已加" in _loc(first), _loc(first)
+    retry = client.post(f"/admin/invoices/{mixed_id}/add-payment", data={
+        "csrf_token": token, "method": "package", "customer_package_id": str(card_id),
+        "pkg_cover": f"{vaccine_line}:1", "idempotency_key": key,
+    }, follow_redirects=False)
+    assert "已经入账" in _loc(retry), _loc(retry)
+    token = _csrf(f"/admin/invoices/{mixed_id}")
+    cash = client.post(f"/admin/invoices/{mixed_id}/add-payment", data={
+        "csrf_token": token, "method": "cash", "amount": "40",
+        "idempotency_key": uuid.uuid4().hex,
+    }, follow_redirects=False)
+    assert "已加" in _loc(cash), _loc(cash)
+
+    token = _csrf(f"/admin/invoices/{partial_id}")
+    part = client.post(f"/admin/invoices/{partial_id}/add-payment", data={
+        "csrf_token": token, "method": "package", "customer_package_id": str(card_id),
+        "pkg_cover": f"{partial_line}:1", "idempotency_key": uuid.uuid4().hex,
+    }, follow_redirects=False)
+    assert "已加" in _loc(part), _loc(part)
+
+    token = _csrf(f"/admin/invoices/{coupon_inv_id}")
+    coupon_pay = client.post(f"/admin/invoices/{coupon_inv_id}/add-payment", data={
+        "csrf_token": token, "method": "coupon", "coupon_id": str(coupon_id),
+        "amount": "40", "idempotency_key": uuid.uuid4().hex,
+    }, follow_redirects=False)
+    assert "已加" in _loc(coupon_pay), _loc(coupon_pay)
+
+    token = _csrf(f"/admin/cashier/multi-pay?customer_id={customer_id}")
+    multi = client.post("/admin/cashier/multi-pay", data={
+        "csrf_token": token, "customer_id": str(customer_id), "method": "wechat",
+        "invoice_ids": [str(other_id)], "round_amount": "30",
+        "idempotency_key": uuid.uuid4().hex,
+    }, follow_redirects=False)
+    assert multi.status_code == 303 and "不能" not in _loc(multi), _loc(multi)
+
+    printed = client.get(f"/admin/invoices/{mixed_id}/print")
+    assert printed.status_code == 200
+    assert "Cash" in printed.text and "套餐" in printed.text
+
+    db = SessionLocal()
+    pays = db.query(Payment).filter(Payment.invoice_id == mixed_id, Payment.status == "success").all()
+    amounts = sorted((p.method, round(p.amount, 2)) for p in pays)
+    assert amounts == [("cash", 40.0), ("package", 60.0)], amounts
+    assert abs(sum(p.amount for p in pays) - 100) < 0.01
+    assert db.get(Invoice, mixed_id).payment_status == "paid"
+    partial_pay = db.query(Payment).filter(Payment.invoice_id == partial_id, Payment.method == "package").one()
+    assert abs(partial_pay.amount - 60) < 0.01
+    assert db.get(Invoice, partial_id).payment_status == "unpaid"
+    assert abs(float(db.get(Invoice, partial_id).total_amount) - 120) < 0.01
+    assert db.get(Invoice, other_id).payment_status == "paid"
+    assert db.get(Invoice, coupon_inv_id).payment_status == "paid"
+    assert db.get(Coupon, coupon_id).status == "used"
+    assert db.get(CustomerPackage, card_id).used_count == 2
+    assert float(db.get(InventoryItem, IDS["vaccine_item"]).stock_qty or 0) == stock_before - 1
+    db.close()
+
+
 if __name__ == "__main__":
     test_mapped_partial_and_ordinary_gate()
     test_ambiguous_cards_do_not_block_unrelated_payment()
@@ -587,4 +700,5 @@ if __name__ == "__main__":
     test_duplicate_service_call_and_similar_name_not_matched()
     test_mapping_applies_to_existing_sold_card_without_rewriting_snapshot()
     test_legacy_unmapped_card_can_be_redeemed_after_staff_confirmation()
+    test_critical_cashier_paths_money_stock_and_print()
     print("package guard tests passed")

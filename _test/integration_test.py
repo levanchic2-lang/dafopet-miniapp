@@ -6,6 +6,7 @@ import sys
 import re
 import httpx
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 # 把项目根加入 sys.path，便于直接 import app.*
@@ -216,11 +217,17 @@ def t_create_item():
     r = client.get("/admin/inventory/create")
     assert r.status_code == 200
     token = extract_csrf(r.text)
+    # 现行规则要求品目归属门店。超管测试账号默认不挂店，先挂到东环店，后面的入库也沿用。
+    switched = client.post("/m/switch-store", data={
+        "csrf_token": token, "store": "东环店", "next_url": "/admin/inventory/create",
+    })
+    assert switched.status_code == 303, switched.status_code
     r = client.post("/admin/inventory/create", data={
         "csrf_token": token,
         "name": "强力素50mg", "category": "medication", "subcategory": "general",
         "unit": "粒", "sell_price": "10", "cost_price": "5",
         "stock_qty": "100", "low_stock_min": "10",
+        "store": "东环店",
     })
     assert r.status_code == 303, f"got {r.status_code}, loc={r.headers.get('location')}"
     # 取 ID
@@ -458,7 +465,9 @@ def t_appointment_conflict():
         "customer_name": "冲突客户", "phone": "13900000099",
         "pet_name": "冲突猫", "pet_gender": "male",
         "store": "大风动物医院（东环店）",
-        "appointment_date": "2026-06-01", "appointment_time": "10:00",
+        # 原夹具 2026-06-01 已早于运行日，冲突断言执行不到。改为今天之后 40 天，断言仍是同时段必须被拒。
+        "appointment_date": (date.today() + timedelta(days=40)).isoformat(),
+        "appointment_time": "10:00",
         "duration_minutes": "30", "notes": "",
         "redirect_after": "admin",
     }
@@ -1069,9 +1078,6 @@ def t_invoice_pay_package():
     from urllib.parse import unquote
     loc = unquote(r.headers.get("location", ""))
     assert "已加" in loc, loc
-    client.post("/m/switch-store", data={
-        "csrf_token": token, "store": "", "next_url": "/admin",
-    })
     assert r.status_code == 303
 
     db = SessionLocal()
@@ -1180,6 +1186,7 @@ def t_coupon_issue():
         "min_amount": "100", "expires_at": "2027-12-31",
         "customer_id": str(cust_id), "quantity": "3",
         "code_prefix": "TEST", "notes": "集成测试",
+        "store": "东环店",
     })
     assert r.status_code == 303, f"got {r.status_code}"
     import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
