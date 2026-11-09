@@ -27,6 +27,8 @@
     <div class="val">{{ packages|length }}<span class="unit">个</span></div>
   </div>
 </div>
+{% set package_notices = package_notices %}
+{% include "includes/package_notice.html" %}
 
 {# 宠物列表 #}
 <div class="ukm-section-head">

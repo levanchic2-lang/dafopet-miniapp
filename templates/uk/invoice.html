@@ -588,11 +588,17 @@
         </div>
       </div>
 
-      <p class="iv-pay-hint">可拆分多种方式收款（混合支付） · 每点一次「确认这一笔」立即入账</p>
+      <p class="iv-pay-hint">可拆分多种方式收款（混合支付） · 每点一次「确认这一笔」立即入账。套餐只抵勾选的明细，不会把整张混合账单收掉。</p>
+      {% set package_notices = package_state.notices if package_state else [] %}
+      {% include "includes/package_notice.html" %}
+      {% if package_state and package_state.protected_amount > 0 %}
+      <p class="iv-pay-hint">已绑定项目里还有 ¥{{ '%.2f'|format(package_state.protected_amount) }} 未用套餐抵扣。普通收款若收进这部分，必须填写不使用原因。</p>
+      {% endif %}
 
       <form method="post" action="/admin/invoices/{{ inv.id }}/add-payment" id="pay-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
         <input type="hidden" name="method" id="pay-method-input" value="cash"/>
+        <input type="hidden" name="idempotency_key" value="{{ package_state.idempotency_key if package_state else '' }}"/>
 
         <div class="iv-pay-methods">
           <button type="button" class="iv-pay-btn selected" data-val="cash" onclick="selectPay(this)"><span class="label">现金</span></button>
@@ -627,42 +633,36 @@
           {% endif %}
         </div>
 
-        {# 套餐 picker #}
+        {# 套餐 picker：不预选最新卡，金额由服务端按勾选次数计算 #}
         <div id="pkg-pick-wrap" class="iv-picker" style="display:none;">
-          {% if active_packages %}
-          <label>选套餐</label>
-          <select name="customer_package_id">
-            <option value="">— 选择 —</option>
-            {% for cp in active_packages %}
-            <option value="{{ cp.id }}">{{ cp.name }} · 剩 {{ cp.total_uses - cp.used_count }}/{{ cp.total_uses }}{% if cp.expires_at %} · {{ cp.expires_at }} 到期{% endif %}</option>
+          {% if package_state and package_state.cards %}
+          <label>选套餐（请主动选择，系统不会默认第一张）</label>
+          <select name="customer_package_id" id="pkg-card">
+            <option value="">— 请选择 —</option>
+            {% for cp in package_state.cards %}
+            <option value="{{ cp.id }}" data-mapped="{{ 1 if cp.mapped else 0 }}" data-pet="{{ 1 if cp.needs_pet_confirm else 0 }}" data-items="{{ cp.mapped_ids|join(',') }}">
+              {{ cp.name }} · 剩 {{ cp.remaining }}/{{ cp.total }} · {{ cp.pet_label }} · {{ cp.store_label }}{% if not cp.mapped %} · 未绑定项目{% endif %}
+            </option>
             {% endfor %}
           </select>
-
-          {# 勾选要抵扣的明细项 → 自动算金额 + 流水写清楚抵扣哪几项 #}
-          {% if inv.items %}
+          <label style="display:block;margin-top:8px;"><input type="checkbox" name="confirm_unassigned_pet" value="1"> 确认本次用于本账单这只宠物（仅购卡时未指定宠物的卡需要）</label>
+          <label style="display:block;margin-top:4px;"><input type="checkbox" name="confirm_unmapped" value="1"> 人工确认下列明细属于这张未绑定项目的卡。系统不判断对错。</label>
+          {% if package_state.lines %}
           <div style="margin-top:10px; padding:8px 10px; border:0.5px solid var(--hair); background:var(--bg);">
-            <label style="font-size:9.5pt; letter-spacing:1.5px; color:var(--ink-2); font-style:italic; font-family:var(--font-serif); display:block; margin-bottom:6px;">
-              勾选本卡要抵扣的项目 → 自动算本笔金额
+            <label style="font-size:9.5pt; letter-spacing:1px; color:var(--ink-2); display:block; margin-bottom:6px;">点名要抵扣的明细和次数。一次不会收掉未勾选的项目。</label>
+            {% for line in package_state.lines %}
+            <label style="display:flex; align-items:center; gap:8px; font-size:10pt; margin-bottom:4px;">
+              <input class="pkg-cover" data-item="{{ line.inventory_item_id or '' }}" data-open="{{ line.open_units }}" type="checkbox" onchange="syncPkgCover(this)">
+              <span style="flex:1;">{{ line.description }}{% if line.matching_card_ids %} · 已绑定套餐可抵{% else %} · 未绑定到套餐{% endif %}</span>
+              <input class="pkg-qty" type="number" min="1" max="{{ line.open_units or 1 }}" value="{{ line.open_units or 1 }}" style="width:64px;" {% if line.open_units < 1 %}disabled{% endif %}>
+              <input type="hidden" class="pkg-cover-value" name="pkg_cover" data-line="{{ line.id }}" value="" disabled>
+              <span>¥{{ '%.2f'|format(line.subtotal) }}</span>
             </label>
-            <div style="display:flex; flex-direction:column; gap:4px;">
-              {% for item in inv.items %}
-              <label style="display:flex; align-items:center; gap:8px; font-size:10pt; cursor:pointer;">
-                <input type="checkbox" class="pkg-cov-cb" name="pkg_covered_item_ids" value="{{ item.id }}"
-                       data-amt="{{ item.subtotal }}"
-                       data-desc="{{ item.description }}"
-                       onchange="updatePkgAmount()"/>
-                <span style="flex:1;">{{ item.description }}</span>
-                <span style="font-family:var(--font-numeric); color:var(--ink-2);">¥{{ '%.2f'|format(item.subtotal) }}</span>
-              </label>
-              {% endfor %}
-            </div>
-            <div style="margin-top:6px; font-size:9pt; color:var(--ink-3); font-style:italic; letter-spacing:1px;">
-              勾选后会写入流水「套餐抵扣：xxx」便于核对
-            </div>
+            {% endfor %}
           </div>
           {% endif %}
           {% else %}
-          <span class="warn">客户暂无有效套餐。{% if cust %}<a href="/admin/customers/{{ cust.id }}?tab=packages" target="_blank">去售卖套餐 →</a>{% endif %}</span>
+          <span class="warn">当前门店没有可核销的套餐。过期、用完、其他宠物或其他门店的卡不会出现在这里。</span>
           {% endif %}
         </div>
 
@@ -718,6 +718,10 @@
         </div>
         {% endif %}
 
+        <div style="margin:10px 0;">
+          <label>不使用已匹配套餐的原因（只在普通收款收进已绑定项目时必填）</label>
+          <input type="text" name="package_bypass_reason" maxlength="200" placeholder="例如：客户要求这次单买，套餐留给下次">
+        </div>
         <button type="submit" class="iv-pay-submit">确&nbsp;认&nbsp;这&nbsp;一&nbsp;笔</button>
       </form>
     </div>
@@ -869,16 +873,22 @@ function selectPay(btn) {
   if (typeof ovoToggle === 'function') ovoToggle();
 }
 
-// 套餐抵扣：勾选哪几项 → 自动算本笔金额
-function updatePkgAmount() {
-  var sum = 0;
-  document.querySelectorAll('.pkg-cov-cb:checked').forEach(function(cb){
-    sum += parseFloat(cb.dataset.amt || '0');
-  });
-  if (sum > 0) {
-    document.getElementById('pay-amount-input').value = sum.toFixed(2);
-  }
+function syncPkgCover(box) {
+  var row = box.closest('label');
+  if (!row) return;
+  var hidden = row.querySelector('.pkg-cover-value');
+  var qty = row.querySelector('.pkg-qty');
+  if (!hidden) return;
+  var n = parseInt(qty && qty.value, 10) || 1;
+  hidden.disabled = !box.checked;
+  hidden.value = box.checked ? (hidden.getAttribute('data-line') + ':' + n) : '';
 }
+document.querySelectorAll('.pkg-qty').forEach(function(qty){
+  qty.addEventListener('input', function(){
+    var box = qty.closest('label').querySelector('.pkg-cover');
+    if (box) syncPkgCover(box);
+  });
+});
 
 // 其他待收单勾选 → 重算应付/未收
 var OVO_BASE_DUE = parseFloat(document.getElementById('ovo-total-due')?.textContent || '0');

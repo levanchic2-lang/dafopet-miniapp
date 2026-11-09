@@ -257,6 +257,45 @@
 </div>
 
 {% if group_list %}
+<div id="package-redeem" style="margin:24px 0 80px;">
+  <h2 style="font-family:Georgia,serif;font-size:16pt;">用套餐抵扣某一张账单</h2>
+  <p style="font-size:10pt;line-height:1.6;color:#4a4a4a;">请自己选择账单、套餐和明细次数。系统不会默认最新的卡，也不会把次数用到第一张单或未勾选的项目上。抵扣后，剩下的金额再用下面的普通收款。</p>
+  {% for state in package_states %}
+  {% set inv = selected_invs[loop.index0] %}
+  <form method="post" action="/admin/invoices/{{ inv.id }}/add-payment" style="border-top:0.5px solid var(--hair);padding:12px 0;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="method" value="package">
+    <input type="hidden" name="idempotency_key" value="{{ state.idempotency_key }}">
+    <input type="hidden" name="next_url" value="/admin/cashier/checkout?invoice_id={{ trigger_invoice_id }}&scope={{ scope }}{% if embed %}&embed=1{% endif %}">
+    <div style="font-weight:700;">账单 #{{ inv.id }} · 未收约 ¥{{ '%.2f'|format(inv.total_amount or 0) }}{% if state.protected_amount %} · 已匹配 ¥{{ '%.2f'|format(state.protected_amount) }}{% endif %}</div>
+    {% if state.cards %}
+    <label>套餐
+      <select name="customer_package_id" required>
+        <option value="">— 请选择 —</option>
+        {% for cp in state.cards %}
+        <option value="{{ cp.id }}">{{ cp.name }} · 剩 {{ cp.remaining }} 次 · {{ cp.pet_label }} · {{ cp.store_label }}{% if not cp.mapped %} · 未绑定项目{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="display:block;"><input type="checkbox" name="confirm_unassigned_pet" value="1"> 确认未指定宠物的卡用于本账单宠物</label>
+    <label style="display:block;"><input type="checkbox" name="confirm_unmapped" value="1"> 人工确认未绑定项目的卡可以抵下面勾选的明细</label>
+    {% for line in state.lines %}
+      {% if line.open_units > 0 %}
+      <label style="display:flex;gap:8px;align-items:center;margin:4px 0;">
+        <input type="checkbox" onchange="var h=this.parentElement.querySelector('input[type=hidden]'); var q=this.parentElement.querySelector('input[type=number]'); h.disabled=!this.checked; h.value=this.checked?({{ line.id }}+':'+q.value):'';">
+        <span>{{ line.description }}</span>
+        <input type="number" min="1" max="{{ line.open_units }}" value="1" style="width:64px;" oninput="var box=this.parentElement.querySelector('input[type=checkbox]'); if(box.checked){var h=this.parentElement.querySelector('input[type=hidden]'); h.value='{{ line.id }}:'+this.value;}">
+        <input type="hidden" name="pkg_cover" value="" disabled>
+      </label>
+      {% endif %}
+    {% endfor %}
+    <button class="uk-btn sm" type="submit">只核销这张单的勾选明细</button>
+    {% else %}
+    <div style="font-size:10pt;color:#8a8a8a;">这张单当前没有可核销的套餐。</div>
+    {% endif %}
+  </form>
+  {% endfor %}
+</div>
 {# ── 固定收款栏 ── #}
 <form method="post" action="/admin/cashier/multi-pay" id="coForm" onsubmit="return coOnSubmit()">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -266,6 +305,8 @@
   <input type="hidden" name="invoice_ids" value="{{ iid }}"/>
   {% endfor %}
   <input type="hidden" name="method" id="co-method-val" value="cash"/>
+  <input type="hidden" name="idempotency_key" value="{{ package_states[0].idempotency_key if package_states else '' }}"/>
+  <input type="hidden" name="package_bypass_reason" id="co-bypass" value=""/>
   <input type="hidden" name="discount_mode" id="co-disc-mode" value="none"/>
   <input type="hidden" name="discount_value" id="co-disc-val-hidden" value=""/>
   <input type="hidden" name="embed" value="{{ '1' if embed else '' }}"/>
@@ -329,9 +370,8 @@
         工资抵扣
       </button>
       {% endif %}
-      {# 套餐 / 押金 / 优惠券：单单核销到主单 #}
+      {# 套餐不走这条合并收款，避免悄悄打到第一张单。押金 / 优惠券仍按原方式。 #}
       {% set complex_methods = [
-        ('package','套餐', active_packages|length),
         ('deposit','押金', available_deposits|length),
         ('coupon','优惠券', available_coupons|length),
       ] %}
@@ -356,6 +396,7 @@
       <input type="text" name="ref_no" class="co-ref-input" placeholder="收款单号…" maxlength="120"/>
     </div>
 
+    <input type="text" id="co-bypass-text" class="co-ref-input" placeholder="不使用已匹配套餐的原因" maxlength="200" oninput="document.getElementById('co-bypass').value=this.value"/>
     <button type="submit" class="co-submit" id="co-submit-btn">确认收款</button>
   </div>{# co-pay-bar-inner #}
   </div>{# co-pay-bar #}

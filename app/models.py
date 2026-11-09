@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -921,6 +921,8 @@ class DewormingRecord(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     # 关联收费单（用于锁定判定）
     invoice_id = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    # 精确对应的库存品目。旧记录为空，不能靠药名猜测。
+    inventory_item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
     # 锁定支持
     status:     Mapped[str] = mapped_column(String(20), default="active")
     voided_by:  Mapped[str] = mapped_column(String(80), default="")
@@ -1466,6 +1468,20 @@ class CustomerPackage(Base):
     product  = relationship("PackageProduct", foreign_keys=[product_id])
 
 
+class PackageApplicableItem(Base):
+    """套餐目录明确可抵扣的库存品目。只认人工勾选，不按名字推断。"""
+    __tablename__ = "package_applicable_items"
+    __table_args__ = (UniqueConstraint("product_id", "inventory_item_id", name="uq_pkg_applicable_item"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_id = mapped_column(ForeignKey("package_products.id", ondelete="CASCADE"), nullable=False)
+    inventory_item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product = relationship("PackageProduct", foreign_keys=[product_id])
+    inventory_item = relationship("InventoryItem", foreign_keys=[inventory_item_id])
+
+
 class PackageRedemption(Base):
     """套餐核销：每次扣 1 次的流水。"""
     __tablename__ = "package_redemptions"
@@ -1481,7 +1497,46 @@ class PackageRedemption(Base):
     store:       Mapped[str]   = mapped_column(String(40), default="")
     operator:    Mapped[str]   = mapped_column(String(80), default="")
     note:        Mapped[str]   = mapped_column(Text, default="")
+    # active = 有效扣次；reversed = 已按这一笔冲回。历史记录保留，不删除。
+    status:      Mapped[str]   = mapped_column(String(20), default="active")
+    payment_id   = mapped_column(ForeignKey("payments.id", ondelete="SET NULL"), nullable=True, default=None)
+    covered_json: Mapped[str]  = mapped_column(Text, default="")
+    idempotency_key: Mapped[str] = mapped_column(String(80), default="")
+    pet_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    confirm_note: Mapped[str] = mapped_column(String(300), default="")
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    reversed_by: Mapped[str] = mapped_column(String(80), default="")
     created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class PackageBypassLog(Base):
+    """收银员明确选择不使用已匹配套餐时的原因。只追加，不改历史卡。"""
+    __tablename__ = "package_bypass_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    invoice_id = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    payment_id = mapped_column(ForeignKey("payments.id", ondelete="SET NULL"), nullable=True, default=None)
+    customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
+    pet_id = mapped_column(ForeignKey("pets.id", ondelete="SET NULL"), nullable=True, default=None)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    protected_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    paid_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    store: Mapped[str] = mapped_column(String(40), default="")
+    operator: Mapped[str] = mapped_column(String(80), default="")
+    detail_json: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class PaymentIdempotency(Base):
+    """同一次收银提交只入账一次。重复点击命中同一键时不再扣次、不再收款。"""
+    __tablename__ = "payment_idempotency"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    idempotency_key: Mapped[str] = mapped_column(String(80), unique=True)
+    invoice_id = mapped_column(ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, default=None)
+    payment_id = mapped_column(Integer, nullable=True, default=None)
+    batch_no: Mapped[str] = mapped_column(String(40), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Deposit(Base):
