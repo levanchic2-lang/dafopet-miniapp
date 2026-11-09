@@ -28,7 +28,7 @@ from urllib.parse import quote
 
 from app.time_utils import beijing_now, beijing_today, format_beijing, to_beijing
 
-from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from passlib.context import CryptContext
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -143,6 +143,11 @@ from app.models import (
     WalkInRegistration,
 )
 from app.services import registration as registration_svc
+from app.services.business_summary import (
+    SummaryQueryError,
+    build_business_summary,
+    require_reports_readonly_token,
+)
 from app.services.ai_review import apply_auto_status_from_ai, review_application_media
 from app.services.breeds import all_breeds as _all_breeds
 _BREEDS_ALL = _all_breeds()
@@ -27438,6 +27443,34 @@ def _sync_visit_invoice(db: Session, visit_id: int, admin_name: str = "") -> "In
         db.add(InvoiceItem(invoice_id=inv.id, **li))
 
     return inv
+
+
+# ---------------------------------------------------------------------------
+# 经营复盘只读汇总。只认 REPORTS_READONLY_TOKEN，不认后台登录态。
+# ---------------------------------------------------------------------------
+
+@app.get("/api/reports/business-summary")
+def api_reports_business_summary(
+    db: Session = Depends(get_db),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    store: str = Query("全部"),
+    grain: str = Query(""),
+    x_reports_token: str = Header(default="", alias="X-Reports-Token"),
+):
+    """给外部分析程序拉聚合数字。密钥不能访问其他接口，响应里也没有客户或宠物信息。"""
+    require_reports_readonly_token(x_reports_token)
+    try:
+        payload = build_business_summary(
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            store=store,
+            grain=grain,
+        )
+    except SummaryQueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse(payload)
 
 
 # ---------------------------------------------------------------------------
