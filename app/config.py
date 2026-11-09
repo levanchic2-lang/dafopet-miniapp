@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     # 留空 = 工具禁用（任何人都进不去）；务必只写在服务器 .env，不要提交进仓库。
     data_purge_password: str = ""
 
+    # 经营复盘只读接口密钥。只给 GET /api/reports/business-summary 用。
+    # 留空 = 接口直接拒绝。不要填管理员密码，也不要复用员工小程序 token。
+    reports_readonly_token: str = ""
+
     # 微信小程序订阅消息（推荐国内推送方式）
     wechat_appid: str = ""
     wechat_appsecret: str = ""
