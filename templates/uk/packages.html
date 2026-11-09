@@ -99,33 +99,10 @@ body #pkg-form > div:last-child button.btn.secondary {
 <div class="ukc-head">
   <div>
     <h1>套&nbsp;餐&nbsp;目&nbsp;录
-      <span class="sub">洗澡卡 / 造型卡 / 健康包 · 售卖与核销</span>
+      <span class="sub">老套餐在此查看和绑定 · 新套餐开单时生成</span>
     </h1>
   </div>
-  {% if request.session.get('admin_role') == 'superadmin' %}
-  <div style="display:flex;gap:12px;align-items:center;">
-    <a href="/admin/packages/migration" style="font-family:var(--font-serif);font-size:10pt;letter-spacing:1px;">迁移预演</a>
-    <button type="button" onclick="document.getElementById('offer-modal').style.display='flex';"
-            style="background:var(--ink); color:var(--paper); border:0; padding:8px 18px; cursor:pointer; font-family:var(--font-serif); font-size:10pt; letter-spacing:2px; font-weight:700; border-radius:0;">
-      从品目开套餐
-    </button>
-  </div>
-  {% endif %}
 </div>
 <hr class="ukc-rule-double"/>
 {% include "includes/admin_packages_body.html" %}
-{% if request.session.get('admin_role') == 'superadmin' %}
-<div id="offer-modal" style="display:none;position:fixed;inset:0;background:rgba(26,26,26,.45);z-index:1200;align-items:flex-start;justify-content:center;overflow:auto;padding:32px 16px;">
-  <div style="background:var(--paper);border:0.5px solid var(--ink);width:min(640px,100%);padding:28px 32px;">
-    <h2 style="font-family:var(--font-serif);letter-spacing:2px;margin:0 0 8px;">从品目开套餐</h2>
-    <p style="color:var(--ink-3);font-size:10pt;">只建立目录，不记到某个客户名下。售卖时如果组合完全相同，会复用这一条。</p>
-    {% set offer_action = '/admin/packages/offers' %}
-    {% set offer_next = '/admin/packages' %}
-    {% set offer_mode = 'catalog' %}
-    {% set offer_submit = '开出这个组合' %}
-    {% include "includes/package_offer_fields.html" %}
-    <button type="button" onclick="document.getElementById('offer-modal').style.display='none';" style="margin-top:12px;background:transparent;border:0;font-family:var(--font-serif);cursor:pointer;">关闭</button>
-  </div>
-</div>
-{% endif %}
 {% endblock %}

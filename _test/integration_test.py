@@ -940,26 +940,33 @@ def t_wallet_refund_overflow():
 t_wallet_refund_overflow()
 
 
-@step("套餐：创建套餐 + 售卖给客户（钱包支付）→ 余额扣减")
+@step("套餐：目录不能手建；已有老套餐售卖给客户（钱包支付）→ 余额扣减")
 def t_package_sell():
-    # 1) 超管创建套餐
+    from urllib.parse import unquote
     r = client.get("/admin/packages")
     token = extract_csrf(r.text)
-    r = client.post("/admin/packages/create", data={
+    assert "新建套餐" not in r.text
+    blocked = client.post("/admin/packages/create", data={
         "csrf_token": token, "name": "美容套餐10次", "category": "beauty",
         "total_uses": "10", "sell_price": "300", "unit_price": "35",
         "validity_days": "365", "store": "东环店",
-    })
-    assert r.status_code == 303, f"create got {r.status_code}"
+    }, follow_redirects=False)
+    assert blocked.status_code == 303, f"create got {blocked.status_code}"
+    assert "不再新建" in unquote(blocked.headers.get("location", ""))
 
-    # 2) 拿到产品 id
+    # 老套餐仍在目录里，直接售卖
     import os; os.environ["DATABASE_URL"] = "sqlite:///./_test/test.db"
     from app import models  # noqa
     from app.database import SessionLocal
     from app.models import PackageProduct, CustomerPackage, Wallet
     db = SessionLocal()
-    prod = db.query(PackageProduct).order_by(PackageProduct.id.desc()).first()
-    assert prod and prod.name == "美容套餐10次"
+    prod = PackageProduct(
+        name="美容套餐10次", category="beauty", total_uses=10,
+        sell_price=300, unit_price=35, validity_days=365,
+        store="东环店", is_active=True,
+    )
+    db.add(prod)
+    db.commit()
     pid = prod.id
 
     # 钱包当前余额（用前面 t_wallet_adjust 后的 600）

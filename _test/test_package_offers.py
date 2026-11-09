@@ -1,4 +1,4 @@
-"""从品目开套餐：命名、去重、分摊、按品目扣次，以及旧套餐迁移对账。"""
+"""从品目开套餐：命名、去重、分摊、按品目扣次。老套餐不迁移，目录不再手建。"""
 
 import os
 import sys
@@ -28,19 +28,11 @@ from app.models import (
     Invoice, InvoiceItem, PackageProduct, PackageRedemption, Payment, Pet, Vaccination,
 )
 from app.services.package_guard import PackageGuardError, redeem_package, reverse_package_payment
-from app.services.package_migration import (
-    apply_migration, build_report, entitlement_totals, propose_legacy, rollback_migration,
-)
 from app.services.package_offer import (
     OfferError, OfferSpec, build_offer_name, cents_for_span, get_or_create_offer,
     money_cents, remaining_refund_amount, resolve_offer_store,
 )
 from app.time_utils import beijing_today
-
-
-class _Named:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
 
 
 @asynccontextmanager
@@ -88,51 +80,6 @@ def test_name_and_cent_allocation():
     assert cents_for_span(10000, 3, 1, 2) == 6666
     assert money_cents(180) == 18000
     assert money_cents("65.5") == 6550
-
-
-def test_parser_accepts_clear_names_and_stops_on_ambiguity():
-    vaccine = _Named(id=1, name="卫佳捌", store="东环店", unit="针", sell_price=61)
-    antibody = _Named(id=2, name="抗体检测", store="东环店", unit="次", sell_price=40)
-    bath = _Named(id=3, name="洗澡", store="东环店", unit="次", sell_price=45)
-    bath_west = _Named(id=4, name="洗澡", store="横岗店", unit="次", sell_price=45)
-    cat_groom = _Named(id=5, name="猫美容", store="东环店", unit="次", sell_price=80)
-    dog_groom = _Named(id=6, name="狗美容", store="东环店", unit="次", sell_price=80)
-    product = _Named(name="卫佳捌三针送抗体套餐180", store="东环店", sell_price=180, total_uses=4, validity_days=365)
-    parsed = propose_legacy(product, [vaccine, antibody, bath], [])
-    assert parsed["status"] == "auto", parsed["reasons"]
-    assert parsed["primary_item_id"] == 1
-    assert parsed["buy_count"] == 3 and parsed["gift_count"] == 0
-    assert parsed["gifts"] == [{"item_id": 2, "qty": 1, "name": "抗体检测", "unit": "次"}]
-    assert parsed["generated_name"] == "卫佳捌 3针 + 赠抗体检测1次 · ¥180"
-
-    mismatch = _Named(name="卫佳捌三针送抗体套餐180", store="东环店", sell_price=180, total_uses=3, validity_days=365)
-    reviewed = propose_legacy(mismatch, [vaccine, antibody], [])
-    assert reviewed["status"] == "needs_review"
-    assert any("目录总次数" in reason for reason in reviewed["reasons"])
-
-    bath_card = _Named(name="65元洗澡卡买3送1", store="东环店", sell_price=65, total_uses=4, validity_days=0)
-    bath_parsed = propose_legacy(bath_card, [bath], [])
-    assert bath_parsed["status"] == "auto", bath_parsed["reasons"]
-    assert bath_parsed["buy_count"] == 3 and bath_parsed["gift_count"] == 1
-    assert bath_parsed["generated_name"] == "洗澡 买3送1 · ¥65"
-
-    price_off = _Named(name="65元洗澡卡买3送1", store="东环店", sell_price=60, total_uses=4, validity_days=365)
-    assert propose_legacy(price_off, [bath], [])["status"] == "needs_review"
-
-    bare = _Named(name="165洗澡卡4送1", store="东环店", sell_price=165, total_uses=5, validity_days=365)
-    bare_parsed = propose_legacy(bare, [bath], [])
-    assert bare_parsed["status"] == "auto", bare_parsed["reasons"]
-    assert bare_parsed["buy_count"] == 4 and bare_parsed["gift_count"] == 1
-
-    chinese = _Named(name="45元洗澡卡4送一", store="东环店", sell_price=45, total_uses=5, validity_days=365)
-    chinese_parsed = propose_legacy(chinese, [bath], [])
-    assert chinese_parsed["status"] == "auto", chinese_parsed["reasons"]
-
-    both_stores = _Named(name="65元洗澡卡买3送1", store="", sell_price=65, total_uses=4, validity_days=365)
-    assert propose_legacy(both_stores, [bath, bath_west], [])["status"] == "needs_review"
-
-    ambiguous = _Named(name="175买4送1美容卡", store="东环店", sell_price=175, total_uses=5, validity_days=365)
-    assert propose_legacy(ambiguous, [cat_groom, dog_groom], [])["status"] == "needs_review"
 
 
 def _spec(primary, gift_item, price, store="东环店"):
@@ -278,73 +225,11 @@ def test_archive_hides_idle_only():
     db.close()
 
 
-def test_migration_dry_run_apply_rollback_keeps_balances():
-    db = SessionLocal()
-    vaccine = InventoryItem(name="喵益哆", category="vaccine", unit="针", store="东环店", sell_price=70, is_active=True)
-    antibody = InventoryItem(name="抗体", category="lab", unit="次", store="东环店", sell_price=30, is_service=True, is_active=True)
-    db.add_all([vaccine, antibody])
-    db.flush()
-    clear = PackageProduct(name="喵益哆三针送抗体套餐200", category="medical", total_uses=4, sell_price=200, unit_price=50, validity_days=365, store="东环店", is_active=True)
-    muddy = PackageProduct(name="175买4送1美容卡", category="beauty", total_uses=5, sell_price=175, unit_price=35, validity_days=365, store="东环店", is_active=True)
-    db.add_all([clear, muddy])
-    db.flush()
-    customer = db.query(Customer).first()
-    card = CustomerPackage(
-        customer_id=customer.id, product_id=clear.id, name=clear.name, total_uses=4, used_count=1,
-        sell_price=200, status="active", purchase_date="2026-01-01", store="东环店",
-    )
-    db.add(card)
-    db.commit()
-    before = entitlement_totals(db)
-    report = build_report(db)
-    by_id = {row["product_id"]: row for row in report["rows"]}
-    assert by_id[clear.id]["status"] == "auto", by_id[clear.id]["reasons"]
-    assert by_id[clear.id]["primary_item_id"] == vaccine.id
-    assert by_id[clear.id]["gifts"][0]["item_id"] == antibody.id
-    assert by_id[muddy.id]["status"] == "needs_review"
-    after_preview = entitlement_totals(db)
-    assert before["card_checksum"] == after_preview["card_checksum"]
-    assert before["remaining_uses"] == after_preview["remaining_uses"]
-    assert before["remaining_cents"] == after_preview["remaining_cents"]
-    assert clear.name == "喵益哆三针送抗体套餐200"
-    result = apply_migration(db, "offer_admin")
-    db.commit()
-    assert result["applied"] >= 1
-    assert result["before"]["remaining_uses"] == result["after"]["remaining_uses"]
-    assert result["before"]["remaining_cents"] == result["after"]["remaining_cents"]
-    assert result["before"]["card_checksum"] == result["after"]["card_checksum"]
-    assert result["before"]["redemption_checksum"] == result["after"]["redemption_checksum"]
-    db.refresh(clear)
-    db.refresh(card)
-    assert clear.offer_kind == "migrated"
-    assert clear.primary_item_id == vaccine.id
-    assert "迁移前名称" in (clear.notes or "")
-    assert card.sell_price == 200 and card.used_count == 1 and card.total_uses == 4
-    assert card.name == "喵益哆三针送抗体套餐200"
-    second = apply_migration(db, "offer_admin")
-    db.commit()
-    assert second["applied"] == 0
-    db.refresh(muddy)
-    assert muddy.offer_kind in ("", None)
-    rolled = rollback_migration(db, result["batch_id"], "offer_admin")
-    db.commit()
-    assert rolled["count"] >= 1
-    db.refresh(clear)
-    assert (clear.offer_kind or "") == ""
-    assert clear.name == "喵益哆三针送抗体套餐200"
-    assert clear.primary_item_id is None
-    db.refresh(card)
-    assert card.sell_price == 200 and card.used_count == 1
-    again = entitlement_totals(db)
-    assert again["remaining_uses"] == before["remaining_uses"]
-    assert again["remaining_cents"] == before["remaining_cents"]
-    assert again["card_checksum"] == before["card_checksum"]
-    db.close()
-
-
-def test_http_staff_store_and_migration_page_is_readonly():
+def test_http_staff_store_catalog_cannot_create():
     _login("offer_staff")
-    assert client.get("/admin/packages/migration", follow_redirects=False).status_code == 403
+    assert client.get("/admin/packages/migration", follow_redirects=False).status_code == 404
+    assert client.get("/m/packages").status_code == 200
+    assert "迁移预演" not in client.get("/m/packages").text
     db = SessionLocal()
     east = InventoryItem(name="东环洗澡", category="grooming", subcategory="washcare", unit="次", store="东环店", sell_price=45, is_service=True, is_active=True)
     west = InventoryItem(name="横岗洗澡", category="grooming", subcategory="washcare", unit="次", store="横岗店", sell_price=45, is_service=True, is_active=True)
@@ -385,21 +270,49 @@ def test_http_staff_store_and_migration_page_is_readonly():
     _login("offer_admin")
     catalog = client.get("/admin/packages")
     assert catalog.status_code == 200
-    assert "从品目开套餐" in catalog.text
-    preview = client.get("/admin/packages/migration")
-    assert preview.status_code == 200
-    assert "不会改套餐" in preview.text
-    db = SessionLocal()
-    marker = db.query(PackageProduct).filter(PackageProduct.name == "175买4送1美容卡").one()
-    marker_name = marker.name
-    marker_kind = marker.offer_kind
-    db.close()
-    client.get("/admin/packages/migration?format=text")
-    db = SessionLocal()
-    marker = db.query(PackageProduct).filter(PackageProduct.name == marker_name).one()
-    assert marker.offer_kind == marker_kind
-    assert db.query(PackageRedemption).count() == db.query(PackageRedemption).count()
-    db.close()
+    assert "开单生成" in catalog.text
+    assert "老套餐" in catalog.text
+    assert "绑定可抵项目" in catalog.text
+    assert "新建套餐" not in catalog.text
+    assert "从品目开套餐" not in catalog.text
+    assert "迁移预演" not in catalog.text
+    token = _csrf("/admin/packages")
+    before = SessionLocal()
+    before_count = before.query(PackageProduct).count()
+    legacy = before.query(PackageProduct).filter(PackageProduct.offer_kind == "").first()
+    legacy_id = legacy.id if legacy is not None else None
+    legacy_name = legacy.name if legacy is not None else None
+    before.close()
+    blocked = client.post("/admin/packages/create", data={
+        "csrf_token": token, "name": "手打新套餐", "category": "beauty",
+        "total_uses": "4", "sell_price": "100", "unit_price": "25",
+        "validity_days": "365", "store": "东环店",
+    }, follow_redirects=False)
+    assert blocked.status_code == 303
+    assert "不再新建" in unquote(blocked.headers["location"])
+    blocked_offer = client.post("/admin/packages/offers", data={
+        "csrf_token": token, "as_package": "1", "primary_item_id": "1",
+        "buy_count": "3", "gift_count": "0", "price": "100", "validity_days": "365",
+        "store": "东环店",
+    }, follow_redirects=False)
+    assert blocked_offer.status_code == 303
+    assert "不再新建" in unquote(blocked_offer.headers["location"])
+    after = SessionLocal()
+    assert after.query(PackageProduct).count() == before_count
+    assert after.query(PackageProduct).filter(PackageProduct.name == "手打新套餐").count() == 0
+    if legacy_id is not None:
+        saved = after.get(PackageProduct, legacy_id)
+        assert (saved.offer_kind or "") == ""
+        assert saved.name == legacy_name
+    after.close()
+    _login("offer_staff")
+    staff_token = _csrf("/admin/packages")
+    staff_blocked = client.post("/admin/packages/create", data={
+        "csrf_token": staff_token, "name": "员工手打", "total_uses": "2",
+        "sell_price": "10", "validity_days": "30", "store": "东环店",
+    }, follow_redirects=False)
+    assert staff_blocked.status_code == 303
+    assert "不再新建" in unquote(staff_blocked.headers["location"])
 
 
 def pytest_raises(exc_type):
@@ -444,9 +357,7 @@ def _vaccine_line(db: Session, customer_id: int, pet_id: int, item_id: int, name
 
 if __name__ == "__main__":
     test_name_and_cent_allocation()
-    test_parser_accepts_clear_names_and_stops_on_ambiguity()
     test_dedup_allocation_and_component_redemption()
     test_archive_hides_idle_only()
-    test_migration_dry_run_apply_rollback_keeps_balances()
-    test_http_staff_store_and_migration_page_is_readonly()
+    test_http_staff_store_catalog_cannot_create()
     print("package offer tests passed")

@@ -1437,11 +1437,9 @@ class PackageProduct(Base):
     buy_count:   Mapped[int] = mapped_column(Integer, default=0)
     gift_count:  Mapped[int] = mapped_column(Integer, default=0)  # 同一主品目再送的次数
     fingerprint: Mapped[str] = mapped_column(String(64), default="")
-    # "" 旧目录 / offer 新开 / migrated 由旧目录拆解
+    # "" 老套餐（目录里手建、靠绑定品目抵扣） / offer 开单时勾选生成
     offer_kind:  Mapped[str] = mapped_column(String(20), default="")
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
-    migrated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
-    migration_batch: Mapped[str] = mapped_column(String(40), default="")
     created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     primary_item = relationship("InventoryItem", foreign_keys=[primary_item_id])
@@ -1553,38 +1551,6 @@ class CustomerPackageComponent(Base):
 
     customer_package = relationship("CustomerPackage", foreign_keys=[customer_package_id], overlaps="components")
     inventory_item = relationship("InventoryItem", foreign_keys=[inventory_item_id])
-
-
-class PackageMigrationLog(Base):
-    """旧套餐拆解的执行记录。只追加，回退时把目录字段改回去，不删这条。"""
-    __tablename__ = "package_migration_logs"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    batch_id: Mapped[str] = mapped_column(String(40), default="")
-    product_id = mapped_column(ForeignKey("package_products.id", ondelete="SET NULL"), nullable=True, default=None)
-    action: Mapped[str] = mapped_column(String(20), default="")  # applied / rolled_back
-    before_json: Mapped[str] = mapped_column(Text, default="")
-    after_json: Mapped[str] = mapped_column(Text, default="")
-    note: Mapped[str] = mapped_column(Text, default="")
-    operator: Mapped[str] = mapped_column(String(80), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-
-class PackageMigrationOverride(Base):
-    """无法自动识别的旧套餐，由超管确认主品目和次数。确认本身不改目录，执行迁移时才用。"""
-    __tablename__ = "package_migration_overrides"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    product_id = mapped_column(ForeignKey("package_products.id", ondelete="CASCADE"), nullable=False, unique=True)
-    primary_item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
-    buy_count: Mapped[int] = mapped_column(Integer, default=0)
-    gift_count: Mapped[int] = mapped_column(Integer, default=0)
-    gifts_json: Mapped[str] = mapped_column(Text, default="")
-    alias_item_ids: Mapped[str] = mapped_column(Text, default="")
-    note: Mapped[str] = mapped_column(Text, default="")
-    confirmed_by: Mapped[str] = mapped_column(String(80), default="")
-    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
-    applied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
 
 class PackageRedemption(Base):

@@ -14795,12 +14795,15 @@ async def admin_package_sales(
     })
 
 
+_PACKAGE_CREATE_CLOSED = "套餐目录不再新建。请在开单或客户档案里点选品目，勾选按套餐/活动卖。"
+
+
 @app.post("/admin/packages/create", name="admin_packages_create")
 async def admin_packages_create(
     request: Request,
     db: Session = Depends(get_db),
     csrf_token: str = Form(""),
-    name: str = Form(...),
+    name: str = Form(""),
     category: str = Form("beauty"),
     total_uses: str = Form("10"),
     sell_price: str = Form("0"),
@@ -14809,32 +14812,12 @@ async def admin_packages_create(
     notes: str = Form(""),
     store: str = Form(""),
 ):
+    """目录不再手建套餐。超管和员工都走开单时的「按套餐/活动卖」。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
-    require_superadmin(request)
-    try:
-        n_total = max(1, int(total_uses))
-        v_days  = max(0, int(validity_days))
-        sp = max(0.0, float(sell_price))
-        up = max(0.0, float(unit_price))
-    except (TypeError, ValueError):
-        return RedirectResponse("/admin/packages?msg=数值字段无效", status_code=303)
-    if category not in _PACKAGE_CATEGORY_ZH:
-        category = "other"
-    p = PackageProduct(
-        name=(name or "").strip()[:120],
-        category=category,
-        total_uses=n_total,
-        sell_price=sp,
-        unit_price=up,
-        validity_days=v_days,
-        notes=(notes or "").strip(),
-        is_active=True,
-        store=_resolve_store_for_create(request, store),
-    )
-    db.add(p); db.commit()
-    return RedirectResponse(f"/admin/packages?msg=已创建套餐：{p.name}", status_code=303)
+    from urllib.parse import quote
+    return RedirectResponse(f"/admin/packages?msg={quote(_PACKAGE_CREATE_CLOSED)}", status_code=303)
 
 
 @app.post("/admin/packages/{pid}/edit")
@@ -15167,138 +15150,11 @@ async def admin_package_offer_preview(request: Request, db: Session = Depends(ge
 
 @app.post("/admin/packages/offers")
 async def admin_package_offer_create(request: Request, db: Session = Depends(get_db)):
-    """只建立或复用目录，不给客户售卖。员工建出来的组合归本店。"""
+    """目录页不再单独开套餐。组合只在售卖给客户时生成。"""
     require_admin(request)
     form = await request.form()
     _require_csrf(request, str(form.get("csrf_token") or ""))
-    from app.services.package_offer import OfferError, get_or_create_offer
-    try:
-        spec = _read_offer_spec(form, request)
-        product, reused = get_or_create_offer(
-            db, spec, operator=request.session.get("admin_username") or "",
-        )
-        db.commit()
-    except OfferError as exc:
-        db.rollback()
-        return _offer_redirect(form, "/admin/packages", str(exc))
-    verb = "已有相同组合，直接复用" if reused else "已开出套餐"
-    return _offer_redirect(form, "/admin/packages", f"{verb}：{product.name}")
-
-
-@app.get("/admin/packages/migration", response_class=HTMLResponse)
-async def admin_package_migration_page(request: Request, db: Session = Depends(get_db), format: str = ""):
-    require_admin(request)
-    require_superadmin(request)
-    from app.services.package_migration import build_report, latest_batch_id, render_text
-    report = build_report(db)
-    if (format or "").strip() == "text":
-        return Response(render_text(report), media_type="text/plain; charset=utf-8")
-    return templates.TemplateResponse(request, "uk/package_migration.html", {
-        "report": report,
-        "rows": report["rows"],
-        "accounts": report["accounts"],
-        "latest_batch": latest_batch_id(db),
-        "csrf_token": _get_csrf_token(request),
-        "msg": request.query_params.get("msg"),
-    })
-
-
-@app.post("/admin/packages/migration/apply")
-async def admin_package_migration_apply(request: Request, db: Session = Depends(get_db)):
-    require_admin(request)
-    form = await request.form()
-    _require_csrf(request, str(form.get("csrf_token") or ""))
-    require_superadmin(request)
-    from app.services.package_migration import MigrationError, apply_migration
-    try:
-        result = apply_migration(db, request.session.get("admin_username") or "")
-        db.commit()
-    except MigrationError as exc:
-        db.rollback()
-        return RedirectResponse(f"/admin/packages/migration?msg={exc}", status_code=303)
-    message = (
-        f"已执行迁移 {result['batch_id']}：写入 {result['applied']} 条，"
-        f"需人工确认的 {result['skipped_review']} 条未动，"
-        f"已是新结构的 {result['skipped_done']} 条跳过。"
-        f"未用次数 {result['before']['remaining_uses']} = {result['after']['remaining_uses']}，"
-        f"未用金额 ¥{result['before']['remaining_cents'] / 100:.2f} = ¥{result['after']['remaining_cents'] / 100:.2f}。"
-    )
-    from urllib.parse import quote
-    return RedirectResponse(f"/admin/packages/migration?msg={quote(message)}", status_code=303)
-
-
-@app.post("/admin/packages/migration/rollback")
-async def admin_package_migration_rollback(request: Request, db: Session = Depends(get_db)):
-    require_admin(request)
-    form = await request.form()
-    _require_csrf(request, str(form.get("csrf_token") or ""))
-    require_superadmin(request)
-    from app.services.package_migration import MigrationError, rollback_migration
-    from urllib.parse import quote
-    try:
-        result = rollback_migration(db, str(form.get("batch_id") or ""), request.session.get("admin_username") or "")
-        db.commit()
-    except MigrationError as exc:
-        db.rollback()
-        return RedirectResponse(f"/admin/packages/migration?msg={quote(str(exc))}", status_code=303)
-    return RedirectResponse(
-        f"/admin/packages/migration?msg={quote('已回退 ' + result['batch_id'] + '，共 ' + str(result['count']) + ' 条。已购卡未改。')}",
-        status_code=303,
-    )
-
-
-@app.post("/admin/packages/migration/override")
-async def admin_package_migration_override(request: Request, db: Session = Depends(get_db)):
-    require_admin(request)
-    form = await request.form()
-    _require_csrf(request, str(form.get("csrf_token") or ""))
-    require_superadmin(request)
-    from urllib.parse import quote
-    from app.services.package_migration import MigrationError, save_override
-    from app.services.package_offer import OfferError, normalize_pairs, parse_id_list
-    product_id = str(form.get("product_id") or "").strip()
-    if not product_id.isdigit() or not db.get(PackageProduct, int(product_id)):
-        return RedirectResponse("/admin/packages/migration?msg=" + quote("套餐不存在"), status_code=303)
-    product = db.get(PackageProduct, int(product_id))
-    primary = str(form.get("primary_item_id") or "").strip()
-    try:
-        if not primary.isdigit():
-            raise OfferError("请填写主品目编号。")
-        gifts = normalize_pairs(form.getlist("gift_item_id"), form.getlist("gift_qty"))
-        aliases = parse_id_list(str(form.get("alias_item_ids") or ""))
-        save_override(
-            db, product,
-            primary_item_id=int(primary),
-            buy_count=int(str(form.get("buy_count") or "0").strip() or "0"),
-            gift_count=int(str(form.get("gift_count") or "0").strip() or "0"),
-            gifts=gifts,
-            alias_item_ids=aliases,
-            note=str(form.get("note") or ""),
-            operator=request.session.get("admin_username") or "",
-        )
-        db.commit()
-    except (OfferError, MigrationError, ValueError) as exc:
-        db.rollback()
-        return RedirectResponse(f"/admin/packages/migration?msg={quote(str(exc))}", status_code=303)
-    return RedirectResponse(
-        f"/admin/packages/migration?msg={quote('已记下 #' + product_id + ' 的人工确认。还没改目录，要点执行迁移才会写入。')}",
-        status_code=303,
-    )
-
-
-@app.post("/admin/packages/migration/override/clear")
-async def admin_package_migration_override_clear(request: Request, db: Session = Depends(get_db)):
-    require_admin(request)
-    form = await request.form()
-    _require_csrf(request, str(form.get("csrf_token") or ""))
-    require_superadmin(request)
-    from urllib.parse import quote
-    from app.services.package_migration import clear_override
-    product_id = str(form.get("product_id") or "").strip()
-    if product_id.isdigit():
-        clear_override(db, int(product_id))
-        db.commit()
-    return RedirectResponse(f"/admin/packages/migration?msg={quote('已清除这条人工确认')}", status_code=303)
+    return _offer_redirect(form, "/admin/packages", _PACKAGE_CREATE_CLOSED)
 
 
 @app.post("/admin/customers/{customer_id}/packages/offer")

@@ -2713,7 +2713,7 @@ def _try_sqlite_migrations() -> None:
             except Exception as _e:
                 print(f"[migrations] package redemption guard skipped: {_e}")
 
-            # 从品目开套餐：只加列和表。不改已售卡，也不在这里拆旧套餐。
+            # 从品目开套餐：只加列和表。不改老套餐，也不拆已售卡。
             try:
                 _offer_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(package_products)")).fetchall()}
                 _offer_adds = {
@@ -2723,8 +2723,6 @@ def _try_sqlite_migrations() -> None:
                     "fingerprint": "ALTER TABLE package_products ADD COLUMN fingerprint VARCHAR(64) DEFAULT ''",
                     "offer_kind": "ALTER TABLE package_products ADD COLUMN offer_kind VARCHAR(20) DEFAULT ''",
                     "archived_at": "ALTER TABLE package_products ADD COLUMN archived_at DATETIME DEFAULT NULL",
-                    "migrated_at": "ALTER TABLE package_products ADD COLUMN migrated_at DATETIME DEFAULT NULL",
-                    "migration_batch": "ALTER TABLE package_products ADD COLUMN migration_batch VARCHAR(40) DEFAULT ''",
                 }
                 for column, sql in _offer_adds.items():
                     if _offer_cols and column not in _offer_cols:
@@ -2778,37 +2776,6 @@ def _try_sqlite_migrations() -> None:
                 conn.execute(text(
                     "CREATE INDEX IF NOT EXISTS idx_cpkg_component "
                     "ON customer_package_components(customer_package_id)"
-                ))
-                conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS package_migration_logs ("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    "batch_id VARCHAR(40) DEFAULT '', "
-                    "product_id INTEGER REFERENCES package_products(id) ON DELETE SET NULL, "
-                    "action VARCHAR(20) DEFAULT '', "
-                    "before_json TEXT DEFAULT '', "
-                    "after_json TEXT DEFAULT '', "
-                    "note TEXT DEFAULT '', "
-                    "operator VARCHAR(80) DEFAULT '', "
-                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
-                    ")"
-                ))
-                conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS idx_pkg_mig_batch ON package_migration_logs(batch_id)"
-                ))
-                conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS package_migration_overrides ("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    "product_id INTEGER NOT NULL UNIQUE REFERENCES package_products(id) ON DELETE CASCADE, "
-                    "primary_item_id INTEGER REFERENCES inventory_items(id) ON DELETE SET NULL, "
-                    "buy_count INTEGER DEFAULT 0, "
-                    "gift_count INTEGER DEFAULT 0, "
-                    "gifts_json TEXT DEFAULT '', "
-                    "alias_item_ids TEXT DEFAULT '', "
-                    "note TEXT DEFAULT '', "
-                    "confirmed_by VARCHAR(80) DEFAULT '', "
-                    "confirmed_at DATETIME, "
-                    "applied_at DATETIME"
-                    ")"
                 ))
             except Exception as _e:
                 print(f"[migrations] package offer columns skipped: {_e}")
