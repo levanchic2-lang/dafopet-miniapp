@@ -201,6 +201,7 @@
    <option value="{{ '%02d:%02d'|format(h, m) }}">{{ '%02d:%02d'|format(h, m) }}</option>
    {% endfor %}{% endfor %}
  </select>
+ <p id="admin_appt_tnr_hint" class="sub" style="display:none;margin:0.35rem 0 0;font-size:0.78rem;color:#6b4423;"></p>
  {# 美容可用时段提示（美容类型时通过 JS 填充） #}
  <div id="beauty-slots-row" style="display:none;margin-top:0.45rem;">
  <div id="beauty-slots-loading" style="display:none;font-size:0.8rem;color:#6b7280;">查询中…</div>
@@ -469,6 +470,9 @@
  {% endif %}
  <form method="post" action="{{ request.url_for('admin_appointment_reschedule', appointment_id=appt.id) }}"
  class="rs-form"
+ data-category="{{ appt.category }}"
+ data-original-time="{{ (appt.appointment_time or '')[:5] }}"
+ data-original-store="{{ appt.store }}"
  style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem;align-items:end;">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
  <input type="hidden" name="next" value="/admin/appointments">
@@ -491,6 +495,7 @@
    <option value="{{ _s }}" {% if appt.appointment_time == _s %}selected{% endif %}>{{ _s }}</option>
    {% endfor %}{% endfor %}
  </select>
+ <p class="tnr-hour-hint" style="display:none;margin:0.3rem 0 0;font-size:0.75rem;color:#6b4423;"></p>
  </div>
  <div>
  <label style="font-size:0.78rem;margin:0 0 0.2rem;">时长（分钟）</label>

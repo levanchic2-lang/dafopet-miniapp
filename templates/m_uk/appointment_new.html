@@ -173,7 +173,7 @@
   <div class="ukm-field">
     <label class="lbl">门&nbsp;店<span class="req">*</span></label>
     {% if is_superadmin %}
-    <select class="ukm-select" name="store" id="m_store_select" required>
+    <select class="ukm-select" name="store" id="m_store_select" required onchange="syncTnrHours()">
       {% if not default_store %}<option value="" disabled selected>— 选择门店 —</option>{% endif %}
       <option value="大风动物医院（东环店）" {% if default_store == '东环店' %}selected{% endif %}>东环店</option>
       <option value="大风动物医院（横岗店）" {% if default_store == '横岗店' %}selected{% endif %}>横岗店</option>
@@ -202,6 +202,7 @@
           {% endfor %}
         {% endfor %}
       </select>
+      <div id="m_tnr_hour_hint" class="hint" style="display:none;color:var(--accent-amber);"></div>
     </div>
   </div>
 
@@ -293,6 +294,18 @@ function onCategoryChange() {
   applyStoreLock(isBeauty);
   if (isBeauty) { syncSizeVis(); updateBeautyDuration(); }
   else { document.getElementById('slots_row').style.display = 'none'; }
+  syncTnrHours();
+}
+function syncTnrHours() {
+  var timeSel = document.getElementById('m_time');
+  var hint = document.getElementById('m_tnr_hour_hint');
+  if (!window.TnrHours || !timeSel) return;
+  var store = effectiveStore();
+  var floor = window.TnrHours.applySelect(timeSel, curCategory(), store, {});
+  if (hint) {
+    hint.textContent = window.TnrHours.hintText(floor, store);
+    hint.style.display = floor ? '' : 'none';
+  }
 }
 function onAddonChange(cb) {
   cb.closest('.ukm-chip').classList.toggle('checked', cb.checked);
@@ -527,6 +540,7 @@ document.addEventListener('click', function(e) {
     timer = setTimeout(() => recognize(v), 300);
   });
 })();
+syncTnrHours();
 </script>
 
 {% endblock %}

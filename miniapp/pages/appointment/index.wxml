@@ -157,6 +157,7 @@
       <picker class="picker" mode="time" start="{{timeRangeStart || ''}}" end="{{timeRangeEnd || ''}}" value="{{form.appointment_time}}" bindchange="onTimeChange">
         <view>{{form.appointment_time || '请选择'}}</view>
       </picker>
+      <view wx:if="{{tnrHourHint}}" class="tip light">{{tnrHourHint}}</view>
       <view wx:if="{{selectedCategoryMeta && selectedCategoryMeta.time_range}}" class="tip light">
         可预约时间：{{selectedCategoryMeta.time_range.start}} – {{selectedCategoryMeta.time_range.end}}{{selectedCategoryMeta.daily_max ? '，每门店每日上限 ' + selectedCategoryMeta.daily_max + ' 个' : ''}}
       </view>

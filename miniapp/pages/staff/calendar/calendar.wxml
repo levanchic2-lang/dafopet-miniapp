@@ -53,7 +53,8 @@
         <view wx:if="{{!fixedStore}}" class="form-line"><text>门店</text><picker range="{{stores}}" range-key="label" value="{{storeIndex}}" bindchange="onStoreChange"><view>{{stores[storeIndex].label || '请选择'}}</view></picker></view>
         <view wx:else class="form-line"><text>门店</text><text>{{profile.store_label}}</text></view>
         <view class="form-line"><text>日期</text><picker mode="date" value="{{createDate}}" bindchange="onCreateDate"><view>{{createDate}}</view></picker></view>
-        <view class="form-line"><text>时间</text><picker mode="time" value="{{createTime}}" bindchange="onCreateTime"><view>{{createTime}}</view></picker></view>
+        <view class="form-line"><text>时间</text><picker mode="time" value="{{createTime}}" start="{{createTimeStart || '00:00'}}" end="{{createTimeEnd || '23:59'}}" bindchange="onCreateTime"><view>{{createTime}}</view></picker></view>
+        <view wx:if="{{tnrCreateHint}}" class="form-hint">{{tnrCreateHint}}</view>
         <view class="form-field"><text>时长（分钟）</text><input type="number" value="{{createDuration}}" bindinput="onCreateDuration" /></view>
         <view class="form-field form-last"><text>备注</text><textarea value="{{createNotes}}" bindinput="onCreateNotes" auto-height /></view>
         <button class="detail-primary" loading="{{saving}}" bindtap="submitAppointment">创建预约</button>
@@ -82,7 +83,8 @@
       <block wx:else>
         <view class="detail-eyebrow">EDIT APPOINTMENT</view><view class="detail-title">修改预约</view>
         <view class="form-line"><text>日期</text><picker mode="date" value="{{editDate}}" bindchange="onEditDate"><view>{{editDate}}</view></picker></view>
-        <view class="form-line"><text>时间</text><picker mode="time" value="{{editTime}}" bindchange="onEditTime"><view>{{editTime}}</view></picker></view>
+        <view class="form-line"><text>时间</text><picker mode="time" value="{{editTime}}" start="{{editTimeStart || '00:00'}}" end="{{editTimeEnd || '23:59'}}" bindchange="onEditTime"><view>{{editTime}}</view></picker></view>
+        <view wx:if="{{tnrEditHint}}" class="form-hint">{{tnrEditHint}}</view>
         <view wx:if="{{selected.is_beauty}}" class="beauty-edit-grid"><view wx:for="{{['犬造型','犬洗护','猫造型','猫洗护']}}" wx:key="*this" class="category-chip {{editService === item ? 'active' : ''}}" data-value="{{item}}" bindtap="chooseEditBeautyService">{{item}}</view></view>
         <view wx:else class="form-field"><text>预约项目</text><input value="{{editService}}" bindinput="onEditService" /></view>
         <view class="form-field"><text>时长（分钟）</text><input type="number" value="{{editDuration}}" bindinput="onEditDuration" /></view>

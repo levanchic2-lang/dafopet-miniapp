@@ -470,7 +470,22 @@
 
     prevCategory = c;
     toggleRelatedRow();
+    syncTnrHours();
   }
+
+  function syncTnrHours() {
+    var timeSel = document.getElementById("admin_appt_time");
+    var hint = document.getElementById("admin_appt_tnr_hint");
+    if (!window.TnrHours || !timeSel) return;
+    var store = storeSel ? storeSel.value : "";
+    var floor = window.TnrHours.applySelect(timeSel, cat.value, store, {});
+    if (hint) {
+      hint.textContent = window.TnrHours.hintText(floor, store);
+      hint.style.display = floor ? "" : "none";
+    }
+  }
+
+  if (storeSel) storeSel.addEventListener("change", syncTnrHours);
 
   cat.addEventListener("change", sync);
   sync();
@@ -524,7 +539,7 @@
   if (petIdEl  && pPetId)    petIdEl.value  = pPetId;
   if (noArchiveEl && (pCustId || pPetId)) noArchiveEl.checked = false;
   if (catEl    && pCategory) { catEl.value  = pCategory; catEl.dispatchEvent(new Event('change')); }
-  if (storeEl  && pStore)    storeEl.value  = pStore;
+  if (storeEl  && pStore)    { storeEl.value = pStore; storeEl.dispatchEvent(new Event('change')); }
 
   // 预填后自动触发客户档案查询
   if (phoneEl && pPhone && typeof lookupCustomerByPhone === 'function') {
@@ -534,4 +549,25 @@
   // 滚动到新建表单
   if (body) setTimeout(function(){ body.scrollIntoView({behavior:'smooth', block:'center'}); }, 100);
 })();
+
+document.querySelectorAll("form.rs-form").forEach(function (form) {
+  var timeSel = form.querySelector('select[name="new_time"]');
+  var storeSel = form.querySelector('select[name="new_store"]');
+  var hint = form.querySelector(".tnr-hour-hint");
+  var category = form.getAttribute("data-category") || "";
+  var originalTime = form.getAttribute("data-original-time") || "";
+  var originalStore = form.getAttribute("data-original-store") || "";
+  function apply() {
+    if (!window.TnrHours || !timeSel) return;
+    var store = storeSel ? storeSel.value : originalStore;
+    var keep = (category === "tnr" && store === originalStore) ? originalTime : "";
+    var floor = window.TnrHours.applySelect(timeSel, category, store, { keepValue: keep });
+    if (hint) {
+      hint.textContent = window.TnrHours.hintText(floor, store);
+      hint.style.display = floor ? "" : "none";
+    }
+  }
+  if (storeSel) storeSel.addEventListener("change", apply);
+  apply();
+});
 </script>

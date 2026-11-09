@@ -25,7 +25,7 @@
   <div class="ukm-chips" style="margin-bottom:18px;">
     {% for val, label in [('outpatient','门 诊'),('surgery','手 术'),('beauty','美 容'),('grooming','造 型'),('washcare','洗 护'),('tnr','T N R')] %}
     <label class="ukm-chip {% if a.category == val %}checked{% endif %}">
-      <input type="radio" name="new_category" value="{{ val }}" {% if a.category == val %}checked{% endif %}/>
+      <input type="radio" name="new_category" value="{{ val }}" {% if a.category == val %}checked{% endif %} onchange="syncEditTnrHours()"/>
       {{ label }}
     </label>
     {% endfor %}
@@ -44,7 +44,7 @@
   <div class="ukm-field">
     <label class="lbl">门&nbsp;店</label>
     {% if admin_role == 'superadmin' %}
-    <select class="ukm-select" name="new_store">
+    <select class="ukm-select" name="new_store" id="m_edit_store" onchange="syncEditTnrHours()">
       <option value="大风动物医院（东环店）" {% if a.store == '大风动物医院（东环店）' %}selected{% endif %}>东环店</option>
       <option value="大风动物医院（横岗店）" {% if a.store == '大风动物医院（横岗店）' %}selected{% endif %}>横岗店</option>
     </select>
@@ -61,7 +61,10 @@
     </div>
     <div class="ukm-field">
       <label class="lbl">时&nbsp;间</label>
-      <select class="ukm-select" name="new_time" required>
+      <select class="ukm-select" name="new_time" id="m_edit_time" required
+              data-original-time="{{ cur_time }}"
+              data-original-store="{{ a.store }}"
+              data-original-category="{{ a.category }}">
         <option value="{{ cur_time }}" selected>{{ cur_time }}</option>
         {% for h in range(8, 22) %}
           {% for m in [0, 15, 30, 45] %}
@@ -70,6 +73,7 @@
           {% endfor %}
         {% endfor %}
       </select>
+      <div id="m_edit_tnr_hint" class="hint" style="display:none;color:var(--accent-amber);"></div>
     </div>
   </div>
 
@@ -110,6 +114,25 @@ document.querySelectorAll('.ukm-chip input[type="radio"]').forEach(function(r){
     });
   });
 });
+function syncEditTnrHours() {
+  var timeSel = document.getElementById('m_edit_time');
+  var storeSel = document.getElementById('m_edit_store');
+  var hint = document.getElementById('m_edit_tnr_hint');
+  var cat = document.querySelector('input[name="new_category"]:checked');
+  if (!window.TnrHours || !timeSel) return;
+  var category = cat ? cat.value : '';
+  var originalCategory = timeSel.getAttribute('data-original-category') || '';
+  var originalStore = timeSel.getAttribute('data-original-store') || '';
+  var originalTime = timeSel.getAttribute('data-original-time') || '';
+  var store = storeSel ? storeSel.value : originalStore;
+  var keep = (category === 'tnr' && originalCategory === 'tnr' && store === originalStore) ? originalTime : '';
+  var floor = window.TnrHours.applySelect(timeSel, category, store, { keepValue: keep });
+  if (hint) {
+    hint.textContent = window.TnrHours.hintText(floor, store);
+    hint.style.display = floor ? '' : 'none';
+  }
+}
+syncEditTnrHours();
 </script>
 
 {% endblock %}
