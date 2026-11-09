@@ -1,0 +1,130 @@
+<form data-offer-form method="post" action="{{ offer_action }}" class="offer-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if offer_next %}<input type="hidden" name="next_url" value="{{ offer_next }}">{% endif %}
+  <label class="offer-field">主品目
+    <input data-offer-search type="search" autocomplete="off" placeholder="输入品名，例如猫三联" required>
+    <div data-offer-results class="offer-results" hidden></div>
+    <input data-offer-primary type="hidden" name="primary_item_id" value="">
+    <span data-offer-picked class="offer-picked"></span>
+  </label>
+  <label class="offer-check">
+    <input data-offer-check type="checkbox" name="as_package" value="1" required>
+    按套餐 / 活动卖
+  </label>
+  <div data-offer-deal hidden>
+    <div class="offer-grid">
+      <label class="offer-field">买几次
+        <input name="buy_count" type="number" min="1" max="99" value="1" required>
+      </label>
+      <label class="offer-field">送几次
+        <input name="gift_count" type="number" min="0" max="99" value="0">
+        <span class="offer-hint">同一主品目再送的次数。买 3 送 1 就填 3 和 1。</span>
+      </label>
+    </div>
+    <div class="offer-field">附加赠送项目
+      <div data-gift-rows></div>
+      <button type="button" class="offer-text-btn" data-gift-add>＋ 从品目里加一项</button>
+      <span class="offer-hint">例如抗体检测 1 次。和主品目相同的不要加在这里。</span>
+    </div>
+    <template data-gift-template>
+      <div class="offer-gift" data-gift-row>
+        <input data-gift-search type="search" autocomplete="off" placeholder="赠品名称">
+        <div data-gift-results class="offer-results" hidden></div>
+        <input data-gift-id type="hidden" name="gift_item_id" value="">
+        <span data-gift-picked class="offer-picked"></span>
+        <label>次数 <input name="gift_qty" type="number" min="1" max="99" value="1"></label>
+        <button type="button" data-gift-remove class="offer-text-btn">移除</button>
+      </div>
+    </template>
+    <div class="offer-grid">
+      <label class="offer-field">成交价
+        <input name="price" type="number" min="0" step="0.01" required placeholder="团购核销金额">
+      </label>
+      <label class="offer-field">有效期（天）
+        <input name="validity_days" type="number" min="0" max="3650" value="365">
+        <span class="offer-hint">0 表示不限期。</span>
+      </label>
+    </div>
+    {% if request.session.get('admin_role') == 'superadmin' %}
+    <label class="offer-field">门店范围
+      <select name="store" data-offer-store>
+        <option value="东环店" {% if request.session.get('admin_store') == '东环店' %}selected{% endif %}>仅东环店</option>
+        <option value="横岗店" {% if request.session.get('admin_store') == '横岗店' %}selected{% endif %}>仅横岗店</option>
+        <option value="" {% if not request.session.get('admin_store') %}selected{% endif %}>两店通用</option>
+      </select>
+    </label>
+    <label class="offer-field">其他可抵品目编号
+      <input name="alias_item_ids" placeholder="另一店的同名品目，多个用逗号">
+      <span class="offer-hint">和主品目共享次数。留空则只认上面点选的那一条。</span>
+    </label>
+    {% endif %}
+    {% if offer_mode == 'sell' %}
+    <div class="offer-grid">
+      <label class="offer-field">收款方式
+        <select name="pay_method">
+          <option value="cash">现金</option>
+          <option value="wechat">微信</option>
+          <option value="alipay">支付宝</option>
+          <option value="shouqianba">收钱吧</option>
+          <option value="meituan">美团</option>
+          <option value="third_party">抖音团购</option>
+          <option value="wallet">钱包扣款</option>
+          <option value="external">旧系统 / 外部已付</option>
+        </select>
+      </label>
+      <label class="offer-field">关联宠物
+        <select name="pet_id">
+          <option value="0">不指定</option>
+          {% for p in pets or [] %}
+          <option value="{{ p.id }}" {% if active_pet_id is defined and p.id == active_pet_id %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="offer-grid">
+      <label class="offer-field">真实购买日
+        <input name="custom_purchase_date" type="date">
+      </label>
+      <label class="offer-field">已用次数
+        <input name="used_count" type="number" min="0" value="0">
+      </label>
+    </div>
+    <label class="offer-field">备注
+      <textarea name="note" rows="2"></textarea>
+    </label>
+    {% endif %}
+    <p class="offer-name" data-offer-name>填写后这里显示系统生成的名称</p>
+    <p class="offer-hint">名称由系统生成，员工不手填。买送、赠品、价格、有效期和门店都相同的组合会直接复用。</p>
+    <div class="offer-actions">
+      <button type="submit" class="offer-submit">{{ offer_submit or '确认' }}</button>
+    </div>
+  </div>
+</form>
+<style>
+  .offer-form { font-family: Georgia, "Times New Roman", "Source Han Serif SC", serif; color: #1a1a1a; }
+  .offer-field, .offer-check { display: block; margin: 14px 0; font-size: 10pt; letter-spacing: 1px; }
+  .offer-field input, .offer-field select, .offer-field textarea {
+    display: block; width: 100%; box-sizing: border-box; margin-top: 6px;
+    border: 0; border-bottom: 0.5px solid #1a1a1a; background: transparent;
+    font: inherit; font-size: 14px; padding: 8px 0; border-radius: 0;
+  }
+  .offer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .offer-hint { display: block; margin-top: 4px; color: #8a8a8a; font-style: italic; font-size: 9pt; letter-spacing: 0; }
+  .offer-name { margin: 12px 0; font-size: 13pt; line-height: 1.5; }
+  .offer-results { border-top: 0.5px solid #d8d4cc; }
+  .offer-option {
+    display: block; width: 100%; text-align: left; background: transparent; border: 0;
+    border-bottom: 0.5px solid #d8d4cc; padding: 10px 0; font: inherit; cursor: pointer;
+  }
+  .offer-option small { display: block; color: #8a8a8a; font-size: 9pt; margin-top: 2px; }
+  .offer-picked { display: block; margin-top: 4px; font-size: 9.5pt; }
+  .offer-gift { margin: 8px 0 12px; padding-top: 8px; border-top: 0.5px solid #d8d4cc; }
+  .offer-text-btn, .offer-submit {
+    background: transparent; border: 0.5px solid #1a1a1a; font: inherit; padding: 8px 12px;
+    cursor: pointer; border-radius: 0; letter-spacing: 1px;
+  }
+  .offer-submit { background: #1a1a1a; color: #fdfcf8; }
+  .offer-actions { margin-top: 16px; }
+  @media (max-width: 640px) { .offer-grid { grid-template-columns: 1fr; } }
+</style>
+<script src="/static/package_offer_form.js?v=1"></script>

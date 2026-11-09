@@ -8,14 +8,17 @@
 <div class="page-head">
  <div>
  <h1><span class="ph-icon"><i data-lucide="ticket"></i></span>套餐目录</h1>
- <p class="ph-sub">配置可售套餐（包次卡）—— 美容 10 次卡、洗护 5 次卡等</p>
+ <p class="ph-sub">查看、编辑和绑定老套餐。新套餐在开单时勾选「按套餐 / 活动卖」生成，不在这里新建。</p>
  </div>
- {% if is_superadmin %}
- <div class="ph-actions">
- <button type="button" class="btn" onclick="document.getElementById('new-pkg-modal').classList.add('visible')"><i data-lucide="plus"></i> 新建套餐</button>
- </div>
- {% endif %}
 </div>
+{% if is_superadmin %}
+<div style="margin:.4rem 0;font-size:.85rem;">
+  <a href="?store={{ wb_store }}&show=active">在用</a>
+  · <a href="?store={{ wb_store }}&show=archived">已归档</a>
+  · <a href="?store={{ wb_store }}&show=all">全部</a>
+  {% if hidden_count %} · 已隐藏 {{ hidden_count }} 条闲置组合{% endif %}
+</div>
+{% endif %}
 
 {% if is_superadmin %}
 <div style="margin:.5rem 0 1rem;font-size:.85rem;color:var(--muted);">
@@ -50,7 +53,9 @@
  <tr>
    <td>
      <strong>{{ p.name }}</strong>
+     {% if p.offer_kind == 'offer' %}<span class="pill pill-gray" style="margin-left:.3rem;">开单生成</span>{% else %}<span class="pill pill-gray" style="margin-left:.3rem;">老套餐</span>{% endif %}
      {% if p.store %}<span class="pill pill-gray" style="margin-left:.3rem;">{{ p.store }}</span>{% else %}<span class="pill pill-info" style="margin-left:.3rem;background:#dbeafe;color:#1e40af;">通用</span>{% endif %}
+     {% if offer_briefs and p.id in offer_briefs and offer_briefs[p.id] %}<div style="font-size:.75rem;color:var(--muted);">{{ offer_briefs[p.id] }}</div>{% endif %}
      {% if p.notes %}<div style="font-size:.75rem;color:var(--muted);">{{ p.notes[:60] }}</div>{% endif %}
    </td>
    <td data-label="类别">{{ category_zh.get(p.category, p.category) }}</td>
@@ -85,7 +90,7 @@
 {% else %}
 <div class="empty-card">
  <div class="empty-icon"><i data-lucide="ticket"></i></div>
- 还没创建任何套餐{% if is_superadmin %}，点右上 ＋ 开始{% endif %}。
+ 当前没有要显示的套餐。新的请在开单时勾选「按套餐 / 活动卖」。
 </div>
 {% endif %}
 
@@ -93,7 +98,7 @@
 {% if is_superadmin %}
 <div class="cust-modal-overlay" id="new-pkg-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1100;align-items:center;justify-content:center;overflow-y:auto;padding:2rem 0;">
  <div class="cust-modal" style="background:var(--card);border-radius:12px;padding:1.25rem;width:460px;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.22);">
-   <h3 id="pkg-modal-title" style="margin:0 0 .85rem;font-size:1rem;">新建套餐</h3>
+   <h3 id="pkg-modal-title" style="margin:0 0 .85rem;font-size:1rem;">编辑套餐</h3>
    <form id="pkg-form" method="post" action="/admin/packages/create">
      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
      <label>套餐名</label>
@@ -151,13 +156,6 @@ function openEdit(id, data) {
   recalcPkgUnitPrice();
   modal.style.display = 'flex';
 }
-document.querySelector('.page-head .btn') && document.querySelector('.page-head .btn').addEventListener('click', function(){
-  var f = document.getElementById('pkg-form');
-  f.action = '/admin/packages/create';
-  f.reset();
-  document.getElementById('pkg-modal-title').textContent = '新建套餐';
-  document.getElementById('new-pkg-modal').style.display = 'flex';
-});
 document.getElementById('new-pkg-modal').addEventListener('click', function(e){
   if (e.target.id === 'new-pkg-modal') e.target.style.display = 'none';
 });

@@ -1432,7 +1432,19 @@ class PackageProduct(Base):
     notes:       Mapped[str]   = mapped_column(Text, default="")
     # 多门店分离：空 = 通用套餐两店共享，"东环店" / "横岗店" = 仅该店
     store:       Mapped[str]   = mapped_column(String(40), default="")
+    # 从品目开出的组合。旧目录这些字段为空，不改已售卡上的快照。
+    primary_item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
+    buy_count:   Mapped[int] = mapped_column(Integer, default=0)
+    gift_count:  Mapped[int] = mapped_column(Integer, default=0)  # 同一主品目再送的次数
+    fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    # "" 老套餐（目录里手建、靠绑定品目抵扣） / offer 开单时勾选生成
+    offer_kind:  Mapped[str] = mapped_column(String(20), default="")
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    primary_item = relationship("InventoryItem", foreign_keys=[primary_item_id])
+    offer_gifts = relationship("PackageOfferGift", back_populates="product", order_by="PackageOfferGift.id")
+    offer_aliases = relationship("PackageOfferAlias", back_populates="product", order_by="PackageOfferAlias.id")
 
 
 class CustomerPackage(Base):
@@ -1466,6 +1478,11 @@ class CustomerPackage(Base):
     customer = relationship("Customer",       foreign_keys=[customer_id])
     pet      = relationship("Pet",            foreign_keys=[pet_id])
     product  = relationship("PackageProduct", foreign_keys=[product_id])
+    components = relationship(
+        "CustomerPackageComponent",
+        foreign_keys="CustomerPackageComponent.customer_package_id",
+        order_by="CustomerPackageComponent.id",
+    )
 
 
 class PackageApplicableItem(Base):
@@ -1479,6 +1496,60 @@ class PackageApplicableItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     product = relationship("PackageProduct", foreign_keys=[product_id])
+    inventory_item = relationship("InventoryItem", foreign_keys=[inventory_item_id])
+
+
+class PackageOfferGift(Base):
+    """结构化套餐的附加赠送项目。主品目的买、送次数记在目录上。"""
+    __tablename__ = "package_offer_gifts"
+    __table_args__ = (UniqueConstraint("product_id", "inventory_item_id", name="uq_pkg_offer_gift"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_id = mapped_column(ForeignKey("package_products.id", ondelete="CASCADE"), nullable=False)
+    inventory_item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product = relationship("PackageProduct", back_populates="offer_gifts")
+    inventory_item = relationship("InventoryItem", foreign_keys=[inventory_item_id])
+
+
+class PackageOfferAlias(Base):
+    """同一服务在另一门店的品目，和主品目或某个赠品共享次数。"""
+    __tablename__ = "package_offer_aliases"
+    __table_args__ = (UniqueConstraint("product_id", "inventory_item_id", name="uq_pkg_offer_alias"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_id = mapped_column(ForeignKey("package_products.id", ondelete="CASCADE"), nullable=False)
+    inventory_item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False)
+    # primary / gift
+    kind: Mapped[str] = mapped_column(String(20), default="primary")
+    # kind=gift 时，指向被共享次数的那条赠品品目
+    gift_item_id: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product = relationship("PackageProduct", back_populates="offer_aliases")
+    inventory_item = relationship("InventoryItem", foreign_keys=[inventory_item_id])
+
+
+class CustomerPackageComponent(Base):
+    """客户这张卡上，某个品目还剩几次、分到多少钱。售卖时写入，之后不跟目录改。"""
+    __tablename__ = "customer_package_components"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_package_id = mapped_column(ForeignKey("customer_packages.id", ondelete="CASCADE"), nullable=False)
+    inventory_item_id = mapped_column(ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True, default=None)
+    role: Mapped[str] = mapped_column(String(20), default="primary")  # primary / gift
+    item_name: Mapped[str] = mapped_column(String(200), default="")
+    quantity: Mapped[int] = mapped_column(Integer, default=0)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    consumed_cents: Mapped[int] = mapped_column(Integer, default=0)
+    # 能扣这次数的品目编号，含另一店的同名品目
+    match_ids_json: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    customer_package = relationship("CustomerPackage", foreign_keys=[customer_package_id], overlaps="components")
     inventory_item = relationship("InventoryItem", foreign_keys=[inventory_item_id])
 
 

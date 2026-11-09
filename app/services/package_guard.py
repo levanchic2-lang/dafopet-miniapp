@@ -39,6 +39,14 @@ from app.models import (
     Vaccination,
     DewormingRecord,
 )
+from app.services.package_offer import (
+    ComponentUseError,
+    annotate_structured_cover,
+    apply_structured_uses,
+    component_notice,
+    component_quota_map,
+    restore_structured_uses,
+)
 from app.time_utils import beijing_today
 
 
@@ -84,6 +92,9 @@ def store_allowed(limit: str, op_store: str) -> bool:
 
 
 def mapped_item_ids(db: Session, card: CustomerPackage) -> set[int]:
+    quota = component_quota_map(db, card.id)
+    if quota is not None:
+        return set(quota)
     if not card.product_id:
         return set()
     rows = db.query(PackageApplicableItem.inventory_item_id).filter(
@@ -140,7 +151,10 @@ def list_package_notices(db: Session, customer_id: int | None, pet_id: int | Non
         if not store_allowed(limit, op_store):
             usable = False
             reason = f"这张卡只限{limit}核销，当前门店不能扣次。"
-        if not mapped:
+        notice = component_notice(db, card.id)
+        if notice:
+            mapping_label = notice
+        elif not mapped:
             mapping_label = "未配置可抵项目。系统不按名字判断，也不会拦住无关收费。"
         else:
             mapping_label = f"已绑定 {len(mapped)} 个具体项目。只有账单里出现这些项目才需要选择核销或不使用。"
@@ -298,6 +312,7 @@ def invoice_redeem_context(db: Session, invoice: Invoice, op_store: str) -> dict
     card_rows = []
     for card in cards:
         mapped = mapped_item_ids(db, card)
+        quota = component_quota_map(db, card.id)
         limit = card_store_limit(db, card)
         card_rows.append({
             "id": card.id,
@@ -311,6 +326,7 @@ def invoice_redeem_context(db: Session, invoice: Invoice, op_store: str) -> dict
             "mapped_ids": sorted(mapped),
             "mapped": bool(mapped),
             "needs_pet_confirm": not card.pet_id,
+            "quota_by_item": quota,
         })
     lines = []
     protected = 0.0
@@ -320,15 +336,24 @@ def invoice_redeem_context(db: Session, invoice: Invoice, op_store: str) -> dict
         already = int(covered_qty.get(line.id, 0))
         open_units = max(0, full_units - already)
         matching = []
+        use_pool = 0
         for card in card_rows:
+            if card["remaining"] <= 0:
+                continue
+            quota = card["quota_by_item"]
+            if quota is not None:
+                left = quota.get(item_id, 0) if item_id else 0
+                if left <= 0:
+                    continue
+                matching.append(card["id"])
+                use_pool += min(left, card["remaining"])
+                continue
             if not card["mapped"]:
                 continue
             if not item_id or item_id not in set(card["mapped_ids"]):
                 continue
-            if card["remaining"] <= 0:
-                continue
             matching.append(card["id"])
-        use_pool = sum(card["remaining"] for card in card_rows if card["id"] in matching)
+            use_pool += card["remaining"]
         protect_units = min(open_units, use_pool) if matching else 0
         protect_amount = _portion_amount(line, protect_units, already, covered_amount.get(line.id, 0.0)) if protect_units else 0.0
         protected = round(protected + protect_amount, 2)
@@ -535,6 +560,12 @@ def redeem_package(
     outstanding = _outstanding(db, invoice)
     if total_amount > outstanding + 0.009:
         raise PackageGuardError("套餐抵扣金额超过这张账单未收金额。请减少次数，或先处理折扣。")
+    try:
+        structured = annotate_structured_cover(db, card.id, parts)
+        if structured:
+            apply_structured_uses(db, parts)
+    except ComponentUseError as exc:
+        raise PackageGuardError(str(exc)) from exc
 
     claim_idempotency(db, idempotency_key, invoice.id)
     _conditional_consume(db, card, total_uses, invoice.pet_id)
@@ -574,6 +605,7 @@ def redeem_package(
         ),
     ))
     attach_idempotent_payment(db, idempotency_key, payment.id)
+    db.flush()
     return payment
 
 
@@ -631,6 +663,10 @@ def reverse_package_payment(db: Session, payment: Payment, operator: str) -> Pac
     ), {"uses": uses, "id": redemption.customer_package_id})
     if not result.rowcount:
         raise PackageGuardError("这张套餐已退款或已撤销，不能自动把次数加回去。请先处理套餐本身。")
+    try:
+        restore_structured_uses(db, redemption.covered_json or "")
+    except ComponentUseError as exc:
+        raise PackageGuardError(str(exc)) from exc
     redemption.status = "reversed"
     redemption.reversed_at = datetime.utcnow()
     redemption.reversed_by = (operator or "")[:80]

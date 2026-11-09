@@ -1118,7 +1118,13 @@
         <tbody>
           {% for cp in customer_packages %}
           <tr>
-            <td><b>{{ cp.name }}</b><div class="uk-mute" style="font-size:9pt;">{{ cp.pet.name if cp.pet else '购卡时未指定宠物' }} · {{ (cp.product.store if cp.product and cp.product.store else '') or (cp.store or '目录未限定门店') }}</div></td>
+            <td><b>{{ cp.name }}</b><div class="uk-mute" style="font-size:9pt;">{{ cp.pet.name if cp.pet else '购卡时未指定宠物' }} · {{ (cp.product.store if cp.product and cp.product.store else '') or (cp.store or '目录未限定门店') }}</div>
+            {% if cp.components %}
+            <div class="uk-mute" style="font-size:9pt;">
+              {% for part in cp.components %}{{ part.item_name }} 剩 {{ (part.quantity or 0) - (part.used_count or 0) }} / {{ part.quantity }} · ¥{{ '%.2f'|format((part.amount_cents or 0) / 100) }}{% if not loop.last %}；{% endif %}{% endfor %}
+            </div>
+            {% endif %}
+          </td>
             <td class="uk-mute">{{ package_category_zh.get(cp.category, cp.category) }}</td>
             <td class="num"><b>{{ (cp.total_uses or 0) - (cp.used_count or 0) }}</b> / {{ cp.total_uses or 0 }}</td>
             <td class="num uk-mute" style="font-size:9pt;">{{ cp.purchase_date or '—' }}</td>
@@ -1657,16 +1663,24 @@
 <div class="uk-modal-overlay" id="sellPkgModal" onclick="if(event.target===this) this.classList.remove('visible');">
   <div class="uk-modal">
     <h3>售 卖 套 餐</h3>
+    <p class="uk-mute" style="font-size:9pt;margin:-6px 0 8px;">从品目开。名称自动生成，相同组合不会重复新建。</p>
+    {% set offer_action = '/admin/customers/' ~ cust.id ~ '/packages/offer' %}
+    {% set offer_next = '/admin/customers/' ~ cust.id ~ '?tab=packages' %}
+    {% set offer_mode = 'sell' %}
+    {% set offer_submit = '售 卖' %}
+    {% include "includes/package_offer_fields.html" %}
+    <details style="margin-top:18px;">
+      <summary style="cursor:pointer;font-size:10pt;letter-spacing:1px;">选用已有在售组合</summary>
     <form method="post" action="/admin/customers/{{ cust.id }}/packages/sell">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
-      <label class="field">套餐
+      <label class="field">已有组合
         <select name="product_id" required>
           {% if package_products %}
             {% for p in package_products %}
             <option value="{{ p.id }}">{{ p.name }} · {{ p.total_uses }} 次 · ¥{{ '%.0f'|format(p.sell_price) }}</option>
             {% endfor %}
           {% else %}
-            <option value="">（暂无可售套餐，请去「经营 → 套餐目录」配置）</option>
+            <option value="">（当前没有在售组合）</option>
           {% endif %}
         </select>
       </label>
@@ -1729,6 +1743,7 @@
         <button type="submit" class="uk-btn primary sm">售 卖</button>
       </div>
     </form>
+    </details>
   </div>
 </div>
 

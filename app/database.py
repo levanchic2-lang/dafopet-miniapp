@@ -2713,6 +2713,73 @@ def _try_sqlite_migrations() -> None:
             except Exception as _e:
                 print(f"[migrations] package redemption guard skipped: {_e}")
 
+            # 从品目开套餐：只加列和表。不改老套餐，也不拆已售卡。
+            try:
+                _offer_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(package_products)")).fetchall()}
+                _offer_adds = {
+                    "primary_item_id": "ALTER TABLE package_products ADD COLUMN primary_item_id INTEGER DEFAULT NULL",
+                    "buy_count": "ALTER TABLE package_products ADD COLUMN buy_count INTEGER DEFAULT 0",
+                    "gift_count": "ALTER TABLE package_products ADD COLUMN gift_count INTEGER DEFAULT 0",
+                    "fingerprint": "ALTER TABLE package_products ADD COLUMN fingerprint VARCHAR(64) DEFAULT ''",
+                    "offer_kind": "ALTER TABLE package_products ADD COLUMN offer_kind VARCHAR(20) DEFAULT ''",
+                    "archived_at": "ALTER TABLE package_products ADD COLUMN archived_at DATETIME DEFAULT NULL",
+                }
+                for column, sql in _offer_adds.items():
+                    if _offer_cols and column not in _offer_cols:
+                        conn.execute(text(sql))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_pkg_offer_fingerprint "
+                    "ON package_products(fingerprint) WHERE fingerprint IS NOT NULL AND fingerprint != ''"
+                ))
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS package_offer_gifts ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "product_id INTEGER NOT NULL REFERENCES package_products(id) ON DELETE CASCADE, "
+                    "inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE, "
+                    "quantity INTEGER DEFAULT 1, "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_pkg_offer_gift "
+                    "ON package_offer_gifts(product_id, inventory_item_id)"
+                ))
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS package_offer_aliases ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "product_id INTEGER NOT NULL REFERENCES package_products(id) ON DELETE CASCADE, "
+                    "inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE, "
+                    "kind VARCHAR(20) DEFAULT 'primary', "
+                    "gift_item_id INTEGER DEFAULT 0, "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_pkg_offer_alias "
+                    "ON package_offer_aliases(product_id, inventory_item_id)"
+                ))
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS customer_package_components ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "customer_package_id INTEGER NOT NULL REFERENCES customer_packages(id) ON DELETE CASCADE, "
+                    "inventory_item_id INTEGER REFERENCES inventory_items(id) ON DELETE SET NULL, "
+                    "role VARCHAR(20) DEFAULT 'primary', "
+                    "item_name VARCHAR(200) DEFAULT '', "
+                    "quantity INTEGER DEFAULT 0, "
+                    "used_count INTEGER DEFAULT 0, "
+                    "amount_cents INTEGER DEFAULT 0, "
+                    "consumed_cents INTEGER DEFAULT 0, "
+                    "match_ids_json TEXT DEFAULT '', "
+                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_cpkg_component "
+                    "ON customer_package_components(customer_package_id)"
+                ))
+            except Exception as _e:
+                print(f"[migrations] package offer columns skipped: {_e}")
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

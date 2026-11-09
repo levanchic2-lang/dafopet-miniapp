@@ -1,0 +1,16 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}按套餐卖 · {{ cust.name }}{% endblock %}
+{% block topbar_title %}按套餐卖{% endblock %}
+{% block topbar_back %}<a href="/m/customer/{{ cust.id }}" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+<div class="ukm-page-head">
+  <h1>{{ cust.name or '客户' }}</h1>
+  <div class="meta">选品目，勾选按套餐或活动卖。名称由系统生成。</div>
+</div>
+{% set offer_action = '/admin/customers/' ~ cust.id ~ '/packages/offer' %}
+{% set offer_next = '/m/customer/' ~ cust.id ~ '/packages/sell' %}
+{% set offer_mode = 'sell' %}
+{% set offer_submit = '售出给这位客户' %}
+{% include "includes/package_offer_fields.html" %}
+{% endblock %}

@@ -12344,10 +12344,8 @@ async def page_admin_customer_detail(
     )
     active_packages_count = sum(1 for p in customer_packages if p.status == "active")
     # 客户档案里售卖套餐：staff 只看本店+通用，避免售错门店的套餐
-    package_products = _apply_store_filter(
-        db.query(PackageProduct).filter(PackageProduct.is_active == True),
-        PackageProduct.store, _get_admin_store(request),
-    ).order_by(PackageProduct.id.desc()).all()
+    from app.services.package_offer import sellable_products
+    package_products = sellable_products(db, _get_admin_store(request))
 
     # ── 押金 ──
     deposits = (
@@ -14640,19 +14638,33 @@ _PACKAGE_CATEGORY_ZH = {
 
 
 @app.get("/admin/packages", response_class=HTMLResponse)
-async def admin_packages_list(request: Request, db: Session = Depends(get_db), store: str = ""):
-    """套餐目录管理（创建/编辑/启停）。"""
+async def admin_packages_list(
+    request: Request, db: Session = Depends(get_db), store: str = "", show: str = "",
+):
+    """套餐目录。默认只显示在售，或仍有客户剩余次数的组合。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
+    from app.services.package_offer import archive_idle, is_in_use, offer_brief, products_with_remaining
     _admin_store = _get_admin_store(request)
-    if request.session.get("admin_role") == "superadmin":
+    is_superadmin = request.session.get("admin_role") == "superadmin"
+    if is_superadmin:
         _wb_store = (store or "").strip()
     else:
         _wb_store = _admin_store
+    archived_count = archive_idle(db)
+    if archived_count:
+        db.commit()
     q = db.query(PackageProduct)
     q = _apply_store_filter(q, PackageProduct.store, _wb_store)
     items = q.order_by(PackageProduct.is_active.desc(), PackageProduct.id.desc()).all()
-    # 统计：每个产品已售套餐数
+    remaining_ids = products_with_remaining(db)
+    show_mode = show if show in ("all", "archived") and is_superadmin else "active"
+    if show_mode == "all":
+        visible = items
+    elif show_mode == "archived":
+        visible = [row for row in items if not is_in_use(row, remaining_ids)]
+    else:
+        visible = [row for row in items if is_in_use(row, remaining_ids)]
     from sqlalchemy import func as _f
     sold_query = db.query(CustomerPackage.product_id, _f.count(CustomerPackage.id))
     if _wb_store:
@@ -14660,12 +14672,15 @@ async def admin_packages_list(request: Request, db: Session = Depends(get_db), s
     sold_rows = sold_query.group_by(CustomerPackage.product_id).all()
     sold_map = {pid: cnt for pid, cnt in sold_rows if pid}
     return templates.TemplateResponse(request, "uk/packages.html", {
-        "items": items,
+        "items": visible,
         "sold_map": sold_map,
+        "offer_briefs": {row.id: offer_brief(db, row) for row in visible},
         "category_zh": _PACKAGE_CATEGORY_ZH,
         "csrf_token": _get_csrf_token(request),
         "wb_store": _wb_store,
-        "is_superadmin": request.session.get("admin_role") == "superadmin",
+        "is_superadmin": is_superadmin,
+        "show_mode": show_mode,
+        "hidden_count": max(0, len(items) - len(visible)) if show_mode == "active" else 0,
     })
 
 
@@ -14780,12 +14795,15 @@ async def admin_package_sales(
     })
 
 
+_PACKAGE_CREATE_CLOSED = "套餐目录不再新建。请在开单或客户档案里点选品目，勾选按套餐/活动卖。"
+
+
 @app.post("/admin/packages/create", name="admin_packages_create")
 async def admin_packages_create(
     request: Request,
     db: Session = Depends(get_db),
     csrf_token: str = Form(""),
-    name: str = Form(...),
+    name: str = Form(""),
     category: str = Form("beauty"),
     total_uses: str = Form("10"),
     sell_price: str = Form("0"),
@@ -14794,32 +14812,12 @@ async def admin_packages_create(
     notes: str = Form(""),
     store: str = Form(""),
 ):
+    """目录不再手建套餐。超管和员工都走开单时的「按套餐/活动卖」。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
-    require_superadmin(request)
-    try:
-        n_total = max(1, int(total_uses))
-        v_days  = max(0, int(validity_days))
-        sp = max(0.0, float(sell_price))
-        up = max(0.0, float(unit_price))
-    except (TypeError, ValueError):
-        return RedirectResponse("/admin/packages?msg=数值字段无效", status_code=303)
-    if category not in _PACKAGE_CATEGORY_ZH:
-        category = "other"
-    p = PackageProduct(
-        name=(name or "").strip()[:120],
-        category=category,
-        total_uses=n_total,
-        sell_price=sp,
-        unit_price=up,
-        validity_days=v_days,
-        notes=(notes or "").strip(),
-        is_active=True,
-        store=_resolve_store_for_create(request, store),
-    )
-    db.add(p); db.commit()
-    return RedirectResponse(f"/admin/packages?msg=已创建套餐：{p.name}", status_code=303)
+    from urllib.parse import quote
+    return RedirectResponse(f"/admin/packages?msg={quote(_PACKAGE_CREATE_CLOSED)}", status_code=303)
 
 
 @app.post("/admin/packages/{pid}/edit")
@@ -14851,12 +14849,46 @@ async def admin_packages_edit(
         p.unit_price    = max(0.0, float(unit_price))
     except (TypeError, ValueError):
         return RedirectResponse("/admin/packages?msg=数值字段无效", status_code=303)
-    p.name     = (name or "").strip()[:120]
     p.category = category if category in _PACKAGE_CATEGORY_ZH else "other"
     p.notes    = (notes or "").strip()
-    # superadmin 可改门店归属
     if request.session.get("admin_role") == "superadmin":
         p.store = (store or "").strip()
+    if p.primary_item_id:
+        from app.services.package_offer import (
+            OfferError, build_offer_name, money_cents, offer_fingerprint, structure_total,
+        )
+        expected = structure_total(db, p)
+        if int(p.total_uses or 0) != expected:
+            return RedirectResponse(
+                "/admin/packages?msg=这个套餐的次数由买送和赠品决定，不能单独改总次数",
+                status_code=303,
+            )
+        primary = db.get(InventoryItem, p.primary_item_id)
+        if primary is None:
+            return RedirectResponse("/admin/packages?msg=主品目已经不在了，不能改价", status_code=303)
+        from app.models import PackageOfferGift
+        gift_rows = db.query(PackageOfferGift).filter(PackageOfferGift.product_id == p.id).order_by(PackageOfferGift.id).all()
+        labels = []
+        pairs = []
+        for gift in gift_rows:
+            item = db.get(InventoryItem, gift.inventory_item_id)
+            labels.append(((item.name if item else "赠品"), int(gift.quantity or 0), (item.unit if item else "") or "次"))
+            pairs.append((int(gift.inventory_item_id), int(gift.quantity or 0)))
+        try:
+            price_cents = money_cents(p.sell_price)
+            new_name = build_offer_name(primary.name, primary.unit or "次", int(p.buy_count or 0), int(p.gift_count or 0), labels, price_cents)
+            new_fp = offer_fingerprint(primary.id, int(p.buy_count or 0), int(p.gift_count or 0), pairs, price_cents, int(p.validity_days or 0), p.store or "")
+        except OfferError as exc:
+            return RedirectResponse(f"/admin/packages?msg={exc}", status_code=303)
+        clash = db.query(PackageProduct).filter(PackageProduct.fingerprint == new_fp, PackageProduct.id != p.id).first()
+        if clash is not None:
+            return RedirectResponse(f"/admin/packages?msg=已有相同组合 #{clash.id}，这条没有改", status_code=303)
+        p.name = new_name
+        p.fingerprint = new_fp
+        p.total_uses = expected
+        p.unit_price = round(float(p.sell_price or 0) / expected, 2) if expected else 0
+    else:
+        p.name = (name or "").strip()[:120]
     db.commit()
     return RedirectResponse("/admin/packages?msg=已保存", status_code=303)
 
@@ -14876,6 +14908,8 @@ async def admin_packages_toggle(
     if not p:
         raise HTTPException(404)
     p.is_active = not p.is_active
+    if p.is_active:
+        p.archived_at = None
     db.commit()
     return RedirectResponse(
         f"/admin/packages?msg={'已上架' if p.is_active else '已下架'}：{p.name}",
@@ -15037,6 +15071,180 @@ def _invoice_package_state(db: Session, request: Request, invoice: Invoice) -> d
     return state
 
 
+def _read_offer_spec(form, request):
+    from app.services.package_offer import OfferError, OfferSpec, normalize_pairs, parse_id_list, resolve_offer_store
+    if str(form.get("as_package") or "") not in ("1", "on", "true"):
+        raise OfferError("请勾选「按套餐/活动卖」，并填写买几次和成交价。")
+    try:
+        buy = int(str(form.get("buy_count") or "0").strip() or "0")
+        gift = int(str(form.get("gift_count") or "0").strip() or "0")
+        price = float(str(form.get("price") or "0").strip() or "0")
+        validity = int(str(form.get("validity_days") or "0").strip() or "0")
+    except ValueError as exc:
+        raise OfferError("次数、成交价和有效期要填数字。") from exc
+    primary = str(form.get("primary_item_id") or "").strip()
+    if not primary.isdigit():
+        raise OfferError("请先点选主品目。")
+    explicit = str(form.get("store")) if "store" in form else None
+    store = resolve_offer_store(
+        is_superadmin=request.session.get("admin_role") == "superadmin",
+        staff_store=request.session.get("admin_store") or "",
+        session_store=request.session.get("admin_store") or "",
+        explicit=explicit,
+    )
+    return OfferSpec(
+        primary_item_id=int(primary),
+        buy_count=buy,
+        gift_count=gift,
+        gifts=normalize_pairs(form.getlist("gift_item_id"), form.getlist("gift_qty")),
+        alias_item_ids=parse_id_list(str(form.get("alias_item_ids") or "")),
+        price=price,
+        validity_days=validity,
+        store=store,
+    )
+
+
+def _offer_redirect(form, fallback: str, message: str) -> RedirectResponse:
+    from urllib.parse import quote
+    target = _safe_next(str(form.get("next_url") or ""), fallback)
+    sep = "&" if "?" in target else "?"
+    return RedirectResponse(f"{target}{sep}msg={quote(message)}", status_code=303)
+
+
+@app.get("/admin/packages/offer-items")
+async def admin_package_offer_items(
+    request: Request, db: Session = Depends(get_db), q: str = "", store: str = "",
+):
+    """给开套餐用的品目搜索。员工只能搜本店和通用品目。"""
+    require_admin(request)
+    from app.services.package_offer import search_offer_items
+    is_superadmin = request.session.get("admin_role") == "superadmin"
+    if is_superadmin:
+        chosen = (store or "").strip()
+        if chosen not in ("", "东环店", "横岗店"):
+            chosen = request.session.get("admin_store") or ""
+    else:
+        chosen = request.session.get("admin_store") or ""
+        if chosen not in ("东环店", "横岗店"):
+            raise HTTPException(400, "员工账号缺少有效门店归属")
+    rows = search_offer_items(db, q, chosen)
+    items = []
+    for row in rows:
+        fields = _inventory_display_fields(row)
+        fields["sell_price"] = round(float(row.sell_price or 0), 2)
+        fields["store_code"] = row.store or ""
+        items.append(fields)
+    return {"items": items}
+
+
+@app.get("/admin/packages/offer-preview")
+async def admin_package_offer_preview(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+    from app.services.package_offer import OfferError, preview_offer
+    try:
+        spec = _read_offer_spec(request.query_params, request)
+        return preview_offer(db, spec)
+    except OfferError as exc:
+        return {"name": "", "error": str(exc)}
+
+
+@app.post("/admin/packages/offers")
+async def admin_package_offer_create(request: Request, db: Session = Depends(get_db)):
+    """目录页不再单独开套餐。组合只在售卖给客户时生成。"""
+    require_admin(request)
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token") or ""))
+    return _offer_redirect(form, "/admin/packages", _PACKAGE_CREATE_CLOSED)
+
+
+@app.post("/admin/customers/{customer_id}/packages/offer")
+async def admin_customer_sell_offer(customer_id: int, request: Request, db: Session = Depends(get_db)):
+    """从品目开套餐并记到客户名下。相同组合复用目录。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login")
+    form = await request.form()
+    _require_csrf(request, str(form.get("csrf_token") or ""))
+    fallback = f"/admin/customers/{customer_id}?tab=packages"
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404, "客户不存在")
+    from app.services.package_offer import (
+        OfferError, attach_components_if_structured, expires_on, get_or_create_offer,
+    )
+    from app.time_utils import beijing_today
+    try:
+        spec = _read_offer_spec(form, request)
+        product, reused = get_or_create_offer(db, spec, operator=request.session.get("admin_username") or "")
+    except OfferError as exc:
+        db.rollback()
+        return _offer_redirect(form, fallback, str(exc))
+    try:
+        pet_id = int(str(form.get("pet_id") or "0").strip() or "0")
+    except ValueError:
+        pet_id = 0
+    try:
+        used_n = max(0, int(str(form.get("used_count") or "0").strip() or "0"))
+    except ValueError:
+        used_n = 0
+    purchase_d = beijing_today()
+    custom_date = str(form.get("custom_purchase_date") or "").strip()
+    if custom_date:
+        try:
+            purchase_d = datetime.strptime(custom_date, "%Y-%m-%d").date()
+        except ValueError:
+            purchase_d = beijing_today()
+    total_n = int(product.total_uses or 0)
+    if used_n > total_n:
+        used_n = total_n
+    price = round(float(product.sell_price or 0), 2)
+    card_store = spec.store or (request.session.get("admin_store") or "")
+    cp = CustomerPackage(
+        customer_id=customer_id,
+        pet_id=pet_id or None,
+        product_id=product.id,
+        name=product.name,
+        category=product.category,
+        total_uses=total_n,
+        used_count=used_n,
+        sell_price=price,
+        unit_price=product.unit_price,
+        purchase_date=purchase_d.isoformat(),
+        expires_at=expires_on(purchase_d, product.validity_days),
+        status="exhausted" if used_n >= total_n else "active",
+        store=card_store,
+        operator=request.session.get("admin_username") or "",
+        note=str(form.get("note") or "").strip(),
+    )
+    db.add(cp)
+    db.flush()
+    attach_components_if_structured(db, cp)
+    pay_method = str(form.get("pay_method") or "cash")
+    if pay_method == "wallet":
+        wallet = _get_or_create_wallet(db, customer_id)
+        try:
+            _wallet_apply_tx(
+                db, wallet, tx_type="consume", amount=price,
+                operator=request.session.get("admin_username") or "",
+                store=card_store,
+                note=f"购买套餐 {product.name}",
+            )
+        except HTTPException as exc:
+            db.rollback()
+            return _offer_redirect(form, fallback, str(exc.detail))
+    db.commit()
+    _audit(db, request, "package_offer_sell", application_id=None, detail={
+        "customer_id": customer_id,
+        "product_id": product.id,
+        "name": product.name,
+        "price": price,
+        "reused": reused,
+        "pay": pay_method,
+    })
+    db.commit()
+    verb = "已有相同组合，直接复用并售出" if reused else "已开套餐并售出"
+    return _offer_redirect(form, fallback, f"{verb}：{product.name}（¥{price:.2f}）")
+
+
 # ── 客户买套餐 ────────────────────────────────────────────────────
 @app.post("/admin/customers/{customer_id}/packages/sell")
 async def admin_customer_buy_package(
@@ -15099,6 +15307,14 @@ async def admin_customer_buy_package(
         total_n = prod.total_uses
     if used_n > total_n:
         used_n = total_n
+    from app.services.package_offer import attach_components_if_structured, structure_total
+    if prod.primary_item_id:
+        expected = structure_total(db, prod)
+        if total_n != expected:
+            return RedirectResponse(
+                f"/admin/customers/{customer_id}?tab=packages&msg=这个套餐的次数由买送和赠品决定，不能单独改总次数",
+                status_code=303,
+            )
     # 状态：已用满 → exhausted
     initial_status = "exhausted" if used_n >= total_n else "active"
 
@@ -15120,6 +15336,7 @@ async def admin_customer_buy_package(
         note=(note or "").strip(),
     )
     db.add(cp); db.flush()
+    attach_components_if_structured(db, cp)
 
     # 如果用钱包支付，立刻扣款
     # pay_method = 'external' / 'imported' / 'legacy' → 视为旧系统/外部已付，不动钱包不写发票
@@ -15156,7 +15373,7 @@ async def admin_customer_package_refund(
     csrf_token: str = Form(""),
     note: str = Form(""),
 ):
-    """退掉未用完的套餐（按剩余次数比例退回钱包）。仅 superadmin。"""
+    """退掉未用完的套餐。旧卡按剩余次数比例；按品目售出的卡按分摊后的剩余金额。仅 superadmin。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login")
     _require_csrf(request, csrf_token)
@@ -15168,8 +15385,9 @@ async def admin_customer_package_refund(
         return RedirectResponse(
             f"/admin/customers/{cp.customer_id}?tab=packages&msg=该套餐已非激活状态", status_code=303,
         )
+    from app.services.package_offer import remaining_refund_amount
     remaining = max(0, cp.total_uses - cp.used_count)
-    refund_amt = round(cp.sell_price * (remaining / cp.total_uses), 2) if cp.total_uses > 0 else 0.0
+    refund_amt = remaining_refund_amount(db, cp)
     if refund_amt > 0:
         wallet = _get_or_create_wallet(db, cp.customer_id)
         _wallet_apply_tx(
@@ -40274,6 +40492,24 @@ async def m_customer_profile(cust_id: int, request: Request, db: Session = Depen
     return templates.TemplateResponse(request, "m_uk/customer_profile.html", ctx)
 
 
+@app.get("/m/customer/{cust_id}/packages/sell", response_class=HTMLResponse)
+async def m_customer_package_offer(cust_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse(f"/admin/login?next=/m/customer/{cust_id}/packages/sell", status_code=303)
+    cust = db.get(Customer, cust_id)
+    if not cust:
+        raise HTTPException(404)
+    pets = db.query(Pet).filter(Pet.customer_id == cust_id).order_by(Pet.id).all()
+    ctx = _m_ctx(request, db, active_tab="customers")
+    ctx.update({
+        "cust": cust,
+        "pets": pets,
+        "msg": request.query_params.get("msg"),
+        "is_superadmin": request.session.get("admin_role") == "superadmin",
+    })
+    return templates.TemplateResponse(request, "m_uk/package_offer.html", ctx)
+
+
 _VISIT_TYPE_ZH = {
     "outpatient": "门诊",
     "followup":   "复诊",
@@ -40973,6 +41209,9 @@ async def m_packages_list(request: Request, db: Session = Depends(get_db), q: st
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/packages", status_code=303)
     query = db.query(CustomerPackage).order_by(CustomerPackage.id.desc())
+    admin_store = _get_admin_store(request)
+    if admin_store:
+        query = query.filter(or_(CustomerPackage.store == admin_store, CustomerPackage.store == ""))
     if q:
         cids = [c.id for c in db.query(Customer.id).filter(
             or_(Customer.name.ilike(f"%{q}%"), Customer.phone.ilike(f"%{q}%"))
