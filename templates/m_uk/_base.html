@@ -10,6 +10,8 @@
   <link rel="manifest" href="/static/manifest.json"/>
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png"/>
   <link rel="stylesheet" href="/static/uk_m.css?v=3"/>
+  <script>window.TNR_HOURS = {{ tnr_hours() | tojson }};</script>
+  <script src="/static/tnr_hours.js?v=1"></script>
   <title>{% block title %}大风动物医院{% endblock %}</title>
   {% block extra_css %}{% endblock %}
 </head>

@@ -1574,6 +1574,11 @@ def _mask_phone(phone: str) -> str:
 
 _TNR_TIME_START = "11:00"
 _TNR_TIME_END = "18:00"
+# 门店短名 -> 最早可约时刻（含该时刻）。未列出的门店沿用 _TNR_TIME_START。
+# 东环店下午才排 TNR 手术，所以 13:00 之前不开放。
+_TNR_STORE_EARLIEST = {
+    "东环店": "13:00",
+}
 _TNR_DAILY_MAX = 2
 _TNR_MONTHLY_QUOTA = 30          # 每月已确认 TNR 预约上限
 _TNR_NOSHOW_BAN_COUNT = 3        # 单月爽约次数达到此值触发封禁
@@ -1781,6 +1786,70 @@ def _get_phone_noshow_ban_until(db: "Session", phone: str) -> "datetime | None":
     return ban_until
 
 
+def _tnr_time_window(store: str) -> tuple[str, str]:
+    """返回该门店 TNR 开放窗口 (最早可约, 结束时刻)。结束时刻沿用全局规则，不含该时刻。"""
+    start = _TNR_STORE_EARLIEST.get(_store_short(store), _TNR_TIME_START)
+    return start, _TNR_TIME_END
+
+
+def _tnr_hours_public() -> dict:
+    """给小程序和后台页面用的门店开放窗口。短名、全名都能对上。"""
+    by_store: dict[str, dict[str, str]] = {}
+    for short, full in _STORE_SHORT_TO_FULL.items():
+        start, end = _tnr_time_window(short)
+        window = {"start": start, "end": end}
+        by_store[short] = window
+        by_store[full] = window
+    return {
+        "default_start": _TNR_TIME_START,
+        "default_end": _TNR_TIME_END,
+        "by_store": by_store,
+    }
+
+
+templates.env.globals["tnr_hours"] = _tnr_hours_public
+
+
+def _tnr_slot_unchanged(
+    db: "Session",
+    exclude_id: int | None,
+    store: str,
+    appointment_date: str,
+    appointment_time: str,
+) -> bool:
+    """改期/改备注时，原 TNR 时段原样保留则不再卡最早开放时间。
+
+    已有的东环店 13:00 前预约不迁移、不删除；只有真正改到新时段时才套新规则。
+    """
+    if not exclude_id:
+        return False
+    row = db.get(Appointment, exclude_id)
+    if row is None or (row.category or "") != AppointmentCategory.tnr.value:
+        return False
+    return (
+        _store_short(row.store or "") == _store_short(store or "")
+        and (row.appointment_date or "") == (appointment_date or "")
+        and (row.appointment_time or "")[:5] == (appointment_time or "")[:5]
+    )
+
+
+def _tnr_time_window_error(store: str, appointment_time: str) -> str | None:
+    raw = (appointment_time or "").strip()[:5]
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", raw):
+        return "预约时间格式应为 HH:MM。"
+    start, end = _tnr_time_window(store)
+    t_minutes = _time_to_minutes(raw)
+    if t_minutes < _time_to_minutes(start) or t_minutes >= _time_to_minutes(end):
+        if start != _TNR_TIME_START:
+            label = _store_short(store) or "该门店"
+            return (
+                f"{label} TNR 手术只安排在 {start} 及以后"
+                f"（开放至 {end} 前），请重新选择时段。"
+            )
+        return f"TNR 手术预约时间须在 {start}–{end} 之间，请重新选择。"
+    return None
+
+
 def _check_tnr_constraints(
     db: "Session",
     category: str,
@@ -1793,12 +1862,12 @@ def _check_tnr_constraints(
     """TNR 预约专项校验：时间段限制、每日上限、月度配额、门店开关、爽约封禁。违规返回错误字符串，通过返回 None。"""
     if category != AppointmentCategory.tnr.value:
         return None
-    # 时间段校验
-    t_minutes = _time_to_minutes(appointment_time)
-    start_minutes = _time_to_minutes(_TNR_TIME_START)
-    end_minutes = _time_to_minutes(_TNR_TIME_END)
-    if t_minutes < start_minutes or t_minutes >= end_minutes:
-        return f"TNR 手术预约时间须在 {_TNR_TIME_START}–{_TNR_TIME_END} 之间，请重新选择。"
+    # 原时段原样保存（只改备注等）不重跑规则，避免改动已存在的早场预约
+    if _tnr_slot_unchanged(db, exclude_id, store, appointment_date, appointment_time):
+        return None
+    time_err = _tnr_time_window_error(store, appointment_time)
+    if time_err:
+        return time_err
     # 每店每日上限
     q = (
         db.query(Appointment)
@@ -1969,6 +2038,7 @@ def _appointment_catalog() -> dict:
             {"value": "male", "label": "公"},
             {"value": "unknown", "label": "未知"},
         ],
+        "tnr_hours": _tnr_hours_public(),
     }
 
 
@@ -9527,6 +9597,7 @@ async def api_staff_miniapp_calendar(
         "blocks": [{"id": b.id, "date": b.block_date, "title": b.title or "美容师休息"} for b in blocks],
         "stores": [{"value": full, "label": _STORE_FULL_TO_SHORT.get(full, full)} for full in _CLINIC_STORES],
         "fixed_store": full_store or "",
+        "tnr_hours": _tnr_hours_public(),
     }
 
 
@@ -9596,6 +9667,13 @@ async def api_staff_miniapp_appointment_reschedule(
         datetime.strptime(new_time, "%H:%M")
     except ValueError:
         raise HTTPException(400, "请选择正确的日期和时间")
+    tnr_err = _check_tnr_constraints(
+        db, category=row.category or "", store=row.store or "",
+        appointment_date=new_date, appointment_time=new_time,
+        phone="", exclude_id=row.id,
+    )
+    if tnr_err:
+        raise HTTPException(400, tnr_err)
     old = {"date": row.appointment_date, "time": row.appointment_time}
     row.appointment_date, row.appointment_time = new_date, new_time
     row.updated_at = datetime.utcnow()
@@ -10452,6 +10530,14 @@ async def api_wechat_appointment_update(
     new_date  = str(payload.get("appointment_date", "") or row.appointment_date).strip()
     new_time  = str(payload.get("appointment_time", "") or row.appointment_time).strip()
     new_store = str(payload.get("store", "") or row.store or "").strip()
+
+    tnr_err = _check_tnr_constraints(
+        db, category=row.category or "", store=new_store,
+        appointment_date=new_date, appointment_time=new_time,
+        phone=row.phone or "", exclude_id=appointment_id,
+    )
+    if tnr_err:
+        raise HTTPException(400, tnr_err)
 
     # 若日期、时间或门店有变，重新做容量检查（exclude 自身，避免自我碰撞）
     if new_date != row.appointment_date or new_time != row.appointment_time or new_store != (row.store or ""):
@@ -36095,6 +36181,13 @@ async def api_calendar_appt_reschedule(appt_id: int, request: Request, db: Sessi
     # 已完成 / 已取消 / 爽约 状态不允许改约
     if row.status in (AppointmentStatus.completed.value, AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value):
         return {"ok": False, "error": f"当前状态（{_APPOINTMENT_STATUS_LABELS.get(row.status, row.status)}）不允许改约"}
+    tnr_err = _check_tnr_constraints(
+        db, category=row.category or "", store=row.store or "",
+        appointment_date=new_date, appointment_time=new_time,
+        phone="", exclude_id=row.id,
+    )
+    if tnr_err:
+        return {"ok": False, "error": tnr_err}
     old_date, old_time = row.appointment_date, row.appointment_time
     row.appointment_date = new_date
     row.appointment_time = new_time

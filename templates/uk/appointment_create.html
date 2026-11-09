@@ -319,7 +319,7 @@
     <div class="ac-row r3">
       <div class="ac-field">
         <label>门&nbsp;店<span class="req">*</span></label>
-        <select name="store" id="ac-store" required class="ac-select">
+        <select name="store" id="ac-store" required class="ac-select" onchange="acSyncTnrHours()">
           {% for s in store_options %}
           <option value="{{ s }}" {% if default_store_full == s %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
@@ -346,6 +346,7 @@
           <option value="{{ s }}" {% if default_time == s %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
         </select>
+        <div id="ac-tnr-hour-hint" class="hint" style="display:none;margin-top:6px;color:var(--accent-amber);"></div>
       </div>
     </div>
 
@@ -564,6 +565,21 @@ function acOnCategoryChange() {
   } else {
     document.getElementById('ac-slots-row').style.display = 'none';
     document.getElementById('ac-duration-hint').style.display = 'none';
+  }
+  acSyncTnrHours();
+}
+
+function acSyncTnrHours() {
+  var timeSel = document.getElementById('ac-time');
+  var storeEl = document.getElementById('ac-store');
+  var catEl = document.getElementById('ac-category');
+  var hint = document.getElementById('ac-tnr-hour-hint');
+  if (!window.TnrHours || !timeSel || !catEl) return;
+  var store = storeEl ? storeEl.value : '';
+  var floor = window.TnrHours.applySelect(timeSel, catEl.value, store, {});
+  if (hint) {
+    hint.textContent = window.TnrHours.hintText(floor, store);
+    hint.style.display = floor ? '' : 'none';
   }
 }
 

@@ -29,6 +29,8 @@ Page({
     selected: null, editing: false, editDate: "", editTime: "", editService: "",
     editDuration: 30, editNotes: "", saving: false,
     createOpen: false, createStep: "choice", createDate: "", createTime: "", createStore: "",
+    createTimeStart: "", createTimeEnd: "", editTimeStart: "", editTimeEnd: "",
+    tnrCreateHint: "", tnrEditHint: "", tnrHours: {},
     stores: [], storeIndex: 0, fixedStore: "", createCategory: "outpatient",
     categories: [{value:"outpatient",label:"门诊"},{value:"surgery",label:"手术"},{value:"tnr",label:"TNR"}],
     createService: "", createBeautySpecies: "", createDuration: 30, createNotes: "", customerQuery: "",
@@ -50,6 +52,7 @@ Page({
       const fixedStore = result.fixed_store || "";
       let storeIndex = Math.max(0, stores.findIndex((s) => s.value === (fixedStore || this.data.createStore)));
       this.setData({ dates: result.dates || [], columns, rawAppointments, rawBlocks, stores, fixedStore, storeIndex,
+        tnrHours: result.tnr_hours || {},
         createStore: fixedStore || (stores[storeIndex] && stores[storeIndex].value) || "" });
     } catch (e) {
       if (e && e.statusCode === 401) { wx.redirectTo({ url: "/pages/staff/login/login" }); return; }
@@ -81,8 +84,13 @@ Page({
       return !!selected;
     });
     if (!selected) return;
+    const win = this.tnrFloor(selected.store, selected.category);
+    let editTimeStart = win ? win.start : "";
+    if (win && selected.time && selected.time < win.start) editTimeStart = selected.time;
     this.setData({ selected, editing: false, editDate: selected.date, editTime: selected.time,
-      editService: selected.service_name, editDuration: selected.duration, editNotes: selected.notes || "" });
+      editService: selected.service_name, editDuration: selected.duration, editNotes: selected.notes || "",
+      editTimeStart, editTimeEnd: win ? win.end : "",
+      tnrEditHint: win ? "东环店 TNR 新时段须从 " + win.start + " 开始。已有更早预约若不改时间，仍保留原时段。" : "" });
   },
   closeEvent() { if (!this.data.saving) this.setData({ selected: null, editing: false }); },
   stopBubble() {},
@@ -143,11 +151,14 @@ Page({
   openBlank(e) {
     if (this.data.selected || this.data.createOpen) return;
     const hour = Number(e.currentTarget.dataset.hour || 8);
-    this.setData({ createOpen: true, createStep: "choice", createDate: e.currentTarget.dataset.date,
-      createTime: `${pad(hour)}:00`, createService: "", createDuration: 30, createNotes: "",
-      createCategory: this.data.track === "beauty" ? "grooming" : "outpatient",
-      createBeautySpecies: "",
-      customerQuery: "", customerResults: [], selectedCustomer: null, selectedPet: null });
+    const createCategory = this.data.track === "beauty" ? "grooming" : "outpatient";
+    const createTime = `${pad(hour)}:00`;
+    this.setData(Object.assign({
+      createOpen: true, createStep: "choice", createDate: e.currentTarget.dataset.date,
+      createTime, createService: "", createDuration: 30, createNotes: "",
+      createCategory, createBeautySpecies: "",
+      customerQuery: "", customerResults: [], selectedCustomer: null, selectedPet: null
+    }, this.createFloorPatch(this.data.createStore, createCategory, createTime)));
   },
   closeCreate() { if (!this.data.saving) this.setData({ createOpen: false, createStep: "choice" }); },
   backCreateChoice() { if (!this.data.saving) this.setData({ createStep: "choice" }); },
@@ -164,12 +175,32 @@ Page({
     } catch (e) { wx.showModal({ title: "设置失败", content: (e && (e.detail || e.errMsg)) || "请稍后重试", showCancel: false }); }
     finally { this.setData({ saving: false }); }
   },
+  tnrFloor(store, category) {
+    if (category !== "tnr") return null;
+    const hours = this.data.tnrHours || {};
+    const win = (hours.by_store || {})[store];
+    const start = win && win.start;
+    const base = hours.default_start || "";
+    if (start && base && start > base) return win;
+    return null;
+  },
+  createFloorPatch(store, category, time) {
+    const win = this.tnrFloor(store, category);
+    const patch = {
+      createTimeStart: win ? win.start : "",
+      createTimeEnd: win ? win.end : "",
+      tnrCreateHint: win ? "东环店 TNR 手术从 " + win.start + " 开始，更早的时段不可预约。" : "",
+    };
+    if (win && time && time < win.start) patch.createTime = win.start;
+    return patch;
+  },
   chooseCategory(e) {
     const createCategory = e.currentTarget.dataset.value;
     const patch = { createCategory };
     if (this.data.track === "beauty") {
       patch.createService = beautyServiceName(this.data.createBeautySpecies, createCategory);
     }
+    Object.assign(patch, this.createFloorPatch(this.data.createStore, createCategory, this.data.createTime));
     this.setData(patch);
   },
   chooseBeautySpecies(e) {
@@ -187,7 +218,11 @@ Page({
   onCreateNotes(e) { this.setData({ createNotes: e.detail.value }); },
   onStoreChange(e) {
     const storeIndex = Number(e.detail.value || 0);
-    this.setData({ storeIndex, createStore: (this.data.stores[storeIndex] || {}).value || "" });
+    const createStore = (this.data.stores[storeIndex] || {}).value || "";
+    this.setData(Object.assign(
+      { storeIndex, createStore },
+      this.createFloorPatch(createStore, this.data.createCategory, this.data.createTime)
+    ));
   },
   onCustomerQuery(e) { this.setData({ customerQuery: e.detail.value || "" }); },
   async searchCustomers() {

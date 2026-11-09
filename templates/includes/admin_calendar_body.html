@@ -47,6 +47,7 @@
  <input type="date" id="rs-date"/>
  <label>新时间</label>
  <input type="time" id="rs-time" step="300"/>
+ <p id="rs-tnr-hint" style="display:none;margin:0.35rem 0 0.65rem;font-size:0.78rem;color:#6b4423;"></p>
  <div class="modal-btns">
  <button class="btn" id="rs-confirm-btn">确认改约</button>
  <button class="btn secondary" onclick="closeReschedule()">取消</button>
@@ -718,8 +719,19 @@ let rescheduleId = null;
 function openReschedule(id) {
  rescheduleId = id;
  const appt = events.find(e=>e.id===id);
+ const timeInput = document.getElementById('rs-time');
+ const hint = document.getElementById('rs-tnr-hint');
  document.getElementById('rs-date').value = appt?.date||'';
- document.getElementById('rs-time').value = appt?.time||'';
+ timeInput.value = appt?.time||'';
+ if (window.TnrHours && appt) {
+  const floor = window.TnrHours.applyTimeInput(timeInput, appt.category, appt.store, { keepValue: appt.time || '' });
+  if (hint) {
+   hint.textContent = window.TnrHours.hintText(floor, appt.store);
+   hint.style.display = floor ? '' : 'none';
+  }
+ } else if (hint) {
+  hint.style.display = 'none';
+ }
  document.getElementById('reschedule-modal').classList.add('visible');
 }
 function closeReschedule() {

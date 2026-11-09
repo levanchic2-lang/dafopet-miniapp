@@ -38,6 +38,7 @@ Page({
     dateStart: "",
     timeRangeStart: "",
     timeRangeEnd: "",
+    tnrHourHint: "",
     categoryIndex: 0,
     serviceIndex: 0,
     storeIndex: -1,
@@ -217,6 +218,7 @@ Page({
       ]);
       const hasApprovedTnr = !!(tnrStatus && tnrStatus.has_approved);
       this._hasApprovedTnr = hasApprovedTnr;
+      this._tnrHours = (cfg && cfg.tnr_hours) || {};
       this._approvedApps = (tnrStatus && Array.isArray(tnrStatus.approved_apps)) ? tnrStatus.approved_apps : [];
       this._tnrStoreStatus = tnrStoreStatus || { stores: [], is_banned: false };
 
@@ -435,6 +437,7 @@ Page({
       }
       // 手机号需用户重新输入（脱敏），提示用户
       patch["form.phone"] = "";
+      Object.assign(patch, this._tnrHourPatch(appt.store || "", true, appt.appointment_time || ""));
       this.setData(patch);
       wx.showToast({ title: "预约信息已加载", icon: "none", duration: 1500 });
     } catch (e) {
@@ -493,6 +496,13 @@ Page({
       if (gIdx >= 0) { patch.petGenderIndex = gIdx; patch["form.pet_gender"] = p.pet_gender; }
     }
     if (p.related_application_id) patch["form.related_application_id"] = p.related_application_id;
+    const nextStore = patch["form.store"] || this.data.form.store;
+    if (nextStore) {
+      Object.assign(
+        patch,
+        this._tnrHourPatch(nextStore, false, patch["form.appointment_time"] || this.data.form.appointment_time)
+      );
+    }
     if (Object.keys(patch).length) this.setData(patch);
     this._prefill = null;
   },
@@ -591,9 +601,51 @@ Page({
     if (this.data.isBeauty) this.scheduleBeautySlots();
   },
 
+  _storeLabel(store) {
+    const text = store || "";
+    if (text.indexOf("东环") >= 0) return "东环店";
+    if (text.indexOf("横岗") >= 0) return "横岗店";
+    return text || "该门店";
+  },
+
+  _tnrFloor(store) {
+    const hours = this._tnrHours || {};
+    const by = hours.by_store || {};
+    const win = by[store] || null;
+    const start = win && win.start ? win.start : "";
+    const base = hours.default_start || "";
+    if (start && base && start > base) return { start: start, end: win.end || "" };
+    return null;
+  },
+
+  _tnrHourPatch(store, keepTime, timeValue) {
+    const floor = this._tnrFloor(store);
+    const current = timeValue != null
+      ? timeValue
+      : ((this.data.form && this.data.form.appointment_time) || "");
+    if (!floor) {
+      return { timeRangeStart: "", timeRangeEnd: "", tnrHourHint: "" };
+    }
+    let start = floor.start;
+    if (keepTime && current && current < floor.start) start = current;
+    const patch = {
+      timeRangeStart: start,
+      timeRangeEnd: floor.end || "",
+      tnrHourHint: this._storeLabel(store) + " TNR 手术从 " + floor.start + " 开始，更早的时段不可预约。",
+    };
+    if (current && current < floor.start && !keepTime) {
+      patch["form.appointment_time"] = floor.start;
+    }
+    return patch;
+  },
+
   onStoreChange(e) {
     const idx = Number(e.detail.value || 0);
-    this.setData({ storeIndex: idx, "form.store": this.data.stores[idx] || "" });
+    const store = this.data.stores[idx] || "";
+    this.setData(Object.assign(
+      { storeIndex: idx, "form.store": store },
+      this._tnrHourPatch(store, false)
+    ));
   },
 
   onPetGenderChange(e) {
