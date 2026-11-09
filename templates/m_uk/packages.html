@@ -41,7 +41,11 @@
 
 <div class="ukm-divider"></div>
 <div class="ukm-btn-row">
-  <a href="/admin/packages" class="ukm-btn hair block">桌&nbsp;面&nbsp;端&nbsp;·&nbsp;售&nbsp;套&nbsp;餐</a>
+  <a href="/admin/packages" class="ukm-btn hair block">套餐目录</a>
+  {% if admin_role == 'superadmin' %}
+  <a href="/admin/packages/migration" class="ukm-btn hair block">迁移预演</a>
+  {% endif %}
 </div>
+<p class="ukm-fineprint">新套餐从客户档案里选品目，勾选「按套餐 / 活动卖」。名称由系统生成。</p>
 
 {% endblock %}

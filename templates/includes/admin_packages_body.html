@@ -8,14 +8,23 @@
 <div class="page-head">
  <div>
  <h1><span class="ph-icon"><i data-lucide="ticket"></i></span>套餐目录</h1>
- <p class="ph-sub">配置可售套餐（包次卡）—— 美容 10 次卡、洗护 5 次卡等</p>
+ <p class="ph-sub">在售组合，以及客户还有剩余次数的卡。闲置的旧组合会归档，不出现在这里。</p>
  </div>
  {% if is_superadmin %}
  <div class="ph-actions">
- <button type="button" class="btn" onclick="document.getElementById('new-pkg-modal').classList.add('visible')"><i data-lucide="plus"></i> 新建套餐</button>
+ <a class="btn secondary" href="/admin/packages/migration">迁移预演</a>
+ <button type="button" class="btn" onclick="var m=document.getElementById('offer-modal'); if(m){m.style.display='flex';}">从品目开套餐</button>
  </div>
  {% endif %}
 </div>
+{% if is_superadmin %}
+<div style="margin:.4rem 0;font-size:.85rem;">
+  <a href="?store={{ wb_store }}&show=active">在用</a>
+  · <a href="?store={{ wb_store }}&show=archived">已归档</a>
+  · <a href="?store={{ wb_store }}&show=all">全部</a>
+  {% if hidden_count %} · 已隐藏 {{ hidden_count }} 条闲置组合{% endif %}
+</div>
+{% endif %}
 
 {% if is_superadmin %}
 <div style="margin:.5rem 0 1rem;font-size:.85rem;color:var(--muted);">
@@ -51,6 +60,7 @@
    <td>
      <strong>{{ p.name }}</strong>
      {% if p.store %}<span class="pill pill-gray" style="margin-left:.3rem;">{{ p.store }}</span>{% else %}<span class="pill pill-info" style="margin-left:.3rem;background:#dbeafe;color:#1e40af;">通用</span>{% endif %}
+     {% if offer_briefs and p.id in offer_briefs and offer_briefs[p.id] %}<div style="font-size:.75rem;color:var(--muted);">{{ offer_briefs[p.id] }}</div>{% endif %}
      {% if p.notes %}<div style="font-size:.75rem;color:var(--muted);">{{ p.notes[:60] }}</div>{% endif %}
    </td>
    <td data-label="类别">{{ category_zh.get(p.category, p.category) }}</td>
@@ -85,7 +95,7 @@
 {% else %}
 <div class="empty-card">
  <div class="empty-icon"><i data-lucide="ticket"></i></div>
- 还没创建任何套餐{% if is_superadmin %}，点右上 ＋ 开始{% endif %}。
+ 当前没有要显示的套餐。{% if is_superadmin %}可以从品目开一个新组合。{% endif %}
 </div>
 {% endif %}
 
@@ -151,13 +161,6 @@ function openEdit(id, data) {
   recalcPkgUnitPrice();
   modal.style.display = 'flex';
 }
-document.querySelector('.page-head .btn') && document.querySelector('.page-head .btn').addEventListener('click', function(){
-  var f = document.getElementById('pkg-form');
-  f.action = '/admin/packages/create';
-  f.reset();
-  document.getElementById('pkg-modal-title').textContent = '新建套餐';
-  document.getElementById('new-pkg-modal').style.display = 'flex';
-});
 document.getElementById('new-pkg-modal').addEventListener('click', function(e){
   if (e.target.id === 'new-pkg-modal') e.target.style.display = 'none';
 });
