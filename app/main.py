@@ -14883,25 +14883,66 @@ async def admin_packages_toggle(
     )
 
 
+_PACKAGE_ITEM_SEARCH_LIMIT = 20
+
+
+def _inventory_display_fields(item: InventoryItem) -> dict:
+    """只返回库存里真实存在的区分字段，不编造规格。"""
+    cat = INVENTORY_CATEGORIES.get(item.category or "", {})
+    category_label = cat.get("label") or (item.category or "")
+    subcategory_label = (cat.get("subs") or {}).get(item.subcategory or "", item.subcategory or "")
+    unit = item.unit or ""
+    unit2 = item.unit2 or ""
+    spec = ""
+    if unit2 and unit and float(item.unit2_ratio or 0) not in (0, 1):
+        spec = f"1{unit2}={item.unit2_ratio:g}{unit}"
+    elif unit2 and unit:
+        spec = f"{unit} / {unit2}"
+    return {
+        "id": item.id,
+        "name": item.name,
+        "store": item.store or "两店通用",
+        "category": category_label,
+        "subcategory": subcategory_label,
+        "unit": unit,
+        "unit2": unit2,
+        "spec": spec,
+        "is_service": bool(item.is_service),
+        "stock_qty": None if item.is_service else float(item.stock_qty or 0),
+        "manufacturer": item.manufacturer or "",
+    }
+
+
+def _package_item_allowed(request: Request, item: InventoryItem | None) -> bool:
+    if item is None or not item.is_active:
+        return False
+    op_store = _get_op_store(request) or ""
+    if not op_store:
+        return True
+    return (item.store or "") in ("", op_store)
+
+
 @app.get("/admin/packages/item-search")
 async def admin_package_item_search(request: Request, db: Session = Depends(get_db), q: str = ""):
-    """按编号或全名精确辅助查找。返回品目编号，绑定仍由人工确认，不按相似度自动勾上。"""
+    """按品名包含关系列出可绑定品目。只返回结果，不自动绑定。"""
     require_admin(request)
-    keyword = (q or "").strip()
+    require_superadmin(request)
+    keyword = (q or "").strip()[:80]
     if len(keyword) < 1:
         return {"items": []}
-    query = _apply_store_filter(db.query(InventoryItem), InventoryItem.store, _get_op_store(request))
-    if keyword.isdigit():
-        query = query.filter(InventoryItem.id == int(keyword))
-    else:
-        query = query.filter(InventoryItem.name == keyword)
-    rows = query.order_by(InventoryItem.id.desc()).limit(20).all()
-    return {"items": [{
-        "id": row.id,
-        "name": row.name,
-        "store": row.store or "通用",
-        "category": row.category or "",
-    } for row in rows]}
+    escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    query = _apply_store_filter(
+        db.query(InventoryItem).filter(InventoryItem.is_active == True),  # noqa: E712
+        InventoryItem.store,
+        _get_op_store(request),
+    )
+    rows = (
+        query.filter(InventoryItem.name.like(f"%{escaped}%", escape="\\"))
+        .order_by(InventoryItem.name, InventoryItem.store, InventoryItem.id)
+        .limit(_PACKAGE_ITEM_SEARCH_LIMIT)
+        .all()
+    )
+    return {"items": [_inventory_display_fields(row) for row in rows]}
 
 
 @app.get("/admin/packages/{pid}/items", response_class=HTMLResponse)
@@ -14916,11 +14957,25 @@ async def admin_package_items_page(pid: int, request: Request, db: Session = Dep
     bound = []
     for link in links:
         item = db.get(InventoryItem, link.inventory_item_id)
-        bound.append({
-            "id": link.inventory_item_id,
-            "name": item.name if item else f"已删除品目 #{link.inventory_item_id}",
-            "store": (item.store if item else "") or "通用",
-        })
+        if item:
+            fields = _inventory_display_fields(item)
+            fields["removed"] = False
+        else:
+            fields = {
+                "id": link.inventory_item_id,
+                "name": "已删除品目",
+                "store": "",
+                "category": "",
+                "subcategory": "",
+                "unit": "",
+                "unit2": "",
+                "spec": "",
+                "is_service": False,
+                "stock_qty": None,
+                "manufacturer": "",
+                "removed": True,
+            }
+        bound.append(fields)
     return templates.TemplateResponse(request, "uk/package_items.html", {
         "product": product,
         "bound": bound,
@@ -14948,16 +15003,23 @@ async def admin_package_items_save(pid: int, request: Request, db: Session = Dep
         ).delete(synchronize_session=False)
         db.commit()
         return RedirectResponse(f"/admin/packages/{pid}/items?msg=已移除绑定", status_code=303)
-    if not item_id.isdigit() or not db.get(InventoryItem, int(item_id)):
-        return RedirectResponse(f"/admin/packages/{pid}/items?msg=请填写存在的品目编号", status_code=303)
+    if not item_id.isdigit():
+        return RedirectResponse(f"/admin/packages/{pid}/items?msg=请先从搜索结果里点选一个品目", status_code=303)
+    item = db.get(InventoryItem, int(item_id))
+    if not _package_item_allowed(request, item):
+        return RedirectResponse(
+            f"/admin/packages/{pid}/items?msg=这个品目不存在、已下架，或当前门店不能绑定",
+            status_code=303,
+        )
     exists = db.query(PackageApplicableItem).filter(
         PackageApplicableItem.product_id == pid,
         PackageApplicableItem.inventory_item_id == int(item_id),
     ).first()
-    if not exists:
-        db.add(PackageApplicableItem(product_id=pid, inventory_item_id=int(item_id)))
-        db.commit()
-    return RedirectResponse(f"/admin/packages/{pid}/items?msg=已绑定品目 #{item_id}", status_code=303)
+    if exists:
+        return RedirectResponse(f"/admin/packages/{pid}/items?msg=这个品目已经绑定过", status_code=303)
+    db.add(PackageApplicableItem(product_id=pid, inventory_item_id=int(item_id)))
+    db.commit()
+    return RedirectResponse(f"/admin/packages/{pid}/items?msg=已绑定：{item.name}", status_code=303)
 
 
 def _package_notices(db: Session, request: Request, customer_id: int | None, pet_id: int | None) -> list[dict]:

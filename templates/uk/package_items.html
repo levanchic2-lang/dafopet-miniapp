@@ -1,24 +1,71 @@
 {% extends "uk/_base.html" %}
 {% block title %}套餐可抵项目 · {{ product.name }}{% endblock %}
 {% block body %}
+<style>
+  .pkg-bind { max-width: 760px; }
+  .pkg-bind p { line-height: 1.7; color: var(--ink-2); }
+  .pkg-search { margin-top: 28px; }
+  .pkg-search label { display: block; font-size: 10pt; letter-spacing: 1px; margin-bottom: 8px; }
+  .pkg-search input[type="search"] {
+    width: 100%; box-sizing: border-box; min-height: 44px;
+    border: 0; border-bottom: 0.5px solid var(--ink); background: transparent;
+    font: inherit; font-size: 14pt; padding: 8px 0;
+  }
+  .pkg-status { min-height: 1.4em; font-size: 9.5pt; color: var(--ink-3); font-style: italic; }
+  .pkg-results { margin: 8px 0 16px; border-top: 0.5px solid var(--hair-2); }
+  .pkg-results[hidden],
+  .pkg-picked[hidden],
+  .pkg-search [hidden] { display: none !important; }
+  .pkg-option {
+    display: block; width: 100%; text-align: left; background: transparent;
+    border: 0; border-bottom: 0.5px solid var(--hair-2); padding: 12px 4px;
+    min-height: 48px; font: inherit; cursor: pointer;
+  }
+  .pkg-option strong { font-weight: 600; }
+  .pkg-option small { display: block; margin-top: 4px; color: var(--ink-3); font-size: 9.5pt; letter-spacing: 0.5px; }
+  .pkg-option.is-active, .pkg-option:hover { background: var(--paper-2, rgba(0,0,0,.03)); }
+  .pkg-picked { margin: 12px 0; padding-top: 12px; border-top: 0.5px solid var(--hair-2); }
+  .pkg-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .pkg-actions .uk-btn { min-height: 44px; }
+  @media (min-width: 720px) {
+    .pkg-actions { flex-direction: row; align-items: center; }
+  }
+  @media (max-width: 719px) {
+    .pkg-table-wrap thead { display: none; }
+    .pkg-table-wrap tr { display: block; padding: 12px 0; border-bottom: 0.5px solid var(--hair-2); }
+    .pkg-table-wrap td { display: block; border: 0; padding: 2px 0; }
+    .pkg-table-wrap td[data-label]::before {
+      content: attr(data-label);
+      display: inline-block;
+      min-width: 3.2em;
+      margin-right: 8px;
+      color: var(--ink-3);
+    }
+  }
+  .pkg-table-wrap { overflow-x: auto; }
+</style>
+<div class="pkg-bind">
 <div class="uk-breadcrumb" style="margin:24px 0 16px;font-size:9pt;letter-spacing:2px;color:var(--ink-3);font-style:italic;">
   <a href="/admin/packages">套餐目录</a><span style="margin:0 8px;">/</span><span>{{ product.name }}</span>
 </div>
 <h1 class="uk-h1" style="font-size:28pt;">{{ product.name }}</h1>
-<p style="max-width:640px;line-height:1.7;color:var(--ink-2);">
-  只有在这里按品目编号绑定的项目，收银时才会被当成「这张卡可以抵」。
-  系统不按名字相似自动匹配。改这里会影响该目录下已经售出、尚未用完的卡能抵哪些项目，
+<p>
+  在下面按名称搜索库存或服务项目，点选其中一条后再绑定。
+  同名项目会列出各自的门店、类别和单位，点哪一条就只绑定那一条，不会按名字相似自动勾上。
+  改这里会影响该目录下已经售出、尚未用完的卡能抵哪些项目，
   但不会改次数、宠物、门店、售价或有效期。旧卡如果当时没指定宠物，仍然不能当成所有宠物通用。
 </p>
 {% if msg %}<p>{{ msg }}</p>{% endif %}
+<div class="pkg-table-wrap">
 <table class="uk-tbl">
-  <thead><tr><th>品目编号</th><th>名称</th><th>门店</th><th></th></tr></thead>
+  <thead><tr><th>名称</th><th>门店</th><th>类别</th><th>单位</th><th></th></tr></thead>
   <tbody>
     {% for row in bound %}
     <tr>
-      <td class="num">{{ row.id }}</td>
-      <td>{{ row.name }}</td>
-      <td>{{ row.store }}</td>
+      <td data-label="名称">{{ row.name }}</td>
+      <td data-label="门店">{{ row.store }}</td>
+      <td data-label="类别">{{ row.category }}{% if row.subcategory %} / {{ row.subcategory }}{% endif %}</td>
+      <td data-label="单位">{{ row.unit }}{% if row.spec %} · {{ row.spec }}{% endif %}</td>
       <td>
         <form method="post" action="/admin/packages/{{ product.id }}/items">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -29,17 +76,177 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="4">还没有绑定。未绑定前，这张卡只会提醒，不会拦住无关收费。</td></tr>
+    <tr><td colspan="5">还没有绑定。未绑定前，这张卡只会提醒，不会拦住无关收费。</td></tr>
     {% endfor %}
   </tbody>
 </table>
-<form method="post" action="/admin/packages/{{ product.id }}/items" style="margin-top:24px;display:flex;gap:12px;align-items:end;">
+</div>
+
+<form class="pkg-search" id="bind-form" method="post" action="/admin/packages/{{ product.id }}/items">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="action" value="add">
-  <label>品目编号
-    <input name="inventory_item_id" inputmode="numeric" required placeholder="例如 2522">
-  </label>
-  <button class="uk-btn sm" type="submit">绑定这个品目</button>
+  <input type="hidden" name="inventory_item_id" id="picked-id" value="">
+  <label for="item-query">按名称搜索</label>
+  <input id="item-query" type="search" autocomplete="off" placeholder="输入品名，例如 洗澡"
+         role="combobox" aria-autocomplete="list" aria-controls="item-results" aria-expanded="false">
+  <p class="pkg-status" id="item-status" role="status" aria-live="polite"></p>
+  <div class="pkg-results" id="item-results" role="listbox" hidden></div>
+  <div class="pkg-picked" id="item-picked" hidden>
+    <div>已选：<strong id="picked-name"></strong></div>
+    <div id="picked-meta" style="color:var(--ink-3);font-size:9.5pt;margin-top:4px;"></div>
+  </div>
+  <div class="pkg-actions">
+    <button class="uk-btn sm" id="bind-btn" type="submit" disabled>绑定选中的这一条</button>
+    <button class="uk-btn ghost sm" id="clear-pick" type="button" hidden>重新选择</button>
+  </div>
 </form>
-<p style="margin-top:12px;font-size:9pt;color:var(--ink-3);">请从库存里抄准确编号。同名的另一支疫苗不会自动算进来。</p>
+<p style="margin-top:12px;font-size:9pt;color:var(--ink-3);">搜索只是找出候选。没有点选具体一条时，不能绑定。</p>
+</div>
+<script>
+(function () {
+  var query = document.getElementById("item-query");
+  var status = document.getElementById("item-status");
+  var list = document.getElementById("item-results");
+  var picked = document.getElementById("item-picked");
+  var pickedName = document.getElementById("picked-name");
+  var pickedMeta = document.getElementById("picked-meta");
+  var pickedId = document.getElementById("picked-id");
+  var bindBtn = document.getElementById("bind-btn");
+  var clearBtn = document.getElementById("clear-pick");
+  var timer = null;
+  var seq = 0;
+  var active = -1;
+  var items = [];
+
+  function meta(item) {
+    var bits = [item.store || "两店通用"];
+    var kind = item.category || "";
+    if (item.subcategory) kind += (kind ? " / " : "") + item.subcategory;
+    if (kind) bits.push(kind);
+    if (item.unit) bits.push("单位 " + item.unit);
+    if (item.spec) bits.push(item.spec);
+    if (item.manufacturer) bits.push(item.manufacturer);
+    bits.push(item.is_service ? "服务项目" : ("库存 " + item.stock_qty));
+    return bits.join(" · ");
+  }
+
+  function setStatus(text) { status.textContent = text || ""; }
+
+  function clearResults() {
+    list.innerHTML = "";
+    list.hidden = true;
+    query.setAttribute("aria-expanded", "false");
+    active = -1;
+    items = [];
+  }
+
+  function selectItem(item) {
+    pickedId.value = String(item.id);
+    pickedName.textContent = item.name || "";
+    pickedMeta.textContent = meta(item);
+    picked.hidden = false;
+    bindBtn.disabled = false;
+    clearBtn.hidden = false;
+    clearResults();
+    setStatus("已选中一条，确认后才会绑定。");
+  }
+
+  function paint() {
+    list.innerHTML = "";
+    items.forEach(function (item, index) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pkg-option" + (index === active ? " is-active" : "");
+      btn.setAttribute("role", "option");
+      btn.setAttribute("aria-selected", index === active ? "true" : "false");
+      btn.id = "pkg-opt-" + index;
+      var name = document.createElement("strong");
+      name.textContent = item.name || "";
+      var detail = document.createElement("small");
+      detail.textContent = meta(item);
+      btn.appendChild(name);
+      btn.appendChild(detail);
+      btn.addEventListener("click", function () { selectItem(item); });
+      list.appendChild(btn);
+    });
+    list.hidden = items.length === 0;
+    query.setAttribute("aria-expanded", items.length ? "true" : "false");
+    query.setAttribute("aria-activedescendant", active >= 0 ? "pkg-opt-" + active : "");
+  }
+
+  function search(text) {
+    var current = ++seq;
+    setStatus("正在搜索…");
+    clearResults();
+    fetch("/admin/packages/item-search?q=" + encodeURIComponent(text), {
+      headers: { "Accept": "application/json" }
+    }).then(function (res) {
+      if (!res.ok) throw new Error("bad");
+      return res.json();
+    }).then(function (data) {
+      if (current !== seq) return;
+      items = (data && data.items) || [];
+      if (!items.length) {
+        setStatus("没有名称包含「" + text + "」的可绑定品目。");
+        return;
+      }
+      setStatus(items.length >= 20 ? "只显示前 20 条，请把名称写得更具体。" : ("找到 " + items.length + " 条，请点选其中一条。"));
+      paint();
+    }).catch(function () {
+      if (current !== seq) return;
+      setStatus("搜索失败，请再试一次。");
+    });
+  }
+
+  query.addEventListener("input", function () {
+    var text = query.value.trim();
+    if (timer) clearTimeout(timer);
+    if (!text) {
+      seq += 1;
+      clearResults();
+      setStatus("");
+      return;
+    }
+    timer = setTimeout(function () { search(text); }, 250);
+  });
+
+  query.addEventListener("keydown", function (event) {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (!items.length) return;
+      event.preventDefault();
+      active = event.key === "ArrowDown"
+        ? Math.min(items.length - 1, active + 1)
+        : Math.max(0, active - 1);
+      paint();
+      var node = document.getElementById("pkg-opt-" + active);
+      if (node) node.scrollIntoView({ block: "nearest" });
+    } else if (event.key === "Enter") {
+      if (active >= 0 && items[active]) {
+        event.preventDefault();
+        selectItem(items[active]);
+      } else if (!pickedId.value) {
+        event.preventDefault();
+      }
+    } else if (event.key === "Escape") {
+      clearResults();
+    }
+  });
+
+  clearBtn.addEventListener("click", function () {
+    pickedId.value = "";
+    picked.hidden = true;
+    bindBtn.disabled = true;
+    clearBtn.hidden = true;
+    setStatus("");
+    query.focus();
+  });
+
+  document.getElementById("bind-form").addEventListener("submit", function (event) {
+    if (!pickedId.value) {
+      event.preventDefault();
+      setStatus("请先从搜索结果里点选一个品目。");
+    }
+  });
+})();
+</script>
 {% endblock %}
