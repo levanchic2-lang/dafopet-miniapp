@@ -509,6 +509,40 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_appointments_wechat_openid ON appointments(wechat_openid)"))
 
+            # 订阅消息：失败日志补事件类型；授权台账只加不删
+            try:
+                notify_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(notification_logs)")).fetchall()}
+                if notify_cols and "event_type" not in notify_cols:
+                    conn.execute(text("ALTER TABLE notification_logs ADD COLUMN event_type VARCHAR(40) DEFAULT ''"))
+                if notify_cols and "appointment_id" not in notify_cols:
+                    conn.execute(text("ALTER TABLE notification_logs ADD COLUMN appointment_id INTEGER DEFAULT NULL"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_notify_event_type ON notification_logs(event_type)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_notify_appointment ON notification_logs(appointment_id)"))
+            except Exception:
+                pass
+            try:
+                conn.execute(text(
+                    "CREATE TABLE IF NOT EXISTS wechat_subscribe_grants ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "openid VARCHAR(64) DEFAULT '', "
+                    "template_id VARCHAR(80) DEFAULT '', "
+                    "template_key VARCHAR(40) DEFAULT '', "
+                    "last_status VARCHAR(20) DEFAULT '', "
+                    "available_count INTEGER DEFAULT 0, "
+                    "scene VARCHAR(40) DEFAULT '', "
+                    "created_at DATETIME, "
+                    "updated_at DATETIME)"
+                ))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_wechat_subscribe_openid_tmpl "
+                    "ON wechat_subscribe_grants(openid, template_id)"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_subscribe_openid ON wechat_subscribe_grants(openid)"
+                ))
+            except Exception:
+                pass
+
             # staff 员工档案表
             staff_cols = conn.execute(text("PRAGMA table_info(staff)")).fetchall()
             if not staff_cols:

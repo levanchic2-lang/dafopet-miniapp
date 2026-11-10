@@ -71,6 +71,7 @@
         <view class="detail-title">{{selected.pet_name}} · {{selected.service_name}}</view>
         <view class="detail-row"><text>时间</text><text>{{selected.date}} {{selected.time}} · {{selected.duration}}分钟</text></view>
         <view class="detail-row"><text>客户</text><text>{{selected.customer_name}} {{selected.phone}}</text></view>
+        <view wx:if="{{selected.notify_alert}}" class="detail-row"><text>通知</text><text>{{selected.notify_alert}}，请提醒主人打开小程序授权</text></view>
         <view class="detail-row"><text>备注</text><text>{{selected.notes || '无'}}</text></view>
         <button class="detail-primary" bindtap="startEdit">修改时间或项目</button>
         <view class="detail-actions">

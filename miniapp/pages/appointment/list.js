@@ -1,4 +1,5 @@
 const { postJson } = require("../../utils/api");
+const subscribe = require("../../utils/subscribe");
 
 Page({
   onShareAppMessage() {
@@ -11,7 +12,9 @@ Page({
     loading: false,
     error: "",
     items: [],
-    highlightId: ""
+    highlightId: "",
+    notifyPrompt: false,
+    notifyOpenSettings: false
   },
 
   onLoad(query) {
@@ -19,7 +22,46 @@ Page({
   },
 
   onShow() {
+    subscribe.prefetch("appointment");
     this.fetchList();
+    this._refreshNotifyPrompt();
+  },
+
+  async _refreshNotifyPrompt() {
+    let openid = "";
+    try { openid = wx.getStorageSync("WECHAT_OPENID") || ""; } catch (e) {}
+    if (!openid) return;
+    const [status, setting] = await Promise.all([
+      subscribe.fetchStatus(openid, "appointment"),
+      subscribe.readSetting()
+    ]);
+    const ids = (status && status.suggested_template_ids) || subscribe.cachedIds("appointment");
+    this._suggestedIds = ids;
+    this.setData({
+      notifyPrompt: !!(status && status.needs_prompt),
+      notifyOpenSettings: subscribe.shouldOpenSettings(setting, ids) || !!(status && status.open_settings)
+    });
+  },
+
+  onReauthNotify() {
+    if (this.data.notifyOpenSettings) {
+      subscribe.openSettings();
+      return;
+    }
+    const ids = (this._suggestedIds && this._suggestedIds.length)
+      ? this._suggestedIds.slice(0, 3)
+      : subscribe.cachedIds("appointment");
+    let openid = "";
+    try { openid = wx.getStorageSync("WECHAT_OPENID") || ""; } catch (e) {}
+    if (!ids.length) return;
+    wx.requestSubscribeMessage({
+      tmplIds: ids,
+      success: (res) => {
+        subscribe.report(openid, "appointment_list_reauth", res);
+        this.setData({ notifyPrompt: !subscribe.acceptedAny(res) });
+      },
+      fail: () => subscribe.openSettings()
+    });
   },
 
   async ensureOpenid() {
@@ -79,7 +121,21 @@ Page({
       confirmColor: "#7a2828",
       success: (res) => {
         if (!res.confirm) return;
-        this._doCancel(id, idx);
+        const ids = subscribe.cachedIds("appointment");
+        const go = () => this._doCancel(id, idx);
+        if (!ids.length) {
+          go();
+          return;
+        }
+        wx.requestSubscribeMessage({
+          tmplIds: ids,
+          complete: (sub) => {
+            let openid = "";
+            try { openid = wx.getStorageSync("WECHAT_OPENID") || ""; } catch (e) {}
+            subscribe.report(openid, "appointment_cancel", sub || {});
+            go();
+          }
+        });
       }
     });
   },

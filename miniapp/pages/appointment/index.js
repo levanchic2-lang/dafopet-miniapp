@@ -1,4 +1,5 @@
 const { getJson, postJson } = require("../../utils/api");
+const subscribe = require("../../utils/subscribe");
 
 const BEAUTY_ADDON_OPTIONS = ["去浮毛", "SPA", "护发素", "纯手剪", "药浴", "去油"];
 const BEAUTY_COAT_OPTIONS  = ["长毛", "短毛"];
@@ -23,6 +24,8 @@ Page({
   data: {
     loading: true,
     submitting: false,
+    notifyPrompt: false,
+    notifyOpenSettings: false,
     // 老顾客识别
     boundProfile: { bound: false, pets: [] },
     selectedPetId: 0,
@@ -122,6 +125,58 @@ Page({
     // bind 页 navigateBack 回来时重新查档案 → 显示新绑定的客户信息
     if (this._mounted) this.loadMyProfile();
     this._mounted = true;
+    subscribe.prefetch("appointment");
+    this._refreshNotifyPrompt();
+  },
+
+  async _refreshNotifyPrompt() {
+    let openid = "";
+    try { openid = wx.getStorageSync("WECHAT_OPENID") || ""; } catch (e) {}
+    if (!openid) return;
+    const [status, setting] = await Promise.all([
+      subscribe.fetchStatus(openid, "appointment"),
+      subscribe.readSetting()
+    ]);
+    const ids = (status && status.suggested_template_ids) || subscribe.cachedIds("appointment");
+    this._suggestedIds = ids;
+    this.setData({
+      notifyPrompt: !!(status && status.needs_prompt),
+      notifyOpenSettings: subscribe.shouldOpenSettings(setting, ids) || !!(status && status.open_settings)
+    });
+  },
+
+  onReauthNotify() {
+    if (this.data.notifyOpenSettings) {
+      subscribe.openSettings();
+      return;
+    }
+    const ids = (this._suggestedIds && this._suggestedIds.length) ? this._suggestedIds : subscribe.cachedIds("appointment");
+    let openid = "";
+    try { openid = wx.getStorageSync("WECHAT_OPENID") || ""; } catch (e) {}
+    if (!ids.length) {
+      wx.showToast({ title: "通知模板未就绪", icon: "none" });
+      return;
+    }
+    wx.requestSubscribeMessage({
+      tmplIds: ids.slice(0, 3),
+      success: (res) => {
+        subscribe.report(openid, "appointment_reauth", res);
+        const ok = subscribe.acceptedAny(res);
+        this.setData({ notifyPrompt: !ok });
+        if (!ok) {
+          wx.showModal({
+            title: "还没有允许通知",
+            content: subscribe.PROMPT + "。若弹窗没出现，请到设置里打开订阅消息。",
+            confirmText: "去设置",
+            cancelText: "知道了",
+            success: (modal) => { if (modal.confirm) subscribe.openSettings(); }
+          });
+        } else {
+          wx.showToast({ title: "通知已开启", icon: "success" });
+        }
+      },
+      fail: () => subscribe.openSettings()
+    });
   },
 
   // 老顾客识别：用 openid 查档案
@@ -773,6 +828,9 @@ Page({
           return;
         }
       }
+      // 同步拉起授权，必须发生在后面的 await 之前，否则微信认为不是用户点击。
+      const tmplIds = subscribe.cachedIds("appointment");
+      const subPromise = tmplIds.length ? subscribe.requestSubscribe(tmplIds) : Promise.resolve({});
       const openid = await this.ensureOpenid();
       const payload = Object.assign({}, this.data.form, { openid });
       // 若用户在 banner 里选了已有宠物 chip → 带 pet_id 给后端绑定到 Pet 档案
@@ -782,6 +840,16 @@ Page({
       // 缓存手机号供下次配额检查使用
       if (payload.phone && /^1\d{10}$/.test((payload.phone || "").trim())) {
         try { wx.setStorageSync("USER_PHONE", payload.phone.trim()); } catch(e2) {}
+      }
+      let subResult = {};
+      try { subResult = await subPromise; } catch (subErr) { subResult = {}; }
+      await subscribe.report(
+        openid,
+        this.data.editMode ? "appointment_update" : "appointment_submit",
+        subResult
+      );
+      if (!subscribe.acceptedAny(subResult)) {
+        this.setData({ notifyPrompt: true });
       }
 
       if (this.data.editMode && this._editId) {
@@ -814,21 +882,6 @@ Page({
           payload.coat_length = this.data.form.coat_length;
         }
         const res = await postJson("/api/appointments/create", payload);
-        // 预约提交成功后，订阅通知（最多3个）
-        try {
-          const _c = (k) => { try { return wx.getStorageSync(k) || ""; } catch(e2) { return ""; } };
-          const tmplIds = [];
-          const apptTmpl = _c("WECHAT_TMPL_APPOINTMENT");
-          if (apptTmpl) tmplIds.push(apptTmpl);
-          // TNR/手术类预约额外订阅手术提醒 + 手术完成模板（共3个，微信上限）
-          if (payload.category === "tnr" || payload.category === "surgery") {
-            const reminderTmpl = _c("WECHAT_TMPL_SURGERY_REMINDER");
-            if (reminderTmpl && !tmplIds.includes(reminderTmpl)) tmplIds.push(reminderTmpl);
-            const doneTmpl = _c("WECHAT_TMPL_SURGERY_DONE");
-            if (doneTmpl && !tmplIds.includes(doneTmpl)) tmplIds.push(doneTmpl);
-          }
-          if (tmplIds.length) await wx.requestSubscribeMessage({ tmplIds });
-        } catch(e2) { /* 订阅失败不阻断跳转 */ }
         wx.showToast({ title: "预约已提交", icon: "success" });
         if (res && res.appointment && res.appointment.id) {
           wx.navigateTo({ url: `/pages/appointment/list?highlight=${res.appointment.id}` });

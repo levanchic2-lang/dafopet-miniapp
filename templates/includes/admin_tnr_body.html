@@ -218,6 +218,8 @@
  <div class="admin-app-lines">
  <strong>#{{ a.id }}</strong> {{ status_badge(a.status) }}
  {% if a.data_origin == 'history_excel' %}<span class="pill pill-info" style="margin-left:.35rem;">表格导入</span>{% else %}<span class="pill pill-gray" style="margin-left:.35rem;">小程序</span>{% endif %}
+ {% if a.notify_unauthorized %}<span class="pill pill-no" style="margin-left:.35rem;">客户未授权通知</span>{% endif %}
+ {% if a.notify_last_failed %}<span class="pill pill-no" style="margin-left:.35rem;">上次推送失败</span>{% endif %}
  {% if surgery_media_ok %}
  <span class="pill pill-ok" style="margin-left:.35rem;">资料齐全</span>
  {% elif a.status in ['cancelled', 'rejected', 'no_show'] %}

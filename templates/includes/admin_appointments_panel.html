@@ -350,10 +350,12 @@
  </td>
  <td class="col-svc">
  <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;">{{ appt.service_name }}</div>
- {% if appt.related_application_id or appt.is_proxy %}
+ {% if appt.related_application_id or appt.is_proxy or appt.notify_unauthorized or appt.notify_last_failed %}
  <div class="row-svc-extra">
  {% if appt.related_application_id %}<a href="/admin#app-{{ appt.related_application_id }}" style="color:#1d4ed8;text-decoration:none;" title="跳转 TNR 申请详情">申请 #{{ appt.related_application_id }} →</a>{% endif %}
  {% if appt.is_proxy %}{% if appt.related_application_id %} · {% endif %}代预约{% endif %}
+ {% if appt.notify_unauthorized %}<span class="pill pill-no" style="margin-left:.35rem;">客户未授权通知</span>{% endif %}
+ {% if appt.notify_last_failed %}<span class="pill pill-no" style="margin-left:.35rem;">上次推送失败</span>{% endif %}
  </div>
  {% endif %}
  </td>

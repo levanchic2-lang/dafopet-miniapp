@@ -46,12 +46,16 @@ def wechat_code2session(js_code: str) -> dict[str, Any]:
     return data
 
 
-def _get_access_token() -> str:
-    """服务端 access_token：内存缓存。"""
+def _get_access_token(*, force: bool = False) -> str:
+    """服务端 access_token：内存缓存。force=True 时丢掉缓存重新向微信要。"""
     if not _enabled():
         raise RuntimeError("未配置 WECHAT_APPID/WECHAT_APPSECRET")
     now = time.time()
-    if _token_cache.access_token and now < _token_cache.expires_at - 60:
+    if (
+        not force
+        and _token_cache.access_token
+        and now < _token_cache.expires_at - 60
+    ):
         return _token_cache.access_token
     url = "https://api.weixin.qq.com/cgi-bin/token"
     params = {
@@ -70,16 +74,114 @@ def _get_access_token() -> str:
     return _token_cache.access_token
 
 
+# 40001 凭证无效、40014 token 不合法、42001 token 过期：刷新后再试一次。
+_TOKEN_RETRY_CODES = {40001, 40014, 42001}
+
+
 def _post_subscribe_send(payload: dict[str, Any]) -> dict[str, Any]:
-    token = _get_access_token()
     url = "https://api.weixin.qq.com/cgi-bin/message/subscribe/send"
-    with httpx.Client(timeout=8.0) as client:
-        r = client.post(url, params={"access_token": token}, json=payload)
-        r.raise_for_status()
-        data = r.json()
-    if data.get("errcode") not in (0, "0", None):
+    last: dict[str, Any] = {}
+    for attempt in (1, 2):
+        token = _get_access_token(force=(attempt == 2))
+        with httpx.Client(timeout=8.0) as client:
+            response = client.post(url, params={"access_token": token}, json=payload)
+            response.raise_for_status()
+            data = response.json()
+        err = data.get("errcode")
+        if err in (0, "0", None):
+            return data
+        try:
+            code = int(err)
+        except (TypeError, ValueError):
+            code = -1
+        last = data
+        if code in _TOKEN_RETRY_CODES and attempt == 1:
+            _token_cache.access_token = ""
+            _token_cache.expires_at = 0.0
+            continue
         raise RuntimeError(f"subscribe send failed: {data}")
-    return data
+    raise RuntimeError(f"subscribe send failed: {last}")
+
+
+def _write_notify_log(
+    db: Session,
+    *,
+    application_id: int | None,
+    event_type: str,
+    success: bool,
+    body: dict[str, Any],
+    appointment_id: int | None = None,
+    commit: bool,
+) -> None:
+    db.add(
+        NotificationLog(
+            application_id=application_id,
+            channel="wechat_miniapp",
+            payload=json.dumps(body, ensure_ascii=False),
+            success=success,
+            event_type=(event_type or "")[:40],
+            appointment_id=appointment_id,
+        )
+    )
+    if commit:
+        db.commit()
+
+
+def _deliver(
+    db: Session,
+    payload: dict[str, Any],
+    *,
+    event_type: str,
+    application_id: int | None = None,
+    appointment_id: int | None = None,
+    event_key: str = "",
+    extra: dict[str, Any] | None = None,
+    commit: bool = True,
+    skip_if_any_attempt: bool = False,
+) -> bool:
+    """发送订阅消息并记日志。成功扣授权次数；43101 标未授权。同一 event_key 成功过不再发。"""
+    from app.services.wechat_subscribe import (
+        consume_grant,
+        mark_grant_unauthorized,
+        subscribe_event_seen,
+    )
+
+    if event_key and subscribe_event_seen(db, event_key, success_only=not skip_if_any_attempt):
+        return False
+    openid = str(payload.get("touser") or "")
+    template_id = str(payload.get("template_id") or "")
+    try:
+        resp = _post_subscribe_send(payload)
+    except Exception as exc:
+        if "43101" in str(exc):
+            mark_grant_unauthorized(db, openid, template_id)
+        body: dict[str, Any] = {"type": event_type, "event_key": event_key, "error": str(exc)}
+        if extra:
+            body.update(extra)
+        _write_notify_log(
+            db,
+            application_id=application_id,
+            event_type=event_type,
+            success=False,
+            body=body,
+            appointment_id=appointment_id,
+            commit=commit,
+        )
+        return False
+    consume_grant(db, openid, template_id)
+    body = {"type": event_type, "event_key": event_key, "resp": resp}
+    if extra:
+        body.update(extra)
+    _write_notify_log(
+        db,
+        application_id=application_id,
+        event_type=event_type,
+        success=True,
+        body=body,
+        appointment_id=appointment_id,
+        commit=commit,
+    )
+    return True
 
 
 def push_application_result(
@@ -93,7 +195,8 @@ def push_application_result(
     note: str = "",
     submitted_at: str = "",
     action_at: str = "",
-) -> None:
+    event_key: str = "",
+) -> bool:
     """推送：审核结果/状态更新。"""
     if not settings.wechat_tmpl_application_result:
         return
@@ -141,27 +244,13 @@ def push_application_result(
         "page": settings.wechat_message_page,
         "data": data,
     }
-    try:
-        resp = _post_subscribe_send(payload)
-        db.add(
-            NotificationLog(
-                application_id=application_id,
-                channel="wechat_miniapp",
-                payload=json.dumps({"type": "application_result", "resp": resp}, ensure_ascii=False),
-                success=True,
-            )
-        )
-        db.commit()
-    except Exception as e:
-        db.add(
-            NotificationLog(
-                application_id=application_id,
-                channel="wechat_miniapp",
-                payload=str(e),
-                success=False,
-            )
-        )
-        db.commit()
+    return _deliver(
+        db,
+        payload,
+        event_type="application_result",
+        application_id=application_id,
+        event_key=event_key or f"application_result:{application_id}:{status_text}",
+    )
 
 
 def push_appointment_status(
@@ -177,8 +266,10 @@ def push_appointment_status(
     phone: str = "",
     customer_name: str = "",
     note: str = "",
-) -> None:
-    """推送：预约状态变更（确认/取消）通知。使用 wechat_tmpl_appointment 模板。"""
+    event_key: str = "",
+    application_id: int | None = None,
+) -> bool:
+    """推送：预约状态变更（确认/取消/改约）通知。使用 wechat_tmpl_appointment 模板。"""
     tmpl = settings.wechat_tmpl_appointment or settings.wechat_tmpl_application_result
     if not tmpl:
         return
@@ -227,34 +318,15 @@ def push_appointment_status(
         "page": settings.wechat_message_page,
         "data": data,
     }
-    try:
-        resp = _post_subscribe_send(payload)
-        try:
-            db.add(
-                NotificationLog(
-                    application_id=None,
-                    channel="wechat_miniapp",
-                    payload=json.dumps({"type": "appointment_status", "appointment_id": appointment_id, "status": status_text, "resp": resp}, ensure_ascii=False),
-                    success=True,
-                )
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
-    except Exception as e:
-        try:
-            db.rollback()
-            db.add(
-                NotificationLog(
-                    application_id=None,
-                    channel="wechat_miniapp",
-                    payload=str(e),
-                    success=False,
-                )
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+    return _deliver(
+        db,
+        payload,
+        event_type="appointment_status",
+        application_id=application_id,
+        appointment_id=appointment_id,
+        event_key=event_key or f"appointment_status:{appointment_id}:{status_text}",
+        extra={"appointment_id": appointment_id, "status": status_text},
+    )
 
 
 def push_surgery_reminder(
@@ -266,7 +338,10 @@ def push_surgery_reminder(
     appointment_date: str = "",
     appointment_time: str = "",
     reminder_type: str = "day_before",
-) -> None:
+    event_key: str = "",
+    application_id: int | None = None,
+    skip_if_any_attempt: bool = False,
+) -> bool:
     """推送：手术前提醒（前一天或当天）。使用专用 surgery_reminder 模板（预约提醒）。"""
     tmpl_id = (settings.wechat_tmpl_surgery_reminder or "").strip()
     if not tmpl_id:
@@ -308,27 +383,16 @@ def push_surgery_reminder(
         "data": data,
     }
     log_type = f"surgery_reminder_{reminder_type}"
-    try:
-        resp = _post_subscribe_send(payload)
-        db.add(
-            NotificationLog(
-                application_id=None,
-                channel="wechat_miniapp",
-                payload=json.dumps({"type": log_type, "appointment_id": appointment_id, "resp": resp}, ensure_ascii=False),
-                success=True,
-            )
-        )
-        db.commit()
-    except Exception as e:
-        db.add(
-            NotificationLog(
-                application_id=None,
-                channel="wechat_miniapp",
-                payload=str(e),
-                success=False,
-            )
-        )
-        db.commit()
+    return _deliver(
+        db,
+        payload,
+        event_type=log_type,
+        application_id=application_id,
+        appointment_id=appointment_id,
+        event_key=event_key or f"{log_type}_{appointment_id}",
+        extra={"appointment_id": appointment_id},
+        skip_if_any_attempt=skip_if_any_attempt,
+    )
 
 
 def push_surgery_done(
@@ -339,7 +403,8 @@ def push_surgery_done(
     *,
     note: str = "",
     action_at: str = "",
-) -> None:
+    event_key: str = "",
+) -> bool:
     """推送：手术完成。"""
     if not settings.wechat_tmpl_surgery_done:
         return
@@ -378,27 +443,13 @@ def push_surgery_done(
         "page": settings.wechat_message_page,
         "data": data,
     }
-    try:
-        resp = _post_subscribe_send(payload)
-        db.add(
-            NotificationLog(
-                application_id=application_id,
-                channel="wechat_miniapp",
-                payload=json.dumps({"type": "surgery_done", "resp": resp}, ensure_ascii=False),
-                success=True,
-            )
-        )
-        db.commit()
-    except Exception as e:
-        db.add(
-            NotificationLog(
-                application_id=application_id,
-                channel="wechat_miniapp",
-                payload=str(e),
-                success=False,
-            )
-        )
-        db.commit()
+    return _deliver(
+        db,
+        payload,
+        event_type="surgery_done",
+        application_id=application_id,
+        event_key=event_key or f"surgery_done:{application_id}",
+    )
 
 def push_rejection_notice(
     db,
@@ -408,7 +459,8 @@ def push_rejection_notice(
     *,
     reason: str = "",
     action_at: str = "",
-) -> None:
+    event_key: str = "",
+) -> bool:
     """推送：审核不通过通知。模板字段：thing1=审核说明, phrase2=审核结果, thing3=审核对象, time4=审核时间。"""
     if not settings.wechat_tmpl_rejection:
         return
@@ -447,27 +499,14 @@ def push_rejection_notice(
         "page": settings.wechat_message_page,
         "data": data,
     }
-    try:
-        resp = _post_subscribe_send(payload)
-        db.add(
-            NotificationLog(
-                application_id=application_id,
-                channel="wechat_miniapp",
-                payload=json.dumps({"type": "rejection_notice", "resp": resp}, ensure_ascii=False),
-                success=True,
-            )
-        )
-        db.commit()
-    except Exception as e:
-        db.add(
-            NotificationLog(
-                application_id=application_id,
-                channel="wechat_miniapp",
-                payload=str(e),
-                success=False,
-            )
-        )
-        db.commit()
+    return _deliver(
+        db,
+        payload,
+        event_type="rejection_notice",
+        application_id=application_id,
+        event_key=event_key or f"rejection:{application_id}",
+    )
+
 
 def push_preventive_reminder(
     db: Session,
@@ -578,7 +617,8 @@ def push_pending_manual_notice(
     applicant_name: str,
     *,
     submitted_at: str = "",
-) -> None:
+    event_key: str = "",
+) -> bool:
     """推送：进入人工审核提醒。模板字段：thing2=申请人, time3=申请时间, thing4=业务类型, character_string5=业务编号, phrase11=审核状态。"""
     if not settings.wechat_tmpl_pending_manual:
         return
@@ -620,27 +660,13 @@ def push_pending_manual_notice(
         "page": settings.wechat_message_page,
         "data": data,
     }
-    try:
-        resp = _post_subscribe_send(payload)
-        db.add(
-            NotificationLog(
-                application_id=application_id,
-                channel="wechat_miniapp",
-                payload=json.dumps({"type": "pending_manual_notice", "resp": resp}, ensure_ascii=False),
-                success=True,
-            )
-        )
-        db.commit()
-    except Exception as e:
-        db.add(
-            NotificationLog(
-                application_id=application_id,
-                channel="wechat_miniapp",
-                payload=str(e),
-                success=False,
-            )
-        )
-        db.commit()
+    return _deliver(
+        db,
+        payload,
+        event_type="pending_manual_notice",
+        application_id=application_id,
+        event_key=event_key or f"pending_manual:{application_id}",
+    )
 
 
 def push_followup(

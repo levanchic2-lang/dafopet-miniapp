@@ -746,8 +746,20 @@ def _execute_create_appointment(db: Session, userid: str, args: dict) -> str:
         pet_id=args.get("pet_id"),
     )
     db.add(row)
+    db.flush()
+    try:
+        from app.services.wechat_subscribe import attach_proxy_booking, notify_appointment_event
+        attach_proxy_booking(db, row)
+    except Exception as exc:
+        logger.warning("wecom appointment attach openid failed: %s", exc)
     db.commit()
     db.refresh(row)
+    try:
+        from app.services.wechat_subscribe import notify_appointment_event
+        kind = "confirmed" if (row.status or "") == AppointmentStatus.confirmed.value else "booked"
+        notify_appointment_event(db, row, kind)
+    except Exception as exc:
+        logger.warning("wecom appointment notify failed: %s", exc)
     return (f"✓ 预约 #{row.id} 已创建\n"
             f"{args['appointment_date']} {args['appointment_time']} · "
             f"{args['service_name']} · {args['pet_name']}（待门店确认）")

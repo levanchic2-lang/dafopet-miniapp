@@ -163,9 +163,9 @@ from app.services.inpatient_medication_schedule import (
     parse_schedule_times,
 )
 from app.services.wechat_miniapp import (
-    push_application_result, push_appointment_status, push_pending_manual_notice,
+    push_application_result, push_pending_manual_notice,
     push_preventive_reminder, push_rejection_notice, push_surgery_done,
-    push_surgery_reminder, wechat_code2session,
+    wechat_code2session,
 )
 
 logger = logging.getLogger(__name__)
@@ -505,7 +505,11 @@ def _startup():
         logger.info("本 worker 未抢到调度锁，跳过定时任务（由持锁 worker 负责）")
         return
     logger.info("本 worker 持有调度锁，启动定时任务")
-    asyncio.get_event_loop().create_task(_surgery_reminder_loop())
+    try:
+        from app.services.wechat_subscribe import start_surgery_reminder_scheduler
+        start_surgery_reminder_scheduler()
+    except Exception as _e:
+        logger.warning("手术前提醒调度器启动失败：%s", _e)
     asyncio.get_event_loop().create_task(_vaccine_reminder_loop())
     # 回访任务调度器（每小时跑一次）
     try:
@@ -536,6 +540,11 @@ def _startup():
 @app.on_event("shutdown")
 def _shutdown():
     try:
+        from app.services.wechat_subscribe import stop_surgery_reminder_scheduler
+        stop_surgery_reminder_scheduler()
+    except Exception:
+        pass
+    try:
         from app.services.followup_dispatch import stop_scheduler as _stop_fu
         _stop_fu()
     except Exception:
@@ -550,81 +559,6 @@ def _shutdown():
         _stop_anmon()
     except Exception:
         pass
-
-
-async def _surgery_reminder_loop():
-    """每天 08:00 检查手术预约并推送前一天+当天提醒。
-    先等到下一个 08:00 再执行，避免服务重启时立即触发误推。
-    """
-    while True:
-        now = datetime.now()
-        next_run = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        if now >= next_run:
-            next_run += timedelta(days=1)
-        await asyncio.sleep((next_run - now).total_seconds())
-        try:
-            _run_surgery_reminders()
-        except Exception:
-            pass
-
-
-def _run_surgery_reminders():
-    """同步执行：查询手术预约并推送提醒。"""
-    from app.database import SessionLocal
-    db = SessionLocal()
-    try:
-        today = datetime.now().date()
-        tomorrow = today + timedelta(days=1)
-        today_str = today.strftime("%Y-%m-%d")
-        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
-
-        # 查询今天和明天的手术/TNR 预约（已确认）
-        rows = (
-            db.query(Appointment)
-            .filter(
-                Appointment.category.in_([AppointmentCategory.surgery.value, AppointmentCategory.tnr.value]),
-                Appointment.status == AppointmentStatus.confirmed.value,
-                Appointment.appointment_date.in_([today_str, tomorrow_str]),
-                Appointment.wechat_openid.isnot(None),
-                Appointment.wechat_openid != "",
-            )
-            .all()
-        )
-        for row in rows:
-            openid = (row.wechat_openid or "").strip()
-            if not openid:
-                continue
-            reminder_type = "day_of" if row.appointment_date == today_str else "day_before"
-            log_key = f"surgery_reminder_{reminder_type}_{row.id}_{row.appointment_date}"
-            # 检查是否已推送过（同一天同一类型不重复发）
-            from app.models import NotificationLog as _NL
-            already = (
-                db.query(_NL)
-                .filter(_NL.payload.contains(log_key))
-                .first()
-            )
-            if already:
-                continue
-            cat_name = (row.pet_name or "猫咪").strip()
-            push_surgery_reminder(
-                db,
-                appointment_id=row.id,
-                openid=openid,
-                cat_name=cat_name,
-                appointment_date=row.appointment_date or "",
-                appointment_time=row.appointment_time or "",
-                reminder_type=reminder_type,
-            )
-            # 记录已推送标记
-            db.add(_NL(
-                application_id=row.related_application_id,
-                channel="log",
-                payload=log_key,
-                success=True,
-            ))
-            db.commit()
-    finally:
-        db.close()
 
 
 _VACC_REMINDER_DAYS = 7  # 提前 N 天推送
@@ -1090,6 +1024,52 @@ async def api_wechat_config():
         "wechat_fields_vaccine_reminder": settings.wechat_fields_vaccine_reminder,
         "wechat_fields_inpatient_medication": settings.wechat_fields_inpatient_medication,
     }
+
+
+@app.post("/api/wechat/subscribe-report")
+async def api_wechat_subscribe_report(payload: dict = Body(...), db: Session = Depends(get_db)):
+    """小程序上报本次订阅弹窗结果（accept/reject/ban/filter）。"""
+    from app.services.wechat_subscribe import (
+        backfill_appointment_openid,
+        record_subscribe_results,
+        subscription_status,
+    )
+    openid = await _resolve_wechat_openid(payload or {})
+    scene = str((payload or {}).get("scene") or "")[:40]
+    main_switch = (payload or {}).get("main_switch")
+    if main_switch is True:
+        main_switch = "on"
+    elif main_switch is False:
+        main_switch = "off"
+    elif main_switch is not None:
+        main_switch = str(main_switch).strip().lower()
+        if main_switch not in ("on", "off"):
+            main_switch = None
+    saved = record_subscribe_results(
+        db,
+        openid,
+        (payload or {}).get("results") or {},
+        scene=scene,
+        main_switch=main_switch,
+    )
+    linked = backfill_appointment_openid(db, openid)
+    db.commit()
+    return {
+        "ok": True,
+        "saved": saved,
+        "appointments_linked": linked,
+        "status": subscription_status(db, openid, scene or "status"),
+    }
+
+
+@app.get("/api/wechat/subscribe-status")
+async def api_wechat_subscribe_status(
+    openid: str = Query(""),
+    scene: str = Query("status"),
+    db: Session = Depends(get_db),
+):
+    from app.services.wechat_subscribe import subscription_status
+    return subscription_status(db, (openid or "").strip(), (scene or "status").strip() or "status")
 
 
 @app.get("/api/geocode/regeo")
@@ -2924,6 +2904,8 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
         .limit(page_size)
         .all()
     )
+    from app.services.wechat_subscribe import annotate_notify_flags
+    annotate_notify_flags(db, list(rows))
 
     try:
         backup_files = list_backup_zips()
@@ -3595,6 +3577,8 @@ async def page_admin_appointments(
         appointments_raw = q.order_by(
             Appointment.appointment_date, Appointment.appointment_time
         ).all()
+    from app.services.wechat_subscribe import annotate_notify_flags
+    annotate_notify_flags(db, list(appointments_raw))
 
     # ── 按日期→部门→时段分组 ──────────────────────────────────
     _SLOT_ORDER = ["morning", "afternoon", "evening", "other"]
@@ -5965,6 +5949,8 @@ async def admin_appointment_create(
         )
         db.add(row)
         db.flush()
+        from app.services.wechat_subscribe import attach_proxy_booking, notify_appointment_event
+        attach_proxy_booking(db, row)
         _audit(
             db,
             request,
@@ -5981,6 +5967,10 @@ async def admin_appointment_create(
             },
         )
         db.commit()
+        try:
+            notify_appointment_event(db, row, "confirmed")
+        except Exception as _e:
+            logger.warning("[wechat] admin appointment confirm push failed: %s", _e)
         # /m 路由用 msg/err；admin 路由保持 appointment_ok/err 兼容现有锚点
         if redirect_base.startswith("/m"):
             return RedirectResponse(redirect_base + "?msg=" + quote(f"预约 #{row.id} 已创建", safe=""), status_code=303)
@@ -6239,23 +6229,14 @@ async def admin_appointment_status(
                 app_row.status = ApplicationStatus.no_show.value
                 app_row.updated_at = datetime.utcnow()
     db.commit()
-    # 预约确认/取消后推送通知给用户（#5）
-    openid_for_push = (row.wechat_openid or "").strip()
-    if openid_for_push and status in (AppointmentStatus.confirmed.value, AppointmentStatus.cancelled.value):
-        status_label = "已确认，请按约定时间到院" if status == AppointmentStatus.confirmed.value else "已取消"
-        push_appointment_status(
-            db,
-            appointment_id=row.id,
-            openid=openid_for_push,
-            status_text=status_label,
-            service_name=row.service_name or "",
-            store=row.store or "",
-            appointment_date=row.appointment_date or "",
-            appointment_time=row.appointment_time or "",
-            phone=row.phone or "",
-            customer_name=row.customer_name or "",
-            note=reason_clean or status_label,
-        )
+    # 确认/取消推给主人。openid 为空时从关联申请补上。同一时段确认成功过则不重复发。
+    if status in (AppointmentStatus.confirmed.value, AppointmentStatus.cancelled.value) and status != old_appt_status:
+        from app.services.wechat_subscribe import notify_appointment_event
+        kind = "confirmed" if status == AppointmentStatus.confirmed.value else "cancelled"
+        try:
+            notify_appointment_event(db, row, kind, note=reason_clean)
+        except Exception as _e:
+            logger.warning("[wechat] appointment status push failed: %s", _e)
     # 尽量回到操作前的筛选页面（保留 preset/df/dt/appt_status 等参数）
     referer = request.headers.get("referer", "")
     # /m 路由用 msg/err；admin 路由保持 appointment_ok 兼容现有锚点
@@ -6514,7 +6495,14 @@ async def admin_appointment_reschedule(
             success=True,
         ))
 
+    changed = (old_store, old_date, old_time) != (row.store, row.appointment_date, row.appointment_time)
     db.commit()
+    if changed:
+        from app.services.wechat_subscribe import notify_appointment_event
+        try:
+            notify_appointment_event(db, row, "rescheduled", note=reason_text)
+        except Exception as _e:
+            logger.warning("[wechat] appointment reschedule push failed: %s", _e)
     return _admin_appointment_redirect(next, ok="reschedule", anchor=_anchor)
 
 
@@ -9559,6 +9547,9 @@ def _staff_appointment_payload(row: Appointment, pet: Pet | None = None) -> dict
         "notes": row.notes or "",
         "store": _STORE_FULL_TO_SHORT.get(row.store or "", row.store or ""),
         "related_application_id": row.related_application_id,
+        "notify_unauthorized": bool(getattr(row, "notify_unauthorized", False)),
+        "notify_last_failed": bool(getattr(row, "notify_last_failed", False)),
+        "notify_alert": getattr(row, "notify_alert", "") or "",
     }
 
 
@@ -9584,6 +9575,8 @@ async def api_staff_miniapp_calendar(
     if full_store:
         q = q.filter(Appointment.store == full_store)
     rows = q.order_by(Appointment.appointment_date, Appointment.appointment_time, Appointment.id).all()
+    from app.services.wechat_subscribe import annotate_notify_flags
+    annotate_notify_flags(db, rows)
     pet_ids = [r.pet_id for r in rows if r.pet_id]
     pet_map = {p.id: p for p in db.query(Pet).filter(Pet.id.in_(pet_ids)).all()} if pet_ids else {}
     dates = []
@@ -9653,14 +9646,13 @@ async def api_staff_miniapp_appointment_status(
         detail=json.dumps({"appointment_id": row.id, "old": old_status, "new": status}, ensure_ascii=False),
     ))
     db.commit()
-    if row.wechat_openid and status in (AppointmentStatus.confirmed.value, AppointmentStatus.cancelled.value):
-        status_text = "已确认，请按约定时间到院" if status == AppointmentStatus.confirmed.value else "已取消"
-        push_appointment_status(
-            db, appointment_id=row.id, openid=row.wechat_openid,
-            status_text=status_text, service_name=row.service_name or "", store=row.store or "",
-            appointment_date=row.appointment_date or "", appointment_time=row.appointment_time or "",
-            phone=row.phone or "", customer_name=row.customer_name or "", note=reason or status_text,
-        )
+    if status in (AppointmentStatus.confirmed.value, AppointmentStatus.cancelled.value) and status != old_status:
+        from app.services.wechat_subscribe import notify_appointment_event
+        kind = "confirmed" if status == AppointmentStatus.confirmed.value else "cancelled"
+        try:
+            notify_appointment_event(db, row, kind, note=reason)
+        except Exception as _e:
+            logger.warning("[wechat] staff appointment status push failed: %s", _e)
     return {"ok": True, "appointment": _staff_appointment_payload(row)}
 
 
@@ -9690,12 +9682,24 @@ async def api_staff_miniapp_appointment_reschedule(
     old = {"date": row.appointment_date, "time": row.appointment_time}
     row.appointment_date, row.appointment_time = new_date, new_time
     row.updated_at = datetime.utcnow()
+    if row.related_application_id:
+        app_row = db.get(Application, row.related_application_id)
+        if app_row and app_row.status == ApplicationStatus.scheduled.value:
+            app_row.appointment_at = new_date
+            app_row.updated_at = datetime.utcnow()
     db.add(AuditLog(
         action="staff_miniapp_appointment_reschedule", actor=(user.username or "")[:80],
         application_id=row.related_application_id,
         detail=json.dumps({"appointment_id": row.id, "old": old, "new": {"date": new_date, "time": new_time}}, ensure_ascii=False),
     ))
+    changed = (old["date"], old["time"]) != (new_date, new_time)
     db.commit()
+    if changed:
+        from app.services.wechat_subscribe import notify_appointment_event
+        try:
+            notify_appointment_event(db, row, "rescheduled")
+        except Exception as _e:
+            logger.warning("[wechat] staff reschedule push failed: %s", _e)
     return {"ok": True, "appointment": _staff_appointment_payload(row)}
 
 
@@ -9837,12 +9841,18 @@ async def api_staff_miniapp_appointment_create(
     )
     db.add(row)
     db.flush()
+    from app.services.wechat_subscribe import attach_proxy_booking, notify_appointment_event
+    attach_proxy_booking(db, row)
     db.add(AuditLog(
         action="staff_miniapp_appointment_create", actor=(user.username or "")[:80],
-        application_id=related_id,
+        application_id=row.related_application_id,
         detail=json.dumps({"appointment_id": row.id, "category": row.category, "store": row.store}, ensure_ascii=False),
     ))
     db.commit()
+    try:
+        notify_appointment_event(db, row, "confirmed")
+    except Exception as _e:
+        logger.warning("[wechat] staff appointment create push failed: %s", _e)
     return {"ok": True, "appointment": _staff_appointment_payload(row, pet)}
 
 
@@ -9923,6 +9933,9 @@ def _staff_tnr_payload(db: Session, row: Application, appointment: Appointment |
         "after_count": after_count,
         "can_complete": before_count > 0 and after_count > 0 and not completed,
         "application_media_ids": [m.id for m in application_images],
+        "notify_unauthorized": bool(getattr(row, "notify_unauthorized", False)),
+        "notify_last_failed": bool(getattr(row, "notify_last_failed", False)),
+        "notify_alert": getattr(row, "notify_alert", "") or "",
     }
 
 
@@ -9949,8 +9962,11 @@ async def api_staff_miniapp_tnr_today(request: Request, db: Session = Depends(ge
         if not row:
             continue
         seen.add(row.id)
-        items.append(_staff_tnr_payload(db, row, appointment))
-    return {"ok": True, "date": date.today().isoformat(), "profile": _staff_profile_payload(user), "items": items}
+        items.append((row, appointment))
+    from app.services.wechat_subscribe import annotate_notify_flags
+    annotate_notify_flags(db, [row for row, _appointment in items])
+    payloads = [_staff_tnr_payload(db, row, appointment) for row, appointment in items]
+    return {"ok": True, "date": date.today().isoformat(), "profile": _staff_profile_payload(user), "items": payloads}
 
 
 @app.get("/api/staff-miniapp/tnr/media/{media_id}")
@@ -10386,22 +10402,10 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
             app_row.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(row)
-    # 保留原来后台确认后发送给客户的订阅通知。
+    # 顾客提交前应已完成订阅授权。这里只发一次确认，和后台再点确认共用同一事件键。
     try:
-        if openid:
-            push_appointment_status(
-                db,
-                appointment_id=row.id,
-                openid=openid,
-                status_text="已确认，请按约定时间到院",
-                service_name=row.service_name or "",
-                store=row.store or "",
-                appointment_date=row.appointment_date or "",
-                appointment_time=row.appointment_time or "",
-                phone=row.phone or "",
-                customer_name=row.customer_name or "",
-                note="预约已自动确认，请按约定时间到院",
-            )
+        from app.services.wechat_subscribe import notify_appointment_event
+        notify_appointment_event(db, row, "confirmed", note="预约已自动确认，请按约定时间到院")
     except Exception as _e:
         logger.warning("[wechat] auto-confirm appointment push failed: %s", _e)
     # 推送给对应门店员工
@@ -10505,6 +10509,11 @@ async def api_wechat_appointment_cancel(
             app_row.status = ApplicationStatus.approved.value
             app_row.updated_at = datetime.utcnow()
     db.commit()
+    try:
+        from app.services.wechat_subscribe import notify_appointment_event
+        notify_appointment_event(db, row, "cancelled", note="顾客已取消预约")
+    except Exception as _e:
+        logger.warning("[wechat] customer cancel push failed: %s", _e)
     return {"ok": True, "id": appointment_id}
 
 
@@ -10562,6 +10571,7 @@ async def api_wechat_appointment_update(
         if err:
             raise HTTPException(400, err)
 
+    old_slot = (row.appointment_date, row.appointment_time, row.store or "")
     row.appointment_date = new_date
     row.appointment_time = new_time
     if new_store:
@@ -10578,8 +10588,20 @@ async def api_wechat_appointment_update(
         row.notes = str(payload.get("notes") or "")[:500]
 
     row.updated_at = datetime.utcnow()
+    if row.related_application_id:
+        app_row = db.get(Application, row.related_application_id)
+        if app_row and app_row.status == ApplicationStatus.scheduled.value:
+            app_row.appointment_at = new_date
+            app_row.updated_at = datetime.utcnow()
+    slot_changed = old_slot != (row.appointment_date, row.appointment_time, row.store or "")
     db.commit()
     db.refresh(row)
+    if slot_changed:
+        try:
+            from app.services.wechat_subscribe import notify_appointment_event
+            notify_appointment_event(db, row, "rescheduled")
+        except Exception as _e:
+            logger.warning("[wechat] customer reschedule push failed: %s", _e)
     return {"ok": True, "appointment": _serialize_appointment(row)}
 
 
@@ -10735,9 +10757,11 @@ async def api_wechat_claim_apps(payload: dict = Body(...), db: Session = Depends
     for row in rows:
         row.wechat_openid = openid
         n += 1
-    if n:
+    from app.services.wechat_subscribe import backfill_appointment_openid
+    linked = backfill_appointment_openid(db, openid)
+    if n or linked:
         db.commit()
-    return {"ok": True, "updated": n}
+    return {"ok": True, "updated": n, "appointments_linked": linked}
 
 
 def _video_ext(name: str) -> str:
@@ -36158,17 +36182,13 @@ async def api_calendar_appt_status(appt_id: int, request: Request, db: Session =
                 app_row.status = ApplicationStatus.no_show.value
                 app_row.updated_at = datetime.utcnow()
     db.commit()
-    openid = (row.wechat_openid or "").strip()
-    if openid and status in (AppointmentStatus.confirmed.value, AppointmentStatus.cancelled.value):
-        status_label = "已确认，请按约定时间到院" if status == AppointmentStatus.confirmed.value else "已取消"
-        push_appointment_status(
-            db, appointment_id=row.id, openid=openid,
-            status_text=status_label, service_name=row.service_name or "",
-            store=row.store or "", appointment_date=row.appointment_date or "",
-            appointment_time=row.appointment_time or "",
-            phone=row.phone or "", customer_name=row.customer_name or "",
-            note=cancel_reason or status_label,
-        )
+    if status in (AppointmentStatus.confirmed.value, AppointmentStatus.cancelled.value) and status != old_status:
+        from app.services.wechat_subscribe import notify_appointment_event
+        kind = "confirmed" if status == AppointmentStatus.confirmed.value else "cancelled"
+        try:
+            notify_appointment_event(db, row, kind, note=cancel_reason)
+        except Exception as _e:
+            logger.warning("[wechat] calendar status push failed: %s", _e)
     return {"ok": True}
 
 
@@ -36205,11 +36225,23 @@ async def api_calendar_appt_reschedule(appt_id: int, request: Request, db: Sessi
     row.appointment_date = new_date
     row.appointment_time = new_time
     row.updated_at = datetime.utcnow()
+    if row.related_application_id:
+        app_row = db.get(Application, row.related_application_id)
+        if app_row and app_row.status == ApplicationStatus.scheduled.value:
+            app_row.appointment_at = new_date
+            app_row.updated_at = datetime.utcnow()
     _audit(db, request, "appointment_reschedule",
            application_id=row.related_application_id,
            detail={"appointment_id": row.id, "old_date": old_date, "old_time": old_time,
                    "new_date": new_date, "new_time": new_time})
+    changed = (old_date, old_time) != (new_date, new_time)
     db.commit()
+    if changed:
+        from app.services.wechat_subscribe import notify_appointment_event
+        try:
+            notify_appointment_event(db, row, "rescheduled")
+        except Exception as _e:
+            logger.warning("[wechat] calendar reschedule push failed: %s", _e)
     return {"ok": True}
 
 
@@ -41605,6 +41637,8 @@ async def m_appointment_detail(appt_id: int, request: Request, db: Session = Dep
     related_app = None
     if a.related_application_id:
         related_app = db.get(Application, a.related_application_id)
+    from app.services.wechat_subscribe import annotate_notify_flags
+    annotate_notify_flags(db, [a])
     ctx = _m_ctx(request, db, active_tab="medical")
     ctx.update({"a": a, "cust": cust, "pet": pet, "related_app": related_app})
     return templates.TemplateResponse(request, "m_uk/appointment_detail.html", ctx)
@@ -41733,12 +41767,24 @@ async def m_appointment_edit_save(
     a.service_name = target_service
     a.notes = target_notes
     a.updated_at = datetime.utcnow()
+    if a.related_application_id:
+        app_row = db.get(Application, a.related_application_id)
+        if app_row and app_row.status == ApplicationStatus.scheduled.value:
+            app_row.appointment_at = new_date
+            app_row.updated_at = datetime.utcnow()
+    slot_changed = (old["store"], old["date"], old["time"]) != (a.store, a.appointment_date, a.appointment_time)
     _audit(db, request, "appointment_edit_mobile", application_id=a.related_application_id, detail={
         "appointment_id": a.id, "old": old,
         "new": {"store": a.store, "date": a.appointment_date, "time": a.appointment_time,
                 "duration": a.duration_minutes, "category": a.category, "service": a.service_name},
     })
     db.commit()
+    if slot_changed:
+        from app.services.wechat_subscribe import notify_appointment_event
+        try:
+            notify_appointment_event(db, a, "rescheduled")
+        except Exception as _e:
+            logger.warning("[wechat] mobile reschedule push failed: %s", _e)
     return RedirectResponse(f"/m/appointment/{appt_id}?msg=" + quote("已修改预约", safe=""), status_code=303)
 
 
@@ -41919,6 +41965,8 @@ async def m_appointments_list(
     for a in appts:
         a.time_range_label = _appointment_time_range_label(a)
 
+    from app.services.wechat_subscribe import annotate_notify_flags
+    annotate_notify_flags(db, appts)
     # 按日期分组
     grouped: dict[str, list] = {}
     for a in appts:
@@ -42053,6 +42101,8 @@ async def m_tnr_list(request: Request, db: Session = Depends(get_db)):
             Application.clinic_store == store_short,
         ))
     rows = q.order_by(Application.created_at.desc()).limit(50).all()
+    from app.services.wechat_subscribe import annotate_notify_flags
+    annotate_notify_flags(db, rows)
     ctx = _m_ctx(request, db, active_tab="tnr")
     ctx["rows"] = rows
     return templates.TemplateResponse(request, "m_uk/tnr_list.html", ctx)
@@ -42068,6 +42118,8 @@ async def m_tnr_detail(app_id: int, request: Request, db: Session = Depends(get_
     # 照片
     images = [m for m in row.media if m.kind == MediaKind.application_image.value]
     videos = [m for m in row.media if m.kind == MediaKind.application_video.value]
+    from app.services.wechat_subscribe import annotate_notify_flags
+    annotate_notify_flags(db, [row])
     ctx = _m_ctx(request, db, active_tab="tnr")
     ctx.update({"row": row, "images": images, "videos": videos})
     return templates.TemplateResponse(request, "m_uk/tnr_detail.html", ctx)

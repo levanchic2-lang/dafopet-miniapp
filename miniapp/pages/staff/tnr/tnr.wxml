@@ -7,6 +7,12 @@
   <view wx:for="{{items}}" wx:key="id" class="tnr-card">
     <view class="tnr-card-head"><view><text class="tnr-time">{{item.time}}</text><text class="tnr-name">{{item.cat_name}}</text></view><text class="tnr-state {{item.completed ? 'done' : item.verified ? 'verified' : ''}}">{{item.status_label}}</text></view>
     <view class="tnr-meta">{{item.gender}}{{item.color ? ' · ' + item.color : ''}} · {{item.applicant_name}} {{item.phone}}</view>
+    <view wx:if="{{item.notify_unauthorized || item.notify_last_failed}}" class="tnr-alert">
+      <text wx:if="{{item.notify_unauthorized}}">客户未授权通知</text>
+      <text wx:if="{{item.notify_unauthorized && item.notify_last_failed}}"> · </text>
+      <text wx:if="{{item.notify_last_failed}}">上次推送失败</text>
+      <text>。请电话或当面提醒主人打开小程序授权，否则收不到审核和手术进度。</text>
+    </view>
     <view class="tnr-subhead"><text>申请照片</text><text>点击可放大核对</text></view>
     <scroll-view wx:if="{{item.previewPaths.length}}" scroll-x class="tnr-images"><image wx:for="{{item.previewPaths}}" wx:for-item="src" wx:key="*this" src="{{src}}" mode="aspectFill" data-id="{{item.id}}" data-src="{{src}}" bindtap="previewImage" /></scroll-view>
     <view wx:else class="tnr-no-image">申请照片载入中或暂无照片</view>

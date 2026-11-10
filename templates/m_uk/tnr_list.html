@@ -35,6 +35,13 @@
           AI&nbsp;{% if a.ai_is_likely_stray %}<span style="color:var(--accent-green);font-style:normal;">流浪</span>{% else %}<span style="color:var(--accent-red);font-style:normal;">非流浪</span>{% endif %}
         {% endif %}
       </div>
+      {% if a.notify_unauthorized or a.notify_last_failed %}
+      <div class="ukm-row-sub" style="color:var(--accent-amber);font-style:normal;">
+        {% if a.notify_unauthorized %}客户未授权通知{% endif %}
+        {% if a.notify_unauthorized and a.notify_last_failed %} · {% endif %}
+        {% if a.notify_last_failed %}上次推送失败{% endif %}
+      </div>
+      {% endif %}
     </div>
     {% if a.status == 'pending_manual' %}<span class="ukm-pill amber">待&nbsp;审</span>
     {% elif a.status == 'pre_approved' %}<span class="ukm-pill">预通过</span>

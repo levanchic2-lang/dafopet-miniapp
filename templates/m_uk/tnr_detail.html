@@ -20,6 +20,16 @@
     申请人&nbsp;<span style="color:var(--ink);font-style:normal;">{{ row.applicant_name or '—' }}</span>
     {% if row.phone %}<span class="sep">·</span><a href="tel:{{ row.phone }}" class="ukm-mono" style="font-style:normal;color:var(--ink-2);border-bottom:0.5px solid var(--hair);">{{ row.phone }}</a>{% endif %}
   </div>
+  {% if row.notify_unauthorized or row.notify_last_failed %}
+  <div class="ukm-card" style="margin-top:12px;border-left:2px solid var(--accent-amber);">
+    <div class="ukm-card-title" style="color:var(--accent-amber);">
+      {% if row.notify_unauthorized %}客户未授权通知{% endif %}
+      {% if row.notify_unauthorized and row.notify_last_failed %} · {% endif %}
+      {% if row.notify_last_failed %}上次推送失败{% endif %}
+    </div>
+    <div class="ukm-card-sub">请电话或当面提醒主人打开小程序，点「开启通知提醒」，否则收不到审核和手术进度。</div>
+  </div>
+  {% endif %}
 </div>
 
 {# AI 判定 #}
