@@ -1,5 +1,6 @@
 const { postJson } = require("../../utils/api");
 const { runWithPrivacyGuard } = require("../../utils/privacy");
+const subscribe = require("../../utils/subscribe");
 // 优先 .js 模块（require 更可靠），缺失时退 .json 兼容
 const shenzhenRegionsLocal = (() => {
   try { return require("../../utils/shenzhen_regions.js"); } catch (e) {}
@@ -75,6 +76,8 @@ Page({
     error: "",
     notifyStatusText: "",
     notifyReady: false,
+    notifyPrompt: false,
+    notifyOpenSettings: false,
     openid: "",
     idConsent: false,
     isProxy: false,
@@ -117,6 +120,8 @@ Page({
     // 兜底：onLoad 时如果数据没就绪（require 失败 + 网络慢），重入页面再试
     if (!this.data.addrReady) this._loadShenzhenRegions();
     this._syncNotifyState();
+    subscribe.prefetch("review");
+    this._refreshNotifyPrompt();
   },
 
   onSutureChange(e) {
@@ -426,9 +431,14 @@ Page({
     try {
       // 订阅弹窗：某些环境可能不返回回调导致卡住，增加超时保护
       console.log("[notify] subscribing tmplIds:", JSON.stringify(tmplIds));
-      await this._withTimeout(wx.requestSubscribeMessage({ tmplIds }), 12000, "订阅授权");
-      console.log("[notify] subscribe success");
-      this.setData({ notifyStatusText: "已弹出授权（请在弹窗里点允许）。" });
+      const subRes = await this._withTimeout(wx.requestSubscribeMessage({ tmplIds }), 12000, "订阅授权");
+      const accepted = subscribe.acceptedAny(subRes);
+      console.log("[notify] subscribe result", JSON.stringify(subscribe.summarize(subRes)));
+      this.setData({
+        notifyStatusText: accepted
+          ? "已允许通知，审核结果会推送到这个微信。"
+          : "您没有点允许。仍可提交申请，但收不到审核通知。"
+      });
 
       // 登录换 openid
       const loginRes = await this._withTimeout(wx.login(), 8000, "微信登录");
@@ -438,12 +448,16 @@ Page({
       this.setData({
         openid,
         notifyReady: !!openid,
-        notifyStatusText:
-          "openid已获取，可提交申请。手机号将用于医院联系，订阅消息将推送到本微信。"
+        notifyPrompt: !accepted,
+        notifyStatusText: accepted
+          ? "账号已绑定。手机号将用于医院联系，订阅消息会推送到本微信。"
+          : "账号已绑定，可以提交申请。通知未允许，审核结果需要自己打开小程序查看。"
       });
       try {
         wx.setStorageSync("WECHAT_OPENID", openid);
       } catch (e2) {}
+      const setting = await subscribe.readSetting();
+      await subscribe.report(openid, "apply", subRes, setting.mainSwitch);
     } catch (e) {
       const msg =
         (e && (e.errMsg || e.message)) ||
@@ -682,7 +696,118 @@ Page({
     }
     // 缓存手机号供预约页 TNR 配额检查使用
     try { wx.setStorageSync("USER_PHONE", String(form.phone || "").trim()); } catch(e2) {}
-    this._submitNow();
+    // 必须在本次点击里同步拉起授权，不能先 await 网络请求。
+    this._askReviewSubscribeThenSubmit();
+  },
+
+  _askReviewSubscribeThenSubmit() {
+    this.setData({ submitting: true });
+    const ids = subscribe.cachedIds("review");
+    const openid = this.data.openid || "";
+    const submit = () => this._submitNow();
+    if (!ids.length) {
+      this.setData({ notifyPrompt: true });
+      submit();
+      return;
+    }
+    wx.requestSubscribeMessage({
+      tmplIds: ids,
+      success: (res) => {
+        subscribe.report(openid, "apply_submit", res);
+        if (subscribe.acceptedAny(res) || this._notifyPersuaded) {
+          this.setData({ notifyPrompt: !subscribe.acceptedAny(res) });
+          submit();
+          return;
+        }
+        this._notifyPersuaded = true;
+        this.setData({ notifyPrompt: true });
+        wx.showModal({
+          title: "收不到审核通知",
+          content: "您没有允许通知，将收不到审核结果。可以再允许一次；不授权也能继续提交申请。",
+          confirmText: "再允许一次",
+          cancelText: "仍然提交",
+          success: (modal) => {
+            if (!modal.confirm) {
+              submit();
+              return;
+            }
+            wx.requestSubscribeMessage({
+              tmplIds: ids,
+              complete: (again) => {
+                subscribe.report(openid, "apply_submit_retry", again || {});
+                this.setData({ notifyPrompt: !subscribe.acceptedAny(again) });
+                submit();
+              }
+            });
+          },
+          fail: () => submit()
+        });
+      },
+      fail: () => {
+        this.setData({ notifyPrompt: true, notifyOpenSettings: true });
+        wx.showModal({
+          title: "请打开订阅消息",
+          content: "没有弹出授权。若您关闭了订阅消息或选择了不再询问，请到设置里打开。不授权也能继续提交申请。",
+          confirmText: "去设置",
+          cancelText: "仍然提交",
+          success: (modal) => {
+            if (modal.confirm) subscribe.openSettings();
+            submit();
+          },
+          fail: () => submit()
+        });
+      }
+    });
+  },
+
+  async _refreshNotifyPrompt() {
+    const openid = this.data.openid || "";
+    if (!openid) return;
+    const [status, setting] = await Promise.all([
+      subscribe.fetchStatus(openid, "apply"),
+      subscribe.readSetting()
+    ]);
+    const ids = (status && status.suggested_template_ids) || subscribe.cachedIds("review");
+    const openSettings = subscribe.shouldOpenSettings(setting, ids) || !!(status && status.open_settings);
+    this.setData({
+      notifyPrompt: !!(status && status.needs_prompt),
+      notifyOpenSettings: openSettings
+    });
+  },
+
+  onReauthNotify() {
+    if (this.data.notifyOpenSettings) {
+      subscribe.openSettings();
+      return;
+    }
+    const ids = subscribe.cachedIds("review");
+    const openid = this.data.openid || "";
+    if (!ids.length) {
+      wx.showToast({ title: "通知模板未就绪", icon: "none" });
+      return;
+    }
+    wx.requestSubscribeMessage({
+      tmplIds: ids,
+      success: (res) => {
+        subscribe.report(openid, "apply_reauth", res);
+        const ok = subscribe.acceptedAny(res);
+        this.setData({ notifyPrompt: !ok });
+        if (ok) wx.showToast({ title: "通知已开启", icon: "success" });
+        else {
+          wx.showModal({
+            title: "还没有允许通知",
+            content: subscribe.PROMPT + "。若弹窗没出现，请到设置里打开订阅消息。",
+            confirmText: "去设置",
+            cancelText: "知道了",
+            success: (modal) => { if (modal.confirm) subscribe.openSettings(); }
+          });
+        }
+      },
+      fail: () => {
+        this.setData({ notifyOpenSettings: true });
+        subscribe.openSettings();
+      }
+    });
   },
 
   async _submitNow() {
@@ -840,13 +965,8 @@ Page({
         const next = [sid, ...arr.filter((x) => String(x) !== sid)].slice(0, 20);
         wx.setStorageSync("MY_APPS", next);
       } catch (e) {}
-      // 提交成功后补订阅手术完成通知（未经预约流程时也能收到）
-      try {
-        const doneTmpl = wx.getStorageSync("WECHAT_TMPL_SURGERY_DONE") || "";
-        if (doneTmpl) {
-          await wx.requestSubscribeMessage({ tmplIds: [doneTmpl] });
-        }
-      } catch (e2) { /* 订阅失败不影响主流程 */ }
+      // 手术完成/预约提醒不在这里补弹：上传照片之后已经离开点击手势，微信不会再出授权窗。
+      // 那 3 个名额留给预约页和进度页。
     } catch (e) {
       let msg = "提交失败";
       if (e && e.data) {

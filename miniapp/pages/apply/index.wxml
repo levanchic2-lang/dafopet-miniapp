@@ -7,6 +7,10 @@
     <button class="btn secondary" bindtap="onEnableNotify">开启通知提醒</button>
     <view wx:if="{{notifyStatusText}}" class="sub">{{notifyStatusText}}</view>
   </view>
+  <view wx:if="{{notifyPrompt}}" style="margin-top:16rpx;padding:20rpx;background:#f8f1e7;border-left:6rpx solid #6b4423;">
+    <view style="font-size:28rpx;font-weight:700;color:#6b4423;">请开启通知提醒，否则收不到审核/预约/手术进度</view>
+    <button class="btn secondary" style="margin-top:12rpx;" bindtap="onReauthNotify">{{notifyOpenSettings ? '去设置打开通知' : '一键重新授权'}}</button>
+  </view>
 
   <view class="preflight-card">
     <view class="preflight-title">申请前请准备</view>

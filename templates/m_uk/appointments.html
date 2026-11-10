@@ -62,6 +62,13 @@
         {% if a.service_name %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ a.service_name }}{% endif %}
         {% if a.store %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ a.store }}{% endif %}
       </div>
+      {% if a.notify_unauthorized or a.notify_last_failed %}
+      <div class="ukm-row-sub" style="color:var(--accent-amber);font-style:normal;">
+        {% if a.notify_unauthorized %}客户未授权通知{% endif %}
+        {% if a.notify_unauthorized and a.notify_last_failed %} · {% endif %}
+        {% if a.notify_last_failed %}上次推送失败{% endif %}
+      </div>
+      {% endif %}
     </div>
     {% if a.status == 'pending' %}<span class="ukm-pill amber">{{ _status_zh.get(a.status) }}</span>
     {% elif a.status == 'confirmed' %}<span class="ukm-pill">{{ _status_zh.get(a.status) }}</span>

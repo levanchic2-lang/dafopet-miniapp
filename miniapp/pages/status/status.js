@@ -1,4 +1,5 @@
 const { runWithPrivacyGuard } = require("../../utils/privacy");
+const subscribe = require("../../utils/subscribe");
 
 const STATUS_ZH = {
   draft: "草稿",
@@ -189,7 +190,9 @@ Page({
     claimPhone: "",
     claimIdNumber: "",
     claimLoading: false,
-    claimStatusText: ""
+    claimStatusText: "",
+    notifyPrompt: false,
+    notifyOpenSettings: false
   },
 
   _pendingExpandId: "",
@@ -199,7 +202,58 @@ Page({
     const openid = wx.getStorageSync("WECHAT_OPENID") || "";
     this._pendingExpandId = String(urlId || "").trim().replace(/^#/, "");
     this.setData({ openid: String(openid || "") });
+    subscribe.prefetch("status");
     this.fetchMyOrders();
+    this._refreshNotifyPrompt();
+  },
+
+  async _refreshNotifyPrompt() {
+    const openid = this.data.openid || "";
+    if (!openid) return;
+    const [status, setting] = await Promise.all([
+      subscribe.fetchStatus(openid, "status"),
+      subscribe.readSetting()
+    ]);
+    const ids = (status && status.suggested_template_ids) || subscribe.cachedIds("review");
+    this._suggestedIds = ids;
+    this.setData({
+      notifyPrompt: !!(status && status.needs_prompt),
+      notifyOpenSettings: subscribe.shouldOpenSettings(setting, ids) || !!(status && status.open_settings)
+    });
+  },
+
+  onReauthNotify() {
+    if (this.data.notifyOpenSettings) {
+      subscribe.openSettings();
+      return;
+    }
+    const ids = (this._suggestedIds && this._suggestedIds.length)
+      ? this._suggestedIds.slice(0, 3)
+      : subscribe.cachedIds("review");
+    const openid = this.data.openid || "";
+    if (!ids.length) {
+      wx.showToast({ title: "通知模板未就绪", icon: "none" });
+      return;
+    }
+    wx.requestSubscribeMessage({
+      tmplIds: ids,
+      success: (res) => {
+        subscribe.report(openid, "status_reauth", res);
+        const ok = subscribe.acceptedAny(res);
+        this.setData({ notifyPrompt: !ok });
+        if (ok) wx.showToast({ title: "通知已开启", icon: "success" });
+        else {
+          wx.showModal({
+            title: "还没有允许通知",
+            content: subscribe.PROMPT + "。若弹窗没出现，请到设置里打开订阅消息。",
+            confirmText: "去设置",
+            cancelText: "知道了",
+            success: (modal) => { if (modal.confirm) subscribe.openSettings(); }
+          });
+        }
+      },
+      fail: () => subscribe.openSettings()
+    });
   },
 
   // 点击订单卡片：折叠/展开
@@ -214,6 +268,18 @@ Page({
     if (order.expanded) {
       this.setData({ [`myOrders[${idx}].expanded`]: false });
       return;
+    }
+    if (!this._detailSubscribed) {
+      this._detailSubscribed = true;
+      const ids = (this._suggestedIds && this._suggestedIds.length)
+        ? this._suggestedIds.slice(0, 3)
+        : subscribe.cachedIds("status");
+      if (ids.length && !this.data.notifyOpenSettings) {
+        wx.requestSubscribeMessage({
+          tmplIds: ids,
+          complete: (res) => subscribe.report(this.data.openid, "status_detail", res || {})
+        });
+      }
     }
     // 折叠其他已展开的
     orders.forEach((o, i) => {
@@ -402,16 +468,11 @@ Page({
       });
 
     try {
-      let tmplIds = [];
-      const c = await withTimeout(fetchConfig(), 6000, "获取模板配置");
-      const t1 = (c.wechat_tmpl_application_result || "").trim();
-      const t2 = (c.wechat_tmpl_surgery_done || "").trim();
-      if (t1) tmplIds.push(t1);
-      if (t2) tmplIds.push(t2);
-      tmplIds = Array.from(new Set(tmplIds)).slice(0, 2);
+      const tmplIds = subscribe.cachedIds("status");
+      let subRes = {};
       if (tmplIds.length) {
         this.setData({ bindStatusText: "正在弹出订阅授权…" });
-        await withTimeout(wx.requestSubscribeMessage({ tmplIds }), 12000, "订阅授权");
+        subRes = await withTimeout(wx.requestSubscribeMessage({ tmplIds }), 12000, "订阅授权");
       }
       this.setData({ bindStatusText: "正在登录…" });
       const loginRes = await withTimeout(wx.login(), 8000, "微信登录");
@@ -419,9 +480,15 @@ Page({
       const openid = (data.openid || "").trim();
       if (!openid) throw new Error("未获取到 openid");
       try { wx.setStorageSync("WECHAT_OPENID", openid); } catch (e2) {}
+      await subscribe.report(openid, "status_bind", subRes);
       this.setData({ openid, bindStatusText: "绑定成功，正在加载订单…" });
       this.fetchMyOrders();
-      this.setData({ bindStatusText: "绑定成功。" });
+      this._refreshNotifyPrompt();
+      this.setData({
+        bindStatusText: subscribe.acceptedAny(subRes)
+          ? "绑定成功，通知已开启。"
+          : "绑定成功。通知未允许，请点下方按钮重新授权，否则收不到进度。"
+      });
     } catch (e) {
       const msg = (e && (e.errMsg || e.message)) || "绑定失败";
       this.setData({ bindStatusText: "绑定失败：" + msg });

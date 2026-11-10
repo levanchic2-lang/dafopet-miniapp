@@ -171,9 +171,34 @@ class NotificationLog(Base):
     channel: Mapped[str] = mapped_column(String(40))  # email / log / wechat_miniapp
     payload: Mapped[str] = mapped_column(Text, default="")
     success: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 失败时也要能按事件检索；旧行留空，新推送都会写入。
+    event_type: Mapped[str] = mapped_column(String(40), default="")
+    appointment_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     application = relationship("Application", back_populates="notifications", foreign_keys=[application_id])
+
+
+class WechatSubscribeGrant(Base):
+    """小程序订阅消息授权台账：按 openid + 模板记最近结果和剩余可发次数。
+
+    一次性订阅每点一次「允许」加 1 次；发送成功扣 1；43101 清零并标未授权。
+    """
+
+    __tablename__ = "wechat_subscribe_grants"
+    __table_args__ = (
+        UniqueConstraint("openid", "template_id", name="uq_wechat_subscribe_openid_tmpl"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    openid: Mapped[str] = mapped_column(String(64), default="")
+    template_id: Mapped[str] = mapped_column(String(80), default="")
+    template_key: Mapped[str] = mapped_column(String(40), default="")
+    last_status: Mapped[str] = mapped_column(String(20), default="")
+    available_count: Mapped[int] = mapped_column(Integer, default=0)
+    scene: Mapped[str] = mapped_column(String(40), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class AuditLog(Base):

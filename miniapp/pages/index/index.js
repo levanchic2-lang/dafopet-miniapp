@@ -1,4 +1,5 @@
 const { postJson } = require("../../utils/api");
+const subscribe = require("../../utils/subscribe");
 
 Page({
   data: {
@@ -21,10 +22,20 @@ Page({
   },
 
   onShow() {
-    try {
-      const openid = wx.getStorageSync("WECHAT_OPENID") || "";
-      if (!!openid !== this.data.notifyReady) this.setData({ notifyReady: !!openid });
-    } catch (e) {}
+    subscribe.prefetch("review");
+    let openid = "";
+    try { openid = wx.getStorageSync("WECHAT_OPENID") || ""; } catch (e) {}
+    if (!openid) {
+      this.setData({ notifyReady: false });
+      return;
+    }
+    subscribe.fetchStatus(openid, "apply").then((status) => {
+      if (!status) return;
+      this.setData({
+        notifyReady: !status.needs_prompt,
+        notifyStatusText: status.needs_prompt ? subscribe.PROMPT : this.data.notifyStatusText
+      });
+    });
   },
 
   onShareAppMessage() {
@@ -81,7 +92,7 @@ Page({
       if (cfg.wechat_tmpl_surgery_reminder) wx.setStorageSync("WECHAT_TMPL_SURGERY_REMINDER", cfg.wechat_tmpl_surgery_reminder);
 
       if (!tmplIds.length) throw new Error("暂未取得通知模板，请稍后重试");
-      await new Promise((resolve, reject) => {
+      const subRes = await new Promise((resolve, reject) => {
         wx.requestSubscribeMessage({ tmplIds: tmplIds.slice(0, 3), success: resolve, fail: reject });
       });
       const loginRes = await new Promise((resolve, reject) => wx.login({ success: resolve, fail: reject }));
@@ -89,11 +100,16 @@ Page({
       const openid = data.openid || "";
       if (!openid) throw new Error("未能完成微信账号绑定");
       wx.setStorageSync("WECHAT_OPENID", openid);
+      const setting = await subscribe.readSetting();
+      await subscribe.report(openid, "home", subRes, setting.mainSwitch);
+      const accepted = subscribe.acceptedAny(subRes);
       this.setData({
         notifyReady: true,
-        notifyStatusText: "通知提醒已开启，可正常接收业务进度通知。"
+        notifyStatusText: accepted
+          ? "通知提醒已开启，可正常接收业务进度通知。"
+          : "账号已绑定，但您没有点允许。不授权也能继续申请，只是收不到进度推送。"
       });
-      wx.showToast({ title: "通知已开启", icon: "success" });
+      wx.showToast({ title: accepted ? "通知已开启" : "未允许通知", icon: accepted ? "success" : "none" });
     } catch (e) {
       const msg = (e && (e.errMsg || e.message)) || "开启失败，请稍后重试";
       this.setData({ notifyStatusText: msg });
