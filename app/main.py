@@ -142,6 +142,7 @@ from app.models import (
     PublicContent,
     WalkInRegistration,
 )
+from app.services import ai_job_recovery
 from app.services import registration as registration_svc
 from app.services.business_summary import (
     SummaryQueryError,
@@ -488,6 +489,20 @@ def _acquire_scheduler_lock() -> bool:
         return False
 
 
+def _release_interrupted_ai_jobs() -> None:
+    """后台任务活不过进程重启。把重启前仍在进行的生成标成可重试。"""
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        ai_job_recovery.release_interrupted_jobs(db)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 @app.on_event("startup")
 def _startup():
     # 部署后看这行即可确认进程时区已钉死北京（不受主机/VPN 影响）
@@ -498,6 +513,10 @@ def _startup():
         datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
     )
     init_db()
+    try:
+        _release_interrupted_ai_jobs()
+    except Exception as exc:
+        logger.warning("回收重启中断的生成任务失败：%s", exc)
     # 多进程（uvicorn --workers）下，定时任务/提醒只能在「一个」worker 里跑，
     # 否则回访/漏药/疫苗/手术提醒会被推送 N 份。用 flock 抢一把独占锁：
     # 抢到的 worker 才启动调度器，锁随该进程退出自动释放（另一 worker 接管）。
@@ -8894,6 +8913,8 @@ async def api_staff_miniapp_visit_consultation(
     latest = db.query(VisitConsultationDraft).filter(
         VisitConsultationDraft.visit_id == visit.id,
     ).order_by(VisitConsultationDraft.id.desc()).first()
+    if latest is not None:
+        ai_job_recovery.release_stale_consultation(db, latest)
     from app.services.visit_consultation_ai import speech_transcription_configured
     return {
         "ok": True,
@@ -8978,7 +8999,7 @@ async def api_staff_miniapp_visit_consultation_retry(
         raise HTTPException(404, "接诊草稿不存在")
     if not row.audio_path or not Path(row.audio_path).is_file():
         raise HTTPException(400, "原始录音已清理，请重新录音")
-    if row.status == "processing":
+    if row.status == "processing" and not ai_job_recovery.consultation_job_is_stale(row):
         return {"ok": True, "draft": _consultation_draft_payload(row)}
     row.status = "processing"
     row.ai_error = ""
@@ -17561,15 +17582,7 @@ async def admin_insurance_material_detail(
         raise HTTPException(404, "材料包不存在")
     pet = db.get(Pet, share.pet_id) if share.pet_id else None
     _assert_store_access(request, share.store, pet.store if pet else "")
-    if (
-        share.generation_status == "processing"
-        and share.generation_started_at
-        and share.generation_started_at <= datetime.utcnow() - timedelta(minutes=30)
-    ):
-        share.generation_status = "failed"
-        share.generation_error = "后台生成任务已中断，请重新生成"
-        share.generation_completed_at = datetime.utcnow()
-        db.commit()
+    ai_job_recovery.release_stale_insurance(db, share)
     snapshots = (
         db.query(InsuranceMaterialSnapshot)
         .filter(InsuranceMaterialSnapshot.share_id == share.id)
@@ -17607,6 +17620,7 @@ async def admin_insurance_material_generation_status(
         raise HTTPException(404, "材料包不存在")
     pet = db.get(Pet, share.pet_id) if share.pet_id else None
     _assert_store_access(request, share.store, pet.store if pet else "")
+    ai_job_recovery.release_stale_insurance(db, share)
     latest = _latest_insurance_snapshot(db, share.id)
     return JSONResponse({
         "status": share.generation_status or "idle",
@@ -17627,13 +17641,14 @@ async def admin_insurance_material_revoke(
     share = db.get(InsuranceMaterialShare, share_id)
     if not share:
         raise HTTPException(404, "材料包不存在")
+    pet = db.get(Pet, share.pet_id) if share.pet_id else None
+    _assert_store_access(request, share.store, pet.store if pet else "")
+    ai_job_recovery.release_stale_insurance(db, share)
     if share.generation_status == "processing":
         return RedirectResponse(
             f"/admin/insurance-materials/{share.id}?err={quote('材料包仍在生成，完成后再撤销链接', safe='')}",
             status_code=303,
         )
-    pet = db.get(Pet, share.pet_id) if share.pet_id else None
-    _assert_store_access(request, share.store, pet.store if pet else "")
     share.status = "revoked"
     share.revoked_at = datetime.utcnow()
     share.revoked_by = request.session.get("admin_username") or request.session.get("admin") or "admin"
@@ -17656,13 +17671,14 @@ async def admin_insurance_material_delete(
     share = db.get(InsuranceMaterialShare, share_id)
     if not share:
         raise HTTPException(404, "材料包不存在")
+    pet = db.get(Pet, share.pet_id) if share.pet_id else None
+    _assert_store_access(request, share.store, pet.store if pet else "")
+    ai_job_recovery.release_stale_insurance(db, share)
     if share.generation_status == "processing":
         return RedirectResponse(
             f"/admin/insurance-materials/{share.id}?err={quote('材料包仍在生成，完成后再删除', safe='')}",
             status_code=303,
         )
-    pet = db.get(Pet, share.pet_id) if share.pet_id else None
-    _assert_store_access(request, share.store, pet.store if pet else "")
     visit_id = share.visit_id
     snapshot_count = len(share.snapshots or [])
 
@@ -34373,7 +34389,7 @@ async def admin_ultrasound_retry_ai(
         raise HTTPException(403, "无权操作其他门店")
     form = await request.form()
     _require_csrf(request, str(form.get("csrf_token", "")))
-    if report.ai_status == "processing":
+    if report.ai_status == "processing" and not ai_job_recovery.ultrasound_job_is_stale(report):
         return JSONResponse({"ok": True, "status": "processing"})
     if not report.raw_pdf_path and not (report.vet_findings or "").strip():
         return JSONResponse({"ok": False, "error": "没有可重新识别的原始PDF或医生描述"}, status_code=400)
@@ -34395,6 +34411,7 @@ async def admin_ultrasound_ai_status(report_id: int, request: Request, db: Sessi
     admin_store = _get_admin_store(request)
     if admin_store and report.store and report.store != admin_store:
         raise HTTPException(403, "无权操作其他门店")
+    ai_job_recovery.release_stale_ultrasound(db, report)
     try:
         groups = json.loads(report.measurements_json or "[]") or []
     except Exception:
@@ -34423,6 +34440,7 @@ async def page_admin_ultrasound_edit(report_id: int, request: Request, db: Sessi
     admin_store = _get_admin_store(request)
     if admin_store and report.store and report.store != admin_store:
         raise HTTPException(403, "无权操作其他门店")
+    ai_job_recovery.release_stale_ultrasound(db, report)
     cust = db.get(Customer, report.customer_id) if report.customer_id else None
     pet = db.get(Pet, report.pet_id) if report.pet_id else None
     try:
@@ -34607,7 +34625,7 @@ async def admin_ultrasound_ai_draft(
     admin_store = _get_admin_store(request)
     if admin_store and report.store and report.store != admin_store:
         raise HTTPException(403, "无权操作其他门店")
-    if report.ai_status == "processing":
+    if report.ai_status == "processing" and not ai_job_recovery.ultrasound_job_is_stale(report):
         return JSONResponse(
             {"ok": False, "error": "已有生成任务正在进行，请稍候"},
             status_code=409,

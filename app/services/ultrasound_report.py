@@ -292,7 +292,7 @@ async def draft_ultrasound_text(payload: dict) -> dict[str, Any]:
             "ok": False,
             "error": "缺少可用测量数据和医生主观描述，已停止生成，避免产生误导性正文",
         }
-    from app.services.report_llm import report_llm_configured, report_text_client_model
+    from app.services.report_llm import llm_call_error, report_llm_configured, report_text_client_model
     if not report_llm_configured():
         return {"ok": False, "error": "未配置文字生成模型（DEEPSEEK_API_KEY / OPENAI_API_KEY）"}
     try:
@@ -322,7 +322,7 @@ async def draft_ultrasound_text(payload: dict) -> dict[str, Any]:
                 max_tokens=10000 if is_reasoner else 2200,
             )
         except Exception as exc:
-            last_error = f"调用模型失败：{exc}"
+            last_error = llm_call_error(exc)
             logger.warning(
                 "[ultrasound] draft API failed (attempt %s/2): %s",
                 attempt + 1,
