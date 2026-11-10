@@ -16,9 +16,17 @@ import logging
 import time
 from typing import Any
 
+import httpx
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# 单次聊天请求的上限。应用层还会再试一次，因此这里不再让 SDK 叠加重试。
+# 180 秒足够一次推理模型出报告；没有上限时，挂起的连接会把后台任务一直停在
+# processing，进程关闭时也会拖过 systemd 的停止时限，直到被 SIGKILL。
+REPORT_LLM_TIMEOUT = httpx.Timeout(180.0, connect=15.0)
+REPORT_LLM_MAX_RETRIES = 0
 
 
 _DEEPSEEK_MODEL_ALIASES = {
@@ -55,13 +63,28 @@ def report_text_client_model():
             or (settings.deepseek_model or "").strip()
         model = _normalize_deepseek_model(configured or "deepseek-v4-pro")
         is_reasoner = ("reason" in model.lower()) or ("r1" in model.lower()) or model.lower().endswith("-pro")
-        return AsyncOpenAI(api_key=dk, base_url=base), model, "deepseek", is_reasoner
+        return AsyncOpenAI(
+            api_key=dk, base_url=base, timeout=REPORT_LLM_TIMEOUT, max_retries=REPORT_LLM_MAX_RETRIES,
+        ), model, "deepseek", is_reasoner
 
     base = (settings.openai_base_url or "").strip() or None
     model = (getattr(settings, "wecom_agent_model", "") or "").strip() \
         or (settings.openai_model or "gpt-4o-mini")
     is_reasoner = ("reason" in model.lower()) or ("think" in model.lower())
-    return AsyncOpenAI(api_key=settings.openai_api_key, base_url=base), model, "doubao", is_reasoner
+    return AsyncOpenAI(
+        api_key=settings.openai_api_key, base_url=base,
+        timeout=REPORT_LLM_TIMEOUT, max_retries=REPORT_LLM_MAX_RETRIES,
+    ), model, "doubao", is_reasoner
+
+
+def llm_call_error(exc: BaseException) -> str:
+    """把模型调用异常收成给医生看的短句。超时不要把英文堆栈露到页面上。"""
+    timed_out = isinstance(exc, (TimeoutError, asyncio.TimeoutError, httpx.TimeoutException))
+    if not timed_out and exc.__class__.__name__ == "APITimeoutError":
+        timed_out = True
+    if timed_out:
+        return "模型响应超时，请稍后重新生成"
+    return f"调用模型失败：{exc}"
 
 
 def _parse_json_object(raw: str) -> dict[str, Any] | None:
@@ -148,7 +171,7 @@ async def generate_json_object(
             )
         except Exception as exc:
             elapsed_ms = int((time.monotonic() - started) * 1000)
-            last_error = f"调用模型失败：{exc}"
+            last_error = llm_call_error(exc)
             logger.warning(
                 "[llm] task=%s model=%s attempt=%s elapsed_ms=%s ok=0 error=%s",
                 task, model, attempt + 1, elapsed_ms, exc,

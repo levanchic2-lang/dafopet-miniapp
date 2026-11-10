@@ -384,7 +384,7 @@ async function pollAiStatus() {
         status.textContent = '生成失败：' + (data.error || '请稍后重试；原有内容未被覆盖');
       }
       redraftPending = false;
-    } else if ((data.status === 'completed' || data.status === 'partial') && !formDirty) {
+    } else if (!formDirty) {
       window.location.reload();
     }
   } catch (e) {

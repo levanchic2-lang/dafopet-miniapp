@@ -110,7 +110,13 @@ async def transcribe_visit_audio(audio_path: str) -> dict[str, Any]:
     except ImportError:
         return {"ok": False, "error": "服务器缺少语音转写组件"}
 
-    client = AsyncOpenAI(api_key=config["key"], base_url=config["base_url"] or None)
+    # 转写没有单独的应用层重试。给一个有限超时，避免录音请求挂死把草稿停在「正在整理」。
+    client = AsyncOpenAI(
+        api_key=config["key"],
+        base_url=config["base_url"] or None,
+        timeout=httpx.Timeout(300.0, connect=15.0),
+        max_retries=0,
+    )
     try:
         with path.open("rb") as audio:
             response = await client.audio.transcriptions.create(
