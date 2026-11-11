@@ -64,6 +64,7 @@ Page({
     customerId: null,
     lookupDone: false,
     customerFound: false,
+    profileRedacted: false,
     addrReady: false,
     districtNames: ["加载中…"],
     streetNames: ["请先选区"],
@@ -262,17 +263,31 @@ Page({
   },
 
   onPhoneInput(e) {
-    this.setData({ "form.owner_phone": e.detail.value, lookupDone: false });
+    this.setData({ "form.owner_phone": e.detail.value, lookupDone: false, profileRedacted: false });
   },
 
   onPhoneLookup() {
     const phone = (this.data.form.owner_phone || "").trim();
     if (phone.length < 11) return;
     getJson("/api/customer/lookup", { phone }).then(res => {
+      if (res && res.redacted) {
+        this.setData({
+          lookupDone: true,
+          customerFound: true,
+          profileRedacted: true,
+          customerId: null,
+          pets: [],
+          selectedPetId: null,
+          duplicatePet: null,
+          needsFullName: false,
+        });
+        return;
+      }
       // 老系统导入数据，姓名是「X小姐 / X先生 / X女士」占位 → 提示客户必须改成全名
       const needsFullName = res.found && !!res.name_invalid;
       this.setData({
         lookupDone: true,
+        profileRedacted: false,
         customerFound: res.found,
         customerId: res.customer_id || null,
         pets: res.pets || [],

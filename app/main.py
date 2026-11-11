@@ -20,6 +20,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import threading
 import unicodedata
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -26388,22 +26389,88 @@ async def api_wechat_immunization_certificate_pdf(
     )
 
 
-@app.get("/api/customer/lookup")
-async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_db)):
-    if not phone or len(phone) < 6:
-        return {"found": False}
+# 未登录查档的进程内限流。挡住按手机号扫档案是否存在；重启后清空，多 worker 各自计数。
+_CUSTOMER_LOOKUP_LOCK = threading.Lock()
+_CUSTOMER_LOOKUP_HITS: dict[str, list[datetime]] = {}
+_CUSTOMER_LOOKUP_WINDOW = timedelta(minutes=10)
+_CUSTOMER_LOOKUP_IP_LIMIT = 120
+_CUSTOMER_LOOKUP_PHONE_LIMIT = 8
+
+
+def _lookup_client_ip(request: Request) -> str:
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded[:80]
+    host = request.client.host if request.client else ""
+    return (host or "unknown")[:80]
+
+
+def _charge_lookup_bucket(key: str, now: datetime, limit: int) -> None:
+    hits = [t for t in _CUSTOMER_LOOKUP_HITS.get(key, []) if now - t < _CUSTOMER_LOOKUP_WINDOW]
+    if len(hits) >= limit:
+        _CUSTOMER_LOOKUP_HITS[key] = hits
+        raise HTTPException(status_code=429, detail="查询过于频繁，请稍后再试")
+    hits.append(now)
+    _CUSTOMER_LOOKUP_HITS[key] = hits
+
+
+def _charge_customer_lookup(request: Request, phone: str) -> None:
+    """未登录调用按 IP 和手机号各记一笔。员工会话不走这里。"""
+    now = beijing_now()
+    phone_key = re.sub(r"\D", "", phone or "")
+    with _CUSTOMER_LOOKUP_LOCK:
+        _charge_lookup_bucket(f"ip:{_lookup_client_ip(request)}", now, _CUSTOMER_LOOKUP_IP_LIMIT)
+        if len(phone_key) >= 6:
+            _charge_lookup_bucket(f"phone:{phone_key}", now, _CUSTOMER_LOOKUP_PHONE_LIMIT)
+        if len(_CUSTOMER_LOOKUP_HITS) > 4000:
+            stale = [
+                key for key, hits in _CUSTOMER_LOOKUP_HITS.items()
+                if not hits or now - hits[-1] >= _CUSTOMER_LOOKUP_WINDOW
+            ]
+            for key in stale:
+                _CUSTOMER_LOOKUP_HITS.pop(key, None)
+
+
+def _lookup_privileged(request: Request, db: Session) -> bool:
+    """后台会话，或员工小程序的 Bearer 令牌。无效令牌不当作员工。"""
+    if _admin_ok(request):
+        return True
+    auth = (request.headers.get("authorization") or "").strip()
+    if not auth.lower().startswith("bearer "):
+        return False
+    try:
+        _staff_miniapp_user(request, db)
+    except HTTPException:
+        return False
+    return True
+
+
+def _verified_customer_openid(code: str) -> str:
+    """用当次 wx.login code 向微信换 openid。失败则当作未验证。"""
+    code = (code or "").strip()
+    if not code:
+        return ""
+    try:
+        data = wechat_code2session(code)
+    except Exception as exc:
+        logger.info("[customer-lookup] 微信身份校验未通过：%s", exc)
+        return ""
+    return str((data or {}).get("openid") or "").strip()
+
+
+def _match_customers_by_phone(db: Session, phone: str) -> list[Customer]:
     p = phone.strip()
-    # 主手机号匹配（可能有多条重客户档案）
     matched = db.query(Customer).filter(Customer.phone == p).all()
-    # 主号匹配不到才查备用号 CSV
     if not matched:
         candidates = db.query(Customer).filter(Customer.phones_extra.like(f"%{p}%")).all()
-        for c in candidates:
-            extras = [x.strip() for x in (c.phones_extra or "").split(",") if x.strip()]
+        for cand in candidates:
+            extras = [x.strip() for x in (cand.phones_extra or "").split(",") if x.strip()]
             if p in extras:
-                matched.append(c)
-    if not matched:
-        return {"found": False}
+                matched.append(cand)
+    return matched
+
+
+def _customer_lookup_full(db: Session, matched: list[Customer]) -> dict:
     # 主客户：选名下宠物最多的那条作为代表（用于填客户名/地址）
     cust_with_pets: list[tuple] = []
     all_pets_seen: set[str] = set()
@@ -26428,16 +26495,60 @@ async def api_customer_lookup(phone: str = Query(""), db: Session = Depends(get_
             })
     cust_with_pets.sort(key=lambda x: -x[1])
     primary = cust_with_pets[0][0]
-    invalid_name = _is_invalid_name(primary.name)
     return {
         "found": True,
+        "redacted": False,
+        "bound": any((c.wechat_openid or "").strip() for c in matched),
         "customer_id": primary.id,
         "name": primary.name or "",
-        "name_invalid": invalid_name,
+        "name_invalid": _is_invalid_name(primary.name),
         "address": primary.address,
         "duplicate_count": len(matched) if len(matched) > 1 else 0,
         "pets": aggregated_pets,
     }
+
+
+def _customer_lookup_redacted(matched: list[Customer]) -> dict:
+    return {
+        "found": True,
+        "bound": any((c.wechat_openid or "").strip() for c in matched),
+        "redacted": True,
+    }
+
+
+def _lookup_json(payload: dict) -> JSONResponse:
+    return JSONResponse(payload, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/api/customer/lookup")
+async def api_customer_lookup(
+    request: Request,
+    phone: str = Query(""),
+    code: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """按手机号查客户。
+
+    医院后台会话或员工小程序令牌返回姓名、地址和宠物。
+    其他调用方只得知档案是否存在、是否已绑定微信。
+    带上当次 wx.login 的 code，且换到的 openid 就是该手机号已绑定档案时，只返回这一份档案。
+    """
+    privileged = _lookup_privileged(request, db)
+    if not privileged:
+        _charge_customer_lookup(request, phone)
+    if not phone or len(phone.strip()) < 6:
+        return _lookup_json({"found": False, "bound": False})
+    matched = _match_customers_by_phone(db, phone)
+    if not matched:
+        return _lookup_json({"found": False, "bound": False})
+    if privileged:
+        return _lookup_json(_customer_lookup_full(db, matched))
+    openid = _verified_customer_openid(code)
+    if openid:
+        owned = [c for c in matched if (c.wechat_openid or "").strip() == openid]
+        if owned:
+            return _lookup_json(_customer_lookup_full(db, owned))
+    return _lookup_json(_customer_lookup_redacted(matched))
 
 
 @app.post("/api/vaccine-registration/create")
@@ -26484,18 +26595,17 @@ async def api_combo_vaccine_registration_create(
             raise HTTPException(400, "请填写宠物姓名并选择猫或犬")
         duplicate = _find_customer_pet_by_name(db, cust.id, pet_name)
         if duplicate:
-            raise HTTPException(
-                409,
-                f"该主人名下已有宠物“{duplicate.name}”，请返回选择已有宠物档案",
+            # 公开查档不再返回宠物 id，代办人无法点选已有档案。同名直接沿用，避免再建一条。
+            pet = duplicate
+        else:
+            pet = Pet(
+                customer_id=cust.id, name=pet_name[:120], species=species,
+                breed=str(payload.get("pet_breed") or "")[:80],
+                gender=str(payload.get("pet_gender") or "unknown")[:10],
+                birthday_estimate=str(payload.get("pet_birthday") or "")[:40],
+                store=clinic_store,
             )
-        pet = Pet(
-            customer_id=cust.id, name=pet_name[:120], species=species,
-            breed=str(payload.get("pet_breed") or "")[:80],
-            gender=str(payload.get("pet_gender") or "unknown")[:10],
-            birthday_estimate=str(payload.get("pet_birthday") or "")[:40],
-            store=clinic_store,
-        )
-        db.add(pet); db.flush()
+            db.add(pet); db.flush()
 
     raw_q = payload.get("questionnaire") or {}
     if not isinstance(raw_q, dict):

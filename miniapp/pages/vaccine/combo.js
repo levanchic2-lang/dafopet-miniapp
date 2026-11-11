@@ -21,7 +21,7 @@ function petNameKey(name) {
 
 Page({
   data: {
-    phone: "", lookupLoading: false, lookupDone: false, customer: null, pets: [],
+    phone: "", lookupLoading: false, lookupDone: false, profileRedacted: false, customer: null, pets: [],
     selectedPetId: 0, useNewPet: false, ownerName: "", duplicatePet: null,
     petName: "", petSpecies: "cat", petBreed: "", petGender: "unknown", petBirthday: "",
     storeOptions: ["请选择接种门店", "东环店", "横岗店"], storeIndex: 0,
@@ -48,19 +48,24 @@ Page({
     } catch (e) {}
   },
 
-  onPhoneInput(e) { this.setData({ phone: (e.detail.value || "").trim(), lookupDone: false, error: "" }); },
+  onPhoneInput(e) { this.setData({ phone: (e.detail.value || "").trim(), lookupDone: false, profileRedacted: false, error: "" }); },
   async lookupCustomer() {
     if (!/^\d{11}$/.test(this.data.phone)) return this.setData({ error: "请输入11位手机号" });
     this.setData({ lookupLoading: true, error: "" });
     try {
       const r = await getJson("/api/customer/lookup", { phone: this.data.phone });
+      const redacted = !!(r && r.redacted);
       this.setData({
         lookupDone: true,
-        customer: r.found ? { id: r.customer_id, name: r.name || "" } : null,
-        pets: r.pets || [], ownerName: r.name || "", selectedPetId: 0,
-        useNewPet: !r.found || !(r.pets || []).length, duplicatePet: null
+        profileRedacted: redacted,
+        customer: (!redacted && r.found) ? { id: r.customer_id, name: r.name || "" } : null,
+        pets: redacted ? [] : (r.pets || []),
+        ownerName: redacted ? "" : (r.name || ""),
+        selectedPetId: 0,
+        useNewPet: redacted || !r.found || !(r.pets || []).length,
+        duplicatePet: null
       });
-    } catch (e) { this.setData({ lookupDone: true, customer: null, pets: [], useNewPet: true, duplicatePet: null, error: "查询失败，请重试" }); }
+    } catch (e) { this.setData({ lookupDone: true, profileRedacted: false, customer: null, pets: [], useNewPet: true, duplicatePet: null, error: "查询失败，请重试" }); }
     finally { this.setData({ lookupLoading: false }); }
   },
   selectPet(e) { this.setData({ selectedPetId: Number(e.detail.value || 0), useNewPet: false, duplicatePet: null, error: "" }); },

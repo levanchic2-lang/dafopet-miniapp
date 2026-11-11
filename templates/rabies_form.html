@@ -239,6 +239,12 @@ function handleLookup(data) {
  hidePetSelector();
  return;
  }
+ if (data.redacted) {
+ document.getElementById('customer_id').value = '';
+ hidePetSelector();
+ resultDiv.innerHTML = '<div class="msg-info">该手机号已有档案。为保护隐私，此处不展示姓名、地址和宠物，请继续填写。提交后会按手机号和宠物名自动关联已有档案。</div>';
+ return;
+ }
  document.getElementById('customer_id').value = data.customer_id;
  // 填充姓名
  const nameEl = document.getElementById('owner_name');

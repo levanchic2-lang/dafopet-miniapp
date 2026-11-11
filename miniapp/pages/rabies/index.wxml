@@ -14,7 +14,10 @@
       placeholder="输入手机号自动查档" bindinput="onPhoneInput" bindblur="onPhoneLookup" />
     <button class="btn secondary sm" bindtap="onPhoneLookup">查询</button>
   </view>
-  <view wx:if="{{lookupDone && customerFound}}" class="lookup-result">
+  <view wx:if="{{lookupDone && customerFound && profileRedacted}}" class="lookup-result">
+    该手机号已有档案。为保护隐私，此处不展示姓名、地址和宠物，请继续填写。提交后会按手机号和宠物名自动关联。
+  </view>
+  <view wx:elif="{{lookupDone && customerFound}}" class="lookup-result">
     ✅ 找到档案：{{form.owner_name}}
     <text wx:if="{{pets.length}}" style="margin-left:8rpx;">· {{pets.length}} 只宠物</text>
   </view>
