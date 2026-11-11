@@ -2029,6 +2029,7 @@ def _appointment_catalog() -> dict:
                     {"name": "犬造型", "duration_minutes": 90},
                 ],
                 "addon_options": ["去浮毛", "SPA", "护发素", "纯手剪", "药浴", "去油"],
+                "addon_extra_minutes": dict(_BEAUTY_ADDON_EXTRA_MINUTES),
                 "size_options": ["微小型犬（4kg 以下）", "小型犬（4–10kg）", "中型犬（10–15kg）", "中大型犬（15–25kg）", "大型犬（25kg 以上）"],
                 "coat_options": ["长毛", "短毛"],
             },
@@ -2039,6 +2040,7 @@ def _appointment_catalog() -> dict:
             {"value": "unknown", "label": "未知"},
         ],
         "tnr_hours": _tnr_hours_public(),
+        "beauty_addon_extra_minutes": dict(_BEAUTY_ADDON_EXTRA_MINUTES),
     }
 
 
@@ -3023,11 +3025,62 @@ _BEAUTY_WORK_START = 13 * 60   # 13:00
 _BEAUTY_WORK_END   = 22 * 60   # 22:00
 _BEAUTY_SLOT_STEP  = 30        # 每 30 分钟一个可选时段
 
+# 附加项目额外占用分钟。院方要求默认不加时。
+# 以后要给某一项加时，只改对应数字，例如 "药浴": 15。未列出的项目用默认值。
+_BEAUTY_ADDON_EXTRA_DEFAULT = 0
+_BEAUTY_ADDON_EXTRA_MINUTES: dict[str, int] = {
+    "去浮毛": 0,
+    "SPA": 0,
+    "护发素": 0,
+    "纯手剪": 0,
+    "药浴": 0,
+    "去油": 0,
+}
+
+
+def _beauty_addon_extra_minutes(addon_services: str = "") -> int:
+    """逗号分隔的附加项目，按 _BEAUTY_ADDON_EXTRA_MINUTES 累加额外分钟。"""
+    if not addon_services:
+        return 0
+    total = 0
+    for raw in str(addon_services).split(","):
+        name = raw.strip()
+        if not name:
+            continue
+        try:
+            extra = int(_BEAUTY_ADDON_EXTRA_MINUTES.get(name, _BEAUTY_ADDON_EXTRA_DEFAULT))
+        except (TypeError, ValueError):
+            extra = _BEAUTY_ADDON_EXTRA_DEFAULT
+        if extra > 0:
+            total += extra
+    return total
+
+
+def _beauty_addon_duration_note() -> str:
+    """给后台说明文案用。全部为 0 时明确写「默认不加时」。"""
+    extras: list[str] = []
+    for name, raw in _BEAUTY_ADDON_EXTRA_MINUTES.items():
+        try:
+            minutes = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if minutes > 0:
+            extras.append(f"{name} +{minutes} 分钟")
+    if not extras:
+        return "附加服务默认不额外占用时间。"
+    return f"附加服务中，{'、'.join(extras)}；其余附加项不额外占用时间。"
+
+
+templates.env.globals["beauty_addon_extra_minutes"] = _BEAUTY_ADDON_EXTRA_MINUTES
+templates.env.globals["beauty_addon_duration_note"] = _beauty_addon_duration_note
+
 
 def _calc_beauty_duration(service_name: str, pet_size: str, coat_length: str, addon_services: str = "") -> int:
     """
     根据美容项目、体型、毛发长度、附加服务估算占用分钟数。
-    附加服务用逗号分隔，每项 +30 分钟。
+    猫犬、体型、毛长的基础时长不变。附加项目默认 0 分钟，
+    个别项目可在 _BEAUTY_ADDON_EXTRA_MINUTES 里单独加时。
+    只用于新预约的估算；已保存的 duration_minutes 不会被重算。
     """
     sn    = service_name or ""
     sz    = pet_size     or ""
@@ -3056,12 +3109,7 @@ def _calc_beauty_duration(service_name: str, pet_size: str, coat_length: str, ad
         elif "小型猫" in sz:
             base = (90 if is_long else 60) if is_wash else 120
 
-    # 附加服务：每项 +30 分钟
-    if addon_services:
-        addon_count = len([a for a in addon_services.split(",") if a.strip()])
-        base += addon_count * 30
-
-    return base
+    return base + _beauty_addon_extra_minutes(addon_services)
 
 
 def _beauty_slots_for_date(
@@ -10252,6 +10300,7 @@ async def api_beauty_slots(
         "duration_minutes": duration,
         "duration_display": dur_display,
         "available_slots":  slots,
+        "addon_extra_minutes": dict(_BEAUTY_ADDON_EXTRA_MINUTES),
         "disclaimer": (
             "以上占用时间为估算时间。"
             "如动物不配合或毛量超出预估，实际服务时长可能有所浮动，"

@@ -73,8 +73,20 @@
   }
 
   /* ── 美容时长估算（与后端 _calc_beauty_duration 保持一致） ── */
+  var BEAUTY_ADDON_EXTRA = {{ beauty_addon_extra_minutes | tojson }};
   var beautyDurationHint = document.getElementById("beauty-duration-hint");
   var beautyDurationText = document.getElementById("beauty-duration-text");
+
+  function beautyAddonExtraMinutes(names) {
+    var total = 0;
+    (names || []).forEach(function (name) {
+      var key = String(name || "").replace(/^\s+|\s+$/g, "");
+      if (!key) return;
+      var extra = BEAUTY_ADDON_EXTRA[key];
+      if (typeof extra === "number" && extra > 0) total += extra;
+    });
+    return total;
+  }
 
   // ── 美容可用时段查询 ──
   var beautySlotsRow     = document.getElementById("beauty-slots-row");
@@ -166,6 +178,13 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         beautySlotsLoading.style.display = "none";
+        if (data && data.duration_minutes && dur && !dur.readOnly) {
+          dur.value = String(data.duration_minutes);
+        }
+        if (data && data.duration_display && beautyDurationText) {
+          beautyDurationText.textContent = data.duration_display;
+          if (beautyDurationHint) beautyDurationHint.style.display = "";
+        }
         _renderBeautySlots(data.available_slots || [], data.duration_display || "");
       })
       .catch(function() {
@@ -180,7 +199,7 @@
     _beautySlotTimer = setTimeout(fetchBeautyAdminSlots, 500);
   }
 
-  function calcBeautyDuration(sn, sz, cl, addonCheckedCount) {
+  function calcBeautyDuration(sn, sz, cl, addonNames) {
     var isLong  = cl === "长毛";
     var isWash  = sn.indexOf("洗护") >= 0;
     var base = 60;
@@ -195,7 +214,7 @@
       else if (sz.indexOf("中型猫") >= 0) { base = isWash ? (isLong ? 120 : 90)  : 120; }
       else if (sz.indexOf("小型猫") >= 0) { base = isWash ? (isLong ? 90  : 60)  : 120; }
     }
-    base += (addonCheckedCount || 0) * 30;
+    base += beautyAddonExtraMinutes(addonNames);
     return base;
   }
 
@@ -209,15 +228,14 @@
     var coatSel = document.getElementById("admin_appt_coat_length");
     if (coatSel && !coatSel.disabled) cl = coatSel.value || "";
 
-    var addonChecked = 0;
-    var checkboxes = document.querySelectorAll('input[name="addon_services"]:checked');
-    addonChecked = checkboxes.length;
+    var addonNames = Array.from(document.querySelectorAll('input[name="addon_services"]:checked'))
+      .map(function (cb) { return cb.value; });
 
     if (!sn || !sz || !cl) {
       beautyDurationHint.style.display = "none";
       return;
     }
-    var mins = calcBeautyDuration(sn, sz, cl, addonChecked);
+    var mins = calcBeautyDuration(sn, sz, cl, addonNames);
     var h = Math.floor(mins / 60);
     var m = mins % 60;
     var label = h === 0 ? m + "分钟" : (h + "小时" + (m ? m + "分钟" : ""));

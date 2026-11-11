@@ -706,7 +706,7 @@
         <li>可预约时段：<strong>13:00 – 22:00</strong>，每 30 分钟一个时段；系统自动过滤已被占用的时段。</li>
         <li>支持服务类型：<strong>犬造型</strong>、<strong>犬洗护</strong>、<strong>猫造型</strong>、<strong>猫洗护</strong>。</li>
         <li>毛发长度选项：<strong>长毛 / 短毛</strong>（影响估算时长）。</li>
-        <li>附加服务（各项 +30 分钟）：去浮毛、SPA、护发素、纯手剪、药浴、去油。</li>
+        <li>附加服务：去浮毛、SPA、护发素、纯手剪、药浴、去油。{{ beauty_addon_duration_note() }}</li>
         <li style="margin-top:0.4rem;list-style:none;padding-left:0;">
           <strong>预计占用时长参考表（分钟，不含附加服务）：</strong>
           <table style="font-size:0.82rem;border-collapse:collapse;width:100%;margin-top:0.4rem;">
@@ -729,7 +729,7 @@
               <tr><td style="padding:4px 8px;border:1px solid var(--border);">猫·大型（4 kg+）</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">150</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">120</td><td style="padding:4px 8px;border:1px solid var(--border);text-align:center;">150</td></tr>
             </tbody>
           </table>
-          <div style="margin-top:0.35rem;font-size:0.8rem;color:var(--muted);">以上为基础时长，每项附加服务额外 +30 分钟。实际执行时间以门店为准。</div>
+          <div style="margin-top:0.35rem;font-size:0.8rem;color:var(--muted);">以上为基础时长。{{ beauty_addon_duration_note() }}实际执行时间以门店为准。</div>
         </li>
         <li style="margin-top:0.35rem;"><i data-lucide="cat"></i> <strong>猫犬并发规则</strong>：猫完成主动护理（前 60 分钟）进入烘干阶段后，美容师可同时接入 <strong>≤120 分钟</strong>的犬洗护（允许延伸到猫结束后）。</li>
       </ul>

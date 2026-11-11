@@ -2,6 +2,16 @@ const { getJson, postJson } = require("../../utils/api");
 const subscribe = require("../../utils/subscribe");
 
 const BEAUTY_ADDON_OPTIONS = ["去浮毛", "SPA", "护发素", "纯手剪", "药浴", "去油"];
+// 与后端 _BEAUTY_ADDON_EXTRA_MINUTES 一致：附加项默认不加时。
+// 接口返回 addon_extra_minutes 后会覆盖这份本地表。
+const BEAUTY_ADDON_EXTRA = {
+  "去浮毛": 0,
+  "SPA": 0,
+  "护发素": 0,
+  "纯手剪": 0,
+  "药浴": 0,
+  "去油": 0,
+};
 const BEAUTY_COAT_OPTIONS  = ["长毛", "短毛"];
 const BEAUTY_SIZE_DOG      = ["微小型犬（4kg 以下）", "小型犬（4–10kg）", "中型犬（10–15kg）", "中大型犬（15–25kg）", "大型犬（25kg 以上）"];
 const BEAUTY_SIZE_CAT      = ["大型猫（4kg 以上）", "中型猫（2.5–4kg）", "小型猫（2.5kg 以下）"];
@@ -355,6 +365,15 @@ Page({
   },
 
   // ── 本地估算时长（与后端 _calc_beauty_duration 逻辑一致） ──
+  _addonExtraMinutes(addonOptions) {
+    const map = this._beautyAddonExtra || BEAUTY_ADDON_EXTRA;
+    const checked = Array.isArray(addonOptions) ? addonOptions.filter(a => a.checked) : [];
+    return checked.reduce((sum, item) => {
+      const extra = map[item.name];
+      return sum + ((typeof extra === "number" && extra > 0) ? extra : 0);
+    }, 0);
+  },
+
   _calcBeautyDuration(sn, sz, cl, addonOptions) {
     const isLong  = cl === "长毛";
     const isWash  = sn.indexOf("洗护") >= 0;
@@ -370,8 +389,7 @@ Page({
       else if (sz.indexOf("中型猫") >= 0) base = isWash ? (isLong ? 120 : 90)  : 120;
       else if (sz.indexOf("小型猫") >= 0) base = isWash ? (isLong ? 90  : 60)  : 120;
     }
-    const checked = Array.isArray(addonOptions) ? addonOptions.filter(a => a.checked).length : 0;
-    base += checked * 30;
+    base += this._addonExtraMinutes(addonOptions);
     return base;
   },
 
@@ -419,14 +437,20 @@ Page({
       const checked = beautyAddonOptions.filter(a => a.checked).map(a => a.name).join(",");
       const qs = `service=${encodeURIComponent(sn)}&pet_size=${encodeURIComponent(sz)}&coat_length=${encodeURIComponent(cl)}&addons=${encodeURIComponent(checked)}&date=${form.appointment_date}&store=${encodeURIComponent(form.store)}`;
       const res = await getJson(`/api/appointments/beauty-slots?${qs}`);
+      if (res.addon_extra_minutes && typeof res.addon_extra_minutes === "object") {
+        this._beautyAddonExtra = res.addon_extra_minutes;
+      }
       const slots = res.available_slots || [];
       const slotIndex = slots.length > 0 ? 0 : -1;
+      const serverDur = Number(res.duration_minutes || dur);
       this.setData({
         beautySlotLoading: false,
         beautySlots: slots,
         beautySlotIndex: slotIndex,
+        beautyDuration: serverDur,
+        beautyDurationDisplay: res.duration_display || this._durationDisplay(serverDur),
         "form.appointment_time": slotIndex >= 0 ? slots[0] : form.appointment_time,
-        "form.duration_minutes": res.duration_minutes || dur,
+        "form.duration_minutes": serverDur,
       });
     } catch (e) {
       const msg = (e && (e.errMsg || e.detail || e.message)) ? `获取时段失败（${e.errMsg || e.detail || e.message}）` : "获取可预约时段失败，请稍后重试。";
