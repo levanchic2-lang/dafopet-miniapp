@@ -67,12 +67,18 @@ duplicate = client.post("/api/vaccine-registration/create", json={
     "requested_date": "2026-09-26",
     "questionnaire": {},
 })
-assert duplicate.status_code == 409, duplicate.text
-assert "Biscuit" in duplicate.json()["detail"]
+# 公开查档不再给出宠物 id，同名提交沿用已有档案，而不是把名字回显在 409 里。
+assert duplicate.status_code == 400, duplicate.text
+assert "Biscuit" not in duplicate.text
+assert "问卷" in duplicate.json()["detail"]
 
 lookup = client.get("/api/customer/lookup", params={"phone": "13376181717"})
 assert lookup.status_code == 200
-assert [row["name"] for row in lookup.json()["pets"]] == ["Biscuit"]
+lookup_body = lookup.json()
+assert lookup_body["found"] is True and lookup_body["redacted"] is True
+assert "pets" not in lookup_body
+assert "Biscuit" not in lookup.text
+assert "王瑞" not in lookup.text
 
 with SessionLocal() as db:
     assert db.query(Pet).filter(Pet.customer_id == customer_id).count() == 1
