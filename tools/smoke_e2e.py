@@ -93,25 +93,26 @@ def main() -> None:
     print("4) POST /api/apply/{id}/finalize (should fail: no images)")
     _expect_raises("finalize without images", lambda: http_post_empty(base, f"/api/apply/{app_id}/finalize", timeout=20))
 
-    print("5) GET /api/app/{id}/status without wechat login is rejected")
-    _expect_raises("status without login", lambda: http_get_json(base, f"/api/app/{app_id}/status", timeout=10))
+    print("5) GET /api/app/{id}/status without wechat login still returns progress")
+    code, status_body = http_get_json(base, f"/api/app/{app_id}/status", timeout=10)
+    print("  status", code, "id", status_body.get("id"))
+    assert code == 200 and status_body.get("id") == app_id
 
-    print("6) POST /api/wechat/my-apps rejects a client-supplied openid")
-    _expect_raises(
-        "my-apps with raw openid",
-        lambda: http_post_json(base, "/api/wechat/my-apps", {"openid": fake_openid}, timeout=10),
-    )
+    print("6) POST /api/wechat/my-apps accepts a cached openid")
+    code, apps = http_post_json(base, "/api/wechat/my-apps", {"openid": fake_openid}, timeout=10)
+    print("  status", code, "count", len(apps.get("items") or []))
+    assert code == 200
+    assert any(item.get("id") == app_id for item in (apps.get("items") or []))
 
-    print("7) POST /api/wechat/claim-apps rejects a client-supplied openid")
-    _expect_raises(
-        "claim-apps with raw openid",
-        lambda: http_post_json(
-            base,
-            "/api/wechat/claim-apps",
-            {"openid": fake_openid, "phone": "13800138000", "id_number": "11010519900101001X"},
-            timeout=10,
-        ),
+    print("7) POST /api/wechat/claim-apps accepts a cached openid")
+    code, claimed = http_post_json(
+        base,
+        "/api/wechat/claim-apps",
+        {"openid": fake_openid, "phone": "13800138000", "id_number": "11010519900101001X"},
+        timeout=10,
     )
+    print("  status", code, "updated", claimed.get("updated"))
+    assert code == 200 and claimed.get("ok") is True
 
     print("== E2E smoke OK ==")
 

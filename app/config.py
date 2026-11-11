@@ -99,7 +99,8 @@ class Settings(BaseSettings):
     ai_cs_test_openids: str = ""
 
     # 旧版小程序过渡。后端会先于小程序发版上线，已发布的顾客端还要等微信审核。
-    # 1（默认）= 旧客户端仍可提交、取消 TNR 预约；查看个人资料改为提示更新，不返回档案。
+    # 1（默认）= 旧客户端仍可提交、取消 TNR 预约，并按缓存 openid 查看申请进度和预约记录。
+    # 个人资料接口仍不向只带 openid 的请求返回档案。
     # 新版小程序发布给顾客之后，在服务器 .env 设 LEGACY_MINIAPP_COMPAT=0 并重启。
     legacy_miniapp_compat: str = "1"
 

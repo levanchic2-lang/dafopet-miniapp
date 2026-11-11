@@ -435,10 +435,13 @@ assert [pet["name"] for pet in body["pets"]] == ["甲犬"]
 assert "甲猫" not in owner_profile.text
 assert "甲路" not in owner_profile.text
 
-status_anon = client.get(f"/api/app/{app_id}/status")
-assert status_anon.status_code == 403
-assert "更新" in status_anon.json()["detail"]
-assert "甲路" not in status_anon.text and "咳嗽" not in status_anon.text
+# 默认开启旧版兼容：已发布小程序不带登录码，申请进度仍按编号返回
+status_legacy = client.get(f"/api/app/{app_id}/status")
+assert status_legacy.status_code == 200, status_legacy.text
+assert status_legacy.json()["address"] == "甲路1号"
+assert status_legacy.json()["health_note"] == "咳嗽保密"
+assert status_legacy.json()["applicant_name"] == "甲客户"
+assert status_legacy.json()["phone"] == "13700001111"
 status_stranger = client.get(f"/api/app/{app_id}/status", params={"code": "stranger-code"})
 assert status_stranger.status_code == 403
 assert "咳嗽" not in status_stranger.text
@@ -446,25 +449,39 @@ status_owner = client.get(f"/api/app/{app_id}/status", params={"code": "owner-co
 assert status_owner.status_code == 200
 assert status_owner.json()["address"] == "甲路1号"
 assert status_owner.json()["health_note"] == "咳嗽保密"
-apps_spoof = client.post("/api/wechat/my-apps", json={"openid": "openid-owner"})
-assert apps_spoof.status_code == 403
-assert "更新" in apps_spoof.json()["detail"]
-assert "咳嗽" not in apps_spoof.text
+apps_legacy = client.post("/api/wechat/my-apps", json={"openid": "openid-owner"})
+assert apps_legacy.status_code == 200, apps_legacy.text
+assert apps_legacy.json()["openid"] == "openid-owner"
+assert apps_legacy.json()["items"][0]["id"] == app_id
+assert apps_legacy.json()["items"][0]["health_note_brief"].startswith("咳嗽")
+apps_other = client.post("/api/wechat/my-apps", json={"openid": "openid-stranger"})
+assert apps_other.status_code == 200
+assert apps_other.json()["items"] == []
 apps_owner = client.post("/api/wechat/my-apps", json={"code": "owner-code", "openid": "openid-stranger"})
 assert apps_owner.status_code == 200
+assert apps_owner.json()["openid"] == "openid-owner"
 assert apps_owner.json()["items"][0]["health_note_brief"].startswith("咳嗽")
 
-appt_spoof = client.post(f"/api/wechat/appointments/{appt_id}/get", json={"openid": "openid-owner"})
-assert appt_spoof.status_code == 403
-assert "更新" in appt_spoof.json()["detail"]
-assert "13700001111" not in appt_spoof.text and "甲客户" not in appt_spoof.text
+appt_legacy = client.post(f"/api/wechat/appointments/{appt_id}/get", json={"openid": "openid-owner"})
+assert appt_legacy.status_code == 200, appt_legacy.text
+assert appt_legacy.json()["id"] == appt_id
+assert appt_legacy.json()["customer_name"] == "甲客户"
+assert appt_legacy.json()["phone_masked"].endswith("1111")
+assert "13700001111" not in appt_legacy.text
 appt_stranger = client.post(f"/api/wechat/appointments/{appt_id}/get", json={"code": "stranger-code"})
 assert appt_stranger.status_code == 403
+appt_other = client.post(f"/api/wechat/appointments/{appt_id}/get", json={"openid": "openid-stranger"})
+assert appt_other.status_code == 403
+assert "甲客户" not in appt_other.text
 appt_owner = client.post("/api/wechat/my-appointments", json={"code": "owner-code"})
 assert appt_owner.status_code == 200
 assert appt_owner.json()["items"][0]["customer_name"] == "甲客户"
 assert appt_owner.json()["items"][0]["phone_masked"].endswith("1111")
 assert "13700001111" not in appt_owner.text
+appt_list_legacy = client.post("/api/wechat/my-appointments", json={"openid": "openid-owner"})
+assert appt_list_legacy.status_code == 200, appt_list_legacy.text
+assert appt_list_legacy.json()["items"][0]["id"] == appt_id
+assert appt_list_legacy.json()["items"][0]["customer_name"] == "甲客户"
 tnr_spoof = client.get("/api/wechat/my-tnr-status", params={"openid": "openid-owner"})
 assert tnr_spoof.status_code == 200
 assert tnr_spoof.json()["has_approved"] is False
@@ -503,7 +520,7 @@ reg_staff = client.get(f"/api/vaccine-registration/{reg_id}")
 assert reg_staff.status_code == 200
 _logout()
 
-# 旧版顾客端：只带 openid 仍能提交和取消 TNR，但不能把档案读回去
+# 旧版顾客端：只带 openid 仍能提交、取消，并查看申请进度和预约；个人资料仍不返回
 os.environ["LEGACY_MINIAPP_COMPAT"] = "1"
 with SessionLocal() as session:
     row = session.get(Application, app_id)
@@ -539,9 +556,62 @@ assert legacy_cancel.status_code == 200, legacy_cancel.text
 assert legacy_cancel.json()["ok"] is True
 assert "甲客户" not in legacy_cancel.text
 legacy_list = client.post("/api/wechat/my-appointments", json={"openid": "openid-owner"})
-assert legacy_list.status_code == 403
-assert "更新" in legacy_list.json()["detail"]
-assert "甲客户" not in legacy_list.text
+assert legacy_list.status_code == 200, legacy_list.text
+listed_ids = [item["id"] for item in legacy_list.json()["items"]]
+assert legacy_id in listed_ids
+assert appt_id in listed_ids
+assert "13700001111" not in legacy_list.text
+
+# 旧版「找回历史订单」：库存里的空格和小写 x 仍能对上，且不改写已有 openid
+with SessionLocal() as session:
+    messy = Application(
+        applicant_name="历史客户",
+        phone="137 0000 5555",
+        address="历史路",
+        cat_gender="unknown",
+        cat_nickname="历史猫",
+        id_number="11010519900101001x ",
+        wechat_openid="",
+        status="approved",
+        clinic_store="大风动物医院（横岗店）",
+        health_note="历史状况",
+    )
+    taken = Application(
+        applicant_name="已有微信",
+        phone="13700006666",
+        address="占用路",
+        cat_gender="unknown",
+        id_number="11010519900202002x",
+        wechat_openid="openid-taken",
+        status="approved",
+        clinic_store="大风动物医院（横岗店）",
+    )
+    session.add_all([messy, taken])
+    session.commit()
+    messy_id = messy.id
+    taken_id = taken.id
+claimed = client.post("/api/wechat/claim-apps", json={
+    "openid": "openid-owner",
+    "phone": " 13700005555 ",
+    "id_number": "110105 19900101001X",
+})
+assert claimed.status_code == 200, claimed.text
+assert claimed.json()["ok"] is True
+assert claimed.json()["updated"] == 1
+stolen = client.post("/api/wechat/claim-apps", json={
+    "openid": "openid-owner",
+    "phone": "13700006666",
+    "id_number": "11010519900202002X",
+})
+assert stolen.status_code == 200, stolen.text
+assert stolen.json()["updated"] == 0
+with SessionLocal() as session:
+    assert session.get(Application, messy_id).wechat_openid == "openid-owner"
+    assert session.get(Application, taken_id).wechat_openid == "openid-taken"
+claimed_list = client.post("/api/wechat/my-apps", json={"openid": "openid-owner"})
+assert claimed_list.status_code == 200
+assert messy_id in [item["id"] for item in claimed_list.json()["items"]]
+assert taken_id not in [item["id"] for item in claimed_list.json()["items"]]
 
 _age(7200)
 main_module._BIND_COOLDOWN = timedelta(0)
@@ -555,6 +625,45 @@ with SessionLocal() as session:
 main_module._BIND_COOLDOWN = timedelta(seconds=60)
 
 os.environ["LEGACY_MINIAPP_COMPAT"] = "0"
+blocked_status = client.get(f"/api/app/{app_id}/status")
+assert blocked_status.status_code == 403
+assert "更新" in blocked_status.json()["detail"]
+assert "甲路" not in blocked_status.text and "咳嗽" not in blocked_status.text
+blocked_apps = client.post("/api/wechat/my-apps", json={"openid": "openid-owner"})
+assert blocked_apps.status_code == 403
+assert "更新" in blocked_apps.json()["detail"]
+assert "咳嗽" not in blocked_apps.text and "历史猫" not in blocked_apps.text
+blocked_appts = client.post("/api/wechat/my-appointments", json={"openid": "openid-owner"})
+assert blocked_appts.status_code == 403
+assert "更新" in blocked_appts.json()["detail"]
+assert "甲客户" not in blocked_appts.text
+blocked_get = client.post(f"/api/wechat/appointments/{appt_id}/get", json={"openid": "openid-owner"})
+assert blocked_get.status_code == 403
+assert "更新" in blocked_get.json()["detail"]
+assert "甲客户" not in blocked_get.text and "13700001111" not in blocked_get.text
+still_apps = client.post("/api/wechat/my-apps", json={"code": "owner-code", "openid": "openid-stranger"})
+assert still_apps.status_code == 200, still_apps.text
+assert still_apps.json()["openid"] == "openid-owner"
+assert any(item["id"] == app_id for item in still_apps.json()["items"])
+still_status = client.get(f"/api/app/{app_id}/status", params={"code": "owner-code"})
+assert still_status.status_code == 200
+still_stranger = client.get(f"/api/app/{app_id}/status", params={"code": "stranger-code"})
+assert still_stranger.status_code == 403
+still_get = client.post(f"/api/wechat/appointments/{appt_id}/get", json={"code": "owner-code", "openid": "openid-stranger"})
+assert still_get.status_code == 200
+assert still_get.json()["customer_name"] == "甲客户"
+profile_off = client.get("/api/wechat/my-profile", params={"openid": "openid-owner"})
+assert profile_off.status_code == 401
+assert "甲客户" not in profile_off.text and "甲路" not in profile_off.text
+blocked_claim = client.post("/api/wechat/claim-apps", json={
+    "openid": "openid-stranger",
+    "phone": "13700006666",
+    "id_number": "11010519900202002X",
+})
+assert blocked_claim.status_code == 403
+assert "更新" in blocked_claim.json()["detail"]
+with SessionLocal() as session:
+    assert session.get(Application, taken_id).wechat_openid == "openid-taken"
 blocked_book = client.post("/api/appointments/create", json={
     "openid": "openid-owner",
     "category": "tnr",
