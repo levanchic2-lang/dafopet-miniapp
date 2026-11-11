@@ -6,10 +6,11 @@
 from __future__ import annotations
 
 import asyncio
+import calendar
 import json
 import logging
 import re
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -19,11 +20,17 @@ from app.models import (
     AiCsMessage,
     AiCsPending,
     AiCsToolLog,
+    AnesthesiaMonitorSheet,
+    Application,
     Appointment,
     AppointmentCategory,
     AppointmentStatus,
     Customer,
+    DewormingRecord,
+    GroomingOrder,
+    Hospitalization,
     Pet,
+    WeightRecord,
 )
 from app.services.ai_cs_booking import (
     HORIZON_DAYS,
@@ -32,11 +39,12 @@ from app.services.ai_cs_booking import (
     _rules_payload,
     book_appointments,
     cancel_appointment,
+    parse_birth_date,
     query_slots,
     reschedule_appointment,
 )
 from app.services.report_llm import report_llm_configured, report_text_client_model
-from app.time_utils import beijing_now, beijing_today
+from app.time_utils import beijing_now, beijing_today, format_beijing
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +81,27 @@ UNBOUND_REPLY = (
 )
 RATE_REPLY = "您发得有点快，我先等一会儿。请过几分钟再发，或直接拨打 17820633031。"
 BIND_HINT = "请先在小程序首页使用「绑定我的档案」。"
+PET_FILE_RULE = (
+    "顺序：名下有多只宠物，或这个微信有多份档案时，先问是哪一只。"
+    "还没确定是哪一只之前，不要问体重、毛长、品种，也不要用某一只的档案去确认。\n"
+    "宠物确定之后，用档案里这一只的物种、品种、性别、年龄、绝育、最近体重和上次毛长。"
+    "已经有的不要当成不知道再问一遍，只问还缺的，或需要确认的。"
+    "只有一只宠物时，直接使用这份档案，不要再问是哪一只。\n"
+    "美容以及任何要用体重的地方（价格档、去底绒加时）先用这份档案，只请客户确认。"
+    "例如「档案里大米是田园猫，上次称重 5.2kg（2026-09-03），上次洗护是短毛，对吗？」。"
+    "体重日期早于 6 个月时，说出日期，并问变化大不大。"
+    "档案没有体重或毛长时才按原来的方式问；品种可以提示可能的毛长，但仍要客户确认。"
+    "档案毛长若是中毛，先确认按长毛还是短毛，不要猜。\n"
+    "is_neutered 为 true 时按已绝育使用，不要再问有没有绝育，也不要再约绝育。"
+    "为 false 时不要断言未绝育。年龄已有的不要再问生日。\n"
+    "本轮对话里客户已经确认过的体重、毛长和品种，不要再问。\n"
+    "确认后的体重用来算价格档和去底绒分钟。"
+    "预约时把确认后的 coat_length（长毛或短毛）和 weight_kg 传给工具；"
+    "没传时用档案里的值写入确认稿和预约。"
+    "体型按确认后的体重选档，不要让客户再报一次体重："
+    "猫用小型猫（2.5kg 以下）、中型猫（2.5–4kg）、大型猫（4kg 以上）；犬用服务目录里的体型档。\n"
+    "多只宠物时，主人选定之后再调用 list_profiles_and_pets 并传入 pet_id，加载这一只的档案。\n"
+)
 
 _PHONE_RE = re.compile(r"(?<!\d)(1\d{2})\d{4}(\d{4})(?!\d)")
 _CONFIRM_RE = re.compile(
@@ -179,14 +208,311 @@ def store_short(value: str) -> str:
     return text or "门店"
 
 
-def _profile_payload(db: Session, customer: Customer) -> dict:
+def gender_zh(value: str) -> str:
+    text = (value or "").strip().lower()
+    if text in {"male", "m", "公", "雄"}:
+        return "公"
+    if text in {"female", "f", "母", "雌"}:
+        return "母"
+    return "未知"
+
+
+def normalize_coat(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    key = text.lower().replace(" ", "").replace("_", "")
+    table = {
+        "short": "短毛",
+        "长": "长毛",
+        "长毛": "长毛",
+        "long": "长毛",
+        "中": "中毛",
+        "中毛": "中毛",
+        "medium": "中毛",
+        "短": "短毛",
+        "短毛": "短毛",
+    }
+    if key in table:
+        return table[key]
+    if "长毛" in text:
+        return "长毛"
+    if "短毛" in text:
+        return "短毛"
+    if "中毛" in text:
+        return "中毛"
+    return ""
+
+
+def format_kg(value: float) -> str:
+    return f"{round(float(value), 2):.2f}".rstrip("0").rstrip(".")
+
+
+def _usable_day(raw: str) -> str:
+    text = (raw or "").strip()
+    match = re.search(r"(\d{4})-(\d{2})-(\d{2})", text)
+    if not match:
+        return ""
+    try:
+        day = date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    except ValueError:
+        return ""
+    if day.year < 1900:
+        return ""
+    return day.isoformat()
+
+
+def _business_day(raw) -> str:
+    if isinstance(raw, datetime):
+        return ""
+    return _usable_day("" if raw is None else str(raw))
+
+
+def _stored_day(value) -> str:
+    if not isinstance(value, datetime):
+        return ""
+    return _usable_day(format_beijing(value, "%Y-%m-%d"))
+
+
+def _pick_day(business, stored) -> str:
+    if isinstance(business, datetime):
+        return _stored_day(business)
+    if business not in (None, ""):
+        parsed = _business_day(business)
+        if parsed:
+            return parsed
+        if re.search(r"\d{4}-\d{2}-\d{2}", str(business)):
+            return ""
+    return _stored_day(stored)
+
+
+def _months_ago(today: date, months: int) -> date:
+    month = today.month - months
+    year = today.year
+    while month <= 0:
+        month += 12
+        year -= 1
+    last = calendar.monthrange(year, month)[1]
+    return date(year, month, min(today.day, last))
+
+
+def _loose_weight(value) -> float | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        weight = float(value)
+    else:
+        text = str(value).strip().lower()
+        if not text or text in {"未知", "不详", "无", "-", "—", "null"}:
+            return None
+        match = re.search(r"(\d+(?:\.\d+)?)", text)
+        if not match:
+            return None
+        weight = float(match.group(1))
+    if weight <= 0 or weight > 200:
+        return None
+    return round(weight, 2)
+
+
+def _source_rows(db: Session, label: str, query):
+    try:
+        return query.all()
+    except Exception:
+        logger.warning("[ai-cs] skip pet source %s", label, exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return []
+
+
+def _consider(best: dict, pet_id: int, day: str, priority: int, seq: int, kg: float | None, source: str) -> None:
+    weight = _loose_weight(kg)
+    if pet_id <= 0 or weight is None:
+        return
+    rank = (1 if day else 0, day or "", priority, seq)
+    current = best.get(pet_id)
+    if current is None or rank > current[0]:
+        best[pet_id] = (rank, weight, day or "", source)
+
+
+def weight_facts_for(db: Session, pet_ids: list[int]) -> dict[int, dict]:
+    ids = [int(pid) for pid in pet_ids if int(pid) > 0]
+    if not ids:
+        return {}
+    best: dict[int, tuple] = {}
+    for row in _source_rows(db, "weight_records", db.query(WeightRecord).filter(WeightRecord.pet_id.in_(ids))):
+        _consider(
+            best, int(row.pet_id or 0), _pick_day(row.record_date, row.created_at),
+            40, int(row.id or 0), row.weight_kg, "weight_records",
+        )
+    for row in _source_rows(db, "deworming_records", db.query(DewormingRecord).filter(DewormingRecord.pet_id.in_(ids))):
+        if (row.status or "") == "voided":
+            continue
+        _consider(
+            best, int(row.pet_id or 0), _pick_day(row.deworm_date, row.created_at),
+            10, int(row.id or 0), row.weight_kg, "deworming_records",
+        )
+    for row in _source_rows(db, "hospitalizations", db.query(Hospitalization).filter(Hospitalization.pet_id.in_(ids))):
+        _consider(
+            best, int(row.pet_id or 0), _pick_day("", row.admitted_at),
+            20, int(row.id or 0), row.admission_weight_kg, "hospitalizations",
+        )
+    for row in _source_rows(
+        db, "anesthesia_monitor_sheets",
+        db.query(AnesthesiaMonitorSheet).filter(AnesthesiaMonitorSheet.pet_id.in_(ids)),
+    ):
+        _consider(
+            best, int(row.pet_id or 0), _pick_day(row.monitor_date, row.created_at),
+            30, int(row.id or 0), row.weight_kg, "anesthesia_monitor_sheets",
+        )
+    for row in _source_rows(db, "applications", db.query(Application).filter(Application.pet_id.in_(ids))):
+        _consider(
+            best, int(row.pet_id or 0), _stored_day(row.created_at),
+            0, int(row.id or 0), row.weight_estimate, "applications",
+        )
+    today = beijing_today()
+    cutoff = _months_ago(today, 6)
+    out = {}
+    for pet_id, (_rank, weight, day, source) in best.items():
+        stale = True
+        if day:
+            try:
+                stale = date.fromisoformat(day) < cutoff
+            except ValueError:
+                stale = True
+        out[pet_id] = {
+            "weight_kg": weight,
+            "weight_date": day,
+            "weight_source": source,
+            "weight_older_than_6_months": stale,
+        }
+    return out
+
+
+def latest_weight_fact(db: Session, pet_id: int) -> dict | None:
+    return weight_facts_for(db, [pet_id]).get(int(pet_id or 0))
+
+
+def latest_weight_kg(db: Session, pet_id: int) -> float | None:
+    fact = latest_weight_fact(db, pet_id)
+    if not fact:
+        return None
+    return fact.get("weight_kg")
+
+
+def coat_facts_for(db: Session, pet_ids: list[int]) -> dict[int, dict]:
+    ids = [int(pid) for pid in pet_ids if int(pid) > 0]
+    if not ids:
+        return {}
+    best: dict[int, tuple] = {}
+    for row in _source_rows(db, "grooming_orders", db.query(GroomingOrder).filter(GroomingOrder.pet_id.in_(ids))):
+        if (row.status or "") == "voided":
+            continue
+        coat = normalize_coat(row.coat_length or "")
+        pid = int(row.pet_id or 0)
+        if not coat or pid <= 0:
+            continue
+        day = _pick_day(row.groom_date, row.created_at)
+        rank = (1 if day else 0, day or "", 2, int(row.id or 0))
+        current = best.get(pid)
+        if current is None or rank > current[0]:
+            best[pid] = (rank, coat, day, "grooming_orders")
+    skipped = {AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value}
+    for row in _source_rows(db, "appointments", db.query(Appointment).filter(Appointment.pet_id.in_(ids))):
+        if (row.status or "") in skipped:
+            continue
+        coat = normalize_coat(row.coat_length or "")
+        pid = int(row.pet_id or 0)
+        if not coat or pid <= 0:
+            continue
+        day = _pick_day(row.appointment_date, row.created_at)
+        rank = (1 if day else 0, day or "", 1, int(row.id or 0))
+        current = best.get(pid)
+        if current is None or rank > current[0]:
+            best[pid] = (rank, coat, day, "appointments")
+    return {
+        pet_id: {
+            "coat_length": coat,
+            "coat_date": day,
+            "coat_source": source,
+        }
+        for pet_id, (_rank, coat, day, source) in best.items()
+    }
+
+
+def latest_coat_fact(db: Session, pet_id: int) -> dict | None:
+    return coat_facts_for(db, [pet_id]).get(int(pet_id or 0))
+
+
+def pet_age_fields(raw: str, today: date | None = None) -> tuple[str, str]:
+    today = today or beijing_today()
+    text = (raw or "").strip()
+    if not text:
+        return "", ""
+    birth = parse_birth_date(text, today)
+    if birth is None or birth > today:
+        return "", ""
+    months_total = (today.year - birth.year) * 12 + (today.month - birth.month)
+    if today.day < birth.day:
+        months_total -= 1
+    if months_total < 0:
+        return "", ""
+    years, rem = divmod(months_total, 12)
+    if years >= 1 and rem:
+        label = f"{years}岁{rem}个月"
+    elif years >= 1:
+        label = f"{years}岁"
+    elif months_total >= 1:
+        label = f"{months_total}个月"
+    else:
+        label = f"{(today - birth).days}天"
+    normalized = text.replace("/", "-").replace(".", "-")
+    birthday = birth.isoformat() if re.fullmatch(r"\d{4}-\d{1,2}(?:-\d{1,2})?", normalized) else ""
+    return label, birthday
+
+
+def _pet_brief(pet: Pet) -> dict:
+    return {
+        "pet_id": pet.id,
+        "name": (pet.name or "").strip() or "未命名",
+        "species": species_zh(pet.species or ""),
+    }
+
+
+def _pet_chart(db: Session, pet: Pet) -> dict:
+    age, birthday = pet_age_fields(pet.birthday_estimate or "")
+    item = {
+        **_pet_brief(pet),
+        "breed": (pet.breed or "").strip(),
+        "gender": gender_zh(pet.gender or ""),
+        "age": age,
+        "birthday": birthday,
+        "is_neutered": bool(pet.is_neutered),
+        "weight_kg": None,
+        "weight_date": "",
+        "weight_source": "",
+        "weight_older_than_6_months": None,
+        "coat_length": "",
+        "coat_date": "",
+        "coat_source": "",
+    }
+    weight = latest_weight_fact(db, pet.id)
+    if weight:
+        item.update(weight)
+    coat = latest_coat_fact(db, pet.id)
+    if coat:
+        item.update(coat)
+    return item
+
+
+def _profile_payload(db: Session, customer: Customer, detail_ids: set[int] | None) -> dict:
     pets = []
     for pet in _pets(db, customer.id):
-        pets.append({
-            "pet_id": pet.id,
-            "name": (pet.name or "").strip() or "未命名",
-            "species": species_zh(pet.species or ""),
-        })
+        if detail_ids is None or pet.id in detail_ids:
+            pets.append(_pet_chart(db, pet))
+        else:
+            pets.append(_pet_brief(pet))
     return {
         "customer_id": customer.id,
         "name": (customer.name or "").strip() or "未命名",
@@ -195,16 +521,45 @@ def _profile_payload(db: Session, customer: Customer) -> dict:
     }
 
 
-def describe_profiles(db: Session, openid: str) -> dict:
+def describe_profiles(db: Session, openid: str, pet_id=None) -> dict:
     rows = customers_for_openid(db, openid)
-    profiles = [_profile_payload(db, row) for row in rows]
-    return {
+    owned: list[Pet] = []
+    for row in rows:
+        owned.extend(_pets(db, row.id))
+    selected = None
+    unknown_pet = False
+    if pet_id not in (None, "", 0):
+        try:
+            wanted = int(pet_id)
+        except (TypeError, ValueError):
+            wanted = 0
+        selected = next((pet for pet in owned if pet.id == wanted), None)
+        unknown_pet = selected is None
+    ask_which = len(rows) > 1 or len(owned) > 1
+    if selected is not None:
+        detail_ids = {selected.id}
+        ask_which = False
+        next_step = "这一只已经选定。使用档案里的品种、年龄、体重、毛长和绝育，只问还缺的，或早于 6 个月的体重。"
+    elif not ask_which:
+        detail_ids = {pet.id for pet in owned}
+        next_step = "只有一只宠物，直接使用档案。只问还缺的；体重早于 6 个月要确认变化大不大。"
+    else:
+        detail_ids = set()
+        next_step = "先问是哪一只。主人选定后，再用 pet_id 调用 list_profiles_and_pets 加载这一只的档案，只问还缺的或需要确认的。"
+    profiles = [_profile_payload(db, row, detail_ids) for row in rows]
+    payload = {
         "bound": bool(profiles),
         "profile_count": len(profiles),
         "need_profile_choice": len(profiles) > 1,
+        "ask_which_pet_first": ask_which,
+        "selected_pet_id": selected.id if selected is not None else None,
+        "next_step": next_step if profiles else BIND_HINT,
         "profiles": profiles,
         "bind_hint": "" if profiles else BIND_HINT,
     }
+    if unknown_pet:
+        payload["message"] = "这只宠物不在您绑定的档案里。"
+    return payload
 
 
 def _save_message(db: Session, openid: str, role: str, content: str, msg_type: str = "") -> None:
@@ -362,7 +717,11 @@ def _tool_list_services() -> dict:
             "rules": _rules_payload(kind),
         }
         if kind == "beauty":
-            item["sizes"] = category.get("size_options") or []
+            sizes = list(category.get("size_options") or [])
+            for extra in ("大型猫（4kg 以上）", "中型猫（2.5–4kg）", "小型猫（2.5kg 以下）"):
+                if extra not in sizes:
+                    sizes.append(extra)
+            item["sizes"] = sizes
             item["coats"] = category.get("coat_options") or []
             item["addons"] = category.get("addon_options") or []
             item["addon_note"] = "去浮毛就是去底绒，按体重加时间；其他附加项目不加时间。价格只看知识库价目表。"
@@ -450,8 +809,8 @@ def _choose_pet(db: Session, customer: Customer, pet_id) -> tuple[Pet | None, di
         return None, {
             "ok": False,
             "code": "need_pet",
-            "message": "名下有多只宠物，请先问是哪一只。",
-            "pets": [{"pet_id": pet.id, "name": pet.name or "未命名", "species": species_zh(pet.species or "")} for pet in pets],
+            "message": "名下有多只宠物，请先问是哪一只。选定前不要问体重、毛长或品种。",
+            "pets": [_pet_brief(pet) for pet in pets],
         }
     if not pet_id:
         return pets[0], None
@@ -461,7 +820,7 @@ def _choose_pet(db: Session, customer: Customer, pet_id) -> tuple[Pet | None, di
     return chosen, None
 
 
-def _booking_script(store: str, service: str, pet: Pet, day: str, clock: str, extra: dict) -> str:
+def _booking_script(store: str, service: str, pet: Pet, day: str, clock: str, extra: dict, detail: dict | None = None) -> str:
     lines = [
         "请核对后回复「确认」，我才会提交：",
         f"门店：{store_short(store)}",
@@ -469,6 +828,25 @@ def _booking_script(store: str, service: str, pet: Pet, day: str, clock: str, ex
         f"宠物：{(pet.name or '未命名')}（{species_zh(pet.species or '')}）",
         f"时间：{day} {clock}",
     ]
+    detail = detail or {}
+    coat = detail.get("coat_length") or ""
+    if coat:
+        if detail.get("coat_from_file"):
+            coat_date = detail.get("coat_date") or ""
+            when = f"，档案 {coat_date}" if coat_date else ""
+            lines.append(f"毛长：{coat}（档案里的上次毛长{when}，请一并核对）")
+        else:
+            lines.append(f"毛长：{coat}")
+    if detail.get("weight_kg") not in (None, ""):
+        weight_text = f"体重：{detail['weight_kg']}kg"
+        if detail.get("weight_from_file"):
+            weight_date = detail.get("weight_date") or ""
+            when = f"档案 {weight_date}" if weight_date else "档案"
+            if detail.get("weight_stale"):
+                weight_text += f"（{when}，已超过 6 个月，请确认变化大不大）"
+            else:
+                weight_text += f"（{when}）"
+        lines.append(weight_text)
     duration = extra.get("duration_minutes")
     if duration:
         lines.append(f"预计占用 {duration} 分钟，实际以到店为准。")
@@ -494,8 +872,44 @@ def tool_stage_booking(db: Session, openid: str, args: dict) -> dict:
     clock = str(args.get("time") or "").strip()
     if not all([kind, service, store, day, clock]):
         return {"ok": False, "message": "还缺门店、项目、日期或时间。问清楚后再确认，不要提交。"}
-    if kind == "beauty" and (not str(args.get("pet_size") or "").strip() or not str(args.get("coat_length") or "").strip()):
-        return {"ok": False, "message": "美容还需要体型和毛长（长毛或短毛）。先问客户，不要提交。"}
+    size = str(args.get("pet_size") or "").strip()
+    supplied_coat = normalize_coat(str(args.get("coat_length") or ""))
+    coat = supplied_coat
+    coat_from_file = False
+    coat_date = ""
+    if kind == "beauty" and not coat:
+        coat_fact = latest_coat_fact(db, pet.id) or {}
+        coat = coat_fact.get("coat_length") or ""
+        coat_date = coat_fact.get("coat_date") or ""
+        coat_from_file = bool(coat)
+    supplied_weight = args.get("weight_kg")
+    weight = None if supplied_weight in (None, "") else supplied_weight
+    weight_from_file = False
+    weight_date = ""
+    weight_stale = False
+    parsed_weight = _main()._parse_weight_kg(weight)
+    if kind == "beauty" and parsed_weight is None:
+        weight_fact = latest_weight_fact(db, pet.id) or {}
+        if weight_fact.get("weight_kg"):
+            parsed_weight = weight_fact["weight_kg"]
+            weight_from_file = True
+            weight_date = weight_fact.get("weight_date") or ""
+            weight_stale = bool(weight_fact.get("weight_older_than_6_months"))
+    if kind == "beauty" and not size:
+        return {
+            "ok": False,
+            "message": "美容还需要体型。按已确认的体重选择体型档，不要再向客户要一次体重。猫：小型猫（2.5kg 以下）、中型猫（2.5–4kg）、大型猫（4kg 以上）。犬用服务目录里的档。",
+        }
+    if kind == "beauty" and coat == "中毛":
+        return {
+            "ok": False,
+            "message": "档案毛长是中毛。请先跟客户确认按长毛还是短毛，再提交。不要猜。",
+        }
+    if kind == "beauty" and not coat:
+        return {
+            "ok": False,
+            "message": "档案里没有毛长。请先问客户是长毛还是短毛。品种只能用来提示可能的毛长，不能直接当作已确认。",
+        }
     try:
         looked = query_slots(
             db,
@@ -503,10 +917,10 @@ def tool_stage_booking(db: Session, openid: str, args: dict) -> dict:
             day=day,
             kind=kind,
             service_name=service,
-            pet_size=str(args.get("pet_size") or ""),
-            coat_length=str(args.get("coat_length") or ""),
+            pet_size=size,
+            coat_length=coat,
             addons=str(args.get("addons") or ""),
-            weight_kg=args.get("weight_kg") or None,
+            weight_kg=parsed_weight,
             pet_id=pet.id,
             species=pet.species or "",
             birthday=pet.birthday_estimate or "",
@@ -528,13 +942,22 @@ def tool_stage_booking(db: Session, openid: str, args: dict) -> dict:
         "time": clock,
         "kind": kind,
         "service_name": looked.get("service_name") or service,
-        "pet_size": str(args.get("pet_size") or ""),
-        "coat_length": str(args.get("coat_length") or ""),
+        "pet_size": size,
+        "coat_length": coat,
         "addons": str(args.get("addons") or ""),
-        "weight_kg": args.get("weight_kg") or "",
+        "weight_kg": parsed_weight if parsed_weight is not None else "",
         "notes": clip(redact(str(args.get("notes") or "")), 200),
     }
-    script = _booking_script(payload["store"], payload["service_name"], pet, day, clock, looked)
+    detail = {
+        "coat_length": coat,
+        "coat_from_file": coat_from_file,
+        "coat_date": coat_date,
+        "weight_kg": format_kg(parsed_weight) if parsed_weight else "",
+        "weight_from_file": weight_from_file,
+        "weight_date": weight_date,
+        "weight_stale": weight_stale,
+    }
+    script = _booking_script(payload["store"], payload["service_name"], pet, day, clock, looked, detail)
     _stage(db, openid, "book", payload, script)
     return {"ok": True, "staged": True, "script": script}
 
@@ -612,7 +1035,30 @@ def tool_stage_cancel(db: Session, openid: str, args: dict) -> dict:
     return {"ok": True, "staged": True, "script": script}
 
 
-def tool_query_slots(db: Session, args: dict) -> dict:
+def _owned_pet(db: Session, openid: str, pet_id) -> Pet | None:
+    try:
+        wanted = int(pet_id or 0)
+    except (TypeError, ValueError):
+        return None
+    if wanted <= 0:
+        return None
+    pet = db.get(Pet, wanted)
+    if pet is None:
+        return None
+    owned_ids = {row.id for row in customers_for_openid(db, openid)}
+    if pet.customer_id not in owned_ids:
+        return None
+    return pet
+
+
+def tool_query_slots(db: Session, openid: str, args: dict) -> dict:
+    pet = _owned_pet(db, openid, args.get("pet_id"))
+    coat = normalize_coat(str(args.get("coat_length") or ""))
+    weight = args.get("weight_kg") if args.get("weight_kg") not in (None, "") else None
+    if pet is not None and not coat:
+        coat = (latest_coat_fact(db, pet.id) or {}).get("coat_length") or ""
+    if pet is not None and weight is None:
+        weight = latest_weight_kg(db, pet.id)
     try:
         result = query_slots(
             db,
@@ -621,12 +1067,12 @@ def tool_query_slots(db: Session, args: dict) -> dict:
             kind=str(args.get("kind") or ""),
             service_name=str(args.get("service_name") or ""),
             pet_size=str(args.get("pet_size") or ""),
-            coat_length=str(args.get("coat_length") or ""),
+            coat_length=coat,
             addons=str(args.get("addons") or ""),
-            weight_kg=args.get("weight_kg") or None,
-            pet_id=int(args.get("pet_id") or 0) or None,
-            species=str(args.get("species") or ""),
-            birthday=str(args.get("birthday") or ""),
+            weight_kg=weight,
+            pet_id=pet.id if pet is not None else None,
+            species=str(args.get("species") or "") or (pet.species if pet is not None else ""),
+            birthday=str(args.get("birthday") or "") or (pet.birthday_estimate if pet is not None else ""),
         )
     except AiCsError as exc:
         return {"ok": False, "message": exc.message, "error_code": exc.code}
@@ -643,6 +1089,8 @@ def tool_query_slots(db: Session, args: dict) -> dict:
         "arrival_note": result.get("arrival_note") or "",
         "warning": result.get("warning") or "",
         "late_penalty": False,
+        "coat_length": coat or "",
+        "weight_kg": weight,
     }
 
 
@@ -652,7 +1100,7 @@ def execute_tool(db: Session, openid: str, name: str, args: dict) -> dict:
         if name == "list_services":
             result = {"ok": True, **_tool_list_services()}
         elif name == "list_profiles_and_pets":
-            result = {"ok": True, **describe_profiles(db, openid)}
+            result = {"ok": True, **describe_profiles(db, openid, args.get("pet_id"))}
         elif name == "list_upcoming_appointments":
             profiles = describe_profiles(db, openid)
             if not profiles["bound"]:
@@ -660,7 +1108,7 @@ def execute_tool(db: Session, openid: str, name: str, args: dict) -> dict:
             else:
                 result = {"ok": True, "appointments": _upcoming(db, openid)}
         elif name == "query_slots":
-            result = tool_query_slots(db, args)
+            result = tool_query_slots(db, openid, args)
         elif name == "stage_booking":
             result = tool_stage_booking(db, openid, args)
         elif name == "stage_reschedule":
@@ -696,8 +1144,18 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_profiles_and_pets",
-            "description": "查看这个微信绑定的档案和宠物。未绑定时会说明要去小程序绑定。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "description": (
+                "查看这个微信绑定的档案和宠物。多只宠物时先只返回名字，不要问体重或毛长；"
+                "主人选定后传入 pet_id，再返回这一只的品种、年龄、性别、绝育、最近体重和上次毛长。"
+                "只有一只时直接返回这些档案。未绑定时会说明要去小程序绑定。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pet_id": {"type": "integer", "description": "主人选定哪一只之后再传。多只时先不要传。"},
+                },
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -736,7 +1194,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "stage_booking",
-            "description": "生成预约确认稿。不会写入预约。多份档案或多只宠物时必须先让客户选定。",
+            "description": (
+                "生成预约确认稿。不会写入预约。多份档案或多只宠物时必须先让客户选定。"
+                "美容请传客户确认后的 coat_length（长毛或短毛）和 weight_kg；"
+                "不传时用该宠物档案里的上次毛长和最近体重占档，并写进确认稿。"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -817,7 +1279,7 @@ def _system_prompt(db: Session, openid: str) -> str:
         "第一句就请客户立刻打电话并到店，电话用知识库里的号码。\n"
         "预约、改期、取消必须先调用 stage 工具，把确认稿里的门店、项目、宠物、日期和时间给客户，"
         "等客户下一句明确同意。没有同意之前，禁止说已经约好、已经改期或已经取消。\n"
-        "一次只确认一只宠物。多份档案或多只宠物时，先问是哪一只。\n"
+        f"{PET_FILE_RULE}"
         "未绑定档案时，预约类问题请客户去小程序使用「绑定我的档案」；一般须知仍可回答。\n"
         "没有把握或知识库没有时调用 request_human。\n\n"
         f"【当前绑定】\n{json.dumps(profiles, ensure_ascii=False)}\n\n"
