@@ -152,7 +152,24 @@
     var dateVal = dateEl ? (dateEl.value || "") : "";
     var storeVal = storeSel ? (storeSel.value || "") : "";
 
-    if (!sn || !sz || !cl || !dateVal || !storeVal) {
+    var petId = 0;
+    var petEl = document.getElementById("admin_appt_pet_id");
+    if (petEl) petId = parseInt(petEl.value || "0", 10) || 0;
+
+    if (!sn || !dateVal || !storeVal) {
+      beautySlotsRow.style.display = "none";
+      return;
+    }
+    if (!sz && petId <= 0) {
+      beautySlotsRow.style.display = "";
+      beautySlotsLoading.style.display = "none";
+      beautySlotsError.style.display = "";
+      beautySlotsError.textContent = "请先填写体型或体重";
+      beautySlotsInfo.style.display = "none";
+      beautySlotsBtns.innerHTML = "";
+      return;
+    }
+    if (sz && !cl) {
       beautySlotsRow.style.display = "none";
       return;
     }
@@ -171,12 +188,23 @@
            + "&coat_length=" + encodeURIComponent(cl)
            + "&addons=" + encodeURIComponent(addonChecked)
            + "&date=" + encodeURIComponent(dateVal)
-           + "&store=" + encodeURIComponent(storeVal);
+           + "&store=" + encodeURIComponent(storeVal)
+           + (petId > 0 ? "&pet_id=" + petId : "");
 
     fetch("/api/appointments/beauty-slots?" + qs, { credentials: "same-origin" })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
+      .then(function(r) {
+        return r.json().then(function(data) { return { ok: r.ok, data: data }; });
+      })
+      .then(function(res) {
         beautySlotsLoading.style.display = "none";
+        if (!res.ok) {
+          beautySlotsError.style.display = "";
+          beautySlotsError.textContent = (res.data && (res.data.message || res.data.detail)) || "请先填写体型或体重";
+          beautySlotsInfo.style.display = "none";
+          beautySlotsBtns.innerHTML = "";
+          return;
+        }
+        var data = res.data || {};
         if (data && data.duration_minutes && dur && !dur.readOnly) {
           dur.value = String(data.duration_minutes);
         }

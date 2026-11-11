@@ -577,6 +577,7 @@ def query_slots(
     birthday: str = "",
     species: str = "",
     require_beauty_size: bool = True,
+    duration_override: int | None = None,
 ) -> dict:
     kind = (kind or "").strip().lower()
     if kind not in {"outpatient", "vaccine", "surgery", "beauty"}:
@@ -658,11 +659,17 @@ def query_slots(
             "late_penalty": LATE_PENALTY,
         }
     resolved_size = pet_size
-    if kind == "beauty":
+    use_stored_duration = kind == "beauty" and duration_override and int(duration_override) > 0
+    if kind == "beauty" and not use_stored_duration:
         resolved_size = _resolve_beauty_size(
             service, pet_size, species, weight, required=require_beauty_size,
         )
-    duration = _planned_duration(kind, service, resolved_size, coat_length, addons, weight)
+    if use_stored_duration:
+        # 改期沿用已保存时长，不用体重或新体型表重算。
+        duration = int(duration_override)
+        resolved_size = (pet_size or "").strip()
+    else:
+        duration = _planned_duration(kind, service, resolved_size, coat_length, addons, weight)
     capacity_name = _capacity_service_name(kind, service)
     category = AppointmentCategory.surgery.value if kind == "surgery" else (
         AppointmentCategory.beauty.value if kind == "beauty" else AppointmentCategory.outpatient.value
@@ -981,7 +988,13 @@ def reschedule_appointment(db: Session, appointment_id: int, payload: dict) -> d
     service = row.service_name or ""
     if kind == "outpatient" and any(word in service for word in _main()._VACCINE_KEYWORDS):
         kind = "vaccine"
-    duration = int(row.duration_minutes or 30)
+    if kind == "beauty":
+        try:
+            duration = _main().minutes_for_reschedule(db, row)
+        except ValueError as exc:
+            raise AiCsError("pet_weight_required", str(exc) or "请先填写体型或体重")
+    else:
+        duration = int(row.duration_minutes or 30)
     warnings: list[str] = []
     pet = db.get(Pet, row.pet_id) if row.pet_id else None
     birthday = _birthday_for_check(pet, "") if pet is not None else ""
