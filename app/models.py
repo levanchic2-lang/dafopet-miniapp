@@ -311,6 +311,21 @@ class Customer(Base):
     pets = relationship("Pet", back_populates="customer", cascade="all, delete-orphan")
 
 
+class SmsVerificationCode(Base):
+    """短信验证码。明文不落库，两个 worker 共用这一张表。"""
+    __tablename__ = "sms_verification_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    phone: Mapped[str] = mapped_column(String(20), default="", index=True)
+    purpose: Mapped[str] = mapped_column(String(40), default="customer_binding", index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), default="")
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    client_ip: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
 class Pet(Base):
     __tablename__ = "pets"
 

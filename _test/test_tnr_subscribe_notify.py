@@ -65,6 +65,15 @@ settings.wechat_tmpl_surgery_done = "tmpl-done"
 settings.wechat_tmpl_surgery_reminder = "tmpl-remind"
 
 DH = "大风动物医院（东环店）"
+
+
+def _fake_wechat(code: str) -> dict:
+    if isinstance(code, str) and code.startswith("as-"):
+        return {"openid": code[3:]}
+    raise RuntimeError("bad code")
+
+
+main_module.wechat_code2session = _fake_wechat
 OPENID = "openid-subscribe-test"
 SENDS: list[dict] = []
 
@@ -270,7 +279,7 @@ def test_customer_cancel_and_update_push_without_duplicate():
         app_row = _application(db, nickname="取消猫", phone="13800004444", openid="openid-cancel")
         client = TestClient(app)
         created = client.post("/api/appointments/create", json={
-            "openid": "openid-cancel",
+            "code": "as-openid-cancel",
             "category": "tnr",
             "service_name": "TNR 手术安排",
             "customer_name": "测试申请人",
@@ -294,7 +303,7 @@ def test_customer_cancel_and_update_push_without_duplicate():
         pending.status = AppointmentStatus.pending.value
         db.commit()
         updated = client.post(f"/api/wechat/appointments/{appointment_id}/update", json={
-            "openid": "openid-cancel",
+            "code": "as-openid-cancel",
             "appointment_date": _day(4),
             "appointment_time": "14:00",
             "store": DH,
@@ -303,11 +312,11 @@ def test_customer_cancel_and_update_push_without_duplicate():
         reschedule_logs = _logs(db, "appointment_status")
         assert any("appointment_rescheduled" in (item.payload or "") and item.success for item in reschedule_logs)
 
-        cancelled = client.post(f"/api/wechat/appointments/{appointment_id}/cancel", json={"openid": "openid-cancel"})
+        cancelled = client.post(f"/api/wechat/appointments/{appointment_id}/cancel", json={"code": "as-openid-cancel"})
         assert cancelled.status_code == 200, cancelled.text
         cancel_logs = [item for item in _logs(db, "appointment_status") if "appointment_cancelled" in (item.payload or "")]
         assert len(cancel_logs) == 1 and cancel_logs[0].success is True
-        again = client.post(f"/api/wechat/appointments/{appointment_id}/cancel", json={"openid": "openid-cancel"})
+        again = client.post(f"/api/wechat/appointments/{appointment_id}/cancel", json={"code": "as-openid-cancel"})
         assert again.status_code == 400
         assert len([item for item in _logs(db, "appointment_status") if "appointment_cancelled" in (item.payload or "")]) == 1
     finally:
@@ -406,6 +415,7 @@ def test_staff_and_admin_proxy_carry_openid_and_schedule():
 
 def test_claim_and_report_link_openid_and_status_page_flags():
     db = SessionLocal()
+    original_code = main_module.wechat_code2session
     try:
         app_row = _application(db, nickname="历史猫", phone="13800007777", openid="", status="approved")
         app_row.wechat_openid = ""
@@ -426,8 +436,18 @@ def test_claim_and_report_link_openid_and_status_page_flags():
         db.add(row)
         db.commit()
         client = TestClient(app)
+        main_module.wechat_code2session = lambda code: {"openid": "openid-claimed"} if code == "claim-code" else original_code(code)
+        spoofed = client.post("/api/wechat/claim-apps", json={
+            "openid": "openid-attacker",
+            "phone": "13800007777",
+            "id_number": "440301199001011234",
+        })
+        assert spoofed.status_code == 401, spoofed.text
+        db.refresh(app_row)
+        assert (app_row.wechat_openid or "") == ""
         claimed = client.post("/api/wechat/claim-apps", json={
-            "openid": "openid-claimed",
+            "code": "claim-code",
+            "openid": "openid-attacker",
             "phone": "13800007777",
             "id_number": "440301199001011234",
         })
@@ -481,6 +501,7 @@ def test_claim_and_report_link_openid_and_status_page_flags():
         assert app_row.notify_last_failed is True
         assert "上次推送失败" in app_row.notify_alert
     finally:
+        main_module.wechat_code2session = original_code
         db.close()
 
 

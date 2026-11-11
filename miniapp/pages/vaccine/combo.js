@@ -1,4 +1,4 @@
-const { getJson, postJson } = require("../../utils/api");
+const { getJson, postJson, wxLoginCode } = require("../../utils/api");
 
 const QUESTIONS = [
   { key: "mental_7d", label: "近7天精神面貌是否异常" },
@@ -40,7 +40,8 @@ Page({
   async onShow() {
     if (!this.data.currentRegistrationId || !this.data.phone) return;
     try {
-      const r = await getJson(`/api/vaccine-registration/${this.data.currentRegistrationId}`, { phone: this.data.phone });
+      const code = await wxLoginCode();
+      const r = await getJson(`/api/vaccine-registration/${this.data.currentRegistrationId}`, { code });
       if (r.status === "pending_review") {
         wx.showModal({ title: "同意书已签署", content: "登记已进入医院待审核列表。医护现场检查后会确认是否接种。", showCancel: false,
           success: () => wx.navigateBack({ delta: 1 }) });

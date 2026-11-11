@@ -2819,6 +2819,28 @@ def _try_sqlite_migrations() -> None:
             except Exception as _e:
                 print(f"[migrations] package offer columns skipped: {_e}")
 
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS sms_verification_codes ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "phone VARCHAR(20) DEFAULT '', "
+                "purpose VARCHAR(40) DEFAULT 'customer_binding', "
+                "code_hash VARCHAR(64) DEFAULT '', "
+                "expires_at DATETIME, "
+                "attempt_count INTEGER DEFAULT 0, "
+                "used BOOLEAN DEFAULT 0, "
+                "client_ip VARCHAR(80) DEFAULT '', "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_sms_codes_phone "
+                "ON sms_verification_codes(phone, purpose, created_at)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_sms_codes_ip "
+                "ON sms_verification_codes(client_ip, created_at)"
+            ))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

@@ -1,4 +1,4 @@
-const { postJson } = require("../../utils/api");
+const { postJson, wxLoginCode } = require("../../utils/api");
 const subscribe = require("../../utils/subscribe");
 
 Page({
@@ -83,8 +83,11 @@ Page({
   async fetchList() {
     this.setData({ loading: true, error: "" });
     try {
-      const openid = await this.ensureOpenid();
-      const data = await postJson("/api/wechat/my-appointments", { openid });
+      const code = await wxLoginCode();
+      const data = await postJson("/api/wechat/my-appointments", { code });
+      if (data && data.openid) {
+        try { wx.setStorageSync("WECHAT_OPENID", data.openid); } catch (e) {}
+      }
       const highlightId = this.data.highlightId;
       const items = Array.isArray(data.items)
         ? data.items.map((item) =>
@@ -143,8 +146,8 @@ Page({
   async _doCancel(id, idx) {
     this.setData({ [`items[${idx}].cancelling`]: true });
     try {
-      const openid = await this.ensureOpenid();
-      await postJson(`/api/wechat/appointments/${id}/cancel`, { openid });
+      const code = await wxLoginCode();
+      await postJson(`/api/wechat/appointments/${id}/cancel`, { code });
       wx.showToast({ title: "已取消", icon: "success" });
       // 更新本地状态，不重新拉取整个列表
       this.setData({

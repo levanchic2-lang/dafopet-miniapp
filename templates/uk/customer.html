@@ -476,6 +476,21 @@
           <span class="val">{{ cust.address or '—' }}</span>
         </div>
         <div class="cust-contact-row">
+          <span class="lbl">微信</span>
+          <span class="val">
+            {% if cust.wechat_openid %}
+              已绑定
+              <form method="post" action="/admin/customers/{{ cust.id }}/unbind-wechat" style="display:inline;margin-left:8px;"
+                    onsubmit="return confirm('确认解除该客户的微信绑定？客户需要重新验证手机号才能再次绑定。');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+                <button type="submit" class="uk-btn ghost sm">解除绑定</button>
+              </form>
+            {% else %}
+              未绑定
+            {% endif %}
+          </span>
+        </div>
+        <div class="cust-contact-row">
           <span class="lbl">备注</span>
           <span class="val" style="color:var(--ink-3);font-style:italic;">{{ cust.notes|truncate(40) if cust.notes else '无' }}</span>
         </div>

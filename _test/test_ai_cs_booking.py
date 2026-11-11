@@ -427,9 +427,77 @@ def test_reschedule_and_staff_admin_checks():
         db.close()
 
 
+def test_multiple_profiles_require_customer_id():
+    db = SessionLocal()
+    try:
+        rows = db.query(Customer).filter(Customer.wechat_openid == "openid-dup").order_by(Customer.id.asc()).all()
+        assert len(rows) == 2
+        phones = {row.phone for row in rows}
+        if not db.query(Pet).filter(Pet.customer_id == rows[0].id, Pet.name == "豆豆").first():
+            db.add(Pet(customer_id=rows[0].id, name="豆豆", species="dog", gender="male", store="横岗店"))
+        if not db.query(Pet).filter(Pet.customer_id == rows[1].id, Pet.name == "米米").first():
+            db.add(Pet(customer_id=rows[1].id, name="米米", species="cat", gender="female", store="横岗店"))
+        db.commit()
+        first_id, second_id = rows[0].id, rows[1].id
+        pet_id = db.query(Pet).filter(Pet.customer_id == first_id, Pet.name == "豆豆").one().id
+    finally:
+        db.close()
+    missing = _book("outpatient", "大黄", openid="openid-dup", service_name="皮肤", time="20:00")
+    assert missing.status_code == 400
+    body = missing.json()
+    assert body["error_code"] == "customer_ambiguous"
+    text = missing.text
+    for secret in phones:
+        assert secret not in text
+    assert "另一人" not in text and "重复" not in text
+    assert "豆豆" in text and "米米" in text
+    choices = {item["id"]: item["pet_names"] for item in body["choices"]}
+    assert choices[first_id] == ["豆豆"]
+    assert choices[second_id] == ["米米"]
+    assert "address" not in body
+    booked = client.post("/api/ai-cs/appointments", headers=KEY, json={
+        "openid": "openid-dup",
+        "customer_id": first_id,
+        "store": "横岗店",
+        "date": TOMORROW.isoformat(),
+        "time": "20:00",
+        "kind": "outpatient",
+        "service_name": "皮肤",
+        "pet_id": pet_id,
+    })
+    assert booked.status_code == 200, booked.text
+    assert booked.json()["appointments"][0]["customer_id"] == first_id
+    wrong_pet = client.post("/api/ai-cs/appointments", headers=KEY, json={
+        "openid": "openid-dup",
+        "customer_id": second_id,
+        "store": "横岗店",
+        "date": TOMORROW.isoformat(),
+        "time": "20:30",
+        "kind": "outpatient",
+        "service_name": "皮肤",
+        "pet_id": pet_id,
+    })
+    assert wrong_pet.status_code == 400
+    assert wrong_pet.json()["error_code"] == "pet_not_owned"
+    outsider = client.post("/api/ai-cs/appointments", headers=KEY, json={
+        "openid": "openid-dup",
+        "customer_id": 999999,
+        "store": "横岗店",
+        "date": TOMORROW.isoformat(),
+        "time": "20:30",
+        "kind": "outpatient",
+        "service_name": "皮肤",
+        "pet_id": pet_id,
+    })
+    assert outsider.status_code == 400
+    assert outsider.json()["error_code"] == "customer_ambiguous"
+    assert "13800001111" not in outsider.text
+
+
 def test_tnr_endpoint_still_rejects_other_categories():
+    main_module.wechat_code2session = lambda code: {"openid": "openid-one"} if code == "owner-code" else (_ for _ in ()).throw(RuntimeError("bad"))
     response = client.post("/api/appointments/create", json={
-        "openid": "openid-one",
+        "code": "owner-code",
         "category": "outpatient", "service_name": "皮肤", "customer_name": "王瑞",
         "phone": "13800001111", "pet_name": "大黄", "pet_gender": "male", "store": HG,
         "appointment_date": TOMORROW.isoformat(), "appointment_time": "10:00",
@@ -446,5 +514,6 @@ if __name__ == "__main__":
     test_neuter_age_and_surgery_window()
     test_vaccine_rules()
     test_reschedule_and_staff_admin_checks()
+    test_multiple_profiles_require_customer_id()
     test_tnr_endpoint_still_rejects_other_categories()
     print("ai cs booking tests passed")

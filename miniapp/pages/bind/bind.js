@@ -1,4 +1,4 @@
-const { postJson } = require("../../utils/api");
+const { postJson, wxLoginCode } = require("../../utils/api");
 
 Page({
   onShareAppMessage() {
@@ -14,10 +14,10 @@ Page({
     sending: false,
     submitting: false,
     error: "",
-    custPreview: null,
-    devCode: "",
     bound: false,
     boundName: "",
+    boundCount: 0,
+    boundMessage: "",
   },
 
   _timer: null,
@@ -56,14 +56,10 @@ Page({
     try {
       const r = await postJson("/api/customer-binding/send-code", { phone });
       if (!r.ok) {
-        this.setData({ error: r.error || "发送失败", custPreview: null, devCode: "" });
+        this.setData({ error: r.error || "发送失败" });
         return;
       }
-      this.setData({
-        custPreview: r.customer || null,
-        devCode: r.dev_code || "",
-      });
-      wx.showToast({ title: r.sms_sent ? "已发送" : "验证码已生成", icon: "success" });
+      wx.showToast({ title: "请查收短信", icon: "success" });
       this.startCooldown();
     } catch (e) {
       this.setData({ error: (e && e.detail) || "网络错误" });
@@ -82,18 +78,12 @@ Page({
     }
     this.setData({ submitting: true, error: "" });
     try {
-      // 取 openid（如果已存储就直接用，否则 wx.login 换）
-      const cachedOpenid = wx.getStorageSync("WECHAT_OPENID") || "";
-      let payload = { phone: this.data.phone, code: this.data.code };
-      if (cachedOpenid) {
-        payload.openid = cachedOpenid;
-      } else {
-        const loginRes = await new Promise((resolve, reject) => {
-          wx.login({ success: resolve, fail: reject });
-        });
-        payload.js_code = loginRes.code;
-      }
-      const r = await postJson("/api/customer-binding/verify", payload);
+      const jsCode = await wxLoginCode();
+      const r = await postJson("/api/customer-binding/verify", {
+        phone: this.data.phone,
+        code: this.data.code,
+        js_code: jsCode,
+      });
       if (!r.ok) {
         this.setData({ error: r.error || "绑定失败" });
         return;
@@ -101,6 +91,8 @@ Page({
       this.setData({
         bound: true,
         boundName: r.customer_name || "",
+        boundCount: r.bound_count || 1,
+        boundMessage: r.message || "",
         error: "",
       });
       // 缓存 customer_id，方便其他页面读用

@@ -1,4 +1,4 @@
-const { getJson, postJson } = require("../../utils/api");
+const { getJson, postJson, wxLoginCode } = require("../../utils/api");
 const subscribe = require("../../utils/subscribe");
 
 const BEAUTY_ADDON_OPTIONS = ["去浮毛", "SPA", "护发素", "纯手剪", "药浴", "去油"];
@@ -275,9 +275,9 @@ Page({
   // 老顾客识别：用 openid 查档案
   async loadMyProfile() {
     try {
-      const openid = await this.ensureOpenid();
-      const { getJson } = require("../../utils/api");
-      const data = await getJson("/api/wechat/my-profile?openid=" + encodeURIComponent(openid));
+      const { getJson, wxLoginCode } = require("../../utils/api");
+      const code = await wxLoginCode();
+      const data = await getJson("/api/wechat/my-profile", { code });
       if (data && data.bound) {
         const patch = { boundProfile: data };
         // 自动填客户名 + 手机号（如果用户表单还没填）
@@ -356,13 +356,16 @@ Page({
     this.setData({ loading: true });
     try {
       // 并行拉取配置 + 用户 TNR 审核状态 + TNR 门店配额状态
-      const openid = await this.ensureOpenid().catch(() => "");
+      const { wxLoginCode } = require("../../utils/api");
+      let tnrCode = "";
+      let banCode = "";
+      try { tnrCode = await wxLoginCode(); } catch (e) {}
+      try { banCode = await wxLoginCode(); } catch (e) {}
       const phone = wx.getStorageSync("USER_PHONE") || "";
-      const storeStatusQs = phone ? ("?phone=" + encodeURIComponent(phone)) : "";
       const [cfg, tnrStatus, tnrStoreStatus] = await Promise.all([
         getJson("/api/appointments/config"),
-        openid ? getJson("/api/wechat/my-tnr-status?openid=" + encodeURIComponent(openid)).catch(() => ({ has_approved: false })) : Promise.resolve({ has_approved: false }),
-        getJson("/api/tnr-store-status" + storeStatusQs).catch(() => ({ stores: [], is_banned: false })),
+        tnrCode ? getJson("/api/wechat/my-tnr-status", { code: tnrCode }).catch(() => ({ has_approved: false })) : Promise.resolve({ has_approved: false }),
+        getJson("/api/tnr-store-status", { code: banCode, phone }).catch(() => ({ stores: [], is_banned: false })),
       ]);
       const hasApprovedTnr = !!(tnrStatus && tnrStatus.has_approved);
       this._hasApprovedTnr = hasApprovedTnr;
@@ -568,8 +571,9 @@ Page({
 
   async _loadEditData(categories, stores, petGenders) {
     try {
-      const openid = await this.ensureOpenid();
-      const appt = await postJson(`/api/wechat/appointments/${this._editId}/get`, { openid });
+      const { wxLoginCode } = require("../../utils/api");
+      const code = await wxLoginCode();
+      const appt = await postJson(`/api/wechat/appointments/${this._editId}/get`, { code });
       const patch = {
         "form.customer_name":    appt.customer_name  || "",
         "form.phone":            appt.phone_masked   || "",   // 脱敏显示，用户可重填
@@ -943,7 +947,8 @@ Page({
       const tmplIds = subscribe.cachedIds("appointment");
       const subPromise = tmplIds.length ? subscribe.requestSubscribe(tmplIds) : Promise.resolve({});
       const openid = await this.ensureOpenid();
-      const payload = Object.assign({}, this.data.form, { openid });
+      const loginCode = await wxLoginCode();
+      const payload = Object.assign({}, this.data.form, { code: loginCode });
       // 若用户在 banner 里选了已有宠物 chip → 带 pet_id 给后端绑定到 Pet 档案
       if (this.data.selectedPetId) {
         payload.pet_id = this.data.selectedPetId;
@@ -971,7 +976,7 @@ Page({
           return;
         }
         const res = await postJson(`/api/wechat/appointments/${this._editId}/update`, {
-          openid,
+          code: loginCode,
           store:            payload.store,
           appointment_date: payload.appointment_date,
           appointment_time: payload.appointment_time,

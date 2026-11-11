@@ -46,6 +46,15 @@ DAY = (datetime.now().date() + timedelta(days=1)).isoformat()
 OPENID = "openid-tnr-hours"
 
 
+def _fake_wechat(code: str) -> dict:
+    if isinstance(code, str) and code.startswith("as-"):
+        return {"openid": code[3:]}
+    raise RuntimeError("bad code")
+
+
+main_module.wechat_code2session = _fake_wechat
+
+
 def _detail(response) -> str:
     body = response.json()
     detail = body.get("detail", body)
@@ -73,7 +82,7 @@ def _application(db, nickname: str) -> Application:
 
 def _payload(app_id: int, store: str, when: str, day: str = DAY) -> dict:
     return {
-        "openid": OPENID,
+        "code": "as-" + OPENID,
         "category": "tnr",
         "service_name": "TNR 手术安排",
         "customer_name": "测试申请人",
@@ -227,14 +236,14 @@ def test_http_create_and_update():
 
     same_slot = client.post(
         f"/api/wechat/appointments/{legacy_id}/update",
-        json={"openid": OPENID, "appointment_date": DAY, "appointment_time": "11:00", "notes": "只改备注"},
+        json={"code": "as-" + OPENID, "appointment_date": DAY, "appointment_time": "11:00", "notes": "只改备注"},
     )
     assert same_slot.status_code == 200, same_slot.text
     assert same_slot.json()["appointment"]["appointment_time"] == "11:00"
 
     moved = client.post(
         f"/api/wechat/appointments/{legacy_id}/update",
-        json={"openid": OPENID, "appointment_date": DAY, "appointment_time": "12:15", "store": DH},
+        json={"code": "as-" + OPENID, "appointment_date": DAY, "appointment_time": "12:15", "store": DH},
     )
     assert moved.status_code == 400, moved.text
     assert "13:00" in _detail(moved)
