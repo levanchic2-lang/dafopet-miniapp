@@ -71,11 +71,12 @@ _VACCINE_RULES = {
 
 
 class AiCsError(Exception):
-    def __init__(self, code: str, message: str, status: int = 400):
+    def __init__(self, code: str, message: str, status: int = 400, choices: list | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
         self.status = status
+        self.choices = choices
 
 
 def read_ai_cs_api_key() -> str:
@@ -312,16 +313,62 @@ def _now_minutes() -> int:
     return now.hour * 60 + now.minute
 
 
-def _customer_by_openid(db: Session, openid: str) -> Customer:
+def _customer_choices(db: Session, rows: list[Customer]) -> list[dict]:
+    choices = []
+    for cust in sorted(rows, key=lambda item: item.id):
+        pets = (
+            db.query(Pet)
+            .filter(Pet.customer_id == cust.id)
+            .order_by(Pet.id.asc())
+            .all()
+        )
+        names = [(pet.name or "").strip() or "未命名" for pet in pets]
+        choices.append({"id": cust.id, "pet_names": names})
+    return choices
+
+
+def _ambiguous_customer(db: Session, rows: list[Customer], *, wrong_id: bool = False) -> AiCsError:
+    choices = _customer_choices(db, rows)
+    parts = []
+    for item in choices:
+        pets = "、".join(item["pet_names"]) if item["pet_names"] else "暂无宠物"
+        parts.append(f"#{item['id']}（{pets}）")
+    listed = "；".join(parts)
+    if wrong_id:
+        message = f"指定的 customer_id 不属于这个微信。可选：{listed}"
+    else:
+        message = f"该微信绑定了多个客户档案，请在请求里带上 customer_id。可选：{listed}"
+    return AiCsError("customer_ambiguous", message, choices=choices)
+
+
+def _optional_customer_id(raw) -> int | None:
+    if raw in (None, "", 0, "0"):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise AiCsError("customer_ambiguous", "customer_id 需要是客户档案编号。")
+    return value if value > 0 else None
+
+
+def _customer_by_openid(db: Session, openid: str, customer_id=None) -> Customer:
     key = (openid or "").strip()
     if not key:
         raise AiCsError("customer_not_found", "请提供已绑定的微信 openid。")
     rows = db.query(Customer).filter(Customer.wechat_openid == key).all()
     if not rows:
         raise AiCsError("customer_not_found", "该微信没有绑定客户档案。")
-    if len(rows) > 1:
-        raise AiCsError("customer_ambiguous", "该微信绑定了多个客户档案，请由门店人工处理。")
-    return rows[0]
+    wanted = _optional_customer_id(customer_id)
+    if len(rows) == 1:
+        if wanted is not None and wanted != rows[0].id:
+            raise AiCsError("customer_not_found", "指定的 customer_id 不属于该微信绑定的客户。")
+        return rows[0]
+    if wanted is None:
+        raise _ambiguous_customer(db, rows)
+    chosen = next((row for row in rows if row.id == wanted), None)
+    if chosen is None:
+        raise _ambiguous_customer(db, rows, wrong_id=True)
+    return chosen
 
 
 def _pet_for_customer(db: Session, customer: Customer, pet_id: int) -> Pet:
@@ -658,7 +705,7 @@ def book_appointments(db: Session, payload: dict) -> dict:
     kind = str(payload.get("kind") or "").strip().lower()
     if kind not in {"outpatient", "vaccine", "surgery", "beauty"}:
         raise AiCsError("kind_invalid", "kind 只能是 outpatient、vaccine、surgery 或 beauty。")
-    customer = _customer_by_openid(db, str(payload.get("openid") or ""))
+    customer = _customer_by_openid(db, str(payload.get("openid") or ""), payload.get("customer_id"))
     phone = _require_phone(customer)
     full_store = _resolve_store(str(payload.get("store") or ""))
     day = _parse_date(str(payload.get("date") or payload.get("appointment_date") or ""))
@@ -830,7 +877,7 @@ def _owned_appointment(db: Session, customer: Customer, appointment_id: int) -> 
 
 def reschedule_appointment(db: Session, appointment_id: int, payload: dict) -> dict:
     payload = payload or {}
-    customer = _customer_by_openid(db, str(payload.get("openid") or ""))
+    customer = _customer_by_openid(db, str(payload.get("openid") or ""), payload.get("customer_id"))
     row = _owned_appointment(db, customer, appointment_id)
     if row.status not in (AppointmentStatus.pending.value, AppointmentStatus.confirmed.value):
         raise AiCsError("status_locked", "只有待确认或已确认的预约可以改期，请联系门店。")
@@ -901,7 +948,7 @@ def reschedule_appointment(db: Session, appointment_id: int, payload: dict) -> d
 
 def cancel_appointment(db: Session, appointment_id: int, payload: dict) -> dict:
     payload = payload or {}
-    customer = _customer_by_openid(db, str(payload.get("openid") or ""))
+    customer = _customer_by_openid(db, str(payload.get("openid") or ""), payload.get("customer_id"))
     row = _owned_appointment(db, customer, appointment_id)
     if row.status not in (AppointmentStatus.pending.value, AppointmentStatus.confirmed.value):
         raise AiCsError("status_locked", "只有待确认或已确认的预约可以取消，请联系门店。")

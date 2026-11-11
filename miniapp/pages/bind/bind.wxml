@@ -9,7 +9,8 @@
   <view wx:if="{{bound}}" class="success-box">
     <view class="success-icon">✓</view>
     <view class="success-title">已绑定</view>
-    <view class="success-text">您的档案：{{boundName}}</view>
+    <view class="success-text">已绑定 {{boundCount || 1}} 份档案{{boundName ? '：' + boundName : ''}}</view>
+    <view wx:if="{{boundMessage}}" class="success-text">{{boundMessage}}</view>
     <button class="btn primary" bindtap="onDone">完成</button>
   </view>
 
@@ -22,15 +23,6 @@
               bindtap="onSendCode">
         {{cooldown > 0 ? cooldown + 's' : (sending ? '发送中…' : '获取验证码')}}
       </button>
-    </view>
-
-    <!-- 找到的档案预览 -->
-    <view wx:if="{{custPreview}}" class="cust-preview">
-      <view class="cust-name">✓ 找到档案：{{custPreview.name}}</view>
-      <view class="cust-meta">{{custPreview.pet_count}} 只宠物{{custPreview.address ? ' · ' + custPreview.address : ''}}</view>
-      <view wx:if="{{devCode}}" class="dev-tip">
-        ⚠ 短信未发送（开发模式），验证码：<text class="dev-code">{{devCode}}</text>
-      </view>
     </view>
 
     <view class="label">验证码</view>

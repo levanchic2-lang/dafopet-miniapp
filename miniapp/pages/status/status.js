@@ -293,11 +293,22 @@ Page({
   },
 
   _fetchOrderDetail(id, idx) {
-    const app = getApp();
     this.setData({ [`myOrders[${idx}].detailLoading`]: true, [`myOrders[${idx}].detailError`]: "" });
+    wx.login({
+      success: (loginRes) => this._requestOrderDetail(id, idx, (loginRes && loginRes.code) || ""),
+      fail: () => this.setData({
+        [`myOrders[${idx}].detailError`]: "请先完成微信登录",
+        [`myOrders[${idx}].detailLoading`]: false
+      })
+    });
+  },
+
+  _requestOrderDetail(id, idx, code) {
+    const app = getApp();
     wx.request({
       url: app.globalData.apiBase + `/api/app/${encodeURIComponent(id)}/status`,
       method: "GET",
+      data: { code },
       success: (res) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           const detail = buildOrderDetail(res.data || {});
@@ -323,14 +334,26 @@ Page({
   },
 
   fetchMyOrders() {
-    const app = getApp();
-    const openid = String(this.data.openid || "").trim();
-    if (!openid) return;
     this.setData({ myOrdersLoading: true });
+    wx.login({
+      fail: () => this.setData({ myOrdersLoading: false }),
+      success: (loginRes) => {
+        const code = (loginRes && loginRes.code) || "";
+        if (!code) {
+          this.setData({ myOrdersLoading: false });
+          return;
+        }
+        this._requestMyOrders(code);
+      }
+    });
+  },
+
+  _requestMyOrders(code) {
+    const app = getApp();
     wx.request({
       url: app.globalData.apiBase + "/api/wechat/my-apps",
       method: "POST",
-      data: { openid },
+      data: { code },
       header: { "content-type": "application/json" },
       success: (res) => {
         const j = res.data || {};
@@ -388,11 +411,8 @@ Page({
   },
 
   claimHistoryOrders() {
-    const app = getApp();
-    const openid = String(this.data.openid || "").trim();
     const phone = String(this.data.claimPhone || "").trim();
     const id_number = String(this.data.claimIdNumber || "").trim().toUpperCase();
-    if (!openid) return;
     if (!/^1\d{10}$/.test(phone)) {
       wx.showModal({ title: "提示", content: "请填写 11 位中国大陆手机号。", showCancel: false });
       return;
@@ -402,10 +422,27 @@ Page({
       return;
     }
     this.setData({ claimLoading: true, claimStatusText: "正在找回历史订单…" });
+    wx.login({
+      fail: () => {
+        this.setData({ claimLoading: false, claimStatusText: "找回失败：请先完成微信登录" });
+      },
+      success: (loginRes) => {
+        const code = (loginRes && loginRes.code) || "";
+        if (!code) {
+          this.setData({ claimLoading: false, claimStatusText: "找回失败：请先完成微信登录" });
+          return;
+        }
+        this._requestClaim(code, phone, id_number);
+      }
+    });
+  },
+
+  _requestClaim(code, phone, id_number) {
+    const app = getApp();
     wx.request({
       url: app.globalData.apiBase + "/api/wechat/claim-apps",
       method: "POST",
-      data: { openid, phone, id_number },
+      data: { code, phone, id_number },
       header: { "content-type": "application/json" },
       success: (res) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {

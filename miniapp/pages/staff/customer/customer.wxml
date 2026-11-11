@@ -6,7 +6,9 @@
       <view class="detail-eyebrow">CLIENT RECORD</view>
       <view class="detail-title">{{customer.name}}</view>
       <view class="detail-sub">{{customer.phone_masked || '未登记手机号'}} · {{customer.pets.length}} 只宠物</view>
+      <view class="detail-sub">{{customer.wechat_bound ? '微信已绑定' : '微信未绑定'}}</view>
       <button wx:if="{{customer.phone}}" class="detail-call" bindtap="callCustomer">联系客户</button>
+      <button wx:if="{{customer.wechat_bound}}" class="detail-call" bindtap="unbindWechat">解除微信绑定</button>
     </view>
     <view class="detail-kpis">
       <view><strong>¥{{summary.wallet_balance}}</strong><text>钱包余额</text></view>

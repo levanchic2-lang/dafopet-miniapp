@@ -239,6 +239,41 @@ phone_blocked = client.get("/api/customer/lookup", params={"phone": "13600000009
 assert phone_blocked.status_code == 429
 assert client.get("/api/customer/lookup", params={"phone": "13600000008"}).status_code == 200
 
+# 限流只认 nginx 写入的 X-Real-IP，不认客户端自己写的 X-Forwarded-For 第一跳
+main_module._CUSTOMER_LOOKUP_HITS.clear()
+main_module._CUSTOMER_LOOKUP_IP_LIMIT = 1
+main_module._CUSTOMER_LOOKUP_PHONE_LIMIT = 8
+assert client.get(
+    "/api/customer/lookup",
+    params={"phone": "13600000021"},
+    headers={"X-Forwarded-For": "198.51.100.1"},
+).status_code == 200
+spoofed_bucket = client.get(
+    "/api/customer/lookup",
+    params={"phone": "13600000022"},
+    headers={"X-Forwarded-For": "198.51.100.2"},
+)
+assert spoofed_bucket.status_code == 429
+main_module._CUSTOMER_LOOKUP_HITS.clear()
+real_ip = client.get(
+    "/api/customer/lookup",
+    params={"phone": "13600000023"},
+    headers={"X-Real-IP": "203.0.113.8", "X-Forwarded-For": "198.51.100.9"},
+)
+assert real_ip.status_code == 200
+same_real = client.get(
+    "/api/customer/lookup",
+    params={"phone": "13600000024"},
+    headers={"X-Real-IP": "203.0.113.8", "X-Forwarded-For": "203.0.113.1"},
+)
+assert same_real.status_code == 429
+other_real = client.get(
+    "/api/customer/lookup",
+    params={"phone": "13600000025"},
+    headers={"X-Real-IP": "203.0.113.9", "X-Forwarded-For": "203.0.113.8"},
+)
+assert other_real.status_code == 200
+
 client.close()
 TEMP_DIR.cleanup()
 print("customer lookup auth test passed")

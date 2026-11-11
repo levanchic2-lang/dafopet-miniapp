@@ -1,13 +1,13 @@
-const { getJson } = require("../../utils/api");
+const { getJson, wxLoginCode } = require("../../utils/api");
 
 Page({
   data: { recent: null },
   async onShow() {
     try {
       const id = Number(wx.getStorageSync("VACCINE_REG_ID") || 0);
-      const phone = wx.getStorageSync("VACCINE_REG_PHONE") || "";
-      if (!id || !phone) return;
-      const recent = await getJson(`/api/vaccine-registration/${id}`, { phone });
+      if (!id) return;
+      const code = await wxLoginCode();
+      const recent = await getJson(`/api/vaccine-registration/${id}`, { code });
       this.setData({ recent });
     } catch (e) {}
   },

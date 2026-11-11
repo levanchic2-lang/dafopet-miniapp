@@ -13,6 +13,7 @@ if hasattr(_time, "tzset"):          # Unix（Linux 服务器 / macOS）生效�
 
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import mimetypes
@@ -64,6 +65,7 @@ from app.models import (
     Contract,
     ContractType,
     Customer,
+    SmsVerificationCode,
     MediaFile,
     MediaKind,
     Pet,
@@ -870,6 +872,93 @@ def _audit(
     )
 
 
+def client_ip(request: Request) -> str:
+    """限流用的客户端地址。只信 nginx 写入的 X-Real-IP。
+
+    反代配置是 X-Real-IP $remote_addr。客户端自己带的 X-Forwarded-For
+    第一跳可以伪造，不能拿来分桶。
+    """
+    real = (request.headers.get("x-real-ip") or "").strip()
+    if real:
+        token = real.split(",")[0].strip()
+        if token:
+            return token[:80]
+    host = request.client.host if request.client else ""
+    return (host or "unknown")[:80]
+
+
+_LEGACY_COMPAT_OFF = {"0", "false", "no", "off"}
+_LEGACY_UPDATE_DETAIL = "请更新小程序后再查看。当前版本暂时不能显示个人资料，新的预约仍可提交。"
+
+
+def legacy_miniapp_compat() -> bool:
+    """旧版小程序过渡开关。环境变量优先，便于测试和上线后关闭。"""
+    if "LEGACY_MINIAPP_COMPAT" in _os.environ:
+        raw = _os.environ.get("LEGACY_MINIAPP_COMPAT") or ""
+    else:
+        raw = str(getattr(settings, "legacy_miniapp_compat", "1") or "1")
+    return raw.strip().lower() not in _LEGACY_COMPAT_OFF
+
+
+def _request_code(payload: dict | None) -> str:
+    return str((payload or {}).get("code") or (payload or {}).get("js_code") or "").strip()
+
+
+def _request_openid(payload: dict | None) -> str:
+    return str((payload or {}).get("openid") or "").strip()[:64]
+
+
+def _legacy_update_required(detail: str = _LEGACY_UPDATE_DETAIL) -> None:
+    raise HTTPException(status_code=403, detail=detail)
+
+
+def _wechat_openid_from_code(code: str) -> str:
+    """用当次 wx.login code 换 openid。不接受客户端自己报上来的 openid。"""
+    code = (code or "").strip()
+    if not code:
+        raise HTTPException(401, "请先完成微信登录")
+    try:
+        data = wechat_code2session(code)
+    except Exception as exc:
+        logger.info("[wechat-auth] code2session 未通过：%s", type(exc).__name__)
+        raise HTTPException(401, "微信登录已失效，请重试")
+    openid = str((data or {}).get("openid") or "").strip()
+    if not openid:
+        raise HTTPException(401, "微信登录已失效，请重试")
+    return openid[:64]
+
+
+def _customers_bound_to(db: Session, openid: str) -> list[Customer]:
+    key = (openid or "").strip()
+    if not key:
+        return []
+    return (
+        db.query(Customer)
+        .filter(Customer.wechat_openid == key)
+        .order_by(Customer.id.asc())
+        .all()
+    )
+
+
+def _customer_phone_set(customer: Customer) -> set[str]:
+    phones = set()
+    primary = re.sub(r"\D", "", customer.phone or "")
+    if primary:
+        phones.add(primary)
+    for extra in (customer.phones_extra or "").split(","):
+        digits = re.sub(r"\D", "", extra)
+        if digits:
+            phones.add(digits)
+    return phones
+
+
+def _caller_openid(request: Request, db: Session, code: str = "", staff_openid: str = "") -> str:
+    """顾客必须用 wx.login code。员工或后台会话可以改查指定 openid。"""
+    if _lookup_privileged(request, db) and (staff_openid or "").strip() and not (code or "").strip():
+        return staff_openid.strip()[:64]
+    return _wechat_openid_from_code(code)
+
+
 def _require_status_in(row: Application, allowed: set[str], action_label: str) -> None:
     if row.status not in allowed:
         zh = {
@@ -1054,7 +1143,13 @@ async def api_wechat_subscribe_report(payload: dict = Body(...), db: Session = D
         record_subscribe_results,
         subscription_status,
     )
-    openid = await _resolve_wechat_openid(payload or {})
+    openid = str((payload or {}).get("openid") or "").strip()
+    code = str((payload or {}).get("code") or (payload or {}).get("js_code") or "").strip()
+    if code:
+        openid = _wechat_openid_from_code(code)
+    elif not openid:
+        raise HTTPException(400, "missing openid")
+    openid = openid[:64]
     scene = str((payload or {}).get("scene") or "")[:40]
     main_switch = (payload or {}).get("main_switch")
     if main_switch is True:
@@ -1988,14 +2083,19 @@ def _check_duplicate_application_appointment(
 
 
 async def _resolve_wechat_openid(payload: dict) -> str:
-    openid = ((payload or {}).get("openid", "") or "").strip()
-    code = ((payload or {}).get("code", "") or "").strip()
-    if not openid and code:
-        data = wechat_code2session(code)
-        openid = (data.get("openid", "") or "").strip()
-    if not openid:
-        raise HTTPException(400, "missing openid")
-    return openid
+    """预约写入。有登录码就用登录码；过渡期内也接受旧版只带 openid 的请求。"""
+    code = _request_code(payload)
+    if code:
+        return _wechat_openid_from_code(code)
+    openid = _request_openid(payload)
+    if openid and legacy_miniapp_compat():
+        return openid
+    raise HTTPException(401, "请先完成微信登录")
+
+
+def _legacy_write_without_code(payload: dict) -> bool:
+    """旧客户端只带了 openid，没有当次登录码。"""
+    return bool(_request_openid(payload)) and not _request_code(payload) and legacy_miniapp_compat()
 
 
 def _appointment_catalog() -> dict:
@@ -2748,8 +2848,23 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
     }
 
 
+def _application_visible_to_openid(db: Session, row: Application, openid: str) -> bool:
+    current = (row.wechat_openid or "").strip()
+    if current:
+        return current == openid
+    phone = re.sub(r"\D", "", row.phone or "")
+    if not phone:
+        return False
+    return any(phone in _customer_phone_set(cust) for cust in _customers_bound_to(db, openid))
+
+
 @app.get("/api/app/{app_id}/status")
-async def api_app_status(app_id: int, db: Session = Depends(get_db)):
+async def api_app_status(
+    app_id: int,
+    request: Request,
+    code: str = Query(""),
+    db: Session = Depends(get_db),
+):
     row = (
         db.query(Application)
         .options(selectinload(Application.notifications))
@@ -2758,6 +2873,14 @@ async def api_app_status(app_id: int, db: Session = Depends(get_db)):
     )
     if not row:
         raise HTTPException(404, "not found")
+    if not _lookup_privileged(request, db):
+        if not (code or "").strip():
+            if legacy_miniapp_compat():
+                _legacy_update_required("请更新小程序后查看申请进度。")
+            raise HTTPException(401, "请先完成微信登录")
+        openid = _wechat_openid_from_code(code)
+        if not _application_visible_to_openid(db, row, openid):
+            raise HTTPException(403, "只能查看已绑定到当前微信的申请")
 
     def mask_phone(s: str) -> str:
         t = (s or "").strip()
@@ -8585,6 +8708,7 @@ async def api_staff_miniapp_customer_detail(
             "phone": customer.phone or "", "phone_masked": _mask_phone(customer.phone or ""),
             "phones_extra": customer.phones_extra or "", "address": customer.address or "",
             "notes": customer.notes or "", "pets": [_staff_pet_payload(p) for p in pets],
+            "wechat_bound": bool((customer.wechat_openid or "").strip()),
         },
         "summary": {
             "wallet_balance": round(float(wallet.balance or 0), 2) if wallet else 0,
@@ -8618,6 +8742,32 @@ async def api_staff_miniapp_customer_detail(
             "expires_at": c.expires_at or "长期有效", "status": c.status or "",
         } for c in coupons],
     }
+
+
+@app.post("/api/staff-miniapp/customers/{customer_id}/unbind-wechat")
+async def api_staff_miniapp_unbind_wechat(
+    customer_id: int, request: Request, db: Session = Depends(get_db),
+):
+    """员工小程序解除客户微信绑定，并写审计。"""
+    user = _staff_miniapp_user(request, db)
+    customer, _pets = _staff_customer_record(db, user, customer_id)
+    previous = (customer.wechat_openid or "").strip()
+    if not previous:
+        return {"ok": True, "wechat_bound": False, "message": "该客户尚未绑定微信"}
+    customer.wechat_openid = ""
+    db.add(AuditLog(
+        action="customer_unbind_wechat",
+        actor=(user.username or "")[:80],
+        ip=client_ip(request)[:80],
+        user_agent=(request.headers.get("user-agent") or "")[:300],
+        detail=json.dumps({
+            "customer_id": customer.id,
+            "openid": previous[:10] + "...",
+            "via": "staff_miniapp",
+        }, ensure_ascii=False),
+    ))
+    db.commit()
+    return {"ok": True, "wechat_bound": False, "message": "已解除微信绑定"}
 
 
 @app.get("/api/staff-miniapp/pets/{pet_id}")
@@ -10466,8 +10616,28 @@ async def api_staff_miniapp_tnr_complete(
 
 
 @app.get("/api/wechat/my-tnr-status")
-async def api_my_tnr_status(openid: str = Query(""), db: Session = Depends(get_db)):
-    """小程序端：传 openid，返回该用户是否有可预约的已通过 TNR 申请。"""
+async def api_my_tnr_status(
+    request: Request,
+    code: str = Query(""),
+    openid: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """小程序端：用当次微信登录码，返回该用户是否有可预约的已通过 TNR 申请。
+
+    过渡期内，旧版只带 openid 时仍返回申请编号和状态，方便继续预约。
+    不返回猫咪名字，避免未校验的 openid 带出个人资料。
+    """
+    supplied = (openid or "").strip()[:64]
+    reveal_names = True
+    if (code or "").strip() or (_lookup_privileged(request, db) and supplied and not (code or "").strip()):
+        openid = _caller_openid(request, db, code, supplied)
+    elif supplied and legacy_miniapp_compat():
+        openid = supplied
+        reveal_names = False
+    elif supplied:
+        raise HTTPException(401, "请先完成微信登录")
+    else:
+        return {"has_approved": False, "approved_apps": []}
     if not openid.strip():
         return {"has_approved": False, "approved_apps": []}
     _APPROVED_STATUSES = {
@@ -10485,7 +10655,14 @@ async def api_my_tnr_status(openid: str = Query(""), db: Session = Depends(get_d
         .limit(10)
         .all()
     )
-    apps = [{"id": r.id, "status": r.status, "cat_nickname": r.cat_nickname} for r in rows]
+    apps = [
+        {
+            "id": r.id,
+            "status": r.status,
+            "cat_nickname": (r.cat_nickname or "") if reveal_names else "",
+        }
+        for r in rows
+    ]
     return {"has_approved": len(apps) > 0, "approved_apps": apps}
 
 
@@ -10499,11 +10676,24 @@ async def api_appointments_config():
     return catalog
 
 
+def _tnr_ban_for_phone(db: Session, phone: str) -> tuple[bool, str | None]:
+    today = datetime.now()
+    ban_until = _get_phone_noshow_ban_until(db, phone)
+    if ban_until is not None and ban_until >= today.date():
+        return True, ban_until.strftime("%Y-%m-%d")
+    return False, None
+
+
 @app.get("/api/tnr-store-status")
-async def api_tnr_store_status(phone: str = Query(""), db: Session = Depends(get_db)):
+async def api_tnr_store_status(
+    request: Request,
+    phone: str = Query(""),
+    code: str = Query(""),
+    db: Session = Depends(get_db),
+):
     """
     小程序调用：获取各门店 TNR 预约开放状态及当月已用配额。
-    可选传 phone 参数以检查爽约封禁。
+    爽约封禁只返回给该手机号已绑定的微信，或已登录的员工。
     """
     today = datetime.now()
     year_month = today.strftime("%Y-%m")
@@ -10520,14 +10710,32 @@ async def api_tnr_store_status(phone: str = Query(""), db: Session = Depends(get
             "monthly_quota": quota,
             "is_open": is_open,
         })
-    # 爽约封禁检查
     ban_until_str = None
     is_banned = False
-    if phone:
-        ban_until = _get_phone_noshow_ban_until(db, phone)
-        if ban_until is not None and ban_until >= today.date():
-            is_banned = True
-            ban_until_str = ban_until.strftime("%Y-%m-%d")
+    phone_digits = re.sub(r"\D", "", phone or "")
+    if _lookup_privileged(request, db):
+        if (phone or "").strip():
+            is_banned, ban_until_str = _tnr_ban_for_phone(db, phone.strip())
+    elif (code or "").strip():
+        try:
+            openid = _wechat_openid_from_code(code)
+        except HTTPException:
+            openid = ""
+        if openid:
+            owned_phones: set[str] = set()
+            for cust in _customers_bound_to(db, openid):
+                owned_phones |= _customer_phone_set(cust)
+            targets = []
+            if phone_digits and phone_digits in owned_phones:
+                targets = [phone_digits]
+            elif not phone_digits:
+                targets = sorted(owned_phones)
+            for target in targets:
+                banned, until = _tnr_ban_for_phone(db, target)
+                if banned:
+                    is_banned = True
+                    ban_until_str = until
+                    break
     return {
         "stores": stores_info,
         "is_banned": is_banned,
@@ -10624,10 +10832,10 @@ def _ai_cs_response(work):
     try:
         return JSONResponse(work())
     except AiCsError as exc:
-        return JSONResponse(
-            {"ok": False, "error_code": exc.code, "message": exc.message},
-            status_code=exc.status,
-        )
+        body = {"ok": False, "error_code": exc.code, "message": exc.message}
+        if exc.choices is not None:
+            body["choices"] = exc.choices
+        return JSONResponse(body, status_code=exc.status)
 
 
 @app.get("/api/ai-cs/slots/{kind}")
@@ -10892,19 +11100,17 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
 
 
 @app.post("/api/wechat/my-apps")
-async def api_wechat_my_apps(payload: dict = Body(...), db: Session = Depends(get_db)):
-    """小程序端：传 {code} 或 {openid}，返回该 openid 的申请列表（用于“我的订单”）。"""
-    code = (payload or {}).get("code", "") or ""
-    openid = (payload or {}).get("openid", "") or ""
-    if code:
-        try:
-            data = wechat_code2session(code)
-        except Exception as e:
-            raise HTTPException(400, str(e))
-        openid = data.get("openid", "") or ""
-    openid = (openid or "").strip()
-    if not openid:
-        raise HTTPException(400, "missing openid")
+async def api_wechat_my_apps(
+    request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    """小程序端：用当次微信登录码返回该微信的申请列表。"""
+    code = _request_code(payload)
+    supplied = _request_openid(payload)
+    if not code and not (_lookup_privileged(request, db) and supplied):
+        if supplied and legacy_miniapp_compat():
+            _legacy_update_required("请更新小程序后查看申请进度。新的预约仍可正常提交。")
+        raise HTTPException(401, "请先完成微信登录")
+    openid = _caller_openid(request, db, code, supplied)
 
     def mask_phone(s: str) -> str:
         t = (s or "").strip()
@@ -10947,8 +11153,16 @@ async def api_wechat_my_apps(payload: dict = Body(...), db: Session = Depends(ge
 
 
 @app.post("/api/wechat/my-appointments")
-async def api_wechat_my_appointments(payload: dict = Body(...), db: Session = Depends(get_db)):
-    openid = await _resolve_wechat_openid(payload)
+async def api_wechat_my_appointments(
+    request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
+):
+    code = _request_code(payload)
+    supplied = _request_openid(payload)
+    if not code and not (_lookup_privileged(request, db) and supplied):
+        if supplied and legacy_miniapp_compat():
+            _legacy_update_required("请更新小程序后查看预约记录。新的预约仍可正常提交。")
+        raise HTTPException(401, "请先完成微信登录")
+    openid = _caller_openid(request, db, code, supplied)
     rows = (
         db.query(Appointment)
         .filter(Appointment.wechat_openid == openid)
@@ -10994,16 +11208,21 @@ async def api_wechat_appointment_cancel(
 @app.post("/api/wechat/appointments/{appointment_id}/get")
 async def api_wechat_appointment_get(
     appointment_id: int,
+    request: Request,
     payload: dict = Body(...),
     db: Session = Depends(get_db),
 ):
-    """小程序端获取单条预约详情（openid 校验）。"""
-    openid = await _resolve_wechat_openid(payload)
+    """小程序端获取单条预约详情。顾客只能看自己微信名下的预约。"""
     row = db.query(Appointment).filter(Appointment.id == appointment_id).first()
     if not row:
         raise HTTPException(404, "预约记录不存在")
-    if (row.wechat_openid or "") != openid:
-        raise HTTPException(403, "无权查看此预约")
+    if not _lookup_privileged(request, db):
+        code = _request_code(payload)
+        if not code and _request_openid(payload) and legacy_miniapp_compat():
+            _legacy_update_required("请更新小程序后再修改预约。如需改期，请联系门店。")
+        openid = _wechat_openid_from_code(code)
+        if (row.wechat_openid or "") != openid:
+            raise HTTPException(403, "无权查看此预约")
     return _serialize_appointment(row)
 
 
@@ -11076,6 +11295,8 @@ async def api_wechat_appointment_update(
             notify_appointment_event(db, row, "rescheduled")
         except Exception as _e:
             logger.warning("[wechat] customer reschedule push failed: %s", _e)
+    if _legacy_write_without_code(payload):
+        return {"ok": True}
     return {"ok": True, "appointment": _serialize_appointment(row)}
 
 
@@ -11189,19 +11410,15 @@ async def api_wechat_claim_apps(payload: dict = Body(...), db: Session = Depends
     小程序端：用 {openid}+{phone}+{id_number} 找回历史订单。
     仅对 phone+id_number 匹配且 wechat_openid 为空的记录进行补写，不覆盖已有 openid 的记录。
     """
-    code = (payload or {}).get("code", "") or ""
-    openid = (payload or {}).get("openid", "") or ""
+    code = _request_code(payload)
     phone = (payload or {}).get("phone", "") or ""
     id_number = (payload or {}).get("id_number", "") or ""
-
-    if code and not openid:
-        try:
-            data = wechat_code2session(code)
-        except Exception as e:
-            raise HTTPException(400, str(e))
-        openid = data.get("openid", "") or ""
-
-    openid = (openid or "").strip()
+    if code:
+        openid = _wechat_openid_from_code(code)
+    elif legacy_miniapp_compat() and _request_openid(payload):
+        openid = _request_openid(payload)
+    else:
+        _legacy_update_required("请更新小程序后再找回历史申请。")
     phone = (phone or "").strip()
     idn = (id_number or "").strip().upper()
 
@@ -12333,6 +12550,36 @@ async def admin_customer_delete(
     db.delete(cust)
     db.commit()
     return RedirectResponse("/admin/customers?msg=客户档案已删除", status_code=303)
+
+
+@app.post("/admin/customers/{customer_id}/unbind-wechat")
+async def admin_customer_unbind_wechat(
+    customer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+):
+    """前台或管理员解除客户档案上的微信绑定。客户需重新验证手机号才能再绑。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login", status_code=303)
+    _require_csrf(request, csrf_token)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404, "客户不存在")
+    from urllib.parse import quote as _q
+    previous = (cust.wechat_openid or "").strip()
+    if not previous:
+        msg = _q("该客户尚未绑定微信", safe="")
+        return RedirectResponse(f"/admin/customers/{customer_id}?msg={msg}", status_code=303)
+    cust.wechat_openid = ""
+    _audit(db, request, "customer_unbind_wechat", application_id=None, detail={
+        "customer_id": cust.id,
+        "openid": previous[:10] + "...",
+        "via": "admin",
+    })
+    db.commit()
+    msg = _q("已解除微信绑定", safe="")
+    return RedirectResponse(f"/admin/customers/{customer_id}?msg={msg}", status_code=303)
 
 
 # ─────────── 老系统客户 xls 批量导入（superadmin only）───────────
@@ -14410,129 +14657,266 @@ async def admin_consent_task_detail(
     })
 
 
-# ─── 客户档案绑定（小程序输入手机号 + 验证码 → 写 openid） ──
-# 内存验证码池：{phone: (code, expires_ts, customer_id)}
-_BIND_CODES: dict[str, tuple[str, float, int]] = {}
-_BIND_CODE_TTL_SECONDS = 300  # 5 分钟
-_BIND_LAST_SENT: dict[str, float] = {}  # 防短时间内重复发送
-_BIND_THROTTLE_SECONDS = 60
+# ─── 客户档案绑定（手机号 + 短信验证码 → 写 openid） ──
+# 验证码放 SQLite，两个 uvicorn worker 共用。明文不落库，也不回给前端。
+_BIND_PURPOSE = "customer_binding"
+_BIND_CODE_TTL = timedelta(minutes=5)
+_BIND_COOLDOWN = timedelta(seconds=60)
+_BIND_PHONE_WINDOW = timedelta(hours=1)
+_BIND_PHONE_LIMIT = 5
+_BIND_IP_WINDOW = timedelta(hours=1)
+_BIND_IP_LIMIT = 30
+_BIND_MAX_ATTEMPTS = 5
+_BIND_SENT_MESSAGE = "若该手机号已在本院建档，验证码已发送，请注意查收。"
+_BIND_FRONT_DESK = "该档案已绑定其他微信，请联系前台协助解绑。"
+
+
+def _bind_now() -> datetime:
+    """验证码的创建和过期用北京时间的墙上时钟，两个 worker 比的是同一套。"""
+    return beijing_now().replace(tzinfo=None)
+
+
+def _bind_code_hash(phone: str, code: str) -> str:
+    key = (_SESSION_SECRET or "binding").encode("utf-8")
+    return hmac.new(key, f"{phone}:{code}".encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _new_bind_code() -> str:
+    return "".join(secrets.choice("0123456789") for _ in range(6))
+
+
+def _send_binding_sms(phone: str, code: str) -> tuple[bool, str]:
+    """发出绑定验证码。失败时返回错误说明，调用方负责打日志且不能带上验证码。"""
+    err_detail = ""
+    try:
+        from app.services.sms_tencent import send_sms_template, _enabled as _tc_enabled
+        if _tc_enabled() and (settings.tencent_sms_tmpl_consent or "").strip():
+            sent, err_detail = send_sms_template(
+                phone,
+                settings.tencent_sms_tmpl_consent.strip(),
+                [code, str(max(1, int(_BIND_CODE_TTL.total_seconds() // 60)))],
+            )
+            if sent:
+                return True, ""
+    except Exception as exc:
+        err_detail = type(exc).__name__
+    try:
+        from app.services.sms_gateway import send_sms
+        if send_sms(
+            phone,
+            f"【大风动物医院】您的档案绑定验证码：{code}，5 分钟内有效。如非本人操作请忽略。",
+            scene="binding",
+        ):
+            return True, ""
+    except Exception as exc:
+        err_detail = err_detail or type(exc).__name__
+    return False, err_detail or "短信发送失败"
+
+
+def _binding_log_failure(phone: str, err: str, code: str) -> None:
+    text = (err or "短信发送失败").replace(code, "******") if code else (err or "短信发送失败")
+    logger.warning("[binding] 短信发送失败 phone=%s err=%s", _mask_phone(phone), text[:300])
+
+
+def _customers_by_primary_phone(db: Session, phone: str) -> list[Customer]:
+    return (
+        db.query(Customer)
+        .filter(Customer.phone == phone)
+        .order_by(Customer.id.asc())
+        .all()
+    )
+
+
+def _bind_rate_limit(db: Session, phone: str, ip: str) -> dict | None:
+    now = _bind_now()
+    latest = (
+        db.query(SmsVerificationCode)
+        .filter(
+            SmsVerificationCode.phone == phone,
+            SmsVerificationCode.purpose == _BIND_PURPOSE,
+        )
+        .order_by(SmsVerificationCode.id.desc())
+        .first()
+    )
+    if latest and latest.created_at and now - latest.created_at < _BIND_COOLDOWN:
+        wait = max(1, int((_BIND_COOLDOWN - (now - latest.created_at)).total_seconds() + 0.999))
+        return {"ok": False, "error": f"请 {wait} 秒后再获取"}
+    phone_count = (
+        db.query(SmsVerificationCode)
+        .filter(
+            SmsVerificationCode.phone == phone,
+            SmsVerificationCode.purpose == _BIND_PURPOSE,
+            SmsVerificationCode.created_at >= now - _BIND_PHONE_WINDOW,
+        )
+        .count()
+    )
+    if phone_count >= _BIND_PHONE_LIMIT:
+        return {"ok": False, "error": "该手机号获取验证码过于频繁，请稍后再试"}
+    ip_count = (
+        db.query(SmsVerificationCode)
+        .filter(
+            SmsVerificationCode.client_ip == ip,
+            SmsVerificationCode.purpose == _BIND_PURPOSE,
+            SmsVerificationCode.created_at >= now - _BIND_IP_WINDOW,
+        )
+        .count()
+    )
+    if ip_count >= _BIND_IP_LIMIT:
+        return {"ok": False, "error": "获取验证码过于频繁，请稍后再试"}
+    return None
+
+
+def _record_bind_code(
+    db: Session, phone: str, ip: str, *, code_hash: str = "", used: bool = True,
+) -> None:
+    now = _bind_now()
+    if code_hash and not used:
+        (
+            db.query(SmsVerificationCode)
+            .filter(
+                SmsVerificationCode.phone == phone,
+                SmsVerificationCode.purpose == _BIND_PURPOSE,
+                SmsVerificationCode.used == False,  # noqa: E712
+                SmsVerificationCode.code_hash != "",
+            )
+            .update({SmsVerificationCode.used: True}, synchronize_session=False)
+        )
+    db.add(SmsVerificationCode(
+        phone=phone,
+        purpose=_BIND_PURPOSE,
+        code_hash=code_hash,
+        expires_at=now + _BIND_CODE_TTL,
+        attempt_count=0,
+        used=used,
+        client_ip=(ip or "")[:80],
+        created_at=now,
+    ))
+    db.commit()
 
 
 @app.post("/api/customer-binding/send-code")
 async def api_binding_send_code(request: Request, db: Session = Depends(get_db)):
-    """根据手机号在 Customer 表查档案 + 发验证码。
-    返回 {ok, customer_summary, dev_code?}。dev_code 仅 sms_gateway 未配时返回。"""
-    body = await request.json()
-    phone = (body.get("phone") or "").strip()
-    if not phone or not phone.isdigit() or len(phone) != 11:
-        return {"ok": False, "error": "请输入 11 位手机号"}
-    # 防刷
-    import time as _t
-    now = _t.time()
-    last = _BIND_LAST_SENT.get(phone, 0)
-    if now - last < _BIND_THROTTLE_SECONDS:
-        wait = int(_BIND_THROTTLE_SECONDS - (now - last))
-        return {"ok": False, "error": f"请 {wait} 秒后再获取"}
-    # 查档案
-    rows = db.query(Customer).filter(Customer.phone == phone).all()
-    if not rows:
-        return {"ok": False, "error": "未找到此手机号对应的客户档案，请先到院前台建档"}
-    # 取最早的一条（防止多账号合并历史）
-    cust = sorted(rows, key=lambda c: c.id)[0]
-    pet_count = db.query(Pet).filter(Pet.customer_id == cust.id).count()
-    # 生成 6 位验证码
-    import secrets as _s
-    code = "".join(_s.choice("0123456789") for _ in range(6))
-    _BIND_CODES[phone] = (code, now + _BIND_CODE_TTL_SECONDS, cust.id)
-    _BIND_LAST_SENT[phone] = now
-    # 发短信：优先腾讯云直连（已配好的验证码模板），失败兜底 sms_gateway 通用网关
-    sent = False
-    err_detail = ""
-    # 1) 腾讯云
+    """按手机号发绑定验证码。只做限流，不告诉对方这个号码有没有档案。"""
     try:
-        from app.services.sms_tencent import send_sms_template, _enabled as _tc_enabled
-        if _tc_enabled() and (settings.tencent_sms_tmpl_consent or "").strip():
-            ttl_min = max(1, _BIND_CODE_TTL_SECONDS // 60)
-            sent, err_detail = send_sms_template(
-                phone,
-                settings.tencent_sms_tmpl_consent.strip(),
-                [code, str(ttl_min)],
-            )
-            if not sent:
-                logger.warning("[binding] 腾讯云发送失败：%s", err_detail)
-    except Exception as _e:
-        logger.warning("[binding] 腾讯云调用异常：%s", _e)
-    # 2) 兜底：通用 sms_gateway
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    phone = (body.get("phone") or "").strip()
+    if not phone.isdigit() or len(phone) != 11:
+        return {"ok": False, "error": "请输入 11 位手机号"}
+    ip = client_ip(request)
+    limited = _bind_rate_limit(db, phone, ip)
+    if limited:
+        return limited
+    customers = _customers_by_primary_phone(db, phone)
+    if not customers:
+        _record_bind_code(db, phone, ip, used=True)
+        return {"ok": True, "message": _BIND_SENT_MESSAGE}
+    code = _new_bind_code()
+    sent, err = _send_binding_sms(phone, code)
     if not sent:
-        try:
-            from app.services.sms_gateway import send_sms
-            sent = send_sms(
-                phone,
-                f"【大风动物医院】您的档案绑定验证码：{code}，5 分钟内有效。如非本人操作请忽略。",
-                scene="binding",
-            )
-        except Exception as _e:
-            logger.warning("[binding] sms_gateway 发送失败：%s", _e)
-    resp = {
-        "ok": True,
-        "customer": {
-            "id": cust.id, "name": cust.name or "—",
-            "pet_count": pet_count,
-            "address": (cust.address or "")[:40],
-        },
-        "sms_sent": sent,
-    }
-    if not sent:
-        # SMS 未发出（未配网关或网关错误）→ 把 code 返回给前端，并提示走人工核对
-        resp["dev_code"] = code
-        resp["dev_warning"] = "短信未发送，仅自助测试用；上线前必须配 SMS_GATEWAY_URL"
-    return resp
+        _binding_log_failure(phone, err, code)
+        _record_bind_code(db, phone, ip, used=True)
+        return {"ok": False, "error": "短信发送失败，请稍后再试"}
+    _record_bind_code(db, phone, ip, code_hash=_bind_code_hash(phone, code), used=False)
+    return {"ok": True, "message": _BIND_SENT_MESSAGE}
 
 
 @app.post("/api/customer-binding/verify")
 async def api_binding_verify(request: Request, db: Session = Depends(get_db)):
-    """校验验证码 + 写 Customer.wechat_openid。需要 js_code（用 wx.login 换 openid）。"""
-    body = await request.json()
+    """校验验证码，把 openid 写到该手机号下尚未绑定其他微信的全部档案。不新建档案。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
     phone = (body.get("phone") or "").strip()
-    code  = (body.get("code") or "").strip()
-    openid = (body.get("openid") or "").strip()
-    js_code = (body.get("js_code") or "").strip()
-    if not (phone and code):
-        return {"ok": False, "error": "手机号 + 验证码必填"}
-    # 验证码核对
-    import time as _t
-    entry = _BIND_CODES.get(phone)
-    if not entry:
-        return {"ok": False, "error": "请先获取验证码"}
-    saved_code, exp_ts, cust_id = entry
-    if _t.time() > exp_ts:
-        _BIND_CODES.pop(phone, None)
-        return {"ok": False, "error": "验证码已过期，请重新获取"}
-    if code != saved_code:
-        return {"ok": False, "error": "验证码不正确"}
-    # 没传 openid → 用 js_code 换
-    if not openid and js_code:
+    code = (body.get("code") or "").strip()
+    js_code = (body.get("js_code") or body.get("wechat_code") or "").strip()
+    supplied_openid = str(body.get("openid") or "").strip()[:64]
+    if not phone.isdigit() or len(phone) != 11 or not code:
+        return {"ok": False, "error": "请填写 11 位手机号和验证码"}
+    if js_code:
         try:
             sess_data = wechat_code2session(js_code)
-            openid = (sess_data.get("openid") or "").strip()
-        except Exception as e:
-            logger.warning("[binding] code2session 失败：%s", e)
-            return {"ok": False, "error": f"微信登录失败：{e}"}
-    if not openid:
-        return {"ok": False, "error": "缺少微信登录凭证（openid 或 js_code）"}
-    cust = db.get(Customer, cust_id)
-    if not cust:
-        return {"ok": False, "error": "客户档案不存在"}
-    cust.wechat_openid = openid[:64]
+        except Exception as exc:
+            logger.info("[binding] code2session 失败：%s", type(exc).__name__)
+            return {"ok": False, "error": "微信登录失败，请重试"}
+        openid = str((sess_data or {}).get("openid") or "").strip()[:64]
+        if not openid:
+            return {"ok": False, "error": "微信登录失败，请重试"}
+    elif supplied_openid and legacy_miniapp_compat():
+        openid = supplied_openid
+    else:
+        return {"ok": False, "error": "请更新小程序后重新绑定。当前版本需要重新登录微信才能完成绑定。"}
+    row = (
+        db.query(SmsVerificationCode)
+        .filter(
+            SmsVerificationCode.phone == phone,
+            SmsVerificationCode.purpose == _BIND_PURPOSE,
+            SmsVerificationCode.used == False,  # noqa: E712
+            SmsVerificationCode.code_hash != "",
+        )
+        .order_by(SmsVerificationCode.id.desc())
+        .first()
+    )
+    invalid = {"ok": False, "error": "验证码不正确或已失效"}
+    if row is None:
+        return invalid
+    now = _bind_now()
+    if row.expires_at is None or row.expires_at <= now or int(row.attempt_count or 0) >= _BIND_MAX_ATTEMPTS:
+        row.used = True
+        db.commit()
+        return {"ok": False, "error": "验证码已失效，请重新获取"}
+    if not secrets.compare_digest(_bind_code_hash(phone, code), row.code_hash or ""):
+        row.attempt_count = int(row.attempt_count or 0) + 1
+        if row.attempt_count >= _BIND_MAX_ATTEMPTS:
+            row.used = True
+        db.commit()
+        if row.used:
+            return {"ok": False, "error": "验证码已失效，请重新获取"}
+        return invalid
+    customers = _customers_by_primary_phone(db, phone)
+    if not customers:
+        row.used = True
+        db.commit()
+        return {"ok": False, "error": "未找到此手机号对应的客户档案，请先到院前台建档"}
+    blocked = []
+    bound = []
+    for cust in customers:
+        current = (cust.wechat_openid or "").strip()
+        if current and current != openid:
+            blocked.append(cust)
+            continue
+        cust.wechat_openid = openid
+        bound.append(cust)
+    if not bound:
+        db.commit()
+        return {"ok": False, "error": _BIND_FRONT_DESK}
+    row.used = True
+    names = [c.name or "" for c in bound if (c.name or "").strip()]
+    _audit(db, request, "customer_binding", application_id=None, detail={
+        "customer_ids": [c.id for c in bound],
+        "bound_count": len(bound),
+        "skipped_count": len(blocked),
+        "phone": _mask_phone(phone),
+        "openid": openid[:10] + "...",
+    })
     db.commit()
-    _BIND_CODES.pop(phone, None)
-    _audit(db, request, "customer_binding", application_id=None,
-           detail={"customer_id": cust_id, "phone": phone, "openid": openid[:10] + "..."})
-    db.commit()
+    message = f"已绑定 {len(bound)} 份档案"
+    if blocked:
+        message += f"。另有 {len(blocked)} 份档案已绑定其他微信，请联系前台协助解绑。"
     return {
         "ok": True,
-        "customer_id": cust_id,
-        "customer_name": cust.name or "",
+        "bound_count": len(bound),
+        "skipped_count": len(blocked),
+        "customer_id": bound[0].id,
+        "customer_name": names[0] if names else (bound[0].name or ""),
+        "customer_ids": [c.id for c in bound],
+        "message": message,
     }
 
 
@@ -26731,31 +27115,59 @@ def _copy_rabies_photo(token: str, record_id: int, kind: str) -> tuple[str, Path
 
 # ── 公开 API：手机号查询客户 ──────────────────────────────────────────────────
 
+def _profile_pet(pet: Pet, customer_id: int) -> dict:
+    return {
+        "id": pet.id,
+        "customer_id": customer_id,
+        "name": pet.name,
+        "breed": pet.breed,
+        "gender": pet.gender,
+        "species": pet.species,
+    }
+
+
 @app.get("/api/wechat/my-profile")
-async def api_wechat_my_profile(openid: str = Query(""), db: Session = Depends(get_db)):
-    """小程序预约页用：按 openid 查是否已绑定档案。已绑→返回客户+宠物列表"""
-    openid = (openid or "").strip()
-    if not openid:
-        return {"bound": False}
-    cust = db.query(Customer).filter(Customer.wechat_openid == openid).first()
-    if not cust:
-        return {"bound": False}
-    pets = db.query(Pet).filter(Pet.customer_id == cust.id).all()
+async def api_wechat_my_profile(
+    request: Request,
+    code: str = Query(""),
+    openid: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """小程序预约页：用当次微信登录码查已绑定档案。一个微信绑了多份档案时全部返回。"""
+    supplied = (openid or "").strip()
+    if not (code or "").strip() and not (_lookup_privileged(request, db) and supplied):
+        if supplied and legacy_miniapp_compat():
+            return {
+                "bound": False,
+                "pets": [],
+                "customers": [],
+                "message": "请更新小程序后自动填入已绑定档案。您仍可以手动填写并提交预约。",
+            }
+        raise HTTPException(401, "请先完成微信登录")
+    openid = _caller_openid(request, db, code, supplied)
+    customers = _customers_bound_to(db, openid)
+    if not customers:
+        return {"bound": False, "pets": [], "customers": []}
+    profiles = []
+    pets = []
+    for cust in customers:
+        cust_pets = db.query(Pet).filter(Pet.customer_id == cust.id).order_by(Pet.id.asc()).all()
+        pet_rows = [_profile_pet(p, cust.id) for p in cust_pets]
+        pets.extend(pet_rows)
+        profiles.append({
+            "id": cust.id,
+            "name": cust.name or "",
+            "phone": cust.phone or "",
+            "pets": pet_rows,
+        })
+    primary = profiles[0]
     return {
         "bound": True,
-        "customer_id": cust.id,
-        "name": cust.name or "",
-        "phone": cust.phone or "",
-        "pets": [
-            {
-                "id": p.id,
-                "name": p.name,
-                "breed": p.breed,
-                "gender": p.gender,
-                "species": p.species,
-            }
-            for p in pets
-        ],
+        "customer_id": primary["id"],
+        "name": primary["name"],
+        "phone": primary["phone"],
+        "customers": profiles,
+        "pets": pets,
     }
 
 
@@ -26850,11 +27262,7 @@ _CUSTOMER_LOOKUP_PHONE_LIMIT = 8
 
 
 def _lookup_client_ip(request: Request) -> str:
-    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-    if forwarded:
-        return forwarded[:80]
-    host = request.client.host if request.client else ""
-    return (host or "unknown")[:80]
+    return client_ip(request)
 
 
 def _charge_lookup_bucket(key: str, now: datetime, limit: int) -> None:
@@ -27101,22 +27509,23 @@ async def api_combo_vaccine_registration_create(
 
 @app.get("/api/vaccine-registration/{reg_id}")
 async def api_combo_vaccine_registration_status(
-    reg_id: int, request: Request, phone: str = Query(""), db: Session = Depends(get_db),
+    reg_id: int,
+    request: Request,
+    code: str = Query(""),
+    db: Session = Depends(get_db),
 ):
+    if not _lookup_privileged(request, db) and not (code or "").strip():
+        if legacy_miniapp_compat():
+            _legacy_update_required("请更新小程序后查看接种登记。")
+        raise HTTPException(401, "请先完成微信登录")
     reg = db.get(ComboVaccineRegistration, reg_id)
     if not reg:
         raise HTTPException(404, "登记不存在")
     cust = db.get(Customer, reg.customer_id) if reg.customer_id else None
-    submitted_phone = re.sub(r"\D", "", phone)
-    customer_phones = {re.sub(r"\D", "", cust.phone or "")} if cust else set()
-    if cust:
-        customer_phones.update(
-            re.sub(r"\D", "", value)
-            for value in (cust.phones_extra or "").split(",")
-            if value.strip()
-        )
-    if not cust or submitted_phone not in customer_phones:
-        raise HTTPException(403, "手机号与登记档案不符")
+    if not _lookup_privileged(request, db):
+        openid = _wechat_openid_from_code(code)
+        if not cust or (cust.wechat_openid or "").strip() != openid:
+            raise HTTPException(403, "只能查看已绑定到当前微信的登记")
     consent = db.get(ConsentTask, reg.consent_task_id) if reg.consent_task_id else None
     if consent and consent.status == "signed" and reg.status in ("pending_signature", "needs_resign"):
         reg.status = "pending_review"

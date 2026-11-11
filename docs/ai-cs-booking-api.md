@@ -82,7 +82,13 @@ X-AI-CS-Key: <密钥>
 }
 ```
 
-`openid` 必须正好对应一个客户档案的 `wechat_openid`。没有档案、或同一个 openid 绑了多个客户，都会拒绝。`pet_id` 必须是这个客户的宠物。
+`openid` 必须对应已经绑定的客户档案。只对应一个客户时可以不传 `customer_id`。同一个 openid 绑了多个客户时，必须再传 `customer_id`，而且它必须是其中一份档案。没传，或传的编号不属于这个微信，返回 `customer_ambiguous`。`message` 和 `choices` 只列出档案 id 和宠物名，不含手机号、地址或客户姓名。
+
+```json
+{"openid": "微信 openid", "customer_id": 12}
+```
+
+`choices` 示例：`[{"id": 12, "pet_names": ["大黄", "小白"]}]`。没有宠物时 `pet_names` 为空数组，文案里写「暂无宠物」。
 
 美容多宠时不要只传一个 `pet_id`，改传 `pets` 数组，并给出第一只的 `time`。系统按算出的时长依次排开，全部成功才保存。每条预约的 `source` 为 `ai_cs`，状态为已确认。
 
@@ -95,8 +101,10 @@ X-AI-CS-Key: <密钥>
 `POST /api/ai-cs/appointments/{id}/reschedule`
 
 ```json
-{"openid": "……", "store": "横岗店", "date": "2026-11-13", "time": "11:00"}
+{"openid": "……", "customer_id": 12, "store": "横岗店", "date": "2026-11-13", "time": "11:00"}
 ```
+
+多个档案时 `customer_id` 必填，规则和新建预约相同。只绑了一份档案时可以不传。
 
 `store` 可以不传，表示还在原门店。规则与新预约相同，并排除这张预约自己。已到店、已完成、已取消的不能改。TNR 不能改。
 
@@ -105,8 +113,10 @@ X-AI-CS-Key: <密钥>
 `POST /api/ai-cs/appointments/{id}/cancel`
 
 ```json
-{"openid": "……", "reason": "临时有事"}
+{"openid": "……", "customer_id": 12, "reason": "临时有事"}
 ```
+
+多个档案时 `customer_id` 必填。只绑了一份档案时可以不传。
 
 当天可以取消。返回 `late_penalty: false` 和 `same_day_cancel_allowed: true`。没有迟到处罚。
 
@@ -141,7 +151,7 @@ X-AI-CS-Key: <密钥>
 | `auth_not_configured` | 503 | 服务器没配 `AI_CS_API_KEY` |
 | `auth_invalid` | 401 | 密钥不对 |
 | `customer_not_found` | 400 | openid 没有绑定客户 |
-| `customer_ambiguous` | 400 | 同一个 openid 绑了多个客户 |
+| `customer_ambiguous` | 400 | 同一个 openid 绑了多个客户，却没有给出其中一份的 `customer_id`。响应里的 `choices` 只有 id 和宠物名 |
 | `customer_phone_invalid` | 400 | 档案手机号不是 11 位大陆号码 |
 | `pet_not_found` / `pet_not_owned` | 400 | 宠物不存在或不属于该客户 |
 | `store_invalid` | 400 | 不是横岗店或东环店 |

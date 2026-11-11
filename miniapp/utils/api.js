@@ -20,6 +20,18 @@ function postJson(path, data) {
   });
 }
 
+function wxLoginCode() {
+  return new Promise((resolve, reject) => {
+    wx.login({
+      success: (res) => {
+        if (res && res.code) resolve(res.code);
+        else reject(new Error("微信登录失败"));
+      },
+      fail: reject
+    });
+  });
+}
+
 function getJson(path, data) {
   return new Promise((resolve, reject) => {
     wx.request({
@@ -122,5 +134,5 @@ function uploadMore(appId, fieldName, filePath) {
   return Promise.resolve({ appId, fieldName, filePath });
 }
 
-module.exports = { getJson, postJson, staffGet, staffPost, staffRequest, staffUpload, uploadApply, uploadMore };
+module.exports = { getJson, postJson, wxLoginCode, staffGet, staffPost, staffRequest, staffUpload, uploadApply, uploadMore };
 

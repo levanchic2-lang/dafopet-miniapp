@@ -1,4 +1,4 @@
-const { staffGet } = require("../../../utils/api");
+const { staffGet, staffPost } = require("../../../utils/api");
 
 const depositLabels = { surgery: "手术押金", boarding: "寄养押金", beauty: "美容押金", other: "其他押金" };
 const statusLabels = { active: "使用中", exhausted: "已用完", expired: "已过期", refunded: "已退款", held: "可用", applied: "已抵扣", partial_refund: "部分退款", issued: "可使用", used: "已使用", cancelled: "已取消" };
@@ -26,5 +26,20 @@ Page({
   setTab(e) { this.setData({ activeTab: e.currentTarget.dataset.tab }); },
   openPet(e) { const id = Number(e.currentTarget.dataset.id || 0); if (id) wx.navigateTo({ url: "/pages/staff/pet/pet?id=" + id }); },
   callCustomer() { if (this.data.customer.phone) wx.makePhoneCall({ phoneNumber: this.data.customer.phone }); },
+  unbindWechat() {
+    wx.showModal({
+      title: "解除微信绑定",
+      content: "解除后，客户需要重新验证手机号才能再绑定微信。",
+      success: (modal) => {
+        if (!modal.confirm) return;
+        staffPost("/api/staff-miniapp/customers/" + this.data.id + "/unbind-wechat", {}).then(() => {
+          wx.showToast({ title: "已解除绑定", icon: "success" });
+          this.load();
+        }).catch((e) => {
+          wx.showToast({ title: (e && e.detail) || "解除失败", icon: "none" });
+        });
+      }
+    });
+  },
   onPullDownRefresh() { this.load(); }
 });

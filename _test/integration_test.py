@@ -521,6 +521,13 @@ def t_noshow_ban():
         ))
     db.commit()
     db.close()
+    anon = httpx.Client(base_url=BASE, follow_redirects=False, timeout=10)
+    hidden = anon.get(f"/api/tnr-store-status?phone={phone}")
+    assert hidden.status_code == 200
+    assert hidden.json().get("is_banned") is False
+    assert not hidden.json().get("ban_until")
+    assert "封禁客户" not in hidden.text
+    anon.close()
     r = client.get(f"/api/tnr-store-status?phone={phone}")
     assert r.status_code == 200
     data = r.json()
@@ -1894,49 +1901,38 @@ def t_customer_binding():
     r = pub.post("/api/customer-binding/send-code", json={"phone": "abc"})
     assert r.json().get("ok") is False
 
-    # 不存在的手机号
+    # 未建档的号码与已建档号码都不能从响应里看出档案内容，也不能带回验证码
     r = pub.post("/api/customer-binding/send-code", json={"phone": "13900000999"})
     j = r.json()
-    assert j.get("ok") is False and "未找到" in j.get("error", "")
-
-    # 正确手机号
-    r = pub.post("/api/customer-binding/send-code", json={"phone": phone})
-    j = r.json()
-    assert j.get("ok") is True
-    assert j["customer"]["name"] == "测试客户A"
-    # 测试环境没配 sms_gateway，应返回 dev_code
-    assert "dev_code" in j and len(j["dev_code"]) == 6
-    code = j["dev_code"]
-
-    # 防刷：立即再发应被拒
-    r = pub.post("/api/customer-binding/send-code", json={"phone": phone})
-    assert r.json().get("ok") is False
-
-    # 错误验证码
-    r = pub.post("/api/customer-binding/verify", json={
-        "phone": phone, "code": "000000", "openid": "FAKE_OPENID_xyz",
-    })
-    assert r.json().get("ok") is False
-
-    # 正确验证码 + openid
-    r = pub.post("/api/customer-binding/verify", json={
-        "phone": phone, "code": code, "openid": "openid_user_aaa_111",
-    })
-    j = r.json()
     assert j.get("ok") is True, j
-    assert j["customer_id"] == cust_id
+    assert "dev_code" not in j and "customer" not in j
+    assert "未找到" not in json.dumps(j, ensure_ascii=False)
+    assert "测试客户" not in json.dumps(j, ensure_ascii=False)
 
-    # DB 校验
+    # 已建档但测试环境没有短信网关：明确失败，不回传验证码
+    r = pub.post("/api/customer-binding/send-code", json={"phone": phone})
+    j = r.json()
+    assert j.get("ok") is False, j
+    assert "短信" in (j.get("error") or "")
+    assert "dev_code" not in j and "customer" not in j
+    blob = json.dumps(j, ensure_ascii=False)
+    assert "测试客户A" not in blob
+
+    # 防刷：同一号码立刻再发应被拒，仍然不能带出验证码
+    r = pub.post("/api/customer-binding/send-code", json={"phone": phone})
+    again = r.json()
+    assert again.get("ok") is False
+    assert "dev_code" not in again
+
+    # 客户端自报 openid 不能完成绑定
+    r = pub.post("/api/customer-binding/verify", json={
+        "phone": phone, "code": "000000", "openid": "openid_user_aaa_111",
+    })
+    assert r.json().get("ok") is False
     db = SessionLocal()
     cust = db.get(Customer, cust_id)
-    assert cust.wechat_openid == "openid_user_aaa_111"
+    assert (cust.wechat_openid or "") == ""
     db.close()
-
-    # 验证码用完即销 - 重放应失败
-    r = pub.post("/api/customer-binding/verify", json={
-        "phone": phone, "code": code, "openid": "openid_replay_xxx",
-    })
-    assert r.json().get("ok") is False
 
     pub.close()
 
