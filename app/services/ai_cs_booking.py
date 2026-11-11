@@ -133,10 +133,22 @@ def _shift_months(day: date, months: int) -> date:
     return date(year, month, min(day.day, last))
 
 
+def _usable_birth(day: date | None) -> date | None:
+    """0001-01-01、1900-01-01、1970-01-01 这类占位日期当成没填。"""
+    if day is None:
+        return None
+    if day.year < 1900:
+        return None
+    if (day.month, day.day) == (1, 1) and day.year in {1900, 1970}:
+        return None
+    return day
+
+
 def parse_birth_date(raw: str, today: date | None = None) -> date | None:
     """能解析出生日就返回日期，否则 None（年龄未知）。
 
     只有年月时用该月最后一天，避免把未知的日子当成更早、从而把月龄算大。
+    占位日期（例如 0001-01-01）视为未知。
     """
     today = today or beijing_today()
     text = (raw or "").strip()
@@ -146,13 +158,13 @@ def parse_birth_date(raw: str, today: date | None = None) -> date | None:
     match = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", normalized)
     if match:
         try:
-            return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+            return _usable_birth(date(int(match.group(1)), int(match.group(2)), int(match.group(3))))
         except ValueError:
             return None
     match = re.fullmatch(r"(\d{4})-(\d{1,2})", normalized)
     if match:
         try:
-            return _month_end(int(match.group(1)), int(match.group(2)))
+            return _usable_birth(_month_end(int(match.group(1)), int(match.group(2))))
         except ValueError:
             return None
     years = re.search(r"(\d+)\s*岁", text)
@@ -166,7 +178,7 @@ def parse_birth_date(raw: str, today: date | None = None) -> date | None:
             birth = _shift_months(birth, int(months.group(1)))
         if weeks:
             birth = birth - timedelta(days=int(weeks.group(1)) * 7)
-        return birth
+        return _usable_birth(birth)
     return None
 
 
@@ -396,6 +408,26 @@ def _surgery_duration(service_name: str) -> int:
     return 60
 
 
+def _file_weight_kg(db: Session, pet_id) -> float | None:
+    """档案里该宠物最新一次体重。来源比体重曲线更宽，供去底绒加时。"""
+    try:
+        pid = int(pet_id or 0)
+    except (TypeError, ValueError):
+        return None
+    if pid <= 0:
+        return None
+    try:
+        from app.services.ai_cs_assistant import latest_weight_kg
+        value = latest_weight_kg(db, pid)
+    except Exception:
+        logger.exception("[ai-cs] file weight lookup failed")
+        recorded = _main()._latest_pet_weight(db, pid)
+        return recorded if recorded > 0 else None
+    if value is None or value <= 0:
+        return None
+    return float(value)
+
+
 def _planned_duration(kind: str, service_name: str, pet_size: str, coat_length: str, addons: str, weight) -> int:
     main = _main()
     if kind == "beauty":
@@ -540,8 +572,7 @@ def query_slots(
         pet = db.get(Pet, int(pet_id))
         if pet is not None:
             if weight is None:
-                recorded = main._latest_pet_weight(db, pet.id)
-                weight = recorded if recorded > 0 else None
+                weight = _file_weight_kg(db, pet.id)
             if not species:
                 species = pet.species or ""
             if not birthday:
@@ -563,6 +594,8 @@ def query_slots(
             if isinstance(item_addons, list):
                 item_addons = ",".join(str(x) for x in item_addons if str(x).strip())
             item_weight = main._parse_weight_kg(item.get("weight_kg"))
+            if item_weight is None and item.get("pet_id"):
+                item_weight = _file_weight_kg(db, item.get("pet_id"))
             if not item_service:
                 raise AiCsError("service_required", "每只宠物都要填写美容项目。")
             duration = main._calc_beauty_duration(item_service, item_size, item_coat, str(item_addons), weight_kg=item_weight)
@@ -732,8 +765,7 @@ def book_appointments(db: Session, payload: dict) -> dict:
                 addons = ",".join(str(x).strip() for x in addons if str(x).strip())
             weight = main._parse_weight_kg(item.get("weight_kg"))
             if weight is None:
-                recorded = main._latest_pet_weight(db, pet.id)
-                weight = recorded if recorded > 0 else None
+                weight = _file_weight_kg(db, pet.id)
             duration = main._calc_beauty_duration(service, size, coat, str(addons or ""), weight_kg=weight)
             label = f"{cursor // 60:02d}:{cursor % 60:02d}"
             pet_rows.append({
@@ -755,8 +787,7 @@ def book_appointments(db: Session, payload: dict) -> dict:
             raise AiCsError("service_invalid", "美容项目请填写猫洗护、猫造型、犬洗护或犬造型。")
         weight = main._parse_weight_kg(payload.get("weight_kg"))
         if weight is None and kind == "beauty":
-            recorded = main._latest_pet_weight(db, pet.id)
-            weight = recorded if recorded > 0 else None
+            weight = _file_weight_kg(db, pet.id)
         duration = _planned_duration(
             kind, service,
             str(payload.get("pet_size") or ""),
