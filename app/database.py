@@ -1852,8 +1852,13 @@ def _try_sqlite_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cal_blocks_date ON calendar_blocks(block_date)"))
             # calendar_blocks: 业务线封锁（beauty=美容线 / medical=医疗线 / all=全部）
             cb_cols = conn.execute(text("PRAGMA table_info(calendar_blocks)")).fetchall()
-            if cb_cols and "track" not in {c[1] for c in cb_cols}:
+            cb_names = {c[1] for c in cb_cols} if cb_cols else set()
+            if cb_cols and "track" not in cb_names:
                 conn.execute(text("ALTER TABLE calendar_blocks ADD COLUMN track VARCHAR(20) DEFAULT 'all'"))
+            if cb_cols and "start_time" not in cb_names:
+                conn.execute(text("ALTER TABLE calendar_blocks ADD COLUMN start_time VARCHAR(5) DEFAULT ''"))
+            if cb_cols and "end_time" not in cb_names:
+                conn.execute(text("ALTER TABLE calendar_blocks ADD COLUMN end_time VARCHAR(5) DEFAULT ''"))
 
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS tnr_store_configs ("

@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     # 留空 = 接口直接拒绝。不要填管理员密码，也不要复用员工小程序 token。
     reports_readonly_token: str = ""
 
+    # AI 客服预约接口密钥。只给 /api/ai-cs/ 用，从环境变量 AI_CS_API_KEY 读取。
+    # 留空 = 这些接口直接拒绝。不要填管理员密码，也不要放到小程序里。
+    ai_cs_api_key: str = ""
+
     # 微信小程序订阅消息（推荐国内推送方式）
     wechat_appid: str = ""
     wechat_appsecret: str = ""

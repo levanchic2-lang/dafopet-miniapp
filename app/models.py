@@ -915,7 +915,7 @@ class InsuranceMaterialSnapshot(Base):
 
 
 class CalendarBlock(Base):
-    """全天封锁日程（如：美容师休息）"""
+    """日程封锁。start_time 与 end_time 都空表示全天；都有值表示当天的一段时间（如美容师请假）。"""
     __tablename__ = "calendar_blocks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -924,6 +924,9 @@ class CalendarBlock(Base):
     store: Mapped[str] = mapped_column(String(40), default="")          # 短名；空=全部门店
     # 封锁业务线：beauty=美容线（美容/洗护/造型）/ medical=医疗线（门诊/手术/TNR）/ all=全部
     track: Mapped[str] = mapped_column(String(20), default="all")
+    # 空字符串 = 全天。两个都填且开始早于结束 = 只挡这一段。
+    start_time: Mapped[str] = mapped_column(String(5), default="")
+    end_time: Mapped[str] = mapped_column(String(5), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -77,15 +77,14 @@
   var beautyDurationHint = document.getElementById("beauty-duration-hint");
   var beautyDurationText = document.getElementById("beauty-duration-text");
 
+  {% include "includes/beauty_addon_extra.js" %}
   function beautyAddonExtraMinutes(names) {
-    var total = 0;
-    (names || []).forEach(function (name) {
-      var key = String(name || "").replace(/^\s+|\s+$/g, "");
-      if (!key) return;
-      var extra = BEAUTY_ADDON_EXTRA[key];
-      if (typeof extra === "number" && extra > 0) total += extra;
-    });
-    return total;
+    var sn = "";
+    var sz = "";
+    if (svcBeauty && !svcBeauty.disabled) sn = svcBeauty.value || "";
+    if (petSizeDog && !petSizeDog.disabled) sz = petSizeDog.value || "";
+    if (petSizeCat && !petSizeCat.disabled) sz = petSizeCat.value || "";
+    return dafopetBeautyAddonExtra(BEAUTY_ADDON_EXTRA, names, sn, sz, null);
   }
 
   // ── 美容可用时段查询 ──

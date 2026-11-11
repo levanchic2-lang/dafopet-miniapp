@@ -46,6 +46,17 @@ Base.metadata.create_all(bind=engine)
 HG = "大风动物医院（横岗店）"
 DAY = (datetime.now().date() + timedelta(days=3)).isoformat()
 ADDONS = "去浮毛,SPA,护发素,纯手剪,药浴,去油"
+ZERO_ADDONS = "SPA,护发素,纯手剪,药浴,去油"
+SIZE_EXTRA = {
+    "微小型犬（4kg 以下）": 30,
+    "小型犬（4–10kg）": 30,
+    "中型犬（10–15kg）": 45,
+    "中大型犬（15–25kg）": 60,
+    "大型犬（25kg 以上）": 90,
+    "小型猫（2.5kg 以下）": 30,
+    "中型猫（2.5–4kg）": 30,
+    "大型猫（4kg 以上）": 45,
+}
 
 # 猫犬 / 体型 / 毛长的基础分钟。附加项为 0 时，带不带附加都应等于这张表。
 BASE_CASES = [
@@ -77,15 +88,28 @@ BASE_CASES = [
 
 
 def test_base_durations_ignore_addons():
-    assert set(_BEAUTY_ADDON_EXTRA_MINUTES) == {"去浮毛", "SPA", "护发素", "纯手剪", "药浴", "去油"}
-    assert all(minutes == 0 for minutes in _BEAUTY_ADDON_EXTRA_MINUTES.values())
-    assert "默认不额外占用时间" in _beauty_addon_duration_note()
+    assert set(_BEAUTY_ADDON_EXTRA_MINUTES) == {"去浮毛", "去底绒", "SPA", "护发素", "纯手剪", "药浴", "去油"}
+    assert _BEAUTY_ADDON_EXTRA_MINUTES["去浮毛"] is _BEAUTY_ADDON_EXTRA_MINUTES["去底绒"]
+    assert _BEAUTY_ADDON_EXTRA_MINUTES["SPA"] == 0
+    assert "去底绒" in _beauty_addon_duration_note()
+    assert "其余附加项不额外占用时间" in _beauty_addon_duration_note()
     for service, size, coat, expected in BASE_CASES:
         plain = _calc_beauty_duration(service, size, coat, "")
-        with_addons = _calc_beauty_duration(service, size, coat, ADDONS)
+        with_zero = _calc_beauty_duration(service, size, coat, ZERO_ADDONS)
         assert plain == expected, (service, size, coat, plain, expected)
-        assert with_addons == expected, (service, size, coat, with_addons)
+        assert with_zero == expected, (service, size, coat, with_zero)
+        extra = SIZE_EXTRA[size]
+        assert _calc_beauty_duration(service, size, coat, "去浮毛") == expected + extra
+        assert _calc_beauty_duration(service, size, coat, "去底绒") == expected + extra
+        assert _calc_beauty_duration(service, size, coat, "去浮毛,去底绒") == expected + extra
     assert _calc_beauty_duration("犬洗护", "小型犬（4–10kg）", "短毛", "  SPA , ,不存在的项目 ") == 60
+    assert _calc_beauty_duration("犬洗护", "大型犬（25kg 以上）", "短毛", "去浮毛", weight_kg=8) == 120 + 30
+    assert _calc_beauty_duration("猫洗护", "大型猫（4kg 以上）", "短毛", "去底绒", weight_kg=2.5) == 120 + 30
+    assert _calc_beauty_duration("猫洗护", "小型猫（2.5kg 以下）", "短毛", "去浮毛", weight_kg=6) == 60 + 45
+    assert _calc_beauty_duration("犬洗护", "小型犬（4–10kg）", "短毛", "去浮毛", weight_kg=10) == 60 + 45
+    assert _calc_beauty_duration("犬洗护", "小型犬（4–10kg）", "短毛", "去浮毛", weight_kg=20) == 60 + 60
+    assert _calc_beauty_duration("犬洗护", "小型犬（4–10kg）", "短毛", "去浮毛", weight_kg=30) == 60 + 60
+    assert _calc_beauty_duration("犬洗护", "小型犬（4–10kg）", "短毛", "去浮毛", weight_kg=31) == 60 + 90
 
 
 def test_addon_minutes_are_configurable_per_item():
@@ -156,7 +180,7 @@ def test_beauty_slots_api_and_pages_use_zero_addon_time():
             "service": "犬洗护",
             "pet_size": "小型犬（4–10kg）",
             "coat_length": "短毛",
-            "addons": ADDONS,
+            "addons": ZERO_ADDONS,
             "date": DAY,
             "store": HG,
         },
@@ -200,7 +224,8 @@ def test_beauty_slots_api_and_pages_use_zero_addon_time():
     for path, label in pages.items():
         page = client.get(path)
         assert page.status_code == 200, (path, page.status_code, page.text[:400])
-        assert "附加服务默认不额外占用时间" in page.text, (path, label)
+        assert "去底绒" in page.text, (path, label)
+        assert "其余附加项不额外占用时间" in page.text, (path, label)
         assert "+30 分钟" not in page.text, path
         assert "addonCount * 30" not in page.text, path
         assert "checked * 30" not in page.text, path
@@ -222,6 +247,8 @@ def test_customer_miniapp_local_estimate_matches():
     assert "checked * 30" not in src
     assert "BEAUTY_ADDON_EXTRA" in src
     assert '"药浴": 0' in src
+    assert 'label: "去底绒"' in src
+    assert "大型犬" in src and "90" in src
     staff = (ROOT / "miniapp" / "pages" / "staff" / "calendar" / "calendar.js").read_text(encoding="utf-8")
     assert "species === \"cat\" ? 60 : 90" in staff
     assert "addon" not in staff.lower()

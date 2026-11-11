@@ -507,6 +507,12 @@
  <label style="font-size:0.78rem;margin:0 0 0.2rem;">改约原因（可选）</label>
  <input type="text" name="reschedule_reason">
  </div>
+ <div style="grid-column:span 4;">
+ <label style="font-size:0.78rem;display:flex;gap:0.4rem;align-items:center;">
+  <input type="checkbox" name="override" value="1">
+  仍要改约（忽略容量、美容师封锁和时间冲突，并记入日志）
+ </label>
+ </div>
  <div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:0.5rem;">
  <button type="button" class="secondary" onclick="toggleApptPanel('rs-{{ appt.id }}')">放弃改约</button>
  <button type="submit">确认改约</button>
