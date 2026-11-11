@@ -912,6 +912,17 @@ def _legacy_update_required(detail: str = _LEGACY_UPDATE_DETAIL) -> None:
     raise HTTPException(status_code=403, detail=detail)
 
 
+def _legacy_cached_openid(payload: dict | None) -> str:
+    """已发布的旧版小程序只带缓存 openid，没有当次 js_code。
+
+    临时只读兼容。新版小程序发布后把 LEGACY_MINIAPP_COMPAT 设为 0，这里返回空，
+    调用方继续拒绝。请求里带了 js_code 时也不走这里，仍用微信登录码。
+    """
+    if _request_code(payload) or not legacy_miniapp_compat():
+        return ""
+    return _request_openid(payload)
+
+
 def _wechat_openid_from_code(code: str) -> str:
     """用当次 wx.login code 换 openid。不接受客户端自己报上来的 openid。"""
     code = (code or "").strip()
@@ -2874,13 +2885,16 @@ async def api_app_status(
     if not row:
         raise HTTPException(404, "not found")
     if not _lookup_privileged(request, db):
-        if not (code or "").strip():
-            if legacy_miniapp_compat():
-                _legacy_update_required("请更新小程序后查看申请进度。")
-            raise HTTPException(401, "请先完成微信登录")
-        openid = _wechat_openid_from_code(code)
-        if not _application_visible_to_openid(db, row, openid):
-            raise HTTPException(403, "只能查看已绑定到当前微信的申请")
+        if (code or "").strip():
+            openid = _wechat_openid_from_code(code)
+            if not _application_visible_to_openid(db, row, openid):
+                raise HTTPException(403, "只能查看已绑定到当前微信的申请")
+        elif legacy_miniapp_compat():
+            # 临时：已发布旧版按申请编号直接查看进度，不带登录码。
+            # 新版小程序发布后关闭 LEGACY_MINIAPP_COMPAT。
+            pass
+        else:
+            _legacy_update_required("请更新小程序后查看申请进度。")
 
     def mask_phone(s: str) -> str:
         t = (s or "").strip()
@@ -11138,11 +11152,16 @@ async def api_wechat_my_apps(
     """小程序端：用当次微信登录码返回该微信的申请列表。"""
     code = _request_code(payload)
     supplied = _request_openid(payload)
-    if not code and not (_lookup_privileged(request, db) and supplied):
-        if supplied and legacy_miniapp_compat():
-            _legacy_update_required("请更新小程序后查看申请进度。新的预约仍可正常提交。")
+    legacy_openid = _legacy_cached_openid(payload)
+    if code or (_lookup_privileged(request, db) and supplied):
+        openid = _caller_openid(request, db, code, supplied)
+    elif legacy_openid:
+        # 临时：已发布旧版「我的订单」只带缓存 openid。新版发布后关闭 LEGACY_MINIAPP_COMPAT。
+        openid = legacy_openid
+    elif supplied:
+        _legacy_update_required("请更新小程序后查看申请进度。新的预约仍可正常提交。")
+    else:
         raise HTTPException(401, "请先完成微信登录")
-    openid = _caller_openid(request, db, code, supplied)
 
     def mask_phone(s: str) -> str:
         t = (s or "").strip()
@@ -11190,11 +11209,16 @@ async def api_wechat_my_appointments(
 ):
     code = _request_code(payload)
     supplied = _request_openid(payload)
-    if not code and not (_lookup_privileged(request, db) and supplied):
-        if supplied and legacy_miniapp_compat():
-            _legacy_update_required("请更新小程序后查看预约记录。新的预约仍可正常提交。")
+    legacy_openid = _legacy_cached_openid(payload)
+    if code or (_lookup_privileged(request, db) and supplied):
+        openid = _caller_openid(request, db, code, supplied)
+    elif legacy_openid:
+        # 临时：已发布旧版预约列表只带缓存 openid。新版发布后关闭 LEGACY_MINIAPP_COMPAT。
+        openid = legacy_openid
+    elif supplied:
+        _legacy_update_required("请更新小程序后查看预约记录。新的预约仍可正常提交。")
+    else:
         raise HTTPException(401, "请先完成微信登录")
-    openid = _caller_openid(request, db, code, supplied)
     rows = (
         db.query(Appointment)
         .filter(Appointment.wechat_openid == openid)
@@ -11250,9 +11274,17 @@ async def api_wechat_appointment_get(
         raise HTTPException(404, "预约记录不存在")
     if not _lookup_privileged(request, db):
         code = _request_code(payload)
-        if not code and _request_openid(payload) and legacy_miniapp_compat():
+        supplied = _request_openid(payload)
+        legacy_openid = _legacy_cached_openid(payload)
+        if code:
+            openid = _wechat_openid_from_code(code)
+        elif legacy_openid:
+            # 临时：已发布旧版改期页只带缓存 openid 拉详情。新版发布后关闭 LEGACY_MINIAPP_COMPAT。
+            openid = legacy_openid
+        elif supplied:
             _legacy_update_required("请更新小程序后再修改预约。如需改期，请联系门店。")
-        openid = _wechat_openid_from_code(code)
+        else:
+            raise HTTPException(401, "请先完成微信登录")
         if (row.wechat_openid or "") != openid:
             raise HTTPException(403, "无权查看此预约")
     return _serialize_appointment(row)
@@ -11436,11 +11468,24 @@ async def admin_feedback_resolve(
     return RedirectResponse(f"/admin/feedback?msg=已处理#{feedback_id}", status_code=303)
 
 
+def _compact_identity(value: str) -> str:
+    """去掉空白并大写。身份证末位 x/X、号码里的空格按同一份处理。"""
+    return re.sub(r"\s+", "", value or "").upper()
+
+
+def _sql_compact_identity(column):
+    expr = column
+    for ch in (" ", "\t", "\r", "\n", "\u3000", "\u00a0"):
+        expr = func.replace(expr, ch, "")
+    return func.upper(expr)
+
+
 @app.post("/api/wechat/claim-apps")
 async def api_wechat_claim_apps(payload: dict = Body(...), db: Session = Depends(get_db)):
     """
     小程序端：用 {openid}+{phone}+{id_number} 找回历史订单。
     仅对 phone+id_number 匹配且 wechat_openid 为空的记录进行补写，不覆盖已有 openid 的记录。
+    临时：LEGACY_MINIAPP_COMPAT 开启时，已发布旧版只带缓存 openid。新版发布后关闭该开关。
     """
     code = _request_code(payload)
     phone = (payload or {}).get("phone", "") or ""
@@ -11451,8 +11496,8 @@ async def api_wechat_claim_apps(payload: dict = Body(...), db: Session = Depends
         openid = _request_openid(payload)
     else:
         _legacy_update_required("请更新小程序后再找回历史申请。")
-    phone = (phone or "").strip()
-    idn = (id_number or "").strip().upper()
+    phone = _compact_identity(phone)
+    idn = _compact_identity(id_number)
 
     if not openid:
         raise HTTPException(400, "missing openid")
@@ -11469,8 +11514,8 @@ async def api_wechat_claim_apps(payload: dict = Body(...), db: Session = Depends
 
     rows = (
         db.query(Application)
-        .filter(Application.phone == phone)
-        .filter(Application.id_number == idn)
+        .filter(_sql_compact_identity(Application.phone) == phone)
+        .filter(_sql_compact_identity(Application.id_number) == idn)
         .filter(or_(Application.wechat_openid == None, Application.wechat_openid == ""))
         .order_by(Application.created_at.desc())
         .limit(200)
