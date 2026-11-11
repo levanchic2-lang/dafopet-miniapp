@@ -108,7 +108,7 @@ def test_cat_durations_and_old_labels():
     assert _calc_beauty_duration("犬洗护", "中大型犬（15–25kg）", "短毛") == 90
     assert _calc_beauty_duration("犬洗护", "大型犬（25kg 以上）", "长毛") == 150
     assert _calc_beauty_duration("犬造型", "大型犬（28kg 及以上）", "短毛") == 210
-    # 员工端：体型和体重都没有时仍是原来的 60 分钟。
+    # 函数内部仍保留旧兜底。对外查空档不再使用这个 60。
     assert _calc_beauty_duration("猫洗护", "", "短毛") == 60
 
 
@@ -259,8 +259,9 @@ def test_staff_slot_fallback_and_labels():
         "/api/appointments/beauty-slots",
         params={"service": "猫洗护", "coat_length": "短毛", "date": DAY, "store": HG},
     )
-    assert silent.status_code == 200
-    assert silent.json()["duration_minutes"] == 60
+    assert silent.status_code == 400
+    assert silent.json()["message"] == "请先填写体型或体重"
+    assert "duration_minutes" not in silent.json()
 
     db = SessionLocal()
     try:

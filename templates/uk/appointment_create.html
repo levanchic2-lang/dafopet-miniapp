@@ -422,6 +422,19 @@ function acGetBeautySize() {
   return document.getElementById('ac-size-cat').value || '';
 }
 function acGetBeautyCoat()  { return document.getElementById('ac-coat').value || ''; }
+function acPetId() {
+  var el = document.querySelector('input[name="pet_id"]');
+  var n = el ? parseInt(el.value || '0', 10) : 0;
+  return n > 0 ? n : 0;
+}
+function acShowSlotHint(text, color) {
+  var hint = document.getElementById('ac-slots-hint');
+  var slotsRow = document.getElementById('ac-slots-row');
+  if (!hint || !slotsRow) return;
+  slotsRow.style.display = '';
+  hint.style.color = color || 'var(--accent-red)';
+  hint.textContent = text;
+}
 function acGetAddonNames() {
   return Array.from(document.querySelectorAll('#ac-beauty-section input[name="addon_services"]:checked'))
     .map(function (cb) { return cb.value; });
@@ -447,6 +460,12 @@ function acUpdateBeautyDuration() {
   var sz = acGetBeautySize();
   var cl = acGetBeautyCoat();
   var addonNames = acGetAddonNames();
+  if (!sz) {
+    var emptyHint = document.getElementById('ac-duration-hint');
+    if (emptyHint) emptyHint.style.display = 'none';
+    acScheduleBeautySlots();
+    return;
+  }
   var dur = acCalcBeautyDuration(sn, sz, cl, addonNames);
   document.getElementById('ac-duration').value = dur;
   var hint = document.getElementById('ac-duration-hint');
@@ -486,8 +505,14 @@ function acFetchBeautySlots() {
   var slotsRow = document.getElementById('ac-slots-row');
 
   if (!sn || !date) { slotsRow.style.display = 'none'; return; }
+  var petId = acPetId();
+  if (!sz && !petId) {
+    acShowSlotHint('请先填写体型或体重');
+    return;
+  }
 
   hint.textContent = '正在查询可用时段…';
+  hint.style.color = 'var(--accent-amber)';
   slotsRow.style.display = '';
 
   var qs = 'service=' + encodeURIComponent(sn)
@@ -495,11 +520,18 @@ function acFetchBeautySlots() {
          + '&coat_length=' + encodeURIComponent(cl)
          + '&addons=' + encodeURIComponent(addons)
          + '&date=' + encodeURIComponent(date)
-         + '&store=' + encodeURIComponent(store);
+         + '&store=' + encodeURIComponent(store)
+         + (petId ? '&pet_id=' + petId : '');
 
   fetch('/api/appointments/beauty-slots?' + qs)
-    .then(function(r){ return r.json(); })
-    .then(function(data) {
+    .then(function(r){ return r.json().then(function(data){ return { ok: r.ok, data: data }; }); })
+    .then(function(res) {
+      if (!res.ok) {
+        var msg = (res.data && (res.data.message || res.data.detail)) || '请先填写体型或体重';
+        acShowSlotHint(msg);
+        return;
+      }
+      var data = res.data || {};
       var slots = data.available_slots || data.slots || [];
       var dur = data.duration_minutes || 0;
       if (!slots.length) {

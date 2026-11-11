@@ -347,6 +347,16 @@ function getBeautySize() {
   return document.getElementById('size_cat').value || '';
 }
 function getBeautyCoat() { return document.getElementById('coat').value || ''; }
+function currentPetId() {
+  var el = document.getElementById('ac_pet_id');
+  if (el && parseInt(el.value || '0', 10) > 0) return parseInt(el.value, 10);
+  var nodes = document.querySelectorAll('input[name="pet_id"]');
+  for (var i = 0; i < nodes.length; i++) {
+    var n = parseInt(nodes[i].value || '0', 10);
+    if (n > 0) return n;
+  }
+  return 0;
+}
 function getAddonNames() {
   return Array.from(document.querySelectorAll('#beauty_section input[name="addon_services"]:checked'))
     .map(function (cb) { return cb.value; });
@@ -363,6 +373,12 @@ function syncSizeVis() {
 }
 function onBeautySvcChange() { syncSizeVis(); updateBeautyDuration(); }
 function updateBeautyDuration() {
+  if (!getBeautySize()) {
+    var emptyHint = document.getElementById('dur_hint');
+    if (emptyHint) emptyHint.style.display = 'none';
+    scheduleSlots();
+    return;
+  }
   var dur = calcBeautyDuration(getBeautySvc(), getBeautySize(), getBeautyCoat(), getAddonNames());
   document.getElementById('m_duration').value = dur;
   var h = document.getElementById('dur_hint');
@@ -387,6 +403,13 @@ function fetchSlots() {
   var row = document.getElementById('slots_row');
   var hint = document.getElementById('slots_hint');
   if (!sn || !date) { row.style.display = 'none'; return; }
+  var petId = currentPetId();
+  if (!getBeautySize() && !petId) {
+    row.style.display = '';
+    hint.style.color = 'var(--accent-red)';
+    hint.textContent = '请先填写体型或体重';
+    return;
+  }
   var ac = document.querySelectorAll('#beauty_section input[name="addon_services"]:checked');
   var addons = Array.from(ac).map(function(cb){ return cb.value; }).join(',');
   row.style.display = '';
@@ -397,10 +420,17 @@ function fetchSlots() {
          + '&coat_length=' + encodeURIComponent(getBeautyCoat())
          + '&addons=' + encodeURIComponent(addons)
          + '&date=' + encodeURIComponent(date)
-         + '&store=' + encodeURIComponent(effectiveStore());
+         + '&store=' + encodeURIComponent(effectiveStore())
+         + (petId ? '&pet_id=' + petId : '');
   fetch('/api/appointments/beauty-slots?' + qs)
-    .then(function(r){ return r.json(); })
-    .then(function(data){
+    .then(function(r){ return r.json().then(function(data){ return { ok: r.ok, data: data }; }); })
+    .then(function(res){
+      if (!res.ok) {
+        hint.style.color = 'var(--accent-red)';
+        hint.textContent = (res.data && (res.data.message || res.data.detail)) || '请先填写体型或体重';
+        return;
+      }
+      var data = res.data || {};
       var slots = data.available_slots || data.slots || [];
       var dur = data.duration_minutes || 0;
       if (!slots.length) {

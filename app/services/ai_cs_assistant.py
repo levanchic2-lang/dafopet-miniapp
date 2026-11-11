@@ -994,6 +994,7 @@ def tool_stage_reschedule(db: Session, openid: str, args: dict) -> dict:
     if kind == "outpatient" and any(word in (current["service_name"] or "") for word in ("疫苗", "驱虫")):
         kind = "vaccine"
     current_row = db.get(Appointment, int(current["id"]))
+    stored_duration = int(current_row.duration_minutes or 0) if current_row is not None else 0
     try:
         looked = query_slots(
             db,
@@ -1005,11 +1006,15 @@ def tool_stage_reschedule(db: Session, openid: str, args: dict) -> dict:
             pet_size=(current_row.pet_size or "") if current_row is not None else "",
             coat_length=(current_row.coat_length or "") if current_row is not None else "",
             addons=(current_row.addon_services or "") if current_row is not None else "",
-            # 改期查空档：有体型或档案体重就用；两者都没有时仍按原来的 60 分钟看位。
-            require_beauty_size=False,
+            # 已保存的时长原样看位。没有时长时才用体型或档案体重，都没有就拒绝。
+            duration_override=stored_duration if stored_duration > 0 else None,
+            require_beauty_size=stored_duration <= 0,
         )
     except AiCsError as exc:
-        return {"ok": False, "message": exc.message, "error_code": exc.code}
+        message = exc.message
+        if exc.code == "pet_weight_required":
+            message = "请先填写体型或体重"
+        return {"ok": False, "message": message, "error_code": exc.code}
     if clock not in (looked.get("slots") or []):
         return {"ok": False, "message": "这个时间目前改不过去。", "slots": (looked.get("slots") or [])[:12]}
     payload = {
@@ -1256,7 +1261,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "stage_reschedule",
-            "description": "生成改期确认稿。不会立刻改期。",
+            "description": (
+                "生成改期确认稿。不会立刻改期。"
+                "美容沿用这张预约已保存的时长，不按新的体型表重算。"
+                "若返回请先填写体型或体重，先问客户，不要按 60 分钟改期。"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {

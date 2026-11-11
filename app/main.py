@@ -3457,6 +3457,101 @@ def resolve_beauty_pet_size(
     return pet_size_from_weight(species, weight_kg, service_name=service_name)
 
 
+BEAUTY_SIZE_REQUIRED_MESSAGE = "请先填写体型或体重"
+
+
+def _pet_file_weight_kg(db: "Session", pet_id) -> float | None:
+    """档案里这只宠物最近一次体重。用 PR #17 的宠物档案助手，失败时退回体重曲线。"""
+    try:
+        pid = int(pet_id or 0)
+    except (TypeError, ValueError):
+        return None
+    if pid <= 0:
+        return None
+    try:
+        from app.services.ai_cs_assistant import latest_weight_kg
+        value = latest_weight_kg(db, pid)
+    except Exception:
+        logger.exception("pet file weight lookup failed")
+        recorded = _latest_pet_weight(db, pid)
+        return recorded if recorded > 0 else None
+    if value is None or value <= 0:
+        return None
+    return float(value)
+
+
+def resolve_beauty_slot_minutes(
+    db: "Session",
+    *,
+    service_name: str = "",
+    pet_size: str = "",
+    coat_length: str = "",
+    addon_services: str = "",
+    weight_kg=None,
+    species: str = "",
+    pet_id: int | None = None,
+    stored_duration: int | None = None,
+    prefer_stored_duration: bool = False,
+) -> tuple[int, str]:
+    """返回 (分钟, 体型档)。只用于这次查空档，不写回预约。
+
+    改期且已有时长时原样沿用，不按新的体型规则重算。
+    否则：请求或预约上的体型优先；没有则用请求体重或档案体重推导。
+    仍然没有、但调用方另外给了已存时长时，沿用该时长。都没有则抛出 ValueError。
+    """
+    stored = int(stored_duration or 0)
+    size = (pet_size or "").strip()
+    if prefer_stored_duration and stored > 0:
+        return stored, size
+    weight = _parse_weight_kg(weight_kg)
+    if size:
+        minutes = _calc_beauty_duration(
+            service_name, size, coat_length, addon_services, weight_kg=weight,
+        )
+        return minutes, size
+    if weight is None and pet_id:
+        weight = _pet_file_weight_kg(db, pet_id)
+    derived = resolve_beauty_pet_size(
+        "", species=species or "", service_name=service_name or "", weight_kg=weight,
+    )
+    if derived:
+        minutes = _calc_beauty_duration(
+            service_name, derived, coat_length, addon_services, weight_kg=weight,
+        )
+        return minutes, derived
+    if stored > 0:
+        return stored, ""
+    raise ValueError(BEAUTY_SIZE_REQUIRED_MESSAGE)
+
+
+def minutes_for_reschedule(db: "Session", row, explicit: int | None = None) -> int:
+    """改期占用分钟。员工明确填了新时长就用那个。
+
+    否则沿用这张预约已保存的时长，不重算，也不写回。
+    美容单没有已存时长时，用体型或档案体重现算，只给这次空档和容量检查用。
+    """
+    if explicit and int(explicit) > 0:
+        return int(explicit)
+    stored = int(getattr(row, "duration_minutes", 0) or 0)
+    if (getattr(row, "category", "") or "") not in _BEAUTY_TRACK:
+        return stored if stored > 0 else 30
+    if stored > 0:
+        return stored
+    pet = db.get(Pet, row.pet_id) if getattr(row, "pet_id", None) else None
+    minutes, _size = resolve_beauty_slot_minutes(
+        db,
+        service_name=row.service_name or "",
+        pet_size=row.pet_size or "",
+        coat_length=row.coat_length or "",
+        addon_services=row.addon_services or "",
+        species=(pet.species or "") if pet is not None else "",
+        pet_id=row.pet_id,
+        stored_duration=0,
+        prefer_stored_duration=False,
+    )
+    return minutes
+
+
 templates.env.globals["beauty_addon_extra_minutes"] = _BEAUTY_ADDON_EXTRA_MINUTES
 templates.env.globals["beauty_addon_duration_note"] = _beauty_addon_duration_note
 templates.env.globals["beauty_dog_size_options"] = BEAUTY_DOG_SIZE_OPTIONS
@@ -3474,7 +3569,8 @@ def _calc_beauty_duration(
     根据美容项目、体型、毛发长度、附加服务估算占用分钟数。
     猫洗护：小型 90，中型 120，大型 120，长短毛相同。猫造型仍只看体型。
     犬的基础时长不变。体型为空且给了体重时，按 pet_size_from_weight 推导。
-    两者都没有时仍回落到 60，留给员工端和小程序旧调用；AI 查空档会在调用前拒绝。
+    两者都没有时函数内部仍是 60，但查空档和改期不能再靠这个数占档，
+    必须先走 resolve_beauty_slot_minutes，没有体型也没有体重就拒绝。
     去浮毛（去底绒）有体重按体重，否则按体型。已保存的 duration_minutes 不会被重算。
     """
     sn = service_name or ""
@@ -6994,7 +7090,11 @@ async def admin_appointment_reschedule(
     if target_store not in _ALLOWED_CLINIC_STORES:
         return _admin_appointment_redirect(next, err="无效的门店", anchor=_anchor)
     dur_raw = (new_duration or "").strip()
-    target_duration = int(dur_raw) if dur_raw and dur_raw.isdigit() and 10 <= int(dur_raw) <= 480 else row.duration_minutes
+    explicit_duration = int(dur_raw) if dur_raw and dur_raw.isdigit() and 10 <= int(dur_raw) <= 480 else None
+    try:
+        target_duration = minutes_for_reschedule(db, row, explicit_duration)
+    except ValueError as exc:
+        return _admin_appointment_redirect(next, err=str(exc), anchor=_anchor)
 
     # TNR 规则校验（管理员改约不检查爽约封禁）
     tnr_err = _check_tnr_constraints(
@@ -7035,7 +7135,9 @@ async def admin_appointment_reschedule(
     row.store = target_store
     row.appointment_date = new_date
     row.appointment_time = new_time
-    row.duration_minutes = target_duration
+    # 只有员工这次明确改了时长才写入。已保存的时长不按体型重算。
+    if explicit_duration:
+        row.duration_minutes = explicit_duration
     row.updated_at = datetime.utcnow()
 
     reason_text = (reschedule_reason or "").strip()[:500]
@@ -10288,9 +10390,13 @@ async def api_staff_miniapp_appointment_reschedule(
         and new_time[:5] == (row.appointment_time or "")[:5]
     )
     if not same_slot:
+        try:
+            hold_minutes = minutes_for_reschedule(db, row)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
         avail_errors = _availability_errors(
             db, store=row.store or "", appointment_date=new_date, appointment_time=new_time,
-            duration_minutes=int(row.duration_minutes or 30), category=row.category or "",
+            duration_minutes=hold_minutes, category=row.category or "",
             service_name=row.service_name or "", exclude_id=row.id,
         )
         if avail_errors:
@@ -10875,15 +10981,59 @@ async def api_beauty_slots(
     date:        str = Query(""),   # YYYY-MM-DD
     store:       str = Query(""),
     weight_kg:   str = Query(""),
+    pet_id:      int = Query(0),
+    appointment_id: int = Query(0),
     db: Session = Depends(get_db),
 ):
     """
     美容预约：计算估算时长 + 可预约时段。
-    时段生成考虑猫进烘干机可并发小型犬洗护的规则。
+    有体型用体型；否则用本次体重或档案里的最近体重。
+    改期带了 appointment_id、且请求没另给体型或体重时，沿用该预约已保存的时长。
+    都没有则 400，不按 60 分钟占档。已发布的顾客小程序查时段时总会带上 pet_size。
     """
-    duration = _calc_beauty_duration(
-        service, pet_size, coat_length, addons, weight_kg=_parse_weight_kg(weight_kg),
-    )
+    row = db.get(Appointment, appointment_id) if appointment_id else None
+    request_size = (pet_size or "").strip()
+    request_weight = _parse_weight_kg(weight_kg)
+    stored = int(row.duration_minutes or 0) if row is not None else 0
+    # 请求没有新的体型或体重时，已保存时长优先，避免把旧单按新规则重算。
+    prefer_stored = bool(row is not None and stored > 0 and not request_size and request_weight is None)
+    service_name = (service or "").strip()
+    coat = (coat_length or "").strip()
+    addon_text = addons or ""
+    size_arg = request_size
+    pid = int(pet_id or 0)
+    if row is not None:
+        if not service_name:
+            service_name = row.service_name or ""
+        if not coat:
+            coat = (row.coat_length or "").strip()
+        if not (addon_text or "").strip():
+            addon_text = row.addon_services or ""
+        if not size_arg and request_weight is None and stored <= 0:
+            size_arg = (row.pet_size or "").strip()
+        if not pid:
+            pid = int(row.pet_id or 0)
+    species = ""
+    if pid:
+        pet = db.get(Pet, pid)
+        if pet is not None:
+            species = pet.species or ""
+    try:
+        duration, resolved_size = resolve_beauty_slot_minutes(
+            db,
+            service_name=service_name,
+            pet_size=(row.pet_size or "") if prefer_stored else size_arg,
+            coat_length=coat,
+            addon_services=addon_text,
+            weight_kg=weight_kg if request_weight is not None else None,
+            species=species,
+            pet_id=pid or None,
+            stored_duration=stored if row is not None else None,
+            prefer_stored_duration=prefer_stored,
+        )
+    except ValueError as exc:
+        message = str(exc) or BEAUTY_SIZE_REQUIRED_MESSAGE
+        return JSONResponse({"detail": message, "message": message}, status_code=400)
 
     # 时长显示字符串
     h, m = divmod(duration, 60)
@@ -10902,13 +11052,14 @@ async def api_beauty_slots(
             if _check_calendar_block(db, store, date, "beauty"):
                 slots = []
             else:
-                slots = _beauty_slots_for_date(db, store, date, service, duration)
+                slots = _beauty_slots_for_date(db, store, date, service_name, duration)
         except Exception:
             slots = []
 
     return {
         "duration_minutes": duration,
         "duration_display": dur_display,
+        "pet_size": resolved_size,
         "available_slots":  slots,
         "addon_extra_minutes": dict(_BEAUTY_ADDON_EXTRA_MINUTES),
         "disclaimer": (
@@ -37382,9 +37533,13 @@ async def api_calendar_appt_reschedule(appt_id: int, request: Request, db: Sessi
         return {"ok": False, "error": tnr_err}
     force = str(body.get("override", "")).strip().lower() in {"1", "true", "on", "yes"} or body.get("override") is True
     same_slot = new_date == (row.appointment_date or "") and new_time[:5] == (row.appointment_time or "")[:5]
+    try:
+        hold_minutes = minutes_for_reschedule(db, row)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
     avail_errors = [] if same_slot else _availability_errors(
         db, store=row.store or "", appointment_date=new_date, appointment_time=new_time,
-        duration_minutes=int(row.duration_minutes or 30), category=row.category or "",
+        duration_minutes=hold_minutes, category=row.category or "",
         service_name=row.service_name or "", exclude_id=row.id,
     )
     if avail_errors and not force:
@@ -42899,7 +43054,11 @@ async def m_appointment_edit_save(
         return _bad("无效的门店")
 
     dur_raw = (new_duration or "").strip()
-    target_duration = int(dur_raw) if dur_raw.isdigit() and 10 <= int(dur_raw) <= 480 else a.duration_minutes
+    explicit_duration = int(dur_raw) if dur_raw.isdigit() and 10 <= int(dur_raw) <= 480 else None
+    try:
+        target_duration = minutes_for_reschedule(db, a, explicit_duration)
+    except ValueError as exc:
+        return _bad(str(exc))
     target_category = (new_category or "").strip() or a.category
     target_service = (new_service_name or "").strip() or a.service_name
     target_notes = (new_notes or "").strip()
@@ -42937,7 +43096,8 @@ async def m_appointment_edit_save(
     a.store = target_store
     a.appointment_date = new_date
     a.appointment_time = new_time
-    a.duration_minutes = target_duration
+    if explicit_duration:
+        a.duration_minutes = explicit_duration
     a.category = target_category
     a.service_name = target_service
     a.notes = target_notes
