@@ -2841,6 +2841,58 @@ def _try_sqlite_migrations() -> None:
                 "ON sms_verification_codes(client_ip, created_at)"
             ))
 
+            # 小程序 AI 客服：只建新表，不改已有列。
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS ai_cs_messages ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "openid VARCHAR(64) DEFAULT '', "
+                "role VARCHAR(20) DEFAULT '', "
+                "content TEXT DEFAULT '', "
+                "msg_type VARCHAR(40) DEFAULT '', "
+                "created_at DATETIME"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ai_cs_messages_openid ON ai_cs_messages(openid, created_at)"))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS ai_cs_tool_logs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "openid VARCHAR(64) DEFAULT '', "
+                "tool_name VARCHAR(60) DEFAULT '', "
+                "arguments_json TEXT DEFAULT '', "
+                "result_summary TEXT DEFAULT '', "
+                "created_at DATETIME"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ai_cs_tool_logs_openid ON ai_cs_tool_logs(openid, created_at)"))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS ai_cs_handoffs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "openid VARCHAR(64) DEFAULT '', "
+                "reason VARCHAR(80) DEFAULT '', "
+                "method VARCHAR(40) DEFAULT '', "
+                "note TEXT DEFAULT '', "
+                "staff_notify_status VARCHAR(40) DEFAULT 'pending_step5', "
+                "created_at DATETIME"
+                ")"
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ai_cs_handoffs_openid ON ai_cs_handoffs(openid, created_at)"))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS ai_cs_seen_msgs ("
+                "msg_key VARCHAR(128) PRIMARY KEY, "
+                "openid VARCHAR(64) DEFAULT '', "
+                "created_at DATETIME"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS ai_cs_pending ("
+                "openid VARCHAR(64) PRIMARY KEY, "
+                "action VARCHAR(20) DEFAULT '', "
+                "payload_json TEXT DEFAULT '', "
+                "script TEXT DEFAULT '', "
+                "created_at DATETIME"
+                ")"
+            ))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

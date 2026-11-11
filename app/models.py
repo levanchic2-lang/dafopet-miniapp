@@ -2635,3 +2635,60 @@ class WalkInRegistration(Base):
     pet = relationship("Pet", foreign_keys=[pet_id])
     visit = relationship("Visit", foreign_keys=[visit_id])
     invoice = relationship("Invoice", foreign_keys=[invoice_id])
+
+
+class AiCsMessage(Base):
+    """小程序客服对话。时间是北京时间，内容里的手机号已打码。"""
+    __tablename__ = "ai_cs_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    openid: Mapped[str] = mapped_column(String(64), default="", index=True)
+    role: Mapped[str] = mapped_column(String(20), default="")
+    content: Mapped[str] = mapped_column(Text, default="")
+    msg_type: Mapped[str] = mapped_column(String(40), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class AiCsToolLog(Base):
+    """客服工具调用。参数和结果都不保留完整手机号。"""
+    __tablename__ = "ai_cs_tool_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    openid: Mapped[str] = mapped_column(String(64), default="", index=True)
+    tool_name: Mapped[str] = mapped_column(String(60), default="")
+    arguments_json: Mapped[str] = mapped_column(Text, default="")
+    result_summary: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class AiCsHandoff(Base):
+    """转人工记录。staff_notify_status 留给第 5 步的服务号模板通知。"""
+    __tablename__ = "ai_cs_handoffs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    openid: Mapped[str] = mapped_column(String(64), default="", index=True)
+    reason: Mapped[str] = mapped_column(String(80), default="")
+    method: Mapped[str] = mapped_column(String(40), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    staff_notify_status: Mapped[str] = mapped_column(String(40), default="pending_step5")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class AiCsSeenMsg(Base):
+    """微信消息去重。MsgId 或事件时间组成的键只处理一次。"""
+    __tablename__ = "ai_cs_seen_msgs"
+
+    msg_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    openid: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class AiCsPending(Base):
+    """客户尚未确认的预约、改期或取消。确认前不写预约表。"""
+    __tablename__ = "ai_cs_pending"
+
+    openid: Mapped[str] = mapped_column(String(64), primary_key=True)
+    action: Mapped[str] = mapped_column(String(20), default="")
+    payload_json: Mapped[str] = mapped_column(Text, default="")
+    script: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

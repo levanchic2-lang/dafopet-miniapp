@@ -74,6 +74,42 @@ def _get_access_token(*, force: bool = False) -> str:
     return _token_cache.access_token
 
 
+def send_customer_service_text(openid: str, content: str) -> dict[str, Any]:
+    """小程序客服文本消息。复用上面的 access_token 缓存。"""
+    if not _enabled():
+        raise RuntimeError("未配置 WECHAT_APPID/WECHAT_APPSECRET")
+    touser = (openid or "").strip()
+    text = (content or "").strip()
+    if not touser or not text:
+        raise RuntimeError("客服消息缺少接收人或内容")
+    raw = text.encode("utf-8")
+    if len(raw) > 2000:
+        text = raw[:2000].decode("utf-8", errors="ignore")
+    url = "https://api.weixin.qq.com/cgi-bin/message/custom/send"
+    payload = {"touser": touser, "msgtype": "text", "text": {"content": text}}
+    last: dict[str, Any] = {}
+    for attempt in (1, 2):
+        token = _get_access_token(force=(attempt == 2))
+        with httpx.Client(timeout=8.0) as client:
+            response = client.post(url, params={"access_token": token}, json=payload)
+            response.raise_for_status()
+            data = response.json()
+        err = data.get("errcode")
+        if err in (0, "0", None):
+            return data
+        try:
+            code = int(err)
+        except (TypeError, ValueError):
+            code = -1
+        last = data
+        if code in _TOKEN_RETRY_CODES and attempt == 1:
+            _token_cache.access_token = ""
+            _token_cache.expires_at = 0.0
+            continue
+        raise RuntimeError(f"customer service send failed: {data}")
+    raise RuntimeError(f"customer service send failed: {last}")
+
+
 # 40001 凭证无效、40014 token 不合法、42001 token 过期：刷新后再试一次。
 _TOKEN_RETRY_CODES = {40001, 40014, 42001}
 

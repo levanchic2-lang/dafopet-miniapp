@@ -38,4 +38,5 @@
       </view>
     </view>
   </block>
+  <button class="cs-entry" open-type="contact">联系客服</button>
 </view>
