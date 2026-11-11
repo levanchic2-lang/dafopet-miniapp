@@ -87,20 +87,18 @@
         <label class="lbl">体&nbsp;型（犬）</label>
         <select class="ukm-select" id="size_dog" name="pet_size" onchange="updateBeautyDuration()">
           <option value="">请选择</option>
-          <option value="微小型犬（4kg 以下）">微小型犬（4kg 以下）</option>
-          <option value="小型犬（4–10kg）">小型犬（4–10kg）</option>
-          <option value="中型犬（10–15kg）">中型犬（10–15kg）</option>
-          <option value="中大型犬（15–25kg）">中大型犬（15–25kg）</option>
-          <option value="大型犬（25kg 以上）">大型犬（25kg 以上）</option>
+          {% for label in beauty_dog_size_options %}
+          <option value="{{ label }}">{{ label }}</option>
+          {% endfor %}
         </select>
       </div>
       <div class="ukm-field" id="size_cat_wrap" style="display:none;">
         <label class="lbl">体&nbsp;型（猫）</label>
         <select class="ukm-select" id="size_cat" name="pet_size" disabled onchange="updateBeautyDuration()">
           <option value="">请选择</option>
-          <option value="大型猫（4kg 以上）">大型猫（4kg 以上）</option>
-          <option value="中型猫（2.5–4kg）">中型猫（2.5–4kg）</option>
-          <option value="小型猫（2.5kg 以下）">小型猫（2.5kg 以下）</option>
+          {% for label in beauty_cat_size_options %}
+          <option value="{{ label }}">{{ label }}</option>
+          {% endfor %}
         </select>
       </div>
       <div class="ukm-field">
@@ -335,9 +333,9 @@ function calcBeautyDuration(sn, sz, cl, addonNames) {
     else if (sz.indexOf('中型犬') >= 0) base = isWash ? (isLong ? 90 : 60) : 150;
     else if (sz.indexOf('大型犬') >= 0) base = isWash ? (isLong ? 150 : 120) : 210;
   } else if (sn.indexOf('猫') >= 0) {
-    if (sz.indexOf('大型猫') >= 0)      base = isWash ? (isLong ? 150 : 120) : 150;
-    else if (sz.indexOf('中型猫') >= 0) base = isWash ? (isLong ? 120 : 90) : 120;
-    else if (sz.indexOf('小型猫') >= 0) base = isWash ? (isLong ? 90 : 60) : 120;
+    if (sz.indexOf('大型猫') >= 0)      base = isWash ? 120 : 150;
+    else if (sz.indexOf('中型猫') >= 0) base = 120;
+    else if (sz.indexOf('小型猫') >= 0) base = isWash ? 90 : 120;
   }
   base += addonExtraMinutes(addonNames);
   return base;

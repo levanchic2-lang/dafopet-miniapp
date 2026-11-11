@@ -36,7 +36,7 @@ X-AI-CS-Key: <密钥>
 | `store` | `横岗店`、`东环店`，或两家店的全称 |
 | `date` | `YYYY-MM-DD`。今天到往后 15 天，含第 15 天 |
 | `service_name` | 门诊、疫苗、手术的项目名。疫苗不填时按「疫苗/驱虫」 |
-| `pet_size` `coat_length` `addons` `weight_kg` | 美容单只用。`weight_kg` 有值时，去浮毛按体重加时 |
+| `pet_size` `coat_length` `addons` `weight_kg` | 美容单只用。没传 `pet_size` 时，用 `weight_kg` 或 `pet_id` 档案里的最近体重分档。两者都没有则 400，`error_code=pet_weight_required`，不要按 60 分钟估算。已传入的体型档原样使用，包括历史文案。`weight_kg` 有值时，去浮毛按体重加时 |
 | `pets` | 多只宠物一起美容时传 JSON 数组，见下文 |
 | `pet_id` `birthday` `species` | 可选。用来在查时段时先做绝育/疫苗年龄和物种提示 |
 
@@ -45,7 +45,9 @@ X-AI-CS-Key: <密钥>
 | 字段 | 说明 |
 | --- | --- |
 | `slots` | 可开始时间，`HH:MM`，30 分钟一档。已经过去的当天时段不会出现 |
-| `groups` | 只在多宠美容时出现。每一组是同一美容师上首尾相接的时间 |
+| `slot_details` | 与 `slots` 一一对应。每条有 `start` 和 `end`。结束时间以 `end` 为准 |
+| `pet_size` | 美容实际用来计时的体型档。由传入值或体重推导 |
+| `groups` | 只在多宠美容时出现。每一组是同一美容师上首尾相接的时间，含 `end` |
 | `duration_minutes` `capacity_units` | 这一档会占用的时长和容量 |
 | `rules` | 提前量、时间窗、15 天上限 |
 | `arrival_note` | 手术/绝育时说明：预约时间只是预计到院时间，实际手术时间看当天安排 |
@@ -56,8 +58,8 @@ X-AI-CS-Key: <密钥>
 
 ```json
 [
-  {"service_name": "猫洗护", "pet_size": "小型猫（2.5kg 以下）", "coat_length": "短毛", "addons": ""},
-  {"service_name": "犬洗护", "pet_size": "小型犬（4–10kg）", "coat_length": "短毛", "addons": "去浮毛", "weight_kg": 8}
+  {"service_name": "猫洗护", "pet_size": "小型猫（不足 3kg）", "coat_length": "短毛", "addons": ""},
+  {"service_name": "犬洗护", "weight_kg": 8, "coat_length": "短毛", "addons": "去浮毛"}
 ]
 ```
 
