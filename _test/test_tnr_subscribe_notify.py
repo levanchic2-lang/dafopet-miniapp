@@ -437,12 +437,19 @@ def test_claim_and_report_link_openid_and_status_page_flags():
         db.commit()
         client = TestClient(app)
         main_module.wechat_code2session = lambda code: {"openid": "openid-claimed"} if code == "claim-code" else original_code(code)
+        previous_compat = os.environ.get("LEGACY_MINIAPP_COMPAT")
+        os.environ["LEGACY_MINIAPP_COMPAT"] = "0"
         spoofed = client.post("/api/wechat/claim-apps", json={
             "openid": "openid-attacker",
             "phone": "13800007777",
             "id_number": "440301199001011234",
         })
-        assert spoofed.status_code == 401, spoofed.text
+        if previous_compat is None:
+            os.environ.pop("LEGACY_MINIAPP_COMPAT", None)
+        else:
+            os.environ["LEGACY_MINIAPP_COMPAT"] = previous_compat
+        assert spoofed.status_code == 403, spoofed.text
+        assert "更新" in spoofed.json()["detail"]
         db.refresh(app_row)
         assert (app_row.wechat_openid or "") == ""
         claimed = client.post("/api/wechat/claim-apps", json={

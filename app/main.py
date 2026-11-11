@@ -887,6 +887,31 @@ def client_ip(request: Request) -> str:
     return (host or "unknown")[:80]
 
 
+_LEGACY_COMPAT_OFF = {"0", "false", "no", "off"}
+_LEGACY_UPDATE_DETAIL = "请更新小程序后再查看。当前版本暂时不能显示个人资料，新的预约仍可提交。"
+
+
+def legacy_miniapp_compat() -> bool:
+    """旧版小程序过渡开关。环境变量优先，便于测试和上线后关闭。"""
+    if "LEGACY_MINIAPP_COMPAT" in _os.environ:
+        raw = _os.environ.get("LEGACY_MINIAPP_COMPAT") or ""
+    else:
+        raw = str(getattr(settings, "legacy_miniapp_compat", "1") or "1")
+    return raw.strip().lower() not in _LEGACY_COMPAT_OFF
+
+
+def _request_code(payload: dict | None) -> str:
+    return str((payload or {}).get("code") or (payload or {}).get("js_code") or "").strip()
+
+
+def _request_openid(payload: dict | None) -> str:
+    return str((payload or {}).get("openid") or "").strip()[:64]
+
+
+def _legacy_update_required(detail: str = _LEGACY_UPDATE_DETAIL) -> None:
+    raise HTTPException(status_code=403, detail=detail)
+
+
 def _wechat_openid_from_code(code: str) -> str:
     """用当次 wx.login code 换 openid。不接受客户端自己报上来的 openid。"""
     code = (code or "").strip()
@@ -2058,9 +2083,19 @@ def _check_duplicate_application_appointment(
 
 
 async def _resolve_wechat_openid(payload: dict) -> str:
-    """小程序预约写入：只认当次 wx.login code，不认客户端自报的 openid。"""
-    code = ((payload or {}).get("code") or (payload or {}).get("js_code") or "").strip()
-    return _wechat_openid_from_code(code)
+    """预约写入。有登录码就用登录码；过渡期内也接受旧版只带 openid 的请求。"""
+    code = _request_code(payload)
+    if code:
+        return _wechat_openid_from_code(code)
+    openid = _request_openid(payload)
+    if openid and legacy_miniapp_compat():
+        return openid
+    raise HTTPException(401, "请先完成微信登录")
+
+
+def _legacy_write_without_code(payload: dict) -> bool:
+    """旧客户端只带了 openid，没有当次登录码。"""
+    return bool(_request_openid(payload)) and not _request_code(payload) and legacy_miniapp_compat()
 
 
 def _appointment_catalog() -> dict:
@@ -2839,6 +2874,10 @@ async def api_app_status(
     if not row:
         raise HTTPException(404, "not found")
     if not _lookup_privileged(request, db):
+        if not (code or "").strip():
+            if legacy_miniapp_compat():
+                _legacy_update_required("请更新小程序后查看申请进度。")
+            raise HTTPException(401, "请先完成微信登录")
         openid = _wechat_openid_from_code(code)
         if not _application_visible_to_openid(db, row, openid):
             raise HTTPException(403, "只能查看已绑定到当前微信的申请")
@@ -10583,8 +10622,22 @@ async def api_my_tnr_status(
     openid: str = Query(""),
     db: Session = Depends(get_db),
 ):
-    """小程序端：用当次微信登录码，返回该用户是否有可预约的已通过 TNR 申请。"""
-    openid = _caller_openid(request, db, code, openid)
+    """小程序端：用当次微信登录码，返回该用户是否有可预约的已通过 TNR 申请。
+
+    过渡期内，旧版只带 openid 时仍返回申请编号和状态，方便继续预约。
+    不返回猫咪名字，避免未校验的 openid 带出个人资料。
+    """
+    supplied = (openid or "").strip()[:64]
+    reveal_names = True
+    if (code or "").strip() or (_lookup_privileged(request, db) and supplied and not (code or "").strip()):
+        openid = _caller_openid(request, db, code, supplied)
+    elif supplied and legacy_miniapp_compat():
+        openid = supplied
+        reveal_names = False
+    elif supplied:
+        raise HTTPException(401, "请先完成微信登录")
+    else:
+        return {"has_approved": False, "approved_apps": []}
     if not openid.strip():
         return {"has_approved": False, "approved_apps": []}
     _APPROVED_STATUSES = {
@@ -10602,7 +10655,14 @@ async def api_my_tnr_status(
         .limit(10)
         .all()
     )
-    apps = [{"id": r.id, "status": r.status, "cat_nickname": r.cat_nickname} for r in rows]
+    apps = [
+        {
+            "id": r.id,
+            "status": r.status,
+            "cat_nickname": (r.cat_nickname or "") if reveal_names else "",
+        }
+        for r in rows
+    ]
     return {"has_approved": len(apps) > 0, "approved_apps": apps}
 
 
@@ -11044,8 +11104,12 @@ async def api_wechat_my_apps(
     request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
 ):
     """小程序端：用当次微信登录码返回该微信的申请列表。"""
-    code = str((payload or {}).get("code") or (payload or {}).get("js_code") or "")
-    supplied = str((payload or {}).get("openid") or "")
+    code = _request_code(payload)
+    supplied = _request_openid(payload)
+    if not code and not (_lookup_privileged(request, db) and supplied):
+        if supplied and legacy_miniapp_compat():
+            _legacy_update_required("请更新小程序后查看申请进度。新的预约仍可正常提交。")
+        raise HTTPException(401, "请先完成微信登录")
     openid = _caller_openid(request, db, code, supplied)
 
     def mask_phone(s: str) -> str:
@@ -11092,8 +11156,13 @@ async def api_wechat_my_apps(
 async def api_wechat_my_appointments(
     request: Request, payload: dict = Body(...), db: Session = Depends(get_db),
 ):
-    code = str((payload or {}).get("code") or (payload or {}).get("js_code") or "")
-    openid = _caller_openid(request, db, code, str((payload or {}).get("openid") or ""))
+    code = _request_code(payload)
+    supplied = _request_openid(payload)
+    if not code and not (_lookup_privileged(request, db) and supplied):
+        if supplied and legacy_miniapp_compat():
+            _legacy_update_required("请更新小程序后查看预约记录。新的预约仍可正常提交。")
+        raise HTTPException(401, "请先完成微信登录")
+    openid = _caller_openid(request, db, code, supplied)
     rows = (
         db.query(Appointment)
         .filter(Appointment.wechat_openid == openid)
@@ -11148,7 +11217,9 @@ async def api_wechat_appointment_get(
     if not row:
         raise HTTPException(404, "预约记录不存在")
     if not _lookup_privileged(request, db):
-        code = str((payload or {}).get("code") or (payload or {}).get("js_code") or "")
+        code = _request_code(payload)
+        if not code and _request_openid(payload) and legacy_miniapp_compat():
+            _legacy_update_required("请更新小程序后再修改预约。如需改期，请联系门店。")
         openid = _wechat_openid_from_code(code)
         if (row.wechat_openid or "") != openid:
             raise HTTPException(403, "无权查看此预约")
@@ -11224,6 +11295,8 @@ async def api_wechat_appointment_update(
             notify_appointment_event(db, row, "rescheduled")
         except Exception as _e:
             logger.warning("[wechat] customer reschedule push failed: %s", _e)
+    if _legacy_write_without_code(payload):
+        return {"ok": True}
     return {"ok": True, "appointment": _serialize_appointment(row)}
 
 
@@ -11337,10 +11410,15 @@ async def api_wechat_claim_apps(payload: dict = Body(...), db: Session = Depends
     小程序端：用 {openid}+{phone}+{id_number} 找回历史订单。
     仅对 phone+id_number 匹配且 wechat_openid 为空的记录进行补写，不覆盖已有 openid 的记录。
     """
-    code = (payload or {}).get("code", "") or (payload or {}).get("js_code", "") or ""
+    code = _request_code(payload)
     phone = (payload or {}).get("phone", "") or ""
     id_number = (payload or {}).get("id_number", "") or ""
-    openid = _wechat_openid_from_code(code)
+    if code:
+        openid = _wechat_openid_from_code(code)
+    elif legacy_miniapp_compat() and _request_openid(payload):
+        openid = _request_openid(payload)
+    else:
+        _legacy_update_required("请更新小程序后再找回历史申请。")
     phone = (phone or "").strip()
     idn = (id_number or "").strip().upper()
 
@@ -14758,19 +14836,22 @@ async def api_binding_verify(request: Request, db: Session = Depends(get_db)):
     phone = (body.get("phone") or "").strip()
     code = (body.get("code") or "").strip()
     js_code = (body.get("js_code") or body.get("wechat_code") or "").strip()
+    supplied_openid = str(body.get("openid") or "").strip()[:64]
     if not phone.isdigit() or len(phone) != 11 or not code:
         return {"ok": False, "error": "请填写 11 位手机号和验证码"}
-    if not js_code:
-        return {"ok": False, "error": "缺少微信登录凭证，请重新进入页面后再试"}
-    try:
-        sess_data = wechat_code2session(js_code)
-    except Exception as exc:
-        logger.info("[binding] code2session 失败：%s", type(exc).__name__)
-        return {"ok": False, "error": "微信登录失败，请重试"}
-    openid = str((sess_data or {}).get("openid") or "").strip()
-    if not openid:
-        return {"ok": False, "error": "微信登录失败，请重试"}
-    openid = openid[:64]
+    if js_code:
+        try:
+            sess_data = wechat_code2session(js_code)
+        except Exception as exc:
+            logger.info("[binding] code2session 失败：%s", type(exc).__name__)
+            return {"ok": False, "error": "微信登录失败，请重试"}
+        openid = str((sess_data or {}).get("openid") or "").strip()[:64]
+        if not openid:
+            return {"ok": False, "error": "微信登录失败，请重试"}
+    elif supplied_openid and legacy_miniapp_compat():
+        openid = supplied_openid
+    else:
+        return {"ok": False, "error": "请更新小程序后重新绑定。当前版本需要重新登录微信才能完成绑定。"}
     row = (
         db.query(SmsVerificationCode)
         .filter(
@@ -27053,7 +27134,17 @@ async def api_wechat_my_profile(
     db: Session = Depends(get_db),
 ):
     """小程序预约页：用当次微信登录码查已绑定档案。一个微信绑了多份档案时全部返回。"""
-    openid = _caller_openid(request, db, code, openid)
+    supplied = (openid or "").strip()
+    if not (code or "").strip() and not (_lookup_privileged(request, db) and supplied):
+        if supplied and legacy_miniapp_compat():
+            return {
+                "bound": False,
+                "pets": [],
+                "customers": [],
+                "message": "请更新小程序后自动填入已绑定档案。您仍可以手动填写并提交预约。",
+            }
+        raise HTTPException(401, "请先完成微信登录")
+    openid = _caller_openid(request, db, code, supplied)
     customers = _customers_bound_to(db, openid)
     if not customers:
         return {"bound": False, "pets": [], "customers": []}
@@ -27423,6 +27514,10 @@ async def api_combo_vaccine_registration_status(
     code: str = Query(""),
     db: Session = Depends(get_db),
 ):
+    if not _lookup_privileged(request, db) and not (code or "").strip():
+        if legacy_miniapp_compat():
+            _legacy_update_required("请更新小程序后查看接种登记。")
+        raise HTTPException(401, "请先完成微信登录")
     reg = db.get(ComboVaccineRegistration, reg_id)
     if not reg:
         raise HTTPException(404, "登记不存在")

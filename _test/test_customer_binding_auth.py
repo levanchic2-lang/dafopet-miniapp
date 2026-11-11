@@ -419,8 +419,10 @@ assert anon_unbind.status_code == 401
 
 # 个人资料接口：没有微信登录码就不能看，也只能看自己的档案
 profile_spoof = client.get("/api/wechat/my-profile", params={"openid": "openid-owner"})
-assert profile_spoof.status_code == 401
-assert "甲客户" not in profile_spoof.text and "甲路" not in profile_spoof.text
+assert profile_spoof.status_code == 200
+assert profile_spoof.json()["bound"] is False
+assert "更新" in profile_spoof.json()["message"]
+assert "甲客户" not in profile_spoof.text and "甲路" not in profile_spoof.text and "甲犬" not in profile_spoof.text
 stranger_profile = client.get("/api/wechat/my-profile", params={"code": "stranger-code"})
 assert stranger_profile.json()["bound"] is False
 assert "甲犬" not in stranger_profile.text
@@ -434,7 +436,8 @@ assert "甲猫" not in owner_profile.text
 assert "甲路" not in owner_profile.text
 
 status_anon = client.get(f"/api/app/{app_id}/status")
-assert status_anon.status_code == 401
+assert status_anon.status_code == 403
+assert "更新" in status_anon.json()["detail"]
 assert "甲路" not in status_anon.text and "咳嗽" not in status_anon.text
 status_stranger = client.get(f"/api/app/{app_id}/status", params={"code": "stranger-code"})
 assert status_stranger.status_code == 403
@@ -444,15 +447,17 @@ assert status_owner.status_code == 200
 assert status_owner.json()["address"] == "甲路1号"
 assert status_owner.json()["health_note"] == "咳嗽保密"
 apps_spoof = client.post("/api/wechat/my-apps", json={"openid": "openid-owner"})
-assert apps_spoof.status_code == 401
+assert apps_spoof.status_code == 403
+assert "更新" in apps_spoof.json()["detail"]
 assert "咳嗽" not in apps_spoof.text
 apps_owner = client.post("/api/wechat/my-apps", json={"code": "owner-code", "openid": "openid-stranger"})
 assert apps_owner.status_code == 200
 assert apps_owner.json()["items"][0]["health_note_brief"].startswith("咳嗽")
 
 appt_spoof = client.post(f"/api/wechat/appointments/{appt_id}/get", json={"openid": "openid-owner"})
-assert appt_spoof.status_code == 401
-assert "13700001111" not in appt_spoof.text
+assert appt_spoof.status_code == 403
+assert "更新" in appt_spoof.json()["detail"]
+assert "13700001111" not in appt_spoof.text and "甲客户" not in appt_spoof.text
 appt_stranger = client.post(f"/api/wechat/appointments/{appt_id}/get", json={"code": "stranger-code"})
 assert appt_stranger.status_code == 403
 appt_owner = client.post("/api/wechat/my-appointments", json={"code": "owner-code"})
@@ -461,11 +466,14 @@ assert appt_owner.json()["items"][0]["customer_name"] == "甲客户"
 assert appt_owner.json()["items"][0]["phone_masked"].endswith("1111")
 assert "13700001111" not in appt_owner.text
 tnr_spoof = client.get("/api/wechat/my-tnr-status", params={"openid": "openid-owner"})
-assert tnr_spoof.status_code == 401
+assert tnr_spoof.status_code == 200
+assert tnr_spoof.json()["has_approved"] is False
+assert "甲猫进度" not in tnr_spoof.text
 
 reg_phone = client.get(f"/api/vaccine-registration/{reg_id}", params={"phone": "13700001111"})
-assert reg_phone.status_code == 401
-assert "护理说明" not in reg_phone.text
+assert reg_phone.status_code == 403
+assert "更新" in reg_phone.json()["detail"]
+assert "护理说明" not in reg_phone.text and "甲犬" not in reg_phone.text
 reg_stranger = client.get(f"/api/vaccine-registration/{reg_id}", params={"code": "stranger-code"})
 assert reg_stranger.status_code == 403
 assert "护理说明" not in reg_stranger.text and "甲客户" not in reg_stranger.text
@@ -494,6 +502,76 @@ assert status_staff.json()["applicant_name"] == "甲客户"
 reg_staff = client.get(f"/api/vaccine-registration/{reg_id}")
 assert reg_staff.status_code == 200
 _logout()
+
+# 旧版顾客端：只带 openid 仍能提交和取消 TNR，但不能把档案读回去
+os.environ["LEGACY_MINIAPP_COMPAT"] = "1"
+with SessionLocal() as session:
+    row = session.get(Application, app_id)
+    row.status = "approved"
+    row.cat_nickname = "甲猫进度"
+    session.commit()
+legacy_tnr = client.get("/api/wechat/my-tnr-status", params={"openid": "openid-owner"})
+assert legacy_tnr.status_code == 200, legacy_tnr.text
+assert legacy_tnr.json()["has_approved"] is True
+assert legacy_tnr.json()["approved_apps"][0]["id"] == app_id
+assert legacy_tnr.json()["approved_apps"][0]["cat_nickname"] == ""
+assert "甲猫进度" not in legacy_tnr.text
+assert "甲路" not in legacy_tnr.text
+book_day = (datetime.now().date() + timedelta(days=3)).isoformat()
+legacy_book = client.post("/api/appointments/create", json={
+    "openid": "openid-owner",
+    "category": "tnr",
+    "service_name": "TNR 手术安排",
+    "customer_name": "甲客户",
+    "phone": "13700001111",
+    "pet_name": "甲犬",
+    "pet_gender": "female",
+    "store": "大风动物医院（横岗店）",
+    "appointment_date": book_day,
+    "appointment_time": "13:00",
+    "duration_minutes": 60,
+    "related_application_id": app_id,
+})
+assert legacy_book.status_code == 200, legacy_book.text
+legacy_id = legacy_book.json()["appointment"]["id"]
+legacy_cancel = client.post(f"/api/wechat/appointments/{legacy_id}/cancel", json={"openid": "openid-owner"})
+assert legacy_cancel.status_code == 200, legacy_cancel.text
+assert legacy_cancel.json()["ok"] is True
+assert "甲客户" not in legacy_cancel.text
+legacy_list = client.post("/api/wechat/my-appointments", json={"openid": "openid-owner"})
+assert legacy_list.status_code == 403
+assert "更新" in legacy_list.json()["detail"]
+assert "甲客户" not in legacy_list.text
+
+_age(7200)
+main_module._BIND_COOLDOWN = timedelta(0)
+assert client.post("/api/customer-binding/send-code", json={"phone": "13700003333"}).json()["ok"] is True
+legacy_bind = client.post("/api/customer-binding/verify", json={
+    "phone": "13700003333", "code": SENT["code"], "openid": "openid-owner",
+})
+assert legacy_bind.json()["ok"] is True, legacy_bind.text
+with SessionLocal() as session:
+    assert session.get(Customer, plain_id).wechat_openid == "openid-owner"
+main_module._BIND_COOLDOWN = timedelta(seconds=60)
+
+os.environ["LEGACY_MINIAPP_COMPAT"] = "0"
+blocked_book = client.post("/api/appointments/create", json={
+    "openid": "openid-owner",
+    "category": "tnr",
+    "service_name": "TNR 手术安排",
+    "customer_name": "甲客户",
+    "phone": "13700001111",
+    "pet_name": "甲犬",
+    "pet_gender": "female",
+    "store": "大风动物医院（横岗店）",
+    "appointment_date": (datetime.now().date() + timedelta(days=4)).isoformat(),
+    "appointment_time": "14:00",
+    "duration_minutes": 60,
+    "related_application_id": app_id,
+})
+assert blocked_book.status_code == 401
+assert "甲客户" not in blocked_book.text
+os.environ["LEGACY_MINIAPP_COMPAT"] = "1"
 
 client.close()
 TEMP_DIR.cleanup()
