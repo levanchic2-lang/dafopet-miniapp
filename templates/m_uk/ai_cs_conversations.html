@@ -6,8 +6,30 @@
 {% block content %}
 <div class="ukm-page-head">
   <h1>客服记录</h1>
-  <div class="meta">只读 · 北京时间 · 手机号已打码</div>
+  <div class="meta">北京时间 · 手机号已打码</div>
 </div>
+
+<div class="ukm-section-head"><h2>正在人工接待</h2></div>
+<p class="ukm-fineprint" style="text-align:left;margin-bottom:12px;">超过 {{ idle_minutes }} 分钟没有新消息，自动结束并恢复客服助手。</p>
+{% if active_sessions %}
+<div class="ukm-card-group">
+  {% for row in active_sessions %}
+  <article class="ukm-card">
+    <div class="ukm-row-title">{{ row.openid or '—' }}</div>
+    <div class="ukm-row-sub">
+      开始 {{ row.started_at.strftime('%m-%d %H:%M') if row.started_at else '' }}
+      · 最近 {{ row.last_customer_msg_at.strftime('%m-%d %H:%M') if row.last_customer_msg_at else '' }}
+    </div>
+    <form method="post" action="/m/ai-cs/sessions/{{ row.id }}/end" style="margin-top:12px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+      <button type="submit" class="ukm-btn block">结束人工、恢复AI</button>
+    </form>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p class="ukm-empty">暂无正在进行的人工接待</p>
+{% endif %}
 
 <div class="ukm-section-head"><h2>转人工</h2></div>
 {% if handoffs %}

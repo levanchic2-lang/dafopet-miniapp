@@ -93,10 +93,12 @@ class Settings(BaseSettings):
     # 小程序客服消息推送。只放服务器环境变量，不要写进小程序。
     # AI_CS_ENABLED 默认关闭：地址仍验签，但不调用 AI，消息转给微信客服工具。
     # AI_CS_TEST_OPENIDS 为逗号分隔的 openid；非空时只有这些微信会收到 AI 回复。
+    # AI_CS_HANDOFF_IDLE_MINUTES：人工会话多久没有客户消息就结束并恢复 AI，默认 30。
     wechat_cs_token: str = ""
     wechat_cs_aes_key: str = ""
     ai_cs_enabled: bool = False
     ai_cs_test_openids: str = ""
+    ai_cs_handoff_idle_minutes: int = 30
 
     # 旧版小程序过渡。后端会先于小程序发版上线，已发布的顾客端还要等微信审核。
     # 1（默认）= 旧客户端仍可提交、取消 TNR 预约，并按缓存 openid 查看申请进度和预约记录。

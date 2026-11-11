@@ -1,9 +1,11 @@
 """小程序客服消息推送：验签、解密、立刻应答，再异步回复。
 
 AI_CS_ENABLED 默认关闭。关闭或 openid 不在白名单时，把消息转给微信客服工具，
-这样人工接待不会因为配置了推送地址而收不到消息。
-客户明确要人工时，也必须在这次 HTTP 响应里返回 transfer_customer_service，
-小程序没有事后再转接的发送接口。
+这样人工接待不会因为配置了推送地址而收不到消息。人工会话状态也不介入。
+客户明确要人工，或人工会话还没结束时，必须在这次 HTTP 响应里返回
+transfer_customer_service。小程序没有事后再转接的发送接口。
+AI 没把握、出错或工具轮次用尽时，模型是在已经应答之后才跑完的，
+这一条只能回电话；同时打开人工会话，客户接下来的消息再转接。
 """
 from __future__ import annotations
 
@@ -19,12 +21,16 @@ from app.config import settings
 from app.models import AiCsSeenMsg
 from app.services.ai_cs_assistant import (
     PHONE_FALLBACK,
+    active_handoff_session,
+    begin_human_handoff,
     beijing_naive,
     clip_wechat,
+    log_handoff_customer_message,
     media_reply,
     maybe_greet,
     record_handoff,
     remember_gated,
+    touch_handoff_session,
     wants_human,
 )
 from app.services.wechat_cs_crypto import (
@@ -267,7 +273,30 @@ def handle_push(db: Session, *, method: str, query: dict, raw: bytes, content_ty
     human = message["msg_type"] == "text" and wants_human(message["content"])
     enabled = ai_cs_enabled()
     allowed = openid_allowed(openid)
-    if human:
+    if enabled and allowed:
+        session = active_handoff_session(db, openid)
+        if session is not None:
+            if _claim(db, _dedupe_key(message), openid):
+                try:
+                    touch_handoff_session(db, session)
+                    log_handoff_customer_message(db, openid, message)
+                except Exception:
+                    logger.exception("[ai-cs] handoff follow-up log failed")
+            body, media = _transfer_body(message, fmt)
+            return PushResult(200, body, media, None)
+        if human:
+            if _claim(db, _dedupe_key(message), openid):
+                try:
+                    begin_human_handoff(
+                        db, openid, "customer_requested", message["content"][:80],
+                        transfer_this_message=True,
+                    )
+                    log_handoff_customer_message(db, openid, message)
+                except Exception:
+                    logger.exception("[ai-cs] start handoff failed")
+            body, media = _transfer_body(message, fmt)
+            return PushResult(200, body, media, None)
+    elif human:
         if _claim(db, _dedupe_key(message), openid):
             record_handoff(db, openid, "customer_requested", "wechat_transfer", message["content"][:80])
         body, media = _transfer_body(message, fmt)
@@ -325,7 +354,9 @@ async def run_cs_job(job: dict) -> None:
         logger.exception("[ai-cs] job failed")
         reply = PHONE_FALLBACK
         try:
-            record_handoff(db, openid, "job_error", "phone_fallback", "处理失败")
+            reply = begin_human_handoff(
+                db, openid, "job_error", "处理失败", transfer_this_message=False,
+            ) or PHONE_FALLBACK
         except Exception:
             logger.exception("[ai-cs] handoff log failed")
     finally:

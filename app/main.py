@@ -11022,13 +11022,30 @@ async def api_wechat_cs_push(
 
 @app.get("/admin/ai-cs", response_class=HTMLResponse)
 async def page_admin_ai_cs(request: Request, db: Session = Depends(get_db)):
-    """最近的 AI 客服对话和转人工。只读。"""
+    """最近的 AI 客服对话、进行中的人工会话，以及结束人工。"""
     if not request.session.get("admin"):
         return RedirectResponse("/admin/login?next=/admin/ai-cs", status_code=303)
     from app.services.ai_cs_assistant import admin_snapshot
     ctx = admin_snapshot(db)
     ctx["request"] = request
+    ctx["csrf_token"] = _get_csrf_token(request)
     return templates.TemplateResponse(request, "uk/ai_cs_conversations.html", ctx)
+
+
+@app.post("/admin/ai-cs/sessions/{session_id}/end")
+async def admin_end_ai_cs_session(
+    session_id: int,
+    request: Request,
+    csrf_token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/admin/ai-cs", status_code=303)
+    _require_csrf(request, csrf_token)
+    from app.services.ai_cs_assistant import end_handoff_session
+    status = end_handoff_session(db, session_id)
+    msg = "没有这起人工会话" if status == "missing" else "已结束人工，AI客服已恢复"
+    return RedirectResponse("/admin/ai-cs?msg=" + quote(msg), status_code=303)
 
 
 @app.get("/m/ai-cs", response_class=HTMLResponse)
@@ -11039,6 +11056,22 @@ async def m_page_ai_cs(request: Request, db: Session = Depends(get_db)):
     ctx = _m_ctx(request, db, active_tab="me")
     ctx.update(admin_snapshot(db))
     return templates.TemplateResponse(request, "m_uk/ai_cs_conversations.html", ctx)
+
+
+@app.post("/m/ai-cs/sessions/{session_id}/end")
+async def m_end_ai_cs_session(
+    session_id: int,
+    request: Request,
+    csrf_token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/ai-cs", status_code=303)
+    _require_csrf(request, csrf_token)
+    from app.services.ai_cs_assistant import end_handoff_session
+    status = end_handoff_session(db, session_id)
+    msg = "没有这起人工会话" if status == "missing" else "已结束人工，AI客服已恢复"
+    return RedirectResponse("/m/ai-cs?msg=" + quote(msg), status_code=303)
 
 
 @app.post("/api/appointments/create")

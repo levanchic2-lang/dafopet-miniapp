@@ -28,8 +28,8 @@ from passlib.hash import bcrypt
 from app.database import Base, SessionLocal, engine
 import app.main as main_module
 from app.main import app
-from app.models import AdminUser, AiCsHandoff, AiCsMessage, AiCsPending, Appointment, Customer, Pet
-from app.services import ai_cs_assistant, wechat_cs_crypto, wechat_cs_push
+from app.models import AdminUser, AiCsHandoff, AiCsHandoffSession, AiCsMessage, AiCsPending, Appointment, Customer, Pet
+from app.services import ai_cs_assistant, wechat_cs_crypto, wechat_cs_push, wechat_miniapp
 from app.services.ai_cs_assistant import load_knowledge
 from app.time_utils import beijing_today
 
@@ -387,3 +387,512 @@ def test_admin_pages_are_login_only():
     assert "客服记录" in shown.text and "cs-admin-view" in shown.text
     mobile = http.get("/m/ai-cs")
     assert mobile.status_code == 200 and "客服记录" in mobile.text
+
+
+def _plant_session(openid: str, minutes_ago: float) -> int:
+    db = SessionLocal()
+    try:
+        now = ai_cs_assistant.beijing_naive()
+        when = now - timedelta(minutes=minutes_ago)
+        row = AiCsHandoffSession(
+            openid=openid,
+            started_at=when,
+            last_customer_msg_at=when,
+            ended_at=None,
+            end_reason="",
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return row.id
+    finally:
+        db.close()
+
+
+def _session_state(openid: str):
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(AiCsHandoffSession)
+            .filter(AiCsHandoffSession.openid == openid)
+            .order_by(AiCsHandoffSession.id.desc())
+            .first()
+        )
+        if row is None:
+            return None
+        return {
+            "id": row.id,
+            "ended_at": row.ended_at,
+            "end_reason": row.end_reason or "",
+            "last": row.last_customer_msg_at,
+        }
+    finally:
+        db.close()
+
+
+def _handoff_rows(openid: str):
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(AiCsHandoff)
+            .filter(AiCsHandoff.openid == openid)
+            .order_by(AiCsHandoff.id.asc())
+            .all()
+        )
+        return [
+            (row.reason, row.method, row.staff_notify_status, row.note or "")
+            for row in rows
+        ]
+    finally:
+        db.close()
+
+
+def _messages(openid: str):
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(AiCsMessage)
+            .filter(AiCsMessage.openid == openid)
+            .order_by(AiCsMessage.id.asc())
+            .all()
+        )
+        return [(row.role, row.msg_type, row.content or "") for row in rows]
+    finally:
+        db.close()
+
+
+@contextmanager
+def capture_send():
+    sent = []
+    original = wechat_miniapp.send_customer_service_text
+
+    def fake(openid, content):
+        sent.append((openid, content))
+        return {"errcode": 0}
+
+    wechat_miniapp.send_customer_service_text = fake
+    try:
+        yield sent
+    finally:
+        wechat_miniapp.send_customer_service_text = original
+
+
+def _login(http, username="admin", password="test123456"):
+    page = http.get("/admin/login")
+    logged = http.post("/admin/login", data={
+        "username": username,
+        "password": password,
+        "csrf_token": csrf_from(page.text),
+    }, follow_redirects=False)
+    assert logged.status_code == 303
+    return http
+
+
+def _push(http, openid, content, msg_id, msg_type="text", title=""):
+    payload = {
+        "ToUserName": "gh_test",
+        "FromUserName": openid,
+        "CreateTime": 1710000000 + int(msg_id),
+        "MsgType": msg_type,
+        "MsgId": msg_id,
+    }
+    if msg_type == "text":
+        payload["Content"] = content
+    elif title:
+        payload["Title"] = title
+    return _post_json(http, payload, f"n{msg_id}")
+
+
+def test_queued_followups_transfer_without_ai():
+    http = client()
+    jobs = []
+
+    async def capture(job):
+        jobs.append(job)
+
+    original = wechat_cs_push.run_cs_job
+    wechat_cs_push.run_cs_job = capture
+    try:
+        with env(WECHAT_CS_TOKEN=TOKEN, AI_CS_ENABLED="1", AI_CS_TEST_OPENIDS="cs-queue"):
+            first = _push(http, "cs-queue", "人工", 9401)
+            second = _push(http, "cs-queue", "那我的预约呢", 9402)
+            image = _push(http, "cs-queue", "", 9403, msg_type="image")
+    finally:
+        wechat_cs_push.run_cs_job = original
+    assert first.json()["MsgType"] == "transfer_customer_service"
+    assert second.json()["MsgType"] == "transfer_customer_service"
+    assert image.json()["MsgType"] == "transfer_customer_service"
+    assert jobs == []
+    state = _session_state("cs-queue")
+    assert state is not None and state["ended_at"] is None and state["end_reason"] == ""
+    handoffs = _handoff_rows("cs-queue")
+    assert len(handoffs) == 1
+    assert handoffs[0][0] == "customer_requested"
+    assert handoffs[0][1] == "wechat_transfer"
+    assert handoffs[0][2] == "pending_step5"
+    logged = _messages("cs-queue")
+    assert ("user", "handoff", "人工") in logged
+    assert any(row[2] == "那我的预约呢" for row in logged)
+    assert any("图片" in row[2] for row in logged)
+    assert all(row[0] != "assistant" for row in logged)
+
+
+def test_handoff_idle_expiry_and_resume_notice():
+    _plant_session("cs-idle-fresh", 10)
+    _plant_session("cs-idle-stale", 45)
+    calls = {"n": 0}
+
+    async def answer(messages, tools):
+        calls["n"] += 1
+        last = messages[-1]["content"]
+        if "第一句" in last:
+            return _Msg(content="明天下午可以")
+        return _Msg(content="好的，还有空")
+
+    original_job = wechat_cs_push.run_cs_job
+    jobs = []
+
+    async def capture(job):
+        jobs.append(job)
+
+    ai_cs_assistant.complete_override = answer
+    try:
+        with env(
+            WECHAT_CS_TOKEN=TOKEN,
+            AI_CS_ENABLED="1",
+            AI_CS_TEST_OPENIDS="cs-idle-fresh,cs-idle-stale",
+            AI_CS_HANDOFF_IDLE_MINUTES="30",
+        ):
+            assert ai_cs_assistant.handoff_idle_minutes() == 30
+            http = client()
+            wechat_cs_push.run_cs_job = capture
+            held = _push(http, "cs-idle-fresh", "还在排队吗", 9501)
+            assert held.json()["MsgType"] == "transfer_customer_service"
+            assert jobs == [] and calls["n"] == 0
+            fresh = _session_state("cs-idle-fresh")
+            assert fresh["ended_at"] is None
+            wechat_cs_push.run_cs_job = original_job
+            with capture_send() as sent:
+                first = _push(http, "cs-idle-stale", "第一句想继续", 9502)
+                assert first.status_code == 200 and first.text == "success"
+                assert calls["n"] == 1
+                assert sent[0][0] == "cs-idle-stale"
+                assert sent[0][1].startswith(ai_cs_assistant.RESUME_NOTE)
+                assert "明天下午可以" in sent[0][1]
+                assert "人工" in sent[0][1]
+                second = _push(http, "cs-idle-stale", "再问一句", 9503)
+                assert second.text == "success"
+                assert calls["n"] == 2
+                assert "又回来了" not in sent[1][1]
+                assert "好的，还有空" in sent[1][1]
+    finally:
+        wechat_cs_push.run_cs_job = original_job
+        ai_cs_assistant.complete_override = None
+    stale = _session_state("cs-idle-stale")
+    assert stale["end_reason"] == "idle" and stale["ended_at"] is not None
+    assert _session_state("cs-idle-fresh")["ended_at"] is None
+
+
+def test_handoff_idle_window_follows_env():
+    with env(AI_CS_HANDOFF_IDLE_MINUTES="abc"):
+        assert ai_cs_assistant.handoff_idle_minutes() == 30
+    with env(AI_CS_HANDOFF_IDLE_MINUTES="0"):
+        assert ai_cs_assistant.handoff_idle_minutes() == 30
+    _plant_session("cs-idle-short", 3)
+    _plant_session("cs-idle-long", 8)
+    original = wechat_cs_push.run_cs_job
+    jobs = []
+
+    async def capture(job):
+        jobs.append(job)
+
+    wechat_cs_push.run_cs_job = capture
+    try:
+        with env(
+            WECHAT_CS_TOKEN=TOKEN,
+            AI_CS_ENABLED="1",
+            AI_CS_TEST_OPENIDS="cs-idle-short,cs-idle-long",
+            AI_CS_HANDOFF_IDLE_MINUTES="5",
+        ):
+            assert ai_cs_assistant.handoff_idle_minutes() == 5
+            http = client()
+            short = _push(http, "cs-idle-short", "还没到点", 9511)
+            long = _push(http, "cs-idle-long", "已经过了", 9512)
+    finally:
+        wechat_cs_push.run_cs_job = original
+    assert short.json()["MsgType"] == "transfer_customer_service"
+    assert long.text == "success"
+    assert len(jobs) == 1 and jobs[0]["openid"] == "cs-idle-long" and jobs[0]["text"] == "已经过了"
+    assert _session_state("cs-idle-short")["ended_at"] is None
+    assert _session_state("cs-idle-long")["end_reason"] == "idle"
+
+
+def test_admin_page_hides_idle_sessions():
+    ensure_admin()
+    _plant_session("cs-idle-page", 45)
+    http = _login(client())
+    with env(AI_CS_HANDOFF_IDLE_MINUTES="30"):
+        page = http.get("/admin/ai-cs")
+    assert page.status_code == 200
+    assert "cs-idle-page" not in page.text
+    assert _session_state("cs-idle-page")["end_reason"] == "idle"
+
+
+def test_staff_end_button_restores_ai():
+    ensure_admin()
+    db = SessionLocal()
+    try:
+        if db.query(AdminUser).filter(AdminUser.username == "cs-staff").first() is None:
+            db.add(AdminUser(
+                username="cs-staff",
+                password_hash=bcrypt.hash("test123456"),
+                role="staff",
+                store="东环店",
+                is_active=True,
+            ))
+            db.commit()
+    finally:
+        db.close()
+    desktop_id = _plant_session("cs-staff-desktop", 1)
+    mobile_id = _plant_session("cs-staff-mobile", 1)
+    anon = client()
+    denied = anon.post(
+        f"/admin/ai-cs/sessions/{desktop_id}/end",
+        data={"csrf_token": "nope"},
+        follow_redirects=False,
+    )
+    assert denied.status_code == 303 and "login" in denied.headers.get("location", "")
+    assert _session_state("cs-staff-desktop")["ended_at"] is None
+
+    http = _login(client(), "cs-staff")
+    page = http.get("/admin/ai-cs")
+    assert page.status_code == 200
+    assert "正在人工接待" in page.text
+    assert "cs-staff-desktop" in page.text
+    assert "结束人工、恢复AI" in page.text
+    assert f"/admin/ai-cs/sessions/{desktop_id}/end" in page.text
+    token = csrf_from(page.text)
+    bad = http.post(
+        f"/admin/ai-cs/sessions/{desktop_id}/end",
+        data={"csrf_token": "x" * len(token)},
+        follow_redirects=False,
+    )
+    assert bad.status_code == 403
+    assert _session_state("cs-staff-desktop")["ended_at"] is None
+    done = http.post(
+        f"/admin/ai-cs/sessions/{desktop_id}/end",
+        data={"csrf_token": token},
+        follow_redirects=False,
+    )
+    assert done.status_code == 303
+    assert "ai-cs" in done.headers.get("location", "")
+    assert _session_state("cs-staff-desktop")["end_reason"] == "staff"
+    again = http.get("/admin/ai-cs")
+    assert f"/admin/ai-cs/sessions/{desktop_id}/end" not in again.text
+    assert "已结束人工，AI客服已恢复" in again.text or "已结束人工" in http.get(done.headers["location"]).text
+
+    mobile = http.get("/m/ai-cs")
+    assert mobile.status_code == 200
+    assert "cs-staff-mobile" in mobile.text
+    assert f"/m/ai-cs/sessions/{mobile_id}/end" in mobile.text
+    ended = http.post(
+        f"/m/ai-cs/sessions/{mobile_id}/end",
+        data={"csrf_token": csrf_from(mobile.text)},
+        follow_redirects=False,
+    )
+    assert ended.status_code == 303
+    assert _session_state("cs-staff-mobile")["end_reason"] == "staff"
+
+    calls = {"n": 0}
+
+    async def answer(messages, tools):
+        calls["n"] += 1
+        return _Msg(content="我来继续帮您看时间")
+
+    ai_cs_assistant.complete_override = answer
+    try:
+        with env(WECHAT_CS_TOKEN=TOKEN, AI_CS_ENABLED="1", AI_CS_TEST_OPENIDS="cs-staff-desktop"):
+            with capture_send() as sent:
+                resumed = _push(client(), "cs-staff-desktop", "那现在还能约吗", 9601)
+    finally:
+        ai_cs_assistant.complete_override = None
+    assert resumed.text == "success"
+    assert calls["n"] == 1
+    assert sent and sent[0][1].startswith(ai_cs_assistant.RESUME_NOTE)
+    assert "我来继续帮您看时间" in sent[0][1]
+    assert _session_state("cs-staff-desktop")["end_reason"] == "staff"
+
+
+def test_low_confidence_opens_transfer_session():
+    calls = {"n": 0}
+
+    async def empty(messages, tools):
+        calls["n"] += 1
+        return _Msg(content="")
+
+    ai_cs_assistant.complete_override = empty
+    try:
+        with env(WECHAT_CS_TOKEN=TOKEN, AI_CS_ENABLED="1", AI_CS_TEST_OPENIDS="cs-low"):
+            with capture_send() as sent:
+                http = client()
+                first = _push(http, "cs-low", "这个病严重吗", 9701)
+                assert first.text == "success"
+                assert calls["n"] == 1
+                assert sent and "17820633031" in sent[0][1]
+                follow = _push(http, "cs-low", "那你转给同事了吗", 9702)
+    finally:
+        ai_cs_assistant.complete_override = None
+    assert follow.json()["MsgType"] == "transfer_customer_service"
+    assert calls["n"] == 1
+    assert len(sent) == 1
+    handoffs = _handoff_rows("cs-low")
+    assert len(handoffs) == 1
+    assert handoffs[0][0] == "low_confidence"
+    assert handoffs[0][1] == "wechat_transfer"
+    assert handoffs[0][2] == "pending_step5"
+    assert "模型没有给出可靠回复" in handoffs[0][3]
+    state = _session_state("cs-low")
+    assert state["ended_at"] is None
+    logged = _messages("cs-low")
+    assert any(row[0] == "assistant" and "交给同事" in row[2] for row in logged)
+
+
+def test_request_human_exhaustion_and_llm_error_transfer():
+    db = SessionLocal()
+    try:
+        async def ask_human(messages, tools):
+            return _Msg(tool_calls=[_Call("request_human", {"reason": "知识库没有"})])
+
+        async def always_tool(messages, tools):
+            return _Msg(tool_calls=[_Call("list_services", {}, call_id="hop")])
+
+        async def broken(messages, tools):
+            raise RuntimeError("down")
+
+        async def false_success(messages, tools):
+            return _Msg(content="已经帮您约好了")
+
+        ai_cs_assistant.complete_override = ask_human
+        asked = asyncio.run(ai_cs_assistant.handle_user_text(db, "cs-ask-human", "手术多少钱"))
+        ai_cs_assistant.complete_override = always_tool
+        tired = asyncio.run(ai_cs_assistant.handle_user_text(db, "cs-tool-hops", "帮我查一下"))
+        ai_cs_assistant.complete_override = broken
+        failed = asyncio.run(ai_cs_assistant.handle_user_text(db, "cs-llm-down", "在吗"))
+        ai_cs_assistant.complete_override = false_success
+        lied = asyncio.run(ai_cs_assistant.handle_user_text(db, "cs-false-ok", "就这样"))
+    finally:
+        ai_cs_assistant.complete_override = None
+        db.close()
+
+    for reply in (asked, tired, failed, lied):
+        assert "交给同事" in reply
+    ask_rows = _handoff_rows("cs-ask-human")
+    assert ask_rows[0][0] == "知识库没有"
+    assert ask_rows[0][1] == "wechat_transfer"
+    assert ask_rows[0][2] == "pending_step5"
+    assert _session_state("cs-ask-human")["ended_at"] is None
+    tired_rows = _handoff_rows("cs-tool-hops")
+    assert tired_rows[0][0] == "low_confidence"
+    assert tired_rows[0][1] == "wechat_transfer"
+    assert "工具轮次用尽" in tired_rows[0][3]
+    assert _session_state("cs-tool-hops")["ended_at"] is None
+    failed_rows = _handoff_rows("cs-llm-down")
+    assert failed_rows[0][0] == "llm_unavailable"
+    assert failed_rows[0][1] == "wechat_transfer"
+    assert "RuntimeError" in failed_rows[0][3]
+    assert _session_state("cs-llm-down")["ended_at"] is None
+    lied_rows = _handoff_rows("cs-false-ok")
+    assert lied_rows[0][0] == "low_confidence" and lied_rows[0][1] == "wechat_transfer"
+
+    calls = {"n": 0}
+
+    async def boom(db_session, openid, text):
+        calls["n"] += 1
+        raise RuntimeError("boom")
+
+    original_text = ai_cs_assistant.handle_user_text
+    ai_cs_assistant.handle_user_text = boom
+    try:
+        with capture_send() as sent:
+            asyncio.run(wechat_cs_push.run_cs_job({
+                "openid": "cs-job-err", "kind": "text", "text": "你好",
+            }))
+        with env(WECHAT_CS_TOKEN=TOKEN, AI_CS_ENABLED="1", AI_CS_TEST_OPENIDS="cs-job-err"):
+            follow = _push(client(), "cs-job-err", "人呢", 9802)
+    finally:
+        ai_cs_assistant.handle_user_text = original_text
+    assert calls["n"] == 1
+    assert sent and "17820633031" in sent[0][1]
+    assert follow.json()["MsgType"] == "transfer_customer_service"
+    job_rows = _handoff_rows("cs-job-err")
+    assert job_rows[0][0] == "job_error"
+    assert job_rows[0][1] == "wechat_transfer"
+    assert job_rows[0][2] == "pending_step5"
+    assert _session_state("cs-job-err")["ended_at"] is None
+
+
+def test_non_whitelisted_and_disabled_do_not_use_sessions():
+    http = client()
+    jobs = []
+
+    async def capture(job):
+        jobs.append(job)
+
+    planted = ai_cs_assistant.beijing_naive() - timedelta(minutes=1)
+    db = SessionLocal()
+    try:
+        db.add(AiCsHandoffSession(
+            openid="cs-outsider-planted",
+            started_at=planted,
+            last_customer_msg_at=planted,
+            ended_at=None,
+            end_reason="",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    original = wechat_cs_push.run_cs_job
+    wechat_cs_push.run_cs_job = capture
+    try:
+        with env(WECHAT_CS_TOKEN=TOKEN, AI_CS_ENABLED="1", AI_CS_TEST_OPENIDS="cs-allowed-only"):
+            human = _push(http, "cs-outsider", "我要人工", 9901)
+            follow = _push(http, "cs-outsider", "还想问价格", 9902)
+            planted_msg = _push(http, "cs-outsider-planted", "你好呀", 9903)
+        with env(WECHAT_CS_TOKEN=TOKEN, AI_CS_ENABLED="0", AI_CS_TEST_OPENIDS="cs-ai-off"):
+            off_human = _push(http, "cs-ai-off", "转人工", 9904)
+            off_next = _push(http, "cs-ai-off", "在吗", 9905)
+    finally:
+        wechat_cs_push.run_cs_job = original
+
+    for response in (human, follow, planted_msg, off_human, off_next):
+        assert response.json()["MsgType"] == "transfer_customer_service"
+    assert jobs == []
+    assert _session_state("cs-outsider") is None
+    outsider = _handoff_rows("cs-outsider")
+    assert len(outsider) == 1
+    assert outsider[0][1] == "wechat_transfer"
+    assert outsider[0][0] == "customer_requested"
+    gated = _messages("cs-outsider")
+    assert len(gated) == 1
+    assert "没有交给" in gated[0][2]
+    assert "还想问价格" not in gated[0][2]
+    planted_state = _session_state("cs-outsider-planted")
+    assert planted_state["ended_at"] is None and planted_state["end_reason"] == ""
+    assert abs((planted_state["last"] - planted).total_seconds()) < 5
+    assert _session_state("cs-ai-off") is None
+    off_rows = _handoff_rows("cs-ai-off")
+    assert len(off_rows) == 1 and off_rows[0][1] == "wechat_transfer"
+    assert _messages("cs-ai-off") == []
+
+
+def test_handoff_session_migration_is_additive():
+    from sqlalchemy import text
+
+    from app.database import _try_sqlite_migrations
+
+    _try_sqlite_migrations()
+    _try_sqlite_migrations()
+    with engine.connect() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(ai_cs_handoff_sessions)"))}
+    assert {"openid", "started_at", "last_customer_msg_at", "ended_at", "end_reason"} <= cols

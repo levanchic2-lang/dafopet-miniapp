@@ -2892,6 +2892,20 @@ def _try_sqlite_migrations() -> None:
                 "created_at DATETIME"
                 ")"
             ))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS ai_cs_handoff_sessions ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "openid VARCHAR(64) DEFAULT '', "
+                "started_at DATETIME, "
+                "last_customer_msg_at DATETIME, "
+                "ended_at DATETIME, "
+                "end_reason VARCHAR(40) DEFAULT ''"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_ai_cs_handoff_sessions_openid "
+                "ON ai_cs_handoff_sessions(openid, started_at)"
+            ))
 
             conn.commit()
     except Exception:
