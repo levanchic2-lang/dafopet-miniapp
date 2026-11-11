@@ -10917,6 +10917,38 @@ async def api_ai_cs_cancel(
     return _ai_cs_response(work)
 
 
+@app.api_route("/api/wechat/cs-push", methods=["GET", "POST"])
+async def api_wechat_cs_push(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """小程序客服消息推送。先验签，立刻应答，再异步回复。"""
+    from app.services.wechat_cs_push import handle_http
+    return await handle_http(request, background_tasks, db)
+
+
+@app.get("/admin/ai-cs", response_class=HTMLResponse)
+async def page_admin_ai_cs(request: Request, db: Session = Depends(get_db)):
+    """最近的 AI 客服对话和转人工。只读。"""
+    if not request.session.get("admin"):
+        return RedirectResponse("/admin/login?next=/admin/ai-cs", status_code=303)
+    from app.services.ai_cs_assistant import admin_snapshot
+    ctx = admin_snapshot(db)
+    ctx["request"] = request
+    return templates.TemplateResponse(request, "uk/ai_cs_conversations.html", ctx)
+
+
+@app.get("/m/ai-cs", response_class=HTMLResponse)
+async def m_page_ai_cs(request: Request, db: Session = Depends(get_db)):
+    if not _admin_ok(request):
+        return RedirectResponse("/admin/login?next=/m/ai-cs", status_code=303)
+    from app.services.ai_cs_assistant import admin_snapshot
+    ctx = _m_ctx(request, db, active_tab="me")
+    ctx.update(admin_snapshot(db))
+    return templates.TemplateResponse(request, "m_uk/ai_cs_conversations.html", ctx)
+
+
 @app.post("/api/appointments/create")
 async def api_appointments_create(payload: dict = Body(...), db: Session = Depends(get_db)):
     openid = await _resolve_wechat_openid(payload)

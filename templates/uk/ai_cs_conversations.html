@@ -1,0 +1,61 @@
+{% extends "uk/_base.html" %}
+{% block title %}客服记录 · 大风动物医院{% endblock %}
+{% block body %}
+<div class="ukc-bc"><a href="/admin">后台</a><span class="sep">/</span><span>客服记录</span></div>
+<div class="ukc-head">
+  <div>
+    <h1>客服记录
+      <span class="sub">只读 · 北京时间 · 手机号已打码</span>
+    </h1>
+  </div>
+</div>
+<hr class="ukc-rule-double"/>
+
+<h2 style="font-family:var(--font-serif);font-size:16pt;letter-spacing:2px;font-weight:700;margin:0 0 18px;">转人工</h2>
+{% if handoffs %}
+<table class="uk-tbl">
+  <thead>
+    <tr>
+      <th>时间</th>
+      <th>微信标识</th>
+      <th>方式</th>
+      <th>原因</th>
+      <th style="text-align:left;">同事通知</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in handoffs %}
+    <tr>
+      <td>{{ row.created_at.strftime('%m-%d %H:%M') if row.created_at else '' }}</td>
+      <td class="name">{{ row.openid or '—' }}</td>
+      <td>{% if row.method == 'wechat_transfer' %}转给微信客服{% elif row.method == 'phone_fallback' %}电话兜底{% else %}{{ row.method or '—' }}{% endif %}</td>
+      <td>{{ row.reason or '—' }}</td>
+      <td style="text-align:left;">{% if row.staff_notify_status == 'pending_step5' %}待通知同事{% else %}{{ row.staff_notify_status or '—' }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="font-style:italic;color:var(--ink-3);">暂无转人工记录</p>
+{% endif %}
+
+<h2 style="font-family:var(--font-serif);font-size:16pt;letter-spacing:2px;font-weight:700;margin:48px 0 18px;">最近对话</h2>
+{% if conversations %}
+  {% for conv in conversations %}
+  <section style="margin:0 0 36px;padding-top:8px;border-top:0.5px solid var(--hair);">
+    <p style="font-family:var(--font-serif);letter-spacing:1px;margin:16px 0;">微信标识 {{ conv['openid'] }}</p>
+    {% for msg in conv['messages'] %}
+    <p style="margin:0 0 10px;line-height:1.7;">
+      <span style="color:var(--ink-3);font-style:italic;">
+        {% if msg.role == 'user' %}客户{% elif msg.role == 'assistant' %}助手{% else %}{{ msg.role }}{% endif %}
+        {% if msg.created_at %} · {{ msg.created_at.strftime('%m-%d %H:%M') }}{% endif %}
+      </span><br>
+      {{ msg.content }}
+    </p>
+    {% endfor %}
+  </section>
+  {% endfor %}
+{% else %}
+<p style="font-style:italic;color:var(--ink-3);">暂无对话 · 客户从微信客服进入后会出现在这里</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "m_uk/_base.html" %}
+{% block title %}客服记录 · 大风动物医院{% endblock %}
+{% block topbar_title %}客服记录{% endblock %}
+{% block topbar_back %}<a href="/m/me" class="ukm-topbar-back">‹</a>{% endblock %}
+
+{% block content %}
+<div class="ukm-page-head">
+  <h1>客服记录</h1>
+  <div class="meta">只读 · 北京时间 · 手机号已打码</div>
+</div>
+
+<div class="ukm-section-head"><h2>转人工</h2></div>
+{% if handoffs %}
+<div class="ukm-card-group">
+  {% for row in handoffs %}
+  <article class="ukm-card">
+    <div class="ukm-row-title">
+      {% if row.method == 'wechat_transfer' %}转给微信客服{% elif row.method == 'phone_fallback' %}电话兜底{% else %}{{ row.method or '转接' }}{% endif %}
+    </div>
+    <div class="ukm-row-sub">
+      {{ row.created_at.strftime('%m-%d %H:%M') if row.created_at else '' }}
+      · {{ row.reason or '未写原因' }}
+      · {% if row.staff_notify_status == 'pending_step5' %}待通知同事{% else %}{{ row.staff_notify_status }}{% endif %}
+    </div>
+    <div class="ukm-fineprint" style="text-align:left;margin-top:8px;">{{ row.openid }}</div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p class="ukm-empty">暂无转人工记录</p>
+{% endif %}
+
+<div class="ukm-section-head"><h2>最近对话</h2></div>
+{% if conversations %}
+  {% for conv in conversations %}
+  <article class="ukm-card" style="margin-bottom:16px;">
+    <div class="ukm-fineprint" style="text-align:left;">{{ conv['openid'] }}</div>
+    {% for msg in conv['messages'] %}
+    <p style="margin:10px 0 0;line-height:1.6;">
+      <span class="ukm-fineprint">
+        {% if msg.role == 'user' %}客户{% elif msg.role == 'assistant' %}助手{% else %}{{ msg.role }}{% endif %}
+        {% if msg.created_at %} {{ msg.created_at.strftime('%m-%d %H:%M') }}{% endif %}
+      </span><br>
+      {{ msg.content }}
+    </p>
+    {% endfor %}
+  </article>
+  {% endfor %}
+{% else %}
+<p class="ukm-empty">暂无对话</p>
+{% endif %}
+{% endblock %}
