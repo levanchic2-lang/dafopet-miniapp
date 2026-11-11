@@ -31,6 +31,11 @@ HORIZON_DAYS = 15
 SLOT_STEP = 30
 SURGERY_ARRIVAL_NOTE = "预约时间仅为预计到院时间，实际手术时间以当天门诊安排为准。"
 LATE_PENALTY = False
+BEAUTY_WEIGHT_REQUIRED_MESSAGE = (
+    "还不知道这只宠物的体重，不能确定体型，也不能按 60 分钟估算美容时长。"
+    "请向主人询问现在的体重（公斤）。问到后把 weight_kg 传给查空档，由系统按体重分档。"
+    "不要自己猜测几点结束；结束时间只用工具返回的 end。"
+)
 
 # 与预约目录里的手术项目时长一致。容量仍按手术 4 个单位，不按这段时长折算。
 _SURGERY_MINUTES = {
@@ -428,6 +433,24 @@ def _file_weight_kg(db: Session, pet_id) -> float | None:
     return float(value)
 
 
+def _end_label(start: str, duration: int) -> str:
+    total = _main()._time_to_minutes(start) + int(duration or 0)
+    return f"{(total // 60) % 24:02d}:{total % 60:02d}"
+
+
+def _slot_details(slots: list[str], duration: int) -> list[dict]:
+    return [{"start": label, "end": _end_label(label, duration)} for label in slots]
+
+
+def _resolve_beauty_size(service: str, pet_size: str, species: str, weight, *, required: bool) -> str:
+    resolved = _main().resolve_beauty_pet_size(
+        pet_size, species=species or "", service_name=service or "", weight_kg=weight,
+    )
+    if resolved or not required:
+        return resolved
+    raise AiCsError("pet_weight_required", BEAUTY_WEIGHT_REQUIRED_MESSAGE)
+
+
 def _planned_duration(kind: str, service_name: str, pet_size: str, coat_length: str, addons: str, weight) -> int:
     main = _main()
     if kind == "beauty":
@@ -553,6 +576,7 @@ def query_slots(
     pet_id: int | None = None,
     birthday: str = "",
     species: str = "",
+    require_beauty_size: bool = True,
 ) -> dict:
     kind = (kind or "").strip().lower()
     if kind not in {"outpatient", "vaccine", "surgery", "beauty"}:
@@ -598,9 +622,18 @@ def query_slots(
                 item_weight = _file_weight_kg(db, item.get("pet_id"))
             if not item_service:
                 raise AiCsError("service_required", "每只宠物都要填写美容项目。")
+            item_species = str(item.get("species") or "").strip() or species
+            item_size = _resolve_beauty_size(
+                item_service, item_size, item_species, item_weight, required=require_beauty_size,
+            )
             duration = main._calc_beauty_duration(item_service, item_size, item_coat, str(item_addons), weight_kg=item_weight)
-            segments.append((item_service, duration))
-        groups = main._beauty_group_starts(db, full_store, parsed_day.isoformat(), segments)
+            segments.append((item_service, duration, item_size))
+        groups = main._beauty_group_starts(
+            db, full_store, parsed_day.isoformat(), [(service_name_i, minutes) for service_name_i, minutes, _size in segments],
+        )
+        for group in groups:
+            for piece, (_service_name_i, _minutes, item_size) in zip(group.get("pets") or [], segments):
+                piece["pet_size"] = item_size
         if parsed_day == beijing_today():
             now_min = _now_minutes()
             groups = [group for group in groups if main._time_to_minutes(group["start"]) >= now_min]
@@ -609,14 +642,27 @@ def query_slots(
             "kind": kind,
             "store": full_store,
             "date": parsed_day.isoformat(),
+            "segments": [
+                {"service_name": service_name_i, "pet_size": item_size, "duration_minutes": minutes}
+                for service_name_i, minutes, item_size in segments
+            ],
             "slots": [group["start"] for group in groups],
+            "slot_details": [
+                {"start": group["start"], "end": group.get("end") or ""}
+                for group in groups
+            ],
             "groups": groups,
             "rules": _rules_payload(kind),
             "warning": "；".join(warnings),
             "warnings": warnings,
             "late_penalty": LATE_PENALTY,
         }
-    duration = _planned_duration(kind, service, pet_size, coat_length, addons, weight)
+    resolved_size = pet_size
+    if kind == "beauty":
+        resolved_size = _resolve_beauty_size(
+            service, pet_size, species, weight, required=require_beauty_size,
+        )
+    duration = _planned_duration(kind, service, resolved_size, coat_length, addons, weight)
     capacity_name = _capacity_service_name(kind, service)
     category = AppointmentCategory.surgery.value if kind == "surgery" else (
         AppointmentCategory.beauty.value if kind == "beauty" else AppointmentCategory.outpatient.value
@@ -632,9 +678,11 @@ def query_slots(
         "service_name": service,
         "store": full_store,
         "date": parsed_day.isoformat(),
+        "pet_size": resolved_size if kind == "beauty" else "",
         "duration_minutes": duration,
         "capacity_units": main._capacity_units(category, capacity_name),
         "slots": slots,
+        "slot_details": _slot_details(slots, duration),
         "rules": _rules_payload(kind),
         "arrival_note": SURGERY_ARRIVAL_NOTE if kind == "surgery" else "",
         "warning": "；".join(warnings),
@@ -766,6 +814,11 @@ def book_appointments(db: Session, payload: dict) -> dict:
             weight = main._parse_weight_kg(item.get("weight_kg"))
             if weight is None:
                 weight = _file_weight_kg(db, pet.id)
+            size = main.resolve_beauty_pet_size(
+                size, species=pet.species or "", service_name=service, weight_kg=weight,
+            )
+            if not size:
+                raise AiCsError("pet_weight_required", BEAUTY_WEIGHT_REQUIRED_MESSAGE)
             duration = main._calc_beauty_duration(service, size, coat, str(addons or ""), weight_kg=weight)
             label = f"{cursor // 60:02d}:{cursor % 60:02d}"
             pet_rows.append({
@@ -788,9 +841,16 @@ def book_appointments(db: Session, payload: dict) -> dict:
         weight = main._parse_weight_kg(payload.get("weight_kg"))
         if weight is None and kind == "beauty":
             weight = _file_weight_kg(db, pet.id)
+        booked_size = str(payload.get("pet_size") or "")
+        if kind == "beauty":
+            booked_size = main.resolve_beauty_pet_size(
+                booked_size, species=pet.species or "", service_name=service, weight_kg=weight,
+            )
+            if not booked_size:
+                raise AiCsError("pet_weight_required", BEAUTY_WEIGHT_REQUIRED_MESSAGE)
         duration = _planned_duration(
             kind, service,
-            str(payload.get("pet_size") or ""),
+            booked_size,
             str(payload.get("coat_length") or ""),
             str(payload.get("addons") or payload.get("addon_services") or ""),
             weight,
@@ -816,7 +876,7 @@ def book_appointments(db: Session, payload: dict) -> dict:
         }.get(kind, AppointmentCategory.outpatient.value)
         stored_service = _capacity_service_name(kind, service) if kind == "vaccine" else service
         pet_rows.append({
-            "pet": pet, "service": stored_service, "size": str(payload.get("pet_size") or ""),
+            "pet": pet, "service": stored_service, "size": booked_size,
             "coat": str(payload.get("coat_length") or ""),
             "addons": str(payload.get("addons") or payload.get("addon_services") or ""),
             "duration": duration, "time": clock, "category": category,

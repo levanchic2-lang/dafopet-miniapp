@@ -2185,7 +2185,8 @@ def _appointment_catalog() -> dict:
                 ],
                 "addon_options": ["去浮毛", "SPA", "护发素", "纯手剪", "药浴", "去油"],
                 "addon_extra_minutes": dict(_BEAUTY_ADDON_EXTRA_MINUTES),
-                "size_options": ["微小型犬（4kg 以下）", "小型犬（4–10kg）", "中型犬（10–15kg）", "中大型犬（15–25kg）", "大型犬（25kg 以上）"],
+                "size_options": list(BEAUTY_DOG_SIZE_OPTIONS),
+                "cat_size_options": list(BEAUTY_CAT_SIZE_OPTIONS),
                 "coat_options": ["长毛", "短毛"],
             },
         ],
@@ -3208,12 +3209,10 @@ _BEAUTY_SLOT_STEP  = 30        # 每 30 分钟一个可选时段
 
 # 附加项目额外占用分钟。数字表示固定加时；字典表示按体重/体型计算。
 # 以后要给某一项加固定时间，只改对应数字，例如 "药浴": 15。未列出的项目用默认值。
-# 去浮毛与价目表「去底绒」是同一项。有体重用价目档；没有体重时按体型覆盖到的
-# 价目档取更长的一档。体型对照（保守）：
-#   微小型犬 <4kg → 30；小型犬 4–10kg → 30（10kg 整按体重另算 45）；
-#   中型犬 10–15kg → 45；中大型犬 15–25kg 跨 45/60 → 60；
-#   大型犬 ≥25kg 跨 60/90 → 90；
-#   小型猫 <2.5kg → 30；中型猫 2.5–4kg → 30；大型猫 ≥4kg 跨 30/45 → 45。
+# 去浮毛与价目表「去底绒」是同一项。有体重用价目档；没有体重时按体型档名取分钟，
+# 不随洗护体型分档调整。档名分钟：微小型犬/小型犬/小型猫/中型猫 30，中型犬 45，
+# 中大型犬 60，大型猫 45，大型犬 90。这些数字按旧体重范围取更长的一档
+# （例如旧「大型猫 ≥4kg」跨 30/45 取 45）。现在的体型分档见 pet_size_from_weight。
 # 体重交界（同时落在两档）取更长：犬 10kg=45、20kg=60；30kg 只属于 20–30 档，为 60。
 _BEAUTY_ADDON_EXTRA_DEFAULT = 0
 _DESHED_ADDON_RULE: dict = {
@@ -3391,8 +3390,77 @@ def _beauty_addon_duration_note() -> str:
     return f"附加服务中，{'；'.join(parts)}；其余附加项不额外占用时间。"
 
 
+# 体型档按体重划分：下界含、上界不含。正好 5kg 的猫是大型猫，正好 28kg 的犬是大型犬。
+# 已经写进预约或美容单的旧文案（如「大型猫（4kg 以上）」）仍按档名关键字计时，不改历史数据。
+BEAUTY_CAT_SIZE_OPTIONS = (
+    "小型猫（不足 3kg）",
+    "中型猫（3kg 至不足 5kg）",
+    "大型猫（5kg 及以上）",
+)
+BEAUTY_DOG_SIZE_OPTIONS = (
+    "微小型犬（不足 3kg）",
+    "小型犬（3kg 至不足 12kg）",
+    "中型犬（12kg 至不足 18kg）",
+    "中大型犬（18kg 至不足 28kg）",
+    "大型犬（28kg 及以上）",
+)
+# 上界为不含；None 表示这一档没有上界。
+_PET_SIZE_UPPER_KG = {
+    "cat": (
+        (3.0, BEAUTY_CAT_SIZE_OPTIONS[0]),
+        (5.0, BEAUTY_CAT_SIZE_OPTIONS[1]),
+        (None, BEAUTY_CAT_SIZE_OPTIONS[2]),
+    ),
+    "dog": (
+        (3.0, BEAUTY_DOG_SIZE_OPTIONS[0]),
+        (12.0, BEAUTY_DOG_SIZE_OPTIONS[1]),
+        (18.0, BEAUTY_DOG_SIZE_OPTIONS[2]),
+        (28.0, BEAUTY_DOG_SIZE_OPTIONS[3]),
+        (None, BEAUTY_DOG_SIZE_OPTIONS[4]),
+    ),
+}
+
+
+def _species_key(species: str = "", service_name: str = "") -> str:
+    raw = (species or "").strip()
+    low = raw.lower()
+    if low in {"cat", "feline"} or "猫" in raw:
+        return "cat"
+    if low in {"dog", "canine"} or "犬" in raw or "狗" in raw:
+        return "dog"
+    return _beauty_species(service_name, "")
+
+
+def pet_size_from_weight(species: str, weight_kg, service_name: str = "") -> str:
+    """物种 + 体重（公斤）→ 体型档文案。体重或物种对不上时返回空字符串。"""
+    kind = _species_key(species, service_name)
+    weight = _parse_weight_kg(weight_kg)
+    if not kind or weight is None:
+        return ""
+    for upper, label in _PET_SIZE_UPPER_KG[kind]:
+        if upper is None or weight < float(upper):
+            return label
+    return ""
+
+
+def resolve_beauty_pet_size(
+    pet_size: str = "",
+    *,
+    species: str = "",
+    service_name: str = "",
+    weight_kg=None,
+) -> str:
+    """已填写的体型档原样沿用，包括历史预约里的旧文案。没填时按体重推导。"""
+    size = (pet_size or "").strip()
+    if size:
+        return size
+    return pet_size_from_weight(species, weight_kg, service_name=service_name)
+
+
 templates.env.globals["beauty_addon_extra_minutes"] = _BEAUTY_ADDON_EXTRA_MINUTES
 templates.env.globals["beauty_addon_duration_note"] = _beauty_addon_duration_note
+templates.env.globals["beauty_dog_size_options"] = BEAUTY_DOG_SIZE_OPTIONS
+templates.env.globals["beauty_cat_size_options"] = BEAUTY_CAT_SIZE_OPTIONS
 
 
 def _calc_beauty_duration(
@@ -3404,17 +3472,17 @@ def _calc_beauty_duration(
 ) -> int:
     """
     根据美容项目、体型、毛发长度、附加服务估算占用分钟数。
-    猫犬、体型、毛长的基础时长不变。附加项目见 _BEAUTY_ADDON_EXTRA_MINUTES。
-    去浮毛（去底绒）有体重按体重，否则按体型。
-    只用于新预约的估算；已保存的 duration_minutes 不会被重算。
+    猫洗护：小型 90，中型 120，大型 120，长短毛相同。猫造型仍只看体型。
+    犬的基础时长不变。体型为空且给了体重时，按 pet_size_from_weight 推导。
+    两者都没有时仍回落到 60，留给员工端和小程序旧调用；AI 查空档会在调用前拒绝。
+    去浮毛（去底绒）有体重按体重，否则按体型。已保存的 duration_minutes 不会被重算。
     """
-    sn    = service_name or ""
-    sz    = pet_size     or ""
-    is_long  = (coat_length or "") == "长毛"
-    is_wash  = "洗护" in sn
-    # is_groom = "造型" in sn  # 不需要显式判断，else 分支即为造型
+    sn = service_name or ""
+    sz = resolve_beauty_pet_size(pet_size, service_name=sn, weight_kg=weight_kg)
+    is_long = (coat_length or "") == "长毛"
+    is_wash = "洗护" in sn
 
-    base = 60  # fallback
+    base = 60  # 体型、体重都没有时的旧兜底
 
     if "犬" in sn:
         if "微小型" in sz:
@@ -3429,11 +3497,11 @@ def _calc_beauty_duration(
             base = (150 if is_long else 120) if is_wash else 210
     elif "猫" in sn:
         if "大型猫" in sz:
-            base = (150 if is_long else 120) if is_wash else 150
+            base = 120 if is_wash else 150
         elif "中型猫" in sz:
-            base = (120 if is_long else 90) if is_wash else 120
+            base = 120
         elif "小型猫" in sz:
-            base = (90 if is_long else 60) if is_wash else 120
+            base = 90 if is_wash else 120
 
     return base + _beauty_addon_extra_minutes(
         addon_services, service_name=sn, pet_size=sz, weight_kg=weight_kg,
@@ -3590,10 +3658,20 @@ def _beauty_group_starts(
             if not _beauty_slots_for_date(db, store, date_str, service, minutes, only_start=cursor):
                 ok = False
                 break
-            pieces.append({"time": label, "duration_minutes": minutes, "service_name": service})
+            end_cursor = cursor + minutes
+            pieces.append({
+                "time": label,
+                "end": f"{end_cursor // 60:02d}:{end_cursor % 60:02d}",
+                "duration_minutes": minutes,
+                "service_name": service,
+            })
             cursor += minutes
         if ok:
-            groups.append({"start": f"{cursor0 // 60:02d}:{cursor0 % 60:02d}", "pets": pieces})
+            groups.append({
+                "start": f"{cursor0 // 60:02d}:{cursor0 % 60:02d}",
+                "end": f"{cursor // 60:02d}:{cursor % 60:02d}",
+                "pets": pieces,
+            })
         cursor0 += _BEAUTY_SLOT_STEP
     return groups
 

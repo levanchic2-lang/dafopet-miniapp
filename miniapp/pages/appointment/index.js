@@ -96,8 +96,9 @@ function beautyAddonExtraTotal(map, names, service, size, weight) {
   return total;
 }
 const BEAUTY_COAT_OPTIONS  = ["长毛", "短毛"];
-const BEAUTY_SIZE_DOG      = ["微小型犬（4kg 以下）", "小型犬（4–10kg）", "中型犬（10–15kg）", "中大型犬（15–25kg）", "大型犬（25kg 以上）"];
-const BEAUTY_SIZE_CAT      = ["大型猫（4kg 以上）", "中型猫（2.5–4kg）", "小型猫（2.5kg 以下）"];
+// 与 app.main 的 BEAUTY_DOG_SIZE_OPTIONS / BEAUTY_CAT_SIZE_OPTIONS 一致。下界含、上界不含。
+const BEAUTY_SIZE_DOG      = ["微小型犬（不足 3kg）", "小型犬（3kg 至不足 12kg）", "中型犬（12kg 至不足 18kg）", "中大型犬（18kg 至不足 28kg）", "大型犬（28kg 及以上）"];
+const BEAUTY_SIZE_CAT      = ["大型猫（5kg 及以上）", "中型猫（3kg 至不足 5kg）", "小型猫（不足 3kg）"];
 
 function todayString() {
   const d = new Date();
@@ -475,9 +476,9 @@ Page({
       else if (sz.indexOf("中型犬") >= 0) base = isWash ? (isLong ? 90  : 60)  : 150;
       else if (sz.indexOf("大型犬") >= 0) base = isWash ? (isLong ? 150 : 120) : 210;
     } else if (sn.indexOf("猫") >= 0) {
-      if      (sz.indexOf("大型猫") >= 0) base = isWash ? (isLong ? 150 : 120) : 150;
-      else if (sz.indexOf("中型猫") >= 0) base = isWash ? (isLong ? 120 : 90)  : 120;
-      else if (sz.indexOf("小型猫") >= 0) base = isWash ? (isLong ? 90  : 60)  : 120;
+      if      (sz.indexOf("大型猫") >= 0) base = isWash ? 120 : 150;
+      else if (sz.indexOf("中型猫") >= 0) base = 120;
+      else if (sz.indexOf("小型猫") >= 0) base = isWash ? 90 : 120;
     }
     base += this._addonExtraMinutes(addonOptions);
     return base;

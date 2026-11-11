@@ -33,6 +33,7 @@ from app.models import (
     WeightRecord,
 )
 from app.services.ai_cs_booking import (
+    BEAUTY_WEIGHT_REQUIRED_MESSAGE,
     HORIZON_DAYS,
     LATE_PENALTY,
     AiCsError,
@@ -98,8 +99,13 @@ PET_FILE_RULE = (
     "确认后的体重用来算价格档和去底绒分钟。"
     "预约时把确认后的 coat_length（长毛或短毛）和 weight_kg 传给工具；"
     "没传时用档案里的值写入确认稿和预约。"
-    "体型按确认后的体重选档，不要让客户再报一次体重："
-    "猫用小型猫（2.5kg 以下）、中型猫（2.5–4kg）、大型猫（4kg 以上）；犬用服务目录里的体型档。\n"
+    "体型由系统按确认后的体重分档，不要让客户再报一次体重，也不要自己换算结束时间。"
+    "猫：不足 3kg 小型猫；3kg 至不足 5kg 中型猫；5kg 及以上大型猫（正好 5kg 是大型猫）。"
+    "犬：不足 3kg 微小型犬；3kg 至不足 12kg 小型犬；12kg 至不足 18kg 中型犬；"
+    "18kg 至不足 28kg 中大型犬；28kg 及以上大型犬（每一档都含下界）。"
+    "查空档时把 weight_kg 传给 query_slots。没传 pet_size 时系统按体重填写。"
+    "没有体重就先问主人，不要按 60 分钟估算。"
+    "只提供工具返回的开始时间，结束时间只用返回的 end。\n"
     "多只宠物时，主人选定之后再调用 list_profiles_and_pets 并传入 pet_id，加载这一只的档案。\n"
 )
 
@@ -718,7 +724,7 @@ def _tool_list_services() -> dict:
         }
         if kind == "beauty":
             sizes = list(category.get("size_options") or [])
-            for extra in ("大型猫（4kg 以上）", "中型猫（2.5–4kg）", "小型猫（2.5kg 以下）"):
+            for extra in _main().BEAUTY_CAT_SIZE_OPTIONS:
                 if extra not in sizes:
                     sizes.append(extra)
             item["sizes"] = sizes
@@ -896,10 +902,11 @@ def tool_stage_booking(db: Session, openid: str, args: dict) -> dict:
             weight_date = weight_fact.get("weight_date") or ""
             weight_stale = bool(weight_fact.get("weight_older_than_6_months"))
     if kind == "beauty" and not size:
-        return {
-            "ok": False,
-            "message": "美容还需要体型。按已确认的体重选择体型档，不要再向客户要一次体重。猫：小型猫（2.5kg 以下）、中型猫（2.5–4kg）、大型猫（4kg 以上）。犬用服务目录里的档。",
-        }
+        size = _main().resolve_beauty_pet_size(
+            "", species=pet.species or "", service_name=service, weight_kg=parsed_weight,
+        )
+    if kind == "beauty" and not size:
+        return {"ok": False, "message": BEAUTY_WEIGHT_REQUIRED_MESSAGE}
     if kind == "beauty" and coat == "中毛":
         return {
             "ok": False,
@@ -986,9 +993,20 @@ def tool_stage_reschedule(db: Session, openid: str, args: dict) -> dict:
     )
     if kind == "outpatient" and any(word in (current["service_name"] or "") for word in ("疫苗", "驱虫")):
         kind = "vaccine"
+    current_row = db.get(Appointment, int(current["id"]))
     try:
         looked = query_slots(
-            db, store=store, day=day, kind=kind, service_name=current["service_name"], pet_id=current["pet_id"],
+            db,
+            store=store,
+            day=day,
+            kind=kind,
+            service_name=current["service_name"],
+            pet_id=current["pet_id"],
+            pet_size=(current_row.pet_size or "") if current_row is not None else "",
+            coat_length=(current_row.coat_length or "") if current_row is not None else "",
+            addons=(current_row.addon_services or "") if current_row is not None else "",
+            # 改期查空档：有体型或档案体重就用；两者都没有时仍按原来的 60 分钟看位。
+            require_beauty_size=False,
         )
     except AiCsError as exc:
         return {"ok": False, "message": exc.message, "error_code": exc.code}
@@ -1077,14 +1095,20 @@ def tool_query_slots(db: Session, openid: str, args: dict) -> dict:
     except AiCsError as exc:
         return {"ok": False, "message": exc.message, "error_code": exc.code}
     slots = result.get("slots") or []
-    return {
+    details = list(result.get("slot_details") or [])
+    if not details:
+        details = [{"start": label, "end": ""} for label in slots]
+    shown = details[:16]
+    payload = {
         "ok": True,
         "store": store_short(result.get("store") or ""),
         "date": result.get("date") or "",
         "service_name": result.get("service_name") or "",
+        "pet_size": result.get("pet_size") or "",
         "duration_minutes": result.get("duration_minutes"),
-        "slots": slots[:16],
+        "slots": shown,
         "slot_count": len(slots),
+        "offer_rule": "只报 slots 里的 start。结束时间用同一条的 end，不要自己用开始时间加时长推算。",
         "rules": result.get("rules") or {},
         "arrival_note": result.get("arrival_note") or "",
         "warning": result.get("warning") or "",
@@ -1092,6 +1116,11 @@ def tool_query_slots(db: Session, openid: str, args: dict) -> dict:
         "coat_length": coat or "",
         "weight_kg": weight,
     }
+    if result.get("segments"):
+        payload["segments"] = result["segments"]
+    if result.get("groups"):
+        payload["groups"] = result["groups"]
+    return payload
 
 
 def execute_tool(db: Session, openid: str, name: str, args: dict) -> dict:
@@ -1170,7 +1199,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "query_slots",
-            "description": "查询某一天还能约的开始时间。不要自己编时间。",
+            "description": (
+                "查询某一天还能约的开始时间。不要自己编时间。"
+                "美容没传 pet_size 时，用 weight_kg 或这只宠物档案里的最近体重分档。"
+                "返回的每条空档都有 start 和 end。结束时间只用 end，不要自己加时长。"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {

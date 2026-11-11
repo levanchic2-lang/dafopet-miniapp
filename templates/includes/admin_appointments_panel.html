@@ -120,20 +120,18 @@
  <label style="margin:0 0 0.35rem;">体型（犬）</label>
  <select name="pet_size" id="admin_appt_pet_size_dog" disabled>
  <option value="">请选择体型</option>
- <option value="微小型犬（4kg 以下）">微小型犬（4kg 以下）</option>
- <option value="小型犬（4–10kg）">小型犬（4–10kg）</option>
- <option value="中型犬（10–15kg）">中型犬（10–15kg）</option>
- <option value="中大型犬（15–25kg）">中大型犬（15–25kg）</option>
- <option value="大型犬（25kg 以上）">大型犬（25kg 以上）</option>
+ {% for label in beauty_dog_size_options %}
+ <option value="{{ label }}">{{ label }}</option>
+ {% endfor %}
  </select>
  </div>
  <div id="beauty-size-cat" style="display:none;">
  <label style="margin:0 0 0.35rem;">体型（猫）</label>
  <select name="pet_size" id="admin_appt_pet_size_cat" disabled>
  <option value="">请选择体型</option>
- <option value="大型猫（4kg 以上）">大型猫（4kg 以上）</option>
- <option value="中型猫（2.5–4kg）">中型猫（2.5–4kg）</option>
- <option value="小型猫（2.5kg 以下）">小型猫（2.5kg 以下）</option>
+ {% for label in beauty_cat_size_options %}
+ <option value="{{ label }}">{{ label }}</option>
+ {% endfor %}
  </select>
  </div>
  {# 毛发长度 #}
