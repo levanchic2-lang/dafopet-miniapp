@@ -48,6 +48,9 @@
  <label>新时间</label>
  <input type="time" id="rs-time" step="300"/>
  <p id="rs-tnr-hint" style="display:none;margin:0.35rem 0 0.65rem;font-size:0.78rem;color:#6b4423;"></p>
+ <label style="font-size:0.78rem;display:flex;gap:0.4rem;align-items:center;margin:0.2rem 0 0.8rem;">
+  <input type="checkbox" id="rs-override"/> 仍要改约（忽略容量和封锁，记入日志）
+ </label>
  <div class="modal-btns">
  <button class="btn" id="rs-confirm-btn">确认改约</button>
  <button class="btn secondary" onclick="closeReschedule()">取消</button>
@@ -107,7 +110,7 @@
  <span class="icon"><i data-lucide="clipboard-list"></i></span>新建预约
  </button>
  <button class="create-choice-btn" id="create-block-btn">
- <span class="icon"><i data-lucide="ban"></i></span>全天封锁<br><small style="color:var(--muted);font-size:0.75rem;">美容师休息等</small>
+ <span class="icon"><i data-lucide="ban"></i></span>美容师不可用<br><small style="color:var(--muted);font-size:0.75rem;">全天或某段时间休息、请假</small>
  </button>
  </div>
  <div id="block-form" style="display:none;">
@@ -127,6 +130,10 @@
  <option value="medical">仅医疗线（门诊/手术/TNR）— 医生休息用这个</option>
  <option value="all">全部业务（节假日全店关门）</option>
  </select>
+ <label>开始时间（留空表示全天）</label>
+ <input type="time" id="block-start" step="1800" style="margin-bottom:0.65rem;width:100%;"/>
+ <label>结束时间（留空表示全天）</label>
+ <input type="time" id="block-end" step="1800" style="margin-bottom:0.65rem;width:100%;"/>
  <label>备注（可选）</label>
  <input type="text" id="block-notes" style="margin-bottom:0.65rem;"/>
  <div class="modal-btns">
@@ -282,6 +289,17 @@ function blocksForDay(dateStr) {
  const s = store;
  return blocks.filter(b => b.date === dateStr && (!s || !b.store || b.store === s));
 }
+function blockIsPartial(b) {
+ return !!(b && b.start_time && b.end_time);
+}
+function blockTrackZh(b) {
+ return {beauty:'美容', medical:'医疗', all:'全部'}[b.track || 'all'] || '全部';
+}
+function blockLabel(b) {
+ const tz = blockTrackZh(b);
+ if (blockIsPartial(b)) return `${b.title}·${tz} ${b.start_time}-${b.end_time}`;
+ return `${b.title}·${tz}`;
+}
 
 // ═══════════════════════════════════════════════════════
 // 渲染分发
@@ -320,8 +338,7 @@ function renderMonth(body) {
 
  // 全天封锁
  dayBlocks.forEach(b => {
- const tz = {beauty:'美容', medical:'医疗', all:'全部'}[b.track || 'all'] || '全部';
- html += `<div class="month-block-pill" onclick="event.stopPropagation();openBlockPopup(event,${b.id})" title="${b.title}（封锁${tz}线）">${b.title}·${tz}</div>`;
+ html += `<div class="month-block-pill" onclick="event.stopPropagation();openBlockPopup(event,${b.id})" title="${blockLabel(b)}">${blockLabel(b)}</div>`;
  });
 
  // 预约（最多3条）
@@ -407,9 +424,9 @@ function renderTimeGrid(days) {
  days.forEach(d => {
  const ds = fmtDate(d);
  allDayHtml += '<div class="allday-cell">';
- blocksForDay(ds).forEach(b => {
- const tz = {beauty:'美容', medical:'医疗', all:'全部'}[b.track || 'all'] || '全部';
- allDayHtml += `<div class="allday-block-pill" onclick="openBlockPopup(event,${b.id})" title="${b.title}（封锁${tz}线）">${b.title}·${tz}</div>`;
+ blocksForDay(ds).filter(b => !blockIsPartial(b)).forEach(b => {
+ const tz = blockTrackZh(b);
+ allDayHtml += `<div class="allday-block-pill" onclick="openBlockPopup(event,${b.id})" title="${blockLabel(b)}">${b.title}·${tz}</div>`;
  });
  allDayHtml += '</div>';
  });
@@ -456,6 +473,22 @@ function renderTimeGrid(days) {
  <div class="ev-time">${e.time}${e.duration>30?' · '+e.duration+'分':''}</div>
  <div class="ev-title">${label}</div>
  ${evH>48 && e.customer_name ? '<div class="ev-cust">'+e.customer_name+'</div>' : ''}
+ </div>`;
+ });
+ blocksForDay(ds).filter(blockIsPartial).forEach(b => {
+ const startMin = (b.start_time || '00:00').split(':').map(Number);
+ const endMin = (b.end_time || '00:00').split(':').map(Number);
+ const duration = (endMin[0] * 60 + endMin[1]) - (startMin[0] * 60 + startMin[1]);
+ const top = timeToTop(b.start_time);
+ const height = Math.max(durationToH(duration), 24);
+ if (top >= TOTAL_H || top < 0) return;
+ const evH = Math.min(height, TOTAL_H - top);
+ gridHtml += `<div class="cal-event" style="
+ top:${top}px; height:${evH}px; left:2%; width:92%;
+ background:#f3f0ea; color:#4a4a4a; border-left-color:#6b4423;"
+ onclick="event.stopPropagation();openBlockPopup(event,${b.id})">
+ <div class="ev-time">${b.start_time}–${b.end_time}</div>
+ <div class="ev-title">${b.title || '美容师不可用'}</div>
  </div>`;
  });
  gridHtml += '</div>';
@@ -643,10 +676,11 @@ function openBlockPopup(ev, id) {
  popupAppt = null;
 
  document.getElementById('pp-title').textContent = b.title;
- document.getElementById('pp-datetime').textContent = b.date + ' 全天';
+ const when = blockIsPartial(b) ? (b.date + ' ' + b.start_time + '–' + b.end_time) : (b.date + ' 全天');
+ document.getElementById('pp-datetime').textContent = when;
  const trackZh = {beauty:'仅美容线', medical:'仅医疗线', all:'全部业务'}[b.track || 'all'] || '全部业务';
  document.getElementById('pp-badges').innerHTML =
-   `<span class="popup-badge" style="background:#e0e7ff;color:#3730a3;border-color:#a5b4fc;">全天封锁</span>` +
+   `<span class="popup-badge" style="background:#e0e7ff;color:#3730a3;border-color:#a5b4fc;">${blockIsPartial(b) ? '时段封锁' : '全天封锁'}</span>` +
    `<span class="popup-badge" style="background:#fef3c7;color:#92400e;border-color:#fcd34d;">${trackZh}</span>`;
  let rows = '';
  if (b.store) rows += row('门店', b.store);
@@ -702,7 +736,7 @@ async function doCancel(id) {
 }
 
 async function doDeleteBlock(id) {
- if (!confirm('删除此全天封锁？')) return;
+ if (!confirm('删除此封锁？')) return;
  const res = await fetch(`/api/calendar/blocks/${id}/delete`, {
  method:'POST', headers:{'Content-Type':'application/json'},
  body: JSON.stringify({ csrf_token: CSRF })
@@ -723,6 +757,8 @@ function openReschedule(id) {
  const hint = document.getElementById('rs-tnr-hint');
  document.getElementById('rs-date').value = appt?.date||'';
  timeInput.value = appt?.time||'';
+ const overrideBox = document.getElementById('rs-override');
+ if (overrideBox) overrideBox.checked = false;
  if (window.TnrHours && appt) {
   const floor = window.TnrHours.applyTimeInput(timeInput, appt.category, appt.store, { keepValue: appt.time || '' });
   if (hint) {
@@ -742,9 +778,10 @@ document.getElementById('rs-confirm-btn').addEventListener('click', async () => 
  if (!rescheduleId) return;
  const date = document.getElementById('rs-date').value;
  const time = document.getElementById('rs-time').value;
+ const override = !!(document.getElementById('rs-override') && document.getElementById('rs-override').checked);
  const res = await fetch(`/api/calendar/appt/${rescheduleId}/reschedule`, {
  method:'POST', headers:{'Content-Type':'application/json'},
- body: JSON.stringify({ csrf_token: CSRF, date, time })
+ body: JSON.stringify({ csrf_token: CSRF, date, time, override })
  });
  const data = await res.json();
  if (data.ok) { closeReschedule(); closePopup(); toast('改约成功'); fetchEvents(); }
@@ -862,7 +899,10 @@ document.getElementById('create-appt-btn').addEventListener('click', () => {
 
 document.getElementById('create-block-btn').addEventListener('click', () => {
  document.getElementById('block-store').value = store;
- document.getElementById('block-title').value = '';
+ document.getElementById('block-title').value = '美容师休息';
+ document.getElementById('block-track').value = 'beauty';
+ document.getElementById('block-start').value = '';
+ document.getElementById('block-end').value = '';
  document.getElementById('block-notes').value = '';
  document.getElementById('create-appt-btn').parentElement.style.display='none'; // hide choice
  document.getElementById('create-block-btn').parentElement.style.display='none';
@@ -870,15 +910,18 @@ document.getElementById('create-block-btn').addEventListener('click', () => {
 });
 
 document.getElementById('block-save-btn').addEventListener('click', async () => {
- const title = document.getElementById('block-title').value.trim() || '全天封锁';
+ const title = document.getElementById('block-title').value.trim() || '美容师休息';
  const date = document.getElementById('block-date').value;
  const st = document.getElementById('block-store').value;
  const track = document.getElementById('block-track').value || 'all';
+ const start_time = document.getElementById('block-start').value || '';
+ const end_time = document.getElementById('block-end').value || '';
  const notes = document.getElementById('block-notes').value.trim();
  if (!date) { toast('请填写日期'); return; }
+ if ((start_time && !end_time) || (!start_time && end_time)) { toast('开始和结束时间要一起填，或都留空表示全天'); return; }
  const res = await fetch('/api/calendar/blocks/create', {
  method:'POST', headers:{'Content-Type':'application/json'},
- body: JSON.stringify({ csrf_token: CSRF, title, date, store: st, track, notes })
+ body: JSON.stringify({ csrf_token: CSRF, title, date, store: st, track, notes, start_time, end_time })
  });
  const data = await res.json();
  if (data.ok) { closeCreateModal(); toast('已创建'); fetchEvents(); }

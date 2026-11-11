@@ -2,16 +2,99 @@ const { getJson, postJson } = require("../../utils/api");
 const subscribe = require("../../utils/subscribe");
 
 const BEAUTY_ADDON_OPTIONS = ["去浮毛", "SPA", "护发素", "纯手剪", "药浴", "去油"];
-// 与后端 _BEAUTY_ADDON_EXTRA_MINUTES 一致：附加项默认不加时。
-// 接口返回 addon_extra_minutes 后会覆盖这份本地表。
+// 与后端 _BEAUTY_ADDON_EXTRA_MINUTES 一致。去浮毛即价目表「去底绒」，按体重加时；
+// 没有体重时按体型取更长的一档。接口返回 addon_extra_minutes 后会覆盖这份本地表。
+const DESHED_ADDON_RULE = {
+  mode: "weight",
+  label: "去底绒",
+  bands: {
+    cat: [
+      { lo_kg: null, hi_kg: 3, lo_inclusive: false, hi_inclusive: false, minutes: 30 },
+      { lo_kg: 3, hi_kg: 5, lo_inclusive: true, hi_inclusive: true, minutes: 30 },
+      { lo_kg: 5, hi_kg: null, lo_inclusive: false, hi_inclusive: false, minutes: 45 },
+    ],
+    dog: [
+      { lo_kg: null, hi_kg: 5, lo_inclusive: false, hi_inclusive: false, minutes: 30 },
+      { lo_kg: 5, hi_kg: 10, lo_inclusive: true, hi_inclusive: true, minutes: 30 },
+      { lo_kg: 10, hi_kg: 20, lo_inclusive: true, hi_inclusive: true, minutes: 45 },
+      { lo_kg: 20, hi_kg: 30, lo_inclusive: true, hi_inclusive: true, minutes: 60 },
+      { lo_kg: 30, hi_kg: null, lo_inclusive: false, hi_inclusive: false, minutes: 90 },
+    ],
+  },
+  size_order: ["微小型犬", "中大型犬", "小型犬", "中型犬", "大型犬", "大型猫", "中型猫", "小型猫"],
+  size_minutes: {
+    "微小型犬": 30, "小型犬": 30, "中型犬": 45, "中大型犬": 60, "大型犬": 90,
+    "小型猫": 30, "中型猫": 30, "大型猫": 45,
+  },
+  species_fallback_minutes: { cat: 45, dog: 90 },
+  unknown_minutes: 90,
+};
 const BEAUTY_ADDON_EXTRA = {
-  "去浮毛": 0,
+  "去浮毛": DESHED_ADDON_RULE,
+  "去底绒": DESHED_ADDON_RULE,
   "SPA": 0,
   "护发素": 0,
   "纯手剪": 0,
   "药浴": 0,
   "去油": 0,
 };
+
+function bandContains(band, weight) {
+  if (band.lo_kg !== null && band.lo_kg !== undefined) {
+    if (band.lo_inclusive ? weight < band.lo_kg : weight <= band.lo_kg) return false;
+  }
+  if (band.hi_kg !== null && band.hi_kg !== undefined) {
+    if (band.hi_inclusive ? weight > band.hi_kg : weight >= band.hi_kg) return false;
+  }
+  return true;
+}
+function addonRuleMinutes(rule, service, size, weight) {
+  if (typeof rule === "number") return rule > 0 ? rule : 0;
+  if (!rule || rule.mode !== "weight") return 0;
+  let species = "";
+  if (service && service.indexOf("猫") >= 0) species = "cat";
+  else if (service && service.indexOf("犬") >= 0) species = "dog";
+  else if (size && size.indexOf("猫") >= 0) species = "cat";
+  else if (size && size.indexOf("犬") >= 0) species = "dog";
+  const w = Number(weight);
+  if (w > 0) {
+    const speciesList = species === "cat" || species === "dog" ? [species] : ["cat", "dog"];
+    let best = 0;
+    speciesList.forEach((sp) => {
+      (rule.bands[sp] || []).forEach((band) => {
+        if (bandContains(band, w)) best = Math.max(best, Number(band.minutes) || 0);
+      });
+    });
+    if (best > 0) return best;
+  }
+  const order = rule.size_order || [];
+  for (let i = 0; i < order.length; i++) {
+    if (size && size.indexOf(order[i]) >= 0) return Number((rule.size_minutes || {})[order[i]]) || 0;
+  }
+  if (species && rule.species_fallback_minutes && rule.species_fallback_minutes[species]) {
+    return Number(rule.species_fallback_minutes[species]) || 0;
+  }
+  return Number(rule.unknown_minutes) || 0;
+}
+function beautyAddonExtraTotal(map, names, service, size, weight) {
+  let total = 0;
+  const seen = {};
+  (names || []).forEach((name) => {
+    const key = String(name || "").trim();
+    if (!key || !map) return;
+    const rule = map[key];
+    if (rule && typeof rule === "object") {
+      const label = rule.label || key;
+      if (seen[label]) return;
+      seen[label] = true;
+      total += addonRuleMinutes(rule, service, size, weight);
+      return;
+    }
+    const n = Number(rule);
+    if (n > 0) total += n;
+  });
+  return total;
+}
 const BEAUTY_COAT_OPTIONS  = ["长毛", "短毛"];
 const BEAUTY_SIZE_DOG      = ["微小型犬（4kg 以下）", "小型犬（4–10kg）", "中型犬（10–15kg）", "中大型犬（15–25kg）", "大型犬（25kg 以上）"];
 const BEAUTY_SIZE_CAT      = ["大型猫（4kg 以上）", "中型猫（2.5–4kg）", "小型猫（2.5kg 以下）"];
@@ -368,10 +451,14 @@ Page({
   _addonExtraMinutes(addonOptions) {
     const map = this._beautyAddonExtra || BEAUTY_ADDON_EXTRA;
     const checked = Array.isArray(addonOptions) ? addonOptions.filter(a => a.checked) : [];
-    return checked.reduce((sum, item) => {
-      const extra = map[item.name];
-      return sum + ((typeof extra === "number" && extra > 0) ? extra : 0);
-    }, 0);
+    const form = (this.data && this.data.form) || {};
+    return beautyAddonExtraTotal(
+      map,
+      checked.map(item => item.name),
+      form.service_name || "",
+      form.pet_size || "",
+      null,
+    );
   },
 
   _calcBeautyDuration(sn, sz, cl, addonOptions) {

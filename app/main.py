@@ -1618,22 +1618,13 @@ def _appt_track(category: str) -> str:
     return "other"
 
 
-def _check_calendar_block(
-    db: "Session",
-    store: str,
-    appointment_date: str,
-    category: str,
-) -> str | None:
-    """检查日期是否被全天封锁（按业务线）。封锁返回错误提示，否则 None。
-    track 语义：beauty 只挡美容线（美容/洗护/造型），medical 只挡医疗线，all 全挡。
-    store 可传全名或短名，两种格式均可匹配。
-    """
+def _calendar_blocks_for(db: "Session", store: str, appointment_date: str):
+    """当天、该门店（含全部门店）的封锁。store 可传全名或短名。"""
     if not appointment_date:
-        return None
-    # store 可能是全名（大风动物医院（东环店））或短名（东环店），统一转为两者均可比较
+        return []
     store_short = _STORE_FULL_TO_SHORT.get(store, store)
-    store_full  = _STORE_SHORT_TO_FULL.get(store, store)
-    blocks = db.query(CalendarBlock).filter(
+    store_full = _STORE_SHORT_TO_FULL.get(store, store)
+    return db.query(CalendarBlock).filter(
         CalendarBlock.block_date == appointment_date,
         or_(
             CalendarBlock.store == store_short,
@@ -1641,14 +1632,67 @@ def _check_calendar_block(
             CalendarBlock.store == "",
         ),
     ).all()
+
+
+def _block_clock_window(block) -> tuple[int, int] | None:
+    """有合法起止时间则返回分钟区间 [start, end)。否则视为全天。"""
+    start = (getattr(block, "start_time", None) or "").strip()[:5]
+    end = (getattr(block, "end_time", None) or "").strip()[:5]
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", start):
+        return None
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", end):
+        return None
+    start_min = _time_to_minutes(start)
+    end_min = _time_to_minutes(end)
+    if end_min <= start_min:
+        return None
+    return start_min, end_min
+
+
+def _check_calendar_block(
+    db: "Session",
+    store: str,
+    appointment_date: str,
+    category: str,
+    appointment_time: str = "",
+    duration_minutes: int = 0,
+) -> str | None:
+    """检查日期或时段是否被封锁（按业务线）。封锁返回错误提示，否则 None。
+
+    track 语义：beauty 只挡美容线（美容/洗护/造型），medical 只挡医疗线，all 全挡。
+    没填起止时间的记录仍是全天封锁。填了起止时间的只挡重叠时段；
+    调用方没传预约时间时，这种时段封锁不把整天判死。
+    """
+    blocks = _calendar_blocks_for(db, store, appointment_date)
     if not blocks:
         return None
     new_track = _appt_track(category)
+    start_min = None
+    if appointment_time and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", (appointment_time or "")[:5]):
+        start_min = _time_to_minutes(appointment_time[:5])
+    duration = int(duration_minutes or 0)
+    if duration <= 0:
+        duration = 30
     for b in blocks:
         bt = (b.track or "all").strip() or "all"
-        if bt == "all" or bt == new_track:
-            track_zh = {"beauty": "美容线", "medical": "医疗线", "all": "全部业务"}.get(bt, bt)
-            return f"{appointment_date} 该门店已封锁（{b.title or '全天封锁'} · {track_zh}），请改约其他日期。"
+        if not (bt == "all" or bt == new_track):
+            continue
+        track_zh = {"beauty": "美容线", "medical": "医疗线", "all": "全部业务"}.get(bt, bt)
+        window = _block_clock_window(b)
+        title = b.title or ("时段封锁" if window else "全天封锁")
+        if window is None:
+            return f"{appointment_date} 该门店已封锁（{title} · {track_zh}），请改约其他日期。"
+        if start_min is None:
+            continue
+        block_start, block_end = window
+        appt_end = start_min + duration
+        if start_min < block_end and appt_end > block_start:
+            start_label = f"{block_start // 60:02d}:{block_start % 60:02d}"
+            end_label = f"{block_end // 60:02d}:{block_end % 60:02d}"
+            return (
+                f"{appointment_date} {start_label}-{end_label} 该门店已封锁"
+                f"（{title} · {track_zh}），请改约其他时段。"
+            )
     return None
 
 
@@ -3025,11 +3069,50 @@ _BEAUTY_WORK_START = 13 * 60   # 13:00
 _BEAUTY_WORK_END   = 22 * 60   # 22:00
 _BEAUTY_SLOT_STEP  = 30        # 每 30 分钟一个可选时段
 
-# 附加项目额外占用分钟。院方要求默认不加时。
-# 以后要给某一项加时，只改对应数字，例如 "药浴": 15。未列出的项目用默认值。
+# 附加项目额外占用分钟。数字表示固定加时；字典表示按体重/体型计算。
+# 以后要给某一项加固定时间，只改对应数字，例如 "药浴": 15。未列出的项目用默认值。
+# 去浮毛与价目表「去底绒」是同一项。有体重用价目档；没有体重时按体型覆盖到的
+# 价目档取更长的一档。体型对照（保守）：
+#   微小型犬 <4kg → 30；小型犬 4–10kg → 30（10kg 整按体重另算 45）；
+#   中型犬 10–15kg → 45；中大型犬 15–25kg 跨 45/60 → 60；
+#   大型犬 ≥25kg 跨 60/90 → 90；
+#   小型猫 <2.5kg → 30；中型猫 2.5–4kg → 30；大型猫 ≥4kg 跨 30/45 → 45。
+# 体重交界（同时落在两档）取更长：犬 10kg=45、20kg=60；30kg 只属于 20–30 档，为 60。
 _BEAUTY_ADDON_EXTRA_DEFAULT = 0
-_BEAUTY_ADDON_EXTRA_MINUTES: dict[str, int] = {
-    "去浮毛": 0,
+_DESHED_ADDON_RULE: dict = {
+    "mode": "weight",
+    "label": "去底绒",
+    "bands": {
+        "cat": [
+            {"lo_kg": None, "hi_kg": 3, "lo_inclusive": False, "hi_inclusive": False, "minutes": 30},
+            {"lo_kg": 3, "hi_kg": 5, "lo_inclusive": True, "hi_inclusive": True, "minutes": 30},
+            {"lo_kg": 5, "hi_kg": None, "lo_inclusive": False, "hi_inclusive": False, "minutes": 45},
+        ],
+        "dog": [
+            {"lo_kg": None, "hi_kg": 5, "lo_inclusive": False, "hi_inclusive": False, "minutes": 30},
+            {"lo_kg": 5, "hi_kg": 10, "lo_inclusive": True, "hi_inclusive": True, "minutes": 30},
+            {"lo_kg": 10, "hi_kg": 20, "lo_inclusive": True, "hi_inclusive": True, "minutes": 45},
+            {"lo_kg": 20, "hi_kg": 30, "lo_inclusive": True, "hi_inclusive": True, "minutes": 60},
+            {"lo_kg": 30, "hi_kg": None, "lo_inclusive": False, "hi_inclusive": False, "minutes": 90},
+        ],
+    },
+    "size_order": ["微小型犬", "中大型犬", "小型犬", "中型犬", "大型犬", "大型猫", "中型猫", "小型猫"],
+    "size_minutes": {
+        "微小型犬": 30,
+        "小型犬": 30,
+        "中型犬": 45,
+        "中大型犬": 60,
+        "大型犬": 90,
+        "小型猫": 30,
+        "中型猫": 30,
+        "大型猫": 45,
+    },
+    "species_fallback_minutes": {"cat": 45, "dog": 90},
+    "unknown_minutes": 90,
+}
+_BEAUTY_ADDON_EXTRA_MINUTES: dict = {
+    "去浮毛": _DESHED_ADDON_RULE,
+    "去底绒": _DESHED_ADDON_RULE,
     "SPA": 0,
     "护发素": 0,
     "纯手剪": 0,
@@ -3038,48 +3121,154 @@ _BEAUTY_ADDON_EXTRA_MINUTES: dict[str, int] = {
 }
 
 
-def _beauty_addon_extra_minutes(addon_services: str = "") -> int:
-    """逗号分隔的附加项目，按 _BEAUTY_ADDON_EXTRA_MINUTES 累加额外分钟。"""
+def _parse_weight_kg(value) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        weight = float(value)
+    except (TypeError, ValueError):
+        return None
+    if weight <= 0 or weight > 200:
+        return None
+    return weight
+
+
+def _beauty_species(service_name: str = "", pet_size: str = "") -> str:
+    service = service_name or ""
+    size = pet_size or ""
+    if "猫" in service:
+        return "cat"
+    if "犬" in service:
+        return "dog"
+    if "猫" in size:
+        return "cat"
+    if "犬" in size:
+        return "dog"
+    return ""
+
+
+def _weight_band_contains(band: dict, weight: float) -> bool:
+    lo = band.get("lo_kg")
+    hi = band.get("hi_kg")
+    if lo is not None:
+        if weight < float(lo) if band.get("lo_inclusive") else weight <= float(lo):
+            return False
+    if hi is not None:
+        if weight > float(hi) if band.get("hi_inclusive") else weight >= float(hi):
+            return False
+    return True
+
+
+def _beauty_addon_rule_minutes(
+    rule,
+    *,
+    service_name: str = "",
+    pet_size: str = "",
+    weight_kg: float | None = None,
+) -> int:
+    if isinstance(rule, bool) or rule is None:
+        return 0
+    if isinstance(rule, (int, float)) and not isinstance(rule, bool):
+        return int(rule) if int(rule) > 0 else 0
+    if not isinstance(rule, dict) or rule.get("mode") != "weight":
+        return _BEAUTY_ADDON_EXTRA_DEFAULT
+    species = _beauty_species(service_name, pet_size)
+    weight = _parse_weight_kg(weight_kg)
+    if weight is not None:
+        species_list = [species] if species in ("cat", "dog") else ["cat", "dog"]
+        best = 0
+        for sp in species_list:
+            for band in rule.get("bands", {}).get(sp, []):
+                if _weight_band_contains(band, weight):
+                    best = max(best, int(band.get("minutes") or 0))
+        if best > 0:
+            return best
+    size = pet_size or ""
+    size_minutes = rule.get("size_minutes") or {}
+    for token in rule.get("size_order") or []:
+        if token and token in size:
+            return int(size_minutes.get(token) or 0)
+    fallback = rule.get("species_fallback_minutes") or {}
+    if species in fallback:
+        return int(fallback[species] or 0)
+    return int(rule.get("unknown_minutes") or 0)
+
+
+def _beauty_addon_extra_minutes(
+    addon_services: str = "",
+    *,
+    service_name: str = "",
+    pet_size: str = "",
+    weight_kg: float | None = None,
+) -> int:
+    """逗号分隔的附加项目，按 _BEAUTY_ADDON_EXTRA_MINUTES 累加额外分钟。
+
+    去浮毛与去底绒共用同一条规则，同时写上只加一次。
+    """
     if not addon_services:
         return 0
     total = 0
+    seen_rules: set[int] = set()
     for raw in str(addon_services).split(","):
         name = raw.strip()
         if not name:
             continue
-        try:
-            extra = int(_BEAUTY_ADDON_EXTRA_MINUTES.get(name, _BEAUTY_ADDON_EXTRA_DEFAULT))
-        except (TypeError, ValueError):
-            extra = _BEAUTY_ADDON_EXTRA_DEFAULT
-        if extra > 0:
-            total += extra
+        rule = _BEAUTY_ADDON_EXTRA_MINUTES.get(name, _BEAUTY_ADDON_EXTRA_DEFAULT)
+        if isinstance(rule, dict):
+            marker = id(rule)
+            if marker in seen_rules:
+                continue
+            seen_rules.add(marker)
+        total += _beauty_addon_rule_minutes(
+            rule, service_name=service_name, pet_size=pet_size, weight_kg=weight_kg,
+        )
     return total
 
 
 def _beauty_addon_duration_note() -> str:
     """给后台说明文案用。全部为 0 时明确写「默认不加时」。"""
-    extras: list[str] = []
+    fixed: list[str] = []
+    weight_names: list[str] = []
+    seen_rules: set[int] = set()
     for name, raw in _BEAUTY_ADDON_EXTRA_MINUTES.items():
+        if isinstance(raw, dict) and raw.get("mode") == "weight":
+            marker = id(raw)
+            if marker in seen_rules:
+                continue
+            seen_rules.add(marker)
+            weight_names.append(str(name))
+            continue
         try:
             minutes = int(raw)
         except (TypeError, ValueError):
             continue
         if minutes > 0:
-            extras.append(f"{name} +{minutes} 分钟")
-    if not extras:
+            fixed.append(f"{name} +{minutes} 分钟")
+    parts: list[str] = []
+    if weight_names:
+        parts.append(f"{'、'.join(weight_names)}（价目表称去底绒）按体重加时")
+    if fixed:
+        parts.append("、".join(fixed))
+    if not parts:
         return "附加服务默认不额外占用时间。"
-    return f"附加服务中，{'、'.join(extras)}；其余附加项不额外占用时间。"
+    return f"附加服务中，{'；'.join(parts)}；其余附加项不额外占用时间。"
 
 
 templates.env.globals["beauty_addon_extra_minutes"] = _BEAUTY_ADDON_EXTRA_MINUTES
 templates.env.globals["beauty_addon_duration_note"] = _beauty_addon_duration_note
 
 
-def _calc_beauty_duration(service_name: str, pet_size: str, coat_length: str, addon_services: str = "") -> int:
+def _calc_beauty_duration(
+    service_name: str,
+    pet_size: str,
+    coat_length: str,
+    addon_services: str = "",
+    weight_kg: float | None = None,
+) -> int:
     """
     根据美容项目、体型、毛发长度、附加服务估算占用分钟数。
-    猫犬、体型、毛长的基础时长不变。附加项目默认 0 分钟，
-    个别项目可在 _BEAUTY_ADDON_EXTRA_MINUTES 里单独加时。
+    猫犬、体型、毛长的基础时长不变。附加项目见 _BEAUTY_ADDON_EXTRA_MINUTES。
+    去浮毛（去底绒）有体重按体重，否则按体型。
     只用于新预约的估算；已保存的 duration_minutes 不会被重算。
     """
     sn    = service_name or ""
@@ -3109,7 +3298,25 @@ def _calc_beauty_duration(service_name: str, pet_size: str, coat_length: str, ad
         elif "小型猫" in sz:
             base = (90 if is_long else 60) if is_wash else 120
 
-    return base + _beauty_addon_extra_minutes(addon_services)
+    return base + _beauty_addon_extra_minutes(
+        addon_services, service_name=sn, pet_size=sz, weight_kg=weight_kg,
+    )
+
+
+def _beauty_block_state(db: "Session", store: str, date_str: str) -> tuple[bool, list[tuple[int, int]]]:
+    """美容线封锁：全天，或若干 [start, end) 分钟区间。"""
+    full_day = False
+    partial: list[tuple[int, int]] = []
+    for block in _calendar_blocks_for(db, store, date_str):
+        track = (block.track or "all").strip() or "all"
+        if track not in ("all", "beauty"):
+            continue
+        window = _block_clock_window(block)
+        if window is None:
+            full_day = True
+        else:
+            partial.append(window)
+    return full_day, partial
 
 
 def _beauty_slots_for_date(
@@ -3118,11 +3325,16 @@ def _beauty_slots_for_date(
     date_str: str,
     new_service: str,
     new_duration: int,
+    only_start: int | None = None,
 ) -> list[str]:
     """
     返回指定日期门店美容师可接受的开始时间列表（HH:MM 字符串）。
     实现猫进烘干机时可并发做 ≤120min 犬洗护的规则（允许延伸到猫结束后）。
+    全天封锁返回空；时段封锁只去掉重叠的开始时间。
     """
+    full_day, partial_blocks = _beauty_block_state(db, store, date_str)
+    if full_day:
+        return []
     _inactive = {AppointmentStatus.cancelled.value, AppointmentStatus.no_show.value}
     bookings = (
         db.query(Appointment)
@@ -3193,7 +3405,15 @@ def _beauty_slots_for_date(
             for dws, dwe in cat_dryer:
                 if _overlaps(start, end, dws, dwe):
                     return False
+        for bs, be in partial_blocks:
+            if _overlaps(start, end, bs, be):
+                return False
         return True
+
+    if only_start is not None:
+        if not _slot_ok(int(only_start)):
+            return []
+        return [f"{int(only_start) // 60:02d}:{int(only_start) % 60:02d}"]
 
     slots = []
     t = _BEAUTY_WORK_START
@@ -3202,6 +3422,43 @@ def _beauty_slots_for_date(
             slots.append(f"{t // 60:02d}:{t % 60:02d}")
         t += _BEAUTY_SLOT_STEP
     return slots
+
+
+def _beauty_group_starts(
+    db: "Session",
+    store: str,
+    date_str: str,
+    segments: list[tuple[str, int]],
+) -> list[dict]:
+    """同一美容师上，多只宠物首尾相接的开始时间。
+
+    segments 为 (服务名, 时长分钟)。返回的 start 是第一只的开始时间。
+    每一段单独套用猫犬并发和时段封锁，已约的单不重算时长。
+    """
+    if not segments:
+        return []
+    cleaned = [(service, int(minutes or 0)) for service, minutes in segments]
+    if any(minutes <= 0 for _, minutes in cleaned):
+        return []
+    total = sum(minutes for _, minutes in cleaned)
+    groups = []
+    cursor0 = _BEAUTY_WORK_START
+    while cursor0 + total <= _BEAUTY_WORK_END:
+        cursor = cursor0
+        pieces = []
+        ok = True
+        for service, minutes in cleaned:
+            label = f"{cursor // 60:02d}:{cursor % 60:02d}"
+            # 后一只可能落在 45 分钟这种非整点，不能只对照 30 分钟网格。
+            if not _beauty_slots_for_date(db, store, date_str, service, minutes, only_start=cursor):
+                ok = False
+                break
+            pieces.append({"time": label, "duration_minutes": minutes, "service_name": service})
+            cursor += minutes
+        if ok:
+            groups.append({"start": f"{cursor0 // 60:02d}:{cursor0 % 60:02d}", "pets": pieces})
+        cursor0 += _BEAUTY_SLOT_STEP
+    return groups
 
 
 # ── 门诊/手术容量规则 ─────────────────────────────────────────────────────────
@@ -3313,6 +3570,50 @@ def _check_slot_capacity(
             f"此{type_zh}需要 {new_units} 单位，请选择其他时段或日期。"
         )
     return None
+
+
+def _conflict_message(conflict: "Appointment") -> str:
+    return (
+        f"时间冲突：该门店 {conflict.appointment_date} {conflict.appointment_time} 已有预约"
+        f"（#{conflict.id} {conflict.customer_name}），请换一个时间段。"
+    )
+
+
+def _availability_errors(
+    db: "Session",
+    *,
+    store: str,
+    appointment_date: str,
+    appointment_time: str,
+    duration_minutes: int,
+    category: str,
+    service_name: str,
+    exclude_id: int | None = None,
+    capacity_service_name: str | None = None,
+) -> list[str]:
+    """容量、日历封锁、时间冲突。美容的容量单位是 0，靠冲突检查保证一位美容师不双约。"""
+    errors: list[str] = []
+    block = _check_calendar_block(
+        db, store, appointment_date, category,
+        appointment_time=appointment_time, duration_minutes=duration_minutes,
+    )
+    if block:
+        errors.append(block)
+    cap_name = service_name if capacity_service_name is None else capacity_service_name
+    cap = _check_slot_capacity(
+        db, store=store, appointment_date=appointment_date, appointment_time=appointment_time,
+        category=category, service_name=cap_name, exclude_id=exclude_id,
+    )
+    if cap:
+        errors.append(cap)
+    conflict = _check_appointment_conflict(
+        db, store=store, appointment_date=appointment_date, appointment_time=appointment_time,
+        duration_minutes=duration_minutes, exclude_id=exclude_id,
+        category=category, service_name=service_name,
+    )
+    if conflict:
+        errors.append(_conflict_message(conflict))
+    return errors
 
 
 def _appt_time_slot(time_str: str) -> str:
@@ -5916,7 +6217,10 @@ async def admin_appointment_create(
             raise HTTPException(400, time_err)
         # 全天封锁校验（按业务线：美容师休息只挡美容线）
         block_err = _check_calendar_block(
-            db, str(fields["store"]), str(fields["appointment_date"]), str(fields["category"]))
+            db, str(fields["store"]), str(fields["appointment_date"]), str(fields["category"]),
+            appointment_time=str(fields["appointment_time"]),
+            duration_minutes=int(fields["duration_minutes"]),
+        )
         if block_err:
             raise HTTPException(400, block_err)
         # 时段容量校验
@@ -6438,6 +6742,7 @@ async def admin_appointment_reschedule(
     new_time: str = Form(...),
     new_duration: str = Form(""),
     reschedule_reason: str = Form(""),
+    override: str = Form(""),
 ):
     """后台改约：修改预约的门店、日期、时间，自动做冲突检测并记录通知日志。"""
     require_admin(request)
@@ -6492,36 +6797,20 @@ async def admin_appointment_reschedule(
     time_err = _check_outpatient_time(row.category, new_time)
     if time_err:
         return _admin_appointment_redirect(next, err=time_err, anchor=_anchor)
-    # 时段容量校验（改约）
-    cap_err = _check_slot_capacity(
-        db,
-        store=target_store,
-        appointment_date=new_date,
-        appointment_time=new_time,
-        category=row.category,
-        service_name=row.service_name or "",
-        exclude_id=appointment_id,
+    force = str(override or "").strip().lower() in {"1", "true", "on", "yes"}
+    same_slot = (
+        target_store == (row.store or "")
+        and new_date == (row.appointment_date or "")
+        and new_time[:5] == (row.appointment_time or "")[:5]
+        and int(target_duration or 0) == int(row.duration_minutes or 0)
     )
-    if cap_err:
-        return _admin_appointment_redirect(next, err=cap_err, anchor=_anchor)
-    # 冲突检测（排除自身）
-    conflict = _check_appointment_conflict(
-        db,
-        store=target_store,
-        appointment_date=new_date,
-        appointment_time=new_time,
-        duration_minutes=target_duration,
-        exclude_id=appointment_id,
-        category=row.category,
-        service_name=row.service_name or "",
+    avail_errors = [] if same_slot else _availability_errors(
+        db, store=target_store, appointment_date=new_date, appointment_time=new_time,
+        duration_minutes=int(target_duration or 0), category=row.category or "",
+        service_name=row.service_name or "", exclude_id=appointment_id,
     )
-    if conflict:
-        return _admin_appointment_redirect(
-            next,
-            err=f"时间冲突：该门店 {conflict.appointment_date} {conflict.appointment_time} 已有预约"
-            f"（#{conflict.id} {conflict.customer_name}），请换一个时间段。",
-            anchor=_anchor,
-        )
+    if avail_errors and not force:
+        return _admin_appointment_redirect(next, err=avail_errors[0], anchor=_anchor)
 
     old_store = row.store
     old_date = row.appointment_date
@@ -6541,6 +6830,9 @@ async def admin_appointment_reschedule(
         "new": {"store": row.store, "date": row.appointment_date, "time": row.appointment_time, "duration": row.duration_minutes},
         "reason": reason_text,
     }
+    if force and avail_errors:
+        detail["override"] = True
+        detail["skipped_checks"] = avail_errors
     _audit(db, request, "appointment_reschedule", application_id=row.related_application_id, detail=detail)
 
     # 同步关联申请的预约日期
@@ -9749,6 +10041,18 @@ async def api_staff_miniapp_appointment_reschedule(
     )
     if tnr_err:
         raise HTTPException(400, tnr_err)
+    same_slot = (
+        new_date == (row.appointment_date or "")
+        and new_time[:5] == (row.appointment_time or "")[:5]
+    )
+    if not same_slot:
+        avail_errors = _availability_errors(
+            db, store=row.store or "", appointment_date=new_date, appointment_time=new_time,
+            duration_minutes=int(row.duration_minutes or 30), category=row.category or "",
+            service_name=row.service_name or "", exclude_id=row.id,
+        )
+        if avail_errors:
+            raise HTTPException(400, avail_errors[0])
     old = {"date": row.appointment_date, "time": row.appointment_time}
     row.appointment_date, row.appointment_time = new_date, new_time
     row.updated_at = datetime.utcnow()
@@ -9885,7 +10189,10 @@ async def api_staff_miniapp_appointment_create(
                                appointment_time=fields["appointment_time"], phone=""),
         _check_duplicate_application_appointment(db, related_id),
         _check_outpatient_time(fields["category"], fields["appointment_time"]),
-        _check_calendar_block(db, fields["store"], fields["appointment_date"], fields["category"]),
+        _check_calendar_block(
+            db, fields["store"], fields["appointment_date"], fields["category"],
+            appointment_time=fields["appointment_time"], duration_minutes=int(fields["duration_minutes"] or 0),
+        ),
         _check_slot_capacity(db, store=fields["store"], appointment_date=fields["appointment_date"],
                              appointment_time=fields["appointment_time"], category=fields["category"],
                              service_name=fields["service_name"]),
@@ -10267,13 +10574,16 @@ async def api_beauty_slots(
     addons:      str = Query(""),   # 逗号分隔的附加项目
     date:        str = Query(""),   # YYYY-MM-DD
     store:       str = Query(""),
+    weight_kg:   str = Query(""),
     db: Session = Depends(get_db),
 ):
     """
     美容预约：计算估算时长 + 可预约时段。
     时段生成考虑猫进烘干机可并发小型犬洗护的规则。
     """
-    duration = _calc_beauty_duration(service, pet_size, coat_length, addons)
+    duration = _calc_beauty_duration(
+        service, pet_size, coat_length, addons, weight_kg=_parse_weight_kg(weight_kg),
+    )
 
     # 时长显示字符串
     h, m = divmod(duration, 60)
@@ -10307,6 +10617,96 @@ async def api_beauty_slots(
             "具体以门店实际执行时间为准。"
         ),
     }
+
+
+def _ai_cs_response(work):
+    from app.services.ai_cs_booking import AiCsError
+    try:
+        return JSONResponse(work())
+    except AiCsError as exc:
+        return JSONResponse(
+            {"ok": False, "error_code": exc.code, "message": exc.message},
+            status_code=exc.status,
+        )
+
+
+@app.get("/api/ai-cs/slots/{kind}")
+async def api_ai_cs_slots(
+    kind: str,
+    store: str = Query(""),
+    date: str = Query(""),
+    service_name: str = Query(""),
+    pet_size: str = Query(""),
+    coat_length: str = Query(""),
+    addons: str = Query(""),
+    weight_kg: str = Query(""),
+    pets: str = Query(""),
+    pet_id: int = Query(0),
+    birthday: str = Query(""),
+    species: str = Query(""),
+    x_ai_cs_key: str = Header(default="", alias="X-AI-CS-Key"),
+    db: Session = Depends(get_db),
+):
+    """门诊、疫苗驱虫、绝育/手术、美容的可约时段。须带服务器内部密钥。"""
+    def work():
+        from app.services.ai_cs_booking import AiCsError, query_slots, require_ai_cs_key
+        require_ai_cs_key(x_ai_cs_key)
+        pet_list = None
+        if pets:
+            try:
+                pet_list = json.loads(pets)
+            except json.JSONDecodeError:
+                raise AiCsError("pets_invalid", "pets 需要是 JSON 数组。")
+            if not isinstance(pet_list, list):
+                raise AiCsError("pets_invalid", "pets 需要是 JSON 数组。")
+        return query_slots(
+            db, store=store, day=date, kind=kind, service_name=service_name,
+            pet_size=pet_size, coat_length=coat_length, addons=addons,
+            weight_kg=weight_kg, pets=pet_list, pet_id=pet_id or None,
+            birthday=birthday, species=species,
+        )
+    return _ai_cs_response(work)
+
+
+@app.post("/api/ai-cs/appointments")
+async def api_ai_cs_book(
+    payload: dict = Body(...),
+    x_ai_cs_key: str = Header(default="", alias="X-AI-CS-Key"),
+    db: Session = Depends(get_db),
+):
+    def work():
+        from app.services.ai_cs_booking import book_appointments, require_ai_cs_key
+        require_ai_cs_key(x_ai_cs_key)
+        return book_appointments(db, payload)
+    return _ai_cs_response(work)
+
+
+@app.post("/api/ai-cs/appointments/{appointment_id}/reschedule")
+async def api_ai_cs_reschedule(
+    appointment_id: int,
+    payload: dict = Body(...),
+    x_ai_cs_key: str = Header(default="", alias="X-AI-CS-Key"),
+    db: Session = Depends(get_db),
+):
+    def work():
+        from app.services.ai_cs_booking import require_ai_cs_key, reschedule_appointment
+        require_ai_cs_key(x_ai_cs_key)
+        return reschedule_appointment(db, appointment_id, payload)
+    return _ai_cs_response(work)
+
+
+@app.post("/api/ai-cs/appointments/{appointment_id}/cancel")
+async def api_ai_cs_cancel(
+    appointment_id: int,
+    payload: dict | None = Body(default=None),
+    x_ai_cs_key: str = Header(default="", alias="X-AI-CS-Key"),
+    db: Session = Depends(get_db),
+):
+    def work():
+        from app.services.ai_cs_booking import cancel_appointment, require_ai_cs_key
+        require_ai_cs_key(x_ai_cs_key)
+        return cancel_appointment(db, appointment_id, payload or {})
+    return _ai_cs_response(work)
 
 
 @app.post("/api/appointments/create")
@@ -10370,7 +10770,10 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
         raise HTTPException(400, time_err)
     # 全天封锁校验（按业务线：美容师休息只挡美容线）
     block_err = _check_calendar_block(
-        db, str(fields["store"]), str(fields["appointment_date"]), str(fields["category"]))
+        db, str(fields["store"]), str(fields["appointment_date"]), str(fields["category"]),
+        appointment_time=str(fields["appointment_time"]),
+        duration_minutes=int(fields["duration_minutes"]),
+    )
     if block_err:
         raise HTTPException(400, block_err)
     cap_err = _check_slot_capacity(
@@ -36261,6 +36664,8 @@ async def api_calendar_events(
         "store": b.store,
         "track": (b.track or "all"),
         "notes": b.notes,
+        "start_time": (b.start_time or "")[:5],
+        "end_time": (b.end_time or "")[:5],
     } for b in blocks]
 
     return {"appointments": appt_list, "blocks": block_list}
@@ -36279,11 +36684,24 @@ async def api_calendar_block_create(request: Request, db: Session = Depends(get_
     _track = str(body.get("track", "all")).strip()
     if _track not in ("beauty", "medical", "all"):
         _track = "all"
+    start_time = str(body.get("start_time", "") or "").strip()[:5]
+    end_time = str(body.get("end_time", "") or "").strip()[:5]
+    if start_time or end_time:
+        if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", start_time) or not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", end_time):
+            return {"ok": False, "error": "时段封锁需要开始和结束时间，格式 HH:MM"}
+        if _time_to_minutes(end_time) <= _time_to_minutes(start_time):
+            return {"ok": False, "error": "结束时间要晚于开始时间"}
+    else:
+        start_time = ""
+        end_time = ""
+    default_title = "美容师休息" if _track == "beauty" else "全天封锁"
     block = CalendarBlock(
-        title=str(body.get("title", "")).strip()[:200] or "全天封锁",
+        title=str(body.get("title", "")).strip()[:200] or default_title,
         block_date=str(body.get("date", "")).strip()[:20],
         store=block_store,
         track=_track,
+        start_time=start_time,
+        end_time=end_time,
         notes=str(body.get("notes", "")).strip()[:500],
         created_by=request.session.get("admin_username", ""),
     )
@@ -36398,6 +36816,15 @@ async def api_calendar_appt_reschedule(appt_id: int, request: Request, db: Sessi
     )
     if tnr_err:
         return {"ok": False, "error": tnr_err}
+    force = str(body.get("override", "")).strip().lower() in {"1", "true", "on", "yes"} or body.get("override") is True
+    same_slot = new_date == (row.appointment_date or "") and new_time[:5] == (row.appointment_time or "")[:5]
+    avail_errors = [] if same_slot else _availability_errors(
+        db, store=row.store or "", appointment_date=new_date, appointment_time=new_time,
+        duration_minutes=int(row.duration_minutes or 30), category=row.category or "",
+        service_name=row.service_name or "", exclude_id=row.id,
+    )
+    if avail_errors and not force:
+        return {"ok": False, "error": avail_errors[0]}
     old_date, old_time = row.appointment_date, row.appointment_time
     row.appointment_date = new_date
     row.appointment_time = new_time
@@ -36407,10 +36834,14 @@ async def api_calendar_appt_reschedule(appt_id: int, request: Request, db: Sessi
         if app_row and app_row.status == ApplicationStatus.scheduled.value:
             app_row.appointment_at = new_date
             app_row.updated_at = datetime.utcnow()
+    audit_detail = {"appointment_id": row.id, "old_date": old_date, "old_time": old_time,
+                    "new_date": new_date, "new_time": new_time}
+    if force and avail_errors:
+        audit_detail["override"] = True
+        audit_detail["skipped_checks"] = avail_errors
     _audit(db, request, "appointment_reschedule",
            application_id=row.related_application_id,
-           detail={"appointment_id": row.id, "old_date": old_date, "old_time": old_time,
-                   "new_date": new_date, "new_time": new_time})
+           detail=audit_detail)
     changed = (old_date, old_time) != (new_date, new_time)
     db.commit()
     if changed:
@@ -41910,7 +42341,10 @@ async def m_appointment_edit_save(
     target_notes = (new_notes or "").strip()
 
     # 校验链（与桌面 create/reschedule 同源）
-    blk_err = _check_calendar_block(db, target_store, new_date, target_category)
+    blk_err = _check_calendar_block(
+        db, target_store, new_date, target_category,
+        appointment_time=new_time, duration_minutes=int(target_duration or 0),
+    )
     if blk_err:
         return _bad(blk_err)
     tnr_err = _check_tnr_constraints(
@@ -42042,8 +42476,11 @@ async def m_calendar(
     block_buckets: dict[str, list] = {}
     _track_zh = {"beauty": "美容", "medical": "医疗", "all": "全部"}
     for blk in blk_q.all():
+        block_title = blk.title or "全天封锁"
+        if (blk.start_time or "").strip() and (blk.end_time or "").strip():
+            block_title = f"{block_title} {(blk.start_time or '')[:5]}-{(blk.end_time or '')[:5]}"
         block_buckets.setdefault(blk.block_date or "", []).append({
-            "title": blk.title or "全天封锁",
+            "title": block_title,
             "track": (blk.track or "all").strip() or "all",
             "track_zh": _track_zh.get((blk.track or "all").strip() or "all", "全部"),
         })

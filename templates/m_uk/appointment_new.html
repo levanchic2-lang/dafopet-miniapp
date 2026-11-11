@@ -315,15 +315,14 @@ function onAddonChange(cb) {
 
 // ─── 美容时长估算（与后端 _calc_beauty_duration 一致）───
 var BEAUTY_ADDON_EXTRA = {{ beauty_addon_extra_minutes | tojson }};
+{% include "includes/beauty_addon_extra.js" %}
 function addonExtraMinutes(names) {
-  var total = 0;
-  (names || []).forEach(function (name) {
-    var key = String(name || "").replace(/^\s+|\s+$/g, "");
-    if (!key) return;
-    var extra = BEAUTY_ADDON_EXTRA[key];
-    if (typeof extra === "number" && extra > 0) total += extra;
-  });
-  return total;
+  var sn = (document.getElementById('svc_beauty') || {}).value || '';
+  var dogWrap = document.getElementById('size_dog_wrap');
+  var sz = '';
+  if (dogWrap && dogWrap.style.display !== 'none') sz = (document.getElementById('size_dog') || {}).value || '';
+  else sz = (document.getElementById('size_cat') || {}).value || '';
+  return dafopetBeautyAddonExtra(BEAUTY_ADDON_EXTRA, names, sn, sz, null);
 }
 function calcBeautyDuration(sn, sz, cl, addonNames) {
   var isWash = sn.indexOf('洗护') >= 0;
