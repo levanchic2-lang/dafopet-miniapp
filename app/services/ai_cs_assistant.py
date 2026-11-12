@@ -9,14 +9,18 @@ import asyncio
 import calendar
 import json
 import logging
+import os
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import (
     AiCsHandoff,
+    AiCsHandoffSession,
     AiCsMessage,
     AiCsPending,
     AiCsToolLog,
@@ -75,6 +79,7 @@ MEDIA_REPLY = (
     "我这边暂时看不了图片和小程序卡片。"
     "您用文字告诉我，是想预约、改期、取消，还是问到院须知，我来帮您。"
 )
+RESUME_NOTE = "我是客服助手，又回来了。需要人工时，随时回复「人工」。"
 UNBOUND_REPLY = (
     "我还没对上您的档案，暂时不能提交预约、改期或取消。"
     "请打开小程序，在首页使用「绑定我的档案」，用在医院留的手机号收验证码。"
@@ -611,7 +616,8 @@ def record_handoff(db: Session, openid: str, reason: str, method: str, note: str
 def notify_staff_later(db: Session, handoff_id: int) -> None:
     """第 5 步在这里给值班同事发服务号模板消息。
 
-    现在只把 ai_cs_handoffs.staff_notify_status 留在 pending_step5，不外发。
+    人工会话打开时也会走到这里（begin_human_handoff 写 ai_cs_handoffs）。
+    现在只把 staff_notify_status 留在 pending_step5，不外发。
     """
     row = db.get(AiCsHandoff, handoff_id)
     if row is None:
@@ -622,6 +628,208 @@ def notify_staff_later(db: Session, handoff_id: int) -> None:
     logger.info("[ai-cs] handoff %s waiting for step-5 staff template", handoff_id)
 
 
+def handoff_idle_minutes() -> int:
+    """人工会话连续多久没有客户消息就结束。环境变量优先，默认 30。"""
+    if "AI_CS_HANDOFF_IDLE_MINUTES" in os.environ:
+        raw = os.environ.get("AI_CS_HANDOFF_IDLE_MINUTES") or ""
+    else:
+        raw = getattr(settings, "ai_cs_handoff_idle_minutes", 30)
+    try:
+        minutes = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return 30
+    if minutes < 1:
+        return 30
+    return min(minutes, 7 * 24 * 60)
+
+
+def _session_is_idle(row: AiCsHandoffSession, now: datetime | None = None) -> bool:
+    if row.ended_at is not None:
+        return False
+    last = row.last_customer_msg_at or row.started_at
+    if last is None:
+        return False
+    current = now or beijing_naive()
+    return current - last >= timedelta(minutes=handoff_idle_minutes())
+
+
+def expire_idle_sessions(db: Session, openid: str | None = None) -> int:
+    """把超过空闲窗口、仍未结束的人工会话标成 idle。只补结束时间，不删行。"""
+    query = db.query(AiCsHandoffSession).filter(AiCsHandoffSession.ended_at.is_(None))
+    if openid is not None:
+        query = query.filter(AiCsHandoffSession.openid == (openid or "")[:64])
+    now = beijing_naive()
+    ended = 0
+    for row in query.all():
+        if not _session_is_idle(row, now):
+            continue
+        row.ended_at = now
+        row.end_reason = "idle"
+        ended += 1
+        logger.info("[ai-cs] handoff session %s ended reason=idle", row.id)
+    if ended:
+        db.commit()
+    return ended
+
+
+def active_handoff_session(db: Session, openid: str) -> AiCsHandoffSession | None:
+    """这个微信还在人工接待中就返回那一行。空闲超时的会先结束。"""
+    key = (openid or "").strip()[:64]
+    if not key:
+        return None
+    expire_idle_sessions(db, key)
+    return (
+        db.query(AiCsHandoffSession)
+        .filter(AiCsHandoffSession.openid == key, AiCsHandoffSession.ended_at.is_(None))
+        .order_by(AiCsHandoffSession.id.desc())
+        .first()
+    )
+
+
+def touch_handoff_session(db: Session, row: AiCsHandoffSession) -> None:
+    row.last_customer_msg_at = beijing_naive()
+    db.commit()
+
+
+def begin_human_handoff(
+    db: Session,
+    openid: str,
+    reason: str,
+    note: str = "",
+    *,
+    transfer_this_message: bool,
+) -> str:
+    """打开或延续人工会话，并写一条 ai_cs_handoffs。
+
+    能在本次微信响应里转接时，返回空字符串，调用方应回 transfer_customer_service。
+    本次已经应答过、微信不再接受转接时，返回电话文案。会话仍然打开，
+    客户的下一条消息会转接。会话写不进去时，才只记 phone_fallback。
+
+    同事通知走 notify_staff_later，状态保持 pending_step5。
+    """
+    key = (openid or "").strip()[:64]
+    if not key:
+        return PHONE_FALLBACK
+    active = active_handoff_session(db, key)
+    if active is not None:
+        active.last_customer_msg_at = beijing_naive()
+        db.commit()
+        return "" if transfer_this_message else PHONE_FALLBACK
+
+    now = beijing_naive()
+    full_note = note or ""
+    if not transfer_this_message:
+        extra = "当前这条已无法转接，已回复电话，后续消息转人工"
+        full_note = f"{full_note}；{extra}" if full_note else extra
+    try:
+        row = AiCsHandoffSession(
+            openid=key,
+            started_at=now,
+            last_customer_msg_at=now,
+            ended_at=None,
+            end_reason="",
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("[ai-cs] handoff session insert failed")
+        try:
+            record_handoff(db, key, reason, "phone_fallback", note or reason)
+        except SQLAlchemyError:
+            logger.exception("[ai-cs] phone fallback log failed")
+        return PHONE_FALLBACK
+    try:
+        handoff_id = record_handoff(db, key, reason, "wechat_transfer", full_note)
+        logger.info(
+            "[ai-cs] handoff session %s opened openid=%s reason=%s handoff=%s",
+            row.id, key[:8], (reason or "")[:40], handoff_id,
+        )
+    except SQLAlchemyError:
+        logger.exception("[ai-cs] handoff log failed")
+    try:
+        _clear_pending(db, key)
+    except SQLAlchemyError:
+        logger.exception("[ai-cs] clear pending failed")
+    return "" if transfer_this_message else PHONE_FALLBACK
+
+
+def end_handoff_session(db: Session, session_id: int) -> str:
+    """员工点「结束人工、恢复AI」。已经结束过的不改原因。"""
+    row = db.get(AiCsHandoffSession, session_id)
+    if row is None:
+        return "missing"
+    if row.ended_at is not None:
+        return "already"
+    row.ended_at = beijing_naive()
+    row.end_reason = "staff"
+    db.commit()
+    logger.info("[ai-cs] handoff session %s ended reason=staff", row.id)
+    return "staff"
+
+
+def log_handoff_customer_message(db: Session, openid: str, message: dict) -> None:
+    """人工会话进行中的客户消息。只记转接，不调用 AI。"""
+    kind = (message.get("msg_type") or "").lower()
+    content = (message.get("content") or "").strip()
+    if not content:
+        if kind == "image":
+            content = "（图片，已转给人工）"
+        elif kind == "miniprogrampage":
+            title = (message.get("title") or "").strip()
+            content = "（小程序卡片，已转给人工）"
+            if title:
+                content = f"{content}{title}"
+        elif kind == "event":
+            event = (message.get("event") or "").lower()
+            content = "（进入客服，已转给人工）" if event == "user_enter_tempsession" else "（事件，已转给人工）"
+        else:
+            content = "（这条消息已转给人工）"
+    _save_message(db, openid, "user", content, "handoff")
+
+
+def _resume_notice_due(db: Session, openid: str) -> bool:
+    key = (openid or "").strip()[:64]
+    if not key:
+        return False
+    latest = (
+        db.query(AiCsHandoffSession)
+        .filter(AiCsHandoffSession.openid == key)
+        .order_by(AiCsHandoffSession.id.desc())
+        .first()
+    )
+    if latest is None or latest.ended_at is None:
+        return False
+    announced = (
+        db.query(AiCsMessage)
+        .filter(
+            AiCsMessage.openid == key,
+            AiCsMessage.role == "assistant",
+            AiCsMessage.created_at >= latest.ended_at,
+        )
+        .first()
+    )
+    return announced is None
+
+
+def with_resume_notice(db: Session, openid: str, reply: str) -> str:
+    text = (reply or "").strip()
+    if not text or text.startswith(RESUME_NOTE):
+        return text
+    if not _resume_notice_due(db, openid):
+        return text
+    return RESUME_NOTE + "\n" + text
+
+
+def _deliver_assistant(db: Session, openid: str, reply: str, msg_type: str) -> str:
+    text = with_resume_notice(db, openid, reply)
+    if not text:
+        return ""
+    _save_message(db, openid, "assistant", text, msg_type)
+    return text
+
+
 def _rate_limited(db: Session, openid: str) -> bool:
     cutoff = beijing_naive() - timedelta(minutes=RATE_WINDOW_MINUTES)
     count = (
@@ -629,6 +837,7 @@ def _rate_limited(db: Session, openid: str) -> bool:
         .filter(
             AiCsMessage.openid == openid,
             AiCsMessage.role == "user",
+            AiCsMessage.msg_type != "handoff",
             AiCsMessage.created_at >= cutoff,
         )
         .count()
@@ -685,6 +894,8 @@ def remember_gated(db: Session, openid: str) -> None:
 
 
 def maybe_greet(db: Session, openid: str) -> str:
+    if active_handoff_session(db, openid) is not None:
+        return ""
     cutoff = beijing_naive() - timedelta(minutes=GREETING_COOLDOWN_MINUTES)
     recent = (
         db.query(AiCsMessage)
@@ -697,16 +908,15 @@ def maybe_greet(db: Session, openid: str) -> str:
     )
     if recent is not None:
         return ""
-    _save_message(db, openid, "assistant", GREETING, "greeting")
-    return GREETING
+    return _deliver_assistant(db, openid, GREETING, "greeting")
 
 
 def media_reply(db: Session, openid: str) -> str:
+    if active_handoff_session(db, openid) is not None:
+        return ""
     if _rate_limited(db, openid):
-        _save_message(db, openid, "assistant", RATE_REPLY, "rate_limit")
-        return RATE_REPLY
-    _save_message(db, openid, "assistant", MEDIA_REPLY, "media")
-    return MEDIA_REPLY
+        return _deliver_assistant(db, openid, RATE_REPLY, "rate_limit")
+    return _deliver_assistant(db, openid, MEDIA_REPLY, "media")
 
 
 def _tool_list_services() -> dict:
@@ -1150,9 +1360,12 @@ def execute_tool(db: Session, openid: str, name: str, args: dict) -> dict:
         elif name == "stage_cancel":
             result = tool_stage_cancel(db, openid, args)
         elif name == "request_human":
-            reason = clip(redact(str(args.get("reason") or "low_confidence")), 80)
-            record_handoff(db, openid, reason or "low_confidence", "phone_fallback", reason)
-            result = {"ok": True, "handoff": True, "message": PHONE_FALLBACK}
+            raw_reason = clip(redact(str(args.get("reason") or "")), 80)
+            reason = raw_reason or "low_confidence"
+            reply = begin_human_handoff(
+                db, openid, reason, raw_reason or reason, transfer_this_message=False,
+            )
+            result = {"ok": True, "handoff": True, "message": reply or PHONE_FALLBACK}
         else:
             result = {"ok": False, "message": "没有这个工具。"}
     except AiCsError as exc:
@@ -1297,7 +1510,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "request_human",
-            "description": "没有把握、知识库没有、或客户明确要人工时调用。不要猜价格和诊断。",
+            "description": "没有把握、知识库没有、或客户明确要人工时调用。不要猜价格和诊断。调用后会转给同事。",
             "parameters": {
                 "type": "object",
                 "properties": {"reason": {"type": "string"}},
@@ -1405,31 +1618,31 @@ async def handle_user_text(db: Session, openid: str, text: str) -> str:
     cleaned = clip(redact(text), 1000)
     if not cleaned:
         return ""
+    session = active_handoff_session(db, openid)
+    if session is not None:
+        touch_handoff_session(db, session)
+        _save_message(db, openid, "user", cleaned, "handoff")
+        return ""
     _save_message(db, openid, "user", cleaned, "text")
     if _rate_limited(db, openid):
-        _save_message(db, openid, "assistant", RATE_REPLY, "rate_limit")
-        return RATE_REPLY
+        return _deliver_assistant(db, openid, RATE_REPLY, "rate_limit")
 
     pending = _pending(db, openid)
     if pending is not None and is_confirm(cleaned):
         reply = _commit_pending(db, openid)
-        _save_message(db, openid, "assistant", reply, "commit")
-        return reply
+        return _deliver_assistant(db, openid, reply, "commit")
     if pending is not None and is_decline(cleaned):
         _clear_pending(db, openid)
         reply = "好的，这个先不办。想改时间或换项目，直接告诉我就行。"
-        _save_message(db, openid, "assistant", reply, "decline")
-        return reply
+        return _deliver_assistant(db, openid, reply, "decline")
     if pending is not None:
         _clear_pending(db, openid)
 
     if not customers_for_openid(db, openid) and any(word in cleaned for word in _WRITE_INTENT):
-        _save_message(db, openid, "assistant", UNBOUND_REPLY, "unbound")
-        return UNBOUND_REPLY
+        return _deliver_assistant(db, openid, UNBOUND_REPLY, "unbound")
 
     reply = await _llm_turn(db, openid, cleaned)
-    _save_message(db, openid, "assistant", reply, "assistant")
-    return reply
+    return _deliver_assistant(db, openid, reply, "assistant")
 
 
 async def _llm_turn(db: Session, openid: str, text: str) -> str:
@@ -1454,8 +1667,10 @@ async def _llm_turn(db: Session, openid: str, text: str) -> str:
                 if staged_script:
                     return staged_script
                 if not content or any(phrase in content for phrase in _FALSE_SUCCESS):
-                    record_handoff(db, openid, "low_confidence", "phone_fallback", "模型没有给出可靠回复")
-                    return PHONE_FALLBACK
+                    return begin_human_handoff(
+                        db, openid, "low_confidence", "模型没有给出可靠回复",
+                        transfer_this_message=False,
+                    )
                 return content
             messages.append({
                 "role": "assistant",
@@ -1479,7 +1694,7 @@ async def _llm_turn(db: Session, openid: str, text: str) -> str:
                 result = execute_tool(db, openid, call.function.name, args)
                 if result.get("handoff"):
                     _clear_pending(db, openid)
-                    return PHONE_FALLBACK
+                    return str(result.get("message") or PHONE_FALLBACK)
                 if result.get("staged") and result.get("script"):
                     staged_script = str(result["script"])
                 messages.append({
@@ -1498,13 +1713,25 @@ async def _llm_turn(db: Session, openid: str, text: str) -> str:
             return staged_script
     except Exception as exc:
         logger.warning("[ai-cs] llm failed openid=%s error=%s", (openid or "")[:8], type(exc).__name__)
-        record_handoff(db, openid, "llm_unavailable", "phone_fallback", type(exc).__name__)
-        return PHONE_FALLBACK
-    record_handoff(db, openid, "low_confidence", "phone_fallback", "工具轮次用尽")
-    return PHONE_FALLBACK
+        return begin_human_handoff(
+            db, openid, "llm_unavailable", type(exc).__name__,
+            transfer_this_message=False,
+        )
+    return begin_human_handoff(
+        db, openid, "low_confidence", "工具轮次用尽",
+        transfer_this_message=False,
+    )
 
 
 def admin_snapshot(db: Session) -> dict:
+    expire_idle_sessions(db)
+    active_sessions = (
+        db.query(AiCsHandoffSession)
+        .filter(AiCsHandoffSession.ended_at.is_(None))
+        .order_by(AiCsHandoffSession.started_at.asc(), AiCsHandoffSession.id.asc())
+        .limit(100)
+        .all()
+    )
     rows = (
         db.query(AiCsMessage)
         .order_by(AiCsMessage.id.desc())
@@ -1532,4 +1759,9 @@ def admin_snapshot(db: Session) -> dict:
         .limit(40)
         .all()
     )
-    return {"conversations": conversations, "handoffs": handoffs}
+    return {
+        "conversations": conversations,
+        "handoffs": handoffs,
+        "active_sessions": active_sessions,
+        "idle_minutes": handoff_idle_minutes(),
+    }

@@ -2674,6 +2674,22 @@ class AiCsHandoff(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 
+class AiCsHandoffSession(Base):
+    """一次人工接待。ended_at 为空表示还在排队或接待中，这段时间不调用 AI。
+
+    时间都是北京时间。ended_at 为空闲超时或员工点「结束人工、恢复AI」时写入。
+    end_reason：idle 空闲超时 / staff 员工结束。
+    """
+    __tablename__ = "ai_cs_handoff_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    openid: Mapped[str] = mapped_column(String(64), default="", index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_customer_msg_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    end_reason: Mapped[str] = mapped_column(String(40), default="")
+
+
 class AiCsSeenMsg(Base):
     """微信消息去重。MsgId 或事件时间组成的键只处理一次。"""
     __tablename__ = "ai_cs_seen_msgs"

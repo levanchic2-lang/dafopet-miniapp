@@ -5,13 +5,45 @@
 <div class="ukc-head">
   <div>
     <h1>客服记录
-      <span class="sub">只读 · 北京时间 · 手机号已打码</span>
+      <span class="sub">北京时间 · 手机号已打码</span>
     </h1>
   </div>
 </div>
 <hr class="ukc-rule-double"/>
 
-<h2 style="font-family:var(--font-serif);font-size:16pt;letter-spacing:2px;font-weight:700;margin:0 0 18px;">转人工</h2>
+<h2 style="font-family:var(--font-serif);font-size:16pt;letter-spacing:2px;font-weight:700;margin:0 0 18px;">正在人工接待</h2>
+<p style="color:var(--ink-3);font-style:italic;margin:0 0 18px;">超过 {{ idle_minutes }} 分钟没有新消息，自动结束并恢复客服助手。</p>
+{% if active_sessions %}
+<table class="uk-tbl">
+  <thead>
+    <tr>
+      <th>开始</th>
+      <th>最近消息</th>
+      <th>微信标识</th>
+      <th style="text-align:left;">操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in active_sessions %}
+    <tr>
+      <td>{{ row.started_at.strftime('%m-%d %H:%M') if row.started_at else '' }}</td>
+      <td>{{ row.last_customer_msg_at.strftime('%m-%d %H:%M') if row.last_customer_msg_at else '' }}</td>
+      <td class="name">{{ row.openid or '—' }}</td>
+      <td style="text-align:left;">
+        <form method="post" action="/admin/ai-cs/sessions/{{ row.id }}/end" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          <button type="submit" class="uk-btn sm">结束人工、恢复AI</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="font-style:italic;color:var(--ink-3);">暂无正在进行的人工接待</p>
+{% endif %}
+
+<h2 style="font-family:var(--font-serif);font-size:16pt;letter-spacing:2px;font-weight:700;margin:48px 0 18px;">转人工</h2>
 {% if handoffs %}
 <table class="uk-tbl">
   <thead>
