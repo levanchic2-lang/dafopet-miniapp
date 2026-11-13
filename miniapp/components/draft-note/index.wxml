@@ -1,0 +1,10 @@
+<textarea
+  class="textarea textarea-lg"
+  placeholder="{{placeholder}}"
+  placeholder-class="placeholder-sm"
+  value="{{text}}"
+  auto-height
+  show-confirm-bar="{{false}}"
+  bindinput="onInput"
+  bindblur="onBlur"
+/>

@@ -1,6 +1,7 @@
-const { postJson } = require("../../utils/api");
+const { postJson, getJson, wxLoginCode } = require("../../utils/api");
 const { runWithPrivacyGuard } = require("../../utils/privacy");
 const subscribe = require("../../utils/subscribe");
+const draftLib = require("../../utils/apply_draft");
 // 优先 .js 模块（require 更可靠），缺失时退 .json 兼容
 const shenzhenRegionsLocal = (() => {
   try { return require("../../utils/shenzhen_regions.js"); } catch (e) {}
@@ -93,35 +94,452 @@ Page({
     streetNames: ["请先选区"],
     districtIndex: 0,
     streetIndex: 0,
-    addressDetailInput: ""
+    addressDetailInput: "",
+    healthNoteSeed: "",
+    healthNoteSeedKey: 0,
+    formEpoch: 1
   },
 
   onHealthNoteInput(e) {
-    // 避免 textarea 每次输入都 setData 触发页面重排导致滚动跳到顶部
+    // 文本在组件内部更新，页面不 setData，避免整页重排把滚动条拉回顶部。
     this._healthNoteDraft = e && e.detail ? e.detail.value : "";
+    this._scheduleDraftSave();
   },
 
   onHealthNoteBlur(e) {
     const v = (e && e.detail ? e.detail.value : "") || "";
-    this._healthNoteDraft = "";
+    this._healthNoteDraft = v;
     this.setData({ "form.health_note": v });
+    this._scheduleDraftSave();
   },
 
   onLoad() {
     this._loadShenzhenRegions();
+    this._bootDraftAndPrefill();
     this._syncNotifyState();
-    // 默认自动尝试获取定位（不强制；失败不阻断）
-    const { form } = this.data;
-    if (form.location_lat && form.location_lng) return;
+    if (this.data.form.location_lat && this.data.form.location_lng) return;
     this._autoGetLocationOnce();
   },
 
   onShow() {
-    // 兜底：onLoad 时如果数据没就绪（require 失败 + 网络慢），重入页面再试
     if (!this.data.addrReady) this._loadShenzhenRegions();
     this._syncNotifyState();
     subscribe.prefetch("review");
     this._refreshNotifyPrompt();
+    if (!this._booted) this._bootDraftAndPrefill();
+  },
+
+  onHide() {
+    this._saveDraftNow();
+  },
+
+  onUnload() {
+    this._saveDraftNow();
+  },
+
+  _bootDraftAndPrefill() {
+    if (this._booted) return;
+    this._booted = true;
+    let raw = null;
+    try { raw = wx.getStorageSync(draftLib.DRAFT_KEY); } catch (e) { raw = null; }
+    const inspected = draftLib.inspectDraft(raw, Date.now());
+    if (inspected.action === "expired") {
+      this._removeStoredFiles(inspected.removeFiles);
+      try { wx.removeStorageSync(draftLib.DRAFT_KEY); } catch (e) {}
+      this._prefillPersonal();
+      return;
+    }
+    if (inspected.action !== "restore") {
+      this._prefillPersonal();
+      return;
+    }
+    this._restoredDraft = true;
+    this._allowDraftSave = true;
+    this._applyDraftFields(inspected.draft);
+    this._pruneRestoredMedia(inspected.draft.images, inspected.draft.videos);
+  },
+
+  async _prefillPersonal() {
+    if (this._restoredDraft) return;
+    const gen = (this._prefillGen || 0) + 1;
+    this._prefillGen = gen;
+    let profile = null;
+    let tnr = null;
+    try {
+      const code = await wxLoginCode();
+      if (gen !== this._prefillGen || this._restoredDraft) return;
+      profile = await getJson("/api/wechat/my-profile", { code: code });
+    } catch (e) {
+      profile = null;
+    }
+    try {
+      if (gen !== this._prefillGen || this._restoredDraft) return;
+      const code = await wxLoginCode();
+      if (gen !== this._prefillGen || this._restoredDraft) return;
+      tnr = await postJson("/api/wechat/tnr-prefill", { code: code });
+    } catch (e) {
+      tnr = null;
+    }
+    if (gen !== this._prefillGen || this._restoredDraft) return;
+    let local = null;
+    try { local = wx.getStorageSync(draftLib.LAST_PERSONAL_KEY) || null; } catch (e) { local = null; }
+    const form = Object.assign({}, this.data.form);
+    // 门店选择器初始停在「请选择」，默认值不能挡住上次提交的门店。
+    if ((this.data.storeIndex || 0) === 0) form.clinic_store = "";
+    const resolved = draftLib.resolvePersonalPrefill({
+      profile: profile,
+      tnr: tnr,
+      local: local,
+      form: form,
+    });
+    this._applyResolvedPersonal(resolved, gen);
+  },
+
+  _applyResolvedPersonal(resolved, gen) {
+    if (!resolved || this._restoredDraft) return;
+    if (gen != null && gen !== this._prefillGen) return;
+    const fields = resolved.patch || {};
+    const patch = {};
+    Object.keys(fields).forEach((key) => {
+      patch["form." + key] = fields[key];
+    });
+    if (fields.clinic_store) {
+      const store = draftLib.canonicalStore(fields.clinic_store);
+      patch["form.clinic_store"] = store;
+      patch.storeIndex = draftLib.storeIndexFor(this.data.storeOptions, store);
+    }
+    if (!this._userEdited) patch.idConsent = false;
+    const done = () => {
+      if (this._restoredDraft) return;
+      if (gen != null && gen !== this._prefillGen) return;
+      if (resolved.structured && (resolved.structured.districtName || resolved.structured.detail || resolved.structured.streetName)) {
+        this._showAddress(resolved.structured);
+        return;
+      }
+      if (fields.address && !String(this.data.addressDetailInput || "").trim()) {
+        this._showAddress({ rawAddress: fields.address });
+      }
+    };
+    if (Object.keys(patch).length) this.setData(patch, done);
+    else done();
+  },
+
+  _scheduleDraftSave() {
+    this._draftClosed = false;
+    this._userEdited = true;
+    this._allowDraftSave = true;
+    if (this._draftTimer) clearTimeout(this._draftTimer);
+    this._draftTimer = setTimeout(() => {
+      this._draftTimer = null;
+      this._saveDraftNow();
+    }, draftLib.DRAFT_DEBOUNCE_MS);
+  },
+
+  _saveDraftNow() {
+    if (this._draftClosed || !this._allowDraftSave) return;
+    if (this._draftTimer) {
+      clearTimeout(this._draftTimer);
+      this._draftTimer = null;
+    }
+    const draft = draftLib.buildDraft(this._collectDraftInput(), Date.now());
+    try {
+      if (!draftLib.draftHasContent(draft)) {
+        if (this._restorePending) return;
+        wx.removeStorageSync(draftLib.DRAFT_KEY);
+        return;
+      }
+      wx.setStorageSync(draftLib.DRAFT_KEY, draft);
+    } catch (e) {}
+  },
+
+  _persistMediaFile(tempPath) {
+    const fsm = wx.getFileSystemManager();
+    const root = (wx.env && wx.env.USER_DATA_PATH) || "";
+    if (!root || !tempPath) return Promise.resolve(tempPath);
+    const ext = (String(tempPath).match(/(\.[A-Za-z0-9]{1,8})$/) || [])[1] || "";
+    const dest = root.replace(/\/+$/, "") + "/tnr_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8) + ext;
+    return new Promise((resolve) => {
+      const copy = () => {
+        fsm.copyFile({
+          srcPath: tempPath,
+          destPath: dest,
+          success: () => resolve(dest),
+          fail: () => resolve(tempPath),
+        });
+      };
+      fsm.saveFile({
+        tempFilePath: tempPath,
+        filePath: dest,
+        success: (res) => resolve((res && res.savedFilePath) || dest),
+        fail: () => copy(),
+      });
+    });
+  },
+
+  _removeStoredFiles(paths) {
+    const root = (wx.env && wx.env.USER_DATA_PATH) || "";
+    let fsm = null;
+    try { fsm = wx.getFileSystemManager(); } catch (e) { return; }
+    draftLib.filesToDelete(paths, root).forEach((filePath) => {
+      try { fsm.unlink({ filePath: filePath, fail() {} }); } catch (e) {}
+    });
+  },
+
+  _addressNames() {
+    const ignore = {
+      "请选择": true,
+      "请先选区": true,
+      "加载中…": true,
+      "该城市无数据": true,
+      "该区无街道数据": true,
+      "请检查网络与 apiBase 后重进": true,
+    };
+    const city = (this.data.cityNames || [])[this.data.cityIndex] || "";
+    const district = (this.data.districtNames || [])[this.data.districtIndex] || "";
+    const street = (this.data.streetNames || [])[this.data.streetIndex] || "";
+    return {
+      cityName: ignore[city] ? "" : city,
+      districtName: ignore[district] ? "" : district,
+      streetName: ignore[street] ? "" : street,
+    };
+  },
+
+  _collectDraftInput() {
+    return Object.assign({
+      form: this.data.form,
+      healthNoteDraft: this._healthNoteDraft,
+      addressDetailInput: this.data.addressDetailInput,
+      cityIndex: this.data.cityIndex,
+      checks: this.data.checks,
+      idConsent: this.data.idConsent,
+      isProxy: this.data.isProxy,
+      proxyName: this.data.proxyName,
+      proxyPhone: this.data.proxyPhone,
+      proxyRelationIndex: this.data.proxyRelationIndex,
+      proxyConsent: this.data.proxyConsent,
+      planIndex: this.data.planIndex,
+      genderIndex: this.data.genderIndex,
+      sutureIndex: this.data.sutureIndex,
+      storeIndex: this.data.storeIndex,
+      images: this.data.images,
+      videos: this.data.videos,
+    }, this._addressNames());
+  },
+
+  _applyDraftFields(draft) {
+    this._restorePending = true;
+    const form = Object.assign(draftLib.blankForm(), this.data.form, draft.form || {});
+    form.clinic_store = draftLib.canonicalStore(form.clinic_store);
+    const patch = {
+      form: form,
+      checks: draft.checks || { ear: true, fraud: true },
+      idConsent: !!draft.idConsent,
+      isProxy: !!draft.isProxy,
+      proxyName: draft.proxyName || "",
+      proxyPhone: draft.proxyPhone || "",
+      proxyRelationIndex: Number(draft.proxyRelationIndex || 0),
+      proxyConsent: !!draft.proxyConsent,
+      planIndex: draftLib.optionIndex(this.data.planOptions, form.post_surgery_plan, draft.planIndex || 0),
+      genderIndex: draftLib.optionIndex(this.data.genderOptions, form.cat_gender, draft.genderIndex || 0),
+      sutureIndex: draftLib.optionIndex(this.data.sutureOptions, form.suture_preference, draft.sutureIndex || 0),
+      storeIndex: draftLib.storeIndexFor(this.data.storeOptions, form.clinic_store),
+      images: draft.images || [],
+      videos: draft.videos || [],
+      mediaReady: (draft.images || []).length >= 2,
+      healthNoteSeed: form.health_note || "",
+      healthNoteSeedKey: (this.data.healthNoteSeedKey || 0) + 1,
+      formEpoch: (this.data.formEpoch || 0) + 1,
+      addressDetailInput: draft.addressDetailInput || "",
+    };
+    this._healthNoteDraft = typeof form.health_note === "string" ? form.health_note : "";
+    this.setData(patch, () => {
+      this._restorePending = false;
+      if (draft.districtName || draft.streetName) {
+        this._showAddress({
+          cityName: draft.cityName || "",
+          districtName: draft.districtName || "",
+          streetName: draft.streetName || "",
+          detail: draft.addressDetailInput || "",
+        });
+        return;
+      }
+      if (form.address) this._showAddress({ rawAddress: form.address });
+    });
+  },
+
+  async _pruneRestoredMedia(images, videos) {
+    const original = [].concat(images || [], videos || []);
+    const accessMap = {};
+    let fsm = null;
+    try { fsm = wx.getFileSystemManager(); } catch (e) { fsm = null; }
+    const can = (filePath) => new Promise((ok) => {
+      if (!fsm || !filePath) { ok(false); return; }
+      fsm.access({ path: filePath, success: () => ok(true), fail: () => ok(false) });
+    });
+    for (let i = 0; i < original.length; i += 1) {
+      const filePath = original[i];
+      accessMap[filePath] = await can(filePath);
+    }
+    if (this._draftClosed || !this._restoredDraft) return;
+    const missingImages = draftLib.classifyMedia(images, (filePath) => accessMap[filePath] === true).missing;
+    const missingVideos = draftLib.classifyMedia(videos, (filePath) => accessMap[filePath] === true).missing;
+    const missing = {};
+    missingImages.concat(missingVideos).forEach((filePath) => { missing[filePath] = true; });
+    const nextImages = (this.data.images || []).filter((filePath) => !missing[filePath]);
+    const nextVideos = (this.data.videos || []).filter((filePath) => !missing[filePath]);
+    this.setData({
+      images: nextImages,
+      videos: nextVideos,
+      mediaReady: nextImages.length >= 2,
+    });
+    const prompt = draftLib.missingMediaPrompt(missingImages.length, missingVideos.length);
+    if (prompt) wx.showModal({ title: "请重新选择", content: prompt, showCancel: false });
+    this._saveDraftNow();
+  },
+
+  _showAddress(input) {
+    if (!input) return;
+    if (!this._regionData) {
+      this._pendingAddress = input;
+      return;
+    }
+    let next = input;
+    if (input.rawAddress && !input.districtName) {
+      const parsed = draftLib.parseStoredAddress(input.rawAddress, this._regionData, this.data.cityNames);
+      if (parsed) {
+        next = {
+          cityName: parsed.cityName,
+          districtName: parsed.districtName,
+          streetName: parsed.streetName,
+          detail: parsed.recognized ? parsed.detail : (parsed.detail || input.rawAddress),
+        };
+      }
+    }
+    this._applyParsedAddress(next);
+  },
+
+  _applyParsedAddress(parsed) {
+    if (!parsed || !this._regionData) {
+      if (parsed) this._pendingAddress = parsed;
+      return;
+    }
+    const cityNames = this.data.cityNames || [];
+    let cityIndex = parsed.cityName ? cityNames.indexOf(parsed.cityName) : -1;
+    if (cityIndex < 0) cityIndex = this.data.cityIndex || 0;
+    const cityName = cityNames[cityIndex] || parsed.cityName || "深圳市";
+    const cityData = this._regionData[cityName] || {};
+    const districts = Object.keys(cityData).sort((a, b) => String(a).localeCompare(b, "zh"));
+    const ph = "请选择";
+    const districtNames = districts.length ? [ph].concat(districts) : ["该城市无数据"];
+    let districtIndex = parsed.districtName ? districtNames.indexOf(parsed.districtName) : 0;
+    if (districtIndex < 0) districtIndex = 0;
+    let streetNames = ["请先选区"];
+    let streetIndex = 0;
+    if (districtIndex > 0) {
+      const raw = cityData[districtNames[districtIndex]];
+      const streetArr = Array.isArray(raw) ? raw.slice() : Object.keys(raw || {});
+      streetArr.sort((a, b) => String(a).localeCompare(b, "zh"));
+      streetNames = streetArr.length ? [ph].concat(streetArr) : ["该区无街道数据"];
+      streetIndex = parsed.streetName ? streetNames.indexOf(parsed.streetName) : 0;
+      if (streetIndex < 0) streetIndex = 0;
+    }
+    this._addrGen = (this._addrGen || 0) + 1;
+    const gen = this._addrGen;
+    this.setData({
+      addrReady: districts.length > 0,
+      cityIndex: cityIndex,
+      districtNames: districtNames,
+      streetNames: streetNames,
+      districtIndex: districtIndex,
+      streetIndex: streetIndex,
+      addressDetailInput: parsed.detail || "",
+    }, () => {
+      if (gen !== this._addrGen) return;
+      this._syncFormAddress();
+    });
+  },
+
+  _rememberSubmittedPersonal() {
+    try {
+      wx.setStorageSync(
+        draftLib.LAST_PERSONAL_KEY,
+        draftLib.buildLastPersonal(this._collectDraftInput(), Date.now())
+      );
+    } catch (e) {}
+  },
+
+  _wipeLocalDraft(extraPaths) {
+    let raw = null;
+    try { raw = wx.getStorageSync(draftLib.DRAFT_KEY); } catch (e) { raw = null; }
+    const paths = []
+      .concat((raw && raw.images) || [])
+      .concat((raw && raw.videos) || [])
+      .concat(this.data.images || [])
+      .concat(this.data.videos || [])
+      .concat(extraPaths || []);
+    try { wx.removeStorageSync(draftLib.DRAFT_KEY); } catch (e) {}
+    this._removeStoredFiles(paths);
+  },
+
+  onClearDraft() {
+    wx.showModal({
+      title: "清空并重新填写",
+      content: "这台手机上未提交的申请内容会被删掉，包括已选的照片和视频。",
+      confirmText: "清空",
+      cancelText: "取消",
+      success: (res) => {
+        if (!res.confirm) return;
+        this._wipeDraftAndRefill();
+      },
+    });
+  },
+
+  _wipeDraftAndRefill() {
+    if (this._draftTimer) {
+      clearTimeout(this._draftTimer);
+      this._draftTimer = null;
+    }
+    this._wipeLocalDraft();
+    this._healthNoteDraft = undefined;
+    this._userEdited = false;
+    this._allowDraftSave = false;
+    this._restoredDraft = false;
+    this._draftClosed = false;
+    this._pendingAddress = null;
+    this._prefillGen = (this._prefillGen || 0) + 1;
+    const form = draftLib.blankForm();
+    this.setData({
+      form: form,
+      error: "",
+      result: null,
+      submitting: false,
+      healthNoteSeed: "",
+      healthNoteSeedKey: (this.data.healthNoteSeedKey || 0) + 1,
+      formEpoch: (this.data.formEpoch || 0) + 1,
+      mediaReady: false,
+      idConsent: false,
+      images: [],
+      videos: [],
+      isProxy: false,
+      proxyName: "",
+      proxyPhone: "",
+      proxyRelationIndex: 0,
+      proxyConsent: false,
+      checks: { ear: true, fraud: true },
+      storeIndex: 0,
+      planIndex: 0,
+      genderIndex: 0,
+      sutureIndex: 0,
+      addressDetailInput: "",
+      cityIndex: 0,
+      districtIndex: 0,
+      streetIndex: 0,
+    }, () => {
+      if (this._regionData) {
+        this._loadDistrictsForCity((this.data.cityNames || [])[0] || "深圳市");
+      }
+      this._prefillPersonal();
+    });
   },
 
   onSutureChange(e) {
@@ -131,6 +549,7 @@ Page({
       sutureIndex: idx,
       "form.suture_preference": row.value
     });
+    this._scheduleDraftSave();
   },
 
   _syncNotifyState() {
@@ -184,6 +603,12 @@ Page({
     // 兼容旧格式（直接是 { district: [streets] }，没有城市层）
     const isMultiCity = Object.values(allRegions)[0] && typeof Object.values(allRegions)[0] === "object" && !Array.isArray(Object.values(allRegions)[0]);
     this._regionData = isMultiCity ? allRegions : { "深圳市": allRegions };
+    if (this._pendingAddress) {
+      const pending = this._pendingAddress;
+      this._pendingAddress = null;
+      this._showAddress(pending);
+      return;
+    }
     this._loadDistrictsForCity(this.data.cityNames[this.data.cityIndex]);
   },
 
@@ -191,6 +616,8 @@ Page({
     const ph = "请选择";
     const cityData = (this._regionData || {})[cityName] || {};
     const districts = Object.keys(cityData).sort((a, b) => String(a).localeCompare(b, "zh"));
+    this._addrGen = (this._addrGen || 0) + 1;
+    const gen = this._addrGen;
     this.setData(
       {
         addrReady: districts.length > 0,
@@ -200,7 +627,10 @@ Page({
         streetIndex: 0,
         addressDetailInput: ""
       },
-      () => this._syncFormAddress()
+      () => {
+        if (gen !== this._addrGen) return;
+        this._syncFormAddress();
+      }
     );
   },
 
@@ -210,6 +640,7 @@ Page({
     const cityName = this.data.cityNames[idx] || "深圳市";
     this.setData({ cityIndex: idx });
     this._loadDistrictsForCity(cityName);
+    this._scheduleDraftSave();
   },
 
   _syncFormAddress() {
@@ -247,21 +678,25 @@ Page({
       streetNames = sorted.length ? [ph, ...sorted] : ["该区无街道数据"];
     }
     this.setData({ districtIndex: idx, streetNames, streetIndex: 0 }, () => this._syncFormAddress());
+    this._scheduleDraftSave();
   },
 
   onAddrStreetPick(e) {
     if (!this.data.addrReady) return;
     const idx = Number(e.detail.value || 0);
     this.setData({ streetIndex: idx }, () => this._syncFormAddress());
+    this._scheduleDraftSave();
   },
 
   onAddressDetailInput(e) {
     const v = e.detail.value || "";
     this.setData({ addressDetailInput: v.length > 240 ? v.slice(0, 240) : v }, () => this._syncFormAddress());
+    this._scheduleDraftSave();
   },
 
   onAgeEstimateChange(e) {
     this.setData({ "form.age_estimate": e.detail.value });
+    this._scheduleDraftSave();
   },
 
   _reverseGeocode(lat, lng) {
@@ -337,11 +772,13 @@ Page({
       patch.idConsent = false;
     }
     this.setData(patch);
+    this._scheduleDraftSave();
   },
 
   onIdConsent(e) {
     const vals = e.detail.value || [];
     this.setData({ idConsent: vals.includes("id") });
+    this._scheduleDraftSave();
   },
 
   onGenderChange(e) {
@@ -350,16 +787,18 @@ Page({
       genderIndex: idx,
       "form.cat_gender": this.data.genderOptions[idx].value
     });
+    this._scheduleDraftSave();
   },
 
   onToggleProxy() {
     this.setData({ isProxy: !this.data.isProxy, proxyName: "", proxyPhone: "", proxyRelationIndex: 0, proxyConsent: false });
+    this._scheduleDraftSave();
   },
 
-  onProxyName(e) { this.setData({ proxyName: e.detail.value }); },
-  onProxyPhone(e) { this.setData({ proxyPhone: e.detail.value.replace(/\D/g, "").slice(0, 11) }); },
-  onProxyRelation(e) { this.setData({ proxyRelationIndex: Number(e.detail.value) }); },
-  onProxyConsent(e) { this.setData({ proxyConsent: (e.detail.value || []).includes("consent") }); },
+  onProxyName(e) { this.setData({ proxyName: e.detail.value }); this._scheduleDraftSave(); },
+  onProxyPhone(e) { this.setData({ proxyPhone: e.detail.value.replace(/\D/g, "").slice(0, 11) }); this._scheduleDraftSave(); },
+  onProxyRelation(e) { this.setData({ proxyRelationIndex: Number(e.detail.value) }); this._scheduleDraftSave(); },
+  onProxyConsent(e) { this.setData({ proxyConsent: (e.detail.value || []).includes("consent") }); this._scheduleDraftSave(); },
 
   onChecks(e) {
     const vals = e.detail.value || [];
@@ -369,6 +808,7 @@ Page({
         fraud: vals.includes("fraud")
       }
     });
+    this._scheduleDraftSave();
   },
 
   async onEnableNotify() {
@@ -481,32 +921,45 @@ Page({
   },
 
   async onPickImages() {
+    const remain = draftLib.PHOTO_LIMIT - (this.data.images || []).length;
+    if (remain <= 0) {
+      wx.showToast({ title: "最多 6 张照片", icon: "none" });
+      return;
+    }
+    this._draftClosed = false;
+    this._allowDraftSave = true;
+    this._saveDraftNow();
     try {
-      await runWithPrivacyGuard("选择照片", () =>
+      const res = await runWithPrivacyGuard("选择照片", () =>
         new Promise((resolve, reject) => {
           wx.chooseMedia({
-            count: 6,
+            count: remain,
             mediaType: ["image"],
             sourceType: ["album", "camera"],
-            success: async (res) => {
-              const files = (res.tempFiles || []).map((f) => f.tempFilePath).slice(0, 6);
-              // 压缩图片（quality 60，失败时降级用原图）
-              const compress = (src) => new Promise((ok) => {
-                wx.compressImage({
-                  src,
-                  quality: 60,
-                  success: (r) => ok(r.tempFilePath),
-                  fail: () => ok(src),
-                });
-              });
-              const imgs = await Promise.all(files.map(compress));
-              this.setData({ images: imgs, mediaReady: imgs.length >= 2 });
-              resolve(res);
-            },
+            success: resolve,
             fail: reject
           });
         })
       );
+      const files = ((res && res.tempFiles) || []).map((f) => f.tempFilePath).filter(Boolean).slice(0, remain);
+      const compress = (src) => new Promise((ok) => {
+        wx.compressImage({
+          src,
+          quality: 60,
+          success: (r) => ok((r && r.tempFilePath) || src),
+          fail: () => ok(src),
+        });
+      });
+      const compressed = await Promise.all(files.map(compress));
+      const persisted = [];
+      for (let i = 0; i < compressed.length; i += 1) {
+        persisted.push(await this._persistMediaFile(compressed[i]));
+      }
+      const merged = draftLib.appendLimited(this.data.images, persisted, draftLib.PHOTO_LIMIT);
+      this._allowDraftSave = true;
+      this.setData({ images: merged.items, mediaReady: merged.items.length >= 2 });
+      this._saveDraftNow();
+      if (merged.overflow) wx.showToast({ title: "最多 6 张照片", icon: "none" });
     } catch (e) {
       const msg = (e && e.errMsg) || "";
       if (msg.includes("cancel")) return;
@@ -519,23 +972,36 @@ Page({
   },
 
   async onPickVideo() {
+    const remain = draftLib.VIDEO_LIMIT - (this.data.videos || []).length;
+    if (remain <= 0) {
+      wx.showToast({ title: "最多 2 个视频", icon: "none" });
+      return;
+    }
+    this._draftClosed = false;
+    this._allowDraftSave = true;
+    this._saveDraftNow();
     try {
-      await runWithPrivacyGuard("选择视频", () =>
+      const res = await runWithPrivacyGuard("选择视频", () =>
         new Promise((resolve, reject) => {
           wx.chooseMedia({
-            count: 2,
+            count: remain,
             mediaType: ["video"],
             sourceType: ["album", "camera"],
-            success: (res) => {
-              const files = (res.tempFiles || []).map((f) => f.tempFilePath);
-              const vids = files.slice(0, 2);
-              this.setData({ videos: vids, mediaReady: this.data.images.length >= 2 });
-              resolve(res);
-            },
+            success: resolve,
             fail: reject
           });
         })
       );
+      const files = ((res && res.tempFiles) || []).map((f) => f.tempFilePath).filter(Boolean).slice(0, remain);
+      const persisted = [];
+      for (let i = 0; i < files.length; i += 1) {
+        persisted.push(await this._persistMediaFile(files[i]));
+      }
+      const merged = draftLib.appendLimited(this.data.videos, persisted, draftLib.VIDEO_LIMIT);
+      this._allowDraftSave = true;
+      this.setData({ videos: merged.items, mediaReady: (this.data.images || []).length >= 2 });
+      this._saveDraftNow();
+      if (merged.overflow) wx.showToast({ title: "最多 2 个视频", icon: "none" });
     } catch (e) {
       const msg = (e && e.errMsg) || "";
       if (msg.includes("cancel")) return;
@@ -553,6 +1019,7 @@ Page({
       storeIndex: idx,
       "form.clinic_store": this.data.storeOptions[idx].value
     });
+    this._scheduleDraftSave();
   },
 
   onPlanChange(e) {
@@ -561,6 +1028,7 @@ Page({
       planIndex: idx,
       "form.post_surgery_plan": this.data.planOptions[idx].value
     });
+    this._scheduleDraftSave();
   },
 
   async onGetLocation() {
@@ -585,6 +1053,7 @@ Page({
                 } else {
                   this.setData({ "form.location_address": "已获取定位（未解析出地址）" });
                 }
+                this._scheduleDraftSave();
                 resolve(res);
               });
             },
@@ -604,6 +1073,8 @@ Page({
   },
 
   async onSubmit() {
+    this._draftClosed = false;
+    this._allowDraftSave = true;
     this.setData({ error: "", result: null });
     this._syncFormAddress();
     const hnDraft = typeof this._healthNoteDraft === "string" ? this._healthNoteDraft : "";
@@ -917,6 +1388,7 @@ Page({
           submitting: false,
           error: `${parts.join("、")}因停留过久已失效，请重新选择后再次提交。`,
         });
+        this._saveDraftNow();
         return;
       }
     } catch (e) {
@@ -956,7 +1428,15 @@ Page({
         "提交审核"
       );
 
-      this.setData({ result: j, submitting: false });
+      this._rememberSubmittedPersonal();
+      this.setData({ result: j, submitting: false, images: [], videos: [], mediaReady: false });
+      this._draftClosed = true;
+      this._allowDraftSave = false;
+      if (this._draftTimer) {
+        clearTimeout(this._draftTimer);
+        this._draftTimer = null;
+      }
+      this._wipeLocalDraft(images.concat(videos || []));
       wx.setStorageSync("LAST_APP_ID", j.id);
       try {
         const prev = wx.getStorageSync("MY_APPS") || [];
