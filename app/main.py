@@ -27510,6 +27510,62 @@ async def api_wechat_my_profile(
     }
 
 
+def _latest_submitted_tnr_application(db: Session, openid: str) -> Application | None:
+    """这个微信（以及它绑定的客户档案）最近一份已经提交的 TNR 申请。草稿不算。"""
+    key = (openid or "").strip()
+    if not key:
+        return None
+    cust_ids = [row.id for row in _customers_bound_to(db, key) if row.id]
+    identity = [Application.wechat_openid == key]
+    if cust_ids:
+        identity.append(Application.customer_id.in_(cust_ids))
+    return (
+        db.query(Application)
+        .filter(Application.status != ApplicationStatus.draft.value)
+        .filter(or_(*identity))
+        .order_by(Application.id.desc())
+        .first()
+    )
+
+
+def _tnr_personal_prefill(row: Application) -> dict:
+    """只回个人资料。猫咪、缝合、术后打算、代申请和媒体一律不放进来。"""
+    return {
+        "found": True,
+        "applicant_name": (row.applicant_name or "").strip(),
+        "phone": (row.phone or "").strip(),
+        "id_number": (row.id_number or "").strip(),
+        "address": (row.address or "").strip(),
+        "clinic_store": (row.clinic_store or "").strip(),
+    }
+
+
+@app.post("/api/wechat/tnr-prefill")
+async def api_wechat_tnr_prefill(request: Request, db: Session = Depends(get_db)):
+    """同一微信再次申请时，预填最近一次已提交申请里的个人资料。
+
+    必须带当次 wx.login 的 code 或 js_code。缓存 openid 和旧版小程序兼容都不认。
+    进行中的草稿不回传，也不在日志里写姓名、手机号或证件号。
+    """
+    payload = None
+    raw = await request.body()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            payload = parsed
+    code = _request_code(payload)
+    if not code:
+        raise HTTPException(status_code=401, detail="请先完成微信登录")
+    openid = _wechat_openid_from_code(code)
+    row = _latest_submitted_tnr_application(db, openid)
+    if row is None:
+        return {"found": False}
+    return _tnr_personal_prefill(row)
+
+
 @app.post("/api/wechat/immunization-certificates")
 async def api_wechat_immunization_certificates(
     payload: dict = Body(...), db: Session = Depends(get_db)

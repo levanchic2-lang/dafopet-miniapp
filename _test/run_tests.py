@@ -9,6 +9,7 @@ CI / 本地一键测试入口。
 用法： python _test/run_tests.py
 """
 import os
+import shutil
 import sys
 import time
 import socket
@@ -75,7 +76,26 @@ def reset_db():
         sys.exit(2)
 
 
+def run_apply_units() -> int:
+    print("[0/4] TNR 预填与本机草稿")
+    prefill = subprocess.run(
+        [sys.executable, str(ROOT / "_test" / "test_tnr_apply_prefill.py")],
+        cwd=ROOT,
+    )
+    if prefill.returncode != 0:
+        return prefill.returncode
+    node = shutil.which("node")
+    if not node:
+        print("[x] 未找到 node，无法跑申请页草稿单测")
+        return 1
+    draft = subprocess.run([node, str(ROOT / "_test" / "test_tnr_apply_draft.js")], cwd=ROOT)
+    return draft.returncode
+
+
 def main():
+    unit_code = run_apply_units()
+    if unit_code != 0:
+        sys.exit(unit_code)
     if port_in_use(PORT):
         print(f"[!] 端口 {PORT} 被占用，请手动关闭后重试。")
         sys.exit(3)

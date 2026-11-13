@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "流浪猫 TNR 申请"
+  "navigationBarTitleText": "流浪猫 TNR 申请",
+  "usingComponents": {
+    "draft-note": "/components/draft-note/index"
+  }
 }

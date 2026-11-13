@@ -43,12 +43,14 @@
 
   <view class="label">身份证号</view>
   <input class="input input-lg" value="{{form.id_number}}" data-k="id_number" maxlength="18" bindinput="onInput" />
-  <checkbox-group bindchange="onIdConsent">
-    <label class="sub">
-      <checkbox value="id" checked="{{idConsent}}" color="#262626" />
-      我已知悉身份证号仅用于签署同意书与必要核验，后台脱敏展示；留存期限与用途以医院告知为准。
-    </label>
-  </checkbox-group>
+  <block wx:for="{{[formEpoch]}}" wx:key="*this">
+    <checkbox-group bindchange="onIdConsent">
+      <label class="sub">
+        <checkbox value="id" checked="{{idConsent}}" color="#262626" />
+        我已知悉身份证号仅用于签署同意书与必要核验，后台脱敏展示；留存期限与用途以医院告知为准。
+      </label>
+    </checkbox-group>
+  </block>
   <view class="info-note">
     <view class="info-note-title">详情说明</view>
     <view class="sub info-note-text">
@@ -129,13 +131,13 @@
   </picker>
 
   <view class="label">流浪状况说明</view>
-  <textarea
-    class="textarea textarea-lg"
+  <draft-note
+    seed="{{healthNoteSeed}}"
+    seed-key="{{healthNoteSeedKey}}"
     placeholder="介绍此流浪猫的详细情况，包括但不仅限于活动范围、外观、病史，性格，是否孕猫等等"
-    placeholder-class="placeholder-sm"
-    bindinput="onHealthNoteInput"
-    bindblur="onHealthNoteBlur"
-  ></textarea>
+    bind:input="onHealthNoteInput"
+    bind:blur="onHealthNoteBlur"
+  />
 
   <block wx:if="{{form.cat_gender === 'female'}}">
     <view class="label">母猫伤口缝合方式</view>
@@ -221,11 +223,16 @@
       <text class="tag warn">必须剪耳标记</text>
       <text class="tag warn">严禁家养猫冒充</text>
     </view>
-    <checkbox-group bindchange="onChecks">
-      <label class="check-line"><checkbox value="ear" checked="{{checks.ear}}" color="#262626" /> 我同意术后剪耳标记</label>
-      <label class="check-line"><checkbox value="fraud" checked="{{checks.fraud}}" color="#262626" /> 我承诺非家养猫冒充申请</label>
-    </checkbox-group>
+    <block wx:for="{{[formEpoch]}}" wx:key="*this">
+      <checkbox-group bindchange="onChecks">
+        <label class="check-line"><checkbox value="ear" checked="{{checks.ear}}" color="#262626" /> 我同意术后剪耳标记</label>
+        <label class="check-line"><checkbox value="fraud" checked="{{checks.fraud}}" color="#262626" /> 我承诺非家养猫冒充申请</label>
+      </checkbox-group>
+    </block>
   </view>
+
+  <view class="draft-privacy">填写到一半的内容只保存在这台手机里，可能包含身份证号，不会上传到服务器。</view>
+  <button class="btn secondary" bindtap="onClearDraft">清空并重新填写</button>
 
   <button class="btn" loading="{{submitting}}" disabled="{{submitting || !mediaReady}}" bindtap="onSubmit">提交申请</button>
 

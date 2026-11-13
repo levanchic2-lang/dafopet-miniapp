@@ -105,6 +105,12 @@
   margin-top: 8rpx;
   margin-bottom: 0;
 }
+.draft-privacy {
+  margin-top: 28rpx;
+  color: #6b4423;
+  font-size: 24rpx;
+  line-height: 1.7;
+}
 
 /* ── 代预约 ── */
 .addon-list {
