@@ -64,46 +64,52 @@ LLM_TIMEOUT_SECONDS = 28
 MAX_TOOL_HOPS = 4
 
 PHONE_FALLBACK = (
-    "这件事我交给同事。您也可以直接打电话："
-    "17820633031（微信同号），或 0755-28704990。"
-    "东环店手机 18026901718，横岗店手机 17820633031。"
-    "如果宠物呼吸困难、抽搐、昏迷或大量出血，请马上拨打并到店。"
+    "这件事我交给同事了。您也可以直接打电话："
+    "17820633031（微信同号），或者 0755-28704990。"
+    "东环店 18026901718，横岗店 17820633031。"
+    "要是宠物呼吸困难、抽搐、昏迷，或者出血很多，请马上打过来，直接到店。"
 )
 GREETING = (
-    "您好，我是大风动物医院的客服助手。"
-    "可以帮您查空档、预约、改期或取消，也可以说说体检、疫苗、绝育和美容怎么到院。"
-    "要帮您提交预约，请先在小程序首页打开「绑定我的档案」。"
-    "需要同事接待，直接回复「人工」。"
+    "您好呀，这里是大风动物医院。"
+    "想约时间、改期，或者问问到院，直接跟我说就好。"
+    "找同事的话，回复「人工」。"
+)
+GREETING_UNBOUND = (
+    GREETING
+    + "要帮您提交预约，先在小程序首页点一下「绑定我的档案」。"
 )
 MEDIA_REPLY = (
-    "我这边暂时看不了图片和小程序卡片。"
-    "您用文字告诉我，是想预约、改期、取消，还是问到院须知，我来帮您。"
+    "图片和小程序卡片我这边看不了。"
+    "您用文字跟我说就行，是想预约、改期、取消，还是问问到院。"
 )
-RESUME_NOTE = "我是客服助手，又回来了。需要人工时，随时回复「人工」。"
+RESUME_NOTE = "同事这边先告一段落，我继续帮您。还需要人工的话，随时回复「人工」。"
 UNBOUND_REPLY = (
-    "我还没对上您的档案，暂时不能提交预约、改期或取消。"
-    "请打开小程序，在首页使用「绑定我的档案」，用在医院留的手机号收验证码。"
-    "绑定好再告诉我门店、项目、宠物和时间。只问医院须知的话，现在就可以问。"
+    "我还没对上您的档案，预约、改期和取消暂时提交不了。"
+    "您打开小程序首页，点「绑定我的档案」，用在医院留的手机号收个验证码。"
+    "绑好了再告诉我哪家店、做什么、哪只宠物、哪天几点。只是问问到院的话，现在就可以说。"
 )
-RATE_REPLY = "您发得有点快，我先等一会儿。请过几分钟再发，或直接拨打 17820633031。"
-BIND_HINT = "请先在小程序首页使用「绑定我的档案」。"
+RATE_REPLY = "您发得有点快，我先歇一会儿。过几分钟再发，或者直接打 17820633031。"
+BIND_HINT = "先在小程序首页点一下「绑定我的档案」，我才能帮您提交预约。"
 PET_FILE_RULE = (
     "顺序：名下有多只宠物，或这个微信有多份档案时，先问是哪一只。"
-    "还没确定是哪一只之前，不要问体重、毛长、品种，也不要用某一只的档案去确认。\n"
+    "还没确定是哪一只之前，不要问体重、毛长、品种，也不要用某一只的档案去确认。"
+    "用宠物名字问，例如「这次是给大米洗，还是大橘呀？」不要说「您名下有两只需要安排」，也不要编成清单。\n"
     "宠物确定之后，用档案里这一只的物种、品种、性别、年龄、绝育、最近体重和上次毛长。"
     "已经有的不要当成不知道再问一遍，只问还缺的，或需要确认的。"
     "只有一只宠物时，直接使用这份档案，不要再问是哪一只。\n"
-    "美容以及任何要用体重的地方（价格档、去底绒加时）先用这份档案，只请客户确认。"
-    "例如「档案里大米是田园猫，上次称重 5.2kg（2026-09-03），上次洗护是短毛，对吗？」。"
+    "美容以及任何要用体重的地方先用这份档案，只请客户确认。内部用来对价目表和去底绒加时，不要对客户说「价格档」或「用于算价格档」。"
+    "对客户说人话，例如「大橘上次大概 5.2 公斤，短毛，对吗？」。"
+    "不要说「档案里大米是田园猫，上次称重 5.2kg（2026-09-03），上次洗护是短毛，对吗？」这种把档案念成标签的句子。\n"
     "体重日期早于 6 个月时，说出日期，并问变化大不大。"
-    "档案没有体重或毛长时才按原来的方式问；品种可以提示可能的毛长，但仍要客户确认。"
+    "档案没有体重或毛长时才问。直接问，不要解释这个数是用来干什么的，也不要说「档案里没有」。"
+    "例如「大橘最近大概多重呀？是短毛吧？」品种可以提示可能的毛长，但仍要客户确认。"
     "档案毛长若是中毛，先确认按长毛还是短毛，不要猜。\n"
     "is_neutered 为 true 时按已绝育使用，不要再问有没有绝育，也不要再约绝育。"
     "为 false 时不要断言未绝育。年龄已有的不要再问生日。\n"
     "本轮对话里客户已经确认过的体重、毛长和品种，不要再问。\n"
-    "确认后的体重用来算价格档和去底绒分钟。"
+    "确认后的体重只在内部对价目表和去底绒分钟，不要把算法讲给客户。"
     "预约时把确认后的 coat_length（长毛或短毛）和 weight_kg 传给工具；"
-    "没传时用档案里的值写入确认稿和预约。"
+    "没传时用档案里的值写进给客户看的确认话和预约。"
     "体型由系统按确认后的体重分档，不要让客户再报一次体重，也不要自己换算结束时间。"
     "猫：不足 3kg 小型猫；3kg 至不足 5kg 中型猫；5kg 及以上大型猫（正好 5kg 是大型猫）。"
     "犬：不足 3kg 微小型犬；3kg 至不足 12kg 小型犬；12kg 至不足 18kg 中型犬；"
@@ -113,6 +119,28 @@ PET_FILE_RULE = (
     "只提供工具返回的开始时间，结束时间只用返回的 end。\n"
     "多只宠物时，主人选定之后再调用 list_profiles_and_pets 并传入 pet_id，加载这一只的档案。\n"
 )
+
+SPEAKING_STYLE = """【对客户怎么说】
+你在微信里跟主人聊天，像医院前台随口说话。短句，口语。呢、哈、呀偶尔用一下就好，不要每句都带。
+一次尽量只问一个问题。用宠物的名字称呼。
+不要使用 Markdown。微信是纯文本，星号、下划线、井号、反引号都不会排版，会原样露出来。
+不要写加粗、标题、代码、项目符号、表格和分隔线。日期和时间写成普通文字，例如「今天 11/13（周五）」。
+不要用「1. 2. 3.」这种清单，除非是在几只宠物里让人选，或者同一天要报出 3 个以上的时间。
+不要把客户刚说的话复读成标签。不要说「大橘：猫洗护，大型猫（5.2kg），短毛」，也不要说「大橘（猫洗护·短毛·大型猫）」。
+说成句子。有工具返回的分钟数时可以换成口语，例如 120 分钟就说「大概两个小时左右」。没有返回时长就不要自己报要多久。
+不要解释某个问题是为了什么。不要说「用于算价格档」「档案里没有它的体重和上次毛长」「我先给您出确认稿」「您名下有两只需要安排」。
+缺什么就直接问，例如「大橘最近大概多重呀？是短毛吧？」
+核对时说「我帮您确认一下」，把店、项目、宠物、日期和时间说成一两句话。不要说「确认稿」。
+空档只能用工具返回的开始时间，结束时间只用同一条的 end，绝对不要编时间。
+不要把一天的空档全部贴出来。从返回结果里每天挑 3 到 4 个比较合适的，按上午、下午、晚上分开说，例如「周六下午有 15:00、16:00，晚上有 19:00。要看更多跟我说。」
+返回的不够 3 个，就有几个说几个。客户问某个钟点，在结果里有才说有。
+报价用句子说，不要贴表格。
+表情最多一个，也可以不用。
+不要说「作为AI」「作为人工智能」「很高兴为您服务」「请问有什么可以帮您」。
+客户问你是不是真人、是不是机器人时，不要装成某一位同事。告诉对方：我是大风动物医院的在线客服助手，需要同事就回复「人工」。
+知识库里如果有「档案里大米是田园猫，上次称重……对吗」这类举例，不要照着对客户念。按上面的口语说。
+急症还是第一句就请对方马上打电话并到店。不诊断、不开药、不解读报告。
+"""
 
 _PHONE_RE = re.compile(r"(?<!\d)(1\d{2})\d{4}(\d{4})(?!\d)")
 _CONFIRM_RE = re.compile(
@@ -155,6 +183,41 @@ def clip_wechat(text: str) -> str:
     if len(raw) <= 1800:
         return (text or "").strip()
     return raw[:1800].decode("utf-8", errors="ignore") + "…"
+
+
+_MD_MARKERS = re.compile(r"\*\*|__|`+")
+_MD_BULLET = re.compile(r"^[ \t]{0,3}[-*+][ \t]+")
+_MD_RULE = re.compile(r"^[-*_]{3,}$")
+_MD_TABLE_SEP = re.compile(r"^[\s|:\-]+$")
+
+
+def _markdown_rule_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if _MD_RULE.fullmatch(stripped):
+        return True
+    return stripped.count("-") >= 3 and _MD_TABLE_SEP.fullmatch(stripped) is not None
+
+
+def sanitize_wechat_text(text: str) -> str:
+    """微信客服是纯文本。去掉 Markdown 记号，保留换行和普通数字。"""
+    raw = text or ""
+    if not raw.strip():
+        return ""
+    value = raw.replace("\r\n", "\n").replace("\r", "\n")
+    value = _MD_MARKERS.sub("", value)
+    value = value.replace("#", "")
+    lines = []
+    for line in value.split("\n"):
+        if _markdown_rule_line(line):
+            continue
+        line = _MD_BULLET.sub("", line)
+        line = line.replace("|", " ")
+        line = line.replace("*", "")
+        line = re.sub(r"[ \t]{2,}", " ", line).strip()
+        lines.append(line)
+    return "\n".join(lines).strip()
 
 
 def wants_human(text: str) -> bool:
@@ -550,13 +613,19 @@ def describe_profiles(db: Session, openid: str, pet_id=None) -> dict:
     if selected is not None:
         detail_ids = {selected.id}
         ask_which = False
-        next_step = "这一只已经选定。使用档案里的品种、年龄、体重、毛长和绝育，只问还缺的，或早于 6 个月的体重。"
+        next_step = (
+            "这一只已经选定。使用档案里的品种、年龄、体重、毛长和绝育，只问还缺的，或早于 6 个月的体重。"
+            "对客户用口语，不要念档案标签，也不要解释为什么要问。"
+        )
     elif not ask_which:
         detail_ids = {pet.id for pet in owned}
-        next_step = "只有一只宠物，直接使用档案。只问还缺的；体重早于 6 个月要确认变化大不大。"
+        next_step = "只有一只宠物，直接使用档案。只问还缺的；体重早于 6 个月要确认变化大不大。对客户用口语。"
     else:
         detail_ids = set()
-        next_step = "先问是哪一只。主人选定后，再用 pet_id 调用 list_profiles_and_pets 加载这一只的档案，只问还缺的或需要确认的。"
+        next_step = (
+            "先问是哪一只。主人选定后，再用 pet_id 调用 list_profiles_and_pets 加载这一只的档案，只问还缺的或需要确认的。"
+            "用名字问，不要说「您名下有两只需要安排」。"
+        )
     profiles = [_profile_payload(db, row, detail_ids) for row in rows]
     payload = {
         "bound": bool(profiles),
@@ -823,7 +892,7 @@ def with_resume_notice(db: Session, openid: str, reply: str) -> str:
 
 
 def _deliver_assistant(db: Session, openid: str, reply: str, msg_type: str) -> str:
-    text = with_resume_notice(db, openid, reply)
+    text = sanitize_wechat_text(with_resume_notice(db, openid, reply))
     if not text:
         return ""
     _save_message(db, openid, "assistant", text, msg_type)
@@ -908,7 +977,8 @@ def maybe_greet(db: Session, openid: str) -> str:
     )
     if recent is not None:
         return ""
-    return _deliver_assistant(db, openid, GREETING, "greeting")
+    text = GREETING if customers_for_openid(db, openid) else GREETING_UNBOUND
+    return _deliver_assistant(db, openid, text, "greeting")
 
 
 def media_reply(db: Session, openid: str) -> str:
@@ -1037,40 +1107,40 @@ def _choose_pet(db: Session, customer: Customer, pet_id) -> tuple[Pet | None, di
 
 
 def _booking_script(store: str, service: str, pet: Pet, day: str, clock: str, extra: dict, detail: dict | None = None) -> str:
-    lines = [
-        "请核对后回复「确认」，我才会提交：",
-        f"门店：{store_short(store)}",
-        f"项目：{service}",
-        f"宠物：{(pet.name or '未命名')}（{species_zh(pet.species or '')}）",
-        f"时间：{day} {clock}",
-    ]
+    pet_name = pet.name or "未命名"
+    species = species_zh(pet.species or "")
+    place = store_short(store)
+    lines = [f"我帮您确认一下：{pet_name}（{species}）{day} {clock} 到{place}做{service}。"]
     detail = detail or {}
+    notes = []
     coat = detail.get("coat_length") or ""
     if coat:
         if detail.get("coat_from_file"):
             coat_date = detail.get("coat_date") or ""
-            when = f"，档案 {coat_date}" if coat_date else ""
-            lines.append(f"毛长：{coat}（档案里的上次毛长{when}，请一并核对）")
+            when = f"，上次是 {coat_date}" if coat_date else ""
+            notes.append(f"毛长按{coat}算{when}")
         else:
-            lines.append(f"毛长：{coat}")
+            notes.append(f"毛长是{coat}")
     if detail.get("weight_kg") not in (None, ""):
-        weight_text = f"体重：{detail['weight_kg']}kg"
+        weight_text = f"体重 {detail['weight_kg']} 公斤"
         if detail.get("weight_from_file"):
             weight_date = detail.get("weight_date") or ""
-            when = f"档案 {weight_date}" if weight_date else "档案"
+            when = f"上次记录 {weight_date}" if weight_date else "上次记录"
             if detail.get("weight_stale"):
-                weight_text += f"（{when}，已超过 6 个月，请确认变化大不大）"
+                weight_text += f"（{when}，已经超过 6 个月了，变化大不大呀）"
             else:
                 weight_text += f"（{when}）"
-        lines.append(weight_text)
+        notes.append(weight_text)
+    if notes:
+        lines.append("，".join(notes) + "。")
     duration = extra.get("duration_minutes")
     if duration:
-        lines.append(f"预计占用 {duration} 分钟，实际以到店为准。")
+        lines.append(f"大概要 {duration} 分钟，到店如果毛量差很多，以门店为准。")
     if extra.get("arrival_note"):
         lines.append(str(extra["arrival_note"]))
     if extra.get("warning"):
         lines.append(str(extra["warning"]))
-    lines.append("要改门店、项目、宠物或时间，直接说。先不要回复确认。")
+    lines.append("对的话回复「确认」，我再帮您提交。想改店、项目、宠物或时间，直接说就行。")
     return "\n".join(lines)
 
 
@@ -1120,12 +1190,12 @@ def tool_stage_booking(db: Session, openid: str, args: dict) -> dict:
     if kind == "beauty" and coat == "中毛":
         return {
             "ok": False,
-            "message": "档案毛长是中毛。请先跟客户确认按长毛还是短毛，再提交。不要猜。",
+            "message": "毛长记的是中毛。请先用口语问客户按长毛还是短毛，不要猜，也不要说档案。",
         }
     if kind == "beauty" and not coat:
         return {
             "ok": False,
-            "message": "档案里没有毛长。请先问客户是长毛还是短毛。品种只能用来提示可能的毛长，不能直接当作已确认。",
+            "message": "还没有毛长。请直接问客户是长毛还是短毛，例如「是短毛吧？」。不要说「档案里没有」，也不要解释原因。品种只能提示，不能当成已确认。",
         }
     try:
         looked = query_slots(
@@ -1236,11 +1306,10 @@ def tool_stage_reschedule(db: Session, openid: str, args: dict) -> dict:
         "time": clock,
     }
     script = (
-        "请核对后回复「确认」，我才会改期：\n"
-        f"原预约：#{current['id']} {current['store']} {current['service_name']} {current['pet_name']} "
-        f"{current['date']} {current['time']}\n"
-        f"改到：{store_short(looked.get('store') or store)} {day} {clock}\n"
-        "要改说法直接说。先不要回复确认。"
+        f"我帮您确认一下改期：原来是{current['pet_name']} {current['date']} {current['time']} "
+        f"在{current['store']}做{current['service_name']}，单号 {current['id']}。\n"
+        f"改到 {store_short(looked.get('store') or store)} {day} {clock}。\n"
+        "对的话回复「确认」，我再改。想换时间直接说就行。"
     )
     if looked.get("arrival_note"):
         script += "\n" + str(looked["arrival_note"])
@@ -1259,10 +1328,9 @@ def tool_stage_cancel(db: Session, openid: str, args: dict) -> dict:
         "reason": clip(redact(str(args.get("reason") or "")), 200),
     }
     script = (
-        "请核对后回复「确认」，我才会取消：\n"
-        f"预约 #{current['id']}，{current['store']}，{current['service_name']}，"
-        f"{current['pet_name']}，{current['date']} {current['time']}。\n"
-        "当天可以取消，迟到不另外收费。先不要回复确认，除非信息没错。"
+        f"我帮您确认一下：取消 {current['pet_name']} {current['date']} {current['time']} "
+        f"在{current['store']}的{current['service_name']}，单号 {current['id']}。\n"
+        "当天取消也可以，没有迟到处罚。对的话回复「确认」。想留下就直接说。"
     )
     _stage(db, openid, "cancel", payload, script)
     return {"ok": True, "staged": True, "script": script}
@@ -1323,7 +1391,11 @@ def tool_query_slots(db: Session, openid: str, args: dict) -> dict:
         "duration_minutes": result.get("duration_minutes"),
         "slots": shown,
         "slot_count": len(slots),
-        "offer_rule": "只报 slots 里的 start。结束时间用同一条的 end，不要自己用开始时间加时长推算。",
+        "offer_rule": (
+            "只报 slots 里的 start。结束时间用同一条的 end，不要自己用开始时间加时长推算。"
+            "对客户不要一次列出全部空档。同一天从这些 start 里挑 3 到 4 个，按上午、下午、晚上分开说，并问要不要看更多。"
+            "客户点名的时刻如果在 slots 里就报出来。不够 3 个就有几个说几个。不要编造 slots 里没有的时间。"
+        ),
         "rules": result.get("rules") or {},
         "arrival_note": result.get("arrival_note") or "",
         "warning": result.get("warning") or "",
@@ -1525,20 +1597,22 @@ def _system_prompt(db: Session, openid: str) -> str:
     now = beijing_now().strftime("%Y-%m-%d %H:%M")
     profiles = describe_profiles(db, openid)
     return (
-        "你是大风动物医院小程序里的客服助手。用简体中文，短、暖、具体。一次说清一件事。\n"
+        "你是大风动物医院小程序里的在线客服。用简体中文，像前台同事一样短、暖、具体。一次说清一件事。\n"
         f"现在是北京时间 {now}。最远可约 {HORIZON_DAYS} 天。\n"
         "你只能依据下面的知识库，以及工具返回的档案、空档和预约。知识库没写的价格、套餐、优惠、政策，"
         "就说医院还没提供，不要编。标了「尚未提供」的内容保持空白。\n"
         "猫三联须知原文写「8周龄以上的犬」是笔误，只按猫来说。\n"
         "不诊断、不开药、不解读报告。急症（呼吸困难、抽搐、昏迷、大量出血、站不起来、中毒）"
         "第一句就请客户立刻打电话并到店，电话用知识库里的号码。\n"
-        "预约、改期、取消必须先调用 stage 工具，把确认稿里的门店、项目、宠物、日期和时间给客户，"
-        "等客户下一句明确同意。没有同意之前，禁止说已经约好、已经改期或已经取消。\n"
+        "预约、改期、取消必须先调用 stage 工具。工具返回的确认话里，门店、项目、宠物、日期和时间都要告诉客户，"
+        "等客户下一句明确同意。对客户说「我帮您确认一下」，不要说「确认稿」。"
+        "没有同意之前，禁止说已经约好、已经改期或已经取消。\n"
         f"{PET_FILE_RULE}"
-        "未绑定档案时，预约类问题请客户去小程序使用「绑定我的档案」；一般须知仍可回答。\n"
+        "未绑定档案时，预约类问题请客户去小程序使用「绑定我的档案」；一般须知仍可回答。已经绑定的不要再提绑定。\n"
         "没有把握或知识库没有时调用 request_human。\n\n"
         f"【当前绑定】\n{json.dumps(profiles, ensure_ascii=False)}\n\n"
-        f"【知识库】\n{load_knowledge()}"
+        f"【知识库】\n{load_knowledge()}\n\n"
+        f"{SPEAKING_STYLE}"
     )
 
 
@@ -1570,7 +1644,7 @@ async def complete_chat(messages: list[dict], tools: list[dict]):
 def _commit_pending(db: Session, openid: str) -> str:
     row = _pending(db, openid)
     if row is None:
-        return "刚才那条核对已经过期了。您再说一下门店、项目、宠物和时间，我重新跟您确认。"
+        return "刚才那条确认过期了。您再说一下哪家店、做什么、哪只宠物、哪天几点，我重新跟您对一下。"
     try:
         payload = json.loads(row.payload_json or "{}")
     except json.JSONDecodeError:
@@ -1582,11 +1656,13 @@ def _commit_pending(db: Session, openid: str) -> str:
             result = book_appointments(db, payload)
             made = result.get("appointments") or []
             first = made[0] if made else {}
-            text = (
-                f"已经帮您约好了 #{first.get('id', '')}。"
-                f"{store_short(first.get('store') or '')}，{first.get('service_name') or ''}，"
-                f"{first.get('pet_name') or ''}，{first.get('appointment_date') or ''} {first.get('appointment_time') or ''}。"
-            )
+            pet_name = first.get("pet_name") or ""
+            service = first.get("service_name") or ""
+            when = f"{first.get('appointment_date') or ''} {first.get('appointment_time') or ''}".strip()
+            place = store_short(first.get("store") or "")
+            text = f"已经帮您约好了。{pet_name} {when} 到{place}做{service}。"
+            if first.get("id") not in (None, ""):
+                text += f"单号是 {first.get('id')}。"
             if result.get("arrival_note"):
                 text += str(result["arrival_note"])
             if result.get("warning"):
@@ -1605,7 +1681,7 @@ def _commit_pending(db: Session, openid: str) -> str:
             return text
         if action == "cancel":
             cancel_appointment(db, int(payload.get("appointment_id") or 0), payload)
-            return "已经取消。当天取消也可以，没有迟到处罚。"
+            return "已经取消了。当天取消也可以，没有迟到处罚。"
     except AiCsError as exc:
         return f"{exc.message} 这次没有提交成功。您可以换个时间再告诉我。"
     except Exception:
@@ -1633,7 +1709,7 @@ async def handle_user_text(db: Session, openid: str, text: str) -> str:
         return _deliver_assistant(db, openid, reply, "commit")
     if pending is not None and is_decline(cleaned):
         _clear_pending(db, openid)
-        reply = "好的，这个先不办。想改时间或换项目，直接告诉我就行。"
+        reply = "好的，这个先不办啦。想改时间或者换项目，直接跟我说。"
         return _deliver_assistant(db, openid, reply, "decline")
     if pending is not None:
         _clear_pending(db, openid)

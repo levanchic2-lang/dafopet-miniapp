@@ -25,6 +25,7 @@ from app.services.ai_cs_assistant import (
     begin_human_handoff,
     beijing_naive,
     clip_wechat,
+    sanitize_wechat_text,
     log_handoff_customer_message,
     media_reply,
     maybe_greet,
@@ -361,6 +362,7 @@ async def run_cs_job(job: dict) -> None:
             logger.exception("[ai-cs] handoff log failed")
     finally:
         db.close()
+    reply = sanitize_wechat_text(reply)
     if not reply or not openid:
         return
     try:
