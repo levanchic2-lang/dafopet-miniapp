@@ -296,7 +296,7 @@ def test_unbound_multiple_pets_and_confirm_before_booking():
     db = SessionLocal()
     try:
         reply = asyncio.run(ai_cs_assistant.handle_user_text(db, "cs-unbound", "我想预约疫苗"))
-        assert "绑定我的档案" in reply
+        assert ai_cs_assistant.BIND_CARD_ASK in reply
         assert db.query(Appointment).filter(Appointment.wechat_openid == "cs-unbound").count() == 0
 
         owner, pet_ids = _seed_customer("cs-multi", "多宠", "13900007771", [("大黄", "dog"), ("小白", "cat")])

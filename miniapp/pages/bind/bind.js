@@ -18,15 +18,31 @@ Page({
     boundName: "",
     boundCount: 0,
     boundMessage: "",
+    fromCs: false,
+    canGoBack: false,
   },
 
   _timer: null,
 
   onLoad(options) {
-    // 上游页（如预约页）跳过来时可带 phone 预填
+    const fromCs = !!(options && String(options.from || "") === "cs");
+    const patch = { fromCs };
+    // 上游页（如预约页）跳过来时可带 phone 预填。从客服卡片进来时这里就是入口页。
     if (options && options.phone) {
-      try { this.setData({ phone: decodeURIComponent(options.phone) }); } catch (e) {}
+      try { patch.phone = decodeURIComponent(options.phone); } catch (e) {}
     }
+    this.setData(patch);
+    this._syncStack();
+    // 入口页没有上一页的登录态。先唤起一次微信登录，提交时再取新的 code。
+    wxLoginCode().catch(() => {});
+  },
+
+  onShow() { this._syncStack(); },
+
+  _syncStack() {
+    let depth = 1;
+    try { depth = getCurrentPages().length; } catch (e) {}
+    this.setData({ canGoBack: depth > 1 });
   },
 
   onPhoneInput(e) { this.setData({ phone: (e.detail.value || "").trim(), error: "" }); },
@@ -97,6 +113,13 @@ Page({
       });
       // 缓存 customer_id，方便其他页面读用
       try { wx.setStorageSync("CUSTOMER_ID", r.customer_id); } catch (e) {}
+      if (this.data.fromCs) {
+        wx.showToast({
+          title: "绑定成功，可以回到客服继续聊",
+          icon: "none",
+          duration: 2500,
+        });
+      }
     } catch (e) {
       this.setData({ error: (e && e.detail) || "网络错误，请重试" });
     } finally {
@@ -104,5 +127,11 @@ Page({
     }
   },
 
-  onDone() { wx.navigateBack({ delta: 1 }); },
+  onDone() {
+    if (this.data.canGoBack) {
+      wx.navigateBack({ delta: 1 });
+      return;
+    }
+    wx.reLaunch({ url: "/pages/index/index" });
+  },
 });

@@ -11,7 +11,9 @@
     <view class="success-title">已绑定</view>
     <view class="success-text">已绑定 {{boundCount || 1}} 份档案{{boundName ? '：' + boundName : ''}}</view>
     <view wx:if="{{boundMessage}}" class="success-text">{{boundMessage}}</view>
-    <button class="btn primary" bindtap="onDone">完成</button>
+    <view wx:if="{{fromCs}}" class="success-text">绑定成功，可以回到客服继续聊</view>
+    <button wx:if="{{fromCs}}" class="btn primary" open-type="contact" session-from="bind" show-message-card="{{false}}">回到客服</button>
+    <button wx:else class="btn primary" bindtap="onDone">{{canGoBack ? '完成' : '返回首页'}}</button>
   </view>
 
   <block wx:else>

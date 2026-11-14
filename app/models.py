@@ -2708,3 +2708,13 @@ class AiCsPending(Base):
     payload_json: Mapped[str] = mapped_column(Text, default="")
     script: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class AiCsMediaCache(Base):
+    """微信临时素材。客服小程序卡片封面大约 3 天过期，到期前重新上传。"""
+    __tablename__ = "ai_cs_media_cache"
+
+    cache_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    media_id: Mapped[str] = mapped_column(String(128), default="")
+    source_stamp: Mapped[str] = mapped_column(String(80), default="")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)

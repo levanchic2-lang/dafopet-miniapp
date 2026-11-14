@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     ai_cs_enabled: bool = False
     ai_cs_test_openids: str = ""
     ai_cs_handoff_idle_minutes: int = 30
+    # 未绑定客户的客服小程序卡片封面。留空则用仓库里的默认图。
+    # 临时素材大约 3 天失效，发送前会在大约 2.5 天时重新上传。
+    ai_cs_bind_card_thumb_path: str = ""
 
     # 旧版小程序过渡。后端会先于小程序发版上线，已发布的顾客端还要等微信审核。
     # 1（默认）= 旧客户端仍可提交、取消 TNR 预约，并按缓存 openid 查看申请进度和预约记录。

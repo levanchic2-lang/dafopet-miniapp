@@ -30,6 +30,7 @@
 
 .btn { display:block; width:100%; box-sizing:border-box; height:88rpx; line-height:88rpx;
   border:0; border-radius:4rpx; font-size:30rpx; font-weight:600; }
+.btn::after { border: 0; }
 .btn.primary { background:#171717; color:#fff; }
 .btn.primary[disabled] { background:#a3a3a3; color:#e5e5e5; }
 .submit-btn { margin-top:32rpx; }

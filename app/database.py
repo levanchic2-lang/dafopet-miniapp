@@ -2906,6 +2906,14 @@ def _try_sqlite_migrations() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_ai_cs_handoff_sessions_openid "
                 "ON ai_cs_handoff_sessions(openid, started_at)"
             ))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS ai_cs_media_cache ("
+                "cache_key VARCHAR(64) PRIMARY KEY, "
+                "media_id VARCHAR(128) DEFAULT '', "
+                "source_stamp VARCHAR(80) DEFAULT '', "
+                "expires_at DATETIME"
+                ")"
+            ))
 
             conn.commit()
     except Exception:

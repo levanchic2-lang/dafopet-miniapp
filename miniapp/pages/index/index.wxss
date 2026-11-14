@@ -1,6 +1,7 @@
 .home-page {
   min-height: 100vh;
-  padding: 36rpx 28rpx 64rpx;
+  padding: 36rpx 28rpx calc(168rpx + constant(safe-area-inset-bottom));
+  padding: 36rpx 28rpx calc(168rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   background: #f7f7f5;
   color: #171717;
@@ -137,3 +138,22 @@
   line-height: 1.4;
 }
 .staff-foot-entry::after { border: 0; }
+
+.cs-float {
+  position: fixed;
+  right: 24rpx;
+  bottom: calc(24rpx + constant(safe-area-inset-bottom));
+  bottom: calc(24rpx + env(safe-area-inset-bottom));
+  z-index: 40;
+  margin: 0;
+  padding: 0 32rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+  border-radius: 999rpx;
+  background: #171717;
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 650;
+  box-shadow: 0 8rpx 24rpx rgba(23, 23, 23, 0.16);
+}
+.cs-float::after { border: 0; }

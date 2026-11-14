@@ -80,7 +80,8 @@ def test_greeting_is_short_and_mentions_bind_only_when_unbound():
     assert "作为AI" not in greeting
     assert len(greeting) < 80
     assert unbound.startswith(greeting)
-    assert "绑定我的档案" in unbound
+    assert ai_cs_assistant.BIND_CARD_ASK in unbound
+    assert "首页" not in unbound
     assert "人工" in ai_cs_assistant.RESUME_NOTE
     assert "又回来了" not in ai_cs_assistant.RESUME_NOTE
     assert "交给同事" in ai_cs_assistant.PHONE_FALLBACK
@@ -93,7 +94,7 @@ def test_greeting_is_short_and_mentions_bind_only_when_unbound():
     try:
         first = ai_cs_assistant.maybe_greet(db, "tone-open")
         assert first == unbound
-        assert "绑定我的档案" in first
+        assert ai_cs_assistant.BIND_CARD_ASK in first
         assert ai_cs_assistant.maybe_greet(db, "tone-open") == ""
 
         db.add(Customer(name="已绑定", phone="13900001001", wechat_openid="tone-bound"))

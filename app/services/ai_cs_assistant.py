@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import calendar
+import contextvars
 import json
 import logging
 import os
@@ -21,6 +22,7 @@ from app.config import settings
 from app.models import (
     AiCsHandoff,
     AiCsHandoffSession,
+    AiCsMediaCache,
     AiCsMessage,
     AiCsPending,
     AiCsToolLog,
@@ -74,9 +76,10 @@ GREETING = (
     "想约时间、改期，或者问问到院，直接跟我说就好。"
     "找同事的话，回复「人工」。"
 )
+BIND_CARD_ASK = "点下面这个卡片绑定一下，绑好回来跟我说一声就行"
 GREETING_UNBOUND = (
     GREETING
-    + "要帮您提交预约，先在小程序首页点一下「绑定我的档案」。"
+    + "想预约或者看档案的话，" + BIND_CARD_ASK + "。"
 )
 MEDIA_REPLY = (
     "图片和小程序卡片我这边看不了。"
@@ -84,12 +87,23 @@ MEDIA_REPLY = (
 )
 RESUME_NOTE = "同事这边先告一段落，我继续帮您。还需要人工的话，随时回复「人工」。"
 UNBOUND_REPLY = (
-    "我还没对上您的档案，预约、改期和取消暂时提交不了。"
-    "您打开小程序首页，点「绑定我的档案」，用在医院留的手机号收个验证码。"
-    "绑好了再告诉我哪家店、做什么、哪只宠物、哪天几点。只是问问到院的话，现在就可以说。"
+    "我还没对上您的档案，预约、改期、取消，还有查自己的预约和宠物，暂时办不了。"
+    + BIND_CARD_ASK
+    + "。卡片上用在医院留的手机号收个验证码。"
+    "然后告诉我哪家店、做什么、哪只宠物、哪天几点。只是问问到院的话，现在就可以说。"
 )
 RATE_REPLY = "您发得有点快，我先歇一会儿。过几分钟再发，或者直接打 17820633031。"
-BIND_HINT = "先在小程序首页点一下「绑定我的档案」，我才能帮您提交预约。"
+BIND_HINT = "还没绑定。请告诉客户" + BIND_CARD_ASK + "。不要让对方退出去首页找按钮。"
+BIND_PAGE_PATH = "pages/bind/bind?from=cs"
+BIND_CARD_TITLE = "点这里绑定我的档案"
+BIND_CARD_COOLDOWN_MINUTES = 30
+BIND_CARD_MEDIA_HOURS = 60
+BIND_CARD_CACHE_KEY = "bind_card_thumb"
+BIND_CARD_FALLBACK = (
+    "卡片没发出去。您回到小程序首页，点一下「绑定我的档案」，"
+    "绑好回来跟我说一声就行。"
+)
+BIND_CARD_LOG = "（已发送绑定卡片：点这里绑定我的档案）"
 PET_FILE_RULE = (
     "顺序：名下有多只宠物，或这个微信有多份档案时，先问是哪一只。"
     "还没确定是哪一只之前，不要问体重、毛长、品种，也不要用某一只的档案去确认。"
@@ -149,6 +163,11 @@ _CONFIRM_RE = re.compile(
 )
 _DECLINE_RE = re.compile(r"^(取消|不用了|算了|先不|不约了|不要了|先别|不行|不)[。.!！]?$")
 _WRITE_INTENT = ("预约", "约个", "约一下", "帮我约", "改期", "改约", "换个时间", "取消预约", "取消这", "取消明天")
+_OWN_RECORD_RE = re.compile(
+    r"我的预约|查预约|看看预约|预约记录|有没有预约|"
+    r"我的宠物|我家宠物|宠物档案|我的猫|我家猫|我的狗|我家狗|哪只|名下"
+)
+_bind_offer: contextvars.ContextVar[bool] = contextvars.ContextVar("ai_cs_bind_offer", default=False)
 _FALSE_SUCCESS = ("已经帮您约", "已帮您约", "已经约好", "预约成功", "已经取消", "已为您取消", "已经改好", "改期成功", "已经改到")
 _HUMAN_RE = re.compile(r"人工|转人工|找人工|转接")
 
@@ -224,6 +243,26 @@ def wants_human(text: str) -> bool:
     return bool(_HUMAN_RE.search(text or ""))
 
 
+def needs_binding_intent(text: str) -> bool:
+    """预约、改期、取消，或查看自己的预约和宠物，都得先绑定。"""
+    raw = text or ""
+    if any(word in raw for word in _WRITE_INTENT):
+        return True
+    return _OWN_RECORD_RE.search(raw) is not None
+
+
+def note_bind_needed() -> None:
+    _bind_offer.set(True)
+
+
+def bind_offer_pending() -> bool:
+    return bool(_bind_offer.get())
+
+
+def clear_bind_offer() -> None:
+    _bind_offer.set(False)
+
+
 def is_confirm(text: str) -> bool:
     return bool(_CONFIRM_RE.match((text or "").strip()))
 
@@ -252,8 +291,12 @@ def customers_for_openid(db: Session, openid: str) -> list[Customer]:
     key = (openid or "").strip()
     if not key:
         return []
+    # 绑定写在另一条请求里。只读事务不结束的话，SQLite 会一直看到绑定前的快照。
+    if not db.new and not db.dirty and not db.deleted:
+        db.rollback()
     return (
         db.query(Customer)
+        .populate_existing()
         .filter(Customer.wechat_openid == key)
         .order_by(Customer.id.asc())
         .all()
@@ -989,6 +1032,121 @@ def media_reply(db: Session, openid: str) -> str:
     return _deliver_assistant(db, openid, MEDIA_REPLY, "media")
 
 
+def bind_card_thumb_path() -> Path:
+    if "AI_CS_BIND_CARD_THUMB_PATH" in os.environ:
+        raw = os.environ.get("AI_CS_BIND_CARD_THUMB_PATH") or ""
+    else:
+        raw = getattr(settings, "ai_cs_bind_card_thumb_path", "") or ""
+    raw = raw.strip()
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parents[2] / "static" / "ai_cs" / "bind_card_thumb.png"
+
+
+def prepare_bind_card_thumb(db: Session) -> str:
+    """上传或复用绑定卡片封面，返回 media_id。失败时抛异常。"""
+    path = bind_card_thumb_path()
+    if not path.is_file():
+        raise RuntimeError(f"绑定卡片封面不存在: {path}")
+    stat = path.stat()
+    stamp = f"{stat.st_mtime_ns}:{stat.st_size}"
+    now = beijing_naive()
+    row = db.get(AiCsMediaCache, BIND_CARD_CACHE_KEY)
+    if (
+        row is not None
+        and (row.media_id or "")
+        and (row.source_stamp or "") == stamp
+        and row.expires_at is not None
+        and row.expires_at > now
+    ):
+        return row.media_id
+    from app.services.wechat_miniapp import upload_temp_image
+
+    media_id = upload_temp_image(str(path))
+    if row is None:
+        row = AiCsMediaCache(cache_key=BIND_CARD_CACHE_KEY)
+        db.add(row)
+    row.media_id = media_id[:128]
+    row.source_stamp = stamp[:80]
+    row.expires_at = now + timedelta(hours=BIND_CARD_MEDIA_HOURS)
+    db.commit()
+    return row.media_id
+
+
+def bind_card_on_cooldown(db: Session, openid: str) -> bool:
+    cutoff = beijing_naive() - timedelta(minutes=BIND_CARD_COOLDOWN_MINUTES)
+    found = (
+        db.query(AiCsMessage)
+        .filter(
+            AiCsMessage.openid == (openid or "")[:64],
+            AiCsMessage.msg_type == "bind_card",
+            AiCsMessage.created_at >= cutoff,
+        )
+        .first()
+    )
+    return found is not None
+
+
+def should_attach_bind_card(db: Session, openid: str, *, kind: str, user_text: str, reply: str) -> bool:
+    flagged = bind_offer_pending()
+    clear_bind_offer()
+    text = (reply or "").strip()
+    if not text or not (openid or "").strip() or text == RATE_REPLY:
+        return False
+    if customers_for_openid(db, openid):
+        return False
+    if kind == "greeting":
+        return True
+    if kind != "text":
+        return False
+    if flagged or needs_binding_intent(user_text) or BIND_CARD_ASK in reply:
+        return True
+    return False
+
+
+def deliver_bind_card(db: Session, openid: str) -> str:
+    """未绑定且需要档案时，在文字回复后再发一张绑定卡片。失败就改发一句文字。"""
+    key = (openid or "").strip()[:64]
+    if not key:
+        return "skipped"
+    try:
+        if customers_for_openid(db, key):
+            return "skipped_bound"
+        if bind_card_on_cooldown(db, key):
+            return "skipped_rate"
+    except Exception:
+        logger.exception("[ai-cs] bind card check failed")
+        return "error"
+    from app.services.wechat_miniapp import (
+        send_customer_service_miniprogram_page,
+        send_customer_service_text,
+    )
+
+    try:
+        media_id = prepare_bind_card_thumb(db)
+        send_customer_service_miniprogram_page(
+            key,
+            title=BIND_CARD_TITLE,
+            pagepath=BIND_PAGE_PATH,
+            thumb_media_id=media_id,
+        )
+        _save_message(db, key, "assistant", BIND_CARD_LOG, "bind_card")
+        return "card"
+    except Exception:
+        logger.exception("[ai-cs] bind card send failed")
+    try:
+        send_customer_service_text(key, clip_wechat(BIND_CARD_FALLBACK))
+        _save_message(db, key, "assistant", BIND_CARD_FALLBACK, "bind_card")
+        return "fallback"
+    except Exception:
+        logger.exception("[ai-cs] bind card fallback failed")
+        try:
+            _save_message(db, key, "assistant", "（绑定卡片和补发文字都没发出去）", "bind_card_error")
+        except Exception:
+            logger.exception("[ai-cs] bind card error log failed")
+        return "error"
+
+
 def _tool_list_services() -> dict:
     catalog = _main()._appointment_catalog()
     items = []
@@ -1446,6 +1604,8 @@ def execute_tool(db: Session, openid: str, name: str, args: dict) -> dict:
         logger.exception("[ai-cs] tool %s failed", name)
         result = {"ok": False, "message": "刚才没有查成，请换个说法或转人工。"}
         result["error"] = type(exc).__name__
+    if result.get("code") == "unbound":
+        note_bind_needed()
     _log_tool(db, openid, name, args, {key: value for key, value in result.items() if key != "script"})
     return result
 
@@ -1466,7 +1626,7 @@ TOOLS = [
             "description": (
                 "查看这个微信绑定的档案和宠物。多只宠物时先只返回名字，不要问体重或毛长；"
                 "主人选定后传入 pet_id，再返回这一只的品种、年龄、性别、绝育、最近体重和上次毛长。"
-                "只有一只时直接返回这些档案。未绑定时会说明要去小程序绑定。"
+                "只有一只时直接返回这些档案。未绑定时请让客户点下面的卡片绑定，不要让对方去首页找按钮。"
             ),
             "parameters": {
                 "type": "object",
@@ -1608,7 +1768,9 @@ def _system_prompt(db: Session, openid: str) -> str:
         "等客户下一句明确同意。对客户说「我帮您确认一下」，不要说「确认稿」。"
         "没有同意之前，禁止说已经约好、已经改期或已经取消。\n"
         f"{PET_FILE_RULE}"
-        "未绑定档案时，预约类问题请客户去小程序使用「绑定我的档案」；一般须知仍可回答。已经绑定的不要再提绑定。\n"
+        "未绑定档案时，如果对方要预约、改期、取消，或者查看自己的预约和宠物，"
+        f"就说「{BIND_CARD_ASK}」。不要让对方退出小程序去首页找按钮。"
+        "一般须知仍可回答。已经绑定的不要再提绑定。\n"
         "没有把握或知识库没有时调用 request_human。\n\n"
         f"【当前绑定】\n{json.dumps(profiles, ensure_ascii=False)}\n\n"
         f"【知识库】\n{load_knowledge()}\n\n"
@@ -1691,6 +1853,7 @@ def _commit_pending(db: Session, openid: str) -> str:
 
 
 async def handle_user_text(db: Session, openid: str, text: str) -> str:
+    clear_bind_offer()
     cleaned = clip(redact(text), 1000)
     if not cleaned:
         return ""
@@ -1714,7 +1877,8 @@ async def handle_user_text(db: Session, openid: str, text: str) -> str:
     if pending is not None:
         _clear_pending(db, openid)
 
-    if not customers_for_openid(db, openid) and any(word in cleaned for word in _WRITE_INTENT):
+    if not customers_for_openid(db, openid) and needs_binding_intent(cleaned):
+        note_bind_needed()
         return _deliver_assistant(db, openid, UNBOUND_REPLY, "unbound")
 
     reply = await _llm_turn(db, openid, cleaned)

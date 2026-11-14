@@ -337,11 +337,20 @@ async def handle_http(request, background_tasks, db: Session):
 
 async def run_cs_job(job: dict) -> None:
     from app.database import SessionLocal
-    from app.services.ai_cs_assistant import handle_user_text
+    from app.services.ai_cs_assistant import (
+        clear_bind_offer,
+        deliver_bind_card,
+        handle_user_text,
+        prepare_bind_card_thumb,
+        should_attach_bind_card,
+    )
     from app.services.wechat_miniapp import send_customer_service_text
 
     openid = (job or {}).get("openid") or ""
+    user_text = (job or {}).get("text") or ""
     reply = ""
+    attach_card = False
+    clear_bind_offer()
     db = SessionLocal()
     try:
         kind = (job or {}).get("kind") or ""
@@ -350,10 +359,23 @@ async def run_cs_job(job: dict) -> None:
         elif kind == "media":
             reply = media_reply(db, openid)
         elif kind == "text":
-            reply = await handle_user_text(db, openid, (job or {}).get("text") or "")
+            reply = await handle_user_text(db, openid, user_text)
+        try:
+            attach_card = should_attach_bind_card(
+                db, openid, kind=kind, user_text=user_text, reply=reply,
+            )
+            if attach_card:
+                try:
+                    prepare_bind_card_thumb(db)
+                except Exception:
+                    logger.info("[ai-cs] bind thumb not ready")
+        except Exception:
+            logger.exception("[ai-cs] bind card decision failed")
+            attach_card = False
     except Exception:
         logger.exception("[ai-cs] job failed")
         reply = PHONE_FALLBACK
+        attach_card = False
         try:
             reply = begin_human_handoff(
                 db, openid, "job_error", "处理失败", transfer_this_message=False,
@@ -363,9 +385,17 @@ async def run_cs_job(job: dict) -> None:
     finally:
         db.close()
     reply = sanitize_wechat_text(reply)
-    if not reply or not openid:
+    if reply and openid:
+        try:
+            send_customer_service_text(openid, clip_wechat(reply))
+        except Exception:
+            logger.exception("[ai-cs] send failed openid=%s", openid[:8])
+    if not attach_card or not openid:
         return
+    card_db = SessionLocal()
     try:
-        send_customer_service_text(openid, clip_wechat(reply))
+        deliver_bind_card(card_db, openid)
     except Exception:
-        logger.exception("[ai-cs] send failed openid=%s", openid[:8])
+        logger.exception("[ai-cs] bind card failed openid=%s", openid[:8])
+    finally:
+        card_db.close()
