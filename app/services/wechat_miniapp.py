@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -85,8 +86,79 @@ def send_customer_service_text(openid: str, content: str) -> dict[str, Any]:
     raw = text.encode("utf-8")
     if len(raw) > 2000:
         text = raw[:2000].decode("utf-8", errors="ignore")
-    url = "https://api.weixin.qq.com/cgi-bin/message/custom/send"
     payload = {"touser": touser, "msgtype": "text", "text": {"content": text}}
+    return _post_custom_message(payload)
+
+
+def send_customer_service_miniprogram_page(
+    openid: str,
+    *,
+    title: str,
+    pagepath: str,
+    thumb_media_id: str,
+) -> dict[str, Any]:
+    """小程序客服里发一张可点开的小程序卡片。"""
+    if not _enabled():
+        raise RuntimeError("未配置 WECHAT_APPID/WECHAT_APPSECRET")
+    touser = (openid or "").strip()
+    card_title = (title or "").strip()
+    path = (pagepath or "").strip()
+    media_id = (thumb_media_id or "").strip()
+    if not touser or not card_title or not path or not media_id:
+        raise RuntimeError("小程序卡片缺少接收人、标题、路径或封面")
+    payload = {
+        "touser": touser,
+        "msgtype": "miniprogrampage",
+        "miniprogrampage": {
+            "title": card_title[:64],
+            "pagepath": path[:1000],
+            "thumb_media_id": media_id,
+        },
+    }
+    return _post_custom_message(payload)
+
+
+def upload_temp_image(path: str) -> str:
+    """上传临时图片素材，返回 media_id。临时素材大约 3 天有效。"""
+    if not _enabled():
+        raise RuntimeError("未配置 WECHAT_APPID/WECHAT_APPSECRET")
+    file_path = Path(path)
+    if not file_path.is_file():
+        raise RuntimeError(f"封面图片不存在: {file_path}")
+    mime = "image/png" if file_path.suffix.lower() == ".png" else "image/jpeg"
+    url = "https://api.weixin.qq.com/cgi-bin/media/upload"
+    last: dict[str, Any] = {}
+    for attempt in (1, 2):
+        token = _get_access_token(force=(attempt == 2))
+        with file_path.open("rb") as handle:
+            files = {"media": (file_path.name, handle, mime)}
+            with httpx.Client(timeout=20.0) as client:
+                response = client.post(
+                    url,
+                    params={"access_token": token, "type": "image"},
+                    files=files,
+                )
+                response.raise_for_status()
+                data = response.json()
+        err = data.get("errcode")
+        media_id = str(data.get("media_id") or "").strip()
+        if media_id and err in (0, "0", None):
+            return media_id
+        try:
+            code = int(err)
+        except (TypeError, ValueError):
+            code = -1
+        last = data
+        if code in _TOKEN_RETRY_CODES and attempt == 1:
+            _token_cache.access_token = ""
+            _token_cache.expires_at = 0.0
+            continue
+        raise RuntimeError(f"media upload failed: {data}")
+    raise RuntimeError(f"media upload failed: {last}")
+
+
+def _post_custom_message(payload: dict[str, Any]) -> dict[str, Any]:
+    url = "https://api.weixin.qq.com/cgi-bin/message/custom/send"
     last: dict[str, Any] = {}
     for attempt in (1, 2):
         token = _get_access_token(force=(attempt == 2))

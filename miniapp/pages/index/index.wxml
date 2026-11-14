@@ -53,18 +53,23 @@
         <view class="service-title">绑定我的档案</view>
         <view class="service-desc">关联既有客户和宠物</view>
       </button>
-      <button class="service-entry" bindtap="goTnrInfoPage">
+      <button class="service-entry" open-type="contact" session-from="home" show-message-card="{{false}}">
         <view class="service-index">05</view>
+        <view class="service-title">在线客服</view>
+        <view class="service-desc">预约、改期和到院咨询</view>
+      </button>
+      <button class="service-entry" bindtap="goTnrInfoPage">
+        <view class="service-index">06</view>
         <view class="service-title">TNR服务指南</view>
         <view class="service-desc">费用、风险、住院及放归说明</view>
       </button>
       <button class="service-entry" bindtap="goAppointmentListPage">
-        <view class="service-index">06</view>
+        <view class="service-index">07</view>
         <view class="service-title">我的预约</view>
         <view class="service-desc">TNR及既有预约记录</view>
       </button>
       <button class="service-entry" bindtap="goImmunizationPage">
-        <view class="service-index">07</view>
+        <view class="service-index">08</view>
         <view class="service-title">电子免疫证</view>
         <view class="service-desc">接种记录与证书下载</view>
       </button>
@@ -75,16 +80,16 @@
     <view class="section-label">公益服务</view>
     <view class="list-group">
       <button class="list-entry" bindtap="goAdoptionPage">
-        <view><text class="list-index">08</text><text class="list-title">待领养动物</text></view>
+        <view><text class="list-index">09</text><text class="list-title">待领养动物</text></view>
         <view class="list-arrow">›</view>
       </button>
       <button class="list-entry" bindtap="goShowcase">
-        <view><text class="list-index">09</text><text class="list-title">TNR爱心展示</text></view>
+        <view><text class="list-index">10</text><text class="list-title">TNR爱心展示</text></view>
         <view class="list-arrow">›</view>
       </button>
       <button class="list-entry" bindtap="goVaccinePage">
         <view>
-          <view><text class="list-index">10</text><text class="list-title">疫苗接种登记</text></view>
+          <view><text class="list-index">11</text><text class="list-title">疫苗接种登记</text></view>
           <view class="list-note">联苗 / 狂犬疫苗接种前登记</view>
         </view>
         <view class="list-arrow">›</view>
@@ -96,10 +101,11 @@
     <view class="section-label">帮助支持</view>
     <view class="support-grid">
       <button class="support-entry" bindtap="goFeedbackPage">问题反馈</button>
-      <button class="support-entry" open-type="contact">联系客服</button>
+      <button class="support-entry" open-type="contact" session-from="home" show-message-card="{{false}}">联系客服</button>
     </view>
   </view>
 
   <view class="home-foot">大风动物医院 · 始于 2018</view>
   <button class="staff-foot-entry" bindtap="goStaffPage">医院员工入口</button>
+  <button class="cs-float" open-type="contact" session-from="home" show-message-card="{{false}}">联系客服</button>
 </view>
