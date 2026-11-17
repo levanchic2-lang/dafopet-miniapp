@@ -1410,16 +1410,63 @@ async def wecom_callback_receive(
     return Response(content="", media_type="text/plain")
 
 
-@app.get("/", response_class=HTMLResponse)
-async def page_apply(request: Request):
+def _public_page_context(request: Request, key: str, json_ld: dict) -> dict:
+    from app.public_info import PUBLIC_NAV, dumps_json_ld, page_context, template_facts
+
+    return {
+        "request": request,
+        "page": page_context(key),
+        "json_ld": dumps_json_ld(json_ld),
+        "nav": PUBLIC_NAV,
+        "facts": template_facts(),
+    }
+
+
+def _render_public_page(request: Request, template_name: str, key: str, json_ld: dict, **extra):
+    from app.public_info import PUBLIC_INDEX_HEADERS
+
+    ctx = _public_page_context(request, key, json_ld)
+    ctx.update(extra)
     return templates.TemplateResponse(
         request,
-        "uk/apply.html",
-        {
-            "title": settings.app_name,
-            "shenzhen_regions": _shenzhen_regions_embed(),
-        },
+        template_name,
+        ctx,
+        headers=PUBLIC_INDEX_HEADERS,
     )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def page_apply(request: Request):
+    from app.public_info import home_json_ld
+
+    return _render_public_page(
+        request,
+        "public/geo_home.html",
+        "home",
+        home_json_ld(),
+        shenzhen_regions=_shenzhen_regions_embed(),
+    )
+
+
+@app.get("/stores", response_class=HTMLResponse)
+async def public_stores(request: Request):
+    from app.public_info import stores_json_ld
+
+    return _render_public_page(request, "public/geo_stores.html", "stores", stores_json_ld())
+
+
+@app.get("/tnr", response_class=HTMLResponse)
+async def public_tnr(request: Request):
+    from app.public_info import tnr_json_ld
+
+    return _render_public_page(request, "public/geo_tnr.html", "tnr", tnr_json_ld())
+
+
+@app.get("/faq", response_class=HTMLResponse)
+async def public_faq(request: Request):
+    from app.public_info import faq_json_ld
+
+    return _render_public_page(request, "public/geo_faq.html", "faq", faq_json_ld())
 
 
 _CLINIC_STORES = ("大风动物医院（东环店）", "大风动物医院（横岗店）")
@@ -44633,32 +44680,32 @@ async def public_site_content(slug: str, request: Request, db: Session = Depends
     return templates.TemplateResponse(request, "public/site_content.html", ctx, headers=headers)
 
 
+def _published_site_paths(db: Session) -> list[str]:
+    paths = ["/site"]
+    rows = db.query(PublicContent).filter(PublicContent.status == "published").order_by(PublicContent.id.asc()).all()
+    for row in rows:
+        slug = (row.slug or "").strip()
+        if not slug or "/" in slug or "\\" in slug or slug.startswith("."):
+            continue
+        paths.append("/site/" + quote(slug, safe=""))
+    return paths
+
+
 @app.get("/robots.txt", response_class=Response)
 async def public_robots(db: Session = Depends(get_db)):
+    from app.public_info import build_robots_txt
+
     brand = _brand_settings(db)
-    lines = [
-        "User-agent: *",
-        "Disallow: /admin/",
-        "Disallow: /m/",
-        "Disallow: /api/",
-        "Disallow: /site-preview",
-    ]
-    if not (brand.public_site_enabled and brand.allow_indexing):
-        lines.append("Disallow: /site")
-    else:
-        lines.extend(["Allow: /site", f"Sitemap: {brand.public_domain}/sitemap.xml"])
-    return Response("\n".join(lines) + "\n", media_type="text/plain")
+    allow_cms = bool(brand.public_site_enabled and brand.allow_indexing)
+    return Response(build_robots_txt(allow_cms=allow_cms), media_type="text/plain; charset=utf-8")
 
 
 @app.get("/sitemap.xml", response_class=Response)
 async def public_sitemap(db: Session = Depends(get_db)):
-    from html import escape as _xml_escape
+    from app.public_info import build_sitemap_xml
+
     brand = _brand_settings(db)
-    if not (brand.public_site_enabled and brand.allow_indexing):
-        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>', media_type="application/xml")
-    base = (brand.public_domain or "https://dafopet.com").rstrip("/")
-    urls = [f"{base}/site"]
-    rows = db.query(PublicContent).filter(PublicContent.status == "published").order_by(PublicContent.id.asc()).all()
-    urls.extend(f"{base}/site/{quote(row.slug)}" for row in rows)
-    body = "".join(f"<url><loc>{_xml_escape(url)}</loc></url>" for url in urls)
-    return Response(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>', media_type="application/xml")
+    extra: list[str] = []
+    if brand.public_site_enabled and brand.allow_indexing:
+        extra = _published_site_paths(db)
+    return Response(build_sitemap_xml(extra), media_type="application/xml; charset=utf-8")

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page['title'] }}</title>
+  <meta name="description" content="{{ page['description'] }}">
+  <link rel="canonical" href="{{ page['canonical'] }}">
+  <meta name="robots" content="index,follow">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="zh_CN">
+  <meta property="og:title" content="{{ page['title'] }}">
+  <meta property="og:description" content="{{ page['description'] }}">
+  <meta property="og:url" content="{{ page['canonical'] }}">
+  <meta name="theme-color" content="#1a1a1a">
+  <link rel="stylesheet" href="/static/public_geo.css">
+  <script type="application/ld+json">{{ json_ld | safe }}</script>
+</head>
+<body>
+  <a class="geo-skip" href="#content">跳到正文</a>
+  <header class="geo-head">
+    <div class="geo-head-inner">
+      <a class="geo-brand" href="/">{{ facts['hospital_name'] }}</a>
+      <nav class="geo-nav" aria-label="公开页面">
+        {% for link in nav %}
+        <a href="{{ link['href'] }}"{% if link['key'] == page['key'] %} aria-current="page"{% endif %}>{{ link['label'] }}</a>
+        {% endfor %}
+      </nav>
+    </div>
+  </header>
+  <main class="geo-main" id="content">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="geo-foot">
+    <div class="geo-foot-inner">
+      {{ facts['hospital_name'] }} · {{ facts['home_lead'] }} · 横岗店与东环店 · <span class="geo-num">{{ facts['hours_text'] }}</span>
+    </div>
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

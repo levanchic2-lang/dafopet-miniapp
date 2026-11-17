@@ -1,0 +1,22 @@
+{% extends "public/geo_base.html" %}
+{% block content %}
+<p class="geo-kicker">深圳 · 两家门店</p>
+<h1>门店信息</h1>
+<p>两家门店同属{{ facts['hospital_name'] }}。对外营业时间相同：<span class="geo-num">{{ facts['hours_text'] }}</span>。</p>
+{% for store in facts['stores'] %}
+<article class="geo-store" id="{{ store['anchor'] }}">
+  <h2>{{ store['name'] }}</h2>
+  <dl class="geo-dl">
+    <div><dt>地址</dt><dd>{{ store['full_address'] }}</dd></div>
+    <div><dt>座机</dt><dd><a class="geo-num" href="{{ store['landline_tel'] }}">{{ store['landline_local'] }}</a></dd></div>
+    <div><dt>手机</dt><dd><a class="geo-num" href="{{ store['mobile_tel'] }}">{{ store['mobile_local'] }}</a> <span class="geo-note">医院业务电话</span></dd></div>
+    <div><dt>营业时间</dt><dd class="geo-num">{{ store['hours_text'] }}</dd></div>
+  </dl>
+</article>
+{% endfor %}
+<p class="geo-note">{{ facts['store_note'] }}</p>
+<div class="geo-links">
+  <a href="/tnr">预约与申请</a>
+  <a href="/#apply">网页申请</a>
+</div>
+{% endblock %}

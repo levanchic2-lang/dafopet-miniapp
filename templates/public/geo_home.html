@@ -1,0 +1,39 @@
+{% extends "public/geo_base.html" %}
+{% block content %}
+<p class="geo-kicker">{{ facts['home_lead'] }}</p>
+<h1>{{ facts['hospital_name'] }}</h1>
+{% for paragraph in facts['home_paragraphs'] %}
+<p>{{ paragraph }}</p>
+{% endfor %}
+<div class="geo-links">
+  <a href="/stores">门店信息</a>
+  <a href="/tnr">预约与申请</a>
+  <a href="/faq">常见问题</a>
+  <a href="#apply">网页申请</a>
+</div>
+
+<section aria-labelledby="store-overview">
+  <h2 id="store-overview">两家门店</h2>
+  {% for store in facts['stores'] %}
+  <article class="geo-store" id="{{ store['anchor'] }}">
+    <h3><a href="/stores#{{ store['anchor'] }}">{{ store['name'] }}</a></h3>
+    <dl class="geo-dl">
+      <div><dt>地址</dt><dd>{{ store['full_address'] }}</dd></div>
+      <div><dt>座机</dt><dd><a class="geo-num" href="{{ store['landline_tel'] }}">{{ store['landline_local'] }}</a></dd></div>
+      <div><dt>手机</dt><dd><a class="geo-num" href="{{ store['mobile_tel'] }}">{{ store['mobile_local'] }}</a> <span class="geo-note">医院业务电话</span></dd></div>
+      <div><dt>营业时间</dt><dd class="geo-num">{{ store['hours_text'] }}</dd></div>
+    </dl>
+  </article>
+  {% endfor %}
+  <p class="geo-note">{{ facts['store_note'] }}</p>
+</section>
+
+<section id="apply" aria-labelledby="web-apply">
+  <h2 id="web-apply">网页申请</h2>
+  <p>网页端为备用入口，适合无法使用微信小程序的情况。小程序名称为「dafopet」。</p>
+  {% include "includes/apply_body.html" %}
+</section>
+{% endblock %}
+{% block scripts %}
+{% include "includes/apply_scripts.html" %}
+{% endblock %}
