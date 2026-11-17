@@ -192,6 +192,13 @@ PUBLIC_PAGES: dict[str, dict[str, str]] = {
 
 PUBLIC_INDEX_HEADERS = {"X-Robots-Tag": "index, follow"}
 
+# 四个公开页和申请表实际会请求的静态资源。其余 /static 仍拒绝抓取。
+# 申请脚本写在页面 HTML 里，不另挂外部脚本。样式只用系统字体，没有字体文件。
+PUBLIC_CRAWL_ASSETS: tuple[str, ...] = (
+    "/static/public_geo.css",
+    "/static/shenzhen_regions.json",
+)
+
 PUBLIC_NAV: tuple[dict[str, str], ...] = (
     {"key": "home", "href": "/", "label": "首页"},
     {"key": "stores", "href": "/stores", "label": "门店信息"},
@@ -369,9 +376,11 @@ def dumps_json_ld(data: dict) -> str:
 
 
 def build_robots_txt(*, allow_cms: bool) -> str:
-    """默认拒绝抓取，只放行四张公开页和 sitemap。
+    """默认拒绝抓取，只放行四张公开页、它们的样式和地区数据，以及 sitemap。
 
-    规则按 RFC 9309：最长匹配优先。`$` 表示路径结束。
+    规则按 RFC 9309：最长匹配优先。`$` 表示路径结束，并计入规则长度。
+    `/static/public_geo.css` 比 `Disallow: /static` 更长，因此样式仍可抓取；
+    manifest、后台脚本和其他静态文件继续被 `/static` 拦住。
     `/site` 仅在既有「正式公开网站 + 允许索引」开关同时打开时放行；预览路径始终关闭。
     """
     lines = [
@@ -381,6 +390,9 @@ def build_robots_txt(*, allow_cms: bool) -> str:
         "Allow: /tnr$",
         "Allow: /faq$",
         "Allow: /sitemap.xml$",
+    ]
+    lines.extend(f"Allow: {path}$" for path in PUBLIC_CRAWL_ASSETS)
+    lines.extend([
         "Disallow: /admin",
         "Disallow: /m$",
         "Disallow: /m/",
@@ -397,7 +409,7 @@ def build_robots_txt(*, allow_cms: bool) -> str:
         "Disallow: /uploads",
         "Disallow: /static",
         "Disallow: /sw.js$",
-    ]
+    ])
     if allow_cms:
         lines.append("Allow: /site")
     else:

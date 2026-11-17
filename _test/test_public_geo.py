@@ -27,10 +27,12 @@ from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.models import Application, BrandSettings, PublicContent
 from app.public_info import (
+    PUBLIC_CRAWL_ASSETS,
     PUBLIC_ORIGIN,
     PUBLIC_STORES,
     RETIRED_HENGGANG_LANDLINE,
     FAQ_ITEMS,
+    build_robots_txt,
     build_sitemap_xml,
     resolve_public_origin,
     robots_allows,
@@ -150,6 +152,8 @@ def test_public_pages_are_server_rendered():
         assert 'href="/admin' not in html
         assert 'href="/m' not in html
         assert "window.TNR_HOURS" not in html
+        assert "tnr_hours.js" not in html
+        assert 'href="/static/public_geo.css"' in html
         assert "资质" not in html
         assert "许可证" not in html
         assert f'rel="canonical" href="{PUBLIC_ORIGIN}{path if path != "/" else "/"}"' in html or (
@@ -169,6 +173,12 @@ def test_public_pages_are_server_rendered():
     assert "大风动物医院（横岗店）" in home
     assert 'fetch("/api/apply"' in home
     assert "id=\"shenzhen-regions-data\"" in home
+    assert "/static/shenzhen_regions.json" in home
+    assert "window.__syncAddressField" in home
+    assert "请选择区、街道，并填写详细地址。" in home
+    assert "请至少上传 1 张申请照片。" in home
+    assert "agree_ear_tip" in home
+    assert "agree_no_pet_fraud" in home
     assert "网页端为备用入口" in visible_home
     for store in PUBLIC_STORES:
         assert store["full_address"] in visible_home
@@ -259,10 +269,25 @@ def test_robots_and_sitemap_expose_only_public_pages():
         assert "Disallow: /" in body
         assert f"Sitemap: {PUBLIC_ORIGIN}/sitemap.xml" in body
         assert "Allow: /site\n" not in body
-        for path in PUBLIC_PATHS + ("/sitemap.xml",):
+        for path in PUBLIC_PATHS + ("/sitemap.xml",) + PUBLIC_CRAWL_ASSETS:
             assert robots_allows(body, path), path
-        for path in BLOCKED_PATHS:
+            assert robots_allows(body, path + "?v=1"), path
+        for path in BLOCKED_PATHS + (
+            "/static/manifest.json",
+            "/static/tnr_hours.js",
+            "/static/uk_minimal.css",
+            "/static/public_geo.css.bak",
+            "/api/regions/shenzhen",
+            "/api/geocode/regeo",
+            "/admin/login",
+        ):
             assert not robots_allows(body, path), path
+        rules = build_robots_txt(allow_cms=False)
+        css_rule = "Allow: /static/public_geo.css$"
+        assert css_rule in rules
+        assert len("/static/public_geo.css$") > len("/static")
+        assert robots_allows(rules, "/static/public_geo.css")
+        assert not robots_allows(rules, "/static/manifest.json")
 
         root = ET.fromstring(sitemap.text)
         locs = [node.text for node in root.findall("sm:url/sm:loc", SITEMAP_NS)]
@@ -368,6 +393,11 @@ def test_existing_tnr_routes_remain():
         admin = client.get("/admin")
         assert admin.status_code == 200
         assert "登录" in admin.text
+        login = client.get("/admin/login")
+        assert login.status_code == 200
+        assert "医院后台登录" in login.text
+        assert 'type="password"' in login.text
+        assert 'action="/admin/login"' in login.text or "admin/login" in login.text
 
         db = SessionLocal()
         try:
