@@ -1,0 +1,15 @@
+{% extends "public/geo_base.html" %}
+{% block content %}
+<p class="geo-kicker">已确认的说明</p>
+<h1>常见问题</h1>
+{% for item in facts['faq_items'] %}
+<article class="geo-faq">
+  <h2>{{ item['question'] }}</h2>
+  <p>{{ item['answer'] }}</p>
+</article>
+{% endfor %}
+<div class="geo-links">
+  <a href="/stores">门店信息</a>
+  <a href="/tnr">预约与申请</a>
+</div>
+{% endblock %}

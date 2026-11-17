@@ -1,0 +1,20 @@
+{% extends "public/geo_base.html" %}
+{% block content %}
+<p class="geo-kicker">现有入口</p>
+<h1>预约与申请</h1>
+<h2>流浪猫绝育（TNR）</h2>
+<p>{{ facts['tnr_intro'] }}</p>
+<ol class="geo-steps">
+  {% for step in facts['tnr_steps'] %}
+  <li>{{ step }}</li>
+  {% endfor %}
+</ol>
+<p>{{ facts['tnr_no_promise'] }}</p>
+<p><a href="/#apply">在本站首页填写网页申请</a>。申请表仍在 https://dafopet.com/ 。</p>
+<h2>其他预约</h2>
+<p>{{ facts['tnr_other'] }}</p>
+<div class="geo-links">
+  <a href="/stores">门店信息</a>
+  <a href="/faq">常见问题</a>
+</div>
+{% endblock %}
