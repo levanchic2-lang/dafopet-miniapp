@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <meta name="description" content="{{ description }}">
+  <meta name="robots" content="index,follow">
+  <link rel="canonical" href="{{ canonical }}">
+  <link rel="stylesheet" href="/static/public_info.css?v=1">
+  <script type="application/ld+json">{{ json_ld | safe }}</script>
+</head>
+<body>
+  <div class="info-wrap">
+    <p class="info-brand">{{ hospital_name }} <span>{{ founding }}</span></p>
+    <nav class="info-nav" aria-label="公开资料">
+      <a href="/stores"{% if page == 'stores' %} aria-current="page"{% endif %}>门店信息</a>
+      <a href="/tnr"{% if page == 'tnr' %} aria-current="page"{% endif %}>流浪猫绝育说明</a>
+      <a href="/">返回首页</a>
+    </nav>
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{% extends "public/geo_base.html" %}
+{% block content %}
+<h1>流浪猫绝育说明</h1>
+{% for paragraph in paragraphs %}
+<p>{{ paragraph }}</p>
+{% endfor %}
+<p class="info-note">{{ hours_note }}</p>
+<section>
+  <h2>常见问题</h2>
+  {% for item in faq %}
+  <h3>{{ item['q'] }}</h3>
+  <p>{{ item['a'] }}</p>
+  {% endfor %}
+</section>
+<p class="info-more"><a href="/stores">查看两家门店的地址和电话</a></p>
+{% endblock %}

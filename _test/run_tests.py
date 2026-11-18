@@ -84,6 +84,13 @@ def run_apply_units() -> int:
     )
     if prefill.returncode != 0:
         return prefill.returncode
+    print("[0/4] 公开门店与绝育说明")
+    geo = subprocess.run(
+        [sys.executable, str(ROOT / "_test" / "test_public_geo.py")],
+        cwd=ROOT,
+    )
+    if geo.returncode != 0:
+        return geo.returncode
     node = shutil.which("node")
     if not node:
         print("[x] 未找到 node，无法跑申请页草稿单测")
