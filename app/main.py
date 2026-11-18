@@ -44633,32 +44633,37 @@ async def public_site_content(slug: str, request: Request, db: Session = Depends
     return templates.TemplateResponse(request, "public/site_content.html", ctx, headers=headers)
 
 
+@app.get("/stores", response_class=HTMLResponse)
+async def public_store_info(request: Request):
+    from app.public_info import page_context
+    return templates.TemplateResponse(request, "public/geo_stores.html", page_context(request, "stores"))
+
+
+@app.get("/tnr", response_class=HTMLResponse)
+async def public_tnr_info(request: Request):
+    from app.public_info import page_context
+    return templates.TemplateResponse(request, "public/geo_tnr.html", page_context(request, "tnr"))
+
+
 @app.get("/robots.txt", response_class=Response)
 async def public_robots(db: Session = Depends(get_db)):
+    from app.public_info import build_robots_txt
     brand = _brand_settings(db)
-    lines = [
-        "User-agent: *",
-        "Disallow: /admin/",
-        "Disallow: /m/",
-        "Disallow: /api/",
-        "Disallow: /site-preview",
-    ]
-    if not (brand.public_site_enabled and brand.allow_indexing):
-        lines.append("Disallow: /site")
-    else:
-        lines.extend(["Allow: /site", f"Sitemap: {brand.public_domain}/sitemap.xml"])
-    return Response("\n".join(lines) + "\n", media_type="text/plain")
+    body = build_robots_txt(
+        site_indexable=bool(brand.public_site_enabled and brand.allow_indexing),
+        brand_domain=brand.public_domain or "",
+    )
+    return Response(body, media_type="text/plain")
 
 
 @app.get("/sitemap.xml", response_class=Response)
 async def public_sitemap(db: Session = Depends(get_db)):
-    from html import escape as _xml_escape
+    from app.public_info import build_sitemap_xml
     brand = _brand_settings(db)
-    if not (brand.public_site_enabled and brand.allow_indexing):
-        return Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>', media_type="application/xml")
-    base = (brand.public_domain or "https://dafopet.com").rstrip("/")
-    urls = [f"{base}/site"]
-    rows = db.query(PublicContent).filter(PublicContent.status == "published").order_by(PublicContent.id.asc()).all()
-    urls.extend(f"{base}/site/{quote(row.slug)}" for row in rows)
-    body = "".join(f"<url><loc>{_xml_escape(url)}</loc></url>" for url in urls)
-    return Response(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>', media_type="application/xml")
+    extra: list[str] = []
+    if brand.public_site_enabled and brand.allow_indexing:
+        base = (brand.public_domain or "https://dafopet.com").rstrip("/")
+        extra.append(f"{base}/site")
+        rows = db.query(PublicContent).filter(PublicContent.status == "published").order_by(PublicContent.id.asc()).all()
+        extra.extend(f"{base}/site/{quote(row.slug)}" for row in rows)
+    return Response(build_sitemap_xml(extra), media_type="application/xml")

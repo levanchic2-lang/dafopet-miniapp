@@ -1,0 +1,106 @@
+/* 公开门店与绝育说明。衬线、纯黑和发丝线，不加载第三方脚本。 */
+:root {
+  --ink: #1a1a1a;
+  --ink-2: #4a4a4a;
+  --ink-3: #8a8a8a;
+  --bg: #f4f1ec;
+  --paper: #fdfcf8;
+  --hair: #d8d4cc;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", "Source Han Serif SC", "Noto Serif SC", serif;
+  font-size: 16px;
+  line-height: 1.75;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.info-wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 48px 28px 88px;
+}
+
+.info-brand {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 2px;
+}
+
+.info-brand span {
+  margin-left: 8px;
+  color: var(--ink-3);
+  font-style: italic;
+  letter-spacing: 1px;
+}
+
+.info-nav {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 0.5px solid var(--hair);
+}
+
+.info-nav a {
+  margin-right: 28px;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-bottom: 0.5px solid transparent;
+}
+
+.info-nav a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom-color: var(--ink);
+}
+
+h1 {
+  margin: 36px 0 20px;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 1px;
+}
+
+h2 {
+  margin: 40px 0 8px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+h3 {
+  margin: 26px 0 6px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+p { margin: 0 0 14px; }
+
+.info-note { color: var(--ink-2); }
+
+section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--hair);
+}
+
+dt {
+  margin-top: 16px;
+  color: var(--ink-3);
+  font-style: italic;
+  font-size: 14px;
+}
+
+dd { margin: 0; }
+
+a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 0.5px solid var(--hair);
+}
+
+.info-more { margin-top: 36px; }

@@ -1,0 +1,23 @@
+{% extends "public/geo_base.html" %}
+{% block content %}
+<h1>门店信息</h1>
+<p>{{ intro }}</p>
+<p>门店对外营业时间（两店相同）：{{ hours_label }}。</p>
+<p class="info-note">{{ hours_note }}</p>
+{% for store in stores %}
+<section id="{{ store['slug'] }}">
+  <h2>{{ store['name'] }}</h2>
+  <dl>
+    <dt>地址</dt>
+    <dd>{{ store['address'] }}</dd>
+    <dt>座机</dt>
+    <dd><a href="tel:{{ store['landline'] }}">{{ store['landline'] }}</a></dd>
+    <dt>业务手机</dt>
+    <dd><a href="tel:{{ store['mobile'] }}">{{ store['mobile'] }}</a></dd>
+    <dt>营业时间</dt>
+    <dd>{{ hours_label }}</dd>
+  </dl>
+</section>
+{% endfor %}
+<p class="info-more"><a href="/tnr">流浪猫绝育的资格、收费和申请方式</a></p>
+{% endblock %}
