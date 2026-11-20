@@ -1412,12 +1412,14 @@ async def wecom_callback_receive(
 
 @app.get("/", response_class=HTMLResponse)
 async def page_apply(request: Request):
+    from app.public_info import homepage_facts
     return templates.TemplateResponse(
         request,
         "uk/apply.html",
         {
             "title": settings.app_name,
             "shenzhen_regions": _shenzhen_regions_embed(),
+            "public_facts": homepage_facts(),
         },
     )
 
