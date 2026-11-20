@@ -97,6 +97,29 @@ def tnr_paragraphs() -> list[str]:
     return [APPLY_TEXT, FEE_FREE, FEE_EXTRA, f"{FEE_LIMIT}{ELIGIBILITY}"]
 
 
+def homepage_facts() -> dict[str, str]:
+    """首页可抓取的短说明。地址和电话取自门店页同一份资料。"""
+    by_slug = {store["slug"]: store for store in STORES}
+    dong = by_slug["donghuan"]
+    heng = by_slug["henggang"]
+    return {
+        "lead": (
+            f"{HOSPITAL_NAME}在深圳设有两家门店，对外营业时间均为{HOURS_LABEL}，"
+            "并非流浪猫绝育手术时段。"
+        ),
+        "dong_label": "东环店",
+        "dong_address": dong["address"],
+        "dong_landline": dong["landline"],
+        "dong_mobile": dong["mobile"],
+        "heng_label": "横岗店",
+        "heng_address": heng["address"],
+        "heng_landline": heng["landline"],
+        "heng_mobile": heng["mobile"],
+        "eligibility": "仅限无主流浪猫，可通过微信小程序 dafopet 申请流浪猫绝育",
+        "other_rules": "其他机构公益项目的规则不能作为本院申请依据。",
+    }
+
+
 def _json_for_script(data: dict) -> str:
     raw = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     return raw.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")

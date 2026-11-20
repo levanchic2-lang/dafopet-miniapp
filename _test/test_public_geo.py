@@ -34,6 +34,7 @@ from app.public_info import (
     HOURS_NOTE,
     STORES,
     faq_items,
+    homepage_facts,
 )
 
 client = TestClient(app, base_url="https://testserver", follow_redirects=False)
@@ -238,6 +239,32 @@ check(
     and "geo_base.html" not in home_html,
     "",
 )
+facts = homepage_facts()
+facts_at = home_html.find('id="public-facts"')
+facts_html = home_html[facts_at:home_html.find("</section>", facts_at)]
+facts_text = visible(facts_html)
+check(
+    "首页公开事实与门店页同一套资料",
+    facts["lead"] in facts_text
+    and facts["dong_address"] in facts_text
+    and facts["heng_address"] in facts_text
+    and facts["dong_landline"] in facts_text
+    and facts["heng_landline"] in facts_text
+    and facts["dong_mobile"] in facts_text
+    and facts["heng_mobile"] in facts_text
+    and HOURS_LABEL in facts_text
+    and "并非流浪猫绝育手术时段" in facts_text
+    and 'href="/stores">/stores</a>' in facts_html
+    and 'href="/tnr">/tnr</a>' in facts_html
+    and "微信小程序 dafopet" in facts_text
+    and "仅限无主流浪猫" in facts_text
+    and facts["other_rules"] in facts_text
+    and all(store["address"] in stores_text for store in STORES),
+    "",
+)
+home_forbidden = ("24小时", "24 小时", "四联路", "8号铺", "8 号铺", "微博", "免费名额", "急诊")
+found_home = [item for item in home_forbidden if item in facts_html]
+check("首页短稿不写未确认规则", not found_home, "、".join(found_home))
 
 with SessionLocal() as db:
     before = db.query(Application).count()

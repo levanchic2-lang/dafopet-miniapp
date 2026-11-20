@@ -136,6 +136,21 @@
   display:block; font-size:10pt; font-weight:400; font-style:italic;
   color:var(--ink-3); letter-spacing:2px; margin-top:10px;
 }
+.uk-wrap .apply-facts {
+  margin: 18px 0 8px;
+  font-family: var(--font-serif);
+  font-size: 11pt;
+  line-height: 1.75;
+  color: var(--ink-2);
+  font-style: normal;
+}
+.uk-wrap .apply-facts p { margin: 0 0 10px; }
+.uk-wrap .apply-facts a {
+  color: var(--ink);
+  border-bottom: 0.5px solid var(--hair);
+  text-decoration: none;
+  font-style: normal;
+}
 </style>
 
 <div class="apply-bc">
@@ -148,6 +163,12 @@
     <span class="sub">请如实填写信息并上传能反映猫咪室外 / 流浪场景的清晰照片 · 可同时上传短视频辅助说明 · 通过预审后医院将与您联系预约到院时间</span>
   </h1>
 </div>
+
+<section class="apply-facts" id="public-facts">
+  <p>{{ public_facts['lead'] }}</p>
+  <p>{{ public_facts['dong_label'] }}：{{ public_facts['dong_address'] }}，座机 {{ public_facts['dong_landline'] }}，业务手机 {{ public_facts['dong_mobile'] }}。{{ public_facts['heng_label'] }}：{{ public_facts['heng_address'] }}，座机 {{ public_facts['heng_landline'] }}，业务手机 {{ public_facts['heng_mobile'] }}。门店资料见 <a href="/stores">/stores</a>。</p>
+  <p>{{ public_facts['eligibility'] }}，资格与收费见 <a href="/tnr">/tnr</a>。{{ public_facts['other_rules'] }}</p>
+</section>
 
 <hr class="apply-rule-double"/>
 
