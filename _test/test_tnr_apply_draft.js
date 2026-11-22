@@ -217,6 +217,17 @@ assert.strictEqual(dongguan.districtName, "城区");
 assert.strictEqual(dongguan.streetName, "莞城街道");
 assert.strictEqual(dongguan.detail, "松山湖");
 
+const keptSuture = draft.buildDraft({
+  form: { cat_nickname: "旧草稿猫", suture_preference: "intradermal" },
+  sutureIndex: 1,
+}, now);
+assert.strictEqual(keptSuture.form.suture_preference, "external");
+assert.strictEqual(keptSuture.form.cat_nickname, "旧草稿猫");
+assert.ok(!("sutureIndex" in keptSuture));
+assert.strictEqual(draft.draftHasContent(draft.buildDraft({
+  form: { suture_preference: "intradermal" },
+}, now)), false);
+
 const page = fs.readFileSync(path.join(__dirname, "../miniapp/pages/apply/index.js"), "utf8");
 const wxml = fs.readFileSync(path.join(__dirname, "../miniapp/pages/apply/index.wxml"), "utf8");
 const prefillStart = page.indexOf("async _prefillPersonal()");
@@ -251,5 +262,18 @@ assert.ok(wxml.includes("身份证号"));
 assert.ok(!/disabled="\{\{[^"]*prefill/.test(wxml));
 assert.ok(wxml.includes('data-k="applicant_name"'));
 assert.ok(!wxml.includes('data-k="applicant_name" disabled'));
+assert.ok(!page.includes("intradermal"));
+assert.ok(!page.includes("皮内"));
+assert.ok(!page.includes("sutureOptions"));
+assert.ok(!page.includes("onSutureChange"));
+assert.ok(page.includes('suture_preference: "external"'));
+assert.ok(/\{\s*\.\.\.form,\s*suture_preference:\s*"external"/.test(page));
+assert.ok(!wxml.includes("intradermal"));
+assert.ok(!wxml.includes("皮内"));
+assert.ok(!wxml.includes("无需拆线"));
+assert.ok(!wxml.includes("sutureOptions"));
+assert.ok(!wxml.includes("onSutureChange"));
+assert.ok(!wxml.includes("母猫伤口缝合方式"));
+assert.ok(wxml.includes("母猫伤口由本院采用皮外缝合"));
 
 console.log("tnr apply draft test passed");

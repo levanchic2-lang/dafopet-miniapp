@@ -84,6 +84,13 @@ def run_apply_units() -> int:
     )
     if prefill.returncode != 0:
         return prefill.returncode
+    print("[0/4] TNR 缝合方式固定皮外")
+    suture = subprocess.run(
+        [sys.executable, str(ROOT / "_test" / "test_tnr_suture_preference.py")],
+        cwd=ROOT,
+    )
+    if suture.returncode != 0:
+        return suture.returncode
     print("[0/4] 公开门店与绝育说明")
     geo = subprocess.run(
         [sys.executable, str(ROOT / "_test" / "test_public_geo.py")],

@@ -2284,6 +2284,11 @@ def _assert_application_form_fields(
     return out
 
 
+def _new_application_suture_preference(_raw: str = "") -> str:
+    """新申请固定皮外。旧版客户端传入 intradermal 时静默改存，不因此拒绝提交。"""
+    return "external"
+
+
 def _count_valid_apply_images(images: list[UploadFile]) -> int:
     n = 0
     for uf in images:
@@ -2390,7 +2395,7 @@ async def api_apply(
         age_estimate=f["age_estimate"],
         weight_estimate="",
         health_note=f["health_note"],
-        suture_preference=suture_preference if suture_preference in ("external", "intradermal") else "external",
+        suture_preference=_new_application_suture_preference(suture_preference),
         agree_ear_tip=ok_ear,
         agree_no_pet_fraud=ok_fraud,
         status=ApplicationStatus.pending_ai.value,
@@ -2655,7 +2660,7 @@ async def api_apply_create(
         age_estimate=f["age_estimate"],
         weight_estimate="",
         health_note=f["health_note"],
-        suture_preference=suture_preference if suture_preference in ("external", "intradermal") else "external",
+        suture_preference=_new_application_suture_preference(suture_preference),
         agree_ear_tip=ok_ear,
         agree_no_pet_fraud=ok_fraud,
         is_proxy=is_proxy.lower() in ("true", "1", "on", "yes"),

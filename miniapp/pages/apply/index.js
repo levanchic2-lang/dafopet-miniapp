@@ -63,11 +63,6 @@ Page({
       { value: "unknown", label: "未知" }
     ],
     genderIndex: 0,
-    sutureOptions: [
-      { value: "external", label: "皮外缝合（需返院复查拆线）" },
-      { value: "intradermal", label: "皮内可吸收缝合（通常无需拆线）" }
-    ],
-    sutureIndex: 0,
     checks: { ear: true, fraud: true },
     images: [],
     videos: [],
@@ -319,7 +314,6 @@ Page({
       proxyConsent: this.data.proxyConsent,
       planIndex: this.data.planIndex,
       genderIndex: this.data.genderIndex,
-      sutureIndex: this.data.sutureIndex,
       storeIndex: this.data.storeIndex,
       images: this.data.images,
       videos: this.data.videos,
@@ -330,6 +324,7 @@ Page({
     this._restorePending = true;
     const form = Object.assign(draftLib.blankForm(), this.data.form, draft.form || {});
     form.clinic_store = draftLib.canonicalStore(form.clinic_store);
+    form.suture_preference = "external";
     const patch = {
       form: form,
       checks: draft.checks || { ear: true, fraud: true },
@@ -341,7 +336,6 @@ Page({
       proxyConsent: !!draft.proxyConsent,
       planIndex: draftLib.optionIndex(this.data.planOptions, form.post_surgery_plan, draft.planIndex || 0),
       genderIndex: draftLib.optionIndex(this.data.genderOptions, form.cat_gender, draft.genderIndex || 0),
-      sutureIndex: draftLib.optionIndex(this.data.sutureOptions, form.suture_preference, draft.sutureIndex || 0),
       storeIndex: draftLib.storeIndexFor(this.data.storeOptions, form.clinic_store),
       images: draft.images || [],
       videos: draft.videos || [],
@@ -529,7 +523,6 @@ Page({
       storeIndex: 0,
       planIndex: 0,
       genderIndex: 0,
-      sutureIndex: 0,
       addressDetailInput: "",
       cityIndex: 0,
       districtIndex: 0,
@@ -540,16 +533,6 @@ Page({
       }
       this._prefillPersonal();
     });
-  },
-
-  onSutureChange(e) {
-    const idx = Number(e.detail.value || 0);
-    const row = this.data.sutureOptions[idx] || this.data.sutureOptions[0];
-    this.setData({
-      sutureIndex: idx,
-      "form.suture_preference": row.value
-    });
-    this._scheduleDraftSave();
   },
 
   _syncNotifyState() {
@@ -1401,6 +1384,7 @@ Page({
       const created = await this._withTimeout(
         requestForm(app.globalData.apiBase + "/api/apply/create", {
           ...form,
+          suture_preference: "external",
           id_number: idNorm,
           wechat_openid: openid,
           agree_ear_tip: checks.ear ? "true" : "false",
