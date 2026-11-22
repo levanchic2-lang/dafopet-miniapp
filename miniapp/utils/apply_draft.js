@@ -132,6 +132,7 @@ function buildDraft(state, now) {
   const src = state || {};
   const form = Object.assign(blankForm(), src.form || {});
   if (typeof src.healthNoteDraft === "string") form.health_note = src.healthNoteDraft;
+  form.suture_preference = "external";
   return {
     v: 1,
     savedAt: now || Date.now(),
@@ -153,7 +154,6 @@ function buildDraft(state, now) {
     proxyConsent: !!src.proxyConsent,
     planIndex: Number(src.planIndex || 0),
     genderIndex: Number(src.genderIndex || 0),
-    sutureIndex: Number(src.sutureIndex || 0),
     storeIndex: Number(src.storeIndex || 0),
     images: (src.images || []).slice(),
     videos: (src.videos || []).slice(),
@@ -174,7 +174,6 @@ function draftHasContent(draft) {
   if (draft.idConsent) return true;
   if (draft.districtName || draft.streetName) return true;
   if (form.cat_gender && form.cat_gender !== "male") return true;
-  if (form.suture_preference && form.suture_preference !== "external") return true;
   if (form.post_surgery_plan && form.post_surgery_plan !== "原地放归") return true;
   if (form.clinic_store && canonicalStore(form.clinic_store) !== "大风动物医院（东环店）") return true;
   if (draft.checks && (draft.checks.ear === false || draft.checks.fraud === false)) return true;
