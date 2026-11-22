@@ -702,6 +702,9 @@
       <tr>
         <td class="num" style="font-size:9.5pt;">
           {{ inv.invoice_no or ('#' ~ inv.id) }}
+          {% if registration_by_invoice.get(inv.id) %}
+          <div class="ink3" style="margin-top:3px;font-size:8.5pt;">挂号单</div>
+          {% endif %}
           {% if hospitalization_by_invoice.get(inv.id) %}
           {% set linked_hosp = hospitalization_by_invoice.get(inv.id) %}
           <div style="margin-top:3px;font-size:8.5pt;"><a href="/admin/inpatient/{{ linked_hosp.id }}">住院单 #{{ linked_hosp.id }} →</a></div>

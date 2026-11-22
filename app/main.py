@@ -19484,8 +19484,24 @@ async def page_admin_visit_detail(
         db.query(Invoice).filter(Invoice.id.in_(hospitalization_by_invoice)).all()
         if hospitalization_by_invoice else []
     )
+    # 挂号费是独立收费单，invoice.visit_id 必须保持为空，否则 _sync_visit_invoice
+    # 会把未付挂号单的明细冲掉。这里只按挂号记录上的 visit_id 把单子列出来。
+    linked_registrations = db.query(WalkInRegistration).filter(
+        WalkInRegistration.visit_id == visit_id,
+        WalkInRegistration.status != "cancelled",
+    ).order_by(WalkInRegistration.id.desc()).all()
+    registration_by_invoice = {
+        int(reg.invoice_id): reg for reg in linked_registrations if reg.invoice_id
+    }
+    registration_invoices = (
+        db.query(Invoice).filter(Invoice.id.in_(registration_by_invoice)).all()
+        if registration_by_invoice else []
+    )
     invoices = sorted(
-        {invoice.id: invoice for invoice in [*direct_invoices, *hospitalization_invoices]}.values(),
+        {
+            invoice.id: invoice
+            for invoice in [*direct_invoices, *hospitalization_invoices, *registration_invoices]
+        }.values(),
         key=lambda invoice: invoice.id,
         reverse=True,
     )
@@ -19577,6 +19593,7 @@ async def page_admin_visit_detail(
         "sales_orders": sales_orders,
         "invoices": invoices,
         "hospitalization_by_invoice": hospitalization_by_invoice,
+        "registration_by_invoice": registration_by_invoice,
         "exam_orders": exam_orders,
         "unified_batches": unified_batches,
         "insurance_shares": insurance_shares,
