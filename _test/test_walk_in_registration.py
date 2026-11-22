@@ -352,12 +352,26 @@ with SessionLocal() as db:
     assert row.status == "converted"
     assert row.visit_id
     visit_id = row.visit_id
+    reg_invoice = db.get(Invoice, linked.invoice_id)
+    assert reg_invoice is not None and reg_invoice.invoice_no
+    reg_invoice_no = reg_invoice.invoice_no
     from app.models import Visit
     visit = db.get(Visit, visit_id)
     assert visit.pet_id == pet_id
     assert visit.customer_id == owner_id
     assert visit.store == "东环店"
     assert visit.visit_date == "2026-06-15"
+visit_page = client.get(f"/admin/visits/{visit_id}")
+assert visit_page.status_code == 200, visit_page.text[:400]
+assert reg_invoice_no in visit_page.text
+assert f'href="/admin/invoices/{linked.invoice_id}"' in visit_page.text
+assert "挂号单" in visit_page.text
+assert "打印票据" not in visit_page.text
+assert "合并打印" not in visit_page.text
+# 同一天同一只宠物、但没有转入本病历的挂号单不能被带出来
+assert "¥200.00" not in visit_page.text
+assert f'href="/admin/invoices/{no_visit.invoice_id}"' not in visit_page.text
+with SessionLocal() as db:
     _sync_visit_invoice(db, visit_id, "test")
     db.commit()
     inv = db.get(Invoice, linked.invoice_id)
@@ -365,11 +379,17 @@ with SessionLocal() as db:
     assert abs(inv.total_amount - 10) < 0.001
     item = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == inv.id).one()
     assert item.ref_type == "registration"
+    assert db.query(Invoice).filter(Invoice.visit_id == visit_id, Invoice.id == inv.id).count() == 0
+visit_page_after = client.get(f"/admin/visits/{visit_id}")
+assert visit_page_after.status_code == 200
+assert reg_invoice_no in visit_page_after.text
+assert f'href="/admin/invoices/{linked.invoice_id}"' in visit_page_after.text
+assert "挂号单" in visit_page_after.text
 listed = client.get("/admin/registrations?date=2026-06-15")
 assert listed.status_code == 200
 assert "已转病历" in listed.text
 assert f"/admin/visits/{visit_id}" in listed.text
-print("  转病历会挂上病历，且病历同步不冲掉挂号费")
+print("  转病历后病例页能看到挂号单，同步也不会冲掉挂号费")
 
 login(client, "reg_henggang")
 hidden = client.get("/admin/registrations?date=2026-06-15")
