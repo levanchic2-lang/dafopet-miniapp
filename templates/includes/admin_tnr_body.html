@@ -471,10 +471,30 @@
  <form method="post" action="/admin/app/{{ a.id }}/upload-surgery" enctype="multipart/form-data">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div class="admin-upload-grid">
+ <div class="tnr-drop" tabindex="0">
  <label>术前照片 <input type="file" name="before_images" accept="image/*" multiple/></label>
+ <p class="tnr-drop-hint">将图片拖到这里即上传，或直接粘贴。再次拖入会追加。</p>
+ <ul class="tnr-drop-files" hidden></ul>
+ <p class="tnr-drop-error" hidden></p>
+ </div>
+ <div class="tnr-drop" tabindex="0">
  <label>术后照片 <input type="file" name="after_images" accept="image/*" multiple/></label>
+ <p class="tnr-drop-hint">将图片拖到这里即上传，或直接粘贴。再次拖入会追加。</p>
+ <ul class="tnr-drop-files" hidden></ul>
+ <p class="tnr-drop-error" hidden></p>
+ </div>
+ <div class="tnr-drop" tabindex="0">
  <label>术前视频 <input type="file" name="before_videos" accept="video/*" multiple/></label>
+ <p class="tnr-drop-hint">将视频拖到这里即上传，或直接粘贴。再次拖入会追加。</p>
+ <ul class="tnr-drop-files" hidden></ul>
+ <p class="tnr-drop-error" hidden></p>
+ </div>
+ <div class="tnr-drop" tabindex="0">
  <label>术后视频 <input type="file" name="after_videos" accept="video/*" multiple/></label>
+ <p class="tnr-drop-hint">将视频拖到这里即上传，或直接粘贴。再次拖入会追加。</p>
+ <ul class="tnr-drop-files" hidden></ul>
+ <p class="tnr-drop-error" hidden></p>
+ </div>
  </div>
  <button type="submit" class="admin-upload-submit">上传补充资料</button>
  </form>
@@ -506,10 +526,30 @@
  <form method="post" action="/admin/app/{{ a.id }}/upload-surgery" enctype="multipart/form-data">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <div class="admin-upload-grid">
+ <div class="tnr-drop" tabindex="0">
  <label>术前照片 <input type="file" name="before_images" accept="image/*" multiple/></label>
+ <p class="tnr-drop-hint">将图片拖到这里即上传，或直接粘贴。再次拖入会追加。</p>
+ <ul class="tnr-drop-files" hidden></ul>
+ <p class="tnr-drop-error" hidden></p>
+ </div>
+ <div class="tnr-drop" tabindex="0">
  <label>术后照片 <input type="file" name="after_images" accept="image/*" multiple/></label>
+ <p class="tnr-drop-hint">将图片拖到这里即上传，或直接粘贴。再次拖入会追加。</p>
+ <ul class="tnr-drop-files" hidden></ul>
+ <p class="tnr-drop-error" hidden></p>
+ </div>
+ <div class="tnr-drop" tabindex="0">
  <label>术前视频 <input type="file" name="before_videos" accept="video/*" multiple/></label>
+ <p class="tnr-drop-hint">将视频拖到这里即上传，或直接粘贴。再次拖入会追加。</p>
+ <ul class="tnr-drop-files" hidden></ul>
+ <p class="tnr-drop-error" hidden></p>
+ </div>
+ <div class="tnr-drop" tabindex="0">
  <label>术后视频 <input type="file" name="after_videos" accept="video/*" multiple/></label>
+ <p class="tnr-drop-hint">将视频拖到这里即上传，或直接粘贴。再次拖入会追加。</p>
+ <ul class="tnr-drop-files" hidden></ul>
+ <p class="tnr-drop-error" hidden></p>
+ </div>
  </div>
  <button type="submit" class="admin-upload-submit">上传手术资料</button>
  </form>
