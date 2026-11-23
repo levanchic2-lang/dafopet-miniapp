@@ -263,7 +263,48 @@
     font-size: 9pt !important; cursor: pointer;
     border: 0.5px solid var(--hair) !important; border-radius: 0 !important;
     background: var(--bg) !important;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
   }
+  body .tnr-drop {
+    border: 1px dashed var(--hair);
+    background: var(--bg);
+    padding: 8px 10px 10px;
+    min-width: 0;
+  }
+  body .tnr-drop.is-over {
+    border-style: solid;
+    border-color: var(--ink);
+    background: #f6f3ec;
+  }
+  body .tnr-drop:focus {
+    outline: 1px solid var(--ink);
+    outline-offset: 1px;
+  }
+  body .admin-upload .tnr-drop-hint,
+  body .admin-upload .tnr-drop-error,
+  body .admin-upload .tnr-drop-files {
+    margin: 6px 0 0;
+    font-family: var(--font-serif);
+    font-size: 8.5pt;
+    font-style: italic;
+    line-height: 1.45;
+  }
+  body .admin-upload .tnr-drop-hint { color: var(--ink-3); }
+  body .admin-upload .tnr-drop-error { color: var(--accent-red); }
+  body .admin-upload .tnr-drop-files {
+    list-style: none;
+    padding: 0;
+    font-style: normal;
+  }
+  body .tnr-drop-files li {
+    color: var(--ink-2);
+    word-break: break-all;
+  }
+  body .tnr-drop-files li.is-uploading { color: var(--accent-amber); }
+  body .tnr-drop-files li.is-done { color: var(--accent-green); }
+  body .tnr-drop-files li.is-error { color: var(--accent-red); }
   body .admin-upload-submit {
     width: auto !important; margin-top: 12px;
     background: var(--ink) !important; color: var(--paper) !important;
@@ -459,5 +500,6 @@
 <hr class="tnr-rule-double"/>
 
 {% include "includes/admin_tnr_body.html" %}
+<script src="/static/tnr_surgery_drop.js?v=1"></script>
 
 {% endblock %}
