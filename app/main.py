@@ -26787,11 +26787,27 @@ async def uk_demo_customer(cust_id: int, request: Request, db: Session = Depends
     })
 
 
+def _parse_manual_stock_in_price(raw: str) -> float | None:
+    """手动入库「本次进价」。空或 0 表示未填，调用方不改目录进价。"""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "本次进价格式不正确")
+    if value < 0:
+        raise HTTPException(400, "本次进价不能为负")
+    if value == 0:
+        return None
+    return value
+
+
 @app.post("/admin/inventory/{item_id}/stock-in")
 async def admin_inventory_stock_in(
     item_id: int, request: Request, db: Session = Depends(get_db),
     csrf_token: str = Form(""),
-    qty: float = Form(...), unit_price: float = Form(0.0),
+    qty: float = Form(...), unit_price: str = Form(""),
     batch_no: str = Form(""), expiry_date: str = Form(""),
     note: str = Form(""),
 ):
@@ -26802,15 +26818,26 @@ async def admin_inventory_stock_in(
         raise HTTPException(404)
     if qty <= 0:
         raise HTTPException(400, "入库数量必须大于 0")
+    # 最新进价：填了本次进价才回写目录进价，与拍照入库一致
+    # （import-photo commit 在 effective_unit_price > 0 时写 item.cost_price）。
+    # 表格导入同样只写 InventoryItem.cost_price。门店覆盖价已废弃，
+    # 两条入库路径都不改 store_overrides，这里保持相同行为。
+    # 留空或 0：不改目录进价，流水单价仍回退到当前目录进价。
+    inbound_price = _parse_manual_stock_in_price(unit_price)
     from datetime import date as _date
     before = item.stock_qty
     item.stock_qty += qty
+    if inbound_price is not None:
+        item.cost_price = inbound_price
+        recorded_price = inbound_price
+    else:
+        recorded_price = float(item.cost_price or 0)
     item.updated_at = datetime.utcnow()
     tx_note = note or ("手动入库" + (f"（批次：{batch_no}）" if batch_no else ""))
     db.add(InventoryTransaction(
         item_id=item_id, tx_type="in", qty=qty,
         qty_before=before, qty_after=item.stock_qty,
-        unit_price=unit_price or item.cost_price,
+        unit_price=recorded_price,
         ref_type="manual", operator=request.session.get("admin_username", ""),
         note=tx_note,
     ))
